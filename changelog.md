@@ -3,6 +3,7 @@
 ## 2026-08-21（v0.21 受控图纸集编辑计划）
 
 - 新增 `PLAN-DM-006` 拆分属性定义与 CSV、统一派生、受控 AcSm DOM、独立 DWG 创建、安全发布、API/Web 替换及双版本 CAD 验收任务；计划尚未开始实施。
+- 新增 `ADR-DM-001`，将图纸集编辑从自由排序/手工标题切换为受控插入与统一派生，并为标题后缀补充 `EnableAddNumberSuffix`、`NumberSuffixType` 配置及校验测试。
 
 ## 2026-08-21（DST Manager v0.21 需求调整规范）
 
