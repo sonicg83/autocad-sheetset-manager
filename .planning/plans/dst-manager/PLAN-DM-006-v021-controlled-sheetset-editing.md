@@ -22,7 +22,7 @@ related:
 
 **技术栈：** Python 3.12、pytest、lxml、FastAPI、Pydantic Settings、Vue 3、TypeScript、Vite、Playwright、AutoCAD 2016/2020 Core Console。
 
-**规范：** [`SPEC-DM-001`](../../../../docs/dst-manager/specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
+**规范：** [`SPEC-DM-001`](../../../docs/dst-manager/specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
 
 ## 全局约束
 
