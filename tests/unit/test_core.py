@@ -894,13 +894,12 @@ def test_update_sheet_title_with_custom_properties_is_rejected_without_partial_c
         "custom_properties": {"比例": "1:500"},
     }
 
-    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
-
-    assert preview["executable"] is False
-    assert preview["diagnostics"][0]["code"] == "COMMAND_UNSUPPORTED"
+    with pytest.raises(ApplicationError) as exc_info:
+        service.preview_changes(workspace.id, workspace.revision_id, [command])
+    assert exc_info.value.code == "COMMAND_UNSUPPORTED"
     with pytest.raises(ApplicationError) as exc_info:
         service.execute_changes(workspace.id, workspace.revision_id, [command])
-    assert exc_info.value.code == "PLAN_INVALID"
+    assert exc_info.value.code == "COMMAND_UNSUPPORTED"
     assert dst.read_bytes() == before
     reopened = service.open_workspace(dst)
     assert reopened.document.sheets[0].custom_properties["比例"] == "1:100"

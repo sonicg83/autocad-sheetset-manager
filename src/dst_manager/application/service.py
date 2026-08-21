@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import re
 import shutil
@@ -10,12 +12,23 @@ from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.config import Settings
-from dst_manager.domain.models import JobStatus, Severity, SuffixOptions, Workspace
+from dst_manager.domain.editing import (
+    EditingError,
+    parse_property_csv,
+    validate_property_definitions,
+)
+from dst_manager.domain.models import (
+    CustomPropertyDefinition,
+    JobStatus,
+    Severity,
+    SheetSetDocument,
+    SuffixOptions,
+    Workspace,
+)
 from dst_manager.domain.planning import (
     PlanningError,
     build_structural_plan,
     derived_document_from_plan,
-    metadata_commands_for_derived_document,
 )
 from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
@@ -82,13 +95,119 @@ class DstManagerService:
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
         return self.open_workspace(Path(row.dst_path), Path(row.root_override) if row.root_override else None)
 
-    def preview_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]]) -> dict[str, Any]:
+    def preview_custom_property_import(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        csv_data: bytes,
+    ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
-        known = {"update_sheet_set", "update_subset", "update_sheet", "delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "insert_subset", "renumber_sheets"}
-        invalid = [command.get("type") for command in commands if command.get("type") not in known]
-        if invalid:
-            raise ApplicationError("COMMAND_UNSUPPORTED", f"不支持的命令：{invalid}")
+        try:
+            definitions = parse_property_csv(csv_data)
+        except EditingError as exc:
+            return {
+                "workspace_id": workspace_id,
+                "base_revision_id": base_revision_id,
+                "requires_cad": False,
+                "changes": [],
+                "commands": [],
+                "diagnostics": [
+                    {
+                        "code": exc.code,
+                        "severity": "error",
+                        "message": self._editing_error_message(exc),
+                        "line": self._csv_error_line(csv_data, exc.code),
+                    },
+                ],
+                "executable": False,
+            }
+
+        existing = {item.name.casefold(): item for item in self._property_definitions(workspace.document)}
+        changes: list[dict[str, Any]] = []
+        commands: list[dict[str, Any]] = []
+        diagnostics: list[dict[str, Any]] = []
+        for line, definition in zip(
+            self._csv_definition_lines(csv_data),
+            definitions,
+            strict=True,
+        ):
+            previous = existing.get(definition.name.casefold())
+            action = "add"
+            if previous is not None and previous.type != definition.type:
+                action = "conflict"
+                diagnostics.append(
+                    {
+                        "code": "CUSTOM_PROPERTY_TYPE_CONFLICT",
+                        "severity": "error",
+                        "message": f"自定义属性类型冲突：{definition.name}",
+                        "line": line,
+                    },
+                )
+            elif previous is not None and previous.name != definition.name:
+                action = "conflict"
+                diagnostics.append(
+                    {
+                        "code": "CUSTOM_PROPERTY_NAME_DUPLICATE",
+                        "severity": "error",
+                        "message": f"自定义属性名称大小写冲突：{definition.name}",
+                        "line": line,
+                    },
+                )
+            elif previous is not None:
+                action = "skip"
+            else:
+                command = {
+                    "type": "add_custom_property",
+                    "property_type": definition.type,
+                    "name": definition.name,
+                    "default_value": definition.default_value,
+                }
+                commands.append(command)
+                existing[definition.name.casefold()] = definition
+            changes.append(
+                {
+                    "line": line,
+                    "action": action,
+                    "type": definition.type,
+                    "name": definition.name,
+                    "default_value": definition.default_value,
+                },
+            )
+        return {
+            "workspace_id": workspace_id,
+            "base_revision_id": base_revision_id,
+            "requires_cad": False,
+            "changes": changes,
+            "commands": commands,
+            "diagnostics": diagnostics,
+            "executable": not diagnostics,
+        }
+
+    def import_custom_properties(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        csv_data: bytes,
+    ) -> dict[str, Any]:
+        preview = self.preview_custom_property_import(workspace_id, base_revision_id, csv_data)
+        if not preview["executable"]:
+            raise ApplicationError("PLAN_INVALID", "属性 CSV 导入计划包含阻断诊断")
+        return self.execute_changes(workspace_id, base_revision_id, preview["commands"])
+
+    def export_custom_properties_csv(self, workspace_id: str) -> bytes:
+        workspace = self.get_workspace(workspace_id)
+        stream = io.StringIO(newline="")
+        writer = csv.writer(stream, lineterminator="\r\n")
+        writer.writerow(["type", "name", "default_value"])
+        for definition in self._property_definitions(workspace.document):
+            writer.writerow([definition.type, definition.name, definition.default_value])
+        return stream.getvalue().encode("utf-8")
+
+    def preview_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]]) -> dict[str, Any]:
+        normalized_commands = self._normalize_commands(commands)
+        workspace = self.get_workspace(workspace_id)
+        self._check_revision(workspace, base_revision_id)
         sheet_ids = {sheet.acsm_id for sheet in workspace.document.sheets}
         diagnostics = []
         changes = []
@@ -96,27 +215,31 @@ class DstManagerService:
         for index, command in enumerate(commands):
             command_type = command["type"]
             sheet_id = command.get("sheet_id")
-            if command_type == "update_sheet" and ({"number", "title"} & command.keys()):
-                diagnostics.append(
-                    {
-                        "code": "COMMAND_UNSUPPORTED",
-                        "severity": "error",
-                        "message": "不支持直接更新图号或图纸标题",
-                        "index": index,
-                    },
-                )
-            if command_type in {"update_sheet", "delete_sheet", "move_sheet", "reorder_sheet"} and sheet_id not in sheet_ids:
+            if command_type in {"update_sheet_properties", "delete_sheet"} and sheet_id not in sheet_ids:
                 diagnostics.append({"code": "SHEET_NOT_FOUND", "severity": "error", "message": f"找不到图纸：{sheet_id}", "index": index})
             if command_type in {"insert_sheet", "insert_subset"} and not command.get("source"):
                 diagnostics.append({"code": "LAYOUT_SOURCE_REQUIRED", "severity": "error", "message": "新增图纸必须明确布局来源", "index": index})
-            structural |= command_type in {"update_subset", "delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "insert_subset", "renumber_sheets"} or (command_type == "update_sheet" and ("number" in command or "title" in command))
+            structural |= command_type in {"update_subset_title", "delete_sheet", "insert_sheet", "insert_subset"}
             changes.append({"index": index, "type": command_type, "object_id": sheet_id, "after": command})
+        property_commands = [
+            command
+            for command in normalized_commands
+            if command["type"] in {"add_custom_property", "delete_custom_property"}
+        ]
+        if structural and property_commands:
+            diagnostics.append(
+                {
+                    "code": "COMMAND_COMBINATION_UNSUPPORTED",
+                    "severity": "error",
+                    "message": "属性定义与 CAD 结构命令必须分别预览和执行",
+                },
+            )
         execution_intent = None
         if structural and not diagnostics:
             try:
                 execution_intent = build_structural_plan(
                     workspace,
-                    commands,
+                    [command for command in normalized_commands if command not in property_commands],
                     SuffixOptions(
                         self.settings.enable_add_number_suffix,
                         self.settings.number_suffix_type,
@@ -129,11 +252,7 @@ class DstManagerService:
                 preview_dom = AcsmDocument(self.codec.decode_file(workspace.dst_path)).clone()
                 if structural:
                     preview_dom.apply_derived_document(derived_document_from_plan(execution_intent))
-                    metadata_commands = metadata_commands_for_derived_document(commands)
-                    if metadata_commands:
-                        preview_dom.apply_metadata_commands(metadata_commands)
-                else:
-                    preview_dom.apply_metadata_commands(commands)
+                self._apply_nonstructural_commands(preview_dom, normalized_commands, structural)
                 planned_sheet_ids = {
                     layout["sheet_id"]
                     for group in execution_intent["groups"]
@@ -153,6 +272,11 @@ class DstManagerService:
                     "CUSTOM_PROPERTY_DUPLICATED": "同一作用域中存在重复的同名自定义属性。",
                     "CUSTOM_PROPERTY_VALUE_DUPLICATED": "自定义属性存在多个 Value，无法安全选择写入目标。",
                     "CUSTOM_PROPERTY_NOT_FOUND": "找不到要更新的自定义属性定义。",
+                    "CUSTOM_PROPERTY_NAME_DUPLICATE": "自定义属性名称已存在。",
+                    "CUSTOM_PROPERTY_TYPE_CONFLICT": "自定义属性名称属于另一作用域。",
+                    "CUSTOM_PROPERTY_NAME_EMPTY": "自定义属性名称不能为空。",
+                    "CUSTOM_PROPERTY_NAME_INVALID": "自定义属性名称无效。",
+                    "CUSTOM_PROPERTY_TYPE_INVALID": "自定义属性类型无效。",
                 }
                 diagnostics.append({"code": code, "severity": "error", "message": messages.get(code, "AcSm 结构不支持当前修改。"), "property_name": detail.strip() or None})
         affected = {str(workspace.dst_path)}
@@ -166,9 +290,10 @@ class DstManagerService:
         plan = self.preview_changes(workspace_id, base_revision_id, commands)
         if not plan["executable"]:
             raise ApplicationError("PLAN_INVALID", "执行计划包含阻断诊断")
+        normalized_commands = self._normalize_commands(commands)
         job_id = str(uuid.uuid4())
         try:
-            self.database.create_job(job_id, workspace_id, "change_set", JobStatus.VALIDATED, {"base_revision_id": base_revision_id, "plan": plan, "commands": commands}, cad_version)
+            self.database.create_job(job_id, workspace_id, "change_set", JobStatus.VALIDATED, {"base_revision_id": base_revision_id, "plan": plan, "commands": normalized_commands}, cad_version)
         except WorkspaceBusyError as exc:
             raise ApplicationError("WORKSPACE_WRITE_BUSY", str(exc), 409) from exc
         if plan["requires_cad"]:
@@ -185,7 +310,7 @@ class DstManagerService:
         append_operation_event(workspace.root, job_id, "STAGING", job_type="metadata")
         acsm = AcsmDocument(self.codec.decode_file(workspace.dst_path))
         try:
-            acsm.apply_metadata_commands(commands)
+            self._apply_nonstructural_commands(acsm, normalized_commands, structural=False)
         except AcsmValidationError as exc:
             self.database.update_job(job_id, JobStatus.FAILED, 0, str(exc).split(":", 1)[0])
             return self.database.get_job(job_id) or {}
@@ -496,6 +621,108 @@ class DstManagerService:
     def _check_revision(self, workspace: Workspace, base_revision_id: str) -> None:
         if workspace.revision_id != base_revision_id:
             raise ApplicationError("REVISION_CONFLICT", "基准修订已变化，请重新预览", 409)
+
+    @staticmethod
+    def _normalize_commands(commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        allowed = {
+            "update_sheet_set",
+            "update_subset_title",
+            "update_sheet_properties",
+            "delete_sheet",
+            "insert_sheet",
+            "insert_subset",
+            "add_custom_property",
+            "delete_custom_property",
+        }
+        invalid = [command.get("type") for command in commands if command.get("type") not in allowed]
+        if invalid:
+            raise ApplicationError("COMMAND_UNSUPPORTED", f"不支持的命令：{invalid}")
+        normalized: list[dict[str, Any]] = []
+        for command in commands:
+            item = dict(command)
+            if item["type"] == "update_subset_title":
+                item["type"] = "update_subset"
+            elif item["type"] == "update_sheet_properties":
+                if {"number", "title"} & item.keys():
+                    raise ApplicationError("COMMAND_UNSUPPORTED", "不支持直接更新图号或图纸标题")
+                item["type"] = "update_sheet"
+            normalized.append(item)
+        return normalized
+
+    @staticmethod
+    def _apply_nonstructural_commands(
+        document: AcsmDocument,
+        commands: list[dict[str, Any]],
+        structural: bool,
+    ) -> None:
+        structural_types = {"update_subset", "delete_sheet", "insert_sheet", "insert_subset"}
+        for command in commands:
+            if command["type"] in {"add_custom_property", "delete_custom_property"}:
+                document.apply_property_definition_commands([command])
+            elif not structural or command["type"] not in structural_types:
+                document.apply_metadata_commands([command])
+
+    @staticmethod
+    def _property_definitions(document: SheetSetDocument) -> list[CustomPropertyDefinition]:
+        result = [
+            CustomPropertyDefinition("sheetset", name, value)
+            for name, value in document.custom_properties.items()
+        ]
+        sheet_seen: set[str] = set()
+        for sheet in document.sheets:
+            for name, value in sheet.custom_properties.items():
+                key = name.casefold()
+                if key in sheet_seen:
+                    continue
+                sheet_seen.add(key)
+                result.append(CustomPropertyDefinition("sheet", name, value))
+        return result
+
+    @staticmethod
+    def _editing_error_message(exc: EditingError) -> str:
+        _, separator, message = str(exc).partition(": ")
+        return message if separator else str(exc)
+
+    @staticmethod
+    def _csv_error_line(data: bytes, code: str) -> int | None:
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return None
+        reader = csv.reader(io.StringIO(text, newline=""))
+        rows: list[tuple[int, list[str]]] = []
+        try:
+            for row in reader:
+                rows.append((reader.line_num, row))
+        except csv.Error:
+            return reader.line_num or None
+        if not rows or code == "CUSTOM_PROPERTY_CSV_HEADER_INVALID":
+            return 1
+        if code == "CUSTOM_PROPERTY_CSV_COLUMNS_INVALID":
+            return next((line for line, row in rows if len(row) != 3), 1)
+        accumulated: list[tuple[str, str, str]] = []
+        for line, row in rows[1:]:
+            if not row or all(not value.strip() for value in row) or len(row) != 3:
+                continue
+            accumulated.append((row[0].strip(), row[1], row[2]))
+            try:
+                validate_property_definitions(accumulated)
+            except EditingError as exc:
+                if exc.code == code:
+                    return line
+        return 1
+
+    @staticmethod
+    def _csv_definition_lines(data: bytes) -> list[int]:
+        reader = csv.reader(io.StringIO(data.decode("utf-8-sig"), newline=""))
+        result: list[int] = []
+        previous_end = 0
+        for index, row in enumerate(reader):
+            start_line = previous_end + 1
+            previous_end = reader.line_num
+            if index > 0 and row and any(value.strip() for value in row):
+                result.append(start_line)
+        return result
 
     @staticmethod
     def _issue(code: str, severity: str, message: str):

@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from dst_manager.application.service import DstManagerService
+from dst_manager.config import Settings
 from dst_manager.domain.editing import (
     EditingError,
     SuffixOptions,
@@ -129,6 +131,30 @@ def test_property_csv_rejects_invalid_encoding_shape_and_required_values(data, c
     with pytest.raises(EditingError) as exc_info:
         parse_property_csv(data)
     assert exc_info.value.code == code
+
+
+def test_service_property_csv_preview_reports_invalid_utf8_without_writing(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    before = (dst.stat().st_mtime_ns, dst.read_bytes())
+
+    preview = service.preview_custom_property_import(
+        workspace.id,
+        workspace.revision_id,
+        b"type,name,default_value\nsheet,\xb1\xe0\xba\xc5,1\n",
+    )
+
+    assert preview["executable"] is False
+    assert preview["diagnostics"] == [
+        {
+            "code": "CUSTOM_PROPERTY_CSV_ENCODING_INVALID",
+            "severity": "error",
+            "message": "CSV 必须使用 UTF-8 编码",
+            "line": None,
+        }
+    ]
+    assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before
 
 
 def test_normalize_property_name_rejects_control_characters():

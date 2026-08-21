@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -41,6 +41,11 @@ class RestoreRevisionRequest(BaseModel):
     base_revision_id: str
 
 
+class PropertyCsvRequest(BaseModel):
+    base_revision_id: str
+    csv: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="DST Manager", version="0.2.1")
     service = DstManagerService(settings)
@@ -61,6 +66,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health():
         return {"status": "ok", "run_id": os.environ.get("DST_MANAGER_RUN_ID")}
 
+    @app.get("/api/custom-properties/template")
+    def custom_property_template():
+        return Response(
+            content=b"type,name,default_value\r\n",
+            media_type="text/csv; charset=utf-8",
+        )
+
     @app.post("/api/workspaces/open")
     def open_workspace(request: OpenRequest):
         return workspace_json(service.open_workspace(request.dst_path, request.root_override))
@@ -68,6 +80,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/workspaces/{workspace_id}")
     def get_workspace(workspace_id: str):
         return workspace_json(service.get_workspace(workspace_id))
+
+    @app.post("/api/workspaces/{workspace_id}/custom-properties/import/preview")
+    def preview_custom_property_import(workspace_id: str, request: PropertyCsvRequest):
+        return service.preview_custom_property_import(
+            workspace_id,
+            request.base_revision_id,
+            request.csv.encode("utf-8"),
+        )
+
+    @app.post("/api/workspaces/{workspace_id}/custom-properties/import")
+    def import_custom_properties(workspace_id: str, request: PropertyCsvRequest):
+        return service.import_custom_properties(
+            workspace_id,
+            request.base_revision_id,
+            request.csv.encode("utf-8"),
+        )
+
+    @app.get("/api/workspaces/{workspace_id}/custom-properties/export")
+    def export_custom_properties(workspace_id: str):
+        return Response(
+            content=service.export_custom_properties_csv(workspace_id),
+            media_type="text/csv; charset=utf-8",
+        )
 
     @app.post("/api/workspaces/{workspace_id}/changes/preview")
     def preview(workspace_id: str, request: ChangeRequest):
