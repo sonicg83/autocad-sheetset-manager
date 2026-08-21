@@ -6,8 +6,10 @@ import pytest
 
 from dst_manager.infrastructure.filesystem.locking import WindowsWriteLocks
 from dst_manager.infrastructure.filesystem.publisher import (
+    PublishBaselineError,
     PublishRolledBackError,
     RecoverablePublisher,
+    file_sha256,
 )
 
 
@@ -113,3 +115,125 @@ def test_windows_lock_blocks_writers_but_allows_readers(tmp_path: Path):
         assert target.read_text()=="data"
         with pytest.raises(PermissionError): target.write_text("changed")
     target.write_text("changed"); assert target.read_text()=="changed"
+
+
+def test_publish_can_atomically_replace_target_while_write_lock_is_held(tmp_path: Path):
+    target = tmp_path / "locked-publish.dwg"
+    staged = tmp_path / "staged-locked-publish.dwg"
+    target.write_bytes(b"old")
+    staged.write_bytes(b"new")
+    expected = file_sha256(target)
+
+    with WindowsWriteLocks([target]):
+        RecoverablePublisher().publish(
+            "locked-publish",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: expected},
+        )
+
+    assert target.read_bytes() == b"new"
+
+
+@pytest.mark.parametrize("fail_at", [1, 2, 3])
+def test_locked_mixed_publish_failure_restores_whole_batch(tmp_path: Path, monkeypatch, fail_at: int):
+    created = tmp_path / "created-locked.dwg"
+    replaced = tmp_path / "replaced-locked.dwg"
+    deleted = tmp_path / "deleted-locked.dwg"
+    staged_created = tmp_path / "staged-created-locked.dwg"
+    staged_replaced = tmp_path / "staged-replaced-locked.dwg"
+    replaced.write_bytes(b"old-replaced")
+    deleted.write_bytes(b"old-deleted")
+    staged_created.write_bytes(b"new-created")
+    staged_replaced.write_bytes(b"new-replaced")
+    publisher = RecoverablePublisher()
+    original_replace = publisher._replace_file
+    replace_calls = 0
+
+    def replace(source: Path, target: Path):
+        nonlocal replace_calls
+        replace_calls += 1
+        if fail_at in {1, 2} and replace_calls == fail_at:
+            raise OSError(f"注入第 {fail_at} 项锁内发布故障")
+        original_replace(source, target)
+
+    publisher._replace_file = replace
+    original_unlink = Path.unlink
+
+    def unlink(path: Path, *args, **kwargs):
+        if fail_at == 3 and path == deleted:
+            raise OSError("注入第 3 项锁内发布故障")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    expected = {
+        created: None,
+        replaced: file_sha256(replaced),
+        deleted: file_sha256(deleted),
+    }
+
+    with WindowsWriteLocks([replaced, deleted]), pytest.raises(PublishRolledBackError):
+        publisher.publish(
+            f"locked-mixed-{fail_at}",
+            tmp_path,
+            {created: staged_created, replaced: staged_replaced, deleted: None},
+            expected_baselines=expected,
+        )
+
+    assert not created.exists()
+    assert replaced.read_bytes() == b"old-replaced"
+    assert deleted.read_bytes() == b"old-deleted"
+
+
+def test_publish_rechecks_existing_target_before_first_replace(tmp_path: Path, monkeypatch):
+    target = tmp_path / "existing.dwg"
+    staged = tmp_path / "staged-existing.dwg"
+    target.write_bytes(b"old")
+    staged.write_bytes(b"new")
+    expected = file_sha256(target)
+    publisher = RecoverablePublisher()
+    original_write_journal = publisher._write_journal
+
+    def mutate_after_publishing(path: Path, journal: dict):
+        original_write_journal(path, journal)
+        if journal["status"] == "PUBLISHING":
+            target.write_bytes(b"external")
+
+    monkeypatch.setattr(publisher, "_write_journal", mutate_after_publishing)
+
+    with pytest.raises(PublishBaselineError) as exc:
+        publisher.publish(
+            "race-existing",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: expected},
+        )
+
+    assert exc.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"external"
+
+
+def test_publish_rechecks_absent_create_target_before_first_replace(tmp_path: Path, monkeypatch):
+    target = tmp_path / "new.dwg"
+    staged = tmp_path / "staged-new.dwg"
+    staged.write_bytes(b"new")
+    publisher = RecoverablePublisher()
+    original_write_journal = publisher._write_journal
+
+    def create_after_publishing(path: Path, journal: dict):
+        original_write_journal(path, journal)
+        if journal["status"] == "PUBLISHING":
+            target.write_bytes(b"external")
+
+    monkeypatch.setattr(publisher, "_write_journal", create_after_publishing)
+
+    with pytest.raises(PublishBaselineError) as exc:
+        publisher.publish(
+            "race-create",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: None},
+        )
+
+    assert exc.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"external"

@@ -46,7 +46,7 @@ def test_plugin_loads_and_reads_layout_handles(version: str, tmp_path: Path):
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_structural_title_change_rebuilds_dwg_and_dst(version: str, tmp_path: Path):
+def test_structural_subset_title_change_rebuilds_dwg_and_dst(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample" / "project1"
     shutil.copy2(source_project / "图纸集数据文件.dst", tmp_path / "图纸集数据文件.dst")
@@ -61,8 +61,13 @@ def test_structural_title_change_rebuilds_dwg_and_dst(version: str, tmp_path: Pa
     )
     service = DstManagerService(settings)
     workspace = service.open_workspace(tmp_path / "图纸集数据文件.dst")
-    sheet = workspace.document.subsets[0].sheets[0]
-    job = service.execute_changes(workspace.id, workspace.revision_id, [{"type": "update_sheet", "sheet_id": sheet.acsm_id, "title": "封面测试"}], version)
+    subset = workspace.document.subsets[0]
+    job = service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_subset", "subset_id": subset.acsm_id, "title": "封面测试"}],
+        version,
+    )
     assert job["status"] == "QUEUED"
     result = service.run_next_job()
     assert result and result["status"] == "SUCCEEDED", result
@@ -170,7 +175,10 @@ def test_five_dwg_groups_run_with_bounded_parallelism(version: str, tmp_path: Pa
     )
     service = DstManagerService(settings)
     workspace = service.open_workspace(tmp_path / dst_name)
-    commands = [{"type": "update_sheet", "sheet_id": subset.sheets[0].acsm_id, "title": f"{subset.sheets[0].title}-并行"} for subset in workspace.document.subsets[:5]]
+    commands = [
+        {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-并行"}
+        for subset in workspace.document.subsets[:5]
+    ]
     job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
     assert job["status"] == "QUEUED"
     result = service.run_next_job()
@@ -179,11 +187,11 @@ def test_five_dwg_groups_run_with_bounded_parallelism(version: str, tmp_path: Pa
     assert all(item["status"] == "SUCCEEDED" for item in result["files"])
     assert all(item["duration_ms"] > 0 and item["peak_memory_bytes"] > 0 for item in result["files"])
     reopened = service.open_workspace(tmp_path / dst_name)
-    assert all(subset.sheets[0].title.endswith("-并行") for subset in reopened.document.subsets[:5])
+    assert all("-并行" in subset.sheets[0].title for subset in reopened.document.subsets[:5])
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_insert_delete_reorder_and_cross_subset_move(version: str, tmp_path: Path):
+def test_insert_and_delete_rebuilds_supported_subset(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
     shutil.copy2(source_project / "图纸集数据文件.dst", tmp_path / "图纸集数据文件.dst")
@@ -199,28 +207,32 @@ def test_insert_delete_reorder_and_cross_subset_move(version: str, tmp_path: Pat
     )
     service = DstManagerService(settings)
     workspace = service.open_workspace(tmp_path / "图纸集数据文件.dst")
-    source_subset, target_subset = workspace.document.subsets[2], workspace.document.subsets[3]
-    reordered_id = source_subset.sheets[0].acsm_id
+    source_subset = workspace.document.subsets[2]
     deleted_id = source_subset.sheets[2].acsm_id
-    moved_id = source_subset.sheets[3].acsm_id
     template = source_subset.sheets[1]
     commands = [
-        {"type": "reorder_sheet", "sheet_id": reordered_id, "position": 4},
         {"type": "delete_sheet", "sheet_id": deleted_id},
-        {"type": "insert_sheet", "target_subset_id": source_subset.acsm_id, "position": 1, "number": "0998", "title": "新增测试", "source": {"type": "template_layout", "file": str(template.layout.resolved_path), "layout": template.layout.layout_name}},
-        {"type": "move_sheet", "sheet_id": moved_id, "target_subset_id": target_subset.acsm_id, "position": 1},
+        {
+            "type": "insert_sheet",
+            "target_subset_id": source_subset.acsm_id,
+            "position": 1,
+            "count": 1,
+            "source": {
+                "type": "template_layout",
+                "file": str(template.layout.resolved_path),
+                "layout": template.layout.layout_name,
+            },
+        },
     ]
     job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
     assert job["status"] == "QUEUED", job
     result = service.run_next_job()
     assert result and result["status"] == "SUCCEEDED", result
     reopened = service.open_workspace(tmp_path / "图纸集数据文件.dst")
-    final_source, final_target = reopened.document.subsets[2], reopened.document.subsets[3]
+    final_source = reopened.document.subsets[2]
     assert deleted_id not in {sheet.acsm_id for sheet in reopened.document.sheets}
-    assert moved_id in {sheet.acsm_id for sheet in final_target.sheets}
-    assert any(sheet.number == "0998" and sheet.title == "新增测试" for sheet in final_source.sheets)
-    assert len(final_source.sheets) == 4 and len(final_target.sheets) == 3
-    assert len({sheet.layout.handle for sheet in final_source.sheets + final_target.sheets}) == 7
+    assert len(final_source.sheets) == len(source_subset.sheets)
+    assert len({sheet.layout.handle for sheet in final_source.sheets}) == len(final_source.sheets)
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
@@ -272,7 +284,7 @@ def test_parallel_one_and_two_produce_equivalent_results(version: str, tmp_path:
         service = DstManagerService(settings)
         workspace = service.open_workspace(project / "图纸集数据文件.dst")
         commands = [
-            {"type": "update_sheet", "sheet_id": subset.sheets[0].acsm_id, "title": f"{subset.sheets[0].title}-等价"}
+            {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-等价"}
             for subset in workspace.document.subsets[:2]
         ]
         job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
@@ -325,7 +337,7 @@ def test_injected_second_dwg_failure_never_publishes_partial_files(version: str,
     service = DstManagerService(settings)
     workspace = service.open_workspace(tmp_path / dst_name)
     commands = [
-        {"type": "update_sheet", "sheet_id": subset.sheets[0].acsm_id, "title": f"{subset.sheets[0].title}-失败注入"}
+        {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-失败注入"}
         for subset in workspace.document.subsets[:2]
     ]
     job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
@@ -359,11 +371,11 @@ def test_cad_success_then_dom_failure_keeps_formal_hashes(version: str, tmp_path
     )
     service = DstManagerService(settings)
     workspace = service.open_workspace(dst)
-    sheet = workspace.document.subsets[0].sheets[0]
+    subset = workspace.document.subsets[0]
     job = service.execute_changes(
         workspace.id,
         workspace.revision_id,
-        [{"type": "update_sheet", "sheet_id": sheet.acsm_id, "title": "DOM 失败注入"}],
+        [{"type": "update_subset", "subset_id": subset.acsm_id, "title": "DOM 失败注入"}],
         version,
     )
     assert job["status"] == "QUEUED"
@@ -372,10 +384,11 @@ def test_cad_success_then_dom_failure_keeps_formal_hashes(version: str, tmp_path
     def fail_dom(*_args, **_kwargs):
         raise AcsmValidationError("CUSTOM_PROPERTY_VALUE_DUPLICATED: 注入")
 
-    monkeypatch.setattr(AcsmDocument, "apply_structural_commands", fail_dom)
+    monkeypatch.setattr(AcsmDocument, "apply_derived_document", fail_dom)
     result = service.run_next_job()
 
     assert result and result["status"] == "FAILED"
+    assert result["error_code"] == "CUSTOM_PROPERTY_VALUE_DUPLICATED"
     after = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)}
     assert after == before
     assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()

@@ -95,6 +95,15 @@ class DstManagerService:
         for index, command in enumerate(commands):
             command_type = command["type"]
             sheet_id = command.get("sheet_id")
+            if command_type == "update_sheet" and ({"number", "title"} & command.keys()):
+                diagnostics.append(
+                    {
+                        "code": "COMMAND_UNSUPPORTED",
+                        "severity": "error",
+                        "message": "不支持直接更新图号或图纸标题",
+                        "index": index,
+                    },
+                )
             if command_type in {"update_sheet", "delete_sheet", "move_sheet", "reorder_sheet"} and sheet_id not in sheet_ids:
                 diagnostics.append({"code": "SHEET_NOT_FOUND", "severity": "error", "message": f"找不到图纸：{sheet_id}", "index": index})
             if command_type in {"insert_sheet", "insert_subset"} and not command.get("source"):

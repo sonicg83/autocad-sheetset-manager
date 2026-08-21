@@ -133,61 +133,64 @@ class CadJobRunner:
                     "TEMPLATE_NOT_FOUND" if layout["source_type"] == "template_layout" else "LAYOUT_SOURCE_NOT_FOUND",
                 )
                 unique_sources.add(source)
-        affected_targets = {
-            Path(group["source_target_file"]).resolve()
-            for group in plan["groups"]
-            if group["source_target_file"] is not None
-        } | {workspace.dst_path.resolve()}
-        required_space = sum(path.stat().st_size for path in unique_sources) + 2 * sum(path.stat().st_size for path in affected_targets)
+        path_graph = plan.get("path_graph")
+        if not isinstance(path_graph, dict):
+            raise PlanningError("EXECUTION_PATH_GRAPH_INVALID", "CAD 任务缺少完整的DWG路径图")
+        publication_targets = {
+            workspace.dst_path.resolve(),
+            *(Path(path).resolve() for path in path_graph.get("old_sources", [])),
+            *(Path(path).resolve() for path in path_graph.get("final_targets", [])),
+        }
+        required_space = sum(path.stat().st_size for path in unique_sources) + 2 * sum(
+            path.stat().st_size for path in publication_targets if path.exists()
+        )
         if shutil.disk_usage(workspace.root).free < required_space:
             raise OSError("STAGING_DISK_SPACE_INSUFFICIENT")
-        source_snapshots: dict[Path, Path] = {}
-        for group in plan["groups"]:
-            for layout in group["layouts"]:
-                source = Path(layout["source_file"]).resolve()
-                if source not in source_snapshots:
-                    source_hash = file_sha256(source)
-                    snapshot = input_dir / f"{source_hash[:16]}-{source.name}"
-                    shutil.copy2(source, snapshot)
-                    if file_sha256(snapshot) != source_hash or file_sha256(source) != source_hash:
-                        raise ValueError(f"SOURCE_SNAPSHOT_HASH_MISMATCH: {source}")
-                    source_snapshots[source] = snapshot
-                layout["source_file"] = str(source_snapshots[source])
-            group["source_snapshot"] = str(source_snapshots[Path(group["source_snapshot"]).resolve()])
-        (plan_dir / "execution-plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-        staged_files: dict[Path, Path | None] = {}
-        bindings: dict[str, dict[str, str]] = {}
-        publication_targets = [
-            workspace.dst_path,
-            *(Path(group["source_target_file"]) for group in plan["groups"] if group["source_target_file"] is not None),
-            *(Path(group["target_file"]) for group in plan["groups"]),
-            *(Path(item["target_file"]) for item in plan["deleted_subsets"]),
-        ]
-        baseline_hashes = {path.resolve(): file_sha256(path) if path.exists() else None for path in publication_targets}
-        lock_targets = [path for path in publication_targets if path.exists()]
+        lock_targets = [path for path in publication_targets | unique_sources if path.exists()]
         with WindowsWriteLocks(lock_targets):
+            baseline_hashes = {
+                path: file_sha256(path) if path.exists() else None
+                for path in publication_targets
+            }
+            self._validate_create_targets(plan, baseline_hashes)
+            source_baselines = {source: file_sha256(source) for source in unique_sources}
+            source_snapshots: dict[Path, Path] = {}
+            for index, source in enumerate(sorted(unique_sources, key=lambda path: str(path).casefold())):
+                source_hash = source_baselines[source]
+                snapshot = input_dir / f"{source_hash[:16]}-{index:03d}-{source.name}"
+                self._copy_verified_snapshot(source, snapshot, source_hash)
+                source_snapshots[source] = snapshot
+            for group in plan["groups"]:
+                for layout in group["layouts"]:
+                    source = Path(layout["source_file"]).resolve()
+                    layout["source_file"] = str(source_snapshots[source])
+                group["source_snapshot"] = str(source_snapshots[Path(group["source_snapshot"]).resolve()])
+            (plan_dir / "execution-plan.json").write_text(
+                json.dumps(plan, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
             self.database.update_job(job_id, JobStatus.CAD_RUNNING, 15)
             units = [RebuildWorkUnit(index, group, Path(group["source_snapshot"]), staging_dir, scripts_dir, logs_dir, self.timeout) for index, group in enumerate(plan["groups"])]
             results = self._run_groups(job_id, worker_id, workspace, capability, units)
-            for result in sorted(results, key=lambda item: item.index):
-                bindings.update(result.bindings)
-                if result.source_target is not None and result.source_target.resolve() != result.target.resolve():
-                    staged_files[result.source_target] = None
-                staged_files[result.target] = result.staged
-            for deleted in plan["deleted_subsets"]:
-                staged_files[Path(deleted["target_file"])] = None
+            staged_files, bindings = self._collect_staged_files(results, plan)
             self.database.update_job(job_id, JobStatus.VERIFYING, 70)
             staged_dst = self._write_staged_dst(workspace, plan, bindings, staging_dir, commands)
-            staged_files[workspace.dst_path] = staged_dst
+            staged_files[workspace.dst_path.resolve()] = staged_dst
             self.database.update_job(job_id, JobStatus.PREPARED, 80)
             for path, expected_hash in baseline_hashes.items():
                 current_hash = file_sha256(path) if path.exists() else None
                 if current_hash != expected_hash:
-                    raise ValueError(f"BASE_FILE_CHANGED: {path}")
-        before_hash = baseline_hashes[workspace.dst_path.resolve()]
-        self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
-        append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=len(staged_files))
-        revision_dir = self.publisher.publish(job_id, workspace.root, staged_files)
+                    raise PlanningError("BASE_FILE_CHANGED", f"发布基准已变化：{path}")
+            before_hash = baseline_hashes[workspace.dst_path.resolve()]
+            expected_publish_baselines = {path.resolve(): baseline_hashes[path.resolve()] for path in staged_files}
+            self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
+            append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=len(staged_files))
+            revision_dir = self.publisher.publish(
+                job_id,
+                workspace.root,
+                staged_files,
+                expected_baselines=expected_publish_baselines,
+            )
         result_hash = file_sha256(workspace.dst_path)
         append_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
         shutil.copytree(logs_dir, revision_dir / "logs", dirs_exist_ok=True)
@@ -197,6 +200,68 @@ class CadJobRunner:
         write_workspace_metadata(workspace.root, workspace.id, workspace.dst_path, result_hash, capability.version)
         self.database.update_job(job_id, JobStatus.SUCCEEDED, 100)
         return self.database.get_job(job_id) or {}
+
+    @staticmethod
+    def _copy_verified_snapshot(source: Path, snapshot: Path, expected_hash: str) -> None:
+        if file_sha256(source) != expected_hash:
+            raise PlanningError("BASE_FILE_CHANGED", f"源文件在快照前已变化：{source}")
+        shutil.copy2(source, snapshot)
+        if file_sha256(snapshot) != expected_hash or file_sha256(source) != expected_hash:
+            snapshot.unlink(missing_ok=True)
+            raise PlanningError("BASE_FILE_CHANGED", f"源文件与快照基准不一致：{source}")
+
+    @staticmethod
+    def _validate_create_targets(plan: dict[str, Any], baselines: dict[Path, str | None]) -> None:
+        old_sources = {
+            str(Path(path).resolve()).casefold()
+            for path in plan["path_graph"].get("old_sources", [])
+        }
+        for group in plan["groups"]:
+            if group["operation"] != "create":
+                continue
+            if group.get("expected_baseline", "missing") is not None:
+                raise PlanningError("EXECUTION_PLAN_INVALID", "create 计划必须声明空目标基准")
+            target = Path(group["target_file"]).resolve()
+            if baselines[target] is None:
+                continue
+            explicitly_reused = group.get("target_reuses_source") is True and str(target).casefold() in old_sources
+            if not explicitly_reused:
+                raise PlanningError("CREATE_TARGET_EXISTS", f"新建DWG目标已存在：{target}")
+
+    @staticmethod
+    def _collect_staged_files(
+        results: list[RebuildResult],
+        plan: dict[str, Any],
+    ) -> tuple[dict[Path, Path | None], dict[str, dict[str, str]]]:
+        expected_targets = {
+            str(Path(group["target_file"]).resolve()).casefold(): Path(group["target_file"]).resolve()
+            for group in plan["groups"]
+        }
+        staged_by_key: dict[str, Path] = {}
+        bindings: dict[str, dict[str, str]] = {}
+        for result in sorted(results, key=lambda item: item.index):
+            key = str(result.target.resolve()).casefold()
+            if key in staged_by_key:
+                raise PlanningError("DUPLICATE_STAGED_TARGET", f"多个CAD结果指向同一最终DWG：{result.target}")
+            if key not in expected_targets:
+                raise PlanningError("CAD_RESULT_TARGET_MISMATCH", f"CAD结果包含计划外目标：{result.target}")
+            staged_by_key[key] = result.staged
+            bindings.update(result.bindings)
+        if staged_by_key.keys() != expected_targets.keys():
+            raise PlanningError("CAD_RESULT_TARGET_MISMATCH", "CAD结果未与最终计划目标一一对应")
+        staged_files: dict[Path, Path | None] = {
+            expected_targets[key]: staged
+            for key, staged in staged_by_key.items()
+        }
+        final_keys = {
+            str(Path(path).resolve()).casefold()
+            for path in plan["path_graph"].get("final_targets", [])
+        }
+        for path in plan["path_graph"].get("delete_targets", []):
+            target = Path(path).resolve()
+            if str(target).casefold() not in final_keys:
+                staged_files[target] = None
+        return staged_files, bindings
 
     def _run_groups(self, job_id: str, worker_id: str, workspace: Workspace, capability: CadCapability, units: list[RebuildWorkUnit]) -> list[RebuildResult]:
         if not units:

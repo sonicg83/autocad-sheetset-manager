@@ -8,8 +8,8 @@ from unittest.mock import Mock
 import pytest
 from typer.testing import CliRunner
 
-from dst_manager.application.cad_job import CadJobRunner, RebuildWorkUnit
-from dst_manager.application.service import DstManagerService
+from dst_manager.application.cad_job import CadJobRunner, RebuildResult, RebuildWorkUnit
+from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
 from dst_manager.domain.editing import SuffixOptions, derive_document_structure
 from dst_manager.domain.models import (
@@ -457,6 +457,37 @@ def _planning_workspace(tmp_path: Path, subsets: list[Subset]) -> Workspace:
     )
 
 
+def _chained_rename_workspace(tmp_path: Path) -> tuple[Workspace, list[Path]]:
+    drawings = [tmp_path / "001 共享.dwg", tmp_path / "002 共享.dwg"]
+    for index, drawing in enumerate(drawings, start=1):
+        drawing.write_bytes(f"old-{index}".encode())
+    ids = [f"g00000000-0000-0000-0001-{index:012X}" for index in range(1, 9)]
+    subsets = []
+    for index, drawing in enumerate(drawings, start=1):
+        offset = (index - 1) * 3
+        subsets.append(
+            f'''<AcSmSubset ID="{ids[offset + 2]}"><AcSmProp propname="Name">00{index} 共享</AcSmProp>'''
+            f'''<AcSmSheet ID="{ids[offset + 3]}"><AcSmCustomPropertyBag ID="{ids[offset + 4]}"/>'''
+            f'''<AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">A{index}</AcSmProp>'''
+            f'''<AcSmProp propname="FileName">{drawing}</AcSmProp>'''
+            f'''<AcSmProp propname="Name">00{index} 共享 ({index})</AcSmProp>'''
+            f'''<AcSmProp propname="Relative_FileName">.\\{drawing.name}</AcSmProp></AcSmAcDbLayoutReference>'''
+            f'''<AcSmProp propname="Number">00{index}</AcSmProp><AcSmProp propname="Title">共享 ({index})</AcSmProp>'''
+            "</AcSmSheet></AcSmSubset>",
+        )
+    xml = (
+        f'''<AcSmDatabase ID="{ids[0]}"><AcSmProp propname="DbVersion">1.1</AcSmProp>'''
+        f'''<AcSmSheetSet ID="{ids[1]}"><AcSmProp propname="Name">连锁改名</AcSmProp>'''
+        + "".join(subsets)
+        + "</AcSmSheetSet></AcSmDatabase>"
+    ).encode()
+    dst = tmp_path / "连锁改名.dst"
+    codec = DstCodec()
+    codec.encode_file(xml, dst)
+    document = AcsmDocument(codec.decode_file(dst)).project(tmp_path)
+    return Workspace("workspace-chain", tmp_path, dst, file_sha256(dst), document), drawings
+
+
 def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_path: Path):
     existing = tmp_path / "GP-0001 目录.dwg"
     existing.write_bytes(b"existing")
@@ -481,6 +512,7 @@ def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_pa
     assert len(plan["groups"]) == 1
     group = plan["groups"][0]
     assert group["operation"] == "create"
+    assert group["expected_baseline"] is None
     assert group["source_target_file"] is None
     assert Path(group["source_snapshot"]) == template
     assert Path(group["target_file"]).parent == tmp_path
@@ -572,6 +604,8 @@ def test_inserted_subset_replans_collateral_number_ranges_and_suffixes(tmp_path:
     assert by_subset["subset-2"]["operation"] == "rebuild"
     assert [layout["number"] for layout in by_subset["subset-2"]["layouts"]] == ["0004"]
     assert [layout["title"] for layout in by_subset["subset-2"]["layouts"]] == ["燃气管道平面图 (4)"]
+    assert set(plan["path_graph"]["old_sources"]) == {str(first.resolve()), str(second.resolve())}
+    assert len(plan["path_graph"]["final_targets"]) == 3
 
 
 def test_first_subset_plan_uses_template_as_create_snapshot(tmp_path: Path):
@@ -706,6 +740,76 @@ def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
     assert any(call.args[3] == "TEMPLATE_NOT_FOUND" for call in database.update_job.call_args_list if len(call.args) >= 4)
 
 
+@pytest.mark.parametrize("template_is_target", [False, True])
+def test_create_target_collision_is_blocked_before_cad(tmp_path: Path, template_is_target: bool):
+    workspace = _planning_workspace(tmp_path, [])
+    target = tmp_path / "1 新建.dwg"
+    template = target if template_is_target else tmp_path / "模板.dwt"
+    template.write_bytes(b"template" if template_is_target else b"template-source")
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "title": "新建",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+    if not template_is_target:
+        target.write_bytes(b"unrelated")
+    database = Mock()
+    runner = CadJobRunner(database, DstCodec(), Mock(), 30)
+    runner._run_groups = Mock(side_effect=AssertionError("目标碰撞时不得启动 CAD"))
+
+    with pytest.raises(PlanningError) as exc_info:
+        runner._execute(
+            "job-collision",
+            "worker",
+            1,
+            workspace,
+            CadCapability("2020", None, tmp_path / "plugin.dll"),
+            [command],
+            plan,
+        )
+
+    assert exc_info.value.code == "CREATE_TARGET_EXISTS"
+    runner._run_groups.assert_not_called()
+    assert target.read_bytes() == (b"template" if template_is_target else b"unrelated")
+
+
+def test_snapshot_copy_rejects_change_after_baseline(tmp_path: Path):
+    source = tmp_path / "source.dwg"
+    snapshot = tmp_path / "snapshot.dwg"
+    source.write_bytes(b"baseline")
+    expected = file_sha256(source)
+    source.write_bytes(b"external")
+
+    with pytest.raises(PlanningError) as exc_info:
+        CadJobRunner._copy_verified_snapshot(source, snapshot, expected)
+
+    assert exc_info.value.code == "BASE_FILE_CHANGED"
+    assert not snapshot.exists()
+
+
+def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
+    target = tmp_path / "same.dwg"
+    first = tmp_path / "first.dwg"
+    second = tmp_path / "second.dwg"
+    result_arguments = ({}, 1, tmp_path / "log", None, 1)
+    results = [
+        RebuildResult(0, target, None, first, *result_arguments),
+        RebuildResult(1, target, None, second, *result_arguments),
+    ]
+    plan = {
+        "groups": [{"target_file": str(target)}, {"target_file": str(target)}],
+        "path_graph": {"delete_targets": []},
+    }
+
+    with pytest.raises(PlanningError) as exc_info:
+        CadJobRunner._collect_staged_files(results, plan)
+
+    assert exc_info.value.code == "DUPLICATE_STAGED_TARGET"
+
+
 def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
@@ -727,6 +831,30 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
     assert job["payload"]["plan"]["execution_intent"] == preview["execution_intent"]
 
 
+def test_update_sheet_title_with_custom_properties_is_rejected_without_partial_commit(tiny_workspace, tmp_path: Path):
+    dst, sheet_id = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    before = dst.read_bytes()
+    command = {
+        "type": "update_sheet",
+        "sheet_id": sheet_id,
+        "title": "不支持的标题",
+        "custom_properties": {"比例": "1:500"},
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+
+    assert preview["executable"] is False
+    assert preview["diagnostics"][0]["code"] == "COMMAND_UNSUPPORTED"
+    with pytest.raises(ApplicationError) as exc_info:
+        service.execute_changes(workspace.id, workspace.revision_id, [command])
+    assert exc_info.value.code == "PLAN_INVALID"
+    assert dst.read_bytes() == before
+    reopened = service.open_workspace(dst)
+    assert reopened.document.sheets[0].custom_properties["比例"] == "1:100"
+
+
 class _SuccessfulCadExecutor:
     def __init__(self, handle_text: str):
         self.handle_text = handle_text
@@ -736,6 +864,21 @@ class _SuccessfulCadExecutor:
         self.calls += 1
         if self.calls == 2:
             drawing.with_suffix(".dst-handles.txt").write_text(self.handle_text, encoding="utf-8")
+        return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+class _PerDrawingCadExecutor:
+    def __init__(self, layouts_by_target: dict[str, list[str]]):
+        self.layouts_by_target = layouts_by_target
+        self.next_handle = 16
+
+    def run(self, _capability, drawing, script, _timeout):
+        if script.stem.startswith("handles-"):
+            lines = []
+            for layout in self.layouts_by_target[drawing.name]:
+                lines.append(f"{layout}={self.next_handle:X}")
+                self.next_handle += 1
+            drawing.with_suffix(".dst-handles.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
@@ -893,6 +1036,50 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     assert {sheet.layout.resolved_path for sheet in created.sheets} == {target}
     assert all(sheet.layout.handle != "0" for sheet in created.sheets)
     assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "manifest.json").is_file()
+
+
+def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
+    workspace, old_drawings = _chained_rename_workspace(tmp_path)
+    template = tmp_path / "模板.dwt"
+    template.write_bytes(b"template")
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "before",
+        "title": "共享",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
+    assert [group["operation"] for group in plan["groups"]] == ["create", "rebuild", "rebuild"]
+    targets = [Path(group["target_file"]) for group in plan["groups"]]
+    assert targets[:2] == old_drawings
+    layouts_by_target = {
+        Path(group["target_file"]).name: [layout["target_layout"] for layout in group["layouts"]]
+        for group in plan["groups"]
+    }
+    database = Mock()
+    database.get_job.return_value = {"id": "job-chain", "status": "SUCCEEDED"}
+    runner = CadJobRunner(database, DstCodec(), RecoverablePublisher(), 30, max_parallel=1)
+    runner.executor = _PerDrawingCadExecutor(layouts_by_target)
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+
+    result = runner._execute(
+        "job-chain",
+        "worker",
+        1,
+        workspace,
+        CadCapability("2020", None, plugin),
+        [command],
+        plan,
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    assert [target.read_bytes() for target in targets] == [b"template", b"old-1", b"old-2"]
+    reopened = AcsmDocument(DstCodec().decode_file(workspace.dst_path)).project(tmp_path)
+    assert [sheet.layout.resolved_path for sheet in reopened.sheets] == targets
+    assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
 
 
 def test_zero_handle_is_rejected_before_binding(tmp_path: Path):

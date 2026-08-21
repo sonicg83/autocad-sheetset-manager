@@ -89,6 +89,7 @@ def build_structural_plan(
     original_subsets = {subset.acsm_id: subset for subset in workspace.document.subsets}
     groups = []
     final_targets: list[str] = []
+    transitions: list[dict[str, str | None]] = []
     planned_subset_ids: list[str] = []
     for subset in derived.subsets:
         layouts = []
@@ -119,25 +120,34 @@ def build_structural_plan(
         target = _final_target_path(workspace, subset, operation)
         subset.target_file = str(target)
         subset.source_target_file = source_target or ""
-        final_targets.append(str(target).casefold())
+        final_targets.append(str(target))
+        transitions.append(
+            {
+                "subset_id": subset.acsm_id,
+                "operation": operation,
+                "source": source_target,
+                "target": str(target),
+            },
+        )
         source_snapshot = source_target or (layouts[0]["source_file"] if layouts else "")
         if not source_snapshot:
             raise PlanningError("LAYOUT_SOURCE_INVALID", f"子集缺少重建基础文件：{subset.acsm_id}")
         if operation == "rebuild" and not _subset_changed(original, subset, source_target, target) and subset.acsm_id not in derived.affected_subset_ids:
             continue
         planned_subset_ids.append(subset.acsm_id)
-        groups.append(
-            {
-                "subset_id": subset.acsm_id,
-                "subset_name": subset.display_name,
-                "operation": operation,
-                "source_target_file": source_target,
-                "source_snapshot": str(Path(source_snapshot).expanduser().resolve()),
-                "target_file": str(target),
-                "layouts": layouts,
-            },
-        )
-    if len(final_targets) != len(set(final_targets)):
+        group = {
+            "subset_id": subset.acsm_id,
+            "subset_name": subset.display_name,
+            "operation": operation,
+            "source_target_file": source_target,
+            "source_snapshot": str(Path(source_snapshot).expanduser().resolve()),
+            "target_file": str(target),
+            "layouts": layouts,
+        }
+        if operation == "create":
+            group["expected_baseline"] = None
+        groups.append(group)
+    if len(final_targets) != len({target.casefold() for target in final_targets}):
         raise PlanningError("DWG_TARGET_COLLISION", "多个子集派生出相同的目标DWG文件名")
     final_subset_ids = {subset.acsm_id for subset in derived.subsets}
     deleted_subsets = [
@@ -145,9 +155,26 @@ def build_structural_plan(
         for subset in workspace.document.subsets
         if subset.acsm_id not in final_subset_ids and (target := _subset_target_file(subset))
     ]
+    old_sources_by_key: dict[str, str] = {}
+    for subset in workspace.document.subsets:
+        if source := _subset_target_file(subset):
+            resolved = str(Path(source).expanduser().resolve())
+            old_sources_by_key.setdefault(resolved.casefold(), resolved)
+    final_targets_by_key = {target.casefold(): target for target in final_targets}
+    reused_keys = old_sources_by_key.keys() & final_targets_by_key.keys()
+    delete_keys = old_sources_by_key.keys() - final_targets_by_key.keys()
+    for group in groups:
+        group["target_reuses_source"] = group["operation"] == "create" and group["target_file"].casefold() in reused_keys
     return {
         "groups": groups,
         "deleted_subsets": deleted_subsets,
+        "path_graph": {
+            "old_sources": list(old_sources_by_key.values()),
+            "final_targets": final_targets,
+            "reused_targets": [final_targets_by_key[key] for key in sorted(reused_keys)],
+            "delete_targets": [old_sources_by_key[key] for key in sorted(delete_keys)],
+            "transitions": transitions,
+        },
         "affected_subset_ids": planned_subset_ids,
         "derived_document": _serialize_derived_document(derived),
     }
@@ -208,6 +235,8 @@ def metadata_commands_for_derived_document(commands: list[dict[str, Any]]) -> li
     """提取不参与结构派生、但必须与结构结果同批写入的元数据更新。"""
     result: list[dict[str, Any]] = []
     for command in commands:
+        if command.get("type") == "update_sheet" and ({"number", "title"} & command.keys()):
+            raise PlanningError("COMMAND_UNSUPPORTED", "不支持直接更新图号或图纸标题")
         if command.get("type") == "update_sheet_set":
             result.append(command)
         elif command.get("type") == "update_sheet" and "custom_properties" in command:
