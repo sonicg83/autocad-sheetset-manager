@@ -13,7 +13,7 @@ type Diagnostic={severity:string;code:string;message:string;line?:number};
 type Preview={executable:boolean;requires_cad?:boolean;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null};
 type PreviewContext={workspaceId:string;baseRevisionId:string;commands:Record<string,unknown>[];result:Preview};
 type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:Preview};
-type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;result:Record<string,any>};
+type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:Record<string,any>};
 
 const dstPath=ref("");
 const workspace=ref<Workspace|null>(null);
@@ -31,11 +31,13 @@ const csvText=ref("");
 const csvPreview=ref<Preview|null>(null);
 const csvPreviewContext=ref<CsvPreviewContext|null>(null);
 const isWorkspaceLoading=ref(false);
+const isRestoreExecuting=ref(false);
 let previewGeneration=0;
 let csvGeneration=0;
 let workspaceLoadGeneration=0;
 let jobMonitorGeneration=0;
 let revisionGeneration=0;
+let restoreExecutionGeneration=0;
 let activeJobEvents:EventSource|null=null;
 let pollTimer:number|null=null;
 
@@ -69,6 +71,7 @@ function selectInitialSubset(){
   insertSheetForm.subsetId=selectedId.value;
 }
 async function openWorkspace(){
+  if(isRestoreExecuting.value){error.value="修订恢复正在执行，请稍候";return}
   const pathSnapshot=dstPath.value;
   invalidateJobMonitor(true);
   const generation=beginWorkspaceLoad();
@@ -183,6 +186,10 @@ async function retryJob(){const current=workspace.value;if(!current||!job.value|
 
 function revisionRequestMatches(generation:number,loadGeneration:number,workspaceId:string){return generation===revisionGeneration&&loadGeneration===workspaceLoadGeneration&&!isWorkspaceLoading.value&&workspace.value?.id===workspaceId}
 async function loadRevisions(){
+  if(isRestoreExecuting.value)return;
+  await loadRevisionsInternal();
+}
+async function loadRevisionsInternal(){
   const current=workspace.value;if(!current||isWorkspaceLoading.value)return;
   const workspaceId=current.id,loadGeneration=workspaceLoadGeneration,generation=++revisionGeneration;
   revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null;
@@ -190,24 +197,27 @@ async function loadRevisions(){
   catch(e){if(revisionRequestMatches(generation,loadGeneration,workspaceId))error.value=String(e)}
 }
 async function previewRestore(revision:Revision){
-  const current=workspace.value;if(!current||isWorkspaceLoading.value)return;
+  const current=workspace.value;if(!current||isWorkspaceLoading.value||isRestoreExecuting.value)return;
   const workspaceId=current.id,baseRevisionId=current.revision_id,revisionId=revision.id,loadGeneration=workspaceLoadGeneration,generation=++revisionGeneration;
   restorePreview.value=null;restorePreviewContext.value=null;
-  try{const result:Record<string,any>=await request(`/api/workspaces/${workspaceId}/revisions/${revisionId}/restore-preview`);if(!revisionRequestMatches(generation,loadGeneration,workspaceId))return;restorePreview.value=result;restorePreviewContext.value={workspaceId,baseRevisionId,revisionId,result}}
+  try{const result:Record<string,any>=await request(`/api/workspaces/${workspaceId}/revisions/${revisionId}/restore-preview`);if(!revisionRequestMatches(generation,loadGeneration,workspaceId))return;restorePreview.value=result;restorePreviewContext.value={workspaceId,baseRevisionId,revisionId,loadGeneration,result}}
   catch(e){if(revisionRequestMatches(generation,loadGeneration,workspaceId))error.value=String(e)}
 }
+function restoreExecutionMatches(generation:number,context:RestorePreviewContext){return generation===restoreExecutionGeneration&&context.loadGeneration===workspaceLoadGeneration&&!isWorkspaceLoading.value&&workspace.value?.id===context.workspaceId&&workspace.value.revision_id===context.baseRevisionId}
 async function restoreRevision(){
   const context=restorePreviewContext.value,current=workspace.value;
-  if(!context||!context.result.executable)return;
-  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){restorePreview.value=null;restorePreviewContext.value=null;error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
+  if(isRestoreExecuting.value||!context||!context.result.executable)return;
+  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==workspaceLoadGeneration){restorePreview.value=null;restorePreviewContext.value=null;error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
   if(!confirm("确认恢复为新修订？历史修订不会被覆盖。"))return;
-  const generation=revisionGeneration,loadGeneration=workspaceLoadGeneration;
+  const generation=++restoreExecutionGeneration;
+  isRestoreExecuting.value=true;invalidateJobMonitor(true);revisionGeneration+=1;
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/revisions/${context.revisionId}/restore`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId})});
-    if(!revisionRequestMatches(generation,loadGeneration,context.workspaceId))return;
-    job.value=result;restorePreview.value=null;restorePreviewContext.value=null;await refreshWorkspace(context.workspaceId);if(workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)await loadRevisions();
+    if(!restoreExecutionMatches(generation,context))return;
+    job.value=result;restorePreview.value=null;restorePreviewContext.value=null;error.value="";await refreshWorkspace(context.workspaceId);if(workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)await loadRevisionsInternal();
   }
-  catch(e){if(revisionRequestMatches(generation,loadGeneration,context.workspaceId))error.value=String(e)}
+  catch(e){if(restoreExecutionMatches(generation,context))error.value=String(e)}
+  finally{if(generation===restoreExecutionGeneration)isRestoreExecuting.value=false}
 }
 
 async function readCsvFile(event:Event){
@@ -253,9 +263,10 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
 <template>
   <header><div><h1>DST Manager</h1><span>v0.2.1 · 受控编辑与可恢复发布</span></div></header>
   <main>
-    <section class="open"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button @click="openWorkspace">打开项目</button><button :disabled="isWorkspaceLoading" @click="loadRevisions">修订历史</button></section>
+    <section class="open"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
     <p v-if="error" class="error notice">{{error}}</p>
     <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
+    <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>
 
     <section v-if="job&&!isWorkspaceLoading" class="job-detail">
       <div class="job"><b>任务 {{job.id??'（无变更）'}}</b><span>{{job.status}} · {{job.progress??100}}% · 第 {{job.attempt??0}} 次</span><small>{{connectionMode}}</small><span v-if="job.error_code" class="error">{{job.error_code}}</span><button v-if="['FAILED','ROLLED_BACK','BLOCKED_FILE_LOCK','NEEDS_REVIEW'].includes(job.status)" @click="retryJob">安全重试</button></div>
@@ -263,9 +274,9 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
       <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>状态</th><th>进度</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="5"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
     </section>
 
-    <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
+    <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button :disabled="isRestoreExecuting" @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="isRestoreExecuting||!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
 
-    <template v-if="workspace&&!isWorkspaceLoading">
+    <template v-if="workspace&&!isWorkspaceLoading&&!isRestoreExecuting">
       <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div></section>
       <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
       <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
