@@ -1,14 +1,16 @@
 ---
 id: SPEC-DM-001
 title: DST Manager v0.21 图纸集编辑需求调整规范
-status: draft
+status: accepted
 owners:
   - dst-manager
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 related:
   - VISION-DM-001
   - ARCH-DM-001
+  - ADR-DM-001
+  - PLAN-DM-006
 ---
 
 # DST Manager v0.21 图纸集编辑需求调整规范
@@ -124,3 +126,9 @@ CAD 执行、Handle 回读、结构校验或发布失败时，继续适用现有
 - API 与 Web 测试：不存在旧操作入口；覆盖属性维护、CSV 导入导出、新建子集、批量插图和预览显示。
 - CAD 系统测试：AutoCAD 2016 与 2020 均验证从模板创建独立 DWG、批量布局复制、重建后布局顺序及 Handle 回读。
 - 回归测试：确认只读打开不写入，且任意 CAD 或发布故障后正式目录保持整批旧版本或完整新版本。
+
+## 实施与验收
+
+本规范已由 [受控图纸集编辑决策（ADR-DM-001）](../adr/ADR-DM-001-controlled-sheetset-editing.md) 和 [v0.21 实施计划（PLAN-DM-006）](../../../.planning/plans/dst-manager/PLAN-DM-006-v021-controlled-sheetset-editing.md) 落地。自动化测试覆盖标题后缀与 CSV 规则、AcSm DOM 往返和属性作用域、API 基准修订、创建/替换/删除混合发布回滚，以及 Web 受控编辑主流程。
+
+2026-08-22 的验收中，Python 全量测试为 208 项通过、32 项跳过，Web Playwright 为 16 项通过，AutoCAD 2016/2020 插件均构建成功。隔离工作树未包含私有 `sample/project1`，因此真实 AutoCAD 系统测试的 2016/2020 各 13 项均跳过；恢复该私有样本后仍需重新运行双版本真实 CAD 验收。此环境限制不改变非 CAD 契约和发布安全回归的验收结果。

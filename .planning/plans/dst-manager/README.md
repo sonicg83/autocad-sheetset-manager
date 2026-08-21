@@ -1,6 +1,6 @@
 # DST Manager MVP 后续实施计划
 
-状态：持续规划中；v0.2 与 v0.2.1 已完成。  
+状态：持续规划中；v0.2、v0.2.1 与 v0.21 已完成。
 目标：把当前技术验证型 MVP 完善为可长期、可靠地处理真实工程的单人单机图纸集编辑管理工具。
 
 ## 阶段顺序
@@ -14,7 +14,7 @@
 
 详细计划：
 
-- [v0.21 受控图纸集编辑（PLAN-DM-006，拟议）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
+- [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
 - [v0.2.1 紧急修复：运行时、日志与 AcSm 兼容性（PLAN-DM-005，已完成）](PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)
 - [阶段 1：v0.2 稳定化与多 DWG 并行（PLAN-DM-001，已完成）](PLAN-DM-001-v0.2-stabilization-and-multi-dwg-parallel.md)
 - [阶段 2：v0.3 日常编辑器（PLAN-DM-002，计划中）](PLAN-DM-002-v0.3-daily-editor.md)
