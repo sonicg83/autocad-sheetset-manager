@@ -7,10 +7,16 @@ import pytest
 from dst_manager.infrastructure.filesystem.locking import WindowsWriteLocks
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishBaselineError,
+    PublishRecoveryError,
     PublishRolledBackError,
     RecoverablePublisher,
     file_sha256,
 )
+
+
+def _identity(path: Path) -> list[int]:
+    stat = path.stat()
+    return [stat.st_dev, stat.st_ino]
 
 
 @pytest.mark.parametrize("fail_at", [1, 2, 3])
@@ -367,3 +373,323 @@ def test_replace_api_partial_failure_restores_attempted_target_and_error_chain(t
     )
     assert journal["status"] == "ROLLED_BACK"
     assert journal["files"][0]["attempted"] is True
+
+
+def test_existing_commit_rejects_same_bytes_external_identity(tmp_path: Path, monkeypatch):
+    target = tmp_path / "same-bytes-existing.dwg"
+    staged = tmp_path / "staged-same-bytes-existing.dwg"
+    external = tmp_path / "external-same-bytes-existing.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    external.write_bytes(b"baseline")
+    external_identity = _identity(external)
+    publisher = RecoverablePublisher()
+    original_replace = publisher._replace_existing
+    calls = 0
+
+    def swap_same_bytes_then_replace(source: Path, destination: Path, backup: Path):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            os.replace(external, destination)
+        original_replace(source, destination, backup)
+
+    monkeypatch.setattr(publisher, "_replace_existing", swap_same_bytes_then_replace, raising=False)
+
+    with pytest.raises(PublishBaselineError) as exc_info:
+        publisher.publish(
+            "same-bytes-existing-race",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert exc_info.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"baseline"
+    assert _identity(target) == external_identity
+
+
+def test_cleanup_preserves_same_bytes_replacement_backup_with_different_identity(tmp_path: Path, monkeypatch):
+    target = tmp_path / "cleanup-existing.dwg"
+    staged = tmp_path / "staged-cleanup-existing.dwg"
+    external = tmp_path / "external-cleanup-backup.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    external.write_bytes(b"baseline")
+    external_identity = _identity(external)
+    publisher = RecoverablePublisher()
+    original_cleanup = publisher._cleanup_replace_backups
+
+    def swap_backup_before_cleanup(entries: list[dict]):
+        replace_backup = Path(entries[0]["replace_backup"])
+        os.replace(external, replace_backup)
+        original_cleanup(entries)
+
+    monkeypatch.setattr(publisher, "_cleanup_replace_backups", swap_backup_before_cleanup)
+
+    with pytest.raises(PublishRecoveryError) as exc_info:
+        publisher.publish(
+            "same-bytes-cleanup-race",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    replace_backup = target.with_name(f".{target.name}.same-bytes-cleanup-race.replaced")
+    assert exc_info.value.code == "PUBLISH_RECOVERY_FAILED"
+    assert replace_backup.read_bytes() == b"baseline"
+    assert _identity(replace_backup) == external_identity
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/same-bytes-cleanup-race/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "ROLLBACK_FAILED"
+
+
+def test_existing_result_identity_recheck_preserves_late_external_target(tmp_path: Path, monkeypatch):
+    target = tmp_path / "late-result-existing.dwg"
+    staged = tmp_path / "staged-late-result-existing.dwg"
+    external = tmp_path / "external-late-result-existing.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    external.write_bytes(b"published")
+    external_identity = _identity(external)
+    publisher = RecoverablePublisher()
+    original_commit = publisher._commit_existing
+
+    def swap_after_commit_check(entry: dict, publish_temp: Path, operation_id: str):
+        original_commit(entry, publish_temp, operation_id)
+        os.replace(external, Path(entry["target"]))
+
+    monkeypatch.setattr(publisher, "_commit_existing", swap_after_commit_check)
+
+    with pytest.raises(PublishBaselineError):
+        publisher.publish(
+            "late-result-existing-race",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert target.read_bytes() == b"published"
+    assert _identity(target) == external_identity
+
+
+def test_delete_result_identity_recheck_preserves_late_external_target(tmp_path: Path, monkeypatch):
+    target = tmp_path / "late-result-delete.dwg"
+    external = tmp_path / "external-late-result-delete.dwg"
+    target.write_bytes(b"baseline")
+    external.write_bytes(b"external")
+    external_identity = _identity(external)
+    publisher = RecoverablePublisher()
+    original_commit = publisher._commit_delete
+
+    def recreate_after_commit_check(entry: dict):
+        original_commit(entry)
+        os.replace(external, Path(entry["target"]))
+
+    monkeypatch.setattr(publisher, "_commit_delete", recreate_after_commit_check)
+
+    with pytest.raises(PublishBaselineError):
+        publisher.publish(
+            "late-result-delete-race",
+            tmp_path,
+            {target: None},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert target.read_bytes() == b"external"
+    assert _identity(target) == external_identity
+
+
+def test_startup_recovery_rejects_same_bytes_external_target_identity(tmp_path: Path):
+    operation = "same-bytes-recovery-race"
+    target = tmp_path / "recovery-existing.dwg"
+    target.write_bytes(b"published")
+    publish_identity = _identity(target)
+    staged = tmp_path / "staged-recovery-existing.dwg"
+    staged.write_bytes(b"published")
+    before = tmp_path / ".dst-manager/revisions" / operation / "before" / target.name
+    before.parent.mkdir(parents=True)
+    before.write_bytes(b"baseline")
+    replace_backup = tmp_path / f".{target.name}.{operation}.replaced"
+    replace_backup.write_bytes(b"baseline")
+    baseline_identity = _identity(replace_backup)
+    external = tmp_path / "external-recovery-existing.dwg"
+    external.write_bytes(b"baseline")
+    external_identity = _identity(external)
+    os.replace(external, target)
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal = {
+        "identity_version": 1,
+        "operation_id": operation,
+        "status": "PUBLISHING",
+        "files": [
+            {
+                "target": str(target),
+                "staged": str(staged),
+                "backup": str(before),
+                "replace_backup": str(replace_backup),
+                "before_hash": file_sha256(before),
+                "staged_hash": file_sha256(staged),
+                "baseline_identity": baseline_identity,
+                "before_identity": _identity(before),
+                "expected_backup_identity": baseline_identity,
+                "publish_identity": publish_identity,
+                "result_identity": publish_identity,
+                "attempted": True,
+                "replaced": True,
+                "conflict_preserved": False,
+            },
+        ],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    with pytest.raises(PublishRecoveryError):
+        RecoverablePublisher().recover(tmp_path)
+
+    assert target.read_bytes() == b"baseline"
+    assert _identity(target) == external_identity
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLBACK_FAILED"
+
+
+def test_startup_recovery_does_not_rebuild_externally_deleted_target(tmp_path: Path):
+    operation = "deleted-recovery-race"
+    target = tmp_path / "deleted-recovery-existing.dwg"
+    target.write_bytes(b"published")
+    publish_identity = _identity(target)
+    staged = tmp_path / "staged-deleted-recovery-existing.dwg"
+    staged.write_bytes(b"published")
+    before = tmp_path / ".dst-manager/revisions" / operation / "before" / target.name
+    before.parent.mkdir(parents=True)
+    before.write_bytes(b"baseline")
+    replace_backup = tmp_path / f".{target.name}.{operation}.replaced"
+    replace_backup.write_bytes(b"baseline")
+    baseline_identity = _identity(replace_backup)
+    target.unlink()
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal = {
+        "identity_version": 1,
+        "operation_id": operation,
+        "status": "PUBLISHING",
+        "files": [
+            {
+                "target": str(target),
+                "staged": str(staged),
+                "backup": str(before),
+                "replace_backup": str(replace_backup),
+                "before_hash": file_sha256(before),
+                "staged_hash": file_sha256(staged),
+                "baseline_identity": baseline_identity,
+                "before_identity": _identity(before),
+                "expected_backup_identity": baseline_identity,
+                "publish_identity": publish_identity,
+                "result_identity": publish_identity,
+                "attempted": True,
+                "replaced": True,
+                "conflict_preserved": False,
+            },
+        ],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    with pytest.raises(PublishRecoveryError):
+        RecoverablePublisher().recover(tmp_path)
+
+    assert not target.exists()
+    assert replace_backup.read_bytes() == b"baseline"
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLBACK_FAILED"
+
+
+def test_startup_recovery_preserves_same_bytes_external_replacement_backup(tmp_path: Path):
+    operation = "same-bytes-backup-recovery-race"
+    target = tmp_path / "backup-recovery-existing.dwg"
+    target.write_bytes(b"published")
+    publish_identity = _identity(target)
+    staged = tmp_path / "staged-backup-recovery-existing.dwg"
+    staged.write_bytes(b"published")
+    before = tmp_path / ".dst-manager/revisions" / operation / "before" / target.name
+    before.parent.mkdir(parents=True)
+    before.write_bytes(b"baseline")
+    replace_backup = tmp_path / f".{target.name}.{operation}.replaced"
+    replace_backup.write_bytes(b"baseline")
+    baseline_identity = _identity(replace_backup)
+    external = tmp_path / "external-backup-recovery-existing.dwg"
+    external.write_bytes(b"baseline")
+    external_identity = _identity(external)
+    os.replace(external, replace_backup)
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal = {
+        "identity_version": 1,
+        "operation_id": operation,
+        "status": "PUBLISHING",
+        "files": [
+            {
+                "target": str(target),
+                "staged": str(staged),
+                "backup": str(before),
+                "replace_backup": str(replace_backup),
+                "before_hash": file_sha256(before),
+                "staged_hash": file_sha256(staged),
+                "baseline_identity": baseline_identity,
+                "before_identity": _identity(before),
+                "expected_backup_identity": baseline_identity,
+                "publish_identity": publish_identity,
+                "result_identity": publish_identity,
+                "attempted": True,
+                "replaced": True,
+                "conflict_preserved": False,
+            },
+        ],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    with pytest.raises(PublishRecoveryError):
+        RecoverablePublisher().recover(tmp_path)
+
+    assert target.read_bytes() == b"published"
+    assert _identity(target) == publish_identity
+    assert replace_backup.read_bytes() == b"baseline"
+    assert _identity(replace_backup) == external_identity
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLBACK_FAILED"
+
+
+def test_partial_replace_with_staged_result_at_target_restores_original_identity(tmp_path: Path, monkeypatch):
+    target = tmp_path / "partial-result-existing.dwg"
+    staged = tmp_path / "staged-partial-result-existing.dwg"
+    target.write_bytes(b"same-content")
+    staged.write_bytes(b"same-content")
+    baseline_identity = _identity(target)
+    published_identity: list[int] | None = None
+    publisher = RecoverablePublisher()
+    original_replace = publisher._replace_existing
+    calls = 0
+
+    def fail_after_installing_staged(source: Path, destination: Path, backup: Path):
+        nonlocal calls, published_identity
+        calls += 1
+        if calls > 1:
+            original_replace(source, destination, backup)
+            return
+        os.replace(destination, backup)
+        os.replace(source, destination)
+        published_identity = _identity(destination)
+        raise OSError("ReplaceFileW 1176 注入故障")
+
+    monkeypatch.setattr(publisher, "_replace_existing", fail_after_installing_staged, raising=False)
+
+    with pytest.raises(PublishRolledBackError) as exc_info:
+        publisher.publish(
+            "partial-staged-result",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert published_identity is not None
+    assert published_identity != baseline_identity
+    assert _identity(target) == baseline_identity
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert "1176" in str(exc_info.value.__cause__)
