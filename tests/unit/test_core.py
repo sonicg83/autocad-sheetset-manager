@@ -2,12 +2,15 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from typer.testing import CliRunner
 
 from dst_manager.application.cad_job import CadJobRunner, RebuildWorkUnit
+from dst_manager.application.service import DstManagerService
+from dst_manager.config import Settings
 from dst_manager.domain.editing import SuffixOptions, derive_document_structure
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
@@ -20,6 +23,7 @@ from dst_manager.domain.models import (
     Subset,
     Workspace,
 )
+from dst_manager.domain.planning import PlanningError, build_structural_plan
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
@@ -28,6 +32,10 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.dst_codec.codec import _DECODE, _ENCODE
+from dst_manager.infrastructure.filesystem.publisher import (
+    RecoverablePublisher,
+    file_sha256,
+)
 from dst_manager.infrastructure.logging_text import (
     sanitize_log_text,
     validate_log_bytes,
@@ -419,3 +427,610 @@ def test_apply_derived_document_failure_leaves_original_dom_unchanged(tiny_works
 
     assert exc_info.value.code == "SHEET_LAYOUT_COUNT"
     assert document.semantic_bytes() == before
+
+
+def _planning_sheet(sheet_id: str, number: str, title: str, drawing: Path, handle: str) -> Sheet:
+    return Sheet(
+        sheet_id,
+        number,
+        title,
+        LayoutReference(
+            str(drawing),
+            f".\\{drawing.name}",
+            f"{number} {title}",
+            handle,
+            drawing.resolve(),
+            "relative",
+        ),
+    )
+
+
+def _planning_workspace(tmp_path: Path, subsets: list[Subset]) -> Workspace:
+    dst = tmp_path / "图纸集.dst"
+    dst.write_bytes(b"dst")
+    return Workspace(
+        "workspace",
+        tmp_path,
+        dst,
+        "revision",
+        SheetSetDocument("database", "图纸集", subsets),
+    )
+
+
+def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_path: Path):
+    existing = tmp_path / "GP-0001 目录.dwg"
+    existing.write_bytes(b"existing")
+    template = tmp_path / "模板" / "标准.dwt"
+    template.parent.mkdir()
+    template.write_bytes(b"template")
+    workspace = _planning_workspace(
+        tmp_path,
+        [Subset("subset-1", "0001 目录", 0, [_planning_sheet("sheet-1", "0001", "目录", existing, "A1")])],
+    )
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "燃气管道平面图",
+        "initial_sheet_count": 2,
+        "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+    }
+
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+
+    assert len(plan["groups"]) == 1
+    group = plan["groups"][0]
+    assert group["operation"] == "create"
+    assert group["source_target_file"] is None
+    assert Path(group["source_snapshot"]) == template
+    assert Path(group["target_file"]).parent == tmp_path
+    assert Path(group["target_file"]).name.endswith(".dwg")
+    assert plan["deleted_subsets"] == []
+
+
+def test_batch_insert_plan_rebuilds_existing_dwg_in_final_layout_order(tmp_path: Path):
+    drawing = tmp_path / "GP-0004-0005 燃气管道平面图.dwg"
+    drawing.write_bytes(b"existing")
+    template = tmp_path / "标准.dwt"
+    template.write_bytes(b"template")
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset(
+                "subset-1",
+                "0004-0005 燃气管道平面图",
+                0,
+                [
+                    _planning_sheet("sheet-1", "0004", "燃气管道平面图 (1)", drawing, "A1"),
+                    _planning_sheet("sheet-2", "0005", "燃气管道平面图 (2)", drawing, "A2"),
+                ],
+            ),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": "subset-1",
+                "ordinal": 1,
+                "placement": "after",
+                "count": 2,
+                "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+            },
+        ],
+        SuffixOptions(True, 2),
+    )
+
+    group = plan["groups"][0]
+    assert group["operation"] == "rebuild"
+    assert Path(group["source_target_file"]) == drawing
+    assert Path(group["source_snapshot"]) == drawing
+    assert [layout["number"] for layout in group["layouts"]] == ["0004", "0005", "0006", "0007"]
+    assert [layout["target_layout"] for layout in group["layouts"]] == [
+        "0004 燃气管道平面图 (1)",
+        "0005 燃气管道平面图 (2)",
+        "0006 燃气管道平面图 (3)",
+        "0007 燃气管道平面图 (4)",
+    ]
+
+
+def test_inserted_subset_replans_collateral_number_ranges_and_suffixes(tmp_path: Path):
+    first = tmp_path / "GP-0001 燃气管道平面图.dwg"
+    second = tmp_path / "GP-0002 燃气管道平面图.dwg"
+    template = tmp_path / "标准.dwt"
+    for path in (first, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "0001 燃气管道平面图", 0, [_planning_sheet("sheet-1", "0001", "燃气管道平面图 (1)", first, "A1")]),
+            Subset("subset-2", "0002 燃气管道平面图", 1, [_planning_sheet("sheet-2", "0002", "燃气管道平面图 (2)", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [
+            {
+                "type": "insert_subset",
+                "ordinal": 1,
+                "placement": "after",
+                "title": "燃气管道平面图",
+                "initial_sheet_count": 2,
+                "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+            },
+        ],
+        SuffixOptions(True, 2),
+    )
+
+    by_subset = {group["subset_id"]: group for group in plan["groups"]}
+    created = next(group for group in plan["groups"] if group["operation"] == "create")
+    assert [layout["number"] for layout in created["layouts"]] == ["0002", "0003"]
+    assert [layout["title"] for layout in created["layouts"]] == ["燃气管道平面图 (2)", "燃气管道平面图 (3)"]
+    assert by_subset["subset-2"]["operation"] == "rebuild"
+    assert [layout["number"] for layout in by_subset["subset-2"]["layouts"]] == ["0004"]
+    assert [layout["title"] for layout in by_subset["subset-2"]["layouts"]] == ["燃气管道平面图 (4)"]
+
+
+def test_first_subset_plan_uses_template_as_create_snapshot(tmp_path: Path):
+    template = tmp_path / "标准.dwt"
+    template.write_bytes(b"template")
+    workspace = _planning_workspace(tmp_path, [])
+
+    plan = build_structural_plan(
+        workspace,
+        [
+            {
+                "type": "insert_subset",
+                "ordinal": 1,
+                "title": "首个子集",
+                "initial_sheet_count": 1,
+                "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+            },
+        ],
+        SuffixOptions(True, 1),
+    )
+
+    assert plan["groups"][0]["operation"] == "create"
+    assert plan["groups"][0]["source_target_file"] is None
+    assert Path(plan["groups"][0]["source_snapshot"]) == template
+    assert json.loads(json.dumps(plan, ensure_ascii=False))["groups"][0]["operation"] == "create"
+
+
+def test_structural_plan_rejects_layout_collision_after_one_derivation(tmp_path: Path, monkeypatch):
+    drawing = tmp_path / "A.dwg"
+    drawing.write_bytes(b"drawing")
+    workspace = _planning_workspace(
+        tmp_path,
+        [Subset("subset-1", "001-002 分组", 0, [_planning_sheet("sheet-1", "001", "分组", drawing, "A1")])],
+    )
+    calls = 0
+    duplicate_layout = LayoutReference(str(drawing), ".\\A.dwg", "重复布局", "A1", drawing)
+    derived = DerivedDocument(
+        [
+            DerivedSubset(
+                "subset-1",
+                "分组",
+                "001-002",
+                "001-002 分组",
+                [
+                    Sheet("sheet-1", "001", "分组", duplicate_layout),
+                    Sheet("sheet-2", "002", "分组", duplicate_layout),
+                ],
+                str(drawing),
+                str(drawing),
+            ),
+        ],
+        ["subset-1"],
+        layout_sources={
+            "sheet-1": {"type": "existing_snapshot", "file": str(drawing), "layout": "001 分组"},
+            "sheet-2": {"type": "existing_snapshot", "file": str(drawing), "layout": "001 分组"},
+        },
+    )
+
+    def derive_once(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return derived
+
+    monkeypatch.setattr("dst_manager.domain.planning.derive_document_structure", derive_once)
+
+    with pytest.raises(PlanningError) as exc_info:
+        build_structural_plan(workspace, [], SuffixOptions(True, 1))
+
+    assert exc_info.value.code == "DUPLICATE_LAYOUT_NAME"
+    assert calls == 1
+
+
+def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path, monkeypatch):
+    console = tmp_path / "accoreconsole.exe"
+    plugin = tmp_path / "plugin.dll"
+    console.write_bytes(b"console")
+    plugin.write_bytes(b"plugin")
+    workspace = _planning_workspace(tmp_path, [])
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    persisted_plan = {"groups": [], "deleted_subsets": [], "derived_document": {}}
+    runner._execute = Mock(return_value={"status": "SUCCEEDED"})
+    monkeypatch.setattr(
+        "dst_manager.domain.planning.derive_document_structure",
+        Mock(side_effect=AssertionError("Worker 不得重新派生计划")),
+    )
+    job = {
+        "id": "job-1",
+        "payload": {
+            "base_revision_id": "revision",
+            "commands": [],
+            "plan": {"execution_intent": persisted_plan},
+        },
+    }
+
+    capability = CadCapability("2020", console, plugin)
+    result = runner.run(job, workspace, capability)
+
+    assert result == {"status": "SUCCEEDED"}
+    runner._execute.assert_called_once_with("job-1", "local-worker", 1, workspace, capability, [], persisted_plan)
+
+
+def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
+    console = tmp_path / "accoreconsole.exe"
+    plugin = tmp_path / "plugin.dll"
+    console.write_bytes(b"console")
+    plugin.write_bytes(b"plugin")
+    workspace = _planning_workspace(tmp_path, [])
+    missing = tmp_path / "missing.dwt"
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "title": "首个子集",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(missing), "layout": "A3"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+    database = Mock()
+    database.get_job.return_value = {"status": "FAILED", "error_code": "TEMPLATE_NOT_FOUND"}
+    runner = CadJobRunner(database, DstCodec(), Mock(), 30)
+    job = {
+        "id": "job-1",
+        "payload": {
+            "base_revision_id": "revision",
+            "commands": [command],
+            "plan": {"execution_intent": plan},
+        },
+    }
+
+    runner.run(job, workspace, CadCapability("2020", console, plugin))
+
+    assert any(call.args[3] == "TEMPLATE_NOT_FOUND" for call in database.update_job.call_args_list if len(call.args) >= 4)
+
+
+def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 2,
+        "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    job = service.execute_changes(workspace.id, workspace.revision_id, [command])
+
+    assert preview["executable"] is True
+    assert any(group["operation"] == "create" for group in preview["execution_intent"]["groups"])
+    assert job["payload"]["plan"]["execution_intent"] == preview["execution_intent"]
+
+
+class _SuccessfulCadExecutor:
+    def __init__(self, handle_text: str):
+        self.handle_text = handle_text
+        self.calls = 0
+
+    def run(self, _capability, drawing, _script, _timeout):
+        self.calls += 1
+        if self.calls == 2:
+            drawing.with_suffix(".dst-handles.txt").write_text(self.handle_text, encoding="utf-8")
+        return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+def test_create_group_uses_template_snapshot_without_source_target(tmp_path: Path):
+    template = tmp_path / "标准.dwt"
+    template.write_bytes(b"template-base")
+    staging = tmp_path / "staging"
+    scripts = tmp_path / "scripts"
+    logs = tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    target = tmp_path / "001 新建子集.dwg"
+    unit = RebuildWorkUnit(
+        0,
+        {
+            "operation": "create",
+            "source_target_file": None,
+            "target_file": str(target),
+            "layouts": [
+                {
+                    "sheet_id": "sheet-new",
+                    "source_file": str(template),
+                    "source_layout": "A3",
+                    "target_layout": "001 新建子集",
+                },
+            ],
+        },
+        template,
+        staging,
+        scripts,
+        logs,
+        30,
+    )
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    runner.executor = _SuccessfulCadExecutor("001 新建子集=AB\n")
+    workspace = _planning_workspace(tmp_path, [])
+
+    result = runner._rebuild_group("job-1", workspace, CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    assert result.source_target is None
+    assert result.target == target
+    assert result.staged.read_bytes() == b"template-base"
+    assert result.bindings == {"sheet-new": {"file": str(target), "layout": "001 新建子集", "handle": "AB"}}
+    assert database.upsert_job_file.call_args_list[0].kwargs["before_hash"] is None
+
+
+def test_missing_template_layout_cad_failure_never_returns_binding(tmp_path: Path):
+    template = tmp_path / "标准.dwt"
+    template.write_bytes(b"template-base")
+    staging = tmp_path / "staging"
+    scripts = tmp_path / "scripts"
+    logs = tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    target = tmp_path / "001 新建子集.dwg"
+    unit = RebuildWorkUnit(
+        0,
+        {
+            "operation": "create",
+            "source_target_file": None,
+            "target_file": str(target),
+            "layouts": [
+                {
+                    "sheet_id": "sheet-new",
+                    "source_file": str(template),
+                    "source_layout": "不存在的模板布局",
+                    "target_layout": "001 新建子集",
+                },
+            ],
+        },
+        template,
+        staging,
+        scripts,
+        logs,
+        30,
+    )
+    runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
+    runner.executor = Mock()
+    runner.executor.run.side_effect = subprocess.CalledProcessError(
+        1,
+        ["accoreconsole.exe"],
+        "",
+        "找不到模板布局",
+    )
+
+    with pytest.raises(subprocess.CalledProcessError):
+        runner._rebuild_group(
+            "job-1",
+            _planning_workspace(tmp_path, []),
+            CadCapability("2020", None, tmp_path / "plugin.dll"),
+            unit,
+        )
+
+    assert not target.exists()
+    assert "找不到模板布局" in (logs / "group-000.log").read_text(encoding="utf-8")
+
+
+def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny_workspace):
+    dst, sheet_id = tiny_workspace
+    codec = DstCodec()
+    acsm = AcsmDocument(codec.decode_file(dst))
+    existing = dst.parent / "001 平面.dwg"
+    (dst.parent / "A.dwg").replace(existing)
+    acsm.apply_metadata_commands(
+        [{"type": "update_subset", "subset_id": acsm.project(dst.parent).subsets[0].acsm_id, "name": "001 平面"}],
+    )
+    acsm.apply_layout_bindings(
+        {sheet_id: {"file": str(existing), "layout": "001 平面", "handle": "AB"}},
+        dst.parent,
+    )
+    codec.encode_file(acsm.to_bytes(), dst)
+    document = AcsmDocument(codec.decode_file(dst)).project(dst.parent)
+    workspace = Workspace("workspace", dst.parent, dst, file_sha256(dst), document)
+    existing_hash = file_sha256(existing)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 2,
+        "source": {"type": "template_layout", "file": str(existing), "layout": "001 平面"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
+    assert [group["operation"] for group in plan["groups"]] == ["create"]
+    group = plan["groups"][0]
+    handle_text = "\n".join(
+        f"{layout['target_layout']}={index + 16:X}"
+        for index, layout in enumerate(group["layouts"])
+    ) + "\n"
+    database = Mock()
+    database.get_job.return_value = {"id": "job-create", "status": "SUCCEEDED"}
+    runner = CadJobRunner(database, codec, RecoverablePublisher(), 30, max_parallel=1)
+    runner.executor = _SuccessfulCadExecutor(handle_text)
+    plugin = dst.parent / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+
+    result = runner._execute(
+        "job-create",
+        "worker",
+        1,
+        workspace,
+        CadCapability("2020", None, plugin),
+        [command],
+        plan,
+    )
+
+    target = Path(group["target_file"])
+    assert result["status"] == "SUCCEEDED"
+    assert target.is_file()
+    assert file_sha256(existing) == existing_hash
+    reopened = AcsmDocument(codec.decode_file(dst)).project(dst.parent)
+    created = next(subset for subset in reopened.subsets if "新建子集" in subset.name)
+    assert len(created.sheets) == 2
+    assert {sheet.layout.resolved_path for sheet in created.sheets} == {target}
+    assert all(sheet.layout.handle != "0" for sheet in created.sheets)
+    assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "manifest.json").is_file()
+
+
+def test_zero_handle_is_rejected_before_binding(tmp_path: Path):
+    source = tmp_path / "来源.dwg"
+    source.write_bytes(b"source")
+    staging = tmp_path / "staging"
+    scripts = tmp_path / "scripts"
+    logs = tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    unit = RebuildWorkUnit(
+        0,
+        {
+            "operation": "rebuild",
+            "source_target_file": str(source),
+            "target_file": str(source),
+            "layouts": [
+                {
+                    "sheet_id": "sheet-1",
+                    "source_file": str(source),
+                    "source_layout": "旧布局",
+                    "target_layout": "001 新布局",
+                },
+            ],
+        },
+        source,
+        staging,
+        scripts,
+        logs,
+        30,
+    )
+    runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
+    runner.executor = _SuccessfulCadExecutor("001 新布局=0\n")
+
+    with pytest.raises(ValueError, match="HANDLE_OUTPUT_INVALID"):
+        runner._rebuild_group(
+            "job-1",
+            _planning_workspace(tmp_path, []),
+            CadCapability("2020", None, tmp_path / "plugin.dll"),
+            unit,
+        )
+
+
+def test_final_dst_applies_derived_structure_then_real_bindings(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst)).project(dst.parent)
+    workspace = Workspace("workspace", dst.parent, dst, "revision", document)
+    template = dst.parent / "A.dwg"
+    plan = build_structural_plan(
+        workspace,
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": document.subsets[0].acsm_id,
+                "ordinal": 1,
+                "placement": "after",
+                "count": 1,
+                "source": {"type": "template_layout", "file": str(template), "layout": "001 平面"},
+            },
+        ],
+        SuffixOptions(True, 2),
+    )
+    group = plan["groups"][0]
+    bindings = {
+        layout["sheet_id"]: {
+            "file": group["target_file"],
+            "layout": layout["target_layout"],
+            "handle": f"C{index + 1}",
+        }
+        for index, layout in enumerate(group["layouts"])
+    }
+    runner = CadJobRunner(Mock(), DstCodec(), Mock(), 30)
+
+    staged = runner._write_staged_dst(workspace, plan, bindings, tmp_path)
+
+    final = AcsmDocument(DstCodec().decode_file(staged))
+    projected = final.project(dst.parent)
+    assert [sheet.number for sheet in projected.sheets] == ["001", "002"]
+    assert [sheet.title for sheet in projected.sheets] == ["分组 (1)", "分组 (2)"]
+    assert [sheet.layout.handle for sheet in projected.sheets] == ["C1", "C2"]
+    assert {issue.code for issue in final.validate() if issue.severity == "error"} == set()
+
+
+def test_final_dst_keeps_metadata_updates_from_structural_batch(tiny_workspace, tmp_path: Path):
+    dst, sheet_id = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst)).project(dst.parent)
+    workspace = Workspace("workspace", dst.parent, dst, "revision", document)
+    commands = [
+        {"type": "update_sheet_set", "custom_properties": {"项目号": "P-999"}},
+        {"type": "update_sheet", "sheet_id": sheet_id, "custom_properties": {"比例": "1:500"}},
+        {
+            "type": "insert_sheet",
+            "target_subset_id": document.subsets[0].acsm_id,
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "template_layout", "file": str(dst.parent / "A.dwg"), "layout": "001 平面"},
+        },
+    ]
+    plan = build_structural_plan(workspace, commands, SuffixOptions(True, 2))
+    group = plan["groups"][0]
+    bindings = {
+        layout["sheet_id"]: {
+            "file": group["target_file"],
+            "layout": layout["target_layout"],
+            "handle": f"D{index + 1}",
+        }
+        for index, layout in enumerate(group["layouts"])
+    }
+    runner = CadJobRunner(Mock(), DstCodec(), Mock(), 30)
+
+    staged = runner._write_staged_dst(workspace, plan, bindings, tmp_path, commands)
+
+    projected = AcsmDocument(DstCodec().decode_file(staged)).project(dst.parent)
+    assert projected.custom_properties["项目号"] == "P-999"
+    assert projected.sheets[0].custom_properties["比例"] == "1:500"
+
+
+@pytest.mark.parametrize(
+    "bindings",
+    [
+        {},
+        {"unexpected": {"file": "A.dwg", "layout": "001 平面", "handle": "AB"}},
+        {"sheet-1": {"file": "A.dwg", "layout": "001 平面", "handle": "0"}},
+    ],
+)
+def test_final_dst_rejects_non_bijective_or_zero_handle_bindings(tiny_workspace, tmp_path: Path, bindings):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst)).project(dst.parent)
+    workspace = Workspace("workspace", dst.parent, dst, "revision", document)
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": document.subsets[0].acsm_id, "title": "新标题"}],
+        SuffixOptions(True, 1),
+    )
+    runner = CadJobRunner(Mock(), DstCodec(), Mock(), 30)
+
+    with pytest.raises(PlanningError) as exc_info:
+        runner._write_staged_dst(workspace, plan, bindings, tmp_path)
+
+    assert exc_info.value.code in {"HANDLE_LAYOUT_MISMATCH", "HANDLE_OUTPUT_INVALID"}

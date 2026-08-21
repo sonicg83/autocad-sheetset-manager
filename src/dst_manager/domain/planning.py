@@ -8,7 +8,16 @@ from dst_manager.domain.editing import (
     SuffixOptions,
     derive_document_structure,
 )
-from dst_manager.domain.models import Sheet, Workspace
+from dst_manager.domain.models import (
+    CustomPropertyDefinition,
+    DerivedDocument,
+    DerivedSubset,
+    LayoutReference,
+    PropertyDefinitionDiff,
+    Sheet,
+    Subset,
+    Workspace,
+)
 
 
 class PlanningError(ValueError):
@@ -77,10 +86,11 @@ def build_structural_plan(
     except EditingError as exc:
         raise PlanningError(exc.code, str(exc)) from exc
 
+    original_subsets = {subset.acsm_id: subset for subset in workspace.document.subsets}
     groups = []
+    final_targets: list[str] = []
+    planned_subset_ids: list[str] = []
     for subset in derived.subsets:
-        if subset.acsm_id not in derived.affected_subset_ids:
-            continue
         layouts = []
         names: set[str] = set()
         for sheet in subset.sheets:
@@ -101,16 +111,210 @@ def build_structural_plan(
                     "target_layout": name,
                 },
             )
+        original = original_subsets.get(subset.acsm_id)
+        operation = "rebuild" if original is not None else "create"
+        source_target = _subset_target_file(original) if original is not None else None
+        if operation == "rebuild" and not source_target:
+            raise PlanningError("SOURCE_TARGET_MISSING", f"子集缺少现有目标DWG：{subset.acsm_id}")
+        target = _final_target_path(workspace, subset, operation)
+        subset.target_file = str(target)
+        subset.source_target_file = source_target or ""
+        final_targets.append(str(target).casefold())
+        source_snapshot = source_target or (layouts[0]["source_file"] if layouts else "")
+        if not source_snapshot:
+            raise PlanningError("LAYOUT_SOURCE_INVALID", f"子集缺少重建基础文件：{subset.acsm_id}")
+        if operation == "rebuild" and not _subset_changed(original, subset, source_target, target) and subset.acsm_id not in derived.affected_subset_ids:
+            continue
+        planned_subset_ids.append(subset.acsm_id)
         groups.append(
             {
                 "subset_id": subset.acsm_id,
                 "subset_name": subset.display_name,
-                "source_target_file": subset.source_target_file,
-                "target_file": subset.target_file,
+                "operation": operation,
+                "source_target_file": source_target,
+                "source_snapshot": str(Path(source_snapshot).expanduser().resolve()),
+                "target_file": str(target),
                 "layouts": layouts,
             },
         )
-    final_targets = [group["target_file"].casefold() for group in groups]
     if len(final_targets) != len(set(final_targets)):
         raise PlanningError("DWG_TARGET_COLLISION", "多个子集派生出相同的目标DWG文件名")
-    return {"groups": groups, "deleted_subsets": [], "affected_subset_ids": derived.affected_subset_ids}
+    final_subset_ids = {subset.acsm_id for subset in derived.subsets}
+    deleted_subsets = [
+        {"subset_id": subset.acsm_id, "target_file": target}
+        for subset in workspace.document.subsets
+        if subset.acsm_id not in final_subset_ids and (target := _subset_target_file(subset))
+    ]
+    return {
+        "groups": groups,
+        "deleted_subsets": deleted_subsets,
+        "affected_subset_ids": planned_subset_ids,
+        "derived_document": _serialize_derived_document(derived),
+    }
+
+
+def derived_document_from_plan(plan: dict[str, Any]) -> DerivedDocument:
+    """从已确认的可序列化计划恢复最终结构，不重新执行业务派生。"""
+    try:
+        raw = plan["derived_document"]
+        subsets = []
+        for subset in raw["subsets"]:
+            sheets = []
+            for sheet in subset["sheets"]:
+                layout = sheet["layout"]
+                resolved_path = layout.get("resolved_path")
+                sheets.append(
+                    Sheet(
+                        sheet["acsm_id"],
+                        sheet["number"],
+                        sheet["title"],
+                        LayoutReference(
+                            layout["file_name"],
+                            layout["relative_file_name"],
+                            layout["layout_name"],
+                            layout["handle"],
+                            Path(resolved_path) if resolved_path else None,
+                            layout.get("resolution_source"),
+                        ),
+                        dict(sheet["custom_properties"]),
+                    ),
+                )
+            subsets.append(
+                DerivedSubset(
+                    subset["acsm_id"],
+                    subset["title"],
+                    subset["number_range"],
+                    subset["display_name"],
+                    sheets,
+                    subset["source_target_file"],
+                    subset["target_file"],
+                ),
+            )
+        property_diff = PropertyDefinitionDiff(
+            [_property_definition_from_dict(item) for item in raw["property_diff"]["added"]],
+            [_property_definition_from_dict(item) for item in raw["property_diff"]["skipped"]],
+        )
+        return DerivedDocument(
+            subsets,
+            list(raw["affected_subset_ids"]),
+            property_diff,
+            {sheet_id: dict(source) for sheet_id, source in raw["layout_sources"].items()},
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PlanningError("DERIVED_DOCUMENT_INVALID", "执行计划缺少有效的最终派生结构") from exc
+
+
+def metadata_commands_for_derived_document(commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """提取不参与结构派生、但必须与结构结果同批写入的元数据更新。"""
+    result: list[dict[str, Any]] = []
+    for command in commands:
+        if command.get("type") == "update_sheet_set":
+            result.append(command)
+        elif command.get("type") == "update_sheet" and "custom_properties" in command:
+            result.append(
+                {
+                    "type": "update_sheet",
+                    "sheet_id": command.get("sheet_id"),
+                    "custom_properties": command["custom_properties"],
+                },
+            )
+    return result
+
+
+def _property_definition_from_dict(item: dict[str, str]) -> CustomPropertyDefinition:
+    return CustomPropertyDefinition(item["type"], item["name"], item["default_value"])
+
+
+def _serialize_derived_document(derived: DerivedDocument) -> dict[str, Any]:
+    return {
+        "subsets": [
+            {
+                "acsm_id": subset.acsm_id,
+                "title": subset.title,
+                "number_range": subset.number_range,
+                "display_name": subset.display_name,
+                "source_target_file": subset.source_target_file,
+                "target_file": subset.target_file,
+                "sheets": [
+                    {
+                        "acsm_id": sheet.acsm_id,
+                        "number": sheet.number,
+                        "title": sheet.title,
+                        "custom_properties": dict(sheet.custom_properties),
+                        "layout": {
+                            "file_name": sheet.layout.file_name,
+                            "relative_file_name": sheet.layout.relative_file_name,
+                            "layout_name": sheet.layout.layout_name,
+                            "handle": sheet.layout.handle,
+                            "resolved_path": str(sheet.layout.resolved_path) if sheet.layout.resolved_path else None,
+                            "resolution_source": sheet.layout.resolution_source,
+                        },
+                    }
+                    for sheet in subset.sheets
+                ],
+            }
+            for subset in derived.subsets
+        ],
+        "affected_subset_ids": list(derived.affected_subset_ids),
+        "property_diff": {
+            "added": [
+                {"type": item.type, "name": item.name, "default_value": item.default_value}
+                for item in derived.property_diff.added
+            ],
+            "skipped": [
+                {"type": item.type, "name": item.name, "default_value": item.default_value}
+                for item in derived.property_diff.skipped
+            ],
+        },
+        "layout_sources": {sheet_id: dict(source) for sheet_id, source in derived.layout_sources.items()},
+    }
+
+
+def _subset_target_file(subset: Subset | None) -> str | None:
+    if subset is None:
+        return None
+    for sheet in subset.sheets:
+        target = sheet.layout.resolved_path or sheet.layout.file_name
+        if target:
+            return str(Path(target).expanduser().resolve())
+    return None
+
+
+def _final_target_path(workspace: Workspace, subset: DerivedSubset, operation: str) -> Path:
+    if operation == "create":
+        target = workspace.root / Path(subset.target_file).name
+    else:
+        target = Path(subset.target_file)
+    target = target.expanduser().resolve()
+    root = workspace.root.resolve()
+    if root not in target.parents:
+        raise PlanningError("DWG_TARGET_OUTSIDE_WORKSPACE", f"目标DWG越出工作区：{target}")
+    return target
+
+
+def _subset_changed(
+    original: Subset,
+    derived: DerivedSubset,
+    source_target: str,
+    target: Path,
+) -> bool:
+    if Path(source_target).resolve() != target.resolve() or original.name != derived.display_name:
+        return True
+    if len(original.sheets) != len(derived.sheets):
+        return True
+    for before, after in zip(original.sheets, derived.sheets, strict=True):
+        if (
+            before.acsm_id,
+            before.number,
+            before.title,
+            before.layout.layout_name,
+            before.custom_properties,
+        ) != (
+            after.acsm_id,
+            after.number,
+            after.title,
+            after.layout.layout_name,
+            after.custom_properties,
+        ):
+            return True
+    return False

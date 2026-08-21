@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from dst_manager.domain.models import JobStatus, Severity, Workspace
-from dst_manager.domain.planning import build_structural_plan
+from dst_manager.domain.planning import (
+    PlanningError,
+    derived_document_from_plan,
+    metadata_commands_for_derived_document,
+)
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
@@ -48,7 +52,7 @@ class RebuildWorkUnit:
 class RebuildResult:
     index: int
     target: Path
-    source_target: Path
+    source_target: Path | None
     staged: Path
     bindings: dict[str, dict[str, str]]
     duration_ms: int
@@ -77,7 +81,9 @@ class CadJobRunner:
             self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_CAPABILITY_UNAVAILABLE")
             return self.database.get_job(job_id) or {}
         try:
-            plan = build_structural_plan(workspace, payload["commands"])
+            plan = payload.get("plan", {}).get("execution_intent")
+            if not isinstance(plan, dict):
+                raise PlanningError("EXECUTION_PLAN_MISSING", "CAD 任务缺少已确认的执行计划")
             return self._execute(job_id, worker_id, job.get("attempt", 1), workspace, capability, payload["commands"], plan)
         except FileLockError as exc:
             append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK")
@@ -112,9 +118,26 @@ class CadJobRunner:
         (plan_dir / "change-set.json").write_text(json.dumps({"base_revision_id": workspace.revision_id, "commands": commands}, ensure_ascii=False, indent=2), encoding="utf-8")
         input_dir = attempt_dir / "input" / "sources"
         input_dir.mkdir(parents=True, exist_ok=True)
-        unique_sources = {Path(layout["source_file"]).resolve() for group in plan["groups"] for layout in group["layouts"]}
-        unique_sources.update(Path(group["source_target_file"]).resolve() for group in plan["groups"])
-        affected_targets = {Path(group["source_target_file"]).resolve() for group in plan["groups"]} | {workspace.dst_path.resolve()}
+        unique_sources: set[Path] = set()
+        for group in plan["groups"]:
+            base_source = Path(group["source_snapshot"]).resolve()
+            self._require_source_file(
+                base_source,
+                "TEMPLATE_NOT_FOUND" if group["operation"] == "create" else "SOURCE_TARGET_NOT_FOUND",
+            )
+            unique_sources.add(base_source)
+            for layout in group["layouts"]:
+                source = Path(layout["source_file"]).resolve()
+                self._require_source_file(
+                    source,
+                    "TEMPLATE_NOT_FOUND" if layout["source_type"] == "template_layout" else "LAYOUT_SOURCE_NOT_FOUND",
+                )
+                unique_sources.add(source)
+        affected_targets = {
+            Path(group["source_target_file"]).resolve()
+            for group in plan["groups"]
+            if group["source_target_file"] is not None
+        } | {workspace.dst_path.resolve()}
         required_space = sum(path.stat().st_size for path in unique_sources) + 2 * sum(path.stat().st_size for path in affected_targets)
         if shutil.disk_usage(workspace.root).free < required_space:
             raise OSError("STAGING_DISK_SPACE_INSUFFICIENT")
@@ -130,11 +153,16 @@ class CadJobRunner:
                         raise ValueError(f"SOURCE_SNAPSHOT_HASH_MISMATCH: {source}")
                     source_snapshots[source] = snapshot
                 layout["source_file"] = str(source_snapshots[source])
-            group["source_snapshot"] = str(source_snapshots[Path(group["source_target_file"]).resolve()])
+            group["source_snapshot"] = str(source_snapshots[Path(group["source_snapshot"]).resolve()])
         (plan_dir / "execution-plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         staged_files: dict[Path, Path | None] = {}
         bindings: dict[str, dict[str, str]] = {}
-        publication_targets = [workspace.dst_path, *(Path(group["source_target_file"]) for group in plan["groups"]), *(Path(group["target_file"]) for group in plan["groups"]), *(Path(item["target_file"]) for item in plan["deleted_subsets"])]
+        publication_targets = [
+            workspace.dst_path,
+            *(Path(group["source_target_file"]) for group in plan["groups"] if group["source_target_file"] is not None),
+            *(Path(group["target_file"]) for group in plan["groups"]),
+            *(Path(item["target_file"]) for item in plan["deleted_subsets"]),
+        ]
         baseline_hashes = {path.resolve(): file_sha256(path) if path.exists() else None for path in publication_targets}
         lock_targets = [path for path in publication_targets if path.exists()]
         with WindowsWriteLocks(lock_targets):
@@ -143,24 +171,13 @@ class CadJobRunner:
             results = self._run_groups(job_id, worker_id, workspace, capability, units)
             for result in sorted(results, key=lambda item: item.index):
                 bindings.update(result.bindings)
-                if result.source_target.resolve() != result.target.resolve():
+                if result.source_target is not None and result.source_target.resolve() != result.target.resolve():
                     staged_files[result.source_target] = None
                 staged_files[result.target] = result.staged
             for deleted in plan["deleted_subsets"]:
                 staged_files[Path(deleted["target_file"])] = None
             self.database.update_job(job_id, JobStatus.VERIFYING, 70)
-            acsm = AcsmDocument(self.codec.decode_file(workspace.dst_path))
-            acsm.apply_structural_commands(commands, workspace.revision_id)
-            acsm.apply_subset_names({group["subset_id"]: group["subset_name"] for group in plan["groups"]})
-            acsm.apply_layout_bindings(bindings, workspace.root)
-            issues = acsm.validate()
-            if any(issue.severity == Severity.ERROR for issue in issues):
-                raise ValueError("XML_VALIDATION_FAILED")
-            staged_dst = staging_dir / workspace.dst_path.name
-            self.codec.encode_file(acsm.to_bytes(), staged_dst)
-            roundtrip = AcsmDocument(self.codec.decode_file(staged_dst))
-            if roundtrip.semantic_bytes() != acsm.semantic_bytes():
-                raise ValueError("DST_ROUNDTRIP_MISMATCH")
+            staged_dst = self._write_staged_dst(workspace, plan, bindings, staging_dir, commands)
             staged_files[workspace.dst_path] = staged_dst
             self.database.update_job(job_id, JobStatus.PREPARED, 80)
             for path, expected_hash in baseline_hashes.items():
@@ -217,7 +234,7 @@ class CadJobRunner:
 
     def _rebuild_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: RebuildWorkUnit) -> RebuildResult:
         group_index, group = unit.index, unit.group
-        source_target = Path(group["source_target_file"])
+        source_target = Path(group["source_target_file"]) if group["source_target_file"] is not None else None
         target = Path(group["target_file"])
         started = time.perf_counter()
         group_dir = unit.staging_dir / f"group-{group_index:03d}"
@@ -226,7 +243,15 @@ class CadJobRunner:
         shutil.copy2(unit.source_snapshot, staged)
         rebuild_script = unit.scripts_dir / f"rebuild-{group_index:03d}.scr"
         log_path = unit.logs_dir / f"group-{group_index:03d}.log"
-        self.database.upsert_job_file(job_id, target, source_path=str(source_target), status="RUNNING", progress=5, log_path=str(log_path), before_hash=file_sha256(source_target))
+        self.database.upsert_job_file(
+            job_id,
+            target,
+            source_path=str(source_target) if source_target is not None else None,
+            status="RUNNING",
+            progress=5,
+            log_path=str(log_path),
+            before_hash=file_sha256(source_target) if source_target is not None else None,
+        )
         rebuild_script.write_text(self.renderer.render_rebuild(capability.plugin, group["layouts"]), encoding="mbcs")
         output = ""
         phase = "重建布局"
@@ -245,6 +270,8 @@ class CadJobRunner:
             expected = {layout["target_layout"] for layout in group["layouts"]}
             if set(handles) != expected:
                 raise ValueError(f"HANDLE_LAYOUT_MISMATCH: expected={sorted(expected)!r}, actual={sorted(handles)!r}")
+            if any(handle == "0" for handle in handles.values()):
+                raise ValueError("HANDLE_OUTPUT_INVALID")
             bindings = {layout["sheet_id"]: {"file": str(target), "layout": layout["target_layout"], "handle": handles[layout["target_layout"]]} for layout in group["layouts"]}
             duration_ms = int((time.perf_counter() - started) * 1000)
             staging_bytes = staged.stat().st_size
@@ -258,6 +285,66 @@ class CadJobRunner:
             log_path.write_text(sanitize_log_text(output + "\n" + repr(exc)), encoding="utf-8")
             self.database.upsert_job_file(job_id, target, status="FAILED", progress=0, duration_ms=duration_ms, error_code=getattr(exc, "code", type(exc).__name__.upper()), error_detail=str(exc))
             raise
+
+    def _write_staged_dst(
+        self,
+        workspace: Workspace,
+        plan: dict[str, Any],
+        bindings: dict[str, dict[str, str]],
+        staging_dir: Path,
+        commands: list[dict[str, Any]] | None = None,
+    ) -> Path:
+        expected = {
+            layout["sheet_id"]: {
+                "file": str(Path(group["target_file"]).resolve()),
+                "layout": layout["target_layout"],
+            }
+            for group in plan["groups"]
+            for layout in group["layouts"]
+        }
+        if len(expected) != sum(len(group["layouts"]) for group in plan["groups"]) or set(bindings) != set(expected):
+            raise PlanningError("HANDLE_LAYOUT_MISMATCH", "Handle 回读结果与最终计划图纸不一一对应")
+        normalized_bindings: dict[str, dict[str, str]] = {}
+        for sheet_id, expected_binding in expected.items():
+            binding = bindings[sheet_id]
+            handle = str(binding.get("handle", "")).upper()
+            try:
+                handle_value = int(handle, 16)
+            except ValueError as exc:
+                raise PlanningError("HANDLE_OUTPUT_INVALID", f"Handle 格式无效：{sheet_id}") from exc
+            if handle_value == 0:
+                raise PlanningError("HANDLE_OUTPUT_INVALID", f"Handle 不得为 0：{sheet_id}")
+            actual_file = str(Path(binding.get("file", "")).resolve())
+            if actual_file.casefold() != expected_binding["file"].casefold() or binding.get("layout") != expected_binding["layout"]:
+                raise PlanningError("HANDLE_LAYOUT_MISMATCH", f"Handle 回读绑定偏离最终计划：{sheet_id}")
+            normalized_bindings[sheet_id] = {
+                "file": expected_binding["file"],
+                "layout": expected_binding["layout"],
+                "handle": handle,
+            }
+
+        acsm = AcsmDocument(self.codec.decode_file(workspace.dst_path))
+        acsm.apply_derived_document(derived_document_from_plan(plan))
+        metadata_commands = metadata_commands_for_derived_document(commands or [])
+        if metadata_commands:
+            acsm.apply_metadata_commands(metadata_commands)
+        acsm.apply_layout_bindings(normalized_bindings, workspace.root)
+        issues = acsm.validate()
+        if any(issue.severity == Severity.ERROR for issue in issues):
+            raise ValueError("XML_VALIDATION_FAILED")
+        final_dir = staging_dir / "final-dst"
+        final_dir.mkdir(parents=True, exist_ok=True)
+        staged_dst = final_dir / workspace.dst_path.name
+        self.codec.encode_file(acsm.to_bytes(), staged_dst)
+        roundtrip = AcsmDocument(self.codec.decode_file(staged_dst))
+        if roundtrip.semantic_bytes() != acsm.semantic_bytes():
+            raise ValueError("DST_ROUNDTRIP_MISMATCH")
+        return staged_dst
+
+    @staticmethod
+    def _require_source_file(path: Path, code: str) -> None:
+        if not path.is_file():
+            raise PlanningError(code, f"CAD 来源文件不存在：{path}")
 
     @staticmethod
     def _format_console_output(phase: str, stdout: str | bytes | None, stderr: str | bytes | None, returncode: int = 0) -> str:

@@ -47,6 +47,55 @@ def test_deleted_file_is_restored_when_later_publish_fails(tmp_path: Path):
     assert deleted.read_text() == "keep-delete" and replaced.read_text() == "keep-replace"
 
 
+@pytest.mark.parametrize("fail_at", [1, 2, 3])
+def test_mixed_create_replace_delete_publish_failure_restores_batch(
+    tmp_path: Path,
+    monkeypatch,
+    fail_at: int,
+):
+    created = tmp_path / "created.dwg"
+    replaced = tmp_path / "replaced.dwg"
+    deleted = tmp_path / "deleted.dwg"
+    staged_created = tmp_path / "staged-created.dwg"
+    staged_replaced = tmp_path / "staged-replaced.dwg"
+    replaced.write_bytes(b"old-replaced")
+    deleted.write_bytes(b"old-deleted")
+    staged_created.write_bytes(b"new-created")
+    staged_replaced.write_bytes(b"new-replaced")
+    replace_calls = 0
+
+    def replace(source: Path, target: Path):
+        nonlocal replace_calls
+        replace_calls += 1
+        if fail_at in {1, 2} and replace_calls == fail_at:
+            raise OSError(f"注入第 {fail_at} 项发布故障")
+        os.replace(source, target)
+
+    original_unlink = Path.unlink
+
+    def unlink(path: Path, *args, **kwargs):
+        if fail_at == 3 and path == deleted:
+            raise OSError("注入第 3 项发布故障")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    with pytest.raises(PublishRolledBackError, match=f"注入第 {fail_at} 项发布故障"):
+        RecoverablePublisher(replace).publish(
+            f"mixed-{fail_at}",
+            tmp_path,
+            {created: staged_created, replaced: staged_replaced, deleted: None},
+        )
+
+    assert not created.exists()
+    assert replaced.read_bytes() == b"old-replaced"
+    assert deleted.read_bytes() == b"old-deleted"
+    journal = json.loads(
+        (tmp_path / ".dst-manager" / "jobs" / f"mixed-{fail_at}" / "publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "ROLLED_BACK"
+
+
 @pytest.mark.parametrize("status", ["PREPARED", "PUBLISHING", "ROLLING_BACK"])
 def test_startup_recovery_closes_unfinished_journal(tmp_path: Path, status: str):
     operation="crash"; target=tmp_path/"target.txt"; target.write_text("after")

@@ -10,8 +10,13 @@ from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.config import Settings
-from dst_manager.domain.models import JobStatus, Severity, Workspace
-from dst_manager.domain.planning import PlanningError, build_structural_plan
+from dst_manager.domain.models import JobStatus, Severity, SuffixOptions, Workspace
+from dst_manager.domain.planning import (
+    PlanningError,
+    build_structural_plan,
+    derived_document_from_plan,
+    metadata_commands_for_derived_document,
+)
 from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
@@ -79,7 +84,7 @@ class DstManagerService:
     def preview_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]]) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
-        known = {"update_sheet_set", "update_subset", "update_sheet", "delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "renumber_sheets"}
+        known = {"update_sheet_set", "update_subset", "update_sheet", "delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "insert_subset", "renumber_sheets"}
         invalid = [command.get("type") for command in commands if command.get("type") not in known]
         if invalid:
             raise ApplicationError("COMMAND_UNSUPPORTED", f"不支持的命令：{invalid}")
@@ -92,24 +97,41 @@ class DstManagerService:
             sheet_id = command.get("sheet_id")
             if command_type in {"update_sheet", "delete_sheet", "move_sheet", "reorder_sheet"} and sheet_id not in sheet_ids:
                 diagnostics.append({"code": "SHEET_NOT_FOUND", "severity": "error", "message": f"找不到图纸：{sheet_id}", "index": index})
-            if command_type == "insert_sheet" and not command.get("source"):
+            if command_type in {"insert_sheet", "insert_subset"} and not command.get("source"):
                 diagnostics.append({"code": "LAYOUT_SOURCE_REQUIRED", "severity": "error", "message": "新增图纸必须明确布局来源", "index": index})
-            structural |= command_type in {"delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "renumber_sheets"} or (command_type == "update_sheet" and ("number" in command or "title" in command))
+            structural |= command_type in {"update_subset", "delete_sheet", "move_sheet", "reorder_sheet", "insert_sheet", "insert_subset", "renumber_sheets"} or (command_type == "update_sheet" and ("number" in command or "title" in command))
             changes.append({"index": index, "type": command_type, "object_id": sheet_id, "after": command})
         execution_intent = None
         if structural and not diagnostics:
             try:
-                execution_intent = build_structural_plan(workspace, commands)
+                execution_intent = build_structural_plan(
+                    workspace,
+                    commands,
+                    SuffixOptions(
+                        self.settings.enable_add_number_suffix,
+                        self.settings.number_suffix_type,
+                    ),
+                )
             except PlanningError as exc:
                 diagnostics.append({"code": exc.code, "severity": "error", "message": str(exc)})
         if not diagnostics:
             try:
                 preview_dom = AcsmDocument(self.codec.decode_file(workspace.dst_path)).clone()
                 if structural:
-                    preview_dom.apply_structural_commands(commands, workspace.revision_id)
+                    preview_dom.apply_derived_document(derived_document_from_plan(execution_intent))
+                    metadata_commands = metadata_commands_for_derived_document(commands)
+                    if metadata_commands:
+                        preview_dom.apply_metadata_commands(metadata_commands)
                 else:
                     preview_dom.apply_metadata_commands(commands)
+                planned_sheet_ids = {
+                    layout["sheet_id"]
+                    for group in execution_intent["groups"]
+                    for layout in group["layouts"]
+                } if execution_intent else set()
                 for issue in preview_dom.validate():
+                    if issue.object_id in planned_sheet_ids and issue.code in {"LAYOUT_FIELD_MISSING", "LAYOUT_HANDLE_PLACEHOLDER"}:
+                        continue
                     if issue.severity == Severity.ERROR:
                         diagnostics.append({"code": issue.code, "severity": "error", "message": issue.message, "object_id": issue.object_id})
             except AcsmValidationError as exc:
@@ -126,7 +148,7 @@ class DstManagerService:
         affected = {str(workspace.dst_path)}
         if execution_intent:
             affected.update(group["target_file"] for group in execution_intent["groups"])
-            affected.update(group["source_target_file"] for group in execution_intent["groups"])
+            affected.update(group["source_target_file"] for group in execution_intent["groups"] if group["source_target_file"] is not None)
             affected.update(item["target_file"] for item in execution_intent["deleted_subsets"])
         return {"workspace_id": workspace_id, "base_revision_id": base_revision_id, "requires_cad": structural, "affected_files": sorted(affected), "execution_intent": execution_intent, "changes": changes, "diagnostics": diagnostics, "executable": not any(item["severity"] == "error" for item in diagnostics)}
 

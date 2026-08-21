@@ -379,3 +379,125 @@ def test_cad_success_then_dom_failure_keeps_formal_hashes(version: str, tmp_path
     after = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)}
     assert after == before
     assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
+
+
+def _copy_single_subset_project(tmp_path: Path) -> tuple[Path, Path, str]:
+    codec = DstCodec()
+    source_dst = _SAMPLE_PROJECT / "图纸集数据文件.dst"
+    document = AcsmDocument(codec.decode_file(source_dst))
+    sheet_set = document.root.xpath("//*[local-name()='AcSmSheetSet']")[0]
+    subsets = sheet_set.xpath("./*[local-name()='AcSmSubset']")
+    for subset in subsets[1:]:
+        sheet_set.remove(subset)
+    dst = tmp_path / source_dst.name
+    codec.encode_file(document.to_bytes(), dst)
+    projected = document.project(_SAMPLE_PROJECT)
+    source_sheet = projected.subsets[0].sheets[0]
+    drawing = tmp_path / source_sheet.layout.resolved_path.name
+    shutil.copy2(source_sheet.layout.resolved_path, drawing)
+    return dst, drawing, source_sheet.layout.layout_name
+
+
+def _system_settings(tmp_path: Path) -> Settings:
+    root = Path(__file__).parents[2]
+    return Settings(
+        data_dir=tmp_path / "data",
+        autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
+        autocad_2016_plugin=root / "plugins/autocad2016/DstManager.AutoCAD.dll",
+        autocad_2020_console=Path("C:/Program Files/Autodesk/AutoCAD 2020/accoreconsole.exe"),
+        autocad_2020_plugin=root / "plugins/autocad2020/DstManager.AutoCAD.dll",
+        cad_timeout_seconds=240,
+        cad_max_parallel=1,
+    )
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, tmp_path: Path):
+    dst, template, template_layout = _copy_single_subset_project(tmp_path)
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "独立DWG验证",
+        "initial_sheet_count": 3,
+        "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
+    }
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    created_group = next(group for group in preview["execution_intent"]["groups"] if group["operation"] == "create")
+    assert created_group["source_target_file"] is None
+    assert len(created_group["layouts"]) == 3
+
+    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
+    result = service.run_next_job()
+
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "SUCCEEDED", result
+    reopened = service.open_workspace(dst)
+    created = next(subset for subset in reopened.document.subsets if "独立DWG验证" in subset.name)
+    assert len(created.sheets) == 3
+    assert len({sheet.layout.resolved_path for sheet in created.sheets}) == 1
+    created_dwg = created.sheets[0].layout.resolved_path
+    assert created_dwg and created_dwg.is_file() and created_dwg != template
+    assert [sheet.layout.layout_name for sheet in created.sheets] == [
+        layout["target_layout"] for layout in created_group["layouts"]
+    ]
+    assert len({sheet.layout.handle for sheet in created.sheets}) == 3
+    assert all(sheet.layout.handle != "0" for sheet in created.sheets)
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_batch_insert_rebuilds_layouts_in_final_order(version: str, tmp_path: Path):
+    dst, template, template_layout = _copy_single_subset_project(tmp_path)
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    subset = workspace.document.subsets[0]
+    command = {
+        "type": "insert_sheet",
+        "target_subset_id": subset.acsm_id,
+        "ordinal": 1,
+        "placement": "after",
+        "count": 3,
+        "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
+    }
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    group = preview["execution_intent"]["groups"][0]
+    assert group["operation"] == "rebuild"
+    assert len(group["layouts"]) == 4
+
+    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
+    result = service.run_next_job()
+
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "SUCCEEDED", result
+    rebuilt = service.open_workspace(dst).document.subsets[0].sheets
+    assert [sheet.layout.layout_name for sheet in rebuilt] == [layout["target_layout"] for layout in group["layouts"]]
+    assert len({sheet.layout.handle for sheet in rebuilt}) == 4
+    assert all(sheet.layout.handle != "0" for sheet in rebuilt)
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_missing_template_layout_fails_without_publishing(version: str, tmp_path: Path):
+    dst, drawing, _ = _copy_single_subset_project(tmp_path)
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    subset = workspace.document.subsets[0]
+    before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)}
+    command = {
+        "type": "insert_sheet",
+        "target_subset_id": subset.acsm_id,
+        "ordinal": 1,
+        "placement": "after",
+        "count": 1,
+        "source": {"type": "template_layout", "file": str(drawing), "layout": "不存在的模板布局"},
+    }
+
+    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
+    result = service.run_next_job()
+
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "FAILED", result
+    assert result["error_code"] == "CAD_PROCESS_FAILED"
+    assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)} == before
+    assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
