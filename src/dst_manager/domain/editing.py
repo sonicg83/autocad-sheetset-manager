@@ -28,10 +28,13 @@ class EditingError(ValueError):
 
 _NUMBER_RANGE = re.compile(r"^\s*(\d+)(?:\s*-\s*(\d+))?\s+(.+?)\s*$")
 _UNSAFE_NAME = re.compile(r"[<>/\\\":;?*|=\r\n\x00-\x1f]")
+_CONTROL_CHAR = re.compile(r"[\x00-\x1f\x7f]")
 _CHINESE_DIGITS = "零一二三四五六七八九"
 
 
 def normalize_property_name(name: str) -> str:
+    if _CONTROL_CHAR.search(name):
+        raise EditingError("CUSTOM_PROPERTY_NAME_INVALID", "自定义属性名称不能包含控制字符")
     normalized = name.strip()
     if not normalized:
         raise EditingError("CUSTOM_PROPERTY_NAME_EMPTY", "自定义属性名称不能为空")
@@ -142,14 +145,15 @@ def derive_group_titles(
         )
     for members in by_title.values():
         members.sort(key=lambda item: item[0])
+        group_title = members[0][2]
         total = sum(item[3] for item in members)
         ordinal = 1
-        for _, index, title, count in members:
+        for _, index, _, count in members:
             if total == 1:
-                result[index] = [format_sheet_title(title, None, enabled, suffix_type)]
+                result[index] = [format_sheet_title(group_title, None, enabled, suffix_type)]
                 continue
             result[index] = [
-                format_sheet_title(title, ordinal + offset, enabled, suffix_type)
+                format_sheet_title(group_title, ordinal + offset, enabled, suffix_type)
                 for offset in range(count)
             ]
             ordinal += count
@@ -213,10 +217,17 @@ def derive_document_structure(
             subset_by_id[subset_id] = subset
             titles[subset_id] = title
             affected.add(subset_id)
+        elif kind == "delete_sheet":
+            subset, index, sheet = _locate_sheet(subsets, str(command.get("sheet_id", "")))
+            subset.sheets.pop(index)
+            layout_sources.pop(sheet.acsm_id, None)
+            affected.add(subset.acsm_id)
         elif kind in {"update_sheet_set", "update_sheet"}:
             continue
         else:
             raise EditingError("COMMAND_UNSUPPORTED", f"不支持的命令：{kind}")
+
+    _apply_added_sheet_property_defaults(subsets, property_diff.added)
 
     start, width = _number_seed(document)
     current = start
@@ -246,6 +257,24 @@ def derive_document_structure(
         )
 
     return DerivedDocument(derived_subsets, sorted(affected), property_diff, layout_sources)
+
+
+def _locate_sheet(subsets: list[Subset], sheet_id: str) -> tuple[Subset, int, Sheet]:
+    for subset in subsets:
+        for index, sheet in enumerate(subset.sheets):
+            if sheet.acsm_id == sheet_id:
+                return subset, index, sheet
+    raise EditingError("SHEET_NOT_FOUND", f"找不到图纸：{sheet_id}")
+
+
+def _apply_added_sheet_property_defaults(subsets: list[Subset], definitions: list[CustomPropertyDefinition]) -> None:
+    sheet_definitions = [definition for definition in definitions if definition.type == "sheet"]
+    if not sheet_definitions:
+        return
+    for subset in subsets:
+        for sheet in subset.sheets:
+            for definition in sheet_definitions:
+                sheet.custom_properties.setdefault(definition.name, definition.default_value)
 
 
 def _apply_property_commands(

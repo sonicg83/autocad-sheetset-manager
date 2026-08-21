@@ -61,6 +61,16 @@ def test_group_title_suffix_modes_and_numeric_range_sorting():
     assert derive_group_titles([("7", "节点详图", 1)], enabled=True, suffix_type=1) == [["节点详图"]]
 
 
+def test_same_title_group_uses_first_trimmed_spelling_for_all_members():
+    titles = derive_group_titles(
+        [("10", " plan ", 1), ("2", "Plan", 1)],
+        enabled=True,
+        suffix_type=2,
+    )
+
+    assert titles == [["Plan (2)"], ["Plan (1)"]]
+
+
 @pytest.mark.parametrize(
     ("base_title", "ordinal", "enabled", "suffix_type", "expected"),
     [
@@ -111,12 +121,20 @@ def test_property_csv_accepts_utf8_bom_and_exact_three_columns():
         (b"type,name,default_value\nsheet,,1:100\n", "CUSTOM_PROPERTY_NAME_EMPTY"),
         ("type,name,default_value\nsubset,编号,1\n".encode(), "CUSTOM_PROPERTY_TYPE_INVALID"),
         (b"type,name,default_value\nsheet,\xb1\xe0\xba\xc5,1\n", "CUSTOM_PROPERTY_CSV_ENCODING_INVALID"),
+        (b'type,name,default_value\nsheet,"line\nbreak",x\n', "CUSTOM_PROPERTY_NAME_INVALID"),
+        (b"type,name,default_value\nsheet,bad\x00name,x\n", "CUSTOM_PROPERTY_NAME_INVALID"),
     ],
 )
 def test_property_csv_rejects_invalid_encoding_shape_and_required_values(data, code):
     with pytest.raises(EditingError) as exc_info:
         parse_property_csv(data)
     assert exc_info.value.code == code
+
+
+def test_normalize_property_name_rejects_control_characters():
+    with pytest.raises(EditingError) as exc_info:
+        normalize_property_name("编号\r")
+    assert exc_info.value.code == "CUSTOM_PROPERTY_NAME_INVALID"
 
 
 def test_property_definition_diff_skips_same_type_and_blocks_different_type():
@@ -144,6 +162,53 @@ def test_property_definition_diff_skips_same_type_and_blocks_different_type():
             SuffixOptions(True, 1),
         )
     assert exc_info.value.code == "CUSTOM_PROPERTY_TYPE_CONFLICT"
+
+
+def test_imported_sheet_property_default_applies_to_inserted_sheets_in_same_batch():
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [Subset("subset-1", "4 燃气管道平面图", 1, [_sheet("sheet-1", "0004", "燃气管道平面图")])],
+    )
+
+    derived = derive_document_structure(
+        document,
+        [
+            {"type": "import_custom_properties", "definitions": [("sheet", "用途", "燃气")]},
+            {
+                "type": "insert_sheet",
+                "target_subset_id": "subset-1",
+                "ordinal": 1,
+                "placement": "after",
+                "count": 1,
+                "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
+            },
+        ],
+        SuffixOptions(True, 1),
+    )
+
+    assert [sheet.custom_properties["用途"] for sheet in derived.subsets[0].sheets] == ["燃气", "燃气"]
+
+
+def test_imported_sheet_property_default_applies_to_inserted_subset_sheets_in_same_batch():
+    document = SheetSetDocument("db", "图纸集", [])
+
+    derived = derive_document_structure(
+        document,
+        [
+            {"type": "import_custom_properties", "definitions": [("sheet", "用途", "燃气")]},
+            {
+                "type": "insert_subset",
+                "ordinal": 1,
+                "title": "燃气管道平面图",
+                "initial_sheet_count": 2,
+                "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
+            },
+        ],
+        SuffixOptions(True, 1),
+    )
+
+    assert [sheet.custom_properties["用途"] for sheet in derived.subsets[0].sheets] == ["燃气", "燃气"]
 
 
 def test_first_subset_ordinal_one_creates_numbered_initial_sheets():
@@ -217,6 +282,53 @@ def test_empty_subset_is_rejected_before_deriving_titles():
     with pytest.raises(EditingError) as exc_info:
         derive_document_structure(document, [], SuffixOptions(True, 1))
     assert exc_info.value.code == "EMPTY_SUBSET"
+
+
+def test_delete_sheet_rederives_numbers_and_titles_without_manual_editing():
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [
+            Subset(
+                "subset-1",
+                "4-6 燃气管道平面图",
+                1,
+                [
+                    _sheet("sheet-1", "0004", "燃气管道平面图"),
+                    _sheet("sheet-2", "0005", "燃气管道平面图"),
+                    _sheet("sheet-3", "0006", "燃气管道平面图"),
+                ],
+            )
+        ],
+    )
+
+    derived = derive_document_structure(
+        document,
+        [{"type": "delete_sheet", "sheet_id": "sheet-2"}],
+        SuffixOptions(True, 2),
+    )
+
+    subset = derived.subsets[0]
+    assert derived.affected_subset_ids == ["subset-1"]
+    assert [sheet.acsm_id for sheet in subset.sheets] == ["sheet-1", "sheet-3"]
+    assert [sheet.number for sheet in subset.sheets] == ["0004", "0005"]
+    assert [sheet.title for sheet in subset.sheets] == ["燃气管道平面图 (1)", "燃气管道平面图 (2)"]
+
+
+def test_delete_sheet_rejects_empty_subset_and_legacy_moves_remain_unsupported():
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [Subset("subset-1", "4 燃气管道平面图", 1, [_sheet("sheet-1", "0004", "燃气管道平面图")])],
+    )
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(document, [{"type": "delete_sheet", "sheet_id": "sheet-1"}], SuffixOptions(True, 1))
+    assert exc_info.value.code == "EMPTY_SUBSET"
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(document, [{"type": "move_sheet", "sheet_id": "sheet-1"}], SuffixOptions(True, 1))
+    assert exc_info.value.code == "COMMAND_UNSUPPORTED"
 
 
 def test_build_structural_plan_consumes_derived_document_without_filesystem_source_checks():
