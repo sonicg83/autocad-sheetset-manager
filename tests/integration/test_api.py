@@ -418,6 +418,88 @@ def test_property_csv_preview_preserves_physical_line_after_blank_record(tmp_pat
     assert preview["changes"][0]["line"] == 3
 
 
+def test_property_csv_rejects_invalid_xml_value_at_logical_record_start_without_writing(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app, raise_server_exceptions=False)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "csv": (
+            'type,name,default_value\r\n'
+            'sheet,说明,"第一行\r\n第二行"\r\n'
+            'sheet,专业,"燃\x00气"\r\n'
+        ),
+    }
+    before = (dst.stat().st_mtime_ns, dst.read_bytes())
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        json=payload,
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is False
+    assert preview.json()["diagnostics"] == [
+        {
+            "code": "CUSTOM_PROPERTY_VALUE_INVALID",
+            "severity": "error",
+            "message": "自定义属性值包含 XML 1.0 禁止字符",
+            "line": 4,
+        },
+    ]
+    execution = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        json=payload,
+    )
+    assert execution.status_code == 400
+    assert execution.json()["code"] == "PLAN_INVALID"
+    with app.state.service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+    assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before
+
+
+def test_direct_property_definition_command_rejects_invalid_xml_value_without_writing(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app, raise_server_exceptions=False)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [
+            {
+                "type": "add_custom_property",
+                "property_type": "sheet",
+                "name": "专业",
+                "default_value": "燃\x00气",
+            },
+        ],
+    }
+    before = (dst.stat().st_mtime_ns, dst.read_bytes())
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json=payload,
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is False
+    assert [item["code"] for item in preview.json()["diagnostics"]] == ["CUSTOM_PROPERTY_VALUE_INVALID"]
+    execution = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json=payload,
+    )
+    assert execution.status_code == 400
+    assert execution.json()["code"] == "PLAN_INVALID"
+    with app.state.service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+    assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before
+
+
 def test_property_csv_preview_merges_main_dom_diagnostics_and_blocks_execution(tmp_path, tiny_workspace):
     dst, _ = tiny_workspace
     xml = DstCodec().decode_file(dst).replace(

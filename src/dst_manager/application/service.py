@@ -272,6 +272,8 @@ class DstManagerService:
                     "CUSTOM_PROPERTY_NAME_EMPTY": "自定义属性名称不能为空。",
                     "CUSTOM_PROPERTY_NAME_INVALID": "自定义属性名称无效。",
                     "CUSTOM_PROPERTY_TYPE_INVALID": "自定义属性类型无效。",
+                    "CUSTOM_PROPERTY_VALUE_INVALID": "自定义属性值包含 XML 1.0 禁止字符。",
+                    "XML_TEXT_INVALID": "文本包含 XML 1.0 禁止字符。",
                 }
                 diagnostics.append({"code": code, "severity": "error", "message": messages.get(code, "AcSm 结构不支持当前修改。"), "property_name": detail.strip() or None})
         affected = {str(workspace.dst_path)}

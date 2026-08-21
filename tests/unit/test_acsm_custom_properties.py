@@ -218,6 +218,29 @@ def test_add_sheet_definition_sets_default_on_every_sheet(tiny_workspace):
     ]
 
 
+def test_xml_node_factory_wraps_invalid_lxml_text_as_acsm_error(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    before = document.semantic_bytes()
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_structural_commands(
+            [
+                {
+                    "type": "insert_subset",
+                    "ordinal": 1,
+                    "placement": "after",
+                    "title": "非法\x00标题",
+                    "source": {"type": "template_layout", "file": str(dst.parent / "A.dwg"), "layout": "A3"},
+                },
+            ],
+            "revision",
+        )
+
+    assert exc_info.value.code == "XML_TEXT_INVALID"
+    assert document.semantic_bytes() == before
+
+
 def test_empty_sheet_definition_uses_missing_value_semantics(tiny_workspace):
     dst, _ = tiny_workspace
     document = AcsmDocument(DstCodec().decode_file(dst))

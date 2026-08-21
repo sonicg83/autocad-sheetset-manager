@@ -5,7 +5,11 @@ from pathlib import Path
 
 from lxml import etree
 
-from dst_manager.domain.editing import EditingError, normalize_property_name
+from dst_manager.domain.editing import (
+    EditingError,
+    normalize_property_name,
+    validate_property_value,
+)
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
@@ -346,8 +350,11 @@ class AcsmDocument:
         attributes = {"propname": name}
         if vt is not None:
             attributes["vt"] = vt
-        node = etree.Element(_tag_like(self.root, "AcSmProp"), attributes)
-        node.text = value
+        try:
+            node = etree.Element(_tag_like(self.root, "AcSmProp"), attributes)
+            node.text = value
+        except ValueError as exc:
+            raise AcsmValidationError("XML_TEXT_INVALID") from exc
         return node
 
     def _make_property_value(
@@ -475,6 +482,10 @@ class AcsmDocument:
         return list(self.root.xpath("//*[local-name()='AcSmSheet']"))
 
     def _add_property_definition(self, definition: CustomPropertyDefinition, *, duplicate_ok: bool) -> None:
+        try:
+            validate_property_value(definition.default_value)
+        except EditingError as exc:
+            raise AcsmValidationError(exc.code) from exc
         scope = _scope_for_property_type(definition.type)
         existing_types = self._existing_property_types(definition.name)
         if existing_types - {definition.type}:

@@ -61,6 +61,20 @@ def normalize_property_name(name: str) -> str:
     return normalized
 
 
+def validate_property_value(value: object) -> str:
+    text = str(value)
+    for character in text:
+        codepoint = ord(character)
+        if not (
+            codepoint in {0x09, 0x0A, 0x0D}
+            or 0x20 <= codepoint <= 0xD7FF
+            or 0xE000 <= codepoint <= 0xFFFD
+            or 0x10000 <= codepoint <= 0x10FFFF
+        ):
+            raise EditingError("CUSTOM_PROPERTY_VALUE_INVALID", "自定义属性值包含 XML 1.0 禁止字符")
+    return text
+
+
 def _property_definition(raw: CustomPropertyDefinition | tuple[str, str, str]) -> CustomPropertyDefinition:
     if isinstance(raw, CustomPropertyDefinition):
         property_type, name, default_value = raw.type, raw.name, raw.default_value
@@ -68,7 +82,11 @@ def _property_definition(raw: CustomPropertyDefinition | tuple[str, str, str]) -
         property_type, name, default_value = raw
     if property_type not in {"sheetset", "sheet"}:
         raise EditingError("CUSTOM_PROPERTY_TYPE_INVALID", f"自定义属性类型无效：{property_type}")
-    return CustomPropertyDefinition(property_type, normalize_property_name(str(name)), str(default_value))
+    return CustomPropertyDefinition(
+        property_type,
+        normalize_property_name(str(name)),
+        validate_property_value(default_value),
+    )
 
 
 def _validated_property_definition(

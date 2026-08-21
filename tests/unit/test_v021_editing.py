@@ -154,6 +154,21 @@ def test_property_csv_result_diagnostics_use_record_start_line(data, code, line)
     assert [(diagnostic.code, diagnostic.line) for diagnostic in result.diagnostics] == [(code, line)]
 
 
+@pytest.mark.parametrize("value", ["制表符\t换行\n回车\r", "补充字符😀"])
+def test_property_definition_allows_xml_10_text_characters(value):
+    assert validate_property_definitions([("sheet", "说明", value)]) == [
+        CustomPropertyDefinition("sheet", "说明", value),
+    ]
+
+
+@pytest.mark.parametrize("value", ["燃\x00气", "\x08", "\x0b", "\x1f", "\ud800", "\ufffe", "\uffff"])
+def test_property_definition_rejects_xml_10_forbidden_characters(value):
+    with pytest.raises(EditingError) as exc_info:
+        validate_property_definitions([("sheet", "专业", value)])
+
+    assert exc_info.value.code == "CUSTOM_PROPERTY_VALUE_INVALID"
+
+
 @pytest.mark.parametrize(
     ("data", "code"),
     [
