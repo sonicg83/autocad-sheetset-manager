@@ -6,6 +6,7 @@
   - 修复轮次 1：新增完整 DWG 来源到最终目标路径图和 create 空基准，阻断既有目标碰撞；源快照、CAD 与发布统一保持在写锁内，发布器在正式替换前复核存在/不存在基准，并以锁内原子替换支持连锁改名、竞态阻断和整批回滚；旧手工图号/标题命令统一拒绝。
   - 修复轮次 2：create 正式提交改用原子 no-replace 移动，既有目标以带同卷 backup 的 `ReplaceFileW` 捕获并复核实际被替换版本；发布前持久化 attempted 状态，补齐 API 部分失败与启动恢复，并新增中部插入 DWG 路径重叠的完整发布回归。
   - 修复轮次 3：发布 journal 持久化 baseline、暂存结果、正式结果和 replacement backup 的文件身份；替换、删除、回滚与启动恢复只操作可证明属于本批的文件，同字节不同身份或目标缺失歧义会保留现场并稳定报错；replacement backup 清理改为 Windows 文件句柄锁内的身份复核删除，旧 journal 继续走显式兼容分支。
+  - 修复轮次 4：调用方以不可变 hash/identity 对象固定发布基准，CadJob 在写锁内且复制快照前采样；journal 持久化 Win32 API source 与调用状态，按 source 文件身份消除崩溃恢复歧义并拒绝未知身份版本；replacement backup 改为先持久化 `COMMITTED` 再身份安全清理，失败保留 pending 诊断并支持启动重试；WinError 32 回滚仅通过原 backup 文件对象换名恢复，否则保留现场并报告失败。
 - 实现 `PLAN-DM-006` 任务 3：新增 AcSm 属性定义增删、受控子集/批量图纸节点工厂和 `DerivedDocument` DOM 写入，旧移动/手工标题结构命令在 DOM 边界被拒绝。
   - 修复轮次 1：新增图纸绑定前统一使用占位 Handle `0`，最终 `validate()` 拒绝占位 Handle；`apply_derived_document()` 改为事务式写入，失败不污染原 DOM，并补齐多图纸属性删除作用域测试。
 - 修复 `PLAN-DM-006` 任务 2 审查缺口：同批属性导入会覆盖后续新增图纸，CSV 属性名拒绝控制字符，同名标题组统一使用首个拼写，并恢复受控删除图纸派生。

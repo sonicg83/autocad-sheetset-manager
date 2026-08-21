@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -25,6 +26,31 @@ class PublishRecoveryError(RuntimeError):
 
 class PublishBaselineError(RuntimeError):
     code = "PUBLISH_BASE_CHANGED"
+
+
+@dataclass(frozen=True, slots=True)
+class ExpectedFileBaseline:
+    """调用方在发布前确认的不可变文件内容与身份基准。"""
+
+    sha256: str
+    identity: tuple[int, int]
+
+
+def capture_file_baseline(path: Path) -> ExpectedFileBaseline | None:
+    """同时捕获文件哈希和身份；不存在的路径以 ``None`` 表示。"""
+    if not path.exists():
+        return None
+    before = path.stat()
+    digest = file_sha256(path)
+    try:
+        after = path.stat()
+    except FileNotFoundError as exc:
+        raise PublishBaselineError(f"捕获发布基准时目标已变化：{path}") from exc
+    before_identity = (before.st_dev, before.st_ino)
+    after_identity = (after.st_dev, after.st_ino)
+    if after_identity != before_identity:
+        raise PublishBaselineError(f"捕获发布基准时目标已变化：{path}")
+    return ExpectedFileBaseline(digest, before_identity)
 
 
 class RecoverablePublisher:
@@ -80,19 +106,21 @@ class RecoverablePublisher:
         workspace_root: Path,
         staged: dict[Path, Path | None],
         *,
-        expected_baselines: dict[Path, str | None] | None = None,
+        expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
     ) -> Path:
         workspace_root = workspace_root.resolve()
         staged = {target.resolve(): staged_file for target, staged_file in staged.items()}
         if expected_baselines is None:
-            baselines = {
-                target: file_sha256(target) if target.exists() else None
-                for target in staged
-            }
+            baselines = {target: capture_file_baseline(target) for target in staged}
         else:
             baselines = {target.resolve(): expected for target, expected in expected_baselines.items()}
             if baselines.keys() != staged.keys():
                 raise ValueError("PUBLISH_BASELINE_TARGET_MISMATCH")
+            if any(
+                expected is not None and not isinstance(expected, ExpectedFileBaseline)
+                for expected in baselines.values()
+            ):
+                raise TypeError("PUBLISH_BASELINE_IDENTITY_REQUIRED")
         self._verify_baselines(baselines)
         manager_dir = workspace_root / ".dst-manager"
         revision_dir = manager_dir / "revisions" / operation_id
@@ -104,15 +132,16 @@ class RecoverablePublisher:
         for target, staged_file in staged.items():
             if workspace_root not in target.parents:
                 raise ValueError(f"PUBLISH_OUTSIDE_WORKSPACE: {target}")
-            target_existed = target.exists()
-            baseline_identity = self._file_identity(target) if target_existed else None
+            expected_baseline = baselines[target]
+            target_existed = expected_baseline is not None
+            baseline_identity = list(expected_baseline.identity) if expected_baseline else None
             backup = before_dir / target.relative_to(workspace_root)
             if target_existed:
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(target, backup)
                 if (
-                    file_sha256(backup) != baselines[target]
-                    or file_sha256(target) != baselines[target]
+                    file_sha256(backup) != expected_baseline.sha256
+                    or file_sha256(target) != expected_baseline.sha256
                     or self._file_identity(target) != baseline_identity
                 ):
                     raise PublishBaselineError(f"发布前快照与预期基准不一致：{target}")
@@ -127,14 +156,16 @@ class RecoverablePublisher:
                     "staged": str(staged_file) if staged_file else None,
                     "backup": str(backup) if target_existed else None,
                     "replace_backup": str(replace_backup),
-                    "before_hash": baselines[target],
+                    "before_hash": expected_baseline.sha256 if expected_baseline else None,
                     "staged_hash": file_sha256(staged_file) if staged_file else None,
                     "baseline_identity": baseline_identity,
                     "before_identity": self._file_identity(backup) if target_existed else None,
                     "staged_identity": self._file_identity(staged_file) if staged_file else None,
                     "expected_backup_identity": baseline_identity,
+                    "publish_source": None,
                     "publish_identity": None,
                     "replace_backup_identity": None,
+                    "api_state": "NOT_STARTED",
                     "attempted": False,
                     "replaced": False,
                     "api_failed": False,
@@ -157,30 +188,44 @@ class RecoverablePublisher:
                 self._verify_entry_baseline(entry)
                 if entry["staged"] is None:
                     entry["attempted"] = True
+                    entry["api_state"] = "STARTED"
                     self._write_journal(journal_path, journal)
-                    self._commit_delete(entry)
+                    try:
+                        self._commit_delete(entry)
+                    except Exception:
+                        entry["api_failed"] = True
+                        entry["api_state"] = "FAILED"
+                        self._write_journal(journal_path, journal)
+                        raise
                 else:
                     staged_file = Path(entry["staged"])
                     publish_temp = target.with_name(f".{target.name}.{operation_id}.tmp")
                     shutil.copy2(staged_file, publish_temp)
                     if file_sha256(publish_temp) != entry["staged_hash"]:
                         raise PublishBaselineError(f"发布暂存文件已偏离计划内容：{staged_file}")
+                    entry["publish_source"] = str(publish_temp)
                     entry["publish_identity"] = self._file_identity(publish_temp)
                     entry["attempted"] = True
+                    entry["api_state"] = "STARTED"
                     self._write_journal(journal_path, journal)
-                    if entry["before_hash"] is None:
-                        self._commit_create(entry, publish_temp)
-                    else:
-                        self._commit_existing(entry, publish_temp, operation_id)
+                    try:
+                        if entry["before_hash"] is None:
+                            self._commit_create(entry, publish_temp)
+                        else:
+                            self._commit_existing(entry, publish_temp, operation_id)
+                    except Exception:
+                        entry["api_failed"] = True
+                        entry["api_state"] = "FAILED"
+                        self._write_journal(journal_path, journal)
+                        raise
+                entry["api_state"] = "SUCCEEDED"
+                self._write_journal(journal_path, journal)
                 self._capture_result(entry)
                 entry["replaced"] = True
                 self._write_journal(journal_path, journal)
-            self._cleanup_replace_backups(entries)
             journal["status"] = "COMMITTED"
+            journal["cleanup_status"] = "PENDING"
             self._write_journal(journal_path, journal)
-            (revision_dir / "manifest.json").write_text(json.dumps(journal, ensure_ascii=False, indent=2), encoding="utf-8")
-            shutil.copy2(journal_path, revision_dir / "publish-journal.json")
-            return revision_dir
         except PublishBaselineError as publish_error:
             self._write_journal(journal_path, journal)
             if any(entry["replaced"] or entry["attempted"] for entry in entries):
@@ -206,6 +251,39 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
                 raise PublishRecoveryError(str(recovery_error)) from publish_error
             raise PublishRolledBackError(str(publish_error)) from publish_error
+        self._archive_journal(revision_dir, journal_path, journal)
+        self._finish_committed_cleanup(journal_path, journal, revision_dir)
+        return revision_dir
+
+    def _finish_committed_cleanup(
+        self,
+        journal_path: Path,
+        journal: dict,
+        revision_dir: Path,
+    ) -> bool:
+        try:
+            self._cleanup_replace_backups(journal["files"])
+        except Exception as cleanup_error:  # noqa: BLE001 - 提交后清理失败不得触发文件回滚
+            journal["cleanup_status"] = "PENDING"
+            journal["cleanup_error_code"] = "PUBLISH_CLEANUP_FAILED"
+            journal["cleanup_error_detail"] = str(cleanup_error)
+            self._write_journal(journal_path, journal)
+            self._archive_journal(revision_dir, journal_path, journal)
+            return False
+        journal["cleanup_status"] = "COMPLETE"
+        journal.pop("cleanup_error_code", None)
+        journal.pop("cleanup_error_detail", None)
+        self._write_journal(journal_path, journal)
+        self._archive_journal(revision_dir, journal_path, journal)
+        return True
+
+    @staticmethod
+    def _archive_journal(revision_dir: Path, journal_path: Path, journal: dict) -> None:
+        (revision_dir / "manifest.json").write_text(
+            json.dumps(journal, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        shutil.copy2(journal_path, revision_dir / "publish-journal.json")
 
     def _commit_create(self, entry: dict, publish_temp: Path) -> None:
         target = Path(entry["target"])
@@ -229,11 +307,13 @@ class RecoverablePublisher:
 
     def _commit_existing(self, entry: dict, publish_temp: Path, operation_id: str) -> None:
         target = Path(entry["target"])
-        if self._replace_file is not None:
-            self._replace_file(publish_temp, target)
-            return
         replace_backup = Path(entry["replace_backup"])
-        self._replace_existing(publish_temp, target, replace_backup)
+        if self._replace_file is not None:
+            self._move_no_replace(target, replace_backup)
+            entry["replace_backup_identity"] = self._file_identity(replace_backup)
+            self._replace_file(publish_temp, target)
+        else:
+            self._replace_existing(publish_temp, target, replace_backup)
         captured_identity = self._file_identity(replace_backup)
         entry["replace_backup_identity"] = captured_identity
         captured_hash = file_sha256(replace_backup)
@@ -330,11 +410,27 @@ class RecoverablePublisher:
         entry["result_hash"] = entry["staged_hash"]
         entry["result_identity"] = entry["publish_identity"]
 
-    @staticmethod
-    def _verify_baselines(baselines: dict[Path, str | None]) -> None:
+    @classmethod
+    def _verify_baselines(
+        cls,
+        baselines: dict[Path, ExpectedFileBaseline | None],
+    ) -> None:
         for target, expected in baselines.items():
-            actual = file_sha256(target) if target.exists() else None
-            if actual != expected:
+            if expected is None:
+                if target.exists():
+                    raise PublishBaselineError(f"发布目标已偏离预期基准：{target}")
+                continue
+            try:
+                identity_before = cls._file_identity(target)
+                actual = file_sha256(target)
+                identity_after = cls._file_identity(target)
+            except FileNotFoundError as exc:
+                raise PublishBaselineError(f"发布目标已偏离预期基准：{target}") from exc
+            if (
+                actual != expected.sha256
+                or identity_before != list(expected.identity)
+                or identity_after != list(expected.identity)
+            ):
                 raise PublishBaselineError(f"发布目标已偏离预期基准：{target}")
 
     def _rollback(self, journal_path: Path, journal: dict, entries: list[dict]) -> None:
@@ -366,48 +462,109 @@ class RecoverablePublisher:
         replacement_backup = self._checked_replacement_backup(entry, before_hash)
         if not target.exists():
             is_delete = entry.get("staged") is None
-            if replacement_backup is None or (not is_delete and not entry.get("api_failed")):
+            if replacement_backup is None or (
+                not is_delete
+                and not self._publish_source_still_owned(entry)
+            ):
                 raise PublishRecoveryError(f"回滚时既有目标缺失且无法证明属于本批：{target}")
             self._move_no_replace(replacement_backup, target)
             if self._file_identity(target) != baseline_identity:
                 raise PublishRecoveryError(f"回滚时原始目标身份不一致：{target}")
+            self._cleanup_publish_source(entry)
             return
 
         current_identity = self._file_identity(target)
         if current_identity == baseline_identity:
+            self._cleanup_publish_source(entry)
             return
         if current_identity not in self._published_identities(entry):
             raise PublishRecoveryError(f"回滚时既有目标已被外部版本替换：{target}")
-        backup = replacement_backup or self._checked_before_snapshot(entry, before_hash)
-        source = backup
-        restored_exact_identity = replacement_backup is not None
         if replacement_backup is None:
-            restore_temp = target.with_name(f".{target.name}.{operation_id}.restore")
-            shutil.copy2(backup, restore_temp)
-            source = restore_temp
+            self._checked_before_snapshot(entry, before_hash)
+            raise PublishRecoveryError(f"回滚缺少可保持原始身份的替换备份：{target}")
         displaced = target.with_name(f".{target.name}.{operation_id}.rollback-displaced")
         try:
-            self._replace_existing(source, target, displaced)
-        except OSError:
+            self._replace_existing(replacement_backup, target, displaced)
+        except OSError as replace_error:
             if (
-                replacement_backup is None
+                getattr(replace_error, "winerror", None) != 32
                 or displaced.exists()
                 or not target.exists()
                 or self._file_identity(target) != current_identity
                 or self._file_identity(replacement_backup) != baseline_identity
             ):
                 raise
-            restore_temp = target.with_name(f".{target.name}.{operation_id}.restore")
-            shutil.copy2(replacement_backup, restore_temp)
-            self._replace_existing(restore_temp, target, displaced)
-            restored_exact_identity = False
+            self._restore_backup_by_rename(
+                replacement_backup,
+                target,
+                displaced,
+                baseline_identity,
+                current_identity,
+            )
+            return
         if self._file_identity(displaced) != current_identity:
             raise PublishRecoveryError(f"回滚原子替换期间目标再次变化：{target}")
-        if restored_exact_identity and self._file_identity(target) != baseline_identity:
+        if self._file_identity(target) != baseline_identity:
             raise PublishRecoveryError(f"回滚后原始目标身份不一致：{target}")
         if file_sha256(target) != before_hash:
             raise PublishRecoveryError(f"回滚后原始目标内容不一致：{target}")
         self._unlink_owned(displaced, current_identity, recovery=True)
+
+    def _restore_backup_by_rename(
+        self,
+        replacement_backup: Path,
+        target: Path,
+        displaced: Path,
+        baseline_identity: list[int],
+        published_identity: list[int],
+    ) -> None:
+        self._move_no_replace(target, displaced)
+        try:
+            self._move_no_replace(replacement_backup, target)
+        except OSError as restore_error:
+            if (
+                not target.exists()
+                and displaced.exists()
+                and self._file_identity(displaced) == published_identity
+            ):
+                try:
+                    self._move_no_replace(displaced, target)
+                except OSError as preserve_error:
+                    raise PublishRecoveryError(
+                        f"回滚换名失败，发布结果保存在 {displaced}：{target}",
+                    ) from preserve_error
+            raise PublishRecoveryError(f"无法按原始身份换名恢复：{target}") from restore_error
+        if (
+            self._file_identity(target) != baseline_identity
+            or self._file_identity(displaced) != published_identity
+        ):
+            raise PublishRecoveryError(f"回滚换名期间文件身份发生变化：{target}")
+        self._unlink_owned(displaced, published_identity, recovery=True)
+
+    def _publish_source_still_owned(self, entry: dict) -> bool:
+        raw_path = entry.get("publish_source")
+        expected_identity = entry.get("publish_identity")
+        expected_hash = entry.get("staged_hash")
+        if not raw_path or expected_identity is None or expected_hash is None:
+            return False
+        path = Path(raw_path)
+        return (
+            path.exists()
+            and self._file_identity(path) == expected_identity
+            and file_sha256(path) == expected_hash
+        )
+
+    def _cleanup_publish_source(self, entry: dict) -> None:
+        raw_path = entry.get("publish_source")
+        expected_identity = entry.get("publish_identity")
+        if not raw_path or expected_identity is None:
+            return
+        path = Path(raw_path)
+        if not path.exists():
+            return
+        if not self._publish_source_still_owned(entry):
+            raise PublishRecoveryError(f"回滚时发布源文件身份已变化：{path}")
+        self._unlink_owned(path, expected_identity, recovery=True)
 
     def _checked_replacement_backup(self, entry: dict, before_hash: str) -> Path | None:
         raw_path = entry.get("replace_backup")
@@ -546,8 +703,29 @@ class RecoverablePublisher:
             return recovered
         for path in jobs.glob("*/publish-journal.json"):
             journal = json.loads(path.read_text(encoding="utf-8"))
-            if journal["status"] in {"COMMITTED", "ROLLED_BACK", "ABORTED_BASELINE_CHANGED"}:
+            status = journal["status"]
+            if status in {"ROLLED_BACK", "ABORTED_BASELINE_CHANGED"}:
                 continue
+            if status == "COMMITTED":
+                if journal.get("cleanup_status") != "PENDING":
+                    continue
+                if "identity_version" in journal and journal["identity_version"] != 1:
+                    journal["cleanup_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
+                    journal["cleanup_error_detail"] = repr(journal["identity_version"])
+                    self._write_journal(path, journal)
+                    raise PublishRecoveryError(
+                        f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
+                    )
+                revision_dir = workspace_root / ".dst-manager" / "revisions" / journal["operation_id"]
+                self._finish_committed_cleanup(path, journal, revision_dir)
+                continue
+            if "identity_version" in journal and journal["identity_version"] != 1:
+                journal["status"] = "ROLLBACK_FAILED"
+                journal["recovery_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
+                self._write_journal(path, journal)
+                raise PublishRecoveryError(
+                    f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
+                )
             if journal.get("identity_version") == 1:
                 try:
                     self._rollback(path, journal, journal["files"])

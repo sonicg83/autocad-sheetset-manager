@@ -28,6 +28,7 @@ from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishRolledBackError,
     RecoverablePublisher,
+    capture_file_baseline,
     file_sha256,
 )
 from dst_manager.infrastructure.filesystem.workspace import write_workspace_metadata
@@ -203,11 +204,20 @@ class DstManagerService:
             self.database.update_job(job_id, JobStatus.FAILED, 0, getattr(exc, "code", "DST_ROUNDTRIP_FAILED"))
             return self.database.get_job(job_id) or {}
         self.database.update_job(job_id, JobStatus.PREPARED, 70)
-        before_hash = file_sha256(workspace.dst_path)
+        expected_baseline = capture_file_baseline(workspace.dst_path)
+        if expected_baseline is None:
+            self.database.update_job(job_id, JobStatus.FAILED, 0, "PUBLISH_BASE_CHANGED")
+            return self.database.get_job(job_id) or {}
+        before_hash = expected_baseline.sha256
         self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
         append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=1)
         try:
-            revision_dir = self.publisher.publish(operation_id, workspace.root, {workspace.dst_path: staging})
+            revision_dir = self.publisher.publish(
+                operation_id,
+                workspace.root,
+                {workspace.dst_path: staging},
+                expected_baselines={workspace.dst_path: expected_baseline},
+            )
         except PublishRolledBackError:
             self.database.update_job(job_id, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK")
             return self.database.get_job(job_id) or {}
@@ -344,10 +354,20 @@ class DstManagerService:
             else:
                 staged[target] = None
         self.database.update_job(job_id, JobStatus.PREPARED, 70)
-        before_hash = file_sha256(workspace.dst_path)
+        expected_baselines = {
+            target.resolve(): capture_file_baseline(target.resolve())
+            for target in staged
+        }
+        workspace_baseline = expected_baselines.get(workspace.dst_path.resolve())
+        before_hash = workspace_baseline.sha256 if workspace_baseline is not None else file_sha256(workspace.dst_path)
         self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
         try:
-            revision_dir = self.publisher.publish(job_id, workspace.root, staged)
+            revision_dir = self.publisher.publish(
+                job_id,
+                workspace.root,
+                staged,
+                expected_baselines=expected_baselines,
+            )
         except PublishRolledBackError as exc:
             self.database.update_job(job_id, JobStatus.ROLLED_BACK, 0, exc.code)
             return self.database.get_job(job_id) or {}
@@ -410,11 +430,17 @@ class DstManagerService:
             self.database.update_job(job_id, JobStatus.FAILED, 0, "DST_ROUNDTRIP_MISMATCH")
             return self.database.get_job(job_id) or {}
         self.database.update_job(job_id, JobStatus.PREPARED, 70)
-        before_hash = file_sha256(destination) if destination.exists() else base_revision_id
+        expected_baseline = capture_file_baseline(destination)
+        before_hash = expected_baseline.sha256 if expected_baseline is not None else base_revision_id
         self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
         append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=1)
         try:
-            revision_dir = self.publisher.publish(job_id, workspace.root, {destination: staged})
+            revision_dir = self.publisher.publish(
+                job_id,
+                workspace.root,
+                {destination: staged},
+                expected_baselines={destination: expected_baseline},
+            )
         except PublishRolledBackError:
             self.database.update_job(job_id, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK")
             return self.database.get_job(job_id) or {}

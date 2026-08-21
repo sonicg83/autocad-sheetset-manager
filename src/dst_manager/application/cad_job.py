@@ -26,9 +26,11 @@ from dst_manager.infrastructure.filesystem.locking import (
     WindowsWriteLocks,
 )
 from dst_manager.infrastructure.filesystem.publisher import (
+    ExpectedFileBaseline,
     PublishRecoveryError,
     PublishRolledBackError,
     RecoverablePublisher,
+    capture_file_baseline,
     file_sha256,
 )
 from dst_manager.infrastructure.filesystem.workspace import write_workspace_metadata
@@ -148,17 +150,30 @@ class CadJobRunner:
             raise OSError("STAGING_DISK_SPACE_INSUFFICIENT")
         lock_targets = [path for path in publication_targets | unique_sources if path.exists()]
         with WindowsWriteLocks(lock_targets):
-            baseline_hashes = {
-                path: file_sha256(path) if path.exists() else None
+            captured_baselines = {
+                path: capture_file_baseline(path)
+                for path in publication_targets | unique_sources
+            }
+            expected_publish_baselines = {
+                path: captured_baselines[path]
                 for path in publication_targets
             }
+            baseline_hashes = {
+                path: baseline.sha256 if baseline is not None else None
+                for path, baseline in expected_publish_baselines.items()
+            }
             self._validate_create_targets(plan, baseline_hashes)
-            source_baselines = {source: file_sha256(source) for source in unique_sources}
+            source_baselines: dict[Path, ExpectedFileBaseline] = {}
+            for source in unique_sources:
+                baseline = captured_baselines[source]
+                if baseline is None:
+                    raise PlanningError("BASE_FILE_CHANGED", f"源文件在基准捕获时已消失：{source}")
+                source_baselines[source] = baseline
             source_snapshots: dict[Path, Path] = {}
             for index, source in enumerate(sorted(unique_sources, key=lambda path: str(path).casefold())):
-                source_hash = source_baselines[source]
-                snapshot = input_dir / f"{source_hash[:16]}-{index:03d}-{source.name}"
-                self._copy_verified_snapshot(source, snapshot, source_hash)
+                source_baseline = source_baselines[source]
+                snapshot = input_dir / f"{source_baseline.sha256[:16]}-{index:03d}-{source.name}"
+                self._copy_verified_snapshot(source, snapshot, source_baseline)
                 source_snapshots[source] = snapshot
             for group in plan["groups"]:
                 for layout in group["layouts"]:
@@ -177,19 +192,21 @@ class CadJobRunner:
             staged_dst = self._write_staged_dst(workspace, plan, bindings, staging_dir, commands)
             staged_files[workspace.dst_path.resolve()] = staged_dst
             self.database.update_job(job_id, JobStatus.PREPARED, 80)
-            for path, expected_hash in baseline_hashes.items():
-                current_hash = file_sha256(path) if path.exists() else None
-                if current_hash != expected_hash:
+            for path, expected_baseline in expected_publish_baselines.items():
+                if capture_file_baseline(path) != expected_baseline:
                     raise PlanningError("BASE_FILE_CHANGED", f"发布基准已变化：{path}")
             before_hash = baseline_hashes[workspace.dst_path.resolve()]
-            expected_publish_baselines = {path.resolve(): baseline_hashes[path.resolve()] for path in staged_files}
+            staged_baselines = {
+                path.resolve(): expected_publish_baselines[path.resolve()]
+                for path in staged_files
+            }
             self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
             append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=len(staged_files))
             revision_dir = self.publisher.publish(
                 job_id,
                 workspace.root,
                 staged_files,
-                expected_baselines=expected_publish_baselines,
+                expected_baselines=staged_baselines,
             )
         result_hash = file_sha256(workspace.dst_path)
         append_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
@@ -202,11 +219,18 @@ class CadJobRunner:
         return self.database.get_job(job_id) or {}
 
     @staticmethod
-    def _copy_verified_snapshot(source: Path, snapshot: Path, expected_hash: str) -> None:
-        if file_sha256(source) != expected_hash:
+    def _copy_verified_snapshot(
+        source: Path,
+        snapshot: Path,
+        expected_baseline: ExpectedFileBaseline,
+    ) -> None:
+        if capture_file_baseline(source) != expected_baseline:
             raise PlanningError("BASE_FILE_CHANGED", f"源文件在快照前已变化：{source}")
         shutil.copy2(source, snapshot)
-        if file_sha256(snapshot) != expected_hash or file_sha256(source) != expected_hash:
+        if (
+            file_sha256(snapshot) != expected_baseline.sha256
+            or capture_file_baseline(source) != expected_baseline
+        ):
             snapshot.unlink(missing_ok=True)
             raise PlanningError("BASE_FILE_CHANGED", f"源文件与快照基准不一致：{source}")
 

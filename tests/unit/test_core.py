@@ -33,7 +33,9 @@ from dst_manager.infrastructure.autocad.worker import (
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.dst_codec.codec import _DECODE, _ENCODE
 from dst_manager.infrastructure.filesystem.publisher import (
+    ExpectedFileBaseline,
     RecoverablePublisher,
+    capture_file_baseline,
     file_sha256,
 )
 from dst_manager.infrastructure.logging_text import (
@@ -780,7 +782,7 @@ def test_snapshot_copy_rejects_change_after_baseline(tmp_path: Path):
     source = tmp_path / "source.dwg"
     snapshot = tmp_path / "snapshot.dwg"
     source.write_bytes(b"baseline")
-    expected = file_sha256(source)
+    expected = capture_file_baseline(source)
     source.write_bytes(b"external")
 
     with pytest.raises(PlanningError) as exc_info:
@@ -788,6 +790,18 @@ def test_snapshot_copy_rejects_change_after_baseline(tmp_path: Path):
 
     assert exc_info.value.code == "BASE_FILE_CHANGED"
     assert not snapshot.exists()
+
+
+def test_snapshot_copy_accepts_unchanged_identity_baseline(tmp_path: Path):
+    source = tmp_path / "unchanged-source.dwg"
+    snapshot = tmp_path / "unchanged-snapshot.dwg"
+    source.write_bytes(b"baseline")
+    expected = capture_file_baseline(source)
+    assert expected is not None
+
+    CadJobRunner._copy_verified_snapshot(source, snapshot, expected)
+
+    assert snapshot.read_bytes() == b"baseline"
 
 
 def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
@@ -829,6 +843,43 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
     assert preview["executable"] is True
     assert any(group["operation"] == "create" for group in preview["execution_intent"]["groups"])
     assert job["payload"]["plan"]["execution_intent"] == preview["execution_intent"]
+
+
+def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    delegate = RecoverablePublisher()
+    calls = 0
+
+    class IdentityCheckingPublisher:
+        def recover(self, *args, **kwargs):
+            return delegate.recover(*args, **kwargs)
+
+        def publish(self, *args, expected_baselines=None, **kwargs):
+            nonlocal calls
+            calls += 1
+            assert expected_baselines is not None
+            assert all(
+                baseline is None or isinstance(baseline, ExpectedFileBaseline)
+                for baseline in expected_baselines.values()
+            )
+            return delegate.publish(
+                *args,
+                expected_baselines=expected_baselines,
+                **kwargs,
+            )
+
+    service.publisher = IdentityCheckingPublisher()
+
+    result = service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "身份基准"}],
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    assert calls == 1
 
 
 def test_update_sheet_title_with_custom_properties_is_rejected_without_partial_commit(tiny_workspace, tmp_path: Path):
@@ -1011,7 +1062,17 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     ) + "\n"
     database = Mock()
     database.get_job.return_value = {"id": "job-create", "status": "SUCCEEDED"}
-    runner = CadJobRunner(database, codec, RecoverablePublisher(), 30, max_parallel=1)
+    publisher = RecoverablePublisher()
+    published_baselines = None
+    original_publish = publisher.publish
+
+    def capture_publish_baselines(*args, **kwargs):
+        nonlocal published_baselines
+        published_baselines = kwargs["expected_baselines"]
+        return original_publish(*args, **kwargs)
+
+    publisher.publish = capture_publish_baselines
+    runner = CadJobRunner(database, codec, publisher, 30, max_parallel=1)
     runner.executor = _SuccessfulCadExecutor(handle_text)
     plugin = dst.parent / "plugin.dll"
     plugin.write_bytes(b"plugin")
@@ -1035,6 +1096,11 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     assert len(created.sheets) == 2
     assert {sheet.layout.resolved_path for sheet in created.sheets} == {target}
     assert all(sheet.layout.handle != "0" for sheet in created.sheets)
+    assert published_baselines is not None
+    assert all(
+        baseline is None or isinstance(baseline, ExpectedFileBaseline)
+        for baseline in published_baselines.values()
+    )
     assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "manifest.json").is_file()
 
 
