@@ -11,6 +11,8 @@ type Job={id:string|null;status:string;progress:number;attempt?:number;error_cod
 type Revision={id:string;created_at:string;before_hash:string;result_hash:string};
 type Diagnostic={severity:string;code:string;message:string;line?:number};
 type Preview={executable:boolean;requires_cad?:boolean;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null};
+type PreviewContext={workspaceId:string;baseRevisionId:string;commands:Record<string,unknown>[];result:Preview};
+type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:Preview};
 
 const dstPath=ref("");
 const workspace=ref<Workspace|null>(null);
@@ -18,12 +20,16 @@ const selectedId=ref("");
 const error=ref("");
 const commands=ref<Record<string,unknown>[]>([]);
 const preview=ref<Preview|null>(null);
+const previewContext=ref<PreviewContext|null>(null);
 const job=ref<Job|null>(null);
 const revisions=ref<Revision[]>([]);
 const restorePreview=ref<Record<string,any>|null>(null);
 const connectionMode=ref("SSE");
 const csvText=ref("");
 const csvPreview=ref<Preview|null>(null);
+const csvPreviewContext=ref<CsvPreviewContext|null>(null);
+let previewGeneration=0;
+let csvGeneration=0;
 
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
 const insertSheetForm=reactive({subsetId:"",sequence:"1",direction:"after",count:"1",sourceType:"template_layout",sourceFile:"",sourceLayout:""});
@@ -43,30 +49,34 @@ async function request(url:string,options?:RequestInit){
   return body;
 }
 
-function resetEditingState(){commands.value=[];preview.value=null;csvPreview.value=null;error.value=""}
+function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
+function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
+function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value=null;csvPreviewContext.value=null;if(clearText)csvText.value=""}
+function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function selectInitialSubset(){
   selectedId.value=workspace.value?.sheet_set.subsets[0]?.id??"";
   insertSheetForm.subsetId=selectedId.value;
 }
 async function openWorkspace(){
-  try{workspace.value=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:dstPath.value})});selectInitialSubset();resetEditingState();job.value=null}
+  resetEditingState();job.value=null;
+  try{workspace.value=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:dstPath.value})});selectInitialSubset()}
   catch(e){error.value=String(e)}
 }
 async function refreshWorkspace(){
   if(!workspace.value)return;
   const previous=selectedId.value;
+  resetEditingState();
   const loaded:Workspace=await request(`/api/workspaces/${workspace.value.id}`);
   workspace.value=loaded;
   selectedId.value=loaded.sheet_set.subsets.some(item=>item.id===previous)?previous:(loaded.sheet_set.subsets[0]?.id??"");
   insertSheetForm.subsetId=selectedId.value;
-  resetEditingState();
 }
 
-function clearCommands(){commands.value=[];preview.value=null;error.value=""}
+function clearCommands(){commands.value=[];invalidatePreview();error.value=""}
 function addCommand(command:Record<string,unknown>,category:"property"|"structural"|"metadata"){
   if(category==="property"&&hasStructuralCommands.value){error.value="属性定义与结构变更必须分批预览和执行";return false}
   if(category==="structural"&&hasPropertyDefinitionCommands.value){error.value="属性定义与结构变更必须分批预览和执行";return false}
-  commands.value.push(command);preview.value=null;error.value="";return true;
+  commands.value.push(command);invalidatePreview();error.value="";return true;
 }
 function positiveInteger(value:string){const parsed=Number(value);return Number.isInteger(parsed)&&parsed>0?parsed:null}
 
@@ -107,12 +117,22 @@ function queueInsertSubset(){
 
 async function showPreview(){
   if(!workspace.value||!commands.value.length)return;
-  try{preview.value=await request(`/api/workspaces/${workspace.value.id}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:workspace.value.revision_id,commands:commands.value})});error.value=""}
-  catch(e){error.value=String(e)}
+  const workspaceId=workspace.value.id;
+  const baseRevisionId=workspace.value.revision_id;
+  const commandSnapshot=cloneJson(commands.value);
+  const generation=++previewGeneration;
+  preview.value=null;previewContext.value=null;
+  try{
+    const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot})});
+    if(generation!==previewGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
+    preview.value=result;previewContext.value={workspaceId,baseRevisionId,commands:commandSnapshot,result};error.value="";
+  }
+  catch(e){if(generation===previewGeneration)error.value=String(e)}
 }
 async function execute(){
-  if(!workspace.value||!preview.value||!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
-  try{job.value=await request(`/api/workspaces/${workspace.value.id}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:workspace.value.revision_id,commands:commands.value,cad_version:"2020"})});if(job.value?.status==="QUEUED"&&job.value.id)watchJob(job.value.id);else if(job.value?.status==="SUCCEEDED")await refreshWorkspace()}
+  const context=previewContext.value;
+  if(!context||!context.result.executable||!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
+  try{job.value=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:"2020"})});if(job.value?.status==="QUEUED"&&job.value.id)watchJob(job.value.id);else if(job.value?.status==="SUCCEEDED")await refreshWorkspace()}
   catch(e){error.value=String(e)}
 }
 
@@ -129,9 +149,38 @@ async function loadRevisions(){if(workspace.value)revisions.value=await request(
 async function previewRestore(revision:Revision){if(workspace.value)restorePreview.value=await request(`/api/workspaces/${workspace.value.id}/revisions/${revision.id}/restore-preview`)}
 async function restoreRevision(){if(!workspace.value||!restorePreview.value||!confirm("确认恢复为新修订？历史修订不会被覆盖。"))return;job.value=await request(`/api/workspaces/${workspace.value.id}/revisions/${restorePreview.value.revision_id}/restore`,{method:"POST",body:JSON.stringify({base_revision_id:workspace.value.revision_id})});restorePreview.value=null;await refreshWorkspace();await loadRevisions()}
 
-async function readCsvFile(event:Event){const file=(event.target as HTMLInputElement).files?.[0];csvText.value=file?await file.text():"";csvPreview.value=null}
-async function previewCsv(){if(!workspace.value||!csvText.value){error.value="请选择 UTF-8 CSV 文件";return}try{csvPreview.value=await request(`/api/workspaces/${workspace.value.id}/custom-properties/import/preview`,{method:"POST",body:JSON.stringify({base_revision_id:workspace.value.revision_id,csv:csvText.value})});error.value=""}catch(e){error.value=String(e)}}
-async function importCsv(){if(!workspace.value||!csvPreview.value?.executable||!confirm("确认导入属性定义？"))return;try{job.value=await request(`/api/workspaces/${workspace.value.id}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:workspace.value.revision_id,csv:csvText.value})});if(job.value?.status==="SUCCEEDED"&&!job.value.no_op)await refreshWorkspace()}catch(e){error.value=String(e)}}
+async function readCsvFile(event:Event){
+  const generation=++csvGeneration;
+  csvText.value="";csvPreview.value=null;csvPreviewContext.value=null;error.value="";
+  const file=(event.target as HTMLInputElement).files?.[0];
+  if(!file)return;
+  try{
+    const decoded=new TextDecoder("utf-8",{fatal:true}).decode(await file.arrayBuffer());
+    if(generation!==csvGeneration)return;
+    csvText.value=decoded;
+  }
+  catch{if(generation===csvGeneration)error.value="CSV 必须使用 UTF-8 编码"}
+}
+async function previewCsv(){
+  if(!workspace.value||!csvText.value){error.value="请选择 UTF-8 CSV 文件";return}
+  const workspaceId=workspace.value.id;
+  const baseRevisionId=workspace.value.revision_id;
+  const csvSnapshot=csvText.value;
+  const generation=++csvGeneration;
+  csvPreview.value=null;csvPreviewContext.value=null;
+  try{
+    const result:Preview=await request(`/api/workspaces/${workspaceId}/custom-properties/import/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,csv:csvSnapshot})});
+    if(generation!==csvGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId||csvText.value!==csvSnapshot)return;
+    csvPreview.value=result;csvPreviewContext.value={workspaceId,baseRevisionId,csv:csvSnapshot,result};error.value="";
+  }
+  catch(e){if(generation===csvGeneration)error.value=String(e)}
+}
+async function importCsv(){
+  const context=csvPreviewContext.value;
+  if(!context||!context.result.executable||!confirm("确认导入属性定义？"))return;
+  try{job.value=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv})});if(job.value?.status==="SUCCEEDED"&&!job.value.no_op)await refreshWorkspace()}
+  catch(e){error.value=String(e)}
+}
 
 function operationLabel(operation:string){return operation==="create"?"创建 DWG":"重建 DWG"}
 </script>
@@ -159,7 +208,7 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
         <div class="section-title"><div><h2>属性定义</h2><p>属性定义与结构变更需分批预览和执行。</p></div><div class="link-actions"><a href="/api/custom-properties/template" download>下载 CSV 模板</a><a :href="`/api/workspaces/${workspace.id}/custom-properties/export`" download>导出当前属性</a></div></div>
         <table><thead><tr><th>作用域</th><th>名称</th><th>默认值</th><th></th></tr></thead><tbody><tr v-for="definition in workspace.sheet_set.property_definitions" :key="definition.type+definition.name"><td>{{definition.type}}</td><td>{{definition.name}}</td><td>{{definition.default_value||'（空）'}}</td><td><button class="danger" @click="queueDeleteProperty(definition)">删除 {{definition.name}}</button></td></tr></tbody></table>
         <div class="form-row"><label>属性作用域<select v-model="propertyForm.type"><option value="sheet">图纸</option><option value="sheetset">图纸集</option></select></label><label>属性名称<input v-model="propertyForm.name"></label><label>默认值<input v-model="propertyForm.defaultValue"></label><button @click="queuePropertyDefinition">加入属性定义</button></div>
-        <div class="csv-flow"><label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="readCsvFile"></label><button @click="previewCsv">预览 CSV 导入</button><button class="primary" :disabled="!csvPreview?.executable" @click="importCsv">确认导入</button></div>
+        <div class="csv-flow"><label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="readCsvFile"></label><button :disabled="!csvText" @click="previewCsv">预览 CSV 导入</button><button class="primary" :disabled="!csvPreviewContext?.result.executable" @click="importCsv">确认导入</button></div>
         <div v-if="csvPreview" class="csv-preview"><h3>CSV 合并预览</h3><ul><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`">第 {{change.line}} 行 · {{change.action}} · {{change.type}} · {{change.name}}</li></ul><ul class="diagnostics"><li v-for="item in csvPreview.diagnostics" :key="`${item.line}-${item.code}`" :class="item.severity"><span v-if="item.line">第 {{item.line}} 行 · </span><b>{{item.code}}</b>：{{item.message}}</li></ul></div>
       </section>
 
