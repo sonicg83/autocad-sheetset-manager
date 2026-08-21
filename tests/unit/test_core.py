@@ -8,13 +8,14 @@ import pytest
 from typer.testing import CliRunner
 
 from dst_manager.application.cad_job import CadJobRunner, RebuildWorkUnit
+from dst_manager.domain.editing import SuffixOptions, derive_document_structure
 from dst_manager.domain.models import (
     LayoutReference,
     Sheet,
     SheetSetDocument,
+    Subset,
     Workspace,
 )
-from dst_manager.domain.planning import derive_subset_and_dwg_name
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
@@ -183,7 +184,14 @@ def test_sheet_set_and_sheet_custom_properties_roundtrip(tiny_workspace):
     assert projected.custom_properties=={"项目号":"P-001"}
     assert projected.sheets[0].custom_properties=={"比例":"1:200"}
 
-def test_legacy_naming_policy_derives_subset_and_dwg():
-    sheets=[Sheet("1","0001","图纸目录(一)",LayoutReference("","","","")),Sheet("2","0005","图纸目录(五)",LayoutReference("","","",""))]
-    subset_name,dwg=derive_subset_and_dwg_name(Path("GP-0001-0005 图纸目录(一)-(五).dwg"),sheets)
-    assert subset_name=="1-5 图纸目录" and dwg.name=="GP-0001-0005 图纸目录(一)-(五).dwg"
+def test_v021_naming_policy_derives_range_and_sheet_titles():
+    sheets = [
+        Sheet("1", "0001", "图纸目录(一)", LayoutReference("", "", "", "")),
+        Sheet("2", "0005", "图纸目录(五)", LayoutReference("", "", "", "")),
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "1-5 图纸目录", 1, sheets)])
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 1))
+
+    assert derived.subsets[0].display_name == "0001-0002 图纸目录"
+    assert [sheet.title for sheet in derived.subsets[0].sheets] == ["图纸目录 (一)", "图纸目录 (二)"]
