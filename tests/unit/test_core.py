@@ -10,13 +10,18 @@ from typer.testing import CliRunner
 from dst_manager.application.cad_job import CadJobRunner, RebuildWorkUnit
 from dst_manager.domain.editing import SuffixOptions, derive_document_structure
 from dst_manager.domain.models import (
+    CustomPropertyDefinition,
+    DerivedDocument,
+    DerivedSubset,
     LayoutReference,
+    PropertyDefinitionDiff,
     Sheet,
     SheetSetDocument,
     Subset,
     Workspace,
 )
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
+from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
     decode_console_output,
@@ -170,7 +175,7 @@ def test_real_project_read_only_structure_profiles():
     assert after == before
     assert not (dst.parent / ".dst-manager").exists()
 def test_unknown_preserved(tiny_workspace):
-    dst,sheet_id=tiny_workspace; doc=AcsmDocument(DstCodec().decode_file(dst)); doc.apply_metadata_commands([{"type":"update_sheet","sheet_id":sheet_id,"title":"修改后","custom_properties":{"比例":"1:200"}}]); output=doc.to_bytes(); assert b'keep="yes"' in output and "修改后" in output.decode()
+    dst,sheet_id=tiny_workspace; doc=AcsmDocument(DstCodec().decode_file(dst)); doc.apply_metadata_commands([{"type":"update_sheet","sheet_id":sheet_id,"title":"修改后","custom_properties":{"比例":"1:200"}}]); roundtrip=AcsmDocument(doc.to_bytes()); sheet=roundtrip.root.xpath("//*[@ID=$sheet_id and local-name()='AcSmSheet']", sheet_id=sheet_id)[0]; unknown=sheet.xpath("./*[local-name()='Unknown']")[0]; assert unknown.get("keep")=="yes"; assert roundtrip.project(dst.parent).sheets[0].title=="修改后"
 
 def test_sheet_set_and_sheet_custom_properties_roundtrip(tiny_workspace):
     dst,sheet_id=tiny_workspace
@@ -195,3 +200,151 @@ def test_v021_naming_policy_derives_range_and_sheet_titles():
 
     assert derived.subsets[0].display_name == "0001-0002 图纸目录"
     assert [sheet.title for sheet in derived.subsets[0].sheets] == ["图纸目录 (一)", "图纸目录 (二)"]
+
+
+def _insert_subset_command(initial_sheet_count: int = 1) -> dict:
+    return {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "燃气管道平面图",
+        "initial_sheet_count": initial_sheet_count,
+        "source": {"type": "template_layout", "file": r"C:\模板\标准.dwt", "layout": "A3"},
+    }
+
+
+def test_insert_subset_creates_nonempty_controlled_nodes(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    document.apply_structural_commands([_insert_subset_command()], "revision")
+
+    projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert len(projected.subsets[-1].sheets) == 1
+    assert projected.subsets[-1].name == "燃气管道平面图"
+    assert projected.subsets[-1].sheets[0].layout.layout_name == "A3"
+
+
+def test_insert_subset_rejects_empty_without_half_node(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    before = document.semantic_bytes()
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_structural_commands([_insert_subset_command(0)], "revision")
+
+    assert exc_info.value.code == "EMPTY_SUBSET"
+    assert document.semantic_bytes() == before
+
+
+def test_insert_sheet_batch_creates_unique_controlled_nodes(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+
+    document.apply_structural_commands(
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": subset.get("ID"),
+                "ordinal": 1,
+                "placement": "after",
+                "count": 3,
+                "source": {"type": "template_layout", "file": r"C:\模板\标准.dwt", "layout": "A3"},
+            },
+        ],
+        "revision",
+    )
+
+    sheets = subset.xpath("./*[local-name()='AcSmSheet']")
+    ids = [node.get("ID") for node in sheets]
+    all_ids = [node.get("ID") for node in document.root.xpath(".//*[@ID] | self::node()[@ID]")]
+    assert len(sheets) == 4
+    assert len(ids) == len(set(ids))
+    assert len(all_ids) == len(set(all_ids))
+    assert [sheet.layout.layout_name for sheet in AcsmDocument(document.to_bytes()).project(dst.parent).subsets[0].sheets[1:]] == ["A3", "A3", "A3"]
+
+
+def test_first_subset_uses_minimal_factory_when_no_subset_template(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    sheet_set = document.root.xpath("//*[local-name()='AcSmSheetSet']")[0]
+    for subset in sheet_set.xpath("./*[local-name()='AcSmSubset']"):
+        sheet_set.remove(subset)
+
+    document.apply_structural_commands([_insert_subset_command(2)], "revision")
+
+    subset = sheet_set.xpath("./*[local-name()='AcSmSubset']")[0]
+    sheets = subset.xpath("./*[local-name()='AcSmSheet']")
+    assert len(sheets) == 2
+    assert [child.get("propname") for child in subset if child.tag.endswith("AcSmProp")] == ["Name"]
+    assert all(sheet.xpath("./*[local-name()='AcSmCustomPropertyBag']") for sheet in sheets)
+    assert all(sheet.xpath("./*[local-name()='AcSmAcDbLayoutReference']") for sheet in sheets)
+    assert all(sheet.xpath("./*[local-name()='AcSmProp' and @propname='Number']") for sheet in sheets)
+    assert all(sheet.xpath("./*[local-name()='AcSmProp' and @propname='Title']") for sheet in sheets)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        {"type": "move_sheet", "sheet_id": "sheet-1", "target_subset_id": "subset-1"},
+        {"type": "reorder_sheet", "sheet_id": "sheet-1", "position": 0},
+        {"type": "update_sheet", "sheet_id": "sheet-1", "title": "手工标题"},
+    ],
+)
+def test_legacy_structural_commands_are_rejected(tiny_workspace, command):
+    dst, sheet_id = tiny_workspace
+    command = dict(command)
+    command["sheet_id"] = sheet_id
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_structural_commands([command], "revision")
+
+    assert exc_info.value.code == "COMMAND_UNSUPPORTED"
+
+
+def test_apply_derived_document_writes_final_structure_without_deriving_business_rules(tiny_workspace):
+    dst, sheet_id = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    existing_layout = LayoutReference(r"C:\old\A.dwg", r".\A.dwg", "应被派生布局覆盖", "AB")
+    derived = DerivedDocument(
+        [
+            DerivedSubset(
+                "g99999999-9999-9999-9999-999999999999",
+                "燃气管道平面图",
+                "001-002",
+                "001-002 燃气管道平面图",
+                [
+                    Sheet(
+                        sheet_id,
+                        "777",
+                        "来自派生的标题",
+                        existing_layout,
+                        {"比例": "1:500", "专业": "燃气"},
+                    ),
+                    Sheet(
+                        "g88888888-8888-8888-8888-888888888888",
+                        "778",
+                        "来自派生的新图纸",
+                        LayoutReference(r"C:\模板\标准.dwt", r".\标准.dwt", "778 来自派生的新图纸", ""),
+                        {"专业": "燃气"},
+                    ),
+                ],
+            )
+        ],
+        ["g99999999-9999-9999-9999-999999999999"],
+        PropertyDefinitionDiff([CustomPropertyDefinition("sheet", "专业", "燃气")]),
+    )
+
+    document.apply_derived_document(derived)
+
+    roundtrip = AcsmDocument(document.to_bytes())
+    projected = roundtrip.project(dst.parent)
+    assert [subset.name for subset in projected.subsets] == ["001-002 燃气管道平面图"]
+    assert [sheet.number for sheet in projected.sheets] == ["777", "778"]
+    assert [sheet.title for sheet in projected.sheets] == ["来自派生的标题", "来自派生的新图纸"]
+    assert [sheet.custom_properties["专业"] for sheet in projected.sheets] == ["燃气", "燃气"]
+    assert projected.sheets[0].custom_properties["比例"] == "1:500"
+    original_sheet = roundtrip.root.xpath("//*[@ID=$sheet_id and local-name()='AcSmSheet']", sheet_id=sheet_id)[0]
+    assert original_sheet.xpath("./*[local-name()='Unknown']")[0].get("keep") == "yes"

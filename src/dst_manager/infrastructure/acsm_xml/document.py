@@ -1,10 +1,14 @@
 import copy
 import re
+import uuid
 from pathlib import Path
 
 from lxml import etree
 
+from dst_manager.domain.editing import EditingError, normalize_property_name
 from dst_manager.domain.models import (
+    CustomPropertyDefinition,
+    DerivedDocument,
     LayoutReference,
     Severity,
     Sheet,
@@ -55,6 +59,31 @@ def _custom_property_scope(node: etree._Element) -> str:
 
 def _custom_property_values(node: etree._Element) -> list[etree._Element]:
     return [child for child in _children(node, "AcSmProp") if child.get("propname") == "Value"]
+
+
+def _tag_like(node: etree._Element, local_name: str) -> str:
+    namespace = etree.QName(node).namespace
+    return f"{{{namespace}}}{local_name}" if namespace else local_name
+
+
+def _new_acsm_id() -> str:
+    return "g" + str(uuid.uuid4()).upper()
+
+
+def _scope_for_property_type(property_type: str) -> str:
+    if property_type == "sheetset":
+        return "1"
+    if property_type == "sheet":
+        return "2"
+    raise AcsmValidationError(f"CUSTOM_PROPERTY_TYPE_INVALID: {property_type}")
+
+
+def _property_type_for_scope(scope: str) -> str:
+    if scope == "1":
+        return "sheetset"
+    if scope == "2":
+        return "sheet"
+    raise AcsmValidationError(f"CUSTOM_PROPERTY_FLAGS_INVALID: {scope}")
 
 
 class AcsmDocument:
@@ -126,7 +155,7 @@ class AcsmDocument:
                 raise AcsmValidationError(f"COMMAND_REQUIRES_CAD: {command_type}")
 
     def apply_structural_commands(self, commands: list[dict], base_revision: str) -> None:
-        """在原始DOM上执行受控的插入、删除与移动，未知兄弟节点保持原位。"""
+        """在原始DOM上执行受控结构节点工厂，未知兄弟节点保持原位。"""
         from dst_manager.domain.planning import new_acsm_id
 
         def one(local_name: str, object_id: str) -> etree._Element:
@@ -135,28 +164,23 @@ class AcsmDocument:
                 raise AcsmValidationError(f"{local_name.upper()}_NOT_FOUND: {object_id}")
             return matches[0]
 
-        def insert_sheet(parent: etree._Element, node: etree._Element, position: int) -> None:
-            sheets = _children(parent, "AcSmSheet")
-            if position < 0 or position > len(sheets):
-                raise AcsmValidationError(f"SHEET_POSITION_INVALID: {position}")
-            if position == len(sheets):
-                if sheets:
-                    sheets[-1].addnext(node)
-                else:
-                    parent.append(node)
-            else:
-                sheets[position].addprevious(node)
-
         for command_index, command in enumerate(commands):
             kind = command.get("type")
             if kind == "update_sheet":
+                if "title" in command:
+                    raise AcsmValidationError("COMMAND_UNSUPPORTED: update_sheet.title")
                 node = one("AcSmSheet", str(command.get("sheet_id", "")))
                 if "number" in command:
                     _set_prop(node, "Number", str(command["number"]))
-                if "title" in command:
-                    _set_prop(node, "Title", str(command["title"]))
                 self._set_custom_properties(node, command.get("custom_properties", {}), expected_scope="2")
-            elif kind in {"update_sheet_set", "update_subset"}:
+            elif kind == "update_sheet_set":
+                self.apply_metadata_commands([command])
+            elif kind == "update_subset_title":
+                subset = one("AcSmSubset", str(command.get("subset_id", "")))
+                _set_prop(subset, "Name", str(command.get("title", "")))
+            elif kind == "update_subset":
+                if "position" in command:
+                    raise AcsmValidationError("COMMAND_UNSUPPORTED: update_subset.position")
                 self.apply_metadata_commands([command])
             elif kind == "renumber_sheets":
                 subset = one("AcSmSubset", str(command.get("subset_id", "")))
@@ -172,30 +196,365 @@ class AcsmDocument:
                     self._assert_no_external_id_reference(parent)
                     parent.getparent().remove(parent)
             elif kind in {"move_sheet", "reorder_sheet"}:
-                node = one("AcSmSheet", str(command.get("sheet_id", "")))
-                source_parent = node.getparent()
-                target_id = str(command.get("target_subset_id", source_parent.get("ID", "")))
-                target = one("AcSmSubset", target_id)
-                source_parent.remove(node)
-                insert_sheet(target, node, int(command.get("position", len(_children(target, "AcSmSheet")))))
-                if source_parent is not target and not _children(source_parent, "AcSmSheet") and command.get("delete_empty_source_subset"):
-                    self._assert_no_external_id_reference(source_parent)
-                    source_parent.getparent().remove(source_parent)
+                raise AcsmValidationError(f"COMMAND_UNSUPPORTED: {kind}")
             elif kind == "insert_sheet":
                 target = one("AcSmSubset", str(command.get("target_subset_id", "")))
-                templates = _children(target, "AcSmSheet") or self.root.xpath("//*[local-name()='AcSmSheet']")
-                if not templates:
-                    raise AcsmValidationError("SHEET_TEMPLATE_NOT_FOUND")
-                node = copy.deepcopy(templates[0])
-                for index, item in enumerate(node.xpath(".//*[@ID] | self::*[@ID]")):
-                    item.set("ID", new_acsm_id(base_revision, command_index, f"node-{index}"))
-                node.set("ID", new_acsm_id(base_revision, command_index))
-                _set_prop(node, "Number", str(command.get("number", "")))
-                _set_prop(node, "Title", str(command.get("title", "")))
-                self._set_custom_properties(node, command.get("custom_properties", {}), expected_scope="2", clear_others=True)
-                insert_sheet(target, node, int(command.get("position", len(_children(target, "AcSmSheet")))))
+                count = self._positive_count(command.get("count", 1), "SHEET_INSERT_COUNT_INVALID")
+                position = self._insertion_index(command, len(_children(target, "AcSmSheet")), "SHEET_POSITION_INVALID")
+                source = self._layout_source(command)
+                template = (_children(target, "AcSmSheet") or self.root.xpath("//*[local-name()='AcSmSheet']") or [None])[0]
+                for offset in range(count):
+                    sheet_id = new_acsm_id(base_revision, command_index, f"sheet-{offset}")
+                    node = self._make_sheet_node(
+                        sheet_id,
+                        str(command.get("number", _prop(template, "Number") if template is not None else "")),
+                        str(command.get("title", _prop(template, "Title") if template is not None else "")),
+                        source["file"],
+                        "",
+                        source["layout"],
+                        _prop(_children(template, "AcSmAcDbLayoutReference")[0], "AcDbHandle", "0") if template is not None and _children(template, "AcSmAcDbLayoutReference") else "0",
+                    )
+                    self._set_custom_properties(node, command.get("custom_properties", {}), expected_scope="2")
+                    self._place_child(target, node, "AcSmSheet", position + offset)
+            elif kind == "insert_subset":
+                count = self._positive_count(command.get("initial_sheet_count", 1), "EMPTY_SUBSET")
+                sheet_set = self._sheet_set()
+                position = self._insertion_index(command, len(_children(sheet_set, "AcSmSubset")), "SUBSET_POSITION_INVALID", allow_empty=True)
+                source = self._layout_source(command)
+                title = str(command.get("title", "")).strip()
+                if not title:
+                    raise AcsmValidationError("SHEET_TITLE_EMPTY")
+                subset = self._make_subset_node(new_acsm_id(base_revision, command_index, "subset"), title)
+                for offset in range(count):
+                    subset.append(
+                        self._make_sheet_node(
+                            new_acsm_id(base_revision, command_index, f"subset-sheet-{offset}"),
+                            str(offset + 1),
+                            title,
+                            source["file"],
+                            "",
+                            source["layout"],
+                            "0",
+                        ),
+                    )
+                self._place_child(sheet_set, subset, "AcSmSubset", position)
             else:
                 raise AcsmValidationError(f"COMMAND_UNSUPPORTED: {kind}")
+
+    def apply_property_definition_commands(self, commands: list[dict]) -> None:
+        """新增或删除图纸集/图纸自定义属性定义和值节点。"""
+        for command in commands:
+            kind = command.get("type")
+            property_type = str(command.get("property_type", ""))
+            scope = _scope_for_property_type(property_type)
+            name = self._normalize_property_name(command.get("name", ""))
+            if kind == "add_custom_property":
+                definition = CustomPropertyDefinition(property_type, name, str(command.get("default_value", "")))
+                self._add_property_definition(definition, duplicate_ok=False)
+            elif kind == "delete_custom_property":
+                self._delete_property_definition(scope, name)
+            else:
+                raise AcsmValidationError(f"COMMAND_UNSUPPORTED: {kind}")
+
+    def apply_derived_document(self, derived: DerivedDocument) -> None:
+        """将已经验证的最终结构写入受控 AcSm 节点，不重新计算业务规则。"""
+        sheet_set = self._sheet_set()
+        derived_subset_ids = {subset.acsm_id for subset in derived.subsets}
+
+        for subset_index, derived_subset in enumerate(derived.subsets):
+            if not derived_subset.sheets:
+                raise AcsmValidationError("EMPTY_SUBSET")
+            subset = self._find_by_id("AcSmSubset", derived_subset.acsm_id)
+            if subset is None:
+                subset = self._make_subset_node(derived_subset.acsm_id, derived_subset.display_name)
+            _set_prop(subset, "Name", derived_subset.display_name)
+            self._place_child(sheet_set, subset, "AcSmSubset", subset_index)
+
+            for sheet_index, derived_sheet in enumerate(derived_subset.sheets):
+                sheet = self._find_by_id("AcSmSheet", derived_sheet.acsm_id)
+                if sheet is None:
+                    sheet = self._make_sheet_node(
+                        derived_sheet.acsm_id,
+                        derived_sheet.number,
+                        derived_sheet.title,
+                        derived_sheet.layout.file_name,
+                        derived_sheet.layout.relative_file_name,
+                        derived_sheet.layout.layout_name,
+                        derived_sheet.layout.handle or "0",
+                    )
+                _set_prop(sheet, "Number", derived_sheet.number)
+                _set_prop(sheet, "Title", derived_sheet.title)
+                layouts = _children(sheet, "AcSmAcDbLayoutReference")
+                if len(layouts) != 1:
+                    raise AcsmValidationError(f"SHEET_LAYOUT_COUNT: {derived_sheet.acsm_id}")
+                if derived_sheet.layout.layout_name:
+                    _set_prop(layouts[0], "Name", derived_sheet.layout.layout_name)
+                self._place_child(subset, sheet, "AcSmSheet", sheet_index)
+
+            expected_sheet_ids = {sheet.acsm_id for sheet in derived_subset.sheets}
+            for sheet in list(_children(subset, "AcSmSheet")):
+                if sheet.get("ID") not in expected_sheet_ids:
+                    self._assert_no_external_id_reference(sheet)
+                    subset.remove(sheet)
+
+        for subset in list(_children(sheet_set, "AcSmSubset")):
+            if subset.get("ID") not in derived_subset_ids:
+                self._assert_no_external_id_reference(subset)
+                sheet_set.remove(subset)
+
+        for definition in derived.property_diff.added:
+            self._add_property_definition(definition, duplicate_ok=True)
+
+        for derived_subset in derived.subsets:
+            for derived_sheet in derived_subset.sheets:
+                sheet = self._find_by_id("AcSmSheet", derived_sheet.acsm_id)
+                if sheet is None:
+                    raise AcsmValidationError(f"SHEET_NOT_FOUND: {derived_sheet.acsm_id}")
+                self._set_custom_properties(sheet, derived_sheet.custom_properties, expected_scope="2")
+
+    def _sheet_set(self) -> etree._Element:
+        matches = self.root.xpath("//*[local-name()='AcSmSheetSet']")
+        if len(matches) != 1:
+            raise AcsmValidationError("SHEET_SET_INVALID")
+        return matches[0]
+
+    def _find_by_id(self, local_name: str, object_id: str) -> etree._Element | None:
+        matches = self.root.xpath(
+            "//*[@ID=$object_id and local-name()=$local_name]",
+            object_id=object_id,
+            local_name=local_name,
+        )
+        if len(matches) > 1:
+            raise AcsmValidationError(f"{local_name.upper()}_DUPLICATED: {object_id}")
+        return matches[0] if matches else None
+
+    def _unique_acsm_id(self, preferred: str | None = None) -> str:
+        used = {node.get("ID") for node in self.root.xpath(".//*[@ID] | self::node()[@ID]")}
+        if preferred and preferred not in used:
+            return preferred
+        while True:
+            value = _new_acsm_id()
+            if value not in used:
+                return value
+
+    def _make_prop(self, name: str, value: str, *, vt: str | None = None) -> etree._Element:
+        attributes = {"propname": name}
+        if vt is not None:
+            attributes["vt"] = vt
+        node = etree.Element(_tag_like(self.root, "AcSmProp"), attributes)
+        node.text = value
+        return node
+
+    def _make_property_value(
+        self,
+        definition: CustomPropertyDefinition,
+        *,
+        default_value: str | None = None,
+    ) -> etree._Element:
+        scope = _scope_for_property_type(definition.type)
+        value = definition.default_value if default_value is None else default_value
+        node = etree.Element(
+            _tag_like(self.root, "AcSmCustomPropertyValue"),
+            {"ID": self._unique_acsm_id(), "propname": definition.name},
+        )
+        node.append(self._make_prop("Flags", scope, vt=self._custom_property_prop_vt("Flags", "3")))
+        if value:
+            node.append(self._make_prop("Value", value, vt=self._custom_property_prop_vt("Value", "8")))
+        return node
+
+    def _make_custom_property_bag(self) -> etree._Element:
+        return etree.Element(_tag_like(self.root, "AcSmCustomPropertyBag"), {"ID": self._unique_acsm_id()})
+
+    def _make_subset_node(self, subset_id: str, name: str) -> etree._Element:
+        node = etree.Element(_tag_like(self.root, "AcSmSubset"), {"ID": self._unique_acsm_id(subset_id)})
+        node.append(self._make_prop("Name", name))
+        return node
+
+    def _make_sheet_node(
+        self,
+        sheet_id: str,
+        number: str,
+        title: str,
+        file_name: str,
+        relative_file_name: str,
+        layout_name: str,
+        handle: str,
+    ) -> etree._Element:
+        node = etree.Element(_tag_like(self.root, "AcSmSheet"), {"ID": self._unique_acsm_id(sheet_id)})
+        bag = self._make_custom_property_bag()
+        for definition in self._sheet_property_definitions():
+            bag.append(self._make_property_value(definition, default_value=""))
+        node.append(bag)
+
+        layout = etree.Element(_tag_like(self.root, "AcSmAcDbLayoutReference"))
+        relative = relative_file_name
+        if not relative and file_name:
+            relative = ".\\" + Path(file_name).name
+        layout.append(self._make_prop("AcDbHandle", handle or "0"))
+        layout.append(self._make_prop("FileName", file_name))
+        layout.append(self._make_prop("Name", layout_name))
+        layout.append(self._make_prop("Relative_FileName", relative))
+        node.append(layout)
+
+        node.append(self._make_prop("Number", number))
+        node.append(self._make_prop("Title", title))
+        return node
+
+    def _custom_property_prop_vt(self, propname: str, default: str) -> str:
+        matches = self.root.xpath(
+            "//*[local-name()='AcSmCustomPropertyValue']/*[local-name()='AcSmProp' and @propname=$propname]",
+            propname=propname,
+        )
+        for match in matches:
+            value = match.get("vt")
+            if value is not None:
+                return value
+        return default
+
+    def _sheet_property_definitions(self) -> list[CustomPropertyDefinition]:
+        definitions: list[CustomPropertyDefinition] = []
+        seen: set[str] = set()
+        for node in self.root.xpath(
+            "//*[local-name()='AcSmSheet']"
+            "/*[local-name()='AcSmCustomPropertyBag']"
+            "/*[local-name()='AcSmCustomPropertyValue']",
+        ):
+            if _custom_property_scope(node) != "2":
+                continue
+            name = node.get("propname", "")
+            key = name.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            definitions.append(CustomPropertyDefinition("sheet", name, ""))
+        return definitions
+
+    def _ensure_custom_property_bag(self, owner: etree._Element) -> etree._Element:
+        bags = _children(owner, "AcSmCustomPropertyBag")
+        if len(bags) > 1:
+            raise AcsmValidationError(f"CUSTOM_PROPERTY_BAG_DUPLICATED: {owner.get('ID', '')}")
+        if bags:
+            return bags[0]
+        bag = self._make_custom_property_bag()
+        if etree.QName(owner).localname == "AcSmSheet":
+            owner.insert(0, bag)
+            return bag
+        props = _children(owner, "AcSmProp")
+        if props:
+            props[-1].addnext(bag)
+        else:
+            owner.insert(0, bag)
+        return bag
+
+    def _owner_has_property(self, owner: etree._Element, scope: str, name: str) -> bool:
+        key = name.casefold()
+        for node in owner.xpath(
+            "./*[local-name()='AcSmCustomPropertyBag']"
+            "/*[local-name()='AcSmCustomPropertyValue']",
+        ):
+            if _custom_property_scope(node) == scope and node.get("propname", "").casefold() == key:
+                return True
+        return False
+
+    def _existing_property_types(self, name: str) -> set[str]:
+        key = name.casefold()
+        types: set[str] = set()
+        for node in self.root.xpath("//*[local-name()='AcSmCustomPropertyValue']"):
+            if node.get("propname", "").casefold() == key:
+                types.add(_property_type_for_scope(_custom_property_scope(node)))
+        return types
+
+    def _property_owners(self, scope: str) -> list[etree._Element]:
+        if scope == "1":
+            return [self._sheet_set()]
+        return list(self.root.xpath("//*[local-name()='AcSmSheet']"))
+
+    def _add_property_definition(self, definition: CustomPropertyDefinition, *, duplicate_ok: bool) -> None:
+        scope = _scope_for_property_type(definition.type)
+        existing_types = self._existing_property_types(definition.name)
+        if existing_types - {definition.type}:
+            raise AcsmValidationError(f"CUSTOM_PROPERTY_TYPE_CONFLICT: {definition.name}")
+        if existing_types and not duplicate_ok:
+            raise AcsmValidationError(f"CUSTOM_PROPERTY_NAME_DUPLICATE: {definition.name}")
+        for owner in self._property_owners(scope):
+            if self._owner_has_property(owner, scope, definition.name):
+                continue
+            self._ensure_custom_property_bag(owner).append(self._make_property_value(definition))
+
+    def _delete_property_definition(self, scope: str, name: str) -> None:
+        removed = False
+        key = name.casefold()
+        for owner in self._property_owners(scope):
+            for bag in _children(owner, "AcSmCustomPropertyBag"):
+                for node in list(_children(bag, "AcSmCustomPropertyValue")):
+                    if _custom_property_scope(node) == scope and node.get("propname", "").casefold() == key:
+                        bag.remove(node)
+                        removed = True
+        if not removed:
+            raise AcsmValidationError(f"CUSTOM_PROPERTY_NOT_FOUND: {name}")
+
+    def _place_child(self, parent: etree._Element, node: etree._Element, local_name: str, position: int) -> None:
+        current_parent = node.getparent()
+        if current_parent is not None:
+            current_parent.remove(node)
+        siblings = _children(parent, local_name)
+        if position < 0 or position > len(siblings):
+            raise AcsmValidationError(f"{local_name.upper()}_POSITION_INVALID: {position}")
+        if position == len(siblings):
+            if siblings:
+                siblings[-1].addnext(node)
+            else:
+                parent.append(node)
+            return
+        siblings[position].addprevious(node)
+
+    @staticmethod
+    def _normalize_property_name(value: object) -> str:
+        try:
+            return normalize_property_name(str(value))
+        except EditingError as exc:
+            raise AcsmValidationError(exc.code) from exc
+
+    @staticmethod
+    def _positive_count(value: object, code: str) -> int:
+        try:
+            count = int(value)
+        except (TypeError, ValueError) as exc:
+            raise AcsmValidationError(f"{code}: {value}") from exc
+        if count < 1:
+            raise AcsmValidationError(f"{code}: {value}")
+        return count
+
+    @staticmethod
+    def _layout_source(command: dict) -> dict[str, str]:
+        source = command.get("source") or {}
+        source_type = str(source.get("type", ""))
+        source_file = str(source.get("file", "")).strip()
+        source_layout = str(source.get("layout", "")).strip()
+        if source_type not in {"existing_snapshot", "template_layout"} or not source_file or not source_layout:
+            raise AcsmValidationError("LAYOUT_SOURCE_INVALID")
+        return {"type": source_type, "file": source_file, "layout": source_layout}
+
+    @staticmethod
+    def _insertion_index(command: dict, length: int, code: str, *, allow_empty: bool = False) -> int:
+        if "position" in command:
+            position = int(command["position"])
+            if position < 0 or position > length:
+                raise AcsmValidationError(f"{code}: {position}")
+            return position
+        ordinal = int(command.get("ordinal", 1 if allow_empty and length == 0 else length))
+        if length == 0:
+            if allow_empty and ordinal == 1:
+                return 0
+            raise AcsmValidationError(f"{code}: {ordinal}")
+        if ordinal < 1 or ordinal > length:
+            raise AcsmValidationError(f"{code}: {ordinal}")
+        placement = str(command.get("placement", command.get("direction", "after"))).strip().casefold()
+        if placement in {"before", "向前添加", "front"}:
+            return ordinal - 1
+        if placement in {"after", "向后添加", "back"}:
+            return ordinal
+        raise AcsmValidationError(f"{code}: {placement}")
 
     def apply_layout_bindings(self, bindings: dict[str, dict[str, str]], dst_dir: Path) -> None:
         for sheet_id, binding in bindings.items():
