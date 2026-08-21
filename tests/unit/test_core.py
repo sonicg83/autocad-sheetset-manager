@@ -262,7 +262,42 @@ def test_insert_sheet_batch_creates_unique_controlled_nodes(tiny_workspace):
     assert len(sheets) == 4
     assert len(ids) == len(set(ids))
     assert len(all_ids) == len(set(all_ids))
-    assert [sheet.layout.layout_name for sheet in AcsmDocument(document.to_bytes()).project(dst.parent).subsets[0].sheets[1:]] == ["A3", "A3", "A3"]
+    projected_sheets = AcsmDocument(document.to_bytes()).project(dst.parent).subsets[0].sheets
+    assert [sheet.layout.layout_name for sheet in projected_sheets[1:]] == ["A3", "A3", "A3"]
+    assert [sheet.layout.handle for sheet in projected_sheets] == ["AB", "0", "0", "0"]
+
+
+def test_final_validate_rejects_inserted_sheet_placeholder_handle_until_binding(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+
+    document.apply_structural_commands(
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": subset.get("ID"),
+                "position": 1,
+                "number": "002",
+                "title": "新增",
+                "source": {"type": "template_layout", "file": r"C:\模板\标准.dwt", "layout": "A3"},
+            },
+        ],
+        "revision",
+    )
+
+    inserted_id = subset.xpath("./*[local-name()='AcSmSheet']")[1].get("ID")
+    placeholder_issues = [issue for issue in document.validate() if issue.code == "LAYOUT_HANDLE_PLACEHOLDER"]
+    assert [issue.object_id for issue in placeholder_issues] == [inserted_id]
+
+    document.apply_layout_bindings(
+        {inserted_id: {"file": str(dst.parent / "A.dwg"), "layout": "002 新增", "handle": "CD"}},
+        dst.parent,
+    )
+
+    final_errors = {issue.code for issue in document.validate() if issue.severity == "error"}
+    assert "LAYOUT_HANDLE_PLACEHOLDER" not in final_errors
+    assert "LAYOUT_HANDLE_INVALID" not in final_errors
 
 
 def test_first_subset_uses_minimal_factory_when_no_subset_template(tiny_workspace):
@@ -348,3 +383,39 @@ def test_apply_derived_document_writes_final_structure_without_deriving_business
     assert projected.sheets[0].custom_properties["比例"] == "1:500"
     original_sheet = roundtrip.root.xpath("//*[@ID=$sheet_id and local-name()='AcSmSheet']", sheet_id=sheet_id)[0]
     assert original_sheet.xpath("./*[local-name()='Unknown']")[0].get("keep") == "yes"
+
+
+def test_apply_derived_document_failure_leaves_original_dom_unchanged(tiny_workspace):
+    dst, sheet_id = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    sheet = document.root.xpath("//*[@ID=$sheet_id and local-name()='AcSmSheet']", sheet_id=sheet_id)[0]
+    sheet.remove(sheet.xpath("./*[local-name()='AcSmAcDbLayoutReference']")[0])
+    before = document.semantic_bytes()
+    derived = DerivedDocument(
+        [
+            DerivedSubset(
+                subset.get("ID"),
+                "新标题",
+                "999",
+                "999 新标题",
+                [
+                    Sheet(
+                        sheet_id,
+                        "999",
+                        "失败前不应留下",
+                        LayoutReference(r"C:\old\A.dwg", r".\A.dwg", "999 失败前不应留下", "AB"),
+                        {"比例": "1:500"},
+                    ),
+                ],
+            ),
+        ],
+        [subset.get("ID")],
+        PropertyDefinitionDiff([CustomPropertyDefinition("sheet", "专业", "燃气")]),
+    )
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_derived_document(derived)
+
+    assert exc_info.value.code == "SHEET_LAYOUT_COUNT"
+    assert document.semantic_bytes() == before

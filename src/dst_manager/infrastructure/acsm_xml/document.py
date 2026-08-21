@@ -212,7 +212,7 @@ class AcsmDocument:
                         source["file"],
                         "",
                         source["layout"],
-                        _prop(_children(template, "AcSmAcDbLayoutReference")[0], "AcDbHandle", "0") if template is not None and _children(template, "AcSmAcDbLayoutReference") else "0",
+                        "0",
                     )
                     self._set_custom_properties(node, command.get("custom_properties", {}), expected_scope="2")
                     self._place_child(target, node, "AcSmSheet", position + offset)
@@ -258,6 +258,11 @@ class AcsmDocument:
 
     def apply_derived_document(self, derived: DerivedDocument) -> None:
         """将已经验证的最终结构写入受控 AcSm 节点，不重新计算业务规则。"""
+        draft = self.clone()
+        draft._apply_derived_document_in_place(derived)
+        self.root = draft.root
+
+    def _apply_derived_document_in_place(self, derived: DerivedDocument) -> None:
         sheet_set = self._sheet_set()
         derived_subset_ids = {subset.acsm_id for subset in derived.subsets}
 
@@ -693,7 +698,9 @@ class AcsmDocument:
                 if not _prop(layout, name):
                     issues.append(ValidationIssue("LAYOUT_FIELD_MISSING", Severity.ERROR, f"布局缺少{name}", node.get("ID")))
             handle = _prop(layout, "AcDbHandle")
-            if handle and not _HANDLE_RE.fullmatch(handle):
+            if handle == "0":
+                issues.append(ValidationIssue("LAYOUT_HANDLE_PLACEHOLDER", Severity.ERROR, "布局Handle仍为CAD回写前占位值", node.get("ID")))
+            elif handle and not _HANDLE_RE.fullmatch(handle):
                 issues.append(ValidationIssue("LAYOUT_HANDLE_INVALID", Severity.ERROR, "布局Handle无效", node.get("ID")))
             if not _prop(node, "Number") or not _prop(node, "Title"):
                 issues.append(ValidationIssue("SHEET_FIELD_MISSING", Severity.ERROR, "图纸缺少Number或Title", node.get("ID")))

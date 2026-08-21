@@ -239,18 +239,44 @@ def test_delete_sheet_definition_removes_values_from_all_sheets(tiny_workspace):
     document.apply_property_definition_commands(
         [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
     )
+    sheet_set_bag = document.root.xpath(
+        "//*[local-name()='AcSmSheetSet']/*[local-name()='AcSmCustomPropertyBag']",
+    )[0]
+    sheet_set_bag.append(
+        etree.fromstring(
+            """
+            <AcSmCustomPropertyValue ID="g55555555-5555-5555-5555-555555555555" propname="专业">
+              <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+              <AcSmProp propname="Value" vt="8">图纸集值</AcSmProp>
+            </AcSmCustomPropertyValue>
+            """.encode(),
+        ),
+    )
+    original_sheet = document.root.xpath("//*[local-name()='AcSmSheet']")[0]
+    second_sheet = etree.fromstring(etree.tostring(original_sheet))
+    for index, node in enumerate(second_sheet.xpath(".//*[@ID] | self::*[@ID]"), start=20):
+        node.set("ID", f"g66666666-6666-6666-6666-{index:012d}")
+    original_sheet.addnext(second_sheet)
 
     document.apply_property_definition_commands(
         [{"type": "delete_custom_property", "property_type": "sheet", "name": "专业"}],
     )
 
     projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert len(projected.sheets) == 2
     assert all("专业" not in sheet.custom_properties for sheet in projected.sheets)
     assert not document.root.xpath(
         "//*[local-name()='AcSmSheet']"
         "/*[local-name()='AcSmCustomPropertyBag']"
         "/*[local-name()='AcSmCustomPropertyValue' and @propname='专业']",
     )
+    sheet_set_property = document.root.xpath(
+        "//*[local-name()='AcSmSheetSet']"
+        "/*[local-name()='AcSmCustomPropertyBag']"
+        "/*[local-name()='AcSmCustomPropertyValue' and @propname='专业']",
+    )[0]
+    assert _props(sheet_set_property, "Flags")[0].text == "1"
+    assert _props(sheet_set_property, "Value")[0].text == "图纸集值"
 
 
 def test_delete_sheetset_definition_only_affects_sheetset_scope(tiny_workspace):
