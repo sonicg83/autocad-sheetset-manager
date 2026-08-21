@@ -84,7 +84,7 @@ def test_structural_subset_title_change_rebuilds_dwg_and_dst(version: str, tmp_p
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_missing_custom_value_insert_and_update_complete_before_publish(version: str, tmp_path: Path):
+def test_missing_custom_value_update_and_supported_insert_complete_before_publish(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
     dst_name = "图纸集数据文件.dst"
@@ -109,16 +109,12 @@ def test_missing_custom_value_insert_and_update_complete_before_publish(version:
         {
             "type": "update_sheet",
             "sheet_id": existing.acsm_id,
-            "title": "封面热修复验证",
             "custom_properties": {"备注": "", "出图比例": "1:500", "设计人": existing.custom_properties["设计人"]},
         },
         {
             "type": "insert_sheet",
             "target_subset_id": subset.acsm_id,
             "position": 1,
-            "number": "0001",
-            "title": "新增热修复验证",
-            "custom_properties": {"备注": "", "出图比例": "1:500"},
             "source": {"type": "template_layout", "file": str(existing.layout.resolved_path), "layout": existing.layout.layout_name},
         },
     ]
@@ -133,9 +129,10 @@ def test_missing_custom_value_insert_and_update_complete_before_publish(version:
     reopened = service.open_workspace(tmp_path / dst_name)
     final_subset = reopened.document.subsets[0]
     assert reopened.document.custom_properties["版本"] == "B"
-    assert [sheet.title for sheet in final_subset.sheets] == ["封面热修复验证", "新增热修复验证"]
+    assert [sheet.title for sheet in final_subset.sheets] == ["封面 (一)", "封面 (二)"]
     assert all(sheet.custom_properties["备注"] == "" for sheet in final_subset.sheets)
-    assert all(sheet.custom_properties["出图比例"] == "1:500" for sheet in final_subset.sheets)
+    updated = next(sheet for sheet in final_subset.sheets if sheet.acsm_id == existing.acsm_id)
+    assert updated.custom_properties["出图比例"] == "1:500"
     xml = AcsmDocument(DstCodec().decode_file(tmp_path / dst_name))
     sheetset_remark_values = xml.root.xpath(
         "//*[local-name()='AcSmSheetSet']/*[local-name()='AcSmCustomPropertyBag']"

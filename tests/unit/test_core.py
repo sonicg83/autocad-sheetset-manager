@@ -457,11 +457,11 @@ def _planning_workspace(tmp_path: Path, subsets: list[Subset]) -> Workspace:
     )
 
 
-def _chained_rename_workspace(tmp_path: Path) -> tuple[Workspace, list[Path]]:
-    drawings = [tmp_path / "001 共享.dwg", tmp_path / "002 共享.dwg"]
+def _chained_rename_workspace(tmp_path: Path, count: int = 2) -> tuple[Workspace, list[Path]]:
+    drawings = [tmp_path / f"{index:03d} 共享.dwg" for index in range(1, count + 1)]
     for index, drawing in enumerate(drawings, start=1):
         drawing.write_bytes(f"old-{index}".encode())
-    ids = [f"g00000000-0000-0000-0001-{index:012X}" for index in range(1, 9)]
+    ids = [f"g00000000-0000-0000-0001-{index:012X}" for index in range(1, 3 + 3 * count)]
     subsets = []
     for index, drawing in enumerate(drawings, start=1):
         offset = (index - 1) * 3
@@ -1079,6 +1079,55 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
     assert [target.read_bytes() for target in targets] == [b"template", b"old-1", b"old-2"]
     reopened = AcsmDocument(DstCodec().decode_file(workspace.dst_path)).project(tmp_path)
     assert [sheet.layout.resolved_path for sheet in reopened.sheets] == targets
+    assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
+
+
+def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: Path):
+    workspace, old_drawings = _chained_rename_workspace(tmp_path, count=3)
+    template = tmp_path / "中部模板.dwt"
+    template.write_bytes(b"middle-template")
+    command = {
+        "type": "insert_subset",
+        "ordinal": 2,
+        "placement": "before",
+        "title": "共享",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
+    changed_targets = [Path(group["target_file"]) for group in plan["groups"]]
+    assert changed_targets == [old_drawings[1], old_drawings[2], tmp_path / "004 共享.dwg"]
+    layouts_by_target = {
+        Path(group["target_file"]).name: [layout["target_layout"] for layout in group["layouts"]]
+        for group in plan["groups"]
+    }
+    database = Mock()
+    database.get_job.return_value = {"id": "job-middle-chain", "status": "SUCCEEDED"}
+    runner = CadJobRunner(database, DstCodec(), RecoverablePublisher(), 30, max_parallel=1)
+    runner.executor = _PerDrawingCadExecutor(layouts_by_target)
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+
+    result = runner._execute(
+        "job-middle-chain",
+        "worker",
+        1,
+        workspace,
+        CadCapability("2020", None, plugin),
+        [command],
+        plan,
+    )
+
+    final_drawings = [*old_drawings, tmp_path / "004 共享.dwg"]
+    assert result["status"] == "SUCCEEDED"
+    assert [path.read_bytes() for path in final_drawings] == [
+        b"old-1",
+        b"middle-template",
+        b"old-2",
+        b"old-3",
+    ]
+    reopened = AcsmDocument(DstCodec().decode_file(workspace.dst_path)).project(tmp_path)
+    assert [sheet.layout.resolved_path for sheet in reopened.sheets] == final_drawings
     assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
 
 

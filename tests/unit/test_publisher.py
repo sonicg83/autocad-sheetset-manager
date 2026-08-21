@@ -73,17 +73,18 @@ def test_mixed_create_replace_delete_publish_failure_restores_batch(
             raise OSError(f"注入第 {fail_at} 项发布故障")
         os.replace(source, target)
 
-    original_unlink = Path.unlink
+    publisher = RecoverablePublisher(replace)
+    original_move = publisher._move_no_replace
 
-    def unlink(path: Path, *args, **kwargs):
-        if fail_at == 3 and path == deleted:
+    def move(source: Path, target: Path):
+        if fail_at == 3 and source == deleted:
             raise OSError("注入第 3 项发布故障")
-        return original_unlink(path, *args, **kwargs)
+        original_move(source, target)
 
-    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(publisher, "_move_no_replace", move)
 
     with pytest.raises(PublishRolledBackError, match=f"注入第 {fail_at} 项发布故障"):
-        RecoverablePublisher(replace).publish(
+        publisher.publish(
             f"mixed-{fail_at}",
             tmp_path,
             {created: staged_created, replaced: staged_replaced, deleted: None},
@@ -107,6 +108,43 @@ def test_startup_recovery_closes_unfinished_journal(tmp_path: Path, status: str)
     assert RecoverablePublisher().recover(tmp_path)==[operation]
     assert json.loads(journal_path.read_text(encoding="utf-8"))["status"]=="ROLLED_BACK"
     assert target.read_text()==("after" if status=="PREPARED" else "before")
+
+
+def test_startup_recovery_restores_target_moved_by_attempted_replace(tmp_path: Path):
+    operation = "attempted-crash"
+    target = tmp_path / "attempted-target.dwg"
+    staged = tmp_path / "attempted-staged.dwg"
+    staged.write_bytes(b"published")
+    before = tmp_path / ".dst-manager/revisions" / operation / "before" / target.name
+    before.parent.mkdir(parents=True)
+    before.write_bytes(b"baseline")
+    replace_backup = tmp_path / f".{target.name}.{operation}.replaced"
+    replace_backup.write_bytes(b"baseline")
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal = {
+        "operation_id": operation,
+        "status": "PUBLISHING",
+        "files": [
+            {
+                "target": str(target),
+                "staged": str(staged),
+                "backup": str(before),
+                "replace_backup": str(replace_backup),
+                "before_hash": file_sha256(before),
+                "staged_hash": file_sha256(staged),
+                "attempted": True,
+                "replaced": False,
+                "conflict_preserved": False,
+            },
+        ],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    assert RecoverablePublisher().recover(tmp_path) == [operation]
+
+    assert target.read_bytes() == b"baseline"
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
 
 
 def test_windows_lock_blocks_writers_but_allows_readers(tmp_path: Path):
@@ -147,25 +185,26 @@ def test_locked_mixed_publish_failure_restores_whole_batch(tmp_path: Path, monke
     staged_created.write_bytes(b"new-created")
     staged_replaced.write_bytes(b"new-replaced")
     publisher = RecoverablePublisher()
-    original_replace = publisher._replace_file
-    replace_calls = 0
+    original_move = publisher._move_no_replace
+    original_replace = publisher._replace_existing
+    publish_calls = 0
 
-    def replace(source: Path, target: Path):
-        nonlocal replace_calls
-        replace_calls += 1
-        if fail_at in {1, 2} and replace_calls == fail_at:
+    def next_call() -> None:
+        nonlocal publish_calls
+        publish_calls += 1
+        if publish_calls == fail_at:
             raise OSError(f"注入第 {fail_at} 项锁内发布故障")
-        original_replace(source, target)
 
-    publisher._replace_file = replace
-    original_unlink = Path.unlink
+    def replace(source: Path, target: Path, backup: Path):
+        next_call()
+        original_replace(source, target, backup)
 
-    def unlink(path: Path, *args, **kwargs):
-        if fail_at == 3 and path == deleted:
-            raise OSError("注入第 3 项锁内发布故障")
-        return original_unlink(path, *args, **kwargs)
+    def move(source: Path, target: Path):
+        next_call()
+        original_move(source, target)
 
-    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(publisher, "_replace_existing", replace)
+    monkeypatch.setattr(publisher, "_move_no_replace", move)
     expected = {
         created: None,
         replaced: file_sha256(replaced),
@@ -237,3 +276,94 @@ def test_publish_rechecks_absent_create_target_before_first_replace(tmp_path: Pa
 
     assert exc.value.code == "PUBLISH_BASE_CHANGED"
     assert target.read_bytes() == b"external"
+
+
+def test_create_commit_atomically_rejects_target_appearing_after_last_check(tmp_path: Path, monkeypatch):
+    target = tmp_path / "atomic-create.dwg"
+    staged = tmp_path / "staged-atomic-create.dwg"
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+
+    def appear_then_commit(source: Path, destination: Path):
+        destination.write_bytes(b"external")
+        os.rename(source, destination)
+
+    monkeypatch.setattr(publisher, "_move_no_replace", appear_then_commit, raising=False)
+
+    with pytest.raises(PublishBaselineError) as exc_info:
+        publisher.publish(
+            "atomic-create-race",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: None},
+        )
+
+    assert exc_info.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"external"
+
+
+def test_existing_commit_restores_external_version_swapped_after_last_check(tmp_path: Path, monkeypatch):
+    target = tmp_path / "atomic-existing.dwg"
+    staged = tmp_path / "staged-atomic-existing.dwg"
+    external = tmp_path / "external-atomic-existing.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    external.write_bytes(b"external")
+    publisher = RecoverablePublisher()
+    original_replace = publisher._replace_existing
+    calls = 0
+
+    def swap_then_replace(source: Path, destination: Path, backup: Path):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            os.replace(external, destination)
+        original_replace(source, destination, backup)
+
+    monkeypatch.setattr(publisher, "_replace_existing", swap_then_replace, raising=False)
+
+    with pytest.raises(PublishBaselineError) as exc_info:
+        publisher.publish(
+            "atomic-existing-race",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert exc_info.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"external"
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/atomic-existing-race/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "ROLLED_BACK"
+
+
+def test_replace_api_partial_failure_restores_attempted_target_and_error_chain(tmp_path: Path, monkeypatch):
+    target = tmp_path / "partial-existing.dwg"
+    staged = tmp_path / "staged-partial-existing.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+
+    def fail_after_moving_target(_source: Path, destination: Path, backup: Path):
+        os.replace(destination, backup)
+        raise OSError("ReplaceFileW 1177 注入故障")
+
+    monkeypatch.setattr(publisher, "_replace_existing", fail_after_moving_target, raising=False)
+
+    with pytest.raises(PublishRolledBackError) as exc_info:
+        publisher.publish(
+            "partial-replace",
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: file_sha256(target)},
+        )
+
+    assert target.read_bytes() == b"baseline"
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert "1177" in str(exc_info.value.__cause__)
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/partial-replace/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "ROLLED_BACK"
+    assert journal["files"][0]["attempted"] is True
