@@ -1,9 +1,41 @@
+import json
+from copy import deepcopy
+
 import pytest
 from fastapi.testclient import TestClient
 
 from dst_manager.config import Settings
+from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.interfaces.api import create_app
+
+
+def _add_second_sheet_with_different_scale(dst):
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    first = subset.xpath("./*[local-name()='AcSmSheet']")[0]
+    second = deepcopy(first)
+    for index, node in enumerate([second, *second.xpath(".//*[@ID]")], start=20):
+        node.set("ID", f"g00000000-0000-0000-0000-{index:012X}")
+    second.xpath("./*[local-name()='AcSmProp' and @propname='Number']")[0].text = "002"
+    second.xpath("./*[local-name()='AcSmProp' and @propname='Title']")[0].text = "剖面"
+    second.xpath(
+        "./*[local-name()='AcSmAcDbLayoutReference']/*[local-name()='AcSmProp' and @propname='Name']",
+    )[0].text = "002 剖面"
+    second.xpath(
+        "./*[local-name()='AcSmCustomPropertyBag']/*[local-name()='AcSmCustomPropertyValue' and @propname='比例']/*[local-name()='AcSmProp' and @propname='Value']",
+    )[0].text = "1:500"
+    subset.append(second)
+    DstCodec().encode_file(document.to_bytes(), dst)
+
+
+def _reverse_sheet_order(dst):
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    sheets = subset.xpath("./*[local-name()='AcSmSheet']")
+    subset.remove(sheets[1])
+    subset.insert(subset.index(sheets[0]), sheets[1])
+    DstCodec().encode_file(document.to_bytes(), dst)
 
 
 def test_read_only_open_does_not_create_workspace_metadata(tmp_path, tiny_workspace):
@@ -146,7 +178,7 @@ def test_property_csv_template_workspace_fields_and_export_are_exact(tmp_path, t
     assert template.content == b"type,name,default_value\r\n"
     assert opened["sheet_set"]["property_definitions"] == [
         {"type": "sheetset", "name": "项目号", "default_value": "P-000"},
-        {"type": "sheet", "name": "比例", "default_value": "1:100"},
+        {"type": "sheet", "name": "比例", "default_value": ""},
     ]
     assert opened["sheet_set"]["subsets"][0] | {"sheets": []} == {
         "id": opened["sheet_set"]["subsets"][0]["id"],
@@ -162,8 +194,58 @@ def test_property_csv_template_workspace_fields_and_export_are_exact(tmp_path, t
     assert exported.content == (
         "type,name,default_value\r\n"
         "sheetset,项目号,P-000\r\n"
-        "sheet,比例,1:100\r\n"
+        "sheet,比例,\r\n"
     ).encode()
+
+
+def test_sheet_property_definition_default_is_stable_across_values_and_sheet_order(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    _add_second_sheet_with_different_scale(dst)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    exported_before = client.get(f"/api/workspaces/{opened['id']}/custom-properties/export").content
+
+    assert opened["sheet_set"]["property_definitions"] == [
+        {"type": "sheetset", "name": "项目号", "default_value": "P-000"},
+        {"type": "sheet", "name": "比例", "default_value": ""},
+    ]
+    assert exported_before == (
+        "type,name,default_value\r\n"
+        "sheetset,项目号,P-000\r\n"
+        "sheet,比例,\r\n"
+    ).encode()
+
+    _reverse_sheet_order(dst)
+    reopened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    exported_after = client.get(f"/api/workspaces/{reopened['id']}/custom-properties/export").content
+
+    assert reopened["sheet_set"]["property_definitions"] == opened["sheet_set"]["property_definitions"]
+    assert exported_after == exported_before
+
+
+def test_property_csv_default_initializes_every_existing_sheet(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    _add_second_sheet_with_different_scale(dst)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    result = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        json={
+            "base_revision_id": opened["revision_id"],
+            "csv": "type,name,default_value\nsheet,专业,燃气\n",
+        },
+    )
+
+    assert result.status_code == 200
+    assert result.json()["status"] == "SUCCEEDED"
+    reopened = client.get(f"/api/workspaces/{opened['id']}").json()
+    sheets = reopened["sheet_set"]["subsets"][0]["sheets"]
+    assert [sheet["custom_properties"]["专业"] for sheet in sheets] == ["燃气", "燃气"]
+    assert {item["name"]: item["default_value"] for item in reopened["sheet_set"]["property_definitions"]}[
+        "专业"
+    ] == ""
 
 
 def test_property_csv_import_preview_executes_domain_commands_and_skips_repeat(tmp_path, tiny_workspace):
@@ -204,6 +286,59 @@ def test_property_csv_import_preview_executes_domain_commands_and_skips_repeat(t
     assert repeated["executable"] is True
     assert repeated["commands"] == []
     assert [change["action"] for change in repeated["changes"]] == ["skip", "skip"]
+
+
+def test_property_csv_repeated_import_is_stable_noop_without_job_revision_or_lock(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app, raise_server_exceptions=False)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    csv_text = "type,name,default_value\nsheet,专业,燃气\n"
+    first = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        json={"base_revision_id": opened["revision_id"], "csv": csv_text},
+    ).json()
+    current = client.get(f"/api/workspaces/{opened['id']}").json()
+    before_file = (dst.stat().st_mtime_ns, dst.read_bytes())
+    with app.state.service.database.engine.connect() as connection:
+        before_counts = (
+            connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one(),
+            connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one(),
+        )
+
+    assert first["status"] == "SUCCEEDED"
+    expected = {
+        "id": None,
+        "workspace_id": opened["id"],
+        "status": "SUCCEEDED",
+        "revision_id": current["revision_id"],
+        "no_op": True,
+    }
+    for _ in range(2):
+        response = client.post(
+            f"/api/workspaces/{opened['id']}/custom-properties/import",
+            json={"base_revision_id": current["revision_id"], "csv": csv_text},
+        )
+        assert response.status_code == 200
+        assert response.json() == expected
+
+    with app.state.service.database.engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one(),
+            connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one(),
+        ) == before_counts
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+    assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before_file
+
+    next_write = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        json={
+            "base_revision_id": current["revision_id"],
+            "csv": "type,name,default_value\nsheetset,项目阶段,施工图\n",
+        },
+    )
+    assert next_write.status_code == 200
+    assert next_write.json()["status"] == "SUCCEEDED"
 
 
 def test_delete_custom_property_uses_revisioned_dst_publish(tmp_path, tiny_workspace):
@@ -281,6 +416,93 @@ def test_property_csv_preview_preserves_physical_line_after_blank_record(tmp_pat
     ).json()
 
     assert preview["changes"][0]["line"] == 3
+
+
+def test_property_csv_preview_merges_main_dom_diagnostics_and_blocks_execution(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    xml = DstCodec().decode_file(dst).replace(
+        b'<AcSmProp propname="Flags" vt="3">2</AcSmProp>',
+        b'<AcSmProp propname="Flags" vt="3">9</AcSmProp>',
+        1,
+    )
+    DstCodec().encode_file(xml, dst)
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app, raise_server_exceptions=False)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "csv": "type,name,default_value\nsheet,专业,燃气\n",
+    }
+    before = (dst.stat().st_mtime_ns, dst.read_bytes())
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        json=payload,
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is False
+    assert preview.json()["requires_cad"] is False
+    assert preview.json()["affected_files"] == [str(dst)]
+    assert preview.json()["changes"] == [
+        {
+            "line": 2,
+            "action": "add",
+            "type": "sheet",
+            "name": "专业",
+            "default_value": "燃气",
+        }
+    ]
+    assert [item["code"] for item in preview.json()["diagnostics"]] == ["CUSTOM_PROPERTY_FLAGS_INVALID"]
+
+    execution = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        json=payload,
+    )
+    assert execution.status_code == 400
+    assert execution.json()["code"] == "PLAN_INVALID"
+    with app.state.service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+    assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before
+
+
+def test_property_csv_api_reports_unpaired_surrogate_as_stable_encoding_diagnostic(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app, raise_server_exceptions=False)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "csv": "type,name,default_value\nsheet,\ud800,x\n",
+    }
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        content=json.dumps(payload, ensure_ascii=True).encode(),
+        headers={"content-type": "application/json"},
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is False
+    assert preview.json()["diagnostics"] == [
+        {
+            "code": "CUSTOM_PROPERTY_CSV_ENCODING_INVALID",
+            "severity": "error",
+            "message": "CSV 必须使用 UTF-8 编码",
+            "line": None,
+        }
+    ]
+    execution = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import",
+        content=json.dumps(payload, ensure_ascii=True).encode(),
+        headers={"content-type": "application/json"},
+    )
+    assert execution.status_code == 400
+    assert execution.json()["code"] == "PLAN_INVALID"
+    with app.state.service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
 
 
 def test_property_csv_writes_require_current_base_revision(tmp_path, tiny_workspace):

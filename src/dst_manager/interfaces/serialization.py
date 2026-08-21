@@ -2,24 +2,16 @@ import re
 from dataclasses import asdict
 from typing import Any
 
+from dst_manager.domain.editing import property_definitions_from_document
+
 _NUMBER_RANGE = re.compile(r"^\s*(\d+)(?:\s*-\s*(\d+))?\s+(.+?)\s*$")
 
 
 def workspace_json(workspace) -> dict[str, Any]:
     property_definitions = [
-        {"type": "sheetset", "name": name, "default_value": value}
-        for name, value in workspace.document.custom_properties.items()
+        asdict(definition)
+        for definition in property_definitions_from_document(workspace.document)
     ]
-    sheet_property_names: set[str] = set()
-    for sheet in workspace.document.sheets:
-        for name, value in sheet.custom_properties.items():
-            key = name.casefold()
-            if key in sheet_property_names:
-                continue
-            sheet_property_names.add(key)
-            property_definitions.append(
-                {"type": "sheet", "name": name, "default_value": value},
-            )
     return {
         "id": workspace.id,
         "root": str(workspace.root),

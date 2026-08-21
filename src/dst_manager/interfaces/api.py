@@ -86,7 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return service.preview_custom_property_import(
             workspace_id,
             request.base_revision_id,
-            request.csv.encode("utf-8"),
+            request.csv.encode("utf-8", errors="surrogatepass"),
         )
 
     @app.post("/api/workspaces/{workspace_id}/custom-properties/import")
@@ -94,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return service.import_custom_properties(
             workspace_id,
             request.base_revision_id,
-            request.csv.encode("utf-8"),
+            request.csv.encode("utf-8", errors="surrogatepass"),
         )
 
     @app.get("/api/workspaces/{workspace_id}/custom-properties/export")

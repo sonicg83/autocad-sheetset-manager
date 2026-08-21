@@ -12,6 +12,7 @@ from dst_manager.domain.editing import (
     format_sheet_title,
     normalize_property_name,
     parse_property_csv,
+    parse_property_csv_result,
     validate_property_definitions,
 )
 from dst_manager.domain.models import (
@@ -113,6 +114,44 @@ def test_property_csv_accepts_utf8_bom_and_exact_three_columns():
         CustomPropertyDefinition("sheetset", "项目号", "P-001"),
         CustomPropertyDefinition("sheet", "比例", ""),
     ]
+
+
+def test_property_csv_result_preserves_logical_record_start_lines_across_blank_rows():
+    result = parse_property_csv_result(
+        "type,name,default_value\r\n\r\nsheet,专业,燃气\r\nsheetset,阶段,施工图\r\n".encode(),
+    )
+
+    assert result.diagnostics == []
+    assert [(record.line, record.definition.name) for record in result.records] == [
+        (3, "专业"),
+        (4, "阶段"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("data", "code", "line"),
+    [
+        (
+            b'type,name,default_value\r\nsheet,"line\r\nbreak",x\r\n',
+            "CUSTOM_PROPERTY_NAME_INVALID",
+            2,
+        ),
+        (
+            "type,name,default_value\n\nsheet,比例\n".encode(),
+            "CUSTOM_PROPERTY_CSV_COLUMNS_INVALID",
+            3,
+        ),
+        (
+            "type,name,default_value\nsheet,专业,燃气\n\nsheet,专业,给排水\n".encode(),
+            "CUSTOM_PROPERTY_NAME_DUPLICATE",
+            4,
+        ),
+    ],
+)
+def test_property_csv_result_diagnostics_use_record_start_line(data, code, line):
+    result = parse_property_csv_result(data)
+
+    assert [(diagnostic.code, diagnostic.line) for diagnostic in result.diagnostics] == [(code, line)]
 
 
 @pytest.mark.parametrize(

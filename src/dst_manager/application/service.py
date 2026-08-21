@@ -13,15 +13,12 @@ from typing import Any
 from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.config import Settings
 from dst_manager.domain.editing import (
-    EditingError,
-    parse_property_csv,
-    validate_property_definitions,
+    parse_property_csv_result,
+    property_definitions_from_document,
 )
 from dst_manager.domain.models import (
-    CustomPropertyDefinition,
     JobStatus,
     Severity,
-    SheetSetDocument,
     SuffixOptions,
     Workspace,
 )
@@ -103,35 +100,25 @@ class DstManagerService:
     ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
-        try:
-            definitions = parse_property_csv(csv_data)
-        except EditingError as exc:
-            return {
-                "workspace_id": workspace_id,
-                "base_revision_id": base_revision_id,
-                "requires_cad": False,
-                "changes": [],
-                "commands": [],
-                "diagnostics": [
-                    {
-                        "code": exc.code,
-                        "severity": "error",
-                        "message": self._editing_error_message(exc),
-                        "line": self._csv_error_line(csv_data, exc.code),
-                    },
-                ],
-                "executable": False,
-            }
-
-        existing = {item.name.casefold(): item for item in self._property_definitions(workspace.document)}
+        parsed = parse_property_csv_result(csv_data)
+        existing = {
+            item.name.casefold(): item
+            for item in property_definitions_from_document(workspace.document)
+        }
         changes: list[dict[str, Any]] = []
         commands: list[dict[str, Any]] = []
-        diagnostics: list[dict[str, Any]] = []
-        for line, definition in zip(
-            self._csv_definition_lines(csv_data),
-            definitions,
-            strict=True,
-        ):
+        diagnostics = [
+            {
+                "code": item.code,
+                "severity": "error",
+                "message": item.message,
+                "line": item.line,
+            }
+            for item in parsed.diagnostics
+        ]
+        for record in parsed.records:
+            line = record.line
+            definition = record.definition
             previous = existing.get(definition.name.casefold())
             action = "add"
             if previous is not None and previous.type != definition.type:
@@ -174,14 +161,14 @@ class DstManagerService:
                     "default_value": definition.default_value,
                 },
             )
+        main_preview = self.preview_changes(workspace_id, base_revision_id, commands)
+        diagnostics.extend(main_preview["diagnostics"])
         return {
-            "workspace_id": workspace_id,
-            "base_revision_id": base_revision_id,
-            "requires_cad": False,
+            **main_preview,
             "changes": changes,
             "commands": commands,
             "diagnostics": diagnostics,
-            "executable": not diagnostics,
+            "executable": not any(item["severity"] == "error" for item in diagnostics),
         }
 
     def import_custom_properties(
@@ -193,6 +180,14 @@ class DstManagerService:
         preview = self.preview_custom_property_import(workspace_id, base_revision_id, csv_data)
         if not preview["executable"]:
             raise ApplicationError("PLAN_INVALID", "属性 CSV 导入计划包含阻断诊断")
+        if not preview["commands"]:
+            return {
+                "id": None,
+                "workspace_id": workspace_id,
+                "status": "SUCCEEDED",
+                "revision_id": base_revision_id,
+                "no_op": True,
+            }
         return self.execute_changes(workspace_id, base_revision_id, preview["commands"])
 
     def export_custom_properties_csv(self, workspace_id: str) -> bytes:
@@ -200,7 +195,7 @@ class DstManagerService:
         stream = io.StringIO(newline="")
         writer = csv.writer(stream, lineterminator="\r\n")
         writer.writerow(["type", "name", "default_value"])
-        for definition in self._property_definitions(workspace.document):
+        for definition in property_definitions_from_document(workspace.document):
             writer.writerow([definition.type, definition.name, definition.default_value])
         return stream.getvalue().encode("utf-8")
 
@@ -661,68 +656,6 @@ class DstManagerService:
                 document.apply_property_definition_commands([command])
             elif not structural or command["type"] not in structural_types:
                 document.apply_metadata_commands([command])
-
-    @staticmethod
-    def _property_definitions(document: SheetSetDocument) -> list[CustomPropertyDefinition]:
-        result = [
-            CustomPropertyDefinition("sheetset", name, value)
-            for name, value in document.custom_properties.items()
-        ]
-        sheet_seen: set[str] = set()
-        for sheet in document.sheets:
-            for name, value in sheet.custom_properties.items():
-                key = name.casefold()
-                if key in sheet_seen:
-                    continue
-                sheet_seen.add(key)
-                result.append(CustomPropertyDefinition("sheet", name, value))
-        return result
-
-    @staticmethod
-    def _editing_error_message(exc: EditingError) -> str:
-        _, separator, message = str(exc).partition(": ")
-        return message if separator else str(exc)
-
-    @staticmethod
-    def _csv_error_line(data: bytes, code: str) -> int | None:
-        try:
-            text = data.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            return None
-        reader = csv.reader(io.StringIO(text, newline=""))
-        rows: list[tuple[int, list[str]]] = []
-        try:
-            for row in reader:
-                rows.append((reader.line_num, row))
-        except csv.Error:
-            return reader.line_num or None
-        if not rows or code == "CUSTOM_PROPERTY_CSV_HEADER_INVALID":
-            return 1
-        if code == "CUSTOM_PROPERTY_CSV_COLUMNS_INVALID":
-            return next((line for line, row in rows if len(row) != 3), 1)
-        accumulated: list[tuple[str, str, str]] = []
-        for line, row in rows[1:]:
-            if not row or all(not value.strip() for value in row) or len(row) != 3:
-                continue
-            accumulated.append((row[0].strip(), row[1], row[2]))
-            try:
-                validate_property_definitions(accumulated)
-            except EditingError as exc:
-                if exc.code == code:
-                    return line
-        return 1
-
-    @staticmethod
-    def _csv_definition_lines(data: bytes) -> list[int]:
-        reader = csv.reader(io.StringIO(data.decode("utf-8-sig"), newline=""))
-        result: list[int] = []
-        previous_end = 0
-        for index, row in enumerate(reader):
-            start_line = previous_end + 1
-            previous_end = reader.line_num
-            if index > 0 and row and any(value.strip() for value in row):
-                result.append(start_line)
-        return result
 
     @staticmethod
     def _issue(code: str, severity: str, message: str):

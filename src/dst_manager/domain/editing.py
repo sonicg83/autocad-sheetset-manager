@@ -4,6 +4,7 @@ import io
 import re
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,25 @@ class EditingError(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(f"{code}: {message}")
         self.code = code
+
+
+@dataclass(frozen=True, slots=True)
+class PropertyCsvDiagnostic:
+    code: str
+    message: str
+    line: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class PropertyCsvRecord:
+    line: int
+    definition: CustomPropertyDefinition
+
+
+@dataclass(frozen=True, slots=True)
+class PropertyCsvParseResult:
+    records: list[PropertyCsvRecord]
+    diagnostics: list[PropertyCsvDiagnostic]
 
 
 _NUMBER_RANGE = re.compile(r"^\s*(\d+)(?:\s*-\s*(\d+))?\s+(.+?)\s*$")
@@ -51,50 +71,124 @@ def _property_definition(raw: CustomPropertyDefinition | tuple[str, str, str]) -
     return CustomPropertyDefinition(property_type, normalize_property_name(str(name)), str(default_value))
 
 
+def _validated_property_definition(
+    raw: CustomPropertyDefinition | tuple[str, str, str],
+    seen: dict[str, CustomPropertyDefinition],
+) -> CustomPropertyDefinition:
+    definition = _property_definition(raw)
+    key = definition.name.casefold()
+    if key in seen:
+        previous = seen[key]
+        code = (
+            "CUSTOM_PROPERTY_TYPE_CONFLICT"
+            if previous.type != definition.type
+            else "CUSTOM_PROPERTY_NAME_DUPLICATE"
+        )
+        raise EditingError(code, f"自定义属性名称重复：{definition.name}")
+    seen[key] = definition
+    return definition
+
+
 def validate_property_definitions(
     definitions: Iterable[CustomPropertyDefinition | tuple[str, str, str]],
 ) -> list[CustomPropertyDefinition]:
     result: list[CustomPropertyDefinition] = []
     seen: dict[str, CustomPropertyDefinition] = {}
     for raw in definitions:
-        definition = _property_definition(raw)
-        key = definition.name.casefold()
-        if key in seen:
-            previous = seen[key]
-            code = (
-                "CUSTOM_PROPERTY_TYPE_CONFLICT"
-                if previous.type != definition.type
-                else "CUSTOM_PROPERTY_NAME_DUPLICATE"
-            )
-            raise EditingError(code, f"自定义属性名称重复：{definition.name}")
-        seen[key] = definition
-        result.append(definition)
+        result.append(_validated_property_definition(raw, seen))
     return result
 
 
-def parse_property_csv(data: bytes) -> list[CustomPropertyDefinition]:
+def property_definitions_from_document(document: SheetSetDocument) -> list[CustomPropertyDefinition]:
+    """提取稳定属性定义；AcSm 图纸属性没有独立默认值节点。"""
+    result = [
+        CustomPropertyDefinition("sheetset", name, value)
+        for name, value in sorted(
+            document.custom_properties.items(),
+            key=lambda item: (item[0].casefold(), item[0]),
+        )
+    ]
+    sheet_names: dict[str, str] = {}
+    for sheet in document.sheets:
+        for name in sheet.custom_properties:
+            key = name.casefold()
+            previous = sheet_names.get(key)
+            if previous is None or name < previous:
+                sheet_names[key] = name
+    result.extend(
+        CustomPropertyDefinition("sheet", name, "")
+        for name in sorted(sheet_names.values(), key=lambda item: (item.casefold(), item))
+    )
+    return result
+
+
+def _csv_diagnostic(exc: EditingError, line: int | None) -> PropertyCsvDiagnostic:
+    _, separator, message = str(exc).partition(": ")
+    return PropertyCsvDiagnostic(exc.code, message if separator else str(exc), line)
+
+
+def parse_property_csv_result(data: bytes) -> PropertyCsvParseResult:
     try:
         text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise EditingError("CUSTOM_PROPERTY_CSV_ENCODING_INVALID", "CSV 必须使用 UTF-8 编码") from exc
-    rows = list(csv.reader(io.StringIO(text, newline="")))
-    if not rows:
-        raise EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 缺少表头")
-    header = rows[0]
+    except UnicodeDecodeError:
+        error = EditingError("CUSTOM_PROPERTY_CSV_ENCODING_INVALID", "CSV 必须使用 UTF-8 编码")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, None)])
+
+    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+    try:
+        header = next(reader)
+    except StopIteration:
+        error = EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 缺少表头")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, 1)])
+    except csv.Error:
+        error = EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 表头格式无效")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, 1)])
     if len(header) == 1 and ";" in header[0]:
-        raise EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 必须使用逗号分隔")
+        error = EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 必须使用逗号分隔")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, 1)])
     if len(header) != 3:
-        raise EditingError("CUSTOM_PROPERTY_CSV_COLUMNS_INVALID", "CSV 只能包含三列")
+        error = EditingError("CUSTOM_PROPERTY_CSV_COLUMNS_INVALID", "CSV 只能包含三列")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, 1)])
     if header != ["type", "name", "default_value"]:
-        raise EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 表头必须为 type,name,default_value")
-    definitions = []
-    for row in rows[1:]:
+        error = EditingError("CUSTOM_PROPERTY_CSV_HEADER_INVALID", "CSV 表头必须为 type,name,default_value")
+        return PropertyCsvParseResult([], [_csv_diagnostic(error, 1)])
+
+    records: list[PropertyCsvRecord] = []
+    diagnostics: list[PropertyCsvDiagnostic] = []
+    seen: dict[str, CustomPropertyDefinition] = {}
+    previous_end = reader.line_num
+    while True:
+        start_line = previous_end + 1
+        try:
+            row = next(reader)
+        except StopIteration:
+            break
+        except csv.Error:
+            error = EditingError("CUSTOM_PROPERTY_CSV_COLUMNS_INVALID", "CSV 记录格式无效")
+            diagnostics.append(_csv_diagnostic(error, start_line))
+            break
+        previous_end = reader.line_num
         if not row or all(not item.strip() for item in row):
             continue
         if len(row) != 3:
-            raise EditingError("CUSTOM_PROPERTY_CSV_COLUMNS_INVALID", "CSV 只能包含三列")
-        definitions.append((row[0].strip(), row[1], row[2]))
-    return validate_property_definitions(definitions)
+            error = EditingError("CUSTOM_PROPERTY_CSV_COLUMNS_INVALID", "CSV 只能包含三列")
+            diagnostics.append(_csv_diagnostic(error, start_line))
+            continue
+        try:
+            definition = _validated_property_definition((row[0].strip(), row[1], row[2]), seen)
+        except EditingError as exc:
+            diagnostics.append(_csv_diagnostic(exc, start_line))
+            continue
+        records.append(PropertyCsvRecord(start_line, definition))
+    return PropertyCsvParseResult(records, diagnostics)
+
+
+def parse_property_csv(data: bytes) -> list[CustomPropertyDefinition]:
+    result = parse_property_csv_result(data)
+    if result.diagnostics:
+        diagnostic = result.diagnostics[0]
+        raise EditingError(diagnostic.code, diagnostic.message)
+    return [record.definition for record in result.records]
 
 
 def _chinese_number(value: int) -> str:
