@@ -28,8 +28,10 @@ const connectionMode=ref("SSE");
 const csvText=ref("");
 const csvPreview=ref<Preview|null>(null);
 const csvPreviewContext=ref<CsvPreviewContext|null>(null);
+const isWorkspaceLoading=ref(false);
 let previewGeneration=0;
 let csvGeneration=0;
+let workspaceLoadGeneration=0;
 
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
 const insertSheetForm=reactive({subsetId:"",sequence:"1",direction:"after",count:"1",sourceType:"template_layout",sourceFile:"",sourceLayout:""});
@@ -53,23 +55,35 @@ function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
 function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value=null;csvPreviewContext.value=null;if(clearText)csvText.value=""}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
+function beginWorkspaceLoad(){workspaceLoadGeneration+=1;isWorkspaceLoading.value=true;resetEditingState();restorePreview.value=null;return workspaceLoadGeneration}
 function selectInitialSubset(){
   selectedId.value=workspace.value?.sheet_set.subsets[0]?.id??"";
   insertSheetForm.subsetId=selectedId.value;
 }
 async function openWorkspace(){
-  resetEditingState();job.value=null;
-  try{workspace.value=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:dstPath.value})});selectInitialSubset()}
-  catch(e){error.value=String(e)}
+  const pathSnapshot=dstPath.value;
+  const generation=beginWorkspaceLoad();
+  job.value=null;revisions.value=[];
+  try{
+    const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:pathSnapshot})});
+    if(generation!==workspaceLoadGeneration)return;
+    resetEditingState();workspace.value=loaded;selectInitialSubset();isWorkspaceLoading.value=false;
+  }
+  catch(e){if(generation===workspaceLoadGeneration){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
 async function refreshWorkspace(){
   if(!workspace.value)return;
+  const workspaceId=workspace.value.id;
   const previous=selectedId.value;
-  resetEditingState();
-  const loaded:Workspace=await request(`/api/workspaces/${workspace.value.id}`);
-  workspace.value=loaded;
-  selectedId.value=loaded.sheet_set.subsets.some(item=>item.id===previous)?previous:(loaded.sheet_set.subsets[0]?.id??"");
-  insertSheetForm.subsetId=selectedId.value;
+  const generation=beginWorkspaceLoad();
+  try{
+    const loaded:Workspace=await request(`/api/workspaces/${workspaceId}`);
+    if(generation!==workspaceLoadGeneration)return;
+    resetEditingState();workspace.value=loaded;
+    selectedId.value=loaded.sheet_set.subsets.some(item=>item.id===previous)?previous:(loaded.sheet_set.subsets[0]?.id??"");
+    insertSheetForm.subsetId=selectedId.value;isWorkspaceLoading.value=false;
+  }
+  catch(e){if(generation===workspaceLoadGeneration){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
 
 function clearCommands(){commands.value=[];invalidatePreview();error.value=""}
@@ -116,7 +130,7 @@ function queueInsertSubset(){
 }
 
 async function showPreview(){
-  if(!workspace.value||!commands.value.length)return;
+  if(isWorkspaceLoading.value||!workspace.value||!commands.value.length)return;
   const workspaceId=workspace.value.id;
   const baseRevisionId=workspace.value.revision_id;
   const commandSnapshot=cloneJson(commands.value);
@@ -131,7 +145,10 @@ async function showPreview(){
 }
 async function execute(){
   const context=previewContext.value;
-  if(!context||!context.result.executable||!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
+  if(!context||!context.result.executable)return;
+  const current=workspace.value;
+  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidatePreview();error.value="工作区或基准修订已变化，请重新预览";return}
+  if(!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
   try{job.value=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:"2020"})});if(job.value?.status==="QUEUED"&&job.value.id)watchJob(job.value.id);else if(job.value?.status==="SUCCEEDED")await refreshWorkspace()}
   catch(e){error.value=String(e)}
 }
@@ -162,7 +179,7 @@ async function readCsvFile(event:Event){
   catch{if(generation===csvGeneration)error.value="CSV 必须使用 UTF-8 编码"}
 }
 async function previewCsv(){
-  if(!workspace.value||!csvText.value){error.value="请选择 UTF-8 CSV 文件";return}
+  if(isWorkspaceLoading.value||!workspace.value||!csvText.value){error.value="请选择 UTF-8 CSV 文件";return}
   const workspaceId=workspace.value.id;
   const baseRevisionId=workspace.value.revision_id;
   const csvSnapshot=csvText.value;
@@ -177,7 +194,10 @@ async function previewCsv(){
 }
 async function importCsv(){
   const context=csvPreviewContext.value;
-  if(!context||!context.result.executable||!confirm("确认导入属性定义？"))return;
+  if(!context||!context.result.executable)return;
+  const current=workspace.value;
+  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();error.value="工作区或基准修订已变化，请重新预览 CSV";return}
+  if(!confirm("确认导入属性定义？"))return;
   try{job.value=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv})});if(job.value?.status==="SUCCEEDED"&&!job.value.no_op)await refreshWorkspace()}
   catch(e){error.value=String(e)}
 }
@@ -188,18 +208,19 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
 <template>
   <header><div><h1>DST Manager</h1><span>v0.2.1 · 受控编辑与可恢复发布</span></div></header>
   <main>
-    <section class="open"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button @click="openWorkspace">打开项目</button><button @click="loadRevisions">修订历史</button></section>
+    <section class="open"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button @click="openWorkspace">打开项目</button><button :disabled="isWorkspaceLoading" @click="loadRevisions">修订历史</button></section>
     <p v-if="error" class="error notice">{{error}}</p>
+    <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
 
-    <section v-if="job" class="job-detail">
+    <section v-if="job&&!isWorkspaceLoading" class="job-detail">
       <div class="job"><b>任务 {{job.id??'（无变更）'}}</b><span>{{job.status}} · {{job.progress??100}}% · 第 {{job.attempt??0}} 次</span><small>{{connectionMode}}</small><span v-if="job.error_code" class="error">{{job.error_code}}</span><button v-if="['FAILED','ROLLED_BACK','BLOCKED_FILE_LOCK','NEEDS_REVIEW'].includes(job.status)" @click="retryJob">安全重试</button></div>
       <p v-if="job.suggestion">{{job.suggestion}}</p>
       <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>状态</th><th>进度</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="5"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
     </section>
 
-    <section v-if="revisions.length" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
+    <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
 
-    <template v-if="workspace">
+    <template v-if="workspace&&!isWorkspaceLoading">
       <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div></section>
       <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
       <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>

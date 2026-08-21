@@ -9,6 +9,8 @@ const workspace={
   ]},diagnostics:[],
 };
 
+function workspaceVersion(id:string,name:string,revisionId:string){return {...workspace,id,revision_id:revisionId,sheet_set:{...workspace.sheet_set,name}}}
+
 async function openWorkspace(page:any){
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
@@ -60,6 +62,26 @@ test("CSV 预览丢弃换文件和乱序响应并只导入冻结文本",async({p
 test("非法 UTF-8 CSV 在本地阻断且不请求 API",async({page})=>{
   let previewCalls=0,importCalls=0;await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",route=>{previewCalls++;return route.abort()});await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>{importCalls++;return route.abort()});await openWorkspace(page);
   await page.getByLabel("属性 CSV 文件").setInputFiles({name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from([0x74,0x79,0x70,0x65,0x0a,0xc3,0x28])});await expect(page.getByText("CSV 必须使用 UTF-8 编码",{exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"预览 CSV 导入"})).toBeDisabled();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();expect(previewCalls).toBe(0);expect(importCalls).toBe(0);
+});
+
+test("加载新工作区时隐藏旧编辑器并阻断跨工作区执行",async({page})=>{
+  const openB=deferred();let openCalls=0,executeCalls=0,importCalls=0;
+  await page.route("**/api/workspaces/open",async route=>{openCalls++;if(openCalls===1)return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")});await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})});
+  await page.route("**/api/workspaces/workspace-A/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"A-preview"}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-A/custom-properties/import/preview",route=>route.fulfill({json:{executable:true,changes:[{line:2,action:"add",type:"sheet",name:"A属性",default_value:""}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-A/changes/execute",route=>{executeCalls++;return route.fulfill({json:{id:"stale-execute",status:"FAILED",progress:0,files:[]}})});await page.route("**/api/workspaces/workspace-A/custom-properties/import",route=>{importCalls++;return route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}})});
+  await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 A");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect.poll(()=>openCalls).toBe(2);
+  const loadingWasVisible=await page.getByText("正在加载工作区…",{exact:true}).isVisible();const oldEditorWasVisible=await page.locator(".editor").isVisible();if(oldEditorWasVisible){await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByLabel("属性 CSV 文件").setInputFiles({name:"A.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,A属性,\n","utf8")});await page.getByRole("button",{name:"预览 CSV 导入"}).click()}
+  openB.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");const staleExecute=page.getByRole("button",{name:"确认并执行"});if(await staleExecute.isVisible()){page.once("dialog",dialog=>dialog.accept());await staleExecute.click()}const staleImport=page.getByRole("button",{name:"确认导入"});if(await staleImport.isEnabled()){page.once("dialog",dialog=>dialog.accept());await staleImport.click()}
+  expect(loadingWasVisible).toBe(true);expect(oldEditorWasVisible).toBe(false);expect(executeCalls).toBe(0);expect(importCalls).toBe(0);await expect(staleExecute).toHaveCount(0);await expect(staleImport).toBeDisabled();
+});
+
+test("多次打开及刷新与打开竞争时仅最新工作区生效",async({page})=>{
+  const openB=deferred(),openC=deferred(),refreshC=deferred();let refreshStarted=false;
+  await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;if(path.endsWith("A.dst"))return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")});if(path.endsWith("B.dst")){await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})}if(path.endsWith("C.dst")){await openC.promise;return route.fulfill({json:workspaceVersion("workspace-C","工作区 C","revision-C")})}return route.fulfill({json:workspaceVersion("workspace-D","工作区 D","revision-D")})});
+  await page.route("**/api/workspaces/workspace-C/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"C-preview"}],diagnostics:[],affected_files:["C.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-C/changes/execute",route=>route.fulfill({json:{id:"job-C",status:"SUCCEEDED",progress:100,files:[]}}));await page.route("**/api/workspaces/workspace-C",async route=>{refreshStarted=true;await refreshC.promise;await route.fulfill({json:workspaceVersion("workspace-C","工作区 C 刷新","revision-C2")})});
+  await page.goto("/");const pathInput=page.getByPlaceholder("输入 .dst 绝对路径");await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await pathInput.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await pathInput.fill("C:\\C.dst");await page.getByRole("button",{name:"打开项目"}).click();openC.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 C");openB.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 C");
+  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect.poll(()=>refreshStarted).toBe(true);await pathInput.fill("C:\\D.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 D");refreshC.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 D");
 });
 
 test("旧编辑入口已移除且图号标题只读",async({page})=>{
