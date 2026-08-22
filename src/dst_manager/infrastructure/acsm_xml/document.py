@@ -9,6 +9,7 @@ from dst_manager.domain.editing import (
     EditingError,
     normalize_property_name,
     validate_property_value,
+    validate_xml_text,
 )
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
@@ -46,7 +47,18 @@ def _set_prop(node: etree._Element, name: str, value: str) -> None:
     props = [child for child in _children(node, "AcSmProp") if child.get("propname") == name]
     if len(props) != 1:
         raise AcsmValidationError(f"CONTROLLED_PROPERTY_INVALID: {name}")
-    props[0].text = value
+    text = _acsm_xml_text(value)
+    try:
+        props[0].text = text
+    except (UnicodeError, ValueError) as exc:
+        raise AcsmValidationError("XML_TEXT_INVALID") from exc
+
+
+def _acsm_xml_text(value: object, code: str = "XML_TEXT_INVALID") -> str:
+    try:
+        return validate_xml_text(value, code)
+    except EditingError as exc:
+        raise AcsmValidationError(exc.code) from exc
 
 
 def _custom_property_scope(node: etree._Element) -> str:
@@ -159,7 +171,16 @@ class AcsmDocument:
                 raise AcsmValidationError(f"COMMAND_REQUIRES_CAD: {command_type}")
 
     def apply_structural_commands(self, commands: list[dict], base_revision: str) -> None:
-        """在原始DOM上执行受控结构节点工厂，未知兄弟节点保持原位。"""
+        """事务式执行受控结构节点工厂，失败时不污染原 DOM。"""
+        original_root = copy.deepcopy(self.root)
+        try:
+            self._apply_structural_commands_in_place(commands, base_revision)
+        except Exception:
+            self.root = original_root
+            raise
+
+    def _apply_structural_commands_in_place(self, commands: list[dict], base_revision: str) -> None:
+        """在草稿 DOM 上执行受控结构命令。"""
         from dst_manager.domain.planning import new_acsm_id
 
         def one(local_name: str, object_id: str) -> etree._Element:
@@ -207,6 +228,7 @@ class AcsmDocument:
                 position = self._insertion_index(command, len(_children(target, "AcSmSheet")), "SHEET_POSITION_INVALID")
                 source = self._layout_source(command)
                 template = (_children(target, "AcSmSheet") or self.root.xpath("//*[local-name()='AcSmSheet']") or [None])[0]
+                inserted: list[etree._Element] = []
                 for offset in range(count):
                     sheet_id = new_acsm_id(base_revision, command_index, f"sheet-{offset}")
                     node = self._make_sheet_node(
@@ -219,7 +241,10 @@ class AcsmDocument:
                         "0",
                     )
                     self._set_custom_properties(node, command.get("custom_properties", {}), expected_scope="2")
-                    self._place_child(target, node, "AcSmSheet", position + offset)
+                    inserted.append(node)
+                sheets = _children(target, "AcSmSheet")
+                sheets[position:position] = inserted
+                self._reconcile_controlled_children(target, "AcSmSheet", sheets)
             elif kind == "insert_subset":
                 count = self._positive_count(command.get("initial_sheet_count", 1), "EMPTY_SUBSET")
                 sheet_set = self._sheet_set()
@@ -241,7 +266,9 @@ class AcsmDocument:
                             "0",
                         ),
                     )
-                self._place_child(sheet_set, subset, "AcSmSubset", position)
+                subsets = _children(sheet_set, "AcSmSubset")
+                subsets.insert(position, subset)
+                self._reconcile_controlled_children(sheet_set, "AcSmSubset", subsets)
             else:
                 raise AcsmValidationError(f"COMMAND_UNSUPPORTED: {kind}")
 
@@ -268,18 +295,20 @@ class AcsmDocument:
 
     def _apply_derived_document_in_place(self, derived: DerivedDocument) -> None:
         sheet_set = self._sheet_set()
+        self._assert_unique_derived_ids(derived)
         derived_subset_ids = {subset.acsm_id for subset in derived.subsets}
+        desired_subsets: list[etree._Element] = []
 
-        for subset_index, derived_subset in enumerate(derived.subsets):
+        for derived_subset in derived.subsets:
             if not derived_subset.sheets:
                 raise AcsmValidationError("EMPTY_SUBSET")
             subset = self._find_by_id("AcSmSubset", derived_subset.acsm_id)
             if subset is None:
                 subset = self._make_subset_node(derived_subset.acsm_id, derived_subset.display_name)
             _set_prop(subset, "Name", derived_subset.display_name)
-            self._place_child(sheet_set, subset, "AcSmSubset", subset_index)
+            desired_sheets: list[etree._Element] = []
 
-            for sheet_index, derived_sheet in enumerate(derived_subset.sheets):
+            for derived_sheet in derived_subset.sheets:
                 sheet = self._find_by_id("AcSmSheet", derived_sheet.acsm_id)
                 if sheet is None:
                     sheet = self._make_sheet_node(
@@ -298,18 +327,19 @@ class AcsmDocument:
                     raise AcsmValidationError(f"SHEET_LAYOUT_COUNT: {derived_sheet.acsm_id}")
                 if derived_sheet.layout.layout_name:
                     _set_prop(layouts[0], "Name", derived_sheet.layout.layout_name)
-                self._place_child(subset, sheet, "AcSmSheet", sheet_index)
+                desired_sheets.append(sheet)
 
             expected_sheet_ids = {sheet.acsm_id for sheet in derived_subset.sheets}
             for sheet in list(_children(subset, "AcSmSheet")):
                 if sheet.get("ID") not in expected_sheet_ids:
                     self._assert_no_external_id_reference(sheet)
-                    subset.remove(sheet)
+            self._reconcile_controlled_children(subset, "AcSmSheet", desired_sheets)
+            desired_subsets.append(subset)
 
         for subset in list(_children(sheet_set, "AcSmSubset")):
             if subset.get("ID") not in derived_subset_ids:
                 self._assert_no_external_id_reference(subset)
-                sheet_set.remove(subset)
+        self._reconcile_controlled_children(sheet_set, "AcSmSubset", desired_subsets)
 
         for definition in derived.property_diff.added:
             self._add_property_definition(definition, duplicate_ok=True)
@@ -339,7 +369,9 @@ class AcsmDocument:
 
     def _unique_acsm_id(self, preferred: str | None = None) -> str:
         used = {node.get("ID") for node in self.root.xpath(".//*[@ID] | self::node()[@ID]")}
-        if preferred and preferred not in used:
+        if preferred:
+            if preferred.casefold() in {item.casefold() for item in used if item is not None}:
+                raise AcsmValidationError(f"DUPLICATE_ACSM_ID: {preferred}")
             return preferred
         while True:
             value = _new_acsm_id()
@@ -352,8 +384,8 @@ class AcsmDocument:
             attributes["vt"] = vt
         try:
             node = etree.Element(_tag_like(self.root, "AcSmProp"), attributes)
-            node.text = value
-        except ValueError as exc:
+            node.text = _acsm_xml_text(value)
+        except (UnicodeError, ValueError) as exc:
             raise AcsmValidationError("XML_TEXT_INVALID") from exc
         return node
 
@@ -365,10 +397,14 @@ class AcsmDocument:
     ) -> etree._Element:
         scope = _scope_for_property_type(definition.type)
         value = definition.default_value if default_value is None else default_value
-        node = etree.Element(
-            _tag_like(self.root, "AcSmCustomPropertyValue"),
-            {"ID": self._unique_acsm_id(), "propname": definition.name},
-        )
+        name = _acsm_xml_text(definition.name, "CUSTOM_PROPERTY_NAME_INVALID")
+        try:
+            node = etree.Element(
+                _tag_like(self.root, "AcSmCustomPropertyValue"),
+                {"ID": self._unique_acsm_id(), "propname": name},
+            )
+        except (UnicodeError, ValueError) as exc:
+            raise AcsmValidationError("CUSTOM_PROPERTY_NAME_INVALID") from exc
         node.append(self._make_prop("Flags", scope, vt=self._custom_property_prop_vt("Flags", "3")))
         if value:
             node.append(self._make_prop("Value", value, vt=self._custom_property_prop_vt("Value", "8")))
@@ -426,11 +462,16 @@ class AcsmDocument:
     def _sheet_property_definitions(self) -> list[CustomPropertyDefinition]:
         definitions: list[CustomPropertyDefinition] = []
         seen: set[str] = set()
-        for node in self.root.xpath(
+        anchor_nodes = self._sheet_set().xpath(
+            "./*[local-name()='AcSmCustomPropertyBag']"
+            "/*[local-name()='AcSmCustomPropertyValue']",
+        )
+        value_nodes = self.root.xpath(
             "//*[local-name()='AcSmSheet']"
             "/*[local-name()='AcSmCustomPropertyBag']"
             "/*[local-name()='AcSmCustomPropertyValue']",
-        ):
+        )
+        for node in [*anchor_nodes, *value_nodes]:
             if _custom_property_scope(node) != "2":
                 continue
             name = node.get("propname", "")
@@ -479,7 +520,7 @@ class AcsmDocument:
     def _property_owners(self, scope: str) -> list[etree._Element]:
         if scope == "1":
             return [self._sheet_set()]
-        return list(self.root.xpath("//*[local-name()='AcSmSheet']"))
+        return [self._sheet_set(), *self.root.xpath("//*[local-name()='AcSmSheet']")]
 
     def _add_property_definition(self, definition: CustomPropertyDefinition, *, duplicate_ok: bool) -> None:
         try:
@@ -495,7 +536,10 @@ class AcsmDocument:
         for owner in self._property_owners(scope):
             if self._owner_has_property(owner, scope, definition.name):
                 continue
-            self._ensure_custom_property_bag(owner).append(self._make_property_value(definition))
+            owner_default = "" if definition.type == "sheet" and owner is self._sheet_set() else definition.default_value
+            self._ensure_custom_property_bag(owner).append(
+                self._make_property_value(definition, default_value=owner_default),
+            )
 
     def _delete_property_definition(self, scope: str, name: str) -> None:
         removed = False
@@ -509,20 +553,49 @@ class AcsmDocument:
         if not removed:
             raise AcsmValidationError(f"CUSTOM_PROPERTY_NOT_FOUND: {name}")
 
-    def _place_child(self, parent: etree._Element, node: etree._Element, local_name: str, position: int) -> None:
-        current_parent = node.getparent()
-        if current_parent is not None:
-            current_parent.remove(node)
-        siblings = _children(parent, local_name)
-        if position < 0 or position > len(siblings):
-            raise AcsmValidationError(f"{local_name.upper()}_POSITION_INVALID: {position}")
-        if position == len(siblings):
-            if siblings:
-                siblings[-1].addnext(node)
+    @staticmethod
+    def _assert_unique_derived_ids(derived: DerivedDocument) -> None:
+        seen: set[str] = set()
+        for subset in derived.subsets:
+            for object_id in [subset.acsm_id, *(sheet.acsm_id for sheet in subset.sheets)]:
+                key = object_id.casefold()
+                if key in seen:
+                    raise AcsmValidationError(f"DUPLICATE_ACSM_ID: {object_id}")
+                seen.add(key)
+
+    @staticmethod
+    def _reconcile_controlled_children(
+        parent: etree._Element,
+        local_name: str,
+        desired: list[etree._Element],
+    ) -> None:
+        if len({id(node) for node in desired}) != len(desired):
+            raise AcsmValidationError("DUPLICATE_ACSM_ID")
+        original = list(parent)
+        controlled_positions = [
+            index
+            for index, child in enumerate(original)
+            if etree.QName(child).localname == local_name
+        ]
+        desired_index = 0
+        result: list[etree._Element] = []
+        last_controlled = controlled_positions[-1] if controlled_positions else None
+        for index, child in enumerate(original):
+            if etree.QName(child).localname == local_name:
+                if desired_index < len(desired):
+                    result.append(desired[desired_index])
+                    desired_index += 1
             else:
-                parent.append(node)
-            return
-        siblings[position].addprevious(node)
+                result.append(child)
+            if index == last_controlled:
+                result.extend(desired[desired_index:])
+                desired_index = len(desired)
+        if last_controlled is None:
+            result.extend(desired)
+        try:
+            parent[:] = result
+        except (UnicodeError, ValueError) as exc:
+            raise AcsmValidationError("CONTROLLED_CHILD_RECONCILIATION_FAILED") from exc
 
     @staticmethod
     def _normalize_property_name(value: object) -> str:
@@ -625,7 +698,8 @@ class AcsmDocument:
                 value_nodes[id(node)] = []
 
         for raw_name, raw_value in values.items():
-            name, value = str(raw_name), str(raw_value)
+            name = _acsm_xml_text(raw_name)
+            value = _acsm_xml_text(raw_value)
             node = by_key.get((expected_scope, name))
             if node is None:
                 if name in scopes_by_name:
@@ -641,11 +715,17 @@ class AcsmDocument:
                     value_nodes[id(node)] = []
                 continue
             if current_nodes:
-                current_nodes[0].text = value
+                try:
+                    current_nodes[0].text = value
+                except (UnicodeError, ValueError) as exc:
+                    raise AcsmValidationError("XML_TEXT_INVALID") from exc
                 continue
             flags_node = next(child for child in _children(node, "AcSmProp") if child.get("propname") == "Flags")
             value_node = etree.Element(flags_node.tag, {"propname": "Value", "vt": "8"})
-            value_node.text = value
+            try:
+                value_node.text = value
+            except (UnicodeError, ValueError) as exc:
+                raise AcsmValidationError("XML_TEXT_INVALID") from exc
             value_node.tail = flags_node.tail
             flags_node.addnext(value_node)
             value_nodes[id(node)] = [value_node]
@@ -693,9 +773,10 @@ class AcsmDocument:
             object_id = node.get("ID")
             if not object_id:
                 continue
-            if object_id in seen:
+            key = object_id.casefold()
+            if key in seen:
                 issues.append(ValidationIssue("DUPLICATE_ACSM_ID", Severity.ERROR, "AcSm ID重复", object_id))
-            seen.add(object_id)
+            seen.add(key)
             if not _ID_RE.fullmatch(object_id):
                 issues.append(ValidationIssue("INVALID_ACSM_ID", Severity.ERROR, "AcSm ID格式无效", object_id))
         for node in self.root.xpath("//*[local-name()='AcSmSheet']"):
@@ -722,6 +803,17 @@ class AcsmDocument:
         if not sheet_set_nodes:
             raise AcsmValidationError("SHEET_SET_MISSING")
         sheet_set = sheet_set_nodes[0]
+        sheet_definition_names: dict[str, str] = {}
+        for value in sheet_set.xpath(
+            "./*[local-name()='AcSmCustomPropertyBag']"
+            "/*[local-name()='AcSmCustomPropertyValue']",
+        ):
+            try:
+                if _custom_property_scope(value) == "2":
+                    name = value.get("propname", "")
+                    sheet_definition_names.setdefault(name.casefold(), name)
+            except AcsmValidationError:
+                continue
         subsets: list[Subset] = []
         for order, subset_node in enumerate(self.root.xpath("//*[local-name()='AcSmSubset']")):
             subset = Subset(subset_node.get("ID", ""), _prop(subset_node, "Name"), order)
@@ -741,7 +833,9 @@ class AcsmDocument:
                 for value in sheet_node.xpath("./*[local-name()='AcSmCustomPropertyBag']/*[local-name()='AcSmCustomPropertyValue']"):
                     try:
                         if _custom_property_scope(value) == "2":
-                            custom[value.get("propname", "")] = _prop(value, "Value")
+                            name = value.get("propname", "")
+                            custom[name] = _prop(value, "Value")
+                            sheet_definition_names.setdefault(name.casefold(), name)
                     except AcsmValidationError:
                         continue
                 subset.sheets.append(Sheet(sheet_node.get("ID", ""), _prop(sheet_node, "Number"), _prop(sheet_node, "Title"), layout, custom))
@@ -753,7 +847,14 @@ class AcsmDocument:
                     sheet_set_custom[value.get("propname", "")] = _prop(value, "Value")
             except AcsmValidationError:
                 continue
-        document = SheetSetDocument(self.root.get("ID", ""), _prop(sheet_set, "Name"), subsets, sheet_set_custom, self.validate())
+        document = SheetSetDocument(
+            self.root.get("ID", ""),
+            _prop(sheet_set, "Name"),
+            subsets,
+            sheet_set_custom,
+            self.validate(),
+            list(sheet_definition_names.values()),
+        )
         self.resolve_paths(document, dst_dir, root_override)
         return document
 

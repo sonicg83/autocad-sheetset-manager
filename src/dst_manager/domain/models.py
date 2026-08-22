@@ -108,6 +108,7 @@ class SheetSetDocument:
     subsets: list[Subset]
     custom_properties: dict[str, str] = field(default_factory=dict)
     diagnostics: list[ValidationIssue] = field(default_factory=list)
+    sheet_property_definitions: list[str] = field(default_factory=list)
 
     @property
     def sheets(self) -> list[Sheet]:

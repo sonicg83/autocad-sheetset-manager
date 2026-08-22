@@ -86,6 +86,8 @@ def build_structural_plan(
     except EditingError as exc:
         raise PlanningError(exc.code, str(exc)) from exc
 
+    _validate_derived_object_ids(derived)
+
     original_subsets = {subset.acsm_id: subset for subset in workspace.document.subsets}
     groups = []
     final_targets: list[str] = []
@@ -178,6 +180,16 @@ def build_structural_plan(
         "affected_subset_ids": planned_subset_ids,
         "derived_document": _serialize_derived_document(derived),
     }
+
+
+def _validate_derived_object_ids(derived: DerivedDocument) -> None:
+    seen: set[str] = set()
+    for subset in derived.subsets:
+        for object_id in [subset.acsm_id, *(sheet.acsm_id for sheet in subset.sheets)]:
+            key = object_id.casefold()
+            if key in seen:
+                raise PlanningError("DUPLICATE_ACSM_ID", f"派生结构包含重复 AcSm ID：{object_id}")
+            seen.add(key)
 
 
 def derived_document_from_plan(plan: dict[str, Any]) -> DerivedDocument:

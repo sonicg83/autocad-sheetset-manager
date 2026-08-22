@@ -53,6 +53,7 @@ _CHINESE_DIGITS = "零一二三四五六七八九"
 
 
 def normalize_property_name(name: str) -> str:
+    validate_xml_text(name, "CUSTOM_PROPERTY_NAME_INVALID")
     if _CONTROL_CHAR.search(name):
         raise EditingError("CUSTOM_PROPERTY_NAME_INVALID", "自定义属性名称不能包含控制字符")
     normalized = name.strip()
@@ -62,6 +63,19 @@ def normalize_property_name(name: str) -> str:
 
 
 def validate_property_value(value: object) -> str:
+    return validate_xml_text(
+        value,
+        "CUSTOM_PROPERTY_VALUE_INVALID",
+        "自定义属性值包含 XML 1.0 禁止字符",
+    )
+
+
+def validate_xml_text(
+    value: object,
+    error_code: str = "XML_TEXT_INVALID",
+    error_message: str = "文本包含 XML 1.0 禁止字符",
+) -> str:
+    """校验可写入 XML 1.0 文本节点或属性的 Unicode 字符。"""
     text = str(value)
     for character in text:
         codepoint = ord(character)
@@ -71,7 +85,7 @@ def validate_property_value(value: object) -> str:
             or 0xE000 <= codepoint <= 0xFFFD
             or 0x10000 <= codepoint <= 0x10FFFF
         ):
-            raise EditingError("CUSTOM_PROPERTY_VALUE_INVALID", "自定义属性值包含 XML 1.0 禁止字符")
+            raise EditingError(error_code, error_message)
     return text
 
 
@@ -118,7 +132,7 @@ def validate_property_definitions(
 
 
 def property_definitions_from_document(document: SheetSetDocument) -> list[CustomPropertyDefinition]:
-    """提取稳定属性定义；AcSm 图纸属性没有独立默认值节点。"""
+    """提取稳定属性定义；图纸定义锚点只保存名称，默认值始终为空。"""
     result = [
         CustomPropertyDefinition("sheetset", name, value)
         for name, value in sorted(
@@ -126,7 +140,10 @@ def property_definitions_from_document(document: SheetSetDocument) -> list[Custo
             key=lambda item: (item[0].casefold(), item[0]),
         )
     ]
-    sheet_names: dict[str, str] = {}
+    sheet_names: dict[str, str] = {
+        name.casefold(): name
+        for name in document.sheet_property_definitions
+    }
     for sheet in document.sheets:
         for name in sheet.custom_properties:
             key = name.casefold()
@@ -221,9 +238,9 @@ def _chinese_number(value: int) -> str:
     if value < 100:
         tens, ones = divmod(value, 10)
         return _CHINESE_DIGITS[tens] + "十" + (_CHINESE_DIGITS[ones] if ones else "")
-    hundreds, rest = divmod(value, 100)
-    suffix = _chinese_number(rest) if rest else ""
-    return _CHINESE_DIGITS[hundreds] + "百" + suffix
+    if value < 1000:
+        return "".join(_CHINESE_DIGITS[int(digit)] for digit in str(value))
+    raise EditingError("SHEET_TITLE_ORDINAL_OUT_OF_RANGE", "中文标题后缀序号不能超过 999")
 
 
 def format_sheet_title(base_title: str, ordinal: int | None, enabled: bool, suffix_type: int) -> str:
@@ -278,6 +295,7 @@ def derive_document_structure(
     suffix_options: SuffixOptions,
 ) -> DerivedDocument:
     subsets = sorted(copy.deepcopy(document.subsets), key=lambda item: item.order)
+    document_seed = _document_state_seed(document)
     subset_by_id = {subset.acsm_id: subset for subset in subsets}
     titles = {subset.acsm_id: _editable_subset_title(subset.name) for subset in subsets}
     affected: set[str] = set()
@@ -306,7 +324,7 @@ def derive_document_structure(
             source = _layout_source(command)
             new_sheets = []
             for offset in range(count):
-                sheet_id = _new_id("sheet", command_index, offset)
+                sheet_id = _new_id(document_seed, "sheet", command_index, offset)
                 new_sheets.append(Sheet(sheet_id, "", "", LayoutReference(source["file"], "", source["layout"], ""), {}))
                 layout_sources[sheet_id] = dict(source)
             target.sheets[position:position] = new_sheets
@@ -317,10 +335,10 @@ def derive_document_structure(
             if not title:
                 raise EditingError("SHEET_TITLE_EMPTY", "子集标题不能为空")
             source = _layout_source(command)
-            subset_id = _new_id("subset", command_index, 0)
+            subset_id = _new_id(document_seed, "subset", command_index, 0)
             sheets = []
             for offset in range(count):
-                sheet_id = _new_id("subset-sheet", command_index, offset)
+                sheet_id = _new_id(document_seed, "subset-sheet", command_index, offset)
                 sheets.append(Sheet(sheet_id, "", "", LayoutReference(source["file"], "", source["layout"], ""), {}))
                 layout_sources[sheet_id] = dict(source)
             subset = Subset(subset_id, title, 0, sheets)
@@ -423,9 +441,10 @@ def _existing_property_definitions(document: SheetSetDocument) -> dict[str, Cust
         name.casefold(): CustomPropertyDefinition("sheetset", name, value)
         for name, value in document.custom_properties.items()
     }
-    for sheet in document.sheets:
-        for name, value in sheet.custom_properties.items():
-            definitions.setdefault(name.casefold(), CustomPropertyDefinition("sheet", name, value))
+    sheet_names = list(document.sheet_property_definitions)
+    sheet_names.extend(name for sheet in document.sheets for name in sheet.custom_properties)
+    for name in sheet_names:
+        definitions.setdefault(name.casefold(), CustomPropertyDefinition("sheet", name, ""))
     return definitions
 
 
@@ -520,8 +539,19 @@ def _editable_subset_title(name: str) -> str:
     return match.group(3).strip() if match else stripped
 
 
-def _new_id(kind: str, command_index: int, offset: int) -> str:
-    value = uuid.uuid5(uuid.NAMESPACE_URL, f"dst-manager:v021:{kind}:{command_index}:{offset}")
+def _document_state_seed(document: SheetSetDocument) -> str:
+    parts = [f"database:{document.database_id}"]
+    for subset in sorted(document.subsets, key=lambda item: item.order):
+        parts.append(f"subset:{subset.acsm_id}")
+        parts.extend(f"sheet:{sheet.acsm_id}" for sheet in subset.sheets)
+    return "\x1f".join(parts)
+
+
+def _new_id(document_seed: str, kind: str, command_index: int, offset: int) -> str:
+    value = uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"dst-manager:v021:{document_seed}:{kind}:{command_index}:{offset}",
+    )
     return "g" + str(value).upper()
 
 
