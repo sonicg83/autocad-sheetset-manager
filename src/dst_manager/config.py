@@ -1,6 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +16,20 @@ class Settings(BaseSettings):
     cad_timeout_seconds: int = 600
     cad_max_parallel: int = Field(default=2, ge=1, le=4)
     worker_lease_seconds: int = Field(default=120, ge=30, le=3600)
+    enable_add_number_suffix: bool = Field(default=True, validation_alias="EnableAddNumberSuffix")
+    number_suffix_type: Literal[1, 2] = Field(default=1, validation_alias="NumberSuffixType")
     model_config = SettingsConfigDict(env_prefix="DST_MANAGER_", env_file=".env")
+
+    @field_validator("enable_add_number_suffix", mode="before")
+    @classmethod
+    def validate_enable_add_number_suffix(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value == "true":
+            return True
+        if value == "false":
+            return False
+        raise ValueError("EnableAddNumberSuffix 仅接受 true 或 false")
 
     @property
     def database_url(self) -> str:

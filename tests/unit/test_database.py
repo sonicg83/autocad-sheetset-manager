@@ -45,7 +45,13 @@ def test_illegal_job_status_transition_is_rejected(tmp_path: Path):
 def test_claim_is_atomic_and_records_lease(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
     database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
-    database.create_job("job-1", "w", "change_set", "QUEUED", {})
+    database.create_job(
+        "job-1",
+        "w",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+    )
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(database.claim_next_job, ("worker-a", "worker-b")))
     claimed = [item for item in results if item]
@@ -61,7 +67,13 @@ def test_stale_safe_stage_requeues_and_publish_requires_review(tmp_path: Path):
     for index, status in enumerate(("CAD_RUNNING", "PUBLISHING"), 1):
         workspace = f"w-{index}"
         database.upsert_workspace(workspace, tmp_path, tmp_path / f"{index}.dst", "r")
-        database.create_job(f"job-{index}", workspace, "change_set", status, {})
+        database.create_job(
+            f"job-{index}",
+            workspace,
+            "change_set",
+            status,
+            {"plan": {"requires_cad": True}},
+        )
         with database.engine.begin() as connection:
             connection.exec_driver_sql("UPDATE jobs SET heartbeat_at=? WHERE id=?", (old.replace(tzinfo=None), f"job-{index}"))
     conclusions = {item["id"]: item["conclusion"] for item in database.recover_stale_jobs(30)}
@@ -70,6 +82,112 @@ def test_stale_safe_stage_requeues_and_publish_requires_review(tmp_path: Path):
     assert database.get_job("job-2")["status"] == "NEEDS_REVIEW"
     with pytest.raises(ValueError, match="JOB_NOT_RETRYABLE"):
         database.retry_job("job-2")
+
+
+def test_finalize_committed_job_is_atomic_and_idempotent(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    root = tmp_path / "project"
+    root.mkdir()
+    dst = root / "a.dst"
+    dst.write_bytes(b"result")
+    database.upsert_workspace("w", root, dst, "before")
+    database.create_job("job", "w", "change_set", "PUBLISHING", {"base_revision_id": "before"})
+
+    for _ in range(2):
+        database.finalize_committed_job(
+            "result",
+            "w",
+            "job",
+            "before",
+            "result",
+            root / ".dst-manager" / "revisions" / "job",
+        )
+
+    job = database.get_job("job")
+    workspace = database.get_workspace("w")
+    assert job is not None and job["status"] == "SUCCEEDED"
+    assert sum(item["status"] == "SUCCEEDED" for item in job["timeline"]) == 1
+    assert workspace is not None and workspace.current_revision == "result"
+    assert [item["id"] for item in database.list_revisions("w")] == ["result"]
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_finalize_committed_job_closes_crash_after_revision_insert_before_success(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    root = tmp_path / "project"
+    root.mkdir()
+    dst = root / "a.dst"
+    dst.write_bytes(b"result")
+    revision_dir = root / ".dst-manager" / "revisions" / "job"
+    database.upsert_workspace("w", root, dst, "before")
+    database.create_job("job", "w", "change_set", "PUBLISHING", {"base_revision_id": "before"})
+    database.add_revision("result", "w", "job", "before", "result", revision_dir, update_current=False)
+
+    database.finalize_committed_job("result", "w", "job", "before", "result", revision_dir)
+
+    assert database.get_job("job")["status"] == "SUCCEEDED"
+    assert database.get_workspace("w").current_revision == "result"
+    assert len(database.list_revisions("w")) == 1
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_stale_revision_restore_is_never_requeued_as_cad_job_and_releases_lock(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job("restore", "w", "revision_restore", "STAGING", {"base_revision_id": "r"})
+    old = datetime.now(UTC) - timedelta(minutes=10)
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET heartbeat_at=? WHERE id='restore'",
+            (old.replace(tzinfo=None),),
+        )
+
+    conclusions = database.recover_stale_jobs(30)
+
+    assert conclusions == [{"id": "restore", "conclusion": "STATE_REVIEW_REQUIRED"}]
+    assert database.get_job("restore")["status"] == "NEEDS_REVIEW"
+    assert database.claim_next_job("cad-worker") is None
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_historical_queued_non_cad_jobs_are_quarantined_and_never_claimed(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job(
+        "restore",
+        "w",
+        "revision_restore",
+        "QUEUED",
+        {"base_revision_id": "r"},
+    )
+
+    conclusions = database.recover_stale_jobs(30)
+
+    assert conclusions == [{"id": "restore", "conclusion": "NON_CAD_QUEUE_QUARANTINED"}]
+    assert database.claim_next_job("cad-worker") is None
+    assert database.get_job("restore")["status"] == "NEEDS_REVIEW"
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_claim_next_job_rejects_queued_non_cad_change_set_even_without_startup_recovery(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job(
+        "metadata",
+        "w",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": False}},
+    )
+
+    assert database.claim_next_job("cad-worker") is None
+    assert database.get_job("metadata")["status"] == "NEEDS_REVIEW"
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
 
 def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):

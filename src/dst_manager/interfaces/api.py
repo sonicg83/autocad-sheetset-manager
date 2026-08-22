@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,12 +24,14 @@ class ChangeRequest(BaseModel):
     base_revision_id: str
     commands: list[dict[str, Any]] = Field(default_factory=list)
     cad_version: str = "2020"
+    preview_digest: str | None = None
 
 
 class XmlRequest(BaseModel):
     base_revision_id: str
     xml: str
     destination: Path | None = None
+    destination_revision_id: str | None = None
 
 
 class TemplateRequest(BaseModel):
@@ -39,6 +41,11 @@ class TemplateRequest(BaseModel):
 
 class RestoreRevisionRequest(BaseModel):
     base_revision_id: str
+
+
+class PropertyCsvRequest(BaseModel):
+    base_revision_id: str
+    csv: str
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -61,6 +68,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health():
         return {"status": "ok", "run_id": os.environ.get("DST_MANAGER_RUN_ID")}
 
+    @app.get("/api/custom-properties/template")
+    def custom_property_template():
+        return Response(
+            content=b"type,name,default_value\r\n",
+            media_type="text/csv; charset=utf-8",
+        )
+
     @app.post("/api/workspaces/open")
     def open_workspace(request: OpenRequest):
         return workspace_json(service.open_workspace(request.dst_path, request.root_override))
@@ -69,25 +83,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_workspace(workspace_id: str):
         return workspace_json(service.get_workspace(workspace_id))
 
+    @app.post("/api/workspaces/{workspace_id}/custom-properties/import/preview")
+    def preview_custom_property_import(workspace_id: str, request: PropertyCsvRequest):
+        return service.preview_custom_property_import(
+            workspace_id,
+            request.base_revision_id,
+            request.csv.encode("utf-8", errors="surrogatepass"),
+        )
+
+    @app.post("/api/workspaces/{workspace_id}/custom-properties/import")
+    def import_custom_properties(workspace_id: str, request: PropertyCsvRequest):
+        return service.import_custom_properties(
+            workspace_id,
+            request.base_revision_id,
+            request.csv.encode("utf-8", errors="surrogatepass"),
+        )
+
+    @app.get("/api/workspaces/{workspace_id}/custom-properties/export")
+    def export_custom_properties(workspace_id: str):
+        return Response(
+            content=service.export_custom_properties_csv(workspace_id),
+            media_type="text/csv; charset=utf-8",
+        )
+
     @app.post("/api/workspaces/{workspace_id}/changes/preview")
     def preview(workspace_id: str, request: ChangeRequest):
-        return service.preview_changes(workspace_id, request.base_revision_id, request.commands)
+        if request.cad_version not in {"2016", "2020"}:
+            raise HTTPException(422, "cad_version必须为2016或2020")
+        return service.preview_changes(
+            workspace_id,
+            request.base_revision_id,
+            request.commands,
+            request.cad_version,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/changes/execute")
     def execute(workspace_id: str, request: ChangeRequest):
         if request.cad_version not in {"2016", "2020"}:
             raise HTTPException(422, "cad_version必须为2016或2020")
-        return service.execute_changes(workspace_id, request.base_revision_id, request.commands, request.cad_version)
+        return service.execute_changes(
+            workspace_id,
+            request.base_revision_id,
+            request.commands,
+            request.cad_version,
+            request.preview_digest,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/xml/import/preview")
     def preview_xml(workspace_id: str, request: XmlRequest):
-        return service.preview_xml(workspace_id, request.base_revision_id, request.xml.encode("utf-8"))
+        return service.preview_xml(
+            workspace_id,
+            request.base_revision_id,
+            request.xml.encode("utf-8"),
+            request.destination,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/xml/export-dst")
     def export_dst(workspace_id: str, request: XmlRequest):
         if request.destination is None:
             raise HTTPException(422, "destination不能为空")
-        return service.export_xml_to_dst(workspace_id, request.base_revision_id, request.xml.encode("utf-8"), request.destination)
+        return service.export_xml_to_dst(
+            workspace_id,
+            request.base_revision_id,
+            request.xml.encode("utf-8"),
+            request.destination,
+            request.destination_revision_id,
+        )
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str):

@@ -1,8 +1,17 @@
+import re
 from dataclasses import asdict
 from typing import Any
 
+from dst_manager.domain.editing import property_definitions_from_document
+
+_NUMBER_RANGE = re.compile(r"^\s*(\d+)(?:\s*-\s*(\d+))?\s+(.+?)\s*$")
+
 
 def workspace_json(workspace) -> dict[str, Any]:
+    property_definitions = [
+        asdict(definition)
+        for definition in property_definitions_from_document(workspace.document)
+    ]
     return {
         "id": workspace.id,
         "root": str(workspace.root),
@@ -12,12 +21,16 @@ def workspace_json(workspace) -> dict[str, Any]:
             "database_id": workspace.document.database_id,
             "name": workspace.document.name,
             "custom_properties": workspace.document.custom_properties,
+            "property_definitions": property_definitions,
             "sheet_count": len(workspace.document.sheets),
             "subset_count": len(workspace.document.subsets),
             "subsets": [
                 {
                     "id": subset.acsm_id,
                     "name": subset.name,
+                    "title": _subset_title(subset.name),
+                    "number_range": _number_range(subset.sheets),
+                    "display_name": _display_name(subset.name, subset.sheets),
                     "order": subset.order,
                     "sheets": [
                         {
@@ -39,3 +52,18 @@ def workspace_json(workspace) -> dict[str, Any]:
         "diagnostics": [asdict(issue) for issue in workspace.document.diagnostics],
         "unreferenced_dwgs": [str(path) for path in workspace.unreferenced_dwgs],
     }
+
+
+def _subset_title(name: str) -> str:
+    match = _NUMBER_RANGE.fullmatch(name.strip())
+    return match.group(3).strip() if match else name.strip()
+
+
+def _number_range(sheets) -> str:
+    if not sheets:
+        return ""
+    return sheets[0].number if len(sheets) == 1 else f"{sheets[0].number}-{sheets[-1].number}"
+
+
+def _display_name(name: str, sheets) -> str:
+    return f"{_number_range(sheets)} {_subset_title(name)}".strip()

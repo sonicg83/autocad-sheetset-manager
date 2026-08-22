@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 
 class Severity(StrEnum):
@@ -62,6 +63,44 @@ class Subset:
     sheets: list[Sheet] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class CustomPropertyDefinition:
+    type: Literal["sheetset", "sheet"]
+    name: str
+    default_value: str
+
+
+@dataclass(frozen=True, slots=True)
+class SuffixOptions:
+    enabled: bool
+    suffix_type: Literal[1, 2]
+
+
+@dataclass(frozen=True, slots=True)
+class PropertyDefinitionDiff:
+    added: list[CustomPropertyDefinition] = field(default_factory=list)
+    skipped: list[CustomPropertyDefinition] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class DerivedSubset:
+    acsm_id: str
+    title: str
+    number_range: str
+    display_name: str
+    sheets: list[Sheet]
+    source_target_file: str = ""
+    target_file: str = ""
+
+
+@dataclass(slots=True)
+class DerivedDocument:
+    subsets: list[DerivedSubset]
+    affected_subset_ids: list[str]
+    property_diff: PropertyDefinitionDiff = field(default_factory=PropertyDefinitionDiff)
+    layout_sources: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class SheetSetDocument:
     database_id: str
@@ -69,6 +108,7 @@ class SheetSetDocument:
     subsets: list[Subset]
     custom_properties: dict[str, str] = field(default_factory=dict)
     diagnostics: list[ValidationIssue] = field(default_factory=list)
+    sheet_property_definitions: list[str] = field(default_factory=list)
 
     @property
     def sheets(self) -> list[Sheet]:

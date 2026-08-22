@@ -167,7 +167,7 @@ def test_same_name_different_scopes_do_not_overwrite_each_other(tiny_workspace):
     assert scoped == {"1": "P-002", "2": "sheet"}
 
 
-def test_insert_clear_others_only_removes_sheet_scope_values(tiny_workspace):
+def test_insert_factory_initializes_sheet_scope_definitions_only(tiny_workspace):
     dst, _ = tiny_workspace
     document = AcsmDocument(DstCodec().decode_file(dst))
     subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
@@ -181,12 +181,170 @@ def test_insert_clear_others_only_removes_sheet_scope_values(tiny_workspace):
     bag.append(inherited)
 
     document.apply_structural_commands(
-        [{"type": "insert_sheet", "target_subset_id": subset.get("ID"), "position": 1, "number": "002", "title": "新增", "custom_properties": {}}],
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": subset.get("ID"),
+                "position": 1,
+                "number": "002",
+                "title": "新增",
+                "custom_properties": {},
+                "source": {"type": "template_layout", "file": r"C:\模板\标准.dwt", "layout": "A3"},
+            },
+        ],
         "revision",
     )
 
     inserted = subset.xpath("./*[local-name()='AcSmSheet']")[1]
     properties = {node.get("propname"): node for node in inserted.xpath("./*[local-name()='AcSmCustomPropertyBag']/*[local-name()='AcSmCustomPropertyValue']")}
     assert not _props(properties["比例"], "Value")
-    assert _props(properties["Inherited"], "Value")[0].text == "keep"
-    assert _props(properties["Inherited"], "Flags")[0].text == "1"
+    assert "Inherited" not in properties
+
+
+def test_add_sheet_definition_sets_default_on_every_sheet(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    document.apply_property_definition_commands(
+        [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
+    )
+
+    projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert [sheet.custom_properties["专业"] for sheet in projected.sheets] == ["燃气"]
+    node = _sheet_property(document, projected.sheets[0].acsm_id, "专业")
+    assert [(prop.get("propname"), prop.get("vt"), prop.text) for prop in _props(node, "Flags") + _props(node, "Value")] == [
+        ("Flags", "3", "2"),
+        ("Value", "8", "燃气"),
+    ]
+
+
+def test_xml_node_factory_wraps_invalid_lxml_text_as_acsm_error(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    before = document.semantic_bytes()
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_structural_commands(
+            [
+                {
+                    "type": "insert_subset",
+                    "ordinal": 1,
+                    "placement": "after",
+                    "title": "非法\x00标题",
+                    "source": {"type": "template_layout", "file": str(dst.parent / "A.dwg"), "layout": "A3"},
+                },
+            ],
+            "revision",
+        )
+
+    assert exc_info.value.code == "XML_TEXT_INVALID"
+    assert document.semantic_bytes() == before
+
+
+def test_empty_sheet_definition_uses_missing_value_semantics(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    document.apply_property_definition_commands(
+        [{"type": "add_custom_property", "property_type": "sheet", "name": "用途", "default_value": ""}],
+    )
+
+    projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert projected.sheets[0].custom_properties["用途"] == ""
+    node = _sheet_property(document, projected.sheets[0].acsm_id, "用途")
+    assert [(prop.get("propname"), prop.get("vt"), prop.text) for prop in _props(node, "Flags")] == [("Flags", "3", "2")]
+    assert not _props(node, "Value")
+
+
+def test_delete_sheet_definition_removes_values_from_all_sheets(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    document.apply_property_definition_commands(
+        [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
+    )
+    sheet_set_bag = document.root.xpath(
+        "//*[local-name()='AcSmSheetSet']/*[local-name()='AcSmCustomPropertyBag']",
+    )[0]
+    sheet_set_bag.append(
+        etree.fromstring(
+            """
+            <AcSmCustomPropertyValue ID="g55555555-5555-5555-5555-555555555555" propname="专业">
+              <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+              <AcSmProp propname="Value" vt="8">图纸集值</AcSmProp>
+            </AcSmCustomPropertyValue>
+            """.encode(),
+        ),
+    )
+    original_sheet = document.root.xpath("//*[local-name()='AcSmSheet']")[0]
+    second_sheet = etree.fromstring(etree.tostring(original_sheet))
+    for index, node in enumerate(second_sheet.xpath(".//*[@ID] | self::*[@ID]"), start=20):
+        node.set("ID", f"g66666666-6666-6666-6666-{index:012d}")
+    original_sheet.addnext(second_sheet)
+
+    document.apply_property_definition_commands(
+        [{"type": "delete_custom_property", "property_type": "sheet", "name": "专业"}],
+    )
+
+    projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert len(projected.sheets) == 2
+    assert all("专业" not in sheet.custom_properties for sheet in projected.sheets)
+    assert not document.root.xpath(
+        "//*[local-name()='AcSmSheet']"
+        "/*[local-name()='AcSmCustomPropertyBag']"
+        "/*[local-name()='AcSmCustomPropertyValue' and @propname='专业']",
+    )
+    sheet_set_property = document.root.xpath(
+        "//*[local-name()='AcSmSheetSet']"
+        "/*[local-name()='AcSmCustomPropertyBag']"
+        "/*[local-name()='AcSmCustomPropertyValue' and @propname='专业']",
+    )[0]
+    assert _props(sheet_set_property, "Flags")[0].text == "1"
+    assert _props(sheet_set_property, "Value")[0].text == "图纸集值"
+
+
+def test_delete_sheetset_definition_only_affects_sheetset_scope(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    document.apply_property_definition_commands(
+        [{"type": "delete_custom_property", "property_type": "sheetset", "name": "项目号"}],
+    )
+
+    projected = AcsmDocument(document.to_bytes()).project(dst.parent)
+    assert "项目号" not in projected.custom_properties
+    assert projected.sheets[0].custom_properties == {"比例": "1:100"}
+
+
+def test_add_definition_rejects_casefold_duplicate(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+
+    with pytest.raises(AcsmValidationError) as exc_info:
+        document.apply_property_definition_commands(
+            [{"type": "add_custom_property", "property_type": "sheet", "name": " 比例 ", "default_value": ""}],
+        )
+
+    assert exc_info.value.code == "CUSTOM_PROPERTY_NAME_DUPLICATE"
+
+
+def test_property_definition_preserves_unknown_bag_children_and_roundtrips(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    sheet = document.root.xpath("//*[local-name()='AcSmSheet']")[0]
+    bag = sheet.xpath("./*[local-name()='AcSmCustomPropertyBag']")[0]
+    marker = etree.Element("UnknownPropertyPayload", {"keep": "yes"})
+    marker.text = "原始文本"
+    bag.insert(0, marker)
+
+    document.apply_property_definition_commands(
+        [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
+    )
+
+    roundtrip = AcsmDocument(document.to_bytes())
+    roundtrip_bag = roundtrip.root.xpath(
+        "//*[local-name()='AcSmSheet']/*[local-name()='AcSmCustomPropertyBag']",
+    )[0]
+    assert [(etree.QName(child).localname, child.get("keep"), child.text) for child in roundtrip_bag[:2]] == [
+        ("UnknownPropertyPayload", "yes", "原始文本"),
+        ("AcSmCustomPropertyValue", None, None),
+    ]

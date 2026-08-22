@@ -288,6 +288,12 @@ class Database:
                 job_id = session.scalar(select(JobRow.id).where(JobRow.status == "QUEUED").order_by(JobRow.created_at).limit(1))
                 if job_id is None:
                     return None
+                row = session.get(JobRow, job_id)
+                if row is None:
+                    continue
+                if not self._is_cad_change_set(row):
+                    self._quarantine_queued_job(session, row)
+                    continue
                 now = datetime.now(UTC)
                 claimed = session.execute(
                     update(JobRow)
@@ -309,6 +315,12 @@ class Database:
         cutoff = datetime.now(UTC) - timedelta(seconds=lease_seconds)
         conclusions: list[dict[str, str]] = []
         with self.sessions.begin() as session:
+            queued_rows = session.scalars(select(JobRow).where(JobRow.status == "QUEUED")).all()
+            for row in queued_rows:
+                if self._is_cad_change_set(row):
+                    continue
+                self._quarantine_queued_job(session, row)
+                conclusions.append({"id": row.id, "conclusion": "NON_CAD_QUEUE_QUARANTINED"})
             rows = session.scalars(select(JobRow).where(JobRow.status.not_in(TERMINAL_JOB_STATUSES), JobRow.status != "QUEUED")).all()
             for row in rows:
                 heartbeat = row.heartbeat_at
@@ -316,7 +328,12 @@ class Database:
                     heartbeat = heartbeat.replace(tzinfo=UTC)
                 if heartbeat is not None and heartbeat >= cutoff:
                     continue
-                if row.status in {"STAGING", "CAD_RUNNING", "VERIFYING", "PREPARED"}:
+                payload = json.loads(row.payload_json)
+                cad_change_set = (
+                    row.job_type == "change_set"
+                    and payload.get("plan", {}).get("requires_cad") is True
+                )
+                if row.status in {"STAGING", "CAD_RUNNING", "VERIFYING", "PREPARED"} and cad_change_set:
                     row.status, conclusion = "QUEUED", "REQUEUED_SAFE_STAGE"
                     row.worker_id = None
                 elif row.status in {"PUBLISHING", "ROLLING_BACK"}:
@@ -327,6 +344,10 @@ class Database:
                     row.finished_at = datetime.now(UTC)
                 row.error_code = conclusion
                 session.add(JobEventRow(job_id=row.id, status=row.status, progress=row.progress, detail=conclusion))
+                if row.status == "NEEDS_REVIEW":
+                    lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+                    if lock is not None and lock.job_id == row.id:
+                        session.delete(lock)
                 conclusions.append({"id": row.id, "conclusion": conclusion})
         return conclusions
 
@@ -336,6 +357,8 @@ class Database:
             if row is None:
                 raise KeyError(job_id)
             if row.status not in {"FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK"}:
+                raise ValueError("JOB_NOT_RETRYABLE")
+            if not self._is_cad_change_set(row):
                 raise ValueError("JOB_NOT_RETRYABLE")
             lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
             if lock is not None and lock.job_id != job_id:
@@ -348,6 +371,32 @@ class Database:
             session.add(JobEventRow(job_id=row.id, status="QUEUED", progress=0, detail="SAFE_RETRY"))
             session.flush()
             return self._job_json(session, row)
+
+    @staticmethod
+    def _is_cad_change_set(row: JobRow) -> bool:
+        try:
+            payload = json.loads(row.payload_json)
+        except (TypeError, json.JSONDecodeError):
+            return False
+        return row.job_type == "change_set" and payload.get("plan", {}).get("requires_cad") is True
+
+    @staticmethod
+    def _quarantine_queued_job(session, row: JobRow) -> None:
+        row.status = "NEEDS_REVIEW"
+        row.error_code = "NON_CAD_QUEUE_QUARANTINED"
+        row.finished_at = datetime.now(UTC)
+        row.heartbeat_at = datetime.now(UTC)
+        session.add(
+            JobEventRow(
+                job_id=row.id,
+                status="NEEDS_REVIEW",
+                progress=row.progress,
+                detail="NON_CAD_QUEUE_QUARANTINED",
+            ),
+        )
+        lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+        if lock is not None and lock.job_id == row.id:
+            session.delete(lock)
 
     def upsert_job_file(self, job_id: str, target_path: Path, **values: Any) -> None:
         with self.sessions.begin() as session:
@@ -381,6 +430,95 @@ class Database:
             workspace = session.get(WorkspaceRow, workspace_id)
             if workspace and update_current:
                 workspace.current_revision = current_revision or revision_id
+
+    def finalize_committed_job(
+        self,
+        revision_id: str,
+        workspace_id: str,
+        operation_id: str,
+        before_hash: str,
+        result_hash: str,
+        revision_dir: Path,
+        *,
+        update_current: bool = True,
+        current_revision: str | None = None,
+    ) -> None:
+        """幂等地把已由 publisher 提交的文件变更闭环到数据库。"""
+        with self.sessions.begin() as session:
+            job = session.get(JobRow, operation_id)
+            if job is None or job.workspace_id != workspace_id:
+                raise KeyError(operation_id)
+            revision = session.get(RevisionRow, revision_id)
+            expected = (
+                workspace_id,
+                operation_id,
+                before_hash,
+                result_hash,
+                str(revision_dir),
+            )
+            if revision is None:
+                session.add(
+                    RevisionRow(
+                        id=revision_id,
+                        workspace_id=workspace_id,
+                        operation_id=operation_id,
+                        before_hash=before_hash,
+                        result_hash=result_hash,
+                        revision_dir=str(revision_dir),
+                    ),
+                )
+            else:
+                actual = (
+                    revision.workspace_id,
+                    revision.operation_id,
+                    revision.before_hash,
+                    revision.result_hash,
+                    revision.revision_dir,
+                )
+                if actual != expected:
+                    raise RuntimeError("REVISION_FINALIZE_CONFLICT")
+            workspace = session.get(WorkspaceRow, workspace_id)
+            if workspace is None:
+                raise KeyError(workspace_id)
+            if update_current:
+                workspace.current_revision = current_revision or revision_id
+            if job.status != "SUCCEEDED" or job.progress != 100:
+                job.status = "SUCCEEDED"
+                job.progress = 100
+                job.error_code = None
+                job.error_detail = None
+                job.finished_at = datetime.now(UTC)
+                job.heartbeat_at = datetime.now(UTC)
+                session.add(JobEventRow(job_id=operation_id, status="SUCCEEDED", progress=100))
+            lock = session.get(WorkspaceWriteLockRow, workspace_id)
+            if lock is not None and lock.job_id == operation_id:
+                session.delete(lock)
+
+    def finalize_job_terminal(
+        self,
+        job_id: str,
+        status: str,
+        error_code: str,
+        error_detail: str | None = None,
+    ) -> None:
+        """把无法继续的同步任务显式隔离为终态，并释放其普通写锁。"""
+        if status not in TERMINAL_JOB_STATUSES - {"SUCCEEDED"}:
+            raise ValueError("JOB_TERMINAL_STATUS_INVALID")
+        with self.sessions.begin() as session:
+            row = session.get(JobRow, job_id)
+            if row is None:
+                raise KeyError(job_id)
+            if row.status != status or row.error_code != error_code or row.error_detail != error_detail:
+                row.status = status
+                row.progress = 0
+                row.error_code = error_code
+                row.error_detail = error_detail
+                row.finished_at = datetime.now(UTC)
+                row.heartbeat_at = datetime.now(UTC)
+                session.add(JobEventRow(job_id=job_id, status=status, progress=0, detail=error_code))
+            lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+            if lock is not None and lock.job_id == job_id:
+                session.delete(lock)
 
     def list_revisions(self, workspace_id: str | None = None) -> list[dict[str, Any]]:
         with self.sessions() as session:
