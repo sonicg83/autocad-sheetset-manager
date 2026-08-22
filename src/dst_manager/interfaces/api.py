@@ -30,6 +30,7 @@ class XmlRequest(BaseModel):
     base_revision_id: str
     xml: str
     destination: Path | None = None
+    destination_revision_id: str | None = None
 
 
 class TemplateRequest(BaseModel):
@@ -116,13 +117,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/workspaces/{workspace_id}/xml/import/preview")
     def preview_xml(workspace_id: str, request: XmlRequest):
-        return service.preview_xml(workspace_id, request.base_revision_id, request.xml.encode("utf-8"))
+        return service.preview_xml(
+            workspace_id,
+            request.base_revision_id,
+            request.xml.encode("utf-8"),
+            request.destination,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/xml/export-dst")
     def export_dst(workspace_id: str, request: XmlRequest):
         if request.destination is None:
             raise HTTPException(422, "destination不能为空")
-        return service.export_xml_to_dst(workspace_id, request.base_revision_id, request.xml.encode("utf-8"), request.destination)
+        return service.export_xml_to_dst(
+            workspace_id,
+            request.base_revision_id,
+            request.xml.encode("utf-8"),
+            request.destination,
+            request.destination_revision_id,
+        )
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str):

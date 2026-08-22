@@ -121,6 +121,7 @@ class CadJobRunner:
         return self.database.get_job(job_id) or {}
 
     def _execute(self, job_id: str, worker_id: str, attempt: int, workspace: Workspace, capability: CadCapability, commands: list[dict], plan: dict[str, Any]) -> dict[str, Any]:
+        commit_state: dict[str, Any] = {"result_hash": None, "revision_dir": None, "error": None}
         job_dir = workspace.root / ".dst-manager" / "jobs" / job_id
         attempt_dir = job_dir / f"attempt-{attempt:03d}"
         staging_dir, scripts_dir, logs_dir = attempt_dir / "staging", attempt_dir / "scripts", attempt_dir / "logs"
@@ -217,35 +218,49 @@ class CadJobRunner:
             }
             self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
             append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=len(staged_files))
-            revision_dir = self.publisher.publish(
+
+            def finalize_cad(revision_dir: Path, journal: dict[str, Any]) -> None:
+                try:
+                    result_hash = self._committed_result_hash(journal, workspace.dst_path)
+                    commit_state["result_hash"] = result_hash
+                    commit_state["revision_dir"] = revision_dir
+                    self.database.finalize_committed_job(
+                        f"change-{job_id}",
+                        workspace.id,
+                        job_id,
+                        before_hash,
+                        result_hash,
+                        revision_dir,
+                        current_revision=result_hash,
+                    )
+                except Exception as exc:  # noqa: BLE001 - 回调不得让 COMMITTED 进入回滚分支
+                    commit_state["error"] = exc
+                    try:
+                        current = self.database.get_job(job_id) or {}
+                        if current.get("status") != JobStatus.SUCCEEDED:
+                            self.database.finalize_job_terminal(
+                                job_id,
+                                JobStatus.NEEDS_REVIEW,
+                                "COMMITTED_FINALIZE_FAILED",
+                                str(exc),
+                            )
+                    except Exception:  # noqa: BLE001, S110 - 启动恢复仍会依据 COMMITTED 日志隔离
+                        pass
+
+            self.publisher.publish(
                 job_id,
                 workspace.root,
                 staged_files,
                 expected_baselines=staged_baselines,
+                on_committed=finalize_cad,
             )
-            journal = self.publisher.read_committed_operation(workspace.root, job_id)
-            if journal is None:
-                raise PublishRecoveryError(f"COMMITTED_JOURNAL_MISSING: {job_id}")
-            result_hash = self._committed_result_hash(journal, workspace.dst_path)
-            try:
-                self.database.finalize_committed_job(
-                    result_hash,
-                    workspace.id,
-                    job_id,
-                    before_hash,
-                    result_hash,
-                    revision_dir,
-                )
-            except Exception as exc:  # noqa: BLE001 - 文件已提交，数据库失败只能隔离或接受已闭环结果
-                current = self.database.get_job(job_id) or {}
-                if current.get("status") != JobStatus.SUCCEEDED:
-                    self.database.finalize_job_terminal(
-                        job_id,
-                        JobStatus.NEEDS_REVIEW,
-                        "COMMITTED_FINALIZE_FAILED",
-                        str(exc),
-                    )
+            if commit_state["error"] is not None:
                 return self.database.get_job(job_id) or {}
+        result_hash = commit_state["result_hash"]
+        revision_dir = commit_state["revision_dir"]
+        if not isinstance(result_hash, str) or not isinstance(revision_dir, Path):
+            self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, "COMMITTED_FINALIZE_MISSING")
+            return self.database.get_job(job_id) or {}
         self._safe_post_commit_copy(logs_dir, revision_dir / "logs")
         self._safe_post_commit_copy(scripts_dir, revision_dir / "scripts")
         self._safe_post_commit_copy(input_dir.parent, revision_dir / "input")
@@ -253,7 +268,7 @@ class CadJobRunner:
             write_workspace_metadata(workspace.root, workspace.id, workspace.dst_path, result_hash, capability.version)
         except Exception as exc:  # noqa: BLE001 - DB 已闭环，元数据失败只能记录诊断
             self._safe_post_commit_event(workspace.root, job_id, "POST_COMMIT_METADATA_FAILED", error=repr(exc))
-        self._safe_post_commit_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
+        self._safe_post_commit_event(workspace.root, job_id, "SUCCEEDED", revision_id=f"change-{job_id}")
         return self.database.get_job(job_id) or {}
 
     @staticmethod

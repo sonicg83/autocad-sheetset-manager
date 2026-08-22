@@ -1004,6 +1004,93 @@ def test_committed_operation_can_be_read_from_active_journal_when_manifest_is_mi
     assert committed[0]["files"][0]["result_hash"] == file_sha256(target)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="验证 Windows ReplaceFile/rename 共享删除竞态")
+def test_result_guard_blocks_replace_between_final_verification_and_committed_journal(tmp_path: Path):
+    target = tmp_path / "guarded.dst"
+    staged = tmp_path / "staged.dst"
+    replacement = tmp_path / "external.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    original_write = publisher._write_journal
+    replacement_blocked = False
+    injected = False
+
+    def inject_replace_before_committed(path: Path, journal: dict):
+        nonlocal injected, replacement_blocked
+        if journal.get("status") == "COMMITTED" and not injected:
+            injected = True
+            replacement.write_bytes(b"external")
+            try:
+                os.replace(replacement, target)
+            except PermissionError:
+                replacement_blocked = True
+        original_write(path, journal)
+
+    publisher._write_journal = inject_replace_before_committed
+
+    publisher.publish("guarded-operation", tmp_path, {target: staged})
+
+    assert replacement_blocked is True
+    assert target.read_bytes() == b"published"
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/guarded-operation/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "COMMITTED"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="验证 Windows 删除结果父目录守卫")
+def test_result_guard_blocks_recreation_of_deleted_target_during_committed_callback(tmp_path: Path):
+    target = tmp_path / "deleted.dst"
+    target.write_bytes(b"before")
+    publisher = RecoverablePublisher()
+    recreation_blocked = False
+
+    def recreate_deleted(_revision_dir: Path, _journal: dict):
+        nonlocal recreation_blocked
+        try:
+            target.write_bytes(b"external-recreated")
+        except PermissionError:
+            recreation_blocked = True
+
+    publisher.publish(
+        "delete-guarded-operation",
+        tmp_path,
+        {target: None},
+        on_committed=recreate_deleted,
+    )
+
+    assert recreation_blocked is True
+    assert not target.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="验证 Windows 新建结果的替换竞态")
+def test_result_guard_blocks_replacement_of_new_target_during_committed_callback(tmp_path: Path):
+    target = tmp_path / "created.dst"
+    staged = tmp_path / "staged-created.dst"
+    replacement = tmp_path / "external-created.dst"
+    staged.write_bytes(b"published")
+    replacement_blocked = False
+
+    def replace_created(_revision_dir: Path, _journal: dict):
+        nonlocal replacement_blocked
+        replacement.write_bytes(b"external")
+        try:
+            os.replace(replacement, target)
+        except PermissionError:
+            replacement_blocked = True
+
+    RecoverablePublisher().publish(
+        "create-guarded-operation",
+        tmp_path,
+        {target: staged},
+        on_committed=replace_created,
+    )
+
+    assert replacement_blocked is True
+    assert target.read_bytes() == b"published"
+
+
 def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
     tmp_path: Path,
     monkeypatch,

@@ -7,6 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from dst_manager.infrastructure.filesystem.locking import WindowsResultGuards
+
 
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -107,6 +109,7 @@ class RecoverablePublisher:
         staged: dict[Path, Path | None],
         *,
         expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
+        on_committed: Callable[[Path, dict], None] | None = None,
     ) -> Path:
         workspace_root = workspace_root.resolve()
         staged = {target.resolve(): staged_file for target, staged_file in staged.items()}
@@ -179,6 +182,7 @@ class RecoverablePublisher:
             "files": entries,
         }
         self._write_journal(journal_path, journal)
+        result_guard: WindowsResultGuards | None = None
         try:
             journal["status"] = "PUBLISHING"
             self._write_journal(journal_path, journal)
@@ -223,10 +227,18 @@ class RecoverablePublisher:
                 self._capture_result(entry)
                 entry["replaced"] = True
                 self._write_journal(journal_path, journal)
+            result_guard = WindowsResultGuards(
+                [Path(entry["target"]) for entry in entries if entry.get("result_hash") is not None],
+                [Path(entry["target"]) for entry in entries if entry.get("result_hash") is None],
+            )
+            result_guard.__enter__()
+            self._verify_committed_results(entries, result_guard)
             journal["status"] = "COMMITTED"
             journal["cleanup_status"] = "PENDING"
             self._write_journal(journal_path, journal)
         except PublishBaselineError as publish_error:
+            if result_guard is not None:
+                result_guard.__exit__(None, None, None)
             self._write_journal(journal_path, journal)
             if any(entry["replaced"] or entry["attempted"] for entry in entries):
                 try:
@@ -240,6 +252,8 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
             raise
         except Exception as publish_error:
+            if result_guard is not None:
+                result_guard.__exit__(None, None, None)
             for entry in entries:
                 if entry.get("attempted") and not entry.get("replaced") and not entry.get("conflict_preserved"):
                     entry["api_failed"] = True
@@ -251,8 +265,16 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
                 raise PublishRecoveryError(str(recovery_error)) from publish_error
             raise PublishRolledBackError(str(publish_error)) from publish_error
+        except BaseException:
+            # 真实进程终止会由操作系统释放结果句柄；测试用 BaseException 模拟该边界时也必须
+            # 释放句柄，但不能执行正常异常路径的回滚，以保留可供启动恢复的事务现场。
+            if result_guard is not None:
+                result_guard.__exit__(None, None, None)
+            raise
+        archive_succeeded = False
         try:
             self._archive_journal(revision_dir, journal_path, journal)
+            archive_succeeded = True
         except Exception as archive_error:  # noqa: BLE001 - COMMITTED 后归档失败不得伪装成发布失败
             journal["cleanup_status"] = "PENDING"
             journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
@@ -261,11 +283,17 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
             except Exception:  # noqa: BLE001, S110 - COMMITTED 主记录已先持久化
                 pass
-            return revision_dir
         try:
-            self._finish_committed_cleanup(journal_path, journal, revision_dir)
-        except Exception:  # noqa: BLE001, S110 - 提交后清理诊断失败不得触发回滚
-            pass
+            if on_committed is not None:
+                on_committed(revision_dir, journal)
+        finally:
+            if result_guard is not None:
+                result_guard.__exit__(None, None, None)
+        if archive_succeeded:
+            try:
+                self._finish_committed_cleanup(journal_path, journal, revision_dir)
+            except Exception:  # noqa: BLE001, S110 - 提交后清理诊断失败不得触发回滚
+                pass
         return revision_dir
 
     def _finish_committed_cleanup(
@@ -422,6 +450,27 @@ class RecoverablePublisher:
             raise PublishBaselineError(f"正式发布结果复核时目标身份已变化：{target}")
         entry["result_hash"] = entry["staged_hash"]
         entry["result_identity"] = entry["publish_identity"]
+
+    def _verify_committed_results(
+        self,
+        entries: list[dict],
+        result_guard: WindowsResultGuards,
+    ) -> None:
+        for entry in entries:
+            target = Path(entry["target"])
+            result_hash = entry.get("result_hash")
+            if result_hash is None:
+                if result_guard.protects_missing(target):
+                    continue
+                if target.exists():
+                    raise PublishBaselineError(f"删除结果在提交闭环前被重建：{target}")
+                continue
+            if (
+                not target.exists()
+                or file_sha256(target) != result_hash
+                or self._file_identity(target) != entry.get("result_identity")
+            ):
+                raise PublishBaselineError(f"发布结果在提交闭环前已变化：{target}")
 
     @classmethod
     def _verify_baselines(

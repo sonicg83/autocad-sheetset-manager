@@ -946,6 +946,47 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
     assert calls == 1
 
 
+def test_repeating_same_content_creates_distinct_operation_revisions(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = [{"type": "update_sheet_set", "name": "相同内容"}]
+
+    first = service.execute_changes(workspace.id, workspace.revision_id, command)
+    repeated_base = file_sha256(dst)
+    second = service.execute_changes(workspace.id, repeated_base, command)
+
+    assert first["status"] == second["status"] == "SUCCEEDED"
+    revisions = service.database.list_revisions(workspace.id)
+    assert len(revisions) == 2
+    assert revisions[0]["id"] != revisions[1]["id"]
+    assert revisions[0]["result_hash"] == revisions[1]["result_hash"] == file_sha256(dst)
+
+
+def test_returning_to_old_content_keeps_distinct_revision_history(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    original_hash = workspace.revision_id
+    first = service.execute_changes(
+        workspace.id,
+        original_hash,
+        [{"type": "update_sheet_set", "name": "临时名称"}],
+    )
+
+    second = service.execute_changes(
+        workspace.id,
+        file_sha256(dst),
+        [{"type": "update_sheet_set", "name": "测试集"}],
+    )
+
+    assert first["status"] == second["status"] == "SUCCEEDED"
+    revisions = service.database.list_revisions(workspace.id)
+    assert len(revisions) == 2
+    assert len({item["id"] for item in revisions}) == 2
+    assert revisions[0]["result_hash"] == file_sha256(dst)
+
+
 def test_metadata_execution_rejects_atomic_replacement_before_locked_baseline(
     tiny_workspace,
     tmp_path: Path,
@@ -1053,8 +1094,49 @@ def test_startup_finalizes_committed_publish_exactly_once_after_repeated_restart
     assert first_restart.database.get_job(operation_id)["status"] == "SUCCEEDED"
     assert second_restart.database.get_job(operation_id)["status"] == "SUCCEEDED"
     revisions = second_restart.database.list_revisions(workspace.id)
-    assert [item["id"] for item in revisions].count(result_hash) == 1
+    recovered = [item for item in revisions if item["id"] == f"change-{operation_id}"]
+    assert len(recovered) == 1
+    assert recovered[0]["result_hash"] == result_hash
     with second_restart.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_startup_quarantines_committed_publish_when_result_changed(
+    tiny_workspace,
+    tmp_path: Path,
+):
+    dst, _ = tiny_workspace
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    workspace = service.open_workspace(dst)
+    operation_id = "committed-result-changed"
+    service.database.create_job(
+        operation_id,
+        workspace.id,
+        "change_set",
+        JobStatus.PUBLISHING,
+        {"base_revision_id": workspace.revision_id, "plan": {"requires_cad": False}},
+    )
+    staged = tmp_path / "committed-changed.dst"
+    staged.write_bytes(b"committed-result")
+    service.publisher.publish(
+        operation_id,
+        workspace.root,
+        {workspace.dst_path: staged},
+        expected_baselines={workspace.dst_path: capture_file_baseline(workspace.dst_path)},
+    )
+    replacement = tmp_path / "external-after-committed.dst"
+    replacement.write_bytes(b"external-after-committed")
+    replacement.replace(workspace.dst_path)
+
+    restarted = DstManagerService(settings)
+
+    recovered_job = restarted.database.get_job(operation_id)
+    assert recovered_job["status"] == "NEEDS_REVIEW"
+    assert recovered_job["error_code"] == "COMMITTED_RECOVERY_UNPROVEN"
+    assert "COMMITTED_RESULT_CHANGED" in recovered_job["error_detail"]
+    assert restarted.database.list_revisions(workspace.id) == []
+    with restarted.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
 
@@ -1141,6 +1223,48 @@ def test_restore_publisher_failures_use_safe_terminal_status(
     result = service.restore_revision(workspace.id, revision_id, base_revision_id)
 
     assert result["status"] == expected_status
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_restore_rejects_permanent_backup_replacement_before_copy(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "建立永久快照"}],
+    )
+    revision = service.database.list_revisions(workspace.id)[0]
+    manifest = json.loads((Path(revision["revision_dir"]) / "manifest.json").read_text(encoding="utf-8"))
+    backup = Path(next(item for item in manifest["files"] if Path(item["target"]) == dst)["backup"])
+    backup_before = backup.read_bytes()
+    base_revision_id = file_sha256(dst)
+    original_copy = service_module.shutil.copy2
+    injected = False
+
+    def replace_backup_before_copy(source: Path, target: Path, *args, **kwargs):
+        nonlocal injected
+        if not injected and Path(source).resolve() == backup.resolve():
+            replacement = backup.with_suffix(".external")
+            replacement.write_bytes(b"corrupt-backup")
+            replacement.replace(backup)
+            injected = True
+        return original_copy(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(service_module.shutil, "copy2", replace_backup_before_copy)
+
+    result = service.restore_revision(workspace.id, revision["id"], base_revision_id)
+
+    assert result["status"] == "FAILED"
+    assert result["error_code"] in {"REVISION_RESTORE_SOURCE_CHANGED", "REVISION_RESTORE_STAGING_FAILED"}
+    assert dst.read_bytes() != b"corrupt-backup"
+    assert backup.read_bytes() in {backup_before, b"corrupt-backup"}
     with service.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 

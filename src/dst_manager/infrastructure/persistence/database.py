@@ -288,6 +288,12 @@ class Database:
                 job_id = session.scalar(select(JobRow.id).where(JobRow.status == "QUEUED").order_by(JobRow.created_at).limit(1))
                 if job_id is None:
                     return None
+                row = session.get(JobRow, job_id)
+                if row is None:
+                    continue
+                if not self._is_cad_change_set(row):
+                    self._quarantine_queued_job(session, row)
+                    continue
                 now = datetime.now(UTC)
                 claimed = session.execute(
                     update(JobRow)
@@ -309,6 +315,12 @@ class Database:
         cutoff = datetime.now(UTC) - timedelta(seconds=lease_seconds)
         conclusions: list[dict[str, str]] = []
         with self.sessions.begin() as session:
+            queued_rows = session.scalars(select(JobRow).where(JobRow.status == "QUEUED")).all()
+            for row in queued_rows:
+                if self._is_cad_change_set(row):
+                    continue
+                self._quarantine_queued_job(session, row)
+                conclusions.append({"id": row.id, "conclusion": "NON_CAD_QUEUE_QUARANTINED"})
             rows = session.scalars(select(JobRow).where(JobRow.status.not_in(TERMINAL_JOB_STATUSES), JobRow.status != "QUEUED")).all()
             for row in rows:
                 heartbeat = row.heartbeat_at
@@ -346,6 +358,8 @@ class Database:
                 raise KeyError(job_id)
             if row.status not in {"FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK"}:
                 raise ValueError("JOB_NOT_RETRYABLE")
+            if not self._is_cad_change_set(row):
+                raise ValueError("JOB_NOT_RETRYABLE")
             lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
             if lock is not None and lock.job_id != job_id:
                 raise WorkspaceBusyError(f"工作区已有写任务：{lock.job_id}")
@@ -357,6 +371,32 @@ class Database:
             session.add(JobEventRow(job_id=row.id, status="QUEUED", progress=0, detail="SAFE_RETRY"))
             session.flush()
             return self._job_json(session, row)
+
+    @staticmethod
+    def _is_cad_change_set(row: JobRow) -> bool:
+        try:
+            payload = json.loads(row.payload_json)
+        except (TypeError, json.JSONDecodeError):
+            return False
+        return row.job_type == "change_set" and payload.get("plan", {}).get("requires_cad") is True
+
+    @staticmethod
+    def _quarantine_queued_job(session, row: JobRow) -> None:
+        row.status = "NEEDS_REVIEW"
+        row.error_code = "NON_CAD_QUEUE_QUARANTINED"
+        row.finished_at = datetime.now(UTC)
+        row.heartbeat_at = datetime.now(UTC)
+        session.add(
+            JobEventRow(
+                job_id=row.id,
+                status="NEEDS_REVIEW",
+                progress=row.progress,
+                detail="NON_CAD_QUEUE_QUARANTINED",
+            ),
+        )
+        lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+        if lock is not None and lock.job_id == row.id:
+            session.delete(lock)
 
     def upsert_job_file(self, job_id: str, target_path: Path, **values: Any) -> None:
         with self.sessions.begin() as session:

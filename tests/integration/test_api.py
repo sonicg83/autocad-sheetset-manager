@@ -113,10 +113,45 @@ def test_full_form_empty_roundtrip_is_semantic_noop(tmp_path, tiny_workspace):
 
 def test_xml_preview_and_export_are_revisioned(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); xml=DstCodec().decode_file(dst).decode().replace("平面</AcSmProp>","导入标题</AcSmProp>")
-    payload={"base_revision_id":opened["revision_id"],"xml":xml}
+    destination=tmp_path/"export.dst"; payload={"base_revision_id":opened["revision_id"],"xml":xml,"destination":str(destination)}
     preview=client.post(f"/api/workspaces/{opened['id']}/xml/import/preview",json=payload).json(); assert any(item["type"]=="sheet_changed" for item in preview["changes"])
-    destination=tmp_path/"export.dst"; payload["destination"]=str(destination); job=client.post(f"/api/workspaces/{opened['id']}/xml/export-dst",json=payload).json(); assert job["status"]=="SUCCEEDED" and destination.is_file()
+    payload["destination_revision_id"]=preview["destination_revision_id"]; job=client.post(f"/api/workspaces/{opened['id']}/xml/export-dst",json=payload).json(); assert job["status"]=="SUCCEEDED" and destination.is_file()
     assert (tmp_path/".dst-manager"/"revisions"/job["id"]).is_dir()
+
+
+def test_xml_export_requires_destination_baseline_from_preview(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    destination = tmp_path / "frozen-export.dst"
+    xml = DstCodec().decode_file(dst).decode()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "xml": xml,
+        "destination": str(destination),
+    }
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/xml/import/preview",
+        json=payload,
+    ).json()
+    assert preview["destination_revision_id"] == "MISSING"
+
+    missing_baseline = client.post(
+        f"/api/workspaces/{opened['id']}/xml/export-dst",
+        json=payload,
+    )
+    assert missing_baseline.status_code == 409
+    assert missing_baseline.json()["code"] == "DESTINATION_BASELINE_REQUIRED"
+
+    payload["destination_revision_id"] = preview["destination_revision_id"]
+    exported = client.post(
+        f"/api/workspaces/{opened['id']}/xml/export-dst",
+        json=payload,
+    )
+    assert exported.status_code == 200
+    assert exported.json()["status"] == "SUCCEEDED"
+    assert destination.is_file()
 
 
 def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_workspace):

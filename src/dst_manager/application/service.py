@@ -35,7 +35,10 @@ from dst_manager.infrastructure.autocad.worker import (
     parse_handles,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
-from dst_manager.infrastructure.filesystem.locking import WindowsWriteLocks
+from dst_manager.infrastructure.filesystem.locking import (
+    WindowsResultGuards,
+    WindowsWriteLocks,
+)
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishBaselineError,
     PublishRecoveryError,
@@ -316,6 +319,7 @@ class DstManagerService:
         workspace = self.get_workspace(workspace_id)
         operation_id = job_id
         published = False
+        commit_state: dict[str, Any] = {"result_hash": None, "error": None}
         try:
             with WindowsWriteLocks([workspace.dst_path]):
                 try:
@@ -345,23 +349,42 @@ class DstManagerService:
                     raise PublishBaselineError("DST 在发布前已偏离提交基准")
                 self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
                 self._safe_operation_event(workspace.root, job_id, "PUBLISHING", file_count=1)
-                revision_dir = self.publisher.publish(
+
+                def finalize_metadata(revision_dir: Path, journal: dict[str, Any]) -> None:
+                    try:
+                        result_hash = self._committed_result_hash(journal, workspace.dst_path)
+                        commit_state["result_hash"] = result_hash
+                        self.database.finalize_committed_job(
+                            f"change-{operation_id}",
+                            workspace_id,
+                            operation_id,
+                            expected_baseline.sha256,
+                            result_hash,
+                            revision_dir,
+                            current_revision=result_hash,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - 回调不得让 COMMITTED 进入回滚分支
+                        commit_state["error"] = exc
+                        try:
+                            current = self.database.get_job(job_id) or {}
+                            if current.get("status") != JobStatus.SUCCEEDED:
+                                self.database.finalize_job_terminal(
+                                    job_id,
+                                    JobStatus.NEEDS_REVIEW,
+                                    "COMMITTED_FINALIZE_FAILED",
+                                    str(exc),
+                                )
+                        except Exception:  # noqa: BLE001, S110 - 启动恢复仍会依据 COMMITTED 日志隔离
+                            pass
+
+                self.publisher.publish(
                     operation_id,
                     workspace.root,
                     {workspace.dst_path: staging},
                     expected_baselines={workspace.dst_path: expected_baseline},
+                    on_committed=finalize_metadata,
                 )
                 published = True
-                journal = self._require_committed_operation(workspace.root, operation_id)
-                result_hash = self._committed_result_hash(journal, workspace.dst_path)
-                self.database.finalize_committed_job(
-                    result_hash,
-                    workspace_id,
-                    operation_id,
-                    expected_baseline.sha256,
-                    result_hash,
-                    revision_dir,
-                )
         except PublishRolledBackError as exc:
             self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, exc.code, str(exc))
             return self.database.get_job(job_id) or {}
@@ -376,8 +399,18 @@ class DstManagerService:
             code = "COMMITTED_FINALIZE_FAILED" if published else getattr(exc, "code", type(exc).__name__.upper())
             self.database.finalize_job_terminal(job_id, status, code, str(exc))
             return self.database.get_job(job_id) or {}
+        if commit_state["error"] is not None:
+            return self.database.get_job(job_id) or {}
+        result_hash = commit_state["result_hash"]
+        if not isinstance(result_hash, str):
+            self.database.finalize_job_terminal(
+                job_id,
+                JobStatus.NEEDS_REVIEW,
+                "COMMITTED_FINALIZE_MISSING",
+            )
+            return self.database.get_job(job_id) or {}
         self._write_workspace_metadata_after_commit(workspace, result_hash, cad_version, job_id)
-        self._safe_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
+        self._safe_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=f"change-{operation_id}")
         return self.database.get_job(job_id) or {}
 
     def run_next_job(self) -> dict[str, Any] | None:
@@ -469,9 +502,34 @@ class DstManagerService:
             target = Path(entry["target"])
             current_hash = file_sha256(target) if target.exists() else None
             expected_hash = entry.get("result_hash")
-            conflict = current_hash != expected_hash
+            backup_hash = None
+            backup_identity = None
+            source_conflict = False
+            if entry.get("backup"):
+                try:
+                    backup_baseline = capture_file_baseline(Path(entry["backup"]))
+                except (OSError, PublishBaselineError):
+                    backup_baseline = None
+                if backup_baseline is not None:
+                    backup_hash = backup_baseline.sha256
+                    backup_identity = list(backup_baseline.identity)
+                source_conflict = (
+                    backup_hash != entry.get("before_hash")
+                    or backup_identity != entry.get("before_identity")
+                )
+            conflict = current_hash != expected_hash or source_conflict
             action = "replace" if entry.get("backup") else "delete"
-            item = {"path": str(target.relative_to(workspace_root)), "action": action, "current_hash": current_hash, "expected_hash": expected_hash, "restore_hash": entry.get("before_hash"), "conflict": conflict}
+            item = {
+                "path": str(target.relative_to(workspace_root)),
+                "action": action,
+                "current_hash": current_hash,
+                "expected_hash": expected_hash,
+                "restore_hash": entry.get("before_hash"),
+                "backup_hash": backup_hash,
+                "backup_identity": backup_identity,
+                "source_conflict": source_conflict,
+                "conflict": conflict,
+            }
             files.append(item)
             if conflict:
                 conflicts.append(item["path"])
@@ -491,13 +549,15 @@ class DstManagerService:
             raise ApplicationError("WORKSPACE_WRITE_BUSY", str(exc), 409) from exc
         staging_dir = workspace.root / ".dst-manager" / "jobs" / job_id / "staging"
         published = False
+        commit_state: dict[str, Any] = {"result_hash": None, "error": None}
         try:
             targets = [Path(entry["target"]).resolve() for entry in manifest["files"]]
+            backup_paths = [Path(entry["backup"]).resolve() for entry in manifest["files"] if entry.get("backup")]
             preview_hashes = {
                 (workspace.root / item["path"]).resolve(): item["current_hash"]
                 for item in preview["files"]
             }
-            with WindowsWriteLocks([target for target in targets if target.exists()]):
+            with WindowsResultGuards(backup_paths), WindowsWriteLocks([target for target in targets if target.exists()]):
                 try:
                     expected_baselines = {
                         target: capture_file_baseline(target)
@@ -510,6 +570,19 @@ class DstManagerService:
                     for target, baseline in expected_baselines.items()
                 } != preview_hashes:
                     raise ApplicationError("REVISION_RESTORE_CONFLICT", "恢复目标已偏离预览", 409)
+                source_baselines = {}
+                for entry, item in zip(manifest["files"], preview["files"], strict=True):
+                    if not entry.get("backup"):
+                        continue
+                    source = Path(entry["backup"]).resolve()
+                    baseline = capture_file_baseline(source)
+                    if (
+                        baseline is None
+                        or baseline.sha256 != item["backup_hash"]
+                        or list(baseline.identity) != item["backup_identity"]
+                    ):
+                        raise ApplicationError("REVISION_RESTORE_SOURCE_CHANGED", "永久恢复源已偏离预览", 409)
+                    source_baselines[source] = baseline
                 staging_dir.mkdir(parents=True, exist_ok=True)
                 staged: dict[Path, Path | None] = {}
                 for index, entry in enumerate(manifest["files"]):
@@ -518,6 +591,11 @@ class DstManagerService:
                         source = Path(entry["backup"])
                         staged_copy = staging_dir / f"{index:03d}-{target.name}"
                         shutil.copy2(source, staged_copy)
+                        if (
+                            file_sha256(staged_copy) != entry["before_hash"]
+                            or capture_file_baseline(source.resolve()) != source_baselines[source.resolve()]
+                        ):
+                            raise ApplicationError("REVISION_RESTORE_SOURCE_CHANGED", "永久恢复源在复制期间变化", 409)
                         staged[target] = staged_copy
                     else:
                         staged[target] = None
@@ -527,25 +605,43 @@ class DstManagerService:
                     raise ApplicationError("REVISION_RESTORE_CONFLICT", "当前 DST 缺失", 409)
                 before_hash = workspace_baseline.sha256
                 self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
-                revision_dir = self.publisher.publish(
+
+                def finalize_restore(revision_dir: Path, journal: dict[str, Any]) -> None:
+                    try:
+                        result_hash = self._committed_result_hash(journal, workspace.dst_path)
+                        commit_state["result_hash"] = result_hash
+                        self.database.finalize_committed_job(
+                            f"restore-{job_id}",
+                            workspace_id,
+                            job_id,
+                            before_hash,
+                            result_hash,
+                            revision_dir,
+                            current_revision=result_hash,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - 回调不得让 COMMITTED 进入回滚分支
+                        commit_state["error"] = exc
+                        try:
+                            current = self.database.get_job(job_id) or {}
+                            if current.get("status") != JobStatus.SUCCEEDED:
+                                self.database.finalize_job_terminal(
+                                    job_id,
+                                    JobStatus.NEEDS_REVIEW,
+                                    "COMMITTED_FINALIZE_FAILED",
+                                    str(exc),
+                                )
+                        except Exception:  # noqa: BLE001, S110 - 启动恢复仍会依据 COMMITTED 日志隔离
+                            pass
+
+                self.publisher.publish(
                     job_id,
                     workspace.root,
                     staged,
                     expected_baselines=expected_baselines,
+                    on_committed=finalize_restore,
                 )
                 published = True
-                committed = self._require_committed_operation(workspace.root, job_id)
-                result_hash = self._committed_result_hash(committed, workspace.dst_path)
                 record_id = f"restore-{job_id}"
-                self.database.finalize_committed_job(
-                    record_id,
-                    workspace_id,
-                    job_id,
-                    before_hash,
-                    result_hash,
-                    revision_dir,
-                    current_revision=result_hash,
-                )
         except PublishRolledBackError as exc:
             self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, exc.code, str(exc))
             return self.database.get_job(job_id) or {}
@@ -563,6 +659,12 @@ class DstManagerService:
                 )
                 self.database.finalize_job_terminal(job_id, status, code, str(exc))
             return self.database.get_job(job_id) or {}
+        if commit_state["error"] is not None:
+            return self.database.get_job(job_id) or {}
+        result_hash = commit_state["result_hash"]
+        if not isinstance(result_hash, str):
+            self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, "COMMITTED_FINALIZE_MISSING")
+            return self.database.get_job(job_id) or {}
         workspace_row = self.database.get_workspace(workspace_id)
         self._write_workspace_metadata_after_commit(
             workspace,
@@ -579,7 +681,13 @@ class DstManagerService:
         )
         return self.database.get_job(job_id) or {}
 
-    def preview_xml(self, workspace_id: str, base_revision_id: str, xml: bytes) -> dict[str, Any]:
+    def preview_xml(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        xml: bytes,
+        destination: Path | None = None,
+    ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
         imported = AcsmDocument(xml).project(workspace.root)
@@ -600,9 +708,30 @@ class DstManagerService:
                 fields["layout"] = {"before": asdict(before.layout), "after": asdict(after.layout)}
             if fields:
                 changes.append({"type": "sheet_changed", "sheet_id": sheet_id, "fields": fields})
-        return {"sheet_count_before": len(workspace.document.sheets), "sheet_count_after": len(imported.sheets), "subset_count_before": len(workspace.document.subsets), "subset_count_after": len(imported.subsets), "changes": changes, "diagnostics": [asdict(issue) for issue in imported.diagnostics]}
+        destination_revision_id = None
+        if destination is not None:
+            destination = destination.expanduser().resolve()
+            if workspace.root != destination.parent and workspace.root not in destination.parents:
+                raise ApplicationError("DESTINATION_OUTSIDE_WORKSPACE", "导出位置必须在工作区内")
+            destination_revision_id = file_sha256(destination) if destination.is_file() else "MISSING"
+        return {
+            "sheet_count_before": len(workspace.document.sheets),
+            "sheet_count_after": len(imported.sheets),
+            "subset_count_before": len(workspace.document.subsets),
+            "subset_count_after": len(imported.subsets),
+            "changes": changes,
+            "diagnostics": [asdict(issue) for issue in imported.diagnostics],
+            "destination_revision_id": destination_revision_id,
+        }
 
-    def export_xml_to_dst(self, workspace_id: str, base_revision_id: str, xml: bytes, destination: Path) -> dict[str, Any]:
+    def export_xml_to_dst(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        xml: bytes,
+        destination: Path,
+        destination_revision_id: str | None = None,
+    ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
         document = AcsmDocument(xml)
@@ -612,20 +741,35 @@ class DstManagerService:
         destination = destination.expanduser().resolve()
         if workspace.root != destination.parent and workspace.root not in destination.parents:
             raise ApplicationError("DESTINATION_OUTSIDE_WORKSPACE", "导出位置必须在工作区内")
+        is_main = destination == workspace.dst_path
+        if not is_main and destination_revision_id is None:
+            raise ApplicationError("DESTINATION_BASELINE_REQUIRED", "非主 DST 导出必须先预览目标基准", 409)
+        frozen_destination_revision = base_revision_id if is_main else destination_revision_id
         job_id = str(uuid.uuid4())
         try:
-            self.database.create_job(job_id, workspace_id, "xml_export", JobStatus.STAGING, {"base_revision_id": base_revision_id, "destination": str(destination)})
+            self.database.create_job(
+                job_id,
+                workspace_id,
+                "xml_export",
+                JobStatus.STAGING,
+                {
+                    "base_revision_id": base_revision_id,
+                    "destination": str(destination),
+                    "destination_revision_id": frozen_destination_revision,
+                },
+            )
         except WorkspaceBusyError as exc:
             raise ApplicationError("WORKSPACE_WRITE_BUSY", str(exc), 409) from exc
         job_dir = workspace.root / ".dst-manager" / "jobs" / job_id
         input_path, staged = job_dir / "input" / "imported.xml", job_dir / "staging" / destination.name
         published = False
+        commit_state: dict[str, Any] = {"result_hash": None, "revision_dir": None, "error": None}
         try:
             with WindowsWriteLocks([destination] if destination.exists() else []):
                 expected_baseline = capture_file_baseline(destination)
-                is_main = destination == workspace.dst_path
-                if is_main and (expected_baseline is None or expected_baseline.sha256 != base_revision_id):
-                    raise PublishBaselineError("主 DST 已偏离 XML 导出基准")
+                actual_destination_revision = expected_baseline.sha256 if expected_baseline is not None else "MISSING"
+                if actual_destination_revision != frozen_destination_revision:
+                    raise PublishBaselineError("XML 导出目标已偏离预览基准")
                 before_hash = expected_baseline.sha256 if expected_baseline is not None else base_revision_id
                 input_path.parent.mkdir(parents=True, exist_ok=True)
                 staged.parent.mkdir(parents=True, exist_ok=True)
@@ -638,26 +782,44 @@ class DstManagerService:
                 self.database.update_job(job_id, JobStatus.PREPARED, 70)
                 self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
                 self._safe_operation_event(workspace.root, job_id, "PUBLISHING", file_count=1)
-                revision_dir = self.publisher.publish(
+
+                def finalize_xml(revision_dir: Path, journal: dict[str, Any]) -> None:
+                    try:
+                        result_hash = self._committed_result_hash(journal, destination)
+                        commit_state["result_hash"] = result_hash
+                        commit_state["revision_dir"] = revision_dir
+                        self.database.finalize_committed_job(
+                            f"xml-{job_id}",
+                            workspace_id,
+                            job_id,
+                            before_hash,
+                            result_hash,
+                            revision_dir,
+                            update_current=is_main,
+                            current_revision=result_hash if is_main else None,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - 回调不得让 COMMITTED 进入回滚分支
+                        commit_state["error"] = exc
+                        try:
+                            current = self.database.get_job(job_id) or {}
+                            if current.get("status") != JobStatus.SUCCEEDED:
+                                self.database.finalize_job_terminal(
+                                    job_id,
+                                    JobStatus.NEEDS_REVIEW,
+                                    "COMMITTED_FINALIZE_FAILED",
+                                    str(exc),
+                                )
+                        except Exception:  # noqa: BLE001, S110 - 启动恢复仍会依据 COMMITTED 日志隔离
+                            pass
+
+                self.publisher.publish(
                     job_id,
                     workspace.root,
                     {destination: staged},
                     expected_baselines={destination: expected_baseline},
+                    on_committed=finalize_xml,
                 )
                 published = True
-                committed = self._require_committed_operation(workspace.root, job_id)
-                result_hash = self._committed_result_hash(committed, destination)
-                revision_id = result_hash if is_main else f"{base_revision_id[:24]}-{job_id}"
-                self.database.finalize_committed_job(
-                    revision_id,
-                    workspace_id,
-                    job_id,
-                    before_hash,
-                    result_hash,
-                    revision_dir,
-                    update_current=is_main,
-                    current_revision=result_hash if is_main else None,
-                )
         except PublishRolledBackError:
             self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, "PUBLISH_ROLLED_BACK")
             return self.database.get_job(job_id) or {}
@@ -670,6 +832,14 @@ class DstManagerService:
                 status = JobStatus.NEEDS_REVIEW if published else JobStatus.FAILED
                 code = "COMMITTED_FINALIZE_FAILED" if published else getattr(exc, "code", type(exc).__name__.upper())
                 self.database.finalize_job_terminal(job_id, status, code, str(exc))
+            return self.database.get_job(job_id) or {}
+        if commit_state["error"] is not None:
+            return self.database.get_job(job_id) or {}
+        result_hash = commit_state["result_hash"]
+        revision_dir = commit_state["revision_dir"]
+        revision_id = f"xml-{job_id}"
+        if not isinstance(result_hash, str) or not isinstance(revision_dir, Path):
+            self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, "COMMITTED_FINALIZE_MISSING")
             return self.database.get_job(job_id) or {}
         revision_input = revision_dir / "input"
         try:
@@ -762,52 +932,48 @@ class DstManagerService:
         try:
             if journal.get("identity_version") != 1:
                 raise PublishRecoveryError("COMMITTED_IDENTITY_VERSION_UNSUPPORTED")
-            for entry in journal["files"]:
-                target = Path(entry["target"])
-                baseline = capture_file_baseline(target)
-                result_hash = entry.get("result_hash")
-                if result_hash is None:
-                    if baseline is not None:
-                        raise PublishRecoveryError(f"COMMITTED_RESULT_CHANGED: {target}")
-                    continue
-                expected_identity = entry.get("result_identity")
-                if (
-                    baseline is None
-                    or baseline.sha256 != result_hash
-                    or expected_identity is None
-                    or tuple(expected_identity) != baseline.identity
-                ):
-                    raise PublishRecoveryError(f"COMMITTED_RESULT_CHANGED: {target}")
-            workspace = self.database.get_workspace(job["workspace_id"])
-            if workspace is None:
-                raise PublishRecoveryError("COMMITTED_WORKSPACE_MISSING")
-            payload = job["payload"]
-            target = Path(payload["destination"]) if job["type"] == "xml_export" else Path(workspace.dst_path)
-            result_hash = self._committed_result_hash(journal, target)
-            entry = next(
-                item
-                for item in journal["files"]
-                if str(Path(item["target"]).resolve()).casefold() == str(target.resolve()).casefold()
-            )
-            before_hash = entry.get("before_hash") or payload["base_revision_id"]
-            update_current = job["type"] != "xml_export" or target.resolve() == Path(workspace.dst_path).resolve()
-            if job["type"] == "revision_restore":
-                revision_id = f"restore-{operation_id}"
-            elif job["type"] == "xml_export" and not update_current:
-                revision_id = f"{payload['base_revision_id'][:24]}-{operation_id}"
-            else:
-                revision_id = result_hash
-            revision_dir = workspace_root / ".dst-manager" / "revisions" / operation_id
-            self.database.finalize_committed_job(
-                revision_id,
-                job["workspace_id"],
-                operation_id,
-                before_hash,
-                result_hash,
-                revision_dir,
-                update_current=update_current,
-                current_revision=result_hash if update_current else None,
-            )
+            existing_results = [
+                Path(entry["target"])
+                for entry in journal["files"]
+                if entry.get("result_hash") is not None
+            ]
+            missing_results = [
+                Path(entry["target"])
+                for entry in journal["files"]
+                if entry.get("result_hash") is None
+            ]
+            with WindowsResultGuards(existing_results, missing_results) as result_guard:
+                self._validate_recovered_committed_results(journal, result_guard)
+                workspace = self.database.get_workspace(job["workspace_id"])
+                if workspace is None:
+                    raise PublishRecoveryError("COMMITTED_WORKSPACE_MISSING")
+                payload = job["payload"]
+                target = Path(payload["destination"]) if job["type"] == "xml_export" else Path(workspace.dst_path)
+                result_hash = self._committed_result_hash(journal, target)
+                entry = next(
+                    item
+                    for item in journal["files"]
+                    if str(Path(item["target"]).resolve()).casefold() == str(target.resolve()).casefold()
+                )
+                before_hash = entry.get("before_hash") or payload["base_revision_id"]
+                update_current = job["type"] != "xml_export" or target.resolve() == Path(workspace.dst_path).resolve()
+                if job["type"] == "revision_restore":
+                    revision_id = f"restore-{operation_id}"
+                elif job["type"] == "xml_export":
+                    revision_id = f"xml-{operation_id}"
+                else:
+                    revision_id = f"change-{operation_id}"
+                revision_dir = workspace_root / ".dst-manager" / "revisions" / operation_id
+                self.database.finalize_committed_job(
+                    revision_id,
+                    job["workspace_id"],
+                    operation_id,
+                    before_hash,
+                    result_hash,
+                    revision_dir,
+                    update_current=update_current,
+                    current_revision=result_hash if update_current else None,
+                )
         except Exception as exc:  # noqa: BLE001 - 无法证明 COMMITTED 一致性时必须隔离
             self.database.finalize_job_terminal(
                 operation_id,
@@ -815,6 +981,28 @@ class DstManagerService:
                 "COMMITTED_RECOVERY_UNPROVEN",
                 str(exc),
             )
+
+    @staticmethod
+    def _validate_recovered_committed_results(
+        journal: dict[str, Any],
+        result_guard: WindowsResultGuards,
+    ) -> None:
+        for entry in journal["files"]:
+            target = Path(entry["target"])
+            result_hash = entry.get("result_hash")
+            if result_hash is None:
+                if not result_guard.protects_missing(target):
+                    raise PublishRecoveryError(f"COMMITTED_RESULT_CHANGED: {target}")
+                continue
+            baseline = capture_file_baseline(target)
+            expected_identity = entry.get("result_identity")
+            if (
+                baseline is None
+                or baseline.sha256 != result_hash
+                or expected_identity is None
+                or tuple(expected_identity) != baseline.identity
+            ):
+                raise PublishRecoveryError(f"COMMITTED_RESULT_CHANGED: {target}")
 
     @staticmethod
     def _safe_operation_event(root: Path, operation_id: str, event: str, **details: Any) -> None:

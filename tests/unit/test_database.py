@@ -45,7 +45,13 @@ def test_illegal_job_status_transition_is_rejected(tmp_path: Path):
 def test_claim_is_atomic_and_records_lease(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
     database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
-    database.create_job("job-1", "w", "change_set", "QUEUED", {})
+    database.create_job(
+        "job-1",
+        "w",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+    )
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(database.claim_next_job, ("worker-a", "worker-b")))
     claimed = [item for item in results if item]
@@ -143,6 +149,43 @@ def test_stale_revision_restore_is_never_requeued_as_cad_job_and_releases_lock(t
     assert conclusions == [{"id": "restore", "conclusion": "STATE_REVIEW_REQUIRED"}]
     assert database.get_job("restore")["status"] == "NEEDS_REVIEW"
     assert database.claim_next_job("cad-worker") is None
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_historical_queued_non_cad_jobs_are_quarantined_and_never_claimed(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job(
+        "restore",
+        "w",
+        "revision_restore",
+        "QUEUED",
+        {"base_revision_id": "r"},
+    )
+
+    conclusions = database.recover_stale_jobs(30)
+
+    assert conclusions == [{"id": "restore", "conclusion": "NON_CAD_QUEUE_QUARANTINED"}]
+    assert database.claim_next_job("cad-worker") is None
+    assert database.get_job("restore")["status"] == "NEEDS_REVIEW"
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_claim_next_job_rejects_queued_non_cad_change_set_even_without_startup_recovery(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job(
+        "metadata",
+        "w",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": False}},
+    )
+
+    assert database.claim_next_job("cad-worker") is None
+    assert database.get_job("metadata")["status"] == "NEEDS_REVIEW"
     with database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
