@@ -230,6 +230,134 @@ def _controlled_sequence(parent: etree._Element, local_name: str) -> list[str]:
     ]
 
 
+def _tail_marker() -> etree._Element:
+    node = etree.Element("UnknownTail", {"keep": "yes"})
+    node.text = "UNKNOWN"
+    node.tail = "TAIL"
+    return node
+
+
+def _sheet_tail_document(dst: Path) -> tuple[AcsmDocument, Subset, Sheet, Sheet]:
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset_node = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    first_node = subset_node.xpath("./*[local-name()='AcSmSheet']")[0]
+    second_node = _clone_with_fresh_ids(first_node, 300)
+    first_node.tail = "KEEP"
+    first_node.addnext(_tail_marker())
+    first_node.getnext().addnext(second_node)
+    second_node.tail = "END"
+    projected_subset = document.project(dst.parent).subsets[0]
+    first_sheet, second_sheet = projected_subset.sheets
+    return document, projected_subset, first_sheet, second_sheet
+
+
+def _tail_children(parent: etree._Element, local_name: str) -> list[etree._Element]:
+    return [
+        child
+        for child in parent
+        if etree.QName(child).localname in {local_name, "UnknownTail"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_labels", "expected_tails"),
+    [
+        ("unchanged", ["first", "unknown", "second"], ["KEEP", "TAIL", "END"]),
+        ("reorder", ["second", "unknown", "first"], ["KEEP", "TAIL", "END"]),
+        ("delete", ["second", "unknown"], ["KEEP", "TAILEND"]),
+        ("insert_front", ["inserted", "unknown", "first", "second"], ["KEEP", "TAIL", None, "END"]),
+    ],
+)
+def test_sheet_reconciliation_preserves_mixed_content_tail_boundaries(
+    tiny_workspace,
+    operation,
+    expected_labels,
+    expected_tails,
+):
+    dst, _ = tiny_workspace
+    document, projected_subset, first_sheet, second_sheet = _sheet_tail_document(dst)
+    inserted = _sheet(
+        "g70000000-0000-0000-0000-000000000001",
+        "003",
+        "新增",
+        str(dst.parent / "A.dwg"),
+    )
+    desired_by_operation = {
+        "unchanged": [first_sheet, second_sheet],
+        "reorder": [second_sheet, first_sheet],
+        "delete": [second_sheet],
+        "insert_front": [inserted, first_sheet, second_sheet],
+    }
+    before = document.semantic_bytes()
+    derived = DerivedDocument(
+        [
+            DerivedSubset(
+                projected_subset.acsm_id,
+                "分组",
+                "001-003",
+                projected_subset.name,
+                desired_by_operation[operation],
+            ),
+        ],
+        [projected_subset.acsm_id],
+    )
+
+    document.apply_derived_document(derived)
+
+    result_subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    children = _tail_children(result_subset, "AcSmSheet")
+    labels_by_id = {
+        first_sheet.acsm_id: "first",
+        second_sheet.acsm_id: "second",
+        inserted.acsm_id: "inserted",
+    }
+    labels = [
+        "unknown" if etree.QName(child).localname == "UnknownTail" else labels_by_id[child.get("ID")]
+        for child in children
+    ]
+    assert labels == expected_labels
+    assert [child.tail for child in children] == expected_tails
+    unknown = next(child for child in children if etree.QName(child).localname == "UnknownTail")
+    assert (unknown.get("keep"), unknown.text) == ("yes", "UNKNOWN")
+    if operation == "unchanged":
+        assert document.semantic_bytes() == before
+
+
+def test_subset_deletion_preserves_mixed_content_tail_boundaries(tiny_workspace):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    sheet_set = document.root.xpath("//*[local-name()='AcSmSheetSet']")[0]
+    first_node = sheet_set.xpath("./*[local-name()='AcSmSubset']")[0]
+    second_node = _clone_with_fresh_ids(first_node, 400)
+    first_node.tail = "KEEP"
+    first_node.addnext(_tail_marker())
+    first_node.getnext().addnext(second_node)
+    second_node.tail = "END"
+    _, second_subset = document.project(dst.parent).subsets
+    derived = DerivedDocument(
+        [
+            DerivedSubset(
+                second_subset.acsm_id,
+                "分组",
+                "001",
+                second_subset.name,
+                second_subset.sheets,
+            ),
+        ],
+        [second_subset.acsm_id],
+    )
+
+    document.apply_derived_document(derived)
+
+    result_sheet_set = document.root.xpath("//*[local-name()='AcSmSheetSet']")[0]
+    children = _tail_children(result_sheet_set, "AcSmSubset")
+    assert [
+        "unknown" if etree.QName(child).localname == "UnknownTail" else child.get("ID")
+        for child in children
+    ] == [second_subset.acsm_id, "unknown"]
+    assert [child.tail for child in children] == ["KEEP", "TAILEND"]
+
+
 def test_sheet_reconciliation_preserves_unknown_slots_for_reorder_insert_and_delete(tiny_workspace):
     dst, _ = tiny_workspace
     document = AcsmDocument(DstCodec().decode_file(dst))

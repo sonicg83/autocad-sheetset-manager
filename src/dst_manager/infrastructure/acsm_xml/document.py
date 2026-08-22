@@ -577,22 +577,46 @@ class AcsmDocument:
             for index, child in enumerate(original)
             if etree.QName(child).localname == local_name
         ]
+        original_tails = [child.tail for child in original]
         desired_index = 0
         result: list[etree._Element] = []
+        result_tails: list[str | None] = []
+        result_parent_text = parent.text
         last_controlled = controlled_positions[-1] if controlled_positions else None
+
+        def append_node(node: etree._Element) -> None:
+            result.append(node)
+            result_tails.append(None)
+
+        def append_boundary_text(value: str | None) -> None:
+            nonlocal result_parent_text
+            if value is None:
+                return
+            if result:
+                current = result_tails[-1]
+                result_tails[-1] = value if current is None else current + value
+                return
+            result_parent_text = value if result_parent_text is None else result_parent_text + value
+
         for index, child in enumerate(original):
             if etree.QName(child).localname == local_name:
                 if desired_index < len(desired):
-                    result.append(desired[desired_index])
+                    append_node(desired[desired_index])
                     desired_index += 1
             else:
-                result.append(child)
+                append_node(child)
             if index == last_controlled:
-                result.extend(desired[desired_index:])
+                for node in desired[desired_index:]:
+                    append_node(node)
                 desired_index = len(desired)
+            append_boundary_text(original_tails[index])
         if last_controlled is None:
-            result.extend(desired)
+            for node in desired:
+                append_node(node)
         try:
+            parent.text = result_parent_text
+            for node, tail in zip(result, result_tails, strict=True):
+                node.tail = tail
             parent[:] = result
         except (UnicodeError, ValueError) as exc:
             raise AcsmValidationError("CONTROLLED_CHILD_RECONCILIATION_FAILED") from exc
