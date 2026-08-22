@@ -782,10 +782,15 @@ class RecoverablePublisher:
                         f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                     )
                 revision_dir = workspace_root / ".dst-manager" / "revisions" / journal["operation_id"]
+                manifest_path = revision_dir / "manifest.json"
+                try:
+                    archived_journal = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    archived_journal = None
                 try:
                     if journal.get("cleanup_status") == "PENDING":
                         self._finish_committed_cleanup(path, journal, revision_dir)
-                    elif not (revision_dir / "manifest.json").is_file():
+                    elif archived_journal != journal:
                         self._archive_journal(revision_dir, path, journal)
                 except Exception as recovery_error:
                     journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"

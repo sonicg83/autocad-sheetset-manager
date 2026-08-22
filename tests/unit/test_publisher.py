@@ -1063,6 +1063,59 @@ def test_archive_copy_failure_does_not_leave_visible_manifest(
     assert not (revision_dir / "manifest.json").exists()
 
 
+def test_startup_refreshes_pending_manifest_after_second_archive_failure(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "cleanup-archive-retry.dst"
+    staged = tmp_path / "staged-cleanup-archive-retry.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    original_archive = publisher._archive_journal
+    archive_calls = 0
+
+    def fail_second_archive(*args):
+        nonlocal archive_calls
+        archive_calls += 1
+        if archive_calls == 2:
+            raise OSError("注入 cleanup 完成后的归档失败")
+        return original_archive(*args)
+
+    monkeypatch.setattr(publisher, "_archive_journal", fail_second_archive)
+    publisher.publish("cleanup-archive-retry", tmp_path, {target: staged})
+    journal_path = tmp_path / ".dst-manager/jobs/cleanup-archive-retry/publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions/cleanup-archive-retry/manifest.json"
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["cleanup_status"] == "COMPLETE"
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["cleanup_status"] == "PENDING"
+
+    publisher.recover(tmp_path)
+
+    assert json.loads(manifest_path.read_text(encoding="utf-8")) == json.loads(
+        journal_path.read_text(encoding="utf-8"),
+    )
+
+
+def test_startup_refreshes_manifest_when_content_differs_from_committed_journal(tmp_path: Path):
+    target = tmp_path / "manifest-content-refresh.dst"
+    staged = tmp_path / "staged-manifest-content-refresh.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    publisher.publish("manifest-content-refresh", tmp_path, {target: staged})
+    journal_path = tmp_path / ".dst-manager/jobs/manifest-content-refresh/publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions/manifest-content-refresh/manifest.json"
+    stale_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stale_manifest["cleanup_error_detail"] = "stale-manifest"
+    manifest_path.write_text(json.dumps(stale_manifest), encoding="utf-8")
+
+    publisher.recover(tmp_path)
+
+    assert json.loads(manifest_path.read_text(encoding="utf-8")) == json.loads(
+        journal_path.read_text(encoding="utf-8"),
+    )
+
+
 @pytest.mark.skipif(os.name != "nt", reason="验证 Windows ReplaceFile/rename 共享删除竞态")
 def test_result_guard_blocks_replace_between_final_verification_and_committed_journal(tmp_path: Path):
     target = tmp_path / "guarded.dst"
@@ -1195,6 +1248,41 @@ def test_non_windows_result_guard_only_unlinks_original_placeholder(
         replacement.replace(target)
 
     assert target.read_bytes() == b"external"
+    tombstones = list(tmp_path.glob(f".{target.name}.*.guard-tombstone"))
+    assert len(tombstones) == 1
+    assert tombstones[0].read_bytes() == b"external"
+
+
+def test_non_windows_result_guard_preserves_replacement_created_after_identity_probe(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "fallback-probed.dst"
+    replacement = tmp_path / "fallback-probed-external.dst"
+    replacement.write_bytes(b"external-after-stat")
+    monkeypatch.setattr(
+        locking_module,
+        "os",
+        SimpleNamespace(name="posix", fstat=os.fstat),
+    )
+    guard = WindowsResultGuards([], [target])
+    guard.__enter__()
+    original_stat = Path.stat
+    injected = False
+
+    def stat_then_replace(path: Path, *args, **kwargs):
+        nonlocal injected
+        result = original_stat(path, *args, **kwargs)
+        if not injected and (path == target or "guard-tombstone" in path.name):
+            replacement.replace(target)
+            injected = True
+        return result
+
+    monkeypatch.setattr(Path, "stat", stat_then_replace)
+
+    guard.__exit__(None, None, None)
+
+    assert target.read_bytes() == b"external-after-stat"
 
 
 def test_winerror32_rollback_preserves_original_identity_or_reports_failure(

@@ -1,5 +1,6 @@
 import ctypes
 import os
+import uuid
 from pathlib import Path
 
 
@@ -148,9 +149,18 @@ class WindowsResultGuards:
         while self.placeholders:
             path = self.placeholders.pop()
             expected_identity = self.placeholder_identities.pop(path, None)
+            tombstone = path.with_name(f".{path.name}.{uuid.uuid4().hex}.guard-tombstone")
             try:
-                current = path.stat()
+                path.replace(tombstone)
             except FileNotFoundError:
                 continue
+            current = tombstone.stat()
             if expected_identity == (current.st_dev, current.st_ino):
-                path.unlink(missing_ok=True)
+                tombstone.unlink(missing_ok=True)
+                continue
+            # 路径在守卫期间被外部对象替换：尝试以 hard link 原子恢复原名称，并始终保留
+            # 私有 tombstone 作为隔离现场；若恢复失败，同样绝不删除该外部对象。
+            try:
+                path.hardlink_to(tombstone)
+            except OSError:
+                continue
