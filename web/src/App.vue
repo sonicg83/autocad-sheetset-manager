@@ -10,8 +10,8 @@ type JobFile={target_path:string;status:string;progress:number;duration_ms?:numb
 type Job={id:string|null;status:string;progress:number;attempt?:number;error_code?:string;suggestion?:string;files?:JobFile[];no_op?:boolean};
 type Revision={id:string;created_at:string;before_hash:string;result_hash:string};
 type Diagnostic={severity:string;code:string;message:string;line?:number};
-type Preview={executable:boolean;requires_cad?:boolean;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null};
-type PreviewContext={workspaceId:string;baseRevisionId:string;commands:Record<string,unknown>[];result:Preview};
+type Preview={executable:boolean;requires_cad?:boolean;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null;semantic_diff?:Record<string,any>};
+type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:Record<string,unknown>[];result:Preview};
 type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:Preview};
 type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:Record<string,any>};
 
@@ -32,6 +32,7 @@ const csvPreview=ref<Preview|null>(null);
 const csvPreviewContext=ref<CsvPreviewContext|null>(null);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
+const cadVersion=ref("2020");
 let previewGeneration=0;
 let csvGeneration=0;
 let workspaceLoadGeneration=0;
@@ -51,6 +52,8 @@ const hasPropertyDefinitionCommands=computed(()=>commands.value.some(item=>item.
 const hasStructuralCommands=computed(()=>commands.value.some(item=>["update_subset_title","delete_sheet","insert_sheet","insert_subset"].includes(String(item.type))));
 const previewGroups=computed(()=>preview.value?.execution_intent?.groups??[]);
 const derivedSubsets=computed(()=>preview.value?.execution_intent?.derived_document?.subsets??[]);
+const sourceInspections=computed(()=>preview.value?.execution_intent?.source_inspections??[]);
+const semanticDiff=computed(()=>preview.value?.semantic_diff??{structure:{before:[],after:[]},properties:[],dwgs:[]});
 
 async function request(url:string,options?:RequestInit){
   const response=await fetch(url,{headers:{"Content-Type":"application/json"},...options});
@@ -61,6 +64,7 @@ async function request(url:string,options?:RequestInit){
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
+function formatSemanticValue(value:unknown){if(value===null||value===undefined||value==="")return "—";return typeof value==="object"?JSON.stringify(value):String(value)}
 function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value=null;csvPreviewContext.value=null;if(clearText)csvText.value=""}
 function invalidateRevisionState(){revisionGeneration+=1;revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null}
 function invalidateJobMonitor(clearJob=false){jobMonitorGeneration+=1;activeJobEvents?.close();activeJobEvents=null;if(pollTimer!==null){clearTimeout(pollTimer);pollTimer=null}if(clearJob)job.value=null;return jobMonitorGeneration}
@@ -146,13 +150,14 @@ async function showPreview(){
   if(isWorkspaceLoading.value||!workspace.value||!commands.value.length)return;
   const workspaceId=workspace.value.id;
   const baseRevisionId=workspace.value.revision_id;
+  const cadVersionSnapshot=cadVersion.value;
   const commandSnapshot=cloneJson(commands.value);
   const generation=++previewGeneration;
   preview.value=null;previewContext.value=null;
   try{
-    const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot})});
+    const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot,cad_version:cadVersionSnapshot})});
     if(generation!==previewGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
-    preview.value=result;previewContext.value={workspaceId,baseRevisionId,commands:commandSnapshot,result};error.value="";
+    preview.value=result;previewContext.value={workspaceId,baseRevisionId,cadVersion:cadVersionSnapshot,commands:commandSnapshot,result};error.value="";
   }
   catch(e){if(generation===previewGeneration)error.value=String(e)}
 }
@@ -164,7 +169,7 @@ async function execute(){
   if(!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
   const generation=invalidateJobMonitor(false);
   try{
-    const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:"2020"})});
+    const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion})});
     if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
     job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED")await refreshWorkspace(context.workspaceId);
   }
@@ -277,7 +282,7 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
     <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button :disabled="isRestoreExecuting" @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="isRestoreExecuting||!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
 
     <template v-if="workspace&&!isWorkspaceLoading&&!isRestoreExecuting">
-      <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div></section>
+      <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div><div><label>AutoCAD 版本<select v-model="cadVersion" @change="invalidatePreview"><option value="2016">2016</option><option value="2020">2020</option></select></label></div></section>
       <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
       <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
 
@@ -308,8 +313,12 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
       </section>
 
       <section v-if="preview" class="panel preview"><h2>完整变更预览</h2>
+        <section><h3>前后有序结构</h3><div class="group-grid"><article v-for="side in ['before','after']" :key="side"><h4>{{side==='before'?'变更前':'变更后'}}</h4><table><thead><tr><th>位置</th><th>子集 / 图纸</th><th>图号范围 / 后缀</th><th>DWG / 布局</th></tr></thead><tbody><template v-for="subset in semanticDiff.structure?.[side]??[]" :key="subset.id"><tr><td>{{subset.position}}</td><td>{{subset.display_name}} · {{subset.title}}</td><td>{{subset.number_range}}</td><td>{{subset.dwg_file}}</td></tr><tr v-for="sheet in subset.sheets" :key="sheet.id"><td>{{subset.position}}.{{sheet.position}}</td><td>{{sheet.number}} · {{sheet.title}}</td><td>{{sheet.suffix||'—'}}</td><td>{{sheet.dwg_file}} · {{sheet.layout_name}}</td></tr></template></tbody></table></article></div></section>
+        <section v-if="semanticDiff.properties?.length"><h3>属性差异</h3><table><thead><tr><th>操作</th><th>作用域</th><th>名称</th><th>前值</th><th>后值</th><th>受影响图纸</th></tr></thead><tbody><tr v-for="item in semanticDiff.properties" :key="`${item.action}-${item.type}-${item.name}`"><td>{{item.action}}</td><td>{{item.type}}</td><td>{{item.name}}</td><td>{{formatSemanticValue(item.before)}}</td><td>{{formatSemanticValue(item.after)}}</td><td>{{item.affected_sheet_count}}</td></tr></tbody></table></section>
+        <section v-if="semanticDiff.dwgs?.length"><h3>DWG 与布局差异</h3><table><thead><tr><th>操作</th><th>变更前文件 / 布局</th><th>变更后文件 / 布局</th></tr></thead><tbody><tr v-for="item in semanticDiff.dwgs" :key="`${item.action}-${item.subset_id}`"><td>{{item.action}}</td><td>{{item.before?.file??'—'}} · {{item.before?.layouts?.join('、')??'—'}}</td><td>{{item.after?.file??'—'}} · {{item.after?.layouts?.join('、')??'—'}}</td></tr></tbody></table></section>
+        <section v-if="sourceInspections.length"><h3>布局来源验证</h3><table><thead><tr><th>AutoCAD</th><th>来源</th><th>SHA-256</th><th>可用布局</th><th>请求布局</th></tr></thead><tbody><tr v-for="item in sourceInspections" :key="item.path"><td>{{item.cad_version}}</td><td>{{item.path}}</td><td>{{item.sha256}}</td><td>{{item.layouts.join('、')}}</td><td>{{item.requested_layouts.join('、')}}</td></tr></tbody></table></section>
         <section v-if="preview.execution_intent"><h3>图号范围变化</h3><table v-if="derivedSubsets.length"><thead><tr><th>服务端图号范围</th><th>服务端显示名</th><th>服务端标题</th></tr></thead><tbody><tr v-for="subset in derivedSubsets" :key="subset.acsm_id"><td>{{subset.number_range}}</td><td>{{subset.display_name}}</td><td>{{subset.title}}</td></tr></tbody></table></section>
-        <section><h3>变更</h3><ul><li v-for="(change,index) in preview.changes" :key="index"><strong>{{change.label??change.type}}</strong><span v-if="change.before!==undefined||change.after!==undefined">：{{change.before??'—'}} → {{change.after??'—'}}</span></li></ul></section>
+        <section><h3>兼容变更清单</h3><ul><li v-for="(change,index) in preview.changes" :key="index"><strong>{{change.label??change.type}}</strong><span v-if="change.affected_sheet_count!==undefined"> · 受影响图纸 {{change.affected_sheet_count}}</span></li></ul></section>
         <section v-if="previewGroups.length"><h3>CAD 执行分组</h3><div class="group-grid"><article v-for="group in previewGroups" :key="group.subset_id??group.target_file" class="execution-group"><strong>{{operationLabel(group.operation)}}</strong><h4>{{group.subset_name}}</h4><p>{{group.target_file}}</p><table><thead><tr><th>图号</th><th>服务端标题</th><th>目标布局</th></tr></thead><tbody><tr v-for="layout in group.layouts" :key="layout.sheet_id??layout.target_layout??layout.layout_name"><td>{{layout.number}}</td><td>{{layout.title}}</td><td>{{layout.target_layout??layout.layout_name}}</td></tr></tbody></table></article></div></section>
         <section><h3>诊断</h3><ul class="diagnostics"><li v-for="item in preview.diagnostics" :key="item.code+item.message" :class="item.severity"><b>{{item.code}}</b>：{{item.message}}</li><li v-if="!preview.diagnostics?.length">无阻断诊断</li></ul></section>
         <section><h3>受影响文件</h3><ul><li v-for="file in preview.affected_files" :key="file">{{file}}</li></ul></section>

@@ -107,7 +107,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/workspaces/{workspace_id}/changes/preview")
     def preview(workspace_id: str, request: ChangeRequest):
-        return service.preview_changes(workspace_id, request.base_revision_id, request.commands)
+        if request.cad_version not in {"2016", "2020"}:
+            raise HTTPException(422, "cad_version必须为2016或2020")
+        return service.preview_changes(
+            workspace_id,
+            request.base_revision_id,
+            request.commands,
+            request.cad_version,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/changes/execute")
     def execute(workspace_id: str, request: ChangeRequest):

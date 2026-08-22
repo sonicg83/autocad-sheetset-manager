@@ -118,7 +118,7 @@ def test_missing_custom_value_update_and_supported_insert_complete_before_publis
             "source": {"type": "template_layout", "file": str(existing.layout.resolved_path), "layout": existing.layout.layout_name},
         },
     ]
-    preview = service.preview_changes(workspace.id, workspace.revision_id, commands)
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
     assert preview["executable"] is True, preview
     job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
     assert job["status"] == "QUEUED", job
@@ -434,7 +434,7 @@ def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, 
         "initial_sheet_count": 3,
         "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
     }
-    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
     created_group = next(group for group in preview["execution_intent"]["groups"] if group["operation"] == "create")
     assert created_group["source_target_file"] is None
     assert len(created_group["layouts"]) == 3
@@ -471,7 +471,7 @@ def test_batch_insert_rebuilds_layouts_in_final_order(version: str, tmp_path: Pa
         "count": 3,
         "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
     }
-    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
     group = preview["execution_intent"]["groups"][0]
     assert group["operation"] == "rebuild"
     assert len(group["layouts"]) == 4
@@ -488,7 +488,7 @@ def test_batch_insert_rebuilds_layouts_in_final_order(version: str, tmp_path: Pa
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_missing_template_layout_fails_without_publishing(version: str, tmp_path: Path):
+def test_missing_template_layout_is_blocked_during_preview(version: str, tmp_path: Path):
     dst, drawing, _ = _copy_single_subset_project(tmp_path)
     service = DstManagerService(_system_settings(tmp_path))
     workspace = service.open_workspace(dst)
@@ -503,11 +503,11 @@ def test_missing_template_layout_fails_without_publishing(version: str, tmp_path
         "source": {"type": "template_layout", "file": str(drawing), "layout": "不存在的模板布局"},
     }
 
-    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
-    result = service.run_next_job()
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
 
-    assert job["status"] == "QUEUED"
-    assert result and result["status"] == "FAILED", result
-    assert result["error_code"] == "CAD_PROCESS_FAILED"
+    assert preview["executable"] is False
+    assert preview["diagnostics"][0]["code"] == "SOURCE_LAYOUT_NOT_FOUND"
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
     assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)} == before
-    assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
+    assert not (tmp_path / ".dst-manager").exists()

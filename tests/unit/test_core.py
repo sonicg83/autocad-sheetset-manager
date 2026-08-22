@@ -697,6 +697,7 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
         "deleted_subsets": [],
         "derived_document": {},
         "expected_file_hashes": {},
+        "source_inspections": [],
     }
     runner._execute = Mock(return_value={"status": "SUCCEEDED"})
     monkeypatch.setattr(
@@ -734,7 +735,14 @@ def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
         "source": {"type": "template_layout", "file": str(missing), "layout": "A3"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
-    plan["expected_file_hashes"] = {}
+    plan["expected_file_hashes"] = {str(missing.resolve()): None}
+    plan["source_inspections"] = [{
+        "path": str(missing.resolve()),
+        "sha256": None,
+        "cad_version": "2020",
+        "layouts": ["A3"],
+        "requested_layouts": ["A3"],
+    }]
     database = Mock()
     database.get_job.return_value = {"status": "FAILED", "error_code": "TEMPLATE_NOT_FOUND"}
     runner = CadJobRunner(database, DstCodec(), Mock(), 30)
@@ -862,9 +870,19 @@ def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
     assert exc_info.value.code == "DUPLICATE_STAGED_TARGET"
 
 
+def _mock_template_inspection(service: DstManagerService, layouts: list[str]) -> None:
+    service.inspect_template = lambda path, version: {
+        "path": str(Path(path).resolve()),
+        "sha256": file_sha256(Path(path)),
+        "cad_version": version,
+        "layouts": [{"name": name, "handle": f"H-{index}"} for index, name in enumerate(layouts)],
+    }
+
+
 def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    _mock_template_inspection(service, ["001 平面"])
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -875,17 +893,27 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
     }
 
-    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
-    job = service.execute_changes(workspace.id, workspace.revision_id, [command])
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], "2016")
+    job = service.execute_changes(workspace.id, workspace.revision_id, [command], "2016")
 
     assert preview["executable"] is True
     assert any(group["operation"] == "create" for group in preview["execution_intent"]["groups"])
+    assert preview["execution_intent"]["source_inspections"] == [
+        {
+            "path": str((tmp_path / "A.dwg").resolve()),
+            "sha256": file_sha256(tmp_path / "A.dwg"),
+            "cad_version": "2016",
+            "layouts": ["001 平面"],
+            "requested_layouts": ["001 平面"],
+        },
+    ]
     assert job["payload"]["plan"]["execution_intent"] == preview["execution_intent"]
 
 
 def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hashes(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    _mock_template_inspection(service, ["001 平面"])
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -904,6 +932,115 @@ def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hash
     assert expected[str((tmp_path / "A.dwg").resolve())] == file_sha256(tmp_path / "A.dwg")
     create_target = next(group["target_file"] for group in intent["groups"] if group["operation"] == "create")
     assert expected[str(Path(create_target).resolve())] is None
+
+
+def test_structural_preview_blocks_outside_source_without_invoking_cad(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    outside = tmp_path.parent / "outside-template.dwt"
+    outside.write_bytes(b"template")
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    inspected: list[Path] = []
+    service.inspect_template = lambda path, version: inspected.append(Path(path))
+    workspace = service.open_workspace(dst)
+
+    preview = service.preview_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{
+            "type": "insert_subset",
+            "ordinal": 1,
+            "placement": "after",
+            "title": "新建子集",
+            "initial_sheet_count": 1,
+            "source": {"type": "template_layout", "file": str(outside), "layout": "A3"},
+        }],
+    )
+
+    assert preview["executable"] is False
+    assert preview["diagnostics"][0]["code"] == "LAYOUT_SOURCE_OUTSIDE_WORKSPACE"
+    assert inspected == []
+
+
+def test_structural_preview_blocks_missing_or_ambiguous_layout(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "A3"},
+    }
+    _mock_template_inspection(service, ["001 平面"])
+    missing = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    _mock_template_inspection(service, ["001 平面", "A3", "a3"])
+    ambiguous = service.preview_changes(workspace.id, workspace.revision_id, [command])
+
+    assert missing["diagnostics"][0]["code"] == "SOURCE_LAYOUT_NOT_FOUND"
+    assert ambiguous["diagnostics"][0]["code"] == "SOURCE_LAYOUT_AMBIGUOUS", ambiguous
+
+
+def test_preview_semantic_diff_contains_complete_structure_properties_and_dwgs(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    _mock_template_inspection(service, ["001 平面"])
+    workspace = service.open_workspace(dst)
+    structural = service.preview_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{
+            "type": "insert_subset",
+            "ordinal": 1,
+            "placement": "after",
+            "title": "新建子集",
+            "initial_sheet_count": 1,
+            "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
+        }],
+    )
+    properties = service.preview_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
+    )
+
+    assert [item["position"] for item in structural["semantic_diff"]["structure"]["before"]] == [1]
+    assert [item["position"] for item in structural["semantic_diff"]["structure"]["after"]] == [1, 2]
+    assert structural["semantic_diff"]["structure"]["after"][1]["sheets"][0].keys() >= {
+        "position", "id", "number", "title", "suffix", "dwg_file", "layout_name",
+    }
+    assert structural["semantic_diff"]["dwgs"][0].keys() >= {"action", "before", "after"}
+    assert properties["semantic_diff"]["properties"][0]["affected_sheet_count"] == 1
+    assert properties["changes"][0]["affected_sheet_count"] == 1
+
+
+def test_cad_runner_rejects_missing_or_wrong_version_source_evidence(tmp_path: Path):
+    source = tmp_path / "A.dwg"
+    source.write_bytes(b"source")
+    plan = {
+        "groups": [{
+            "operation": "create",
+            "source_snapshot": str(source),
+            "layouts": [{"source_file": str(source), "source_layout": "A3"}],
+        }],
+        "expected_file_hashes": {str(source.resolve()): file_sha256(source)},
+    }
+
+    with pytest.raises(PlanningError) as missing:
+        CadJobRunner._validate_source_inspections(plan, "2016")
+    plan["source_inspections"] = [{
+        "path": str(source.resolve()),
+        "sha256": file_sha256(source),
+        "cad_version": "2020",
+        "layouts": ["A3"],
+        "requested_layouts": ["A3"],
+    }]
+    with pytest.raises(PlanningError) as mismatch:
+        CadJobRunner._validate_source_inspections(plan, "2016")
+
+    assert missing.value.code == "EXECUTION_SOURCE_EVIDENCE_MISSING"
+    assert mismatch.value.code == "EXECUTION_SOURCE_EVIDENCE_MISMATCH"
 
 
 def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, tmp_path: Path):

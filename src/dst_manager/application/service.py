@@ -174,6 +174,7 @@ class DstManagerService:
                     "type": definition.type,
                     "name": definition.name,
                     "default_value": definition.default_value,
+                    "affected_sheet_count": len(workspace.document.sheets) if definition.type == "sheet" else 0,
                 },
             )
         main_preview = self.preview_changes(workspace_id, base_revision_id, commands)
@@ -214,7 +215,15 @@ class DstManagerService:
             writer.writerow([definition.type, definition.name, definition.default_value])
         return stream.getvalue().encode("utf-8")
 
-    def preview_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]]) -> dict[str, Any]:
+    def preview_changes(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        commands: list[dict[str, Any]],
+        cad_version: str = "2020",
+    ) -> dict[str, Any]:
+        if cad_version not in {"2016", "2020"}:
+            raise ApplicationError("CAD_VERSION_INVALID", f"不支持的AutoCAD版本：{cad_version}", 422)
         normalized_commands = self._normalize_commands(commands)
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
@@ -255,9 +264,21 @@ class DstManagerService:
                         self.settings.number_suffix_type,
                     ),
                 )
-                self._attach_expected_file_hashes(workspace, execution_intent)
             except PlanningError as exc:
                 diagnostics.append({"code": exc.code, "severity": "error", "message": str(exc)})
+        if execution_intent is not None and not diagnostics:
+            diagnostics.extend(self._inspect_structural_sources(workspace, execution_intent, cad_version))
+            if not diagnostics:
+                try:
+                    self._attach_expected_file_hashes(workspace, execution_intent)
+                except OSError as exc:
+                    diagnostics.append(
+                        {
+                            "code": "LAYOUT_SOURCE_UNREADABLE",
+                            "severity": "error",
+                            "message": f"布局来源无法读取：{exc}",
+                        },
+                    )
         if not diagnostics:
             try:
                 preview_dom = AcsmDocument(self.codec.decode_file(workspace.dst_path)).clone()
@@ -297,10 +318,34 @@ class DstManagerService:
             affected.update(group["target_file"] for group in execution_intent["groups"])
             affected.update(group["source_target_file"] for group in execution_intent["groups"] if group["source_target_file"] is not None)
             affected.update(item["target_file"] for item in execution_intent["deleted_subsets"])
-        return {"workspace_id": workspace_id, "base_revision_id": base_revision_id, "requires_cad": structural, "affected_files": sorted(affected), "execution_intent": execution_intent, "changes": changes, "diagnostics": diagnostics, "executable": not any(item["severity"] == "error" for item in diagnostics)}
+        semantic_diff = self._build_semantic_diff(workspace, normalized_commands, execution_intent)
+        property_counts = {
+            (item["action"], item["type"], item["name"]): item["affected_sheet_count"]
+            for item in semantic_diff["properties"]
+        }
+        for change in changes:
+            command = change["after"]
+            if command["type"] in {"add_custom_property", "delete_custom_property"}:
+                action = "add" if command["type"] == "add_custom_property" else "delete"
+                change["affected_sheet_count"] = property_counts.get(
+                    (action, command.get("property_type"), command.get("name")),
+                    0,
+                )
+        return {
+            "workspace_id": workspace_id,
+            "base_revision_id": base_revision_id,
+            "cad_version": cad_version,
+            "requires_cad": structural,
+            "affected_files": sorted(affected),
+            "execution_intent": execution_intent,
+            "semantic_diff": semantic_diff,
+            "changes": changes,
+            "diagnostics": diagnostics,
+            "executable": not any(item["severity"] == "error" for item in diagnostics),
+        }
 
     def execute_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]], cad_version: str = "2020") -> dict[str, Any]:
-        plan = self.preview_changes(workspace_id, base_revision_id, commands)
+        plan = self.preview_changes(workspace_id, base_revision_id, commands, cad_version)
         if not plan["executable"]:
             raise ApplicationError("PLAN_INVALID", "执行计划包含阻断诊断")
         normalized_commands = self._normalize_commands(commands)
@@ -892,6 +937,286 @@ class DstManagerService:
         if workspace.revision_id != base_revision_id:
             raise ApplicationError("REVISION_CONFLICT", "基准修订已变化，请重新预览", 409)
 
+    def _inspect_structural_sources(
+        self,
+        workspace: Workspace,
+        execution_intent: dict[str, Any],
+        cad_version: str,
+    ) -> list[dict[str, Any]]:
+        """在任务入队前解析、检查并固化全部布局来源证据。"""
+        def diagnostic(code: str, message: str) -> dict[str, Any]:
+            return {"code": code, "severity": "error", "message": message}
+
+        row = self.database.get_workspace(workspace.id)
+        allowed_roots = [workspace.root.resolve()]
+        if row is not None and row.root_override:
+            allowed_roots.append(Path(row.root_override).expanduser().resolve())
+        sources: dict[str, dict[str, Any]] = {}
+
+        def register(raw_path: str, source_type: str, requested_layout: str | None = None) -> Path:
+            candidate = Path(raw_path).expanduser()
+            if not candidate.is_absolute():
+                candidate = workspace.root / candidate
+            resolved = candidate.resolve()
+            key = str(resolved).casefold()
+            item = sources.setdefault(
+                key,
+                {"path": resolved, "types": set(), "requested_layouts": set()},
+            )
+            item["types"].add(source_type)
+            if requested_layout:
+                item["requested_layouts"].add(requested_layout)
+            return resolved
+
+        try:
+            for group in execution_intent.get("groups", []):
+                snapshot_type = "template_layout" if group.get("operation") == "create" else "existing_snapshot"
+                snapshot = register(group["source_snapshot"], snapshot_type)
+                group["source_snapshot"] = str(snapshot)
+                for layout in group.get("layouts", []):
+                    source = register(layout["source_file"], layout["source_type"], layout["source_layout"])
+                    layout["source_file"] = str(source)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return [diagnostic("LAYOUT_SOURCE_OUTSIDE_WORKSPACE", f"布局来源路径无效：{exc}")]
+
+        for item in sorted(sources.values(), key=lambda source: str(source["path"]).casefold()):
+            path = item["path"]
+            if not any(path == root or path.is_relative_to(root) for root in allowed_roots):
+                return [diagnostic("LAYOUT_SOURCE_OUTSIDE_WORKSPACE", f"布局来源越出工作区：{path}")]
+            allowed_extensions = {".dwg", ".dwt"}
+            if "existing_snapshot" in item["types"]:
+                allowed_extensions = {".dwg"}
+            if path.suffix.lower() not in allowed_extensions:
+                return [diagnostic("LAYOUT_SOURCE_EXTENSION_INVALID", f"布局来源扩展名无效：{path}")]
+            if not path.is_file():
+                return [diagnostic("LAYOUT_SOURCE_NOT_FOUND", f"布局来源不存在：{path}")]
+            try:
+                with path.open("rb") as stream:
+                    stream.read(1)
+            except OSError:
+                return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源不可读：{path}")]
+
+        inspections: list[dict[str, Any]] = []
+        for item in sorted(sources.values(), key=lambda source: str(source["path"]).casefold()):
+            path = item["path"]
+            try:
+                inspected = self.inspect_template(path, cad_version)
+            except ApplicationError as exc:
+                if exc.code == "CAD_CAPABILITY_UNAVAILABLE":
+                    return [diagnostic(exc.code, str(exc))]
+                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
+            except Exception as exc:  # noqa: BLE001 - CAD 检查边界统一转换为阻断诊断
+                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
+            raw_layouts = inspected.get("layouts") if isinstance(inspected, dict) else None
+            if not isinstance(raw_layouts, list):
+                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查结果无效：{path}")]
+            layout_names = [
+                str(layout["name"] if isinstance(layout, dict) else layout)
+                for layout in raw_layouts
+            ]
+            requested = sorted(item["requested_layouts"], key=str.casefold)
+            for requested_name in requested:
+                matches = [name for name in layout_names if name.casefold() == requested_name.casefold()]
+                if not matches:
+                    return [diagnostic("SOURCE_LAYOUT_NOT_FOUND", f"来源布局不存在：{path} / {requested_name}")]
+                if len(matches) > 1:
+                    return [diagnostic("SOURCE_LAYOUT_AMBIGUOUS", f"来源布局大小写歧义：{path} / {requested_name}")]
+            inspected_path = Path(str(inspected.get("path", path))).resolve()
+            if inspected_path != path or inspected.get("cad_version") != cad_version:
+                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查证据不匹配：{path}")]
+            inspections.append(
+                {
+                    "path": str(path),
+                    "sha256": str(inspected.get("sha256", "")),
+                    "cad_version": cad_version,
+                    "layouts": sorted(layout_names, key=str.casefold),
+                    "requested_layouts": requested,
+                },
+            )
+        execution_intent["source_inspections"] = inspections
+        return []
+
+    @classmethod
+    def _build_semantic_diff(
+        cls,
+        workspace: Workspace,
+        commands: list[dict[str, Any]],
+        execution_intent: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        before = cls._summarize_current_structure(workspace)
+        after = (
+            cls._summarize_derived_structure(execution_intent["derived_document"])
+            if execution_intent is not None
+            else before
+        )
+        return {
+            "structure": {"before": before, "after": after},
+            "properties": cls._summarize_property_changes(workspace, commands),
+            "dwgs": cls._summarize_dwg_changes(workspace, execution_intent),
+        }
+
+    @classmethod
+    def _summarize_current_structure(cls, workspace: Workspace) -> list[dict[str, Any]]:
+        result = []
+        for subset_position, subset in enumerate(sorted(workspace.document.subsets, key=lambda item: item.order), 1):
+            sheets = []
+            for sheet_position, sheet in enumerate(subset.sheets, 1):
+                drawing = sheet.layout.resolved_path or sheet.layout.file_name
+                sheets.append(cls._sheet_summary(sheet_position, sheet.acsm_id, sheet.number, sheet.title, str(drawing or ""), sheet.layout.layout_name))
+            number_range = ""
+            if sheets:
+                number_range = sheets[0]["number"] if len(sheets) == 1 else f"{sheets[0]['number']}-{sheets[-1]['number']}"
+            title = subset.name
+            if number_range and subset.name.startswith(f"{number_range} "):
+                title = subset.name[len(number_range) + 1:]
+            result.append(
+                {
+                    "position": subset_position,
+                    "id": subset.acsm_id,
+                    "title": title,
+                    "number_range": number_range,
+                    "display_name": subset.name,
+                    "dwg_file": sheets[0]["dwg_file"] if sheets else "",
+                    "sheets": sheets,
+                },
+            )
+        return result
+
+    @classmethod
+    def _summarize_derived_structure(cls, document: dict[str, Any]) -> list[dict[str, Any]]:
+        result = []
+        for subset_position, subset in enumerate(document.get("subsets", []), 1):
+            drawing = str(subset.get("target_file", ""))
+            sheets = [
+                cls._sheet_summary(
+                    sheet_position,
+                    sheet["acsm_id"],
+                    sheet["number"],
+                    sheet["title"],
+                    drawing,
+                    sheet["layout"]["layout_name"],
+                )
+                for sheet_position, sheet in enumerate(subset.get("sheets", []), 1)
+            ]
+            result.append(
+                {
+                    "position": subset_position,
+                    "id": subset["acsm_id"],
+                    "title": subset["title"],
+                    "number_range": subset["number_range"],
+                    "display_name": subset["display_name"],
+                    "dwg_file": drawing,
+                    "sheets": sheets,
+                },
+            )
+        return result
+
+    @staticmethod
+    def _sheet_summary(position: int, sheet_id: str, number: str, title: str, drawing: str, layout: str) -> dict[str, Any]:
+        suffix_match = re.search(r"\s+\(([^()]*)\)$", title)
+        return {
+            "position": position,
+            "id": sheet_id,
+            "number": number,
+            "title": title,
+            "suffix": suffix_match.group(1) if suffix_match else "",
+            "dwg_file": drawing,
+            "layout_name": layout,
+        }
+
+    @staticmethod
+    def _summarize_property_changes(workspace: Workspace, commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        try:
+            definitions = {
+                (definition.type, definition.name.casefold()): definition
+                for definition in property_definitions_from_document(workspace.document)
+            }
+        except AcsmValidationError:
+            definitions = {}
+        sheet_by_id = {sheet.acsm_id: sheet for sheet in workspace.document.sheets}
+        result = []
+        for command in commands:
+            command_type = command["type"]
+            if command_type in {"add_custom_property", "delete_custom_property"}:
+                property_type = command["property_type"]
+                name = command["name"]
+                previous = definitions.get((property_type, name.casefold()))
+                after = None
+                if command_type == "add_custom_property":
+                    after = {
+                        "type": property_type,
+                        "name": name,
+                        "default_value": command.get("default_value", ""),
+                    }
+                result.append(
+                    {
+                        "action": "add" if command_type == "add_custom_property" else "delete",
+                        "type": property_type,
+                        "name": name,
+                        "before": asdict(previous) if previous is not None else None,
+                        "after": after,
+                        "affected_sheet_count": len(workspace.document.sheets) if property_type == "sheet" else 0,
+                    },
+                )
+            elif command_type == "update_sheet_properties":
+                sheet = sheet_by_id.get(command.get("sheet_id"))
+                for name, value in command.get("custom_properties", {}).items():
+                    result.append(
+                        {
+                            "action": "update",
+                            "type": "sheet",
+                            "name": name,
+                            "before": sheet.custom_properties.get(name) if sheet else None,
+                            "after": value,
+                            "affected_sheet_count": 1 if sheet else 0,
+                        },
+                    )
+            elif command_type == "update_sheet_set":
+                for name, value in command.get("custom_properties", {}).items():
+                    result.append(
+                        {
+                            "action": "update",
+                            "type": "sheetset",
+                            "name": name,
+                            "before": workspace.document.custom_properties.get(name),
+                            "after": value,
+                            "affected_sheet_count": 0,
+                        },
+                    )
+        return result
+
+    @classmethod
+    def _summarize_dwg_changes(cls, workspace: Workspace, execution_intent: dict[str, Any] | None) -> list[dict[str, Any]]:
+        if execution_intent is None:
+            return []
+        before_by_id = {item["id"]: item for item in cls._summarize_current_structure(workspace)}
+        after_by_id = {item["id"]: item for item in cls._summarize_derived_structure(execution_intent["derived_document"])}
+        result = []
+        for group in execution_intent.get("groups", []):
+            subset_id = group["subset_id"]
+            before = before_by_id.get(subset_id)
+            after = after_by_id.get(subset_id)
+            result.append(
+                {
+                    "action": group["operation"],
+                    "subset_id": subset_id,
+                    "before": None if before is None else {"file": before["dwg_file"], "layouts": [sheet["layout_name"] for sheet in before["sheets"]]},
+                    "after": None if after is None else {"file": after["dwg_file"], "layouts": [sheet["layout_name"] for sheet in after["sheets"]]},
+                },
+            )
+        for deleted in execution_intent.get("deleted_subsets", []):
+            subset_id = deleted["subset_id"]
+            before = before_by_id.get(subset_id)
+            result.append(
+                {
+                    "action": "delete",
+                    "subset_id": subset_id,
+                    "before": {"file": deleted["target_file"], "layouts": [sheet["layout_name"] for sheet in before["sheets"]]} if before else {"file": deleted["target_file"], "layouts": []},
+                    "after": None,
+                },
+            )
+        return result
+
     @staticmethod
     def _attach_expected_file_hashes(workspace: Workspace, execution_intent: dict[str, Any]) -> None:
         paths = {
@@ -902,10 +1227,15 @@ class DstManagerService:
         for group in execution_intent.get("groups", []):
             paths.add(Path(group["source_snapshot"]).resolve())
             paths.update(Path(layout["source_file"]).resolve() for layout in group.get("layouts", []))
-        execution_intent["expected_file_hashes"] = {
+        expected = {
             str(path): file_sha256(path) if path.is_file() else None
             for path in sorted(paths, key=lambda item: str(item).casefold())
         }
+        for inspection in execution_intent.get("source_inspections", []):
+            path = str(Path(inspection["path"]).resolve())
+            if expected.get(path) != inspection["sha256"]:
+                raise OSError(f"布局来源在检查后发生变化：{path}")
+        execution_intent["expected_file_hashes"] = expected
 
     def _require_committed_operation(self, workspace_root: Path, operation_id: str) -> dict[str, Any]:
         journal = self.publisher.read_committed_operation(workspace_root, operation_id)

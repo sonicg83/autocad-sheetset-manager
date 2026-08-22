@@ -41,6 +41,22 @@ test("维护属性并按位置创建子集后预览派生变化",async({page})=>
   await expect(page.getByText("图号范围变化")).toBeVisible();await expect(page.getByText("创建 DWG")).toBeVisible();await expect(page.getByText("重建 DWG")).toBeVisible();const derivedTable=page.locator(".preview table").filter({hasText:"服务端图号范围"});await expect(derivedTable.getByRole("cell",{name:"003-004",exact:true})).toBeVisible();await expect(derivedTable.getByRole("cell",{name:"003-004 新分册",exact:true})).toBeVisible();const createdGroup=page.locator(".execution-group").filter({hasText:"创建 DWG"});await expect(createdGroup.getByText("C:\\project\\003-004 新分册.dwg",{exact:true})).toBeVisible();await expect(createdGroup.getByRole("cell",{name:"003 新分册 (一)",exact:true})).toBeVisible();
 });
 
+test("冻结CAD版本并展示服务端语义差异与来源证据",async({page})=>{
+  const previewBodies:any[]=[];let executeBody:any=null;
+  const semantic={
+    structure:{before:[{position:1,id:"subset-1",title:"第一册",number_range:"001-002",display_name:"001-002 第一册",dwg_file:"C:\\project\\A.dwg",sheets:[{position:1,id:"sheet-1",number:"001",title:"第一册 (一)",suffix:"一",dwg_file:"C:\\project\\A.dwg",layout_name:"001 第一册 (一)"}]}],after:[{position:1,id:"subset-1",title:"第一册",number_range:"001-003",display_name:"001-003 第一册",dwg_file:"C:\\project\\A.dwg",sheets:[{position:1,id:"sheet-1",number:"001",title:"第一册 (一)",suffix:"一",dwg_file:"C:\\project\\A.dwg",layout_name:"001 第一册 (一)"}]}]},
+    properties:[{action:"add",type:"sheet",name:"专业",before:null,after:{name:"专业",default_value:"燃气"},affected_sheet_count:2}],
+    dwgs:[{action:"rebuild",subset_id:"subset-1",before:{file:"C:\\project\\A.dwg",layouts:["001 第一册 (一)"]},after:{file:"C:\\project\\A.dwg",layouts:["001 第一册 (一)","003 第一册 (三)"]}}],
+  };
+  const inspection={path:"C:\\project\\template.dwt",sha256:"abc123",cad_version:"2016",layouts:["A1模板"],requested_layouts:["A1模板"]};
+  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());await route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"add_custom_property",affected_sheet_count:2}],diagnostics:[],affected_files:["C:\\project\\test.dst"],semantic_diff:semantic,execution_intent:{source_inspections:[inspection],derived_document:{subsets:[]},groups:[]}}})});
+  await page.route("**/api/workspaces/workspace-1/changes/execute",async route=>{executeBody=await route.request().postDataJSON();await route.fulfill({json:{id:"job-version",status:"FAILED",progress:0,attempt:1,files:[]}})});
+  await openWorkspace(page);await page.getByLabel("AutoCAD 版本").selectOption("2016");await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  expect(previewBodies[0].cad_version).toBe("2016");await expect(page.getByText("前后有序结构")).toBeVisible();await expect(page.getByRole("columnheader",{name:"受影响图纸"})).toBeVisible();await expect(page.getByText("DWG 与布局差异")).toBeVisible();await expect(page.getByText("布局来源验证")).toBeVisible();await expect(page.getByText("abc123",{exact:true})).toBeVisible();await expect(page.getByText("A1模板",{exact:true}).first()).toBeVisible();await expect(page.getByText("[object Object]",{exact:true})).toHaveCount(0);
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();expect(executeBody.cad_version).toBe("2016");
+  await page.getByRole("button",{name:"预览变更"}).click();await expect(page.getByText("完整变更预览")).toBeVisible();await page.getByLabel("AutoCAD 版本").selectOption("2020");await expect(page.getByText("完整变更预览")).toHaveCount(0);
+});
+
 test("普通预览丢弃乱序响应并只执行冻结命令",async({page})=>{
   const gates=[deferred(),deferred(),deferred(),deferred()];const previewBodies:any[]=[];let executeBody:any=null;
   await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{const index=previewBodies.length;previewBodies.push(await route.request().postDataJSON());await gates[index].promise;await route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:`preview-${index+1}`}],diagnostics:[],affected_files:[`preview-${index+1}.dst`],execution_intent:null}})});

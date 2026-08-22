@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from dst_manager.config import Settings
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.filesystem.publisher import file_sha256
 from dst_manager.interfaces.api import create_app
 
 
@@ -75,6 +76,109 @@ def test_sheet_set_name_is_metadata_only(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); payload={"base_revision_id":opened["revision_id"],"commands":[{"type":"update_sheet_set","name":"新图纸集"}]}
     assert client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json()["requires_cad"] is False
     assert client.post(f"/api/workspaces/{opened['id']}/changes/execute",json=payload).json()["status"]=="SUCCEEDED"
+
+
+def test_metadata_illegal_xml_text_is_blocked_without_side_effects(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    before = dst.read_bytes()
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [{"type": "update_sheet_set", "name": "非法\u0001名称"}],
+    }
+
+    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload)
+    execute = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is False
+    assert preview.json()["diagnostics"][0]["code"] == "XML_TEXT_INVALID"
+    assert execute.status_code == 400
+    assert execute.json()["code"] == "PLAN_INVALID"
+    assert dst.read_bytes() == before
+    with app.state.service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_empty_sheetset_sheet_property_round_trip_reports_zero_affected(tmp_path):
+    xml = (
+        b'<AcSmDatabase ID="g00000000-0000-0000-0000-000000000001">'
+        b'<AcSmProp propname="DbVersion">1.1</AcSmProp>'
+        b'<AcSmSheetSet ID="g00000000-0000-0000-0000-000000000002">'
+        b'<AcSmProp propname="Name">Empty</AcSmProp>'
+        b'</AcSmSheetSet></AcSmDatabase>'
+    )
+    dst = tmp_path / "empty.dst"
+    DstCodec().encode_file(xml, dst)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [{"type": "add_custom_property", "property_type": "sheet", "name": "专业", "default_value": "燃气"}],
+    }
+
+    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
+    executed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload).json()
+    reopened = client.get(f"/api/workspaces/{opened['id']}").json()
+    exported = client.get(f"/api/workspaces/{opened['id']}/custom-properties/export").text
+
+    assert [item["code"] for item in preview["diagnostics"]] == []
+    assert preview["executable"] is True
+    assert preview["changes"][0]["affected_sheet_count"] == 0
+    assert preview["semantic_diff"]["properties"][0]["affected_sheet_count"] == 0
+    assert executed["status"] == "SUCCEEDED"
+    assert {item["name"] for item in reopened["sheet_set"]["property_definitions"]} == {"专业"}
+    assert "sheet,专业," in exported
+
+
+def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    inspected_versions: list[str] = []
+
+    def inspect(path, version):
+        inspected_versions.append(version)
+        return {
+            "path": str(path.resolve()),
+            "sha256": file_sha256(path),
+            "cad_version": version,
+            "layouts": [{"name": "001 平面", "handle": "AB"}],
+        }
+
+    app.state.service.inspect_template = inspect
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "cad_version": "2016",
+        "commands": [{
+            "type": "insert_subset",
+            "ordinal": 1,
+            "placement": "after",
+            "title": "新建子集",
+            "initial_sheet_count": 1,
+            "source": {"type": "template_layout", "file": str(dst.parent / "A.dwg"), "layout": "001 平面"},
+        }],
+    }
+
+    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
+    executed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload).json()
+    invalid = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json={**payload, "cad_version": "2018"},
+    )
+
+    assert preview["executable"] is True
+    assert preview["cad_version"] == "2016"
+    assert {item["cad_version"] for item in preview["execution_intent"]["source_inspections"]} == {"2016"}
+    assert executed["payload"]["plan"]["cad_version"] == "2016"
+    assert executed["payload"]["plan"]["execution_intent"]["source_inspections"] == preview["execution_intent"]["source_inspections"]
+    assert set(inspected_versions) == {"2016"}
+    assert invalid.status_code == 422
 
 
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):
@@ -568,6 +672,7 @@ def test_property_csv_preview_merges_main_dom_diagnostics_and_blocks_execution(t
             "type": "sheet",
             "name": "专业",
             "default_value": "燃气",
+            "affected_sheet_count": 1,
         }
     ]
     assert [item["code"] for item in preview.json()["diagnostics"]] == ["CUSTOM_PROPERTY_FLAGS_INVALID"]
