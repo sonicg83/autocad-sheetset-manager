@@ -284,7 +284,7 @@ class RecoverablePublisher:
             except Exception:  # noqa: BLE001, S110 - COMMITTED 主记录已先持久化
                 pass
         try:
-            if on_committed is not None:
+            if archive_succeeded and on_committed is not None:
                 on_committed(revision_dir, journal)
         finally:
             if result_guard is not None:
@@ -320,11 +320,16 @@ class RecoverablePublisher:
 
     @staticmethod
     def _archive_journal(revision_dir: Path, journal_path: Path, journal: dict) -> None:
-        (revision_dir / "manifest.json").write_text(
+        manifest_path = revision_dir / "manifest.json"
+        manifest_temp = revision_dir / ".manifest.json.tmp"
+        # manifest 是数据库 finalize 的可见性闸门，因此必须最后原子发布；任何前置归档
+        # 失败都只能留下不可枚举的临时文件或 journal 副本。
+        shutil.copy2(journal_path, revision_dir / "publish-journal.json")
+        manifest_temp.write_text(
             json.dumps(journal, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        shutil.copy2(journal_path, revision_dir / "publish-journal.json")
+        os.replace(manifest_temp, manifest_path)
 
     def _commit_create(self, entry: dict, publish_temp: Path) -> None:
         target = Path(entry["target"])
@@ -769,8 +774,6 @@ class RecoverablePublisher:
             if status in {"ROLLED_BACK", "ABORTED_BASELINE_CHANGED"}:
                 continue
             if status == "COMMITTED":
-                if journal.get("cleanup_status") != "PENDING":
-                    continue
                 if "identity_version" in journal and journal["identity_version"] != 1:
                     journal["cleanup_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
                     journal["cleanup_error_detail"] = repr(journal["identity_version"])
@@ -779,7 +782,19 @@ class RecoverablePublisher:
                         f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                     )
                 revision_dir = workspace_root / ".dst-manager" / "revisions" / journal["operation_id"]
-                self._finish_committed_cleanup(path, journal, revision_dir)
+                try:
+                    if journal.get("cleanup_status") == "PENDING":
+                        self._finish_committed_cleanup(path, journal, revision_dir)
+                    elif not (revision_dir / "manifest.json").is_file():
+                        self._archive_journal(revision_dir, path, journal)
+                except Exception as recovery_error:
+                    journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
+                    journal["cleanup_error_detail"] = str(recovery_error)
+                    try:
+                        self._write_journal(path, journal)
+                    except Exception:  # noqa: BLE001, S110 - 保留原始归档恢复故障
+                        pass
+                    raise PublishRecoveryError(str(recovery_error)) from recovery_error
                 continue
             if "identity_version" in journal and journal["identity_version"] != 1:
                 journal["status"] = "ROLLBACK_FAILED"
@@ -824,10 +839,7 @@ class RecoverablePublisher:
     def list_committed_operations(self, workspace_root: Path) -> list[dict]:
         """只读枚举仍可用于数据库闭环的 COMMITTED 发布清单。"""
         workspace_root = workspace_root.resolve()
-        candidates = [
-            *(workspace_root / ".dst-manager" / "jobs").glob("*/publish-journal.json"),
-            *(workspace_root / ".dst-manager" / "revisions").glob("*/manifest.json"),
-        ]
+        candidates = (workspace_root / ".dst-manager" / "revisions").glob("*/manifest.json")
         committed: dict[str, dict] = {}
         for path in candidates:
             try:

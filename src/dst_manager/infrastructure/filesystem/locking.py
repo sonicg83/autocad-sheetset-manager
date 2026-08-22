@@ -62,13 +62,16 @@ class WindowsResultGuards:
         self.handles: list[int] = []
         self.streams = []
         self.placeholders: set[Path] = set()
+        self.placeholder_identities: dict[Path, tuple[int, int]] = {}
 
     def __enter__(self):
         if os.name != "nt":
             self.streams = [path.open("rb") for path in self.existing_paths]
             for path in self.missing_paths:
-                path.open("xb").close()
+                with path.open("xb") as placeholder:
+                    stat = os.fstat(placeholder.fileno())
                 self.placeholders.add(path)
+                self.placeholder_identities[path] = (stat.st_dev, stat.st_ino)
             return self
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateFileW.restype = ctypes.c_void_p
@@ -137,6 +140,17 @@ class WindowsResultGuards:
             kernel32 = ctypes.windll.kernel32
             while self.handles:
                 kernel32.CloseHandle(self.handles.pop())
+            # delete-pending 文件在最后一个句柄关闭时已由内核删除并释放名称；此后绝不能
+            # 再按路径 unlink，否则可能删除恰好复用该名称的外部文件。
+            self.placeholders.clear()
+            self.placeholder_identities.clear()
+            return
         while self.placeholders:
             path = self.placeholders.pop()
-            path.unlink(missing_ok=True)
+            expected_identity = self.placeholder_identities.pop(path, None)
+            try:
+                current = path.stat()
+            except FileNotFoundError:
+                continue
+            if expected_identity == (current.st_dev, current.st_ino):
+                path.unlink(missing_ok=True)

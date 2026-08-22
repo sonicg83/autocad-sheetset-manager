@@ -2,10 +2,16 @@ import ctypes
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from dst_manager.infrastructure.filesystem.locking import WindowsWriteLocks
+from dst_manager.infrastructure.filesystem import locking as locking_module
+from dst_manager.infrastructure.filesystem import publisher as publisher_module
+from dst_manager.infrastructure.filesystem.locking import (
+    WindowsResultGuards,
+    WindowsWriteLocks,
+)
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishBaselineError,
     PublishRecoveryError,
@@ -983,7 +989,7 @@ def test_startup_resumes_cleanup_after_crash_following_committed_journal(
     assert json.loads(journal_path.read_text(encoding="utf-8"))["cleanup_status"] == "COMPLETE"
 
 
-def test_committed_operation_can_be_read_from_active_journal_when_manifest_is_missing(tmp_path: Path):
+def test_committed_operation_is_not_visible_without_manifest(tmp_path: Path):
     root = tmp_path / "workspace"
     root.mkdir()
     target = root / "a.dst"
@@ -995,13 +1001,66 @@ def test_committed_operation_can_be_read_from_active_journal_when_manifest_is_mi
     revision_dir = publisher.publish("job-committed", root, {target: staged})
     (revision_dir / "manifest.json").unlink()
 
-    committed = publisher.list_committed_operations(root)
+    assert publisher.list_committed_operations(root) == []
 
-    assert len(committed) == 1
-    assert committed[0]["operation_id"] == "job-committed"
-    assert committed[0]["status"] == "COMMITTED"
-    assert committed[0]["files"][0]["before_hash"] == file_sha256(revision_dir / "before" / "a.dst")
-    assert committed[0]["files"][0]["result_hash"] == file_sha256(target)
+
+def test_archive_failure_does_not_invoke_committed_callback_or_expose_operation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "archive-failure.dst"
+    staged = tmp_path / "staged-archive-failure.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    callback_results: list[str] = []
+
+    def fail_archive(*_args):
+        raise OSError("注入 manifest 归档失败")
+
+    monkeypatch.setattr(publisher, "_archive_journal", fail_archive)
+
+    publisher.publish(
+        "archive-failure",
+        tmp_path,
+        {target: staged},
+        on_committed=lambda _revision_dir, _journal: callback_results.append("called"),
+    )
+
+    assert callback_results == []
+    assert publisher.list_committed_operations(tmp_path) == []
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/archive-failure/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "COMMITTED"
+    assert journal["cleanup_error_code"] == "PUBLISH_ARCHIVE_FAILED"
+
+
+def test_archive_copy_failure_does_not_leave_visible_manifest(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "archive-copy-failure.dst"
+    staged = tmp_path / "staged-archive-copy-failure.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    original_copy = publisher_module.shutil.copy2
+
+    def fail_publish_journal_copy(source, destination, *args, **kwargs):
+        if Path(destination).name == "publish-journal.json":
+            raise OSError("注入归档 journal 复制失败")
+        return original_copy(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(publisher_module.shutil, "copy2", fail_publish_journal_copy)
+
+    RecoverablePublisher().publish(
+        "archive-copy-failure",
+        tmp_path,
+        {target: staged},
+    )
+
+    revision_dir = tmp_path / ".dst-manager/revisions/archive-copy-failure"
+    assert not (revision_dir / "manifest.json").exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="验证 Windows ReplaceFile/rename 共享删除竞态")
@@ -1089,6 +1148,53 @@ def test_result_guard_blocks_replacement_of_new_target_during_committed_callback
 
     assert replacement_blocked is True
     assert target.read_bytes() == b"published"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="验证 Windows delete-pending 关闭后的名称复用")
+def test_windows_result_guard_does_not_unlink_external_file_created_after_close(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "deleted-then-recreated.dst"
+    target.write_bytes(b"before")
+    target.unlink()
+    kernel32 = ctypes.windll.kernel32
+    original_close = kernel32.CloseHandle
+    external_created = False
+
+    def close_then_recreate(handle):
+        nonlocal external_created
+        result = original_close(handle)
+        if not external_created:
+            target.write_bytes(b"external-after-close")
+            external_created = True
+        return result
+
+    monkeypatch.setattr(kernel32, "CloseHandle", close_then_recreate)
+
+    with WindowsResultGuards([], [target]):
+        pass
+
+    assert target.read_bytes() == b"external-after-close"
+
+
+def test_non_windows_result_guard_only_unlinks_original_placeholder(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "fallback-recreated.dst"
+    replacement = tmp_path / "fallback-external.dst"
+    replacement.write_bytes(b"external")
+    monkeypatch.setattr(
+        locking_module,
+        "os",
+        SimpleNamespace(name="posix", fstat=os.fstat),
+    )
+
+    with WindowsResultGuards([], [target]):
+        replacement.replace(target)
+
+    assert target.read_bytes() == b"external"
 
 
 def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
