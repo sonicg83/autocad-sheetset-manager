@@ -9,6 +9,7 @@ import pytest
 from dst_manager.infrastructure.filesystem import locking as locking_module
 from dst_manager.infrastructure.filesystem import publisher as publisher_module
 from dst_manager.infrastructure.filesystem.locking import (
+    FileLockError,
     WindowsResultGuards,
     WindowsWriteLocks,
 )
@@ -1116,6 +1117,59 @@ def test_startup_refreshes_manifest_when_content_differs_from_committed_journal(
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("result_hash", "0" * 64),
+        ("result_identity", [999, 999]),
+    ],
+)
+def test_startup_rejects_main_journal_file_identity_projection_tampering(
+    tmp_path: Path,
+    field: str,
+    tampered_value,
+):
+    target = tmp_path / f"immutable-{field}.dst"
+    staged = tmp_path / f"staged-immutable-{field}.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    operation_id = f"immutable-{field}"
+    publisher.publish(operation_id, tmp_path, {target: staged})
+    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "manifest.json"
+    safe_manifest = manifest_path.read_bytes()
+    tampered = json.loads(journal_path.read_text(encoding="utf-8"))
+    tampered["files"][0][field] = tampered_value
+    journal_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+    with pytest.raises(PublishRecoveryError, match="PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"):
+        publisher.recover(tmp_path)
+
+    assert manifest_path.read_bytes() == safe_manifest
+
+
+def test_startup_rejects_main_journal_operation_id_tampering(tmp_path: Path):
+    target = tmp_path / "immutable-operation.dst"
+    staged = tmp_path / "staged-immutable-operation.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    operation_id = "immutable-operation"
+    publisher.publish(operation_id, tmp_path, {target: staged})
+    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "manifest.json"
+    safe_manifest = manifest_path.read_bytes()
+    tampered = json.loads(journal_path.read_text(encoding="utf-8"))
+    tampered["operation_id"] = "tampered-operation"
+    journal_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+    with pytest.raises(PublishRecoveryError, match="PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"):
+        publisher.recover(tmp_path)
+
+    assert manifest_path.read_bytes() == safe_manifest
+
+
 @pytest.mark.skipif(os.name != "nt", reason="验证 Windows ReplaceFile/rename 共享删除竞态")
 def test_result_guard_blocks_replace_between_final_verification_and_committed_journal(tmp_path: Path):
     target = tmp_path / "guarded.dst"
@@ -1231,12 +1285,12 @@ def test_windows_result_guard_does_not_unlink_external_file_created_after_close(
     assert target.read_bytes() == b"external-after-close"
 
 
-def test_non_windows_result_guard_only_unlinks_original_placeholder(
+def test_non_windows_result_guard_fails_closed_without_touching_paths(
     tmp_path: Path,
     monkeypatch,
 ):
-    target = tmp_path / "fallback-recreated.dst"
-    replacement = tmp_path / "fallback-external.dst"
+    target = tmp_path / "fallback-unsupported.dst"
+    replacement = tmp_path / "fallback-untouched.dst"
     replacement.write_bytes(b"external")
     monkeypatch.setattr(
         locking_module,
@@ -1244,45 +1298,44 @@ def test_non_windows_result_guard_only_unlinks_original_placeholder(
         SimpleNamespace(name="posix", fstat=os.fstat),
     )
 
-    with WindowsResultGuards([], [target]):
-        replacement.replace(target)
+    with (
+        pytest.raises(FileLockError, match="PUBLISH_RESULT_GUARD_UNSUPPORTED"),
+        WindowsResultGuards([], [target]),
+    ):
+        pass
 
-    assert target.read_bytes() == b"external"
-    tombstones = list(tmp_path.glob(f".{target.name}.*.guard-tombstone"))
-    assert len(tombstones) == 1
-    assert tombstones[0].read_bytes() == b"external"
+    assert not target.exists()
+    assert replacement.read_bytes() == b"external"
 
 
-def test_non_windows_result_guard_preserves_replacement_created_after_identity_probe(
+def test_non_windows_result_guard_never_reaches_replace_tombstone_probe(
     tmp_path: Path,
     monkeypatch,
 ):
-    target = tmp_path / "fallback-probed.dst"
-    replacement = tmp_path / "fallback-probed-external.dst"
-    replacement.write_bytes(b"external-after-stat")
+    target = tmp_path / "fallback-tombstone-probe.dst"
+    replacement = tmp_path / "fallback-tombstone-external.dst"
+    replacement.write_bytes(b"external-tombstone")
     monkeypatch.setattr(
         locking_module,
         "os",
         SimpleNamespace(name="posix", fstat=os.fstat),
     )
     guard = WindowsResultGuards([], [target])
-    guard.__enter__()
     original_stat = Path.stat
-    injected = False
 
     def stat_then_replace(path: Path, *args, **kwargs):
-        nonlocal injected
         result = original_stat(path, *args, **kwargs)
-        if not injected and (path == target or "guard-tombstone" in path.name):
-            replacement.replace(target)
-            injected = True
+        if "guard-tombstone" in path.name:
+            replacement.replace(path)
         return result
 
     monkeypatch.setattr(Path, "stat", stat_then_replace)
 
-    guard.__exit__(None, None, None)
+    with pytest.raises(FileLockError, match="PUBLISH_RESULT_GUARD_UNSUPPORTED"), guard:
+        pass
 
-    assert target.read_bytes() == b"external-after-stat"
+    assert not target.exists()
+    assert replacement.read_bytes() == b"external-tombstone"
 
 
 def test_winerror32_rollback_preserves_original_identity_or_reports_failure(

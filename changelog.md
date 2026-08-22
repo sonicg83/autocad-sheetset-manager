@@ -8,6 +8,7 @@
   - 后续事务审查修复：发布结果在最终复核、`COMMITTED` 落盘和数据库 finalize 之间持续持有不可写不可删除句柄，删除结果以同名 delete-pending 占位阻断重建；启动恢复重新验证结果 hash/identity，修订 ID 改为操作唯一；永久恢复源绑定 hash/identity，非主 DST XML 导出绑定预览目标基准，历史非 CAD 排队任务统一隔离并释放写锁。
   - 第三轮事务审查修复：Windows delete-pending 占位关闭后不再按路径二次删除，非 Windows 回退仅清理创建时同一文件身份；manifest 改为归档最后原子发布的数据库可见性闸门，归档失败不执行 finalize，任务先隔离并在启动归档恢复后幂等成功。
   - 第四轮事务审查修复：非 Windows 占位先原子移入操作私有 tombstone 再核验身份，外部替换对象恢复或留档隔离；启动恢复逐项比较 COMMITTED 主 journal 与 manifest，自动刷新 cleanup 状态或内容陈旧的归档。
+  - 第五轮事务审查修复：正式发布结果守卫在非 Windows 明确 fail-closed，不再执行任何按路径清理；COMMITTED 恢复以 manifest 的不可变事务投影为安全基准，仅在 operation、工作区根、状态及完整文件审计向量一致时同步 cleanup 字段，篡改时保留 manifest 并隔离任务。
 - 修复 `PLAN-DM-006` 最终领域与 AcSm DOM 审查缺口：结构 ID 按数据库及当前对象顺序确定性派生并阻断全局冲突，Sheet/Subset 重建按原受控槽位一次协调且保留未知兄弟节点，兼容 1–999 的 Legacy `Transdigit`，以 SheetSet `Flags=2` 锚点持久化空图纸集的 sheet 属性定义，并统一受控 XML 1.0 文本校验。
   - 后续审查修复：受控 Sheet/Subset 重排、删除或插入时将 `tail` 作为原 child 槽位后的混合内容边界保留，避免文本随节点移动、被删除或跨越未知兄弟节点。
 - 修复 `PLAN-DM-006` 最终预览审查缺口：结构预览按所选 AutoCAD 2016/2020 在任务创建前检查工作区内 DWG/DWT 来源及布局，固化路径、内容哈希、版本、可用布局和请求布局证据；CAD Worker 在启动前复核完整证据并继续使用锁内内容基准阻断漂移。预览新增服务端完整前后有序结构、属性影响数及 DWG/布局语义差异，Web 冻结同一 CAD 版本用于预览和执行并直接展示这些证据。

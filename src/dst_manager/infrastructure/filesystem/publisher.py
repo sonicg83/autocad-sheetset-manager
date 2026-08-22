@@ -58,6 +58,8 @@ def capture_file_baseline(path: Path) -> ExpectedFileBaseline | None:
 class RecoverablePublisher:
     """以before快照和同步日志提供多文件可恢复发布。"""
 
+    CLEANUP_FIELDS = ("cleanup_status", "cleanup_error_code", "cleanup_error_detail")
+
     def __init__(self, replace_file: Callable[[Path, Path], None] | None = None):
         self._replace_file = replace_file
 
@@ -330,6 +332,35 @@ class RecoverablePublisher:
             encoding="utf-8",
         )
         os.replace(manifest_temp, manifest_path)
+
+    @staticmethod
+    def _immutable_transaction_projection(workspace_root: Path, journal: dict) -> dict:
+        operation_id = journal.get("operation_id")
+        files = journal.get("files")
+        if (
+            not isinstance(operation_id, str)
+            or journal.get("status") != "COMMITTED"
+            or not isinstance(files, list)
+            or any(not isinstance(entry, dict) for entry in files)
+        ):
+            raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+        root = workspace_root.resolve()
+        for entry in files:
+            target_raw = entry.get("target")
+            if not isinstance(target_raw, str):
+                raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+            target = Path(target_raw).resolve()
+            if root != target and root not in target.parents:
+                raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+        return {
+            "identity_version": journal.get("identity_version"),
+            "operation_id": operation_id,
+            "root": str(root).casefold(),
+            "status": journal["status"],
+            # COMMITTED 后 files 的完整审计向量均不可变，包括目标、staged/backup、
+            # before/result hash 与 identity、Win32 source 及 API 状态。
+            "files": files,
+        }
 
     def _commit_create(self, entry: dict, publish_temp: Path) -> None:
         target = Path(entry["target"])
@@ -781,17 +812,35 @@ class RecoverablePublisher:
                     raise PublishRecoveryError(
                         f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                     )
-                revision_dir = workspace_root / ".dst-manager" / "revisions" / journal["operation_id"]
+                operation_id = path.parent.name
+                if journal.get("operation_id") != operation_id:
+                    raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+                revision_dir = workspace_root / ".dst-manager" / "revisions" / operation_id
                 manifest_path = revision_dir / "manifest.json"
                 try:
                     archived_journal = json.loads(manifest_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
+                except FileNotFoundError:
                     archived_journal = None
+                except (OSError, json.JSONDecodeError) as manifest_error:
+                    raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH") from manifest_error
+                if archived_journal is not None and self._immutable_transaction_projection(
+                    workspace_root,
+                    archived_journal,
+                ) != self._immutable_transaction_projection(workspace_root, journal):
+                    raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
                 try:
                     if journal.get("cleanup_status") == "PENDING":
                         self._finish_committed_cleanup(path, journal, revision_dir)
-                    elif archived_journal != journal:
+                    elif archived_journal is None:
                         self._archive_journal(revision_dir, path, journal)
+                    else:
+                        synchronized_manifest = dict(archived_journal)
+                        for field in self.CLEANUP_FIELDS:
+                            synchronized_manifest.pop(field, None)
+                            if field in journal:
+                                synchronized_manifest[field] = journal[field]
+                        if synchronized_manifest != archived_journal:
+                            self._archive_journal(revision_dir, path, synchronized_manifest)
                 except Exception as recovery_error:
                     journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
                     journal["cleanup_error_detail"] = str(recovery_error)

@@ -1,6 +1,5 @@
 import ctypes
 import os
-import uuid
 from pathlib import Path
 
 
@@ -61,19 +60,13 @@ class WindowsResultGuards:
             key=lambda item: str(item).casefold(),
         )
         self.handles: list[int] = []
-        self.streams = []
         self.placeholders: set[Path] = set()
-        self.placeholder_identities: dict[Path, tuple[int, int]] = {}
 
     def __enter__(self):
         if os.name != "nt":
-            self.streams = [path.open("rb") for path in self.existing_paths]
-            for path in self.missing_paths:
-                with path.open("xb") as placeholder:
-                    stat = os.fstat(placeholder.fileno())
-                self.placeholders.add(path)
-                self.placeholder_identities[path] = (stat.st_dev, stat.st_ino)
-            return self
+            raise FileLockError(
+                "PUBLISH_RESULT_GUARD_UNSUPPORTED: 正式发布结果守卫仅支持 Windows",
+            )
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateFileW.restype = ctypes.c_void_p
         try:
@@ -135,8 +128,6 @@ class WindowsResultGuards:
         return path.resolve() in self.placeholders
 
     def __exit__(self, *_):
-        while self.streams:
-            self.streams.pop().close()
         if os.name == "nt":
             kernel32 = ctypes.windll.kernel32
             while self.handles:
@@ -144,23 +135,5 @@ class WindowsResultGuards:
             # delete-pending 文件在最后一个句柄关闭时已由内核删除并释放名称；此后绝不能
             # 再按路径 unlink，否则可能删除恰好复用该名称的外部文件。
             self.placeholders.clear()
-            self.placeholder_identities.clear()
-            return
-        while self.placeholders:
-            path = self.placeholders.pop()
-            expected_identity = self.placeholder_identities.pop(path, None)
-            tombstone = path.with_name(f".{path.name}.{uuid.uuid4().hex}.guard-tombstone")
-            try:
-                path.replace(tombstone)
-            except FileNotFoundError:
-                continue
-            current = tombstone.stat()
-            if expected_identity == (current.st_dev, current.st_ino):
-                tombstone.unlink(missing_ok=True)
-                continue
-            # 路径在守卫期间被外部对象替换：尝试以 hard link 原子恢复原名称，并始终保留
-            # 私有 tombstone 作为隔离现场；若恢复失败，同样绝不删除该外部对象。
-            try:
-                path.hardlink_to(tombstone)
-            except OSError:
-                continue
+        else:
+            self.placeholders.clear()
