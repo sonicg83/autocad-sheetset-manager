@@ -10,7 +10,7 @@ type JobFile={target_path:string;status:string;progress:number;duration_ms?:numb
 type Job={id:string|null;status:string;progress:number;attempt?:number;error_code?:string;suggestion?:string;files?:JobFile[];no_op?:boolean};
 type Revision={id:string;created_at:string;before_hash:string;result_hash:string};
 type Diagnostic={severity:string;code:string;message:string;line?:number};
-type Preview={executable:boolean;requires_cad?:boolean;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null;semantic_diff?:Record<string,any>};
+type Preview={executable:boolean;requires_cad?:boolean;preview_digest?:string;changes?:Record<string,any>[];diagnostics?:Diagnostic[];affected_files?:string[];execution_intent?:Record<string,any>|null;semantic_diff?:Record<string,any>};
 type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:Record<string,unknown>[];result:Preview};
 type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:Preview};
 type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:Record<string,any>};
@@ -169,7 +169,7 @@ async function execute(){
   if(!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
   const generation=invalidateJobMonitor(false);
   try{
-    const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion})});
+    const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
     if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
     job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED")await refreshWorkspace(context.workspaceId);
   }

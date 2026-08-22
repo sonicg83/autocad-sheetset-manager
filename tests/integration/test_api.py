@@ -166,7 +166,11 @@ def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, ti
     }
 
     preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
-    executed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload).json()
+    unconfirmed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+    executed = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": preview["preview_digest"]},
+    ).json()
     invalid = client.post(
         f"/api/workspaces/{opened['id']}/changes/preview",
         json={**payload, "cad_version": "2018"},
@@ -175,6 +179,8 @@ def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, ti
     assert preview["executable"] is True
     assert preview["cad_version"] == "2016"
     assert {item["cad_version"] for item in preview["execution_intent"]["source_inspections"]} == {"2016"}
+    assert unconfirmed.status_code == 409
+    assert unconfirmed.json()["code"] == "REPREVIEW_REQUIRED"
     assert executed["payload"]["plan"]["cad_version"] == "2016"
     assert executed["payload"]["plan"]["execution_intent"]["source_inspections"] == preview["execution_intent"]["source_inspections"]
     assert set(inspected_versions) == {"2016"}

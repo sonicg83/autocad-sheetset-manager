@@ -49,11 +49,11 @@ test("冻结CAD版本并展示服务端语义差异与来源证据",async({page}
     dwgs:[{action:"rebuild",subset_id:"subset-1",before:{file:"C:\\project\\A.dwg",layouts:["001 第一册 (一)"]},after:{file:"C:\\project\\A.dwg",layouts:["001 第一册 (一)","003 第一册 (三)"]}}],
   };
   const inspection={path:"C:\\project\\template.dwt",sha256:"abc123",cad_version:"2016",layouts:["A1模板"],requested_layouts:["A1模板"]};
-  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());await route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"add_custom_property",affected_sheet_count:2}],diagnostics:[],affected_files:["C:\\project\\test.dst"],semantic_diff:semantic,execution_intent:{source_inspections:[inspection],derived_document:{subsets:[]},groups:[]}}})});
+  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());await route.fulfill({json:{executable:true,requires_cad:true,preview_digest:"digest-2016",changes:[{type:"add_custom_property",affected_sheet_count:2}],diagnostics:[],affected_files:["C:\\project\\test.dst"],semantic_diff:semantic,execution_intent:{source_inspections:[inspection],derived_document:{subsets:[]},groups:[]}}})});
   await page.route("**/api/workspaces/workspace-1/changes/execute",async route=>{executeBody=await route.request().postDataJSON();await route.fulfill({json:{id:"job-version",status:"FAILED",progress:0,attempt:1,files:[]}})});
   await openWorkspace(page);await page.getByLabel("AutoCAD 版本").selectOption("2016");await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewBodies[0].cad_version).toBe("2016");await expect(page.getByText("前后有序结构")).toBeVisible();await expect(page.getByRole("columnheader",{name:"受影响图纸"})).toBeVisible();await expect(page.getByText("DWG 与布局差异")).toBeVisible();await expect(page.getByText("布局来源验证")).toBeVisible();await expect(page.getByText("abc123",{exact:true})).toBeVisible();await expect(page.getByText("A1模板",{exact:true}).first()).toBeVisible();await expect(page.getByText("[object Object]",{exact:true})).toHaveCount(0);
-  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();expect(executeBody.cad_version).toBe("2016");
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();expect(executeBody.cad_version).toBe("2016");expect(executeBody.preview_digest).toBe("digest-2016");
   await page.getByRole("button",{name:"预览变更"}).click();await expect(page.getByText("完整变更预览")).toBeVisible();await page.getByLabel("AutoCAD 版本").selectOption("2020");await expect(page.getByText("完整变更预览")).toHaveCount(0);
 });
 

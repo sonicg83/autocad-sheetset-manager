@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import json
 import re
@@ -36,6 +37,7 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import (
+    FileLockError,
     WindowsResultGuards,
     WindowsWriteLocks,
 )
@@ -69,8 +71,9 @@ class DstManagerService:
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)
-            except PublishRecoveryError:
-                rolled_back = []
+            except PublishRecoveryError as exc:
+                self._quarantine_unproven_publish_jobs(root, exc)
+                continue
             for operation_id in rolled_back:
                 try:
                     self.database.update_job(operation_id, JobStatus.ROLLED_BACK, 0, "STARTUP_RECOVERY")
@@ -231,7 +234,7 @@ class DstManagerService:
         diagnostics = []
         changes = []
         structural = False
-        for index, command in enumerate(commands):
+        for index, (command, normalized_command) in enumerate(zip(commands, normalized_commands, strict=True)):
             command_type = command["type"]
             sheet_id = command.get("sheet_id")
             if command_type in {"update_sheet_properties", "delete_sheet"} and sheet_id not in sheet_ids:
@@ -239,7 +242,14 @@ class DstManagerService:
             if command_type in {"insert_sheet", "insert_subset"} and not command.get("source"):
                 diagnostics.append({"code": "LAYOUT_SOURCE_REQUIRED", "severity": "error", "message": "新增图纸必须明确布局来源", "index": index})
             structural |= command_type in {"update_subset_title", "delete_sheet", "insert_sheet", "insert_subset"}
-            changes.append({"index": index, "type": command_type, "object_id": sheet_id, "after": command})
+            changes.append(
+                {
+                    "index": index,
+                    "type": normalized_command["type"],
+                    "object_id": sheet_id,
+                    "after": normalized_command,
+                },
+            )
         property_commands = [
             command
             for command in normalized_commands
@@ -331,6 +341,13 @@ class DstManagerService:
                     (action, command.get("property_type"), command.get("name")),
                     0,
                 )
+        preview_digest = self._preview_digest(
+            base_revision_id,
+            cad_version,
+            normalized_commands,
+            execution_intent,
+            semantic_diff,
+        )
         return {
             "workspace_id": workspace_id,
             "base_revision_id": base_revision_id,
@@ -339,15 +356,25 @@ class DstManagerService:
             "affected_files": sorted(affected),
             "execution_intent": execution_intent,
             "semantic_diff": semantic_diff,
+            "preview_digest": preview_digest,
             "changes": changes,
             "diagnostics": diagnostics,
             "executable": not any(item["severity"] == "error" for item in diagnostics),
         }
 
-    def execute_changes(self, workspace_id: str, base_revision_id: str, commands: list[dict[str, Any]], cad_version: str = "2020") -> dict[str, Any]:
+    def execute_changes(
+        self,
+        workspace_id: str,
+        base_revision_id: str,
+        commands: list[dict[str, Any]],
+        cad_version: str = "2020",
+        preview_digest: str | None = None,
+    ) -> dict[str, Any]:
         plan = self.preview_changes(workspace_id, base_revision_id, commands, cad_version)
         if not plan["executable"]:
             raise ApplicationError("PLAN_INVALID", "执行计划包含阻断诊断")
+        if plan["requires_cad"] and preview_digest != plan["preview_digest"]:
+            raise ApplicationError("REPREVIEW_REQUIRED", "结构变更预览已变化或尚未确认，请重新预览并确认", 409)
         normalized_commands = self._normalize_commands(commands)
         job_id = str(uuid.uuid4())
         try:
@@ -981,7 +1008,10 @@ class DstManagerService:
 
         for item in sorted(sources.values(), key=lambda source: str(source["path"]).casefold()):
             path = item["path"]
-            if not any(path == root or path.is_relative_to(root) for root in allowed_roots):
+            if (
+                "existing_snapshot" in item["types"]
+                and not any(path == root or path.is_relative_to(root) for root in allowed_roots)
+            ):
                 return [diagnostic("LAYOUT_SOURCE_OUTSIDE_WORKSPACE", f"布局来源越出工作区：{path}")]
             allowed_extensions = {".dwg", ".dwt"}
             if "existing_snapshot" in item["types"]:
@@ -996,43 +1026,71 @@ class DstManagerService:
             except OSError:
                 return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源不可读：{path}")]
 
-        inspections: list[dict[str, Any]] = []
-        for item in sorted(sources.values(), key=lambda source: str(source["path"]).casefold()):
-            path = item["path"]
-            try:
-                inspected = self.inspect_template(path, cad_version)
-            except ApplicationError as exc:
-                if exc.code == "CAD_CAPABILITY_UNAVAILABLE":
-                    return [diagnostic(exc.code, str(exc))]
-                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
-            except Exception as exc:  # noqa: BLE001 - CAD 检查边界统一转换为阻断诊断
-                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
-            raw_layouts = inspected.get("layouts") if isinstance(inspected, dict) else None
-            if not isinstance(raw_layouts, list):
-                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查结果无效：{path}")]
-            layout_names = [
-                str(layout["name"] if isinstance(layout, dict) else layout)
-                for layout in raw_layouts
-            ]
-            requested = sorted(item["requested_layouts"], key=str.casefold)
-            for requested_name in requested:
-                matches = [name for name in layout_names if name.casefold() == requested_name.casefold()]
-                if not matches:
-                    return [diagnostic("SOURCE_LAYOUT_NOT_FOUND", f"来源布局不存在：{path} / {requested_name}")]
-                if len(matches) > 1:
-                    return [diagnostic("SOURCE_LAYOUT_AMBIGUOUS", f"来源布局大小写歧义：{path} / {requested_name}")]
-            inspected_path = Path(str(inspected.get("path", path))).resolve()
-            if inspected_path != path or inspected.get("cad_version") != cad_version:
-                return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查证据不匹配：{path}")]
-            inspections.append(
-                {
-                    "path": str(path),
-                    "sha256": str(inspected.get("sha256", "")),
-                    "cad_version": cad_version,
-                    "layouts": sorted(layout_names, key=str.casefold),
-                    "requested_layouts": requested,
-                },
-            )
+        ordered_sources = sorted(sources.values(), key=lambda source: str(source["path"]).casefold())
+        snapshots: dict[Path, tuple[Path, Any]] = {}
+        try:
+            with tempfile.TemporaryDirectory(prefix="dst-manager-preview-") as temporary_directory:
+                snapshot_root = Path(temporary_directory)
+                with WindowsWriteLocks([item["path"] for item in ordered_sources]):
+                    for index, item in enumerate(ordered_sources):
+                        path = item["path"]
+                        baseline = capture_file_baseline(path)
+                        if baseline is None:
+                            return [diagnostic("LAYOUT_SOURCE_NOT_FOUND", f"布局来源不存在：{path}")]
+                        snapshot = snapshot_root / f"{index:03d}-{path.name}"
+                        shutil.copy2(path, snapshot)
+                        if file_sha256(snapshot) != baseline.sha256 or capture_file_baseline(path) != baseline:
+                            snapshot.unlink(missing_ok=True)
+                            return [diagnostic("BASE_FILE_CHANGED", f"布局来源在快照期间发生变化：{path}")]
+                        snapshots[path] = (snapshot, baseline)
+
+                inspections: list[dict[str, Any]] = []
+                for item in ordered_sources:
+                    path = item["path"]
+                    snapshot, baseline = snapshots[path]
+                    try:
+                        inspected = self.inspect_template(snapshot, cad_version)
+                    except ApplicationError as exc:
+                        if exc.code == "CAD_CAPABILITY_UNAVAILABLE":
+                            return [diagnostic(exc.code, str(exc))]
+                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
+                    except Exception as exc:  # noqa: BLE001 - CAD 检查边界统一转换为阻断诊断
+                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
+                    raw_layouts = inspected.get("layouts") if isinstance(inspected, dict) else None
+                    if not isinstance(raw_layouts, list):
+                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查结果无效：{path}")]
+                    layout_names = [
+                        str(layout["name"] if isinstance(layout, dict) else layout)
+                        for layout in raw_layouts
+                    ]
+                    requested = sorted(item["requested_layouts"], key=str.casefold)
+                    for requested_name in requested:
+                        matches = [name for name in layout_names if name.casefold() == requested_name.casefold()]
+                        if not matches:
+                            return [diagnostic("SOURCE_LAYOUT_NOT_FOUND", f"来源布局不存在：{path} / {requested_name}")]
+                        if len(matches) > 1:
+                            return [diagnostic("SOURCE_LAYOUT_AMBIGUOUS", f"来源布局大小写歧义：{path} / {requested_name}")]
+                    inspected_path = Path(str(inspected.get("path", snapshot))).resolve()
+                    if (
+                        inspected_path != snapshot.resolve()
+                        or inspected.get("cad_version") != cad_version
+                        or inspected.get("sha256") != baseline.sha256
+                    ):
+                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查证据不匹配：{path}")]
+                    inspections.append(
+                        {
+                            "path": str(path),
+                            "sha256": baseline.sha256,
+                            "identity": list(baseline.identity),
+                            "cad_version": cad_version,
+                            "layouts": sorted(layout_names, key=str.casefold),
+                            "requested_layouts": requested,
+                        },
+                    )
+        except FileLockError as exc:
+            return [diagnostic("BLOCKED_FILE_LOCK", f"布局来源被占用：{exc}")]
+        except OSError as exc:
+            return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源无法读取：{exc}")]
         execution_intent["source_inspections"] = inspections
         return []
 
@@ -1158,7 +1216,7 @@ class DstManagerService:
                         "affected_sheet_count": len(workspace.document.sheets) if property_type == "sheet" else 0,
                     },
                 )
-            elif command_type == "update_sheet_properties":
+            elif command_type == "update_sheet":
                 sheet = sheet_by_id.get(command.get("sheet_id"))
                 for name, value in command.get("custom_properties", {}).items():
                     result.append(
@@ -1218,6 +1276,24 @@ class DstManagerService:
         return result
 
     @staticmethod
+    def _preview_digest(
+        base_revision_id: str,
+        cad_version: str,
+        commands: list[dict[str, Any]],
+        execution_intent: dict[str, Any] | None,
+        semantic_diff: dict[str, Any],
+    ) -> str:
+        payload = {
+            "base_revision_id": base_revision_id,
+            "cad_version": cad_version,
+            "commands": commands,
+            "execution_intent": execution_intent,
+            "semantic_diff": semantic_diff,
+        }
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @staticmethod
     def _attach_expected_file_hashes(workspace: Workspace, execution_intent: dict[str, Any]) -> None:
         paths = {
             workspace.dst_path.resolve(),
@@ -1227,15 +1303,23 @@ class DstManagerService:
         for group in execution_intent.get("groups", []):
             paths.add(Path(group["source_snapshot"]).resolve())
             paths.update(Path(layout["source_file"]).resolve() for layout in group.get("layouts", []))
+        inspected_sources = {
+            Path(inspection["path"]).resolve(): inspection
+            for inspection in execution_intent.get("source_inspections", [])
+        }
         expected = {
-            str(path): file_sha256(path) if path.is_file() else None
+            str(path): (
+                inspected_sources[path]["sha256"]
+                if path in inspected_sources
+                else file_sha256(path) if path.is_file() else None
+            )
             for path in sorted(paths, key=lambda item: str(item).casefold())
         }
-        for inspection in execution_intent.get("source_inspections", []):
-            path = str(Path(inspection["path"]).resolve())
-            if expected.get(path) != inspection["sha256"]:
-                raise OSError(f"布局来源在检查后发生变化：{path}")
         execution_intent["expected_file_hashes"] = expected
+        execution_intent["expected_file_identities"] = {
+            str(path): inspected_sources[path]["identity"]
+            for path in sorted(inspected_sources, key=lambda item: str(item).casefold())
+        }
 
     def _require_committed_operation(self, workspace_root: Path, operation_id: str) -> dict[str, Any]:
         journal = self.publisher.read_committed_operation(workspace_root, operation_id)
@@ -1311,6 +1395,29 @@ class DstManagerService:
                 "COMMITTED_RECOVERY_UNPROVEN",
                 str(exc),
             )
+
+    def _quarantine_unproven_publish_jobs(self, workspace_root: Path, error: PublishRecoveryError) -> None:
+        """发布清单不可证明时，只按受控任务目录隔离，绝不读取它来完成事务。"""
+        jobs_root = workspace_root.resolve() / ".dst-manager" / "jobs"
+        if not jobs_root.is_dir():
+            return
+        error_code = str(error) or error.code
+        for journal_path in jobs_root.glob("*/publish-journal.json"):
+            operation_id = journal_path.parent.name
+            if not operation_id or journal_path.parent.parent != jobs_root:
+                continue
+            job = self.database.get_job(operation_id)
+            if job is None or job["status"] == JobStatus.SUCCEEDED:
+                continue
+            try:
+                self.database.finalize_job_terminal(
+                    operation_id,
+                    JobStatus.NEEDS_REVIEW,
+                    error_code,
+                    str(error),
+                )
+            except KeyError:
+                continue
 
     @staticmethod
     def _validate_recovered_committed_results(

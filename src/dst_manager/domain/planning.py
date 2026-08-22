@@ -28,6 +28,7 @@ class PlanningError(ValueError):
 
 _UNSAFE_NAME = re.compile(r"[<>/\\\":;?*|=\r\n\x00-\x1f]")
 _ORDINAL = re.compile(r"^(.*?)[(（]([一二三四五六七八九十百]+)[)）]$")
+_DERIVED_RANGE_PREFIX = re.compile(r"^(?P<prefix>.*?)(?P<range>\d+(?:-\d+)?)\s+")
 
 
 def derive_layout_name(number: str, title: str) -> str:
@@ -58,8 +59,8 @@ def derive_subset_and_dwg_name(existing: Path, sheets: list[Sheet]) -> tuple[str
     first, last = sheets[0].number, sheets[-1].number
     number_range = first if len(sheets) == 1 else f"{first}-{last}"
     display_range = _display_number(first) if len(sheets) == 1 else f"{_display_number(first)}-{_display_number(last)}"
-    prefix_match = re.match(r"^(.*?-)(?=\d)", existing.stem)
-    prefix = prefix_match.group(1) if prefix_match else ""
+    prefix_match = _DERIVED_RANGE_PREFIX.match(existing.stem)
+    prefix = prefix_match.group("prefix") if prefix_match else ""
     subset_name = f"{display_range} {base_title}"
     file_name = f"{prefix}{number_range} {file_title}.dwg"
     if _UNSAFE_NAME.search(file_name) or len(file_name) > 240:

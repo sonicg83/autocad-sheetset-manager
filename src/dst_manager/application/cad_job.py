@@ -286,10 +286,16 @@ class CadJobRunner:
             raise PlanningError("EXECUTION_BASELINE_TARGET_MISMATCH", "执行文件集合已偏离预览")
         if expected.get(workspace.dst_path.resolve()) != workspace.revision_id:
             raise PlanningError("BASE_FILE_CHANGED", "DST 执行基准与任务修订不一致")
+        expected_identities = {
+            Path(path).resolve(): tuple(identity)
+            for path, identity in plan.get("expected_file_identities", {}).items()
+        }
         for path, baseline in captured.items():
             actual = baseline.sha256 if baseline is not None else None
             if actual != expected[path]:
                 raise PlanningError("BASE_FILE_CHANGED", f"文件内容已偏离预览基准：{path}")
+            if path in expected_identities and (baseline is None or baseline.identity != expected_identities[path]):
+                raise PlanningError("BASE_FILE_CHANGED", f"文件身份已偏离预览基准：{path}")
 
     @staticmethod
     def _validate_source_inspections(plan: dict[str, Any], cad_version: str) -> None:

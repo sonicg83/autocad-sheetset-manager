@@ -24,6 +24,7 @@ class ChangeRequest(BaseModel):
     base_revision_id: str
     commands: list[dict[str, Any]] = Field(default_factory=list)
     cad_version: str = "2020"
+    preview_digest: str | None = None
 
 
 class XmlRequest(BaseModel):
@@ -120,7 +121,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def execute(workspace_id: str, request: ChangeRequest):
         if request.cad_version not in {"2016", "2020"}:
             raise HTTPException(422, "cad_version必须为2016或2020")
-        return service.execute_changes(workspace_id, request.base_revision_id, request.commands, request.cad_version)
+        return service.execute_changes(
+            workspace_id,
+            request.base_revision_id,
+            request.commands,
+            request.cad_version,
+            request.preview_digest,
+        )
 
     @app.post("/api/workspaces/{workspace_id}/xml/import/preview")
     def preview_xml(workspace_id: str, request: XmlRequest):
