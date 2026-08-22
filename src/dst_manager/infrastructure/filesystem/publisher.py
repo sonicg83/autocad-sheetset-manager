@@ -251,8 +251,21 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
                 raise PublishRecoveryError(str(recovery_error)) from publish_error
             raise PublishRolledBackError(str(publish_error)) from publish_error
-        self._archive_journal(revision_dir, journal_path, journal)
-        self._finish_committed_cleanup(journal_path, journal, revision_dir)
+        try:
+            self._archive_journal(revision_dir, journal_path, journal)
+        except Exception as archive_error:  # noqa: BLE001 - COMMITTED 后归档失败不得伪装成发布失败
+            journal["cleanup_status"] = "PENDING"
+            journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
+            journal["cleanup_error_detail"] = str(archive_error)
+            try:
+                self._write_journal(journal_path, journal)
+            except Exception:  # noqa: BLE001, S110 - COMMITTED 主记录已先持久化
+                pass
+            return revision_dir
+        try:
+            self._finish_committed_cleanup(journal_path, journal, revision_dir)
+        except Exception:  # noqa: BLE001, S110 - 提交后清理诊断失败不得触发回滚
+            pass
         return revision_dir
 
     def _finish_committed_cleanup(
@@ -758,3 +771,36 @@ class RecoverablePublisher:
             self._write_journal(path, journal)
             recovered.append(journal["operation_id"])
         return recovered
+
+    def list_committed_operations(self, workspace_root: Path) -> list[dict]:
+        """只读枚举仍可用于数据库闭环的 COMMITTED 发布清单。"""
+        workspace_root = workspace_root.resolve()
+        candidates = [
+            *(workspace_root / ".dst-manager" / "jobs").glob("*/publish-journal.json"),
+            *(workspace_root / ".dst-manager" / "revisions").glob("*/manifest.json"),
+        ]
+        committed: dict[str, dict] = {}
+        for path in candidates:
+            try:
+                journal = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            operation_id = journal.get("operation_id")
+            if (
+                journal.get("status") != "COMMITTED"
+                or not isinstance(operation_id, str)
+                or not isinstance(journal.get("files"), list)
+            ):
+                continue
+            committed.setdefault(operation_id, journal)
+        return [committed[key] for key in sorted(committed)]
+
+    def read_committed_operation(self, workspace_root: Path, operation_id: str) -> dict | None:
+        return next(
+            (
+                journal
+                for journal in self.list_committed_operations(workspace_root)
+                if journal["operation_id"] == operation_id
+            ),
+            None,
+        )

@@ -973,12 +973,35 @@ def test_startup_resumes_cleanup_after_crash_following_committed_journal(
 
     journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
     assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "COMMITTED"
+
+
     committed_identity = _identity(target)
 
     assert RecoverablePublisher().recover(tmp_path) == []
     assert target.read_bytes() == b"published"
     assert _identity(target) == committed_identity
     assert json.loads(journal_path.read_text(encoding="utf-8"))["cleanup_status"] == "COMPLETE"
+
+
+def test_committed_operation_can_be_read_from_active_journal_when_manifest_is_missing(tmp_path: Path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    target = root / "a.dst"
+    staged = root / "staged.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    publisher = RecoverablePublisher()
+
+    revision_dir = publisher.publish("job-committed", root, {target: staged})
+    (revision_dir / "manifest.json").unlink()
+
+    committed = publisher.list_committed_operations(root)
+
+    assert len(committed) == 1
+    assert committed[0]["operation_id"] == "job-committed"
+    assert committed[0]["status"] == "COMMITTED"
+    assert committed[0]["files"][0]["before_hash"] == file_sha256(revision_dir / "before" / "a.dst")
+    assert committed[0]["files"][0]["result_hash"] == file_sha256(target)
 
 
 def test_winerror32_rollback_preserves_original_identity_or_reports_failure(

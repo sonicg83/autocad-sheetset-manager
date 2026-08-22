@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 from typer.testing import CliRunner
 
+import dst_manager.application.service as service_module
 from dst_manager.application.cad_job import CadJobRunner, RebuildResult, RebuildWorkUnit
 from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
@@ -16,6 +17,7 @@ from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
     DerivedSubset,
+    JobStatus,
     LayoutReference,
     PropertyDefinitionDiff,
     Sheet,
@@ -34,6 +36,8 @@ from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.dst_codec.codec import _DECODE, _ENCODE
 from dst_manager.infrastructure.filesystem.publisher import (
     ExpectedFileBaseline,
+    PublishBaselineError,
+    PublishRecoveryError,
     RecoverablePublisher,
     capture_file_baseline,
     file_sha256,
@@ -688,7 +692,12 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
     workspace = _planning_workspace(tmp_path, [])
     database = Mock()
     runner = CadJobRunner(database, Mock(), Mock(), 30)
-    persisted_plan = {"groups": [], "deleted_subsets": [], "derived_document": {}}
+    persisted_plan = {
+        "groups": [],
+        "deleted_subsets": [],
+        "derived_document": {},
+        "expected_file_hashes": {},
+    }
     runner._execute = Mock(return_value={"status": "SUCCEEDED"})
     monkeypatch.setattr(
         "dst_manager.domain.planning.derive_document_structure",
@@ -725,6 +734,7 @@ def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
         "source": {"type": "template_layout", "file": str(missing), "layout": "A3"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+    plan["expected_file_hashes"] = {}
     database = Mock()
     database.get_job.return_value = {"status": "FAILED", "error_code": "TEMPLATE_NOT_FOUND"}
     runner = CadJobRunner(database, DstCodec(), Mock(), 30)
@@ -804,6 +814,34 @@ def test_snapshot_copy_accepts_unchanged_identity_baseline(tmp_path: Path):
     assert snapshot.read_bytes() == b"baseline"
 
 
+def test_cad_execution_rejects_captured_hash_that_differs_from_preview(tmp_path: Path):
+    planned = _planning_workspace(tmp_path, [])
+    workspace = Workspace(
+        planned.id,
+        planned.root,
+        planned.dst_path,
+        file_sha256(planned.dst_path),
+        planned.document,
+    )
+    source = tmp_path / "source.dwg"
+    source.write_bytes(b"external")
+    captured = {
+        workspace.dst_path.resolve(): capture_file_baseline(workspace.dst_path),
+        source.resolve(): capture_file_baseline(source),
+    }
+    plan = {
+        "expected_file_hashes": {
+            str(workspace.dst_path.resolve()): workspace.revision_id,
+            str(source.resolve()): hashlib.sha256(b"preview").hexdigest(),
+        },
+    }
+
+    with pytest.raises(PlanningError) as exc_info:
+        CadJobRunner._validate_expected_hashes(plan, captured, workspace)
+
+    assert exc_info.value.code == "BASE_FILE_CHANGED"
+
+
 def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
     target = tmp_path / "same.dwg"
     first = tmp_path / "first.dwg"
@@ -845,6 +883,29 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
     assert job["payload"]["plan"]["execution_intent"] == preview["execution_intent"]
 
 
+def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hashes(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    intent = preview["execution_intent"]
+    expected = intent["expected_file_hashes"]
+
+    assert expected[str(dst.resolve())] == workspace.revision_id
+    assert expected[str((tmp_path / "A.dwg").resolve())] == file_sha256(tmp_path / "A.dwg")
+    create_target = next(group["target_file"] for group in intent["groups"] if group["operation"] == "create")
+    assert expected[str(Path(create_target).resolve())] is None
+
+
 def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
@@ -870,6 +931,9 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
                 **kwargs,
             )
 
+        def read_committed_operation(self, *args, **kwargs):
+            return delegate.read_committed_operation(*args, **kwargs)
+
     service.publisher = IdentityCheckingPublisher()
 
     result = service.execute_changes(
@@ -880,6 +944,205 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
 
     assert result["status"] == "SUCCEEDED"
     assert calls == 1
+
+
+def test_metadata_execution_rejects_atomic_replacement_before_locked_baseline(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    before = dst.read_bytes()
+    original_capture = service_module.capture_file_baseline
+    injected = False
+
+    def replace_then_capture(path: Path):
+        nonlocal injected
+        if not injected and path.resolve() == dst.resolve():
+            replacement = dst.with_suffix(".external")
+            replacement.write_bytes(b"external-version")
+            replacement.replace(dst)
+            injected = True
+        return original_capture(path)
+
+    monkeypatch.setattr(service_module, "capture_file_baseline", replace_then_capture)
+
+    result = service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "不得覆盖外部版本"}],
+    )
+
+    assert result["status"] == "FAILED"
+    assert result["error_code"] in {"REVISION_CONFLICT", "PUBLISH_BASE_CHANGED"}
+    assert dst.read_bytes() in {before, b"external-version"}
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_restore_rejects_atomic_replacement_after_preview_before_locked_baseline(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "已发布版本"}],
+    )
+    revision_id = service.database.list_revisions(workspace.id)[0]["id"]
+    current_revision = file_sha256(dst)
+    before = dst.read_bytes()
+    original_capture = service_module.capture_file_baseline
+    injected = False
+
+    def replace_then_capture(path: Path):
+        nonlocal injected
+        if not injected and path.resolve() == dst.resolve():
+            replacement = dst.with_suffix(".external")
+            replacement.write_bytes(b"external-after-preview")
+            replacement.replace(dst)
+            injected = True
+        return original_capture(path)
+
+    monkeypatch.setattr(service_module, "capture_file_baseline", replace_then_capture)
+
+    result = service.restore_revision(workspace.id, revision_id, current_revision)
+
+    assert result["status"] == "FAILED"
+    assert result["error_code"] in {"REVISION_RESTORE_CONFLICT", "PUBLISH_BASE_CHANGED"}
+    assert dst.read_bytes() in {before, b"external-after-preview"}
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_startup_finalizes_committed_publish_exactly_once_after_repeated_restart(
+    tiny_workspace,
+    tmp_path: Path,
+):
+    dst, _ = tiny_workspace
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    workspace = service.open_workspace(dst)
+    operation_id = "committed-before-db-finalize"
+    service.database.create_job(
+        operation_id,
+        workspace.id,
+        "change_set",
+        JobStatus.PUBLISHING,
+        {"base_revision_id": workspace.revision_id, "plan": {"requires_cad": False}},
+    )
+    staged = tmp_path / "committed.dst"
+    staged.write_bytes(b"committed-result")
+    service.publisher.publish(
+        operation_id,
+        workspace.root,
+        {workspace.dst_path: staged},
+        expected_baselines={workspace.dst_path: capture_file_baseline(workspace.dst_path)},
+    )
+    result_hash = file_sha256(workspace.dst_path)
+
+    first_restart = DstManagerService(settings)
+    second_restart = DstManagerService(settings)
+
+    assert first_restart.database.get_job(operation_id)["status"] == "SUCCEEDED"
+    assert second_restart.database.get_job(operation_id)["status"] == "SUCCEEDED"
+    revisions = second_restart.database.list_revisions(workspace.id)
+    assert [item["id"] for item in revisions].count(result_hash) == 1
+    with second_restart.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_restore_finalize_failure_enters_needs_review_without_live_lock(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "待恢复版本"}],
+    )
+    revision_id = service.database.list_revisions(workspace.id)[0]["id"]
+    base_revision_id = file_sha256(dst)
+
+    def fail_finalize(*_args, **_kwargs):
+        raise OSError("注入数据库 finalize 故障")
+
+    monkeypatch.setattr(service.database, "finalize_committed_job", fail_finalize)
+
+    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+
+    assert result["status"] == "NEEDS_REVIEW"
+    assert result["error_code"] == "COMMITTED_FINALIZE_FAILED"
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_restore_staging_copy_failure_becomes_failed_and_releases_lock(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "待复制恢复"}],
+    )
+    revision_id = service.database.list_revisions(workspace.id)[0]["id"]
+    base_revision_id = file_sha256(dst)
+    monkeypatch.setattr(service_module.shutil, "copy2", Mock(side_effect=OSError("注入 copy 故障")))
+
+    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+
+    assert result["status"] == "FAILED"
+    assert result["error_code"] == "REVISION_RESTORE_STAGING_FAILED"
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        (PublishBaselineError("注入 publisher baseline 故障"), "FAILED"),
+        (PublishRecoveryError("注入 publisher recovery 故障"), "NEEDS_REVIEW"),
+    ],
+)
+def test_restore_publisher_failures_use_safe_terminal_status(
+    tiny_workspace,
+    tmp_path: Path,
+    monkeypatch,
+    failure: Exception,
+    expected_status: str,
+):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "待发布恢复"}],
+    )
+    revision_id = service.database.list_revisions(workspace.id)[0]["id"]
+    base_revision_id = file_sha256(dst)
+    monkeypatch.setattr(service.publisher, "publish", Mock(side_effect=failure))
+
+    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+
+    assert result["status"] == expected_status
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
 
 def test_update_sheet_title_with_custom_properties_is_rejected_without_partial_commit(tiny_workspace, tmp_path: Path):

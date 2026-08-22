@@ -27,6 +27,7 @@ from dst_manager.infrastructure.filesystem.locking import (
 )
 from dst_manager.infrastructure.filesystem.publisher import (
     ExpectedFileBaseline,
+    PublishBaselineError,
     PublishRecoveryError,
     PublishRolledBackError,
     RecoverablePublisher,
@@ -86,6 +87,8 @@ class CadJobRunner:
             plan = payload.get("plan", {}).get("execution_intent")
             if not isinstance(plan, dict):
                 raise PlanningError("EXECUTION_PLAN_MISSING", "CAD 任务缺少已确认的执行计划")
+            if not isinstance(plan.get("expected_file_hashes"), dict):
+                raise PlanningError("EXECUTION_BASELINE_MISSING", "CAD 任务缺少预览内容基准")
             return self._execute(job_id, worker_id, job.get("attempt", 1), workspace, capability, payload["commands"], plan)
         except FileLockError as exc:
             append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK")
@@ -95,7 +98,7 @@ class CadJobRunner:
             self.database.update_job(job_id, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK", str(exc))
         except PublishRecoveryError as exc:
             append_operation_event(workspace.root, job_id, "PUBLISH_RECOVERY_FAILED")
-            self.database.update_job(job_id, JobStatus.FAILED, 0, "PUBLISH_RECOVERY_FAILED", str(exc))
+            self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, "PUBLISH_RECOVERY_FAILED", str(exc))
         except subprocess.TimeoutExpired as exc:
             append_operation_event(workspace.root, job_id, "CAD_TIMEOUT")
             self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_TIMEOUT", str(exc))
@@ -106,7 +109,15 @@ class CadJobRunner:
         except Exception as exc:  # noqa: BLE001 - Worker边界必须把任意故障持久化为终态
             append_operation_event(workspace.root, job_id, "FAILED", error=repr(exc))
             self._write_failure_log(workspace, job_id, job.get("attempt", 1), "", repr(exc))
-            self.database.update_job(job_id, JobStatus.FAILED, 0, getattr(exc, "code", type(exc).__name__.upper()), str(exc))
+            current = self.database.get_job(job_id) or {}
+            if current.get("status") != JobStatus.SUCCEEDED:
+                self.database.update_job(
+                    job_id,
+                    JobStatus.FAILED,
+                    0,
+                    getattr(exc, "code", type(exc).__name__.upper()),
+                    str(exc),
+                )
         return self.database.get_job(job_id) or {}
 
     def _execute(self, job_id: str, worker_id: str, attempt: int, workspace: Workspace, capability: CadCapability, commands: list[dict], plan: dict[str, Any]) -> dict[str, Any]:
@@ -150,10 +161,14 @@ class CadJobRunner:
             raise OSError("STAGING_DISK_SPACE_INSUFFICIENT")
         lock_targets = [path for path in publication_targets | unique_sources if path.exists()]
         with WindowsWriteLocks(lock_targets):
-            captured_baselines = {
-                path: capture_file_baseline(path)
-                for path in publication_targets | unique_sources
-            }
+            try:
+                captured_baselines = {
+                    path: capture_file_baseline(path)
+                    for path in publication_targets | unique_sources
+                }
+            except (OSError, PublishBaselineError) as exc:
+                raise PlanningError("BASE_FILE_CHANGED", "捕获执行基准时文件发生变化") from exc
+            self._validate_expected_hashes(plan, captured_baselines, workspace)
             expected_publish_baselines = {
                 path: captured_baselines[path]
                 for path in publication_targets
@@ -208,15 +223,81 @@ class CadJobRunner:
                 staged_files,
                 expected_baselines=staged_baselines,
             )
-        result_hash = file_sha256(workspace.dst_path)
-        append_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
-        shutil.copytree(logs_dir, revision_dir / "logs", dirs_exist_ok=True)
-        shutil.copytree(scripts_dir, revision_dir / "scripts", dirs_exist_ok=True)
-        shutil.copytree(input_dir.parent, revision_dir / "input", dirs_exist_ok=True)
-        self.database.add_revision(result_hash, workspace.id, job_id, before_hash, result_hash, revision_dir)
-        write_workspace_metadata(workspace.root, workspace.id, workspace.dst_path, result_hash, capability.version)
-        self.database.update_job(job_id, JobStatus.SUCCEEDED, 100)
+            journal = self.publisher.read_committed_operation(workspace.root, job_id)
+            if journal is None:
+                raise PublishRecoveryError(f"COMMITTED_JOURNAL_MISSING: {job_id}")
+            result_hash = self._committed_result_hash(journal, workspace.dst_path)
+            try:
+                self.database.finalize_committed_job(
+                    result_hash,
+                    workspace.id,
+                    job_id,
+                    before_hash,
+                    result_hash,
+                    revision_dir,
+                )
+            except Exception as exc:  # noqa: BLE001 - 文件已提交，数据库失败只能隔离或接受已闭环结果
+                current = self.database.get_job(job_id) or {}
+                if current.get("status") != JobStatus.SUCCEEDED:
+                    self.database.finalize_job_terminal(
+                        job_id,
+                        JobStatus.NEEDS_REVIEW,
+                        "COMMITTED_FINALIZE_FAILED",
+                        str(exc),
+                    )
+                return self.database.get_job(job_id) or {}
+        self._safe_post_commit_copy(logs_dir, revision_dir / "logs")
+        self._safe_post_commit_copy(scripts_dir, revision_dir / "scripts")
+        self._safe_post_commit_copy(input_dir.parent, revision_dir / "input")
+        try:
+            write_workspace_metadata(workspace.root, workspace.id, workspace.dst_path, result_hash, capability.version)
+        except Exception as exc:  # noqa: BLE001 - DB 已闭环，元数据失败只能记录诊断
+            self._safe_post_commit_event(workspace.root, job_id, "POST_COMMIT_METADATA_FAILED", error=repr(exc))
+        self._safe_post_commit_event(workspace.root, job_id, "SUCCEEDED", revision_id=result_hash)
         return self.database.get_job(job_id) or {}
+
+    @staticmethod
+    def _validate_expected_hashes(
+        plan: dict[str, Any],
+        captured: dict[Path, ExpectedFileBaseline | None],
+        workspace: Workspace,
+    ) -> None:
+        raw_expected = plan.get("expected_file_hashes")
+        if raw_expected is None:
+            return
+        expected = {Path(path).resolve(): digest for path, digest in raw_expected.items()}
+        if expected.keys() != captured.keys():
+            raise PlanningError("EXECUTION_BASELINE_TARGET_MISMATCH", "执行文件集合已偏离预览")
+        if expected.get(workspace.dst_path.resolve()) != workspace.revision_id:
+            raise PlanningError("BASE_FILE_CHANGED", "DST 执行基准与任务修订不一致")
+        for path, baseline in captured.items():
+            actual = baseline.sha256 if baseline is not None else None
+            if actual != expected[path]:
+                raise PlanningError("BASE_FILE_CHANGED", f"文件内容已偏离预览基准：{path}")
+
+    @staticmethod
+    def _committed_result_hash(journal: dict[str, Any], target: Path) -> str:
+        target_key = str(target.resolve()).casefold()
+        for entry in journal["files"]:
+            if str(Path(entry["target"]).resolve()).casefold() == target_key:
+                value = entry.get("result_hash")
+                if isinstance(value, str):
+                    return value
+        raise PublishRecoveryError(f"COMMITTED_RESULT_MISSING: {target}")
+
+    @staticmethod
+    def _safe_post_commit_copy(source: Path, destination: Path) -> None:
+        try:
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        except Exception:  # noqa: BLE001, S110 - 提交后归档失败不得改变已提交状态
+            pass
+
+    @staticmethod
+    def _safe_post_commit_event(root: Path, job_id: str, event: str, **details: Any) -> None:
+        try:
+            append_operation_event(root, job_id, event, **details)
+        except Exception:  # noqa: BLE001, S110 - 提交后日志失败不得改变已提交状态
+            pass
 
     @staticmethod
     def _copy_verified_snapshot(
