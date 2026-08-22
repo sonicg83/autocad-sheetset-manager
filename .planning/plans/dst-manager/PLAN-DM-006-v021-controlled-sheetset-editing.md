@@ -524,20 +524,20 @@ git commit -m "完成v0.21受控图纸集编辑交付记录"
 
 ## 实际验证记录
 
-2026-08-22 在隔离工作树、提交 `b7092dd` 上先验证后更新状态，结果如下：
+2026-08-22 在隔离工作树、最终修复提交 `cc249f9` 上重新验证，结果如下：
 
 | 检查 | 实际结果 |
 | --- | --- |
 | `$env:UV_LINK_MODE = "copy"; uv sync --dev` | 退出码 0；解析并审计 39 个包。 |
 | `uv run ruff check .` | 退出码 0；`All checks passed!`。 |
-| `uv run pytest -q` | 退出码 0；补充关闭默认 `addopts` 的 JUnit 计数运行确认 208 项通过、32 项跳过、0 项失败。跳过项包括缺少私有黄金样本和真实 CAD 前置条件的测试。 |
+| `uv run pytest -q` | 退出码 0；补充以 `-o addopts=` 显示完整汇总的运行确认 298 项通过、32 项跳过、0 项失败。跳过项包括缺少私有黄金样本和真实 CAD 前置条件的测试。 |
 | `uv lock --check` | 退出码 0；锁文件一致，解析 39 个包。 |
 | `uv run alembic upgrade head` | 退出码 0；SQLite migration 升级到 head，无错误。 |
 | `web/npm ci` | 退出码 0；安装 48 个包；仅提示 `esbuild` install script 审阅警告，后续构建成功。 |
 | `web/npm run build` | 退出码 0；Vue TypeScript 检查和 Vite 生产构建成功。 |
-| `web/npm run test:e2e` | 退出码 0；Playwright 16 项全部通过。 |
+| `web/npm run test:e2e` | 退出码 0；Playwright 17 项全部通过。 |
 | `scripts/build_plugins.ps1` | 退出码 0；AutoCAD 2016 与 2020 插件均构建成功，各 0 个警告、0 个错误。 |
 | `DST_MANAGER_RUN_AUTOCAD=1; uv run pytest tests/system_autocad -q` | 退出码 0；收集 26 项，2016 与 2020 各 13 项均跳过。隔离工作树缺少不随公开仓库分发的 `sample/project1`，因此本轮没有执行真实 Core Console/DWG/DST 验收。 |
-| `git diff --check` | 文档修改前退出码 0；文档闭环后再次执行并记录于任务报告。 |
+| `git diff --check` | 退出码 0；工作树与暂存区均无空白错误。 |
 
-自动化覆盖已核对领域后缀/CSV、AcSm DOM 往返、API 基准修订、发布回滚和 Web 构建/Playwright。真实 CAD 的恢复条件是把经验证的私有 `sample/project1` 放入本隔离工作树，保留已构建的匹配版本插件及可用的 AutoCAD 2016/2020 Core Console，然后重新显式运行系统测试。计划闭环表示实现和所有可用环境下的验收记录完整，不等同于本机真实 CAD 已执行或通过。
+自动化覆盖已核对领域后缀/CSV、AcSm DOM 往返、API 基准修订、发布回滚、发布日志/恢复防篡改、结构来源快照确认及 Web 构建/Playwright。真实 CAD 的恢复条件是把经验证的私有 `sample/project1` 放入本隔离工作树，保留已构建的匹配版本插件及可用的 AutoCAD 2016/2020 Core Console，然后重新显式运行系统测试。计划闭环表示实现和所有可用环境下的验收记录完整，不等同于本机真实 CAD 已执行或通过。
