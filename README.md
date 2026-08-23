@@ -92,6 +92,10 @@ SQLite 使用 SQLAlchemy 运行时模型和 Alembic 迁移：`uv run alembic upg
 
 公开仓库不包含 `legacy/` 旧工具和 `sample/` 工程样本。这两个目录只保留在本地工作区；缺少样本时，黄金样本和真实 AutoCAD 系统测试会自动跳过。
 
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源协议。
+
 ## 文档导航
 
 - [完整文档入口](docs/README.md)

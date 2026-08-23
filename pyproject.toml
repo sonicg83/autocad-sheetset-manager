@@ -3,6 +3,7 @@ name = "autocad-sheetset"
 version = "0.2.1"
 description = "本地 DST 图纸集管理器 MVP"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16,<2",
