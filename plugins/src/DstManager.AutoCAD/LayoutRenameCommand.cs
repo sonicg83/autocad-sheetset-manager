@@ -210,9 +210,12 @@ namespace DstManager.AutoCAD
 
         private static List<TemporaryRename> CreateTemporaryRenames(IEnumerable<RenameRow> rows, IEnumerable<string> currentNames)
         {
+            var renameRows = new List<RenameRow>(rows);
             var temporary = new List<TemporaryRename>();
             var occupied = new HashSet<string>(currentNames, StringComparer.OrdinalIgnoreCase);
-            foreach (RenameRow row in rows)
+            foreach (RenameRow row in renameRows)
+                occupied.Add(row.NewName);
+            foreach (RenameRow row in renameRows)
             {
                 if (!string.Equals(row.OldName, row.NewName, StringComparison.Ordinal))
                 {
