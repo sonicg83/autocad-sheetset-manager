@@ -89,13 +89,13 @@ def test_subset_title_only_renames_target_without_touching_following_subset(tmp_
     first.write_bytes(b"first")
     second.write_bytes(b"second")
     workspace = _planning_workspace(tmp_path, [
-        Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "001 第一册")]),
-        Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "002 第二册")]),
+        Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A1")]),
+        Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "A2")]),
     ])
 
     plan = build_structural_plan(
         workspace,
-        [{"type": "update_subset_title", "subset_id": "subset-1", "title": "第一分册"}],
+        [{"type": "update_subset", "subset_id": "subset-1", "title": "第一分册"}],
         SuffixOptions(True, 1),
     )
 
@@ -115,8 +115,8 @@ def test_sheet_count_change_rebuilds_frontier_and_renames_following_subset(tmp_p
     for path in (first, second, template):
         path.write_bytes(path.name.encode("utf-8"))
     workspace = _planning_workspace(tmp_path, [
-        Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "001 第一册")]),
-        Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "002 第二册")]),
+        Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A1")]),
+        Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "A2")]),
     ])
 
     plan = build_structural_plan(workspace, [{
@@ -188,18 +188,20 @@ def _cad_operation(
         stable_handles = all(int(sheet.layout.handle, 16) != 0 for sheet in original.sheets)
     except (TypeError, ValueError):
         stable_handles = False
-    same_sources = same_ids
-    for before, after in zip(original.sheets, derived.sheets, strict=True):
-        source = layout_sources.get(after.acsm_id)
-        if (
-            source is None
-            or source.get("type") != "existing_snapshot"
-            or Path(str(source.get("file", ""))).resolve()
-            != Path(before.layout.resolved_path or before.layout.file_name).resolve()
-            or source.get("layout") != before.layout.layout_name
-        ):
-            same_sources = False
-            break
+    same_sources = False
+    if same_ids:
+        same_sources = True
+        for before, after in zip(original.sheets, derived.sheets, strict=True):
+            source = layout_sources.get(after.acsm_id)
+            if (
+                source is None
+                or source.get("type") != "existing_snapshot"
+                or Path(str(source.get("file", ""))).resolve()
+                != Path(before.layout.resolved_path or before.layout.file_name).resolve()
+                or source.get("layout") != before.layout.layout_name
+            ):
+                same_sources = False
+                break
     if not same_ids or not stable_handles or not same_sources:
         return "rebuild"
     changed = _subset_changed(original, derived, source_target or "", target)
