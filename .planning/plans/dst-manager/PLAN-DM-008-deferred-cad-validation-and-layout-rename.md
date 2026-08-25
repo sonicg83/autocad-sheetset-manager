@@ -465,7 +465,10 @@ if (!string.Equals(Path.GetFullPath(requestPath), expectedRequestPath, StringCom
 RenameRequest request = ReadRequest(requestPath);
 List<string> current = ReadPaperLayoutNames(database);
 ValidateRequest(request, current);
-var temporary = request.Layouts.Select((row, index) => new {
+var changes = request.Layouts
+    .Where(row => !string.Equals(row.OldName, row.NewName, StringComparison.Ordinal))
+    .ToList();
+var temporary = changes.Select((row, index) => new {
     Row = row,
     Name = "DST_RENAME_" + Guid.NewGuid().ToString("N") + "_" + index.ToString("D4")
 }).ToList();
@@ -475,7 +478,7 @@ foreach (var item in temporary)
     manager.RenameLayout(item.Name, item.Row.NewName);
 List<string> finalNames = ReadPaperLayoutNames(database);
 ValidateFinalNames(request, finalNames);
-WriteResult(SidecarPath(database.Filename, ".dst-layout-rename-result.json"), finalNames, request.Layouts.Count);
+WriteResult(SidecarPath(database.Filename, ".dst-layout-rename-result.json"), finalNames, changes.Count);
 ```
 
 比较使用 `StringComparer.OrdinalIgnoreCase`；拒绝 `Model`、空白、控制字符、长度大于 255、`<>/\":;?*|=` 中任一字符、旧/新名称大小写重复、当前集合与旧集合不相等。结果使用实际最终布局名排序写出。任何异常写入 Editor 错误消息后继续抛出，确保 Worker 得不到成功结果。
