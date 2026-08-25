@@ -41,16 +41,7 @@ namespace DstManager.AutoCAD
                 List<string> current = ReadPaperLayoutNames(database);
                 ValidateRequest(request, current);
 
-                foreach (RenameRow row in request.Layouts)
-                {
-                    if (!string.Equals(row.OldName, row.NewName, StringComparison.Ordinal))
-                    {
-                        temporary.Add(new TemporaryRename(
-                            row.OldName,
-                            row.NewName,
-                            "DST_RENAME_" + Guid.NewGuid().ToString("N") + "_" + temporary.Count.ToString("D4")));
-                    }
-                }
+                temporary = CreateTemporaryRenames(request.Layouts, current);
 
                 foreach (TemporaryRename item in temporary)
                 {
@@ -166,7 +157,7 @@ namespace DstManager.AutoCAD
             EnsureUnique(oldNames);
             EnsureUnique(newNames);
             EnsureUnique(current);
-            if (!SameNames(oldNames, current))
+            if (!SameNamesIgnoreCase(oldNames, current))
                 throw new InvalidDataException("LAYOUT_RENAME_LAYOUT_SET_INVALID");
         }
 
@@ -176,7 +167,7 @@ namespace DstManager.AutoCAD
             foreach (RenameRow row in request.Layouts)
                 expected.Add(row.NewName);
             EnsureUnique(finalNames);
-            if (!SameNames(expected, finalNames))
+            if (!SameNamesOrdinal(expected, finalNames))
                 throw new InvalidDataException("LAYOUT_RENAME_FINAL_LAYOUT_SET_INVALID");
         }
 
@@ -203,19 +194,61 @@ namespace DstManager.AutoCAD
             }
         }
 
-        private static bool SameNames(IEnumerable<string> first, IEnumerable<string> second)
+        private static bool SameNamesIgnoreCase(IEnumerable<string> first, IEnumerable<string> second)
         {
             var firstSet = new HashSet<string>(first, StringComparer.OrdinalIgnoreCase);
             var secondSet = new HashSet<string>(second, StringComparer.OrdinalIgnoreCase);
             return firstSet.Count == secondSet.Count && firstSet.SetEquals(secondSet);
         }
 
+        private static bool SameNamesOrdinal(IEnumerable<string> first, IEnumerable<string> second)
+        {
+            var firstSet = new HashSet<string>(first, StringComparer.Ordinal);
+            var secondSet = new HashSet<string>(second, StringComparer.Ordinal);
+            return firstSet.Count == secondSet.Count && firstSet.SetEquals(secondSet);
+        }
+
+        private static List<TemporaryRename> CreateTemporaryRenames(IEnumerable<RenameRow> rows, IEnumerable<string> currentNames)
+        {
+            var temporary = new List<TemporaryRename>();
+            var occupied = new HashSet<string>(currentNames, StringComparer.OrdinalIgnoreCase);
+            foreach (RenameRow row in rows)
+            {
+                if (!string.Equals(row.OldName, row.NewName, StringComparison.Ordinal))
+                {
+                    string temporaryName;
+                    do
+                    {
+                        temporaryName = "DST_RENAME_" + Guid.NewGuid().ToString("N") + "_" + temporary.Count.ToString("D4");
+                    }
+                    while (!occupied.Add(temporaryName));
+                    temporary.Add(new TemporaryRename(row.OldName, row.NewName, temporaryName));
+                }
+            }
+            return temporary;
+        }
+
         private static void RestoreOriginalNames(LayoutManager manager, List<TemporaryRename> temporary, int firstPhaseCount, int secondPhaseCount)
         {
+            var failures = new List<Exception>();
             for (int index = secondPhaseCount - 1; index >= 0; index--)
-                manager.RenameLayout(temporary[index].NewName, temporary[index].TemporaryName);
+                TryRestoreRename(manager, temporary[index].NewName, temporary[index].TemporaryName, failures);
             for (int index = firstPhaseCount - 1; index >= 0; index--)
-                manager.RenameLayout(temporary[index].TemporaryName, temporary[index].OldName);
+                TryRestoreRename(manager, temporary[index].TemporaryName, temporary[index].OldName, failures);
+            if (failures.Count > 0)
+                throw new AggregateException("LAYOUT_RENAME_ROLLBACK_FAILED", failures);
+        }
+
+        private static void TryRestoreRename(LayoutManager manager, string oldName, string newName, List<Exception> failures)
+        {
+            try
+            {
+                manager.RenameLayout(oldName, newName);
+            }
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
         }
 
         private static void WriteResult(string resultPath, List<string> finalNames, int renamedCount)

@@ -87,9 +87,19 @@ def _read_handles(capability: CadCapability, drawing: Path, script: Path) -> dic
     return parse_handles(drawing.with_suffix(".dst-handles.txt").read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize(("mapping", "changed_count"), [("exchange", 2), ("cycle", 3)])
+def _add_case_probe_layout(capability: CadCapability, drawing: Path, script: Path) -> str:
+    name = "DST_CASE_PROBE_AUTOMATED_RENAME"
+    script.write_text(
+        f"FILEDIA\n0\nCMDECHO\n0\n_.-LAYOUT\n_New\n{name}\n_.QSAVE\n_.QUIT\n",
+        encoding="mbcs",
+    )
+    CoreConsoleExecutor().run(capability, drawing, script, 120)
+    return name
+
+
+@pytest.mark.parametrize(("mapping", "changed_count"), [("exchange", 2), ("cycle", 3), ("case", 1)])
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_rename_layouts_supports_exchange_and_cycle_without_changing_handles(
+def test_rename_layouts_preserves_handle_mapping_for_exchange_cycle_and_case_only_changes(
     version: str,
     mapping: str,
     changed_count: int,
@@ -98,17 +108,23 @@ def test_rename_layouts_supports_exchange_and_cycle_without_changing_handles(
     capability = _rename_capability(version)
     drawing = _copy_rename_drawing(tmp_path, changed_count)
     before_handles = _read_handles(capability, drawing, tmp_path / "before-handles.scr")
+    if mapping == "case":
+        case_name = _add_case_probe_layout(capability, drawing, tmp_path / "add-case-probe.scr")
+        before_handles = _read_handles(capability, drawing, tmp_path / "case-before-handles.scr")
+        assert case_name in before_handles
     original_names = sorted(before_handles)
-    expected_final_names = set(original_names)
     rows = [{"old_name": name, "new_name": name} for name in original_names]
     if mapping == "exchange":
         rows[0]["new_name"], rows[1]["new_name"] = original_names[1], original_names[0]
-    else:
+    elif mapping == "cycle":
         rows[0]["new_name"], rows[1]["new_name"], rows[2]["new_name"] = (
             original_names[1],
             original_names[2],
             original_names[0],
         )
+    else:
+        rows[original_names.index(case_name)]["new_name"] = case_name.lower()
+    expected_handles = {row["new_name"]: before_handles[row["old_name"]] for row in rows}
     request = rename_request_path(drawing)
     request.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
     rename_script = tmp_path / "rename.scr"
@@ -119,9 +135,8 @@ def test_rename_layouts_supports_exchange_and_cycle_without_changing_handles(
     after_handles = _read_handles(capability, drawing, tmp_path / "after-handles.scr")
     result_path = rename_result_path(drawing)
     assert completed.returncode == 0
-    assert set(after_handles) == expected_final_names
-    assert sorted(before_handles.values()) == sorted(after_handles.values())
-    assert parse_rename_result(result_path.read_text(encoding="utf-8"), expected_final_names) == changed_count
+    assert after_handles == expected_handles
+    assert parse_rename_result(result_path.read_text(encoding="utf-8"), set(expected_handles)) == changed_count
 
 
 @pytest.mark.parametrize("request_kind", ["missing", "duplicate", "extra"])
