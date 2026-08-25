@@ -265,10 +265,12 @@ async function importCsv(){
   catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
 
-function cadOperationLabel(operation:string){
+function cadOperationLabel(operation?:string|null){
   if(operation==="rename_only")return "批量改名布局";
   if(operation==="rebuild")return "清除并重建布局";
-  return "无需 CAD 操作";
+  if(operation==="none")return "无需 CAD 操作";
+  if(operation===undefined||operation===null||operation==="")return "未提供 CAD 操作";
+  return `未知 CAD 操作：${operation}`;
 }
 </script>
 
@@ -283,7 +285,7 @@ function cadOperationLabel(operation:string){
     <section v-if="job&&!isWorkspaceLoading" class="job-detail">
       <div class="job"><b>任务 {{job.id??'（无变更）'}}</b><span>{{job.status}} · {{job.progress??100}}% · 第 {{job.attempt??0}} 次</span><small>{{connectionMode}}</small><span v-if="job.error_code" class="error">{{job.error_code}}</span><button v-if="['FAILED','ROLLED_BACK','BLOCKED_FILE_LOCK','NEEDS_REVIEW'].includes(job.status)" @click="retryJob">安全重试</button></div>
       <p v-if="job.suggestion">{{job.suggestion}}</p>
-      <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>操作</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{cadOperationLabel(file.cad_operation??'none')}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.started_at??'-'}}</td><td>{{file.finished_at??'-'}}</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="8"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
+      <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>操作</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{cadOperationLabel(file.cad_operation)}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.started_at??'-'}}</td><td>{{file.finished_at??'-'}}</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="8"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
     </section>
 
     <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button :disabled="isRestoreExecuting" @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="isRestoreExecuting||!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
