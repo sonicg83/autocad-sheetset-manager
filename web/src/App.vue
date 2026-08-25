@@ -6,7 +6,7 @@ type PropertyDefinition={type:PropertyType;name:string;default_value:string};
 type Sheet={id:string;number:string;title:string;custom_properties:Record<string,string>};
 type Subset={id:string;name:string;title:string;number_range:string;display_name:string;sheets:Sheet[]};
 type Workspace={id:string;revision_id:string;sheet_set:{name:string;sheet_count:number;subset_count:number;custom_properties:Record<string,string>;property_definitions:PropertyDefinition[];subsets:Subset[]};diagnostics:{severity:string;code:string;message:string}[]};
-type JobFile={target_path:string;status:string;progress:number;duration_ms?:number;error_code?:string;log_summary?:string};
+type JobFile={target_path:string;status:string;progress:number;cad_operation?:string;started_at?:string;finished_at?:string;duration_ms?:number;error_code?:string;log_summary?:string};
 type Job={id:string|null;status:string;progress:number;attempt?:number;error_code?:string;suggestion?:string;files?:JobFile[];no_op?:boolean};
 type Revision={id:string;created_at:string;before_hash:string;result_hash:string};
 type Diagnostic={severity:string;code:string;message:string;line?:number};
@@ -52,7 +52,10 @@ const hasPropertyDefinitionCommands=computed(()=>commands.value.some(item=>item.
 const hasStructuralCommands=computed(()=>commands.value.some(item=>["update_subset_title","delete_sheet","insert_sheet","insert_subset"].includes(String(item.type))));
 const previewGroups=computed(()=>preview.value?.execution_intent?.groups??[]);
 const derivedSubsets=computed(()=>preview.value?.execution_intent?.derived_document?.subsets??[]);
-const sourceInspections=computed(()=>preview.value?.execution_intent?.source_inspections??[]);
+const sourceBaselines=computed(()=>preview.value?.execution_intent?.source_baselines??[]);
+const subsetOperations=computed(()=>preview.value?.execution_intent?.subset_operations??[]);
+const cardinalityFrontier=computed(()=>preview.value?.execution_intent?.cardinality_frontier??null);
+const cadValidationDeferred=computed(()=>preview.value?.execution_intent?.cad_validation_deferred===true);
 const semanticDiff=computed(()=>preview.value?.semantic_diff??{structure:{before:[],after:[]},properties:[],dwgs:[]});
 
 async function request(url:string,options?:RequestInit){
@@ -262,7 +265,11 @@ async function importCsv(){
   catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
 
-function operationLabel(operation:string){return operation==="create"?"创建 DWG":"重建 DWG"}
+function cadOperationLabel(operation:string){
+  if(operation==="rename_only")return "批量改名布局";
+  if(operation==="rebuild")return "清除并重建布局";
+  return "无需 CAD 操作";
+}
 </script>
 
 <template>
@@ -276,7 +283,7 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
     <section v-if="job&&!isWorkspaceLoading" class="job-detail">
       <div class="job"><b>任务 {{job.id??'（无变更）'}}</b><span>{{job.status}} · {{job.progress??100}}% · 第 {{job.attempt??0}} 次</span><small>{{connectionMode}}</small><span v-if="job.error_code" class="error">{{job.error_code}}</span><button v-if="['FAILED','ROLLED_BACK','BLOCKED_FILE_LOCK','NEEDS_REVIEW'].includes(job.status)" @click="retryJob">安全重试</button></div>
       <p v-if="job.suggestion">{{job.suggestion}}</p>
-      <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>状态</th><th>进度</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="5"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
+      <table v-if="job.files?.length"><thead><tr><th>DWG</th><th>操作</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>耗时</th><th>错误</th></tr></thead><tbody><template v-for="file in job.files" :key="file.target_path"><tr><td>{{file.target_path}}</td><td>{{cadOperationLabel(file.cad_operation??'none')}}</td><td>{{file.status}}</td><td>{{file.progress}}%</td><td>{{file.started_at??'-'}}</td><td>{{file.finished_at??'-'}}</td><td>{{file.duration_ms??'-'}} ms</td><td class="error">{{file.error_code}}</td></tr><tr v-if="file.log_summary"><td colspan="8"><details><summary>Core Console 输出日志</summary><pre>{{file.log_summary}}</pre></details></td></tr></template></tbody></table>
     </section>
 
     <section v-if="revisions.length&&!isWorkspaceLoading" class="panel preview"><h2>永久修订</h2><table><thead><tr><th>时间</th><th>修订</th><th>结果摘要</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{new Date(revision.created_at).toLocaleString()}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><button :disabled="isRestoreExecuting" @click="previewRestore(revision)">恢复预览</button></td></tr></tbody></table><div v-if="restorePreview"><h3>恢复确认</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">（当前文件冲突）</span></li></ul><button class="primary" :disabled="isRestoreExecuting||!restorePreview.executable" @click="restoreRevision">恢复为新修订</button></div></section>
@@ -316,10 +323,13 @@ function operationLabel(operation:string){return operation==="create"?"创建 DW
         <section><h3>前后有序结构</h3><div class="group-grid"><article v-for="side in ['before','after']" :key="side"><h4>{{side==='before'?'变更前':'变更后'}}</h4><table><thead><tr><th>位置</th><th>子集 / 图纸</th><th>图号范围 / 后缀</th><th>DWG / 布局</th></tr></thead><tbody><template v-for="subset in semanticDiff.structure?.[side]??[]" :key="subset.id"><tr><td>{{subset.position}}</td><td>{{subset.display_name}} · {{subset.title}}</td><td>{{subset.number_range}}</td><td>{{subset.dwg_file}}</td></tr><tr v-for="sheet in subset.sheets" :key="sheet.id"><td>{{subset.position}}.{{sheet.position}}</td><td>{{sheet.number}} · {{sheet.title}}</td><td>{{sheet.suffix||'—'}}</td><td>{{sheet.dwg_file}} · {{sheet.layout_name}}</td></tr></template></tbody></table></article></div></section>
         <section v-if="semanticDiff.properties?.length"><h3>属性差异</h3><table><thead><tr><th>操作</th><th>作用域</th><th>名称</th><th>前值</th><th>后值</th><th>受影响图纸</th></tr></thead><tbody><tr v-for="item in semanticDiff.properties" :key="`${item.action}-${item.type}-${item.name}`"><td>{{item.action}}</td><td>{{item.type}}</td><td>{{item.name}}</td><td>{{formatSemanticValue(item.before)}}</td><td>{{formatSemanticValue(item.after)}}</td><td>{{item.affected_sheet_count}}</td></tr></tbody></table></section>
         <section v-if="semanticDiff.dwgs?.length"><h3>DWG 与布局差异</h3><table><thead><tr><th>操作</th><th>变更前文件 / 布局</th><th>变更后文件 / 布局</th></tr></thead><tbody><tr v-for="item in semanticDiff.dwgs" :key="`${item.action}-${item.subset_id}`"><td>{{item.action}}</td><td>{{item.before?.file??'—'}} · {{item.before?.layouts?.join('、')??'—'}}</td><td>{{item.after?.file??'—'}} · {{item.after?.layouts?.join('、')??'—'}}</td></tr></tbody></table></section>
-        <section v-if="sourceInspections.length"><h3>布局来源验证</h3><table><thead><tr><th>AutoCAD</th><th>来源</th><th>SHA-256</th><th>可用布局</th><th>请求布局</th></tr></thead><tbody><tr v-for="item in sourceInspections" :key="item.path"><td>{{item.cad_version}}</td><td>{{item.path}}</td><td>{{item.sha256}}</td><td>{{item.layouts.join('、')}}</td><td>{{item.requested_layouts.join('、')}}</td></tr></tbody></table></section>
+        <section v-if="cadValidationDeferred" class="notice"><h3>CAD 校验</h3><p>CAD 布局校验将在确认后执行</p></section>
+        <section v-if="cardinalityFrontier"><h3>数量变化前沿</h3><p>数量变化前沿：第 {{cardinalityFrontier.index + 1}} 个子集</p></section>
+        <section v-if="subsetOperations.length"><h3>子集 CAD 操作</h3><table><thead><tr><th>子集</th><th>操作</th><th>目标 DWG</th><th>数量前沿范围</th></tr></thead><tbody><tr v-for="item in subsetOperations" :key="item.subset_id"><td>{{item.subset_id}}</td><td>{{cadOperationLabel(item.cad_operation)}}</td><td>{{item.target_file}}</td><td>{{item.in_cardinality_scope ? '是' : '否'}}</td></tr></tbody></table></section>
+        <section v-if="sourceBaselines.length"><h3>来源基准</h3><table><thead><tr><th>来源路径</th><th>SHA-256</th><th>请求布局</th><th>来源类型</th></tr></thead><tbody><tr v-for="item in sourceBaselines" :key="item.path"><td>{{item.path}}</td><td>{{item.sha256}}</td><td>{{item.requested_layouts?.join('、')}}</td><td>{{item.source_types?.join('、')}}</td></tr></tbody></table></section>
         <section v-if="preview.execution_intent"><h3>图号范围变化</h3><table v-if="derivedSubsets.length"><thead><tr><th>服务端图号范围</th><th>服务端显示名</th><th>服务端标题</th></tr></thead><tbody><tr v-for="subset in derivedSubsets" :key="subset.acsm_id"><td>{{subset.number_range}}</td><td>{{subset.display_name}}</td><td>{{subset.title}}</td></tr></tbody></table></section>
         <section><h3>兼容变更清单</h3><ul><li v-for="(change,index) in preview.changes" :key="index"><strong>{{change.label??change.type}}</strong><span v-if="change.affected_sheet_count!==undefined"> · 受影响图纸 {{change.affected_sheet_count}}</span></li></ul></section>
-        <section v-if="previewGroups.length"><h3>CAD 执行分组</h3><div class="group-grid"><article v-for="group in previewGroups" :key="group.subset_id??group.target_file" class="execution-group"><strong>{{operationLabel(group.operation)}}</strong><h4>{{group.subset_name}}</h4><p>{{group.target_file}}</p><table><thead><tr><th>图号</th><th>服务端标题</th><th>目标布局</th></tr></thead><tbody><tr v-for="layout in group.layouts" :key="layout.sheet_id??layout.target_layout??layout.layout_name"><td>{{layout.number}}</td><td>{{layout.title}}</td><td>{{layout.target_layout??layout.layout_name}}</td></tr></tbody></table></article></div></section>
+        <section v-if="previewGroups.length"><h3>CAD 执行分组</h3><div class="group-grid"><article v-for="group in previewGroups" :key="group.subset_id??group.target_file" class="execution-group"><strong>{{cadOperationLabel(group.cad_operation)}}</strong><h4>{{group.subset_name}}</h4><p>{{group.target_file}}</p><table><thead><tr><th>图号</th><th>服务端标题</th><th>目标布局</th></tr></thead><tbody><tr v-for="layout in group.layouts" :key="layout.sheet_id??layout.target_layout??layout.layout_name"><td>{{layout.number}}</td><td>{{layout.title}}</td><td>{{layout.target_layout??layout.layout_name}}</td></tr></tbody></table></article></div></section>
         <section><h3>诊断</h3><ul class="diagnostics"><li v-for="item in preview.diagnostics" :key="item.code+item.message" :class="item.severity"><b>{{item.code}}</b>：{{item.message}}</li><li v-if="!preview.diagnostics?.length">无阻断诊断</li></ul></section>
         <section><h3>受影响文件</h3><ul><li v-for="file in preview.affected_files" :key="file">{{file}}</li></ul></section>
         <button class="primary" :disabled="preview.executable===false" @click="execute">确认并执行</button>
