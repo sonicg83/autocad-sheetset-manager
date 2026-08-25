@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -15,6 +16,9 @@ from dst_manager.infrastructure.autocad.worker import (
     CoreConsoleExecutor,
     ScriptRenderer,
     parse_handles,
+    parse_rename_result,
+    rename_request_path,
+    rename_result_path,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 
@@ -43,6 +47,110 @@ def test_plugin_loads_and_reads_layout_handles(version: str, tmp_path: Path):
     handle_file = drawing.with_suffix(".dst-handles.txt")
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert parse_handles(handle_file.read_text(encoding="utf-8"))
+
+
+def _rename_capability(version: str) -> CadCapability:
+    root = Path(__file__).parents[2]
+    capability = CadCapability(
+        version,
+        Path(f"C:/Program Files/Autodesk/AutoCAD {version}/accoreconsole.exe"),
+        root / "plugins" / f"autocad{version}" / "DstManager.AutoCAD.dll",
+    )
+    if not capability.available:
+        pytest.skip(f"缺少 AutoCAD {version} Core Console 或匹配插件")
+    return capability
+
+
+def _copy_rename_drawing(tmp_path: Path, minimum_layouts: int) -> Path:
+    source_document = AcsmDocument(DstCodec().decode_file(_SAMPLE_PROJECT / "图纸集数据文件.dst")).project(_SAMPLE_PROJECT)
+    groups: dict[Path, list[str]] = {}
+    for sheet in source_document.sheets:
+        groups.setdefault(sheet.layout.resolved_path, []).append(sheet.layout.layout_name)
+    source = next(
+        (
+            path
+            for path, names in sorted(groups.items(), key=lambda item: str(item[0]))
+            if len(names) >= minimum_layouts
+        ),
+        None,
+    )
+    if source is None:
+        pytest.skip(f"私有样本中不存在至少含 {minimum_layouts} 个业务布局的 DWG")
+    drawing = tmp_path / source.name
+    shutil.copy2(source, drawing)
+    return drawing
+
+
+def _read_handles(capability: CadCapability, drawing: Path, script: Path) -> dict[str, str]:
+    script.write_text(ScriptRenderer().render_handles(capability.plugin), encoding="mbcs")
+    CoreConsoleExecutor().run(capability, drawing, script, 120)
+    return parse_handles(drawing.with_suffix(".dst-handles.txt").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(("mapping", "changed_count"), [("exchange", 2), ("cycle", 3)])
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_rename_layouts_supports_exchange_and_cycle_without_changing_handles(
+    version: str,
+    mapping: str,
+    changed_count: int,
+    tmp_path: Path,
+):
+    capability = _rename_capability(version)
+    drawing = _copy_rename_drawing(tmp_path, changed_count)
+    before_handles = _read_handles(capability, drawing, tmp_path / "before-handles.scr")
+    original_names = sorted(before_handles)
+    expected_final_names = set(original_names)
+    rows = [{"old_name": name, "new_name": name} for name in original_names]
+    if mapping == "exchange":
+        rows[0]["new_name"], rows[1]["new_name"] = original_names[1], original_names[0]
+    else:
+        rows[0]["new_name"], rows[1]["new_name"], rows[2]["new_name"] = (
+            original_names[1],
+            original_names[2],
+            original_names[0],
+        )
+    request = rename_request_path(drawing)
+    request.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
+    rename_script = tmp_path / "rename.scr"
+    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin, request), encoding="mbcs")
+
+    completed = CoreConsoleExecutor().run(capability, drawing, rename_script, 120)
+
+    after_handles = _read_handles(capability, drawing, tmp_path / "after-handles.scr")
+    result_path = rename_result_path(drawing)
+    assert completed.returncode == 0
+    assert set(after_handles) == expected_final_names
+    assert sorted(before_handles.values()) == sorted(after_handles.values())
+    assert parse_rename_result(result_path.read_text(encoding="utf-8"), expected_final_names) == changed_count
+
+
+@pytest.mark.parametrize("request_kind", ["missing", "duplicate", "extra"])
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_rename_layouts_rejects_invalid_complete_layout_sets(version: str, request_kind: str, tmp_path: Path):
+    capability = _rename_capability(version)
+    drawing = _copy_rename_drawing(tmp_path, 2)
+    before_handles = _read_handles(capability, drawing, tmp_path / "before-handles.scr")
+    original_names = sorted(before_handles)
+    rows = [{"old_name": name, "new_name": name} for name in original_names]
+    if request_kind == "missing":
+        rows.pop()
+    elif request_kind == "duplicate":
+        rows[1]["new_name"] = original_names[0]
+    else:
+        rows.append({"old_name": "意外额外布局", "new_name": "意外额外布局"})
+    request = rename_request_path(drawing)
+    request.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
+    rename_script = tmp_path / "rename-invalid.scr"
+    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin, request), encoding="mbcs")
+
+    failed = False
+    try:
+        CoreConsoleExecutor().run(capability, drawing, rename_script, 120)
+    except subprocess.CalledProcessError:
+        failed = True
+
+    assert failed or not rename_result_path(drawing).exists()
+    assert _read_handles(capability, drawing, tmp_path / "after-handles.scr") == before_handles
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])

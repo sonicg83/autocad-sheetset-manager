@@ -80,5 +80,11 @@ namespace DstManager.AutoCAD
             File.WriteAllLines(output, rows, new UTF8Encoding(false));
             document.Editor.WriteMessage("\nDST_MANAGER_HANDLES={0}", rows.Count);
         }
+
+        [CommandMethod("DstRenameLayouts")]
+        public void RenameLayouts()
+        {
+            LayoutRenameCommand.Execute(Application.DocumentManager.MdiActiveDocument);
+        }
     }
 }
