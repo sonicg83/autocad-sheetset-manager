@@ -207,9 +207,33 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
     database = Database(f"sqlite:///{path.as_posix()}")
     with database.engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(jobs)")}
+        job_file_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(job_files)")}
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
-    assert revision == "0002_v02_job_reliability"
+    assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
+    assert revision == "0003_dm008_job_file_cad_operation"
+
+
+def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    database.create_job("job", "workspace", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    target = tmp_path / "001 第一册.dwg"
+    started = datetime(2026, 8, 26, 1, 2, 3, tzinfo=UTC)
+    finished = datetime(2026, 8, 26, 1, 2, 4, tzinfo=UTC)
+
+    database.upsert_job_file(
+        "job",
+        target,
+        cad_operation="rename_only",
+        started_at=started,
+        finished_at=finished,
+    )
+
+    item = database.get_job("job")["files"][0]
+    assert item["cad_operation"] == "rename_only"
+    assert item["started_at"] == started.replace(tzinfo=None).isoformat()
+    assert item["finished_at"] == finished.replace(tzinfo=None).isoformat()
 
 
 def test_outdated_schema_is_rejected_when_migration_is_disabled(tmp_path: Path):

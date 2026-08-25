@@ -94,6 +94,7 @@ class JobFileRow(Base):
     result_hash: Mapped[str | None] = mapped_column(String(64))
     role: Mapped[str] = mapped_column(String(32))
     result: Mapped[str | None] = mapped_column(String(32))
+    cad_operation: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(32), default="PENDING")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
@@ -102,6 +103,8 @@ class JobFileRow(Base):
     log_path: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(String(80))
     error_detail: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class JobEventRow(Base):
@@ -155,7 +158,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0002_v02_job_reliability"
+LATEST_SCHEMA_REVISION = "0003_dm008_job_file_cad_operation"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -421,7 +424,7 @@ class Database:
             "finished_at": row.finished_at.isoformat() if row.finished_at else None,
             "payload": json.loads(row.payload_json),
             "timeline": [{"status": item.status, "progress": item.progress, "detail": item.detail, "at": item.created_at.isoformat()} for item in events],
-            "files": [{"target_path": item.target_path, "source_path": item.source_path, "status": item.status, "progress": item.progress, "duration_ms": item.duration_ms, "peak_memory_bytes": item.peak_memory_bytes, "staging_bytes": item.staging_bytes, "log_path": item.log_path, "error_code": item.error_code, "error_detail": item.error_detail, "before_hash": item.before_hash, "result_hash": item.result_hash, "role": item.role} for item in files],
+            "files": [{"target_path": item.target_path, "source_path": item.source_path, "cad_operation": item.cad_operation, "status": item.status, "progress": item.progress, "duration_ms": item.duration_ms, "peak_memory_bytes": item.peak_memory_bytes, "staging_bytes": item.staging_bytes, "log_path": item.log_path, "error_code": item.error_code, "error_detail": item.error_detail, "started_at": item.started_at.isoformat() if item.started_at else None, "finished_at": item.finished_at.isoformat() if item.finished_at else None, "before_hash": item.before_hash, "result_hash": item.result_hash, "role": item.role} for item in files],
         }
 
     def add_revision(self, revision_id: str, workspace_id: str, operation_id: str, before_hash: str, result_hash: str, revision_dir: Path, update_current: bool = True, current_revision: str | None = None) -> None:

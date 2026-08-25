@@ -1,4 +1,5 @@
 import copy
+import os
 import re
 import uuid
 from pathlib import Path
@@ -670,22 +671,27 @@ class AcsmDocument:
         raise AcsmValidationError(f"{code}: {placement}")
 
     def apply_layout_bindings(self, bindings: dict[str, dict[str, str]], dst_dir: Path) -> None:
+        self.apply_layout_references(bindings, dst_dir)
         for sheet_id, binding in bindings.items():
-            matches = self.root.xpath("//*[@ID=$sheet_id and local-name()='AcSmSheet']", sheet_id=sheet_id)
-            if len(matches) != 1:
-                raise AcsmValidationError(f"SHEET_NOT_FOUND: {sheet_id}")
-            layouts = _children(matches[0], "AcSmAcDbLayoutReference")
-            if len(layouts) != 1:
-                raise AcsmValidationError(f"SHEET_LAYOUT_COUNT: {sheet_id}")
-            target = Path(binding["file"]).resolve()
-            try:
-                relative = target.relative_to(dst_dir.resolve())
-            except ValueError as exc:
-                raise AcsmValidationError(f"DWG_OUTSIDE_WORKSPACE: {target}") from exc
-            _set_prop(layouts[0], "FileName", str(target))
-            _set_prop(layouts[0], "Relative_FileName", ".\\" + str(relative).replace("/", "\\"))
-            _set_prop(layouts[0], "Name", binding["layout"])
-            _set_prop(layouts[0], "AcDbHandle", binding["handle"])
+            layout = self._layout_reference_for_sheet(sheet_id)
+            _set_prop(layout, "AcDbHandle", binding["handle"])
+
+    def apply_layout_references(self, references: dict[str, dict[str, str]], dst_dir: Path) -> None:
+        for sheet_id, reference in references.items():
+            layout = self._layout_reference_for_sheet(sheet_id)
+            target = Path(reference["file"]).resolve()
+            _set_prop(layout, "FileName", str(target))
+            _set_prop(layout, "Relative_FileName", os.path.relpath(target, dst_dir.resolve()))
+            _set_prop(layout, "Name", reference["layout"])
+
+    def _layout_reference_for_sheet(self, sheet_id: str) -> etree._Element:
+        sheet = self._find_by_id("AcSmSheet", sheet_id)
+        if sheet is None:
+            raise AcsmValidationError(f"SHEET_NOT_FOUND: {sheet_id}")
+        layouts = _children(sheet, "AcSmAcDbLayoutReference")
+        if len(layouts) != 1:
+            raise AcsmValidationError(f"SHEET_LAYOUT_COUNT: {sheet_id}")
+        return layouts[0]
 
     def apply_subset_names(self, names: dict[str, str]) -> None:
         for subset_id, name in names.items():

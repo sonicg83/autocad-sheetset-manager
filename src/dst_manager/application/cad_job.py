@@ -1,9 +1,11 @@
 import json
+import re
 import shutil
 import subprocess
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,9 @@ from dst_manager.infrastructure.autocad.worker import (
     CoreConsoleExecutor,
     ScriptRenderer,
     parse_handles,
+    parse_rename_result,
+    rename_result_path,
+    write_rename_request,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import (
@@ -41,7 +46,7 @@ from dst_manager.infrastructure.persistence import Database
 
 
 @dataclass(frozen=True, slots=True)
-class RebuildWorkUnit:
+class CadWorkUnit:
     index: int
     group: dict[str, Any]
     source_snapshot: Path
@@ -52,7 +57,7 @@ class RebuildWorkUnit:
 
 
 @dataclass(frozen=True, slots=True)
-class RebuildResult:
+class CadWorkResult:
     index: int
     target: Path
     source_target: Path | None
@@ -62,6 +67,11 @@ class RebuildResult:
     log_path: Path
     peak_memory_bytes: int | None
     staging_bytes: int
+
+
+# 兼容既有调用方；新代码统一使用 CAD 工作单元名称。
+RebuildWorkUnit = CadWorkUnit
+RebuildResult = CadWorkResult
 
 
 class CadJobRunner:
@@ -202,7 +212,7 @@ class CadJobRunner:
                 encoding="utf-8",
             )
             self.database.update_job(job_id, JobStatus.CAD_RUNNING, 15)
-            units = [RebuildWorkUnit(index, group, Path(group["source_snapshot"]), staging_dir, scripts_dir, logs_dir, self.timeout) for index, group in enumerate(plan["groups"])]
+            units = [CadWorkUnit(index, group, Path(group["source_snapshot"]), staging_dir, scripts_dir, logs_dir, self.timeout) for index, group in enumerate(plan["groups"])]
             results = self._run_groups(job_id, worker_id, workspace, capability, units)
             staged_files, bindings = self._collect_staged_files(results, plan)
             self.database.update_job(job_id, JobStatus.VERIFYING, 70)
@@ -431,7 +441,7 @@ class CadJobRunner:
 
     @staticmethod
     def _collect_staged_files(
-        results: list[RebuildResult],
+        results: list[CadWorkResult],
         plan: dict[str, Any],
     ) -> tuple[dict[Path, Path | None], dict[str, dict[str, str]]]:
         expected_targets = {
@@ -464,17 +474,17 @@ class CadJobRunner:
                 staged_files[target] = None
         return staged_files, bindings
 
-    def _run_groups(self, job_id: str, worker_id: str, workspace: Workspace, capability: CadCapability, units: list[RebuildWorkUnit]) -> list[RebuildResult]:
+    def _run_groups(self, job_id: str, worker_id: str, workspace: Workspace, capability: CadCapability, units: list[CadWorkUnit]) -> list[CadWorkResult]:
         if not units:
             return []
-        results: list[RebuildResult] = []
+        results: list[CadWorkResult] = []
         next_index = 0
         failed: BaseException | None = None
-        futures: dict[Future[RebuildResult], RebuildWorkUnit] = {}
+        futures: dict[Future[CadWorkResult], CadWorkUnit] = {}
         with ThreadPoolExecutor(max_workers=self.max_parallel, thread_name_prefix="dst-cad") as pool:
             while next_index < len(units) and len(futures) < self.max_parallel:
                 unit = units[next_index]
-                futures[pool.submit(self._rebuild_group, job_id, workspace, capability, unit)] = unit
+                futures[pool.submit(self._execute_group, job_id, workspace, capability, unit)] = unit
                 next_index += 1
             while futures:
                 done, _ = wait(futures, return_when=FIRST_COMPLETED)
@@ -489,7 +499,7 @@ class CadJobRunner:
                     self.database.heartbeat(job_id, worker_id)
                     if failed is None and next_index < len(units):
                         following = units[next_index]
-                        futures[pool.submit(self._rebuild_group, job_id, workspace, capability, following)] = following
+                        futures[pool.submit(self._execute_group, job_id, workspace, capability, following)] = following
                         next_index += 1
                 if failed is not None:
                     for future in futures:
@@ -498,11 +508,87 @@ class CadJobRunner:
             raise failed
         return results
 
-    def _rebuild_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: RebuildWorkUnit) -> RebuildResult:
+    def _execute_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: CadWorkUnit) -> CadWorkResult:
+        operation = unit.group.get("cad_operation")
+        if operation == "rename_only":
+            return self._rename_group(job_id, workspace, capability, unit)
+        if operation == "rebuild":
+            return self._rebuild_group(job_id, workspace, capability, unit)
+        raise PlanningError("CAD_OPERATION_INVALID", f"CAD 工作单元操作无效：{operation}")
+
+    def _rename_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: CadWorkUnit) -> CadWorkResult:
         group_index, group = unit.index, unit.group
         source_target = Path(group["source_target_file"]) if group["source_target_file"] is not None else None
         target = Path(group["target_file"])
         started = time.perf_counter()
+        started_at = datetime.now(UTC)
+        group_dir = unit.staging_dir / f"group-{group_index:03d}"
+        group_dir.mkdir(parents=True, exist_ok=True)
+        staged = group_dir / target.name
+        shutil.copy2(unit.source_snapshot, staged)
+        rename_script = unit.scripts_dir / f"rename-{group_index:03d}.scr"
+        log_path = unit.logs_dir / f"group-{group_index:03d}.log"
+        self.database.upsert_job_file(
+            job_id,
+            target,
+            source_path=str(source_target) if source_target is not None else None,
+            cad_operation="rename_only",
+            status="RUNNING",
+            progress=5,
+            started_at=started_at,
+            log_path=str(log_path),
+            before_hash=file_sha256(source_target) if source_target is not None else None,
+        )
+        output = ""
+        phase = "校验并批量改名布局"
+        try:
+            request = write_rename_request(staged, group["layouts"])
+            rename_script.write_text(self.renderer.render_rename(capability.plugin, request), encoding="mbcs")
+            completed = self.executor.run(capability, staged, rename_script, unit.timeout)
+            output += self._format_console_output(phase, completed.stdout, completed.stderr)
+            log_path.write_text(sanitize_log_text(output), encoding="utf-8")
+            expected = {layout["target_layout"] for layout in group["layouts"]}
+            parse_rename_result(rename_result_path(staged).read_text(encoding="utf-8"), expected)
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            staging_bytes = staged.stat().st_size
+            self.database.upsert_job_file(
+                job_id,
+                target,
+                cad_operation="rename_only",
+                status="SUCCEEDED",
+                progress=100,
+                duration_ms=duration_ms,
+                peak_memory_bytes=completed.peak_memory_bytes,
+                staging_bytes=staging_bytes,
+                finished_at=datetime.now(UTC),
+                result_hash=file_sha256(staged),
+            )
+            return CadWorkResult(group_index, target, source_target, staged, {}, duration_ms, log_path, completed.peak_memory_bytes, staging_bytes)
+        except Exception as exc:
+            if isinstance(exc, subprocess.CalledProcessError):
+                stdout = exc.stdout if exc.stdout is not None else exc.output
+                output += self._format_console_output(phase, stdout, exc.stderr, exc.returncode)
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            log_path.write_text(sanitize_log_text(output + "\n" + repr(exc)), encoding="utf-8")
+            self.database.upsert_job_file(
+                job_id,
+                target,
+                cad_operation="rename_only",
+                status="FAILED",
+                progress=0,
+                duration_ms=duration_ms,
+                finished_at=datetime.now(UTC),
+                error_code=getattr(exc, "code", type(exc).__name__.upper()),
+                error_detail=str(exc),
+            )
+            raise
+
+    def _rebuild_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: CadWorkUnit) -> CadWorkResult:
+        group_index, group = unit.index, unit.group
+        source_target = Path(group["source_target_file"]) if group["source_target_file"] is not None else None
+        target = Path(group["target_file"])
+        started = time.perf_counter()
+        started_at = datetime.now(UTC)
         group_dir = unit.staging_dir / f"group-{group_index:03d}"
         group_dir.mkdir(parents=True, exist_ok=True)
         staged = group_dir / target.name
@@ -513,15 +599,17 @@ class CadJobRunner:
             job_id,
             target,
             source_path=str(source_target) if source_target is not None else None,
+            cad_operation="rebuild",
             status="RUNNING",
             progress=5,
+            started_at=started_at,
             log_path=str(log_path),
             before_hash=file_sha256(source_target) if source_target is not None else None,
         )
-        rebuild_script.write_text(self.renderer.render_rebuild(capability.plugin, group["layouts"]), encoding="mbcs")
         output = ""
         phase = "重建布局并读取布局 Handle"
         try:
+            rebuild_script.write_text(self.renderer.render_rebuild(capability.plugin, group["layouts"]), encoding="mbcs")
             completed = self.executor.run(capability, staged, rebuild_script, unit.timeout)
             peak_memory = completed.peak_memory_bytes
             output += self._format_console_output(phase, completed.stdout, completed.stderr)
@@ -535,15 +623,15 @@ class CadJobRunner:
             bindings = {layout["sheet_id"]: {"file": str(target), "layout": layout["target_layout"], "handle": handles[layout["target_layout"]]} for layout in group["layouts"]}
             duration_ms = int((time.perf_counter() - started) * 1000)
             staging_bytes = staged.stat().st_size
-            self.database.upsert_job_file(job_id, target, status="SUCCEEDED", progress=100, duration_ms=duration_ms, peak_memory_bytes=peak_memory, staging_bytes=staging_bytes, result_hash=file_sha256(staged))
-            return RebuildResult(group_index, target, source_target, staged, bindings, duration_ms, log_path, peak_memory, staging_bytes)
+            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="SUCCEEDED", progress=100, duration_ms=duration_ms, peak_memory_bytes=peak_memory, staging_bytes=staging_bytes, finished_at=datetime.now(UTC), result_hash=file_sha256(staged))
+            return CadWorkResult(group_index, target, source_target, staged, bindings, duration_ms, log_path, peak_memory, staging_bytes)
         except Exception as exc:
             if isinstance(exc, subprocess.CalledProcessError):
                 stdout = exc.stdout if exc.stdout is not None else exc.output
                 output += self._format_console_output(phase, stdout, exc.stderr, exc.returncode)
             duration_ms = int((time.perf_counter() - started) * 1000)
             log_path.write_text(sanitize_log_text(output + "\n" + repr(exc)), encoding="utf-8")
-            self.database.upsert_job_file(job_id, target, status="FAILED", progress=0, duration_ms=duration_ms, error_code=getattr(exc, "code", type(exc).__name__.upper()), error_detail=str(exc))
+            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="FAILED", progress=0, duration_ms=duration_ms, finished_at=datetime.now(UTC), error_code=getattr(exc, "code", type(exc).__name__.upper()), error_detail=str(exc))
             raise
 
     def _write_staged_dst(
@@ -554,18 +642,29 @@ class CadJobRunner:
         staging_dir: Path,
         commands: list[dict[str, Any]] | None = None,
     ) -> Path:
-        expected = {
-            layout["sheet_id"]: {
-                "file": str(Path(group["target_file"]).resolve()),
-                "layout": layout["target_layout"],
-            }
-            for group in plan["groups"]
-            for layout in group["layouts"]
-        }
-        if len(expected) != sum(len(group["layouts"]) for group in plan["groups"]) or set(bindings) != set(expected):
-            raise PlanningError("HANDLE_LAYOUT_MISMATCH", "Handle 回读结果与最终计划图纸不一一对应")
+        references: dict[str, dict[str, str]] = {}
+        rebuild_expected: dict[str, dict[str, str]] = {}
+        for group in plan["groups"]:
+            operation = group.get("cad_operation")
+            if operation not in {"rename_only", "rebuild"}:
+                raise PlanningError("CAD_OPERATION_INVALID", f"CAD 工作单元操作无效：{operation}")
+            for layout in group["layouts"]:
+                sheet_id = layout["sheet_id"]
+                if sheet_id in references:
+                    raise PlanningError("HANDLE_LAYOUT_MISMATCH", "最终计划包含重复图纸")
+                reference = {
+                    "file": str(Path(group["target_file"]).resolve()),
+                    "layout": layout["target_layout"],
+                }
+                references[sheet_id] = reference
+                if operation == "rebuild":
+                    rebuild_expected[sheet_id] = reference
+        if len(references) != sum(len(group["layouts"]) for group in plan["groups"]):
+            raise PlanningError("HANDLE_LAYOUT_MISMATCH", "最终计划包含重复图纸")
+        if set(bindings) != set(rebuild_expected):
+            raise PlanningError("HANDLE_LAYOUT_MISMATCH", "Handle 回读结果与需要重建的最终图纸不一一对应")
         normalized_bindings: dict[str, dict[str, str]] = {}
-        for sheet_id, expected_binding in expected.items():
+        for sheet_id, expected_binding in rebuild_expected.items():
             binding = bindings[sheet_id]
             handle = str(binding.get("handle", "")).upper()
             try:
@@ -588,7 +687,12 @@ class CadJobRunner:
         metadata_commands = metadata_commands_for_derived_document(commands or [])
         if metadata_commands:
             acsm.apply_metadata_commands(metadata_commands)
+        acsm.apply_layout_references(references, workspace.root)
         acsm.apply_layout_bindings(normalized_bindings, workspace.root)
+        for sheet in acsm.project(workspace.root).sheets:
+            handle = sheet.layout.handle
+            if not handle or not re.fullmatch(r"[0-9A-Fa-f]+", handle) or int(handle, 16) == 0:
+                raise PlanningError("HANDLE_OUTPUT_INVALID", f"最终图纸 Handle 无效：{sheet.acsm_id}")
         issues = acsm.validate()
         if any(issue.severity == Severity.ERROR for issue in issues):
             raise ValueError("XML_VALIDATION_FAILED")

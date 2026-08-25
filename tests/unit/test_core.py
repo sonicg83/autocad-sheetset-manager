@@ -35,6 +35,7 @@ from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
     decode_console_output,
+    rename_result_path,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.dst_codec.codec import _DECODE, _ENCODE
@@ -1897,6 +1898,135 @@ class _SuccessfulCadExecutor:
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
+class _RenameSuccessfulCadExecutor:
+    def __init__(self, final_layouts: list[str]):
+        self.final_layouts = final_layouts
+        self.calls = 0
+        self.scripts: list[Path] = []
+
+    def run(self, _capability, drawing, script, _timeout):
+        self.calls += 1
+        self.scripts.append(script)
+        rename_result_path(drawing).write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "renamed_count": len(self.final_layouts),
+                    "final_layouts": self.final_layouts,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+def test_rename_group_uses_one_console_call_and_returns_no_bindings(tmp_path: Path):
+    source = tmp_path / "001 第一册.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    group = {
+        "subset_id": "subset-1",
+        "subset_name": "002 第一册",
+        "operation": "rebuild",
+        "cad_operation": "rename_only",
+        "source_target_file": str(source),
+        "target_file": str(tmp_path / "002 第一册.dwg"),
+        "layouts": [{"sheet_id": "sheet-1", "original_layout": "001 第一册", "target_layout": "002 第一册"}],
+    }
+    unit = RebuildWorkUnit(0, group, source, staging, scripts, logs, 30)
+    runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
+    executor = _RenameSuccessfulCadExecutor(["002 第一册"])
+    runner.executor = executor
+
+    result = runner._execute_group(
+        "job-1",
+        _planning_workspace(tmp_path, []),
+        CadCapability("2020", None, tmp_path / "plugin.dll"),
+        unit,
+    )
+
+    assert executor.calls == 1
+    assert [script.name for script in executor.scripts] == ["rename-000.scr"]
+    assert result.bindings == {}
+    assert rename_result_path(result.staged).is_file()
+    assert not result.staged.with_suffix(".dst-handles.txt").exists()
+
+
+def test_rename_group_records_finished_failure_when_request_is_invalid(tmp_path: Path):
+    source = tmp_path / "source.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    unit = RebuildWorkUnit(
+        0,
+        {
+            "cad_operation": "rename_only",
+            "source_target_file": str(source),
+            "target_file": str(tmp_path / "target.dwg"),
+            "layouts": [{}],
+        },
+        source,
+        staging,
+        scripts,
+        logs,
+        30,
+    )
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+
+    with pytest.raises(ValueError, match="LAYOUT_RENAME_REQUEST_INVALID"):
+        runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    assert database.upsert_job_file.call_args_list[-1].kwargs["status"] == "FAILED"
+    assert database.upsert_job_file.call_args_list[-1].kwargs["finished_at"] is not None
+    assert database.upsert_job_file.call_args_list[-1].kwargs["duration_ms"] is not None
+
+
+def test_rename_only_final_dst_preserves_existing_handle(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst)).project(dst.parent)
+    workspace = Workspace("workspace", dst.parent, dst, "revision", document)
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": document.subsets[0].acsm_id, "title": "改名后的子集"}],
+        SuffixOptions(True, 1),
+    )
+    assert plan["groups"][0]["cad_operation"] == "rename_only"
+
+    staged = CadJobRunner(Mock(), DstCodec(), Mock(), 30)._write_staged_dst(workspace, plan, {}, tmp_path)
+
+    final_sheet = AcsmDocument(DstCodec().decode_file(staged)).project(dst.parent).sheets[0]
+    assert final_sheet.layout.handle == "AB"
+    assert final_sheet.layout.file_name == str(Path(plan["groups"][0]["target_file"]).resolve())
+    assert final_sheet.layout.layout_name == plan["groups"][0]["layouts"][0]["target_layout"]
+
+
+def test_execute_group_rejects_missing_or_unknown_cad_operation(tmp_path: Path):
+    source = tmp_path / "source.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
+    for operation in (None, "unsupported"):
+        unit = RebuildWorkUnit(
+            0,
+            {"cad_operation": operation, "source_target_file": str(source), "target_file": str(source), "layouts": []},
+            source,
+            staging,
+            scripts,
+            logs,
+            30,
+        )
+        with pytest.raises(PlanningError) as exc_info:
+            runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+        assert exc_info.value.code == "CAD_OPERATION_INVALID"
+
+
 class _PerDrawingCadExecutor:
     def __init__(self, layouts_by_target: dict[str, list[str]]):
         self.layouts_by_target = layouts_by_target
@@ -1905,6 +2035,19 @@ class _PerDrawingCadExecutor:
 
     def run(self, _capability, drawing, script, _timeout):
         self.scripts.append(script)
+        if script.name.startswith("rename-"):
+            rename_result_path(drawing).write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "renamed_count": len(self.layouts_by_target[drawing.name]),
+                        "final_layouts": self.layouts_by_target[drawing.name],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
         lines = []
         for layout in self.layouts_by_target[drawing.name]:
             lines.append(f"{layout}={self.next_handle:X}")
@@ -1929,6 +2072,59 @@ class _SecondRebuildFailureExecutor:
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
+class _RenameFailureAfterRebuildExecutor:
+    def __init__(self, layouts_by_target: dict[str, list[str]]):
+        self.layouts_by_target = layouts_by_target
+        self.scripts: list[Path] = []
+
+    def run(self, _capability, drawing, script, _timeout):
+        self.scripts.append(script)
+        if script.name.startswith("rename-"):
+            raise subprocess.CalledProcessError(1, ["accoreconsole.exe"], "", "INJECTED_RENAME_FAILURE")
+        drawing.with_suffix(".dst-handles.txt").write_text(
+            "\n".join(f"{layout}={index + 16:X}" for index, layout in enumerate(self.layouts_by_target[drawing.name])) + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+def test_mixed_cad_failure_does_not_publish_staged_results(tmp_path: Path):
+    workspace, old_drawings = _chained_rename_workspace(tmp_path)
+    template = tmp_path / "模板.dwt"
+    template.write_bytes(b"template")
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "before",
+        "title": "新增",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
+    assert {group["cad_operation"] for group in plan["groups"]} == {"rename_only", "rebuild"}
+    layouts_by_target = {
+        Path(group["target_file"]).name: [layout["target_layout"] for layout in group["layouts"]]
+        for group in plan["groups"]
+        if group["cad_operation"] == "rebuild"
+    }
+    publisher = Mock()
+    runner = CadJobRunner(Mock(), DstCodec(), publisher, 30, max_parallel=1)
+    executor = _RenameFailureAfterRebuildExecutor(layouts_by_target)
+    runner.executor = executor
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+    before = {path: path.read_bytes() for path in [workspace.dst_path, *old_drawings]}
+
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        runner._execute("job-mixed", "worker", 1, workspace, CadCapability("2020", None, plugin), [command], plan)
+
+    assert exc_info.value.stderr == "INJECTED_RENAME_FAILURE"
+    assert any(script.name.startswith("rebuild-") for script in executor.scripts)
+    assert any(script.name.startswith("rename-") for script in executor.scripts)
+    publisher.publish.assert_not_called()
+    assert {path: path.read_bytes() for path in before} == before
+
+
 def test_second_group_failure_is_attributable_to_the_single_rebuild_script(tmp_path: Path):
     source = tmp_path / "来源.dwg"
     source.write_bytes(b"source")
@@ -1940,8 +2136,9 @@ def test_second_group_failure_is_attributable_to_the_single_rebuild_script(tmp_p
     units = [
         RebuildWorkUnit(
             index,
-            {
-                "source_target_file": str(source),
+                {
+                    "cad_operation": "rebuild",
+                    "source_target_file": str(source),
                 "target_file": str(tmp_path / f"目标-{index}.dwg"),
                 "layouts": [{"sheet_id": f"sheet-{index}", "source_file": str(source), "source_layout": "来源", "target_layout": f"00{index + 1} 第{index + 1}组"}],
             },
@@ -2234,9 +2431,8 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
     assert [sheet.layout.resolved_path for sheet in reopened.sheets] == targets
     assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
     assert [script.name for script in executor.scripts] == [
-        "rebuild-000.scr",
-        "rebuild-001.scr",
-        "rebuild-002.scr",
+        f"{'rename' if group['cad_operation'] == 'rename_only' else 'rebuild'}-{index:03d}.scr"
+        for index, group in enumerate(plan["groups"])
     ]
 
 
@@ -2289,9 +2485,8 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
     assert [sheet.layout.resolved_path for sheet in reopened.sheets] == final_drawings
     assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
     assert [script.name for script in executor.scripts] == [
-        "rebuild-000.scr",
-        "rebuild-001.scr",
-        "rebuild-002.scr",
+        f"{'rename' if group['cad_operation'] == 'rename_only' else 'rebuild'}-{index:03d}.scr"
+        for index, group in enumerate(plan["groups"])
     ]
 
 
@@ -2418,7 +2613,6 @@ def test_final_dst_keeps_metadata_updates_from_structural_batch(tiny_workspace, 
 @pytest.mark.parametrize(
     "bindings",
     [
-        {},
         {"unexpected": {"file": "A.dwg", "layout": "001 平面", "handle": "AB"}},
         {"sheet-1": {"file": "A.dwg", "layout": "001 平面", "handle": "0"}},
     ],
