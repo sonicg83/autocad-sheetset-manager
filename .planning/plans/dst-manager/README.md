@@ -14,6 +14,7 @@
 
 详细计划：
 
+- [延后 CAD 校验与布局批量改名（PLAN-DM-008，计划中）](PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)
 - [v0.21 CAD 单脚本布局重建（PLAN-DM-007，受阻：等待真实 CAD 验收）](PLAN-DM-007-v021-cad-single-script-execution.md)
 - [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
 - [v0.2.1 紧急修复：运行时、日志与 AcSm 兼容性（PLAN-DM-005，已完成）](PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)
