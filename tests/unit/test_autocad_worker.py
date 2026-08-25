@@ -13,7 +13,7 @@ from dst_manager.infrastructure.autocad.worker import (
 
 
 def test_render_rename_uses_only_fixed_safe_commands():
-    plugin = Path("C:/plugins/DstManager.AutoCAD.dll")
+    plugin = Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll")
     request = Path("C:/staging/001 rename request.json")
     script = ScriptRenderer().render_rename(plugin, request)
 
@@ -25,18 +25,45 @@ def test_render_rename_uses_only_fixed_safe_commands():
         "CMDECHO",
         "0",
         "_.NETLOAD",
-        str(plugin),
+        f'"{plugin}"',
         "DstRenameLayouts",
         f'"{request}"',
         "CMDECHO",
         "1",
         "FILEDIA",
         "1",
+        "SECURELOAD",
+        "1",
         "_.QSAVE",
         "_.QUIT",
     ]
     for forbidden in ("DstDeleteLayouts", "DstGetLayoutHandles", "_.-LAYOUT", "_Template"):
         assert forbidden not in script
+
+
+def test_render_rename_restores_secureload_before_save_and_quit():
+    lines = ScriptRenderer().render_rename(
+        Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll"),
+        Path("C:/staging/001 rename request.json"),
+    ).splitlines()
+
+    secureload_indexes = [index for index, line in enumerate(lines) if line == "SECURELOAD"]
+    assert len(secureload_indexes) == 2
+    restored_index = secureload_indexes[-1]
+    assert lines[restored_index + 1] == "1"
+    assert restored_index < lines.index("_.QSAVE") < lines.index("_.QUIT")
+
+
+@pytest.mark.parametrize(
+    "plugin, request_path",
+    [
+        (Path("C:/plugins/AutoCAD\nWorker/DstManager.AutoCAD.dll"), Path("C:/staging/request.json")),
+        (Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll"), Path("C:/staging/request\x00.json")),
+    ],
+)
+def test_render_rename_rejects_control_characters_in_paths(plugin: Path, request_path: Path):
+    with pytest.raises(ValueError, match="SCR_ARGUMENT_UNSAFE"):
+        ScriptRenderer().render_rename(plugin, request_path)
 
 
 def test_rename_sidecars_use_fixed_names_and_strict_result(tmp_path: Path):
@@ -104,6 +131,22 @@ def test_write_rename_request_rejects_invalid_names(tmp_path: Path, layouts: lis
 def test_parse_rename_result_rejects_invalid_payloads(payload: dict[str, object]):
     with pytest.raises(ValueError, match="LAYOUT_RENAME_RESULT_INVALID"):
         parse_rename_result(json.dumps(payload, ensure_ascii=False), {"新名称"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "不是 JSON",
+        "[]",
+        '{"version":1,"renamed_count":1,"final_layouts":["新名称"],"extra":true}',
+        '{"version":1,"renamed_count":1,"final_layouts":"新名称"}',
+        '{"version":1,"renamed_count":1,"final_layouts":[""]}',
+        '{"version":1,"renamed_count":1,"final_layouts":[1]}',
+    ],
+)
+def test_parse_rename_result_rejects_invalid_json_shapes(text: str):
+    with pytest.raises(ValueError, match="LAYOUT_RENAME_RESULT_INVALID"):
+        parse_rename_result(text, {"新名称"})
 
 
 def test_render_rebuild_contains_handle_read_in_the_same_script():

@@ -107,6 +107,8 @@ class ScriptRenderer:
             "1",
             "FILEDIA",
             "1",
+            "SECURELOAD",
+            "1",
             "_.QSAVE",
             "_.QUIT",
         ]
