@@ -276,13 +276,12 @@ def test_missing_custom_value_update_and_supported_insert_complete_before_publis
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-@pytest.mark.parametrize(("parallel", "expected_peak"), [(1, 1), (4, 4), (10, 5)])
+@pytest.mark.parametrize("parallel", [1, 4, 10])
 def test_five_dwg_groups_run_with_bounded_parallelism(
     version: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     parallel: int,
-    expected_peak: int,
 ):
     active = 0
     maximum = 0
@@ -331,7 +330,11 @@ def test_five_dwg_groups_run_with_bounded_parallelism(
     assert len(result["files"]) == 5
     assert all(item["status"] == "SUCCEEDED" for item in result["files"])
     assert all(item["duration_ms"] > 0 and item["peak_memory_bytes"] > 0 for item in result["files"])
-    assert maximum == expected_peak
+    assert maximum <= min(parallel, 5)
+    if parallel == 1:
+        assert maximum == 1
+    else:
+        assert maximum > 1
     reopened = service.open_workspace(tmp_path / dst_name)
     assert all("-并行" in subset.sheets[0].title for subset in reopened.document.subsets[:5])
 

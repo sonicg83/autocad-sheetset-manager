@@ -40,6 +40,17 @@ def test_parallel_setting_defaults_to_four_and_rejects_out_of_range(tmp_path: Pa
             Settings(data_dir=tmp_path, cad_max_parallel=value)
 
 
+@pytest.mark.parametrize("parallel", [1, 10])
+def test_parallel_setting_accepts_boundary_values(tmp_path: Path, parallel: int):
+    assert Settings(data_dir=tmp_path, cad_max_parallel=parallel).cad_max_parallel == parallel
+
+
+def test_runner_defaults_to_four(tmp_path: Path):
+    runner = CadJobRunner(FakeDatabase(), DstCodec(), RecoverablePublisher(), 10)
+
+    assert runner.max_parallel == 4
+
+
 @pytest.mark.parametrize("parallel", [1, 4, 10])
 def test_runner_accepts_configured_parallel_range(tmp_path: Path, parallel: int):
     runner = CadJobRunner(FakeDatabase(), DstCodec(), RecoverablePublisher(), 10, parallel)
@@ -59,23 +70,49 @@ def test_mixed_group_scheduler_is_globally_bounded(tmp_path: Path, parallel: int
     active = 0
     maximum = 0
     operations: list[str] = []
-    lock = threading.Lock()
+    initial_workers = min(parallel, 6)
+    released = threading.Event()
+    gate_released = threading.Event()
+    condition = threading.Condition()
 
     def execute(_job, _workspace, _capability, unit):
         nonlocal active, maximum
-        with lock:
+        with condition:
             active += 1
             maximum = max(maximum, active)
             operations.append(unit.group["cad_operation"])
-        time.sleep(0.005 * (6 - unit.index))
-        with lock:
-            active -= 1
-        target = tmp_path / f"{unit.index}.dwg"
-        return RebuildResult(unit.index, target, target, target, {}, 30, tmp_path / "x.log", 100, 200)
+            condition.notify_all()
+            is_initial_worker = len(operations) <= initial_workers
+            if is_initial_worker and not condition.wait_for(released.is_set, timeout=10):
+                raise AssertionError("启动闸门未在超时前释放")
+        try:
+            target = tmp_path / f"{unit.index}.dwg"
+            return RebuildResult(unit.index, target, target, target, {}, 30, tmp_path / "x.log", 100, 200)
+        finally:
+            with condition:
+                active -= 1
+
+    def release_initial_workers():
+        with condition:
+            if condition.wait_for(lambda: len(operations) == initial_workers, timeout=10):
+                released.set()
+                gate_released.set()
+                condition.notify_all()
 
     runner._execute_group = execute
     units = [_unit(tmp_path, index, "rename_only" if index % 2 == 0 else "rebuild") for index in range(6)]
-    results = runner._run_groups("job", "worker", object(), CadCapability("2020", None, None), units)
+    gatekeeper = threading.Thread(target=release_initial_workers)
+    gatekeeper.start()
+    try:
+        results = runner._run_groups("job", "worker", object(), CadCapability("2020", None, None), units)
+    finally:
+        released.set()
+        with condition:
+            condition.notify_all()
+        gatekeeper.join(timeout=10)
+
+    assert gate_released.is_set()
+    assert not gatekeeper.is_alive()
     assert [item.index for item in results] == list(range(6))
     assert maximum == expected
     assert set(operations) == {"rename_only", "rebuild"}
