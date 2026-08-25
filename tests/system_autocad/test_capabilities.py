@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -275,7 +276,31 @@ def test_missing_custom_value_update_and_supported_insert_complete_before_publis
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_five_dwg_groups_run_with_bounded_parallelism(version: str, tmp_path: Path):
+@pytest.mark.parametrize(("parallel", "expected_peak"), [(1, 1), (4, 4), (10, 5)])
+def test_five_dwg_groups_run_with_bounded_parallelism(
+    version: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parallel: int,
+    expected_peak: int,
+):
+    active = 0
+    maximum = 0
+    lock = threading.Lock()
+    original_run = CoreConsoleExecutor.run
+
+    def measure_console_peak(self, *args, **kwargs):
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        try:
+            return original_run(self, *args, **kwargs)
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(CoreConsoleExecutor, "run", measure_console_peak)
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
     dst_name = "图纸集数据文件.dst"
@@ -291,7 +316,7 @@ def test_five_dwg_groups_run_with_bounded_parallelism(version: str, tmp_path: Pa
         autocad_2020_console=Path("C:/Program Files/Autodesk/AutoCAD 2020/accoreconsole.exe"),
         autocad_2020_plugin=root / "plugins/autocad2020/DstManager.AutoCAD.dll",
         cad_timeout_seconds=180,
-        cad_max_parallel=2,
+        cad_max_parallel=parallel,
     )
     service = DstManagerService(settings)
     workspace = service.open_workspace(tmp_path / dst_name)
@@ -306,6 +331,7 @@ def test_five_dwg_groups_run_with_bounded_parallelism(version: str, tmp_path: Pa
     assert len(result["files"]) == 5
     assert all(item["status"] == "SUCCEEDED" for item in result["files"])
     assert all(item["duration_ms"] > 0 and item["peak_memory_bytes"] > 0 for item in result["files"])
+    assert maximum == expected_peak
     reopened = service.open_workspace(tmp_path / dst_name)
     assert all("-并行" in subset.sheets[0].title for subset in reopened.document.subsets[:5])
 

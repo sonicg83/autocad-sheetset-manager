@@ -75,9 +75,9 @@ RebuildResult = CadWorkResult
 
 
 class CadJobRunner:
-    def __init__(self, database: Database, codec: DstCodec, publisher: RecoverablePublisher, timeout: int, max_parallel: int = 2):
+    def __init__(self, database: Database, codec: DstCodec, publisher: RecoverablePublisher, timeout: int, max_parallel: int = 4):
         self.database, self.codec, self.publisher, self.timeout = database, codec, publisher, timeout
-        if not 1 <= max_parallel <= 4:
+        if not 1 <= max_parallel <= 10:
             raise ValueError("CAD_MAX_PARALLEL_OUT_OF_RANGE")
         self.max_parallel = max_parallel
         self.renderer, self.executor = ScriptRenderer(), CoreConsoleExecutor()
@@ -497,16 +497,17 @@ class CadJobRunner:
                     completed = len(results)
                     self.database.update_job(job_id, JobStatus.CAD_RUNNING, 15 + int(50 * completed / len(units)))
                     self.database.heartbeat(job_id, worker_id)
-                    if failed is None and next_index < len(units):
+                if failed is None:
+                    while next_index < len(units) and len(futures) < self.max_parallel:
                         following = units[next_index]
                         futures[pool.submit(self._execute_group, job_id, workspace, capability, following)] = following
                         next_index += 1
-                if failed is not None:
+                else:
                     for future in futures:
                         future.cancel()
         if failed is not None:
             raise failed
-        return results
+        return sorted(results, key=lambda result: result.index)
 
     def _execute_group(self, job_id: str, workspace: Workspace, capability: CadCapability, unit: CadWorkUnit) -> CadWorkResult:
         operation = unit.group.get("cad_operation")
