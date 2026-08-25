@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-008
 title: 延后 CAD 校验与布局批量改名实施计划
-status: proposed
+status: completed
 owners:
   - dst-manager
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 related:
   - ARCH-DM-001
   - ADR-DM-002
@@ -78,7 +78,7 @@ related:
 - Produces: `execution_intent["subset_operations"]`，按最终顺序为每个子集记录 `subset_id`、`cad_operation`、`target_file` 和 `in_cardinality_scope`。
 - Produces: 每个非 `none` group 保留发布字段 `operation=create|rebuild`，新增 `cad_operation=rename_only|rebuild`；每个布局新增 `original_layout: str | None`。
 
-- [ ] **Step 1：写出前沿和标题改名的失败测试**
+- [x] **Step 1：写出前沿和标题改名的失败测试**
 
 在 `tests/unit/test_core.py` 增加以下断言，使用文件中已有 `_planning_workspace()`、`_planning_sheet()` 和 `SuffixOptions`：
 
@@ -136,7 +136,7 @@ def test_sheet_count_change_rebuilds_frontier_and_renames_following_subset(tmp_p
     assert plan["groups"][1]["layouts"][0]["original_layout"] == "002 第二册"
 ```
 
-- [ ] **Step 2：运行测试并确认旧规划器失败**
+- [x] **Step 2：运行测试并确认旧规划器失败**
 
 Run:
 
@@ -146,7 +146,7 @@ rtk uv run pytest tests/unit/test_core.py -q -k "title_only_renames_target or sh
 
 Expected: FAIL，旧计划缺少 `subset_operations`、`cardinality_frontier`、`cad_operation` 和 `original_layout`，且会把后续组统一当作完整重建。
 
-- [ ] **Step 3：实现最小分类函数并接入计划**
+- [x] **Step 3：实现最小分类函数并接入计划**
 
 在 `planning.py` 增加并从 `build_structural_plan()` 调用：
 
@@ -210,7 +210,7 @@ def _cad_operation(
 
 构造 `layouts` 时从 `original.sheets` 的稳定 ID 映射填入 `original_layout`；仅为非 `none` 子集添加 group。`cardinality_frontier` 使用最终索引和子集 ID，尾部删除没有存续后续组时允许 `subset_id=None`。
 
-- [ ] **Step 4：补齐插入/删除子集和尾部删除回归并运行**
+- [x] **Step 4：补齐插入/删除子集和尾部删除回归并运行**
 
 新增参数化用例，固定以下结果：插入子集为 `rebuild` 且后续为 `rename_only`；删除中间子集时后续为 `rename_only`；删除末尾子集不创建不存在的 CAD 组；同图纸数但稳定 ID/顺序不一致必须 `rebuild`。然后运行：
 
@@ -221,7 +221,7 @@ rtk uv run ruff check src/dst_manager/domain/planning.py tests/unit/test_core.py
 
 Expected: PASS；所有 group 都含合法 `cad_operation`，所有最终子集都出现在 `subset_operations` 一次。
 
-- [ ] **Step 5：提交领域规划变更**
+- [x] **Step 5：提交领域规划变更**
 
 ```powershell
 rtk git add src/dst_manager/domain/planning.py tests/unit/test_core.py
@@ -244,7 +244,7 @@ rtk git commit -m "按子集数量变化前沿规划CAD操作"
 - Produces: `execution_intent["cad_validation_deferred"] = True`。
 - Replaces: `CadJobRunner._validate_source_inspections()` 改为 `_validate_source_baselines()`；它只验证计划证据形状、覆盖集合和 hash/identity 一致性，不宣称布局已检查。
 
-- [ ] **Step 1：把“不调用 CAD、无持久写入”写成失败测试**
+- [x] **Step 1：把“不调用 CAD、无持久写入”写成失败测试**
 
 ```python
 def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tmp_path: Path):
@@ -271,7 +271,7 @@ def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tm
     service.inspect_template.assert_not_called()
 ```
 
-- [ ] **Step 2：运行快速预览和 API 测试，确认旧行为失败**
+- [x] **Step 2：运行快速预览和 API 测试，确认旧行为失败**
 
 ```powershell
 rtk uv run pytest tests/unit/test_core.py tests/integration/test_api.py -q -k "fast_and_defers or structural_preview_and_execute"
@@ -279,7 +279,7 @@ rtk uv run pytest tests/unit/test_core.py tests/integration/test_api.py -q -k "f
 
 Expected: FAIL；旧预览调用 `inspect_template()` 并返回 `source_inspections`。
 
-- [ ] **Step 3：拆出轻量来源基准收集**
+- [x] **Step 3：拆出轻量来源基准收集**
 
 用 `_collect_structural_source_baselines()` 保留原 `_inspect_structural_sources()` 的路径注册、工作区边界、`.dwg/.dwt`、存在性和可读性诊断，删除临时副本、`WindowsWriteLocks` 和 `inspect_template()` 循环。核心输出为：
 
@@ -300,7 +300,7 @@ execution_intent["cad_validation_deferred"] = True
 
 `preview_changes()` 调用该函数后再调用 `_attach_expected_file_hashes()`；后者从 `source_baselines` 复用 hash/identity。保留 `execute_changes()` 的再次轻量预览和 `preview_digest` 比对，使确认瞬间的变化返回 `REPREVIEW_REQUIRED`。
 
-- [ ] **Step 4：让确认 Worker 只验证基准证据，CAD 内容由每个单元验证**
+- [x] **Step 4：让确认 Worker 只验证基准证据，CAD 内容由每个单元验证**
 
 将 `run()` 中的调用改为：
 
@@ -320,7 +320,7 @@ rtk uv run ruff check src/dst_manager/application/service.py src/dst_manager/app
 
 Expected: PASS；预览无 Core Console，预览后或锁内来源漂移仍被拒绝。
 
-- [ ] **Step 5：提交快速预览变更**
+- [x] **Step 5：提交快速预览变更**
 
 ```powershell
 rtk git add src/dst_manager/application/service.py src/dst_manager/application/cad_job.py tests/unit/test_core.py tests/integration/test_api.py
@@ -342,7 +342,7 @@ rtk git commit -m "将CAD布局校验延后到确认任务"
 - Produces: `parse_rename_result(text: str, expected_layouts: set[str]) -> int`，验证版本、最终集合和非负改名数量。
 - Produces: `ScriptRenderer.render_rename(plugin: Path, request: Path) -> str`，固定命令只有环境设置、`NETLOAD`、`DstRenameLayouts`、经 `encode_scr_argument()` 编码的受控请求路径、恢复变量、`QSAVE`、`QUIT`。
 
-- [ ] **Step 1：写协议与 SCR 失败测试**
+- [x] **Step 1：写协议与 SCR 失败测试**
 
 ```python
 def test_render_rename_has_no_destructive_or_handle_commands():
@@ -375,7 +375,7 @@ def test_rename_sidecars_use_fixed_names_and_strict_result(tmp_path: Path):
         parse_rename_result('{"version":1,"renamed_count":1,"final_layouts":["错误"]}', {"002 第一册"})
 ```
 
-- [ ] **Step 2：运行测试确认接口尚不存在**
+- [x] **Step 2：运行测试确认接口尚不存在**
 
 ```powershell
 rtk uv run pytest tests/unit/test_autocad_worker.py -q
@@ -383,7 +383,7 @@ rtk uv run pytest tests/unit/test_autocad_worker.py -q
 
 Expected: FAIL，缺少 `render_rename`、请求写入与结果解析函数。
 
-- [ ] **Step 3：实现固定协议**
+- [x] **Step 3：实现固定协议**
 
 实现路径函数和严格 JSON 校验；请求写入前拒绝 `original_layout` 缺失、大小写重复的旧名/新名和空名称：
 
@@ -403,7 +403,7 @@ def write_rename_request(drawing: Path, layouts: list[dict[str, str]]) -> Path:
 
 结果解析必须拒绝额外/缺失布局、布尔型 `renamed_count`、负数、重复结果和未知版本。
 
-- [ ] **Step 4：运行协议回归和 Ruff**
+- [x] **Step 4：运行协议回归和 Ruff**
 
 ```powershell
 rtk uv run pytest tests/unit/test_autocad_worker.py -q
@@ -412,7 +412,7 @@ rtk uv run ruff check src/dst_manager/infrastructure/autocad/worker.py tests/uni
 
 Expected: PASS；改名脚本不含删除、导入或 Handle 命令。
 
-- [ ] **Step 5：提交 Python 协议**
+- [x] **Step 5：提交 Python 协议**
 
 ```powershell
 rtk git add src/dst_manager/infrastructure/autocad/worker.py tests/unit/test_autocad_worker.py
@@ -434,7 +434,7 @@ rtk git commit -m "定义受控布局改名副文件协议"
 - Produces: `<stem>.dst-layout-rename-result.json`，schema 为 `version/renamed_count/final_layouts`。
 - Produces: `[CommandMethod("DstRenameLayouts")] Commands.RenameLayouts()`，只接收 Worker 生成并经 SCR 编码的请求路径，且插件复核该路径等于当前 DWG 旁的固定请求路径。
 
-- [ ] **Step 1：先写真实 CAD 命令契约测试**
+- [x] **Step 1：先写真实 CAD 命令契约测试**
 
 在 `tests/system_autocad/test_capabilities.py` 增加一个参数化测试：先复制私有样本 DWG 到 `tmp_path`，用独立 `render_handles()` 记录 Handle；写入交换名称的请求，运行 `render_rename()`；再次用独立 `render_handles()` 读取结果并断言：
 
@@ -446,7 +446,7 @@ assert parse_rename_result(rename_result_path(drawing).read_text(encoding="utf-8
 
 再增加缺失旧布局、重复目标和意外额外布局三个失败用例，断言 Core Console 非零退出或结果副文件缺失，且测试只操作临时副本。
 
-- [ ] **Step 2：运行双版本定向测试确认命令缺失**
+- [x] **Step 2：运行双版本定向测试确认命令缺失**
 
 ```powershell
 $env:DST_MANAGER_RUN_AUTOCAD = "1"
@@ -455,7 +455,7 @@ rtk uv run pytest tests/system_autocad/test_capabilities.py -q -k "rename_layout
 
 Expected: 在可用 CAD 环境中 FAIL，AutoCAD 报告未知命令 `DstRenameLayouts`；环境缺失时明确 SKIP 并记录缺失条件，不能把 SKIP 当作通过。
 
-- [ ] **Step 3：实现严格读取、全集合校验和两阶段改名**
+- [x] **Step 3：实现严格读取、全集合校验和两阶段改名**
 
 `LayoutRenameCommand.cs` 使用 `DataContractJsonSerializer` 定义 `RenameRequest`、`RenameRow`、`RenameResult`。入口算法固定为：
 
@@ -485,7 +485,7 @@ WriteResult(SidecarPath(database.Filename, ".dst-layout-rename-result.json"), fi
 
 比较使用 `StringComparer.OrdinalIgnoreCase`；拒绝 `Model`、空白、控制字符、长度大于 255、`<>/\":;?*|=` 中任一字符、旧/新名称大小写重复、当前集合与旧集合不相等。结果使用实际最终布局名排序写出。任何异常写入 Editor 错误消息后继续抛出，确保 Worker 得不到成功结果。
 
-- [ ] **Step 4：接入命令和双版本工程构建**
+- [x] **Step 4：接入命令和双版本工程构建**
 
 在 `Commands.cs` 添加：
 
@@ -505,7 +505,7 @@ rtk powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps
 
 Expected: AutoCAD 2016/2020 两套 x64、.NET Framework 4.8 插件均构建成功。
 
-- [ ] **Step 5：重跑真实改名测试并提交插件**
+- [x] **Step 5：重跑真实改名测试并提交插件**
 
 ```powershell
 $env:DST_MANAGER_RUN_AUTOCAD = "1"
@@ -534,7 +534,7 @@ Expected: 可用环境中名称互换和循环成功且 Handle 集合不变；�
 - Produces: `AcsmDocument.apply_layout_references(references: dict[str, dict[str, str]], dst_dir: Path) -> None`，只更新 `FileName`、`Relative_FileName`、`Name`，不改 `AcDbHandle`。
 - Produces: `job_files.cad_operation`、`started_at`、`finished_at`，API 的 `files[]` 原样返回三个字段。
 
-- [ ] **Step 1：写改名单元一次调用且无 Handle 绑定的失败测试**
+- [x] **Step 1：写改名单元一次调用且无 Handle 绑定的失败测试**
 
 ```python
 def test_rename_group_uses_one_console_call_and_returns_no_bindings(tmp_path: Path):
@@ -561,7 +561,7 @@ def test_rename_group_uses_one_console_call_and_returns_no_bindings(tmp_path: Pa
 
 再写 `_write_staged_dst()` 测试，原始 `AcDbHandle=AB`、文件和布局名变化后断言最终 XML 仍为 `AB`；另一个 `rebuild` 图纸必须使用回读的新 Handle。
 
-- [ ] **Step 2：运行混合执行测试确认旧 Worker 失败**
+- [x] **Step 2：运行混合执行测试确认旧 Worker 失败**
 
 ```powershell
 rtk uv run pytest tests/unit/test_core.py -q -k "rename_group or preserves_handle or mixed_cad"
@@ -569,7 +569,7 @@ rtk uv run pytest tests/unit/test_core.py -q -k "rename_group or preserves_handl
 
 Expected: FAIL；旧 Worker 只有 `_rebuild_group()`，并要求所有 group 返回 Handle。
 
-- [ ] **Step 3：实现 `_rename_group()` 与统一分派**
+- [x] **Step 3：实现 `_rename_group()` 与统一分派**
 
 统一 `_execute_group()`：
 
@@ -585,7 +585,7 @@ def _execute_group(self, job_id, workspace, capability, unit):
 
 `_rename_group()` 复制不可变快照到 group 暂存目录，写固定请求，把该路径传给 `render_rename()`，生成 `rename-xxx.scr`，调用一次 executor，严格解析固定结果，验证最终名称集合，返回空 bindings，并在 job file 的日志摘要中使用阶段名“校验并批量改名布局”。`_rebuild_group()` 保持现有一次 Core Console 和 Handle 读取。
 
-- [ ] **Step 4：分离名称/路径引用更新与 Handle 绑定**
+- [x] **Step 4：分离名称/路径引用更新与 Handle 绑定**
 
 在 `AcsmDocument` 实现：
 
@@ -619,7 +619,7 @@ rtk uv run ruff check src/dst_manager/application/cad_job.py src/dst_manager/inf
 
 Expected: PASS；改名保留 Handle，重建更新 Handle，混合任一失败均不发布。
 
-- [ ] **Step 5：提交混合 Worker**
+- [x] **Step 5：提交混合 Worker**
 
 ```powershell
 rtk git add src/dst_manager/application/cad_job.py src/dst_manager/infrastructure/acsm_xml/document.py src/dst_manager/infrastructure/persistence/database.py migrations/versions/0003_dm008_job_file_cad_operation.py tests/unit/test_core.py tests/unit/test_database.py
@@ -641,7 +641,7 @@ rtk git commit -m "分流CAD布局改名与完整重建任务"
 - `CadJobRunner(..., max_parallel: int = 4)` 接受 1–10。
 - `_run_groups()` 只向同一个 `ThreadPoolExecutor` 提交 `_execute_group()`，改名和重建不得拥有独立池。
 
-- [ ] **Step 1：先修改并发测试为 1、4、10**
+- [x] **Step 1：先修改并发测试为 1、4、10**
 
 ```python
 def test_parallel_setting_defaults_to_four_and_rejects_out_of_range(tmp_path: Path):
@@ -657,7 +657,7 @@ def test_mixed_group_scheduler_is_globally_bounded(tmp_path: Path, parallel: int
     assert maximum == expected
 ```
 
-- [ ] **Step 2：运行测试确认旧范围失败**
+- [x] **Step 2：运行测试确认旧范围失败**
 
 ```powershell
 rtk uv run pytest tests/unit/test_cad_parallel.py -q
@@ -665,7 +665,7 @@ rtk uv run pytest tests/unit/test_cad_parallel.py -q
 
 Expected: FAIL；旧默认值为 2、上限为 4，并且调度器仍调用旧 `_rebuild_group()`。
 
-- [ ] **Step 3：更新配置和共享调度器**
+- [x] **Step 3：更新配置和共享调度器**
 
 ```python
 cad_max_parallel: int = Field(default=4, ge=1, le=10)
@@ -673,7 +673,7 @@ cad_max_parallel: int = Field(default=4, ge=1, le=10)
 
 将 `CadJobRunner` 的构造检查同步为 `1 <= max_parallel <= 10`，把线程池提交目标统一改为 `_execute_group`。失败后不再提交新组，已启动进程等待安全退出后统一抛出，结果仍按 `index` 确定性合并。
 
-- [ ] **Step 4：运行并发、配置与混合失败测试**
+- [x] **Step 4：运行并发、配置与混合失败测试**
 
 ```powershell
 rtk uv run pytest tests/unit/test_cad_parallel.py tests/unit/test_core.py -q -k "parallel or mixed or failure_stops"
@@ -682,7 +682,7 @@ rtk uv run ruff check src/dst_manager/config.py src/dst_manager/application/cad_
 
 Expected: PASS；最大活跃进程不超过 1/4/10 配置，共享池中任一类型失败都停止提交新组。
 
-- [ ] **Step 5：提交并发配置**
+- [x] **Step 5：提交并发配置**
 
 ```powershell
 rtk git add src/dst_manager/config.py src/dst_manager/application/cad_job.py tests/unit/test_cad_parallel.py tests/system_autocad/test_capabilities.py
@@ -702,7 +702,7 @@ rtk git commit -m "扩大并统一CAD并发预算"
 - Produces: `cadOperationLabel("rename_only") = "批量改名布局"`，`cadOperationLabel("rebuild") = "清除并重建布局"`。
 - Produces: 任务文件操作直接显示后端持久化的 `job.files[].cad_operation`、`started_at`、`finished_at` 和 `duration_ms`，不在前端重新判断操作资格。
 
-- [ ] **Step 1：写 E2E 失败测试**
+- [x] **Step 1：写 E2E 失败测试**
 
 把结构预览 mock 改为一组 `rename_only` 和一组 `rebuild`，然后断言：
 
@@ -715,7 +715,7 @@ await expect(page.getByText("数量变化前沿：第 2 个子集")).toBeVisible
 
 任务 mock 的 `files` 分别提供 `cad_operation=rename_only/rebuild`、`started_at`、`finished_at` 和 `duration_ms`，断言每行显示对应模式与时间。
 
-- [ ] **Step 2：运行 E2E 确认旧 UI 失败**
+- [x] **Step 2：运行 E2E 确认旧 UI 失败**
 
 ```powershell
 Set-Location web
@@ -725,7 +725,7 @@ Set-Location ..
 
 Expected: FAIL；旧界面只显示“创建 DWG/重建 DWG”和预览期“布局来源验证”。
 
-- [ ] **Step 3：实现预览和任务显示**
+- [x] **Step 3：实现预览和任务显示**
 
 新增纯显示函数：
 
@@ -739,7 +739,7 @@ function cadOperationLabel(operation:string){
 
 移除“可用布局”预览表，改为来源路径/SHA-256/请求布局的轻量基准表；显示延后校验提示、前沿、每组模式和工作图纸数。任务表新增“操作”“开始”“结束”列，直接使用服务端文件进度字段。
 
-- [ ] **Step 4：运行 Web 构建和全量 E2E**
+- [x] **Step 4：运行 Web 构建和全量 E2E**
 
 ```powershell
 Set-Location web
@@ -750,7 +750,7 @@ Set-Location ..
 
 Expected: TypeScript/Vite 构建成功；现有 latest-wins、跨工作区任务隔离、重试和新增 CAD 操作展示全部通过。
 
-- [ ] **Step 5：提交 Web 变更**
+- [x] **Step 5：提交 Web 变更**
 
 ```powershell
 rtk git add web/src/App.vue web/tests/e2e/main.spec.ts
@@ -776,7 +776,7 @@ rtk git commit -m "展示CAD操作分流与延后校验状态"
 - 性能记录至少包含并发 1、4、10、CAD 版本、工作单元数量、每种操作数量、每组 `duration_ms`、整批墙钟时间和峰值内存。
 - 只有代码、非 CAD 回归、双版本真实 CAD、事务恢复和性能证据全部完成，才能把 Plan 改为 `completed`；环境缺失则记录恢复条件并保持 `active` 或按实际阻塞状态处理。
 
-- [ ] **Step 1：补齐混合事务与漂移失败测试**
+- [x] **Step 1：补齐混合事务与漂移失败测试**
 
 增加一个 `rename_only + rebuild + delete` 混合任务，分别在改名结果缺失、重建 Handle 错误、锁后源文件替换和第二个 CAD 单元进程失败处注入故障。每个用例必须断言：
 
@@ -788,7 +788,7 @@ assert not (workspace.root / ".dst-manager" / "revisions" / result["id"] / "mani
 
 同时运行现有启动恢复测试，确认 create/replace/delete 混合发布与 COMMITTED 恢复不变。
 
-- [ ] **Step 2：执行最小充分非 CAD 验证**
+- [x] **Step 2：执行最小充分非 CAD 验证**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
@@ -802,7 +802,7 @@ rtk git diff --check
 
 Expected: 所有非 CAD 相关测试、Ruff、锁文件、数据库升级和空白检查通过。
 
-- [ ] **Step 3：构建并运行双版本真实 CAD 验收**
+- [x] **Step 3：构建并运行双版本真实 CAD 验收**
 
 ```powershell
 rtk powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
@@ -813,7 +813,7 @@ rtk uv run pytest tests/system_autocad/test_capabilities.py -q
 
 Expected: 2016/2020 均通过标题改名 Handle 不变、名称交换/循环、数量前沿混合操作、完整重建、任一失败不发布和独立重开验证。若私有样本、console 或 DLL 缺失，记录具体 SKIP 数和恢复命令，不写成通过。
 
-- [ ] **Step 4：记录并发 1、4、10 的真实性能**
+- [x] **Step 4：记录并发 1、4、10 的真实性能**
 
 对同一临时样本和相同 10 个 CAD 工作单元分别设置：
 
@@ -828,7 +828,7 @@ rtk uv run pytest tests/system_autocad/test_capabilities.py -q -k "mixed_operati
 
 把 CAD 版本、CPU、内存、工作单元构成、进程峰值、各组耗时和整批墙钟写入本 Plan 的“实际验证记录”。结论只使用实测数据；不把单次波动描述为稳定加速比例。
 
-- [ ] **Step 5：执行全量验证并闭环文档**
+- [x] **Step 5：执行全量验证并闭环文档**
 
 ```powershell
 rtk uv run pytest -q
@@ -841,7 +841,7 @@ rtk git diff --check
 
 将 `ARCH-DM-001` 的生产链改为快速预览无 CAD、确认后每组单次 Core Console、改名/重建分流和共享并发预算；在 `ADR-DM-003`、`SPEC-DM-003`、README、Plan 与 `changelog.md` 中记录实际命令、通过/跳过数和真实 CAD 证据。只有全部完成后将 Plan 标为 `completed`。
 
-- [ ] **Step 6：提交最终验收与文档闭环**
+- [x] **Step 6：提交最终验收与文档闭环**
 
 ```powershell
 rtk git add tests/system_autocad/test_capabilities.py docs/dst-manager .planning/plans/dst-manager changelog.md
@@ -871,4 +871,42 @@ rtk git commit -m "完成CAD校验延后与布局改名交付闭环"
 
 ## 实际验证记录
 
-计划建立时尚未实施代码，未运行实现测试或真实性能采样。本节由执行者按 Task 8 记录每条命令的退出码、测试通过/跳过数、双版本结果、硬件信息和并发 1/4/10 的墙钟及内存数据。
+`PLAN-DM-008` 于 2026-08-26 完成。实现提交覆盖快速预览无 CAD、确认阶段延期布局校验、逐子集 `none`/`rename_only`/`rebuild` 分类、`DstRenameLayouts` 两阶段改名、`rename_only` Handle 保持、`rebuild` Handle 回读、共享并发预算和失败不发布。真实 CAD 修复提交为 `f70f310` 与 `a447224`；Task 8 在其上完成回归、性能和文档闭环。
+
+### 环境
+
+- Windows 11 企业版；12th Gen Intel(R) Core(TM) i7-12700，12 核/20 逻辑处理器，63.8 GiB RAM。
+- AutoCAD 2016/2020 Core Console 与对应 Worker DLL 均存在；双版本插件构建成功，0 warning、0 error。
+- 私有 `sample/project1` 只复制到忽略目录，所有系统测试只操作 pytest 临时副本。
+
+### 自动化与构建
+
+- `rtk uv sync --dev`：成功，39 个包已解析/审计。
+- `rtk uv run pytest tests/unit/test_autocad_worker.py tests/unit/test_cad_parallel.py tests/unit/test_core.py tests/unit/test_database.py tests/integration/test_api.py tests/integration/test_transaction_recovery.py -q`：200 passed。
+- API `GET /api/jobs/{job_id}` 直接返回文件级 `cad_operation`、`started_at`、`finished_at` 的契约测试按 RED/GREEN 完成。
+- `rtk uv run ruff check .`、`rtk uv lock --check`、`rtk git diff --check`：均成功。
+- 全新临时 SQLite 执行 `rtk uv run alembic upgrade head`：依次升级 `0001 → 0002 → 0003_dm008_job_file_cadop`，成功。
+- `rtk uv run pytest -q`：367 passed、64 skipped；其中 60 项真实 CAD 测试因该普通全量命令未设置 `DST_MANAGER_RUN_AUTOCAD=1` 而跳过，另 4 项为既有环境跳过。真实 CAD 另按下述显式命令全部执行，不以这些 skip 代替验收。
+- `web` 下 `rtk npm run build`：成功，Vite 构建 11 modules；`rtk npm run test:e2e`：18 passed。
+
+### 真实 AutoCAD
+
+- `rtk powershell -NoProfile -Command '$env:DST_MANAGER_RUN_AUTOCAD="1"; uv run pytest tests/system_autocad/test_capabilities.py -q -k "not mixed_operation_performance"'`：54/54 passed，0 skipped。覆盖 2016/2020、混合事务、来源基线漂移、故障不发布、25-layout 重建、并发等价、空子集安全拒绝和独立 Handle 验证。
+- `DstRenameLayouts` 的缺失、重复、额外、顶层未知字段、行级未知字段、交换、循环和仅大小写改名矩阵为 16/16 passed；有效改名前后 Handle 保持不变，无效请求无结果副文件。
+- `acad.err` 在改名矩阵前后保持 2178 bytes、54 lines，没有新增致命错误；该根目录生成物在提交前删除。
+- `rtk powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1`：AutoCAD 2016/2020 双版本构建均成功。
+
+### 性能记录
+
+命令：`rtk powershell -NoProfile -Command '$env:DST_MANAGER_RUN_AUTOCAD="1"; uv run pytest tests/system_autocad/test_capabilities.py -q -s -k "mixed_operation_performance"'`。最终 6/6 passed，0 skipped。每组均为 10 个真实 CAD 工作单元，精确包含 5 个 `rename_only` 与 5 个 `rebuild`；全部文件成功后才发布。`文件耗时合计` 是各工作单元耗时之和，并发时预期可大于墙钟。
+
+| CAD | 并发 | 工作单元 | wall_clock_ms | job_duration_ms | 文件耗时合计 ms | 最大单进程峰值 bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2016 | 1 | 10 | 37236 | 37175 | 36223 | 603557888 |
+| 2020 | 1 | 10 | 42307 | 42244 | 41297 | 566448128 |
+| 2016 | 4 | 10 | 16290 | 16236 | 39758 | 604241920 |
+| 2020 | 4 | 10 | 15604 | 15507 | 43603 | 566194176 |
+| 2016 | 10 | 10 | 13436 | 13369 | 56968 | 612433920 |
+| 2020 | 10 | 10 | 10802 | 10738 | 60675 | 567427072 |
+
+这些数据是本机单轮实测，只证明本次环境下的行为与资源记录，不宣称稳定加速比例。默认并发仍为 4，配置合法范围保持 1–10。

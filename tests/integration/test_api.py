@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
@@ -176,6 +177,40 @@ def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_work
     assert executed["payload"]["plan"]["execution_intent"]["source_baselines"] == preview["execution_intent"]["source_baselines"]
     app.state.service.inspect_template.assert_not_called()
     assert invalid.status_code == 422
+
+
+def test_get_job_files_returns_cad_operation_and_timing_directly(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    started = datetime(2026, 8, 26, 1, 2, 3, tzinfo=UTC)
+    finished = datetime(2026, 8, 26, 1, 2, 4, tzinfo=UTC)
+    app.state.service.database.create_job(
+        "job-files-contract",
+        opened["id"],
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        "2020",
+    )
+    app.state.service.database.upsert_job_file(
+        "job-files-contract",
+        dst.parent / "001 第一册.dwg",
+        cad_operation="rename_only",
+        status="SUCCEEDED",
+        started_at=started,
+        finished_at=finished,
+    )
+
+    response = client.get("/api/jobs/job-files-contract")
+
+    assert response.status_code == 200
+    assert response.json()["files"][0] == response.json()["files"][0] | {
+        "cad_operation": "rename_only",
+        "started_at": started.replace(tzinfo=None).isoformat(),
+        "finished_at": finished.replace(tzinfo=None).isoformat(),
+    }
 
 
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):

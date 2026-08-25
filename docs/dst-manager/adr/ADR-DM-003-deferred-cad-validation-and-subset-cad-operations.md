@@ -4,7 +4,7 @@ title: 延后 CAD 校验与子集级 CAD 操作分流
 status: accepted
 document_kind: adr
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 related:
   - ARCH-DM-001
   - ADR-DM-001
@@ -86,4 +86,6 @@ v0.21 的结构差异预览会逐个启动 Core Console 检查模板和既有 DW
 
 ## 实施状态
 
-本 ADR 已确认接受，但尚未实施代码或变更现有发布行为。实施细节、接口和验收条件见 [SPEC-DM-003](../specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)，实施步骤见 [PLAN-DM-008](../../../.planning/plans/dst-manager/PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)。
+本 ADR 已由 `PLAN-DM-008` 完成实施与验收。快速预览不启动 CAD；确认任务按 `none`、`rename_only`、`rebuild` 逐子集分流，延后执行布局集合与版本校验。`rename_only` 保留原 `AcDbHandle`，`rebuild` 才回读新 Handle；两类单元共用默认 4、范围 1–10 的并发预算，任一单元或发布复核失败都不发布正式文件。
+
+2026-08-26 的验收证据包括 AutoCAD 2016/2020 非性能系统矩阵 54/54、10 个混合工作单元在并发 1/4/10 下的性能矩阵 6/6、双版本插件构建，以及全量 Python 与 Web 验证。详细命令与性能数据见 [PLAN-DM-008](../../../.planning/plans/dst-manager/PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)；接口和行为要求见 [SPEC-DM-003](../specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)。

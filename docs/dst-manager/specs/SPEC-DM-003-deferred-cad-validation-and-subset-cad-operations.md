@@ -4,7 +4,7 @@ title: 延后 CAD 校验与子集级 CAD 操作分流规范
 status: accepted
 document_kind: spec
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 related:
   - ARCH-DM-001
   - ADR-DM-001
@@ -132,4 +132,4 @@ Python Worker 为每个暂存单元写入受控的布局名称映射副文件，
 
 本规范替代 [SPEC-DM-002](SPEC-DM-002-v021-cad-single-script-execution.md) 中“所有结构单元均完整布局重建”的操作选择，同时保留其单次 Core Console、暂存、校验和发布安全要求。
 
-本规范已经确认并接受；尚未实施或宣称完成任何代码、性能测试或真实 CAD 验收。
+本规范已经确认、实施并由 `PLAN-DM-008` 完成验收。2026-08-26 实测证明快速预览无 CAD、确认阶段延期校验、逐子集操作分类、`rename_only` Handle 不变、数量变化前沿及失败不发布；AutoCAD 2016/2020 非性能系统矩阵为 54/54，10 工作单元、`5 rename_only + 5 rebuild` 的并发 1/4/10 性能矩阵为 6/6。完整命令、环境和数据以 [PLAN-DM-008](../../../.planning/plans/dst-manager/PLAN-DM-008-deferred-cad-validation-and-layout-rename.md) 的实际验证记录为准。

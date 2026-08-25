@@ -4,10 +4,13 @@ import os
 import shutil
 import subprocess
 import threading
+import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+import dst_manager.application.cad_job as cad_job_module
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
@@ -22,6 +25,7 @@ from dst_manager.infrastructure.autocad.worker import (
     rename_result_path,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.filesystem.publisher import file_sha256
 
 _SAMPLE_PROJECT = Path(__file__).parents[2] / "sample" / "project1"
 pytestmark = [
@@ -98,6 +102,23 @@ def _add_case_probe_layout(capability: CadCapability, drawing: Path, script: Pat
     return name
 
 
+def _execute_confirmed(
+    service: DstManagerService,
+    workspace,
+    commands: list[dict[str, object]],
+    version: str,
+    preview: dict[str, object] | None = None,
+):
+    confirmed = preview or service.preview_changes(workspace.id, workspace.revision_id, commands, version)
+    return service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        commands,
+        version,
+        preview_digest=confirmed["preview_digest"],
+    )
+
+
 @pytest.mark.parametrize(("mapping", "changed_count"), [("exchange", 2), ("cycle", 3), ("case", 1)])
 @pytest.mark.parametrize("version", ["2016", "2020"])
 def test_rename_layouts_preserves_handle_mapping_for_exchange_cycle_and_case_only_changes(
@@ -129,7 +150,7 @@ def test_rename_layouts_preserves_handle_mapping_for_exchange_cycle_and_case_onl
     request = rename_request_path(drawing)
     request.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
     rename_script = tmp_path / "rename.scr"
-    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin, request), encoding="mbcs")
+    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin), encoding="mbcs")
 
     completed = CoreConsoleExecutor().run(capability, drawing, rename_script, 120)
 
@@ -140,7 +161,7 @@ def test_rename_layouts_preserves_handle_mapping_for_exchange_cycle_and_case_onl
     assert parse_rename_result(result_path.read_text(encoding="utf-8"), set(expected_handles)) == changed_count
 
 
-@pytest.mark.parametrize("request_kind", ["missing", "duplicate", "extra"])
+@pytest.mark.parametrize("request_kind", ["missing", "duplicate", "extra", "top_unknown", "row_unknown"])
 @pytest.mark.parametrize("version", ["2016", "2020"])
 def test_rename_layouts_rejects_invalid_complete_layout_sets(version: str, request_kind: str, tmp_path: Path):
     capability = _rename_capability(version)
@@ -148,33 +169,37 @@ def test_rename_layouts_rejects_invalid_complete_layout_sets(version: str, reque
     before_handles = _read_handles(capability, drawing, tmp_path / "before-handles.scr")
     original_names = sorted(before_handles)
     rows = [{"old_name": name, "new_name": name} for name in original_names]
+    payload: dict[str, object] = {"version": 1, "layouts": rows}
     if request_kind == "missing":
         rows.pop()
     elif request_kind == "duplicate":
         rows[1]["new_name"] = original_names[0]
-    else:
+    elif request_kind == "extra":
         rows.append({"old_name": "意外额外布局", "new_name": "意外额外布局"})
+    elif request_kind == "top_unknown":
+        payload["unknown"] = True
+    else:
+        rows[0]["unknown"] = True
     request = rename_request_path(drawing)
-    request.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
+    request.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     rename_script = tmp_path / "rename-invalid.scr"
-    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin, request), encoding="mbcs")
+    rename_script.write_text(ScriptRenderer().render_rename(capability.plugin), encoding="mbcs")
 
-    failed = False
     try:
         CoreConsoleExecutor().run(capability, drawing, rename_script, 120)
     except subprocess.CalledProcessError:
-        failed = True
+        pass
 
-    assert failed or not rename_result_path(drawing).exists()
+    assert not rename_result_path(drawing).exists()
     assert _read_handles(capability, drawing, tmp_path / "after-handles.scr") == before_handles
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_structural_subset_title_change_rebuilds_dwg_and_dst(version: str, tmp_path: Path):
+def test_structural_subset_title_change_renames_layout_and_preserves_handle(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample" / "project1"
-    shutil.copy2(source_project / "图纸集数据文件.dst", tmp_path / "图纸集数据文件.dst")
-    shutil.copy2(source_project / "GP-0000 封面.dwg", tmp_path / "GP-0000 封面.dwg")
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [source_document.subsets[0].acsm_id])
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -184,37 +209,50 @@ def test_structural_subset_title_change_rebuilds_dwg_and_dst(version: str, tmp_p
         cad_timeout_seconds=120,
     )
     service = DstManagerService(settings)
-    workspace = service.open_workspace(tmp_path / "图纸集数据文件.dst")
+    workspace = service.open_workspace(dst)
     subset = workspace.document.subsets[0]
-    job = service.execute_changes(
+    drawing = subset.sheets[0].layout.resolved_path
+    capability = _rename_capability(version)
+    before_handles = _read_handles(capability, drawing, tmp_path / "title-before.scr")
+    preview = service.preview_changes(
         workspace.id,
         workspace.revision_id,
-        [{"type": "update_subset", "subset_id": subset.acsm_id, "title": "封面测试"}],
+        [{"type": "update_subset_title", "subset_id": subset.acsm_id, "title": "封面测试"}],
         version,
+    )
+    assert preview["execution_intent"] is not None, preview
+    assert [group["cad_operation"] for group in preview["execution_intent"]["groups"]] == ["rename_only"], preview
+    job = _execute_confirmed(
+        service,
+        workspace,
+        [{"type": "update_subset_title", "subset_id": subset.acsm_id, "title": "封面测试"}],
+        version,
+        preview,
     )
     assert job["status"] == "QUEUED"
     result = service.run_next_job()
     assert result and result["status"] == "SUCCEEDED", result
     assert len(result["files"]) == 1
+    assert result["files"][0]["cad_operation"] == "rename_only"
     assert result["files"][0]["duration_ms"] > 0
     assert result["files"][0]["peak_memory_bytes"] > 0
     assert result["files"][0]["staging_bytes"] > 0
-    reopened = service.open_workspace(tmp_path / "图纸集数据文件.dst")
+    reopened = service.open_workspace(dst)
     changed = reopened.document.subsets[0].sheets[0]
     assert changed.title == "封面测试"
     assert changed.layout.layout_name == "0000 封面测试"
     assert changed.layout.handle
-    assert (tmp_path / ".dst-manager" / "revisions" / result["id"] / "before" / "图纸集数据文件.dst").is_file()
+    after_handles = _read_handles(capability, changed.layout.resolved_path, tmp_path / "title-after.scr")
+    assert before_handles[subset.sheets[0].layout.layout_name] == after_handles[changed.layout.layout_name]
+    assert (tmp_path / ".dst-manager" / "revisions" / result["id"] / "before" / dst.name).is_file()
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
 def test_missing_custom_value_update_and_supported_insert_complete_before_publish(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
-    dst_name = "图纸集数据文件.dst"
-    drawing_name = "GP-0000 封面.dwg"
-    shutil.copy2(source_project / dst_name, tmp_path / dst_name)
-    shutil.copy2(source_project / drawing_name, tmp_path / drawing_name)
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [source_document.subsets[0].acsm_id])
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -224,14 +262,14 @@ def test_missing_custom_value_update_and_supported_insert_complete_before_publis
         cad_timeout_seconds=180,
     )
     service = DstManagerService(settings)
-    workspace = service.open_workspace(tmp_path / dst_name)
+    workspace = service.open_workspace(dst)
     subset = workspace.document.subsets[0]
     existing = subset.sheets[0]
     assert existing.custom_properties["备注"] == ""
     commands = [
         {"type": "update_sheet_set", "custom_properties": {"版本": "B"}},
         {
-            "type": "update_sheet",
+            "type": "update_sheet_properties",
             "sheet_id": existing.acsm_id,
             "custom_properties": {"备注": "", "出图比例": "1:500", "设计人": existing.custom_properties["设计人"]},
         },
@@ -244,20 +282,20 @@ def test_missing_custom_value_update_and_supported_insert_complete_before_publis
     ]
     preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
     assert preview["executable"] is True, preview
-    job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
+    job = _execute_confirmed(service, workspace, commands, version, preview)
     assert job["status"] == "QUEUED", job
 
     result = service.run_next_job()
 
     assert result and result["status"] == "SUCCEEDED", result
-    reopened = service.open_workspace(tmp_path / dst_name)
+    reopened = service.open_workspace(dst)
     final_subset = reopened.document.subsets[0]
     assert reopened.document.custom_properties["版本"] == "B"
     assert [sheet.title for sheet in final_subset.sheets] == ["封面 (一)", "封面 (二)"]
     assert all(sheet.custom_properties["备注"] == "" for sheet in final_subset.sheets)
     updated = next(sheet for sheet in final_subset.sheets if sheet.acsm_id == existing.acsm_id)
     assert updated.custom_properties["出图比例"] == "1:500"
-    xml = AcsmDocument(DstCodec().decode_file(tmp_path / dst_name))
+    xml = AcsmDocument(DstCodec().decode_file(dst))
     sheetset_remark_values = xml.root.xpath(
         "//*[local-name()='AcSmSheetSet']/*[local-name()='AcSmCustomPropertyBag']"
         "/*[local-name()='AcSmCustomPropertyValue' and @propname='备注']"
@@ -302,12 +340,8 @@ def test_five_dwg_groups_run_with_bounded_parallelism(
     monkeypatch.setattr(CoreConsoleExecutor, "run", measure_console_peak)
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
-    dst_name = "图纸集数据文件.dst"
-    shutil.copy2(source_project / dst_name, tmp_path / dst_name)
-    source_document = AcsmDocument(DstCodec().decode_file(source_project / dst_name)).project(source_project)
-    sheets = [subset.sheets[0] for subset in source_document.subsets[:5]]
-    for drawing in {sheet.layout.resolved_path for sheet in sheets}:
-        shutil.copy2(drawing, tmp_path / drawing.name)
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [subset.acsm_id for subset in source_document.subsets[:5]])
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -318,12 +352,12 @@ def test_five_dwg_groups_run_with_bounded_parallelism(
         cad_max_parallel=parallel,
     )
     service = DstManagerService(settings)
-    workspace = service.open_workspace(tmp_path / dst_name)
+    workspace = service.open_workspace(dst)
     commands = [
-        {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-并行"}
+        {"type": "update_subset_title", "subset_id": subset.acsm_id, "title": f"{subset.name}-并行"}
         for subset in workspace.document.subsets[:5]
     ]
-    job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
+    job = _execute_confirmed(service, workspace, commands, version)
     assert job["status"] == "QUEUED"
     result = service.run_next_job()
     assert result and result["status"] == "SUCCEEDED", result
@@ -335,7 +369,7 @@ def test_five_dwg_groups_run_with_bounded_parallelism(
         assert maximum == 1
     else:
         assert maximum > 1
-    reopened = service.open_workspace(tmp_path / dst_name)
+    reopened = service.open_workspace(dst)
     assert all("-并行" in subset.sheets[0].title for subset in reopened.document.subsets[:5])
 
 
@@ -343,9 +377,8 @@ def test_five_dwg_groups_run_with_bounded_parallelism(
 def test_insert_and_delete_rebuilds_supported_subset(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
-    shutil.copy2(source_project / "图纸集数据文件.dst", tmp_path / "图纸集数据文件.dst")
-    for name in ("GP-0001-0005 图纸目录(一)-(五).dwg", "GP-0006-0007 主要设备及材料表(一)-(二).dwg"):
-        shutil.copy2(source_project / name, tmp_path / name)
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [source_document.subsets[2].acsm_id])
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -355,8 +388,8 @@ def test_insert_and_delete_rebuilds_supported_subset(version: str, tmp_path: Pat
         cad_timeout_seconds=180,
     )
     service = DstManagerService(settings)
-    workspace = service.open_workspace(tmp_path / "图纸集数据文件.dst")
-    source_subset = workspace.document.subsets[2]
+    workspace = service.open_workspace(dst)
+    source_subset = workspace.document.subsets[0]
     deleted_id = source_subset.sheets[2].acsm_id
     template = source_subset.sheets[1]
     commands = [
@@ -373,39 +406,65 @@ def test_insert_and_delete_rebuilds_supported_subset(version: str, tmp_path: Pat
             },
         },
     ]
-    job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
+    job = _execute_confirmed(service, workspace, commands, version)
     assert job["status"] == "QUEUED", job
     result = service.run_next_job()
     assert result and result["status"] == "SUCCEEDED", result
-    reopened = service.open_workspace(tmp_path / "图纸集数据文件.dst")
-    final_source = reopened.document.subsets[2]
+    reopened = service.open_workspace(dst)
+    final_source = reopened.document.subsets[0]
     assert deleted_id not in {sheet.acsm_id for sheet in reopened.document.sheets}
     assert len(final_source.sheets) == len(source_subset.sheets)
     assert len({sheet.layout.handle for sheet in final_source.sheets}) == len(final_source.sheets)
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_delete_last_sheet_removes_subset_and_dwg(version: str, tmp_path: Path):
+def test_delete_last_sheet_is_rejected_without_publication(version: str, tmp_path: Path):
     root = Path(__file__).parents[2]; source_project = root / "sample/project1"
-    shutil.copy2(source_project / "图纸集数据文件.dst", tmp_path / "图纸集数据文件.dst")
-    drawing = tmp_path / "GP-0000 封面.dwg"; shutil.copy2(source_project / drawing.name, drawing)
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [source_document.subsets[0].acsm_id])
     settings=Settings(data_dir=tmp_path/"data",autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),autocad_2016_plugin=root/"plugins/autocad2016/DstManager.AutoCAD.dll",autocad_2020_console=Path("C:/Program Files/Autodesk/AutoCAD 2020/accoreconsole.exe"),autocad_2020_plugin=root/"plugins/autocad2020/DstManager.AutoCAD.dll",cad_timeout_seconds=120)
-    service=DstManagerService(settings); workspace=service.open_workspace(tmp_path/"图纸集数据文件.dst"); subset=workspace.document.subsets[0]; sheet_id=subset.sheets[0].acsm_id
-    job=service.execute_changes(workspace.id,workspace.revision_id,[{"type":"delete_sheet","sheet_id":sheet_id,"delete_empty_subset":True}],version); assert job["status"]=="QUEUED"
-    result=service.run_next_job(); assert result and result["status"]=="SUCCEEDED",result
-    reopened=service.open_workspace(tmp_path/"图纸集数据文件.dst"); assert subset.acsm_id not in {item.acsm_id for item in reopened.document.subsets}; assert not drawing.exists()
-    assert (tmp_path/".dst-manager"/"revisions"/result["id"]/"before"/drawing.name).is_file()
+    service=DstManagerService(settings); workspace=service.open_workspace(dst); subset=workspace.document.subsets[0]; sheet_id=subset.sheets[0].acsm_id; drawing=subset.sheets[0].layout.resolved_path
+    before={path: file_sha256(path) for path in (dst,drawing)}
+    commands=[{"type":"delete_sheet","sheet_id":sheet_id,"delete_empty_subset":True}]
+    preview=service.preview_changes(workspace.id,workspace.revision_id,commands,version)
+    assert preview["execution_intent"] is None, preview
+    assert preview["executable"] is False, preview
+    assert {item["code"] for item in preview["diagnostics"]} == {"EMPTY_SUBSET"}, preview
+    assert {path: file_sha256(path) for path in (dst,drawing)} == before
+    assert not (tmp_path/".dst-manager"/"revisions").exists()
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
 def test_largest_25_layout_group_rebuilds_in_order(version: str, tmp_path: Path):
-    root=Path(__file__).parents[2]; source_project=root/"sample/project1"; shutil.copy2(source_project/"图纸集数据文件.dst",tmp_path/"图纸集数据文件.dst")
-    drawing_name="GP-0038-0062 龙岗段入廊给水、再生水平面图(十六)-(四十).dwg"; shutil.copy2(source_project/drawing_name,tmp_path/drawing_name)
+    root=Path(__file__).parents[2]; source_project=root/"sample/project1"
+    source_document=AcsmDocument(DstCodec().decode_file(source_project/"图纸集数据文件.dst")).project(source_project); dst=_copy_selected_subset_project(tmp_path,[source_document.subsets[14].acsm_id])
     settings=Settings(data_dir=tmp_path/"data",autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),autocad_2016_plugin=root/"plugins/autocad2016/DstManager.AutoCAD.dll",autocad_2020_console=Path("C:/Program Files/Autodesk/AutoCAD 2020/accoreconsole.exe"),autocad_2020_plugin=root/"plugins/autocad2020/DstManager.AutoCAD.dll",cad_timeout_seconds=900)
-    service=DstManagerService(settings); workspace=service.open_workspace(tmp_path/"图纸集数据文件.dst"); subset=workspace.document.subsets[14]; assert len(subset.sheets)==25
-    job=service.execute_changes(workspace.id,workspace.revision_id,[{"type":"renumber_sheets","subset_id":subset.acsm_id,"start":38,"width":4}],version); assert job["status"]=="QUEUED"
+    service=DstManagerService(settings); workspace=service.open_workspace(dst); subset=workspace.document.subsets[0]; assert len(subset.sheets)==25
+    removed = subset.sheets[-1]
+    commands = [
+        {"type": "delete_sheet", "sheet_id": removed.acsm_id},
+        {
+            "type": "insert_sheet",
+            "target_subset_id": subset.acsm_id,
+            "ordinal": 24,
+            "placement": "after",
+            "count": 1,
+            "source": {
+                "type": "template_layout",
+                "file": str(removed.layout.resolved_path),
+                "layout": removed.layout.layout_name,
+            },
+        },
+    ]
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
+    assert preview["execution_intent"] is not None, preview
+    group = preview["execution_intent"]["groups"][0]
+    expected_layouts = [layout["target_layout"] for layout in group["layouts"]]
+    assert group["cad_operation"] == "rebuild"
+    assert len(expected_layouts) == 25
+    job=_execute_confirmed(service,workspace,commands,version,preview); assert job["status"]=="QUEUED"
     result=service.run_next_job(); assert result and result["status"]=="SUCCEEDED",result
-    rebuilt=service.open_workspace(tmp_path/"图纸集数据文件.dst").document.subsets[14].sheets; assert len(rebuilt)==25; assert [sheet.number for sheet in rebuilt]==[str(value).zfill(4) for value in range(38,63)]; assert len({sheet.layout.handle for sheet in rebuilt})==25
+    rebuilt=service.open_workspace(dst).document.subsets[0].sheets; assert len(rebuilt)==25; assert [sheet.layout.layout_name for sheet in rebuilt]==expected_layouts; assert len({sheet.layout.handle for sheet in rebuilt})==25
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
@@ -413,14 +472,12 @@ def test_parallel_one_and_two_produce_equivalent_results(version: str, tmp_path:
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
     source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
-    source_sheets = [subset.sheets[0] for subset in source_document.subsets[:2]]
+    subset_ids = [subset.acsm_id for subset in source_document.subsets[:2]]
     outcomes = []
     for parallel in (1, 2):
         project = tmp_path / f"parallel-{parallel}"
         project.mkdir()
-        shutil.copy2(source_project / "图纸集数据文件.dst", project / "图纸集数据文件.dst")
-        for drawing in {sheet.layout.resolved_path for sheet in source_sheets}:
-            shutil.copy2(drawing, project / drawing.name)
+        dst = _copy_selected_subset_project(project, subset_ids)
         settings = Settings(
             data_dir=project / "data",
             autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -431,16 +488,16 @@ def test_parallel_one_and_two_produce_equivalent_results(version: str, tmp_path:
             cad_max_parallel=parallel,
         )
         service = DstManagerService(settings)
-        workspace = service.open_workspace(project / "图纸集数据文件.dst")
+        workspace = service.open_workspace(dst)
         commands = [
-            {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-等价"}
+            {"type": "update_subset_title", "subset_id": subset.acsm_id, "title": f"{subset.name}-等价"}
             for subset in workspace.document.subsets[:2]
         ]
-        job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
+        job = _execute_confirmed(service, workspace, commands, version)
         assert job["status"] == "QUEUED"
         result = service.run_next_job()
         assert result and result["status"] == "SUCCEEDED", result
-        reopened = service.open_workspace(project / "图纸集数据文件.dst")
+        reopened = service.open_workspace(dst)
         outcomes.append(
             [
                 (sheet.acsm_id, sheet.number, sheet.title, sheet.layout.layout_name)
@@ -455,14 +512,8 @@ def test_parallel_one_and_two_produce_equivalent_results(version: str, tmp_path:
 def test_injected_second_dwg_failure_never_publishes_partial_files(version: str, tmp_path: Path, monkeypatch):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
-    dst_name = "图纸集数据文件.dst"
-    shutil.copy2(source_project / dst_name, tmp_path / dst_name)
-    source_document = AcsmDocument(DstCodec().decode_file(source_project / dst_name)).project(source_project)
-    source_sheets = [subset.sheets[0] for subset in source_document.subsets[:2]]
-    for drawing in {sheet.layout.resolved_path for sheet in source_sheets}:
-        shutil.copy2(drawing, tmp_path / drawing.name)
-    formal_files = [tmp_path / dst_name, *(tmp_path / sheet.layout.resolved_path.name for sheet in source_sheets)]
-    before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in formal_files}
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [subset.acsm_id for subset in source_document.subsets[:2]])
     original_run = CoreConsoleExecutor.run
     calls = 0
 
@@ -487,12 +538,14 @@ def test_injected_second_dwg_failure_never_publishes_partial_files(version: str,
         cad_max_parallel=1,
     )
     service = DstManagerService(settings)
-    workspace = service.open_workspace(tmp_path / dst_name)
+    workspace = service.open_workspace(dst)
+    formal_files = [dst, *(sheet.layout.resolved_path for subset in workspace.document.subsets for sheet in subset.sheets)]
+    before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in formal_files}
     commands = [
-        {"type": "update_subset", "subset_id": subset.acsm_id, "title": f"{subset.name}-失败注入"}
+        {"type": "update_subset_title", "subset_id": subset.acsm_id, "title": f"{subset.name}-失败注入"}
         for subset in workspace.document.subsets[:2]
     ]
-    job = service.execute_changes(workspace.id, workspace.revision_id, commands, version)
+    job = _execute_confirmed(service, workspace, commands, version)
     assert job["status"] == "QUEUED"
 
     result = service.run_next_job()
@@ -503,17 +556,15 @@ def test_injected_second_dwg_failure_never_publishes_partial_files(version: str,
     assert after == before
     assert {path.name for path in tmp_path.glob("*.dwg")} == {path.name for path in formal_files if path.suffix.lower() == ".dwg"}
     assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
-    assert failed_script == "rebuild-001.scr"
+    assert failed_script == "rename-001.scr"
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
 def test_cad_success_then_dom_failure_keeps_formal_hashes(version: str, tmp_path: Path, monkeypatch):
     root = Path(__file__).parents[2]
     source_project = root / "sample/project1"
-    dst = tmp_path / "图纸集数据文件.dst"
-    drawing = tmp_path / "GP-0000 封面.dwg"
-    shutil.copy2(source_project / dst.name, dst)
-    shutil.copy2(source_project / drawing.name, drawing)
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [source_document.subsets[0].acsm_id])
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -525,10 +576,11 @@ def test_cad_success_then_dom_failure_keeps_formal_hashes(version: str, tmp_path
     service = DstManagerService(settings)
     workspace = service.open_workspace(dst)
     subset = workspace.document.subsets[0]
-    job = service.execute_changes(
-        workspace.id,
-        workspace.revision_id,
-        [{"type": "update_subset", "subset_id": subset.acsm_id, "title": "DOM 失败注入"}],
+    drawing = subset.sheets[0].layout.resolved_path
+    job = _execute_confirmed(
+        service,
+        workspace,
+        [{"type": "update_subset_title", "subset_id": subset.acsm_id, "title": "DOM 失败注入"}],
         version,
     )
     assert job["status"] == "QUEUED"
@@ -564,6 +616,221 @@ def _copy_single_subset_project(tmp_path: Path) -> tuple[Path, Path, str]:
     return dst, drawing, source_sheet.layout.layout_name
 
 
+def _copy_selected_subset_project(tmp_path: Path, subset_ids: list[str]) -> Path:
+    codec = DstCodec()
+    source_dst = _SAMPLE_PROJECT / "图纸集数据文件.dst"
+    document = AcsmDocument(codec.decode_file(source_dst))
+    sheet_set = document.root.xpath("//*[local-name()='AcSmSheetSet']")[0]
+    selected = set(subset_ids)
+    for subset in sheet_set.xpath("./*[local-name()='AcSmSubset']"):
+        if subset.get("ID") not in selected:
+            sheet_set.remove(subset)
+    projected = document.project(_SAMPLE_PROJECT)
+    if {subset.acsm_id for subset in projected.subsets} != selected:
+        pytest.skip("私有样本子集结构不满足裁剪验收前提")
+    dst = tmp_path / source_dst.name
+    codec.encode_file(document.to_bytes(), dst)
+    drawings = {sheet.layout.resolved_path for subset in projected.subsets for sheet in subset.sheets}
+    if len(drawings) != len(projected.subsets):
+        pytest.skip("私有样本不满足一子集一独立 DWG 的验收前提")
+    for drawing in drawings:
+        shutil.copy2(drawing, tmp_path / drawing.name)
+    return dst
+
+
+def _mixed_transaction_project(tmp_path: Path) -> tuple[DstManagerService, object, list[dict[str, object]], list[Path]]:
+    source_document = AcsmDocument(DstCodec().decode_file(_SAMPLE_PROJECT / "图纸集数据文件.dst")).project(
+        _SAMPLE_PROJECT,
+    )
+    if len(source_document.subsets) < 3:
+        pytest.skip("私有样本子集数量不足")
+    delete_subset = next((subset for subset in source_document.subsets[2:] if len(subset.sheets) >= 2), None)
+    if delete_subset is None:
+        pytest.skip("私有样本缺少可执行删除的多图纸子集")
+    chosen = [source_document.subsets[0], source_document.subsets[1], delete_subset]
+    dst = _copy_selected_subset_project(tmp_path, [subset.acsm_id for subset in chosen])
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    rename_subset, rebuild_subset, removed_subset = workspace.document.subsets
+    template = rebuild_subset.sheets[0]
+    commands: list[dict[str, object]] = [
+        {"type": "update_subset_title", "subset_id": rename_subset.acsm_id, "title": "事务改名"},
+        {
+            "type": "insert_sheet",
+            "target_subset_id": rebuild_subset.acsm_id,
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {
+                "type": "template_layout",
+                "file": str(template.layout.resolved_path),
+                "layout": template.layout.layout_name,
+            },
+        },
+        {
+            "type": "delete_sheet",
+            "sheet_id": removed_subset.sheets[-1].acsm_id,
+        },
+    ]
+    official_files = [
+        workspace.dst_path,
+        *sorted(
+            {sheet.layout.resolved_path for subset in workspace.document.subsets for sheet in subset.sheets},
+            key=lambda path: str(path).casefold(),
+        ),
+    ]
+    return service, workspace, commands, official_files
+
+
+@pytest.mark.parametrize("failure_kind", ["rename_result_missing", "rebuild_handle_invalid", "locked_source_replaced", "second_cad_process"])
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_mixed_rename_rebuild_delete_failure_never_publishes(
+    version: str,
+    failure_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service, workspace, commands, official_files = _mixed_transaction_project(tmp_path)
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
+    assert preview["execution_intent"] is not None, preview
+    operations = [group["cad_operation"] for group in preview["execution_intent"]["groups"]]
+    assert "rename_only" in operations and "rebuild" in operations
+    assert preview["execution_intent"]["path_graph"]["delete_targets"]
+    before_hashes = {path: file_sha256(path) for path in official_files}
+    job = _execute_confirmed(service, workspace, commands, version)
+    assert job["status"] == "QUEUED"
+
+    if failure_kind == "locked_source_replaced":
+        replaced = False
+        original_capture = cad_job_module.capture_file_baseline
+        source = official_files[1]
+
+        def replace_after_lock(path: Path):
+            nonlocal replaced
+            if not replaced and path.resolve() == source.resolve():
+                replacement = source.with_suffix(".replacement")
+                replacement.write_bytes(source.read_bytes())
+                replacement.replace(source)
+                replaced = True
+            return original_capture(path)
+
+        monkeypatch.setattr(cad_job_module, "capture_file_baseline", replace_after_lock)
+    else:
+        original_run = CoreConsoleExecutor.run
+        calls = 0
+
+        def inject_cad_failure(self, capability, drawing, script, timeout):
+            nonlocal calls
+            calls += 1
+            if failure_kind == "second_cad_process" and calls == 2:
+                raise subprocess.CalledProcessError(1, [str(capability.console)], "", "INJECTED_SECOND_CAD_FAILURE")
+            completed = original_run(self, capability, drawing, script, timeout)
+            if failure_kind == "rename_result_missing" and Path(script).name.startswith("rename-"):
+                rename_result_path(drawing).unlink(missing_ok=True)
+            if failure_kind == "rebuild_handle_invalid" and Path(script).name.startswith("rebuild-"):
+                drawing.with_suffix(".dst-handles.txt").write_text("错误布局=0\n", encoding="utf-8")
+            return completed
+
+        monkeypatch.setattr(CoreConsoleExecutor, "run", inject_cad_failure)
+
+    result = service.run_next_job()
+
+    assert result and result["status"] == "FAILED"
+    assert {path: file_sha256(path) for path in official_files} == before_hashes
+    assert not (workspace.root / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+@pytest.mark.parametrize("cad_max_parallel", [1, 4, 10])
+def test_mixed_operation_performance(version: str, cad_max_parallel: int, tmp_path: Path):
+    source_document = AcsmDocument(DstCodec().decode_file(_SAMPLE_PROJECT / "图纸集数据文件.dst")).project(
+        _SAMPLE_PROJECT,
+    )
+    if len(source_document.subsets) < 10:
+        pytest.skip("私有样本不足 10 个 CAD 工作单元")
+    selected = source_document.subsets[:10]
+    dst = _copy_selected_subset_project(tmp_path, [subset.acsm_id for subset in selected])
+    root = Path(__file__).parents[2]
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
+        autocad_2016_plugin=root / "plugins/autocad2016/DstManager.AutoCAD.dll",
+        autocad_2020_console=Path("C:/Program Files/Autodesk/AutoCAD 2020/accoreconsole.exe"),
+        autocad_2020_plugin=root / "plugins/autocad2020/DstManager.AutoCAD.dll",
+        cad_timeout_seconds=900,
+        cad_max_parallel=cad_max_parallel,
+    )
+    service = DstManagerService(settings)
+    workspace = service.open_workspace(dst)
+    commands: list[dict[str, object]] = [
+        {"type": "update_subset_title", "subset_id": subset.acsm_id, "title": f"性能改名-{index}"}
+        for index, subset in enumerate(workspace.document.subsets[:5], start=1)
+    ]
+    for rebuild_subset in workspace.document.subsets[5:]:
+        template = rebuild_subset.sheets[0]
+        commands.append({
+            "type": "insert_sheet",
+            "target_subset_id": rebuild_subset.acsm_id,
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {
+                "type": "template_layout",
+                "file": str(template.layout.resolved_path),
+                "layout": template.layout.layout_name,
+            },
+        })
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
+    assert preview["execution_intent"] is not None, preview
+    groups = preview["execution_intent"]["groups"]
+    operation_counts = {
+        operation: sum(group["cad_operation"] == operation for group in groups)
+        for operation in ("rename_only", "rebuild")
+    }
+    assert len(groups) == 10
+    assert operation_counts == {"rename_only": 5, "rebuild": 5}, preview
+    job = _execute_confirmed(service, workspace, commands, version)
+
+    started = time.perf_counter()
+    result = service.run_next_job()
+    wall_clock_ms = int((time.perf_counter() - started) * 1000)
+
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "SUCCEEDED", result
+    assert len(result["files"]) == 10
+    assert all(item["duration_ms"] > 0 and item["peak_memory_bytes"] > 0 for item in result["files"])
+    started_at = datetime.fromisoformat(result["started_at"])
+    finished_at = datetime.fromisoformat(result["finished_at"])
+    job_duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+    assert job_duration_ms > 0
+    print(
+        "CAD_PERFORMANCE "
+        + json.dumps(
+            {
+                "cad_version": version,
+                "parallel": settings.cad_max_parallel,
+                "work_units": len(result["files"]),
+                "operation_counts": operation_counts,
+                "wall_clock_ms": wall_clock_ms,
+                "job_duration_ms": job_duration_ms,
+                "files_total_duration_ms": sum(item["duration_ms"] for item in result["files"]),
+                "max_peak_memory_bytes": max(item["peak_memory_bytes"] for item in result["files"]),
+                "groups": [
+                    {
+                        "target": Path(item["target_path"]).name,
+                        "cad_operation": item["cad_operation"],
+                        "duration_ms": item["duration_ms"],
+                        "peak_memory_bytes": item["peak_memory_bytes"],
+                    }
+                    for item in result["files"]
+                ],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
+
+
 def _system_settings(tmp_path: Path) -> Settings:
     root = Path(__file__).parents[2]
     return Settings(
@@ -591,11 +858,12 @@ def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, 
         "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
     }
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
+    assert preview["execution_intent"] is not None, preview
     created_group = next(group for group in preview["execution_intent"]["groups"] if group["operation"] == "create")
     assert created_group["source_target_file"] is None
     assert len(created_group["layouts"]) == 3
 
-    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
+    job = _execute_confirmed(service, workspace, [command], version, preview)
     result = service.run_next_job()
 
     assert job["status"] == "QUEUED"
@@ -628,11 +896,12 @@ def test_batch_insert_rebuilds_layouts_in_final_order(version: str, tmp_path: Pa
         "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
     }
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
+    assert preview["execution_intent"] is not None, preview
     group = preview["execution_intent"]["groups"][0]
     assert group["operation"] == "rebuild"
     assert len(group["layouts"]) == 4
 
-    job = service.execute_changes(workspace.id, workspace.revision_id, [command], version)
+    job = _execute_confirmed(service, workspace, [command], version, preview)
     result = service.run_next_job()
 
     assert job["status"] == "QUEUED"
@@ -644,7 +913,7 @@ def test_batch_insert_rebuilds_layouts_in_final_order(version: str, tmp_path: Pa
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_missing_template_layout_is_blocked_during_preview(version: str, tmp_path: Path):
+def test_missing_template_layout_fails_after_confirmation_without_publish(version: str, tmp_path: Path):
     dst, drawing, _ = _copy_single_subset_project(tmp_path)
     service = DstManagerService(_system_settings(tmp_path))
     workspace = service.open_workspace(dst)
@@ -660,10 +929,13 @@ def test_missing_template_layout_is_blocked_during_preview(version: str, tmp_pat
     }
 
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
+    assert preview["execution_intent"] is not None, preview
+    job = _execute_confirmed(service, workspace, [command], version, preview)
+    result = service.run_next_job()
 
-    assert preview["executable"] is False
-    assert preview["diagnostics"][0]["code"] == "SOURCE_LAYOUT_NOT_FOUND"
-    with service.database.engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
+    assert preview["executable"] is True
+    assert preview["execution_intent"]["cad_validation_deferred"] is True
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "FAILED"
     assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (dst, drawing)} == before
-    assert not (tmp_path / ".dst-manager").exists()
+    assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
