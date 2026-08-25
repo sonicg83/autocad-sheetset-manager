@@ -545,13 +545,20 @@ class CadJobRunner:
             staged = group_dir / target.name
             shutil.copy2(unit.source_snapshot, staged)
             before_hash = file_sha256(source_target) if source_target is not None else None
-            request = write_rename_request(staged, group["layouts"])
-            rename_script.write_text(self.renderer.render_rename(capability.plugin, request), encoding="mbcs")
+            result_path = rename_result_path(staged)
+            result_path.unlink(missing_ok=True)
+            write_rename_request(staged, group["layouts"])
+            rename_script.write_text(self.renderer.render_rename(capability.plugin), encoding="mbcs")
             completed = self.executor.run(capability, staged, rename_script, unit.timeout)
             output += self._format_console_output(phase, completed.stdout, completed.stderr)
             log_path.write_text(sanitize_log_text(output), encoding="utf-8")
             expected = {layout["target_layout"] for layout in group["layouts"]}
-            parse_rename_result(rename_result_path(staged).read_text(encoding="utf-8"), expected)
+            renamed_count = parse_rename_result(result_path.read_text(encoding="utf-8"), expected)
+            expected_renamed_count = sum(
+                layout["original_layout"] != layout["target_layout"] for layout in group["layouts"]
+            )
+            if renamed_count != expected_renamed_count:
+                raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
             duration_ms = int((time.perf_counter() - started) * 1000)
             staging_bytes = staged.stat().st_size
             self.database.upsert_job_file(

@@ -121,8 +121,14 @@ namespace DstManager.AutoCAD
             if (ExtensionDataMembersField == null)
                 throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID");
 
-            var members = ExtensionDataMembersField.GetValue(extensionData) as ICollection;
-            return members != null && members.Count > 0;
+            object value = ExtensionDataMembersField.GetValue(extensionData);
+            if (value == null)
+                return false;
+
+            var members = value as ICollection;
+            if (members == null)
+                throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID");
+            return members.Count > 0;
         }
 
         private static List<string> ReadPaperLayoutNames(Database database)

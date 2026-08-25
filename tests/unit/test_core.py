@@ -1920,19 +1920,22 @@ class _SuccessfulCadExecutor:
 
 
 class _RenameSuccessfulCadExecutor:
-    def __init__(self, final_layouts: list[str]):
+    def __init__(self, final_layouts: list[str], renamed_count: int | None = None):
         self.final_layouts = final_layouts
+        self.renamed_count = len(final_layouts) if renamed_count is None else renamed_count
         self.calls = 0
         self.scripts: list[Path] = []
+        self.result_existed_at_start: bool | None = None
 
     def run(self, _capability, drawing, script, _timeout):
         self.calls += 1
         self.scripts.append(script)
+        self.result_existed_at_start = rename_result_path(drawing).exists()
         rename_result_path(drawing).write_text(
             json.dumps(
                 {
                     "version": 1,
-                    "renamed_count": len(self.final_layouts),
+                    "renamed_count": self.renamed_count,
                     "final_layouts": self.final_layouts,
                 },
                 ensure_ascii=False,
@@ -1974,6 +1977,94 @@ def test_rename_group_uses_one_console_call_and_returns_no_bindings(tmp_path: Pa
     assert result.bindings == {}
     assert rename_result_path(result.staged).is_file()
     assert not result.staged.with_suffix(".dst-handles.txt").exists()
+
+
+def test_rename_group_deletes_stale_result_before_starting_console(tmp_path: Path):
+    source = tmp_path / "001 第一册.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    group = {
+        "cad_operation": "rename_only",
+        "source_target_file": str(source),
+        "target_file": str(tmp_path / "002 第一册.dwg"),
+        "layouts": [{"original_layout": "001 第一册", "target_layout": "002 第一册"}],
+    }
+    unit = RebuildWorkUnit(0, group, source, staging, scripts, logs, 30)
+    stale_result = rename_result_path(staging / "group-000" / "002 第一册.dwg")
+    stale_result.parent.mkdir()
+    stale_result.write_text('{"version":1,"renamed_count":1,"final_layouts":["002 第一册"]}', encoding="utf-8")
+    runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
+    executor = _RenameSuccessfulCadExecutor(["002 第一册"])
+    runner.executor = executor
+
+    runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    assert executor.result_existed_at_start is False
+
+
+def test_rename_group_records_failure_without_starting_console_when_stale_result_cannot_be_deleted(
+    tmp_path: Path,
+    monkeypatch,
+):
+    source = tmp_path / "001 第一册.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    group = {
+        "cad_operation": "rename_only",
+        "source_target_file": str(source),
+        "target_file": str(tmp_path / "002 第一册.dwg"),
+        "layouts": [{"original_layout": "001 第一册", "target_layout": "002 第一册"}],
+    }
+    unit = RebuildWorkUnit(0, group, source, staging, scripts, logs, 30)
+    stale_result = rename_result_path(staging / "group-000" / "002 第一册.dwg")
+    stale_result.parent.mkdir()
+    stale_result.write_text('{"version":1,"renamed_count":1,"final_layouts":["002 第一册"]}', encoding="utf-8")
+    original_unlink = Path.unlink
+
+    def reject_result_delete(path: Path, *args, **kwargs):
+        if path == stale_result:
+            raise PermissionError("INJECTED_RESULT_DELETE_FAILURE")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", reject_result_delete)
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    runner.executor = Mock()
+    runner.executor.run.return_value = SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+    with pytest.raises(PermissionError, match="INJECTED_RESULT_DELETE_FAILURE"):
+        runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    runner.executor.run.assert_not_called()
+    assert database.upsert_job_file.call_args_list[-1].kwargs["status"] == "FAILED"
+    assert stale_result.is_file()
+
+
+def test_rename_group_rejects_mismatched_renamed_count(tmp_path: Path):
+    source = tmp_path / "001 第一册.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    group = {
+        "cad_operation": "rename_only",
+        "source_target_file": str(source),
+        "target_file": str(tmp_path / "002 第一册.dwg"),
+        "layouts": [{"original_layout": "001 第一册", "target_layout": "002 第一册"}],
+    }
+    unit = RebuildWorkUnit(0, group, source, staging, scripts, logs, 30)
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    runner.executor = _RenameSuccessfulCadExecutor(["002 第一册"], renamed_count=0)
+
+    with pytest.raises(ValueError, match="LAYOUT_RENAME_RESULT_INVALID"):
+        runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    assert database.upsert_job_file.call_args_list[-1].kwargs["status"] == "FAILED"
 
 
 def test_rename_group_records_finished_failure_when_request_is_invalid(tmp_path: Path):

@@ -91,7 +91,7 @@ def parse_rename_result(text: str, expected_layouts: set[str]) -> int:
 
 
 class ScriptRenderer:
-    def render_rename(self, plugin: Path, request: Path) -> str:
+    def render_rename(self, plugin: Path) -> str:
         lines = [
             "FILEDIA",
             "0",
