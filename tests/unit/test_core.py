@@ -498,6 +498,191 @@ def _chained_rename_workspace(tmp_path: Path, count: int = 2) -> tuple[Workspace
     return Workspace("workspace-chain", tmp_path, dst, file_sha256(dst), document), drawings
 
 
+def test_subset_title_only_renames_target_without_touching_following_subset(tmp_path: Path):
+    first = tmp_path / "001 第一册.dwg"
+    second = tmp_path / "002 第二册.dwg"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A1")]),
+            Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": "subset-1", "title": "第一分册"}],
+        SuffixOptions(True, 1),
+    )
+
+    assert [(item["subset_id"], item["cad_operation"]) for item in plan["subset_operations"]] == [
+        ("subset-1", "rename_only"),
+        ("subset-2", "none"),
+    ]
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [
+        ("subset-1", "rename_only"),
+    ]
+
+
+def test_sheet_count_change_rebuilds_frontier_and_renames_following_subset(tmp_path: Path):
+    first = tmp_path / "001 第一册.dwg"
+    second = tmp_path / "002 第二册.dwg"
+    template = tmp_path / "模板.dwt"
+    for path in (first, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A1")]),
+            Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "insert_sheet",
+            "target_subset_id": "subset-1",
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+        }],
+        SuffixOptions(True, 1),
+    )
+
+    assert plan["cardinality_frontier"] == {"index": 0, "subset_id": "subset-1"}
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [
+        ("subset-1", "rebuild"),
+        ("subset-2", "rename_only"),
+    ]
+    assert plan["groups"][1]["layouts"][0]["original_layout"] == "002 第二册"
+
+
+def _derived_subset_for_plan(subset: Subset, sheets: list[Sheet] | None = None) -> DerivedSubset:
+    source_target = str((subset.sheets[0].layout.resolved_path or Path(subset.sheets[0].layout.file_name)).resolve())
+    sheets = sheets if sheets is not None else subset.sheets
+    return DerivedSubset(
+        subset.acsm_id,
+        subset.name,
+        f"{sheets[0].number}-{sheets[-1].number}" if len(sheets) > 1 else sheets[0].number,
+        subset.name,
+        sheets,
+        source_target,
+        source_target,
+    )
+
+
+def _existing_sources(subsets: list[Subset]) -> dict[str, dict[str, str]]:
+    return {
+        sheet.acsm_id: {
+            "type": "existing_snapshot",
+            "file": str((sheet.layout.resolved_path or Path(sheet.layout.file_name)).resolve()),
+            "layout": sheet.layout.layout_name,
+        }
+        for subset in subsets
+        for sheet in subset.sheets
+    }
+
+
+@pytest.mark.parametrize(
+    ("removed_subset_id", "expected_frontier", "expected_groups"),
+    [
+        ("subset-2", {"index": 1, "subset_id": "subset-3"}, [("subset-3", "rename_only")]),
+        ("subset-3", {"index": 2, "subset_id": None}, []),
+    ],
+)
+def test_cardinality_frontier_propagates_after_subset_deletion(
+    tmp_path: Path,
+    monkeypatch,
+    removed_subset_id: str,
+    expected_frontier: dict[str, int | str | None],
+    expected_groups: list[tuple[str, str]],
+):
+    subsets = []
+    for index, title in enumerate(("第一册", "第二册", "第三册"), start=1):
+        drawing = tmp_path / f"{index:03d} {title}.dwg"
+        drawing.write_bytes(title.encode("utf-8"))
+        subsets.append(
+            Subset(
+                f"subset-{index}",
+                f"{index:03d} {title}",
+                index - 1,
+                [_planning_sheet(f"sheet-{index}", f"{index:03d}", title, drawing, f"A{index}")],
+            ),
+        )
+    workspace = _planning_workspace(tmp_path, subsets)
+    final_subsets = [_derived_subset_for_plan(subset) for subset in subsets if subset.acsm_id != removed_subset_id]
+    derived = DerivedDocument(final_subsets, [], layout_sources=_existing_sources(subsets))
+    monkeypatch.setattr("dst_manager.domain.planning.derive_document_structure", lambda *_args: derived)
+
+    plan = build_structural_plan(workspace, [], SuffixOptions(True, 1))
+
+    assert plan["cardinality_frontier"] == expected_frontier
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == expected_groups
+    assert [item["subset_id"] for item in plan["subset_operations"]] == [subset.acsm_id for subset in final_subsets]
+
+
+def test_inserted_subset_rebuilds_and_renames_following_subset(tmp_path: Path):
+    first = tmp_path / "001 第一册.dwg"
+    second = tmp_path / "002 第二册.dwg"
+    template = tmp_path / "模板.dwt"
+    for path in (first, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A1")]),
+            Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "insert_subset",
+            "ordinal": 1,
+            "placement": "after",
+            "title": "新增册",
+            "initial_sheet_count": 1,
+            "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+        }],
+        SuffixOptions(True, 1),
+    )
+
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]][-2:] == [
+        (plan["groups"][-2]["subset_id"], "rebuild"),
+        ("subset-2", "rename_only"),
+    ]
+
+
+def test_mismatched_stable_sheet_order_requires_rebuild(tmp_path: Path, monkeypatch):
+    drawing = tmp_path / "001-002 第一册.dwg"
+    drawing.write_bytes(b"drawing")
+    original = Subset(
+        "subset-1",
+        "001-002 第一册",
+        0,
+        [
+            _planning_sheet("sheet-1", "001", "第一册", drawing, "A1"),
+            _planning_sheet("sheet-2", "002", "第一册", drawing, "A2"),
+        ],
+    )
+    workspace = _planning_workspace(tmp_path, [original])
+    derived = DerivedDocument(
+        [_derived_subset_for_plan(original, list(reversed(original.sheets)))],
+        [],
+        layout_sources=_existing_sources([original]),
+    )
+    monkeypatch.setattr("dst_manager.domain.planning.derive_document_structure", lambda *_args: derived)
+
+    plan = build_structural_plan(workspace, [], SuffixOptions(True, 1))
+
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [("subset-1", "rebuild")]
+
+
 def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_path: Path):
     existing = tmp_path / "GP-0001 目录.dwg"
     existing.write_bytes(b"existing")
