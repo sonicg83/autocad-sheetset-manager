@@ -683,6 +683,24 @@ def test_mismatched_stable_sheet_order_requires_rebuild(tmp_path: Path, monkeypa
     assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [("subset-1", "rebuild")]
 
 
+@pytest.mark.parametrize("handle", ["-1", "+1", "0x1", " A1"])
+def test_noncanonical_nonzero_handle_requires_rebuild(tmp_path: Path, handle: str):
+    drawing = tmp_path / "001 第一册.dwg"
+    drawing.write_bytes(b"drawing")
+    workspace = _planning_workspace(
+        tmp_path,
+        [Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", drawing, handle)])],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": "subset-1", "title": "第一分册"}],
+        SuffixOptions(True, 1),
+    )
+
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [("subset-1", "rebuild")]
+
+
 def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_path: Path):
     existing = tmp_path / "GP-0001 目录.dwg"
     existing.write_bytes(b"existing")

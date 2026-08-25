@@ -30,6 +30,7 @@ class PlanningError(ValueError):
 _UNSAFE_NAME = re.compile(r"[<>/\\\":;?*|=\r\n\x00-\x1f]")
 _ORDINAL = re.compile(r"^(.*?)[(（]([一二三四五六七八九十百]+)[)）]$")
 _DERIVED_RANGE_PREFIX = re.compile(r"^(?P<prefix>.*?)(?P<range>\d+(?:-\d+)?)\s+")
+_HEX_HANDLE = re.compile(r"^[0-9A-Fa-f]+$")
 
 CadOperation = Literal["none", "rename_only", "rebuild"]
 
@@ -254,7 +255,10 @@ def _cad_operation(
         return "rebuild"
     same_ids = [sheet.acsm_id for sheet in original.sheets] == [sheet.acsm_id for sheet in derived.sheets]
     try:
-        stable_handles = all(int(sheet.layout.handle, 16) != 0 for sheet in original.sheets)
+        stable_handles = all(
+            _HEX_HANDLE.fullmatch(sheet.layout.handle) is not None and int(sheet.layout.handle, 16) != 0
+            for sheet in original.sheets
+        )
     except (TypeError, ValueError):
         stable_handles = False
     same_sources = False
