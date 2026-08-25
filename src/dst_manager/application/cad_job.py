@@ -299,6 +299,8 @@ class CadJobRunner:
 
     @staticmethod
     def _validate_source_baselines(plan: dict[str, Any]) -> None:
+        if plan.get("cad_validation_deferred") is not True:
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "CAD 任务缺少已延期的布局校验标记")
         raw_baselines = plan.get("source_baselines")
         if not isinstance(raw_baselines, list):
             raise PlanningError("EXECUTION_SOURCE_BASELINE_MISSING", "CAD 任务缺少布局来源基准")

@@ -905,6 +905,7 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
         "derived_document": {},
         "expected_file_hashes": {},
         "source_baselines": [],
+        "cad_validation_deferred": True,
     }
     runner._execute = Mock(return_value={"status": "SUCCEEDED"})
     monkeypatch.setattr(
@@ -927,6 +928,43 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
     runner._execute.assert_called_once_with("job-1", "local-worker", 1, workspace, capability, [], persisted_plan)
 
 
+@pytest.mark.parametrize("cad_validation_deferred", [None, False], ids=["missing", "false"])
+def test_worker_rejects_persisted_plan_without_deferred_cad_validation(tmp_path: Path, cad_validation_deferred: bool | None):
+    console = tmp_path / "accoreconsole.exe"
+    plugin = tmp_path / "plugin.dll"
+    console.write_bytes(b"console")
+    plugin.write_bytes(b"plugin")
+    workspace = _planning_workspace(tmp_path, [])
+    database = Mock()
+    database.get_job.return_value = {"status": "FAILED", "error_code": "EXECUTION_SOURCE_BASELINE_MISMATCH"}
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    runner._execute = Mock(return_value={"status": "SUCCEEDED"})
+    plan = {
+        "groups": [],
+        "expected_file_hashes": {},
+        "source_baselines": [],
+    }
+    if cad_validation_deferred is not None:
+        plan["cad_validation_deferred"] = cad_validation_deferred
+    job = {
+        "id": "job-1",
+        "payload": {
+            "base_revision_id": "revision",
+            "commands": [],
+            "plan": {"execution_intent": plan},
+        },
+    }
+
+    runner.run(job, workspace, CadCapability("2020", console, plugin))
+
+    runner._execute.assert_not_called()
+    assert any(
+        call.args[3] == "EXECUTION_SOURCE_BASELINE_MISMATCH"
+        for call in database.update_job.call_args_list
+        if len(call.args) >= 4
+    )
+
+
 def test_missing_source_baseline_is_rejected_before_cad_staging(tmp_path: Path):
     console = tmp_path / "accoreconsole.exe"
     plugin = tmp_path / "plugin.dll"
@@ -943,6 +981,7 @@ def test_missing_source_baseline_is_rejected_before_cad_staging(tmp_path: Path):
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
     plan["expected_file_hashes"] = {str(missing.resolve()): None}
+    plan["cad_validation_deferred"] = True
     database = Mock()
     database.get_job.return_value = {"status": "FAILED", "error_code": "TEMPLATE_NOT_FOUND"}
     runner = CadJobRunner(database, DstCodec(), Mock(), 30)
@@ -1426,6 +1465,7 @@ def test_cad_runner_rejects_missing_or_mismatched_source_baselines(tmp_path: Pat
     baseline = capture_file_baseline(source)
     assert baseline is not None
     plan = {
+        "cad_validation_deferred": True,
         "groups": [{
             "operation": "create",
             "source_snapshot": str(source),
@@ -1956,7 +1996,7 @@ def test_core_console_failure_is_classified_as_cad_process_failed(tmp_path: Path
         "payload": {
             "base_revision_id": "revision",
             "commands": [],
-            "plan": {"execution_intent": {"groups": [], "expected_file_hashes": {}, "source_baselines": []}},
+            "plan": {"execution_intent": {"groups": [], "expected_file_hashes": {}, "source_baselines": [], "cad_validation_deferred": True}},
         },
     }
 
