@@ -904,7 +904,7 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
         "deleted_subsets": [],
         "derived_document": {},
         "expected_file_hashes": {},
-        "source_inspections": [],
+        "source_baselines": [],
     }
     runner._execute = Mock(return_value={"status": "SUCCEEDED"})
     monkeypatch.setattr(
@@ -927,7 +927,7 @@ def test_worker_uses_persisted_execution_plan_without_rederiving(tmp_path: Path,
     runner._execute.assert_called_once_with("job-1", "local-worker", 1, workspace, capability, [], persisted_plan)
 
 
-def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
+def test_missing_source_baseline_is_rejected_before_cad_staging(tmp_path: Path):
     console = tmp_path / "accoreconsole.exe"
     plugin = tmp_path / "plugin.dll"
     console.write_bytes(b"console")
@@ -943,13 +943,6 @@ def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
     plan["expected_file_hashes"] = {str(missing.resolve()): None}
-    plan["source_inspections"] = [{
-        "path": str(missing.resolve()),
-        "sha256": None,
-        "cad_version": "2020",
-        "layouts": ["A3"],
-        "requested_layouts": ["A3"],
-    }]
     database = Mock()
     database.get_job.return_value = {"status": "FAILED", "error_code": "TEMPLATE_NOT_FOUND"}
     runner = CadJobRunner(database, DstCodec(), Mock(), 30)
@@ -964,7 +957,11 @@ def test_missing_template_is_reported_at_cad_staging_boundary(tmp_path: Path):
 
     runner.run(job, workspace, CadCapability("2020", console, plugin))
 
-    assert any(call.args[3] == "TEMPLATE_NOT_FOUND" for call in database.update_job.call_args_list if len(call.args) >= 4)
+    assert any(
+        call.args[3] == "EXECUTION_SOURCE_BASELINE_MISSING"
+        for call in database.update_job.call_args_list
+        if len(call.args) >= 4
+    )
 
 
 @pytest.mark.parametrize("template_is_target", [False, True])
@@ -1146,19 +1143,33 @@ def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
     assert exc_info.value.code == "DUPLICATE_STAGED_TARGET"
 
 
-def _mock_template_inspection(service: DstManagerService, layouts: list[str]) -> None:
-    service.inspect_template = lambda path, version: {
-        "path": str(Path(path).resolve()),
-        "sha256": file_sha256(Path(path)),
-        "cad_version": version,
-        "layouts": [{"name": name, "handle": f"H-{index}"} for index, name in enumerate(layouts)],
-    }
-
-
-def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path: Path):
+def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    _mock_template_inspection(service, ["001 平面"])
+    service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], "2016")
+
+    assert preview["executable"] is True
+    assert preview["execution_intent"]["cad_validation_deferred"] is True
+    assert preview["execution_intent"]["source_baselines"][0]["sha256"] == file_sha256(tmp_path / "A.dwg")
+    assert "source_inspections" not in preview["execution_intent"]
+    assert not (tmp_path / ".dst-manager").exists()
+    service.inspect_template.assert_not_called()
+
+
+def test_service_persists_insert_subset_baselines_for_worker(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -1180,13 +1191,12 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
 
     assert preview["executable"] is True, preview["diagnostics"]
     assert any(group["operation"] == "create" for group in preview["execution_intent"]["groups"])
-    assert preview["execution_intent"]["source_inspections"] == [
+    assert preview["execution_intent"]["source_baselines"] == [
         {
             "path": str((tmp_path / "A.dwg").resolve()),
             "sha256": file_sha256(tmp_path / "A.dwg"),
             "identity": list(capture_file_baseline(tmp_path / "A.dwg").identity),
-            "cad_version": "2016",
-            "layouts": ["001 平面"],
+            "source_types": ["existing_snapshot", "template_layout"],
             "requested_layouts": ["001 平面"],
         },
     ]
@@ -1196,7 +1206,6 @@ def test_service_persists_insert_subset_plan_for_worker(tiny_workspace, tmp_path
 def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hashes(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    _mock_template_inspection(service, ["001 平面"])
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -1220,7 +1229,6 @@ def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hash
 def test_structural_execute_requires_confirmed_preview_digest(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    _mock_template_inspection(service, ["001 平面"])
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -1249,12 +1257,39 @@ def test_structural_execute_requires_confirmed_preview_digest(tiny_workspace, tm
     create_job.assert_not_called()
 
 
+def test_structural_execute_requires_repreview_after_source_baseline_changes(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    source = tmp_path / "A.dwg"
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(source), "layout": "001 平面"},
+    }
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], "2016")
+    source.write_bytes(b"changed-after-preview")
+
+    with pytest.raises(ApplicationError) as exc_info:
+        service.execute_changes(
+            workspace.id,
+            workspace.revision_id,
+            [command],
+            "2016",
+            preview_digest=preview["preview_digest"],
+        )
+
+    assert exc_info.value.code == "REPREVIEW_REQUIRED"
+
+
 def test_structural_preview_allows_legal_absolute_template_outside_workspace(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     outside = tmp_path.parent / "outside-template.dwt"
     outside.write_bytes(b"template")
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    _mock_template_inspection(service, ["001 平面", "A3"])
     workspace = service.open_workspace(dst)
 
     preview = service.preview_changes(
@@ -1271,79 +1306,7 @@ def test_structural_preview_allows_legal_absolute_template_outside_workspace(tin
     )
 
     assert preview["executable"] is True
-    assert preview["execution_intent"]["source_inspections"][0]["path"] == str(outside.resolve())
-
-
-def test_structural_preview_inspects_verified_snapshot_when_source_changes_during_inspection(tiny_workspace, tmp_path: Path):
-    dst, _ = tiny_workspace
-    source = tmp_path / "A.dwg"
-    original = source.read_bytes()
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    workspace = service.open_workspace(dst)
-
-    def inspect(snapshot: Path, version: str):
-        assert snapshot.resolve() != source.resolve()
-        assert snapshot.read_bytes() == original
-        source.write_bytes(b"changed-after-snapshot")
-        return {
-            "path": str(snapshot.resolve()),
-            "sha256": file_sha256(snapshot),
-            "cad_version": version,
-            "layouts": [{"name": "001 平面", "handle": "AB"}],
-        }
-
-    service.inspect_template = inspect
-    preview = service.preview_changes(
-        workspace.id,
-        workspace.revision_id,
-        [{
-            "type": "insert_subset",
-            "ordinal": 1,
-            "placement": "after",
-            "title": "新建子集",
-            "initial_sheet_count": 1,
-            "source": {"type": "template_layout", "file": str(source), "layout": "001 平面"},
-        }],
-    )
-
-    assert preview["executable"] is True
-    evidence = preview["execution_intent"]["source_inspections"]
-    assert evidence[0]["sha256"] == hashlib.sha256(original).hexdigest()
-    assert evidence[0]["identity"]
-    assert source.read_bytes() == b"changed-after-snapshot"
-
-
-def test_structural_preview_rejects_source_changed_during_snapshot_copy(tiny_workspace, tmp_path: Path, monkeypatch):
-    dst, _ = tiny_workspace
-    source = tmp_path / "A.dwg"
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    service.inspect_template = Mock()
-    workspace = service.open_workspace(dst)
-    original_copy = service_module.shutil.copy2
-
-    def copy_then_change(copy_source: Path, target: Path, *args, **kwargs):
-        result = original_copy(copy_source, target, *args, **kwargs)
-        if Path(copy_source).resolve() == source.resolve():
-            source.write_bytes(b"changed-during-copy")
-        return result
-
-    monkeypatch.setattr(service_module.shutil, "copy2", copy_then_change)
-    preview = service.preview_changes(
-        workspace.id,
-        workspace.revision_id,
-        [{
-            "type": "insert_subset",
-            "ordinal": 1,
-            "placement": "after",
-            "title": "新建子集",
-            "initial_sheet_count": 1,
-            "source": {"type": "template_layout", "file": str(source), "layout": "001 平面"},
-        }],
-    )
-
-    assert preview["executable"] is False
-    assert preview["diagnostics"][0]["code"] == "LAYOUT_SOURCE_UNREADABLE"
-    service.inspect_template.assert_not_called()
+    assert preview["execution_intent"]["source_baselines"][0]["path"] == str(outside.resolve())
 
 
 def test_normalized_sheet_property_update_has_semantic_before_after(tiny_workspace, tmp_path: Path):
@@ -1386,8 +1349,7 @@ def test_structural_preview_blocks_outside_source_without_invoking_cad(tiny_work
     outside = tmp_path.parent / "outside-source.dwg"
     outside.write_bytes(b"template")
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    inspected: list[Path] = []
-    service.inspect_template = lambda path, version: inspected.append(Path(path))
+    service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     workspace = service.open_workspace(dst)
 
     preview = service.preview_changes(
@@ -1405,10 +1367,10 @@ def test_structural_preview_blocks_outside_source_without_invoking_cad(tiny_work
 
     assert preview["executable"] is False
     assert preview["diagnostics"][0]["code"] == "LAYOUT_SOURCE_OUTSIDE_WORKSPACE"
-    assert inspected == []
+    service.inspect_template.assert_not_called()
 
 
-def test_structural_preview_blocks_missing_or_ambiguous_layout(tiny_workspace, tmp_path: Path):
+def test_structural_preview_defers_layout_existence_to_cad_worker(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
@@ -1420,19 +1382,15 @@ def test_structural_preview_blocks_missing_or_ambiguous_layout(tiny_workspace, t
         "initial_sheet_count": 1,
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "A3"},
     }
-    _mock_template_inspection(service, ["001 平面"])
-    missing = service.preview_changes(workspace.id, workspace.revision_id, [command])
-    _mock_template_inspection(service, ["001 平面", "A3", "a3"])
-    ambiguous = service.preview_changes(workspace.id, workspace.revision_id, [command])
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
 
-    assert missing["diagnostics"][0]["code"] == "SOURCE_LAYOUT_NOT_FOUND"
-    assert ambiguous["diagnostics"][0]["code"] == "SOURCE_LAYOUT_AMBIGUOUS", ambiguous
+    assert preview["executable"] is True
+    assert "A3" in preview["execution_intent"]["source_baselines"][0]["requested_layouts"]
 
 
 def test_preview_semantic_diff_contains_complete_structure_properties_and_dwgs(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    _mock_template_inspection(service, ["001 平面"])
     workspace = service.open_workspace(dst)
     structural = service.preview_changes(
         workspace.id,
@@ -1462,32 +1420,42 @@ def test_preview_semantic_diff_contains_complete_structure_properties_and_dwgs(t
     assert properties["changes"][0]["affected_sheet_count"] == 1
 
 
-def test_cad_runner_rejects_missing_or_wrong_version_source_evidence(tmp_path: Path):
+def test_cad_runner_rejects_missing_or_mismatched_source_baselines(tmp_path: Path):
     source = tmp_path / "A.dwg"
     source.write_bytes(b"source")
+    baseline = capture_file_baseline(source)
+    assert baseline is not None
     plan = {
         "groups": [{
             "operation": "create",
             "source_snapshot": str(source),
-            "layouts": [{"source_file": str(source), "source_layout": "A3"}],
+            "layouts": [{"source_file": str(source), "source_layout": "A3", "source_type": "template_layout"}],
         }],
         "expected_file_hashes": {str(source.resolve()): file_sha256(source)},
+        "expected_file_identities": {str(source.resolve()): list(baseline.identity)},
     }
 
     with pytest.raises(PlanningError) as missing:
-        CadJobRunner._validate_source_inspections(plan, "2016")
-    plan["source_inspections"] = [{
+        CadJobRunner._validate_source_baselines(plan)
+    plan["source_baselines"] = [{
         "path": str(source.resolve()),
         "sha256": file_sha256(source),
-        "cad_version": "2020",
-        "layouts": ["A3"],
+        "identity": list(baseline.identity),
+        "source_types": ["template_layout"],
         "requested_layouts": ["A3"],
     }]
+    CadJobRunner._validate_source_baselines(plan)
+    plan["source_baselines"][0]["identity"] = ["unexpected"]
     with pytest.raises(PlanningError) as mismatch:
-        CadJobRunner._validate_source_inspections(plan, "2016")
+        CadJobRunner._validate_source_baselines(plan)
+    plan["source_baselines"][0].pop("identity")
+    plan.pop("expected_file_identities")
+    with pytest.raises(PlanningError) as malformed:
+        CadJobRunner._validate_source_baselines(plan)
 
-    assert missing.value.code == "EXECUTION_SOURCE_EVIDENCE_MISSING"
-    assert mismatch.value.code == "EXECUTION_SOURCE_EVIDENCE_MISMATCH"
+    assert missing.value.code == "EXECUTION_SOURCE_BASELINE_MISSING"
+    assert mismatch.value.code == "EXECUTION_SOURCE_BASELINE_MISMATCH"
+    assert malformed.value.code == "EXECUTION_SOURCE_BASELINE_MISMATCH"
 
 
 def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, tmp_path: Path):
@@ -1988,7 +1956,7 @@ def test_core_console_failure_is_classified_as_cad_process_failed(tmp_path: Path
         "payload": {
             "base_revision_id": "revision",
             "commands": [],
-            "plan": {"execution_intent": {"groups": [], "expected_file_hashes": {}, "source_inspections": []}},
+            "plan": {"execution_intent": {"groups": [], "expected_file_hashes": {}, "source_baselines": []}},
         },
     }
 

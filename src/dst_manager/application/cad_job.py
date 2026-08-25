@@ -89,7 +89,7 @@ class CadJobRunner:
                 raise PlanningError("EXECUTION_PLAN_MISSING", "CAD 任务缺少已确认的执行计划")
             if not isinstance(plan.get("expected_file_hashes"), dict):
                 raise PlanningError("EXECUTION_BASELINE_MISSING", "CAD 任务缺少预览内容基准")
-            self._validate_source_inspections(plan, capability.version)
+            self._validate_source_baselines(plan)
             return self._execute(job_id, worker_id, job.get("attempt", 1), workspace, capability, payload["commands"], plan)
         except FileLockError as exc:
             append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK")
@@ -298,47 +298,76 @@ class CadJobRunner:
                 raise PlanningError("BASE_FILE_CHANGED", f"文件身份已偏离预览基准：{path}")
 
     @staticmethod
-    def _validate_source_inspections(plan: dict[str, Any], cad_version: str) -> None:
-        raw_inspections = plan.get("source_inspections")
-        if not isinstance(raw_inspections, list):
-            raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISSING", "CAD 任务缺少布局来源检查证据")
-        sources: dict[Path, set[str]] = {}
+    def _validate_source_baselines(plan: dict[str, Any]) -> None:
+        raw_baselines = plan.get("source_baselines")
+        if not isinstance(raw_baselines, list):
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISSING", "CAD 任务缺少布局来源基准")
+        sources: dict[Path, dict[str, set[str]]] = {}
+
+        def register(path: Path, source_type: str, requested_layout: str | None = None) -> None:
+            item = sources.setdefault(path, {"source_types": set(), "requested_layouts": set()})
+            item["source_types"].add(source_type)
+            if requested_layout is not None:
+                item["requested_layouts"].add(requested_layout)
+
         for group in plan.get("groups", []):
             snapshot = Path(group["source_snapshot"]).resolve()
-            sources.setdefault(snapshot, set())
+            register(snapshot, "template_layout" if group.get("operation") == "create" else "existing_snapshot")
             for layout in group.get("layouts", []):
                 source = Path(layout["source_file"]).resolve()
-                sources.setdefault(source, set()).add(str(layout["source_layout"]))
-        inspections: dict[Path, dict[str, Any]] = {}
-        for item in raw_inspections:
+                source_type = layout.get("source_type")
+                if not isinstance(source_type, str):
+                    raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准缺少来源类型")
+                register(source, source_type, str(layout["source_layout"]))
+        baselines: dict[Path, dict[str, Any]] = {}
+        for item in raw_baselines:
             if not isinstance(item, dict) or not isinstance(item.get("path"), str):
-                raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISMATCH", "布局来源检查证据格式无效")
+                raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准格式无效")
             path = Path(item["path"]).resolve()
-            if path in inspections:
-                raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISMATCH", f"布局来源检查证据重复：{path}")
-            inspections[path] = item
-        if inspections.keys() != sources.keys():
-            raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISMATCH", "布局来源检查证据未完整覆盖执行计划")
+            if path in baselines:
+                raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", f"布局来源基准重复：{path}")
+            baselines[path] = item
+        if baselines.keys() != sources.keys():
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准未完整覆盖执行计划")
+        raw_expected_hashes = plan.get("expected_file_hashes")
+        raw_expected_identities = plan.get("expected_file_identities")
+        if not isinstance(raw_expected_hashes, dict):
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准缺少期望文件证据")
+        if raw_expected_identities is None:
+            raw_expected_identities = {}
+        elif not isinstance(raw_expected_identities, dict):
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准缺少期望文件证据")
+        if sources and not raw_expected_identities:
+            raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", "布局来源基准缺少期望文件证据")
         expected_hashes = {
             Path(path).resolve(): digest
-            for path, digest in plan.get("expected_file_hashes", {}).items()
+            for path, digest in raw_expected_hashes.items()
         }
-        for path, requested in sources.items():
-            item = inspections[path]
-            layouts = item.get("layouts")
+        expected_identities = {
+            Path(path).resolve(): identity
+            for path, identity in raw_expected_identities.items()
+        }
+        for path, source in sources.items():
+            item = baselines[path]
+            source_types = item.get("source_types")
             recorded_requested = item.get("requested_layouts")
             if (
-                item.get("cad_version") != cad_version
-                or not isinstance(layouts, list)
+                not isinstance(source_types, list)
                 or not isinstance(recorded_requested, list)
-                or item.get("sha256") != expected_hashes.get(path)
-                or {str(name).casefold() for name in recorded_requested} != {name.casefold() for name in requested}
+                or not all(isinstance(source_type, str) for source_type in source_types)
+                or not all(isinstance(layout, str) for layout in recorded_requested)
+                or path not in expected_hashes
+                or not isinstance(expected_hashes[path], str)
+                or item.get("sha256") != expected_hashes[path]
+                or not isinstance(item.get("identity"), list)
+                or path not in expected_identities
+                or not isinstance(expected_identities[path], list)
+                or item["identity"] != expected_identities[path]
+                or set(source_types) != source["source_types"]
+                or {str(name).casefold() for name in recorded_requested}
+                != {name.casefold() for name in source["requested_layouts"]}
             ):
-                raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISMATCH", f"布局来源检查证据与计划不一致：{path}")
-            for requested_name in requested:
-                matches = [name for name in layouts if str(name).casefold() == requested_name.casefold()]
-                if len(matches) != 1:
-                    raise PlanningError("EXECUTION_SOURCE_EVIDENCE_MISMATCH", f"布局来源检查证据无法唯一匹配布局：{path} / {requested_name}")
+                raise PlanningError("EXECUTION_SOURCE_BASELINE_MISMATCH", f"布局来源基准与计划不一致：{path}")
 
     @staticmethod
     def _committed_result_hash(journal: dict[str, Any], target: Path) -> str:

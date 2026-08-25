@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,22 +136,11 @@ def test_empty_sheetset_sheet_property_round_trip_reports_zero_affected(tmp_path
     assert "sheet,专业," in exported
 
 
-def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, tiny_workspace):
+def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_workspace):
     dst, _ = tiny_workspace
     app = create_app(Settings(data_dir=tmp_path / "data"))
     client = TestClient(app)
-    inspected_versions: list[str] = []
-
-    def inspect(path, version):
-        inspected_versions.append(version)
-        return {
-            "path": str(path.resolve()),
-            "sha256": file_sha256(path),
-            "cad_version": version,
-            "layouts": [{"name": "001 平面", "handle": "AB"}],
-        }
-
-    app.state.service.inspect_template = inspect
+    app.state.service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     payload = {
         "base_revision_id": opened["revision_id"],
@@ -178,12 +168,13 @@ def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, ti
 
     assert preview["executable"] is True
     assert preview["cad_version"] == "2016"
-    assert {item["cad_version"] for item in preview["execution_intent"]["source_inspections"]} == {"2016"}
+    assert preview["execution_intent"]["cad_validation_deferred"] is True
+    assert preview["execution_intent"]["source_baselines"][0]["sha256"] == file_sha256(dst.parent / "A.dwg")
     assert unconfirmed.status_code == 409
     assert unconfirmed.json()["code"] == "REPREVIEW_REQUIRED"
     assert executed["payload"]["plan"]["cad_version"] == "2016"
-    assert executed["payload"]["plan"]["execution_intent"]["source_inspections"] == preview["execution_intent"]["source_inspections"]
-    assert set(inspected_versions) == {"2016"}
+    assert executed["payload"]["plan"]["execution_intent"]["source_baselines"] == preview["execution_intent"]["source_baselines"]
+    app.state.service.inspect_template.assert_not_called()
     assert invalid.status_code == 422
 
 
