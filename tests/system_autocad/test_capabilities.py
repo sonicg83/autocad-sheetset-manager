@@ -314,14 +314,17 @@ def test_injected_second_dwg_failure_never_publishes_partial_files(version: str,
     original_run = CoreConsoleExecutor.run
     calls = 0
 
-    def fail_third_console_call(self, capability, drawing, script, timeout):
-        nonlocal calls
+    failed_script = None
+
+    def fail_second_console_call(self, capability, drawing, script, timeout):
+        nonlocal calls, failed_script
         calls += 1
-        if calls == 3:
+        if calls == 2:
+            failed_script = Path(script).name
             raise subprocess.CalledProcessError(1, [str(capability.console)], "", "INJECTED_DWG_FAILURE")
         return original_run(self, capability, drawing, script, timeout)
 
-    monkeypatch.setattr(CoreConsoleExecutor, "run", fail_third_console_call)
+    monkeypatch.setattr(CoreConsoleExecutor, "run", fail_second_console_call)
     settings = Settings(
         data_dir=tmp_path / "data",
         autocad_2016_console=Path("C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"),
@@ -348,6 +351,7 @@ def test_injected_second_dwg_failure_never_publishes_partial_files(version: str,
     assert after == before
     assert {path.name for path in tmp_path.glob("*.dwg")} == {path.name for path in formal_files if path.suffix.lower() == ".dwg"}
     assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
+    assert failed_script == "rebuild-001.scr"
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])

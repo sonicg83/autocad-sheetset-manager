@@ -1702,6 +1702,105 @@ class _PerDrawingCadExecutor:
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
+class _SecondRebuildFailureExecutor:
+    def __init__(self):
+        self.calls = 0
+        self.failed_script: str | None = None
+        self.scripts: list[Path] = []
+
+    def run(self, _capability, drawing, script, _timeout):
+        self.calls += 1
+        self.scripts.append(script)
+        if self.calls == 2:
+            self.failed_script = script.name
+            raise subprocess.CalledProcessError(1, ["accoreconsole.exe"], "布局输出", "INJECTED_DWG_FAILURE")
+        drawing.with_suffix(".dst-handles.txt").write_text("001 第1组=10\n", encoding="utf-8")
+        return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+def test_second_group_failure_is_attributable_to_the_single_rebuild_script(tmp_path: Path):
+    source = tmp_path / "来源.dwg"
+    source.write_bytes(b"source")
+    staging = tmp_path / "staging"
+    scripts = tmp_path / "scripts"
+    logs = tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    units = [
+        RebuildWorkUnit(
+            index,
+            {
+                "source_target_file": str(source),
+                "target_file": str(tmp_path / f"目标-{index}.dwg"),
+                "layouts": [{"sheet_id": f"sheet-{index}", "source_file": str(source), "source_layout": "来源", "target_layout": f"00{index + 1} 第{index + 1}组"}],
+            },
+            source,
+            staging,
+            scripts,
+            logs,
+            30,
+        )
+        for index in range(2)
+    ]
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30, max_parallel=1)
+    executor = _SecondRebuildFailureExecutor()
+    runner.executor = executor
+
+    with pytest.raises(subprocess.CalledProcessError):
+        runner._run_groups(
+            "job-1",
+            "worker",
+            _planning_workspace(tmp_path, []),
+            CadCapability("2020", None, tmp_path / "plugin.dll"),
+            units,
+        )
+
+    assert executor.failed_script == "rebuild-001.scr"
+    assert [script.name for script in executor.scripts] == ["rebuild-000.scr", "rebuild-001.scr"]
+    assert not list(scripts.glob("handles-*.scr"))
+    log = (logs / "group-001.log").read_text(encoding="utf-8")
+    assert "Core Console：重建布局并读取布局 Handle（退出码 1）stdout" in log
+    assert "布局输出" in log and "INJECTED_DWG_FAILURE" in log and "CalledProcessError" in log
+    assert any(
+        call.args[1] == tmp_path / "目标-1.dwg" and call.kwargs["status"] == "FAILED"
+        for call in database.upsert_job_file.call_args_list
+    )
+
+
+def test_core_console_failure_is_classified_as_cad_process_failed(tmp_path: Path):
+    console = tmp_path / "accoreconsole.exe"
+    plugin = tmp_path / "plugin.dll"
+    console.write_bytes(b"console")
+    plugin.write_bytes(b"plugin")
+    workspace = _planning_workspace(tmp_path, [])
+    database = Mock()
+    database.get_job.return_value = {"status": "FAILED", "error_code": "CAD_PROCESS_FAILED"}
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    runner._execute = Mock(
+        side_effect=subprocess.CalledProcessError(1, [str(console)], "布局输出", "INJECTED_DWG_FAILURE")
+    )
+    job = {
+        "id": "job-1",
+        "payload": {
+            "base_revision_id": "revision",
+            "commands": [],
+            "plan": {"execution_intent": {"groups": [], "expected_file_hashes": {}, "source_inspections": []}},
+        },
+    }
+
+    result = runner.run(job, workspace, CadCapability("2020", console, plugin))
+
+    assert result["error_code"] == "CAD_PROCESS_FAILED"
+    assert any(
+        call.args[3] == "CAD_PROCESS_FAILED"
+        for call in database.update_job.call_args_list
+        if len(call.args) >= 4
+    )
+    failure_log = tmp_path / ".dst-manager" / "jobs" / "job-1" / "attempt-001" / "logs" / "failure.log"
+    assert "INJECTED_DWG_FAILURE" in failure_log.read_text(encoding="utf-8")
+
+
 def test_create_group_uses_template_snapshot_without_source_target(tmp_path: Path):
     template = tmp_path / "标准.dwt"
     template.write_bytes(b"template-base")
