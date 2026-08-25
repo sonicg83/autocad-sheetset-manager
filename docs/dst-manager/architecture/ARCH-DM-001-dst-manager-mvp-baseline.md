@@ -151,6 +151,8 @@ flowchart LR
 
 依赖只在实施时锁定补丁版本。领域层不得导入FastAPI、SQLAlchemy、lxml或Windows进程代码。
 
+SQLite 是本地 CAD 预算的权威边界：`claim_next_job` 在 `BEGIN IMMEDIATE` 事务内同时检查活跃 CAD change_set 并领取队首任务，同一数据库任一时刻最多一个 CAD job 进入执行态。Worker 在长 CAD 单元等待期间按短于租约的周期续写带 `worker_id + attempt` 的 heartbeat；失去所有权后不得更新新 attempt、补充工作单元或进入发布阶段。
+
 ## 4. 领域模型与编辑能力
 
 ### 4.1 聚合和值对象
@@ -239,11 +241,11 @@ flowchart LR
 
 ### 6.3 单个 DWG 的操作分流
 
-领域规划器先按数量变化前沿确定 CAD 工作范围，再逐子集分类：稳定图纸 ID、顺序、来源与非零 Handle 均可证明时使用 `rename_only`；数量、集合、顺序或内容来源变化时使用 `rebuild`；范围外且无布局差异时为 `none`。前沿只扩大工作范围，不把可证明安全的下游单元强制升级为重建。
+领域规划器先按数量变化前沿确定 CAD 工作范围，再逐子集分类：稳定图纸 ID、顺序、来源以及按十六进制数值合法、非零且在同一目标 DWG 内唯一的 Handle 均可证明时使用 `rename_only`；数量、集合、顺序、内容来源或 Handle 资格变化时使用 `rebuild`；范围外且无布局差异时为 `none`。前沿只扩大工作范围，不把可证明安全的下游单元强制升级为重建。发布前再次按 `(resolved DWG casefold, int(handle, 16))` 检查全部最终图纸，允许不同 DWG 复用同一 Handle，禁止同一 DWG 内的数值重复。
 
 Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定脚本。每个 `rename_only` 或 `rebuild` 工作单元在暂存 DWG 上只调用一次 Core Console，并与所有其他单元共享 `cad_max_parallel` 预算；默认值为 4，合法范围为 1–10。
 
-- `rename_only` 调用受限的 `DstRenameLayouts`，先验证完整纸空间布局集合，再经任务生成的临时名称执行交换、循环和仅大小写改名。它不调用 `DstDeleteLayouts`、布局导入或 `DstGetLayoutHandles`，派生 DST 保留原 `AcDbHandle`。
+- `rename_only` 调用受限的 `DstRenameLayouts`；Python 按暂存 DWG 派生固定请求/结果副文件，SCR 只执行 `NETLOAD` 和无参数命令，插件从当前 DWG 派生 sidecar 路径。命令先验证完整纸空间布局集合，再经任务生成的临时名称执行交换、循环和仅大小写改名。它不调用 `DstDeleteLayouts`、布局导入或 `DstGetLayoutHandles`，派生 DST 保留原 `AcDbHandle`。
 - `rebuild` 在同一脚本和 Core Console 会话中完成布局删除、按最终顺序导入、默认布局清理、Handle 获取、校验和保存；Python 只接受完整、非零且无重复的 Handle 结果。
 
 确认后的来源基准漂移、插件协议错误、结果副文件缺失、任一 CAD 单元失败、DST DOM 复核失败或发布失败，都必须使整批任务失败并保持正式文件不变。独立新进程重新打开最终暂存 DWG 只属于第 12.2 节的双版本系统验收和诊断，不是生产任务的第二次 CAD 调用。

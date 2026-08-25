@@ -1,6 +1,7 @@
 import hashlib
 import json
 import subprocess
+import time
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -489,7 +490,11 @@ def _planning_workspace(tmp_path: Path, subsets: list[Subset]) -> Workspace:
     )
 
 
-def _chained_rename_workspace(tmp_path: Path, count: int = 2) -> tuple[Workspace, list[Path]]:
+def _chained_rename_workspace(
+    tmp_path: Path,
+    count: int = 2,
+    handles: list[str] | None = None,
+) -> tuple[Workspace, list[Path]]:
     drawings = [tmp_path / f"{index:03d} 共享.dwg" for index in range(1, count + 1)]
     for index, drawing in enumerate(drawings, start=1):
         drawing.write_bytes(f"old-{index}".encode())
@@ -497,10 +502,11 @@ def _chained_rename_workspace(tmp_path: Path, count: int = 2) -> tuple[Workspace
     subsets = []
     for index, drawing in enumerate(drawings, start=1):
         offset = (index - 1) * 3
+        handle = handles[index - 1] if handles is not None else f"A{index}"
         subsets.append(
             f'''<AcSmSubset ID="{ids[offset + 2]}"><AcSmProp propname="Name">00{index} 共享</AcSmProp>'''
             f'''<AcSmSheet ID="{ids[offset + 3]}"><AcSmCustomPropertyBag ID="{ids[offset + 4]}"/>'''
-            f'''<AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">A{index}</AcSmProp>'''
+            f'''<AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">{handle}</AcSmProp>'''
             f'''<AcSmProp propname="FileName">{drawing}</AcSmProp>'''
             f'''<AcSmProp propname="Name">00{index} 共享 ({index})</AcSmProp>'''
             f'''<AcSmProp propname="Relative_FileName">.\\{drawing.name}</AcSmProp></AcSmAcDbLayoutReference>'''
@@ -721,6 +727,65 @@ def test_noncanonical_nonzero_handle_requires_rebuild(tmp_path: Path, handle: st
     )
 
     assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [("subset-1", "rebuild")]
+
+
+@pytest.mark.parametrize(("first_handle", "second_handle"), [("A", "A"), ("A", "0A")])
+def test_duplicate_numeric_handles_in_one_drawing_require_rebuild(
+    tmp_path: Path,
+    first_handle: str,
+    second_handle: str,
+):
+    drawing = tmp_path / "001-002 第一册.dwg"
+    drawing.write_bytes(b"drawing")
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset(
+                "subset-1",
+                "001-002 第一册",
+                0,
+                [
+                    _planning_sheet("sheet-1", "001", "第一册 (1)", drawing, first_handle),
+                    _planning_sheet("sheet-2", "002", "第一册 (2)", drawing, second_handle),
+                ],
+            ),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": "subset-1", "title": "改名后的第一册"}],
+        SuffixOptions(True, 1),
+    )
+
+    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == [
+        ("subset-1", "rebuild"),
+    ]
+
+
+def test_same_numeric_handle_in_different_drawings_can_rename(tmp_path: Path):
+    first = tmp_path / "001 第一册.dwg"
+    second = tmp_path / "002 第二册.dwg"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 第一册", 0, [_planning_sheet("sheet-1", "001", "第一册", first, "A")]),
+            Subset("subset-2", "002 第二册", 1, [_planning_sheet("sheet-2", "002", "第二册", second, "0A")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [
+            {"type": "update_subset", "subset_id": "subset-1", "title": "第一分册"},
+            {"type": "update_subset", "subset_id": "subset-2", "title": "第二分册"},
+        ],
+        SuffixOptions(True, 1),
+    )
+
+    assert [group["cad_operation"] for group in plan["groups"]] == ["rename_only", "rename_only"]
 
 
 def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_path: Path):
@@ -2150,6 +2215,72 @@ def test_rename_only_final_dst_preserves_existing_handle(tiny_workspace, tmp_pat
     assert final_sheet.layout.layout_name == plan["groups"][0]["layouts"][0]["target_layout"]
 
 
+def test_final_dst_rejects_numeric_duplicate_handles_in_same_drawing(tmp_path: Path):
+    drawing = tmp_path / "001-002 第一册.dwg"
+    drawing.write_bytes(b"drawing")
+    ids = [f"g00000000-0000-0000-0001-{index:012X}" for index in range(1, 8)]
+    xml = (
+        f'<AcSmDatabase ID="{ids[0]}"><AcSmProp propname="DbVersion">1.1</AcSmProp>'
+        f'<AcSmSheetSet ID="{ids[1]}"><AcSmProp propname="Name">重复 Handle</AcSmProp>'
+        f'<AcSmSubset ID="{ids[2]}"><AcSmProp propname="Name">001-002 第一册</AcSmProp>'
+        f'<AcSmSheet ID="{ids[3]}"><AcSmCustomPropertyBag ID="{ids[4]}"/>'
+        f'<AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">A</AcSmProp>'
+        f'<AcSmProp propname="FileName">{drawing}</AcSmProp><AcSmProp propname="Name">001 第一册 (1)</AcSmProp>'
+        f'<AcSmProp propname="Relative_FileName">.\\{drawing.name}</AcSmProp></AcSmAcDbLayoutReference>'
+        '<AcSmProp propname="Number">001</AcSmProp><AcSmProp propname="Title">第一册 (1)</AcSmProp></AcSmSheet>'
+        f'<AcSmSheet ID="{ids[5]}"><AcSmCustomPropertyBag ID="{ids[6]}"/>'
+        f'<AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">0A</AcSmProp>'
+        f'<AcSmProp propname="FileName">{drawing}</AcSmProp><AcSmProp propname="Name">002 第一册 (2)</AcSmProp>'
+        f'<AcSmProp propname="Relative_FileName">.\\{drawing.name}</AcSmProp></AcSmAcDbLayoutReference>'
+        '<AcSmProp propname="Number">002</AcSmProp><AcSmProp propname="Title">第一册 (2)</AcSmProp></AcSmSheet>'
+        '</AcSmSubset></AcSmSheetSet></AcSmDatabase>'
+    ).encode()
+    dst = tmp_path / "重复Handle.dst"
+    codec = DstCodec()
+    codec.encode_file(xml, dst)
+    document = AcsmDocument(codec.decode_file(dst)).project(tmp_path)
+    workspace = Workspace("workspace", tmp_path, dst, file_sha256(dst), document)
+    plan = build_structural_plan(
+        workspace,
+        [{"type": "update_subset", "subset_id": document.subsets[0].acsm_id, "title": "改名后的第一册"}],
+        SuffixOptions(True, 1),
+    )
+    # 模拟旧版本已确认的 rename_only 计划，发布边界仍必须独立阻断重复 Handle。
+    plan["groups"][0]["cad_operation"] = "rename_only"
+
+    with pytest.raises(PlanningError) as exc_info:
+        CadJobRunner(Mock(), codec, Mock(), 30)._write_staged_dst(workspace, plan, {}, tmp_path)
+
+    assert exc_info.value.code == "HANDLE_DUPLICATE"
+
+
+def test_final_dst_allows_same_numeric_handle_in_different_drawings(tmp_path: Path):
+    workspace, _ = _chained_rename_workspace(tmp_path, handles=["A", "0A"])
+    commands = [
+        {
+            "type": "update_subset",
+            "subset_id": subset.acsm_id,
+            "title": f"改名后的第{index}册",
+        }
+        for index, subset in enumerate(workspace.document.subsets, start=1)
+    ]
+    plan = build_structural_plan(workspace, commands, SuffixOptions(True, 1))
+
+    staged = CadJobRunner(Mock(), DstCodec(), Mock(), 30)._write_staged_dst(
+        workspace,
+        plan,
+        {},
+        tmp_path,
+        commands,
+    )
+
+    handles = [
+        sheet.layout.handle
+        for sheet in AcsmDocument(DstCodec().decode_file(staged)).project(tmp_path).sheets
+    ]
+    assert handles == ["A", "0A"]
+
+
 def test_execute_group_rejects_missing_or_unknown_cad_operation(tmp_path: Path):
     source = tmp_path / "source.dwg"
     source.write_bytes(b"source")
@@ -2291,6 +2422,82 @@ def test_parallel_mixed_cad_failure_never_publishes_staged_results(tmp_path: Pat
     assert executor.rebuild_started.is_set() and executor.rename_started.is_set()
     publisher.publish.assert_not_called()
     assert {path: path.read_bytes() for path in before} == before
+
+
+def test_lost_job_lease_never_publishes_staged_results(tmp_path: Path):
+    workspace, drawings = _chained_rename_workspace(tmp_path, count=1)
+    command = {
+        "type": "update_subset",
+        "subset_id": workspace.document.subsets[0].acsm_id,
+        "title": "改名后的共享册",
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+    database = Mock()
+    database.update_job.return_value = True
+    database.heartbeat.return_value = False
+    publisher = Mock()
+    runner = CadJobRunner(
+        database,
+        DstCodec(),
+        publisher,
+        30,
+        max_parallel=1,
+        heartbeat_interval=0.01,
+    )
+
+    def execute(_job, _workspace, _capability, unit):
+        time.sleep(0.05)
+        target = Path(unit.group["target_file"])
+        return RebuildResult(unit.index, target, target, target, {}, 50, tmp_path / "x.log", 1, 1)
+
+    runner._execute_group = execute
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+    before = {path: path.read_bytes() for path in [workspace.dst_path, *drawings]}
+
+    with pytest.raises(PlanningError) as exc_info:
+        runner._execute(
+            "job-lost-lease",
+            "old-worker",
+            1,
+            workspace,
+            CadCapability("2020", None, plugin),
+            [command],
+            plan,
+        )
+
+    assert exc_info.value.code == "CAD_JOB_LEASE_LOST"
+    publisher.publish.assert_not_called()
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_service_derives_heartbeat_interval_from_worker_lease(tmp_path: Path, monkeypatch):
+    service = object.__new__(DstManagerService)
+    service.database = Mock()
+    service.database.claim_next_job.return_value = {
+        "id": "job",
+        "workspace_id": "workspace",
+        "cad_version": "2020",
+    }
+    service.settings = Settings(data_dir=tmp_path / "data", worker_lease_seconds=60)
+    service.codec = Mock()
+    service.publisher = Mock()
+    service.get_workspace = Mock(return_value=object())
+    service._capability = Mock(return_value=object())
+    captured: dict[str, object] = {}
+
+    class FakeRunner:
+        def __init__(self, *_args, **kwargs):
+            captured.update(kwargs)
+
+        def run(self, *_args):
+            return {"status": "FAILED"}
+
+    monkeypatch.setattr(service_module, "CadJobRunner", FakeRunner)
+
+    service.run_next_job()
+
+    assert captured["heartbeat_interval"] == 20
 
 
 def test_mixed_cad_failure_does_not_publish_staged_results(tmp_path: Path):

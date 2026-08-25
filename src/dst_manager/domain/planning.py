@@ -255,9 +255,15 @@ def _cad_operation(
         return "rebuild"
     same_ids = [sheet.acsm_id for sheet in original.sheets] == [sheet.acsm_id for sheet in derived.sheets]
     try:
-        stable_handles = all(
-            _HEX_HANDLE.fullmatch(sheet.layout.handle) is not None and int(sheet.layout.handle, 16) != 0
+        handle_values = [
+            int(sheet.layout.handle, 16)
             for sheet in original.sheets
+            if _HEX_HANDLE.fullmatch(sheet.layout.handle) is not None
+        ]
+        stable_handles = (
+            len(handle_values) == len(original.sheets)
+            and all(value != 0 for value in handle_values)
+            and len(set(handle_values)) == len(handle_values)
         )
     except (TypeError, ValueError):
         stable_handles = False

@@ -261,21 +261,62 @@ class Database:
             session.add(JobEventRow(job_id=job_id, status=status, progress=0))
             session.add(WorkspaceWriteLockRow(workspace_id=workspace_id, job_id=job_id))
 
-    def update_job(self, job_id: str, status: str, progress: int, error_code: str | None = None, error_detail: str | None = None) -> None:
+    def update_job(
+        self,
+        job_id: str,
+        status: str,
+        progress: int,
+        error_code: str | None = None,
+        error_detail: str | None = None,
+        *,
+        worker_id: str | None = None,
+        attempt: int | None = None,
+    ) -> bool:
         with self.sessions.begin() as session:
             row = session.get(JobRow, job_id)
             if row is None:
                 raise KeyError(job_id)
+            owned_update = worker_id is not None or attempt is not None
+            if owned_update:
+                if worker_id is None or attempt is None:
+                    raise ValueError("JOB_OWNER_INCOMPLETE")
+                if row.worker_id != worker_id or row.attempt != attempt:
+                    return False
             if status != row.status and status not in ALLOWED_JOB_TRANSITIONS.get(row.status, set()):
                 raise InvalidJobTransitionError(f"JOB_STATUS_TRANSITION_INVALID: {row.status}->{status}")
-            row.status, row.progress, row.error_code, row.error_detail = status, progress, error_code, error_detail
+            previous_status = row.status
+            now = datetime.now(UTC)
+            if owned_update:
+                result = session.execute(
+                    update(JobRow)
+                    .where(
+                        JobRow.id == job_id,
+                        JobRow.status == previous_status,
+                        JobRow.worker_id == worker_id,
+                        JobRow.attempt == attempt,
+                    )
+                    .values(
+                        status=status,
+                        progress=progress,
+                        error_code=error_code,
+                        error_detail=error_detail,
+                        heartbeat_at=now,
+                        finished_at=now if status in TERMINAL_JOB_STATUSES else row.finished_at,
+                    ),
+                )
+                if result.rowcount != 1:
+                    return False
+            else:
+                row.status, row.progress, row.error_code, row.error_detail = status, progress, error_code, error_detail
+                row.heartbeat_at = now
+                if status in TERMINAL_JOB_STATUSES:
+                    row.finished_at = now
             session.add(JobEventRow(job_id=job_id, status=status, progress=progress, detail=error_code))
-            row.heartbeat_at = datetime.now(UTC)
             if status in TERMINAL_JOB_STATUSES:
-                row.finished_at = datetime.now(UTC)
                 lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
                 if lock and lock.job_id == job_id:
                     session.delete(lock)
+            return True
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.sessions() as session:
@@ -286,10 +327,22 @@ class Database:
 
     def claim_next_job(self, worker_id: str = "local-worker") -> dict[str, Any] | None:
         """单Worker原子领取一个排队任务。"""
-        with self.sessions.begin() as session:
+        with self.sessions() as session:
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+            active_rows = session.scalars(
+                select(JobRow).where(
+                    JobRow.job_type == "change_set",
+                    JobRow.status.not_in(TERMINAL_JOB_STATUSES),
+                    JobRow.status != "QUEUED",
+                ),
+            ).all()
+            if any(self._is_cad_change_set(row) for row in active_rows):
+                session.commit()
+                return None
             while True:
                 job_id = session.scalar(select(JobRow.id).where(JobRow.status == "QUEUED").order_by(JobRow.created_at).limit(1))
                 if job_id is None:
+                    session.commit()
                     return None
                 row = session.get(JobRow, job_id)
                 if row is None:
@@ -306,11 +359,24 @@ class Database:
                 if claimed.rowcount == 1:
                     session.add(JobEventRow(job_id=job_id, status="STAGING", progress=5, detail=f"worker={worker_id}"))
                     session.flush()
-                    return self._job_json(session, session.get(JobRow, job_id))
+                    claimed_job = self._job_json(session, session.get(JobRow, job_id))
+                    session.commit()
+                    return claimed_job
 
-    def heartbeat(self, job_id: str, worker_id: str) -> bool:
+    def heartbeat(self, job_id: str, worker_id: str, *, attempt: int | None = None) -> bool:
         with self.sessions.begin() as session:
-            result = session.execute(update(JobRow).where(JobRow.id == job_id, JobRow.worker_id == worker_id, JobRow.status.not_in(TERMINAL_JOB_STATUSES)).values(heartbeat_at=datetime.now(UTC)))
+            conditions = [
+                JobRow.id == job_id,
+                JobRow.worker_id == worker_id,
+                JobRow.status.not_in(TERMINAL_JOB_STATUSES),
+            ]
+            if attempt is not None:
+                conditions.append(JobRow.attempt == attempt)
+            result = session.execute(
+                update(JobRow)
+                .where(*conditions)
+                .values(heartbeat_at=datetime.now(UTC)),
+            )
             return result.rowcount == 1
 
     def recover_stale_jobs(self, lease_seconds: int = 120) -> list[dict[str, str]]:
@@ -371,6 +437,24 @@ class Database:
             row.status, row.progress, row.worker_id = "QUEUED", 0, None
             row.started_at = row.heartbeat_at = row.finished_at = None
             row.error_code = row.error_detail = None
+            files = session.scalars(select(JobFileRow).where(JobFileRow.job_id == row.id)).all()
+            for file_row in files:
+                file_row.status = "PENDING"
+                file_row.progress = 0
+                for name in (
+                    "started_at",
+                    "finished_at",
+                    "duration_ms",
+                    "peak_memory_bytes",
+                    "staging_bytes",
+                    "log_path",
+                    "before_hash",
+                    "result_hash",
+                    "result",
+                    "error_code",
+                    "error_detail",
+                ):
+                    setattr(file_row, name, None)
             session.add(JobEventRow(job_id=row.id, status="QUEUED", progress=0, detail="SAFE_RETRY"))
             session.flush()
             return self._job_json(session, row)

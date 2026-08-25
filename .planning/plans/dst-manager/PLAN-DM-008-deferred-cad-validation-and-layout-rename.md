@@ -340,16 +340,13 @@ rtk git commit -m "将CAD布局校验延后到确认任务"
 - Produces: `rename_result_path(drawing: Path) -> Path`，固定后缀 `.dst-layout-rename-result.json`。
 - Produces: `write_rename_request(drawing: Path, layouts: list[dict[str, str]]) -> Path`，写 UTF-8、`version=1`、完整 `old_name/new_name` 数组。
 - Produces: `parse_rename_result(text: str, expected_layouts: set[str]) -> int`，验证版本、最终集合和非负改名数量。
-- Produces: `ScriptRenderer.render_rename(plugin: Path, request: Path) -> str`，固定命令只有环境设置、`NETLOAD`、`DstRenameLayouts`、经 `encode_scr_argument()` 编码的受控请求路径、恢复变量、`QSAVE`、`QUIT`。
+- Produces: `ScriptRenderer.render_rename(plugin: Path) -> str`，固定命令只有环境设置、`NETLOAD`、无参数的 `DstRenameLayouts`、恢复变量、`QSAVE`、`QUIT`；请求/结果路径均由暂存 DWG 派生，不进入 SCR。
 
 - [x] **Step 1：写协议与 SCR 失败测试**
 
 ```python
 def test_render_rename_has_no_destructive_or_handle_commands():
-    script = ScriptRenderer().render_rename(
-        Path("C:/plugins/DstManager.AutoCAD.dll"),
-        Path("C:/staging/001.dst-layout-rename-request.json"),
-    )
+    script = ScriptRenderer().render_rename(Path("C:/plugins/DstManager.AutoCAD.dll"))
     assert script.count("_.NETLOAD") == 1
     assert script.count("DstRenameLayouts") == 1
     assert script.count("_.QSAVE") == 1
@@ -432,7 +429,7 @@ rtk git commit -m "定义受控布局改名副文件协议"
 
 - Consumes: 当前 DWG 旁固定的 `<stem>.dst-layout-rename-request.json`，schema 为 Task 3 的 `version/layouts/old_name/new_name`。
 - Produces: `<stem>.dst-layout-rename-result.json`，schema 为 `version/renamed_count/final_layouts`。
-- Produces: `[CommandMethod("DstRenameLayouts")] Commands.RenameLayouts()`，只接收 Worker 生成并经 SCR 编码的请求路径，且插件复核该路径等于当前 DWG 旁的固定请求路径。
+- Produces: `[CommandMethod("DstRenameLayouts")] Commands.RenameLayouts()`，不接收参数；插件从当前 DWG 路径派生并读取固定请求路径。
 
 - [x] **Step 1：先写真实 CAD 命令契约测试**
 
@@ -461,10 +458,7 @@ Expected: 在可用 CAD 环境中 FAIL，AutoCAD 报告未知命令 `DstRenameLa
 
 ```csharp
 string expectedRequestPath = SidecarPath(database.Filename, ".dst-layout-rename-request.json");
-string requestPath = ReadRequestPath(document.Editor);
-if (!string.Equals(Path.GetFullPath(requestPath), expectedRequestPath, StringComparison.OrdinalIgnoreCase))
-    throw new InvalidDataException("LAYOUT_RENAME_REQUEST_PATH_INVALID");
-RenameRequest request = ReadRequest(requestPath);
+RenameRequest request = ReadRequest(expectedRequestPath);
 List<string> current = ReadPaperLayoutNames(database);
 ValidateRequest(request, current);
 var changes = request.Layouts
@@ -583,7 +577,7 @@ def _execute_group(self, job_id, workspace, capability, unit):
     raise PlanningError("CAD_OPERATION_INVALID", f"CAD 工作单元操作无效：{operation}")
 ```
 
-`_rename_group()` 复制不可变快照到 group 暂存目录，写固定请求，把该路径传给 `render_rename()`，生成 `rename-xxx.scr`，调用一次 executor，严格解析固定结果，验证最终名称集合，返回空 bindings，并在 job file 的日志摘要中使用阶段名“校验并批量改名布局”。`_rebuild_group()` 保持现有一次 Core Console 和 Handle 读取。
+`_rename_group()` 复制不可变快照到 group 暂存目录，按暂存 DWG 派生并写固定请求，调用无请求路径参数的 `render_rename()` 生成 `rename-xxx.scr`，调用一次 executor，严格解析按同一 DWG 派生的固定结果，验证最终名称集合，返回空 bindings，并在 job file 的日志摘要中使用阶段名“校验并批量改名布局”。`_rebuild_group()` 保持现有一次 Core Console 和 Handle 读取。
 
 - [x] **Step 4：分离名称/路径引用更新与 Handle 绑定**
 

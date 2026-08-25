@@ -75,23 +75,68 @@ RebuildResult = CadWorkResult
 
 
 class CadJobRunner:
-    def __init__(self, database: Database, codec: DstCodec, publisher: RecoverablePublisher, timeout: int, max_parallel: int = 4):
+    def __init__(
+        self,
+        database: Database,
+        codec: DstCodec,
+        publisher: RecoverablePublisher,
+        timeout: int,
+        max_parallel: int = 4,
+        heartbeat_interval: float = 30.0,
+    ):
         self.database, self.codec, self.publisher, self.timeout = database, codec, publisher, timeout
         if not 1 <= max_parallel <= 10:
             raise ValueError("CAD_MAX_PARALLEL_OUT_OF_RANGE")
+        if heartbeat_interval <= 0:
+            raise ValueError("CAD_HEARTBEAT_INTERVAL_INVALID")
         self.max_parallel = max_parallel
+        self.heartbeat_interval = heartbeat_interval
         self.renderer, self.executor = ScriptRenderer(), CoreConsoleExecutor()
+
+    def _update_owned_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        attempt: int,
+        status: str,
+        progress: int,
+        error_code: str | None = None,
+        error_detail: str | None = None,
+    ) -> bool:
+        return bool(
+            self.database.update_job(
+                job_id,
+                status,
+                progress,
+                error_code,
+                error_detail,
+                worker_id=worker_id,
+                attempt=attempt,
+            ),
+        )
+
+    def _require_owned_update(
+        self,
+        job_id: str,
+        worker_id: str,
+        attempt: int,
+        status: str,
+        progress: int,
+    ) -> None:
+        if not self._update_owned_job(job_id, worker_id, attempt, status, progress):
+            raise PlanningError("CAD_JOB_LEASE_LOST", "CAD Worker 已失去任务租约")
 
     def run(self, job: dict[str, Any], workspace: Workspace, capability: CadCapability) -> dict[str, Any]:
         job_id = job["id"]
         payload = job["payload"]
         worker_id = job.get("worker_id") or "local-worker"
+        attempt = job.get("attempt", 1)
         append_operation_event(workspace.root, job_id, "WORKER_CLAIMED", cad_version=capability.version)
         if workspace.revision_id != payload["base_revision_id"]:
-            self.database.update_job(job_id, JobStatus.FAILED, 0, "REVISION_CONFLICT")
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "REVISION_CONFLICT")
             return self.database.get_job(job_id) or {}
         if not capability.available:
-            self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_CAPABILITY_UNAVAILABLE")
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_CAPABILITY_UNAVAILABLE")
             return self.database.get_job(job_id) or {}
         try:
             plan = payload.get("plan", {}).get("execution_intent")
@@ -100,30 +145,32 @@ class CadJobRunner:
             if not isinstance(plan.get("expected_file_hashes"), dict):
                 raise PlanningError("EXECUTION_BASELINE_MISSING", "CAD 任务缺少预览内容基准")
             self._validate_source_baselines(plan)
-            return self._execute(job_id, worker_id, job.get("attempt", 1), workspace, capability, payload["commands"], plan)
+            return self._execute(job_id, worker_id, attempt, workspace, capability, payload["commands"], plan)
         except FileLockError as exc:
             append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK")
-            self.database.update_job(job_id, JobStatus.BLOCKED_FILE_LOCK, 0, "BLOCKED_FILE_LOCK", str(exc))
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.BLOCKED_FILE_LOCK, 0, "BLOCKED_FILE_LOCK", str(exc))
         except PublishRolledBackError as exc:
             append_operation_event(workspace.root, job_id, "PUBLISH_ROLLED_BACK")
-            self.database.update_job(job_id, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK", str(exc))
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK", str(exc))
         except PublishRecoveryError as exc:
             append_operation_event(workspace.root, job_id, "PUBLISH_RECOVERY_FAILED")
             self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, "PUBLISH_RECOVERY_FAILED", str(exc))
         except subprocess.TimeoutExpired as exc:
             append_operation_event(workspace.root, job_id, "CAD_TIMEOUT")
-            self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_TIMEOUT", str(exc))
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_TIMEOUT", str(exc))
         except subprocess.CalledProcessError as exc:
             append_operation_event(workspace.root, job_id, "CAD_PROCESS_FAILED", returncode=exc.returncode)
-            self._write_failure_log(workspace, job_id, job.get("attempt", 1), exc.stdout or "", exc.stderr or "")
-            self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_PROCESS_FAILED", str(exc))
+            self._write_failure_log(workspace, job_id, attempt, exc.stdout or "", exc.stderr or "")
+            self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_PROCESS_FAILED", str(exc))
         except Exception as exc:  # noqa: BLE001 - Worker边界必须把任意故障持久化为终态
             append_operation_event(workspace.root, job_id, "FAILED", error=repr(exc))
-            self._write_failure_log(workspace, job_id, job.get("attempt", 1), "", repr(exc))
+            self._write_failure_log(workspace, job_id, attempt, "", repr(exc))
             current = self.database.get_job(job_id) or {}
             if current.get("status") != JobStatus.SUCCEEDED:
-                self.database.update_job(
+                self._update_owned_job(
                     job_id,
+                    worker_id,
+                    attempt,
                     JobStatus.FAILED,
                     0,
                     getattr(exc, "code", type(exc).__name__.upper()),
@@ -211,14 +258,14 @@ class CadJobRunner:
                 json.dumps(plan, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            self.database.update_job(job_id, JobStatus.CAD_RUNNING, 15)
+            self._require_owned_update(job_id, worker_id, attempt, JobStatus.CAD_RUNNING, 15)
             units = [CadWorkUnit(index, group, Path(group["source_snapshot"]), staging_dir, scripts_dir, logs_dir, self.timeout) for index, group in enumerate(plan["groups"])]
-            results = self._run_groups(job_id, worker_id, workspace, capability, units)
+            results = self._run_groups(job_id, worker_id, workspace, capability, units, attempt=attempt)
             staged_files, bindings = self._collect_staged_files(results, plan)
-            self.database.update_job(job_id, JobStatus.VERIFYING, 70)
+            self._require_owned_update(job_id, worker_id, attempt, JobStatus.VERIFYING, 70)
             staged_dst = self._write_staged_dst(workspace, plan, bindings, staging_dir, commands)
             staged_files[workspace.dst_path.resolve()] = staged_dst
-            self.database.update_job(job_id, JobStatus.PREPARED, 80)
+            self._require_owned_update(job_id, worker_id, attempt, JobStatus.PREPARED, 80)
             for path, expected_baseline in expected_publish_baselines.items():
                 if capture_file_baseline(path) != expected_baseline:
                     raise PlanningError("BASE_FILE_CHANGED", f"发布基准已变化：{path}")
@@ -227,7 +274,7 @@ class CadJobRunner:
                 path.resolve(): expected_publish_baselines[path.resolve()]
                 for path in staged_files
             }
-            self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
+            self._require_owned_update(job_id, worker_id, attempt, JobStatus.PUBLISHING, 90)
             append_operation_event(workspace.root, job_id, "PUBLISHING", file_count=len(staged_files))
 
             def finalize_cad(revision_dir: Path, journal: dict[str, Any]) -> None:
@@ -474,29 +521,56 @@ class CadJobRunner:
                 staged_files[target] = None
         return staged_files, bindings
 
-    def _run_groups(self, job_id: str, worker_id: str, workspace: Workspace, capability: CadCapability, units: list[CadWorkUnit]) -> list[CadWorkResult]:
+    def _run_groups(
+        self,
+        job_id: str,
+        worker_id: str,
+        workspace: Workspace,
+        capability: CadCapability,
+        units: list[CadWorkUnit],
+        *,
+        attempt: int = 1,
+    ) -> list[CadWorkResult]:
         if not units:
             return []
         results: list[CadWorkResult] = []
         next_index = 0
         failed: BaseException | None = None
         futures: dict[Future[CadWorkResult], CadWorkUnit] = {}
+        next_heartbeat = time.monotonic() + self.heartbeat_interval
         with ThreadPoolExecutor(max_workers=self.max_parallel, thread_name_prefix="dst-cad") as pool:
             while next_index < len(units) and len(futures) < self.max_parallel:
                 unit = units[next_index]
                 futures[pool.submit(self._execute_group, job_id, workspace, capability, unit)] = unit
                 next_index += 1
             while futures:
-                done, _ = wait(futures, return_when=FIRST_COMPLETED)
-                for future in done:
+                wait_timeout = max(0.0, next_heartbeat - time.monotonic())
+                done, _ = wait(futures, timeout=wait_timeout, return_when=FIRST_COMPLETED)
+                if time.monotonic() >= next_heartbeat:
+                    if not self.database.heartbeat(job_id, worker_id, attempt=attempt):
+                        failed = PlanningError("CAD_JOB_LEASE_LOST", "CAD Worker 已失去任务租约")
+                    next_heartbeat = time.monotonic() + self.heartbeat_interval
+                if failed is not None and not done:
+                    for future in futures:
+                        future.cancel()
+                    break
+                for future in sorted(done, key=lambda item: futures[item].index):
                     unit = futures.pop(future)
                     try:
                         results.append(future.result())
                     except BaseException as exc:  # noqa: BLE001 - 等待已启动 CAD 安全退出后统一抛出
                         failed = failed or exc
                     completed = len(results)
-                    self.database.update_job(job_id, JobStatus.CAD_RUNNING, 15 + int(50 * completed / len(units)))
-                    self.database.heartbeat(job_id, worker_id)
+                    try:
+                        self._require_owned_update(
+                            job_id,
+                            worker_id,
+                            attempt,
+                            JobStatus.CAD_RUNNING,
+                            15 + int(50 * completed / len(units)),
+                        )
+                    except PlanningError as exc:
+                        failed = exc
                 if failed is None:
                     while next_index < len(units) and len(futures) < self.max_parallel:
                         following = units[next_index]
@@ -703,10 +777,19 @@ class CadJobRunner:
             acsm.apply_metadata_commands(metadata_commands)
         acsm.apply_layout_references(references, workspace.root)
         acsm.apply_layout_bindings(normalized_bindings, workspace.root)
+        handle_owners: set[tuple[str, int]] = set()
         for sheet in acsm.project(workspace.root).sheets:
             handle = sheet.layout.handle
             if not handle or not re.fullmatch(r"[0-9A-Fa-f]+", handle) or int(handle, 16) == 0:
                 raise PlanningError("HANDLE_OUTPUT_INVALID", f"最终图纸 Handle 无效：{sheet.acsm_id}")
+            drawing = (sheet.layout.resolved_path or Path(sheet.layout.file_name)).resolve()
+            owner = (str(drawing).casefold(), int(handle, 16))
+            if owner in handle_owners:
+                raise PlanningError(
+                    "HANDLE_DUPLICATE",
+                    f"同一 DWG 包含数值重复的 Handle：{drawing}，{handle}",
+                )
+            handle_owners.add(owner)
         issues = acsm.validate()
         if any(issue.severity == Severity.ERROR for issue in issues):
             raise ValueError("XML_VALIDATION_FAILED")

@@ -497,6 +497,7 @@ class DstManagerService:
             self.publisher,
             self.settings.cad_timeout_seconds,
             self.settings.cad_max_parallel,
+            heartbeat_interval=min(30.0, self.settings.worker_lease_seconds / 3),
         )
         return runner.run(job, workspace, capability)
 

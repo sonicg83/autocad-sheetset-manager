@@ -8,16 +8,21 @@ from pydantic import ValidationError
 from dst_manager.application import cad_job
 from dst_manager.application.cad_job import CadJobRunner, RebuildResult, RebuildWorkUnit
 from dst_manager.config import Settings
+from dst_manager.domain.planning import PlanningError
 from dst_manager.infrastructure.autocad.worker import CadCapability
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.publisher import RecoverablePublisher
 
 
 class FakeDatabase:
+    def __init__(self):
+        self.heartbeat_calls = 0
+
     def update_job(self, *_args, **_kwargs):
-        return None
+        return True
 
     def heartbeat(self, *_args, **_kwargs):
+        self.heartbeat_calls += 1
         return True
 
 
@@ -189,3 +194,124 @@ def test_failure_in_completed_batch_stops_before_replenishing_pool(tmp_path: Pat
         )
 
     assert submitted == [0, 1]
+
+
+@pytest.mark.parametrize("done_order", [(1, 0), (2, 1, 0), (1, 2, 0)])
+def test_completed_batch_selects_lowest_index_failure_deterministically(
+    tmp_path: Path,
+    monkeypatch,
+    done_order: tuple[int, ...],
+):
+    class ControlledExecutor:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def submit(self, function, *args):
+            future = cad_job.Future()
+            try:
+                future.set_result(function(*args))
+            except BaseException as exc:  # noqa: BLE001 - 模拟同一 wait 周期的多个失败。
+                future.set_exception(exc)
+            return future
+
+    def unordered_done(futures, **_kwargs):
+        by_index = {unit.index: future for future, unit in futures.items()}
+        return [by_index[index] for index in done_order], set()
+
+    def execute(_job, _workspace, _capability, unit):
+        raise RuntimeError(f"failure-{unit.index}")
+
+    monkeypatch.setattr(cad_job, "ThreadPoolExecutor", ControlledExecutor)
+    monkeypatch.setattr(cad_job, "wait", unordered_done)
+    runner = CadJobRunner(
+        FakeDatabase(),
+        DstCodec(),
+        RecoverablePublisher(),
+        10,
+        max_parallel=len(done_order),
+    )
+    runner._execute_group = execute
+
+    with pytest.raises(RuntimeError, match="failure-0"):
+        runner._run_groups(
+            "job",
+            "worker",
+            object(),
+            CadCapability("2020", None, None),
+            [_unit(tmp_path, index, "rebuild") for index in range(len(done_order))],
+        )
+
+
+def test_long_group_renews_job_lease_before_completion(tmp_path: Path):
+    database = FakeDatabase()
+    runner = CadJobRunner(
+        database,
+        DstCodec(),
+        RecoverablePublisher(),
+        10,
+        max_parallel=1,
+        heartbeat_interval=0.01,
+    )
+
+    def execute(_job, _workspace, _capability, unit):
+        time.sleep(0.05)
+        target = tmp_path / f"{unit.index}.dwg"
+        return RebuildResult(unit.index, target, target, target, {}, 50, tmp_path / "x.log", 100, 200)
+
+    runner._execute_group = execute
+
+    runner._run_groups(
+        "job",
+        "worker",
+        object(),
+        CadCapability("2020", None, None),
+        [_unit(tmp_path, 0, "rebuild")],
+        attempt=3,
+    )
+
+    assert database.heartbeat_calls >= 2
+
+
+def test_lost_lease_stops_submitting_new_groups(tmp_path: Path):
+    class LostLeaseDatabase(FakeDatabase):
+        def heartbeat(self, *_args, **_kwargs):
+            self.heartbeat_calls += 1
+            return False
+
+    database = LostLeaseDatabase()
+    runner = CadJobRunner(
+        database,
+        DstCodec(),
+        RecoverablePublisher(),
+        10,
+        max_parallel=1,
+        heartbeat_interval=0.01,
+    )
+    started: list[int] = []
+
+    def execute(_job, _workspace, _capability, unit):
+        started.append(unit.index)
+        time.sleep(0.05)
+        target = tmp_path / f"{unit.index}.dwg"
+        return RebuildResult(unit.index, target, target, target, {}, 50, tmp_path / "x.log", 100, 200)
+
+    runner._execute_group = execute
+
+    with pytest.raises(PlanningError) as exc_info:
+        runner._run_groups(
+            "job",
+            "old-worker",
+            object(),
+            CadCapability("2020", None, None),
+            [_unit(tmp_path, index, "rebuild") for index in range(3)],
+            attempt=1,
+        )
+
+    assert exc_info.value.code == "CAD_JOB_LEASE_LOST"
+    assert started == [0]

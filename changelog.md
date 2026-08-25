@@ -2,6 +2,8 @@
 
 ## 2026-08-26（PLAN-DM-008 延后 CAD 校验与布局批量改名）
 
+- 修复最终审查问题：`rename_only` 按十六进制数值拒绝同一 DWG 内重复 Handle，发布前再次执行 DWG+Handle 全局复核；长 CAD 单元按租约续写 heartbeat，旧 attempt 失权后不能更新、补充工作或发布。
+- SQLite 领取事务强制同一数据库仅一个活跃 CAD job；安全重试原子清空 JobFile 的上次 attempt 终态；同批并发失败稳定选择最小工作单元下标。布局改名协议文档统一为“按暂存 DWG 派生固定 sidecar，SCR 不传请求路径”。
 - 完成 `PLAN-DM-008`：快速结构预览不启动 Core Console，只采集路径、身份与 SHA-256；用户确认后在暂存任务中执行真实布局集合、来源与 CAD 版本校验，并按子集分类 `none`、`rename_only`、`rebuild`。
 - 新增 AutoCAD 2016/2020 `DstRenameLayouts` 固定协议与两阶段布局改名；`rename_only` 不删除/导入布局、不读取或覆盖 Handle，`rebuild` 才完整重建并回读 Handle。共享 Core Console 并发默认 4、合法范围 1–10，任一单元、DOM 或发布失败均不发布正式文件。
 - 完成事务与接口回归：混合 rename/rebuild/delete、来源基线漂移、结果缺失、Handle 非法、第二 CAD 进程失败均保持正式文件哈希不变且无 manifest；`GET /api/jobs/{job_id}` 直接返回文件级 `cad_operation`、`started_at`、`finished_at`。

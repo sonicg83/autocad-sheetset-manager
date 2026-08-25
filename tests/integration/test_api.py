@@ -213,6 +213,55 @@ def test_get_job_files_returns_cad_operation_and_timing_directly(tmp_path, tiny_
     }
 
 
+def test_retry_then_pre_cad_failure_does_not_expose_previous_file_terminal_state(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    database = app.state.service.database
+    database.create_job(
+        "job-retry-files",
+        opened["id"],
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        "2020",
+    )
+    database.upsert_job_file(
+        "job-retry-files",
+        dst.parent / "001 第一册.dwg",
+        source_path=str(dst.parent / "old.dwg"),
+        cad_operation="rebuild",
+        status="SUCCEEDED",
+        progress=100,
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        duration_ms=100,
+        error_code="OLD_ERROR",
+        error_detail="old detail",
+    )
+    database.update_job("job-retry-files", "FAILED", 0, "CAD_FAILED")
+
+    retry = client.post("/api/jobs/job-retry-files/retry")
+    database.update_job("job-retry-files", "FAILED", 0, "PRE_CAD_FAILURE")
+    details = client.get("/api/jobs/job-retry-files")
+
+    assert retry.status_code == 200
+    assert details.status_code == 200
+    item = details.json()["files"][0]
+    assert item["cad_operation"] == "rebuild"
+    assert item["source_path"] == "old.dwg"
+    assert item == item | {
+        "status": "PENDING",
+        "progress": 0,
+        "started_at": None,
+        "finished_at": None,
+        "duration_ms": None,
+        "error_code": None,
+        "error_detail": None,
+    }
+
+
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):
     dst, sheet_id = tiny_workspace
     xml = DstCodec().decode_file(dst).replace(b'<AcSmProp propname="Flags" vt="3">2</AcSmProp>', b'<AcSmProp propname="Flags" vt="3">9</AcSmProp>', 1)
