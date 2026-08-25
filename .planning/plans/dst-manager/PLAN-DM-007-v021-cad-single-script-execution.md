@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-007
 title: v0.21 CAD 单脚本布局重建实施计划
-status: proposed
+status: blocked
 owners:
   - dst-manager
 created: 2026-08-25
@@ -42,7 +42,7 @@ related:
 
 | 文件 | 责任 |
 | --- | --- |
-| `docs/dst-manager/adr/ADR-DM-002-single-script-cad-execution.md` | 记录取消生产路径新进程重开验证、采用单脚本执行及其后果。 |
+| `docs/dst-manager/adr/ADR-DM-002-v021-cad-single-script-execution.md` | 记录取消生产路径新进程重开验证、采用单脚本执行及其后果。 |
 | `docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md` | 将第 6.3 节的旧双脚本描述改为单脚本顺序，保留独立真实验收重开步骤。 |
 | `src/dst_manager/infrastructure/autocad/worker.py` | 保持 `render_rebuild()` 签名不变，使其输出布局重建、Handle 获取、保存和退出的完整 SCR；保留 `render_handles()`。 |
 | `src/dst_manager/application/cad_job.py` | 删除结构性重建路径的第二次脚本生成和执行，统一处理一次执行结果、日志、Handle 解析及耗时。 |
@@ -55,11 +55,11 @@ related:
 
 ---
 
-### 任务 1：冻结决策、架构基线和性能基线
+### Task 1：冻结决策、架构基线和性能基线
 
 **文件：**
 
-- Create: `docs/dst-manager/adr/ADR-DM-002-single-script-cad-execution.md`
+- Create: `docs/dst-manager/adr/ADR-DM-002-v021-cad-single-script-execution.md`
 - Modify: `docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md:234-246`
 - Modify: `docs/dst-manager/specs/SPEC-DM-002-v021-cad-single-script-execution.md`
 - Modify: `docs/dst-manager/README.md`
@@ -132,11 +132,11 @@ rtk git diff --check
 - [ ] **步骤 5：提交决策基线**
 
 ```powershell
-git add docs/dst-manager/adr/ADR-DM-002-single-script-cad-execution.md docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md docs/dst-manager/specs/SPEC-DM-002-v021-cad-single-script-execution.md docs/dst-manager/README.md .planning/plans/dst-manager/README.md changelog.md
+git add docs/dst-manager/adr/ADR-DM-002-v021-cad-single-script-execution.md docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md docs/dst-manager/specs/SPEC-DM-002-v021-cad-single-script-execution.md docs/dst-manager/README.md .planning/plans/dst-manager/README.md changelog.md
 git commit -m "确定CAD单脚本布局重建决策"
 ```
 
-### 任务 2：先测试再合并 SCR 渲染顺序
+### Task 2：先测试再合并 SCR 渲染顺序
 
 **文件：**
 
@@ -219,7 +219,7 @@ git add src/dst_manager/infrastructure/autocad/worker.py tests/unit/test_autocad
 git commit -m "合并布局重建与Handle读取脚本"
 ```
 
-### 任务 3：让 CadJobRunner 每个工作单元只执行一次
+### Task 3：让 CadJobRunner 每个工作单元只执行一次
 
 **文件：**
 
@@ -306,7 +306,7 @@ git add src/dst_manager/application/cad_job.py tests/unit/test_core.py
 git commit -m "让CAD工作单元单次完成布局重建和Handle读取"
 ```
 
-### 任务 4：修正失败注入、日志和多 DWG 回归
+### Task 4：修正失败注入、日志和多 DWG 回归
 
 **文件：**
 
@@ -372,7 +372,7 @@ git add src/dst_manager/application/cad_job.py tests/unit/test_core.py tests/sys
 git commit -m "更新单脚本CAD失败回滚回归"
 ```
 
-### 任务 5：执行双版本真实 CAD 验收和性能验证
+### Task 5：执行双版本真实 CAD 验收和性能验证
 
 **文件：**
 
@@ -430,13 +430,13 @@ git add tests/system_autocad/test_capabilities.py .planning/plans/dst-manager/PL
 git commit -m "完成单脚本CAD双版本验收记录"
 ```
 
-### 任务 6：全量验证、文档闭环和交付状态
+### Task 6：全量验证、文档闭环和交付状态
 
 **文件：**
 
 - Modify: `docs/dst-manager/README.md`
 - Modify: `docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md`
-- Modify: `docs/dst-manager/adr/ADR-DM-002-single-script-cad-execution.md`
+- Modify: `docs/dst-manager/adr/ADR-DM-002-v021-cad-single-script-execution.md`
 - Modify: `.planning/plans/dst-manager/README.md`
 - Modify: `.planning/plans/dst-manager/PLAN-DM-007-v021-cad-single-script-execution.md`
 - Modify: `changelog.md`
@@ -444,8 +444,8 @@ git commit -m "完成单脚本CAD双版本验收记录"
 **Interfaces:**
 
 - 所有文档的 ID、状态、related、索引和实际验证结果一致。
-- `SPEC-DM-002` 保持 `accepted`；`ADR-DM-002` 在实现和验证完成后标记 `accepted`；本计划只有在要求全部满足后标记 `completed`。
-- 若真实 CAD 环境缺失，计划保持 `active`，并记录具体恢复条件，不把跳过项写成通过。
+- `SPEC-DM-002` 与 `ADR-DM-002` 保持 `accepted`；实现和验证完成后补充可核验的实施证据，本计划只有在要求全部满足后标记为 `completed`。
+- 若真实 CAD 环境缺失，计划标记为 `blocked`，并记录具体恢复条件，不把跳过项写成通过。
 
 - [ ] **步骤 1：运行最小充分的非 CAD 验证**
 
@@ -488,6 +488,42 @@ rtk rg -n "第二次用 Core Console|handles-\{group_index|两次启动|render_h
 git add docs/dst-manager .planning/plans/dst-manager changelog.md
 git commit -m "完成CAD单脚本布局重建交付闭环"
 ```
+
+## 实际验证记录（2026-08-25）
+
+### 已完成实现
+
+- 已完成 `ADR-DM-002`、`ARCH-DM-001` 与 `SPEC-DM-002` 约定的生产路径调整：每个 `RebuildWorkUnit` 使用一个 `rebuild-*.scr`，在同一 Core Console 会话中完成布局重建和 `DstGetLayoutHandles`；结构性路径的调用数由 `2G` 降为 `G`。
+- 已保留 `render_handles()` 供模板检查和独立验收使用；Handle 解析、非空/唯一/非零校验、暂存发布和失败回滚语义未改变。
+- 已补充 SCR 顺序、单次调用、Handle 绑定、失败注入、并行与事务恢复回归测试。
+
+### 已执行验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `$env:UV_LINK_MODE = "copy"; uv sync --dev` | 退出码 0；已解析并审计 39 个包。 |
+| `uv run ruff check .` | 退出码 0；`All checks passed!`。 |
+| `uv run pytest -q --disable-warnings` | 退出码 0；全量 Python 测试为 302 passed、32 skipped。通过 `uv run pytest --collect-only --disable-warnings` 可复核总计 334 项；跳过项由 26 项真实 CAD、2 项私有样本相关和 4 项 Windows 环境相关用例组成。 |
+| `uv lock --check` | 退出码 0；锁文件可复现，解析 39 个包。 |
+| `uv run dst-manager doctor` | 退出码 0；AutoCAD 2016/2020 均为 `available: false`，且 `console`、`plugin` 均为 `null`。 |
+| `$env:DST_MANAGER_RUN_AUTOCAD = "1"; uv run pytest tests/system_autocad/test_capabilities.py -q --disable-warnings` | 退出码 0；26 项真实 CAD 系统用例全部跳过。 |
+
+### 阻塞原因与恢复条件
+
+本计划的代码、非 CAD 全量验证和文档决策已完成，但不能标记为 `completed`：真实 AutoCAD 2016/2020 验收、独立新进程重开验证及 1/2/25 布局、`cad_max_parallel=1/2` 的性能证据尚未执行。私有 `sample/project1` 不在当前工作树；两版 `accoreconsole.exe` 的现有路径尚未写入显式配置，对应双版本 Worker 插件 DLL 也尚未构建和配置。因此真实 CAD 测试在显式设置 `DST_MANAGER_RUN_AUTOCAD=1` 后仍全部跳过，性能数据也不可获得。
+
+本次未执行 `scripts/build_plugins.ps1`、独立新进程重开验收或性能采样；它们均保留为解除阻塞后的必做步骤，不将系统测试跳过记作通过。
+
+恢复时须提供私有样本，将现有两版 `accoreconsole.exe` 路径写入显式配置，构建并配置匹配的 2016/2020 Worker DLL，然后执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
+uv run dst-manager doctor
+$env:DST_MANAGER_RUN_AUTOCAD = "1"
+uv run pytest tests/system_autocad/test_capabilities.py -q
+```
+
+恢复后还须按 Task 5 记录 1、2、25 布局及 `cad_max_parallel=1/2` 的调用数、插件加载次数、单 DWG/整批墙钟耗时与独立重开验收结果；仅在这些证据通过后将本计划改为 `completed`。
 
 ## 风险与回退
 

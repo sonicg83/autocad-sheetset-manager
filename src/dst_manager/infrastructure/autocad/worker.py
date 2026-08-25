@@ -40,6 +40,7 @@ class ScriptRenderer:
         if layouts:
             lines.extend(["_.-LAYOUT", "_Set", encode_scr_argument(layouts[0]["target_layout"])])
         lines.append("DstDeleteDefaultLayout")
+        lines.append("DstGetLayoutHandles")
         lines.extend(["CMDECHO", "1", "FILEDIA", "1", "_.QSAVE", "_.QUIT"])
         return "\n".join(lines) + "\n"
 

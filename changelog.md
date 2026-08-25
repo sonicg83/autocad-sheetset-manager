@@ -2,8 +2,10 @@
 
 ## 2026-08-25（DST Manager v0.21 CAD 单脚本布局重建需求调整）
 
-- 接受 `SPEC-DM-002`，确认结构性 DWG 重建将布局修改与 Handle 获取合并为一次 Core Console 执行，保留 Handle 校验、暂存发布、回滚和双版本真实 CAD 验收边界，并将新进程重新打开验证从生产必要条件调整为验收/诊断手段。
-- 新增 `PLAN-DM-007`，拆分决策基线、SCR 渲染器、CAD Worker 单次执行、失败回滚回归、双版本 CAD 性能验证和文档闭环任务；计划尚未执行。
+- 接受 `SPEC-DM-002` 并新增 `ADR-DM-002`：确认结构性 DWG 重建将布局修改与 Handle 获取合并为一次 Core Console 执行，更新 `ARCH-DM-001` 的生产流程；保留 Handle 校验、暂存发布、回滚和双版本真实 CAD 验收边界，并将新进程重新打开验证从生产必要条件调整为验收/诊断手段。
+- 新增 `PLAN-DM-007`，拆分决策基线、SCR 渲染器、CAD Worker 单次执行、失败回滚回归、双版本 CAD 性能验证和文档闭环任务。
+- 完成单脚本实现：每个 `RebuildWorkUnit` 在一个 `rebuild-*.scr` 和一次 Core Console 调用中完成布局重建、Handle 获取、校验和保存，结构性路径调用数由 `2G` 降为 `G`；保留模板检查用的独立 `render_handles()`。
+- 全量 Python 测试、Ruff 和锁文件检查均通过；全量 pytest 为 302 passed、32 skipped。真实 CAD 系统测试在显式设置 `DST_MANAGER_RUN_AUTOCAD=1` 后为 26 skipped：私有样本缺失，现有的 2016/2020 `accoreconsole.exe` 路径尚未显式配置，双版本 Worker DLL 尚未构建和配置，`dst-manager doctor` 因此报告两个版本不可用。插件构建、独立新进程重开验收和性能采样均未执行；`PLAN-DM-007` 因未完成真实双版本验收和性能测量标记为受阻，恢复条件见计划实际验证记录。
 
 ## 2026-08-23
 
