@@ -17,6 +17,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 当前没有独立 PRD。功能规范：
 
 - [v0.21 图纸集编辑需求调整规范（SPEC-DM-001，已接受）](specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
+- [v0.21 CAD 单脚本布局重建需求调整规范（SPEC-DM-002，已接受）](specs/SPEC-DM-002-v021-cad-single-script-execution.md)
 
 ## 指南
 

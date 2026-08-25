@@ -14,6 +14,7 @@
 
 详细计划：
 
+- [v0.21 CAD 单脚本布局重建（PLAN-DM-007，提议）](PLAN-DM-007-v021-cad-single-script-execution.md)
 - [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
 - [v0.2.1 紧急修复：运行时、日志与 AcSm 兼容性（PLAN-DM-005，已完成）](PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)
 - [阶段 1：v0.2 稳定化与多 DWG 并行（PLAN-DM-001，已完成）](PLAN-DM-001-v0.2-stabilization-and-multi-dwg-parallel.md)
