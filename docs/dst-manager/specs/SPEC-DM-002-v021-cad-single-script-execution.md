@@ -149,5 +149,3 @@ AutoCAD 2016 和 2020 均须在私有样本的临时副本上验证：
 ## 与既有文档的关系
 
 本文补充 [SPEC-DM-001](SPEC-DM-001-v021-sheetset-editing-adjustment.md) 的 CAD 执行要求，并在实现完成后替代 [ARCH-DM-001](../architecture/ARCH-DM-001-dst-manager-mvp-baseline.md) 第 6.3 节中“第二次用 Core Console 重新打开并读取 Handle”的生产执行描述。DST/XML、Worker、路径、发布安全和双版本边界仍以 `ARCH-DM-001` 其余章节为准。
-
-
