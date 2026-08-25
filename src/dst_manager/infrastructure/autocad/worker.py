@@ -102,7 +102,6 @@ class ScriptRenderer:
             "_.NETLOAD",
             encode_scr_argument(str(plugin)),
             "DstRenameLayouts",
-            encode_scr_argument(str(request)),
             "CMDECHO",
             "1",
             "FILEDIA",

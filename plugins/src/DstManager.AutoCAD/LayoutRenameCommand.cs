@@ -2,11 +2,12 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.Text;
 
 namespace DstManager.AutoCAD
 {
@@ -14,6 +15,9 @@ namespace DstManager.AutoCAD
     {
         private const int SchemaVersion = 1;
         private static readonly char[] InvalidNameCharacters = { '<', '>', '/', '\\', '"', ':', ';', '?', '*', '|', '=' };
+        private static readonly FieldInfo ExtensionDataMembersField = typeof(ExtensionDataObject).GetField(
+            "members",
+            BindingFlags.Instance | BindingFlags.NonPublic);
 
         public static void Execute(Document document)
         {
@@ -30,11 +34,8 @@ namespace DstManager.AutoCAD
 
             try
             {
-                string expectedRequestPath = Path.GetFullPath(SidecarPath(database.Filename, ".dst-layout-rename-request.json"));
+                string requestPath = Path.GetFullPath(SidecarPath(database.Filename, ".dst-layout-rename-request.json"));
                 resultPath = Path.GetFullPath(SidecarPath(database.Filename, ".dst-layout-rename-result.json"));
-                string requestPath = Path.GetFullPath(ReadRequestPath(editor));
-                if (!string.Equals(requestPath, expectedRequestPath, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("LAYOUT_RENAME_REQUEST_PATH_INVALID");
 
                 DeleteResultIfPresent(resultPath);
                 RenameRequest request = ReadRequest(requestPath);
@@ -72,16 +73,7 @@ namespace DstManager.AutoCAD
                 if (resultPath != null)
                     DeleteResultIfPresent(resultPath);
                 editor.WriteMessage("\nDST_MANAGER_LAYOUT_RENAME_FAILED={0}", exception.Message);
-                throw;
             }
-        }
-
-        private static string ReadRequestPath(Editor editor)
-        {
-            PromptResult result = editor.GetString(new PromptStringOptions("\nDST 布局改名请求路径:") { AllowSpaces = true });
-            if (result.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(result.StringResult))
-                throw new InvalidDataException("LAYOUT_RENAME_REQUEST_PATH_INVALID");
-            return result.StringResult;
         }
 
         private static string SidecarPath(string drawingPath, string suffix)
@@ -99,13 +91,13 @@ namespace DstManager.AutoCAD
                 {
                     var serializer = new DataContractJsonSerializer(typeof(RenameRequest));
                     var request = serializer.ReadObject(stream) as RenameRequest;
-                    if (request == null || stream.Position != stream.Length || request.ExtensionData != null)
+                    if (request == null || stream.Position != stream.Length || HasExtensionData(request.ExtensionData))
                         throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID");
                     if (request.Layouts != null)
                     {
                         foreach (RenameRow row in request.Layouts)
                         {
-                            if (row == null || row.ExtensionData != null)
+                            if (row == null || HasExtensionData(row.ExtensionData))
                                 throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID");
                         }
                     }
@@ -120,6 +112,17 @@ namespace DstManager.AutoCAD
             {
                 throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID", exception);
             }
+        }
+
+        private static bool HasExtensionData(ExtensionDataObject extensionData)
+        {
+            if (extensionData == null)
+                return false;
+            if (ExtensionDataMembersField == null)
+                throw new InvalidDataException("LAYOUT_RENAME_REQUEST_INVALID");
+
+            var members = ExtensionDataMembersField.GetValue(extensionData) as ICollection;
+            return members != null && members.Count > 0;
         }
 
         private static List<string> ReadPaperLayoutNames(Database database)

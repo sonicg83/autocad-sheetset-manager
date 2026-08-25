@@ -12,9 +12,9 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 
 
-def test_render_rename_uses_only_fixed_safe_commands():
+def test_render_rename_uses_only_fixed_safe_commands_without_request_path_input():
     plugin = Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll")
-    request = Path("C:/staging/001 rename request.json")
+    request = Path("C:/临时工作区/" + "很长的目录名/" * 30 + "改名请求.json")
     script = ScriptRenderer().render_rename(plugin, request)
 
     assert script.splitlines() == [
@@ -27,7 +27,6 @@ def test_render_rename_uses_only_fixed_safe_commands():
         "_.NETLOAD",
         f'"{plugin}"',
         "DstRenameLayouts",
-        f'"{request}"',
         "CMDECHO",
         "1",
         "FILEDIA",
@@ -54,16 +53,11 @@ def test_render_rename_restores_secureload_before_save_and_quit():
     assert restored_index < lines.index("_.QSAVE") < lines.index("_.QUIT")
 
 
-@pytest.mark.parametrize(
-    "plugin, request_path",
-    [
-        (Path("C:/plugins/AutoCAD\nWorker/DstManager.AutoCAD.dll"), Path("C:/staging/request.json")),
-        (Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll"), Path("C:/staging/request\x00.json")),
-    ],
-)
-def test_render_rename_rejects_control_characters_in_paths(plugin: Path, request_path: Path):
+def test_render_rename_rejects_control_characters_in_plugin_path():
+    plugin = Path("C:/plugins/AutoCAD\nWorker/DstManager.AutoCAD.dll")
+
     with pytest.raises(ValueError, match="SCR_ARGUMENT_UNSAFE"):
-        ScriptRenderer().render_rename(plugin, request_path)
+        ScriptRenderer().render_rename(plugin, Path("C:/staging/request.json"))
 
 
 def test_rename_sidecars_use_fixed_names_and_strict_result(tmp_path: Path):
