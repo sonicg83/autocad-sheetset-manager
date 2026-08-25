@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0003_dm008_job_file_cad_operation"
+revision = "0003_dm008_job_file_cadop"
 down_revision = "0002_v02_job_reliability"
 branch_labels = None
 depends_on = None

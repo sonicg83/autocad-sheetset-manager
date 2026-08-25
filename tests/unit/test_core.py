@@ -2,12 +2,14 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from typer.testing import CliRunner
 
+import dst_manager.application.cad_job as cad_job_module
 import dst_manager.application.service as service_module
 from dst_manager.application.cad_job import CadJobRunner, RebuildResult, RebuildWorkUnit
 from dst_manager.application.service import ApplicationError, DstManagerService
@@ -317,6 +319,25 @@ def test_final_validate_rejects_inserted_sheet_placeholder_handle_until_binding(
     final_errors = {issue.code for issue in document.validate() if issue.severity == "error"}
     assert "LAYOUT_HANDLE_PLACEHOLDER" not in final_errors
     assert "LAYOUT_HANDLE_INVALID" not in final_errors
+
+
+def test_layout_references_use_windows_relative_path_and_reject_outside_workspace(tiny_workspace, tmp_path: Path):
+    dst, sheet_id = tiny_workspace
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    target = dst.parent / "A.dwg"
+
+    document.apply_layout_references(
+        {sheet_id: {"file": str(target), "layout": "001 平面"}},
+        dst.parent,
+    )
+
+    layout = document.project(dst.parent).sheets[0].layout
+    assert layout.relative_file_name == ".\\A.dwg"
+    with pytest.raises(AcsmValidationError, match="DWG_OUTSIDE_WORKSPACE"):
+        document.apply_layout_references(
+            {sheet_id: {"file": str(tmp_path.parent / "outside.dwg"), "layout": "001 平面"}},
+            dst.parent,
+        )
 
 
 def test_first_subset_uses_minimal_factory_when_no_subset_template(tiny_workspace):
@@ -1986,6 +2007,39 @@ def test_rename_group_records_finished_failure_when_request_is_invalid(tmp_path:
     assert database.upsert_job_file.call_args_list[-1].kwargs["duration_ms"] is not None
 
 
+@pytest.mark.parametrize("cad_operation", ["rename_only", "rebuild"])
+def test_group_setup_failure_records_terminal_file_state(tmp_path: Path, monkeypatch, cad_operation: str):
+    source = tmp_path / "source.dwg"
+    source.write_bytes(b"source")
+    staging, scripts, logs = tmp_path / "staging", tmp_path / "scripts", tmp_path / "logs"
+    for directory in (staging, scripts, logs):
+        directory.mkdir()
+    unit = RebuildWorkUnit(
+        0,
+        {
+            "cad_operation": cad_operation,
+            "source_target_file": str(source),
+            "target_file": str(tmp_path / "target.dwg"),
+            "layouts": [],
+        },
+        source,
+        staging,
+        scripts,
+        logs,
+        30,
+    )
+    database = Mock()
+    runner = CadJobRunner(database, Mock(), Mock(), 30)
+    monkeypatch.setattr(cad_job_module.shutil, "copy2", Mock(side_effect=OSError("INJECTED_COPY_FAILURE")))
+
+    with pytest.raises(OSError, match="INJECTED_COPY_FAILURE"):
+        runner._execute_group("job-1", _planning_workspace(tmp_path, []), CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
+
+    assert [call.kwargs["status"] for call in database.upsert_job_file.call_args_list] == ["RUNNING", "FAILED"]
+    assert database.upsert_job_file.call_args_list[-1].kwargs["cad_operation"] == cad_operation
+    assert database.upsert_job_file.call_args_list[-1].kwargs["finished_at"] is not None
+
+
 def test_rename_only_final_dst_preserves_existing_handle(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     document = AcsmDocument(DstCodec().decode_file(dst)).project(dst.parent)
@@ -2086,6 +2140,66 @@ class _RenameFailureAfterRebuildExecutor:
             encoding="utf-8",
         )
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+
+
+class _ParallelRenameFailureExecutor:
+    def __init__(self, layouts_by_target: dict[str, list[str]]):
+        self.layouts_by_target = layouts_by_target
+        self.rebuild_started = Event()
+        self.rename_started = Event()
+        self.release_rebuild = Event()
+        self.scripts: list[Path] = []
+
+    def run(self, _capability, drawing, script, _timeout):
+        self.scripts.append(script)
+        if script.name.startswith("rebuild-"):
+            self.rebuild_started.set()
+            assert self.rename_started.wait(2)
+            assert self.release_rebuild.wait(2)
+            drawing.with_suffix(".dst-handles.txt").write_text(
+                "\n".join(f"{layout}={index + 16:X}" for index, layout in enumerate(self.layouts_by_target[drawing.name])) + "\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
+        self.rename_started.set()
+        assert self.rebuild_started.wait(2)
+        self.release_rebuild.set()
+        raise subprocess.CalledProcessError(1, ["accoreconsole.exe"], "", "INJECTED_PARALLEL_RENAME_FAILURE")
+
+
+def test_parallel_mixed_cad_failure_never_publishes_staged_results(tmp_path: Path):
+    workspace, old_drawings = _chained_rename_workspace(tmp_path)
+    template = tmp_path / "模板.dwt"
+    template.write_bytes(b"template")
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "before",
+        "title": "新增",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
+    }
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
+    layouts_by_target = {
+        Path(group["target_file"]).name: [layout["target_layout"] for layout in group["layouts"]]
+        for group in plan["groups"]
+        if group["cad_operation"] == "rebuild"
+    }
+    publisher = Mock()
+    runner = CadJobRunner(Mock(), DstCodec(), publisher, 30, max_parallel=2)
+    executor = _ParallelRenameFailureExecutor(layouts_by_target)
+    runner.executor = executor
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+    before = {path: path.read_bytes() for path in [workspace.dst_path, *old_drawings]}
+
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        runner._execute("job-parallel", "worker", 1, workspace, CadCapability("2020", None, plugin), [command], plan)
+
+    assert exc_info.value.stderr == "INJECTED_PARALLEL_RENAME_FAILURE"
+    assert executor.rebuild_started.is_set() and executor.rename_started.is_set()
+    publisher.publish.assert_not_called()
+    assert {path: path.read_bytes() for path in before} == before
 
 
 def test_mixed_cad_failure_does_not_publish_staged_results(tmp_path: Path):

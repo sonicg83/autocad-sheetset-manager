@@ -1,5 +1,4 @@
 import copy
-import os
 import re
 import uuid
 from pathlib import Path
@@ -680,8 +679,12 @@ class AcsmDocument:
         for sheet_id, reference in references.items():
             layout = self._layout_reference_for_sheet(sheet_id)
             target = Path(reference["file"]).resolve()
+            try:
+                relative = target.relative_to(dst_dir.resolve())
+            except ValueError as exc:
+                raise AcsmValidationError(f"DWG_OUTSIDE_WORKSPACE: {target}") from exc
             _set_prop(layout, "FileName", str(target))
-            _set_prop(layout, "Relative_FileName", os.path.relpath(target, dst_dir.resolve()))
+            _set_prop(layout, "Relative_FileName", ".\\" + str(relative).replace("/", "\\"))
             _set_prop(layout, "Name", reference["layout"])
 
     def _layout_reference_for_sheet(self, sheet_id: str) -> etree._Element:

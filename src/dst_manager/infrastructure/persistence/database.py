@@ -158,7 +158,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0003_dm008_job_file_cad_operation"
+LATEST_SCHEMA_REVISION = "0003_dm008_job_file_cadop"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -407,6 +407,11 @@ class Database:
             if row is None:
                 row = JobFileRow(job_id=job_id, target_path=str(target_path), role=values.pop("role", "DWG"))
                 session.add(row)
+            if values.get("status") == "RUNNING":
+                for name in ("finished_at", "duration_ms", "peak_memory_bytes", "staging_bytes", "result_hash", "error_code", "error_detail"):
+                    setattr(row, name, None)
+            elif values.get("status") == "SUCCEEDED":
+                row.error_code = row.error_detail = None
             for key, value in values.items():
                 setattr(row, key, value)
 

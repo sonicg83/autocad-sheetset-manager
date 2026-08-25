@@ -211,7 +211,7 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
     assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0003_dm008_job_file_cad_operation"
+    assert revision == "0003_dm008_job_file_cadop"
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
@@ -234,6 +234,44 @@ def test_job_file_cad_operation_and_timing_are_returned_without_transformation(t
     assert item["cad_operation"] == "rename_only"
     assert item["started_at"] == started.replace(tzinfo=None).isoformat()
     assert item["finished_at"] == finished.replace(tzinfo=None).isoformat()
+
+
+def test_running_job_file_retry_clears_previous_terminal_state(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    database.create_job("job", "workspace", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    target = tmp_path / "001 第一册.dwg"
+    database.upsert_job_file(
+        "job",
+        target,
+        cad_operation="rename_only",
+        status="FAILED",
+        duration_ms=12,
+        peak_memory_bytes=34,
+        staging_bytes=56,
+        result_hash="before",
+        error_code="CAD_FAILED",
+        error_detail="previous failure",
+        finished_at=datetime.now(UTC),
+    )
+
+    database.upsert_job_file("job", target, cad_operation="rename_only", status="RUNNING", started_at=datetime.now(UTC))
+
+    running = database.get_job("job")["files"][0]
+    assert running["duration_ms"] is None
+    assert running["peak_memory_bytes"] is None
+    assert running["staging_bytes"] is None
+    assert running["result_hash"] is None
+    assert running["error_code"] is None
+    assert running["error_detail"] is None
+    assert running["finished_at"] is None
+
+    database.upsert_job_file("job", target, status="SUCCEEDED", result_hash="after", finished_at=datetime.now(UTC))
+
+    succeeded = database.get_job("job")["files"][0]
+    assert succeeded["result_hash"] == "after"
+    assert succeeded["error_code"] is None
+    assert succeeded["error_detail"] is None
 
 
 def test_outdated_schema_is_rejected_when_migration_is_disabled(tmp_path: Path):

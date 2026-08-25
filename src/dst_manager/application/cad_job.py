@@ -522,10 +522,6 @@ class CadJobRunner:
         target = Path(group["target_file"])
         started = time.perf_counter()
         started_at = datetime.now(UTC)
-        group_dir = unit.staging_dir / f"group-{group_index:03d}"
-        group_dir.mkdir(parents=True, exist_ok=True)
-        staged = group_dir / target.name
-        shutil.copy2(unit.source_snapshot, staged)
         rename_script = unit.scripts_dir / f"rename-{group_index:03d}.scr"
         log_path = unit.logs_dir / f"group-{group_index:03d}.log"
         self.database.upsert_job_file(
@@ -537,11 +533,17 @@ class CadJobRunner:
             progress=5,
             started_at=started_at,
             log_path=str(log_path),
-            before_hash=file_sha256(source_target) if source_target is not None else None,
+            before_hash=None,
         )
         output = ""
         phase = "校验并批量改名布局"
+        before_hash: str | None = None
         try:
+            group_dir = unit.staging_dir / f"group-{group_index:03d}"
+            group_dir.mkdir(parents=True, exist_ok=True)
+            staged = group_dir / target.name
+            shutil.copy2(unit.source_snapshot, staged)
+            before_hash = file_sha256(source_target) if source_target is not None else None
             request = write_rename_request(staged, group["layouts"])
             rename_script.write_text(self.renderer.render_rename(capability.plugin, request), encoding="mbcs")
             completed = self.executor.run(capability, staged, rename_script, unit.timeout)
@@ -561,6 +563,7 @@ class CadJobRunner:
                 peak_memory_bytes=completed.peak_memory_bytes,
                 staging_bytes=staging_bytes,
                 finished_at=datetime.now(UTC),
+                before_hash=before_hash,
                 result_hash=file_sha256(staged),
             )
             return CadWorkResult(group_index, target, source_target, staged, {}, duration_ms, log_path, completed.peak_memory_bytes, staging_bytes)
@@ -578,6 +581,7 @@ class CadJobRunner:
                 progress=0,
                 duration_ms=duration_ms,
                 finished_at=datetime.now(UTC),
+                before_hash=before_hash,
                 error_code=getattr(exc, "code", type(exc).__name__.upper()),
                 error_detail=str(exc),
             )
@@ -589,10 +593,6 @@ class CadJobRunner:
         target = Path(group["target_file"])
         started = time.perf_counter()
         started_at = datetime.now(UTC)
-        group_dir = unit.staging_dir / f"group-{group_index:03d}"
-        group_dir.mkdir(parents=True, exist_ok=True)
-        staged = group_dir / target.name
-        shutil.copy2(unit.source_snapshot, staged)
         rebuild_script = unit.scripts_dir / f"rebuild-{group_index:03d}.scr"
         log_path = unit.logs_dir / f"group-{group_index:03d}.log"
         self.database.upsert_job_file(
@@ -604,11 +604,17 @@ class CadJobRunner:
             progress=5,
             started_at=started_at,
             log_path=str(log_path),
-            before_hash=file_sha256(source_target) if source_target is not None else None,
+            before_hash=None,
         )
         output = ""
         phase = "重建布局并读取布局 Handle"
+        before_hash: str | None = None
         try:
+            group_dir = unit.staging_dir / f"group-{group_index:03d}"
+            group_dir.mkdir(parents=True, exist_ok=True)
+            staged = group_dir / target.name
+            shutil.copy2(unit.source_snapshot, staged)
+            before_hash = file_sha256(source_target) if source_target is not None else None
             rebuild_script.write_text(self.renderer.render_rebuild(capability.plugin, group["layouts"]), encoding="mbcs")
             completed = self.executor.run(capability, staged, rebuild_script, unit.timeout)
             peak_memory = completed.peak_memory_bytes
@@ -623,7 +629,7 @@ class CadJobRunner:
             bindings = {layout["sheet_id"]: {"file": str(target), "layout": layout["target_layout"], "handle": handles[layout["target_layout"]]} for layout in group["layouts"]}
             duration_ms = int((time.perf_counter() - started) * 1000)
             staging_bytes = staged.stat().st_size
-            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="SUCCEEDED", progress=100, duration_ms=duration_ms, peak_memory_bytes=peak_memory, staging_bytes=staging_bytes, finished_at=datetime.now(UTC), result_hash=file_sha256(staged))
+            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="SUCCEEDED", progress=100, duration_ms=duration_ms, peak_memory_bytes=peak_memory, staging_bytes=staging_bytes, finished_at=datetime.now(UTC), before_hash=before_hash, result_hash=file_sha256(staged))
             return CadWorkResult(group_index, target, source_target, staged, bindings, duration_ms, log_path, peak_memory, staging_bytes)
         except Exception as exc:
             if isinstance(exc, subprocess.CalledProcessError):
@@ -631,7 +637,7 @@ class CadJobRunner:
                 output += self._format_console_output(phase, stdout, exc.stderr, exc.returncode)
             duration_ms = int((time.perf_counter() - started) * 1000)
             log_path.write_text(sanitize_log_text(output + "\n" + repr(exc)), encoding="utf-8")
-            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="FAILED", progress=0, duration_ms=duration_ms, finished_at=datetime.now(UTC), error_code=getattr(exc, "code", type(exc).__name__.upper()), error_detail=str(exc))
+            self.database.upsert_job_file(job_id, target, cad_operation="rebuild", status="FAILED", progress=0, duration_ms=duration_ms, finished_at=datetime.now(UTC), before_hash=before_hash, error_code=getattr(exc, "code", type(exc).__name__.upper()), error_detail=str(exc))
             raise
 
     def _write_staged_dst(
