@@ -503,16 +503,18 @@ git commit -m "完成CAD单脚本布局重建交付闭环"
 | --- | --- |
 | `$env:UV_LINK_MODE = "copy"; uv sync --dev` | 退出码 0；已解析并审计 39 个包。 |
 | `uv run ruff check .` | 退出码 0；`All checks passed!`。 |
-| `uv run pytest -q --disable-warnings` | 退出码 0；全量 Python 测试执行至 `[100%]`，环境相关用例按既有规则跳过。 |
+| `uv run pytest -q --disable-warnings` | 退出码 0；全量 Python 测试为 302 passed、32 skipped。通过 `uv run pytest --collect-only --disable-warnings` 可复核总计 334 项；跳过项由 26 项真实 CAD、2 项私有样本相关和 4 项 Windows 环境相关用例组成。 |
 | `uv lock --check` | 退出码 0；锁文件可复现，解析 39 个包。 |
 | `uv run dst-manager doctor` | 退出码 0；AutoCAD 2016/2020 均为 `available: false`，且 `console`、`plugin` 均为 `null`。 |
-| `$env:DST_MANAGER_RUN_AUTOCAD = "1"; uv run pytest tests/system_autocad/test_capabilities.py -q --disable-warnings` | 退出码 0；24 项真实 CAD 系统用例全部跳过。 |
+| `$env:DST_MANAGER_RUN_AUTOCAD = "1"; uv run pytest tests/system_autocad/test_capabilities.py -q --disable-warnings` | 退出码 0；26 项真实 CAD 系统用例全部跳过。 |
 
 ### 阻塞原因与恢复条件
 
-本计划的代码、非 CAD 全量验证和文档决策已完成，但不能标记为 `completed`：真实 AutoCAD 2016/2020 验收、独立新进程重开验证及 1/2/25 布局、`cad_max_parallel=1/2` 的性能证据尚未执行。当前工作树缺少私有 `sample/project1`、AutoCAD 2016/2020 的 Core Console、对应双版本 Worker 插件 DLL 和显式 Core Console/DLL 配置；因此真实 CAD 测试在显式设置 `DST_MANAGER_RUN_AUTOCAD=1` 后仍全部跳过，性能数据也不可获得。
+本计划的代码、非 CAD 全量验证和文档决策已完成，但不能标记为 `completed`：真实 AutoCAD 2016/2020 验收、独立新进程重开验证及 1/2/25 布局、`cad_max_parallel=1/2` 的性能证据尚未执行。私有 `sample/project1` 不在当前工作树；两版 `accoreconsole.exe` 的现有路径尚未写入显式配置，对应双版本 Worker 插件 DLL 也尚未构建和配置。因此真实 CAD 测试在显式设置 `DST_MANAGER_RUN_AUTOCAD=1` 后仍全部跳过，性能数据也不可获得。
 
-恢复时须提供私有样本、安装或配置两版 `accoreconsole.exe`、构建并配置匹配的 2016/2020 Worker DLL，然后执行：
+本次未执行 `scripts/build_plugins.ps1`、独立新进程重开验收或性能采样；它们均保留为解除阻塞后的必做步骤，不将系统测试跳过记作通过。
+
+恢复时须提供私有样本，将现有两版 `accoreconsole.exe` 路径写入显式配置，构建并配置匹配的 2016/2020 Worker DLL，然后执行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
