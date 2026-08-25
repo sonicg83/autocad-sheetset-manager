@@ -489,16 +489,10 @@ class CadJobRunner:
         )
         rebuild_script.write_text(self.renderer.render_rebuild(capability.plugin, group["layouts"]), encoding="mbcs")
         output = ""
-        phase = "重建布局"
+        phase = "重建布局并读取布局 Handle"
         try:
             completed = self.executor.run(capability, staged, rebuild_script, unit.timeout)
             peak_memory = completed.peak_memory_bytes
-            output += self._format_console_output(phase, completed.stdout, completed.stderr)
-            handle_script = unit.scripts_dir / f"handles-{group_index:03d}.scr"
-            handle_script.write_text(self.renderer.render_handles(capability.plugin), encoding="mbcs")
-            phase = "读取布局 Handle"
-            completed = self.executor.run(capability, staged, handle_script, unit.timeout)
-            peak_memory = max(value for value in (peak_memory, completed.peak_memory_bytes) if value is not None) if any(value is not None for value in (peak_memory, completed.peak_memory_bytes)) else None
             output += self._format_console_output(phase, completed.stdout, completed.stderr)
             log_path.write_text(sanitize_log_text(output), encoding="utf-8")
             handles = parse_handles(staged.with_suffix(".dst-handles.txt").read_text(encoding="utf-8"))

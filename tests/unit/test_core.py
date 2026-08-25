@@ -108,7 +108,7 @@ def test_failed_core_console_output_is_archived_in_per_dwg_log(tmp_path):
         runner._rebuild_group("job-1", workspace, CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
 
     log = (logs / "group-000.log").read_text(encoding="utf-8")
-    assert "Core Console：重建布局（退出码 7）stdout" in log
+    assert "Core Console：重建布局并读取布局 Handle（退出码 7）stdout" in log
     assert "布局输出" in log and "CAD 错误输出" in log
 
 
@@ -1677,11 +1677,12 @@ class _SuccessfulCadExecutor:
     def __init__(self, handle_text: str):
         self.handle_text = handle_text
         self.calls = 0
+        self.scripts: list[Path] = []
 
-    def run(self, _capability, drawing, _script, _timeout):
+    def run(self, _capability, drawing, script, _timeout):
         self.calls += 1
-        if self.calls == 2:
-            drawing.with_suffix(".dst-handles.txt").write_text(self.handle_text, encoding="utf-8")
+        self.scripts.append(script)
+        drawing.with_suffix(".dst-handles.txt").write_text(self.handle_text, encoding="utf-8")
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
@@ -1689,14 +1690,15 @@ class _PerDrawingCadExecutor:
     def __init__(self, layouts_by_target: dict[str, list[str]]):
         self.layouts_by_target = layouts_by_target
         self.next_handle = 16
+        self.scripts: list[Path] = []
 
     def run(self, _capability, drawing, script, _timeout):
-        if script.stem.startswith("handles-"):
-            lines = []
-            for layout in self.layouts_by_target[drawing.name]:
-                lines.append(f"{layout}={self.next_handle:X}")
-                self.next_handle += 1
-            drawing.with_suffix(".dst-handles.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.scripts.append(script)
+        lines = []
+        for layout in self.layouts_by_target[drawing.name]:
+            lines.append(f"{layout}={self.next_handle:X}")
+            self.next_handle += 1
+        drawing.with_suffix(".dst-handles.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
         return SimpleNamespace(stdout="", stderr="", peak_memory_bytes=1)
 
 
@@ -1732,7 +1734,8 @@ def test_create_group_uses_template_snapshot_without_source_target(tmp_path: Pat
     )
     database = Mock()
     runner = CadJobRunner(database, Mock(), Mock(), 30)
-    runner.executor = _SuccessfulCadExecutor("001 新建子集=AB\n")
+    executor = _SuccessfulCadExecutor("001 新建子集=AB\n")
+    runner.executor = executor
     workspace = _planning_workspace(tmp_path, [])
 
     result = runner._rebuild_group("job-1", workspace, CadCapability("2020", None, tmp_path / "plugin.dll"), unit)
@@ -1741,6 +1744,9 @@ def test_create_group_uses_template_snapshot_without_source_target(tmp_path: Pat
     assert result.target == target
     assert result.staged.read_bytes() == b"template-base"
     assert result.bindings == {"sheet-new": {"file": str(target), "layout": "001 新建子集", "handle": "AB"}}
+    assert executor.calls == 1
+    assert [script.name for script in executor.scripts] == ["rebuild-000.scr"]
+    assert not (scripts / "handles-000.scr").exists()
     assert database.upsert_job_file.call_args_list[0].kwargs["before_hash"] is None
 
 
@@ -1840,7 +1846,8 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
 
     publisher.publish = capture_publish_baselines
     runner = CadJobRunner(database, codec, publisher, 30, max_parallel=1)
-    runner.executor = _SuccessfulCadExecutor(handle_text)
+    executor = _SuccessfulCadExecutor(handle_text)
+    runner.executor = executor
     plugin = dst.parent / "plugin.dll"
     plugin.write_bytes(b"plugin")
 
@@ -1863,6 +1870,8 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     assert len(created.sheets) == 2
     assert {sheet.layout.resolved_path for sheet in created.sheets} == {target}
     assert all(sheet.layout.handle != "0" for sheet in created.sheets)
+    assert executor.calls == 1
+    assert [script.name for script in executor.scripts] == ["rebuild-000.scr"]
     assert published_baselines is not None
     assert all(
         baseline is None or isinstance(baseline, ExpectedFileBaseline)
@@ -1894,7 +1903,8 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
     database = Mock()
     database.get_job.return_value = {"id": "job-chain", "status": "SUCCEEDED"}
     runner = CadJobRunner(database, DstCodec(), RecoverablePublisher(), 30, max_parallel=1)
-    runner.executor = _PerDrawingCadExecutor(layouts_by_target)
+    executor = _PerDrawingCadExecutor(layouts_by_target)
+    runner.executor = executor
     plugin = tmp_path / "plugin.dll"
     plugin.write_bytes(b"plugin")
 
@@ -1913,6 +1923,11 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
     reopened = AcsmDocument(DstCodec().decode_file(workspace.dst_path)).project(tmp_path)
     assert [sheet.layout.resolved_path for sheet in reopened.sheets] == targets
     assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
+    assert [script.name for script in executor.scripts] == [
+        "rebuild-000.scr",
+        "rebuild-001.scr",
+        "rebuild-002.scr",
+    ]
 
 
 def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: Path):
@@ -1937,7 +1952,8 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
     database = Mock()
     database.get_job.return_value = {"id": "job-middle-chain", "status": "SUCCEEDED"}
     runner = CadJobRunner(database, DstCodec(), RecoverablePublisher(), 30, max_parallel=1)
-    runner.executor = _PerDrawingCadExecutor(layouts_by_target)
+    executor = _PerDrawingCadExecutor(layouts_by_target)
+    runner.executor = executor
     plugin = tmp_path / "plugin.dll"
     plugin.write_bytes(b"plugin")
 
@@ -1962,6 +1978,11 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
     reopened = AcsmDocument(DstCodec().decode_file(workspace.dst_path)).project(tmp_path)
     assert [sheet.layout.resolved_path for sheet in reopened.sheets] == final_drawings
     assert all(sheet.layout.handle != "0" for sheet in reopened.sheets)
+    assert [script.name for script in executor.scripts] == [
+        "rebuild-000.scr",
+        "rebuild-001.scr",
+        "rebuild-002.scr",
+    ]
 
 
 def test_zero_handle_is_rejected_before_binding(tmp_path: Path):
@@ -1994,7 +2015,8 @@ def test_zero_handle_is_rejected_before_binding(tmp_path: Path):
         30,
     )
     runner = CadJobRunner(Mock(), Mock(), Mock(), 30)
-    runner.executor = _SuccessfulCadExecutor("001 新布局=0\n")
+    executor = _SuccessfulCadExecutor("001 新布局=0\n")
+    runner.executor = executor
 
     with pytest.raises(ValueError, match="HANDLE_OUTPUT_INVALID"):
         runner._rebuild_group(
@@ -2003,6 +2025,9 @@ def test_zero_handle_is_rejected_before_binding(tmp_path: Path):
             CadCapability("2020", None, tmp_path / "plugin.dll"),
             unit,
         )
+
+    assert executor.calls == 1
+    assert [script.name for script in executor.scripts] == ["rebuild-000.scr"]
 
 
 def test_final_dst_applies_derived_structure_then_real_bindings(tiny_workspace, tmp_path: Path):
