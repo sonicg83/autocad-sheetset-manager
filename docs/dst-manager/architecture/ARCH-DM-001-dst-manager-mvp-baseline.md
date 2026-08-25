@@ -5,13 +5,16 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-08-10
-updated: 2026-08-22
+updated: 2026-08-25
 related:
   - PLAN-DM-001
   - PLAN-DM-005
   - ADR-DM-001
+  - ADR-DM-002
   - SPEC-DM-001
+  - SPEC-DM-002
   - PLAN-DM-006
+  - PLAN-DM-007
 document_kind: architecture-baseline
 ---
 
@@ -21,7 +24,7 @@ document_kind: architecture-baseline
 > 定位：完整现代化重构前的独立技术验证项目，不直接替换现有 PowerShell 工具  
 > 核心链路：`DST → AcSm XML → 领域命令修改 → DST`，`DWG → accoreconsole 脚本重建布局 → 回读 Handle`
 >
-> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以后两份文档为准。
+> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。[ADR-DM-002](../adr/ADR-DM-002-v021-cad-single-script-execution.md) 与 [SPEC-DM-002](../specs/SPEC-DM-002-v021-cad-single-script-execution.md) 将每个 DWG 分组的布局重建与 Handle 获取收敛为一次 Core Console 执行。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以对应规范和 ADR 为准。
 
 ## 1. MVP目标与边界
 
@@ -238,12 +241,14 @@ Python不接受用户提供SCR文本，只把结构化意图渲染成固定命�
 1. 在任务暂存区复制目标DWG基础文件；新DWG从配置的基础模板复制。
 2. 设置 `FILEDIA=0`、`SECURELOAD=0`、`CMDECHO=0`。
 3. 加载与2016或2020对应的固定插件。
-4. 执行 `dellayouts`。
-5. 按最终顺序逐个执行 `-LAYOUT Template`，从快照或模板导入布局。
-6. 将导入布局重命名为最终布局名。
-7. 恢复系统变量并 `QSAVE`。
-8. 第二次用Core Console只读式打开最终暂存DWG，执行 `GetLayoutHandles` 并再次确认可保存。
-9. Python解析 `布局名=Handle` 结果，要求与计划一一对应且无重复。
+4. 执行 `DstDeleteLayouts`。
+5. 按最终顺序逐个执行 `-LAYOUT Template`，从快照或模板导入布局，并重命名为最终布局名。
+6. 执行 `DstDeleteDefaultLayout`。
+7. 在同一脚本、同一 Core Console 会话中执行 `DstGetLayoutHandles`。
+8. 恢复系统变量并依次执行 `QSAVE`、`QUIT`。
+9. Core Console 退出后，Python解析 `.dst-handles.txt` 中的 `布局名=Handle` 结果，要求与计划一一对应、Handle 非零且无重复。
+
+正常任务不再为 Handle 获取单独启动第二个 Core Console。独立新进程重新打开最终暂存 DWG 仅属于第 12.2 节的双版本系统验收和诊断，不属于生产任务执行步骤。
 
 路径、布局名和换行必须经过脚本参数编码器；遇到引号、控制字符或AutoCAD不支持的名称直接在计划阶段拒绝。
 
@@ -485,8 +490,9 @@ AutoCAD 2016和2020分别执行：
 6. 插入后重排并核对布局顺序。
 7. 跨DWG移动布局。
 8. 对25布局的样本最大分组执行完整重建。
-9. 回读每个最终布局的唯一Handle。
-10. 用生成DST关联最终DWG，在对应AutoCAD桌面环境进行验收打开。
+9. 解析生产单脚本写出的每个最终布局唯一Handle，并与执行计划匹配。
+10. 另启一个新的 Core Console 进程重新打开最终暂存 DWG，独立读取布局与 Handle；该步骤只用于双版本系统验收/诊断，不计入正常生产任务调用。
+11. 用生成DST关联最终DWG，在对应AutoCAD桌面环境进行验收打开。
 
 AutoCAD桌面验收可以人工触发，但必须记录版本、结果和证据文件。Core Console日志中出现未识别命令、脚本中断、致命错误或超时均视为失败。
 

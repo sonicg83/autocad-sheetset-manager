@@ -11,12 +11,14 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [产品愿景（VISION-DM-001）](product/vision.md)
 - [已接受的架构基线（ARCH-DM-001）](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md)
 - [受控图纸集编辑替代自由调整模型（ADR-DM-001）](adr/ADR-DM-001-controlled-sheetset-editing.md)
+- [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [实施路线图（ROADMAP-DM-001）](../../.planning/roadmaps/dst-manager.md)
 - [当前 Plan 索引](../../.planning/plans/dst-manager/README.md)
 
 当前没有独立 PRD。功能规范：
 
 - [v0.21 图纸集编辑需求调整规范（SPEC-DM-001，已接受）](specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
+- [v0.21 CAD 单脚本布局重建需求调整规范（SPEC-DM-002，已接受）](specs/SPEC-DM-002-v021-cad-single-script-execution.md)
 
 ## 指南
 
