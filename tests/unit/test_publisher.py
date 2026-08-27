@@ -73,6 +73,27 @@ def test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish(
     assert _identity(target) == external_identity
 
 
+def test_publish_fence_aborts_before_replacing_formal_file(tmp_path: Path):
+    target = tmp_path / "fenced-target.dwg"
+    staged = tmp_path / "fenced-staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+
+    def reject_publish() -> None:
+        raise PublishBaselineError("PUBLISH_FENCE_LOST")
+
+    with pytest.raises(PublishBaselineError, match="PUBLISH_FENCE_LOST"):
+        RecoverablePublisher().publish(
+            "fenced-publish",
+            tmp_path,
+            {target: staged},
+            before_commit=reject_publish,
+        )
+
+    assert target.read_bytes() == b"before"
+    assert not (tmp_path / ".dst-manager" / "revisions" / "fenced-publish" / "manifest.json").exists()
+
+
 @pytest.mark.parametrize("fail_at", [1, 2, 3])
 def test_publish_failure_rolls_back_every_replaced_file(tmp_path: Path, fail_at: int):
     targets = {}

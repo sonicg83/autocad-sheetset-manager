@@ -1,7 +1,8 @@
 import re
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from dst_manager.domain.editing import (
     EditingError,
@@ -29,7 +30,9 @@ class PlanningError(ValueError):
 _UNSAFE_NAME = re.compile(r"[<>/\\\":;?*|=\r\n\x00-\x1f]")
 _ORDINAL = re.compile(r"^(.*?)[(（]([一二三四五六七八九十百]+)[)）]$")
 _DERIVED_RANGE_PREFIX = re.compile(r"^(?P<prefix>.*?)(?P<range>\d+(?:-\d+)?)\s+")
+_HEX_HANDLE = re.compile(r"^[0-9A-Fa-f]+$")
 
+CadOperation = Literal["none", "rename_only", "rebuild"]
 
 def derive_layout_name(number: str, title: str) -> str:
     name = f"{number.strip()} {title.strip()}".strip()
@@ -90,11 +93,18 @@ def build_structural_plan(
     _validate_derived_object_ids(derived)
 
     original_subsets = {subset.acsm_id: subset for subset in workspace.document.subsets}
+    cardinality_frontier_index = _cardinality_frontier(workspace.document.subsets, derived.subsets)
     groups = []
+    subset_operations = []
     final_targets: list[str] = []
     transitions: list[dict[str, str | None]] = []
     planned_subset_ids: list[str] = []
-    for subset in derived.subsets:
+    for index, subset in enumerate(derived.subsets):
+        original = original_subsets.get(subset.acsm_id)
+        original_layouts = {
+            sheet.acsm_id: sheet.layout.layout_name
+            for sheet in original.sheets
+        } if original is not None else {}
         layouts = []
         names: set[str] = set()
         for sheet in subset.sheets:
@@ -113,9 +123,9 @@ def build_structural_plan(
                     "source_file": source["file"],
                     "source_layout": source["layout"],
                     "target_layout": name,
+                    "original_layout": original_layouts.get(sheet.acsm_id),
                 },
             )
-        original = original_subsets.get(subset.acsm_id)
         operation = "rebuild" if original is not None else "create"
         source_target = _subset_target_file(original) if original is not None else None
         if operation == "rebuild" and not source_target:
@@ -124,6 +134,23 @@ def build_structural_plan(
         subset.target_file = str(target)
         subset.source_target_file = source_target or ""
         final_targets.append(str(target))
+        in_cardinality_scope = cardinality_frontier_index is not None and index >= cardinality_frontier_index
+        cad_operation = _cad_operation(
+            original,
+            subset,
+            derived.layout_sources,
+            in_frontier_scope=in_cardinality_scope,
+            source_target=source_target,
+            target=target,
+        )
+        subset_operations.append(
+            {
+                "subset_id": subset.acsm_id,
+                "cad_operation": cad_operation,
+                "target_file": str(target),
+                "in_cardinality_scope": in_cardinality_scope,
+            },
+        )
         transitions.append(
             {
                 "subset_id": subset.acsm_id,
@@ -132,16 +159,17 @@ def build_structural_plan(
                 "target": str(target),
             },
         )
+        if cad_operation == "none":
+            continue
         source_snapshot = source_target or (layouts[0]["source_file"] if layouts else "")
         if not source_snapshot:
             raise PlanningError("LAYOUT_SOURCE_INVALID", f"子集缺少重建基础文件：{subset.acsm_id}")
-        if operation == "rebuild" and not _subset_changed(original, subset, source_target, target) and subset.acsm_id not in derived.affected_subset_ids:
-            continue
         planned_subset_ids.append(subset.acsm_id)
         group = {
             "subset_id": subset.acsm_id,
             "subset_name": subset.display_name,
             "operation": operation,
+            "cad_operation": cad_operation,
             "source_target_file": source_target,
             "source_snapshot": str(Path(source_snapshot).expanduser().resolve()),
             "target_file": str(target),
@@ -170,6 +198,19 @@ def build_structural_plan(
         group["target_reuses_source"] = group["operation"] == "create" and group["target_file"].casefold() in reused_keys
     return {
         "groups": groups,
+        "cardinality_frontier": (
+            {
+                "index": cardinality_frontier_index,
+                "subset_id": (
+                    derived.subsets[cardinality_frontier_index].acsm_id
+                    if cardinality_frontier_index < len(derived.subsets)
+                    else None
+                ),
+            }
+            if cardinality_frontier_index is not None
+            else None
+        ),
+        "subset_operations": subset_operations,
         "deleted_subsets": deleted_subsets,
         "path_graph": {
             "old_sources": list(old_sources_by_key.values()),
@@ -181,6 +222,69 @@ def build_structural_plan(
         "affected_subset_ids": planned_subset_ids,
         "derived_document": _serialize_derived_document(derived),
     }
+
+
+def _cardinality_frontier(original: list[Subset], derived: list[DerivedSubset]) -> int | None:
+    final_index = {subset.acsm_id: index for index, subset in enumerate(derived)}
+    candidates: list[int] = []
+    for index, subset in enumerate(derived):
+        before = next((item for item in original if item.acsm_id == subset.acsm_id), None)
+        if before is None or len(before.sheets) != len(subset.sheets):
+            candidates.append(index)
+    for original_index, subset in enumerate(original):
+        if subset.acsm_id in final_index:
+            continue
+        following = next(
+            (final_index[item.acsm_id] for item in original[original_index + 1 :] if item.acsm_id in final_index),
+            len(derived),
+        )
+        candidates.append(following)
+    return min(candidates) if candidates else None
+
+
+def _cad_operation(
+    original: Subset | None,
+    derived: DerivedSubset,
+    layout_sources: Mapping[str, dict[str, str]],
+    *,
+    in_frontier_scope: bool,
+    source_target: str | None,
+    target: Path,
+) -> CadOperation:
+    if original is None:
+        return "rebuild"
+    same_ids = [sheet.acsm_id for sheet in original.sheets] == [sheet.acsm_id for sheet in derived.sheets]
+    try:
+        handle_values = [
+            int(sheet.layout.handle, 16)
+            for sheet in original.sheets
+            if _HEX_HANDLE.fullmatch(sheet.layout.handle) is not None
+        ]
+        stable_handles = (
+            len(handle_values) == len(original.sheets)
+            and all(value != 0 for value in handle_values)
+            and len(set(handle_values)) == len(handle_values)
+        )
+    except (TypeError, ValueError):
+        stable_handles = False
+    same_sources = False
+    if same_ids:
+        same_sources = True
+        for before, after in zip(original.sheets, derived.sheets, strict=True):
+            source = layout_sources.get(after.acsm_id)
+            if (
+                source is None
+                or source.get("type") != "existing_snapshot"
+                or Path(str(source.get("file", ""))).resolve()
+                != Path(before.layout.resolved_path or before.layout.file_name).resolve()
+                or source.get("layout") != before.layout.layout_name
+            ):
+                same_sources = False
+                break
+    if not same_ids or not stable_handles or not same_sources:
+        return "rebuild"
+    changed = _subset_changed(original, derived, source_target or "", target)
+    return "rename_only" if changed or in_frontier_scope else "none"
 
 
 def _validate_derived_object_ids(derived: DerivedDocument) -> None:

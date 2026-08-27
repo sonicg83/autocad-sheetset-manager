@@ -5,16 +5,19 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-08-10
-updated: 2026-08-25
+updated: 2026-08-27
 related:
   - PLAN-DM-001
   - PLAN-DM-005
   - ADR-DM-001
   - ADR-DM-002
+  - ADR-DM-003
   - SPEC-DM-001
   - SPEC-DM-002
+  - SPEC-DM-003
   - PLAN-DM-006
   - PLAN-DM-007
+  - PLAN-DM-008
 document_kind: architecture-baseline
 ---
 
@@ -22,9 +25,9 @@ document_kind: architecture-baseline
 
 > 状态：设计定稿，DM-ADR-001 至 DM-ADR-010 已关闭  
 > 定位：完整现代化重构前的独立技术验证项目，不直接替换现有 PowerShell 工具  
-> 核心链路：`DST → AcSm XML → 领域命令修改 → DST`，`DWG → accoreconsole 脚本重建布局 → 回读 Handle`
+> 核心链路：`DST → AcSm XML → 领域命令修改 → DST`；结构预览不启动 CAD，确认后 `DWG → 单次 accoreconsole → rename_only 保留 Handle / rebuild 回读 Handle`
 >
-> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。[ADR-DM-002](../adr/ADR-DM-002-v021-cad-single-script-execution.md) 与 [SPEC-DM-002](../specs/SPEC-DM-002-v021-cad-single-script-execution.md) 将每个 DWG 分组的布局重建与 Handle 获取收敛为一次 Core Console 执行。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以对应规范和 ADR 为准。
+> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。[ADR-DM-002](../adr/ADR-DM-002-v021-cad-single-script-execution.md) 与 [SPEC-DM-002](../specs/SPEC-DM-002-v021-cad-single-script-execution.md) 将每个 DWG 分组的布局重建与 Handle 获取收敛为一次 Core Console；[ADR-DM-003](../adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 与 [SPEC-DM-003](../specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 进一步规定快速预览无 CAD、确认阶段延期校验及 `none`、`rename_only`、`rebuild` 分流。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以对应规范和 ADR 为准。
 
 ## 1. MVP目标与边界
 
@@ -148,6 +151,8 @@ flowchart LR
 
 依赖只在实施时锁定补丁版本。领域层不得导入FastAPI、SQLAlchemy、lxml或Windows进程代码。
 
+SQLite 是本地 CAD 预算的权威边界：`claim_next_job` 在 `BEGIN IMMEDIATE` 事务内同时检查活跃 CAD change_set 并领取队首任务，同一数据库任一时刻最多一个 CAD job 进入执行态。Worker 在每次领取前回收过期租约，并在长 CAD 单元等待期间按短于租约的周期续写带 `worker_id + attempt` 的 heartbeat；失去所有权后不得更新新 attempt、补充工作单元或进入发布阶段。`JobFile`、发布替换前的租约闸门及最终 finalize 同样绑定 `worker_id + attempt`，发布中的失权任务进入人工复核，不得被旧 Worker 恢复为成功。
+
 ## 4. 领域模型与编辑能力
 
 ### 4.1 聚合和值对象
@@ -175,7 +180,7 @@ flowchart LR
 - 修改子集可编辑标题；图号范围和子集显示名由最终顺序派生。
 - 按目标子集、序号、前后方向和数量批量插入图纸，并使用明确的已有布局或模板布局来源。
 - 按图纸集序号、前后方向和至少一张初始图纸插入非空子集；新子集使用明确模板创建独立 DWG。
-- 删除图纸；当子集变空时显式删除该子集及其主 DWG。
+- 删除图纸；删除后会形成空子集时以 `EMPTY_SUBSET` 拒绝，不能用请求字段绕过该不变量。
 - 结构变更完成后统一派生图号、图纸标题及后缀、布局名、子集显示名、主 DWG 文件名和 DST 路径引用。
 - 修改工作区路径绑定，但不修改业务内容。
 
@@ -209,7 +214,7 @@ flowchart LR
 - 发布时同时写入规范绝对 `FileName` 和以DST目录为基准的 `Relative_FileName`。
 - 禁止通过通配符、模糊中文匹配或修改后缀猜测文件。
 
-## 6. 布局重建协议
+## 6. 布局 CAD 操作协议
 
 ### 6.1 布局来源
 
@@ -219,7 +224,7 @@ flowchart LR
 - `template_layout`：从用户选择的DWG/DWT模板导入指定布局；
 - `moved_sheet`：本质上仍从源DWG快照导入，只是目标DWG发生变化。
 
-已有图纸保留其原布局内容；删除图纸不会进入目标计划；新增图纸必须选择已有布局或模板布局。计划生成阶段就验证所有源文件和源布局，不能等脚本执行时再猜测。
+已有图纸保留其原布局内容；删除图纸不会进入目标计划；新增图纸必须选择已有布局或模板布局。快速预览只采集来源路径、存在性、文件身份与 SHA-256，不启动 Core Console，也不枚举 DWG 布局；真正的来源布局存在性、完整布局集合和 CAD 版本校验延后到用户确认后的暂存工作单元中执行。
 
 ### 6.2 重排与命名
 
@@ -234,23 +239,16 @@ flowchart LR
 
 重命名规则沿用旧项目规则，并作为独立可测试策略实现。插入和删除不会对原XML就地逐字符修补，而是根据最终计划重建受控节点及受影响DWG。
 
-### 6.3 单个DWG脚本意图
+### 6.3 单个 DWG 的操作分流
 
-Python不接受用户提供SCR文本，只把结构化意图渲染成固定命令序列：
+领域规划器先按数量变化前沿确定 CAD 工作范围，再逐子集分类：稳定图纸 ID、顺序、来源以及按十六进制数值合法、非零且在同一目标 DWG 内唯一的 Handle 均可证明时使用 `rename_only`；数量、集合、顺序、内容来源或 Handle 资格变化时使用 `rebuild`；范围外且无布局差异时为 `none`。前沿只扩大工作范围，不把可证明安全的下游单元强制升级为重建。发布前再次按 `(resolved DWG casefold, int(handle, 16))` 检查全部最终图纸，允许不同 DWG 复用同一 Handle，禁止同一 DWG 内的数值重复。
 
-1. 在任务暂存区复制目标DWG基础文件；新DWG从配置的基础模板复制。
-2. 设置 `FILEDIA=0`、`SECURELOAD=0`、`CMDECHO=0`。
-3. 加载与2016或2020对应的固定插件。
-4. 执行 `DstDeleteLayouts`。
-5. 按最终顺序逐个执行 `-LAYOUT Template`，从快照或模板导入布局，并重命名为最终布局名。
-6. 执行 `DstDeleteDefaultLayout`。
-7. 在同一脚本、同一 Core Console 会话中执行 `DstGetLayoutHandles`。
-8. 恢复系统变量并依次执行 `QSAVE`、`QUIT`。
-9. Core Console 退出后，Python解析 `.dst-handles.txt` 中的 `布局名=Handle` 结果，要求与计划一一对应、Handle 非零且无重复。
+Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定脚本。每个 `rename_only` 或 `rebuild` 工作单元在暂存 DWG 上只调用一次 Core Console，并与所有其他单元共享 `cad_max_parallel` 预算；默认值为 4，合法范围为 1–10。
 
-正常任务不再为 Handle 获取单独启动第二个 Core Console。独立新进程重新打开最终暂存 DWG 仅属于第 12.2 节的双版本系统验收和诊断，不属于生产任务执行步骤。
+- `rename_only` 调用受限的 `DstRenameLayouts`；Python 按暂存 DWG 派生固定请求/结果副文件，SCR 只执行 `NETLOAD` 和无参数命令，插件从当前 DWG 派生 sidecar 路径。命令先验证完整纸空间布局集合，再经任务生成的临时名称执行交换、循环和仅大小写改名。它不调用 `DstDeleteLayouts`、布局导入或 `DstGetLayoutHandles`，派生 DST 保留原 `AcDbHandle`。
+- `rebuild` 在同一脚本和 Core Console 会话中完成布局删除、按最终顺序导入、默认布局清理、Handle 获取、校验和保存；Python 只接受完整、非零且无重复的 Handle 结果。
 
-路径、布局名和换行必须经过脚本参数编码器；遇到引号、控制字符或AutoCAD不支持的名称直接在计划阶段拒绝。
+确认后的来源基准漂移、插件协议错误、结果副文件缺失、任一 CAD 单元失败、DST DOM 复核失败或发布失败，都必须使整批任务失败并保持正式文件不变。独立新进程重新打开最终暂存 DWG 只属于第 12.2 节的双版本系统验收和诊断，不是生产任务的第二次 CAD 调用。
 
 ### 6.4 双AutoCAD版本
 
@@ -296,8 +294,8 @@ Python不接受用户提供SCR文本，只把结构化意图渲染成固定命�
 
 1. 复制原始DOM到任务暂存区。
 2. 应用受控元数据和结构命令。
-3. 完成所有DWG重建及Handle回读。
-4. 把最终路径、布局名和Handle写入暂存XML。
+3. 完成所有 `rename_only`/`rebuild` CAD 工作；改名单元保留原 Handle，重建单元回读完整 Handle。
+4. 把最终路径与布局名写入暂存 XML，并只为重建单元应用新 Handle 绑定。
 5. 运行结构和引用校验。
 6. 编码为暂存DST。
 7. 重新解码暂存DST并做语义往返比较。
@@ -367,7 +365,7 @@ SQLite不保存DST/DWG二进制，只保存索引和任务状态。
 | `document_revisions` | operation ID、基准/结果哈希、revision目录、创建时间 |
 | `change_sets` | 命令JSON、基准修订、状态、校验摘要 |
 | `jobs` | 类型、CAD版本、状态、进度、开始/结束时间、错误码 |
-| `job_files` | 源/目标路径、前后哈希、角色、处理结果 |
+| `job_files` | 源/目标路径、前后哈希、角色、`cad_operation`、开始/结束时间、耗时、内存与处理结果 |
 | `diagnostics` | 级别、代码、对象ID、XPath/文件路径、消息 |
 | `templates` | 模板路径、哈希、可用布局、适用CAD版本 |
 | `application_settings` | Core Console、插件、超时和本地文档配置 |
@@ -392,7 +390,7 @@ DRAFT → VALIDATED → QUEUED → STAGING → CAD_RUNNING
 | `POST` | `/api/workspaces/{id}/changes/execute` | 提交已确认计划 |
 | `POST` | `/api/workspaces/{id}/xml/import/preview` | 导入XML并展示结构差异 |
 | `POST` | `/api/workspaces/{id}/xml/export-dst` | 校验并提交DST导出任务 |
-| `GET` | `/api/jobs/{id}` | 查询进度、结果和错误 |
+| `GET` | `/api/jobs/{id}` | 查询进度、结果、错误，以及逐文件 `cad_operation`、`started_at`、`finished_at` |
 | `GET` | `/api/jobs/{id}/events` | SSE任务事件 |
 | `GET` | `/api/revisions` | 查看永久修订 |
 | `POST` | `/api/templates/inspect` | 用Core Console枚举模板布局 |
@@ -406,9 +404,9 @@ DRAFT → VALIDATED → QUEUED → STAGING → CAD_RUNNING
 - 图纸集概览：图纸集属性、子集、DWG数量、未引用文件。
 - 图纸编辑器：树形子集＋可排序图纸表格，支持插入、删除、拖动和批量属性编辑。
 - 新增图纸表单：图号位置、标题、自定义属性、目标子集、来源类型、来源布局或模板布局。
-- 变更预览：展示图号、布局名、子集、DWG文件名、移动和删除的前后差异。
+- 变更预览：展示图号、布局名、子集、DWG 文件名、数量变化前沿、`none`/`rename_only`/`rebuild` 及 CAD 校验延后提示。
 - XML导入：只显示语义差异和诊断，不提供原始XML任意编辑框。
-- 任务详情：逐DWG阶段、Core Console版本、日志、Handle回读和回滚状态。
+- 任务详情：逐 DWG 操作类型、开始/结束时间、耗时、Core Console 版本、日志、Handle 回读和回滚状态。
 - 修订历史：永久快照、哈希和操作清单；MVP只提供“查看和导出”，恢复作为后续命令实现。
 
 用户必须在变更预览页明确确认后才执行CAD任务。
@@ -472,9 +470,10 @@ MVP可以在现仓库内先建立上述子目录，验证完成后再决定是�
 - 未知XML节点、属性和顺序保留测试。
 - GUID唯一性、节点模板和删除引用测试。
 - 298张样本的解析快照和路径重定位测试。
-- 插入、删除、排序、跨子集移动的表驱动测试。
+- 受控插入、删除、空子集拒绝和统一派生的表驱动测试。
 - 图号、布局名、子集名和DWG文件名派生测试。
 - SCR渲染黄金测试和危险字符拒绝测试。
+- 快速预览不调用 CAD、操作分类、`rename_only` Handle 保持和混合失败不发布测试。
 - SQLite状态机、崩溃恢复和并发基准修订测试。
 - 多文件发布在第N个文件失败时的逐点回滚测试。
 
@@ -486,13 +485,13 @@ AutoCAD 2016和2020分别执行：
 2. 枚举样本DWG布局和Handle。
 3. 从原DWG快照重建多布局DWG。
 4. 从DWG/DWT模板创建空白业务布局。
-5. 删除首张、中间、末张布局。
-6. 插入后重排并核对布局顺序。
-7. 跨DWG移动布局。
-8. 对25布局的样本最大分组执行完整重建。
-9. 解析生产单脚本写出的每个最终布局唯一Handle，并与执行计划匹配。
-10. 另启一个新的 Core Console 进程重新打开最终暂存 DWG，独立读取布局与 Handle；该步骤只用于双版本系统验收/诊断，不计入正常生产任务调用。
-11. 用生成DST关联最终DWG，在对应AutoCAD桌面环境进行验收打开。
+5. 对稳定图纸集合执行布局交换、循环、仅大小写和标题改名，并独立比较改名前后 Handle。
+6. 插入或删除图纸后核对重建布局顺序；空子集请求必须在预览阶段拒绝。
+7. 对25布局的样本最大分组执行完整重建。
+8. 解析生产单脚本写出的每个最终布局唯一Handle，并与执行计划匹配。
+9. 另启一个新的 Core Console 进程重新打开最终暂存 DWG，独立读取布局与 Handle；该步骤只用于双版本系统验收/诊断，不计入正常生产任务调用。
+10. 用生成DST关联最终DWG，在对应AutoCAD桌面环境进行验收打开。
+11. 对 10 个混合工作单元以并发度 1、4、10 分别记录墙钟、任务时长、逐文件耗时和峰值内存。
 
 AutoCAD桌面验收可以人工触发，但必须记录版本、结果和证据文件。Core Console日志中出现未识别命令、脚本中断、致命错误或超时均视为失败。
 

@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import time
@@ -26,7 +27,92 @@ def encode_scr_argument(value: str) -> str:
     return f'"{value}"' if " " in value else value
 
 
+def rename_request_path(drawing: Path) -> Path:
+    return drawing.with_suffix(".dst-layout-rename-request.json")
+
+
+def rename_result_path(drawing: Path) -> Path:
+    return drawing.with_suffix(".dst-layout-rename-result.json")
+
+
+def write_rename_request(drawing: Path, layouts: list[dict[str, str]]) -> Path:
+    try:
+        rows = [
+            {"old_name": item["original_layout"], "new_name": item["target_layout"]}
+            for item in layouts
+        ]
+    except (KeyError, TypeError):
+        raise ValueError("LAYOUT_RENAME_REQUEST_INVALID") from None
+
+    if (
+        not rows
+        or any(
+            not isinstance(item["old_name"], str)
+            or not isinstance(item["new_name"], str)
+            or not item["old_name"]
+            or not item["new_name"]
+            for item in rows
+        )
+    ):
+        raise ValueError("LAYOUT_RENAME_REQUEST_INVALID")
+
+    old_keys = [item["old_name"].casefold() for item in rows]
+    new_keys = [item["new_name"].casefold() for item in rows]
+    if len(old_keys) != len(set(old_keys)) or len(new_keys) != len(set(new_keys)):
+        raise ValueError("LAYOUT_RENAME_REQUEST_INVALID")
+
+    path = rename_request_path(drawing)
+    path.write_text(json.dumps({"version": 1, "layouts": rows}, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def parse_rename_result(text: str, expected_layouts: set[str]) -> int:
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID") from None
+
+    if not isinstance(payload, dict) or set(payload) != {"version", "renamed_count", "final_layouts"}:
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
+    if type(payload["version"]) is not int or payload["version"] != 1:
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
+
+    renamed_count = payload["renamed_count"]
+    if type(renamed_count) is not int or renamed_count < 0:
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
+
+    final_layouts = payload["final_layouts"]
+    if not isinstance(final_layouts, list) or not all(isinstance(name, str) and name for name in final_layouts):
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
+    layout_keys = [name.casefold() for name in final_layouts]
+    if len(layout_keys) != len(set(layout_keys)) or set(final_layouts) != expected_layouts:
+        raise ValueError("LAYOUT_RENAME_RESULT_INVALID")
+    return renamed_count
+
+
 class ScriptRenderer:
+    def render_rename(self, plugin: Path) -> str:
+        lines = [
+            "FILEDIA",
+            "0",
+            "SECURELOAD",
+            "0",
+            "CMDECHO",
+            "0",
+            "_.NETLOAD",
+            encode_scr_argument(str(plugin)),
+            "DstRenameLayouts",
+            "CMDECHO",
+            "1",
+            "FILEDIA",
+            "1",
+            "SECURELOAD",
+            "1",
+            "_.QSAVE",
+            "_.QUIT",
+        ]
+        return "\n".join(lines) + "\n"
+
     def render_rebuild(self, plugin: Path, layouts: list[dict[str, str]]) -> str:
         lines = ["FILEDIA", "0", "SECURELOAD", "0", "CMDECHO", "0", "_.NETLOAD", encode_scr_argument(str(plugin)), "DstDeleteLayouts"]
         temporary_names = []

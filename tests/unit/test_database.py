@@ -61,6 +61,40 @@ def test_claim_is_atomic_and_records_lease(tmp_path: Path):
     assert claimed[0]["heartbeat_at"]
 
 
+def test_claim_allows_only_one_active_cad_job_across_workspaces(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    for index in (1, 2):
+        workspace_id = f"w-{index}"
+        database.upsert_workspace(workspace_id, tmp_path / workspace_id, tmp_path / f"{workspace_id}.dst", "r")
+        database.create_job(
+            f"job-{index}",
+            workspace_id,
+            "change_set",
+            "QUEUED",
+            {"plan": {"requires_cad": True}},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(database.claim_next_job, ("worker-a", "worker-b")))
+
+    claimed = [item for item in results if item is not None]
+    assert len(claimed) == 1
+    first = claimed[0]
+    queued_id = "job-2" if first["id"] == "job-1" else "job-1"
+    assert database.get_job(queued_id)["status"] == "QUEUED"
+
+    assert database.update_job(
+        first["id"],
+        "FAILED",
+        0,
+        "TEST_COMPLETE",
+        worker_id=first["worker_id"],
+        attempt=first["attempt"],
+    ) is True
+    second = database.claim_next_job("worker-c")
+    assert second is not None and second["id"] == queued_id
+
+
 def test_stale_safe_stage_requeues_and_publish_requires_review(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
     old = datetime.now(UTC) - timedelta(minutes=10)
@@ -82,6 +116,44 @@ def test_stale_safe_stage_requeues_and_publish_requires_review(tmp_path: Path):
     assert database.get_job("job-2")["status"] == "NEEDS_REVIEW"
     with pytest.raises(ValueError, match="JOB_NOT_RETRYABLE"):
         database.retry_job("job-2")
+
+
+def test_stale_recovery_prevents_old_attempt_from_updating_new_owner(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job(
+        "job",
+        "w",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+    )
+    old = database.claim_next_job("old-worker")
+    assert old is not None and old["attempt"] == 1
+    stale_at = datetime.now(UTC) - timedelta(minutes=10)
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET heartbeat_at=? WHERE id='job'",
+            (stale_at.replace(tzinfo=None),),
+        )
+    assert database.recover_stale_jobs(30) == [{"id": "job", "conclusion": "REQUEUED_SAFE_STAGE"}]
+    current = database.claim_next_job("new-worker")
+    assert current is not None and current["attempt"] == 2
+
+    assert database.heartbeat("job", "old-worker", attempt=1) is False
+    assert database.update_job(
+        "job",
+        "FAILED",
+        0,
+        "OLD_WORKER_FAILURE",
+        worker_id="old-worker",
+        attempt=1,
+    ) is False
+    after_old_update = database.get_job("job")
+    assert after_old_update is not None
+    assert after_old_update["status"] == "STAGING"
+    assert after_old_update["worker_id"] == "new-worker"
+    assert after_old_update["attempt"] == 2
 
 
 def test_finalize_committed_job_is_atomic_and_idempotent(tmp_path: Path):
@@ -111,6 +183,55 @@ def test_finalize_committed_job_is_atomic_and_idempotent(tmp_path: Path):
     assert [item["id"] for item in database.list_revisions("w")] == ["result"]
     with database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_finalize_committed_job_rejects_lost_owner_before_writing_revision(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    root = tmp_path / "project"
+    root.mkdir()
+    dst = root / "a.dst"
+    dst.write_bytes(b"result")
+    database.upsert_workspace("w", root, dst, "before")
+    database.create_job("job", "w", "change_set", "PUBLISHING", {"plan": {"requires_cad": True}})
+    claimed = database.claim_next_job("worker")
+    assert claimed is None
+
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET status='PUBLISHING', worker_id='worker', attempt=3 WHERE id='job'",
+        )
+
+    assert database.finalize_committed_job(
+        "result",
+        "w",
+        "job",
+        "before",
+        "result",
+        root / ".dst-manager" / "revisions" / "job",
+        worker_id="old-worker",
+        attempt=2,
+    ) is False
+    assert database.get_job("job")["status"] == "PUBLISHING"
+    assert database.list_revisions("w") == []
+
+
+def test_job_file_update_rejects_lost_owner(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job("job", "w", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    claimed = database.claim_next_job("new-worker")
+    assert claimed is not None and claimed["attempt"] == 1
+    target = tmp_path / "target.dwg"
+
+    assert database.upsert_job_file(
+        "job",
+        target,
+        worker_id="old-worker",
+        attempt=0,
+        status="SUCCEEDED",
+        result_hash="old-result",
+    ) is False
+    assert database.get_job("job")["files"] == []
 
 
 def test_finalize_committed_job_closes_crash_after_revision_insert_before_success(tmp_path: Path):
@@ -207,9 +328,123 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
     database = Database(f"sqlite:///{path.as_posix()}")
     with database.engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(jobs)")}
+        job_file_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(job_files)")}
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
-    assert revision == "0002_v02_job_reliability"
+    assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
+    assert revision == "0003_dm008_job_file_cadop"
+
+
+def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    database.create_job("job", "workspace", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    target = tmp_path / "001 第一册.dwg"
+    started = datetime(2026, 8, 26, 1, 2, 3, tzinfo=UTC)
+    finished = datetime(2026, 8, 26, 1, 2, 4, tzinfo=UTC)
+
+    database.upsert_job_file(
+        "job",
+        target,
+        cad_operation="rename_only",
+        started_at=started,
+        finished_at=finished,
+    )
+
+    item = database.get_job("job")["files"][0]
+    assert item["cad_operation"] == "rename_only"
+    assert item["started_at"] == started.replace(tzinfo=None).isoformat()
+    assert item["finished_at"] == finished.replace(tzinfo=None).isoformat()
+
+
+def test_running_job_file_retry_clears_previous_terminal_state(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    database.create_job("job", "workspace", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    target = tmp_path / "001 第一册.dwg"
+    database.upsert_job_file(
+        "job",
+        target,
+        cad_operation="rename_only",
+        status="FAILED",
+        duration_ms=12,
+        peak_memory_bytes=34,
+        staging_bytes=56,
+        result_hash="before",
+        error_code="CAD_FAILED",
+        error_detail="previous failure",
+        finished_at=datetime.now(UTC),
+    )
+
+    database.upsert_job_file("job", target, cad_operation="rename_only", status="RUNNING", started_at=datetime.now(UTC))
+
+    running = database.get_job("job")["files"][0]
+    assert running["duration_ms"] is None
+    assert running["peak_memory_bytes"] is None
+    assert running["staging_bytes"] is None
+    assert running["result_hash"] is None
+    assert running["error_code"] is None
+    assert running["error_detail"] is None
+    assert running["finished_at"] is None
+
+    database.upsert_job_file("job", target, status="SUCCEEDED", result_hash="after", finished_at=datetime.now(UTC))
+
+    succeeded = database.get_job("job")["files"][0]
+    assert succeeded["result_hash"] == "after"
+    assert succeeded["error_code"] is None
+    assert succeeded["error_detail"] is None
+
+
+def test_retry_job_resets_all_job_file_attempt_state_atomically(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    database.create_job("job", "workspace", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    source = tmp_path / "source.dwg"
+    target = tmp_path / "target.dwg"
+    database.upsert_job_file(
+        "job",
+        target,
+        source_path=str(source),
+        cad_operation="rename_only",
+        role="DWG",
+        status="SUCCEEDED",
+        progress=100,
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        duration_ms=12,
+        peak_memory_bytes=34,
+        staging_bytes=56,
+        log_path=str(tmp_path / "old.log"),
+        before_hash="before",
+        result_hash="after",
+        result="WRITTEN",
+        error_code="OLD_ERROR",
+        error_detail="old detail",
+    )
+    database.update_job("job", "FAILED", 0, "CAD_FAILED")
+
+    retried = database.retry_job("job")
+
+    assert retried["status"] == "QUEUED"
+    item = retried["files"][0]
+    assert item["target_path"] == str(target)
+    assert item["source_path"] == str(source)
+    assert item["cad_operation"] == "rename_only"
+    assert item["role"] == "DWG"
+    assert item == item | {
+        "status": "PENDING",
+        "progress": 0,
+        "started_at": None,
+        "finished_at": None,
+        "duration_ms": None,
+        "peak_memory_bytes": None,
+        "staging_bytes": None,
+        "log_path": None,
+        "before_hash": None,
+        "result_hash": None,
+        "error_code": None,
+        "error_detail": None,
+    }
 
 
 def test_outdated_schema_is_rejected_when_migration_is_disabled(tmp_path: Path):

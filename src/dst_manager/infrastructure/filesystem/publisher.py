@@ -111,6 +111,7 @@ class RecoverablePublisher:
         staged: dict[Path, Path | None],
         *,
         expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
+        before_commit: Callable[[], None] | None = None,
         on_committed: Callable[[Path, dict], None] | None = None,
     ) -> Path:
         workspace_root = workspace_root.resolve()
@@ -191,12 +192,16 @@ class RecoverablePublisher:
             self._verify_baselines(baselines)
             for entry in entries:
                 target = Path(entry["target"])
+                if before_commit is not None:
+                    before_commit()
                 self._verify_entry_baseline(entry)
                 if entry["staged"] is None:
                     entry["attempted"] = True
                     entry["api_state"] = "STARTED"
                     self._write_journal(journal_path, journal)
                     try:
+                        if before_commit is not None:
+                            before_commit()
                         self._commit_delete(entry)
                     except Exception:
                         entry["api_failed"] = True
@@ -215,6 +220,8 @@ class RecoverablePublisher:
                     entry["api_state"] = "STARTED"
                     self._write_journal(journal_path, journal)
                     try:
+                        if before_commit is not None:
+                            before_commit()
                         if entry["before_hash"] is None:
                             self._commit_create(entry, publish_temp)
                         else:
@@ -235,6 +242,8 @@ class RecoverablePublisher:
             )
             result_guard.__enter__()
             self._verify_committed_results(entries, result_guard)
+            if before_commit is not None:
+                before_commit()
             journal["status"] = "COMMITTED"
             journal["cleanup_status"] = "PENDING"
             self._write_journal(journal_path, journal)

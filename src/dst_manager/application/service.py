@@ -8,6 +8,7 @@ import socket
 import tempfile
 import uuid
 from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,6 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import (
-    FileLockError,
     WindowsResultGuards,
     WindowsWriteLocks,
 )
@@ -277,7 +277,7 @@ class DstManagerService:
             except PlanningError as exc:
                 diagnostics.append({"code": exc.code, "severity": "error", "message": str(exc)})
         if execution_intent is not None and not diagnostics:
-            diagnostics.extend(self._inspect_structural_sources(workspace, execution_intent, cad_version))
+            diagnostics.extend(self._collect_structural_source_baselines(workspace, execution_intent))
             if not diagnostics:
                 try:
                     self._attach_expected_file_hashes(workspace, execution_intent)
@@ -486,6 +486,7 @@ class DstManagerService:
         return self.database.get_job(job_id) or {}
 
     def run_next_job(self) -> dict[str, Any] | None:
+        self.database.recover_stale_jobs(self.settings.worker_lease_seconds)
         worker_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         job = self.database.claim_next_job(worker_id)
         if job is None:
@@ -498,6 +499,7 @@ class DstManagerService:
             self.publisher,
             self.settings.cad_timeout_seconds,
             self.settings.cad_max_parallel,
+            heartbeat_interval=min(30.0, self.settings.worker_lease_seconds / 3),
         )
         return runner.run(job, workspace, capability)
 
@@ -964,13 +966,12 @@ class DstManagerService:
         if workspace.revision_id != base_revision_id:
             raise ApplicationError("REVISION_CONFLICT", "基准修订已变化，请重新预览", 409)
 
-    def _inspect_structural_sources(
+    def _collect_structural_source_baselines(
         self,
         workspace: Workspace,
         execution_intent: dict[str, Any],
-        cad_version: str,
     ) -> list[dict[str, Any]]:
-        """在任务入队前解析、检查并固化全部布局来源证据。"""
+        """在预览中捕获全部布局来源的轻量基准，不调用 CAD。"""
         def diagnostic(code: str, message: str) -> dict[str, Any]:
             return {"code": code, "severity": "error", "message": message}
 
@@ -1026,72 +1027,26 @@ class DstManagerService:
             except OSError:
                 return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源不可读：{path}")]
 
-        ordered_sources = sorted(sources.values(), key=lambda source: str(source["path"]).casefold())
-        snapshots: dict[Path, tuple[Path, Any]] = {}
-        try:
-            with tempfile.TemporaryDirectory(prefix="dst-manager-preview-") as temporary_directory:
-                snapshot_root = Path(temporary_directory)
-                with WindowsWriteLocks([item["path"] for item in ordered_sources]):
-                    for index, item in enumerate(ordered_sources):
-                        path = item["path"]
-                        baseline = capture_file_baseline(path)
-                        if baseline is None:
-                            return [diagnostic("LAYOUT_SOURCE_NOT_FOUND", f"布局来源不存在：{path}")]
-                        snapshot = snapshot_root / f"{index:03d}-{path.name}"
-                        shutil.copy2(path, snapshot)
-                        if file_sha256(snapshot) != baseline.sha256 or capture_file_baseline(path) != baseline:
-                            snapshot.unlink(missing_ok=True)
-                            return [diagnostic("BASE_FILE_CHANGED", f"布局来源在快照期间发生变化：{path}")]
-                        snapshots[path] = (snapshot, baseline)
-
-                inspections: list[dict[str, Any]] = []
-                for item in ordered_sources:
-                    path = item["path"]
-                    snapshot, baseline = snapshots[path]
-                    try:
-                        inspected = self.inspect_template(snapshot, cad_version)
-                    except ApplicationError as exc:
-                        if exc.code == "CAD_CAPABILITY_UNAVAILABLE":
-                            return [diagnostic(exc.code, str(exc))]
-                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
-                    except Exception as exc:  # noqa: BLE001 - CAD 检查边界统一转换为阻断诊断
-                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查失败：{path}；{exc}")]
-                    raw_layouts = inspected.get("layouts") if isinstance(inspected, dict) else None
-                    if not isinstance(raw_layouts, list):
-                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查结果无效：{path}")]
-                    layout_names = [
-                        str(layout["name"] if isinstance(layout, dict) else layout)
-                        for layout in raw_layouts
-                    ]
-                    requested = sorted(item["requested_layouts"], key=str.casefold)
-                    for requested_name in requested:
-                        matches = [name for name in layout_names if name.casefold() == requested_name.casefold()]
-                        if not matches:
-                            return [diagnostic("SOURCE_LAYOUT_NOT_FOUND", f"来源布局不存在：{path} / {requested_name}")]
-                        if len(matches) > 1:
-                            return [diagnostic("SOURCE_LAYOUT_AMBIGUOUS", f"来源布局大小写歧义：{path} / {requested_name}")]
-                    inspected_path = Path(str(inspected.get("path", snapshot))).resolve()
-                    if (
-                        inspected_path != snapshot.resolve()
-                        or inspected.get("cad_version") != cad_version
-                        or inspected.get("sha256") != baseline.sha256
-                    ):
-                        return [diagnostic("LAYOUT_SOURCE_INSPECTION_FAILED", f"布局来源检查证据不匹配：{path}")]
-                    inspections.append(
-                        {
-                            "path": str(path),
-                            "sha256": baseline.sha256,
-                            "identity": list(baseline.identity),
-                            "cad_version": cad_version,
-                            "layouts": sorted(layout_names, key=str.casefold),
-                            "requested_layouts": requested,
-                        },
-                    )
-        except FileLockError as exc:
-            return [diagnostic("BLOCKED_FILE_LOCK", f"布局来源被占用：{exc}")]
-        except OSError as exc:
-            return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源无法读取：{exc}")]
-        execution_intent["source_inspections"] = inspections
+        baselines = []
+        for item in sorted(sources.values(), key=lambda source: str(source["path"]).casefold()):
+            path = item["path"]
+            try:
+                baseline = capture_file_baseline(path)
+            except OSError as exc:
+                return [diagnostic("LAYOUT_SOURCE_UNREADABLE", f"布局来源无法读取：{exc}")]
+            if baseline is None:
+                return [diagnostic("LAYOUT_SOURCE_NOT_FOUND", f"布局来源不存在：{path}")]
+            baselines.append(
+                {
+                    "path": str(path),
+                    "sha256": baseline.sha256,
+                    "identity": list(baseline.identity),
+                    "source_types": sorted(item["types"]),
+                    "requested_layouts": sorted(item["requested_layouts"], key=str.casefold),
+                },
+            )
+        execution_intent["source_baselines"] = baselines
+        execution_intent["cad_validation_deferred"] = True
         return []
 
     @classmethod
@@ -1303,22 +1258,22 @@ class DstManagerService:
         for group in execution_intent.get("groups", []):
             paths.add(Path(group["source_snapshot"]).resolve())
             paths.update(Path(layout["source_file"]).resolve() for layout in group.get("layouts", []))
-        inspected_sources = {
-            Path(inspection["path"]).resolve(): inspection
-            for inspection in execution_intent.get("source_inspections", [])
+        source_baselines = {
+            Path(baseline["path"]).resolve(): baseline
+            for baseline in execution_intent.get("source_baselines", [])
         }
         expected = {
             str(path): (
-                inspected_sources[path]["sha256"]
-                if path in inspected_sources
+                source_baselines[path]["sha256"]
+                if path in source_baselines
                 else file_sha256(path) if path.is_file() else None
             )
             for path in sorted(paths, key=lambda item: str(item).casefold())
         }
         execution_intent["expected_file_hashes"] = expected
         execution_intent["expected_file_identities"] = {
-            str(path): inspected_sources[path]["identity"]
-            for path in sorted(inspected_sources, key=lambda item: str(item).casefold())
+            str(path): source_baselines[path]["identity"]
+            for path in sorted(source_baselines, key=lambda item: str(item).casefold())
         }
 
     def _require_committed_operation(self, workspace_root: Path, operation_id: str) -> dict[str, Any]:
@@ -1343,6 +1298,23 @@ class DstManagerService:
         job = self.database.get_job(operation_id)
         if job is None or job["status"] == JobStatus.SUCCEEDED:
             return
+        # 过期的 PUBLISHING 任务已被回收并明确隔离；其 COMMITTED 清单不能
+        # 再被启动恢复自动闭环，避免失权的旧 Worker 把任务恢复为成功。
+        if (
+            job["status"] == JobStatus.NEEDS_REVIEW
+            and job.get("error_code") == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+        ):
+            return
+        heartbeat_at = job.get("heartbeat_at")
+        if heartbeat_at:
+            try:
+                heartbeat = datetime.fromisoformat(heartbeat_at)
+            except ValueError:
+                return
+            if heartbeat.tzinfo is None:
+                heartbeat = heartbeat.replace(tzinfo=UTC)
+            if heartbeat < datetime.now(UTC) - timedelta(seconds=self.settings.worker_lease_seconds):
+                return
         try:
             if journal.get("identity_version") != 1:
                 raise PublishRecoveryError("COMMITTED_IDENTITY_VERSION_UNSUPPORTED")

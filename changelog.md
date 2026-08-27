@@ -1,7 +1,26 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-008 复审修复）
+
+- 加固 CAD Worker 租约隔离：发布替换正式文件前、发布过程中及 finalize 前持续复核 worker/attempt；失权的旧进程只能进入安全隔离状态，不能恢复任务成功或写入修订。
+- 将过期任务回收放入每次 Worker 领取前的轮询路径，避免服务重启后租约尚未过期而长期阻塞队列；JobFile 更新同时绑定 worker/attempt，旧 attempt 不能覆盖新 attempt。
+- 并发 CAD 单元失败后排空当前批次再按工作单元序号选择首个失败，补充发布租约、任务租约、JobFile 隔离和轮询回收回归测试。
+
+## 2026-08-26（PLAN-DM-008 延后 CAD 校验与布局批量改名）
+
+- 修复最终审查问题：`rename_only` 按十六进制数值拒绝同一 DWG 内重复 Handle，发布前再次执行 DWG+Handle 全局复核；长 CAD 单元按租约续写 heartbeat，旧 attempt 失权后不能更新、补充工作或发布。
+- SQLite 领取事务强制同一数据库仅一个活跃 CAD job；安全重试原子清空 JobFile 的上次 attempt 终态；同批并发失败稳定选择最小工作单元下标。布局改名协议文档统一为“按暂存 DWG 派生固定 sidecar，SCR 不传请求路径”。
+- 完成 `PLAN-DM-008`：快速结构预览不启动 Core Console，只采集路径、身份与 SHA-256；用户确认后在暂存任务中执行真实布局集合、来源与 CAD 版本校验，并按子集分类 `none`、`rename_only`、`rebuild`。
+- 新增 AutoCAD 2016/2020 `DstRenameLayouts` 固定协议与两阶段布局改名；`rename_only` 不删除/导入布局、不读取或覆盖 Handle，`rebuild` 才完整重建并回读 Handle。共享 Core Console 并发默认 4、合法范围 1–10，任一单元、DOM 或发布失败均不发布正式文件。
+- 完成事务与接口回归：混合 rename/rebuild/delete、来源基线漂移、结果缺失、Handle 非法、第二 CAD 进程失败均保持正式文件哈希不变且无 manifest；`GET /api/jobs/{job_id}` 直接返回文件级 `cad_operation`、`started_at`、`finished_at`。
+- AutoCAD 2016/2020 非性能系统矩阵 54/54 passed；布局改名协议矩阵 16/16 passed，改名前后 Handle 不变，`acad.err` 前后保持 2178 bytes/54 lines。双版本插件构建成功，0 warning、0 error。
+- 10 个真实 CAD 工作单元（5 `rename_only` + 5 `rebuild`）性能矩阵 6/6 passed：2016 的并发 1/4/10 墙钟分别为 37236/16290/13436 ms，2020 分别为 42307/15604/10802 ms；任务时长、逐文件耗时和峰值内存记录在 `PLAN-DM-008`，不把单轮数据表述为稳定加速比例。
+- 最终验证：相关 Python 200 passed；全量 Python 367 passed、64 skipped（60 项真实 CAD 在普通全量命令中因未显式启用而跳过，已由上述独立真实 CAD 命令覆盖；另 4 项为既有环境跳过）；Ruff、`uv lock --check`、全新 Alembic 升级与 `git diff --check` 通过；Web production build 通过，Playwright 18 passed。
+
 ## 2026-08-25（DST Manager v0.21 CAD 单脚本布局重建需求调整）
 
+- 接受 `ADR-DM-003` 与 `SPEC-DM-003`，新增 `PLAN-DM-008`：将快速预览、数量变化前沿、布局批量改名、Handle 保留、共享 1–10 并发、Web 展示及双版本真实 CAD 验收拆分为可测试任务；后续实现与验收见 2026-08-26 记录。
+- 新增 `ADR-DM-003` 与 `SPEC-DM-003` 评审设计：结构预览延后 CAD 校验、按子集图纸数量变化前沿安排 CAD 工作，并将仅布局名称变化分流为保留 Handle 的批量改名；实施证据见 2026-08-26 记录。
 - 接受 `SPEC-DM-002` 并新增 `ADR-DM-002`：确认结构性 DWG 重建将布局修改与 Handle 获取合并为一次 Core Console 执行，更新 `ARCH-DM-001` 的生产流程；保留 Handle 校验、暂存发布、回滚和双版本真实 CAD 验收边界，并将新进程重新打开验证从生产必要条件调整为验收/诊断手段。
 - 新增 `PLAN-DM-007`，拆分决策基线、SCR 渲染器、CAD Worker 单次执行、失败回滚回归、双版本 CAD 性能验证和文档闭环任务。
 - 完成单脚本实现：每个 `RebuildWorkUnit` 在一个 `rebuild-*.scr` 和一次 Core Console 调用中完成布局重建、Handle 获取、校验和保存，结构性路径调用数由 `2G` 降为 `G`；保留模板检查用的独立 `render_handles()`。

@@ -1,5 +1,7 @@
 import json
 from copy import deepcopy
+from datetime import UTC, datetime
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,22 +137,11 @@ def test_empty_sheetset_sheet_property_round_trip_reports_zero_affected(tmp_path
     assert "sheet,专业," in exported
 
 
-def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, tiny_workspace):
+def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_workspace):
     dst, _ = tiny_workspace
     app = create_app(Settings(data_dir=tmp_path / "data"))
     client = TestClient(app)
-    inspected_versions: list[str] = []
-
-    def inspect(path, version):
-        inspected_versions.append(version)
-        return {
-            "path": str(path.resolve()),
-            "sha256": file_sha256(path),
-            "cad_version": version,
-            "layouts": [{"name": "001 平面", "handle": "AB"}],
-        }
-
-    app.state.service.inspect_template = inspect
+    app.state.service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     payload = {
         "base_revision_id": opened["revision_id"],
@@ -178,13 +169,97 @@ def test_structural_preview_and_execute_share_requested_cad_version(tmp_path, ti
 
     assert preview["executable"] is True
     assert preview["cad_version"] == "2016"
-    assert {item["cad_version"] for item in preview["execution_intent"]["source_inspections"]} == {"2016"}
+    assert preview["execution_intent"]["cad_validation_deferred"] is True
+    assert preview["execution_intent"]["source_baselines"][0]["sha256"] == file_sha256(dst.parent / "A.dwg")
     assert unconfirmed.status_code == 409
     assert unconfirmed.json()["code"] == "REPREVIEW_REQUIRED"
     assert executed["payload"]["plan"]["cad_version"] == "2016"
-    assert executed["payload"]["plan"]["execution_intent"]["source_inspections"] == preview["execution_intent"]["source_inspections"]
-    assert set(inspected_versions) == {"2016"}
+    assert executed["payload"]["plan"]["execution_intent"]["source_baselines"] == preview["execution_intent"]["source_baselines"]
+    app.state.service.inspect_template.assert_not_called()
     assert invalid.status_code == 422
+
+
+def test_get_job_files_returns_cad_operation_and_timing_directly(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    started = datetime(2026, 8, 26, 1, 2, 3, tzinfo=UTC)
+    finished = datetime(2026, 8, 26, 1, 2, 4, tzinfo=UTC)
+    app.state.service.database.create_job(
+        "job-files-contract",
+        opened["id"],
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        "2020",
+    )
+    app.state.service.database.upsert_job_file(
+        "job-files-contract",
+        dst.parent / "001 第一册.dwg",
+        cad_operation="rename_only",
+        status="SUCCEEDED",
+        started_at=started,
+        finished_at=finished,
+    )
+
+    response = client.get("/api/jobs/job-files-contract")
+
+    assert response.status_code == 200
+    assert response.json()["files"][0] == response.json()["files"][0] | {
+        "cad_operation": "rename_only",
+        "started_at": started.replace(tzinfo=None).isoformat(),
+        "finished_at": finished.replace(tzinfo=None).isoformat(),
+    }
+
+
+def test_retry_then_pre_cad_failure_does_not_expose_previous_file_terminal_state(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    database = app.state.service.database
+    database.create_job(
+        "job-retry-files",
+        opened["id"],
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        "2020",
+    )
+    database.upsert_job_file(
+        "job-retry-files",
+        dst.parent / "001 第一册.dwg",
+        source_path=str(dst.parent / "old.dwg"),
+        cad_operation="rebuild",
+        status="SUCCEEDED",
+        progress=100,
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        duration_ms=100,
+        error_code="OLD_ERROR",
+        error_detail="old detail",
+    )
+    database.update_job("job-retry-files", "FAILED", 0, "CAD_FAILED")
+
+    retry = client.post("/api/jobs/job-retry-files/retry")
+    database.update_job("job-retry-files", "FAILED", 0, "PRE_CAD_FAILURE")
+    details = client.get("/api/jobs/job-retry-files")
+
+    assert retry.status_code == 200
+    assert details.status_code == 200
+    item = details.json()["files"][0]
+    assert item["cad_operation"] == "rebuild"
+    assert item["source_path"] == "old.dwg"
+    assert item == item | {
+        "status": "PENDING",
+        "progress": 0,
+        "started_at": None,
+        "finished_at": None,
+        "duration_ms": None,
+        "error_code": None,
+        "error_detail": None,
+    }
 
 
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):
