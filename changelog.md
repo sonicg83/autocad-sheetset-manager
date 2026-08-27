@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：AcSm 契约与 schema）
+
+- 新建 `src/dst_manager/infrastructure/acsm_xml/contract.py`：版本化 AcSm contract registry，固化七类已知对象（`AcSmSheetSet`/`AcSmSubset`/`AcSmSheet`/`AcSmCustomPropertyBag`/`AcSmCustomPropertyValue`/`AcSmAcDbLayoutReference`/`AcSmSheetViews`）的必需属性、固定 `clsid` 和已知 `AcSmProp` 的 `vt` 类型表，并校验已知对象父级包含关系；未知元素/属性/顺序/tail 一律宽容保留。
+- 新建 `src/dst_manager/infrastructure/acsm_xml/schema/acsm-v1.xsd`：修复后结构边界，声明已知对象类型并允许扩展节点/属性；由于 lxml 不支持 XSD 1.1 assert，必需子节点不变量由契约/语义校验器承担（已在代码注释与规范中记录职责分工）。
+- 新增 `tests/unit/test_acsm_contract.py`（12 项）：黄金样本 contract+XSD 零错误、Sheet 仅要求 ID+固定 clsid、固定 ID 表、`vt` 类型区分（`Flags=3`/文本=8/`PromptForDwt`/`FileRevision`=2/3，不默认 8）、未知内容忽略与负例（缺 ID/错误固定值/缺 vt/错误层级/错误根）。
+
 ## 2026-08-27（PLAN-DM-008 复审修复）
 
 - 新增 `PLAN-DM-009` 实施计划：按 `SPEC-DM-004` 分解 AcSm contract/XSD、内存修复报告、统一加载门禁、独立修复发布事务、Web 确认和全量验证任务。
