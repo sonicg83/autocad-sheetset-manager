@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009 审查修复）
+
+- 修复器在修复后合并契约复核（`validate_contract`）到阻断集：父级包含关系等修复器未建模的契约错误不再伪装成 `REPAIRED`/`VALID`，而是进入 `INVALID_REPAIR_REQUIRED` 并以 `REPAIR_BLOCKED` 阻断写入；与既有 `CONTRACT_*` 按（code、object、message）去重避免重复报告，消除“用户确认修复后必然 `XML_VALIDATION_FAILED`”和“`dst_validation=VALID` 却带有结构错误”的死胡同（对应审查 Important #1）。
+- `repairs/preview` 的 `preview_digest` 仅在 `REPAIRED` 状态返回，`INVALID_*` 不返回摘要，避免把“不可执行阻断”与“待确认修复”混为一谈（对应审查 Minor #4）。
+- `AcsmDocument(repair=False)` 的 actions 语义注释明确为“本次识别但未应用的修复记录”，`RepairReport` docstring 补充契约层层级/必需属性错误归入 `INVALID_REPAIR_REQUIRED`（对应审查 Minor #3）。
+- 新增回归：层级错误样本（`AcSmSheet` 直属 `AcSmDatabase`，其余结构完整）打开即 `INVALID_REPAIR_REQUIRED` 且预览写入 409（修复器级 + 入口级两条）；两次独立解码修复的 `repair_digest` 一致且绑定基准修订（固化掩码不变量，对应审查 Important #2）。
+- 决策记录：`restore_revision` 不受修复门禁限制（显式破坏性恢复是 `INVALID_*` 状态下用户唯一出路，恢复后重新校验），保持既有行为（对应审查 Minor #5）。
+
 ## 2026-08-27（PLAN-DM-009 交付审查）
 
 - 完成 PLAN-DM-009 交付验证：`uv sync --dev`、`uv run ruff check .`、`uv run pytest -q`（432 passed / 66 skipped，退出码 0）、`uv lock --check` 全部通过；黄金样本 `VALID` 零修复、失败样本 231 项可审计内存修复且原件/时间戳不变、新建 Sheet 子树与黄金契约逐字段一致并保留未知内容与顺序。

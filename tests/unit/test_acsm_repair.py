@@ -244,3 +244,28 @@ def test_property_scope_conflict_is_blocked():
     _, _, report = _repair(xml)
     assert report.status == "INVALID_REPAIR_REQUIRED"
     assert any(issue.code == "CUSTOM_PROPERTY_FLAGS_INVALID" for issue in report.blocking_issues)
+
+
+def test_parent_hierarchy_violation_is_blocked_not_repaired():
+    """契约层父级包含关系错误（AcSmSheet 直属 AcSmDatabase）且其余结构完整时，
+    不得伪装成 REPAIRED/VALID：修复器必须把它合入阻断集并标记 INVALID。"""
+    xml = (
+        TEMPLATE.replace(
+            (
+                '<AcSmSheetSet ID="g00000000-0000-0000-0000-200000000002" '
+                'clsid="gB20534F2-0978-418C-8D14-2E6928A077ED" propname="SheetSet" vt="13">'
+                '<AcSmSubset ID="g00000000-0000-0000-0000-200000000003" '
+                'clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322">'
+            ),
+            "",
+            1,
+        ).replace("</AcSmSubset></AcSmSheetSet>", "", 1)
+    ).encode()
+    root, repaired, report = _repair(xml)
+    assert report.status == "INVALID_REPAIR_REQUIRED"
+    assert any(issue.code == "CONTRACT_PARENT_INVALID" for issue in report.blocking_issues)
+    # 不得自动改写或删除层级错误的节点
+    assert root is not None
+    sheet = repaired.xpath("//*[local-name()='AcSmSheet']")
+    assert len(sheet) == 1
+    assert sheet[0].get("ID") == "g00000000-0000-0000-0000-200000000004"

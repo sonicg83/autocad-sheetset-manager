@@ -160,7 +160,9 @@ class AcsmDocument:
             self.root = repaired_root
             status = report.status
         else:
-            # 不应用修复：raw DOM 保留原样，已识别但未应用的修复标记为需确认
+            # 不应用修复：raw DOM 保留原样；`report.actions` 描述的是本次识别但
+            # 未应用的修复记录（DOM 中对应属性/节点仍缺失，`validate()` 会继续
+            # 报出契约问题），因此已识别修复的输入一律标记为需确认。
             if report.actions and report.status == "REPAIRED":
                 status = "INVALID_REPAIR_REQUIRED"
             else:

@@ -955,13 +955,16 @@ class DstManagerService:
                 "preview_digest": None,
                 "executable": False,
             }
+        # 摘要只对可确认的 REPAIRED 状态有意义：INVALID_* 不可执行，不返回摘要，
+        # 避免客户端混淆“不可执行的阻断”与“待确认的修复”。
+        digest = repair_digest(acsm.root, base_revision_id) if report.status == "REPAIRED" else None
         return {
             "workspace_id": workspace_id,
             "base_revision_id": base_revision_id,
             "status": report.status,
             "actions": [self._repair_action_dict(action) for action in report.actions],
             "blocking_issues": [asdict(issue) for issue in report.blocking_issues],
-            "preview_digest": repair_digest(acsm.root, base_revision_id),
+            "preview_digest": digest,
             "executable": report.status == "REPAIRED",
         }
 

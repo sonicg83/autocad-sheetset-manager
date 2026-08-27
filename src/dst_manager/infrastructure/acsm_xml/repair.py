@@ -8,12 +8,15 @@
 3. 按 `contract.py` 的固定属性表补齐缺失的 `clsid`/`propname`/`vt`；
 4. 按属性类型表补齐 `AcSmProp` 缺失的 `vt`；
 5. 在黄金样本位置为缺 `AcSmSheetViews` 的图纸补齐该容器；
-6. 汇总每张图纸的布局/Number/Title/属性作用域不变量，形成阻断诊断。
+6. 汇总每张图纸的布局/Number/Title/属性作用域不变量，形成阻断诊断；
+7. 修复后契约复核：合并 `validate_contract` 的结果到阻断集，确保修复器
+   未建模的契约问题（如父级包含关系、无法补全的必需属性）不会伪装成
+   `REPAIRED`/`VALID` 状态，状态与最终 `validate()` 保持一致。
 
 状态汇总（见 `domain.models.RepairReport`）：
 - 结构性不可恢复（重复/非法 ID、根节点错误）→ `INVALID_UNRECOVERABLE`；
-- 其他阻断（缺业务值、布局冲突、错误非空固定值、属性作用域冲突）→
-  `INVALID_REPAIR_REQUIRED`，均**不覆盖原值**；
+- 其他阻断（缺业务值、布局冲突、错误非空固定值、属性作用域冲突、契约层
+  层级/必需属性错误）→ `INVALID_REPAIR_REQUIRED`，均**不覆盖原值**；
 - 修复生效且无阻断 → `REPAIRED`；无修复且无阻断 → `VALID`。
 """
 from __future__ import annotations
@@ -35,6 +38,7 @@ from dst_manager.infrastructure.acsm_xml.contract import (
     CLSID_SHEET_VIEWS,
     expected_prop_vt,
     object_contract,
+    validate_contract,
 )
 
 _ID_RE = re.compile(r"^g[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$")
@@ -268,6 +272,11 @@ class AcsmRepairer:
                 )
             blocking.extend(self._property_scope_issues(sheet, sheet_id))
 
+        # 7) 修复后契约复核：把修复器未建模的契约错误（父级包含关系、无法补全
+        #    的必需属性等）并入阻断集，保证状态分类与最终 validate() 一致；
+        #    与步骤 3/4 已经报告的 CONTRACT_* 按 (code, object, message) 去重。
+        blocking = self._merge_contract_issues(blocking, validate_contract(working))
+
         status = self._classify(blocking, actions)
         return working, RepairReport(status, tuple(actions), tuple(blocking))
 
@@ -287,6 +296,20 @@ class AcsmRepairer:
                 issues.append(ValidationIssue("CUSTOM_PROPERTY_DUPLICATED", Severity.ERROR, f"自定义属性“{name}”重复", owner_id))
             seen.add(key)
         return issues
+
+    @staticmethod
+    def _merge_contract_issues(
+        blocking: list[ValidationIssue],
+        contract_issues: Iterable[ValidationIssue],
+    ) -> list[ValidationIssue]:
+        """把契约复核问题并入阻断集，避免与已报告问题重复。"""
+        seen = {(issue.code, issue.object_id, issue.message) for issue in blocking}
+        for issue in contract_issues:
+            key = (issue.code, issue.object_id, issue.message)
+            if key not in seen:
+                seen.add(key)
+                blocking.append(issue)
+        return blocking
 
     @staticmethod
     def _new_unique_id(seen: set[str]) -> str:
