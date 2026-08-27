@@ -1,0 +1,571 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<AcSmDatabase clsid="g2162C6B6-0CE4-40E8-912B-46F59DFDF826" ID="g7FF64921-3B99-4080-ABFB-20B7C25D53E1">
+  <AcSmProp propname="DbFingerPrint" vt="8">g00F5B462-D4BE-4107-BEB1-C9D4A5D88604</AcSmProp>
+  <AcSmProp propname="DbVersion" vt="8">1.1</AcSmProp>
+  <AcSmProp propname="FileRevision" vt="3">4</AcSmProp>
+  <AcSmSheetSet clsid="gB20534F2-0978-418C-8D14-2E6928A077ED" ID="g4AA8F662-1EC4-4AAB-9D39-5C47F72D30C5" propname="SheetSet" vt="13">
+    <AcSmCalloutBlocks clsid="g203EAB46-483B-4E6B-A10B-15E9A4B210FF" ID="gF936FA75-BE99-4EA4-B133-6A82E599F84C" propname="CalloutBlocks" vt="13"/>
+    <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g6DE5E684-0466-40BF-B7DF-C18C73A4A6C4" propname="CustomPropertyBag" vt="13">
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g9CE40F14-B702-4BB3-A38E-DC8A9FF43D3E" propname="工程名称" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">深圳市城市轨道交通16号线工程</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gC8015AC0-EF7E-49D9-A098-1477548BE41B" propname="工程简称" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">地铁16号线工程</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gF99C4C64-8376-454A-B19E-0B4FDD7F735C" propname="设计阶段" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">初步设计</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g5C6BA2CE-6032-470F-941D-E2B802B72C00" propname="工点名称" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">大运北站</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g082CBD32-5006-4E77-B878-58C654B5B752" propname="工点代码" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">S02</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g9A8983B7-38B6-4EC2-88F6-CB6EE284F7CF" propname="子项名" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">前期工程</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g9BE8DF03-2F54-4FE5-ADD5-BD1F34FEFD63" propname="子项编号" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">第二十五篇</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g569916C4-BCE4-41C7-9FC7-593E3891E32F" propname="孙项名" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">前期工程龙岗段</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g06C5B723-E527-4576-AB16-EE8CB026FA54" propname="孙项编号" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">第一册</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gBB763891-50DB-4AB5-86DE-F6A83DFFFAE8" propname="分册名" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">燃气改迁工程</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3706643B-2CE7-4520-BA3C-987574F2CDB2" propname="分册编号" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">第七分册</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gE0A161B4-7822-4F4D-A083-14BE5239CB84" propname="分部名" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">大运北站</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g4CEEBA8C-8D1C-486D-8D2B-083F2534D440" propname="分部编号" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">
+        </AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g0CFC1CDE-33B2-4355-AA44-D4787F3CF262" propname="图册全称" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">深圳市城市轨道交通16号线工程 初步设计 第二十五篇 前期工程 第一册 前期工程龙岗段 第七分册 燃气改迁工程  大运北站</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gAECC9711-565E-4A0D-AE71-B42E741EB32E" propname="项目负责人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">吴清玲 叶少华</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gADC8B040-AF64-4CD0-B4B0-63F7984CB787" propname="审核人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">顾建良</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g407EE255-FF9A-49C9-AB5F-EDA801061734" propname="审定人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">徐波</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3393AF79-A78E-4B97-AFDD-75432E712785" propname="总体审定" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">叶少华</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8EDBD416-0291-4245-A861-B171C137C25E" propname="系统审定" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">庾敏莉</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8FF4F42E-B25E-4F88-82E7-E615EB78BF9E" propname="专业负责人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">庾敏莉</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g9EAC13EC-DCC2-4988-A221-666077FCA949" propname="校对人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">庾敏莉</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g710ACD2A-8343-4AD2-B910-F1971ADDD846" propname="设计人" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">郑迎亚</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3B0B9171-61D3-4B29-B335-6C2D7F095CBA" propname="专业名称" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">燃气</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gFB7C9D7C-0041-4F31-85A7-2E5C817085FC" propname="专业代码" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">RQ</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gFF327131-D4D9-4739-AD7F-23D46D262968" propname="项目编码前缀" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">4/16/D09/C/S02/PMO/QT</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gFC8A6F05-845F-4A50-9CD7-70D45C3ACC38" propname="管理号前缀" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">17065-01-RQ</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gCD530FD4-BCA2-434E-A226-F1EE7CEF5DF3" propname="管理号后缀" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">A</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gCA430D50-E366-481B-B939-3ACDA96E156F" propname="图名前缀" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">前期工程 前期工程龙岗段</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gFAB2541A-278B-43E2-A8A4-76171DC5BC5D" propname="编号前缀" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">00</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g7E6E7B0A-7FB6-44D1-B96A-B38FC3E003FE" propname="出图日期年" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">2019</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g696EE074-21C5-4707-B85A-E4A74D20D75F" propname="出图日期月" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">12</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g02ACF84E-9ABD-4C11-AFEF-9D795F7456E7" propname="是否送审版" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">否</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3DD76474-89A6-4B9D-92CF-A9C074B01412" propname="版本" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">B</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gB719B463-5D24-4D54-AF4F-5E73E3406935" propname="总体单位" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">深圳市市政设计研究院有限公司</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g736688A9-2945-48EE-AD95-4218595072E6" propname="工点单位" vt="13">
+        <AcSmProp propname="Flags" vt="3">1</AcSmProp>
+        <AcSmProp propname="Value" vt="8">深圳市市政设计研究院有限公司</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g24AB1C24-D1E9-46BC-9C9C-714B59944133" propname="图幅" vt="13">
+        <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+        <AcSmProp propname="Value" vt="8">
+        </AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g2A97DF1D-DDC7-4756-BD52-F03ADA255432" propname="出图比例" vt="13">
+        <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+        <AcSmProp propname="Value" vt="8">--</AcSmProp>
+      </AcSmCustomPropertyValue>
+      <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g23969027-1738-4CE2-BEC1-B4D6754AD04E" propname="备注" vt="13">
+        <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+        <AcSmProp propname="Value" vt="8">
+        </AcSmProp>
+      </AcSmCustomPropertyValue>
+    </AcSmCustomPropertyBag>
+    <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g406CB585-23D3-4789-AD2F-4A22EA966043" propname="DefDwtLayout" vt="13"/>
+    <AcSmAcDbBlockRecordReference clsid="g11782523-474B-4C83-9646-57C052847FBB" ID="gD3B466FD-27C0-4387-AD80-702D18A179BA" propname="DefLabelBlk" vt="13"/>
+    <AcSmProp propname="Desc" vt="8">轨道项目图纸集</AcSmProp>
+    <AcSmProp propname="Name" vt="8">地铁16号线工程-初步设计 燃气</AcSmProp>
+    <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g2927E726-6453-4010-9286-F65C751B5670" propname="NewSheetLocation" vt="13">
+      <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+      <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+    </AcSmFileReference>
+    <AcSmProjectPointLocations clsid="gE40EA246-BAB4-4907-81A5-511EA30C16FD" ID="gD356CC7B-CDEC-49B6-99A2-7FFC1A2A90EF" propname="ProjectPointLocations" vt="13"/>
+    <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+    <AcSmPublishOptions clsid="gF57F96E7-0F16-4DC9-8F09-52F7BB389AB6" ID="g3F46F8F8-5F7A-4924-B491-13BF10B5E10A" propname="PublishOptions" vt="13">
+      <AcSmSimpleFileReferece clsid="gD15A03C2-C39B-428A-9BBA-C031347C496F" ID="gF508DE61-C3FA-483F-B1EF-4DA9D8B99095" propname="DefaultOutputdir" vt="13"/>
+      <AcSmProp propname="DwfType" vt="2">-1</AcSmProp>
+      <AcSmProp propname="PromptForName" vt="2">-1</AcSmProp>
+    </AcSmPublishOptions>
+    <AcSmResources clsid="g3F0FAF10-09DE-4EBA-AED1-C4E4D6FECF5D" ID="g80F3AA0B-D41F-435F-B4F8-5C5879DDF939" propname="Resources" vt="13"/>
+    <AcSmSheetSelSets clsid="g444780B8-6527-43A8-8DC4-FAB41B7E48BB" ID="gD65763CA-5C7C-4849-9449-3D846D520BA8" propname="SheetSelSets" vt="13"/>
+    <AcSmViewCategories clsid="g021730DF-5BEA-48E9-BC7A-35087A674FD0" ID="gE2DC5B9C-29FA-40F0-B4B4-B33AFA19ADBB" propname="ViewCategories" vt="13">
+      <AcSmViewCategory clsid="g4AEA81ED-C24F-477B-A534-EA69220A276A" ID="g2393E170-FA4E-49B1-97FE-6AFF5F224FC3">
+        <AcSmCalloutBlockReferences clsid="g67C52FE4-0A6B-4C82-A4CC-5E68537747B0" ID="g52C6CC84-20F2-421C-93A0-BA982C548170" propname="CalloutBlocks" vt="13"/>
+      </AcSmViewCategory>
+    </AcSmViewCategories>
+    <AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322" ID="g02954877-0419-4301-AF67-06BAF3BA08DF">
+      <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g94464A95-9EEC-49C7-823B-FFBA99615981" propname="NewSheetLocation" vt="13">
+        <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+        <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+      </AcSmFileReference>
+      <AcSmProp propname="Desc" vt="8">按图名设置的子集</AcSmProp>
+      <AcSmProp propname="Name" vt="8">001 大运北站图纸目录</AcSmProp>
+      <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gED1D96E1-21C9-4889-945A-3531B8515C93">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gDF219E4B-2E9B-416A-AA7E-D314337FBF72" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8D9B6252-BC7A-4661-897F-5090E241802E" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g02000536-61DD-4BFF-958B-F051CA06EB63" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g653278B5-E325-4B05-A4B1-FB22F42BE590" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g01CE481D-4021-43A6-A57E-7E6788DEB774" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">408D</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-001 大运北站图纸目录.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">001 大运北站图纸目录</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-001 大运北站图纸目录.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g0CA1DCE1-FE6B-4519-820B-DB83E81315A4" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">001</AcSmProp>
+        <AcSmProp propname="Title" vt="8">大运北站图纸目录</AcSmProp>
+      </AcSmSheet>
+    </AcSmSubset>
+    <AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322" ID="g3DD48DC6-1D03-4173-B523-634990607BCB">
+      <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g69E21EB8-8482-4366-BD28-72C6A1D92BDD" propname="NewSheetLocation" vt="13">
+        <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+        <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+      </AcSmFileReference>
+      <AcSmProp propname="Desc" vt="8">按图名设置的子集</AcSmProp>
+      <AcSmProp propname="Name" vt="8">002-006 现状燃气管道平面图</AcSmProp>
+      <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gE68C8503-8FD6-407D-8E2D-7B8D5037E1AF">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gE7DB46F9-D629-4F96-AC3F-68542DB74949" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g6F2C308F-E994-46AE-ADBE-3539CFC9A036" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g130706F9-FC26-4523-8209-8D74A6484AB1" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">1:1000</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g51C57B1B-3A54-4A5F-99AA-CAB5CD7D66F2" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gDAC832FE-B923-4E21-9F2F-88640869E829" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">20D6D</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">002 现状燃气管道平面图 (一)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g6703A211-CBDB-415F-8C87-0FB2F68E1943" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">002</AcSmProp>
+        <AcSmProp propname="Title" vt="8">现状燃气管道平面图 (一)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g56DEE527-830D-4092-841C-26E27FD51249">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g5D99DDA8-EEF0-4400-88D1-8A34136DBAB0" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3FAF1CA8-D347-4ADE-96A9-3E5F552D75EF" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gBEC1BB04-E2F7-4997-BF21-BC2B84C7A506" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">1:1000</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gE8B0CBEE-2FA1-4D2A-814E-564920F15E28" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gB728FFA1-EF34-48D6-819A-AF6549A65E0C" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">21235</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">003 现状燃气管道平面图 (二)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gAC30F213-B61D-4A24-9839-FBB994256CEB" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">003</AcSmProp>
+        <AcSmProp propname="Title" vt="8">现状燃气管道平面图 (二)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gF3FA9A55-B6DB-4B8E-8BB8-4E6EFBBBA63C">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g7A9FF123-3F67-4408-8909-5BD16A62582A" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g9D458EE5-C9E5-44E4-8AD9-4483E28851A6" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gADE04978-0779-4075-A81E-75B2AB42165B" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">1:1000</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g88C594EF-67D5-43F1-996B-53A57908DCC2" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g228E9654-E205-48F6-920E-BB4BFC55AF2D" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">216FD</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">004 现状燃气管道平面图 (三)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gEB62B108-C3C5-4BB0-A3EA-022EAA4758CC" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">004</AcSmProp>
+        <AcSmProp propname="Title" vt="8">现状燃气管道平面图 (三)</AcSmProp>
+      </AcSmSheet><AcSmSheet ID="g4F9303B2-A68F-53B3-8084-A947759CE132"><AcSmCustomPropertyBag ID="gBB7DCFB7-9E23-41A5-8D14-BCFCA872898B"><AcSmCustomPropertyValue ID="gA274F5FF-654D-4699-B63E-D9AD75325F6B" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g0775424F-0A98-4D43-A5FF-8518C02B4D88" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g8F533777-F589-4AD3-B5F1-5A4562B2B075" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">22480</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp><AcSmProp propname="Name">005 现状燃气管道平面图 (四)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">005</AcSmProp><AcSmProp propname="Title">现状燃气管道平面图 (四)</AcSmProp></AcSmSheet><AcSmSheet ID="gA1934FDE-A7AD-58A5-932E-AF90C45F5A0D"><AcSmCustomPropertyBag ID="g7231A219-FA12-43F5-8FF1-727C8F0B8B63"><AcSmCustomPropertyValue ID="g1BC2F5A1-CD2A-434A-A9E5-725A651BA132" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g297C6C7F-0924-4CE1-94C1-F62F44366858" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g06E42055-F766-4F51-BD34-EDFD8DEE1757" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">2300F</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp><AcSmProp propname="Name">006 现状燃气管道平面图 (五)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-002-006 现状燃气管道平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">006</AcSmProp><AcSmProp propname="Title">现状燃气管道平面图 (五)</AcSmProp></AcSmSheet>
+    </AcSmSubset>
+    <AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322" ID="g645D50AE-B860-4E6F-8C1F-17F563991B24">
+      <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g11DFD56B-B4DE-4544-AF92-25F871ACF6FB" propname="NewSheetLocation" vt="13">
+        <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+        <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+      </AcSmFileReference>
+      <AcSmProp propname="Desc" vt="8">按图名设置的子集</AcSmProp>
+      <AcSmProp propname="Name" vt="8">007-011 交通疏解第一阶段燃气管道改迁平面图</AcSmProp>
+      <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gA9C9D5DE-A642-41EA-A845-819E6DCD60E8">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g222A2FB1-9B2A-47A1-B906-A0128B498B77" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g6D867FB7-AF1C-4999-9C35-0EA0D0F1F007" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g0B1B4A72-15BA-4033-99B8-FBB5DCB76B7E" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g7D1703A8-261D-4887-93B7-2A7700B1D872" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g63B26DD8-5416-4297-AC54-5E37FD2C084A" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">5D222</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">007 交通疏解第一阶段燃气管道改迁平面图 (一)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gDD872B81-2F8E-4BFC-A60C-CC9345803CD7" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">007</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第一阶段燃气管道改迁平面图 (一)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g25AC5BC0-6F7C-4491-AC24-AF91F22518EE">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gFCFA8AD4-2B21-4163-8081-86C4F7D1368D" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g3CFD1AEA-634F-4B5F-B5AA-7C4627D59347" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gA43BFE3F-94A9-4080-9282-E0F6A575ADB3" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8674BF19-EF49-431E-9813-0AF88CB17C41" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g7C584C7E-D58C-4B5B-9D70-60102B6B639A" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">5D783</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">008 交通疏解第一阶段燃气管道改迁平面图 (二)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g665FBBD2-FFB1-41A7-AB6A-39EB5EF56E64" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">008</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第一阶段燃气管道改迁平面图 (二)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g0291F4AB-511D-4362-A940-0A0E6B8B30CD">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g84821B77-95F6-4F98-8A8D-EB3911FB3F4D" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g50766BF4-964C-44DB-A4DA-2805B19516AC" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g74999C2F-43D3-40E5-8D26-72EAFA197994" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gBA19CBAF-8438-4596-B744-B97C416DCB3A" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gDFA448D2-9B5B-4723-A016-AB44A29F50DC" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">5DCE4</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">009 交通疏解第一阶段燃气管道改迁平面图 (三)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g57C58EC0-08C7-4189-96D2-31039808D297" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">009</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第一阶段燃气管道改迁平面图 (三)</AcSmProp>
+      </AcSmSheet><AcSmSheet ID="g0B9BF25C-4418-572E-9865-01AA861E6A05"><AcSmCustomPropertyBag ID="gFFDAF96C-E5D8-4308-AB73-89E8B7D5FB6D"><AcSmCustomPropertyValue ID="g5716B77F-B5CF-437C-ADE7-1C313A80063C" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gAB18324B-7385-481F-98F5-3C67F0C70D50" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g13423D72-50F1-4AA0-AB1C-E6619B34B789" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">5EA69</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">010 交通疏解第一阶段燃气管道改迁平面图 (四)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">010</AcSmProp><AcSmProp propname="Title">交通疏解第一阶段燃气管道改迁平面图 (四)</AcSmProp></AcSmSheet><AcSmSheet ID="g2D74DE2C-1EA6-5AE1-80AE-B174666DA431"><AcSmCustomPropertyBag ID="gA6B1E7A3-8287-42D0-BA63-4FCCDE7894D4"><AcSmCustomPropertyValue ID="g0D702928-3D7E-4D43-93A8-5B249380D69A" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gD3670C79-4569-42FA-9BCD-7DB2CBE0C5A6" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g8AB0127D-FD5F-4670-9F8B-DDBBCE29794B" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">5F5F9</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">011 交通疏解第一阶段燃气管道改迁平面图 (五)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-007-011 交通疏解第一阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">011</AcSmProp><AcSmProp propname="Title">交通疏解第一阶段燃气管道改迁平面图 (五)</AcSmProp></AcSmSheet>
+    </AcSmSubset>
+    <AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322" ID="g2360210B-1B10-4C20-B812-26FCCA68803B">
+      <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g00DAAD34-0431-4886-B17B-0B918F04B9D0" propname="NewSheetLocation" vt="13">
+        <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+        <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+      </AcSmFileReference>
+      <AcSmProp propname="Desc" vt="8">按图名设置的子集</AcSmProp>
+      <AcSmProp propname="Name" vt="8">012-017 交通疏解第二阶段二期燃气管道改迁平面图</AcSmProp>
+      <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g66C96272-1F4E-45CE-B321-2922B24517D8">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g7F1533FB-EC93-443D-B6A8-624CD214BB28" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g2D764E82-84AA-4C70-928A-29B7632E5819" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g49D10D3C-4DC7-4EDC-AAEA-CDC1755B4766" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g2918042E-DC9F-45ED-9CA2-F4D3AC881C21" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gE902DD88-C727-44C9-88A9-7690FE970443" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">25014</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">012 交通疏解第二阶段二期燃气管道改迁平面图 (一)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gEE9BEDC3-3103-4A85-853F-2472E78F7F65" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">012</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第二阶段二期燃气管道改迁平面图 (一)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gB68476CE-4BE6-41F4-984F-A5387E6AB819">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="g89578ACA-80D3-4082-9BF8-D1275223BD5D" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8081F873-F5E3-4B8C-9126-85D4C883C2FA" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8A6C781C-C159-46C4-898D-BB0BA5A91D71" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g85AA4490-EF3A-426B-9094-9E8A6C0B19E5" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g834CFEA6-C405-4FF1-A628-579969DCA6A0" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">254DB</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">013 交通疏解第二阶段二期燃气管道改迁平面图 (二)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gACC946A3-3204-41AC-9BC4-B3F77131D7F1" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">013</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第二阶段二期燃气管道改迁平面图 (二)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g853670C8-A771-432B-92D7-A596DF092D26">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gB45AD8AF-EE7E-4E5E-8C41-194E10A61C84" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g6CBBDF81-4A2B-49E7-9945-CC38AA5ADCD8" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g93DD6E42-3434-48B8-98D9-2B9CA0CF5259" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g74518872-2963-4EA1-87D1-C67D025FEB9E" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gD84D4C7E-7176-460F-99D2-08808B9AA02E" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">259A2</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">014 交通疏解第二阶段二期燃气管道改迁平面图 (三)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g49A24FFB-5C89-4F3A-BC4E-CA266FF6AF3D" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">014</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解第二阶段二期燃气管道改迁平面图 (三)</AcSmProp>
+      </AcSmSheet><AcSmSheet ID="g37C628A6-6856-516E-98A7-1A42753B581F"><AcSmCustomPropertyBag ID="g734656A7-F7D5-4FDC-8722-F0D5FADF6F3F"><AcSmCustomPropertyValue ID="gFB5729AE-F917-4A4A-A6B4-63D6FC1185A5" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g9DBC8E82-DCE1-4222-8653-9085F4BE9FB2" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g5017C6E7-2A89-408C-A25A-FEA53AC19972" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">26725</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">015 交通疏解第二阶段二期燃气管道改迁平面图 (四)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">015</AcSmProp><AcSmProp propname="Title">交通疏解第二阶段二期燃气管道改迁平面图 (四)</AcSmProp></AcSmSheet><AcSmSheet ID="gCF8E1821-2FA3-5CC3-9AA8-E23CBFE17C2C"><AcSmCustomPropertyBag ID="g939C75C2-B810-48D9-8AE8-50F62CD3BE06"><AcSmCustomPropertyValue ID="gCCBCF95E-90D8-4B08-B3B4-7E07DDE5EBCB" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g7A185C45-937C-4BB4-83E2-535EED5A3C07" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gFFBA3C31-CE58-4318-A674-4EE3A211CE37" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">272B5</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">016 交通疏解第二阶段二期燃气管道改迁平面图 (五)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">016</AcSmProp><AcSmProp propname="Title">交通疏解第二阶段二期燃气管道改迁平面图 (五)</AcSmProp></AcSmSheet><AcSmSheet ID="gA2DD63C0-AB5F-50B9-8770-5BE2F84E9B83"><AcSmCustomPropertyBag ID="g4CD566FD-E5FE-48B6-8852-63575DD67483"><AcSmCustomPropertyValue ID="gDD932C05-DB54-418F-9B58-C75049F85325" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gC134C603-85C6-401B-88AD-AD45AA612075" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g410A8FC9-683A-483E-A675-EC6A37B25BEC" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">27F1F</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">017 交通疏解第二阶段二期燃气管道改迁平面图 (六)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-012-017 交通疏解第二阶段二期燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">017</AcSmProp><AcSmProp propname="Title">交通疏解第二阶段二期燃气管道改迁平面图 (六)</AcSmProp></AcSmSheet>
+    </AcSmSubset>
+    <AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322" ID="gC790DDA8-5196-4DCC-9592-3AA8C35FBBCA">
+      <AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" ID="g143DF379-C0A9-4FDE-A124-402751F11B32" propname="NewSheetLocation" vt="13">
+        <AcSmProp propname="FileName" vt="8">G:\WORK\古春雷\16号线地铁\初涉修编\第七分册 燃气改迁工程\第七分册 燃气改迁工程\图纸集\1</AcSmProp>
+        <AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+      </AcSmFileReference>
+      <AcSmProp propname="Desc" vt="8">按图名设置的子集</AcSmProp>
+      <AcSmProp propname="Name" vt="8">018-024 交通疏解恢复阶段燃气管道改迁平面图</AcSmProp>
+      <AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="gE1DF9737-48F7-4903-9F75-89A9CB8A7B6E">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gA3C24E97-C840-4A3F-B2BF-F6A690C1A64A" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g41F36053-826F-4103-83E9-7A95C7877757" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g8CBB8176-F51B-44DB-9159-5DD034871653" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gE39521C9-C10E-4922-837E-F8FB036A0AC7" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="gB93026EA-4BED-4131-BCDF-D8371ABE4A23" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">23117</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">018 交通疏解恢复阶段燃气管道改迁平面图 (一)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g964A5981-440C-4EF7-993C-35D516E9AA24" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">018</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解恢复阶段燃气管道改迁平面图 (一)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g6C8A59A5-AF40-4C48-8667-EE2DFB9AF755">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gF27D37F5-775B-402B-BA6A-15FD9423CB25" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g35B81B7B-849B-46A5-9E51-3829AAE2CD86" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gE944866B-05F3-4AC9-8ED9-3E2B9C56266B" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="g6345DF83-FAD8-4421-9113-C328CBA8401B" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g1D93AA2B-5A9D-45B9-81A3-F8089AC46E14" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">235DE</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">019 交通疏解恢复阶段燃气管道改迁平面图 (二)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="gC750DBEC-5E8F-4DA5-9DAC-456B002EE415" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">019</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解恢复阶段燃气管道改迁平面图 (二)</AcSmProp>
+      </AcSmSheet>
+      <AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065" ID="g70113791-C39A-4150-8350-45B4BB4EBB8D">
+        <AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" ID="gBD8EDB2B-01F8-43EF-B458-836643DD9399" propname="CustomPropertyBag" vt="13">
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gCCA785B6-494C-4999-90CD-6F0C0644DD92" propname="图幅" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">A3轨道</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gF50D9752-98AE-473C-AC01-2CC329D906C0" propname="出图比例" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">- -</AcSmProp>
+          </AcSmCustomPropertyValue>
+          <AcSmCustomPropertyValue clsid="g8D22A2A4-1777-4D78-84CC-69EF741FE954" ID="gCB3CB71C-4B76-480E-89CC-951325882F06" propname="备注" vt="13">
+            <AcSmProp propname="Flags" vt="3">2</AcSmProp>
+            <AcSmProp propname="Value" vt="8">
+            </AcSmProp>
+          </AcSmCustomPropertyValue>
+        </AcSmCustomPropertyBag>
+        <AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" ID="g3378DB2F-88D7-4153-ACDE-632D6E5C8775" propname="Layout" vt="13">
+          <AcSmProp propname="AcDbHandle" vt="8">23AA5</AcSmProp>
+          <AcSmProp propname="FileName" vt="8">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+          <AcSmProp propname="Name" vt="8">020 交通疏解恢复阶段燃气管道改迁平面图 (三)</AcSmProp>
+          <AcSmProp propname="Relative_FileName" vt="8">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp>
+        </AcSmAcDbLayoutReference>
+        <AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" ID="g04A930D8-8C10-4029-9FC4-FFDC916C1EBF" propname="SheetViews" vt="13"/>
+        <AcSmProp propname="Number" vt="8">020</AcSmProp>
+        <AcSmProp propname="Title" vt="8">交通疏解恢复阶段燃气管道改迁平面图 (三)</AcSmProp>
+      </AcSmSheet><AcSmSheet ID="g38B65E0B-5626-55E7-BBA4-3398D3E3CD47"><AcSmCustomPropertyBag ID="gD348B70A-A363-4D67-A20A-8138216E1368"><AcSmCustomPropertyValue ID="g4454F7B6-5EDF-403B-8E2B-66BF3696C41A" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gEC526D2F-82D7-4956-80FA-BBDA4D22F544" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g1FC14E9D-30EC-40B9-BAAC-0D08A5AE30FE" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">2482C</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">021 交通疏解恢复阶段燃气管道改迁平面图 (四)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">021</AcSmProp><AcSmProp propname="Title">交通疏解恢复阶段燃气管道改迁平面图 (四)</AcSmProp></AcSmSheet><AcSmSheet ID="g9423F8B2-EDB8-5AC9-A04A-69241203F377"><AcSmCustomPropertyBag ID="g4A70CD84-E275-44AD-BE51-BAB89895F610"><AcSmCustomPropertyValue ID="g1849C0CA-BC3D-478B-8520-968A60015FBA" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g4659FBE8-1465-44EF-8BB4-DC87CD4E21F9" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g9A7B9ADF-79B3-4992-B70B-16749EC7FDB8" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">253C0</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">022 交通疏解恢复阶段燃气管道改迁平面图 (五)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">022</AcSmProp><AcSmProp propname="Title">交通疏解恢复阶段燃气管道改迁平面图 (五)</AcSmProp></AcSmSheet><AcSmSheet ID="gB524E29A-A73F-5901-8E19-648690BE39C9"><AcSmCustomPropertyBag ID="gF5DF86B8-FF83-45F6-B299-ED6751A66428"><AcSmCustomPropertyValue ID="gE4AE9009-B479-4026-8365-2AB37DCF1341" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gD4794DBA-15B7-491B-85DE-5E9B3F0D9906" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="gEEAB8942-39DD-43F6-8796-7AD570D515DC" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">2602E</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">023 交通疏解恢复阶段燃气管道改迁平面图 (六)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">023</AcSmProp><AcSmProp propname="Title">交通疏解恢复阶段燃气管道改迁平面图 (六)</AcSmProp></AcSmSheet><AcSmSheet ID="g940F561D-7FB8-58AB-973E-E47FD4A7851C"><AcSmCustomPropertyBag ID="gD8196584-0E42-4832-898F-2D1842366F12"><AcSmCustomPropertyValue ID="g0F5A6B78-FDCA-4570-B135-66BBF3F8C1A2" propname="图幅"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g49DF8630-AD68-4977-9C47-0F18065AAA95" propname="出图比例"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue><AcSmCustomPropertyValue ID="g1A010EF2-F69D-40FF-AD20-782D92ECCF1B" propname="备注"><AcSmProp propname="Flags" vt="3">2</AcSmProp></AcSmCustomPropertyValue></AcSmCustomPropertyBag><AcSmAcDbLayoutReference><AcSmProp propname="AcDbHandle">26C9C</AcSmProp><AcSmProp propname="FileName">C:\Users\sonic\autocad-sheetset\sample\project3 - copy\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp><AcSmProp propname="Name">024 交通疏解恢复阶段燃气管道改迁平面图 (七)</AcSmProp><AcSmProp propname="Relative_FileName">.\RQ-018-024 交通疏解恢复阶段燃气管道改迁平面图.dwg</AcSmProp></AcSmAcDbLayoutReference><AcSmProp propname="Number">024</AcSmProp><AcSmProp propname="Title">交通疏解恢复阶段燃气管道改迁平面图 (七)</AcSmProp></AcSmSheet>
+    </AcSmSubset>
+  </AcSmSheetSet>
+</AcSmDatabase>

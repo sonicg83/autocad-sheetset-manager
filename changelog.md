@@ -2,6 +2,7 @@
 
 ## 2026-08-27（PLAN-DM-008 复审修复）
 
+- 新增 `scripts/dst-to-xml.ps1`：复用 `DstCodec` 将 `.dst` 解码为原始 XML 字节，支持单文件/目录递归输入、指定输出目录及默认同目录输出，已用临时 DST 往返一致验证。
 - 加固 CAD Worker 租约隔离：发布替换正式文件前、发布过程中及 finalize 前持续复核 worker/attempt；失权的旧进程只能进入安全隔离状态，不能恢复任务成功或写入修订。
 - 将过期任务回收放入每次 Worker 领取前的轮询路径，避免服务重启后租约尚未过期而长期阻塞队列；JobFile 更新同时绑定 worker/attempt，旧 attempt 不能覆盖新 attempt。
 - 并发 CAD 单元失败后排空当前批次再按工作单元序号选择首个失败，补充发布租约、任务租约、JobFile 隔离和轮询回收回归测试。
