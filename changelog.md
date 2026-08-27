@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-008 复审修复）
+
+- 加固 CAD Worker 租约隔离：发布替换正式文件前、发布过程中及 finalize 前持续复核 worker/attempt；失权的旧进程只能进入安全隔离状态，不能恢复任务成功或写入修订。
+- 将过期任务回收放入每次 Worker 领取前的轮询路径，避免服务重启后租约尚未过期而长期阻塞队列；JobFile 更新同时绑定 worker/attempt，旧 attempt 不能覆盖新 attempt。
+- 并发 CAD 单元失败后排空当前批次再按工作单元序号选择首个失败，补充发布租约、任务租约、JobFile 隔离和轮询回收回归测试。
+
 ## 2026-08-26（PLAN-DM-008 延后 CAD 校验与布局批量改名）
 
 - 修复最终审查问题：`rename_only` 按十六进制数值拒绝同一 DWG 内重复 Handle，发布前再次执行 DWG+Handle 全局复核；长 CAD 单元按租约续写 heartbeat，旧 attempt 失权后不能更新、补充工作或发布。

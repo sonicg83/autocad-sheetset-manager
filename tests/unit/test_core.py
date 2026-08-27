@@ -2,6 +2,7 @@ import hashlib
 import json
 import subprocess
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -1625,6 +1626,52 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
     assert calls == 1
 
 
+def test_worker_poll_rechecks_stale_jobs_after_initialization(tmp_path: Path):
+    service = object.__new__(DstManagerService)
+    service.settings = SimpleNamespace(worker_lease_seconds=120)
+    service.database = Mock()
+    service.database.claim_next_job.return_value = None
+
+    assert service.run_next_job() is None
+
+    service.database.recover_stale_jobs.assert_called_once_with(120)
+
+
+def test_committed_journal_review_quarantine_is_not_auto_finalized(tmp_path: Path):
+    service = object.__new__(DstManagerService)
+    service.database = Mock()
+    service.database.get_job.return_value = {
+        "status": JobStatus.NEEDS_REVIEW,
+        "error_code": "PUBLISH_JOURNAL_REVIEW_REQUIRED",
+    }
+
+    service._recover_committed_job(
+        tmp_path,
+        {"operation_id": "job-1", "status": "COMMITTED", "files": []},
+    )
+
+    service.database.finalize_committed_job.assert_not_called()
+    service.database.finalize_job_terminal.assert_not_called()
+
+
+def test_stale_publishing_job_with_committed_journal_is_not_auto_finalized(tmp_path: Path):
+    service = object.__new__(DstManagerService)
+    service.database = Mock()
+    service.settings = SimpleNamespace(worker_lease_seconds=120)
+    service.database.get_job.return_value = {
+        "status": JobStatus.PUBLISHING,
+        "heartbeat_at": (datetime.now(UTC) - timedelta(minutes=10)).isoformat(),
+    }
+
+    service._recover_committed_job(
+        tmp_path,
+        {"operation_id": "job-1", "status": "COMMITTED", "files": []},
+    )
+
+    service.database.finalize_committed_job.assert_not_called()
+    service.database.finalize_job_terminal.assert_not_called()
+
+
 def test_repeating_same_content_creates_distinct_operation_revisions(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
@@ -2756,11 +2803,13 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     database.get_job.return_value = {"id": "job-create", "status": "SUCCEEDED"}
     publisher = RecoverablePublisher()
     published_baselines = None
+    published_before_commit = None
     original_publish = publisher.publish
 
     def capture_publish_baselines(*args, **kwargs):
-        nonlocal published_baselines
+        nonlocal published_baselines, published_before_commit
         published_baselines = kwargs["expected_baselines"]
+        published_before_commit = kwargs["before_commit"]
         return original_publish(*args, **kwargs)
 
     publisher.publish = capture_publish_baselines
@@ -2792,10 +2841,17 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     assert executor.calls == 1
     assert [script.name for script in executor.scripts] == ["rebuild-000.scr"]
     assert published_baselines is not None
+    assert callable(published_before_commit)
     assert all(
         baseline is None or isinstance(baseline, ExpectedFileBaseline)
         for baseline in published_baselines.values()
     )
+    assert all(
+        call.kwargs["worker_id"] == "worker" and call.kwargs["attempt"] == 1
+        for call in database.upsert_job_file.call_args_list
+    )
+    assert database.finalize_committed_job.call_args.kwargs["worker_id"] == "worker"
+    assert database.finalize_committed_job.call_args.kwargs["attempt"] == 1
     assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "manifest.json").is_file()
 
 

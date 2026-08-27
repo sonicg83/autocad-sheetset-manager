@@ -485,8 +485,22 @@ class Database:
         if lock is not None and lock.job_id == row.id:
             session.delete(lock)
 
-    def upsert_job_file(self, job_id: str, target_path: Path, **values: Any) -> None:
+    def upsert_job_file(self, job_id: str, target_path: Path, **values: Any) -> bool:
         with self.sessions.begin() as session:
+            worker_id = values.pop("worker_id", None)
+            attempt = values.pop("attempt", None)
+            owned_update = worker_id is not None or attempt is not None
+            if owned_update:
+                if worker_id is None or attempt is None:
+                    raise ValueError("JOB_OWNER_INCOMPLETE")
+                job = session.get(JobRow, job_id)
+                if (
+                    job is None
+                    or job.status in TERMINAL_JOB_STATUSES
+                    or job.worker_id != worker_id
+                    or job.attempt != attempt
+                ):
+                    return False
             row = session.scalars(select(JobFileRow).where(JobFileRow.job_id == job_id, JobFileRow.target_path == str(target_path))).first()
             if row is None:
                 row = JobFileRow(job_id=job_id, target_path=str(target_path), role=values.pop("role", "DWG"))
@@ -498,6 +512,7 @@ class Database:
                 row.error_code = row.error_detail = None
             for key, value in values.items():
                 setattr(row, key, value)
+            return True
 
     @staticmethod
     def _job_json(session, row: JobRow) -> dict[str, Any]:
@@ -534,12 +549,36 @@ class Database:
         *,
         update_current: bool = True,
         current_revision: str | None = None,
-    ) -> None:
+        worker_id: str | None = None,
+        attempt: int | None = None,
+    ) -> bool:
         """幂等地把已由 publisher 提交的文件变更闭环到数据库。"""
         with self.sessions.begin() as session:
             job = session.get(JobRow, operation_id)
             if job is None or job.workspace_id != workspace_id:
                 raise KeyError(operation_id)
+            owned_update = worker_id is not None or attempt is not None
+            if owned_update:
+                if worker_id is None or attempt is None:
+                    raise ValueError("JOB_OWNER_INCOMPLETE")
+                if (
+                    job.status != "PUBLISHING"
+                    or job.worker_id != worker_id
+                    or job.attempt != attempt
+                ):
+                    return False
+                fenced = session.execute(
+                    update(JobRow)
+                    .where(
+                        JobRow.id == operation_id,
+                        JobRow.status == "PUBLISHING",
+                        JobRow.worker_id == worker_id,
+                        JobRow.attempt == attempt,
+                    )
+                    .values(heartbeat_at=datetime.now(UTC)),
+                )
+                if fenced.rowcount != 1:
+                    return False
             revision = session.get(RevisionRow, revision_id)
             expected = (
                 workspace_id,
@@ -585,6 +624,7 @@ class Database:
             lock = session.get(WorkspaceWriteLockRow, workspace_id)
             if lock is not None and lock.job_id == operation_id:
                 session.delete(lock)
+            return True
 
     def finalize_job_terminal(
         self,
@@ -592,7 +632,10 @@ class Database:
         status: str,
         error_code: str,
         error_detail: str | None = None,
-    ) -> None:
+        *,
+        worker_id: str | None = None,
+        attempt: int | None = None,
+    ) -> bool:
         """把无法继续的同步任务显式隔离为终态，并释放其普通写锁。"""
         if status not in TERMINAL_JOB_STATUSES - {"SUCCEEDED"}:
             raise ValueError("JOB_TERMINAL_STATUS_INVALID")
@@ -600,6 +643,36 @@ class Database:
             row = session.get(JobRow, job_id)
             if row is None:
                 raise KeyError(job_id)
+            owned_update = worker_id is not None or attempt is not None
+            if owned_update:
+                if worker_id is None or attempt is None:
+                    raise ValueError("JOB_OWNER_INCOMPLETE")
+                if row.worker_id != worker_id or row.attempt != attempt or row.status in TERMINAL_JOB_STATUSES:
+                    return False
+                fenced = session.execute(
+                    update(JobRow)
+                    .where(
+                        JobRow.id == job_id,
+                        JobRow.worker_id == worker_id,
+                        JobRow.attempt == attempt,
+                        JobRow.status.not_in(TERMINAL_JOB_STATUSES),
+                    )
+                    .values(
+                        status=status,
+                        progress=0,
+                        error_code=error_code,
+                        error_detail=error_detail,
+                        finished_at=datetime.now(UTC),
+                        heartbeat_at=datetime.now(UTC),
+                    ),
+                )
+                if fenced.rowcount != 1:
+                    return False
+                session.add(JobEventRow(job_id=job_id, status=status, progress=0, detail=error_code))
+                lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+                if lock is not None and lock.job_id == job_id:
+                    session.delete(lock)
+                return True
             if row.status != status or row.error_code != error_code or row.error_detail != error_detail:
                 row.status = status
                 row.progress = 0
@@ -611,6 +684,7 @@ class Database:
             lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
             if lock is not None and lock.job_id == job_id:
                 session.delete(lock)
+            return True
 
     def list_revisions(self, workspace_id: str | None = None) -> list[dict[str, Any]]:
         with self.sessions() as session:

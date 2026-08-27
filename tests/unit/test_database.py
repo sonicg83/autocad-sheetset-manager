@@ -185,6 +185,55 @@ def test_finalize_committed_job_is_atomic_and_idempotent(tmp_path: Path):
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
 
+def test_finalize_committed_job_rejects_lost_owner_before_writing_revision(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    root = tmp_path / "project"
+    root.mkdir()
+    dst = root / "a.dst"
+    dst.write_bytes(b"result")
+    database.upsert_workspace("w", root, dst, "before")
+    database.create_job("job", "w", "change_set", "PUBLISHING", {"plan": {"requires_cad": True}})
+    claimed = database.claim_next_job("worker")
+    assert claimed is None
+
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET status='PUBLISHING', worker_id='worker', attempt=3 WHERE id='job'",
+        )
+
+    assert database.finalize_committed_job(
+        "result",
+        "w",
+        "job",
+        "before",
+        "result",
+        root / ".dst-manager" / "revisions" / "job",
+        worker_id="old-worker",
+        attempt=2,
+    ) is False
+    assert database.get_job("job")["status"] == "PUBLISHING"
+    assert database.list_revisions("w") == []
+
+
+def test_job_file_update_rejects_lost_owner(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r")
+    database.create_job("job", "w", "change_set", "QUEUED", {"plan": {"requires_cad": True}})
+    claimed = database.claim_next_job("new-worker")
+    assert claimed is not None and claimed["attempt"] == 1
+    target = tmp_path / "target.dwg"
+
+    assert database.upsert_job_file(
+        "job",
+        target,
+        worker_id="old-worker",
+        attempt=0,
+        status="SUCCEEDED",
+        result_hash="old-result",
+    ) is False
+    assert database.get_job("job")["files"] == []
+
+
 def test_finalize_committed_job_closes_crash_after_revision_insert_before_success(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
     root = tmp_path / "project"

@@ -5,7 +5,7 @@ status: completed
 owners:
   - dst-manager
 created: 2026-08-25
-updated: 2026-08-26
+updated: 2026-08-27
 related:
   - ARCH-DM-001
   - ADR-DM-002
@@ -904,3 +904,11 @@ rtk git commit -m "完成CAD校验延后与布局改名交付闭环"
 | 2020 | 10 | 10 | 10802 | 10738 | 60675 | 567427072 |
 
 这些数据是本机单轮实测，只证明本次环境下的行为与资源记录，不宣称稳定加速比例。默认并发仍为 4，配置合法范围保持 1–10。
+
+### 2026-08-27 复审修复验证
+
+- 针对两份复审报告修复 CAD Worker 的发布租约闸门：正式文件替换前、逐文件发布期间及数据库 finalize 前均复核 `worker_id + attempt`；失权的旧 Worker 不能发布、写入新的 JobFile 状态或把任务恢复为成功。
+- 每次 Worker 领取任务前执行过期租约回收；安全暂存阶段可重新排队，发布阶段进入 `NEEDS_REVIEW`，并保留启动时对归档失败 COMMITTED 事务的正常恢复能力。
+- 并发单元发生失败后继续排空已启动的当前批次，再按工作单元序号选择首个失败，避免高序号先完成导致错误优先级不稳定。
+- 新增发布 fence、finalize 所有权、JobFile attempt 隔离、轮询回收、COMMITTED 隔离和跨等待批次失败选择回归测试。
+- `rtk uv run pytest -q`：通过；`rtk uv run ruff check .`、`rtk uv lock --check`、`rtk git diff --check`：均通过。真实 CAD 双版本与插件构建仍沿用本节前述已完成证据，本轮未改变插件代码。

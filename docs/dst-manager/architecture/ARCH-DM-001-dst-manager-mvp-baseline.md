@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-08-10
-updated: 2026-08-26
+updated: 2026-08-27
 related:
   - PLAN-DM-001
   - PLAN-DM-005
@@ -151,7 +151,7 @@ flowchart LR
 
 依赖只在实施时锁定补丁版本。领域层不得导入FastAPI、SQLAlchemy、lxml或Windows进程代码。
 
-SQLite 是本地 CAD 预算的权威边界：`claim_next_job` 在 `BEGIN IMMEDIATE` 事务内同时检查活跃 CAD change_set 并领取队首任务，同一数据库任一时刻最多一个 CAD job 进入执行态。Worker 在长 CAD 单元等待期间按短于租约的周期续写带 `worker_id + attempt` 的 heartbeat；失去所有权后不得更新新 attempt、补充工作单元或进入发布阶段。
+SQLite 是本地 CAD 预算的权威边界：`claim_next_job` 在 `BEGIN IMMEDIATE` 事务内同时检查活跃 CAD change_set 并领取队首任务，同一数据库任一时刻最多一个 CAD job 进入执行态。Worker 在每次领取前回收过期租约，并在长 CAD 单元等待期间按短于租约的周期续写带 `worker_id + attempt` 的 heartbeat；失去所有权后不得更新新 attempt、补充工作单元或进入发布阶段。`JobFile`、发布替换前的租约闸门及最终 finalize 同样绑定 `worker_id + attempt`，发布中的失权任务进入人工复核，不得被旧 Worker 恢复为成功。
 
 ## 4. 领域模型与编辑能力
 

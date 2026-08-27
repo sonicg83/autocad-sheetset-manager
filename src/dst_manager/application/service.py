@@ -8,6 +8,7 @@ import socket
 import tempfile
 import uuid
 from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -485,6 +486,7 @@ class DstManagerService:
         return self.database.get_job(job_id) or {}
 
     def run_next_job(self) -> dict[str, Any] | None:
+        self.database.recover_stale_jobs(self.settings.worker_lease_seconds)
         worker_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         job = self.database.claim_next_job(worker_id)
         if job is None:
@@ -1296,6 +1298,23 @@ class DstManagerService:
         job = self.database.get_job(operation_id)
         if job is None or job["status"] == JobStatus.SUCCEEDED:
             return
+        # 过期的 PUBLISHING 任务已被回收并明确隔离；其 COMMITTED 清单不能
+        # 再被启动恢复自动闭环，避免失权的旧 Worker 把任务恢复为成功。
+        if (
+            job["status"] == JobStatus.NEEDS_REVIEW
+            and job.get("error_code") == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+        ):
+            return
+        heartbeat_at = job.get("heartbeat_at")
+        if heartbeat_at:
+            try:
+                heartbeat = datetime.fromisoformat(heartbeat_at)
+            except ValueError:
+                return
+            if heartbeat.tzinfo is None:
+                heartbeat = heartbeat.replace(tzinfo=UTC)
+            if heartbeat < datetime.now(UTC) - timedelta(seconds=self.settings.worker_lease_seconds):
+                return
         try:
             if journal.get("identity_version") != 1:
                 raise PublishRecoveryError("COMMITTED_IDENTITY_VERSION_UNSUPPORTED")

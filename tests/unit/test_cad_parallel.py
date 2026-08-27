@@ -248,6 +248,61 @@ def test_completed_batch_selects_lowest_index_failure_deterministically(
         )
 
 
+def test_failure_drains_later_wait_cycles_before_selecting_lowest_index(tmp_path: Path, monkeypatch):
+    submitted: dict[int, cad_job.Future] = {}
+    wait_calls = 0
+
+    class NonCancellableFuture(cad_job.Future):
+        def cancel(self):
+            return False
+
+    class ControlledExecutor:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def submit(self, function, *args):
+            unit = args[-1]
+            future = NonCancellableFuture()
+            submitted[unit.index] = future
+            return future
+
+    def staged_wait(futures, **_kwargs):
+        nonlocal wait_calls
+        wait_calls += 1
+        if wait_calls == 1:
+            submitted[2].set_exception(RuntimeError("failure-2"))
+            return {submitted[2]}, set(futures) - {submitted[2]}
+        submitted[0].set_exception(RuntimeError("failure-0"))
+        target = tmp_path / "1.dwg"
+        submitted[1].set_result(RebuildResult(1, target, target, target, {}, 10, tmp_path / "x.log", 100, 200))
+        return {submitted[0], submitted[1]}, set()
+
+    def execute(_job, _workspace, _capability, unit):
+        raise AssertionError(f"不应直接执行受控 future：{unit.index}")
+
+    monkeypatch.setattr(cad_job, "ThreadPoolExecutor", ControlledExecutor)
+    monkeypatch.setattr(cad_job, "wait", staged_wait)
+    runner = CadJobRunner(FakeDatabase(), DstCodec(), RecoverablePublisher(), 10, max_parallel=3)
+    runner._execute_group = execute
+
+    with pytest.raises(RuntimeError, match="failure-0"):
+        runner._run_groups(
+            "job",
+            "worker",
+            object(),
+            CadCapability("2020", None, None),
+            [_unit(tmp_path, index, "rebuild") for index in range(3)],
+        )
+
+    assert wait_calls == 2
+
+
 def test_long_group_renews_job_lease_before_completion(tmp_path: Path):
     database = FakeDatabase()
     runner = CadJobRunner(
