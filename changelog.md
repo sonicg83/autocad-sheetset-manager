@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：内存修复与报告）
+
+- 领域层新增 `RepairStatus`（VALID/REPAIRED/INVALID_REPAIR_REQUIRED/INVALID_UNRECOVERABLE）、`RepairConfidence`、不可变 `RepairAction` 与 `RepairReport` 诊断值对象，不依赖 lxml/文件系统。
+- 新建 `src/dst_manager/infrastructure/acsm_xml/repair.py`：`AcsmRepairer` 在深拷贝 DOM 上按固定顺序修复（全局 ID 索引 → 补 ID → 按 contract 补固定属性 → 补 AcSmProp vt → 黄金位置补 AcSmSheetViews → 汇总阻断诊断）；不修改传入 root、不写文件；状态分类为结构性不可恢复（重复/非法 ID、根错误）→ `INVALID_UNRECOVERABLE`，其余阻断（缺业务值、布局冲突、错误非空固定值、属性作用域冲突）→ `INVALID_REPAIR_REQUIRED` 且不覆盖原值。
+- 新增 `tests/unit/test_acsm_repair.py`（10 项）：黄金 no-op（VALID/零 action/序列化一致/输入不变）、失败样本内存修复（补齐 SheetViews≥11、生成 ID 合法且全局唯一、contract 通过、样本原件不变）及负例阻断（重复 ID、非空错误 clsid、缺业务值、缺/多布局、Flags 作用域冲突）。
+
 ## 2026-08-27（PLAN-DM-009：AcSm 契约与 schema）
 
 - 新建 `src/dst_manager/infrastructure/acsm_xml/contract.py`：版本化 AcSm contract registry，固化七类已知对象（`AcSmSheetSet`/`AcSmSubset`/`AcSmSheet`/`AcSmCustomPropertyBag`/`AcSmCustomPropertyValue`/`AcSmAcDbLayoutReference`/`AcSmSheetViews`）的必需属性、固定 `clsid` 和已知 `AcSmProp` 的 `vt` 类型表，并校验已知对象父级包含关系；未知元素/属性/顺序/tail 一律宽容保留。
