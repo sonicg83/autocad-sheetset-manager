@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：统一加载与修复确认）
+
+- 新增统一 loader `load_acsm`（service/cad_job/XML 入口全部改用，工作区序列化新增稳定字段 `dst_validation`：`status`/`actions`/`blocking_issues`，`diagnostics` 保持向后兼容）；文件 SHA-256 仍是 revision 基准，内存修复不改 revision，只读打开不产生 `.dst-manager/` 或时间戳变化。
+- 新增写入门禁：`VALID` 才能正常预览/执行；`REPAIRED` 必须先经独立修复修订确认（409 `REPAIR_CONFIRMATION_REQUIRED`）；`INVALID_REPAIR_REQUIRED`/`INVALID_UNRECOVERABLE` 只能读和显示诊断（409 `REPAIR_BLOCKED`/`REPAIR_UNRECOVERABLE`）。
+- 新增 `POST /api/workspaces/{id}/repairs/preview` 与 `/repairs/execute`：预览固定 base revision 并返回修复摘要（修复后 DOM canonical 字节对 `ID` 值掩码后与基准组合，保证预览/执行独立重解码结果一致）；执行从正式 DST 重新解码、修复、严格校验并复核摘要，沿现有锁/暂存/永久 before 快照/发布日志/回滚发布独立修复修订。
+- 新增入口一致性测试与 API 覆盖：黄金样本打开 `VALID`、失败样本返回报告且不改文件、未确认修复被明确错误码阻断、确认后产生新修订并重载为 `VALID`、篡改摘要/基准漂移被拒。
+- `tiny_workspace` 测试夹具改为契约合规文档（固定 clsid/propname/vt + AcSmSheetViews），既有测试全部回归通过；属性作用域冲突的工作区改为“打开即可见阻断诊断、写入 409”。
+
 ## 2026-08-27（PLAN-DM-009：新增 Sheet 契约对齐）
 
 - `AcsmDocument` 加载流程改为 parse → 宽容契约扫描 → 可选内存修复 → 严格 XSD → 语义校验；新增可选参数 `repair`（默认 True）与 `repair_report` 属性，修复只作用深拷贝副本，`clone()` 同步复制报告状态；`repair=False` 时已识别但未应用的修复标记为 `INVALID_REPAIR_REQUIRED`。

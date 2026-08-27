@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -108,10 +109,10 @@ def test_metadata_illegal_xml_text_is_blocked_without_side_effects(tmp_path, tin
 
 def test_empty_sheetset_sheet_property_round_trip_reports_zero_affected(tmp_path):
     xml = (
-        b'<AcSmDatabase ID="g00000000-0000-0000-0000-000000000001">'
-        b'<AcSmProp propname="DbVersion">1.1</AcSmProp>'
-        b'<AcSmSheetSet ID="g00000000-0000-0000-0000-000000000002">'
-        b'<AcSmProp propname="Name">Empty</AcSmProp>'
+        b'<AcSmDatabase ID="g00000000-0000-0000-0000-000000000001" clsid="g2162C6B6-0CE4-40E8-912B-46F59DFDF826">'
+        b'<AcSmProp propname="DbVersion" vt="8">1.1</AcSmProp>'
+        b'<AcSmSheetSet ID="g00000000-0000-0000-0000-000000000002" clsid="gB20534F2-0978-418C-8D14-2E6928A077ED" propname="SheetSet" vt="13">'
+        b'<AcSmProp propname="Name" vt="8">Empty</AcSmProp>'
         b'</AcSmSheetSet></AcSmDatabase>'
     )
     dst = tmp_path / "empty.dst"
@@ -269,15 +270,22 @@ def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, ti
     app = create_app(Settings(data_dir=tmp_path / "data"))
     client = TestClient(app)
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    # 打开即可见阻断诊断：属性作用域冲突不得自动修复
+    assert opened["dst_validation"]["status"] == "INVALID_REPAIR_REQUIRED"
+    assert any(
+        issue["code"] == "CUSTOM_PROPERTY_FLAGS_INVALID"
+        for issue in opened["dst_validation"]["blocking_issues"]
+    )
     payload = {"base_revision_id": opened["revision_id"], "commands": [{"type": "update_sheet_properties", "sheet_id": sheet_id, "custom_properties": {"比例": "1:200"}}]}
 
-    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
-
-    assert preview["executable"] is False
-    assert preview["diagnostics"][0]["code"] == "CUSTOM_PROPERTY_FLAGS_INVALID"
+    # INVALID 工作区只能读和显示诊断，写入被 409 阻断且不创建任务
+    response = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload)
+    assert response.status_code == 409
+    assert response.json()["code"] == "REPAIR_BLOCKED"
+    assert not (dst.parent / ".dst-manager" / "revisions").exists()
     execution = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
-    assert execution.status_code == 400
-    assert execution.json() == {"code": "PLAN_INVALID", "message": "执行计划包含阻断诊断"}
+    assert execution.status_code == 409
+    assert execution.json()["code"] == "REPAIR_BLOCKED"
     assert "traceback" not in execution.text.lower()
     with app.state.service.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
@@ -742,28 +750,20 @@ def test_property_csv_preview_merges_main_dom_diagnostics_and_blocks_execution(t
         json=payload,
     )
 
-    assert preview.status_code == 200
-    assert preview.json()["executable"] is False
-    assert preview.json()["requires_cad"] is False
-    assert preview.json()["affected_files"] == [str(dst)]
-    assert preview.json()["changes"] == [
-        {
-            "line": 2,
-            "action": "add",
-            "type": "sheet",
-            "name": "专业",
-            "default_value": "燃气",
-            "affected_sheet_count": 1,
-        }
-    ]
-    assert [item["code"] for item in preview.json()["diagnostics"]] == ["CUSTOM_PROPERTY_FLAGS_INVALID"]
+    # 工作区存在阻断诊断（属性作用域冲突），打开即可见；写入预览被 409 阻断
+    assert preview.status_code == 409
+    assert preview.json()["code"] == "REPAIR_BLOCKED"
+    assert any(
+        issue["code"] == "CUSTOM_PROPERTY_FLAGS_INVALID"
+        for issue in opened["dst_validation"]["blocking_issues"]
+    )
 
     execution = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
         json=payload,
     )
-    assert execution.status_code == 400
-    assert execution.json()["code"] == "PLAN_INVALID"
+    assert execution.status_code == 409
+    assert execution.json()["code"] == "REPAIR_BLOCKED"
     with app.state.service.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
@@ -899,3 +899,137 @@ def test_controlled_insert_commands_report_ordinal_boundaries(tmp_path, tiny_wor
 
     assert preview["executable"] is False
     assert preview["diagnostics"][0]["code"] == code
+
+
+# ---------------------------------------------------------------- PLAN-DM-009 Task 4：修复报告 API 与确认流程
+
+FAIL_SRC = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "shared"
+    / "research"
+    / "project1-dst-xml"
+    / "sheetset-fail.xml"
+)
+GOLDEN_SRC = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "shared"
+    / "research"
+    / "project1-dst-xml"
+    / "project1_sheetset.xml"
+)
+
+
+def _fail_dst(tmp_path) -> Path:
+    dst = tmp_path / "fail-project.dst"
+    DstCodec().encode_file(FAIL_SRC.read_bytes(), dst)
+    return dst
+
+
+def test_open_golden_reports_valid_without_repair_actions(tmp_path):
+    dst = tmp_path / "golden.dst"
+    DstCodec().encode_file(GOLDEN_SRC.read_bytes(), dst)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    assert opened["dst_validation"]["status"] == "VALID"
+    assert opened["dst_validation"]["actions"] == []
+    assert opened["dst_validation"]["blocking_issues"] == []
+
+
+def test_open_fail_sample_reports_repair_but_does_not_touch_file(tmp_path):
+    dst = _fail_dst(tmp_path)
+    before = file_sha256(dst)
+    mtime = dst.stat().st_mtime_ns
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    validation = opened["dst_validation"]
+    assert validation["status"] == "REPAIRED"
+    assert validation["actions"]
+    assert all(action["node_path"] and action["message"] for action in validation["actions"])
+    assert all(issue["code"] for issue in validation["blocking_issues"])
+    assert file_sha256(dst) == before
+    assert dst.stat().st_mtime_ns == mtime
+
+
+def test_unconfirmed_repair_blocks_normal_writes_with_clear_error(tmp_path):
+    dst = _fail_dst(tmp_path)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {"base_revision_id": opened["revision_id"], "commands": []}
+
+    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload)
+    assert preview.status_code == 409
+    assert preview.json()["code"] == "REPAIR_CONFIRMATION_REQUIRED"
+
+    execute = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+    assert execute.status_code == 409
+    assert execute.json()["code"] == "REPAIR_CONFIRMATION_REQUIRED"
+
+
+def test_repair_preview_execute_creates_new_revision_and_reload_is_valid(tmp_path):
+    dst = _fail_dst(tmp_path)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    assert opened["dst_validation"]["status"] == "REPAIRED"
+
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/repairs/preview",
+        json={"base_revision_id": opened["revision_id"]},
+    ).json()
+    assert preview["status"] == "REPAIRED"
+    assert preview["preview_digest"]
+    assert preview["executable"] is True
+
+    job = client.post(
+        f"/api/workspaces/{opened['id']}/repairs/execute",
+        json={"base_revision_id": opened["revision_id"], "preview_digest": preview["preview_digest"]},
+    ).json()
+    assert job["status"] == "SUCCEEDED"
+
+    reloaded = client.get(f"/api/workspaces/{opened['id']}").json()
+    assert reloaded["revision_id"] != opened["revision_id"]
+    assert reloaded["dst_validation"]["status"] == "VALID"
+    assert reloaded["dst_validation"]["actions"] == []
+
+    # 修复修订之后，普通业务编辑恢复正常
+    sheet_id = reloaded["sheet_set"]["subsets"][0]["sheets"][0]["id"]
+    payload = {
+        "base_revision_id": reloaded["revision_id"],
+        "commands": [{"type": "update_sheet_properties", "sheet_id": sheet_id, "custom_properties": {}}],
+    }
+    preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload)
+    assert preview.status_code == 200
+    assert preview.json()["executable"] is True
+
+
+def test_repair_execute_rejects_stale_digest_and_baseline_drift(tmp_path):
+    dst = _fail_dst(tmp_path)
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    # 篡改的 digest 被拒绝：任务进入 FAILED，不发布
+    job = client.post(
+        f"/api/workspaces/{opened['id']}/repairs/execute",
+        json={"base_revision_id": opened["revision_id"], "preview_digest": "stale-digest"},
+    ).json()
+    assert job["status"] == "FAILED"
+    assert job["error_code"] == "REPREVIEW_REQUIRED"
+    assert file_sha256(dst) == opened["revision_id"]
+
+    # 基准漂移：预览后正式 DST 被外部修改，执行在解锁检查时被拒（409），正式文件保持外部新内容
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/repairs/preview",
+        json={"base_revision_id": opened["revision_id"]},
+    ).json()
+    tampered = tmp_path / "tampered.dst"
+    DstCodec().encode_file(GOLDEN_SRC.read_bytes(), tampered)
+    dst.write_bytes(tampered.read_bytes())
+    response = client.post(
+        f"/api/workspaces/{opened['id']}/repairs/execute",
+        json={"base_revision_id": opened["revision_id"], "preview_digest": preview["preview_digest"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "REVISION_CONFLICT"
+    assert file_sha256(dst) == file_sha256(tampered)

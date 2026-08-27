@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import re
 import uuid
 from pathlib import Path
@@ -35,6 +36,7 @@ from dst_manager.infrastructure.acsm_xml.contract import (
 from dst_manager.infrastructure.acsm_xml.repair import AcsmRepairer
 
 _ID_RE = re.compile(r"^g[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$")
+_ACSM_ID_ATTR_RE = re.compile(rb'ID="g[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"')
 _HANDLE_RE = re.compile(r"^[0-9A-Fa-f]+$")
 
 
@@ -112,6 +114,29 @@ def _property_type_for_scope(scope: str) -> str:
     if scope == "2":
         return "sheet"
     raise AcsmValidationError(f"CUSTOM_PROPERTY_FLAGS_INVALID: {scope}")
+
+
+def load_acsm(xml: bytes, *, repair: bool = True) -> "AcsmDocument":
+    """统一 DST/XML 加载入口：parse → 契约扫描 → 可选内存修复 → XSD → 语义校验。
+
+    所有工作区、预览、XML 和 CAD 暂存入口都必须经过本函数，禁止直接构造
+    `AcsmDocument` 绕过 loader。内存修复不改变 revision（文件 SHA-256 仍是
+    基准），读取不产生发布目录或文件时间戳变化。
+    """
+    return AcsmDocument(xml, repair=repair)
+
+
+def repair_digest(root: etree._Element, base_revision_id: str) -> str:
+    """由修复后 DOM 的 canonical 字节与基准修订组成修复预览摘要。
+
+    修复会为缺失 ID 的对象生成随机 UUID，因此摘要对 `ID` 属性值做掩码
+    规范化：摘要与源内容、修复动作绑定，但与随机生成的 ID 值无关，保证
+    预览与执行（各自独立重解码）得到同一摘要。执行时必须从正式 DST 重新
+    解码、修复并复核该摘要，禁止信任客户端 XML 或普通业务 commands 绕过。
+    """
+    canonical = etree.tostring(root, method="c14n", with_comments=True)
+    masked = _ACSM_ID_ATTR_RE.sub(b'ID="@ID@"', canonical)
+    return hashlib.sha256(masked + base_revision_id.encode("utf-8")).hexdigest()
 
 
 class AcsmDocument:
@@ -943,6 +968,7 @@ class AcsmDocument:
             sheet_set_custom,
             self.validate(),
             list(sheet_definition_names.values()),
+            self._report,
         )
         self.resolve_paths(document, dst_dir, root_override)
         return document

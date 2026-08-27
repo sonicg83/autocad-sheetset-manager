@@ -15,7 +15,7 @@ from dst_manager.domain.planning import (
     derived_document_from_plan,
     metadata_commands_for_derived_document,
 )
-from dst_manager.infrastructure.acsm_xml import AcsmDocument
+from dst_manager.infrastructure.acsm_xml import load_acsm
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
     CoreConsoleExecutor,
@@ -810,7 +810,7 @@ class CadJobRunner:
                 "handle": handle,
             }
 
-        acsm = AcsmDocument(self.codec.decode_file(workspace.dst_path))
+        acsm = load_acsm(self.codec.decode_file(workspace.dst_path))
         acsm.apply_derived_document(derived_document_from_plan(plan))
         metadata_commands = metadata_commands_for_derived_document(commands or [])
         if metadata_commands:
@@ -837,7 +837,7 @@ class CadJobRunner:
         final_dir.mkdir(parents=True, exist_ok=True)
         staged_dst = final_dir / workspace.dst_path.name
         self.codec.encode_file(acsm.to_bytes(), staged_dst)
-        roundtrip = AcsmDocument(self.codec.decode_file(staged_dst))
+        roundtrip = load_acsm(self.codec.decode_file(staged_dst))
         if roundtrip.semantic_bytes() != acsm.semantic_bytes():
             raise ValueError("DST_ROUNDTRIP_MISMATCH")
         return staged_dst

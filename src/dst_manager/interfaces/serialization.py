@@ -50,7 +50,19 @@ def workspace_json(workspace) -> dict[str, Any]:
             ],
         },
         "diagnostics": [asdict(issue) for issue in workspace.document.diagnostics],
+        "dst_validation": _repair_report_dict(workspace.document.repair_report),
         "unreferenced_dwgs": [str(path) for path in workspace.unreferenced_dwgs],
+    }
+
+
+def _repair_report_dict(report) -> dict[str, Any]:
+    """修复报告序列化为稳定字段；无报告视为 VALID（向后兼容）。"""
+    if report is None:
+        return {"status": "VALID", "actions": [], "blocking_issues": []}
+    return {
+        "status": report.status,
+        "actions": [asdict(action) for action in report.actions],
+        "blocking_issues": [asdict(issue) for issue in report.blocking_issues],
     }
 
 
