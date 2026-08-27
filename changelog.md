@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：修复确认界面）
+
+- Web 新增 `DstValidation`/`RepairAction` 类型与修复面板：四种状态各自的文案、颜色与按钮可用性（`VALID` 无面板；`REPAIRED` 显示“预览并确认修复”；两个 `INVALID_*` 只显示诊断）；逐项展示凭 code/路径/before/after/confidence 与阻断原因，长路径可换行且不含敏感绝对路径。
+- 修复确认流程：预览调用 `repairs/preview` 固定基准并展示摘要，确认后经 `repairs/execute` 发布；确认前普通编辑发布按钮（预览变更/确认执行/CSV 导入）全部禁用；修复成功后刷新工作区、修订与诊断。加载代次/workspace 修订变化时丢弃旧修复报告。
+- 前端生产构建通过（vue-tsc + vite），Playwright e2e 新增修复流程用例，19/19 全部通过。
+
 ## 2026-08-27（PLAN-DM-009：修复事务与 CAD 边界）
 
 - CAD 暂存加载（`_write_staged_dst` 及其 round-trip）要求统一 loader 结果为 `VALID`，任何修复/阻断诊断都会以 `DST_REPAIR_GATE_BLOCKED` 使任务失败，不把不完整图纸交给 AutoCAD Worker。

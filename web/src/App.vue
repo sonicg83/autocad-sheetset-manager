@@ -5,7 +5,9 @@ type PropertyType="sheetset"|"sheet";
 type PropertyDefinition={type:PropertyType;name:string;default_value:string};
 type Sheet={id:string;number:string;title:string;custom_properties:Record<string,string>};
 type Subset={id:string;name:string;title:string;number_range:string;display_name:string;sheets:Sheet[]};
-type Workspace={id:string;revision_id:string;sheet_set:{name:string;sheet_count:number;subset_count:number;custom_properties:Record<string,string>;property_definitions:PropertyDefinition[];subsets:Subset[]};diagnostics:{severity:string;code:string;message:string}[]};
+type RepairAction={code:string;node_path:string;object_id?:string|null;confidence:"deterministic"|"inferred";before:Record<string,string|null>;after:Record<string,string|null>;message:string};
+type DstValidation={status:"VALID"|"REPAIRED"|"INVALID_REPAIR_REQUIRED"|"INVALID_UNRECOVERABLE";actions:RepairAction[];blocking_issues:Diagnostic[]};
+type Workspace={id:string;revision_id:string;sheet_set:{name:string;sheet_count:number;subset_count:number;custom_properties:Record<string,string>;property_definitions:PropertyDefinition[];subsets:Subset[]};diagnostics:{severity:string;code:string;message:string}[];dst_validation?:DstValidation};
 type JobFile={target_path:string;status:string;progress:number;cad_operation?:string;started_at?:string;finished_at?:string;duration_ms?:number;error_code?:string;log_summary?:string};
 type Job={id:string|null;status:string;progress:number;attempt?:number;error_code?:string;suggestion?:string;files?:JobFile[];no_op?:boolean};
 type Revision={id:string;created_at:string;before_hash:string;result_hash:string};
@@ -26,6 +28,10 @@ const job=ref<Job|null>(null);
 const revisions=ref<Revision[]>([]);
 const restorePreview=ref<Record<string,any>|null>(null);
 const restorePreviewContext=ref<RestorePreviewContext|null>(null);
+const repairPreview=ref<Record<string,any>|null>(null);
+const repairContext=ref<{workspaceId:string;baseRevisionId:string;previewDigest:string|undefined;loadGeneration:number}|null>(null);
+const isRepairPreviewing=ref(false);
+const isRepairExecuting=ref(false);
 const connectionMode=ref("SSE");
 const csvText=ref("");
 const csvPreview=ref<Preview|null>(null);
@@ -39,6 +45,7 @@ let workspaceLoadGeneration=0;
 let jobMonitorGeneration=0;
 let revisionGeneration=0;
 let restoreExecutionGeneration=0;
+let repairGeneration=0;
 let activeJobEvents:EventSource|null=null;
 let pollTimer:number|null=null;
 
@@ -48,6 +55,13 @@ const insertSubsetForm=reactive({sequence:"1",direction:"after",title:"",initial
 
 const selected=computed(()=>workspace.value?.sheet_set.subsets.find(item=>item.id===selectedId.value)??null);
 const blocking=computed(()=>workspace.value?.diagnostics.filter(item=>item.severity==="error")??[]);
+const dstValidation=computed(()=>workspace.value?.dst_validation??null);
+const repairWritesDisabled=computed(()=>{
+  const status=dstValidation.value?.status;
+  // 旧客户端/旧 mock 未提供 dst_validation 时视为 VALID（后端仍会门禁）
+  if(!status||status==="VALID")return false;
+  return true;
+});
 const hasPropertyDefinitionCommands=computed(()=>commands.value.some(item=>item.type==="add_custom_property"||item.type==="delete_custom_property"));
 const hasStructuralCommands=computed(()=>commands.value.some(item=>["update_subset_title","delete_sheet","insert_sheet","insert_subset"].includes(String(item.type))));
 const previewGroups=computed(()=>preview.value?.execution_intent?.groups??[]);
@@ -228,6 +242,41 @@ async function restoreRevision(){
   finally{if(generation===restoreExecutionGeneration)isRestoreExecuting.value=false}
 }
 
+function repairStatusLabel(status:string){switch(status){case"VALID":return"无问题";case"REPAIRED":return"已修复（待确认）";case"INVALID_REPAIR_REQUIRED":return"需补充信息（阻断）";case"INVALID_UNRECOVERABLE":return"不可恢复";default:return status}}
+function repairAttr(value:Record<string,string|null>){const entries=Object.entries(value??{});return entries.length?entries.map(([k,v])=>`${k}=${v??'（空）'}`).join("，"):"—"}
+async function previewRepair(){
+  const current=workspace.value;
+  if(isWorkspaceLoading.value||!current||isRepairPreviewing.value)return;
+  const workspaceId=current.id,baseRevisionId=current.revision_id,loadGeneration=workspaceLoadGeneration,generation=++repairGeneration;
+  repairPreview.value=null;repairContext.value=null;isRepairPreviewing.value=true;
+  try{
+    const result:Record<string,any>=await request(`/api/workspaces/${workspaceId}/repairs/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId})});
+    // 代次/修订保护：旧修复报告不得覆盖新工作区
+    if(generation!==repairGeneration||loadGeneration!==workspaceLoadGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
+    repairPreview.value=result;repairContext.value={workspaceId,baseRevisionId,previewDigest:result.preview_digest,loadGeneration};error.value="";
+  }
+  catch(e){if(generation===repairGeneration)error.value=String(e)}
+  finally{if(generation===repairGeneration)isRepairPreviewing.value=false}
+}
+async function executeRepair(){
+  const context=repairContext.value;
+  if(!context||isRepairExecuting.value)return;
+  const current=workspace.value;
+  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==workspaceLoadGeneration){repairPreview.value=null;repairContext.value=null;error.value="工作区或基准修订已变化，请重新生成修复预览";return}
+  if(!confirm("确认把内存修复发布为独立修订？原 DST 将永久备份。"))return;
+  const generation=invalidateJobMonitor(false);
+  isRepairExecuting.value=true;
+  try{
+    const result:Job=await request(`/api/workspaces/${context.workspaceId}/repairs/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,preview_digest:context.previewDigest})});
+    if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
+    job.value=result;
+    if(result.status==="SUCCEEDED"){repairPreview.value=null;repairContext.value=null;await refreshWorkspace(context.workspaceId)}
+    else if(result.status==="FAILED"){error.value=result.error_code??"修复发布失败"}
+  }
+  catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
+  finally{if(generation===jobMonitorGeneration)isRepairExecuting.value=false}
+}
+
 async function readCsvFile(event:Event){
   const generation=++csvGeneration;
   csvText.value="";csvPreview.value=null;csvPreviewContext.value=null;error.value="";
@@ -295,18 +344,36 @@ function cadOperationLabel(operation?:string|null){
       <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
       <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
 
+      <section v-if="dstValidation&&dstValidation.status!=='VALID'" class="panel repair" :class="`repair-${dstValidation.status}`">
+        <h2>DST 修复状态：{{repairStatusLabel(dstValidation.status)}}</h2>
+        <p v-if="dstValidation.status==='REPAIRED'" class="warning">检测到可修复的元数据缺失，已在本机内存中修复；必须先确认并发布独立修复修订，普通编辑发布已被禁用。</p>
+        <p v-if="dstValidation.status==='INVALID_REPAIR_REQUIRED'||dstValidation.status==='INVALID_UNRECOVERABLE'" class="error">存在阻断问题；当前只读，所有写入操作已禁用。请先修复 DST 后重新打开。</p>
+        <details v-if="dstValidation.actions.length"><summary>修复明细（{{dstValidation.actions.length}}）</summary><ul class="repair-actions">
+          <li v-for="(action,index) in dstValidation.actions" :key="index"><b>{{action.code}}</b> · {{action.confidence}} · {{action.object_id??'—'}}<br><span class="attr-diff">{{action.node_path}}</span><br><span class="attr-diff">前：{{repairAttr(action.before)}}</span><br><span class="attr-diff">后：{{repairAttr(action.after)}}</span><br>{{action.message}}</li>
+        </ul></details>
+        <details v-if="dstValidation.blocking_issues.length"><summary>阻断原因（{{dstValidation.blocking_issues.length}}）</summary><ul class="diagnostics"><li v-for="issue in dstValidation.blocking_issues" :key="issue.code+issue.message" :class="issue.severity"><b>{{issue.code}}</b>：{{issue.message}}</li></ul></details>
+        <div v-if="dstValidation.status==='REPAIRED'" class="link-actions">
+          <button :disabled="isRepairPreviewing||isRepairExecuting" @click="previewRepair">预览并确认修复</button>
+          <template v-if="repairPreview">
+            <span class="derived">修复 {{repairPreview.actions?.length??0}} 项 · 摘要 {{repairPreview.preview_digest?.slice(0,16)}}</span>
+            <button class="primary" :disabled="isRepairExecuting||!repairPreview.executable" @click="executeRepair">确认发布修复修订</button>
+            <button :disabled="isRepairExecuting" @click="repairPreview=null;repairContext=null">取消确认</button>
+          </template>
+        </div>
+      </section>
+
       <section class="panel property-panel">
         <div class="section-title"><div><h2>属性定义</h2><p>属性定义与结构变更需分批预览和执行。</p></div><div class="link-actions"><a href="/api/custom-properties/template" download>下载 CSV 模板</a><a :href="`/api/workspaces/${workspace.id}/custom-properties/export`" download>导出当前属性</a></div></div>
         <table><thead><tr><th>作用域</th><th>名称</th><th>默认值</th><th></th></tr></thead><tbody><tr v-for="definition in workspace.sheet_set.property_definitions" :key="definition.type+definition.name"><td>{{definition.type}}</td><td>{{definition.name}}</td><td>{{definition.default_value||'（空）'}}</td><td><button class="danger" @click="queueDeleteProperty(definition)">删除 {{definition.name}}</button></td></tr></tbody></table>
         <div class="form-row"><label>属性作用域<select v-model="propertyForm.type"><option value="sheet">图纸</option><option value="sheetset">图纸集</option></select></label><label>属性名称<input v-model="propertyForm.name"></label><label>默认值<input v-model="propertyForm.defaultValue"></label><button @click="queuePropertyDefinition">加入属性定义</button></div>
-        <div class="csv-flow"><label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="readCsvFile"></label><button :disabled="!csvText" @click="previewCsv">预览 CSV 导入</button><button class="primary" :disabled="!csvPreviewContext?.result.executable" @click="importCsv">确认导入</button></div>
+        <div class="csv-flow"><label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="readCsvFile"></label><button :disabled="!csvText" @click="previewCsv">预览 CSV 导入</button><button class="primary" :disabled="repairWritesDisabled||!csvPreviewContext?.result.executable" @click="importCsv">确认导入</button></div>
         <div v-if="csvPreview" class="csv-preview"><h3>CSV 合并预览</h3><ul><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`">第 {{change.line}} 行 · {{change.action}} · {{change.type}} · {{change.name}}</li></ul><ul class="diagnostics"><li v-for="item in csvPreview.diagnostics" :key="`${item.line}-${item.code}`" :class="item.severity"><span v-if="item.line">第 {{item.line}} 行 · </span><b>{{item.code}}</b>：{{item.message}}</li></ul></div>
       </section>
 
       <section class="editor">
         <aside><button v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :class="{active:selectedId===subset.id}" @click="selectedId=subset.id;insertSheetForm.subsetId=subset.id">{{subset.display_name}} <b>{{subset.sheets.length}}</b></button></aside>
         <article>
-          <div class="toolbar"><span>待处理 {{commands.length}}</span><button :disabled="!commands.length" @click="clearCommands">清空</button><button :disabled="!commands.length" @click="showPreview">预览变更</button></div>
+          <div class="toolbar"><span>待处理 {{commands.length}}</span><button :disabled="!commands.length" @click="clearCommands">清空</button><button :disabled="!commands.length||repairWritesDisabled||isWorkspaceLoading" @click="showPreview">预览变更</button></div>
           <section v-if="selected" class="subset-editor"><div class="form-row"><label>当前子集标题<input v-model="selected.title"></label><button @click="queueSubsetTitle">加入标题变更</button></div><p class="derived">只读图号范围：{{selected.number_range||'—'}} · 显示名：{{selected.display_name}}</p>
             <table><thead><tr><th>图号</th><th>派生标题</th><th>自定义属性</th><th></th></tr></thead><tbody><tr v-for="sheet in selected.sheets" :key="sheet.id"><td><span>{{sheet.number}}</span></td><td><span>{{sheet.title}}</span></td><td><div class="property-values"><label v-for="(_,name) in sheet.custom_properties" :key="name">{{name}}<input v-model="sheet.custom_properties[name]"></label></div></td><td><button @click="queueSheetProperties(sheet)">加入属性变更</button><button class="danger" @click="queueDelete(sheet)">删除</button></td></tr></tbody></table>
           </section>
@@ -334,7 +401,7 @@ function cadOperationLabel(operation?:string|null){
         <section v-if="previewGroups.length"><h3>CAD 执行分组</h3><div class="group-grid"><article v-for="group in previewGroups" :key="group.subset_id??group.target_file" class="execution-group"><strong>{{cadOperationLabel(group.cad_operation)}}</strong><h4>{{group.subset_name}}</h4><p>{{group.target_file}}</p><table><thead><tr><th>图号</th><th>服务端标题</th><th>目标布局</th></tr></thead><tbody><tr v-for="layout in group.layouts" :key="layout.sheet_id??layout.target_layout??layout.layout_name"><td>{{layout.number}}</td><td>{{layout.title}}</td><td>{{layout.target_layout??layout.layout_name}}</td></tr></tbody></table></article></div></section>
         <section><h3>诊断</h3><ul class="diagnostics"><li v-for="item in preview.diagnostics" :key="item.code+item.message" :class="item.severity"><b>{{item.code}}</b>：{{item.message}}</li><li v-if="!preview.diagnostics?.length">无阻断诊断</li></ul></section>
         <section><h3>受影响文件</h3><ul><li v-for="file in preview.affected_files" :key="file">{{file}}</li></ul></section>
-        <button class="primary" :disabled="preview.executable===false" @click="execute">确认并执行</button>
+        <button class="primary" :disabled="repairWritesDisabled||preview.executable===false" @click="execute">确认并执行</button>
       </section>
     </template>
   </main>
