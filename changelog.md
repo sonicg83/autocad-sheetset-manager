@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：新增 Sheet 契约对齐）
+
+- `AcsmDocument` 加载流程改为 parse → 宽容契约扫描 → 可选内存修复 → 严格 XSD → 语义校验；新增可选参数 `repair`（默认 True）与 `repair_report` 属性，修复只作用深拷贝副本，`clone()` 同步复制报告状态；`repair=False` 时已识别但未应用的修复标记为 `INVALID_REPAIR_REQUIRED`。
+- `_make_sheet_node`/`_make_subset_node`/`_make_custom_property_bag`/`_make_property_value` 改为 contract-driven 工厂：补齐 `clsid`、固定 `propname`、`vt=13`，布局四字段与 `Number`/`Title` 使用 `vt=8`，新 Sheet 按黄金顺序补齐 `AcSmSheetViews`。
+- `validate()` 合并契约、严格 XSD、语义与既有自定义属性诊断，保持既有错误码兼容，新增稳定英文错误码（`CONTRACT_*`/`PROP_VT_*`/`XSD_INVALID`）。
+- 新增回归测试：工厂输出与黄金契约逐字段一致、`insert_sheet`/`insert_subset`/`apply_derived_document` 的新图纸均含 `AcSmSheetViews` 且保留未知节点与顺序、失败样本加载修复后 24 张图纸全部可见且 `validate()` 零问题、样本原件字节与 mtime 不变。
+
 ## 2026-08-27（PLAN-DM-009：内存修复与报告）
 
 - 领域层新增 `RepairStatus`（VALID/REPAIRED/INVALID_REPAIR_REQUIRED/INVALID_UNRECOVERABLE）、`RepairConfidence`、不可变 `RepairAction` 与 `RepairReport` 诊断值对象，不依赖 lxml/文件系统。

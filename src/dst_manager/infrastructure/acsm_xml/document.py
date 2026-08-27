@@ -15,12 +15,24 @@ from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
     LayoutReference,
+    RepairReport,
     Severity,
     Sheet,
     SheetSetDocument,
     Subset,
     ValidationIssue,
 )
+from dst_manager.infrastructure.acsm_xml.contract import (
+    CLSID_LAYOUT_REFERENCE,
+    CLSID_PROPERTY_BAG,
+    CLSID_PROPERTY_VALUE,
+    CLSID_SHEET,
+    CLSID_SHEET_VIEWS,
+    CLSID_SUBSET,
+    validate_contract,
+    validate_schema,
+)
+from dst_manager.infrastructure.acsm_xml.repair import AcsmRepairer
 
 _ID_RE = re.compile(r"^g[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$")
 _HANDLE_RE = re.compile(r"^[0-9A-Fa-f]+$")
@@ -103,9 +115,14 @@ def _property_type_for_scope(scope: str) -> str:
 
 
 class AcsmDocument:
-    """保留原DOM，仅投影受控字段。"""
+    """保留未知内容、可修复加载的 AcSm DOM 载体。
 
-    def __init__(self, xml: bytes):
+    加载流程：parse → 宽容契约扫描 → 可选内存修复 → 严格 XSD → 语义校验。
+    修复只发生在深拷贝副本上，不修改源对象或文件；`repair_report` 提供
+    可审计报告，真正写回由应用层按报告门禁决定。
+    """
+
+    def __init__(self, xml: bytes, *, repair: bool = True):
         parser = etree.XMLParser(remove_blank_text=False, resolve_entities=False, no_network=True)
         try:
             self.root = etree.fromstring(xml, parser)
@@ -113,10 +130,26 @@ class AcsmDocument:
             raise AcsmValidationError(f"XML_INVALID: {exc}") from exc
         if etree.QName(self.root).localname != "AcSmDatabase":
             raise AcsmValidationError("XML_ROOT_INVALID: 根节点必须为AcSmDatabase")
+        repaired_root, report = AcsmRepairer().repair(self.root)
+        if repair:
+            self.root = repaired_root
+            status = report.status
+        else:
+            # 不应用修复：raw DOM 保留原样，已识别但未应用的修复标记为需确认
+            if report.actions and report.status == "REPAIRED":
+                status = "INVALID_REPAIR_REQUIRED"
+            else:
+                status = report.status
+        self._report = RepairReport(status, report.actions, report.blocking_issues)
+
+    @property
+    def repair_report(self) -> RepairReport:
+        return self._report
 
     def clone(self) -> "AcsmDocument":
         result = object.__new__(AcsmDocument)
         result.root = copy.deepcopy(self.root)
+        result._report = self._report
         return result
 
     def to_bytes(self) -> bytes:
@@ -401,7 +434,7 @@ class AcsmDocument:
         try:
             node = etree.Element(
                 _tag_like(self.root, "AcSmCustomPropertyValue"),
-                {"ID": self._unique_acsm_id(), "propname": name},
+                {"ID": self._unique_acsm_id(), "clsid": CLSID_PROPERTY_VALUE, "propname": name, "vt": "13"},
             )
         except (UnicodeError, ValueError) as exc:
             raise AcsmValidationError("CUSTOM_PROPERTY_NAME_INVALID") from exc
@@ -411,12 +444,24 @@ class AcsmDocument:
         return node
 
     def _make_custom_property_bag(self) -> etree._Element:
-        return etree.Element(_tag_like(self.root, "AcSmCustomPropertyBag"), {"ID": self._unique_acsm_id()})
+        return etree.Element(
+            _tag_like(self.root, "AcSmCustomPropertyBag"),
+            {"ID": self._unique_acsm_id(), "clsid": CLSID_PROPERTY_BAG, "propname": "CustomPropertyBag", "vt": "13"},
+        )
 
     def _make_subset_node(self, subset_id: str, name: str) -> etree._Element:
-        node = etree.Element(_tag_like(self.root, "AcSmSubset"), {"ID": self._unique_acsm_id(subset_id)})
-        node.append(self._make_prop("Name", name))
+        node = etree.Element(
+            _tag_like(self.root, "AcSmSubset"),
+            {"ID": self._unique_acsm_id(subset_id), "clsid": CLSID_SUBSET},
+        )
+        node.append(self._make_prop("Name", name, vt="8"))
         return node
+
+    def _make_sheet_views(self) -> etree._Element:
+        return etree.Element(
+            _tag_like(self.root, "AcSmSheetViews"),
+            {"ID": self._unique_acsm_id(), "clsid": CLSID_SHEET_VIEWS, "propname": "SheetViews", "vt": "13"},
+        )
 
     def _make_sheet_node(
         self,
@@ -428,24 +473,31 @@ class AcsmDocument:
         layout_name: str,
         handle: str,
     ) -> etree._Element:
-        node = etree.Element(_tag_like(self.root, "AcSmSheet"), {"ID": self._unique_acsm_id(sheet_id)})
+        node = etree.Element(
+            _tag_like(self.root, "AcSmSheet"),
+            {"ID": self._unique_acsm_id(sheet_id), "clsid": CLSID_SHEET},
+        )
         bag = self._make_custom_property_bag()
         for definition in self._sheet_property_definitions():
             bag.append(self._make_property_value(definition, default_value=""))
         node.append(bag)
 
-        layout = etree.Element(_tag_like(self.root, "AcSmAcDbLayoutReference"))
+        layout = etree.Element(
+            _tag_like(self.root, "AcSmAcDbLayoutReference"),
+            {"ID": self._unique_acsm_id(), "clsid": CLSID_LAYOUT_REFERENCE, "propname": "Layout", "vt": "13"},
+        )
         relative = relative_file_name
         if not relative and file_name:
             relative = ".\\" + Path(file_name).name
-        layout.append(self._make_prop("AcDbHandle", handle or "0"))
-        layout.append(self._make_prop("FileName", file_name))
-        layout.append(self._make_prop("Name", layout_name))
-        layout.append(self._make_prop("Relative_FileName", relative))
+        layout.append(self._make_prop("AcDbHandle", handle or "0", vt="8"))
+        layout.append(self._make_prop("FileName", file_name, vt="8"))
+        layout.append(self._make_prop("Name", layout_name, vt="8"))
+        layout.append(self._make_prop("Relative_FileName", relative, vt="8"))
         node.append(layout)
 
-        node.append(self._make_prop("Number", number))
-        node.append(self._make_prop("Title", title))
+        node.append(self._make_prop("Number", number, vt="8"))
+        node.append(self._make_sheet_views())
+        node.append(self._make_prop("Title", title, vt="8"))
         return node
 
     def _custom_property_prop_vt(self, propname: str, default: str) -> str:
@@ -796,6 +848,10 @@ class AcsmDocument:
 
     def validate(self) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = self._custom_property_issues()
+        # 契约层：必需属性、固定值、AcSmProp vt 与父级包含关系
+        issues.extend(validate_contract(self.root))
+        # 严格后置 XSD 结构边界
+        issues.extend(validate_schema(self.root))
         seen: set[str] = set()
         sheet_sets = self.root.xpath("//*[local-name()='AcSmSheetSet']")
         if not sheet_sets:
