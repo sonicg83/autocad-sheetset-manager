@@ -4,7 +4,7 @@ title: Project1 DST/XML 结构分析
 status: accepted
 owners: [shared]
 created: 2026-08-11
-updated: 2026-08-17
+updated: 2026-08-27
 ---
 
 # project1 DST/XML 结构分析
@@ -20,6 +20,7 @@ updated: 2026-08-17
 | `project1_sheetset.xml` | DST 直接解码所得的完整 AcSm XML | UTF-8，845,628 字节 |
 | `project1_sheet_manifest.csv` | 每张图纸、所属子集、DWG、布局和自定义属性清单 | UTF-8 with BOM，298 行 |
 | `RES-SH-001-project1-dst-xml-analysis.md` | 本分析文档 | UTF-8 |
+| `sheetset-fail.xml` | 新建 Sheet 标签属性不完整的失败 XML 样本 | UTF-8，24 张图纸 |
 
 XML 是解码后的原始字节结果，不经过序列化、格式化或结构编辑，因此与源 DST 的一一字节置换关系仍成立。CSV 仅是 XML 中受控业务字段的投影，不能用于重建 DST。
 
@@ -76,15 +77,15 @@ AcSmDatabase
 | `AcSmSheetViews` | 298 | 每张图纸均保留的视图容器。 |
 | `AcSmProp` | 5,377 | 标量字段统一以该节点表达。 |
 
-对象节点普遍具有下列属性：
+对象节点通常具有下列属性；具体是否存在 `propname` 和 `vt` 仍以节点类型的实际黄金结构为准：
 
 ```xml
-<AcSmSheet clsid="g..." ID="g..." propname="Sheet" vt="13">
+<AcSmSheet clsid="g..." ID="g...">
 ```
 
 - `ID`：AcSm 对象身份。样本中唯一；它不是 DWG Handle。
 - `clsid`：AutoCAD AcSm 对象类别标识。相同 XML 元素在样本中使用同一类标识。
-- `propname`：该对象作为父对象属性时的名称，例如 `Sheet`、`Layout` 或 `DefDwtLayout`。
+- `propname`：该对象作为父对象属性时的名称，例如 `SheetSet`、`Layout` 或 `DefDwtLayout`；黄金样本中的 `AcSmSheet` 根节点没有该属性。
 - `vt`：持久化类型标记。普通文本属性主要使用 `vt="8"`；不要仅凭显示值替换或擅自变更该标记。
 
 `AcSmProp` 是常规标量属性的统一表示，例如：
@@ -160,3 +161,24 @@ AcSmDatabase
 - 使用 `AcsmDocument.validate()` 验证，结果为 0 项问题。
 - 执行 `uv run pytest tests/unit/test_core.py -q`，结果为 5 passed。
 - 本次仅导出文档、XML 和 CSV；未修改样本目录、DST 或 DWG。
+
+## 10. 新建图纸的最小 AcSm 契约
+
+对 `project1_sheetset.xml` 与 `sheetset-fail.xml` 的对比表明，官方 Sheet Manager 依赖的不只是业务字段，而是完整的 AcSm 对象标签属性和固定子节点。失败样本中的部分新增 `AcSmSheet` 只有 `ID`，同时其属性袋、属性值对象、布局引用缺少黄金样本中的固定 `clsid`、`propname`、`vt`，并且缺少 `AcSmSheetViews`。
+
+新建 Sheet 必须至少满足以下结构：
+
+| 节点 | 固定契约 |
+| --- | --- |
+| `AcSmSheet` | `ID` 与 Sheet 类别 `clsid` |
+| `AcSmCustomPropertyBag` | `ID`、类别 `clsid`、`propname=CustomPropertyBag`、`vt=13` |
+| `AcSmCustomPropertyValue` | `ID`、类别 `clsid`、属性名、`vt=13`；`Flags` 为 `vt=3`，非空 `Value` 为 `vt=8` |
+| `AcSmAcDbLayoutReference` | `ID`、类别 `clsid`、`propname=Layout`、`vt=13`；四个布局字段均为 `vt=8` |
+| `AcSmSheetViews` | `ID`、类别 `clsid`、`propname=SheetViews`、`vt=13` |
+| `Number`、`Title` | `AcSmProp` 且 `vt=8` |
+
+属性定义的数量和名称仍由具体图纸集决定；空属性缺少 `Value` 是合法状态。该最小契约由 `SPEC-DM-004` 进一步定义，并将同时约束新建节点工厂、加载校验和可修复加载。
+
+## 11. 后续验证边界
+
+`sheetset-fail.xml` 可用于 XML/DOM 修复回归，但不能替代完整 DST 与官方 AutoCAD Sheet Manager 验收。修复后的 DST 必须在具备对应 AutoCAD 版本、Core Console、Worker 和私有 DWG 样本的环境中验证官方显示及布局绑定。

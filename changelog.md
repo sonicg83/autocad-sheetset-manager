@@ -2,6 +2,7 @@
 
 ## 2026-08-27（PLAN-DM-008 复审修复）
 
+- 新增 `SPEC-DM-004` 草案，基于 Project1 黄金/失败 XML 固化 AcSm 新建 Sheet 最小契约、加载时可修复校验边界及用户确认后的受控发布流程；同步修正 `RES-SH-001` 对 `AcSmSheet` 标签属性的描述。
 - 新增 `scripts/dst-to-xml.ps1`：复用 `DstCodec` 将 `.dst` 解码为原始 XML 字节，支持单文件/目录递归输入、指定输出目录及默认同目录输出，已用临时 DST 往返一致验证。
 - 加固 CAD Worker 租约隔离：发布替换正式文件前、发布过程中及 finalize 前持续复核 worker/attempt；失权的旧进程只能进入安全隔离状态，不能恢复任务成功或写入修订。
 - 将过期任务回收放入每次 Worker 领取前的轮询路径，避免服务重启后租约尚未过期而长期阻塞队列；JobFile 更新同时绑定 worker/attempt，旧 attempt 不能覆盖新 attempt。
