@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009 交付审查）
+
+- 完成 PLAN-DM-009 交付验证：`uv sync --dev`、`uv run ruff check .`、`uv run pytest -q`（432 passed / 66 skipped，退出码 0）、`uv lock --check` 全部通过；黄金样本 `VALID` 零修复、失败样本 231 项可审计内存修复且原件/时间戳不变、新建 Sheet 子树与黄金契约逐字段一致并保留未知内容与顺序。
+- 发布事务回归覆盖写入门禁、独立修复修订、异常/基线漂移/暂存失败回滚与启动恢复；service/CAD/XML 全部入口统一 `load_acsm`；Web 修复确认界面与 e2e 19/19 通过。
+- 真实 AutoCAD 2016/2020 系统测试与官方 Sheet Manager 显示验收：本机未设置 `DST_MANAGER_RUN_AUTOCAD=1` 且无对应 Core Console/Worker/私有 DWG 样本，按计划记录跳过条件，不视为通过。
+- PLAN-DM-009 标记为 `completed`，交付验证记录写入计划正文；SPEC-DM-004 补充修复器“不丢弃副本、未确定修复进入阻断诊断”的实施说明。
+
 ## 2026-08-27（PLAN-DM-009：修复确认界面）
 
 - Web 新增 `DstValidation`/`RepairAction` 类型与修复面板：四种状态各自的文案、颜色与按钮可用性（`VALID` 无面板；`REPAIRED` 显示“预览并确认修复”；两个 `INVALID_*` 只显示诊断）；逐项展示凭 code/路径/before/after/confidence 与阻断原因，长路径可换行且不含敏感绝对路径。

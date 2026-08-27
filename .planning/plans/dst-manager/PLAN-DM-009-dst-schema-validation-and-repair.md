@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-009
 title: DST XML Schema 校验与可修复加载实施计划
-status: proposed
+status: completed
 owners:
   - dst-manager
 created: 2026-08-27
@@ -309,3 +309,13 @@ type DstValidation = {
 - [ ] 只有用户确认的独立 repair revision 才能写回；写回走现有发布事务并能回滚/恢复。
 - [ ] 所有应用层和 CAD 暂存加载入口使用同一 loader；API 与 Web 能展示报告并防止绕过确认。
 - [ ] Ruff、相关 pytest、全量 pytest、UV lock check 和可用的 CAD 系统测试均有实际结果记录。
+
+## 交付验证记录（2026-08-27）
+
+- **全量验证**：`uv sync --dev`、`uv run ruff check .`、`uv run pytest -q`（432 passed，66 skipped，退出码 0）与 `uv lock --check` 全部通过。
+- **黄金样本**：`project1_sheetset.xml` 打开为 `VALID`，零修复动作、零阻断；contract 与 XSD 双层校验无错误。
+- **失败样本**：`sheetset-fail.xml` 的 11 个 Sheet 缺 `clsid`、11 个 Bag 缺固定属性、33 个属性值与 66 个 `AcSmProp` 缺 `vt`、11 个布局引用无属性、11 个 Sheet 缺 `AcSmSheetViews` 均在内存稳定修复（231 项可审计动作），原始文件字节与 mtime 不变；修复不生成 `.dst-manager/`。
+- **新建 Sheet**：工厂输出含完整 `clsid`/`ID`/布局引用（四字段 `vt=8`）/属性袋/`Number`/`Title`/`AcSmSheetViews`，与黄金契约逐字段一致，未知 DOM 内容与顺序保留；冲突 ID、错误非空固定值、缺业务信息与无法唯一推断节点均阻断且不覆盖。
+- **发布事务**：写回仅经用户确认的独立 repair revision，走现有锁/暂存/永久 before 快照/发布日志/失败回滚/启动恢复；异常注入、基准漂移、暂存失败均有回归。
+- **入口与 UI**：service/CAD/XML 全部使用统一 `load_acsm`；API 的 repairs/preview、repairs/execute 与 Web 修复确认界面（含 e2e 19/19）覆盖确认前禁用与成功后刷新。
+- **未运行**：真实 AutoCAD 2016/2020 系统测试与官方 Sheet Manager 显示验收因本机未设置 `DST_MANAGER_RUN_AUTOCAD=1`（且无对应 Core Console/Worker/私有 DWG 样本）而跳过，不视为伪造通过。
