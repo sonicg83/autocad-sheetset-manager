@@ -35,7 +35,7 @@ from dst_manager.domain.planning import (
     build_structural_plan,
     derive_subset_and_dwg_name,
 )
-from dst_manager.infrastructure.acsm_xml import AcsmDocument
+from dst_manager.infrastructure.acsm_xml import AcsmDocument, load_acsm
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
@@ -48,6 +48,7 @@ from dst_manager.infrastructure.filesystem.publisher import (
     ExpectedFileBaseline,
     PublishBaselineError,
     PublishRecoveryError,
+    PublishRolledBackError,
     RecoverablePublisher,
     capture_file_baseline,
     file_sha256,
@@ -521,6 +522,8 @@ def _chained_rename_workspace(
         + "".join(subsets)
         + "</AcSmSheetSet></AcSmDatabase>"
     ).encode()
+    # 通过统一 loader 对齐新契约（固定 clsid/propname/vt + AcSmSheetViews），保持 VALID
+    xml = load_acsm(xml).to_bytes()
     dst = tmp_path / "连锁改名.dst"
     codec = DstCodec()
     codec.encode_file(xml, dst)
@@ -2283,6 +2286,8 @@ def test_final_dst_rejects_numeric_duplicate_handles_in_same_drawing(tmp_path: P
         '<AcSmProp propname="Number">002</AcSmProp><AcSmProp propname="Title">第一册 (2)</AcSmProp></AcSmSheet>'
         '</AcSmSubset></AcSmSheetSet></AcSmDatabase>'
     ).encode()
+    # 通过统一 loader 对齐新契约，保持 VALID（允许 Handle 校验逻辑独立验证）
+    xml = load_acsm(xml).to_bytes()
     dst = tmp_path / "重复Handle.dst"
     codec = DstCodec()
     codec.encode_file(xml, dst)
@@ -3271,3 +3276,180 @@ def test_fail_sample_load_repairs_in_memory_and_roundtrips(tmp_path: Path):
 
     assert fail_copy.read_bytes() == before_bytes
     assert fail_copy.stat().st_mtime == before_mtime
+
+
+# ---------------------------------------------------------------- PLAN-DM-009 Task 5：修复事务与 CAD 边界
+
+FAIL_SRC = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "shared"
+    / "research"
+    / "project1-dst-xml"
+    / "sheetset-fail.xml"
+)
+
+
+def _fail_dst(tmp_path: Path) -> Path:
+    dst = tmp_path / "repair-project.dst"
+    DstCodec().encode_file(FAIL_SRC.read_bytes(), dst)
+    return dst
+
+
+def _repair_preview_digest(service, workspace) -> str:
+    preview = service.preview_repair(workspace.id, workspace.revision_id)
+    assert preview["status"] == "REPAIRED"
+    return preview["preview_digest"]
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        (PublishRolledBackError("INJECTED_REPAIR_ROLLBACK"), "ROLLED_BACK"),
+        (PublishRecoveryError("INJECTED_REPAIR_RECOVERY"), "NEEDS_REVIEW"),
+        (RuntimeError("INJECTED_REPAIR_FAILURE"), "FAILED"),
+    ],
+)
+def test_repair_publish_failures_use_safe_terminal_and_keep_official_dst(
+    tmp_path: Path,
+    monkeypatch,
+    failure: Exception,
+    expected_status: str,
+):
+    """修复发布中途异常时，正式 DST 保持发布前字节，任务进入安全终态并释放写锁。"""
+    dst = _fail_dst(tmp_path)
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    base_hash = file_sha256(dst)
+    base_bytes = dst.read_bytes()
+    digest = _repair_preview_digest(service, workspace)
+    monkeypatch.setattr(service.publisher, "publish", Mock(side_effect=failure))
+
+    job = service.execute_repair(workspace.id, workspace.revision_id, digest)
+
+    assert job["status"] == expected_status
+    assert dst.read_bytes() == base_bytes
+    assert file_sha256(dst) == base_hash
+    with service.database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+
+
+def test_repair_staging_encode_failure_is_traceable_and_keeps_file(tmp_path: Path, monkeypatch):
+    """暂存编码失败：任务 FAILED、正式 DST 不变，且无修订 manifest 落盘。"""
+    dst = _fail_dst(tmp_path)
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    base_hash = file_sha256(dst)
+    base_bytes = dst.read_bytes()
+    digest = _repair_preview_digest(service, workspace)
+
+    def fail_encode(data: bytes, target):
+        raise OSError("INJECTED_ENCODE_FAILURE")
+
+    monkeypatch.setattr(service.codec, "encode_file", Mock(side_effect=fail_encode))
+    job = service.execute_repair(workspace.id, workspace.revision_id, digest)
+
+    assert job["status"] == "FAILED"
+    assert job.get("error_code") == "OSERROR"
+    assert dst.read_bytes() == base_bytes
+    assert file_sha256(dst) == base_hash
+    revisions = service.database.list_revisions(workspace.id)
+    assert not any(item["id"].startswith("repair-") for item in revisions)
+
+
+def test_repair_startup_recovery_restores_official_dst(tmp_path: Path, tiny_workspace):
+    """修复发布在 PUBLISHING 阶段中断后重启，正式 DST 恢复为发布前字节且任务 ROLLED_BACK。"""
+    dst, _ = tiny_workspace
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    workspace = service.open_workspace(dst)
+    operation_id = "repair-crash"
+    service.database.create_job(
+        operation_id,
+        workspace.id,
+        "repair_revision",
+        JobStatus.PUBLISHING,
+        {"base_revision_id": workspace.revision_id, "kind": "repair"},
+    )
+    before_bytes = DstCodec().decode_file(dst)
+    backup = tmp_path / ".dst-manager" / "revisions" / operation_id / "before" / dst.name
+    backup.parent.mkdir(parents=True)
+    backup.write_bytes(before_bytes)
+    staged = tmp_path / ".dst-manager" / "jobs" / operation_id / "staging" / dst.name
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"repair-staged")
+    journal_path = tmp_path / ".dst-manager" / "jobs" / operation_id / "publish-journal.json"
+    journal = {
+        "operation_id": operation_id,
+        "status": "PUBLISHING",
+        "files": [
+            {
+                "target": str(dst),
+                "backup": str(backup),
+                "staged": None,
+                "replaced": True,
+            },
+        ],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    dst.write_bytes(b"repair-staged")  # 模拟已替换
+
+    restarted = DstManagerService(settings)
+
+    assert dst.read_bytes() == before_bytes
+    assert restarted.database.get_job(operation_id)["status"] == "ROLLED_BACK"
+
+
+def test_cad_staging_rejects_non_valid_dst(tmp_path: Path):
+    """CAD 暂存加载要求 VALID：修复/阻断状态的 DST 不得交给 AutoCAD Worker。"""
+    dst = _fail_dst(tmp_path)
+    document = load_acsm(DstCodec().decode_file(dst)).project(tmp_path)
+    workspace = Workspace("workspace", tmp_path, dst, "revision", document)
+    runner = CadJobRunner(Mock(), DstCodec(), Mock(), 30)
+
+    # 门禁在计划内容使用前触发，因此最小 plan 即可验证
+    with pytest.raises(PlanningError) as exc_info:
+        runner._write_staged_dst(workspace, {"groups": []}, {}, tmp_path)
+
+    assert exc_info.value.code == "DST_REPAIR_GATE_BLOCKED"
+
+
+def _replicate_relative_dwgs(dst: Path) -> None:
+    """按失败样本 Relative_FileName 在 DST 目录补齐同名 DWG，保证规划路径落在工作区内。"""
+    document = load_acsm(DstCodec().decode_file(dst))
+    for item in document.root.iter():
+        if etree.QName(item).localname == "AcSmProp" and item.get("propname") == "Relative_FileName":
+            relative = (item.text or "").strip().replace("\\", "/").removeprefix("./")
+            if not relative:
+                continue
+            target = (dst.parent / relative).resolve()
+            if dst.parent.resolve() not in target.parents:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"fake-dwg")
+
+
+def test_cad_staging_accepts_valid_dst_after_repair(tmp_path: Path):
+    """修复发布成功后，CAD 暂存加载恢复为 VALID 并可生成最终 DST。"""
+    dst = _fail_dst(tmp_path)
+    _replicate_relative_dwgs(dst)
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    digest = _repair_preview_digest(service, workspace)
+    job = service.execute_repair(workspace.id, workspace.revision_id, digest)
+    assert job["status"] == "SUCCEEDED"
+
+    reloaded = service.get_workspace(workspace.id)
+    assert reloaded.document.repair_report.status == "VALID"
+    # 门禁直接可过
+    CadJobRunner(Mock(), DstCodec(), Mock(), 30)._require_valid_staging(
+        load_acsm(DstCodec().decode_file(dst)),
+    )
+    plan = build_structural_plan(reloaded, [], SuffixOptions(True, 1))
+    runner = CadJobRunner(Mock(), DstCodec(), Mock(), 30)
+
+    staged = runner._write_staged_dst(reloaded, plan, {}, tmp_path)
+
+    final = load_acsm(DstCodec().decode_file(staged))
+    assert final.repair_report.status == "VALID"
+    assert len(final.project(tmp_path).sheets) == 24

@@ -811,6 +811,7 @@ class CadJobRunner:
             }
 
         acsm = load_acsm(self.codec.decode_file(workspace.dst_path))
+        self._require_valid_staging(acsm)
         acsm.apply_derived_document(derived_document_from_plan(plan))
         metadata_commands = metadata_commands_for_derived_document(commands or [])
         if metadata_commands:
@@ -838,9 +839,19 @@ class CadJobRunner:
         staged_dst = final_dir / workspace.dst_path.name
         self.codec.encode_file(acsm.to_bytes(), staged_dst)
         roundtrip = load_acsm(self.codec.decode_file(staged_dst))
+        self._require_valid_staging(roundtrip)
         if roundtrip.semantic_bytes() != acsm.semantic_bytes():
             raise ValueError("DST_ROUNDTRIP_MISMATCH")
         return staged_dst
+
+    @staticmethod
+    def _require_valid_staging(acsm) -> None:
+        """CAD 暂存加载必须为 VALID：任何修复/阻断诊断都不得把不完整图纸交给 Worker。"""
+        if acsm.repair_report.status != "VALID":
+            raise PlanningError(
+                "DST_REPAIR_GATE_BLOCKED",
+                "CAD 暂存加载要求 DST 为 VALID，当前状态：" + acsm.repair_report.status,
+            )
 
     @staticmethod
     def _require_source_file(path: Path, code: str) -> None:

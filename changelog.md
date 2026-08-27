@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009：修复事务与 CAD 边界）
+
+- CAD 暂存加载（`_write_staged_dst` 及其 round-trip）要求统一 loader 结果为 `VALID`，任何修复/阻断诊断都会以 `DST_REPAIR_GATE_BLOCKED` 使任务失败，不把不完整图纸交给 AutoCAD Worker。
+- 修复独立修订的发布完全复用现有锁、暂存、永久 before 快照、发布日志、失败回滚与启动恢复流程：新增事务回归（发布中途异常 → ROLLED_BACK/NEEDS_REVIEW/FAILED 安全终态且正式 DST 保持发布前字节、暂存编码失败可追踪无 manifest、PUBLISHING 中断后启动恢复回滚正式 DST）。
+- 修复成功后工作区重载为 `VALID`，普通元数据/结构/CAD 流程继续经过既有基准与权限校验（含修复后 24 张图的 CAD 暂存可达 VALID）。
+- AutoCAD 系统测试跳过：本机未设置 `DST_MANAGER_RUN_AUTOCAD=1`（且未确认 Core Console/Worker/私有样本），按计划记录跳过条件，不伪造通过结果。
+
 ## 2026-08-27（PLAN-DM-009：统一加载与修复确认）
 
 - 新增统一 loader `load_acsm`（service/cad_job/XML 入口全部改用，工作区序列化新增稳定字段 `dst_validation`：`status`/`actions`/`blocking_issues`，`diagnostics` 保持向后兼容）；文件 SHA-256 仍是 revision 基准，内存修复不改 revision，只读打开不产生 `.dst-manager/` 或时间戳变化。
