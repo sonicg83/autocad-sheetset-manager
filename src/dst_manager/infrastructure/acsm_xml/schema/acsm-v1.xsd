@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  acsm-v1.xsd — AcSm XML 严格后置结构边界（XSD 1.0）。
+
+  本 schema 是 `DST -> XML DOM -> DST` 受控链路的修复后结构边界：
+  - 声明已知 AcSm 对象类型，作为整棵树的类型纲目；
+  - 通过 `<xs:any processContents="lax">` 与 `<xs:anyAttribute processContents="lax">`
+    保留未知子元素、未知属性、原有顺序和 tail 文本，绝不因扩展内容报错；
+  - 必需属性缺失、固定属性值错配、AcSmProp vt 错配与父级包含关系
+    由 `contract.py` 的契约校验器承担；每张 Sheet 布局/Number/Title/Handle
+    等业务不变量由 `document.py` 的语义校验器承担。
+
+  由于 lxml/libxml2 不支持 XSD 1.1 `assert` 与 `xs:all + xs:any` 组合，
+  本 schema 不在其中强制“必需子节点必须出现”，以避免对顺序与扩展节点误报。
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <!-- AcSm 对象 ID：g + 标准 UUID -->
+  <xs:simpleType name="AcSmId">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="g[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 已知对象的通用结构：ID/clsid/propname/vt 属性 + 任意扩展 -->
+  <xs:complexType name="acsmObjectType" mixed="true">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="ID" type="AcSmId"/>
+    <xs:attribute name="clsid" type="xs:string"/>
+    <xs:attribute name="propname" type="xs:string"/>
+    <xs:attribute name="vt" type="xs:string"/>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+
+  <!-- 已知对象元素声明（全局，作为根/嵌套类型纲目） -->
+  <xs:element name="AcSmDatabase" type="acsmObjectType"/>
+  <xs:element name="AcSmSheetSet" type="acsmObjectType"/>
+  <xs:element name="AcSmSubset" type="acsmObjectType"/>
+  <xs:element name="AcSmSheet" type="acsmObjectType"/>
+  <xs:element name="AcSmCustomPropertyBag" type="acsmObjectType"/>
+  <xs:element name="AcSmCustomPropertyValue" type="acsmObjectType"/>
+  <xs:element name="AcSmAcDbLayoutReference" type="acsmObjectType"/>
+  <xs:element name="AcSmSheetViews" type="acsmObjectType"/>
+  <xs:element name="AcSmProp" type="acsmObjectType"/>
+
+</xs:schema>

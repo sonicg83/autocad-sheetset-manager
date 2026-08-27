@@ -1,5 +1,60 @@
 # 变更记录
 
+## 2026-08-27（PLAN-DM-009 审查修复）
+
+- 修复器在修复后合并契约复核（`validate_contract`）到阻断集：父级包含关系等修复器未建模的契约错误不再伪装成 `REPAIRED`/`VALID`，而是进入 `INVALID_REPAIR_REQUIRED` 并以 `REPAIR_BLOCKED` 阻断写入；与既有 `CONTRACT_*` 按（code、object、message）去重避免重复报告，消除“用户确认修复后必然 `XML_VALIDATION_FAILED`”和“`dst_validation=VALID` 却带有结构错误”的死胡同（对应审查 Important #1）。
+- `repairs/preview` 的 `preview_digest` 仅在 `REPAIRED` 状态返回，`INVALID_*` 不返回摘要，避免把“不可执行阻断”与“待确认修复”混为一谈（对应审查 Minor #4）。
+- `AcsmDocument(repair=False)` 的 actions 语义注释明确为“本次识别但未应用的修复记录”，`RepairReport` docstring 补充契约层层级/必需属性错误归入 `INVALID_REPAIR_REQUIRED`（对应审查 Minor #3）。
+- 新增回归：层级错误样本（`AcSmSheet` 直属 `AcSmDatabase`，其余结构完整）打开即 `INVALID_REPAIR_REQUIRED` 且预览写入 409（修复器级 + 入口级两条）；两次独立解码修复的 `repair_digest` 一致且绑定基准修订（固化掩码不变量，对应审查 Important #2）。
+- 决策记录：`restore_revision` 不受修复门禁限制（显式破坏性恢复是 `INVALID_*` 状态下用户唯一出路，恢复后重新校验），保持既有行为（对应审查 Minor #5）。
+
+## 2026-08-27（PLAN-DM-009 交付审查）
+
+- 完成 PLAN-DM-009 交付验证：`uv sync --dev`、`uv run ruff check .`、`uv run pytest -q`（432 passed / 66 skipped，退出码 0）、`uv lock --check` 全部通过；黄金样本 `VALID` 零修复、失败样本 231 项可审计内存修复且原件/时间戳不变、新建 Sheet 子树与黄金契约逐字段一致并保留未知内容与顺序。
+- 发布事务回归覆盖写入门禁、独立修复修订、异常/基线漂移/暂存失败回滚与启动恢复；service/CAD/XML 全部入口统一 `load_acsm`；Web 修复确认界面与 e2e 19/19 通过。
+- 真实 AutoCAD 2016/2020 系统测试与官方 Sheet Manager 显示验收：本机未设置 `DST_MANAGER_RUN_AUTOCAD=1` 且无对应 Core Console/Worker/私有 DWG 样本，按计划记录跳过条件，不视为通过。
+- PLAN-DM-009 标记为 `completed`，交付验证记录写入计划正文；SPEC-DM-004 补充修复器“不丢弃副本、未确定修复进入阻断诊断”的实施说明。
+
+## 2026-08-27（PLAN-DM-009：修复确认界面）
+
+- Web 新增 `DstValidation`/`RepairAction` 类型与修复面板：四种状态各自的文案、颜色与按钮可用性（`VALID` 无面板；`REPAIRED` 显示“预览并确认修复”；两个 `INVALID_*` 只显示诊断）；逐项展示凭 code/路径/before/after/confidence 与阻断原因，长路径可换行且不含敏感绝对路径。
+- 修复确认流程：预览调用 `repairs/preview` 固定基准并展示摘要，确认后经 `repairs/execute` 发布；确认前普通编辑发布按钮（预览变更/确认执行/CSV 导入）全部禁用；修复成功后刷新工作区、修订与诊断。加载代次/workspace 修订变化时丢弃旧修复报告。
+- 前端生产构建通过（vue-tsc + vite），Playwright e2e 新增修复流程用例，19/19 全部通过。
+
+## 2026-08-27（PLAN-DM-009：修复事务与 CAD 边界）
+
+- CAD 暂存加载（`_write_staged_dst` 及其 round-trip）要求统一 loader 结果为 `VALID`，任何修复/阻断诊断都会以 `DST_REPAIR_GATE_BLOCKED` 使任务失败，不把不完整图纸交给 AutoCAD Worker。
+- 修复独立修订的发布完全复用现有锁、暂存、永久 before 快照、发布日志、失败回滚与启动恢复流程：新增事务回归（发布中途异常 → ROLLED_BACK/NEEDS_REVIEW/FAILED 安全终态且正式 DST 保持发布前字节、暂存编码失败可追踪无 manifest、PUBLISHING 中断后启动恢复回滚正式 DST）。
+- 修复成功后工作区重载为 `VALID`，普通元数据/结构/CAD 流程继续经过既有基准与权限校验（含修复后 24 张图的 CAD 暂存可达 VALID）。
+- AutoCAD 系统测试跳过：本机未设置 `DST_MANAGER_RUN_AUTOCAD=1`（且未确认 Core Console/Worker/私有样本），按计划记录跳过条件，不伪造通过结果。
+
+## 2026-08-27（PLAN-DM-009：统一加载与修复确认）
+
+- 新增统一 loader `load_acsm`（service/cad_job/XML 入口全部改用，工作区序列化新增稳定字段 `dst_validation`：`status`/`actions`/`blocking_issues`，`diagnostics` 保持向后兼容）；文件 SHA-256 仍是 revision 基准，内存修复不改 revision，只读打开不产生 `.dst-manager/` 或时间戳变化。
+- 新增写入门禁：`VALID` 才能正常预览/执行；`REPAIRED` 必须先经独立修复修订确认（409 `REPAIR_CONFIRMATION_REQUIRED`）；`INVALID_REPAIR_REQUIRED`/`INVALID_UNRECOVERABLE` 只能读和显示诊断（409 `REPAIR_BLOCKED`/`REPAIR_UNRECOVERABLE`）。
+- 新增 `POST /api/workspaces/{id}/repairs/preview` 与 `/repairs/execute`：预览固定 base revision 并返回修复摘要（修复后 DOM canonical 字节对 `ID` 值掩码后与基准组合，保证预览/执行独立重解码结果一致）；执行从正式 DST 重新解码、修复、严格校验并复核摘要，沿现有锁/暂存/永久 before 快照/发布日志/回滚发布独立修复修订。
+- 新增入口一致性测试与 API 覆盖：黄金样本打开 `VALID`、失败样本返回报告且不改文件、未确认修复被明确错误码阻断、确认后产生新修订并重载为 `VALID`、篡改摘要/基准漂移被拒。
+- `tiny_workspace` 测试夹具改为契约合规文档（固定 clsid/propname/vt + AcSmSheetViews），既有测试全部回归通过；属性作用域冲突的工作区改为“打开即可见阻断诊断、写入 409”。
+
+## 2026-08-27（PLAN-DM-009：新增 Sheet 契约对齐）
+
+- `AcsmDocument` 加载流程改为 parse → 宽容契约扫描 → 可选内存修复 → 严格 XSD → 语义校验；新增可选参数 `repair`（默认 True）与 `repair_report` 属性，修复只作用深拷贝副本，`clone()` 同步复制报告状态；`repair=False` 时已识别但未应用的修复标记为 `INVALID_REPAIR_REQUIRED`。
+- `_make_sheet_node`/`_make_subset_node`/`_make_custom_property_bag`/`_make_property_value` 改为 contract-driven 工厂：补齐 `clsid`、固定 `propname`、`vt=13`，布局四字段与 `Number`/`Title` 使用 `vt=8`，新 Sheet 按黄金顺序补齐 `AcSmSheetViews`。
+- `validate()` 合并契约、严格 XSD、语义与既有自定义属性诊断，保持既有错误码兼容，新增稳定英文错误码（`CONTRACT_*`/`PROP_VT_*`/`XSD_INVALID`）。
+- 新增回归测试：工厂输出与黄金契约逐字段一致、`insert_sheet`/`insert_subset`/`apply_derived_document` 的新图纸均含 `AcSmSheetViews` 且保留未知节点与顺序、失败样本加载修复后 24 张图纸全部可见且 `validate()` 零问题、样本原件字节与 mtime 不变。
+
+## 2026-08-27（PLAN-DM-009：内存修复与报告）
+
+- 领域层新增 `RepairStatus`（VALID/REPAIRED/INVALID_REPAIR_REQUIRED/INVALID_UNRECOVERABLE）、`RepairConfidence`、不可变 `RepairAction` 与 `RepairReport` 诊断值对象，不依赖 lxml/文件系统。
+- 新建 `src/dst_manager/infrastructure/acsm_xml/repair.py`：`AcsmRepairer` 在深拷贝 DOM 上按固定顺序修复（全局 ID 索引 → 补 ID → 按 contract 补固定属性 → 补 AcSmProp vt → 黄金位置补 AcSmSheetViews → 汇总阻断诊断）；不修改传入 root、不写文件；状态分类为结构性不可恢复（重复/非法 ID、根错误）→ `INVALID_UNRECOVERABLE`，其余阻断（缺业务值、布局冲突、错误非空固定值、属性作用域冲突）→ `INVALID_REPAIR_REQUIRED` 且不覆盖原值。
+- 新增 `tests/unit/test_acsm_repair.py`（10 项）：黄金 no-op（VALID/零 action/序列化一致/输入不变）、失败样本内存修复（补齐 SheetViews≥11、生成 ID 合法且全局唯一、contract 通过、样本原件不变）及负例阻断（重复 ID、非空错误 clsid、缺业务值、缺/多布局、Flags 作用域冲突）。
+
+## 2026-08-27（PLAN-DM-009：AcSm 契约与 schema）
+
+- 新建 `src/dst_manager/infrastructure/acsm_xml/contract.py`：版本化 AcSm contract registry，固化七类已知对象（`AcSmSheetSet`/`AcSmSubset`/`AcSmSheet`/`AcSmCustomPropertyBag`/`AcSmCustomPropertyValue`/`AcSmAcDbLayoutReference`/`AcSmSheetViews`）的必需属性、固定 `clsid` 和已知 `AcSmProp` 的 `vt` 类型表，并校验已知对象父级包含关系；未知元素/属性/顺序/tail 一律宽容保留。
+- 新建 `src/dst_manager/infrastructure/acsm_xml/schema/acsm-v1.xsd`：修复后结构边界，声明已知对象类型并允许扩展节点/属性；由于 lxml 不支持 XSD 1.1 assert，必需子节点不变量由契约/语义校验器承担（已在代码注释与规范中记录职责分工）。
+- 新增 `tests/unit/test_acsm_contract.py`（12 项）：黄金样本 contract+XSD 零错误、Sheet 仅要求 ID+固定 clsid、固定 ID 表、`vt` 类型区分（`Flags=3`/文本=8/`PromptForDwt`/`FileRevision`=2/3，不默认 8）、未知内容忽略与负例（缺 ID/错误固定值/缺 vt/错误层级/错误根）。
+
 ## 2026-08-27（PLAN-DM-008 复审修复）
 
 - 新增 `PLAN-DM-009` 实施计划：按 `SPEC-DM-004` 分解 AcSm contract/XSD、内存修复报告、统一加载门禁、独立修复发布事务、Web 确认和全量验证任务。

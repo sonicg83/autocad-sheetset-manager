@@ -167,3 +167,33 @@ test("失败任务显示逐 DWG 详情并可安全重试",async({page})=>{
 test("修订恢复先预览再确认为新修订",async({page})=>{
   await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore",route=>route.fulfill({json:{id:"restore-1",status:"SUCCEEDED",progress:100,attempt:0,files:[]}}));await openWorkspace(page);await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();await expect(page.getByText("replace test.dst")).toBeVisible();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"恢复为新修订"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");
 });
+
+test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
+  const repaired:any=workspaceVersion("workspace-1","测试图纸集","revision-1");
+  repaired.dst_validation={status:"REPAIRED",actions:[{code:"REPAIR_ATTR_MISSING",node_path:"/AcSmDatabase/AcSmSheetSet[@ID=\"x\"]/AcSmSheet",object_id:null,confidence:"deterministic",before:{clsid:null},after:{clsid:"g16A07941-BC15-4D48-A880-9D5A211D5065"},message:"补齐 AcSmSheet 的 clsid"}],blocking_issues:[]};
+  const valid:any=workspaceVersion("workspace-1","测试图纸集","revision-2");
+  valid.dst_validation={status:"VALID",actions:[],blocking_issues:[]};
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:repaired}));
+  await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:valid}));
+  await page.route("**/api/workspaces/workspace-1/repairs/preview",route=>route.fulfill({json:{status:"REPAIRED",actions:repaired.dst_validation.actions,blocking_issues:[],preview_digest:"digest-1234567890abcdef",executable:true}}));
+  await page.route("**/api/workspaces/workspace-1/repairs/execute",route=>route.fulfill({json:{id:"repair-job",status:"SUCCEEDED",progress:100,files:[]}}));
+  await page.goto("/");
+  await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\project\test.dst");
+  await page.getByRole("button",{name:"打开项目"}).click();
+  await expect(page.getByText("DST 修复状态：已修复（待确认）")).toBeVisible();
+  await page.getByText("修复明细（1）").click();
+  await expect(page.getByText("REPAIR_ATTR_MISSING")).toBeVisible();
+  // 确认前普通编辑发布被禁用
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
+  await page.getByRole("button",{name:"预览并确认修复"}).click();
+  await expect(page.getByText(/修复 1 项 · 摘要 digest-12345678/)).toBeVisible();
+  page.once("dialog",dialog=>dialog.accept());
+  await page.getByRole("button",{name:"确认发布修复修订"}).click();
+  await expect(page.getByText("任务 repair-job")).toBeVisible();
+  // 修复成功后刷新为 VALID，修复面板消失且普通编辑恢复
+  await expect(page.getByText("已修复（待确认）")).toHaveCount(0);
+  await expect(page.getByText("DST 修复状态")).toHaveCount(0);
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
+});

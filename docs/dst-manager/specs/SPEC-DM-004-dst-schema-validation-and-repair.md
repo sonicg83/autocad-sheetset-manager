@@ -108,6 +108,13 @@ AcSmSheet
 
 修复必须在 DOM 副本上事务式执行。任一修复无法完成时，丢弃副本并保留原始解析结果，不产生半修复对象。
 
+> 实施说明（PLAN-DM-009 已落地）：`AcsmRepairer` 对深拷贝 DOM 顺序执行
+> “全局 ID 索引 → 补 ID → 补固定属性 → 补 AcSmProp vt → 黄金位置补
+> `AcSmSheetViews`”；无法确定的修复（缺业务值、布局缺失/冲突、属性作用域
+> 冲突、非空错误固定值）不覆盖原值，而是进入 `blocking_issues` 并形成
+> `INVALID_REPAIR_REQUIRED`/`INVALID_UNRECOVERABLE` 阻断状态，不再以
+> “丢弃整个副本”处理——这与本规范的“可识别修复 + 阻断诊断”目标一致。
+
 ### 4.2 必须阻断
 
 - XML 编码、语法或 DST 解码失败；

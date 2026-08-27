@@ -34,6 +34,11 @@ class XmlRequest(BaseModel):
     destination_revision_id: str | None = None
 
 
+class RepairRequest(BaseModel):
+    base_revision_id: str
+    preview_digest: str | None = None
+
+
 class TemplateRequest(BaseModel):
     template_path: Path
     cad_version: str = "2020"
@@ -188,6 +193,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/workspaces/{workspace_id}/revisions/{revision_id}/restore")
     def restore_revision(workspace_id: str, revision_id: str, request: RestoreRevisionRequest):
         return service.restore_revision(workspace_id, revision_id, request.base_revision_id)
+
+    @app.post("/api/workspaces/{workspace_id}/repairs/preview")
+    def repair_preview(workspace_id: str, request: RepairRequest):
+        return service.preview_repair(workspace_id, request.base_revision_id)
+
+    @app.post("/api/workspaces/{workspace_id}/repairs/execute")
+    def repair_execute(workspace_id: str, request: RepairRequest):
+        return service.execute_repair(workspace_id, request.base_revision_id, request.preview_digest)
 
     @app.get("/api/system/cad-capabilities")
     def capabilities():

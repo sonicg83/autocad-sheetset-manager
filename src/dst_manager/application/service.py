@@ -21,6 +21,7 @@ from dst_manager.domain.editing import (
 from dst_manager.domain.models import (
     JobStatus,
     Severity,
+    SheetSetDocument,
     SuffixOptions,
     Workspace,
 )
@@ -29,7 +30,12 @@ from dst_manager.domain.planning import (
     build_structural_plan,
     derived_document_from_plan,
 )
-from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationError
+from dst_manager.infrastructure.acsm_xml import (
+    AcsmDocument,
+    AcsmValidationError,
+    load_acsm,
+)
+from dst_manager.infrastructure.acsm_xml.document import repair_digest
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
     CoreConsoleExecutor,
@@ -94,7 +100,7 @@ class DstManagerService:
             raise ApplicationError("PUBLISH_RECOVERY_FAILED", "工作区存在无法自动恢复的发布事务", 409) from exc
         revision = file_sha256(dst_path)
         workspace_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(dst_path).casefold()))
-        acsm = AcsmDocument(self.codec.decode_file(dst_path))
+        acsm = load_acsm(self.codec.decode_file(dst_path))
         document = acsm.project(root, root_override)
         referenced = {sheet.layout.resolved_path for sheet in document.sheets if sheet.layout.resolved_path}
         unreferenced = sorted((path.resolve() for path in root.glob("*.dwg") if path.resolve() not in referenced), key=str)
@@ -230,6 +236,7 @@ class DstManagerService:
         normalized_commands = self._normalize_commands(commands)
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
+        self._gate_writable(workspace.document)
         sheet_ids = {sheet.acsm_id for sheet in workspace.document.sheets}
         diagnostics = []
         changes = []
@@ -291,7 +298,7 @@ class DstManagerService:
                     )
         if not diagnostics:
             try:
-                preview_dom = AcsmDocument(self.codec.decode_file(workspace.dst_path)).clone()
+                preview_dom = load_acsm(self.codec.decode_file(workspace.dst_path)).clone()
                 if structural:
                     preview_dom.apply_derived_document(derived_document_from_plan(execution_intent))
                 self._apply_nonstructural_commands(preview_dom, normalized_commands, structural)
@@ -402,7 +409,7 @@ class DstManagerService:
                     raise PublishBaselineError("DST 已偏离提交预览基准")
                 self.database.update_job(job_id, JobStatus.STAGING, 20)
                 self._safe_operation_event(workspace.root, job_id, "STAGING", job_type="metadata")
-                acsm = AcsmDocument(self.codec.decode_file(workspace.dst_path))
+                acsm = load_acsm(self.codec.decode_file(workspace.dst_path))
                 try:
                     self._apply_nonstructural_commands(acsm, normalized_commands, structural=False)
                 except AcsmValidationError as exc:
@@ -415,7 +422,7 @@ class DstManagerService:
                 staging = job_dir / "staging" / workspace.dst_path.name
                 staging.parent.mkdir(parents=True, exist_ok=True)
                 self.codec.encode_file(acsm.to_bytes(), staging)
-                AcsmDocument(self.codec.decode_file(staging))
+                load_acsm(self.codec.decode_file(staging))
                 self.database.update_job(job_id, JobStatus.PREPARED, 70)
                 if capture_file_baseline(workspace.dst_path) != expected_baseline:
                     raise PublishBaselineError("DST 在发布前已偏离提交基准")
@@ -764,7 +771,8 @@ class DstManagerService:
     ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
-        imported = AcsmDocument(xml).project(workspace.root)
+        self._gate_writable(workspace.document)
+        imported = load_acsm(xml).project(workspace.root)
         before_sheets = {sheet.acsm_id: sheet for sheet in workspace.document.sheets}
         after_sheets = {sheet.acsm_id: sheet for sheet in imported.sheets}
         changes: list[dict[str, Any]] = []
@@ -808,7 +816,8 @@ class DstManagerService:
     ) -> dict[str, Any]:
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
-        document = AcsmDocument(xml)
+        self._gate_writable(workspace.document)
+        document = load_acsm(xml)
         errors = [issue for issue in document.validate() if issue.severity == Severity.ERROR]
         if errors:
             raise ApplicationError("XML_VALIDATION_FAILED", f"XML存在{len(errors)}个阻断问题")
@@ -850,7 +859,7 @@ class DstManagerService:
                 input_path.write_bytes(xml)
                 self._safe_operation_event(workspace.root, job_id, "STAGING", job_type="xml_export")
                 self.codec.encode_file(document.to_bytes(), staged)
-                roundtrip = AcsmDocument(self.codec.decode_file(staged))
+                roundtrip = load_acsm(self.codec.decode_file(staged))
                 if roundtrip.semantic_bytes() != document.semantic_bytes():
                     raise ValueError("DST_ROUNDTRIP_MISMATCH")
                 self.database.update_job(job_id, JobStatus.PREPARED, 70)
@@ -930,6 +939,152 @@ class DstManagerService:
             pass
         return self.database.get_job(job_id) or {}
 
+    def preview_repair(self, workspace_id: str, base_revision_id: str) -> dict[str, Any]:
+        """固定 base revision 并生成修复摘要与可审计报告；执行只信任服务端重解码结果。"""
+        workspace = self.get_workspace(workspace_id)
+        self._check_revision(workspace, base_revision_id)
+        acsm = load_acsm(self.codec.decode_file(workspace.dst_path))
+        report = acsm.repair_report
+        if report.status == "VALID":
+            return {
+                "workspace_id": workspace_id,
+                "base_revision_id": base_revision_id,
+                "status": "VALID",
+                "actions": [],
+                "blocking_issues": [],
+                "preview_digest": None,
+                "executable": False,
+            }
+        # 摘要只对可确认的 REPAIRED 状态有意义：INVALID_* 不可执行，不返回摘要，
+        # 避免客户端混淆“不可执行的阻断”与“待确认的修复”。
+        digest = repair_digest(acsm.root, base_revision_id) if report.status == "REPAIRED" else None
+        return {
+            "workspace_id": workspace_id,
+            "base_revision_id": base_revision_id,
+            "status": report.status,
+            "actions": [self._repair_action_dict(action) for action in report.actions],
+            "blocking_issues": [asdict(issue) for issue in report.blocking_issues],
+            "preview_digest": digest,
+            "executable": report.status == "REPAIRED",
+        }
+
+    def execute_repair(self, workspace_id: str, base_revision_id: str, preview_digest: str | None) -> dict[str, Any]:
+        """把可审计的内存修复作为独立修订，沿现有受控发布事务写回正式 DST。
+
+        执行时从正式 DST 重新解码、修复、严格校验并复核预览摘要；不允许通过
+        普通业务 commands 或客户端 XML 绕过确认。发布沿用锁、永久 before 快照、
+        暂存、校验、发布日志与失败回滚/启动恢复流程。
+        """
+        workspace = self.get_workspace(workspace_id)
+        self._check_revision(workspace, base_revision_id)
+        job_id = str(uuid.uuid4())
+        try:
+            self.database.create_job(
+                job_id,
+                workspace_id,
+                "repair_revision",
+                JobStatus.VALIDATED,
+                {"base_revision_id": base_revision_id, "kind": "repair"},
+            )
+        except WorkspaceBusyError as exc:
+            raise ApplicationError("WORKSPACE_WRITE_BUSY", str(exc), 409) from exc
+        operation_id = job_id
+        published = False
+        commit_state: dict[str, Any] = {"result_hash": None, "error": None}
+        try:
+            with WindowsWriteLocks([workspace.dst_path]):
+                expected_baseline = capture_file_baseline(workspace.dst_path)
+                if expected_baseline is None or expected_baseline.sha256 != base_revision_id:
+                    raise PublishBaselineError("DST 已偏离修复预览基准")
+                acsm = load_acsm(self.codec.decode_file(workspace.dst_path))
+                report = acsm.repair_report
+                if report.status == "VALID":
+                    raise ApplicationError("REPAIR_NOT_REQUIRED", "当前 DST 无待确认修复")
+                if report.status != "REPAIRED":
+                    raise ApplicationError("REPAIR_BLOCKED", "修复后仍存在阻断问题，禁止发布")
+                if preview_digest != repair_digest(acsm.root, base_revision_id):
+                    raise ApplicationError("REPREVIEW_REQUIRED", "修复预览已变化，请重新预览并确认", 409)
+                issues = acsm.validate()
+                if any(issue.severity == Severity.ERROR for issue in issues):
+                    raise ApplicationError("XML_VALIDATION_FAILED", "修复后 DST XML 校验失败")
+                self.database.update_job(job_id, JobStatus.STAGING, 20)
+                self._safe_operation_event(workspace.root, job_id, "STAGING", job_type="repair")
+                job_dir = workspace.root / ".dst-manager" / "jobs" / operation_id
+                staging = job_dir / "staging" / workspace.dst_path.name
+                staging.parent.mkdir(parents=True, exist_ok=True)
+                self.codec.encode_file(acsm.to_bytes(), staging)
+                roundtrip = load_acsm(self.codec.decode_file(staging))
+                if roundtrip.semantic_bytes() != acsm.semantic_bytes():
+                    raise ValueError("DST_ROUNDTRIP_MISMATCH")
+                self.database.update_job(job_id, JobStatus.PREPARED, 70)
+                if capture_file_baseline(workspace.dst_path) != expected_baseline:
+                    raise PublishBaselineError("DST 在发布前已偏离修复基准")
+                self.database.update_job(job_id, JobStatus.PUBLISHING, 90)
+                self._safe_operation_event(workspace.root, job_id, "PUBLISHING", file_count=1)
+
+                def finalize_repair(revision_dir: Path, journal: dict[str, Any]) -> None:
+                    try:
+                        result_hash = self._committed_result_hash(journal, workspace.dst_path)
+                        commit_state["result_hash"] = result_hash
+                        self.database.finalize_committed_job(
+                            f"repair-{operation_id}",
+                            workspace_id,
+                            operation_id,
+                            expected_baseline.sha256,
+                            result_hash,
+                            revision_dir,
+                            current_revision=result_hash,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - 回调不得让 COMMITTED 进入回滚分支
+                        commit_state["error"] = exc
+                        try:
+                            current = self.database.get_job(job_id) or {}
+                            if current.get("status") != JobStatus.SUCCEEDED:
+                                self.database.finalize_job_terminal(
+                                    job_id,
+                                    JobStatus.NEEDS_REVIEW,
+                                    "COMMITTED_FINALIZE_FAILED",
+                                    str(exc),
+                                )
+                        except Exception:  # noqa: BLE001, S110 - 启动恢复仍会依据 COMMITTED 日志隔离
+                            pass
+
+                self.publisher.publish(
+                    operation_id,
+                    workspace.root,
+                    {workspace.dst_path: staging},
+                    expected_baselines={workspace.dst_path: expected_baseline},
+                    on_committed=finalize_repair,
+                )
+                published = True
+        except PublishRolledBackError as exc:
+            self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, exc.code, str(exc))
+            return self.database.get_job(job_id) or {}
+        except PublishRecoveryError as exc:
+            self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, exc.code, str(exc))
+            return self.database.get_job(job_id) or {}
+        except Exception as exc:  # noqa: BLE001 - 同步写入边界必须持久化终态并释放写锁
+            current = self.database.get_job(job_id) or {}
+            if current.get("status") == JobStatus.SUCCEEDED:
+                return current
+            status = JobStatus.NEEDS_REVIEW if published else JobStatus.FAILED
+            code = "COMMITTED_FINALIZE_FAILED" if published else getattr(exc, "code", type(exc).__name__.upper())
+            self.database.finalize_job_terminal(job_id, status, code, str(exc))
+            return self.database.get_job(job_id) or {}
+        if commit_state["error"] is not None:
+            return self.database.get_job(job_id) or {}
+        result_hash = commit_state["result_hash"]
+        if not isinstance(result_hash, str):
+            self.database.finalize_job_terminal(
+                job_id,
+                JobStatus.NEEDS_REVIEW,
+                "COMMITTED_FINALIZE_MISSING",
+            )
+            return self.database.get_job(job_id) or {}
+        self._write_workspace_metadata_after_commit(workspace, result_hash, "2020", job_id)
+        self._safe_operation_event(workspace.root, job_id, "SUCCEEDED", revision_id=f"repair-{operation_id}")
+        return self.database.get_job(job_id) or {}
+
     def capabilities(self) -> dict[str, dict[str, Any]]:
         capabilities = {version: self._capability(version) for version in ("2016", "2020")}
         return {version: {"version": version, "available": item.available, "console": str(item.console) if item.console else None, "plugin": str(item.plugin) if item.plugin else None} for version, item in capabilities.items()}
@@ -965,6 +1120,46 @@ class DstManagerService:
     def _check_revision(self, workspace: Workspace, base_revision_id: str) -> None:
         if workspace.revision_id != base_revision_id:
             raise ApplicationError("REVISION_CONFLICT", "基准修订已变化，请重新预览", 409)
+
+    @staticmethod
+    def _gate_writable(document: SheetSetDocument) -> None:
+        """写入门禁：只有 VALID 工作区才能创建/执行写任务。
+
+        `REPAIRED` 必须先完成独立修复修订；两个 INVALID 状态只能读和显示诊断。
+        """
+        report = getattr(document, "repair_report", None)
+        status = report.status if report is not None else None
+        if status is None or status == "VALID":
+            return
+        if status == "REPAIRED":
+            raise ApplicationError(
+                "REPAIR_CONFIRMATION_REQUIRED",
+                "检测到可修复的 DST 元数据缺失，必须先在修复预览中确认并发布独立修复修订",
+                409,
+            )
+        if status == "INVALID_REPAIR_REQUIRED":
+            raise ApplicationError(
+                "REPAIR_BLOCKED",
+                "DST 存在需补充信息或决策的阻断问题，只能查看诊断，禁止写入",
+                409,
+            )
+        raise ApplicationError(
+            "REPAIR_UNRECOVERABLE",
+            "DST 存在不可恢复问题，禁止写入",
+            409,
+        )
+
+    @staticmethod
+    def _repair_action_dict(action) -> dict[str, Any]:
+        return {
+            "code": action.code,
+            "node_path": action.node_path,
+            "object_id": action.object_id,
+            "confidence": action.confidence,
+            "before": action.before,
+            "after": action.after,
+            "message": action.message,
+        }
 
     def _collect_structural_source_baselines(
         self,
