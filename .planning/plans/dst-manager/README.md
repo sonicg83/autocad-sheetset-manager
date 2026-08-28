@@ -1,6 +1,6 @@
 # DST Manager MVP 后续实施计划
 
-状态：持续规划中；v0.2、v0.2.1、v0.21、PLAN-DM-008 与 PLAN-DM-009 已完成。
+状态：持续规划中；当前能力基线为 v0.2.1（含 PLAN-DM-005、PLAN-DM-006、PLAN-DM-008 与 PLAN-DM-009）。
 目标：把当前技术验证型 MVP 完善为可长期、可靠地处理真实工程的单人单机图纸集编辑管理工具。
 
 ## 阶段顺序
@@ -8,15 +8,15 @@
 | 阶段 | 版本目标 | 核心成果 | 前置条件 |
 | --- | --- | --- | --- |
 | 1 | v0.2 稳定化 | 数据安全、修订恢复、任务自救、多 DWG 有界并行 | 当前 MVP |
-| 2 | v0.3 日常编辑器 | 可撤销、可批量操作、可理解预览的大项目编辑体验 | 阶段 1 完成 |
-| 3 | v0.4 单人工作流 | 最近项目、模板库、健康检查、CSV 和诊断包 | 阶段 2 完成 |
-| 4 | v1.0 Windows 产品化 | 单入口启动、升级迁移、清理策略、完整验收 | 阶段 3 完成 |
+| 2 | v0.3 受控日常编辑器 | 草稿、批量属性维护、人类可读预览、修复状态与全写入摘要门禁 | v0.2.1 基线稳定，SPEC-DM-004 门禁已明确 |
+| 3 | v0.4 单人工作流与维护支持 | 最近项目、受检查模板、CSV 双契约、健康检查与脱敏诊断 | 阶段 2 完成 |
+| 4 | v1.0 Windows 产品化与发布资格 | 安装升级、恢复、保留策略、双版本 CAD 与官方 Sheet Manager 资格 | 阶段 3 完成，发布门禁具备实际证据 |
 
 详细计划：
 
 - [DST XML Schema 校验与可修复加载（PLAN-DM-009，已完成）](PLAN-DM-009-dst-schema-validation-and-repair.md)
 - [延后 CAD 校验与布局批量改名（PLAN-DM-008，已完成）](PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)
-- [v0.21 CAD 单脚本布局重建（PLAN-DM-007，受阻：等待真实 CAD 验收）](PLAN-DM-007-v021-cad-single-script-execution.md)
+- [v0.21 CAD 单脚本布局重建（PLAN-DM-007，已取消：范围由 PLAN-DM-008 吸收）](PLAN-DM-007-v021-cad-single-script-execution.md)
 - [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
 - [v0.2.1 紧急修复：运行时、日志与 AcSm 兼容性（PLAN-DM-005，已完成）](PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)
 - [阶段 1：v0.2 稳定化与多 DWG 并行（PLAN-DM-001，已完成）](PLAN-DM-001-v0.2-stabilization-and-multi-dwg-parallel.md)

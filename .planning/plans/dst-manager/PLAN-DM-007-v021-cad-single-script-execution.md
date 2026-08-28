@@ -1,18 +1,25 @@
 ---
 id: PLAN-DM-007
 title: v0.21 CAD 单脚本布局重建实施计划
-status: blocked
+status: cancelled
 owners:
   - dst-manager
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-28
 related:
   - SPEC-DM-002
   - ARCH-DM-001
+  - PLAN-DM-008
   - GUIDE-SH-001
 ---
 
 # DST Manager v0.21 CAD 单脚本布局重建实施计划
+
+## 状态变更（2026-08-28）
+
+本计划原先因真实 CAD 验收与性能测量环境不足而处于 `blocked`。后续 `PLAN-DM-008` 已在同一能力链路上完成快速预览、单脚本 CAD 执行、`none`/`rename_only`/`rebuild` 分流、默认并发 4（允许 1～10）以及 AutoCAD 2016/2020 实测证据的闭环。
+
+因此，本计划不再保留为待恢复工作，状态改为 `cancelled`；其未完成的旧验收措辞不再单独追踪，后续实现与验收以 `PLAN-DM-008` 为权威记录。本计划保留原任务和验证记录，作为范围演进与决策追溯材料。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: 使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务逐项实施；步骤使用复选框跟踪。
 

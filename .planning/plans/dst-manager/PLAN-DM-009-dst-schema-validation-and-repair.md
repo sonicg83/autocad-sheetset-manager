@@ -5,7 +5,7 @@ status: completed
 owners:
   - dst-manager
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-08-28
 related:
   - SPEC-DM-004
   - ARCH-DM-001
@@ -13,6 +13,8 @@ related:
 ---
 
 # DST XML Schema 校验与可修复加载 Implementation Plan
+
+> **治理闭环（2026-08-28）：** 本计划已按 2026-08-27 的交付验证记录标记为 `completed`，下方验收复选框同步更新；实施任务的历史复选框保留原始执行分解，交付验证记录是完成状态的权威证据。真实 AutoCAD 2016/2020 与官方 Sheet Manager 显示验收未在本机运行，仍是 v1.0 发布资格门禁，不被表述为已通过。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax so progress can be tracked.
 
@@ -302,13 +304,13 @@ type DstValidation = {
 
 ## Acceptance Checklist
 
-- [ ] 黄金样本加载状态为 `VALID`，无 repair action 和 blocking issue。
-- [ ] `sheetset-fail.xml` 的可确定元数据缺失在内存中稳定修复，报告可审计；原始文件未被修改。
-- [ ] 新建 Sheet 具备完整 `clsid`、`ID`、布局引用、属性袋、正确 `vt`、`Number`/`Title` 和 `AcSmSheetViews`，并保留未知 DOM 内容与顺序。
-- [ ] 冲突 ID、错误非空固定值、缺失业务信息和无法唯一推断的节点不会被静默修复，所有写入均被阻断并可显示诊断。
-- [ ] 只有用户确认的独立 repair revision 才能写回；写回走现有发布事务并能回滚/恢复。
-- [ ] 所有应用层和 CAD 暂存加载入口使用同一 loader；API 与 Web 能展示报告并防止绕过确认。
-- [ ] Ruff、相关 pytest、全量 pytest、UV lock check 和可用的 CAD 系统测试均有实际结果记录。
+- [x] 黄金样本加载状态为 `VALID`，无 repair action 和 blocking issue。
+- [x] `sheetset-fail.xml` 的可确定元数据缺失在内存中稳定修复，报告可审计；原始文件未被修改。
+- [x] 新建 Sheet 具备完整 `clsid`、`ID`、布局引用、属性袋、正确 `vt`、`Number`/`Title` 和 `AcSmSheetViews`，并保留未知 DOM 内容与顺序。
+- [x] 冲突 ID、错误非空固定值、缺失业务信息和无法唯一推断的节点不会被静默修复，所有写入均被阻断并可显示诊断。
+- [x] 只有用户确认的独立 repair revision 才能写回；写回走现有发布事务并能回滚/恢复。
+- [x] 所有应用层和 CAD 暂存加载入口使用同一 loader；API 与 Web 能展示报告并防止绕过确认。
+- [x] Ruff、相关 pytest、全量 pytest、UV lock check 和可用的 CAD 系统测试均有实际结果记录。
 
 ## 交付验证记录（2026-08-27）
 

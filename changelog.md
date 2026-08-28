@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-08-28（DST Manager 后续计划重基线）
+
+- 按 v0.2.1 实际能力重写 `PLAN-DM-002`、`PLAN-DM-003` 与 `PLAN-DM-004`：后续版本以受控编辑、派生字段只读、快速预览、修复门禁和 CAD 分流为前提；移除自由排序、跨子集移动、批量重编号及旧 1/2/4 并发假设。
+- v0.4 的 CSV 明确拆分为既有属性定义契约与新增属性值契约，派生字段只读；v1.0 改为复用现有单入口与运行日志，补齐安装升级、恢复、保留策略和发布资格。
+- `PLAN-DM-007` 改为 `cancelled`，明确其范围已由 `PLAN-DM-008` 吸收；`PLAN-DM-009` 补齐验收勾选与治理说明，真实 AutoCAD/官方 Sheet Manager 未运行项目继续作为 v1.0 门禁。
+- 同步 `ROADMAP-DM-001`、DST Manager 计划索引与产品入口，统一当前基线为 v0.2.1 并补全 PLAN-DM-005 至 PLAN-DM-009 的追溯关系。
+
 ## 2026-08-27（PLAN-DM-009 审查修复）
 
 - 修复器在修复后合并契约复核（`validate_contract`）到阻断集：父级包含关系等修复器未建模的契约错误不再伪装成 `REPAIRED`/`VALID`，而是进入 `INVALID_REPAIR_REQUIRED` 并以 `REPAIR_BLOCKED` 阻断写入；与既有 `CONTRACT_*` 按（code、object、message）去重避免重复报告，消除“用户确认修复后必然 `XML_VALIDATION_FAILED`”和“`dst_validation=VALID` 却带有结构错误”的死胡同（对应审查 Important #1）。
