@@ -332,7 +332,7 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
     assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0003_dm008_job_file_cadop"
+    assert revision == "0004_dm007_layout_name_cache"
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
@@ -514,3 +514,12 @@ def test_latest_revision_with_physical_schema_drift_is_rejected(tmp_path: Path, 
 
     with pytest.raises(RuntimeError, match=f"DATABASE_SCHEMA_DRIFT.*{missing}"):
         Database(f"sqlite:///{path.as_posix()}", migrate=False)
+
+
+def test_fresh_upgrade_includes_layout_name_cache(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    with database.engine.connect() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='layout_name_cache'"
+        ).fetchall()
+    assert rows, "layout_name_cache 表应存在"

@@ -6,6 +6,7 @@ from typing import Any
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -150,6 +151,15 @@ class WorkspaceWriteLockRow(Base):
     job_id: Mapped[str] = mapped_column(String(36), unique=True)
 
 
+class LayoutNameCacheRow(Base):
+    __tablename__ = "layout_name_cache"
+
+    file_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_path: Mapped[str] = mapped_column(Text)
+    layouts: Mapped[list[str]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class WorkspaceBusyError(RuntimeError):
     pass
 
@@ -158,7 +168,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0003_dm008_job_file_cadop"
+LATEST_SCHEMA_REVISION = "0004_dm007_layout_name_cache"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -730,3 +740,20 @@ class Database:
     def list_workspace_roots(self) -> list[Path]:
         with self.sessions() as session:
             return [Path(value) for value in session.scalars(select(WorkspaceRow.root)).all()]
+
+    def get_layout_names(self, file_hash: str) -> list[str] | None:
+        with self.sessions() as session:
+            row = session.get(LayoutNameCacheRow, file_hash)
+            return list(row.layouts) if row else None
+
+    def save_layout_names(self, file_hash: str, source_path: str, layouts: list[str]) -> None:
+        with self.sessions.begin() as session:
+            row = session.get(LayoutNameCacheRow, file_hash)
+            if row is None:
+                session.add(
+                    LayoutNameCacheRow(file_hash=file_hash, source_path=source_path, layouts=layouts, created_at=datetime.now(UTC))
+                )
+            else:
+                row.source_path = source_path
+                row.layouts = layouts
+                row.created_at = datetime.now(UTC)
