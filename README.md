@@ -56,7 +56,7 @@ uv run dst-manager serve
 
 脚本会：从 `.env.example` 生成 `.env`（若不存在）、探测本机 AutoCAD 2016/2020 的 `accoreconsole.exe` 写回 `.env`、设置 `UV_LINK_MODE=copy`（OneDrive 建议）与项目独立 `UV_CACHE_DIR`。脚本幂等，只补缺失项，不覆盖已有 `.env` 内容；用 `-Force` 可重建 `.env`。
 
-如需每次打开终端自动生效，可在 PowerShell `$PROFILE` 中加入 `. "C:\Users\sonic\OneDrive\codework\autocad-sheetset\scripts\setup-env.ps1"`（脚本仅在项目根目录生效，不会污染其他项目）。
+如需每次打开终端自动生效，可在 PowerShell `$PROFILE` 中加入 `. "C:\Users\sonic\autocad-sheetset\scripts\setup-env.ps1"`（脚本仅在项目根目录生效，不会污染其他项目）。
 
 `.env` 与 `DST_MANAGER_*` 变量说明见根目录 `.env.example`；CAD 控制台/插件路径也可手动在 `.env` 中配置。
 
