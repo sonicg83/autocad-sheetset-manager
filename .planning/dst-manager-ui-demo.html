@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-density="comfy">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DST Manager · UI/UX Demo（依据 SPEC-DM-006）</title>
+<style>
+/* ============ 设计令牌（SPEC-DM-006 §5） ============ */
+:root{
+  --font-ui:"Inter","Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  --font-mono:"Cascadia Code","IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --color-bg-canvas:#F6F7F9; --color-bg-surface:#FFFFFF; --color-bg-muted:#EEF1F5;
+  --color-text-primary:#1A2233; --color-text-secondary:#4A5568; --color-text-muted:#6B7280;
+  --color-border-subtle:#E3E8EF; --color-border-strong:#C7D0DB;
+  --color-accent:#2F5BE0; --color-accent-hover:#2A50C8; --color-accent-active:#2445AD; --color-on-accent:#FFFFFF;
+  --color-focus:#2F5BE0;
+  --color-success:#1B7F4B; --color-success-bg:#E7F4EC;
+  --color-warning:#946200; --color-warning-bg:#FBF1DB;
+  --color-danger:#C2302B; --color-danger-bg:#FBEAE8;
+  --color-info:#245FA6; --color-info-bg:#E8F0F9;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-full:9999px;
+  --shadow-1:0 1px 2px rgba(16,24,40,.06); --shadow-2:0 4px 12px rgba(16,24,40,.10); --shadow-3:0 12px 32px rgba(16,24,40,.16);
+  --z-sticky:10; --z-drawer:100; --z-modal:1000;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px; --space-7:40px; --space-8:48px;
+  --row-h:40px;
+  --header-h:56px; --dock-h:66px; --tree-w:264px; --aside-w:360px;
+}
+[data-theme="dark"]{
+  --color-bg-canvas:#10151E; --color-bg-surface:#171E29; --color-bg-muted:#212B39;
+  --color-text-primary:#E6EAF2; --color-text-secondary:#AEB8C7; --color-text-muted:#8592A3;
+  --color-border-subtle:#2A3444; --color-border-strong:#3B485C;
+  --color-accent:#6B8DFF; --color-accent-hover:#7E9CFF; --color-accent-active:#5A7BE8; --color-on-accent:#0B1220;
+  --color-focus:#8FAAFF;
+  --color-success:#54C98A; --color-success-bg:#12301F;
+  --color-warning:#E0B15A; --color-warning-bg:#332712;
+  --color-danger:#F0776E; --color-danger-bg:#3A1917;
+  --color-info:#7CB0E8; --color-info-bg:#132739;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 12px rgba(0,0,0,.5); --shadow-3:0 12px 32px rgba(0,0,0,.6);
+}
+[data-density="compact"]{ --row-h:32px; }
+
+/* ============ 基础 ============ */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--font-ui);font-size:14px;line-height:1.5;color:var(--color-text-primary);background:var(--color-bg-canvas);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+/* D-01：hidden 属性必须真正隐藏元素，避免显式 display 覆盖造成状态同屏 */
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--color-text-muted)}
+h1,h2,h3{margin:0}
+.ic{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-3px}
+.ic-sm{width:16px;height:16px}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* 跳转链接（无障碍） */
+.skip{position:absolute;left:-9999px;top:8px;z-index:2000;background:var(--color-accent);color:var(--color-on-accent);padding:8px 14px;border-radius:var(--radius-md)}
+.skip:focus{left:8px}
+
+/* ============ 布局外壳 ============ */
+.app{display:grid;grid-template-rows:var(--header-h) 1fr var(--dock-h);grid-template-columns:var(--tree-w) minmax(0,1fr) var(--aside-w);height:100vh}
+.topbar{grid-area:1/1/2/4;display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:0 var(--space-5);background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);z-index:var(--z-sticky)}
+.brand{display:flex;align-items:center;gap:var(--space-3);min-width:0}
+.brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--color-accent),#7c4dff);display:grid;place-items:center;color:#fff}
+.brand h1{font-size:16px;font-weight:600}
+.brand .path{color:var(--color-text-muted);font-size:12px;display:flex;align-items:center;gap:4px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:var(--space-3)}
+
+.tree{grid-area:2/1/3/2;background:var(--color-bg-surface);border-right:1px solid var(--color-border-subtle);overflow:auto;padding:var(--space-3)}
+.main{grid-area:2/2/3/3;overflow:auto;padding:var(--space-5);min-width:0}
+.aside{grid-area:2/3/3/4;background:var(--color-bg-surface);border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;min-width:0}
+.dock{grid-area:3/1/4/4;display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:0 var(--space-5);background:var(--color-bg-surface);border-top:1px solid var(--color-border-subtle);z-index:var(--z-sticky)}
+
+/* ============ 控件 ============ */
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--color-border-strong);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-md);font-size:14px;font-weight:500;transition:background .15s,border-color .15s,box-shadow .15s,transform .05s}
+.btn .ic{width:18px;height:18px}
+.btn:hover{background:var(--color-bg-muted)}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent);font-weight:600}
+.btn-primary:hover{background:var(--color-accent-hover);border-color:var(--color-accent-hover)}
+.btn-primary:active{background:var(--color-accent-active)}
+.btn-danger{background:var(--color-danger);border-color:var(--color-danger);color:#fff;font-weight:600}
+.btn-danger:hover{filter:brightness(.94)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-ghost:hover{background:var(--color-bg-muted)}
+.btn-sm{height:30px;padding:0 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-icon{width:36px;height:36px;padding:0;justify-content:center}
+
+.field{display:grid;gap:6px}
+.field label{font-size:13px;color:var(--color-text-secondary);font-weight:500}
+.field input,.field select{height:36px;padding:0 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font-size:14px;font-family:inherit;min-width:0}
+.field .hint{font-size:12px;color:var(--color-text-muted)}
+.field input[aria-invalid="true"],.field select[aria-invalid="true"]{border-color:var(--color-danger);background:var(--color-danger-bg)}
+
+.card{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
+
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--radius-full);font-size:12px;font-weight:600;line-height:1.4}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.pill-success{background:var(--color-success-bg);color:var(--color-success)}
+.pill-warning{background:var(--color-warning-bg);color:var(--color-warning)}
+.pill-danger{background:var(--color-danger-bg);color:var(--color-danger)}
+.pill-info{background:var(--color-info-bg);color:var(--color-info)}
+.pill-muted{background:var(--color-bg-muted);color:var(--color-text-secondary)}
+
+.selectall{height:30px;padding:0 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-secondary);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+
+/* ============ 左树 ============ */
+.tree-title{font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--color-text-muted);margin:6px 8px}
+.tnode{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--radius-md);cursor:pointer;color:var(--color-text-secondary);user-select:none}
+.tnode:hover{background:var(--color-bg-muted)}
+.tnode.active{background:var(--color-accent);color:var(--color-on-accent);font-weight:600}
+.tnode .ic{width:16px;height:16px}
+.tnode .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tnode .count{font-size:12px;color:var(--color-text-muted);background:var(--color-bg-muted);padding:1px 7px;border-radius:var(--radius-full)}
+.tnode.active .count{color:inherit;background:rgba(255,255,255,.18)}
+.tnode-sub{font-size:12px;color:var(--color-text-muted);padding:3px 8px 3px 30px;display:flex;align-items:center;gap:6px;cursor:pointer;border-radius:var(--radius-md)}
+.tnode-sub:hover{background:var(--color-bg-muted)}
+.tnode-sub .ic{width:13px;height:13px}
+.tnode[aria-selected="true"]{background:var(--color-accent);color:var(--color-on-accent);font-weight:600}
+.tnode[aria-selected="true"] .count{color:inherit;background:rgba(255,255,255,.18)}
+
+/* ============ 工具栏 ============ */
+.toolbar{display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-4);flex-wrap:wrap}
+.toolbar .search{flex:1;min-width:220px;position:relative}
+.toolbar .search input{width:100%;height:38px;padding-left:36px}
+.toolbar .search .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--color-text-muted)}
+.chips{display:flex;gap:8px;align-items:center}
+.result-count{font-size:13px;color:var(--color-text-muted);white-space:nowrap}
+
+/* ============ 表格 ============ */
+.table-wrap{max-height:calc(100vh - var(--header-h) - var(--dock-h) - 240px);overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;background:var(--color-bg-muted);text-align:left;padding:10px 12px;font-weight:600;color:var(--color-text-secondary);border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;z-index:1}
+tbody td{padding:0 12px;height:var(--row-h);border-bottom:1px solid var(--color-border-subtle);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--color-bg-canvas)}
+tbody tr.selected{background:var(--color-info-bg)}
+/* 表格单一 Tab 停靠点后的行焦点（§7.2） */
+tbody tr.row-focus{outline:2px solid var(--color-focus);outline-offset:-2px}
+.cell-title{font-weight:500}
+.cell-props{font-size:12px;color:var(--color-text-muted);max-width:180px}
+.cell-dwg{color:var(--color-text-secondary)}
+.row-check{width:38px;text-align:center}
+.row-check input{width:16px;height:16px;accent-color:var(--color-accent);cursor:pointer}
+.load-more{width:100%;text-align:center;padding:10px;background:transparent;border:0;border-top:1px solid var(--color-border-subtle);color:var(--color-accent);font-weight:500;font-size:13px}
+.load-more:hover{background:var(--color-bg-muted)}
+
+/* ============ 批量条 ============ */
+.bulkbar{display:flex;align-items:center;gap:var(--space-3);margin:var(--space-4) 0;padding:10px 12px;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);flex-wrap:wrap}
+.bulkbar .field{grid-template-columns:auto auto;align-items:center;gap:8px}
+.bulkbar .grow{flex:1}
+
+/* ============ 右栏 ============ */
+.tabs{display:flex;border-bottom:1px solid var(--color-border-subtle)}
+.tab{flex:1;height:44px;border:0;background:transparent;color:var(--color-text-secondary);font-size:13px;font-weight:500;position:relative;display:flex;align-items:center;justify-content:center;gap:6px}
+.tab .ic{width:16px;height:16px}
+.tab:hover{color:var(--color-text-primary)}
+.tab.active{color:var(--color-accent);font-weight:600}
+.tab.active::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2px;background:var(--color-accent);border-radius:2px}
+.tabbadge{min-width:18px;height:18px;padding:0 5px;border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:11px;font-weight:700;display:inline-grid;place-items:center}
+.tab.active .tabbadge{background:var(--color-accent);color:var(--color-on-accent)}
+.tabpanels{overflow:auto;flex:1}
+.tabpanel{padding:var(--space-4);display:none}
+.tabpanel.active{display:block}
+.panel-h{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--color-text-muted);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+
+.draft-actions{display:flex;gap:8px;margin-bottom:12px}
+.count-badge{font-size:12px;font-weight:600;color:var(--color-accent);background:var(--color-info-bg);padding:2px 8px;border-radius:var(--radius-full)}
+.undo-redo{display:flex;align-items:center;gap:12px;padding:8px 10px;background:var(--color-bg-muted);border-radius:var(--radius-md);margin-bottom:12px;font-size:12px}
+.undo-redo .seg{display:flex;gap:6px;margin-left:auto}
+.action{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);margin-bottom:8px;background:var(--color-bg-surface)}
+.action.past{opacity:.5}
+.action .txt{flex:1;font-size:13px}
+.action .ic{width:16px;height:16px;color:var(--color-text-muted)}
+.action .cur{font-size:11px;color:var(--color-accent);font-weight:700}
+
+.progress{height:8px;background:var(--color-bg-muted);border-radius:var(--radius-full);overflow:hidden}
+.progress>span{display:block;height:100%;background:var(--color-accent);border-radius:var(--radius-full);transition:width .4s ease}
+.job-files{margin-top:12px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);overflow:hidden}
+.job-files .jf-head,.job-files .jf-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:8px 10px;font-size:12px;align-items:center}
+.job-files .jf-head{background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600}
+.job-files .jf-row{border-top:1px solid var(--color-border-subtle)}
+.job-files .jf-row .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono)}
+
+/* ============ 预览面板 ============ */
+.preview{margin-top:var(--space-5);overflow:hidden}
+.preview-head{display:flex;align-items:center;justify-content:space-between;padding:14px var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
+.preview-head h2{font-size:15px;display:flex;align-items:center;gap:8px}
+.preview-body{padding:var(--space-4)}
+.preview-body h3{font-size:13px;margin-bottom:10px;color:var(--color-text-secondary)}
+.est{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--color-info-bg);color:var(--color-info);padding:12px 14px;border-radius:var(--radius-md);font-size:13px}
+.est .strong{font-size:15px;font-weight:700}
+.est ul{margin:0;padding-left:18px;font-size:12px}
+.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.side{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);overflow:hidden}
+.side-h{font-size:12px;font-weight:600;padding:8px 12px;background:var(--color-bg-muted);color:var(--color-text-secondary)}
+.side ol{margin:0;padding:10px 12px 10px 28px;font-size:13px}
+.side li{margin:4px 0}
+.side .chg{color:var(--color-warning);font-weight:600}
+.sub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:4px}
+.sub-item{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:10px 12px}
+.sub-item .k{font-size:12px;color:var(--color-text-muted)}
+.sub-item .v{font-weight:600;margin-top:2px}
+.file-list{list-style:none;margin:0;padding:0;font-size:12px;font-family:var(--font-mono);color:var(--color-text-secondary)}
+.file-list li{padding:4px 0;display:flex;gap:8px;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-list .ic{width:14px;height:14px;color:var(--color-text-muted)}
+
+/* ============ 底部操作栏 ============ */
+.dock-left{display:flex;align-items:center;gap:var(--space-4);min-width:0}
+.dock .draft-count{font-size:13px;color:var(--color-text-secondary)}
+.dock .draft-count b{color:var(--color-accent);font-size:15px}
+.dock-right{display:flex;align-items:center;gap:var(--space-3)}
+.dock .hint{font-size:12px;color:var(--color-text-muted)}
+.dock .reason{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--color-warning);background:var(--color-warning-bg);padding:5px 11px;border-radius:var(--radius-full);max-width:340px}
+.dock .reason .ic{width:14px;height:14px;flex:none}
+.btn .spin{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ 错误摘要（表单/发布阻断） ============ */
+.error-summary{background:var(--color-danger-bg);border:1px solid var(--color-danger);border-left-width:4px;border-radius:var(--radius-md);padding:12px 14px;margin-bottom:var(--space-4)}
+.error-summary h2{font-size:13px;color:var(--color-danger);display:flex;align-items:center;gap:8px}
+.error-summary ol{margin:8px 0 0;padding-left:20px;font-size:13px}
+.error-summary a{color:var(--color-danger);text-decoration:underline}
+.notice{border-radius:var(--radius-md);padding:12px 14px;margin-bottom:var(--space-4);font-size:13px;display:flex;gap:10px;align-items:flex-start;border:1px solid}
+.notice .ic{width:18px;height:18px;margin-top:1px}
+.notice-info{background:var(--color-info-bg);border-color:var(--color-info);color:var(--color-info)}
+.notice-warning{background:var(--color-warning-bg);border-color:var(--color-warning);color:var(--color-warning)}
+
+/* ============ 模态 ============ */
+dialog{border:0;padding:0;border-radius:var(--radius-lg);box-shadow:var(--shadow-3);background:var(--color-bg-surface);color:var(--color-text-primary);max-width:520px;width:100%}
+dialog::backdrop{background:rgba(9,12,18,.55)}
+.modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--color-border-subtle)}
+.modal-h h2{font-size:16px}
+.modal-b{padding:20px}
+.modal-f{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid var(--color-border-subtle)}
+.impact{background:var(--color-danger-bg);border-radius:var(--radius-md);padding:14px;margin-bottom:14px}
+.impact ul{margin:0;padding-left:20px;font-size:13px;color:var(--color-text-primary)}
+.impact .ic{color:var(--color-danger)}
+.gate{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);font-size:13px;background:var(--color-bg-canvas)}
+.gate input{width:18px;height:18px;accent-color:var(--color-danger);flex:none}
+.warn-line{color:var(--color-danger);font-size:12px;margin-top:10px;font-weight:500}
+
+/* ============ Toast（可手动关闭，D-07） ============ */
+.toast-region{position:fixed;right:20px;bottom:calc(var(--dock-h) + 20px);z-index:1500;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);box-shadow:var(--shadow-2);border-radius:var(--radius-md);padding:12px 14px;min-width:260px;max-width:420px;display:flex;align-items:center;gap:10px;font-size:13px;border-left:4px solid var(--color-info)}
+.toast-success{border-left-color:var(--color-success)} .toast-success .ic{color:var(--color-success)}
+.toast-error{border-left-color:var(--color-danger)} .toast-error .ic{color:var(--color-danger)}
+.toast-info{border-left-color:var(--color-info)}
+.toast-close{border:0;background:transparent;color:var(--color-text-muted);font-size:14px;line-height:1;padding:2px 6px;margin-left:auto;border-radius:var(--radius-sm);flex:none}
+.toast-close:hover{background:var(--color-bg-muted);color:var(--color-text-primary)}
+
+/* ============ 状态矩阵演示（§6.9） ============ */
+.statedemo{display:flex;flex-direction:column;gap:10px;margin-bottom:var(--space-4)}
+.statebar{display:flex;flex-wrap:wrap;gap:6px;padding:12px;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
+.statebar .sb-title{width:100%;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--color-text-muted);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.statebtn{height:28px;padding:0 11px;border:1px solid var(--color-border-strong);background:var(--color-bg-surface);color:var(--color-text-secondary);border-radius:var(--radius-full);font-size:12px;font-weight:500}
+.statebtn:hover{background:var(--color-bg-muted)}
+.statebtn.active{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent);font-weight:600}
+.legend{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);padding:14px}
+.legend h3{font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px;color:var(--color-text-secondary)}
+.legend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:8px}
+.legend-cell{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:8px 10px;font-size:12px;background:var(--color-bg-canvas)}
+.legend-cell .k{color:var(--color-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+.legend-cell .v{margin-top:3px;color:var(--color-text-primary);line-height:1.4}
+.legend-note{margin-top:10px;font-size:12px;color:var(--color-text-muted)}
+
+/* 状态锁（编辑/切换不可用时降权） */
+.main.locked .toolbar,.main.locked .table-wrap,.main.locked .bulkbar{opacity:.45;pointer-events:none;filter:grayscale(.25)}
+.tree.locked{opacity:.45;pointer-events:none}
+#cad:disabled{opacity:.5;cursor:not-allowed}
+.pv-stale{background:var(--color-warning-bg);color:var(--color-warning);border-radius:var(--radius-md);padding:10px 14px;margin:0 0 12px;font-size:13px;display:flex;gap:8px;align-items:center}
+
+/* ============ 抽屉（D-02：窄屏侧栏必须有入口与焦点管理） ============ */
+.drawer-btn{display:none}
+@media (max-width:1120px){
+  :root{--aside-w:0px}
+  .app{grid-template-columns:var(--tree-w) minmax(0,1fr) 0}
+  .aside{position:fixed;right:0;top:var(--header-h);bottom:var(--dock-h);width:min(360px,88vw);z-index:var(--z-drawer);visibility:hidden;transform:translateX(103%);transition:transform .2s ease,visibility .2s}
+  .aside.open{visibility:visible;transform:none;box-shadow:var(--shadow-3)}
+  #openAsideBtn{display:inline-flex}
+}
+@media (max-width:900px){
+  .app{grid-template-columns:0 minmax(0,1fr) 0}
+  .tree{position:fixed;left:0;top:var(--header-h);bottom:var(--dock-h);width:min(280px,88vw);z-index:var(--z-drawer);visibility:hidden;transform:translateX(-103%);transition:transform .2s ease,visibility .2s}
+  .tree.open{visibility:visible;transform:none;box-shadow:var(--shadow-3)}
+  #openTreeBtn{display:inline-flex}
+  .brand .path{display:none}
+}
+
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+<div class="sr-only" aria-live="polite" id="liveRegion"></div>
+
+<!-- 图标精灵 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13H6z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A8 8 0 1 1 11 3a6 6 0 0 0 10 9.8z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5A2.5 2.5 0 0 1 14 11c0 1.5-2 2-2 3.5M12 18h0"/></symbol>
+  <symbol id="i-preview" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-publish" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h0"/></symbol>
+  <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h0"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-repair" viewBox="0 0 24 24"><path d="M14 6a3.5 3.5 0 0 1-4.6 4.6L5 15v4h4l4.4-4.4A3.5 3.5 0 0 1 18 10l-2.5 2.5-2-2z"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ===== 顶栏 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <button class="btn btn-icon drawer-btn" id="openTreeBtn" data-icon="folder" aria-label="打开结构导航" aria-expanded="false" aria-controls="treePane"></button>
+      <span class="logo"><svg class="ic" aria-hidden="true"><use href="#i-logo"/></svg></span>
+      <div>
+        <h1>DST Manager</h1>
+        <span class="path mono"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-file"/></svg>project1.dst</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill pill-success" id="dstPill" title="DST 结构校验通过"><span class="dot"></span><span id="dstPillText">DST 有效</span></span>
+      <label class="muted" for="cad" style="font-size:12px">AutoCAD</label>
+      <select id="cad" style="height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 8px;font-family:inherit">
+        <option>2020</option><option>2016</option>
+      </select>
+      <button class="btn btn-icon drawer-btn" id="openAsideBtn" data-icon="layers" aria-label="打开上下文面板" aria-expanded="false" aria-controls="ctxPane"></button>
+      <button class="btn btn-icon" id="densityBtn" data-icon="layers" aria-label="切换表格密度" title="切换表格密度"></button>
+      <button class="btn btn-icon" id="themeBtn" data-icon="moon" aria-label="切换深浅主题"></button>
+      <button class="btn btn-icon" id="helpBtn" data-icon="help" aria-label="键盘快捷键"></button>
+    </div>
+  </header>
+
+  <!-- ===== 左树（role=tree，§7.2 键盘模型） ===== -->
+  <aside class="tree" id="treePane" role="tree" aria-label="结构导航">
+    <div class="tnode active" role="treeitem" aria-level="1" aria-selected="true" tabindex="0" data-name="project1"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg><span class="grow">project1</span><span class="count">45</span></div>
+    <div class="tree-title" style="margin-top:12px" aria-hidden="true">子集</div>
+    <div id="treeList"></div>
+  </aside>
+
+  <!-- ===== 主工作区 ===== -->
+  <main class="main" id="main">
+    <!-- §6.9 ActionDock 操作 × 状态矩阵 演示 -->
+    <div class="statedemo">
+      <div class="statebar" id="stateBar" role="group" aria-label="ActionDock 状态矩阵演示">
+        <span class="sb-title"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grid"/></svg>ActionDock 状态矩阵演示（SPEC-DM-006 §6.9）· 点击切换状态，观察底部 CTA、禁用原因、DST 状态与编辑/切换锁的联动</span>
+      </div>
+      <div class="legend" aria-live="polite">
+        <h3 id="legendTitle">当前状态</h3>
+        <div class="legend-grid" id="legendGrid"></div>
+        <div class="legend-note">优先级：修复门禁 / 恢复 &gt; 正式写入（发布·CSV·XML）&gt; 预览 &gt; 编辑草稿。快捷键 <span class="mono">Ctrl+S</span> 只打开确认模态，绝不直接执行。</div>
+      </div>
+    </div>
+
+    <!-- 表单错误摘要：链接直指控件，标题为程序化焦点目标（D-05） -->
+    <div class="error-summary" id="formError" role="alert" hidden>
+      <h2 id="formErrorTitle" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>无法预览：请修正以下 <span id="formErrorCount">2</span> 个问题</h2>
+      <ol>
+        <li id="err-bulkval"><a href="#bulkVal" data-focus="bulkVal">批量属性值不能为空</a></li>
+        <li id="err-bulkprop"><a href="#bulkProp" data-focus="bulkProp">请选择一个既有图纸属性</a></li>
+      </ol>
+    </div>
+
+    <div class="notice notice-info" role="status">
+      <svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>
+      <span>浏览与预览永远安全；<b>正式工程文件写入</b>（发布、CSV、XML、修复、恢复）均不可逆，需完整预览 + 确认。编辑先持久化到应用数据目录的本地草稿（不改动工程文件），可随时撤销。</span>
+    </div>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="searchInput" type="search" placeholder="搜索图号、标题、属性或 DWG 路径…（/ 聚焦）" aria-label="搜索图纸">
+      </div>
+      <div class="chips">
+        <select id="fSubset" class="selectall" aria-label="子集筛选"><option>全部子集</option><option>001-002 第一册</option><option>003-004 第二册</option></select>
+        <select id="fPending" class="selectall" aria-label="待变更筛选"><option>全部</option><option>待变更</option><option>未变更</option></select>
+        <span class="result-count"><b id="shown">12</b> / 45 张</span>
+      </div>
+    </div>
+
+    <!-- 表格：单一 Tab 停靠点 + 方向键行焦点 + Space 选择 + Ctrl+A 全选（§7.2） -->
+    <div class="table-wrap" id="sheetGrid" tabindex="0" aria-label="图纸表格：上下方向键移动行焦点，Space 选择，Ctrl+A 全选">
+      <table>
+        <thead><tr>
+          <th class="row-check"><input type="checkbox" id="checkAll" aria-label="全选当前结果" tabindex="-1" style="width:16px;height:16px;accent-color:var(--color-accent)"></th>
+          <th style="width:72px">图号</th><th>标题</th><th>自定义属性</th><th>DWG / 布局</th><th style="width:150px">状态</th>
+        </tr></thead>
+        <tbody id="sheetBody"></tbody>
+      </table>
+      <button class="load-more" id="loadMore">继续加载（尚余 33）</button>
+    </div>
+
+    <div class="bulkbar">
+      <button class="btn btn-sm" id="selectAll2">全选当前结果</button>
+      <span class="muted">已选 <b id="selCount">0</b></span>
+      <span class="grow"></span>
+      <div class="field" id="f-bulkprop"><label for="bulkProp">既有图纸属性</label><select id="bulkProp"><option value="">请选择</option><option>比例</option><option>专业</option><option>图幅</option></select></div>
+      <div class="field" id="f-bulkval"><label for="bulkVal">批量值</label><input id="bulkVal" placeholder="如 1:100"></div>
+      <button class="btn btn-sm" id="bulkAdd">批量加入草稿</button>
+    </div>
+
+    <!-- 变更预览面板 -->
+    <section class="card preview" id="previewPanel" hidden aria-labelledby="pvTitle">
+      <div class="preview-head">
+        <h2 id="pvTitle"><svg class="ic" aria-hidden="true"><use href="#i-preview"/></svg>完整变更预览</h2>
+        <span class="pill pill-success" id="pvStatus"><span class="dot"></span>可执行 · 基准 revision-7 · 摘要 <span class="mono">a1b2c3d4</span></span>
+      </div>
+      <div class="preview-body">
+        <div class="pv-stale" id="pvStale" hidden><svg class="ic ic-sm" aria-hidden="true"><use href="#i-alert"/></svg>基准修订或预览摘要已变化，预览失效——请重新预览后再确认写入。</div>
+        <div class="est">
+          <span class="strong">预计 3 个 Core Console 任务</span>
+          <span class="pill pill-info">并发度 4</span>
+          <span>预计耗时 18–42 秒</span>
+          <ul style="flex:1;min-width:220px">
+            <li>批量改名布局：历史样本 12 个</li>
+            <li>清除并重建布局：保守 fallback v1（历史样本 3 个）</li>
+          </ul>
+        </div>
+        <div class="notice notice-warning" style="margin:16px 0 0">
+          <svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>
+          <span><b>CAD 校验延后</b>：布局校验将在确认后执行，不会在预览阶段启动 AutoCAD。</span>
+        </div>
+
+        <h3 style="margin-top:20px">图纸集字段差异</h3>
+        <div class="diff-grid">
+          <div class="side"><div class="side-h">变更前</div><ol>
+            <li>图纸集：<b>project1</b></li>
+            <li>范围：001-002 第一册 · 003-004 第二册</li>
+            <li>子集 2 · 图纸 45 · 主 DWG 45</li>
+          </ol></div>
+          <div class="side"><div class="side-h">变更后</div><ol>
+            <li>图纸集：<b>project1</b></li>
+            <li>范围：<span class="chg">001-003 第一册</span> · 003-004 第二册</li>
+            <li>子集 2 · <span class="chg">图纸 46</span> · 主 DWG 45</li>
+          </ol></div>
+        </div>
+
+        <h3 style="margin-top:20px">图号范围变化（服务端派生，只读）</h3>
+        <div class="sub-grid">
+          <div class="sub-item"><div class="k">服务端图号范围</div><div class="v mono">001-003</div></div>
+          <div class="sub-item"><div class="k">服务端显示名</div><div class="v">001-003 第一册</div></div>
+          <div class="sub-item"><div class="k">服务端标题</div><div class="v">第一册</div></div>
+        </div>
+
+        <h3 style="margin-top:20px">子集 CAD 操作</h3>
+        <div class="table-wrap" style="max-height:none;border:1px solid var(--color-border-subtle)">
+          <table><thead><tr><th>子集</th><th>操作</th><th>目标 DWG</th><th>数量前沿</th></tr></thead><tbody>
+            <tr><td>001-002 第一册</td><td><span class="pill pill-info">批量改名布局</span></td><td class="cell-dwg mono">001-002 第一册.dwg</td><td>否</td></tr>
+            <tr><td>003-004 第二册</td><td><span class="pill pill-warning">清除并重建布局</span></td><td class="cell-dwg mono">003-004 第二册.dwg</td><td>是（第 2 个）</td></tr>
+          </tbody></table>
+        </div>
+
+        <h3 style="margin-top:20px">受影响文件（永久 before 备份）</h3>
+        <ul class="file-list">
+          <li><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>project1.dst</li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-box"/></svg>001-002 第一册.dwg</li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-box"/></svg>003-004 第二册.dwg</li>
+        </ul>
+
+        <h3 style="margin-top:20px">诊断</h3>
+        <ul class="file-list" style="font-family:var(--font-ui);font-size:13px">
+          <li style="color:var(--color-success)"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>无阻断诊断</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 右栏（role=tablist 完整 ARIA + 方向键 roving） ===== -->
+  <aside class="aside" id="ctxPane" aria-label="上下文面板">
+    <div class="tabs" role="tablist" id="ctxTabs" aria-label="上下文面板页签">
+      <button class="tab" role="tab" id="tab-props" aria-controls="panel-props" aria-selected="false" tabindex="-1" data-tab="props">属性</button>
+      <button class="tab active" role="tab" id="tab-draft" aria-controls="panel-draft" aria-selected="true" tabindex="0" data-tab="draft">草稿 <span class="tabbadge" id="draftBadge">2</span></button>
+      <button class="tab" role="tab" id="tab-job" aria-controls="panel-job" aria-selected="false" tabindex="-1" data-tab="job">任务</button>
+      <button class="tab" role="tab" id="tab-diag" aria-controls="panel-diag" aria-selected="false" tabindex="-1" data-tab="diag">诊断 <span class="tabbadge">1</span></button>
+    </div>
+    <div class="tabpanels">
+      <div class="tabpanel" role="tabpanel" id="panel-props" aria-labelledby="tab-props" data-panel="props">
+        <div class="panel-h">图纸集属性</div>
+        <div class="field" style="margin-bottom:12px"><label for="ssName">名称</label><input id="ssName" value="project1"></div>
+        <div class="field" style="margin-bottom:12px"><label for="ssProj">项目号</label><input id="ssProj" value="P-001"></div>
+        <div class="field"><label for="ssStage">设计阶段</label><input id="ssStage" value="施工图"></div>
+        <div class="notice notice-info" style="margin-top:16px;font-size:12px"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg><span>图号、范围、标题与命名由服务端统一派生，界面只读呈现。</span></div>
+      </div>
+
+      <div class="tabpanel active" role="tabpanel" id="panel-draft" aria-labelledby="tab-draft" data-panel="draft">
+        <div class="panel-h">草稿动作 <span class="count-badge" id="draftCount">动作 2 / 2</span></div>
+        <div class="undo-redo">
+          <span class="muted">游标 2/2</span>
+          <div class="seg"><button class="btn btn-sm" id="undoBtn" data-icon="undo" aria-label="撤销"></button><button class="btn btn-sm" disabled data-icon="redo" aria-label="重做（无可重做）"></button></div>
+        </div>
+        <div id="draftList"></div>
+      </div>
+
+      <div class="tabpanel" role="tabpanel" id="panel-job" aria-labelledby="tab-job" data-panel="job">
+        <div class="panel-h">任务进度 <span class="pill pill-info" style="font-weight:500"><span class="dot"></span>SSE 实时</span></div>
+        <div class="muted" style="font-size:13px;margin-bottom:8px">发布图纸集变更 · job-3842</div>
+        <div class="progress"><span id="jobBar" style="width:66%"></span></div>
+        <div class="job-files">
+          <div class="jf-head"><span>文件</span><span>操作</span><span>状态</span></div>
+          <div class="jf-row"><span class="fname">project1.dst</span><span class="pill pill-muted">DST</span><span class="pill pill-success">成功</span></div>
+          <div class="jf-row"><span class="fname">001-002 第一册.dwg</span><span class="pill pill-info">改名</span><span class="pill pill-success">成功</span></div>
+          <div class="jf-row"><span class="fname">003-004 第二册.dwg</span><span class="pill pill-warning">重建</span><span class="pill pill-info">进行中</span></div>
+        </div>
+        <button class="btn btn-sm" style="margin-top:16px" id="jobDemoBtn" data-icon="clock">模拟任务失败</button>
+        <p class="muted" style="font-size:12px;margin-top:10px">失败时保留可见、支持安全重试；<b>NEEDS_REVIEW</b> 状态禁止直接重试。任一单元失败整批回滚。</p>
+      </div>
+
+      <div class="tabpanel" role="tabpanel" id="panel-diag" aria-labelledby="tab-diag" data-panel="diag">
+        <div class="panel-h">诊断</div>
+        <div class="action" style="border-color:var(--color-danger)"><svg class="ic" style="color:var(--color-danger)" aria-hidden="true"><use href="#i-error"/></svg><span class="txt"><b>DWG_NOT_FOUND</b><br><span class="muted mono">003-004 第二册.dwg 路径未解析</span></span><span class="pill pill-danger">阻断</span></div>
+        <p class="muted" style="font-size:12px">阻断诊断存在时发布被禁用，需先解决或走修复流程。</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== 底部操作栏（由 §6.9 状态矩阵驱动） ===== -->
+  <footer class="dock">
+    <div class="dock-left" id="dockLeft"></div>
+    <div class="dock-right" id="dockRight">
+      <span class="reason" id="dockReason" hidden></span>
+      <span class="hint" id="dockHint"></span>
+      <div id="dockActions" style="display:flex;gap:12px"></div>
+    </div>
+  </footer>
+</div>
+
+<!-- ===== 正式写入确认模态（发布/CSV/XML/修复/恢复共用，替换原生 confirm） ===== -->
+<dialog id="publishModal" aria-labelledby="pubH">
+  <form method="dialog">
+    <div class="modal-h"><h2 id="pubH">确认发布变更</h2><button class="btn btn-icon btn-ghost" value="cancel" data-icon="close" aria-label="关闭"></button></div>
+    <div class="modal-b">
+      <div class="impact">
+        <ul id="pubImpact">
+          <li>更新 <b>1</b> 个图纸集字段、影响 <b>2</b> 个子集</li>
+          <li>写入 <b>1</b> 个 DST + <b>2</b> 个 DWG，共 <b>3</b> 个文件</li>
+          <li>布局重建 1 个（数量变化前沿：第 2 个子集）</li>
+        </ul>
+      </div>
+      <p style="margin:0 0 12px"><span class="pill pill-danger"><span class="dot"></span>不可逆</span> <span id="pubNote" class="muted">原 DST 与受影响 DWG 将永久备份为独立修订，失败时整批回滚。</span></p>
+      <label class="gate"><input type="checkbox" id="pubGate"> <span id="pubGateText">我已了解发布将写入正式工程文件，并接受影响范围</span></label>
+    </div>
+    <div class="modal-f">
+      <button class="btn" value="cancel">取消</button>
+      <button class="btn btn-danger" id="pubConfirm" data-icon="publish" disabled>确认发布（永久备份）</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ===== 删除确认模态（含外部引用声明） ===== -->
+<dialog id="deleteModal" aria-labelledby="delH">
+  <form method="dialog">
+    <div class="modal-h"><h2 id="delH">删除整个子集</h2><button class="btn btn-icon btn-ghost" value="cancel" data-icon="close" aria-label="关闭"></button></div>
+    <div class="modal-b">
+      <div class="impact">
+        <ul>
+          <li>删除子集 <b>001-002 第一册</b> 及其中 <b>2</b> 张图纸</li>
+          <li>删除主 DWG：<span class="mono">001-002 第一册.dwg</span></li>
+        </ul>
+      </div>
+      <p class="warn-line">系统不会证明工程外部引用；确认后由用户承担外部影响。</p>
+      <label class="gate" style="margin-top:12px"><input type="checkbox" id="delGate"> 我已了解外部引用风险并确认删除</label>
+    </div>
+    <div class="modal-f">
+      <button class="btn" value="cancel">取消</button>
+      <button class="btn btn-danger" id="delConfirm" data-icon="trash" disabled>删除子集</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ===== 快捷键帮助（含单字符快捷键开关，SC 2.1.4） ===== -->
+<dialog id="helpModal" aria-labelledby="helpH">
+  <div class="modal-h"><h2 id="helpH">键盘快捷键</h2><button class="btn btn-icon btn-ghost" id="helpClose" data-icon="close" aria-label="关闭"></button></div>
+  <div class="modal-b">
+    <table style="width:100%;font-size:13px">
+      <tr><td>打开项目</td><td class="mono" style="text-align:right">Ctrl/⌘ + O</td></tr>
+      <tr><td>预览变更</td><td class="mono" style="text-align:right">Ctrl/⌘ + Enter</td></tr>
+      <tr><td>打开当前写入确认（发布/修复/恢复，不直接执行）</td><td class="mono" style="text-align:right">Ctrl/⌘ + S</td></tr>
+      <tr><td>撤销 / 重做</td><td class="mono" style="text-align:right">Ctrl/⌘ + Z / ⇧ + Z</td></tr>
+      <tr><td>聚焦搜索</td><td class="mono" style="text-align:right">/</td></tr>
+      <tr><td>快捷键面板</td><td class="mono" style="text-align:right">?</td></tr>
+    </table>
+    <label class="gate" style="margin-top:14px"><input type="checkbox" id="singleKeysToggle" checked> 启用单字符快捷键（<span class="mono">/</span> 聚焦搜索 · <span class="mono">?</span> 打开帮助）——可整体关闭（WCAG SC 2.1.4）</label>
+  </div>
+</dialog>
+
+<div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+<script>
+/* ============ 图标渲染 ============ */
+document.querySelectorAll('[data-icon]').forEach(el=>{el.insertAdjacentHTML('afterbegin',`<svg class="ic" aria-hidden="true"><use href="#i-${el.dataset.icon}"/></svg>`)});
+function icon(n,cls){return `<svg class="ic ${cls||''}" aria-hidden="true"><use href="#i-${n}"/></svg>`}
+const $=id=>document.getElementById(id);
+function announce(msg){$('liveRegion').textContent='';requestAnimationFrame(()=>{$('liveRegion').textContent=msg})}
+
+/* ============ 主题 / 密度 ============ */
+const root=document.documentElement, themeBtn=$('themeBtn');
+function setTheme(t){root.dataset.theme=t;themeBtn.querySelector('use').setAttribute('href',t==='dark'?'#i-sun':'#i-moon');try{localStorage.setItem('dm-theme',t)}catch(e){}}
+setTheme((()=>{try{return localStorage.getItem('dm-theme')||'light'}catch(e){return 'light'}})());
+themeBtn.onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+$('densityBtn').onclick=e=>{const c=root.dataset.density==='compact'?'comfy':'compact';root.dataset.density=c;e.currentTarget.classList.toggle('btn-primary',c==='compact')};
+$('cad').onchange=()=>{if(current&&current.id==='preview-ok'){applyState('preview-stale');toast('info','CAD 版本变化，预览摘要失效，请重新预览')}};
+
+/* ============ 数据（样例，全部为演示态；真实值来自服务端） ============ */
+const subsets=['001-002 第一册','003-004 第二册','005 第三册'];
+const props=[{比例:'1:100',专业:'建筑'},{比例:'1:100',专业:'结构'},{图幅:'A1',专业:'给排水'}];
+const rows=Array.from({length:12},(_,i)=>({
+  number:String(i+1).padStart(3,'0'),title:'图纸 '+(i+1),sub:subsets[i%3],prop:props[i%3],
+  dwg:subsets[i%3].split(' ')[0]+'.dwg',layout:'L'+(i+1),pending:i%5===0,blocked:i===7
+}));
+const body=$('sheetBody');
+
+/* ============ 表格：单一 Tab 停靠点键盘模型（§7.2 / D-03） ============ */
+const sheetGrid=$('sheetGrid');
+let rowFocus=0;
+function visibleRows(){return [...body.querySelectorAll('tr')]}
+function setRowFocus(i){
+  const rs=visibleRows();if(!rs.length)return;
+  rowFocus=Math.max(0,Math.min(i,rs.length-1));
+  rs.forEach((r,k)=>{r.classList.toggle('row-focus',k===rowFocus);r.setAttribute('aria-selected',String(selected.has(+r.dataset.i)))});
+}
+function toggleRow(i){selected.has(i)?selected.delete(i):selected.add(i);syncSel();setRowFocus(rowFocus)}
+function renderRows(){
+  body.innerHTML=rows.map((r,i)=>`<tr id="row-${i}" data-i="${i}" class="${selected.has(i)?'selected':''}${i===rowFocus?' row-focus':''}" aria-selected="${selected.has(i)}">
+    <td class="row-check"><input type="checkbox" class="rc" data-i="${i}" tabindex="-1" ${selected.has(i)?'checked':''} aria-label="选择图纸 ${r.number}"></td>
+    <td class="mono">${r.number}</td><td class="cell-title">${r.title}</td>
+    <td class="cell-props">${Object.entries(r.prop).map(([k,v])=>k+' '+v).join(' · ')}</td>
+    <td class="cell-dwg mono">${r.dwg} <span class="muted">· ${r.layout}</span></td>
+    <td>${r.blocked?'<span class="pill pill-danger"><span class="dot"></span>阻断</span>':r.pending?'<span class="pill pill-warning"><span class="dot"></span>待变更</span>':'<span class="pill pill-muted">未变更</span>'}</td>
+  </tr>`).join('');
+  body.querySelectorAll('.rc').forEach(cb=>cb.onchange=()=>{const i=+cb.dataset.i;cb.checked?selected.add(i):selected.delete(i);syncSel();setRowFocus(i)});
+  // 卸载/重渲染后行焦点恢复（§7.2）：焦点保持在最近仍在列表中的行
+  if(document.activeElement===sheetGrid)setRowFocus(rowFocus);
+}
+sheetGrid.addEventListener('keydown',e=>{
+  const rs=visibleRows();if(!rs.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();setRowFocus(rowFocus+1)}
+  else if(e.key==='ArrowUp'){e.preventDefault();setRowFocus(rowFocus-1)}
+  else if(e.key==='Home'){e.preventDefault();setRowFocus(0)}
+  else if(e.key==='End'){e.preventDefault();setRowFocus(rs.length-1)}
+  else if(e.key===' '){e.preventDefault();toggleRow(rowFocus)}
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='a'||e.key==='A')){e.preventDefault();selected=new Set(rows.map((_,i)=>i));syncSel();announce('已全选 '+rows.length+' 张')}
+});
+
+/* ============ 左树：role=tree 键盘模型（§7.2 / D-03） ============ */
+const treePane=$('treePane');
+$('treeList').innerHTML=subsets.map((s,i)=>`
+  <div class="tnode" role="treeitem" aria-level="2" aria-expanded="true" aria-selected="false" tabindex="-1" data-sub="${i}" data-name="${s}">${icon('chev')}${icon('folder')}<span class="grow">${s}</span><span class="count">${8-i*2}</span></div>
+  <div class="tnode-sub" role="treeitem" aria-level="3" aria-selected="false" tabindex="-1" data-name="${String(i+1).padStart(3,'0')} ${s.split(' ')[1]||'图纸'}">${icon('sheet','ic-sm')}<span>${String(i+1).padStart(3,'0')} ${s.split(' ')[1]||'图纸'}</span></div>`).join('');
+function treeItems(){return [...treePane.querySelectorAll('[role="treeitem"]')].filter(x=>x.offsetParent!==null)}
+function selectTreeNode(n,quiet){
+  treePane.querySelectorAll('.tnode').forEach(x=>x.classList.remove('active')); // 清除初始 active，避免与 aria-selected 双重高亮
+  treePane.querySelectorAll('[role="treeitem"]').forEach(x=>{x.setAttribute('aria-selected',String(x===n));x.tabIndex=x===n?0:-1});
+  n.focus();
+  if(!quiet&&current&&current.canSwitch)toast('info','已选择：'+(n.dataset.name||n.textContent.trim()));
+  else if(!quiet&&!current.canSwitch)toast('error','当前状态禁止切换');
+}
+treePane.addEventListener('click',e=>{const n=e.target.closest('[role="treeitem"]');if(n)selectTreeNode(n)});
+treePane.addEventListener('keydown',e=>{
+  const items=treeItems();const idx=items.indexOf(document.activeElement);if(idx<0)return;
+  const cur=items[idx];
+  const go=i=>{const t=items[i];cur.tabIndex=-1;t.tabIndex=0;t.focus()};
+  const kidsOf=el=>{const out=[];let n=el.nextElementSibling;while(n&&n.getAttribute('aria-level')==='3'){out.push(n);n=n.nextElementSibling}return out};
+  switch(e.key){
+    case 'ArrowDown':e.preventDefault();if(idx<items.length-1)go(idx+1);break;
+    case 'ArrowUp':e.preventDefault();if(idx>0)go(idx-1);break;
+    case 'Home':e.preventDefault();go(0);break;
+    case 'End':e.preventDefault();go(items.length-1);break;
+    case 'ArrowRight':e.preventDefault();if(cur.getAttribute('aria-level')==='2'){cur.setAttribute('aria-expanded','true');kidsOf(cur).forEach(k=>k.style.display='')}break;
+    case 'ArrowLeft':e.preventDefault();
+      if(cur.getAttribute('aria-level')==='2'&&cur.getAttribute('aria-expanded')==='true'){cur.setAttribute('aria-expanded','false');kidsOf(cur).forEach(k=>k.style.display='none')}
+      else{for(let i=idx-1;i>=0;i--){if(items[i].getAttribute('aria-level')<cur.getAttribute('aria-level')){go(i);break}}}
+      break;
+    case 'Enter':case ' ':e.preventDefault();selectTreeNode(cur);break;
+    default:
+      // typeahead：字符键跳到名称前缀匹配节点
+      if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+        const ch=e.key.toLowerCase();
+        const name=el=>(el.dataset.name||el.textContent||'').trim().toLowerCase();
+        let hit=null;
+        for(let i=idx+1;i<items.length;i++){if(name(items[i]).startsWith(ch)){hit=items[i];break}}
+        if(!hit)for(let i=0;i<idx;i++){if(name(items[i]).startsWith(ch)){hit=items[i];break}}
+        if(hit){e.preventDefault();cur.tabIndex=-1;hit.tabIndex=0;hit.focus()}
+      }
+  }
+});
+
+/* ============ 右栏 Tab：roving tabindex + 方向键（§7.2 / D-03） ============ */
+const tabEls=[...document.querySelectorAll('.tab')];
+function switchTab(name,focus){
+  tabEls.forEach(x=>{const on=x.dataset.tab===name;x.classList.toggle('active',on);x.setAttribute('aria-selected',String(on));x.tabIndex=on?0:-1;if(on&&focus)x.focus()});
+  document.querySelectorAll('.tabpanel').forEach(x=>x.classList.toggle('active',x.dataset.panel===name));
+}
+tabEls.forEach(t=>t.onclick=()=>switchTab(t.dataset.tab));
+$('ctxTabs').addEventListener('keydown',e=>{
+  const i=tabEls.indexOf(document.activeElement);if(i<0)return;
+  if(e.key==='ArrowRight'){e.preventDefault();switchTab(tabEls[(i+1)%tabEls.length].dataset.tab,true)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();switchTab(tabEls[(i-1+tabEls.length)%tabEls.length].dataset.tab,true)}
+  else if(e.key==='Home'){e.preventDefault();switchTab(tabEls[0].dataset.tab,true)}
+  else if(e.key==='End'){e.preventDefault();switchTab(tabEls[tabEls.length-1].dataset.tab,true)}
+});
+
+/* ============ 选择 ============ */
+let selected=new Set();
+function syncSel(){$('selCount').textContent=selected.size;$('checkAll').checked=selected.size===rows.length&&rows.length>0;announce('已选择 '+selected.size+' 张');renderRows()}
+$('checkAll').onchange=e=>{selected=e.target.checked?new Set(rows.map((_,i)=>i)):new Set();syncSel()};
+$('selectAll2').onclick=()=>{selected=new Set(rows.map((_,i)=>i));syncSel();toast('info','已选择全部 '+rows.length+' 张')};
+$('loadMore').onclick=()=>{toast('info','加载后续图纸（虚拟滚动占位）');setRowFocus(rowFocus);announce('焦点保持在图纸 '+rows[rowFocus].number)};
+
+/* ============ 搜索 ============ */
+const searchInput=$('searchInput');
+searchInput.oninput=()=>{const q=searchInput.value.trim();$('shown').textContent=q?Math.max(0,12-q.length):12};
+
+/* ============ 批量表单校验：错误摘要聚焦标题、链接直指控件（D-05） ============ */
+const formError=$('formError');
+formError.addEventListener('click',e=>{const a=e.target.closest('[data-focus]');if(a){e.preventDefault();$(a.dataset.focus).focus()}});
+$('bulkAdd').onclick=()=>{
+  const prop=$('bulkProp'), val=$('bulkVal');let errs=[];
+  const check=(el,errId)=>{const ok=!!el.value;el.setAttribute('aria-invalid',String(!ok));if(ok){el.removeAttribute('aria-describedby')}else{el.setAttribute('aria-describedby',errId);errs.push(errId)}};
+  check(prop,'err-bulkprop');check(val,'err-bulkval');
+  if(errs.length){
+    formError.hidden=false;$('formErrorCount').textContent=errs.length;$('formErrorTitle').focus();
+    toast('error','请先补全批量属性与值');return;
+  }
+  formError.hidden=true;
+  addDraft(`批量更新 ${prop.value}（${selected.size||'2'} 张）`);
+  val.value='';toast('success','已加入草稿：批量更新 '+prop.value);draftMutation();
+};
+
+/* ============ 草稿 ============ */
+let drafts=[{label:'更新图纸集名称',count:1},{label:'新建子集 005 第三册',count:1}];
+let cursor=2;
+const draftList=$('draftList');
+function renderDraft(){
+  draftList.innerHTML=drafts.map((d,i)=>`<div class="action ${i>=cursor?'past':''}">${icon('layers')}<span class="txt">${d.label}${d.count>1?` · ${d.count} 条`:''}</span>${i<cursor?'<span class="cur">当前</span>':''}<button class="btn btn-sm btn-ghost" data-rm="${i}" aria-label="移除此动作：${d.label}">${icon('trash')}</button></div>`).join('')||'<p class="muted" style="font-size:13px">尚无草稿动作。</p>';
+  draftList.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{if(!current.canEdit)return;drafts.splice(+b.dataset.rm,1);cursor=drafts.length;renderDraft();draftMutation()});
+  $('draftBadge').textContent=drafts.length;$('draftCount').textContent=`动作 ${cursor} / ${drafts.length}`;$('undoBtn').disabled=cursor===0;
+}
+function addDraft(label){drafts=drafts.slice(0,cursor);drafts.push({label,count:1});cursor=drafts.length;renderDraft()}
+// 草稿变更后回到"有草稿·未预览"（或无草稿），使预览失效
+function draftMutation(){if(drafts.length===0)applyState('no-draft');else applyState('draft')}
+$('undoBtn').onclick=()=>{if(!current.canEdit||cursor===0)return;cursor--;renderDraft();draftMutation();toast('info','已撤销')};
+
+/* ============ §6.9 状态矩阵（REPAIRED 按 R-02 拆为两段） ============ */
+const CELL_LABELS=['主操作','次操作','预览','确认写入','禁用原因可见','快捷键','编辑 / 切换'];
+const DLEFT='待发布：<b>{N}</b> 条 · {D}';
+const DRAFT_HINT='编辑持久化到应用数据目录草稿（不改动工程文件）';
+const STATES=[
+ {id:'no-workspace',name:'无工作区',dst:['pill-muted','未打开'],canEdit:false,canSwitch:true,shown:false,
+  left:'<span class="draft-count muted">未打开工程文件</span>',hint:'',reason:null,
+  ctas:[{t:'打开项目',tier:'primary',ic:'file',a:'open'}],
+  cells:['打开项目 · Primary · 可用','—','隐藏','隐藏','—','仅 Ctrl+O 生效，其余禁用','—']},
+ {id:'no-draft',name:'有工作区 · 无草稿',dst:['pill-success','DST 有效'],canEdit:true,canSwitch:true,shown:false,discardDisabled:true,
+  left:DLEFT,hint:DRAFT_HINT,reason:'没有待发布变更',
+  ctas:[{t:'预览变更',tier:'primary',ic:'preview',a:'preview',dis:true},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['—','丢弃草稿 · Ghost · 禁用','禁用','禁用','是（"没有待发布变更"）','Ctrl+Enter/Ctrl+S 非阻断提示','可编辑、可切换']},
+ {id:'draft',name:'有草稿 · 未预览',dst:['pill-success','DST 有效'],canEdit:true,canSwitch:true,shown:false,
+  left:DLEFT,hint:DRAFT_HINT,reason:'请先预览',
+  ctas:[{t:'预览变更',tier:'primary',ic:'preview',a:'preview'},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['预览 · Primary · 可用','丢弃草稿','可用','禁用','是（"请先预览"）','Ctrl+S 引导先预览','可编辑、可切换']},
+ {id:'previewing',name:'预览生成中',dst:['pill-success','DST 有效'],canEdit:true,canSwitch:false,shown:false,
+  left:DLEFT,hint:'',reason:'正在生成预览',
+  ctas:[{t:'预览中…',tier:'primary',ic:'clock',a:'preview',dis:true,loading:true},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['预览 · Primary · loading','—','loading','禁用','是','禁用写入','禁止再次发起']},
+ {id:'preview-ok',name:'预览有效可执行',dst:['pill-success','DST 有效'],canEdit:true,canSwitch:true,shown:true,
+  left:DLEFT,hint:'预览完成，可安全确认写入',reason:null,
+  ctas:[{t:'重新预览',tier:'primary',ic:'preview',a:'preview'},{t:'确认发布',tier:'danger',ic:'publish',a:'publish'}],
+  cells:['确认写入 · Danger · 可用（开模态）','重新预览','可用','可用（模态）','—','Ctrl+S 打开模态，不直接执行','可编辑、可切换']},
+ {id:'preview-stale',name:'预览过期 · 基准变化',dst:['pill-warning','基准已变'],canEdit:true,canSwitch:true,shown:true,stale:true,
+  left:DLEFT,hint:'',reason:'预览已失效，请重新预览',
+  ctas:[{t:'重新预览',tier:'primary',ic:'preview',a:'preview'},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['预览 · Primary · 可用','—','可用','禁用','是（"预览已失效"）','Ctrl+S 要求重新预览','可编辑、可切换']},
+ {id:'repaired',name:'REPAIRED · 待确认修复',dst:['pill-warning','已修复待确认'],canEdit:false,canSwitch:true,shown:false,
+  left:'<span class="draft-count muted">普通编辑锁定</span>',hint:'普通写入已禁用，请先预览修复',reason:'存在待确认修复',
+  ctas:[{t:'预览修复',tier:'primary',ic:'preview',a:'repairPreview'},{t:'确认发布修复',tier:'danger',ic:'repair',a:'repair',dis:true}],
+  cells:['预览修复 · Primary · 可用','确认发布修复 · Danger · 仅预览后可用（开模态）','普通写入禁用','普通写入禁用','是（"存在待确认修复"）','修复走模态','只读普通编辑']},
+ {id:'repaired-previewed',name:'修复预览有效',dst:['pill-warning','已修复待确认'],canEdit:false,canSwitch:true,shown:false,
+  left:'<span class="draft-count muted">普通编辑锁定</span>',hint:'修复预览有效，可确认发布修复修订',reason:null,
+  ctas:[{t:'重新预览修复',tier:'primary',ic:'preview',a:'repairPreview'},{t:'确认发布修复',tier:'danger',ic:'repair',a:'repair'}],
+  cells:['预览修复 · Primary · 可用','确认发布修复 · Danger · 可用（开模态）','普通写入禁用','普通写入禁用','—','修复走模态','只读普通编辑']},
+ {id:'invalid-repair',name:'INVALID_REPAIR_REQUIRED',dst:['pill-danger','需先修复'],canEdit:false,canSwitch:true,shown:false,
+  left:'<span class="draft-count muted">只读 · DST 需修复</span>',hint:'只读模式',reason:'存在阻断问题，需先修复',
+  ctas:[{t:'查看阻断详情',tier:'danger',ic:'error',a:'diag'},{t:'修订恢复',tier:'ghost',ic:'restore',a:'restore'}],
+  cells:['查看阻断/修复 · Danger · 引导','修订恢复 · Ghost','普通禁用','普通禁用','是（"需先修复"）','仅恢复/修复','只读']},
+ {id:'invalid-unrecover',name:'INVALID_UNRECOVERABLE',dst:['pill-danger','不可恢复'],canEdit:false,canSwitch:true,shown:false,
+  left:'<span class="draft-count muted">只读 · DST 不可恢复</span>',hint:'只读模式',reason:'DST 不可恢复，唯一出路是修订恢复',
+  ctas:[{t:'修订恢复',tier:'danger',ic:'restore',a:'restore'}],
+  cells:['修订恢复 · Danger · 引导','—','普通禁用','普通禁用','是（"不可恢复"）','仅恢复','只读']},
+ {id:'running',name:'任务执行中',dst:['pill-success','DST 有效'],canEdit:false,canSwitch:false,shown:false,tab:'job',
+  left:'<span class="draft-count">任务执行中 <b>66%</b></span>',hint:'任务执行中，禁止再次写入/切换',reason:'任务进行中',
+  ctas:[{t:'预览变更',tier:'primary',ic:'preview',a:'preview',dis:true},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['进度（右栏）· 无 CTA','查看任务','禁用','禁用','是（"任务进行中"）','全部写入快捷键禁用','可查看，禁止再次写入/危险切换']},
+ {id:'needs-review',name:'NEEDS_REVIEW',dst:['pill-danger','需人工检查'],canEdit:false,canSwitch:true,shown:false,tab:'job',
+  left:'<span class="draft-count">任务 job-3842 · 需人工检查</span>',hint:'发布状态需人工检查',reason:'需人工检查，禁止直接重试',
+  ctas:[{t:'查看任务 / 日志',tier:'primary',ic:'clock',a:'noop'},{t:'恢复',tier:'danger',ic:'restore',a:'restore'}],
+  cells:['查看任务/日志 · 可用','恢复 · Danger','禁用','禁用','是（"禁止直接重试"）','重试禁用','只读']},
+ {id:'restoring',name:'恢复执行中',dst:['pill-success','DST 有效'],canEdit:false,canSwitch:false,shown:false,tab:'job',
+  left:'<span class="draft-count">恢复执行中…</span>',hint:'恢复执行中，其它入口已锁定',reason:'恢复进行中，其它入口锁定',
+  ctas:[{t:'预览变更',tier:'primary',ic:'preview',a:'preview',dis:true},{t:'确认发布',tier:'danger',ic:'publish',a:'publish',dis:true}],
+  cells:['进度 · 无 CTA','—','全部入口锁定','锁定','是','全部禁用','锁定其它写入入口']},
+];
+$('stateBar').insertAdjacentHTML('beforeend',STATES.map(s=>`<button class="statebtn" data-state="${s.id}">${s.name}</button>`).join(''));
+document.querySelectorAll('.statebtn').forEach(b=>b.onclick=()=>applyState(b.dataset.state));
+
+let current=null, previewTimer=null;
+function applyState(id){
+  const s=STATES.find(x=>x.id===id);if(!s)return;current=s;
+  document.querySelectorAll('.statebtn').forEach(b=>b.classList.toggle('active',b.dataset.state===id));
+  // 顶栏 DST 状态 + 切换锁
+  $('dstPill').className='pill '+s.dst[0];$('dstPillText').textContent=s.dst[1];$('dstPill').title='DST 状态：'+s.dst[1];
+  $('cad').disabled=!s.canSwitch;treePane.classList.toggle('locked',!s.canSwitch);
+  $('main').classList.toggle('locked',!s.canEdit);
+  // dock 左侧
+  const D=(s.canEdit&&drafts.length>0)?'<button class="btn btn-sm" data-act="discard">丢弃草稿</button>':(s.discardDisabled?'<button class="btn btn-sm" disabled>丢弃草稿</button>':'');
+  $('dockLeft').innerHTML=s.left.replace('{N}',drafts.length).replace('{D}',D);
+  // dock 右侧：禁用原因 / 提示 / CTA（单一写入者，保证状态互斥）
+  if(s.reason){$('dockReason').hidden=false;$('dockReason').innerHTML=icon('alert','ic-sm')+`<span>${s.reason}</span>`}else $('dockReason').hidden=true;
+  $('dockHint').textContent=s.hint||'';
+  $('dockActions').innerHTML=s.ctas.map(c=>{const inner=c.loading?'<span class="spin"></span>':icon(c.ic);return `<button class="btn btn-${c.tier}" data-act="${c.a}" ${c.dis?'disabled':''}>${inner}${c.t}</button>`}).join('');
+  // 预览面板：有效 / 失效互斥（D-01）
+  $('previewPanel').hidden=!s.shown;$('pvStale').hidden=!s.stale;
+  $('pvStatus').className='pill '+(s.stale?'pill-warning':'pill-success');
+  $('pvStatus').innerHTML=s.stale?'<span class="dot"></span>已失效 · 请重新预览':'<span class="dot"></span>可执行 · 基准 revision-7 · 摘要 <span class="mono">a1b2c3d4</span>';
+  console.assert(!(s.shown&&!s.stale&&id==='preview-stale'),'状态互斥：过期态不得显示可执行');
+  console.assert(!(id==='preview-ok'&&s.stale),'状态互斥：有效态不得显示失效提示');
+  if(s.tab)switchTab(s.tab);
+  // 图例
+  $('legendTitle').innerHTML=icon('grid','ic-sm')+'当前状态：<b style="margin-left:4px">'+s.name+'</b>';
+  $('legendGrid').innerHTML=s.cells.map((v,i)=>`<div class="legend-cell"><div class="k">${CELL_LABELS[i]}</div><div class="v">${v}</div></div>`).join('');
+  announce('当前状态：'+s.name+(s.reason?'；'+s.reason:''));
+  if(id==='preview-ok')$('previewPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+document.querySelector('.dock').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b&&!b.disabled)dispatch(b.dataset.act)});
+
+/* ============ 动作分派 ============ */
+function dispatch(a){
+  if(a==='open'){toast('info','（演示）已打开 project1.dst');applyState('no-draft')}
+  else if(a==='preview')runPreview('normal');
+  else if(a==='repairPreview')runPreview('repair');
+  else if(a==='publish')openConfirm('publish');
+  else if(a==='repair')openConfirm('repair');
+  else if(a==='restore')openConfirm('restore');
+  else if(a==='discard'){drafts=[];cursor=0;renderDraft();toast('success','草稿已丢弃');applyState('no-draft')}
+  else if(a==='diag')toast('error','存在阻断诊断（INVALID_REPAIR_REQUIRED）：普通写入已禁用，请走修复或修订恢复');
+  else if(a==='noop')toast('info','（演示）查看任务详情与日志');
+}
+function runPreview(kind){
+  if(kind!=='repair'&&drafts.length===0){toast('error','没有待发布的变更');return}
+  applyState('previewing');
+  clearTimeout(previewTimer);
+  previewTimer=setTimeout(()=>{if(current&&current.id==='previewing')applyState(kind==='repair'?'repaired-previewed':'preview-ok')},1200);
+}
+
+/* ============ 正式写入确认模态（参数化：发布/修复/恢复共用，体现 §9.1 统一门禁） ============ */
+const pubModal=$('publishModal'),pubGate=$('pubGate'),pubConfirm=$('pubConfirm');
+const CONFIRM={
+ publish:{h:'确认发布变更',imp:'<li>更新 <b>1</b> 个图纸集字段、影响 <b>2</b> 个子集</li><li>写入 <b>1</b> 个 DST + <b>2</b> 个 DWG，共 <b>3</b> 个文件</li><li>布局重建 1 个（数量变化前沿：第 2 个子集）</li>',note:'原 DST 与受影响 DWG 将永久备份为独立修订，失败时整批回滚。',gate:'我已了解发布将写入正式工程文件，并接受影响范围',btn:'确认发布（永久备份）',ic:'publish'},
+ repair:{h:'确认发布修复修订',imp:'<li>补齐 <b>1</b> 项可修复的 AcSm 元数据缺失</li><li>写入 <b>1</b> 个 DST（内存修复发布为独立修订）</li>',note:'修复发布同样是正式工程文件写入：原 DST 永久备份，失败整批回滚。',gate:'我已了解修复将写入 DST，并确认内存修复结果',btn:'确认发布修复修订',ic:'repair'},
+ restore:{h:'确认恢复为新修订',imp:'<li>用选定修订覆盖当前 DST</li><li>历史修订不会被覆盖，恢复生成新修订</li>',note:'恢复为独立不可逆写入；当前未发布草稿将被丢弃。',gate:'我已了解恢复将覆盖当前工作副本',btn:'恢复为新修订',ic:'restore'},
+};
+let pendingKind='publish';
+function openConfirm(kind){const c=CONFIRM[kind];pendingKind=kind;$('pubH').textContent=c.h;$('pubImpact').innerHTML=c.imp;$('pubNote').textContent=c.note;$('pubGateText').textContent=c.gate;pubConfirm.innerHTML=icon(c.ic)+c.btn;pubGate.checked=false;pubConfirm.disabled=true;pubModal.showModal()}
+pubGate.onchange=()=>pubConfirm.disabled=!pubGate.checked;
+pubConfirm.onclick=()=>runWrite(pendingKind);
+function runWrite(kind){const label=kind==='publish'?'发布':kind==='repair'?'修复发布':'恢复';pubModal.close();applyState('running');let p=0;const bar=$('jobBar');if(bar)bar.style.width='0%';const t=setInterval(()=>{p+=Math.random()*22;if(bar)bar.style.width=Math.min(100,p)+'%';if(p>=100){clearInterval(t);drafts=[];cursor=0;renderDraft();toast('success',label+'成功，已生成独立修订并刷新工作区');applyState('no-draft')}},500)}
+
+/* ============ 删除确认模态（含外部引用声明） ============ */
+const delModal=$('deleteModal'),delGate=$('delGate'),delConfirm=$('delConfirm');
+delGate.onchange=()=>delConfirm.disabled=!delGate.checked;
+delConfirm.onclick=()=>{delModal.close();addDraft('删除子集 001-002 第一册');toast('success','子集已加入删除草稿');draftMutation()};
+body.ondblclick=e=>{const tr=e.target.closest('tr');if(tr&&current.canEdit){delGate.checked=false;delConfirm.disabled=true;delModal.showModal()}};
+
+/* ============ 任务失败 → NEEDS_REVIEW 演示 ============ */
+$('jobDemoBtn').onclick=()=>{toast('error','CAD_TIMEOUT · 003-004 第二册.dwg 重建超时');applyState('needs-review')};
+
+/* ============ Toast：可手动关闭；错误保留至关闭（D-07） ============ */
+function toast(type,msg){
+  const region=$('toastRegion');
+  const el=document.createElement('div');el.className='toast toast-'+type;
+  el.setAttribute('role',type==='error'?'alert':'status');
+  const ico=type==='success'?'check':type==='error'?'error':'info';
+  el.innerHTML=icon(ico)+`<span>${msg}</span><button class="toast-close" aria-label="关闭通知">✕</button>`;
+  const remove=()=>{el.style.opacity='0';el.style.transform='translateY(8px)';el.style.transition='.3s';setTimeout(()=>el.remove(),300)};
+  el.querySelector('.toast-close').onclick=remove;
+  region.appendChild(el);
+  if(type!=='error')setTimeout(remove,3400);
+}
+
+/* ============ 抽屉：窄屏侧栏入口 + 焦点管理（D-02 / §7.2） ============ */
+function setupDrawer(btnId,paneId){
+  const btn=$(btnId),pane=$(paneId);let lastFocus=null;
+  const focusables=()=>[...pane.querySelectorAll('button,[href],input,select,textarea')].filter(x=>!x.disabled&&x.offsetParent!==null&&getComputedStyle(x).visibility!=='hidden');
+  function open(){pane.classList.add('open');btn.setAttribute('aria-expanded','true');lastFocus=document.activeElement;const f=focusables()[0];if(f)f.focus();announce((paneId==='treePane'?'结构导航':'上下文面板')+'抽屉已打开')}
+  function close(){if(!pane.classList.contains('open'))return;pane.classList.remove('open');btn.setAttribute('aria-expanded','false');if(lastFocus&&document.contains(lastFocus))lastFocus.focus();lastFocus=null}
+  btn.addEventListener('click',open);
+  pane.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();close();return}
+    if(e.key==='Tab'){ // 焦点困绕
+      const fs=focusables();if(!fs.length)return;
+      const first=fs[0],last=fs[fs.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+    }
+  });
+  return {close};
+}
+setupDrawer('openTreeBtn','treePane');
+setupDrawer('openAsideBtn','ctxPane');
+
+/* ============ 快捷键帮助 ============ */
+const helpModal=$('helpModal');
+$('helpBtn').onclick=()=>helpModal.showModal();$('helpClose').onclick=()=>helpModal.close();
+document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close()}));
+
+/* ============ 单字符快捷键开关（D-06 / SC 2.1.4） ============ */
+const singleKeysToggle=$('singleKeysToggle');
+try{singleKeysToggle.checked=localStorage.getItem('dm-single-keys')!=='0'}catch(e){}
+singleKeysToggle.onchange=()=>{try{localStorage.setItem('dm-single-keys',singleKeysToggle.checked?'1':'0')}catch(e){}toast('info',singleKeysToggle.checked?'单字符快捷键已启用':'单字符快捷键已关闭（/ 与 ? 不再触发全局动作）')};
+function singleKeysOn(){return singleKeysToggle.checked}
+
+/* ============ 全局快捷键（受 §6.9 状态约束，Ctrl+S 从不直接执行） ============ */
+function enabledAct(acts){return current&&current.ctas.some(c=>!c.dis&&acts.includes(c.a))}
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase(),typing=tag==='input'||tag==='select'||tag==='textarea';
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();if(enabledAct(['preview']))dispatch('preview');else toast('info',current.reason||'当前状态不可预览')}
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();const c=current&&current.ctas.find(x=>!x.dis&&['publish','repair','restore'].includes(x.a));if(c)dispatch(c.a);else toast('info',(current&&current.reason)||'当前状态不可写入（Ctrl+S 只打开确认模态，不直接执行）')}
+  else if(e.key==='/'&&!typing&&singleKeysOn()){e.preventDefault();searchInput.focus()}
+  else if(e.key==='?'&&!typing&&singleKeysOn()){e.preventDefault();helpModal.showModal()}
+});
+
+renderRows();renderDraft();applyState('draft');
+</script>
+</body>
+</html>
