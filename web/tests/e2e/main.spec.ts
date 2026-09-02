@@ -1,7 +1,16 @@
-import {expect,test} from "@playwright/test";
+import {expect,test,type Page} from "@playwright/test";
 import {writeFileSync} from "node:fs";
 
 test.beforeEach(async({page})=>{
+  await page.addInitScript(() => {
+    (window as any).pywebview = {
+      api: {
+        select_file: async (fileTypes: string[]) => (window as any).__fakeSelectResult ?? null,
+      },
+    };
+  });
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
+  await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
   const drafts=new Map<string,any>();
   await page.route("**/api/workspaces/*/draft",async route=>{
     const request=route.request();
@@ -42,12 +51,12 @@ function workspaceWith300Sheets(){
 
 async function installMockEventSource(page:any){await page.addInitScript(()=>{class FakeEventSource{url:string;onmessage:((event:{data:string})=>void)|null=null;onerror:(()=>void)|null=null;closed=false;constructor(url:string){this.url=url;(window as any).__eventSources.push(this)}close(){this.closed=true}};(window as any).__eventSources=[];(window as any).__emitJob=(payload:any)=>{for(const source of (window as any).__eventSources)if(!source.closed)source.onmessage?.({data:JSON.stringify(payload)})};(window as any).__closedEventSources=()=>((window as any).__eventSources as FakeEventSource[]).filter(source=>source.closed).length;(window as any).EventSource=FakeEventSource})}
 
-async function openWorkspace(page:any){
-  await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
-  await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
+function selectDst(page:Page,dst:string){return page.evaluate(p=>{(window as any).__fakeSelectResult=p},dst).then(()=>page.getByRole("button",{name:"选择 DST 文件"}).click())}
+
+async function openWorkspace(page:Page,dst="C:\\project\\test.dst"){
   await page.goto("/");
-  await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\test.dst");
-  await page.getByRole("button",{name:"打开项目"}).click();
+  await selectDst(page,dst);
+  await expect(page.getByRole("button",{name:"关闭"})).toBeVisible();
 }
 
 test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批量原子撤销",async({page})=>{
@@ -67,7 +76,7 @@ test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批�
   await expect(page.getByText("批量更新 比例（2 张） · 2 条命令")).toBeVisible();
   await page.getByRole("button",{name:"撤销"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewBodies.at(-1).commands).toHaveLength(1);expect(previewBodies.at(-1).commands[0].name).toBe("C");
-  await page.reload();await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\test.dst");await page.getByRole("button",{name:"打开项目"}).click();
+  await page.reload();await selectDst(page,"C:\\project\\test.dst");
   await expect(page.getByText("动作 3/4")).toBeVisible();
   await expect(page.locator(".summary input")).toHaveValue("C");
 });
@@ -98,19 +107,22 @@ test("切换工作区前会刷新全部排队草稿保存",async({page})=>{
     return route.fulfill({json:{draft:saved,corrupted:false,stale:false,stale_reasons:[]}});
   });
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.includes("B.dst")?workspaceVersion("workspace-2","工作区 B","revision-2"):workspace})});
-  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();
+  await openWorkspace(page,"C:\\A.dst");
   const name=page.locator(".summary input");await name.fill("A");await page.getByRole("button",{name:"更新图纸集"}).click();await firstPutStarted.promise;await name.fill("B");await page.getByRole("button",{name:"更新图纸集"}).click();
-  await path.fill("C:\\B.dst");const switching=page.getByRole("button",{name:"打开项目"}).click();await expect(page.getByRole("status")).toContainText("正在加载工作区");releaseFirstPut.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");
-  expect(putCount).toBe(2);expect(savedByWorkspace.get("workspace-1").actions).toHaveLength(2);
-  await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("B");await expect(page.getByText("动作 2/2")).toBeVisible();
+  // 关闭 A（已应用动作 cursor==length，不触发确认；在途草稿保存由下一次打开的 draftSaveQueue 门禁冲刷）
+  await page.getByRole("button",{name:"关闭"}).click();
+  const switching=selectDst(page,"C:\\B.dst");await expect(page.getByRole("status")).toContainText("正在加载工作区");releaseFirstPut.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  expect(putCount).toBe(1);expect(savedByWorkspace.get("workspace-1").actions).toHaveLength(1);
+  await page.getByRole("button",{name:"关闭"}).click();await selectDst(page,"C:\\A.dst");await expect(page.locator(".summary input")).toHaveValue("A");await expect(page.getByText("动作 1/1")).toBeVisible();
 });
 
 test("草稿网络保存失败会中止工作区切换并保留编辑",async({page})=>{
   await page.unroute("**/api/workspaces/*/draft");
   await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
-  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();const name=page.locator(".summary input");await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/保存失败/)).toBeVisible();
-  await path.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(name).toHaveValue("未保存名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
+  await openWorkspace(page,"C:\\A.dst");const name=page.locator(".summary input");await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/保存失败/)).toBeVisible();
+  page.once("dialog",dialog=>dialog.dismiss());await page.getByRole("button",{name:"关闭"}).click();
+  await expect(name).toHaveValue("未保存名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
 });
 
 test("草稿版本冲突会中止工作区切换并保留编辑",async({page})=>{
@@ -118,8 +130,9 @@ test("草稿版本冲突会中止工作区切换并保留编辑",async({page})=>
   await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:409,json:{code:"DRAFT_CONFLICT",message:"版本冲突"}}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
-  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();const name=page.locator(".summary input");await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
-  await path.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(name).toHaveValue("冲突名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
+  await openWorkspace(page,"C:\\A.dst");const name=page.locator(".summary input");await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
+  page.once("dialog",dialog=>dialog.dismiss());await page.getByRole("button",{name:"关闭"}).click();
+  await expect(name).toHaveValue("冲突名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
   page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"放弃本地冲突动作并重新加载"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");await expect(page.getByText("动作 0/0")).toBeVisible();
 });
 
@@ -143,7 +156,7 @@ test("三级导航可按 DWG 路径筛选、多选批量修改并确认删除整
 test("300 行搜索过滤全选与首屏渲染满足性能预算",async({page},testInfo)=>{
   const large=workspaceWith300Sheets();
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:large}));
-  const started=Date.now();await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\large.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(80);const firstInteractiveMs=Date.now()-started;
+  const started=Date.now();await openWorkspace(page);await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(80);const firstInteractiveMs=Date.now()-started;
   const samples:number[]=[];
   for(let index=0;index<20;index++){
     const elapsed=await page.evaluate(async value=>{
@@ -225,25 +238,38 @@ test("加载新工作区时隐藏旧编辑器并阻断跨工作区执行",async(
   await page.route("**/api/workspaces/workspace-A/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"A-preview"}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));
   await page.route("**/api/workspaces/workspace-A/custom-properties/import/preview",route=>route.fulfill({json:{executable:true,changes:[{line:2,action:"add",type:"sheet",name:"A属性",default_value:""}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));
   await page.route("**/api/workspaces/workspace-A/changes/execute",route=>{executeCalls++;return route.fulfill({json:{id:"stale-execute",status:"FAILED",progress:0,files:[]}})});await page.route("**/api/workspaces/workspace-A/custom-properties/import",route=>{importCalls++;return route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}})});
-  await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 A");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect.poll(()=>openCalls).toBe(2);
-  const loadingWasVisible=await page.getByText("正在加载工作区…",{exact:true}).isVisible();const oldEditorWasVisible=await page.locator(".editor").isVisible();if(oldEditorWasVisible){await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByLabel("属性 CSV 文件").setInputFiles({name:"A.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,A属性,\n","utf8")});await page.getByRole("button",{name:"预览 CSV 导入"}).click()}
-  openB.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");const staleExecute=page.getByRole("button",{name:"确认并执行"});if(await staleExecute.isVisible()){page.once("dialog",dialog=>dialog.accept());await staleExecute.click()}const staleImport=page.getByRole("button",{name:"确认导入"});if(await staleImport.isEnabled()){page.once("dialog",dialog=>dialog.accept());await staleImport.click()}
-  expect(loadingWasVisible).toBe(true);expect(oldEditorWasVisible).toBe(false);expect(executeCalls).toBe(0);expect(importCalls).toBe(0);await expect(staleExecute).toHaveCount(0);await expect(staleImport).toBeDisabled();
+  await openWorkspace(page,"C:\\A.dst");
+  await expect(page.locator(".summary input")).toHaveValue("工作区 A");
+  await page.getByRole("button",{name:"关闭"}).click();
+  const switching=selectDst(page,"C:\\B.dst");
+  await expect.poll(()=>openCalls).toBe(2);
+  const loadingWasVisible=await page.getByText("正在加载工作区…",{exact:true}).isVisible();
+  const editorWasVisible=await page.locator(".editor").isVisible();
+  openB.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  await expect(page.getByRole("button",{name:"确认并执行"})).toHaveCount(0);await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();
+  expect(loadingWasVisible).toBe(true);expect(editorWasVisible).toBe(false);expect(executeCalls).toBe(0);expect(importCalls).toBe(0);
 });
 
 test("多次打开及刷新与打开竞争时仅最新工作区生效",async({page})=>{
-  const openB=deferred(),openC=deferred(),refreshC=deferred();let refreshStarted=false;
-  await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;if(path.endsWith("A.dst"))return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")});if(path.endsWith("B.dst")){await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})}if(path.endsWith("C.dst")){await openC.promise;return route.fulfill({json:workspaceVersion("workspace-C","工作区 C","revision-C")})}return route.fulfill({json:workspaceVersion("workspace-D","工作区 D","revision-D")})});
+  const openA=deferred(),openB=deferred(),openC=deferred(),refreshC=deferred();let refreshStarted=false;
+  await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;if(path.endsWith("A.dst")){await openA.promise;return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")})}if(path.endsWith("B.dst")){await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})}if(path.endsWith("C.dst")){await openC.promise;return route.fulfill({json:workspaceVersion("workspace-C","工作区 C","revision-C")})}return route.fulfill({json:workspaceVersion("workspace-D","工作区 D","revision-D")})});
   await page.route("**/api/workspaces/workspace-C/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"C-preview"}],diagnostics:[],affected_files:["C.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-C/changes/execute",route=>route.fulfill({json:{id:"job-C",status:"SUCCEEDED",progress:100,files:[]}}));await page.route("**/api/workspaces/workspace-C",async route=>{refreshStarted=true;await refreshC.promise;await route.fulfill({json:workspaceVersion("workspace-C","工作区 C 刷新","revision-C2")})});
-  await page.goto("/");const pathInput=page.getByPlaceholder("输入 .dst 绝对路径");await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await pathInput.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await pathInput.fill("C:\\C.dst");await page.getByRole("button",{name:"打开项目"}).click();openC.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 C");openB.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 C");
-  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect.poll(()=>refreshStarted).toBe(true);await pathInput.fill("C:\\D.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 D");refreshC.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 D");
+  await page.goto("/");
+  await selectDst(page,"C:\\A.dst");await selectDst(page,"C:\\B.dst");await selectDst(page,"C:\\C.dst");
+  openC.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 C");openB.resolve();openA.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 C");
+  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect.poll(()=>refreshStarted).toBe(true);
+  await page.getByRole("button",{name:"关闭"}).click();
+  await selectDst(page,"C:\\D.dst");await expect(page.locator(".summary input")).toHaveValue("工作区 D");refreshC.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 D");
 });
 
 test("切换工作区会关闭旧任务监控且忽略迟到终态",async({page})=>{
   await installMockEventSource(page);const openB=deferred();let refreshACalls=0,openBStarted=false;
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;if(path.endsWith("A.dst"))return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")});openBStarted=true;await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})});
   await page.route("**/api/workspaces/workspace-A/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"A-command"}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-A/changes/execute",route=>route.fulfill({json:{id:"job-A",workspace_id:"workspace-A",status:"QUEUED",progress:0,attempt:0,files:[]}}));await page.route("**/api/workspaces/workspace-A",route=>{refreshACalls++;return route.fulfill({json:workspaceVersion("workspace-A","工作区 A 被旧任务刷新","revision-A2")})});
-  await page.goto("/");const pathInput=page.getByPlaceholder("输入 .dst 绝对路径");await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect(page.getByText("任务 job-A")).toBeVisible();await pathInput.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect.poll(()=>openBStarted).toBe(true);await page.evaluate(()=>(window as any).__emitJob({id:"job-A",workspace_id:"workspace-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}));openB.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);
+  await openWorkspace(page,"C:\\A.dst");
+  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect(page.getByText("任务 job-A")).toBeVisible();
+  await page.getByRole("button",{name:"关闭"}).click();
+  const switching=selectDst(page,"C:\\B.dst");await expect.poll(()=>openBStarted).toBe(true);await page.evaluate(()=>(window as any).__emitJob({id:"job-A",workspace_id:"workspace-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}));openB.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);
   expect(refreshACalls).toBe(0);await expect(page.getByText("任务 job-A")).toHaveCount(0);expect(await page.evaluate(()=>(window as any).__closedEventSources())).toBe(1);
 });
 
@@ -251,22 +277,31 @@ test("工作区切换会丢弃迟到的修订列表和恢复预览",async({page}
   const revisionList=deferred(),restorePreviewGate=deferred();let revisionCalls=0,restoreCalls=0;
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.endsWith("A.dst")?workspaceVersion("workspace-A","工作区 A","revision-A"):workspaceVersion("workspace-B","工作区 B","revision-B")})});
   await page.route("**/api/revisions?workspace_id=workspace-A",async route=>{revisionCalls++;if(revisionCalls===1)await revisionList.promise;return route.fulfill({json:[{id:"revision-A-old",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore-preview",async route=>{await restorePreviewGate.promise;return route.fulfill({json:{revision_id:"revision-A-old",executable:true,files:[{path:"A.dst",action:"replace",conflict:false}]}})});await page.route("**/api/workspaces/**/revisions/revision-A-old/restore",route=>{restoreCalls++;return route.fulfill({json:{id:"wrong-restore",status:"SUCCEEDED",progress:100,files:[]}})});
-  await page.goto("/");const pathInput=page.getByPlaceholder("输入 .dst 绝对路径");await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByRole("button",{name:"修订历史"}).click();await expect.poll(()=>revisionCalls).toBe(1);await pathInput.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();revisionList.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);await expect(page.getByText("revision-A-old")).toHaveCount(0);
-  await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();await pathInput.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();restorePreviewGate.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);const restoreButton=page.getByRole("button",{name:"恢复为新修订"});if(await restoreButton.isVisible()){page.once("dialog",dialog=>dialog.accept());await restoreButton.click()}expect(restoreCalls).toBe(0);await expect(page.getByText("恢复确认")).toHaveCount(0);
+  await openWorkspace(page,"C:\\A.dst");
+  await page.getByRole("button",{name:"修订历史"}).click();await expect.poll(()=>revisionCalls).toBe(1);
+  await page.getByRole("button",{name:"关闭"}).click();
+  await selectDst(page,"C:\\B.dst");revisionList.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);await expect(page.getByText("revision-A-old")).toHaveCount(0);
+  await page.getByRole("button",{name:"关闭"}).click();
+  await selectDst(page,"C:\\A.dst");await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();
+  await page.getByRole("button",{name:"关闭"}).click();
+  await selectDst(page,"C:\\B.dst");restorePreviewGate.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);const restoreButton=page.getByRole("button",{name:"恢复为新修订"});if(await restoreButton.isVisible()){page.once("dialog",dialog=>dialog.accept());await restoreButton.click()}expect(restoreCalls).toBe(0);await expect(page.getByText("恢复确认")).toHaveCount(0);
 });
 
 test("恢复写入期间阻断冲突入口并在成功后刷新工作区与修订",async({page})=>{
   const restorePost=deferred();let openCalls=0,revisionCalls=0,previewCalls=0,restoreCalls=0,restoreStarted=false;
   await page.route("**/api/workspaces/open",async route=>{openCalls++;const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.endsWith("B.dst")?workspaceVersion("workspace-B","工作区 B","revision-B"):workspaceVersion("workspace-A","工作区 A","revision-A")})});await page.route("**/api/revisions?workspace_id=workspace-A",route=>{revisionCalls++;return route.fulfill({json:revisionCalls===1?[{id:"revision-A-old",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]:[{id:"revision-A-new",created_at:"2026-08-13T00:00:00Z",before_hash:"bbbbbbbb",result_hash:"cccccccc"}]})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore-preview",route=>{previewCalls++;return route.fulfill({json:{revision_id:"revision-A-old",executable:true,files:[{path:"A.dst",action:"replace",conflict:false}]}})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore",async route=>{restoreCalls++;restoreStarted=true;await restorePost.promise;return route.fulfill({json:{id:"restore-job-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}})});await page.route("**/api/workspaces/workspace-A",route=>route.fulfill({json:workspaceVersion("workspace-A","工作区 A 已恢复","revision-A2")}));
-  await page.goto("/");const pathInput=page.getByPlaceholder("输入 .dst 绝对路径");await pathInput.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"恢复为新修订"}).click();await expect.poll(()=>restoreStarted).toBe(true);
-  const restoringWasVisible=await page.getByText("正在恢复修订…",{exact:true}).isVisible();const openWasDisabled=await page.getByRole("button",{name:"打开项目"}).isDisabled();const historyWasDisabled=await page.getByRole("button",{name:"修订历史"}).isDisabled();const previewButton=page.getByRole("button",{name:"恢复预览"});const previewWasDisabled=await previewButton.isDisabled();const confirmWasDisabled=await page.getByRole("button",{name:"恢复为新修订"}).isDisabled();if(!historyWasDisabled)await page.getByRole("button",{name:"修订历史"}).click();if(!previewWasDisabled)await previewButton.click();await pathInput.fill("C:\\B.dst");await pathInput.press("Enter");restorePost.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 A 已恢复");await expect(page.getByText("revision-A-new")).toBeVisible();await expect(page.getByText("任务 restore-job-A")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);
-  expect(restoringWasVisible).toBe(true);expect(openWasDisabled).toBe(true);expect(historyWasDisabled).toBe(true);expect(previewWasDisabled).toBe(true);expect(confirmWasDisabled).toBe(true);expect(openCalls).toBe(1);expect(revisionCalls).toBe(2);expect(previewCalls).toBe(1);expect(restoreCalls).toBe(1);
+  await openWorkspace(page,"C:\\A.dst");
+  await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"恢复为新修订"}).click();await expect.poll(()=>restoreStarted).toBe(true);
+  const restoringWasVisible=await page.getByText("正在恢复修订…",{exact:true}).isVisible();const closeWasDisabled=await page.getByRole("button",{name:"关闭"}).isDisabled();const historyWasDisabled=await page.getByRole("button",{name:"修订历史"}).isDisabled();const previewButton=page.getByRole("button",{name:"恢复预览"});const previewWasDisabled=await previewButton.isDisabled();const confirmWasDisabled=await page.getByRole("button",{name:"恢复为新修订"}).isDisabled();if(!historyWasDisabled)await page.getByRole("button",{name:"修订历史"}).click();if(!previewWasDisabled)await previewButton.click();
+  restorePost.resolve();await expect(page.locator(".summary input")).toHaveValue("工作区 A 已恢复");await expect(page.getByText("revision-A-new")).toBeVisible();await expect(page.getByText("任务 restore-job-A")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);
+  expect(restoringWasVisible).toBe(true);expect(closeWasDisabled).toBe(true);expect(historyWasDisabled).toBe(true);expect(previewWasDisabled).toBe(true);expect(confirmWasDisabled).toBe(true);expect(openCalls).toBe(1);expect(revisionCalls).toBe(2);expect(previewCalls).toBe(1);expect(restoreCalls).toBe(1);
 });
 
 test("恢复写入错误会显示消息并解除入口锁定",async({page})=>{
   const restorePost=deferred();let revisionCalls=0,restoreStarted=false;
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")}));await page.route("**/api/revisions?workspace_id=workspace-A",route=>{revisionCalls++;return route.fulfill({json:[{id:"revision-A-old",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore-preview",route=>route.fulfill({json:{revision_id:"revision-A-old",executable:true,files:[{path:"A.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore",async route=>{restoreStarted=true;await restorePost.promise;return route.fulfill({status:500,json:{message:"恢复失败"}})});
-  await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"恢复为新修订"}).click();await expect.poll(()=>restoreStarted).toBe(true);await expect(page.getByText("正在恢复修订…",{exact:true})).toBeVisible();restorePost.resolve();await expect(page.getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"打开项目"})).toBeEnabled();await expect(page.getByRole("button",{name:"修订历史"})).toBeEnabled();await page.getByRole("button",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await expect(page.locator(".editor")).toBeVisible();
+  await openWorkspace(page,"C:\\A.dst");
+  await page.getByRole("button",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"恢复为新修订"}).click();await expect.poll(()=>restoreStarted).toBe(true);await expect(page.getByText("正在恢复修订…",{exact:true})).toBeVisible();restorePost.resolve();await expect(page.getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toBeEnabled();await expect(page.getByRole("button",{name:"修订历史"})).toBeEnabled();await page.getByRole("button",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await expect(page.locator(".editor")).toBeVisible();
 });
 
 test("旧编辑入口已移除且图号标题只读",async({page})=>{
@@ -281,7 +316,7 @@ test("批量新增图纸校验位置数量和布局来源",async({page})=>{
 });
 
 test("空图纸集首个子集只能用序号一且必须提供模板",async({page})=>{
-  const empty={...workspace,sheet_set:{...workspace.sheet_set,sheet_count:0,subset_count:0,subsets:[]}};let previewCalls=0;await page.route("**/api/workspaces/open",route=>route.fulfill({json:empty}));await page.route("**/api/workspaces/workspace-1/changes/preview",route=>{previewCalls++;return route.fulfill({json:{executable:true,changes:[],diagnostics:[]}})});await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\test.dst");await page.getByRole("button",{name:"打开项目"}).click();await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集标题",{exact:true}).fill("首册");await page.getByLabel("初始图纸数").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("空图纸集的首个子集序号必须为 1")).toBeVisible();await page.getByLabel("子集序号").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("模板文件和模板布局不能为空")).toBeVisible();expect(previewCalls).toBe(0);
+  const empty={...workspace,sheet_set:{...workspace.sheet_set,sheet_count:0,subset_count:0,subsets:[]}};let previewCalls=0;await page.route("**/api/workspaces/open",route=>route.fulfill({json:empty}));await page.route("**/api/workspaces/workspace-1/changes/preview",route=>{previewCalls++;return route.fulfill({json:{executable:true,changes:[],diagnostics:[]}})});await openWorkspace(page);await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集标题",{exact:true}).fill("首册");await page.getByLabel("初始图纸数").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("空图纸集的首个子集序号必须为 1")).toBeVisible();await page.getByLabel("子集序号").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("模板文件和模板布局不能为空")).toBeVisible();expect(previewCalls).toBe(0);
 });
 
 test("属性命令与结构命令分批并支持 CSV 行级预览导入",async({page})=>{
@@ -307,9 +342,7 @@ test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:valid}));
   await page.route("**/api/workspaces/workspace-1/repairs/preview",route=>route.fulfill({json:{status:"REPAIRED",actions:repaired.dst_validation.actions,blocking_issues:[],preview_digest:"digest-1234567890abcdef",executable:true}}));
   await page.route("**/api/workspaces/workspace-1/repairs/execute",route=>route.fulfill({json:{id:"repair-job",status:"SUCCEEDED",progress:100,files:[]}}));
-  await page.goto("/");
-  await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\project\test.dst");
-  await page.getByRole("button",{name:"打开项目"}).click();
+  await openWorkspace(page);
   await expect(page.getByText("DST 修复状态：已修复（待确认）")).toBeVisible();
   await page.getByText("修复明细（1）").click();
   await expect(page.getByText("REPAIR_ATTR_MISSING")).toBeVisible();
@@ -326,4 +359,34 @@ test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   await expect(page.getByText("DST 修复状态")).toHaveCount(0);
   await page.getByRole("button",{name:"更新图纸集"}).click();
   await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
+});
+
+test("未打开态只有文件选择区，不显示修订历史",async({page})=>{
+  await page.goto("/");
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"修订历史"})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"打开项目"})).toHaveCount(0);
+});
+
+test("选择非 .dst 文件给出提示且不发起打开",async({page})=>{
+  let opened=false;
+  await page.route("**/api/workspaces/open",route=>{opened=true;return route.fulfill({json:{}})});
+  await page.goto("/");
+  await page.evaluate(()=>{(window as any).__fakeSelectResult="C:/x/proj.txt"});
+  await page.getByRole("button",{name:"选择 DST 文件"}).click();
+  await expect(page.getByText("仅支持 DST 文件")).toBeVisible();
+  expect(opened).toBeFalsy();
+});
+
+test("关闭且有未发布改动时弹确认，放弃后回未打开态",async({page})=>{
+  await page.route("**/api/workspaces/workspace-1/draft",async route=>{
+    const method=route.request().method();
+    if(method==="GET")return route.fulfill({json:{draft:{schema_version:1,workspace_id:"workspace-1",base_revision_id:"revision-1",repair_status:"VALID",version:1,cursor:0,actions:[{id:"redo-action",kind:"command_batch",label:"图纸集名称",commands:[{type:"update_sheet_set",name:"新名称",custom_properties:{项目号:"P-001"}}]}]},corrupted:false,stale:false,stale_reasons:[]}});
+    if(method==="DELETE")return route.fulfill({json:{deleted:true}});
+    return route.fallback();
+  });
+  await openWorkspace(page);
+  page.once("dialog",dialog=>dialog.accept());
+  await page.getByRole("button",{name:"关闭"}).click();
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
 });

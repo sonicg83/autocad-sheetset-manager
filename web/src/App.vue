@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed,reactive,ref} from "vue";
 import {ApiError,request} from "./api/client";
+import {getShellBridge,DST_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
@@ -128,20 +129,39 @@ function selectInitialSubset(){
 }
 function selectSubset(subsetId:string){selectedId.value=subsetId;insertSheetForm.subsetId=subsetId}
 function resetNavigation(){searchText.value="";subsetFilter.value="all";pathFilter.value="all";diagnosticFilter.value="all";pendingFilter.value="all";selectedSheetIds.value=[];renderLimit.value=80}
-async function openWorkspace(){
+async function openByPath(path:string){
   if(isRestoreExecuting.value){error.value="修订恢复正在执行，请稍候";return}
-  const pathSnapshot=dstPath.value;
   isWorkspaceLoading.value=true;
   await draftSaveQueue;
   if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
   invalidateJobMonitor(true);
   const generation=beginWorkspaceLoad();
   try{
-    const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:pathSnapshot})});
+    const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:path})});
     if(generation!==workspaceLoadGeneration)return;
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);selectInitialSubset();resetNavigation();await loadDraft(loaded);isWorkspaceLoading.value=false;
   }
   catch(e){if(generation===workspaceLoadGeneration){isWorkspaceLoading.value=false;error.value=String(e)}}
+}
+async function openWorkspace(){await openByPath(dstPath.value)}
+const hasShell=computed(()=>getShellBridge()!==null);
+const DST_EXT=/\.dst$/i;
+async function selectAndOpenDst(){
+  const bridge=getShellBridge();
+  if(!bridge){error.value="桌面壳未就绪，请通过 dst-manager desktop 启动";return}
+  const path=await bridge.select_file(DST_FILE_FILTERS);
+  if(!path)return;
+  if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
+  await openByPath(path);
+}
+async function closeWorkspace(){
+  const pending=draftActions.value.length>draftCursor.value||draftSaveFailed.value||draftStale.value;
+  if(pending){
+    const ok=confirm("存在未发布完毕的改动。改动已自动保存，重新打开同一 DST 可继续处理。确定关闭并放弃当前改动？");
+    if(!ok)return;
+    await discardDraft();
+  }
+  resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
@@ -444,7 +464,7 @@ async function importCsv(){
 <template>
   <header><div><h1>DST Manager</h1><span>v0.3 · 受控日常编辑与可恢复发布</span></div></header>
   <main>
-    <section class="open"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
+    <section v-if="!workspace" class="open"><template v-if="!hasShell"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button></template><button v-else @click="selectAndOpenDst">选择 DST 文件</button></section><section v-else class="open"><button :disabled="isRestoreExecuting" @click="closeWorkspace">关闭</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
     <p v-if="error" class="error notice">{{error}}</p>
     <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
     <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>

@@ -2,6 +2,7 @@
 
 ## 2026-09-03（v0.3.1 重基线与 SPEC-DM-007）
 
+- 前端落地 DST 文件选择与关闭确认状态机（PLAN-DM-011 Task 5）：新增 `web/src/api/shell.ts`（`getShellBridge` 桥探测 + `DST_FILE_FILTERS`/`TEMPLATE_FILE_FILTERS`，过滤器采用 pywebview 括号格式 `"DST 文件 (*.dst)"`，规避竖线格式实测抛 ValueError）；App.vue 两态状态机——未打开态仅文件选择区（壳桥可用时"选择 DST 文件"并经 `.dst` 校验后自动打开，无壳回退保留原路径输入框），已打开态以"关闭"替换"打开项目"、修订历史保留；`openWorkspace` 抽出 `openByPath(path)`（保留 `beginWorkspaceLoad` 代次保护、`resetEditingState`、`loadDraft` 顺序），新增 `closeWorkspace`（未发布改动确认弹窗 + `discardDraft` + 清空工作区状态）；e2e 经 `page.addInitScript` 注入壳桥假件，既有依赖路径输入框用例全部改经假桥点击"选择 DST 文件"，新增未打开态/非 `.dst` 提示/关闭确认三用例；`vue-tsc` 与 Playwright e2e 30/30 通过。
 - 手动冒烟（本机 RDP 会话，WebView2 Runtime 已安装）：`uv run dst-manager desktop` 主窗口打开（标题 `DST Manager`，句柄有效）、后端在 `127.0.0.1` 临时端口启动并挂载 `web/dist` 前端、关闭窗口后应用与 uv 进程全部退出且端口释放；`select_file` 原生对话框返回绝对路径依赖交互点击，无交互桌面下无法自动验证，留待 Task 7 前端联调。
 - 新增 pywebview 桌面壳（v0.3.1 唯一交付入口）：`uv add "pywebview>=5,<6"`；新增 `src/dst_manager/interfaces/shell.py`——`ShellBridge.select_file(file_types: list[str]) -> str | None` js_api 桥（未绑定窗口抛 `RuntimeError`，绑定后经 `window.create_file_dialog` 返回首个路径或 `None`）、`run_desktop` 以 `127.0.0.1:0` 临时端口启动 uvicorn 承载 `create_app()` 并打开 WebView2 窗口；`cli.py` 对齐 `serve` 风格新增 `desktop` 命令；新增 `tests/unit/test_shell.py` 3 项轻量单测（未绑定报错、返回首个路径、取消返回 None），`ruff check .` 与 `uv lock --check` 通过。
 - 审查修复：`tests/unit/test_layout_names.py` 补充"executor 成功但未产出 sidecar"分支用例（`LAYOUT_READ_FAILED` 502 第二条路径），纯测试补覆盖，不改生产代码。
