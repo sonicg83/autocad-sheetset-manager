@@ -1,10 +1,10 @@
 ---
 id: SPEC-DM-004
 title: DST XML Schema 校验与可修复加载契约
-status: draft
+status: accepted
 document_kind: spec
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-09-01
 related:
 - ARCH-DM-001
 - SPEC-DM-001

@@ -22,7 +22,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [v0.21 图纸集编辑需求调整规范（SPEC-DM-001，已接受）](specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
 - [v0.21 CAD 单脚本布局重建需求调整规范（SPEC-DM-002，已接受）](specs/SPEC-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流规范（SPEC-DM-003，已验收）](specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
-- [DST XML Schema 校验与可修复加载契约（SPEC-DM-004，草案）](specs/SPEC-DM-004-dst-schema-validation-and-repair.md)
+- [DST XML Schema 校验与可修复加载契约（SPEC-DM-004，已接受）](specs/SPEC-DM-004-dst-schema-validation-and-repair.md)
 - [受控子集整体删除与文件事务规范（SPEC-DM-005，已接受）](specs/SPEC-DM-005-controlled-subset-deletion.md)
 
 ## 指南
