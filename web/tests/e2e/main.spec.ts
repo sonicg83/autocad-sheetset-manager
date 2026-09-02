@@ -279,6 +279,25 @@ test("切换工作区会关闭旧任务监控且忽略迟到终态",async({page}
   expect(refreshACalls).toBe(0);await expect(page.getByText("任务 job-A")).toHaveCount(0);expect(await page.evaluate(()=>(window as any).__closedEventSources())).toBe(1);
 });
 
+test("关闭工作区后停留在未打开态时任务与修订面板不残留",async({page})=>{
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-close",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-close-1234567890",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();
+  await expect(page.getByText("任务 job-close")).toBeVisible();
+  await page.getByRole("button",{name:"修订历史"}).click();
+  await expect(page.getByRole("heading",{name:"永久修订"})).toBeVisible();
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"关闭"}).click();
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  await expect(page.getByText("任务 job-close")).toHaveCount(0);
+  await expect(page.getByRole("heading",{name:"永久修订"})).toHaveCount(0);
+  await expect(page.getByText("revision-close")).toHaveCount(0);
+  expect(await page.evaluate(()=>(window as any).__closedEventSources())).toBe(1);
+});
+
 test("工作区切换会丢弃迟到的修订列表和恢复预览",async({page})=>{
   const revisionList=deferred(),restorePreviewGate=deferred();let revisionCalls=0,restoreCalls=0;
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.endsWith("A.dst")?workspaceVersion("workspace-A","工作区 A","revision-A"):workspaceVersion("workspace-B","工作区 B","revision-B")})});

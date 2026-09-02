@@ -198,7 +198,7 @@ async function closeWorkspace(){
     await discardDraft();
   }
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
-  workspaceLoadGeneration+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;
+  workspaceLoadGeneration+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
