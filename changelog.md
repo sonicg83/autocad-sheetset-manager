@@ -1,9 +1,10 @@
 # 变更记录
 
-## 2026-09-02（DST Manager 桌面 UI/UX 设计规范）
+## 2026-09-03（v0.3.1 重基线与 SPEC-DM-007）
 
-- 新增 `SPEC-DM-006`（DST Manager 单人桌面界面人性化与易用性设计规范，`draft`）：以人性化操作与易用性优先、兼顾清爽简洁，定义应用外壳、令牌化双主题视觉系统、组件与交互规范、键盘与无障碍、后端契约与发布安全边界，以及视觉/E2E/无障碍/性能验收标准。
-- 规范基于 ui-ux-pro-max 设计研究（Minimalism/Swiss 风格、Inter + 雅黑 + 等宽、语义色与 WCAG 对比），仅约束界面表现，不改动后端 API、任务契约与发布安全流程；同步在 DST Manager 文档索引登记。
+- 新增 [PLAN-DM-011](.planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md)（v0.3.1 实施计划，状态 `proposed`）：9 个任务覆盖布局缓存迁移、Worker 插件只读布局枚举命令、`POST /api/layout-names` 端点、pywebview 桌面壳、前端两态状态机/关闭确认/恢复提示/布局下拉、拖拽路径 spike 与交付收尾。
+- 依据 v0.3 测试后意见（`.planning/memos/DMv03-test-report.md`）评审并重基线：新增 [SPEC-DM-007](docs/dst-manager/specs/SPEC-DM-007-v031-shell-and-usability.md)（桌面壳与操作易用性迭代，状态 `draft`）作为 v0.3.1 依据；SPEC-DM-006 界面重构推后为 v0.3.2（PLAN-DM-010 待编制）。关键决策：提前实现 WebView2 桌面壳（pywebview 选型倾向）并作为唯一交付入口；草稿暂存能力经核对已存在（确定性 workspace_id、自动保存、重开恢复、清空与发布后清除），定性为恢复可发现性改进；`template_layout` 保留 DWG/DWT 双支持；布局缓存（SHA-256 → 布局名）与暂存均存后端应用数据目录，不触碰工作区。同步更新 ROADMAP-DM-001 与计划索引。
+
 - 按 UI/UX 审查报告（`.planning/memos/dst-manager/SPEC-DM-006-ui-ux-review.md`）修订 F-01～F-08，状态转为 `review`：新增 §9.1"正式工程文件写入"统一分类（普通发布/CSV/XML/修复/恢复共用预览 + 冻结摘要 + 基准复核 + 危险确认门禁）；修正 `Ctrl+S` 只打开确认模态不直接执行；§8 区分草稿 `expected_version`、任务重试复用冻结计划与正式写入 `base_revision_id + preview_digest`；§6.8 澄清草稿持久化到 `%LOCALAPPDATA%` 应用数据目录而非工程文件；新增 §6.9 ActionDock 操作×状态矩阵；§7 列出适用 WCAG 2.1 成功准则与树/表格/抽屉键盘模型；修订恢复引用改指 PLAN-DM-001/002 与 ADR-DM-004；§5.1 补齐浅色/深色完整令牌映射，§10 明确组合对比度、多次采样性能与视口×主题回归矩阵。
 - 新增并升级静态 UI/UX demo（`.planning/dst-manager-ui-demo.html`，离线自包含）：落地三区外壳、令牌化双主题、危险确认模态与表单错误摘要；demo 底部操作栏改为由 §6.9 状态矩阵驱动，可一键切换 12 种状态（无工作区、无草稿、有草稿未预览、预览生成中、预览有效、预览过期、REPAIRED、两类 INVALID、任务执行中、NEEDS_REVIEW、恢复执行中），联动展示 CTA 文案/等级、禁用原因、顶栏 DST 状态、编辑/切换锁与快捷键旁路防护，并把发布/修复/恢复确认模态参数化以演示 F-01 统一门禁。
 - 按复审报告闭环 SPEC R-01～R-03 与 Demo D-01～D-07：§7.3 承诺完整 WCAG 2.1 AA（含响应式变体与人工读屏），§7.1 为 `/`、`?` 增加 SC 2.1.4 关闭/重映射要求；`REPAIRED` 拆分为预览修复（Primary）与确认发布修复（Danger，仅预览后可用），声明不存在 Warning 按钮层级；视觉回归矩阵固定 `1024×768 / 1120×768 / 1440×900 / 900×768`（900 为韧性测试）。Demo 修复 `[hidden]` 状态同屏（加互斥断言）、1120/900 断点左右抽屉（触发按钮 + `aria-expanded` + 焦点困绕/归还）、树/表格/Tab 完整键盘模型（roving tabindex、方向键、typeahead、单停靠点行焦点、卸载焦点恢复、`aria-controls`）、正式写入文案统一、错误摘要标题聚焦与链接直指控件、单字符快捷键开关持久化、toast 可关闭且错误保留。
@@ -22,13 +23,6 @@
 - 接受 `ADR-DM-004` 与 `SPEC-DM-005` 并实现独立 `delete_subset`：明确确认后删除完整 AcSm 子树、全部图纸和主 DWG；内部未知 ID 引用及存活 DWG 引用阻断，纯删除不要求 Core Console但仍走永久 before、多文件 journal、回滚和启动恢复。
 - 预览新增按 AutoCAD 版本与 `cad_operation` 的历史耗时估算；历史样本不足时使用版本化保守 fallback，并显示 Core Console 数量、并发度、范围和来源。
 - 完成交付审查修复：草稿对合法 JSON 做完整语义校验并隔离损坏文件，动作移除不再误激活 redo 区，undo/redo/重开同时投影表单与命令；CAD 估算按并发槽计算 makespan，图纸集名称显示 before/after，子集删除在预览阶段阻断越界或多主 DWG；核心预览结构改为 Pydantic/OpenAPI 明确模型并移除前端 `any` 覆盖，应用版本统一为 `0.3.0`。
-- 复审后统一 API 与磁盘草稿的文本/路径校验，工作区切换前刷新当前草稿保存队列并在网络失败/版本冲突时保留编辑，冲突时提供经确认后放弃本地动作并重新读取较新草稿的出口；CAD makespan 按 Worker 的计划顺序模拟。新增相对来源、危险名称、非法 XML、延迟或失败保存切换和短短长调度回归，完整 Playwright 27/27 通过。
-
-## 2026-08-28（DST Manager 后续计划重基线）
-
-- 按 v0.2.1 实际能力重写 `PLAN-DM-002`、`PLAN-DM-003` 与 `PLAN-DM-004`：后续版本以受控编辑、派生字段只读、快速预览、修复门禁和 CAD 分流为前提；移除自由排序、跨子集移动、批量重编号及旧 1/2/4 并发假设。
-- v0.4 的 CSV 明确拆分为既有属性定义契约与新增属性值契约，派生字段只读；v1.0 改为复用现有单入口与运行日志，补齐安装升级、恢复、保留策略和发布资格。
-- `PLAN-DM-007` 改为 `cancelled`，明确其范围已由 `PLAN-DM-008` 吸收；`PLAN-DM-009` 补齐验收勾选与治理说明，真实 AutoCAD/官方 Sheet Manager 未运行项目继续作为 v1.0 门禁。
 - 同步 `ROADMAP-DM-001`、DST Manager 计划索引与产品入口，统一当前基线为 v0.2.1 并补全 PLAN-DM-005 至 PLAN-DM-009 的追溯关系。
 
 ## 2026-08-27（PLAN-DM-009 审查修复）

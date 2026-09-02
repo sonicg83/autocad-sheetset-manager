@@ -14,7 +14,8 @@
 
 详细计划：
 
-- [DST XML Schema 校验与可修复加载（PLAN-DM-009，已完成）](PLAN-DM-009-dst-schema-validation-and-repair.md)
+- [v0.3.1 桌面壳与操作易用性迭代（PLAN-DM-011，proposed，依据 SPEC-DM-007）](PLAN-DM-011-v031-shell-and-usability.md)
+- v0.3.2 桌面界面人性化与易用性重构（PLAN-DM-010，待编制，依据 SPEC-DM-006）
 - [延后 CAD 校验与布局批量改名（PLAN-DM-008，已完成）](PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)
 - [v0.21 CAD 单脚本布局重建（PLAN-DM-007，已取消：范围由 PLAN-DM-008 吸收）](PLAN-DM-007-v021-cad-single-script-execution.md)
 - [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
