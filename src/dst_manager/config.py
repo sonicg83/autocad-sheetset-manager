@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -5,10 +6,17 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _default_draft_dir() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+    return (base / "dst-manager" / "drafts").resolve()
+
+
 class Settings(BaseSettings):
     """只接受显式路径，不通过注册表或 PATH 猜测 AutoCAD。"""
 
     data_dir: Path = Path(".dst-manager-data")
+    draft_dir: Path = Field(default_factory=_default_draft_dir)
     autocad_2016_console: Path | None = None
     autocad_2016_plugin: Path | None = None
     autocad_2020_console: Path | None = None
@@ -30,6 +38,13 @@ class Settings(BaseSettings):
         if value == "false":
             return False
         raise ValueError("EnableAddNumberSuffix 仅接受 true 或 false")
+
+    @field_validator("draft_dir")
+    @classmethod
+    def validate_draft_dir(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("draft_dir 必须为绝对路径")
+        return value.resolve()
 
     @property
     def database_url(self) -> str:

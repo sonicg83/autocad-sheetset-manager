@@ -2,7 +2,7 @@
 
 ## 定位与当前状态
 
-DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.2.1`；该基线已包含受控图纸集编辑、`PLAN-DM-008` 的快速预览/确认阶段 CAD 分流，以及 `PLAN-DM-009` 的 DST XML 契约校验与可修复加载。图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
+DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3`；该基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除。图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
 2026-08-26 已在私有 `sample/project1` 临时副本上完成 `PLAN-DM-008` 的 AutoCAD 2016/2020 验收：非性能系统矩阵 54/54、并发 1/4/10 性能矩阵 6/6、双版本插件构建成功；全量 Python 为 367 passed、64 skipped，Web E2E 为 18 passed。`rename_only` 不删除/导入布局且保持 Handle，`rebuild` 才回读 Handle；默认并发为 4、合法范围 1–10，任一单元失败均不发布。`PLAN-DM-009` 已完成非 CAD 交付验证（全量 Python 432 passed、66 skipped；Web E2E 19/19）；其真实 AutoCAD 2016/2020 与官方 Sheet Manager 显示验收尚未在该环境运行，保留为 v1.0 发布资格门禁。具体记录见 [PLAN-DM-008](../../.planning/plans/dst-manager/PLAN-DM-008-deferred-cad-validation-and-layout-rename.md) 与 [PLAN-DM-009](../../.planning/plans/dst-manager/PLAN-DM-009-dst-schema-validation-and-repair.md)。
 
@@ -13,6 +13,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [受控图纸集编辑替代自由调整模型（ADR-DM-001）](adr/ADR-DM-001-controlled-sheetset-editing.md)
 - [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流（ADR-DM-003，已实施）](adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
+- [正式工程文件删除纳入可恢复发布事务（ADR-DM-004，已接受）](adr/ADR-DM-004-recoverable-file-deletion.md)
 - [实施路线图（ROADMAP-DM-001）](../../.planning/roadmaps/dst-manager.md)
 - [当前 Plan 索引](../../.planning/plans/dst-manager/README.md)
 
@@ -22,6 +23,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [v0.21 CAD 单脚本布局重建需求调整规范（SPEC-DM-002，已接受）](specs/SPEC-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流规范（SPEC-DM-003，已验收）](specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
 - [DST XML Schema 校验与可修复加载契约（SPEC-DM-004，草案）](specs/SPEC-DM-004-dst-schema-validation-and-repair.md)
+- [受控子集整体删除与文件事务规范（SPEC-DM-005，已接受）](specs/SPEC-DM-005-controlled-subset-deletion.md)
 
 ## 指南
 

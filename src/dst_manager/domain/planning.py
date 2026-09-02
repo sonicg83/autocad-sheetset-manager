@@ -181,17 +181,30 @@ def build_structural_plan(
     if len(final_targets) != len({target.casefold() for target in final_targets}):
         raise PlanningError("DWG_TARGET_COLLISION", "多个子集派生出相同的目标DWG文件名")
     final_subset_ids = {subset.acsm_id for subset in derived.subsets}
-    deleted_subsets = [
-        {"subset_id": subset.acsm_id, "target_file": target}
-        for subset in workspace.document.subsets
-        if subset.acsm_id not in final_subset_ids and (target := _subset_target_file(subset))
-    ]
+    deleted_subsets = []
+    for subset in workspace.document.subsets:
+        if subset.acsm_id in final_subset_ids:
+            continue
+        target = _deleted_subset_target_file(workspace, subset)
+        if target is not None:
+            deleted_subsets.append({"subset_id": subset.acsm_id, "target_file": target})
     old_sources_by_key: dict[str, str] = {}
     for subset in workspace.document.subsets:
         if source := _subset_target_file(subset):
             resolved = str(Path(source).expanduser().resolve())
             old_sources_by_key.setdefault(resolved.casefold(), resolved)
     final_targets_by_key = {target.casefold(): target for target in final_targets}
+    deleted_target_keys = {
+        str(Path(item["target_file"]).expanduser().resolve()).casefold()
+        for item in deleted_subsets
+    }
+    retained_deleted_targets = deleted_target_keys & final_targets_by_key.keys()
+    if retained_deleted_targets:
+        target = final_targets_by_key[min(retained_deleted_targets)]
+        raise PlanningError(
+            "DWG_DELETE_STILL_REFERENCED",
+            f"存活图纸仍引用待删除主 DWG：{target}",
+        )
     reused_keys = old_sources_by_key.keys() & final_targets_by_key.keys()
     delete_keys = old_sources_by_key.keys() - final_targets_by_key.keys()
     for group in groups:
@@ -424,6 +437,36 @@ def _subset_target_file(subset: Subset | None) -> str | None:
         if target:
             return str(Path(target).expanduser().resolve())
     return None
+
+
+def _deleted_subset_target_file(workspace: Workspace, subset: Subset) -> str | None:
+    if not subset.sheets:
+        return None
+    targets: dict[str, Path] = {}
+    for sheet in subset.sheets:
+        raw_target = sheet.layout.resolved_path or sheet.layout.file_name
+        if not raw_target:
+            raise PlanningError(
+                "SUBSET_MAIN_DWG_MISSING",
+                f"待删除子集内图纸缺少主 DWG：{sheet.acsm_id}",
+            )
+        target = Path(raw_target).expanduser()
+        if not target.is_absolute():
+            target = workspace.root / target
+        target = target.resolve()
+        root = workspace.root.resolve()
+        if root not in target.parents:
+            raise PlanningError(
+                "DWG_DELETE_OUTSIDE_WORKSPACE",
+                f"待删除主 DWG 越出工作区：{target}",
+            )
+        targets.setdefault(str(target).casefold(), target)
+    if len(targets) != 1:
+        raise PlanningError(
+            "SUBSET_MULTIPLE_MAIN_DWGS",
+            f"待删除子集并非仅引用一个主 DWG：{subset.acsm_id}",
+        )
+    return str(next(iter(targets.values())))
 
 
 def _final_target_path(workspace: Workspace, subset: DerivedSubset, operation: str) -> Path:

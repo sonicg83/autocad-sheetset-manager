@@ -42,6 +42,7 @@ from dst_manager.infrastructure.autocad.worker import (
     ScriptRenderer,
     parse_handles,
 )
+from dst_manager.infrastructure.drafts import DraftConflictError, DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import (
     WindowsResultGuards,
@@ -74,6 +75,7 @@ class DstManagerService:
         self.database = Database(self.settings.database_url)
         self.codec = DstCodec()
         self.publisher = RecoverablePublisher()
+        self.drafts = DraftStore(self.settings.draft_dir)
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)
@@ -115,6 +117,57 @@ class DstManagerService:
         if row is None:
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
         return self.open_workspace(Path(row.dst_path), Path(row.root_override) if row.root_override else None)
+
+    def get_draft(self, workspace_id: str) -> dict[str, Any]:
+        workspace = self.get_workspace(workspace_id)
+        loaded = self.drafts.load(workspace_id)
+        return self._draft_envelope(workspace, loaded)
+
+    def save_draft(
+        self,
+        workspace_id: str,
+        draft: dict[str, Any],
+        expected_version: int,
+    ) -> dict[str, Any]:
+        workspace = self.get_workspace(workspace_id)
+        try:
+            saved = self.drafts.save(
+                workspace_id,
+                draft,
+                expected_version=expected_version,
+            )
+        except DraftConflictError as exc:
+            raise ApplicationError("DRAFT_CONFLICT", str(exc), 409) from exc
+        return self._draft_envelope(workspace, {"draft": saved, "corrupted": False})
+
+    def delete_draft(self, workspace_id: str, expected_version: int) -> dict[str, bool]:
+        self.get_workspace(workspace_id)
+        try:
+            deleted = self.drafts.delete(workspace_id, expected_version=expected_version)
+        except DraftConflictError as exc:
+            raise ApplicationError("DRAFT_CONFLICT", str(exc), 409) from exc
+        return {"deleted": deleted}
+
+    @staticmethod
+    def _draft_envelope(workspace: Workspace, loaded: dict[str, Any]) -> dict[str, Any]:
+        draft = loaded["draft"]
+        reasons: list[str] = []
+        if draft is not None:
+            if draft.get("base_revision_id") != workspace.revision_id:
+                reasons.append("BASE_REVISION_CHANGED")
+            current_repair_status = (
+                workspace.document.repair_report.status
+                if workspace.document.repair_report is not None
+                else "VALID"
+            )
+            if draft.get("repair_status") != current_repair_status:
+                reasons.append("REPAIR_STATUS_CHANGED")
+        return {
+            "draft": draft,
+            "corrupted": bool(loaded["corrupted"]),
+            "stale": bool(reasons),
+            "stale_reasons": reasons,
+        }
 
     def preview_custom_property_import(
         self,
@@ -188,12 +241,25 @@ class DstManagerService:
             )
         main_preview = self.preview_changes(workspace_id, base_revision_id, commands)
         diagnostics.extend(main_preview["diagnostics"])
+        preview_digest = self._operation_digest(
+            operation_type="property_csv_import",
+            workspace_id=workspace_id,
+            base_revision_id=base_revision_id,
+            normalized_input={"commands": commands},
+            semantic_diff={
+                "changes": changes,
+                "diagnostics": diagnostics,
+                "change_semantic_diff": main_preview["semantic_diff"],
+            },
+            target_baselines={str(workspace.dst_path): base_revision_id},
+        )
         return {
             **main_preview,
             "changes": changes,
             "commands": commands,
             "diagnostics": diagnostics,
             "executable": not any(item["severity"] == "error" for item in diagnostics),
+            "preview_digest": preview_digest,
         }
 
     def import_custom_properties(
@@ -201,10 +267,13 @@ class DstManagerService:
         workspace_id: str,
         base_revision_id: str,
         csv_data: bytes,
+        preview_digest: str,
     ) -> dict[str, Any]:
         preview = self.preview_custom_property_import(workspace_id, base_revision_id, csv_data)
         if not preview["executable"]:
             raise ApplicationError("PLAN_INVALID", "属性 CSV 导入计划包含阻断诊断")
+        if preview_digest != preview["preview_digest"]:
+            raise ApplicationError("REPREVIEW_REQUIRED", "CSV 导入预览已变化或尚未确认，请重新预览并确认", 409)
         if not preview["commands"]:
             return {
                 "id": None,
@@ -213,7 +282,13 @@ class DstManagerService:
                 "revision_id": base_revision_id,
                 "no_op": True,
             }
-        return self.execute_changes(workspace_id, base_revision_id, preview["commands"])
+        change_preview = self.preview_changes(workspace_id, base_revision_id, preview["commands"])
+        return self.execute_changes(
+            workspace_id,
+            base_revision_id,
+            preview["commands"],
+            preview_digest=change_preview["preview_digest"],
+        )
 
     def export_custom_properties_csv(self, workspace_id: str) -> bytes:
         workspace = self.get_workspace(workspace_id)
@@ -248,7 +323,7 @@ class DstManagerService:
                 diagnostics.append({"code": "SHEET_NOT_FOUND", "severity": "error", "message": f"找不到图纸：{sheet_id}", "index": index})
             if command_type in {"insert_sheet", "insert_subset"} and not command.get("source"):
                 diagnostics.append({"code": "LAYOUT_SOURCE_REQUIRED", "severity": "error", "message": "新增图纸必须明确布局来源", "index": index})
-            structural |= command_type in {"update_subset_title", "delete_sheet", "insert_sheet", "insert_subset"}
+            structural |= command_type in {"update_subset_title", "delete_sheet", "delete_subset", "insert_sheet", "insert_subset"}
             changes.append(
                 {
                     "index": index,
@@ -288,6 +363,10 @@ class DstManagerService:
             if not diagnostics:
                 try:
                     self._attach_expected_file_hashes(workspace, execution_intent)
+                    execution_intent["estimate"] = self._estimate_cad_execution(
+                        cad_version,
+                        execution_intent,
+                    )
                 except OSError as exc:
                     diagnostics.append(
                         {
@@ -348,12 +427,20 @@ class DstManagerService:
                     (action, command.get("property_type"), command.get("name")),
                     0,
                 )
-        preview_digest = self._preview_digest(
-            base_revision_id,
-            cad_version,
-            normalized_commands,
-            execution_intent,
-            semantic_diff,
+        target_baselines = {str(workspace.dst_path): base_revision_id}
+        source_baselines: list[dict[str, Any]] = []
+        if execution_intent is not None:
+            target_baselines.update(execution_intent.get("expected_file_hashes", {}))
+            source_baselines = execution_intent.get("source_baselines", [])
+        preview_digest = self._operation_digest(
+            operation_type="change_set",
+            workspace_id=workspace_id,
+            base_revision_id=base_revision_id,
+            normalized_input={"commands": normalized_commands},
+            semantic_diff=semantic_diff,
+            target_baselines=target_baselines,
+            cad_version=cad_version,
+            source_baselines=source_baselines,
         )
         return {
             "workspace_id": workspace_id,
@@ -380,8 +467,8 @@ class DstManagerService:
         plan = self.preview_changes(workspace_id, base_revision_id, commands, cad_version)
         if not plan["executable"]:
             raise ApplicationError("PLAN_INVALID", "执行计划包含阻断诊断")
-        if plan["requires_cad"] and preview_digest != plan["preview_digest"]:
-            raise ApplicationError("REPREVIEW_REQUIRED", "结构变更预览已变化或尚未确认，请重新预览并确认", 409)
+        if preview_digest != plan["preview_digest"]:
+            raise ApplicationError("REPREVIEW_REQUIRED", "变更预览已变化或尚未确认，请重新预览并确认", 409)
         normalized_commands = self._normalize_commands(commands)
         job_id = str(uuid.uuid4())
         try:
@@ -390,7 +477,8 @@ class DstManagerService:
             raise ApplicationError("WORKSPACE_WRITE_BUSY", str(exc), 409) from exc
         if plan["requires_cad"]:
             capability = self.capabilities()[cad_version]
-            if capability["available"]:
+            execution_groups = (plan.get("execution_intent") or {}).get("groups", [])
+            if capability["available"] or not execution_groups:
                 self.database.update_job(job_id, JobStatus.QUEUED, 0)
             else:
                 self.database.update_job(job_id, JobStatus.FAILED, 0, "CAD_CAPABILITY_UNAVAILABLE")
@@ -614,10 +702,35 @@ class DstManagerService:
             files.append(item)
             if conflict:
                 conflicts.append(item["path"])
-        return {"workspace_id": workspace_id, "revision_id": revision_id, "base_revision_id": file_sha256(dst_path), "files": files, "conflicts": conflicts, "executable": not conflicts}
+        base_revision_id = file_sha256(dst_path)
+        preview_digest = self._operation_digest(
+            operation_type="revision_restore",
+            workspace_id=workspace_id,
+            base_revision_id=base_revision_id,
+            normalized_input={"source_revision_id": revision_id},
+            semantic_diff={"files": files, "conflicts": conflicts},
+            target_baselines={item["path"]: item["current_hash"] for item in files},
+        )
+        return {
+            "workspace_id": workspace_id,
+            "revision_id": revision_id,
+            "base_revision_id": base_revision_id,
+            "files": files,
+            "conflicts": conflicts,
+            "executable": not conflicts,
+            "preview_digest": preview_digest,
+        }
 
-    def restore_revision(self, workspace_id: str, revision_id: str, base_revision_id: str) -> dict[str, Any]:
+    def restore_revision(
+        self,
+        workspace_id: str,
+        revision_id: str,
+        base_revision_id: str,
+        preview_digest: str | None = None,
+    ) -> dict[str, Any]:
         preview = self.preview_revision_restore(workspace_id, revision_id)
+        if preview_digest != preview["preview_digest"]:
+            raise ApplicationError("REPREVIEW_REQUIRED", "修订恢复预览已变化或尚未确认，请重新预览并确认", 409)
         if preview["base_revision_id"] != base_revision_id or not preview["executable"]:
             raise ApplicationError("REVISION_RESTORE_CONFLICT", "当前文件已变化，请重新预览恢复", 409)
         workspace = self.get_workspace(workspace_id)
@@ -796,14 +909,48 @@ class DstManagerService:
             if workspace.root != destination.parent and workspace.root not in destination.parents:
                 raise ApplicationError("DESTINATION_OUTSIDE_WORKSPACE", "导出位置必须在工作区内")
             destination_revision_id = file_sha256(destination) if destination.is_file() else "MISSING"
-        return {
+        changes = json.loads(json.dumps(changes, ensure_ascii=False, default=str))
+        diagnostics = [asdict(issue) for issue in imported.diagnostics]
+        executable = not any(issue.severity == Severity.ERROR for issue in imported.diagnostics)
+        normalized_destination = str(destination) if destination is not None else None
+        semantic_diff = {
             "sheet_count_before": len(workspace.document.sheets),
             "sheet_count_after": len(imported.sheets),
             "subset_count_before": len(workspace.document.subsets),
             "subset_count_after": len(imported.subsets),
             "changes": changes,
-            "diagnostics": [asdict(issue) for issue in imported.diagnostics],
+            "diagnostics": diagnostics,
+        }
+        preview_digest = self._operation_digest(
+            operation_type="xml_export",
+            workspace_id=workspace_id,
+            base_revision_id=base_revision_id,
+            normalized_input={
+                "xml_sha256": hashlib.sha256(xml).hexdigest(),
+                "destination": normalized_destination,
+            },
+            semantic_diff=semantic_diff,
+            target_baselines={
+                str(workspace.dst_path): base_revision_id,
+                **(
+                    {normalized_destination: destination_revision_id}
+                    if normalized_destination is not None
+                    else {}
+                ),
+            },
+        )
+        return {
+            "workspace_id": workspace_id,
+            "base_revision_id": base_revision_id,
+            "sheet_count_before": len(workspace.document.sheets),
+            "sheet_count_after": len(imported.sheets),
+            "subset_count_before": len(workspace.document.subsets),
+            "subset_count_after": len(imported.subsets),
+            "changes": changes,
+            "diagnostics": diagnostics,
             "destination_revision_id": destination_revision_id,
+            "preview_digest": preview_digest,
+            "executable": executable,
         }
 
     def export_xml_to_dst(
@@ -813,7 +960,11 @@ class DstManagerService:
         xml: bytes,
         destination: Path,
         destination_revision_id: str | None = None,
+        preview_digest: str | None = None,
     ) -> dict[str, Any]:
+        preview = self.preview_xml(workspace_id, base_revision_id, xml, destination)
+        if preview_digest != preview["preview_digest"]:
+            raise ApplicationError("REPREVIEW_REQUIRED", "XML 导出预览已变化或尚未确认，请重新预览并确认", 409)
         workspace = self.get_workspace(workspace_id)
         self._check_revision(workspace, base_revision_id)
         self._gate_writable(workspace.document)
@@ -957,13 +1108,29 @@ class DstManagerService:
             }
         # 摘要只对可确认的 REPAIRED 状态有意义：INVALID_* 不可执行，不返回摘要，
         # 避免客户端混淆“不可执行的阻断”与“待确认的修复”。
-        digest = repair_digest(acsm.root, base_revision_id) if report.status == "REPAIRED" else None
+        actions = [self._repair_action_dict(action) for action in report.actions]
+        blocking_issues = [asdict(issue) for issue in report.blocking_issues]
+        digest = (
+            self._operation_digest(
+                operation_type="repair_publish",
+                workspace_id=workspace_id,
+                base_revision_id=base_revision_id,
+                normalized_input={"repair_digest": repair_digest(acsm.root, base_revision_id)},
+                semantic_diff={
+                    "action_codes": [action["code"] for action in actions],
+                    "blocking_issue_codes": [issue["code"] for issue in blocking_issues],
+                },
+                target_baselines={str(workspace.dst_path): base_revision_id},
+            )
+            if report.status == "REPAIRED"
+            else None
+        )
         return {
             "workspace_id": workspace_id,
             "base_revision_id": base_revision_id,
             "status": report.status,
-            "actions": [self._repair_action_dict(action) for action in report.actions],
-            "blocking_issues": [asdict(issue) for issue in report.blocking_issues],
+            "actions": actions,
+            "blocking_issues": blocking_issues,
             "preview_digest": digest,
             "executable": report.status == "REPAIRED",
         }
@@ -1002,7 +1169,18 @@ class DstManagerService:
                     raise ApplicationError("REPAIR_NOT_REQUIRED", "当前 DST 无待确认修复")
                 if report.status != "REPAIRED":
                     raise ApplicationError("REPAIR_BLOCKED", "修复后仍存在阻断问题，禁止发布")
-                if preview_digest != repair_digest(acsm.root, base_revision_id):
+                expected_digest = self._operation_digest(
+                    operation_type="repair_publish",
+                    workspace_id=workspace_id,
+                    base_revision_id=base_revision_id,
+                    normalized_input={"repair_digest": repair_digest(acsm.root, base_revision_id)},
+                    semantic_diff={
+                        "action_codes": [action.code for action in report.actions],
+                        "blocking_issue_codes": [issue.code for issue in report.blocking_issues],
+                    },
+                    target_baselines={str(workspace.dst_path): base_revision_id},
+                )
+                if preview_digest != expected_digest:
                     raise ApplicationError("REPREVIEW_REQUIRED", "修复预览已变化，请重新预览并确认", 409)
                 issues = acsm.validate()
                 if any(issue.severity == Severity.ERROR for issue in issues):
@@ -1258,10 +1436,31 @@ class DstManagerService:
             else before
         )
         return {
+            "sheet_set": cls._summarize_sheet_set_changes(workspace, commands),
             "structure": {"before": before, "after": after},
             "properties": cls._summarize_property_changes(workspace, commands),
             "dwgs": cls._summarize_dwg_changes(workspace, execution_intent),
         }
+
+    @staticmethod
+    def _summarize_sheet_set_changes(
+        workspace: Workspace,
+        commands: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        result = []
+        for command in commands:
+            if command["type"] != "update_sheet_set" or "name" not in command:
+                continue
+            after = command["name"]
+            if after != workspace.document.name:
+                result.append(
+                    {
+                        "field": "name",
+                        "before": workspace.document.name,
+                        "after": after,
+                    },
+                )
+        return result
 
     @classmethod
     def _summarize_current_structure(cls, workspace: Workspace) -> list[dict[str, Any]]:
@@ -1426,22 +1625,82 @@ class DstManagerService:
         return result
 
     @staticmethod
-    def _preview_digest(
+    def _operation_digest(
+        *,
+        operation_type: str,
+        workspace_id: str,
         base_revision_id: str,
-        cad_version: str,
-        commands: list[dict[str, Any]],
-        execution_intent: dict[str, Any] | None,
+        normalized_input: dict[str, Any],
         semantic_diff: dict[str, Any],
+        target_baselines: dict[str, Any],
+        cad_version: str | None = None,
+        source_baselines: list[dict[str, Any]] | None = None,
     ) -> str:
         payload = {
+            "schema_version": 1,
+            "operation_type": operation_type,
+            "workspace_id": workspace_id,
             "base_revision_id": base_revision_id,
-            "cad_version": cad_version,
-            "commands": commands,
-            "execution_intent": execution_intent,
+            "normalized_input": normalized_input,
             "semantic_diff": semantic_diff,
+            "target_baselines": target_baselines,
+            "cad_version": cad_version,
+            "source_baselines": source_baselines or [],
         }
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    def _estimate_cad_execution(
+        self,
+        cad_version: str,
+        execution_intent: dict[str, Any],
+    ) -> dict[str, Any]:
+        """按已确认计划估算 Core Console 数量、并发度和墙钟耗时范围。"""
+        fallback = {
+            "2016": {"rename_only": (15_000, 45_000), "rebuild": (60_000, 180_000)},
+            "2020": {"rename_only": (10_000, 30_000), "rebuild": (45_000, 120_000)},
+        }
+        groups = list(execution_intent.get("groups", []))
+        concurrency = min(self.settings.cad_max_parallel, len(groups)) if groups else 0
+        sources: list[dict[str, Any]] = []
+        ranges: dict[str, tuple[int, int]] = {}
+        for operation in sorted({str(group["cad_operation"]) for group in groups}):
+            samples = self.database.cad_duration_history(cad_version, operation)
+            if len(samples) >= 3:
+                ranges[operation] = (min(samples), max(samples))
+                source = "history"
+            else:
+                ranges[operation] = fallback[cad_version].get(operation, (60_000, 180_000))
+                source = "fallback-v1"
+            sources.append(
+                {
+                    "cad_operation": operation,
+                    "sample_count": len(samples),
+                    "source": source,
+                },
+            )
+        lower_durations = [ranges[str(group["cad_operation"])][0] for group in groups]
+        upper_durations = [ranges[str(group["cad_operation"])][1] for group in groups]
+        lower_total = self._parallel_makespan(lower_durations, concurrency)
+        upper_total = self._parallel_makespan(upper_durations, concurrency)
+        return {
+            "schema_version": 1,
+            "estimated": True,
+            "core_console_count": len(groups),
+            "concurrency": concurrency,
+            "duration_ms": {"lower": lower_total, "upper": upper_total},
+            "sources": sources,
+        }
+
+    @staticmethod
+    def _parallel_makespan(durations: list[int], concurrency: int) -> int:
+        if not durations or concurrency <= 0:
+            return 0
+        slots = [0] * concurrency
+        for duration in durations:
+            slot = min(range(concurrency), key=slots.__getitem__)
+            slots[slot] += duration
+        return max(slots)
 
     @staticmethod
     def _attach_expected_file_hashes(workspace: Workspace, execution_intent: dict[str, Any]) -> None:
@@ -1647,6 +1906,7 @@ class DstManagerService:
             "delete_sheet",
             "insert_sheet",
             "insert_subset",
+            "delete_subset",
             "add_custom_property",
             "delete_custom_property",
         }
@@ -1671,7 +1931,7 @@ class DstManagerService:
         commands: list[dict[str, Any]],
         structural: bool,
     ) -> None:
-        structural_types = {"update_subset", "delete_sheet", "insert_sheet", "insert_subset"}
+        structural_types = {"update_subset", "delete_sheet", "delete_subset", "insert_sheet", "insert_subset"}
         for command in commands:
             if command["type"] in {"add_custom_property", "delete_custom_property"}:
                 document.apply_property_definition_commands([command])

@@ -325,6 +325,30 @@ class Database:
                 return None
             return self._job_json(session, row)
 
+    def cad_duration_history(
+        self,
+        cad_version: str,
+        cad_operation: str,
+        *,
+        limit: int = 20,
+    ) -> list[int]:
+        """返回同版本、同操作最近成功执行的逐 DWG 耗时样本。"""
+        with self.sessions() as session:
+            rows = session.execute(
+                select(JobFileRow.duration_ms)
+                .join(JobRow, JobRow.id == JobFileRow.job_id)
+                .where(
+                    JobRow.cad_version == cad_version,
+                    JobFileRow.cad_operation == cad_operation,
+                    JobFileRow.status == "SUCCEEDED",
+                    JobFileRow.duration_ms.is_not(None),
+                    JobFileRow.duration_ms > 0,
+                )
+                .order_by(JobFileRow.id.desc())
+                .limit(limit),
+            ).scalars().all()
+        return list(reversed(rows))
+
     def claim_next_job(self, worker_id: str = "local-worker") -> dict[str, Any] | None:
         """单Worker原子领取一个排队任务。"""
         with self.sessions() as session:

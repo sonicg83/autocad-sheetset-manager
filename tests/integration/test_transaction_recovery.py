@@ -3,6 +3,16 @@ from dst_manager.config import Settings
 from dst_manager.infrastructure.filesystem.publisher import RecoverablePublisher
 
 
+def _execute_confirmed(service, workspace, commands):
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands)
+    return service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        commands,
+        preview_digest=preview["preview_digest"],
+    )
+
+
 def test_archive_failure_enters_needs_review_then_startup_finalizes_after_manifest_recovers(
     tmp_path,
     tiny_workspace,
@@ -18,9 +28,9 @@ def test_archive_failure_enters_needs_review_then_startup_finalizes_after_manife
 
     monkeypatch.setattr(service.publisher, "_archive_journal", fail_archive_once)
 
-    result = service.execute_changes(
-        workspace.id,
-        workspace.revision_id,
+    result = _execute_confirmed(
+        service,
+        workspace,
         [{"type": "update_sheet_set", "name": "等待归档恢复"}],
     )
 
@@ -51,9 +61,9 @@ def test_persistent_archive_failure_never_finalizes_without_manifest_and_later_r
         raise OSError("注入持续 manifest 归档失败")
 
     monkeypatch.setattr(RecoverablePublisher, "_archive_journal", staticmethod(fail_archive))
-    result = service.execute_changes(
-        workspace.id,
-        workspace.revision_id,
+    result = _execute_confirmed(
+        service,
+        workspace,
         [{"type": "update_sheet_set", "name": "持续等待归档"}],
     )
 

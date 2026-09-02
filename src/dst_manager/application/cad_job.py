@@ -136,7 +136,11 @@ class CadJobRunner:
         if workspace.revision_id != payload["base_revision_id"]:
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "REVISION_CONFLICT")
             return self.database.get_job(job_id) or {}
-        if not capability.available:
+        execution_intent = payload.get("plan", {}).get("execution_intent")
+        requires_core_console = bool(
+            isinstance(execution_intent, dict) and execution_intent.get("groups")
+        )
+        if requires_core_console and not capability.available:
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_CAPABILITY_UNAVAILABLE")
             return self.database.get_job(job_id) or {}
         try:

@@ -61,6 +61,27 @@ from dst_manager.interfaces.cli import _worker_summary
 from dst_manager.interfaces.cli import app as cli_app
 
 
+def _execute_confirmed(service, workspace_id, base_revision_id, commands, cad_version="2020"):
+    preview = service.preview_changes(workspace_id, base_revision_id, commands, cad_version)
+    return service.execute_changes(
+        workspace_id,
+        base_revision_id,
+        commands,
+        cad_version,
+        preview_digest=preview["preview_digest"],
+    )
+
+
+def _restore_confirmed(service, workspace_id, revision_id, base_revision_id):
+    preview = service.preview_revision_restore(workspace_id, revision_id)
+    return service.restore_revision(
+        workspace_id,
+        revision_id,
+        base_revision_id,
+        preview_digest=preview["preview_digest"],
+    )
+
+
 def test_mapping_all_bytes(): assert bytes(range(256)).translate(_ENCODE).translate(_DECODE)==bytes(range(256))
 
 
@@ -1357,6 +1378,66 @@ def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hash
     assert expected[str(Path(create_target).resolve())] is None
 
 
+def test_structural_preview_estimates_core_console_count_concurrency_and_historical_duration(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data", cad_max_parallel=3))
+    service.database.cad_duration_history = Mock(return_value=[10_000, 20_000, 30_000])
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "insert_sheet",
+        "target_subset_id": workspace.document.subsets[0].acsm_id,
+        "ordinal": 1,
+        "placement": "after",
+        "count": 1,
+        "source": {"type": "existing_snapshot", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], "2020")
+    estimate = preview["execution_intent"]["estimate"]
+
+    assert estimate == {
+        "schema_version": 1,
+        "estimated": True,
+        "core_console_count": 1,
+        "concurrency": 1,
+        "duration_ms": {"lower": 10_000, "upper": 30_000},
+        "sources": [{"cad_operation": "rebuild", "sample_count": 3, "source": "history"}],
+    }
+
+
+def test_cad_estimate_never_places_a_long_task_below_its_own_duration(tmp_path: Path):
+    service = DstManagerService(Settings(data_dir=tmp_path / "data", cad_max_parallel=4))
+    service.database.cad_duration_history = Mock(return_value=[])
+    intent = {
+        "groups": [
+            {"cad_operation": "rebuild"},
+            {"cad_operation": "rename_only"},
+            {"cad_operation": "rename_only"},
+            {"cad_operation": "rename_only"},
+        ],
+    }
+
+    estimate = service._estimate_cad_execution("2020", intent)
+
+    assert estimate["duration_ms"] == {"lower": 45_000, "upper": 120_000}
+
+
+def test_cad_estimate_simulates_worker_plan_order_instead_of_optimized_order(tmp_path: Path):
+    service = DstManagerService(Settings(data_dir=tmp_path / "data", cad_max_parallel=2))
+    service.database.cad_duration_history = Mock(return_value=[])
+    intent = {
+        "groups": [
+            {"cad_operation": "rename_only"},
+            {"cad_operation": "rename_only"},
+            {"cad_operation": "rebuild"},
+        ],
+    }
+
+    estimate = service._estimate_cad_execution("2020", intent)
+
+    assert estimate["duration_ms"] == {"lower": 55_000, "upper": 150_000}
+
+
 def test_structural_execute_requires_confirmed_preview_digest(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
@@ -1460,6 +1541,26 @@ def test_normalized_sheet_property_update_has_semantic_before_after(tiny_workspa
         "after": "1:200",
         "affected_sheet_count": 1,
     }]
+
+
+def test_sheet_set_name_update_has_human_readable_before_after(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+
+    preview = service.preview_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "新图纸集名称"}],
+    )
+
+    assert preview["semantic_diff"]["sheet_set"] == [
+        {
+            "field": "name",
+            "before": workspace.document.name,
+            "after": "新图纸集名称",
+        },
+    ]
 
 
 def test_derived_dwg_name_removes_stale_number_range_without_misreading_parenthetical_title(tmp_path: Path):
@@ -1620,7 +1721,8 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
 
     service.publisher = IdentityCheckingPublisher()
 
-    result = service.execute_changes(
+    result = _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "身份基准"}],
@@ -1682,9 +1784,9 @@ def test_repeating_same_content_creates_distinct_operation_revisions(tiny_worksp
     workspace = service.open_workspace(dst)
     command = [{"type": "update_sheet_set", "name": "相同内容"}]
 
-    first = service.execute_changes(workspace.id, workspace.revision_id, command)
+    first = _execute_confirmed(service, workspace.id, workspace.revision_id, command)
     repeated_base = file_sha256(dst)
-    second = service.execute_changes(workspace.id, repeated_base, command)
+    second = _execute_confirmed(service, workspace.id, repeated_base, command)
 
     assert first["status"] == second["status"] == "SUCCEEDED"
     revisions = service.database.list_revisions(workspace.id)
@@ -1698,13 +1800,15 @@ def test_returning_to_old_content_keeps_distinct_revision_history(tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
     original_hash = workspace.revision_id
-    first = service.execute_changes(
+    first = _execute_confirmed(
+        service,
         workspace.id,
         original_hash,
         [{"type": "update_sheet_set", "name": "临时名称"}],
     )
 
-    second = service.execute_changes(
+    second = _execute_confirmed(
+        service,
         workspace.id,
         file_sha256(dst),
         [{"type": "update_sheet_set", "name": "测试集"}],
@@ -1738,12 +1842,15 @@ def test_metadata_execution_rejects_atomic_replacement_before_locked_baseline(
             injected = True
         return original_capture(path)
 
+    commands = [{"type": "update_sheet_set", "name": "不得覆盖外部版本"}]
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands)
     monkeypatch.setattr(service_module, "capture_file_baseline", replace_then_capture)
 
     result = service.execute_changes(
         workspace.id,
         workspace.revision_id,
-        [{"type": "update_sheet_set", "name": "不得覆盖外部版本"}],
+        commands,
+        preview_digest=preview["preview_digest"],
     )
 
     assert result["status"] == "FAILED"
@@ -1761,7 +1868,8 @@ def test_restore_rejects_atomic_replacement_after_preview_before_locked_baseline
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
-    service.execute_changes(
+    _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "已发布版本"}],
@@ -1769,6 +1877,7 @@ def test_restore_rejects_atomic_replacement_after_preview_before_locked_baseline
     revision_id = service.database.list_revisions(workspace.id)[0]["id"]
     current_revision = file_sha256(dst)
     before = dst.read_bytes()
+    restore_preview = service.preview_revision_restore(workspace.id, revision_id)
     original_capture = service_module.capture_file_baseline
     injected = False
 
@@ -1783,7 +1892,12 @@ def test_restore_rejects_atomic_replacement_after_preview_before_locked_baseline
 
     monkeypatch.setattr(service_module, "capture_file_baseline", replace_then_capture)
 
-    result = service.restore_revision(workspace.id, revision_id, current_revision)
+    result = service.restore_revision(
+        workspace.id,
+        revision_id,
+        current_revision,
+        preview_digest=restore_preview["preview_digest"],
+    )
 
     assert result["status"] == "FAILED"
     assert result["error_code"] in {"REVISION_RESTORE_CONFLICT", "PUBLISH_BASE_CHANGED"}
@@ -1878,7 +1992,8 @@ def test_restore_finalize_failure_enters_needs_review_without_live_lock(
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
-    service.execute_changes(
+    _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "待恢复版本"}],
@@ -1891,7 +2006,7 @@ def test_restore_finalize_failure_enters_needs_review_without_live_lock(
 
     monkeypatch.setattr(service.database, "finalize_committed_job", fail_finalize)
 
-    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+    result = _restore_confirmed(service, workspace.id, revision_id, base_revision_id)
 
     assert result["status"] == "NEEDS_REVIEW"
     assert result["error_code"] == "COMMITTED_FINALIZE_FAILED"
@@ -1907,7 +2022,8 @@ def test_restore_staging_copy_failure_becomes_failed_and_releases_lock(
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
-    service.execute_changes(
+    _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "待复制恢复"}],
@@ -1916,7 +2032,7 @@ def test_restore_staging_copy_failure_becomes_failed_and_releases_lock(
     base_revision_id = file_sha256(dst)
     monkeypatch.setattr(service_module.shutil, "copy2", Mock(side_effect=OSError("注入 copy 故障")))
 
-    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+    result = _restore_confirmed(service, workspace.id, revision_id, base_revision_id)
 
     assert result["status"] == "FAILED"
     assert result["error_code"] == "REVISION_RESTORE_STAGING_FAILED"
@@ -1941,7 +2057,8 @@ def test_restore_publisher_failures_use_safe_terminal_status(
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
-    service.execute_changes(
+    _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "待发布恢复"}],
@@ -1950,7 +2067,7 @@ def test_restore_publisher_failures_use_safe_terminal_status(
     base_revision_id = file_sha256(dst)
     monkeypatch.setattr(service.publisher, "publish", Mock(side_effect=failure))
 
-    result = service.restore_revision(workspace.id, revision_id, base_revision_id)
+    result = _restore_confirmed(service, workspace.id, revision_id, base_revision_id)
 
     assert result["status"] == expected_status
     with service.database.engine.connect() as connection:
@@ -1965,7 +2082,8 @@ def test_restore_rejects_permanent_backup_replacement_before_copy(
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
     workspace = service.open_workspace(dst)
-    service.execute_changes(
+    _execute_confirmed(
+        service,
         workspace.id,
         workspace.revision_id,
         [{"type": "update_sheet_set", "name": "建立永久快照"}],
@@ -1975,6 +2093,7 @@ def test_restore_rejects_permanent_backup_replacement_before_copy(
     backup = Path(next(item for item in manifest["files"] if Path(item["target"]) == dst)["backup"])
     backup_before = backup.read_bytes()
     base_revision_id = file_sha256(dst)
+    restore_preview = service.preview_revision_restore(workspace.id, revision["id"])
     original_copy = service_module.shutil.copy2
     injected = False
 
@@ -1989,7 +2108,12 @@ def test_restore_rejects_permanent_backup_replacement_before_copy(
 
     monkeypatch.setattr(service_module.shutil, "copy2", replace_backup_before_copy)
 
-    result = service.restore_revision(workspace.id, revision["id"], base_revision_id)
+    result = service.restore_revision(
+        workspace.id,
+        revision["id"],
+        base_revision_id,
+        preview_digest=restore_preview["preview_digest"],
+    )
 
     assert result["status"] == "FAILED"
     assert result["error_code"] in {"REVISION_RESTORE_SOURCE_CHANGED", "REVISION_RESTORE_STAGING_FAILED"}
@@ -3300,6 +3424,160 @@ def _repair_preview_digest(service, workspace) -> str:
     preview = service.preview_repair(workspace.id, workspace.revision_id)
     assert preview["status"] == "REPAIRED"
     return preview["preview_digest"]
+
+
+def test_delete_subset_preview_removes_complete_subtree_and_main_dwg(tiny_workspace, tmp_path: Path):
+    dst, sheet_id = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    subset = workspace.document.subsets[0]
+    command = {
+        "type": "delete_subset",
+        "subset_id": subset.acsm_id,
+        "confirm_delete_all_sheets": True,
+        "confirm_delete_main_dwg": True,
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+
+    assert preview["executable"] is True, preview["diagnostics"]
+    assert preview["execution_intent"]["derived_document"]["subsets"] == []
+    assert preview["execution_intent"]["deleted_subsets"] == [
+        {"subset_id": subset.acsm_id, "target_file": str((tmp_path / "A.dwg").resolve())},
+    ]
+    assert preview["execution_intent"]["path_graph"]["delete_targets"] == [
+        str((tmp_path / "A.dwg").resolve()),
+    ]
+    before = preview["semantic_diff"]["structure"]["before"][0]
+    assert [item["id"] for item in before["sheets"]] == [sheet_id]
+    assert preview["semantic_diff"]["structure"]["after"] == []
+    assert preview["semantic_diff"]["dwgs"][0]["action"] == "delete"
+
+
+def test_delete_subset_preview_blocks_external_xml_reference_to_owned_id(tiny_workspace, tmp_path: Path):
+    dst, sheet_id = tiny_workspace
+    codec = DstCodec()
+    xml = codec.decode_file(dst)
+    xml = xml.replace(b"</AcSmSheetSet>", f'<UnknownReference ref="{sheet_id}"/></AcSmSheetSet>'.encode())
+    codec.encode_file(xml, dst)
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "delete_subset",
+        "subset_id": workspace.document.subsets[0].acsm_id,
+        "confirm_delete_all_sheets": True,
+        "confirm_delete_main_dwg": True,
+    }
+
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+
+    assert preview["executable"] is False
+    assert any(item["code"] == "UNKNOWN_REFERENCE_BLOCKED" for item in preview["diagnostics"])
+
+
+def test_delete_subset_publishes_dst_and_main_dwg_delete_without_core_console(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    main_dwg = tmp_path / "A.dwg"
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    command = {
+        "type": "delete_subset",
+        "subset_id": workspace.document.subsets[0].acsm_id,
+        "confirm_delete_all_sheets": True,
+        "confirm_delete_main_dwg": True,
+    }
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
+
+    queued = service.execute_changes(
+        workspace.id,
+        workspace.revision_id,
+        [command],
+        preview_digest=preview["preview_digest"],
+    )
+    completed = service.run_next_job()
+
+    assert queued["status"] == "QUEUED"
+    assert completed["status"] == "SUCCEEDED"
+    assert not main_dwg.exists()
+    reopened = service.get_workspace(workspace.id)
+    assert reopened.document.subsets == []
+    manifest = Path(completed["payload"]["plan"]["execution_intent"]["path_graph"]["delete_targets"][0])
+    assert manifest == main_dwg.resolve()
+    revision = service.database.list_revisions(workspace.id)[0]
+    assert (Path(revision["revision_dir"]) / "before" / "A.dwg").is_file()
+
+
+def test_delete_subset_blocks_when_surviving_sheet_references_same_main_dwg(tmp_path: Path):
+    shared = tmp_path / "001 立面.dwg"
+    shared.write_bytes(b"dwg")
+    first_sheet = Sheet("sheet-1", "001", "平面", LayoutReference(str(shared), ".\\001 立面.dwg", "001 平面", "A", shared))
+    second_sheet = Sheet("sheet-2", "002", "立面", LayoutReference(str(shared), ".\\001 立面.dwg", "002 立面", "B", shared))
+    document = SheetSetDocument(
+        "database",
+        "测试集",
+        [Subset("subset-1", "1 平面", 0, [first_sheet]), Subset("subset-2", "2 立面", 1, [second_sheet])],
+    )
+    workspace = Workspace("workspace", tmp_path, tmp_path / "test.dst", "revision", document)
+
+    with pytest.raises(PlanningError) as exc_info:
+        build_structural_plan(
+            workspace,
+            [{
+                "type": "delete_subset",
+                "subset_id": "subset-1",
+                "confirm_delete_all_sheets": True,
+                "confirm_delete_main_dwg": True,
+            }],
+        )
+
+    assert exc_info.value.code == "DWG_DELETE_STILL_REFERENCED"
+
+
+def test_delete_subset_preview_blocks_main_dwg_outside_workspace(tmp_path: Path):
+    outside = tmp_path.parent / "outside-delete-target.dwg"
+    outside.write_bytes(b"dwg")
+    sheet = Sheet("sheet-1", "001", "平面", LayoutReference(str(outside), str(outside), "001 平面", "A", outside))
+    document = SheetSetDocument("database", "测试集", [Subset("subset-1", "1 平面", 0, [sheet])])
+    workspace = Workspace("workspace", tmp_path, tmp_path / "test.dst", "revision", document)
+
+    with pytest.raises(PlanningError) as exc_info:
+        build_structural_plan(
+            workspace,
+            [{
+                "type": "delete_subset",
+                "subset_id": "subset-1",
+                "confirm_delete_all_sheets": True,
+                "confirm_delete_main_dwg": True,
+            }],
+        )
+
+    assert exc_info.value.code == "DWG_DELETE_OUTSIDE_WORKSPACE"
+
+
+def test_delete_subset_preview_blocks_multiple_main_dwgs(tmp_path: Path):
+    first = tmp_path / "A.dwg"
+    second = tmp_path / "B.dwg"
+    first.write_bytes(b"a")
+    second.write_bytes(b"b")
+    sheets = [
+        Sheet("sheet-1", "001", "平面", LayoutReference(str(first), str(first), "001 平面", "A", first)),
+        Sheet("sheet-2", "002", "立面", LayoutReference(str(second), str(second), "002 立面", "B", second)),
+    ]
+    document = SheetSetDocument("database", "测试集", [Subset("subset-1", "1-2", 0, sheets)])
+    workspace = Workspace("workspace", tmp_path, tmp_path / "test.dst", "revision", document)
+
+    with pytest.raises(PlanningError) as exc_info:
+        build_structural_plan(
+            workspace,
+            [{
+                "type": "delete_subset",
+                "subset_id": "subset-1",
+                "confirm_delete_all_sheets": True,
+                "confirm_delete_main_dwg": True,
+            }],
+        )
+
+    assert exc_info.value.code == "SUBSET_MULTIPLE_MAIN_DWGS"
 
 
 @pytest.mark.parametrize(

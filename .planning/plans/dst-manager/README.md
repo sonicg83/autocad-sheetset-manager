@@ -20,7 +20,7 @@
 - [v0.21 受控图纸集编辑（PLAN-DM-006，已完成）](PLAN-DM-006-v021-controlled-sheetset-editing.md)
 - [v0.2.1 紧急修复：运行时、日志与 AcSm 兼容性（PLAN-DM-005，已完成）](PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)
 - [阶段 1：v0.2 稳定化与多 DWG 并行（PLAN-DM-001，已完成）](PLAN-DM-001-v0.2-stabilization-and-multi-dwg-parallel.md)
-- [阶段 2：v0.3 日常编辑器（PLAN-DM-002，计划中）](PLAN-DM-002-v0.3-daily-editor.md)
+- [阶段 2：v0.3 日常编辑器（PLAN-DM-002，已完成）](PLAN-DM-002-v0.3-daily-editor.md)
 - [阶段 3：v0.4 单人工作流（PLAN-DM-003，计划中）](PLAN-DM-003-v0.4-solo-workflow.md)
 - [阶段 4：v1.0 Windows 产品化（PLAN-DM-004，计划中）](PLAN-DM-004-v1.0-windows-productization.md)
 

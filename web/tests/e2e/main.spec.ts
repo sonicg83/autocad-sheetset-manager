@@ -1,9 +1,25 @@
 import {expect,test} from "@playwright/test";
+import {writeFileSync} from "node:fs";
+
+test.beforeEach(async({page})=>{
+  const drafts=new Map<string,any>();
+  await page.route("**/api/workspaces/*/draft",async route=>{
+    const request=route.request();
+    const workspaceId=new URL(request.url()).pathname.split("/").at(-2)!;
+    const current=drafts.get(workspaceId)??null;
+    if(request.method()==="GET")return route.fulfill({json:{draft:current,corrupted:false,stale:false,stale_reasons:[]}});
+    if(request.method()==="DELETE"){drafts.delete(workspaceId);return route.fulfill({json:{deleted:current!==null}})}
+    const body=await request.postDataJSON();
+    const saved={...body,workspace_id:workspaceId,version:(current?.version??0)+1};
+    delete saved.expected_version;drafts.set(workspaceId,saved);
+    return route.fulfill({json:{draft:saved,corrupted:false,stale:false,stale_reasons:[]}});
+  });
+});
 
 test("CAD 操作分流",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"number_range_changed"}],diagnostics:[],affected_files:["C:\\project\\test.dst","C:\\project\\001-002.dwg","C:\\project\\003-004.dwg"],execution_intent:{cad_validation_deferred:true,cardinality_frontier:{index:1,subset_id:"subset-2"},subset_operations:[{subset_id:"subset-1",cad_operation:"rename_only",target_file:"C:\\project\\001-002.dwg",in_cardinality_scope:false},{subset_id:"subset-2",cad_operation:"rebuild",target_file:"C:\\project\\003-004.dwg",in_cardinality_scope:true}],source_baselines:[{path:"C:\\project\\001-002.dwg",sha256:"source-sha-256",identity:["source-id"],source_types:["existing_snapshot"],requested_layouts:["001 第一册(一)"]}],groups:[{subset_id:"subset-1",cad_operation:"rename_only",subset_name:"第一册",target_file:"C:\\project\\001-002.dwg",layouts:[]},{subset_id:"subset-2",cad_operation:"rebuild",subset_name:"第二册",target_file:"C:\\project\\003-004.dwg",layouts:[]},{subset_id:"subset-none",cad_operation:"none",subset_name:"无需操作",target_file:"C:\\project\\none.dwg",layouts:[]},{subset_id:"subset-missing",subset_name:"缺失操作",target_file:"C:\\project\\missing.dwg",layouts:[]},{subset_id:"subset-unknown",cad_operation:"legacy",subset_name:"未知操作",target_file:"C:\\project\\unknown.dwg",layouts:[]}]}}}));
   await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-cad",status:"FAILED",progress:100,attempt:1,files:[{target_path:"C:\\project\\001-002.dwg",status:"SUCCEEDED",progress:100,cad_operation:"rename_only",started_at:"2026-08-26T10:00:00Z",finished_at:"2026-08-26T10:00:02Z",duration_ms:2000},{target_path:"C:\\project\\003-004.dwg",status:"FAILED",progress:100,cad_operation:"rebuild",started_at:"2026-08-26T10:00:03Z",finished_at:"2026-08-26T10:00:08Z",duration_ms:5000}]}}));
-  await openWorkspace(page);await page.locator(".summary button").click();await page.locator(".toolbar button").nth(1).click();
+  await openWorkspace(page);await page.locator(".summary button").click();await page.getByRole("button",{name:"预览变更"}).click();
   await expect(page.getByText("CAD 布局校验将在确认后执行")).toBeVisible();await expect(page.getByText("批量改名布局").first()).toBeVisible();await expect(page.getByText("清除并重建布局").first()).toBeVisible();await expect(page.getByText("无需 CAD 操作",{exact:true}).first()).toBeVisible();await expect(page.getByText("未提供 CAD 操作",{exact:true})).toBeVisible();await expect(page.getByText("未知 CAD 操作：legacy",{exact:true})).toBeVisible();await expect(page.getByText("数量变化前沿：第 2 个子集")).toBeVisible();await expect(page.getByText("来源基准")).toBeVisible();await expect(page.getByText("source-sha-256",{exact:true})).toBeVisible();await expect(page.getByText("布局来源验证")).toHaveCount(0);const affectedFiles=page.locator(".preview > section").filter({has:page.getByRole("heading",{name:"受影响文件"})});await expect(affectedFiles.getByText("C:\\project\\001-002.dwg",{exact:true})).toBeVisible();await expect(affectedFiles.getByText("C:\\project\\003-004.dwg",{exact:true})).toBeVisible();
   page.once("dialog",dialog=>dialog.accept());await page.locator(".preview button.primary").click();const jobDetail=page.locator(".job-detail");const renameRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\001-002.dwg"});const rebuildRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\003-004.dwg"});await expect(renameRow.getByText("批量改名布局",{exact:true})).toBeVisible();await expect(renameRow.getByText("2026-08-26T10:00:00Z",{exact:true})).toBeVisible();await expect(renameRow.getByText("2026-08-26T10:00:02Z",{exact:true})).toBeVisible();await expect(renameRow.getByText("2000 ms",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("清除并重建布局",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("2026-08-26T10:00:03Z",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("2026-08-26T10:00:08Z",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("5000 ms",{exact:true})).toBeVisible();
 });
@@ -12,12 +28,17 @@ function deferred(){let resolve!:()=>void;const promise=new Promise<void>(done=>
 
 const workspace={
   id:"workspace-1",revision_id:"revision-1",sheet_set:{name:"测试图纸集",sheet_count:2,subset_count:2,custom_properties:{项目号:"P-001"},property_definitions:[{type:"sheetset",name:"项目号",default_value:"P-001"},{type:"sheet",name:"比例",default_value:""}],subsets:[
-    {id:"subset-1",name:"001-002 第一册",title:"第一册",number_range:"001-002",display_name:"001-002 第一册",sheets:[{id:"sheet-1",number:"001",title:"第一册 (一)",custom_properties:{比例:"1:100"}},{id:"sheet-2",number:"002",title:"第一册 (二)",custom_properties:{比例:"1:100"}}]},
+    {id:"subset-1",name:"001-002 第一册",title:"第一册",number_range:"001-002",display_name:"001-002 第一册",sheets:[{id:"sheet-1",number:"001",title:"第一册 (一)",custom_properties:{比例:"1:100"},layout:{file_name:"C:\\project\\001-002 第一册.dwg",relative_file_name:".\\001-002 第一册.dwg",resolved_path:"C:\\project\\001-002 第一册.dwg",layout_name:"001 第一册 (一)",handle:"A1"}},{id:"sheet-2",number:"002",title:"第一册 (二)",custom_properties:{比例:"1:100"},layout:{file_name:"C:\\project\\001-002 第一册.dwg",relative_file_name:".\\001-002 第一册.dwg",resolved_path:"C:\\project\\001-002 第一册.dwg",layout_name:"002 第一册 (二)",handle:"A2"}}]},
     {id:"subset-2",name:"第二册",title:"第二册",number_range:"",display_name:"第二册",sheets:[]},
   ]},diagnostics:[],
 };
 
 function workspaceVersion(id:string,name:string,revisionId:string){return {...workspace,id,revision_id:revisionId,sheet_set:{...workspace.sheet_set,name}}}
+
+function workspaceWith300Sheets(){
+  const subsets=Array.from({length:10},(_,subsetIndex)=>({id:`subset-${subsetIndex}`,name:`子集 ${subsetIndex+1}`,title:`子集 ${subsetIndex+1}`,number_range:`${subsetIndex*30+1}-${subsetIndex*30+30}`,display_name:`子集 ${subsetIndex+1}`,sheets:Array.from({length:30},(_,sheetIndex)=>{const ordinal=subsetIndex*30+sheetIndex+1;const number=String(ordinal).padStart(3,"0");const file=`C:\\project\\${String(subsetIndex+1).padStart(2,"0")}-分册.dwg`;return {id:`sheet-${ordinal}`,number,title:`图纸 ${ordinal}`,custom_properties:{比例:ordinal%2?"1:100":"1:50",专业:ordinal%3?"建筑":"结构"},layout:{file_name:file,relative_file_name:`.\\${file.split("\\").at(-1)}`,resolved_path:ordinal%5?file:null,layout_name:`${number} 图纸 ${ordinal}`,handle:ordinal.toString(16)}}})}));
+  return {...workspace,sheet_set:{...workspace.sheet_set,sheet_count:300,subset_count:10,property_definitions:[...workspace.sheet_set.property_definitions,{type:"sheet",name:"专业",default_value:""}],subsets}};
+}
 
 async function installMockEventSource(page:any){await page.addInitScript(()=>{class FakeEventSource{url:string;onmessage:((event:{data:string})=>void)|null=null;onerror:(()=>void)|null=null;closed=false;constructor(url:string){this.url=url;(window as any).__eventSources.push(this)}close(){this.closed=true}};(window as any).__eventSources=[];(window as any).__emitJob=(payload:any)=>{for(const source of (window as any).__eventSources)if(!source.closed)source.onmessage?.({data:JSON.stringify(payload)})};(window as any).__closedEventSources=()=>((window as any).__eventSources as FakeEventSource[]).filter(source=>source.closed).length;(window as any).EventSource=FakeEventSource})}
 
@@ -28,6 +49,115 @@ async function openWorkspace(page:any){
   await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\test.dst");
   await page.getByRole("button",{name:"打开项目"}).click();
 }
+
+test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批量原子撤销",async({page})=>{
+  const previewBodies:any[]=[];
+  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"draft-digest",executable:true,requires_cad:false,changes:[],diagnostics:[],affected_files:[],semantic_diff:{structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:null}})});
+  await openWorkspace(page);
+  const name=page.locator(".summary input");
+  for(const value of ["A","B","C"]){await name.fill(value);await page.getByRole("button",{name:"更新图纸集"}).click()}
+  await expect(page.getByText("动作 3/3")).toBeVisible();
+  await page.getByRole("button",{name:"撤销"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  await expect(name).toHaveValue("B");
+  expect(previewBodies.at(-1).commands).toEqual([{type:"update_sheet_set",name:"B",custom_properties:{项目号:"P-001"}}]);
+  await page.getByRole("button",{name:"重做"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  await expect(name).toHaveValue("C");
+  expect(previewBodies.at(-1).commands[0].name).toBe("C");
+  await page.getByRole("button",{name:"全选当前结果"}).click();await page.getByLabel("既有图纸属性").selectOption("比例");await page.getByLabel("批量值").fill("1:200");await page.getByRole("button",{name:"批量加入草稿"}).click();
+  await expect(page.getByText("批量更新 比例（2 张） · 2 条命令")).toBeVisible();
+  await page.getByRole("button",{name:"撤销"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  expect(previewBodies.at(-1).commands).toHaveLength(1);expect(previewBodies.at(-1).commands[0].name).toBe("C");
+  await page.reload();await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\test.dst");await page.getByRole("button",{name:"打开项目"}).click();
+  await expect(page.getByText("动作 3/4")).toBeVisible();
+  await expect(page.locator(".summary input")).toHaveValue("C");
+});
+
+test("移除 active 动作不会激活 redo 区命令",async({page})=>{
+  const previewBodies:any[]=[];
+  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"remove-digest",executable:true,requires_cad:false,changes:[],diagnostics:[],affected_files:[],semantic_diff:{sheet_set:[],structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:null}})});
+  await openWorkspace(page);
+  const name=page.locator(".summary input");
+  for(const value of ["A","B","C"]){await name.fill(value);await page.getByRole("button",{name:"更新图纸集"}).click()}
+  await page.getByRole("button",{name:"撤销"}).click();
+  const actions=page.locator(".draft-actions li");
+  await actions.nth(0).getByRole("button",{name:"移除"}).click();
+  await expect(page.getByText("动作 1/2")).toBeVisible();
+  await expect(name).toHaveValue("B");
+  await page.getByRole("button",{name:"预览变更"}).click();
+  expect(previewBodies.at(-1).commands).toEqual([{type:"update_sheet_set",name:"B",custom_properties:{项目号:"P-001"}}]);
+});
+
+test("切换工作区前会刷新全部排队草稿保存",async({page})=>{
+  await page.unroute("**/api/workspaces/*/draft");
+  const firstPutStarted=deferred();const releaseFirstPut=deferred();const savedByWorkspace=new Map<string,any>();let putCount=0;
+  await page.route("**/api/workspaces/*/draft",async route=>{
+    const request=route.request();const workspaceId=new URL(request.url()).pathname.split("/").at(-2)!;
+    if(request.method()==="GET")return route.fulfill({json:{draft:savedByWorkspace.get(workspaceId)??null,corrupted:false,stale:false,stale_reasons:[]}});
+    const body=await request.postDataJSON();putCount+=1;if(putCount===1){firstPutStarted.resolve();await releaseFirstPut.promise}
+    const saved={...body,workspace_id:workspaceId,version:putCount};delete saved.expected_version;savedByWorkspace.set(workspaceId,saved);
+    return route.fulfill({json:{draft:saved,corrupted:false,stale:false,stale_reasons:[]}});
+  });
+  await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.includes("B.dst")?workspaceVersion("workspace-2","工作区 B","revision-2"):workspace})});
+  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();
+  const name=page.locator(".summary input");await name.fill("A");await page.getByRole("button",{name:"更新图纸集"}).click();await firstPutStarted.promise;await name.fill("B");await page.getByRole("button",{name:"更新图纸集"}).click();
+  await path.fill("C:\\B.dst");const switching=page.getByRole("button",{name:"打开项目"}).click();await expect(page.getByRole("status")).toContainText("正在加载工作区");releaseFirstPut.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  expect(putCount).toBe(2);expect(savedByWorkspace.get("workspace-1").actions).toHaveLength(2);
+  await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".summary input")).toHaveValue("B");await expect(page.getByText("动作 2/2")).toBeVisible();
+});
+
+test("草稿网络保存失败会中止工作区切换并保留编辑",async({page})=>{
+  await page.unroute("**/api/workspaces/*/draft");
+  await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
+  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();const name=page.locator(".summary input");await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/保存失败/)).toBeVisible();
+  await path.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(name).toHaveValue("未保存名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("草稿版本冲突会中止工作区切换并保留编辑",async({page})=>{
+  await page.unroute("**/api/workspaces/*/draft");
+  await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:409,json:{code:"DRAFT_CONFLICT",message:"版本冲突"}}));
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
+  await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
+  await page.goto("/");const path=page.getByPlaceholder("输入 .dst 绝对路径");await path.fill("C:\\A.dst");await page.getByRole("button",{name:"打开项目"}).click();const name=page.locator(".summary input");await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
+  await path.fill("C:\\B.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(name).toHaveValue("冲突名称");await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
+  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"放弃本地冲突动作并重新加载"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");await expect(page.getByText("动作 0/0")).toBeVisible();
+});
+
+test("过期草稿只展示旧意图、阻断预览且可明确丢弃",async({page})=>{
+  let deleted=false;await page.unroute("**/api/workspaces/*/draft");await page.route("**/api/workspaces/*/draft",async route=>{if(route.request().method()==="DELETE"){deleted=true;return route.fulfill({json:{deleted:true}})}return route.fulfill({json:{corrupted:false,stale:true,stale_reasons:["BASE_REVISION_CHANGED"],draft:{schema_version:1,workspace_id:"workspace-1",base_revision_id:"old-revision",repair_status:"VALID",version:3,cursor:1,actions:[{id:"old-action",kind:"command_batch",label:"旧图纸集名称",commands:[{type:"update_sheet_set",name:"旧值",custom_properties:{项目号:"P-001"}}]}]}}})});
+  await openWorkspace(page);await expect(page.getByText(/草稿已过期（BASE_REVISION_CHANGED）/)).toBeVisible();await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();await expect(page.getByText("旧图纸集名称 · 1 条命令")).toBeVisible();await page.getByRole("button",{name:"丢弃过期草稿"}).click();expect(deleted).toBe(true);await expect(page.getByText(/草稿已过期/)).toHaveCount(0);
+});
+
+test("三级导航可按 DWG 路径筛选、多选批量修改并确认删除整个子集",async({page})=>{
+  let previewCommands:any[]=[];
+  await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewCommands=(await route.request().postDataJSON()).commands;return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"delete-digest",executable:true,requires_cad:true,changes:[],diagnostics:[],affected_files:["C:\\project\\test.dst","C:\\project\\001-002 第一册.dwg"],semantic_diff:{structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:{groups:[],deleted_subsets:[]}}})});
+  await openWorkspace(page);
+  await page.getByLabel("搜索图纸").fill("001-002 第一册.DWG");await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(2);
+  const subsetSelect=page.locator(".filter-grid select").nth(0);await subsetSelect.selectOption("subset-2");await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(0);await subsetSelect.selectOption("subset-1");
+  await page.getByRole("button",{name:"全选当前结果"}).click();await expect(page.getByText("已选 2")).toBeVisible();
+  await page.getByLabel("既有图纸属性").selectOption("比例");await page.getByLabel("批量值").fill("1:50");await page.getByRole("button",{name:"批量加入草稿"}).click();await page.getByRole("button",{name:"清空"}).click();
+  page.once("dialog",dialog=>{expect(dialog.message()).toContain("系统不会证明工程外部引用");dialog.accept()});await page.getByRole("button",{name:"删除整个子集"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  expect(previewCommands).toEqual([{type:"delete_subset",subset_id:"subset-1",confirm_delete_all_sheets:true,confirm_delete_main_dwg:true}]);
+});
+
+test("300 行搜索过滤全选与首屏渲染满足性能预算",async({page},testInfo)=>{
+  const large=workspaceWith300Sheets();
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:large}));
+  const started=Date.now();await page.goto("/");await page.getByPlaceholder("输入 .dst 绝对路径").fill("C:\\project\\large.dst");await page.getByRole("button",{name:"打开项目"}).click();await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(80);const firstInteractiveMs=Date.now()-started;
+  const samples:number[]=[];
+  for(let index=0;index<20;index++){
+    const elapsed=await page.evaluate(async value=>{
+      const input=document.querySelector<HTMLInputElement>('input[placeholder="图号、标题、属性或 DWG"]')!;const start=performance.now();input.value=value;input.dispatchEvent(new Event("input",{bubbles:true}));await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);return performance.now()-start;
+    },index%2?"结构":"分册.dwg");
+    samples.push(elapsed);
+  }
+  await page.getByRole("button",{name:/继续加载/}).click();await expect(page.locator(".sheet-table-window tbody tr")).toHaveCount(100);await page.locator(".sheet-table-window").focus();await page.keyboard.press("Tab");await expect(page.getByLabel("选择图纸 003")).toBeFocused();
+  await page.getByRole("button",{name:"全选当前结果"}).click();await expect(page.getByText(/已选 \d+/)).toBeVisible();
+  const sorted=[...samples].sort((a,b)=>a-b);const median=sorted[Math.floor(sorted.length/2)];const p95=sorted[Math.ceil(sorted.length*.95)-1];
+  console.info("PERF_300",JSON.stringify({browser:"Chromium",rows:300,firstInteractiveMs,samples,median,p95}));
+  const performanceResult={browser:"Chromium",rows:300,firstInteractiveMs,samples,median,p95};const performancePath=testInfo.outputPath("performance-300.json");writeFileSync(performancePath,JSON.stringify(performanceResult,null,2),"utf8");await testInfo.attach("performance-300.json",{path:performancePath,contentType:"application/json"});
+  expect(firstInteractiveMs).toBeLessThanOrEqual(1500);expect(median).toBeLessThanOrEqual(50);expect(p95).toBeLessThanOrEqual(100);
+});
 
 test("维护属性并按位置创建子集后预览派生变化",async({page})=>{
   const previewRequests:any[][]=[];

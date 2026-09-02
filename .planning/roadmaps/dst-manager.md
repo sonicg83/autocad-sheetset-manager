@@ -31,7 +31,7 @@ related:
 | --- | --- | --- | --- |
 | v0.2 | 已完成 | 稳定化、修订恢复、任务自救与多 DWG 有界并行 | [PLAN-DM-001](../plans/dst-manager/PLAN-DM-001-v0.2-stabilization-and-multi-dwg-parallel.md) |
 | v0.2.1 | 已完成 | 运行与日志、受控图纸集编辑、快速预览与 CAD 分流、DST 可修复加载 | [PLAN-DM-005](../plans/dst-manager/PLAN-DM-005-v0.2.1-runtime-logging-and-acsm-hotfix.md)、[PLAN-DM-006](../plans/dst-manager/PLAN-DM-006-v021-controlled-sheetset-editing.md)、[PLAN-DM-008](../plans/dst-manager/PLAN-DM-008-deferred-cad-validation-and-layout-rename.md)、[PLAN-DM-009](../plans/dst-manager/PLAN-DM-009-dst-schema-validation-and-repair.md) |
-| v0.3 | 计划中 | 受控日常编辑器、草稿、人类可读预览与全写入摘要门禁 | [PLAN-DM-002](../plans/dst-manager/PLAN-DM-002-v0.3-daily-editor.md) |
+| v0.3 | 已完成 | 受控日常编辑器、草稿、人类可读预览与全写入摘要门禁 | [PLAN-DM-002](../plans/dst-manager/PLAN-DM-002-v0.3-daily-editor.md) |
 | v0.4 | 计划中 | 单人工作流、受检查模板、CSV 双契约、健康检查与脱敏诊断 | [PLAN-DM-003](../plans/dst-manager/PLAN-DM-003-v0.4-solo-workflow.md) |
 | v1.0 | 计划中 | Windows 产品化、升级恢复、保留策略与发布资格 | [PLAN-DM-004](../plans/dst-manager/PLAN-DM-004-v1.0-windows-productization.md) |
 

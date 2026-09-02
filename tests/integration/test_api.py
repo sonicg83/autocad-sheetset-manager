@@ -68,17 +68,255 @@ def test_health_returns_current_run_id(tmp_path, monkeypatch):
     assert client.get("/api/health").json() == {"status": "ok", "run_id": "run-test-123"}
 
 
+def test_openapi_exposes_typed_workspace_preview_job_and_revision_responses(tmp_path):
+    schema = create_app(Settings(data_dir=tmp_path / "data")).openapi()
+    paths = schema["paths"]
+
+    assert paths["/api/workspaces/open"]["post"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/WorkspaceResponse",
+    }
+    assert paths["/api/workspaces/{workspace_id}/changes/preview"]["post"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ChangePreviewResponse",
+    }
+    assert paths["/api/jobs/{job_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/JobResponse",
+    }
+    assert paths["/api/revisions"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["items"] == {
+        "$ref": "#/components/schemas/RevisionResponse",
+    }
+    assert schema["components"]["schemas"]["SheetResponse"]["properties"]["layout"]["$ref"] == (
+        "#/components/schemas/LayoutResponse"
+    )
+    preview = schema["components"]["schemas"]["ChangePreviewResponse"]["properties"]
+    assert preview["execution_intent"]["anyOf"][0] == {
+        "$ref": "#/components/schemas/ExecutionIntentResponse",
+    }
+    assert preview["semantic_diff"] == {"$ref": "#/components/schemas/SemanticDiffResponse"}
+    assert {
+        item["$ref"] for item in preview["changes"]["items"]["anyOf"]
+    } == {
+        "#/components/schemas/CommandChangeResponse",
+        "#/components/schemas/PropertyCsvChangeResponse",
+    }
+    assert schema["info"]["version"] == "0.3.0"
+
+
+def test_open_and_template_requests_reject_unknown_fields_and_invalid_cad_version(tmp_path):
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+
+    opened = client.post(
+        "/api/workspaces/open",
+        json={"dst_path": str(tmp_path / "missing.dst"), "unexpected": True},
+    )
+    template = client.post(
+        "/api/templates/inspect",
+        json={"template_path": str(tmp_path / "missing.dwt"), "cad_version": "2024"},
+    )
+
+    assert opened.status_code == 422
+    assert template.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        {"type": "unknown_command"},
+        {"type": "update_sheet_set", "name": "新图纸集", "unexpected": True},
+        {"type": "update_sheet_set", "name": ""},
+        {"type": "add_custom_property", "property_type": "subset", "name": "专业", "default_value": "燃气"},
+        {
+            "type": "insert_sheet",
+            "target_subset_id": "subset-id",
+            "ordinal": 1,
+            "source": {
+                "type": "template_layout",
+                "file": "A.dwt",
+                "layout": "A3",
+                "unexpected": True,
+            },
+        },
+        {
+            "type": "delete_subset",
+            "subset_id": "subset-id",
+            "confirm_delete_all_sheets": True,
+        },
+        {
+            "type": "delete_subset",
+            "subset_id": "subset-id",
+            "confirm_delete_all_sheets": True,
+            "confirm_delete_main_dwg": False,
+        },
+        {
+            "type": "insert_sheet",
+            "target_subset_id": "subset-id",
+            "ordinal": 0,
+            "source": {"type": "template_layout", "file": "relative.dwt", "layout": "A1"},
+        },
+        {
+            "type": "insert_subset",
+            "ordinal": 1,
+            "title": "危险/子集",
+            "source": {"type": "template_layout", "file": "C:\\template.dwt", "layout": "A1"},
+        },
+        {
+            "type": "insert_subset",
+            "ordinal": 1,
+            "title": "正常子集",
+            "source": {"type": "template_layout", "file": "C:\\template.dwt", "layout": "A1\n恶意"},
+        },
+    ],
+)
+def test_change_preview_rejects_commands_outside_typed_contract(tmp_path, tiny_workspace, command):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    response = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json={"base_revision_id": opened["revision_id"], "commands": [command]},
+    )
+
+    assert response.status_code == 422
+
+
+def test_change_preview_and_execute_have_distinct_confirmation_contracts(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [{"type": "update_sheet_set", "name": "新图纸集"}],
+    }
+
+    preview_with_confirmation = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json={**payload, "preview_digest": "not-allowed-on-preview"},
+    )
+    execute_without_confirmation = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json=payload,
+    )
+
+    assert preview_with_confirmation.status_code == 422
+    assert execute_without_confirmation.status_code == 422
+
+
+def test_restore_and_xml_execute_require_preview_digest(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    restore = client.post(
+        f"/api/workspaces/{opened['id']}/revisions/missing/restore",
+        json={"base_revision_id": opened["revision_id"]},
+    )
+    xml_export = client.post(
+        f"/api/workspaces/{opened['id']}/xml/export-dst",
+        json={
+            "base_revision_id": opened["revision_id"],
+            "xml": DstCodec().decode_file(dst).decode(),
+            "destination": str(tmp_path / "export.dst"),
+        },
+    )
+
+    assert restore.status_code == 422
+    assert xml_export.status_code == 422
+
+
+def test_metadata_execute_rejects_digest_that_does_not_match_current_preview(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [{"type": "update_sheet_set", "name": "新图纸集"}],
+    }
+
+    response = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": "stale-preview-digest"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "REPREVIEW_REQUIRED"
+
+
+def test_draft_api_persists_actions_detects_conflicts_and_marks_stale(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(
+        create_app(
+            Settings(
+                data_dir=tmp_path / "data",
+                draft_dir=(tmp_path / "drafts").resolve(),
+            ),
+        ),
+    )
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "schema_version": 1,
+        "base_revision_id": opened["revision_id"],
+        "repair_status": opened["dst_validation"]["status"],
+        "expected_version": 0,
+        "cursor": 1,
+        "actions": [
+            {
+                "id": "action-1",
+                "kind": "command_batch",
+                "label": "修改图纸集名称",
+                "commands": [{"type": "update_sheet_set", "name": "草稿名称"}],
+            },
+        ],
+    }
+
+    saved = client.put(f"/api/workspaces/{opened['id']}/draft", json=payload)
+    conflict = client.put(f"/api/workspaces/{opened['id']}/draft", json=payload)
+    loaded = client.get(f"/api/workspaces/{opened['id']}/draft")
+
+    assert saved.status_code == 200
+    assert saved.json()["draft"]["version"] == 1
+    assert saved.json()["stale"] is False
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "DRAFT_CONFLICT"
+    assert loaded.json()["draft"]["actions"] == payload["actions"]
+
+    change_payload = {
+        "base_revision_id": opened["revision_id"],
+        "commands": [{"type": "update_sheet_set", "name": "正式名称"}],
+    }
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json=change_payload,
+    ).json()
+    client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**change_payload, "preview_digest": preview["preview_digest"]},
+    )
+
+    stale = client.get(f"/api/workspaces/{opened['id']}/draft").json()
+    deleted = client.request(
+        "DELETE",
+        f"/api/workspaces/{opened['id']}/draft",
+        json={"expected_version": 1},
+    )
+
+    assert stale["stale"] is True
+    assert stale["stale_reasons"] == ["BASE_REVISION_CHANGED"]
+    assert stale["draft"]["actions"] == payload["actions"]
+    assert deleted.status_code == 200
+    assert client.get(f"/api/workspaces/{opened['id']}/draft").json()["draft"] is None
+
+
 def test_open_preview_execute(tmp_path,tiny_workspace):
     dst,sheet_id=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); assert opened["sheet_set"]["sheet_count"]==1
-    payload={"base_revision_id":opened["revision_id"],"commands":[{"type":"update_sheet_properties","sheet_id":sheet_id,"custom_properties":{"比例":"1:200"}}]}; assert client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json()["requires_cad"] is False
-    job=client.post(f"/api/workspaces/{opened['id']}/changes/execute",json=payload).json(); assert job["status"]=="SUCCEEDED"; assert (dst.parent/".dst-manager"/"revisions"/job["id"]/"before"/dst.name).is_file()
+    payload={"base_revision_id":opened["revision_id"],"commands":[{"type":"update_sheet_properties","sheet_id":sheet_id,"custom_properties":{"比例":"1:200"}}]}; preview=client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json(); assert preview["requires_cad"] is False
+    job=client.post(f"/api/workspaces/{opened['id']}/changes/execute",json={**payload,"preview_digest":preview["preview_digest"]}).json(); assert job["status"]=="SUCCEEDED"; assert (dst.parent/".dst-manager"/"revisions"/job["id"]/"before"/dst.name).is_file()
 def test_revision_conflict(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); response=client.post(f"/api/workspaces/{opened['id']}/changes/preview",json={"base_revision_id":"stale","commands":[]}); assert response.status_code==409 and response.json()["code"]=="REVISION_CONFLICT"
 
 def test_sheet_set_name_is_metadata_only(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); payload={"base_revision_id":opened["revision_id"],"commands":[{"type":"update_sheet_set","name":"新图纸集"}]}
-    assert client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json()["requires_cad"] is False
-    assert client.post(f"/api/workspaces/{opened['id']}/changes/execute",json=payload).json()["status"]=="SUCCEEDED"
+    preview=client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json(); assert preview["requires_cad"] is False
+    assert client.post(f"/api/workspaces/{opened['id']}/changes/execute",json={**payload,"preview_digest":preview["preview_digest"]}).json()["status"]=="SUCCEEDED"
 
 
 def test_metadata_illegal_xml_text_is_blocked_without_side_effects(tmp_path, tiny_workspace):
@@ -93,13 +331,7 @@ def test_metadata_illegal_xml_text_is_blocked_without_side_effects(tmp_path, tin
     }
 
     preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload)
-    execute = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
-
-    assert preview.status_code == 200
-    assert preview.json()["executable"] is False
-    assert preview.json()["diagnostics"][0]["code"] == "XML_TEXT_INVALID"
-    assert execute.status_code == 400
-    assert execute.json()["code"] == "PLAN_INVALID"
+    assert preview.status_code == 422
     assert dst.read_bytes() == before
     with app.state.service.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
@@ -125,7 +357,10 @@ def test_empty_sheetset_sheet_property_round_trip_reports_zero_affected(tmp_path
     }
 
     preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
-    executed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload).json()
+    executed = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": preview["preview_digest"]},
+    ).json()
     reopened = client.get(f"/api/workspaces/{opened['id']}").json()
     exported = client.get(f"/api/workspaces/{opened['id']}/custom-properties/export").text
 
@@ -172,8 +407,7 @@ def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_work
     assert preview["cad_version"] == "2016"
     assert preview["execution_intent"]["cad_validation_deferred"] is True
     assert preview["execution_intent"]["source_baselines"][0]["sha256"] == file_sha256(dst.parent / "A.dwg")
-    assert unconfirmed.status_code == 409
-    assert unconfirmed.json()["code"] == "REPREVIEW_REQUIRED"
+    assert unconfirmed.status_code == 422
     assert executed["payload"]["plan"]["cad_version"] == "2016"
     assert executed["payload"]["plan"]["execution_intent"]["source_baselines"] == preview["execution_intent"]["source_baselines"]
     app.state.service.inspect_template.assert_not_called()
@@ -283,7 +517,10 @@ def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, ti
     assert response.status_code == 409
     assert response.json()["code"] == "REPAIR_BLOCKED"
     assert not (dst.parent / ".dst-manager" / "revisions").exists()
-    execution = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+    execution = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": "repair-blocked"},
+    )
     assert execution.status_code == 409
     assert execution.json()["code"] == "REPAIR_BLOCKED"
     assert "traceback" not in execution.text.lower()
@@ -308,8 +545,36 @@ def test_xml_preview_and_export_are_revisioned(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); xml=DstCodec().decode_file(dst).decode().replace("平面</AcSmProp>","导入标题</AcSmProp>")
     destination=tmp_path/"export.dst"; payload={"base_revision_id":opened["revision_id"],"xml":xml,"destination":str(destination)}
     preview=client.post(f"/api/workspaces/{opened['id']}/xml/import/preview",json=payload).json(); assert any(item["type"]=="sheet_changed" for item in preview["changes"])
-    payload["destination_revision_id"]=preview["destination_revision_id"]; job=client.post(f"/api/workspaces/{opened['id']}/xml/export-dst",json=payload).json(); assert job["status"]=="SUCCEEDED" and destination.is_file()
+    payload["destination_revision_id"]=preview["destination_revision_id"]; payload["preview_digest"]=preview["preview_digest"]; job=client.post(f"/api/workspaces/{opened['id']}/xml/export-dst",json=payload).json(); assert job["status"]=="SUCCEEDED" and destination.is_file()
     assert (tmp_path/".dst-manager"/"revisions"/job["id"]).is_dir()
+
+
+def test_xml_export_rejects_digest_that_does_not_match_current_preview(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    destination = tmp_path / "stale-export.dst"
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "xml": DstCodec().decode_file(dst).decode(),
+        "destination": str(destination),
+    }
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/xml/import/preview",
+        json=payload,
+    ).json()
+
+    response = client.post(
+        f"/api/workspaces/{opened['id']}/xml/export-dst",
+        json={
+            **payload,
+            "destination_revision_id": preview["destination_revision_id"],
+            "preview_digest": "stale-preview-digest",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "REPREVIEW_REQUIRED"
 
 
 def test_xml_export_requires_destination_baseline_from_preview(tmp_path, tiny_workspace):
@@ -332,12 +597,13 @@ def test_xml_export_requires_destination_baseline_from_preview(tmp_path, tiny_wo
 
     missing_baseline = client.post(
         f"/api/workspaces/{opened['id']}/xml/export-dst",
-        json=payload,
+        json={**payload, "preview_digest": preview["preview_digest"]},
     )
     assert missing_baseline.status_code == 409
     assert missing_baseline.json()["code"] == "DESTINATION_BASELINE_REQUIRED"
 
     payload["destination_revision_id"] = preview["destination_revision_id"]
+    payload["preview_digest"] = preview["preview_digest"]
     exported = client.post(
         f"/api/workspaces/{opened['id']}/xml/export-dst",
         json=payload,
@@ -352,7 +618,11 @@ def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_
     client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     payload = {"base_revision_id": opened["revision_id"], "commands": [{"type": "update_sheet_properties", "sheet_id": sheet_id, "custom_properties": {"比例": "1:200"}}]}
-    changed = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload).json()
+    change_preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
+    changed = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": change_preview["preview_digest"]},
+    ).json()
     assert changed["status"] == "SUCCEEDED"
     revision = client.get("/api/revisions", params={"workspace_id": opened["id"]}).json()[0]
     current = client.get(f"/api/workspaces/{opened['id']}").json()
@@ -361,7 +631,10 @@ def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_
     assert preview["files"] == [preview["files"][0] | {"path": dst.name, "action": "replace", "conflict": False}]
     restored = client.post(
         f"/api/workspaces/{opened['id']}/revisions/{revision['id']}/restore",
-        json={"base_revision_id": current["revision_id"]},
+        json={
+            "base_revision_id": current["revision_id"],
+            "preview_digest": preview["preview_digest"],
+        },
     ).json()
     assert restored["status"] == "SUCCEEDED"
     reopened = client.get(f"/api/workspaces/{opened['id']}").json()
@@ -373,7 +646,10 @@ def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_
     assert reverse_preview["executable"] is True
     reversed_job = client.post(
         f"/api/workspaces/{opened['id']}/revisions/{restore_revision['id']}/restore",
-        json={"base_revision_id": reopened["revision_id"]},
+        json={
+            "base_revision_id": reopened["revision_id"],
+            "preview_digest": reverse_preview["preview_digest"],
+        },
     ).json()
     assert reversed_job["status"] == "SUCCEEDED"
     changed_again = client.get(f"/api/workspaces/{opened['id']}").json()
@@ -385,7 +661,11 @@ def test_revision_restore_rejects_changed_current_file(tmp_path, tiny_workspace)
     client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     payload = {"base_revision_id": opened["revision_id"], "commands": [{"type": "update_sheet_properties", "sheet_id": sheet_id, "custom_properties": {"比例": "1:200"}}]}
-    client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+    change_preview = client.post(f"/api/workspaces/{opened['id']}/changes/preview", json=payload).json()
+    client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": change_preview["preview_digest"]},
+    )
     revision = client.get("/api/revisions", params={"workspace_id": opened["id"]}).json()[0]
     dst.write_bytes(dst.read_bytes() + b"external-change")
     preview = client.get(f"/api/workspaces/{opened['id']}/revisions/{revision['id']}/restore-preview").json()
@@ -457,13 +737,18 @@ def test_property_csv_default_initializes_every_existing_sheet(tmp_path, tiny_wo
     _add_second_sheet_with_different_scale(dst)
     client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    payload = {
+        "base_revision_id": opened["revision_id"],
+        "csv": "type,name,default_value\nsheet,专业,燃气\n",
+    }
+    preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        json=payload,
+    ).json()
 
     result = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json={
-            "base_revision_id": opened["revision_id"],
-            "csv": "type,name,default_value\nsheet,专业,燃气\n",
-        },
+        json={**payload, "preview_digest": preview["preview_digest"]},
     )
 
     assert result.status_code == 200
@@ -498,7 +783,7 @@ def test_property_csv_import_preview_executes_domain_commands_and_skips_repeat(t
 
     job = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json=payload,
+        json={**payload, "preview_digest": preview["preview_digest"]},
     ).json()
     assert job["status"] == "SUCCEEDED"
     assert (dst.parent / ".dst-manager" / "revisions" / job["id"] / "before" / dst.name).is_file()
@@ -522,9 +807,14 @@ def test_property_csv_repeated_import_is_stable_noop_without_job_revision_or_loc
     client = TestClient(app, raise_server_exceptions=False)
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     csv_text = "type,name,default_value\nsheet,专业,燃气\n"
+    first_payload = {"base_revision_id": opened["revision_id"], "csv": csv_text}
+    first_preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        json=first_payload,
+    ).json()
     first = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json={"base_revision_id": opened["revision_id"], "csv": csv_text},
+        json={**first_payload, "preview_digest": first_preview["preview_digest"]},
     ).json()
     current = client.get(f"/api/workspaces/{opened['id']}").json()
     before_file = (dst.stat().st_mtime_ns, dst.read_bytes())
@@ -543,9 +833,14 @@ def test_property_csv_repeated_import_is_stable_noop_without_job_revision_or_loc
         "no_op": True,
     }
     for _ in range(2):
+        repeated_payload = {"base_revision_id": current["revision_id"], "csv": csv_text}
+        repeated_preview = client.post(
+            f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+            json=repeated_payload,
+        ).json()
         response = client.post(
             f"/api/workspaces/{opened['id']}/custom-properties/import",
-            json={"base_revision_id": current["revision_id"], "csv": csv_text},
+            json={**repeated_payload, "preview_digest": repeated_preview["preview_digest"]},
         )
         assert response.status_code == 200
         assert response.json() == expected
@@ -558,12 +853,17 @@ def test_property_csv_repeated_import_is_stable_noop_without_job_revision_or_loc
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
     assert (dst.stat().st_mtime_ns, dst.read_bytes()) == before_file
 
+    next_payload = {
+        "base_revision_id": current["revision_id"],
+        "csv": "type,name,default_value\nsheetset,项目阶段,施工图\n",
+    }
+    next_preview = client.post(
+        f"/api/workspaces/{opened['id']}/custom-properties/import/preview",
+        json=next_payload,
+    ).json()
     next_write = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json={
-            "base_revision_id": current["revision_id"],
-            "csv": "type,name,default_value\nsheetset,项目阶段,施工图\n",
-        },
+        json={**next_payload, "preview_digest": next_preview["preview_digest"]},
     )
     assert next_write.status_code == 200
     assert next_write.json()["status"] == "SUCCEEDED"
@@ -590,7 +890,7 @@ def test_delete_custom_property_uses_revisioned_dst_publish(tmp_path, tiny_works
     ).json()
     job = client.post(
         f"/api/workspaces/{opened['id']}/changes/execute",
-        json=payload,
+        json={**payload, "preview_digest": preview["preview_digest"]},
     ).json()
 
     assert preview["executable"] is True
@@ -678,7 +978,7 @@ def test_property_csv_rejects_invalid_xml_value_at_logical_record_start_without_
     ]
     execution = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json=payload,
+        json={**payload, "preview_digest": preview.json()["preview_digest"]},
     )
     assert execution.status_code == 400
     assert execution.json()["code"] == "PLAN_INVALID"
@@ -712,15 +1012,12 @@ def test_direct_property_definition_command_rejects_invalid_xml_value_without_wr
         json=payload,
     )
 
-    assert preview.status_code == 200
-    assert preview.json()["executable"] is False
-    assert [item["code"] for item in preview.json()["diagnostics"]] == ["CUSTOM_PROPERTY_VALUE_INVALID"]
+    assert preview.status_code == 422
     execution = client.post(
         f"/api/workspaces/{opened['id']}/changes/execute",
-        json=payload,
+        json={**payload, "preview_digest": "invalid-input"},
     )
-    assert execution.status_code == 400
-    assert execution.json()["code"] == "PLAN_INVALID"
+    assert execution.status_code == 422
     with app.state.service.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM jobs").scalar_one() == 0
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM document_revisions").scalar_one() == 0
@@ -760,7 +1057,7 @@ def test_property_csv_preview_merges_main_dom_diagnostics_and_blocks_execution(t
 
     execution = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        json=payload,
+        json={**payload, "preview_digest": "repair-blocked"},
     )
     assert execution.status_code == 409
     assert execution.json()["code"] == "REPAIR_BLOCKED"
@@ -799,7 +1096,10 @@ def test_property_csv_api_reports_unpaired_surrogate_as_stable_encoding_diagnost
     ]
     execution = client.post(
         f"/api/workspaces/{opened['id']}/custom-properties/import",
-        content=json.dumps(payload, ensure_ascii=True).encode(),
+        content=json.dumps(
+            {**payload, "preview_digest": preview.json()["preview_digest"]},
+            ensure_ascii=True,
+        ).encode(),
         headers={"content-type": "application/json"},
     )
     assert execution.status_code == 400
@@ -817,7 +1117,11 @@ def test_property_csv_writes_require_current_base_revision(tmp_path, tiny_worksp
     missing = client.post(path, json={"csv": "type,name,default_value\n"})
     stale = client.post(
         path,
-        json={"base_revision_id": "stale", "csv": "type,name,default_value\nsheet,专业,燃气\n"},
+        json={
+            "base_revision_id": "stale",
+            "csv": "type,name,default_value\nsheet,专业,燃气\n",
+            "preview_digest": "stale-preview",
+        },
     )
 
     assert missing.status_code == 422
@@ -853,8 +1157,7 @@ def test_legacy_commands_are_immediately_unsupported_without_partial_commit(tmp_
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["code"] == "COMMAND_UNSUPPORTED"
+    assert response.status_code == 422
     assert dst.read_bytes() == before
 
 
@@ -888,17 +1191,22 @@ def test_controlled_insert_commands_report_ordinal_boundaries(tmp_path, tiny_wor
     subset_id = opened["sheet_set"]["subsets"][0]["id"]
     command = {
         **command,
-        "target_subset_id": subset_id if command["type"] == "insert_sheet" else command.get("target_subset_id"),
         "source": {**command["source"], "file": str(dst.parent / "A.dwg")},
     }
+    if command["type"] == "insert_sheet":
+        command["target_subset_id"] = subset_id
 
-    preview = client.post(
+    response = client.post(
         f"/api/workspaces/{opened['id']}/changes/preview",
         json={"base_revision_id": opened["revision_id"], "commands": [command]},
-    ).json()
+    )
 
-    assert preview["executable"] is False
-    assert preview["diagnostics"][0]["code"] == code
+    if command["ordinal"] == 0:
+        assert response.status_code == 422
+    else:
+        preview = response.json()
+        assert preview["executable"] is False
+        assert preview["diagnostics"][0]["code"] == code
 
 
 # ---------------------------------------------------------------- PLAN-DM-009 Task 4：修复报告 API 与确认流程
@@ -963,7 +1271,10 @@ def test_unconfirmed_repair_blocks_normal_writes_with_clear_error(tmp_path):
     assert preview.status_code == 409
     assert preview.json()["code"] == "REPAIR_CONFIRMATION_REQUIRED"
 
-    execute = client.post(f"/api/workspaces/{opened['id']}/changes/execute", json=payload)
+    execute = client.post(
+        f"/api/workspaces/{opened['id']}/changes/execute",
+        json={**payload, "preview_digest": "repair-required"},
+    )
     assert execute.status_code == 409
     assert execute.json()["code"] == "REPAIR_CONFIRMATION_REQUIRED"
 

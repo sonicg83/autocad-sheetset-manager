@@ -357,6 +357,47 @@ def test_job_file_cad_operation_and_timing_are_returned_without_transformation(t
     assert item["finished_at"] == finished.replace(tzinfo=None).isoformat()
 
 
+def test_cad_duration_history_is_scoped_by_version_operation_and_success(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")
+    samples = [12_000, 18_000, 24_000]
+    for index, duration in enumerate(samples):
+        job_id = f"job-{index}"
+        database.create_job(
+            job_id,
+            "workspace",
+            "change_set",
+            "QUEUED",
+            {"plan": {"requires_cad": True}},
+            cad_version="2020",
+        )
+        database.upsert_job_file(
+            job_id,
+            tmp_path / f"{index}.dwg",
+            cad_operation="rename_only",
+            status="SUCCEEDED",
+            duration_ms=duration,
+        )
+        database.update_job(job_id, "FAILED", 0, "TEST_COMPLETE")
+    database.create_job(
+        "ignored",
+        "workspace",
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        cad_version="2016",
+    )
+    database.upsert_job_file(
+        "ignored",
+        tmp_path / "ignored.dwg",
+        cad_operation="rename_only",
+        status="SUCCEEDED",
+        duration_ms=99_000,
+    )
+
+    assert database.cad_duration_history("2020", "rename_only") == samples
+
+
 def test_running_job_file_retry_clears_previous_terminal_state(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
     database.upsert_workspace("workspace", tmp_path, tmp_path / "set.dst", "revision")

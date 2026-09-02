@@ -352,6 +352,21 @@ def derive_document_structure(
             subset.sheets.pop(index)
             layout_sources.pop(sheet.acsm_id, None)
             affected.add(subset.acsm_id)
+        elif kind == "delete_subset":
+            subset_id = str(command.get("subset_id", ""))
+            subset = subset_by_id.get(subset_id)
+            if subset is None:
+                raise EditingError("SUBSET_NOT_FOUND", f"找不到子集：{subset_id}")
+            if command.get("confirm_delete_all_sheets") is not True:
+                raise EditingError("DELETE_SUBSET_SHEETS_CONFIRMATION_REQUIRED", "必须确认删除子集内全部图纸")
+            if command.get("confirm_delete_main_dwg") is not True:
+                raise EditingError("DELETE_SUBSET_DWG_CONFIRMATION_REQUIRED", "必须确认删除子集对应主 DWG")
+            subsets.remove(subset)
+            subset_by_id.pop(subset_id)
+            titles.pop(subset_id, None)
+            for sheet in subset.sheets:
+                layout_sources.pop(sheet.acsm_id, None)
+            affected.add(subset_id)
         elif kind in {"update_sheet_set", "update_sheet"}:
             continue
         else:

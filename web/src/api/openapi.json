@@ -1,0 +1,4803 @@
+{
+  "components": {
+    "schemas": {
+      "AddCustomPropertyCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "default_value": {
+            "default": "",
+            "title": "Default Value",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "property_type": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Property Type",
+            "type": "string"
+          },
+          "type": {
+            "const": "add_custom_property",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "property_type",
+          "name"
+        ],
+        "title": "AddCustomPropertyCommand",
+        "type": "object"
+      },
+      "CadCapabilitiesResponse": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/CadCapabilityResponse"
+        },
+        "title": "CadCapabilitiesResponse",
+        "type": "object"
+      },
+      "CadCapabilityResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "console": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Console"
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "available"
+        ],
+        "title": "CadCapabilityResponse",
+        "type": "object"
+      },
+      "CadGroupResponse": {
+        "properties": {
+          "cad_operation": {
+            "enum": [
+              "rename_only",
+              "rebuild"
+            ],
+            "title": "Cad Operation",
+            "type": "string"
+          },
+          "expected_baseline": {
+            "title": "Expected Baseline",
+            "type": "null"
+          },
+          "layouts": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedLayoutResponse"
+            },
+            "title": "Layouts",
+            "type": "array"
+          },
+          "operation": {
+            "enum": [
+              "create",
+              "rebuild"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "source_snapshot": {
+            "title": "Source Snapshot",
+            "type": "string"
+          },
+          "source_target_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Target File"
+          },
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "subset_name": {
+            "title": "Subset Name",
+            "type": "string"
+          },
+          "target_file": {
+            "title": "Target File",
+            "type": "string"
+          },
+          "target_reuses_source": {
+            "title": "Target Reuses Source",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "subset_id",
+          "subset_name",
+          "operation",
+          "cad_operation",
+          "source_target_file",
+          "source_snapshot",
+          "target_file",
+          "layouts",
+          "target_reuses_source"
+        ],
+        "title": "CadGroupResponse",
+        "type": "object"
+      },
+      "CardinalityFrontierResponse": {
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "subset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subset Id"
+          }
+        },
+        "required": [
+          "index",
+          "subset_id"
+        ],
+        "title": "CardinalityFrontierResponse",
+        "type": "object"
+      },
+      "ChangeExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "cad_version": {
+            "default": "2020",
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "commands": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                  "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                  "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                  "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                  "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                  "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                  "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                  "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                  "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSubsetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSubsetCommand"
+                }
+              ]
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "preview_digest": {
+            "minLength": 1,
+            "title": "Preview Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "preview_digest"
+        ],
+        "title": "ChangeExecuteRequest",
+        "type": "object"
+      },
+      "ChangePreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "cad_version": {
+            "default": "2020",
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "commands": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                  "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                  "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                  "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                  "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                  "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                  "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                  "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                  "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSubsetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSubsetCommand"
+                }
+              ]
+            },
+            "title": "Commands",
+            "type": "array"
+          }
+        },
+        "required": [
+          "base_revision_id"
+        ],
+        "title": "ChangePreviewRequest",
+        "type": "object"
+      },
+      "ChangePreviewResponse": {
+        "properties": {
+          "affected_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Files",
+            "type": "array"
+          },
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "cad_version": {
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "changes": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CommandChangeResponse"
+                },
+                {
+                  "$ref": "#/components/schemas/PropertyCsvChangeResponse"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "commands": {
+            "anyOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                      "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                      "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                      "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                      "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                      "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                      "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                      "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                      "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeleteSheetCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InsertSheetCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InsertSubsetCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeleteSubsetCommand"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commands"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticResponse"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "execution_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionIntentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "requires_cad": {
+            "title": "Requires Cad",
+            "type": "boolean"
+          },
+          "semantic_diff": {
+            "$ref": "#/components/schemas/SemanticDiffResponse"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "base_revision_id",
+          "cad_version",
+          "requires_cad",
+          "affected_files",
+          "semantic_diff",
+          "preview_digest",
+          "changes",
+          "diagnostics",
+          "executable"
+        ],
+        "title": "ChangePreviewResponse",
+        "type": "object"
+      },
+      "CommandChangeResponse": {
+        "properties": {
+          "affected_sheet_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Sheet Count"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                    "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                    "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                    "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                    "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                    "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                    "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                    "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                    "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteSheetCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InsertSheetCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InsertSubsetCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteSubsetCommand"
+                  }
+                ]
+              },
+              {
+                "$ref": "#/components/schemas/NormalizedUpdateSubsetCommand"
+              },
+              {
+                "$ref": "#/components/schemas/NormalizedUpdateSheetCommand"
+              }
+            ],
+            "title": "After"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "type": {
+            "enum": [
+              "update_sheet_set",
+              "update_subset",
+              "update_sheet",
+              "delete_sheet",
+              "insert_sheet",
+              "insert_subset",
+              "add_custom_property",
+              "delete_custom_property",
+              "delete_subset"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "type",
+          "after"
+        ],
+        "title": "CommandChangeResponse",
+        "type": "object"
+      },
+      "DeleteCustomPropertyCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "property_type": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Property Type",
+            "type": "string"
+          },
+          "type": {
+            "const": "delete_custom_property",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "property_type",
+          "name"
+        ],
+        "title": "DeleteCustomPropertyCommand",
+        "type": "object"
+      },
+      "DeleteSheetCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "sheet_id": {
+            "minLength": 1,
+            "title": "Sheet Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "delete_sheet",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sheet_id"
+        ],
+        "title": "DeleteSheetCommand",
+        "type": "object"
+      },
+      "DeleteSubsetCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_delete_all_sheets": {
+            "const": true,
+            "title": "Confirm Delete All Sheets",
+            "type": "boolean"
+          },
+          "confirm_delete_main_dwg": {
+            "const": true,
+            "title": "Confirm Delete Main Dwg",
+            "type": "boolean"
+          },
+          "subset_id": {
+            "minLength": 1,
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "delete_subset",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "subset_id",
+          "confirm_delete_all_sheets",
+          "confirm_delete_main_dwg"
+        ],
+        "title": "DeleteSubsetCommand",
+        "type": "object"
+      },
+      "DeletedSubsetResponse": {
+        "properties": {
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "target_file": {
+            "title": "Target File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subset_id",
+          "target_file"
+        ],
+        "title": "DeletedSubsetResponse",
+        "type": "object"
+      },
+      "DerivedDocumentResponse": {
+        "properties": {
+          "affected_subset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Subset Ids",
+            "type": "array"
+          },
+          "layout_sources": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Layout Sources",
+            "type": "object"
+          },
+          "property_diff": {
+            "$ref": "#/components/schemas/PropertyDefinitionDiffResponse"
+          },
+          "subsets": {
+            "items": {
+              "$ref": "#/components/schemas/DerivedSubsetResponse"
+            },
+            "title": "Subsets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subsets",
+          "affected_subset_ids",
+          "property_diff",
+          "layout_sources"
+        ],
+        "title": "DerivedDocumentResponse",
+        "type": "object"
+      },
+      "DerivedLayoutResponse": {
+        "properties": {
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "layout_name": {
+            "title": "Layout Name",
+            "type": "string"
+          },
+          "relative_file_name": {
+            "title": "Relative File Name",
+            "type": "string"
+          },
+          "resolution_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Source"
+          },
+          "resolved_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Path"
+          }
+        },
+        "required": [
+          "file_name",
+          "relative_file_name",
+          "layout_name",
+          "handle"
+        ],
+        "title": "DerivedLayoutResponse",
+        "type": "object"
+      },
+      "DerivedSheetResponse": {
+        "properties": {
+          "acsm_id": {
+            "title": "Acsm Id",
+            "type": "string"
+          },
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/DerivedLayoutResponse"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acsm_id",
+          "number",
+          "title",
+          "custom_properties",
+          "layout"
+        ],
+        "title": "DerivedSheetResponse",
+        "type": "object"
+      },
+      "DerivedSubsetResponse": {
+        "properties": {
+          "acsm_id": {
+            "title": "Acsm Id",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "number_range": {
+            "title": "Number Range",
+            "type": "string"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/DerivedSheetResponse"
+            },
+            "title": "Sheets",
+            "type": "array"
+          },
+          "source_target_file": {
+            "title": "Source Target File",
+            "type": "string"
+          },
+          "target_file": {
+            "title": "Target File",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acsm_id",
+          "title",
+          "number_range",
+          "display_name",
+          "source_target_file",
+          "target_file",
+          "sheets"
+        ],
+        "title": "DerivedSubsetResponse",
+        "type": "object"
+      },
+      "DiagnosticResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "property_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Name"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "title": "DiagnosticResponse",
+        "type": "object"
+      },
+      "DraftAction": {
+        "additionalProperties": false,
+        "properties": {
+          "commands": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                  "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                  "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                  "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                  "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                  "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                  "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                  "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                  "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSubsetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSubsetCommand"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Commands",
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "command_batch",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "commands"
+        ],
+        "title": "DraftAction",
+        "type": "object"
+      },
+      "DraftActionResponse": {
+        "properties": {
+          "commands": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add_custom_property": "#/components/schemas/AddCustomPropertyCommand",
+                  "delete_custom_property": "#/components/schemas/DeleteCustomPropertyCommand",
+                  "delete_sheet": "#/components/schemas/DeleteSheetCommand",
+                  "delete_subset": "#/components/schemas/DeleteSubsetCommand",
+                  "insert_sheet": "#/components/schemas/InsertSheetCommand",
+                  "insert_subset": "#/components/schemas/InsertSubsetCommand",
+                  "update_sheet_properties": "#/components/schemas/UpdateSheetPropertiesCommand",
+                  "update_sheet_set": "#/components/schemas/UpdateSheetSetCommand",
+                  "update_subset_title": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/UpdateSheetSetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSubsetTitleCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateSheetPropertiesCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSheetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/InsertSubsetCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/AddCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteCustomPropertyCommand"
+                },
+                {
+                  "$ref": "#/components/schemas/DeleteSubsetCommand"
+                }
+              ]
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "command_batch",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "commands"
+        ],
+        "title": "DraftActionResponse",
+        "type": "object"
+      },
+      "DraftDeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "DraftDeleteRequest",
+        "type": "object"
+      },
+      "DraftDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DraftDeleteResponse",
+        "type": "object"
+      },
+      "DraftDocumentResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/DraftActionResponse"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "cursor": {
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "repair_status": {
+            "enum": [
+              "VALID",
+              "REPAIRED",
+              "INVALID_REPAIR_REQUIRED",
+              "INVALID_UNRECOVERABLE"
+            ],
+            "title": "Repair Status",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "workspace_id",
+          "base_revision_id",
+          "repair_status",
+          "version",
+          "cursor",
+          "actions"
+        ],
+        "title": "DraftDocumentResponse",
+        "type": "object"
+      },
+      "DraftEnvelopeResponse": {
+        "properties": {
+          "corrupted": {
+            "title": "Corrupted",
+            "type": "boolean"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftDocumentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft",
+          "corrupted",
+          "stale",
+          "stale_reasons"
+        ],
+        "title": "DraftEnvelopeResponse",
+        "type": "object"
+      },
+      "DraftPutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/DraftAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "cursor": {
+            "minimum": 0.0,
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "repair_status": {
+            "enum": [
+              "VALID",
+              "REPAIRED",
+              "INVALID_REPAIR_REQUIRED",
+              "INVALID_UNRECOVERABLE"
+            ],
+            "title": "Repair Status",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "repair_status",
+          "expected_version",
+          "cursor"
+        ],
+        "title": "DraftPutRequest",
+        "type": "object"
+      },
+      "DstValidationResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RepairActionResponse"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocking_issues": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticResponse"
+            },
+            "title": "Blocking Issues",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "VALID",
+              "REPAIRED",
+              "INVALID_REPAIR_REQUIRED",
+              "INVALID_UNRECOVERABLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DstValidationResponse",
+        "type": "object"
+      },
+      "DwgDiffResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "rebuild",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DwgLayoutSnapshotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DwgLayoutSnapshotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "subset_id",
+          "before",
+          "after"
+        ],
+        "title": "DwgDiffResponse",
+        "type": "object"
+      },
+      "DwgLayoutSnapshotResponse": {
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "layouts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Layouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "file",
+          "layouts"
+        ],
+        "title": "DwgLayoutSnapshotResponse",
+        "type": "object"
+      },
+      "EstimateDurationResponse": {
+        "properties": {
+          "lower": {
+            "title": "Lower",
+            "type": "integer"
+          },
+          "upper": {
+            "title": "Upper",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lower",
+          "upper"
+        ],
+        "title": "EstimateDurationResponse",
+        "type": "object"
+      },
+      "EstimateSourceResponse": {
+        "properties": {
+          "cad_operation": {
+            "enum": [
+              "rename_only",
+              "rebuild"
+            ],
+            "title": "Cad Operation",
+            "type": "string"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "history",
+              "fallback-v1"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cad_operation",
+          "sample_count",
+          "source"
+        ],
+        "title": "EstimateSourceResponse",
+        "type": "object"
+      },
+      "ExecutionEstimateResponse": {
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "core_console_count": {
+            "title": "Core Console Count",
+            "type": "integer"
+          },
+          "duration_ms": {
+            "$ref": "#/components/schemas/EstimateDurationResponse"
+          },
+          "estimated": {
+            "const": true,
+            "title": "Estimated",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateSourceResponse"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "estimated",
+          "core_console_count",
+          "concurrency",
+          "duration_ms",
+          "sources"
+        ],
+        "title": "ExecutionEstimateResponse",
+        "type": "object"
+      },
+      "ExecutionIntentResponse": {
+        "properties": {
+          "affected_subset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Subset Ids",
+            "type": "array"
+          },
+          "cad_validation_deferred": {
+            "default": false,
+            "title": "Cad Validation Deferred",
+            "type": "boolean"
+          },
+          "cardinality_frontier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardinalityFrontierResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deleted_subsets": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedSubsetResponse"
+            },
+            "title": "Deleted Subsets",
+            "type": "array"
+          },
+          "derived_document": {
+            "$ref": "#/components/schemas/DerivedDocumentResponse"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionEstimateResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_file_hashes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Expected File Hashes",
+            "type": "object"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CadGroupResponse"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "path_graph": {
+            "$ref": "#/components/schemas/PathGraphResponse"
+          },
+          "source_baselines": {
+            "items": {
+              "$ref": "#/components/schemas/SourceBaselineResponse"
+            },
+            "title": "Source Baselines",
+            "type": "array"
+          },
+          "subset_operations": {
+            "items": {
+              "$ref": "#/components/schemas/SubsetOperationResponse"
+            },
+            "title": "Subset Operations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups",
+          "cardinality_frontier",
+          "subset_operations",
+          "deleted_subsets",
+          "path_graph",
+          "affected_subset_ids",
+          "derived_document"
+        ],
+        "title": "ExecutionIntentResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "InsertSheetCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "ordinal": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordinal"
+          },
+          "placement": {
+            "default": "after",
+            "enum": [
+              "before",
+              "after"
+            ],
+            "title": "Placement",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LayoutSource"
+          },
+          "target_subset_id": {
+            "minLength": 1,
+            "title": "Target Subset Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "insert_sheet",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "target_subset_id",
+          "source"
+        ],
+        "title": "InsertSheetCommand",
+        "type": "object"
+      },
+      "InsertSubsetCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "initial_sheet_count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Initial Sheet Count",
+            "type": "integer"
+          },
+          "ordinal": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordinal"
+          },
+          "placement": {
+            "default": "after",
+            "enum": [
+              "before",
+              "after"
+            ],
+            "title": "Placement",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LayoutSource"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "insert_subset",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "source"
+        ],
+        "title": "InsertSubsetCommand",
+        "type": "object"
+      },
+      "JobFileResponse": {
+        "properties": {
+          "before_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Hash"
+          },
+          "cad_operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cad Operation"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "log_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Path"
+          },
+          "log_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Summary"
+          },
+          "peak_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Memory Bytes"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "integer"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          },
+          "staging_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staging Bytes"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_path",
+          "status",
+          "progress"
+        ],
+        "title": "JobFileResponse",
+        "type": "object"
+      },
+      "JobResponse": {
+        "properties": {
+          "attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt"
+          },
+          "cad_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cad Version"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/JobFileResponse"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "no_op": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Op"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeline": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "status"
+        ],
+        "title": "JobResponse",
+        "type": "object"
+      },
+      "JobSummaryResponse": {
+        "properties": {
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "succeeded",
+          "failed",
+          "duration_ms"
+        ],
+        "title": "JobSummaryResponse",
+        "type": "object"
+      },
+      "LayoutResponse": {
+        "properties": {
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "layout_name": {
+            "title": "Layout Name",
+            "type": "string"
+          },
+          "relative_file_name": {
+            "title": "Relative File Name",
+            "type": "string"
+          },
+          "resolution_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Source"
+          },
+          "resolved_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Path"
+          }
+        },
+        "required": [
+          "file_name",
+          "relative_file_name",
+          "layout_name",
+          "handle"
+        ],
+        "title": "LayoutResponse",
+        "type": "object"
+      },
+      "LayoutSource": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "minLength": 1,
+            "title": "File",
+            "type": "string"
+          },
+          "layout": {
+            "minLength": 1,
+            "title": "Layout",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "existing_snapshot",
+              "template_layout"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "file",
+          "layout"
+        ],
+        "title": "LayoutSource",
+        "type": "object"
+      },
+      "NormalizedUpdateSheetCommand": {
+        "properties": {
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "sheet_id": {
+            "title": "Sheet Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "update_sheet",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sheet_id",
+          "custom_properties"
+        ],
+        "title": "NormalizedUpdateSheetCommand",
+        "type": "object"
+      },
+      "NormalizedUpdateSubsetCommand": {
+        "properties": {
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "update_subset",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "subset_id",
+          "title"
+        ],
+        "title": "NormalizedUpdateSubsetCommand",
+        "type": "object"
+      },
+      "OpenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dst_path": {
+            "format": "path",
+            "title": "Dst Path",
+            "type": "string"
+          },
+          "root_override": {
+            "anyOf": [
+              {
+                "format": "path",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Override"
+          }
+        },
+        "required": [
+          "dst_path"
+        ],
+        "title": "OpenRequest",
+        "type": "object"
+      },
+      "PathGraphResponse": {
+        "properties": {
+          "delete_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Delete Targets",
+            "type": "array"
+          },
+          "final_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Final Targets",
+            "type": "array"
+          },
+          "old_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Old Sources",
+            "type": "array"
+          },
+          "reused_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reused Targets",
+            "type": "array"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/PathTransitionResponse"
+            },
+            "title": "Transitions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "old_sources",
+          "final_targets",
+          "reused_targets",
+          "delete_targets",
+          "transitions"
+        ],
+        "title": "PathGraphResponse",
+        "type": "object"
+      },
+      "PathTransitionResponse": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "create",
+              "rebuild"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subset_id",
+          "operation",
+          "source",
+          "target"
+        ],
+        "title": "PathTransitionResponse",
+        "type": "object"
+      },
+      "PlannedLayoutResponse": {
+        "properties": {
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "original_layout": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Layout"
+          },
+          "sheet_id": {
+            "title": "Sheet Id",
+            "type": "string"
+          },
+          "source_file": {
+            "title": "Source File",
+            "type": "string"
+          },
+          "source_layout": {
+            "title": "Source Layout",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "existing_snapshot",
+              "template_layout"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "target_layout": {
+            "title": "Target Layout",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sheet_id",
+          "number",
+          "title",
+          "custom_properties",
+          "source_type",
+          "source_file",
+          "source_layout",
+          "target_layout"
+        ],
+        "title": "PlannedLayoutResponse",
+        "type": "object"
+      },
+      "PropertyCsvChangeResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "add",
+              "skip",
+              "conflict"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "affected_sheet_count": {
+            "title": "Affected Sheet Count",
+            "type": "integer"
+          },
+          "default_value": {
+            "title": "Default Value",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "action",
+          "type",
+          "name",
+          "default_value",
+          "affected_sheet_count"
+        ],
+        "title": "PropertyCsvChangeResponse",
+        "type": "object"
+      },
+      "PropertyCsvExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "csv": {
+            "title": "Csv",
+            "type": "string"
+          },
+          "preview_digest": {
+            "minLength": 1,
+            "title": "Preview Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "csv",
+          "preview_digest"
+        ],
+        "title": "PropertyCsvExecuteRequest",
+        "type": "object"
+      },
+      "PropertyCsvPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "csv": {
+            "title": "Csv",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "csv"
+        ],
+        "title": "PropertyCsvPreviewRequest",
+        "type": "object"
+      },
+      "PropertyDefinitionDiffResponse": {
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyDefinitionResponse"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyDefinitionResponse"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "added",
+          "skipped"
+        ],
+        "title": "PropertyDefinitionDiffResponse",
+        "type": "object"
+      },
+      "PropertyDefinitionResponse": {
+        "properties": {
+          "default_value": {
+            "title": "Default Value",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "default_value"
+        ],
+        "title": "PropertyDefinitionResponse",
+        "type": "object"
+      },
+      "PropertyDiffResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "add",
+              "delete",
+              "update"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "affected_sheet_count": {
+            "title": "Affected Sheet Count",
+            "type": "integer"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/PropertyDefinitionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/PropertyDefinitionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "type",
+          "name",
+          "before",
+          "after",
+          "affected_sheet_count"
+        ],
+        "title": "PropertyDiffResponse",
+        "type": "object"
+      },
+      "RepairActionResponse": {
+        "properties": {
+          "after": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "After",
+            "type": "object"
+          },
+          "before": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Before",
+            "type": "object"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "confidence": {
+            "enum": [
+              "deterministic",
+              "inferred"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_path": {
+            "title": "Node Path",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          }
+        },
+        "required": [
+          "code",
+          "node_path",
+          "confidence",
+          "before",
+          "after",
+          "message"
+        ],
+        "title": "RepairActionResponse",
+        "type": "object"
+      },
+      "RepairExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "preview_digest": {
+            "minLength": 1,
+            "title": "Preview Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "preview_digest"
+        ],
+        "title": "RepairExecuteRequest",
+        "type": "object"
+      },
+      "RepairPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id"
+        ],
+        "title": "RepairPreviewRequest",
+        "type": "object"
+      },
+      "RepairPreviewResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RepairActionResponse"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "blocking_issues": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticResponse"
+            },
+            "title": "Blocking Issues",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "preview_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Digest"
+          },
+          "status": {
+            "enum": [
+              "VALID",
+              "REPAIRED",
+              "INVALID_REPAIR_REQUIRED",
+              "INVALID_UNRECOVERABLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "base_revision_id",
+          "status",
+          "actions",
+          "blocking_issues",
+          "executable"
+        ],
+        "title": "RepairPreviewResponse",
+        "type": "object"
+      },
+      "RestoreFileResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "replace",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "backup_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Hash"
+          },
+          "backup_identity": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Identity"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "current_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Hash"
+          },
+          "expected_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Hash"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "restore_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restore Hash"
+          },
+          "source_conflict": {
+            "title": "Source Conflict",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "source_conflict",
+          "conflict"
+        ],
+        "title": "RestoreFileResponse",
+        "type": "object"
+      },
+      "RestorePreviewResponse": {
+        "properties": {
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/RestoreFileResponse"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "revision_id",
+          "base_revision_id",
+          "files",
+          "conflicts",
+          "executable",
+          "preview_digest"
+        ],
+        "title": "RestorePreviewResponse",
+        "type": "object"
+      },
+      "RestoreRevisionExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "preview_digest": {
+            "minLength": 1,
+            "title": "Preview Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "preview_digest"
+        ],
+        "title": "RestoreRevisionExecuteRequest",
+        "type": "object"
+      },
+      "RevisionResponse": {
+        "properties": {
+          "before_hash": {
+            "title": "Before Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "result_hash": {
+            "title": "Result Hash",
+            "type": "string"
+          },
+          "revision_dir": {
+            "title": "Revision Dir",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "operation_id",
+          "before_hash",
+          "result_hash",
+          "revision_dir",
+          "created_at"
+        ],
+        "title": "RevisionResponse",
+        "type": "object"
+      },
+      "SemanticDiffResponse": {
+        "properties": {
+          "dwgs": {
+            "items": {
+              "$ref": "#/components/schemas/DwgDiffResponse"
+            },
+            "title": "Dwgs",
+            "type": "array"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyDiffResponse"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "sheet_set": {
+            "items": {
+              "$ref": "#/components/schemas/SheetSetFieldDiffResponse"
+            },
+            "title": "Sheet Set",
+            "type": "array"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/StructureDiffResponse"
+          }
+        },
+        "required": [
+          "sheet_set",
+          "structure",
+          "properties",
+          "dwgs"
+        ],
+        "title": "SemanticDiffResponse",
+        "type": "object"
+      },
+      "SheetResponse": {
+        "properties": {
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/LayoutResponse"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "title",
+          "custom_properties",
+          "layout"
+        ],
+        "title": "SheetResponse",
+        "type": "object"
+      },
+      "SheetSetFieldDiffResponse": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "field": {
+            "const": "name",
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "title": "SheetSetFieldDiffResponse",
+        "type": "object"
+      },
+      "SheetSetResponse": {
+        "properties": {
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "database_id": {
+            "title": "Database Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_definitions": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyDefinitionResponse"
+            },
+            "title": "Property Definitions",
+            "type": "array"
+          },
+          "sheet_count": {
+            "title": "Sheet Count",
+            "type": "integer"
+          },
+          "subset_count": {
+            "title": "Subset Count",
+            "type": "integer"
+          },
+          "subsets": {
+            "items": {
+              "$ref": "#/components/schemas/SubsetResponse"
+            },
+            "title": "Subsets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "database_id",
+          "name",
+          "custom_properties",
+          "property_definitions",
+          "sheet_count",
+          "subset_count",
+          "subsets"
+        ],
+        "title": "SheetSetResponse",
+        "type": "object"
+      },
+      "SourceBaselineResponse": {
+        "properties": {
+          "identity": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Identity",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "requested_layouts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Layouts",
+            "type": "array"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "source_types": {
+            "items": {
+              "enum": [
+                "existing_snapshot",
+                "template_layout"
+              ],
+              "type": "string"
+            },
+            "title": "Source Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "identity",
+          "source_types",
+          "requested_layouts"
+        ],
+        "title": "SourceBaselineResponse",
+        "type": "object"
+      },
+      "StructureDiffResponse": {
+        "properties": {
+          "after": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSubsetResponse"
+            },
+            "title": "After",
+            "type": "array"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSubsetResponse"
+            },
+            "title": "Before",
+            "type": "array"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "title": "StructureDiffResponse",
+        "type": "object"
+      },
+      "StructureSheetResponse": {
+        "properties": {
+          "dwg_file": {
+            "title": "Dwg File",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "layout_name": {
+            "title": "Layout Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "id",
+          "number",
+          "title",
+          "suffix",
+          "dwg_file",
+          "layout_name"
+        ],
+        "title": "StructureSheetResponse",
+        "type": "object"
+      },
+      "StructureSubsetResponse": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "dwg_file": {
+            "title": "Dwg File",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "number_range": {
+            "title": "Number Range",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSheetResponse"
+            },
+            "title": "Sheets",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "id",
+          "title",
+          "number_range",
+          "display_name",
+          "dwg_file",
+          "sheets"
+        ],
+        "title": "StructureSubsetResponse",
+        "type": "object"
+      },
+      "SubsetOperationResponse": {
+        "properties": {
+          "cad_operation": {
+            "enum": [
+              "none",
+              "rename_only",
+              "rebuild"
+            ],
+            "title": "Cad Operation",
+            "type": "string"
+          },
+          "in_cardinality_scope": {
+            "title": "In Cardinality Scope",
+            "type": "boolean"
+          },
+          "subset_id": {
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "target_file": {
+            "title": "Target File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subset_id",
+          "cad_operation",
+          "target_file",
+          "in_cardinality_scope"
+        ],
+        "title": "SubsetOperationResponse",
+        "type": "object"
+      },
+      "SubsetResponse": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number_range": {
+            "title": "Number Range",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/SheetResponse"
+            },
+            "title": "Sheets",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "title",
+          "number_range",
+          "display_name",
+          "order",
+          "sheets"
+        ],
+        "title": "SubsetResponse",
+        "type": "object"
+      },
+      "TemplateInspectResponse": {
+        "properties": {
+          "cad_version": {
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "layouts": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateLayoutResponse"
+            },
+            "title": "Layouts",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "cad_version",
+          "layouts"
+        ],
+        "title": "TemplateInspectResponse",
+        "type": "object"
+      },
+      "TemplateLayoutResponse": {
+        "properties": {
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "handle"
+        ],
+        "title": "TemplateLayoutResponse",
+        "type": "object"
+      },
+      "TemplateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cad_version": {
+            "default": "2020",
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "template_path": {
+            "format": "path",
+            "title": "Template Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_path"
+        ],
+        "title": "TemplateRequest",
+        "type": "object"
+      },
+      "UpdateSheetPropertiesCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "custom_properties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Custom Properties",
+            "type": "object"
+          },
+          "sheet_id": {
+            "minLength": 1,
+            "title": "Sheet Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "update_sheet_properties",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sheet_id",
+          "custom_properties"
+        ],
+        "title": "UpdateSheetPropertiesCommand",
+        "type": "object"
+      },
+      "UpdateSheetSetCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "custom_properties": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Properties"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "const": "update_sheet_set",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "UpdateSheetSetCommand",
+        "type": "object"
+      },
+      "UpdateSubsetTitleCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "subset_id": {
+            "minLength": 1,
+            "title": "Subset Id",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "update_subset_title",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "subset_id",
+          "title"
+        ],
+        "title": "UpdateSubsetTitleCommand",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkspaceResponse": {
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticResponse"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "dst_path": {
+            "title": "Dst Path",
+            "type": "string"
+          },
+          "dst_validation": {
+            "$ref": "#/components/schemas/DstValidationResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sheet_set": {
+            "$ref": "#/components/schemas/SheetSetResponse"
+          },
+          "unreferenced_dwgs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unreferenced Dwgs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "root",
+          "dst_path",
+          "revision_id",
+          "sheet_set",
+          "diagnostics",
+          "dst_validation",
+          "unreferenced_dwgs"
+        ],
+        "title": "WorkspaceResponse",
+        "type": "object"
+      },
+      "XmlExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "destination": {
+            "format": "path",
+            "title": "Destination",
+            "type": "string"
+          },
+          "destination_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Revision Id"
+          },
+          "preview_digest": {
+            "minLength": 1,
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "xml": {
+            "title": "Xml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "xml",
+          "destination",
+          "preview_digest"
+        ],
+        "title": "XmlExecuteRequest",
+        "type": "object"
+      },
+      "XmlPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "minLength": 1,
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "format": "path",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "xml": {
+            "title": "Xml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revision_id",
+          "xml"
+        ],
+        "title": "XmlPreviewRequest",
+        "type": "object"
+      },
+      "XmlPreviewResponse": {
+        "properties": {
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "destination_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Revision Id"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticResponse"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "sheet_count_after": {
+            "title": "Sheet Count After",
+            "type": "integer"
+          },
+          "sheet_count_before": {
+            "title": "Sheet Count Before",
+            "type": "integer"
+          },
+          "subset_count_after": {
+            "title": "Subset Count After",
+            "type": "integer"
+          },
+          "subset_count_before": {
+            "title": "Subset Count Before",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "base_revision_id",
+          "sheet_count_before",
+          "sheet_count_after",
+          "subset_count_before",
+          "subset_count_after",
+          "changes",
+          "diagnostics",
+          "preview_digest",
+          "executable"
+        ],
+        "title": "XmlPreviewResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "DST Manager",
+    "version": "0.3.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/custom-properties/template": {
+      "get": {
+        "operationId": "custom_property_template_api_custom_properties_template_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Custom Property Template"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "operationId": "job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job"
+      }
+    },
+    "/api/jobs/{job_id}/events": {
+      "get": {
+        "operationId": "job_events_api_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Events"
+      }
+    },
+    "/api/jobs/{job_id}/retry": {
+      "post": {
+        "operationId": "retry_job_api_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Job"
+      }
+    },
+    "/api/revisions": {
+      "get": {
+        "operationId": "revisions_api_revisions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RevisionResponse"
+                  },
+                  "title": "Response Revisions Api Revisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revisions"
+      }
+    },
+    "/api/system/cad-capabilities": {
+      "get": {
+        "operationId": "capabilities_api_system_cad_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadCapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Capabilities"
+      }
+    },
+    "/api/templates/inspect": {
+      "post": {
+        "operationId": "inspect_template_api_templates_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateInspectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Template"
+      }
+    },
+    "/api/workspaces/open": {
+      "post": {
+        "operationId": "open_workspace_api_workspaces_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Workspace"
+      }
+    },
+    "/api/workspaces/{workspace_id}": {
+      "get": {
+        "operationId": "get_workspace_api_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workspace"
+      }
+    },
+    "/api/workspaces/{workspace_id}/changes/execute": {
+      "post": {
+        "operationId": "execute_api_workspaces__workspace_id__changes_execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute"
+      }
+    },
+    "/api/workspaces/{workspace_id}/changes/preview": {
+      "post": {
+        "operationId": "preview_api_workspaces__workspace_id__changes_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview"
+      }
+    },
+    "/api/workspaces/{workspace_id}/custom-properties/export": {
+      "get": {
+        "operationId": "export_custom_properties_api_workspaces__workspace_id__custom_properties_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Custom Properties"
+      }
+    },
+    "/api/workspaces/{workspace_id}/custom-properties/import": {
+      "post": {
+        "operationId": "import_custom_properties_api_workspaces__workspace_id__custom_properties_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyCsvExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Custom Properties"
+      }
+    },
+    "/api/workspaces/{workspace_id}/custom-properties/import/preview": {
+      "post": {
+        "operationId": "preview_custom_property_import_api_workspaces__workspace_id__custom_properties_import_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyCsvPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Custom Property Import"
+      }
+    },
+    "/api/workspaces/{workspace_id}/draft": {
+      "delete": {
+        "operationId": "delete_draft_api_workspaces__workspace_id__draft_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Draft"
+      },
+      "get": {
+        "operationId": "get_draft_api_workspaces__workspace_id__draft_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftEnvelopeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Draft"
+      },
+      "put": {
+        "operationId": "put_draft_api_workspaces__workspace_id__draft_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftEnvelopeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Draft"
+      }
+    },
+    "/api/workspaces/{workspace_id}/repairs/execute": {
+      "post": {
+        "operationId": "repair_execute_api_workspaces__workspace_id__repairs_execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Repair Execute"
+      }
+    },
+    "/api/workspaces/{workspace_id}/repairs/preview": {
+      "post": {
+        "operationId": "repair_preview_api_workspaces__workspace_id__repairs_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Repair Preview"
+      }
+    },
+    "/api/workspaces/{workspace_id}/revisions/{revision_id}/restore": {
+      "post": {
+        "operationId": "restore_revision_api_workspaces__workspace_id__revisions__revision_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRevisionExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Revision"
+      }
+    },
+    "/api/workspaces/{workspace_id}/revisions/{revision_id}/restore-preview": {
+      "get": {
+        "operationId": "restore_preview_api_workspaces__workspace_id__revisions__revision_id__restore_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Preview"
+      }
+    },
+    "/api/workspaces/{workspace_id}/xml/export-dst": {
+      "post": {
+        "operationId": "export_dst_api_workspaces__workspace_id__xml_export_dst_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XmlExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Dst"
+      }
+    },
+    "/api/workspaces/{workspace_id}/xml/import/preview": {
+      "post": {
+        "operationId": "preview_xml_api_workspaces__workspace_id__xml_import_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XmlPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XmlPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Xml"
+      }
+    }
+  }
+}
