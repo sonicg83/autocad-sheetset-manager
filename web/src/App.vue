@@ -169,7 +169,8 @@ async function selectAndOpenDst(){
 }
 onMounted(()=>{
   const bridge=getShellBridge();
-  if(!bridge)return;
+  // 老/部分桥面可能只暴露 select_file：on_files_dropped 缺失时静默跳过拖拽接桥
+  if(!bridge||typeof bridge.on_files_dropped!=="function")return;
   // 拖拽热区接桥：壳侧 document drop 监听（pywebview 原生 pywebviewFullPath）→ 本全局回调
   (window as unknown as Record<string,unknown>)[DROP_CALLBACK_ID]=(path:unknown)=>{void acceptDstPath(String(path))};
   void bridge.on_files_dropped(DROP_CALLBACK_ID).catch(()=>{});

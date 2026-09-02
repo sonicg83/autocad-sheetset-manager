@@ -42,8 +42,8 @@ class ShellBridge:
         """注册拖拽文件路径回调。
 
         callback_id 是前端暴露的全局 JS 函数名；此后每次真实 OS 拖拽把文件落入
-        窗口时，本桥以该文件的绝对路径调用 `window[callback_id](path)`。仅取
-        `.dst` 之外的扩展名不做拦截，由前端复用 selectAndOpenDst 的校验。
+        窗口时，本桥以该文件的绝对路径调用 `window[callback_id](path)`。桥不拦截
+        扩展名，仅转发路径；扩展名校验由前端复用 selectAndOpenDst 的校验。
         """
         if self._window is None:
             raise RuntimeError("拖拽回调注册时窗口尚未就绪")

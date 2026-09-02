@@ -11,6 +11,7 @@ class _FakeDom:
     def __init__(self):
         self.handler = None
         self.evaluated: list[str] = []
+        self.on_calls = 0
 
     @property
     def dom(self):
@@ -22,6 +23,7 @@ class _FakeDom:
 
     def on(self, event: str, handler) -> None:
         # 对齐 pywebview Element.on：存的是底层 callable（DOMEventHandler.callback）
+        self.on_calls += 1
         self.handler = handler.callback
 
     def evaluate_js(self, code: str) -> None:
@@ -75,6 +77,7 @@ def test_shell_bridge_on_files_dropped_registers_drop_listener_once():
     bridge.bind(dom)
     bridge.on_files_dropped("__acceptDstPath")
     bridge.on_files_dropped("__acceptDstPath")  # 幂等：不重复注册监听器
+    assert dom.on_calls == 1
     assert dom.handler is not None
     assert dom.evaluated == []
 

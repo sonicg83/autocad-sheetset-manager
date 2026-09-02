@@ -6,6 +6,7 @@ test.beforeEach(async({page})=>{
     (window as any).pywebview = {
       api: {
         select_file: async (fileTypes: string[]) => (window as any).__fakeSelectResult ?? null,
+        on_files_dropped: async () => {},
       },
     };
   });
