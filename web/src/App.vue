@@ -31,6 +31,8 @@ const draftStale=ref(false);
 const draftStaleReasons=ref<string[]>([]);
 const draftCorrupted=ref(false);
 const draftSaveFailed=ref(false);
+const draftSaving=ref(false);
+const draftRecovered=ref<number|null>(null);
 const preview=ref<Preview|null>(null);
 const previewContext=ref<PreviewContext|null>(null);
 const job=ref<Job|null>(null);
@@ -114,6 +116,7 @@ const visibleSheetRows=computed(()=>filteredSheetRows.value.slice(0,renderLimit.
 const allFilteredSelected=computed(()=>filteredSheetRows.value.length>0&&filteredSheetRows.value.every(({sheet})=>selectedSheetIds.value.includes(sheet.id)));
 const sheetPropertyNames=computed(()=>workspace.value?.sheet_set.property_definitions.filter(item=>item.type==="sheet").map(item=>item.name)??[]);
 const executionEstimate=computed(()=>preview.value?.execution_intent?.estimate??null);
+const saveStatusText=computed(()=>draftSaveFailed.value?"保存失败":draftSaving.value?"保存中":draftStale.value?"草稿已过期":"已保存");
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
@@ -121,7 +124,7 @@ function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value
 function invalidateRevisionState(){revisionGeneration+=1;revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null}
 function invalidateJobMonitor(clearJob=false){jobMonitorGeneration+=1;activeJobEvents?.close();activeJobEvents=null;if(pollTimer!==null){clearTimeout(pollTimer);pollTimer=null}if(clearJob)job.value=null;return jobMonitorGeneration}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
-function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false}
+function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();return workspaceLoadGeneration}
 function selectInitialSubset(){
   selectedId.value=workspace.value?.sheet_set.subsets[0]?.id??"";
@@ -197,6 +200,7 @@ async function loadDraft(loaded:Workspace){
   draftCursor.value=draft.cursor;
   draftVersion.value=draft.version;
   rebuildDraftProjection();
+  draftRecovered.value=draft.actions.length>0?commands.value.length:null;
   if(result.corrupted)error.value="检测到损坏草稿，已隔离；可安全重新开始编辑";
   else if(result.stale)error.value="草稿基准或修复状态已变化；仅可查看旧意图、手工重做或丢弃，禁止自动 rebase";
 }
@@ -212,6 +216,7 @@ function rebuildDraftProjection(){
 function scheduleDraftSave(){
   const workspaceId=workspace.value?.id;
   if(!workspaceId||draftStale.value)return;
+  draftSaving.value=true;
   draftSaveQueue=draftSaveQueue.then(async()=>{
     const current=workspace.value;
     if(!current||current.id!==workspaceId||draftStale.value)return;
@@ -220,9 +225,10 @@ function scheduleDraftSave(){
       if(workspace.value?.id===workspaceId&&saved.draft){draftVersion.value=saved.draft.version;draftSaveFailed.value=false}
     }
     catch(e){if(workspace.value?.id===workspaceId&&e instanceof ApiError&&e.code==="DRAFT_CONFLICT"){draftSaveFailed.value=true;draftStale.value=true;draftStaleReasons.value=["DRAFT_VERSION_CONFLICT"];commands.value=[];invalidatePreview();error.value="草稿已在其他窗口更新；当前窗口禁止覆盖，请重新打开工作区"}else throw e}
-  }).catch(e=>{if(workspace.value?.id===workspaceId){draftSaveFailed.value=true;error.value=String(e)}});
+  }).catch(e=>{if(workspace.value?.id===workspaceId){draftSaveFailed.value=true}}).finally(()=>{draftSaving.value=false});
 }
 function clearCommands(){draftActions.value=[];draftCursor.value=0;rebuildDraftProjection();scheduleDraftSave();error.value=""}
+function clearDraftRestart(){draftRecovered.value=null;clearCommands();void discardDraft()}
 function undoDraft(){if(draftStale.value||draftCursor.value===0)return;draftCursor.value-=1;rebuildDraftProjection();scheduleDraftSave()}
 function redoDraft(){if(draftStale.value||draftCursor.value>=draftActions.value.length)return;draftCursor.value+=1;rebuildDraftProjection();scheduleDraftSave()}
 function removeDraftAction(index:number){if(draftStale.value)return;const removedActive=index<draftCursor.value;draftActions.value.splice(index,1);if(removedActive)draftCursor.value-=1;draftCursor.value=Math.min(draftCursor.value,draftActions.value.length);rebuildDraftProjection();scheduleDraftSave()}
@@ -475,6 +481,7 @@ async function importCsv(){
     <RevisionHistoryPanel v-if="revisions.length&&!isWorkspaceLoading" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" @preview="previewRestore" @restore="restoreRevision" />
 
     <template v-if="workspace&&!isWorkspaceLoading&&!isRestoreExecuting">
+      <div v-if="draftRecovered!==null&&draftRecovered>0" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
       <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div><div><label>AutoCAD 版本<select v-model="cadVersion" @change="invalidatePreview"><option value="2016">2016</option><option value="2020">2020</option></select></label></div></section>
       <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
       <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
@@ -501,6 +508,7 @@ async function importCsv(){
         <ProjectNavigation :subsets="workspace.sheet_set.subsets" :selected-id="selectedId" @select="selectSubset" />
         <article>
           <DraftActionsPanel :actions="draftActions" :cursor="draftCursor" :command-count="commands.length" :stale="draftStale" :stale-reasons="draftStaleReasons" :corrupted="draftCorrupted" :writes-disabled="repairWritesDisabled" :loading="isWorkspaceLoading" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @preview="showPreview" @remove="removeDraftAction" />
+          <div class="draft-save-status"><span class="save-status" :class="{error:draftSaveFailed}">{{saveStatusText}}</span><button v-if="draftSaveFailed" @click="scheduleDraftSave">重试</button></div>
           <section v-if="selected" class="subset-editor"><div class="form-row"><label>当前子集标题<input v-model="selected.title"></label><button @click="queueSubsetTitle">加入标题变更</button><button class="danger" @click="queueDeleteSubset">删除整个子集</button></div><p class="derived">只读图号范围：{{selected.number_range||'—'}} · 显示名：{{selected.display_name}}</p>
             <table><thead><tr><th>图号</th><th>派生标题</th><th>自定义属性</th><th></th></tr></thead><tbody><tr v-for="sheet in selected.sheets" :key="sheet.id"><td><span>{{sheet.number}}</span></td><td><span>{{sheet.title}}</span></td><td><div class="property-values"><label v-for="(_,name) in sheet.custom_properties" :key="name">{{name}}<input v-model="sheet.custom_properties[name]"></label></div></td><td><button @click="queueSheetProperties(sheet)">加入属性变更</button><button class="danger" @click="queueDelete(sheet)">删除</button></td></tr></tbody></table>
           </section>

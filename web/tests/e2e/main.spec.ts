@@ -383,6 +383,28 @@ test("选择非 .dst 文件给出提示且不发起打开",async({page})=>{
   expect(opened).toBeFalsy();
 });
 
+test("打开时恢复非空草稿显示恢复提示",async({page})=>{
+  await page.route("**/api/workspaces/workspace-1/draft",async route=>{
+    if(route.request().method()==="GET")return route.fulfill({json:{draft:{schema_version:1,workspace_id:"workspace-1",base_revision_id:"revision-1",repair_status:"VALID",version:3,cursor:1,actions:[{id:"recovered-action",kind:"command_batch",label:"图纸集名称",commands:[{type:"update_sheet_set",name:"新名称",custom_properties:{项目号:"P-001"}}]}]},corrupted:false,stale:false,stale_reasons:[]}});
+    return route.fallback();
+  });
+  await openWorkspace(page);
+  await expect(page.getByText(/已恢复上次未完成的改动/)).toBeVisible();
+  await page.getByRole("button",{name:"清空重来"}).click();
+  await expect(page.getByText(/已恢复上次未完成的改动/)).toHaveCount(0);
+});
+
+test("草稿保存失败时显示保存失败与重试入口",async({page})=>{
+  await page.route("**/api/workspaces/workspace-1/draft",async route=>{
+    if(route.request().method()==="PUT")return route.fulfill({status:409,json:{code:"DRAFT_CONFLICT",message:"冲突"}});
+    return route.fallback();
+  });
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  await expect(page.getByText("保存失败")).toBeVisible();
+  await expect(page.getByRole("button",{name:"重试"})).toBeVisible();
+});
+
 test("关闭且有未发布改动时弹确认，放弃后回未打开态",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/draft",async route=>{
     const method=route.request().method();
