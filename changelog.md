@@ -2,6 +2,7 @@
 
 ## 2026-09-01（DST 契约与 v0.3 计划审查）
 
+- 固定 OpenAPI 与 TypeScript 生成契约使用 LF，避免 Windows `core.autocrlf=true` 检出后误触发生成漂移门禁。
 - `SPEC-DM-004`（DST XML Schema 校验与可修复加载契约）状态由 `draft` 转为 `accepted`，同步更新文档索引与元数据；作为 `PLAN-DM-002`（v0.3 受控日常编辑器）的前置门禁生效。
 - 完成 `PLAN-DM-002` 灰区审查并回写计划：API/Web 采用 Pydantic/OpenAPI 单一契约来源，所有用户发起的正式工程文件写入统一绑定当前基准与预览摘要；草稿明确为版本化动作历史且不自动 rebase，300 张图纸交互增加量化预算。
 - 明确新增独立 `delete_subset` 语义：整体删除 `AcSmSubset` 子树、全部图纸及主 DWG，不探测工程外部引用但保留内部 ID/存活图纸断链阻断；正式文件删除须先由后续 Spec/ADR 定义 before 快照、发布事务和恢复协议。
