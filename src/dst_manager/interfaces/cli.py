@@ -43,6 +43,14 @@ def serve(
     uvicorn.run("dst_manager.interfaces.api:app", host=host, port=port)
 
 
+@app.command("desktop")
+def desktop() -> None:
+    """启动桌面壳（WebView2）窗口。"""
+    from .shell import run_desktop
+
+    run_desktop()
+
+
 @app.command("open")
 def open_workspace(dst_path: Path):
     """只读打开并输出结构报告。"""
