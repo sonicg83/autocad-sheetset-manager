@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/layout-names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read Layout Names */
+        post: operations["read_layout_names_api_layout_names_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/revisions": {
         parameters: {
             query?: never;
@@ -1007,6 +1024,29 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** LayoutNamesRequest */
+        LayoutNamesRequest: {
+            /**
+             * Cad Version
+             * @default 2020
+             * @enum {string}
+             */
+            cad_version: "2016" | "2020";
+            /**
+             * File Path
+             * Format: path
+             */
+            file_path: string;
+        };
+        /** LayoutNamesResponse */
+        LayoutNamesResponse: {
+            /** Cached */
+            cached: boolean;
+            /** File Hash */
+            file_hash: string;
+            /** Layouts */
+            layouts: string[];
+        };
         /** LayoutResponse */
         LayoutResponse: {
             /** File Name */
@@ -1744,6 +1784,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_layout_names_api_layout_names_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LayoutNamesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutNamesResponse"];
                 };
             };
             /** @description Validation Error */

@@ -2099,6 +2099,56 @@
         "title": "JobSummaryResponse",
         "type": "object"
       },
+      "LayoutNamesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cad_version": {
+            "default": "2020",
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version",
+            "type": "string"
+          },
+          "file_path": {
+            "format": "path",
+            "title": "File Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ],
+        "title": "LayoutNamesRequest",
+        "type": "object"
+      },
+      "LayoutNamesResponse": {
+        "properties": {
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "file_hash": {
+            "title": "File Hash",
+            "type": "string"
+          },
+          "layouts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Layouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "layouts",
+          "cached",
+          "file_hash"
+        ],
+        "title": "LayoutNamesResponse",
+        "type": "object"
+      },
       "LayoutResponse": {
         "properties": {
           "file_name": {
@@ -3946,6 +3996,44 @@
           }
         },
         "summary": "Retry Job"
+      }
+    },
+    "/api/layout-names": {
+      "post": {
+        "operationId": "read_layout_names_api_layout_names_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutNamesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutNamesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Layout Names"
       }
     },
     "/api/revisions": {

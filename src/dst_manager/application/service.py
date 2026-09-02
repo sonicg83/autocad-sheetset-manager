@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import socket
+import subprocess
 import tempfile
 import uuid
 from dataclasses import asdict
@@ -41,6 +42,7 @@ from dst_manager.infrastructure.autocad.worker import (
     CoreConsoleExecutor,
     ScriptRenderer,
     parse_handles,
+    parse_layout_names,
 )
 from dst_manager.infrastructure.drafts import DraftConflictError, DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
@@ -1287,6 +1289,40 @@ class DstManagerService:
         if file_sha256(template) != source_hash:
             raise ApplicationError("TEMPLATE_CHANGED", "模板在检查期间发生变化")
         return {"path": str(template), "sha256": source_hash, "cad_version": cad_version, "layouts": [{"name": name, "handle": handle} for name, handle in handles.items()]}
+
+    def get_layout_names(self, file_path: Path, cad_version: str) -> dict:
+        """读取 DWG/DWT 布局名，命中全局缓存直接返回，否则在临时副本上运行只读枚举。
+
+        对用户路径复用 open_workspace（service.py:94 起）的同一校验模式：
+        expanduser().resolve() + 扩展名 + is_file，保持入口校验逻辑一致。
+        """
+        resolved = file_path.expanduser().resolve()
+        if resolved.suffix.casefold() not in {".dwg", ".dwt"}:
+            raise ApplicationError("LAYOUT_SOURCE_TYPE_INVALID", "来源文件必须是 .dwg 或 .dwt", 422)
+        if not resolved.is_file():
+            raise ApplicationError("LAYOUT_SOURCE_NOT_FOUND", "来源文件不存在", 404)
+        digest = file_sha256(resolved)
+        cached = self.database.get_layout_names(digest)
+        if cached is not None:
+            return {"layouts": cached, "cached": True, "file_hash": digest}
+        capability = self._capability(cad_version)
+        renderer, executor = ScriptRenderer(), CoreConsoleExecutor()
+        with tempfile.TemporaryDirectory(prefix="dst-layouts-") as tmp:
+            work_dir = Path(tmp)
+            # .dwt 同样复制为 source.dwg（同格式），避免 /i 按模板新建图形；
+            # 在临时副本上运行，原文件不产生锁/临时文件，sidecar 落在 temp 内。
+            shutil.copy2(resolved, work_dir / "source.dwg")
+            script = renderer.render_layout_names(capability, work_dir)
+            try:
+                executor.run(capability, work_dir / "source.dwg", script, self.settings.cad_timeout_seconds)
+            except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+                raise ApplicationError("LAYOUT_READ_FAILED", "读取布局失败：DWG 可能正被 AutoCAD 占用或 CAD 环境不可用", 502) from exc
+            sidecar = work_dir / "source.dst-layout-names.json"
+            if not sidecar.is_file():
+                raise ApplicationError("LAYOUT_READ_FAILED", "布局枚举未产出结果，请确认 Core Console 与插件配置", 502)
+            layouts = parse_layout_names(sidecar)
+        self.database.save_layout_names(digest, str(resolved), layouts)
+        return {"layouts": layouts, "cached": False, "file_hash": digest}
 
     def _capability(self, version: str) -> CadCapability:
         if version == "2016":

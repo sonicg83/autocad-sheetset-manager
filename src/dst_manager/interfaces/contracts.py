@@ -227,3 +227,8 @@ class DraftPutRequest(ContractModel):
 
 class DraftDeleteRequest(ContractModel):
     expected_version: int = Field(ge=0)
+
+
+class LayoutNamesRequest(ContractModel):
+    file_path: Path
+    cad_version: Literal["2016", "2020"] = "2020"

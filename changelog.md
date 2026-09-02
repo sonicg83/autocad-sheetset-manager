@@ -2,6 +2,7 @@
 
 ## 2026-09-03（v0.3.1 重基线与 SPEC-DM-007）
 
+- 新增 `POST /api/layout-names` 布局名读取端点与 `DstManagerService.get_layout_names`：请求 `{"file_path": "<绝对路径>", "cad_version": "2016"|"2020"}`（`extra="forbid"`），响应 `{"layouts": [...], "cached": bool, "file_hash": "<sha256>"}`；复用 `open_workspace` 对用户路径的 `expanduser().resolve()` + 扩展名 + `is_file` 入口校验，命中全局缓存直接返回，未命中时在全新 `TemporaryDirectory` 副本（`.dwt` 同样复制为 `source.dwg`）上运行 `DstGetLayoutNames` 只读枚举并解析 sidecar；executor 失败（非零/超时/CAD 不可用）转换为 `LAYOUT_READ_FAILED`(502)，缓存结果经 `Database.get_layout_names`/`save_layout_names` 持久化；集成测试与注入假 executor 的 service 单测覆盖缓存二次命中、原 DWG 不被修改、`.dwt` 副本路径与 DB roundtrip/upsert/缺失→None。
 - 新增 Worker 插件只读布局枚举命令 `DstGetLayoutNames`（仅遍历纸张空间布局、不修改图纸、不 QSAVE）与 `ScriptRenderer.render_layout_names`/`parse_layout_names`（`<dwg>.dst-layout-names.json` sidecar 渲染与解析，未知版本/解析失败抛 `ApplicationError("LAYOUT_READ_FAILED", ...)`）；单元测试全绿，插件 2016/2020 双版本构建成功，真实 AutoCAD Core Console 验证布局枚举与 Sheet Manager 显示一致且原 DWG 时间戳不变。
 - 新增 `0004_dm007_layout_name_cache` 迁移与 `LayoutNameCacheRow` ORM：布局名全局缓存表 `layout_name_cache`（`file_hash` 主键 + `source_path`/`layouts` JSON/`created_at`），`Database.get_layout_names`/`save_layout_names` 实现读取与 upsert；`LATEST_SCHEMA_REVISION` 提升至 `0004_dm007_layout_name_cache`，全新库升级与旧 MVP 库升级测试同步更新。
 - 新增 [PLAN-DM-011](.planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md)（v0.3.1 实施计划，状态 `proposed`）：9 个任务覆盖布局缓存迁移、Worker 插件只读布局枚举命令、`POST /api/layout-names` 端点、pywebview 桌面壳、前端两态状态机/关闭确认/恢复提示/布局下拉、拖拽路径 spike 与交付收尾。

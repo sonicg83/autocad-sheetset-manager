@@ -1344,3 +1344,35 @@ def test_repair_execute_rejects_stale_digest_and_baseline_drift(tmp_path):
     assert response.status_code == 409
     assert response.json()["code"] == "REVISION_CONFLICT"
     assert file_sha256(dst) == file_sha256(tampered)
+
+
+# ---------------------------------------------------------------- PLAN-DM-011 Task 3：布局名读取端点
+
+def test_layout_names_rejects_non_dwg(tmp_path):
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    other = tmp_path / "x.txt"
+    other.write_text("x")
+    resp = client.post("/api/layout-names", json={"file_path": str(other), "cad_version": "2020"})
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "LAYOUT_SOURCE_TYPE_INVALID"
+
+
+def test_layout_names_missing_file(tmp_path):
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    resp = client.post("/api/layout-names", json={"file_path": str(tmp_path / "a.dwg"), "cad_version": "2020"})
+    assert resp.status_code == 404
+    assert resp.json()["code"] == "LAYOUT_SOURCE_NOT_FOUND"
+
+
+def test_layout_names_request_rejects_unknown_fields_and_cad_version(tmp_path):
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    unknown = client.post(
+        "/api/layout-names",
+        json={"file_path": str(tmp_path / "a.dwg"), "cad_version": "2020", "unexpected": True},
+    )
+    invalid_version = client.post(
+        "/api/layout-names",
+        json={"file_path": str(tmp_path / "a.dwg"), "cad_version": "2024"},
+    )
+    assert unknown.status_code == 422
+    assert invalid_version.status_code == 422

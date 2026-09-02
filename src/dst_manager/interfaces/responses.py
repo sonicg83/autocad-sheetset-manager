@@ -515,3 +515,9 @@ class DraftEnvelopeResponse(ResponseModel):
 
 class DraftDeleteResponse(ResponseModel):
     deleted: bool
+
+
+class LayoutNamesResponse(ResponseModel):
+    layouts: list[str]
+    cached: bool
+    file_hash: str

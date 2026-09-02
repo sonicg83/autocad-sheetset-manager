@@ -17,6 +17,7 @@ from dst_manager.interfaces.contracts import (
     ContractModel,
     DraftDeleteRequest,
     DraftPutRequest,
+    LayoutNamesRequest,
     PropertyCsvExecuteRequest,
     PropertyCsvPreviewRequest,
     RepairExecuteRequest,
@@ -32,6 +33,7 @@ from dst_manager.interfaces.responses import (
     DraftEnvelopeResponse,
     HealthResponse,
     JobResponse,
+    LayoutNamesResponse,
     RepairPreviewResponse,
     RestorePreviewResponse,
     RevisionResponse,
@@ -290,6 +292,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def inspect_template(request: TemplateRequest):
         return service.inspect_template(request.template_path, request.cad_version)
+
+    @app.post(
+        "/api/layout-names",
+        response_model=LayoutNamesResponse,
+        response_model_exclude_unset=True,
+    )
+    def read_layout_names(request: LayoutNamesRequest):
+        return service.get_layout_names(request.file_path, request.cad_version)
 
     web_dist = Path(__file__).parents[3] / "web" / "dist"
     if web_dist.is_dir():
