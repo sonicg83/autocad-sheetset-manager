@@ -1,4 +1,4 @@
-type ShellBridge={select_file(fileTypes:string[]):Promise<string|null>};
+type ShellBridge={select_file(fileTypes:string[]):Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>};
 
 export function getShellBridge():ShellBridge|null{
   const api=(window as unknown as {pywebview?:{api?:ShellBridge}}).pywebview?.api;

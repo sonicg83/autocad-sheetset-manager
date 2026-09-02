@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed,reactive,ref} from "vue";
+import {computed,onMounted,reactive,ref} from "vue";
 import {ApiError,request} from "./api/client";
 import {getShellBridge,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
@@ -154,14 +154,26 @@ async function openByPath(path:string){
 async function openWorkspace(){await openByPath(dstPath.value)}
 const hasShell=computed(()=>getShellBridge()!==null);
 const DST_EXT=/\.dst$/i;
+const DROP_CALLBACK_ID="__dstManagerAcceptDst";
+async function acceptDstPath(path:string){
+  if(workspace.value){error.value="请先关闭当前工作区，再打开新的 DST 文件";return}
+  if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
+  await openByPath(path);
+}
 async function selectAndOpenDst(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪，请通过 dst-manager desktop 启动";return}
   const path=await bridge.select_file(DST_FILE_FILTERS);
   if(!path)return;
-  if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
-  await openByPath(path);
+  await acceptDstPath(path);
 }
+onMounted(()=>{
+  const bridge=getShellBridge();
+  if(!bridge)return;
+  // 拖拽热区接桥：壳侧 document drop 监听（pywebview 原生 pywebviewFullPath）→ 本全局回调
+  (window as unknown as Record<string,unknown>)[DROP_CALLBACK_ID]=(path:unknown)=>{void acceptDstPath(String(path))};
+  void bridge.on_files_dropped(DROP_CALLBACK_ID).catch(()=>{});
+});
 async function selectTemplateFile(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪";return}
@@ -491,7 +503,7 @@ async function importCsv(){
 <template>
   <header><div><h1>DST Manager</h1><span>v0.3 · 受控日常编辑与可恢复发布</span></div></header>
   <main>
-    <section v-if="!workspace" class="open"><template v-if="!hasShell"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button></template><button v-else @click="selectAndOpenDst">选择 DST 文件</button></section><section v-else class="open"><button :disabled="isRestoreExecuting" @click="closeWorkspace">关闭</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
+    <section v-if="!workspace" class="open"><template v-if="!hasShell"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button></template><template v-else><button @click="selectAndOpenDst">选择 DST 文件</button><small class="drop-hint">或将 .dst 文件拖入窗口</small></template></section><section v-else class="open"><button :disabled="isRestoreExecuting" @click="closeWorkspace">关闭</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
     <p v-if="error" class="error notice">{{error}}</p>
     <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
     <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>

@@ -60,9 +60,9 @@ v0.3 实测后收集到三组操作易用性反馈（见 [v0.3 测试后意见](
 | 桥方法 | 作用 |
 | --- | --- |
 | `select_file(filters)` | 打开原生单文件对话框，返回绝对路径或 null |
-| `on_drop(cb)`（视实现可行性） | 注册拖拽文件的原生路径回调 |
+| `on_files_dropped(callback_id)` | 注册拖拽文件路径回调（前端传入全局 JS 函数名，真实 OS 拖拽落入窗口后以绝对路径调用之） |
 
-**拖拽路径约束**：WebView2 的 HTML5 drop 事件同样拿不到文件绝对路径，需在壳侧注册原生 drop 处理（WinForms `IDropTarget` 拦截）并经桥转发路径。此项在实施计划中先行验证；若验证不可行，拖拽区域降级为"点击即打开原生对话框"，视觉上仍保留拖拽热区提示。验收以"用户能通过拖拽或点击完成选择"为准。
+**拖拽路径约束**：浏览器 JS 的 HTML5 drop 事件拿不到文件绝对路径，但 **pywebview ≥5 的 EdgeChromium/WebView2 后端原生暴露**——`webview.dom` 的 drop 事件经 WebView2 `postMessageWithAdditionalObjects` 携带真实 `CoreWebView2File`，pywebview 把绝对路径注入 `pywebviewFullPath` 字段（v0.3.1 Task 8 spike 已验证，无需 WinForms `IDropTarget` 手工拦截；若该机制不可用，原降级预案仍为"点击即打开原生对话框"）。验收以"用户能通过拖拽或点击完成选择"为准。
 
 ## 4. DST 文件打开与关闭（F-02 ~ F-04）
 
@@ -161,4 +161,5 @@ v0.3 实测后收集到三组操作易用性反馈（见 [v0.3 测试后意见](
 
 ## 10. 修订记录
 
+- 2026-09-03：拖拽路径 spike 结论（PLAN-DM-011 Task 8，详见 [DMv031-drag-drop-spike](../../../.planning/memos/dst-manager/DMv031-drag-drop-spike.md)）——**可行**：pywebview ≥5 EdgeChromium/WebView2 原生暴露拖拽文件绝对路径（`webview.dom` drop → `CoreWebView2File` → `pywebviewFullPath`），不采用 §3.2 原"WinForms IDropTarget 拦截"降级预案。§3.2 桥面更新为已实现 `on_files_dropped(callback_id)`；前端 `selectAndOpenDst` 抽出 `acceptDstPath(path)`（含 `.dst` 校验与 `openByPath`）供拖拽复用，未打开态"选择 DST 文件"下提示"或将 .dst 文件拖入窗口"。本机为断开 RDP 会话（输入桌面不活跃、光标定位失败），OS 级拖拽最后一跳未能在本机复现，需在活跃输入桌面人工冒烟。
 - 2026-09-03：依据 [v0.3 测试后意见](../../../.planning/memos/DMv03-test-report.md) 与 2026-09-03 评审结论创建；确定壳为唯一入口、v0.3.1/v0.3.2 重基线、保留 DWT、意见 2 定性为恢复可发现性改进。状态 `draft`。
