@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,reactive,ref} from "vue";
 import {ApiError,request} from "./api/client";
-import {getShellBridge,DST_FILE_FILTERS} from "./api/shell";
+import {getShellBridge,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
@@ -73,6 +73,11 @@ let draftSaveQueue:Promise<void>=Promise.resolve();
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
 const insertSheetForm=reactive<{subsetId:string;sequence:string;direction:Placement;count:string;sourceType:LayoutSourceType;sourceFile:string;sourceLayout:string}>({subsetId:"",sequence:"1",direction:"after",count:"1",sourceType:"template_layout",sourceFile:"",sourceLayout:""});
 const insertSubsetForm=reactive<{sequence:string;direction:Placement;title:string;initialSheetCount:string;templateFile:string;templateLayout:string}>({sequence:"1",direction:"after",title:"",initialSheetCount:"1",templateFile:"",templateLayout:""});
+const layoutOptions=ref<string[]>([]);
+const layoutLoading=ref(false);
+const layoutError=ref("");
+const layoutManual=ref(false);
+const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 
 const selected=computed(()=>workspace.value?.sheet_set.subsets.find(item=>item.id===selectedId.value)??null);
 const blocking=computed(()=>workspace.value?.diagnostics.filter(item=>item.severity==="error")??[]);
@@ -156,6 +161,21 @@ async function selectAndOpenDst(){
   if(!path)return;
   if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
   await openByPath(path);
+}
+async function selectTemplateFile(){
+  const bridge=getShellBridge();
+  if(!bridge){error.value="桌面壳未就绪";return}
+  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  if(!path)return;
+  if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
+  insertSheetForm.sourceFile=path;layoutError.value="";layoutManual.value=false;
+  await loadLayoutOptions(path);
+}
+async function loadLayoutOptions(path:string){
+  layoutLoading.value=true;layoutOptions.value=[];
+  try{const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:"2020"})});layoutOptions.value=r.layouts}
+  catch(e){layoutError.value=e instanceof ApiError?e.message:"读取布局失败";layoutManual.value=true}
+  finally{layoutLoading.value=false}
 }
 async function closeWorkspace(){
   const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
@@ -516,7 +536,7 @@ async function importCsv(){
           <fieldset><legend>批量新增图纸</legend><div class="form-grid">
             <label>目标子集<select v-model="insertSheetForm.subsetId"><option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{subset.display_name}}</option></select></label>
             <label>图纸序号<input v-model="insertSheetForm.sequence" inputmode="numeric"></label><label>图纸方向<select v-model="insertSheetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>新增图纸数量<input v-model="insertSheetForm.count" inputmode="numeric"></label>
-            <label>来源类型<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><label>来源文件<input v-model="insertSheetForm.sourceFile"></label><label>来源布局<input v-model="insertSheetForm.sourceLayout"></label>
+            <label>来源类型<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><label>来源文件<button type="button" aria-label="选择模板文件" @click="selectTemplateFile">选择模板文件</button><span v-if="insertSheetForm.sourceFile">{{insertSheetForm.sourceFile}}</span></label><label>来源布局<span v-if="layoutLoading">正在读取布局…</span><template v-else-if="layoutError"><span class="error">{{layoutError}}</span><input v-model="insertSheetForm.sourceLayout"></template><select v-else-if="layoutOptions.length&&!layoutManual" v-model="insertSheetForm.sourceLayout"><option v-for="l in layoutOptions" :value="l">{{l}}</option></select></label>
           </div><button @click="queueInsertSheet">批量新增图纸</button></fieldset>
 
           <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>模板文件<input v-model="insertSubsetForm.templateFile"></label><label>模板布局<input v-model="insertSubsetForm.templateLayout"></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
