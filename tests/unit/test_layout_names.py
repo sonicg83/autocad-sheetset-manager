@@ -99,6 +99,33 @@ def test_get_layout_names_converts_executor_failure_to_502(tmp_path, monkeypatch
     assert excinfo.value.status_code == 502
 
 
+def test_get_layout_names_no_sidecar_after_success_raises_502(tmp_path, monkeypatch):
+    source = tmp_path / "drawing.dwg"
+    source.write_bytes(b"fake dwg bytes")
+
+    def success_without_sidecar(capability, drawing: Path, script: Path, timeout: int) -> CoreConsoleResult:
+        return CoreConsoleResult(
+            args=[],
+            returncode=0,
+            stdout="",
+            stderr="",
+            duration_ms=0,
+            peak_memory_bytes=None,
+        )
+
+    monkeypatch.setattr(
+        "dst_manager.application.service.CoreConsoleExecutor.run",
+        staticmethod(success_without_sidecar),
+    )
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+
+    with pytest.raises(ApplicationError) as excinfo:
+        service.get_layout_names(source, "2020")
+
+    assert excinfo.value.code == "LAYOUT_READ_FAILED"
+    assert excinfo.value.status_code == 502
+
+
 def test_layout_name_cache_database_roundtrip_upsert_and_missing(tmp_path):
     database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
 
