@@ -3,8 +3,11 @@ from pathlib import Path
 
 import pytest
 
+from dst_manager.application.service import ApplicationError
 from dst_manager.infrastructure.autocad.worker import (
+    CadCapability,
     ScriptRenderer,
+    parse_layout_names,
     parse_rename_result,
     rename_request_path,
     rename_result_path,
@@ -187,3 +190,41 @@ def test_render_handles_remains_a_standalone_handle_script():
     assert "DstGetLayoutHandles" in script
     for structural_command in ("DstDeleteLayouts", "_.-LAYOUT", "_Rename", "DstDeleteDefaultLayout"):
         assert structural_command not in script
+
+
+@pytest.fixture
+def fake_capability() -> CadCapability:
+    return CadCapability(
+        version="2020",
+        console=Path("C:/console.exe"),
+        plugin=Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll"),
+    )
+
+
+def test_render_layout_names_script(tmp_path: Path, fake_capability: CadCapability):
+    renderer = ScriptRenderer()
+    script = renderer.render_layout_names(fake_capability, tmp_path)
+    text = script.read_text(encoding="mbcs")
+    assert "_.NETLOAD" in text and str(fake_capability.plugin) in text
+    assert "DstGetLayoutNames" in text
+    assert "_.QSAVE" not in text, "布局枚举为只读命令，不得保存图纸"
+
+
+def test_parse_layout_names(tmp_path: Path):
+    sidecar = tmp_path / "source.dst-layout-names.json"
+    sidecar.write_text('{"version":1,"layouts":["A-01","A-02"]}', encoding="utf-8")
+    assert parse_layout_names(sidecar) == ["A-01", "A-02"]
+
+
+def test_parse_layout_names_rejects_unknown_version(tmp_path: Path):
+    sidecar = tmp_path / "source.dst-layout-names.json"
+    sidecar.write_text('{"version":99,"layouts":[]}', encoding="utf-8")
+    with pytest.raises(ApplicationError):
+        parse_layout_names(sidecar)
+
+
+def test_parse_layout_names_rejects_invalid_json(tmp_path: Path):
+    sidecar = tmp_path / "source.dst-layout-names.json"
+    sidecar.write_text("不是 JSON", encoding="utf-8")
+    with pytest.raises(ApplicationError):
+        parse_layout_names(sidecar)

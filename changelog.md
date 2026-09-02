@@ -2,6 +2,7 @@
 
 ## 2026-09-03（v0.3.1 重基线与 SPEC-DM-007）
 
+- 新增 Worker 插件只读布局枚举命令 `DstGetLayoutNames`（仅遍历纸张空间布局、不修改图纸、不 QSAVE）与 `ScriptRenderer.render_layout_names`/`parse_layout_names`（`<dwg>.dst-layout-names.json` sidecar 渲染与解析，未知版本/解析失败抛 `ApplicationError("LAYOUT_READ_FAILED", ...)`）；单元测试全绿，插件 2016/2020 双版本构建成功，真实 AutoCAD Core Console 验证布局枚举与 Sheet Manager 显示一致且原 DWG 时间戳不变。
 - 新增 `0004_dm007_layout_name_cache` 迁移与 `LayoutNameCacheRow` ORM：布局名全局缓存表 `layout_name_cache`（`file_hash` 主键 + `source_path`/`layouts` JSON/`created_at`），`Database.get_layout_names`/`save_layout_names` 实现读取与 upsert；`LATEST_SCHEMA_REVISION` 提升至 `0004_dm007_layout_name_cache`，全新库升级与旧 MVP 库升级测试同步更新。
 - 新增 [PLAN-DM-011](.planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md)（v0.3.1 实施计划，状态 `proposed`）：9 个任务覆盖布局缓存迁移、Worker 插件只读布局枚举命令、`POST /api/layout-names` 端点、pywebview 桌面壳、前端两态状态机/关闭确认/恢复提示/布局下拉、拖拽路径 spike 与交付收尾。
 - 依据 v0.3 测试后意见（`.planning/memos/DMv03-test-report.md`）评审并重基线：新增 [SPEC-DM-007](docs/dst-manager/specs/SPEC-DM-007-v031-shell-and-usability.md)（桌面壳与操作易用性迭代，状态 `draft`）作为 v0.3.1 依据；SPEC-DM-006 界面重构推后为 v0.3.2（PLAN-DM-010 待编制）。关键决策：提前实现 WebView2 桌面壳（pywebview 选型倾向）并作为唯一交付入口；草稿暂存能力经核对已存在（确定性 workspace_id、自动保存、重开恢复、清空与发布后清除），定性为恢复可发现性改进；`template_layout` 保留 DWG/DWT 双支持；布局缓存（SHA-256 → 布局名）与暂存均存后端应用数据目录，不触碰工作区。同步更新 ROADMAP-DM-001 与计划索引。

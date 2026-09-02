@@ -20,6 +20,7 @@ from dst_manager.infrastructure.autocad.worker import (
     CoreConsoleExecutor,
     ScriptRenderer,
     parse_handles,
+    parse_layout_names,
     parse_rename_result,
     rename_request_path,
     rename_result_path,
@@ -52,6 +53,34 @@ def test_plugin_loads_and_reads_layout_handles(version: str, tmp_path: Path):
     handle_file = drawing.with_suffix(".dst-handles.txt")
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert parse_handles(handle_file.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_read_layout_names_is_read_only_and_matches_sheet_set(version: str, tmp_path: Path):
+    capability = _rename_capability(version)
+    drawing = _copy_rename_drawing(tmp_path, 1)
+    source_document = AcsmDocument(DstCodec().decode_file(_SAMPLE_PROJECT / "图纸集数据文件.dst")).project(
+        _SAMPLE_PROJECT,
+    )
+    expected = sorted(
+        {
+            sheet.layout.layout_name
+            for subset in source_document.subsets
+            for sheet in subset.sheets
+            if sheet.layout.resolved_path.name == drawing.name
+        }
+    )
+    assert expected, "私有样本必须至少声明一个布局"
+    before = (drawing.stat().st_mtime, drawing.stat().st_size)
+    script = ScriptRenderer().render_layout_names(capability, tmp_path)
+    completed = CoreConsoleExecutor().run(capability, drawing, script, 120)
+    sidecar = drawing.with_suffix(".dst-layout-names.json")
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert sidecar.is_file()
+    actual = parse_layout_names(sidecar)
+    assert actual
+    assert set(expected) <= set(actual), (expected, actual)
+    assert (drawing.stat().st_mtime, drawing.stat().st_size) == before, "布局枚举为只读命令，不得改动原 DWG"
 
 
 def _rename_capability(version: str) -> CadCapability:

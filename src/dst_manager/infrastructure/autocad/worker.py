@@ -133,6 +133,17 @@ class ScriptRenderer:
     def render_handles(self, plugin: Path) -> str:
         return "\n".join(["FILEDIA", "0", "SECURELOAD", "0", "CMDECHO", "0", "_.NETLOAD", encode_scr_argument(str(plugin)), "DstGetLayoutHandles", "_.QSAVE", "_.QUIT"]) + "\n"
 
+    def render_layout_names(self, capability: "CadCapability", work_dir: Path) -> Path:
+        script = work_dir / "layout-names.scr"
+        lines = [
+            "FILEDIA 0",
+            "SECURELOAD 0",
+            f"_.NETLOAD {encode_scr_argument(str(capability.plugin))}",
+            "DstGetLayoutNames",
+        ]
+        script.write_text("\n".join(lines) + "\n", encoding="mbcs")
+        return script
+
 
 def parse_handles(text: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -146,6 +157,21 @@ def parse_handles(text: str) -> dict[str, str]:
     if not result:
         raise ValueError("HANDLE_OUTPUT_EMPTY")
     return result
+
+
+def parse_layout_names(path: Path) -> list[str]:
+    from dst_manager.application.service import ApplicationError
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise ApplicationError("LAYOUT_READ_FAILED", f"布局清单读取失败：{path}") from None
+    if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload.get("version") != 1:
+        raise ApplicationError("LAYOUT_READ_FAILED", f"不支持的布局清单版本：{path}")
+    layouts = payload.get("layouts")
+    if not isinstance(layouts, list) or not all(isinstance(name, str) and name for name in layouts):
+        raise ApplicationError("LAYOUT_READ_FAILED", f"布局清单内容无效：{path}")
+    return list(layouts)
 
 
 @dataclass(slots=True)

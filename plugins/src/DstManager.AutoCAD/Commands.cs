@@ -5,6 +5,8 @@ using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Text;
 
 [assembly: CommandClass(typeof(DstManager.AutoCAD.Commands))]
@@ -81,10 +83,47 @@ namespace DstManager.AutoCAD
             document.Editor.WriteMessage("\nDST_MANAGER_HANDLES={0}", rows.Count);
         }
 
+        [CommandMethod("DstGetLayoutNames")]
+        public void GetLayoutNames()
+        {
+            Document document = Application.DocumentManager.MdiActiveDocument;
+            Database database = document.Database;
+            var names = new List<string>();
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                var layouts = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId, OpenMode.ForRead);
+                foreach (DBDictionaryEntry entry in layouts)
+                {
+                    if (!string.Equals(entry.Key, "Model", StringComparison.OrdinalIgnoreCase))
+                        names.Add(entry.Key);
+                }
+                transaction.Abort();
+            }
+            names.Sort(StringComparer.Ordinal);
+            string output = Path.Combine(Path.GetDirectoryName(database.Filename), Path.GetFileNameWithoutExtension(database.Filename) + ".dst-layout-names.json");
+            var result = new LayoutNamesResult { Version = 1, Layouts = names };
+            using (var stream = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var serializer = new DataContractJsonSerializer(typeof(LayoutNamesResult));
+                serializer.WriteObject(stream, result);
+            }
+            document.Editor.WriteMessage("\nDST_MANAGER_LAYOUT_NAMES={0}", names.Count);
+        }
+
         [CommandMethod("DstRenameLayouts")]
         public void RenameLayouts()
         {
             LayoutRenameCommand.Execute(Application.DocumentManager.MdiActiveDocument);
         }
+    }
+
+    [DataContract]
+    internal sealed class LayoutNamesResult
+    {
+        [DataMember(Name = "version", IsRequired = true)]
+        public int Version { get; set; }
+
+        [DataMember(Name = "layouts", IsRequired = true)]
+        public List<string> Layouts { get; set; }
     }
 }
