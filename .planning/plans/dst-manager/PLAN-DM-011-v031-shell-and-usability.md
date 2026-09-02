@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-011
 title: DST Manager v0.3.1 桌面壳与操作易用性迭代实施计划
-status: proposed
+status: completed
 owners:
   - dst-manager
 created: 2026-09-03
@@ -860,3 +860,43 @@ Expected: 全部通过（真实 AutoCAD 系统测试按 `DST_MANAGER_RUN_AUTOCAD
 git add changelog.md docs/dst-manager/README.md .planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md .planning/roadmaps/dst-manager.md
 git commit -m "v0.3.1 交付收尾与验证记录"
 ```
+
+---
+
+## 实际验证（2026-09-03）
+
+Task 1-8 已按各自提交记录交付（HEAD=b3deffd），本 Task 9 在仓库主分支完成全量验证与收尾。
+
+### 命令与结果
+
+| 命令 | 结果 |
+| --- | --- |
+| `uv sync --dev` | 通过（Audited 47 packages） |
+| `uv run ruff check .` | 通过（All checks passed） |
+| `uv run pytest -q`（默认，未启用真实 CAD） | 退出码 0；**566 tests，500 passed / 66 skipped，0 failures、0 errors** |
+| `uv run pytest -q`（`DST_MANAGER_RUN_AUTOCAD=1`，真实 AutoCAD） | 退出码 0；**566 tests，562 passed / 4 skipped，0 failures、0 errors**；62 项真实 AutoCAD 2016/2020 系统测试全数通过 |
+| `uv lock --check` | 通过 |
+| `cd web && npm ci` | 通过 |
+| `cd web && npm run build` | 通过（vue-tsc + vite，零类型错误；`npm run generate:api` 契约漂移门禁保持 LF） |
+| `cd web && npm run test:e2e` | **35/35 passed**（47.1s） |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1` | 2016/2020 双版本构建成功，0 error、2 warning（并发真实 CAD 运行占用 DLL 触发的 MSBuild 复制重试，均自动重试成功） |
+| 桌面壳启动冒烟 `uv run dst-manager desktop` | 通过：uvicorn 在 `127.0.0.1` 临时端口（本次 2036）承载 `create_app()`，Alembic 迁移（含 0004）执行完成，`/api/health` 返回 `{"status":"ok",...}`，WebView2 窗口创建（标题 `DST Manager`、句柄有效），终止后进程树退出干净、日志无报错 |
+
+真实 AutoCAD 环境：本机 AutoCAD 2016/2020 Core Console（`C:/Program Files/Autodesk/AutoCAD 2016|2020/accoreconsole.exe`）可用，双版本插件 DLL 构建产物在位，私有 `sample/project1` 样本存在；因此本次真实 CAD 测试按环境可用执行并通过，非跳过。关键新增用例 `test_read_layout_names_is_read_only_and_matches_sheet_set`（2016/2020）实测产出 sidecar `{"layouts":["0000 封面"],"version":1}`，与原 Sheet Set 布局一致且原 DWG 时间戳/大小不变。
+
+### 跳过项及原因
+
+- 默认全量 pytest 中的 62 项真实 AutoCAD 系统测试（`tests/system_autocad/test_capabilities.py`）：因未设置 `DST_MANAGER_RUN_AUTOCAD=1` 按门禁跳过；已在上文独立真实 CAD 全量运行中全部执行并通过。
+- `tests/unit/test_start_script.py` 4 项真实进程生命周期测试（行 93/157/172）：需另行显式启用，与本次迭代范围无关，维持既有跳过。
+
+### 遗留人工验收项（需活跃桌面人工走查，本会话无法完成）
+
+交互式文件对话框、OS 级拖拽与关闭确认依赖活跃输入桌面的人工操作，本会话仅完成启动冒烟（见上表）；以下按 SPEC-DM-007 §9 与 Task 8 审查决议列为人工验收清单：
+
+1. 启动壳 → 选择 `.dst` 文件打开工作区（原生对话框返回绝对路径后自动打开）。
+2. 选择模板 `.dwg`/`.dwt` 读布局：首次真实读取、二次命中缓存（界面可感知，无需 CAD 二次启动）。
+3. 拖拽 4 项冒烟（Task 8 审查决议，OS 级拖拽最后一跳需活跃桌面）：(1) 未打开态拖入 `.dst` 直接打开；(2) 拖入非 `.dst` 给出"仅支持 DST 文件"提示且不发起打开；(3) 已打开工作区时拖入被拒绝且不破坏当前工作区；(4) 中文/空格文件名的 `.dst` 拖入正常打开。
+4. 关闭确认：存在未发布改动时弹确认框，放弃后回未打开态；确认后工作区与草稿清理。
+5. 退出清理：关闭窗口后 uv/应用进程全部退出、临时端口释放。
+
+以上结果验证通过后无需改动代码；若发现回归再单独立项处理。

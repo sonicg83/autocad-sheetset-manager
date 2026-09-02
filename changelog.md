@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-03（v0.3.1 交付收尾与全量验证）
+
+- 完成 [PLAN-DM-011](.planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md)（状态 `completed`）v0.3.1 交付收尾与全量验证：`uv sync --dev`、`uv run ruff check .`（All checks passed）、`uv lock --check` 通过；`uv run pytest -q` 全量 566 项 **500 passed / 66 skipped**（其中 62 项真实 AutoCAD 测试因未显式启用而跳过），退出码 0；设置 `DST_MANAGER_RUN_AUTOCAD=1` 后全量 pytest **562 passed / 4 skipped**（0 failures、0 errors，退出码 0），62 项真实 AutoCAD 2016/2020 系统测试全数通过（含 Task 2 新增的 `DstGetLayoutNames` 只读布局枚举命令双版本用例：sidecar 产出 `{"version":1,"layouts":["0000 封面"]}` 且原 DWG 时间戳不变）；`npm ci`、`npm run build`（vue-tsc + vite 零类型错误）、Playwright e2e **35/35 通过**；`scripts/build_plugins.ps1` 2016/2020 双版本构建成功（0 error，2 个警告为并发真实 CAD 运行时 DLL 被占用触发的 MSBuild 重试，均自动重试成功）。
+- 桌面壳启动冒烟（v0.3.1 唯一交付入口 `uv run dst-manager desktop`）：后台启动后 uvicorn 在 `127.0.0.1` 临时端口（本次 2036）承载 `create_app()`，Alembic 迁移（含 0004 布局缓存表）执行完成，`GET /api/health` 返回 `{"status":"ok",...}`，WebView2 窗口创建（标题 `DST Manager`、句柄有效），强制终止后进程树退出干净、日志无报错。依赖活跃桌面交互的文件对话框/OS 级拖拽/关闭确认等走查项无法在本会话自动完成，列为遗留人工验收项（清单见 PLAN-DM-011「实际验证」小节）。
+- 本迭代（v0.3.1，SPEC-DM-007）实际交付汇总：布局名全局缓存（SQLite 迁移 `0004_dm007_layout_name_cache` + `LayoutNameCacheRow`）；Worker 插件只读布局枚举命令 `DstGetLayoutNames`（不修改图纸、不 QSAVE）与 SCR/sidecar 渲染解析；`POST /api/layout-names` 端点（SHA-256 缓存命中直返、未命中在临时副本上 accoreconsole 枚举、`LAYOUT_READ_FAILED` 502）；pywebview 桌面壳 `src/dst_manager/interfaces/shell.py`（`uv run dst-manager desktop` 唯一入口）；前端两态状态机（DST 文件选择/关闭确认/草稿恢复提示/保存状态可见性/来源文件选择+布局下拉）；拖拽路径原生桥 `ShellBridge.on_files_dropped`（pywebview ≥5 WebView2 原生 `pywebviewFullPath`，不做 WinForms IDropTarget 降级）。
+
 ## 2026-09-03（v0.3.1 重基线与 SPEC-DM-007）
 
 - 拖拽文件路径 spike 结论与落地（PLAN-DM-011 Task 8）：验证 **pywebview ≥5 EdgeChromium/WebView2 原生暴露拖拽文件绝对路径**（`webview.dom` drop → `CoreWebView2File` → `pywebviewFullPath`），不采用 WinForms `IDropTarget` 降级；落地 `ShellBridge.on_files_dropped(callback_id)`（document 级 drop 监听 + `prevent_default` 拦截导航，命中后 `evaluate_js` 调前端全局回调）并顺手把 `settings` 转发给 `create_app`；前端 `selectAndOpenDst` 抽出 `acceptDstPath(path)`（含 `.dst` 校验与 `openByPath`，已打开工作区时拒绝）供拖拽复用，`onMounted` 注册 `window.__dstManagerAcceptDst` 接桥，未打开态提示"或将 .dst 文件拖入窗口"；`test_shell.py` 新增 4 项（合计 7 passed）、`ruff check .` 与 `npm run build` 通过；决策记录见 [DMv031-drag-drop-spike](.planning/memos/dst-manager/DMv031-drag-drop-spike.md)（本机断开 RDP 会话输入桌面不活跃，OS 级拖拽最后一跳留待活跃桌面人工冒烟）。
