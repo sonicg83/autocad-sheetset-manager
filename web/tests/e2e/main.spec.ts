@@ -96,12 +96,13 @@ test("移除 active 动作不会激活 redo 区命令",async({page})=>{
   expect(previewBodies.at(-1).commands).toEqual([{type:"update_sheet_set",name:"B",custom_properties:{项目号:"P-001"}}]);
 });
 
-test("切换工作区前会刷新全部排队草稿保存",async({page})=>{
+test("关闭未发布改动时确认放弃会先冲刷在途草稿保存再删除",async({page})=>{
   await page.unroute("**/api/workspaces/*/draft");
-  const firstPutStarted=deferred();const releaseFirstPut=deferred();const savedByWorkspace=new Map<string,any>();let putCount=0;
+  const firstPutStarted=deferred();const releaseFirstPut=deferred();const savedByWorkspace=new Map<string,any>();let putCount=0,deleted=false;
   await page.route("**/api/workspaces/*/draft",async route=>{
     const request=route.request();const workspaceId=new URL(request.url()).pathname.split("/").at(-2)!;
     if(request.method()==="GET")return route.fulfill({json:{draft:savedByWorkspace.get(workspaceId)??null,corrupted:false,stale:false,stale_reasons:[]}});
+    if(request.method()==="DELETE"){deleted=true;savedByWorkspace.delete(workspaceId);return route.fulfill({json:{deleted:true}})}
     const body=await request.postDataJSON();putCount+=1;if(putCount===1){firstPutStarted.resolve();await releaseFirstPut.promise}
     const saved={...body,workspace_id:workspaceId,version:putCount};delete saved.expected_version;savedByWorkspace.set(workspaceId,saved);
     return route.fulfill({json:{draft:saved,corrupted:false,stale:false,stale_reasons:[]}});
@@ -109,11 +110,14 @@ test("切换工作区前会刷新全部排队草稿保存",async({page})=>{
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.includes("B.dst")?workspaceVersion("workspace-2","工作区 B","revision-2"):workspace})});
   await openWorkspace(page,"C:\\A.dst");
   const name=page.locator(".summary input");await name.fill("A");await page.getByRole("button",{name:"更新图纸集"}).click();await firstPutStarted.promise;await name.fill("B");await page.getByRole("button",{name:"更新图纸集"}).click();
-  // 关闭 A（已应用动作 cursor==length，不触发确认；在途草稿保存由下一次打开的 draftSaveQueue 门禁冲刷）
+  // 关闭 A：存在未发布改动 → 确认放弃 → discardDraft 先等待在途草稿保存全部完成再删除
+  page.once("dialog",dialog=>dialog.accept());
   await page.getByRole("button",{name:"关闭"}).click();
-  const switching=selectDst(page,"C:\\B.dst");await expect(page.getByRole("status")).toContainText("正在加载工作区");releaseFirstPut.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");
-  expect(putCount).toBe(1);expect(savedByWorkspace.get("workspace-1").actions).toHaveLength(1);
-  await page.getByRole("button",{name:"关闭"}).click();await selectDst(page,"C:\\A.dst");await expect(page.locator(".summary input")).toHaveValue("A");await expect(page.getByText("动作 1/1")).toBeVisible();
+  releaseFirstPut.resolve();
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  await selectDst(page,"C:\\B.dst");await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  expect(putCount).toBe(2);expect(deleted).toBe(true);
+  await page.getByRole("button",{name:"关闭"}).click();await selectDst(page,"C:\\A.dst");await expect(page.locator(".summary input")).toHaveValue("测试图纸集");await expect(page.getByText("动作 0/0")).toBeVisible();
 });
 
 test("草稿网络保存失败会中止工作区切换并保留编辑",async({page})=>{
@@ -268,6 +272,7 @@ test("切换工作区会关闭旧任务监控且忽略迟到终态",async({page}
   await page.route("**/api/workspaces/workspace-A/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"A-command"}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-A/changes/execute",route=>route.fulfill({json:{id:"job-A",workspace_id:"workspace-A",status:"QUEUED",progress:0,attempt:0,files:[]}}));await page.route("**/api/workspaces/workspace-A",route=>{refreshACalls++;return route.fulfill({json:workspaceVersion("workspace-A","工作区 A 被旧任务刷新","revision-A2")})});
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();await expect(page.getByText("任务 job-A")).toBeVisible();
+  page.once("dialog",dialog=>dialog.accept());
   await page.getByRole("button",{name:"关闭"}).click();
   const switching=selectDst(page,"C:\\B.dst");await expect.poll(()=>openBStarted).toBe(true);await page.evaluate(()=>(window as any).__emitJob({id:"job-A",workspace_id:"workspace-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}));openB.resolve();await switching;await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);
   expect(refreshACalls).toBe(0);await expect(page.getByText("任务 job-A")).toHaveCount(0);expect(await page.evaluate(()=>(window as any).__closedEventSources())).toBe(1);
@@ -381,7 +386,7 @@ test("选择非 .dst 文件给出提示且不发起打开",async({page})=>{
 test("关闭且有未发布改动时弹确认，放弃后回未打开态",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/draft",async route=>{
     const method=route.request().method();
-    if(method==="GET")return route.fulfill({json:{draft:{schema_version:1,workspace_id:"workspace-1",base_revision_id:"revision-1",repair_status:"VALID",version:1,cursor:0,actions:[{id:"redo-action",kind:"command_batch",label:"图纸集名称",commands:[{type:"update_sheet_set",name:"新名称",custom_properties:{项目号:"P-001"}}]}]},corrupted:false,stale:false,stale_reasons:[]}});
+    if(method==="GET")return route.fulfill({json:{draft:{schema_version:1,workspace_id:"workspace-1",base_revision_id:"revision-1",repair_status:"VALID",version:1,cursor:1,actions:[{id:"pending-action",kind:"command_batch",label:"图纸集名称",commands:[{type:"update_sheet_set",name:"新名称",custom_properties:{项目号:"P-001"}}]}]},corrupted:false,stale:false,stale_reasons:[]}});
     if(method==="DELETE")return route.fulfill({json:{deleted:true}});
     return route.fallback();
   });
@@ -389,4 +394,20 @@ test("关闭且有未发布改动时弹确认，放弃后回未打开态",async(
   page.once("dialog",dialog=>dialog.accept());
   await page.getByRole("button",{name:"关闭"}).click();
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+});
+
+test("关闭后迟到的刷新响应不会复活工作区",async({page})=>{
+  const refreshGate=deferred();let refreshStarted=false;
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")}));
+  await page.route("**/api/workspaces/workspace-A/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"A-preview"}],diagnostics:[],affected_files:["A.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-A/changes/execute",route=>route.fulfill({json:{id:"job-refresh",status:"SUCCEEDED",progress:100,files:[]}}));
+  await page.route("**/api/workspaces/workspace-A",async route=>{refreshStarted=true;await refreshGate.promise;return route.fulfill({json:workspaceVersion("workspace-A","工作区 A 已刷新","revision-A2")})});
+  await openWorkspace(page,"C:\\A.dst");
+  await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("button",{name:"预览变更"}).click();page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"确认并执行"}).click();
+  await expect.poll(()=>refreshStarted).toBe(true);
+  await page.getByRole("button",{name:"关闭"}).click();
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  refreshGate.resolve();await page.waitForTimeout(100);
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  await expect(page.locator(".summary input")).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toHaveCount(0);
 });

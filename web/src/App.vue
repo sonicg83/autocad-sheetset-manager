@@ -155,13 +155,14 @@ async function selectAndOpenDst(){
   await openByPath(path);
 }
 async function closeWorkspace(){
-  const pending=draftActions.value.length>draftCursor.value||draftSaveFailed.value||draftStale.value;
+  const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
   if(pending){
     const ok=confirm("存在未发布完毕的改动。改动已自动保存，重新打开同一 DST 可继续处理。确定关闭并放弃当前改动？");
     if(!ok)return;
     await discardDraft();
   }
-  resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;
+  // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
+  workspaceLoadGeneration+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
