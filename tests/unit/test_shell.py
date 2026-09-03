@@ -15,10 +15,11 @@ from dst_manager.interfaces.shell import (
 
 
 class _FakeDom:
-    """模拟 window（含 window.dom.document）：捕获 drop 监听器与 evaluate_js 调用。"""
+    """模拟 window（含 window.dom.document）：捕获事件监听器与 evaluate_js 调用。"""
 
     def __init__(self):
-        self.handler = None
+        self.handlers: dict[str, object] = {}  # 事件名 -> DOMEventHandler
+        self.handler = None  # drop 监听器的底层 callable（对齐老用例）
         self.evaluated: list[str] = []
         self.on_calls = 0
 
@@ -33,7 +34,9 @@ class _FakeDom:
     def on(self, event: str, handler) -> None:
         # 对齐 pywebview Element.on：存的是底层 callable（DOMEventHandler.callback）
         self.on_calls += 1
-        self.handler = handler.callback
+        self.handlers[event] = handler
+        if event == "drop":
+            self.handler = handler.callback
 
     def evaluate_js(self, code: str) -> None:
         self.evaluated.append(code)
@@ -86,9 +89,22 @@ def test_shell_bridge_on_files_dropped_registers_drop_listener_once():
     bridge.bind(dom)
     bridge.on_files_dropped("__acceptDstPath")
     bridge.on_files_dropped("__acceptDstPath")  # 幂等：不重复注册监听器
-    assert dom.on_calls == 1
+    assert dom.on_calls == 3  # drop + dragenter + dragover，重复注册不再翻倍
     assert dom.handler is not None
     assert dom.evaluated == []
+
+
+def test_shell_bridge_registers_dragenter_and_dragover_to_allow_drop():
+    """MDN/pywebview 官方示例：必须对 dragenter/dragover preventDefault，页面才是合法放置目标；
+    否则 WebView2 走默认行为（导航/下载该文件），drop 事件根本不会派发到页面。"""
+    dom = _FakeDom()
+    bridge = ShellBridge()
+    bridge.bind(dom)
+    bridge.on_files_dropped("__acceptDstPath")
+    for event in ("dragenter", "dragover"):
+        handler = dom.handlers.get(event)
+        assert handler is not None, f"缺少 {event} 监听器"
+        assert handler.prevent_default and handler.stop_propagation
 
 
 def test_shell_bridge_dropped_path_forwards_to_frontend_callback():
@@ -205,3 +221,17 @@ def test_shutdown_worker_ignores_already_exited():
     _shutdown_worker(process)
     _shutdown_worker(None)  # 不抛错
     assert process.calls == []
+
+def test_frontend_file_filters_match_pywebview_parse_format():
+    """壳桥 select_file 直通 create_file_dialog：前端过滤器字符串必须通过 pywebview
+    parse_file_type 校验（描述仅允许字母/数字/下划线/空格，不得含 / 等符号），否则真实壳
+    在对话框弹出前抛 ValueError；假桥 e2e 不经过该校验，需本契约测试守护。"""
+    import re
+
+    from webview.util import parse_file_type
+
+    source = (Path(__file__).parents[2] / "web" / "src" / "api" / "shell.ts").read_text(encoding="utf-8")
+    filters = re.findall(r'"([^"]+\(\*[^"]+\))"', source)
+    assert filters, "未在 web/src/api/shell.ts 中找到文件过滤器定义"
+    for file_filter in filters:
+        parse_file_type(file_filter)  # 抛 ValueError 即失败

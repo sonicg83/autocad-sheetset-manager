@@ -18,6 +18,21 @@ from dst_manager.infrastructure.filesystem.publisher import file_sha256
 from dst_manager.infrastructure.persistence import Database
 
 
+def _available_settings(tmp_path: Path) -> Settings:
+    """构造 capability 可用的 Settings（dummy console/plugin 文件，仅满足 is_file 检查）。"""
+    console = tmp_path / "accoreconsole.exe"
+    console.write_bytes(b"console")
+    plugin = tmp_path / "DstManager.AutoCAD.dll"
+    plugin.write_bytes(b"plugin")
+    return Settings(
+        data_dir=tmp_path / "data",
+        autocad_2016_console=console,
+        autocad_2016_plugin=plugin,
+        autocad_2020_console=console,
+        autocad_2020_plugin=plugin,
+    )
+
+
 def _fake_run(payload: dict, captured: list) -> callable:
     def run(capability, drawing: Path, script: Path, timeout: int) -> CoreConsoleResult:
         captured.append(drawing)
@@ -46,7 +61,7 @@ def test_get_layout_names_writes_sidecar_then_hits_cache_and_keeps_dwg_untouched
         "dst_manager.application.service.CoreConsoleExecutor.run",
         staticmethod(_fake_run({"version": 1, "layouts": ["001 平面", "002 立面"]}, captured)),
     )
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    service = DstManagerService(_available_settings(tmp_path))
     expected_hash = file_sha256(source)
 
     first = service.get_layout_names(source, "2020")
@@ -68,7 +83,7 @@ def test_get_layout_names_dwt_also_copied_to_source_dwg(tmp_path, monkeypatch):
         "dst_manager.application.service.CoreConsoleExecutor.run",
         staticmethod(_fake_run({"version": 1, "layouts": ["A3", "A4"]}, captured)),
     )
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    service = DstManagerService(_available_settings(tmp_path))
 
     result = service.get_layout_names(template, "2016")
 
@@ -79,18 +94,41 @@ def test_get_layout_names_dwt_also_copied_to_source_dwg(tmp_path, monkeypatch):
     assert template.read_bytes() == before
 
 
+def test_get_layout_names_unconfigured_capability_raises_clear_error(tmp_path):
+    """CAD 能力未配置（缺 console/plugin）时必须在调用 Core Console 前给出可操作的明确错误，
+    不得误报为"DWG 可能正被 AutoCAD 占用"（对齐 inspect_template 的 CAD_CAPABILITY_UNAVAILABLE 先例）。"""
+    source = tmp_path / "drawing.dwg"
+    source.write_bytes(b"fake dwg bytes")
+
+    # 显式传 None 覆盖 env_file=".env"：测试不得依赖宿主机 CAD 配置
+    service = DstManagerService(
+        Settings(
+            data_dir=tmp_path / "data",
+            autocad_2016_console=None,
+            autocad_2016_plugin=None,
+            autocad_2020_console=None,
+            autocad_2020_plugin=None,
+        )
+    )
+
+    with pytest.raises(ApplicationError) as excinfo:
+        service.get_layout_names(source, "2020")
+
+    assert excinfo.value.code == "CAD_CAPABILITY_UNAVAILABLE"
+
+
 def test_get_layout_names_converts_executor_failure_to_502(tmp_path, monkeypatch):
     source = tmp_path / "drawing.dwg"
     source.write_bytes(b"fake dwg bytes")
 
     def failing_run(capability, drawing: Path, script: Path, timeout: int):
-        raise RuntimeError("CAD_CAPABILITY_UNAVAILABLE")
+        raise RuntimeError("accoreconsole 退出码 1")  # capability 已可用，纯执行失败
 
     monkeypatch.setattr(
         "dst_manager.application.service.CoreConsoleExecutor.run",
         staticmethod(failing_run),
     )
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    service = DstManagerService(_available_settings(tmp_path))
 
     with pytest.raises(ApplicationError) as excinfo:
         service.get_layout_names(source, "2020")
@@ -117,7 +155,7 @@ def test_get_layout_names_no_sidecar_after_success_raises_502(tmp_path, monkeypa
         "dst_manager.application.service.CoreConsoleExecutor.run",
         staticmethod(success_without_sidecar),
     )
-    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    service = DstManagerService(_available_settings(tmp_path))
 
     with pytest.raises(ApplicationError) as excinfo:
         service.get_layout_names(source, "2020")

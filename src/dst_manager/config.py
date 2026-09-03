@@ -46,6 +46,18 @@ class Settings(BaseSettings):
             raise ValueError("draft_dir 必须为绝对路径")
         return value.resolve()
 
+    @field_validator(
+        "autocad_2016_console",
+        "autocad_2016_plugin",
+        "autocad_2020_console",
+        "autocad_2020_plugin",
+    )
+    @classmethod
+    def validate_cad_paths(cls, value: Path | None) -> Path | None:
+        # accoreconsole 子进程内 NETLOAD 按自身工作目录解析相对 DLL 路径：Python 侧
+        # is_file（相对项目根）会通过但加载失败，必须在源头统一规范化为绝对路径
+        return value.resolve() if value is not None else None
+
     @property
     def database_url(self) -> str:
         return f"sqlite:///{(self.data_dir / 'dst-manager.db').resolve().as_posix()}"

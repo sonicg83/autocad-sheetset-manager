@@ -3,12 +3,22 @@ import {writeFileSync} from "node:fs";
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(() => {
-    (window as any).pywebview = {
-      api: {
-        select_file: async (fileTypes: string[]) => (window as any).__fakeSelectResult ?? null,
-        on_files_dropped: async () => {},
-      },
+    // 真实 pywebview 在页面加载后才异步注入 window.pywebview 并派发 pywebviewready；
+    // ?late-bridge 模拟该时序（load 后 30ms 才注入），验证前端不把"晚到的桥"当成无壳浏览器
+    const inject = () => {
+      (window as any).pywebview = {
+        api: {
+          select_file: async (fileTypes: string[]) => (window as any).__fakeSelectResult ?? null,
+          on_files_dropped: async () => {},
+        },
+      };
+      window.dispatchEvent(new Event("pywebviewready"));
     };
+    if (new URLSearchParams(window.location.search).has("late-bridge")) {
+      window.addEventListener("load", () => setTimeout(inject, 30));
+    } else {
+      inject();
+    }
   });
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
@@ -470,4 +480,13 @@ test("关闭后迟到的刷新响应不会复活工作区",async({page})=>{
   refreshGate.resolve();await page.waitForTimeout(100);
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
   await expect(page.locator(".summary input")).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toHaveCount(0);
+});
+
+test("壳桥延迟注入（pywebviewready）时初始界面切换为文件选择区",async({page})=>{
+  await page.goto("/?late-bridge");
+  // 注入前：无壳降级态（浏览器场景）
+  await expect(page.getByRole("button",{name:"打开项目"})).toBeVisible();
+  // load 后 30ms 注入桥并派发 pywebviewready：界面应切换，而非永远停留在降级态
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible({timeout:5000});
+  await expect(page.getByRole("button",{name:"打开项目"})).toHaveCount(0);
 });

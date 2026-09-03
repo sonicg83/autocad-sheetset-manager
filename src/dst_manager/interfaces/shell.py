@@ -26,8 +26,9 @@ class ShellBridge:
     拖拽文件路径（v0.3.1 Task 8 spike 结论）：pywebview >=5 的 EdgeChromium/WebView2
     后端原生支持——`webview.dom` 的 drop 事件经 WebView2 `postMessageWithAdditionalObjects`
     携带真实 `CoreWebView2File`，pywebview 将其绝对路径注入事件字典的
-    `pywebviewFullPath` 字段。本桥在 document 上注册 drop 监听（prevent_default，
-    避免拖拽触发默认导航），命中后经 `window.evaluate_js` 把路径转交前端注册的
+    `pywebviewFullPath` 字段。本桥在 document 上注册 dragenter/dragover/drop 监听
+    （dragenter/dragover prevent_default 放行拖放，避免 WebView2 走默认导航/下载），
+    drop 命中后经 `window.evaluate_js` 把路径转交前端注册的
     全局回调（callback_id 为前端传入的全局函数名）。
     """
 
@@ -64,6 +65,9 @@ class ShellBridge:
             return
         from webview.dom import DOMEventHandler
 
+        def _on_drag(event: dict) -> None:
+            pass  # 仅需 preventDefault 使页面成为合法放置目标；无业务逻辑
+
         def _on_drop(event: dict) -> None:
             files = event.get("dataTransfer", {}).get("files", [])
             for file in files:
@@ -71,7 +75,18 @@ class ShellBridge:
                 if path:
                     self._notify_dropped_path(path)
 
-        self._window.dom.document.on(
+        document = self._window.dom.document
+        # 对齐 pywebview 官方 drag & drop 示例（MDN：drop 只在 dragover 被 cancel 后派发）：
+        # 缺 dragenter/dragover 的 preventDefault 时，WebView2 走默认行为（导航/下载被拖文件），
+        # drop 事件不会到达页面。dragover 高频触发，debounce 抑制桥面空转。
+        document.on(
+            "dragenter", DOMEventHandler(_on_drag, prevent_default=True, stop_propagation=True)
+        )
+        document.on(
+            "dragover",
+            DOMEventHandler(_on_drag, prevent_default=True, stop_propagation=True, debounce=500),
+        )
+        document.on(
             "drop", DOMEventHandler(_on_drop, prevent_default=True, stop_propagation=True)
         )
         self._drop_listener_registered = True

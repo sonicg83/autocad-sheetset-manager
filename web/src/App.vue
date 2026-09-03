@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import {computed,onMounted,reactive,ref} from "vue";
+import {computed,reactive,ref,watch} from "vue";
 import {ApiError,request} from "./api/client";
-import {getShellBridge,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
+import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
@@ -152,7 +152,8 @@ async function openByPath(path:string){
   catch(e){if(generation===workspaceLoadGeneration){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
 async function openWorkspace(){await openByPath(dstPath.value)}
-const hasShell=computed(()=>getShellBridge()!==null);
+// 桥晚于首帧注入（pywebviewready）：依赖 shellReady 才能在就绪时重算，否则永远显示无壳降级界面
+const hasShell=computed(()=>shellReady.value&&getShellBridge()!==null);
 const DST_EXT=/\.dst$/i;
 const DROP_CALLBACK_ID="__dstManagerAcceptDst";
 async function acceptDstPath(path:string){
@@ -167,14 +168,16 @@ async function selectAndOpenDst(){
   if(!path)return;
   await acceptDstPath(path);
 }
-onMounted(()=>{
+function registerDropBridge(){
   const bridge=getShellBridge();
   // 老/部分桥面可能只暴露 select_file：on_files_dropped 缺失时静默跳过拖拽接桥
   if(!bridge||typeof bridge.on_files_dropped!=="function")return;
   // 拖拽热区接桥：壳侧 document drop 监听（pywebview 原生 pywebviewFullPath）→ 本全局回调
   (window as unknown as Record<string,unknown>)[DROP_CALLBACK_ID]=(path:unknown)=>{void acceptDstPath(String(path))};
   void bridge.on_files_dropped(DROP_CALLBACK_ID).catch(()=>{});
-});
+}
+// 桥就绪时机不定（早于/晚于首帧注入都可能）：immediate 覆盖已就绪，watch 覆盖 pywebviewready 晚到
+watch(shellReady,ready=>{if(ready)registerDropBridge()},{immediate:true});
 async function selectTemplateFile(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪";return}

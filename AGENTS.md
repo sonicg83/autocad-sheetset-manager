@@ -9,6 +9,11 @@
 - 标识符、协议字段、API 路径、错误码以及第三方工具的固定名称保持其原始英文形式。
 - 文件统一使用 UTF-8；AutoCAD SCR 等明确要求其他编码的文件除外。
 
+## 网络搜索工具
+
+- 需要搜索网页、查找资料或调研外部信息时，不得使用内置的原生搜索工具（如 WebSearch），必须使用已注册的 `tavily-cli` 技能（`tvly search`、`tvly extract` 等，详见 `tavily-search` 等技能说明）。
+- 原生搜索不可用或报错时，优先排查 `tvly` 安装与认证状态（`tvly --status`），仍然失败时向用户说明并等待指示，不要静默改用原生搜索。
+
 ## 文档归档约定
 
 - 文档治理的权威设计是 `docs/integration/architecture/ARCH-INT-001-documentation-organization.md`；本节只保留日常执行约束，出现歧义时以权威设计为准。

@@ -1306,6 +1306,14 @@ class DstManagerService:
         if cached is not None:
             return {"layouts": cached, "cached": True, "file_hash": digest}
         capability = self._capability(cad_version)
+        if not capability.available:
+            # 与 inspect_template 同一先例：未配置是环境问题，不得混入"文件被占用"的执行失败提示
+            raise ApplicationError(
+                "CAD_CAPABILITY_UNAVAILABLE",
+                f"AutoCAD {cad_version} 未配置：缺少 Core Console 或 Worker 插件路径，"
+                "请检查 .env 配置或运行 dst-manager doctor",
+                503,
+            )
         renderer, executor = ScriptRenderer(), CoreConsoleExecutor()
         with tempfile.TemporaryDirectory(prefix="dst-layouts-") as tmp:
             work_dir = Path(tmp)

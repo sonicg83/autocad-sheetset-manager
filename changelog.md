@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-03（v0.3.1 修复：壳桥就绪响应式与拖拽放行、模板过滤器格式、布局读取误报、CAD 插件相对路径；搜索工具约束）
+
+- 修复"布局枚举未产出结果"：`.env` 中的相对插件路径（`./plugins/...`）在 Python 侧 `is_file` 检查（相对项目根）能通过，但 accoreconsole 子进程内 `NETLOAD` 按自身工作目录解析而加载失败（"无法加载程序集"→`DstGetLayoutNames` 成未知命令），退出码仍为 0、无 sidecar。`config.py` 新增 `validate_cad_paths`：四个 CAD 路径字段在 Settings 源头统一 `resolve()` 为绝对路径（doctor/脚本渲染/NETLOAD 全链路一致）。`test_config.py` 新增相对路径规范化与 None 不变两项（511 passed / 66 skipped）；真机验证 `Settings()`（读 .env 相对路径）经 `get_layout_names` 对 `sample/template/市政项目模板-通用.dwg` 成功枚举 `['A1','A2','A3','A3NS']`。
+
+- 修复新增图纸"读取布局失败：DWG 可能被 AutoCAD 占用"误报：根因为本机 `.env` 缺 `DST_MANAGER_AUTOCAD_*_PLUGIN` 两行（`CadCapability.available` 要求 console 与 plugin 同时存在），`CoreConsoleExecutor` 抛出的 `CAD_CAPABILITY_UNAVAILABLE` 被 `get_layout_names` 一律包装成"文件被占用"。两处修复：① `service.py` 在调用 Core Console 前置能力检查，未配置时抛 `CAD_CAPABILITY_UNAVAILABLE`(503) 并给出可操作提示（对齐 `inspect_template` 先例，履行 SPEC-DM-007"关闭占用提示"要求）；② `.env` 补齐两个插件路径（DLL 位于 `plugins/autocad2016|2020/`），`dst-manager doctor` 双版本 `available: true`。`test_layout_names.py` 新增未配置分流用例并让 mock executor 用例显式传可用路径（不再依赖宿主机 `.env`），全量 pytest **509 passed / 66 skipped**；`DST_MANAGER_RUN_AUTOCAD=1` 下真实 AutoCAD 2016/2020 布局枚举系统测试通过。
+
+- 修复新增图纸「选择模板文件」报错：`TEMPLATE_FILE_FILTERS` 描述 "DWG/DWT 文件" 含 `/`，不满足 pywebview `parse_file_type` 校验的 `[\w ]+`（描述仅允许字母/数字/下划线/空格），真实壳在对话框弹出前抛 ValueError；描述改为 "DWG DWT 文件"，`shell.ts` 注释补充格式约束，`tests/unit/test_shell.py` 新增契约测试直接以 pywebview 校验 `shell.ts` 全部过滤器字符串（假桥 e2e 不经过该校验），15 passed；`web/dist` 已重建。
+
+- `AGENTS.md` 新增「网络搜索工具」约束：网页搜索/调研必须使用已注册的 `tavily-cli` 技能（`tvly search`、`tvly extract` 等），不得使用内置原生搜索工具；搜索失败时先排查 `tvly` 安装与认证状态，仍失败则向用户说明并等待指示。
+
 ## 2026-09-03（v0.3.1 收尾补丁：壳托管 CAD Worker 与代码组织契约）
 
 - 桌面壳补齐 CAD Worker 子进程托管（修复壳模式下发布/布局重建等队列型 CAD 任务无人认领的缺口）：`run_desktop` 在窗口创建前经 `_spawn_worker` 拉起 `sys.executable -m dst_manager.interfaces.cli worker`（`cwd` 与 `--project-root` 同取当前工作目录，与壳内 API 同库同队列；`PYTHONUTF8=1` 继承），`_report_early_exit` 后台线程观察 2 秒、立即退出（配置错误等）时向 stderr 输出可见警告，窗口关闭时 `_shutdown_worker` terminate→wait(5)→升级 kill 回收（与 start.ps1 Stop 强杀语义一致，Worker 中断的任务由既有启动恢复闭环）；`tests/unit/test_shell.py` 新增 6 项（13 passed），真实壳冒烟验证 Worker 父子链拉起与整树回收（taskkill 后 0 残留）。注意：强杀壳进程（taskkill /T /F）走 OS 级树杀，正常关窗路径的 terminate 回收逻辑由单测覆盖；孤儿 Worker 仍可被 start.ps1 -Action Stop 按既有命令行匹配清理。
