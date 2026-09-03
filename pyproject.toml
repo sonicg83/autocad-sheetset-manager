@@ -13,6 +13,7 @@ dependencies = [
     "pywebview>=5,<6",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0,<3",
+    "tavily-cli>=0.1.8",
     "typer>=0.16,<1",
     "uvicorn>=0.35,<1",
 ]
