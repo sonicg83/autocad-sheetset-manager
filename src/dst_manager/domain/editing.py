@@ -306,7 +306,8 @@ def _compressed_group_title(base_title: str, sheet_titles: list[str]) -> str:
             suffixes.append(title[len(prefix):-1])
         else:
             return base_title  # 结构异常时防御性回退为基础标题
-    return f"{prefix}{')-('.join(suffixes)})"
+    # 区间压缩：文件名后缀只保留首末两张图纸的序号（如 (一)-(六)），与图纸标题后缀语义对齐
+    return f"{prefix}{suffixes[0]})-({suffixes[-1]})"
 
 
 def derive_document_structure(
@@ -413,6 +414,8 @@ def derive_document_structure(
         for subset in subsets
     ]
     group_titles = derive_group_titles(groups, suffix_options.enabled, suffix_options.suffix_type)
+    # 项目级 DWG 前缀（如 `RQ-`）：从图纸集既有 DWG 登记名提取，模板来源派生新子集时对齐既有命名
+    project_prefix = _project_dwgs_prefix(document)
     derived_subsets = []
     for subset, titles_for_subset in zip(subsets, group_titles):
         title = titles[subset.acsm_id]
@@ -421,7 +424,7 @@ def derive_document_structure(
             sheet.layout.layout_name = _layout_name(sheet.number, sheet.title)
         number_range = _number_range(subset.sheets)
         source_target = _source_target_file(document, subset, layout_sources)
-        target_file = _target_file_name(source_target, number_range, _compressed_group_title(title, titles_for_subset))
+        target_file = _target_file_name(source_target, number_range, _compressed_group_title(title, titles_for_subset), project_prefix)
         derived_subsets.append(
             DerivedSubset(subset.acsm_id, title, number_range, f"{number_range} {title}", subset.sheets, source_target, target_file),
         )
@@ -650,11 +653,25 @@ def _source_target_file(
     return ""
 
 
-def _target_file_name(source_target: str, number_range: str, title: str) -> str:
+def _target_file_name(source_target: str, number_range: str, title: str, fallback_prefix: str = "") -> str:
     base = Path(source_target) if source_target else Path(f"{number_range} {title}.dwg")
     prefix_match = re.match(r"^(.*?-)(?=\d)", base.stem)
-    prefix = prefix_match.group(1) if prefix_match else ""
+    # 来源文件名自带前缀（如 `RQ-01 图纸目录`）优先；模板来源无前缀时回退项目级前缀对齐既有 DWG
+    prefix = prefix_match.group(1) if prefix_match else fallback_prefix
     file_name = f"{prefix}{number_range} {title}.dwg"
     if _UNSAFE_NAME.search(file_name) or len(file_name) > 240:
         raise EditingError("DWG_FILE_NAME_INVALID", f"派生DWG文件名无效：{file_name}")
     return str(base.with_name(file_name))
+
+
+def _project_dwgs_prefix(document: SheetSetDocument) -> str:
+    # 从图纸集既有 DWG 登记名（resolved_path 或 file_name）提取项目前缀；无登记或无前缀时返回空串
+    for subset in document.subsets:
+        for sheet in subset.sheets:
+            value = str(sheet.layout.resolved_path or sheet.layout.file_name)
+            if not value:
+                continue
+            match = re.match(r"^(.*?-)(?=\d)", Path(value).stem)
+            if match:
+                return match.group(1)
+    return ""

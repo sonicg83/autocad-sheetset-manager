@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-03（v0.3.2 实测修复：文件名后缀区间压缩与项目前缀对齐）
+
+- 依据 `sample/project3 - copy2` 图纸集实测反馈修订派生 DWG 文件名两条规则（[SPEC-DM-008](docs/dst-manager/specs/SPEC-DM-008-v032-naming-and-template-flows.md) §3.2 同步修订并补修订记录）：① 后缀压缩改为**区间形式**——文件名后缀只保留首末两张图纸的序号，六张图纸为 `RQ-011-016 … (一)-(六).dwg` 而非 `(一)-(二)-(三)-(四)-(五)-(六).dwg`（`domain/editing.py` 的 `_compressed_group_title` 改为 `首后缀)-(末后缀` 拼接；两张时与原输出一致，既有用例不变）；② **项目前缀对齐**——新增 `_project_dwgs_prefix(document)` 从图纸集既有 DWG 登记名提取项目级前缀（如 `RQ-001-002 大运北站图纸目录 (一)-(二).dwg` → `RQ-`），`_target_file_name` 增加回退参数：来源文件名自带前缀优先，模板来源（新建子集的布局模板文件无前缀）时回退项目前缀，新子集派生 `RQ-003-004 主要设备及材料表 (一)-(二).dwg` 而非 `003-004 …`。`tests/unit/test_core.py` 新增 6 张区间压缩与新建子集前缀继承两用例（先确认失败原因正确再实现）；全量 `uv run pytest` **619 项，547 passed / 72 skipped / 0 failed**、`ruff check .` 无违规。
+
 ## 2026-09-03（v0.3.2 补遗：新建子集布局模板选择与添加图纸对齐）
 
 - 新建子集表单的"布局模板文件/布局模板名称"从手动输入对齐为批量新增图纸同款交互——按钮打开文件选择对话框（`.dwg/.dwt` 过滤器）→ 选取后经 `/api/layout-names` 读取布局列表（后端缓存优先）→ 从下拉列表选择布局名称（读取失败回退手动输入，与批量新增图纸一致）。`web/src/App.vue`：`loadLayoutOptions(path, target)` 泛化为按表单注入目标状态组（`LayoutPickerTarget`），新增子集独立的 `subsetLayoutOptions/Loading/Error/Manual` 四件套避免与批量新增图纸共享串扰，新增 `selectSubsetTemplateFile`（复用 `TEMPLATE_FILE_FILTERS`、`DWG_DWT_EXT` 校验与 `selectTemplateFile` 同构流程）；M6 重置同步清空子集布局选项状态。E2E 同步：新建子集入队用例改为按钮选择 + 下拉选布局（命令断言不变），关闭重置用例改为断言子集布局路径与下拉清空。`npm run build` 零类型错误、Playwright e2e **39/39 通过**。

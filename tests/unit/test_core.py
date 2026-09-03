@@ -289,6 +289,40 @@ def test_derived_target_file_name_keeps_base_title_without_suffix(tmp_path: Path
     assert Path(derived.subsets[0].target_file).name == "RQ-01 图纸目录.dwg"
 
 
+def test_derived_target_file_name_compresses_suffix_range(tmp_path: Path):
+    sheets = [
+        Sheet(str(i), f"{i:02d}", "平面图", LayoutReference(str(tmp_path / "RQ-01 平面图.dwg"), "", f"{i:02d} 平面图", ""))
+        for i in range(1, 7)
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "01-06 平面图", 1, sheets)])
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 1))
+
+    assert [sheet.title for sheet in derived.subsets[0].sheets] == ["平面图 (一)", "平面图 (二)", "平面图 (三)", "平面图 (四)", "平面图 (五)", "平面图 (六)"]
+    assert Path(derived.subsets[0].target_file).name == "RQ-01-06 平面图 (一)-(六).dwg"
+
+
+def test_insert_subset_target_file_inherits_project_dwgs_prefix(tmp_path: Path):
+    sheets = [
+        Sheet("1", "001", "图纸目录", LayoutReference(str(tmp_path / "RQ-001-002 大运北站图纸目录 (一)-(二).dwg"), "", "001 图纸目录 (一)", "")),
+        Sheet("2", "002", "图纸目录", LayoutReference(str(tmp_path / "RQ-001-002 大运北站图纸目录 (一)-(二).dwg"), "", "002 图纸目录 (二)", "")),
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "001-002 大运北站图纸目录", 1, sheets)])
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "主要设备及材料表",
+        "initial_sheet_count": 2,
+        "base_template_file": str(tmp_path / "图纸基底.dwg"),
+        "source": {"type": "template_layout", "file": str(tmp_path / "布局模板.dwt"), "layout": "A3"},
+    }
+
+    derived = derive_document_structure(document, [command], SuffixOptions(True, 1))
+
+    assert Path(derived.subsets[-1].target_file).name == "RQ-003-004 主要设备及材料表 (一)-(二).dwg"
+
+
 def _insert_subset_command(initial_sheet_count: int = 1) -> dict:
     return {
         "type": "insert_subset",
