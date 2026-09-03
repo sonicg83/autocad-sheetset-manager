@@ -1442,6 +1442,37 @@ def test_structural_preview_estimates_core_console_count_concurrency_and_histori
     }
 
 
+def test_structural_preview_resolves_existing_snapshot_from_target_subset(tiny_workspace, tmp_path: Path):
+    """existing_snapshot 空来源在预览规划期解析为目标子集首图登记，下游零改动。"""
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+
+    preview = service.preview_changes(
+        workspace.id,
+        workspace.revision_id,
+        [{
+            "type": "insert_sheet",
+            "target_subset_id": workspace.document.subsets[0].acsm_id,
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "existing_snapshot"},
+        }],
+    )
+
+    assert preview["executable"] is True, preview["diagnostics"]
+    group = preview["execution_intent"]["groups"][0]
+    resolved = group["layouts"][1]
+    assert resolved["source_type"] == "existing_snapshot"
+    assert resolved["source_file"] == str((tmp_path / "A.dwg").resolve())
+    assert resolved["source_layout"] == "001 平面"
+    # 解析出的 DWG 进入既有来源基准（SHA-256）链路
+    assert str((tmp_path / "A.dwg").resolve()) in {
+        item["path"] for item in preview["execution_intent"]["source_baselines"]
+    }
+
+
 def test_cad_estimate_never_places_a_long_task_below_its_own_duration(tmp_path: Path):
     service = DstManagerService(Settings(data_dir=tmp_path / "data", cad_max_parallel=4))
     service.database.cad_duration_history = Mock(return_value=[])

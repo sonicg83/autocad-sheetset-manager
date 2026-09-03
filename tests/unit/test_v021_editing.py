@@ -411,6 +411,148 @@ def test_delete_sheet_rejects_empty_subset_and_legacy_moves_remain_unsupported()
     assert exc_info.value.code == "COMMAND_UNSUPPORTED"
 
 
+def test_insert_sheet_existing_snapshot_resolves_from_target_subset_first_sheet():
+    """existing_snapshot 空来源从目标子集首张图纸的 DST 登记解析回填（SPEC-DM-008 F-02）。"""
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [
+            Subset(
+                "subset-1",
+                "4-5 燃气管道平面图",
+                1,
+                [_sheet("sheet-1", "0004", "燃气管道平面图"), _sheet("sheet-2", "0005", "燃气管道平面图")],
+            )
+        ],
+    )
+    first = document.subsets[0].sheets[0]
+
+    derived = derive_document_structure(
+        document,
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": "subset-1",
+                "ordinal": 1,
+                "placement": "after",
+                "count": 1,
+                "source": {"type": "existing_snapshot"},
+            }
+        ],
+        SuffixOptions(True, 2),
+    )
+
+    inserted = derived.subsets[0].sheets[1]
+    assert inserted.acsm_id not in {"sheet-1", "sheet-2"}
+    assert derived.layout_sources[inserted.acsm_id] == {
+        "type": "existing_snapshot",
+        "file": str(first.layout.resolved_path or first.layout.file_name),
+        "layout": first.layout.layout_name,
+    }
+    assert inserted.layout.file_name == str(first.layout.resolved_path or first.layout.file_name)
+    # 目标布局名由派生流程重新生成，解析出的来源布局只存在于 layout_sources
+    assert inserted.layout.layout_name == "0005 燃气管道平面图 (2)"
+
+
+def test_insert_sheet_existing_snapshot_resolves_even_when_only_layout_empty():
+    """existing_snapshot 的 file/layout 任一为空即触发解析回填。"""
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [
+            Subset(
+                "subset-1",
+                "4 燃气管道平面图",
+                1,
+                [_sheet("sheet-1", "0004", "燃气管道平面图")],
+            )
+        ],
+    )
+    first = document.subsets[0].sheets[0]
+
+    derived = derive_document_structure(
+        document,
+        [
+            {
+                "type": "insert_sheet",
+                "target_subset_id": "subset-1",
+                "ordinal": 1,
+                "placement": "after",
+                "count": 1,
+                "source": {"type": "existing_snapshot", "file": "", "layout": ""},
+            }
+        ],
+        SuffixOptions(True, 1),
+    )
+
+    inserted = derived.subsets[0].sheets[1]
+    assert derived.layout_sources[inserted.acsm_id]["file"] == str(first.layout.resolved_path or first.layout.file_name)
+    assert derived.layout_sources[inserted.acsm_id]["layout"] == first.layout.layout_name
+
+
+def test_insert_sheet_existing_snapshot_rejects_empty_target_subset():
+    """目标子集无任何图纸登记时阻断：LAYOUT_SOURCE_INVALID。"""
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [Subset("subset-1", "空子集", 1, [])],
+    )
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(
+            document,
+            [
+                {
+                    "type": "insert_sheet",
+                    "target_subset_id": "subset-1",
+                    "ordinal": 1,
+                    "placement": "after",
+                    "count": 1,
+                    "source": {"type": "existing_snapshot"},
+                }
+            ],
+            SuffixOptions(True, 1),
+        )
+
+    assert exc_info.value.code == "LAYOUT_SOURCE_INVALID"
+    assert "目标子集缺少可用的已有布局来源" in str(exc_info.value)
+
+
+def test_insert_sheet_existing_snapshot_rejects_first_sheet_without_registration():
+    """目标子集首张图纸登记为空同样阻断：LAYOUT_SOURCE_INVALID。"""
+    document = SheetSetDocument(
+        "db",
+        "图纸集",
+        [
+            Subset(
+                "subset-1",
+                "4 燃气管道平面图",
+                1,
+                [Sheet("sheet-1", "0004", "燃气管道平面图", LayoutReference("", "", "", ""))],
+            )
+        ],
+    )
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(
+            document,
+            [
+                {
+                    "type": "insert_sheet",
+                    "target_subset_id": "subset-1",
+                    "ordinal": 1,
+                    "placement": "after",
+                    "count": 1,
+                    "source": {"type": "existing_snapshot"},
+                }
+            ],
+            SuffixOptions(True, 1),
+        )
+
+    assert exc_info.value.code == "LAYOUT_SOURCE_INVALID"
+    assert "目标子集缺少可用的已有布局来源" in str(exc_info.value)
+
+
 def test_build_structural_plan_consumes_derived_document_without_filesystem_source_checks():
     document = SheetSetDocument(
         "db",

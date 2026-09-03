@@ -19,17 +19,27 @@ class ContractModel(BaseModel):
 
 class LayoutSource(ContractModel):
     type: Literal["existing_snapshot", "template_layout"]
-    file: str = Field(min_length=1)
-    layout: str = Field(min_length=1)
+    file: str = ""
+    layout: str = ""
+
+    @model_validator(mode="after")
+    def require_template_layout_fields(self) -> "LayoutSource":
+        if self.type == "template_layout" and (not self.file.strip() or not self.layout.strip()):
+            raise ValueError("LAYOUT_SOURCE_INVALID: 新增图纸的来源文件或布局无效")
+        return self
 
     @field_validator("file")
     @classmethod
     def validate_absolute_file(cls, value: str) -> str:
+        if not value:
+            return value
         return validate_absolute_source_file(value)
 
     @field_validator("layout")
     @classmethod
     def validate_layout_name(cls, value: str) -> str:
+        if not value:
+            return value
         return normalize_derived_name(value, "布局名称")
 
 

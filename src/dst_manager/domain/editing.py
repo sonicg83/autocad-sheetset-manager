@@ -340,8 +340,10 @@ def derive_document_structure(
             if "number" in command or "title" in command:
                 raise EditingError("SHEET_INSERT_DERIVED_FIELD_NOT_ACCEPTED", "新增图纸不接收图号或标题")
             count = _positive_int(command.get("count", 1), "SHEET_INSERT_COUNT_INVALID")
-            position = _insertion_index(command, len(target.sheets), "SHEET_POSITION_INVALID")
             source = _layout_source(command)
+            if source["type"] == "existing_snapshot" and (not source["file"] or not source["layout"]):
+                source = _resolve_existing_snapshot(document, target.acsm_id)
+            position = _insertion_index(command, len(target.sheets), "SHEET_POSITION_INVALID")
             new_sheets = []
             for offset in range(count):
                 sheet_id = _new_id(document_seed, "sheet", command_index, offset)
@@ -506,9 +508,30 @@ def _layout_source(command: dict[str, Any]) -> dict[str, str]:
     source_type = str(source.get("type", ""))
     source_file = str(source.get("file", "")).strip()
     source_layout = str(source.get("layout", "")).strip()
-    if source_type not in {"existing_snapshot", "template_layout"} or not source_file or not source_layout:
+    if source_type not in {"existing_snapshot", "template_layout"}:
+        raise EditingError("LAYOUT_SOURCE_INVALID", "新增图纸的来源文件或布局无效")
+    if source_type == "template_layout" and (not source_file or not source_layout):
         raise EditingError("LAYOUT_SOURCE_INVALID", "新增图纸的来源文件或布局无效")
     return {"type": source_type, "file": source_file, "layout": source_layout}
+
+
+def _resolve_existing_snapshot(document: SheetSetDocument, target_subset_id: str) -> dict[str, str]:
+    """从目标子集首张图纸的 DST 登记解析已有布局来源（只读原始文档）。
+
+    解析发生在 layout_sources 写入前，保证 planning/baseline/cad_job 读到
+    齐全的三字段。目标子集缺图或首图登记为空时阻断（SPEC-DM-008 F-02）。
+    """
+    original = next(
+        (subset for subset in document.subsets if subset.acsm_id == target_subset_id),
+        None,
+    )
+    if original is not None and original.sheets:
+        sheet = original.sheets[0]
+        file_name = str(sheet.layout.resolved_path or sheet.layout.file_name)
+        layout = sheet.layout.layout_name
+        if file_name and layout:
+            return {"type": "existing_snapshot", "file": file_name, "layout": layout}
+    raise EditingError("LAYOUT_SOURCE_INVALID", "目标子集缺少可用的已有布局来源")
 
 
 def _positive_int(value: object, code: str) -> int:
