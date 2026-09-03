@@ -21,7 +21,7 @@ related:
 v0.3 实测后收集到三组操作易用性反馈（见 [v0.3 测试后意见](../../../.planning/memos/DMv03-test-report.md)）：DST 文件打开依赖手输绝对路径、待处理改动恢复不可发现、模板来源文件与布局名依赖手动输入。经评审（2026-09-03），确定如下基线调整：
 
 - 本规范驱动的迭代为 **v0.3.1**，提前于原 UI/UX 重构；
-- 原 [SPEC-DM-006](SPEC-DM-006-dst-manager-desktop-ui-ux.md) 驱动的界面重构（原定 v0.3.1，其实施计划 PLAN-DM-010 尚未编制）推后为 **v0.3.2**。先落地本迭代定义的交互模型，SPEC-DM-006 的视觉系统在其上重构，避免返工。
+- 原 [SPEC-DM-006](SPEC-DM-006-dst-manager-desktop-ui-ux.md) 驱动的界面重构（原定 v0.3.1，其实施计划 PLAN-DM-010 尚未编制）推后为 **v0.3.2**（2026-09-03 再次重基线为 **v0.3.3**，v0.3.2 由 [SPEC-DM-008](SPEC-DM-008-v032-naming-and-template-flows.md) 占用）。先落地本迭代定义的交互模型，SPEC-DM-006 的视觉系统在其上重构，避免返工。
 
 关键评审结论：
 
@@ -40,7 +40,7 @@ v0.3 实测后收集到三组操作易用性反馈（见 [v0.3 测试后意见](
 
 ### 2.2 非目标
 
-- 不引入 [SPEC-DM-006](SPEC-DM-006-dst-manager-desktop-ui-ux.md) 的设计令牌、主题与统一组件系统（v0.3.2 范围）；
+- 不引入 [SPEC-DM-006](SPEC-DM-006-dst-manager-desktop-ui-ux.md) 的设计令牌、主题与统一组件系统（v0.3.3 范围）；
 - 不新增草稿存储结构或操作历史回放能力（沿用现有草稿契约）；
 - 不实现"最近打开"列表（后续按需另立需求）；
 - 不改变后端 API 契约、发布事务、安全门禁与 CAD 分流约束。
@@ -161,5 +161,6 @@ v0.3 实测后收集到三组操作易用性反馈（见 [v0.3 测试后意见](
 
 ## 10. 修订记录
 
+- 2026-09-03：版本重基线——v0.3.2 由 [SPEC-DM-008](SPEC-DM-008-v032-naming-and-template-flows.md)（命名与模板流程需求变更）占用，本规范所指"v0.3.2 界面重构范围"重基线为 v0.3.3；PLAN-DM-010 编号含义不变（界面重构实施计划，待编制）。
 - 2026-09-03：拖拽路径 spike 结论（PLAN-DM-011 Task 8，详见 [DMv031-drag-drop-spike](../../../.planning/memos/dst-manager/DMv031-drag-drop-spike.md)）——**可行**：pywebview ≥5 EdgeChromium/WebView2 原生暴露拖拽文件绝对路径（`webview.dom` drop → `CoreWebView2File` → `pywebviewFullPath`），不采用 §3.2 原"WinForms IDropTarget 拦截"降级预案。§3.2 桥面更新为已实现 `on_files_dropped(callback_id)`；前端 `selectAndOpenDst` 抽出 `acceptDstPath(path)`（含 `.dst` 校验与 `openByPath`）供拖拽复用，未打开态"选择 DST 文件"下提示"或将 .dst 文件拖入窗口"。本机为断开 RDP 会话（输入桌面不活跃、光标定位失败），OS 级拖拽最后一跳未能在本机复现，需在活跃输入桌面人工冒烟。
 - 2026-09-03：依据 [v0.3 测试后意见](../../../.planning/memos/DMv03-test-report.md) 与 2026-09-03 评审结论创建；确定壳为唯一入口、v0.3.1/v0.3.2 重基线、保留 DWT、意见 2 定性为恢复可发现性改进。状态 `draft`。

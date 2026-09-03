@@ -874,8 +874,11 @@ def _system_settings(tmp_path: Path) -> Settings:
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])
-def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, tmp_path: Path):
+@pytest.mark.parametrize("base_ext", ["dwg", "dwt"])
+def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, base_ext: str, tmp_path: Path):
     dst, template, template_layout = _copy_single_subset_project(tmp_path)
+    base_template = tmp_path / f"base-template.{base_ext}"
+    shutil.copy2(template, base_template)
     service = DstManagerService(_system_settings(tmp_path))
     workspace = service.open_workspace(dst)
     command = {
@@ -884,12 +887,14 @@ def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, 
         "placement": "after",
         "title": "独立DWG验证",
         "initial_sheet_count": 3,
+        "base_template_file": str(base_template),
         "source": {"type": "template_layout", "file": str(template), "layout": template_layout},
     }
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
     assert preview["execution_intent"] is not None, preview
     created_group = next(group for group in preview["execution_intent"]["groups"] if group["operation"] == "create")
     assert created_group["source_target_file"] is None
+    assert created_group["source_snapshot"] == str(base_template.resolve())
     assert len(created_group["layouts"]) == 3
 
     job = _execute_confirmed(service, workspace, [command], version, preview)
@@ -908,6 +913,101 @@ def test_insert_subset_creates_independent_dwg_with_batch_layouts(version: str, 
     ]
     assert len({sheet.layout.handle for sheet in created.sheets}) == 3
     assert all(sheet.layout.handle != "0" for sheet in created.sheets)
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_existing_snapshot_batch_insert_publishes_whole_batch(version: str, tmp_path: Path):
+    dst, _, _ = _copy_single_subset_project(tmp_path)
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    subset = workspace.document.subsets[0]
+    first = subset.sheets[0]
+    expected_source = Path(first.layout.resolved_path or first.layout.file_name).resolve()
+    command = {
+        "type": "insert_sheet",
+        "target_subset_id": subset.acsm_id,
+        "ordinal": 1,
+        "placement": "after",
+        "count": 2,
+        "source": {"type": "existing_snapshot"},
+    }
+    preview = service.preview_changes(workspace.id, workspace.revision_id, [command], version)
+    assert preview["execution_intent"] is not None, preview
+    group = preview["execution_intent"]["groups"][0]
+    assert group["operation"] == "rebuild"
+    assert len(group["layouts"]) == 3
+    for layout in group["layouts"]:
+        assert Path(layout["source_file"]).resolve() == expected_source
+        assert layout["source_layout"] == first.layout.layout_name
+
+    job = _execute_confirmed(service, workspace, [command], version, preview)
+    result = service.run_next_job()
+
+    assert job["status"] == "QUEUED"
+    assert result and result["status"] == "SUCCEEDED", result
+    reopened = service.open_workspace(dst)
+    final_subset = reopened.document.subsets[0]
+    assert [sheet.layout.layout_name for sheet in final_subset.sheets] == [
+        layout["target_layout"] for layout in group["layouts"]
+    ]
+    assert len({sheet.layout.handle for sheet in final_subset.sheets}) == 3
+    assert all(sheet.layout.handle != "0" for sheet in final_subset.sheets)
+
+
+@pytest.mark.parametrize("version", ["2016", "2020"])
+def test_existing_snapshot_batch_failure_never_publishes_partial(version: str, tmp_path: Path, monkeypatch):
+    root = Path(__file__).parents[2]
+    source_project = root / "sample/project1"
+    source_document = AcsmDocument(DstCodec().decode_file(source_project / "图纸集数据文件.dst")).project(source_project)
+    dst = _copy_selected_subset_project(tmp_path, [subset.acsm_id for subset in source_document.subsets[:2]])
+    original_run = CoreConsoleExecutor.run
+    calls = 0
+    failed_script = None
+
+    def fail_second_console_call(self, capability, dwg, script, timeout):
+        nonlocal calls, failed_script
+        calls += 1
+        if calls == 2:
+            failed_script = Path(script).name
+            raise subprocess.CalledProcessError(1, [str(capability.console)], "", "INJECTED_DWG_FAILURE")
+        return original_run(self, capability, dwg, script, timeout)
+
+    monkeypatch.setattr(CoreConsoleExecutor, "run", fail_second_console_call)
+    service = DstManagerService(_system_settings(tmp_path))
+    workspace = service.open_workspace(dst)
+    subset_ids = [subset.acsm_id for subset in workspace.document.subsets]
+    formal_files = [dst, *(sheet.layout.resolved_path for subset in workspace.document.subsets for sheet in subset.sheets)]
+    before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in formal_files}
+    commands = [
+        {
+            "type": "insert_sheet",
+            "target_subset_id": subset_id,
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "existing_snapshot"},
+        }
+        for subset_id in subset_ids
+    ]
+    preview = service.preview_changes(workspace.id, workspace.revision_id, commands, version)
+    assert preview["execution_intent"] is not None, preview
+    for group in preview["execution_intent"]["groups"]:
+        assert group["operation"] == "rebuild"
+        first = next(subset for subset in workspace.document.subsets if subset.acsm_id == group["subset_id"]).sheets[0]
+        expected = Path(first.layout.resolved_path or first.layout.file_name).resolve()
+        for layout in group["layouts"]:
+            assert Path(layout["source_file"]).resolve() == expected
+            assert layout["source_layout"] == first.layout.layout_name
+    job = _execute_confirmed(service, workspace, commands, version, preview)
+    assert job["status"] == "QUEUED"
+
+    result = service.run_next_job()
+
+    assert result and result["status"] == "FAILED", result
+    assert result["error_code"] == "CAD_PROCESS_FAILED"
+    after = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in formal_files}
+    assert after == before
+    assert not (tmp_path / ".dst-manager" / "revisions" / result["id"] / "manifest.json").exists()
 
 
 @pytest.mark.parametrize("version", ["2016", "2020"])

@@ -1,5 +1,7 @@
 # DM v0.3.1 最终评审遗留发现（供 v0.3.2 编制 PLAN-DM-010 时吸收）
 
+> **2026-09-03 版本重基线**：v0.3.2 由 [SPEC-DM-008](../../../docs/dst-manager/specs/SPEC-DM-008-v032-naming-and-template-flows.md)（命名与模板流程需求变更，[PLAN-DM-012](../../plans/dst-manager/PLAN-DM-012-v032-naming-and-template-flows.md)）占用；本备忘所述"v0.3.2"重基线为 **v0.3.3**（SPEC-DM-006 界面重构，PLAN-DM-010 编号含义不变）。其中两项已提前并入 v0.3.2：`service.py` 拆分（PLAN-DM-012 Task 0）与 M6、M4（PLAN-DM-012 Task 4）。下文版本表述按原记录保留，以本注为准。
+
 来源：PLAN-DM-011 最终整分支评审（2026-09-03，opus，范围 4e7202c..9526839）与逐任务审查 deferred 项 triage。I1（关闭工作区不清理任务/修订状态）已在 commit 9526839 修复并通过突变验证复审，不在本清单。
 
 ## 用户已决策的 v0.3.2 事项（2026-09-03 收尾补丁后）

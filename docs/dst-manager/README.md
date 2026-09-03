@@ -28,6 +28,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [受控子集整体删除与文件事务规范（SPEC-DM-005，已接受）](specs/SPEC-DM-005-controlled-subset-deletion.md)
 - [单人桌面界面人性化与易用性设计规范（SPEC-DM-006，评审中）](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md)
 - [v0.3.1 桌面壳与操作易用性迭代设计规范（SPEC-DM-007，草稿）](specs/SPEC-DM-007-v031-shell-and-usability.md)
+- [v0.3.2 命名与模板流程需求变更规范（SPEC-DM-008，已接受）](specs/SPEC-DM-008-v032-naming-and-template-flows.md)
 
 ## 指南
 

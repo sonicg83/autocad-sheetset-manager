@@ -262,7 +262,7 @@ class DstManagerService(
             409,
         )
 
-    def _issue(code: str, severity: str, message: str):
+    def _issue(self, code: str, severity: str, message: str):
         from dst_manager.domain.models import ValidationIssue
         return ValidationIssue(code, Severity(severity), message)
 

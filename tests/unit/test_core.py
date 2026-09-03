@@ -1447,6 +1447,15 @@ def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tm
     service.get_layout_names.assert_not_called()
 
 
+def test_open_workspace_reports_unreferenced_dwg_without_crashing(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    (tmp_path / "孤儿.dwg").write_bytes(b"fake-unreferenced")
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    codes = {item.code for item in workspace.document.diagnostics}
+    assert "UNREFERENCED_DWG" in codes
+
+
 def test_service_persists_insert_subset_baselines_for_worker(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
