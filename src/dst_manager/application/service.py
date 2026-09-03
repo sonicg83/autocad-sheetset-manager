@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
+from dst_manager.application.drafts import DraftOperations
+from dst_manager.application.errors import ApplicationError
 from dst_manager.application.summaries import (
     attach_expected_file_hashes,
     build_semantic_diff,
@@ -49,7 +51,7 @@ from dst_manager.infrastructure.autocad.worker import (
     ScriptRenderer,
     parse_layout_names,
 )
-from dst_manager.infrastructure.drafts import DraftConflictError, DraftStore
+from dst_manager.infrastructure.drafts import DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import (
     WindowsResultGuards,
@@ -69,13 +71,7 @@ from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
 
 
-class ApplicationError(RuntimeError):
-    def __init__(self, code: str, message: str, status_code: int = 400):
-        super().__init__(message)
-        self.code, self.status_code = code, status_code
-
-
-class DstManagerService:
+class DstManagerService(DraftOperations):
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings()
         self.settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -124,57 +120,6 @@ class DstManagerService:
         if row is None:
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
         return self.open_workspace(Path(row.dst_path), Path(row.root_override) if row.root_override else None)
-
-    def get_draft(self, workspace_id: str) -> dict[str, Any]:
-        workspace = self.get_workspace(workspace_id)
-        loaded = self.drafts.load(workspace_id)
-        return self._draft_envelope(workspace, loaded)
-
-    def save_draft(
-        self,
-        workspace_id: str,
-        draft: dict[str, Any],
-        expected_version: int,
-    ) -> dict[str, Any]:
-        workspace = self.get_workspace(workspace_id)
-        try:
-            saved = self.drafts.save(
-                workspace_id,
-                draft,
-                expected_version=expected_version,
-            )
-        except DraftConflictError as exc:
-            raise ApplicationError("DRAFT_CONFLICT", str(exc), 409) from exc
-        return self._draft_envelope(workspace, {"draft": saved, "corrupted": False})
-
-    def delete_draft(self, workspace_id: str, expected_version: int) -> dict[str, bool]:
-        self.get_workspace(workspace_id)
-        try:
-            deleted = self.drafts.delete(workspace_id, expected_version=expected_version)
-        except DraftConflictError as exc:
-            raise ApplicationError("DRAFT_CONFLICT", str(exc), 409) from exc
-        return {"deleted": deleted}
-
-    @staticmethod
-    def _draft_envelope(workspace: Workspace, loaded: dict[str, Any]) -> dict[str, Any]:
-        draft = loaded["draft"]
-        reasons: list[str] = []
-        if draft is not None:
-            if draft.get("base_revision_id") != workspace.revision_id:
-                reasons.append("BASE_REVISION_CHANGED")
-            current_repair_status = (
-                workspace.document.repair_report.status
-                if workspace.document.repair_report is not None
-                else "VALID"
-            )
-            if draft.get("repair_status") != current_repair_status:
-                reasons.append("REPAIR_STATUS_CHANGED")
-        return {
-            "draft": draft,
-            "corrupted": bool(loaded["corrupted"]),
-            "stale": bool(reasons),
-            "stale_reasons": reasons,
-        }
 
     def preview_custom_property_import(
         self,
