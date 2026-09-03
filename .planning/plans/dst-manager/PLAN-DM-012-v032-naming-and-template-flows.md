@@ -258,14 +258,16 @@ Expected: 全部通过；记录 pytest/E2E 实际数字写入 changelog 收尾�
 
 ## 实际验证
 
-**全量验证（Task 5，2026-09-03）**：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **545 passed / 72 skipped**（617 项，0 failures / 0 errors，退出码 0；62 项真实 AutoCAD 系统测试未显式启用时跳过）；`uv lock --check` 通过；`npm run build`（check:api + vue-tsc + vite）零类型错误；Playwright e2e **39/39 通过**。契约再生成等幂确认：`export_openapi.py` + `generate:api` 重跑后 `web/src/api` 无 git 变更，`openapi.json`/`schema.d.ts` 保持 LF。
+**全量验证（Task 5，2026-09-03）**：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **545 passed / 72 skipped**（617 项，0 failures / 0 errors，退出码 0；68 项真实 AutoCAD 系统测试未显式启用时跳过）；`uv lock --check` 通过；`npm run build`（check:api + vue-tsc + vite）零类型错误；Playwright e2e **39/39 通过**。契约再生成等幂确认：`export_openapi.py` + `generate:api` 重跑后 `web/src/api` 无 git 变更，`openapi.json`/`schema.d.ts` 保持 LF。
 
-**真实 CAD 系统测试（本机具备 AutoCAD 2016 R20.1 / 2020 R23.1 Core Console、匹配插件与私有样本 `sample/project1`）**：`DST_MANAGER_RUN_AUTOCAD=1` 下运行 24 项场景相关系统测试全数通过（0 失败 0 跳过）：
+**真实 CAD 系统测试（本机具备 AutoCAD 2016 R20.1 / 2020 R23.1 Core Console、匹配插件与私有样本 `sample/project1`）**：`DST_MANAGER_RUN_AUTOCAD=1` 下运行 24 项真实 CAD 系统测试全数通过（0 失败 0 跳过；两批 `-k` 选择、junittest 计数 12+12＝场景相关 12 项＋既有整批回滚机制回归 12 项）：
 
 1. **新建子集（基础模板文件 `.dwg` 与 `.dwt` 各一 + 布局模板）**：`test_insert_subset_creates_independent_dwg_with_batch_layouts`（2016/2020 × dwg/dwt 共 4 项）——预览 `source_snapshot` 确认为基础模板文件（`.dwg` 与 `.dwt` 均接受）、`source_target_file` 为 None，执行后新子集 3 张图纸共享独立 DWG（与模板文件不同）、布局名与 Handle 齐全且非 0；
-2. **"已有布局"批量新增图纸的整批发布**：`test_existing_snapshot_batch_insert_publishes_whole_batch`（2016/2020）——空来源提交后预览把布局来源解析为目标子集首图登记的 DWG 与布局，rebuild 后 3 张图纸按目标布局顺序发布、Handle 齐全；
-3. **"已有布局"批量新增的回滚路径**：`test_existing_snapshot_batch_failure_never_publishes_partial`（2016/2020）——双子集批量插入注入第 2 个 CAD 工作单元失败 → 整批 `FAILED`（`CAD_PROCESS_FAILED`）、全部正式文件 SHA-256 不变、无 publish manifest；
-4. **既有整批回滚机制回归**（12 项）：`test_injected_second_dwg_failure_never_publishes_partial_files`、`test_mixed_rename_rebuild_delete_failure_never_publishes`（4 种失败注入）、`test_cad_success_then_dom_failure_keeps_formal_hashes`——均验证失败不回滚、正式文件字节不变。
+2. **"已有布局"批量新增图纸的整批发布**：`test_existing_snapshot_batch_insert_publishes_whole_batch`（2016/2020，2 项）——空来源提交后预览把布局来源解析为目标子集首图登记的 DWG 与布局，rebuild 后 3 张图纸按目标布局顺序发布、Handle 齐全；
+3. **"已有布局"批量新增的回滚路径**：`test_existing_snapshot_batch_failure_never_publishes_partial`（2016/2020，2 项）——双子集批量插入注入第 2 个 CAD 工作单元失败 → 整批 `FAILED`（`CAD_PROCESS_FAILED`）、全部正式文件 SHA-256 不变、无 publish manifest；
+4. **批量新增重建顺序**：`test_batch_insert_rebuilds_layouts_in_final_order`（2016/2020，2 项）——3 张批量插入按目标布局顺序整批 rebuild 发布、4 图纸 Handle 齐全；
+5. **缺失模板布局确认后失败不回滚**：`test_missing_template_layout_fails_after_confirmation_without_publish`（2016/2020，2 项）——CAD 验证延后、确认后执行失败 → `FAILED`、正式文件哈希不变、无 manifest；
+6. **既有整批回滚机制回归**（12 项）：`test_injected_second_dwg_failure_never_publishes_partial_files`（2）＋`test_mixed_rename_rebuild_delete_failure_never_publishes`（4 种失败注入 × 2016/2020，8）＋`test_cad_success_then_dom_failure_keeps_formal_hashes`（2）——均验证失败不回滚、正式文件字节不变。
 
 **真机验证修复的缺陷**：Task 5 系统测试暴露 `DstManagerService._issue`（service.py:265）实例方法签名缺 `self`，`open_workspace` 的 `UNREFERENCED_DWG` 诊断分支（工程根存在未被 DST 引用的 `.dwg`，如置于根目录的基础模板文件）调用即抛 `TypeError`；已补 `self` 并新增单测 `test_open_workspace_reports_unreferenced_dwg_without_crashing`（full-suite 全绿）。系统测试夹具同步：`test_insert_subset_creates_independent_dwg_with_batch_layouts` 补 Task 3 遗漏的必填 `base_template_file` 并按 `.dwg/.dwt` 参数化；新增两个 `existing_snapshot` 系统测试（SPEC-DM-008 §10 验收）。
 
