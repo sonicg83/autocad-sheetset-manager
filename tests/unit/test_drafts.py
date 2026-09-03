@@ -246,17 +246,25 @@ def test_draft_existing_snapshot_source_still_validates_nonempty_path(tmp_path):
     assert result == {"draft": None, "corrupted": True}
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        lambda command: command.pop("base_template_file"),
-        lambda command: command.update(base_template_file="relative.dwg"),
-    ],
-)
-def test_draft_insert_subset_missing_or_invalid_base_template_is_quarantined(tmp_path, mutation):
+def test_old_draft_insert_subset_without_base_template_file_loads_clean(tmp_path):
+    """向后兼容（评审 Important #1）：v0.3.1 前保存的旧草稿 insert_subset 命令缺
+    base_template_file 应可正常加载（不隔离），回放/预览时由 INSERT_SUBSET_BASE_TEMPLATE_INVALID
+    明确拒绝（草稿保留），而非形状校验器静默隔离为损坏。"""
     draft = _draft(version=1)
     command = _insert_subset_draft_command()
-    mutation(command)
+    command.pop("base_template_file")
+    draft["actions"][0]["commands"] = [command]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": draft, "corrupted": False}
+
+
+def test_draft_insert_subset_invalid_base_template_is_quarantined(tmp_path):
+    """base_template_file 存在但非法（非绝对路径）仍按损坏草稿隔离（契约校验保留）。"""
+    draft = _draft(version=1)
+    command = _insert_subset_draft_command()
+    command.update(base_template_file="relative.dwg")
     draft["actions"][0]["commands"] = [command]
 
     result = _write_and_load(tmp_path, draft)

@@ -34,8 +34,8 @@ _COMMAND_KEYS: dict[str, tuple[set[str], set[str]]] = {
         {"ordinal"},
     ),
     "insert_subset": (
-        {"type", "placement", "title", "initial_sheet_count", "source", "base_template_file"},
-        {"ordinal"},
+        {"type", "placement", "title", "initial_sheet_count", "source"},
+        {"ordinal", "base_template_file"},
     ),
     "add_custom_property": (
         {"type", "property_type", "name", "default_value"},
@@ -252,8 +252,9 @@ def _validate_command(command: object) -> None:
         validate_sheet_set_name(command["name"])
     if command_type in {"update_subset_title", "insert_subset"}:
         normalize_derived_name(command["title"], "子集标题")
-    if command_type == "insert_subset":
-        # 基础模板文件与契约同步：必填非空且绝对路径（SPEC-DM-008 F-04）
+    if command_type == "insert_subset" and "base_template_file" in command:
+        # 基础模板文件与契约同步（SPEC-DM-008 F-04）：存在则校验非空绝对路径；
+        # 缺字段视为 v0.3.1 前旧草稿，可加载、预览期由 INSERT_SUBSET_BASE_TEMPLATE_INVALID 明确拒绝
         _require_text(command["base_template_file"])
         validate_absolute_source_file(command["base_template_file"])
     if command_type in {"add_custom_property", "delete_custom_property"} and command["property_type"] not in {"sheetset", "sheet"}:
