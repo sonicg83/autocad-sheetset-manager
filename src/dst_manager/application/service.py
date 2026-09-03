@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
+from dst_manager.application.summaries import (
+    attach_expected_file_hashes,
+    build_semantic_diff,
+    operation_digest,
+    parallel_makespan,
+)
 from dst_manager.config import Settings
 from dst_manager.domain.editing import (
     parse_property_csv_result,
@@ -242,7 +248,7 @@ class DstManagerService:
             )
         main_preview = self.preview_changes(workspace_id, base_revision_id, commands)
         diagnostics.extend(main_preview["diagnostics"])
-        preview_digest = self._operation_digest(
+        preview_digest = operation_digest(
             operation_type="property_csv_import",
             workspace_id=workspace_id,
             base_revision_id=base_revision_id,
@@ -363,7 +369,7 @@ class DstManagerService:
             diagnostics.extend(self._collect_structural_source_baselines(workspace, execution_intent))
             if not diagnostics:
                 try:
-                    self._attach_expected_file_hashes(workspace, execution_intent)
+                    attach_expected_file_hashes(workspace, execution_intent)
                     execution_intent["estimate"] = self._estimate_cad_execution(
                         cad_version,
                         execution_intent,
@@ -415,7 +421,7 @@ class DstManagerService:
             affected.update(group["target_file"] for group in execution_intent["groups"])
             affected.update(group["source_target_file"] for group in execution_intent["groups"] if group["source_target_file"] is not None)
             affected.update(item["target_file"] for item in execution_intent["deleted_subsets"])
-        semantic_diff = self._build_semantic_diff(workspace, normalized_commands, execution_intent)
+        semantic_diff = build_semantic_diff(workspace, normalized_commands, execution_intent)
         property_counts = {
             (item["action"], item["type"], item["name"]): item["affected_sheet_count"]
             for item in semantic_diff["properties"]
@@ -433,7 +439,7 @@ class DstManagerService:
         if execution_intent is not None:
             target_baselines.update(execution_intent.get("expected_file_hashes", {}))
             source_baselines = execution_intent.get("source_baselines", [])
-        preview_digest = self._operation_digest(
+        preview_digest = operation_digest(
             operation_type="change_set",
             workspace_id=workspace_id,
             base_revision_id=base_revision_id,
@@ -703,7 +709,7 @@ class DstManagerService:
             if conflict:
                 conflicts.append(item["path"])
         base_revision_id = file_sha256(dst_path)
-        preview_digest = self._operation_digest(
+        preview_digest = operation_digest(
             operation_type="revision_restore",
             workspace_id=workspace_id,
             base_revision_id=base_revision_id,
@@ -921,7 +927,7 @@ class DstManagerService:
             "changes": changes,
             "diagnostics": diagnostics,
         }
-        preview_digest = self._operation_digest(
+        preview_digest = operation_digest(
             operation_type="xml_export",
             workspace_id=workspace_id,
             base_revision_id=base_revision_id,
@@ -1111,7 +1117,7 @@ class DstManagerService:
         actions = [self._repair_action_dict(action) for action in report.actions]
         blocking_issues = [asdict(issue) for issue in report.blocking_issues]
         digest = (
-            self._operation_digest(
+            operation_digest(
                 operation_type="repair_publish",
                 workspace_id=workspace_id,
                 base_revision_id=base_revision_id,
@@ -1169,7 +1175,7 @@ class DstManagerService:
                     raise ApplicationError("REPAIR_NOT_REQUIRED", "当前 DST 无待确认修复")
                 if report.status != "REPAIRED":
                     raise ApplicationError("REPAIR_BLOCKED", "修复后仍存在阻断问题，禁止发布")
-                expected_digest = self._operation_digest(
+                expected_digest = operation_digest(
                     operation_type="repair_publish",
                     workspace_id=workspace_id,
                     base_revision_id=base_revision_id,
@@ -1443,234 +1449,6 @@ class DstManagerService:
         execution_intent["cad_validation_deferred"] = True
         return []
 
-    @classmethod
-    def _build_semantic_diff(
-        cls,
-        workspace: Workspace,
-        commands: list[dict[str, Any]],
-        execution_intent: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        before = cls._summarize_current_structure(workspace)
-        after = (
-            cls._summarize_derived_structure(execution_intent["derived_document"])
-            if execution_intent is not None
-            else before
-        )
-        return {
-            "sheet_set": cls._summarize_sheet_set_changes(workspace, commands),
-            "structure": {"before": before, "after": after},
-            "properties": cls._summarize_property_changes(workspace, commands),
-            "dwgs": cls._summarize_dwg_changes(workspace, execution_intent),
-        }
-
-    @staticmethod
-    def _summarize_sheet_set_changes(
-        workspace: Workspace,
-        commands: list[dict[str, Any]],
-    ) -> list[dict[str, str]]:
-        result = []
-        for command in commands:
-            if command["type"] != "update_sheet_set" or "name" not in command:
-                continue
-            after = command["name"]
-            if after != workspace.document.name:
-                result.append(
-                    {
-                        "field": "name",
-                        "before": workspace.document.name,
-                        "after": after,
-                    },
-                )
-        return result
-
-    @classmethod
-    def _summarize_current_structure(cls, workspace: Workspace) -> list[dict[str, Any]]:
-        result = []
-        for subset_position, subset in enumerate(sorted(workspace.document.subsets, key=lambda item: item.order), 1):
-            sheets = []
-            for sheet_position, sheet in enumerate(subset.sheets, 1):
-                drawing = sheet.layout.resolved_path or sheet.layout.file_name
-                sheets.append(cls._sheet_summary(sheet_position, sheet.acsm_id, sheet.number, sheet.title, str(drawing or ""), sheet.layout.layout_name))
-            number_range = ""
-            if sheets:
-                number_range = sheets[0]["number"] if len(sheets) == 1 else f"{sheets[0]['number']}-{sheets[-1]['number']}"
-            title = subset.name
-            if number_range and subset.name.startswith(f"{number_range} "):
-                title = subset.name[len(number_range) + 1:]
-            result.append(
-                {
-                    "position": subset_position,
-                    "id": subset.acsm_id,
-                    "title": title,
-                    "number_range": number_range,
-                    "display_name": subset.name,
-                    "dwg_file": sheets[0]["dwg_file"] if sheets else "",
-                    "sheets": sheets,
-                },
-            )
-        return result
-
-    @classmethod
-    def _summarize_derived_structure(cls, document: dict[str, Any]) -> list[dict[str, Any]]:
-        result = []
-        for subset_position, subset in enumerate(document.get("subsets", []), 1):
-            drawing = str(subset.get("target_file", ""))
-            sheets = [
-                cls._sheet_summary(
-                    sheet_position,
-                    sheet["acsm_id"],
-                    sheet["number"],
-                    sheet["title"],
-                    drawing,
-                    sheet["layout"]["layout_name"],
-                )
-                for sheet_position, sheet in enumerate(subset.get("sheets", []), 1)
-            ]
-            result.append(
-                {
-                    "position": subset_position,
-                    "id": subset["acsm_id"],
-                    "title": subset["title"],
-                    "number_range": subset["number_range"],
-                    "display_name": subset["display_name"],
-                    "dwg_file": drawing,
-                    "sheets": sheets,
-                },
-            )
-        return result
-
-    @staticmethod
-    def _sheet_summary(position: int, sheet_id: str, number: str, title: str, drawing: str, layout: str) -> dict[str, Any]:
-        suffix_match = re.search(r"\s+\(([^()]*)\)$", title)
-        return {
-            "position": position,
-            "id": sheet_id,
-            "number": number,
-            "title": title,
-            "suffix": suffix_match.group(1) if suffix_match else "",
-            "dwg_file": drawing,
-            "layout_name": layout,
-        }
-
-    @staticmethod
-    def _summarize_property_changes(workspace: Workspace, commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        try:
-            definitions = {
-                (definition.type, definition.name.casefold()): definition
-                for definition in property_definitions_from_document(workspace.document)
-            }
-        except AcsmValidationError:
-            definitions = {}
-        sheet_by_id = {sheet.acsm_id: sheet for sheet in workspace.document.sheets}
-        result = []
-        for command in commands:
-            command_type = command["type"]
-            if command_type in {"add_custom_property", "delete_custom_property"}:
-                property_type = command["property_type"]
-                name = command["name"]
-                previous = definitions.get((property_type, name.casefold()))
-                after = None
-                if command_type == "add_custom_property":
-                    after = {
-                        "type": property_type,
-                        "name": name,
-                        "default_value": command.get("default_value", ""),
-                    }
-                result.append(
-                    {
-                        "action": "add" if command_type == "add_custom_property" else "delete",
-                        "type": property_type,
-                        "name": name,
-                        "before": asdict(previous) if previous is not None else None,
-                        "after": after,
-                        "affected_sheet_count": len(workspace.document.sheets) if property_type == "sheet" else 0,
-                    },
-                )
-            elif command_type == "update_sheet":
-                sheet = sheet_by_id.get(command.get("sheet_id"))
-                for name, value in command.get("custom_properties", {}).items():
-                    result.append(
-                        {
-                            "action": "update",
-                            "type": "sheet",
-                            "name": name,
-                            "before": sheet.custom_properties.get(name) if sheet else None,
-                            "after": value,
-                            "affected_sheet_count": 1 if sheet else 0,
-                        },
-                    )
-            elif command_type == "update_sheet_set":
-                for name, value in command.get("custom_properties", {}).items():
-                    result.append(
-                        {
-                            "action": "update",
-                            "type": "sheetset",
-                            "name": name,
-                            "before": workspace.document.custom_properties.get(name),
-                            "after": value,
-                            "affected_sheet_count": 0,
-                        },
-                    )
-        return result
-
-    @classmethod
-    def _summarize_dwg_changes(cls, workspace: Workspace, execution_intent: dict[str, Any] | None) -> list[dict[str, Any]]:
-        if execution_intent is None:
-            return []
-        before_by_id = {item["id"]: item for item in cls._summarize_current_structure(workspace)}
-        after_by_id = {item["id"]: item for item in cls._summarize_derived_structure(execution_intent["derived_document"])}
-        result = []
-        for group in execution_intent.get("groups", []):
-            subset_id = group["subset_id"]
-            before = before_by_id.get(subset_id)
-            after = after_by_id.get(subset_id)
-            result.append(
-                {
-                    "action": group["operation"],
-                    "subset_id": subset_id,
-                    "before": None if before is None else {"file": before["dwg_file"], "layouts": [sheet["layout_name"] for sheet in before["sheets"]]},
-                    "after": None if after is None else {"file": after["dwg_file"], "layouts": [sheet["layout_name"] for sheet in after["sheets"]]},
-                },
-            )
-        for deleted in execution_intent.get("deleted_subsets", []):
-            subset_id = deleted["subset_id"]
-            before = before_by_id.get(subset_id)
-            result.append(
-                {
-                    "action": "delete",
-                    "subset_id": subset_id,
-                    "before": {"file": deleted["target_file"], "layouts": [sheet["layout_name"] for sheet in before["sheets"]]} if before else {"file": deleted["target_file"], "layouts": []},
-                    "after": None,
-                },
-            )
-        return result
-
-    @staticmethod
-    def _operation_digest(
-        *,
-        operation_type: str,
-        workspace_id: str,
-        base_revision_id: str,
-        normalized_input: dict[str, Any],
-        semantic_diff: dict[str, Any],
-        target_baselines: dict[str, Any],
-        cad_version: str | None = None,
-        source_baselines: list[dict[str, Any]] | None = None,
-    ) -> str:
-        payload = {
-            "schema_version": 1,
-            "operation_type": operation_type,
-            "workspace_id": workspace_id,
-            "base_revision_id": base_revision_id,
-            "normalized_input": normalized_input,
-            "semantic_diff": semantic_diff,
-            "target_baselines": target_baselines,
-            "cad_version": cad_version,
-            "source_baselines": source_baselines or [],
-        }
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
     def _estimate_cad_execution(
         self,
         cad_version: str,
@@ -1702,8 +1480,8 @@ class DstManagerService:
             )
         lower_durations = [ranges[str(group["cad_operation"])][0] for group in groups]
         upper_durations = [ranges[str(group["cad_operation"])][1] for group in groups]
-        lower_total = self._parallel_makespan(lower_durations, concurrency)
-        upper_total = self._parallel_makespan(upper_durations, concurrency)
+        lower_total = parallel_makespan(lower_durations, concurrency)
+        upper_total = parallel_makespan(upper_durations, concurrency)
         return {
             "schema_version": 1,
             "estimated": True,
@@ -1711,44 +1489,6 @@ class DstManagerService:
             "concurrency": concurrency,
             "duration_ms": {"lower": lower_total, "upper": upper_total},
             "sources": sources,
-        }
-
-    @staticmethod
-    def _parallel_makespan(durations: list[int], concurrency: int) -> int:
-        if not durations or concurrency <= 0:
-            return 0
-        slots = [0] * concurrency
-        for duration in durations:
-            slot = min(range(concurrency), key=slots.__getitem__)
-            slots[slot] += duration
-        return max(slots)
-
-    @staticmethod
-    def _attach_expected_file_hashes(workspace: Workspace, execution_intent: dict[str, Any]) -> None:
-        paths = {
-            workspace.dst_path.resolve(),
-            *(Path(path).resolve() for path in execution_intent.get("path_graph", {}).get("old_sources", [])),
-            *(Path(path).resolve() for path in execution_intent.get("path_graph", {}).get("final_targets", [])),
-        }
-        for group in execution_intent.get("groups", []):
-            paths.add(Path(group["source_snapshot"]).resolve())
-            paths.update(Path(layout["source_file"]).resolve() for layout in group.get("layouts", []))
-        source_baselines = {
-            Path(baseline["path"]).resolve(): baseline
-            for baseline in execution_intent.get("source_baselines", [])
-        }
-        expected = {
-            str(path): (
-                source_baselines[path]["sha256"]
-                if path in source_baselines
-                else file_sha256(path) if path.is_file() else None
-            )
-            for path in sorted(paths, key=lambda item: str(item).casefold())
-        }
-        execution_intent["expected_file_hashes"] = expected
-        execution_intent["expected_file_identities"] = {
-            str(path): source_baselines[path]["identity"]
-            for path in sorted(source_baselines, key=lambda item: str(item).casefold())
         }
 
     def _require_committed_operation(self, workspace_root: Path, operation_id: str) -> dict[str, Any]:
