@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-03（v0.3.1 收尾补丁：壳托管 CAD Worker 与代码组织契约）
+
+- 桌面壳补齐 CAD Worker 子进程托管（修复壳模式下发布/布局重建等队列型 CAD 任务无人认领的缺口）：`run_desktop` 在窗口创建前经 `_spawn_worker` 拉起 `sys.executable -m dst_manager.interfaces.cli worker`（`cwd` 与 `--project-root` 同取当前工作目录，与壳内 API 同库同队列；`PYTHONUTF8=1` 继承），`_report_early_exit` 后台线程观察 2 秒、立即退出（配置错误等）时向 stderr 输出可见警告，窗口关闭时 `_shutdown_worker` terminate→wait(5)→升级 kill 回收（与 start.ps1 Stop 强杀语义一致，Worker 中断的任务由既有启动恢复闭环）；`tests/unit/test_shell.py` 新增 6 项（13 passed），真实壳冒烟验证 Worker 父子链拉起与整树回收（taskkill 后 0 残留）。注意：强杀壳进程（taskkill /T /F）走 OS 级树杀，正常关窗路径的 terminate 回收逻辑由单测覆盖；孤儿 Worker 仍可被 start.ps1 -Action Stop 按既有命令行匹配清理。
+- `AGENTS.md` 新增「代码组织契约（容量与拆分）」：单文件约 500 行/单类约 15 个公共方法软上限、编排入口类只留跨域公共编排与共享门禁、功能域与纯辅助拆同层独立模块、新功能优先新建模块组合、拆分保持公共接口与错误码不变渐进进行。`application/service.py`（1984 行）拆分作为 v0.3.2 事项执行（先拆 ~600 行纯辅助簇，再按功能域拆服务），依据记录见 [DMv031-deferred-findings](.planning/memos/dst-manager/DMv031-deferred-findings.md)。
+
 ## 2026-09-03（v0.3.1 交付收尾与全量验证）
 
 - 完成 [PLAN-DM-011](.planning/plans/dst-manager/PLAN-DM-011-v031-shell-and-usability.md)（状态 `completed`）v0.3.1 交付收尾与全量验证：`uv sync --dev`、`uv run ruff check .`（All checks passed）、`uv lock --check` 通过；`uv run pytest -q` 全量 566 项 **500 passed / 66 skipped**（其中 62 项真实 AutoCAD 测试因未显式启用而跳过），退出码 0；设置 `DST_MANAGER_RUN_AUTOCAD=1` 后全量 pytest **562 passed / 4 skipped**（0 failures、0 errors，退出码 0），62 项真实 AutoCAD 2016/2020 系统测试全数通过（含 Task 2 新增的 `DstGetLayoutNames` 只读布局枚举命令双版本用例：sidecar 产出 `{"version":1,"layouts":["0000 封面"]}` 且原 DWG 时间戳不变）；`npm ci`、`npm run build`（vue-tsc + vite 零类型错误）、Playwright e2e **35/35 通过**；`scripts/build_plugins.ps1` 2016/2020 双版本构建成功（0 error，2 个警告为并发真实 CAD 运行时 DLL 被占用触发的 MSBuild 重试，均自动重试成功）。

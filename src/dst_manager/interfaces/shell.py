@@ -1,8 +1,17 @@
-"""桌面壳：pywebview（WebView2）承载本地 Web 界面。壳为 v0.3.1 唯一交付入口。"""
+"""桌面壳：pywebview（WebView2）承载本地 Web 界面。壳为 v0.3.1 唯一交付入口。
+
+壳进程负责完整的进程族生命周期：进程内 uvicorn（临时端口）+ 同机 CAD Worker
+子进程（发布/布局重建等队列型 CAD 操作依赖 Worker 认领 SQLite 任务，见
+`cli worker`）。窗口关闭时一并回收两者。
+"""
 
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 
 import uvicorn
 import webview
@@ -76,6 +85,48 @@ class ShellBridge:
         )
 
 
+def _spawn_worker(project_root: Path) -> subprocess.Popen:
+    """拉起同机 CAD Worker 子进程（对齐 start.ps1 的托管方式）。
+
+    `cwd` 与 `--project-root` 都取当前工作目录：`cli worker` 校验二者一致，
+    且 `Settings.data_dir` 相对路径按 cwd 解析——与壳内 API 同 cwd，保证
+    Worker 与 API 操作同一个 SQLite 任务队列。输出继承父进程终端，便于
+    观察 Worker 认领日志。
+    """
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    return subprocess.Popen(
+        [sys.executable, "-m", "dst_manager.interfaces.cli", "worker", "--project-root", str(project_root)],
+        cwd=str(project_root),
+        env=env,
+    )
+
+
+def _report_early_exit(process: subprocess.Popen) -> None:
+    """Worker 启动后短暂观察；立即退出（配置错误等）时给出可见警告。"""
+    for _ in range(4):
+        if process.poll() is not None:
+            print(
+                f"警告：CAD Worker 子进程已提前退出（退出码 {process.returncode}），"
+                "队列型 CAD 任务将无人认领；请检查 `dst-manager doctor` 配置。",
+                file=sys.stderr,
+            )
+            return
+        time.sleep(0.5)
+
+
+def _shutdown_worker(process: subprocess.Popen | None) -> None:
+    """回收 Worker 子进程；terminate 不退出则升级 kill（与 start.ps1 Stop 的强杀语义一致）。"""
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
 def run_desktop(settings: Settings | None = None) -> None:
     settings = settings or Settings()
     server = uvicorn.Server(
@@ -89,8 +140,11 @@ def run_desktop(settings: Settings | None = None) -> None:
     bridge = ShellBridge()
     window = webview.create_window("DST Manager", f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800)
     bridge.bind(window)
+    worker = _spawn_worker(Path.cwd())
+    threading.Thread(target=_report_early_exit, args=(worker,), daemon=True).start()
     try:
         webview.start()
     finally:
+        _shutdown_worker(worker)
         server.should_exit = True
         thread.join(timeout=5)

@@ -1,8 +1,17 @@
-"""pywebview 桌面壳轻量单测：桥可导入、未绑定窗口报错、绑定后对话框返回路径、拖拽回调注册与转发。"""
+"""pywebview 桌面壳轻量单测：桥可导入、未绑定窗口报错、绑定后对话框返回路径、拖拽回调注册与转发、Worker 子进程管理。"""
+
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
-from dst_manager.interfaces.shell import ShellBridge
+from dst_manager.interfaces.shell import (
+    ShellBridge,
+    _report_early_exit,
+    _shutdown_worker,
+    _spawn_worker,
+)
 
 
 class _FakeDom:
@@ -101,3 +110,98 @@ def test_shell_bridge_dropped_event_without_full_path_is_ignored():
     bridge.on_files_dropped("__acceptDstPath")
     dom.handler({"dataTransfer": {"files": [{"name": "out.dst"}]}})  # 无 pywebviewFullPath
     assert dom.evaluated == []
+
+
+class _FakePopen:
+    """模拟 subprocess.Popen：记录构造参数与回收调用序列。"""
+
+    def __init__(self, args, cwd=None, env=None, alive=True):
+        self.args = args
+        self.cwd = cwd
+        self.env = env
+        self.alive = alive
+        self.returncode = None if alive else 3
+        self.calls: list[str] = []
+
+    def poll(self):
+        return None if self.alive else self.returncode
+
+    def terminate(self):
+        self.calls.append("terminate")
+        self.alive = False
+        self.returncode = 0
+
+    def kill(self):
+        self.calls.append("kill")
+        self.alive = False
+        self.returncode = 1
+
+    def wait(self, timeout=None):
+        self.calls.append(f"wait({timeout})")
+        return self.returncode
+
+
+def test_spawn_worker_targets_cli_worker_with_matching_project_root(monkeypatch):
+    captured = {}
+
+    def fake_popen(args, cwd=None, env=None):
+        captured["args"], captured["cwd"], captured["env"] = args, cwd, env
+        return _FakePopen(args, cwd=cwd, env=env)
+
+    monkeypatch.setattr("dst_manager.interfaces.shell.subprocess.Popen", fake_popen)
+    project_root = Path.cwd()
+    _spawn_worker(project_root)
+    # cwd 与 --project-root 一致（cli worker 校验），且指向同一任务队列
+    assert captured["cwd"] == str(project_root)
+    assert captured["args"][:3] == [sys.executable, "-m", "dst_manager.interfaces.cli"]
+    assert captured["args"][3:5] == ["worker", "--project-root"]
+    assert captured["args"][5] == str(project_root)
+    assert captured["env"].get("PYTHONUTF8") == "1"
+
+
+def test_report_early_exit_warns_when_worker_dies_immediately(capsys):
+    dead = _FakePopen([], alive=False)
+    dead.returncode = 3
+    _report_early_exit(dead)  # 首轮 poll 即命中，不引入测试等待
+    err = capsys.readouterr().err
+    assert "CAD Worker 子进程已提前退出" in err
+    assert "退出码 3" in err
+
+
+def test_report_early_exit_silent_while_alive(monkeypatch, capsys):
+    process = _FakePopen([], alive=True)
+    sleeps = []
+
+    monkeypatch.setattr("dst_manager.interfaces.shell.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(process, "poll", lambda: None)
+    _report_early_exit(process)
+    assert len(sleeps) == 4  # 观察 2 秒后静默放行
+    assert capsys.readouterr().err == ""
+
+
+def test_shutdown_worker_terminates_gracefully():
+    process = _FakePopen([], alive=True)
+    _shutdown_worker(process)
+    assert process.calls == ["terminate", "wait(5)"]
+
+
+def test_shutdown_worker_escapes_to_kill_on_timeout():
+    process = _FakePopen([], alive=True)
+    original_wait = process.wait
+
+    def stubborn_wait(timeout=None):
+        if process.calls.count("terminate") == 1 and "wait(5)" not in process.calls:
+            process.calls.append(f"wait({timeout})")
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        return original_wait(timeout)
+
+    process.wait = stubborn_wait
+    _shutdown_worker(process)
+    assert process.calls[:3] == ["terminate", "wait(5)", "kill"]
+
+
+def test_shutdown_worker_ignores_already_exited():
+    process = _FakePopen([], alive=False)
+    _shutdown_worker(process)
+    _shutdown_worker(None)  # 不抛错
+    assert process.calls == []

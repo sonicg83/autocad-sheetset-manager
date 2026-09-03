@@ -2,6 +2,11 @@
 
 来源：PLAN-DM-011 最终整分支评审（2026-09-03，opus，范围 4e7202c..9526839）与逐任务审查 deferred 项 triage。I1（关闭工作区不清理任务/修订状态）已在 commit 9526839 修复并通过突变验证复审，不在本清单。
 
+## 用户已决策的 v0.3.2 事项（2026-09-03 收尾补丁后）
+
+- **`application/service.py` 拆分（1984 行）**：先拆 ~600 行纯辅助簇（`_build_semantic_diff`/`_summarize_*`/`_operation_digest` 等 → 无状态模块，行为零变化），再按功能域拆服务类（drafts/editing/revisions/xml_io/repair），共享小核心（workspace 门禁、修订检查、事务辅助）。已写入 AGENTS.md「代码组织契约」防复发。
+- **正常关窗路径的 Worker 回收交互确认**：壳托管 Worker 已落地（`_spawn_worker`/`_shutdown_worker`，单测 6 项 + 整树冒烟），正常关闭窗口时的 terminate 回收逻辑由单测覆盖，活跃桌面的交互确认并入遗留人工验收项。
+
 ## 最终评审 Minor（M1-M7，均留 v0.3.2）
 
 | # | 位置 | 问题 | 备注 |
