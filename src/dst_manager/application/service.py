@@ -171,6 +171,7 @@ class DstManagerService(
         }
         job["suggestion"] = suggestions.get(job["error_code"], "查看逐 DWG 日志和错误详情后决定是否重试。" if job["error_code"] else None)
         return job
+
     def capabilities(self) -> dict[str, dict[str, Any]]:
         capabilities = {version: self._capability(version) for version in ("2016", "2020")}
         return {version: {"version": version, "available": item.available, "console": str(item.console) if item.console else None, "plugin": str(item.plugin) if item.plugin else None} for version, item in capabilities.items()}
@@ -260,6 +261,7 @@ class DstManagerService(
             "DST 存在不可恢复问题，禁止写入",
             409,
         )
+
     def _issue(code: str, severity: str, message: str):
         from dst_manager.domain.models import ValidationIssue
         return ValidationIssue(code, Severity(severity), message)
