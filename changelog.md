@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-03（清理：移除孤儿模板检查 API `/api/templates/inspect`）
+
+- 删除 `inspect_template` 及其 `/api/templates/inspect` 端点：该接口（v0.2 模板布局检查，返回布局名+Handle）在 PLAN-DM-008 将 CAD 校验延期到执行期后已无任何调用方（预览不再调 CAD，前端只用 v0.3.1 的 `/api/layout-names`），与 `get_layout_names` 构成同功能两套 accoreconsole 只读包装且错误处理不一致（占用/超时时裸抛 500，无友好错误码）。同步删除 `TemplateRequest`、`TemplateInspectResponse`、`TemplateLayoutResponse` 及 `service.py` 中 `parse_handles` 导入；`render_handles()` 按 SPEC-DM-002 保留（真实 CAD 系统测试的诊断工具）。"预览不得调用 CAD"守卫测试改为 mock `get_layout_names`；`ARCH-DM-001` 端点表以 `/api/layout-names` 替换该行；`web/src/api` 契约经 `npm run generate:api` 重新生成。
+
 ## 2026-09-03（v0.3.1 修复：壳桥就绪响应式与拖拽放行、模板过滤器格式、布局读取误报、CAD 插件相对路径；搜索工具约束）
 
 - 修复"布局枚举未产出结果"：`.env` 中的相对插件路径（`./plugins/...`）在 Python 侧 `is_file` 检查（相对项目根）能通过，但 accoreconsole 子进程内 `NETLOAD` 按自身工作目录解析而加载失败（"无法加载程序集"→`DstGetLayoutNames` 成未知命令），退出码仍为 0、无 sidecar。`config.py` 新增 `validate_cad_paths`：四个 CAD 路径字段在 Settings 源头统一 `resolve()` 为绝对路径（doctor/脚本渲染/NETLOAD 全链路一致）。`test_config.py` 新增相对路径规范化与 None 不变两项（511 passed / 66 skipped）；真机验证 `Settings()`（读 .env 相对路径）经 `get_layout_names` 对 `sample/template/市政项目模板-通用.dwg` 成功枚举 `['A1','A2','A3','A3NS']`。

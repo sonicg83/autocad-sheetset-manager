@@ -140,23 +140,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/templates/inspect": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Inspect Template */
-        post: operations["inspect_template_api_templates_inspect_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/workspaces/{workspace_id}": {
         parameters: {
             query?: never;
@@ -1501,38 +1484,6 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** TemplateInspectResponse */
-        TemplateInspectResponse: {
-            /** Cad Version */
-            cad_version: string;
-            /** Layouts */
-            layouts: components["schemas"]["TemplateLayoutResponse"][];
-            /** Path */
-            path: string;
-            /** Sha256 */
-            sha256: string;
-        };
-        /** TemplateLayoutResponse */
-        TemplateLayoutResponse: {
-            /** Handle */
-            handle: string;
-            /** Name */
-            name: string;
-        };
-        /** TemplateRequest */
-        TemplateRequest: {
-            /**
-             * Cad Version
-             * @default 2020
-             * @enum {string}
-             */
-            cad_version: "2016" | "2020";
-            /**
-             * Template Path
-             * Format: path
-             */
-            template_path: string;
-        };
         /** UpdateSheetPropertiesCommand */
         UpdateSheetPropertiesCommand: {
             /** Custom Properties */
@@ -1877,39 +1828,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CadCapabilitiesResponse"];
-                };
-            };
-        };
-    };
-    inspect_template_api_templates_inspect_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TemplateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TemplateInspectResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

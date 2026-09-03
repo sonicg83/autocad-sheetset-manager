@@ -96,7 +96,7 @@ def test_get_layout_names_dwt_also_copied_to_source_dwg(tmp_path, monkeypatch):
 
 def test_get_layout_names_unconfigured_capability_raises_clear_error(tmp_path):
     """CAD 能力未配置（缺 console/plugin）时必须在调用 Core Console 前给出可操作的明确错误，
-    不得误报为"DWG 可能正被 AutoCAD 占用"（对齐 inspect_template 的 CAD_CAPABILITY_UNAVAILABLE 先例）。"""
+    不得误报为"DWG 可能正被 AutoCAD 占用"（能力未配置是环境问题，与执行失败提示分开）。"""
     source = tmp_path / "drawing.dwg"
     source.write_bytes(b"fake dwg bytes")
 

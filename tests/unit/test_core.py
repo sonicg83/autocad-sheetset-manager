@@ -1298,7 +1298,7 @@ def test_duplicate_staged_results_for_final_target_are_rejected(tmp_path: Path):
 def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
+    service.get_layout_names = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     workspace = service.open_workspace(dst)
     command = {
         "type": "insert_subset",
@@ -1316,7 +1316,7 @@ def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tm
     assert preview["execution_intent"]["source_baselines"][0]["sha256"] == file_sha256(tmp_path / "A.dwg")
     assert "source_inspections" not in preview["execution_intent"]
     assert not (tmp_path / ".dst-manager").exists()
-    service.inspect_template.assert_not_called()
+    service.get_layout_names.assert_not_called()
 
 
 def test_service_persists_insert_subset_baselines_for_worker(tiny_workspace, tmp_path: Path):
@@ -1581,7 +1581,7 @@ def test_structural_preview_blocks_outside_source_without_invoking_cad(tiny_work
     outside = tmp_path.parent / "outside-source.dwg"
     outside.write_bytes(b"template")
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))
-    service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
+    service.get_layout_names = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     workspace = service.open_workspace(dst)
 
     preview = service.preview_changes(
@@ -1599,7 +1599,7 @@ def test_structural_preview_blocks_outside_source_without_invoking_cad(tiny_work
 
     assert preview["executable"] is False
     assert preview["diagnostics"][0]["code"] == "LAYOUT_SOURCE_OUTSIDE_WORKSPACE"
-    service.inspect_template.assert_not_called()
+    service.get_layout_names.assert_not_called()
 
 
 def test_structural_preview_defers_layout_existence_to_cad_worker(tiny_workspace, tmp_path: Path):

@@ -101,20 +101,20 @@ def test_openapi_exposes_typed_workspace_preview_job_and_revision_responses(tmp_
     assert schema["info"]["version"] == "0.3.0"
 
 
-def test_open_and_template_requests_reject_unknown_fields_and_invalid_cad_version(tmp_path):
+def test_open_and_layout_names_requests_reject_unknown_fields_and_invalid_cad_version(tmp_path):
     client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
 
     opened = client.post(
         "/api/workspaces/open",
         json={"dst_path": str(tmp_path / "missing.dst"), "unexpected": True},
     )
-    template = client.post(
-        "/api/templates/inspect",
-        json={"template_path": str(tmp_path / "missing.dwt"), "cad_version": "2024"},
+    layout_names = client.post(
+        "/api/layout-names",
+        json={"file_path": str(tmp_path / "missing.dwg"), "cad_version": "2024"},
     )
 
     assert opened.status_code == 422
-    assert template.status_code == 422
+    assert layout_names.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -377,7 +377,7 @@ def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_work
     dst, _ = tiny_workspace
     app = create_app(Settings(data_dir=tmp_path / "data"))
     client = TestClient(app)
-    app.state.service.inspect_template = Mock(side_effect=AssertionError("预览不得调用 CAD"))
+    app.state.service.get_layout_names = Mock(side_effect=AssertionError("预览不得调用 CAD"))
     opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
     payload = {
         "base_revision_id": opened["revision_id"],
@@ -410,7 +410,7 @@ def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_work
     assert unconfirmed.status_code == 422
     assert executed["payload"]["plan"]["cad_version"] == "2016"
     assert executed["payload"]["plan"]["execution_intent"]["source_baselines"] == preview["execution_intent"]["source_baselines"]
-    app.state.service.inspect_template.assert_not_called()
+    app.state.service.get_layout_names.assert_not_called()
     assert invalid.status_code == 422
 
 

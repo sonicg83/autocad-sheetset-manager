@@ -477,18 +477,6 @@ class CadCapabilitiesResponse(RootModel[dict[str, CadCapabilityResponse]]):
     pass
 
 
-class TemplateLayoutResponse(ResponseModel):
-    name: str
-    handle: str
-
-
-class TemplateInspectResponse(ResponseModel):
-    path: str
-    sha256: str
-    cad_version: str
-    layouts: list[TemplateLayoutResponse]
-
-
 class DraftActionResponse(ResponseModel):
     id: str
     kind: Literal["command_batch"]

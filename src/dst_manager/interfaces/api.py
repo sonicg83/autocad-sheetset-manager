@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Literal
 
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
@@ -37,7 +36,6 @@ from dst_manager.interfaces.responses import (
     RepairPreviewResponse,
     RestorePreviewResponse,
     RevisionResponse,
-    TemplateInspectResponse,
     WorkspaceResponse,
     XmlPreviewResponse,
 )
@@ -47,11 +45,6 @@ from dst_manager.interfaces.serialization import workspace_json
 class OpenRequest(ContractModel):
     dst_path: Path
     root_override: Path | None = None
-
-
-class TemplateRequest(ContractModel):
-    template_path: Path
-    cad_version: Literal["2016", "2020"] = "2020"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -284,14 +277,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def capabilities():
         return service.capabilities()
-
-    @app.post(
-        "/api/templates/inspect",
-        response_model=TemplateInspectResponse,
-        response_model_exclude_unset=True,
-    )
-    def inspect_template(request: TemplateRequest):
-        return service.inspect_template(request.template_path, request.cad_version)
 
     @app.post(
         "/api/layout-names",

@@ -3429,79 +3429,6 @@
         "title": "SubsetResponse",
         "type": "object"
       },
-      "TemplateInspectResponse": {
-        "properties": {
-          "cad_version": {
-            "title": "Cad Version",
-            "type": "string"
-          },
-          "layouts": {
-            "items": {
-              "$ref": "#/components/schemas/TemplateLayoutResponse"
-            },
-            "title": "Layouts",
-            "type": "array"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "sha256": {
-            "title": "Sha256",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "sha256",
-          "cad_version",
-          "layouts"
-        ],
-        "title": "TemplateInspectResponse",
-        "type": "object"
-      },
-      "TemplateLayoutResponse": {
-        "properties": {
-          "handle": {
-            "title": "Handle",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "handle"
-        ],
-        "title": "TemplateLayoutResponse",
-        "type": "object"
-      },
-      "TemplateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "cad_version": {
-            "default": "2020",
-            "enum": [
-              "2016",
-              "2020"
-            ],
-            "title": "Cad Version",
-            "type": "string"
-          },
-          "template_path": {
-            "format": "path",
-            "title": "Template Path",
-            "type": "string"
-          }
-        },
-        "required": [
-          "template_path"
-        ],
-        "title": "TemplateRequest",
-        "type": "object"
-      },
       "UpdateSheetPropertiesCommand": {
         "additionalProperties": false,
         "properties": {
@@ -4102,44 +4029,6 @@
           }
         },
         "summary": "Capabilities"
-      }
-    },
-    "/api/templates/inspect": {
-      "post": {
-        "operationId": "inspect_template_api_templates_inspect_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TemplateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemplateInspectResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Inspect Template"
       }
     },
     "/api/workspaces/open": {

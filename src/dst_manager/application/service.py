@@ -41,7 +41,6 @@ from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
     CoreConsoleExecutor,
     ScriptRenderer,
-    parse_handles,
     parse_layout_names,
 )
 from dst_manager.infrastructure.drafts import DraftConflictError, DraftStore
@@ -645,7 +644,6 @@ class DstManagerService:
         suggestions = {
             "CAD_CAPABILITY_UNAVAILABLE": "配置匹配版本的 Core Console 和 Worker 插件后重试。",
             "BLOCKED_FILE_LOCK": "关闭占用目标 DST/DWG 的程序后重试。",
-            "TEMPLATE_CHANGED": "模板已变化，请重新预览后提交。",
             "CAD_TIMEOUT": "检查 CAD 日志、图纸复杂度和超时设置后重试。",
             "STAGING_DISK_SPACE_INSUFFICIENT": "释放工作区磁盘空间后重试。",
             "HANDLE_LAYOUT_MISMATCH": "检查模板布局名和 Worker 插件版本。",
@@ -1269,27 +1267,6 @@ class DstManagerService:
         capabilities = {version: self._capability(version) for version in ("2016", "2020")}
         return {version: {"version": version, "available": item.available, "console": str(item.console) if item.console else None, "plugin": str(item.plugin) if item.plugin else None} for version, item in capabilities.items()}
 
-    def inspect_template(self, template: Path, cad_version: str) -> dict[str, Any]:
-        template = template.expanduser().resolve()
-        if template.suffix.lower() not in {".dwg", ".dwt"} or not template.is_file():
-            raise ApplicationError("TEMPLATE_NOT_FOUND", f"模板不存在：{template}", 404)
-        capability = self._capability(cad_version)
-        if not capability.available:
-            raise ApplicationError("CAD_CAPABILITY_UNAVAILABLE", f"AutoCAD {cad_version}未配置")
-        source_hash = file_sha256(template)
-        with tempfile.TemporaryDirectory(prefix="dst-manager-template-") as temp:
-            temp_dir = Path(temp)
-            drawing = temp_dir / (template.stem + ".dwg")
-            import shutil
-            shutil.copy2(template, drawing)
-            script = temp_dir / "inspect.scr"
-            script.write_text(ScriptRenderer().render_handles(capability.plugin), encoding="mbcs")
-            CoreConsoleExecutor().run(capability, drawing, script, self.settings.cad_timeout_seconds)
-            handles = parse_handles(drawing.with_suffix(".dst-handles.txt").read_text(encoding="utf-8"))
-        if file_sha256(template) != source_hash:
-            raise ApplicationError("TEMPLATE_CHANGED", "模板在检查期间发生变化")
-        return {"path": str(template), "sha256": source_hash, "cad_version": cad_version, "layouts": [{"name": name, "handle": handle} for name, handle in handles.items()]}
-
     def get_layout_names(self, file_path: Path, cad_version: str) -> dict:
         """读取 DWG/DWT 布局名，命中全局缓存直接返回，否则在临时副本上运行只读枚举。
 
@@ -1307,7 +1284,7 @@ class DstManagerService:
             return {"layouts": cached, "cached": True, "file_hash": digest}
         capability = self._capability(cad_version)
         if not capability.available:
-            # 与 inspect_template 同一先例：未配置是环境问题，不得混入"文件被占用"的执行失败提示
+            # 未配置是环境问题，不得混入"文件被占用"的执行失败提示
             raise ApplicationError(
                 "CAD_CAPABILITY_UNAVAILABLE",
                 f"AutoCAD {cad_version} 未配置：缺少 Core Console 或 Worker 插件路径，"

@@ -393,7 +393,7 @@ DRAFT → VALIDATED → QUEUED → STAGING → CAD_RUNNING
 | `GET` | `/api/jobs/{id}` | 查询进度、结果、错误，以及逐文件 `cad_operation`、`started_at`、`finished_at` |
 | `GET` | `/api/jobs/{id}/events` | SSE任务事件 |
 | `GET` | `/api/revisions` | 查看永久修订 |
-| `POST` | `/api/templates/inspect` | 用Core Console枚举模板布局 |
+| `POST` | `/api/layout-names` | 用Core Console枚举DWG/DWT布局名（SHA-256缓存） |
 | `GET` | `/api/system/cad-capabilities` | 检测2016/2020与插件 |
 
 所有写API要求提交 `base_revision_id`。基准已变化时返回409，用户必须重新预览。
