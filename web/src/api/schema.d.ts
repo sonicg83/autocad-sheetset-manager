@@ -891,6 +891,8 @@ export interface components {
         };
         /** InsertSubsetCommand */
         InsertSubsetCommand: {
+            /** Base Template File */
+            base_template_file: string;
             /**
              * Initial Sheet Count
              * @default 1
@@ -1047,9 +1049,15 @@ export interface components {
         };
         /** LayoutSource */
         LayoutSource: {
-            /** File */
+            /**
+             * File
+             * @default
+             */
             file: string;
-            /** Layout */
+            /**
+             * Layout
+             * @default
+             */
             layout: string;
             /**
              * Type

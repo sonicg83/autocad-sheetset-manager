@@ -116,6 +116,7 @@ def test_corrupt_draft_is_quarantined_without_overwriting_it(tmp_path):
                 "title": "危险/标题",
                 "initial_sheet_count": 1,
                 "source": {"type": "template_layout", "file": "C:\\template.dwt", "layout": "A1"},
+                "base_template_file": "C:\\template.dwt",
             },
         ),
         lambda draft: draft["actions"][0]["commands"].__setitem__(
@@ -168,3 +169,107 @@ def test_draft_store_rejects_workspace_path_traversal(tmp_path):
         store.load("../outside")
 
     assert not (tmp_path / "outside.json").exists()
+
+
+def _insert_subset_draft_command(
+    *,
+    base_template_file: str = "C:\\图纸基底.dwg",
+    source: dict | None = None,
+) -> dict:
+    return {
+        "type": "insert_subset",
+        "placement": "after",
+        "title": "新分册",
+        "initial_sheet_count": 2,
+        "source": source or {"type": "template_layout", "file": "C:\\template.dwt", "layout": "A1模板"},
+        "base_template_file": base_template_file,
+    }
+
+
+def _insert_sheet_draft_command(*, source: dict) -> dict:
+    return {
+        "type": "insert_sheet",
+        "target_subset_id": "subset-1",
+        "ordinal": 1,
+        "placement": "after",
+        "count": 1,
+        "source": source,
+    }
+
+
+def _write_and_load(tmp_path, draft: dict) -> dict:
+    import json
+
+    draft_dir = tmp_path / "drafts"
+    draft_dir.mkdir()
+    source = draft_dir / "workspace-1.json"
+    source.write_text(json.dumps(draft), encoding="utf-8")
+    return DraftStore(draft_dir).load("workspace-1")
+
+
+def test_draft_with_insert_subset_base_template_file_loads_clean(tmp_path):
+    """SPEC-DM-008 F-04：含必填 base_template_file 的 insert_subset 命令不再被形状校验器误判损坏。"""
+    draft = _draft(version=1)
+    draft["actions"][0]["commands"] = [_insert_subset_draft_command()]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": draft, "corrupted": False}
+
+
+def test_draft_existing_snapshot_source_allows_empty_file_and_layout(tmp_path):
+    """SPEC-DM-008 F-02：existing_snapshot 来源允许空 file/layout，template_layout 仍要求非空。"""
+    draft = _draft(version=1)
+    draft["actions"][0]["commands"] = [
+        _insert_sheet_draft_command(source={"type": "existing_snapshot", "file": "", "layout": ""}),
+    ]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result["corrupted"] is False
+    assert result["draft"]["actions"][0]["commands"][0]["source"] == {
+        "type": "existing_snapshot",
+        "file": "",
+        "layout": "",
+    }
+
+
+def test_draft_existing_snapshot_source_still_validates_nonempty_path(tmp_path):
+    """existing_snapshot 非空 file 仍走绝对路径校验（越界防御保留）。"""
+    draft = _draft(version=1)
+    draft["actions"][0]["commands"] = [
+        _insert_sheet_draft_command(source={"type": "existing_snapshot", "file": "relative.dwg", "layout": ""}),
+    ]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": None, "corrupted": True}
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda command: command.pop("base_template_file"),
+        lambda command: command.update(base_template_file="relative.dwg"),
+    ],
+)
+def test_draft_insert_subset_missing_or_invalid_base_template_is_quarantined(tmp_path, mutation):
+    draft = _draft(version=1)
+    command = _insert_subset_draft_command()
+    mutation(command)
+    draft["actions"][0]["commands"] = [command]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": None, "corrupted": True}
+
+
+def test_draft_template_layout_source_rejects_empty_file(tmp_path):
+    draft = _draft(version=1)
+    draft["actions"][0]["commands"] = [
+        _insert_sheet_draft_command(source={"type": "template_layout", "file": "", "layout": "A1"}),
+    ]
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": None, "corrupted": True}

@@ -34,7 +34,7 @@ _COMMAND_KEYS: dict[str, tuple[set[str], set[str]]] = {
         {"ordinal"},
     ),
     "insert_subset": (
-        {"type", "placement", "title", "initial_sheet_count", "source"},
+        {"type", "placement", "title", "initial_sheet_count", "source", "base_template_file"},
         {"ordinal"},
     ),
     "add_custom_property": (
@@ -223,10 +223,16 @@ def _validate_source(value: object) -> None:
     _require_keys(value, {"type", "file", "layout"})
     if value["type"] not in {"existing_snapshot", "template_layout"}:
         raise ValueError("DRAFT_CONTENT_INVALID")
-    _require_text(value["file"])
-    _require_text(value["layout"])
-    validate_absolute_source_file(value["file"])
-    normalize_derived_name(value["layout"], "布局名称")
+    if not isinstance(value["file"], str) or not isinstance(value["layout"], str):
+        raise ValueError("DRAFT_CONTENT_INVALID")  # noqa: TRY004 - 文件内容损坏统一归类
+    # existing_snapshot 来源允许空 file/layout（前端以 {type, file:"", layout:""} 提交，SPEC-DM-008 F-02）
+    if value["type"] == "template_layout":
+        _require_text(value["file"])
+        _require_text(value["layout"])
+    if value["file"]:
+        validate_absolute_source_file(value["file"])
+    if value["layout"]:
+        normalize_derived_name(value["layout"], "布局名称")
 
 
 def _validate_command(command: object) -> None:
@@ -246,6 +252,10 @@ def _validate_command(command: object) -> None:
         validate_sheet_set_name(command["name"])
     if command_type in {"update_subset_title", "insert_subset"}:
         normalize_derived_name(command["title"], "子集标题")
+    if command_type == "insert_subset":
+        # 基础模板文件与契约同步：必填非空且绝对路径（SPEC-DM-008 F-04）
+        _require_text(command["base_template_file"])
+        validate_absolute_source_file(command["base_template_file"])
     if command_type in {"add_custom_property", "delete_custom_property"} and command["property_type"] not in {"sheetset", "sheet"}:
         raise ValueError("DRAFT_CONTENT_INVALID")
     if command_type in {"add_custom_property", "delete_custom_property"}:

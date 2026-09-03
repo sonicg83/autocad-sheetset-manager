@@ -1635,6 +1635,11 @@
       "InsertSubsetCommand": {
         "additionalProperties": false,
         "properties": {
+          "base_template_file": {
+            "minLength": 1,
+            "title": "Base Template File",
+            "type": "string"
+          },
           "initial_sheet_count": {
             "default": 1,
             "minimum": 1.0,
@@ -1679,7 +1684,8 @@
         "required": [
           "type",
           "title",
-          "source"
+          "source",
+          "base_template_file"
         ],
         "title": "InsertSubsetCommand",
         "type": "object"
@@ -2203,12 +2209,12 @@
         "additionalProperties": false,
         "properties": {
           "file": {
-            "minLength": 1,
+            "default": "",
             "title": "File",
             "type": "string"
           },
           "layout": {
-            "minLength": 1,
+            "default": "",
             "title": "Layout",
             "type": "string"
           },
@@ -2222,9 +2228,7 @@
           }
         },
         "required": [
-          "type",
-          "file",
-          "layout"
+          "type"
         ],
         "title": "LayoutSource",
         "type": "object"
