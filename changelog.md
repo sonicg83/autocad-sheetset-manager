@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-03（v0.3.2 基线：SPEC-DM-008 / PLAN-DM-012 与版本重基线）
+
+- PLAN-DM-012 Task 1（SPEC-DM-008 F-01）：序号后缀压缩拼接进入 DWG 文件名——`editing.py` 新增模块级私有 `_compressed_group_title(base_title, sheet_titles)`，把组内多张带后缀图纸标题压缩为单个区间后缀标题（如 `图纸目录 (一)`/`图纸目录 (二)` → `图纸目录 (一)-(二)`，`RQ-01-02 图纸目录 (一)-(二).dwg`）；任一张标题结构不符合 `基础标题 (后缀)` 时防御性回退为基础标题，单张无后缀行为与现状一致。`derive_document_structure` 中 `_target_file_name` 的标题实参改为 `_compressed_group_title(title, titles_for_subset)`，规划展示名 `{number_range} {title}` 保持基础标题不变。`tests/unit/test_core.py` 新增三个派生文件名用例（中文/阿拉伯数字后缀压缩与单张回退）。
+- 立项 v0.3.2「命名与模板流程需求变更」：[SPEC-DM-008](docs/dst-manager/specs/SPEC-DM-008-v032-naming-and-template-flows.md)（review）与 [PLAN-DM-012](.planning/plans/dst-manager/PLAN-DM-012-v032-naming-and-template-flows.md)（active）。四项需求：① 序号后缀压缩拼接进入 DWG 文件名；② 批量新增图纸"已有布局"来源强制解析为目标子集 DWG 与第一个非 Model 布局（只读 DST，不调 CAD 脚本，执行期失败整批回滚）；③ 批量新增图纸/新建子集表单文案统一；④ 新建子集必填"基础模板文件"（图纸模板），DWG 基底与布局来源分离。经评审并入两项既有事项：`service.py` 全量拆分（先辅助簇后功能域，置于功能变更之前，行为零变化）与遗留项 M6/M4。
+- 版本重基线：原 v0.3.2（SPEC-DM-006 桌面界面重构，PLAN-DM-010 编号含义不变）延后为 **v0.3.3**，v0.3.1 其余遗留项（M1-M5、M7、T 系列）随 v0.3.3；同步更新 [SPEC-DM-007](docs/dst-manager/specs/SPEC-DM-007-v031-shell-and-usability.md)、[ROADMAP-DM-001](.planning/roadmaps/dst-manager.md)、plans/README、[DMv031-deferred-findings](.planning/memos/dst-manager/DMv031-deferred-findings.md)（保留原记录并加重基线注）。
+
 ## 2026-09-03（清理：移除孤儿模板检查 API `/api/templates/inspect`）
 
 - 删除 `inspect_template` 及其 `/api/templates/inspect` 端点：该接口（v0.2 模板布局检查，返回布局名+Handle）在 PLAN-DM-008 将 CAD 校验延期到执行期后已无任何调用方（预览不再调 CAD，前端只用 v0.3.1 的 `/api/layout-names`），与 `get_layout_names` 构成同功能两套 accoreconsole 只读包装且错误处理不一致（占用/超时时裸抛 500，无友好错误码）。同步删除 `TemplateRequest`、`TemplateInspectResponse`、`TemplateLayoutResponse` 及 `service.py` 中 `parse_handles` 导入；`render_handles()` 按 SPEC-DM-002 保留（真实 CAD 系统测试的诊断工具）。"预览不得调用 CAD"守卫测试改为 mock `get_layout_names`；`ARCH-DM-001` 端点表以 `/api/layout-names` 替换该行；`web/src/api` 契约经 `npm run generate:api` 重新生成。

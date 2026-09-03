@@ -248,6 +248,43 @@ def test_v021_naming_policy_derives_range_and_sheet_titles():
     assert [sheet.title for sheet in derived.subsets[0].sheets] == ["图纸目录 (一)", "图纸目录 (二)"]
 
 
+def test_derived_target_file_name_compresses_title_suffixes(tmp_path: Path):
+    sheets = [
+        Sheet("1", "01", "图纸目录", LayoutReference(str(tmp_path / "RQ-01 图纸目录.dwg"), "", "01 图纸目录", "")),
+        Sheet("2", "02", "图纸目录", LayoutReference(str(tmp_path / "RQ-01 图纸目录.dwg"), "", "02 图纸目录", "")),
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "01-02 图纸目录", 1, sheets)])
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 1))
+
+    assert [sheet.title for sheet in derived.subsets[0].sheets] == ["图纸目录 (一)", "图纸目录 (二)"]
+    assert Path(derived.subsets[0].target_file).name == "RQ-01-02 图纸目录 (一)-(二).dwg"
+
+
+def test_derived_target_file_name_compresses_arabic_suffixes(tmp_path: Path):
+    sheets = [
+        Sheet("1", "01", "图纸目录", LayoutReference(str(tmp_path / "RQ-01 图纸目录.dwg"), "", "01 图纸目录", "")),
+        Sheet("2", "02", "图纸目录", LayoutReference(str(tmp_path / "RQ-01 图纸目录.dwg"), "", "02 图纸目录", "")),
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "01-02 图纸目录", 1, sheets)])
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 2))
+
+    assert Path(derived.subsets[0].target_file).name == "RQ-01-02 图纸目录 (1)-(2).dwg"
+
+
+def test_derived_target_file_name_keeps_base_title_without_suffix(tmp_path: Path):
+    sheets = [
+        Sheet("1", "01", "图纸目录", LayoutReference(str(tmp_path / "RQ-01 图纸目录.dwg"), "", "01 图纸目录", "")),
+    ]
+    document = SheetSetDocument("db", "图纸集", [Subset("subset", "01 图纸目录", 1, sheets)])
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 1))
+
+    assert derived.subsets[0].sheets[0].title == "图纸目录"
+    assert Path(derived.subsets[0].target_file).name == "RQ-01 图纸目录.dwg"
+
+
 def _insert_subset_command(initial_sheet_count: int = 1) -> dict:
     return {
         "type": "insert_subset",

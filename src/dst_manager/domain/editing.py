@@ -289,6 +289,26 @@ def derive_group_titles(
     return result
 
 
+def _compressed_group_title(base_title: str, sheet_titles: list[str]) -> str:
+    """把组内多张带后缀图纸的标题压缩为单个带区间后缀的标题。
+
+    例如三张 `图纸目录 (一)`/`图纸目录 (二)`/`图纸目录 (三)` 压缩为
+    `图纸目录 (一)-(三)`，供派生 DWG 文件名使用。组内仅一张时沿用基础
+    标题（向后兼容）；任一张标题结构不符合 `基础标题 (后缀)` 时防御性
+    回退为基础标题，保持与旧行为一致。
+    """
+    if len(sheet_titles) < 2:
+        return base_title  # 组内仅一张时沿用基础标题（SPEC-DM-008 §3.2 向后兼容）
+    prefix = f"{base_title} ("
+    suffixes: list[str] = []
+    for title in sheet_titles:
+        if title.startswith(prefix) and title.endswith(")"):
+            suffixes.append(title[len(prefix):-1])
+        else:
+            return base_title  # 结构异常时防御性回退为基础标题
+    return f"{prefix}{')-('.join(suffixes)})"
+
+
 def derive_document_structure(
     document: SheetSetDocument,
     commands: list[dict[str, Any]],
@@ -396,7 +416,7 @@ def derive_document_structure(
             sheet.layout.layout_name = _layout_name(sheet.number, sheet.title)
         number_range = _number_range(subset.sheets)
         source_target = _source_target_file(document, subset, layout_sources)
-        target_file = _target_file_name(source_target, number_range, title)
+        target_file = _target_file_name(source_target, number_range, _compressed_group_title(title, titles_for_subset))
         derived_subsets.append(
             DerivedSubset(subset.acsm_id, title, number_range, f"{number_range} {title}", subset.sheets, source_target, target_file),
         )
