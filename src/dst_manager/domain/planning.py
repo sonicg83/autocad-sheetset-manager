@@ -161,7 +161,11 @@ def build_structural_plan(
         )
         if cad_operation == "none":
             continue
-        source_snapshot = source_target or (layouts[0]["source_file"] if layouts else "")
+        source_snapshot = (
+            source_target
+            or derived.subset_base_templates.get(subset.acsm_id)
+            or (layouts[0]["source_file"] if layouts else "")
+        )
         if not source_snapshot:
             raise PlanningError("LAYOUT_SOURCE_INVALID", f"子集缺少重建基础文件：{subset.acsm_id}")
         planned_subset_ids.append(subset.acsm_id)
@@ -356,6 +360,7 @@ def derived_document_from_plan(plan: dict[str, Any]) -> DerivedDocument:
             list(raw["affected_subset_ids"]),
             property_diff,
             {sheet_id: dict(source) for sheet_id, source in raw["layout_sources"].items()},
+            dict(raw.get("subset_base_templates", {})),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise PlanningError("DERIVED_DOCUMENT_INVALID", "执行计划缺少有效的最终派生结构") from exc
@@ -426,6 +431,7 @@ def _serialize_derived_document(derived: DerivedDocument) -> dict[str, Any]:
             ],
         },
         "layout_sources": {sheet_id: dict(source) for sheet_id, source in derived.layout_sources.items()},
+        "subset_base_templates": dict(derived.subset_base_templates),
     }
 
 

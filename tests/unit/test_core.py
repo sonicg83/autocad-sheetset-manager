@@ -17,7 +17,11 @@ import dst_manager.application.service as service_module
 from dst_manager.application.cad_job import CadJobRunner, RebuildResult, RebuildWorkUnit
 from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
-from dst_manager.domain.editing import SuffixOptions, derive_document_structure
+from dst_manager.domain.editing import (
+    EditingError,
+    SuffixOptions,
+    derive_document_structure,
+)
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
@@ -293,7 +297,63 @@ def _insert_subset_command(initial_sheet_count: int = 1) -> dict:
         "title": "燃气管道平面图",
         "initial_sheet_count": initial_sheet_count,
         "source": {"type": "template_layout", "file": r"C:\模板\标准.dwt", "layout": "A3"},
+        "base_template_file": r"C:\模板\图纸模板.dwg",
     }
+
+
+def test_derive_insert_subset_carries_base_template_file(tmp_path: Path):
+    base_template = tmp_path / "图纸基底.dwg"
+    document = SheetSetDocument("db", "图纸集", [])
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "燃气管道平面图",
+        "initial_sheet_count": 2,
+        "base_template_file": str(base_template),
+        "source": {"type": "template_layout", "file": str(tmp_path / "布局模板.dwt"), "layout": "A3"},
+    }
+
+    derived = derive_document_structure(document, [command], SuffixOptions(True, 1))
+
+    new_subset_id = derived.subsets[-1].acsm_id
+    assert derived.subset_base_templates[new_subset_id] == str(base_template)
+    assert new_subset_id in derived.affected_subset_ids
+
+
+def test_derive_insert_subset_rejects_missing_base_template_file(tmp_path: Path):
+    document = SheetSetDocument("db", "图纸集", [])
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "燃气管道平面图",
+        "initial_sheet_count": 1,
+        "source": {"type": "template_layout", "file": str(tmp_path / "布局模板.dwt"), "layout": "A3"},
+    }
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(document, [command], SuffixOptions(True, 1))
+
+    assert exc_info.value.code == "INSERT_SUBSET_BASE_TEMPLATE_INVALID"
+
+
+def test_derive_insert_subset_rejects_invalid_base_template_extension(tmp_path: Path):
+    document = SheetSetDocument("db", "图纸集", [])
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "燃气管道平面图",
+        "initial_sheet_count": 1,
+        "base_template_file": str(tmp_path / "基底.txt"),
+        "source": {"type": "template_layout", "file": str(tmp_path / "布局模板.dwt"), "layout": "A3"},
+    }
+
+    with pytest.raises(EditingError) as exc_info:
+        derive_document_structure(document, [command], SuffixOptions(True, 1))
+
+    assert exc_info.value.code == "INSERT_SUBSET_BASE_TEMPLATE_INVALID"
 
 
 def test_insert_subset_creates_nonempty_controlled_nodes(tiny_workspace):
@@ -738,6 +798,7 @@ def test_inserted_subset_rebuilds_and_renames_following_subset(tmp_path: Path):
             "placement": "after",
             "title": "新增册",
             "initial_sheet_count": 1,
+            "base_template_file": str(template),
             "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
         }],
         SuffixOptions(True, 1),
@@ -867,6 +928,7 @@ def test_insert_subset_plan_creates_one_new_dwg_without_deleting_existing(tmp_pa
         "placement": "after",
         "title": "燃气管道平面图",
         "initial_sheet_count": 2,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
     }
 
@@ -954,6 +1016,7 @@ def test_inserted_subset_replans_collateral_number_ranges_and_suffixes(tmp_path:
                 "placement": "after",
                 "title": "燃气管道平面图",
                 "initial_sheet_count": 2,
+                "base_template_file": str(template),
                 "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
             },
         ],
@@ -984,6 +1047,7 @@ def test_first_subset_plan_uses_template_as_create_snapshot(tmp_path: Path):
                 "ordinal": 1,
                 "title": "首个子集",
                 "initial_sheet_count": 1,
+                "base_template_file": str(template),
                 "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
             },
         ],
@@ -994,6 +1058,30 @@ def test_first_subset_plan_uses_template_as_create_snapshot(tmp_path: Path):
     assert plan["groups"][0]["source_target_file"] is None
     assert Path(plan["groups"][0]["source_snapshot"]) == template
     assert json.loads(json.dumps(plan, ensure_ascii=False))["groups"][0]["operation"] == "create"
+
+
+def test_insert_subset_plan_snapshot_uses_base_template_not_layout_template(tmp_path: Path):
+    base_template = tmp_path / "图纸基底.dwg"
+    layout_template = tmp_path / "布局模板.dwt"
+    base_template.write_bytes(b"base")
+    layout_template.write_bytes(b"layout-template")
+    workspace = _planning_workspace(tmp_path, [])
+    command = {
+        "type": "insert_subset",
+        "ordinal": 1,
+        "placement": "after",
+        "title": "新建子集",
+        "initial_sheet_count": 1,
+        "base_template_file": str(base_template),
+        "source": {"type": "template_layout", "file": str(layout_template), "layout": "A3"},
+    }
+
+    plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
+
+    group = plan["groups"][0]
+    assert group["operation"] == "create"
+    assert Path(group["source_snapshot"]) == base_template
+    assert group["layouts"][0]["source_file"] == str(layout_template)
 
 
 def test_structural_plan_rejects_layout_collision_after_one_derivation(tmp_path: Path, monkeypatch):
@@ -1127,6 +1215,7 @@ def test_missing_source_baseline_is_rejected_before_cad_staging(tmp_path: Path):
         "ordinal": 1,
         "title": "首个子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(missing),
         "source": {"type": "template_layout", "file": str(missing), "layout": "A3"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
@@ -1164,6 +1253,7 @@ def test_create_target_collision_is_blocked_before_cad(tmp_path: Path, template_
         "ordinal": 1,
         "title": "新建",
         "initial_sheet_count": 1,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 1))
@@ -1343,6 +1433,7 @@ def test_structural_preview_is_fast_and_defers_cad_validation(tiny_workspace, tm
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(tmp_path / "A.dwg"),
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
     }
 
@@ -1366,6 +1457,7 @@ def test_service_persists_insert_subset_baselines_for_worker(tiny_workspace, tmp
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 2,
+        "base_template_file": str(tmp_path / "A.dwg"),
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
     }
 
@@ -1402,6 +1494,7 @@ def test_structural_preview_binds_dst_sources_and_create_targets_to_content_hash
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(tmp_path / "A.dwg"),
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
     }
 
@@ -1516,6 +1609,7 @@ def test_structural_execute_requires_confirmed_preview_digest(tiny_workspace, tm
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(tmp_path / "A.dwg"),
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
     }
 
@@ -1548,6 +1642,7 @@ def test_structural_execute_requires_repreview_after_source_baseline_changes(tin
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(source),
         "source": {"type": "template_layout", "file": str(source), "layout": "001 平面"},
     }
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command], "2016")
@@ -1581,6 +1676,7 @@ def test_structural_preview_allows_legal_absolute_template_outside_workspace(tin
             "placement": "after",
             "title": "新建子集",
             "initial_sheet_count": 1,
+            "base_template_file": str(outside),
             "source": {"type": "template_layout", "file": str(outside), "layout": "A3"},
         }],
     )
@@ -1680,6 +1776,7 @@ def test_structural_preview_defers_layout_existence_to_cad_worker(tiny_workspace
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 1,
+        "base_template_file": str(tmp_path / "A.dwg"),
         "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "A3"},
     }
     preview = service.preview_changes(workspace.id, workspace.revision_id, [command])
@@ -1701,6 +1798,7 @@ def test_preview_semantic_diff_contains_complete_structure_properties_and_dwgs(t
             "placement": "after",
             "title": "新建子集",
             "initial_sheet_count": 1,
+            "base_template_file": str(tmp_path / "A.dwg"),
             "source": {"type": "template_layout", "file": str(tmp_path / "A.dwg"), "layout": "001 平面"},
         }],
     )
@@ -2644,6 +2742,7 @@ def test_parallel_mixed_cad_failure_never_publishes_staged_results(tmp_path: Pat
         "placement": "before",
         "title": "新增",
         "initial_sheet_count": 1,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
@@ -2755,6 +2854,7 @@ def test_mixed_cad_failure_does_not_publish_staged_results(tmp_path: Path):
         "placement": "before",
         "title": "新增",
         "initial_sheet_count": 1,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
@@ -2988,6 +3088,7 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
         "placement": "after",
         "title": "新建子集",
         "initial_sheet_count": 2,
+        "base_template_file": str(existing),
         "source": {"type": "template_layout", "file": str(existing), "layout": "001 平面"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
@@ -3063,6 +3164,7 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
         "placement": "before",
         "title": "共享",
         "initial_sheet_count": 1,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
@@ -3112,6 +3214,7 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
         "placement": "before",
         "title": "共享",
         "initial_sheet_count": 1,
+        "base_template_file": str(template),
         "source": {"type": "template_layout", "file": str(template), "layout": "模板布局"},
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))

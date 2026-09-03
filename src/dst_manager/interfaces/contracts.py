@@ -102,11 +102,20 @@ class InsertSubsetCommand(ContractModel):
     title: str = Field(min_length=1)
     initial_sheet_count: int = Field(default=1, ge=1)
     source: LayoutSource
+    base_template_file: str = Field(min_length=1)
 
     @field_validator("title")
     @classmethod
     def validate_title(cls, value: str) -> str:
         return normalize_derived_name(value, "子集标题")
+
+    @field_validator("base_template_file")
+    @classmethod
+    def validate_base_template_file(cls, value: str) -> str:
+        path = validate_absolute_source_file(value)
+        if Path(path).suffix.lower() not in {".dwg", ".dwt"}:
+            raise ValueError("INSERT_SUBSET_BASE_TEMPLATE_INVALID: 基础模板文件必须为 .dwg 或 .dwt 文件")
+        return path
 
 
 class AddCustomPropertyCommand(ContractModel):

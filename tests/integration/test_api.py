@@ -388,6 +388,7 @@ def test_structural_preview_and_execute_defer_cad_validation(tmp_path, tiny_work
             "placement": "after",
             "title": "新建子集",
             "initial_sheet_count": 1,
+            "base_template_file": str(dst.parent / "A.dwg"),
             "source": {"type": "template_layout", "file": str(dst.parent / "A.dwg"), "layout": "001 平面"},
         }],
     }
@@ -1178,6 +1179,7 @@ def test_legacy_commands_are_immediately_unsupported_without_partial_commit(tmp_
                 "type": "insert_subset",
                 "ordinal": 2,
                 "title": "新子集",
+                "base_template_file": "C:/模板/图纸模板.dwg",
                 "source": {"type": "template_layout", "file": "drawing", "layout": "001 平面"},
             },
             "SUBSET_POSITION_INVALID",

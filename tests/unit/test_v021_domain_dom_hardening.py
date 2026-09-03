@@ -53,6 +53,7 @@ def _insert_subset_command(count: int = 1) -> dict:
         "placement": "after",
         "title": "燃气管道平面图",
         "initial_sheet_count": count,
+        "base_template_file": "C:/模板/图纸基底.dwg",
         "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
     }
 

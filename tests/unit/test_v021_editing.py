@@ -282,6 +282,7 @@ def test_imported_sheet_property_default_applies_to_inserted_subset_sheets_in_sa
                 "ordinal": 1,
                 "title": "燃气管道平面图",
                 "initial_sheet_count": 2,
+                "base_template_file": "C:/模板/图纸基底.dwg",
                 "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
             },
         ],
@@ -302,6 +303,7 @@ def test_first_subset_ordinal_one_creates_numbered_initial_sheets():
                 "ordinal": 1,
                 "title": "燃气管道平面图",
                 "initial_sheet_count": 2,
+                "base_template_file": "C:/模板/图纸基底.dwg",
                 "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
             }
         ],

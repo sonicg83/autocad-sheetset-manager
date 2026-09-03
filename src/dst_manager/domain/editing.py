@@ -320,6 +320,7 @@ def derive_document_structure(
     titles = {subset.acsm_id: _editable_subset_title(subset.name) for subset in subsets}
     affected: set[str] = set()
     layout_sources = _existing_layout_sources(document)
+    subset_base_templates: dict[str, str] = {}
     property_diff = _apply_property_commands(document, subsets, commands)
 
     for command_index, command in enumerate(commands):
@@ -356,6 +357,7 @@ def derive_document_structure(
             title = str(command.get("title", "")).strip()
             if not title:
                 raise EditingError("SHEET_TITLE_EMPTY", "子集标题不能为空")
+            base_template_file = _base_template_file(command)
             source = _layout_source(command)
             subset_id = _new_id(document_seed, "subset", command_index, 0)
             sheets = []
@@ -364,6 +366,7 @@ def derive_document_structure(
                 sheets.append(Sheet(sheet_id, "", "", LayoutReference(source["file"], "", source["layout"], ""), {}))
                 layout_sources[sheet_id] = dict(source)
             subset = Subset(subset_id, title, 0, sheets)
+            subset_base_templates[subset_id] = base_template_file
             position = _insertion_index(command, len(subsets), "SUBSET_POSITION_INVALID", allow_empty=True)
             subsets.insert(position, subset)
             subset_by_id[subset_id] = subset
@@ -423,7 +426,7 @@ def derive_document_structure(
             DerivedSubset(subset.acsm_id, title, number_range, f"{number_range} {title}", subset.sheets, source_target, target_file),
         )
 
-    return DerivedDocument(derived_subsets, sorted(affected), property_diff, layout_sources)
+    return DerivedDocument(derived_subsets, sorted(affected), property_diff, layout_sources, subset_base_templates)
 
 
 def _locate_sheet(subsets: list[Subset], sheet_id: str) -> tuple[Subset, int, Sheet]:
@@ -513,6 +516,15 @@ def _layout_source(command: dict[str, Any]) -> dict[str, str]:
     if source_type == "template_layout" and (not source_file or not source_layout):
         raise EditingError("LAYOUT_SOURCE_INVALID", "新增图纸的来源文件或布局无效")
     return {"type": source_type, "file": source_file, "layout": source_layout}
+
+
+def _base_template_file(command: dict[str, Any]) -> str:
+    raw = str(command.get("base_template_file", "")).strip()
+    if not raw:
+        raise EditingError("INSERT_SUBSET_BASE_TEMPLATE_INVALID", "新建子集必须提供基础模板文件")
+    if Path(raw).suffix.lower() not in {".dwg", ".dwt"}:
+        raise EditingError("INSERT_SUBSET_BASE_TEMPLATE_INVALID", "基础模板文件必须为 .dwg 或 .dwt 文件")
+    return raw
 
 
 def _resolve_existing_snapshot(document: SheetSetDocument, target_subset_id: str) -> dict[str, str]:

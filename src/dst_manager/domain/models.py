@@ -144,6 +144,7 @@ class DerivedDocument:
     affected_subset_ids: list[str]
     property_diff: PropertyDefinitionDiff = field(default_factory=PropertyDefinitionDiff)
     layout_sources: dict[str, dict[str, str]] = field(default_factory=dict)
+    subset_base_templates: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
