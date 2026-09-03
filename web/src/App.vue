@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,reactive,ref,watch} from "vue";
+import type {Ref} from "vue";
 import {ApiError,request} from "./api/client";
 import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
@@ -77,6 +78,13 @@ const layoutOptions=ref<string[]>([]);
 const layoutLoading=ref(false);
 const layoutError=ref("");
 const layoutManual=ref(false);
+// 新建子集表单独立的布局选项状态：与批量新增图纸互不串扰，结构镜像上方四件套
+const subsetLayoutOptions=ref<string[]>([]);
+const subsetLayoutLoading=ref(false);
+const subsetLayoutError=ref("");
+const subsetLayoutManual=ref(false);
+// loadLayoutOptions 的注入目标：把布局读取结果写进指定表单的状态组
+type LayoutPickerTarget={options:Ref<string[]>;loading:Ref<boolean>;error:Ref<string>;manual:Ref<boolean>};
 const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 
 const selected=computed(()=>workspace.value?.sheet_set.subsets.find(item=>item.id===selectedId.value)??null);
@@ -185,14 +193,24 @@ async function selectTemplateFile(){
   if(!path)return;
   if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
   insertSheetForm.sourceFile=path;layoutError.value="";layoutManual.value=false;
-  await loadLayoutOptions(path);
+  await loadLayoutOptions(path,{options:layoutOptions,loading:layoutLoading,error:layoutError,manual:layoutManual});
 }
-async function loadLayoutOptions(path:string){
-  layoutLoading.value=true;layoutOptions.value=[];
+async function loadLayoutOptions(path:string,target:LayoutPickerTarget){
+  target.loading.value=true;target.options.value=[];
   // M4：cad_version 改用当前工作区的响应式版本，去除硬编码 "2020"
-  try{const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:cadVersion.value})});layoutOptions.value=r.layouts}
-  catch(e){layoutError.value=e instanceof ApiError?e.message:"读取布局失败";layoutManual.value=true}
-  finally{layoutLoading.value=false}
+  try{const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:cadVersion.value})});target.options.value=r.layouts}
+  catch(e){target.error.value=e instanceof ApiError?e.message:"读取布局失败";target.manual.value=true}
+  finally{target.loading.value=false}
+}
+async function selectSubsetTemplateFile(){
+  const bridge=getShellBridge();
+  if(!bridge){error.value="桌面壳未就绪";return}
+  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  if(!path)return;
+  if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
+  // 与批量新增图纸对齐：选文件后读取布局列表（缓存优先），下拉选择布局名称
+  insertSubsetForm.templateFile=path;subsetLayoutError.value="";subsetLayoutManual.value=false;
+  await loadLayoutOptions(path,{options:subsetLayoutOptions,loading:subsetLayoutLoading,error:subsetLayoutError,manual:subsetLayoutManual});
 }
 async function selectBaseTemplateFile(){
   const bridge=getShellBridge();
@@ -214,6 +232,7 @@ async function closeWorkspace(){
   // M6：重置批量新增图纸与新建子集表单的模板文件/布局/布局选项状态，避免重开工作区残留旧模板路径
   insertSheetForm.sourceFile="";insertSheetForm.sourceLayout="";insertSheetForm.sourceType="template_layout";
   layoutOptions.value=[];layoutLoading.value=false;layoutError.value="";layoutManual.value=false;
+  subsetLayoutOptions.value=[];subsetLayoutLoading.value=false;subsetLayoutError.value="";subsetLayoutManual.value=false;
   insertSubsetForm.templateFile="";insertSubsetForm.templateLayout="";insertSubsetForm.baseTemplateFile="";
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
@@ -574,7 +593,7 @@ async function importCsv(){
             <label>模板来源<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><template v-if="insertSheetForm.sourceType==='existing_snapshot'"><label>来源说明<span>来源为目标子集 DWG 的第一个非 Model 布局</span></label></template><template v-else><label>布局模板文件<button type="button" aria-label="选择模板文件" @click="selectTemplateFile">选择模板文件</button><span v-if="insertSheetForm.sourceFile">{{insertSheetForm.sourceFile}}</span></label><label>布局模板名称<span v-if="layoutLoading">正在读取布局…</span><template v-else-if="layoutError"><span class="error">{{layoutError}}</span><input v-model="insertSheetForm.sourceLayout"></template><select v-else-if="layoutOptions.length&&!layoutManual" v-model="insertSheetForm.sourceLayout"><option v-for="l in layoutOptions" :value="l">{{l}}</option></select></label></template>
           </div><button @click="queueInsertSheet">批量新增图纸</button></fieldset>
 
-          <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>基础模板文件<button type="button" aria-label="选择基础模板文件" @click="selectBaseTemplateFile">选择基础模板文件</button><span v-if="insertSubsetForm.baseTemplateFile">{{insertSubsetForm.baseTemplateFile}}</span></label><label>布局模板文件<input v-model="insertSubsetForm.templateFile"></label><label>布局模板名称<input v-model="insertSubsetForm.templateLayout"></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
+          <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>基础模板文件<button type="button" aria-label="选择基础模板文件" @click="selectBaseTemplateFile">选择基础模板文件</button><span v-if="insertSubsetForm.baseTemplateFile">{{insertSubsetForm.baseTemplateFile}}</span></label><label>布局模板文件<button type="button" aria-label="选择布局模板文件" @click="selectSubsetTemplateFile">选择布局模板文件</button><span v-if="insertSubsetForm.templateFile">{{insertSubsetForm.templateFile}}</span></label><label>布局模板名称<span v-if="subsetLayoutLoading">正在读取布局…</span><template v-else-if="subsetLayoutError"><span class="error">{{subsetLayoutError}}</span><input v-model="insertSubsetForm.templateLayout"></template><select v-else-if="subsetLayoutOptions.length&&!subsetLayoutManual" v-model="insertSubsetForm.templateLayout"><option v-for="l in subsetLayoutOptions" :value="l">{{l}}</option></select></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
         </article>
       </section>
 

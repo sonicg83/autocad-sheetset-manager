@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-03（v0.3.2 补遗：新建子集布局模板选择与添加图纸对齐）
+
+- 新建子集表单的"布局模板文件/布局模板名称"从手动输入对齐为批量新增图纸同款交互——按钮打开文件选择对话框（`.dwg/.dwt` 过滤器）→ 选取后经 `/api/layout-names` 读取布局列表（后端缓存优先）→ 从下拉列表选择布局名称（读取失败回退手动输入，与批量新增图纸一致）。`web/src/App.vue`：`loadLayoutOptions(path, target)` 泛化为按表单注入目标状态组（`LayoutPickerTarget`），新增子集独立的 `subsetLayoutOptions/Loading/Error/Manual` 四件套避免与批量新增图纸共享串扰，新增 `selectSubsetTemplateFile`（复用 `TEMPLATE_FILE_FILTERS`、`DWG_DWT_EXT` 校验与 `selectTemplateFile` 同构流程）；M6 重置同步清空子集布局选项状态。E2E 同步：新建子集入队用例改为按钮选择 + 下拉选布局（命令断言不变），关闭重置用例改为断言子集布局路径与下拉清空。`npm run build` 零类型错误、Playwright e2e **39/39 通过**。
+
 ## 2026-09-03（v0.3.2 评审修复：旧草稿回放后向兼容）
 
 - 修复最终整分支评审 Important #1（旧草稿回放后向兼容缺口）：v0.3.1 前保存、含 `insert_subset` 命令的旧草稿在升级后首次加载被草稿形状校验器以缺 `base_template_file` 判为损坏并隔离（`os.replace` 至 `.corrupt-*.json`、UI 标记 corrupted、draft 置 None），用户待办的新建子集命令从活跃草稿丢失，破坏"草稿是待发布工作的确定性载体"的既有承诺。修复：`src/dst_manager/infrastructure/drafts.py` 的 `_COMMAND_KEYS["insert_subset"]` 将 `base_template_file` 移入可选集、`_validate_command` 改为"命令含该字段才校验非空绝对路径"——旧草稿恢复/回放可正常加载（不再 422/静默隔离），缺基础模板的预览/执行仍由既有下游 `INSERT_SUBSET_BASE_TEMPLATE_INVALID` 明确拒绝（草稿保留、用户补选后重预览）；Task 2/3 已落地的契约必填与扩展名白名单语义不变，命令含该字段但非法（相对路径）仍按损坏草稿隔离。`tests/unit/test_drafts.py` 新增"旧草稿 insert_subset 缺 base_template_file 可加载"单测，并将既有"缺字段/非法路径"参数化用例拆分为"非法路径仍隔离"专项（缺字段移入兼容用例）。全量 `uv run pytest tests/unit -q` **479 passed / 4 skipped**（0 failures / 0 errors，退出码 0）、`uv run ruff check .` 无违规。
