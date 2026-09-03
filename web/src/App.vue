@@ -72,7 +72,7 @@ let draftSaveQueue:Promise<void>=Promise.resolve();
 
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
 const insertSheetForm=reactive<{subsetId:string;sequence:string;direction:Placement;count:string;sourceType:LayoutSourceType;sourceFile:string;sourceLayout:string}>({subsetId:"",sequence:"1",direction:"after",count:"1",sourceType:"template_layout",sourceFile:"",sourceLayout:""});
-const insertSubsetForm=reactive<{sequence:string;direction:Placement;title:string;initialSheetCount:string;templateFile:string;templateLayout:string}>({sequence:"1",direction:"after",title:"",initialSheetCount:"1",templateFile:"",templateLayout:""});
+const insertSubsetForm=reactive<{sequence:string;direction:Placement;title:string;initialSheetCount:string;baseTemplateFile:string;templateFile:string;templateLayout:string}>({sequence:"1",direction:"after",title:"",initialSheetCount:"1",baseTemplateFile:"",templateFile:"",templateLayout:""});
 const layoutOptions=ref<string[]>([]);
 const layoutLoading=ref(false);
 const layoutError=ref("");
@@ -189,9 +189,18 @@ async function selectTemplateFile(){
 }
 async function loadLayoutOptions(path:string){
   layoutLoading.value=true;layoutOptions.value=[];
-  try{const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:"2020"})});layoutOptions.value=r.layouts}
+  // M4：cad_version 改用当前工作区的响应式版本，去除硬编码 "2020"
+  try{const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:cadVersion.value})});layoutOptions.value=r.layouts}
   catch(e){layoutError.value=e instanceof ApiError?e.message:"读取布局失败";layoutManual.value=true}
   finally{layoutLoading.value=false}
+}
+async function selectBaseTemplateFile(){
+  const bridge=getShellBridge();
+  if(!bridge){error.value="桌面壳未就绪";return}
+  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  if(!path)return;
+  if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
+  insertSubsetForm.baseTemplateFile=path;
 }
 async function closeWorkspace(){
   const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
@@ -202,6 +211,10 @@ async function closeWorkspace(){
   }
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
   workspaceLoadGeneration+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();
+  // M6：重置批量新增图纸与新建子集表单的模板文件/布局/布局选项状态，避免重开工作区残留旧模板路径
+  insertSheetForm.sourceFile="";insertSheetForm.sourceLayout="";insertSheetForm.sourceType="template_layout";
+  layoutOptions.value=[];layoutLoading.value=false;layoutError.value="";layoutManual.value=false;
+  insertSubsetForm.templateFile="";insertSubsetForm.templateLayout="";insertSubsetForm.baseTemplateFile="";
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
@@ -336,8 +349,13 @@ function queueInsertSheet(){
   const count=positiveInteger(insertSheetForm.count);
   if(sequence===null||sequence>subset.sheets.length){error.value=`图纸序号必须在 1 到 ${subset.sheets.length} 之间`;return}
   if(count===null){error.value="新增图纸数量必须为正整数";return}
-  if(!insertSheetForm.sourceFile.trim()||!insertSheetForm.sourceLayout.trim()){error.value="来源文件和来源布局不能为空";return}
-  addCommand(createCommand.insertSheet({target_subset_id:subset.id,ordinal:sequence,placement:insertSheetForm.direction,count,source:{type:insertSheetForm.sourceType,file:insertSheetForm.sourceFile.trim(),layout:insertSheetForm.sourceLayout.trim()}}),"structural");
+  if(insertSheetForm.sourceType==="existing_snapshot"){
+    // F-02：已有布局来源由系统解析为目标子集 DWG 与其第一个非 Model 布局，前端不携带文件与布局
+    addCommand(createCommand.insertSheet({target_subset_id:subset.id,ordinal:sequence,placement:insertSheetForm.direction,count,source:{type:"existing_snapshot",file:"",layout:""}}),"structural");
+    return;
+  }
+  if(!insertSheetForm.sourceFile.trim()||!insertSheetForm.sourceLayout.trim()){error.value="布局模板文件和布局模板名称不能为空";return}
+  addCommand(createCommand.insertSheet({target_subset_id:subset.id,ordinal:sequence,placement:insertSheetForm.direction,count,source:{type:"template_layout",file:insertSheetForm.sourceFile.trim(),layout:insertSheetForm.sourceLayout.trim()}}),"structural");
 }
 function queueInsertSubset(){
   if(!workspace.value)return;
@@ -349,8 +367,9 @@ function queueInsertSubset(){
   if(subsetCount>0&&sequence>subsetCount){error.value=`子集序号必须在 1 到 ${subsetCount} 之间`;return}
   if(!insertSubsetForm.title.trim()){error.value="子集标题不能为空";return}
   if(count===null){error.value="初始图纸数必须为正整数";return}
-  if(!insertSubsetForm.templateFile.trim()||!insertSubsetForm.templateLayout.trim()){error.value="模板文件和模板布局不能为空";return}
-  addCommand(createCommand.insertSubset({ordinal:sequence,placement:insertSubsetForm.direction,title:insertSubsetForm.title.trim(),initial_sheet_count:count,source:{type:"template_layout",file:insertSubsetForm.templateFile.trim(),layout:insertSubsetForm.templateLayout.trim()}}),"structural");
+  if(!insertSubsetForm.baseTemplateFile.trim()){error.value="基础模板文件不能为空";return}
+  if(!insertSubsetForm.templateFile.trim()||!insertSubsetForm.templateLayout.trim()){error.value="布局模板文件和布局模板名称不能为空";return}
+  addCommand(createCommand.insertSubset({ordinal:sequence,placement:insertSubsetForm.direction,title:insertSubsetForm.title.trim(),initial_sheet_count:count,base_template_file:insertSubsetForm.baseTemplateFile.trim(),source:{type:"template_layout",file:insertSubsetForm.templateFile.trim(),layout:insertSubsetForm.templateLayout.trim()}}),"structural");
 }
 
 async function showPreview(){
@@ -552,10 +571,10 @@ async function importCsv(){
           <fieldset><legend>批量新增图纸</legend><div class="form-grid">
             <label>目标子集<select v-model="insertSheetForm.subsetId"><option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{subset.display_name}}</option></select></label>
             <label>图纸序号<input v-model="insertSheetForm.sequence" inputmode="numeric"></label><label>图纸方向<select v-model="insertSheetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>新增图纸数量<input v-model="insertSheetForm.count" inputmode="numeric"></label>
-            <label>来源类型<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><label>来源文件<button type="button" aria-label="选择模板文件" @click="selectTemplateFile">选择模板文件</button><span v-if="insertSheetForm.sourceFile">{{insertSheetForm.sourceFile}}</span></label><label>来源布局<span v-if="layoutLoading">正在读取布局…</span><template v-else-if="layoutError"><span class="error">{{layoutError}}</span><input v-model="insertSheetForm.sourceLayout"></template><select v-else-if="layoutOptions.length&&!layoutManual" v-model="insertSheetForm.sourceLayout"><option v-for="l in layoutOptions" :value="l">{{l}}</option></select></label>
+            <label>模板来源<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><template v-if="insertSheetForm.sourceType==='existing_snapshot'"><label>来源说明<span>来源为目标子集 DWG 的第一个非 Model 布局</span></label></template><template v-else><label>布局模板文件<button type="button" aria-label="选择模板文件" @click="selectTemplateFile">选择模板文件</button><span v-if="insertSheetForm.sourceFile">{{insertSheetForm.sourceFile}}</span></label><label>布局模板名称<span v-if="layoutLoading">正在读取布局…</span><template v-else-if="layoutError"><span class="error">{{layoutError}}</span><input v-model="insertSheetForm.sourceLayout"></template><select v-else-if="layoutOptions.length&&!layoutManual" v-model="insertSheetForm.sourceLayout"><option v-for="l in layoutOptions" :value="l">{{l}}</option></select></label></template>
           </div><button @click="queueInsertSheet">批量新增图纸</button></fieldset>
 
-          <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>模板文件<input v-model="insertSubsetForm.templateFile"></label><label>模板布局<input v-model="insertSubsetForm.templateLayout"></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
+          <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>基础模板文件<button type="button" aria-label="选择基础模板文件" @click="selectBaseTemplateFile">选择基础模板文件</button><span v-if="insertSubsetForm.baseTemplateFile">{{insertSubsetForm.baseTemplateFile}}</span></label><label>布局模板文件<input v-model="insertSubsetForm.templateFile"></label><label>布局模板名称<input v-model="insertSubsetForm.templateLayout"></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
         </article>
       </section>
 

@@ -200,9 +200,9 @@ test("维护属性并按位置创建子集后预览派生变化",async({page})=>
   await page.getByLabel("属性作用域").selectOption("sheet");await page.getByLabel("属性名称").fill("专业");await page.getByLabel("默认值").fill("燃气");await page.getByRole("button",{name:"加入属性定义"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewRequests[0]).toEqual([{type:"add_custom_property",property_type:"sheet",name:"专业",default_value:"燃气"}]);
   await page.getByRole("button",{name:"清空"}).click();await page.getByRole("button",{name:"删除 比例"}).click();await page.getByRole("button",{name:"预览变更"}).click();expect(previewRequests[1]).toEqual([{type:"delete_custom_property",property_type:"sheet",name:"比例"}]);
-  await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集方向").selectOption("after");await page.getByLabel("子集标题",{exact:true}).fill("新分册");await page.getByLabel("初始图纸数").fill("2");await page.getByLabel("模板文件",{exact:true}).fill("C:\\template.dwt");await page.getByLabel("模板布局",{exact:true}).fill("A1模板");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("属性定义与结构变更必须分批预览和执行")).toBeVisible();
+  await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集方向").selectOption("after");await page.getByLabel("子集标题",{exact:true}).fill("新分册");await page.getByLabel("初始图纸数").fill("2");await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\base.dwt"});await page.getByRole("button",{name:"选择基础模板文件"}).click();await page.getByRole("textbox",{name:/布局模板文件/}).fill("C:\\template.dwt");await page.getByRole("textbox",{name:/布局模板名称/}).fill("A1模板");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("属性定义与结构变更必须分批预览和执行")).toBeVisible();
   await page.getByRole("button",{name:"清空"}).click();await page.getByRole("button",{name:"新建子集"}).click();await page.getByRole("button",{name:"预览变更"}).click();
-  expect(previewRequests[2]).toEqual([{type:"insert_subset",ordinal:2,placement:"after",title:"新分册",initial_sheet_count:2,source:{type:"template_layout",file:"C:\\template.dwt",layout:"A1模板"}}]);expect(previewRequests[2][0]).not.toHaveProperty("number");
+  expect(previewRequests[2]).toEqual([{type:"insert_subset",ordinal:2,placement:"after",title:"新分册",initial_sheet_count:2,base_template_file:"C:\\base.dwt",source:{type:"template_layout",file:"C:\\template.dwt",layout:"A1模板"}}]);expect(previewRequests[2][0]).not.toHaveProperty("number");
   await expect(page.getByText("图号范围变化")).toBeVisible();await expect(page.getByText("清除并重建布局").first()).toBeVisible();await expect(page.getByText("数量变化前沿：第 3 个子集")).toBeVisible();const subsetOperationTable=page.locator(".preview section").filter({has:page.getByRole("heading",{name:"子集 CAD 操作"})}).locator("table");await expect(subsetOperationTable.locator("tbody tr").filter({hasText:"subset-1"}).getByText("无需 CAD 操作",{exact:true})).toBeVisible();await expect(subsetOperationTable.locator("tbody tr").filter({hasText:"subset-2"}).getByText("无需 CAD 操作",{exact:true})).toBeVisible();await expect(subsetOperationTable.locator("tbody tr").filter({hasText:"subset-new"}).getByText("清除并重建布局",{exact:true})).toBeVisible();const affectedFiles=page.locator(".preview > section").filter({has:page.getByRole("heading",{name:"受影响文件"})});await expect(affectedFiles.getByText("C:\\project\\003-004 新分册.dwg",{exact:true})).toBeVisible();await expect(affectedFiles.getByText("C:\\project\\001-002 第一册.dwg",{exact:true})).toHaveCount(0);const derivedTable=page.locator(".preview table").filter({hasText:"服务端图号范围"});await expect(derivedTable.getByRole("cell",{name:"003-004",exact:true})).toBeVisible();await expect(derivedTable.getByRole("cell",{name:"003-004 新分册",exact:true})).toBeVisible();const createdGroup=page.locator(".execution-group").filter({hasText:"清除并重建布局"});await expect(createdGroup.getByText("C:\\project\\003-004 新分册.dwg",{exact:true})).toBeVisible();await expect(createdGroup.getByRole("cell",{name:"003 新分册 (一)",exact:true})).toBeVisible();
 });
 
@@ -346,7 +346,7 @@ test("旧编辑入口已移除且图号标题只读",async({page})=>{
 test("批量新增图纸校验位置数量和布局来源",async({page})=>{
   let previewCommands:any[]=[];await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewCommands=(await route.request().postDataJSON()).commands;await route.fulfill({json:{executable:true,requires_cad:true,changes:[],diagnostics:[],affected_files:[],execution_intent:{groups:[]}}})});await page.route("**/api/layout-names",route=>route.fulfill({json:{layouts:["A1","A2"],cached:false,file_hash:"x"}}));await openWorkspace(page);
   await page.getByLabel("图纸序号").fill("3");await page.getByLabel("新增图纸数量").fill("0");await page.getByRole("button",{name:"批量新增图纸"}).click();await expect(page.getByText("图纸序号必须在 1 到 2 之间")).toBeVisible();expect(previewCommands).toHaveLength(0);
-  await page.getByLabel("图纸序号").fill("2");await page.getByLabel("新增图纸数量").fill("2");await page.getByRole("button",{name:"批量新增图纸"}).click();await expect(page.getByText("来源文件和来源布局不能为空")).toBeVisible();await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\source.dwg"});await page.getByRole("button",{name:"选择模板文件"}).click();await page.getByLabel("来源布局").selectOption("A1");await page.getByLabel("图纸方向").selectOption("before");await page.getByRole("button",{name:"批量新增图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByLabel("图纸序号").fill("2");await page.getByLabel("新增图纸数量").fill("2");await page.getByRole("button",{name:"批量新增图纸"}).click();await expect(page.getByText("布局模板文件和布局模板名称不能为空")).toBeVisible();await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\source.dwg"});await page.getByRole("button",{name:"选择模板文件"}).click();await page.getByRole("combobox",{name:/布局模板名称/}).selectOption("A1");await page.getByLabel("图纸方向").selectOption("before");await page.getByRole("button",{name:"批量新增图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewCommands).toEqual([{type:"insert_sheet",target_subset_id:"subset-1",ordinal:2,placement:"before",count:2,source:{type:"template_layout",file:"C:\\source.dwg",layout:"A1"}}]);expect(previewCommands[0]).not.toHaveProperty("number");expect(previewCommands[0]).not.toHaveProperty("title");
 });
 
@@ -355,8 +355,8 @@ test("选择来源文件后加载布局下拉",async({page})=>{
   await openWorkspace(page);
   await page.evaluate(()=>{(window as any).__fakeSelectResult="C:/tpl/frame.dwg"});
   await page.getByRole("button",{name:"选择模板文件"}).click();
-  await expect(page.getByRole("combobox",{name:/来源布局/})).toBeEnabled();
-  await expect(page.getByRole("combobox",{name:/来源布局/})).toContainText("A-01");
+  await expect(page.getByRole("combobox",{name:/布局模板名称/})).toBeEnabled();
+  await expect(page.getByRole("combobox",{name:/布局模板名称/})).toContainText("A-01");
 });
 
 test("布局读取失败回退手动输入",async({page})=>{
@@ -365,11 +365,44 @@ test("布局读取失败回退手动输入",async({page})=>{
   await page.evaluate(()=>{(window as any).__fakeSelectResult="C:/tpl/frame.dwg"});
   await page.getByRole("button",{name:"选择模板文件"}).click();
   await expect(page.getByText("读取布局失败")).toBeVisible();
-  await expect(page.getByRole("textbox",{name:/来源布局/})).toBeVisible();
+  // 作用域限定在批量新增图纸 fieldset（组角色）：新建子集也有同名"布局模板名称"文本框
+  await expect(page.getByRole("group",{name:"批量新增图纸"}).getByRole("textbox",{name:/布局模板名称/})).toBeVisible();
 });
 
 test("空图纸集首个子集只能用序号一且必须提供模板",async({page})=>{
-  const empty={...workspace,sheet_set:{...workspace.sheet_set,sheet_count:0,subset_count:0,subsets:[]}};let previewCalls=0;await page.route("**/api/workspaces/open",route=>route.fulfill({json:empty}));await page.route("**/api/workspaces/workspace-1/changes/preview",route=>{previewCalls++;return route.fulfill({json:{executable:true,changes:[],diagnostics:[]}})});await openWorkspace(page);await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集标题",{exact:true}).fill("首册");await page.getByLabel("初始图纸数").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("空图纸集的首个子集序号必须为 1")).toBeVisible();await page.getByLabel("子集序号").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("模板文件和模板布局不能为空")).toBeVisible();expect(previewCalls).toBe(0);
+  const empty={...workspace,sheet_set:{...workspace.sheet_set,sheet_count:0,subset_count:0,subsets:[]}};let previewCalls=0;await page.route("**/api/workspaces/open",route=>route.fulfill({json:empty}));await page.route("**/api/workspaces/workspace-1/changes/preview",route=>{previewCalls++;return route.fulfill({json:{executable:true,changes:[],diagnostics:[]}})});await openWorkspace(page);await page.getByLabel("子集序号").fill("2");await page.getByLabel("子集标题",{exact:true}).fill("首册");await page.getByLabel("初始图纸数").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("空图纸集的首个子集序号必须为 1")).toBeVisible();await page.getByLabel("子集序号").fill("1");await page.getByRole("button",{name:"新建子集"}).click();await expect(page.getByText("基础模板文件不能为空")).toBeVisible();expect(previewCalls).toBe(0);
+});
+
+test("已有布局来源隐藏模板输入并以空来源提交",async({page})=>{
+  let previewCommands:any[]=[];await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewCommands=(await route.request().postDataJSON()).commands;await route.fulfill({json:{executable:true,requires_cad:true,changes:[],diagnostics:[],affected_files:[],execution_intent:{groups:[]}}})});await openWorkspace(page);
+  const bulkFieldset=page.getByRole("group",{name:"批量新增图纸"});
+  await page.getByLabel("模板来源").selectOption("existing_snapshot");
+  await expect(bulkFieldset.getByRole("button",{name:"选择模板文件"})).toHaveCount(0);
+  await expect(page.getByText("来源为目标子集 DWG 的第一个非 Model 布局")).toBeVisible();
+  await page.getByRole("button",{name:"批量新增图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  expect(previewCommands).toEqual([{type:"insert_sheet",target_subset_id:"subset-1",ordinal:1,placement:"after",count:1,source:{type:"existing_snapshot",file:"",layout:""}}]);
+});
+
+test("关闭工作区重置模板表单状态且布局读取跟随 CAD 版本",async({page})=>{
+  const layoutBodies:any[]=[];
+  await page.route("**/api/layout-names",async route=>{layoutBodies.push(await route.request().postDataJSON());await route.fulfill({json:{layouts:["A1"],cached:false,file_hash:"x"}})});
+  await openWorkspace(page);
+  const subsetFieldset=page.getByRole("group",{name:"新建子集"});
+  const bulkFieldset=page.getByRole("group",{name:"批量新增图纸"});
+  await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\source.dwg"});await page.getByRole("button",{name:"选择模板文件"}).click();
+  await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\base.dwt"});await page.getByRole("button",{name:"选择基础模板文件"}).click();
+  await page.getByRole("textbox",{name:/布局模板文件/}).fill("C:\\template.dwt");await page.getByRole("textbox",{name:/布局模板名称/}).fill("A1模板");
+  await page.getByRole("button",{name:"关闭"}).click();
+  await selectDst(page,"C:\\project\\test.dst");
+  // M6：重开工作区后表单模板状态已清空
+  await expect(subsetFieldset.getByRole("textbox",{name:/布局模板文件/})).toHaveValue("");
+  await expect(subsetFieldset.getByRole("textbox",{name:/布局模板名称/})).toHaveValue("");
+  await expect(bulkFieldset.getByText("C:\\source.dwg")).toHaveCount(0);
+  // M4：布局读取 cad_version 跟随所选 AutoCAD 版本而非硬编码 "2020"
+  await page.getByLabel("AutoCAD 版本").selectOption("2016");
+  await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\source2.dwg"});await page.getByRole("button",{name:"选择模板文件"}).click();
+  expect(layoutBodies.at(-1).cad_version).toBe("2016");
 });
 
 test("属性命令与结构命令分批并支持 CSV 行级预览导入",async({page})=>{
