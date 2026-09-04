@@ -55,8 +55,14 @@ export function useCsvImport(deps:{
     if(!context||!context.result.executable)return;
     const current=deps.workspace.value;
     if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();deps.error.value="工作区或基准修订已变化，请重新预览 CSV";return}
-    // 属性定义导入为低风险动作：danger:false、无需勾选
-    const ok=await deps.confirmAction({title:"确认导入属性定义",message:"确认导入属性定义？",confirmText:"确认导入",danger:false});
+    // 属性定义导入为正式写入（SPEC-DM-006 §6.2/§10.3）：CSV/XML 不得走弱确认旁路，与 §9.1 全部正式写入共用同一危险确认
+    const impactLines=context.result.changes.map(change=>{
+      const action=change.action==="add"?"新增":change.action==="skip"?"跳过":"冲突";
+      const scope=change.type==="sheetset"?"图纸集":"图纸";
+      return `${action}属性「${change.name}」（${scope}${change.affected_sheet_count?`，影响 ${change.affected_sheet_count} 张图纸`:""}）`;
+    });
+    if(impactLines.length===0)impactLines.push(...(context.result.affected_files.length>0?context.result.affected_files.map(file=>`受影响文件：${file}`):["本次导入不含属性定义变更"]));
+    const ok=await deps.confirmAction({title:"确认导入属性定义",message:"将按预览结果把属性定义合并写入图纸集，原 DST 将永久备份。",impactLines,confirmText:"确认导入",danger:true,requireCheckbox:true,reversibility:"不可逆"});
     if(!ok)return;
     const generation=deps.invalidateJobMonitor(false);
     try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(!deps.isCurrentJobGeneration(generation)||deps.isWorkspaceLoading.value||deps.workspace.value?.id!==context.workspaceId)return;deps.setJob(result);if(result.status==="QUEUED"&&result.id)deps.watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await deps.refreshWorkspace(context.workspaceId)}

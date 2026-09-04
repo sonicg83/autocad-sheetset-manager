@@ -289,6 +289,29 @@ test("非法 UTF-8 CSV 在本地阻断且不请求 API",async({page})=>{
   await page.getByLabel("属性 CSV 文件").setInputFiles({name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from([0x74,0x79,0x70,0x65,0x0a,0xc3,0x28])});await expect(page.getByText("CSV 必须使用 UTF-8 编码",{exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"预览 CSV 导入"})).toBeDisabled();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();expect(previewCalls).toBe(0);expect(importCalls).toBe(0);
 });
 
+test("CSV 导入确认模态为强确认：未勾选时确认按钮禁用",async({page})=>{
+  // SPEC-DM-006 §6.2/§10.3：CSV 不得走弱确认旁路，与 §9.1 全部正式写入共用同一危险确认（danger+requireCheckbox+impactLines）
+  await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",route=>route.fulfill({json:{executable:true,changes:[{line:2,action:"add",type:"sheet",name:"比例",default_value:"1:100",affected_sheet_count:2},{line:3,action:"skip",type:"sheet",name:"专业",default_value:"建筑",affected_sheet_count:0}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();
+  await page.getByLabel("属性 CSV 文件").setInputFiles({name:"props.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,比例,1:100\nsheet,专业,建筑\n","utf8")});
+  await page.getByRole("button",{name:"预览 CSV 导入"}).click();
+  await expect(page.getByRole("button",{name:"确认导入"})).toBeEnabled();
+  await page.getByRole("button",{name:"确认导入"}).click();
+  const modal=page.getByRole("dialog");
+  await expect(modal).toBeVisible();
+  // 强确认要素：不可逆徽标 + 受影响定义清单 + 未勾选确认按钮禁用
+  await expect(modal.getByText("不可逆",{exact:true})).toBeVisible();
+  await expect(modal.getByText(/新增属性「比例」/)).toBeVisible();
+  await expect(modal.getByText(/跳过属性「专业」/)).toBeVisible();
+  await expect(modal.getByRole("button",{name:/确认导入/})).toBeDisabled();
+  await modal.getByRole("checkbox").check();
+  await expect(modal.getByRole("button",{name:/确认导入/})).toBeEnabled();
+  await modal.getByRole("button",{name:/确认导入/}).click();
+  await expect(modal).toHaveCount(0);
+});
+
 test("加载新工作区时隐藏旧编辑器并阻断跨工作区执行",async({page})=>{
   const openB=deferred();let openCalls=0,executeCalls=0,importCalls=0;
   await page.route("**/api/workspaces/open",async route=>{openCalls++;if(openCalls===1)return route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")});await openB.promise;return route.fulfill({json:workspaceVersion("workspace-B","工作区 B","revision-B")})});
