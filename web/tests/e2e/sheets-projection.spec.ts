@@ -37,6 +37,8 @@ test("结构投影内部请求不启用确认写入，且逆序响应只应用�
   await page.getByRole("button", {name: "删除", exact: true}).first().click();
   await page.getByRole("button", {name: "确认删除"}).click();
   // 结构动作二：新增一张（已有布局来源）→ 投影请求 #2（新代次，15 张）
+  // 任务 3 起新增操作表单非驻留：先点「新增图纸」入口展开
+  await page.getByRole("button", {name: "新增图纸"}).click();
   await page.getByRole("combobox", {name: "模板来源"}).selectOption("existing_snapshot");
   await page.getByRole("button", {name: "批量新增图纸"}).click();
   await expect.poll(() => previewCalls).toBe(2);
@@ -59,15 +61,18 @@ test("结构动作之间不跨边界去重压缩，服务端命令索引保持�
   await installSheetsFixture(page, {sheetCount: 15});
   await openWorkspace(page);
 
-  // 结构动作一：改子集标题（update_subset_title）
+  // 结构动作一：改子集标题（update_subset_title）；任务 3 起表单非驻留，先点「编辑子集」展开
+  await page.getByRole("button", {name: "编辑子集"}).click();
   await page.getByLabel("当前子集标题").fill("平面图甲");
   await page.getByRole("button", {name: "加入标题变更"}).click();
   await expect.poll(() => bodies.length).toBe(1);
-  // 结构动作二：新增一张（已有布局来源）
+  // 结构动作二：新增一张（已有布局来源）→ 切换为「新增图纸」表单（一次只出现一种）
+  await page.getByRole("button", {name: "新增图纸"}).click();
   await page.getByRole("combobox", {name: "模板来源"}).selectOption("existing_snapshot");
   await page.getByRole("button", {name: "批量新增图纸"}).click();
   await expect.poll(() => bodies.length).toBe(2);
-  // 结构动作三：再次改同一子集标题（与动作一同键）
+  // 结构动作三：再次改同一子集标题（与动作一同键）→ 切回「编辑子集」表单
+  await page.getByRole("button", {name: "编辑子集"}).click();
   await page.getByLabel("当前子集标题").fill("平面图乙");
   await page.getByRole("button", {name: "加入标题变更"}).click();
   await expect.poll(() => bodies.length).toBe(3);

@@ -12,6 +12,8 @@ import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
 import {useSheetProjection} from "./composables/useSheetProjection";
+import {useSheetsWorkspace} from "./composables/useSheetsWorkspace";
+import type {OperationKind} from "./components/sheets/SheetToolbar.vue";
 import {useConfirm} from "./composables/useConfirm";
 import {useToast} from "./composables/useToast";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
@@ -31,7 +33,6 @@ type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
-const selectedId=ref("");
 const error=ref("");
 const commands=ref<ChangeCommand[]>([]);
 const draftActions=ref<DraftAction[]>([]);
@@ -93,15 +94,37 @@ function onTabKeydown(e:KeyboardEvent){const before=active.value;onKeydown(e);if
 // 恢复预览成功（restorePreview 已写入）后展开任务浮层到修改预览页签，与 showPreview 共用 §9.1 统一预览门禁呈现
 async function previewRestoreAndOpen(revision:Revision){await previewRestore(revision);if(restorePreview.value)openOverlay("prev")}
 function onCadVersionChange(value:string){cadVersion.value=value;invalidatePreview()}
-const searchText=ref("");
-const subsetFilter=ref("all");
-const pathFilter=ref("all");
-const diagnosticFilter=ref("all");
-const pendingFilter=ref("all");
-const selectedSheetIds=ref<string[]>([]);
-const renderLimit=ref(80);
 const bulkPropertyName=ref("");
 const bulkPropertyValue=ref("");
+// 图纸页工作区状态（PLAN-DM-015 任务 3）：范围/搜索/低频筛选/勾选集合/首屏加载。
+// 在主标签之外实例化，切换主标签保留勾选集合与筛选；行 ID 取服务端 ID。
+const sheets=useSheetsWorkspace({workspace,commands});
+const {
+  scope,focusedSheetId,selectedIds,searchText,searchAll,filtersVisible,
+  pathFilter,diagnosticFilter,pendingFilter,renderLimit,
+  filteredRows,visibleRows,hiddenSelectedCount,allFilteredSelected,
+  hiddenTarget,pruneMessage,scopeTotal,allTotal,rangeTotal,
+  pendingSheetIds,diagnosticObjectIds,allRows,
+}=sheets;
+const {selectAll:sheetsSelectAll,selectSubset:sheetsSelectSubset,locateSheet,toggleSheet,toggleFilteredSelection,clearSelection,clearFilters,reset:resetSheetsWorkspace}=sheets;
+// 新增操作入口（任务 6 接表单）：编辑子集/新增图纸/新建子集一次只出现一种的过渡实现
+const activeOperation=ref<OperationKind|null>(null);
+const operationSubsetId=ref("");
+const subsetTitleBuffer=ref("");
+function resetOperationState(){activeOperation.value=null;operationSubsetId.value="";subsetTitleBuffer.value=""}
+function openOperation(kind:OperationKind){
+  activeOperation.value=kind;
+  const current=workspace.value;if(!current)return;
+  // 编辑/新增目标默认取当前范围子集，全部范围内取首个子集
+  const targetId=sheets.scope.value.kind==="subset"?sheets.scope.value.id:(current.sheet_set.subsets[0]?.id??"");
+  if(kind==="rename"){
+    operationSubsetId.value=targetId;
+    subsetTitleBuffer.value=current.sheet_set.subsets.find(item=>item.id===targetId)?.title??"";
+  }else if(kind==="insert-sheet"){
+    insertSheetForm.subsetId=targetId;
+  }
+}
+function closeOperation(){activeOperation.value=null}
 let previewGeneration=0;
 let draftSaveQueue:Promise<void>=Promise.resolve();
 
@@ -121,7 +144,6 @@ const subsetLayoutManual=ref(false);
 type LayoutPickerTarget={options:Ref<string[]>;loading:Ref<boolean>;error:Ref<string>;manual:Ref<boolean>};
 const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 
-const selected=computed(()=>workspace.value?.sheet_set.subsets.find(item=>item.id===selectedId.value)??null);
 const blocking=computed(()=>workspace.value?.diagnostics.filter(item=>item.severity==="error")??[]);
 const hasPropertyDefinitionCommands=computed(()=>commands.value.some(item=>item.type==="add_custom_property"||item.type==="delete_custom_property"));
 const hasStructuralCommands=computed(()=>commands.value.some(item=>["update_subset_title","delete_sheet","delete_subset","insert_sheet","insert_subset"].includes(String(item.type))));
@@ -132,28 +154,6 @@ const subsetOperations=computed(()=>preview.value?.execution_intent?.subset_oper
 const cardinalityFrontier=computed(()=>preview.value?.execution_intent?.cardinality_frontier??null);
 const cadValidationDeferred=computed(()=>preview.value?.execution_intent?.cad_validation_deferred===true);
 const semanticDiff=computed<SemanticDiff>(()=>preview.value?.semantic_diff??{sheet_set:[],structure:{before:[],after:[]},properties:[],dwgs:[]});
-const allSheetRows=computed(()=>(workspace.value?.sheet_set.subsets??[]).flatMap(subset=>subset.sheets.map(sheet=>({subset,sheet}))));
-const pendingSheetIds=computed(()=>new Set(commands.value.flatMap(command=>"sheet_id" in command&&typeof command.sheet_id==="string"?[command.sheet_id]:[])));
-const diagnosticObjectIds=computed(()=>new Set((workspace.value?.diagnostics??[]).filter(item=>item.severity==="error").map(item=>item.object_id).filter((id):id is string=>Boolean(id))));
-const filteredSheetRows=computed(()=>{
-  const query=searchText.value.trim().toLocaleLowerCase();
-  return allSheetRows.value.filter(({subset,sheet})=>{
-    if(subsetFilter.value!=="all"&&subset.id!==subsetFilter.value)return false;
-    const resolved=Boolean(sheet.layout.resolved_path);
-    if(pathFilter.value==="resolved"&&!resolved)return false;
-    if(pathFilter.value==="unresolved"&&resolved)return false;
-    const hasDiagnostic=diagnosticObjectIds.value.has(sheet.id);
-    if(diagnosticFilter.value==="blocking"&&!hasDiagnostic)return false;
-    if(diagnosticFilter.value==="clean"&&hasDiagnostic)return false;
-    const pending=pendingSheetIds.value.has(sheet.id);
-    if(pendingFilter.value==="pending"&&!pending)return false;
-    if(pendingFilter.value==="unchanged"&&pending)return false;
-    if(!query)return true;
-    return [sheet.number,sheet.title,subset.display_name,sheet.layout.file_name,sheet.layout.relative_file_name,sheet.layout.resolved_path,sheet.layout.layout_name,...Object.entries(sheet.custom_properties).flat()].filter(Boolean).some(value=>String(value).toLocaleLowerCase().includes(query));
-  });
-});
-const visibleSheetRows=computed(()=>filteredSheetRows.value.slice(0,renderLimit.value));
-const allFilteredSelected=computed(()=>filteredSheetRows.value.length>0&&filteredSheetRows.value.every(({sheet})=>selectedSheetIds.value.includes(sheet.id)));
 const sheetPropertyNames=computed(()=>workspace.value?.sheet_set.property_definitions.filter(item=>item.type==="sheet").map(item=>item.name)??[]);
 const executionEstimate=computed(()=>preview.value?.execution_intent?.estimate??null);
 const saveStatusText=computed(()=>draftSaveFailed.value?"保存失败":draftSaving.value?"保存中":draftStale.value?"草稿已过期":"已保存");
@@ -163,12 +163,6 @@ function invalidatePreview(){previewGeneration+=1;preview.value=null;previewCont
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";return workspaceLoadGeneration.value}
-function selectInitialSubset(){
-  selectedId.value=workspace.value?.sheet_set.subsets[0]?.id??"";
-  insertSheetForm.subsetId=selectedId.value;
-}
-function selectSubset(subsetId:string){selectedId.value=subsetId;insertSheetForm.subsetId=subsetId}
-function resetNavigation(){searchText.value="";subsetFilter.value="all";pathFilter.value="all";diagnosticFilter.value="all";pendingFilter.value="all";selectedSheetIds.value=[];renderLimit.value=80}
 async function openByPath(path:string){
   if(isRestoreExecuting.value){error.value="修订恢复正在执行，请稍候";return}
   isWorkspaceLoading.value=true;
@@ -179,7 +173,7 @@ async function openByPath(path:string){
   try{
     const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:path})});
     if(generation!==workspaceLoadGeneration.value)return;
-    resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);selectInitialSubset();resetNavigation();await loadDraft(loaded);isWorkspaceLoading.value=false;
+    resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);resetSheetsWorkspace();resetOperationState();await loadDraft(loaded);isWorkspaceLoading.value=false;
     // 打开成功后若停留在修订历史标签，重载修订列表（beginWorkspaceLoad 已 invalidateRevisionState 清空，避免虚假空态）
     if(active.value==="revisions")void loadRevisions();
   }
@@ -273,6 +267,7 @@ async function closeWorkspace(){
   layoutOptions.value=[];layoutLoading.value=false;layoutError.value="";layoutManual.value=false;
   subsetLayoutOptions.value=[];subsetLayoutLoading.value=false;subsetLayoutError.value="";subsetLayoutManual.value=false;
   insertSubsetForm.templateFile="";insertSubsetForm.templateLayout="";insertSubsetForm.baseTemplateFile="";
+  resetSheetsWorkspace();resetOperationState();
 }
 async function refreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
@@ -283,14 +278,12 @@ async function refreshWorkspace(expectedWorkspaceId?:string){
   await draftSaveQueue;
   if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
   if(workspace.value?.id!==workspaceId)return;
-  const previous=selectedId.value;
   const generation=beginWorkspaceLoad();
   try{
     const loaded:Workspace=await request(`/api/workspaces/${workspaceId}`);
     if(generation!==workspaceLoadGeneration.value)return;
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);
-    selectedId.value=loaded.sheet_set.subsets.some(item=>item.id===previous)?previous:(loaded.sheet_set.subsets[0]?.id??"");
-    insertSheetForm.subsetId=selectedId.value;await loadDraft(loaded);isWorkspaceLoading.value=false;
+    await loadDraft(loaded);isWorkspaceLoading.value=false;
     // 刷新成功后若停留在修订历史标签，重载修订列表（发布/关闭等路径已 invalidateRevisionState 清空，避免虚假空态）
     if(active.value==="revisions")void loadRevisions();
   }
@@ -380,35 +373,33 @@ function addCommandBatch(batch:ChangeCommand[],label:string,category:"property"|
 function positiveInteger(value:string){const parsed=Number(value);return Number.isInteger(parsed)&&parsed>0?parsed:null}
 
 function queueSheetSet(){if(!workspace.value)return;if(!workspace.value.sheet_set.name.trim()){error.value="图纸集名称不能为空";return}addCommand(createCommand.updateSheetSet(workspace.value.sheet_set.name,{...workspace.value.sheet_set.custom_properties}),"metadata")}
-function queueSubsetTitle(){if(selected.value)addCommand(createCommand.updateSubsetTitle(selected.value.id,selected.value.title),"structural")}
-function queueSheetProperties(sheet:Sheet){addCommand(createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties}),"metadata")}
+// 编辑子集表单：以 operationSubsetId 为目标，标题取缓冲副本（不直接改工作区对象）
+function queueSubsetTitle(){
+  const subset=workspace.value?.sheet_set.subsets.find(item=>item.id===operationSubsetId.value);
+  if(!subset)return;
+  addCommand(createCommand.updateSubsetTitle(subset.id,subsetTitleBuffer.value),"structural");
+}
 async function queueDelete(sheet:Sheet){
-  if(!selected.value)return;
   // 单张图纸删除为低风险动作：danger:false、无需勾选
   const ok=await confirmAction({title:"删除图纸",message:`删除图纸 ${sheet.number}？`,confirmText:"确认删除",danger:false});
   if(!ok)return;
   addCommand(createCommand.deleteSheet(sheet.id),"structural");
 }
 async function queueDeleteSubset(){
-  const subset=selected.value;if(!subset)return;
+  const subset=workspace.value?.sheet_set.subsets.find(item=>item.id===operationSubsetId.value);
+  if(!subset)return;
   const drawing=subset.sheets[0]?.layout.resolved_path??subset.sheets[0]?.layout.file_name??"（未知主 DWG）";
   // 删除整个子集属不可逆破坏类操作：需要显式勾选后才可确认
   const ok=await confirmAction({title:"删除整个子集",message:`删除整个子集“${subset.display_name}”、其中 ${subset.sheets.length} 张图纸及主 DWG：${drawing}？\n系统不会证明工程外部引用，确认后由用户承担外部影响。`,confirmText:"确定删除整个子集",danger:true,requireCheckbox:true,reversibility:"不可逆"});
   if(!ok)return;
   addCommand(createCommand.deleteSubset(subset.id),"structural");
 }
-function toggleFilteredSelection(){
-  const ids=filteredSheetRows.value.map(({sheet})=>sheet.id);
-  if(allFilteredSelected.value)selectedSheetIds.value=selectedSheetIds.value.filter(id=>!ids.includes(id));
-  else selectedSheetIds.value=Array.from(new Set([...selectedSheetIds.value,...ids]));
-}
-function toggleSheetSelection(sheetId:string){selectedSheetIds.value=selectedSheetIds.value.includes(sheetId)?selectedSheetIds.value.filter(id=>id!==sheetId):[...selectedSheetIds.value,sheetId]}
 function queueBulkSheetProperty(){
   const name=bulkPropertyName.value;
-  if(!name||!selectedSheetIds.value.length){error.value="请选择图纸和既有图纸属性";return}
-  const selectedIds=new Set(selectedSheetIds.value);
-  const batch=allSheetRows.value.filter(({sheet})=>selectedIds.has(sheet.id)).map(({sheet})=>createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties,[name]:bulkPropertyValue.value}));
-  if(addCommandBatch(batch,`批量更新 ${name}（${batch.length} 张）`,"metadata"))selectedSheetIds.value=[];
+  if(!name||!selectedIds.value.length){error.value="请选择图纸和既有图纸属性";return}
+  const selected=new Set(selectedIds.value);
+  const batch=allRows.value.filter(({sheet})=>selected.has(sheet.id)).map(({sheet})=>createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties,[name]:bulkPropertyValue.value}));
+  if(addCommandBatch(batch,`批量更新 ${name}（${batch.length} 张）`,"metadata")){clearSelection();bulkPropertyName.value="";bulkPropertyValue.value=""}
 }
 function queuePropertyDefinition(){
   const name=propertyForm.name.trim();if(!name){error.value="属性名称不能为空";return}
@@ -521,7 +512,7 @@ useHotkeys({
       <template v-else>
         <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
-        <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" />
+        <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :active-operation="activeOperation" :operation-subset-id="operationSubsetId" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" v-model:search-text="searchText" v-model:search-all="searchAll" v-model:filters-visible="filtersVisible" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:subset-title-buffer="subsetTitleBuffer" @select-all="sheetsSelectAll" @select-subset="sheetsSelectSubset" @select-sheet="locateSheet" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @delete-sheet="queueDelete" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @close-operation="closeOperation" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" />
         <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
       </template>
