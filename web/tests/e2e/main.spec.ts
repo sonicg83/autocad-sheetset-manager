@@ -855,6 +855,24 @@ test("修订历史标签激活时加载列表，空修订显示暂无修订历�
   expect(asked).toBeTruthy(); // 激活时才加载
 });
 
+test("停留在修订历史标签重开工作区后修订列表重新加载",async({page})=>{
+  // 回归：active 停在 revisions 时重开工作区，beginWorkspaceLoad 已 invalidateRevisionState 清空列表，
+  // 若不重载会停留在虚假"暂无修订历史"空态（closeWorkspace 与发布 SUCCEEDED 后 refreshWorkspace 均触发）
+  let revisionCalls=0;
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>{revisionCalls++;return route.fulfill({json:revisionCalls===1?[]:[{id:"revision-reopen-1234567890",created_at:"2026-08-13T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]})});
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"修订历史"}).click();
+  await expect(page.getByText("暂无修订历史")).toBeVisible();
+  // 关闭（无未发布改动，不弹模态）后停留在未打开态，标签仍停在修订历史
+  await page.getByRole("button",{name:"关闭"}).click();
+  await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
+  await selectDst(page,"C:\\project\\test.dst");
+  // 重开工作区后修订列表应重新加载，而非停留在被清空的虚假空态
+  await expect(page.getByRole("heading",{name:"永久修订"})).toBeVisible();
+  await expect(page.getByText("revision-reopen")).toBeVisible();
+  expect(revisionCalls).toBe(2);
+});
+
 test("恢复预览在任务浮层修改预览页签呈现",async({page})=>{
   await openWorkspace(page);
   // 跟随既有"修订恢复先预览再确认为新修订"用例 mock 修订列表与 restore-preview

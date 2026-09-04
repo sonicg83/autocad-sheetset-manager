@@ -3,6 +3,7 @@
 ## 2026-09-04（v0.3.3 标签化外壳最终分支审查修复）
 
 - **修复 CSV 导入确认模态对齐发布强确认**（Important，[SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.2/§10.3）：`web/src/composables/useCsvImport.ts` 的 `importCsv` 确认由 `danger:false`、无勾选、message 仅"确认导入属性定义？"改为与 §9.1 全部正式写入共用同一危险确认——`danger:true + requireCheckbox:true + reversibility:"不可逆" + impactLines 受影响属性定义清单`（从 `csvPreview.changes` 派生：`新增/跳过/冲突属性「名称」（作用域，影响 N 张图纸）`，changes 为空时回退受影响文件清单）；message 明确"原 DST 将永久备份"。同步更正 changelog Task 2/Task 3 将 CSV 导入归类为"低风险动作"的表述。e2e 新增「CSV 导入确认模态为强确认：未勾选时确认按钮禁用」（先红后绿）。
+- **修复标签激活态随工作区加载复位**（Important）：`active` 停留在 `revisions` 时，`openByPath`/`refreshWorkspace` 成功路径不重载修订列表，而 `beginWorkspaceLoad` 内 `invalidateRevisionState` 已清空 `revisions`，导致虚假"暂无修订历史"空态（closeWorkspace 与发布 SUCCEEDED 后 refreshWorkspace 均触发）。修复（最外科方案）：`web/src/App.vue` 两处成功路径末尾加 `if(active.value==="revisions")void loadRevisions()`；不在 `beginWorkspaceLoad` 复位 active（不强制切走用户页签），`loadRevisions` 的 `isRestoreExecuting`/`isWorkspaceLoading`/代次防重入门禁原样保留。e2e 新增「停留在修订历史标签重开工作区后修订列表重新加载」（先红后绿）。
 
 ## 2026-09-04（v0.3.3 标签化外壳 Task 8 收尾：修订历史标签完善与 v0.3.3 全量验证）
 

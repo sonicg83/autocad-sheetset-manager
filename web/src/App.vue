@@ -175,6 +175,8 @@ async function openByPath(path:string){
     const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:path})});
     if(generation!==workspaceLoadGeneration.value)return;
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);selectInitialSubset();resetNavigation();await loadDraft(loaded);isWorkspaceLoading.value=false;
+    // 打开成功后若停留在修订历史标签，重载修订列表（beginWorkspaceLoad 已 invalidateRevisionState 清空，避免虚假空态）
+    if(active.value==="revisions")void loadRevisions();
   }
   catch(e){if(generation===workspaceLoadGeneration.value){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
@@ -271,6 +273,8 @@ async function refreshWorkspace(expectedWorkspaceId?:string){
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);
     selectedId.value=loaded.sheet_set.subsets.some(item=>item.id===previous)?previous:(loaded.sheet_set.subsets[0]?.id??"");
     insertSheetForm.subsetId=selectedId.value;await loadDraft(loaded);isWorkspaceLoading.value=false;
+    // 刷新成功后若停留在修订历史标签，重载修订列表（发布/关闭等路径已 invalidateRevisionState 清空，避免虚假空态）
+    if(active.value==="revisions")void loadRevisions();
   }
   catch(e){if(generation===workspaceLoadGeneration.value){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
