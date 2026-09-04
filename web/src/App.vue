@@ -447,7 +447,11 @@ async function doQueueDelete(sheet:Sheet){
   if(!ok)return;
   addCommand(createCommand.deleteSheet(sheet.id),"structural");
 }
+// 删除整个子集：与单行删除一致，编辑未提交时先三选一决策，再走整子集删除确认流程
 async function queueDeleteSubset(){
+  await editor.guard(async()=>{await doQueueDeleteSubset()});
+}
+async function doQueueDeleteSubset(){
   const subset=workspace.value?.sheet_set.subsets.find(item=>item.id===operationSubsetId.value);
   if(!subset)return;
   const drawing=subset.sheets[0]?.layout.resolved_path??subset.sheets[0]?.layout.file_name??"（未知主 DWG）";

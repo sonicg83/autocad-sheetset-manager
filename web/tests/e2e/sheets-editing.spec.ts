@@ -306,6 +306,46 @@ test("编辑未提交时点击删除先处理缓冲，删除命令不夹带属�
   expect(actions.map((action) => action.commands[0].type)).toEqual(["update_sheet_properties", "delete_sheet"]);
 });
 
+test("删除整个子集先处理未提交输入：加入草稿后继续进入整子集删除确认", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await openWorkspace(page);
+  await openEditor(page);
+  // 先打开编辑子集表单（编辑器干净，guard 直接放行），随后编辑产生未提交输入
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await expect(page.getByRole("region", {name: "编辑子集"})).toBeVisible();
+  await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
+  // 点击删除整个子集 → 先三选一处理缓冲，再进入整子集删除确认流程
+  await page.getByRole("button", {name: "删除整个子集"}).click();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toBeVisible();
+  await page.getByRole("button", {name: "加入草稿后继续"}).click();
+  // 缓冲已保存后进入整子集删除确认（不可逆强确认），此时尚未真正删除
+  await expect(page.getByRole("dialog", {name: "删除整个子集"})).toBeVisible();
+  await page.getByRole("dialog", {name: "删除整个子集"}).getByRole("button", {name: "取消", exact: true}).click();
+  // 草稿只含属性编辑批次，未夹带删除命令
+  await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
+  const actions = (draftBodies[draftBodies.length - 1] as {actions: {commands: {type: string}[]}[]}).actions;
+  expect(actions.map((action) => action.commands[0].type)).toEqual(["update_sheet_properties"]);
+});
+
+test("删除整个子集三选一：留在此处时子集删除不发生", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await openWorkspace(page);
+  await openEditor(page);
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await expect(page.getByRole("region", {name: "编辑子集"})).toBeVisible();
+  await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
+  await page.getByRole("button", {name: "删除整个子集"}).click();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toBeVisible();
+  await page.getByRole("button", {name: "留在此处"}).click();
+  // 留在此处：不进入整子集删除确认、不产生删除命令，编辑保留
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
+  await expect(page.getByRole("dialog", {name: "删除整个子集"})).toHaveCount(0);
+  await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toHaveValue("A2");
+  await expect.poll(() => draftBodies.length).toBe(0);
+});
+
 test("基准刷新后编辑失效保留输入供核对且禁止提交", async ({page}) => {
   let revisionOverride = "revision-1";
   await installSheetsFixture(page, {
