@@ -76,3 +76,65 @@ test("结构动作之间不跨边界去重压缩，服务端命令索引保持�
   const last = bodies[2].commands as Array<{type: string}>;
   expect(last.map((command) => command.type)).toEqual(["update_subset_title", "insert_sheet", "update_subset_title"]);
 });
+
+test("撤销结构动作后早期返回恢复 pending：旧在途响应被丢弃且可再次投影", async ({page}) => {
+  const gates = [deferred()];
+  let previewCalls = 0;
+  await page.route("**/api/workspaces/workspace-1/changes/preview", async (route) => {
+    const index = previewCalls++;
+    if (index === 0) await gates[0].promise; // 第一个结构请求在途被 gate
+    await route.fulfill({json: previewResponse(14)});
+  });
+  await installSheetsFixture(page, {sheetCount: 15});
+  await openWorkspace(page);
+  await expect(page.getByText("匹配 15 / 全部 15 张", {exact: true})).toBeVisible();
+
+  // 结构动作一：删除首张 → 内部投影请求在途（pending=true）
+  await page.getByRole("button", {name: "删除", exact: true}).first().click();
+  await page.getByRole("button", {name: "确认删除"}).click();
+  await expect.poll(() => previewCalls).toBe(1);
+
+  // 立即撤销 → 早期返回：不得再发新请求，pending 恢复 false，旧在途响应因代次失效被丢弃
+  await page.getByRole("button", {name: "撤销"}).click();
+  await expect.poll(() => previewCalls).toBe(1);
+  gates[0].resolve();
+  await expect(page.getByText("匹配 15 / 全部 15 张", {exact: true})).toBeVisible();
+  await expect(page.getByText("匹配 14 / 全部 14 张", {exact: true})).not.toBeVisible();
+
+  // 结构动作二：再次删除 → 重新投影成功，不受旧在途请求影响
+  await page.getByRole("button", {name: "删除", exact: true}).first().click();
+  await page.getByRole("button", {name: "确认删除"}).click();
+  await expect.poll(() => previewCalls).toBe(2);
+  await expect(page.getByText("匹配 14 / 全部 14 张", {exact: true})).toBeVisible();
+});
+
+test("持久草稿恢复：跨结构边界同键命令不被去重压缩，命令序列保持", async ({page}) => {
+  const bodies: any[] = [];
+  await page.route("**/api/workspaces/workspace-1/changes/preview", async (route) => {
+    bodies.push(await route.request().postDataJSON());
+    await route.fulfill({json: previewResponse(15)});
+  });
+  const initialDraft = {
+    schema_version: 1,
+    workspace_id: "workspace-1",
+    base_revision_id: "revision-1",
+    repair_status: "VALID",
+    version: 1,
+    cursor: 3,
+    actions: [
+      {id: "action-1", kind: "command_batch", label: "改子集标题", commands: [{type: "update_subset_title", subset_id: "subset-1", title: "平面图甲"}]},
+      {id: "action-2", kind: "command_batch", label: "新增图纸", commands: [{type: "insert_sheet", target_subset_id: "subset-1", ordinal: 1, placement: "after", count: 1, source: {type: "existing_snapshot"}}]},
+      {id: "action-3", kind: "command_batch", label: "再改子集标题", commands: [{type: "update_subset_title", subset_id: "subset-1", title: "平面图乙"}]},
+    ],
+  };
+  await installSheetsFixture(page, {sheetCount: 15, initialDraft});
+  await openWorkspace(page);
+
+  // 持久草稿恢复提示：3 条待处理
+  await expect(page.getByText("已恢复上次未完成的改动（3 条待处理）")).toBeVisible();
+  // 内部投影请求携带跨边界命令序列：两个同键 update_subset_title 不得跨 insert 被去重压缩
+  await expect.poll(() => bodies.length).toBe(1);
+  const commands = bodies[0].commands as Array<{type: string}>;
+  expect(commands.map((command) => command.type)).toEqual(["update_subset_title", "insert_sheet", "update_subset_title"]);
+  expect(commands.map((command) => (command as any).subset_id ?? (command as any).target_subset_id)).toEqual(["subset-1", "subset-1", "subset-1"]);
+});

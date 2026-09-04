@@ -33,11 +33,14 @@ export function useSheetProjection(deps: {
     const current = deps.workspace.value;
     const base = deps.baseWorkspace.value;
     const commands = deps.commands.value;
-    // 无结构动作时由本地只读副本投影显示：清空结构投影并失效在途请求，避免旧结构残留
+    // 无结构动作时由本地只读副本投影显示：清空结构投影、失效在途请求并恢复 pending，
+    // 否则撤销结构动作后 in-flight 请求的 finally 因代次不匹配跳过重置，pending 永久卡死
     if (!current || !base || !commands.length || !commands.some((command) => STRUCTURAL_TYPES.has(command.type))) {
       generation += 1;
       projection.value = null;
       stamp.value = null;
+      pending.value = false;
+      error.value = "";
       return {ok: true};
     }
     const workspaceId = current.id;

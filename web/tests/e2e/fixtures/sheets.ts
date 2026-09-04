@@ -5,6 +5,8 @@ import type {Page} from "@playwright/test";
 export type SheetsFixtureOptions = {
   sheetCount?: number;
   propertyCount?: number;
+  // 持久草稿恢复用例：GET 草稿路由返回该预置草稿（模拟上次未完成改动）
+  initialDraft?: unknown;
 };
 
 // 虚构工作区：单子集 sheetCount 张图纸，全部路径虚构
@@ -123,7 +125,7 @@ export function previewResponse(sheetCount: number) {
 
 // 最小夹具：假壳 + 打开/工作区/持久草稿路由；预览路由由各测试自装（投影门禁需要 gate）
 export async function installSheetsFixture(page: Page, options: SheetsFixtureOptions = {}): Promise<void> {
-  const {sheetCount = 15, propertyCount = 1} = options;
+  const {sheetCount = 15, propertyCount = 1, initialDraft} = options;
   const workspace = buildWorkspace(sheetCount, propertyCount);
   await page.addInitScript(() => {
     (window as any).pywebview = {
@@ -140,7 +142,7 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
   await page.route("**/api/workspaces/*/draft", async (route) => {
     const request = route.request();
     const workspaceId = new URL(request.url()).pathname.split("/").at(-2)!;
-    const current = drafts.get(workspaceId) ?? null;
+    const current = drafts.get(workspaceId) ?? initialDraft ?? null;
     if (request.method() === "GET") return route.fulfill({json: {draft: current, corrupted: false, stale: false, stale_reasons: []}});
     if (request.method() === "DELETE") {
       drafts.delete(workspaceId);
