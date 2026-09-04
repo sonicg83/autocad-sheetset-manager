@@ -27,6 +27,8 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
+from ...runtime import resource_dir
+
 
 class Base(DeclarativeBase):
     pass
@@ -185,7 +187,7 @@ ALLOWED_JOB_TRANSITIONS = {
 
 def migrate_database(url: str) -> None:
     """只通过 Alembic 把空库或既有 MVP 数据库升级到最新版本。"""
-    root = Path(__file__).resolve().parents[4]
+    root = resource_dir()
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "migrations"))
     config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
