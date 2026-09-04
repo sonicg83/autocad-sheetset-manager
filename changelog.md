@@ -7,7 +7,7 @@
 - **新增 Windows 资源管理器适配（`src/dst_manager/infrastructure/explorer.py`）**：以结构化 argv（`shell=False`，无 shell=True/cmd /c、不拼接用户字符串）调用 explorer 打开目录并尽量选中 DST，无法选中时打开已验证目录，目录缺失返回 `SHELL_DIRECTORY_NOT_FOUND`；非 Windows 返回不支持。
 - **TopBar 文件夹入口与前端接线**：`web/src/layout/TopBar.vue` 新增可访问名称为「打开图纸集所在文件夹」的图标按钮——无桌面壳时禁用并解释（`title` 说明原因），桥晚到由 `shellReady` 响应式更新；`web/src/api/shell.ts` 按简报 verbatim 增加 `ShellResult`/`SheetShellBridge` 接口与 `openWorkspaceFolder`/`loadSheetColumns`/`saveSheetColumns`/`clearWorkspaceContext` 包装（旧桥缺新方法时返回 null 降级不抛错）；`App.vue` 点击经桥传当前 workspace_id（异步返回后再比较，旧工作区结果不进入新工作区），关闭成功后 best-effort 清空服务端上下文。
 - **测试（TDD）**：新增 `tests/unit/test_sheet_preferences.py`（16 项：两 ID 隔离、同一 ID 重开、坏 JSON/未知 schema/字段与数量限制拒绝、数据目录不可写 IO 错、只读 load 不建目录、写入不触碰工程目录且失败保留旧文件、workspace_id 摘要防注入）与 `tests/unit/test_shell_workspace.py`（20 项：fake Explorer 只记录参数不弹窗，覆盖未打开/其他 ID/关闭后/目录消失/空格中文路径/路径命令注入拒绝/非 Windows 不支持/五个错误码/成功路径/create_app 回调登记与 HTTP 契约不变）；新增 `web/tests/e2e/sheets-folder.spec.ts`（4 项：无壳禁用并解释、新桥传当前 ID 且成功不报错、旧桥缺方法降级提示、关闭后清上下文且按钮消失）。
-- 验证：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **675 项（603 passed / 72 skipped，0 failures，退出码 0）**——基线 641 + 本任务新增 35；`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **67/67 通过**（63 既有 + 新增 4）；`git diff --check` 通过。真实 Windows 桌面「空格目录打开并实际选中 DST」人工验收留待用户执行，未以 mock 代替系统集成证据。
+- 验证：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **676 项（604 passed / 72 skipped，0 failures，退出码 0）**——基线 641 + 本任务新增 35；`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **67/67 通过**（63 既有 + 新增 4）；`git diff --check` 通过。真实 Windows 桌面「空格目录打开并实际选中 DST」人工验收留待用户执行，未以 mock 代替系统集成证据。
 
 ## 2026-09-04（建立图纸页权威结构投影与命令身份验证）
 
