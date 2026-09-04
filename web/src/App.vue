@@ -4,10 +4,11 @@ import type {Ref} from "vue";
 import {ApiError,request} from "./api/client";
 import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
+import type {ChangeCommand,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import {useTheme} from "./composables/useTheme";
 import {useJobMonitor} from "./composables/useJobMonitor";
+import {useCsvImport} from "./composables/useCsvImport";
 import {useConfirm} from "./composables/useConfirm";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
 import DraftActionsPanel from "./components/DraftActionsPanel.vue";
@@ -20,7 +21,6 @@ import RepairStatusPanel from "./components/RepairStatusPanel.vue";
 import SheetTable from "./components/SheetTable.vue";
 
 type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:ChangeCommand[];result:Preview};
-type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:CsvPreview};
 type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:RestorePreview};
 
 const {toggleTheme}=useTheme();
@@ -49,9 +49,6 @@ const repairPreview=ref<RepairPreview|null>(null);
 const repairContext=ref<{workspaceId:string;baseRevisionId:string;previewDigest:string|undefined;loadGeneration:number}|null>(null);
 const isRepairPreviewing=ref(false);
 const isRepairExecuting=ref(false);
-const csvText=ref("");
-const csvPreview=ref<CsvPreview|null>(null);
-const csvPreviewContext=ref<CsvPreviewContext|null>(null);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
 // 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
@@ -59,6 +56,12 @@ const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,isCurrentJobGen
   isWorkspaceLoading,workspace,
   onJobSucceeded:async(workspaceId:string)=>{await discardDraft();await refreshWorkspace(workspaceId)},
   error,
+});
+// job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入
+const setJob=(j:Job)=>{job.value=j};
+// 自定义属性 CSV 导入域（Task 3 拆分）
+const {csvText,csvPreview,csvPreviewContext,readCsvFile,previewCsv,importCsv,invalidateCsvPreview}=useCsvImport({
+  workspace,isWorkspaceLoading,watchJob,setJob,refreshWorkspace,invalidateJobMonitor,isCurrentJobGeneration,error,confirmAction,
 });
 const cadVersion=ref("2020");
 const searchText=ref("");
@@ -71,7 +74,6 @@ const renderLimit=ref(80);
 const bulkPropertyName=ref("");
 const bulkPropertyValue=ref("");
 let previewGeneration=0;
-let csvGeneration=0;
 let workspaceLoadGeneration=0;
 let revisionGeneration=0;
 let restoreExecutionGeneration=0;
@@ -140,7 +142,6 @@ const saveStatusText=computed(()=>draftSaveFailed.value?"保存失败":draftSavi
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
-function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value=null;csvPreviewContext.value=null;if(clearText)csvText.value=""}
 function invalidateRevisionState(){revisionGeneration+=1;revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
@@ -512,45 +513,6 @@ async function executeRepair(){
   }
   catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
   finally{if(isCurrentJobGeneration(generation))isRepairExecuting.value=false}
-}
-
-async function readCsvFile(event:Event){
-  const generation=++csvGeneration;
-  csvText.value="";csvPreview.value=null;csvPreviewContext.value=null;error.value="";
-  const file=(event.target as HTMLInputElement).files?.[0];
-  if(!file)return;
-  try{
-    const decoded=new TextDecoder("utf-8",{fatal:true}).decode(await file.arrayBuffer());
-    if(generation!==csvGeneration)return;
-    csvText.value=decoded;
-  }
-  catch{if(generation===csvGeneration)error.value="CSV 必须使用 UTF-8 编码"}
-}
-async function previewCsv(){
-  if(isWorkspaceLoading.value||!workspace.value||!csvText.value){error.value="请选择 UTF-8 CSV 文件";return}
-  const workspaceId=workspace.value.id;
-  const baseRevisionId=workspace.value.revision_id;
-  const csvSnapshot=csvText.value;
-  const generation=++csvGeneration;
-  csvPreview.value=null;csvPreviewContext.value=null;
-  try{
-    const result:CsvPreview=await request(`/api/workspaces/${workspaceId}/custom-properties/import/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,csv:csvSnapshot})});
-    if(generation!==csvGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId||csvText.value!==csvSnapshot)return;
-    csvPreview.value=result;csvPreviewContext.value={workspaceId,baseRevisionId,csv:csvSnapshot,result};error.value="";
-  }
-  catch(e){if(generation===csvGeneration)error.value=String(e)}
-}
-async function importCsv(){
-  const context=csvPreviewContext.value;
-  if(!context||!context.result.executable)return;
-  const current=workspace.value;
-  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();error.value="工作区或基准修订已变化，请重新预览 CSV";return}
-  // 属性定义导入为低风险动作：danger:false、无需勾选
-  const ok=await confirmAction({title:"确认导入属性定义",message:"确认导入属性定义？",confirmText:"确认导入",danger:false});
-  if(!ok)return;
-  const generation=invalidateJobMonitor(false);
-  try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await refreshWorkspace(context.workspaceId)}
-  catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
 
 </script>
