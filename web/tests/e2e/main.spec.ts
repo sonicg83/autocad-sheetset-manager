@@ -526,3 +526,13 @@ test("壳桥延迟注入（pywebviewready）时初始界面切换为文件选择
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible({timeout:5000});
   await expect(page.getByRole("button",{name:"打开项目"})).toHaveCount(0);
 });
+
+test("主题切换写 html data-theme 并持久化",async({page})=>{
+  // 仅首次导航播种浅色初始态；reload 时 addInitScript 会重跑，若无条件覆盖会把已持久化的 dark 冲回 light
+  await page.addInitScript(()=>{if(!localStorage.getItem("dst-manager-theme"))localStorage.setItem("dst-manager-theme","light")});
+  await page.goto("/");
+  await page.getByRole("button",{name:"切换主题"}).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+});

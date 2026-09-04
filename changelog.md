@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-04（v0.3.3 标签化外壳 Task 1：设计令牌与浅深双主题）
+
+- 落地界面设计令牌与浅深双主题切换（[PLAN-DM-013](.planning/plans/dst-manager/PLAN-DM-013-v033-tabbed-shell.md) Task 1，对应 [SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §5.1、§4.1 顶栏主题切换）：`web/src/style.css` 文件头部新增 `:root` 浅色与 `html[data-theme="dark"]` 深色两套设计令牌（背景/文字/边框/强调/语义色、圆角、阴影、间距共 8 组），浅色默认；新增 `web/src/composables/useTheme.ts`（`useTheme(): { theme, toggleTheme }`，持久化键 `localStorage["dst-manager-theme"]`，watch immediate 写 `document.documentElement.dataset.theme`）；`web/src/App.vue` header 内临时挂载主题切换按钮（`aria-label="切换主题"`，Task 4 迁入 TopBar）。e2e 新增「主题切换写 html data-theme 并持久化」用例（先红后绿；用例中 `addInitScript` 播种初始主题改为"仅当未持久化时写入"，规避 Playwright 每次导航重跑 init script 会把 reload 后已持久化的 dark 冲回 light 的语义陷阱）。全量 Playwright e2e **40/40 通过**（39 既有 + 1 新增）、`npm run build`（check:api + vue-tsc + vite）零类型错误。
+
 ## 2026-09-03（v0.3.2 实测修复：文件名后缀区间压缩与项目前缀对齐）
 
 - 依据 `sample/project3 - copy2` 图纸集实测反馈修订派生 DWG 文件名两条规则（[SPEC-DM-008](docs/dst-manager/specs/SPEC-DM-008-v032-naming-and-template-flows.md) §3.2 同步修订并补修订记录）：① 后缀压缩改为**区间形式**——文件名后缀只保留首末两张图纸的序号，六张图纸为 `RQ-011-016 … (一)-(六).dwg` 而非 `(一)-(二)-(三)-(四)-(五)-(六).dwg`（`domain/editing.py` 的 `_compressed_group_title` 改为 `首后缀)-(末后缀` 拼接；两张时与原输出一致，既有用例不变）；② **项目前缀对齐**——新增 `_project_dwgs_prefix(document)` 从图纸集既有 DWG 登记名提取项目级前缀（如 `RQ-001-002 大运北站图纸目录 (一)-(二).dwg` → `RQ-`），`_target_file_name` 增加回退参数：来源文件名自带前缀优先，模板来源（新建子集的布局模板文件无前缀）时回退项目前缀，新子集派生 `RQ-003-004 主要设备及材料表 (一)-(二).dwg` 而非 `003-004 …`。`tests/unit/test_core.py` 新增 6 张区间压缩与新建子集前缀继承两用例（先确认失败原因正确再实现）；全量 `uv run pytest` **619 项，547 passed / 72 skipped / 0 failed**、`ruff check .` 无违规。

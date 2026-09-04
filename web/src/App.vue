@@ -6,6 +6,7 @@ import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
+import {useTheme} from "./composables/useTheme";
 import DraftActionsPanel from "./components/DraftActionsPanel.vue";
 import JobStatusPanel from "./components/JobStatusPanel.vue";
 import ProjectNavigation from "./components/ProjectNavigation.vue";
@@ -19,6 +20,7 @@ type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;
 type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;result:CsvPreview};
 type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:RestorePreview};
 
+const {toggleTheme}=useTheme();
 const dstPath=ref("");
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
@@ -543,7 +545,7 @@ async function importCsv(){
 </script>
 
 <template>
-  <header><div><h1>DST Manager</h1><span>v0.3 · 受控日常编辑与可恢复发布</span></div></header>
+  <header><div><h1>DST Manager</h1><span>v0.3 · 受控日常编辑与可恢复发布</span><button type="button" aria-label="切换主题" @click="toggleTheme">◐</button></div></header>
   <main>
     <section v-if="!workspace" class="open"><template v-if="!hasShell"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button></template><template v-else><button @click="selectAndOpenDst">选择 DST 文件</button><small class="drop-hint">或将 .dst 文件拖入窗口</small></template></section><section v-else class="open"><button :disabled="isRestoreExecuting" @click="closeWorkspace">关闭</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
     <p v-if="error" class="error notice">{{error}}</p>
