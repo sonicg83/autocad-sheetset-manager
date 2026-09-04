@@ -55,7 +55,7 @@ def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
     database_module.migrate_database(url)
     assert database_module.LATEST_SCHEMA_REVISION == "0004_dm007_layout_name_cache"
     # 迁移真实发生：alembic_version 表存在且为最新修订
-    from sqlalchemy import inspect, create_engine, text
+    from sqlalchemy import create_engine, text
 
     engine = create_engine(url)
     version = engine.connect().execute(text("SELECT version_num FROM alembic_version")).scalar_one()

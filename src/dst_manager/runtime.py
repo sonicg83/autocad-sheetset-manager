@@ -22,5 +22,5 @@ def resource_dir(base: Path | None = None) -> Path:
     if base is not None:
         return base
     if is_frozen():
-        return Path(getattr(sys, "_MEIPASS"))
+        return Path(sys._MEIPASS)
     return _DEV_ROOT
