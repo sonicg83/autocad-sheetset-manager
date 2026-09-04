@@ -480,6 +480,29 @@ test("发布确认模态必须显式勾选后才可提交",async({page})=>{
   await expect(modal).toHaveCount(0);
 });
 
+test("取消高门槛模态后低风险模态不残留勾选与不可逆徽标",async({page})=>{
+  // 回归：useConfirm 共享 reactive 状态跨次泄漏——先触发 requireCheckbox+impactLines 模态并取消，
+  // 再触发低风险模态，断言干净状态（无复选框、无"不可逆"徽标、无上次受影响文件清单、确认按钮不被门禁）
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["leak-test.dst"],execution_intent:null}}));
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  // 先打开发布模态（requireCheckbox + impactLines + 不可逆）并取消
+  await page.getByRole("button",{name:"确认并执行"}).click();
+  const gated=page.getByRole("dialog");
+  await expect(gated.getByText("不可逆",{exact:true})).toBeVisible();
+  await gated.getByRole("button",{name:"取消"}).click();
+  await expect(gated).toHaveCount(0);
+  // 再触发单张图纸删除（低风险：danger:false、无勾选）
+  await page.locator(".subset-editor tbody tr").filter({has:page.getByText("001",{exact:true})}).getByRole("button",{name:"删除"}).click();
+  const lowRisk=page.getByRole("dialog");
+  await expect(lowRisk).toBeVisible();
+  await expect(lowRisk.getByRole("checkbox")).toHaveCount(0);
+  await expect(lowRisk.getByText("不可逆",{exact:true})).toHaveCount(0);
+  await expect(lowRisk.locator(".modal-impact")).toHaveCount(0);
+  await expect(lowRisk.getByRole("button",{name:/确认删除/})).toBeEnabled();
+});
+
 test("未打开态只有文件选择区，不显示修订历史",async({page})=>{
   await page.goto("/");
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {watch,ref,nextTick} from "vue";
-const props=defineProps<{open:boolean;title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?:string}>();
+const props=defineProps<{open:boolean;title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "可撤销"|"不可逆"}>();
 const emit=defineEmits<{confirm:[];cancel:[]}>();
 const checked=ref(false);const card=ref<HTMLElement|null>(null);const opener=ref<Element|null>(null);
 watch(()=>props.open,async open=>{checked.value=false;

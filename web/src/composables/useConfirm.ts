@@ -1,6 +1,6 @@
 import {reactive} from "vue";
 
-export type ConfirmOptions={title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?:string};
+export type ConfirmOptions={title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "可撤销"|"不可逆"};
 type ConfirmModalState=ConfirmOptions&{open:boolean};
 
 export function useConfirm(){
@@ -9,6 +9,12 @@ export function useConfirm(){
   function confirmAction(options:ConfirmOptions):Promise<boolean>{
     return new Promise(resolve=>{
       pending=resolve;
+      // 每次打开都是干净状态：先复位全部可选键，避免上一次模态的 requireCheckbox/reversibility/impactLines/cancelText/danger 跨次泄漏
+      state.impactLines=undefined;
+      state.cancelText=undefined;
+      state.danger=false;
+      state.requireCheckbox=false;
+      state.reversibility=undefined;
       Object.assign(state,options,{open:true});
     });
   }
