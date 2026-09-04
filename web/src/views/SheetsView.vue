@@ -1,7 +1,6 @@
 <script setup lang="ts">
 // 标签① 图纸：图纸集/子集/图纸导航、批量新增与新建子集表单、编辑区（受控组件，业务状态仍由 App.vue 持有）
-import type {Diagnostic,DraftAction,DstValidation,LayoutSourceType,Placement,RepairPreview,Sheet,Subset,Workspace} from "../api/contracts";
-import DraftActionsPanel from "../components/DraftActionsPanel.vue";
+import type {Diagnostic,DstValidation,LayoutSourceType,Placement,RepairPreview,Sheet,Subset,Workspace} from "../api/contracts";
 import ProjectNavigation from "../components/ProjectNavigation.vue";
 import RepairStatusPanel from "../components/RepairStatusPanel.vue";
 import SheetTable from "../components/SheetTable.vue";
@@ -26,8 +25,6 @@ defineProps<{
   insertSubsetForm:InsertSubsetForm;
   layoutOptions:string[];layoutLoading:boolean;layoutError:string;layoutManual:boolean;
   subsetLayoutOptions:string[];subsetLayoutLoading:boolean;subsetLayoutError:string;subsetLayoutManual:boolean;
-  draftActions:DraftAction[];draftCursor:number;commandCount:number;draftStale:boolean;draftStaleReasons:string[];draftCorrupted:boolean;draftSaveFailed:boolean;saveStatusText:string;
-  repairWritesDisabled:boolean;isWorkspaceLoading:boolean;
   dstValidation:DstValidation|null;repairPreview:RepairPreview|null;isRepairPreviewing:boolean;isRepairExecuting:boolean;
 }>();
 const searchText=defineModel<string>("searchText",{default:""});
@@ -44,7 +41,6 @@ defineEmits<{
   selectTemplateFile:[];selectSubsetTemplateFile:[];selectBaseTemplateFile:[];
   queueSubsetTitle:[];queueSheetProperties:[sheet:Sheet];queueDelete:[sheet:Sheet];queueDeleteSubset:[];
   queueInsertSheet:[];queueInsertSubset:[];
-  discard:[];reloadConflict:[];undo:[];redo:[];clear:[];preview:[];remove:[index:number];scheduleDraftSave:[];
   previewRepair:[];executeRepair:[];cancelRepair:[];
 }>();
 </script>
@@ -76,8 +72,6 @@ defineEmits<{
     <section class="editor">
       <ProjectNavigation :subsets="workspace.sheet_set.subsets" :selected-id="selected?.id??''" @select="$emit('selectSubset',$event)" />
       <article>
-        <DraftActionsPanel :actions="draftActions" :cursor="draftCursor" :command-count="commandCount" :stale="draftStale" :stale-reasons="draftStaleReasons" :corrupted="draftCorrupted" :writes-disabled="repairWritesDisabled" :loading="isWorkspaceLoading" @discard="$emit('discard')" @reload-conflict="$emit('reloadConflict')" @undo="$emit('undo')" @redo="$emit('redo')" @clear="$emit('clear')" @preview="$emit('preview')" @remove="$emit('remove',$event)" />
-        <div class="draft-save-status"><span class="save-status" :class="{error:draftSaveFailed}">{{saveStatusText}}</span><button v-if="draftSaveFailed" @click="$emit('scheduleDraftSave')">重试</button></div>
         <section v-if="selected" class="subset-editor"><div class="form-row"><label>当前子集标题<input v-model="selected.title"></label><button @click="$emit('queueSubsetTitle')">加入标题变更</button><button class="danger" @click="$emit('queueDeleteSubset')">删除整个子集</button></div><p class="derived">只读图号范围：{{selected.number_range||'—'}} · 显示名：{{selected.display_name}}</p>
           <table><thead><tr><th>图号</th><th>派生标题</th><th>自定义属性</th><th></th></tr></thead><tbody><tr v-for="sheet in selected.sheets" :key="sheet.id"><td><span>{{sheet.number}}</span></td><td><span>{{sheet.title}}</span></td><td><div class="property-values"><label v-for="(_,name) in sheet.custom_properties" :key="name">{{name}}<input v-model="sheet.custom_properties[name]"></label></div></td><td><button @click="$emit('queueSheetProperties',sheet)">加入属性变更</button><button class="danger" @click="$emit('queueDelete',sheet)">删除</button></td></tr></tbody></table>
         </section>

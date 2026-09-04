@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type {CadGroup,CardinalityFrontier,DerivedSubset,ExecutionEstimate,Preview,SemanticDiff,SourceBaseline,SubsetOperation} from "../api/contracts";
-defineProps<{preview:Preview;semanticDiff:SemanticDiff;estimate:ExecutionEstimate|null;cadValidationDeferred:boolean;cardinalityFrontier:CardinalityFrontier|null;subsetOperations:SubsetOperation[];sourceBaselines:SourceBaseline[];derivedSubsets:DerivedSubset[];groups:CadGroup[];writesDisabled:boolean}>();
-defineEmits<{execute:[]}>();
+defineProps<{preview:Preview;semanticDiff:SemanticDiff;estimate:ExecutionEstimate|null;cadValidationDeferred:boolean;cardinalityFrontier:CardinalityFrontier|null;subsetOperations:SubsetOperation[];sourceBaselines:SourceBaseline[];derivedSubsets:DerivedSubset[];groups:CadGroup[]}>();
+
 function valueText(value:unknown){if(value===null||value===undefined||value==="")return "—";return typeof value==="object"?JSON.stringify(value):String(value)}
 function operationLabel(operation?:string|null){if(operation==="rename_only")return "批量改名布局";if(operation==="rebuild")return "清除并重建布局";if(operation==="none")return "无需 CAD 操作";if(!operation)return "未提供 CAD 操作";return `未知 CAD 操作：${operation}`}
 </script>
@@ -18,5 +18,4 @@ function operationLabel(operation?:string|null){if(operation==="rename_only")ret
   <section><h3>兼容变更清单</h3><ul><li v-for="(change,index) in preview.changes" :key="index"><strong>{{change.type}}</strong><span v-if="change.affected_sheet_count!==undefined"> · 受影响图纸 {{change.affected_sheet_count}}</span></li></ul></section>
   <section v-if="groups.length"><h3>CAD 执行分组</h3><div class="group-grid"><article v-for="group in groups" :key="group.subset_id" class="execution-group"><strong>{{operationLabel(group.cad_operation)}}</strong><h4>{{group.subset_name}}</h4><p>{{group.target_file}}</p><table><thead><tr><th>图号</th><th>服务端标题</th><th>目标布局</th></tr></thead><tbody><tr v-for="layout in group.layouts" :key="layout.sheet_id"><td>{{layout.number}}</td><td>{{layout.title}}</td><td>{{layout.target_layout}}</td></tr></tbody></table></article></div></section>
   <section><h3>诊断</h3><ul class="diagnostics"><li v-for="item in preview.diagnostics" :key="item.code+item.message" :class="item.severity"><b>{{item.code}}</b>：{{item.message}}</li><li v-if="!preview.diagnostics?.length">无阻断诊断</li></ul></section><section><h3>受影响文件</h3><ul><li v-for="file in preview.affected_files" :key="file">{{file}}</li></ul></section>
-  <button class="primary" :disabled="writesDisabled||preview.executable===false" @click="$emit('execute')">确认并执行</button>
 </section></template>

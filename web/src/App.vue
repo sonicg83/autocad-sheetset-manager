@@ -17,6 +17,8 @@ import JobStatusPanel from "./components/JobStatusPanel.vue";
 import PreviewPanel from "./components/PreviewPanel.vue";
 import TopBar from "./layout/TopBar.vue";
 import TabBar from "./layout/TabBar.vue";
+import ActionDock from "./layout/ActionDock.vue";
+import {useHotkeys} from "./composables/useHotkeys";
 import WelcomeView from "./views/WelcomeView.vue";
 import SheetsView from "./views/SheetsView.vue";
 import PropertiesView from "./views/PropertiesView.vue";
@@ -41,6 +43,8 @@ const draftSaving=ref(false);
 const draftRecovered=ref<number|null>(null);
 const preview=ref<Preview|null>(null);
 const previewContext=ref<PreviewContext|null>(null);
+// 预览请求进行中（Task 5 ActionDock 门禁：仅作按钮 loading 呈现，不阻止再次发起——竞态由 previewGeneration 丢弃乱序响应）
+const isPreviewing=ref(false);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
@@ -413,22 +417,21 @@ async function showPreview(){
   const cadVersionSnapshot=cadVersion.value;
   const commandSnapshot=cloneJson(commands.value);
   const generation=++previewGeneration;
-  preview.value=null;previewContext.value=null;
+  preview.value=null;previewContext.value=null;isPreviewing.value=true;
   try{
     const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot,cad_version:cadVersionSnapshot})});
     if(generation!==previewGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
     preview.value=result;previewContext.value={workspaceId,baseRevisionId,cadVersion:cadVersionSnapshot,commands:commandSnapshot,result};error.value="";
   }
   catch(e){if(generation===previewGeneration)error.value=String(e)}
+  finally{if(generation===previewGeneration)isPreviewing.value=false}
 }
+// 执行正式写入（Task 5：模态上移到 write()，execute 不再自行开模态）
 async function execute(){
   const context=previewContext.value;
   if(!context||!context.result.executable)return;
   const current=workspace.value;
   if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidatePreview();error.value="工作区或基准修订已变化，请重新预览";return}
-  // 发布为不可逆破坏类操作：需显式勾选后才可确认，并列出受影响文件清单
-  const ok=await confirmAction({title:"确认发布",message:"原 DST 和受影响 DWG 将永久备份。",impactLines:context.result.affected_files,confirmText:"确认发布（原 DST 与受影响 DWG 永久备份）",danger:true,requireCheckbox:true,reversibility:"不可逆"});
-  if(!ok)return;
   const generation=invalidateJobMonitor(false);
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
@@ -437,6 +440,34 @@ async function execute(){
   }
   catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
+
+// —— ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一出口）——
+const dock=computed(()=>{
+  const taskRunning=isWorkspaceLoading.value||isRestoreExecuting.value||Boolean(job.value&&!["SUCCEEDED","FAILED"].includes(job.value.status));
+  const base={commandCount:commands.value.length,actions:draftActions.value,cursor:draftCursor.value,stale:draftStale.value,staleReasons:draftStaleReasons.value,corrupted:draftCorrupted.value,saveStatusText:saveStatusText.value,saveFailed:draftSaveFailed.value,previewing:isPreviewing.value,writesDisabled:taskRunning||repairWritesDisabled.value};
+  if(taskRunning)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"任务进行中",writeNeedsModal:false};
+  const status=dstValidation.value?.status??"VALID";
+  if(status!=="VALID")return{...base,canPreview:false,canWrite:false,writeDisabledReason:status==="REPAIRED"?"存在待确认修复":"需先修复",writeNeedsModal:false};
+  if(!commands.value.length)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"没有待发布变更",writeNeedsModal:false};
+  const context=previewContext.value;
+  if(!context)return{...base,canPreview:true,canWrite:false,writeDisabledReason:"请先预览",writeNeedsModal:false};
+  if(context.workspaceId!==workspace.value?.id||context.baseRevisionId!==workspace.value?.revision_id)return{...base,canPreview:true,canWrite:false,writeDisabledReason:"预览已失效，请重新预览",writeNeedsModal:false};
+  if(context.result.executable===false)return{...base,canPreview:true,canWrite:false,writeDisabledReason:"预览不可执行",writeNeedsModal:false};
+  return{...base,canPreview:true,canWrite:true,writeDisabledReason:"",writeNeedsModal:true};
+});
+async function write(){
+  const context=previewContext.value;
+  if(!context||context.result.executable===false)return;
+  if(await confirmAction({title:"确认发布",message:"原 DST 和受影响 DWG 将永久备份。",impactLines:context.result.affected_files,confirmText:"确认发布（原 DST 与受影响 DWG 永久备份）",danger:true,requireCheckbox:true,reversibility:"不可逆"}))await execute();
+}
+// 全局快捷键（SPEC-DM-006 §7.1）：Ctrl+S 只在 writeNeedsModal 时开模态，否则给非阻断提示（Task 7 toast 前用既有 error）
+useHotkeys({
+  open:()=>{if(workspace.value){error.value="请先关闭当前工作区，再打开新的 DST 文件";return}if(hasShell.value)void selectAndOpenDst();else(document.querySelector<HTMLInputElement>(".no-shell input"))?.focus()},
+  preview:()=>{if(dock.value.canPreview)void showPreview();else error.value=dock.value.writeDisabledReason||"当前状态不可预览"},
+  write:()=>{if(dock.value.writeNeedsModal)void write();else error.value=dock.value.writeDisabledReason||"当前状态不可写入"},
+  undo:()=>undoDraft(),
+  redo:()=>redoDraft(),
+});
 
 </script>
 
@@ -453,10 +484,11 @@ async function execute(){
       <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
       <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
       <JobStatusPanel v-if="job&&!isWorkspaceLoading" :job="job" :connection-mode="connectionMode" @retry="retryJob" />
-      <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :writes-disabled="repairWritesDisabled" @execute="execute" />
-      <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" :draft-actions="draftActions" :draft-cursor="draftCursor" :command-count="commands.length" :draft-stale="draftStale" :draft-stale-reasons="draftStaleReasons" :draft-corrupted="draftCorrupted" :draft-save-failed="draftSaveFailed" :save-status-text="saveStatusText" :repair-writes-disabled="repairWritesDisabled" :is-workspace-loading="isWorkspaceLoading" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @preview="showPreview" @remove="removeDraftAction" @schedule-draft-save="scheduleDraftSave" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
+      <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" />
+      <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
       <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
       <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestore" @restore="restoreRevision" />
+      <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
     </template>
   </main>
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
