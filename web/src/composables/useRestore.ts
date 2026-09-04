@@ -68,7 +68,9 @@ export function useRestore(deps:{
     try{
       const result:Job=await request(`/api/workspaces/${context.workspaceId}/revisions/${context.revisionId}/restore`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,preview_digest:context.result.preview_digest})});
       if(!restoreExecutionMatches(generation,context))return;
-      deps.setJob(result);restorePreview.value=null;restorePreviewContext.value=null;deps.error.value="";await deps.refreshWorkspace(context.workspaceId);if(deps.workspace.value?.id===context.workspaceId&&!deps.isWorkspaceLoading.value)await loadRevisionsInternal();
+      deps.setJob(result);restorePreview.value=null;restorePreviewContext.value=null;deps.error.value="";
+      // fix round 1（裁决）：refreshWorkspace 仅 SUCCEEDED 时执行——QUEUED/终态 FAILED 等由浮层实施进度页签呈现，避免无条件复位把刚展开的浮层闪关（对齐 execute/executeRepair/importCsv 三入口）
+      if(result.status==="SUCCEEDED"){await deps.refreshWorkspace(context.workspaceId);if(deps.workspace.value?.id===context.workspaceId&&!deps.isWorkspaceLoading.value)await loadRevisionsInternal()}
     }
     catch(e){if(restoreExecutionMatches(generation,context))deps.error.value=String(e)}
     finally{if(generation===restoreExecutionGeneration)deps.isRestoreExecuting.value=false}

@@ -471,6 +471,25 @@ test("修订恢复先预览再确认为新修订",async({page})=>{
   await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore",route=>route.fulfill({json:{id:"restore-1",status:"SUCCEEDED",progress:100,attempt:0,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"修订历史"}).click();await page.getByRole("button",{name:"恢复预览"}).click();await expect(page.getByText("replace test.dst")).toBeVisible();await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");
 });
 
+test("恢复直返终态 FAILED 时任务浮层自动展开到实施进度页签",async({page})=>{
+  // fix round 1 回归：后端 restore 为同步发布可直返终态 FAILED（不设 error），任务详情不得再藏进折叠浮层——setJob 收到任何状态均展开浮层到实施进度页签
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore",route=>route.fulfill({json:{id:"restore-failed",status:"FAILED",progress:40,attempt:1,error_code:"RESTORE_FAILED",suggestion:"检查原文件",files:[{target_path:"test.dst",status:"FAILED",progress:0,error_code:"RESTORE_FAILED"}]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"修订历史"}).click();
+  await page.getByRole("button",{name:"恢复预览"}).click();
+  await expect(page.getByText("replace test.dst")).toBeVisible();
+  await page.getByRole("button",{name:"恢复为新修订"}).click();
+  await confirmModal(page,/确认恢复/);
+  // 终态 FAILED 响应：浮层可见且实施进度页签激活，任务详情不再静默
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
+  await expect(page.getByText("任务 restore-failed")).toBeVisible();
+  await expect(page.getByText("RESTORE_FAILED").first()).toBeVisible();
+});
+
 test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   const repaired:any=workspaceVersion("workspace-1","测试图纸集","revision-1");
   repaired.dst_validation={status:"REPAIRED",actions:[{code:"REPAIR_ATTR_MISSING",node_path:"/AcSmDatabase/AcSmSheetSet[@ID=\"x\"]/AcSmSheet",object_id:null,confidence:"deterministic",before:{clsid:null},after:{clsid:"g16A07941-BC15-4D48-A880-9D5A211D5065"},message:"补齐 AcSmSheet 的 clsid"}],blocking_issues:[]};

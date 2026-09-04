@@ -57,8 +57,8 @@ const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurr
 // 任务浮层状态（SPEC-DM-006 §4.1）：open/tab 由 App 持有（Task 7 toast 抑制与"查看"跳转依赖）；openOverlay 为唯一自动展开入口
 const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
 function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
-// job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入；QUEUED 即自动展开到实施进度页签（execute/executeRepair/importCsv/restoreRevision 统一入口）
-const setJob=(j:Job)=>{job.value=j;if(j.status==="QUEUED")openOverlay("prog")};
+// job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入；任何任务响应（排队或已终态）均展开到实施进度页签——用户刚发起动作任务必须可见，已展开时幂等不重复弹（fix round 1：restore 同步直返终态时不再静默）
+const setJob=(j:Job)=>{job.value=j;openOverlay("prog")};
 // 自定义属性 CSV 导入域（Task 3 拆分）
 const {csvText,csvPreview,csvPreviewContext,readCsvFile,previewCsv,importCsv,invalidateCsvPreview}=useCsvImport({
   workspace,isWorkspaceLoading,watchJob,setJob,refreshWorkspace,invalidateJobMonitor,isCurrentJobGeneration,error,confirmAction,
