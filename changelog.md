@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-04（v0.3.3 修复输入控件不随主题切换）
+
+- **修复深色/浅色模式下文本输入框与下拉选单视觉不变**：旧样式块对 `input`/`select` 只设置 `padding`/`border`，背景与文字色落到浏览器 UA 默认白底黑字，且全站未声明 `color-scheme`。修复两项：① `web/src/style.css` 令牌区声明 `:root{color-scheme:light}` 与 `html[data-theme="dark"]{color-scheme:dark}`（原生控件、下拉弹出列表与滚动条随主题渲染）；② 旧块新增通用控件规则 `input:not([type="checkbox"]):not([type="radio"]),select,textarea{background:var(--color-bg-surface);color:var(--color-text-primary)}`——排除 checkbox/radio 以免影响确认模态勾选框外观（`ConfirmModal` 的勾选框由 UA 按 `color-scheme` 自行渲染）。e2e 新增「深色模式下文本输入框与下拉选单随主题切换背景」（先红后绿：断言 `.filter-grid` 输入框与下拉计算背景为 `--color-bg-surface` 深色值）。
+- 验证：`cd web && npm run test:e2e` **59/59 通过**（58 既有 + 新增 1）、`npm run build` 零错误；后端零改动。
+
 ## 2026-09-04（v0.3.3 修复中心视图区域不随主题切换）
 
 - **修复深色/浅色切换只作用于外围框架、标签中心区域不生效**：`web/src/style.css` 存在两层并存——语义令牌区（`:root` 浅色 + `html[data-theme="dark"]` 深色，外壳 TopBar/TabBar/ActionDock/任务浮层/模态消费令牌，随主题切换）与旧单页版压缩样式块（`.editor`、`aside`、`table`、`.panel`、`.sheet-table-window`、`fieldset` 等，被中心视图区域命中）。旧块全部硬编码浅色值（`background:white`、`#172033`、`#f7f9fc` 等 24 种），不消费任何令牌，CSS 变量切换对其无效。修复：旧块内全部硬编码颜色等值映射到既有语义令牌（`background:white→var(--color-bg-surface)`、文字色→`--color-text-primary/secondary/muted`、边框→`--color-border-subtle/strong`、状态色→`--color-accent/success/warning/danger` 及对应 `-bg`、`box-shadow:0 1px 3px #17203312→var(--shadow-1)`），仅 `.modal-mask` 遮罩的 `rgba(16,24,40,.55)` 保留（半透明黑双主题皆宜）。e2e 新增「深色模式下中心视图区域随主题切换背景」（先红后绿：播种 dark 主题打开工作区，断言 `.sheet-browser` 计算背景为 `--color-bg-surface` 深色值）。

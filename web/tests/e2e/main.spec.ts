@@ -686,6 +686,16 @@ test("深色模式下中心视图区域随主题切换背景",async({page})=>{
   expect(panelBg).toBe("rgb(23, 30, 41)"); // --color-bg-surface 深色值 #171E29
 });
 
+test("深色模式下文本输入框与下拉选单随主题切换背景",async({page})=>{
+  // 回归：旧样式块只设 input/select 的 padding/border，背景落到 UA 默认白底且未声明 color-scheme
+  await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+  await openWorkspace(page);
+  for(const locator of [page.locator(".filter-grid input").first(),page.locator(".filter-grid select").first()]){
+    const bg=await locator.evaluate(el=>getComputedStyle(el).backgroundColor);
+    expect(bg).toBe("rgb(23, 30, 41)"); // --color-bg-surface 深色值 #171E29
+  }
+});
+
 // —— Task 4 外壳骨架（SPEC-DM-006 §4.1/§4.2/§7.2）——
 
 test("打开工作区后显示三个固定标签且默认激活图纸标签",async({page})=>{
