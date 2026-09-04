@@ -441,11 +441,11 @@ async function execute(){
   catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
 
-// —— ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一出口）——
-const dock=computed(()=>{
+const dock=computed(()=>{ // ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一出口）
   const taskRunning=isWorkspaceLoading.value||isRestoreExecuting.value||Boolean(job.value&&!terminal(job.value.status));
   const base={commandCount:commands.value.length,actions:draftActions.value,cursor:draftCursor.value,stale:draftStale.value,staleReasons:draftStaleReasons.value,corrupted:draftCorrupted.value,saveStatusText:saveStatusText.value,saveFailed:draftSaveFailed.value,previewing:isPreviewing.value,writesDisabled:taskRunning||repairWritesDisabled.value};
   if(taskRunning)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"任务进行中",writeNeedsModal:false};
+  if(job.value?.status==="NEEDS_REVIEW")return{...base,canPreview:false,canWrite:false,writeDisabledReason:"需人工检查，禁止直接重试",writeNeedsModal:false}; // 终态但需人工检查：dst_validation 是加载快照仅 SUCCEEDED 刷新，须独立锁定（§6.9 行）
   const status=dstValidation.value?.status??"VALID";
   if(status!=="VALID")return{...base,canPreview:false,canWrite:false,writeDisabledReason:status==="REPAIRED"?"存在待确认修复":status==="INVALID_UNRECOVERABLE"?"不可恢复":"需先修复",writeNeedsModal:false};
   if(!commands.value.length)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"没有待发布变更",writeNeedsModal:false};

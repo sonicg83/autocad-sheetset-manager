@@ -707,3 +707,21 @@ test("任务回滚终态后 ActionDock 解锁不再锁定任务进行中",async(
   await expect(page.getByText("任务进行中")).toHaveCount(0);
   await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
 });
+
+test("NEEDS_REVIEW 终态时 ActionDock 锁定并提示需人工检查禁止直接重试",async({page})=>{
+  // 回归：dst_validation 是加载时快照、仅 SUCCEEDED 刷新；VALID 工作区遇 NEEDS_REVIEW 后不能落入"有效可执行"，
+  // 须由 dock 独立分支锁定（§6.9 行"需人工检查，禁止直接重试"，与 useJobMonitor.retryJob 的 NEEDS_REVIEW 禁止重试一致）
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-review",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
+  await expect(page.getByText("任务进行中")).toBeVisible();
+  // 终态 NEEDS_REVIEW：需人工检查，预览/确认写入均禁用且内联文本可见（不依赖 dst_validation 快照）
+  await page.evaluate(()=>(window as any).__emitJob({id:"job-review",workspace_id:"workspace-1",status:"NEEDS_REVIEW",progress:100,attempt:0,files:[]}));
+  await expect(page.getByText("需人工检查，禁止直接重试")).toBeVisible();
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();
+});
