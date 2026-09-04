@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // 标签① 图纸：图纸集/子集/图纸导航、批量新增与新建子集表单、编辑区（受控组件，业务状态仍由 App.vue 持有）
-import type {Diagnostic,DstValidation,LayoutSourceType,Placement,RepairPreview,Sheet,Subset,Workspace} from "../api/contracts";
+import type {Diagnostic,LayoutSourceType,Placement,Sheet,Subset,Workspace} from "../api/contracts";
 import ProjectNavigation from "../components/ProjectNavigation.vue";
-import RepairStatusPanel from "../components/RepairStatusPanel.vue";
 import SheetTable from "../components/SheetTable.vue";
 
 type SheetRow={subset:Subset;sheet:Sheet};
@@ -25,7 +24,6 @@ defineProps<{
   insertSubsetForm:InsertSubsetForm;
   layoutOptions:string[];layoutLoading:boolean;layoutError:string;layoutManual:boolean;
   subsetLayoutOptions:string[];subsetLayoutLoading:boolean;subsetLayoutError:string;subsetLayoutManual:boolean;
-  dstValidation:DstValidation|null;repairPreview:RepairPreview|null;isRepairPreviewing:boolean;isRepairExecuting:boolean;
 }>();
 const searchText=defineModel<string>("searchText",{default:""});
 const subsetFilter=defineModel<string>("subsetFilter",{default:"all"});
@@ -41,7 +39,6 @@ defineEmits<{
   selectTemplateFile:[];selectSubsetTemplateFile:[];selectBaseTemplateFile:[];
   queueSubsetTitle:[];queueSheetProperties:[sheet:Sheet];queueDelete:[sheet:Sheet];queueDeleteSubset:[];
   queueInsertSheet:[];queueInsertSubset:[];
-  previewRepair:[];executeRepair:[];cancelRepair:[];
 }>();
 </script>
 <template>
@@ -50,10 +47,6 @@ defineEmits<{
       <h2>图纸集 / 子集 / 图纸</h2>
       <div class="counts"><span>子集 {{workspace.sheet_set.subset_count}}</span><span>图纸 {{workspace.sheet_set.sheet_count}}</span><span>阻断诊断 {{blocking.length}}</span></div>
     </div>
-
-    <RepairStatusPanel v-if="dstValidation&&dstValidation.status!=='VALID'" :validation="dstValidation" :preview="repairPreview" :previewing="isRepairPreviewing" :executing="isRepairExecuting" @preview-repair="$emit('previewRepair')" @execute-repair="$emit('executeRepair')" @cancel="$emit('cancelRepair')" />
-
-    <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
 
     <section class="panel sheet-browser" aria-label="图纸导航与筛选">
       <div class="section-title"><div><h2>图纸集 / 子集 / 图纸导航</h2><p>派生字段只读；搜索覆盖图号、标题、自定义属性及 DWG 文件名、相对路径和解析路径。</p></div><strong>{{filteredSheetRows.length}} / {{allSheetRows.length}} 张</strong></div>

@@ -13,11 +13,10 @@ import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
 import {useConfirm} from "./composables/useConfirm";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
-import JobStatusPanel from "./components/JobStatusPanel.vue";
-import PreviewPanel from "./components/PreviewPanel.vue";
 import TopBar from "./layout/TopBar.vue";
 import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
+import TaskOverlay from "./layout/TaskOverlay.vue";
 import {useHotkeys} from "./composables/useHotkeys";
 import WelcomeView from "./views/WelcomeView.vue";
 import SheetsView from "./views/SheetsView.vue";
@@ -55,8 +54,11 @@ const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurr
   onJobSucceeded:async(workspaceId:string)=>{await discardDraft();await refreshWorkspace(workspaceId)},
   error,
 });
-// job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入
-const setJob=(j:Job)=>{job.value=j};
+// 任务浮层状态（SPEC-DM-006 §4.1）：open/tab 由 App 持有（Task 7 toast 抑制与"查看"跳转依赖）；openOverlay 为唯一自动展开入口
+const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
+function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
+// job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入；QUEUED 即自动展开到实施进度页签（execute/executeRepair/importCsv/restoreRevision 统一入口）
+const setJob=(j:Job)=>{job.value=j;if(j.status==="QUEUED")openOverlay("prog")};
 // 自定义属性 CSV 导入域（Task 3 拆分）
 const {csvText,csvPreview,csvPreviewContext,readCsvFile,previewCsv,importCsv,invalidateCsvPreview}=useCsvImport({
   workspace,isWorkspaceLoading,watchJob,setJob,refreshWorkspace,invalidateJobMonitor,isCurrentJobGeneration,error,confirmAction,
@@ -146,7 +148,7 @@ function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
-function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();return workspaceLoadGeneration.value}
+function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";return workspaceLoadGeneration.value}
 function selectInitialSubset(){
   selectedId.value=workspace.value?.sheet_set.subsets[0]?.id??"";
   insertSheetForm.subsetId=selectedId.value;
@@ -236,7 +238,7 @@ async function closeWorkspace(){
     await discardDraft();
   }
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
-  workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();
+  workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";
   // M6：重置批量新增图纸与新建子集表单的模板文件/布局/布局选项状态，避免重开工作区残留旧模板路径
   insertSheetForm.sourceFile="";insertSheetForm.sourceLayout="";insertSheetForm.sourceType="template_layout";
   layoutOptions.value=[];layoutLoading.value=false;layoutError.value="";layoutManual.value=false;
@@ -421,7 +423,7 @@ async function showPreview(){
   try{
     const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot,cad_version:cadVersionSnapshot})});
     if(generation!==previewGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
-    preview.value=result;previewContext.value={workspaceId,baseRevisionId,cadVersion:cadVersionSnapshot,commands:commandSnapshot,result};error.value="";
+    preview.value=result;previewContext.value={workspaceId,baseRevisionId,cadVersion:cadVersionSnapshot,commands:commandSnapshot,result};error.value="";openOverlay("prev");
   }
   catch(e){if(generation===previewGeneration)error.value=String(e)}
   finally{if(generation===previewGeneration)isPreviewing.value=false}
@@ -436,7 +438,7 @@ async function execute(){
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
     if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
-    job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(context.workspaceId)}
+    setJob(result);if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(context.workspaceId)}
   }
   catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
@@ -473,28 +475,30 @@ useHotkeys({
 
 <template>
   <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" />
-  <main class="shell-main">
-    <p v-if="error" class="error notice">{{error}}</p>
-    <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
-    <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>
-    <template v-if="!workspace">
-      <WelcomeView :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" />
-    </template>
-    <template v-else>
-      <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
-      <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
-      <JobStatusPanel v-if="job&&!isWorkspaceLoading" :job="job" :connection-mode="connectionMode" @retry="retryJob" />
-      <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" />
-      <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
-      <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
-      <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestore" @restore="restoreRevision" />
-      <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
-    </template>
-  </main>
+  <div class="shell-body">
+    <main class="shell-main">
+      <p v-if="error" class="error notice">{{error}}</p>
+      <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
+      <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>
+      <template v-if="!workspace">
+        <WelcomeView :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" />
+      </template>
+      <template v-else>
+        <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
+        <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
+        <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" />
+        <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
+        <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestore" @restore="restoreRevision" />
+      </template>
+    </main>
+    <TaskOverlay v-if="workspace" :open="overlayOpen" :tab="overlayTab" :has-blocking="blocking.length>0" :has-repair="Boolean(dstValidation&&dstValidation.status!=='VALID')" :job="job" :connection-mode="connectionMode" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :diagnostics="workspace.diagnostics" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" @update:tab="overlayTab=$event" @fold="overlayOpen=!overlayOpen" @retry="retryJob" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
+  </div>
+  <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
 </template>
 
 <style scoped>
-.shell-main{display:flex;flex-direction:column;gap:var(--space-3);min-height:calc(100vh - 52px)}
+.shell-body{display:flex;align-items:stretch;min-height:calc(100vh - 104px)}
+.shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;max-width:none;margin:0;padding:var(--space-5)}
 </style>
 
