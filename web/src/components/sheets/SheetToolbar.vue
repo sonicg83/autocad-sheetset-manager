@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// 图纸工作区工具栏（PLAN-DM-015 任务 3，SPEC-DM-009 §3.1/§4.1/§4.2/§6.3）。
+// 图纸工作区工具栏（PLAN-DM-015 任务 3/4，SPEC-DM-009 §3.1/§4.1/§4.2/§6.3）。
 // 标题栏（当前范围 + 匹配/范围总数 + 已加载数 + 新增操作入口）、常驻搜索、
-// 「筛选」展开的低频筛选、可清除条件标签、吸顶选择条（勾选集合 + 批量修改属性展开）。
+// 「筛选」展开的低频筛选、可清除条件标签、「显示列」配置面板、吸顶选择条（勾选集合 + 批量修改属性展开）。
 // 新增操作入口先接线到任务 6 的表单（任务 3 提供过渡实现，一次只出现一种）。
 import {computed, ref} from "vue";
+import type {BuiltinPrefField, SheetColumnOption} from "../../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "../../composables/useSheetsWorkspace";
+import ColumnSettings from "./ColumnSettings.vue";
 
 export type OperationKind = "rename" | "insert-sheet" | "insert-subset";
 
@@ -27,6 +29,9 @@ defineProps<{
   bulkPropertyName: string;
   bulkPropertyValue: string;
   activeOperation: OperationKind | null;
+  columnOptions: SheetColumnOption[];
+  columnSaveError: string;
+  newPropertyCount: number;
 }>();
 const searchText = defineModel<string>("searchText", {default: ""});
 const searchAll = defineModel<boolean>("searchAll", {default: false});
@@ -42,7 +47,14 @@ const emit = defineEmits<{
   clearSelection: [];
   queueBulkSheetProperty: [];
   openOperation: [kind: OperationKind];
+  toggleBuiltin: [field: BuiltinPrefField, value: boolean];
+  toggleProperty: [name: string, value: boolean];
+  resetColumns: [];
 }>();
+
+function onToggleBuiltin(field: BuiltinPrefField, value: boolean) { emit("toggleBuiltin", field, value); }
+function onToggleProperty(name: string, value: boolean) { emit("toggleProperty", name, value); }
+function onResetColumns() { emit("resetColumns"); }
 
 // 批量输入默认折叠：「选择后出现吸顶选择条，点击'批量修改属性'展开输入」
 const bulkExpanded = ref(false);
@@ -77,6 +89,14 @@ const conditionChips = computed(() => {
       <label class="search-box">搜索图纸<input v-model="searchText" placeholder="图号、标题、属性或 DWG"></label>
       <label class="search-all"><input v-model="searchAll" type="checkbox">搜索全部图纸</label>
       <button type="button" class="filter-toggle" @click="filtersVisible = !filtersVisible">筛选</button>
+      <ColumnSettings
+        :options="columnOptions"
+        :save-error="columnSaveError"
+        :new-property-count="newPropertyCount"
+        @toggle-builtin="onToggleBuiltin"
+        @toggle-property="onToggleProperty"
+        @reset="onResetColumns"
+      />
       <template v-if="filtersVisible">
         <label>路径状态<select v-model="pathFilter"><option value="all">全部</option><option value="resolved">已解析</option><option value="unresolved">未解析</option></select></label>
         <label>诊断状态<select v-model="diagnosticFilter"><option value="all">全部</option><option value="blocking">有阻断诊断</option><option value="clean">无阻断诊断</option></select></label>

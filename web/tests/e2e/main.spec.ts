@@ -416,8 +416,8 @@ test("恢复写入错误会显示消息并解除入口锁定",async({page})=>{
 
 test("旧编辑入口已移除且图号标题只读",async({page})=>{
   await openWorkspace(page);await expect(page.getByRole("button",{name:"子集↑"})).toHaveCount(0);await expect(page.getByRole("button",{name:"子集↓"})).toHaveCount(0);await expect(page.getByText("移动到",{exact:true})).toHaveCount(0);
-  // 任务 3 起唯一主表图号/标题为只读文本（列：选择/子集/图号/标题/DWG/布局/状态/操作）
-  const sheetRow=page.locator(".sheet-table-window tbody tr").filter({has:page.getByText("001",{exact:true})});await expect(sheetRow.locator("td").nth(2).locator("input,textarea,select")).toHaveCount(0);await expect(sheetRow.locator("td").nth(3).locator("input,textarea,select")).toHaveCount(0);await expect(sheetRow.locator("td").nth(2)).toHaveText("001");await expect(sheetRow.locator("td").nth(3)).toHaveText("第一册 (一)");
+  // 任务 3/4 起唯一主表图号/标题为只读文本（列：选择/图号/标题/子集/文件名/布局/状态/操作）
+  const sheetRow=page.locator(".sheet-table-window tbody tr").filter({has:page.getByText("001",{exact:true})});await expect(sheetRow.locator("td").nth(1).locator("input,textarea,select")).toHaveCount(0);await expect(sheetRow.locator("td").nth(2).locator("input,textarea,select")).toHaveCount(0);await expect(sheetRow.locator("td").nth(1)).toHaveText("001");await expect(sheetRow.locator("td").nth(2)).toHaveText("第一册 (一)");
 });
 
 test("批量新增图纸校验位置数量和布局来源",async({page})=>{

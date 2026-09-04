@@ -12,8 +12,16 @@ export type SheetsFixtureOptions = {
   noProperties?: boolean; // 无属性定义与自定义属性
   longText?: boolean;     // 长标题与超长路径
   dualStatus?: boolean;   // 阻断诊断与待变更并存
+  propertyNames?: string[]; // 覆盖图纸属性定义名称（同名内置列等用例）
   // 持久草稿恢复用例：GET 草稿路由返回该预置草稿（模拟上次未完成改动）
   initialDraft?: unknown;
+  // 任务 4 列配置用例：预置偏好映射（按工作区 ID），模拟上次会话保存
+  initialColumns?: Record<string, unknown>;
+  // 任务 4 列配置用例：save/load_sheet_columns 返回 IO 错误（存储失败回退）
+  failSaveColumns?: boolean;
+  failLoadColumns?: boolean;
+  // 任务 4 列配置用例：第二个可打开的工作区（不同 ID），用于跨工作区隔离
+  secondWorkspace?: {dstPath: string; id?: string; options?: SheetsFixtureOptions};
 };
 
 const FAKE_DST = "C:\\虚构工程\\图纸集.dst";
@@ -21,9 +29,9 @@ const SUBSET_NAMES = ["建筑施工图", "结构施工图", "给排水施工图"
 const LONG_TITLE = "（超长标题）" + "建筑平面图大样详图之东北角楼梯间与疏散口细部构造做法示意说明".repeat(4);
 const LONG_PATH = "C:\\虚构工程\\一期\\地下室\\东北角楼梯间\\细部构造做法示意图\\第 13 分册最终版.dwg";
 
-// 图纸属性定义：前三项使用常用字段名，其余按序号命名，共 propertyCount 项
-function buildPropertyDefinitions(propertyCount: number) {
-  const NAMES = ["图幅", "比例", "专业"];
+// 图纸属性定义：前三项使用常用字段名（可用 propertyNames 覆盖），其余按序号命名，共 propertyCount 项
+function buildPropertyDefinitions(propertyCount: number, names?: string[]) {
+  const NAMES = names ?? ["图幅", "比例", "专业"];
   return Array.from({length: propertyCount}, (_, index) => ({
     type: "sheet" as const,
     name: index < NAMES.length ? NAMES[index] : `属性${String(index + 1).padStart(2, "0")}`,
@@ -101,12 +109,13 @@ function buildWorkspace(options: SheetsFixtureOptions = {}) {
   const {
     sheetCount = 13, subsetCount = 5, propertyCount = 36,
     empty = false, noProperties = false, longText = false, dualStatus = false,
+    propertyNames,
   } = options;
   const total = empty ? 0 : sheetCount;
   const subsets = empty ? [] : buildSubsets(sheetCount, subsetCount, {noProperties, longText});
   const propertyDefinitions = noProperties ? [] : [
     {type: "sheetset", name: "项目号", default_value: "P-FAKE"},
-    ...buildPropertyDefinitions(propertyCount),
+    ...buildPropertyDefinitions(propertyCount, propertyNames),
   ];
   return {
     id: "workspace-1",
@@ -199,10 +208,21 @@ export function previewResponse(sheetCount: number) {
 export async function installSheetsFixture(page: Page, options: SheetsFixtureOptions = {}): Promise<void> {
   const workspace = buildWorkspace(options);
   const initialDraft = options.dualStatus && !options.initialDraft ? DUAL_STATUS_DRAFT : options.initialDraft;
-  await page.addInitScript(() => {
+  const secondWorkspace = options.secondWorkspace
+    ? (() => {
+        const ws2 = buildWorkspace(options.secondWorkspace?.options);
+        ws2.id = options.secondWorkspace!.id ?? "workspace-2";
+        ws2.dst_path = options.secondWorkspace!.dstPath;
+        return ws2;
+      })()
+    : null;
+  const failLoad = options.failLoadColumns ?? false;
+  const failSave = options.failSaveColumns ?? false;
+  const initialColumns = options.initialColumns ?? {};
+  await page.addInitScript(({failLoad, failSave, initialColumns}) => {
     (window as any).__sheetsShell = {
       currentWorkspaceId: null,
-      preferences: new Map(),
+      preferences: new Map(Object.entries(initialColumns)),
     };
     (window as any).pywebview = {
       api: {
@@ -210,15 +230,32 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
         select_file: async () => (window as any).__fakeSelectResult ?? "C:\\虚构工程\\图纸集.dst",
         on_files_dropped: async () => {},
         open_workspace_folder: async (workspaceId: string) => { (window as any).__sheetsShell.currentWorkspaceId = workspaceId; return {ok: true, value: null}; },
-        load_sheet_columns: async (workspaceId: string) => ({ok: true, value: (window as any).__sheetsShell.preferences.get(workspaceId) ?? null}),
-        save_sheet_columns: async (workspaceId: string, preferences: unknown) => { (window as any).__sheetsShell.preferences.set(workspaceId, preferences); return {ok: true, value: null}; },
+        load_sheet_columns: async (workspaceId: string) => {
+          if (failLoad) return {ok: false, code: "SHEET_PREFERENCES_IO", message: "读取列配置失败"};
+          return {ok: true, value: (window as any).__sheetsShell.preferences.get(workspaceId) ?? null};
+        },
+        save_sheet_columns: async (workspaceId: string, preferences: unknown) => {
+          if (failSave) return {ok: false, code: "SHEET_PREFERENCES_IO", message: "磁盘只读"};
+          (window as any).__sheetsShell.preferences.set(workspaceId, preferences);
+          return {ok: true, value: null};
+        },
         clear_workspace_context: async (workspaceId: string) => { if ((window as any).__sheetsShell.currentWorkspaceId === workspaceId) (window as any).__sheetsShell.currentWorkspaceId = null; return {ok: true, value: null}; },
       },
     };
     window.dispatchEvent(new Event("pywebviewready"));
+  }, {failLoad, failSave, initialColumns});
+  // 打开路由按 DST 路径分发：第二工作区命中时返回不同 ID，否则返回主工作区
+  await page.route("**/api/workspaces/open", async (route) => {
+    if (secondWorkspace) {
+      const body = await route.request().postDataJSON();
+      if (body?.dst_path === secondWorkspace.dst_path) return route.fulfill({json: secondWorkspace});
+    }
+    return route.fulfill({json: workspace});
   });
-  await page.route("**/api/workspaces/open", (route) => route.fulfill({json: workspace}));
   await page.route("**/api/workspaces/workspace-1", (route) => route.fulfill({json: workspace}));
+  if (secondWorkspace) {
+    await page.route(`**/api/workspaces/${secondWorkspace.id}`, (route) => route.fulfill({json: secondWorkspace}));
+  }
   const drafts = new Map<string, any>();
   await page.route("**/api/workspaces/*/draft", async (route) => {
     const request = route.request();

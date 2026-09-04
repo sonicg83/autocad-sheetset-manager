@@ -5,6 +5,7 @@
 import {computed} from "vue";
 import type {LayoutSourceType, Placement, Sheet, Workspace} from "../api/contracts";
 import type {SheetScope} from "../features/sheets/types";
+import type {BuiltinPrefField, SheetColumn, SheetColumnOption} from "../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter, SheetRow} from "../composables/useSheetsWorkspace";
 import SheetTree from "../components/sheets/SheetTree.vue";
 import SheetToolbar, {type OperationKind} from "../components/sheets/SheetToolbar.vue";
@@ -36,6 +37,10 @@ const props = defineProps<{
   insertSubsetForm: InsertSubsetForm;
   layoutOptions: string[]; layoutLoading: boolean; layoutError: string; layoutManual: boolean;
   subsetLayoutOptions: string[]; subsetLayoutLoading: boolean; subsetLayoutError: string; subsetLayoutManual: boolean;
+  visibleColumns: SheetColumn[];
+  columnOptions: SheetColumnOption[];
+  newPropertyCount: number;
+  columnSaveError: string;
 }>();
 const searchText = defineModel<string>("searchText", {default: ""});
 const searchAll = defineModel<boolean>("searchAll", {default: false});
@@ -55,6 +60,10 @@ const emit = defineEmits<{
   openOperation: [kind: OperationKind]; closeOperation: [];
   selectTemplateFile: []; selectSubsetTemplateFile: []; selectBaseTemplateFile: [];
   queueSubsetTitle: []; queueDeleteSubset: []; queueInsertSheet: []; queueInsertSubset: [];
+  toggleBuiltin: [field: BuiltinPrefField, value: boolean];
+  toggleProperty: [name: string, value: boolean];
+  resetColumns: [];
+  openDiagnostics: [];
 }>();
 
 const rangeTitle = computed(() => {
@@ -92,6 +101,9 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
           :can-select="filteredRows.length > 0"
           :sheet-property-names="sheetPropertyNames"
           :active-operation="activeOperation"
+          :column-options="columnOptions"
+          :column-save-error="columnSaveError"
+          :new-property-count="newPropertyCount"
           v-model:search-text="searchText"
           v-model:search-all="searchAll"
           v-model:filters-visible="filtersVisible"
@@ -105,6 +117,9 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
           @clear-selection="$emit('clearSelection')"
           @queue-bulk-sheet-property="$emit('queueBulkSheetProperty')"
           @open-operation="$emit('openOperation', $event)"
+          @toggle-builtin="(field, value) => $emit('toggleBuiltin', field, value)"
+          @toggle-property="(name, value) => $emit('toggleProperty', name, value)"
+          @reset-columns="$emit('resetColumns')"
         />
 
         <p v-if="pruneMessage" class="notice prune-notice" role="status">{{ pruneMessage }}</p>
@@ -160,9 +175,11 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
             :pending-ids="pendingSheetIds"
             :diagnostic-ids="diagnosticObjectIds"
             :focused-sheet-id="focusedSheetId"
+            :columns="visibleColumns"
             @toggle="$emit('toggleSheet', $event)"
             @open-subset="$emit('selectSubset', $event)"
             @delete="$emit('deleteSheet', $event)"
+            @open-diagnostics="$emit('openDiagnostics')"
           />
           <button v-if="visibleRows.length < filteredRows.length" type="button" class="load-more" @click="renderLimit += 80">继续加载（尚余 {{ filteredRows.length - visibleRows.length }}）</button>
         </template>
