@@ -24,6 +24,7 @@ dst-manager = "dst_manager.interfaces.cli:app"
 [dependency-groups]
 dev = [
     "httpx>=0.28,<1",
+    "pyinstaller>=6,<7",
     "pytest>=8.4,<9",
     "pytest-cov>=6.2,<7",
     "ruff>=0.12,<1",

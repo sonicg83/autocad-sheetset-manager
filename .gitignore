@@ -20,6 +20,10 @@ web/dist/
 web/test-results/
 web/playwright-report/
 web/*.tsbuildinfo
+
+# PyInstaller 产物目录（onedir 输出 dist/DSTManager/ 与中间目录 build/）
+/build/
+/dist/
 plugins/autocad2016/
 plugins/autocad2020/
 plugins/src/**/obj/
