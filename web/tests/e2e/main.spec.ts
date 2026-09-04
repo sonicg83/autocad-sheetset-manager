@@ -678,6 +678,14 @@ test("主题切换写 html data-theme 并持久化",async({page})=>{
   await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
 });
 
+test("深色模式下中心视图区域随主题切换背景",async({page})=>{
+  // 回归：旧单页样式块硬编码 background:white，中心区域不随 data-theme 切换
+  await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+  await openWorkspace(page);
+  const panelBg=await page.locator(".sheet-browser").evaluate(el=>getComputedStyle(el).backgroundColor);
+  expect(panelBg).toBe("rgb(23, 30, 41)"); // --color-bg-surface 深色值 #171E29
+});
+
 // —— Task 4 外壳骨架（SPEC-DM-006 §4.1/§4.2/§7.2）——
 
 test("打开工作区后显示三个固定标签且默认激活图纸标签",async({page})=>{

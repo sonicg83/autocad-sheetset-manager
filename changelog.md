@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-04（v0.3.3 修复中心视图区域不随主题切换）
+
+- **修复深色/浅色切换只作用于外围框架、标签中心区域不生效**：`web/src/style.css` 存在两层并存——语义令牌区（`:root` 浅色 + `html[data-theme="dark"]` 深色，外壳 TopBar/TabBar/ActionDock/任务浮层/模态消费令牌，随主题切换）与旧单页版压缩样式块（`.editor`、`aside`、`table`、`.panel`、`.sheet-table-window`、`fieldset` 等，被中心视图区域命中）。旧块全部硬编码浅色值（`background:white`、`#172033`、`#f7f9fc` 等 24 种），不消费任何令牌，CSS 变量切换对其无效。修复：旧块内全部硬编码颜色等值映射到既有语义令牌（`background:white→var(--color-bg-surface)`、文字色→`--color-text-primary/secondary/muted`、边框→`--color-border-subtle/strong`、状态色→`--color-accent/success/warning/danger` 及对应 `-bg`、`box-shadow:0 1px 3px #17203312→var(--shadow-1)`），仅 `.modal-mask` 遮罩的 `rgba(16,24,40,.55)` 保留（半透明黑双主题皆宜）。e2e 新增「深色模式下中心视图区域随主题切换背景」（先红后绿：播种 dark 主题打开工作区，断言 `.sheet-browser` 计算背景为 `--color-bg-surface` 深色值）。
+- 验证：`cd web && npm run test:e2e` **58/58 通过**（57 既有 + 新增 1）、`npm run build` 零错误；后端零改动。
+
 ## 2026-09-04（v0.3.3 标签化外壳最终分支审查修复）
 
 - **修复 CSV 导入确认模态对齐发布强确认**（Important，[SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.2/§10.3）：`web/src/composables/useCsvImport.ts` 的 `importCsv` 确认由 `danger:false`、无勾选、message 仅"确认导入属性定义？"改为与 §9.1 全部正式写入共用同一危险确认——`danger:true + requireCheckbox:true + reversibility:"不可逆" + impactLines 受影响属性定义清单`（从 `csvPreview.changes` 派生：`新增/跳过/冲突属性「名称」（作用域，影响 N 张图纸）`，changes 为空时回退受影响文件清单）；message 明确"原 DST 将永久备份"。同步更正 changelog Task 2/Task 3 将 CSV 导入归类为"低风险动作"的表述。e2e 新增「CSV 导入确认模态为强确认：未勾选时确认按钮禁用」（先红后绿）。
