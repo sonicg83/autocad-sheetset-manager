@@ -50,7 +50,7 @@ const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
 const workspaceLoadGeneration=ref(0);
 // 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
-const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,isCurrentJobGeneration}=useJobMonitor({
+const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurrentJobGeneration}=useJobMonitor({
   isWorkspaceLoading,workspace,
   onJobSucceeded:async(workspaceId:string)=>{await discardDraft();await refreshWorkspace(workspaceId)},
   error,
@@ -443,11 +443,11 @@ async function execute(){
 
 // —— ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一出口）——
 const dock=computed(()=>{
-  const taskRunning=isWorkspaceLoading.value||isRestoreExecuting.value||Boolean(job.value&&!["SUCCEEDED","FAILED"].includes(job.value.status));
+  const taskRunning=isWorkspaceLoading.value||isRestoreExecuting.value||Boolean(job.value&&!terminal(job.value.status));
   const base={commandCount:commands.value.length,actions:draftActions.value,cursor:draftCursor.value,stale:draftStale.value,staleReasons:draftStaleReasons.value,corrupted:draftCorrupted.value,saveStatusText:saveStatusText.value,saveFailed:draftSaveFailed.value,previewing:isPreviewing.value,writesDisabled:taskRunning||repairWritesDisabled.value};
   if(taskRunning)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"任务进行中",writeNeedsModal:false};
   const status=dstValidation.value?.status??"VALID";
-  if(status!=="VALID")return{...base,canPreview:false,canWrite:false,writeDisabledReason:status==="REPAIRED"?"存在待确认修复":"需先修复",writeNeedsModal:false};
+  if(status!=="VALID")return{...base,canPreview:false,canWrite:false,writeDisabledReason:status==="REPAIRED"?"存在待确认修复":status==="INVALID_UNRECOVERABLE"?"不可恢复":"需先修复",writeNeedsModal:false};
   if(!commands.value.length)return{...base,canPreview:false,canWrite:false,writeDisabledReason:"没有待发布变更",writeNeedsModal:false};
   const context=previewContext.value;
   if(!context)return{...base,canPreview:true,canWrite:false,writeDisabledReason:"请先预览",writeNeedsModal:false};

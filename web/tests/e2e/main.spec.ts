@@ -688,3 +688,22 @@ test("Ctrl+S 只打开确认模态不直接执行",async({page})=>{
   await expect(modal).toHaveCount(0);
   expect(executed).toBeFalsy();
 });
+
+test("任务回滚终态后 ActionDock 解锁不再锁定任务进行中",async({page})=>{
+  // 回归：dock 的 taskRunning 复用 useJobMonitor.terminal 终态集（SUCCEEDED/FAILED/ROLLED_BACK/BLOCKED_FILE_LOCK/NEEDS_REVIEW），
+  // ROLLED_BACK 属终态应释放矩阵，而非误锁"任务进行中"
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-rolled",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
+  // QUEUED 非终态：dock 锁定并显示"任务进行中"
+  await expect(page.getByText("任务进行中")).toBeVisible();
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
+  // 任务终态 ROLLED_BACK：释放矩阵，预览/写入解锁
+  await page.evaluate(()=>(window as any).__emitJob({id:"job-rolled",workspace_id:"workspace-1",status:"ROLLED_BACK",progress:100,attempt:0,files:[]}));
+  await expect(page.getByText("任务进行中")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
+});
