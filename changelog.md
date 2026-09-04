@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-04（PLAN-DM-014 Windows 打包与 release 实施计划）
+
+- 新增 [PLAN-DM-014 Windows 绿色分发包与一键 release 流程实施计划](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md)，状态为 `proposed`，依据 [ARCH-DM-002](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md)：9 个任务依次为 `runtime.py` 路径解析模块、三处 frozen 路径适配（前端静态目录/Alembic 迁移/Worker 拉起）、`Settings` frozen 默认值、`packaging/entry.py` + PyInstaller spec 与本地构建冒烟、`build_release.ps1` 纯构建脚本、`release.ps1` 一键 release（门禁 + 本地 tag）、文档与全量回归。本次仅编写计划，未修改产品代码。
+
 ## 2026-09-04（ARCH-DM-002 Windows 打包与 release 流程设计）
 
 - 新增 [ARCH-DM-002 Windows 绿色分发包与一键 release 流程](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md)，状态为 `accepted`（2026-09-04 用户确认）：确定 PyInstaller onedir + zip 绿色包方案（否决 onefile 与嵌入式 Python），明确三处 frozen 路径适配（前端静态目录、Alembic 迁移、Worker 子进程拉起）、`packaging/entry.py` 双击入口、spec 数据文件与 hiddenimports 清单、分发包内插件 DLL 与 `data_dir` 默认值，以及 `build_release.ps1` / `release.ps1` 两层构建与门禁流程；代码签名、安装器、CI 与远程 Release 明确列为范围外。更新 DST Manager 文档索引。本次仅编写设计文档，未修改产品代码。
