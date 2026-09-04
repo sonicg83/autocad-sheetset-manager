@@ -7,6 +7,8 @@ import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import {useTheme} from "./composables/useTheme";
+import {useConfirm} from "./composables/useConfirm";
+import ConfirmModal from "./components/ui/ConfirmModal.vue";
 import DraftActionsPanel from "./components/DraftActionsPanel.vue";
 import JobStatusPanel from "./components/JobStatusPanel.vue";
 import ProjectNavigation from "./components/ProjectNavigation.vue";
@@ -21,6 +23,7 @@ type CsvPreviewContext={workspaceId:string;baseRevisionId:string;csv:string;resu
 type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:RestorePreview};
 
 const {toggleTheme}=useTheme();
+const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const dstPath=ref("");
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
@@ -225,7 +228,8 @@ async function selectBaseTemplateFile(){
 async function closeWorkspace(){
   const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
   if(pending){
-    const ok=confirm("存在未发布完毕的改动。改动已自动保存，重新打开同一 DST 可继续处理。确定关闭并放弃当前改动？");
+    // 关闭工作区属于不可逆破坏类操作：需要显式勾选后才可确认
+    const ok=await confirmAction({title:"关闭工作区",message:"存在未发布完毕的改动。改动已自动保存，重新打开同一 DST 可继续处理。确定关闭并放弃当前改动？",confirmText:"确定关闭并放弃当前改动",danger:true,requireCheckbox:true,reversibility:"不可逆"});
     if(!ok)return;
     await discardDraft();
   }
@@ -311,7 +315,9 @@ async function discardDraft(){
 }
 async function reloadAfterDraftConflict(){
   const current=workspace.value;if(!current||!draftStaleReasons.value.includes("DRAFT_VERSION_CONFLICT"))return;
-  if(!confirm("将放弃当前窗口未保存的冲突动作，并重新读取服务器上的较新草稿。是否继续？"))return;
+  // 丢弃本地冲突动作并重新读取较新草稿：不改变服务器数据，属低风险动作（danger:false、无需勾选）
+  const ok=await confirmAction({title:"放弃冲突动作并重新加载",message:"将放弃当前窗口未保存的冲突动作，并重新读取服务器上的较新草稿。是否继续？",confirmText:"确定放弃冲突动作并重新加载",danger:false});
+  if(!ok)return;
   draftSaveFailed.value=false;
   await refreshWorkspace(current.id);
 }
@@ -337,11 +343,20 @@ function positiveInteger(value:string){const parsed=Number(value);return Number.
 function queueSheetSet(){if(!workspace.value)return;if(!workspace.value.sheet_set.name.trim()){error.value="图纸集名称不能为空";return}addCommand(createCommand.updateSheetSet(workspace.value.sheet_set.name,{...workspace.value.sheet_set.custom_properties}),"metadata")}
 function queueSubsetTitle(){if(selected.value)addCommand(createCommand.updateSubsetTitle(selected.value.id,selected.value.title),"structural")}
 function queueSheetProperties(sheet:Sheet){addCommand(createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties}),"metadata")}
-function queueDelete(sheet:Sheet){if(selected.value&&confirm(`删除图纸 ${sheet.number}？`))addCommand(createCommand.deleteSheet(sheet.id),"structural")}
-function queueDeleteSubset(){
+async function queueDelete(sheet:Sheet){
+  if(!selected.value)return;
+  // 单张图纸删除为低风险动作：danger:false、无需勾选
+  const ok=await confirmAction({title:"删除图纸",message:`删除图纸 ${sheet.number}？`,confirmText:"确认删除",danger:false});
+  if(!ok)return;
+  addCommand(createCommand.deleteSheet(sheet.id),"structural");
+}
+async function queueDeleteSubset(){
   const subset=selected.value;if(!subset)return;
   const drawing=subset.sheets[0]?.layout.resolved_path??subset.sheets[0]?.layout.file_name??"（未知主 DWG）";
-  if(confirm(`删除整个子集“${subset.display_name}”、其中 ${subset.sheets.length} 张图纸及主 DWG：${drawing}？\n系统不会证明工程外部引用，确认后由用户承担外部影响。`))addCommand(createCommand.deleteSubset(subset.id),"structural");
+  // 删除整个子集属不可逆破坏类操作：需要显式勾选后才可确认
+  const ok=await confirmAction({title:"删除整个子集",message:`删除整个子集“${subset.display_name}”、其中 ${subset.sheets.length} 张图纸及主 DWG：${drawing}？\n系统不会证明工程外部引用，确认后由用户承担外部影响。`,confirmText:"确定删除整个子集",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+  if(!ok)return;
+  addCommand(createCommand.deleteSubset(subset.id),"structural");
 }
 function toggleFilteredSelection(){
   const ids=filteredSheetRows.value.map(({sheet})=>sheet.id);
@@ -413,7 +428,9 @@ async function execute(){
   if(!context||!context.result.executable)return;
   const current=workspace.value;
   if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidatePreview();error.value="工作区或基准修订已变化，请重新预览";return}
-  if(!confirm("确认发布？原 DST 和受影响 DWG 将永久备份。"))return;
+  // 发布为不可逆破坏类操作：需显式勾选后才可确认，并列出受影响文件清单
+  const ok=await confirmAction({title:"确认发布",message:"原 DST 和受影响 DWG 将永久备份。",impactLines:context.result.affected_files,confirmText:"确认发布（原 DST 与受影响 DWG 永久备份）",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+  if(!ok)return;
   const generation=invalidateJobMonitor(false);
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
@@ -460,7 +477,9 @@ async function restoreRevision(){
   const context=restorePreviewContext.value,current=workspace.value;
   if(isRestoreExecuting.value||!context||!context.result.executable)return;
   if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==workspaceLoadGeneration){restorePreview.value=null;restorePreviewContext.value=null;error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
-  if(!confirm("确认恢复为新修订？历史修订不会被覆盖。"))return;
+  // 恢复为新修订属不可逆破坏类操作：需要显式勾选后才可确认
+  const ok=await confirmAction({title:"确认恢复为新修订",message:"历史修订不会被覆盖。",confirmText:"确认恢复",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+  if(!ok)return;
   const generation=++restoreExecutionGeneration;
   isRestoreExecuting.value=true;invalidateJobMonitor(true);revisionGeneration+=1;
   try{
@@ -491,7 +510,9 @@ async function executeRepair(){
   if(!context||isRepairExecuting.value)return;
   const current=workspace.value;
   if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==workspaceLoadGeneration){repairPreview.value=null;repairContext.value=null;error.value="工作区或基准修订已变化，请重新生成修复预览";return}
-  if(!confirm("确认把内存修复发布为独立修订？原 DST 将永久备份。"))return;
+  // 发布独立修复修订属不可逆破坏类操作：需要显式勾选后才可确认
+  const ok=await confirmAction({title:"确认把内存修复发布为独立修订",message:"原 DST 将永久备份。",confirmText:"确认把内存修复发布",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+  if(!ok)return;
   const generation=invalidateJobMonitor(false);
   isRepairExecuting.value=true;
   try{
@@ -536,7 +557,9 @@ async function importCsv(){
   if(!context||!context.result.executable)return;
   const current=workspace.value;
   if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();error.value="工作区或基准修订已变化，请重新预览 CSV";return}
-  if(!confirm("确认导入属性定义？"))return;
+  // 属性定义导入为低风险动作：danger:false、无需勾选
+  const ok=await confirmAction({title:"确认导入属性定义",message:"确认导入属性定义？",confirmText:"确认导入",danger:false});
+  if(!ok)return;
   const generation=invalidateJobMonitor(false);
   try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await refreshWorkspace(context.workspaceId)}
   catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
@@ -602,4 +625,5 @@ async function importCsv(){
       <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :writes-disabled="repairWritesDisabled" @execute="execute" />
     </template>
   </main>
+  <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
 </template>
