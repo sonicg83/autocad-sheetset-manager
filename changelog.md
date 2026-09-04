@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-05（分页编辑缓冲与全局输入保护）
+
+- **新增唯一活动编辑上下文组合式函数（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 5，SPEC-DM-009 §6.1/§6.2）**：`web/src/composables/useSheetEditor.ts`。上下文为 `null | sheet | rename | insert-sheet | insert-subset | bulk` 联合分支（类型建于 `features/sheets/types.ts`，不用 any），每分支保留 workspaceId/revisionId/投影快照/objectId/original/values/errors。sheet 分支在 `custom_properties` 完整副本上编辑，搜索/翻页只派生视图、不丢输入、不自动提交；提交 `createCommand.updateSheetProperties(id,{...values})` 覆盖全部属性页（不只当前页），成功退出编辑并更新既有草稿投影与计数，失败保留输入并呈现行内错误与可聚焦摘要，未给字段路径的错误只进摘要、不编造字段归因。`guard(next)` 三选一「加入草稿后继续/放弃输入/留在此处」：无改动直接继续；保存→等待草稿持久化与投影成功→继续（`SubmitCommands` 等原 `draftSaveQueue`，不以入队即宣称保存）；失败不能继续 next；放弃明确清空缓冲；Esc 等于留下。基准刷新或对象消失标记上下文失效、保留可见输入供核对、禁止提交到新基准；只读值更新不自动覆盖用户输入；保存中切换等保存完成再继续、不重复提示；关闭编辑器焦点回到触发按钮。
+- **新增分页属性编辑器（`web/src/components/sheets/SheetPropertyEditor.vue`）**：最多两列、每页 6 个属性、属性名称搜索；页脚显示总属性数/页码/跨页已修改数并显式区分「尚未加入草稿（仅本会话保留）」与「草稿已保存」；错误摘要可聚焦、字段错误提供跳到对应页与字段的入口。「编辑属性」入口落在 `SheetTable` 操作列（一次只展开一张图纸，勾选不等同进入编辑）。
+- **新增未提交输入三选一模态（`web/src/components/sheets/UnsavedInputDialog.vue`）**：独立实现，复用公共可访问模态样式与焦点管理（焦点困绕、Esc=留在此处、关闭归还焦点）；不改 `useConfirm` 的 boolean 强确认协议。
+- **App.vue 全局动作接线（`web/src/App.vue`）**：showPreview/write、关闭工作区、删除入口、快捷键、打开另一编辑上下文（新增操作/批量/编辑属性）及范围/筛选改变（隐藏当前编辑对象时经 `useSheetsWorkspace` 新增 `snapshotState`/`restoreState` 先还原再提示）均先接 guard；加入草稿使旧 `previewContext` 失效；write 不能捕获旧 context 在保存继续时执行，必须重新预览。切主标签不触发 guard、不销毁状态宿主（编辑上下文在标签之外实例化）。`submitCommands` 实现 `SubmitCommands`：草稿保存失败重试与最后一条动作等价时不重复加入同一命令批次。
+- **混合批次显示缺口修复（任务 1 审查遗留）**：`features/sheets/projection.ts` 新增 `applyCommandOverlay`，`useSheetProjection.refresh()` 在结构派生结果上叠加命令簿元数据命令（update_sheet_properties/update_sheet_set/属性定义增删），批次同时含结构命令与属性值编辑时显示不回退既有图纸属性值；只叠加显示、不写回 base、不称已保存。`api/client.ts` 的 `ApiError` 透传服务端字段级错误（`fields`），供编辑器行内错误/摘要跳转消费。
+- **测试（TDD，先红后绿）**：`web/tests/e2e/fixtures/sheets.ts` 扩展 `failDraftSave`（草稿 PUT 注入 422，含字段错误/DRAFT_CONFLICT，经闭包一次性/条件触发）、`transformWorkspaceGet`（工作区 GET 变换模拟基准刷新/版本变化）、`onDraftPut`（捕获草稿 PUT 请求体）；`derivedDocument` 既有图纸补基底属性值（贴近真实派生响应）。新增 `web/tests/e2e/sheets-editing.spec.ts`（19 项：跨页修改且搜索隐藏后仍提交两项、取消不污染 base、切主标签恢复缓冲且不触发保护、加入草稿成功退出并更新投影与计数、提交失败保留输入并呈现行内错误与可聚焦摘要、错误摘要跳转到第六页字段并聚焦、DRAFT_CONFLICT 保留输入提示过期、保存失败重试不重复加入同一命令批次、切换范围三选一三种选择、打开另一编辑上下文先三选一、全局预览先处理未提交输入且预览含全部命令、确认写入保存后旧预览失效必须重新预览且不执行、删除入口先处理缓冲且删除命令不夹带属性变更、基准刷新后编辑失效保留输入禁止提交、键盘焦点恢复、混合批次显示不回退既有属性值、保存中切换范围等保存完成不重复提示）。
+- 验证：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **114/114 通过**（95 既有 + 新增 19）。本任务只改 `web/` 与 changelog，Python 侧未触碰；仓库所有者并行的 SPEC-DM-010 文档/演示改动未纳入本提交。
+
 ## 2026-09-05（属性页独立交互 Demo）
 
 - 新增 [SPEC-DM-010 属性页 Demo](docs/dst-manager/mockups/SPEC-DM-010-properties-demo.html)：两面板独立折叠、字段定义六条分页与增删、33 项文本属性平铺、字段名/值搜索、隐藏修改统计、三态标记、值对照、撤回输入、草稿撤销重做及 CSV/发布强确认模拟。

@@ -4,12 +4,13 @@
 // 新增操作（编辑子集/新增图纸/新建子集）先接线任务 6 的入口，任务 3 提供非驻留的过渡表单实现。
 import {computed} from "vue";
 import type {LayoutSourceType, Placement, Sheet, Workspace} from "../api/contracts";
-import type {SheetScope} from "../features/sheets/types";
+import type {EditContext, SheetScope} from "../features/sheets/types";
 import type {BuiltinPrefField, SheetColumn, SheetColumnOption} from "../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter, SheetRow} from "../composables/useSheetsWorkspace";
 import SheetTree from "../components/sheets/SheetTree.vue";
 import SheetToolbar, {type OperationKind} from "../components/sheets/SheetToolbar.vue";
 import SheetTable from "../components/SheetTable.vue";
+import SheetPropertyEditor from "../components/sheets/SheetPropertyEditor.vue";
 
 type InsertSheetForm = {subsetId: string; sequence: string; direction: Placement; count: string; sourceType: LayoutSourceType; sourceFile: string; sourceLayout: string};
 type InsertSubsetForm = {sequence: string; direction: Placement; title: string; initialSheetCount: string; baseTemplateFile: string; templateFile: string; templateLayout: string};
@@ -41,6 +42,7 @@ const props = defineProps<{
   columnOptions: SheetColumnOption[];
   newPropertyCount: number;
   columnSaveError: string;
+  editContext: EditContext;
 }>();
 const searchText = defineModel<string>("searchText", {default: ""});
 const searchAll = defineModel<boolean>("searchAll", {default: false});
@@ -55,8 +57,14 @@ const subsetTitleBuffer = defineModel<string>("subsetTitleBuffer", {default: ""}
 const emit = defineEmits<{
   selectAll: []; selectSubset: [id: string]; selectSheet: [id: string];
   toggleFilteredSelection: []; clearSelection: []; clearFilters: [];
-  toggleSheet: [id: string]; deleteSheet: [sheet: Sheet];
+  toggleSheet: [id: string]; editSheet: [sheet: Sheet]; deleteSheet: [sheet: Sheet];
   queueBulkSheetProperty: [];
+  editorSetValue: [name: string, value: string];
+  editorSetPage: [page: number];
+  editorSetSearch: [query: string];
+  editorSubmit: [];
+  editorCancel: [];
+  editorJumpError: [name: string];
   openOperation: [kind: OperationKind]; closeOperation: [];
   selectTemplateFile: []; selectSubsetTemplateFile: []; selectBaseTemplateFile: [];
   queueSubsetTitle: []; queueDeleteSubset: []; queueInsertSheet: []; queueInsertSubset: [];
@@ -155,6 +163,18 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
           <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>基础模板文件<button type="button" aria-label="选择基础模板文件" @click="$emit('selectBaseTemplateFile')">选择基础模板文件</button><span v-if="insertSubsetForm.baseTemplateFile">{{ insertSubsetForm.baseTemplateFile }}</span></label><label>布局模板文件<button type="button" aria-label="选择布局模板文件" @click="$emit('selectSubsetTemplateFile')">选择布局模板文件</button><span v-if="insertSubsetForm.templateFile">{{ insertSubsetForm.templateFile }}</span></label><label>布局模板名称<span v-if="subsetLayoutLoading">正在读取布局…</span><template v-else-if="subsetLayoutError"><span class="error">{{ subsetLayoutError }}</span><input v-model="insertSubsetForm.templateLayout"></template><select v-else-if="subsetLayoutOptions.length && !subsetLayoutManual" v-model="insertSubsetForm.templateLayout"><option v-for="l in subsetLayoutOptions" :value="l">{{ l }}</option></select></label></div><button type="button" @click="$emit('queueInsertSubset')">新建子集</button> <button type="button" @click="$emit('closeOperation')">取消</button></fieldset>
         </section>
 
+        <!-- 分页属性编辑（任务 5，SPEC-DM-009 §6.1）：唯一活动编辑上下文下的局部编辑区，一次只展开一张图纸 -->
+        <SheetPropertyEditor
+          v-if="editContext?.kind === 'sheet'"
+          :context="editContext"
+          @set-value="(name, value) => $emit('editorSetValue', name, value)"
+          @set-page="(p) => $emit('editorSetPage', p)"
+          @set-search="(q) => $emit('editorSetSearch', q)"
+          @submit="$emit('editorSubmit')"
+          @cancel="$emit('editorCancel')"
+          @jump-error="(name) => $emit('editorJumpError', name)"
+        />
+
         <!-- 唯一业务表：空集/无结果显示原因与入口，不渲染无说明的空表头 -->
         <div v-if="allTotal === 0" class="empty-state" role="status">
           <p>图纸集为空</p>
@@ -178,6 +198,7 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
             :columns="visibleColumns"
             @toggle="$emit('toggleSheet', $event)"
             @open-subset="$emit('selectSubset', $event)"
+            @edit="$emit('editSheet', $event)"
             @delete="$emit('deleteSheet', $event)"
             @open-diagnostics="$emit('openDiagnostics')"
           />

@@ -22,6 +22,12 @@ export type SheetsFixtureOptions = {
   failLoadColumns?: boolean;
   // 任务 4 列配置用例：第二个可打开的工作区（不同 ID），用于跨工作区隔离
   secondWorkspace?: {dstPath: string; id?: string; options?: SheetsFixtureOptions};
+  // 任务 5 编辑用例：草稿 PUT 注入失败（返回 422；返回 null 则正常保存，可经闭包一次性/条件触发）
+  failDraftSave?: (body: unknown) => {code: string; message: string; fields?: Record<string, string>} | null;
+  // 任务 5 编辑用例：工作区 GET 变换（模拟基准刷新/版本变化，闭包可变）
+  transformWorkspaceGet?: (workspace: unknown) => unknown;
+  // 任务 5 编辑用例：捕获草稿 PUT 请求体（经夹具路由直接回调，不额外安装捕获路由）
+  onDraftPut?: (body: unknown) => void;
 };
 
 const FAKE_DST = "C:\\虚构工程\\图纸集.dst";
@@ -151,7 +157,8 @@ export function derivedDocument(sheetCount: number) {
       acsm_id: `sheet-${ordinal}`,
       number,
       title: `图纸 ${ordinal}`,
-      custom_properties: {比例: "1:100"},
+      // 既有图纸沿用基底属性（结构派生不合成值编辑；任务 5 以命令簿叠加修正混合批次显示）
+      custom_properties: {图幅: "A1", 比例: ordinal % 2 ? "1:100" : "1:50", 专业: "建筑"},
       layout: {
         file_name: `C:\\虚构工程\\分册.dwg`,
         relative_file_name: `.\\分册.dwg`,
@@ -225,6 +232,7 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
   const failLoad = options.failLoadColumns ?? false;
   const failSave = options.failSaveColumns ?? false;
   const initialColumns = options.initialColumns ?? {};
+  const transformWorkspaceGet = options.transformWorkspaceGet;
   await page.addInitScript(({failLoad, failSave, initialColumns}) => {
     (window as any).__sheetsShell = {
       currentWorkspaceId: null,
@@ -258,7 +266,10 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
     }
     return route.fulfill({json: workspace});
   });
-  await page.route("**/api/workspaces/workspace-1", (route) => route.fulfill({json: workspace}));
+  await page.route("**/api/workspaces/workspace-1", (route) => {
+    const body = transformWorkspaceGet ? transformWorkspaceGet(workspace) : workspace;
+    return route.fulfill({json: body});
+  });
   if (secondWorkspace) {
     await page.route(`**/api/workspaces/${secondWorkspace.id}`, (route) => route.fulfill({json: secondWorkspace}));
   }
@@ -273,6 +284,10 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
       return route.fulfill({json: {deleted: current !== null}});
     }
     const body = await request.postDataJSON();
+    // 任务 5：草稿保存失败注入（提交失败/字段错误/DRAFT_CONFLICT 用例），返回 null 走正常保存
+    options.onDraftPut?.(body);
+    const failure = options.failDraftSave?.(body) ?? null;
+    if (failure) return route.fulfill({status: 422, json: failure});
     const saved = {...body, workspace_id: workspaceId, version: (current?.version ?? 0) + 1};
     delete saved.expected_version;
     drafts.set(workspaceId, saved);

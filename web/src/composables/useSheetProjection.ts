@@ -6,7 +6,7 @@ import {ref} from "vue";
 import type {Ref} from "vue";
 import {request} from "../api/client";
 import type {ChangeCommand, Preview, Workspace} from "../api/contracts";
-import {applyDerivedProjection} from "../features/sheets/projection";
+import {applyCommandOverlay, applyDerivedProjection} from "../features/sheets/projection";
 import type {ProjectionStamp, SubmitResult} from "../features/sheets/types";
 
 const STRUCTURAL_TYPES = new Set(["update_subset_title", "delete_sheet", "delete_subset", "insert_sheet", "insert_subset"]);
@@ -62,7 +62,9 @@ export function useSheetProjection(deps: {
       ) return {ok: true};
       if (!preview.execution_intent?.derived_document) { stamp.value = null; error.value = "缺少结构投影，请重新预览"; return {ok: false, message: "缺少结构投影，请重新预览"}; }
       if (preview.executable === false) { stamp.value = null; error.value = "结构投影不可执行，请检查诊断"; return {ok: false, message: "结构投影不可执行，请检查诊断"}; }
-      projection.value = applyDerivedProjection(base, preview);
+      // 混合批次（结构命令 + 属性值编辑）：derived_document 不含值编辑合成，
+      // 以命令簿元数据命令叠加显示，避免既有图纸属性值被回退（不写回 base、不称已保存）
+      projection.value = applyCommandOverlay(applyDerivedProjection(base, preview), commands);
       stamp.value = {workspaceId, revisionId: baseRevisionId, generation: requestGeneration, commandKey};
       error.value = "";
       return {ok: true};

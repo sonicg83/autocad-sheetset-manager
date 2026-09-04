@@ -187,6 +187,34 @@ export function useSheetsWorkspace(deps: {
     pruneMessage.value = "";
   }
 
+  // 未提交输入保护（SPEC-DM-009 §6.2）：范围/筛选改变若隐藏当前编辑对象，
+  // 先还原快照再提示三选一，选「留在此处」时编辑不被隐藏，保存/放弃后再应用
+  type SheetsStateSnapshot = {
+    scope: SheetScope; focusedSheetId: string | null; searchText: string; searchAll: boolean;
+    filtersVisible: boolean; pathFilter: SheetPathFilter; diagnosticFilter: SheetDiagFilter;
+    pendingFilter: SheetPendingFilter; renderLimit: number; hiddenTarget: string | null;
+  };
+  function snapshotState(): SheetsStateSnapshot {
+    return {
+      scope: scope.value, focusedSheetId: focusedSheetId.value, searchText: searchText.value,
+      searchAll: searchAll.value, filtersVisible: filtersVisible.value, pathFilter: pathFilter.value,
+      diagnosticFilter: diagnosticFilter.value, pendingFilter: pendingFilter.value,
+      renderLimit: renderLimit.value, hiddenTarget: hiddenTarget.value,
+    };
+  }
+  function restoreState(snapshot: SheetsStateSnapshot) {
+    scope.value = snapshot.scope;
+    focusedSheetId.value = snapshot.focusedSheetId;
+    searchText.value = snapshot.searchText;
+    searchAll.value = snapshot.searchAll;
+    filtersVisible.value = snapshot.filtersVisible;
+    pathFilter.value = snapshot.pathFilter;
+    diagnosticFilter.value = snapshot.diagnosticFilter;
+    pendingFilter.value = snapshot.pendingFilter;
+    renderLimit.value = snapshot.renderLimit;
+    hiddenTarget.value = snapshot.hiddenTarget;
+  }
+
   return {
     scope, focusedSheetId, selectedIds, searchText, searchAll, filtersVisible,
     pathFilter, diagnosticFilter, pendingFilter, renderLimit,
@@ -195,5 +223,6 @@ export function useSheetsWorkspace(deps: {
     pendingSheetIds, diagnosticObjectIds, allRows,
     selectAll, selectSubset, locateSheet, clearFilters,
     toggleSheet, toggleFilteredSelection, clearSelection, reset,
+    snapshotState, restoreState,
   };
 }

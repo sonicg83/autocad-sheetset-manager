@@ -19,6 +19,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggle: [sheetId: string];
   openSubset: [subsetId: string];
+  edit: [sheet: Sheet];
   delete: [sheet: Sheet];
   openDiagnostics: [];
 }>();
@@ -61,7 +62,10 @@ function propertyValue(row: SheetRow, col: SheetColumn): string {
               <button v-if="diagnosticIds.has(row.sheet.id)" type="button" class="diag-link" @click="$emit('openDiagnostics')">诊断</button>
             </template>
             <template v-else-if="col.kind === 'sheet'"><span class="ellipsis" tabindex="0" :title="propertyValue(row, col)">{{ propertyValue(row, col) || "—" }}</span></template>
-            <template v-else-if="col.key === 'builtin:actions'"><button class="danger-link" @click="$emit('delete', row.sheet)">删除</button></template>
+            <template v-else-if="col.key === 'builtin:actions'">
+              <button type="button" class="link-button" @click="$emit('edit', row.sheet)">编辑属性</button>
+              <button type="button" class="danger-link" @click="$emit('delete', row.sheet)">删除</button>
+            </template>
           </td>
         </tr>
       </tbody>
@@ -78,7 +82,8 @@ tbody tr.focused{background:var(--color-accent-soft,var(--color-bg-surface-2))}
 /* 固定列横向吸顶：选择/图号左侧、操作右侧，不随内部滚动隐藏 */
 th.col-select,td.col-select{position:sticky;left:0;width:40px;min-width:40px;z-index:2;background:var(--color-bg-surface)}
 th.col-number,td.col-number{position:sticky;left:40px;min-width:72px;z-index:2;background:var(--color-bg-surface)}
-th.col-actions,td.col-actions{position:sticky;right:0;width:104px;min-width:104px;z-index:2;background:var(--color-bg-surface)}
+th.col-actions,td.col-actions{position:sticky;right:0;width:150px;min-width:150px;z-index:2;background:var(--color-bg-surface)}
+td.col-actions .link-button{margin-right:10px}
 th.col-select,th.col-number,th.col-actions{background:var(--color-bg-surface-2,var(--color-bg-surface));z-index:3}
 tbody tr.focused td.col-select,tbody tr.focused td.col-number,tbody tr.focused td.col-actions{background:var(--color-accent-soft,var(--color-bg-surface-2))}
 /* 标题最多两行；完整值悬停/键盘聚焦可读，不压缩焦点轮廓 */
