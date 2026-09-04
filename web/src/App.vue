@@ -6,27 +6,25 @@ import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
-import {useTheme} from "./composables/useTheme";
+import {useShellTabs} from "./composables/useShellTabs";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
 import {useConfirm} from "./composables/useConfirm";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
-import DraftActionsPanel from "./components/DraftActionsPanel.vue";
 import JobStatusPanel from "./components/JobStatusPanel.vue";
-import ProjectNavigation from "./components/ProjectNavigation.vue";
-import PropertyPanel from "./components/PropertyPanel.vue";
 import PreviewPanel from "./components/PreviewPanel.vue";
-import RevisionHistoryPanel from "./components/RevisionHistoryPanel.vue";
-import RepairStatusPanel from "./components/RepairStatusPanel.vue";
-import SheetTable from "./components/SheetTable.vue";
+import TopBar from "./layout/TopBar.vue";
+import TabBar from "./layout/TabBar.vue";
+import WelcomeView from "./views/WelcomeView.vue";
+import SheetsView from "./views/SheetsView.vue";
+import PropertiesView from "./views/PropertiesView.vue";
+import RevisionsView from "./views/RevisionsView.vue";
 
 type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:ChangeCommand[];result:Preview};
 
-const {toggleTheme}=useTheme();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
-const dstPath=ref("");
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
 const selectedId=ref("");
@@ -68,6 +66,13 @@ const {revisions,restorePreview,restorePreviewContext,loadRevisions,loadRevision
   workspace,isWorkspaceLoading,refreshWorkspace,setJob,invalidateJobMonitor,isCurrentJobGeneration,workspaceLoadGeneration,isRestoreExecuting,error,confirmAction,
 });
 const cadVersion=ref("2020");
+// 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件
+const {active,select,onKeydown}=useShellTabs<string>(["sheets","properties","revisions"],"sheets");
+const projectPath=computed(()=>workspace.value?.dst_path??"");
+const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
+function selectTab(id:string){select(id);if(id==="revisions")void loadRevisions()}
+function onTabKeydown(e:KeyboardEvent){const before=active.value;onKeydown(e);if(active.value!==before&&active.value==="revisions")void loadRevisions()}
+function onCadVersionChange(value:string){cadVersion.value=value;invalidatePreview()}
 const searchText=ref("");
 const subsetFilter=ref("all");
 const pathFilter=ref("all");
@@ -158,7 +163,6 @@ async function openByPath(path:string){
   }
   catch(e){if(generation===workspaceLoadGeneration.value){isWorkspaceLoading.value=false;error.value=String(e)}}
 }
-async function openWorkspace(){await openByPath(dstPath.value)}
 // 桥晚于首帧注入（pywebviewready）：依赖 shellReady 才能在就绪时重算，否则永远显示无壳降级界面
 const hasShell=computed(()=>shellReady.value&&getShellBridge()!==null);
 const DST_EXT=/\.dst$/i;
@@ -437,62 +441,28 @@ async function execute(){
 </script>
 
 <template>
-  <header><div><h1>DST Manager</h1><span>v0.3 · 受控日常编辑与可恢复发布</span><button type="button" aria-label="切换主题" @click="toggleTheme">◐</button></div></header>
-  <main>
-    <section v-if="!workspace" class="open"><template v-if="!hasShell"><input v-model="dstPath" placeholder="输入 .dst 绝对路径" @keyup.enter="openWorkspace"><button :disabled="isRestoreExecuting" @click="openWorkspace">打开项目</button></template><template v-else><button @click="selectAndOpenDst">选择 DST 文件</button><small class="drop-hint">或将 .dst 文件拖入窗口</small></template></section><section v-else class="open"><button :disabled="isRestoreExecuting" @click="closeWorkspace">关闭</button><button :disabled="isWorkspaceLoading||isRestoreExecuting" @click="loadRevisions">修订历史</button></section>
+  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" />
+  <main class="shell-main">
     <p v-if="error" class="error notice">{{error}}</p>
     <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
     <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>
-
-    <JobStatusPanel v-if="job&&!isWorkspaceLoading" :job="job" :connection-mode="connectionMode" @retry="retryJob" />
-
-    <RevisionHistoryPanel v-if="revisions.length&&!isWorkspaceLoading" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" @preview="previewRestore" @restore="restoreRevision" />
-
-    <template v-if="workspace&&!isWorkspaceLoading&&!isRestoreExecuting">
-      <div v-if="draftRecovered!==null&&draftRecovered>0" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
-      <section class="summary"><div><small>图纸集</small><input v-model="workspace.sheet_set.name"><button @click="queueSheetSet">更新图纸集</button></div><div><small>子集</small><strong>{{workspace.sheet_set.subset_count}}</strong></div><div><small>图纸</small><strong>{{workspace.sheet_set.sheet_count}}</strong></div><div><small>阻断诊断</small><strong>{{blocking.length}}</strong></div><div><label>AutoCAD 版本<select v-model="cadVersion" @change="invalidatePreview"><option value="2016">2016</option><option value="2020">2020</option></select></label></div></section>
-      <details v-if="Object.keys(workspace.sheet_set.custom_properties).length"><summary>图纸集自定义属性</summary><div class="form-grid"><label v-for="(_,name) in workspace.sheet_set.custom_properties" :key="name">{{name}}<input v-model="workspace.sheet_set.custom_properties[name]"></label></div><button @click="queueSheetSet">加入属性值变更</button></details>
-      <details v-if="workspace.diagnostics.length"><summary>诊断（{{workspace.diagnostics.length}}）</summary><ul><li v-for="item in workspace.diagnostics" :key="item.code+item.message" :class="item.severity">{{item.code}}：{{item.message}}</li></ul></details>
-
-      <RepairStatusPanel v-if="dstValidation&&dstValidation.status!=='VALID'" :validation="dstValidation" :preview="repairPreview" :previewing="isRepairPreviewing" :executing="isRepairExecuting" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel="repairPreview=null;repairContext=null" />
-
-      <PropertyPanel :workspace-id="workspace.id" :definitions="workspace.sheet_set.property_definitions" :form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :writes-disabled="repairWritesDisabled" @delete-definition="queueDeleteProperty" @add-definition="queuePropertyDefinition" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
-
-      <section class="panel sheet-browser" aria-label="图纸导航与筛选">
-        <div class="section-title"><div><h2>图纸集 / 子集 / 图纸导航</h2><p>派生字段只读；搜索覆盖图号、标题、自定义属性及 DWG 文件名、相对路径和解析路径。</p></div><strong>{{filteredSheetRows.length}} / {{allSheetRows.length}} 张</strong></div>
-        <div class="filter-grid">
-          <label>搜索图纸<input v-model="searchText" placeholder="图号、标题、属性或 DWG" @input="renderLimit=80"></label>
-          <label>子集<select v-model="subsetFilter" @change="renderLimit=80"><option value="all">全部子集</option><option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{subset.display_name}}</option></select></label>
-          <label>路径状态<select v-model="pathFilter" @change="renderLimit=80"><option value="all">全部</option><option value="resolved">已解析</option><option value="unresolved">未解析</option></select></label>
-          <label>诊断状态<select v-model="diagnosticFilter" @change="renderLimit=80"><option value="all">全部</option><option value="blocking">有阻断诊断</option><option value="clean">无阻断诊断</option></select></label>
-          <label>待变更状态<select v-model="pendingFilter" @change="renderLimit=80"><option value="all">全部</option><option value="pending">待变更</option><option value="unchanged">未变更</option></select></label>
-        </div>
-        <div class="bulk-bar"><button :disabled="!filteredSheetRows.length" @click="toggleFilteredSelection">{{allFilteredSelected?'取消全选':'全选当前结果'}}</button><span>已选 {{selectedSheetIds.length}}</span><label>既有图纸属性<select v-model="bulkPropertyName"><option value="">请选择</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{name}}</option></select></label><label>批量值<input v-model="bulkPropertyValue"></label><button :disabled="!selectedSheetIds.length||!bulkPropertyName" @click="queueBulkSheetProperty">批量加入草稿</button></div>
-        <SheetTable :rows="visibleSheetRows" :selected-ids="selectedSheetIds" :pending-ids="pendingSheetIds" :diagnostic-ids="diagnosticObjectIds" @toggle="toggleSheetSelection" @open-subset="selectSubset" />
-        <button v-if="visibleSheetRows.length<filteredSheetRows.length" @click="renderLimit+=80">继续加载（尚余 {{filteredSheetRows.length-visibleSheetRows.length}}）</button>
-      </section>
-
-      <section class="editor">
-        <ProjectNavigation :subsets="workspace.sheet_set.subsets" :selected-id="selectedId" @select="selectSubset" />
-        <article>
-          <DraftActionsPanel :actions="draftActions" :cursor="draftCursor" :command-count="commands.length" :stale="draftStale" :stale-reasons="draftStaleReasons" :corrupted="draftCorrupted" :writes-disabled="repairWritesDisabled" :loading="isWorkspaceLoading" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @preview="showPreview" @remove="removeDraftAction" />
-          <div class="draft-save-status"><span class="save-status" :class="{error:draftSaveFailed}">{{saveStatusText}}</span><button v-if="draftSaveFailed" @click="scheduleDraftSave">重试</button></div>
-          <section v-if="selected" class="subset-editor"><div class="form-row"><label>当前子集标题<input v-model="selected.title"></label><button @click="queueSubsetTitle">加入标题变更</button><button class="danger" @click="queueDeleteSubset">删除整个子集</button></div><p class="derived">只读图号范围：{{selected.number_range||'—'}} · 显示名：{{selected.display_name}}</p>
-            <table><thead><tr><th>图号</th><th>派生标题</th><th>自定义属性</th><th></th></tr></thead><tbody><tr v-for="sheet in selected.sheets" :key="sheet.id"><td><span>{{sheet.number}}</span></td><td><span>{{sheet.title}}</span></td><td><div class="property-values"><label v-for="(_,name) in sheet.custom_properties" :key="name">{{name}}<input v-model="sheet.custom_properties[name]"></label></div></td><td><button @click="queueSheetProperties(sheet)">加入属性变更</button><button class="danger" @click="queueDelete(sheet)">删除</button></td></tr></tbody></table>
-          </section>
-
-          <fieldset><legend>批量新增图纸</legend><div class="form-grid">
-            <label>目标子集<select v-model="insertSheetForm.subsetId"><option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{subset.display_name}}</option></select></label>
-            <label>图纸序号<input v-model="insertSheetForm.sequence" inputmode="numeric"></label><label>图纸方向<select v-model="insertSheetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>新增图纸数量<input v-model="insertSheetForm.count" inputmode="numeric"></label>
-            <label>模板来源<select v-model="insertSheetForm.sourceType"><option value="template_layout">DWG/DWT 模板布局</option><option value="existing_snapshot">已有布局</option></select></label><template v-if="insertSheetForm.sourceType==='existing_snapshot'"><label>来源说明<span>来源为目标子集 DWG 的第一个非 Model 布局</span></label></template><template v-else><label>布局模板文件<button type="button" aria-label="选择模板文件" @click="selectTemplateFile">选择模板文件</button><span v-if="insertSheetForm.sourceFile">{{insertSheetForm.sourceFile}}</span></label><label>布局模板名称<span v-if="layoutLoading">正在读取布局…</span><template v-else-if="layoutError"><span class="error">{{layoutError}}</span><input v-model="insertSheetForm.sourceLayout"></template><select v-else-if="layoutOptions.length&&!layoutManual" v-model="insertSheetForm.sourceLayout"><option v-for="l in layoutOptions" :value="l">{{l}}</option></select></label></template>
-          </div><button @click="queueInsertSheet">批量新增图纸</button></fieldset>
-
-          <fieldset><legend>新建子集</legend><div class="form-grid"><label>子集序号<input v-model="insertSubsetForm.sequence" inputmode="numeric"></label><label>子集方向<select v-model="insertSubsetForm.direction"><option value="before">向前</option><option value="after">向后</option></select></label><label>子集标题<input v-model="insertSubsetForm.title"></label><label>初始图纸数<input v-model="insertSubsetForm.initialSheetCount" inputmode="numeric"></label><label>基础模板文件<button type="button" aria-label="选择基础模板文件" @click="selectBaseTemplateFile">选择基础模板文件</button><span v-if="insertSubsetForm.baseTemplateFile">{{insertSubsetForm.baseTemplateFile}}</span></label><label>布局模板文件<button type="button" aria-label="选择布局模板文件" @click="selectSubsetTemplateFile">选择布局模板文件</button><span v-if="insertSubsetForm.templateFile">{{insertSubsetForm.templateFile}}</span></label><label>布局模板名称<span v-if="subsetLayoutLoading">正在读取布局…</span><template v-else-if="subsetLayoutError"><span class="error">{{subsetLayoutError}}</span><input v-model="insertSubsetForm.templateLayout"></template><select v-else-if="subsetLayoutOptions.length&&!subsetLayoutManual" v-model="insertSubsetForm.templateLayout"><option v-for="l in subsetLayoutOptions" :value="l">{{l}}</option></select></label></div><button @click="queueInsertSubset">新建子集</button></fieldset>
-        </article>
-      </section>
-
+    <template v-if="!workspace">
+      <WelcomeView :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" />
+    </template>
+    <template v-else>
+      <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
+      <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
+      <JobStatusPanel v-if="job&&!isWorkspaceLoading" :job="job" :connection-mode="connectionMode" @retry="retryJob" />
       <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :writes-disabled="repairWritesDisabled" @execute="execute" />
+      <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :selected="selected" :blocking="blocking" :selected-sheet-ids="selectedSheetIds" :sheet-property-names="sheetPropertyNames" :filtered-sheet-rows="filteredSheetRows" :all-sheet-rows="allSheetRows" :visible-sheet-rows="visibleSheetRows" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :all-filtered-selected="allFilteredSelected" :insert-sheet-form="insertSheetForm" :insert-subset-form="insertSubsetForm" :layout-options="layoutOptions" :layout-loading="layoutLoading" :layout-error="layoutError" :layout-manual="layoutManual" :subset-layout-options="subsetLayoutOptions" :subset-layout-loading="subsetLayoutLoading" :subset-layout-error="subsetLayoutError" :subset-layout-manual="subsetLayoutManual" :draft-actions="draftActions" :draft-cursor="draftCursor" :command-count="commands.length" :draft-stale="draftStale" :draft-stale-reasons="draftStaleReasons" :draft-corrupted="draftCorrupted" :draft-save-failed="draftSaveFailed" :save-status-text="saveStatusText" :repair-writes-disabled="repairWritesDisabled" :is-workspace-loading="isWorkspaceLoading" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" v-model:search-text="searchText" v-model:subset-filter="subsetFilter" v-model:path-filter="pathFilter" v-model:diagnostic-filter="diagnosticFilter" v-model:pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @select-subset="selectSubset" @toggle-filtered-selection="toggleFilteredSelection" @toggle-sheet="toggleSheetSelection" @queue-bulk-sheet-property="queueBulkSheetProperty" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @queue-subset-title="queueSubsetTitle" @queue-sheet-properties="queueSheetProperties" @queue-delete="queueDelete" @queue-delete-subset="queueDeleteSubset" @queue-insert-sheet="queueInsertSheet" @queue-insert-subset="queueInsertSubset" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @preview="showPreview" @remove="removeDraftAction" @schedule-draft-save="scheduleDraftSave" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
+      <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
+      <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestore" @restore="restoreRevision" />
     </template>
   </main>
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
 </template>
+
+<style scoped>
+.shell-main{display:flex;flex-direction:column;gap:var(--space-3);min-height:calc(100vh - 52px)}
+</style>
+

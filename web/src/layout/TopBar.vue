@@ -1,0 +1,39 @@
+<script setup lang="ts">
+import {useTheme} from "../composables/useTheme";
+// 主题按钮迁入顶栏：useTheme 为模块级单例，TopBar 与 App.vue 共享同一主题状态
+const {theme,toggleTheme}=useTheme();
+defineProps<{projectPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean}>();
+defineEmits<{"update:cadVersion":[value:string];close:[]}>();
+function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
+</script>
+<template>
+  <header class="topbar" role="banner">
+    <span class="brand">DST Manager</span>
+    <span class="brand-sub">v0.3 · 受控日常编辑与可恢复发布</span>
+    <span v-if="projectPath" class="proj mono" :title="projectPath">{{projectPath}}</span>
+    <span class="spacer"></span>
+    <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{dstStatus}}</span>
+    <label class="cad-version">AutoCAD 版本<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
+    <button v-if="projectPath" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
+    <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
+  </header>
+</template>
+<style scoped>
+.topbar{display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);height:52px;min-height:52px;background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
+.brand{font-weight:600;font-size:15px;color:var(--color-text-primary);white-space:nowrap}
+.brand-sub{color:var(--color-text-muted);font-size:12px;white-space:nowrap}
+.proj{color:var(--color-text-secondary);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38vw}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:var(--radius-full);font-size:12px;font-weight:500;white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:var(--radius-full);background:currentColor}
+.pill.valid{background:var(--color-success-bg);color:var(--color-success)}
+.pill.warn{background:var(--color-warning-bg);color:var(--color-warning)}
+.pill.invalid{background:var(--color-danger-bg);color:var(--color-danger)}
+.cad-version{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);white-space:nowrap}
+.cad-version select{height:30px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2);font-family:inherit}
+.close-btn{height:32px;padding:0 var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:13px;white-space:nowrap}
+.close-btn:hover:not(:disabled){background:var(--color-bg-muted)}
+.close-btn:disabled{cursor:not-allowed;opacity:.5}
+.iconbtn{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:15px}
+.iconbtn:hover{background:var(--color-bg-muted)}
+</style>
