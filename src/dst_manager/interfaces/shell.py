@@ -17,6 +17,7 @@ import uvicorn
 import webview
 
 from ..config import Settings
+from ..runtime import is_frozen
 from .api import create_app
 
 
@@ -103,15 +104,21 @@ class ShellBridge:
 def _spawn_worker(project_root: Path) -> subprocess.Popen:
     """拉起同机 CAD Worker 子进程（对齐 start.ps1 的托管方式）。
 
+    开发态经 `python -m` 进入 `cli worker`；frozen 态 sys.executable 是 exe 自身，
+    复用其 `worker` 子命令（entry.py 无参数时默认 desktop，见 packaging/entry.py）。
     `cwd` 与 `--project-root` 都取当前工作目录：`cli worker` 校验二者一致，
     且 `Settings.data_dir` 相对路径按 cwd 解析——与壳内 API 同 cwd，保证
     Worker 与 API 操作同一个 SQLite 任务队列。输出继承父进程终端，便于
     观察 Worker 认领日志。
     """
+    if is_frozen():
+        args = [sys.executable, "worker", "--project-root", str(project_root)]
+    else:
+        args = [sys.executable, "-m", "dst_manager.interfaces.cli", "worker", "--project-root", str(project_root)]
     env = os.environ.copy()
     env.setdefault("PYTHONUTF8", "1")
     return subprocess.Popen(
-        [sys.executable, "-m", "dst_manager.interfaces.cli", "worker", "--project-root", str(project_root)],
+        args,
         cwd=str(project_root),
         env=env,
     )

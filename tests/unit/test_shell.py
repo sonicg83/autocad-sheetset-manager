@@ -235,3 +235,20 @@ def test_frontend_file_filters_match_pywebview_parse_format():
     assert filters, "未在 web/src/api/shell.ts 中找到文件过滤器定义"
     for file_filter in filters:
         parse_file_type(file_filter)  # 抛 ValueError 即失败
+
+
+def test_spawn_worker_frozen_reuses_exe_worker_subcommand(monkeypatch):
+    """frozen 态 sys.executable 是 dst-manager.exe 自身：-m 方式失效，必须复用 worker 子命令。"""
+    captured = {}
+
+    def fake_popen(args, cwd=None, env=None):
+        captured["args"], captured["cwd"], captured["env"] = args, cwd, env
+        return _FakePopen(args, cwd=cwd, env=env)
+
+    monkeypatch.setattr("dst_manager.interfaces.shell.is_frozen", lambda: True)
+    monkeypatch.setattr("dst_manager.interfaces.shell.subprocess.Popen", fake_popen)
+    project_root = Path.cwd()
+    _spawn_worker(project_root)
+    assert captured["args"] == [sys.executable, "worker", "--project-root", str(project_root)]
+    assert captured["cwd"] == str(project_root)
+    assert captured["env"].get("PYTHONUTF8") == "1"
