@@ -7,6 +7,7 @@ import {createCommand} from "./api/contracts";
 import type {ChangeCommand,CsvPreview,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RepairPreview,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import {useTheme} from "./composables/useTheme";
+import {useJobMonitor} from "./composables/useJobMonitor";
 import {useConfirm} from "./composables/useConfirm";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
 import DraftActionsPanel from "./components/DraftActionsPanel.vue";
@@ -41,7 +42,6 @@ const draftSaving=ref(false);
 const draftRecovered=ref<number|null>(null);
 const preview=ref<Preview|null>(null);
 const previewContext=ref<PreviewContext|null>(null);
-const job=ref<Job|null>(null);
 const revisions=ref<Revision[]>([]);
 const restorePreview=ref<RestorePreview|null>(null);
 const restorePreviewContext=ref<RestorePreviewContext|null>(null);
@@ -49,12 +49,17 @@ const repairPreview=ref<RepairPreview|null>(null);
 const repairContext=ref<{workspaceId:string;baseRevisionId:string;previewDigest:string|undefined;loadGeneration:number}|null>(null);
 const isRepairPreviewing=ref(false);
 const isRepairExecuting=ref(false);
-const connectionMode=ref("SSE");
 const csvText=ref("");
 const csvPreview=ref<CsvPreview|null>(null);
 const csvPreviewContext=ref<CsvPreviewContext|null>(null);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
+// 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
+const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,isCurrentJobGeneration}=useJobMonitor({
+  isWorkspaceLoading,workspace,
+  onJobSucceeded:async(workspaceId:string)=>{await discardDraft();await refreshWorkspace(workspaceId)},
+  error,
+});
 const cadVersion=ref("2020");
 const searchText=ref("");
 const subsetFilter=ref("all");
@@ -68,12 +73,9 @@ const bulkPropertyValue=ref("");
 let previewGeneration=0;
 let csvGeneration=0;
 let workspaceLoadGeneration=0;
-let jobMonitorGeneration=0;
 let revisionGeneration=0;
 let restoreExecutionGeneration=0;
 let repairGeneration=0;
-let activeJobEvents:EventSource|null=null;
-let pollTimer:number|null=null;
 let draftSaveQueue:Promise<void>=Promise.resolve();
 
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
@@ -140,7 +142,6 @@ function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
 function invalidateCsvPreview(clearText=false){csvGeneration+=1;csvPreview.value=null;csvPreviewContext.value=null;if(clearText)csvText.value=""}
 function invalidateRevisionState(){revisionGeneration+=1;revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null}
-function invalidateJobMonitor(clearJob=false){jobMonitorGeneration+=1;activeJobEvents?.close();activeJobEvents=null;if(pollTimer!==null){clearTimeout(pollTimer);pollTimer=null}if(clearJob)job.value=null;return jobMonitorGeneration}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();return workspaceLoadGeneration}
@@ -434,24 +435,11 @@ async function execute(){
   const generation=invalidateJobMonitor(false);
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
-    if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
+    if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
     job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(context.workspaceId)}
   }
-  catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
+  catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
-
-function terminal(status:string){return ["SUCCEEDED","FAILED","ROLLED_BACK","BLOCKED_FILE_LOCK","NEEDS_REVIEW"].includes(status)}
-function monitorMatches(generation:number,workspaceId:string){return generation===jobMonitorGeneration&&!isWorkspaceLoading.value&&workspace.value?.id===workspaceId}
-function watchJob(id:string,workspaceId:string){
-  const generation=invalidateJobMonitor(false);
-  const events=new EventSource(`/api/jobs/${id}/events`);
-  activeJobEvents=events;
-  events.onmessage=async event=>{if(!monitorMatches(generation,workspaceId))return;const result:Job=JSON.parse(event.data);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(terminal(result.status)){events.close();if(activeJobEvents===events)activeJobEvents=null;if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(workspaceId)}}};
-  events.onerror=()=>{if(!monitorMatches(generation,workspaceId))return;events.close();if(activeJobEvents===events)activeJobEvents=null;connectionMode.value="轮询";schedulePoll(id,workspaceId,generation)};
-}
-function schedulePoll(id:string,workspaceId:string,generation:number){if(!monitorMatches(generation,workspaceId))return;if(pollTimer!==null)clearTimeout(pollTimer);pollTimer=window.setTimeout(()=>{pollTimer=null;void pollJob(id,workspaceId,generation)},1000)}
-async function pollJob(id:string,workspaceId:string,generation:number){if(!monitorMatches(generation,workspaceId)||job.value&&terminal(job.value.status))return;try{const result:Job=await request(`/api/jobs/${id}`);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(!terminal(result.status))schedulePoll(id,workspaceId,generation);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(workspaceId)}}catch(e){if(monitorMatches(generation,workspaceId))error.value=String(e)}}
-async function retryJob(){const current=workspace.value;if(!current||!job.value||!job.value.id||isWorkspaceLoading.value)return;if(job.value.status==="NEEDS_REVIEW"){error.value="发布状态需要人工检查，禁止直接重试";return}const workspaceId=current.id,id=job.value.id,generation=invalidateJobMonitor(false);try{const result:Job=await request(`/api/jobs/${id}/retry`,{method:"POST"});if(!monitorMatches(generation,workspaceId))return;job.value=result;if(result.status==="QUEUED")watchJob(id,workspaceId)}catch(e){if(monitorMatches(generation,workspaceId))error.value=String(e)}}
 
 function revisionRequestMatches(generation:number,loadGeneration:number,workspaceId:string){return generation===revisionGeneration&&loadGeneration===workspaceLoadGeneration&&!isWorkspaceLoading.value&&workspace.value?.id===workspaceId}
 async function loadRevisions(){
@@ -517,13 +505,13 @@ async function executeRepair(){
   isRepairExecuting.value=true;
   try{
     const result:Job=await request(`/api/workspaces/${context.workspaceId}/repairs/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,preview_digest:context.previewDigest})});
-    if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
+    if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
     job.value=result;
     if(result.status==="SUCCEEDED"){repairPreview.value=null;repairContext.value=null;await refreshWorkspace(context.workspaceId)}
     else if(result.status==="FAILED"){error.value=result.error_code??"修复发布失败"}
   }
-  catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
-  finally{if(generation===jobMonitorGeneration)isRepairExecuting.value=false}
+  catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
+  finally{if(isCurrentJobGeneration(generation))isRepairExecuting.value=false}
 }
 
 async function readCsvFile(event:Event){
@@ -561,8 +549,8 @@ async function importCsv(){
   const ok=await confirmAction({title:"确认导入属性定义",message:"确认导入属性定义？",confirmText:"确认导入",danger:false});
   if(!ok)return;
   const generation=invalidateJobMonitor(false);
-  try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(generation!==jobMonitorGeneration||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await refreshWorkspace(context.workspaceId)}
-  catch(e){if(generation===jobMonitorGeneration&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
+  try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await refreshWorkspace(context.workspaceId)}
+  catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
 }
 
 </script>
