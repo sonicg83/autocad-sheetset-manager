@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-007
 title: DST Manager v0.3.1 桌面壳与操作易用性迭代设计规范
-status: draft
+status: accepted
 document_kind: spec
 owners:
   - dst-manager
