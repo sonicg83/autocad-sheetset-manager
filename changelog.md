@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-04（ARCH-DM-002 Windows 打包与 release 流程设计）
+
+- 新增 [ARCH-DM-002 Windows 绿色分发包与一键 release 流程](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md)，状态为 `review`：确定 PyInstaller onedir + zip 绿色包方案（否决 onefile 与嵌入式 Python），明确三处 frozen 路径适配（前端静态目录、Alembic 迁移、Worker 子进程拉起）、`packaging/entry.py` 双击入口、spec 数据文件与 hiddenimports 清单、分发包内插件 DLL 与 `data_dir` 默认值，以及 `build_release.ps1` / `release.ps1` 两层构建与门禁流程；代码签名、安装器、CI 与远程 Release 明确列为范围外。更新 DST Manager 文档索引。本次仅编写设计文档，未修改产品代码。
+
+## 2026-09-04（中心工作区双 SPEC 设计）
+
+- 新增 [SPEC-DM-009 图纸页](docs/dst-manager/specs/SPEC-DM-009-sheets-workspace-ui.md) 与 [SPEC-DM-010 属性页](docs/dst-manager/specs/SPEC-DM-010-properties-workspace-ui.md)，状态为 `review`：分别定义单表导航与按需编辑、字段定义分页与属性分组表单，补齐未提交输入保护、异常与验收标准。
+- 更新 DST Manager 文档索引及 SPEC-DM-006 细化文档入口；公共外壳和写入安全门禁仍引用既有规范。本次仅编写文档，未修改产品代码或发布版本。
+
 ## 2026-09-04（v0.3.3 修复输入控件不随主题切换）
 
 - **修复深色/浅色模式下文本输入框与下拉选单视觉不变**：旧样式块对 `input`/`select` 只设置 `padding`/`border`，背景与文字色落到浏览器 UA 默认白底黑字，且全站未声明 `color-scheme`。修复两项：① `web/src/style.css` 令牌区声明 `:root{color-scheme:light}` 与 `html[data-theme="dark"]{color-scheme:dark}`（原生控件、下拉弹出列表与滚动条随主题渲染）；② 旧块新增通用控件规则 `input:not([type="checkbox"]):not([type="radio"]),select,textarea{background:var(--color-bg-surface);color:var(--color-text-primary)}`——排除 checkbox/radio 以免影响确认模态勾选框外观（`ConfirmModal` 的勾选框由 UA 按 `color-scheme` 自行渲染）。e2e 新增「深色模式下文本输入框与下拉选单随主题切换背景」（先红后绿：断言 `.filter-grid` 输入框与下拉计算背景为 `--color-bg-surface` 深色值）。
