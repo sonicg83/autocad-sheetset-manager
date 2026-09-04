@@ -42,3 +42,36 @@ def test_cad_paths_none_untouched():
     settings = Settings(_env_file=None)
     assert settings.autocad_2016_console is None
     assert settings.autocad_2020_plugin is None
+
+
+def test_frozen_plugin_defaults_point_to_bundled_dlls(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "dst-manager.exe"))
+    settings = Settings(_env_file=None)
+    assert settings.autocad_2016_plugin == (tmp_path / "autocad2016" / "DstManager.AutoCAD.dll").resolve()
+    assert settings.autocad_2020_plugin == (tmp_path / "autocad2020" / "DstManager.AutoCAD.dll").resolve()
+    # Core Console 永不猜测，frozen 态同样保持 None
+    assert settings.autocad_2016_console is None
+    assert settings.autocad_2020_console is None
+
+
+def test_frozen_data_dir_defaults_to_localappdata(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "dst-manager.exe"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData"))
+    settings = Settings(_env_file=None)
+    assert settings.data_dir == (tmp_path / "AppData" / "dst-manager" / "data").resolve()
+
+
+def test_frozen_explicit_config_overrides_defaults(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "dst-manager.exe"))
+    plugin = tmp_path / "custom" / "my.dll"
+    settings = Settings(_env_file=None, autocad_2020_plugin=str(plugin))
+    assert settings.autocad_2020_plugin == plugin.resolve()
