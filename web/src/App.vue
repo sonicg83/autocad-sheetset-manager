@@ -4,12 +4,13 @@ import type {Ref} from "vue";
 import {ApiError,request} from "./api/client";
 import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,RestorePreview,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
+import type {ChangeCommand,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import {useTheme} from "./composables/useTheme";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
+import {useRestore} from "./composables/useRestore";
 import {useConfirm} from "./composables/useConfirm";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
 import DraftActionsPanel from "./components/DraftActionsPanel.vue";
@@ -22,7 +23,6 @@ import RepairStatusPanel from "./components/RepairStatusPanel.vue";
 import SheetTable from "./components/SheetTable.vue";
 
 type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:ChangeCommand[];result:Preview};
-type RestorePreviewContext={workspaceId:string;baseRevisionId:string;revisionId:string;loadGeneration:number;result:RestorePreview};
 
 const {toggleTheme}=useTheme();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
@@ -43,9 +43,6 @@ const draftSaving=ref(false);
 const draftRecovered=ref<number|null>(null);
 const preview=ref<Preview|null>(null);
 const previewContext=ref<PreviewContext|null>(null);
-const revisions=ref<Revision[]>([]);
-const restorePreview=ref<RestorePreview|null>(null);
-const restorePreviewContext=ref<RestorePreviewContext|null>(null);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
@@ -66,6 +63,10 @@ const {csvText,csvPreview,csvPreviewContext,readCsvFile,previewCsv,importCsv,inv
 const {repairPreview,repairContext,isRepairPreviewing,isRepairExecuting,previewRepair,executeRepair,repairWritesDisabled,dstValidation}=useRepair({
   workspace,isWorkspaceLoading,isRestoreExecuting,refreshWorkspace,setJob,invalidateJobMonitor,isCurrentJobGeneration,workspaceLoadGeneration,error,confirmAction,
 });
+// 修订恢复域（Task 3 拆分）：isRestoreExecuting 复用 App.vue 单一 ref，useRestore 返回同一 ref 保持单一事实来源
+const {revisions,restorePreview,restorePreviewContext,loadRevisions,loadRevisionsInternal,previewRestore,restoreRevision,invalidateRevisionState}=useRestore({
+  workspace,isWorkspaceLoading,refreshWorkspace,setJob,invalidateJobMonitor,isCurrentJobGeneration,workspaceLoadGeneration,isRestoreExecuting,error,confirmAction,
+});
 const cadVersion=ref("2020");
 const searchText=ref("");
 const subsetFilter=ref("all");
@@ -77,8 +78,6 @@ const renderLimit=ref(80);
 const bulkPropertyName=ref("");
 const bulkPropertyValue=ref("");
 let previewGeneration=0;
-let revisionGeneration=0;
-let restoreExecutionGeneration=0;
 let draftSaveQueue:Promise<void>=Promise.resolve();
 
 const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
@@ -136,7 +135,6 @@ const saveStatusText=computed(()=>draftSaveFailed.value?"保存失败":draftSavi
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
-function invalidateRevisionState(){revisionGeneration+=1;revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();return workspaceLoadGeneration.value}
@@ -434,44 +432,6 @@ async function execute(){
     job.value=result;if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(context.workspaceId)}
   }
   catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
-}
-
-function revisionRequestMatches(generation:number,loadGeneration:number,workspaceId:string){return generation===revisionGeneration&&loadGeneration===workspaceLoadGeneration.value&&!isWorkspaceLoading.value&&workspace.value?.id===workspaceId}
-async function loadRevisions(){
-  if(isRestoreExecuting.value)return;
-  await loadRevisionsInternal();
-}
-async function loadRevisionsInternal(){
-  const current=workspace.value;if(!current||isWorkspaceLoading.value)return;
-  const workspaceId=current.id,loadGeneration=workspaceLoadGeneration.value,generation=++revisionGeneration;
-  revisions.value=[];restorePreview.value=null;restorePreviewContext.value=null;
-  try{const result:Revision[]=await request(`/api/revisions?workspace_id=${workspaceId}`);if(revisionRequestMatches(generation,loadGeneration,workspaceId))revisions.value=result}
-  catch(e){if(revisionRequestMatches(generation,loadGeneration,workspaceId))error.value=String(e)}
-}
-async function previewRestore(revision:Revision){
-  const current=workspace.value;if(!current||isWorkspaceLoading.value||isRestoreExecuting.value)return;
-  const workspaceId=current.id,baseRevisionId=current.revision_id,revisionId=revision.id,loadGeneration=workspaceLoadGeneration.value,generation=++revisionGeneration;
-  restorePreview.value=null;restorePreviewContext.value=null;
-  try{const result:RestorePreview=await request(`/api/workspaces/${workspaceId}/revisions/${revisionId}/restore-preview`);if(!revisionRequestMatches(generation,loadGeneration,workspaceId))return;restorePreview.value=result;restorePreviewContext.value={workspaceId,baseRevisionId,revisionId,loadGeneration,result}}
-  catch(e){if(revisionRequestMatches(generation,loadGeneration,workspaceId))error.value=String(e)}
-}
-function restoreExecutionMatches(generation:number,context:RestorePreviewContext){return generation===restoreExecutionGeneration&&context.loadGeneration===workspaceLoadGeneration.value&&!isWorkspaceLoading.value&&workspace.value?.id===context.workspaceId&&workspace.value.revision_id===context.baseRevisionId}
-async function restoreRevision(){
-  const context=restorePreviewContext.value,current=workspace.value;
-  if(isRestoreExecuting.value||!context||!context.result.executable)return;
-  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==workspaceLoadGeneration.value){restorePreview.value=null;restorePreviewContext.value=null;error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
-  // 恢复为新修订属不可逆破坏类操作：需要显式勾选后才可确认
-  const ok=await confirmAction({title:"确认恢复为新修订",message:"历史修订不会被覆盖。",confirmText:"确认恢复",danger:true,requireCheckbox:true,reversibility:"不可逆"});
-  if(!ok)return;
-  const generation=++restoreExecutionGeneration;
-  isRestoreExecuting.value=true;invalidateJobMonitor(true);revisionGeneration+=1;
-  try{
-    const result:Job=await request(`/api/workspaces/${context.workspaceId}/revisions/${context.revisionId}/restore`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,preview_digest:context.result.preview_digest})});
-    if(!restoreExecutionMatches(generation,context))return;
-    job.value=result;restorePreview.value=null;restorePreviewContext.value=null;error.value="";await refreshWorkspace(context.workspaceId);if(workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)await loadRevisionsInternal();
-  }
-  catch(e){if(restoreExecutionMatches(generation,context))error.value=String(e)}
-  finally{if(generation===restoreExecutionGeneration)isRestoreExecuting.value=false}
 }
 
 </script>
