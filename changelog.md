@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-04（v0.3.3 标签化外壳 Task 8 收尾：修订历史标签完善与 v0.3.3 全量验证）
+
+- 修订历史标签完善（[PLAN-DM-013](.planning/plans/dst-manager/PLAN-DM-013-v033-tabbed-shell.md) Task 8，对应 [SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §4.2 标签③、§6.5）：`web/src/views/RevisionsView.vue` 空状态由简单 `<p class="empty">` 升级为空状态卡——标题「暂无修订历史」、说明「发布首个变更后，此处会记录每个可恢复的修订版本。」、下一步动作提示「前往「图纸」标签发起首个变更，发布后即可在此恢复。」（§6.5「说明 + 下一步动作」，动作即提示去标签①发起变更，不设跳转按钮以免打断）；样式全部引用设计令牌。
+- `web/src/App.vue`（512→514 行）恢复预览接入任务浮层修改预览页签：新增 `previewRestoreAndOpen(revision)` 包装——`previewRestore` 成功（`restorePreview` 已写入）后 `openOverlay("prev")`，与 `showPreview` 共用 §9.1 统一预览门禁呈现（§4.2 标签③「先预览（进任务浮层"修改预览"页签）→ 危险确认模态 → 恢复为新修订」）；`RevisionsView` 的 `@preview` 由 `previewRestore` 改接 `previewRestoreAndOpen`。`restoreRevision` 确认执行后任务响应经 `setJob` 已自动 `openOverlay("prog")`（Task 6 fix round 1 接线，核实未重复）。激活标签③时加载修订**核实 Task 4 已接线**（`selectTab`/`onTabKeydown` 切换至 `revisions` 即调 `loadRevisions`，内部含 `isRestoreExecuting` 防重入与 `revisionGeneration`/`workspaceLoadGeneration` 代次保护），未重复加 `watch`。
+- e2e 新增 2 项（TDD：第 2 条先红后绿，第 1 条因接线已存在首跑即绿）：①「修订历史标签激活时加载列表，空修订显示暂无修订历史」——`page.route("**/api/revisions**")` 在点击标签前安装，断言空状态卡「暂无修订历史」可见且 `asked` 为真（激活时才加载）；②「恢复预览在任务浮层修改预览页签呈现」——跟随既有「修订恢复先预览再确认为新修订」mock 修订列表与 restore-preview，断言点击「恢复预览」后任务浮层「修改预览」页签 `aria-selected="true"`。与简报用例的最小修正：恢复按钮名沿用既有契约「恢复预览」（简报正文写作「预览恢复」）。
+- **v0.3.3 收尾**：`PLAN-DM-013` 状态 `proposed` → `completed`（全部任务步骤勾选，追加「实际验证」小节）；[ROADMAP-DM-001](.planning/roadmaps/dst-manager.md) v0.3.3 行更新为已完成并引用 PLAN-DM-013；[docs/dst-manager/README.md](docs/dst-manager/README.md) 当前版本更新为 `v0.3.3` 并补外壳重建说明。全量验证：`uv run ruff check .` All checks passed；`uv run pytest -q` **547 passed / 72 skipped**（619 项，0 failures / 0 errors，退出码 0）——与 v0.3.2 基线 545 passed / 72 skipped 的差异为提交 `a83e92b`（修复派生 DWG 文件名后缀区间压缩）新增 2 项 `test_core.py` 用例，本次后端零改动如实记录；`cd web && npm run build`（check:api + vue-tsc + vite）零类型错误；Playwright e2e **55/55 通过**（53 既有 + 2 新增，51.1s）。本计划 Task 1-7 的 e2e 数字演进：40→42→42→45→49→52→53→55，逐 task 记录见下方各章节。
+
 ## 2026-09-04（v0.3.3 标签化外壳 Task 7：SSE 任务通知 toast 与浮层跳转）
 
 - 新增 `web/src/composables/useToast.ts`（[PLAN-DM-013](.planning/plans/dst-manager/PLAN-DM-013-v033-tabbed-shell.md) Task 7，对应 [SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.6）：`useToast()` 返回 `{toasts,pushToast,dismiss}`——`pushToast({type:"ok"|"fail",title,body,jumpTab?})`，`ok` 5 秒自动消失、`fail` 常驻不自动消失；同屏上限 4 条，超出移除最旧（`slice(-3)`）。`Toast` 类型含 `jumpTab?:"prog"|"prev"|"diag"`。

@@ -822,3 +822,22 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   await toast.getByRole("button",{name:"✕"}).click();
   await expect(toast).toHaveCount(0);
 });
+
+test("修订历史标签激活时加载列表，空修订显示暂无修订历史",async({page})=>{
+  await openWorkspace(page);
+  let asked=false;
+  await page.route("**/api/revisions**",route=>{asked=true;return route.fulfill({json:[]})});
+  await page.getByRole("tab",{name:/修订历史/}).click();
+  await expect(page.getByText("暂无修订历史")).toBeVisible();
+  expect(asked).toBeTruthy(); // 激活时才加载
+});
+
+test("恢复预览在任务浮层修改预览页签呈现",async({page})=>{
+  await openWorkspace(page);
+  // 跟随既有"修订恢复先预览再确认为新修订"用例 mock 修订列表与 restore-preview
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+  await page.getByRole("tab",{name:/修订历史/}).click();
+  await page.getByRole("button",{name:"恢复预览"}).first().click();
+  await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"修改预览"})).toHaveAttribute("aria-selected","true");
+});
