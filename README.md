@@ -88,6 +88,21 @@ npm run test:e2e
 
 SQLite 使用 SQLAlchemy 运行时模型和 Alembic 迁移：`uv run alembic upgrade head`。项目首次确认执行后，会在项目目录建立 `.dst-manager/`，永久保存 before 快照、输入、执行计划、脚本、日志、发布日志和 manifest；只读打开不会创建该目录。
 
+## 打包与 release
+
+分发给内部同事使用绿色免安装包；开发环境不需要以下流程。
+
+```powershell
+# 构建分发包（版本号缺省取 pyproject.toml）
+.\scripts\build_release.ps1                # 首次或插件源码变更后不带 -SkipPlugins
+.\scripts\build_release.ps1 -SkipPlugins   # 插件 DLL 无变化时复用既有产物
+
+# 一键 release：前置校验 + Ruff/pytest 门禁 + 构建 + 本地 tag
+.\scripts\release.ps1 -Version 0.3.4       # 先人工把 pyproject.toml version 与 changelog 更新到位
+```
+
+产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：双击 `dst-manager.exe` 打开桌面壳；数据与草稿在 `%LOCALAPPDATA%\dst-manager\`；AutoCAD Core Console 路径在 exe 同级放 `.env` 配置（`autocad_2016_console`/`autocad_2020_console`），可用 `dst-manager.exe doctor` 自检。tag 仅打在本地，推送与分发由人工执行。
+
 ## 本地保留资料
 
 公开仓库不包含 `legacy/` 旧工具和 `sample/` 工程样本。这两个目录只保留在本地工作区；缺少样本时，黄金样本和真实 AutoCAD 系统测试会自动跳过。

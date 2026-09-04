@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-04（v0.3.4 打包与 release 收尾：根 README 文档与全量回归）
+
+- 根 [README.md](README.md) 新增「打包与 release」小节（[PLAN-DM-014](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md) Task 9，位于「一键启动」相关章节之后）：面向分发给内部同事的绿色免安装包，给出 `scripts/build_release.ps1`（`-Version`/`-SkipPlugins`，版本缺省取 pyproject.toml）与 `scripts/release.ps1 -Version <版本>`（前置校验 + Ruff/pytest 门禁 + 构建 + 本地 tag）两条命令，并说明产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：双击 `dst-manager.exe` 打开桌面壳、数据与草稿在 `%LOCALAPPDATA%\dst-manager\`、Core Console 经 exe 同级 `.env` 配置（`autocad_2016_console`/`autocad_2020_console`）、`dst-manager.exe doctor` 自检、tag 仅本地不推送。
+- 全量回归（真实验证）：`uv run ruff check .` 首查报 3 项——`src/dst_manager/runtime.py:25` B009（对常量属性使用 `getattr(sys, "_MEIPASS")`）与 `tests/unit/test_runtime.py:58` I001/F401（import 未排序 + `sqlalchemy.inspect` 未使用），均来自本计划 Task 1-4 已提交代码；已就地修复并复核 Ruff 全绿，修复改动留在工作区未随本提交入库（本提交按任务范围仅暂存 README.md 与 changelog.md），下次执行 release 前需一并提交。`uv run pytest -q` 全量 **634 项 562 passed / 72 skipped**（0 failures / 0 errors，退出码 0，约 40s），与基线 547/72 + 本计划新增 15 项（runtime 3 + api 1 + migrate 1 + shell 1 + config 3 + release_scripts 6）一致。
+- 简报 Step 3「端到端 release 演练」按任务约定跳过留待用户：`release.ps1` 要求干净工作区、main 分支、`pyproject.toml version` 与 changelog `v<版本>` 记录到位；当前工作区含用户未提交改动且 lint 修复未提交，不具备执行条件。
+
 ## 2026-09-04（PLAN-DM-014 Windows 打包与 release 实施计划）
 
 - 新增 [PLAN-DM-014 Windows 绿色分发包与一键 release 流程实施计划](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md)，状态为 `proposed`，依据 [ARCH-DM-002](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md)：9 个任务依次为 `runtime.py` 路径解析模块、三处 frozen 路径适配（前端静态目录/Alembic 迁移/Worker 拉起）、`Settings` frozen 默认值、`packaging/entry.py` + PyInstaller spec 与本地构建冒烟、`build_release.ps1` 纯构建脚本、`release.ps1` 一键 release（门禁 + 本地 tag）、文档与全量回归。本次仅编写计划，未修改产品代码。
