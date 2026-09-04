@@ -11,6 +11,7 @@ import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
+import {useSheetProjection} from "./composables/useSheetProjection";
 import {useConfirm} from "./composables/useConfirm";
 import {useToast} from "./composables/useToast";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
@@ -79,6 +80,10 @@ const {revisions,restorePreview,restorePreviewContext,loadRevisions,loadRevision
   workspace,isWorkspaceLoading,refreshWorkspace,setJob,invalidateJobMonitor,isCurrentJobGeneration,workspaceLoadGeneration,isRestoreExecuting,error,confirmAction,
 });
 const cadVersion=ref("2020");
+// 结构投影域（Task 1）：内部 /changes/preview 获取权威结构显示，与显式发布预览分离。
+// 只读 projection 由 watch 应用到显示 workspace；stamp/pending/error 供后续任务消费。
+const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
+watch(sheetProjection,(value)=>{if(value)workspace.value=value});
 // 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件
 const {active,select,onKeydown}=useShellTabs<string>(["sheets","properties","revisions"],"sheets");
 const projectPath=computed(()=>workspace.value?.dst_path??"");
@@ -301,7 +306,11 @@ function commandLabel(command:ChangeCommand){
 }
 function rebuildDraftProjection(){
   commands.value=draftStale.value?[]:projectCommands(draftActions.value,draftCursor.value);
-  if(baseWorkspace.value)workspace.value=projectWorkspace(baseWorkspace.value,draftStale.value?[]:draftActions.value,draftStale.value?0:draftCursor.value);
+  if(baseWorkspace.value){
+    // 元数据/属性定义沿用本地只读副本投影；结构动作由内部投影请求以服务端权威派生结果显示
+    workspace.value=projectWorkspace(baseWorkspace.value,draftStale.value?[]:draftActions.value,draftStale.value?0:draftCursor.value);
+    void refreshSheetProjection();
+  }
   invalidatePreview();
 }
 function scheduleDraftSave(){

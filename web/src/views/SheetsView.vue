@@ -49,7 +49,7 @@ defineEmits<{
     </div>
 
     <section class="panel sheet-browser" aria-label="图纸导航与筛选">
-      <div class="section-title"><div><h2>图纸集 / 子集 / 图纸导航</h2><p>派生字段只读；搜索覆盖图号、标题、自定义属性及 DWG 文件名、相对路径和解析路径。</p></div><strong>{{filteredSheetRows.length}} / {{allSheetRows.length}} 张</strong></div>
+      <div class="section-title"><div><h2>图纸集 / 子集 / 图纸导航</h2><p>派生字段只读；搜索覆盖图号、标题、自定义属性及 DWG 文件名、相对路径和解析路径。</p></div><strong>匹配 {{filteredSheetRows.length}} / 全部 {{allSheetRows.length}} 张</strong></div>
       <div class="filter-grid">
         <label>搜索图纸<input v-model="searchText" placeholder="图号、标题、属性或 DWG" @input="renderLimit=80"></label>
         <label>子集<select v-model="subsetFilter" @change="renderLimit=80"><option value="all">全部子集</option><option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{subset.display_name}}</option></select></label>

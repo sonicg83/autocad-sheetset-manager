@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-04（建立图纸页权威结构投影与命令身份验证）
+
+- **新增图纸页权威结构投影先行门禁（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 1）**：结构变化（insert/delete/rename）的显示结果改为经内部 `/changes/preview` 的 `execution_intent.derived_document` 获取服务端权威投影，浏览器不再本地拼装结构；该内部请求与用户显式发布预览分离——绝不设置 `previewContext`、不打开发布确认、不启动 CAD，因此不会启用「确认写入」。新增 `web/src/features/sheets/types.ts`（公共类型 verbatim：SheetScope/ProjectionStamp/PropertyKey/ColumnPreferences/SheetRef/SubmitResult/SubmitCommands）、`web/src/features/sheets/projection.ts`（`applyDerivedProjection(base,preview)`：acsm_id 映射 UI id，名称/number/layout/custom_properties 全取响应，sheet_count/subset_count 从完整集合计数，新增对象不填造 Handle 或 resolved_path，不改 base）、`web/src/composables/useSheetProjection.ts`（只读 projection/stamp/pending/error + `refresh():Promise<SubmitResult>`；按 workspace/revision/命令快照/请求代次校验，乱序响应只应用最新代次；失败保留上一份结果并标为失效，不展示「已同步」；非结构动作清空旧投影并失效在途请求）。`App.vue` 仅改 `rebuildDraftProjection` 调用边界：元数据/属性定义沿用本地 `projectWorkspace`，结构动作额外触发内部投影并经 watch 应用到显示 workspace。
+- **固化命令索引风险（drafts.ts）**：`projectCommands` 新增结构边界——结构动作（update_subset_title/delete_sheet/delete_subset/insert_sheet/insert_subset）之间的同键命令不再跨边界去重压缩，避免早期命令被移除使其后的结构命令索引前移、改变服务端派生的新增 AcSm ID；旧草稿仍按原兼容逻辑恢复。前端只显示服务端派生 ID，不按行号偷偷重绑、不自行生成 UUID5。
+- **显示文案对齐 SPEC-DM-009 单表格式**：`SheetsView.vue` 计数由「15 / 15 张」改为「匹配 15 / 全部 15 张」（任务 3 单表导航沿用同一文案），使投影结果可被 e2e 观测。
+- **测试（TDD）**：新增 `tests/unit/test_sheet_projection_contract.py`（4 项，用最小临时 DST 夹具经真实 `preview_changes` 路径、无 CAD，覆盖 insert→属性编辑 ID 稳定、insert→insert 顺序/去重一致、delete→undo 不持久化、rename→insert 命令索引敏感）；新增 `web/tests/e2e/sheets-projection.spec.ts`（2 项，先红后绿：投影请求不启用确认写入且逆序响应只应用最新代次；结构动作之间不跨边界去重、服务端命令索引稳定）与最小夹具 `web/tests/e2e/fixtures/sheets.ts`（`installSheetsFixture(page,{sheetCount,propertyCount})`，只含虚构路径与假壳/假路由；任务 3 再扩展全能力）。
+- 验证：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **641 项通过**（退出码 0；基线 637 + 新增 4）；`cd web && npm run build`（check:api + vue-tsc + vite）零错误；`npm run test:e2e` **61/61 通过**（59 既有 + 新增 2）。
+
 ## 2026-09-04（修复打包遗漏 XSD 与 changelog 门禁误配）
 
 - **修复分发包遗漏 acsm-v1.xsd（Critical，PLAN-DM-014 最终审查 C-1）**：`src/dst_manager/infrastructure/acsm_xml/contract.py` 的 `_load_schema()` 用 `Path(__file__)` 定位 `schema/acsm-v1.xsd`，frozen 态下 `__file__` 指向 `_internal` 内 .pyc，而 `packaging/dst-manager.spec` 的 `datas` 未含 schema 目录 → 打包后真实 DST 加载（load_acsm → validate_schema）必崩。修复：spec `datas` 追加 `..\src\dst_manager\infrastructure\acsm_xml\schema` → `dst_manager/infrastructure/acsm_xml/schema`；新增静态守护测试 [tests/unit/test_packaging_spec.py](tests/unit/test_packaging_spec.py)（不跑 PyInstaller）：断言 XSD 存在、spec datas 含 schema 路径条目，并扫描 `src/dst_manager` 内新增 `Path(__file__)` 资源定位必须登记白名单（contract/api/database/runtime）且被 spec 覆盖，防止未来再次遗漏。

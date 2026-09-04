@@ -1,5 +1,12 @@
 import type { ChangeCommand, DraftAction, Workspace } from "./api/contracts";
 
+// 结构动作类型：其命令索引决定服务端派生的新增 AcSm ID，去重压缩不得跨越结构边界
+const STRUCTURAL_TYPES = new Set(["update_subset_title", "delete_sheet", "delete_subset", "insert_sheet", "insert_subset"]);
+
+function isStructural(command: ChangeCommand): boolean {
+  return STRUCTURAL_TYPES.has(command.type);
+}
+
 function replacementKey(command: ChangeCommand): string | null {
   switch (command.type) {
     case "update_sheet_set":
@@ -23,14 +30,18 @@ function replacementKey(command: ChangeCommand): string | null {
 export function projectCommands(actions: DraftAction[], cursor: number): ChangeCommand[] {
   const projected: Array<ChangeCommand | null> = [];
   const previousByKey = new Map<string, number>();
+  // 最近一个结构动作在投影数组中的下标；跨结构边界禁止按同键压缩早期命令，
+  // 否则早期命令被移除会使其后的结构命令索引前移，改变服务端派生的新增 ID。
+  let lastStructural = -1;
   for (const action of actions.slice(0, cursor)) {
     for (const command of action.commands) {
       const key = replacementKey(command);
       if (key !== null) {
         const previous = previousByKey.get(key);
-        if (previous !== undefined) projected[previous] = null;
+        if (previous !== undefined && previous >= lastStructural) projected[previous] = null;
         previousByKey.set(key, projected.length);
       }
+      if (isStructural(command)) lastStructural = projected.length;
       projected.push(command);
     }
   }
