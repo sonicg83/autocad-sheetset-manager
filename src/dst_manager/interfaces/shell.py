@@ -16,7 +16,14 @@ from pathlib import Path
 import uvicorn
 import webview
 
+from ..application.shell_context import ShellContext
 from ..config import Settings
+from ..infrastructure.explorer import Explorer, ExplorerError
+from ..infrastructure.sheet_preferences import (
+    InvalidSheetPreferencesError,
+    SheetPreferences,
+    SheetPreferencesError,
+)
 from ..runtime import is_frozen
 from .api import create_app
 
@@ -33,13 +40,102 @@ class ShellBridge:
     全局回调（callback_id 为前端传入的全局函数名）。
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        context: ShellContext | None = None,
+        preferences: SheetPreferences | None = None,
+        explorer: Explorer | None = None,
+    ) -> None:
+        """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。"""
+        self._context = context
+        self._preferences = preferences
+        self._explorer = explorer if explorer is not None else Explorer()
         self._window: webview.Window | None = None
         self._drop_callback_id: str | None = None
         self._drop_listener_registered = False
 
     def bind(self, window: webview.Window) -> None:
         self._window = window
+
+    # ---- PLAN-DM-015 任务 2：可信上下文与偏好桥（新增方法不进业务 OpenAPI） ----
+    # 四个方法均校验 workspace_id 等于当前有效上下文；路径只从上下文取得。
+    # 返回可序列化字典：{ok:true;value} 或 {ok:false;code;message}。
+
+    def _context_error(self, workspace_id: str) -> dict | None:
+        context = self._context.current if self._context is not None else None
+        if context is None or context.workspace_id != workspace_id:
+            return {
+                "ok": False,
+                "code": "SHELL_WORKSPACE_UNAVAILABLE",
+                "message": "当前没有匹配的已打开工作区，请重新打开图纸集",
+            }
+        return None
+
+    def open_workspace_folder(self, workspace_id: str) -> dict:
+        """在资源管理器中打开当前 DST 所在目录并尽量选中 DST；目录缺失明确提示。"""
+        error = self._context_error(workspace_id)
+        if error is not None:
+            return error
+        context = self._context.current
+        if context.dst_path.is_file():
+            try:
+                self._explorer.open_folder_and_select(context.dst_path)
+            except ExplorerError as exc:
+                return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
+            return {"ok": True, "value": None}
+        if context.root.is_dir():
+            try:
+                self._explorer.open_folder(context.root)
+            except ExplorerError as exc:
+                return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
+            return {"ok": True, "value": None}
+        return {
+            "ok": False,
+            "code": "SHELL_DIRECTORY_NOT_FOUND",
+            "message": "图纸集目录不存在，可能已被移动或删除",
+        }
+
+    def load_sheet_columns(self, workspace_id: str) -> dict:
+        """读取当前工作区的图纸页列偏好；无存储返回 value=None。"""
+        error = self._context_error(workspace_id)
+        if error is not None:
+            return error
+        if self._preferences is None:
+            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": "偏好存储未就绪"}
+        try:
+            data = self._preferences.load(workspace_id)
+        except InvalidSheetPreferencesError as exc:
+            return {"ok": False, "code": "SHEET_PREFERENCES_INVALID", "message": str(exc)}
+        except SheetPreferencesError as exc:
+            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": str(exc)}
+        return {"ok": True, "value": data}
+
+    def save_sheet_columns(self, workspace_id: str, preferences: dict) -> dict:
+        """校验并保存当前工作区的图纸页列偏好到应用数据目录。"""
+        error = self._context_error(workspace_id)
+        if error is not None:
+            return error
+        if self._preferences is None:
+            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": "偏好存储未就绪"}
+        try:
+            self._preferences.save(workspace_id, preferences)
+        except InvalidSheetPreferencesError as exc:
+            return {"ok": False, "code": "SHEET_PREFERENCES_INVALID", "message": str(exc)}
+        except SheetPreferencesError as exc:
+            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": str(exc)}
+        return {"ok": True, "value": None}
+
+    def clear_workspace_context(self, workspace_id: str) -> dict:
+        """关闭成功后清除可信上下文；ID 不匹配或本无上下文返回不可用（前端 best-effort）。"""
+        if self._context is None:
+            return {"ok": True, "value": None}
+        if not self._context.clear(workspace_id):
+            return {
+                "ok": False,
+                "code": "SHELL_WORKSPACE_UNAVAILABLE",
+                "message": "当前没有匹配的已打开工作区上下文",
+            }
+        return {"ok": True, "value": None}
 
     def select_file(self, file_types: list[str]) -> str | None:
         if self._window is None:
@@ -151,15 +247,23 @@ def _shutdown_worker(process: subprocess.Popen | None) -> None:
 
 def run_desktop(settings: Settings | None = None) -> None:
     settings = settings or Settings()
+    # 可信上下文登记 + 列偏好仓库：create_app 打开成功后登记当前工作区，桥只消费登记结果
+    context = ShellContext()
+    preferences = SheetPreferences(settings.data_dir)
     server = uvicorn.Server(
-        uvicorn.Config(create_app(settings), host="127.0.0.1", port=0, log_level="warning")
+        uvicorn.Config(
+            create_app(settings, on_workspace_opened=context.set_workspace),
+            host="127.0.0.1",
+            port=0,
+            log_level="warning",
+        )
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started:
         time.sleep(0.05)
     port = server.servers[0].sockets[0].getsockname()[1]
-    bridge = ShellBridge()
+    bridge = ShellBridge(context=context, preferences=preferences)
     window = webview.create_window("DST Manager", f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800)
     bridge.bind(window)
     worker = _spawn_worker(Path.cwd())

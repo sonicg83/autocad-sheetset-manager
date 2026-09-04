@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import FastAPI, Response
@@ -49,7 +50,16 @@ class OpenRequest(ContractModel):
     root_override: Path | None = None
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    on_workspace_opened: Callable[[object], None] | None = None,
+) -> FastAPI:
+    """构建 FastAPI 应用。
+
+    ``on_workspace_opened`` 是仅 Python 内部可选回调（默认 None，不改任何 HTTP
+    契约）：工作区打开成功后被以服务端 Workspace 调用一次，供桌面壳登记可信
+    当前上下文（PLAN-DM-015 任务 2）。
+    """
     app = FastAPI(title="DST Manager", version="0.3.0")
     service = DstManagerService(settings)
     app.state.service = service
@@ -78,7 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/workspaces/open", response_model=WorkspaceResponse, response_model_exclude_unset=True)
     def open_workspace(request: OpenRequest):
-        return workspace_json(service.open_workspace(request.dst_path, request.root_override))
+        workspace = service.open_workspace(request.dst_path, request.root_override)
+        if on_workspace_opened is not None:
+            on_workspace_opened(workspace)
+        return workspace_json(workspace)
 
     @app.get(
         "/api/workspaces/{workspace_id}",

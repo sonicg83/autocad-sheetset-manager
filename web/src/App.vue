@@ -2,7 +2,7 @@
 import {computed,reactive,ref,watch} from "vue";
 import type {Ref} from "vue";
 import {ApiError,request} from "./api/client";
-import {getShellBridge,shellReady,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
+import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,LayoutSourceType,Placement,Preview,PropertyDefinition,PropertyType,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
@@ -187,6 +187,16 @@ async function openByPath(path:string){
 }
 // 桥晚于首帧注入（pywebviewready）：依赖 shellReady 才能在就绪时重算，否则永远显示无壳降级界面
 const hasShell=computed(()=>shellReady.value&&getShellBridge()!==null);
+// 打开图纸集所在文件夹（PLAN-DM-015 任务 2）：目标路径由服务端可信上下文解析，前端只传
+// workspace_id；异步返回后再比较一次，旧工作区结果不进入新工作区
+async function openFolder(){
+  const current=workspace.value;
+  if(!current||!hasShell.value)return;
+  const result=await bridgeOpenWorkspaceFolder(current.id);
+  if(workspace.value?.id!==current.id)return;
+  if(!result){error.value="当前桌面壳不支持打开图纸集所在文件夹";return}
+  if(!result.ok)error.value=result.code==="SHELL_WORKSPACE_UNAVAILABLE"?"工作区已切换或未打开，请重新打开":result.message;
+}
 const DST_EXT=/\.dst$/i;
 const DROP_CALLBACK_ID="__dstManagerAcceptDst";
 async function acceptDstPath(path:string){
@@ -253,8 +263,11 @@ async function closeWorkspace(){
     if(!ok)return;
     await discardDraft();
   }
+  const closedId=workspace.value?.id;
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
   workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";
+  // 关闭成功清空服务端可信上下文（best-effort：旧 ID 的迟到清除请求由服务端按上下文匹配拒绝，不影响新工作区）
+  if(closedId)void clearWorkspaceContext(closedId);
   // M6：重置批量新增图纸与新建子集表单的模板文件/布局/布局选项状态，避免重开工作区残留旧模板路径
   insertSheetForm.sourceFile="";insertSheetForm.sourceLayout="";insertSheetForm.sourceType="template_layout";
   layoutOptions.value=[];layoutLoading.value=false;layoutError.value="";layoutManual.value=false;
@@ -496,7 +509,7 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" />
+  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" />
   <div class="shell-body">
     <main class="shell-main">
       <p v-if="error" class="error notice">{{error}}</p>

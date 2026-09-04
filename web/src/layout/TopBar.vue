@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import {computed} from "vue";
 import {useTheme} from "../composables/useTheme";
 // 主题按钮迁入顶栏：useTheme 为模块级单例，TopBar 与 App.vue 共享同一主题状态
 const {theme,toggleTheme}=useTheme();
-defineProps<{projectPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean}>();
-defineEmits<{"update:cadVersion":[value:string];close:[]}>();
+const props=defineProps<{projectPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean;hasShell?:boolean;workspaceId?:string}>();
+defineEmits<{"update:cadVersion":[value:string];close:[];"open-folder":[]}>();
 function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
 // 状态胶囊中文三态映射（枚举不进用户文案，与 RepairStatusPanel/App.vue dock 文案一致风格）
 function statusLabel(status:string){
@@ -12,6 +13,9 @@ function statusLabel(status:string){
   if(status==="INVALID_UNRECOVERABLE")return "不可恢复";
   return "需修复";
 }
+// 打开图纸集所在文件夹：无桌面壳时禁用并解释（桥晚到由 App.vue 的 shellReady 响应式更新）
+const folderDisabled=computed(()=>!props.hasShell);
+const folderTitle=computed(()=>folderDisabled.value?"桌面壳未就绪，无法打开图纸集所在文件夹":"打开图纸集所在文件夹");
 </script>
 <template>
   <header class="topbar" role="banner">
@@ -20,6 +24,9 @@ function statusLabel(status:string){
     <span v-if="projectPath" class="proj mono" :title="projectPath">{{projectPath}}</span>
     <span class="spacer"></span>
     <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{statusLabel(dstStatus)}}</span>
+    <button v-if="workspaceId" type="button" class="iconbtn folder-btn" :disabled="folderDisabled" :title="folderTitle" aria-label="打开图纸集所在文件夹" @click="$emit('open-folder')">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+    </button>
     <label class="cad-version">AutoCAD 版本<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
     <button v-if="projectPath" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
     <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
@@ -42,5 +49,6 @@ function statusLabel(status:string){
 .close-btn:hover:not(:disabled){background:var(--color-bg-muted)}
 .close-btn:disabled{cursor:not-allowed;opacity:.5}
 .iconbtn{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:15px}
-.iconbtn:hover{background:var(--color-bg-muted)}
+.iconbtn:hover:not(:disabled){background:var(--color-bg-muted)}
+.iconbtn:disabled{cursor:not-allowed;opacity:.5}
 </style>
