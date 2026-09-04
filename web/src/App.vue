@@ -487,7 +487,7 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" />
+  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" />
   <div class="shell-body">
     <main class="shell-main">
       <p v-if="error" class="error notice">{{error}}</p>
