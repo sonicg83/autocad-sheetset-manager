@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-04（修复打包遗漏 XSD 与 changelog 门禁误配）
+
+- **修复分发包遗漏 acsm-v1.xsd（Critical，PLAN-DM-014 最终审查 C-1）**：`src/dst_manager/infrastructure/acsm_xml/contract.py` 的 `_load_schema()` 用 `Path(__file__)` 定位 `schema/acsm-v1.xsd`，frozen 态下 `__file__` 指向 `_internal` 内 .pyc，而 `packaging/dst-manager.spec` 的 `datas` 未含 schema 目录 → 打包后真实 DST 加载（load_acsm → validate_schema）必崩。修复：spec `datas` 追加 `..\src\dst_manager\infrastructure\acsm_xml\schema` → `dst_manager/infrastructure/acsm_xml/schema`；新增静态守护测试 [tests/unit/test_packaging_spec.py](tests/unit/test_packaging_spec.py)（不跑 PyInstaller）：断言 XSD 存在、spec datas 含 schema 路径条目，并扫描 `src/dst_manager` 内新增 `Path(__file__)` 资源定位必须登记白名单（contract/api/database/runtime）且被 spec 覆盖，防止未来再次遗漏。
+- **修复 release.ps1 changelog 门禁子串误配（Important，最终审查 I-1）**：旧 `.Contains("v$Version")` 会让 `v0.3.3` 误命中 `v0.3.30` 记录且版本号未正则转义。改为章节标题正则 `(?m)^## .*v$([regex]::Escape($Version))\b` 匹配；[tests/unit/test_release_scripts.py](tests/unit/test_release_scripts.py) 的 `REQUIRED_RELEASE_STEPS` 仍含 "changelog.md"，无需改动。
+- **附带小修**：[packaging/entry.py](packaging/entry.py) docstring 更正开发态入口表述（`pyproject.toml` `[project.scripts]` 的 `dst-manager` script，原误指 main.py）；根 [README.md](README.md)「打包与 release」补 `.env` 按启动时工作目录解析（双击启动即 exe 同级）与数据/草稿目录（`%LOCALAPPDATA%\dst-manager\data\` 与 `drafts\` 为同级目录）说明，修正原文易误读为 drafts 位于 data 之下的措辞；[tests/unit/test_packaging_spec.py](tests/unit/test_packaging_spec.py) 按复审意见收紧：白名单改按相对 src/dst_manager 的路径登记、断言 spec datas 目标路径与 frozen 态 __file__ 定位逐级吻合、注明扫描仅覆盖 `Path(__file__)` 字面写法。
+- 验证：`uv run ruff check .` All checks passed；`uv run pytest -q` 全量 **637 项 565 passed / 72 skipped**（0 failures / 0 errors，退出码 0，约 40s；634 项基线 + 新增 test_packaging_spec 3 项）。
+
 ## 2026-09-04（v0.3.4 打包与 release 收尾：根 README 文档与全量回归）
 
 - 根 [README.md](README.md) 新增「打包与 release」小节（[PLAN-DM-014](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md) Task 9，位于「一键启动」相关章节之后）：面向分发给内部同事的绿色免安装包，给出 `scripts/build_release.ps1`（`-Version`/`-SkipPlugins`，版本缺省取 pyproject.toml）与 `scripts/release.ps1 -Version <版本>`（前置校验 + Ruff/pytest 门禁 + 构建 + 本地 tag）两条命令，并说明产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：双击 `dst-manager.exe` 打开桌面壳、数据与草稿在 `%LOCALAPPDATA%\dst-manager\`、Core Console 经 exe 同级 `.env` 配置（`autocad_2016_console`/`autocad_2020_console`）、`dst-manager.exe doctor` 自检、tag 仅本地不推送。

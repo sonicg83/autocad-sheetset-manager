@@ -15,6 +15,8 @@ a = Analysis(
         ("..\\web\\dist", "web/dist"),
         ("..\\alembic.ini", "."),
         ("..\\migrations", "migrations"),
+        # 严格后置校验 XSD（contract._load_schema 经 __file__ 定位）：frozen 态必须随包打入
+        ("..\\src\\dst_manager\\infrastructure\\acsm_xml\\schema", "dst_manager/infrastructure/acsm_xml/schema"),
     ],
     hiddenimports=[
         # uvicorn 运行期动态导入的协议/事件循环实现

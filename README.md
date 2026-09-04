@@ -103,6 +103,8 @@ SQLite 使用 SQLAlchemy 运行时模型和 Alembic 迁移：`uv run alembic upg
 
 产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：双击 `dst-manager.exe` 打开桌面壳；数据与草稿在 `%LOCALAPPDATA%\dst-manager\`；AutoCAD Core Console 路径在 exe 同级放 `.env` 配置（`autocad_2016_console`/`autocad_2020_console`），可用 `dst-manager.exe doctor` 自检。tag 仅打在本地，推送与分发由人工执行。
 
+`.env` 按启动时工作目录解析（双击启动即 exe 同级目录）；应用数据落在 `%LOCALAPPDATA%\dst-manager\data\`，草稿在 `%LOCALAPPDATA%\dst-manager\drafts\`（两者为同级目录），均不写进程序目录，zip 更新不会覆盖用户数据。
+
 ## 本地保留资料
 
 公开仓库不包含 `legacy/` 旧工具和 `sample/` 工程样本。这两个目录只保留在本地工作区；缺少样本时，黄金样本和真实 AutoCAD 系统测试会自动跳过。

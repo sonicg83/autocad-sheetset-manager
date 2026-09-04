@@ -18,8 +18,9 @@ if ($pyproject -notmatch "(?m)^version\s*=\s*`"$Version`"") {
     throw "pyproject.toml version 与 -Version $Version 不一致：请人工更新版本号后重试（脚本不做自动 bump）"
 }
 $changelog = Get-Content (Join-Path $projectRoot "changelog.md") -Raw
-if (-not $changelog.Contains("v$Version")) {
-    throw "changelog.md 未包含 v$Version 记录：先按仓库约定补齐变更记录"
+# 按章节标题正则匹配：避免 v0.3.3 误命中 v0.3.30 记录，且对版本号做正则转义
+if ($changelog -notmatch "(?m)^## .*v$([regex]::Escape($Version))\b") {
+    throw "changelog.md 缺少 v$Version 章节标题：先按仓库约定补齐变更记录"
 }
 
 # 2. 测试门禁（真实 CAD 系统测试按约定另行显式启用，不在 release 门禁内）
