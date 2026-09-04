@@ -5,6 +5,13 @@ const {theme,toggleTheme}=useTheme();
 defineProps<{projectPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean}>();
 defineEmits<{"update:cadVersion":[value:string];close:[]}>();
 function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
+// 状态胶囊中文三态映射（枚举不进用户文案，与 RepairStatusPanel/App.vue dock 文案一致风格）
+function statusLabel(status:string){
+  if(status==="VALID")return "正常";
+  if(status==="REPAIRED")return "已修复";
+  if(status==="INVALID_UNRECOVERABLE")return "不可恢复";
+  return "需修复";
+}
 </script>
 <template>
   <header class="topbar" role="banner">
@@ -12,7 +19,7 @@ function statusClass(status:string){return status==="VALID"?"valid":status==="RE
     <span class="brand-sub">v0.3 · 受控日常编辑与可恢复发布</span>
     <span v-if="projectPath" class="proj mono" :title="projectPath">{{projectPath}}</span>
     <span class="spacer"></span>
-    <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{dstStatus}}</span>
+    <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{statusLabel(dstStatus)}}</span>
     <label class="cad-version">AutoCAD 版本<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
     <button v-if="projectPath" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
     <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
