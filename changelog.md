@@ -13,6 +13,20 @@
 - 全量回归（真实验证）：`uv run ruff check .` 首查报 3 项——`src/dst_manager/runtime.py:25` B009（对常量属性使用 `getattr(sys, "_MEIPASS")`）与 `tests/unit/test_runtime.py:58` I001/F401（import 未排序 + `sqlalchemy.inspect` 未使用），均来自本计划 Task 1-4 已提交代码；已就地修复并复核 Ruff 全绿，修复改动留在工作区未随本提交入库（本提交按任务范围仅暂存 README.md 与 changelog.md），下次执行 release 前需一并提交。`uv run pytest -q` 全量 **634 项 562 passed / 72 skipped**（0 failures / 0 errors，退出码 0，约 40s），与基线 547/72 + 本计划新增 15 项（runtime 3 + api 1 + migrate 1 + shell 1 + config 3 + release_scripts 6）一致。
 - 简报 Step 3「端到端 release 演练」按任务约定跳过留待用户：`release.ps1` 要求干净工作区、main 分支、`pyproject.toml version` 与 changelog `v<版本>` 记录到位；当前工作区含用户未提交改动且 lint 修复未提交，不具备执行条件。
 
+## 2026-09-04（接受图纸页规范并编制实施计划）
+
+- 根据用户对交互 Demo 的确认，将 [SPEC-DM-009](docs/dst-manager/specs/SPEC-DM-009-sheets-workspace-ui.md) 标记为 `accepted`，追加确认记录并更新文档索引；SPEC-DM-010 仍为 `review`。
+- 新增 [PLAN-DM-015 图纸页单表工作区实施计划](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md)，状态为 `proposed`：8 项任务覆盖权威结构投影、受限壳桥与列偏好、统一单表、列配置、分页缓冲、参照表单、草稿操作和完整验收，明确新增对象 ID 与命令压缩的先行验证门禁。本次只修改文档，未启动产品代码实施。
+
+## 2026-09-04（图纸页交互 Demo）
+
+- 新增 [SPEC-DM-009 单文件交互 Demo](docs/dst-manager/mockups/SPEC-DM-009-sheets-demo.html)，供功能评审：单表导航、范围筛选、显示列记忆、12 项属性分页编辑、未提交输入保护、参照位置插入、子集表单、删除、批量属性和草稿撤销/重做。文件夹、模板选择及发布均明确模拟，未修改产品前后端或工程文件。
+- 新增独立 Node 数据模型测试（7/7 通过），完成浏览器交互与 1440px/900px 截图检查；相关 `tests/unit/test_core.py` 通过。全量 Ruff 当次检查受其他工作区改动 `src/dst_manager/runtime.py:25` 的 B009 阻塞，未越界修改。详细范围与限制见 [Demo 验证记录](.planning/memos/dst-manager/2026-09-04-sheets-demo-qa.md)。
+
+## 2026-09-04（图纸页功能设计讨论修订）
+
+- 修订 [SPEC-DM-009](docs/dst-manager/specs/SPEC-DM-009-sheets-workspace-ui.md)：纳入已确认的参照对象插入交互、显示列配置与图纸集级记忆、属性编辑分页、直接删除及灰区规则；明确顶栏图纸集名称、打开所在文件夹的受限壳桥扩展和全部图纸范围语义，补充验收条件。仅修改文档，未实施功能；规范仍为 `review`。
+
 ## 2026-09-04（PLAN-DM-014 Windows 打包与 release 实施计划）
 
 - 新增 [PLAN-DM-014 Windows 绿色分发包与一键 release 流程实施计划](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md)，状态为 `proposed`，依据 [ARCH-DM-002](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md)：9 个任务依次为 `runtime.py` 路径解析模块、三处 frozen 路径适配（前端静态目录/Alembic 迁移/Worker 拉起）、`Settings` frozen 默认值、`packaging/entry.py` + PyInstaller spec 与本地构建冒烟、`build_release.ps1` 纯构建脚本、`release.ps1` 一键 release（门禁 + 本地 tag）、文档与全量回归。本次仅编写计划，未修改产品代码。

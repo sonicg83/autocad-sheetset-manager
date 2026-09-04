@@ -32,10 +32,12 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [单人桌面界面人性化与易用性设计规范（SPEC-DM-006，评审中）](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md)
 - [v0.3.1 桌面壳与操作易用性迭代设计规范（SPEC-DM-007，草稿）](specs/SPEC-DM-007-v031-shell-and-usability.md)
 - [v0.3.2 命名与模板流程需求变更规范（SPEC-DM-008，已接受）](specs/SPEC-DM-008-v032-naming-and-template-flows.md)
-- [图纸页单表工作区设计规范（SPEC-DM-009，评审中）](specs/SPEC-DM-009-sheets-workspace-ui.md)
+- [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，评审中）](specs/SPEC-DM-010-properties-workspace-ui.md)
 
 ## 指南
+
+- [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 
 - [启动、使用和开发说明](../../README.md#一键启动)
 - [测试策略](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md#12-测试策略)

@@ -6,7 +6,7 @@ document_kind: spec
 owners:
   - dst-manager
 created: 2026-09-02
-updated: 2026-09-03
+updated: 2026-09-04
 related:
   - VISION-DM-001
   - ARCH-DM-001
@@ -22,6 +22,8 @@ related:
 ---
 
 # DST Manager 单人桌面界面人性化与易用性设计规范
+
+> 中心工作区细化提案：图纸标签见 [SPEC-DM-009](SPEC-DM-009-sheets-workspace-ui.md)，属性标签见 [SPEC-DM-010](SPEC-DM-010-properties-workspace-ui.md)，两份均处于评审中。本文继续作为公共外壳、设计令牌、无障碍及正式写入门禁的依据；新文档不表示已实施，也不替代本文公共规则。
 
 ## 1. 背景
 

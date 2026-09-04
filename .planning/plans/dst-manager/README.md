@@ -14,6 +14,7 @@
 
 详细计划：
 
+- [图纸页单表工作区实施计划（PLAN-DM-015，proposed，依据已接受的 SPEC-DM-009）](PLAN-DM-015-sheets-workspace-ui.md)
 - [v0.3.2 命名与模板流程需求变更（PLAN-DM-012，completed，依据 SPEC-DM-008；含 service.py 拆分与 M6/M4）](PLAN-DM-012-v032-naming-and-template-flows.md)
 - [v0.3.1 桌面壳与操作易用性迭代（PLAN-DM-011，completed，依据 SPEC-DM-007）](PLAN-DM-011-v031-shell-and-usability.md)
 - v0.3.3 桌面界面人性化与易用性重构（PLAN-DM-010，待编制，依据 SPEC-DM-006）
