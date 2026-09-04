@@ -1,7 +1,7 @@
 ---
 id: ARCH-DM-002
 title: Windows 绿色分发包与一键 release 流程
-status: review
+status: accepted
 owners:
   - dst-manager
 created: 2026-09-04
@@ -14,7 +14,7 @@ document_kind: architecture
 
 # Windows 绿色分发包与一键 release 流程
 
-> 状态：评审中
+> 状态：已接受（2026-09-04 用户确认）
 > 定位：为 DST Manager 建立 Windows 免安装绿色分发包（PyInstaller onedir）与本地一键 release 流程，作为项目第一条 release 链路
 > 交付形态：`dst-manager-v<版本>-win64.zip`，解压即用；单个 `dst-manager.exe` 兼任桌面壳、CAD Worker 与 CLI 自检
 
