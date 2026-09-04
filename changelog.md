@@ -1,13 +1,19 @@
 # 变更记录
 
+## 2026-09-05（属性页独立交互 Demo）
+
+- 新增 [SPEC-DM-010 属性页 Demo](docs/dst-manager/mockups/SPEC-DM-010-properties-demo.html)：两面板独立折叠、字段定义六条分页与增删、33 项文本属性平铺、字段名/值搜索、隐藏修改统计、三态标记、值对照、撤回输入、草稿撤销重做及 CSV/发布强确认模拟。
+- 新增九项独立 Node 模型测试；修正搜索期间暂留字段误计为隐藏修改的问题。Node 测试 9/9、相关属性 pytest 20/20 与 Ruff 通过；完成桌面/窄窗浏览器检查，详见 [QA 记录](.planning/memos/dst-manager/2026-09-05-properties-demo-qa.md)。未修改生产 Web、后端或 PLAN-DM-015；SPEC-DM-010 保持 `review`。
+
 ## 2026-09-05（可配置列与图纸集级恢复）
 
 - **新增显示列配置组合式函数（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 4，SPEC-DM-009 §5）**：`web/src/composables/useSheetColumns.ts` 产出 `visibleColumns`/`preferences`/`newPropertyCount`/`saveError`/`reset():Promise<void>`。消费任务 2 的 load/save_sheet_columns 壳桥与服务端图纸属性定义；`builtin:`/`sheet:` 命名空间区分内置列与自定义属性（字段身份含作用域，不与内置列同名冲突）；PropertyKey 名称按既有大小写匹配规则规范化、显示保留服务端原名。首次无存储时应用默认（文件名开、布局关、子集列全部范围显示/单子集范围隐藏、按定义顺序前三项属性开、不足三项全显）；已有存储时新增字段默认关并在入口计数提示，勾选后不再计数。删除字段只从可见配置移除、偏好以墓碑保留，撤销删除恢复此前开关。保存按工作区 ID 排队，切工作区后旧保存按代次作废、不覆盖新工作区偏好；存储失败显示提示且当前会话选择仍生效；恢复默认仅影响当前图纸集。
 - **新增显示列配置面板（`web/src/components/sheets/ColumnSettings.vue`，接入 SheetToolbar「筛选」旁）**：固定图号/标题/状态/操作以禁用复选框锁定展示（可访问名「图号 固定」）；可选内置列与自定义属性复选框；自定义属性多时支持名称搜索；「恢复默认」按钮。面板打开状态自持，Esc/Tab 键盘模型与关闭后焦点回到触发按钮对齐确认模态；第一版只提供开关与「恢复默认」，不提供拖拽排序。
 - **SheetTable 改为列配置驱动（`web/src/components/SheetTable.vue`）**：按 SPEC-DM-009 §5 列序渲染——固定选择/图号/标题/状态/操作 + 可选子集/文件名/布局 + 可见属性列（位于状态与操作之间）；选择 40px、图号最小 72px、操作稳定宽度且选择/图号/操作横向吸顶（左 0/40px、右 0），宽度不足仅表格内部横向滚动、不自动隐藏已配置列；标题最多两行（-webkit-line-clamp 2）且完整值悬停/键盘聚焦读取；文件名列只显示登记文件名部分（不同时堆叠三种路径），省略时可悬停/键盘聚焦读取完整值；状态列阻断与待变更可并存不遮盖，异常行提供「诊断」跳转入口。
 - **诊断完整值复制（`web/src/layout/TaskOverlay.vue` 诊断页签）**：诊断列表项新增「复制」按钮（剪贴板不可用时回退 execCommand），复制内容为后端原值（code：message，含原始路径），满足 S-04「诊断路径与后端原值一致且可复制」。
-- **测试（TDD，先红后绿）**：`web/tests/e2e/fixtures/sheets.ts` 扩展 `propertyNames`/`initialColumns`/`failSaveColumns`/`failLoadColumns`/`secondWorkspace` 选项（打开路由按 DST 路径分发第二工作区、预置偏好映射、存储失败注入）；新增 `web/tests/e2e/sheets-columns.spec.ts`（14 项：固定列不可关、默认列与前三属性、显示列开关立即生效、子集列按两种范围分别记忆、36 字段搜索、同名内置列独立配置、删除字段墓碑/撤销恢复、新增字段默认关并提示、恢复默认、重开恢复、不同工作区不串、存储失败回退、标题两行/文件名键盘聚焦、窄屏不隐藏、异常状态进诊断并可复制原始路径）；`main.spec.ts` 按 SPEC 列序更新图号/标题只读断言（td 下标 2/3 → 1/2，列序由旧 选择/子集/图号/标题 调整为 SPEC 的 选择/图号/标题/子集）。
-- 验证：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **94/94 通过**（80 既有 + 新增 14）；`git diff --check` 通过。本任务只改 `web/`，Python 侧未触碰。
+- **测试（TDD，先红后绿）**：`web/tests/e2e/fixtures/sheets.ts` 扩展 `propertyNames`/`initialColumns`/`failSaveColumns`/`failLoadColumns`/`secondWorkspace` 选项（打开路由按 DST 路径分发第二工作区、预置偏好映射、存储失败注入）；新增 `web/tests/e2e/sheets-columns.spec.ts`（15 项：固定列不可关、默认列与前三属性、显示列开关立即生效、子集列按两种范围分别记忆、36 字段搜索、同名内置列独立配置、拉丁字母属性名取值按原始大小写、删除字段墓碑/撤销恢复、新增字段默认关并提示、恢复默认、重开恢复、不同工作区不串、存储失败回退、标题两行/文件名键盘聚焦、窄屏不隐藏、异常状态进诊断并可复制原始路径）；`main.spec.ts` 按 SPEC 列序更新图号/标题只读断言（td 下标 2/3 → 1/2，列序由旧 选择/子集/图号/标题 调整为 SPEC 的 选择/图号/标题/子集）。
+- **任务 4 审查修复（fix round 1，Important）**：属性单元格取值改用服务端原始大小写键——`SheetTable.vue` 的 `propertyValue` 原先用 `col.key`（经 `toLocaleLowerCase()` 规范化的 PropertyKey）切片取值，而 `custom_properties` 按定义的原始大小写键控（Python `normalize_property_name` 只 trim、序列化原样透传），拉丁字母属性名（如 "No."/"Scale"）即使有值也静默显示「—」（中文属性名夹具未捕获）。修复：`SheetColumn` 携带原始 `name`（仅用于取值），小写 PropertyKey 只作偏好身份；新增 e2e「拉丁字母属性名取值按原始大小写且重开后偏好身份稳定」（先红后绿：临时回退修复后断言 `V4` 未显示而失败），夹具 `buildSubsets` 为附加/拉丁属性补确定性值。
+- 验证：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **95/95 通过**（80 既有 + 新增 15）；`git diff --check` 通过。本任务只改 `web/`，Python 侧未触碰。
 
 ## 2026-09-05（属性页功能讨论修订）
 

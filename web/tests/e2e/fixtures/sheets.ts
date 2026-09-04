@@ -43,7 +43,7 @@ function buildPropertyDefinitions(propertyCount: number, names?: string[]) {
 function buildSubsets(
   sheetCount: number,
   subsetCount: number,
-  opts: {noProperties: boolean; longText: boolean},
+  opts: {noProperties: boolean; longText: boolean; propertyNames?: string[]},
 ) {
   const base = Math.floor(sheetCount / subsetCount);
   const remainder = sheetCount % subsetCount;
@@ -58,6 +58,12 @@ function buildSubsets(
       const ordinal = start + sheetIndex;
       const number = String(ordinal).padStart(3, "0");
       const custom: Record<string, string> = opts.noProperties ? {} : {图幅: "A1", 比例: ordinal % 2 ? "1:100" : "1:50", 专业: "建筑"};
+      // 附加（含拉丁名）属性也给出确定性值，供取值按原始大小写键的用例断言
+      if (!opts.noProperties) {
+        (opts.propertyNames ?? []).forEach((name, index) => {
+          if (!(name in custom)) custom[name] = `V${index + 1}`;
+        });
+      }
       if (!opts.noProperties && ordinal === 7) custom["属性07"] = "特殊隐藏值X7";
       const long = opts.longText && ordinal === sheetCount;
       const file = `C:\\虚构工程\\一期\\${String(subsetIndex + 1).padStart(2, "0")} 分册.dwg`;
@@ -112,7 +118,7 @@ function buildWorkspace(options: SheetsFixtureOptions = {}) {
     propertyNames,
   } = options;
   const total = empty ? 0 : sheetCount;
-  const subsets = empty ? [] : buildSubsets(sheetCount, subsetCount, {noProperties, longText});
+  const subsets = empty ? [] : buildSubsets(sheetCount, subsetCount, {noProperties, longText, propertyNames});
   const propertyDefinitions = noProperties ? [] : [
     {type: "sheetset", name: "项目号", default_value: "P-FAKE"},
     ...buildPropertyDefinitions(propertyCount, propertyNames),

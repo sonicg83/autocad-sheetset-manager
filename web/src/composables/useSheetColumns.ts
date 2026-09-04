@@ -13,15 +13,15 @@ export type BuiltinColumnKey = "select" | "number" | "title" | "subset" | "file"
 export type BuiltinPrefField = "file" | "layout" | "subsetAll" | "subsetSingle";
 
 export type SheetColumn = {
-  key: string;            // builtin:select | sheet:图幅
+  key: string;            // builtin:select | sheet:图幅（偏好身份，名称经大小写规范化）
   label: string;          // 显示名（属性保留服务端原名）
+  name?: string;          // sheet: 字段原始名称（custom_properties 按原始大小写键控，取值用原名）
   kind: "builtin" | "sheet";
   fixed: boolean;         // 固定列不可隐藏
   visible: boolean;
 };
 
 export type SheetColumnOption = SheetColumn & {
-  name?: string;          // sheet: 字段原始名称（配置面板切换用）
   newField: boolean;      // 配置建立后新增的字段（首次默认不视为新增）
   prefField?: BuiltinPrefField; // 可选内置列写入的偏好字段（子集列随范围取 subsetAll/subsetSingle）
 };
@@ -95,7 +95,7 @@ export function useSheetColumns(deps: {
       ({key: `builtin:${key}`, label: BUILTIN_LABELS[key], kind: "builtin", fixed: LOCKED_BUILTINS.includes(key) || key === "select", visible: true});
     const props: SheetColumn[] = sheetDefinitions.value
       .filter((item) => prefs.properties[propertyKey(item.name)] === true)
-      .map((item) => ({key: propertyKey(item.name), label: item.name, kind: "sheet", fixed: false, visible: true}));
+      .map((item) => ({key: propertyKey(item.name), label: item.name, name: item.name, kind: "sheet", fixed: false, visible: true}));
     return [
       builtin("select"), builtin("number"), builtin("title"),
       ...(subsetVisible(prefs) ? [builtin("subset")] : []),

@@ -112,6 +112,26 @@ test("同名内置列的属性独立配置不冲突", async ({page}) => {
   await expect(page.getByRole("columnheader", {name: "图号", exact: true})).toHaveCount(2);
 });
 
+test("拉丁字母属性名取值按原始大小写且重开后偏好身份稳定", async ({page}) => {
+  await installSheetsFixture(page, {propertyCount: 5, propertyNames: ["图幅", "比例", "专业", "No.", "Scale"]});
+  await openWorkspace(page);
+  // 打开两个拉丁名属性列（默认关）
+  await openColumns(page);
+  await page.getByRole("checkbox", {name: "No.", exact: true}).check();
+  await page.getByRole("checkbox", {name: "Scale", exact: true}).check();
+  await closeColumns(page);
+  // 值按服务端原始大小写键正确显示（修复前用小写 PropertyKey 取参会静默显示 "—"）
+  const firstRow = page.locator(".sheet-table-window tbody tr").first();
+  await expect(firstRow.getByText("V4", {exact: true})).toBeVisible();
+  await expect(firstRow.getByText("V5", {exact: true})).toBeVisible();
+  // 偏好身份稳定（小写 PropertyKey 仅用于偏好身份）：关闭重开后两个拉丁名列仍开启
+  await page.getByRole("button", {name: "关闭工作区"}).click();
+  await expect(page.getByRole("button", {name: "选择 DST 文件"})).toBeVisible();
+  await page.getByRole("button", {name: "选择 DST 文件"}).click();
+  await expect(page.getByRole("columnheader", {name: "No.", exact: true})).toBeVisible();
+  await expect(page.getByRole("columnheader", {name: "Scale", exact: true})).toBeVisible();
+});
+
 test("删除字段从配置移除且撤销恢复此前开关", async ({page}) => {
   await installSheetsFixture(page);
   await openWorkspace(page);

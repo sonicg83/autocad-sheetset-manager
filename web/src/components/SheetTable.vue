@@ -34,8 +34,9 @@ watch(() => props.focusedSheetId, async (id) => {
 function cellClass(col: SheetColumn): string {
   return col.kind === "sheet" ? "col-prop" : `col-${col.key.slice("builtin:".length)}`;
 }
+// custom_properties 按定义的原始大小写键控（服务端序列化原样透传），取值用原名而非规范化 PropertyKey
 function propertyValue(row: SheetRow, col: SheetColumn): string {
-  return row.sheet.custom_properties[col.key.slice("sheet:".length)] ?? "";
+  return col.name ? (row.sheet.custom_properties[col.name] ?? "") : "";
 }
 </script>
 <template>
