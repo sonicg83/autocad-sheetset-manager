@@ -37,3 +37,36 @@ def test_build_release_script_contains_required_steps():
     source = SCRIPT.read_text(encoding="utf-8-sig")
     for marker in REQUIRED_BUILD_STEPS:
         assert marker in source, f"build_release.ps1 缺少步骤：{marker}"
+
+
+RELEASE_SCRIPT = ROOT / "scripts" / "release.ps1"
+REQUIRED_RELEASE_STEPS = [
+    "git status --porcelain", "rev-parse --abbrev-ref", "git tag -l", "version",
+    "changelog.md", "ruff check", "pytest", "build_release.ps1", "git tag -a",
+]
+
+
+def test_release_script_is_utf8_bom():
+    assert RELEASE_SCRIPT.exists(), "缺少 release.ps1"
+    assert RELEASE_SCRIPT.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="需要 Windows PowerShell 或 PowerShell 7")
+def test_release_script_parses_in_powershell():
+    command = (
+        "$tokens=$null;$errors=$null;"
+        f"[System.Management.Automation.Language.Parser]::ParseFile('{RELEASE_SCRIPT}',[ref]$tokens,[ref]$errors)|Out-Null;"
+        "if($errors.Count){$errors|ForEach-Object{$_.Message};exit 1}"
+    )
+    completed = subprocess.run(
+        [POWERSHELLS[0], "-NoProfile", "-Command", command], cwd=ROOT, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_release_script_contains_gate_steps_in_order():
+    source = RELEASE_SCRIPT.read_text(encoding="utf-8-sig")
+    positions = [source.find(marker) for marker in REQUIRED_RELEASE_STEPS]
+    assert all(p >= 0 for p in positions), f"release.ps1 缺少步骤：{[m for m, p in zip(REQUIRED_RELEASE_STEPS, positions) if p < 0]}"
+    assert positions == sorted(positions), "release.ps1 门禁步骤顺序错误（tag 必须最后）"
