@@ -41,6 +41,8 @@ from dst_manager.interfaces.responses import (
 )
 from dst_manager.interfaces.serialization import workspace_json
 
+from ..runtime import resource_dir
+
 
 class OpenRequest(ContractModel):
     dst_path: Path
@@ -286,7 +288,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def read_layout_names(request: LayoutNamesRequest):
         return service.get_layout_names(request.file_path, request.cad_version)
 
-    web_dist = Path(__file__).parents[3] / "web" / "dist"
+    web_dist = resource_dir() / "web" / "dist"
     if web_dist.is_dir():
         app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
 
