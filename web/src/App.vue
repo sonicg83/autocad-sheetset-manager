@@ -12,7 +12,9 @@ import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
 import {useConfirm} from "./composables/useConfirm";
+import {useToast} from "./composables/useToast";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
+import ToastHost from "./components/ui/ToastHost.vue";
 import TopBar from "./layout/TopBar.vue";
 import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
@@ -48,15 +50,20 @@ const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
 const workspaceLoadGeneration=ref(0);
+// 任务浮层状态（SPEC-DM-006 §4.1）：open/tab 由 App 持有（Task 7 toast 抑制与"查看"跳转依赖）；openOverlay 为唯一自动展开入口
+const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
+function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
+// 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转仅放行合法页签后复用 openOverlay
+const {toasts,pushToast,dismiss}=useToast();
+function jumpOverlay(tab:string){if(tab==="prog"||tab==="prev"||tab==="diag")openOverlay(tab)}
 // 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
 const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurrentJobGeneration}=useJobMonitor({
   isWorkspaceLoading,workspace,
   onJobSucceeded:async(workspaceId:string)=>{await discardDraft();await refreshWorkspace(workspaceId)},
   error,
+  pushToast,
+  shouldSuppress:()=>overlayOpen.value&&overlayTab.value==="prog",
 });
-// 任务浮层状态（SPEC-DM-006 §4.1）：open/tab 由 App 持有（Task 7 toast 抑制与"查看"跳转依赖）；openOverlay 为唯一自动展开入口
-const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
-function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
 // job 为 useJobMonitor 单一 ref：CSV 导入/修复/恢复域经 setJob 写入；任何任务响应（排队或已终态）均展开到实施进度页签——用户刚发起动作任务必须可见，已展开时幂等不重复弹（fix round 1：restore 同步直返终态时不再静默）
 const setJob=(j:Job)=>{job.value=j;openOverlay("prog")};
 // 自定义属性 CSV 导入域（Task 3 拆分）
@@ -495,6 +502,7 @@ useHotkeys({
   </div>
   <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
+  <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />
 </template>
 
 <style scoped>

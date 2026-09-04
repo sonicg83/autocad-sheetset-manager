@@ -796,3 +796,29 @@ test("存在阻断诊断时任务浮层诊断页签显示红点并可打开",asy
   await overlay.getByRole("tab",{name:/诊断/}).click();
   await expect(overlay.getByRole("tab",{name:/诊断/})).toHaveAttribute("aria-selected","true");
 });
+
+// —— Task 7 SSE 任务通知 toast（SPEC-DM-006 §6.6）——
+
+test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({page})=>{
+  // 跟随既有"失败任务显示逐 DWG 详情并可安全重试"用例的 SSE mock：execute 返回 QUEUED 启动 watchJob，
+  // 随后经 __emitJob 推送终态 FAILED 事件（终态分支直写 job.value，不经 setJob）
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-toast",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
+  // 用户折叠/切走浮层后任务到达终态：toast 抑制规则（overlayOpen&&overlayTab==="prog"）才不命中
+  await page.getByRole("complementary",{name:"任务浮层"}).getByRole("button",{name:"收起任务浮层"}).click();
+  // 推送终态 FAILED 事件后
+  await page.evaluate(()=>(window as any).__emitJob({id:"job-toast",workspace_id:"workspace-1",status:"FAILED",progress:40,attempt:1,error_code:"CAD_TIMEOUT",suggestion:"检查 CAD 日志",files:[]}));
+  const toast=page.getByRole("alert").filter({hasText:"任务失败"});
+  await expect(toast).toBeVisible();
+  await page.waitForTimeout(6000); // 超过成功类自动消失时长
+  await expect(toast).toBeVisible(); // 失败常驻
+  await toast.getByRole("button",{name:"查看"}).click();
+  await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
+  await toast.getByRole("button",{name:"✕"}).click();
+  await expect(toast).toHaveCount(0);
+});
