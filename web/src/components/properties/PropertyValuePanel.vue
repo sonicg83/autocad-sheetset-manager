@@ -181,7 +181,7 @@ function onExpandKeydown(event: KeyboardEvent) {
         @click="emit('update:collapsed', !collapsed)"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <h2>图纸集属性值 <small>{{ valueCount }} 项</small></h2>
+        <span class="head-title">图纸集属性值 <small>{{ valueCount }} 项</small></span>
       </button>
       <div class="metrics" role="status" aria-live="polite">
         <span v-if="dirtyCount" class="flag dirty">未加入草稿 {{ dirtyCount }} 项</span>
@@ -274,8 +274,9 @@ function onExpandKeydown(event: KeyboardEvent) {
 .panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:60px;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
 /* 折叠开关沿用属性页受控按钮基线（≥36px、边框与不透明背景），仅排布为标题样式 */
 .head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:36px}
-.head-toggle h2{margin:0;font-size:16px}
-.head-toggle small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
+/* 标题文字用 span（button 内不允许 h2）：面板名由 section aria-label 与按钮 aria-label 提供 */
+.head-title{margin:0;font-size:16px;font-weight:600}
+.head-title small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
 .chevron{color:var(--color-text-secondary);font-size:12px}
 .metrics{display:flex;gap:var(--space-2);flex-wrap:wrap}
 .head-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
@@ -287,8 +288,10 @@ function onExpandKeydown(event: KeyboardEvent) {
 .flag.pending{color:var(--color-info);background:var(--color-info-bg)}
 .flag.error{color:var(--color-danger);background:var(--color-danger-bg)}
 .hint{color:var(--color-text-muted);font-size:12px}
-.panel-body{padding:var(--space-4) var(--space-5)}
-/* 双列节奏（minmax(240px,360px)）；窄宽度降为一列。长值与名称行整行展示。 */
+/* 面板体作为容器查询上下文：缩放/极窄容器下两列最小宽度放不下时兜底降一列 */
+.panel-body{padding:var(--space-4) var(--space-5);container:value-body / inline-size}
+/* 双列节奏（minmax(240px,360px)）；视口 ≤900px（与 Demo 断点对齐）或容器不足以容纳两个最小列时降一列。
+   长值与名称行整行展示。 */
 .value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:start}
 .value-item{min-width:0;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-2);border:1px solid transparent;border-radius:var(--radius-md)}
 .value-item:focus-within{background:var(--color-bg-canvas)}
@@ -325,5 +328,6 @@ button.link:focus-visible{outline:2px solid var(--color-focus);outline-offset:2p
 /* 展开编辑对话框（复用公共模态原语；textarea 长文本完整显示不截断） */
 .expand-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:13px;line-height:1.7}
 textarea{width:100%;min-height:140px;resize:vertical;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
-@media (max-width:700px){.value-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){.value-grid{grid-template-columns:minmax(0,1fr)}}
+@container value-body (max-width:511px){.value-grid{grid-template-columns:minmax(0,1fr)}}
 </style>

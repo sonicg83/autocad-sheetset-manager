@@ -119,8 +119,8 @@ async function addSheetsetField(){
   </section>
 </template>
 <style scoped>
-/* 三张独立语义卡片：定义在上、CSV 居中、值在下；16px 卡片间距，无旧名称横条 */
-.properties-view{display:flex;flex-direction:column;gap:16px;min-width:0}
+/* 三张独立语义卡片：定义在上、CSV 居中、值在下；16px 卡片间距（--space-4），卡片间不留旧 margin 叠加 */
+.properties-view{display:flex;flex-direction:column;gap:var(--space-4);min-width:0}
 /* 错误摘要：摘要文案 + 字段错误跳转项（展开目标面板并聚焦字段） */
 .error-summary{background:var(--color-danger-bg);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-1)}
 .error-summary-title{margin:0;color:var(--color-danger);font-weight:600}

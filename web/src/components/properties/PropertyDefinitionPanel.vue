@@ -131,7 +131,7 @@ async function viewAddedField() {
         @click="toggleCollapsed"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <h2>属性字段定义 <small>共 {{ definitions.length }} 项</small></h2>
+        <span class="head-title">属性字段定义 <small>共 {{ definitions.length }} 项</small></span>
       </button>
       <div class="link-actions">
         <button ref="addToggleButton" type="button" class="primary" @click="adding ? closeAdd() : openAdd()">{{ adding ? "关闭新增" : "新增字段" }}</button>
@@ -201,12 +201,13 @@ async function viewAddedField() {
   </section>
 </template>
 <style scoped>
-.definition-panel{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);margin-bottom:var(--space-4);overflow:hidden}
+.definition-panel{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);overflow:hidden}
 .panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:60px;padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
 /* 折叠开关沿用属性页受控按钮基线（≥36px、边框与不透明背景），仅排布为标题样式 */
 .head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:36px}
-.head-toggle h2{margin:0;font-size:16px}
-.head-toggle small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
+/* 标题文字用 span（button 内不允许 h2）：面板名由 section aria-label 与按钮 aria-label 提供 */
+.head-title{margin:0;font-size:16px;font-weight:600}
+.head-title small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
 .chevron{color:var(--color-text-secondary);font-size:12px}
 .link-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
 .link-actions button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}

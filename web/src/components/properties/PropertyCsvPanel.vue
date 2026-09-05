@@ -53,12 +53,14 @@ const csvStatus = computed(() => {
         @click="emit('update:collapsed', !collapsed)"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <h2>属性导入导出</h2>
+        <span class="head-title">属性导入导出</span>
       </button>
       <span class="head-status" role="status">{{ csvStatus }}</span>
+      <!-- 面板折叠时菜单目标（io-menu）在隐藏的面板体内：禁用避免死键；展开面板后即可用 -->
       <button
         type="button"
         class="menu-toggle"
+        :disabled="collapsed"
         :aria-expanded="menuOpen"
         aria-controls="csv-io-menu"
         @click="toggleMenu"
@@ -100,7 +102,8 @@ const csvStatus = computed(() => {
 .panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:60px;padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
 /* 折叠开关沿用属性页受控按钮基线（≥36px、边框与不透明背景），仅排布为标题样式 */
 .head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:36px}
-.head-toggle h2{margin:0;font-size:16px}
+/* 标题文字用 span（button 内不允许 h2）：面板名由 section aria-label 与按钮 aria-label 提供 */
+.head-title{margin:0;font-size:16px;font-weight:600}
 .chevron{color:var(--color-text-secondary);font-size:12px}
 .head-status{color:var(--color-text-muted);font-size:12px}
 .menu-toggle{margin-left:auto;display:inline-flex;align-items:center;min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}
