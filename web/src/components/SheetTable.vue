@@ -39,6 +39,11 @@ function cellClass(col: SheetColumn): string {
 function propertyValue(row: SheetRow, col: SheetColumn): string {
   return col.name ? (row.sheet.custom_properties[col.name] ?? "") : "";
 }
+// file_name 兼容服务端返回的 Windows/POSIX 路径；主表只展示登记文件名部分，完整路径留给诊断区。
+function displayFileName(value: string): string {
+  const fileName = value.replace(/\\/g, "/").split("/").filter(Boolean).at(-1);
+  return fileName || "—";
+}
 </script>
 <template>
   <div ref="windowEl" class="sheet-table-window" tabindex="0" aria-label="过滤后的图纸表格">
@@ -53,7 +58,7 @@ function propertyValue(row: SheetRow, col: SheetColumn): string {
             <template v-else-if="col.key === 'builtin:number'"><span class="mono">{{ row.sheet.number }}</span></template>
             <template v-else-if="col.key === 'builtin:title'"><span class="title-text" tabindex="0" :title="row.sheet.title">{{ row.sheet.title || "—" }}</span></template>
             <template v-else-if="col.key === 'builtin:subset'"><button class="link-button" @click="$emit('openSubset', row.subset.id)">{{ row.subset.display_name }}</button></template>
-            <template v-else-if="col.key === 'builtin:file'"><span class="ellipsis mono" tabindex="0" :title="row.sheet.layout.file_name">{{ row.sheet.layout.file_name }}</span></template>
+            <template v-else-if="col.key === 'builtin:file'"><span class="ellipsis mono" tabindex="0" :title="displayFileName(row.sheet.layout.file_name)">{{ displayFileName(row.sheet.layout.file_name) }}</span></template>
             <template v-else-if="col.key === 'builtin:layout'"><span class="mono" tabindex="0" :title="row.sheet.layout.layout_name">{{ row.sheet.layout.layout_name }}</span></template>
             <template v-else-if="col.key === 'builtin:status'">
               <span v-if="pendingIds.has(row.sheet.id)" class="status pending">待变更</span>
@@ -73,7 +78,7 @@ function propertyValue(row: SheetRow, col: SheetColumn): string {
   </div>
 </template>
 <style scoped>
-.sheet-table-window{overflow:auto;max-height:calc(100vh - 300px);border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);outline:none}
+.sheet-table-window{flex:1;min-height:130px;max-height:none;overflow:auto;border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);outline:none}
 .sheet-table-window:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:-2px}
 table{border-collapse:separate;border-spacing:0;min-width:100%;font-size:13px}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--color-border,var(--color-bg-surface-2));white-space:nowrap;vertical-align:top}
@@ -83,6 +88,9 @@ tbody tr.focused{background:var(--color-accent-soft,var(--color-bg-surface-2))}
 th.col-select,td.col-select{position:sticky;left:0;width:40px;min-width:40px;z-index:2;background:var(--color-bg-surface)}
 th.col-number,td.col-number{position:sticky;left:40px;min-width:72px;z-index:2;background:var(--color-bg-surface)}
 th.col-actions,td.col-actions{position:sticky;right:0;width:150px;min-width:150px;z-index:2;background:var(--color-bg-surface)}
+th.col-title,td.col-title{min-width:180px}
+th.col-subset,td.col-subset{min-width:200px}
+th.col-file,td.col-file{min-width:240px}
 td.col-actions .link-button{margin-right:10px}
 th.col-select,th.col-number,th.col-actions{background:var(--color-bg-surface-2,var(--color-bg-surface));z-index:3}
 tbody tr.focused td.col-select,tbody tr.focused td.col-number,tbody tr.focused td.col-actions{background:var(--color-accent-soft,var(--color-bg-surface-2))}

@@ -236,7 +236,7 @@ test("存储失败时当前选择仍生效且提示", async ({page}) => {
   await expect(page.getByRole("columnheader", {name: "布局", exact: true})).toBeVisible();
 });
 
-test("标题最多两行且文件名完整值可键盘聚焦读取", async ({page}) => {
+test("标题最多两行且文件名单独显示并可键盘聚焦读取", async ({page}) => {
   await installSheetsFixture(page, {longText: true});
   await openWorkspace(page);
   const row = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("013", {exact: true})});
@@ -245,9 +245,11 @@ test("标题最多两行且文件名完整值可键盘聚焦读取", async ({pag
   await expect(title).toHaveCSS("-webkit-line-clamp", "2");
   await expect(title).toHaveAttribute("title", /超长标题/);
   await expect(title).toHaveAttribute("tabindex", "0");
-  // 文件名省略时可键盘聚焦读取完整文件名
+  // 文件名只显示 basename，省略时仍可键盘聚焦读取完整文件名，不泄露目录路径
   const file = row.locator(".col-file .ellipsis");
-  await expect(file).toHaveAttribute("title", /\.dwg$/);
+  await expect(file).toHaveText("第 13 分册最终版.dwg");
+  await expect(file).toHaveAttribute("title", "第 13 分册最终版.dwg");
+  await expect(file).not.toContainText("C:\\虚构工程");
   await file.focus();
   await expect(file).toBeFocused();
 });

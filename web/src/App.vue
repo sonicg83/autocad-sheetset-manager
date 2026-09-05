@@ -92,7 +92,8 @@ const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjec
 watch(sheetProjection,(value)=>{if(value)workspace.value=value});
 // 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件
 const {active,select,onKeydown}=useShellTabs<string>(["sheets","properties","revisions"],"sheets");
-const projectPath=computed(()=>workspace.value?.dst_path??"");
+const sheetSetName=computed(()=>workspace.value?.sheet_set.name??"");
+const dstPath=computed(()=>workspace.value?.dst_path??"");
 const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
 function selectTab(id:string){select(id);if(id==="revisions")void loadRevisions()}
 function onTabKeydown(e:KeyboardEvent){const before=active.value;onKeydown(e);if(active.value!==before&&active.value==="revisions")void loadRevisions()}
@@ -575,9 +576,9 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :project-path="projectPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" />
+  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" />
   <div class="shell-body">
-    <main class="shell-main">
+    <main class="shell-main" :class="{'sheets-active': Boolean(workspace) && active === 'sheets'}">
       <p v-if="error" class="error notice">{{error}}</p>
       <p v-if="isWorkspaceLoading" class="panel loading" role="status">正在加载工作区…</p>
       <p v-if="isRestoreExecuting" class="panel loading" role="status">正在恢复修订…</p>
@@ -601,7 +602,8 @@ useHotkeys({
 </template>
 
 <style scoped>
-.shell-body{display:flex;align-items:stretch;min-height:calc(100vh - 104px)}
-.shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;max-width:none;margin:0;padding:var(--space-5)}
+.shell-body{display:flex;align-items:stretch;height:calc(100vh - 104px);min-height:0}
+.shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:var(--space-5);overflow:auto}
+.shell-main.sheets-active{overflow:hidden}
 </style>
 

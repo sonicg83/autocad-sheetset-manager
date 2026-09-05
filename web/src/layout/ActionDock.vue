@@ -57,4 +57,12 @@ onBeforeUnmount(()=>window.removeEventListener("keydown",onGlobalKeydown));
 .dock-btn.loading{opacity:.7}
 .dock-reason{font-size:12px;color:var(--color-text-muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pop{position:absolute;bottom:100%;left:var(--space-4);width:420px;max-width:calc(100vw - 32px);max-height:300px;overflow:auto;margin-bottom:var(--space-2);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3);padding:var(--space-3);z-index:100}
+@media(max-width:1120px){
+  .dock{padding-right:calc(var(--space-4) + 44px)}
+}
+@media(max-width:900px){
+  .dock{gap:var(--space-2)}
+  .dock-reason{display:none}
+  .dock-btn{padding-inline:var(--space-3)}
+}
 </style>

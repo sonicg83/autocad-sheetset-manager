@@ -2,7 +2,7 @@
 // 图纸导航树（PLAN-DM-015 任务 3，SPEC-DM-009 §3.1/§4.1）：全部图纸 / 子集 / 图纸。
 // 树与范围筛选共用一个范围状态；点击子集切换范围、点击图纸经 locateSheet 定位。
 // 扁平渲染 + aria-level 平铺树；方向键/Home/End 漫游焦点，子集支持展开/收起。
-import {computed, nextTick, ref} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import type {Workspace} from "../../api/contracts";
 import type {SheetScope} from "../../features/sheets/types";
 
@@ -22,10 +22,21 @@ type TreeNode =
   | {kind: "subset"; id: string; label: string; count: number; level: number; expanded: boolean}
   | {kind: "sheet"; id: string; label: string; number: string; subsetId: string; level: number};
 
-// 收起集合：缺省视为展开；新子集（投影插入）默认展开
+// 全部图纸范围默认只显示子集；选中某个子集时自动展开该子集，减少真实工程中的导航噪声。
 const collapsed = ref<Set<string>>(new Set());
 const treeEl = ref<HTMLElement | null>(null);
 const focusIndex = ref(0);
+
+watch(() => props.workspace.id, () => {
+  collapsed.value = new Set(props.workspace.sheet_set.subsets.map((subset) => subset.id));
+  focusIndex.value = 0;
+}, {immediate: true});
+watch(() => props.scope, (scope) => {
+  if (scope.kind !== "subset" || !collapsed.value.has(scope.id)) return;
+  const nextSet = new Set(collapsed.value);
+  nextSet.delete(scope.id);
+  collapsed.value = nextSet;
+});
 
 const visibleNodes = computed<TreeNode[]>(() => {
   const nodes: TreeNode[] = [];
@@ -119,6 +130,7 @@ function onKeydown(event: KeyboardEvent) {
       :aria-level="node.level"
       :aria-expanded="isSubsetExpanded(node)"
       :aria-selected="isScopeNode(node)"
+      :title="node.label"
       :tabindex="index === focusIndex ? 0 : -1"
       :class="{active: isScopeNode(node), focused: node.kind === 'sheet' && node.id === focusedSheetId}"
       @click="focusIndex = index; activate(node)"
@@ -140,7 +152,7 @@ function onKeydown(event: KeyboardEvent) {
 <style scoped>
 .sheet-tree{display:flex;flex-direction:column;gap:2px;padding:var(--space-2);outline:none}
 .sheet-tree:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:-2px}
-.sheet-tree [role=treeitem]{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:13px;color:var(--color-text-primary)}
+.sheet-tree [role=treeitem]{display:flex;align-items:flex-start;gap:6px;padding:5px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:13px;color:var(--color-text-primary)}
 .sheet-tree [role=treeitem]:hover{background:var(--color-bg-hover,var(--color-bg-surface-2))}
 .sheet-tree [role=treeitem].active{background:var(--color-accent-soft,var(--color-bg-surface-2));font-weight:600}
 .sheet-tree [role=treeitem].focused .node-label{box-shadow:inset 0 -2px 0 var(--color-accent)}
@@ -149,6 +161,6 @@ function onKeydown(event: KeyboardEvent) {
 .sheet-tree [role=treeitem]:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:-2px}
 .chevron{border:none;background:none;cursor:pointer;font-size:11px;width:16px;height:16px;padding:0;color:var(--color-text-secondary);flex:none}
 .chevron-placeholder{width:16px;height:16px;flex:none}
-.node-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.node-count{font-size:12px;color:var(--color-text-secondary);white-space:nowrap}
+.node-label{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;line-height:1.45;overflow-wrap:anywhere;flex:1}
+.node-count{font-size:12px;color:var(--color-text-secondary);white-space:nowrap;line-height:1.45;padding-top:1px}
 </style>

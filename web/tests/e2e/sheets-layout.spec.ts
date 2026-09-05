@@ -230,7 +230,11 @@ test("a11y 语义：树方向键移动焦点、展开按钮 aria-expanded、表�
   await tree.focus();
   // Up/Down 移动焦点（roving tabindex：方向键焦点落到目标节点）
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("treeitem", {name: /建筑施工图/})).toBeFocused();
+  const subsetItem = page.getByRole("treeitem", {name: /建筑施工图/});
+  await expect(subsetItem).toBeFocused();
+  await expect(subsetItem).toHaveAttribute("aria-expanded", "false");
+  // 全部图纸范围默认收起；Right 展开当前子集后才进入首张图纸
+  await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("treeitem", {name: "001 图纸 1"})).toBeFocused();
   // Left 从子节点上移到父级子集，再 Left 折叠 → 子节点隐藏；Right 展开 → 子节点可见
@@ -242,11 +246,13 @@ test("a11y 语义：树方向键移动焦点、展开按钮 aria-expanded、表�
   await expect(page.getByRole("treeitem", {name: "001 图纸 1"})).toBeVisible();
   // Home/End
   await page.keyboard.press("End");
+  await expect(page.getByRole("treeitem", {name: /暖通施工图/})).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("End");
   await expect(page.getByRole("treeitem", {name: /013 图纸 13/})).toBeFocused();
   await page.keyboard.press("Home");
   await expect(page.getByRole("treeitem", {name: /全部图纸/})).toBeFocused();
   // 子集可展开元素带 aria-expanded
-  const subsetItem = page.getByRole("treeitem", {name: /建筑施工图/});
   await expect(subsetItem).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("tree", {name: "图纸导航"})).toHaveAttribute("aria-label", "图纸导航");
   // 表格可访问名与选择复选框含图号

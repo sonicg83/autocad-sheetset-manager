@@ -83,8 +83,39 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
 // 触发按钮始终渲染，>900px 由 CSS 隐藏；抽屉不设焦点困绕（与任务浮层同时展开时 Tab 仍可离开），
 // 打开后焦点移入树、Esc 或选择节点后关闭并把焦点还给触发按钮。
 const drawerOpen = ref(false);
+const TREE_MIN_WIDTH = 260;
+const TREE_MAX_WIDTH = 420;
+const treeWidth = ref(320);
 const treeDrawerEl = ref<HTMLElement | null>(null);
 const treeToggleEl = ref<HTMLElement | null>(null);
+let removeResizeListeners: (() => void) | null = null;
+function setTreeWidth(value: number) {
+  treeWidth.value = Math.min(TREE_MAX_WIDTH, Math.max(TREE_MIN_WIDTH, Math.round(value)));
+}
+function startTreeResize(event: PointerEvent) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  removeResizeListeners?.();
+  const startX = event.clientX;
+  const startWidth = treeWidth.value;
+  const onMove = (moveEvent: PointerEvent) => setTreeWidth(startWidth + moveEvent.clientX - startX);
+  const onUp = () => removeResizeListeners?.();
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp, {once: true});
+  removeResizeListeners = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    removeResizeListeners = null;
+  };
+}
+function onTreeResizeKeydown(event: KeyboardEvent) {
+  if (event.key === "Home") setTreeWidth(TREE_MIN_WIDTH);
+  else if (event.key === "End") setTreeWidth(TREE_MAX_WIDTH);
+  else if (event.key === "ArrowLeft") setTreeWidth(treeWidth.value - 16);
+  else if (event.key === "ArrowRight") setTreeWidth(treeWidth.value + 16);
+  else return;
+  event.preventDefault();
+}
 function closeTreeDrawer() {
   if (!drawerOpen.value) return;
   drawerOpen.value = false;
@@ -103,11 +134,14 @@ function onGlobalKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") closeTreeDrawer();
 }
 onMounted(() => window.addEventListener("keydown", onGlobalKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeydown));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onGlobalKeydown);
+  removeResizeListeners?.();
+});
 </script>
 <template>
   <section class="sheets-view" role="tabpanel" id="panel-sheets" aria-label="图纸">
-    <div class="sheets-workspace">
+    <div class="sheets-workspace" :style="{'--sheet-tree-width': `${treeWidth}px`}">
       <aside ref="treeDrawerEl" id="tree-drawer" class="sheet-tree-pane" :class="{'drawer-open': drawerOpen}" aria-label="图纸导航栏">
         <div class="tree-root">{{ workspace.sheet_set.name }}（{{ allTotal }} 张）</div>
         <SheetTree
@@ -119,6 +153,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeydown));
           @select-sheet="closeTreeDrawer(); $emit('selectSheet', $event)"
         />
       </aside>
+      <div
+        class="tree-resizer"
+        role="separator"
+        aria-label="调整图纸导航栏宽度"
+        aria-orientation="vertical"
+        :aria-valuemin="TREE_MIN_WIDTH"
+        :aria-valuemax="TREE_MAX_WIDTH"
+        :aria-valuenow="treeWidth"
+        tabindex="0"
+        @pointerdown="startTreeResize"
+        @keydown="onTreeResizeKeydown"
+      ></div>
       <main class="sheets-main">
         <button ref="treeToggleEl" type="button" class="tree-drawer-toggle" :aria-expanded="drawerOpen ? 'true' : 'false'" aria-controls="tree-drawer" @click="toggleTreeDrawer">{{ drawerOpen ? "关闭图纸导航" : "打开图纸导航" }}</button>
         <SheetToolbar
@@ -218,11 +264,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeydown));
   </section>
 </template>
 <style scoped>
-.sheets-view{display:block}
-.sheets-workspace{display:flex;align-items:stretch;gap:var(--space-4);background:var(--color-bg-surface);border-radius:var(--radius-md,8px);padding:var(--space-4)}
-.sheet-tree-pane{flex:0 0 240px;min-width:0;display:flex;flex-direction:column;gap:var(--space-3);border-right:1px solid var(--color-border,var(--color-bg-surface-2));padding-right:var(--space-3);max-height:calc(100vh - 160px);overflow:auto}
-.tree-root{font-size:14px;font-weight:600;color:var(--color-text-primary);padding:0 var(--space-2)}
-.sheets-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.sheets-view{display:flex;flex-direction:column;flex:1;min-height:0}
+.sheets-workspace{display:flex;align-items:stretch;flex:1;min-height:0;background:var(--color-bg-surface);border-radius:var(--radius-md,8px);padding:var(--space-4)}
+.sheet-tree-pane{flex:0 0 var(--sheet-tree-width,320px);min-width:0;display:flex;flex-direction:column;gap:var(--space-3);padding-right:var(--space-3);overflow:auto}
+.tree-resizer{flex:0 0 9px;margin-right:var(--space-4);border-left:1px solid var(--color-border,var(--color-bg-surface-2));cursor:col-resize;touch-action:none;outline:none}
+.tree-resizer:hover,.tree-resizer:focus-visible{border-left:3px solid var(--color-accent);background:var(--color-accent-soft,var(--color-bg-surface-2))}
+.tree-resizer:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:1px}
+.tree-root{font-size:14px;font-weight:600;color:var(--color-text-primary);padding:0 var(--space-2);line-height:1.5;overflow-wrap:anywhere}
+.sheets-main{flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)}
 .notice{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md,8px);font-size:13px;margin:0}
 .prune-notice{background:var(--color-accent-soft,var(--color-bg-surface-2))}
 .hidden-target-notice{background:var(--color-warning-soft,transparent);border:1px solid var(--color-warning,#b7791f)}
@@ -233,9 +282,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeydown));
 .tree-drawer-toggle{display:none}
 @media (max-width:900px){
   .sheets-workspace{position:relative}
+  .tree-resizer{display:none}
   .tree-drawer-toggle{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;border:1px solid var(--color-border,var(--color-bg-surface-2));background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit}
   .tree-drawer-toggle:hover{background:var(--color-bg-muted,var(--color-bg-surface-2))}
-  .sheet-tree-pane{position:absolute;top:0;bottom:-24px;left:0;width:280px;max-width:85vw;z-index:30;margin:0;padding:var(--space-3);border-right:1px solid var(--color-border,var(--color-bg-surface-2));box-shadow:var(--shadow-3);background:var(--color-bg-surface);transform:translateX(-105%);visibility:hidden;transition:transform .2s ease}
+  .sheet-tree-pane{position:absolute;top:0;bottom:-24px;left:0;width:min(360px,90vw);max-width:90vw;z-index:30;margin:0;padding:var(--space-3);border-right:1px solid var(--color-border,var(--color-bg-surface-2));box-shadow:var(--shadow-3);background:var(--color-bg-surface);transform:translateX(-105%);visibility:hidden;transition:transform .2s ease}
   .sheet-tree-pane.drawer-open{transform:translateX(0);visibility:visible}
 }
 </style>
