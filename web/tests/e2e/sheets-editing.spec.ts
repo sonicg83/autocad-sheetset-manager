@@ -6,7 +6,7 @@
 // 全局预览/确认写入先处理未提交输入且旧预览失效需重新预览、删除入口先处理缓冲、
 // 基准刷新后编辑失效保留输入禁止提交、键盘焦点恢复、混合批次显示不回退既有属性值。
 import {expect, test, type Page} from "@playwright/test";
-import {installSheetsFixture, previewResponse} from "./fixtures/sheets";
+import {buildPreviewFromBase, installSheetsFixture, previewResponse} from "./fixtures/sheets";
 
 async function openWorkspace(page: Page) {
   await page.goto("/");
@@ -240,9 +240,11 @@ test("点击全局预览先处理未提交输入且预览包含全部命令", as
   await openWorkspace(page);
   // 先加入结构命令使「预览变更」可用（无命令时 dock 禁用预览）
   await page.getByRole("button", {name: "编辑子集"}).click();
-  await page.getByLabel("当前子集标题").fill("平面图甲");
-  await page.getByRole("button", {name: "加入标题变更"}).click();
-  await expect.poll(() => previewBodies.length).toBe(1); // 结构投影内部请求
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
+  await page.getByRole("button", {name: "加入草稿"}).click();
+  // 结构提交经草稿保存与投影确认可能发出多次投影请求；只确认内部投影已发生
+  await expect.poll(() => previewBodies.length).toBeGreaterThan(0);
   await openEditor(page);
   await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
   await page.getByRole("button", {name: "预览变更"}).click();
@@ -269,8 +271,9 @@ test("确认写入先处理未提交输入：保存后旧预览失效必须重�
   await openWorkspace(page);
   // 先加入结构命令并预览，得到有效可执行预览上下文
   await page.getByRole("button", {name: "编辑子集"}).click();
-  await page.getByLabel("当前子集标题").fill("平面图甲");
-  await page.getByRole("button", {name: "加入标题变更"}).click();
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
+  await page.getByRole("button", {name: "加入草稿"}).click();
   await page.getByRole("button", {name: "预览变更"}).click();
   await expect(page.getByRole("button", {name: "确认写入"})).toBeEnabled();
   await openEditor(page);
@@ -308,13 +311,17 @@ test("编辑未提交时点击删除先处理缓冲，删除命令不夹带属�
 
 test("删除整个子集先处理未提交输入：加入草稿后继续进入整子集删除确认", async ({page}) => {
   const draftBodies: unknown[] = [];
-  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  const {workspace} = await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => {
+    const body = route.request().postDataJSON();
+    route.fulfill({json: buildPreviewFromBase(workspace, body.commands)});
+  });
   await openWorkspace(page);
-  await openEditor(page);
-  // 先打开编辑子集表单（编辑器干净，guard 直接放行），随后编辑产生未提交输入
+  // 打开编辑子集表单并修改标题（产生未提交输入）
   await page.getByRole("button", {name: "编辑子集"}).click();
   await expect(page.getByRole("region", {name: "编辑子集"})).toBeVisible();
-  await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
   // 点击删除整个子集 → 先三选一处理缓冲，再进入整子集删除确认流程
   await page.getByRole("button", {name: "删除整个子集"}).click();
   await expect(page.getByRole("dialog", {name: "未提交输入"})).toBeVisible();
@@ -322,27 +329,27 @@ test("删除整个子集先处理未提交输入：加入草稿后继续进入�
   // 缓冲已保存后进入整子集删除确认（不可逆强确认），此时尚未真正删除
   await expect(page.getByRole("dialog", {name: "删除整个子集"})).toBeVisible();
   await page.getByRole("dialog", {name: "删除整个子集"}).getByRole("button", {name: "取消", exact: true}).click();
-  // 草稿只含属性编辑批次，未夹带删除命令
+  // 草稿只含标题变更批次，未夹带删除命令
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   const actions = (draftBodies[draftBodies.length - 1] as {actions: {commands: {type: string}[]}[]}).actions;
-  expect(actions.map((action) => action.commands[0].type)).toEqual(["update_sheet_properties"]);
+  expect(actions.map((action) => action.commands[0].type)).toEqual(["update_subset_title"]);
 });
 
 test("删除整个子集三选一：留在此处时子集删除不发生", async ({page}) => {
   const draftBodies: unknown[] = [];
   await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
   await openWorkspace(page);
-  await openEditor(page);
   await page.getByRole("button", {name: "编辑子集"}).click();
   await expect(page.getByRole("region", {name: "编辑子集"})).toBeVisible();
-  await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
   await page.getByRole("button", {name: "删除整个子集"}).click();
   await expect(page.getByRole("dialog", {name: "未提交输入"})).toBeVisible();
   await page.getByRole("button", {name: "留在此处"}).click();
   // 留在此处：不进入整子集删除确认、不产生删除命令，编辑保留
   await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
   await expect(page.getByRole("dialog", {name: "删除整个子集"})).toHaveCount(0);
-  await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toHaveValue("A2");
+  await expect(page.getByLabel("子集标题")).toHaveValue("平面图甲");
   await expect.poll(() => draftBodies.length).toBe(0);
 });
 
@@ -393,8 +400,10 @@ test("混合批次显示不回退既有图纸属性值", async ({page}) => {
   // 加入结构命令（新增图纸）→ 混合批次：derived_document 不含值编辑合成，
   // 显示以命令簿叠加，既有图纸属性值不回退
   await page.getByRole("button", {name: "新增图纸"}).click();
+  await page.getByLabel("目标子集").selectOption("subset-1");
+  await page.getByLabel("参照图纸").selectOption("sheet-1");
   await page.getByRole("combobox", {name: "模板来源"}).selectOption("existing_snapshot");
-  await page.getByRole("button", {name: "批量新增图纸"}).click();
+  await page.getByRole("button", {name: "加入草稿"}).click();
   await expect(page.getByText("匹配 14 / 全部 14 张", {exact: true})).toBeVisible();
   await expect(firstRowPropCell(page, 0)).toHaveText("A2");
 });

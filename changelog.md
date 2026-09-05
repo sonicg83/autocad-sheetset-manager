@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-05（三类操作表单与参照位置映射）
+
+- **新增参照对象 → 既有 ordinal/placement 命令映射（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 6，SPEC-DM-009 §6.3）**：`web/src/features/sheets/commands.ts` 产出 `resolveSheetOrdinal(workspace,ref)`/`resolveSubsetOrdinal(workspace,subsetId)`，把稳定对象 ID 映射为既有序号/方向命令（ordinal 为锚对象序位、placement 相对其前后），失效参照抛可见错误、不回退为 1；不重新实现后端派生命名、不增加自由排序能力。原 command schema（insert_sheet 的 target_subset_id/ordinal/placement/count/source，insert_subset 的 ordinal/placement/title/initial_sheet_count/base_template_file/source），不携带 UI ref 或演示 token。
+- **新增三类操作表单（`web/src/components/sheets/SheetOperationForm.vue`）**：编辑子集/新增图纸/新建子集统一在主表上方展开、一次只出现一种、长表单内部滚动且保留标题与「取消/加入草稿」入口；编辑子集仅缓冲标题（全部图纸范围先选择编辑对象、单子集范围预填，图号范围只读），新增图纸选择目标子集与参照图纸而非手填序号（单子集范围预填目标、全部范围必须明确选择，目标变化后清除不属于新目标的参照），新建子集选择参照子集与前后（空图纸集显示「创建首个子集」、不展示不存在的参照、沿用首个序号为 1 的契约），基础模板决定新 DWG 基底、布局模板提供布局，两者分开标注。
+- **唯一编辑上下文接入操作表单（`useSheetEditor.ts`、`types.ts`）**：rename/insert-sheet/insert-subset 分支携带表单字段与布局读取状态，dirty 标记纳入三选一输入保护（编辑子集标题缓冲折入 rename 上下文，不再游离于 guard 之外）；提交前固定打开时的投影快照、基准/对象变化由 watch 标 invalid 拦截旧索引；加入草稿时重新核对参照（已删除/失效保留表单并要求重选、不静默替换对象），成功等待权威投影后从派生结果取得新增 ID 并定位到其所在范围（原筛选保留、隐藏目标提示清除后定位），失败保留完整输入；空子集无可用图纸参照时提示流程不可用并禁用新增。清理 `added` 死字段与 `sheetView` 死计算（视图逻辑与组件重复）。
+- **模板/布局接线（`App.vue`）**：复用 selectTemplateFile/selectSubsetTemplateFile/selectBaseTemplateFile 壳桥与 layout-names 错误回退；布局异步读取增加上下文代次与对象身份校验，取消/切表单/切 CAD 版本后的旧响应不回填；已有布局来源不重新要求用户文件/布局，选择模板来源才展开对应文件与布局选择。
+- **替换任务 3 过渡实现**：非驻留过渡表单与「全部范围默认取首个子集」改为正式参照表单与显式对象选择；工具栏三类操作入口常驻显示（同一表单已打开点击不重开，另一表单经三选一切换），消除操作按钮可见性不一致。
+- **测试（TDD，先红后绿）**：夹具 `fixtures/sheets.ts` 新增 `buildPreviewFromBase`（把命令应用到基底生成权威派生文档，新增对象用独立派生 ID，证明前端不从计数拼造）与 `installSmartPreview`，`installSheetsFixture` 返回基底工作区；新增 `web/tests/e2e/sheets-forms.spec.ts`（13 项：单子集预填/全部必须选择、变目标清参照、删除参照需重选、同 ID 顺序变化重新映射、空子集禁用新增、空集新子集 ordinal=1、基础与布局模板分离、成功关闭表单并定位派生新增对象、失败保留完整输入、编辑子集全部范围先选择编辑对象、成功后保留筛选并提示目标隐藏）；迁移 sheets-editing/sheets-projection/main.spec 中旧过渡表单交互到参照表单（编辑子集先选对象、新增图纸选参照对象、提交按钮统一「加入草稿」）。
+- 验证：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **129/129 通过**（116 既有 + 新增 13）；`git diff --check` 通过。本任务只改 `web/` 与 changelog，Python 侧未触碰；仓库所有者并行的 SPEC-DM-010 文档/演示改动未纳入本提交。
+
 ## 2026-09-05（分页编辑缓冲与全局输入保护）
 
 - **新增唯一活动编辑上下文组合式函数（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 5，SPEC-DM-009 §6.1/§6.2）**：`web/src/composables/useSheetEditor.ts`。上下文为 `null | sheet | rename | insert-sheet | insert-subset | bulk` 联合分支（类型建于 `features/sheets/types.ts`，不用 any），每分支保留 workspaceId/revisionId/投影快照/objectId/original/values/errors。sheet 分支在 `custom_properties` 完整副本上编辑，搜索/翻页只派生视图、不丢输入、不自动提交；提交 `createCommand.updateSheetProperties(id,{...values})` 覆盖全部属性页（不只当前页），成功退出编辑并更新既有草稿投影与计数，失败保留输入并呈现行内错误与可聚焦摘要，未给字段路径的错误只进摘要、不编造字段归因。`guard(next)` 三选一「加入草稿后继续/放弃输入/留在此处」：无改动直接继续；保存→等待草稿持久化与投影成功→继续（`SubmitCommands` 等原 `draftSaveQueue`，不以入队即宣称保存）；失败不能继续 next；放弃明确清空缓冲；Esc 等于留下。基准刷新或对象消失标记上下文失效、保留可见输入供核对、禁止提交到新基准；只读值更新不自动覆盖用户输入；保存中切换等保存完成再继续、不重复提示；关闭编辑器焦点回到触发按钮。

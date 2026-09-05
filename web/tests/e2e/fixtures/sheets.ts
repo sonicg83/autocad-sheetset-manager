@@ -3,6 +3,7 @@
 // 只含虚构路径与假壳/假路由；fake 壳持有当前工作区 ID 与独立偏好映射；
 // 持久草稿路由保持 expected_version 语义。
 import type {Page} from "@playwright/test";
+import type {ChangeCommand, Preview, Subset, Workspace} from "../../../src/api/contracts";
 
 export type SheetsFixtureOptions = {
   sheetCount?: number;    // 图纸总数，默认 13
@@ -216,9 +217,127 @@ export function previewResponse(sheetCount: number) {
   };
 }
 
+// 参照表单测试用的“智能投影”（任务 6）：把当前命令应用到基底工作区，生成权威派生文档，
+// 模拟服务端对 insert/delete/rename 的派生结果——既有对象沿用基底 ID 与顺序，
+// 新增对象使用独立派生 ID（sheet-der-N/subset-der-N），前端必须从派生结果取得而非按计数拼造。
+export function buildPreviewFromBase(base: Workspace, commands: ChangeCommand[]): Preview {
+  const subsets = JSON.parse(JSON.stringify(base.sheet_set.subsets)) as Subset[];
+  let sheetSeq = 1000;
+  let subsetSeq = 100;
+  // 基底子集图纸用 id 键（派生文档映射时经 acsm_id 对齐），新增对象同样用 id 键保持一致
+  const derivedSheet = (ordinal: number) => ({
+    id: `sheet-der-${sheetSeq++}`,
+    number: String(ordinal).padStart(3, "0"),
+    title: `派生图纸 ${ordinal}`,
+    custom_properties: {} as Record<string, string>,
+    layout: {file_name: "C:\\虚构工程\\派生.dwg", relative_file_name: ".\\派生.dwg", layout_name: "", handle: "", resolved_path: null, resolution_source: null},
+  });
+  for (const command of commands) {
+    switch (command.type) {
+      case "delete_sheet":
+        for (const subset of subsets) subset.sheets = subset.sheets.filter((s) => s.id !== command.sheet_id);
+        break;
+      case "insert_sheet": {
+        const subset = subsets.find((s) => s.id === command.target_subset_id);
+        if (!subset) break;
+        const index = Math.min(Math.max((command.ordinal ?? 1) - 1, 0), subset.sheets.length);
+        const at = command.placement === "before" ? index : index + 1;
+        const inserted = Array.from({length: command.count}, (_, i) => derivedSheet(at + i + 1));
+        subset.sheets.splice(at, 0, ...inserted);
+        break;
+      }
+      case "delete_subset": {
+        const index = subsets.findIndex((s) => s.id === command.subset_id);
+        if (index >= 0) subsets.splice(index, 1);
+        break;
+      }
+      case "insert_subset": {
+        const index = Math.min(Math.max((command.ordinal ?? 1) - 1, 0), subsets.length);
+        const at = command.placement === "before" ? index : index + 1;
+        const id = `subset-der-${subsetSeq++}`;
+        const sheets = Array.from({length: command.initial_sheet_count}, (_, i) => derivedSheet(at * 100 + i + 1));
+        subsets.splice(at, 0, {id, name: command.title, title: command.title, number_range: "", display_name: command.title, sheets});
+        break;
+      }
+      case "update_subset_title": {
+        const subset = subsets.find((s) => s.id === command.subset_id);
+        if (subset) { subset.title = command.title; subset.display_name = command.title; subset.name = command.title; }
+        break;
+      }
+      case "update_sheet_properties": {
+        const sheet = subsets.flatMap((s) => s.sheets).find((s) => s.id === command.sheet_id);
+        if (sheet) sheet.custom_properties = {...command.custom_properties};
+        break;
+      }
+      default:
+        break; // update_sheet_set / 属性定义增删不改变派生结构
+    }
+  }
+  const derivedSubsets = subsets.map((subset) => ({
+    acsm_id: subset.id,
+    title: subset.title,
+    number_range: subset.number_range ?? "",
+    display_name: subset.display_name,
+    source_target_file: "",
+    target_file: "",
+    sheets: subset.sheets.map((sheet) => ({
+      acsm_id: sheet.id,
+      number: sheet.number,
+      title: sheet.title,
+      custom_properties: sheet.custom_properties,
+      layout: {
+        file_name: sheet.layout.file_name,
+        relative_file_name: sheet.layout.relative_file_name,
+        layout_name: sheet.layout.layout_name,
+        handle: sheet.layout.handle ?? "",
+        resolved_path: sheet.layout.resolved_path ?? null,
+        resolution_source: null,
+      },
+    })),
+  }));
+  return {
+    workspace_id: base.id,
+    base_revision_id: base.revision_id,
+    cad_version: "2020",
+    requires_cad: true,
+    affected_files: [base.dst_path],
+    execution_intent: {
+      groups: [],
+      cardinality_frontier: null,
+      subset_operations: [],
+      deleted_subsets: [],
+      path_graph: {old_sources: [], final_targets: [], reused_targets: [], delete_targets: [], transitions: []},
+      affected_subset_ids: derivedSubsets.map((s) => s.acsm_id),
+      derived_document: {
+        subsets: derivedSubsets,
+        affected_subset_ids: derivedSubsets.map((s) => s.acsm_id),
+        property_diff: {added: [], skipped: []},
+        layout_sources: {},
+      },
+      source_baselines: [],
+      cad_validation_deferred: true,
+      expected_file_hashes: {},
+      estimate: null,
+    },
+    semantic_diff: {sheet_set: [], structure: {before: [], after: []}, properties: [], dwgs: []},
+    preview_digest: "digest-fake",
+    changes: [],
+    diagnostics: [],
+    executable: true,
+  };
+}
+
+// 安装基于 buildPreviewFromBase 的智能投影路由（任务 6 表单测试用；既有测试仍可自行覆盖路由）
+export async function installSmartPreview(page: Page, base: Workspace): Promise<void> {
+  await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => {
+    const body = route.request().postDataJSON() as {commands: ChangeCommand[]};
+    route.fulfill({json: buildPreviewFromBase(base, body.commands)});
+  });
+}
+
 // 全能力夹具：假壳（持有当前 ID 与独立偏好映射）+ 打开/工作区/持久草稿路由；
-// 预览路由由各测试自装（投影门禁需要 gate）。
-export async function installSheetsFixture(page: Page, options: SheetsFixtureOptions = {}): Promise<void> {
+// 预览路由由各测试自装（投影门禁需要 gate）；返回基底工作区供智能投影复用。
+export async function installSheetsFixture(page: Page, options: SheetsFixtureOptions = {}): Promise<{workspace: Workspace}> {
   const workspace = buildWorkspace(options);
   const initialDraft = options.dualStatus && !options.initialDraft ? DUAL_STATUS_DRAFT : options.initialDraft;
   const secondWorkspace = options.secondWorkspace
@@ -293,4 +412,5 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
     drafts.set(workspaceId, saved);
     return route.fulfill({json: {draft: saved, corrupted: false, stale: false, stale_reasons: []}});
   });
+  return {workspace};
 }

@@ -39,6 +39,7 @@ export type ChangeCommand = NonNullable<
 >[number];
 export type Placement = "before" | "after";
 export type LayoutSourceType = "existing_snapshot" | "template_layout";
+export type LayoutSource = components["schemas"]["LayoutSource"];
 
 type CommandOf<T extends ChangeCommand["type"]> = Extract<ChangeCommand, { type: T }>;
 

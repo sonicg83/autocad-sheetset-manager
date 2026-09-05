@@ -28,7 +28,6 @@ defineProps<{
   sheetPropertyNames: string[];
   bulkPropertyName: string;
   bulkPropertyValue: string;
-  activeOperation: OperationKind | null;
   columnOptions: SheetColumnOption[];
   columnSaveError: string;
   newPropertyCount: number;
@@ -80,9 +79,10 @@ const conditionChips = computed(() => {
         <span class="loaded">已加载 {{ visibleCount }} 行</span>
       </div>
       <div class="operations">
+        <!-- 三类操作入口常驻显示（任务 6）：同一表单已打开时点击不重开，另一表单经三选一保护切换 -->
         <button type="button" @click="$emit('openOperation', 'rename')">编辑子集</button>
         <button type="button" @click="$emit('openOperation', 'insert-sheet')">新增图纸</button>
-        <button v-if="activeOperation !== 'insert-subset'" type="button" @click="$emit('openOperation', 'insert-subset')">新建子集</button>
+        <button type="button" @click="$emit('openOperation', 'insert-subset')">新建子集</button>
       </div>
     </div>
     <div class="toolbar-filters">
