@@ -384,3 +384,15 @@ S-01～S-12 证据核对（自动化证据来源）：
 状态判定：S-01～S-12 均有自动化证据且无阻断风险，但 S-09 的真实桌面人工验收与 S-07 截图人工目检尚未由用户在真实 Windows 桌面执行，属关键待验收项；SPEC-DM-009 保持 `accepted`，属性页 SPEC-DM-010 不随本计划升级状态（保持 `review`）。因此本计划状态维持 `active`，不标记 `completed`。
 
 2026-09-05 补充：SPEC-DM-010 的接受发生于任务 8 之后（用户并行完成其规范接受，规范 frontmatter 与文档入口均已更新为 `accepted`，实施计划为 PLAN-DM-016）；上句「保持 `review`」为任务 8 收尾时的状态快照，本计划不改写历史记录。
+
+2026-09-05 最终审查与修复：整分支最终审查（db2980e..90646a1）判定 With fixes，2 项 Important 已修复并经局部复审确认（commit 95aa2ca）：①`submitCommands` 去重未检查撤销/重做光标，撤销后重新提交相同命令批次被静默吞掉——已加光标守卫并补先红后绿 e2e；②`docs/dst-manager/README.md` 中 SPEC-DM-010 状态自相矛盾——已更正。顺手删除编辑上下文未消费的 `stamp` 字段（陈旧注释更正见 b75b632）。修复后全量 e2e 串行 **147/147**、生产构建零错误。最终审查同时确认：任务 1 混合批次显示缺口、任务 3 行编辑/按钮可见性/首子集误触、任务 4 操作列延迟、任务 5 死代码、任务 6 遗留指针（含子集标题缓冲纳入 guard）等历史挂起项均已在此前任务中解决。
+
+已知挂起项（均为 Minor，不阻断，后续计划可择机处理）：
+- `STRUCTURAL_TYPES` 在 `web/src/drafts.ts` 与 `useSheetProjection.ts` 重复定义，宜上提至 `features/sheets/types.ts`。
+- 操作表单 `dirty` 标记为粘性（取消参照选择后仍提示未保存）；同类按钮点击先触发 guard 再 no-op。
+- `useSheetColumns` 存储加载与用户切换存在窄窗口竞态；`saveError` 成功后不清除；有偏好的工作区默认值闪现一帧。
+- 投影重建与刷新完成间显示短暂回退本地投影（flicker）；`commandKey` 为非规范化 JSON 比较。
+- 结构投影失败时显示降级为本地投影（无数据损失，错误已提示）；含未加载行的批量路径与 guard 竞态修复缺独立确定性 e2e。
+- 编辑器渲染于表格上方而非 SPEC 字面的"该行下展开"；提交失败焦点移至摘要；App.vue 约 600 行（计划既定超限）。
+- Python 侧：`SheetPreferences._validate` 不拒未知顶层字段、`open_workspace_folder` 理论 TOCTOU、`load` 未加锁。
+- 任务 8：长列状态矩阵 2 尺寸×2 主题（非全 4×2）、对比度冒烟取样，均已如实记录。
