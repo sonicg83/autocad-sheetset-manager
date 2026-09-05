@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import {computed,reactive,ref,watch} from "vue";
+import {computed,ref,watch} from "vue";
 import {ApiError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,PropertyType,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
+import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult} from "./features/sheets/types";
 import type {GuardChoice} from "./features/sheets/types";
 import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/properties/types";
+import type {DefinitionScopeFilter} from "./features/properties/model";
 import {useShellTabs} from "./composables/useShellTabs";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
@@ -137,7 +138,6 @@ function doOpenOperation(kind:OperationKind){
 let previewGeneration=0;
 let draftSaveQueue:Promise<void>=Promise.resolve();
 
-const propertyForm=reactive<{type:PropertyType;name:string;defaultValue:string}>({type:"sheet",name:"",defaultValue:""});
 const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 // 布局读取代次：取消/切表单/切 CAD 版本后的旧布局响应不回填（任务 6）
 let layoutReadGeneration=0;
@@ -201,8 +201,11 @@ const guardedDiagnosticFilter=guardedFilter((value:SheetDiagFilter)=>{diagnostic
 const guardedPendingFilter=guardedFilter((value:SheetPendingFilter)=>{pendingFilter.value=value});
 // 「编辑属性」：打开唯一编辑上下文（操作表单等另一上下文内有未提交输入先三选一）
 function onEditSheet(sheet:Sheet){editor.openSheetEditor(sheet.id)}
-// 属性页会话缓冲域（PLAN-DM-016 任务 2）：三层快照/提交生命周期/三选一 guard，状态在此不在页面
-const properties=usePropertiesWorkspace({workspace,baseWorkspace,submitCommands});
+// 属性页会话缓冲域（PLAN-DM-016 任务 2/6）：三层快照/提交生命周期/三选一 guard/面板会话态，
+// 状态在此不在页面；新增属性定义仍经既有 addCommand('property') 命令簿门禁，页面不持有草稿栈
+const properties=usePropertiesWorkspace({workspace,baseWorkspace,submitCommands,
+  addPropertyDefinition:(form)=>addCommand(createCommand.addCustomProperty(form.type,form.name,form.defaultValue),"property"),
+  notifyError:(message)=>{error.value=message}});
 // 删除属性定义命令使对应图纸集值字段进入失效集合；撤销/移除后随命令簿整体重算自动解除
 watch(()=>commands.value.map(item=>item.type==="delete_custom_property"?`${item.property_type}:${item.name.toLocaleLowerCase()}`:"").join("|"),()=>{
   const keys=new Set<PropertyKey>();
@@ -545,10 +548,6 @@ function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:
     pushToast({type:"ok",title:"已加入草稿",body:`批量${verb} ${name}（${batch.length} 张 / ${subsetCount} 个子集）`});
   }
 }
-function queuePropertyDefinition(){
-  const name=propertyForm.name.trim();if(!name){error.value="属性名称不能为空";return}
-  if(addCommand(createCommand.addCustomProperty(propertyForm.type,name,propertyForm.defaultValue),"property")){propertyForm.name="";propertyForm.defaultValue=""}
-}
 // 删除属性定义（PLAN-DM-016 任务 4 / SPEC-DM-010 §4.2）：沿用既有草稿与确认语义；
 // 目标 sheetset 值仍 dirty 时先运行属性输入 guard（三选一）再弹删除确认；空文本值不视为删除定义。
 // 确认文案只说明作用域与草稿语义，不虚构级联影响数量；受影响范围以预览时服务端结果为准。
@@ -647,7 +646,7 @@ useHotkeys({
         <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
         <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:bulk-mode="bulkMode" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
-        <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-base="properties.base.value" :property-draft="properties.draft.value" :property-status-of="properties.statusOf" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-matched-keys="properties.matchedKeys.value" :property-hidden-dirty-count="properties.hiddenDirtyCount.value" :property-search="properties.search.value" :property-search-mode="properties.searchMode.value" :property-changed-only="properties.changedOnly.value" :property-active-key="properties.activeKey.value" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:ValueKey,value:string)=>properties.setValue(key,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:ValueKey)=>properties.revertValue(key)" @update:property-search="(value:string)=>properties.search.value=value" @update:property-search-mode="(value:PropertySearchMode)=>properties.searchMode.value=value" @update:property-changed-only="(value:boolean)=>properties.changedOnly.value=value" @update:property-active-key="(key:ValueKey|null)=>properties.activeKey.value=key" @discard-property-input="properties.discardInput" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" />
+        <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-base="properties.base.value" :property-draft="properties.draft.value" :property-status-of="properties.statusOf" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-matched-keys="properties.matchedKeys.value" :property-hidden-dirty-count="properties.hiddenDirtyCount.value" :property-search="properties.search.value" :property-search-mode="properties.searchMode.value" :property-changed-only="properties.changedOnly.value" :property-active-key="properties.activeKey.value" :property-definition-form="properties.definitionForm" :property-definitions-collapsed="properties.definitionsCollapsed.value" :property-values-collapsed="properties.valuesCollapsed.value" :property-csv-collapsed="properties.csvCollapsed.value" :property-csv-open="properties.csvOpen.value" :property-definitions-query="properties.definitionsQuery.value" :property-definitions-scope="properties.definitionsScope.value" :property-definitions-page="properties.definitionsPage.value" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:ValueKey,value:string)=>properties.setValue(key,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:ValueKey)=>properties.revertValue(key)" @update:property-search="(value:string)=>properties.search.value=value" @update:property-search-mode="(value:PropertySearchMode)=>properties.searchMode.value=value" @update:property-changed-only="(value:boolean)=>properties.changedOnly.value=value" @update:property-active-key="(key:ValueKey|null)=>properties.activeKey.value=key" @update:property-definitions-collapsed="(value:boolean)=>properties.definitionsCollapsed.value=value" @update:property-values-collapsed="(value:boolean)=>properties.valuesCollapsed.value=value" @update:property-csv-collapsed="(value:boolean)=>properties.csvCollapsed.value=value" @update:property-csv-open="(value:boolean)=>properties.csvOpen.value=value" @update:property-definitions-query="(value:string)=>properties.definitionsQuery.value=value" @update:property-definitions-scope="(value:DefinitionScopeFilter)=>properties.definitionsScope.value=value" @update:property-definitions-page="(value:number)=>properties.definitionsPage.value=value" @discard-property-input="properties.discardInput" @queue-property-definition="properties.queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
       </template>
     </main>

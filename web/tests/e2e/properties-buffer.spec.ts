@@ -92,8 +92,10 @@ test("提交失败保留输入并呈现字段错误", async ({page}) => {
   await openProperties(page);
   await page.getByLabel("图纸集名称", {exact: true}).fill("重复名称");
   await page.getByRole("button", {name: "更新图纸集"}).click();
+  // 任务 6 错误摘要：摘要 alert 含保存失败与字段跳转项；字段错误就近展示（摘要与字段两处可见）
   await expect(page.getByRole("alert")).toContainText("草稿保存失败");
-  await expect(page.getByText("图纸集名称已存在")).toBeVisible();
+  await expect(page.locator(".properties-view .error-summary").getByText("图纸集名称已存在")).toBeVisible();
+  await expect(page.locator(".value-panel .field-error")).toContainText("图纸集名称已存在");
   await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("重复名称");
 });
 

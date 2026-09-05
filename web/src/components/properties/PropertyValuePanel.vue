@@ -21,6 +21,8 @@ const props = defineProps<{
   searchMode: PropertySearchMode;
   changedOnly: boolean;
   activeKey: ValueKey | null;
+  // 折叠为工作区会话态（默认展开）：折叠后标题栏仍显示字段数与 dirty/pending/error 计数
+  collapsed: boolean;
 }>();
 const emit = defineEmits<{
   setValue: [key: ValueKey, value: string];
@@ -31,6 +33,8 @@ const emit = defineEmits<{
   "update:searchMode": [value: PropertySearchMode];
   "update:changedOnly": [value: boolean];
   "update:activeKey": [key: ValueKey | null];
+  "update:collapsed": [value: boolean];
+  addSheetsetField: [];
 }>();
 
 const NAME_KEY: ValueKey = "@name";
@@ -82,6 +86,8 @@ function isPinned(key: ValueKey): boolean {
   return key === pinnedKey.value;
 }
 const hasNoMatch = computed(() => props.matchedKeys.length === 0 && !pinnedKey.value);
+// 无自定义值：仍展示名称，并提供新增 sheetset 字段入口（与查询无结果区分的空态）
+const hasNoValues = computed(() => props.input.values && Object.keys(props.input.values).length === 0);
 
 // —— 状态摘要 ——
 const allKeys = computed<ValueKey[]>(() => [NAME_KEY, ...Object.keys(props.input.values).map((name) => `sheetset:${name}` as ValueKey)]);
@@ -166,7 +172,17 @@ function onExpandKeydown(event: KeyboardEvent) {
 <template>
   <section class="value-panel" aria-label="图纸集属性值">
     <header class="panel-head">
-      <h2>图纸集属性值 <small>{{ valueCount }} 项</small></h2>
+      <button
+        type="button"
+        class="head-toggle"
+        :aria-expanded="!collapsed"
+        aria-controls="value-body"
+        :aria-label="collapsed ? '展开图纸集属性值' : '收起图纸集属性值'"
+        @click="emit('update:collapsed', !collapsed)"
+      >
+        <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
+        <h2>图纸集属性值 <small>{{ valueCount }} 项</small></h2>
+      </button>
       <div class="metrics" role="status" aria-live="polite">
         <span v-if="dirtyCount" class="flag dirty">未加入草稿 {{ dirtyCount }} 项</span>
         <span v-if="pendingCount" class="flag pending">待写入 {{ pendingCount }} 项</span>
@@ -174,18 +190,19 @@ function onExpandKeydown(event: KeyboardEvent) {
         <span v-if="!dirtyCount && !pendingCount && !errorCount" class="hint">无属性值修改</span>
       </div>
       <div class="head-actions">
+        <span v-if="dirtyCount" class="submit-hint">加入草稿：共 {{ dirtyCount }} 项，其中 {{ hiddenDirtyCount }} 项当前未显示 · 尚未写入正式文件</span>
         <button type="button" @click="emit('discard')">放弃本区输入</button>
         <button type="button" class="primary" @click="emit('submit')">更新图纸集</button>
       </div>
     </header>
-    <div class="panel-body">
+    <div v-if="!collapsed" id="value-body" class="panel-body">
       <p class="legend">
         <span class="flag dirty">未加入草稿</span>
         <span class="flag pending">待写入</span>
         <span class="flag error">错误 / 冲突</span>
         <span class="hint">所有自定义属性均为文本，不分组、不分页。</span>
       </p>
-      <div class="value-toolbar">
+      <div v-if="!hasNoValues" class="value-toolbar">
         <input
           type="search"
           aria-label="搜索属性值"
@@ -232,10 +249,11 @@ function onExpandKeydown(event: KeyboardEvent) {
           <p v-if="isPinned(key)" class="pinned-note">不再匹配当前搜索 · 暂留编辑 <button type="button" class="link" @click="endEdit">结束编辑</button></p>
         </div>
       </div>
-      <p v-if="hasNoMatch" class="empty">没有匹配属性；请清除搜索或关闭“仅看修改”。</p>
-      <div class="local-actions">
-        <span class="hint">加入草稿：共 {{ dirtyCount }} 项，其中 {{ hiddenDirtyCount }} 项当前未显示 · 尚未写入正式文件</span>
+      <div v-if="hasNoValues" class="empty empty-values">
+        <p>尚无图纸集自定义属性；图纸集名称仍可在此编辑。</p>
+        <button type="button" @click="emit('addSheetsetField')">新增图纸集字段</button>
       </div>
+      <p v-else-if="hasNoMatch" class="empty">没有匹配属性；请清除搜索或关闭“仅看修改”。</p>
     </div>
     <PropertyValueCompareDialog :open="compareKey !== null" :heading="compareHeading" :stages="compareStages" @close="compareKey = null" />
     <div v-if="expandKey" class="modal-mask" @keydown="onExpandKeydown">
@@ -252,12 +270,16 @@ function onExpandKeydown(event: KeyboardEvent) {
   </section>
 </template>
 <style scoped>
-.value-panel{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);margin-bottom:var(--space-4);overflow:hidden}
+.value-panel{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);overflow:hidden}
 .panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:60px;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
-.panel-head h2{margin:0;font-size:16px}
-.panel-head small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
+/* 折叠开关沿用属性页受控按钮基线（≥36px、边框与不透明背景），仅排布为标题样式 */
+.head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:36px}
+.head-toggle h2{margin:0;font-size:16px}
+.head-toggle small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
+.chevron{color:var(--color-text-secondary);font-size:12px}
 .metrics{display:flex;gap:var(--space-2);flex-wrap:wrap}
-.head-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap}
+.head-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.submit-hint{color:var(--color-text-muted);font-size:12px}
 .head-actions button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
 .legend{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;font-size:12px;color:var(--color-text-secondary);margin:0 0 var(--space-3)}
 .flag{display:inline-block;font-size:12px;padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
@@ -296,7 +318,10 @@ button.link:focus-visible{outline:2px solid var(--color-focus);outline-offset:2p
 .value-toolbar .only-changed{display:inline-flex;align-items:center;gap:var(--space-1);font-size:13px;color:var(--color-text-secondary)}
 .match-count{margin-left:auto;color:var(--color-text-muted);font-size:12px}
 .empty{text-align:center;padding:var(--space-5);color:var(--color-text-secondary);margin:0}
-.local-actions{display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;border-top:1px solid var(--color-border-subtle);margin-top:var(--space-4);padding-top:var(--space-4)}
+/* 无自定义值空态：与查询无结果区分，提供新增 sheetset 字段入口 */
+.empty-values{display:grid;justify-items:center;gap:var(--space-3);border:1px dashed var(--color-border-subtle);border-radius:var(--radius-md)}
+.empty-values p{margin:0}
+.empty-values button{min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface)}
 /* 展开编辑对话框（复用公共模态原语；textarea 长文本完整显示不截断） */
 .expand-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:13px;line-height:1.7}
 textarea{width:100%;min-height:140px;resize:vertical;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}

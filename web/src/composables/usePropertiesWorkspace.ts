@@ -7,10 +7,13 @@
 // - invalidateDefinitions(keys)：删除属性定义后对应图纸集值字段进入失效集合（App 按命令簿整体重算传入，
 //   撤销/移除命令后自动解除）；失效字段阻断提交但保留输入供核对；
 // - guard(next)：三选一（加入草稿后继续/放弃输入/留在此处），与图纸页共享同一个 UnsavedInputDialog 实例。
-import {computed, ref, watch} from "vue";
+// - 面板会话态（任务 6）：定义折叠/查询/作用域/页码、值面板折叠、CSV 面板折叠与导入区开关、
+//   新增字段表单均在此持有；切工作区（基准重建）重置为定义折叠、值展开，切主标签保留（P-09）。
+import {computed, reactive, ref, watch} from "vue";
 import type {ComputedRef, Ref} from "vue";
-import type {ChangeCommand, Workspace} from "../api/contracts";
+import type {ChangeCommand, PropertyType, Workspace} from "../api/contracts";
 import {buildSheetSetCommand, createPropertyBuffer, filterValueKeys, valueStatus} from "../features/properties/model";
+import type {DefinitionScopeFilter} from "../features/properties/model";
 import type {
   PropertyBuffer, PropertyKey, PropertySearchMode, PropertySubmitResult, ValueKey, ValueStatus,
 } from "../features/properties/types";
@@ -20,6 +23,10 @@ export type PropertiesWorkspaceDeps = {
   workspace: Ref<Workspace | null>;
   baseWorkspace: Ref<Workspace | null>;
   submitCommands: (commands: ChangeCommand[], label: string, category: "metadata" | "structural" | "property") => Promise<PropertySubmitResult>;
+  // 新增属性定义命令簿门禁（App 既有 addCommand(...,'property')）：返回 false 表示未入栈
+  addPropertyDefinition: (form: {type: PropertyType; name: string; defaultValue: string}) => boolean;
+  // 页面级错误呈现（App 既有 error 通知条）
+  notifyError: (message: string) => void;
 };
 
 export type GuardState = {open: boolean; summary: string; canSave: boolean};
@@ -40,6 +47,17 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
   const searchMode = ref<PropertySearchMode>("all");
   const changedOnly = ref(false);
   const activeKey = ref<ValueKey | null>(null);
+  // —— 面板会话态（PLAN-DM-016 任务 6）：折叠/查询/页码/导入区开关为工作区会话态 ——
+  // 切工作区（基准重建）重置为定义折叠、值展开、导入区关闭、查询与页码清零；同一会话内切主标签保留。
+  const definitionsCollapsed = ref(true);
+  const valuesCollapsed = ref(false);
+  const csvCollapsed = ref(false);   // 面板体折叠（默认展开）
+  const csvOpen = ref(false);        // 导入区开关（默认关闭）
+  const definitionsQuery = ref("");
+  const definitionsScope = ref<DefinitionScopeFilter>("all");
+  const definitionsPage = ref(1);
+  // 新增字段表单（原 App propertyForm 移交）：作用域/名称/默认值，成功清空、失败保留
+  const definitionForm = reactive<{type: PropertyType; name: string; defaultValue: string}>({type: "sheet", name: "", defaultValue: ""});
   let guardResolver: ((choice: GuardChoice) => void) | null = null;
   let seen = "";
 
@@ -99,6 +117,18 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
   }
 
   // —— 快照生命周期 ——
+  function resetSessionState() {
+    definitionsCollapsed.value = true;   // 定义折叠
+    valuesCollapsed.value = false;       // 值展开
+    csvCollapsed.value = false;          // CSV 面板展开
+    csvOpen.value = false;               // 导入区关闭
+    definitionsQuery.value = "";
+    definitionsScope.value = "all";
+    definitionsPage.value = 1;
+    definitionForm.type = "sheet";
+    definitionForm.name = "";
+    definitionForm.defaultValue = "";
+  }
   function resetBuffers() {
     base.value = null;
     draft.value = null;
@@ -108,6 +138,7 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     summaryError.value = "";
     activeKey.value = null;
     seen = "";
+    resetSessionState();
   }
   function rebuild(ws: Workspace, baseWs: Workspace) {
     base.value = createPropertyBuffer(baseWs);
@@ -117,6 +148,7 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     errors.value = {};
     summaryError.value = "";
     activeKey.value = null;
+    resetSessionState();
   }
   // 普通投影变化：采纳草稿投影并保留未加入草稿的本地编辑
   function syncFromProjection() {
@@ -195,6 +227,17 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     return result;
   }
 
+  // —— 新增属性定义（PLAN-DM-016 任务 6）：表单状态在此，命令簿门禁仍由 App 的 addCommand 执行 ——
+  // 名称必填（空文本直接通知错误）；入栈成功清空名称与默认值，失败（如结构分批阻断）保留输入。
+  function queuePropertyDefinition() {
+    const name = definitionForm.name.trim();
+    if (!name) { deps.notifyError("属性名称不能为空"); return; }
+    if (deps.addPropertyDefinition({type: definitionForm.type, name, defaultValue: definitionForm.defaultValue})) {
+      definitionForm.name = "";
+      definitionForm.defaultValue = "";
+    }
+  }
+
   // —— 全局输入保护三选一（与图纸页共享同一个 UnsavedInputDialog 实例，由 App 串联）——
   async function guard(next: () => void | Promise<void>): Promise<void> {
     if (guardState.value.open) return;          // 防重入
@@ -218,7 +261,9 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     input, base, draft, invalidKeys, errors, summaryError, guardState,
     dirtyKeys, pendingKeys, hiddenDirtyCount, matchedKeys,
     search, searchMode, changedOnly, activeKey, statusOf,
-    setValue, revertValue, discardInput, submitValues,
+    definitionsCollapsed, valuesCollapsed, csvCollapsed, csvOpen,
+    definitionsQuery, definitionsScope, definitionsPage, definitionForm,
+    setValue, revertValue, discardInput, submitValues, queuePropertyDefinition,
     syncFromProjection, invalidateDefinitions, guard, resolveGuard,
   };
 }

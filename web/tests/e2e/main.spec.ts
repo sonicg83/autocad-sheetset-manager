@@ -260,7 +260,7 @@ test("维护属性并按位置创建子集后预览派生变化",async({page})=>
   await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewRequests[0]).toEqual([{type:"add_custom_property",property_type:"sheet",name:"专业",default_value:"燃气"}]);
   await openDraftPop(page);await page.getByRole("button",{name:"清空"}).click();await closeDraftPop(page);
-  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"展开属性字段定义"}).click();
+  await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByRole("button",{name:"收起属性字段定义"})).toBeVisible();await expect(page.getByRole("button",{name:"新增字段"})).toBeVisible();
   await page.getByRole("button",{name:"删除 图纸 属性 比例"}).click();await page.getByRole("dialog",{name:"删除属性定义"}).getByRole("button",{name:"加入删除草稿"}).click();
   await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();expect(previewRequests[1]).toEqual([{type:"delete_custom_property",property_type:"sheet",name:"比例"}]);
   // 任务 6 起新建子集表单选择参照子集而非手填序号：参照子集 2 + 之后 → ordinal 2

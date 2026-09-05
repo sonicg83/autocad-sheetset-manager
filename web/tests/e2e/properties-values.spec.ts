@@ -176,13 +176,13 @@ test("搜索三模式与仅看修改取交集，活动字段暂留并计入隐�
   const activeItem = valueItem(page, "工程名称");
   await expect(activeItem).toBeVisible();
   await expect(activeItem.getByText("不再匹配当前搜索")).toBeVisible();
-  await expect(page.locator(".value-panel .local-actions .hint")).toContainText("共 1 项，其中 0 项当前未显示");
+  await expect(page.locator(".value-panel .submit-hint")).toContainText("共 1 项，其中 0 项当前未显示");
   // 结束编辑后该修改被隐藏，隐藏计数为 1
   await activeItem.getByRole("button", {name: "结束编辑"}).click();
   await expect(activeItem).toHaveCount(0);
   await expect(page.getByText("没有匹配属性")).toBeVisible();
   await expect(page.locator(".value-panel .match-count")).toContainText("1 项修改被隐藏");
-  await expect(page.locator(".value-panel .local-actions .hint")).toContainText("共 1 项，其中 1 项当前未显示");
+  await expect(page.locator(".value-panel .submit-hint")).toContainText("共 1 项，其中 1 项当前未显示");
   // 仅属性值：重新命中
   await mode.selectOption({label: "仅属性值"});
   await expect(valueItem(page, "工程名称")).toBeVisible();

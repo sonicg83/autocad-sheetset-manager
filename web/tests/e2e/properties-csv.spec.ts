@@ -80,7 +80,7 @@ test("默认不显示文件选择：经导入/导出菜单按需展开，未选�
   await openCsvFlow(page);
   await expect(page.getByRole("button", {name: "预览 CSV 导入"})).toBeHidden();
   await expect(page.getByRole("button", {name: "确认导入"})).toBeDisabled();
-  await expect(page.getByText(/未选择 CSV 文件/)).toBeVisible();
+  await expect(page.locator(".csv-flow .csv-hint")).toContainText(/未选择 CSV 文件/);
   // 关闭导入区仅隐藏 UI：再打开仍可继续
   await page.getByRole("button", {name: "关闭导入"}).click();
   await expect(page.getByLabel("属性 CSV 文件")).toBeHidden();
@@ -139,7 +139,7 @@ test("无效数据禁用确认导入；乱码读取与预览失败均有明确�
   // 无效数据（executable=false）：确认禁用并有不可执行说明
   await page.getByLabel("属性 CSV 文件").setInputFiles(csvFile("type,name,default_value\nsheet,,\n"));
   await page.getByRole("button", {name: "预览 CSV 导入"}).click();
-  await expect(page.getByText(/不可执行/)).toBeVisible();
+  await expect(page.locator(".csv-flow .csv-hint.error")).toContainText(/不可执行/);
   await expect(page.getByRole("button", {name: "确认导入"})).toBeDisabled();
   expect(importCalls).toBe(0);
   // 预览失败：给出错误说明且不进入确认

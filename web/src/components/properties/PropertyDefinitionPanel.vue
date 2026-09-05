@@ -15,52 +15,60 @@ import PropertyDefinitionTable from "./PropertyDefinitionTable.vue";
 
 const props = defineProps<{
   definitions: PropertyDefinition[];
-  // 新增表单状态由 App 持有（与既有 queuePropertyDefinition 门禁共用），任务 6 移交组合式函数
+  // 新增表单为工作区会话态（usePropertiesWorkspace.definitionForm），经 App 传入共享
   form: {type: PropertyType; name: string; defaultValue: string};
+  // 折叠/查询/作用域/页码为工作区会话态（PLAN-DM-016 任务 6）：切 workspace 重置，切主标签保留
+  collapsed: boolean;
+  query: string;
+  scopeFilter: DefinitionScopeFilter;
+  page: number;
 }>();
 const emit = defineEmits<{
   addDefinition: [];
   deleteDefinition: [definition: PropertyDefinition];
+  "update:collapsed": [value: boolean];
+  "update:query": [value: string];
+  "update:scopeFilter": [value: DefinitionScopeFilter];
+  "update:page": [value: number];
 }>();
 
 function scopeLabel(definition: PropertyDefinition): string {
   return definition.type === "sheetset" ? "图纸集" : "图纸";
 }
 
-// —— 折叠（默认折叠；仅隐藏内容，不清空输入；任务 6 起提升为工作区会话态）——
-const collapsed = ref(true);
-function toggleCollapsed() { collapsed.value = !collapsed.value; }
+// —— 折叠（默认折叠；仅隐藏内容，不清空输入；会话态经 emit 上报）——
+function toggleCollapsed() { emit("update:collapsed", !props.collapsed); }
 
-// —— 查询与分页：面板持有，表格只展示（SPEC-DM-010 §4.1）——
-const query = ref("");
-const scopeFilter = ref<DefinitionScopeFilter>("all");
-const page = ref(1);
-const filtered = computed(() => filterDefinitions(props.definitions, query.value, scopeFilter.value));
+// —— 查询与分页：状态在会话态，本面板只做派生与上报（SPEC-DM-010 §4.1）——
+const filtered = computed(() => filterDefinitions(props.definitions, props.query, props.scopeFilter));
 const lastPage = computed(() => Math.max(1, Math.ceil(filtered.value.length / DEFINITIONS_PAGE_SIZE)));
-const pageRows = computed(() => filtered.value.slice((page.value - 1) * DEFINITIONS_PAGE_SIZE, page.value * DEFINITIONS_PAGE_SIZE));
-watch([query, scopeFilter], () => { page.value = 1; });                       // 查询/筛选变化回第一页
-watch(lastPage, (value) => { page.value = Math.min(page.value, value); });    // 删除后回退到最后有效页
-function changePage(value: number) { page.value = value; }
-function clearFilter() { query.value = ""; scopeFilter.value = "all"; }
+const pageRows = computed(() => filtered.value.slice((props.page - 1) * DEFINITIONS_PAGE_SIZE, props.page * DEFINITIONS_PAGE_SIZE));
+watch([() => props.query, () => props.scopeFilter], () => { if (props.page !== 1) emit("update:page", 1); });    // 查询/筛选变化回第一页
+watch(lastPage, (value) => { const next = Math.min(props.page, value); if (next !== props.page) emit("update:page", next); }); // 删除后回退到最后有效页
+function changePage(value: number) { emit("update:page", value); }
+function clearFilter() { emit("update:query", ""); emit("update:scopeFilter", "all"); }
 
 // —— 新增区（SPEC-DM-010 §4.2）：仅作用域/名称/默认值；成功清空，失败保留输入并就近展示错误 ——
 const adding = ref(false);
 const nameError = ref("");
 const addNameInput = ref<HTMLInputElement | null>(null);
 const addToggleButton = ref<HTMLButtonElement | null>(null);
-async function openAdd() {
-  collapsed.value = false;
+// openAdd 可指定预置作用域（值面板「新增 sheetset 字段」入口调用）：展开面板并聚焦名称输入
+async function openAdd(scope?: "sheet" | "sheetset") {
+  if (scope) props.form.type = scope;
+  if (props.collapsed) emit("update:collapsed", false);
   adding.value = true;
   await nextTick();
   addNameInput.value?.focus();
 }
+defineExpose({openAdd});
 function closeAdd() {
   adding.value = false;
   nameError.value = "";
   addHint.value = "";
   pendingAddKey.value = null;
   hiddenAddedKey.value = null;
-  props.form.name = "";           // 关闭新增清空输入（form 为 App 持有的共享表单状态）
+  props.form.name = "";           // 关闭新增清空输入（form 为工作区会话共享表单状态）
   props.form.defaultValue = "";
   addToggleButton.value?.focus(); // 关闭录入区后焦点回到有效控件
 }
@@ -87,8 +95,8 @@ watch(() => props.definitions, (definitions) => {
   const added = definitions.find((definition) => definitionKey(definition) === key);
   if (!added) return;
   pendingAddKey.value = null;
-  if (definitionMatches(added, query.value, scopeFilter.value)) {
-    page.value = Math.floor(definitions.indexOf(added) / DEFINITIONS_PAGE_SIZE) + 1; // 使新增定义可见
+  if (definitionMatches(added, props.query, props.scopeFilter)) {
+    emit("update:page", Math.floor(definitions.indexOf(added) / DEFINITIONS_PAGE_SIZE) + 1); // 使新增定义可见
     addHint.value = `已加入草稿：${scopeLabel(added)}属性「${added.name}」`;
   } else {
     hiddenAddedKey.value = definitionKey(added);
@@ -106,7 +114,7 @@ async function viewAddedField() {
   const index = props.definitions.findIndex((definition) => definitionKey(definition) === key);
   if (index < 0) return;
   await nextTick();
-  page.value = Math.floor(index / DEFINITIONS_PAGE_SIZE) + 1;
+  emit("update:page", Math.floor(index / DEFINITIONS_PAGE_SIZE) + 1);
 }
 
 // —— CSV 区已移交 PropertyCsvPanel（任务 5）：本面板只负责定义查询/分页/新增/删除 ——
@@ -136,12 +144,12 @@ async function viewAddedField() {
           aria-label="搜索字段"
           placeholder="搜索字段名或默认值"
           :value="query"
-          @input="query = ($event.target as HTMLInputElement).value"
+          @input="emit('update:query', ($event.target as HTMLInputElement).value)"
         >
         <select
           aria-label="作用域筛选"
           :value="scopeFilter"
-          @change="scopeFilter = ($event.target as HTMLSelectElement).value as DefinitionScopeFilter"
+          @change="emit('update:scopeFilter', ($event.target as HTMLSelectElement).value as DefinitionScopeFilter)"
         >
           <option value="all">全部作用域</option>
           <option value="sheetset">图纸集</option>
