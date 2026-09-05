@@ -6,6 +6,8 @@ import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,PropertyType,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult} from "./features/sheets/types";
+import type {GuardChoice} from "./features/sheets/types";
+import type {PropertyKey, ValueKey} from "./features/properties/types";
 import {useShellTabs} from "./composables/useShellTabs";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
@@ -16,8 +18,9 @@ import {useSheetsWorkspace} from "./composables/useSheetsWorkspace";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "./composables/useSheetsWorkspace";
 import {useSheetColumns} from "./composables/useSheetColumns";
 import {useSheetEditor} from "./composables/useSheetEditor";
+import {usePropertiesWorkspace} from "./composables/usePropertiesWorkspace";
 import type {OperationKind} from "./components/sheets/SheetToolbar.vue";
-import UnsavedInputDialog from "./components/sheets/UnsavedInputDialog.vue";
+import UnsavedInputDialog from "./components/ui/UnsavedInputDialog.vue";
 import {useConfirm} from "./composables/useConfirm";
 import {useToast} from "./composables/useToast";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
@@ -152,16 +155,18 @@ const sheetPropertyNames=computed(()=>workspace.value?.sheet_set.property_defini
 const executionEstimate=computed(()=>preview.value?.execution_intent?.estimate??null);
 const saveStatusText=computed(()=>draftSaveFailed.value?"保存失败":draftSaving.value?"保存中":draftStale.value?"草稿已过期":"已保存");
 // —— 提交命令（SubmitCommands）：加入草稿动作并等待持久化与投影成功，不以入队即宣称保存 ——
-async function submitCommands(commands:ChangeCommand[],label:string,category:"metadata"|"structural"):Promise<SubmitResult>{
+async function submitCommands(commands:ChangeCommand[],label:string,category:"metadata"|"structural"|"property"):Promise<SubmitResult>{
   if(draftStale.value)return{ok:false,message:"草稿已过期，必须丢弃或重新打开后手工重做"};
   // 结构变更与属性定义变更必须分批；属性值编辑（metadata）可与结构并存（混合批次显示由命令簿叠加合成）
   if(category==="structural"&&hasPropertyDefinitionCommands.value)return{ok:false,message:"属性定义与结构变更必须分批预览和执行"};
+  if(category==="property"&&hasStructuralCommands.value)return{ok:false,message:"属性定义与结构变更必须分批预览和执行"};
   // 草稿保存失败重试：仅当撤销/重做光标位于栈顶且与最后一条草稿动作等价时，
   // 视为保存失败重试而不重复加入同一命令批次；撤销后重提交相同命令必须重新入栈（I-1 修复）
   const last=draftActions.value[draftActions.value.length-1];
   const sameBatch=last?.kind==="command_batch"&&draftCursor.value===draftActions.value.length&&JSON.stringify(last.commands)===JSON.stringify(commands);
   if(!sameBatch){if(!addCommandBatch(commands,label,category))return{ok:false,message:error.value||"加入草稿失败"}}
-  else scheduleDraftSave();
+  // 保存失败重试去重：不重复入栈，但用户确实执行了一次加入草稿动作，旧预览同样失效
+  else {scheduleDraftSave();invalidatePreview()}
   await draftSaveQueue;
   if(draftSaveFailed.value)return{ok:false,message:lastDraftError.value?.message??"草稿保存失败",fields:lastDraftError.value?.fields};
   const projection=await refreshSheetProjection();
@@ -195,6 +200,23 @@ const guardedDiagnosticFilter=guardedFilter((value:SheetDiagFilter)=>{diagnostic
 const guardedPendingFilter=guardedFilter((value:SheetPendingFilter)=>{pendingFilter.value=value});
 // 「编辑属性」：打开唯一编辑上下文（操作表单等另一上下文内有未提交输入先三选一）
 function onEditSheet(sheet:Sheet){editor.openSheetEditor(sheet.id)}
+// 属性页会话缓冲域（PLAN-DM-016 任务 2）：三层快照/提交生命周期/三选一 guard，状态在此不在页面
+const properties=usePropertiesWorkspace({workspace,baseWorkspace,submitCommands});
+// 删除属性定义命令使对应图纸集值字段进入失效集合；撤销/移除后随命令簿整体重算自动解除
+watch(()=>commands.value.map(item=>item.type==="delete_custom_property"?`${item.property_type}:${item.name.toLocaleLowerCase()}`:"").join("|"),()=>{
+  const keys=new Set<PropertyKey>();
+  for(const item of commands.value)if(item.type==="delete_custom_property"&&item.property_type==="sheetset")keys.add(`sheetset:${item.name}`);
+  properties.invalidateDefinitions(keys);
+},{immediate:true});
+// —— 全局输入保护（PLAN-DM-016 任务 2）：图纸页与属性页两个活动输入域依次过闸 ——
+// 固定先处理当前主标签的活动编辑器，再处理另一域；任一步「留在此处」即终止 next。
+// 页面只挂载一个共享 UnsavedInputDialog（见模板），两个 guard 顺序开合同一实例，不叠加模态。
+async function guardAllInputs(next:()=>void|Promise<void>){
+  if(active.value==="properties")await properties.guard(()=>editor.guard(next));
+  else await editor.guard(()=>properties.guard(next));
+}
+function resolveSharedGuard(choice:GuardChoice){editor.resolveGuard(choice);properties.resolveGuard(choice)}
+const sharedGuardState=computed(()=>properties.guardState.value.open?properties.guardState.value:editor.guardState.value);
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
@@ -202,6 +224,10 @@ function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsv
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";return workspaceLoadGeneration.value}
 async function openByPath(path:string){
+  // 重新打开/切换工作区前先过全局输入保护（无未提交输入时直接通过）
+  await guardAllInputs(()=>doOpenByPath(path));
+}
+async function doOpenByPath(path:string){
   if(isRestoreExecuting.value){error.value="修订恢复正在执行，请稍候";return}
   isWorkspaceLoading.value=true;
   await draftSaveQueue;
@@ -308,9 +334,9 @@ async function selectBaseTemplateFile(){
   if(!ctx)return;
   ctx.baseTemplateFile=path;ctx.dirty=true;
 }
-// 关闭工作区：先接未提交输入保护（三选一），再纳入现有关闭确认，不静默丢弃
+// 关闭工作区：先接全局输入保护（三选一），再纳入现有关闭确认，不静默丢弃
 async function closeWorkspace(){
-  await editor.guard(async()=>{await doCloseWorkspace()});
+  await guardAllInputs(async()=>{await doCloseWorkspace()});
 }
 async function doCloseWorkspace(){
   const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
@@ -328,7 +354,11 @@ async function doCloseWorkspace(){
   // 重置图纸页工作区状态；操作表单/编辑缓冲状态已由 editor.reset() 清空，旧模板路径不残留
   resetSheetsWorkspace();layoutReadGeneration+=1;
 }
+// 刷新工作区同样先过全局输入保护（基准即将重建，未提交输入须先三选一）
 async function refreshWorkspace(expectedWorkspaceId?:string){
+  await guardAllInputs(()=>doRefreshWorkspace(expectedWorkspaceId));
+}
+async function doRefreshWorkspace(expectedWorkspaceId?:string){
   const current=workspace.value;
   if(!current||isWorkspaceLoading.value)return;
   const workspaceId=expectedWorkspaceId??current.id;
@@ -410,7 +440,8 @@ async function reloadAfterDraftConflict(){
   const ok=await confirmAction({title:"放弃冲突动作并重新加载",message:"将放弃当前窗口未保存的冲突动作，并重新读取服务器上的较新草稿。是否继续？",confirmText:"确定放弃冲突动作并重新加载",danger:false});
   if(!ok)return;
   draftSaveFailed.value=false;
-  await refreshWorkspace(current.id);
+  // 此路径已带明确「放弃并重新加载」确认：直接刷新，不再叠加三选一（保存对过期草稿也必然失败）
+  await doRefreshWorkspace(current.id);
 }
 function addCommand(command:ChangeCommand,category:"property"|"structural"|"metadata"){
   if(draftStale.value){error.value="草稿已过期，必须丢弃或重新打开后手工重做";return false}
@@ -429,7 +460,12 @@ function addCommandBatch(batch:ChangeCommand[],label:string,category:"property"|
   draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label,commands:batch});
   draftCursor.value=draftActions.value.length;rebuildDraftProjection();scheduleDraftSave();error.value="";return true;
 }
-function queueSheetSet(){if(!workspace.value)return;if(!workspace.value.sheet_set.name.trim()){error.value="图纸集名称不能为空";return}addCommand(createCommand.updateSheetSet(workspace.value.sheet_set.name,{...workspace.value.sheet_set.custom_properties}),"metadata")}
+// 属性页名称/值的提交改走 usePropertiesWorkspace.submitValues()（一个完整 update_sheet_set 命令），
+// 不再直接读取 workspace props 编排（PLAN-DM-016 任务 2）
+async function guardedImportCsv(){
+  // CSV 是正式写入：确认导入前先处理普通未提交输入（三选一），不静默混批
+  await guardAllInputs(async()=>{await importCsv()});
+}
 async function queueDelete(sheet:Sheet){
   // 编辑未提交时先处理缓冲（三选一），再按删除确认流程；删除命令不得夹带未确认的属性变更
   await editor.guard(async()=>{await doQueueDelete(sheet)});
@@ -507,9 +543,9 @@ function queueDeleteProperty(definition:PropertyDefinition){addCommand(createCom
 // 新增图纸/新建子集提交由 useSheetEditor 处理：参照对象 → ordinal 映射（commands.ts）、
 // 原 command schema、成功定位与失败保留输入（任务 6），不在 App.vue 重复实现。
 
-// 全局预览/确认写入：有未提交输入先三选一；加入草稿使旧预览失效，不能静默忽略输入
+// 全局预览/确认写入：有未提交输入先三选一（图纸页与属性页依次过闸）；加入草稿使旧预览失效，不能静默忽略输入
 async function showPreview(){
-  await editor.guard(async()=>{await doShowPreview()});
+  await guardAllInputs(async()=>{await doShowPreview()});
 }
 async function doShowPreview(){
   if(isWorkspaceLoading.value||draftStale.value||!workspace.value||!commands.value.length)return;
@@ -558,7 +594,7 @@ const dock=computed(()=>{ // ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一�
 });
 // write 不能捕获旧 context 后在保存继续时执行：guard 保存后 previewContext 已失效，必须重新预览
 async function write(){
-  await editor.guard(async()=>{await doWrite()});
+  await guardAllInputs(async()=>{await doWrite()});
 }
 async function doWrite(){
   const context=previewContext.value;
@@ -590,7 +626,7 @@ useHotkeys({
         <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
         <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:bulk-mode="bulkMode" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
-        <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
+        <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:string,value:string)=>properties.setValue(key as ValueKey,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:string)=>properties.revertValue(key as ValueKey)" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
       </template>
     </main>
@@ -598,7 +634,8 @@ useHotkeys({
   </div>
   <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
-  <UnsavedInputDialog v-bind="editor.guardState.value" @save-and-continue="editor.resolveGuard('save')" @discard="editor.resolveGuard('discard')" @stay="editor.resolveGuard('stay')" />
+  <!-- 唯一共享三选一模态：图纸页与属性页 guard 顺序开合同一实例，状态取当前打开者 -->
+  <UnsavedInputDialog v-bind="sharedGuardState" @save-and-continue="resolveSharedGuard('save')" @discard="resolveSharedGuard('discard')" @stay="resolveSharedGuard('stay')" />
   <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />
 </template>
 
