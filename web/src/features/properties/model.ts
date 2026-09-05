@@ -1,7 +1,7 @@
 // 属性页三基准模型（PLAN-DM-016 任务 1 / SPEC-DM-010 §5.2、§5.3）。
 // 无副作用纯函数：三基准比较（正式基准/草稿投影/当前输入）、搜索过滤与命令构造。
 // 不依赖 Vue DOM；只消费 Workspace 与 ChangeCommand。
-import type {ChangeCommand, Workspace} from "../../api/contracts";
+import type {ChangeCommand, PropertyDefinition, Workspace} from "../../api/contracts";
 import type {PropertyBuffer, PropertySearchMode, ValueKey, ValueStatus} from "./types";
 
 /** 从工作区建立名称与完整自定义属性值的快照副本；不引用原映射，避免直接修改 props。 */
@@ -79,4 +79,39 @@ export function buildSheetSetCommand(
     throw new Error(`PROPERTY_BUFFER_STALE:${[...invalid].join(",")}`);
   }
   return {type: "update_sheet_set", name: input.name, custom_properties: {...input.values}};
+}
+
+// —— 字段定义查询与分页（PLAN-DM-016 任务 4 / SPEC-DM-010 §4.1）——
+// 字段身份始终是 type + name；同名跨作用域独立，键用 toLocaleLowerCase 归一。
+
+/** 每页固定六条：字段定义以分页控制高度，不采用无限纵向长表。 */
+export const DEFINITIONS_PAGE_SIZE = 6;
+
+export type DefinitionScopeFilter = "all" | "sheetset" | "sheet";
+
+/** 字段定义身份键：`${type}:${name.toLocaleLowerCase()}`，同名跨作用域不合并。 */
+export function definitionKey(definition: PropertyDefinition): string {
+  return `${definition.type}:${definition.name.toLocaleLowerCase()}`;
+}
+
+/** 字段定义是否命中当前查询与作用域筛选：字段名/默认值文本包含（英文不区分大小写），保持输入顺序。 */
+export function definitionMatches(
+  definition: PropertyDefinition,
+  query: string,
+  scope: DefinitionScopeFilter,
+): boolean {
+  if (scope !== "all" && definition.type !== scope) return false;
+  const needle = query.toLocaleLowerCase();
+  if (!needle) return true;
+  return definition.name.toLocaleLowerCase().includes(needle)
+    || (definition.default_value ?? "").toLocaleLowerCase().includes(needle);
+}
+
+/** 过滤字段定义：仅按当前查询与作用域筛选，不排序、不补造、不合并同名定义。 */
+export function filterDefinitions(
+  definitions: PropertyDefinition[],
+  query: string,
+  scope: DefinitionScopeFilter,
+): PropertyDefinition[] {
+  return definitions.filter((definition) => definitionMatches(definition, query, scope));
 }

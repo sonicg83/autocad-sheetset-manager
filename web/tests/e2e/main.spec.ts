@@ -255,11 +255,13 @@ test("维护属性并按位置创建子集后预览派生变化",async({page})=>
   await openWorkspace(page);
   await page.route("**/api/layout-names",route=>route.fulfill({json:{layouts:["A1模板"],cached:false,file_hash:"x"}}));
   await page.getByRole("tab",{name:"属性"}).click();
-  await page.getByLabel("属性作用域").selectOption("sheet");await page.getByLabel("属性名称").fill("专业");await page.getByLabel("默认值").fill("燃气");await page.getByRole("button",{name:"加入属性定义"}).click();
+  await page.getByRole("button",{name:"展开属性字段定义"}).click();await page.getByRole("button",{name:"新增字段"}).click();
+  await page.getByLabel("属性作用域").selectOption("sheet");await page.getByLabel("属性名称").fill("专业");await page.getByLabel("默认值").fill("燃气");await page.getByRole("button",{name:"加入草稿"}).click();
   await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewRequests[0]).toEqual([{type:"add_custom_property",property_type:"sheet",name:"专业",default_value:"燃气"}]);
   await openDraftPop(page);await page.getByRole("button",{name:"清空"}).click();await closeDraftPop(page);
-  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"删除 比例"}).click();
+  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"展开属性字段定义"}).click();
+  await page.getByRole("button",{name:"删除 图纸 属性 比例"}).click();await page.getByRole("dialog",{name:"删除属性定义"}).getByRole("button",{name:"加入删除草稿"}).click();
   await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();expect(previewRequests[1]).toEqual([{type:"delete_custom_property",property_type:"sheet",name:"比例"}]);
   // 任务 6 起新建子集表单选择参照子集而非手填序号：参照子集 2 + 之后 → ordinal 2
   await page.getByRole("button",{name:"收起任务浮层"}).click();
@@ -303,7 +305,7 @@ test("普通预览丢弃乱序响应并只执行冻结命令",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/changes/execute",async route=>{executeBody=await route.request().postDataJSON();await route.fulfill({json:{id:"job-race",status:"FAILED",progress:0,attempt:1,files:[]}})});
   await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await expect.poll(()=>previewBodies.length).toBe(1);await page.getByRole("button",{name:"预览变更"}).click();await expect.poll(()=>previewBodies.length).toBe(2);
   gates[1].resolve();await expect(page.getByText("preview-2",{exact:true})).toBeVisible();gates[0].resolve();await expect(page.getByText("preview-2",{exact:true})).toBeVisible();await expect(page.getByText("preview-1",{exact:true})).toHaveCount(0);
-  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await expect.poll(()=>previewBodies.length).toBe(3);await openDraftPop(page);await page.getByRole("button",{name:"清空"}).click();await closeDraftPop(page);gates[2].resolve();await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();
+  await page.getByRole("button",{name:"收起任务浮层"}).click();await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await expect.poll(()=>previewBodies.length).toBe(3);await openDraftPop(page);await page.getByRole("button",{name:"清空"}).click();await closeDraftPop(page);gates[2].resolve();await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();
   await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await expect.poll(()=>previewBodies.length).toBe(4);gates[3].resolve();await expect(page.getByText("preview-4",{exact:true})).toBeVisible();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);await expect.poll(()=>executeBody).not.toBeNull();expect(executeBody.base_revision_id).toBe(previewBodies[3].base_revision_id);expect(executeBody.commands).toEqual(previewBodies[3].commands);expect(executeBody.commands).not.toBe(previewBodies[3].commands);
 });
 
@@ -311,14 +313,14 @@ test("CSV 预览丢弃换文件和乱序响应并只导入冻结文本",async({p
   const gates=[deferred(),deferred(),deferred()];const previewBodies:any[]=[];let importBody:any=null;
   await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",async route=>{const index=previewBodies.length;const body=await route.request().postDataJSON();previewBodies.push(body);const name=body.csv.match(/sheet,([^,]+)/)?.[1]??`属性${index}`;await gates[index].promise;await route.fulfill({json:{executable:true,changes:[{line:2,action:"add",type:"sheet",name,default_value:""}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}})});
   await page.route("**/api/workspaces/workspace-1/custom-properties/import",async route=>{importBody=await route.request().postDataJSON();await route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}})});
-  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();const csvInput=page.getByLabel("属性 CSV 文件");const csv=(name:string)=>({name:`${name}.csv`,mimeType:"text/csv",buffer:Buffer.from(`type,name,default_value\nsheet,${name},\n`,"utf8")});
+  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"导入 CSV"}).click();const csvInput=page.getByLabel("属性 CSV 文件");const csv=(name:string)=>({name:`${name}.csv`,mimeType:"text/csv",buffer:Buffer.from(`type,name,default_value\nsheet,${name},\n`,"utf8")});
   await csvInput.setInputFiles(csv("A属性"));await page.getByRole("button",{name:"预览 CSV 导入"}).click();await expect.poll(()=>previewBodies.length).toBe(1);await csvInput.setInputFiles(csv("B属性"));gates[0].resolve();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();await expect(page.locator(".csv-preview").getByText("A属性")).toHaveCount(0);
   await page.getByRole("button",{name:"预览 CSV 导入"}).click();await expect.poll(()=>previewBodies.length).toBe(2);await csvInput.setInputFiles(csv("C属性"));await page.getByRole("button",{name:"预览 CSV 导入"}).click();await expect.poll(()=>previewBodies.length).toBe(3);gates[2].resolve();await expect(page.locator(".csv-preview").getByText("C属性")).toBeVisible();gates[1].resolve();await expect(page.locator(".csv-preview").getByText("C属性")).toBeVisible();await expect(page.locator(".csv-preview").getByText("B属性")).toHaveCount(0);
   await page.getByRole("button",{name:"确认导入"}).click();await confirmModal(page,/确认导入/);await expect.poll(()=>importBody).not.toBeNull();expect(importBody).toEqual(previewBodies[2]);
 });
 
 test("非法 UTF-8 CSV 在本地阻断且不请求 API",async({page})=>{
-  let previewCalls=0,importCalls=0;await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",route=>{previewCalls++;return route.abort()});await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>{importCalls++;return route.abort()});await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();
+  let previewCalls=0,importCalls=0;await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",route=>{previewCalls++;return route.abort()});await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>{importCalls++;return route.abort()});await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"导入 CSV"}).click();
   await page.getByLabel("属性 CSV 文件").setInputFiles({name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from([0x74,0x79,0x70,0x65,0x0a,0xc3,0x28])});await expect(page.getByText("CSV 必须使用 UTF-8 编码",{exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"预览 CSV 导入"})).toBeDisabled();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();expect(previewCalls).toBe(0);expect(importCalls).toBe(0);
 });
 
@@ -328,6 +330,7 @@ test("CSV 导入确认模态为强确认：未勾选时确认按钮禁用",async
   await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}}));
   await openWorkspace(page);
   await page.getByRole("tab",{name:"属性"}).click();
+  await page.getByRole("button",{name:"导入 CSV"}).click();
   await page.getByLabel("属性 CSV 文件").setInputFiles({name:"props.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,比例,1:100\nsheet,专业,建筑\n","utf8")});
   await page.getByRole("button",{name:"预览 CSV 导入"}).click();
   await expect(page.getByRole("button",{name:"确认导入"})).toBeEnabled();
@@ -360,7 +363,7 @@ test("加载新工作区时隐藏旧编辑器并阻断跨工作区执行",async(
   const loadingWasVisible=await page.getByText("正在加载工作区…",{exact:true}).isVisible();
   // 任务 3 起旧编辑器区改名为左树右表工作区容器
   const editorWasVisible=await page.locator(".sheets-workspace").isVisible();
-  openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");
+  openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");await page.getByRole("button",{name:"导入 CSV"}).click();
   await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();
   expect(loadingWasVisible).toBe(true);expect(editorWasVisible).toBe(false);expect(executeCalls).toBe(0);expect(importCalls).toBe(0);
 });
@@ -545,7 +548,7 @@ test("关闭工作区重置模板表单状态且布局读取跟随 CAD 版本",a
 
 test("属性命令与结构命令分批并支持 CSV 行级预览导入",async({page})=>{
   let importedCsv="";await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",async route=>{importedCsv=(await route.request().postDataJSON()).csv;await route.fulfill({json:{executable:false,changes:[{line:2,action:"add",type:"sheet",name:"专业",default_value:"燃气"}],diagnostics:[{line:3,severity:"error",code:"CUSTOM_PROPERTY_NAME_EMPTY",message:"名称不能为空"}],affected_files:["test.dst"],execution_intent:null}})});await page.route("**/api/workspaces/workspace-1/custom-properties/import",route=>route.fulfill({json:{id:"csv-job",status:"SUCCEEDED",progress:100,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();
-  await expect(page.getByRole("link",{name:"下载 CSV 模板"})).toHaveAttribute("href","/api/custom-properties/template");await expect(page.getByRole("link",{name:"导出当前属性"})).toHaveAttribute("href","/api/workspaces/workspace-1/custom-properties/export");await page.getByLabel("属性 CSV 文件").setInputFiles({name:"properties.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,专业,燃气\nsheet,,\n","utf8")});await page.getByRole("button",{name:"预览 CSV 导入"}).click();expect(importedCsv).toContain("sheet,专业,燃气");await expect(page.getByText("第 3 行")).toBeVisible();await expect(page.getByText("CUSTOM_PROPERTY_NAME_EMPTY")).toBeVisible();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();
+  await expect(page.getByRole("link",{name:"下载 CSV 模板"})).toHaveAttribute("href","/api/custom-properties/template");await expect(page.getByRole("link",{name:"导出当前属性"})).toHaveAttribute("href","/api/workspaces/workspace-1/custom-properties/export");await page.getByRole("button",{name:"导入 CSV"}).click();await page.getByLabel("属性 CSV 文件").setInputFiles({name:"properties.csv",mimeType:"text/csv",buffer:Buffer.from("type,name,default_value\nsheet,专业,燃气\nsheet,,\n","utf8")});await page.getByRole("button",{name:"预览 CSV 导入"}).click();expect(importedCsv).toContain("sheet,专业,燃气");await expect(page.getByText("第 3 行")).toBeVisible();await expect(page.getByText("CUSTOM_PROPERTY_NAME_EMPTY")).toBeVisible();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();
   await page.unroute("**/api/workspaces/workspace-1/custom-properties/import/preview");await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview",route=>route.fulfill({json:{executable:true,changes:[{line:2,action:"add",type:"sheet",name:"专业",default_value:"燃气"}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));await page.getByRole("button",{name:"预览 CSV 导入"}).click();await page.getByRole("button",{name:"确认导入"}).click();await confirmModal(page,/确认导入/);
   // CSV 导入任务迁入任务浮层实施进度页签：刷新复位后先展开浮层
   const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("button",{name:"展开任务浮层"}).click();await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("任务 csv-job")).toBeVisible();
@@ -597,9 +600,10 @@ test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   await expect(page.getByText("DST 修复状态：已修复（待确认）")).toBeVisible();
   await page.getByText("修复明细（1）").click();
   await expect(page.getByText("REPAIR_ATTR_MISSING")).toBeVisible();
-  // 确认前普通编辑发布被禁用
-  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  // 确认前普通编辑发布被禁用；浮层展开覆盖属性面板，先收起再继续属性编辑
+  await page.getByRole("button",{name:"收起任务浮层"}).click();await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
   await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
+  await overlay.getByRole("button",{name:"展开任务浮层"}).click();await overlay.getByRole("tab",{name:"诊断"}).click();
   await page.getByRole("button",{name:"预览并确认修复"}).click();
   await expect(page.getByText(/修复 1 项 · 摘要 digest-12345678/)).toBeVisible();
   await page.getByRole("button",{name:"确认发布修复修订"}).click();
@@ -611,7 +615,7 @@ test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   // 修复成功后刷新为 VALID，修复面板消失且普通编辑恢复
   await expect(page.getByText("已修复（待确认）")).toHaveCount(0);
   await expect(page.getByText("DST 修复状态")).toHaveCount(0);
-  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"收起任务浮层"}).click();await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
   await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
 });
 

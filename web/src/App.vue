@@ -539,7 +539,18 @@ function queuePropertyDefinition(){
   const name=propertyForm.name.trim();if(!name){error.value="属性名称不能为空";return}
   if(addCommand(createCommand.addCustomProperty(propertyForm.type,name,propertyForm.defaultValue),"property")){propertyForm.name="";propertyForm.defaultValue=""}
 }
-function queueDeleteProperty(definition:PropertyDefinition){addCommand(createCommand.deleteCustomProperty(definition.type,definition.name),"property")}
+// 删除属性定义（PLAN-DM-016 任务 4 / SPEC-DM-010 §4.2）：沿用既有草稿与确认语义；
+// 目标 sheetset 值仍 dirty 时先运行属性输入 guard（三选一）再弹删除确认；空文本值不视为删除定义。
+// 确认文案只说明作用域与草稿语义，不虚构级联影响数量；受影响范围以预览时服务端结果为准。
+function queueDeleteProperty(definition:PropertyDefinition){void properties.guard(()=>doQueueDeleteProperty(definition))}
+async function doQueueDeleteProperty(definition:PropertyDefinition){
+  const scopeLabel=definition.type==="sheetset"?"图纸集":"图纸";
+  const ok=await confirmAction({title:"删除属性定义",message:`删除${scopeLabel}属性定义「${definition.name}」？\n该操作仅加入删除草稿，可在草稿栈撤销；预览时以服务端结果显示受影响范围，此处不虚构级联影响数量。`,confirmText:"加入删除草稿",danger:false});
+  if(!ok)return;
+  if(addCommand(createCommand.deleteCustomProperty(definition.type,definition.name),"property")){
+    pushToast({type:"ok",title:"已加入删除草稿",body:`${scopeLabel}属性定义「${definition.name}」已加入删除草稿，可在草稿栈查看与撤销`});
+  }
+}
 // 新增图纸/新建子集提交由 useSheetEditor 处理：参照对象 → ordinal 映射（commands.ts）、
 // 原 command schema、成功定位与失败保留输入（任务 6），不在 App.vue 重复实现。
 

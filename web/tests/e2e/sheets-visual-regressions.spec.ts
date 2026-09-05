@@ -18,7 +18,7 @@ for (const theme of ["light", "dark"] as const) {
     }});
     await openWorkspace(page);
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-    for (const selector of [".sheets-toolbar .operations button", ".recover-banner button", ".properties-view button", ".property-panel .link-actions a"]) {
+    for (const selector of [".sheets-toolbar .operations button", ".recover-banner button", ".properties-view button", ".properties-view .definition-panel .link-actions a"]) {
       if (selector.startsWith(".properties")) await page.getByRole("tab", {name: "属性"}).click();
       const controls = page.locator(`${selector}:visible`);
       expect(await controls.count()).toBeGreaterThan(0);
