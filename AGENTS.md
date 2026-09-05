@@ -11,8 +11,9 @@
 
 ## 网络搜索工具
 
-- 需要搜索网页、查找资料或调研外部信息时，不得使用内置的原生搜索工具（如 WebSearch），必须使用已注册的 `tavily-cli` 技能（`tvly search`、`tvly extract` 等，详见 `tavily-search` 等技能说明）。
-- 原生搜索不可用或报错时，优先排查 `tvly` 安装与认证状态（`tvly --status`），仍然失败时向用户说明并等待指示，不要静默改用原生搜索。
+- 需要搜索网页、查找资料或调研外部信息时，优先使用内置的原生搜索工具（如 WebSearch）。
+- 内置搜索不可用或报错时，再检查 `tvly` 安装与认证状态（`tvly --status`），并使用已注册的 `tavily-cli` 技能（`tvly search`、`tvly extract` 等，详见 `tavily-search` 等技能说明）。
+- 内置搜索与 Tavily 均不可用时，向用户说明并等待指示，不要静默改用其他搜索工具。
 
 ## 文档归档约定
 
