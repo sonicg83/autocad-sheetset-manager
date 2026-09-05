@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // 右缘任务浮层：实施进度 / 修改预览 / 诊断三页签（SPEC-DM-006 §4.1/§4.2/§7.2）
 // 受控组件：open/tab 状态由 App.vue 持有（Task 7 toast 抑制与"查看"跳转依赖）；页签行复用 useShellTabs 键盘模型
-// 折叠不卸载：面板体 hidden，页签行保留窄条（始终可见触发按钮 §4.3）；收起后任务继续执行
-import {ref, watch} from "vue";
+// 折叠不卸载：固定入口栏始终可见，抽屉覆盖主区；收起后任务继续执行。
+import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
 import type {CadGroup,CardinalityFrontier,DerivedSubset,Diagnostic,DstValidation,ExecutionEstimate,Job,Preview,RepairPreview,SemanticDiff,SourceBaseline,SubsetOperation} from "../api/contracts";
 import {useShellTabs} from "../composables/useShellTabs";
 import JobStatusPanel from "../components/JobStatusPanel.vue";
@@ -49,10 +49,45 @@ const OV_TABS=[
 ];
 // 页签行复用 useShellTabs 键盘模型；受控：外部 tab prop 变化时同步激活态，内部激活变化回写外部
 const {active,select,onKeydown}=useShellTabs<OverlayTab>(["prog","prev","diag"],"prog");
-watch(()=>props.tab,tab=>{if(active.value!==tab)active.value=tab});
+watch(()=>props.tab,tab=>{if(active.value!==tab)active.value=tab},{immediate:true});
 watch(active,tab=>{if(props.tab!==tab)emit("update:tab",tab)});
 function clickTab(id:OverlayTab){select(id)}
-function onTabKeydown(e:KeyboardEvent){onKeydown(e)}
+function onTabKeydown(e:KeyboardEvent){
+  if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+  onKeydown(e);void nextTick(focusActiveTab);
+}
+const activeTabLabel=computed(()=>OV_TABS.find(item=>item.id===active.value)?.label??"任务详情");
+const drawer=ref<HTMLElement|null>(null);
+const rail=ref<HTMLElement|null>(null);
+const drawerBounds=ref({top:"0px",bottom:"52px"});
+let observer:ResizeObserver|undefined;
+function measureBounds(){
+  const tabs=document.querySelector(".tabbar");
+  const dock=document.querySelector(".dock");
+  if(tabs&&dock)drawerBounds.value={top:`${tabs.getBoundingClientRect().bottom}px`,bottom:`${window.innerHeight-dock.getBoundingClientRect().top}px`};
+}
+function focusActiveTab(){drawer.value?.querySelector<HTMLElement>(`#ov-tab-${active.value}`)?.focus({preventScroll:true})}
+function openTab(id:OverlayTab){select(id);if(!props.open)emit("fold");else void nextTick(focusActiveTab)}
+function closeDrawer(){emit("fold");void nextTick(()=>rail.value?.querySelector<HTMLElement>(`[data-entry="${active.value}"]`)?.focus({preventScroll:true}))}
+function onDrawerKeydown(e:KeyboardEvent){
+  if(e.key==="Escape"){e.preventDefault();e.stopPropagation();closeDrawer();return}
+  if(e.key!=="Tab")return;
+  const controls=Array.from(drawer.value?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')??[])
+    .filter(el=>el.tabIndex>=0&&el.getClientRects().length>0);
+  const first=controls[0],last=controls[controls.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus({preventScroll:true})}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus({preventScroll:true})}
+}
+watch(()=>props.open,async open=>{
+  observer?.disconnect();
+  window.removeEventListener("resize",measureBounds);
+  if(!open)return;
+  await nextTick();measureBounds();focusActiveTab();
+  observer=new ResizeObserver(measureBounds);
+  for(const selector of [".shell-main",".tabbar",".dock"]) {const el=document.querySelector(selector);if(el)observer.observe(el)}
+  window.addEventListener("resize",measureBounds);
+},{immediate:true});
+onBeforeUnmount(()=>{observer?.disconnect();window.removeEventListener("resize",measureBounds)});
 // 诊断完整值读取与复制（SPEC-DM-009 S-04：路径与后端原值一致且可复制）
 const copiedCode=ref<string|null>(null);
 async function copyText(text:string){
@@ -72,6 +107,14 @@ async function copyDiag(item:Diagnostic){
 </script>
 <template>
   <aside class="task-overlay" :class="{collapsed:!open}" role="complementary" aria-label="任务浮层">
+    <nav ref="rail" class="task-rail" aria-label="任务入口">
+      <button v-for="item in OV_TABS" :key="item.id" type="button" :data-entry="item.id"
+        :aria-expanded="open&&active===item.id" aria-controls="task-drawer" @click="openTab(item.id)">
+        {{item.label}}<span v-if="item.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
+      </button>
+      <button v-if="!open" type="button" class="ov-fold" aria-label="展开任务浮层" aria-expanded="false" aria-controls="task-drawer" @click="openTab(active)">«</button>
+    </nav>
+    <section ref="drawer" class="task-drawer" id="task-drawer" :hidden="!open" :style="drawerBounds" role="region" :aria-label="activeTabLabel" @keydown="onDrawerKeydown">
     <div class="ov-tabs" role="tablist" aria-label="任务页签">
       <button v-for="tab in OV_TABS" :key="tab.id" type="button" class="ov-tab" role="tab"
         :id="`ov-tab-${tab.id}`" :aria-selected="active===tab.id" :aria-controls="`ov-panel-${tab.id}`"
@@ -81,7 +124,7 @@ async function copyDiag(item:Diagnostic){
         {{tab.label}}<span v-if="tab.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
       </button>
       <button type="button" class="ov-fold" :aria-expanded="open" aria-controls="ov-body"
-        :aria-label="open?'收起任务浮层':'展开任务浮层'" @click="emit('fold')">{{open?'»':'«'}}</button>
+        aria-label="收起任务浮层" @click="closeDrawer">»</button>
     </div>
     <div class="ov-body" id="ov-body" :hidden="!open">
       <div v-if="active==='prog'" class="ov-panel" id="ov-panel-prog" role="tabpanel" aria-labelledby="ov-tab-prog">
@@ -96,11 +139,15 @@ async function copyDiag(item:Diagnostic){
         <p v-if="!diagnostics.length&&!hasRepair" class="ov-empty">无阻断诊断</p>
       </div>
     </div>
+    </section>
   </aside>
 </template>
 <style scoped>
-.task-overlay{width:340px;flex-shrink:0;background:var(--color-bg-surface);border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;min-height:0;transition:width .2s;overflow-x:hidden}
-.task-overlay.collapsed{width:44px}
+.task-overlay{box-sizing:border-box;width:48px;flex:0 0 48px;position:relative;z-index:100;padding:0;border:0;border-radius:0;background:var(--color-bg-surface);min-height:0;overflow:visible}
+.task-rail{box-sizing:border-box;width:48px;height:100%;border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);padding:var(--space-2) 0}
+.task-rail button{box-sizing:border-box;display:block;width:40px;min-height:40px;margin:0;padding:6px;border:0;background:none;white-space:normal;font-size:12px;text-align:center;border-radius:var(--radius-sm)}
+.task-rail button:hover,.task-rail button[aria-expanded="true"]{background:var(--color-info-bg);color:var(--color-accent)}
+.task-drawer{box-sizing:border-box;position:fixed;right:48px;width:min(390px,calc(100vw - 48px));z-index:100;display:flex;flex-direction:column;min-height:0;padding:0;border:0;border-left:1px solid var(--color-border-subtle);background:var(--color-bg-surface);box-shadow:var(--shadow-3)}
 .task-overlay [hidden]{display:none!important}
 .ov-tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
 .ov-tab{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:10px 4px;font-size:13px;color:var(--color-text-secondary);border:none;border-bottom:2px solid transparent;background:none;display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-family:inherit;white-space:nowrap}

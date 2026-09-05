@@ -401,3 +401,7 @@ S-01～S-12 证据核对（自动化证据来源）：
 - 编辑器渲染于表格上方而非 SPEC 字面的"该行下展开"；提交失败焦点移至摘要；App.vue 约 600 行（计划既定超限）。
 - Python 侧：`SheetPreferences._validate` 不拒未知顶层字段、`open_workspace_folder` 理论 TOCTOU、`load` 未加锁。
 - 任务 8：长列状态矩阵 2 尺寸×2 主题（非全 4×2）、对比度冒烟取样，均已如实记录。
+
+2026-09-05 PLAN-DM-017 实施补充：令牌、双卡片、表单、表格几何与交互、任务覆盖抽屉已落地；已保存19张虚构实现截图。当前结果与证据见[设计 QA](../../../design-qa.md)及 [PLAN-DM-017](../../../.planning/plans/dst-manager/PLAN-DM-017-sheets-visual-convergence.md)。本地 Demo 被浏览器 URL 安全策略拒绝，缺少其他主题/状态匹配参考，S-07 仍待同状态验收；S-09 真实 Explorer 仍待人工验收，计划保持 active。
+
+2026-09-05 最终视觉验收：用户在真实桌面完成连续复验与反馈闭环后，明确确认 PLAN-DM-017 可标记为 `completed`，因此 S-07 通过。S-09 的真实 Windows Explorer 打开正确目录并选中当前 DST 仍待人工验收，本计划继续保持 `active`。

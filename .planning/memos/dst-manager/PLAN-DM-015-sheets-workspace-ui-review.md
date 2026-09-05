@@ -271,8 +271,14 @@
 
 ## 整改执行记录（2026-09-05）
 
+> 以下为前轮执行记录。真实桌面复验发现的卡片、控件、表格交互与浮层布局问题由 [PLAN-DM-017](../../plans/dst-manager/PLAN-DM-017-sheets-visual-convergence.md) 承接；原视觉通过结论不再作为当前 S-07 验收依据。
+
 本报告的 P1/P2 建议已实施：顶栏改显图纸集名称并提供清晰的“打开所在文件夹”文字按钮；导航支持 260～420px 鼠标/键盘调宽、双行名称及渐进展开；主表文件名只显示 basename，标题/子集/文件名列分别保留 180/200/240px 最小宽度；工作区改为连续 flex 高度链，900px 下底部操作栏为任务栏预留空间。
 
 新增 `sheets-visual-regressions.spec.ts` 并补强既有列、导航和布局测试。实际验证为：生产构建通过；Playwright E2E 153/153；Ruff 通过；相关 Python 测试 51/51。视觉证据和逐项比较见仓库根目录 `design-qa.md`，最终结果为 `passed`。
 
 验收清单除真实 Windows 桌面 Explorer 行为外均已由自动化和截图复核关闭。S-09 仍需人工确认：在桌面壳点击按钮后打开正确目录并选中当前 DST，且覆盖含空格/中文路径；因此 PLAN-DM-015 继续保持 `active`。
+
+2026-09-05 PLAN-DM-017 实施补充：令牌、双卡片、表单、表格几何与交互、任务覆盖抽屉已落地；已保存19张虚构实现截图。当前结果与证据见[设计 QA](../../../design-qa.md)及 [PLAN-DM-017](../../../.planning/plans/dst-manager/PLAN-DM-017-sheets-visual-convergence.md)。本地 Demo 被浏览器 URL 安全策略拒绝，缺少其他主题/状态匹配参考，S-07 仍待同状态验收；S-09 真实 Explorer 仍待人工验收，计划保持 active。
+
+2026-09-05 最终视觉验收：用户在真实桌面连续复验并确认 PLAN-DM-017 可以完成，S-07 据此关闭。此前“同状态参考不足”的结论保留为验收前过程记录；S-09 真实 Windows Explorer 验收仍待执行，PLAN-DM-015 继续保持 `active`。

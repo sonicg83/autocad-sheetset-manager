@@ -494,7 +494,8 @@ function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:
   const label=`批量${verb} ${name}（${batch.length} 张）`;
   // 提交摘要含完整数量与跨子集范围（toast 反馈；草稿动作标签保持既有「N 张」格式）
   if(addCommandBatch(batch,label,"metadata")){
-    clearSelection();bulkPropertyName.value="";bulkPropertyValue.value="";
+    // 连续批量编辑保留勾选集合与展开状态，只初始化本次属性输入。
+    bulkMode.value="set";bulkPropertyName.value="";bulkPropertyValue.value="";
     pushToast({type:"ok",title:"已加入草稿",body:`批量${verb} ${name}（${batch.length} 张 / ${subsetCount} 个子集）`});
   }
 }

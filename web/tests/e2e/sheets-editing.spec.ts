@@ -276,6 +276,8 @@ test("确认写入先处理未提交输入：保存后旧预览失效必须重�
   await page.getByRole("button", {name: "加入草稿"}).click();
   await page.getByRole("button", {name: "预览变更"}).click();
   await expect(page.getByRole("button", {name: "确认写入"})).toBeEnabled();
+  // 预览抽屉覆盖主表，先通过真实入口收起再编辑。
+  await page.getByRole("button", {name: "收起任务浮层"}).click();
   await openEditor(page);
   await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
   await page.getByRole("button", {name: "确认写入"}).click();

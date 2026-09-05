@@ -14,6 +14,112 @@ const VIEWPORTS = [
 ] as const;
 const THEMES = ["light", "dark"] as const;
 
+test("任务浮层覆盖时四尺寸双主题几何与滚动不变", async ({page}) => {
+  await installSheetsFixture(page, {sheetCount: 161});
+  for (const vp of [VIEWPORTS[2],VIEWPORTS[0],VIEWPORTS[1],VIEWPORTS[3]]) for (const theme of THEMES) {
+    await page.setViewportSize(vp);
+    await openWorkspace(page, theme);
+    await page.locator(".sheet-table-window").evaluate(el => el.scrollTop = 240);
+    const snapshot = () => page.locator(".shell-main,.sheets-workspace,.sheet-table-window").evaluateAll(els => els.map(el => {
+      const r = el.getBoundingClientRect();
+      return {left:r.left,right:r.right,width:r.width,scrollTop:el.scrollTop};
+    }));
+    const before = await snapshot();
+    expect(before[2].scrollTop).toBeGreaterThan(0);
+    await page.getByRole("button", {name:"展开任务浮层"}).click();
+    await expect(page.getByRole("button", {name:"收起任务浮层"})).toBeVisible();
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const after = await snapshot();
+    for (let i=0;i<before.length;i++) for (const key of ["left","right","width","scrollTop"] as const) expect(Math.abs(before[i][key]-after[i][key])).toBeLessThanOrEqual(1);
+    const drawer = await page.locator(".task-drawer").boundingBox();
+    const rail = await page.locator(".task-rail").boundingBox();
+    const tabs = await page.locator(".tabbar").boundingBox();
+    const dock = await page.locator(".dock").boundingBox();
+    expect(rail!.width).toBe(48);
+    expect(drawer!.x).toBeLessThan(before[0].right);
+    expect(drawer!.x+drawer!.width).toBeLessThanOrEqual(rail!.x);
+    expect(drawer!.y).toBeGreaterThanOrEqual(tabs!.y+tabs!.height);
+    expect(drawer!.y+drawer!.height).toBeLessThanOrEqual(dock!.y);
+    await page.keyboard.press("Escape");
+    expect(await snapshot()).toEqual(before);
+  }
+});
+
+test("任务浮层入口、页签键盘、Tab 困绕与 Esc 焦点归还", async ({page}) => {
+  await installSheetsFixture(page);
+  await openWorkspace(page,"light");
+  const entry = page.getByRole("button",{name:"修改预览",exact:true});
+  await entry.click();
+  await expect(entry).toHaveAttribute("aria-expanded","true");
+  await expect(entry).toHaveAttribute("aria-controls","task-drawer");
+  await expect(page.getByRole("tab",{name:"修改预览"})).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab",{name:"诊断"})).toBeFocused();
+  for (const key of ["Tab","Shift+Tab"]) for (let i=0;i<8;i++) {
+    await page.keyboard.press(key);
+    expect(await page.evaluate(()=>Boolean(document.activeElement?.closest(".task-drawer")))).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".task-drawer")).toBeHidden();
+  await expect(page.getByRole("button",{name:"诊断",exact:true})).toBeFocused();
+});
+
+test("任务浮层 Tab 可达关闭和诊断复制控件并双向循环", async ({page}) => {
+  await installSheetsFixture(page,{dualStatus:true});
+  await openWorkspace(page,"light");
+  await page.getByRole("navigation",{name:"任务入口"}).getByRole("button",{name:"诊断",exact:true}).click();
+  const tab=page.getByRole("tab",{name:"诊断"});
+  const close=page.getByRole("button",{name:"收起任务浮层"});
+  await expect(tab).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(tab).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  const summary=page.locator(".ov-diagnostics summary");
+  await expect(summary).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  const copies=page.getByRole("button",{name:"复制诊断 DWG_UNRESOLVED"});
+  await expect(copies.first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(copies.last()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(tab).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(copies.last()).toBeFocused();
+});
+
+test("导航拖拽后表格列不重叠", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installSheetsFixture(page);
+  await openWorkspace(page, "dark");
+  for (const width of [260, 320, 420]) {
+    const divider = page.getByRole("separator");
+    const box = await divider.boundingBox();
+    const current = Number(await divider.getAttribute("aria-valuenow"));
+    await page.mouse.move(box!.x + 4, box!.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 4 + width - current, box!.y + 30);
+    await page.mouse.up();
+    await expect(divider).toHaveAttribute("aria-valuenow", String(width));
+    if (width === 420) await page.getByRole("button", {name: "展开任务浮层"}).click();
+    for (const selector of ["thead tr", "tbody tr"]) {
+      const rects = await page.locator(`.sheet-table-window ${selector}`).first().locator("th,td").evaluateAll(cells => cells.map(cell => {
+        const r = cell.getBoundingClientRect();
+        return {left: r.left, right: r.right};
+      }));
+      for (let i = 1; i < rects.length - 1; i++) expect(rects[i].left).toBeGreaterThanOrEqual(rects[i - 1].right - 1);
+      const tableBox = (await page.locator(".sheet-table-window").boundingBox())!;
+      expect(rects.at(-1)!.right).toBeLessThanOrEqual(tableBox.x + tableBox.width + 1);
+    }
+    await assertNoHorizontalOverflow(page, 1440);
+    expect(await page.locator(".sheet-table-window").evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+    await expect(page.locator(".sheet-table-window")).toHaveCSS("overflow-x", "auto");
+  }
+});
+
 async function openWorkspace(page: Page, theme: "light" | "dark") {
   await page.addInitScript((t) => localStorage.setItem("dst-manager-theme", t), theme);
   await page.goto("/");
@@ -157,7 +263,11 @@ test("900px 树收起为可访问抽屉：键盘开关、焦点归还且不与�
     if (leftDrawer) break;
   }
   expect(leftDrawer).toBe(true);
-  // Esc 关闭抽屉并把焦点还给触发按钮
+  // 第一次 Esc 只关闭任务抽屉，不让树同时抢焦点。
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", {name:"实施进度",exact:true})).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  // 第二次 Esc 关闭树抽屉并把焦点还给树入口。
   await page.keyboard.press("Escape");
   await expect(toggle).toBeFocused();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -172,7 +282,7 @@ test("只剩一张业务表；搜索栏、选择条、固定列与 ActionDock �
   await expect(page.locator(".sheet-table-window table")).toHaveCount(1);
   await expect(page.getByRole("table", {name: "图纸表格"})).toHaveCount(1);
   // 选择后出现吸顶选择条
-  await page.getByRole("button", {name: "全选当前结果"}).click();
+  await page.getByRole("checkbox", {name: "全选当前结果"}).check();
   await expect(page.locator(".selection-bar")).toBeVisible();
   const rects = await page.evaluate(() => {
     const rect = (s: string) => {
@@ -196,9 +306,11 @@ test("只剩一张业务表；搜索栏、选择条、固定列与 ActionDock �
   expect(overlaps(rects.toolbar, rects.table)).toBe(false);
   expect(overlaps(rects.selection, rects.table)).toBe(false);
   expect(overlaps(rects.table, rects.dock)).toBe(false);
-  // 固定列（选择/图号/操作）都在表格窗口横向范围内
+  // 左固定列始终可见；实际总列宽不足时操作列回归普通列，不覆盖中间字段。
   expect(rects.selectCol && rects.selectCol.left >= rects.table!.left - 1).toBe(true);
-  expect(rects.actionsCol && rects.actionsCol.right <= rects.table!.right + 1).toBe(true);
+  const safeSticky = await page.locator(".sheet-table-window").evaluate(el => el.classList.contains("sticky-actions"));
+  if (safeSticky) expect(rects.actionsCol!.right).toBeLessThanOrEqual(rects.table!.right + 1);
+  else await expect(page.locator("th.col-actions")).toHaveCSS("right", "auto");
   expect(rects.numberCol && rects.numberCol.left >= rects.selectCol!.right - 1).toBe(true);
 });
 
@@ -307,4 +419,45 @@ test("浅深主题正文对比度 ≥ 4.5:1、强调色 UI ≥ 3:1", async ({pag
     expect(ratio.muted, `muted ${theme}`).toBeGreaterThanOrEqual(4.5);
     expect(ratio.accent, `accent ${theme}`).toBeGreaterThanOrEqual(3);
   }
+});
+for (const operation of ["编辑子集", "新增图纸", "新建子集"]) {
+  test(`独立编辑卡片：${operation}位于列表上方且取消后列表恢复高度`, async ({page}) => {
+    await page.setViewportSize({width: 1440, height: 900});
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const list = page.locator(".sheet-list-card");
+    const editor = page.locator(".sheet-editor-card");
+    await page.getByRole("button", {name: operation, exact: true}).click();
+    await expect(editor).toHaveCount(1);
+    await expect(list.locator(".sheets-toolbar")).toHaveCount(1);
+    await expect(list.getByRole("table", {name: "图纸表格"})).toHaveCount(1);
+    await expect(editor.locator(".sheets-toolbar")).toHaveCount(0);
+    const editorBox = await editor.boundingBox();
+    const listBox = await list.boundingBox();
+    expect(editorBox!.y + editorBox!.height).toBeLessThanOrEqual(listBox!.y + 1);
+    for (const card of [editor, list]) {
+      const style = await card.evaluate(el => {
+        const css = getComputedStyle(el);
+        return {border: parseFloat(css.borderTopWidth), radius: parseFloat(css.borderTopLeftRadius), background: css.backgroundColor};
+      });
+      expect(style.border).toBeGreaterThan(0);
+      expect(style.radius).toBeGreaterThan(0);
+      expect(style.background).not.toBe("rgba(0, 0, 0, 0)");
+    }
+    await editor.getByRole("button", {name: "取消", exact: true}).click();
+    await expect(editor).toHaveCount(0);
+    const mainBox = await page.locator(".sheets-main").boundingBox();
+    const restored = await list.boundingBox();
+    expect(restored!.y).toBeCloseTo(mainBox!.y, 0);
+    expect(restored!.height).toBeCloseTo(mainBox!.height, 0);
+  });
+}
+
+test("批量编辑上下文不渲染空编辑卡片", async ({page}) => {
+  await installSheetsFixture(page);
+  await openWorkspace(page, "light");
+  await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+  await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+  await expect(page.locator(".sheet-editor-card")).toHaveCount(0);
+  await expect(page.locator(".sheet-list-card .sheets-toolbar")).toHaveCount(1);
 });

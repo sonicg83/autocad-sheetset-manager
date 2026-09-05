@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 图纸属性分页编辑器（PLAN-DM-015 任务 5，SPEC-DM-009 §6.1）。
-// 最多两列、每页 6 个属性、属性名称搜索；页脚显示总属性数/页码/跨页已修改数。
+// 桌面端每行三列、每页 6 个属性、属性名称搜索；页脚显示总属性数/页码/跨页已修改数。
 // 编辑缓冲副本由 useSheetEditor 持有（本组件只呈现与转发，不直接改工作区对象）；
 // 「加入草稿」提交该图纸全部属性页，失败保留输入并呈现行内错误与可聚焦摘要；
 // 未给字段路径的错误只进摘要，不编造字段归因；「取消」明确丢弃当前缓冲。
@@ -98,26 +98,31 @@ watch(() => hasError.value, (now) => {
   </section>
 </template>
 <style scoped>
-.sheet-property-editor{border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.sheet-property-editor{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);background:var(--color-info-bg)}
 .editor-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .editor-head h3{margin:0;font-size:15px}
 .editor-head-hint{color:var(--color-text-secondary);font-size:12px}
+.sheet-property-editor input{height:38px;min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+.sheet-property-editor input:hover:not(:disabled){border-color:var(--color-accent)}
+.sheet-property-editor input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .editor-search{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px}
 .editor-search input{width:180px}
-/* 最多两列、每页 6 个属性 */
-.editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
+/* 桌面端三列；窄视口逐级收为两列和一列。 */
+.editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
 .prop-field{display:flex;flex-direction:column;gap:4px}
 .prop-field label{font-size:13px;color:var(--color-text-secondary)}
 .prop-field input{width:100%;box-sizing:border-box}
-.prop-field.invalid input{border-color:var(--color-danger,#c53030)}
-.field-error{color:var(--color-danger,#c53030);font-size:12px}
-.error-summary{border:1px solid var(--color-danger,#c53030);background:var(--color-danger-soft,transparent);border-radius:var(--radius-md,8px);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);outline:none}
-.error-summary:focus-visible{outline:2px solid var(--color-focus,var(--color-accent))}
-.summary-title{font-weight:600;margin:0;color:var(--color-danger,#c53030)}
+.prop-field.invalid input{border-color:var(--color-danger)}
+.field-error{color:var(--color-danger);font-size:12px}
+.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);border-radius:var(--radius-md,8px);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);outline:none}
+.error-summary:focus-visible{outline:2px solid var(--color-focus)}
+.summary-title{font-weight:600;margin:0;color:var(--color-danger)}
 .summary-message{margin:0;font-size:13px}
-.summary-jump{align-self:flex-start;color:var(--color-danger,#c53030);background:none;border:none;cursor:pointer;font-size:13px;padding:0;text-decoration:underline;text-align:left}
-.editor-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px;border-top:1px solid var(--color-border,var(--color-bg-surface-2));padding-top:var(--space-3)}
+.summary-jump{align-self:flex-start;color:var(--color-danger);background:none;border:none;cursor:pointer;font-size:13px;padding:0;text-decoration:underline;text-align:left}
+.editor-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px;border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
 .editor-counts{color:var(--color-text-secondary)}
 .editor-status{color:var(--color-text-secondary)}
 .editor-spacer{flex:1}
+@container (max-width:900px){.editor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:620px){.editor-grid{grid-template-columns:minmax(0,1fr)}}
 </style>

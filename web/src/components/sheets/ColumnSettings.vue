@@ -100,17 +100,17 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 </template>
 <style scoped>
 .column-settings{display:inline-flex}
-.cols-toggle{border:1px solid var(--color-border,var(--color-bg-surface-2));background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 10px;font-size:13px;cursor:pointer;font-family:inherit}
-.cols-toggle:hover{background:var(--color-bg-muted,var(--color-bg-surface-2))}
+.cols-toggle{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 10px;font-size:13px;cursor:pointer;font-family:inherit}
+.cols-toggle:hover{background:var(--color-bg-muted)}
 .cols-count{margin-left:6px;color:var(--color-accent);font-weight:600}
 .cols-mask{position:fixed;inset:0;z-index:1000;background:rgba(16,24,40,.4);display:flex;align-items:center;justify-content:center}
-.cols-panel{width:380px;max-width:calc(100vw - 32px);max-height:min(80vh,560px);display:flex;flex-direction:column;background:var(--color-bg-surface);border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);box-shadow:var(--shadow-2,0 8px 24px #17203333);padding:var(--space-4);outline:none}
+.cols-panel{width:380px;max-width:calc(100vw - 32px);max-height:min(80vh,560px);display:flex;flex-direction:column;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);box-shadow:var(--shadow-2,0 8px 24px #17203333);padding:var(--space-4);outline:none}
 .cols-head{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
 .cols-title{margin:0;font-size:15px;color:var(--color-text-primary)}
 .cols-close{margin-left:auto;border:none;background:none;color:var(--color-text-secondary);cursor:pointer;font-size:13px;padding:4px 8px;border-radius:var(--radius-sm,6px);font-family:inherit}
-.cols-close:hover{background:var(--color-bg-muted,var(--color-bg-surface-2));color:var(--color-text-primary)}
+.cols-close:hover{background:var(--color-bg-muted);color:var(--color-text-primary)}
 .cols-hint{font-size:12px;color:var(--color-text-secondary);margin:0 0 var(--space-2);line-height:1.6}
-.cols-error{font-size:12px;color:var(--color-danger,#c53030);margin:0 0 var(--space-2);background:var(--color-danger-soft,transparent);padding:6px 10px;border-radius:var(--radius-sm,6px)}
+.cols-error{font-size:12px;color:var(--color-danger);margin:0 0 var(--space-2);background:var(--color-danger-bg);padding:6px 10px;border-radius:var(--radius-sm,6px)}
 .cols-search{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-secondary);margin-bottom:var(--space-2)}
 .cols-search input{flex:1;min-width:0}
 .cols-list{overflow:auto;margin:0 0 var(--space-2);max-height:40vh}
@@ -120,7 +120,7 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 .cols-option.locked small{color:var(--color-text-muted);font-size:12px;margin-left:2px}
 .cols-option small.cols-new{color:var(--color-accent);font-size:12px}
 .cols-section{margin:var(--space-2) 0 0;font-size:12px;color:var(--color-text-secondary);font-weight:600}
-.cols-actions{display:flex;justify-content:flex-end;padding-top:var(--space-2);border-top:1px solid var(--color-border,var(--color-bg-surface-2))}
-.cols-reset{border:1px solid var(--color-border,var(--color-bg-surface-2));background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
-.cols-reset:hover{background:var(--color-bg-muted,var(--color-bg-surface-2))}
+.cols-actions{display:flex;justify-content:flex-end;padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
+.cols-reset{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.cols-reset:hover{background:var(--color-bg-muted)}
 </style>

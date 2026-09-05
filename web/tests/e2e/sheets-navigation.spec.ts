@@ -46,6 +46,16 @@ test("点击树中图纸切换到所属子集并定位且不自动勾选", async
   // 定位行高亮，但勾选框未被勾选（点击树不自动勾选）
   await expect(row).toHaveClass(/focused/);
   await expect(row.getByRole("checkbox")).not.toBeChecked();
+  await expect(row).not.toHaveClass(/selected/);
+  await row.getByRole("checkbox").check();
+  await expect(row).toHaveClass(/selected/);
+  await expect(row).toHaveClass(/focused/);
+  await page.getByRole("treeitem", {name: "001 图纸 1"}).click();
+  await expect(row).not.toHaveClass(/focused/);
+  await expect(row).toHaveClass(/selected/);
+  await expect(row.getByRole("checkbox")).toBeChecked();
+  await row.getByRole("checkbox").uncheck();
+  await expect(row).not.toHaveClass(/selected/);
 });
 
 test("筛选排除目标时显示目标被筛选隐藏并可清除筛选定位", async ({page}) => {
@@ -74,7 +84,7 @@ test("161 项大列表首屏 80 行且全选覆盖未加载结果", async ({page
   await expect(page.getByText("匹配 161 / 全部 161 张", {exact: true})).toBeVisible();
   await expect(page.getByText("已加载 80 行", {exact: true})).toBeVisible();
   // 全选覆盖全部匹配项（161），而非仅已渲染的 80 行
-  await page.getByRole("button", {name: "全选当前结果"}).click();
+  await page.getByRole("checkbox", {name: "全选当前结果"}).check();
   await expect(page.getByText("已选 161 张，其中 0 张不在当前结果", {exact: true})).toBeVisible();
   // 继续加载 → 已加载计数随可见行更新
   await page.getByRole("button", {name: /继续加载/}).click();
@@ -85,7 +95,7 @@ test("161 项大列表首屏 80 行且全选覆盖未加载结果", async ({page
 test("切范围保留勾选集合且取消全选只移除当前匹配", async ({page}) => {
   await installSheetsFixture(page);
   await openWorkspace(page);
-  await page.getByRole("button", {name: "全选当前结果"}).click();
+  await page.getByRole("checkbox", {name: "全选当前结果"}).check();
   await expect(page.getByText("已选 13 张，其中 0 张不在当前结果", {exact: true})).toBeVisible();
   // 切到子集 1（3 张）：勾选集合保留，10 张不在当前结果
   await page.getByRole("treeitem", {name: /建筑施工图/}).click();
@@ -102,7 +112,7 @@ test("投影删除的对象从勾选集合移除并提示", async ({page}) => {
   await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => route.fulfill({json: previewResponse(12)}));
   await installSheetsFixture(page);
   await openWorkspace(page);
-  await page.getByRole("button", {name: "全选当前结果"}).click();
+  await page.getByRole("checkbox", {name: "全选当前结果"}).check();
   await expect(page.getByText("已选 13 张，其中 0 张不在当前结果", {exact: true})).toBeVisible();
   // 删除第一张图纸（结构动作）→ 权威投影返回 12 张 → 选择集合修剪 1 张并提示
   await page.getByRole("button", {name: "删除", exact: true}).first().click();

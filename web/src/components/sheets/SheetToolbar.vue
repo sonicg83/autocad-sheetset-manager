@@ -3,14 +3,14 @@
 // 标题栏（当前范围 + 匹配/范围总数 + 已加载数 + 新增操作入口）、常驻搜索、
 // 「筛选」展开的低频筛选、可清除条件标签、「显示列」配置面板、吸顶选择条（勾选集合 + 批量修改属性展开）。
 // 新增操作入口先接线到任务 6 的表单（任务 3 提供过渡实现，一次只出现一种）。
-import {computed, ref} from "vue";
+import {computed, ref, watch} from "vue";
 import type {BuiltinPrefField, SheetColumnOption} from "../../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "../../composables/useSheetsWorkspace";
 import ColumnSettings from "./ColumnSettings.vue";
 
 export type OperationKind = "rename" | "insert-sheet" | "insert-subset";
 
-defineProps<{
+const props = defineProps<{
   rangeTitle: string;
   rangeTotal: number;
   matchCount: number;
@@ -59,6 +59,31 @@ function onResetColumns() { emit("resetColumns"); }
 
 // 批量输入默认折叠：「选择后出现吸顶选择条，点击'批量修改属性'展开输入」
 const bulkExpanded = ref(false);
+
+function resetBulkInputs() {
+  bulkMode.value = "set";
+  bulkPropertyName.value = "";
+  bulkPropertyValue.value = "";
+}
+
+function exitBulkAndToggleFilteredSelection() {
+  bulkExpanded.value = false;
+  resetBulkInputs();
+  emit("toggleFilteredSelection");
+}
+
+function exitBulkAndClearSelection() {
+  bulkExpanded.value = false;
+  resetBulkInputs();
+  emit("clearSelection");
+}
+
+watch(() => props.selectedCount, (selectedCount) => {
+  if (selectedCount === 0) {
+    bulkExpanded.value = false;
+    resetBulkInputs();
+  }
+});
 
 // 生效条件以可清除标签展示（低频筛选）
 const conditionChips = computed(() => {
@@ -114,11 +139,13 @@ const conditionChips = computed(() => {
     </div>
     <!-- 未选择时只显示选择入口；选择后出现吸顶选择条 -->
     <div v-if="selectedCount" class="selection-bar">
-      <span class="selection-summary" role="status">已选 {{ selectedCount }} 张，其中 {{ hiddenSelectedCount }} 张不在当前结果</span>
-      <button type="button" :disabled="!canSelect" @click="$emit('toggleFilteredSelection')">{{ allFilteredSelected ? "取消全选当前结果" : "全选当前结果" }}</button>
-      <button type="button" @click="$emit('clearSelection')">清除选择</button>
-      <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">批量修改属性</button>
-      <template v-if="bulkExpanded">
+      <div class="selection-actions">
+        <span class="selection-summary" role="status">已选 {{ selectedCount }} 张，其中 {{ hiddenSelectedCount }} 张不在当前结果</span>
+        <button type="button" :disabled="!canSelect" @click="exitBulkAndToggleFilteredSelection">{{ allFilteredSelected ? "取消全选当前结果" : "全选当前结果" }}</button>
+        <button type="button" @click="exitBulkAndClearSelection">清除选择</button>
+        <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">批量修改属性</button>
+      </div>
+      <div v-if="bulkExpanded" class="bulk-controls">
         <label>批量模式<select v-model="bulkMode"><option value="set">设置值</option><option value="clear">清空值</option></select></label>
         <label>既有图纸属性<select v-model="bulkPropertyName"><option value="">请选择</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{ name }}</option></select></label>
         <template v-if="bulkMode === 'set'">
@@ -129,10 +156,7 @@ const conditionChips = computed(() => {
           <span class="bulk-hint">清空所选图纸该属性（设为空字符串，是否允许空值由服务端校验）</span>
           <button type="button" class="danger" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">清空所选属性</button>
         </template>
-      </template>
-    </div>
-    <div v-else class="select-entry">
-      <button type="button" :disabled="!canSelect" @click="$emit('toggleFilteredSelection')">{{ allFilteredSelected ? "取消全选当前结果" : "全选当前结果" }}</button>
+      </div>
     </div>
   </div>
 </template>
@@ -142,16 +166,23 @@ const conditionChips = computed(() => {
 .range-title{margin:0;font-size:17px;color:var(--color-text-primary)}
 .counts{display:flex;gap:var(--space-3);font-size:13px;color:var(--color-text-secondary)}
 .operations{margin-left:auto;display:flex;gap:var(--space-2)}
+.operations button,.filter-toggle,:deep(.cols-toggle),.selection-bar button{height:34px;min-height:34px;padding:0 12px;border-radius:var(--radius-md);font-size:13px}
 .toolbar-filters{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px}
 .search-box input{width:260px}
+.sheets-toolbar :is(input:not([type="checkbox"]),select){height:38px;min-width:0;max-width:100%;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+.sheets-toolbar :is(input,select):focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.sheets-toolbar :is(input:not([type="checkbox"]),select):hover:not(:disabled){border-color:var(--color-accent)}
+.sheets-toolbar :is(input,select):disabled{background:var(--color-bg-muted);color:var(--color-text-muted);cursor:not-allowed}
 .toolbar-filters label{display:inline-flex;align-items:center;gap:6px}
 .search-all{white-space:nowrap}
 .chips{display:inline-flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--color-accent-soft,var(--color-bg-surface-2));font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--color-info-bg);font-size:12px}
 .chip-clear{border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:12px;padding:0}
-.selection-bar{display:flex;align-items:center;gap:var(--space-3);position:sticky;top:0;z-index:5;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);background:var(--color-bg-surface);flex-wrap:wrap}
+.selection-bar{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-2);position:sticky;top:0;z-index:5;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);background:var(--color-bg-surface)}
+.selection-actions,.bulk-controls{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.bulk-controls{padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
+.bulk-controls label{display:inline-flex;align-items:center;gap:6px}
 .selection-summary{font-weight:600;color:var(--color-text-primary)}
 .bulk-hint{color:var(--color-text-secondary);font-size:12px;max-width:220px}
-.bulk-hint + .danger,.selection-bar .danger{color:var(--color-danger,#c53030)}
-.select-entry{display:flex}
+.bulk-hint + .danger,.selection-bar .danger{color:var(--color-danger)}
 </style>

@@ -150,15 +150,17 @@ function onKeydown(event: KeyboardEvent) {
   </div>
 </template>
 <style scoped>
-.sheet-tree{display:flex;flex-direction:column;gap:2px;padding:var(--space-2);outline:none}
-.sheet-tree:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:-2px}
+.sheet-tree{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2);outline:none}
+.sheet-tree:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
 .sheet-tree [role=treeitem]{display:flex;align-items:flex-start;gap:6px;padding:5px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:13px;color:var(--color-text-primary)}
-.sheet-tree [role=treeitem]:hover{background:var(--color-bg-hover,var(--color-bg-surface-2))}
-.sheet-tree [role=treeitem].active{background:var(--color-accent-soft,var(--color-bg-surface-2));font-weight:600}
+.sheet-tree [role=treeitem]:hover{background:var(--color-bg-muted)}
+.sheet-tree [role=treeitem].active{background:var(--color-accent);color:var(--color-on-accent);font-weight:600}
+.sheet-tree [role=treeitem].active .node-count,.sheet-tree [role=treeitem].active .chevron{color:inherit}
+.sheet-tree [role=treeitem].focused{background:var(--color-info-bg);color:var(--color-accent)}
 .sheet-tree [role=treeitem].focused .node-label{box-shadow:inset 0 -2px 0 var(--color-accent)}
 .sheet-tree [role=treeitem][aria-level="2"]{padding-left:20px}
 .sheet-tree [role=treeitem][aria-level="3"]{padding-left:36px}
-.sheet-tree [role=treeitem]:focus-visible{outline:2px solid var(--color-focus,var(--color-accent));outline-offset:-2px}
+.sheet-tree [role=treeitem]:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .chevron{border:none;background:none;cursor:pointer;font-size:11px;width:16px;height:16px;padding:0;color:var(--color-text-secondary);flex:none}
 .chevron-placeholder{width:16px;height:16px;flex:none}
 .node-label{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;line-height:1.45;overflow-wrap:anywhere;flex:1}

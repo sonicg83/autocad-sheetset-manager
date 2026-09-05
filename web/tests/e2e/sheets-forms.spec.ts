@@ -19,6 +19,8 @@ test("新增图纸单子集范围预填目标子集", async ({page}) => {
   await page.getByRole("button", {name: "新增图纸"}).click();
   await expect(page.getByRole("region", {name: "新增图纸"})).toBeVisible();
   await expect(page.getByLabel("目标子集")).toHaveValue("subset-2");
+  await expect(page.locator(".sheet-editor-card").getByRole("region", {name: "新增图纸"})).toBeVisible();
+  await expect(page.locator(".sheet-list-card .operation-form")).toHaveCount(0);
 });
 
 test("新增图纸全部范围必须明确选择目标子集且失败保留输入", async ({page}) => {

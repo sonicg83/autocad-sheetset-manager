@@ -3,6 +3,47 @@
 // 同名内置列独立配置、删除字段墓碑/撤销恢复、新增字段默认关并提示、重开恢复、
 // 不同工作区不串、存储失败当前选择仍生效、标题两行/文件名键盘聚焦、窄屏不隐藏、诊断复制。
 import {expect, test, type Page} from "@playwright/test";
+
+test("列宽模型保持确定且短列文本与双状态限制在列内", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installSheetsFixture(page, {longText: true, dualStatus: true});
+  await openWorkspace(page);
+  await openColumns(page);
+  await page.getByRole("checkbox", {name: "布局", exact: true}).check();
+  await closeColumns(page);
+  const widths = await page.locator(".sheet-table-window th").evaluateAll(cells => cells.map(cell => cell.getBoundingClientRect().width));
+  expect(widths).toEqual([40, 72, 270, 220, 260, 160, 96, 140, 140, 140, 150]);
+  const ordinary = await page.locator(".sheet-table-window tbody tr").nth(2).boundingBox();
+  expect(ordinary!.height).toBeGreaterThanOrEqual(40);
+  expect(ordinary!.height).toBeLessThanOrEqual(48);
+  const status = page.locator(".sheet-table-window tbody tr").first().locator("td.col-status");
+  await expect(status.locator(".pending")).toBeVisible();
+  await expect(status.locator(".blocking")).toBeVisible();
+  const geometry = await status.evaluate(el => {
+    const cell = el.getBoundingClientRect();
+    return [...el.children].map(child => {
+      const r = child.getBoundingClientRect();
+      return {left: r.left - cell.left, right: r.right - cell.left, top: r.top, bottom: r.bottom};
+    });
+  });
+  for (const rect of geometry) {
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(96);
+  }
+  for (let i = 1; i < geometry.length; i++) {
+    const a = geometry[i - 1], b = geometry[i];
+    expect(b.top >= a.bottom - 1 || b.left >= a.right - 1).toBe(true);
+  }
+  const number = page.locator(".sheet-table-window tbody tr .col-number .ellipsis").first();
+  await expect(number).toHaveCSS("text-overflow", "ellipsis");
+  await expect(number).toHaveAttribute("title", /.+/);
+  for (const column of ["subset", "file", "layout", "prop"]) {
+    const text = page.locator(`.sheet-table-window tbody tr .col-${column} .multiline-text`).first();
+    await expect(text).toHaveCSS("-webkit-line-clamp", "2");
+    await expect(text).toHaveCSS("white-space", "normal");
+    await expect(text).toHaveAttribute("title", /.+/);
+  }
+});
 import {installSheetsFixture} from "./fixtures/sheets";
 import type {ColumnPreferences} from "../../src/features/sheets/types";
 
@@ -246,7 +287,7 @@ test("标题最多两行且文件名单独显示并可键盘聚焦读取", async
   await expect(title).toHaveAttribute("title", /超长标题/);
   await expect(title).toHaveAttribute("tabindex", "0");
   // 文件名只显示 basename，省略时仍可键盘聚焦读取完整文件名，不泄露目录路径
-  const file = row.locator(".col-file .ellipsis");
+  const file = row.locator(".col-file .multiline-text");
   await expect(file).toHaveText("第 13 分册最终版.dwg");
   await expect(file).toHaveAttribute("title", "第 13 分册最终版.dwg");
   await expect(file).not.toContainText("C:\\虚构工程");

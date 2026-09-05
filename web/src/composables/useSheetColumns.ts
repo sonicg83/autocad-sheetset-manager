@@ -12,6 +12,15 @@ import {loadSheetColumns, saveSheetColumns} from "../api/shell";
 export type BuiltinColumnKey = "select" | "number" | "title" | "subset" | "file" | "layout" | "status" | "actions";
 export type BuiltinPrefField = "file" | "layout" | "subsetAll" | "subsetSingle";
 
+const COLUMN_WIDTHS: Record<BuiltinColumnKey, number> = {
+  select: 40, number: 72, title: 270, subset: 220,
+  file: 260, layout: 160, status: 96, actions: 150,
+};
+
+export function columnWidth(column: SheetColumn): number {
+  return column.kind === "sheet" ? 140 : COLUMN_WIDTHS[column.key.slice("builtin:".length) as BuiltinColumnKey];
+}
+
 export type SheetColumn = {
   key: string;            // builtin:select | sheet:图幅（偏好身份，名称经大小写规范化）
   label: string;          // 显示名（属性保留服务端原名）
@@ -27,7 +36,7 @@ export type SheetColumnOption = SheetColumn & {
 };
 
 const BUILTIN_LABELS: Record<BuiltinColumnKey, string> = {
-  select: "选择", number: "图号", title: "标题", subset: "子集",
+  select: "", number: "图号", title: "标题", subset: "子集",
   file: "文件名", layout: "布局", status: "状态", actions: "操作",
 };
 // 配置面板锁定展示的固定内置列（选择列恒显但不在面板列出）
