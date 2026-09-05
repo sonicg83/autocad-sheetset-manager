@@ -78,6 +78,9 @@ function onKeydown(event: KeyboardEvent) {
   const move = (index: number) => {
     focusIndex.value = index;
     scrollNodeIntoView(index);
+    // roving tabindex：方向键真正移动焦点（SPEC-DM-006 §7.2 结构树键盘模型），
+    // 焦点停在目标节点，后续按键经事件冒泡回容器处理
+    treeEl.value?.querySelectorAll<HTMLElement>("[role=treeitem]")[index]?.focus();
   };
   switch (event.key) {
     case "ArrowDown": event.preventDefault(); move(Math.min(focusIndex.value + 1, count - 1)); break;

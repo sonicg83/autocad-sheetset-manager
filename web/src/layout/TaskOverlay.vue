@@ -99,11 +99,11 @@ async function copyDiag(item:Diagnostic){
   </aside>
 </template>
 <style scoped>
-.task-overlay{width:340px;flex-shrink:0;background:var(--color-bg-surface);border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;min-height:0;transition:width .2s}
+.task-overlay{width:340px;flex-shrink:0;background:var(--color-bg-surface);border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;min-height:0;transition:width .2s;overflow-x:hidden}
 .task-overlay.collapsed{width:44px}
 .task-overlay [hidden]{display:none!important}
 .ov-tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
-.ov-tab{flex:1;padding:10px 4px;font-size:13px;color:var(--color-text-secondary);border:none;border-bottom:2px solid transparent;background:none;display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.ov-tab{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:10px 4px;font-size:13px;color:var(--color-text-secondary);border:none;border-bottom:2px solid transparent;background:none;display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .ov-tab:hover:not([hidden]){color:var(--color-text-primary)}
 .ov-tab[aria-selected="true"]{color:var(--color-accent);border-bottom-color:var(--color-accent)}
 .ov-dot{color:var(--color-danger);font-size:10px}

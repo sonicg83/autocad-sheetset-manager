@@ -1,12 +1,12 @@
 ---
 id: PLAN-DM-015
 title: DST Manager 图纸页单表工作区实施计划
-status: proposed
+status: active
 document_kind: plan
 owners:
   - dst-manager
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-05
 related:
   - SPEC-DM-009
   - SPEC-DM-006
@@ -356,3 +356,29 @@ rtk git diff --check
 2026-09-04：完成计划编写与规范对照，状态 `proposed`。产品代码实施、上述新增测试与产品视觉验收尚未执行；不得引用 Demo 测试结果替代本计划验收。
 
 本次文档变更检查：`git diff --check` 通过；现有 `tests/unit/test_shell.py` 与 `tests/unit/test_drafts.py` 共 37 项通过（Alembic 既有弃用警告）。全量 Ruff 当次未通过：其他工作区文件 `runtime.py:25` 的 B009 与 `test_runtime.py:58` 的 I001/F401，未修改这些文件。此结果不等同于实施完成，也不解除实施阶段的全量检查要求。
+
+2026-09-05：任务 1–8 全部实施完成。任务 8 按简报 verbatim 执行以下验证，实际输出如下（完整记录见 [任务 8 报告](../../../.superpowers/sdd/PLAN-DM-015-sheets-workspace-ui/task-8-report.md)）：
+
+| 命令 | 实际结果 | 说明 |
+| --- | --- | --- |
+| `rtk proxy uv run ruff check .` | All checks passed（退出码 0） | 全量，无遗留 |
+| `rtk proxy uv run pytest <简报 8 个文件> -q` | **138 passed**（退出码 0，约 3.3s） | 含任务 1 的 `test_sheet_projection_contract.py` 4 项 Python 集成证据 |
+| `rtk proxy npm --prefix web run build` | 零错误（check:api + vue-tsc + vite，914ms） | 生产构建 |
+| `rtk proxy npm --prefix web run test:e2e` | **串行 146/146 通过**；并行默认下 2 项既有时序敏感用例（300 行性能预算、壳桥延迟注入/文件夹禁用等）高负载偶发超时，单独重跑与串行全绿 | 137 既有 + 任务 8 新增 9 项 sheets-layout |
+| `rtk git diff --check` | 通过 | 无空白错误 |
+
+S-01～S-12 证据核对（自动化证据来源）：
+- S-01（单表/树顶部/两类新增表单不常驻）：sheets-navigation「单表初始范围」+ sheets-layout「只剩一张业务表」。
+- S-02（树/搜索/筛选共用范围、隐藏定位显式反馈）：sheets-navigation「点击子集切换范围」「筛选排除目标」「低频筛选展开与条件标签」。
+- S-03（全选覆盖未加载、跨范围批量对象数一致）：sheets-navigation「161 项首屏 80 与全选覆盖未加载」+ sheets-drafts「跨范围两张批量」。
+- S-04（短列不换行、固定列不可隐藏、偏好逐图纸集恢复、诊断路径与后端原值一致且可复制）：sheets-columns 系列 + TaskOverlay 诊断复制（S-04）。
+- S-05（单行/批量/新增/子集编辑成功失败取消与未提交保护）：sheets-editing、sheets-forms、sheets-drafts。
+- S-06（新增来源、整子集删除、草稿恢复及全部发布门禁无回归）：main.spec + sheets-forms + sheets-drafts + sheets-projection。
+- S-07（四尺寸双主题截图、浮层/行编辑/新增态可达）：任务 8 sheets-layout 截图测试产出 4 尺寸 × 浅深默认态截图与 1440×900 浅深行编辑/编辑子集/浮层展开截图（Playwright test-results 附件，仅作视觉证据），各态行为断言（可达、无横向溢出、页脚可滚动）同时通过。截图人工逐张目检待用户执行。
+- S-08（Playwright 回归 + 生产构建 + Ruff/pytest）：上表命令全部通过。
+- S-09（打开所在文件夹仅用当前 DST 目录，覆盖无壳/无工作区/目录缺失/空格中文路径/任意路径命令拒绝）：`test_shell_workspace.py`（20 项）+ `test_shell.py` + `sheets-folder.spec.ts`（4 项）。真实 Windows 桌面人工验收（空格/中文目录实际打开并选中 DST）待用户执行，不以 mock 代替系统集成证据。
+- S-10（参照对象与前后位置映射，覆盖目标变化/参照删除/序号变化/首个子集）：sheets-forms 系列 + `test_sheet_projection_contract.py`。
+- S-11（多页属性编辑、搜索隐藏修改、跨页错误定位不丢数据；批量空输入不误清空、显式清空走原门禁）：sheets-editing + sheets-drafts。
+- S-12（删除仅入草稿、投影移除、反馈、撤销、未提交编辑保护；已配置列不因窄屏消失）：sheets-navigation/sheets-drafts + sheets-layout「长列状态」与 900px 抽屉（树收起为抽屉但表格与列配置保留）。
+
+状态判定：S-01～S-12 均有自动化证据且无阻断风险，但 S-09 的真实桌面人工验收与 S-07 截图人工目检尚未由用户在真实 Windows 桌面执行，属关键待验收项；SPEC-DM-009 保持 `accepted`，属性页 SPEC-DM-010 不随本计划升级状态（保持 `review`）。因此本计划状态维持 `active`，不标记 `completed`。

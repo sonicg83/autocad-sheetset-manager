@@ -60,11 +60,11 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 </script>
 <template>
   <span class="column-settings">
-    <button type="button" class="cols-toggle" aria-haspopup="dialog" @click="openPanel">
+    <button type="button" class="cols-toggle" :aria-expanded="open ? 'true' : 'false'" aria-controls="column-settings-panel" aria-haspopup="dialog" @click="openPanel">
       显示列<span v-if="newPropertyCount" class="cols-count">{{ newPropertyCount }} 个新字段</span>
     </button>
     <div v-if="open" class="cols-mask" @keydown="onKeydown" @click.self="closePanel">
-      <div class="cols-panel" role="dialog" aria-modal="true" aria-label="显示列" tabindex="-1" ref="panel">
+      <div id="column-settings-panel" class="cols-panel" role="dialog" aria-modal="true" aria-label="显示列" tabindex="-1" ref="panel">
         <div class="cols-head">
           <h3 class="cols-title">显示列</h3>
           <button type="button" class="cols-close" @click="closePanel">关闭显示列</button>

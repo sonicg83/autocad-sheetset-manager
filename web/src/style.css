@@ -56,3 +56,8 @@ html[data-theme="dark"]{
 @media (max-width:900px){
   .tabbar{overflow-x:auto}
 }
+/* 减少动画（SPEC-DM-006 §7.4）：用户偏好 reduced-motion 时关闭非必要过渡/动画，
+   避免抽屉与浮层宽度过渡等瞬态横向溢出与动态效果 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}

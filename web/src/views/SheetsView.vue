@@ -3,7 +3,7 @@
 // 范围/搜索/筛选/勾选集合由 App.vue 的 useSheetsWorkspace 持有（跨主标签保留），本组件只做呈现与转发。
 // 三类操作表单（编辑子集/新增图纸/新建子集）由 SheetOperationForm 渲染于主表上方，
 // 与 SheetPropertyEditor 共用唯一编辑上下文（任务 5/6），一次只出现一种。
-import {computed} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref} from "vue";
 import type {Placement, Sheet, Workspace} from "../api/contracts";
 import type {EditContext, SheetScope} from "../features/sheets/types";
 import type {BuiltinPrefField, SheetColumn, SheetColumnOption} from "../composables/useSheetColumns";
@@ -78,22 +78,49 @@ const rangeTitle = computed(() => {
   return props.workspace.sheet_set.subsets.find((item) => item.id === currentScope.id)?.display_name ?? "全部图纸";
 });
 const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilter.value !== "all" || diagnosticFilter.value !== "all" || pendingFilter.value !== "all");
+
+// —— 900px 韧性视口：树收起为可访问抽屉（SPEC-DM-006 §4.3/§7.2、SPEC-DM-009 §3.2）——
+// 触发按钮始终渲染，>900px 由 CSS 隐藏；抽屉不设焦点困绕（与任务浮层同时展开时 Tab 仍可离开），
+// 打开后焦点移入树、Esc 或选择节点后关闭并把焦点还给触发按钮。
+const drawerOpen = ref(false);
+const treeDrawerEl = ref<HTMLElement | null>(null);
+const treeToggleEl = ref<HTMLElement | null>(null);
+function closeTreeDrawer() {
+  if (!drawerOpen.value) return;
+  drawerOpen.value = false;
+  void nextTick(() => treeToggleEl.value?.focus());
+}
+function toggleTreeDrawer() {
+  drawerOpen.value = !drawerOpen.value;
+  void nextTick(() => {
+    if (drawerOpen.value) treeDrawerEl.value?.querySelector<HTMLElement>('[role="tree"]')?.focus();
+    else treeToggleEl.value?.focus();
+  });
+}
+// 全局 Esc 兜底：抽屉不设焦点困绕（可与任务浮层同时展开），焦点离开抽屉后仍能 Esc 关闭。
+// 模态自身 Escape 均 stopPropagation（ConfirmModal/UnsavedInputDialog/ColumnSettings），不会误触本兜底。
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") closeTreeDrawer();
+}
+onMounted(() => window.addEventListener("keydown", onGlobalKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeydown));
 </script>
 <template>
   <section class="sheets-view" role="tabpanel" id="panel-sheets" aria-label="图纸">
     <div class="sheets-workspace">
-      <aside class="sheet-tree-pane" aria-label="图纸导航栏">
+      <aside ref="treeDrawerEl" id="tree-drawer" class="sheet-tree-pane" :class="{'drawer-open': drawerOpen}" aria-label="图纸导航栏">
         <div class="tree-root">{{ workspace.sheet_set.name }}（{{ allTotal }} 张）</div>
         <SheetTree
           :workspace="workspace"
           :scope="scope"
           :focused-sheet-id="focusedSheetId"
-          @select-all="$emit('selectAll')"
-          @select-subset="$emit('selectSubset', $event)"
-          @select-sheet="$emit('selectSheet', $event)"
+          @select-all="closeTreeDrawer(); $emit('selectAll')"
+          @select-subset="closeTreeDrawer(); $emit('selectSubset', $event)"
+          @select-sheet="closeTreeDrawer(); $emit('selectSheet', $event)"
         />
       </aside>
       <main class="sheets-main">
+        <button ref="treeToggleEl" type="button" class="tree-drawer-toggle" :aria-expanded="drawerOpen ? 'true' : 'false'" aria-controls="tree-drawer" @click="toggleTreeDrawer">{{ drawerOpen ? "关闭图纸导航" : "打开图纸导航" }}</button>
         <SheetToolbar
           :range-title="rangeTitle"
           :range-total="rangeTotal"
@@ -201,4 +228,14 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
 .hidden-target-notice{background:var(--color-warning-soft,transparent);border:1px solid var(--color-warning,#b7791f)}
 .empty-state{padding:var(--space-5);text-align:center;color:var(--color-text-secondary);border:1px dashed var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px)}
 .load-more{margin:0 auto}
+/* 900px 树抽屉（SPEC-DM-006 §4.3/§7.2）：>900px 隐藏触发按钮；<=900px 树绝对定位抽屉化。
+   关闭用 visibility:hidden（移出可访问树与焦点序），打开后焦点移入树；不设焦点困绕。 */
+.tree-drawer-toggle{display:none}
+@media (max-width:900px){
+  .sheets-workspace{position:relative}
+  .tree-drawer-toggle{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;border:1px solid var(--color-border,var(--color-bg-surface-2));background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+  .tree-drawer-toggle:hover{background:var(--color-bg-muted,var(--color-bg-surface-2))}
+  .sheet-tree-pane{position:absolute;top:0;bottom:-24px;left:0;width:280px;max-width:85vw;z-index:30;margin:0;padding:var(--space-3);border-right:1px solid var(--color-border,var(--color-bg-surface-2));box-shadow:var(--shadow-3);background:var(--color-bg-surface);transform:translateX(-105%);visibility:hidden;transition:transform .2s ease}
+  .sheet-tree-pane.drawer-open{transform:translateX(0);visibility:visible}
+}
 </style>

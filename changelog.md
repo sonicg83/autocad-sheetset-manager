@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-05（接受属性页规范并编制实施计划）
+
+- 将 [SPEC-DM-010](docs/dst-manager/specs/SPEC-DM-010-properties-workspace-ui.md) 状态由 `review` 转为 `accepted`，记录用户对完整修订与交互 Demo 的确认；接受状态不代表生产实现完成。
+- 新增 [PLAN-DM-016](.planning/plans/dst-manager/PLAN-DM-016-properties-workspace-ui.md)（`proposed`）：以后端/API 零扩展为默认边界，分七个 TDD 任务实施三基准属性缓冲、属性值面板、字段定义六条分页、CSV 隔离、统一未提交输入保护、响应式/无障碍矩阵及全量回归；明确在 PLAN-DM-015 合入后的最新基线上执行并保留共享代码变更。
+
+## 2026-09-05（视觉、可访问性、回归与交付）
+
+- **新增视口与可访问性回归测试（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 8，SPEC-DM-009 §3.2/§8）**：新增 `web/tests/e2e/sheets-layout.spec.ts`（9 项）：四尺寸（1024×768/1120×768/1440×900/900×768）× 浅深主题视口矩阵，覆盖默认、行编辑、编辑子集/新增图纸/新建子集三类操作表单、任务浮层展开与长列状态，断言无页面横向溢出且主表可达；900px 树抽屉键盘开关、焦点移入树、Tab 可离开（不与任务浮层同时锁焦）、Esc 关闭并回焦；只剩一张业务表且搜索栏/选择条/固定列/ActionDock 不重叠；小视口下属性编辑与操作表单页脚可滚动到达；a11y 语义（树方向键移动焦点、展开按钮 aria-expanded、表格可访问名、完整文本键盘读取）；浅深主题实际渲染前景/背景组合对比度正文 ≥4.5:1、强调色 ≥3:1。
+- **900px 树收起为可访问抽屉（SPEC-DM-006 §4.3/§7.2、SPEC-DM-009 §3.2）**：`SheetsView.vue` 新增始终可见「打开图纸导航」触发按钮（aria-expanded/aria-controls），打开后焦点移入树，选择节点或 Esc 关闭并把焦点还给触发按钮；抽屉不设焦点困绕（与任务浮层同时展开时 Tab 仍可离开），全局 Esc 兜底与模态自身 stopPropagation 不冲突。窄屏下树绝对定位抽屉化，关闭用 visibility:hidden 移出可访问树与焦点序。
+- **a11y 补口（SPEC-DM-009 §8/SPEC-DM-006 §7）**：`SheetTree.vue` 方向键/Home/End 真正移动焦点（roving tabindex 焦点落到目标节点，后续按键经事件冒泡回容器处理）；`ColumnSettings.vue`「显示列」触发按钮补 aria-expanded/aria-controls；`style.css` 新增全局 `prefers-reduced-motion:reduce` 关闭非必要过渡/动画；`TaskOverlay.vue` 页签 flex 补 min-width:0/ellipsis 并给浮层 overflow-x:hidden，消除展开宽度过渡期间页签行挤压导致的瞬时横向溢出。
+- **验证（按简报 verbatim）**：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **146/146 通过**（137 既有 + 新增 9；并行默认下 2 项既有时序敏感用例高负载偶发超时，单独重跑与串行全绿）；`uv run ruff check .` All checks passed；指定 pytest 选集（test_shell/test_shell_workspace/test_sheet_preferences/test_sheet_projection_contract/test_drafts/test_v021_editing/test_contracts）**138 passed**（含任务 1 的 `test_sheet_projection_contract.py` 集成证据）；`git diff --check` 通过。本任务只改 `web/`、计划/索引、README 与 changelog，Python 侧未触碰；S-09 真实桌面人工验收与 S-07 截图人工目检待用户执行，不写「完整系统验收通过」；仓库所有者并行的 SPEC-DM-010 文档/演示改动未纳入本提交。
+
 ## 2026-09-05（批量、删除及草稿动作联动）
 
 - **批量属性编辑区分「设置值/清空值」（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 7，SPEC-DM-009 §4.2/§6.1）**：`SheetToolbar.vue` 批量输入新增「批量模式」切换（设置值/清空值）。遍历完整勾选集合（含未加载行，批量范围不隐式缩为当前可见行），逐张复制 `custom_properties` 后仅改指定名称，已删除对象按 ID 匹配不到自然不进入批量。设置值模式空输入不生成修改、只提示改走清空；清空值模式必须显式选择并确认受影响数量（设为空字符串，是否允许空值仍由服务端校验 S-11），且只改实际受影响图纸、与确认数量一致。提交摘要（toast）含完整数量与跨子集范围，草稿动作标签保持既有「N 张」格式。
