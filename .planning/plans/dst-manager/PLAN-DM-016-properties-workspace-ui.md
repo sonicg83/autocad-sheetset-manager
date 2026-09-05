@@ -1,12 +1,12 @@
 ---
 id: PLAN-DM-016
 title: DST Manager 属性页分区编辑实施计划
-status: proposed
+status: active
 document_kind: plan
 owners:
   - dst-manager
 created: 2026-09-05
-updated: 2026-09-05
+updated: 2026-09-06
 related:
   - SPEC-DM-010
   - SPEC-DM-006
@@ -315,3 +315,73 @@ await expect(page.getByRole('dialog')).toContainText('原文件值');
 - 后端 API、OpenAPI、数据库和 DST/CAD 发布链路无非必要变化；PLAN-DM-017 覆盖的图纸页全量用例通过。
 - Ruff、pytest、UV lock、迁移、Web build、Playwright 全量及 `git diff --check` 通过；任何跳过均有可核验原因。
 - changelog、计划实际验证和索引同步；计划状态仅在全部条件满足后改为 `completed`。
+
+## 8. 实际验证（Task 8，2026-09-06 记录）
+
+**计划状态保持 `active`，未写完成**：完成标准中「Demo 与生产同状态对比差异逐项审查并由用户确认」尚未发生（[QA 备忘](../../memos/dst-manager/PLAN-DM-016-properties-design-qa.md) 14 项全部保持待人工确认），人工视觉/键盘矩阵亦待用户执行。恢复条件：用户完成 8.3 核对清单并在 QA 备忘逐项给出验收结论后，才可将本计划与 QA 备忘改为完成/通过。
+
+### 8.1 自动验证（实际运行结果）
+
+| 门禁 | 命令 | 实际结果 |
+| --- | --- | --- |
+| Ruff | `rtk uv run ruff check .` | 通过（All checks passed!） |
+| pytest | `rtk uv run pytest -q`（junitxml 统计复核） | 676 项：**604 passed / 72 skipped / 0 failed**；72 项跳过与既有基线数量一致，无新增跳过 |
+| UV lock | `rtk uv lock --check` | 通过（Resolved 68 packages） |
+| 迁移 | `rtk uv run alembic upgrade head` | 通过（新建库依次应用 0001→0004 至 head，退出码 0） |
+| 依赖安装 | `rtk npm --prefix web ci` | 通过（退出码 0） |
+| 生产构建 | `rtk npm --prefix web run build` | 通过（vue-tsc + vite 零错误，✓ built，`dist/assets/index-*.js` 242.38 kB） |
+| Playwright 全量 | `rtk npm --prefix web run test:e2e -- --workers=4` | **276/276 通过（1.4m）** |
+
+**并行度说明（如实记录，非掩盖失败）**：默认并行（workers=auto，webServer 为 vite dev server 按需编译）下连续 4 次全量各出现 1 个互不相同的 30s 超时用例——`properties-visual-evidence.spec.ts:49`（light，工作区打开竞态）、`main.spec.ts:227`（300 行性能预算）、`main.spec.ts:40`（CAD 操作分流）及早期一次同类抖动；单独重跑均通过，且同批用例在其他全量中通过，判定为开发服务器负载抖动而非功能回归。收口数字以 `--workers=4` 全绿为准。
+
+**全量过程中发现并修复的真实回归**：`web/tests/e2e/sheets-columns.spec.ts:176`「删除字段从配置移除且撤销恢复此前开关」在全量中确定失败。根因是该 PLAN-DM-017 时代用例未按本计划 Task 6 Step 5 完成旧属性选择器迁移，与本计划 Task 4 的新交互不匹配（字段定义默认折叠、每页六条、删除经「删除属性定义」确认），非产品缺陷。修复仅补齐既有交互步骤「展开属性字段定义 → 搜索字段定位 属性07 → 确认对话框『加入删除草稿』」，断言意图（列从配置移除、撤销恢复开关）不变；修复后该文件 16/16，全量绿。
+
+PLAN-DM-017 覆盖的图纸页全部用例（`sheets-columns/drafts/editing/forms/layout/navigation/visual-regressions/visual-evidence` 等）在每次全量中均通过；共享 App、唯一共享 `UnsavedInputDialog`、对话框与全局样式未回归。
+
+### 8.2 安全抽查（Step 4）
+
+人工浏览器网络面板抽查未执行；以下为自动化已覆盖的等价证据。草稿端点 `PUT **/api/workspaces/*/draft` 由 `web/tests/e2e/fixtures/sheets.ts:396-414` 的 `onDraftPut` 捕获，未显式注册 execute/import 路由的用例中任何此类调用都会落空失败：
+
+- 局部「加入草稿」只写草稿/预览投影，不调用 execute/import：
+  - `web/tests/e2e/properties-buffer.spec.ts:51-64` 直接编辑 draftBodies 为 0，workspace 名称不被输入污染
+  - `web/tests/e2e/properties-buffer.spec.ts:66-86` 隐藏修改一次完整 `update_sheet_set` 仅 PUT 草稿端点
+  - `web/tests/e2e/properties-buffer.spec.ts:136-158` 预览前 guard：留在此处 previewBodies=0；加入草稿后仅 1 次 changes/preview
+  - `web/tests/e2e/properties-buffer.spec.ts:160-182` 确认写入前留在此处不进入发布确认
+  - `web/tests/e2e/properties-csv.spec.ts:314-345` 普通预览/写入路径 csvPreviewCalls=0、importCalls=0
+- CSV 强确认才调用 import：
+  - `web/tests/e2e/properties-csv.spec.ts:189-220` 强确认勾选前确认按钮 disabled，勾选后 importBody 才非空且携带 `base_revision_id/preview_digest/csv`
+  - `web/tests/e2e/properties-csv.spec.ts:248-312` 存在属性定义草稿时确认导入被分批门禁阻断（importCalls=0），强确认勾选后才为 1
+  - `web/tests/e2e/properties-buffer.spec.ts:184-213` CSV 确认前 guard 三选一，CSV 不被自动保存
+- 真实工程测试：**未执行，无授权**。如后续执行，仅允许把 `sample/` 复制到临时目录并经用户显式授权，不读写原件。
+
+### 8.3 人工视觉/键盘矩阵（Step 3，待用户执行）
+
+本节为可执行核对清单，**由用户执行，代理不得代行或宣布通过**。证据参考：QA 备忘 7 状态 × 双主题的 demo/prod 成对 PNG（`assets/PLAN-DM-016/`，共 28 张）。
+
+对以下 4 视口 × 浅/深主题（共 8 组合），逐一走查 5 个状态并勾选：
+
+| 视口 \ 状态 | 默认 | dirty+pending | 错误 | 新增字段 | CSV |
+| --- | --- | --- | --- | --- | --- |
+| 1024×768 浅 / 深 | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ |
+| 1120×768 浅 / 深 | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ |
+| 1440×900 浅 / 深 | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ |
+| 900×768 浅 / 深 | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ | ☐/☐ |
+
+每格检查项（与 QA 备忘逐项对比表对应）：
+
+1. **默认**：三卡独立层级与 16px 卡片间距、60px 面板标题栏；定义面板折叠、值面板展开；值网格两列（视口 ≤900px 降一列）；整页无横向溢出、单一主纵向滚动区；浅深主题表面/边框/文字层级正常。
+2. **dirty+pending**：编辑名称与若干值后琥珀「未加入草稿」与蓝「待写入」文字与色并存、不只靠颜色；隐藏修改计数正确；同行控件对齐。
+3. **错误**：注入保存失败或无效值后红色仅表示错误且有文字；错误摘要可见并可跳转聚焦字段；输入保留。
+4. **新增字段**：展开定义面板（每页六条、可翻页）；名称/默认值搜索与作用域筛选；新增区「关闭新增」；长默认值两行摘要并可读取完整值；溢出时「操作」列冻结、无溢出时无冻结阴影。
+5. **CSV**：经「导入 / 导出」按需展开；选择文件→预览/诊断→确认；无效数据禁用确认；换文件/基准后预览失效；强确认勾选前不可导入。
+
+键盘专项（任一视口，浅/深各一遍）：
+
+- ☐ Tab / Shift+Tab 顺序遍历定义面板、值面板、CSV 区全部控件，焦点环在两主题下均可见
+- ☐ Enter/Space 正确激活按钮、切换复选框与折叠标题
+- ☐ Esc 关闭值对照、删除确认、CSV 强确认模态，且焦点归还触发按钮
+- ☐ 错误摘要跳转后焦点落到目标字段；折叠/展开定义面板后键盘可用
+- ☐ 200% 浏览器缩放（任一视口）：属性页区域无整页横向溢出、值网格降一列；已知外壳级 200% 溢出为已裁决全局遗留项（见 QA 备忘），不并入本清单结论
+- ☐ 长文本（长默认值、长属性值）可完整读取且不只靠 hover
+
+结论记录：完成核对后把 QA 备忘「逐项对比」表对应行的「待人工确认」改为验收结论；全部确认前本计划保持 `active`。

@@ -2,7 +2,9 @@
 // 断言（浅/深主题）：卡片表面、弱化表头、语义边框、焦点环、禁用态、错误与状态徽标色
 // 全部解析自已定义 CSS 变量（与 :root / html[data-theme=dark] 解析值逐一比对）；
 // 输入/选择器 38px、按钮 ≥36px 普通档、图标按钮 ≥36×36（属性页当前无图标按钮，若引入必须满足下限）、
-// 同行控件垂直居中对齐。状态截图仅作为 testInfo 附件（同状态 Demo 对比图由验收时人工采集比对），
+// 同行控件垂直居中对齐。本 spec 的截图仅作为 testInfo 附件（prod-{状态}-{宽}x{高}-{主题}.png）；
+// 入库的同状态 Demo/生产对比图由验收时按相同视口、主题和状态显式复制附件到
+// .planning/memos/dst-manager/assets/PLAN-DM-016/（demo 侧由临时采集脚本生成，脚本不进入提交树），
 // 只使用 properties.ts 虚构夹具，不读取用户截图、真实工程或 sample/。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
 import {installPropertiesFixture, openProperties, pendingDraft} from "./fixtures/properties";

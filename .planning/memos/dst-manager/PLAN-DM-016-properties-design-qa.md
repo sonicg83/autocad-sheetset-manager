@@ -11,7 +11,7 @@
 
 | 状态 | 视口 | 文件对（light/dark） |
 | --- | --- | --- |
-| 默认 | 1440×900 | `demo/prod-default-1440x90{0}-{light,dark}.png` |
+| 默认 | 1440×900 | `demo/prod-default-1440x900-{light,dark}.png` |
 | dirty+pending | 1440×900 | `demo/prod-dirty-pending-1440x900-{light,dark}.png` |
 | 错误 | 1440×900 | `demo/prod-error-1440x900-{light,dark}.png` |
 | 新增字段 | 1440×900 | `demo/prod-add-field-1440x900-{light,dark}.png` |

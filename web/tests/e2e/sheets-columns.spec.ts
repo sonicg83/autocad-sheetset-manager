@@ -181,9 +181,14 @@ test("删除字段从配置移除且撤销恢复此前开关", async ({page}) =>
   await page.getByRole("checkbox", {name: "属性07"}).check();
   await closeColumns(page);
   await expect(page.getByRole("columnheader", {name: "属性07", exact: true})).toBeVisible();
-  // 属性标签删除属性07 定义
+  // 属性标签删除属性07 定义（PLAN-DM-016 任务 4 起字段定义默认折叠且每页六条，先展开再搜索定位）
   await page.getByRole("tab", {name: /属性/}).click();
-  await page.getByRole("button", {name: "删除 属性07"}).click();
+  await page.getByRole("button", {name: "展开属性字段定义"}).click();
+  await page.getByRole("searchbox", {name: "搜索字段"}).fill("属性07");
+  await page.getByRole("button", {name: /删除.*属性07/}).click();
+  // PLAN-DM-016 任务 4 起删除定义经「删除属性定义」确认（加入删除草稿）
+  const deleteConfirm = page.getByRole("dialog", {name: "删除属性定义"});
+  await deleteConfirm.getByRole("button", {name: "加入删除草稿"}).click();
   // 回图纸标签：列从表格与配置列表移除
   await page.getByRole("tab", {name: /图纸/}).click();
   await expect(page.getByRole("columnheader", {name: "属性07", exact: true})).toHaveCount(0);
