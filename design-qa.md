@@ -38,3 +38,13 @@ final result: passed
 | 1024×768 overlay | [截图](.planning/memos/dst-manager/assets/PLAN-DM-017/overlay-1024x768-light.png) | [截图](.planning/memos/dst-manager/assets/PLAN-DM-017/overlay-1024x768-dark.png) |
 | 1120×768 overlay | [截图](.planning/memos/dst-manager/assets/PLAN-DM-017/overlay-1120x768-light.png) | [截图](.planning/memos/dst-manager/assets/PLAN-DM-017/overlay-1120x768-dark.png) |
 | 900×768 overlay | 本计划未要求 | [截图](.planning/memos/dst-manager/assets/PLAN-DM-017/overlay-900x768-dark.png) |
+
+## PLAN-DM-016 属性页遗留复评清单（Task 6/7 复评入口）
+
+以下偏离来自 Task 3 实现，均有真实回归约束支撑，暂缓至页面组合（Task 6）与视觉收敛（Task 7）时统一裁决：
+
+1. **"更新图纸集 / 放弃本区输入"按钮位于值面板标题行右侧**，而非 Demo 的卡片底部：TaskOverlay 抽屉（fixed 右侧 390px）遮挡滚动至下部的按钮，导致 3 个 main.spec 既有用例回归。
+2. **"加入草稿：共 N 项，其中 M 项当前未显示"摘要行位于面板底部 `.local-actions`**，未满足 SPEC-DM-010 §5.2 "提交按钮旁"措辞：为上述按钮位置偏离的连带结果。
+3. **`button.link` 采用 34px 紧凑档**（Demo 为 28px）：在计划 38/36/34px 密度基线内，Task 7 几何断言裁决。
+
+复评时逐项决定：保留（记录为有意差异）或调整；调整不得破坏 main.spec 既有流程几何。
