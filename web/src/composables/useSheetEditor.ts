@@ -1,11 +1,11 @@
 // 分页编辑缓冲与全局输入保护（PLAN-DM-015 任务 5/6，SPEC-DM-009 §6.1/§6.2/§6.3）。
 // 唯一活动编辑上下文为 null 或 sheet/rename/insert-sheet/insert-subset/bulk 联合分支，
-// 每分支保留 workspaceId/revisionId/投影快照/objectId/original/values/errors（类型见 types.ts）。
+// 每分支保留 workspaceId/revisionId/objectId/original/values/errors（类型见 types.ts）。
 // sheet 分支在 custom_properties 完整副本上编辑，搜索/翻页只派生视图（不改缓冲）；
 // 提交 createCommand.updateSheetProperties(id,{...values}) 覆盖全部属性页，不只当前页。
 // rename/insert-sheet/insert-subset 三类操作表单（任务 6）同用一个上下文：
 // 字段输入由 SheetOperationForm 直接写入缓冲，本域负责提交（参照 ID → ordinal 映射）、
-// 失效校验、成功定位与三选一保护；提交前固定打开时的投影快照，基准变化由 watch 标 invalid。
+// 失效校验、成功定位与三选一保护；参照在提交时对当前工作区重新解析，基准变化由 watch 标 invalid。
 // guard(next) 统一处理预览/写入/关闭/切换/删除等全局动作：无改动直接继续；
 // 有改动三选一「加入草稿后继续/放弃输入/留在此处」，保存失败不能继续 next。
 import {computed, nextTick, ref, watch} from "vue";
@@ -274,7 +274,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       }
       source = {type: "template_layout", file: ctx.sourceFile.trim(), layout: ctx.sourceLayout.trim()};
     }
-    // 提交前固定打开时的投影快照；请求/基准变化已由 watch 标 invalid 拦截，不会用旧索引提交
+    // 参照序号已在上方对当前工作区重新解析；请求/基准变化已由 watch 标 invalid 拦截，不会用旧索引提交
     const beforeIds = new Set(allSheetIds(workspace));
     const command = createCommand.insertSheet({
       target_subset_id: ctx.reference.subsetId,
