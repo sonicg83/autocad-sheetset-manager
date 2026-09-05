@@ -24,11 +24,12 @@ export type SubmitCommands = (
 // —— 活动编辑上下文（SPEC-DM-009 §6.1/§6.2，PLAN-DM-015 任务 5）——
 // 唯一上下文为 null 或 sheet/rename/insert-sheet/insert-subset/bulk 联合分支之一，
 // 单行编辑/新增表单/子集标题编辑/批量编辑共用，避免多个提交按钮争夺注意力。
-// 每分支保留 workspaceId/revisionId/projection stamp/objectId/original/values/errors。
+// 每分支保留 workspaceId/revisionId/objectId/original/values/errors。
+// 参照重校验机制：提交时对实时 workspace 重新解析（resolveSheetOrdinal/SubsetOrdinal），
+// 基准刷新或对象消失由 revision watch 标记 invalid，禁止提交到新基准。
 export type EditContextBase = {
   workspaceId: string;
   revisionId: string;
-  stamp: ProjectionStamp | null;  // 打开编辑时的投影快照（结构命令前固定，表单提交用于参照重校验）
   objectId: string;               // 目标对象 ID（图纸/子集等）
   subject: string;                // 供提示语显示的主题（如「图纸 001」）
   errors: Record<string, string>; // 字段级错误（字段名 → 错误文案）

@@ -4,7 +4,7 @@
 // 删除/撤销计数联动（简报 verbatim）、删除整个子集强确认字段不变、
 // 结构表单服务端失败保留输入。
 import {expect, test, type Page} from "@playwright/test";
-import {buildPreviewFromBase, installSheetsFixture} from "./fixtures/sheets";
+import {buildPreviewFromBase, installSheetsFixture, installSmartPreview} from "./fixtures/sheets";
 
 async function openWorkspace(page: Page) {
   await page.goto("/");
@@ -160,4 +160,43 @@ test("结构表单服务端失败保留完整输入且不展示为已创建", as
   await expect(page.getByLabel("参照图纸")).toHaveValue("sheet-1");
   await expect(page.getByLabel("模板来源")).toHaveValue("existing_snapshot");
   await expect(page.getByText("匹配 13 / 全部 13 张", {exact: true})).toBeVisible();
+});
+
+test("撤销后重提交相同命令批次重新入栈且撤销/重做栈状态正确", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  const {workspace} = await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await installSmartPreview(page, workspace);
+  await openWorkspace(page);
+  // 第一次提交：新增图纸（参照 sheet-1、existing_snapshot）批次 X 入栈，cursor=1
+  await page.getByRole("button", {name: "新增图纸"}).click();
+  await page.getByLabel("目标子集").selectOption("subset-1");
+  await page.getByLabel("参照图纸").selectOption("sheet-1");
+  await page.getByLabel("模板来源").selectOption("existing_snapshot");
+  await page.getByRole("button", {name: "加入草稿", exact: true}).click();
+  await expect(page.getByText("匹配 4 / 全部 4 张", {exact: true})).toBeVisible();
+  await expect(page.getByText(/草稿 1\/1/)).toBeVisible();
+  // 撤销：cursor=0，X 仍在数组尾部（重提交去重误吞的复现前提），匹配数恢复
+  await page.getByRole("button", {name: "撤销", exact: true}).click();
+  await expect(page.getByText("匹配 3 / 全部 3 张", {exact: true})).toBeVisible();
+  await expect(page.getByText(/草稿 0\/1/)).toBeVisible();
+  // 重新打开编辑器输入相同值并提交：不得被 sameBatch 去重误吞，批次必须重新入栈
+  await page.getByRole("button", {name: "新增图纸"}).click();
+  await page.getByLabel("目标子集").selectOption("subset-1");
+  await page.getByLabel("参照图纸").selectOption("sheet-1");
+  await page.getByLabel("模板来源").selectOption("existing_snapshot");
+  await page.getByRole("button", {name: "加入草稿", exact: true}).click();
+  // 批次重新入栈且匹配数再次改变；撤销/重做栈状态正确（新批次 cursor=1、actions=1）
+  await expect(page.getByText("匹配 4 / 全部 4 张", {exact: true})).toBeVisible();
+  await expect(page.getByText(/草稿 1\/1/)).toBeVisible();
+  await expect(page.getByRole("button", {name: "重做", exact: true})).toBeDisabled();
+  // 草稿请求体确认：重提交批次已重新入栈（cursor=1、含插入命令），非静默丢弃
+  await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
+  const lastBody = draftBodies[draftBodies.length - 1] as {cursor: number; actions: {commands: {type: string}[]}[]};
+  expect(lastBody.cursor).toBe(1);
+  expect(lastBody.actions.map((action) => action.commands[0].type)).toEqual(["insert_sheet"]);
+  // 新批次独立可撤销/重做：撤销回基底（3/3）、重做恢复新增（4/4）
+  await page.getByRole("button", {name: "撤销", exact: true}).click();
+  await expect(page.getByText("匹配 3 / 全部 3 张", {exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "重做", exact: true}).click();
+  await expect(page.getByText("匹配 4 / 全部 4 张", {exact: true})).toBeVisible();
 });

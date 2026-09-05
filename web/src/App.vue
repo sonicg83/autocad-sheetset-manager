@@ -87,8 +87,8 @@ const {revisions,restorePreview,restorePreviewContext,loadRevisions,loadRevision
 });
 const cadVersion=ref("2020");
 // 结构投影域（Task 1）：内部 /changes/preview 获取权威结构显示，与显式发布预览分离。
-// 只读 projection 由 watch 应用到显示 workspace；stamp/pending/error 供后续任务消费。
-const {projection:sheetProjection,stamp:sheetProjectionStamp,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
+// 只读 projection 由 watch 应用到显示 workspace；pending/error 供后续任务消费。
+const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
 watch(sheetProjection,(value)=>{if(value)workspace.value=value});
 // 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件
 const {active,select,onKeydown}=useShellTabs<string>(["sheets","properties","revisions"],"sheets");
@@ -155,9 +155,10 @@ async function submitCommands(commands:ChangeCommand[],label:string,category:"me
   if(draftStale.value)return{ok:false,message:"草稿已过期，必须丢弃或重新打开后手工重做"};
   // 结构变更与属性定义变更必须分批；属性值编辑（metadata）可与结构并存（混合批次显示由命令簿叠加合成）
   if(category==="structural"&&hasPropertyDefinitionCommands.value)return{ok:false,message:"属性定义与结构变更必须分批预览和执行"};
-  // 草稿保存失败重试：与最后一条草稿动作等价时不重复加入同一命令批次，仅重试保存
+  // 草稿保存失败重试：仅当撤销/重做光标位于栈顶且与最后一条草稿动作等价时，
+  // 视为保存失败重试而不重复加入同一命令批次；撤销后重提交相同命令必须重新入栈（I-1 修复）
   const last=draftActions.value[draftActions.value.length-1];
-  const sameBatch=last?.kind==="command_batch"&&JSON.stringify(last.commands)===JSON.stringify(commands);
+  const sameBatch=last?.kind==="command_batch"&&draftCursor.value===draftActions.value.length&&JSON.stringify(last.commands)===JSON.stringify(commands);
   if(!sameBatch){if(!addCommandBatch(commands,label,category))return{ok:false,message:error.value||"加入草稿失败"}}
   else scheduleDraftSave();
   await draftSaveQueue;
@@ -168,7 +169,7 @@ async function submitCommands(commands:ChangeCommand[],label:string,category:"me
 }
 // —— 分页编辑缓冲与全局输入保护（PLAN-DM-015 任务 5）：唯一活动编辑上下文，跨主标签保留 ——
 const editor=useSheetEditor({
-  workspace,baseWorkspace,commands,sheetPropertyNames,projectionStamp:sheetProjectionStamp,
+  workspace,baseWorkspace,commands,sheetPropertyNames,
   refreshSheetProjection,submitCommands,
   locateSheet,selectSubset:sheetsSelectSubset, // 操作表单成功后定位新增/编辑对象并更新到其所在范围
 });

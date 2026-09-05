@@ -15,7 +15,7 @@ import type {ChangeCommand, LayoutSource, Workspace} from "../api/contracts";
 import {resolveSheetOrdinal, resolveSubsetOrdinal} from "../features/sheets/commands";
 import type {
   EditContext, GuardChoice, InsertSheetEditContext, InsertSubsetEditContext,
-  ProjectionStamp, PropertyEditContext, RenameEditContext, SheetRef,
+  PropertyEditContext, RenameEditContext, SheetRef,
   SubmitCommands, SubmitResult,
 } from "../features/sheets/types";
 
@@ -26,7 +26,6 @@ export type SheetEditorDeps = {
   baseWorkspace: Ref<Workspace | null>;
   commands: Ref<ChangeCommand[]>;
   sheetPropertyNames: Ref<string[]>;
-  projectionStamp: Ref<ProjectionStamp | null>;
   refreshSheetProjection: () => Promise<SubmitResult>;
   submitCommands: SubmitCommands;
   // 操作表单成功后定位新增/编辑对象（App 注入 useSheetsWorkspace 的定位/切范围）
@@ -69,7 +68,6 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       kind: "sheet",
       workspaceId: current.id,
       revisionId: current.revision_id,
-      stamp: deps.projectionStamp.value,
       objectId: sheet.id,
       subject: `图纸 ${sheet.number}`,
       original: {...sheet.custom_properties},
@@ -105,7 +103,6 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       kind: "rename",
       workspaceId: current.id,
       revisionId: current.revision_id,
-      stamp: deps.projectionStamp.value,
       objectId: subsetId, // 全部图纸范围打开时为空，由表单先选择编辑对象
       subject: subset ? `子集 ${subset.display_name}` : "子集标题编辑",
       original: {title: subset?.title ?? ""},
@@ -125,7 +122,6 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       kind: "insert-sheet",
       workspaceId: current.id,
       revisionId: current.revision_id,
-      stamp: deps.projectionStamp.value,
       objectId: target,
       subject: "新增图纸",
       errors: {},
@@ -154,7 +150,6 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       kind: "insert-subset",
       workspaceId: current.id,
       revisionId: current.revision_id,
-      stamp: deps.projectionStamp.value,
       objectId: "",
       subject: "新建子集",
       errors: {},
