@@ -1,4 +1,5 @@
-// 自定义属性 CSV 导入域组合式函数：文件读取、行级预览与导入发布（Task 3 拆分，行为零变化）
+// 自定义属性 CSV 导入域组合式函数：文件读取、行级预览与导入发布（Task 3 拆分；
+// Task 5 增加分批门禁：属性定义草稿与 CSV 导入冲突时阻断，预览失效判定仍由调用方按代次/基准驱动）
 import {ref} from "vue";
 import type {Ref} from "vue";
 import {request} from "../api/client";
@@ -17,6 +18,8 @@ export function useCsvImport(deps:{
   isCurrentJobGeneration(generation:number):boolean;
   error:Ref<string>;
   confirmAction(options:ConfirmOptions):Promise<boolean>;
+  // 命令簿中已有属性定义草稿（add/delete_custom_property）时 CSV 导入与其冲突，必须分批（PLAN-DM-016 任务 5）
+  hasConflictingDraft:()=>boolean;
 }){
   const csvText=ref("");
   const csvPreview=ref<CsvPreview|null>(null);
@@ -51,6 +54,9 @@ export function useCsvImport(deps:{
     catch(e){if(generation===csvGeneration)deps.error.value=String(e)}
   }
   async function importCsv(){
+    // 分批门禁（PLAN-DM-016 任务 5）：命令簿已有属性定义草稿时 CSV 导入与其冲突，
+    // 明确阻断并要求分批；预览上下文与草稿任何一方都不清空，由用户自行取舍。
+    if(deps.hasConflictingDraft()){deps.error.value="命令簿中已有属性定义草稿，与 CSV 导入必须分批：请先预览执行或撤销属性定义草稿，再导入 CSV";return}
     const context=csvPreviewContext.value;
     if(!context||!context.result.executable)return;
     const current=deps.workspace.value;

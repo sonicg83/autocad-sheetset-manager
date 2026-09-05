@@ -1,14 +1,14 @@
-<!-- 属性字段定义面板（PLAN-DM-016 任务 4，SPEC-DM-010 §3/§4）。
-     外壳：折叠标题栏（默认折叠，标题栏始终显示字段总数）、查询区、六条分页、新增/删除与 CSV 区组合。
+<!-- 属性字段定义面板（PLAN-DM-016 任务 4，任务 5 起为纯定义面板，SPEC-DM-010 §3/§4）。
+     外壳：折叠标题栏（默认折叠，标题栏始终显示字段总数）、查询区、六条分页、新增/删除。
+     CSV 导入导出组合在 PropertyCsvPanel（任务 5 抽出）。
      定义数据来自草稿投影（只读，不修改 workspace）；新增/删除经 emit 交给 App 既有命令簿门禁
      （与 submitCommands(...,'property') 同一草稿栈，不得绕过 hasStructuralCommands 分批门禁）。
      过滤/分页为纯派生（features/properties/model）：查询/筛选变化回第一页，删除后回退到最后有效页；
      新增成功清空输入、失败就近展示字段错误并保留输入，与当前筛选不匹配时提示并提供「查看字段」。
-     CSV 区为任务 5 前的过渡承载：默认收起、不常驻文件选择器，任务 5 抽为 PropertyCsvPanel。
      样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
 import {computed, nextTick, ref, watch} from "vue";
-import type {CsvPreview, PropertyDefinition, PropertyType} from "../../api/contracts";
+import type {PropertyDefinition, PropertyType} from "../../api/contracts";
 import {DEFINITIONS_PAGE_SIZE, definitionKey, definitionMatches, filterDefinitions} from "../../features/properties/model";
 import type {DefinitionScopeFilter} from "../../features/properties/model";
 import PropertyDefinitionTable from "./PropertyDefinitionTable.vue";
@@ -17,18 +17,10 @@ const props = defineProps<{
   definitions: PropertyDefinition[];
   // 新增表单状态由 App 持有（与既有 queuePropertyDefinition 门禁共用），任务 6 移交组合式函数
   form: {type: PropertyType; name: string; defaultValue: string};
-  workspaceId: string;
-  hasCsv: boolean;
-  csvPreview: CsvPreview | null;
-  csvExecutable: boolean;
-  writesDisabled: boolean;
 }>();
 const emit = defineEmits<{
   addDefinition: [];
   deleteDefinition: [definition: PropertyDefinition];
-  readCsv: [event: Event];
-  previewCsv: [];
-  importCsv: [];
 }>();
 
 function scopeLabel(definition: PropertyDefinition): string {
@@ -117,12 +109,7 @@ async function viewAddedField() {
   page.value = Math.floor(index / DEFINITIONS_PAGE_SIZE) + 1;
 }
 
-// —— CSV 区（任务 5 前过渡承载）：默认收起，不常驻文件选择器与确认按钮；打开时同时展开面板 ——
-const csvOpen = ref(false);
-function toggleCsv() {
-  csvOpen.value = !csvOpen.value;
-  if (csvOpen.value) collapsed.value = false;
-}
+// —— CSV 区已移交 PropertyCsvPanel（任务 5）：本面板只负责定义查询/分页/新增/删除 ——
 </script>
 <template>
   <section class="definition-panel" aria-label="属性字段定义">
@@ -139,9 +126,6 @@ function toggleCsv() {
         <h2>属性字段定义 <small>共 {{ definitions.length }} 项</small></h2>
       </button>
       <div class="link-actions">
-        <a href="/api/custom-properties/template" download>下载 CSV 模板</a>
-        <a :href="`/api/workspaces/${workspaceId}/custom-properties/export`" download>导出当前属性</a>
-        <button type="button" :aria-expanded="csvOpen" @click="toggleCsv">导入 CSV</button>
         <button ref="addToggleButton" type="button" class="primary" @click="adding ? closeAdd() : openAdd()">{{ adding ? "关闭新增" : "新增字段" }}</button>
       </div>
     </header>
@@ -205,18 +189,6 @@ function toggleCsv() {
         {{ addHint }}
         <button v-if="hiddenAddedKey" type="button" class="link" @click="viewAddedField">查看字段</button>
       </p>
-      <template v-if="csvOpen">
-        <div class="csv-flow">
-          <label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="emit('readCsv', $event)"></label>
-          <button type="button" :disabled="!hasCsv" @click="emit('previewCsv')">预览 CSV 导入</button>
-          <button type="button" class="primary" :disabled="writesDisabled || !csvExecutable" @click="emit('importCsv')">确认导入</button>
-        </div>
-        <div v-if="csvPreview" class="csv-preview">
-          <h3>CSV 合并预览</h3>
-          <ul><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`">第 {{ change.line }} 行 · {{ change.action }} · {{ change.type }} · {{ change.name }}</li></ul>
-          <ul class="diagnostics"><li v-for="item in csvPreview.diagnostics" :key="`${item.line}-${item.code}`" :class="item.severity"><span v-if="item.line">第 {{ item.line }} 行 · </span><b>{{ item.code }}</b>：{{ item.message }}</li></ul>
-        </div>
-      </template>
     </div>
   </section>
 </template>
@@ -229,7 +201,6 @@ function toggleCsv() {
 .head-toggle small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
 .chevron{color:var(--color-text-secondary);font-size:12px}
 .link-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
-.link-actions a{display:inline-flex;align-items:center;min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .link-actions button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
 .panel-body{padding:var(--space-4) var(--space-5)}
 .query-bar{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-3)}
@@ -247,14 +218,4 @@ function toggleCsv() {
 .field-error{margin:var(--space-2) 0 0;color:var(--color-danger);font-size:12px}
 .add-hint{margin:var(--space-3) 0 0;color:var(--color-success);font-size:13px;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
 .add-hint .link{color:var(--color-accent);text-decoration:underline}
-/* CSV 过渡承载沿用既有紧凑流式布局（任务 5 抽为 PropertyCsvPanel） */
-.csv-flow{display:flex;align-items:end;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--color-border-subtle)}
-.csv-flow label{display:grid;gap:var(--space-1);color:var(--color-text-secondary);font-size:13px}
-.csv-flow input{min-width:0;padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm)}
-.csv-flow button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
-.csv-preview{margin-top:var(--space-3);background:var(--color-bg-muted);padding:var(--space-3);border-radius:var(--radius-md)}
-.csv-preview h3{margin:0 0 var(--space-2);font-size:14px}
-.csv-preview ul{margin:var(--space-2) 0;padding-left:20px}
-.diagnostics .error{color:var(--color-danger)}
-.diagnostics .warning{color:var(--color-warning)}
 </style>

@@ -79,6 +79,7 @@ const setJob=(j:Job)=>{job.value=j;openOverlay("prog")};
 // 自定义属性 CSV 导入域（Task 3 拆分）
 const {csvText,csvPreview,csvPreviewContext,readCsvFile,previewCsv,importCsv,invalidateCsvPreview}=useCsvImport({
   workspace,isWorkspaceLoading,watchJob,setJob,refreshWorkspace,invalidateJobMonitor,isCurrentJobGeneration,error,confirmAction,
+  hasConflictingDraft:()=>hasPropertyDefinitionCommands.value,
 });
 // 内存修复域（Task 3 拆分）：修复预览/独立修订发布与写入门禁；isRestoreExecuting 为 App.vue 单一 ref 注入
 const {repairPreview,repairContext,isRepairPreviewing,isRepairExecuting,previewRepair,executeRepair,repairWritesDisabled,dstValidation}=useRepair({
@@ -207,6 +208,15 @@ watch(()=>commands.value.map(item=>item.type==="delete_custom_property"?`${item.
   const keys=new Set<PropertyKey>();
   for(const item of commands.value)if(item.type==="delete_custom_property"&&item.property_type==="sheetset")keys.add(`sheetset:${item.name}`);
   properties.invalidateDefinitions(keys);
+},{immediate:true});
+// —— CSV 预览失效（PLAN-DM-016 任务 5）：预览结果只对发起时的基准与定义投影有效 ——
+// 影响属性定义的命令簿变化（新增/删除属性定义，含撤销/移除）使预览失效；仅失效预览，不清除已选文件文本
+watch(()=>commands.value.map(item=>item.type==="add_custom_property"?`add:${item.property_type}:${item.name.toLocaleLowerCase()}`:item.type==="delete_custom_property"?`del:${item.property_type}:${item.name.toLocaleLowerCase()}`:"").join("|"),()=>{
+  invalidateCsvPreview(false);
+},{immediate:true});
+// 工作区或基准修订变化（重开/刷新/任务成功后刷新）使预览失效：不能以旧预览上下文确认新基准
+watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
+  invalidateCsvPreview(false);
 },{immediate:true});
 // —— 全局输入保护（PLAN-DM-016 任务 2）：图纸页与属性页两个活动输入域依次过闸 ——
 // 固定先处理当前主标签的活动编辑器，再处理另一域；任一步「留在此处」即终止 next。

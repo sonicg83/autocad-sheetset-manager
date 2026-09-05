@@ -1,11 +1,13 @@
 <script setup lang="ts">
-// 标签② 属性：属性字段定义面板 + 图纸集属性值面板（PLAN-DM-016 任务 3/4，SPEC-DM-010 §3）。
-// 内容区从上到下为「属性字段定义」「图纸集属性值」两个独立面板；本视图只组合与转发，
+// 标签② 属性：属性字段定义面板 + CSV 导入导出面板 + 图纸集属性值面板（PLAN-DM-016 任务 3/4/5，SPEC-DM-010 §3）。
+// 内容区从上到下为「属性字段定义」「属性导入导出」「图纸集属性值」三个独立面板；本视图只组合与转发，
 // 不直接改 workspace props、不编排 API 命令：值编辑经 usePropertiesWorkspace，定义增删
-// 经 emit 交给 App 既有命令簿门禁（queuePropertyDefinition/queueDeleteProperty）。
+// 经 emit 交给 App 既有命令簿门禁（queuePropertyDefinition/queueDeleteProperty），
+// CSV 读取/预览/确认经 App 的 useCsvImport（渐进面板 + 门禁 + 强确认）。
 import type {CsvPreview,PropertyDefinition,PropertyType,Workspace} from "../api/contracts";
 import type {PropertyBuffer,PropertySearchMode,ValueKey,ValueStatus} from "../features/properties/types";
 import PropertyDefinitionPanel from "../components/properties/PropertyDefinitionPanel.vue";
+import PropertyCsvPanel from "../components/properties/PropertyCsvPanel.vue";
 import PropertyValuePanel from "../components/properties/PropertyValuePanel.vue";
 const props=defineProps<{
   workspace:Workspace;
@@ -40,10 +42,12 @@ defineEmits<{
     <PropertyDefinitionPanel
       :definitions="workspace.sheet_set.property_definitions"
       :form="propertyForm"
-      :workspace-id="workspace.id"
-      :has-csv="hasCsv" :csv-preview="csvPreview" :csv-executable="csvExecutable" :writes-disabled="repairWritesDisabled"
       @add-definition="$emit('queuePropertyDefinition')"
       @delete-definition="definition=>$emit('queueDeleteProperty',definition)"
+    />
+    <PropertyCsvPanel
+      :workspace-id="workspace.id"
+      :has-csv="hasCsv" :csv-preview="csvPreview" :csv-executable="csvExecutable" :writes-disabled="repairWritesDisabled"
       @read-csv="$emit('readCsv',$event)" @preview-csv="$emit('previewCsv')" @import-csv="$emit('importCsv')"
     />
     <PropertyValuePanel
