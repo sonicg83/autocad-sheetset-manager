@@ -43,20 +43,19 @@ function guardDialog(page: Page) {
   return page.getByRole("dialog", {name: "未提交输入"});
 }
 
-// 自定义属性区折叠开关（summary 在 Chromium 无隐式 button 角色名，按文本定位）
-function valueSectionToggle(page: Page) {
-  return page.locator(".properties-view summary").filter({hasText: "图纸集自定义属性"});
+// 图纸集名称独立输入框（PLAN-DM-016 任务 3 起在值面板内，exact 避免命中「值对照 图纸集名称」等按钮）
+function nameInput(page: Page) {
+  return page.getByLabel("图纸集名称", {exact: true});
 }
 
-test("直接编辑只进入缓冲：不产生草稿命令，标签切换与折叠都保留输入", async ({page}) => {
+test("直接编辑只进入缓冲：不产生草稿命令，标签切换保留输入", async ({page}) => {
   const {draftBodies} = await install(page);
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
   // 未提交：不产生草稿命令（不 PUT 草稿），workspace 名称不被输入污染
   expect(draftBodies).toHaveLength(0);
-  await expect(page.locator(".summary input")).toHaveValue("虚构图纸集");
-  // 折叠自定义属性区再切换主标签：会话缓冲保留
-  await valueSectionToggle(page).click();
+  await expect(nameInput(page)).toHaveValue("虚构图纸集");
+  // 切换主标签：会话缓冲保留（折叠保留由任务 6 面板标题折叠覆盖）
   await page.getByRole("tab", {name: "图纸"}).click();
   await page.getByRole("tab", {name: "属性"}).click();
   await expect(page.getByLabel("属性 工程名称")).toHaveValue("二期");
@@ -69,8 +68,8 @@ test("隐藏的修改一次完整加入草稿：单个 update_sheet_set 携带�
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
   await page.getByLabel("属性 编号").fill("002");
-  // 折叠隐藏两项修改后从名称行提交
-  await valueSectionToggle(page).click();
+  // 搜索其他字段隐藏两项修改后提交（搜索不丢弃隐藏修改）
+  await page.getByRole("searchbox", {name: "搜索属性值"}).fill("项目号");
   await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   const actions = (draftBodies.at(-1) as {actions: {commands: {type: string}[]}[]}).actions;
@@ -81,7 +80,7 @@ test("隐藏的修改一次完整加入草稿：单个 update_sheet_set 携带�
   // 一次完整提交：完整映射包含未修改项（计划断言意图，选择器按实现适配）
   expect(command.custom_properties).toEqual(expect.objectContaining({工程名称: "二期", 编号: "002", 项目号: "P-FAKE"}));
   // 成功后输入以草稿投影重建：值保持且可继续编辑
-  await valueSectionToggle(page).click();
+  await page.getByRole("button", {name: "清除搜索"}).click();
   await expect(page.getByLabel("属性 工程名称")).toHaveValue("二期");
   await expect(page.getByLabel("属性 编号")).toHaveValue("002");
 });
@@ -91,18 +90,18 @@ test("提交失败保留输入并呈现字段错误", async ({page}) => {
     failDraftSave: () => ({code: "DRAFT_SAVE_FAILED", message: "草稿保存失败", fields: {name: "图纸集名称已存在"}}),
   });
   await openProperties(page);
-  await page.locator(".summary input").fill("重复名称");
+  await page.getByLabel("图纸集名称", {exact: true}).fill("重复名称");
   await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect(page.getByRole("alert")).toContainText("草稿保存失败");
   await expect(page.getByText("图纸集名称已存在")).toBeVisible();
-  await expect(page.locator(".summary input")).toHaveValue("重复名称");
+  await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("重复名称");
 });
 
 test("撤回仅回到草稿投影：已提交值保持，不回到正式基准", async ({page}) => {
   const {draftBodies} = await install(page);
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
-  await page.getByRole("button", {name: "加入属性值变更"}).click();
+  await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   await page.getByLabel("属性 工程名称").fill("三期");
   await page.getByRole("button", {name: "撤回 工程名称"}).click();
@@ -141,7 +140,7 @@ test("预览先处理属性输入：留在此处阻断，加入草稿后继续�
   });
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
-  await page.getByRole("button", {name: "加入属性值变更"}).click();
+  await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   await page.getByLabel("属性 编号").fill("002");
   await page.getByRole("tab", {name: "图纸"}).click();
@@ -165,7 +164,7 @@ test("确认写入先处理属性输入三选一：留在此处不进入发布�
   });
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
-  await page.getByRole("button", {name: "加入属性值变更"}).click();
+  await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   await page.getByRole("tab", {name: "图纸"}).click();
   await page.getByRole("button", {name: "预览变更"}).click();

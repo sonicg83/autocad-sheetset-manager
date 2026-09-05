@@ -54,10 +54,11 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
   const dirtyKeys: ComputedRef<ValueKey[]> = computed(() => allKeys().filter((key) => statusOf(key).dirty));
   const pendingKeys: ComputedRef<ValueKey[]> = computed(() => allKeys().filter((key) => statusOf(key).pending));
   const matchedKeys = computed(() => input.value ? filterValueKeys(input.value, search.value, searchMode.value, changedOnly.value, statusOf) : []);
-  // 隐藏修改数：未加入草稿、不匹配当前过滤且不是暂留活动字段的键数（任务 1 契约口径）
+  // 隐藏修改数：未加入草稿、不匹配当前过滤且不是暂留活动字段的键数（任务 1 契约口径）。
+  // 图纸集名称独立展示且始终可见，永不计入「被隐藏」。
   const hiddenDirtyCount = computed(() => {
     const active = activeKey.value;
-    return dirtyKeys.value.filter((key) => !matchedKeys.value.includes(key) && key !== active).length;
+    return dirtyKeys.value.filter((key) => key !== "@name" && !matchedKeys.value.includes(key) && key !== active).length;
   });
 
   // —— 缓冲编辑：错误随编辑清除，属性值只使用字符串（不 trim/转换）——

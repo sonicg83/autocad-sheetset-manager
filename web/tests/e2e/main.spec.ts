@@ -40,7 +40,7 @@ test.beforeEach(async({page})=>{
 test("CAD 操作分流",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"number_range_changed"}],diagnostics:[],affected_files:["C:\\project\\test.dst","C:\\project\\001-002.dwg","C:\\project\\003-004.dwg"],execution_intent:{cad_validation_deferred:true,cardinality_frontier:{index:1,subset_id:"subset-2"},subset_operations:[{subset_id:"subset-1",cad_operation:"rename_only",target_file:"C:\\project\\001-002.dwg",in_cardinality_scope:false},{subset_id:"subset-2",cad_operation:"rebuild",target_file:"C:\\project\\003-004.dwg",in_cardinality_scope:true}],source_baselines:[{path:"C:\\project\\001-002.dwg",sha256:"source-sha-256",identity:["source-id"],source_types:["existing_snapshot"],requested_layouts:["001 第一册(一)"]}],groups:[{subset_id:"subset-1",cad_operation:"rename_only",subset_name:"第一册",target_file:"C:\\project\\001-002.dwg",layouts:[]},{subset_id:"subset-2",cad_operation:"rebuild",subset_name:"第二册",target_file:"C:\\project\\003-004.dwg",layouts:[]},{subset_id:"subset-none",cad_operation:"none",subset_name:"无需操作",target_file:"C:\\project\\none.dwg",layouts:[]},{subset_id:"subset-missing",subset_name:"缺失操作",target_file:"C:\\project\\missing.dwg",layouts:[]},{subset_id:"subset-unknown",cad_operation:"legacy",subset_name:"未知操作",target_file:"C:\\project\\unknown.dwg",layouts:[]}]}}}));
   await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-cad",status:"FAILED",progress:100,attempt:1,files:[{target_path:"C:\\project\\001-002.dwg",status:"SUCCEEDED",progress:100,cad_operation:"rename_only",started_at:"2026-08-26T10:00:00Z",finished_at:"2026-08-26T10:00:02Z",duration_ms:2000},{target_path:"C:\\project\\003-004.dwg",status:"FAILED",progress:100,cad_operation:"rebuild",started_at:"2026-08-26T10:00:03Z",finished_at:"2026-08-26T10:00:08Z",duration_ms:5000}]}}));
-  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.locator(".summary button").click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   await expect(page.getByText("CAD 布局校验将在确认后执行")).toBeVisible();await expect(page.getByText("批量改名布局").first()).toBeVisible();await expect(page.getByText("清除并重建布局").first()).toBeVisible();await expect(page.getByText("无需 CAD 操作",{exact:true}).first()).toBeVisible();await expect(page.getByText("未提供 CAD 操作",{exact:true})).toBeVisible();await expect(page.getByText("未知 CAD 操作：legacy",{exact:true})).toBeVisible();await expect(page.getByText("数量变化前沿：第 2 个子集")).toBeVisible();await expect(page.getByText("来源基准")).toBeVisible();await expect(page.getByText("source-sha-256",{exact:true})).toBeVisible();await expect(page.getByText("布局来源验证")).toHaveCount(0);const affectedFiles=page.locator(".preview > section").filter({has:page.getByRole("heading",{name:"受影响文件"})});await expect(affectedFiles.getByText("C:\\project\\001-002.dwg",{exact:true})).toBeVisible();await expect(affectedFiles.getByText("C:\\project\\003-004.dwg",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   // 任务详情迁入任务浮层实施进度页签：预览已展开浮层，切到实施进度页签再断言逐文件行
@@ -107,7 +107,7 @@ test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批�
   await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"draft-digest",executable:true,requires_cad:false,changes:[],diagnostics:[],affected_files:[],semantic_diff:{structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:null}})});
   await openWorkspace(page);
   await page.getByRole("tab",{name:"属性"}).click();
-  const name=page.locator(".summary input");
+  const name=page.getByLabel("图纸集名称", {exact: true});
   for(const value of ["A","B","C"]){await name.fill(value);await page.getByRole("button",{name:"更新图纸集"}).click()}
   await page.getByRole("tab",{name:"图纸"}).click();
   await openDraftPop(page);
@@ -136,7 +136,7 @@ test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批�
   await openDraftPop(page);
   await expect(page.getByText("动作 3/4")).toBeVisible();
   await page.getByRole("tab",{name:"属性"}).click();
-  await expect(page.locator(".summary input")).toHaveValue("C");
+  await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("C");
 });
 
 test("移除 active 动作不会激活 redo 区命令",async({page})=>{
@@ -144,7 +144,7 @@ test("移除 active 动作不会激活 redo 区命令",async({page})=>{
   await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"remove-digest",executable:true,requires_cad:false,changes:[],diagnostics:[],affected_files:[],semantic_diff:{sheet_set:[],structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:null}})});
   await openWorkspace(page);
   await page.getByRole("tab",{name:"属性"}).click();
-  const name=page.locator(".summary input");
+  const name=page.getByLabel("图纸集名称", {exact: true});
   for(const value of ["A","B","C"]){await name.fill(value);await page.getByRole("button",{name:"更新图纸集"}).click()}
   await page.getByRole("tab",{name:"图纸"}).click();
   await page.getByRole("button",{name:"撤销"}).click();
@@ -174,22 +174,22 @@ test("关闭未发布改动时确认放弃会先冲刷在途草稿保存再删�
   await page.route("**/api/workspaces/open",async route=>{const path=(await route.request().postDataJSON()).dst_path;return route.fulfill({json:path.includes("B.dst")?workspaceVersion("workspace-2","工作区 B","revision-2"):workspace})});
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("tab",{name:"属性"}).click();
-  const name=page.locator(".summary input");await name.fill("A");await page.getByRole("button",{name:"更新图纸集"}).click();await firstPutStarted.promise;await name.fill("B");await page.getByRole("button",{name:"更新图纸集"}).click();
+  const name=page.getByLabel("图纸集名称", {exact: true});await name.fill("A");await page.getByRole("button",{name:"更新图纸集"}).click();await firstPutStarted.promise;await name.fill("B");await page.getByRole("button",{name:"更新图纸集"}).click();
   // 关闭 A：存在未发布改动 → 确认放弃 → discardDraft 先等待在途草稿保存全部完成再删除
   await page.getByRole("button",{name:"关闭"}).click();
   await confirmModal(page,/确定关闭并放弃当前改动/);
   releaseFirstPut.resolve();
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
-  await selectDst(page,"C:\\B.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  await selectDst(page,"C:\\B.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");
   expect(putCount).toBe(2);expect(deleted).toBe(true);
-  await page.getByRole("button",{name:"关闭"}).click();await selectDst(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText("动作 0/0")).toBeVisible();
+  await page.getByRole("button",{name:"关闭"}).click();await selectDst(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("测试图纸集");await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText("动作 0/0")).toBeVisible();
 });
 
 test("草稿网络保存失败会中止工作区切换并保留编辑",async({page})=>{
   await page.unroute("**/api/workspaces/*/draft");
   await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
-  await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.locator(".summary input");await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText(/保存失败/)).toBeVisible();
+  await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.getByLabel("图纸集名称", {exact: true});await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText(/保存失败/)).toBeVisible();
   await page.getByRole("button",{name:"关闭"}).click();await cancelModal(page);
   await page.getByRole("tab",{name:"属性"}).click();await expect(name).toHaveValue("未保存名称");await page.getByRole("tab",{name:"图纸"}).click();await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
 });
@@ -199,10 +199,10 @@ test("草稿版本冲突会中止工作区切换并保留编辑",async({page})=>
   await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:409,json:{code:"DRAFT_CONFLICT",message:"版本冲突"}}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
-  await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.locator(".summary input");await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
+  await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.getByLabel("图纸集名称", {exact: true});await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
   await page.getByRole("button",{name:"关闭"}).click();await cancelModal(page);
   await expect(name).toHaveValue("冲突名称");await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
-  await page.getByRole("button",{name:"放弃本地冲突动作并重新加载"}).click();await confirmModal(page,/确定放弃冲突动作并重新加载/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");await page.getByRole("tab",{name:"图纸"}).click();await expect(page.getByText("动作 0/0")).toBeVisible();
+  await page.getByRole("button",{name:"放弃本地冲突动作并重新加载"}).click();await confirmModal(page,/确定放弃冲突动作并重新加载/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("测试图纸集");await page.getByRole("tab",{name:"图纸"}).click();await expect(page.getByText("动作 0/0")).toBeVisible();
 });
 
 test("过期草稿只展示旧意图、阻断预览且可明确丢弃",async({page})=>{
@@ -353,14 +353,14 @@ test("加载新工作区时隐藏旧编辑器并阻断跨工作区执行",async(
   await page.route("**/api/workspaces/workspace-A/changes/execute",route=>{executeCalls++;return route.fulfill({json:{id:"stale-execute",status:"FAILED",progress:0,files:[]}})});await page.route("**/api/workspaces/workspace-A/custom-properties/import",route=>{importCalls++;return route.fulfill({json:{id:null,status:"SUCCEEDED",progress:100,no_op:true,files:[]}})});
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("tab",{name:"属性"}).click();
-  await expect(page.locator(".summary input")).toHaveValue("工作区 A");
+  await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 A");
   await page.getByRole("button",{name:"关闭"}).click();
   const switching=selectDst(page,"C:\\B.dst");
   await expect.poll(()=>openCalls).toBe(2);
   const loadingWasVisible=await page.getByText("正在加载工作区…",{exact:true}).isVisible();
   // 任务 3 起旧编辑器区改名为左树右表工作区容器
   const editorWasVisible=await page.locator(".sheets-workspace").isVisible();
-  openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 B");
+  openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");
   await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();await expect(page.getByRole("button",{name:"确认导入"})).toBeDisabled();
   expect(loadingWasVisible).toBe(true);expect(editorWasVisible).toBe(false);expect(executeCalls).toBe(0);expect(importCalls).toBe(0);
 });
@@ -371,11 +371,11 @@ test("多次打开及刷新与打开竞争时仅最新工作区生效",async({pa
   await page.route("**/api/workspaces/workspace-C/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{type:"C-preview"}],diagnostics:[],affected_files:["C.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-C/changes/execute",route=>route.fulfill({json:{id:"job-C",status:"SUCCEEDED",progress:100,files:[]}}));await page.route("**/api/workspaces/workspace-C",async route=>{refreshStarted=true;await refreshC.promise;await route.fulfill({json:workspaceVersion("workspace-C","工作区 C 刷新","revision-C2")})});
   await page.goto("/");
   await selectDst(page,"C:\\A.dst");await selectDst(page,"C:\\B.dst");await selectDst(page,"C:\\C.dst");
-  openC.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 C");openB.resolve();openA.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 C");
+  openC.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 C");openB.resolve();openA.resolve();await page.waitForTimeout(100);await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 C");
   await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);await expect.poll(()=>refreshStarted).toBe(true);
   // 执行成功已 discardDraft，此处关闭无未发布改动，不弹确认模态
   await page.getByRole("button",{name:"关闭"}).click();
-  await selectDst(page,"C:\\D.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 D");refreshC.resolve();await page.waitForTimeout(100);await expect(page.locator(".summary input")).toHaveValue("工作区 D");
+  await selectDst(page,"C:\\D.dst");await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 D");refreshC.resolve();await page.waitForTimeout(100);await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 D");
 });
 
 test("切换工作区会关闭旧任务监控且忽略迟到终态",async({page})=>{
@@ -386,7 +386,7 @@ test("切换工作区会关闭旧任务监控且忽略迟到终态",async({page}
   await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);await expect(page.getByText("任务 job-A")).toBeVisible();
   // 任务仍在排队，草稿命令未发布成功：关闭会弹确认模态
   await page.getByRole("button",{name:"关闭"}).click();await confirmModal(page,/确定关闭并放弃当前改动/);
-  const switching=selectDst(page,"C:\\B.dst");await expect.poll(()=>openBStarted).toBe(true);await page.evaluate(()=>(window as any).__emitJob({id:"job-A",workspace_id:"workspace-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}));openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);
+  const switching=selectDst(page,"C:\\B.dst");await expect.poll(()=>openBStarted).toBe(true);await page.evaluate(()=>(window as any).__emitJob({id:"job-A",workspace_id:"workspace-A",status:"SUCCEEDED",progress:100,attempt:0,files:[]}));openB.resolve();await switching;await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");await page.waitForTimeout(100);
   expect(refreshACalls).toBe(0);await expect(page.getByText("任务 job-A")).toHaveCount(0);expect(await page.evaluate(()=>(window as any).__closedEventSources())).toBe(1);
 });
 
@@ -416,11 +416,11 @@ test("工作区切换会丢弃迟到的修订列表和恢复预览",async({page}
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("tab",{name:"修订历史"}).click();await expect.poll(()=>revisionCalls).toBe(1);
   await page.getByRole("button",{name:"关闭"}).click();
-  await selectDst(page,"C:\\B.dst");revisionList.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);await expect(page.getByText("revision-A-old")).toHaveCount(0);
+  await selectDst(page,"C:\\B.dst");revisionList.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");await page.waitForTimeout(100);await expect(page.getByText("revision-A-old")).toHaveCount(0);
   await page.getByRole("button",{name:"关闭"}).click();
   await selectDst(page,"C:\\A.dst");await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();
   await page.getByRole("button",{name:"关闭"}).click();
-  await selectDst(page,"C:\\B.dst");restorePreviewGate.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 B");await page.waitForTimeout(100);const restoreButton=page.getByRole("button",{name:"恢复为新修订"});if(await restoreButton.isVisible()){await restoreButton.click()}expect(restoreCalls).toBe(0);await expect(page.getByText("恢复确认")).toHaveCount(0);
+  await selectDst(page,"C:\\B.dst");restorePreviewGate.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 B");await page.waitForTimeout(100);const restoreButton=page.getByRole("button",{name:"恢复为新修订"});if(await restoreButton.isVisible()){await restoreButton.click()}expect(restoreCalls).toBe(0);await expect(page.getByText("恢复确认")).toHaveCount(0);
 });
 
 test("恢复写入期间阻断冲突入口并在成功后刷新工作区与修订",async({page})=>{
@@ -429,7 +429,7 @@ test("恢复写入期间阻断冲突入口并在成功后刷新工作区与修�
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await expect.poll(()=>restoreStarted).toBe(true);
   const restoringWasVisible=await page.getByText("正在恢复修订…",{exact:true}).isVisible();const closeWasDisabled=await page.getByRole("button",{name:"关闭"}).isDisabled();const historyWasDisabled=await page.getByRole("tab",{name:"修订历史"}).isDisabled();const previewButton=page.getByRole("button",{name:"恢复预览"});const previewWasDisabled=await previewButton.isDisabled();const confirmWasDisabled=await page.getByRole("button",{name:"恢复为新修订"}).isDisabled();if(!historyWasDisabled)await page.getByRole("tab",{name:"修订历史"}).click();if(!previewWasDisabled)await previewButton.click();
-  restorePost.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("工作区 A 已恢复");await page.getByRole("tab",{name:"修订历史"}).click();await expect(page.getByText("revision-A-new")).toBeVisible();
+  restorePost.resolve();await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("工作区 A 已恢复");await page.getByRole("tab",{name:"修订历史"}).click();await expect(page.getByText("revision-A-new")).toBeVisible();
   // 恢复任务详情迁入任务浮层实施进度页签：刷新复位后先展开浮层
   const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("button",{name:"展开任务浮层"}).click();await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("任务 restore-job-A")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);
   expect(restoringWasVisible).toBe(true);expect(closeWasDisabled).toBe(true);expect(historyWasDisabled).toBe(true);expect(previewWasDisabled).toBe(true);expect(confirmWasDisabled).toBe(true);expect(openCalls).toBe(1);expect(revisionCalls).toBe(3);expect(previewCalls).toBe(1);expect(restoreCalls).toBe(1); // 3 次 = 首次切标签① + 恢复成功后自动刷新 + 断言后切回标签③（沿用旧按钮每次点击即加载语义）
@@ -558,7 +558,7 @@ test("失败任务显示逐 DWG 详情并可安全重试",async({page})=>{
 });
 
 test("修订恢复先预览再确认为新修订",async({page})=>{
-  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore",route=>route.fulfill({json:{id:"restore-1",status:"SUCCEEDED",progress:100,attempt:0,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expect(page.getByText("replace test.dst")).toBeVisible();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.locator(".summary input")).toHaveValue("测试图纸集");
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore",route=>route.fulfill({json:{id:"restore-1",status:"SUCCEEDED",progress:100,attempt:0,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expect(page.getByText("replace test.dst")).toBeVisible();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("测试图纸集");
 });
 
 test("恢复直返终态 FAILED 时任务浮层自动展开到实施进度页签",async({page})=>{
@@ -724,7 +724,7 @@ test("关闭后迟到的刷新响应不会复活工作区",async({page})=>{
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
   refreshGate.resolve();await page.waitForTimeout(100);
   await expect(page.getByRole("button",{name:"选择 DST 文件"})).toBeVisible();
-  await expect(page.locator(".summary input")).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭工作区"})).toHaveCount(0);
+  await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭工作区"})).toHaveCount(0);
 });
 
 test("壳桥延迟注入（pywebviewready）时初始界面切换为文件选择区",async({page})=>{
@@ -816,7 +816,7 @@ test("ActionDock：无草稿时写入禁用并可见原因，有草稿未预览�
   await expect(page.getByText("没有待发布变更")).toBeVisible(); // 禁用原因以内联文本呈现（原生 title 不进 DOM，不作为断言通道）
   // 加入一条动作后（跟随既有 mock 方式触发一次属性变更）
   await page.getByRole("tab",{name:"属性"}).click();
-  await page.locator(".summary input").fill("新名称");
+  await page.getByLabel("图纸集名称", {exact: true}).fill("新名称");
   await page.getByRole("button",{name:"更新图纸集"}).click();
   await expect(page.getByText("请先预览")).toBeVisible();
 });
