@@ -211,3 +211,52 @@ test("确认导入先处理属性输入三选一且 CSV 不被自动保存", asy
   expect(importBodies).toHaveLength(0);
   await confirm.getByRole("button", {name: "取消"}).click();
 });
+
+test("恢复成功触发的刷新先处理属性输入三选一：留在此处不刷新，放弃后刷新且输入清空", async ({page}) => {
+  const {draftBodies} = await install(page);
+  // 计数并放行工作区 GET（fallback 走夹具路由）：刷新是否发生以工作区重新 GET 为准
+  let refreshGets = 0;
+  await page.route("**/api/workspaces/workspace-1", (route) => {
+    if (route.request().method() === "GET") refreshGets += 1;
+    return route.fallback();
+  });
+  // 修订恢复路由（沿用 main.spec 恢复用例的 mock 形状）：恢复成功后 App 经 refreshWorkspace 刷新
+  await page.route("**/api/revisions?workspace_id=workspace-1", (route) => route.fulfill({json: [{id: "revision-1", created_at: "2026-08-12T00:00:00Z", before_hash: "aaaaaaaa", result_hash: "bbbbbbbb"}]}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview", (route) => route.fulfill({json: {revision_id: "revision-1", executable: true, files: [{path: "test.dst", action: "replace", conflict: false}]}}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore", (route) => route.fulfill({json: {id: "restore-job-1", status: "SUCCEEDED", progress: 100, attempt: 0, files: []}}));
+  await openProperties(page);
+  await page.getByLabel("属性 工程名称").fill("二期");
+  // 属性页有未提交输入时执行恢复：恢复成功后的刷新先过三选一
+  await page.getByRole("tab", {name: "修订历史"}).click();
+  await page.getByRole("button", {name: "恢复预览"}).click();
+  await page.getByRole("button", {name: "恢复为新修订"}).click();
+  const confirm = page.locator('[role="dialog"][aria-modal="true"]');
+  await expect(confirm).toContainText(/确认恢复/);
+  await confirm.getByRole("checkbox").check();
+  await confirm.getByRole("button", {name: "确认恢复"}).click();
+  const dialog = guardDialog(page);
+  await expect(dialog).toBeVisible();
+  // 留在此处：刷新未发生（工作区未重新 GET），输入保留
+  await dialog.getByRole("button", {name: "留在此处"}).click();
+  await expect(dialog).toHaveCount(0);
+  await page.waitForTimeout(200);
+  expect(refreshGets).toBe(0);
+  await page.getByRole("tab", {name: "属性"}).click();
+  await expect(page.getByLabel("属性 工程名称")).toHaveValue("二期");
+  expect(draftBodies).toHaveLength(0);
+  // 再次恢复并放弃输入：收起恢复预览浮层后重新走恢复流程，刷新发生，输入清空为服务端值，且不产生草稿命令
+  await page.getByRole("button", {name: "收起任务浮层"}).click();
+  await page.getByRole("tab", {name: "修订历史"}).click();
+  await page.getByRole("button", {name: "恢复预览"}).click();
+  await page.getByRole("button", {name: "恢复为新修订"}).click();
+  await expect(confirm).toContainText(/确认恢复/);
+  await confirm.getByRole("checkbox").check();
+  await confirm.getByRole("button", {name: "确认恢复"}).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", {name: "放弃输入"}).click();
+  await expect.poll(() => refreshGets).toBe(1);
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("tab", {name: "属性"}).click();
+  await expect(page.getByLabel("属性 工程名称")).toHaveValue("一期工程");
+  expect(draftBodies).toHaveLength(0);
+});

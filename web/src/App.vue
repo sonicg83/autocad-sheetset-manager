@@ -554,7 +554,7 @@ function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:
 function queueDeleteProperty(definition:PropertyDefinition){void properties.guard(()=>doQueueDeleteProperty(definition))}
 async function doQueueDeleteProperty(definition:PropertyDefinition){
   const scopeLabel=definition.type==="sheetset"?"图纸集":"图纸";
-  const ok=await confirmAction({title:"删除属性定义",message:`删除${scopeLabel}属性定义「${definition.name}」？\n该操作仅加入删除草稿，可在草稿栈撤销；预览时以服务端结果显示受影响范围，此处不虚构级联影响数量。`,confirmText:"加入删除草稿",danger:false});
+  const ok=await confirmAction({title:"删除属性定义",message:`删除${scopeLabel}属性定义「${definition.name}」？\n该操作仅加入删除草稿，可在草稿栈撤销；预览时以服务端结果显示受影响范围。`,confirmText:"加入删除草稿",danger:false});
   if(!ok)return;
   if(addCommand(createCommand.deleteCustomProperty(definition.type,definition.name),"property")){
     pushToast({type:"ok",title:"已加入删除草稿",body:`${scopeLabel}属性定义「${definition.name}」已加入删除草稿，可在草稿栈查看与撤销`});

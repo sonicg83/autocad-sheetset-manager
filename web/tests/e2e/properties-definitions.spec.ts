@@ -353,3 +353,51 @@ test("新增区与查询控件密度：输入 38px、普通按钮 36px", async (
   const addButtonHeight = await panel.getByRole("button", {name: "新增字段"}).evaluate((el) => Math.round(el.getBoundingClientRect().height));
   expect(addButtonHeight).toBeGreaterThanOrEqual(36);
 });
+
+test("删除 sheetset 定义使值字段失效：输入保留、提交被阻断，撤销命令后提交恢复", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  const {draftBodies} = await install(page);
+  await openProperties(page);
+  // 值面板编辑 sheetset 字段（仅入缓冲，不产生草稿命令）
+  await page.getByRole("textbox", {name: "属性 工程名称"}).fill("城东安置房当前输入");
+  expect(draftBodies).toHaveLength(0);
+  // 展开定义面板删除同名字段定义：dirty 输入先过三选一，加入草稿后继续删除
+  await expandDefinitions(page);
+  const deleteButton = page.getByRole("button", {name: "删除 图纸集 属性 工程名称"});
+  await deleteButton.click();
+  const guard = page.getByRole("dialog", {name: "未提交输入"});
+  await expect(guard).toBeVisible();
+  await guard.getByRole("button", {name: "加入草稿后继续"}).click();
+  await expect.poll(() => draftBodies.length).toBe(1);
+  const confirm = page.getByRole("dialog", {name: "删除属性定义"});
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", {name: "加入删除草稿"}).click();
+  await expect.poll(() => draftBodies.length).toBe(2);
+  // 最后一个草稿主体以删除命令收尾（前一主体为「加入草稿后继续」保存的完整值映射）
+  expect(lastCommands(draftBodies).at(-1)).toEqual({type: "delete_custom_property", property_type: "sheetset", name: "工程名称"});
+  // 回到值面板：字段值保留（编辑值已入草稿投影，不因定义删除丢失）
+  await expect(page.getByRole("textbox", {name: "属性 工程名称"})).toHaveValue("城东安置房当前输入");
+  // 再编辑一次：本地输入与失效并存
+  await page.getByRole("textbox", {name: "属性 工程名称"}).fill("城东安置房再次输入");
+  // 提交被阻断：不产生新草稿命令（PROPERTY_BUFFER_STALE 前置返回），输入保留供核对
+  const bodiesBeforeBlocked = draftBodies.length;
+  await page.getByRole("button", {name: "更新图纸集"}).click();
+  await page.waitForTimeout(500);
+  expect(draftBodies).toHaveLength(bodiesBeforeBlocked);
+  await expect(page.getByRole("textbox", {name: "属性 工程名称"})).toHaveValue("城东安置房再次输入");
+  // 三选一失效语义：存在失效字段时「加入草稿后继续」禁用（canSave:false），留在此处可退出
+  await page.getByRole("button", {name: "关闭"}).click();
+  await expect(guard).toBeVisible();
+  await expect(guard.getByRole("button", {name: "加入草稿后继续"})).toBeDisabled();
+  await guard.getByRole("button", {name: "留在此处"}).click();
+  await expect(guard).toHaveCount(0);
+  await expect(page.getByRole("button", {name: "关闭"})).toBeVisible();
+  // 撤销删除命令后失效解除：提交恢复可行，完整映射携带再次编辑的值
+  await page.getByRole("button", {name: "撤销"}).click();
+  const hasSubmitted = () => draftBodies.some((body) => JSON.stringify(body).includes("城东安置房再次输入"));
+  await page.getByRole("button", {name: "更新图纸集"}).click();
+  await expect.poll(hasSubmitted).toBe(true);
+  const lastBody = draftBodies.at(-1) as {actions: {commands: {type: string; custom_properties?: Record<string, string>}[]}[]};
+  const command = lastBody.actions.flatMap((action) => action.commands).filter((item) => item.type === "update_sheet_set").at(-1);
+  expect(command?.custom_properties).toEqual(expect.objectContaining({工程名称: "城东安置房再次输入"}));
+});
