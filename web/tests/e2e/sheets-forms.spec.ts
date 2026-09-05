@@ -53,7 +53,7 @@ test("删除参照后加入草稿需重选且保留表单输入", async ({page})
   // 先删除 sheet-1（表单未打开，无输入保护）
   const row = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("001", {exact: true})});
   await row.getByRole("button", {name: "删除", exact: true}).click();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   await expect(page.getByText("匹配 12 / 全部 12 张", {exact: true})).toBeVisible();
   // 撤销删除 → sheet-1 恢复
   await page.getByRole("button", {name: "撤销"}).click();
@@ -213,13 +213,28 @@ test("编辑子集全部范围先选择编辑对象", async ({page}) => {
   await openWorkspace(page);
   await page.getByRole("button", {name: "编辑子集"}).click();
   await expect(page.getByRole("region", {name: "编辑子集"})).toBeVisible();
-  // 全部范围：未选择编辑对象时提交被拒
+  // 全部范围：未选择编辑对象时提交被拒且删除整个子集危险入口禁用（任务 7 修：不静默无操作）
+  await expect(page.getByRole("button", {name: "删除整个子集"})).toBeDisabled();
   await page.getByLabel("子集标题").fill("平面图甲");
   await page.getByRole("button", {name: "加入草稿", exact: true}).click();
   await expect(page.getByText("请选择要编辑的子集", {exact: true})).toBeVisible();
-  // 选择编辑对象后缓冲重置为该子集当前标题
+  // 选择编辑对象后缓冲重置为该子集当前标题，危险入口可用
   await page.getByLabel("当前子集").selectOption("subset-2");
   await expect(page.getByLabel("子集标题")).toHaveValue("结构施工图");
+  await expect(page.getByRole("button", {name: "删除整个子集"})).toBeEnabled();
+});
+
+test("同类操作入口点击不触发三选一且表单保留", async ({page}) => {
+  const {workspace} = await installSheetsFixture(page);
+  await installSmartPreview(page, workspace);
+  await openWorkspace(page);
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
+  // 再次点击同类入口：同一表单已打开，先短路不重开、不触发三选一（任务 7 修）
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
+  await expect(page.getByLabel("子集标题")).toHaveValue("平面图甲");
 });
 
 test("编辑子集单子集范围预填当前子集且标题可改", async ({page}) => {

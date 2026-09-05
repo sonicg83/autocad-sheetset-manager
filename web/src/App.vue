@@ -3,7 +3,7 @@ import {computed,reactive,ref,watch} from "vue";
 import {ApiError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,PropertyType,Revision,SemanticDiff,Sheet,Workspace} from "./api/contracts";
+import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,PropertyType,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult} from "./features/sheets/types";
 import {useShellTabs} from "./composables/useShellTabs";
@@ -101,6 +101,7 @@ async function previewRestoreAndOpen(revision:Revision){await previewRestore(rev
 function onCadVersionChange(value:string){cadVersion.value=value;layoutReadGeneration+=1;invalidatePreview()}
 const bulkPropertyName=ref("");
 const bulkPropertyValue=ref("");
+const bulkMode=ref<"set"|"clear">("set"); // 批量模式：设置值 / 清空值（SPEC-DM-009 §6.1 显式区分）
 // 图纸页工作区状态（PLAN-DM-015 任务 3）：范围/搜索/低频筛选/勾选集合/首屏加载。
 // 在主标签之外实例化，切换主标签保留勾选集合与筛选；行 ID 取服务端 ID。
 const sheets=useSheetsWorkspace({workspace,commands});
@@ -117,11 +118,11 @@ const {visibleColumns,columnOptions,newPropertyCount,saveError:columnSaveError,s
 // 新增操作入口（任务 6 接真实表单）：三类操作表单共用一个唯一编辑上下文，一次只出现一种。
 // 单子集范围预填目标子集，全部图纸范围必须明确选择（不使用隐含的上次子集）。
 function openOperation(kind:OperationKind){
+  // 同一表单已打开：不重开（先于 guard，避免无谓三选一提示后再空操作）
+  if(editor.context.value?.kind===kind)return;
   void editor.guard(()=>doOpenOperation(kind));
 }
 function doOpenOperation(kind:OperationKind){
-  const currentCtx=editor.context.value;
-  if(currentCtx?.kind===kind)return; // 同一表单已打开：不重开
   if(!workspace.value)return;
   const targetId=sheets.scope.value.kind==="subset"?sheets.scope.value.id:"";
   if(kind==="rename")editor.openRename(targetId);
@@ -432,10 +433,12 @@ async function queueDelete(sheet:Sheet){
   await editor.guard(async()=>{await doQueueDelete(sheet)});
 }
 async function doQueueDelete(sheet:Sheet){
-  // 单张图纸删除为低风险动作：danger:false、无需勾选
-  const ok=await confirmAction({title:"删除图纸",message:`删除图纸 ${sheet.number}？`,confirmText:"确认删除",danger:false});
+  // 单张图纸删除为低风险动作：danger:false、无需勾选；确认文案明确「加入删除草稿」，不是立即删除文件（SPEC-DM-009 §6.3）
+  const ok=await confirmAction({title:"删除图纸",message:`删除图纸 ${sheet.number}？`,confirmText:"加入删除草稿",danger:false});
   if(!ok)return;
-  addCommand(createCommand.deleteSheet(sheet.id),"structural");
+  if(addCommand(createCommand.deleteSheet(sheet.id),"structural")){
+    pushToast({type:"ok",title:"已加入删除草稿",body:`图纸 ${sheet.number} 已加入删除草稿，可在草稿栈查看与撤销`});
+  }
 }
 // 删除整个子集：目标取编辑子集表单的编辑对象；编辑未提交时先三选一决策（保存后再删除），
 // 再走整子集删除确认流程。目标 ID 在 guard 前捕获——保存标题会关闭表单，删除仍作用于原目标。
@@ -451,18 +454,47 @@ async function doQueueDeleteSubset(subsetId:string){
   // 删除整个子集属不可逆破坏类操作：需要显式勾选后才可确认
   const ok=await confirmAction({title:"删除整个子集",message:`删除整个子集“${subset.display_name}”、其中 ${subset.sheets.length} 张图纸及主 DWG：${drawing}？\n系统不会证明工程外部引用，确认后由用户承担外部影响。`,confirmText:"确定删除整个子集",danger:true,requireCheckbox:true,reversibility:"不可逆"});
   if(!ok)return;
-  addCommand(createCommand.deleteSubset(subset.id),"structural");
+  if(addCommand(createCommand.deleteSubset(subset.id),"structural")){
+    pushToast({type:"ok",title:"已加入删除草稿",body:`子集 ${subset.display_name} 及其中 ${subset.sheets.length} 张图纸已加入删除草稿，可在草稿栈查看与撤销`});
+  }
 }
 // 批量加入草稿：与单行编辑共用一个活动编辑上下文，有未提交输入先三选一
 function queueBulkSheetProperty(){
   void editor.guard(()=>doQueueBulkSheetProperty());
 }
-function doQueueBulkSheetProperty(){
+// 批量编辑（SPEC-DM-009 §4.2/§6.1）：遍历完整勾选集合（含未加载行，不隐式缩为当前可见行）；
+// 逐张复制 custom_properties 后仅改指定名称，已删除对象按 ID 匹配不到自然不进入批量。
+// 设置值模式空输入不生成修改只提示；清空值须显式选择并确认受影响数量（是否允许空值仍由服务端校验 S-11）。
+async function doQueueBulkSheetProperty(){
   const name=bulkPropertyName.value;
   if(!name||!selectedIds.value.length){error.value="请选择图纸和既有图纸属性";return}
   const selected=new Set(selectedIds.value);
-  const batch=allRows.value.filter(({sheet})=>selected.has(sheet.id)).map(({sheet})=>createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties,[name]:bulkPropertyValue.value}));
-  if(addCommandBatch(batch,`批量更新 ${name}（${batch.length} 张）`,"metadata")){clearSelection();bulkPropertyName.value="";bulkPropertyValue.value=""}
+  const targets=allRows.value.filter(({sheet})=>selected.has(sheet.id));
+  if(!targets.length){error.value="所选图纸均已删除或不可用，无法批量操作";return}
+  if(bulkMode.value==="set"){
+    if(!bulkPropertyValue.value.trim()){error.value="批量设置为空值不会生成修改；如需清空请改用「清空值」";return}
+    applyBulkBatch(targets,name,bulkPropertyValue.value,"更新");
+    return;
+  }
+  const affected=targets.filter(({sheet})=>(sheet.custom_properties[name]??"").trim()!=="");
+  if(!affected.length){error.value=`所选图纸的「${name}」属性均为空值，无需清空`;return}
+  const ok=await confirmAction({
+    title:"清空属性值",
+    message:`将清空 ${affected.length} 张已选图纸的「${name}」属性值（设为空字符串，是否允许空值由服务端校验）。\n清空仅作用于已勾选图纸，可在草稿栈撤销。`,
+    confirmText:"确定清空",danger:false,
+  });
+  if(!ok)return;
+  applyBulkBatch(affected,name,"","清空"); // 只改实际受影响图纸，与确认数量一致
+}
+function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:string,verb:"更新"|"清空"){
+  const batch=targets.map(({sheet})=>createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties,[name]:value}));
+  const subsetCount=new Set(targets.map(({subset})=>subset.id)).size;
+  const label=`批量${verb} ${name}（${batch.length} 张）`;
+  // 提交摘要含完整数量与跨子集范围（toast 反馈；草稿动作标签保持既有「N 张」格式）
+  if(addCommandBatch(batch,label,"metadata")){
+    clearSelection();bulkPropertyName.value="";bulkPropertyValue.value="";
+    pushToast({type:"ok",title:"已加入草稿",body:`批量${verb} ${name}（${batch.length} 张 / ${subsetCount} 个子集）`});
+  }
 }
 function queuePropertyDefinition(){
   const name=propertyForm.name.trim();if(!name){error.value="属性名称不能为空";return}
@@ -554,7 +586,7 @@ useHotkeys({
       <template v-else>
         <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">已恢复上次未完成的改动（{{draftRecovered}} 条待处理）<button @click="draftRecovered=null">继续</button><button @click="clearDraftRestart">清空重来</button></div>
-        <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
+        <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:bulk-mode="bulkMode" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
         <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-form="propertyForm" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @queue-sheet-set="queueSheetSet" @queue-property-definition="queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="importCsv" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
       </template>

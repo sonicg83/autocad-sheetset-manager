@@ -302,7 +302,7 @@ test("编辑未提交时点击删除先处理缓冲，删除命令不夹带属�
   // 保存后再走删除确认流程
   await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
   await expect(page.getByRole("dialog", {name: "删除图纸"})).toBeVisible();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   // 两个独立批次：属性编辑 + 删除；删除命令不带 custom_properties
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   const actions = (draftBodies[draftBodies.length - 1] as {actions: {commands: {type: string}[]}[]}).actions;

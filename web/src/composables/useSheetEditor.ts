@@ -348,6 +348,8 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   async function guard(next: () => void | Promise<void>): Promise<void> {
     if (guardState.value.open) return;          // 防重入
     if (submitInFlight) await submitInFlight;   // 保存中切换：等保存完成再判断
+    // 等待保存期间另一 guard 已打开模态：丢弃本次续延（避免后者覆盖 guardResolver 丢弃前者）
+    if (guardState.value.open) return;
     const ctx = context.value;
     const prompt = Boolean(ctx) && (hasUnsavedChanges.value || ctx!.invalid);
     if (!prompt) { await next(); return; }

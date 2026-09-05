@@ -179,7 +179,8 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
         <p class="derived">只读图号范围：{{ renameSubset?.number_range || "—" }} · 显示名：{{ renameSubset?.display_name }}</p>
       </div>
       <div class="form-danger">
-        <button type="button" class="danger" @click="$emit('deleteSubset')">删除整个子集</button>
+        <!-- 未选择编辑对象时禁用危险入口，避免静默无操作（任务 7 修：全部范围先选对象） -->
+        <button type="button" class="danger" :disabled="!context.objectId" @click="$emit('deleteSubset')">删除整个子集</button>
       </div>
     </template>
 

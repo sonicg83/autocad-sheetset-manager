@@ -47,6 +47,7 @@ const pendingFilter = defineModel<SheetPendingFilter>("pendingFilter", {default:
 const renderLimit = defineModel<number>("renderLimit", {default: 80});
 const bulkPropertyName = defineModel<string>("bulkPropertyName", {default: ""});
 const bulkPropertyValue = defineModel<string>("bulkPropertyValue", {default: ""});
+const bulkMode = defineModel<"set" | "clear">("bulkMode", {default: "set"});
 const emit = defineEmits<{
   selectAll: []; selectSubset: [id: string]; selectSheet: [id: string];
   toggleFilteredSelection: []; clearSelection: []; clearFilters: [];
@@ -114,6 +115,7 @@ const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilt
           v-model:pending-filter="pendingFilter"
           v-model:bulk-property-name="bulkPropertyName"
           v-model:bulk-property-value="bulkPropertyValue"
+          v-model:bulk-mode="bulkMode"
           @clear-filters="$emit('clearFilters')"
           @toggle-filtered-selection="$emit('toggleFilteredSelection')"
           @clear-selection="$emit('clearSelection')"

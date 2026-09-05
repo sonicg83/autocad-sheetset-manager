@@ -104,7 +104,7 @@ test("投影删除的对象从勾选集合移除并提示", async ({page}) => {
   await expect(page.getByText("已选 13 张，其中 0 张不在当前结果", {exact: true})).toBeVisible();
   // 删除第一张图纸（结构动作）→ 权威投影返回 12 张 → 选择集合修剪 1 张并提示
   await page.getByRole("button", {name: "删除", exact: true}).first().click();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   await expect(page.getByText("已从选择中移除 1 张已删除图纸", {exact: true})).toBeVisible();
   await expect(page.getByText("已选 12 张，其中 0 张不在当前结果", {exact: true})).toBeVisible();
 });

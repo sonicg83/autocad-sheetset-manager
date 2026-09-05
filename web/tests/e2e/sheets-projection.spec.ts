@@ -35,7 +35,7 @@ test("结构投影内部请求不启用确认写入，且逆序响应只应用�
 
   // 结构动作一：删除首张图纸 → 投影请求 #1（旧代次，14 张）
   await page.getByRole("button", {name: "删除", exact: true}).first().click();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   // 结构动作二：新增一张（已有布局来源）→ 表单提交经草稿保存与投影确认，共发出两次投影请求（新代次，15 张）
   await page.getByRole("button", {name: "新增图纸"}).click();
   await page.getByLabel("目标子集").selectOption("subset-1");
@@ -103,7 +103,7 @@ test("撤销结构动作后早期返回恢复 pending：旧在途响应被丢弃
 
   // 结构动作一：删除首张 → 内部投影请求在途（pending=true）
   await page.getByRole("button", {name: "删除", exact: true}).first().click();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   await expect.poll(() => previewCalls).toBe(1);
 
   // 立即撤销 → 早期返回：不得再发新请求，pending 恢复 false，旧在途响应因代次失效被丢弃
@@ -115,7 +115,7 @@ test("撤销结构动作后早期返回恢复 pending：旧在途响应被丢弃
 
   // 结构动作二：再次删除 → 重新投影成功，不受旧在途请求影响
   await page.getByRole("button", {name: "删除", exact: true}).first().click();
-  await page.getByRole("button", {name: "确认删除"}).click();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
   await expect.poll(() => previewCalls).toBe(2);
   await expect(page.getByText("匹配 14 / 全部 14 张", {exact: true})).toBeVisible();
 });

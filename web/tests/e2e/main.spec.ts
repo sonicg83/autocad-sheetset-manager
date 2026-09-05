@@ -638,7 +638,7 @@ test("取消高门槛模态后低风险模态不残留勾选与不可逆徽标",
   await expect(lowRisk.getByRole("checkbox")).toHaveCount(0);
   await expect(lowRisk.getByText("不可逆",{exact:true})).toHaveCount(0);
   await expect(lowRisk.locator(".modal-impact")).toHaveCount(0);
-  await expect(lowRisk.getByRole("button",{name:/确认删除/})).toBeEnabled();
+  await expect(lowRisk.getByRole("button",{name:/加入删除草稿/})).toBeEnabled();
 });
 
 test("未打开态只有文件选择区，不显示修订历史",async({page})=>{

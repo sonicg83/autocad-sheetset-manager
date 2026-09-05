@@ -28,6 +28,7 @@ defineProps<{
   sheetPropertyNames: string[];
   bulkPropertyName: string;
   bulkPropertyValue: string;
+  bulkMode: "set" | "clear";
   columnOptions: SheetColumnOption[];
   columnSaveError: string;
   newPropertyCount: number;
@@ -40,6 +41,7 @@ const diagnosticFilter = defineModel<SheetDiagFilter>("diagnosticFilter", {defau
 const pendingFilter = defineModel<SheetPendingFilter>("pendingFilter", {default: "all"});
 const bulkPropertyName = defineModel<string>("bulkPropertyName", {default: ""});
 const bulkPropertyValue = defineModel<string>("bulkPropertyValue", {default: ""});
+const bulkMode = defineModel<"set" | "clear">("bulkMode", {default: "set"});
 const emit = defineEmits<{
   clearFilters: [];
   toggleFilteredSelection: [];
@@ -117,9 +119,16 @@ const conditionChips = computed(() => {
       <button type="button" @click="$emit('clearSelection')">清除选择</button>
       <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">批量修改属性</button>
       <template v-if="bulkExpanded">
+        <label>批量模式<select v-model="bulkMode"><option value="set">设置值</option><option value="clear">清空值</option></select></label>
         <label>既有图纸属性<select v-model="bulkPropertyName"><option value="">请选择</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{ name }}</option></select></label>
-        <label>批量值<input v-model="bulkPropertyValue"></label>
-        <button type="button" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">批量加入草稿</button>
+        <template v-if="bulkMode === 'set'">
+          <label>批量值<input v-model="bulkPropertyValue"></label>
+          <button type="button" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">批量加入草稿</button>
+        </template>
+        <template v-else>
+          <span class="bulk-hint">清空所选图纸该属性（设为空字符串，是否允许空值由服务端校验）</span>
+          <button type="button" class="danger" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">清空所选属性</button>
+        </template>
       </template>
     </div>
     <div v-else class="select-entry">
@@ -142,5 +151,7 @@ const conditionChips = computed(() => {
 .chip-clear{border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:12px;padding:0}
 .selection-bar{display:flex;align-items:center;gap:var(--space-3);position:sticky;top:0;z-index:5;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border,var(--color-bg-surface-2));border-radius:var(--radius-md,8px);background:var(--color-bg-surface);flex-wrap:wrap}
 .selection-summary{font-weight:600;color:var(--color-text-primary)}
+.bulk-hint{color:var(--color-text-secondary);font-size:12px;max-width:220px}
+.bulk-hint + .danger,.selection-bar .danger{color:var(--color-danger,#c53030)}
 .select-entry{display:flex}
 </style>

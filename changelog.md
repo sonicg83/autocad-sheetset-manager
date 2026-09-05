@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-05（批量、删除及草稿动作联动）
+
+- **批量属性编辑区分「设置值/清空值」（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 7，SPEC-DM-009 §4.2/§6.1）**：`SheetToolbar.vue` 批量输入新增「批量模式」切换（设置值/清空值）。遍历完整勾选集合（含未加载行，批量范围不隐式缩为当前可见行），逐张复制 `custom_properties` 后仅改指定名称，已删除对象按 ID 匹配不到自然不进入批量。设置值模式空输入不生成修改、只提示改走清空；清空值模式必须显式选择并确认受影响数量（设为空字符串，是否允许空值仍由服务端校验 S-11），且只改实际受影响图纸、与确认数量一致。提交摘要（toast）含完整数量与跨子集范围，草稿动作标签保持既有「N 张」格式。
+- **删除确认文案对齐「加入删除草稿」并补反馈（SPEC-DM-009 §6.3）**：单张图纸删除确认按钮由「确认删除」改为「加入删除草稿」，明确不是立即删除文件；成功后推送 toast 反馈（可在草稿栈查看与撤销）。整子集删除保持 confirm_delete_all_sheets/confirm_delete_main_dwg 强确认（不可逆 + 勾选 + 影响 DWG 与外部引用声明）并补 toast。删除命令经既有 guard 先处理未提交缓冲，不夹带未确认的属性变更；投影移除、选择修剪与撤销/重做联动不变，撤销恢复图纸但不自动恢复勾选（S-12）。
+- **清理前序任务遗留（任务 5/6 审查项）**：`useSheetEditor.guard` 等待在途保存后复检 guardState.open，修复两个排队 guard 动作在提交失败后都能越过防重入检查、后者覆盖 guardResolver 丢弃前者续延的微竞态；`SheetOperationForm` 编辑子集未选择对象时禁用「删除整个子集」危险入口（不再静默无操作）；`App.vue` 同类操作入口点击的同类型短路前移到 guard 之前（不再无谓触发三选一）。
+- **测试（TDD，先红后绿）**：新增 `web/tests/e2e/sheets-drafts.spec.ts`（7 项：跨范围两张批量只改指定字段并保留其他字段、设置值空输入不生成命令且仅提示、清空值显式确认受影响数量且只清指定字段、单张删除加入草稿后从投影表与勾选集合移除、撤销恢复图纸但不自动恢复勾选（含简报 verbatim 计数联动）、删除整个子集强确认字段不变且声明影响 DWG 与外部引用、结构表单服务端失败保留完整输入）；`sheets-forms.spec.ts` 新增「同类操作入口点击不触发三选一且表单保留」并给「编辑子集全部范围先选择编辑对象」补危险入口禁用/可用断言；同步迁移 6 处既有「确认删除」为「加入删除草稿」。
+- 验证：`cd web && npm run build`（check:api + vue-tsc + vite）零错误；Playwright e2e **137/137 通过**（129 既有 + 新增 8）。本任务只改 `web/` 与 changelog，Python 侧未触碰；仓库所有者并行的 SPEC-DM-010 文档/演示改动未纳入本提交。
+
 ## 2026-09-05（三类操作表单与参照位置映射）
 
 - **新增参照对象 → 既有 ordinal/placement 命令映射（[PLAN-DM-015](.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 任务 6，SPEC-DM-009 §6.3）**：`web/src/features/sheets/commands.ts` 产出 `resolveSheetOrdinal(workspace,ref)`/`resolveSubsetOrdinal(workspace,subsetId)`，把稳定对象 ID 映射为既有序号/方向命令（ordinal 为锚对象序位、placement 相对其前后），失效参照抛可见错误、不回退为 1；不重新实现后端派生命名、不增加自由排序能力。原 command schema（insert_sheet 的 target_subset_id/ordinal/placement/count/source，insert_subset 的 ordinal/placement/title/initial_sheet_count/base_template_file/source），不携带 UI ref 或演示 token。
