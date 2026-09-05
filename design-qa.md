@@ -45,6 +45,6 @@ final result: passed
 
 1. **"更新图纸集 / 放弃本区输入"按钮位于值面板标题行右侧**，而非 Demo 的卡片底部：TaskOverlay 抽屉（fixed 右侧 390px）遮挡滚动至下部的按钮，导致 3 个 main.spec 既有用例回归。
 2. **"加入草稿：共 N 项，其中 M 项当前未显示"摘要行位于面板底部 `.local-actions`**，未满足 SPEC-DM-010 §5.2 "提交按钮旁"措辞：为上述按钮位置偏离的连带结果。
-3. **`button.link` 采用 34px 紧凑档**（Demo 为 28px）：在计划 38/36/34px 密度基线内，Task 7 几何断言裁决。
+3. **`button.link` 已在 fix round 1 修复，升为 36px 普通档**（min-height 36px、8px 横向留白、不透明语义背景 `--color-bg-surface`）：34px 档仅限工具栏紧凑按钮，值面板行内文字操作按钮按 `.properties-view button` 36px 基线执行，`sheets-visual-regressions` "点击留白"用例（浅/深双主题）已恢复通过。
 
 复评时逐项决定：保留（记录为有意差异）或调整；调整不得破坏 main.spec 既有流程几何。

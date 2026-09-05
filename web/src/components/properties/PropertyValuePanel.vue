@@ -284,8 +284,8 @@ function onExpandKeydown(event: KeyboardEvent) {
 .field-foot .spacer{flex:1;min-width:0}
 .field-error{margin:0;color:var(--color-danger);font-size:12px;line-height:1.7}
 .pinned-note{margin:0;color:var(--color-text-secondary);font-size:12px}
-/* 纯文字操作按钮按生产密度基线取 34px 紧凑工具按钮档 */
-button.link{min-height:34px;padding:2px 6px;border:1px solid transparent;border-radius:var(--radius-sm);background:none;color:var(--color-accent);white-space:nowrap;font-size:12px}
+/* 值面板行内文字操作按钮属 36px 普通档（34px 仅限工具栏紧凑按钮）：不透明语义背景 + 8px 横向留白 */
+button.link{min-height:36px;padding:2px var(--space-2);border:1px solid transparent;border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-accent);white-space:nowrap;font-size:12px}
 button.link:hover:not(:disabled){background:var(--color-bg-muted)}
 button.link:disabled{color:var(--color-text-muted);cursor:not-allowed}
 button.link:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
