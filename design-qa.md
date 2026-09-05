@@ -48,3 +48,7 @@ final result: passed
 3. **`button.link` 已在 fix round 1 修复，升为 36px 普通档**（min-height 36px、8px 横向留白、不透明语义背景 `--color-bg-surface`）：34px 档仅限工具栏紧凑按钮，值面板行内文字操作按钮按 `.properties-view button` 36px 基线执行，`sheets-visual-regressions` "点击留白"用例（浅/深双主题）已恢复通过。
 
 复评时逐项决定：保留（记录为有意差异）或调整；调整不得破坏 main.spec 既有流程几何。
+
+## PLAN-DM-016 追加遗留项（Task 7 裁决产出）
+
+4. **共享外壳 200% 缩放横向溢出适配**：Task 7 实测 topbar/dock 在 200% 缩放下产生整页横向溢出（图纸页同现状，PLAN-DM-017 之前既有）。计划 Task 7 Step 2 的"整页无横向溢出"在 200% 缩放档收窄为属性页区域自身（已双处留痕：properties-layout.spec.ts 注释 + QA 备忘第 41 行）；规范 P-07 的整页义务仅约束四个未缩放视口，未违反。后续：另立任务适配外壳 200% 缩放，并补图纸页/外壳在 zoom 下的整页溢出持久回归测试（当前图纸页侧无任何持久佐证）。
