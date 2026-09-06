@@ -101,7 +101,7 @@ SQLite 使用 SQLAlchemy 运行时模型和 Alembic 迁移：`uv run alembic upg
 .\scripts\release.ps1 -Version 0.3.4       # 先人工把 pyproject.toml version 与 changelog 更新到位
 ```
 
-产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：双击 `dst-manager.exe` 打开桌面壳；数据与草稿在 `%LOCALAPPDATA%\dst-manager\`；AutoCAD Core Console 路径在 exe 同级放 `.env` 配置（`autocad_2016_console`/`autocad_2020_console`），可用 `dst-manager.exe doctor` 自检。tag 仅打在本地，推送与分发由人工执行。
+产物 `dist/releases/dst-manager-v<版本>-win64.zip` 解压即用：解压后先运行程序目录内的 `setup.bat`——自动搜索本机 AutoCAD（注册表 + 默认安装目录）定位 `accoreconsole.exe` 并按兼容组写入 exe 同级的 `.env`（2015-2019 → `autocad_2016_console`，2020-2024 → `autocad_2020_console`；2013/2014 写入 2016 桶但有兼容性警告；2025+ 不受支持），幂等不覆盖已有配置，也可手工编辑 `.env`。随后双击 `dst-manager.exe` 打开桌面壳；数据与草稿在 `%LOCALAPPDATA%\dst-manager\`；可用 `dst-manager.exe doctor` 自检。tag 仅打在本地，推送与分发由人工执行。
 
 `.env` 按启动时工作目录解析（双击启动即 exe 同级目录）；应用数据落在 `%LOCALAPPDATA%\dst-manager\data\`，草稿在 `%LOCALAPPDATA%\dst-manager\drafts\`（两者为同级目录），均不写进程序目录，zip 更新不会覆盖用户数据。
 

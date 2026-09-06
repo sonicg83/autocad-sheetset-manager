@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-06（新增 setup.bat 最终用户环境初始化脚本）
+
+- 新增 `scripts/setup.bat` 并随包分发：面向打包分发后的最终用户，双击运行即在程序目录生成/补全 `.env`，免去手工配置。按年份升序探测注册表 `HKLM\SOFTWARE\Autodesk\AutoCAD\Rxx.x`（回退 `C:\Program Files\Autodesk\AutoCAD *\accoreconsole.exe` 目录扫描）定位本机 `accoreconsole.exe`，按 .NET 插件向前兼容口径写入版本桶：2015-2019 → `DST_MANAGER_AUTOCAD_2016_CONSOLE`，2020-2024 → `DST_MANAGER_AUTOCAD_2020_CONSOLE`（同组多版本取最新，两组独立填写）；2013/2014 输出兼容性风险警告后仍写入 2016 桶；2025 及以上（.NET 8）明确提示不支持；accoreconsole 自 2013 起才有，更早版本不在探测范围。脚本幂等，只补缺失键、绝不覆盖已有 `.env`；未探测到时模板保留注释占位并提示手工填写。`build_release.ps1` 组包阶段将 `setup.bat` 拷入 `dist/DSTManager/`。
+- 编码例外：`setup.bat` 保存为 GBK（ANSI，zh-CN 默认代码页）——实测 UTF-8 批处理在 cmd 下多字节解析不可靠（会吞字符），沿用 SCR 先例豁免仓库 UTF-8 规则；`.env` 模板注释刻意全 ASCII，保证写出的 `.env` 恒为合法 UTF-8（pydantic-settings 按 utf-8 读取）。测试钩子 `DST_SETUP_AUTODESK_ROOT` / `DST_SETUP_SKIP_REGISTRY` / `DST_SETUP_NO_PAUSE` 支持无 AutoCAD 环境的沙箱集成测试。
+- 修复设置读取的既有缺陷：`NumberSuffixType=1`（`.env.example` 引导的写法）会使 `Settings` 校验崩溃——`Literal[1, 2]` 不接受字符串，补 `validate_number_suffix_type` 字符串容错校验器（与 `EnableAddNumberSuffix` 同风格），新增 "1"/"2" 字符串接受用例。
+- 文档同步：ARCH-DM-002 §3.4 增补 setup.bat 探测与兼容组映射约定（运行期仍保持显式配置、不在包内猜测）、§4 组包步骤补 `setup.bat`；README 打包章节改为解压后先运行 `setup.bat` 的引导。
+- 验证（实际运行）：新增 `tests/unit/test_setup_bat.py`（静态契约 + 6 项沙箱集成测试：双桶映射、2013/2014 警告映射、组内取最新、2025 不支持、幂等不覆盖、未发现时注释占位）；`test_setup_bat.py + test_release_scripts.py + test_packaging_spec.py + test_config.py` 31/31 通过；真实环境运行 `setup.bat`（注册表探测）生成本机 2016/2020 双桶路径的合法 UTF-8 `.env`，重复运行确认幂等跳过，`dst-manager doctor` 成功读取写回的路径。
+- 计划同步：[PLAN-DM-014](.planning/plans/dst-manager/PLAN-DM-014-windows-release-packaging.md) 追加 Task 10（setup.bat，含随包验证待办），并逐任务核查完成情况——Task 1-9 代码全部落地（提交 `ccecb99`…`76d99b2`、审查修复 `4dc87cc`，`dist/DSTManager` 与 v0.3.3 zip 构建产物在盘佐证冒烟已执行），勾选 50 项；遗留 3 项人工/冒烟未做（exe 冒烟无记录、release.ps1 前置校验冒烟未执行、端到端 release 演练确认未做过——version 0.3.3 且无任何 git tag），状态 `proposed` → `active`，核查明细见计划新增「完成情况核查」章节。
+
 ## 2026-09-06（修复属性导入导出下载失效并简化操作层级）
 
 - 立项产品化阶段版本管理与发布流程设计 [ARCH-DM-003](docs/dst-manager/architecture/ARCH-DM-003-versioning-and-release.md)：SemVer（0.x 阶段）+ rc 预发布渠道 + tag 驱动 GitHub Releases + GitHub Actions 门禁与自动发布；接手 ARCH-DM-002 明确范围外的 CI 自动构建与远程发布。本文档阶段仅设计，实施另行立项。

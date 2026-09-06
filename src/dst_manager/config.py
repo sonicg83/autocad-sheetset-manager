@@ -65,6 +65,15 @@ class Settings(BaseSettings):
             return False
         raise ValueError("EnableAddNumberSuffix 仅接受 true 或 false")
 
+    @field_validator("number_suffix_type", mode="before")
+    @classmethod
+    def validate_number_suffix_type(cls, value: object) -> object:
+        # .env 与环境变量中的值恒为字符串，Literal[1, 2] 不接受 "1"/"2"，
+        # 与 EnableAddNumberSuffix 同样在源头做字符串容错
+        if value in ("1", "2"):
+            return int(value)  # type: ignore[arg-type]
+        return value
+
     @field_validator("draft_dir")
     @classmethod
     def validate_draft_dir(cls, value: Path) -> Path:

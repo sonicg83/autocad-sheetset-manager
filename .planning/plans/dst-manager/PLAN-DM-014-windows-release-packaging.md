@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-014
 title: DST Manager Windows 绿色分发包与一键 release 流程实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-06
 related:
   - ARCH-DM-002
   - SPEC-DM-007
@@ -48,7 +48,7 @@ related:
 - Consumes: 无（仅标准库 `sys`、`pathlib`）。
 - Produces: `is_frozen() -> bool`；`resource_dir(base: Path | None = None) -> Path`（开发态=仓库根；frozen=`sys._MEIPASS`；`base` 仅测试注入）。后续 Task 2/3/4 均从 `dst_manager.runtime` 导入这两个函数。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """runtime 路径解析单测：开发态/frozen 态两态定位与测试注入。"""
@@ -81,12 +81,12 @@ def test_explicit_base_overrides_both_states(monkeypatch):
     assert resource_dir(base) == base
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_runtime.py -q`
 Expected: FAIL，`ModuleNotFoundError: No module named 'dst_manager.runtime'`
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 ```python
 """运行时路径解析：统一开发态（源码树）与 PyInstaller frozen 态（onedir）的资源定位。
@@ -117,12 +117,12 @@ def resource_dir(base: Path | None = None) -> Path:
     return _DEV_ROOT
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `uv run pytest tests/unit/test_runtime.py -q`
 Expected: PASS（3 项）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/dst_manager/runtime.py tests/unit/test_runtime.py
@@ -141,7 +141,7 @@ git commit -m "新增 runtime 模块统一开发态与 frozen 态资源定位"
 - Consumes: Task 1 的 `resource_dir()`。
 - Produces: `create_app()` 静态挂载改从 `resource_dir() / "web" / "dist"` 定位；对外 HTTP 行为不变。
 
-- [ ] **Step 1: 写失败测试**（追加到 `tests/unit/test_runtime.py`）
+- [x] **Step 1: 写失败测试**（追加到 `tests/unit/test_runtime.py`）
 
 ```python
 def test_api_mounts_web_dist_from_resource_dir(monkeypatch, tmp_path):
@@ -157,12 +157,12 @@ def test_api_mounts_web_dist_from_resource_dir(monkeypatch, tmp_path):
     assert mounts, "web/dist 未被挂载到 /"
 ```
 
-- [ ] **Step 2: 运行测试确认当前通过（开发态等价）**
+- [x] **Step 2: 运行测试确认当前通过（开发态等价）**
 
 Run: `uv run pytest tests/unit/test_runtime.py -q`
 Expected: 新测试 PASS（monkeypatch 后与定位来源无关）——此测试守护"改经 resource_dir 后仍挂载"，先确认它在当前实现下也通过。
 
-- [ ] **Step 3: 修改实现**
+- [x] **Step 3: 修改实现**
 
 `src/dst_manager/interfaces/api.py` 顶部导入区追加：
 
@@ -182,12 +182,12 @@ from ..runtime import resource_dir
     web_dist = resource_dir() / "web" / "dist"
 ```
 
-- [ ] **Step 4: 回归确认**
+- [x] **Step 4: 回归确认**
 
 Run: `uv run pytest tests/unit/test_runtime.py -q && uv run ruff check src/dst_manager/interfaces/api.py`
 Expected: 全部 PASS，Ruff 无告警（`Path` 若在 api.py 其余处仍使用则保留导入，否则按 Ruff 提示清理）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/dst_manager/interfaces/api.py tests/unit/test_runtime.py
@@ -206,7 +206,7 @@ git commit -m "前端静态目录改经 runtime.resource_dir 定位"
 - Consumes: Task 1 的 `resource_dir()`。
 - Produces: `migrate_database(url)` 在 frozen 态从 `resource_dir()` 读取 `alembic.ini` 与 `migrations/`；行为契约（升级到 `LATEST_SCHEMA_REVISION`）不变。
 
-- [ ] **Step 1: 写失败测试**（追加到 `tests/unit/test_runtime.py`）
+- [x] **Step 1: 写失败测试**（追加到 `tests/unit/test_runtime.py`）
 
 ```python
 def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
@@ -230,12 +230,12 @@ def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
     assert version == database_module.LATEST_SCHEMA_REVISION
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_runtime.py::test_migrate_database_uses_resource_dir -q`
 Expected: FAIL——当前实现读源码树 `Path(__file__).parents[4]`，`alembic_version` 断言仍会通过但 `database_module` 没有 `resource_dir` 属性，monkeypatch 抛 `AttributeError`。
 
-- [ ] **Step 3: 修改实现**
+- [x] **Step 3: 修改实现**
 
 `database.py` 导入区追加：
 
@@ -257,12 +257,12 @@ from ...runtime import resource_dir
 
 （开发态 `resource_dir()` 返回仓库根，与 `parents[4]` 等价；确认文件内 `Path` 仍有其他使用处，勿删导入。）
 
-- [ ] **Step 4: 回归确认**
+- [x] **Step 4: 回归确认**
 
 Run: `uv run pytest tests/unit/test_runtime.py tests/unit/test_database.py -q`
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/dst_manager/infrastructure/persistence/database.py tests/unit/test_runtime.py
@@ -281,7 +281,7 @@ git commit -m "Alembic 迁移资源改经 runtime.resource_dir 定位"
 - Consumes: Task 1 的 `is_frozen()`。
 - Produces: `_spawn_worker(project_root: Path) -> subprocess.Popen`——frozen 态命令为 `[sys.executable, "worker", "--project-root", str(project_root)]`（复用 exe 的 `worker` 子命令），开发态保持 `[sys.executable, "-m", "dst_manager.interfaces.cli", "worker", ...]`。Task 6 的 exe 入口依赖此分支与 `packaging/entry.py` 的 argv 约定（无参数=`desktop`）。
 
-- [ ] **Step 1: 写失败测试**（追加到 `tests/unit/test_shell.py`，复用文件内既有的 `_FakePopen` 与捕获模式）
+- [x] **Step 1: 写失败测试**（追加到 `tests/unit/test_shell.py`，复用文件内既有的 `_FakePopen` 与捕获模式）
 
 ```python
 def test_spawn_worker_frozen_reuses_exe_worker_subcommand(monkeypatch):
@@ -301,12 +301,12 @@ def test_spawn_worker_frozen_reuses_exe_worker_subcommand(monkeypatch):
     assert captured["env"].get("PYTHONUTF8") == "1"
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_shell.py::test_spawn_worker_frozen_reuses_exe_worker_subcommand -q`
 Expected: FAIL，`AttributeError: <module 'dst_manager.interfaces.shell'> ... does not have the attribute 'is_frozen'`
 
-- [ ] **Step 3: 修改实现**
+- [x] **Step 3: 修改实现**
 
 `shell.py` 导入区追加：
 
@@ -340,12 +340,12 @@ def _spawn_worker(project_root: Path) -> subprocess.Popen:
     )
 ```
 
-- [ ] **Step 4: 回归确认**
+- [x] **Step 4: 回归确认**
 
 Run: `uv run pytest tests/unit/test_shell.py -q`
 Expected: 全部 PASS（既有开发态用例断言 `-m` 分支不变）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/dst_manager/interfaces/shell.py tests/unit/test_shell.py
@@ -364,7 +364,7 @@ git commit -m "Worker 子进程支持 frozen 态复用 exe worker 子命令"
 - Consumes: Task 1 的 `is_frozen()`。
 - Produces: `Settings` 字段默认值——frozen 态：`autocad_2016_plugin`/`autocad_2020_plugin` 指向 exe 同级 `autocad2016/autocad2020/DstManager.AutoCAD.dll`，`data_dir` 指向 `%LOCALAPPDATA%/dst-manager/data`；开发态与现状完全一致（插件 None、data_dir `.dst-manager-data`）。`.env`/环境变量覆盖路径不变（ARCH-DM-002 §3.4）。
 
-- [ ] **Step 1: 写失败测试**（追加到 `tests/unit/test_config.py`）
+- [x] **Step 1: 写失败测试**（追加到 `tests/unit/test_config.py`）
 
 ```python
 def test_frozen_plugin_defaults_point_to_bundled_dlls(monkeypatch, tmp_path):
@@ -400,12 +400,12 @@ def test_frozen_explicit_config_overrides_defaults(monkeypatch, tmp_path):
     assert settings.autocad_2020_plugin == plugin.resolve()
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_config.py -q`
 Expected: 新增 3 项 FAIL（frozen 态当前仍返回 None/相对路径）。
 
-- [ ] **Step 3: 修改实现**
+- [x] **Step 3: 修改实现**
 
 `config.py` 导入区追加 `import sys` 与：
 
@@ -450,12 +450,12 @@ def _default_plugin(version: str) -> Path | None:
     autocad_2020_plugin: Path | None = Field(default_factory=lambda: _default_plugin("2020"))
 ```
 
-- [ ] **Step 4: 回归确认**
+- [x] **Step 4: 回归确认**
 
 Run: `uv run pytest tests/unit/test_config.py -q && uv run pytest tests/unit -q`
 Expected: 全部 PASS（既有 `test_cad_paths_none_untouched` 等开发态断言不受影响）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/dst_manager/config.py tests/unit/test_config.py
@@ -476,7 +476,7 @@ git commit -m "Settings 支持 frozen 态插件 DLL 与数据目录默认值"
 - Consumes: Task 4 的 argv 约定（frozen 态 `_spawn_worker` 传 `worker` 子命令）；Task 2/3 的 `resource_dir()`（运行期从 `_MEIPASS` 读取 datas）。
 - Produces: `dist/DSTManager/` onedir 产物，内含 `dst-manager.exe`；Task 7 的构建脚本调用 `uv run pyinstaller --noconfirm packaging/dst-manager.spec`。
 
-- [ ] **Step 1: 追加依赖与忽略项**
+- [x] **Step 1: 追加依赖与忽略项**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
@@ -490,7 +490,7 @@ uv add --dev "pyinstaller>=6,<7"
 /dist/
 ```
 
-- [ ] **Step 2: 创建 `packaging/entry.py`**
+- [x] **Step 2: 创建 `packaging/entry.py`**
 
 ```python
 """PyInstaller exe 入口（ARCH-DM-002 §3.2）。
@@ -510,7 +510,7 @@ from dst_manager.interfaces.cli import app
 app()
 ```
 
-- [ ] **Step 3: 创建 `packaging/dst-manager.spec`**
+- [x] **Step 3: 创建 `packaging/dst-manager.spec`**
 
 ```python
 # -*- mode: python ; coding: utf-8 -*-
@@ -573,7 +573,7 @@ coll = COLLECT(
 )
 ```
 
-- [ ] **Step 4: 本地构建冒烟**
+- [x] **Step 4: 本地构建冒烟**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
@@ -593,7 +593,7 @@ Expected: `dist/DSTManager/dst-manager.exe` 存在；`_internal` 内可见 `web/
 
 任何 `ModuleNotFoundError`（如 `clr`/`alembic`/`mako`）按缺什么补进 spec `hiddenimports` 后重打；`web` 页面白屏时核对 `_internal/web/dist` 与浏览器控制台资源路径。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add packaging/entry.py packaging/dst-manager.spec pyproject.toml uv.lock .gitignore
@@ -612,7 +612,7 @@ git commit -m "新增 PyInstaller onedir 打包入口与 spec"
 - Consumes: `web/` npm 构建、`uv`、`scripts/build_plugins.ps1`（支持既有产物时传 `-SkipPlugins`）、Task 6 的 spec。
 - Produces: `dist/releases/dst-manager-v<版本>-win64.zip`（版本缺省时从 `pyproject.toml` 读取）；Task 8 以 `-Version <版本>` 调用本脚本。
 
-- [ ] **Step 1: 写失败测试**（新建 `tests/unit/test_release_scripts.py`）
+- [x] **Step 1: 写失败测试**（新建 `tests/unit/test_release_scripts.py`）
 
 ```python
 """release 脚本静态契约：UTF-8 BOM、PowerShell 语法可解析、关键步骤齐全。
@@ -656,12 +656,12 @@ def test_build_release_script_contains_required_steps():
         assert marker in source, f"build_release.ps1 缺少步骤：{marker}"
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_release_scripts.py -q`
 Expected: FAIL（两个脚本不存在）。
 
-- [ ] **Step 3: 创建 `scripts/build_release.ps1`**
+- [x] **Step 3: 创建 `scripts/build_release.ps1`**
 
 ```powershell
 # DST Manager 纯构建脚本：前端 -> Python 环境 -> 插件 -> PyInstaller -> 分发 zip（ARCH-DM-002 §4）。
@@ -726,12 +726,12 @@ Compress-Archive -Path (Join-Path $appDir "*") -DestinationPath $zip
 Write-Host "分发包已生成：$zip"
 ```
 
-- [ ] **Step 4: 运行脚本测试确认通过**
+- [x] **Step 4: 运行脚本测试确认通过**
 
 Run: `uv run pytest tests/unit/test_release_scripts.py -q`
 Expected: PASS（本文件仅覆盖 `build_release.ps1`：BOM、语法、构建步骤契约）。
 
-- [ ] **Step 5: 构建冒烟（有插件产物时）**
+- [x] **Step 5: 构建冒烟（有插件产物时）**
 
 ```powershell
 .\scripts\build_release.ps1 -SkipPlugins
@@ -739,7 +739,7 @@ Expected: PASS（本文件仅覆盖 `build_release.ps1`：BOM、语法、构建�
 
 Expected: `dist/releases/dst-manager-v<pyproject版本>-win64.zip` 生成；解压后 `autocad2016/`、`autocad2020/` 与 `dst-manager.exe` 同级。若 `plugins/autocad2016/autocad2020` 产物缺失，先跑 `.\scripts\build_plugins.ps1`（本机无 VS/AutoCAD 程序集时如实记录跳过，不得伪造产物）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/build_release.ps1 tests/unit/test_release_scripts.py
@@ -758,7 +758,7 @@ git commit -m "新增纯构建脚本 build_release.ps1"
 - Consumes: Task 7 的 `build_release.ps1 -Version`。
 - Produces: 本地 annotated tag `v<版本>` + `dist/releases/dst-manager-v<版本>-win64.zip`；不 push、不发远程 Release。
 
-- [ ] **Step 1: 写失败测试**（追加到 `tests/unit/test_release_scripts.py`）
+- [x] **Step 1: 写失败测试**（追加到 `tests/unit/test_release_scripts.py`）
 
 ```python
 RELEASE_SCRIPT = ROOT / "scripts" / "release.ps1"
@@ -794,12 +794,12 @@ def test_release_script_contains_gate_steps_in_order():
     assert positions == sorted(positions), "release.ps1 门禁步骤顺序错误（tag 必须最后）"
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `uv run pytest tests/unit/test_release_scripts.py -q`
 Expected: `test_release_script_is_utf8_bom` FAIL（`scripts/release.ps1` 不存在），其余 release 用例连带失败。
 
-- [ ] **Step 3: 创建 `scripts/release.ps1`**
+- [x] **Step 3: 创建 `scripts/release.ps1`**
 
 ```powershell
 # DST Manager 一键 release：前置校验 -> 测试门禁 -> 构建 -> 本地 tag（ARCH-DM-002 §5）。
@@ -847,7 +847,7 @@ Write-Host "release v$Version 完成：$zip"
 Write-Host "tag v$Version 仅保存在本地；推送与 zip 分发由人工执行。"
 ```
 
-- [ ] **Step 4: 运行脚本测试确认全部转绿**
+- [x] **Step 4: 运行脚本测试确认全部转绿**
 
 Run: `uv run pytest tests/unit/test_release_scripts.py -q`
 Expected: 全部 PASS（含步骤顺序契约：tag 位于最后）。
@@ -860,7 +860,7 @@ Expected: 全部 PASS（含步骤顺序契约：tag 位于最后）。
 
 Expected: 在"工作区干净、版本不一致"或"changelog 无 v0.0.0"处中止并给出中文错误（**不会**走到构建/tag）。当前工作区若有其他未提交改动，此步会以"工作区存在未提交改动"中止——同样算通过，如实记录实际命中的校验项。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/release.ps1 tests/unit/test_release_scripts.py
@@ -880,7 +880,7 @@ git commit -m "新增一键 release 脚本含门禁校验与本地 tag"
 - Consumes: Task 6-8 的脚本与产物路径。
 - Produces: 分发与 release 的操作文档；全量回归结论。
 
-- [ ] **Step 1: 根 README 新增"打包与 release"小节**（放在"一键启动"相关章节之后）
+- [x] **Step 1: 根 README 新增"打包与 release"小节**（放在"一键启动"相关章节之后）
 
 ````markdown
 ## 打包与 release
@@ -902,7 +902,7 @@ git commit -m "新增一键 release 脚本含门禁校验与本地 tag"
 tag 仅打在本地，推送与分发由人工执行。
 ````
 
-- [ ] **Step 2: 全量回归**
+- [x] **Step 2: 全量回归**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
@@ -918,7 +918,7 @@ Expected: Ruff 全绿；pytest 不低于基线（547 passed / 72 skipped + 本�
 - 在 main 分支执行 `.\scripts\release.ps1 -Version 0.3.4`；
 - 核对：门禁全绿、zip 生成、`git tag -l v0.3.4` 存在、无 push 发生。
 
-- [ ] **Step 4: 更新 changelog 与提交**
+- [x] **Step 4: 更新 changelog 与提交**
 
 `changelog.md` 追加本 task 记录（含实际验证数字与跳过项），然后：
 
@@ -928,6 +928,53 @@ git commit -m "新增打包与 release 使用文档并完成全量回归"
 ```
 
 ---
+
+### Task 10（追加，2026-09-06）: setup.bat 最终用户环境初始化脚本
+
+**背景：** 分发包落地后用户需自行创建并配置 `.env`。依据用户确认的版本兼容映射（.NET 插件向前兼容口径），新增随包 `setup.bat` 自动探测本机 AutoCAD 并写入版本桶，`build_release.ps1` 组包时附带。ARCH-DM-002 §3.4 与 §4 已同步修订。
+
+**Files:**
+- Create: `scripts/setup.bat`（GBK/ANSI 编码，UTF-8 规则例外，理由见文件头与 ARCH-DM-002 §3.4）
+- Create: `tests/unit/test_setup_bat.py`
+- Modify: `scripts/build_release.ps1`（组包复制 setup.bat）
+- Modify: `src/dst_manager/config.py`、`tests/unit/test_config.py`（顺带修复 `NumberSuffixType` 字符串校验缺陷）
+- Modify: `README.md`、`docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md`、`changelog.md`
+
+- [x] **Step 1: setup.bat 探测与写入逻辑**——注册表 `HKLM\SOFTWARE\Autodesk\AutoCAD\Rxx.x`（R19.0~R24.3）优先、`%ProgramFiles%\Autodesk\AutoCAD *` 目录扫描兜底；兼容组映射：2015-2019 → 2016 桶、2020-2024 → 2020 桶（同组多版本取最新、两组独立填写）；2013/2014 警告后仍写入 2016 桶；2025+（.NET 8）明确不支持；accoreconsole 自 2013 起才有，更早不探测。幂等只补缺失键，绝不覆盖已有 `.env`；测试钩子 `DST_SETUP_AUTODESK_ROOT` / `DST_SETUP_SKIP_REGISTRY` / `DST_SETUP_NO_PAUSE`。
+- [x] **Step 2: 沙箱集成与静态测试**——`tests/unit/test_setup_bat.py` 9 项：静态契约（GBK 无 BOM、两个 CONSOLE 键、注册表路径、组包复制）+ 6 项沙箱集成（双桶映射、2013/2014 警告映射、组内取最新、2025 不支持、幂等不覆盖、未发现时注释占位）。
+- [x] **Step 3: 组包附带**——`build_release.ps1` 第 6 步将 `setup.bat` 拷入 `dist/DSTManager/`；`test_release_scripts.py` 增加组包复制断言。
+- [x] **Step 4: 修复 Settings 字符串校验缺陷**——真实 doctor 验证发现 `.env.example` 引导的 `NumberSuffixType=1` 使 `Settings` 崩溃（`Literal[1, 2]` 不接受字符串），补 `validate_number_suffix_type` 容错校验器（与 `EnableAddNumberSuffix` 同风格），新增 "1"/"2" 接受用例。
+- [x] **Step 5: 文档与 changelog**——ARCH-DM-002 §3.4/§4、根 README 打包章节改为"解压后先运行 setup.bat"引导、changelog 追加。
+- [x] **Step 6: 实际验证**——`ruff check .` 通过；`test_setup_bat + test_release_scripts + test_packaging_spec + test_config` 31/31；全量 `pytest` **616 passed / 72 skipped，0 失败**（基线 604 + 新增 12）；真实环境运行 setup.bat（注册表探测）定位本机 2016/2020 Core Console，生成合法 UTF-8 `.env`（无 BOM），重复运行确认幂等跳过，`dst-manager doctor` 成功读回双桶路径。
+- [ ] **Step 7: 随包验证（待下次构建）**——本机现存 `dist/DSTManager/`（v0.3.3 构建）不含 setup.bat；下次执行 `build_release.ps1` 后核对包内 setup.bat 并在解压目录真实运行一次。
+
+---
+
+## 完成情况核查（2026-09-06）
+
+逐任务核对仓库证据（文件存在性、git 提交、磁盘产物、全量测试）后的结论：
+
+| 任务 | 状态 | 证据 |
+|---|---|---|
+| Task 1 runtime.py | 已完成 | 提交 `ccecb99`；`src/dst_manager/runtime.py` 与 3 项单测在库 |
+| Task 2 前端静态目录 | 已完成 | 提交 `5c05962`；api.py 经 `resource_dir()` 定位 |
+| Task 3 Alembic 迁移 | 已完成 | 提交 `1b03651`；database.py 经 `resource_dir()` 定位 |
+| Task 4 Worker frozen 拉起 | 已完成 | 提交 `fb9ac65`；shell.py 含 `is_frozen()` 分支 |
+| Task 5 Settings frozen 默认值 | 已完成 | 提交 `88bd5ae`；config.py 三工厂 + frozen 单测 |
+| Task 6 entry.py + spec | 已完成 | 提交 `a94dbf8`；`dist/DSTManager/dst-manager.exe` 与 `_internal` 产物在盘（构建冒烟实际执行）；最终审查 C-1 补 XSD（提交 `4dc87cc`） |
+| Task 7 build_release.ps1 | 已完成 | 提交 `a6ff62b`；`dist/releases/dst-manager-v0.3.3-win64.zip`（29MB）在盘（组包冒烟实际执行） |
+| Task 8 release.ps1 | 已完成（代码） | 提交 `adff3ea`；最终审查 I-1 修复 changelog 门禁正则（提交 `4dc87cc`）；**前置校验冒烟未执行**（见下） |
+| Task 9 文档与全量回归 | 已完成 | 提交 `76d99b2`、`c9053ab`（Ruff 修复）；README 章节、changelog、全量回归记录在案 |
+| Task 10 setup.bat（本次追加） | 代码与验证已完成 | 见 Task 10 Step 1-6；Step 7 随包验证待下次构建 |
+
+**遗留未勾选项（3 项，均为人工/冒烟性质，不阻塞代码交付）：**
+
+1. **Task 6 Step 5 exe 冒烟（人工）**：无 changelog 记录，无法确认 `dst-manager.exe --help / doctor / 桌面壳` 三步是否真实走过；下一次构建后应补做并记录。
+2. **Task 8 Step 5 release.ps1 前置校验冒烟**：未执行（可随时以 `.\scripts\release.ps1 -Version 0.0.0` 验证中止行为）。
+3. **Task 9 Step 3 端到端 release 演练**：changelog 已记录"跳过留待用户"；当前 `pyproject.toml` version 为 0.3.3、`git tag` 为空，确认从未执行过真实 release。
+
+**计划状态**：`proposed` → `active`。代码层面全部落地并通过全量回归（616 passed / 72 skipped），剩余为发布演练类人工事项；待上述 3 项与 Task 10 Step 7 完成后可将计划标记 `completed`。
+
 
 ## 自查记录
 

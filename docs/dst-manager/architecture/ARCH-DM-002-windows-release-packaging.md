@@ -83,7 +83,7 @@ frozen 态下调整两个默认值，开发态不变：
 
 - `autocad_2016_plugin` / `autocad_2020_plugin`：默认指向 exe 同级的 `autocad2016/`、`autocad2020/` 目录（随包分发的 Worker 插件 DLL）；`.env` 与环境变量覆盖路径保持不变。
 - `data_dir`：frozen 态默认改为 `%LOCALAPPDATA%/dst-manager/data`（与既有 `_default_draft_dir` 同风格），避免双击启动时数据写入程序目录、zip 更新时被覆盖。
-- Core Console（`accoreconsole.exe`）来自目标机器的 AutoCAD 安装，保持显式配置 + `doctor` 自检，不在包内猜测（对齐 ARCH-DM-001"不通过注册表或 PATH 猜测 AutoCAD"的约束）。
+- Core Console（`accoreconsole.exe`）来自目标机器的 AutoCAD 安装，运行期保持显式配置 + `doctor` 自检，不在包内猜测（对齐 ARCH-DM-001"不通过注册表或 PATH 猜测 AutoCAD"的约束）。显式配置由随包附带的 `setup.bat` 在安装阶段生成：按年份升序探测注册表 `HKLM\SOFTWARE\Autodesk\AutoCAD\Rxx.x`（回退默认安装目录扫描）定位 `accoreconsole.exe`，按 .NET 插件向前兼容口径写入版本桶——2015-2019 → `DST_MANAGER_AUTOCAD_2016_CONSOLE`，2020-2024 → `DST_MANAGER_AUTOCAD_2020_CONSOLE`（同组多版本取最新）；2013/2014 警告后仍写入 2016 桶，2025+（.NET 8）明确不支持。脚本幂等，只补缺失键、绝不覆盖已有 `.env`；脚本本体保存为 GBK（cmd 对 UTF-8 批处理的多字节解析不可靠，沿用 SCR 编码例外），其 `.env` 模板注释刻意全 ASCII 以保证写出文件恒为合法 UTF-8。
 
 ## 4. 构建脚本 `scripts/build_release.ps1`
 
@@ -93,7 +93,7 @@ frozen 态下调整两个默认值，开发态不变：
 2. `uv sync --dev`（pyinstaller 加入 `[dependency-groups] dev`，同步更新 `pyproject.toml` 与 `uv.lock`）。
 3. 调用 `build_plugins.ps1` 编译双版本插件（支持 `-SkipPlugins` 直接复用已编译产物）。
 4. `uv run pyinstaller packaging/dst-manager.spec`。
-5. 将 `plugins/autocad2016/`、`plugins/autocad2020/` 的 DLL 拷入 dist 目录，产出 `dist/releases/dst-manager-v<版本>-win64.zip`。
+5. 将 `plugins/autocad2016/`、`plugins/autocad2020/` 的 DLL 与 `scripts/setup.bat` 拷入 dist 目录，产出 `dist/releases/dst-manager-v<版本>-win64.zip`。
 
 ## 5. 一键 release 流程 `scripts/release.ps1`
 

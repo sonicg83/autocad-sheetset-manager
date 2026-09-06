@@ -18,6 +18,15 @@ def test_suffix_settings_reject_invalid_values(monkeypatch):
         Settings(_env_file=None)
 
 
+@pytest.mark.parametrize("value", ["1", "2"])
+def test_suffix_settings_accept_digit_strings(monkeypatch, value: str):
+    """.env 与环境变量里的值恒为字符串：数字序号选项必须像布尔选项一样
+    接受 "1"/"2" 字符串，否则 setup.bat 生成的 .env 会让 Settings 崩溃。"""
+    monkeypatch.setenv("NumberSuffixType", value)
+    settings = Settings(_env_file=None)
+    assert settings.number_suffix_type == int(value)
+
+
 @pytest.mark.parametrize("value", ["1", "0", "yes", "on"])
 def test_suffix_settings_reject_loose_boolean_strings(monkeypatch, value: str):
     monkeypatch.setenv("EnableAddNumberSuffix", value)

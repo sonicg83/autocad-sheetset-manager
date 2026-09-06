@@ -52,6 +52,8 @@ foreach ($v in @("2016", "2020")) {
     }
     Copy-Item -LiteralPath $src -Destination (Join-Path $appDir "autocad$v") -Recurse -Force
 }
+# 最终用户环境初始化脚本（生成/补全 .env 并探测 accoreconsole.exe，见 ARCH-DM-002 §3.4）
+Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\setup.bat") -Destination (Join-Path $appDir "setup.bat") -Force
 $releaseDir = Join-Path $projectRoot "dist\releases"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $zip = Join-Path $releaseDir "dst-manager-v$Version-win64.zip"
