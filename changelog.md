@@ -2,6 +2,8 @@
 
 ## 2026-09-06（修复属性导入导出下载失效并简化操作层级）
 
+- 立项产品化阶段版本管理与发布流程设计 [ARCH-DM-003](docs/dst-manager/architecture/ARCH-DM-003-versioning-and-release.md)：SemVer（0.x 阶段）+ rc 预发布渠道 + tag 驱动 GitHub Releases + GitHub Actions 门禁与自动发布；接手 ARCH-DM-002 明确范围外的 CI 自动构建与远程发布。本文档阶段仅设计，实施另行立项。
+
 - 修复桌面壳内「下载 CSV 模板 / 导出当前属性」点击无响应的阻断性缺陷：pywebview 5 默认 `ALLOW_DOWNLOADS = False`，WebView2 会静默吞掉页面内 `<a download>`；`run_desktop` 启动前经 `enable_native_downloads()` 显式放行，并新增单测锁定该前提。
 - 两个下载端点（`/api/custom-properties/template`、`/api/workspaces/{id}/custom-properties/export`）补 `Content-Disposition: attachment` 固定 CSV 落盘文件名（URL 末段无扩展名，WebView2 依该头命名），集成测试同步断言。
 - 按用户裁决简化属性导入导出操作层级：移除「导入 / 导出」二级菜单按钮，面板展开后下载模板、导出当前属性、导入 CSV 三个操作常驻（面板折叠时不可达，原遗留 1 的禁用修复随之不再需要）；SPEC-DM-010 §6 与评审状态同步修订，CSV 相关 e2e 口径全部迁移。
