@@ -48,7 +48,7 @@ const emit=defineEmits<{
   "update:propertyDefinitionsScope":[value:DefinitionScopeFilter];"update:propertyDefinitionsPage":[value:number];
   discardPropertyInput:[];
   queuePropertyDefinition:[];queueDeleteProperty:[definition:PropertyDefinition];
-  readCsv:[event:Event];previewCsv:[];importCsv:[];
+  readCsv:[event:Event];previewCsv:[];importCsv:[];closeCsv:[];
 }>();
 
 // —— 错误摘要（SPEC-DM-010 §5.2）：摘要 + 字段错误项，点击展开值面板并聚焦字段 ——
@@ -93,7 +93,7 @@ async function addSheetsetField(){
       :workspace-id="workspace.id"
       :has-csv="hasCsv" :csv-preview="csvPreview" :csv-executable="csvExecutable" :writes-disabled="repairWritesDisabled"
       :collapsed="propertyCsvCollapsed" :csv-open="propertyCsvOpen"
-      @read-csv="$emit('readCsv',$event)" @preview-csv="$emit('previewCsv')" @import-csv="$emit('importCsv')"
+      @read-csv="$emit('readCsv',$event)" @preview-csv="$emit('previewCsv')" @import-csv="$emit('importCsv')" @close-csv="$emit('closeCsv')"
       @update:collapsed="value=>$emit('update:propertyCsvCollapsed',value)"
       @update:csv-open="value=>$emit('update:propertyCsvOpen',value)"
     />

@@ -33,11 +33,9 @@ async function openProperties(page: Page) {
   await expect(page.getByLabel("属性 项目编号")).toHaveValue("GC-2026-000");
 }
 
-// 经「导入 / 导出」菜单打开 CSV 流程区（幂等：菜单已展开或导入区已打开时直接复用）
+// CSV 面板展开后「导入 CSV」常驻（2026-09-06 取消二级菜单）；幂等：导入区已打开时直接复用
 async function openCsvFlow(page: Page) {
   if (await page.getByLabel("属性 CSV 文件").isVisible()) return;
-  const trigger = page.getByRole("button", {name: "导入 / 导出"});
-  if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
   await page.getByRole("button", {name: "导入 CSV"}).click();
   await expect(page.getByLabel("属性 CSV 文件")).toBeVisible();
 }
@@ -67,12 +65,11 @@ function csvPreviewBody(executable: boolean, digest = "digest-1") {
   };
 }
 
-test("默认不显示文件选择：经导入/导出菜单按需展开，未选择文件不出现预览操作", async ({page}) => {
+test("默认不显示文件选择：三个操作常驻、导入区按需展开，未选择文件不出现预览操作", async ({page}) => {
   await install(page);
   await openProperties(page);
   await expect(page.getByLabel("属性 CSV 文件")).toBeHidden();
-  // 菜单包含三个既有入口，下载模板/导出链接保持原 URL
-  await page.getByRole("button", {name: "导入 / 导出"}).click();
+  // 面板展开即见三个操作，下载模板/导出链接保持原 URL
   await expect(page.getByRole("link", {name: "下载 CSV 模板"})).toHaveAttribute("href", "/api/custom-properties/template");
   await expect(page.getByRole("link", {name: "导出当前属性"})).toHaveAttribute("href", "/api/workspaces/workspace-1/custom-properties/export");
   await expect(page.getByLabel("属性 CSV 文件")).toBeHidden();
@@ -81,11 +78,50 @@ test("默认不显示文件选择：经导入/导出菜单按需展开，未选�
   await expect(page.getByRole("button", {name: "预览 CSV 导入"})).toBeHidden();
   await expect(page.getByRole("button", {name: "确认导入"})).toBeDisabled();
   await expect(page.locator(".csv-flow .csv-hint")).toContainText(/未选择 CSV 文件/);
-  // 关闭导入区仅隐藏 UI：再打开仍可继续
+  // 关闭导入区（无未导入数据时不弹确认，直接收起）：再打开仍可继续
   await page.getByRole("button", {name: "关闭导入"}).click();
   await expect(page.getByLabel("属性 CSV 文件")).toBeHidden();
   await openCsvFlow(page);
   await expect(page.getByLabel("属性 CSV 文件")).toBeVisible();
+});
+
+test("关闭导入清空缓存：有未导入数据先确认，取消保留、确认清空文件与预览", async ({page}) => {
+  let previewCalls = 0;
+  await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview", (route) => {
+    previewCalls++;
+    return route.fulfill({json: csvPreviewBody(true)});
+  });
+  await install(page);
+  await openProperties(page);
+  await openCsvFlow(page);
+  await page.getByLabel("属性 CSV 文件").setInputFiles(csvFile("type,name,default_value\nsheet,专业,燃气\n"));
+  await page.getByRole("button", {name: "预览 CSV 导入"}).click();
+  await expect(page.locator(".csv-preview")).toBeVisible();
+  // 有未导入数据（已选文件 + 预览）：关闭弹确认提醒尚未写入
+  await page.getByRole("button", {name: "关闭导入"}).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(/尚未写入正式文件/);
+  await expect(dialog).toContainText(/清空/);
+  // 取消：留在导入区，文件与预览保留
+  await dialog.getByRole("button", {name: "取消"}).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("属性 CSV 文件")).toBeVisible();
+  await expect(page.locator(".csv-preview")).toBeVisible();
+  expect(previewCalls).toBe(1);
+  // 确认关闭：清空文件与预览缓存并收起导入区；原生文件名一并重置
+  await page.getByRole("button", {name: "关闭导入"}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", {name: "确认关闭并清空"}).click();
+  await expect(page.getByLabel("属性 CSV 文件")).toBeHidden();
+  // 重新打开：缓存已清空，无预览、确认禁用、提示未选择文件；重新预览需重新选文件
+  await openCsvFlow(page);
+  await expect(page.locator(".csv-preview")).toHaveCount(0);
+  await expect(page.getByRole("button", {name: "预览 CSV 导入"})).toBeHidden();
+  await expect(page.getByRole("button", {name: "确认导入"})).toBeDisabled();
+  await expect(page.locator(".csv-flow .csv-hint")).toContainText(/未选择 CSV 文件/);
+  await expect(page.getByLabel("属性 CSV 文件")).toHaveValue("");
+  expect(previewCalls).toBe(1);
 });
 
 test("UTF-8 读取并按响应顺序预览新增/跳过/冲突及行号，诊断保留 code/message/severity", async ({page}) => {

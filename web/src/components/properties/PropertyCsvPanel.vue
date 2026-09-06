@@ -1,11 +1,11 @@
 <!-- 属性 CSV 导入导出面板（PLAN-DM-016 任务 5，SPEC-DM-006 §6.2/§10.3、SPEC-DM-010 §4）。
-     按需渐进流程：默认不显示文件选择；「导入 / 导出」菜单收纳下载模板/导出/导入入口（链接保持原 URL）；
+     按需渐进流程：面板展开后直接常驻下载模板/导出/导入三个操作（2026-09-06 用户裁决取消二级菜单）；
      选择文件后才出现预览操作，确认导入为 Danger 分级正式写入（禁用态见 useCsvImport 门禁）。
      组件只展示与派发动作：文件读取/预览/正式确认仍由 App 的 useCsvImport 完成（强确认、代次失效、job 监控不在组件内）。
-     导入区用 v-show、预览区按存在性渲染：关闭仅隐藏 UI，不取消在途任务；预览失效由 App 依代次/基准/定义草稿判定。
-     样式全部 scoped 且只用语义令牌。 -->
+     关闭导入区经 closeCsv 交 App 处理：有未导入数据（已选文件/预览）先确认，确认后清空缓存并收起（2026-09-06 用户裁决）；
+     在途任务不受关闭影响；预览失效仍由 App 依代次/基准/定义草稿判定。样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
-import {computed, ref} from "vue";
+import {computed, ref, watch} from "vue";
 import type {CsvPreview} from "../../api/contracts";
 
 const props = defineProps<{
@@ -23,17 +23,20 @@ const emit = defineEmits<{
   readCsv: [event: Event];
   previewCsv: [];
   importCsv: [];
+  closeCsv: [];
   "update:collapsed": [value: boolean];
   "update:csvOpen": [value: boolean];
 }>();
 
-// —— 菜单（面板内局部）；导入区开关为会话态，经 emit 上报 ——
-const menuOpen = ref(false);
-function toggleMenu() { menuOpen.value = !menuOpen.value; }
+// 导入区开关为会话态，经 emit 上报
 function toggleCsv() {
   emit("update:csvOpen", !props.csvOpen);
-  menuOpen.value = false; // 打开/关闭导入区后收起菜单，保持单一焦点
 }
+// 关闭确认清空后 hasCsv 翻转 false：同步重置原生 file input，避免残留文件名显示
+const fileInput = ref<HTMLInputElement|null>(null);
+watch(() => props.hasCsv, (has) => {
+  if (!has && fileInput.value) fileInput.value.value = "";
+});
 // 标题栏 CSV 状态摘要：折叠后仍可见（措辞与流程区提示区分，避免同文案歧义）
 const csvStatus = computed(() => {
   if (!props.hasCsv) return "CSV：未选择文件";
@@ -56,25 +59,17 @@ const csvStatus = computed(() => {
         <span class="head-title">属性导入导出</span>
       </button>
       <span class="head-status" role="status">{{ csvStatus }}</span>
-      <!-- 面板折叠时菜单目标（io-menu）在隐藏的面板体内：禁用避免死键；展开面板后即可用 -->
-      <button
-        type="button"
-        class="menu-toggle"
-        :disabled="collapsed"
-        :aria-expanded="menuOpen"
-        aria-controls="csv-io-menu"
-        @click="toggleMenu"
-      >导入 / 导出</button>
     </header>
     <div v-if="!collapsed" id="csv-panel-body" class="panel-body">
-      <div v-show="menuOpen" id="csv-io-menu" class="io-menu">
-        <a href="/api/custom-properties/template" download @click="menuOpen = false">下载 CSV 模板</a>
-        <a :href="`/api/workspaces/${workspaceId}/custom-properties/export`" download @click="menuOpen = false">导出当前属性</a>
+      <!-- 三个操作常驻（面板展开即见）；下载文件名由后端 Content-Disposition 提供，桌面壳放行页面内下载 -->
+      <div class="io-menu">
+        <a href="/api/custom-properties/template" download>下载 CSV 模板</a>
+        <a :href="`/api/workspaces/${workspaceId}/custom-properties/export`" download>导出当前属性</a>
         <button v-if="!csvOpen" type="button" :aria-expanded="csvOpen" @click="toggleCsv">导入 CSV</button>
       </div>
       <div v-show="csvOpen" class="csv-flow">
-        <label>属性 CSV 文件<input type="file" accept=".csv,text/csv" @change="emit('readCsv', $event)"></label>
-        <!-- 关闭入口在流程区内：菜单收起后仍可关闭导入区；关闭仅隐藏 UI，不取消在途任务 -->
+        <label>属性 CSV 文件<input ref="fileInput" type="file" accept=".csv,text/csv" @change="emit('readCsv', $event)"></label>
+        <!-- 关闭入口在流程区内：有未导入数据时由 App 先弹确认，确认后清空文件与预览缓存；在途任务不受影响 -->
         <!-- 预览操作在选择文件后才可用（未选择时隐藏）；确认导入为 Danger 分级，无效数据禁用 -->
         <button v-show="hasCsv" type="button" @click="emit('previewCsv')">预览 CSV 导入</button>
         <button
@@ -83,12 +78,12 @@ const csvStatus = computed(() => {
           :disabled="writesDisabled || !csvExecutable"
           @click="emit('importCsv')"
         >确认导入</button>
-        <button type="button" :aria-expanded="csvOpen" @click="toggleCsv">关闭导入</button>
+        <button type="button" :aria-expanded="csvOpen" @click="emit('closeCsv')">关闭导入</button>
         <p v-if="!hasCsv" class="csv-hint" role="status">未选择 CSV 文件：请选择 UTF-8 编码的 .csv 文件，选择后可预览合并结果</p>
         <p v-else-if="csvPreview && csvPreview.changes.length === 0" class="csv-hint" role="status">本次导入不含属性定义变更</p>
         <p v-else-if="csvPreview && !csvExecutable" class="csv-hint error" role="alert">预览结果不可执行：请按诊断修正 CSV 后重新预览</p>
       </div>
-      <!-- 预览数据保存在 useCsvImport（App 域）：关闭导入区不销毁上下文，重开后仍显示最近一次预览 -->
+      <!-- 预览数据保存在 useCsvImport（App 域）：关闭导入区即清空（有数据先确认），重开需重新选择文件并预览 -->
       <div v-if="csvOpen && csvPreview" class="csv-preview">
         <h3>CSV 合并预览</h3>
         <ul class="change-list"><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`" class="csv-change">第 {{ change.line }} 行 · {{ change.action }} · {{ change.type }} · {{ change.name }}</li></ul>
@@ -106,7 +101,6 @@ const csvStatus = computed(() => {
 .head-title{margin:0;font-size:16px;font-weight:600}
 .chevron{color:var(--color-text-secondary);font-size:12px}
 .head-status{color:var(--color-text-muted);font-size:12px}
-.menu-toggle{margin-left:auto;display:inline-flex;align-items:center;min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .panel-body{padding:var(--space-4)}
 .io-menu{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:0 0 var(--space-3);border-bottom:1px solid var(--color-border-subtle);margin-bottom:var(--space-3)}
 .io-menu a{display:inline-flex;align-items:center;min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}

@@ -191,8 +191,7 @@ test("确认导入先处理属性输入三选一且 CSV 不被自动保存", asy
   });
   await openProperties(page);
   await page.getByLabel("属性 工程名称").fill("二期");
-  // 任务 5 起 CSV 区经「导入 / 导出」菜单按需展开，不常驻文件选择器
-  await page.getByRole("button", {name: "导入 / 导出"}).click();
+  // CSV 面板展开后「导入 CSV」常驻（2026-09-06 取消二级菜单），导入区仍按需展开
   await page.getByRole("button", {name: "导入 CSV"}).click();
   await page.getByLabel("属性 CSV 文件").setInputFiles({name: "properties.csv", mimeType: "text/csv", buffer: Buffer.from("type,name,default_value\nsheet,专业,燃气\n", "utf8")});
   await page.getByRole("button", {name: "预览 CSV 导入"}).click();

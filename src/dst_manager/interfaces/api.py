@@ -84,6 +84,8 @@ def create_app(
         return Response(
             content=b"type,name,default_value\r\n",
             media_type="text/csv; charset=utf-8",
+            # 桌面壳（WebView2）按该头命名落盘文件；URL 末段无扩展名，不能省略
+            headers={"Content-Disposition": 'attachment; filename="custom-properties-template.csv"'},
         )
 
     @app.post("/api/workspaces/open", response_model=WorkspaceResponse, response_model_exclude_unset=True)
@@ -160,6 +162,7 @@ def create_app(
         return Response(
             content=service.export_custom_properties_csv(workspace_id),
             media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="custom-properties-export.csv"'},
         )
 
     @app.post(

@@ -17,19 +17,18 @@ const THEMES = ["light", "dark"] as const;
 const STATES = ["default", "dirty-pending", "error", "add-field", "csv"] as const;
 type StateName = (typeof STATES)[number];
 
-// 安装夹具、打开属性页并展开定义面板、打开 CSV 导入区，让全部控件进入可视状态
+// 安装夹具、打开属性页并展开定义面板，让全部控件进入可视状态（CSV 操作随面板常驻）
 async function openFullWorkspace(page: Page, theme?: "light" | "dark") {
   await installPropertiesFixture(page, {theme});
   await openProperties(page);
   await page.getByRole("button", {name: "展开属性字段定义"}).click();
-  await page.getByRole("button", {name: "导入 / 导出"}).click();
 }
 
 // 打开指定业务状态（任务 7：布局矩阵与证据共用同一状态口径）
 // - dirty-pending：预置待写入草稿（项目编号 → 待写入）+ 本地编辑（设计阶段 → 未加入草稿）
 // - error：同上并在提交失败后注入字段错误（错误摘要 + 字段级错误）
 // - add-field：展开定义面板并打开新增区（新增表单输入进入可视状态）
-// - csv：打开「导入 / 导出」菜单与导入区
+// - csv：打开 CSV 面板导入区
 async function openState(page: Page, state: StateName, theme?: "light" | "dark") {
   const options: Parameters<typeof installPropertiesFixture>[1] = {theme};
   if (state === "dirty-pending" || state === "error") options.initialDraft = pendingDraft();
@@ -51,8 +50,8 @@ async function openState(page: Page, state: StateName, theme?: "light" | "dark")
     await expect(page.locator(".definition-panel .add-form")).toBeVisible();
   }
   if (state === "csv") {
-    await page.getByRole("button", {name: "导入 / 导出"}).click();
-    await expect(page.locator(".csv-panel .io-menu")).toBeVisible();
+    await page.getByRole("button", {name: "导入 CSV"}).click();
+    await expect(page.locator(".csv-panel .csv-flow")).toBeVisible();
   }
 }
 

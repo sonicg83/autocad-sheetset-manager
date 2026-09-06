@@ -685,6 +685,9 @@ def test_property_csv_template_workspace_fields_and_export_are_exact(tmp_path, t
     assert template.status_code == 200
     assert template.headers["content-type"].startswith("text/csv; charset=utf-8")
     assert template.content == b"type,name,default_value\r\n"
+    # 桌面壳 WebView2 依 Content-Disposition 命名落盘文件（URL 末段无扩展名）
+    assert template.headers["content-disposition"] == 'attachment; filename="custom-properties-template.csv"'
+    assert exported.headers["content-disposition"] == 'attachment; filename="custom-properties-export.csv"'
     assert opened["sheet_set"]["property_definitions"] == [
         {"type": "sheetset", "name": "项目号", "default_value": "P-000"},
         {"type": "sheet", "name": "比例", "default_value": ""},

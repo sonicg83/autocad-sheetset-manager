@@ -252,3 +252,19 @@ def test_spawn_worker_frozen_reuses_exe_worker_subcommand(monkeypatch):
     assert captured["args"] == [sys.executable, "worker", "--project-root", str(project_root)]
     assert captured["cwd"] == str(project_root)
     assert captured["env"].get("PYTHONUTF8") == "1"
+
+
+def test_enable_native_downloads_allows_anchor_download():
+    """pywebview 5 默认 ALLOW_DOWNLOADS=False：WebView2 静默吞掉 <a download>（属性 CSV 模板/导出），
+    表现为点击无任何反应；run_desktop 前必须放行。"""
+    import webview
+
+    from dst_manager.interfaces.shell import enable_native_downloads
+
+    original = webview.settings["ALLOW_DOWNLOADS"]
+    try:
+        assert original is False  # 前提成立：pywebview 默认阻断，修复才有意义
+        enable_native_downloads()
+        assert webview.settings["ALLOW_DOWNLOADS"] is True
+    finally:
+        webview.settings["ALLOW_DOWNLOADS"] = original

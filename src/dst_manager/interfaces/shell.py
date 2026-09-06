@@ -245,8 +245,18 @@ def _shutdown_worker(process: subprocess.Popen | None) -> None:
         process.wait(timeout=5)
 
 
+def enable_native_downloads() -> None:
+    """放行页面内下载（属性 CSV 模板/导出）。
+
+    pywebview 5 默认 ``ALLOW_DOWNLOADS = False``：WebView2 会静默吞掉 ``<a download>`` 点击，
+    表现为页面无任何反应；落盘文件名由后端 Content-Disposition 提供。
+    """
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
+
 def run_desktop(settings: Settings | None = None) -> None:
     settings = settings or Settings()
+    enable_native_downloads()
     # 可信上下文登记 + 列偏好仓库：create_app 打开成功后登记当前工作区，桥只消费登记结果
     context = ShellContext()
     preferences = SheetPreferences(settings.data_dir)

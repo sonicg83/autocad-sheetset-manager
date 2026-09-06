@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-06（修复属性导入导出下载失效并简化操作层级）
+
+- 修复桌面壳内「下载 CSV 模板 / 导出当前属性」点击无响应的阻断性缺陷：pywebview 5 默认 `ALLOW_DOWNLOADS = False`，WebView2 会静默吞掉页面内 `<a download>`；`run_desktop` 启动前经 `enable_native_downloads()` 显式放行，并新增单测锁定该前提。
+- 两个下载端点（`/api/custom-properties/template`、`/api/workspaces/{id}/custom-properties/export`）补 `Content-Disposition: attachment` 固定 CSV 落盘文件名（URL 末段无扩展名，WebView2 依该头命名），集成测试同步断言。
+- 按用户裁决简化属性导入导出操作层级：移除「导入 / 导出」二级菜单按钮，面板展开后下载模板、导出当前属性、导入 CSV 三个操作常驻（面板折叠时不可达，原遗留 1 的禁用修复随之不再需要）；SPEC-DM-010 §6 与评审状态同步修订，CSV 相关 e2e 口径全部迁移。
+- 同日追加裁决（关闭导入清空缓存）：「关闭导入」不再仅收起——存在未导入数据（已选文件或预览）时先经 `useConfirm` 确认提醒"数据尚未写入正式文件，关闭将清空这些提交数据"，确认后经 `invalidateCsvPreview(true)` 清空文件与预览缓存并由组件 watch 重置原生 file input，重新打开需重新选择文件并预览；无数据时直接收起不弹确认。在途导入任务不受关闭影响（job 监控独立于导入区 UI）。SPEC-DM-010 §6 同步修订。
+- 新增 e2e「关闭导入清空缓存：有未导入数据先确认，取消保留、确认清空文件与预览」，覆盖取消保留与确认清空两分支（含重开后预览清空、确认禁用、file input 值清空断言）。
+- 验证（实际运行）：生产构建（vue-tsc + vite）零错误；Playwright 属性页 csv/workspace/layout/buffer + main **96/96**。
+- 验证（实际运行）：Ruff 通过；`test_shell.py + test_api.py` 85/85；生产构建（vue-tsc + vite）零错误；Playwright 属性页 csv/workspace/buffer/layout 36/36、main + 其余属性页 111/111、sheets-visual-regressions 19/19。
+- 同日早前：PLAN-DM-016 设计 QA 备忘经 28 张成对证据逐项视觉核对并由用户确认标记 `passed`（核对观察 A–D 与跟进候选 5/6 登记于备忘与 `design-qa.md`）。
+
 ## 2026-09-06（完成属性页分区编辑工作区）
 
 - 落地 [PLAN-DM-016](.planning/plans/dst-manager/PLAN-DM-016-properties-workspace-ui.md) 任务 1～7（三基准缓冲模型、会话缓冲与全局输入保护、值面板、字段定义六条分页、CSV 渐进导入门禁、页面组合、视觉基线与 7 状态 × 双主题的 demo/prod 去敏成对证据共 28 张 PNG）并执行任务 8 收口；全部实际数字记录于计划新增「8. 实际验证」小节。

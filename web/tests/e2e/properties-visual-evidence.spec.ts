@@ -15,7 +15,6 @@ async function openWorkspace(page: Page, theme?: "light" | "dark") {
   await installPropertiesFixture(page, {theme});
   await openProperties(page);
   await page.getByRole("button", {name: "展开属性字段定义"}).click();
-  await page.getByRole("button", {name: "导入 / 导出"}).click();
 }
 
 // 解析 CSS 变量在当前主题下的实际颜色值（经探针元素取 computed color）
@@ -114,7 +113,6 @@ for (const theme of THEMES) {
     await openProperties(page);
     await page.getByRole("button", {name: "展开属性字段定义"}).click();
     await page.getByRole("button", {name: "新增字段"}).click();
-    await page.getByRole("button", {name: "导入 / 导出"}).click();
     // 文本输入与选择器统一 38px（checkbox/file 不在密度档内）
     const inputHeights = await page.locator(
       ".properties-view input[type=\"text\"], .properties-view input[type=\"search\"], .properties-view select",

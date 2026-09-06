@@ -16,10 +16,8 @@ async function expandValuePanel(page: Page) {
   await page.getByRole("button", {name: "展开图纸集属性值"}).click();
   await expect(page.getByRole("button", {name: "收起图纸集属性值"})).toBeVisible();
 }
-// 经「导入 / 导出」菜单打开 CSV 导入区（与 properties-csv.spec 同一口径）
+// CSV 面板展开后「导入 CSV」常驻（2026-09-06 取消二级菜单，与 properties-csv.spec 同一口径）
 async function openCsvFlow(page: Page) {
-  const trigger = page.getByRole("button", {name: "导入 / 导出"});
-  if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
   await page.getByRole("button", {name: "导入 CSV"}).click();
   await expect(page.getByLabel("属性 CSV 文件")).toBeVisible();
 }
