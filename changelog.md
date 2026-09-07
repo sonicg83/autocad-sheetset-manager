@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-07（修复发布与恢复并发踩踏）
+
+- 修复用户连续编辑时第二次预览/打开工作区会对仍在发布的 journal 启动回滚、最终进入 `PUBLISH_RECOVERY_FAILED` 的问题：普通 `open_workspace()` 恢复为纯读取路径，发布恢复仅由服务启动流程负责。
+- 新增工作区级跨进程发布事务锁，串行化 API 与 CAD Worker 的发布、启动恢复及已提交清单读取；将数据库提交回调延后到发布日志归档和清理尝试完成之后，避免工作区写锁提前释放；journal 原子写入改用唯一临时文件，消除固定 `publish-journal.tmp` 的源文件争用。
+- 新增回归测试，覆盖活动发布不被恢复、普通打开不触发恢复、并发 journal 写入使用独立临时文件，以及提交回调发生在发布清理之后。
+- 验证（实际运行）：`uv run ruff check .` 全绿；全量 `uv run pytest -q` 在批处理约定的 GBK 控制台代码页下 **642 passed / 72 skipped / 0 failed**。直接继承当前 UTF-8 控制台时，仅既有 `setup.bat` 的 2 项中文输出解码断言失败，切换 `chcp 936` 后单项与全量均通过。
+
 ## 2026-09-07（桌面壳单实例守卫）
 
 - 新增 `src/dst_manager/infrastructure/single_instance.py`（仅标准库 + ctypes 直调 Win32，无新依赖）：命名互斥量（`Local\dst-manager-<用户维度摘要>`）检测已有实例，内核对象随进程退出自动释放；第二个实例弹置顶警告框，用户点击“确定”后由后启动进程（持前台权限）把既有窗口 `ShowWindow(SW_RESTORE)` 还原并 `SetForegroundWindow` 置前，前台锁拦截时退化为任务栏闪烁兜底。

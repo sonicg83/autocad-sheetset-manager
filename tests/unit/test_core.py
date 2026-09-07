@@ -1519,6 +1519,29 @@ def test_open_workspace_reports_unreferenced_dwg_without_crashing(tiny_workspace
     assert "UNREFERENCED_DWG" in codes
 
 
+def test_open_workspace_does_not_recover_an_active_publish_journal(tiny_workspace, tmp_path: Path):
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    journal_path = tmp_path / ".dst-manager" / "jobs" / "active-job" / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal_path.write_text(
+        json.dumps(
+            {
+                "identity_version": 2,
+                "operation_id": "active-job",
+                "status": "PUBLISHING",
+                "files": [],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    workspace = service.open_workspace(dst)
+
+    assert workspace.dst_path == dst.resolve()
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "PUBLISHING"
+
+
 def test_service_persists_insert_subset_baselines_for_worker(tiny_workspace, tmp_path: Path):
     dst, _ = tiny_workspace
     service = DstManagerService(Settings(data_dir=tmp_path / "data"))

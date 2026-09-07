@@ -32,6 +32,7 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 from dst_manager.infrastructure.drafts import DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionBusyError
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishRecoveryError,
     RecoverablePublisher,
@@ -62,6 +63,9 @@ class DstManagerService(
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)
+                committed = self.publisher.list_committed_operations(root)
+            except WorkspaceTransactionBusyError:
+                continue
             except PublishRecoveryError as exc:
                 self._quarantine_unproven_publish_jobs(root, exc)
                 continue
@@ -70,7 +74,7 @@ class DstManagerService(
                     self.database.update_job(operation_id, JobStatus.ROLLED_BACK, 0, "STARTUP_RECOVERY")
                 except KeyError:
                     pass
-            for journal in self.publisher.list_committed_operations(root):
+            for journal in committed:
                 self._recover_committed_job(root, journal)
         self.database.recover_stale_jobs(self.settings.worker_lease_seconds)
 
@@ -79,10 +83,6 @@ class DstManagerService(
         if dst_path.suffix.lower() != ".dst" or not dst_path.is_file():
             raise ApplicationError("DST_NOT_FOUND", f"DST文件不存在：{dst_path}", 404)
         root = dst_path.parent
-        try:
-            self.publisher.recover(root)
-        except PublishRecoveryError as exc:
-            raise ApplicationError("PUBLISH_RECOVERY_FAILED", "工作区存在无法自动恢复的发布事务", 409) from exc
         revision = file_sha256(dst_path)
         workspace_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(dst_path).casefold()))
         acsm = load_acsm(self.codec.decode_file(dst_path))

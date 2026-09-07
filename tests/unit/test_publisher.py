@@ -1,6 +1,8 @@
 import ctypes
 import json
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +14,7 @@ from dst_manager.infrastructure.filesystem.locking import (
     FileLockError,
     WindowsResultGuards,
     WindowsWriteLocks,
+    WorkspaceTransactionBusyError,
 )
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishBaselineError,
@@ -47,6 +50,67 @@ def test_caller_identity_baseline_allows_unchanged_target(tmp_path: Path):
     )
 
     assert target.read_bytes() == b"published"
+
+
+def test_recovery_rejects_a_publish_holding_the_workspace_transaction_lock(tmp_path: Path, monkeypatch):
+    target = tmp_path / "active.dst"
+    staged = tmp_path / "staged-active.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    publisher = RecoverablePublisher()
+    original_write = publisher._write_journal
+    recovery_was_blocked = False
+    injected = False
+
+    def recover_while_publishing(path: Path, journal: dict):
+        nonlocal injected, recovery_was_blocked
+        original_write(path, journal)
+        if journal.get("status") == "PUBLISHING" and not injected:
+            injected = True
+            with pytest.raises(WorkspaceTransactionBusyError):
+                RecoverablePublisher().recover(tmp_path)
+            recovery_was_blocked = True
+
+    monkeypatch.setattr(publisher, "_write_journal", recover_while_publishing)
+
+    publisher.publish("active-job", tmp_path, {target: staged})
+
+    assert recovery_was_blocked is True
+    assert target.read_bytes() == b"after"
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/active-job/publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "COMMITTED"
+
+
+def test_concurrent_journal_writes_use_independent_temporary_files(tmp_path: Path, monkeypatch):
+    journal_path = tmp_path / "publish-journal.json"
+    barrier = threading.Barrier(2)
+    replace_lock = threading.Lock()
+    original_replace = publisher_module.os.replace
+    replace_sources: list[Path] = []
+
+    def synchronize_before_replace(source, destination):
+        replace_sources.append(Path(source))
+        barrier.wait(timeout=5)
+        with replace_lock:
+            return original_replace(source, destination)
+
+    monkeypatch.setattr(publisher_module.os, "replace", synchronize_before_replace)
+    journals = [
+        {"operation_id": "first", "status": "PUBLISHING", "files": []},
+        {"operation_id": "second", "status": "PUBLISHING", "files": []},
+    ]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(RecoverablePublisher._write_journal, journal_path, item) for item in journals]
+        for future in futures:
+            future.result()
+
+    written = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert written in journals
+    assert len(set(replace_sources)) == 2
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish(tmp_path: Path):
@@ -1056,6 +1120,30 @@ def test_archive_failure_does_not_invoke_committed_callback_or_expose_operation(
     )
     assert journal["status"] == "COMMITTED"
     assert journal["cleanup_error_code"] == "PUBLISH_ARCHIVE_FAILED"
+
+
+def test_committed_callback_runs_after_publish_cleanup_attempt(tmp_path: Path):
+    target = tmp_path / "callback-order.dst"
+    staged = tmp_path / "staged-callback-order.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    observed: dict[str, object] = {}
+
+    def observe_cleanup(_revision_dir: Path, journal: dict):
+        observed["cleanup_status"] = journal["cleanup_status"]
+        observed["replace_backup_exists"] = Path(journal["files"][0]["replace_backup"]).exists()
+
+    RecoverablePublisher().publish(
+        "callback-order",
+        tmp_path,
+        {target: staged},
+        on_committed=observe_cleanup,
+    )
+
+    assert observed == {
+        "cleanup_status": "COMPLETE",
+        "replace_backup_exists": False,
+    }
 
 
 def test_archive_copy_failure_does_not_leave_visible_manifest(

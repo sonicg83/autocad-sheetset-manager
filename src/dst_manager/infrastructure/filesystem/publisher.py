@@ -3,11 +3,15 @@ import hashlib
 import json
 import os
 import shutil
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from dst_manager.infrastructure.filesystem.locking import WindowsResultGuards
+from dst_manager.infrastructure.filesystem.locking import (
+    WindowsResultGuards,
+    WorkspaceTransactionLock,
+)
 
 
 def file_sha256(path: Path) -> str:
@@ -105,6 +109,28 @@ class RecoverablePublisher:
             raise ctypes.WinError(ctypes.get_last_error())
 
     def publish(
+        self,
+        operation_id: str,
+        workspace_root: Path,
+        staged: dict[Path, Path | None],
+        *,
+        expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
+        before_commit: Callable[[], None] | None = None,
+        on_committed: Callable[[Path, dict], None] | None = None,
+    ) -> Path:
+        workspace_root = workspace_root.resolve()
+        lock_path = workspace_root / ".dst-manager" / "publish-transaction.lock"
+        with WorkspaceTransactionLock(lock_path, timeout_seconds=30):
+            return self._publish_locked(
+                operation_id,
+                workspace_root,
+                staged,
+                expected_baselines=expected_baselines,
+                before_commit=before_commit,
+                on_committed=on_committed,
+            )
+
+    def _publish_locked(
         self,
         operation_id: str,
         workspace_root: Path,
@@ -294,17 +320,17 @@ class RecoverablePublisher:
                 self._write_journal(journal_path, journal)
             except Exception:  # noqa: BLE001, S110 - COMMITTED 主记录已先持久化
                 pass
+        if archive_succeeded:
+            try:
+                self._finish_committed_cleanup(journal_path, journal, revision_dir)
+            except Exception:  # noqa: BLE001, S110 - 提交后清理诊断失败不得触发回滚
+                pass
         try:
             if archive_succeeded and on_committed is not None:
                 on_committed(revision_dir, journal)
         finally:
             if result_guard is not None:
                 result_guard.__exit__(None, None, None)
-        if archive_succeeded:
-            try:
-                self._finish_committed_cleanup(journal_path, journal, revision_dir)
-            except Exception:  # noqa: BLE001, S110 - 提交后清理诊断失败不得触发回滚
-                pass
         return revision_dir
 
     def _finish_committed_cleanup(
@@ -771,9 +797,12 @@ class RecoverablePublisher:
 
     @staticmethod
     def _write_journal(path: Path, journal: dict) -> None:
-        temp = path.with_suffix(".tmp")
-        temp.write_text(json.dumps(journal, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temp, path)
+        temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp.write_text(json.dumps(journal, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temp, path)
+        finally:
+            temp.unlink(missing_ok=True)
 
     def _rollback_legacy_attempted(self, journal_path: Path, journal: dict) -> None:
         journal["status"] = "ROLLING_BACK"
@@ -804,6 +833,15 @@ class RecoverablePublisher:
         raise PublishRecoveryError(f"PUBLISH_BACKUP_CORRUPTED: {entry['target']}")
 
     def recover(self, workspace_root: Path) -> list[str]:
+        workspace_root = workspace_root.resolve()
+        jobs = workspace_root / ".dst-manager" / "jobs"
+        if not jobs.exists():
+            return []
+        lock_path = workspace_root / ".dst-manager" / "publish-transaction.lock"
+        with WorkspaceTransactionLock(lock_path):
+            return self._recover_locked(workspace_root)
+
+    def _recover_locked(self, workspace_root: Path) -> list[str]:
         recovered: list[str] = []
         jobs = workspace_root / ".dst-manager" / "jobs"
         if not jobs.exists():
@@ -902,6 +940,14 @@ class RecoverablePublisher:
     def list_committed_operations(self, workspace_root: Path) -> list[dict]:
         """只读枚举仍可用于数据库闭环的 COMMITTED 发布清单。"""
         workspace_root = workspace_root.resolve()
+        revisions = workspace_root / ".dst-manager" / "revisions"
+        if not revisions.exists():
+            return []
+        lock_path = workspace_root / ".dst-manager" / "publish-transaction.lock"
+        with WorkspaceTransactionLock(lock_path):
+            return self._list_committed_operations_locked(workspace_root)
+
+    def _list_committed_operations_locked(self, workspace_root: Path) -> list[dict]:
         candidates = (workspace_root / ".dst-manager" / "revisions").glob("*/manifest.json")
         committed: dict[str, dict] = {}
         for path in candidates:
