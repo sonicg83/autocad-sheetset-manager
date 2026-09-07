@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-08（SPEC-DM-011 G4 设计冻结）
+
+- 用户操作[设置中心交互 Demo](docs/dst-manager/mockups/SPEC-DM-011-settings-demo.html)确认通过，[SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md) G4 转为通过；冻结截图索引落 `assets/SPEC-DM-011/`（默认态/校验失败/保存成功/深色常规/深色关于/损坏诊断×最小视口共 6 张）。
+- 冻结前修复 Demo 两处缺陷：重开对话框时分区高亮未重置（`aria-selected` 与内容不同步）；损坏诊断横幅误用红色只读样式（按 ARCH-DM-004 §5，损坏=amber 警告，Schema 过新才红色只读）。
+- 下一步按 G6 创建实施 Plan 与 SC-01～SC-14 追踪矩阵。
+
 ## 2026-09-08（设置中心 UI 立项 SPEC-DM-011 与 G4 Demo）
 
 - 按 [GUIDE-DM-001](docs/dst-manager/guides/GUIDE-DM-001-frontend-design-implementation-gates.md) 将设置中心前端子项目立项为 [SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md)（`draft`）：L 级跨域改动拆分为配置域后端（走常规工程门禁）与设置中心 UI（走 G0～G9）两个子项目；沉淀 G0～G5 门禁证据——业务目标、用户流程与状态矩阵、14 条可追踪需求（SC-01～SC-14）、视觉方向裁决（齿轮+对话框，否决标签页方案）、技术映射表与门禁记录。

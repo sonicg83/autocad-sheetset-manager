@@ -84,7 +84,7 @@ let modalResolve=null,returnFocus=null;
 function ask(title,body,choices){returnFocus=document.activeElement;$('modal-title').textContent=title;$('modal-body').innerHTML=body;$('modal-actions').innerHTML=choices.map(c=>`<button data-action="modal" data-choice="${c.value}" class="${c.cls||''}">${c.text}</button>`).join('');$('modal').showModal();return new Promise(r=>modalResolve=r);}
 function finishModal(v){$('modal').close();modalResolve?.(v);modalResolve=null;if(returnFocus?.isConnected)returnFocus.focus();}
 $('modal').addEventListener('cancel',e=>{e.preventDefault();finishModal('cancel')});
-function openSettings(){opened=true;dirty=false;edits={};cleared={};errors={};section='general';dirtyFields=[];applyScenario();$('settings').showModal();$('gear').setAttribute('aria-expanded','true');render();}
+function openSettings(){opened=true;dirty=false;edits={};cleared={};errors={};section='general';dirtyFields=[];applyScenario();document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));$('settings').showModal();$('gear').setAttribute('aria-expanded','true');render();}
 function closeSettings(){$('settings').close();opened=false;$('gear').setAttribute('aria-expanded','false');$('gear').focus();}
 function applyScenario(){snapshot=SC.seed();scenario=$('scenario').value;
   if(scenario==='corrupt')snapshot.diagnostics=[{code:'SETTINGS_FILE_CORRUPT',message:'用户配置文件无法读取（已备份为 settings.json.corrupt-20260908），本次会话按默认值运行。'}];}
@@ -101,7 +101,7 @@ function fieldHtml(it){const dirty=isDirty(it.key),err=errors[it.key];
   const unset=it.hasFileOverride?`<button class="link" data-action="unset" data-key="${it.key}" aria-label="恢复继承 ${esc(it.label)}">恢复继承</button>`:'';
   return `<div class="field ${dirty?'dirty':''} ${err?'error':''}" data-field="${it.key}"><label class="f-label" id="lb-${it.key}">${esc(it.label)}</label><div class="f-main">${control}<div class="f-foot">${srcBadge(it.source)}${unset}<span class="f-hint">${it.control==='path'?it.fileFilter||'':''}</span></div>${err?`<div class="f-error" id="err-${it.key}" role="alert">${esc(err)}</div>`:''}</div></div>`;}
 function render(){$('rev-pill').textContent=`配置修订 r${snapshot.configRevision} · 模拟`;
-  const diag=$('diag');if(snapshot.diagnostics.length){diag.hidden=false;diag.classList.add('readonly');diag.innerHTML=snapshot.diagnostics.map(d=>`⚠ ${esc(d.message)}（诊断码 ${d.code}）`).join('<br>');}else diag.hidden=true;
+  const diag=$('diag');if(snapshot.diagnostics.length){diag.hidden=false;diag.classList.toggle('readonly',snapshot.diagnostics.some(d=>d.code==='SETTINGS_SCHEMA_NEWER'));diag.innerHTML=snapshot.diagnostics.map(d=>`⚠ ${esc(d.message)}（诊断码 ${d.code}）`).join('<br>');}else diag.hidden=true;
   const categories=[...new Set(snapshot.items.map(i=>i.category))];
   $('panel').innerHTML=section==='general'
     ?categories.map(c=>`<div class="group"><div class="group-title">${esc(c)}</div>${snapshot.items.filter(i=>i.category===c).map(fieldHtml).join('')}</div>`).join('')
