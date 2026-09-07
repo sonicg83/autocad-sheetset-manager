@@ -30,3 +30,6 @@ plugins/src/**/obj/
 plugins/src/**/bin/
 coverage.xml
 .coverage
+
+# 测试用户反馈
+tests/user-feedback/

@@ -47,7 +47,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="dst-manager",
-    console=True,  # 控制台保留：Worker 认领日志与启动警告必须可观察
+    console=False,  # 去终端黑窗：壳/Worker 输出经 entry.py 重定向到 %LOCALAPPDATA%/dst-manager/logs/，启动警告与认领日志仍可观察（日志文件通道，ARCH-DM-002 §3.3）
     disable_windowed_traceback=False,
 )
 

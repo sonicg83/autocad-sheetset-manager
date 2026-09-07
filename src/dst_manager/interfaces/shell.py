@@ -204,8 +204,9 @@ def _spawn_worker(project_root: Path) -> subprocess.Popen:
     复用其 `worker` 子命令（entry.py 无参数时默认 desktop，见 packaging/entry.py）。
     `cwd` 与 `--project-root` 都取当前工作目录：`cli worker` 校验二者一致，
     且 `Settings.data_dir` 相对路径按 cwd 解析——与壳内 API 同 cwd，保证
-    Worker 与 API 操作同一个 SQLite 任务队列。输出继承父进程终端，便于
-    观察 Worker 认领日志。
+    Worker 与 API 操作同一个 SQLite 任务队列。frozen 态 console=False，子进程
+    无终端：Worker 认领日志由 entry.py 在子进程内重定向到
+    %LOCALAPPDATA%/dst-manager/logs/worker.log（从控制台手工运行则保持可见）。
     """
     if is_frozen():
         args = [sys.executable, "worker", "--project-root", str(project_root)]
@@ -221,7 +222,11 @@ def _spawn_worker(project_root: Path) -> subprocess.Popen:
 
 
 def _report_early_exit(process: subprocess.Popen) -> None:
-    """Worker 启动后短暂观察；立即退出（配置错误等）时给出可见警告。"""
+    """Worker 启动后短暂观察；立即退出（配置错误等）时给出警告。
+
+    console=False 下警告经 entry.py 的 stdio 重定向落入 dst-manager.log；
+    从控制台运行时仍直接可见。
+    """
     for _ in range(4):
         if process.poll() is not None:
             print(
@@ -256,31 +261,50 @@ def enable_native_downloads() -> None:
 
 def run_desktop(settings: Settings | None = None) -> None:
     settings = settings or Settings()
-    enable_native_downloads()
-    # 可信上下文登记 + 列偏好仓库：create_app 打开成功后登记当前工作区，桥只消费登记结果
-    context = ShellContext()
-    preferences = SheetPreferences(settings.data_dir)
-    server = uvicorn.Server(
-        uvicorn.Config(
-            create_app(settings, on_workspace_opened=context.set_workspace),
-            host="127.0.0.1",
-            port=0,
-            log_level="warning",
-        )
+    # 单实例守卫（PLAN-DM-018）：双实例会同时操作同一工作区的 .dst-manager 锁、发布
+    # journal 与任务队列互相踩踏；第二个实例弹窗报错，用户确认后唤起既有窗口再退出。
+    # Worker 由壳拉起、天然同实例，serve/doctor 等开发入口不参与守卫。
+    from ..infrastructure.single_instance import (
+        APP_WINDOW_TITLE,
+        acquire_instance_mutex,
+        notify_already_running_and_raise,
+        release_instance_mutex,
     )
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    while not server.started:
-        time.sleep(0.05)
-    port = server.servers[0].sockets[0].getsockname()[1]
-    bridge = ShellBridge(context=context, preferences=preferences)
-    window = webview.create_window("DST Manager", f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800)
-    bridge.bind(window)
-    worker = _spawn_worker(Path.cwd())
-    threading.Thread(target=_report_early_exit, args=(worker,), daemon=True).start()
+
+    guard = acquire_instance_mutex()
+    if guard is None:
+        notify_already_running_and_raise()
+        return
     try:
-        webview.start()
+        enable_native_downloads()
+        # 可信上下文登记 + 列偏好仓库：create_app 打开成功后登记当前工作区，桥只消费登记结果
+        context = ShellContext()
+        preferences = SheetPreferences(settings.data_dir)
+        server = uvicorn.Server(
+            uvicorn.Config(
+                create_app(settings, on_workspace_opened=context.set_workspace),
+                host="127.0.0.1",
+                port=0,
+                log_level="warning",
+            )
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        while not server.started:
+            time.sleep(0.05)
+        port = server.servers[0].sockets[0].getsockname()[1]
+        bridge = ShellBridge(context=context, preferences=preferences)
+        window = webview.create_window(
+            APP_WINDOW_TITLE, f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800
+        )
+        bridge.bind(window)
+        worker = _spawn_worker(Path.cwd())
+        threading.Thread(target=_report_early_exit, args=(worker,), daemon=True).start()
+        try:
+            webview.start()
+        finally:
+            _shutdown_worker(worker)
+            server.should_exit = True
+            thread.join(timeout=5)
     finally:
-        _shutdown_worker(worker)
-        server.should_exit = True
-        thread.join(timeout=5)
+        release_instance_mutex(guard)

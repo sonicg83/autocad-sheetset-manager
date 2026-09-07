@@ -61,7 +61,16 @@ def open_workspace(dst_path: Path):
 @app.command("doctor")
 def doctor():
     """检查AutoCAD 2016/2020显式配置。"""
-    typer.echo(json.dumps(DstManagerService().capabilities(), ensure_ascii=False, indent=2))
+    payload = json.dumps(DstManagerService().capabilities(), ensure_ascii=False, indent=2)
+    from ..runtime import is_frozen, log_dir
+
+    if is_frozen():
+        # console=False 下双击/图形环境无终端可看：自检结果同时落盘，便于排障与反馈
+        report = log_dir() / "doctor-last.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(payload + "\n", encoding="utf-8")
+        typer.echo(f"自检结果已写入 {report}")
+    typer.echo(payload)
 
 
 @app.command("worker")

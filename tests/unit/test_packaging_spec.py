@@ -76,3 +76,20 @@ def test_no_unlisted_file_resolves_resources_via___file__():
         "spec datas 的目标路径须为 dst_manager/infrastructure/acsm_xml/schema："
         "frozen 态 schema/ 目录必须落在 contract.pyc 同级才能被 _load_schema() 找到"
     )
+
+
+def test_spec_disables_console_window():
+    """console=False（ARCH-DM-002 §3.3）：双击 exe 无终端黑窗，输出走日志文件通道。"""
+    assert re.search(r"console\s*=\s*False", _spec_text()), (
+        "spec 必须保持 console=False：壳与 Worker 的输出依赖 entry.py 的 stdio 重定向，"
+        "改回 True 前需先修订 ARCH-DM-002 的日志可观察决策"
+    )
+
+
+def test_entry_redirects_windowless_stdio_before_imports():
+    """entry.py 必须在导入业务代码（含 uvicorn 日志接管）之前完成 desktop/worker 的 stdio 重定向。"""
+    text = (ROOT / "packaging" / "entry.py").read_text(encoding="utf-8")
+    assert "redirect_frozen_stdio" in text, "entry.py 缺少无窗 stdio 重定向：console=False 下日志会全部丢失"
+    assert text.index("redirect_frozen_stdio") < text.index("from dst_manager.interfaces.cli import app"), (
+        "重定向必须发生在导入 dst_manager.interfaces.cli 之前，否则 uvicorn 等库在导入期绑定的 stderr 已指向丢失的控制台"
+    )

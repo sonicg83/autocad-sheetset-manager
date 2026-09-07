@@ -201,7 +201,9 @@ class CoreConsoleExecutor:
             raise RuntimeError(f"CAD_CAPABILITY_UNAVAILABLE: {capability.version}")
         args = [str(capability.console), "/i", str(drawing), "/s", str(script), "/l", "zh-CN"]
         started = time.perf_counter()
-        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        # accoreconsole 是控制台程序，从 GUI 进程启动会弹出终端窗口；
+        # CREATE_NO_WINDOW 抑制该窗口（stdout/stderr 仍照常经管道回收）。
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
         try:
             stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:

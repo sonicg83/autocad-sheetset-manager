@@ -199,6 +199,35 @@ def test_worker_cli_writes_only_one_line_summary(monkeypatch, status, error_code
     summary = json.loads(lines[0])
     assert summary["job_id"] == "job-1" and summary["status"] == status
     assert "payload" not in completed.stdout and "commands" not in completed.stdout and "客户" not in completed.stdout
+
+
+def test_doctor_writes_report_file_when_frozen(monkeypatch, tmp_path):
+    """console=False 下双击环境无终端：frozen 态 doctor 自检结果必须同时落盘 doctor-last.json。"""
+
+    class FakeService:
+        def capabilities(self):
+            return {"2016_console": "C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"}
+
+    monkeypatch.setattr("dst_manager.interfaces.cli.DstManagerService", FakeService)
+    monkeypatch.setattr("dst_manager.runtime.is_frozen", lambda: True)
+    monkeypatch.setattr("dst_manager.runtime.log_dir", lambda: tmp_path)
+    completed = CliRunner().invoke(cli_app, ["doctor"])
+
+    assert completed.exit_code == 0
+    report = tmp_path / "doctor-last.json"
+    assert report.is_file(), "frozen 态 doctor 必须写 doctor-last.json"
+    assert json.loads(report.read_text(encoding="utf-8")) == {"2016_console": "C:/Program Files/Autodesk/AutoCAD 2016/accoreconsole.exe"}
+    assert "doctor-last.json" in completed.stdout
+
+
+def test_doctor_skips_report_file_in_dev(monkeypatch, tmp_path):
+    """开发态 doctor 走终端输出，不产生落盘文件。"""
+    monkeypatch.setattr("dst_manager.runtime.is_frozen", lambda: False)
+    monkeypatch.setattr("dst_manager.runtime.log_dir", lambda: tmp_path)
+    completed = CliRunner().invoke(cli_app, ["doctor"])
+
+    assert completed.exit_code == 0
+    assert not (tmp_path / "doctor-last.json").exists()
 def test_golden_counts_and_relocation():
     dst=Path("sample/project1/图纸集数据文件.dst")
     if not dst.is_file(): pytest.skip("公开仓库不分发黄金工程样本")
