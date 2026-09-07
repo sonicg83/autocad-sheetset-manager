@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>DST Manager · 设置中心交互演示</title>
+<style>
+:root{color-scheme:light;--canvas:#f6f7f9;--surface:#fff;--muted:#eef1f5;--text:#1a2233;--secondary:#596579;--border:#e3e8ef;--strong:#bdc8d7;--blue:#2f5be0;--bluebg:#edf2ff;--green:#197348;--greenbg:#e7f4ec;--red:#b82e2a;--redbg:#fbeae8;--amber:#896000;--amberbg:#fff6df;--shadow:0 8px 32px #18264218;font-family:"Microsoft YaHei",system-ui,sans-serif;font-size:14px;color:var(--text);background:var(--canvas)}
+html.dark{color-scheme:dark;--canvas:#10151e;--surface:#171e29;--muted:#212b39;--text:#e6eaf2;--secondary:#aeb8c7;--border:#303b4d;--strong:#56647a;--blue:#91aaff;--bluebg:#202e52;--green:#78dfaa;--greenbg:#12301f;--red:#ff9a92;--redbg:#3a1917;--amber:#eac784;--amberbg:#332712;--shadow:0 8px 32px #0006}
+*{box-sizing:border-box}body{margin:0;height:100vh;overflow:hidden}button,input,select{font:inherit;color:inherit}button{border:1px solid var(--strong);border-radius:7px;background:var(--surface);padding:7px 12px;min-height:34px;cursor:pointer;white-space:nowrap}button:hover{background:var(--muted)}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:var(--blue);border-color:var(--blue);color:#fff}html.dark .primary{color:#10151e}.quiet{border-color:transparent;background:transparent;color:var(--secondary)}.link{border-color:transparent;background:transparent;color:var(--blue);padding:4px 6px;font-size:12px;min-height:28px}input,select{border:1px solid var(--strong);border-radius:7px;background:var(--surface);padding:8px 10px;min-width:0;max-width:100%}input{height:36px}input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue)}button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:3px}h1,h2,h3,p{margin:0}h2{font-size:16px}h3{font-size:13px}.row{display:flex;align-items:center;gap:10px}.spacer{flex:1}.hint{font-size:12px;line-height:1.8;color:var(--secondary)}.mono{font-family:Consolas,monospace}.badge{display:inline-block;font-size:12px;padding:3px 9px;border-radius:20px;white-space:nowrap}.blue{color:var(--blue);background:var(--bluebg)}.amber{color:var(--amber);background:var(--amberbg)}.red{color:var(--red);background:var(--redbg)}.green{color:var(--green);background:var(--greenbg)}.muted{color:var(--secondary);background:var(--muted)}
+#app{height:100%;display:flex;flex-direction:column}.top{height:56px;flex-shrink:0;padding:0 22px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}.gear{font-size:17px;padding:6px 12px}.gear[aria-expanded=true]{background:var(--bluebg);border-color:var(--blue)}.demo-label{font-size:12px;color:var(--secondary)}.welcome{flex:1;display:flex;align-items:center;justify-content:center;text-align:center}.welcome .card{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:36px 44px;max-width:560px}
+dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh);border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:var(--shadow)}dialog::backdrop{background:#111c3266}.dlg{display:flex;flex-direction:column;height:100%}.dlg-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}.dlg-body{display:flex;flex:1;min-height:0}.sections{width:150px;flex-shrink:0;border-right:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:4px}.sections button{border:0;background:transparent;text-align:left;color:var(--secondary);padding:9px 12px;border-radius:7px}.sections button[aria-selected=true]{background:var(--bluebg);color:var(--blue);font-weight:600}.panel{flex:1;overflow:auto;padding:16px 20px;scroll-padding:16px}.diag{border:1px solid var(--amber);background:var(--amberbg);color:var(--amber);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.8;margin-bottom:14px}.diag.readonly{border-color:var(--red);background:var(--redbg);color:var(--red)}
+.group{margin-bottom:8px}.group-title{font-weight:600;font-size:13px;border-left:3px solid var(--blue);padding-left:8px;margin:14px 0 10px}.field{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;padding:8px 10px;border:1px solid transparent;border-radius:8px;align-items:start}.field:focus-within{background:var(--canvas)}.field.dirty{border-color:var(--amber);background:var(--amberbg)}.field.error{border-color:var(--red);background:var(--redbg)}label.f-label{font-size:13px;font-weight:500;padding-top:8px}.f-main{display:flex;flex-direction:column;gap:5px;min-width:0}.f-line{display:flex;gap:6px;align-items:center}.f-line input{flex:1}.f-foot{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:24px}.f-error{font-size:12px;color:var(--red);line-height:1.6}.f-hint{font-size:12px;color:var(--secondary)}.switch{display:inline-flex;align-items:center;gap:8px;padding-top:6px}.radio-line{display:flex;gap:18px;padding-top:6px}.radio-line label{display:flex;gap:6px;align-items:center}
+.dlg-foot{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}.saved-pill{font-size:12px;color:var(--green)}
+.about-block{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px}.about-block h3{margin-bottom:6px}.license{font-size:12px;line-height:1.7;color:var(--secondary);white-space:pre-wrap;background:var(--canvas);border-radius:7px;padding:10px 12px;max-height:200px;overflow:auto}
+.pick-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;cursor:pointer}.pick-item:hover{background:var(--muted)}
+#toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);max-width:80vw;z-index:30;background:var(--text);color:var(--surface);padding:12px 20px;border-radius:8px;box-shadow:var(--shadow);font-size:13px}#toast:empty{display:none}
+@media(max-width:900px){dialog{width:calc(100vw - 24px)}.sections{width:110px}.field{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top"><h1 style="font-size:16px">DST Manager</h1><span class="badge muted">未加载工作区 · 模拟</span><span class="spacer"></span>
+    <label class="hint" for="scenario">演示场景</label><select id="scenario"><option value="normal">正常编辑</option><option value="validation">下一次保存校验失败</option><option value="savefail">下一次保存写入失败</option><option value="corrupt">配置文件损坏</option></select>
+    <button class="quiet" data-action="theme">切换主题</button>
+    <button class="gear" data-action="open-settings" id="gear" aria-haspopup="dialog" aria-expanded="false" title="设置">⚙ 设置</button>
+  </header>
+  <main class="welcome"><div class="card"><h2 style="margin-bottom:10px">设置中心独立演示</h2><p class="hint">顶部"⚙ 设置"入口未加载工作区时同样可用——点击体验配置编辑、来源标记、校验与保存反馈。本页全部为去敏虚构数据，不调用真实 API、不读写任何文件。</p></div></main>
+</div>
+
+<dialog id="settings" aria-labelledby="settings-title">
+  <div class="dlg">
+    <div class="dlg-head"><h2 id="settings-title">设置</h2><span id="rev-pill" class="badge muted"></span><span class="spacer"></span><button class="quiet" data-action="close-x" id="close-x" aria-label="关闭设置">✕</button></div>
+    <div id="diag" class="diag" style="margin:12px 18px 0" hidden></div>
+    <div class="dlg-body">
+      <nav class="sections" role="tablist" aria-label="设置分区">
+        <button role="tab" aria-selected="true" data-action="section" data-section="general">常规配置</button>
+        <button role="tab" aria-selected="false" data-action="section" data-section="about">关于</button>
+      </nav>
+      <div class="panel" id="panel"></div>
+    </div>
+    <div class="dlg-foot"><span class="hint" id="foot-hint">模拟数据 · 保存仅作用于演示内存</span><span id="saved-pill" class="saved-pill" hidden>已保存</span><span class="spacer"></span><button data-action="cancel" id="btn-cancel">取消</button><button class="primary" data-action="save" id="btn-save">保存</button></div>
+  </div>
+</dialog>
+
+<dialog id="modal" aria-labelledby="modal-title"><div style="padding:24px"><h2 id="modal-title"></h2><div id="modal-body" style="margin-top:10px"></div><div id="modal-actions" class="row" style="justify-content:flex-end;margin-top:18px;flex-wrap:wrap;gap:8px"></div></div></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// 纯演示模型：模拟 GET /api/settings 的 items 快照与 PUT 语义（set/unset/expected_revision）。
+// 不替代后端校验；数值范围与 ARCH-DM-004 §2.1 的派生约束一致。
+const SC=(()=>{
+  // source: default | env | file（file = settings.json 显式覆盖，has_file_override）
+  const seedItems=()=>[
+    {key:'autocad_2016_console',label:'Core Console',category:'AutoCAD 2016',control:'path',nullable:true,fileFilter:'可执行程序 (*.exe)',value:'C:\\Program Files\\Autodesk\\AutoCAD 2016\\accoreconsole.exe',default:null,source:'env',hasFileOverride:false},
+    {key:'autocad_2016_plugin',label:'Worker 插件',category:'AutoCAD 2016',control:'path',nullable:true,fileFilter:'.NET 程序集 (*.dll)',value:'D:\\dst-manager\\autocad2016\\DstManager.AutoCAD.dll',default:null,source:'file',hasFileOverride:true},
+    {key:'autocad_2020_console',label:'Core Console',category:'AutoCAD 2020',control:'path',nullable:true,fileFilter:'可执行程序 (*.exe)',value:null,default:null,source:'default',hasFileOverride:false},
+    {key:'autocad_2020_plugin',label:'Worker 插件',category:'AutoCAD 2020',control:'path',nullable:true,fileFilter:'.NET 程序集 (*.dll)',value:'C:\\Apps\\dst-manager\\autocad2020\\DstManager.AutoCAD.dll',default:'C:\\Apps\\dst-manager\\autocad2020\\DstManager.AutoCAD.dll',source:'default',hasFileOverride:false},
+    {key:'cad_timeout_seconds',label:'CAD 超时（秒）',category:'任务执行',control:'int',min:1,max:3600,value:600,default:600,source:'default',hasFileOverride:false},
+    {key:'cad_max_parallel',label:'最大并行任务数',category:'任务执行',control:'int',min:1,max:10,value:4,default:4,source:'file',hasFileOverride:true},
+    {key:'worker_lease_seconds',label:'Worker 租约（秒）',category:'任务执行',control:'int',min:30,max:3600,value:120,default:120,source:'default',hasFileOverride:false},
+    {key:'enable_add_number_suffix',label:'图纸编号追加后缀',category:'编号规则',control:'bool',value:true,default:true,source:'file',hasFileOverride:true},
+    {key:'number_suffix_type',label:'后缀类型',category:'编号规则',control:'enum',options:[{value:1,text:'类型 1（示意）'},{value:2,text:'类型 2（示意）'}],value:1,default:1,source:'default',hasFileOverride:false}
+  ];
+  const seed=()=>({items:seedItems(),configRevision:7,diagnostics:[]});
+  function validate(items,set){const errors={};for(const [k,raw] of Object.entries(set)){const it=items.find(x=>x.key===k);if(!it){errors[k]='未知配置项';continue;}
+    if(it.control==='path'){if(raw===null||raw==='')continue;if(/[<>|]/.test(raw))errors[k]='路径包含不允许的字符';continue;}
+    if(it.control==='int'){const n=Number(raw);if(!Number.isInteger(n))errors[k]='必须为整数';else if(n<it.min||n>it.max)errors[k]=`必须在 ${it.min}–${it.max} 之间`;continue;}
+    if(it.control==='enum'&&!it.options.some(o=>o.value===raw))errors[k]='取值不在允许范围';}
+    return errors;}
+  function apply(items,set,unset){const next=structuredClone(items);for(const k of unset){const it=next.find(x=>x.key===k);const eff=it.source==='env'&&!it.hasFileOverride?it.value:it.default;it.value=eff;it.hasFileOverride=false;it.source=it.default===eff?'default':(it.source==='env'?'env':'default');}
+    for(const [k,raw] of Object.entries(set)){const it=next.find(x=>x.key===k);let v=raw;if(it.control==='path'&&(v===''||v===null))v=null;if(it.control==='int')v=Number(v);
+      if(it.hasFileOverride&&it.value===v){continue;}
+      it.value=v;it.hasFileOverride=true;it.source='file';}
+    return next;}
+  return {seed,validate,apply};
+})();
+const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let snapshot=SC.seed(),edits={},cleared={},errors={},section='general',opened=false,dirty=false,scenario='normal',dirtyFields=[];
+const item=k=>snapshot.items.find(x=>x.key===k);
+const srcBadge=s=>s==='file'?'<span class="badge blue">用户覆盖</span>':s==='env'?'<span class="badge amber">环境变量</span>':'<span class="badge muted">默认</span>';
+function toast(s){$('toast').textContent=s;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').textContent='',4200);}
+let modalResolve=null,returnFocus=null;
+function ask(title,body,choices){returnFocus=document.activeElement;$('modal-title').textContent=title;$('modal-body').innerHTML=body;$('modal-actions').innerHTML=choices.map(c=>`<button data-action="modal" data-choice="${c.value}" class="${c.cls||''}">${c.text}</button>`).join('');$('modal').showModal();return new Promise(r=>modalResolve=r);}
+function finishModal(v){$('modal').close();modalResolve?.(v);modalResolve=null;if(returnFocus?.isConnected)returnFocus.focus();}
+$('modal').addEventListener('cancel',e=>{e.preventDefault();finishModal('cancel')});
+function openSettings(){opened=true;dirty=false;edits={};cleared={};errors={};section='general';dirtyFields=[];applyScenario();$('settings').showModal();$('gear').setAttribute('aria-expanded','true');render();}
+function closeSettings(){$('settings').close();opened=false;$('gear').setAttribute('aria-expanded','false');$('gear').focus();}
+function applyScenario(){snapshot=SC.seed();scenario=$('scenario').value;
+  if(scenario==='corrupt')snapshot.diagnostics=[{code:'SETTINGS_FILE_CORRUPT',message:'用户配置文件无法读取（已备份为 settings.json.corrupt-20260908），本次会话按默认值运行。'}];}
+function isDirty(k){const it=item(k);if(cleared[k])return it.value!==null;if(k in edits)return String(edits[k])!==String(it.value??'');return false;}
+function anyDirty(){return snapshot.items.some(it=>isDirty(it.key));}
+function effValue(it){if(cleared[it.key])return '';if(it.key in edits)return edits[it.key];return it.value??'';}
+function fieldHtml(it){const dirty=isDirty(it.key),err=errors[it.key];
+  let control='';
+  if(it.control==='path'){const shown=effValue(it);
+    control=`<div class="f-line"><input data-key="${it.key}" value="${esc(shown)}" placeholder="未配置" aria-label="${esc(it.label)}" aria-invalid="${err?'true':'false'}"><button data-action="browse" data-key="${it.key}" aria-label="浏览 ${esc(it.label)}">浏览…</button>${it.nullable?`<button class="link" data-action="clear" data-key="${it.key}" ${shown===''?'disabled':''} aria-label="清除 ${esc(it.label)}">清除</button>`:''}</div>`;}
+  else if(it.control==='int'){control=`<div class="f-line"><input data-key="${it.key}" type="number" min="${it.min}" max="${it.max}" value="${esc(effValue(it))}" aria-label="${esc(it.label)}" aria-invalid="${err?'true':'false'}"><span class="f-hint">${it.min}–${it.max}</span></div>`;}
+  else if(it.control==='bool'){const v=edits[it.key]??it.value;control=`<div class="switch"><input type="checkbox" role="switch" data-key="${it.key}" ${v?'checked':''} aria-label="${esc(it.label)}"><span class="f-hint">${v?'开启':'关闭'}</span></div>`;}
+  else if(it.control==='enum'){const v=edits[it.key]??it.value;control=`<div class="radio-line" role="radiogroup" aria-label="${esc(it.label)}">${it.options.map(o=>`<label><input type="radio" name="rg-${it.key}" data-key="${it.key}" value="${o.value}" ${o.value===v?'checked':''}>${esc(o.text)}</label>`).join('')}</div>`;}
+  const unset=it.hasFileOverride?`<button class="link" data-action="unset" data-key="${it.key}" aria-label="恢复继承 ${esc(it.label)}">恢复继承</button>`:'';
+  return `<div class="field ${dirty?'dirty':''} ${err?'error':''}" data-field="${it.key}"><label class="f-label" id="lb-${it.key}">${esc(it.label)}</label><div class="f-main">${control}<div class="f-foot">${srcBadge(it.source)}${unset}<span class="f-hint">${it.control==='path'?it.fileFilter||'':''}</span></div>${err?`<div class="f-error" id="err-${it.key}" role="alert">${esc(err)}</div>`:''}</div></div>`;}
+function render(){$('rev-pill').textContent=`配置修订 r${snapshot.configRevision} · 模拟`;
+  const diag=$('diag');if(snapshot.diagnostics.length){diag.hidden=false;diag.classList.add('readonly');diag.innerHTML=snapshot.diagnostics.map(d=>`⚠ ${esc(d.message)}（诊断码 ${d.code}）`).join('<br>');}else diag.hidden=true;
+  const categories=[...new Set(snapshot.items.map(i=>i.category))];
+  $('panel').innerHTML=section==='general'
+    ?categories.map(c=>`<div class="group"><div class="group-title">${esc(c)}</div>${snapshot.items.filter(i=>i.category===c).map(fieldHtml).join('')}</div>`).join('')
+    :`<div class="about-block"><h3>应用</h3><p>DST Manager <strong>v0.9.9（模拟版本号）</strong></p><p class="hint">真实实现运行时读取包元数据（ARCH-DM-004 §3）。</p></div>
+     <div class="about-block"><h3>开源协议（MIT）</h3><div class="license">MIT License
+
+Copyright (c) 2026 DST Manager 作者
+
+特此免费授予任何获得本软件副本的人不受限制地处理本软件的权利，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或销售本软件的副本……（演示摘录；真实实现读取随包 LICENSE 全文）</div></div>
+     <div class="about-block"><h3>项目主页 / 反馈</h3><p><button class="link" data-action="ext-link" data-url="https://github.com/sonicg83/autocad-sheetset">项目主页（模拟）</button> <button class="link" data-action="ext-link" data-url="https://github.com/sonicg83/autocad-sheetset/issues">问题反馈（模拟）</button></p><p class="hint">真实实现经系统默认浏览器打开，仅允许代码登记的 https 地址。</p></div>`;
+  const n=snapshot.items.filter(it=>isDirty(it.key)).length;
+  $('btn-save').disabled=!n;$('foot-hint').textContent=n?`${n} 项修改待保存 · 即时校验，保存前不落盘`:'模拟数据 · 保存仅作用于演示内存';}
+function validateLocal(){errors={};for(const it of snapshot.items){if(it.control==='int'&&it.key in edits){const n=Number(edits[it.key]);if(!Number.isInteger(n))errors[it.key]='必须为整数';else if(n<it.min||n>it.max)errors[it.key]=`必须在 ${it.min}–${it.max} 之间`;}}return Object.keys(errors).length;}
+async function save(){if(validateLocal()){render();focusFirstError();return;}
+  if(scenario==='validation'){const k='cad_timeout_seconds';errors[k]='演示校验错误：超出执行窗口允许范围';render();focusFirstError();$('scenario').value='normal';toast('模拟后端 422：逐字段错误已显示，输入保留');return;}
+  const set={},unset=[];snapshot.items.forEach(it=>{if(isDirty(it.key)){if(cleared[it.key])set[it.key]=null;else set[it.key]=edits[it.key];}});
+  $('btn-save').disabled=true;$('btn-save').textContent='保存中…';
+  await new Promise(r=>setTimeout(r,500));
+  if(scenario==='savefail'){$('btn-save').textContent='保存';toast('模拟写入失败（磁盘/权限）：配置未落盘，内存值未替换，可重试');render();return;}
+  snapshot.items=SC.apply(snapshot.items,set,unset);snapshot.configRevision++;dirty=false;edits={};cleared={};errors={};
+  $('btn-save').textContent='保存';render();
+  const sp=$('saved-pill');sp.hidden=false;setTimeout(()=>sp.hidden=true,2500);
+  if(['enable_add_number_suffix','number_suffix_type','cad_max_parallel'].some(k=>k in set))toast('已保存。相关预览将按新配置重算（SC-13 提示）');else toast('已保存（模拟 PUT 成功，修订号 +1）');}
+function focusFirstError(){const k=Object.keys(errors)[0];if(!k)return;const el=$('panel').querySelector(`[data-key="${k}"]`);el?.scrollIntoView({block:'center'});el?.focus();}
+async function tryClose(){if(!anyDirty())return closeSettings();
+  const r=await ask('有未保存的修改','<p>关闭将放弃本次全部未保存修改，已保存的配置不受影响。</p>',[{text:'留在此处',value:'cancel'},{text:'放弃修改并关闭',value:'discard',cls:'primary'}]);
+  if(r==='discard'){edits={};cleared={};errors={};closeSettings();}}
+const fakeFiles={exe:[['C:\\Program Files\\Autodesk\\AutoCAD 2016\\accoreconsole.exe','accoreconsole.exe'],['C:\\Program Files\\Autodesk\\AutoCAD 2020\\accoreconsole.exe','accoreconsole.exe']],dll:[['C:\\Apps\\dst-manager\\autocad2016\\DstManager.AutoCAD.dll','DstManager.AutoCAD.dll'],['C:\\Apps\\dst-manager\\autocad2020\\DstManager.AutoCAD.dll','DstManager.AutoCAD.dll']]};
+async function browse(k){const it=item(k),list=it.fileFilter.includes('exe')?fakeFiles.exe:fakeFiles.dll;
+  const r=await ask('模拟原生选择器 · '+it.fileFilter,`<p class="hint">桌面壳中此处为 pywebview create_file_dialog（ShellBridge select_file）。请选择模拟条目：</p>${list.map(([p])=>`<div class="pick-item" data-action="pick" data-path="${esc(p)}"><span class="mono">${esc(p)}</span></div>`).join('')}`,[{text:'取消',value:'cancel'}]);
+  if(r&&r!=='cancel'){edits[k]=r;delete cleared[k];delete errors[k];render();}}
+document.addEventListener('input',e=>{const t=e.target,k=t.dataset?.key;if(!k)return;delete errors[k];dirtyFields.push(k);
+  if(t.type==='checkbox')edits[k]=t.checked;else if(t.type==='radio')edits[k]=Number(t.value);else edits[k]=t.value;
+  if(t.type==='number'&&(t.value===''||Number(t.value)<item(k).min||Number(t.value)>item(k).max)){errors[k]=t.value===''?'必须为整数':`必须在 ${item(k).min}–${item(k).max} 之间`;}
+  render();if(t.type!=='checkbox'&&t.type!=='radio'){const el=$('panel').querySelector(`[data-key="${k}"]`);el?.focus();}});
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const a=b.dataset.action;
+  if(a==='modal'){finishModal(b.dataset.choice);return;}
+  if(a==='theme'){document.documentElement.classList.toggle('dark');return;}
+  if(a==='open-settings'){openSettings();return;}
+  if(a==='section'){section=b.dataset.section;document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));render();return;}
+  if(a==='close-x'||a==='cancel'){await tryClose();return;}
+  if(a==='save'){await save();return;}
+  if(a==='browse'){await browse(b.dataset.key);return;}
+  if(a==='clear'){cleared[b.dataset.key]=true;delete edits[b.dataset.key];delete errors[b.dataset.key];render();return;}
+  if(a==='unset'){const it=item(b.dataset.key);const r=await ask('恢复继承值',`<p>“${esc(it.label)}”将删除用户覆盖（settings.json），恢复为 ${it.source==='env'?'环境变量':'代码默认'}继承值。</p>`,[{text:'取消',value:'cancel'},{text:'恢复继承',value:'yes',cls:'primary'}]);
+    if(r==='yes'){unsetPending=unsetPending||[];unsetPending.push(b.dataset.key);applyUnset(b.dataset.key);toast('已恢复继承（模拟 unset，保存时提交）');}return;}
+  if(a==='pick'){finishModal(b.dataset.path);return;}
+  if(a==='ext-link'){toast('模拟：真实实现经系统默认浏览器打开（仅登记 https）');return;}
+  if(a==='reset'){snapshot=SC.seed();edits={};cleared={};errors={};unsetPending=[];render();toast('演示已重置');return;}});
+let unsetPending=[];
+function applyUnset(k){const it=item(k);const eff=it.source==='env'?it.default??it.value:it.default;it.value=eff;it.hasFileOverride=false;it.source=it.default===eff?'default':'env';delete edits[k];delete cleared[k];render();}
+$('settings').addEventListener('cancel',e=>{e.preventDefault();tryClose();});
+</script>
+</body>
+</html>

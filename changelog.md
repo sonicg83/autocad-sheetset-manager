@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-08（设置中心 UI 立项 SPEC-DM-011 与 G4 Demo）
+
+- 按 [GUIDE-DM-001](docs/dst-manager/guides/GUIDE-DM-001-frontend-design-implementation-gates.md) 将设置中心前端子项目立项为 [SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md)（`draft`）：L 级跨域改动拆分为配置域后端（走常规工程门禁）与设置中心 UI（走 G0～G9）两个子项目；沉淀 G0～G5 门禁证据——业务目标、用户流程与状态矩阵、14 条可追踪需求（SC-01～SC-14）、视觉方向裁决（齿轮+对话框，否决标签页方案）、技术映射表与门禁记录。
+- 新增[设置中心交互 Demo](docs/dst-manager/mockups/SPEC-DM-011-settings-demo.html)（G4 证据，去敏虚构数据）：覆盖分区切换、动态表单、来源/覆盖标记与恢复继承、即时与保存校验、保存失败、损坏文件诊断横幅、未保存关闭确认、浅深主题；已经 Playwright 实测关键交互（渲染、校验、保存修订号递增、焦点管理、控制台零报错）。
+- G4 待用户操作 Demo 并冻结截图后转通过，随后按 G6 创建实施 Plan 与追踪矩阵；行为权威仍为 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)，Spec 只引用不复制。
+
 ## 2026-09-08（按设计审查修订 ARCH-DM-004 设置中心）
 
 - 依据[设计审查备忘](.planning/memos/dst-manager/2026-09-07-settings-center-design-review.md)修订 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)，关闭全部 P1/P2：新增 §2.4 跨进程配置传播（Worker 认领任务前检测 `config_revision` 重载、任务级配置快照冻结、租约按任务快照判断以防过渡期误回收）；`settings.json` 语义改为**只存用户显式覆盖值**（PUT 改为 PATCH 风格 `set`/`unset` + `expected_revision`/409，杜绝 env/default 值被固化进用户文件）；保存事务改为进程内锁覆盖"读基准→校验→落盘→换快照"全程；Pydantic `Settings` 确立为唯一权威、注册表只存展示元数据并从 Schema 派生约束。
