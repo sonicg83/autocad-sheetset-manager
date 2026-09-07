@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-08（按设计审查修订 ARCH-DM-004 设置中心）
+
+- 依据[设计审查备忘](.planning/memos/dst-manager/2026-09-07-settings-center-design-review.md)修订 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)，关闭全部 P1/P2：新增 §2.4 跨进程配置传播（Worker 认领任务前检测 `config_revision` 重载、任务级配置快照冻结、租约按任务快照判断以防过渡期误回收）；`settings.json` 语义改为**只存用户显式覆盖值**（PUT 改为 PATCH 风格 `set`/`unset` + `expected_revision`/409，杜绝 env/default 值被固化进用户文件）；保存事务改为进程内锁覆盖"读基准→校验→落盘→换快照"全程；Pydantic `Settings` 确立为唯一权威、注册表只存展示元数据并从 Schema 派生约束。
+- 补充可空路径契约（`null` 表示未配置、空字符串绝不解析为 cwd、EXE/DLL 过滤器按字段声明）、损坏文件与未知高版本 Schema 的分流恢复策略（备份重建 vs 只读降级禁写）、相对路径保持现有兼容规范化行为，并按备忘测试矩阵扩充 §7。
+- 文档状态保持 `draft`，待按备忘复审清单复审通过后转 `accepted`。
+
+## 2026-09-07（应用 PRD-DM-001 审查修订）
+
+- 按审查备忘（`.planning/memos/dst-manager/2026-09-07-prd-dm-001-review.md`）修订 [PRD-DM-001](docs/dst-manager/product/prds/PRD-DM-001-extensible-capability-platform.md)：`related` 补入 `ARCH-DM-004`；统一“插件式扩展平台/分层扩展”叫法；§8.2 与 UI-002 贡献点对齐；明确 Capability 与权限概念；统一“停用中/停用待任务完成”状态表述；新增 AC-009～AC-012 覆盖 EXT-003/007/012/013；补充同进程资源治理、扩展间互调边界、AutoLISP 独立评估及 §13/§14 定位说明。
+
+## 2026-09-07（归档设置中心架构设计审查）
+
+- 新增 [ARCH-DM-004 设置中心设计审查备忘](.planning/memos/dst-manager/2026-09-07-settings-center-design-review.md)：对照当前 `Settings`、API、桌面壳、独立 CAD Worker、打包资源和单实例守卫，记录 3 项 P1 与 4 项 P2；结论为当前草稿暂不应转 `accepted`，需先补齐跨进程热更新、覆盖值/继承值、并发保存事务、可空路径、未知 Schema、相对路径兼容和校验唯一来源。
+- 补充建议目标配置流程、测试矩阵和转为 `accepted` 的复审清单；本次仅归档审查，不修改 ARCH-DM-004、产品代码或测试。
+
 ## 2026-09-07（立项设置中心架构设计 ARCH-DM-004）
 
 - 新增 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)（`draft`）：针对 exe 桌面软件形态下"编辑 .env 改配置"不可用的问题，确立应用内设置中心设计——声明式配置注册表 + 动态表单渲染、`%LOCALAPPDATA%\dst-manager\settings.json` 原子存储（带 `schema_version`，合并优先级默认 < env < 用户文件）、全部界面配置即时生效（运行时 Settings 持有者热替换）、`GET/PUT /api/settings` 与 `GET /api/about` 版本化契约、顶部齿轮入口 + 未加载 DST 可用的模态对话框（含关于页：版本号、MIT 协议、主页/反馈入口）。
