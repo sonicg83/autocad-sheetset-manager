@@ -950,6 +950,29 @@ git commit -m "新增打包与 release 使用文档并完成全量回归"
 
 ---
 
+### Task 11（追加，2026-09-06）: console=False 去终端黑窗与无窗日志通道
+
+**背景：** 用户反馈运行打包 exe 会弹出终端。经确认采用"去终端 + 日志文件兜底"方案（保留"Worker 日志与启动警告必须可观察"约束，观察通道由控制台改为日志文件）。ARCH-DM-002 §3.3 决策已修订（`console=True` → `console=False`），§3.5 新增无窗日志通道约定。
+
+**Files:**
+- Modify: `packaging/dst-manager.spec`（console=False）
+- Modify: `packaging/entry.py`（frozen 态 desktop/worker 命令在导入业务代码前重定向 stdio）
+- Modify: `src/dst_manager/runtime.py`（新增 `log_dir()`、`redirect_frozen_stdio()`、`_stdio_usable()`）
+- Modify: `src/dst_manager/interfaces/cli.py`（doctor frozen 态落盘 doctor-last.json）
+- Modify: `src/dst_manager/interfaces/shell.py`（仅注释同步：Worker 日志去向、警告落文件）
+- Modify: `tests/unit/test_packaging_spec.py`、`tests/unit/test_runtime.py`、`tests/unit/test_core.py`
+- Modify: `docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md`、`README.md`、`changelog.md`
+
+- [x] **Step 1: runtime 无窗重定向能力**——`log_dir()` 默认 `%LOCALAPPDATA%/dst-manager/logs/`（与数据目录同根）；`redirect_frozen_stdio(command)` 仅在 `is_frozen()` 且命令为 desktop（→ `dst-manager.log`）/ worker（→ `worker.log`）且标准流不可用（None / PyInstaller `NullWriter` / 无有效 fileno）时生效，追加模式 UTF-8 + 启动分隔行；写日志失败静默放弃不阻断启动；从控制台手工运行时输出保持可见，doctor/serve 等控制台命令不重定向。
+- [x] **Step 2: entry.py 接线**——frozen 态默认 desktop 后，按 `sys.argv[1]` 调用重定向，位置在 `from dst_manager.interfaces.cli import app` 之前（uvicorn 等库在导入期绑定 stderr）。
+- [x] **Step 3: doctor 落盘**——frozen 态自检 JSON 同时写入 `logs/doctor-last.json` 并回显路径；开发态不落盘。
+- [x] **Step 4: spec 与守护**——`console=False` + 注释更新；`test_packaging_spec.py` 新增 console=False 静态断言、"entry.py 重定向先于 cli 导入"断言。
+- [x] **Step 5: 测试**——`test_runtime.py` +8 项；`test_core.py` +2 项（doctor frozen 落盘 / 开发态不落盘）。
+- [x] **Step 6: 文档与验证**——ARCH-DM-002 §3.3/§3.5/§6、README 打包章节（无终端说明、日志位置、反馈方式）、changelog；全量 pytest（排除真实 CAD 系统测试）**628 passed / 4 skipped，0 失败**，退出码 0。
+- [ ] **Step 7: 真实构建冒烟（待下次构建）**——`build_release.ps1` 后确认：双击 exe 无黑窗；`logs/dst-manager.log`、`worker.log`、`doctor-last.json` 按预期产生；从控制台运行 `dst-manager.exe worker` 输出仍可见。
+
+---
+
 ## 完成情况核查（2026-09-06）
 
 逐任务核对仓库证据（文件存在性、git 提交、磁盘产物、全量测试）后的结论：
@@ -966,14 +989,16 @@ git commit -m "新增打包与 release 使用文档并完成全量回归"
 | Task 8 release.ps1 | 已完成（代码） | 提交 `adff3ea`；最终审查 I-1 修复 changelog 门禁正则（提交 `4dc87cc`）；**前置校验冒烟未执行**（见下） |
 | Task 9 文档与全量回归 | 已完成 | 提交 `76d99b2`、`c9053ab`（Ruff 修复）；README 章节、changelog、全量回归记录在案 |
 | Task 10 setup.bat（本次追加） | 代码与验证已完成 | 见 Task 10 Step 1-6；Step 7 随包验证待下次构建 |
+| Task 11 console=False 无窗日志（本次追加） | 代码与验证已完成 | 见 Task 11 Step 1-6；Step 7 真实构建冒烟待下次构建 |
 
-**遗留未勾选项（3 项，均为人工/冒烟性质，不阻塞代码交付）：**
+**遗留未勾选项（4 项，均为人工/冒烟性质，不阻塞代码交付）：**
 
 1. **Task 6 Step 5 exe 冒烟（人工）**：无 changelog 记录，无法确认 `dst-manager.exe --help / doctor / 桌面壳` 三步是否真实走过；下一次构建后应补做并记录。
 2. **Task 8 Step 5 release.ps1 前置校验冒烟**：未执行（可随时以 `.\scripts\release.ps1 -Version 0.0.0` 验证中止行为）。
 3. **Task 9 Step 3 端到端 release 演练**：changelog 已记录"跳过留待用户"；当前 `pyproject.toml` version 为 0.3.3、`git tag` 为空，确认从未执行过真实 release。
+4. **Task 10 Step 7 / Task 11 Step 7 随包验证**：`setup.bat` 组包与 console=False 无窗日志均待下次 `build_release.ps1` 后在解压目录实测核对（可与遗留 1 的 exe 冒烟合并执行）。
 
-**计划状态**：`proposed` → `active`。代码层面全部落地并通过全量回归（616 passed / 72 skipped），剩余为发布演练类人工事项；待上述 3 项与 Task 10 Step 7 完成后可将计划标记 `completed`。
+**计划状态**：`proposed` → `active`。代码层面全部落地并通过全量回归（Task 10 时 616 passed / 72 skipped，Task 11 时 628 passed / 4 skipped），剩余为发布演练与随包冒烟类人工事项；待上述 4 项完成后可将计划标记 `completed`。
 
 
 ## 自查记录

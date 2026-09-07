@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-06
 related:
   - ARCH-DM-001
   - SPEC-DM-007
@@ -75,7 +75,7 @@ app()
 - `datas`：`web/dist`（构建脚本先产出）、`alembic.ini`、`migrations/`（含 `versions/`）。
 - `hiddenimports`：静态分析探测不到的动态导入，至少包含 `uvicorn.loops.auto`、`uvicorn.protocols.*`、`uvicorn.lifespan.on`、`webview.platforms.edgechromium`、`sqlalchemy.dialects.sqlite`。
 - `excludes`：`tavily_cli`、`pytest` 等纯开发依赖（`tavily-cli` 目前在生产依赖中，打包阶段排除以免白占体积；是否从生产依赖移除另行处理）。
-- `console=True`：保留控制台窗口。Worker 日志与启动警告（如 Worker 提前退出的 stderr 提示）必须可观察，这是现有设计明确要求；内部分发阶段不做 windowed 美化。
+- `console=False`（2026-09-06 修订，原为 `console=True`）：双击 exe 不再弹出终端黑窗。"Worker 日志与启动警告必须可观察" 的约束保留，但观察通道由控制台改为日志文件——见 §3.5。
 
 ### 3.4 分发包内配置默认值
 
@@ -84,6 +84,17 @@ frozen 态下调整两个默认值，开发态不变：
 - `autocad_2016_plugin` / `autocad_2020_plugin`：默认指向 exe 同级的 `autocad2016/`、`autocad2020/` 目录（随包分发的 Worker 插件 DLL）；`.env` 与环境变量覆盖路径保持不变。
 - `data_dir`：frozen 态默认改为 `%LOCALAPPDATA%/dst-manager/data`（与既有 `_default_draft_dir` 同风格），避免双击启动时数据写入程序目录、zip 更新时被覆盖。
 - Core Console（`accoreconsole.exe`）来自目标机器的 AutoCAD 安装，运行期保持显式配置 + `doctor` 自检，不在包内猜测（对齐 ARCH-DM-001"不通过注册表或 PATH 猜测 AutoCAD"的约束）。显式配置由随包附带的 `setup.bat` 在安装阶段生成：按年份升序探测注册表 `HKLM\SOFTWARE\Autodesk\AutoCAD\Rxx.x`（回退默认安装目录扫描）定位 `accoreconsole.exe`，按 .NET 插件向前兼容口径写入版本桶——2015-2019 → `DST_MANAGER_AUTOCAD_2016_CONSOLE`，2020-2024 → `DST_MANAGER_AUTOCAD_2020_CONSOLE`（同组多版本取最新）；2013/2014 警告后仍写入 2016 桶，2025+（.NET 8）明确不支持。脚本幂等，只补缺失键、绝不覆盖已有 `.env`；脚本本体保存为 GBK（cmd 对 UTF-8 批处理的多字节解析不可靠，沿用 SCR 编码例外），其 `.env` 模板注释刻意全 ASCII 以保证写出文件恒为合法 UTF-8。
+
+### 3.5 无窗日志通道（console=False 的可观察性替代）
+
+`console=False` 后双击启动的壳进程与 Worker 子进程都没有终端，stdout/stderr 改走日志文件：
+
+- 位置：`%LOCALAPPDATA%/dst-manager/logs/`（与数据目录同根，zip 更新不覆盖）。
+- `dst-manager.log`：壳进程输出——uvicorn 日志、Alembic 迁移输出、Worker 提前退出警告（`_report_early_exit`）等。
+- `worker.log`：Worker 子进程的任务认领摘要（`cli worker` 的单行 JSON）。
+- 机制：`packaging/entry.py` 在导入业务代码（含 uvicorn 日志接管）之前，经 `runtime.redirect_frozen_stdio` 把不可用的标准流（windowed 态 PyInstaller 注入 `NullWriter`）重定向到对应日志文件（追加模式，带启动分隔行）。从控制台手工运行 `dst-manager.exe worker` 等命令时标准流可用，不重定向、输出保持可见——重定向只补"无终端"的缺口，不改变控制台场景。
+- `doctor` 自检：frozen 态除命令行输出外同时落盘 `%LOCALAPPDATA%/dst-manager/logs/doctor-last.json`，便于无终端环境下排障与反馈。
+- 不做日志轮转/清理（内部规模 MVP，需要时另行立项）。
 
 ## 4. 构建脚本 `scripts/build_release.ps1`
 
@@ -115,8 +126,9 @@ frozen 态下调整两个默认值，开发态不变：
 - `runtime.py` 路径解析单测：`resource_dir()` 支持注入基准，通过 monkeypatch 模拟 frozen/开发两态；三处调用点的既有 pytest 回归全量通过。
 - 构建链路验证：`build_release.ps1` 在本机完整跑通一次，产物 zip 解压后：
   - 空库首次启动自动完成 Alembic 迁移并打开壳窗口；
-  - `dst-manager.exe doctor` 正确报告随包插件与已配置 Core Console；
-  - 拖拽 DST 打开工作区，Worker 认领日志在控制台可见。
+  - `dst-manager.exe doctor` 正确报告随包插件与已配置 Core Console（frozen 态同时落盘 doctor-last.json）；
+  - 拖拽 DST 打开工作区，Worker 认领日志出现在 `%LOCALAPPDATA%/dst-manager/logs/worker.log`，壳输出出现在同目录 `dst-manager.log`；
+  - 双击 exe 不出现终端黑窗。
 - 真实 AutoCAD 2016/2020 发布全流程按既有约定由用户显式启用（`DST_MANAGER_RUN_AUTOCAD=1`），打包链路本身不阻塞于 CAD 环境。
 - 交付时更新 `changelog.md` 并记录实际验证结果。
 

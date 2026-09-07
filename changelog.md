@@ -1,5 +1,34 @@
 # 变更记录
 
+## 2026-09-07（桌面壳单实例守卫）
+
+- 新增 `src/dst_manager/infrastructure/single_instance.py`（仅标准库 + ctypes 直调 Win32，无新依赖）：命名互斥量（`Local\dst-manager-<用户维度摘要>`）检测已有实例，内核对象随进程退出自动释放；第二个实例弹置顶警告框，用户点击“确定”后由后启动进程（持前台权限）把既有窗口 `ShowWindow(SW_RESTORE)` 还原并 `SetForegroundWindow` 置前，前台锁拦截时退化为任务栏闪烁兜底。
+- `run_desktop` 集成单实例守卫（[PLAN-DM-018](.planning/plans/dst-manager/PLAN-DM-018-desktop-single-instance.md)）：第二个实例弹窗报错后退出，不再与第一个实例同时操作同一工作区的 `.dst-manager` 锁、发布 journal 与任务队列（回应 `tests/user-feedback/logs/user-weng/` 中 `PUBLISH_RECOVERY_FAILED` / `WinError 32` 所见的双进程踩踏）；`desktop` 为唯一受限入口，`worker`（壳子进程）与 `serve`/`doctor` 不受影响，非 Windows 平台守卫放行。
+- 新增 10 项单实例单测（`tests/unit/test_single_instance.py`）：互斥量名称确定性派生、真实内核持锁/后启动被拒/释放重入（Windows 实跑）、非 Windows 放行标记、唤起容错（窗口缺失不崩溃）。
+- 验证（实际运行）：`uv run ruff check .` 全绿；全量 `uv run pytest -q` 退出码 0，**638 passed / 72 skipped / 0 failed**（基线 628 + 新增 10，无回归）。真实桌面双开冒烟（弹窗→确认→切换、最小化还原置前）待用户本机复验。
+
+## 2026-09-07（建立前端功能设计与实施门禁）
+
+- 新增 `GUIDE-DM-001`，以 G0～G9 十道门禁规范前端功能从立项、业务目标、流程状态、视觉方向、Demo 冻结、技术映射、计划追踪、分批实施到设计 QA 和真实环境验收的全过程；提供 S/M/L 风险分级、小改快速通道、强制追踪矩阵和门禁记录模板。
+- 新增 `GUIDE-DM-002`，面向非前端专业人员解释各门禁的目的、需要业务负责人确认的事项、Agent/技术负责人职责，以及 Figma、Demo、Spec、Plan、设计 QA 和真实环境验收的区别。
+- 更新 DST Manager 文档入口；两份指南保持“权威清单 + 通俗解释”的单向引用关系，避免重复规则形成双重权威。
+
+## 2026-09-06（全仓静态审查归档备忘）
+
+- 完成全仓库静态审查（后端 src 四层 + tests 八域 + web 前端 + C# 插件 + 打包/迁移/脚本 + 文档治理与 git 卫生），结论归档为 `[2026-09-06-full-code-review](.planning/memos/dst-manager/2026-09-06-full-code-review.md)`。
+- 审查结论：未发现 P0 阻断项；5 项 P1（发布 journal 无 fsync 且恢复对坏日志无容错、Worker 领取后准备阶段异常逃逸致进程退出、XML 导入写主 DST 路径缺空子集校验、前后端 422/fields 错误契约不匹配、7 文件超 500 行容量红线未排期）＋ 12 项 P2 ＋ 若干 P3 与未提交打包改动评估。
+- 验证（实际运行）：`ruff check .` 通过；pytest（排除真实 CAD 系统测试）**628 passed / 72 skipped / 0 failed**（700 收集，72 个跳过为真实 AutoCAD 与真实环境用例）含发布器回滚、acsm repair、事务恢复、CAD 并行；web 生产构建通过（OpenAPI 契约一致性 + 全新库 alembic 迁移 + vue-tsc + vite）；依赖方向扫描确认 domain 层无违规导入。
+- 同日追加：应用户要求对未提交的“打包 exe 隐藏控制台 + 无窗日志”12 文件专项审查，结论以附录 A 追加至备忘底部——无数据/发布安全红线；P1 为“windowed exe 从控制台手工运行时输出保持可见”断言不成立（PyInstaller windowed stdio 恒 NullWriter，需 Step 7 冒烟实测后修订文档），另有 doctor 异常零反馈、测试缺口、验证口径不一致等 P2。
+
+## 2026-09-06（隐藏打包 exe 终端黑窗，日志改走文件）
+
+- 按用户裁决修订 ARCH-DM-002 的 `console=True` 决策为 `console=False`：双击 `dst-manager.exe` 不再弹出终端黑窗；"Worker 日志与启动警告必须可观察"的约束保留，观察通道由控制台改为日志文件（ARCH-DM-002 §3.5 新增）。
+- 新增无窗日志通道：`runtime.py` 增加 `log_dir()`（`%LOCALAPPDATA%/dst-manager/logs/`，与数据目录同根）与 `redirect_frozen_stdio()`——`packaging/entry.py` 在导入业务代码（含 uvicorn 日志接管）之前，把 windowed 态不可用的标准流（PyInstaller `NullWriter`）按命令重定向到 `dst-manager.log`（壳进程：uvicorn/Alembic/Worker 提前退出警告）或 `worker.log`（Worker 任务认领摘要），追加模式带启动分隔行。重定向只补"无终端"缺口：从控制台手工运行 `dst-manager.exe worker` 等命令时标准流可用、输出照常可见；`doctor`/`serve` 不重定向。
+- `doctor` 自检在 frozen 态除命令行输出外落盘 `%LOCALAPPDATA%/dst-manager/logs/doctor-last.json`，便于无终端环境下排障与反馈；开发态不落盘。`_spawn_worker` 无需改动：Worker 子进程由自身入口的 entry.py 重定向接住（从控制台手工运行时认领日志仍然打印到终端）。
+- 防回归守护：`test_packaging_spec.py` 新增 `console=False` 静态断言与"entry.py 重定向必须发生在导入 cli 之前"断言；`test_runtime.py` 新增 8 项（NullWriter 识别、LOCALAPPDATA 日志根、开发态/控制台子命令不重定向、双文件名、坏流替换与好流保留）；`test_core.py` 新增 doctor frozen 落盘/开发态不落盘两用例。
+- 文档同步：ARCH-DM-002 §3.3 决策改写 + 新增 §3.5 + §6 验证口径（Worker 认领日志见 `worker.log`、双击无黑窗）；README 打包章节补充"双击无终端、日志位置与反馈方式、doctor-last.json"。
+- 验证（实际运行）：pytest 全量（排除真实 CAD 系统测试）**628 passed / 4 skipped，0 失败**，退出码 0。
+
 ## 2026-09-06（新增 setup.bat 最终用户环境初始化脚本）
 
 - 新增 `scripts/setup.bat` 并随包分发：面向打包分发后的最终用户，双击运行即在程序目录生成/补全 `.env`，免去手工配置。按年份升序探测注册表 `HKLM\SOFTWARE\Autodesk\AutoCAD\Rxx.x`（回退 `C:\Program Files\Autodesk\AutoCAD *\accoreconsole.exe` 目录扫描）定位本机 `accoreconsole.exe`，按 .NET 插件向前兼容口径写入版本桶：2015-2019 → `DST_MANAGER_AUTOCAD_2016_CONSOLE`，2020-2024 → `DST_MANAGER_AUTOCAD_2020_CONSOLE`（同组多版本取最新，两组独立填写）；2013/2014 输出兼容性风险警告后仍写入 2016 桶；2025 及以上（.NET 8）明确提示不支持；accoreconsole 自 2013 起才有，更早版本不在探测范围。脚本幂等，只补缺失键、绝不覆盖已有 `.env`；未探测到时模板保留注释占位并提示手工填写。`build_release.ps1` 组包阶段将 `setup.bat` 拷入 `dist/DSTManager/`。

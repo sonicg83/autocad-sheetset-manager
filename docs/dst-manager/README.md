@@ -4,6 +4,8 @@
 
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
+2026-09-07 完成 [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证 638 passed / 72 skipped，真实桌面双开冒烟待用户复验）](../../.planning/plans/dst-manager/PLAN-DM-018-desktop-single-instance.md)：同一会话只允许一个壳进程，第二个实例弹置顶告警框并在用户确认后把既有窗口还原置前（命名互斥量 + Win32 前台唤起，仅限 `desktop` 入口，不涉及 API 契约与 Worker 链路）。
+
 2026-09-05 完成 [图纸页单表工作区实施计划（PLAN-DM-015，状态 `active`）](../../.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 的功能实施（依据已接受的 [SPEC-DM-009](specs/SPEC-DM-009-sheets-workspace-ui.md)）：图纸页已具备左树右唯一主表、统一范围导航、显示列配置、分页缓冲编辑、参照插入、批量/删除/草稿联动及视口/可访问性回归。用户随后在真实桌面复验中确认并推动关闭 S-07 的系统性视觉差距，包括编辑与列表卡片层级、控件样式、表格分层和交互态、导航拖拽后的列重叠，以及任务浮层挤压主内容；SPEC-DM-006/SPEC-DM-009 已于同日修订，[视觉收敛整改计划（PLAN-DM-017，completed；用户真实桌面复验通过）](../../.planning/plans/dst-manager/PLAN-DM-017-sheets-visual-convergence.md) 已完成。PLAN-DM-015 仅因 S-09 真实 Explorer 验收尚未完成而继续保持 `active`；SPEC-DM-010 已接受（实施计划 PLAN-DM-016）。
 
 2026-09-04 交付 `v0.3.3`（[PLAN-DM-013](../../.planning/plans/dst-manager/PLAN-DM-013-v033-tabbed-shell.md)，依据 [SPEC-DM-006](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md)）：**纯前端标签化外壳重建，后端零改动**。设计令牌与浅深双主题（§5.1）；发布/删除/恢复等 8 处原生 `confirm()` 改为应用内可访问确认模态（§6.2/§6.9）；`App.vue` 四业务状态域拆分到 composables（useJobMonitor/useCsvImport/useRepair/useRestore）；固定三标签外壳（① 图纸 / ② 属性 / ③ 修订历史，§4.1/§4.2）+ 右缘任务浮层（实施进度/修改预览/诊断）+ 全局 ActionDock 与草稿栈浮窗（§6.8/§6.9 §7.1）+ SSE 任务通知 toast（§6.6）+ 修订历史标签空状态卡与恢复预览接入浮层（§6.5）。全量验证：`uv run ruff check .` 通过、`uv run pytest -q` 547 passed / 72 skipped（619 项，0 失败）、`npm run build` 零类型错误、Playwright e2e 55/55 通过，记录见 [PLAN-DM-013](../../.planning/plans/dst-manager/PLAN-DM-013-v033-tabbed-shell.md)「实际验证」小节。
@@ -40,10 +42,12 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 
 ## 指南
 
+- [前端功能设计与实施门禁清单（GUIDE-DM-001，评审中）](guides/GUIDE-DM-001-frontend-design-implementation-gates.md)
+- [前端功能设计与实施门禁通俗说明（GUIDE-DM-002，评审中）](guides/GUIDE-DM-002-frontend-gates-plain-language.md)
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
 
 - [启动、使用和开发说明](../../README.md#一键启动)
 - [测试策略](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md#12-测试策略)
 
-当前暂无独立部署指南；开发与测试入口以上述仓库说明和架构基线为准。
+当前暂无独立部署指南；开发与测试入口以上述仓库说明、架构基线和前端门禁指南为准。
