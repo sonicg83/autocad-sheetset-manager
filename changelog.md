@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-08（立项设置中心实施计划 PLAN-DM-019）
+
+- 新增 [PLAN-DM-019](.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（`proposed`，依据 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md) 与 [SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md)）：12 个 TDD 任务分四批交付——批次 1 配置域（settings.json 原子存储/展示元数据注册表/快照解析器/运行时持有者与保存事务），批次 2 三个设置 API 端点 + Worker 任务级配置快照与租约按行回收（含迁移 0005）+ 打包触点，批次 3 前端纵向切片（ShellBridge 文件夹选择器/useSettings/SettingsDialog/TopBar 齿轮入口），批次 4 全量回归与 G8 设计 QA、G9 手工清单。
+- 含 SC-01～SC-14 与 A-01～A-07 追踪矩阵、全局约束与逐任务接口签名；同步更新 Plan 索引。
+
 ## 2026-09-08（SPEC-DM-011 G4 设计冻结）
 
 - 用户操作[设置中心交互 Demo](docs/dst-manager/mockups/SPEC-DM-011-settings-demo.html)确认通过，[SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md) G4 转为通过；冻结截图索引落 `assets/SPEC-DM-011/`（默认态/校验失败/保存成功/深色常规/深色关于/损坏诊断×最小视口共 6 张）。

@@ -14,6 +14,7 @@
 
 详细计划：
 
+- [设置中心实施计划（PLAN-DM-019，proposed，依据 ARCH-DM-004 与 SPEC-DM-011；G0～G5 门禁已通过，G4 设计已冻结）](PLAN-DM-019-settings-center.md)
 - [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证通过，真实桌面双开冒烟待用户复验）](PLAN-DM-018-desktop-single-instance.md)
 - [图纸工作区与任务浮层视觉收敛整改计划（PLAN-DM-017，completed；用户真实桌面复验通过）](PLAN-DM-017-sheets-visual-convergence.md)
 - [属性页分区编辑实施计划（PLAN-DM-016，active，依据已接受的 SPEC-DM-010；任务 1～7 已实施、自动回归全绿，视觉确认与人工矩阵待用户后收口）](PLAN-DM-016-properties-workspace-ui.md)
