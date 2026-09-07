@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-07（立项设置中心架构设计 ARCH-DM-004）
+
+- 新增 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)（`draft`）：针对 exe 桌面软件形态下"编辑 .env 改配置"不可用的问题，确立应用内设置中心设计——声明式配置注册表 + 动态表单渲染、`%LOCALAPPDATA%\dst-manager\settings.json` 原子存储（带 `schema_version`，合并优先级默认 < env < 用户文件）、全部界面配置即时生效（运行时 Settings 持有者热替换）、`GET/PUT /api/settings` 与 `GET /api/about` 版本化契约、顶部齿轮入口 + 未加载 DST 可用的模态对话框（含关于页：版本号、MIT 协议、主页/反馈入口）。
+- 明确范围外与预留：`data_dir`/`draft_dir` 不界面化、模板目录与扩展设置本体后续立项；UI 分区结构、扩展设置独立存储命名空间和"描述 + 值"渲染契约为 [PRD-DM-001](docs/dst-manager/product/prds/PRD-DM-001-extensible-capability-platform.md)（EXT-013、UI-001/UI-002）预留接入点。
+- 同步更新 DST Manager 文档入口索引。
+
+## 2026-09-07（编制插件式扩展平台产品需求）
+
+- 新增 [PRD-DM-001](docs/dst-manager/product/prds/PRD-DM-001-extensible-capability-platform.md)：将已确认的分层扩展平台路线、内部受信扩展、随包交付并启停、`Change Proposal` 统一写入权和 Cordis 借鉴边界整理为长期产品需求；定义内置扩展、受控 AutoCAD 作业、连接器、嵌入应用、Artifact、AutoCAD 运行时提供者及安全/兼容验收要求。
+- 结合 [GUIDE-DM-001](docs/dst-manager/guides/GUIDE-DM-001-frontend-design-implementation-gates.md)，将扩展中心、动态贡献点和嵌入页面定为 L 级跨域前端改动，要求拆分子项目并逐项通过 G0～G9、状态矩阵、设计冻结、技术映射、追踪矩阵、设计 QA 和真实 Windows 桌面验收；同步更新 DST Manager 文档入口。本文仅定义长期需求，不创建近期实施计划。
+- 修订 EXT-008：取消通用“自定义自动化”设想，改为仅随包交付的内部“受控 AutoCAD 作业扩展”；固定通过 `accoreconsole`、SCR 及声明的 .NET Worker/AutoLISP 在任务副本上执行打印和归档作业，严格采用 Artifact-only 模型，禁止 Proposal、正式发布和源工程回写，并补充普通派生 DWG 的布局/DST 不变量及 `detached` 归档成果要求。
+
 ## 2026-09-07（修复发布与恢复并发踩踏）
 
 - 修复用户连续编辑时第二次预览/打开工作区会对仍在发布的 journal 启动回滚、最终进入 `PUBLISH_RECOVERY_FAILED` 的问题：普通 `open_workspace()` 恢复为纯读取路径，发布恢复仅由服务启动流程负责。
