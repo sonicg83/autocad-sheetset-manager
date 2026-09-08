@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-012
 title: 图纸目录 XLSX 内置扩展设计规范
-status: review
+status: accepted
 document_kind: spec
 owners:
   - dst-manager
@@ -15,6 +15,7 @@ related:
   - SPEC-DM-009
   - SPEC-DM-010
   - GUIDE-DM-001
+  - PLAN-DM-020
 ---
 
 # 图纸目录 XLSX 内置扩展设计规范
@@ -251,9 +252,9 @@ escaped_brace   := "{{" | "}}"
 
 ### 7.4 G4 可操作 Demo
 
-[图纸目录交互 Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html)使用去敏虚构数据覆盖模板管理、字段插入、表达式编辑、兼容性提示、预览、空图纸集和模拟原生另存为。Demo 不调用真实 API、不创建 XLSX、不写模板数据库，也不登记 Artifact；具体差异和自动化预检证据见[图纸目录 G4 Demo 自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md)。
+[图纸目录交互 Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html)使用去敏虚构数据覆盖模板管理、字段插入、表达式编辑、兼容性提示、预览、空图纸集和模拟原生另存为。Demo 不调用真实 API、不创建 XLSX、不写模板数据库，也不登记 Artifact；具体差异和自动化预检证据见[图纸目录 G4 Demo 自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md)。冻结版本为 commit `9f3dfb3`，基准截图为 [`1440 × 1000` 浅色](assets/SPEC-DM-012/default-light-1440x1000.jpg)和[`900 × 700` 深色](assets/SPEC-DM-012/default-dark-900x700.jpg)。
 
-自动化预检不代替用户确认。用户实际操作并确认前，G4 保持“评审中”，本文保持 `review`。
+用户于 2026-09-09 确认认可 Demo，G4 已通过并冻结设计；冻结后如改变主流程、布局结构或关键状态，必须重新打开 G4。
 
 ## 8. 预览与执行接口
 
@@ -360,17 +361,20 @@ save_grant_id
 
 ## 14. 技术映射
 
-| 设计要求 | 当前基础 | 差距与建议落点 | 验证 |
-| --- | --- | --- | --- |
-| 扩展入口与启停 | 固定三标签外壳 | 新增宿主贡献映射和扩展注册表；不把逻辑继续堆入 `App.vue` | 注册表单测 + E2E |
-| 只读字段 | `WorkspaceResponse` 已含 number/title/layout/custom properties | 新增裁剪后的冻结快照，文件名只保留 basename | 快照单测 + 时间戳回归 |
-| 属性定义 | `property_definitions_from_document` | 复用大小写不敏感定义规则，按 sheetset/sheet 分组 | 领域表驱动测试 |
-| 模板 | 现有应用设置不含扩展设置 | 新建扩展命名空间仓储和工作区偏好 | 迁移 + 仓储单测 |
-| 表达式 | 无 | 新建独立纯函数解析、绑定和求值模块 | 语法/恶意输入单测 |
-| XLSX | 无相关依赖 | 新增 `openpyxl` 适配器，不放入领域层 | 回读验证 |
-| 保存位置 | ShellBridge 仅有打开/文件夹选择 | 新增固定 XLSX SAVE_DIALOG 和一次性授权存储 | 桥单测 + G9 |
-| Artifact | 无数据模型 | 新增宿主仓储；成功后登记，失败不登记成功记录 | 迁移 + 集成测试 |
-| 错误与 i18n | ARCH-DM-005 已定义稳定语义 | 新增扩展与目录错误 key | 契约/键一致性测试 |
+| 设计要求 | 当前实现 | 差距 | 数据/接口 | 修改位置 | 风险 | 验证方式 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 扩展入口与启停 | `TabBar.vue` 固定三标签；`App.vue` 已 683 行 | 缺宿主贡献映射、注册表和生命周期 | `GET /api/extensions`、`PATCH .../state` | 新建 `extensions/contracts.py`、`registry.py`、`builtin/index.py`；拆出前端扩展页映射，不继续扩张 `App.vue` | 停用时活动调用与未保存输入 | 注册表单测 + E2E |
+| 只读字段 | `WorkspaceResponse` 与领域 `Workspace` 已含 number/title/layout/custom properties/revision | HTTP 工作区响应包含的信息过宽，不能直接交给扩展 | `workspace.snapshot.read.v1` 冻结值对象 | 新建 `extensions/snapshots.py`、`capabilities.py` | Windows/Posix basename、路径泄漏、打开动作重复计算修订 | 快照表驱动测试 + DST/DWG 时间戳回归 |
+| 属性定义 | `property_definitions_from_document` 已合并声明和实际图纸属性并按 `casefold()` 规范化 | 需按 `sheetset`/`sheet` 输出目录并保留规范名称 | `FieldCatalog` | `extensions/snapshots.py` 复用领域函数，不复制规则 | 保留字段与同名自定义属性冲突 | 领域/应用单测 |
+| 模板与偏好 | SQLite 仅有通用 `application_settings`；设置中心文件存储不适合扩展业务 JSON | 缺隔离设置、乐观修订和工作区偏好 | settings/preferences GET/PUT | 新建 `extensions/settings.py`；迁移 `0006` 与独立仓储 | 旧 Schema、大小写重名、并发保存 | 迁移 + 仓储/接口测试 |
+| 表达式与预览 | 无通用模板执行器 | 缺受限 parser、绑定、求值、摘要和兼容性诊断 | preview action | `builtin/sheet_catalog/expressions.py`、`extension.py` | 恶意输入、未知字段、缺值统计、摘要漂移 | 表驱动单测 + 集成测试 |
+| XLSX | `pyproject.toml` 无 `openpyxl` | 缺生成与回读验证适配器 | 候选文件契约 | `builtin/sheet_catalog/workbook.py`；UV 增加锁定依赖 | 公式注入、前导零、超宽列、候选伪造 | `openpyxl` 回读测试 + 打包检查 |
+| 保存位置 | `ShellBridge` 已支持打开/文件夹选择，API 与桥在桌面进程内装配 | 缺固定 XLSX SAVE_DIALOG、一次性授权和宿主原子落盘 | `request_save_xlsx()`、`SaveGrantStore.consume()` | 新建 `extensions/save_grants.py`、`artifacts.py`；修改 `interfaces/shell.py` 与桌面装配 | 授权复用、路径/用途错配、目标漂移、失败残留 | 桥/授权/故障注入单测 + G9 |
+| Artifact | `database.py` 无成果模型且已 782 行 | 缺后台记录、查询和可用性派生；不应继续向大文件追加业务仓储 | `GET /api/artifacts/{id}` | 新建 `infrastructure/persistence/extensions.py`；迁移 `0006` 只放 ORM 表定义所需最小改动 | 文件后改动/删除、失败误登记 | 迁移 + 仓储/集成测试 |
+| API 与错误 | `api.py` 已 512 行且错误仅有 `code/message` | 缺统一扩展分派端点和结构化错误；不能由扩展自挂 router | §8 请求/响应、`message_key/params` | 新建 `interfaces/extension_api.py`、`extension_contracts.py`；`create_app` 仅装配 router | OpenAPI 类型漂移、状态码不一致 | API 契约 + `npm run check:api` |
+| 独立页面 | 已有共享主题、确认模态、toast、未保存对话框和标签键盘模型 | 缺目录页状态所有者、动态标签和保存桥客户端 | 编译期 `route_key -> Vue component` 映射 | 新建 `views/SheetCatalogView.vue`、`components/sheet-catalog/*`、`composables/useSheetCatalog.ts`；修改 `TabBar.vue`、`useShellTabs.ts`、`App.vue` 最小接线 | 50 列、200% 缩放、停用当前页、无桌面壳 | Playwright + G8 同状态截图 + G9 |
+
+完整代码核对、状态所有权、文件容量裁决与 Spike 结论见[技术映射记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-g5-technical-mapping.md)。当前没有阻断计划编制的未知高风险点；批次四须复用 ARCH-DM-005 的唯一 i18n 基础，不能另建局部翻译器。原生另存为、Excel 打开结果和覆盖/漂移行为仍按门禁保留为 G9 真实桌面验收，不以 mock 替代。
 
 ## 15. 测试与验收
 
@@ -425,11 +429,11 @@ npm run test:e2e
 | G1 业务目标 | 通过 | 本文 §2 | 用户 | 2026-09-09 | — |
 | G2 流程与状态 | 通过 | 本文 §3、§7.3、§10～§11 | 用户 | 2026-09-09 | — |
 | G3 视觉方向 | 通过 | 本文 §7.1；用户选择表达式模板方向 | 用户 | 2026-09-09 | — |
-| G4 Demo 与设计冻结 | 评审中 | [Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html) + [自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md) | 等待用户确认 | 2026-09-09 | 自动化预检已通过；用户操作确认后冻结设计 |
-| G5 技术映射 | 进行中 | 本文 §14 | 技术负责人 | 2026-09-09 | G4 后按冻结设计复核组件映射和必要 Spike |
-| G6 计划就绪 | 未开始 | — | — | — | G4/G5 与正式文档评审通过后建立追踪矩阵和 Plan |
+| G4 Demo 与设计冻结 | 通过 | [Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html) commit `9f3dfb3` + [截图](assets/SPEC-DM-012/) + [自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md) | 用户 | 2026-09-09 | 冻结后主流程、结构或关键状态变化须重开 G4 |
+| G5 技术映射 | 通过 | 本文 §14 + [技术映射记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-g5-technical-mapping.md) | 技术负责人（Agent） | 2026-09-09 | 原生另存为和 Excel 结果保留到 G9 真机验证 |
+| G6 计划就绪 | 通过 | [PLAN-DM-020](../../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（含追踪矩阵、四批次和 12 个任务） | 技术负责人（Agent） | 2026-09-09 | 等待选择执行方式后进入 G7 |
 | G7 分批实施 | 未开始 | — | — | — | 等待 Plan |
 | G8 设计 QA | 未开始 | — | — | — | 等待生产实现 |
 | G9 真实验收与关闭 | 未开始 | — | — | — | 等待打包后的 Windows 桌面壳验证 |
 
-在 G4、G5 和正式文档评审完成前，不得创建声称“计划就绪”的实施 Plan，也不得开始生产代码。
+G4～G6 已关闭。生产代码只能依据 PLAN-DM-020 分批进入 G7；若冻结设计或业务规则发生实质变化，先回到相应门禁更新 Spec 和追踪矩阵。

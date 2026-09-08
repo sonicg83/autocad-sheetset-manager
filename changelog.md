@@ -6,6 +6,9 @@
 - 新增 [SPEC-DM-012](docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md)（`review`）：定义独立“图纸目录”页面、应用级命名模板、`sheetset`/`sheet` 属性作用域、受限组合表达式、缺定义阻断/缺值警告、XLSX 文本输出和用户原生另存为流程；记录 G0～G3 已通过，G4 Demo 与设计冻结尚未开始。
 - 更新 PRD-DM-001 的关联文档和 DST Manager 导航状态；忽略可视化设计会话生成的 `.superpowers/` 本地目录，避免临时文件进入提交树。
 - 新增 SPEC-DM-012 图纸目录单文件交互 Demo，覆盖模板另存与切换保护、字段光标插入、缺定义阻断、缺值警告、空图纸集、浅深主题和模拟原生另存为；自动化 QA 已通过，G4 等待用户实际操作确认。
+- 用户确认认可图纸目录交互 Demo，冻结 commit `9f3dfb3` 及浅色桌面/深色最小视口截图，SPEC-DM-012 转为 `accepted`，G4 关闭。
+- 完成 SPEC-DM-012 G5 技术映射与风险复核，明确扩展注册表、冻结快照、隔离设置、受限表达式、XLSX、一次性保存授权、后台 Artifact、统一 API 和独立页面的现有落点；无须先行 Spike，原生另存为与 Excel 结果保留 G9 真机验收。
+- 新增 [PLAN-DM-020](.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（`proposed`），以四个可独立验证批次和 12 个 TDD 任务覆盖内置扩展平台及首个图纸目录 XLSX 扩展，SPEC-DM-012 G6 关闭；本阶段未修改生产代码。
 
 ## 2026-09-08（按审查接受 DST Manager 多语言支持架构）
 
