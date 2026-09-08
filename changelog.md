@@ -1,9 +1,14 @@
 # 变更记录
 
+## 2026-09-08（编制配置中心配置项增删改 SOP）
+
+- 新增 [GUIDE-DM-003](docs/dst-manager/guides/GUIDE-DM-003-settings-config-sop.md)（`review`）：基于 PLAN-DM-019 交付后的实际代码结构，沉淀配置项**新增 / 修改 / 移除**三套标准操作流程——前置判定决策树（凭据/启动期配置不进设置中心）、`config.py` 唯一权威 + `registry.py` 展示元数据的分工边界、完整性测试与 API 硬锚的同步要求、enum 文案 fail-fast 与 pywebview 过滤器格式陷阱、存量 `settings.json` 的自愈与 `schema_version` bump 判据（增删 key 不 bump）、Worker 冻结模式与九条反模式对照表。
+- 同步更新 DST Manager 文档入口索引。
+
 ## 2026-09-08（交付设置中心 PLAN-DM-019 批次 1–4）
 
 - 按 [PLAN-DM-019](.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)）交付设置中心全部 11 个实施任务：后端配置域四件套（`settings/store.py` 原子存储与四类诊断码、`registry.py` 展示元数据注册表、`resolver.py` 三层合并快照、`runtime.py` 保存事务与热替换）；API 三端点（`GET/PUT /api/settings`、`GET /api/about`，仅桌面壳装配注册）；Worker 任务级配置快照与 `jobs.lease_seconds` 按行租约回收（迁移 0005）；前端 `SettingsDialog.vue` 动态表单 + 来源标记/恢复继承/校验状态机/诊断横幅 + TopBar 齿轮入口（e2e 真实打后端）；打包触点（spec 随附 `LICENSE` 与 `pyproject.toml`）。
-- 关键裁决（台账见 [progress.md](.superpowers/sdd/PLAN-DM-019-settings-center/progress.md)）：①`/api/about` 版本查询发行名为 `autocad-sheetset`（`copy_metadata("dst-manager")` 不可行，改随包打入 `pyproject.toml` 走兜底链）；②`config.py` 增加 `populate_by_name=True` 使 alias 字段 init-kwargs 合并机制生效（env 通道行为不变）；③enum 选项文案以 `domain/editing.py` 真实序号语义为准（1=中文序号、2=数字序号）；④e2e 必须真实打后端（`schema.d.ts` 不覆盖设置端点契约），经 globalSetup 注入 `DST_MANAGER_SETTINGS_PATH` 启动真实服务。
+- 关键裁决（执行台账为 git-ignored 的 SDD 工作区草稿，未入库；裁决要点已由逐任务 commit message 与本记录留痕）：①`/api/about` 版本查询发行名为 `autocad-sheetset`（`copy_metadata("dst-manager")` 不可行，改随包打入 `pyproject.toml` 走兜底链）；②`config.py` 增加 `populate_by_name=True` 使 alias 字段 init-kwargs 合并机制生效（env 通道行为不变）；③enum 选项文案以 `domain/editing.py` 真实序号语义为准（1=中文序号、2=数字序号）；④e2e 必须真实打后端（`schema.d.ts` 不覆盖设置端点契约），经 globalSetup 注入 `DST_MANAGER_SETTINGS_PATH` 启动真实服务。
 - 验证（实际运行）：`uv run ruff check .` 全绿；`uv lock --check` 通过（Resolved 68 packages）；全量 `uv run pytest -q` **703 passed / 72 skipped / 0 failed**（775 项，junitxml 精确计数；含 0005 迁移 upgrade→downgrade→upgrade 往返单测）；`npm ci` + `npm run build` 通过（构建预检含全新库 alembic 迁移链至 0005、OpenAPI 契约一致性、vue-tsc）；`npx playwright test` 全量 **291 passed / 0 failed**（1.6m）。G8 截图比对与 G9 真实桌面验收（路径选择器真实弹窗、外链、frozen 版本/LICENSE、真实 CAD 任务生效等）未开始，见 PLAN-DM-019「实际验证」待办。
 
 ## 2026-09-08（立项设置中心实施计划 PLAN-DM-019）
