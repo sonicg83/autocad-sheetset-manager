@@ -114,6 +114,15 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
             value = str(raw) if raw is not None else None
         else:
             value = raw
+        # default 取 Settings 字段默认值（与 resolver._field_default 同规则），
+        # 不随 env/文件覆盖漂移——快照 settings 在降级分支才是纯默认构造
+        raw_default = Settings.model_fields[meta.key].get_default(call_default_factory=True)
+        if meta.control == "path":
+            default: bool | int | str | None = (
+                str(raw_default) if raw_default is not None else None
+            )
+        else:
+            default = raw_default
         source = snapshot.sources[meta.key]
         item = SettingsItemModel(
             key=meta.key,
@@ -121,6 +130,7 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
             category=meta.category,
             control=meta.control,
             value=value,
+            default=default,
             source=source.source,  # type: ignore[arg-type]
             has_file_override=source.has_file_override,
         )

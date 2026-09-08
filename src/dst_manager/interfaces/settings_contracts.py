@@ -55,6 +55,7 @@ class SettingsItemModel(ContractModel):
     category: str
     control: str
     value: bool | int | str | None
+    default: bool | int | str | None
     source: Literal["default", "env", "file"]
     has_file_override: bool
     nullable: bool | None = None

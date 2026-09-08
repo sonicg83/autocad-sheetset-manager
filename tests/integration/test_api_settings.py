@@ -11,6 +11,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from dst_manager.config import Settings
 from dst_manager.interfaces.api import create_app
 from dst_manager.settings.runtime import RuntimeSettings, default_store
 
@@ -53,6 +54,17 @@ def test_get_settings_returns_items_with_metadata(client_with_runtime) -> None:
     assert keys[0] == "autocad_2016_console" and len(keys) == 9  # REGISTRY 顺序稳定
     item = body["items"][4]
     assert item["label"] and item["category"] and item["source"] in ("default", "env", "file")
+
+
+def test_get_settings_items_carry_settings_defaults(client_with_runtime) -> None:
+    """每项含 default 且与 Settings 字段默认一致（ARCH-DM-004 §3 契约）。"""
+    body = client_with_runtime.get("/api/settings").json()
+    assert body["items"][4]["default"] == 600  # cad_timeout_seconds（REGISTRY 第 5 项）
+    for item in body["items"]:
+        expected = Settings.model_fields[item["key"]].get_default(call_default_factory=True)
+        if item["control"] == "path":
+            expected = str(expected) if expected is not None else None
+        assert item["default"] == expected, item["key"]
 
 
 def test_put_partial_update_does_not_freeze_env_values(client_with_runtime, monkeypatch) -> None:
