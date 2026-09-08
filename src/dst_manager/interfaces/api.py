@@ -1,11 +1,14 @@
 import asyncio
 import json
 import os
+import tomllib
 from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 from fastapi import FastAPI, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from dst_manager.application.service import ApplicationError, DstManagerService
@@ -41,6 +44,26 @@ from dst_manager.interfaces.responses import (
     XmlPreviewResponse,
 )
 from dst_manager.interfaces.serialization import workspace_json
+from dst_manager.interfaces.settings_contracts import (
+    AboutResponse,
+    EnumOptionModel,
+    LicenseInfo,
+    SettingsItemModel,
+    SettingsPutRequest,
+    SettingsResponse,
+)
+from dst_manager.settings.registry import REGISTRY, enum_options, min_max
+from dst_manager.settings.resolver import FieldSource, SettingsSnapshot
+from dst_manager.settings.runtime import (
+    RuntimeSettings,
+    SettingsConflict,
+    SettingsValidationError,
+)
+from dst_manager.settings.store import (
+    SCHEMA_VERSION,
+    SettingsSchemaNewer,
+    SettingsSchemaOlder,
+)
 
 from ..runtime import resource_dir
 
@@ -50,15 +73,125 @@ class OpenRequest(ContractModel):
     root_override: Path | None = None
 
 
+_APP_NAME = "DST Manager"
+_HOMEPAGE = "https://github.com/sonicg83/autocad-sheetset"
+
+
+def _app_version() -> str:
+    """应用版本：分发元数据优先，缺失时回退读 pyproject.toml。
+
+    frozen 态 pyproject.toml 不保证随包分发，全部来源不可得时容错返回
+    "版本未知" 字符串，绝不让 /api/about 因版本探测崩溃。
+    """
+    try:
+        # 发行名以 pyproject.toml [project].name 为准（autocad-sheetset），
+        # 而非 CLI/包目录名 dst-manager——后者永远查不到，主路径才是活代码
+        return package_version("autocad-sheetset")
+    except PackageNotFoundError:
+        pass
+    try:
+        with (resource_dir() / "pyproject.toml").open("rb") as handle:
+            return str(tomllib.load(handle)["project"]["version"])
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return "版本未知"
+
+
+def _license_text() -> str:
+    """LICENSE 全文：开发态读仓库根，frozen 态读 resource_dir()/LICENSE（任务 7 打包）。"""
+    try:
+        return (resource_dir() / "LICENSE").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
+    """快照按 REGISTRY 稳定顺序转响应模型；值经控件类型规整（Path → str|None）。"""
+    items: list[SettingsItemModel] = []
+    for meta in REGISTRY:
+        raw = getattr(snapshot.settings, meta.key)
+        value: bool | int | str | None
+        if meta.control == "path":
+            value = str(raw) if raw is not None else None
+        else:
+            value = raw
+        # default 取 Settings 字段默认值（与 resolver._field_default 同规则），
+        # 不随 env/文件覆盖漂移——快照 settings 在降级分支才是纯默认构造
+        raw_default = Settings.model_fields[meta.key].get_default(call_default_factory=True)
+        if meta.control == "path":
+            default: bool | int | str | None = (
+                str(raw_default) if raw_default is not None else None
+            )
+        else:
+            default = raw_default
+        source = snapshot.sources[meta.key]
+        item = SettingsItemModel(
+            key=meta.key,
+            label=meta.label,
+            category=meta.category,
+            control=meta.control,
+            value=value,
+            default=default,
+            source=source.source,  # type: ignore[arg-type]
+            has_file_override=source.has_file_override,
+        )
+        if meta.control == "path":
+            item.nullable = meta.nullable
+            item.file_filter = meta.file_filter
+        elif meta.control == "enum":
+            item.options = [
+                EnumOptionModel(**option) for option in enum_options(meta.key)
+            ]
+        else:  # int 控件：无 ge/le 约束的字段（cad_timeout_seconds）不设范围
+            try:
+                item.min, item.max = min_max(meta.key)
+            except ValueError:
+                pass
+        items.append(item)
+    return items
+
+
+def _settings_response(snapshot: SettingsSnapshot) -> SettingsResponse:
+    return SettingsResponse(
+        schema_version=SCHEMA_VERSION,
+        config_revision=snapshot.config_revision,
+        items=_settings_items(snapshot),
+        diagnostics=snapshot.diagnostics,
+        schema_blocked=snapshot.schema_blocked,
+    )
+
+
+def _schema_older_snapshot() -> SettingsSnapshot:
+    """schema 过旧的只读降级快照：忽略文件覆盖，按默认值与环境变量展示。
+
+    resolver 对 SettingsSchemaNewer 已内置降级；Older 本期无迁移器，由本端点
+    处置——原则是旧 Schema 文件绝不能经本程序写回（PUT 一律 409）。
+    """
+    return SettingsSnapshot(
+        settings=Settings(),
+        sources={meta.key: FieldSource("default", False) for meta in REGISTRY},
+        diagnostics=[
+            "SETTINGS_SCHEMA_OLDER",
+            "设置文件 schema 版本低于当前程序，已忽略文件覆盖并按默认值与环境变量只读展示",
+        ],
+        config_revision=0,
+        schema_blocked=True,
+    )
+
+
 def create_app(
     settings: Settings | None = None,
     on_workspace_opened: Callable[[object], None] | None = None,
+    runtime_settings: RuntimeSettings | None = None,
 ) -> FastAPI:
     """构建 FastAPI 应用。
 
     ``on_workspace_opened`` 是仅 Python 内部可选回调（默认 None，不改任何 HTTP
     契约）：工作区打开成功后被以服务端 Workspace 调用一次，供桌面壳登记可信
     当前上下文（PLAN-DM-015 任务 2）。
+
+    ``runtime_settings`` 是进程内设置快照持有者（PLAN-DM-019 任务 4）：由
+    ``run_desktop`` 构造一次同时供 API 与桌面服务共用；为 None 时（开发态
+    serve / 既有测试）不注册设置与关于端点，契约零变化。
     """
     app = FastAPI(title="DST Manager", version="0.3.0")
     service = DstManagerService(settings)
@@ -303,6 +436,71 @@ def create_app(
     )
     def read_layout_names(request: LayoutNamesRequest):
         return service.get_layout_names(request.file_path, request.cad_version)
+
+    if runtime_settings is not None:
+        # 设置中心与关于端点（PLAN-DM-019 任务 5）：仅注入 RuntimeSettings 时注册。
+        @app.get("/api/settings", response_model=SettingsResponse)
+        def get_settings():
+            try:
+                # 先按文件指纹刷新缓存：外部手编/其他窗口保存后 GET 不读陈旧快照；
+                # 文件被替换为旧 schema 时刷新本身即抛 SettingsSchemaOlder
+                runtime_settings.refresh_if_changed()
+                snapshot = runtime_settings.current()
+            except SettingsSchemaOlder:
+                snapshot = _schema_older_snapshot()
+            return _settings_response(snapshot)
+
+        @app.put("/api/settings", response_model=SettingsResponse)
+        def put_settings(request: SettingsPutRequest):
+            try:
+                # 与 GET 一致先按文件指纹刷新：进程启动后直接 PUT 时，
+                # 只读守卫不得建立在陈旧快照（schema_blocked=False）之上
+                runtime_settings.refresh_if_changed()
+                snapshot = runtime_settings.current()
+                if snapshot.schema_blocked:
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "code": "SETTINGS_SCHEMA_BLOCKED",
+                            "message": "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
+                        },
+                    )
+                snapshot = runtime_settings.apply_changes(
+                    request.set, request.unset, request.expected_revision
+                )
+            except SettingsSchemaNewer:
+                # 刷新与 apply_changes 落盘之间文件被替换为新 Schema 的竞态：拒绝写回
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "code": "SETTINGS_SCHEMA_BLOCKED",
+                        "message": "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
+                    },
+                )
+            except SettingsSchemaOlder:
+                # current() 未触发的竞态（读后文件被替换为旧 schema）同样拒绝写回
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "code": "SETTINGS_SCHEMA_OLDER",
+                        "message": "设置文件 schema 版本低于当前程序，已进入只读模式，不能保存",
+                    },
+                )
+            except SettingsConflict as exc:
+                return JSONResponse(status_code=409, content={"code": "SETTINGS_CONFLICT", "message": str(exc)})
+            except SettingsValidationError as exc:
+                return JSONResponse(status_code=422, content={"errors": exc.errors})
+            return _settings_response(snapshot)
+
+        @app.get("/api/about", response_model=AboutResponse)
+        def about():
+            return AboutResponse(
+                app_name=_APP_NAME,
+                version=_app_version(),
+                license=LicenseInfo(spdx="MIT", text=_license_text()),
+                homepage=_HOMEPAGE,
+                feedback_url=f"{_HOMEPAGE}/issues",
+            )
 
     web_dist = resource_dir() / "web" / "dist"
     if web_dist.is_dir():

@@ -26,6 +26,7 @@ import {useConfirm} from "./composables/useConfirm";
 import {useToast} from "./composables/useToast";
 import ConfirmModal from "./components/ui/ConfirmModal.vue";
 import ToastHost from "./components/ui/ToastHost.vue";
+import SettingsDialog from "./components/settings/SettingsDialog.vue";
 import TopBar from "./layout/TopBar.vue";
 import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
@@ -66,6 +67,8 @@ const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
 function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
 // 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转仅放行合法页签后复用 openOverlay
 const {toasts,pushToast,dismiss}=useToast();
+// 设置中心（PLAN-DM-019 任务 10/11）：入口在 TopBar 齿轮；toast 复用宿主 useToast
+const settingsOpen=ref(false);
 function jumpOverlay(tab:string){if(tab==="prog"||tab==="prev"||tab==="diag")openOverlay(tab)}
 // 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
 const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurrentJobGeneration}=useJobMonitor({
@@ -271,6 +274,8 @@ async function openFolder(){
 const DST_EXT=/\.dst$/i;
 const DROP_CALLBACK_ID="__dstManagerAcceptDst";
 async function acceptDstPath(path:string){
+  // 设置对话框打开时丢弃壳侧 document 级 drop 回调（SC-14 双保险：对话框已 stop 冒泡）
+  if(settingsOpen.value)return;
   if(workspace.value){error.value="请先关闭当前工作区，再打开新的 DST 文件";return}
   if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
   await openByPath(path);
@@ -643,7 +648,7 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" />
+  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" @open-settings="settingsOpen=true" />
   <div class="shell-body">
     <main class="shell-main" :class="{'sheets-active': Boolean(workspace) && active === 'sheets'}">
       <p v-if="error" class="error notice">{{error}}</p>
@@ -664,6 +669,7 @@ useHotkeys({
   </div>
   <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
+  <SettingsDialog :open="settingsOpen" :push-toast="pushToast" @close="settingsOpen=false" />
   <!-- 唯一共享三选一模态：图纸页与属性页 guard 顺序开合同一实例，状态取当前打开者 -->
   <UnsavedInputDialog v-bind="sharedGuardState" @save-and-continue="resolveSharedGuard('save')" @discard="resolveSharedGuard('discard')" @stay="resolveSharedGuard('stay')" />
   <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />

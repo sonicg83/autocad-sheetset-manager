@@ -14,6 +14,11 @@ a = Analysis(
     datas=[
         ("..\\web\\dist", "web/dist"),
         ("..\\alembic.ini", "."),
+        # 设置中心 /api/about：frozen 态读 resource_dir 根的 LICENSE 全文与 pyproject.toml 版本兜底
+        # （api._license_text / _app_version；发行名实为 autocad-sheetset，importlib.metadata 查 dst-manager
+        # 必然 miss，故版本读取依赖 pyproject.toml 兜底，不能走 copy_metadata("dst-manager")）
+        ("..\\LICENSE", "."),
+        ("..\\pyproject.toml", "."),
         ("..\\migrations", "migrations"),
         # 严格后置校验 XSD（contract._load_schema 经 __file__ 定位）：frozen 态必须随包打入
         ("..\\src\\dst_manager\\infrastructure\\acsm_xml\\schema", "dst_manager/infrastructure/acsm_xml/schema"),

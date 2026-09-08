@@ -4,7 +4,7 @@ import {useTheme} from "../composables/useTheme";
 // 主题按钮迁入顶栏：useTheme 为模块级单例，TopBar 与 App.vue 共享同一主题状态
 const {theme,toggleTheme}=useTheme();
 const props=defineProps<{sheetSetName:string;dstPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean;hasShell?:boolean;workspaceId?:string}>();
-defineEmits<{"update:cadVersion":[value:string];close:[];"open-folder":[]}>();
+defineEmits<{"update:cadVersion":[value:string];close:[];"open-folder":[];"open-settings":[]}>();
 function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
 // 状态胶囊中文三态映射（枚举不进用户文案，与 RepairStatusPanel/App.vue dock 文案一致风格）
 function statusLabel(status:string){
@@ -28,6 +28,8 @@ const folderTitle=computed(()=>folderDisabled.value?"桌面壳未就绪，无法
     <label class="cad-version">AutoCAD 版本<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
     <button v-if="workspaceId" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
     <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
+    <!-- 设置中心入口（SPEC-DM-011 SC-01）：常驻，未加载工作区同样可用；焦点归还由对话框负责 -->
+    <button type="button" class="settings-btn" aria-label="设置" aria-haspopup="dialog" title="设置" @click="$emit('open-settings')">⚙ 设置</button>
   </header>
 </template>
 <style scoped>
@@ -52,6 +54,8 @@ const folderTitle=computed(()=>folderDisabled.value?"桌面壳未就绪，无法
 .iconbtn{width:32px;height:32px;padding:0;flex:0 0 32px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:15px}
 .iconbtn:hover:not(:disabled){background:var(--color-bg-muted)}
 .iconbtn:disabled{cursor:not-allowed;opacity:.5}
+.settings-btn{height:32px;padding:0 var(--space-3);flex:none;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:13px;white-space:nowrap}
+.settings-btn:hover{background:var(--color-bg-muted)}
 @media (max-width:1120px){.topbar{gap:var(--space-2)}.brand-sub{display:none}.workspace-name{max-width:180px}}
 @media (max-width:900px){.pill{display:none}.workspace-name{max-width:130px}.folder-btn{padding:0 var(--space-2)}}
 </style>

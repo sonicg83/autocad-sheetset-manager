@@ -4,6 +4,8 @@
 
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
+2026-09-08 交付 [设置中心（PLAN-DM-019，active；自动化验证 703 passed / 72 skipped、e2e 291 passed，G8 截图比对与 G9 真实桌面验收待进行）](../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](architecture/ARCH-DM-004-settings-center.md)）：顶部齿轮入口 + 模态对话框，未加载 DST 即可配置 9 个应用配置项（`settings.json` 只存显式覆盖值、保存即时生效并跨 API/Worker 进程传播）并查看关于页（版本/MIT 协议/外链）。
+
 2026-09-07 完成 [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证 638 passed / 72 skipped，真实桌面双开冒烟待用户复验）](../../.planning/plans/dst-manager/PLAN-DM-018-desktop-single-instance.md)：同一会话只允许一个壳进程，第二个实例弹置顶告警框并在用户确认后把既有窗口还原置前（命名互斥量 + Win32 前台唤起，仅限 `desktop` 入口，不涉及 API 契约与 Worker 链路）。
 
 2026-09-05 完成 [图纸页单表工作区实施计划（PLAN-DM-015，状态 `active`）](../../.planning/plans/dst-manager/PLAN-DM-015-sheets-workspace-ui.md) 的功能实施（依据已接受的 [SPEC-DM-009](specs/SPEC-DM-009-sheets-workspace-ui.md)）：图纸页已具备左树右唯一主表、统一范围导航、显示列配置、分页缓冲编辑、参照插入、批量/删除/草稿联动及视口/可访问性回归。用户随后在真实桌面复验中确认并推动关闭 S-07 的系统性视觉差距，包括编辑与列表卡片层级、控件样式、表格分层和交互态、导航拖拽后的列重叠，以及任务浮层挤压主内容；SPEC-DM-006/SPEC-DM-009 已于同日修订，[视觉收敛整改计划（PLAN-DM-017，completed；用户真实桌面复验通过）](../../.planning/plans/dst-manager/PLAN-DM-017-sheets-visual-convergence.md) 已完成。PLAN-DM-015 仅因 S-09 真实 Explorer 验收尚未完成而继续保持 `active`；SPEC-DM-010 已接受（实施计划 PLAN-DM-016）。
@@ -44,7 +46,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [v0.3.2 命名与模板流程需求变更规范（SPEC-DM-008，已接受）](specs/SPEC-DM-008-v032-naming-and-template-flows.md)
 - [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015，视觉整改 PLAN-DM-017）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，已接受；实施计划 PLAN-DM-016）](specs/SPEC-DM-010-properties-workspace-ui.md)
-- [设置中心 UI 设计规范（SPEC-DM-011，草稿；依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
+- [设置中心 UI 设计规范（SPEC-DM-011，草稿；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
 
 ## 指南
 

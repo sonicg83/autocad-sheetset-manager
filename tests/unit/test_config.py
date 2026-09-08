@@ -34,6 +34,14 @@ def test_suffix_settings_reject_loose_boolean_strings(monkeypatch, value: str):
         Settings(_env_file=None)
 
 
+def test_alias_fields_accept_field_name_kwargs():
+    """设置中心以 registry 字段名（snake_case）构造覆盖项：validation_alias 只服务
+    .env/环境变量通道，populate_by_name 必须让字段名入口同时可用。"""
+    settings = Settings(_env_file=None, enable_add_number_suffix=False, number_suffix_type=2)
+    assert settings.enable_add_number_suffix is False
+    assert settings.number_suffix_type == 2
+
+
 def test_cad_paths_resolve_relative_to_absolute(monkeypatch, tmp_path):
     """accoreconsole 子进程内 NETLOAD 按自身工作目录解析相对 DLL 路径，Python 侧 is_file
     （相对项目根）会通过但加载失败：Settings 必须把 CAD 路径统一规范化为绝对路径。"""

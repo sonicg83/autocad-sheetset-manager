@@ -332,7 +332,7 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
     assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0004_dm007_layout_name_cache"
+    assert revision == "0005_dm019_job_lease_seconds"
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
@@ -523,3 +523,33 @@ def test_fresh_upgrade_includes_layout_name_cache(tmp_path: Path):
             "SELECT name FROM sqlite_master WHERE type='table' AND name='layout_name_cache'"
         ).fetchall()
     assert rows, "layout_name_cache 表应存在"
+
+
+def test_job_lease_seconds_migration_round_trip(tmp_path: Path):
+    """0005 升级→降级→再升级往返：jobs.lease_seconds 随迁移出现/消失。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from dst_manager.runtime import resource_dir
+
+    path = tmp_path / "roundtrip.sqlite"
+    url = f"sqlite:///{path.as_posix()}"
+
+    def alembic_config() -> Config:
+        config = Config(str(resource_dir() / "alembic.ini"))
+        config.set_main_option("script_location", str(resource_dir() / "migrations"))
+        config.set_main_option("sqlalchemy.url", url)
+        return config
+
+    def job_columns() -> set[str]:
+        with sqlite3.connect(path) as connection:
+            return {row[1] for row in connection.execute("PRAGMA table_info(jobs)").fetchall()}
+
+    command.upgrade(alembic_config(), "head")
+    assert "lease_seconds" in job_columns()
+
+    command.downgrade(alembic_config(), "-1")
+    assert "lease_seconds" not in job_columns()
+
+    command.upgrade(alembic_config(), "head")
+    assert "lease_seconds" in job_columns()
