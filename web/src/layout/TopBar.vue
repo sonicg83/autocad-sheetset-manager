@@ -29,7 +29,7 @@ const folderTitle=computed(()=>folderDisabled.value?"桌面壳未就绪，无法
     <button v-if="workspaceId" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
     <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
     <!-- 设置中心入口（SPEC-DM-011 SC-01）：常驻，未加载工作区同样可用；焦点归还由对话框负责 -->
-    <button type="button" class="settings-btn" aria-label="设置" title="设置" @click="$emit('open-settings')">⚙ 设置</button>
+    <button type="button" class="settings-btn" aria-label="设置" aria-haspopup="dialog" title="设置" @click="$emit('open-settings')">⚙ 设置</button>
   </header>
 </template>
 <style scoped>
