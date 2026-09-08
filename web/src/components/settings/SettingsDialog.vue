@@ -134,9 +134,14 @@ function onUpdate(key:string,value:SettingsValue){
 }
 function onClear(key:string){onUpdate(key,null)} // nullable path 清除=写 null
 function onUnset(key:string){
-  pendingUnset.value=pendingUnset.value.includes(key)
-    ?pendingUnset.value.filter(item=>item!==key)
-    :[...pendingUnset.value,key];
+  if(pendingUnset.value.includes(key)){
+    pendingUnset.value=pendingUnset.value.filter(item=>item!==key);
+    return;
+  }
+  // 标记恢复继承时丢弃同键编辑缓冲：与 onUpdate 移除 pendingUnset 对称，
+  // 避免 set+unset 同键提交（后端 unset 生效会静默丢弃用户编辑）
+  delete edits.value[key];
+  pendingUnset.value=[...pendingUnset.value,key];
 }
 async function onBrowse(key:string){
   const item=items.value.find(entry=>entry.key===key);
@@ -239,7 +244,9 @@ const browseDisabled=computed(()=>{
 });
 </script>
 <template>
-  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onCancel" @click="onBackdropClick">
+  <!-- dragover/drop 就地拦截并阻止冒泡：壳侧 drop 监听挂 document（shell.py），
+       showModal 只挡命中测试不挡事件冒泡，不 stop 会在对话框背后打开工作区（SC-14） -->
+  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onCancel" @click="onBackdropClick" @dragover.prevent.stop @drop.prevent.stop>
     <div class="dlg">
       <div class="dlg-head">
         <h2 id="settings-title">设置</h2>

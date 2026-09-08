@@ -15,14 +15,18 @@ test("修改→保存→重开对话框值保留且来源变为用户覆盖", as
   await openSettingsDialog(page);
   const timeout = page.locator(TIMEOUT_INPUT);
   await timeout.fill("900");
+  // cad_max_parallel 属 SC-13 条件提示键集：本次保存须追加"相关预览将按新配置重算"
+  await page.locator('input[data-key="cad_max_parallel"]').fill("6");
   await page.getByRole("button", {name: "保存"}).click();
   await expect(page.getByText("已保存").first()).toBeVisible();
+  await expect(page.getByText("相关预览将按新配置重算")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", {name: "设置"}).click();
   await expectDialog(page);
   await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("900");
   const row = page.locator(TIMEOUT_INPUT).locator("..");
   await expect(row).toContainText("用户覆盖");
+  await expect(page.locator('input[data-key="cad_max_parallel"]')).toHaveValue("6");
 });
 
 test("数字超范围显示行内错误且保存禁用", async ({page}) => {
@@ -45,7 +49,10 @@ test("恢复继承：随下一次保存提交 unset 并回到默认", async ({pa
   // 上一用例已把 cad_timeout_seconds 存为用户覆盖（900）
   const row = page.locator(TIMEOUT_ROW);
   await expect(row).toContainText("用户覆盖");
+  // 先编辑再恢复继承：编辑缓冲被丢弃（不与 unset 同键提交，用户编辑不静默混入本次保存）
+  await page.locator(TIMEOUT_INPUT).fill("999");
   await row.getByRole("button", {name: "恢复继承"}).click();
+  await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("900");
   // 契约语义：点击不落盘，标记随下次保存提交
   await row.getByRole("button", {name: "撤销恢复继承"}).click();
   await row.getByRole("button", {name: "恢复继承"}).click();
@@ -140,19 +147,23 @@ test("对话框打开时拖放不穿透遮罩（SC-14）", async ({page}) => {
   await page.goto("/");
   await openSettingsDialog(page);
   const info = await page.evaluate(() => {
-    const target = document.elementFromPoint(120, 360) as Element | null;
+    // 壳侧 drop 监听挂 document（shell.py）：在 document 挂 spy，断言对话框
+    // 子树内的 drop 被 stop 后不再冒泡到 document（浏览器内可验证的部分）
+    (window as unknown as Record<string, number>).__documentDropSeen = 0;
+    document.addEventListener("drop", () => {(window as unknown as Record<string, number>).__documentDropSeen += 1;});
+    const dialog = document.querySelector("dialog")!;
     const data = new DataTransfer();
     data.setData("text/plain", "C:\\project\\drop.dst");
-    target?.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer: data}));
-    // 顶层对话框拦截命中测试：坐标点上的元素必须位于对话框子树内
-    const dialog = document.querySelector("dialog");
-    return {
-      inDialog: target instanceof Element && dialog !== null && dialog.contains(target),
-      dialogOpen: dialog !== null && dialog.open,
-    };
+    // 1) 命中测试：遮罩打开时坐标点上的元素必须位于顶层对话框子树内
+    const target = document.elementFromPoint(120, 360) as Element | null;
+    const inDialog = target instanceof Element && dialog.contains(target);
+    // 2) 对话框子树内派发 drop：不冒泡出 dialog（stop），document spy 不得收到
+    dialog.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer: data}));
+    return {inDialog, dialogOpen: dialog.open, documentDropSeen: (window as unknown as Record<string, number>).__documentDropSeen};
   });
   expect(info.inDialog).toBe(true);
   expect(info.dialogOpen).toBe(true);
+  expect(info.documentDropSeen).toBe(0);
   // 底层页面状态不变：无错误提示、欢迎区未被拖入路径扰动
   await expect(page.locator(".error.notice")).toBeHidden();
   await expect(page.getByRole("region", {name: "打开图纸集"})).toBeVisible();

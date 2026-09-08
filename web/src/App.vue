@@ -274,6 +274,8 @@ async function openFolder(){
 const DST_EXT=/\.dst$/i;
 const DROP_CALLBACK_ID="__dstManagerAcceptDst";
 async function acceptDstPath(path:string){
+  // 设置对话框打开时丢弃壳侧 document 级 drop 回调（SC-14 双保险：对话框已 stop 冒泡）
+  if(settingsOpen.value)return;
   if(workspace.value){error.value="请先关闭当前工作区，再打开新的 DST 文件";return}
   if(!DST_EXT.test(path)){error.value="仅支持 DST 文件";return}
   await openByPath(path);
