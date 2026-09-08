@@ -52,7 +52,10 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = Field(default=120, ge=30, le=3600)
     enable_add_number_suffix: bool = Field(default=True, validation_alias="EnableAddNumberSuffix")
     number_suffix_type: Literal[1, 2] = Field(default=1, validation_alias="NumberSuffixType")
-    model_config = SettingsConfigDict(env_prefix="DST_MANAGER_", env_file=".env")
+    # populate_by_name：设置中心以 registry 字段名（snake_case）构造覆盖项，而
+    # enable_add_number_suffix/number_suffix_type 的 validation_alias 仅服务
+    # .env/环境变量通道——两个入口必须同时可用（.env 仍用别名键，行为不变）
+    model_config = SettingsConfigDict(env_prefix="DST_MANAGER_", env_file=".env", populate_by_name=True)
 
     @field_validator("enable_add_number_suffix", mode="before")
     @classmethod
