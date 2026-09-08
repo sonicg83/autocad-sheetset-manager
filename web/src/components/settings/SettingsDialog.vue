@@ -8,7 +8,7 @@ import {computed,nextTick,ref,watch} from "vue";
 import {ApiError} from "../../api/client";
 import {fetchAbout} from "../../api/settings";
 import type {AboutInfo,SettingsItem,SettingsValue} from "../../api/settings";
-import {getShellBridge,selectSettingsPath,shellReady} from "../../api/shell";
+import {getShellBridge,openExternalLink,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
 import ConfirmModal from "../ui/ConfirmModal.vue";
@@ -227,12 +227,22 @@ async function showAbout(){
     aboutFailed.value=true;
   }
 }
-function openExternal(url:string){
-  // 本期范围：浏览器开发态 window.open；桌面壳外链增强登记在 Task 12，不在对话框加桥方法
+async function openExternal(url:string){
+  // SC-11：url 来自 GET /api/about 的后端登记值（api.py _HOMEPAGE 常量），前端不传任意字符串；
+  // 壳侧 open_external 再按代码内白名单二次校验（github.com/sonicg83 前缀），拒绝结果不经 WebView 导航。
   if(getShellBridge()){
-    props.pushToast({type:"ok",title:"外部链接",body:"桌面版暂不支持在系统浏览器打开链接，请复制地址访问"});
+    const opened=await openExternalLink(url);
+    if(opened===true){
+      props.pushToast({type:"ok",title:"外部链接",body:"已在系统浏览器打开"});
+    }else if(opened===false){
+      props.pushToast({type:"fail",title:"外部链接",body:"仅允许打开登记的 https 链接"});
+    }else{
+      // 旧壳缺 open_external 方法：维持降级提示
+      props.pushToast({type:"ok",title:"外部链接",body:"桌面版暂不支持在系统浏览器打开链接，请复制地址访问"});
+    }
     return;
   }
+  // 浏览器开发态（无桥）：维持 window.open（e2e 依赖此路径断言 popup URL）
   window.open(url,"_blank","noopener");
 }
 

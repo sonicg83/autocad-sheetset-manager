@@ -31,6 +31,9 @@ export interface SheetShellBridge {
   load_sheet_columns(workspace_id:string):Promise<ShellResult<ColumnPreferences|null>>;
   save_sheet_columns(workspace_id:string,preferences:ColumnPreferences):Promise<ShellResult<null>>;
   clear_workspace_context(workspace_id:string):Promise<ShellResult<null>>;
+  // SC-11（SPEC-DM-011 §4 / ARCH-DM-004 §4.2）：外链经系统浏览器打开；
+  // url 只能是 GET /api/about 返回的后端登记值，桥侧再按代码内白名单二次校验
+  open_external(url:string):Promise<ShellResult<null>>;
 }
 
 // 旧/部分桥可能只暴露 select_file/on_files_dropped：新方法缺失时返回 null，
@@ -70,4 +73,15 @@ export async function selectSettingsPath(filter:"exe"|"dll"|"folder"):Promise<st
   }
   if(typeof bridge.select_file!=="function")return undefined;
   return bridge.select_file(filter==="exe"?EXE_FILE_FILTERS:DLL_FILE_FILTERS);
+}
+
+// ---- PLAN-DM-019 修复波：SC-11 外链经系统默认浏览器打开 ----
+// 三态语义：undefined = 桥或 open_external 方法缺失（浏览器开发态/旧壳，调用方走 window.open 回退）；
+// true = 壳已交给系统默认浏览器；false = 桥侧白名单校验拒绝（SHELL_EXTERNAL_URL_REJECTED）。
+// url 必须来自 GET /api/about 的后端登记值，前端不得传任意字符串。
+export async function openExternalLink(url:string):Promise<boolean|undefined>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.open_external!=="function")return undefined;
+  const result=await bridge.open_external(url);
+  return result.ok===true?true:false;
 }

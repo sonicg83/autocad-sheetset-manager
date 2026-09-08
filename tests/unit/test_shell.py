@@ -294,3 +294,49 @@ def test_enable_native_downloads_allows_anchor_download():
         assert webview.settings["ALLOW_DOWNLOADS"] is True
     finally:
         webview.settings["ALLOW_DOWNLOADS"] = original
+
+
+# ---- SC-11：外链经系统浏览器打开（SPEC-DM-011 §4 / ARCH-DM-004 §4.2） ----
+
+
+def test_open_external_opens_allowlisted_https_url(monkeypatch):
+    """白名单内 https 地址（后端 /api/about 登记值）经 webbrowser.open 打开。"""
+    opened: list[str] = []
+    monkeypatch.setattr("dst_manager.interfaces.shell.webbrowser.open", opened.append)
+    bridge = ShellBridge()
+    result = bridge.open_external("https://github.com/sonicg83/autocad-sheetset/issues")
+    assert result == {"ok": True, "value": None}
+    assert opened == ["https://github.com/sonicg83/autocad-sheetset/issues"]
+
+
+def test_open_external_rejects_http_scheme(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr("dst_manager.interfaces.shell.webbrowser.open", opened.append)
+    result = ShellBridge().open_external("http://github.com/sonicg83/autocad-sheetset")
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_EXTERNAL_URL_REJECTED"
+    assert opened == []
+
+
+def test_open_external_rejects_non_allowlisted_host(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr("dst_manager.interfaces.shell.webbrowser.open", opened.append)
+    bridge = ShellBridge()
+    for url in (
+        "https://example.com/sonicg83/autocad-sheetset",  # 非 github.com 域
+        "https://github.com/other-account/autocad-sheetset",  # 域内但非登记路径前缀
+        "https://github.com.evil.com/sonicg83/autocad-sheetset",  # 伪装后缀域
+    ):
+        result = bridge.open_external(url)
+        assert result["ok"] is False and result["code"] == "SHELL_EXTERNAL_URL_REJECTED"
+    assert opened == []
+
+
+def test_open_external_rejects_non_string_input():
+    """前端只应传 /api/about 登记值；非字符串（含 None）一律拒绝而非抛异常。"""
+    bridge = ShellBridge()
+    for bad in (None, 123, ["https://github.com/sonicg83"]):
+        result = bridge.open_external(bad)  # type: ignore[arg-type]
+        assert result["ok"] is False
+        assert result["code"] == "SHELL_EXTERNAL_URL_REJECTED"
+        assert result["message"] == "仅允许打开登记的 https 链接"

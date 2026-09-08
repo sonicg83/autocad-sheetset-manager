@@ -11,7 +11,9 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import uvicorn
 import webview
@@ -27,6 +29,13 @@ from ..infrastructure.sheet_preferences import (
 from ..runtime import is_frozen
 from ..settings.runtime import RuntimeSettings, default_store
 from .api import create_app
+
+# SC-11 外链白名单（SPEC-DM-011 §4 / ARCH-DM-004 §4.2）：硬编码登记，不做任意放宽。
+# 仅允许项目主页/反馈所在的 github.com 域、sonicg83 账号路径下的 https 地址；
+# 运行值来自 GET /api/about 的后端登记常量（api.py _HOMEPAGE），前端不传任意字符串。
+_EXTERNAL_URL_SCHEME = "https"
+_EXTERNAL_URL_HOST = "github.com"
+_EXTERNAL_URL_PATH_PREFIX = "/sonicg83"
 
 
 class ShellBridge:
@@ -136,6 +145,45 @@ class ShellBridge:
                 "code": "SHELL_WORKSPACE_UNAVAILABLE",
                 "message": "当前没有匹配的已打开工作区上下文",
             }
+        return {"ok": True, "value": None}
+
+    def open_external(self, url: str) -> dict:
+        """经系统默认浏览器打开登记的 https 外链（SPEC-DM-011 SC-11），不经 WebView 导航。
+
+        只接受代码内白名单（github.com 域、/sonicg83 路径前缀）的 https 地址；
+        返回模式与 open_workspace_folder 等桥方法一致：{ok:true;value} / {ok:false;code;message}。
+        本方法不触碰 webview 窗口，无需窗口就绪守卫；打开失败对齐 open_workspace_folder
+        回 SHELL_OPEN_FAILED。
+        """
+        if not isinstance(url, str):
+            return {
+                "ok": False,
+                "code": "SHELL_EXTERNAL_URL_REJECTED",
+                "message": "仅允许打开登记的 https 链接",
+            }
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            return {
+                "ok": False,
+                "code": "SHELL_EXTERNAL_URL_REJECTED",
+                "message": "仅允许打开登记的 https 链接",
+            }
+        path = parts.path or ""
+        if (
+            parts.scheme != _EXTERNAL_URL_SCHEME
+            or parts.netloc != _EXTERNAL_URL_HOST
+            or not (path == _EXTERNAL_URL_PATH_PREFIX or path.startswith(f"{_EXTERNAL_URL_PATH_PREFIX}/"))
+        ):
+            return {
+                "ok": False,
+                "code": "SHELL_EXTERNAL_URL_REJECTED",
+                "message": "仅允许打开登记的 https 链接",
+            }
+        try:
+            webbrowser.open(url)
+        except OSError as exc:
+            return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
         return {"ok": True, "value": None}
 
     def select_file(self, file_types: list[str]) -> str | None:
