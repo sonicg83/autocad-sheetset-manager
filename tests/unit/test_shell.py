@@ -77,6 +77,32 @@ def test_shell_bridge_select_file_returns_none_when_cancelled():
     assert bridge.select_file(["DST 文件|*.dst"]) is None
 
 
+def test_select_folder_requires_window():
+    bridge = ShellBridge()
+    with pytest.raises(RuntimeError):
+        bridge.select_folder()  # 未绑定窗口时给出明确错误而非 AttributeError
+
+
+def test_select_folder_uses_folder_dialog():
+    import webview
+
+    class _FakeWindow:
+        def __init__(self, result):
+            self._result = result
+            self.calls = []
+
+        def create_file_dialog(self, dialog_type, allow_multiple=False, file_types=None):
+            self.calls.append((dialog_type, allow_multiple, file_types))
+            return self._result
+
+    fake = _FakeWindow(["C:\\work\\settings"])
+    bridge = ShellBridge()
+    bridge.bind(fake)
+    assert bridge.select_folder() == "C:\\work\\settings"
+    assert fake.calls[0][0] == webview.FOLDER_DIALOG  # 必须是文件夹对话框而非文件对话框
+    assert fake.calls[0][1] is False
+
+
 def test_shell_bridge_on_files_dropped_requires_window():
     bridge = ShellBridge()
     with pytest.raises(RuntimeError):

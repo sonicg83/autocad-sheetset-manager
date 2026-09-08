@@ -1,7 +1,7 @@
 import {ref} from "vue";
 import type {ColumnPreferences} from "../features/sheets/types";
 
-type ShellBridge={select_file(fileTypes:string[]):Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>} & Partial<SheetShellBridge>;
+type ShellBridge={select_file(fileTypes:string[]):Promise<string|null>;select_folder():Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>} & Partial<SheetShellBridge>;
 
 export function getShellBridge():ShellBridge|null{
   const api=(window as unknown as {pywebview?:{api?:ShellBridge}}).pywebview?.api;
@@ -18,6 +18,10 @@ window.addEventListener("pywebviewready",()=>{shellReady.value=true},{once:true}
 // "DWG/DWT" 这类含斜杠的描述同样会在对话框弹出前抛 ValueError（守卫见 tests/unit/test_shell.py）
 export const DST_FILE_FILTERS=["DST 文件 (*.dst)"];
 export const TEMPLATE_FILE_FILTERS=["DWG DWT 文件 (*.dwg;*.dwt)"];
+// 设置中心"浏览"按钮过滤器（PLAN-DM-019 任务 8）。描述部分必须通过 pywebview parse_file_type
+// 的 [\w ]+ 校验：".NET" 的前导点不合法，会在对话框弹出前抛 ValueError，故写作 "NET 程序集"。
+export const EXE_FILE_FILTERS=["可执行程序 (*.exe)"];
+export const DLL_FILE_FILTERS=["NET 程序集 (*.dll)"];
 
 // ---- PLAN-DM-015 任务 2：可信上下文与列偏好桥（PLAN-DM-015 接口，不进业务 OpenAPI） ----
 // workspace_id 只用于服务端匹配，路径一律由服务端可信上下文提供，前端不传任何路径/命令。
@@ -50,4 +54,20 @@ export async function clearWorkspaceContext(workspaceId:string):Promise<ShellRes
   const bridge=getShellBridge();
   if(!bridge||typeof bridge.clear_workspace_context!=="function")return null;
   return bridge.clear_workspace_context(workspaceId);
+}
+
+// ---- PLAN-DM-019 任务 8：设置中心"浏览"按钮统一封装 ----
+// 三态语义（Task 10 消费方依赖，不得走样）：
+// - undefined = 桥不可用或 select_file/select_folder 方法缺失（浏览器开发态/旧壳）→ 调用方禁用"浏览"按钮；
+// - null      = 用户取消对话框；
+// - string    = 用户选中的路径。
+export async function selectSettingsPath(filter:"exe"|"dll"|"folder"):Promise<string|null|undefined>{
+  const bridge=getShellBridge();
+  if(!bridge)return undefined;
+  if(filter==="folder"){
+    if(typeof bridge.select_folder!=="function")return undefined;
+    return bridge.select_folder();
+  }
+  if(typeof bridge.select_file!=="function")return undefined;
+  return bridge.select_file(filter==="exe"?EXE_FILE_FILTERS:DLL_FILE_FILTERS);
 }

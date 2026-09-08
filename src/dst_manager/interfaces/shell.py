@@ -146,6 +146,13 @@ class ShellBridge:
         )
         return result[0] if result else None
 
+    def select_folder(self) -> str | None:
+        """弹出原生文件夹选择对话框；取消或未选中返回 None（模式与 select_file 一致）。"""
+        if self._window is None:
+            raise RuntimeError("文件夹对话框窗口尚未就绪")
+        result = self._window.create_file_dialog(webview.FOLDER_DIALOG, allow_multiple=False)
+        return result[0] if result else None
+
     def on_files_dropped(self, callback_id: str) -> None:
         """注册拖拽文件路径回调。
 
