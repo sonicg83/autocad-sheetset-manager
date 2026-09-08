@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-08（策划 DST Manager 多语言支持）
+
+- 新增 [ARCH-DM-005](docs/dst-manager/architecture/ARCH-DM-005-multilingual-support.md)（`draft`）：确定首期支持简体中文与英文，采用前端翻译、后端提供稳定错误码/文案键/参数的架构，并定义系统语言解析、设置持久化、兼容契约、分阶段迁移和验收门禁。
+- 同步更新 DST Manager 文档入口索引。
+
 ## 2026-09-08（编制配置中心配置项增删改 SOP）
 
 - 新增 [GUIDE-DM-003](docs/dst-manager/guides/GUIDE-DM-003-settings-config-sop.md)（`review`）：基于 PLAN-DM-019 交付后的实际代码结构，沉淀配置项**新增 / 修改 / 移除**三套标准操作流程——前置判定决策树（凭据/启动期配置不进设置中心）、`config.py` 唯一权威 + `registry.py` 展示元数据的分工边界、完整性测试与 API 硬锚的同步要求、enum 文案 fail-fast 与 pywebview 过滤器格式陷阱、存量 `settings.json` 的自愈与 `schema_version` bump 判据（增删 key 不 bump）、Worker 冻结模式与九条反模式对照表。
