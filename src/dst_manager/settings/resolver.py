@@ -9,6 +9,9 @@ env 基线，再对有覆盖的 key 用 ``Settings(**overrides)`` 构造最终�
 - 文件覆盖值经 kwargs 注入 ``Settings(...)``，由 pydantic 完成校验与
   路径规范化（相对路径解析为绝对路径，兼容现状）；
 - 空字符串/纯空白路径在传入 kwargs 前置为 None，绝不解析为 cwd；
+- 手编文件值类型非法（pydantic 拒绝，如 int 字段塞字符串）→ 忽略全部
+  文件覆盖、按默认+env 构造 ``Settings``，诊断附 ``SETTINGS_FILE_CORRUPT``
+  与中文说明——绝不让进程启动/任务认领因设置文件崩溃；
 - ``SettingsSchemaNewer``（schema 过新）→ 忽略全部文件覆盖、用纯
   env/默认构造 ``Settings``，``schema_blocked=True`` 只读，
   ``config_revision`` 仍取文件值（store.load 抛异常前已校验其为 int）。
@@ -21,6 +24,8 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+
+from pydantic import ValidationError
 
 from dst_manager.config import Settings
 
@@ -70,13 +75,31 @@ class SettingsResolver:
             overrides_raw, revision, diagnostics = {}, self._read_file_revision(), []
             schema_blocked = True
         overrides = self._normalize_overrides(overrides_raw)
-        settings = Settings(**overrides)
+        try:
+            settings = Settings(**overrides)
+        except ValidationError:
+            # 手编文件值类型非法：忽略全部文件覆盖降级运行，修订号仍取文件值
+            return self._degraded_snapshot(revision, diagnostics)
         return SettingsSnapshot(
             settings=settings,
             sources=self._build_sources(overrides),
             diagnostics=diagnostics,
             config_revision=revision,
             schema_blocked=schema_blocked,
+        )
+
+    def _degraded_snapshot(self, revision: int, diagnostics: list[str]) -> SettingsSnapshot:
+        """值类型非法时的降级快照：纯默认+env，无文件覆盖，携带诊断。"""
+        return SettingsSnapshot(
+            settings=Settings(),
+            sources=self._build_sources({}),
+            diagnostics=[
+                *diagnostics,
+                "SETTINGS_FILE_CORRUPT",
+                "设置文件中存在类型非法的值，已忽略全部文件覆盖，按默认值与环境变量运行",
+            ],
+            config_revision=revision,
+            schema_blocked=False,
         )
 
     def _read_file_revision(self) -> int:

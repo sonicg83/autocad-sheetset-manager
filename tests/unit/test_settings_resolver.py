@@ -61,3 +61,13 @@ def test_newer_schema_blocks_but_falls_back(monkeypatch, tmp_path) -> None:
 def test_env_unset_paths_stay_none_in_dev(tmp_path) -> None:
     snap = _resolver(tmp_path, {}).load_snapshot()
     assert snap.settings.autocad_2016_console is None        # 开发态默认 None
+
+
+def test_bad_value_type_degrades_instead_of_crashing(monkeypatch, tmp_path) -> None:
+    # 手编文件值类型非法：忽略全部文件覆盖按默认+env 降级，绝不让进程崩溃
+    monkeypatch.setenv("DST_MANAGER_CAD_TIMEOUT_SECONDS", "777")
+    snap = _resolver(tmp_path, {"cad_timeout_seconds": "abc"}).load_snapshot()
+    assert snap.settings.cad_timeout_seconds == 777          # 非法覆盖被忽略 → env
+    assert snap.config_revision == 4                          # 修订号仍取文件值
+    assert snap.schema_blocked is False
+    assert any("SETTINGS_FILE_CORRUPT" in d for d in snap.diagnostics)
