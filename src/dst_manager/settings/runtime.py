@@ -85,10 +85,13 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> str | None:
         if not low <= value <= high:
             return f"{label} 必须介于 {low} 和 {high} 之间"
         return None
-    # enum
+    # enum：先守卫可哈希性，list/dict 等任意负载都转成 422 而非 TypeError 崩溃
     options = {option["value"] for option in enum_options(meta.key)}
-    if value in options:
-        return None
+    try:
+        if value in options:
+            return None
+    except TypeError:
+        pass
     return f"{label} 取值必须为 {'/'.join(str(option) for option in sorted(options))}"
 
 

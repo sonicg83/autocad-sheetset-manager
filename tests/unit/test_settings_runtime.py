@@ -70,17 +70,18 @@ def test_concurrent_applies_serialize_to_consistent_state(tmp_path) -> None:
     rt = _runtime(tmp_path)
     barrier = threading.Barrier(2)
 
-    def worker(key: str) -> None:
+    def worker(key: str, value: int) -> None:
         barrier.wait()
-        try:
-            rt.apply_changes({key: 8}, [], expected_revision=rt.current().config_revision)
-        except SettingsConflict:
-            pass  # 后到者 409 是合法结果
-        except SettingsValidationError:
-            pass  # worker_lease_seconds=8 低于下限 30，被拒同样是合法结果
+        for _ in range(50):
+            try:
+                rt.apply_changes({key: value}, [], expected_revision=rt.current().config_revision)
+                return
+            except SettingsConflict:
+                continue  # 后到者 409 是合法结果：刷新修订号重试直至落盘
 
-    threads = [threading.Thread(target=worker, args=("cad_max_parallel",)),
-               threading.Thread(target=worker, args=("worker_lease_seconds",))]
+    # 两个取值都合法（45 在 worker_lease_seconds 下限 30 之上），保证真正双写竞争
+    threads = [threading.Thread(target=worker, args=("cad_max_parallel", 8)),
+               threading.Thread(target=worker, args=("worker_lease_seconds", 45))]
     for t in threads:
         t.start()
     for t in threads:
@@ -88,7 +89,8 @@ def test_concurrent_applies_serialize_to_consistent_state(tmp_path) -> None:
     disk = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     mem = rt.current()
     assert disk["config_revision"] == mem.config_revision       # 磁盘与内存一致
-    assert set(disk["values"]) == (set(mem.settings.model_dump()) & set(disk["values"]))  # 覆盖集一致
+    assert disk["values"] == {"cad_max_parallel": 8, "worker_lease_seconds": 45}  # 两写都未丢
+    assert mem.settings.cad_max_parallel == 8 and mem.settings.worker_lease_seconds == 45
 
 
 def test_empty_string_path_becomes_null_override(tmp_path) -> None:
@@ -127,6 +129,16 @@ def test_registry_constraints_rejected_with_field_errors(tmp_path) -> None:
         rt.apply_changes({"autocad_2020_console": "console<a>.exe"}, [], expected_revision=0)
     assert "autocad_2020_console" in exc_info.value.errors
     assert not (tmp_path / "settings.json").exists()
+
+
+def test_unhashable_enum_payload_rejected_as_validation_error(tmp_path) -> None:
+    # 任意 JSON 负载（list/dict 不可哈希）都须转成 422 语义，不得 TypeError 崩成 500
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes({"number_suffix_type": ["1"]}, [], expected_revision=0)
+    assert "number_suffix_type" in exc_info.value.errors
+    assert not (tmp_path / "settings.json").exists()
+    assert rt.current().config_revision == 0
 
 
 def test_alias_fields_round_trip_by_registry_key(tmp_path) -> None:
