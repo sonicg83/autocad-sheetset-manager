@@ -5,7 +5,7 @@ status: review
 owners:
   - dst-manager
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-09
 related:
   - VISION-DM-001
   - ARCH-DM-001
@@ -14,6 +14,8 @@ related:
   - ARCH-DM-004
   - GUIDE-DM-001
   - SPEC-DM-006
+  - ARCH-DM-006
+  - SPEC-DM-012
 ---
 
 # DST Manager 插件式扩展平台功能需求与要求书

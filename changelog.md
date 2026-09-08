@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-09（设计内置扩展平台与图纸目录 XLSX 试点）
+
+- 新增 [ARCH-DM-006](docs/dst-manager/architecture/ARCH-DM-006-builtin-extension-platform.md)（`review`）：确定首期只加载固定代码白名单与随包清单中的受信内置扩展，建立注册表、生命周期、Capability Broker、裁剪后的只读工作区快照、宿主管理页面贡献、扩展设置、一次性保存授权和后台 Artifact 边界。
+- 新增 [SPEC-DM-012](docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md)（`review`）：定义独立“图纸目录”页面、应用级命名模板、`sheetset`/`sheet` 属性作用域、受限组合表达式、缺定义阻断/缺值警告、XLSX 文本输出和用户原生另存为流程；记录 G0～G3 已通过，G4 Demo 与设计冻结尚未开始。
+- 更新 PRD-DM-001 的关联文档和 DST Manager 导航状态；忽略可视化设计会话生成的 `.superpowers/` 本地目录，避免临时文件进入提交树。
+
 ## 2026-09-08（按审查接受 DST Manager 多语言支持架构）
 
 - 按 2026-09-08 架构审查修订 [ARCH-DM-005](docs/dst-manager/architecture/ARCH-DM-005-multilingual-support.md)：补齐 422 逐字段错误结构、`file_filter` key 化与稳定 `file_kind`、ShellBridge 签名收紧和浏览器降级行为；明确兼容字段收敛门禁、WebView2 真实语言验证、`DST_MANAGER_UI_LOCALE` 优先级及前端过渡映射删除条件。

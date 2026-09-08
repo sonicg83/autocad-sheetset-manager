@@ -24,6 +24,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [版本管理与发布流程（ARCH-DM-003，已接受）](architecture/ARCH-DM-003-versioning-and-release.md)
 - [设置中心：应用内配置与关于页（ARCH-DM-004，草稿）](architecture/ARCH-DM-004-settings-center.md)
 - [多语言支持架构（ARCH-DM-005，已接受）](architecture/ARCH-DM-005-multilingual-support.md)
+- [内置扩展平台首期架构（ARCH-DM-006，评审中）](architecture/ARCH-DM-006-builtin-extension-platform.md)
 - [受控图纸集编辑替代自由调整模型（ADR-DM-001）](adr/ADR-DM-001-controlled-sheetset-editing.md)
 - [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流（ADR-DM-003，已实施）](adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
@@ -33,7 +34,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 
 产品需求：
 
-- [插件式扩展平台功能需求与要求书（PRD-DM-001，草稿）](product/prds/PRD-DM-001-extensible-capability-platform.md)
+- [插件式扩展平台功能需求与要求书（PRD-DM-001，评审中）](product/prds/PRD-DM-001-extensible-capability-platform.md)
 
 功能规范：
 
@@ -47,7 +48,8 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [v0.3.2 命名与模板流程需求变更规范（SPEC-DM-008，已接受）](specs/SPEC-DM-008-v032-naming-and-template-flows.md)
 - [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015，视觉整改 PLAN-DM-017）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，已接受；实施计划 PLAN-DM-016）](specs/SPEC-DM-010-properties-workspace-ui.md)
-- [设置中心 UI 设计规范（SPEC-DM-011，草稿；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
+- [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
+- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，评审中；G0～G3 已通过）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 
 ## 指南
 
