@@ -143,7 +143,7 @@ document_kind: spec
 | G5 技术映射 | 通过 | 本文 §6 | 技术负责人（Agent） | 2026-09-08 | — |
 | G6 计划就绪 | 通过 | [PLAN-DM-019](../../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md) 创建（含 SC-01～SC-14 与 A-01～A-07 追踪矩阵、全局约束、12 任务四批次） | 技术负责人（Agent） | 2026-09-08 | — |
 | G7 分批实施 | 通过 | PLAN-DM-019「实际验证」：批次 1–4（Task 1–11）全部实施并评审收口；`uv run ruff check .` 全绿、全量 pytest 0 失败、`npm run build` 通过、Playwright e2e 全量通过（数字见 Plan） | 技术负责人（Agent） | 2026-09-08 | G8 截图比对、G9 真实桌面验收未开始 |
-| G8 设计 QA | 未开始 | — | — | — | 生产实现 vs `assets/SPEC-DM-011/` 冻结截图同状态比对（默认/校验失败/保存/深色/诊断/最小视口） |
+| G8 设计 QA | 通过 | [MEMO-DM-024](../../../.planning/memos/dst-manager/2026-09-08-plan-dm019-g8-design-qa.md)（逐对截图裁决 + 控制器终局裁决）+ `assets/SPEC-DM-011/production/`（g4-01～g4-06） | 设计 QA（Agent）+ 控制器裁决 | 2026-09-08 | D4 cad_timeout_seconds 边界（后续项，须用户裁决，见 MEMO-DM-024） |
 | G9 真实验收与关闭 | 未开始 | — | — | — | 桌面壳路径选择器真实弹窗、外链系统浏览器、frozen 版本/LICENSE 读取、保存后真实 CAD 任务生效需真实环境 |
 
 ## 9. 验收标准（G8/G9 锚点）
