@@ -65,6 +65,11 @@ class UserSettingsStore:
     def __init__(self, path: Path) -> None:
         self._path = Path(path)
 
+    @property
+    def path(self) -> Path:
+        """设置文件路径（供 resolver/runtime 做 stat 或读未校验修订号）。"""
+        return self._path
+
     def load(self) -> tuple[dict[str, object], int, list[str]]:
         """返回 (values 覆盖字典, config_revision, 诊断码列表)。"""
         if not self._path.is_file():
