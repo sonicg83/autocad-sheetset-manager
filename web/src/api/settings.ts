@@ -18,6 +18,8 @@ export interface SettingsItem {
   category: string;
   control: SettingsControl;
   value: SettingsValue;
+  // Schema 字段默认值（非当前值，fba1624 起返回）
+  default: SettingsValue;
   source: SettingsSource;
   hasFileOverride: boolean;
   // 以下仅特定控件返回（path → nullable/fileFilter；enum → options；int → min/max）
@@ -53,6 +55,7 @@ interface RawSettingsItem {
   category: string;
   control: string;
   value: SettingsValue;
+  default: SettingsValue;
   source: string;
   has_file_override: boolean;
   nullable?: boolean | null;
@@ -85,6 +88,7 @@ function mapItem(raw: RawSettingsItem): SettingsItem {
     category: raw.category,
     control: raw.control as SettingsControl,
     value: raw.value,
+    default: raw.default,
     source: raw.source as SettingsSource,
     hasFileOverride: raw.has_file_override,
     nullable: raw.nullable ?? undefined,
