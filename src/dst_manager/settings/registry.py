@@ -61,9 +61,20 @@ def min_max(key: str) -> tuple[int, int]:
     return (ge, le)
 
 
+# 枚举选项文案（按领域真实语义：suffix_type=1 → 中文数字后缀，2 → 阿拉伯数字后缀，
+# 见 domain/editing.py format_sheet_title）
+_ENUM_TEXTS: dict[str, dict[int, str]] = {
+    "number_suffix_type": {
+        1: "中文序号（一、二、三…）",
+        2: "数字序号（1、2、3…）",
+    },
+}
+
+
 def enum_options(key: str) -> list[dict]:
-    """从 ``Literal`` 注解派生枚举选项（如 number_suffix_type → 类型 1/类型 2）。"""
+    """从 ``Literal`` 注解派生枚举选项（如 number_suffix_type → 中文/数字序号）。"""
     annotation = Settings.model_fields[key].annotation
     if get_origin(annotation) is not Literal:
         raise ValueError(f"字段 {key} 注解不是 Literal，无法派生枚举选项")
-    return [{"value": value, "text": f"类型 {value}"} for value in get_args(annotation)]
+    texts = _ENUM_TEXTS[key]
+    return [{"value": value, "text": texts[value]} for value in get_args(annotation)]
