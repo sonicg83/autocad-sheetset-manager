@@ -12,8 +12,9 @@
 
 ## 2026-09-08（编制配置中心配置项增删改 SOP）
 
-- 新增 [GUIDE-DM-003](docs/dst-manager/guides/GUIDE-DM-003-settings-config-sop.md)（`review`）：基于 PLAN-DM-019 交付后的实际代码结构，沉淀配置项**新增 / 修改 / 移除**三套标准操作流程——前置判定决策树（凭据/启动期配置不进设置中心）、`config.py` 唯一权威 + `registry.py` 展示元数据的分工边界、完整性测试与 API 硬锚的同步要求、enum 文案 fail-fast 与 pywebview 过滤器格式陷阱、存量 `settings.json` 的自愈与 `schema_version` bump 判据（增删 key 不 bump）、Worker 冻结模式与九条反模式对照表。
+- 新增 [GUIDE-DM-003](docs/dst-manager/guides/GUIDE-DM-003-settings-config-sop.md)（`review`）：基于 PLAN-DM-019 交付后的实际代码结构，沉淀配置项**新增 / 修改 / 移除**三套标准操作流程——前置判定决策树（凭据/启动期配置不进设置中心）、`config.py` 唯一权威 + `registry.py` 展示元数据的分工边界、完整性测试与 API 硬锚的同步要求、enum 文案 fail-fast 与 pywebview 过滤器格式陷阱、存量 `settings.json` 的自愈与 `schema_version` bump 判据（区分读取兼容与往返保留）、Worker 冻结模式与反模式对照表。
 - 同步更新 DST Manager 文档入口索引。
+- 按实现复审修订 GUIDE-DM-003：补齐新增配置的生产消费点与 API/Worker 生命周期要求；明确 registry `file_filter` 与前端 pywebview 过滤器的当前映射边界；纠正非法存量值会使全部文件覆盖暂时降级的语义；区分未知 key 的读取兼容与往返保留，避免旧程序保存时静默丢失新字段覆盖；验证命令统一使用 `npm run test:e2e`。
 
 ## 2026-09-08（交付设置中心 PLAN-DM-019 批次 1–4）
 
