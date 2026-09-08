@@ -25,6 +25,7 @@ from ..infrastructure.sheet_preferences import (
     SheetPreferencesError,
 )
 from ..runtime import is_frozen
+from ..settings.runtime import RuntimeSettings, default_store
 from .api import create_app
 
 
@@ -280,9 +281,16 @@ def run_desktop(settings: Settings | None = None) -> None:
         # 可信上下文登记 + 列偏好仓库：create_app 打开成功后登记当前工作区，桥只消费登记结果
         context = ShellContext()
         preferences = SheetPreferences(settings.data_dir)
+        # 设置快照持有者装配一次（PLAN-DM-019 任务 5）：API 与桌面服务共用同一实例，
+        # 避免双实例缓存读到不同步的 config_revision（桌面服务消费在任务 6 接线）。
+        runtime_settings = RuntimeSettings(default_store())
         server = uvicorn.Server(
             uvicorn.Config(
-                create_app(settings, on_workspace_opened=context.set_workspace),
+                create_app(
+                    settings,
+                    on_workspace_opened=context.set_workspace,
+                    runtime_settings=runtime_settings,
+                ),
                 host="127.0.0.1",
                 port=0,
                 log_level="warning",
