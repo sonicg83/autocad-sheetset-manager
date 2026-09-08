@@ -19,7 +19,7 @@ related:
 
 # 图纸目录 XLSX 内置扩展设计规范
 
-> 定位：首个内置业务扩展 `dst-manager.sheet-catalog` 的权威行为与交互 Spec。扩展加载、Capability、保存授权和 Artifact 边界以 [ARCH-DM-006](../architecture/ARCH-DM-006-builtin-extension-platform.md) 为准；前端门禁以 [GUIDE-DM-001](../guides/GUIDE-DM-001-frontend-design-implementation-gates.md) 为准。
+> 定位：首个内置业务扩展 `dst-manager.sheet-catalog` 的权威行为与交互 Spec。扩展加载、Capability、保存授权和 Artifact 边界以 [ARCH-DM-006](../architecture/ARCH-DM-006-builtin-extension-platform.md) 为准；前端门禁以 [GUIDE-DM-001](../guides/GUIDE-DM-001-frontend-design-implementation-gates.md) 为准；G4 评审使用[图纸目录交互 Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html)。
 
 ## 1. 背景与范围
 
@@ -249,6 +249,12 @@ escaped_brace   := "{{" | "}}"
 
 错误必须出现在可见正文中，并将焦点移到首个可操作问题；不能只用颜色、tooltip 或禁用按钮解释失败原因。
 
+### 7.4 G4 可操作 Demo
+
+[图纸目录交互 Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html)使用去敏虚构数据覆盖模板管理、字段插入、表达式编辑、兼容性提示、预览、空图纸集和模拟原生另存为。Demo 不调用真实 API、不创建 XLSX、不写模板数据库，也不登记 Artifact；具体差异和自动化预检证据见[图纸目录 G4 Demo 自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md)。
+
+自动化预检不代替用户确认。用户实际操作并确认前，G4 保持“评审中”，本文保持 `review`。
+
 ## 8. 预览与执行接口
 
 ### 8.1 预览请求
@@ -419,7 +425,7 @@ npm run test:e2e
 | G1 业务目标 | 通过 | 本文 §2 | 用户 | 2026-09-09 | — |
 | G2 流程与状态 | 通过 | 本文 §3、§7.3、§10～§11 | 用户 | 2026-09-09 | — |
 | G3 视觉方向 | 通过 | 本文 §7.1；用户选择表达式模板方向 | 用户 | 2026-09-09 | — |
-| G4 Demo 与设计冻结 | 未开始 | — | — | — | 创建可操作 Demo、冻结关键状态截图与差异表，并由用户确认 |
+| G4 Demo 与设计冻结 | 评审中 | [Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html) + [自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md) | 等待用户确认 | 2026-09-09 | 自动化预检已通过；用户操作确认后冻结设计 |
 | G5 技术映射 | 进行中 | 本文 §14 | 技术负责人 | 2026-09-09 | G4 后按冻结设计复核组件映射和必要 Spike |
 | G6 计划就绪 | 未开始 | — | — | — | G4/G5 与正式文档评审通过后建立追踪矩阵和 Plan |
 | G7 分批实施 | 未开始 | — | — | — | 等待 Plan |
@@ -427,4 +433,3 @@ npm run test:e2e
 | G9 真实验收与关闭 | 未开始 | — | — | — | 等待打包后的 Windows 桌面壳验证 |
 
 在 G4、G5 和正式文档评审完成前，不得创建声称“计划就绪”的实施 Plan，也不得开始生产代码。
-

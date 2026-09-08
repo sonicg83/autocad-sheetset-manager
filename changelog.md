@@ -5,6 +5,7 @@
 - 新增 [ARCH-DM-006](docs/dst-manager/architecture/ARCH-DM-006-builtin-extension-platform.md)（`review`）：确定首期只加载固定代码白名单与随包清单中的受信内置扩展，建立注册表、生命周期、Capability Broker、裁剪后的只读工作区快照、宿主管理页面贡献、扩展设置、一次性保存授权和后台 Artifact 边界。
 - 新增 [SPEC-DM-012](docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md)（`review`）：定义独立“图纸目录”页面、应用级命名模板、`sheetset`/`sheet` 属性作用域、受限组合表达式、缺定义阻断/缺值警告、XLSX 文本输出和用户原生另存为流程；记录 G0～G3 已通过，G4 Demo 与设计冻结尚未开始。
 - 更新 PRD-DM-001 的关联文档和 DST Manager 导航状态；忽略可视化设计会话生成的 `.superpowers/` 本地目录，避免临时文件进入提交树。
+- 新增 SPEC-DM-012 图纸目录单文件交互 Demo，覆盖模板另存与切换保护、字段光标插入、缺定义阻断、缺值警告、空图纸集、浅深主题和模拟原生另存为；自动化 QA 已通过，G4 等待用户实际操作确认。
 
 ## 2026-09-08（按审查接受 DST Manager 多语言支持架构）
 

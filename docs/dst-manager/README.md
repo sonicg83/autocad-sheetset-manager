@@ -59,6 +59,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
 - [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 评审中）](mockups/SPEC-DM-011-settings-demo.html)
+- [图纸目录交互 Demo（模拟数据，SPEC-DM-012 G4 评审中）](mockups/SPEC-DM-012-sheet-catalog-demo.html)
 
 - [启动、使用和开发说明](../../README.md#一键启动)
 - [测试策略](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md#12-测试策略)
