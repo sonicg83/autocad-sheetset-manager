@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-08（交付设置中心 PLAN-DM-019 批次 1–4）
+
+- 按 [PLAN-DM-019](.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md)）交付设置中心全部 11 个实施任务：后端配置域四件套（`settings/store.py` 原子存储与四类诊断码、`registry.py` 展示元数据注册表、`resolver.py` 三层合并快照、`runtime.py` 保存事务与热替换）；API 三端点（`GET/PUT /api/settings`、`GET /api/about`，仅桌面壳装配注册）；Worker 任务级配置快照与 `jobs.lease_seconds` 按行租约回收（迁移 0005）；前端 `SettingsDialog.vue` 动态表单 + 来源标记/恢复继承/校验状态机/诊断横幅 + TopBar 齿轮入口（e2e 真实打后端）；打包触点（spec 随附 `LICENSE` 与 `pyproject.toml`）。
+- 关键裁决（台账见 [progress.md](.superpowers/sdd/PLAN-DM-019-settings-center/progress.md)）：①`/api/about` 版本查询发行名为 `autocad-sheetset`（`copy_metadata("dst-manager")` 不可行，改随包打入 `pyproject.toml` 走兜底链）；②`config.py` 增加 `populate_by_name=True` 使 alias 字段 init-kwargs 合并机制生效（env 通道行为不变）；③enum 选项文案以 `domain/editing.py` 真实序号语义为准（1=中文序号、2=数字序号）；④e2e 必须真实打后端（`schema.d.ts` 不覆盖设置端点契约），经 globalSetup 注入 `DST_MANAGER_SETTINGS_PATH` 启动真实服务。
+- 验证（实际运行）：`uv run ruff check .` 全绿；`uv lock --check` 通过（Resolved 68 packages）；全量 `uv run pytest -q` **703 passed / 72 skipped / 0 failed**（775 项，junitxml 精确计数；含 0005 迁移 upgrade→downgrade→upgrade 往返单测）；`npm ci` + `npm run build` 通过（构建预检含全新库 alembic 迁移链至 0005、OpenAPI 契约一致性、vue-tsc）；`npx playwright test` 全量 **291 passed / 0 failed**（1.6m）。G8 截图比对与 G9 真实桌面验收（路径选择器真实弹窗、外链、frozen 版本/LICENSE、真实 CAD 任务生效等）未开始，见 PLAN-DM-019「实际验证」待办。
+
 ## 2026-09-08（立项设置中心实施计划 PLAN-DM-019）
 
 - 新增 [PLAN-DM-019](.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（`proposed`，依据 [ARCH-DM-004](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md) 与 [SPEC-DM-011](docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md)）：12 个 TDD 任务分四批交付——批次 1 配置域（settings.json 原子存储/展示元数据注册表/快照解析器/运行时持有者与保存事务），批次 2 三个设置 API 端点 + Worker 任务级配置快照与租约按行回收（含迁移 0005）+ 打包触点，批次 3 前端纵向切片（ShellBridge 文件夹选择器/useSettings/SettingsDialog/TopBar 齿轮入口），批次 4 全量回归与 G8 设计 QA、G9 手工清单。

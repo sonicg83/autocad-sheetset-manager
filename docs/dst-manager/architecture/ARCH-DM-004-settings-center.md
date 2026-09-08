@@ -102,7 +102,7 @@ document_kind: architecture
 
 随现有 `interfaces/api` 单应用扁平路由新增 3 个端点；`/api/settings` 的请求/响应结构标注为版本化契约（`schema_version` 演进），使用显式 Pydantic 请求/响应模型并纳入 OpenAPI 契约测试（含字段稳定排序）：
 
-- `GET /api/settings` → `{ schema_version, config_revision, items: [{ key, label, category, control, value, default, source, has_file_override, nullable?, file_filter?, min?, max?, options? }], diagnostics? }`。`value` 为当前有效值；`items` 为注册表序列化；前端**只认描述、不认具体配置项**。`source` 与 `has_file_override` 区分"当前生效值"与"是否存在用户覆盖"。
+- `GET /api/settings` → `{ schema_version, config_revision, items: [{ key, label, category, control, value, default, source, has_file_override, nullable?, file_filter?, min?, max?, options? }], diagnostics? }`。`value` 为当前有效值；`items` 为注册表序列化；`items[]` 含 `default` 字段（取 `Settings` Schema 字段默认值，非当前生效值——当前生效值见 `value`）；前端**只认描述、不认具体配置项**。`source` 与 `has_file_override` 区分"当前生效值"与"是否存在用户覆盖"。
 - `PUT /api/settings`：PATCH 风格**部分更新覆盖集合**。body `{ expected_revision, set: { key: value }, unset: [key] }`：
   - `set` 只写入显式覆盖；未提及字段不受影响（§2.2 的固化禁令）；
   - `unset` 逐字段删除覆盖，恢复 环境 → 默认 继承；
@@ -111,7 +111,7 @@ document_kind: architecture
   - `expected_revision` 与当前 `config_revision` 不符 → 409，不修改任何状态；
   - 通过后锁内原子落盘 + 热替换进程内快照，返回与 GET 同构的已提交快照。幂等。
   - （修订说明：`expected_revision/409` 本对单窗口桌面应用属过度设计，但 `config_revision` 是 §2.4 Worker 同步的必需品，API 侧搭车使用边际成本可忽略，故纳入契约。）
-- `GET /api/about` → `{ app_name, version, license: { spdx, text }, homepage, feedback_url }`。版本号运行时读取 `importlib.metadata.version("dst-manager")`（唯一权威仍是 `pyproject.toml`，ARCH-DM-003 §2）；开发态包元数据不可用时回退读 `pyproject.toml`。MIT 全文来自仓库根 `LICENSE` 文件：开发态直接读取；frozen 态由 `packaging/dst-manager.spec` 将 `LICENSE` 加入 onedir 数据文件、经 `runtime.resource_dir()`（`sys._MEIPASS`/`_internal`）读取——不内嵌第二份协议文本，不另写 exe 目录定位规则，保持单一来源。
+- `GET /api/about` → `{ app_name, version, license: { spdx, text }, homepage, feedback_url }`。版本号运行时读取 `importlib.metadata.version(<发行名>)`——真实发行名为 `autocad-sheetset`（以 `pyproject.toml` 的 `[project].name` 为准，`dst-manager` 仅为包/模块名，勘误 2026-09-08；唯一权威仍是 `pyproject.toml`，ARCH-DM-003 §2）；开发态包元数据不可用时回退读 `pyproject.toml`。MIT 全文来自仓库根 `LICENSE` 文件：开发态直接读取；frozen 态由 `packaging/dst-manager.spec` 将 `LICENSE` 加入 onedir 数据文件、经 `runtime.resource_dir()`（`sys._MEIPASS`/`_internal`）读取——不内嵌第二份协议文本，不另写 exe 目录定位规则，保持单一来源。
 
 三端点均**不依赖已打开的工作区**，未加载 DST 时可用。服务继续只监听 `127.0.0.1`；`GET /api/settings` 会返回本机绝对路径，日志与诊断不得无差别复制完整路径。
 

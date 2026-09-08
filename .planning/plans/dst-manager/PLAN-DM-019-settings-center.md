@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-019
 title: 设置中心实施计划（配置域后端 + 设置中心 UI）
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-08
@@ -715,4 +715,44 @@ test("数字超范围显示行内错误且保存禁用", async ({ page }) => {
 
 ## 实际验证
 
-（实施中按批次回填：命令、通过数、偏差记录、G8 差异裁决、G9 手工验收状态。）
+执行分支 `feature/dm019-settings-center`（BASE `1a4cb6e`），批次 1–4（Task 1–11）于 2026-09-08 全部实施并评审收口；台账与逐任务裁决见 [progress.md](../../.superpowers/sdd/PLAN-DM-019-settings-center/progress.md)。
+
+### 批次与提交范围
+
+- 批次 1（Task 1–4 配置域）：`1a4cb6e..227795e`，评审收口（Task 2/4 各一轮 fix）。
+- 批次 2（Task 5–7 API/Worker/打包）：`227795e..acf315f`（含 Task 5 追加两轮：`954de52` 发行名、`fba1624` default 字段）。
+- 批次 3（Task 8–11 前端纵向切片）：`954de52..a816431`（Task 10 一轮 fix，`c86ca39`）。
+- 批次 4（Task 12 回归与文档收尾）：本节。
+
+### 全量验证（Task 12 实跑，2026-09-08）
+
+| 命令 | 结果 |
+| --- | --- |
+| `uv run ruff check .` | All checks passed!（退出码 0） |
+| `uv lock --check` | Resolved 68 packages in 1ms（lock 与 pyproject 一致） |
+| `uv run pytest -q` | **703 passed / 72 skipped / 0 failed**（junitxml 精确计数：tests=775、failures=0、errors=0；59.6s；72 跳过为真实 AutoCAD 与真实环境用例） |
+| `cd web && npm ci` | 安装成功（esbuild postinstall 脚本按 npm warn 提示维持默认跳过，不影响构建） |
+| `cd web && npm run build` | 通过（117 modules；预检含全新库 alembic 迁移链 `0001→…→0005_dm019_job_lease_seconds`、OpenAPI 契约一致性、vue-tsc 零错误） |
+| `cd web && npx playwright test` | **291 passed / 0 failed**（1.6m；与 Task 11 后基线 291 一致） |
+| 迁移链 0005（单测实跑） | `tests/unit/test_database.py::test_job_lease_seconds_migration_round_trip`：空库 `alembic upgrade head`→`downgrade -1`→`upgrade head` 往返，`jobs.lease_seconds` 随迁移出现/消失，通过 |
+
+### 偏差与裁决摘要（详见 progress.md）
+
+- 发行名：`importlib.metadata.version` 查询名为 `autocad-sheetset`（ARCH-DM-004 §3 文字已勘误）；打包改为随包打入 `pyproject.toml` 走 about 端点兜底链（`copy_metadata("dst-manager")` 会构建失败）。
+- `config.py` 增加 `populate_by_name=True`：越出"不得改动"字面，经裁决为必要（alias 字段的 init-kwargs 合并对 2 个字段完全失效）且 env 通道行为不变。
+- 手编 settings.json 类型非法的兜底放 `resolver.load_snapshot`（Task 3 层），一处修复覆盖 current()/refresh/API 三路径。
+- enum 文案以 `domain/editing.py` 真实语义为准（1=中文序号、2=数字序号），未照简报占位文案。
+- dll 文件过滤器文案为 "NET 程序集 (*.dll)"（pywebview `parse_file_type` 前导点非法）。
+- e2e 真实打后端（`schema.d.ts` 不覆盖设置端点，禁 mock 契约）：globalSetup 启动真实服务并注入 `DST_MANAGER_SETTINGS_PATH`；后端端口 9001（本机 WinNAT 端口排除区间覆盖 8000）；playwright `retries:1 + workers:4`（基础设施抖动实证，裁决认可）。
+- 壳内拖拽穿透双保险：`<dialog>` 根元素 stop 修饰 + App.vue `settingsOpen` 守卫；e2e 断言经变异验证有杀伤力；壳内真实验证归 G9。
+
+### 待办：G9 真实桌面手工验收（未开始，不自动声明完成）
+
+- [ ] 桌面壳内路径选择器真实弹窗：EXE 过滤器与 DLL 过滤器各一（含文件夹选择分支）
+- [ ] 关于页外链经系统默认浏览器打开（不经 WebView 导航）
+- [ ] frozen 包内 about 版本读取与 `LICENSE` 全文可读（resource_dir 兜底链）
+- [ ] 保存后配置对真实 CAD 任务生效（新任务新配置、运行中任务保持旧快照）
+- [ ] 移动绿色分发包后，未覆盖的插件默认路径跟随新 exe 目录
+- [ ] 壳内拖拽不穿透设置对话框遮罩（真实 pywebview 壳）
+- [ ] 壳内设置中心完整流程 + 外链组合操作
+- [ ] G8 截图比对：生产实现 vs `assets/SPEC-DM-011/` 冻结截图同状态比对（控制器另行派发）
