@@ -168,3 +168,36 @@ test("对话框打开时拖放不穿透遮罩（SC-14）", async ({page}) => {
   await expect(page.locator(".error.notice")).toBeHidden();
   await expect(page.getByRole("region", {name: "打开图纸集"})).toBeVisible();
 });
+
+// 任务 11 入口专项补充（前 10 个用例已在未加载态经齿轮打开对话框，此处补显式断言）
+test("未加载工作区时齿轮常驻可见可开（SC-01 入口）", async ({page}) => {
+  await page.goto("/");
+  // 未加载态：欢迎区可见（尚未打开任何 DST），入口不随工作区状态隐藏
+  await expect(page.getByRole("region", {name: "打开图纸集"})).toBeVisible();
+  const gear = page.getByRole("button", {name: "设置"});
+  await expect(gear).toBeVisible();
+  await expect(gear).toBeEnabled();
+  await gear.click();
+  await expectDialog(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+});
+
+test("重复打开不产生多实例且字段无状态残留", async ({page}) => {
+  await page.goto("/");
+  await openSettingsDialog(page);
+  // 既有状态链保存值：cad_timeout_seconds=600（默认，前文已恢复继承）、cad_max_parallel=6（用户覆盖）
+  await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("600");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+  // 再次点齿轮重开：对话框实例唯一，未做编辑不触发未保存确认
+  await openSettingsDialog(page);
+  await expect(page.getByRole("dialog", {name: "设置"})).toHaveCount(1);
+  await expect(page.getByRole("dialog", {name: "有未保存的修改"})).toBeHidden();
+  // 字段与上次保存一致，无上一轮残留（无行内错误、无只读诊断）；
+  // 未编辑缓冲为纯净态：保存按钮按设计禁用（saveDisabled 含 !hasUnsaved），恰证无脏状态残留
+  await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("600");
+  await expect(page.locator(TIMEOUT_ROW)).toContainText("默认");
+  await expect(page.locator(".diag.readonly")).toBeHidden();
+  await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+});
