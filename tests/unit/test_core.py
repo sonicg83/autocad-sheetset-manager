@@ -183,7 +183,8 @@ def test_worker_cli_writes_only_one_line_summary(monkeypatch, status, error_code
     }
 
     class FakeService:
-        def __init__(self):
+        # worker 命令现以 runtime_settings 关键字构造服务（PLAN-DM-019 任务 6）
+        def __init__(self, *args, **kwargs):
             self.calls = 0
 
         def run_next_job(self):
@@ -1995,7 +1996,8 @@ def test_metadata_service_passes_identity_baseline_to_publisher(tiny_workspace, 
 
 def test_worker_poll_rechecks_stale_jobs_after_initialization(tmp_path: Path):
     service = object.__new__(DstManagerService)
-    service.settings = SimpleNamespace(worker_lease_seconds=120)
+    # run_next_job 在认领前冻结 timeout/max_parallel/lease（PLAN-DM-019 任务 6）
+    service.settings = SimpleNamespace(worker_lease_seconds=120, cad_timeout_seconds=600, cad_max_parallel=4)
     service.database = Mock()
     service.database.claim_next_job.return_value = None
 

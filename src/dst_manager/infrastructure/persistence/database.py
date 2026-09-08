@@ -80,6 +80,8 @@ class JobRow(Base):
     error_detail: Mapped[str | None] = mapped_column(Text)
     worker_id: Mapped[str | None] = mapped_column(String(100))
     attempt: Mapped[int] = mapped_column(Integer, default=0)
+    # 认领时冻结的 worker_lease_seconds 行快照（PLAN-DM-019）：过期恢复按行判断
+    lease_seconds: Mapped[int | None] = mapped_column(Integer)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -170,7 +172,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0004_dm007_layout_name_cache"
+LATEST_SCHEMA_REVISION = "0005_dm019_job_lease_seconds"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -361,8 +363,18 @@ class Database:
             ).scalars().all()
         return list(reversed(rows))
 
-    def claim_next_job(self, worker_id: str = "local-worker") -> dict[str, Any] | None:
-        """单Worker原子领取一个排队任务。"""
+    def claim_next_job(
+        self,
+        worker_id: str = "local-worker",
+        *,
+        lease_seconds: int = 120,
+        config_revision: int | None = None,
+    ) -> dict[str, Any] | None:
+        """单Worker原子领取一个排队任务。
+
+        ``lease_seconds`` 是本任务冻结的租约行快照（ARCH-DM-004 §2.4）；
+        ``config_revision`` 存在时记入认领事件 detail，用于追溯任务实际配置。
+        """
         with self.sessions() as session:
             session.connection().exec_driver_sql("BEGIN IMMEDIATE")
             active_rows = session.scalars(
@@ -390,10 +402,13 @@ class Database:
                 claimed = session.execute(
                     update(JobRow)
                     .where(JobRow.id == job_id, JobRow.status == "QUEUED")
-                    .values(status="STAGING", progress=5, worker_id=worker_id, attempt=JobRow.attempt + 1, started_at=now, heartbeat_at=now, finished_at=None, error_code=None, error_detail=None)
+                    .values(status="STAGING", progress=5, worker_id=worker_id, attempt=JobRow.attempt + 1, started_at=now, heartbeat_at=now, finished_at=None, error_code=None, error_detail=None, lease_seconds=lease_seconds)
                 )
                 if claimed.rowcount == 1:
-                    session.add(JobEventRow(job_id=job_id, status="STAGING", progress=5, detail=f"worker={worker_id}"))
+                    detail = f"worker={worker_id}"
+                    if config_revision is not None:
+                        detail += f" cfg=r{config_revision}"
+                    session.add(JobEventRow(job_id=job_id, status="STAGING", progress=5, detail=detail))
                     session.flush()
                     claimed_job = self._job_json(session, session.get(JobRow, job_id))
                     session.commit()
@@ -416,8 +431,13 @@ class Database:
             return result.rowcount == 1
 
     def recover_stale_jobs(self, lease_seconds: int = 120) -> list[dict[str, str]]:
-        """保守恢复遗留任务；发布阶段一律交给发布日志恢复后再落终态。"""
-        cutoff = datetime.now(UTC) - timedelta(seconds=lease_seconds)
+        """保守恢复遗留任务；发布阶段一律交给发布日志恢复后再落终态。
+
+        过期判定按各任务认领时冻结的 lease_seconds 行快照，行值为空（迁移
+        过渡期的旧任务）才退回调用方全局默认——新旧租约并存的过渡期不会
+        误回收仍在执行的任务（ARCH-DM-004 §2.4）。
+        """
+        now = datetime.now(UTC)
         conclusions: list[dict[str, str]] = []
         with self.sessions.begin() as session:
             queued_rows = session.scalars(select(JobRow).where(JobRow.status == "QUEUED")).all()
@@ -431,6 +451,7 @@ class Database:
                 heartbeat = row.heartbeat_at
                 if heartbeat is not None and heartbeat.tzinfo is None:
                     heartbeat = heartbeat.replace(tzinfo=UTC)
+                cutoff = now - timedelta(seconds=row.lease_seconds or lease_seconds)
                 if heartbeat is not None and heartbeat >= cutoff:
                     continue
                 payload = json.loads(row.payload_json)

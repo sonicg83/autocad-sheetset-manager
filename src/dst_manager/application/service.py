@@ -42,6 +42,7 @@ from dst_manager.infrastructure.filesystem.publisher import (
 from dst_manager.infrastructure.filesystem.workspace import write_workspace_metadata
 from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
+from dst_manager.settings.runtime import RuntimeSettings
 
 
 class DstManagerService(
@@ -53,8 +54,18 @@ class DstManagerService(
     RepairOperations,
     TransactionRecoveryOperations,
 ):
-    def __init__(self, settings: Settings | None = None):
-        self.settings = settings or Settings()
+    # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
+    _runtime: RuntimeSettings | None = None
+
+    def __init__(self, settings: Settings | None = None, *, runtime_settings: RuntimeSettings | None = None):
+        # runtime_settings 注入时（CLI worker）走 ARCH-DM-004 §2.4 的按任务热更新；
+        # 显式传入 settings 时其启动期字段（data_dir 等）优先，None 时退化为启动期
+        # 一次性快照——serve/既有测试行为不变。
+        self._runtime = runtime_settings
+        self.settings = (
+            settings
+            or (runtime_settings.current().settings if runtime_settings is not None else Settings())
+        )
         self.settings.data_dir.mkdir(parents=True, exist_ok=True)
         self.database = Database(self.settings.database_url)
         self.codec = DstCodec()
@@ -76,7 +87,7 @@ class DstManagerService(
                     pass
             for journal in committed:
                 self._recover_committed_job(root, journal)
-        self.database.recover_stale_jobs(self.settings.worker_lease_seconds)
+        self.database.recover_stale_jobs(self._snapshot_settings().worker_lease_seconds)
 
     def open_workspace(self, dst_path: Path, root_override: Path | None = None) -> Workspace:
         dst_path = dst_path.expanduser().resolve()
@@ -101,21 +112,44 @@ class DstManagerService(
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
         return self.open_workspace(Path(row.dst_path), Path(row.root_override) if row.root_override else None)
 
+    def _snapshot_settings(self) -> Settings:
+        """运行期设置来源：注入 RuntimeSettings 时取其快照，否则退化为启动期配置。"""
+        if self._runtime is not None:
+            return self._runtime.current().settings
+        return self.settings
+
+    def _snapshot_config_revision(self) -> int | None:
+        """当前配置修订号；未注入 RuntimeSettings 时为 None（detail 保持既有格式）。"""
+        return self._runtime.current().config_revision if self._runtime is not None else None
+
     def run_next_job(self) -> dict[str, Any] | None:
-        self.database.recover_stale_jobs(self.settings.worker_lease_seconds)
+        # ARCH-DM-004 §2.4：认领新任务前检测配置变化；本任务运行期间一律读
+        # 认领时冻结的局部值，不再中途读设置。
+        if self._runtime is not None:
+            self._runtime.refresh_if_changed()
+        snapshot = self._snapshot_settings()
+        config_revision = self._snapshot_config_revision()
+        timeout_seconds = snapshot.cad_timeout_seconds
+        max_parallel = snapshot.cad_max_parallel
+        lease_seconds = snapshot.worker_lease_seconds
+        self.database.recover_stale_jobs(lease_seconds)
         worker_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
-        job = self.database.claim_next_job(worker_id)
+        job = self.database.claim_next_job(
+            worker_id,
+            lease_seconds=lease_seconds,
+            config_revision=config_revision,
+        )
         if job is None:
             return None
         workspace = self.get_workspace(job["workspace_id"])
-        capability = self._capability(job["cad_version"] or "2020")
+        capability = self._capability(job["cad_version"] or "2020", snapshot)
         runner = CadJobRunner(
             self.database,
             self.codec,
             self.publisher,
-            self.settings.cad_timeout_seconds,
-            self.settings.cad_max_parallel,
-            heartbeat_interval=min(30.0, self.settings.worker_lease_seconds / 3),
+            timeout_seconds,
+            max_parallel,
+            heartbeat_interval=min(30.0, lease_seconds / 3),
         )
         return runner.run(job, workspace, capability)
 
@@ -218,11 +252,13 @@ class DstManagerService(
         self.database.save_layout_names(digest, str(resolved), layouts)
         return {"layouts": layouts, "cached": False, "file_hash": digest}
 
-    def _capability(self, version: str) -> CadCapability:
+    def _capability(self, version: str, settings: Settings | None = None) -> CadCapability:
+        # settings 缺省回退启动期配置；run_next_job 必须传认领时冻结的快照
+        settings = settings or self.settings
         if version == "2016":
-            return CadCapability(version, self.settings.autocad_2016_console, self.settings.autocad_2016_plugin)
+            return CadCapability(version, settings.autocad_2016_console, settings.autocad_2016_plugin)
         if version == "2020":
-            return CadCapability(version, self.settings.autocad_2020_console, self.settings.autocad_2020_plugin)
+            return CadCapability(version, settings.autocad_2020_console, settings.autocad_2020_plugin)
         raise ApplicationError("CAD_VERSION_INVALID", f"不支持的AutoCAD版本：{version}")
 
     def _check_revision(self, workspace: Workspace, base_revision_id: str) -> None:

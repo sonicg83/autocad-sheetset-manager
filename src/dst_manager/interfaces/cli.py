@@ -84,7 +84,10 @@ def worker(
         raise typer.BadParameter("project_root与当前工作目录不一致")
     if run_id:
         os.environ["DST_MANAGER_RUN_ID"] = run_id
-    service = DstManagerService()
+    # ARCH-DM-004 §2.4：Worker 注入运行时设置，每任务认领前检测并应用配置变化
+    from dst_manager.settings.runtime import RuntimeSettings, default_store
+
+    service = DstManagerService(runtime_settings=RuntimeSettings(default_store()))
     while True:
         started = time.perf_counter()
         result = service.run_next_job()

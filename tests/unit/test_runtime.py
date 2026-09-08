@@ -59,7 +59,7 @@ def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(database_module, "resource_dir", lambda: tmp_path)
     url = f"sqlite:///{(tmp_path / 'migrate.db').as_posix()}"
     database_module.migrate_database(url)
-    assert database_module.LATEST_SCHEMA_REVISION == "0004_dm007_layout_name_cache"
+    assert database_module.LATEST_SCHEMA_REVISION == "0005_dm019_job_lease_seconds"
     # 迁移真实发生：alembic_version 表存在且为最新修订
     from sqlalchemy import create_engine, text
 
