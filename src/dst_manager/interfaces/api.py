@@ -59,7 +59,11 @@ from dst_manager.settings.runtime import (
     SettingsConflict,
     SettingsValidationError,
 )
-from dst_manager.settings.store import SCHEMA_VERSION, SettingsSchemaOlder
+from dst_manager.settings.store import (
+    SCHEMA_VERSION,
+    SettingsSchemaNewer,
+    SettingsSchemaOlder,
+)
 
 from ..runtime import resource_dir
 
@@ -437,6 +441,9 @@ def create_app(
         @app.put("/api/settings", response_model=SettingsResponse)
         def put_settings(request: SettingsPutRequest):
             try:
+                # 与 GET 一致先按文件指纹刷新：进程启动后直接 PUT 时，
+                # 只读守卫不得建立在陈旧快照（schema_blocked=False）之上
+                runtime_settings.refresh_if_changed()
                 snapshot = runtime_settings.current()
                 if snapshot.schema_blocked:
                     return JSONResponse(
@@ -448,6 +455,15 @@ def create_app(
                     )
                 snapshot = runtime_settings.apply_changes(
                     request.set, request.unset, request.expected_revision
+                )
+            except SettingsSchemaNewer:
+                # 刷新与 apply_changes 落盘之间文件被替换为新 Schema 的竞态：拒绝写回
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "code": "SETTINGS_SCHEMA_BLOCKED",
+                        "message": "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
+                    },
                 )
             except SettingsSchemaOlder:
                 # current() 未触发的竞态（读后文件被替换为旧 schema）同样拒绝写回

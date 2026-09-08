@@ -94,6 +94,7 @@ def test_about_returns_version_and_mit_license(client_with_runtime) -> None:
 def test_endpoints_absent_without_runtime(client) -> None:
     """开发态/既有测试的 create_app() 不注册设置端点，契约零变化。"""
     assert client.get("/api/settings").status_code == 404
+    assert client.get("/api/about").status_code == 404
 
 
 def test_get_settings_schema_older_degrades_to_readonly(client_with_runtime, tmp_path) -> None:
@@ -119,7 +120,7 @@ def test_put_rejected_when_schema_older_and_file_untouched(client_with_runtime, 
 
 def test_put_rejected_when_schema_newer_blocks_writes(client_with_runtime, tmp_path) -> None:
     """schema 过新：GET 只读降级（resolver 快照），PUT 409 拒绝写回。"""
-    _write_settings_file(tmp_path, schema_version=2, revision=5)
+    original = _write_settings_file(tmp_path, schema_version=2, revision=5)
     body = client_with_runtime.get("/api/settings").json()
     assert body["schema_blocked"] is True and body["config_revision"] == 5
     resp = client_with_runtime.put(
@@ -128,6 +129,38 @@ def test_put_rejected_when_schema_newer_blocks_writes(client_with_runtime, tmp_p
     )
     assert resp.status_code == 409
     assert resp.json()["code"] == "SETTINGS_SCHEMA_BLOCKED"
+    assert (tmp_path / "settings.json").read_bytes() == original
+
+
+def test_put_without_prior_get_rejects_upgraded_schema(client_with_runtime, tmp_path) -> None:
+    """进程启动后直接 PUT（无先行 GET）且文件已是新 Schema：409 且字节不动。"""
+    original = _write_settings_file(tmp_path, schema_version=2, revision=5)
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={"expected_revision": 5, "set": {"cad_max_parallel": 8}, "unset": []},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "SETTINGS_SCHEMA_BLOCKED"
+    assert (tmp_path / "settings.json").read_bytes() == original
+
+
+def test_put_after_external_schema_upgrade_rejects_stale_guard(
+    client_with_runtime, tmp_path
+) -> None:
+    """先 GET 旧文件、外部换为新 Schema 后直接 PUT：陈旧缓存不得绕过只读守卫。
+
+    守卫若读陈旧快照（schema_blocked=False）会让 apply_changes 内部的
+    SettingsSchemaNewer 逃逸成 500；PUT 必须与 GET 一样先按文件指纹刷新。
+    """
+    assert client_with_runtime.get("/api/settings").json()["config_revision"] == 0
+    original = _write_settings_file(tmp_path, schema_version=2, revision=5)
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={"expected_revision": 5, "set": {"cad_max_parallel": 8}, "unset": []},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "SETTINGS_SCHEMA_BLOCKED"
+    assert (tmp_path / "settings.json").read_bytes() == original
 
 
 def test_get_refreshes_after_external_file_change(client_with_runtime, tmp_path) -> None:
