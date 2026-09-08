@@ -35,6 +35,23 @@ def test_app_version_prefers_installed_distribution(monkeypatch) -> None:
     assert _app_version() == "1.2.3"
 
 
+def test_app_version_queries_project_distribution_name(monkeypatch) -> None:
+    """查询名必须是 pyproject.toml [project].name（autocad-sheetset）。
+
+    发行名不是包目录名/CLI 名 dst-manager：查错名字会永远 PackageNotFoundError，
+    importlib 主路径沦为死代码、全靠 pyproject 兜底（Task 7 打包评审修正）。
+    """
+    queried: list[str] = []
+
+    def spy(name: str) -> str:
+        queried.append(name)
+        return "0.0.0"
+
+    monkeypatch.setattr(api_module, "package_version", spy)
+    assert _app_version() == "0.0.0"
+    assert queried == ["autocad-sheetset"]
+
+
 @pytest.mark.parametrize(
     "content",
     [

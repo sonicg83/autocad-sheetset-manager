@@ -84,7 +84,9 @@ def _app_version() -> str:
     "版本未知" 字符串，绝不让 /api/about 因版本探测崩溃。
     """
     try:
-        return package_version("dst-manager")
+        # 发行名以 pyproject.toml [project].name 为准（autocad-sheetset），
+        # 而非 CLI/包目录名 dst-manager——后者永远查不到，主路径才是活代码
+        return package_version("autocad-sheetset")
     except PackageNotFoundError:
         pass
     try:
