@@ -1,7 +1,7 @@
 ---
 id: ARCH-DM-005
 title: DST Manager 多语言支持架构
-status: draft
+status: accepted
 document_kind: architecture
 owners:
 - dst-manager
@@ -11,12 +11,14 @@ related:
 - ARCH-DM-001
 - ARCH-DM-004
 - SPEC-DM-006
+- SPEC-DM-009
+- SPEC-DM-010
 - SPEC-DM-011
 ---
 
 # DST Manager 多语言支持架构
 
-> 状态：草稿，已完成方案讨论，等待书面设计审阅。
+> 状态：已接受（2026-09-08 按 ARCH-DM-005 架构审查闭合 P2/P3 契约问题）。
 > 首期语言：简体中文（`zh-CN`）与英文（`en-US`）。
 > 核心裁决：前端负责用户界面翻译，后端负责稳定的错误码、文案键和插值参数；语言选择不得改变 DST、DWG、任务或发布事务的业务语义。
 
@@ -77,6 +79,8 @@ ui_locale: Literal["system", "zh-CN", "en-US"] = "system"
 
 该字段作为普通应用设置写入 `%LOCALAPPDATA%\dst-manager\settings.json` 的 `values`，只保存显式覆盖值。它不进入工作区、草稿或数据库。新增带默认值的已知键保持现有 `schema_version`，无需数据库迁移。
 
+允许通过 `DST_MANAGER_UI_LOCALE` 提供环境值，沿用设置中心既有的“默认值 < env < `settings.json` 文件覆盖”优先级：环境变量可提供安装或启动环境的默认语言，用户显式保存的文件覆盖仍具有最高优先级。API 的 `source` 继续据实返回 `default`、`env` 或 `file`。
+
 设置中心将它显示在新的“界面”分类中，枚举项为“跟随系统”“简体中文”“English”。选择“跟随系统”时同时展示当前解析结果。
 
 ### 4.2 生效语言
@@ -136,9 +140,13 @@ jobs.status.cadRunning
 设置注册表从“保存中文显示文本”演进为“保存稳定显示键并保留兼容文本”。`SettingsItemModel` 增加：
 
 - `label_key: str`；
-- `category_key: str`。
+- `category_key: str`；
+- `file_filter_key: str | None`；
+- `file_kind: Literal["exe", "dll"] | None`。
 
-`EnumOptionModel` 增加 `text_key: str`，其 `value` 从 `int` 扩展为 `int | str`，用于承载 `ui_locale` 的字符串枚举值。既有 `label`、`category` 和 `text` 在至少一个发布周期内继续返回中文回退文本。字段顺序和现有设置键保持稳定；新增 `ui_locale` 后，禁止继续用固定数量断言注册表完整性。
+`file_filter_key` 只负责过滤器的本地化显示名，`file_kind` 负责选择固定扩展名，前端不得再通过检查中文 `file_filter` 是否包含 `exe`/`dll` 推导行为。`EnumOptionModel` 增加 `text_key: str`，其 `value` 从 `int` 扩展为 `int | str`，用于承载 `ui_locale` 的字符串枚举值。注册表中的 `_ENUM_TEXTS` 演进为“稳定选项键 + 中文兼容文本”，不能继续假设全部枚举值都是 `int`。
+
+既有 `label`、`category`、`text` 和 `file_filter` 只保留到阶段三验收。移除前必须完成仓库内调用方、OpenAPI、TypeScript 契约与测试检查；当前同包桌面交付不存在需要跨版本兼容的旧前端。字段顺序和现有设置键保持稳定；新增 `ui_locale` 后，禁止继续用固定数量或固定索引断言注册表完整性。
 
 ### 6.2 通用错误结构
 
@@ -156,11 +164,31 @@ jobs.status.cadRunning
 前端按以下顺序渲染：
 
 1. 已知 `message_key` 与合法 `params`；
-2. 前端对稳定 `code` 的兼容映射；
-3. 后端原始 `message`；
+2. 前端对稳定 `code` 的过渡映射；
+3. 兼容期后端原始 `message`；
 4. 通用未知错误文案，同时把原始详情保留在诊断区域。
 
-字段校验错误、DST 诊断、任务失败建议和 ShellBridge 错误遵循同一语义，但允许按功能域渐进迁移。接口层负责把已有领域错误码映射为文案键和结构化参数；领域层、基础设施层和日志记录继续使用稳定错误码及原始技术消息，不依赖 i18n。
+前端 `code` 映射仅用于旧错误尚未获得 `message_key` 的迁移期，必须随阶段三收敛删除，避免与后端键映射长期双份维护。已知错误的中文 `message` 同样在阶段三验收后移除；无法结构化的第三方或未知错误仍可保留原始 `message`，但只能作为诊断详情，不能充当正常界面翻译。
+
+设置逐字段校验错误使用独立的 422 结构：
+
+```json
+{
+  "code": "SETTINGS_VALIDATION_FAILED",
+  "errors": {
+    "cad_max_parallel": {
+      "code": "SETTING_INTEGER_RANGE",
+      "message_key": "settings.validation.integerRange",
+      "params": {"min": 1, "max": 10},
+      "message": "最大并行任务数必须介于 1 和 10 之间"
+    }
+  }
+}
+```
+
+外层对象键 `cad_max_parallel` 是稳定设置键。前端用该键在设置快照中取得 `label_key` 并先解析字段标签，再将标签与 `min`、`max`、`allowed_values` 等结构化参数交给翻译函数。`params` 禁止携带后端已经本地化的 label、枚举文本或完整句子。阶段三验收后，逐字段对象中的中文兼容 `message` 与其他兼容字段一并移除。
+
+字段校验错误、DST 诊断、任务失败建议和 ShellBridge 错误遵循同一稳定标识原则，但允许按功能域渐进迁移。接口层负责把已有领域错误码映射为文案键和结构化参数；领域层、基础设施层和日志记录继续使用稳定错误码及原始技术消息，不依赖 i18n。
 
 ### 6.3 SSE 与任务
 
@@ -168,7 +196,11 @@ SSE 继续传输 `QUEUED`、`STAGING`、`CAD_RUNNING`、`VERIFYING`、`PUBLISHIN
 
 ## 7. ShellBridge 边界
 
-原生文件选择器需要本地化标题与过滤器显示名。前端在调用 ShellBridge 前生成这些显示文本，同时只传递登记过的文件类型标识。Shell 继续把文件类型标识映射到固定扩展名白名单，不能接受前端提供的任意扩展名或路径规则。
+原生文件选择器需要本地化标题与过滤器显示名。前端在调用 ShellBridge 前生成显示文本，并调用 `select_file(file_kind, localized_description)`；桥层的 `file_kind` 支持 `dst`、`template`、`exe` 与 `dll`。Shell 根据 `file_kind` 改为映射固定扩展名白名单，只把 `localized_description` 用作对话框描述，不能接受前端提供的任意扩展名或路径规则。
+
+这是对现有 `select_file(file_types: list[str])` 任意过滤器字符串透传行为的有意破坏性收紧，不是既有能力的延续。桌面前后端作为同一个 onedir 包发布，签名变更随同包版本一次生效，不支持“旧壳 + 新前端”的生产组合。所有 `dst`、`template`、`exe` 与 `dll` 调用点必须在同一阶段迁移。
+
+浏览器开发态没有 ShellBridge 时沿用现有降级：设置中心“浏览”按钮禁用，工作区入口继续使用无壳路径输入流程；不得用浏览器任意文件过滤器模拟 Shell 白名单。检测到旧或部分桥而没有新签名能力时视为桥不可用，不回退到旧的任意字符串透传。
 
 ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有 `code` 与 `message`。这部分是原生 UI 边界的轻量适配，不把完整前端语言包复制到 Python。
 
@@ -220,8 +252,11 @@ ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有
 
 - 为所有会进入桌面界面的 API 错误补充结构化文案字段；
 - 为设置校验、DST 诊断、任务失败建议和 ShellBridge 错误建立映射；
+- 迁移逐字段 422 结构、`file_filter_key`/`file_kind` 及全部 `select_file` 调用点；
 - 保留日志和第三方原始详情，不在领域层引入翻译依赖；
 - 重新生成 OpenAPI 与 TypeScript 契约。
+
+阶段三验收包含兼容字段收敛：检查全部仓库内消费者后删除 `label`、`category`、`text`、`file_filter` 和已知错误的中文 `message`，同时删除前端 `code`→文案键过渡映射。未知第三方错误的原始详情不在该删除范围。
 
 ### 9.4 阶段四：完整性门禁与验收
 
@@ -242,6 +277,8 @@ ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有
 - 文案参数、数量与日期格式；
 - `<html lang>` 更新；
 - 中英文键集合、值类型与插值参数一致；
+- 422 逐字段错误在两种语言下使用稳定设置键解析标签，参数中不存在已本地化文本；
+- `file_filter_key` 在英文设置中心无中文残留，`file_kind` 不依赖显示文本推导；
 - 缺失键和未知错误的回退顺序。
 
 ### 10.2 后端测试
@@ -250,6 +287,7 @@ ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有
 
 - `ui_locale` 默认值、注册表元数据、字符串枚举、保存与重载；
 - 非法语言值返回字段级校验错误；
+- `DST_MANAGER_UI_LOCALE` 在没有文件覆盖时作为 env 来源生效，文件覆盖存在时仍由文件值优先；
 - 修订冲突和 schema 阻断不改变已保存语言；
 - 设置 API 的新增字段与兼容字段同时存在；
 - 已纳入首期范围的错误均有稳定 `code`、`message_key` 和合法参数；
@@ -260,6 +298,10 @@ ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有
 简体中文继续运行全量 E2E。英文至少覆盖启动、打开工作区、图纸编辑、属性编辑、预览发布、设置中心、任务失败和错误提示等关键流程。两种语言均检查顶部栏、设置对话框、确认框、主表格和任务浮层的换行、截断、按钮宽度、焦点环与键盘操作。
 
 测试不得通过硬编码中文字符串定位非文案目标。确实验证翻译结果时，测试必须显式设置语言，并断言对应语言文本。
+
+除浏览器自动化外，必须在真实 pywebview/WebView2 桌面壳中分别验证中文与英文 Windows 显示语言，记录 `navigator.languages`、`navigator.language` 与最终解析结果；另验证 `ja-JP` 或 `de-DE` 等非中英系统语言按 §4.2 回落到 `en-US`。若 WebView2 实测不能稳定反映 Windows 显示语言，应在实施阶段回到架构审查，不得静默改用另一来源。
+
+ShellBridge 测试必须证明 `file_kind` 只能映射登记的扩展名，前端任意字符串不能改变过滤器模式；同时验证浏览器开发态的按钮禁用和无壳路径输入行为保持不变。
 
 ## 11. 验收标准
 
@@ -277,5 +319,5 @@ ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有
 - 直接翻译后端自由文本会丢失动态参数或产生误译，因此只迁移有稳定错误码且能明确结构化的用户消息；
 - 英文长度可能暴露既有固定宽度布局问题，布局修复必须与对应功能域迁移一起交付；
 - 启动前读取设置会增加一次本地请求，失败路径必须保持非阻断；
-- 兼容字段会在一个发布周期内造成 API 结构冗余，移除前必须单独立项并检查全部调用方；
+- 兼容字段只存在于阶段一至阶段三的迁移窗口；阶段三必须以调用方检查和契约再生作为删除门禁，不能把它们遗留为无期限负债；
 - 首期只定义两种语言，不引入远程语言包、在线翻译、运行时下载、翻译管理平台或用户自定义语言包。

@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-08（按审查接受 DST Manager 多语言支持架构）
+
+- 按 2026-09-08 架构审查修订 [ARCH-DM-005](docs/dst-manager/architecture/ARCH-DM-005-multilingual-support.md)：补齐 422 逐字段错误结构、`file_filter` key 化与稳定 `file_kind`、ShellBridge 签名收紧和浏览器降级行为；明确兼容字段收敛门禁、WebView2 真实语言验证、`DST_MANAGER_UI_LOCALE` 优先级及前端过渡映射删除条件。
+- ARCH-DM-005 状态由 `draft` 更新为 `accepted`，并同步更新 DST Manager 文档入口。
+
 ## 2026-09-08（策划 DST Manager 多语言支持）
 
 - 新增 [ARCH-DM-005](docs/dst-manager/architecture/ARCH-DM-005-multilingual-support.md)（`draft`）：确定首期支持简体中文与英文，采用前端翻译、后端提供稳定错误码/文案键/参数的架构，并定义系统语言解析、设置持久化、兼容契约、分阶段迁移和验收门禁。

@@ -23,7 +23,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [Windows 绿色分发包与一键 release 流程（ARCH-DM-002，已接受）](architecture/ARCH-DM-002-windows-release-packaging.md)
 - [版本管理与发布流程（ARCH-DM-003，已接受）](architecture/ARCH-DM-003-versioning-and-release.md)
 - [设置中心：应用内配置与关于页（ARCH-DM-004，草稿）](architecture/ARCH-DM-004-settings-center.md)
-- [多语言支持架构（ARCH-DM-005，草稿）](architecture/ARCH-DM-005-multilingual-support.md)
+- [多语言支持架构（ARCH-DM-005，已接受）](architecture/ARCH-DM-005-multilingual-support.md)
 - [受控图纸集编辑替代自由调整模型（ADR-DM-001）](adr/ADR-DM-001-controlled-sheetset-editing.md)
 - [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流（ADR-DM-003，已实施）](adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
