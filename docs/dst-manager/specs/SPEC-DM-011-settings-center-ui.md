@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-011
 title: 设置中心 UI 设计规范（齿轮入口 + 模态对话框 + 关于页）
-status: draft
+status: accepted
 owners:
   - dst-manager
 created: 2026-09-08

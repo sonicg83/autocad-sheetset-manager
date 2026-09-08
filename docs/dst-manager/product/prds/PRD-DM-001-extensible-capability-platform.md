@@ -1,7 +1,7 @@
 ---
 id: PRD-DM-001
 title: DST Manager 插件式扩展平台功能需求与要求书
-status: draft
+status: review
 owners:
   - dst-manager
 created: 2026-09-07
