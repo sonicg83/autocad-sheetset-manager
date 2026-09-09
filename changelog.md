@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-09（启动多语言界面 G4 设计冻结）
+
+- 新增 [SPEC-DM-013](docs/dst-manager/specs/SPEC-DM-013-multilingual-ui.md)（`draft`）：把 ARCH-DM-005 落为用户流程、状态矩阵、18 条可追踪需求、视觉方向与验收边界；纠正旧 Todo 中已被图纸目录占用的 `SPEC-DM-012`/`PLAN-DM-020` 编号，后续实施计划使用 `PLAN-DM-021`。
+- 新增双语交互 Demo，供用户确认设置入口、保存后即时切换、失败不切换、英文伸长、浅深主题和最小视口；G4 通过前不修改生产代码。
+- 同步更新 DST Manager 文档入口索引。
+
 ## 2026-09-09（审查 PLAN-DM-020 实施计划）
 
 - 新增 [PLAN-DM-020 实施计划审查备忘](.planning/memos/dst-manager/2026-09-09-plan-dm-020-review.md)：对照 ARCH-DM-006 与 SPEC-DM-012 逐条核对追踪矩阵并验证代码事实，识别 3 项阻塞级缺口（SPEC §5.3 限制值 80/100/1024、SPEC §11 错误码词汇表、清单缺动作输出类型与 `name_key`/`description_key` 字段）、5 项重要偏差（日志语义反向、`SAVE_DIALOG` 非既有约定、Step 9 暂存措辞、changelog 时机、ARCH-DM-005 前置无排期）及若干测试锚点补强项；计划主体覆盖面确认无结构性遗漏，修订后可转 `active`。
