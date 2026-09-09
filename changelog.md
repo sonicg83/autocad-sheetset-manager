@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-09（冻结多语言设计并完成 G5～G6）
+
+- 用户确认 SPEC-DM-013 双语 Demo，冻结 commit `3ecb754`、中文浅色 1440×900 与英文深色 900×768 截图，G4 关闭。
+- 新增 [G5 技术映射备忘](.planning/memos/dst-manager/2026-09-09-multilingual-g5-technical-mapping.md)：核对启动挂载、设置事务、结构化错误、SSE、ShellBridge、全部 Vue 文案、测试与打包落点；无需先行 Spike，真实 WebView2 与原生过滤器留至 G9。
+- 新增 [PLAN-DM-021](.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)（`proposed`），以四个批次、12 个 TDD 任务追踪 I18N-01～I18N-18；SPEC-DM-013 转 `accepted`，G5/G6 关闭。本次未修改生产代码。
+- 修正 ARCH-DM-005 门禁待办的正式 Spec/Plan 编号，并在 PLAN-DM-020 记录多语言前置状态：只有 PLAN-DM-021 批次一实际完成后才解除其 Task 10 阻断。
+
 ## 2026-09-09（启动多语言界面 G4 设计冻结）
 
 - 新增 [SPEC-DM-013](docs/dst-manager/specs/SPEC-DM-013-multilingual-ui.md)（`draft`）：把 ARCH-DM-005 落为用户流程、状态矩阵、18 条可追踪需求、视觉方向与验收边界；纠正旧 Todo 中已被图纸目录占用的 `SPEC-DM-012`/`PLAN-DM-020` 编号，后续实施计划使用 `PLAN-DM-021`。
