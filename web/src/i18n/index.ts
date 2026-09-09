@@ -49,7 +49,7 @@ function readUiLocaleSetting(snapshot: SettingsSnapshot): UiLocaleSetting {
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`settings 读取超时（${timeoutMs}ms）`)), timeoutMs);
+    const timer = setTimeout(() => reject(new Error(`settings request timed out after ${timeoutMs}ms`)), timeoutMs);
     promise.then(
       value => { clearTimeout(timer); resolve(value); },
       error => { clearTimeout(timer); reject(error); },

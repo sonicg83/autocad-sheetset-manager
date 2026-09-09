@@ -26,7 +26,7 @@ import type {SettingsItem, SettingsSnapshot} from "../api/settings";
 vi.stubGlobal("document", {documentElement: {lang: ""}});
 
 function localeItem(value: SettingsItem["value"]): SettingsItem {
-  return {key: "ui_locale", label: "", category: "", control: "enum", value, default: "system", source: "file", hasFileOverride: true};
+  return {key: "ui_locale", labelKey: "settings.items.uiLocale", categoryKey: "settings.categories.interface", control: "enum", value, default: "system", source: "file", hasFileOverride: true};
 }
 
 function snapshotWithUiLocale(value: SettingsItem["value"] | null): SettingsSnapshot {

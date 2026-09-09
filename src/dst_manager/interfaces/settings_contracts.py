@@ -40,35 +40,31 @@ class EnumOptionModel(ContractModel):
     """枚举控件的单个选项。
 
     ``value`` 支持 int 与 str（承载 ui_locale 的字符串枚举值）；``text_key``
-    为稳定选项键，``text`` 是迁移期兼容中文文本（阶段三随 label/category 删除）。
+    为稳定选项键，前端按语言包渲染（迁移期兼容中文 ``text`` 已随阶段三删除）。
     """
 
     value: int | str
     text_key: str
-    text: str
 
 
 class SettingsItemModel(ContractModel):
     """单个设置项：展示元数据 + 当前值 + 来源标注。
 
-    ``label_key``/``category_key`` 为稳定显示键；``label``/``category`` 为
-    迁移期兼容中文文本。``nullable``/``file_filter``/``file_filter_key``/
-    ``file_kind`` 仅 path 控件返回；``options`` 仅 enum 控件；``min``/``max``
-    仅带 ge/le 约束的 int 控件。
+    ``label_key``/``category_key`` 为稳定显示键，前端按语言包渲染；迁移期兼容
+    中文字段（``label``/``category``/``file_filter``）已随阶段三删除。
+    ``nullable``/``file_filter_key``/``file_kind`` 仅 path 控件返回；
+    ``options`` 仅 enum 控件；``min``/``max`` 仅带 ge/le 约束的 int 控件。
     """
 
     key: str
     label_key: str
     category_key: str
-    label: str
-    category: str
     control: str
     value: bool | int | str | None
     default: bool | int | str | None
     source: Literal["default", "env", "file"]
     has_file_override: bool
     nullable: bool | None = None
-    file_filter: str | None = None
     file_filter_key: str | None = None
     file_kind: Literal["exe", "dll"] | None = None
     options: list[EnumOptionModel] | None = None

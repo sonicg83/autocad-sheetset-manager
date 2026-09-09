@@ -69,7 +69,6 @@ def default_store() -> UserSettingsStore:
 
 def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | None:
     """按 registry 控件类型校验单个取值；通过返回 None，否则返回结构化错误。"""
-    label = meta.label  # 仅用于兼容 message，不进入 params
     if meta.control == "path":
         if value is None:
             return None  # 显式置空与"清空覆盖"等价
@@ -77,13 +76,13 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | 
             return FieldErrorModel(
                 code="SETTING_PATH_TYPE",
                 message_key="settings.validation.pathType",
-                message=f"{label} 必须为文件路径",
+                message=f"{meta.key} 必须为文件路径",
             )
         if any(char in _ILLEGAL_PATH_CHARS or ord(char) < 0x20 for char in value):
             return FieldErrorModel(
                 code="SETTING_PATH_ILLEGAL_CHARS",
                 message_key="settings.validation.pathIllegalChars",
-                message=f"{label} 含有路径非法字符",
+                message=f"{meta.key} 含有路径非法字符",
             )
         return None
     if meta.control == "bool":
@@ -92,14 +91,14 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | 
         return FieldErrorModel(
             code="SETTING_BOOL_TYPE",
             message_key="settings.validation.boolType",
-            message=f"{label} 仅接受 true 或 false",
+            message=f"{meta.key} 仅接受 true 或 false",
         )
     if meta.control == "int":
         if isinstance(value, bool) or not isinstance(value, int):
             return FieldErrorModel(
                 code="SETTING_INTEGER_TYPE",
                 message_key="settings.validation.integerType",
-                message=f"{label} 必须为整数",
+                message=f"{meta.key} 必须为整数",
             )
         try:
             low, high = min_max(meta.key)
@@ -110,7 +109,7 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | 
                 code="SETTING_INTEGER_RANGE",
                 message_key="settings.validation.integerRange",
                 params={"min": low, "max": high},
-                message=f"{label} 必须介于 {low} 和 {high} 之间",
+                message=f"{meta.key} 必须介于 {low} 和 {high} 之间",
             )
         return None
     # enum：先守卫可哈希性，list/dict 等任意负载都转成 422 而非 TypeError 崩溃
@@ -126,7 +125,7 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | 
         # allowed_values 一律转字符串列表：params 白名单为 str/int/bool/list[str]，
         # 前端原样展示，不做区域化转换
         params={"allowed_values": [str(option) for option in sorted(options)]},
-        message=f"{label} 取值必须为 {'/'.join(str(option) for option in sorted(options))}",
+        message=f"{meta.key} 取值必须为 {'/'.join(str(option) for option in sorted(options))}",
     )
 
 

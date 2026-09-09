@@ -202,7 +202,7 @@ SSE 继续传输 `QUEUED`、`STAGING`、`CAD_RUNNING`、`VERIFYING`、`PUBLISHIN
 
 浏览器开发态没有 ShellBridge 时沿用现有降级：设置中心“浏览”按钮禁用，工作区入口继续使用无壳路径输入流程；不得用浏览器任意文件过滤器模拟 Shell 白名单。检测到旧或部分桥而没有新签名能力时视为桥不可用，不回退到旧的任意字符串透传。
 
-ShellBridge 错误响应增加可选的 `messageKey` 和 `params`，保留现有 `code` 与 `message`。这部分是原生 UI 边界的轻量适配，不把完整前端语言包复制到 Python。
+ShellBridge 错误响应增加可选的 `message_key` 和 `params`，保留现有 `code` 与 `message`。这部分是原生 UI 边界的轻量适配，不把完整前端语言包复制到 Python。
 
 ## 8. 数据流
 

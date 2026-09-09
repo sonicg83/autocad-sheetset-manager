@@ -18,7 +18,7 @@ import {ApiError} from "../api/client";
 import type {SettingsItem, SettingsSnapshot, SettingsValue} from "../api/settings";
 
 function makeItem(key: string, value: SettingsValue): SettingsItem {
-  return {key, control: "enum", value, default: "system", source: "file", hasFileOverride: false};
+  return {key, labelKey: "settings.items." + key, categoryKey: "settings.categories.interface", control: "enum", value, default: "system", source: "file", hasFileOverride: false};
 }
 
 function makeSnapshot(uiLocale: SettingsValue, configRevision = 1): SettingsSnapshot {

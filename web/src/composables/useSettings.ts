@@ -37,7 +37,7 @@ export function useSettings():{
 
   async function save(set:Record<string,unknown>,unset:string[]):Promise<void>{
     const current=snapshot.value;
-    if(current===null)throw new Error("设置快照未加载，无法保存");
+    if(current===null)throw new Error("Settings snapshot not loaded; cannot save"); // 开发态诊断，非界面文案
     // 乐观并发：以打开对话框时的 config_revision 为期望修订号。
     // 失败（422/409/网络/5xx）原样上抛：快照不替换、语言不切换。
     const next=await putSettings(current.configRevision,set,unset);

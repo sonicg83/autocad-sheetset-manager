@@ -105,12 +105,12 @@ function onCancel(event:Event){
 
 // ---- 编辑缓冲与校验 ----
 const items=computed(()=>snapshot.value?.items??[]);
-// 按 category key 分组（I18N-09）：稳定键优先，迁移期缺键回退中文 category；
-// 注册表顺序即首次出现顺序（后端稳定排序）
+// 按 category key 分组（I18N-09）：稳定键分组，注册表顺序即首次出现顺序（后端稳定排序）；
+// 迁移期兼容中文 category 回退已随阶段三（Task 10）删除
 const groups=computed(()=>{
   const result:{key:string;items:SettingsItem[]}[]=[];
   for(const item of items.value){
-    const key=item.categoryKey??item.category??item.key;
+    const key=item.categoryKey??item.key;
     const group=result.find(entry=>entry.key===key);
     if(group)group.items.push(item);
     else result.push({key,items:[item]});
@@ -118,7 +118,7 @@ const groups=computed(()=>{
   return result;
 });
 function groupTitle(key:string):string{
-  return key.startsWith("settings.")?t(key):key; // 非键形态=迁移期兼容中文，原样显示
+  return t(key); // category key 由注册表保证存在
 }
 const schemaBlocked=computed(()=>snapshot.value?.schemaBlocked??false);
 
@@ -148,7 +148,7 @@ function fieldErrorText(error:ApiFieldError):string{
 function fieldLabel(key:string):string{
   const item=items.value.find(entry=>entry.key===key);
   if(item===undefined)return key;
-  return item.labelKey!==undefined?t(item.labelKey):(item.label??item.key);
+  return item.labelKey!==undefined?t(item.labelKey):item.key; // 兼容中文 label 回退已随阶段三删除
 }
 function rowError(item:SettingsItem):string|undefined{
   const error=fieldErrors.value[item.key];

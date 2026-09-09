@@ -249,7 +249,7 @@ def test_field_error_params_stay_within_whitelist(tmp_path) -> None:
         {"ui_locale": "fr-FR"},
         {"no_such_key": 1},
     ]
-    labels = {meta.label for meta in REGISTRY}
+    keys = {meta.key for meta in REGISTRY}
     for case in cases:
         with pytest.raises(SettingsValidationError) as exc_info:
             rt.apply_changes(case, [], expected_revision=0)
@@ -260,7 +260,7 @@ def test_field_error_params_stay_within_whitelist(tmp_path) -> None:
                 if isinstance(value, list):
                     assert all(isinstance(item, str) for item in value), error.code
                 if isinstance(value, str):
-                    assert value not in labels, error.code  # 不传中文 label
+                    assert value not in keys, error.code  # 不传本地化 label（兼容 label 已删除，以稳定 key 判别）
 
 
 def test_pydantic_fallback_error_is_structured() -> None:

@@ -12,19 +12,15 @@ export type SettingsFileKind = "exe" | "dll";
 export interface SettingsEnumOption {
   // ui_locale 为字符串枚举（system/zh-CN/en-US），其余枚举为 int
   value: number | string;
-  textKey?: string; // 稳定选项文本键（PLAN-DM-021 Task 1）
-  text?: string; // 迁移期兼容中文文本（阶段三随 label/category 一并删除）
+  textKey: string; // 稳定选项文本键（PLAN-DM-021 Task 1）；阶段三起兼容 text 已删除
 }
 
-// PLAN-DM-021 Task 3 起组件只消费稳定显示键（labelKey/categoryKey/textKey/
-// fileFilterKey）做 i18n 渲染；label/category/text/fileFilter 为迁移期兼容
-// 中文文本（I18N-17），仅在前端语言资源缺键时作回退，阶段三验收后删除。
+// 组件只消费稳定显示键（labelKey/categoryKey/textKey/fileFilterKey）做 i18n 渲染；
+// 迁移期兼容中文字段（label/category/text/fileFilter，I18N-17）已随阶段三（Task 10）删除。
 export interface SettingsItem {
   key: string;
-  labelKey?: string; // 前端文案键，如 settings.items.uiLocale
-  categoryKey?: string; // 前端文案键，如 settings.categories.interface
-  label?: string; // 迁移期兼容：中文显示名
-  category?: string; // 迁移期兼容：中文分类
+  labelKey: string; // 前端文案键，如 settings.items.uiLocale
+  categoryKey: string; // 前端文案键，如 settings.categories.interface
   control: SettingsControl;
   value: SettingsValue;
   // Schema 字段默认值（非当前值，fba1624 起返回）
@@ -35,7 +31,6 @@ export interface SettingsItem {
   nullable?: boolean;
   fileFilterKey?: string; // 过滤器显示名文案键，如 settings.fileFilters.executable
   fileKind?: SettingsFileKind; // ShellBridge 固定扩展名种类
-  fileFilter?: string; // 迁移期兼容：中文过滤器文本
   options?: SettingsEnumOption[];
   min?: number;
   max?: number;
@@ -62,10 +57,8 @@ export interface AboutInfo {
 
 interface RawSettingsItem {
   key: string;
-  label_key?: string | null;
-  category_key?: string | null;
-  label?: string | null;
-  category?: string | null;
+  label_key: string;
+  category_key: string;
   control: string;
   value: SettingsValue;
   default: SettingsValue;
@@ -74,8 +67,7 @@ interface RawSettingsItem {
   nullable?: boolean | null;
   file_filter_key?: string | null;
   file_kind?: string | null;
-  file_filter?: string | null;
-  options?: {value: number | string; text_key?: string | null; text?: string | null}[] | null;
+  options?: {value: number | string; text_key: string}[] | null;
   min?: number | null;
   max?: number | null;
 }
@@ -99,10 +91,8 @@ interface RawAboutResponse {
 function mapItem(raw: RawSettingsItem): SettingsItem {
   return {
     key: raw.key,
-    labelKey: raw.label_key ?? undefined,
-    categoryKey: raw.category_key ?? undefined,
-    label: raw.label ?? undefined,
-    category: raw.category ?? undefined,
+    labelKey: raw.label_key,
+    categoryKey: raw.category_key,
     control: raw.control as SettingsControl,
     value: raw.value,
     default: raw.default,
@@ -111,11 +101,9 @@ function mapItem(raw: RawSettingsItem): SettingsItem {
     nullable: raw.nullable ?? undefined,
     fileFilterKey: raw.file_filter_key ?? undefined,
     fileKind: (raw.file_kind ?? undefined) as SettingsFileKind | undefined,
-    fileFilter: raw.file_filter ?? undefined,
     options: raw.options?.map(option => ({
       value: option.value,
-      textKey: option.text_key ?? undefined,
-      text: option.text ?? undefined,
+      textKey: option.text_key,
     })),
     min: raw.min ?? undefined,
     max: raw.max ?? undefined,

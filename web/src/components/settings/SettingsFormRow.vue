@@ -2,7 +2,7 @@
 // 设置中心单字段行（PLAN-DM-019 任务 10；PLAN-DM-021 Task 3 双语化）。
 // 只负责展示与编辑事件上抛；编辑缓冲、校验与保存状态机在 SettingsDialog.vue。
 // 文本一律经语言包渲染：item 的稳定显示键（labelKey/textKey/fileFilterKey），
-// 缺键时回退迁移期兼容中文（I18N-17，阶段三删除）。DOM 约定（e2e 依赖）：
+// 迁移期兼容中文回退（I18N-17）已随阶段三（Task 10）删除。DOM 约定（e2e 依赖）：
 // 行容器 data-field；可编辑控件 data-key；int 控件直接位于 .f-main 内，
 // 保证 `input[data-key]` 的父节点包含来源徽章文本。
 import {computed} from "vue";
@@ -21,8 +21,8 @@ const emit=defineEmits<{update:[key:string,value:SettingsValue];clear:[key:strin
 
 const {t,locale}=useI18n();
 
-// 字段标签：稳定键优先，兼容中文仅作迁移期回退
-const label=computed(()=>props.item.labelKey!==undefined?t(props.item.labelKey):(props.item.label??props.item.key));
+// 字段标签：稳定键经语言包渲染（兼容中文回退已随阶段三删除）
+const label=computed(()=>props.item.labelKey!==undefined?t(props.item.labelKey):props.item.key);
 
 // "跟随系统"选项的当前生效语言名：语言名保留自称形式（SPEC-DM-013 §5.1），
 // 与界面语言无关地显示 zh-CN → 简体中文 / en-US → English
@@ -31,7 +31,6 @@ const currentLocaleName=computed(()=>locale.value==="zh-CN"?t("settings.locale.z
 // 枚举选项文本：textKey 走语言包；"跟随系统"为复合标签（SPEC-DM-013 §3.2），
 // 当前解析结果经命名参数注入（I18N-08），不在调用点拼接可翻译片段
 function optionText(option:SettingsEnumOption):string{
-  if(option.textKey===undefined)return option.text??String(option.value);
   if(option.textKey==="settings.locale.system")return t("settings.locale.systemCurrent",{current:currentLocaleName.value});
   return t(option.textKey);
 }
@@ -87,7 +86,6 @@ function onEnumInput(event:Event){
         <span class="badge" :class="badgeClass">{{badgeText}}</span>
         <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
         <span v-if="item.control==='path'&&item.fileFilterKey!==undefined" class="f-hint">{{t(item.fileFilterKey)}}</span>
-        <span v-else-if="item.control==='path'&&item.fileFilter" class="f-hint">{{item.fileFilter}}</span>
         <span v-else-if="item.control==='int'&&item.min!==undefined&&item.max!==undefined" class="f-hint">{{item.min}}–{{item.max}}</span>
       </div>
       <p v-if="hasError" class="f-error" role="alert">{{error}}</p>

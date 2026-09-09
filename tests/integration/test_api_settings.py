@@ -55,15 +55,17 @@ def test_get_settings_returns_items_with_metadata(client_with_runtime) -> None:
     assert next(item["key"] for item in body["items"]) == "ui_locale"
     assert set(items) == set(Settings.model_fields) - {"data_dir", "draft_dir"}
     item = items["cad_timeout_seconds"]
-    assert item["label"] and item["category"] and item["source"] in ("default", "env", "file")
+    assert item["label_key"] and item["category_key"] and item["source"] in ("default", "env", "file")
 
 
-def test_settings_items_carry_legacy_and_key_metadata(client_with_runtime) -> None:
-    """迁移期契约（ARCH-DM-005 §6.1）：旧中文字段与新 key 字段同时返回。"""
+def test_settings_items_carry_key_metadata_only(client_with_runtime) -> None:
+    """阶段三契约（PLAN-DM-021 Task 10 / I18N-17）：兼容中文字段已删除，
+    响应只携带稳定显示键，前端按语言包渲染（ARCH-DM-005 §6.1）。"""
     body = client_with_runtime.get("/api/settings").json()
     items = {item["key"]: item for item in body["items"]}
     locale = items["ui_locale"]
-    assert locale["label"] == "语言" and locale["category"] == "界面"  # 兼容中文
+    for legacy in ("label", "category", "text"):
+        assert legacy not in locale
     assert locale["label_key"] == "settings.items.uiLocale"
     assert locale["category_key"] == "settings.categories.interface"
     assert [(o["value"], o["text_key"]) for o in locale["options"]] == [
@@ -71,9 +73,10 @@ def test_settings_items_carry_legacy_and_key_metadata(client_with_runtime) -> No
         ("zh-CN", "settings.locale.zhCN"),
         ("en-US", "settings.locale.enUS"),
     ]
-    assert all(o["text"] for o in locale["options"])  # 兼容中文 text
+    assert all("text" not in o for o in locale["options"])  # 兼容中文 text 已删除
     console = items["autocad_2016_console"]
-    assert console["file_filter"] and console["nullable"] is True  # 兼容中文过滤器
+    assert "file_filter" not in console
+    assert console["nullable"] is True
     assert console["file_filter_key"] == "settings.fileFilters.executable"
     assert console["file_kind"] == "exe"
     plugin = items["autocad_2016_plugin"]

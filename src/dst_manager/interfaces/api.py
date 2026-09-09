@@ -129,8 +129,6 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
             key=meta.key,
             label_key=meta.label_key,
             category_key=meta.category_key,
-            label=meta.label,  # 迁移期兼容中文，阶段三随 key 字段接管后删除
-            category=meta.category,
             control=meta.control,
             value=value,
             default=default,
@@ -139,7 +137,6 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
         )
         if meta.control == "path":
             item.nullable = meta.nullable
-            item.file_filter = meta.file_filter  # 迁移期兼容中文过滤器文本
             item.file_filter_key = meta.file_filter_key
             item.file_kind = meta.file_kind
         elif meta.control == "enum":
