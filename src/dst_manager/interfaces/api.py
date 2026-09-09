@@ -126,7 +126,9 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
         source = snapshot.sources[meta.key]
         item = SettingsItemModel(
             key=meta.key,
-            label=meta.label,
+            label_key=meta.label_key,
+            category_key=meta.category_key,
+            label=meta.label,  # 迁移期兼容中文，阶段三随 key 字段接管后删除
             category=meta.category,
             control=meta.control,
             value=value,
@@ -136,7 +138,9 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
         )
         if meta.control == "path":
             item.nullable = meta.nullable
-            item.file_filter = meta.file_filter
+            item.file_filter = meta.file_filter  # 迁移期兼容中文过滤器文本
+            item.file_filter_key = meta.file_filter_key
+            item.file_kind = meta.file_kind
         elif meta.control == "enum":
             item.options = [
                 EnumOptionModel(**option) for option in enum_options(meta.key)
@@ -489,7 +493,17 @@ def create_app(
             except SettingsConflict as exc:
                 return JSONResponse(status_code=409, content={"code": "SETTINGS_CONFLICT", "message": str(exc)})
             except SettingsValidationError as exc:
-                return JSONResponse(status_code=422, content={"errors": exc.errors})
+                # 逐字段 422（ARCH-DM-005 §6.2）：外层 key 为稳定设置 key，
+                # 错误对象含 code/message_key/params 与兼容 message
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "code": "SETTINGS_VALIDATION_FAILED",
+                        "errors": {
+                            key: error.model_dump() for key, error in exc.errors.items()
+                        },
+                    },
+                )
             return _settings_response(snapshot)
 
         @app.get("/api/about", response_model=AboutResponse)

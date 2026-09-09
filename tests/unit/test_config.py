@@ -92,3 +92,24 @@ def test_frozen_explicit_config_overrides_defaults(monkeypatch, tmp_path):
     plugin = tmp_path / "custom" / "my.dll"
     settings = Settings(_env_file=None, autocad_2020_plugin=str(plugin))
     assert settings.autocad_2020_plugin == plugin.resolve()
+
+
+# ---- ui_locale（PLAN-DM-021 Task 1：I18N-02 三值白名单）----
+
+
+def test_ui_locale_defaults_to_system(monkeypatch):
+    monkeypatch.delenv("DST_MANAGER_UI_LOCALE", raising=False)
+    assert Settings(_env_file=None).ui_locale == "system"
+
+
+@pytest.mark.parametrize("value", ["system", "zh-CN", "en-US"])
+def test_ui_locale_accepts_only_whitelist(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_UI_LOCALE", value)
+    assert Settings(_env_file=None).ui_locale == value
+
+
+@pytest.mark.parametrize("value", ["fr-FR", "zh", "SYSTEM", ""])
+def test_ui_locale_rejects_values_outside_whitelist(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_UI_LOCALE", value)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

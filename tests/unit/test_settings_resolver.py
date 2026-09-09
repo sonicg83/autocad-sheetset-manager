@@ -71,3 +71,37 @@ def test_bad_value_type_degrades_instead_of_crashing(monkeypatch, tmp_path) -> N
     assert snap.config_revision == 4                          # 修订号仍取文件值
     assert snap.schema_blocked is False
     assert any("SETTINGS_FILE_CORRUPT" in d for d in snap.diagnostics)
+
+
+# ---- ui_locale：默认 < env < 文件覆盖（ARCH-DM-005 §4.1）----
+
+
+def test_ui_locale_defaults_to_system(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("DST_MANAGER_UI_LOCALE", raising=False)
+    snap = _resolver(tmp_path, {}).load_snapshot()
+    assert snap.settings.ui_locale == "system"
+    assert snap.sources["ui_locale"].source == "default"
+
+
+def test_ui_locale_env_applies_without_file_override(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("DST_MANAGER_UI_LOCALE", "en-US")
+    snap = _resolver(tmp_path, {}).load_snapshot()
+    assert snap.settings.ui_locale == "en-US"
+    assert snap.sources["ui_locale"].source == "env"
+
+
+def test_ui_locale_file_override_wins_over_env(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("DST_MANAGER_UI_LOCALE", "en-US")
+    snap = _resolver(tmp_path, {"ui_locale": "zh-CN"}).load_snapshot()
+    assert snap.settings.ui_locale == "zh-CN"
+    src = snap.sources["ui_locale"]
+    assert (src.source, src.has_file_override) == ("file", True)
+
+
+def test_ui_locale_whitelist_enforced_during_resolution(monkeypatch, tmp_path) -> None:
+    # 文件遗留非法语言值：随既有降级语义忽略全部覆盖，回落默认值并携带诊断
+    monkeypatch.delenv("DST_MANAGER_UI_LOCALE", raising=False)
+    snap = _resolver(tmp_path, {"ui_locale": "fr-FR"}).load_snapshot()
+    assert snap.settings.ui_locale == "system"
+    assert snap.sources["ui_locale"].source == "default"
+    assert any("SETTINGS_FILE_CORRUPT" in d for d in snap.diagnostics)

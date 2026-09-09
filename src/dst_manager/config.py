@@ -8,6 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .runtime import is_frozen
 
+# 界面语言三值白名单（I18N-02）：system 表示跟随系统语言，解析在前端完成
+UiLocale = Literal["system", "zh-CN", "en-US"]
+
 
 def _default_draft_dir() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
@@ -52,6 +55,11 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = Field(default=120, ge=30, le=3600)
     enable_add_number_suffix: bool = Field(default=True, validation_alias="EnableAddNumberSuffix")
     number_suffix_type: Literal[1, 2] = Field(default=1, validation_alias="NumberSuffixType")
+    # 界面语言（ARCH-DM-005 §4.1）：只保存显式覆盖值，不进工作区/草稿/数据库；
+    # 仅接受三值白名单，system 的解析（含非中英回落 en-US、无法读取回落 zh-CN）
+    # 由前端负责，后端不按语言生成文本。env 通道 DST_MANAGER_UI_LOCALE 沿用
+    # env_prefix 既有规则，优先级 默认 < env < settings.json 文件覆盖
+    ui_locale: UiLocale = "system"
     # populate_by_name：设置中心以 registry 字段名（snake_case）构造覆盖项，而
     # enable_add_number_suffix/number_suffix_type 的 validation_alias 仅服务
     # .env/环境变量通道——两个入口必须同时可用。顺带使带 DST_MANAGER_ 前缀的

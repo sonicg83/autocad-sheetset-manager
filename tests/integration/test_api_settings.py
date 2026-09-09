@@ -50,21 +50,61 @@ def _write_settings_file(tmp_path, schema_version, revision=3, values=None):
 def test_get_settings_returns_items_with_metadata(client_with_runtime) -> None:
     body = client_with_runtime.get("/api/settings").json()
     assert body["schema_version"] == 1 and body["config_revision"] == 0
-    keys = [item["key"] for item in body["items"]]
-    assert keys[0] == "autocad_2016_console" and len(keys) == 9  # REGISTRY 顺序稳定
-    item = body["items"][4]
+    items = {item["key"]: item for item in body["items"]}
+    # REGISTRY 顺序稳定：ui_locale（界面/语言）居首；覆盖面由 Settings 字段派生
+    assert next(item["key"] for item in body["items"]) == "ui_locale"
+    assert set(items) == set(Settings.model_fields) - {"data_dir", "draft_dir"}
+    item = items["cad_timeout_seconds"]
     assert item["label"] and item["category"] and item["source"] in ("default", "env", "file")
+
+
+def test_settings_items_carry_legacy_and_key_metadata(client_with_runtime) -> None:
+    """迁移期契约（ARCH-DM-005 §6.1）：旧中文字段与新 key 字段同时返回。"""
+    body = client_with_runtime.get("/api/settings").json()
+    items = {item["key"]: item for item in body["items"]}
+    locale = items["ui_locale"]
+    assert locale["label"] == "语言" and locale["category"] == "界面"  # 兼容中文
+    assert locale["label_key"] == "settings.items.uiLocale"
+    assert locale["category_key"] == "settings.categories.interface"
+    assert [(o["value"], o["text_key"]) for o in locale["options"]] == [
+        ("system", "settings.locale.system"),
+        ("zh-CN", "settings.locale.zhCN"),
+        ("en-US", "settings.locale.enUS"),
+    ]
+    assert all(o["text"] for o in locale["options"])  # 兼容中文 text
+    console = items["autocad_2016_console"]
+    assert console["file_filter"] and console["nullable"] is True  # 兼容中文过滤器
+    assert console["file_filter_key"] == "settings.fileFilters.executable"
+    assert console["file_kind"] == "exe"
+    plugin = items["autocad_2016_plugin"]
+    assert plugin["file_kind"] == "dll"
+    assert plugin["file_filter_key"] == "settings.fileFilters.dotnetAssembly"
+    non_path = items["cad_max_parallel"]
+    assert non_path["file_filter_key"] is None and non_path["file_kind"] is None
 
 
 def test_get_settings_items_carry_settings_defaults(client_with_runtime) -> None:
     """每项含 default 且与 Settings 字段默认一致（ARCH-DM-004 §3 契约）。"""
     body = client_with_runtime.get("/api/settings").json()
-    assert body["items"][4]["default"] == 600  # cad_timeout_seconds（REGISTRY 第 5 项）
+    items = {item["key"]: item for item in body["items"]}
+    assert items["cad_timeout_seconds"]["default"] == 600
     for item in body["items"]:
         expected = Settings.model_fields[item["key"]].get_default(call_default_factory=True)
         if item["control"] == "path":
             expected = str(expected) if expected is not None else None
         assert item["default"] == expected, item["key"]
+
+
+def test_put_ui_locale_persists_and_returns_snapshot(client_with_runtime) -> None:
+    rev = client_with_runtime.get("/api/settings").json()["config_revision"]
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={"expected_revision": rev, "set": {"ui_locale": "en-US"}, "unset": []},
+    )
+    assert resp.status_code == 200
+    items = {i["key"]: i for i in resp.json()["items"]}
+    assert items["ui_locale"]["value"] == "en-US"
+    assert items["ui_locale"]["has_file_override"] is True
 
 
 def test_put_partial_update_does_not_freeze_env_values(client_with_runtime, monkeypatch) -> None:
@@ -87,13 +127,37 @@ def test_put_stale_revision_returns_409(client_with_runtime) -> None:
     assert resp.status_code == 409
 
 
-def test_put_field_errors_return_422_with_errors_map(client_with_runtime) -> None:
+def test_put_field_errors_return_structured_422(client_with_runtime) -> None:
+    """422 结构（ARCH-DM-005 §6.2）：外层 key 为设置 key，错误对象含 code/
+    message_key/params 与兼容 message；params 不携带本地化 label 或完整句子。"""
     rev = client_with_runtime.get("/api/settings").json()["config_revision"]
     resp = client_with_runtime.put(
         "/api/settings",
         json={"expected_revision": rev, "set": {"cad_max_parallel": 99}, "unset": []},
     )
-    assert resp.status_code == 422 and "cad_max_parallel" in resp.json()["errors"]
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "SETTINGS_VALIDATION_FAILED"
+    error = body["errors"]["cad_max_parallel"]
+    assert error["code"] == "SETTING_INTEGER_RANGE"
+    assert error["message_key"] == "settings.validation.integerRange"
+    assert error["params"] == {"min": 1, "max": 10}
+    assert error["message"]
+
+
+def test_put_unknown_locale_rejected_with_field_error(client_with_runtime) -> None:
+    rev = client_with_runtime.get("/api/settings").json()["config_revision"]
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={"expected_revision": rev, "set": {"ui_locale": "fr-FR"}, "unset": []},
+    )
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "SETTINGS_VALIDATION_FAILED"
+    error = body["errors"]["ui_locale"]
+    assert error["code"] == "SETTING_ENUM_VALUE"
+    assert error["message_key"] == "settings.validation.enumValue"
+    assert sorted(error["params"]["allowed_values"]) == ["en-US", "system", "zh-CN"]
 
 
 def test_about_returns_version_and_mit_license(client_with_runtime) -> None:

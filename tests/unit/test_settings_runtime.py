@@ -3,11 +3,15 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
+from dst_manager.config import Settings
+from dst_manager.settings.registry import REGISTRY
 from dst_manager.settings.runtime import (
     RuntimeSettings,
     SettingsConflict,
     SettingsValidationError,
+    _pydantic_fallback_errors,
     default_store,
 )
 from dst_manager.settings.store import UserSettingsStore
@@ -185,3 +189,88 @@ def test_default_store_falls_back_to_local_app_data(monkeypatch) -> None:
     monkeypatch.delenv("DST_MANAGER_SETTINGS_PATH", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\demo\AppData\Local")
     assert default_store().path == Path(r"C:\Users\demo\AppData\Local\dst-manager\settings.json")
+
+
+# ---- ui_locale 保存与结构化字段错误（PLAN-DM-021 Task 1 / I18N-10）----
+
+
+def test_ui_locale_round_trips_through_save_transaction(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    snap = rt.apply_changes({"ui_locale": "en-US"}, [], expected_revision=0)
+    assert snap.settings.ui_locale == "en-US"
+    assert snap.sources["ui_locale"].source == "file"
+    assert json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))["values"] == {
+        "ui_locale": "en-US"
+    }
+
+
+def test_ui_locale_rejected_outside_whitelist_with_structured_error(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes({"ui_locale": "fr-FR"}, [], expected_revision=0)
+    error = exc_info.value.errors["ui_locale"]
+    assert error.code == "SETTING_ENUM_VALUE"
+    assert error.message_key == "settings.validation.enumValue"
+    assert error.params == {"allowed_values": ["en-US", "system", "zh-CN"]}
+    assert error.message  # 迁移期兼容中文文本仍在
+
+
+def test_integer_range_error_carries_structured_params(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes({"cad_max_parallel": 99}, [], expected_revision=0)
+    error = exc_info.value.errors["cad_max_parallel"]
+    assert error.code == "SETTING_INTEGER_RANGE"
+    assert error.message_key == "settings.validation.integerRange"
+    assert error.params == {"min": 1, "max": 10}
+    assert error.message
+
+
+def test_unknown_key_error_is_structured(tmp_path) -> None:
+    with pytest.raises(SettingsValidationError) as exc_info:
+        _runtime(tmp_path).apply_changes({"no_such_key": 1}, [], expected_revision=0)
+    error = exc_info.value.errors["no_such_key"]
+    assert error.code == "SETTING_UNKNOWN"
+    assert error.message_key == "settings.validation.unknownKey"
+    assert error.params == {}
+
+
+def test_field_error_params_stay_within_whitelist(tmp_path) -> None:
+    # params 只允许 str/int/bool/list[str]，且不携带已本地化 label 或完整句子
+    rt = _runtime(tmp_path)
+    cases: list[dict[str, object]] = [
+        {"cad_max_parallel": 99},
+        {"worker_lease_seconds": "abc"},
+        {"enable_add_number_suffix": "yes"},
+        {"autocad_2020_console": "console<a>.exe"},
+        {"autocad_2016_plugin": 3},
+        {"number_suffix_type": 3},
+        {"number_suffix_type": ["1"]},
+        {"ui_locale": "fr-FR"},
+        {"no_such_key": 1},
+    ]
+    labels = {meta.label for meta in REGISTRY}
+    for case in cases:
+        with pytest.raises(SettingsValidationError) as exc_info:
+            rt.apply_changes(case, [], expected_revision=0)
+        for error in exc_info.value.errors.values():
+            assert error.message_key.startswith("settings.validation."), error.code
+            for value in error.params.values():
+                assert isinstance(value, (str, int, bool, list)), error.code
+                if isinstance(value, list):
+                    assert all(isinstance(item, str) for item in value), error.code
+                if isinstance(value, str):
+                    assert value not in labels, error.code  # 不传中文 label
+
+
+def test_pydantic_fallback_error_is_structured() -> None:
+    # 兜底转换分支（registry 约束之外，如 lax 模式仍拒绝的负载）直接以真实
+    # pydantic 异常驱动：同样必须产出结构化对象而非中文纯字符串
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None, cad_max_parallel=99)
+    errors = _pydantic_fallback_errors(exc_info.value)
+    error = errors["cad_max_parallel"]
+    assert error.code == "SETTING_INVALID_FORMAT"
+    assert error.message_key == "settings.validation.invalidFormat"
+    assert error.params == {}
+    assert error.message

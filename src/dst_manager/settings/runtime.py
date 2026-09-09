@@ -1,4 +1,4 @@
-"""进程内设置快照持有者与保存事务（PLAN-DM-019 设置中心任务 4）。
+"""进程内设置快照持有者与保存事务（PLAN-DM-019 设置中心任务 4；PLAN-DM-021 Task 1）。
 
 职责（API 与同进程的 desktop/Worker 服务共用）：
 
@@ -10,8 +10,11 @@
   :class:`SettingsConflict`（零副作用，API 层转 409）；校验失败抛
   :class:`SettingsValidationError`（文件与内存均不动，API 层转 422）；
 - 校验分层：registry 约束（int 范围、bool/enum 取值、path 非法字符）先行，
-  再以 ``Settings(**merged_overrides)`` 构造兜底，pydantic 异常转逐字段中文
+  再以 ``Settings(**merged_overrides)`` 构造兜底，pydantic 异常转逐字段结构化
   错误；文件遗留的非法值在保存时随合并清理（自愈），不影响本次合法提交。
+- 逐字段错误为结构化对象（``code``/``message_key``/``params`` + 兼容
+  ``message``）：``params`` 只携带 min/max/allowed_values 等结构化参数，不含
+  本地化 label 或完整句子；本模块不根据语言选择文本（ARCH-DM-005 §6.2）。
 
 ``default_store()`` 返回用户默认设置存储：``DST_MANAGER_SETTINGS_PATH`` 环境
 变量存在时用作 settings.json 完整路径（测试/e2e 隔离机制）；否则落
@@ -28,6 +31,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from dst_manager.config import Settings
+from dst_manager.interfaces.settings_contracts import FieldErrorModel
 
 from .registry import REGISTRY, SettingsItemMeta, enum_options, min_max
 from .resolver import SettingsResolver, SettingsSnapshot
@@ -44,11 +48,12 @@ class SettingsConflict(Exception):
 class SettingsValidationError(Exception):
     """设置值未通过校验（API 层转 422）。
 
-    ``errors``：key → 中文消息，逐字段回显到设置界面。
+    ``errors``：设置 key → :class:`FieldErrorModel` 结构化错误，外层 key 即
+    稳定设置 key，供前端按 ``label_key`` 解析字段标签后本地化。
     """
 
-    def __init__(self, errors: dict[str, str]) -> None:
-        super().__init__("；".join(f"{key}: {message}" for key, message in errors.items()))
+    def __init__(self, errors: dict[str, FieldErrorModel]) -> None:
+        super().__init__("；".join(f"{key}: {error.message}" for key, error in errors.items()))
         self.errors = errors
 
 
@@ -62,28 +67,51 @@ def default_store() -> UserSettingsStore:
     return UserSettingsStore(base / "dst-manager" / "settings.json")
 
 
-def _validate_value(meta: SettingsItemMeta, value: object) -> str | None:
-    """按 registry 控件类型校验单个取值；通过返回 None，否则返回中文消息。"""
-    label = meta.label
+def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | None:
+    """按 registry 控件类型校验单个取值；通过返回 None，否则返回结构化错误。"""
+    label = meta.label  # 仅用于兼容 message，不进入 params
     if meta.control == "path":
         if value is None:
             return None  # 显式置空与"清空覆盖"等价
         if not isinstance(value, str):
-            return f"{label} 必须为文件路径"
+            return FieldErrorModel(
+                code="SETTING_PATH_TYPE",
+                message_key="settings.validation.pathType",
+                message=f"{label} 必须为文件路径",
+            )
         if any(char in _ILLEGAL_PATH_CHARS or ord(char) < 0x20 for char in value):
-            return f"{label} 含有路径非法字符"
+            return FieldErrorModel(
+                code="SETTING_PATH_ILLEGAL_CHARS",
+                message_key="settings.validation.pathIllegalChars",
+                message=f"{label} 含有路径非法字符",
+            )
         return None
     if meta.control == "bool":
-        return None if isinstance(value, bool) else f"{label} 仅接受 true 或 false"
+        if isinstance(value, bool):
+            return None
+        return FieldErrorModel(
+            code="SETTING_BOOL_TYPE",
+            message_key="settings.validation.boolType",
+            message=f"{label} 仅接受 true 或 false",
+        )
     if meta.control == "int":
         if isinstance(value, bool) or not isinstance(value, int):
-            return f"{label} 必须为整数"
+            return FieldErrorModel(
+                code="SETTING_INTEGER_TYPE",
+                message_key="settings.validation.integerType",
+                message=f"{label} 必须为整数",
+            )
         try:
             low, high = min_max(meta.key)
         except ValueError:
             return None  # 字段无 ge/le 约束（如 cad_timeout_seconds），不设范围
         if not low <= value <= high:
-            return f"{label} 必须介于 {low} 和 {high} 之间"
+            return FieldErrorModel(
+                code="SETTING_INTEGER_RANGE",
+                message_key="settings.validation.integerRange",
+                params={"min": low, "max": high},
+                message=f"{label} 必须介于 {low} 和 {high} 之间",
+            )
         return None
     # enum：先守卫可哈希性，list/dict 等任意负载都转成 422 而非 TypeError 崩溃
     options = {option["value"] for option in enum_options(meta.key)}
@@ -92,7 +120,14 @@ def _validate_value(meta: SettingsItemMeta, value: object) -> str | None:
             return None
     except TypeError:
         pass
-    return f"{label} 取值必须为 {'/'.join(str(option) for option in sorted(options))}"
+    return FieldErrorModel(
+        code="SETTING_ENUM_VALUE",
+        message_key="settings.validation.enumValue",
+        # allowed_values 一律转字符串列表：params 白名单为 str/int/bool/list[str]，
+        # 前端原样展示，不做区域化转换
+        params={"allowed_values": [str(option) for option in sorted(options)]},
+        message=f"{label} 取值必须为 {'/'.join(str(option) for option in sorted(options))}",
+    )
 
 
 class RuntimeSettings:
@@ -165,22 +200,22 @@ class RuntimeSettings:
     def _validated_set(self, set_values: dict[str, object], unset: list[str]) -> dict[str, object]:
         """registry 约束校验 + 空串路径规整为 None；失败抛 SettingsValidationError。"""
         known = {meta.key: meta for meta in REGISTRY}
-        errors: dict[str, str] = {}
+        errors: dict[str, FieldErrorModel] = {}
         for key in unset:
             if key not in known:
-                errors[key] = f"未知的设置项：{key}"
+                errors[key] = _unknown_key_error(key)
         fresh: dict[str, object] = {}
         for key, value in set_values.items():
             meta = known.get(key)
             if meta is None:
-                errors[key] = f"未知的设置项：{key}"
+                errors[key] = _unknown_key_error(key)
                 continue
             if meta.control == "path" and isinstance(value, str) and not value.strip():
                 fresh[key] = None  # 空串/纯空白 = 清空覆盖，写 null
                 continue
-            message = _validate_value(meta, value)
-            if message is not None:
-                errors[key] = message
+            error = _validate_value(meta, value)
+            if error is not None:
+                errors[key] = error
                 continue
             fresh[key] = value
         if errors:
@@ -206,7 +241,7 @@ class RuntimeSettings:
         """``Settings(**merged)`` 构造兜底。
 
         文件遗留值类型非法时剔除后重试（随本次保存自愈）；本次提交的取值
-        仍非法则把 pydantic 异常转成逐字段中文 ``SettingsValidationError``。
+        仍非法则把 pydantic 异常转成逐字段结构化 ``SettingsValidationError``。
         """
         try:
             Settings(**merged)
@@ -218,14 +253,27 @@ class RuntimeSettings:
             try:
                 Settings(**merged)
             except ValidationError as retry_exc:
-                raise SettingsValidationError(_errors_to_chinese(retry_exc)) from retry_exc
+                raise SettingsValidationError(_pydantic_fallback_errors(retry_exc)) from retry_exc
             return merged
 
 
-def _errors_to_chinese(exc: ValidationError) -> dict[str, str]:
-    """pydantic 错误转 key → 中文消息（registry 约束之外的兜底分支）。"""
-    errors: dict[str, str] = {}
+def _unknown_key_error(key: str) -> FieldErrorModel:
+    """未知设置项的结构化错误（外层 key 已携带该 key，params 留空）。"""
+    return FieldErrorModel(
+        code="SETTING_UNKNOWN",
+        message_key="settings.validation.unknownKey",
+        message=f"未知的设置项：{key}",
+    )
+
+
+def _pydantic_fallback_errors(exc: ValidationError) -> dict[str, FieldErrorModel]:
+    """pydantic 错误转结构化对象（registry 约束之外的兜底分支）。"""
+    errors: dict[str, FieldErrorModel] = {}
     for err in exc.errors():
         key = str(err["loc"][0]) if err["loc"] else "settings"
-        errors[key] = "取值类型或格式不合法，请检查后重试"
+        errors[key] = FieldErrorModel(
+            code="SETTING_INVALID_FORMAT",
+            message_key="settings.validation.invalidFormat",
+            message="取值类型或格式不合法，请检查后重试",
+        )
     return errors
