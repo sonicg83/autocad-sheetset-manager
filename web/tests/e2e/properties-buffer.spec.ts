@@ -86,14 +86,17 @@ test("隐藏的修改一次完整加入草稿：单个 update_sheet_set 携带�
 });
 
 test("提交失败保留输入并呈现字段错误", async ({page}) => {
+  // 虚构 code 不在错误目录（I18N-11）：摘要只显示本地化未知摘要，兼容原文不进主提示；
+  // 字符串型 fields 仍按草稿端点兼容契约进入摘要跳转项与就近字段错误
   await install(page, {
     failDraftSave: () => ({code: "DRAFT_SAVE_FAILED", message: "草稿保存失败", fields: {name: "图纸集名称已存在"}}),
   });
   await openProperties(page);
   await page.getByLabel("图纸集名称", {exact: true}).fill("重复名称");
   await page.getByRole("button", {name: "更新图纸集"}).click();
-  // 任务 6 错误摘要：摘要 alert 含保存失败与字段跳转项；字段错误就近展示（摘要与字段两处可见）
-  await expect(page.getByRole("alert")).toContainText("草稿保存失败");
+  // 任务 6 错误摘要：摘要 alert 含未知错误摘要与字段跳转项；字段错误就近展示（摘要与字段两处可见）
+  await expect(page.getByRole("alert")).toContainText("操作失败，发生未知错误");
+  await expect(page.getByRole("alert")).not.toContainText("草稿保存失败");
   await expect(page.locator(".properties-view .error-summary").getByText("图纸集名称已存在")).toBeVisible();
   await expect(page.locator(".value-panel .field-error")).toContainText("图纸集名称已存在");
   await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("重复名称");

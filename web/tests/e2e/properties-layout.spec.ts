@@ -33,6 +33,7 @@ async function openState(page: Page, state: StateName, theme?: "light" | "dark")
   const options: Parameters<typeof installPropertiesFixture>[1] = {theme};
   if (state === "dirty-pending" || state === "error") options.initialDraft = pendingDraft();
   if (state === "error") {
+    // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
     options.failDraftSave = () => ({code: "DRAFT_SAVE_FAILED", message: "草稿保存失败", fields: {项目编号: "演示校验错误"}});
   }
   await installPropertiesFixture(page, options);
@@ -42,7 +43,7 @@ async function openState(page: Page, state: StateName, theme?: "light" | "dark")
   }
   if (state === "error") {
     await page.getByRole("button", {name: "更新图纸集"}).click();
-    await expect(page.locator(".error-summary")).toContainText("草稿保存失败");
+    await expect(page.locator(".error-summary")).toContainText("操作失败，发生未知错误");
   }
   if (state === "add-field") {
     await page.getByRole("button", {name: "展开属性字段定义"}).click();

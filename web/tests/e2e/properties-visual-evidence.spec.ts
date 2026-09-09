@@ -91,7 +91,8 @@ for (const theme of THEMES) {
     await openProperties(page);
     await page.getByRole("textbox", {name: "属性 设计阶段"}).fill("初步设计");
     await page.getByRole("button", {name: "更新图纸集"}).click();
-    await expect(page.locator(".error-summary")).toContainText("草稿保存失败");
+    // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
+    await expect(page.locator(".error-summary")).toContainText("操作失败，发生未知错误");
     await expect(page.locator(".value-panel .flag.pending").first()).toBeVisible();
     await expect(page.locator(".value-panel .flag.dirty").first()).toBeVisible();
     await expect(page.locator(".value-panel .flag.error").first()).toBeVisible();
@@ -165,7 +166,8 @@ for (const theme of THEMES) {
         await openProperties(page);
         await page.getByRole("textbox", {name: "属性 设计阶段"}).fill("初步设计");
         await page.getByRole("button", {name: "更新图纸集"}).click();
-        await expect(page.locator(".error-summary")).toContainText("草稿保存失败");
+        // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
+        await expect(page.locator(".error-summary")).toContainText("操作失败，发生未知错误");
       } else if (state === "add-field") {
         await openWorkspace(page, theme);
         await page.getByRole("button", {name: "新增字段"}).click();

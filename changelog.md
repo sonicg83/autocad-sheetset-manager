@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-10（实施 PLAN-DM-021 e2e 回归修复：对齐错误契约的夹具断言）
+
+- 控制器裁决：Task 9 统一错误契约（I18N-11）为正确产品行为，不回退。Task 12 揭示的 12 个 e2e 失败根因全部是批次三之前夹具以虚构 code（`DRAFT_SAVE_FAILED`/`PROPERTY_VALIDATION`，不在 `message_catalog.CATALOG`）注入草稿保存失败并断言兼容 `message`"草稿保存失败"出现在摘要——该呈现已被"未知 code 显示本地化摘要 `errors.ui.unknownSummary`、原文只进诊断详情"取代。真实后端草稿保存失败仅产生 `DRAFT_CONFLICT`（409，走草稿过期专用 UX），与用例的"字段校验错误 + 输入保留"场景不匹配，故修测试：摘要断言改为本地化未知摘要、兼容原文断言不出现；草稿端点字符串 `fields` 兼容契约的字段错误/摘要跳转/错误计数断言全部保留；未新增重复的未知 code 专项用例。
+- 修改 6 个 e2e 文件（`properties-buffer/layout/values/visual-evidence/workspace`、`sheets-drafts` spec），产品代码零改动。
+- 新鲜验证：失败子集 6 文件 `--workers=1` 70 passed（退出码 0）；全量 `npm --prefix web run test:e2e --workers=1` **332 passed / 0 failed / 0 flaky**（6.6m，退出码 0）；`scripts/build_release.ps1` **退出码 0**（产物 `dist/releases/dst-manager-v0.3.3-win64.zip`）。
+- flaky 复核：Task 12 的 2 个 flaky 隔离 8 连跑全过、无逻辑竞态；`--workers=4` 全量平行复跑 3 轮 flaky 名单逐轮随机且症状为 30s click 超时/高载几何偏差，与 `playwright.config.ts` 已记载的单一 vite dev server 高负载抖动一致，属基础设施抖动而非用例缺陷；门禁以 `--workers=1` 全量绿为准。PLAN-DM-021 剩余项 2、3 关闭。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 12：打包、完整验证、G9 与状态收口）
 
 - 打包静态守护扩展 `tests/unit/test_packaging_spec.py`（+4 项）：spec datas 必含 `web\dist`；生产 JS 产物同时嵌入 zh-CN/en-US 全部 8 域语言资源（逐域最长文案基准）；产物不回指 `web/src`/`node_modules`/绝对盘符路径；`web/src/i18n/index.ts` 仅构建期静态装配 16 个域资源、无 locales 动态 import/fetch。与既有 5 项共 9 项通过；在 Task 12 新鲜 `npm run build` 产物上复跑通过。当前产物本就合规，红验证经突变测试证实（剥离 bundle 内 en-US 最长文案 → 失败，还原 → 通过）。

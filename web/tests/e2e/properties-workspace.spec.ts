@@ -48,8 +48,9 @@ test("面板标题折叠后仍显示字段/dirty/pending/error/CSV 状态", asyn
   await expect(page.getByLabel("属性 项目编号")).toHaveValue("GC-2026-DRAFT");
   await page.getByLabel("属性 工程名称").fill("城东安置房二期");
   // 提交失败产生错误摘要与字段错误（命令已入草稿栈但保存失败：工程名称随投影变为待写入）
+  // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
   await page.getByRole("button", {name: "更新图纸集"}).click();
-  await expect(page.locator(".properties-view .error-summary")).toContainText("草稿保存失败");
+  await expect(page.locator(".properties-view .error-summary")).toContainText("操作失败，发生未知错误");
   // 再编辑一个未受影响字段：dirty 与 pending 并存
   await page.getByLabel("属性 版本号").fill("C");
   // 折叠值面板：标题栏仍显示 dirty/pending/error 计数与加入草稿摘要
@@ -76,7 +77,8 @@ test("错误摘要展开目标面板并聚焦字段；重新提交成功后摘�
   await page.getByLabel("属性 工程名称").fill("城东安置房二期");
   await page.getByRole("button", {name: "更新图纸集"}).click();
   const summary = page.locator(".properties-view .error-summary");
-  await expect(summary).toContainText("草稿保存失败");
+  // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示；字段跳转项照常
+  await expect(summary).toContainText("操作失败，发生未知错误");
   await expect(summary.getByRole("button", {name: "工程名称：工程名称与既有图纸集冲突"})).toBeVisible();
   // 折叠值面板后点击摘要字段项：目标面板展开且字段获得焦点
   await collapseValuePanel(page);

@@ -145,6 +145,7 @@ test("删除整个子集强确认字段不变且声明影响 DWG 与外部引用
 });
 
 test("结构表单服务端失败保留完整输入且不展示为已创建", async ({page}) => {
+  // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
   await installSheetsFixture(page, {
     failDraftSave: () => ({code: "PROPERTY_VALIDATION", message: "草稿保存失败", fields: {}}),
   });
@@ -154,8 +155,9 @@ test("结构表单服务端失败保留完整输入且不展示为已创建", as
   await page.getByLabel("参照图纸").selectOption("sheet-1");
   await page.getByLabel("模板来源").selectOption("existing_snapshot");
   await page.getByRole("button", {name: "加入草稿", exact: true}).click();
-  // 服务端保存失败：表单保留、呈现错误、不展示为已创建
-  await expect(page.getByText("草稿保存失败", {exact: true})).toBeVisible();
+  // 服务端保存失败：表单保留、呈现本地化未知摘要（原文不出现）、不展示为已创建
+  await expect(page.getByText("操作失败，发生未知错误", {exact: true})).toBeVisible();
+  await expect(page.getByText("草稿保存失败", {exact: true})).toHaveCount(0);
   await expect(page.getByRole("region", {name: "新增图纸"})).toBeVisible();
   await expect(page.getByLabel("参照图纸")).toHaveValue("sheet-1");
   await expect(page.getByLabel("模板来源")).toHaveValue("existing_snapshot");

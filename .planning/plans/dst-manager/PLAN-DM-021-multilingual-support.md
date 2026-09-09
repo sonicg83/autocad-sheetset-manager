@@ -493,10 +493,17 @@ Step 3 反查（I18N-01～18，自动化可执行部分全部通过）：
 
 Step 4（G9）：无法在本环境执行（无真实桌面壳）。已准备 [MEMO-DM-026](../../memos/dst-manager/PLAN-DM-021-multilingual-g9-checklist.md) 填空清单，覆盖中文/英文/非中英显示语言、显式覆盖、读取失败降级、保存成功/失败、四类过滤器与取消、英文窄屏/200%、发布与任务不中断及物理 hash 复验；全部结果字段留空待操作者填写。
 
+### e2e 回归修复（控制器裁决：产品契约正确，修测试）— 2026-09-10
+
+- 裁决：Task 9 统一错误契约（I18N-11）为正确产品行为，不回退；失败根因全部是批次三之前 e2e 夹具以虚构 code（`DRAFT_SAVE_FAILED`/`PROPERTY_VALIDATION`，不在 `message_catalog.CATALOG`）注入草稿保存失败并断言兼容 `message`"草稿保存失败"出现在摘要。真实后端草稿保存失败仅产生 `DRAFT_CONFLICT`（409，走"草稿版本冲突→草稿过期"专用 UX），与这些用例的"字段级校验错误 + 输入保留"场景不匹配，故按未知 code 契约修断言而非换 code：摘要断言改为本地化未知摘要 `errors.ui.unknownSummary`（操作失败，发生未知错误）、兼容原文断言不出现，字符串型 `fields` 兼容契约（草稿端点 `{key: message}`）的字段错误/跳转/计数断言全部保留；不新增重复的未知 code 专项用例（main.spec Task 9 专项用例不变）。
+- 修改 6 个 e2e 文件：`properties-buffer.spec.ts`、`properties-layout.spec.ts`、`properties-values.spec.ts`、`properties-visual-evidence.spec.ts`、`properties-workspace.spec.ts`、`sheets-drafts.spec.ts`（共 12 个失败用例的断言对齐新契约；产品代码零改动）。
+- 新鲜验证：失败子集 6 文件 `--workers=1` 重跑 **70 passed**（退出码 0）；全量 `npm --prefix web run test:e2e --workers=1` **332 passed / 0 failed / 0 flaky**（6.6m，退出码 0）；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1` **退出码 0**，产物 `dist/releases/dst-manager-v0.3.3-win64.zip`。
+- flaky 复核：Task 12 记录的 2 个 flaky（properties-workspace「无定义与查询无结果采用不同空态」、sheets-columns「存储失败时当前选择仍生效且提示」）在隔离 8 连跑（`--workers=4`）各 8/8 通过、无逻辑竞态（复选框仅在偏好加载后渲染、toast 断言自动等待）；另以 `--workers=4` 全量平行复跑 3 次，flaky 名单逐轮随机（main/properties-csv/sheets-drafts/sheets-columns/sheets-editing 等，症状为 30s click 超时或高载下几何断言偏差），与 `playwright.config.ts` 已记载的"单一 vite dev server 高负载抖动、retries=1 消抖"一致——属基础设施负载抖动而非用例缺陷，最终门禁以 `--workers=1` 全量绿为准。
+
 ### 剩余项（计划保持 `active` 的原因）
 
 1. **G8 人工确认**：D3 文案裁决（UI language vs Display language，MEMO-DM-025）待用户裁决后 G8 才登记通过。
-2. **批次三遗留 e2e 回归**：12 failed / 2 flaky（根因见上）须按批次三修复范畴裁决并修复后，全量 `test:e2e` 退出码 0。
-3. **`build_release.ps1` 完整运行**：按失败即停未执行，须在 e2e 修复后补跑并记录分发包产物。
+2. ~~**批次三遗留 e2e 回归**：12 failed / 2 flaky（根因见上）须按批次三修复范畴裁决并修复后，全量 `test:e2e` 退出码 0。~~ **已完成（2026-09-10）**：裁决修测试不改产品；全量 `test:e2e --workers=1` 332 passed / 0 failed / 0 flaky，退出码 0（见上节）。
+3. ~~**`build_release.ps1` 完整运行**：按失败即停未执行，须在 e2e 修复后补跑并记录分发包产物。~~ **已完成（2026-09-10）**：退出码 0，产物 `dist/releases/dst-manager-v0.3.3-win64.zip`。
 4. **G9 真实桌面验收**：按 MEMO-DM-026 执行并填写，含 I18N-16 物理 hash 复验；通过且 G8 闭合后才可改 `completed`。
 5. **I18N-17 迁移窗口收尾（窗口结束时）**：删除 `DraftActionsPanel.vue` 旧草稿 `label` 兼容回退并补全仓扫描；确认无调用方后移除诊断 `message` 兼容字段。

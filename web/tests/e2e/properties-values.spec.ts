@@ -214,7 +214,9 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   await expect(dirtyItem.getByText("未加入草稿")).toBeVisible();
   // 提交失败：错误边框优先，但修改状态文字保留（保存失败重试语义：命令已在草稿栈，编辑转为待写入）
   await page.getByRole("button", {name: "更新图纸集"}).click();
-  await expect(page.getByRole("alert")).toContainText("草稿保存失败");
+  // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示；字段错误照常
+  await expect(page.getByRole("alert")).toContainText("操作失败，发生未知错误");
+  await expect(page.getByRole("alert")).not.toContainText("草稿保存失败");
   await expect(dirtyItem.getByText("演示校验错误")).toBeVisible();
   await expect(dirtyItem.getByText("待写入")).toBeVisible();
   await expect(dirtyItem).toHaveClass(/invalid/);
