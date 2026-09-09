@@ -98,6 +98,27 @@ function onBackdropClick(event:MouseEvent){
   if(event.target===dialogEl.value)void tryClose();
 }
 
+// Tab 焦点圈闭（SPEC-DM-013 §5.3 / PLAN-DM-021 Task 11）：showModal 原生圈闭在
+// 尾元素→首元素回绕时有一拍落到 body 的 Chromium 缺口，这里显式接住 Tab/Shift+Tab 回绕
+function onDialogKeydown(event:KeyboardEvent){
+  if(event.key!=="Tab")return;
+  const dialog=dialogEl.value;
+  if(!dialog)return;
+  const focusables=Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled]),input:not([disabled]),select,textarea,a[href],[tabindex]:not([tabindex=\"-1\"])"))
+    .filter(el=>el.offsetWidth>0||el.offsetHeight>0||el===document.activeElement);
+  if(!focusables.length)return;
+  const first=focusables[0];
+  const last=focusables[focusables.length-1];
+  const active=document.activeElement;
+  if(!dialog.contains(active)||(active===last&&!event.shiftKey)){
+    event.preventDefault();
+    first.focus();
+  }else if(active===first&&event.shiftKey){
+    event.preventDefault();
+    last.focus();
+  }
+}
+
 function onCancel(event:Event){
   event.preventDefault(); // 接管 Esc：走关闭守卫而非直接关闭
   void tryClose();
@@ -318,7 +339,7 @@ const browseDisabled=computed(()=>{
 <template>
   <!-- dragover/drop 就地拦截并阻止冒泡：壳侧 drop 监听挂 document（shell.py），
        showModal 只挡命中测试不挡事件冒泡，不 stop 会在对话框背后打开工作区（SC-14） -->
-  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onCancel" @click="onBackdropClick" @dragover.prevent.stop @drop.prevent.stop>
+  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onCancel" @click="onBackdropClick" @keydown="onDialogKeydown" @dragover.prevent.stop @drop.prevent.stop>
     <div class="dlg">
       <div class="dlg-head">
         <h2 id="settings-title">{{t("settings.title")}}</h2>

@@ -9,6 +9,7 @@ import {useI18n} from "vue-i18n";
 import type {ColumnPreferences, PropertyKey, SheetScope} from "../features/sheets/types";
 import type {Workspace} from "../api/contracts";
 import {loadSheetColumns, saveSheetColumns} from "../api/shell";
+import {localizedError} from "../api/client";
 
 export type BuiltinColumnKey = "select" | "number" | "title" | "subset" | "file" | "layout" | "status" | "actions";
 export type BuiltinPrefField = "file" | "layout" | "subsetAll" | "subsetSingle";
@@ -157,7 +158,14 @@ export function useSheetColumns(deps: {
       const result = await saveSheetColumns(workspaceId, snapshot);
       if (generation !== loadGeneration || deps.workspace.value?.id !== workspaceId) return;
       if (result === null) return; // 旧桥缺方法：静默降级
-      if (!result.ok) saveError.value = result.code === "SHEET_PREFERENCES_IO" ? t("sheets.errors.columnsSaveFailed") : result.message;
+      // PLAN-DM-021 Task 11 绑定修复（I18N-11）：已知错误按 Task 9 错误目录的
+      // message_key+params 渲染本地化文案（同 App.vue 的 localizedError 模式），
+      // 原始中文 message 只作未知 code 的回退；IO 失败沿用会话内恢复提示
+      if (!result.ok) {
+        saveError.value = result.code === "SHEET_PREFERENCES_IO"
+          ? t("sheets.errors.columnsSaveFailed")
+          : localizedError(result.message_key, result.params, result.message);
+      }
     });
     saveQueue = run.catch(() => {});
     return run;

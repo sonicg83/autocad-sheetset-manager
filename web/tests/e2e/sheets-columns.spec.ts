@@ -282,6 +282,51 @@ test("存储失败时当前选择仍生效且提示", async ({page}) => {
   await expect(page.getByRole("columnheader", {name: "布局", exact: true})).toBeVisible();
 });
 
+// PLAN-DM-021 Task 11 绑定修复（Task 10 审查裁决）：SHEET_PREFERENCES_INVALID 不再透传
+// 桥的原始中文 message，按 Task 9 错误目录 message_key 渲染本地化文案（同 App.vue 的
+// localizedError 模式）；断言中英文均渲染语义键文案且原文不出现。
+test("偏好校验失败渲染本地化文案而不透传桥原始中文", async ({page}) => {
+  await installSheetsFixture(page);
+  await openWorkspace(page);
+  await page.evaluate(() => {
+    (window as any).pywebview.api.save_sheet_columns = async () => ({
+      ok: false,
+      code: "SHEET_PREFERENCES_INVALID",
+      message: "偏好结构损坏：schema_version=99（虚构桥原文）",
+      message_key: "errors.shell.preferencesInvalid",
+      params: {},
+    });
+  });
+  await openColumns(page);
+  await page.getByRole("checkbox", {name: "布局", exact: true}).check();
+  const alert = page.locator(".cols-error");
+  await expect(alert).toHaveText("图纸列偏好数据无效");
+  await expect(alert).not.toContainText("偏好结构损坏");
+  await expect(alert).not.toContainText("schema_version=99");
+});
+
+test("英文界面偏好校验失败渲染英文本地化文案", async ({page}) => {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page);
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.evaluate(() => {
+    (window as any).pywebview.api.save_sheet_columns = async () => ({
+      ok: false,
+      code: "SHEET_PREFERENCES_INVALID",
+      message: "偏好结构损坏：schema_version=99（虚构桥原文）",
+      message_key: "errors.shell.preferencesInvalid",
+      params: {},
+    });
+  });
+  await page.getByRole("button", {name: "Columns", exact: true}).click();
+  await page.getByRole("checkbox", {name: "Layout", exact: true}).check();
+  const alert = page.locator(".cols-error");
+  await expect(alert).toHaveText("Sheet column preference data is invalid");
+  await expect(alert).not.toContainText("偏好结构损坏");
+  await expect(alert).not.toContainText("schema_version=99");
+});
+
 test("标题最多两行且文件名单独显示并可键盘聚焦读取", async ({page}) => {
   await installSheetsFixture(page, {longText: true});
   await openWorkspace(page);

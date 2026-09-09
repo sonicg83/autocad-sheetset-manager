@@ -146,8 +146,8 @@ async function copyDiag(item:Diagnostic){
 </template>
 <style scoped>
 .task-overlay{box-sizing:border-box;width:48px;flex:0 0 48px;position:relative;z-index:100;padding:0;border:0;border-radius:0;background:var(--color-bg-surface);min-height:0;overflow:visible}
-.task-rail{box-sizing:border-box;width:48px;height:100%;border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);padding:var(--space-2) 0}
-.task-rail button{box-sizing:border-box;display:block;width:40px;min-height:40px;margin:0;padding:6px;border:0;background:none;white-space:normal;font-size:12px;text-align:center;border-radius:var(--radius-sm)}
+.task-rail{box-sizing:border-box;width:48px;height:100%;border-left:1px solid var(--color-border-subtle);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;min-width:0;overflow:hidden}
+.task-rail button{box-sizing:border-box;display:block;width:40px;min-height:40px;margin:0;padding:6px;border:0;background:none;white-space:normal;font-size:12px;text-align:center;border-radius:var(--radius-sm);overflow-wrap:anywhere}
 .task-rail button:hover,.task-rail button[aria-expanded="true"]{background:var(--color-info-bg);color:var(--color-accent)}
 .task-drawer{box-sizing:border-box;position:fixed;right:48px;width:min(390px,calc(100vw - 48px));z-index:100;display:flex;flex-direction:column;min-height:0;padding:0;border:0;border-left:1px solid var(--color-border-subtle);background:var(--color-bg-surface);box-shadow:var(--shadow-3)}
 .task-overlay [hidden]{display:none!important}

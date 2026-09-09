@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 11：英文关键矩阵、响应式与业务不变量）
+
+- 新增 `web/tests/e2e/i18n-workflows.spec.ts`（3 例）：zh-CN 与 en-US 各跑一遍 启动→设置→打开→图纸→属性→预览→发布→任务→修订 九域关键矩阵（语义键渲染 + 用户数据原样，I18N-07/16）；语言切换不变量——切换前后 workspace 标识（DST 路径 title/顶栏名）、未提交输入、选区、草稿计数、任务状态、修订哈希一致，发布不重跑（execute 仅一次）、SSE 事件 URL 不携带语言（I18N-06/12）。
+- 新增 `web/tests/e2e/i18n-visual-evidence.spec.ts`（7 例）：1440×900 浅色、900×768 深色、200% 缩放（CDP 720×450 CSS 视口 + 2x 渲染等价浏览器 200%）三组合断言无整页横滚、主操作可达、长错误完整可读（本地化摘要 + `overflow-wrap:anywhere` 可展开原文）、表格只在自身容器横滚；Tab 到达主操作、Esc 关闭设置并归还焦点、设置模态焦点圈闭、422 错误摘要聚焦并链接字段（英文）、状态不只靠颜色（禁用属性/文字化原因/计数文本/`role=status`/文本徽章）（I18N-15、§3.5、§5.3）。
+- 布局缺陷最小修复（落所属组件，未改全局 `style.css`）：`web/src/layout/TaskOverlay.vue` 收起态任务侧栏内容溢出致英文界面整页横滚 54px（1440×900 / 900×768 / 200% 均复现），`.task-rail` 加 `min-width:0;overflow:hidden`、按钮加 `overflow-wrap:anywhere`；`web/src/components/settings/SettingsDialog.vue` 补 `@keydown` Tab/Shift+Tab 显式回绕，消除 showModal 原生圈闭尾→首回绕一拍落到 body 的缺口（Esc 归还焦点行为不变）。
+- Task 10 审查绑定修复：`web/src/composables/useSheetColumns.ts` 对 `SHEET_PREFERENCES_INVALID` 不再透传桥原始中文 message，改按 Task 9 错误目录 `message_key+params` 经 `localizedError` 渲染（与 App.vue 壳桥错误同模式）；`web/tests/e2e/sheets-columns.spec.ts` 新增中英文渲染断言（本地化文案出现、原文不出现）。
+- G8 设计 QA 取证：以 `npm run build` 生产产物 + 与 G4 相同虚构数据/视口/主题/状态采集生产截图（`.planning/memos/dst-manager/assets/PLAN-DM-021/production-{zh-CN-light-1440x900,en-US-dark-900x768}.png`），与两张冻结截图逐项比对记录于 `.planning/memos/dst-manager/PLAN-DM-021-multilingual-design-qa.md`（MEMO-DM-025）：结构/双语内容/语言选择语义/主题一致或属已接受差异，无未关闭 P0/P1；低优先级文案差异 D3（UI language vs Demo 的 Display language）提请 Task 12 用户裁决。F1～F3 修复后重取证，采集脚本未进入提交树。
+- Files 清单外必要增量（已披露）：`web/src/layout/TaskOverlay.vue`、`web/src/components/settings/SettingsDialog.vue`（Step 3 布局/焦点最小修复落点）、`web/tests/e2e/sheets-columns.spec.ts`（绑定修复测试）、`web/src/composables/useSheetColumns.ts`（绑定修复，Task 10 审查授权）。
+- 验证：`npm --prefix web run test:unit` 28 passed；`npm --prefix web run build`（check:api + check:i18n 759 键对称 + vue-tsc + vite）通过；`npm --prefix web run test:e2e -- tests/e2e/i18n-workflows.spec.ts tests/e2e/i18n-visual-evidence.spec.ts --workers=1` 多轮通过（新增 spec 各自 ≥2 连续全绿）；全量 `npm --prefix web run test:e2e` 320 passed / 0 failed。Python 侧零改动（未涉及 pytest/ruff）。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 10：语言包完整性门禁与兼容层清理）
 
 - 语言包门禁升级（I18N-14）：`web/scripts/check-i18n.mjs` 从最小键对称版扩展为四类约束——中英域文件集合一致、域内键集合一致（缺键/多键/域内重复键，报告 `<域>.<键>` 与资源文件路径）、每个键的命名插值参数（`{name}`）集合中英严格一致、`web/src` 硬编码中文扫描（词法剥离 `//`、`/* */`、`<!-- -->` 注释并按前一有效 token 识别正则字面量，字符串/模板文本/属性值出现 `[一-龥]` 即违规并报告 `文件:行`；语言资源目录、`*.d.ts` 生成产物与 vitest `*.test.ts`（不进生产构建）不入扫描范围）。任一违规非零退出并已纳入 `build`。顺带修复旧版单 Set 压平导致的跨域同名键静默合并（`revisions.confirm.title/message` ↔ `settings.confirm.*`、`properties.view.regionAria` ↔ `sheets.*`，键总数 756→759 的口径修正）。
