@@ -1,7 +1,11 @@
 import {ref} from "vue";
 import type {ColumnPreferences} from "../features/sheets/types";
 
-type ShellBridge={select_file(fileTypes:string[]):Promise<string|null>;select_folder():Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>} & Partial<SheetShellBridge>;
+// PLAN-DM-021 Task 4：原生文件对话框种类（白名单由壳侧按 kind 固定拼接）。
+// 前端只传种类与本地化描述，不再定义/传递任意 file_types 过滤器字符串；
+// 描述仅作对话框显示，含伪造模式也不能扩大白名单（壳侧净化 + 固定拼接）。
+export type ShellFileKind="dst"|"template"|"exe"|"dll";
+type ShellBridge={select_file(fileKind:ShellFileKind,localizedDescription:string):Promise<string|null>;select_folder():Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>} & Partial<SheetShellBridge>;
 
 export function getShellBridge():ShellBridge|null{
   const api=(window as unknown as {pywebview?:{api?:ShellBridge}}).pywebview?.api;
@@ -13,15 +17,9 @@ export function getShellBridge():ShellBridge|null{
 export const shellReady=ref(getShellBridge()!==null);
 window.addEventListener("pywebviewready",()=>{shellReady.value=true},{once:true});
 
-// pywebview 的 file_types 使用 "描述 (*.ext)" 括号格式；"描述|*.ext" 竖线格式会在对话框弹出前抛
-// ValueError。描述部分还须匹配 pywebview parse_file_type 的 [\w ]+（字母/数字/下标/空格）——
-// "DWG/DWT" 这类含斜杠的描述同样会在对话框弹出前抛 ValueError（守卫见 tests/unit/test_shell.py）
-export const DST_FILE_FILTERS=["DST 文件 (*.dst)"];
-export const TEMPLATE_FILE_FILTERS=["DWG DWT 文件 (*.dwg;*.dwt)"];
-// 设置中心"浏览"按钮过滤器（PLAN-DM-019 任务 8）。描述部分必须通过 pywebview parse_file_type
-// 的 [\w ]+ 校验：".NET" 的前导点不合法，会在对话框弹出前抛 ValueError，故写作 "NET 程序集"。
-export const EXE_FILE_FILTERS=["可执行程序 (*.exe)"];
-export const DLL_FILE_FILTERS=["NET 程序集 (*.dll)"];
+// pywebview 的 file_types 使用 "描述 (*.ext)" 括号格式，描述部分须匹配 parse_file_type
+// 的 [\w ]+；该格式约束自 Task 4 起完全由壳侧保证（见 tests/unit/test_shell.py 契约测试），
+// 前端不再持有过滤器字符串常量。
 
 // ---- PLAN-DM-015 任务 2：可信上下文与列偏好桥（PLAN-DM-015 接口，不进业务 OpenAPI） ----
 // workspace_id 只用于服务端匹配，路径一律由服务端可信上下文提供，前端不传任何路径/命令。
@@ -59,20 +57,22 @@ export async function clearWorkspaceContext(workspaceId:string):Promise<ShellRes
   return bridge.clear_workspace_context(workspaceId);
 }
 
-// ---- PLAN-DM-019 任务 8：设置中心"浏览"按钮统一封装 ----
+// ---- PLAN-DM-019 任务 8：设置中心"浏览"按钮统一封装（PLAN-DM-021 Task 4 file_kind 化） ----
 // 三态语义（Task 10 消费方依赖，不得走样）：
 // - undefined = 桥不可用或 select_file/select_folder 方法缺失（浏览器开发态/旧壳）→ 调用方禁用"浏览"按钮；
 // - null      = 用户取消对话框；
 // - string    = 用户选中的路径。
-export async function selectSettingsPath(filter:"exe"|"dll"|"folder"):Promise<string|null|undefined>{
+// kind "folder" 走独立 select_folder 桥方法（FOLDER_DIALOG 无过滤器概念，不传描述）；
+// exe/dll 经 select_file(fileKind, localizedDescription)，扩展名白名单由壳侧固定拼接。
+export async function selectSettingsPath(kind:"exe"|"dll"|"folder",localizedDescription:string):Promise<string|null|undefined>{
   const bridge=getShellBridge();
   if(!bridge)return undefined;
-  if(filter==="folder"){
+  if(kind==="folder"){
     if(typeof bridge.select_folder!=="function")return undefined;
     return bridge.select_folder();
   }
   if(typeof bridge.select_file!=="function")return undefined;
-  return bridge.select_file(filter==="exe"?EXE_FILE_FILTERS:DLL_FILE_FILTERS);
+  return bridge.select_file(kind,localizedDescription);
 }
 
 // ---- PLAN-DM-019 修复波：SC-11 外链经系统默认浏览器打开 ----

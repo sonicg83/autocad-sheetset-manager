@@ -317,3 +317,53 @@ test("保存成功切换语言：html[lang] 同步、对话框保持、焦点恢
   // 还原中文基线（本用例为串行链最后一个，覆盖值与 Task 3 之前的状态一致）
   writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 4);
 });
+
+// ---- PLAN-DM-021 Task 4：exe/dll 浏览的 file_kind + 本地化描述契约 ----
+// 契约红线（原生文件选择白名单）：桥调用只传固定种类（exe/dll）与本地化描述，
+// 白名单由壳侧按 kind 固定拼接——中英文切换只改变描述，种类（白名单）不变。
+
+test("exe/dll 浏览：中英文只改变描述、固定种类（白名单）不变", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 5);
+  await page.addInitScript(() => {
+    (window as any).__fileDialogCalls = [];
+    (window as any).pywebview = {
+      api: {
+        select_file: async (fileKind: string, description: string) => {
+          (window as any).__fileDialogCalls.push({fileKind, description});
+          return null; // 假桥只记录契约参数，不返回路径
+        },
+        select_folder: async () => {
+          (window as any).__fileDialogCalls.push({fileKind: "folder"});
+          return null;
+        },
+        on_files_dropped: async () => {},
+      },
+    };
+    window.dispatchEvent(new Event("pywebviewready"));
+  });
+
+  const browseCalls = async (browseLabel: string) => {
+    await page.goto("/");
+    // 齿轮入口/壳界面未随 Task 4 迁移，仍为中文基线；对话框标题随 ui_locale 切换
+    await page.getByRole("button", {name: "设置"}).click();
+    await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
+    await page.locator('[data-field="autocad_2016_console"]').getByRole("button", {name: browseLabel}).click();
+    await page.locator('[data-field="autocad_2016_plugin"]').getByRole("button", {name: browseLabel}).click();
+    return page.evaluate(() => (window as any).__fileDialogCalls);
+  };
+
+  expect(await browseCalls("浏览…")).toEqual([
+    {fileKind: "exe", description: "可执行程序"},
+    {fileKind: "dll", description: "NET 程序集"},
+  ]);
+
+  // 切换到英文基线：语言包只改变描述参数，固定种类（=壳侧白名单）保持不变
+  writeSettingsFile({ui_locale: "en-US", cad_max_parallel: 6}, 6);
+  expect(await browseCalls("Browse…")).toEqual([
+    {fileKind: "exe", description: "Executable program"},
+    {fileKind: "dll", description: "NET assembly"},
+  ]);
+
+  // 还原中文基线（本用例接为串行链末尾）
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 7);
+});

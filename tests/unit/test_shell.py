@@ -45,36 +45,94 @@ class _FakeDom:
 def test_shell_bridge_select_file_requires_window():
     bridge = ShellBridge()
     with pytest.raises(RuntimeError):
-        bridge.select_file(["DST 文件|*.dst"])  # 未绑定窗口时给出明确错误而非 AttributeError
+        bridge.select_file("dst", "DST 文件")  # 未绑定窗口时给出明确错误而非 AttributeError
 
 
-def test_shell_bridge_select_file_returns_first_path():
-    class _FakeWindow:
-        def __init__(self, result):
-            self._result = result
+# ---- PLAN-DM-021 Task 4：select_file 固定文件种类（file_kind）与本地化描述 ----
+# 安全红线：扩展名白名单只由 kind 固定拼接；本地化描述不可携带模式扩大白名单；
+# 未知 kind 拒绝且不弹对话框；取消返回 None；无窗口报明确错误；folder 不进
+# file_kind（文件夹选择走独立 select_folder 桥方法）。
+
+
+def _bridge_with_recording_window(result=None):
+    class _RecordingWindow:
+        def __init__(self):
             self.calls = []
 
         def create_file_dialog(self, dialog_type, allow_multiple=False, file_types=None):
             self.calls.append((dialog_type, allow_multiple, file_types))
-            return self._result
+            return result
 
-    fake = _FakeWindow(["C:\\work\\out.dst"])
+    window = _RecordingWindow()
     bridge = ShellBridge()
-    bridge.bind(fake)
-    assert bridge.select_file(["DST 文件|*.dst"]) == "C:\\work\\out.dst"
-    assert fake.calls[0][0] == 10  # webview.OPEN_DIALOG
-    assert fake.calls[0][1] is False
-    assert fake.calls[0][2] == ["DST 文件|*.dst"]
+    bridge.bind(window)
+    return bridge, window
+
+
+@pytest.mark.parametrize(
+    ("file_kind", "description", "patterns"),
+    [
+        ("dst", "DST 文件", "*.dst"),
+        ("template", "DWG DWT 文件", "*.dwg;*.dwt"),
+        ("exe", "可执行程序", "*.exe"),
+        ("dll", "NET 程序集", "*.dll"),
+    ],
+)
+def test_select_file_composes_fixed_whitelist_per_kind(file_kind, description, patterns):
+    import webview
+
+    bridge, window = _bridge_with_recording_window(["C:\\work\\out.dst"])
+    assert bridge.select_file(file_kind, description) == "C:\\work\\out.dst"
+    assert window.calls[0][0] == webview.OPEN_DIALOG
+    assert window.calls[0][1] is False
+    # 白名单只由 kind 固定拼接，描述仅用于对话框显示
+    assert window.calls[0][2] == [f"{description} ({patterns})"]
+
+
+def test_select_file_composed_filters_match_pywebview_parse_format():
+    """壳桥直通 create_file_dialog：四种 kind 的组合过滤器必须通过 pywebview
+    parse_file_type（描述仅允许字母/数字/下标/空格），否则真实壳在对话框弹出前
+    抛 ValueError；假桥 e2e 不经过该校验，需本契约测试守护。"""
+    from webview.util import parse_file_type
+
+    kind_patterns = {
+        "dst": "*.dst",
+        "template": "*.dwg;*.dwt",
+        "exe": "*.exe",
+        "dll": "*.dll",
+    }
+    for file_kind, patterns in kind_patterns.items():
+        bridge, window = _bridge_with_recording_window(["C:\\work\\x"])
+        assert bridge.select_file(file_kind, patterns) == "C:\\work\\x"
+        (composed,) = window.calls[0][2]
+        _, parsed_patterns = parse_file_type(composed)  # 抛 ValueError 即失败
+        assert parsed_patterns == patterns
+
+
+@pytest.mark.parametrize("bad_kind", ["folder", "bat", "", None, ["dst"]])
+def test_select_file_rejects_unknown_kind(bad_kind):
+    bridge, window = _bridge_with_recording_window()
+    with pytest.raises(ValueError):
+        bridge.select_file(bad_kind, "任意描述")  # type: ignore[arg-type]
+    assert window.calls == []  # 未知 kind 直接拒绝，不弹对话框
+
+
+def test_select_file_forged_description_cannot_widen_whitelist():
+    """本地化描述含伪造 (*.bat) 也不能扩大白名单：扩展名仍由 kind 固定，且组合
+    过滤器必须保持 pywebview 可解析的安全格式。"""
+    from webview.util import parse_file_type
+
+    bridge, window = _bridge_with_recording_window(["C:\\x\\evil.bat"])
+    assert bridge.select_file("exe", "危险 (*.bat)") == "C:\\x\\evil.bat"
+    (composed,) = window.calls[0][2]
+    _, parsed_patterns = parse_file_type(composed)
+    assert parsed_patterns == "*.exe"
+    assert "*.bat" not in composed
 
 
 def test_shell_bridge_select_file_returns_none_when_cancelled():
-    class _FakeWindow:
-        def create_file_dialog(self, dialog_type, allow_multiple=False, file_types=None):
-            return None
-
-    bridge = ShellBridge()
-    bridge.bind(_FakeWindow())
-    assert bridge.select_file(["DST 文件|*.dst"]) is None
+    bridge, _ = _bridge_with_recording_window(None)
+    assert bridge.select_file("dst", "DST 文件") is None
 
 
 def test_select_folder_requires_window():
@@ -248,19 +306,17 @@ def test_shutdown_worker_ignores_already_exited():
     _shutdown_worker(None)  # 不抛错
     assert process.calls == []
 
-def test_frontend_file_filters_match_pywebview_parse_format():
-    """壳桥 select_file 直通 create_file_dialog：前端过滤器字符串必须通过 pywebview
-    parse_file_type 校验（描述仅允许字母/数字/下划线/空格，不得含 / 等符号），否则真实壳
-    在对话框弹出前抛 ValueError；假桥 e2e 不经过该校验，需本契约测试守护。"""
+def test_shell_ts_no_longer_defers_file_type_strings_to_bridge():
+    """PLAN-DM-021 Task 4：过滤器字符串不再由前端拼装传入（旧 file_types 任意字符串
+    签名删除），web/src/api/shell.ts 代码内不得再定义过滤器常量；白名单由壳侧按 kind 拼接。"""
     import re
 
-    from webview.util import parse_file_type
-
     source = (Path(__file__).parents[2] / "web" / "src" / "api" / "shell.ts").read_text(encoding="utf-8")
-    filters = re.findall(r'"([^"]+\(\*[^"]+\))"', source)
-    assert filters, "未在 web/src/api/shell.ts 中找到文件过滤器定义"
-    for file_filter in filters:
-        parse_file_type(file_filter)  # 抛 ValueError 即失败
+    code = re.sub(r"//[^\n]*", "", source)  # 去行注释（注释中的格式示例不算定义）
+    code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
+    filters = re.findall(r'"([^"]+\(\*[^"]+\))"', code)
+    assert filters == [], "前端不得再定义文件过滤器字符串常量"
+    assert "FILE_FILTERS" not in code
 
 
 def test_spawn_worker_frozen_reuses_exe_worker_subcommand(monkeypatch):

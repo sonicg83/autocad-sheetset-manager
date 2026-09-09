@@ -182,8 +182,12 @@ function onUnset(key:string){
 async function onBrowse(key:string){
   const item=items.value.find(entry=>entry.key===key);
   if(!item)return;
-  const filter=item.fileFilter?.includes("exe")?"exe":item.fileFilter?.includes("dll")?"dll":"folder";
-  const result=await selectSettingsPath(filter); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
+  // PLAN-DM-021 Task 4：按注册表 file_kind 传固定种类；exe/dll 描述取自语言包
+  //（common.shell.fileKinds.*）——白名单由壳侧按 kind 固定拼接，描述不能扩大之。
+  // folder（无 file_kind 的 path 项）走独立 select_folder，不传描述。
+  const kind=item.fileKind??"folder";
+  const description=item.fileKind===undefined?"":t(`common.shell.fileKinds.${item.fileKind}`);
+  const result=await selectSettingsPath(kind,description); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
   if(typeof result==="string")onUpdate(key,result);
 }
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import {computed,ref,watch} from "vue";
+import {useI18n} from "vue-i18n";
 import {ApiError,request} from "./api/client";
-import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder,DST_FILE_FILTERS,TEMPLATE_FILE_FILTERS} from "./api/shell";
+import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
@@ -39,6 +40,8 @@ import RevisionsView from "./views/RevisionsView.vue";
 
 type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:ChangeCommand[];result:Preview};
 
+// PLAN-DM-021 Task 4：文件选择经桥的 file_kind + 本地化描述（描述取自语言包，仅作对话框显示）
+const {t}=useI18n();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
@@ -283,7 +286,7 @@ async function acceptDstPath(path:string){
 async function selectAndOpenDst(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪，请通过 dst-manager desktop 启动";return}
-  const path=await bridge.select_file(DST_FILE_FILTERS);
+  const path=await bridge.select_file("dst",t("common.shell.fileKinds.dst"));
   if(!path)return;
   await acceptDstPath(path);
 }
@@ -322,7 +325,7 @@ async function loadLayoutOptions(path:string,ctx:InsertSheetEditContext|InsertSu
 async function selectTemplateFile(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪";return}
-  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
   if(!path)return;
   if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
   const ctx=activeLayoutContext("insert-sheet");
@@ -333,7 +336,7 @@ async function selectTemplateFile(){
 async function selectSubsetTemplateFile(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪";return}
-  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
   if(!path)return;
   if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
   // 与新增图纸对齐：选文件后读取布局列表（缓存优先），下拉选择布局名称
@@ -345,7 +348,7 @@ async function selectSubsetTemplateFile(){
 async function selectBaseTemplateFile(){
   const bridge=getShellBridge();
   if(!bridge){error.value="桌面壳未就绪";return}
-  const path=await bridge.select_file(TEMPLATE_FILE_FILTERS);
+  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
   if(!path)return;
   if(!DWG_DWT_EXT.test(path)){error.value="仅支持 .dwg/.dwt 模板文件";return}
   const ctx=activeLayoutContext("insert-subset");

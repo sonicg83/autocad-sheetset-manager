@@ -26,7 +26,8 @@ async function installNewShell(page:Page){
     (window as any).__folderCalls=[];
     (window as any).__clearCalls=[];
     (window as any).pywebview={api:{
-      select_file:async()=>(window as any).__fakeSelectResult??null,
+      // PLAN-DM-021 Task 4：select_file(file_kind, localizedDescription) 新签名（白名单由壳侧拼接）
+      select_file:async(_fileKind:string,_description:string)=>(window as any).__fakeSelectResult??null,
       on_files_dropped:async()=>{},
       open_workspace_folder:async(workspaceId:string)=>{(window as any).__folderCalls.push(workspaceId);return {ok:true,value:null}},
       clear_workspace_context:async(workspaceId:string)=>{(window as any).__clearCalls.push(workspaceId);return {ok:true,value:null}},
@@ -39,7 +40,8 @@ async function installNewShell(page:Page){
 async function installOldShell(page:Page){
   await page.addInitScript(()=>{
     (window as any).pywebview={api:{
-      select_file:async()=>(window as any).__fakeSelectResult??null,
+      // PLAN-DM-021 Task 4：select_file(file_kind, localizedDescription) 新签名（白名单由壳侧拼接）
+      select_file:async(_fileKind:string,_description:string)=>(window as any).__fakeSelectResult??null,
       on_files_dropped:async()=>{},
     }};
     window.dispatchEvent(new Event("pywebviewready"));

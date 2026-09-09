@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 4：ShellBridge 固定文件种类与本地化描述）
+
+- `src/dst_manager/interfaces/shell.py` 原生文件选择契约收紧（安全红线）：`select_file` 签名由 `file_types: list[str]`（前端任意过滤器字符串）改为 `select_file(file_kind: FileKind, localized_description: str)`，`FileKind = Literal["dst", "template", "exe", "dll"]`；扩展名白名单只由壳侧 `_FILE_KIND_PATTERNS` 按 kind 固定拼接（dst→`*.dst`、template→`*.dwg;*.dwt`、exe→`*.exe`、dll→`*.dll`），未知 kind 抛 `ValueError` 且不弹对话框；本地化描述经 `_sanitize_description` 净化为 pywebview `parse_file_type` 允许的 `[\w ]+` 文本——伪造 `危险 (*.bat)` 退化为纯文本、不能扩大白名单，也不会在对话框弹出前抛 `ValueError`；取消返回 None、无窗口报明确错误不变。文件夹选择不经 `file_kind`，维持独立 `select_folder`（FOLDER_DIALOG 无过滤器概念）。
+- `web/src/api/shell.ts`：删除 `DST_FILE_FILTERS`/`TEMPLATE_FILE_FILTERS`/`EXE_FILE_FILTERS`/`DLL_FILE_FILTERS` 过滤器常量数组（同包升级不保留旧 `file_types` 任意字符串签名），新增 `ShellFileKind` 类型；`selectSettingsPath(kind, localizedDescription)` 按 `file_kind` 传参且描述参数化，三态语义（undefined=桥/方法缺失、null=取消、string=路径）与 folder 走 `select_folder` 的行为不变。
+- `web/src/i18n/locales/{zh-CN,en-US}/common.ts` 新增 `shell.fileKinds.{dst,template,exe,dll}` 四键（对话框描述专用，85 键对称）：中英文只改变描述文本，白名单与语言无关。设置行内的过滤器提示 `settings.fileFilters.*` 保持原样（冻结 Demo 文案不变）。
+- `web/src/App.vue` 四处选择文件调用（打开 DST、新增图纸模板、新建子集布局/基础模板）全部改为 `select_file(kind, t("common.shell.fileKinds.*"))`；`web/src/components/settings/SettingsDialog.vue` `onBrowse` 以注册表 `file_kind` 取代过滤器文本解析，exe/dll 描述取自语言包，folder（无 `file_kind` 的 path 项）走 `select_folder`。设置中心 exe/dll"浏览"仍可用。
+- 测试（TDD）：红灯（Python 14 例失败、TS 1 例失败）→ 最小实现 → 绿灯。`tests/unit/test_shell.py` 重写 select_file 契约：四种 kind 的固定白名单与 `parse_file_type` 格式契约（取代原前端源码过滤器正则守护）、未知 kind（含 `folder`/`bat`/空串/None/列表）拒绝且不弹对话框、伪造描述不能扩大白名单、取消 None、无窗口明确错误，并断言 `web/src/api/shell.ts` 代码内不再持有过滤器常量；新增 `web/src/api/shell.test.ts` 5 例（file_kind 传参+描述参数化、folder 走 select_folder、三态语义、旧壳降级）；e2e 随调用点迁移：`settings-dialog.spec.ts` 新增 exe/dll 浏览断言（注入记录型假桥，中英文各点一次，断言固定种类不变、描述随语言包切换），`main.spec.ts`/`sheets-folder.spec.ts` 假桥更新为新签名并在非 .dst 用例记录 `select_file` 调用参数（kind=dst + 中文描述）。验证：`uv run pytest tests/unit/test_shell.py -q` 33 passed、全量 `tests/unit` 654 passed/4 skipped、`uv run ruff check` 通过、`npm run test:unit` 28 passed、e2e（main + sheets-folder + settings-dialog，`--workers=1`）80 passed、`npm run build`（check:api + check:i18n + vue-tsc + vite）通过。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 3：设置中心语言事务与双语错误恢复）
 
 - `web/src/composables/useSettings.ts` 新增语言切换事务（I18N-05/06）：只有 PUT 成功才切换语言，且以响应快照的 `ui_locale` 为准（`system` 按系统规则解析）经 `applyLocale` 恰好切换一次；`load`（409 刷新/打开对话框）、选择未保存、取消与 422/409/网络/5xx 均不切换，快照不替换、本地编辑保留。

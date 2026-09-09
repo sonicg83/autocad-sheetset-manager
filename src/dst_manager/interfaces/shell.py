@@ -7,12 +7,14 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 import uvicorn
@@ -36,6 +38,28 @@ from .api import create_app
 _EXTERNAL_URL_SCHEME = "https"
 _EXTERNAL_URL_HOST = "github.com"
 _EXTERNAL_URL_PATH_PREFIX = "/sonicg83"
+
+# ---- PLAN-DM-021 Task 4：原生文件对话框固定文件种类（安全红线） ----
+# 扩展名白名单只由 file_kind 在此固定拼接：前端（含被伪造的本地化描述）无法传入
+# 任意 file_types 过滤器字符串，描述含 (*.bat) 也不能扩大白名单。未知 kind 拒绝；
+# 文件夹选择不经 file_kind，走独立的 select_folder（FOLDER_DIALOG 无过滤器概念）。
+FileKind = Literal["dst", "template", "exe", "dll"]
+_FILE_KIND_PATTERNS: dict[str, str] = {
+    "dst": "*.dst",
+    "template": "*.dwg;*.dwt",
+    "exe": "*.exe",
+    "dll": "*.dll",
+}
+
+
+def _sanitize_description(description: str) -> str:
+    """把本地化描述净化为 pywebview parse_file_type 允许的 ``[\\w ]+`` 文本。
+
+    描述只进对话框显示：剥掉括号/点/分号/星号等模式字符（保留字母、数字、
+    下标、CJK 与空格），伪造 ``危险 (*.bat)`` 退化为纯文本 ``危险 bat``，
+    既不能扩大白名单，也不会在对话框弹出前抛 ValueError。
+    """
+    return " ".join(re.sub(r"[^\w ]", " ", description).split())
 
 
 class ShellBridge:
@@ -186,11 +210,30 @@ class ShellBridge:
             return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
         return {"ok": True, "value": None}
 
-    def select_file(self, file_types: list[str]) -> str | None:
+    def select_file(self, file_kind: FileKind, localized_description: str) -> str | None:
+        """弹出原生文件选择对话框（PLAN-DM-021 Task 4：file_kind + 本地化描述）。
+
+        扩展名白名单只由 ``file_kind`` 按 :data:`_FILE_KIND_PATTERNS` 固定拼接；
+        ``localized_description`` 仅作对话框显示并经净化，无法扩大白名单。
+        未知 kind 抛 ValueError（不弹对话框）；取消或未选中返回 None；无窗口报
+        明确错误。文件夹选择不经本方法，走 :meth:`select_folder`。
+        """
         if self._window is None:
             raise RuntimeError("文件对话框窗口尚未就绪")
+        patterns = _FILE_KIND_PATTERNS.get(file_kind) if isinstance(file_kind, str) else None
+        if patterns is None:
+            raise ValueError(f"未知的文件种类：{file_kind!r}")
+        description = (
+            _sanitize_description(localized_description)
+            if isinstance(localized_description, str)
+            else ""
+        )
+        if not description:
+            description = "文件"  # 空描述仍须满足 parse_file_type 的 [\w ]+ 前缀
         result = self._window.create_file_dialog(
-            webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types
+            webview.OPEN_DIALOG,
+            allow_multiple=False,
+            file_types=[f"{description} ({patterns})"],
         )
         return result[0] if result else None
 

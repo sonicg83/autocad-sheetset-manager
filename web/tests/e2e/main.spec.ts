@@ -7,9 +7,15 @@ test.beforeEach(async({page})=>{
     // 真实 pywebview 在页面加载后才异步注入 window.pywebview 并派发 pywebviewready；
     // ?late-bridge 模拟该时序（load 后 30ms 才注入），验证前端不把"晚到的桥"当成无壳浏览器
     const inject = () => {
+      (window as any).__selectFileCalls = [];
       (window as any).pywebview = {
         api: {
-          select_file: async (fileTypes: string[]) => (window as any).__fakeSelectResult ?? null,
+          // PLAN-DM-021 Task 4：select_file(file_kind, localizedDescription)——记录调用以断言
+          // 固定种类与本地化描述；白名单由壳侧按 kind 拼接，前端不再传过滤器字符串
+          select_file: async (fileKind: string, description: string) => {
+            (window as any).__selectFileCalls.push({fileKind, description});
+            return (window as any).__fakeSelectResult ?? null;
+          },
           on_files_dropped: async () => {},
         },
       };
@@ -677,6 +683,10 @@ test("选择非 .dst 文件给出提示且不发起打开",async({page})=>{
   await page.getByRole("button",{name:"选择 DST 文件"}).click();
   await expect(page.getByText("仅支持 DST 文件")).toBeVisible();
   expect(opened).toBeFalsy();
+  // PLAN-DM-021 Task 4：选择调用以固定种类 "dst" 发起，描述来自语言包（白名单由壳侧拼接）
+  expect(await page.evaluate(() => (window as any).__selectFileCalls)).toEqual([
+    {fileKind: "dst", description: "DST 文件"},
+  ]);
 });
 
 test("打开时恢复非空草稿显示恢复提示",async({page})=>{

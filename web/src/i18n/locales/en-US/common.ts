@@ -7,4 +7,14 @@ export default {
   errors: {
     settingsLoadFailed: "Failed to load settings; UI language resolved from system settings",
   },
+  // Localized descriptions for native file dialogs (PLAN-DM-021 Task 4): display only;
+  // the extension whitelist is fixed shell-side by file_kind and cannot be widened
+  shell: {
+    fileKinds: {
+      dst: "DST files",
+      template: "DWG DWT files",
+      exe: "Executable program",
+      dll: "NET assembly",
+    },
+  },
 } as const;
