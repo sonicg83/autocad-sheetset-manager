@@ -4,6 +4,7 @@
 // 结构显示消费任务 1 的权威投影（workspace 为投影后的显示副本）。
 import {computed, ref, watch} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import type {ChangeCommand, Subset, Sheet, Workspace} from "../api/contracts";
 import type {SheetScope} from "../features/sheets/types";
 
@@ -18,6 +19,7 @@ export function useSheetsWorkspace(deps: {
   workspace: Ref<Workspace | null>;
   commands: Ref<ChangeCommand[]>;
 }) {
+  const {t} = useI18n();
   // —— 范围（初始为全部图纸；树与范围筛选共用同一状态）——
   const scope = ref<SheetScope>({kind: "all"});
   const focusedSheetId = ref<string | null>(null);
@@ -163,7 +165,7 @@ export function useSheetsWorkspace(deps: {
     const pruned = selectedIds.value.filter((id) => !existing.has(id));
     if (pruned.length > 0) {
       selectedIds.value = selectedIds.value.filter((id) => existing.has(id));
-      pruneMessage.value = `已从选择中移除 ${pruned.length} 张已删除图纸`;
+      pruneMessage.value = t("sheets.view.pruneMessage", {count: pruned.length}, pruned.length);
     }
     const currentScope = scope.value;
     if (currentScope.kind === "subset" && !current.sheet_set.subsets.some((item) => item.id === currentScope.id)) {

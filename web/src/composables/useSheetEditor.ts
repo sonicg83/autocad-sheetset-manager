@@ -10,6 +10,7 @@
 // 有改动三选一「加入草稿后继续/放弃输入/留在此处」，保存失败不能继续 next。
 import {computed, nextTick, ref, watch} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import {createCommand} from "../api/contracts";
 import type {ChangeCommand, LayoutSource, Workspace} from "../api/contracts";
 import {resolveSheetOrdinal, resolveSubsetOrdinal} from "../features/sheets/commands";
@@ -36,6 +37,7 @@ export type SheetEditorDeps = {
 export type GuardState = {open: boolean; summary: string; canSave: boolean};
 
 export function useSheetEditor(deps: SheetEditorDeps) {
+  const {t} = useI18n();
   const context = ref<EditContext>(null);
   const guardState = ref<GuardState>({open: false, summary: "", canSave: true});
   let guardResolver: ((choice: GuardChoice) => void) | null = null;
@@ -69,7 +71,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       workspaceId: current.id,
       revisionId: current.revision_id,
       objectId: sheet.id,
-      subject: `图纸 ${sheet.number}`,
+      subject: t("sheets.subjects.sheet", {number: sheet.number}),
       original: {...sheet.custom_properties},
       values: {...sheet.custom_properties},
       errors: {},
@@ -104,7 +106,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       workspaceId: current.id,
       revisionId: current.revision_id,
       objectId: subsetId, // 全部图纸范围打开时为空，由表单先选择编辑对象
-      subject: subset ? `子集 ${subset.display_name}` : "子集标题编辑",
+      subject: subset ? t("sheets.subjects.subset", {name: subset.display_name}) : t("sheets.subjects.subsetTitleEdit"),
       original: {title: subset?.title ?? ""},
       values: {title: subset?.title ?? ""},
       errors: {},
@@ -123,7 +125,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       workspaceId: current.id,
       revisionId: current.revision_id,
       objectId: target,
-      subject: "新增图纸",
+      subject: t("sheets.operation.insertSheetTitle"),
       errors: {},
       summaryError: "",
       invalid: false,
@@ -151,7 +153,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       workspaceId: current.id,
       revisionId: current.revision_id,
       objectId: "",
-      subject: "新建子集",
+      subject: t("sheets.operation.insertSubsetTitle"),
       errors: {},
       summaryError: "",
       invalid: false,
@@ -211,33 +213,33 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   }
   async function doSubmit(): Promise<SubmitResult> {
     const ctx = context.value;
-    if (!ctx) return {ok: false, message: "没有活动编辑上下文"};
-    if (ctx.invalid) return {ok: false, message: "编辑上下文已失效（基准已刷新或对象已消失），禁止提交"};
+    if (!ctx) return {ok: false, message: t("sheets.errors.noEditContext")};
+    if (ctx.invalid) return {ok: false, message: t("sheets.errors.invalidContext")};
     switch (ctx.kind) {
       case "sheet": return submitSheet(ctx);
       case "rename": return submitRename(ctx);
       case "insert-sheet": return submitInsertSheet(ctx);
       case "insert-subset": return submitInsertSubset(ctx);
-      case "bulk": return {ok: false, message: "该编辑类型尚未接入提交"};
+      case "bulk": return {ok: false, message: t("sheets.errors.bulkNotSupported")};
     }
   }
   async function submitSheet(ctx: PropertyEditContext): Promise<SubmitResult> {
     const command = createCommand.updateSheetProperties(ctx.objectId, {...ctx.values});
-    const result = await deps.submitCommands([command], "更新图纸属性", "metadata");
+    const result = await deps.submitCommands([command], t("shell.commands.updateSheetProperties"), "metadata");
     if (result.ok) {
       discard();
     } else {
-      ctx.summaryError = result.message || "加入草稿失败";
+      ctx.summaryError = result.message || t("shell.errors.addDraftFailed");
       // 未给字段路径的错误只保留摘要，不编造字段归因
       if (result.fields) for (const [field, message] of Object.entries(result.fields)) ctx.errors[field] = message;
     }
     return result;
   }
   async function submitRename(ctx: RenameEditContext): Promise<SubmitResult> {
-    if (!ctx.objectId) { ctx.summaryError = "请选择要编辑的子集"; return {ok: false, message: "请选择要编辑的子集"}; }
+    if (!ctx.objectId) { ctx.summaryError = t("sheets.errors.pickRenameSubset"); return {ok: false, message: t("sheets.errors.pickRenameSubset")}; }
     const title = ctx.values.title.trim();
-    if (!title) { ctx.summaryError = "子集标题不能为空"; return {ok: false, message: "子集标题不能为空"}; }
-    const result = await deps.submitCommands([createCommand.updateSubsetTitle(ctx.objectId, title)], "更新子集标题", "structural");
+    if (!title) { ctx.summaryError = t("sheets.errors.subsetTitleEmpty"); return {ok: false, message: t("sheets.errors.subsetTitleEmpty")}; }
+    const result = await deps.submitCommands([createCommand.updateSubsetTitle(ctx.objectId, title)], t("shell.commands.updateSubsetTitle"), "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     await nextTick(); // 等权威投影 watch 应用到显示 workspace 后再定位
     deps.selectSubset?.(ctx.objectId);
@@ -246,21 +248,21 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   }
   async function submitInsertSheet(ctx: InsertSheetEditContext): Promise<SubmitResult> {
     const workspace = deps.workspace.value;
-    if (!workspace) return {ok: false, message: "没有活动工作区"};
-    if (!ctx.targetSubsetId) { ctx.summaryError = "请选择目标子集"; return {ok: false, message: "请选择目标子集"}; }
-    if (!ctx.reference) { ctx.summaryError = "请选择参照图纸"; return {ok: false, message: "请选择参照图纸"}; }
+    if (!workspace) return {ok: false, message: t("sheets.errors.noWorkspace")};
+    if (!ctx.targetSubsetId) { ctx.summaryError = t("sheets.errors.pickTargetSubset"); return {ok: false, message: t("sheets.errors.pickTargetSubset")}; }
+    if (!ctx.reference) { ctx.summaryError = t("sheets.errors.pickReferenceSheet"); return {ok: false, message: t("sheets.errors.pickReferenceSheet")}; }
     const subset = workspace.sheet_set.subsets.find((item) => item.id === ctx.targetSubsetId);
     if (!subset || subset.sheets.length === 0) {
-      ctx.summaryError = "当前子集没有可用图纸参照，新增流程不可用";
-      return {ok: false, message: "当前子集没有可用图纸参照，新增流程不可用"};
+      ctx.summaryError = t("sheets.errors.noReferenceAvailable");
+      return {ok: false, message: t("sheets.errors.noReferenceAvailable")};
     }
     const count = positiveInteger(ctx.count);
-    if (count === null) { ctx.summaryError = "新增图纸数量必须为正整数"; return {ok: false, message: "新增图纸数量必须为正整数"}; }
+    if (count === null) { ctx.summaryError = t("sheets.errors.sheetCountPositive"); return {ok: false, message: t("sheets.errors.sheetCountPositive")}; }
     // 加入草稿时重新核对：参照已删除/失效则保留表单并要求重选，不静默替换对象
     let ordinal: number;
     try { ordinal = resolveSheetOrdinal(workspace, ctx.reference); }
     catch (e) {
-      const message = e instanceof Error ? e.message : "参照图纸已失效，请重新选择";
+      const message = e instanceof Error ? e.message : t("sheets.errors.sheetRefStale");
       ctx.summaryError = message;
       return {ok: false, message};
     }
@@ -269,8 +271,8 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       source = {type: "existing_snapshot", file: "", layout: ""};
     } else {
       if (!ctx.sourceFile.trim() || !ctx.sourceLayout.trim()) {
-        ctx.summaryError = "布局模板文件和布局模板名称不能为空";
-        return {ok: false, message: "布局模板文件和布局模板名称不能为空"};
+        ctx.summaryError = t("sheets.errors.layoutTemplateRequired");
+        return {ok: false, message: t("sheets.errors.layoutTemplateRequired")};
       }
       source = {type: "template_layout", file: ctx.sourceFile.trim(), layout: ctx.sourceLayout.trim()};
     }
@@ -283,7 +285,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       count,
       source,
     });
-    const result = await deps.submitCommands([command], "新增图纸", "structural");
+    const result = await deps.submitCommands([command], t("shell.commands.insertSheet"), "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     // 成功：从权威派生结果取得新增 ID 并定位（不从计数拼造）；原筛选保留，隐藏目标由 locateSheet 提示
     await nextTick();
@@ -296,25 +298,25 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   }
   async function submitInsertSubset(ctx: InsertSubsetEditContext): Promise<SubmitResult> {
     const workspace = deps.workspace.value;
-    if (!workspace) return {ok: false, message: "没有活动工作区"};
+    if (!workspace) return {ok: false, message: t("sheets.errors.noWorkspace")};
     const title = ctx.title.trim();
-    if (!title) { ctx.summaryError = "子集标题不能为空"; return {ok: false, message: "子集标题不能为空"}; }
+    if (!title) { ctx.summaryError = t("sheets.errors.subsetTitleEmpty"); return {ok: false, message: t("sheets.errors.subsetTitleEmpty")}; }
     const count = positiveInteger(ctx.initialSheetCount);
-    if (count === null) { ctx.summaryError = "初始图纸数必须为正整数"; return {ok: false, message: "初始图纸数必须为正整数"}; }
-    if (!ctx.baseTemplateFile.trim()) { ctx.summaryError = "基础模板文件不能为空"; return {ok: false, message: "基础模板文件不能为空"}; }
+    if (count === null) { ctx.summaryError = t("sheets.errors.initialCountPositive"); return {ok: false, message: t("sheets.errors.initialCountPositive")}; }
+    if (!ctx.baseTemplateFile.trim()) { ctx.summaryError = t("sheets.errors.baseTemplateRequired"); return {ok: false, message: t("sheets.errors.baseTemplateRequired")}; }
     if (!ctx.templateFile.trim() || !ctx.templateLayout.trim()) {
-      ctx.summaryError = "布局模板文件和布局模板名称不能为空";
-      return {ok: false, message: "布局模板文件和布局模板名称不能为空"};
+      ctx.summaryError = t("sheets.errors.layoutTemplateRequired");
+      return {ok: false, message: t("sheets.errors.layoutTemplateRequired")};
     }
     const subsetCount = workspace.sheet_set.subsets.length;
     let ordinal: number;
     if (subsetCount === 0) {
       ordinal = 1; // 空图纸集首个子集沿用序号 1 契约
     } else {
-      if (!ctx.referenceSubsetId) { ctx.summaryError = "请选择参照子集"; return {ok: false, message: "请选择参照子集"}; }
+      if (!ctx.referenceSubsetId) { ctx.summaryError = t("sheets.errors.pickReferenceSubset"); return {ok: false, message: t("sheets.errors.pickReferenceSubset")}; }
       try { ordinal = resolveSubsetOrdinal(workspace, ctx.referenceSubsetId); }
       catch (e) {
-        const message = e instanceof Error ? e.message : "参照子集已失效，请重新选择";
+        const message = e instanceof Error ? e.message : t("sheets.errors.subsetRefStale");
         ctx.summaryError = message;
         return {ok: false, message};
       }
@@ -328,7 +330,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       base_template_file: ctx.baseTemplateFile.trim(),
       source: {type: "template_layout", file: ctx.templateFile.trim(), layout: ctx.templateLayout.trim()},
     });
-    const result = await deps.submitCommands([command], "新建子集", "structural");
+    const result = await deps.submitCommands([command], t("shell.commands.insertSubset"), "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     await nextTick();
     const after = deps.workspace.value;
@@ -360,7 +362,9 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   }
   function resolveGuard(choice: GuardChoice) { guardResolver?.(choice); }
   function describe(ctx: Exclude<EditContext, null>): string {
-    return ctx.kind === "sheet" ? `${ctx.subject} 属性编辑` : `${ctx.subject} 编辑`;
+    return ctx.kind === "sheet"
+      ? t("sheets.guard.sheetSummary", {subject: ctx.subject})
+      : t("sheets.guard.otherSummary", {subject: ctx.subject});
   }
 
   // —— 基准刷新/对象消失：标记失效，保留可见输入供核对，禁止提交 ——

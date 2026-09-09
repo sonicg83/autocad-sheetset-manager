@@ -5,6 +5,7 @@
 // 参照以稳定对象 ID 绑定：选择参照对象而非手填序号；目标变化后清除不属于新目标的参照。
 // 空图纸集显示「创建首个子集」，不展示不存在的参照；空子集提示当前流程不可用并禁用新增。
 import {computed} from "vue";
+import {useI18n} from "vue-i18n";
 import type {LayoutSourceType, Placement, Sheet, Subset, Workspace} from "../../api/contracts";
 import type {OperationContext} from "../../composables/useSheetEditor";
 
@@ -23,14 +24,11 @@ const emit = defineEmits<{
 }>();
 
 const context = computed(() => props.context);
+const {t} = useI18n();
+// 操作类型 → 表单标题语义键映射（稳定操作类型 → sheets.operation.*）
+const OPERATION_TITLE_KEYS = {rename: "sheets.operation.renameTitle", "insert-sheet": "sheets.operation.insertSheetTitle", "insert-subset": "sheets.operation.insertSubsetTitle"} as const;
 
-const formTitle = computed(() => {
-  switch (context.value.kind) {
-    case "rename": return "编辑子集";
-    case "insert-sheet": return "新增图纸";
-    case "insert-subset": return "新建子集";
-  }
-});
+const formTitle = computed(() => t(OPERATION_TITLE_KEYS[context.value.kind]));
 
 // —— 输入联动：写缓冲副本并标记 dirty（未提交输入保护），不直接改工作区对象 ——
 function touch() {
@@ -52,7 +50,7 @@ function onRenameSubset(e: Event) {
   const subset = props.workspace.sheet_set.subsets.find((s) => s.id === subsetId);
   // 切换编辑对象：缓冲重置为该子集的当前标题（不继承上一个对象的未提交标题）
   c.objectId = subsetId;
-  c.subject = subset ? `子集 ${subset.display_name}` : "子集标题编辑";
+  c.subject = subset ? t("sheets.subjects.subset", {name: subset.display_name}) : t("sheets.subjects.subsetTitleEdit");
   c.original = {title: subset?.title ?? ""};
   c.values = {title: subset?.title ?? ""};
   touch();
@@ -158,7 +156,7 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
   <section class="operation-form" role="region" :aria-label="formTitle">
     <header class="form-head">
       <h3>{{ formTitle }}</h3>
-      <span class="form-head-hint">图号、派生标题、范围和文件/布局派生名不可编辑；派生结果经服务端预览确认</span>
+      <span class="form-head-hint">{{ $t("sheets.operation.headHint") }}</span>
     </header>
 
     <!-- 编辑子集：显示当前子集、标题输入和只读图号范围，只修改子集标题；
@@ -166,21 +164,21 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
     <template v-if="context.kind === 'rename'">
       <div class="form-body">
         <label class="form-field">
-          当前子集
+          {{ $t("sheets.operation.currentSubset") }}
           <select :value="context.objectId" @change="onRenameSubset">
-            <option value="">请选择子集</option>
+            <option value="">{{ $t("sheets.operation.pickSubset") }}</option>
             <option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{ subset.display_name }}</option>
           </select>
         </label>
         <label class="form-field">
-          子集标题
+          {{ $t("sheets.operation.subsetTitle") }}
           <input :value="context.values.title" @input="onRenameTitle">
         </label>
-        <p class="derived">只读图号范围：{{ renameSubset?.number_range || "—" }} · 显示名：{{ renameSubset?.display_name }}</p>
+        <p class="derived">{{ $t("sheets.operation.derivedRange", {range: renameSubset?.number_range || "—", name: renameSubset?.display_name ?? ""}) }}</p>
       </div>
       <div class="form-danger">
         <!-- 未选择编辑对象时禁用危险入口，避免静默无操作（任务 7 修：全部范围先选对象） -->
-        <button type="button" class="danger" :disabled="!context.objectId" @click="$emit('deleteSubset')">删除整个子集</button>
+        <button type="button" class="danger" :disabled="!context.objectId" @click="$emit('deleteSubset')">{{ $t("sheets.operation.deleteSubset") }}</button>
       </div>
     </template>
 
@@ -188,110 +186,110 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
     <template v-else-if="context.kind === 'insert-sheet'">
       <div class="form-body">
         <label class="form-field">
-          目标子集
+          {{ $t("sheets.operation.targetSubset") }}
           <select :value="context.targetSubsetId" @change="onInsertTarget">
-            <option value="">请选择目标子集</option>
+            <option value="">{{ $t("sheets.operation.pickTargetSubset") }}</option>
             <option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{ subset.display_name }}</option>
           </select>
         </label>
         <label class="form-field">
-          参照图纸
+          {{ $t("sheets.operation.referenceSheet") }}
           <select :value="referenceSheetId" :disabled="referenceOptions.length === 0" @change="onInsertReference">
-            <option value="">请选择参照图纸</option>
+            <option value="">{{ $t("sheets.operation.pickReferenceSheet") }}</option>
             <option v-for="sheet in referenceOptions" :key="sheet.id" :value="sheet.id">{{ sheet.number }} {{ sheet.title }}</option>
           </select>
         </label>
         <label class="form-field">
-          图纸方向
+          {{ $t("sheets.operation.placement") }}
           <select :value="context.reference?.placement ?? 'after'" @change="onInsertPlacement">
-            <option value="before">之前</option>
-            <option value="after">之后</option>
+            <option value="before">{{ $t("sheets.operation.before") }}</option>
+            <option value="after">{{ $t("sheets.operation.after") }}</option>
           </select>
         </label>
         <label class="form-field">
-          新增图纸数量
+          {{ $t("sheets.operation.sheetCount") }}
           <input :value="context.count" inputmode="numeric" @input="onInsertCount">
         </label>
         <label class="form-field">
-          模板来源
+          {{ $t("sheets.operation.sourceType") }}
           <select :value="context.sourceType" @change="onInsertSourceType">
-            <option value="template_layout">DWG/DWT 模板布局</option>
-            <option value="existing_snapshot">已有布局</option>
+            <option value="template_layout">{{ $t("sheets.operation.sourceTemplateLayout") }}</option>
+            <option value="existing_snapshot">{{ $t("sheets.operation.sourceExistingSnapshot") }}</option>
           </select>
         </label>
         <template v-if="context.sourceType === 'existing_snapshot'">
-          <span class="derived">来源为目标子集 DWG 的第一个非 Model 布局</span>
+          <span class="derived">{{ $t("sheets.operation.existingSnapshotHint") }}</span>
         </template>
         <template v-else>
           <div class="form-field">
-            <span>布局模板文件</span>
-            <button type="button" @click="$emit('selectTemplateFile')">选择模板文件</button>
+            <span>{{ $t("sheets.operation.layoutTemplateFile") }}</span>
+            <button type="button" @click="$emit('selectTemplateFile')">{{ $t("sheets.operation.selectTemplateFile") }}</button>
             <span v-if="context.sourceFile" class="value">{{ context.sourceFile }}</span>
           </div>
           <label class="form-field">
-            布局模板名称
-            <span v-if="context.layoutLoading">正在读取布局…</span>
+            {{ $t("sheets.operation.layoutTemplateName") }}
+            <span v-if="context.layoutLoading">{{ $t("sheets.operation.layoutLoading") }}</span>
             <template v-else-if="context.layoutError">
               <span class="error">{{ context.layoutError }}</span>
               <input :value="context.sourceLayout" @input="onInsertSourceLayout">
             </template>
             <select v-else-if="context.layoutOptions.length && !context.layoutManual" :value="context.sourceLayout" @change="onInsertSourceLayout">
-              <option value="">请选择布局模板名称</option>
+              <option value="">{{ $t("sheets.operation.pickLayoutTemplate") }}</option>
               <option v-for="layout in context.layoutOptions" :key="layout" :value="layout">{{ layout }}</option>
             </select>
           </label>
         </template>
-        <p v-if="emptyTargetSubset" class="notice" role="status">当前子集没有可用图纸参照，新增流程不可用</p>
+        <p v-if="emptyTargetSubset" class="notice" role="status">{{ $t("sheets.operation.emptyReferenceNotice") }}</p>
       </div>
     </template>
 
     <!-- 新建子集：标题、参照子集、之前/之后、初始图纸数、基础模板文件、布局模板文件及布局 -->
     <template v-else-if="context.kind === 'insert-subset'">
       <div class="form-body">
-        <p v-if="isEmptySet" class="notice" role="status">创建首个子集</p>
+        <p v-if="isEmptySet" class="notice" role="status">{{ $t("sheets.view.createFirstSubset") }}</p>
         <template v-else>
           <label class="form-field">
-            参照子集
+            {{ $t("sheets.operation.referenceSubset") }}
             <select :value="context.referenceSubsetId" @change="onSubsetReference">
-              <option value="">请选择参照子集</option>
+              <option value="">{{ $t("sheets.operation.pickReferenceSubset") }}</option>
               <option v-for="subset in workspace.sheet_set.subsets" :key="subset.id" :value="subset.id">{{ subset.display_name }}</option>
             </select>
           </label>
           <label class="form-field">
-            子集方向
+            {{ $t("sheets.operation.subsetPlacement") }}
             <select :value="context.placement" @change="onSubsetPlacement">
-              <option value="before">之前</option>
-              <option value="after">之后</option>
+              <option value="before">{{ $t("sheets.operation.before") }}</option>
+              <option value="after">{{ $t("sheets.operation.after") }}</option>
             </select>
           </label>
         </template>
         <label class="form-field">
-          子集标题
+          {{ $t("sheets.operation.subsetTitle") }}
           <input :value="context.title" @input="onSubsetTitle">
         </label>
         <label class="form-field">
-          初始图纸数
+          {{ $t("sheets.operation.initialSheetCount") }}
           <input :value="context.initialSheetCount" inputmode="numeric" @input="onSubsetCount">
         </label>
         <div class="form-field">
-          <span>基础模板文件</span>
-          <button type="button" @click="$emit('selectBaseTemplateFile')">选择基础模板文件</button>
+          <span>{{ $t("sheets.operation.baseTemplateFile") }}</span>
+          <button type="button" @click="$emit('selectBaseTemplateFile')">{{ $t("sheets.operation.selectBaseTemplateFile") }}</button>
           <span v-if="context.baseTemplateFile" class="value">{{ context.baseTemplateFile }}</span>
         </div>
         <div class="form-field">
-          <span>布局模板文件</span>
-          <button type="button" @click="$emit('selectSubsetTemplateFile')">选择布局模板文件</button>
+          <span>{{ $t("sheets.operation.layoutTemplateFile") }}</span>
+          <button type="button" @click="$emit('selectSubsetTemplateFile')">{{ $t("sheets.operation.selectLayoutTemplateFile") }}</button>
           <span v-if="context.templateFile" class="value">{{ context.templateFile }}</span>
         </div>
         <label class="form-field">
-          布局模板名称
-          <span v-if="context.layoutLoading">正在读取布局…</span>
+          {{ $t("sheets.operation.layoutTemplateName") }}
+          <span v-if="context.layoutLoading">{{ $t("sheets.operation.layoutLoading") }}</span>
           <template v-else-if="context.layoutError">
             <span class="error">{{ context.layoutError }}</span>
             <input :value="context.templateLayout" @input="onSubsetLayout">
           </template>
           <select v-else-if="context.layoutOptions.length && !context.layoutManual" :value="context.templateLayout" @change="onSubsetLayout">
-            <option value="">请选择布局模板名称</option>
+            <option value="">{{ $t("sheets.operation.pickLayoutTemplate") }}</option>
             <option v-for="layout in context.layoutOptions" :key="layout" :value="layout">{{ layout }}</option>
           </select>
         </label>
@@ -301,10 +299,10 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
     <p v-if="context.summaryError" class="error-summary" role="alert">{{ context.summaryError }}</p>
 
     <footer class="form-footer">
-      <span class="form-status" role="status">{{ context.invalid ? "编辑上下文已失效（基准已刷新或对象已消失），禁止提交" : "尚未加入草稿（仅本会话保留）" }}</span>
+      <span class="form-status" role="status">{{ context.invalid ? $t("sheets.operation.statusInvalid") : $t("sheets.operation.statusDraft") }}</span>
       <span class="form-spacer"></span>
-      <button type="button" @click="$emit('cancel')">取消</button>
-      <button type="button" class="primary" :disabled="submitDisabled" @click="$emit('submit')">加入草稿</button>
+      <button type="button" @click="$emit('cancel')">{{ $t("sheets.operation.cancel") }}</button>
+      <button type="button" class="primary" :disabled="submitDisabled" @click="$emit('submit')">{{ $t("sheets.operation.addToDraft") }}</button>
     </footer>
   </section>
 </template>

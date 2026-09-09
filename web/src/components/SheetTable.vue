@@ -69,14 +69,14 @@ function displayFileName(value: string): string {
 }
 </script>
 <template>
-  <div ref="windowEl" class="sheet-table-window" :class="{'sticky-actions': stickyActions}" tabindex="0" aria-label="过滤后的图纸表格">
-    <table aria-label="图纸表格" :style="{width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`}">
+  <div ref="windowEl" class="sheet-table-window" :class="{'sticky-actions': stickyActions}" tabindex="0" :aria-label="$t('sheets.table.windowAria')">
+    <table :aria-label="$t('sheets.table.tableAria')" :style="{width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`}">
       <colgroup><col v-for="col in columns" :key="col.key" :style="{width: `${columnWidth(col)}px`}"></colgroup>
       <thead><tr><th v-for="col in columns" :key="col.key" :class="cellClass(col)" :title="col.label || undefined">
         <input
           v-if="col.key === 'builtin:select'"
           type="checkbox"
-          aria-label="全选当前结果"
+          :aria-label="$t('sheets.table.selectAllAria')"
           :checked="allFilteredSelected"
           :indeterminate="filteredSelectedCount > 0 && !allFilteredSelected"
           :disabled="!canSelect"
@@ -89,7 +89,7 @@ function displayFileName(value: string): string {
         <tr :data-sheet-id="row.sheet.id" :class="{focused: row.sheet.id === focusedSheetId, selected: selectedIds.includes(row.sheet.id)}">
           <td v-for="col in columns" :key="col.key" :class="cellClass(col)">
             <template v-if="col.key === 'builtin:select'">
-              <input type="checkbox" :aria-label="`选择图纸 ${row.sheet.number}`" :checked="selectedIds.includes(row.sheet.id)" @change="$emit('toggle', row.sheet.id)">
+              <input type="checkbox" :aria-label="$t('sheets.table.selectRowAria', {number: row.sheet.number})" :checked="selectedIds.includes(row.sheet.id)" @change="$emit('toggle', row.sheet.id)">
             </template>
             <template v-else-if="col.key === 'builtin:number'"><span class="ellipsis mono" tabindex="0" :title="row.sheet.number">{{ row.sheet.number }}</span></template>
             <template v-else-if="col.key === 'builtin:title'"><span class="title-text multiline-text" tabindex="0" :title="row.sheet.title">{{ row.sheet.title || "—" }}</span></template>
@@ -97,15 +97,15 @@ function displayFileName(value: string): string {
             <template v-else-if="col.key === 'builtin:file'"><span class="multiline-text mono" tabindex="0" :title="displayFileName(row.sheet.layout.file_name)">{{ displayFileName(row.sheet.layout.file_name) }}</span></template>
             <template v-else-if="col.key === 'builtin:layout'"><span class="multiline-text mono" tabindex="0" :title="row.sheet.layout.layout_name">{{ row.sheet.layout.layout_name || "—" }}</span></template>
             <template v-else-if="col.key === 'builtin:status'">
-              <span v-if="pendingIds.has(row.sheet.id)" class="status pending">待变更</span>
-              <span v-if="diagnosticIds.has(row.sheet.id)" class="status blocking">阻断</span>
-              <span v-if="!pendingIds.has(row.sheet.id) && !diagnosticIds.has(row.sheet.id)">正常</span>
-              <button v-if="diagnosticIds.has(row.sheet.id)" type="button" class="diag-link" @click="$emit('openDiagnostics')">诊断</button>
+              <span v-if="pendingIds.has(row.sheet.id)" class="status pending">{{ $t("sheets.table.statusPending") }}</span>
+              <span v-if="diagnosticIds.has(row.sheet.id)" class="status blocking">{{ $t("sheets.table.statusBlocking") }}</span>
+              <span v-if="!pendingIds.has(row.sheet.id) && !diagnosticIds.has(row.sheet.id)">{{ $t("sheets.table.statusNormal") }}</span>
+              <button v-if="diagnosticIds.has(row.sheet.id)" type="button" class="diag-link" @click="$emit('openDiagnostics')">{{ $t("sheets.table.diagnostics") }}</button>
             </template>
             <template v-else-if="col.kind === 'sheet'"><span class="multiline-text" tabindex="0" :title="propertyValue(row, col)">{{ propertyValue(row, col) || "—" }}</span></template>
             <template v-else-if="col.key === 'builtin:actions'">
-              <button type="button" class="link-button" @click="$emit('edit', row.sheet)">编辑属性</button>
-              <button type="button" class="danger-link" @click="$emit('delete', row.sheet)">删除</button>
+              <button type="button" class="link-button" @click="$emit('edit', row.sheet)">{{ $t("sheets.table.editProperties") }}</button>
+              <button type="button" class="danger-link" @click="$emit('delete', row.sheet)">{{ $t("sheets.table.delete") }}</button>
             </template>
           </td>
         </tr>

@@ -4,6 +4,7 @@
 // 投影按 workspace/revision/命令快照/请求代次校验；失败保留上一份结果并标为失效。
 import {ref} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import {request} from "../api/client";
 import type {ChangeCommand, Preview, Workspace} from "../api/contracts";
 import {applyCommandOverlay, applyDerivedProjection} from "../features/sheets/projection";
@@ -23,6 +24,7 @@ export function useSheetProjection(deps: {
   error: Ref<string>;
   refresh(): Promise<SubmitResult>;
 } {
+  const {t} = useI18n();
   const projection = ref<Workspace | null>(null);
   const stamp = ref<ProjectionStamp | null>(null);
   const pending = ref(false);
@@ -60,8 +62,8 @@ export function useSheetProjection(deps: {
         || deps.workspace.value.revision_id !== baseRevisionId
         || JSON.stringify(deps.commands.value) !== commandKey
       ) return {ok: true};
-      if (!preview.execution_intent?.derived_document) { stamp.value = null; error.value = "缺少结构投影，请重新预览"; return {ok: false, message: "缺少结构投影，请重新预览"}; }
-      if (preview.executable === false) { stamp.value = null; error.value = "结构投影不可执行，请检查诊断"; return {ok: false, message: "结构投影不可执行，请检查诊断"}; }
+      if (!preview.execution_intent?.derived_document) { stamp.value = null; error.value = t("sheets.errors.projectionMissing"); return {ok: false, message: t("sheets.errors.projectionMissing")}; }
+      if (preview.executable === false) { stamp.value = null; error.value = t("sheets.errors.projectionNotExecutable"); return {ok: false, message: t("sheets.errors.projectionNotExecutable")}; }
       // 混合批次（结构命令 + 属性值编辑）：derived_document 不含值编辑合成，
       // 以命令簿元数据命令叠加显示，避免既有图纸属性值被回退（不写回 base、不称已保存）
       projection.value = applyCommandOverlay(applyDerivedProjection(base, preview), commands);

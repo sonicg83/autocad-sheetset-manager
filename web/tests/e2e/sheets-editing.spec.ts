@@ -410,6 +410,48 @@ test("混合批次显示不回退既有图纸属性值", async ({page}) => {
   await expect(firstRowPropCell(page, 0)).toHaveText("A2");
 });
 
+// —— PLAN-DM-021 Task 6：英文关键矩阵（SPEC-DM-013 I18N-07/08/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json；
+// 断言属性名、属性值、字段错误（后端原消息）与图纸编号不被翻译。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test("英文界面：属性编辑器、错误摘要与三选一保护双语且属性名值原样", async ({page}) => {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page, {
+    failDraftSave: () => ({code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效"}}),
+  });
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.getByRole("button", {name: "Edit Properties"}).first().click();
+  // 编辑器标题（编号不翻译）、提示、搜索与分页英文
+  await expect(page.getByRole("heading", {name: "Property Editing · Sheet 001"})).toBeVisible();
+  await expect(page.getByText("Sheet numbers, derived titles, ranges, and file/layout derived names cannot be edited")).toBeVisible();
+  await expect(page.getByLabel("Search properties")).toBeVisible();
+  await expect(page.getByText("36 items", {exact: true})).toBeVisible();
+  await expect(page.getByText("Page 1 / 6", {exact: true})).toBeVisible();
+  // 属性字段：label 英文前缀 + 属性名（用户数据）原样
+  await expect(page.getByRole("textbox", {name: "Property 图幅", exact: true})).toBeVisible();
+  await page.getByRole("textbox", {name: "Property 图幅", exact: true}).fill("A2");
+  // 提交失败：错误摘要英文，字段错误（属性名 + 后端消息）原样
+  await page.getByRole("button", {name: "Add to Draft"}).click();
+  await expect(page.getByRole("alert", {name: "Add-to-draft error summary"})).toBeVisible();
+  await expect(page.getByText("Cannot add to draft:", {exact: true})).toBeVisible();
+  await expect(page.getByRole("button", {name: "图幅：值无效"})).toBeVisible();
+  await expect(page.getByText("Failed to add to the draft; fix the errors and retry", {exact: true})).toBeVisible();
+  // 三选一保护：英文按钮、输入（用户数据）保留
+  await page.getByRole("button", {name: "Edit Subset"}).click();
+  await expect(page.getByRole("dialog", {name: "Unsaved Input"})).toBeVisible();
+  await page.getByRole("button", {name: "Stay Here"}).click();
+  await expect(page.getByRole("dialog", {name: "Unsaved Input"})).toHaveCount(0);
+  await expect(page.getByRole("textbox", {name: "Property 图幅", exact: true})).toHaveValue("A2");
+  await expect(page.getByRole("button", {name: "Add to Draft and Continue"})).toBeHidden();
+});
+
 test("保存中切换范围：等保存完成后切换且不重复提示", async ({page}) => {
   let releaseSave = () => {};
   const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });

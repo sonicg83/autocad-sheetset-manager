@@ -4,6 +4,7 @@
 // 三类操作表单（编辑子集/新增图纸/新建子集）由 SheetOperationForm 渲染于主表上方，
 // 与 SheetPropertyEditor 共用唯一编辑上下文（任务 5/6），一次只出现一种。
 import {computed, nextTick, onBeforeUnmount, onMounted, ref} from "vue";
+import {useI18n} from "vue-i18n";
 import type {Placement, Sheet, Workspace} from "../api/contracts";
 import type {EditContext, PropertyEditContext, SheetScope} from "../features/sheets/types";
 import type {BuiltinPrefField, SheetColumn, SheetColumnOption} from "../composables/useSheetColumns";
@@ -67,6 +68,7 @@ const emit = defineEmits<{
   openDiagnostics: [];
 }>();
 // 新增操作表单（一次只出现一种）由唯一编辑上下文驱动；无操作表单时不渲染
+const {t} = useI18n();
 const operationContext = computed<OperationContext | null>(() => {
   const ctx = props.editContext;
   return ctx && (ctx.kind === "rename" || ctx.kind === "insert-sheet" || ctx.kind === "insert-subset") ? ctx : null;
@@ -75,8 +77,8 @@ const sheetEditContext = computed<PropertyEditContext | null>(() => props.editCo
 const filteredSelectedCount = computed(() => Math.max(0, props.selectedIds.length - props.hiddenSelectedCount));
 const rangeTitle = computed(() => {
   const currentScope = props.scope;
-  if (currentScope.kind !== "subset") return "全部图纸";
-  return props.workspace.sheet_set.subsets.find((item) => item.id === currentScope.id)?.display_name ?? "全部图纸";
+  if (currentScope.kind !== "subset") return t("sheets.view.scopeAll");
+  return props.workspace.sheet_set.subsets.find((item) => item.id === currentScope.id)?.display_name ?? t("sheets.view.scopeAll");
 });
 const hasAnyFilter = computed(() => Boolean(searchText.value.trim()) || pathFilter.value !== "all" || diagnosticFilter.value !== "all" || pendingFilter.value !== "all");
 
@@ -141,10 +143,10 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="sheets-view" role="tabpanel" id="panel-sheets" aria-label="图纸">
+  <section class="sheets-view" role="tabpanel" id="panel-sheets" :aria-label="$t('sheets.view.regionAria')">
     <div class="sheets-workspace" :style="{'--sheet-tree-width': `${treeWidth}px`}">
-      <aside ref="treeDrawerEl" id="tree-drawer" class="sheet-tree-pane" :class="{'drawer-open': drawerOpen}" aria-label="图纸导航栏">
-        <div class="tree-root">{{ workspace.sheet_set.name }}（{{ allTotal }} 张）</div>
+      <aside ref="treeDrawerEl" id="tree-drawer" class="sheet-tree-pane" :class="{'drawer-open': drawerOpen}" :aria-label="$t('sheets.view.treePaneAria')">
+        <div class="tree-root">{{ $t("sheets.view.treeRootCount", {name: workspace.sheet_set.name, count: allTotal}) }}</div>
         <SheetTree
           :workspace="workspace"
           :scope="scope"
@@ -157,7 +159,7 @@ onBeforeUnmount(() => {
       <div
         class="tree-resizer"
         role="separator"
-        aria-label="调整图纸导航栏宽度"
+        :aria-label="$t('sheets.view.resizerAria')"
         aria-orientation="vertical"
         :aria-valuemin="TREE_MIN_WIDTH"
         :aria-valuemax="TREE_MAX_WIDTH"
@@ -167,7 +169,7 @@ onBeforeUnmount(() => {
         @keydown="onTreeResizeKeydown"
       ></div>
       <main class="sheets-main">
-        <button ref="treeToggleEl" type="button" class="tree-drawer-toggle" :aria-expanded="drawerOpen ? 'true' : 'false'" aria-controls="tree-drawer" @click="toggleTreeDrawer">{{ drawerOpen ? "关闭图纸导航" : "打开图纸导航" }}</button>
+        <button ref="treeToggleEl" type="button" class="tree-drawer-toggle" :aria-expanded="drawerOpen ? 'true' : 'false'" aria-controls="tree-drawer" @click="toggleTreeDrawer">{{ drawerOpen ? $t("sheets.view.closeTreeNav") : $t("sheets.view.openTreeNav") }}</button>
         <section v-if="operationContext" class="sheet-editor-card">
         <!-- 三类操作表单（任务 6，SPEC-DM-009 §6.3）：位于主表上方，一次只出现一种 -->
         <SheetOperationForm
@@ -218,22 +220,22 @@ onBeforeUnmount(() => {
 
         <p v-if="pruneMessage" class="notice prune-notice" role="status">{{ pruneMessage }}</p>
         <p v-if="hiddenTarget" class="notice hidden-target-notice" role="status">
-          <span>目标被筛选隐藏</span>
-          <button type="button" @click="$emit('clearFilters')">清除筛选并定位</button>
+          <span>{{ $t("sheets.view.hiddenTarget") }}</span>
+          <button type="button" @click="$emit('clearFilters')">{{ $t("sheets.view.clearFiltersAndLocate") }}</button>
         </p>
 
         <!-- 唯一业务表：空集/无结果显示原因与入口，不渲染无说明的空表头 -->
         <div v-if="allTotal === 0" class="empty-state" role="status">
-          <p>图纸集为空</p>
-          <button type="button" @click="$emit('openOperation', 'insert-subset')">创建首个子集</button>
+          <p>{{ $t("sheets.view.emptySet") }}</p>
+          <button type="button" @click="$emit('openOperation', 'insert-subset')">{{ $t("sheets.view.createFirstSubset") }}</button>
         </div>
         <div v-else-if="scopeTotal === 0" class="empty-state" role="status">
-          <p>当前范围无图纸</p>
-          <button type="button" @click="$emit('selectAll')">查看全部图纸</button>
+          <p>{{ $t("sheets.view.emptyScope") }}</p>
+          <button type="button" @click="$emit('selectAll')">{{ $t("sheets.view.viewAllSheets") }}</button>
         </div>
         <div v-else-if="filteredRows.length === 0" class="empty-state" role="status">
-          <p>无匹配图纸</p>
-          <button v-if="hasAnyFilter" type="button" @click="$emit('clearFilters')">清除筛选</button>
+          <p>{{ $t("sheets.view.noMatch") }}</p>
+          <button v-if="hasAnyFilter" type="button" @click="$emit('clearFilters')">{{ $t("sheets.view.clearFilters") }}</button>
         </div>
         <template v-else>
           <SheetTable
@@ -260,7 +262,7 @@ onBeforeUnmount(() => {
             @editor-cancel="$emit('editorCancel')"
             @editor-jump-error="(name) => $emit('editorJumpError', name)"
           />
-          <button v-if="visibleRows.length < filteredRows.length" type="button" class="load-more" @click="renderLimit += 80">继续加载（尚余 {{ filteredRows.length - visibleRows.length }}）</button>
+          <button v-if="visibleRows.length < filteredRows.length" type="button" class="load-more" @click="renderLimit += 80">{{ $t("sheets.view.loadMore", {count: filteredRows.length - visibleRows.length}) }}</button>
         </template>
         </section>
       </main>

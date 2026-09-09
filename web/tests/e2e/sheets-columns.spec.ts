@@ -315,6 +315,41 @@ test("窄屏下已配置列不自动隐藏仅内部横向滚动", async ({page})
   await expect(page.locator(".sheet-table-window")).toHaveCSS("overflow-x", "auto");
 });
 
+// —— PLAN-DM-021 Task 6：英文关键矩阵（SPEC-DM-013 I18N-07/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json；
+// 断言自定义属性名（图幅等）在英文界面保持原样。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test("英文界面：显示列配置双语且属性名原样", async ({page}) => {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page);
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.getByRole("button", {name: "Columns", exact: true}).click();
+  await expect(page.getByRole("dialog", {name: "Columns"})).toBeVisible();
+  await expect(page.getByText("Fixed columns cannot be hidden; the configuration is remembered per sheet set and does not affect search, filters, or full property editing.")).toBeVisible();
+  await expect(page.getByLabel("Search custom properties")).toHaveAttribute("placeholder", "Search by property name");
+  // 固定列锁定（英文内标签）与可选内置列英文
+  await expect(page.getByRole("checkbox", {name: "Sheet No. Fixed"})).toBeDisabled();
+  await expect(page.getByRole("checkbox", {name: "Title Fixed"})).toBeDisabled();
+  await expect(page.getByRole("checkbox", {name: "File Name"})).toBeChecked();
+  await expect(page.getByRole("checkbox", {name: "Layout", exact: true})).not.toBeChecked();
+  await expect(page.getByRole("checkbox", {name: "Subset (current scope)"})).toBeChecked();
+  // 自定义属性名（用户数据）原样、分区标题英文
+  await expect(page.getByText("Sheet custom properties", {exact: true})).toBeVisible();
+  await expect(page.getByRole("checkbox", {name: "图幅", exact: true})).toBeChecked();
+  // 开关立即生效：布局列以英文列头出现
+  await page.getByRole("checkbox", {name: "Layout", exact: true}).check();
+  await page.getByRole("button", {name: "Close columns"}).click();
+  await expect(page.getByRole("columnheader", {name: "Layout", exact: true})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Restore Defaults"})).toBeHidden();
+});
+
 test("异常状态进入诊断并可复制原始路径", async ({page}) => {
   await page.addInitScript(() => {
     (window as any).__copiedText = "";

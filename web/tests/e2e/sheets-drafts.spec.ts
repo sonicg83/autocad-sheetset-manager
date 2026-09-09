@@ -162,6 +162,41 @@ test("结构表单服务端失败保留完整输入且不展示为已创建", as
   await expect(page.getByText("匹配 13 / 全部 13 张", {exact: true})).toBeVisible();
 });
 
+// —— PLAN-DM-021 Task 6：英文关键矩阵（SPEC-DM-013 I18N-07/08/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json；
+// 断言属性名（比例）、属性值、命令 payload 不被翻译。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test("英文界面：选择条、批量修改双语且属性名值原样", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  // 行选择 aria 与全选 aria 英文（图号不翻译）
+  await page.getByLabel("Select sheet 001").check();
+  await page.getByLabel("Select sheet 004").check();
+  await expect(page.getByRole("checkbox", {name: "Select all results"})).toBeVisible();
+  // 选择条摘要与批量控件英文
+  await expect(page.getByText("2 selected, 0 outside current results", {exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Batch Edit Properties"}).click();
+  await page.getByLabel("Existing sheet property").selectOption("比例"); // 属性名不翻译
+  await page.getByLabel("Batch value").fill("1:200");
+  await page.getByRole("button", {name: "Add Batch to Draft"}).click();
+  // 批量 Toast（外壳域）英文且属性名（用户数据）原样
+  await expect(page.getByRole("status").filter({hasText: "Batch update 比例 (2 sheets / 2 subsets)"})).toBeVisible();
+  // 命令 payload 保持原契约
+  await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
+  const commands = lastPropertyCommands(draftBodies[draftBodies.length - 1], ["sheet-1", "sheet-4"]);
+  expect(commands.map((item) => item.sheet_id)).toEqual(["sheet-1", "sheet-4"]);
+  expect(commands[0].custom_properties["比例"]).toBe("1:200");
+});
+
 test("撤销后重提交相同命令批次重新入栈且撤销/重做栈状态正确", async ({page}) => {
   const draftBodies: unknown[] = [];
   const {workspace} = await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});

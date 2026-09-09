@@ -61,20 +61,20 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 <template>
   <span class="column-settings">
     <button type="button" class="cols-toggle" :aria-expanded="open ? 'true' : 'false'" aria-controls="column-settings-panel" aria-haspopup="dialog" @click="openPanel">
-      显示列<span v-if="newPropertyCount" class="cols-count">{{ newPropertyCount }} 个新字段</span>
+      {{ $t("sheets.columns.toggle") }}<span v-if="newPropertyCount" class="cols-count">{{ $t("sheets.columns.newFieldCount", {count: newPropertyCount}) }}</span>
     </button>
     <div v-if="open" class="cols-mask" @keydown="onKeydown" @click.self="closePanel">
-      <div id="column-settings-panel" class="cols-panel" role="dialog" aria-modal="true" aria-label="显示列" tabindex="-1" ref="panel">
+      <div id="column-settings-panel" class="cols-panel" role="dialog" aria-modal="true" :aria-label="$t('sheets.columns.dialogAria')" tabindex="-1" ref="panel">
         <div class="cols-head">
-          <h3 class="cols-title">显示列</h3>
-          <button type="button" class="cols-close" @click="closePanel">关闭显示列</button>
+          <h3 class="cols-title">{{ $t("sheets.columns.toggle") }}</h3>
+          <button type="button" class="cols-close" @click="closePanel">{{ $t("sheets.columns.close") }}</button>
         </div>
-        <p class="cols-hint">固定列不可隐藏；配置按图纸集记忆，不影响搜索、筛选与完整属性编辑。</p>
+        <p class="cols-hint">{{ $t("sheets.columns.hint") }}</p>
         <p v-if="saveError" class="cols-error" role="alert">{{ saveError }}</p>
-        <label class="cols-search">搜索自定义属性<input v-model="search" placeholder="按属性名称搜索"></label>
+        <label class="cols-search">{{ $t("sheets.columns.searchLabel") }}<input v-model="search" :placeholder="$t('sheets.columns.searchPlaceholder')"></label>
         <div class="cols-list">
           <div v-for="col in lockedOptions" :key="col.key" class="cols-option locked">
-            <label class="cols-check"><input type="checkbox" checked disabled><span>{{ col.label }}</span><small>固定</small></label>
+            <label class="cols-check"><input type="checkbox" checked disabled><span>{{ col.label }}</span><small>{{ $t("sheets.columns.locked") }}</small></label>
           </div>
           <div v-for="col in builtinOptions" :key="col.key" class="cols-option">
             <label class="cols-check">
@@ -82,17 +82,17 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
               <span>{{ col.label }}</span>
             </label>
           </div>
-          <h4 v-if="hasProperties" class="cols-section">图纸自定义属性</h4>
+          <h4 v-if="hasProperties" class="cols-section">{{ $t("sheets.columns.sheetSection") }}</h4>
           <div v-for="col in propertyOptions" :key="col.key" class="cols-option">
             <label class="cols-check">
               <input type="checkbox" :checked="col.visible" @change="onPropertyChange(col, $event)">
               <span>{{ col.label }}</span>
             </label>
-            <small v-if="col.newField" class="cols-new">新字段</small>
+            <small v-if="col.newField" class="cols-new">{{ $t("sheets.columns.newField") }}</small>
           </div>
         </div>
         <div class="cols-actions">
-          <button type="button" class="cols-reset" @click="emit('reset')">恢复默认</button>
+          <button type="button" class="cols-reset" @click="emit('reset')">{{ $t("sheets.columns.reset") }}</button>
         </div>
       </div>
     </div>

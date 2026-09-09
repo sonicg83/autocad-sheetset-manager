@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 6：图纸工作区迁移）
+
+- 新增图纸域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/sheets.ts`（179 键对称）并注册进唯一 i18n 实例（416 键 / 4 域，`check:i18n` 通过）。
+- 图纸工作区迁移（I18N-07）：`SheetsView.vue`（树根计数插值、抽屉开关 ARIA、空集/无范围/无匹配引导、隐藏目标提示、继续加载）、`SheetTable.vue`（表格/窗口 ARIA、全选与行选择 aria（图号插值）、状态枚举 待变更/阻断/正常/诊断、编辑属性/删除）、`SheetToolbar.vue`（计数、已加载行数、三类操作入口、搜索 label/placeholder、低频筛选与选项、可清除条件标签（稳定筛选值→语义键映射）、选择条摘要、批量控件）、`SheetTree.vue`（树 ARIA、全部图纸节点、节点计数、展开/收起子集 aria）、`SheetOperationForm.vue`（三类表单标题映射、全部字段/选项/按钮/提示/状态行）、`SheetPropertyEditor.vue`（标题/提示/搜索/分页计数/状态文本/错误摘要/属性字段 label（`属性 {name}`）/页脚按钮）、`ColumnSettings.vue`（入口/面板/提示/固定标记/新字段/恢复默认）全部改用 `$t`/`useI18n`。
+- composables 与 features 迁移：`useSheetsWorkspace.ts` 修剪提示（复数插值）；`useSheetColumns.ts` 内置列名与「所属子集（当前范围）」改语义键映射（属性列保留服务端原名），列配置保存/读取失败提示；`useSheetEditor.ts` 编辑主题（`图纸 {number}`/`子集 {name}`）、三选一摘要（`{subject} 属性编辑` 命名参数）、全部提交校验提示与批次标签（复用 `shell.commands.*`/`shell.errors.addDraftFailed`）；`useSheetProjection.ts`/`projection.ts`/`commands.ts`（非组件模块经唯一实例 `i18n.global.t`）投影缺失/不可执行与参照失效错误。命令 payload、字段名与后端校验契约未变；图号、标题、路径、属性名/值、错误码保持原样（I18N-16）。
+- 测试（TDD）：四个图纸 spec 新增 5 例英文关键矩阵红灯先行（导航/计数/筛选/状态、空集引导、属性编辑器+错误摘要+三选一、显示列配置、选择条+批量入草稿），断言图号、标题、路径、图纸集名、子集名、属性名/值与后端字段消息不被翻译，命令 payload 保持原契约；`main.spec.ts` 两处英文用例的图纸域控件名随迁移更新为英文名（Task 5 时该域未迁移，暂用中文名）。语言来源沿用 page 级 `/api/settings` 路由（不写共享 settings.json）。
+- 验证：四个聚焦 spec `--workers=1` 63 passed；`sheets-*.spec.ts` 全量 136 passed；`main.spec.ts`+`settings-dialog.spec.ts` 81 passed；`npm run test:unit` 28 passed；`npm run build`（check:api + check:i18n + vue-tsc + vite）通过。
+- Files 清单外必要增量（已披露）：`web/src/i18n/index.ts` 注册 sheets 域；`web/tests/e2e/main.spec.ts` 两处英文用例控件名更新（图纸域双语化后的必要跟随）。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 5：共享外壳、通用组件与格式化能力）
 
 - 新增外壳域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/shell.ts`（约 150 键对称）并注册进唯一 i18n 实例（237 键 / 3 域，`check:i18n` 通过）：覆盖顶栏（副标题、状态胶囊、文件夹/关闭/主题/设置入口及 ARIA、tooltip）、标签栏（分区/页签/预留位）、操作栏（草稿芯片计数插值、撤销/重做/预览/写入、草稿动作栈 ARIA）、任务浮层（页签/入口 ARIA、阻断诊断 aria-description、诊断计数、复制按钮、空状态）、欢迎区、通用模态与 Toast。

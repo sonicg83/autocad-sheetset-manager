@@ -3,6 +3,7 @@
 // 树与范围筛选共用一个范围状态；点击子集切换范围、点击图纸经 locateSheet 定位。
 // 扁平渲染 + aria-level 平铺树；方向键/Home/End 漫游焦点，子集支持展开/收起。
 import {computed, nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {Workspace} from "../../api/contracts";
 import type {SheetScope} from "../../features/sheets/types";
 
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   selectSubset: [id: string];
   selectSheet: [id: string];
 }>();
+
+const {t} = useI18n();
 
 type TreeNode =
   | {kind: "all"; id: string; label: string; count: number; level: number}
@@ -40,7 +43,7 @@ watch(() => props.scope, (scope) => {
 
 const visibleNodes = computed<TreeNode[]>(() => {
   const nodes: TreeNode[] = [];
-  nodes.push({kind: "all", id: "all", label: "全部图纸", count: props.workspace.sheet_set.sheet_count, level: 1});
+  nodes.push({kind: "all", id: "all", label: t("sheets.tree.all"), count: props.workspace.sheet_set.sheet_count, level: 1});
   for (const subset of props.workspace.sheet_set.subsets) {
     const expanded = !collapsed.value.has(subset.id);
     nodes.push({kind: "subset", id: subset.id, label: subset.display_name, count: subset.sheets.length, level: 2, expanded});
@@ -54,8 +57,7 @@ const visibleNodes = computed<TreeNode[]>(() => {
 });
 
 function nodeAriaLabel(node: TreeNode): string {
-  if (node.kind === "subset") return `${node.label}（${node.count} 张）`;
-  if (node.kind === "all") return `${node.label}（${node.count} 张）`;
+  if (node.kind === "subset" || node.kind === "all") return t("sheets.tree.nodeAria", {label: node.label, count: node.count});
   return node.label;
 }
 function isScopeNode(node: TreeNode): boolean {
@@ -121,7 +123,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 </script>
 <template>
-  <div ref="treeEl" class="sheet-tree" role="tree" aria-label="图纸导航" tabindex="0" @keydown="onKeydown">
+  <div ref="treeEl" class="sheet-tree" role="tree" :aria-label="$t('sheets.tree.navAria')" tabindex="0" @keydown="onKeydown">
     <div
       v-for="(node, index) in visibleNodes"
       :key="`${node.kind}-${node.id}`"
@@ -140,12 +142,12 @@ function onKeydown(event: KeyboardEvent) {
         v-if="node.kind === 'subset'"
         type="button"
         class="chevron"
-        :aria-label="node.expanded ? `收起子集 ${node.label}` : `展开子集 ${node.label}`"
+        :aria-label="node.expanded ? $t('sheets.tree.collapseSubset', {label: node.label}) : $t('sheets.tree.expandSubset', {label: node.label})"
         @click.stop="focusIndex = index; toggleCollapse(node)"
       >{{ node.expanded ? "▾" : "▸" }}</button>
       <span v-else class="chevron-placeholder"></span>
       <span class="node-label">{{ node.label }}</span>
-      <span class="node-count">{{ node.kind === "sheet" ? "" : `（${node.count} 张）` }}</span>
+      <span class="node-count">{{ node.kind === "sheet" ? "" : $t("sheets.tree.countSuffix", {count: node.count}) }}</span>
     </div>
   </div>
 </template>

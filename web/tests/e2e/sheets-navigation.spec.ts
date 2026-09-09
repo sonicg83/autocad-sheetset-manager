@@ -175,6 +175,65 @@ test("筛选无结果显示原因与清除入口，不渲染无说明空表头",
   await expect(page.getByText("匹配 13 / 全部 13 张", {exact: true})).toBeVisible();
 });
 
+// —— PLAN-DM-021 Task 6：英文关键矩阵（SPEC-DM-013 I18N-07/08/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json：
+// 避免与中文基线用例串扰（与 main.spec.ts 英文节同型）；断言图号、标题、
+// 文件名、子集显示名等用户数据在英文界面保持原样。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test("英文界面：导航、计数、筛选与状态双语且图纸数据原样", async ({page}) => {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page, {dualStatus: true});
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  // 树与范围：树 aria、全部图纸节点英文；图纸集名/子集显示名（用户数据）原样
+  await expect(page.getByRole("tree", {name: "Sheets navigation"})).toBeVisible();
+  await expect(page.getByRole("treeitem", {name: /All Sheets/})).toBeVisible();
+  await expect(page.getByRole("treeitem", {name: /建筑施工图/})).toBeVisible();
+  await expect(page.getByText("虚构图纸集 (13 sheets)", {exact: true})).toBeVisible();
+  await page.getByRole("treeitem", {name: /建筑施工图/}).click();
+  await expect(page.getByText("Match 3 / Total 3 sheets", {exact: true})).toBeVisible();
+  await expect(page.getByText("Loaded 3 rows", {exact: true})).toBeVisible();
+  await page.getByRole("treeitem", {name: /All Sheets/}).click();
+  await expect(page.getByText("Match 13 / Total 13 sheets", {exact: true})).toBeVisible();
+  // 表格 aria、列头与状态枚举英文；行内图号/标题/文件名（用户数据）原样
+  await expect(page.getByRole("table", {name: "Sheet table"})).toBeVisible();
+  await expect(page.getByRole("columnheader", {name: "Sheet No.", exact: true})).toBeVisible();
+  await expect(page.getByRole("columnheader", {name: "File Name", exact: true})).toBeVisible();
+  const row1 = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("001", {exact: true})});
+  await expect(row1).toContainText("Pending");
+  await expect(row1).toContainText("Blocking");
+  const row4 = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("004", {exact: true})});
+  await expect(row4).toContainText("Valid");
+  await expect(row4).toContainText("图纸 4");
+  // 低频筛选与条件标签英文
+  await page.getByRole("button", {name: "Filters", exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Path status"})).toBeVisible();
+  await page.getByRole("combobox", {name: "Path status"}).selectOption("resolved");
+  await expect(page.getByRole("button", {name: "Clear filter: Path resolved"})).toBeVisible();
+  await page.getByRole("button", {name: "Clear all filters"}).click();
+  // 搜索框 label 与 placeholder 英文；无匹配引导英文
+  await expect(page.getByLabel("Search sheets")).toHaveAttribute("placeholder", "Sheet number, title, property, or DWG");
+  await page.getByLabel("Search sheets").fill("不存在的图纸XYZ");
+  await expect(page.getByText("No matching sheets", {exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Clear filters", exact: true}).click();
+  await expect(page.getByText("Match 13 / Total 13 sheets", {exact: true})).toBeVisible();
+});
+
+test("英文界面：空图纸集引导双语", async ({page}) => {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await installSheetsFixture(page, {empty: true});
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await expect(page.getByText("The sheet set is empty", {exact: true})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Create the first subset"})).toBeVisible();
+});
+
 test("阻断与待变更并存显示，不相互遮盖", async ({page}) => {
   await installSheetsFixture(page, {dualStatus: true});
   await openWorkspace(page);

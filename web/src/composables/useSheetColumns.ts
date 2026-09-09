@@ -5,6 +5,7 @@
 // 保存按工作区 ID 排队，切工作区后旧保存按代次作废，不覆盖新工作区的偏好。
 import {computed, ref, watch} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import type {ColumnPreferences, PropertyKey, SheetScope} from "../features/sheets/types";
 import type {Workspace} from "../api/contracts";
 import {loadSheetColumns, saveSheetColumns} from "../api/shell";
@@ -35,9 +36,10 @@ export type SheetColumnOption = SheetColumn & {
   prefField?: BuiltinPrefField; // 可选内置列写入的偏好字段（子集列随范围取 subsetAll/subsetSingle）
 };
 
-const BUILTIN_LABELS: Record<BuiltinColumnKey, string> = {
-  select: "", number: "图号", title: "标题", subset: "子集",
-  file: "文件名", layout: "布局", status: "状态", actions: "操作",
+// 内置列稳定标识 → 显示名语义键映射（sheets.builtin.*）；选择列无显示名
+const BUILTIN_LABEL_KEYS: Record<BuiltinColumnKey, string | null> = {
+  select: null, number: "sheets.builtin.number", title: "sheets.builtin.title", subset: "sheets.builtin.subset",
+  file: "sheets.builtin.file", layout: "sheets.builtin.layout", status: "sheets.builtin.status", actions: "sheets.builtin.actions",
 };
 // 配置面板锁定展示的固定内置列（选择列恒显但不在面板列出）
 const LOCKED_BUILTINS: BuiltinColumnKey[] = ["number", "title", "status", "actions"];
@@ -47,9 +49,6 @@ const OPTIONAL_BUILTINS: Array<{key: BuiltinColumnKey; pref: BuiltinPrefField}> 
 ];
 // 首次默认开的三项按定义顺序；不足三项全部显示
 const DEFAULT_PROPERTY_COUNT = 3;
-
-const SAVE_FAILED_MESSAGE = "列配置保存失败，当前选择仍在本会话生效";
-const LOAD_FAILED_MESSAGE = "读取列配置失败，本次使用默认显示";
 
 // PropertyKey 名称按既有大小写匹配规则规范化（与 drafts.ts 的 custom_property 键一致），显示保留原名
 function propertyKey(name: string): PropertyKey {
@@ -73,6 +72,7 @@ export function useSheetColumns(deps: {
   workspace: Ref<Workspace | null>;
   scope: Ref<SheetScope>;
 }) {
+  const {t} = useI18n();
   const preferences = ref<ColumnPreferences | null>(null);
   const saveError = ref("");
   let loadGeneration = 0;            // 每次工作区加载递增，作废在途读取/保存结果
@@ -96,12 +96,18 @@ export function useSheetColumns(deps: {
     return deps.scope.value.kind === "all" ? prefs.subsetAll : prefs.subsetSingle;
   }
 
+  // 内置列显示名经语义键本地化（选择列无显示名）；随语言响应式刷新
+  function builtinLabel(key: BuiltinColumnKey): string {
+    const labelKey = BUILTIN_LABEL_KEYS[key];
+    return labelKey ? t(labelKey) : "";
+  }
+
   // 表格可见列：固定选择/图号/标题/状态/操作 + 可选子集/文件名/布局 + 可见属性列（状态与操作之间）
   const visibleColumns = computed<SheetColumn[]>(() => {
     const prefs = preferences.value;
     if (!prefs) return [];
     const builtin = (key: BuiltinColumnKey): SheetColumn =>
-      ({key: `builtin:${key}`, label: BUILTIN_LABELS[key], kind: "builtin", fixed: LOCKED_BUILTINS.includes(key) || key === "select", visible: true});
+      ({key: `builtin:${key}`, label: builtinLabel(key), kind: "builtin", fixed: LOCKED_BUILTINS.includes(key) || key === "select", visible: true});
     const props: SheetColumn[] = sheetDefinitions.value
       .filter((item) => prefs.properties[propertyKey(item.name)] === true)
       .map((item) => ({key: propertyKey(item.name), label: item.name, name: item.name, kind: "sheet", fixed: false, visible: true}));
@@ -122,12 +128,12 @@ export function useSheetColumns(deps: {
     if (!prefs) return [];
     const scopeKey: BuiltinPrefField = deps.scope.value.kind === "all" ? "subsetAll" : "subsetSingle";
     const locked: SheetColumnOption[] = LOCKED_BUILTINS.map((key) => ({
-      key: `builtin:${key}`, label: BUILTIN_LABELS[key], kind: "builtin", fixed: true, visible: true, newField: false,
+      key: `builtin:${key}`, label: builtinLabel(key), kind: "builtin", fixed: true, visible: true, newField: false,
     }));
     const optional: SheetColumnOption[] = [
-      {key: "subset", label: "所属子集（当前范围）", kind: "builtin", fixed: false, visible: subsetVisible(prefs), newField: false, prefField: scopeKey},
+      {key: "subset", label: t("sheets.builtin.subsetScope"), kind: "builtin", fixed: false, visible: subsetVisible(prefs), newField: false, prefField: scopeKey},
       ...OPTIONAL_BUILTINS.map(({key, pref}) => ({
-        key: `builtin:${key}`, label: BUILTIN_LABELS[key], kind: "builtin" as const, fixed: false,
+        key: `builtin:${key}`, label: builtinLabel(key), kind: "builtin" as const, fixed: false,
         visible: prefs[pref], newField: false, prefField: pref,
       })),
     ];
@@ -151,7 +157,7 @@ export function useSheetColumns(deps: {
       const result = await saveSheetColumns(workspaceId, snapshot);
       if (generation !== loadGeneration || deps.workspace.value?.id !== workspaceId) return;
       if (result === null) return; // 旧桥缺方法：静默降级
-      if (!result.ok) saveError.value = result.code === "SHEET_PREFERENCES_IO" ? SAVE_FAILED_MESSAGE : result.message;
+      if (!result.ok) saveError.value = result.code === "SHEET_PREFERENCES_IO" ? t("sheets.errors.columnsSaveFailed") : result.message;
     });
     saveQueue = run.catch(() => {});
     return run;
@@ -199,7 +205,7 @@ export function useSheetColumns(deps: {
     if (generation !== loadGeneration || deps.workspace.value?.id !== workspaceId) return;
     if (result === null) return; // 旧桥缺方法：保持默认降级
     if (!result.ok) {
-      saveError.value = LOAD_FAILED_MESSAGE;
+      saveError.value = t("sheets.errors.columnsLoadFailed");
       return;
     }
     if (result.value !== null) preferences.value = result.value;

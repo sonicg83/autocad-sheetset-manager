@@ -1076,7 +1076,7 @@ test("英文界面：删除确认框与 Toast 双语且图纸编号保持原样"
   await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
   await page.goto("/");
 await selectDst(page,"C:\\project\\test.dst","Select DST File");
-  await page.getByRole("button",{name:"删除"}).first().click();
+  await page.getByRole("button",{name:"Delete",exact:true}).first().click();
   // 确认框：标题/正文/确认按钮双语，图纸编号（用户数据）原样
   const modal=page.locator('[role="dialog"][aria-modal="true"]');
   await expect(modal).toBeVisible();
@@ -1097,12 +1097,12 @@ test("英文界面：发布确认模态（不可逆标记与危险勾选）双�
   await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-en",status:"QUEUED",progress:0,attempt:0,files:[]}}));
   await page.goto("/");
   await selectDst(page,"C:\\project\\test.dst","Select DST File");
-  // 批量属性流程入草稿（图纸页域控件未迁移，仍中文），随后走英文预览/写入门禁
-  await page.getByRole("checkbox",{name:"全选当前结果"}).check();
-  await page.getByRole("button",{name:"批量修改属性"}).click();
-  await page.getByLabel("既有图纸属性").selectOption("比例");
-  await page.getByLabel("批量值").fill("1:200");
-  await page.getByRole("button",{name:"批量加入草稿"}).click();
+  // 批量属性流程入草稿（Task 6 起图纸页域控件随语言切换），随后走英文预览/写入门禁
+  await page.getByRole("checkbox",{name:"Select all results"}).check();
+  await page.getByRole("button",{name:"Batch Edit Properties"}).click();
+  await page.getByLabel("Existing sheet property").selectOption("比例");
+  await page.getByLabel("Batch value").fill("1:200");
+  await page.getByRole("button",{name:"Add Batch to Draft"}).click();
   await page.getByRole("button",{name:"Preview Changes"}).click();
   await page.getByRole("button",{name:"Confirm Write"}).click();
   const modal=page.locator('[role="dialog"][aria-modal="true"]');

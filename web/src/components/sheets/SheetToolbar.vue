@@ -4,6 +4,7 @@
 // 「筛选」展开的低频筛选、可清除条件标签、「显示列」配置面板、吸顶选择条（勾选集合 + 批量修改属性展开）。
 // 新增操作入口先接线到任务 6 的表单（任务 3 提供过渡实现，一次只出现一种）。
 import {computed, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {BuiltinPrefField, SheetColumnOption} from "../../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "../../composables/useSheetsWorkspace";
 import ColumnSettings from "./ColumnSettings.vue";
@@ -57,6 +58,17 @@ function onToggleBuiltin(field: BuiltinPrefField, value: boolean) { emit("toggle
 function onToggleProperty(name: string, value: boolean) { emit("toggleProperty", name, value); }
 function onResetColumns() { emit("resetColumns"); }
 
+const {t} = useI18n();
+// 筛选枚举 → 生效条件标签语义键映射（稳定筛选值 → sheets.toolbar.chips.*，整句键不做调用点拼接）
+const CHIP_KEYS = {
+  "path-resolved": {label: "sheets.toolbar.chips.pathResolved", clear: "sheets.toolbar.chips.pathResolvedClear"},
+  "path-unresolved": {label: "sheets.toolbar.chips.pathUnresolved", clear: "sheets.toolbar.chips.pathUnresolvedClear"},
+  "diag-blocking": {label: "sheets.toolbar.chips.diagBlocking", clear: "sheets.toolbar.chips.diagBlockingClear"},
+  "diag-clean": {label: "sheets.toolbar.chips.diagClean", clear: "sheets.toolbar.chips.diagCleanClear"},
+  "pending-pending": {label: "sheets.toolbar.chips.pendingPending", clear: "sheets.toolbar.chips.pendingPendingClear"},
+  "pending-unchanged": {label: "sheets.toolbar.chips.pendingUnchanged", clear: "sheets.toolbar.chips.pendingUnchangedClear"},
+} as const;
+
 // 批量输入默认折叠：「选择后出现吸顶选择条，点击'批量修改属性'展开输入」
 const bulkExpanded = ref(false);
 
@@ -88,12 +100,15 @@ watch(() => props.selectedCount, (selectedCount) => {
 // 生效条件以可清除标签展示（低频筛选）
 const conditionChips = computed(() => {
   const chips: {key: string; label: string; clearLabel: string; clear: () => void}[] = [];
-  if (pathFilter.value === "resolved") chips.push({key: "path-resolved", label: "路径：已解析", clearLabel: "清除筛选：路径已解析", clear: () => { pathFilter.value = "all"; }});
-  if (pathFilter.value === "unresolved") chips.push({key: "path-unresolved", label: "路径：未解析", clearLabel: "清除筛选：路径未解析", clear: () => { pathFilter.value = "all"; }});
-  if (diagnosticFilter.value === "blocking") chips.push({key: "diag-blocking", label: "诊断：有阻断", clearLabel: "清除筛选：有阻断诊断", clear: () => { diagnosticFilter.value = "all"; }});
-  if (diagnosticFilter.value === "clean") chips.push({key: "diag-clean", label: "诊断：无阻断", clearLabel: "清除筛选：无阻断诊断", clear: () => { diagnosticFilter.value = "all"; }});
-  if (pendingFilter.value === "pending") chips.push({key: "pending-pending", label: "待变更：待变更", clearLabel: "清除筛选：待变更", clear: () => { pendingFilter.value = "all"; }});
-  if (pendingFilter.value === "unchanged") chips.push({key: "pending-unchanged", label: "待变更：未变更", clearLabel: "清除筛选：未变更", clear: () => { pendingFilter.value = "all"; }});
+  const push = (key: keyof typeof CHIP_KEYS, clear: () => void) => {
+    chips.push({key, label: t(CHIP_KEYS[key].label), clearLabel: t(CHIP_KEYS[key].clear), clear});
+  };
+  if (pathFilter.value === "resolved") push("path-resolved", () => { pathFilter.value = "all"; });
+  if (pathFilter.value === "unresolved") push("path-unresolved", () => { pathFilter.value = "all"; });
+  if (diagnosticFilter.value === "blocking") push("diag-blocking", () => { diagnosticFilter.value = "all"; });
+  if (diagnosticFilter.value === "clean") push("diag-clean", () => { diagnosticFilter.value = "all"; });
+  if (pendingFilter.value === "pending") push("pending-pending", () => { pendingFilter.value = "all"; });
+  if (pendingFilter.value === "unchanged") push("pending-unchanged", () => { pendingFilter.value = "all"; });
   return chips;
 });
 </script>
@@ -102,20 +117,20 @@ const conditionChips = computed(() => {
     <div class="toolbar-head">
       <h2 class="range-title">{{ rangeTitle }}</h2>
       <div class="counts">
-        <span class="count">匹配 {{ matchCount }} / 全部 {{ rangeTotal }} 张</span>
-        <span class="loaded">已加载 {{ visibleCount }} 行</span>
+        <span class="count">{{ $t("sheets.toolbar.counts", {match: matchCount, total: rangeTotal}) }}</span>
+        <span class="loaded">{{ $t("sheets.toolbar.loadedRows", {count: visibleCount}) }}</span>
       </div>
       <div class="operations">
         <!-- 三类操作入口常驻显示（任务 6）：同一表单已打开时点击不重开，另一表单经三选一保护切换 -->
-        <button type="button" @click="$emit('openOperation', 'rename')">编辑子集</button>
-        <button type="button" @click="$emit('openOperation', 'insert-sheet')">新增图纸</button>
-        <button type="button" @click="$emit('openOperation', 'insert-subset')">新建子集</button>
+        <button type="button" @click="$emit('openOperation', 'rename')">{{ $t("sheets.toolbar.renameSubset") }}</button>
+        <button type="button" @click="$emit('openOperation', 'insert-sheet')">{{ $t("sheets.toolbar.insertSheet") }}</button>
+        <button type="button" @click="$emit('openOperation', 'insert-subset')">{{ $t("sheets.toolbar.insertSubset") }}</button>
       </div>
     </div>
     <div class="toolbar-filters">
-      <label class="search-box">搜索图纸<input v-model="searchText" placeholder="图号、标题、属性或 DWG"></label>
-      <label class="search-all"><input v-model="searchAll" type="checkbox">搜索全部图纸</label>
-      <button type="button" class="filter-toggle" @click="filtersVisible = !filtersVisible">筛选</button>
+      <label class="search-box">{{ $t("sheets.toolbar.searchLabel") }}<input v-model="searchText" :placeholder="$t('sheets.toolbar.searchPlaceholder')"></label>
+      <label class="search-all"><input v-model="searchAll" type="checkbox">{{ $t("sheets.toolbar.searchAll") }}</label>
+      <button type="button" class="filter-toggle" @click="filtersVisible = !filtersVisible">{{ $t("sheets.toolbar.filterToggle") }}</button>
       <ColumnSettings
         :options="columnOptions"
         :save-error="columnSaveError"
@@ -125,36 +140,36 @@ const conditionChips = computed(() => {
         @reset="onResetColumns"
       />
       <template v-if="filtersVisible">
-        <label>路径状态<select v-model="pathFilter"><option value="all">全部</option><option value="resolved">已解析</option><option value="unresolved">未解析</option></select></label>
-        <label>诊断状态<select v-model="diagnosticFilter"><option value="all">全部</option><option value="blocking">有阻断诊断</option><option value="clean">无阻断诊断</option></select></label>
-        <label>待变更状态<select v-model="pendingFilter"><option value="all">全部</option><option value="pending">待变更</option><option value="unchanged">未变更</option></select></label>
+        <label>{{ $t("sheets.toolbar.pathFilterLabel") }}<select v-model="pathFilter"><option value="all">{{ $t("sheets.toolbar.filterAll") }}</option><option value="resolved">{{ $t("sheets.toolbar.filterResolved") }}</option><option value="unresolved">{{ $t("sheets.toolbar.filterUnresolved") }}</option></select></label>
+        <label>{{ $t("sheets.toolbar.diagFilterLabel") }}<select v-model="diagnosticFilter"><option value="all">{{ $t("sheets.toolbar.filterAll") }}</option><option value="blocking">{{ $t("sheets.toolbar.filterBlocking") }}</option><option value="clean">{{ $t("sheets.toolbar.filterClean") }}</option></select></label>
+        <label>{{ $t("sheets.toolbar.pendingFilterLabel") }}<select v-model="pendingFilter"><option value="all">{{ $t("sheets.toolbar.filterAll") }}</option><option value="pending">{{ $t("sheets.toolbar.filterPending") }}</option><option value="unchanged">{{ $t("sheets.toolbar.filterUnchanged") }}</option></select></label>
       </template>
       <div v-if="conditionChips.length" class="chips">
         <span v-for="chip in conditionChips" :key="chip.key" class="chip">
           <span class="chip-label">{{ chip.label }}</span>
           <button type="button" class="chip-clear" :aria-label="chip.clearLabel" @click="chip.clear()">✕</button>
         </span>
-        <button type="button" class="chips-clear-all" @click="$emit('clearFilters')">清除全部筛选</button>
+        <button type="button" class="chips-clear-all" @click="$emit('clearFilters')">{{ $t("sheets.toolbar.clearAllFilters") }}</button>
       </div>
     </div>
     <!-- 未选择时只显示选择入口；选择后出现吸顶选择条 -->
     <div v-if="selectedCount" class="selection-bar">
       <div class="selection-actions">
-        <span class="selection-summary" role="status">已选 {{ selectedCount }} 张，其中 {{ hiddenSelectedCount }} 张不在当前结果</span>
-        <button type="button" :disabled="!canSelect" @click="exitBulkAndToggleFilteredSelection">{{ allFilteredSelected ? "取消全选当前结果" : "全选当前结果" }}</button>
-        <button type="button" @click="exitBulkAndClearSelection">清除选择</button>
-        <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">批量修改属性</button>
+        <span class="selection-summary" role="status">{{ $t("sheets.toolbar.selectionSummary", {selected: selectedCount, hidden: hiddenSelectedCount}) }}</span>
+        <button type="button" :disabled="!canSelect" @click="exitBulkAndToggleFilteredSelection">{{ allFilteredSelected ? $t("sheets.toolbar.unselectAllFiltered") : $t("sheets.toolbar.selectAllFiltered") }}</button>
+        <button type="button" @click="exitBulkAndClearSelection">{{ $t("sheets.toolbar.clearSelection") }}</button>
+        <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">{{ $t("sheets.toolbar.bulkToggle") }}</button>
       </div>
       <div v-if="bulkExpanded" class="bulk-controls">
-        <label>批量模式<select v-model="bulkMode"><option value="set">设置值</option><option value="clear">清空值</option></select></label>
-        <label>既有图纸属性<select v-model="bulkPropertyName"><option value="">请选择</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{ name }}</option></select></label>
+        <label>{{ $t("sheets.toolbar.bulkModeLabel") }}<select v-model="bulkMode"><option value="set">{{ $t("sheets.toolbar.bulkModeSet") }}</option><option value="clear">{{ $t("sheets.toolbar.bulkModeClear") }}</option></select></label>
+        <label>{{ $t("sheets.toolbar.bulkPropertyLabel") }}<select v-model="bulkPropertyName"><option value="">{{ $t("sheets.toolbar.bulkPropertyPlaceholder") }}</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{ name }}</option></select></label>
         <template v-if="bulkMode === 'set'">
-          <label>批量值<input v-model="bulkPropertyValue"></label>
-          <button type="button" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">批量加入草稿</button>
+          <label>{{ $t("sheets.toolbar.bulkValueLabel") }}<input v-model="bulkPropertyValue"></label>
+          <button type="button" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">{{ $t("sheets.toolbar.bulkQueue") }}</button>
         </template>
         <template v-else>
-          <span class="bulk-hint">清空所选图纸该属性（设为空字符串，是否允许空值由服务端校验）</span>
-          <button type="button" class="danger" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">清空所选属性</button>
+          <span class="bulk-hint">{{ $t("sheets.toolbar.bulkClearHint") }}</span>
+          <button type="button" class="danger" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">{{ $t("sheets.toolbar.bulkClearQueue") }}</button>
         </template>
       </div>
     </div>

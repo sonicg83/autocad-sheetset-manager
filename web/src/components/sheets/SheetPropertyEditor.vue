@@ -5,10 +5,12 @@
 // 「加入草稿」提交该图纸全部属性页，失败保留输入并呈现行内错误与可聚焦摘要；
 // 未给字段路径的错误只进摘要，不编造字段归因；「取消」明确丢弃当前缓冲。
 import {computed, nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {PropertyEditContext} from "../../features/sheets/types";
 import {PROPERTY_PAGE_SIZE} from "../../composables/useSheetEditor";
 
 const props = defineProps<{context: PropertyEditContext}>();
+const {t} = useI18n();
 const emit = defineEmits<{
   setValue: [name: string, value: string];
   setPage: [page: number];
@@ -35,10 +37,10 @@ const hasError = computed(() => props.context.summaryError !== "" || Object.keys
 const fieldErrorNames = computed(() => props.context.propertyNames.filter((name) => props.context.errors[name]));
 
 const statusText = computed(() => {
-  if (props.context.invalid) return "编辑上下文已失效（基准已刷新或对象已消失），禁止提交";
-  if (hasError.value) return "加入草稿失败，可修正后重试";
-  if (modifiedCount.value > 0) return "尚未加入草稿（仅本会话保留）";
-  return "暂无修改";
+  if (props.context.invalid) return t("sheets.operation.statusInvalid");
+  if (hasError.value) return t("sheets.editor.statusFailed");
+  if (modifiedCount.value > 0) return t("sheets.editor.statusDraft");
+  return t("sheets.editor.statusClean");
 });
 
 function fieldId(name: string) { return `prop-${props.context.objectId}-${name}`; }
@@ -60,22 +62,22 @@ watch(() => hasError.value, (now) => {
 });
 </script>
 <template>
-  <section class="sheet-property-editor" :aria-label="`属性编辑 ${context.subject}`">
+  <section class="sheet-property-editor" :aria-label="$t('sheets.editor.aria', {subject: context.subject})">
     <header class="editor-head">
-      <h3>属性编辑 · {{ context.subject }}</h3>
-      <span class="editor-head-hint">图号、派生标题、范围和文件/布局派生名不可编辑</span>
-      <label class="editor-search">搜索属性<input :value="context.search" :aria-label="`搜索属性`" @input="(e) => emit('setSearch', (e.target as HTMLInputElement).value)"></label>
+      <h3>{{ $t("sheets.editor.title", {subject: context.subject}) }}</h3>
+      <span class="editor-head-hint">{{ $t("sheets.editor.headHint") }}</span>
+      <label class="editor-search">{{ $t("sheets.editor.searchLabel") }}<input :value="context.search" :aria-label="$t('sheets.editor.searchLabel')" @input="(e) => emit('setSearch', (e.target as HTMLInputElement).value)"></label>
     </header>
 
-    <div v-if="hasError" ref="summaryEl" class="error-summary" tabindex="-1" role="alert" aria-label="加入草稿错误摘要">
-      <p class="summary-title">无法加入草稿：</p>
+    <div v-if="hasError" ref="summaryEl" class="error-summary" tabindex="-1" role="alert" :aria-label="$t('sheets.editor.summaryAria')">
+      <p class="summary-title">{{ $t("sheets.editor.summaryTitle") }}</p>
       <p v-if="context.summaryError" class="summary-message">{{ context.summaryError }}</p>
       <button v-for="name in fieldErrorNames" :key="name" type="button" class="summary-jump" @click="onJumpError(name)">{{ name }}：{{ context.errors[name] }}</button>
     </div>
 
     <div class="editor-grid">
       <div v-for="name in pageNames" :key="name" class="prop-field" :class="{invalid: context.errors[name]}">
-        <label :for="fieldId(name)">属性 {{ name }}</label>
+        <label :for="fieldId(name)">{{ $t("sheets.editor.propLabel", {name}) }}</label>
         <input
           :id="fieldId(name)"
           :value="context.values[name] ?? ''"
@@ -87,13 +89,13 @@ watch(() => hasError.value, (now) => {
     </div>
 
     <footer class="editor-footer">
-      <span class="editor-counts"><span>共 {{ context.propertyNames.length }} 项</span> · <span>第 {{ page + 1 }} / {{ totalPages }} 页</span> · <span>已修改 {{ modifiedCount }} 项</span></span>
-      <button type="button" :disabled="page === 0" @click="onPage(-1)">上一页</button>
-      <button type="button" :disabled="page >= totalPages - 1" @click="onPage(1)">下一页</button>
+      <span class="editor-counts"><span>{{ $t("sheets.editor.totalItems", {count: context.propertyNames.length}) }}</span> · <span>{{ $t("sheets.editor.pageInfo", {page: page + 1, total: totalPages}) }}</span> · <span>{{ $t("sheets.editor.modifiedCount", {count: modifiedCount}) }}</span></span>
+      <button type="button" :disabled="page === 0" @click="onPage(-1)">{{ $t("sheets.editor.prevPage") }}</button>
+      <button type="button" :disabled="page >= totalPages - 1" @click="onPage(1)">{{ $t("sheets.editor.nextPage") }}</button>
       <span class="editor-status" role="status">{{ statusText }}</span>
       <span class="editor-spacer"></span>
-      <button type="button" class="danger" @click="emit('cancel')">取消</button>
-      <button type="button" :disabled="context.invalid" :title="context.invalid ? '编辑上下文已失效，禁止提交' : ''" @click="emit('submit')">加入草稿</button>
+      <button type="button" class="danger" @click="emit('cancel')">{{ $t("sheets.editor.cancel") }}</button>
+      <button type="button" :disabled="context.invalid" :title="context.invalid ? $t('sheets.editor.invalidTooltip') : ''" @click="emit('submit')">{{ $t("sheets.editor.addToDraft") }}</button>
     </footer>
   </section>
 </template>
