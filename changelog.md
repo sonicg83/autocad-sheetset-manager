@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-09（修复 PLAN-DM-021 语言迁移批次遗留的三处 main.spec e2e 回归）
+
+- 根因定位（worktree 检出 b159c86 复跑实证：三处失败均先于 Task 9 提交 fabb4be 存在，Task 8 检查点「全量绿」结论对这三例不成立）：①`失败任务显示逐 DWG 详情并可安全重试`——b159c86 重写断言时误写「第 0 次」，而重试响应 attempt=1 且任务域契约（I18N-12）按 payload 原值渲染「第 1 次」（与同批 SSE 用例口径一致），属过期测试期望，改断言为「第 1 次」；②`壳桥延迟注入`——bootstrap 先取设置再挂载（I18N-04）后首帧晚于 load+30ms 的模拟注入点，降级界面从未渲染即切有壳态（注入早于挂载时应用直接有壳起步，产品行为正确），测试夹具改为等 `#app` 挂载（降级界面已渲染）再延迟 30ms 注入，`pywebviewready` 晚到切换断言全部保留；③`语言切换不变量`——切 en-US 后图纸集名称输入可访问名合法变为 "Sheet set name"（label/for 经 fieldId(key) 稳定绑定，值「改名后的图纸集」实际保留，见失败快照），属过期定位器，改双语 label 正则语言容忍定位，不变量断言（active tab/工作区/未提交输入值）全部保留。产品代码零改动。
+- 验证：`npm --prefix web run test:e2e -- tests/e2e/main.spec.ts --workers=1` 74 passed / 0 failed。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 9：已知 API/CAD/Shell 错误结构化）
 
 - 新增接口层错误目录 `src/dst_manager/interfaces/message_catalog.py`（I18N-11 / ARCH-DM-005 §6.2）：枚举登记全部已知稳定 code——26 个 `ApplicationError`、37 个 `AcsmValidationError`（含 `ACSMSHEET/SUBSET_NOT_FOUND|DUPLICATED` 动态族具体值）、4 个设置 409/422 外层 code、6 个 ShellBridge code，共 73 项；每项对应唯一 `message_key`、参数 schema（str/int/bool/list 白名单）与可选详情提取参数，不发明新业务错误码。`ApplicationError` 增加可选结构化 `params`（仅稳定值，默认 None，向后兼容）；`ApplicationError`/`AcsmValidationError` 统一 handler 与设置 409 改经 `error_payload` 输出 `{code, message_key, params, message}`（未知 code 不携带 `message_key`，原文仅作诊断）。DST 诊断、任务状态与 CSV 诊断 code 不在目录（按功能域渐进迁移）。

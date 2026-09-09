@@ -22,8 +22,15 @@ test.beforeEach(async({page})=>{
       };
       window.dispatchEvent(new Event("pywebviewready"));
     };
+    // I18N 批次起 bootstrap 先取设置再挂载（I18N-04），首帧可能晚于 load+30ms；
+    // 必须等 Vue 已挂载（#app 有子节点，即降级界面已渲染）再注入，否则"降级态→文件选择区"
+    // 的切换无从观察（注入早于首帧时应用直接以有壳态起步，同样符合预期行为）
     if (new URLSearchParams(window.location.search).has("late-bridge")) {
-      window.addEventListener("load", () => setTimeout(inject, 30));
+      const injectWhenMounted = () => {
+        if (document.querySelector("#app")?.hasChildNodes()) { setTimeout(inject, 30); return; }
+        setTimeout(injectWhenMounted, 10);
+      };
+      window.addEventListener("load", injectWhenMounted);
     } else {
       inject();
     }
@@ -569,7 +576,8 @@ test("属性命令与结构命令分批并支持 CSV 行级预览导入",async({
 test("失败任务显示逐 DWG 详情并可安全重试",async({page})=>{
   await installMockEventSource(page);await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-failed",status:"FAILED",progress:40,attempt:1,error_code:"CAD_TIMEOUT",suggestion:"检查 CAD 日志",files:[{target_path:"A.dwg",status:"FAILED",progress:0,duration_ms:600000,error_code:"CAD_TIMEOUT"}]}}));await page.route("**/api/jobs/job-failed/retry",route=>route.fulfill({json:{id:"job-failed",status:"QUEUED",progress:0,attempt:1,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   // 失败任务详情迁入任务浮层实施进度页签：预览已展开浮层，切到实施进度页签再断言逐 DWG 详情
-  const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();await expect(page.getByText("A.dwg")).toBeVisible();await expect(page.getByText("检查 CAD 日志")).toBeVisible();await expectActionAppearance(page, ".job-detail button");await page.getByRole("button",{name:"安全重试"}).click();await expect(page.getByText(/已排队 · 0% · 第 0 次/)).toBeVisible();
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();await expect(page.getByText("A.dwg")).toBeVisible();await expect(page.getByText("检查 CAD 日志")).toBeVisible();await expectActionAppearance(page, ".job-detail button");await page.getByRole("button",{name:"安全重试"}).click();await expect(page.getByText(/已排队 · 0% · 第 1 次/)).toBeVisible();
+  // 第 N 次跟随 payload attempt 原值渲染（I18N-12：任务域不加工数据，与下方 SSE 用例第 1 次口径一致）
 });
 
 test("修订恢复先预览再确认为新修订",async({page})=>{
@@ -1131,7 +1139,9 @@ test("语言切换不变量：保存成功后 active tab、工作区与未提交
   // 背景：属性页签 + 更新图纸集表单未提交输入
   await page.getByRole("tab",{name:"属性"}).click();
   await page.getByRole("button",{name:"更新图纸集"}).click();
-  const nameInput=page.getByLabel("图纸集名称",{exact:true});
+  // 语言容忍定位：切换 en-US 后该输入的可访问名合法变为 "Sheet set name"（label/for 关联
+  // 由 fieldId(key) 稳定绑定，不受语言影响），故仅值不变量断言用双语 label 正则匹配
+  const nameInput=page.getByLabel(/^(图纸集名称|Sheet set name)$/);
   await nameInput.fill("改名后的图纸集");
   // 设置中心保存切换 en-US
   await openSettingsDialog(page);
