@@ -6,6 +6,7 @@
      过滤与分页派生在 PropertyDefinitionPanel（纯函数来自 features/properties/model），本组件只展示。 -->
 <script setup lang="ts">
 import {computed, onBeforeUnmount, onMounted, ref} from "vue";
+import {useI18n} from "vue-i18n";
 import type {PropertyDefinition} from "../../api/contracts";
 import {definitionKey} from "../../features/properties/model";
 
@@ -22,16 +23,18 @@ const emit = defineEmits<{
   deleteDefinition: [definition: PropertyDefinition];
 }>();
 
+// 稳定作用域枚举 → 语义键映射（I18N-16：枚举值本身不翻译）
+const {t} = useI18n();
 function scopeLabel(definition: PropertyDefinition): string {
-  return definition.type === "sheetset" ? "图纸集" : "图纸";
+  return t(definition.type === "sheetset" ? "properties.scope.sheetset" : "properties.scope.sheet");
 }
 
-// —— 列宽确定（table-layout:fixed + min-width），同图纸主表的模式 ——
+// —— 列宽确定（table-layout:fixed + min-width），同图纸主表的模式；列头走语义键 ——
 const COLUMNS = [
-  {key: "name", label: "字段名", width: 200},
-  {key: "scope", label: "作用域", width: 88},
-  {key: "default", label: "默认值", width: 320},
-  {key: "actions", label: "操作", width: 140},
+  {key: "name", labelKey: "properties.definitions.colName", width: 200},
+  {key: "scope", labelKey: "properties.definitions.colScope", width: 88},
+  {key: "default", labelKey: "properties.definitions.colDefault", width: 320},
+  {key: "actions", labelKey: "properties.definitions.colActions", width: 140},
 ] as const;
 const tableMinWidth = computed(() => COLUMNS.reduce((sum, column) => sum + column.width, 0));
 
@@ -64,7 +67,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
       class="table-window"
       :class="{'sticky-actions': stickyActions}"
       tabindex="0"
-      aria-label="属性字段定义表格"
+      :aria-label="$t('properties.definitions.tableAria')"
     >
       <table :style="{minWidth: `${tableMinWidth}px`}">
         <colgroup>
@@ -72,7 +75,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
         </colgroup>
         <thead>
           <tr>
-            <th v-for="column in COLUMNS" :key="column.key" :class="`col-${column.key}`" scope="col">{{ column.label }}</th>
+            <th v-for="column in COLUMNS" :key="column.key" :class="`col-${column.key}`" scope="col">{{ $t(column.labelKey) }}</th>
           </tr>
         </thead>
         <tbody>
@@ -85,35 +88,35 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
                 class="default-text"
                 :class="{expanded: expandedKey === definitionKey(definition)}"
               >{{ definition.default_value }}</span>
-              <span v-else class="empty-value">（空）</span>
+              <span v-else class="empty-value">{{ $t("properties.definitions.emptyValue") }}</span>
               <button
                 v-if="isLong(definition)"
                 type="button"
                 class="text-action"
                 :aria-expanded="expandedKey === definitionKey(definition)"
-                :aria-label="`${expandedKey === definitionKey(definition) ? '收起' : '展开'}默认值 ${scopeLabel(definition)} ${definition.name}`"
+                :aria-label="expandedKey === definitionKey(definition) ? $t('properties.definitions.collapseDefaultAria', {scope: scopeLabel(definition), name: definition.name}) : $t('properties.definitions.expandDefaultAria', {scope: scopeLabel(definition), name: definition.name})"
                 @click="toggleExpand(definition)"
-              >{{ expandedKey === definitionKey(definition) ? "收起" : "展开" }}</button>
+              >{{ expandedKey === definitionKey(definition) ? $t("properties.definitions.collapse") : $t("properties.definitions.expand") }}</button>
             </td>
             <td class="col-actions">
               <button
                 type="button"
                 class="danger-text"
-                :aria-label="`删除 ${scopeLabel(definition)} 属性 ${definition.name}`"
+                :aria-label="$t('properties.definitions.deleteAria', {scope: scopeLabel(definition), name: definition.name})"
                 @click="emit('deleteDefinition', definition)"
-              >删除</button>
+              >{{ $t("properties.definitions.delete") }}</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p v-if="totalCount === 0" class="empty">没有属性定义；使用「新增字段」创建第一个字段。</p>
-    <p v-else-if="matchedCount === 0" class="empty">没有匹配的字段定义。<button type="button" class="text-action" @click="emit('clearFilter')">清除查询</button></p>
+    <p v-if="totalCount === 0" class="empty">{{ $t("properties.definitions.emptyNoDefinitions") }}</p>
+    <p v-else-if="matchedCount === 0" class="empty">{{ $t("properties.definitions.emptyNoMatch") }}<button type="button" class="text-action" @click="emit('clearFilter')">{{ $t("properties.definitions.clearQuery") }}</button></p>
     <div class="table-foot">
-      <span class="foot-info">匹配 {{ matchedCount }} 项 · 第 {{ page }} / {{ lastPage }} 页</span>
+      <span class="foot-info">{{ $t("properties.definitions.pageInfo", {matched: matchedCount, page, total: lastPage}) }}</span>
       <div class="pager">
-        <button type="button" :disabled="page <= 1" @click="emit('changePage', page - 1)">上一页</button>
-        <button type="button" :disabled="page >= lastPage" @click="emit('changePage', page + 1)">下一页</button>
+        <button type="button" :disabled="page <= 1" @click="emit('changePage', page - 1)">{{ $t("properties.definitions.prevPage") }}</button>
+        <button type="button" :disabled="page >= lastPage" @click="emit('changePage', page + 1)">{{ $t("properties.definitions.nextPage") }}</button>
       </div>
     </div>
   </div>

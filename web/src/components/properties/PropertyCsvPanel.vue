@@ -6,6 +6,7 @@
      在途任务不受关闭影响；预览失效仍由 App 依代次/基准/定义草稿判定。样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
 import {computed, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {CsvPreview} from "../../api/contracts";
 
 const props = defineProps<{
@@ -38,56 +39,58 @@ watch(() => props.hasCsv, (has) => {
   if (!has && fileInput.value) fileInput.value.value = "";
 });
 // 标题栏 CSV 状态摘要：折叠后仍可见（措辞与流程区提示区分，避免同文案歧义）
+const {t} = useI18n();
 const csvStatus = computed(() => {
-  if (!props.hasCsv) return "CSV：未选择文件";
-  if (!props.csvPreview) return "CSV：已选择文件，未预览";
-  return props.csvExecutable ? "CSV：预览可确认" : "CSV：预览存在诊断，无法确认";
+  if (!props.hasCsv) return t("properties.csv.statusNoFile");
+  if (!props.csvPreview) return t("properties.csv.statusSelectedNoPreview");
+  return props.csvExecutable ? t("properties.csv.statusExecutable") : t("properties.csv.statusNotExecutable");
 });
 </script>
 <template>
-  <section class="csv-panel" aria-label="属性导入导出">
+  <section class="csv-panel" :aria-label="$t('properties.csv.panelAria')">
     <header class="panel-head">
       <button
         type="button"
         class="head-toggle"
         :aria-expanded="!collapsed"
         aria-controls="csv-panel-body"
-        :aria-label="collapsed ? '展开属性导入导出' : '收起属性导入导出'"
+        :aria-label="collapsed ? $t('properties.csv.openPanel') : $t('properties.csv.collapsePanel')"
         @click="emit('update:collapsed', !collapsed)"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <span class="head-title">属性导入导出</span>
+        <span class="head-title">{{ $t("properties.csv.title") }}</span>
       </button>
       <span class="head-status" role="status">{{ csvStatus }}</span>
     </header>
     <div v-if="!collapsed" id="csv-panel-body" class="panel-body">
       <!-- 三个操作常驻（面板展开即见）；下载文件名由后端 Content-Disposition 提供，桌面壳放行页面内下载 -->
       <div class="io-menu">
-        <a href="/api/custom-properties/template" download>下载 CSV 模板</a>
-        <a :href="`/api/workspaces/${workspaceId}/custom-properties/export`" download>导出当前属性</a>
-        <button v-if="!csvOpen" type="button" :aria-expanded="csvOpen" @click="toggleCsv">导入 CSV</button>
+        <a href="/api/custom-properties/template" download>{{ $t("properties.csv.downloadTemplate") }}</a>
+        <a :href="`/api/workspaces/${workspaceId}/custom-properties/export`" download>{{ $t("properties.csv.exportCurrent") }}</a>
+        <button v-if="!csvOpen" type="button" :aria-expanded="csvOpen" @click="toggleCsv">{{ $t("properties.csv.importCsv") }}</button>
       </div>
       <div v-show="csvOpen" class="csv-flow">
-        <label>属性 CSV 文件<input ref="fileInput" type="file" accept=".csv,text/csv" @change="emit('readCsv', $event)"></label>
+        <label>{{ $t("properties.csv.fileLabel") }}<input ref="fileInput" type="file" accept=".csv,text/csv" @change="emit('readCsv', $event)"></label>
         <!-- 关闭入口在流程区内：有未导入数据时由 App 先弹确认，确认后清空文件与预览缓存；在途任务不受影响 -->
         <!-- 预览操作在选择文件后才可用（未选择时隐藏）；确认导入为 Danger 分级，无效数据禁用 -->
-        <button v-show="hasCsv" type="button" @click="emit('previewCsv')">预览 CSV 导入</button>
+        <button v-show="hasCsv" type="button" @click="emit('previewCsv')">{{ $t("properties.csv.previewImport") }}</button>
         <button
           type="button"
           class="danger"
           :disabled="writesDisabled || !csvExecutable"
           @click="emit('importCsv')"
-        >确认导入</button>
-        <button type="button" :aria-expanded="csvOpen" @click="emit('closeCsv')">关闭导入</button>
-        <p v-if="!hasCsv" class="csv-hint" role="status">未选择 CSV 文件：请选择 UTF-8 编码的 .csv 文件，选择后可预览合并结果</p>
-        <p v-else-if="csvPreview && csvPreview.changes.length === 0" class="csv-hint" role="status">本次导入不含属性定义变更</p>
-        <p v-else-if="csvPreview && !csvExecutable" class="csv-hint error" role="alert">预览结果不可执行：请按诊断修正 CSV 后重新预览</p>
+        >{{ $t("properties.csv.confirmImport") }}</button>
+        <button type="button" :aria-expanded="csvOpen" @click="emit('closeCsv')">{{ $t("properties.csv.closeImport") }}</button>
+        <p v-if="!hasCsv" class="csv-hint" role="status">{{ $t("properties.csv.noFileHint") }}</p>
+        <p v-else-if="csvPreview && csvPreview.changes.length === 0" class="csv-hint" role="status">{{ $t("properties.csv.noDefinitionChanges") }}</p>
+        <p v-else-if="csvPreview && !csvExecutable" class="csv-hint error" role="alert">{{ $t("properties.csv.notExecutableHint") }}</p>
       </div>
       <!-- 预览数据保存在 useCsvImport（App 域）：关闭导入区即清空（有数据先确认），重开需重新选择文件并预览 -->
       <div v-if="csvOpen && csvPreview" class="csv-preview">
-        <h3>CSV 合并预览</h3>
-        <ul class="change-list"><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`" class="csv-change">第 {{ change.line }} 行 · {{ change.action }} · {{ change.type }} · {{ change.name }}</li></ul>
-        <ul v-if="csvPreview.diagnostics.length > 0" class="diagnostics"><li v-for="item in csvPreview.diagnostics" :key="`${item.line}-${item.code}`" :class="item.severity"><span v-if="item.line">第 {{ item.line }} 行 · </span><b>{{ item.code }}</b>：{{ item.message }}</li></ul>
+        <h3>{{ $t("properties.csv.previewTitle") }}</h3>
+        <!-- action/type 为协议稳定码，保持原样（I18N-16）；名称为 CSV 内容（用户数据），不翻译 -->
+        <ul class="change-list"><li v-for="change in csvPreview.changes" :key="`${change.line}-${change.type}-${change.name}`" class="csv-change">{{ $t("properties.csv.changeItem", {line: change.line, action: change.action, type: change.type, name: change.name}) }}</li></ul>
+        <ul v-if="csvPreview.diagnostics.length > 0" class="diagnostics"><li v-for="item in csvPreview.diagnostics" :key="`${item.line}-${item.code}`" :class="item.severity"><span v-if="item.line">{{ $t("properties.csv.diagLine", {line: item.line}) }}</span><b>{{ item.code }}</b>{{ $t("properties.csv.diagSeparator") }}{{ item.message }}</li></ul>
       </div>
     </div>
   </section>

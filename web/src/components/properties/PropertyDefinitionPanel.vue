@@ -8,6 +8,7 @@
      样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
 import {computed, nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {PropertyDefinition, PropertyType} from "../../api/contracts";
 import {DEFINITIONS_PAGE_SIZE, definitionKey, definitionMatches, filterDefinitions} from "../../features/properties/model";
 import type {DefinitionScopeFilter} from "../../features/properties/model";
@@ -32,8 +33,10 @@ const emit = defineEmits<{
   "update:page": [value: number];
 }>();
 
+// 稳定作用域枚举 → 语义键映射（I18N-16：枚举值本身不翻译）
+const {t} = useI18n();
 function scopeLabel(definition: PropertyDefinition): string {
-  return definition.type === "sheetset" ? "图纸集" : "图纸";
+  return t(definition.type === "sheetset" ? "properties.scope.sheetset" : "properties.scope.sheet");
 }
 
 // —— 折叠（默认折叠；仅隐藏内容，不清空输入；会话态经 emit 上报）——
@@ -77,7 +80,7 @@ function submitAdd() {
   addHint.value = "";
   const name = props.form.name.trim();
   if (!name) {
-    nameError.value = "属性名称不能为空";
+    nameError.value = t("properties.errors.propertyNameEmpty");
     addNameInput.value?.focus();
     return;
   }
@@ -97,10 +100,10 @@ watch(() => props.definitions, (definitions) => {
   pendingAddKey.value = null;
   if (definitionMatches(added, props.query, props.scopeFilter)) {
     emit("update:page", Math.floor(definitions.indexOf(added) / DEFINITIONS_PAGE_SIZE) + 1); // 使新增定义可见
-    addHint.value = `已加入草稿：${scopeLabel(added)}属性「${added.name}」`;
+    addHint.value = t("properties.definitions.addHint", {scope: scopeLabel(added), name: added.name});
   } else {
     hiddenAddedKey.value = definitionKey(added);
-    addHint.value = `已加入草稿：${scopeLabel(added)}属性「${added.name}」与当前筛选不匹配`;
+    addHint.value = t("properties.definitions.addHintFiltered", {scope: scopeLabel(added), name: added.name});
   }
 });
 // 「查看字段」：显式清除筛选（不静默更改作用域）并跳到新增定义所在页。
@@ -120,40 +123,40 @@ async function viewAddedField() {
 // —— CSV 区已移交 PropertyCsvPanel（任务 5）：本面板只负责定义查询/分页/新增/删除 ——
 </script>
 <template>
-  <section class="definition-panel" aria-label="属性字段定义">
+  <section class="definition-panel" :aria-label="$t('properties.definitions.panelAria')">
     <header class="panel-head">
       <button
         type="button"
         class="head-toggle"
         :aria-expanded="!collapsed"
         aria-controls="definition-body"
-        :aria-label="collapsed ? '展开属性字段定义' : '收起属性字段定义'"
+        :aria-label="collapsed ? $t('properties.definitions.openPanel') : $t('properties.definitions.collapsePanel')"
         @click="toggleCollapsed"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <span class="head-title">属性字段定义 <small>共 {{ definitions.length }} 项</small></span>
+        <span class="head-title">{{ $t("properties.definitions.title") }} <small>{{ $t("properties.definitions.totalItems", {count: definitions.length}) }}</small></span>
       </button>
       <div class="link-actions">
-        <button ref="addToggleButton" type="button" class="primary" @click="adding ? closeAdd() : openAdd()">{{ adding ? "关闭新增" : "新增字段" }}</button>
+        <button ref="addToggleButton" type="button" class="primary" @click="adding ? closeAdd() : openAdd()">{{ adding ? $t("properties.definitions.closeAdd") : $t("properties.definitions.addField") }}</button>
       </div>
     </header>
     <div v-if="!collapsed" id="definition-body" class="panel-body">
       <div class="query-bar">
         <input
           type="search"
-          aria-label="搜索字段"
-          placeholder="搜索字段名或默认值"
+          :aria-label="$t('properties.definitions.searchLabel')"
+          :placeholder="$t('properties.definitions.searchPlaceholder')"
           :value="query"
           @input="emit('update:query', ($event.target as HTMLInputElement).value)"
         >
         <select
-          aria-label="作用域筛选"
+          :aria-label="$t('properties.definitions.scopeFilterLabel')"
           :value="scopeFilter"
           @change="emit('update:scopeFilter', ($event.target as HTMLSelectElement).value as DefinitionScopeFilter)"
         >
-          <option value="all">全部作用域</option>
-          <option value="sheetset">图纸集</option>
-          <option value="sheet">图纸</option>
+          <option value="all">{{ $t("properties.definitions.scopeAll") }}</option>
+          <option value="sheetset">{{ $t("properties.scope.sheetset") }}</option>
+          <option value="sheet">{{ $t("properties.scope.sheet") }}</option>
         </select>
       </div>
       <PropertyDefinitionTable
@@ -168,13 +171,13 @@ async function viewAddedField() {
       />
       <div v-if="adding" class="add-form">
         <div class="add-grid">
-          <label>属性作用域
+          <label>{{ $t("properties.definitions.addScopeLabel") }}
             <select v-model="form.type">
-              <option value="sheet">图纸</option>
-              <option value="sheetset">图纸集</option>
+              <option value="sheet">{{ $t("properties.scope.sheet") }}</option>
+              <option value="sheetset">{{ $t("properties.scope.sheetset") }}</option>
             </select>
           </label>
-          <label>属性名称
+          <label>{{ $t("properties.definitions.addNameLabel") }}
             <input
               ref="addNameInput"
               v-model="form.name"
@@ -185,17 +188,17 @@ async function viewAddedField() {
               @input="nameError = ''"
             >
           </label>
-          <label>默认值<input v-model="form.defaultValue" type="text" autocomplete="off"></label>
+          <label>{{ $t("properties.definitions.addDefaultValueLabel") }}<input v-model="form.defaultValue" type="text" autocomplete="off"></label>
         </div>
         <p v-if="nameError" id="definition-name-error" class="field-error" role="alert">{{ nameError }}</p>
         <div class="add-actions">
-          <span class="hint">新增仅加入草稿：分批预览后才执行，不直接写入工程文件</span>
-          <button type="button" class="primary" @click="submitAdd">加入草稿</button>
+          <span class="hint">{{ $t("properties.definitions.addDraftHint") }}</span>
+          <button type="button" class="primary" @click="submitAdd">{{ $t("properties.definitions.addToDraft") }}</button>
         </div>
       </div>
       <p v-if="addHint" class="add-hint" role="status">
         {{ addHint }}
-        <button v-if="hiddenAddedKey" type="button" class="link" @click="viewAddedField">查看字段</button>
+        <button v-if="hiddenAddedKey" type="button" class="link" @click="viewAddedField">{{ $t("properties.definitions.viewField") }}</button>
       </p>
     </div>
   </section>

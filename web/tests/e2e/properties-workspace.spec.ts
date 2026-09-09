@@ -183,3 +183,79 @@ test("共享夹具完整提交：隐藏修改一次加入单个 update_sheet_set
   expect(Object.keys(command.custom_properties)).toHaveLength(33);
   expect(command.custom_properties).toEqual(expect.objectContaining({工程名称: "城东安置房二期", 车位数量: "900", 设计说明: SHEETSET_VALUES["设计说明"]}));
 });
+
+// —— PLAN-DM-021 Task 7：英文关键矩阵（SPEC-DM-013 I18N-07/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json；
+// 断言属性名、属性值等用户数据在英文界面保持原样（I18N-16）。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+async function openPropertiesEn(page: Page) {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.getByRole("tab", {name: "Properties"}).click();
+  await expect(page.getByLabel("Sheet set name", {exact: true})).toHaveValue("虚构图纸集");
+}
+
+test("英文界面：属性工作区骨架、定义面板与空态双语，属性名值原样", async ({page}) => {
+  await installPropertiesFixture(page);
+  await openPropertiesEn(page);
+  // 分区与值面板骨架英文；图纸集名称与属性值（用户数据）保持原样
+  await expect(page.locator("#panel-properties")).toHaveAttribute("aria-label", "Properties");
+  await expect(page.locator(".value-panel")).toHaveAttribute("aria-label", "Sheet set property values");
+  await expect(page.getByLabel("Property 工程名称")).toHaveValue(SHEETSET_VALUES["工程名称"]);
+  // 定义面板：折叠标题栏计数英文，展开后查询/作用域/新增区英文
+  await expect(page.locator(".definition-panel .panel-head")).toContainText("36 in total");
+  await page.getByRole("button", {name: "Expand property definitions"}).click();
+  await expect(page.getByRole("searchbox", {name: "Search fields"})).toHaveAttribute("placeholder", "Search field names or default values");
+  await page.getByRole("combobox", {name: "Scope filter"}).selectOption({label: "Sheet set"});
+  // 夹具含 33 个 sheetset 定义，六条分页第一页全是 Sheet set 作用域
+  await expect(page.locator(".definition-panel tbody tr")).toHaveCount(6);
+  await expect(page.locator(".definition-panel tbody tr td.col-scope")).toHaveText(["Sheet set", "Sheet set", "Sheet set", "Sheet set", "Sheet set", "Sheet set"]);
+  await page.getByRole("button", {name: "Add Field"}).click();
+  const addForm = page.locator(".definition-panel .add-form");
+  await expect(addForm.getByLabel("Property scope")).toBeVisible();
+  await expect(addForm.getByLabel("Property name")).toBeVisible();
+  await expect(addForm.getByLabel("Default value")).toBeVisible();
+  await expect(addForm.getByText("Adding only stages a draft")).toBeVisible();
+  await addForm.getByRole("button", {name: "Add to Draft"}).click();
+  await expect(page.locator(".definition-panel .field-error")).toHaveText("The property name cannot be empty");
+  // 查询无结果空态英文 + 清除查询
+  await page.getByRole("searchbox", {name: "Search fields"}).fill("不存在字段");
+  await expect(page.getByText("No matching field definitions.")).toBeVisible();
+  await page.getByRole("button", {name: "Clear Query"}).click();
+  await expect(page.locator(".definition-panel tbody tr")).toHaveCount(6);
+  // 值面板工具行与匹配计数英文；搜索命中属性名（用户数据）保持原样
+  await page.getByRole("searchbox", {name: "Search property values"}).fill("项目编号");
+  await expect(page.locator(".value-panel .match-count")).toContainText("1 matched / 33 items");
+  await page.getByRole("button", {name: "Clear search"}).click();
+  // 值面板头部动作与 CSV 面板标题栏英文
+  await expect(page.getByRole("button", {name: "Update Sheet Set"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Discard Input"})).toBeVisible();
+  await expect(page.locator(".csv-panel .panel-head")).toContainText("CSV: No file selected");
+  await expect(page.getByRole("link", {name: "Download CSV Template"})).toBeVisible();
+  await expect(page.getByRole("link", {name: "Export Current Properties"})).toBeVisible();
+  await page.getByRole("button", {name: "Import CSV"}).click();
+  await expect(page.getByLabel("Property CSV file")).toBeVisible();
+  await expect(page.locator(".csv-flow .csv-hint")).toContainText("No CSV file selected");
+  await expect(page.getByRole("button", {name: "Confirm Import"})).toBeDisabled();
+});
+
+test("英文界面：无定义与无值空态双语并提供新增入口", async ({page}) => {
+  await installPropertiesFixture(page, {definitionsCount: 0, noValues: true});
+  await openPropertiesEn(page);
+  await page.getByRole("button", {name: "Expand property definitions"}).click();
+  await expect(page.getByText("No property definitions; use “Add Field” to create the first field.")).toBeVisible();
+  // 无值空态英文：仍展示名称并提供新增 sheetset 字段入口
+  const valueEmpty = page.locator(".value-panel .empty-values");
+  await expect(valueEmpty).toContainText("No sheet set custom properties yet");
+  await valueEmpty.getByRole("button", {name: "Add sheet set field"}).click();
+  await expect(page.locator(".definition-panel .panel-body")).toBeVisible();
+  await expect(page.getByLabel("Property scope")).toHaveValue("sheetset");
+  await expect(page.getByLabel("Property name")).toBeFocused();
+});

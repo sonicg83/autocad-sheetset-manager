@@ -2,6 +2,7 @@
 // Task 5 增加分批门禁：属性定义草稿与 CSV 导入冲突时阻断，预览失效判定仍由调用方按代次/基准驱动）
 import {ref} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import {request} from "../api/client";
 import type {CsvPreview,Job,Workspace} from "../api/contracts";
 import type {ConfirmOptions} from "./useConfirm";
@@ -21,6 +22,9 @@ export function useCsvImport(deps:{
   // 命令簿中已有属性定义草稿（add/delete_custom_property）时 CSV 导入与其冲突，必须分批（PLAN-DM-016 任务 5）
   hasConflictingDraft:()=>boolean;
 }){
+  const {t}=useI18n();
+  // 稳定 action/type 枚举 → 语义键映射（I18N-16：协议稳定码本身不翻译）
+  const CSV_ACTION_KEYS: Record<string,string>={add:"properties.csv.actions.add",skip:"properties.csv.actions.skip",conflict:"properties.csv.actions.conflict"};
   const csvText=ref("");
   const csvPreview=ref<CsvPreview|null>(null);
   const csvPreviewContext=ref<CsvPreviewContext|null>(null);
@@ -37,10 +41,10 @@ export function useCsvImport(deps:{
       if(generation!==csvGeneration)return;
       csvText.value=decoded;
     }
-    catch{if(generation===csvGeneration)deps.error.value="CSV 必须使用 UTF-8 编码"}
+    catch{if(generation===csvGeneration)deps.error.value=t("properties.csv.errors.notUtf8")}
   }
   async function previewCsv(){
-    if(deps.isWorkspaceLoading.value||!deps.workspace.value||!csvText.value){deps.error.value="请选择 UTF-8 CSV 文件";return}
+    if(deps.isWorkspaceLoading.value||!deps.workspace.value||!csvText.value){deps.error.value=t("properties.csv.errors.pickUtf8Csv");return}
     const workspaceId=deps.workspace.value.id;
     const baseRevisionId=deps.workspace.value.revision_id;
     const csvSnapshot=csvText.value;
@@ -56,19 +60,22 @@ export function useCsvImport(deps:{
   async function importCsv(){
     // 分批门禁（PLAN-DM-016 任务 5）：命令簿已有属性定义草稿时 CSV 导入与其冲突，
     // 明确阻断并要求分批；预览上下文与草稿任何一方都不清空，由用户自行取舍。
-    if(deps.hasConflictingDraft()){deps.error.value="命令簿中已有属性定义草稿，与 CSV 导入必须分批：请先预览执行或撤销属性定义草稿，再导入 CSV";return}
+    if(deps.hasConflictingDraft()){deps.error.value=t("properties.csv.errors.conflictingDraft");return}
     const context=csvPreviewContext.value;
     if(!context||!context.result.executable)return;
     const current=deps.workspace.value;
-    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();deps.error.value="工作区或基准修订已变化，请重新预览 CSV";return}
+    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidateCsvPreview();deps.error.value=t("properties.csv.errors.contextStale");return}
     // 属性定义导入为正式写入（SPEC-DM-006 §6.2/§10.3）：CSV/XML 不得走弱确认旁路，与 §9.1 全部正式写入共用同一危险确认
+    // 影响行句子用命名参数插值（I18N-08）；action/type 走稳定码映射，属性名与 CSV 内容保持原样（I18N-16）
     const impactLines=context.result.changes.map(change=>{
-      const action=change.action==="add"?"新增":change.action==="skip"?"跳过":"冲突";
-      const scope=change.type==="sheetset"?"图纸集":"图纸";
-      return `${action}属性「${change.name}」（${scope}${change.affected_sheet_count?`，影响 ${change.affected_sheet_count} 张图纸`:""}）`;
+      const action=t(CSV_ACTION_KEYS[change.action]??CSV_ACTION_KEYS.conflict);
+      const scope=t(change.type==="sheetset"?"properties.scope.sheetset":"properties.scope.sheet");
+      return change.affected_sheet_count
+        ? t("properties.csv.impactChange",{action,name:change.name,scope,count:change.affected_sheet_count})
+        : t("properties.csv.impactChangeNoCount",{action,name:change.name,scope});
     });
-    if(impactLines.length===0)impactLines.push(...(context.result.affected_files.length>0?context.result.affected_files.map(file=>`受影响文件：${file}`):["本次导入不含属性定义变更"]));
-    const ok=await deps.confirmAction({title:"确认导入属性定义",message:"将按预览结果把属性定义合并写入图纸集，原 DST 将永久备份。",impactLines,confirmText:"确认导入",danger:true,requireCheckbox:true,reversibility:"irreversible"});
+    if(impactLines.length===0)impactLines.push(...(context.result.affected_files.length>0?context.result.affected_files.map(file=>t("properties.csv.impactFile",{file})):[t("properties.csv.noDefinitionChanges")]));
+    const ok=await deps.confirmAction({title:t("properties.csv.confirmTitle"),message:t("properties.csv.confirmMessage"),impactLines,confirmText:t("properties.csv.confirmImport"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=deps.invalidateJobMonitor(false);
     try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(!deps.isCurrentJobGeneration(generation)||deps.isWorkspaceLoading.value||deps.workspace.value?.id!==context.workspaceId)return;deps.setJob(result);if(result.status==="QUEUED"&&result.id)deps.watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await deps.refreshWorkspace(context.workspaceId)}

@@ -11,6 +11,7 @@
 //   新增字段表单均在此持有；切工作区（基准重建）重置为定义折叠、值展开，切主标签保留（P-09）。
 import {computed, reactive, ref, watch} from "vue";
 import type {ComputedRef, Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import type {ChangeCommand, PropertyType, Workspace} from "../api/contracts";
 import {buildSheetSetCommand, createPropertyBuffer, filterValueKeys, valueStatus} from "../features/properties/model";
 import type {DefinitionScopeFilter} from "../features/properties/model";
@@ -34,6 +35,7 @@ export type GuardState = {open: boolean; summary: string; canSave: boolean};
 const EMPTY_STATUS: ValueStatus = {dirty: false, pending: false, invalid: false};
 
 export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
+  const {t} = useI18n();
   const base = ref<PropertyBuffer | null>(null);
   const draft = ref<PropertyBuffer | null>(null);
   const input = ref<PropertyBuffer | null>(null);
@@ -201,19 +203,19 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
   }
   async function doSubmitValues(): Promise<PropertySubmitResult> {
     const buffer = input.value;
-    if (!buffer) return {ok: false, message: "没有活动工作区"};
+    if (!buffer) return {ok: false, message: t("shell.errors.noWorkspace")};
     let command: ChangeCommand;
     try {
       command = buildSheetSetCommand(buffer, invalidKeys.value);
     } catch {
-      return {ok: false, message: "存在已删除定义的失效字段，请先撤回或放弃对应输入"};
+      return {ok: false, message: t("properties.errors.staleFields")};
     }
-    const result = await deps.submitCommands([command], "更新图纸集", "metadata");
+    const result = await deps.submitCommands([command], t("shell.commands.updateSheetSet"), "metadata");
     if (result.ok) {
       summaryError.value = "";
       errors.value = {};
     } else {
-      summaryError.value = result.message || "加入草稿失败";
+      summaryError.value = result.message || t("shell.errors.addDraftFailed");
       // 未给字段路径的错误只保留摘要，不编造字段归因
       if (result.fields) {
         const mapped: Partial<Record<ValueKey, string>> = {};
@@ -231,7 +233,7 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
   // 名称必填（空文本直接通知错误）；入栈成功清空名称与默认值，失败（如结构分批阻断）保留输入。
   function queuePropertyDefinition() {
     const name = definitionForm.name.trim();
-    if (!name) { deps.notifyError("属性名称不能为空"); return; }
+    if (!name) { deps.notifyError(t("properties.errors.propertyNameEmpty")); return; }
     if (deps.addPropertyDefinition({type: definitionForm.type, name, defaultValue: definitionForm.defaultValue})) {
       definitionForm.name = "";
       definitionForm.defaultValue = "";
@@ -245,7 +247,7 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     // 「加入草稿后继续」分支内的 submitValues 会自然排在在途保存之后。
     const prompt = dirtyKeys.value.length > 0 || invalidKeys.value.size > 0;
     if (!prompt) { await next(); return; }
-    guardState.value = {open: true, summary: "属性页编辑", canSave: invalidKeys.value.size === 0};
+    guardState.value = {open: true, summary: t("properties.guard.summary"), canSave: invalidKeys.value.size === 0};
     const choice = await new Promise<GuardChoice>((resolve) => { guardResolver = resolve; });
     guardState.value.open = false;
     guardResolver = null;

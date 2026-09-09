@@ -379,3 +379,55 @@ test("全局普通预览与写入不触发 CSV 预览或导入", async ({page}) 
   expect(csvPreviewCalls).toBe(0);
   expect(importCalls).toBe(0);
 });
+
+// —— PLAN-DM-021 Task 7：英文关键矩阵（SPEC-DM-013 I18N-07/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US）；断言 CSV 头与 CSV 内容（用户数据）原样（I18N-16）。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test("英文界面：CSV 流程、强确认与预览双语且 CSV 内容原样", async ({page}) => {
+  let importBody: Record<string, unknown> | null = null;
+  await page.route("**/api/workspaces/workspace-1/custom-properties/import/preview", (route) => route.fulfill({json: csvPreviewBody(true)}));
+  await page.route("**/api/workspaces/workspace-1/custom-properties/import", (route) => {
+    importBody = route.request().postDataJSON();
+    return route.fulfill({json: {id: "csv-job", status: "SUCCEEDED", progress: 100, files: []}});
+  });
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await install(page);
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.getByRole("tab", {name: "Properties"}).click();
+  await expect(page.getByLabel("Property 项目编号")).toHaveValue("GC-2026-000");
+  // 面板骨架与流程区英文
+  await expect(page.locator(".csv-panel")).toHaveAttribute("aria-label", "Property import & export");
+  await page.getByRole("button", {name: "Import CSV"}).click();
+  await expect(page.getByLabel("Property CSV file")).toBeVisible();
+  await page.getByLabel("Property CSV file").setInputFiles(csvFile("type,name,default_value\nsheetset,项目编号,GC-2026-001\nsheet,专业,燃气\nsheet,图幅,A1\n"));
+  await page.getByRole("button", {name: "Preview CSV Import"}).click();
+  // 预览行英文行号前缀；action/type 稳定码与名称（CSV 内容）保持原样
+  const rows = page.locator(".csv-preview .csv-change");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toHaveText("Line 2 · conflict · sheetset · 项目编号");
+  await expect(rows.nth(1)).toHaveText("Line 3 · add · sheet · 专业");
+  await expect(rows.nth(2)).toContainText("Line 4");
+  // 预览标题与诊断英文（诊断 message 来自后端，保持原样）
+  await expect(page.locator(".csv-preview h3")).toHaveText("CSV Merge Preview");
+  await expect(page.locator(".csv-preview").getByText("CUSTOM_PROPERTY_DEFAULT_EMPTY")).toBeVisible();
+  await expect(page.getByRole("button", {name: "Confirm Import"})).toBeEnabled();
+  // 强确认英文：标题、影响行（影响张数英文插值）与危险勾选
+  await page.getByRole("button", {name: "Confirm Import"}).click();
+  const modal = page.getByRole("dialog");
+  await expect(modal).toContainText("Confirm Property Definition Import");
+  await expect(modal.getByText("Add property “专业” (Sheet, affects 5 sheets)")).toBeVisible();
+  await expect(modal.getByText("Conflict property “项目编号” (Sheet set)")).toBeVisible();
+  await expect(modal.getByRole("button", {name: /Confirm Import/})).toBeDisabled();
+  await modal.getByRole("checkbox").check();
+  await modal.getByRole("button", {name: /Confirm Import/}).click();
+  await expect.poll(() => importBody).not.toBeNull();
+  // CSV 内容原样：头与行不随 UI locale 改变
+  expect(String(importBody!.csv)).toContain("type,name,default_value\nsheetset,项目编号,GC-2026-001");
+});

@@ -308,3 +308,59 @@ test("窄宽度（640px）值网格降为一列", async ({page}) => {
   const template = await page.locator(".value-panel .value-grid").evaluate((el) => getComputedStyle(el).gridTemplateColumns);
   expect(template.split(" ").length).toBe(1);
 });
+
+// —— PLAN-DM-021 Task 7：英文关键矩阵（SPEC-DM-013 I18N-07/16）——
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US）；断言属性名与属性值原样（I18N-16）。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+async function openPropertiesEn(page: Page) {
+  await page.route("**/api/settings", (route) => route.fulfill({json: enSettingsSnapshot}));
+  await page.goto("/");
+  await page.getByRole("button", {name: "Select DST File"}).click();
+  await page.getByRole("tab", {name: "Properties"}).click();
+  await expect(page.getByRole("textbox", {name: "Property 项目编号"})).toHaveValue("GC-2026-007");
+}
+
+// 英文界面字段项定位（aria 前缀英文，属性名原样）
+function valueItemEn(page: Page, name: string) {
+  return page.locator(".value-panel .value-item").filter({has: page.getByRole("textbox", {name: `Property ${name}`, exact: true})});
+}
+
+test("英文界面：值面板三态、对照与展开编辑双语，属性名值原样", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await install(page, {initialDraft: PENDING_DRAFT});
+  await openPropertiesEn(page);
+  // 待写入（草稿）与未加入草稿（本地编辑）英文；属性值保持原样
+  const pendingItem = valueItemEn(page, "工程名称");
+  await expect(pendingItem.getByText("Pending write")).toBeVisible();
+  await page.getByRole("textbox", {name: "Property 项目编号"}).fill("GC-2026-009");
+  await expect(valueItemEn(page, "项目编号").getByText("Not in draft")).toBeVisible();
+  await expect(page.locator(".value-panel .metrics")).toContainText("Not in draft: 1");
+  // 搜索三模式选项英文；匹配计数英文
+  await expect(page.getByRole("combobox", {name: "Search scope"})).toContainText("Field name only");
+  await expect(page.getByText("Changed only")).toBeVisible();
+  await page.getByRole("searchbox", {name: "Search property values"}).fill("监理单位");
+  await expect(page.locator(".value-panel .match-count")).toContainText("1 matched / 33 items");
+  await page.getByRole("button", {name: "Clear search"}).click();
+  // 值对照对话框英文：三阶段相同合并展示，属性名与值原样
+  await page.getByRole("button", {name: "Value Compare 监理单位"}).click();
+  const mergedDialog = page.getByRole("dialog", {name: "Value Compare · 监理单位"});
+  await expect(mergedDialog).toContainText("Base file value / Draft value / Current input");
+  await expect(mergedDialog).toContainText("恒正工程监理");
+  await mergedDialog.getByRole("button", {name: "Close Compare"}).click();
+  // 单项撤回按钮英文（aria 含属性名，属性名原样）
+  await expect(page.getByRole("button", {name: "Revert 工程名称"})).toBeVisible();
+  // 展开编辑对话框英文：长值完整不截断，取消关闭
+  await page.getByRole("button", {name: "Expand edit LongNote"}).click();
+  const expandDialog = page.getByRole("dialog", {name: "Expand Edit · LongNote"});
+  await expect(expandDialog).toBeVisible();
+  await expect(expandDialog).toContainText("Edits the text input only");
+  await expect(expandDialog.getByRole("textbox")).toHaveValue(VALUE_ENTRIES.at(-1)![1]);
+  await expandDialog.getByRole("button", {name: "Cancel"}).click();
+  await expect(expandDialog).toHaveCount(0);
+});

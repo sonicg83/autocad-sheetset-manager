@@ -6,6 +6,7 @@
      值对照与展开编辑走独立对话框；单项撤回仅回到草稿投影。样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
 import {computed, nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {PropertyBuffer, PropertySearchMode, ValueKey, ValueStatus} from "../../features/properties/types";
 import PropertyValueCompareDialog from "./PropertyValueCompareDialog.vue";
 
@@ -39,8 +40,10 @@ const emit = defineEmits<{
 
 const NAME_KEY: ValueKey = "@name";
 
+const {t} = useI18n();
+// 字段标签：@name 用独立语义键，其余为属性名（用户数据，保持原样，I18N-16）
 function labelOf(key: ValueKey): string {
-  return key === NAME_KEY ? "图纸集名称" : key.slice("sheetset:".length);
+  return key === NAME_KEY ? t("properties.values.nameLabel") : key.slice("sheetset:".length);
 }
 function readOf(buffer: PropertyBuffer, key: ValueKey): string | undefined {
   return key === NAME_KEY ? buffer.name : buffer.values[key.slice("sheetset:".length)];
@@ -108,24 +111,20 @@ function clearSearch() {
   emit("update:changedOnly", false);
 }
 
-// —— 值对照：三阶段（原文件值/草稿值/当前输入），相邻相同阶段合并展示 ——
+// —— 值对照：三阶段（原文件值/草稿值/当前输入），相邻相同阶段合并展示（合并标签走专用语义键，不拼接片段）——
 const compareKey = ref<ValueKey | null>(null);
-const compareHeading = computed(() => (compareKey.value ? `值对照 · ${labelOf(compareKey.value)}` : ""));
+const compareHeading = computed(() => (compareKey.value ? t("properties.values.compareHeading", {name: labelOf(compareKey.value)}) : ""));
 const compareStages = computed(() => {
   const key = compareKey.value;
   if (!key) return [];
-  const raw = [
-    {label: "原文件值", value: readOf(props.base, key)},
-    {label: "草稿值", value: readOf(props.draft, key)},
-    {label: "当前输入", value: readOf(props.input, key)},
-  ];
-  const merged: {label: string; value: string | undefined}[] = [];
-  for (const stage of raw) {
-    const last = merged[merged.length - 1];
-    if (last && last.value === stage.value) last.label += ` / ${stage.label}`;
-    else merged.push({...stage});
-  }
-  return merged;
+  const base = readOf(props.base, key);
+  const draft = readOf(props.draft, key);
+  const input = readOf(props.input, key);
+  const single = (labelKey: string, value: string | undefined) => ({label: t(labelKey), value});
+  if (base === draft && draft === input) return [{label: t("properties.compare.stageAll"), value: base}];
+  if (base === draft) return [single("properties.compare.stageBaseDraft", base), single("properties.compare.stageInput", input)];
+  if (draft === input) return [single("properties.compare.stageBase", base), single("properties.compare.stageDraftInput", draft)];
+  return [single("properties.compare.stageBase", base), single("properties.compare.stageDraft", draft), single("properties.compare.stageInput", input)];
 });
 
 // —— 展开编辑：长值完整读取与编辑（textarea 不截断），关闭后焦点回字段输入 ——
@@ -170,54 +169,54 @@ function onExpandKeydown(event: KeyboardEvent) {
 }
 </script>
 <template>
-  <section class="value-panel" aria-label="图纸集属性值">
+  <section class="value-panel" :aria-label="$t('properties.values.panelAria')">
     <header class="panel-head">
       <button
         type="button"
         class="head-toggle"
         :aria-expanded="!collapsed"
         aria-controls="value-body"
-        :aria-label="collapsed ? '展开图纸集属性值' : '收起图纸集属性值'"
+        :aria-label="collapsed ? $t('properties.values.openPanel') : $t('properties.values.collapsePanel')"
         @click="emit('update:collapsed', !collapsed)"
       >
         <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
-        <span class="head-title">图纸集属性值 <small>{{ valueCount }} 项</small></span>
+        <span class="head-title">{{ $t("properties.values.title") }} <small>{{ $t("properties.values.totalItems", {count: valueCount}) }}</small></span>
       </button>
       <div class="metrics" role="status" aria-live="polite">
-        <span v-if="dirtyCount" class="flag dirty">未加入草稿 {{ dirtyCount }} 项</span>
-        <span v-if="pendingCount" class="flag pending">待写入 {{ pendingCount }} 项</span>
-        <span v-if="errorCount" class="flag error">错误 {{ errorCount }} 项</span>
-        <span v-if="!dirtyCount && !pendingCount && !errorCount" class="hint">无属性值修改</span>
+        <span v-if="dirtyCount" class="flag dirty">{{ $t("properties.values.dirtyCount", {count: dirtyCount}) }}</span>
+        <span v-if="pendingCount" class="flag pending">{{ $t("properties.values.pendingCount", {count: pendingCount}) }}</span>
+        <span v-if="errorCount" class="flag error">{{ $t("properties.values.errorCount", {count: errorCount}) }}</span>
+        <span v-if="!dirtyCount && !pendingCount && !errorCount" class="hint">{{ $t("properties.values.noChanges") }}</span>
       </div>
       <div class="head-actions">
-        <span v-if="dirtyCount" class="submit-hint">加入草稿：共 {{ dirtyCount }} 项，其中 {{ hiddenDirtyCount }} 项当前未显示 · 尚未写入正式文件</span>
-        <button type="button" @click="emit('discard')">放弃本区输入</button>
-        <button type="button" class="primary" @click="emit('submit')">更新图纸集</button>
+        <span v-if="dirtyCount" class="submit-hint">{{ $t("properties.values.submitHint", {count: dirtyCount, hidden: hiddenDirtyCount}) }}</span>
+        <button type="button" @click="emit('discard')">{{ $t("properties.values.discardInput") }}</button>
+        <button type="button" class="primary" @click="emit('submit')">{{ $t("properties.values.submit") }}</button>
       </div>
     </header>
     <div v-if="!collapsed" id="value-body" class="panel-body">
       <p class="legend">
-        <span class="flag dirty">未加入草稿</span>
-        <span class="flag pending">待写入</span>
-        <span class="flag error">错误 / 冲突</span>
-        <span class="hint">所有自定义属性均为文本，不分组、不分页。</span>
+        <span class="flag dirty">{{ $t("properties.values.flagDirty") }}</span>
+        <span class="flag pending">{{ $t("properties.values.flagPending") }}</span>
+        <span class="flag error">{{ $t("properties.values.flagError") }}</span>
+        <span class="hint">{{ $t("properties.values.legendHint") }}</span>
       </p>
       <div v-if="!hasNoValues" class="value-toolbar">
         <input
           type="search"
-          aria-label="搜索属性值"
-          placeholder="搜索字段名或属性值"
+          :aria-label="$t('properties.values.searchLabel')"
+          :placeholder="$t('properties.values.searchPlaceholder')"
           :value="search"
           @input="emit('update:search', ($event.target as HTMLInputElement).value)"
         >
-        <select aria-label="搜索范围" :value="searchMode" @change="emit('update:searchMode', ($event.target as HTMLSelectElement).value as PropertySearchMode)">
-          <option value="all">字段名或属性值</option>
-          <option value="name">仅字段名</option>
-          <option value="value">仅属性值</option>
+        <select :aria-label="$t('properties.values.searchScopeLabel')" :value="searchMode" @change="emit('update:searchMode', ($event.target as HTMLSelectElement).value as PropertySearchMode)">
+          <option value="all">{{ $t("properties.values.searchAll") }}</option>
+          <option value="name">{{ $t("properties.values.searchNameOnly") }}</option>
+          <option value="value">{{ $t("properties.values.searchValueOnly") }}</option>
         </select>
-        <label class="only-changed"><input type="checkbox" :checked="changedOnly" @change="emit('update:changedOnly', ($event.target as HTMLInputElement).checked)">仅看修改</label>
-        <button type="button" class="link" @click="clearSearch">清除搜索</button>
-        <span class="match-count">匹配 {{ matchedKeys.length }} / 共 {{ valueCount }} 项<template v-if="hiddenDirtyCount"> · {{ hiddenDirtyCount }} 项修改被隐藏</template></span>
+        <label class="only-changed"><input type="checkbox" :checked="changedOnly" @change="emit('update:changedOnly', ($event.target as HTMLInputElement).checked)">{{ $t("properties.values.changedOnly") }}</label>
+        <button type="button" class="link" @click="clearSearch">{{ $t("properties.values.clearSearch") }}</button>
+        <span class="match-count">{{ $t("properties.values.matchCount", {matched: matchedKeys.length, total: valueCount}) }}<template v-if="hiddenDirtyCount">{{ $t("properties.values.hiddenDirtySuffix", {count: hiddenDirtyCount}) }}</template></span>
       </div>
       <div class="value-grid">
         <div v-for="key in displayKeys" :key="key" class="value-item" :class="{name: key === NAME_KEY, full: isLong(key), invalid: Boolean(errorOf(key)), pinned: isPinned(key)}">
@@ -228,42 +227,42 @@ function onExpandKeydown(event: KeyboardEvent) {
               type="text"
               autocomplete="off"
               :value="readOf(input, key) ?? ''"
-              :aria-label="key === NAME_KEY ? undefined : `属性 ${labelOf(key)}`"
+              :aria-label="key === NAME_KEY ? undefined : $t('properties.values.fieldAria', {name: labelOf(key)})"
               :aria-invalid="errorOf(key) ? 'true' : undefined"
               :aria-describedby="describedBy(key)"
               @input="onInput(key, $event)"
               @focus="emit('update:activeKey', key)"
             >
-            <button type="button" class="link" :aria-label="`展开编辑 ${labelOf(key)}`" @click="openExpand(key)">展开编辑</button>
+            <button type="button" class="link" :aria-label="$t('properties.values.expandEditAria', {name: labelOf(key)})" @click="openExpand(key)">{{ $t("properties.values.expandEdit") }}</button>
           </div>
           <div class="field-foot">
             <span :id="statusId(key)" class="flags">
-              <span v-if="statusOf(key).dirty" class="flag dirty">未加入草稿</span>
-              <span v-if="statusOf(key).pending" class="flag pending">待写入</span>
+              <span v-if="statusOf(key).dirty" class="flag dirty">{{ $t("properties.values.flagDirty") }}</span>
+              <span v-if="statusOf(key).pending" class="flag pending">{{ $t("properties.values.flagPending") }}</span>
             </span>
             <span class="spacer"></span>
-            <button type="button" class="link" :aria-label="`值对照 ${labelOf(key)}`" @click="compareKey = key">值对照</button>
-            <button type="button" class="link" :aria-label="`撤回 ${labelOf(key)}`" :disabled="!statusOf(key).dirty" @click="emit('revertValue', key)">撤回</button>
+            <button type="button" class="link" :aria-label="$t('properties.values.compareAria', {name: labelOf(key)})" @click="compareKey = key">{{ $t("properties.values.compare") }}</button>
+            <button type="button" class="link" :aria-label="$t('properties.values.revertAria', {name: labelOf(key)})" :disabled="!statusOf(key).dirty" @click="emit('revertValue', key)">{{ $t("properties.values.revert") }}</button>
           </div>
           <p v-if="errorOf(key)" :id="errorId(key)" class="field-error">{{ errorOf(key) }}</p>
-          <p v-if="isPinned(key)" class="pinned-note">不再匹配当前搜索 · 暂留编辑 <button type="button" class="link" @click="endEdit">结束编辑</button></p>
+          <p v-if="isPinned(key)" class="pinned-note">{{ $t("properties.values.pinnedNote") }} <button type="button" class="link" @click="endEdit">{{ $t("properties.values.endEdit") }}</button></p>
         </div>
       </div>
       <div v-if="hasNoValues" class="empty empty-values">
-        <p>尚无图纸集自定义属性；图纸集名称仍可在此编辑。</p>
-        <button type="button" @click="emit('addSheetsetField')">新增图纸集字段</button>
+        <p>{{ $t("properties.values.noValuesHint") }}</p>
+        <button type="button" @click="emit('addSheetsetField')">{{ $t("properties.values.addSheetsetField") }}</button>
       </div>
-      <p v-else-if="hasNoMatch" class="empty">没有匹配属性；请清除搜索或关闭“仅看修改”。</p>
+      <p v-else-if="hasNoMatch" class="empty">{{ $t("properties.values.noMatch") }}</p>
     </div>
     <PropertyValueCompareDialog :open="compareKey !== null" :heading="compareHeading" :stages="compareStages" @close="compareKey = null" />
     <div v-if="expandKey" class="modal-mask" @keydown="onExpandKeydown">
-      <div ref="expandCard" class="modal-card" role="dialog" aria-modal="true" :aria-label="`展开编辑 · ${labelOf(expandKey)}`" tabindex="-1">
-        <h2>展开编辑 · {{ labelOf(expandKey) }}</h2>
-        <p class="expand-hint">仅编辑文本输入；显示换行不改变原文，长文本不截断。</p>
-        <textarea ref="expandTextarea" v-model="expandedValue" rows="8" aria-label="展开后的属性文本"></textarea>
+      <div ref="expandCard" class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('properties.values.expandDialogTitle', {name: labelOf(expandKey)})" tabindex="-1">
+        <h2>{{ $t("properties.values.expandDialogTitle", {name: labelOf(expandKey)}) }}</h2>
+        <p class="expand-hint">{{ $t("properties.values.expandHint") }}</p>
+        <textarea ref="expandTextarea" v-model="expandedValue" rows="8" :aria-label="$t('properties.values.expandedTextareaAria')"></textarea>
         <div class="modal-actions">
-          <button type="button" @click="closeExpand">取消</button>
-          <button type="button" class="primary" @click="applyExpand">应用到输入</button>
+          <button type="button" @click="closeExpand">{{ $t("properties.values.cancel") }}</button>
+          <button type="button" class="primary" @click="applyExpand">{{ $t("properties.values.applyToInput") }}</button>
         </div>
       </div>
     </div>

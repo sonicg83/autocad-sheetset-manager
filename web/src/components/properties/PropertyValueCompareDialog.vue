@@ -3,6 +3,7 @@
      复用公共模态原语（modal-mask/modal-card），Esc=关闭、Tab 焦点圈闭、关闭后焦点回触发按钮。 -->
 <script setup lang="ts">
 import {nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 
 export type CompareStage = {label: string; value: string | undefined};
 
@@ -12,12 +13,13 @@ const props = defineProps<{
   stages: CompareStage[];
 }>();
 const emit = defineEmits<{close: []}>();
+const {t} = useI18n();
 const card = ref<HTMLElement | null>(null);
 const opener = ref<Element | null>(null);
 
 function display(value: string | undefined): string {
-  if (value === undefined) return "（字段不存在）";
-  if (value === "") return "（空文本）";
+  if (value === undefined) return t("properties.compare.fieldMissing");
+  if (value === "") return t("properties.compare.emptyText");
   return value;
 }
 
@@ -47,13 +49,13 @@ function onKeydown(event: KeyboardEvent) {
   <div v-if="open" class="modal-mask" @keydown="onKeydown">
     <div ref="card" class="modal-card compare-card" role="dialog" aria-modal="true" :aria-label="heading" tabindex="-1">
       <h2>{{ heading }}</h2>
-      <p class="compare-hint">三阶段按当前草稿链路对照；相同阶段合并展示。长文本完整显示，不截断。</p>
+      <p class="compare-hint">{{ $t("properties.compare.dialogHint") }}</p>
       <div v-for="stage in stages" :key="stage.label" class="compare-item">
         <small>{{ stage.label }}</small>
         <pre>{{ display(stage.value) }}</pre>
       </div>
       <div class="modal-actions">
-        <button type="button" @click="emit('close')">关闭对照</button>
+        <button type="button" @click="emit('close')">{{ $t("properties.compare.close") }}</button>
       </div>
     </div>
   </div>

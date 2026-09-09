@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 7：属性工作区迁移）
+
+- 新增属性域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/properties.ts`（132 键对称）并注册进唯一 i18n 实例（548 键 / 5 域，`check:i18n` 通过）。
+- 属性工作区迁移（I18N-07）：`PropertiesView.vue`（分区 ARIA、错误摘要字段项「{label}：{message}」改语义键插值）、`PropertyDefinitionPanel.vue`（面板 ARIA/折叠开关、标题计数、查询/作用域筛选选项、新增区标签/提示/错误、加入草稿提示（作用域×名称命名参数，取消调用点拼接）、「查看字段」）、`PropertyDefinitionTable.vue`（表头列名改 `labelKey` 语义键、空默认值/展开收起/删除 aria（作用域与名称插值）、两种空态、清除查询、分页页脚「匹配 {matched} 项 · 第 {page} / {total} 页」）、`PropertyValuePanel.vue`（标题计数、dirty/pending/error 计数与三态徽标、提交摘要、搜索三模式与仅看修改、匹配计数与隐藏后缀、字段 aria（`属性 {name}`，属性名原样）、值对照入口、撤回、暂留提示、两种空态、展开编辑对话框）、`PropertyValueCompareDialog.vue`（对照提示、缺失/空文本占位、关闭按钮）全部改用 `$t`/`useI18n`。
+- composables 迁移：`usePropertiesWorkspace.ts` 无活动工作区（复用 `shell.errors.noWorkspace`）、失效字段阻断提示、批次标签（复用 `shell.commands.updateSheetSet`）、加入草稿失败（复用 `shell.errors.addDraftFailed`）、属性名称为空提示、三选一摘要（`properties.guard.summary`）；`useCsvImport.ts` UTF-8 编码/选择文件/分批阻断/预览失效提示，强确认标题/正文/确认文案与影响行（稳定 action 码走 `CSV_ACTION_KEYS` 语义键映射，句子用命名参数插值）。属性名、属性值、CSV 头与 CSV 内容保持原样（I18N-16）；命令 payload 与后端校验契约未变；`features/properties/model.ts` 无用户可见文案，未改动（稳定 kind/status 与 `PROPERTY_BUFFER_STALE` 原样）。
+- 测试（TDD）：三个属性 spec 新增 4 例英文关键矩阵红灯先行（工作区骨架/定义面板/空态、值面板三态/值对照/展开编辑、CSV 流程/强确认/预览行），断言属性名与值、CSV 头与 CSV 内容、诊断消息不被翻译，导入请求体 CSV 原样；语言来源沿用 page 级 `/api/settings` 路由（不写共享 settings.json）。
+- 验证：三个聚焦 spec `--workers=1` 39 passed；`properties-*.spec.ts` 全量 8 个 spec 92 passed（1 例既有基础设施抖动重跑通过）；`npm run test:unit` 28 passed；`npm run build`（check:api + check:i18n + vue-tsc + vite）通过。
+- Files 清单外必要增量（已披露）：`web/src/i18n/index.ts` 注册 properties 域。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 6：图纸工作区迁移）
 
 - 新增图纸域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/sheets.ts`（179 键对称）并注册进唯一 i18n 实例（416 键 / 4 域，`check:i18n` 通过）。
