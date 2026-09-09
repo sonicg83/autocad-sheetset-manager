@@ -6,6 +6,7 @@
 - 修改 6 个 e2e 文件（`properties-buffer/layout/values/visual-evidence/workspace`、`sheets-drafts` spec），产品代码零改动。
 - 新鲜验证：失败子集 6 文件 `--workers=1` 70 passed（退出码 0）；全量 `npm --prefix web run test:e2e --workers=1` **332 passed / 0 failed / 0 flaky**（6.6m，退出码 0）；`scripts/build_release.ps1` **退出码 0**（产物 `dist/releases/dst-manager-v0.3.3-win64.zip`）。
 - flaky 复核：Task 12 的 2 个 flaky 隔离 8 连跑全过、无逻辑竞态；`--workers=4` 全量平行复跑 3 轮 flaky 名单逐轮随机且症状为 30s click 超时/高载几何偏差，与 `playwright.config.ts` 已记载的单一 vite dev server 高负载抖动一致，属基础设施抖动而非用例缺陷；门禁以 `--workers=1` 全量绿为准。PLAN-DM-021 剩余项 2、3 关闭。
+- 2026-09-10：修正 SPEC-DM-013 G7 记录与最终验证数字对齐（状态行与门禁表改为 12/12 门全通过：e2e 332 passed / 0 failed（workers=1）、`build_release.ps1` exit 0 产物 `dst-manager-v0.3.3-win64.zip`，移除「e2e 回归修复 + 发布构建补跑」未关闭事项；G8/G9 维持未关闭）。
 
 ## 2026-09-09（实施 PLAN-DM-021 Task 12：打包、完整验证、G9 与状态收口）
 

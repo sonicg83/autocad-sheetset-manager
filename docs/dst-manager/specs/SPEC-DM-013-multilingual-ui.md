@@ -18,7 +18,7 @@ related:
 
 # DST Manager 多语言界面与本地化契约规范
 
-> 状态：已接受；G0～G7 自动验证部分已闭合（G7 有批次三遗留 e2e 回归待修复），G8 待用户裁决 D3，G9 待真实桌面执行——统一以 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」与 MEMO-DM-025/026 为准。
+> 状态：已接受；G0～G7 自动验证全部门通过（e2e 332 passed / 0 failed，build_release.ps1 exit 0），G8 待用户裁决 D3，G9 待真实桌面执行——统一以 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」与 MEMO-DM-025/026 为准。
 > 权威边界：ARCH-DM-005 决定语言架构与契约方向；本文决定用户可见行为、状态和验收；[双语交互 Demo](../mockups/SPEC-DM-013-multilingual-demo.html)仅作为 G4 视觉与交互基准。
 
 ## 1. G0 立项与范围
@@ -222,7 +222,7 @@ related:
 | G4 Demo 与设计冻结 | 通过 | 本文 §6；双语 Demo；commit `3ecb754` | 用户 | 2026-09-09 | — |
 | G5 技术映射 | 通过 | [G5 技术映射备忘](../../../.planning/memos/dst-manager/2026-09-09-multilingual-g5-technical-mapping.md) | 技术负责人 | 2026-09-09 | 真实 WebView2 留至 G9 |
 | G6 计划就绪 | 通过 | [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md) 追踪矩阵与 12 个 TDD 任务 | 用户、技术负责人 | 2026-09-09 | — |
-| G7 分批实施 | 通过（自动验证 10/12 门） | 2026-09-09 全量新鲜验证：`uv run pytest` 779 passed / 72 skipped、`check:i18n` 759 键 8 域、`test:unit` 28 passed、`build` 通过；全量 `test:e2e` 318 passed / 12 failed / 2 flaky（批次三夹具以虚构 code `DRAFT_SAVE_FAILED` 断言旧兼容文案，与 I18N-11 新呈现冲突），`build_release.ps1` 按失败即停未执行——见 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」 | 实施者 | 2026-09-09 | e2e 回归修复 + 发布构建补跑 |
+| G7 分批实施 | 通过（自动验证 12/12 门） | 2026-09-09 全量新鲜验证：`uv run pytest` 779 passed / 72 skipped、`check:i18n` 759 键 8 域、`test:unit` 28 passed、`build` 通过；全量 `test:e2e` 332 passed / 0 failed（workers=1），`build_release.ps1` exit 0（产物 dst-manager-v0.3.3-win64.zip）——见 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」 | 实施者 | 2026-09-09 | — |
 | G8 设计 QA | 自动取证完成，待用户裁决 | [MEMO-DM-025](../../../.planning/memos/dst-manager/PLAN-DM-021-multilingual-design-qa.md)：无未关闭 P0/P1；D3（UI language vs Display language）待用户裁决 | 用户、验证者 | — | D3 裁决后登记通过 |
 | G9 真实验收与关闭 | 未开始 | [MEMO-DM-026 填空清单](../../../.planning/memos/dst-manager/PLAN-DM-021-multilingual-g9-checklist.md)已就绪 | 用户、技术负责人 | — | 等待真实 Windows 桌面壳逐项执行 |
 
