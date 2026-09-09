@@ -182,8 +182,8 @@ function onUnset(key:string){
 async function onBrowse(key:string){
   const item=items.value.find(entry=>entry.key===key);
   if(!item)return;
-  // file_kind 为后端注册表固定值（Task 1 起返回）；桥签名（file_kind+本地化描述）随 Task 4 迁移
-  const result=await selectSettingsPath(item.fileKind??"folder"); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
+  const filter=item.fileFilter?.includes("exe")?"exe":item.fileFilter?.includes("dll")?"dll":"folder";
+  const result=await selectSettingsPath(filter); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
   if(typeof result==="string")onUpdate(key,result);
 }
 
