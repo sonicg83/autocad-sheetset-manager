@@ -1,0 +1,25 @@
+# 图纸目录内置扩展随包清单（ARCH-DM-006 §4.2；SPEC-DM-012）
+# 本文件是数据契约：不得携带 module/class_name/script/command/entry_point
+# 等可执行入口字段，扩展实例由 dst_manager/extensions/builtin/index.py 的
+# 固定索引直接引用工厂函数创建。
+extension_id: dst-manager.sheet-catalog
+version: 0.1.0
+extension_type: builtin
+host_contract: 1
+enabled_by_default: true
+name_key: extensions.sheetCatalog.name
+description_key: extensions.sheetCatalog.description
+required_capabilities:
+  - workspace.snapshot.read.v1
+permissions:
+  - workspace.snapshot.read
+  - artifact.output.propose
+ui_contributions:
+  - contribution_id: workspace-page
+    kind: workspace_page
+    route_key: sheet-catalog
+actions:
+  - action_id: export-xlsx
+    output_kind: xlsx
+    media_type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+settings_schema: 1
