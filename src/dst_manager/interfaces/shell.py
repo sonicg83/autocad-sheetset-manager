@@ -31,6 +31,7 @@ from ..infrastructure.sheet_preferences import (
 from ..runtime import is_frozen
 from ..settings.runtime import RuntimeSettings, default_store
 from .api import create_app
+from .message_catalog import shell_error
 
 # SC-11 外链白名单（SPEC-DM-011 §4 / ARCH-DM-004 §4.2）：硬编码登记，不做任意放宽。
 # 仅允许项目主页/反馈所在的 github.com 域、sonicg83 账号路径下的 https 地址；
@@ -98,11 +99,9 @@ class ShellBridge:
     def _context_error(self, workspace_id: str) -> dict | None:
         context = self._context.current if self._context is not None else None
         if context is None or context.workspace_id != workspace_id:
-            return {
-                "ok": False,
-                "code": "SHELL_WORKSPACE_UNAVAILABLE",
-                "message": "当前没有匹配的已打开工作区，请重新打开图纸集",
-            }
+            return shell_error(
+                "SHELL_WORKSPACE_UNAVAILABLE", "当前没有匹配的已打开工作区，请重新打开图纸集"
+            )
         return None
 
     def open_workspace_folder(self, workspace_id: str) -> dict:
@@ -115,19 +114,17 @@ class ShellBridge:
             try:
                 self._explorer.open_folder_and_select(context.dst_path)
             except ExplorerError as exc:
-                return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
+                return shell_error("SHELL_OPEN_FAILED", str(exc))
             return {"ok": True, "value": None}
         if context.root.is_dir():
             try:
                 self._explorer.open_folder(context.root)
             except ExplorerError as exc:
-                return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
+                return shell_error("SHELL_OPEN_FAILED", str(exc))
             return {"ok": True, "value": None}
-        return {
-            "ok": False,
-            "code": "SHELL_DIRECTORY_NOT_FOUND",
-            "message": "图纸集目录不存在，可能已被移动或删除",
-        }
+        return shell_error(
+            "SHELL_DIRECTORY_NOT_FOUND", "图纸集目录不存在，可能已被移动或删除"
+        )
 
     def load_sheet_columns(self, workspace_id: str) -> dict:
         """读取当前工作区的图纸页列偏好；无存储返回 value=None。"""
@@ -135,13 +132,13 @@ class ShellBridge:
         if error is not None:
             return error
         if self._preferences is None:
-            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": "偏好存储未就绪"}
+            return shell_error("SHEET_PREFERENCES_IO", "偏好存储未就绪")
         try:
             data = self._preferences.load(workspace_id)
         except InvalidSheetPreferencesError as exc:
-            return {"ok": False, "code": "SHEET_PREFERENCES_INVALID", "message": str(exc)}
+            return shell_error("SHEET_PREFERENCES_INVALID", str(exc))
         except SheetPreferencesError as exc:
-            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": str(exc)}
+            return shell_error("SHEET_PREFERENCES_IO", str(exc))
         return {"ok": True, "value": data}
 
     def save_sheet_columns(self, workspace_id: str, preferences: dict) -> dict:
@@ -150,13 +147,13 @@ class ShellBridge:
         if error is not None:
             return error
         if self._preferences is None:
-            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": "偏好存储未就绪"}
+            return shell_error("SHEET_PREFERENCES_IO", "偏好存储未就绪")
         try:
             self._preferences.save(workspace_id, preferences)
         except InvalidSheetPreferencesError as exc:
-            return {"ok": False, "code": "SHEET_PREFERENCES_INVALID", "message": str(exc)}
+            return shell_error("SHEET_PREFERENCES_INVALID", str(exc))
         except SheetPreferencesError as exc:
-            return {"ok": False, "code": "SHEET_PREFERENCES_IO", "message": str(exc)}
+            return shell_error("SHEET_PREFERENCES_IO", str(exc))
         return {"ok": True, "value": None}
 
     def clear_workspace_context(self, workspace_id: str) -> dict:
@@ -164,11 +161,9 @@ class ShellBridge:
         if self._context is None:
             return {"ok": True, "value": None}
         if not self._context.clear(workspace_id):
-            return {
-                "ok": False,
-                "code": "SHELL_WORKSPACE_UNAVAILABLE",
-                "message": "当前没有匹配的已打开工作区上下文",
-            }
+            return shell_error(
+                "SHELL_WORKSPACE_UNAVAILABLE", "当前没有匹配的已打开工作区上下文"
+            )
         return {"ok": True, "value": None}
 
     def open_external(self, url: str) -> dict:
@@ -180,34 +175,22 @@ class ShellBridge:
         回 SHELL_OPEN_FAILED。
         """
         if not isinstance(url, str):
-            return {
-                "ok": False,
-                "code": "SHELL_EXTERNAL_URL_REJECTED",
-                "message": "仅允许打开登记的 https 链接",
-            }
+            return shell_error("SHELL_EXTERNAL_URL_REJECTED", "仅允许打开登记的 https 链接")
         try:
             parts = urlsplit(url)
         except ValueError:
-            return {
-                "ok": False,
-                "code": "SHELL_EXTERNAL_URL_REJECTED",
-                "message": "仅允许打开登记的 https 链接",
-            }
+            return shell_error("SHELL_EXTERNAL_URL_REJECTED", "仅允许打开登记的 https 链接")
         path = parts.path or ""
         if (
             parts.scheme != _EXTERNAL_URL_SCHEME
             or parts.netloc != _EXTERNAL_URL_HOST
             or not (path == _EXTERNAL_URL_PATH_PREFIX or path.startswith(f"{_EXTERNAL_URL_PATH_PREFIX}/"))
         ):
-            return {
-                "ok": False,
-                "code": "SHELL_EXTERNAL_URL_REJECTED",
-                "message": "仅允许打开登记的 https 链接",
-            }
+            return shell_error("SHELL_EXTERNAL_URL_REJECTED", "仅允许打开登记的 https 链接")
         try:
             webbrowser.open(url)
         except OSError as exc:
-            return {"ok": False, "code": "SHELL_OPEN_FAILED", "message": str(exc)}
+            return shell_error("SHELL_OPEN_FAILED", str(exc))
         return {"ok": True, "value": None}
 
     def select_file(self, file_kind: FileKind, localized_description: str) -> str | None:

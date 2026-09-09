@@ -29,6 +29,7 @@ from dst_manager.interfaces.contracts import (
     XmlExecuteRequest,
     XmlPreviewRequest,
 )
+from dst_manager.interfaces.message_catalog import error_payload
 from dst_manager.interfaces.responses import (
     CadCapabilitiesResponse,
     ChangePreviewResponse,
@@ -203,14 +204,16 @@ def create_app(
 
     @app.exception_handler(ApplicationError)
     async def application_error(_, exc: ApplicationError):
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=exc.status_code, content={"code": exc.code, "message": str(exc)})
+        # PLAN-DM-021 Task 9：统一错误结构 {code, message_key, params, message}；
+        # message 保留原始诊断（兼容文本 + 排障），message_key 由接口层目录提供
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_payload(exc.code, str(exc), params=exc.params),
+        )
 
     @app.exception_handler(AcsmValidationError)
     async def acsm_validation_error(_, exc: AcsmValidationError):
-        from fastapi.responses import JSONResponse
-        code, _, detail = str(exc).partition(":")
-        return JSONResponse(status_code=422, content={"code": code, "message": detail.strip() or "AcSm 结构校验失败"})
+        return JSONResponse(status_code=422, content=error_payload(exc.code, str(exc)))
 
     @app.get("/api/health", response_model=HealthResponse, response_model_exclude_unset=True)
     def health():
@@ -464,10 +467,10 @@ def create_app(
                 if snapshot.schema_blocked:
                     return JSONResponse(
                         status_code=409,
-                        content={
-                            "code": "SETTINGS_SCHEMA_BLOCKED",
-                            "message": "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
-                        },
+                        content=error_payload(
+                            "SETTINGS_SCHEMA_BLOCKED",
+                            "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
+                        ),
                     )
                 snapshot = runtime_settings.apply_changes(
                     request.set, request.unset, request.expected_revision
@@ -476,22 +479,22 @@ def create_app(
                 # 刷新与 apply_changes 落盘之间文件被替换为新 Schema 的竞态：拒绝写回
                 return JSONResponse(
                     status_code=409,
-                    content={
-                        "code": "SETTINGS_SCHEMA_BLOCKED",
-                        "message": "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
-                    },
+                    content=error_payload(
+                        "SETTINGS_SCHEMA_BLOCKED",
+                        "设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存",
+                    ),
                 )
             except SettingsSchemaOlder:
                 # current() 未触发的竞态（读后文件被替换为旧 schema）同样拒绝写回
                 return JSONResponse(
                     status_code=409,
-                    content={
-                        "code": "SETTINGS_SCHEMA_OLDER",
-                        "message": "设置文件 schema 版本低于当前程序，已进入只读模式，不能保存",
-                    },
+                    content=error_payload(
+                        "SETTINGS_SCHEMA_OLDER",
+                        "设置文件 schema 版本低于当前程序，已进入只读模式，不能保存",
+                    ),
                 )
             except SettingsConflict as exc:
-                return JSONResponse(status_code=409, content={"code": "SETTINGS_CONFLICT", "message": str(exc)})
+                return JSONResponse(status_code=409, content=error_payload("SETTINGS_CONFLICT", str(exc)))
             except SettingsValidationError as exc:
                 # 逐字段 422（ARCH-DM-005 §6.2）：外层 key 为稳定设置 key，
                 # 错误对象含 code/message_key/params 与兼容 message

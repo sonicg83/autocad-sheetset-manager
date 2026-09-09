@@ -452,7 +452,8 @@ test("恢复写入错误会显示消息并解除入口锁定",async({page})=>{
   const restorePost=deferred();let revisionCalls=0,restoreStarted=false;
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")}));await page.route("**/api/revisions?workspace_id=workspace-A",route=>{revisionCalls++;return route.fulfill({json:[{id:"revision-A-old",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore-preview",route=>route.fulfill({json:{revision_id:"revision-A-old",executable:true,files:[{path:"A.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore",async route=>{restoreStarted=true;await restorePost.promise;return route.fulfill({status:500,json:{message:"恢复失败"}})});
   await openWorkspace(page,"C:\\A.dst");
-  await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await expect.poll(()=>restoreStarted).toBe(true);await expect(page.getByText("正在恢复修订…",{exact:true})).toBeVisible();restorePost.resolve();await expect(page.getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toBeEnabled();await expect(page.getByRole("tab",{name:"修订历史"})).toBeEnabled();await page.getByRole("tab",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await page.getByRole("tab",{name:"图纸"}).click();await expect(page.locator(".sheets-workspace")).toBeVisible();
+  await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await expect.poll(()=>restoreStarted).toBe(true);await expect(page.getByText("正在恢复修订…",{exact:true})).toBeVisible();restorePost.resolve();// PLAN-DM-021 Task 9（I18N-11）：无 message_key 的错误按未知错误呈现——本地化摘要为主提示，原文在诊断详情
+  await expect(page.locator("p.error.notice")).toContainText("操作失败，发生未知错误");await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeHidden();await page.locator("details.error.notice").getByText("原始错误详情").click();await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toBeEnabled();await expect(page.getByRole("tab",{name:"修订历史"})).toBeEnabled();await page.getByRole("tab",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await page.getByRole("tab",{name:"图纸"}).click();await expect(page.locator(".sheets-workspace")).toBeVisible();
 });
 
 test("旧编辑入口已移除且图号标题只读",async({page})=>{
@@ -487,12 +488,13 @@ test("选择来源文件后加载布局下拉",async({page})=>{
 });
 
 test("布局读取失败回退手动输入",async({page})=>{
-  await page.route("**/api/layout-names",(route)=>route.fulfill({status:502,json:{code:"LAYOUT_READ_FAILED",message:"读取布局失败"}}));
+  // PLAN-DM-021 Task 9：模拟后端统一错误结构（已知 code 携带 message_key）
+  await page.route("**/api/layout-names",(route)=>route.fulfill({status:502,json:{code:"LAYOUT_READ_FAILED",message_key:"errors.layout.readFailed",params:{},message:"读取布局失败"}}));
   await openWorkspace(page);
   await page.getByRole("button",{name:"新增图纸"}).click();
   await page.evaluate(()=>{(window as any).__fakeSelectResult="C:/tpl/frame.dwg"});
   await page.getByRole("button",{name:"选择模板文件"}).click();
-  await expect(page.getByText("读取布局失败")).toBeVisible();
+  await expect(page.getByText("读取布局失败，DWG 可能正被占用或 CAD 环境不可用")).toBeVisible();
   // 作用域限定在新增图纸表单：仅该表单渲染时布局模板名称文本框出现
   await expect(page.getByRole("region",{name:"新增图纸"}).getByRole("textbox",{name:/布局模板名称/})).toBeVisible();
 });
@@ -1371,4 +1373,32 @@ test("英文界面：修复状态、修复明细与确认发布双语",async({pa
   await expect(page.getByText("Job repair-job-en")).toBeVisible();
   // 修复成功后刷新为 VALID：修复面板消失
   await expect(page.getByText("DST repair status")).toHaveCount(0);
+});
+
+// ---- PLAN-DM-021 Task 9：统一错误结构渲染（ARCH-DM-005 §6.2 / I18N-11） ----
+
+test("已知 API 错误按 message_key 渲染并忽略兼容 message",async({page})=>{
+  await page.route("**/api/workspaces/open",route=>route.fulfill({status:404,json:{code:"WORKSPACE_NOT_FOUND",message_key:"errors.workspace.notFound",params:{},message:"【兼容】旧中文文本不应进入主提示"}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst");
+  const notice=page.locator("p.error.notice");
+  await expect(notice).toContainText("工作区不存在，请重新打开图纸集");
+  // 已知错误：兼容 message 不进主提示，也不进诊断详情
+  await expect(page.getByText("【兼容】旧中文文本不应进入主提示")).toHaveCount(0);
+  await expect(page.locator("details.error.notice")).toHaveCount(0);
+});
+
+test("未知 API 错误显示本地化摘要、原文只在可展开诊断详情",async({page})=>{
+  await page.route("**/api/workspaces/open",route=>route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst");
+  const notice=page.locator("p.error.notice");
+  await expect(notice).toContainText("操作失败，发生未知错误");
+  await expect(notice).not.toContainText("保存失败");
+  // 原始文本只在可展开诊断详情：折叠时不可见，展开后可读
+  const diagnostics=page.locator("details.error.notice");
+  await expect(diagnostics).toContainText("原始错误详情");
+  await expect(diagnostics.getByText("保存失败")).toBeHidden();
+  await diagnostics.getByText("原始错误详情").click();
+  await expect(diagnostics.getByText("保存失败")).toBeVisible();
 });

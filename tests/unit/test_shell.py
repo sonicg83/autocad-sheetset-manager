@@ -396,3 +396,48 @@ def test_open_external_rejects_non_string_input():
         assert result["ok"] is False
         assert result["code"] == "SHELL_EXTERNAL_URL_REJECTED"
         assert result["message"] == "仅允许打开登记的 https 链接"
+
+
+# ---- PLAN-DM-021 Task 9：桥错误稳定结构（ARCH-DM-005 §6.2 / I18N-11） ----
+
+
+def test_bridge_context_error_carries_message_key():
+    """无匹配上下文的桥错误返回统一结构：code/message_key/params/message 齐备。"""
+    result = ShellBridge().open_workspace_folder("workspace-1")
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+    assert result["message_key"] == "errors.shell.workspaceUnavailable"
+    assert result["params"] == {}
+    assert result["message"]  # 兼容文本保留（迁移窗口）
+
+
+def test_open_external_rejection_carries_message_key():
+    result = ShellBridge().open_external("http://github.com/sonicg83/autocad-sheetset")
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_EXTERNAL_URL_REJECTED"
+    assert result["message_key"] == "errors.shell.externalUrlRejected"
+    assert result["message"] == "仅允许打开登记的 https 链接"
+
+
+def test_sheet_preferences_bridge_errors_carry_message_key():
+    """偏好桥错误（IO/目录缺失）同样带稳定 message_key。"""
+
+    class _Workspace:
+        workspace_id = "workspace-1"
+        dst_path = Path(r"Z:\missing\out.dst")
+        root = Path(r"Z:\missing")
+
+    class _Context:
+        current = _Workspace()
+
+        def clear(self, workspace_id: str) -> bool:
+            return False
+
+    bridge = ShellBridge(context=_Context())  # type: ignore[arg-type]
+    unavailable = ShellBridge(context=_Context()).clear_workspace_context("other")
+    io_error = bridge.load_sheet_columns("workspace-1")  # preferences 未注入 → IO
+    directory_missing = bridge.open_workspace_folder("workspace-1")
+
+    assert io_error["message_key"] == "errors.shell.preferencesIo"
+    assert directory_missing["message_key"] == "errors.shell.directoryNotFound"
+    assert unavailable["message_key"] == "errors.shell.workspaceUnavailable"

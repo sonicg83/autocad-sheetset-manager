@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
-import {ApiError,request} from "./api/client";
+import {ApiError,lastErrorDiagnostic,localizedError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
@@ -273,7 +273,7 @@ async function openFolder(){
   const result=await bridgeOpenWorkspaceFolder(current.id);
   if(workspace.value?.id!==current.id)return;
   if(!result){error.value=t("shell.errors.shellFolderUnsupported");return}
-  if(!result.ok)error.value=result.code==="SHELL_WORKSPACE_UNAVAILABLE"?t("shell.errors.workspaceSwitched"):result.message;
+  if(!result.ok)error.value=result.code==="SHELL_WORKSPACE_UNAVAILABLE"?t("shell.errors.workspaceSwitched"):localizedError(result.message_key,result.params,result.message);
 }
 const DST_EXT=/\.dst$/i;
 const DROP_CALLBACK_ID="__dstManagerAcceptDst";
@@ -656,6 +656,8 @@ useHotkeys({
   <div class="shell-body">
     <main class="shell-main" :class="{'sheets-active': Boolean(workspace) && active === 'sheets'}">
       <p v-if="error" class="error notice">{{error}}</p>
+      <!-- PLAN-DM-021 Task 9（I18N-11）：未知错误的原始文本只在可展开诊断详情呈现 -->
+      <details v-if="error && lastErrorDiagnostic" class="error notice"><summary>{{ $t("errors.ui.diagnosticsDetails") }}</summary><pre class="error-raw">{{ lastErrorDiagnostic }}</pre></details>
       <p v-if="isWorkspaceLoading" class="panel loading" role="status">{{ $t("shell.workspace.loading") }}</p>
       <p v-if="isRestoreExecuting" class="panel loading" role="status">{{ $t("shell.workspace.restoring") }}</p>
       <template v-if="!workspace">

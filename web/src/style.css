@@ -63,3 +63,6 @@ html[data-theme="dark"]{
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+/* PLAN-DM-021 Task 9（I18N-11/15）：未知错误诊断详情的原始文本按容器换行，不产生横向溢出 */
+.error-raw{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:12px}

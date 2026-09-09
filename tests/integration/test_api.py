@@ -7,11 +7,13 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
+from dst_manager.application.service import ApplicationError
 from dst_manager.config import Settings
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
 from dst_manager.interfaces.api import create_app
+from dst_manager.interfaces.error_contracts import ErrorPayloadModel
 
 
 def _add_second_sheet_with_different_scale(dst):
@@ -1381,3 +1383,61 @@ def test_layout_names_request_rejects_unknown_fields_and_cad_version(tmp_path):
     )
     assert unknown.status_code == 422
     assert invalid_version.status_code == 422
+
+
+# ---- PLAN-DM-021 Task 9：统一错误结构（ARCH-DM-005 §6.2 / I18N-11） ----
+
+
+def test_known_api_error_returns_structured_payload(tmp_path):
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    response = client.post("/api/workspaces/open", json={"dst_path": str(tmp_path / "missing.dst")})
+    assert response.status_code == 404
+    body = response.json()
+    assert body["code"] == "DST_NOT_FOUND"
+    assert body["message_key"] == "errors.workspace.dstNotFound"
+    # 路径是用户数据原样进入 params；message 仅迁移窗口兼容文本与原始诊断
+    assert body["params"] == {"dst_path": str(tmp_path / "missing.dst")}
+    assert body["message"]
+    ErrorPayloadModel.model_validate(body)
+
+
+def test_acsm_validation_error_returns_structured_payload(tmp_path, tiny_workspace):
+    """CAD 结构校验异常经统一 handler 返回稳定结构：打开后损坏磁盘上的 DST，
+    预览重新解码触发 AcsmValidationError（XML_INVALID）。"""
+    dst, _ = tiny_workspace
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    # DST 是字节平移的 XML：经 codec 写入合法 XML 但根节点不是 AcSmDatabase
+    DstCodec().encode_file(b'<?xml version="1.0"?><not-a-sheetset/>', dst)
+
+    response = client.post(
+        f"/api/workspaces/{opened['id']}/changes/preview",
+        json={"base_revision_id": opened["revision_id"], "commands": []},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "XML_ROOT_INVALID"
+    assert body["message_key"] == "errors.xml.rootInvalid"
+    assert body["params"] == {}
+    assert body["message"].startswith("XML_ROOT_INVALID")
+    ErrorPayloadModel.model_validate(body)
+
+
+def test_unknown_api_error_omits_message_key(tmp_path, tiny_workspace, monkeypatch):
+    """目录未登记的 code 不携带 message_key：前端按未知错误本地化摘要并保留原始诊断。"""
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+
+    def _future_error(_workspace_id):
+        raise ApplicationError("FUTURE_CODE", "未来新增的错误", 409)
+
+    monkeypatch.setattr(app.state.service, "get_workspace", _future_error)
+    response = client.get(f"/api/workspaces/{opened['id']}")
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "FUTURE_CODE"
+    assert "message_key" not in body
+    assert body["message"] == "未来新增的错误"

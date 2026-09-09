@@ -23,7 +23,9 @@ window.addEventListener("pywebviewready",()=>{shellReady.value=true},{once:true}
 
 // ---- PLAN-DM-015 任务 2：可信上下文与列偏好桥（PLAN-DM-015 接口，不进业务 OpenAPI） ----
 // workspace_id 只用于服务端匹配，路径一律由服务端可信上下文提供，前端不传任何路径/命令。
-export type ShellResult<T>={ok:true;value:T}|{ok:false;code:string;message:string};
+// PLAN-DM-021 Task 9（I18N-11）：桥错误补 message_key/params（与后端统一错误目录同构），
+// message 保留为兼容原始文本，仅在未知 code 时作为回退。
+export type ShellResult<T>={ok:true;value:T}|{ok:false;code:string;message:string;message_key?:string;params?:Record<string,string|number|boolean|string[]>};
 export interface SheetShellBridge {
   open_workspace_folder(workspace_id:string):Promise<ShellResult<null>>;
   load_sheet_columns(workspace_id:string):Promise<ShellResult<ColumnPreferences|null>>;

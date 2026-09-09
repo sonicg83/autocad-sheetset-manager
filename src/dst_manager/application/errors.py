@@ -8,6 +8,16 @@
 
 
 class ApplicationError(RuntimeError):
-    def __init__(self, code: str, message: str, status_code: int = 400):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+        params: dict[str, object] | None = None,
+    ):
         super().__init__(message)
         self.code, self.status_code = code, status_code
+        # PLAN-DM-021 Task 9：可选结构化插值参数（仅稳定值：路径/标识/编号等，
+        # 禁止本地化 label 或完整句子）；由接口层错误目录按 code 的参数 schema
+        # 校验后写入统一错误负载，未提供时由接口层从详情规则提取。
+        self.params = dict(params) if params else None

@@ -1,3 +1,8 @@
+import {ref} from "vue";
+import {i18n} from "../i18n";
+
+export type StructuredParams = Record<string, string | number | boolean | string[]>;
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -5,6 +10,9 @@ export class ApiError extends Error {
     readonly code?: string,
     readonly fields?: Record<string, string>, // 兼容：字符串型字段级错误（编辑器行内错误/摘要跳转消费）
     readonly fieldErrors?: Record<string, ApiFieldError>, // 结构化字段级错误（设置 PUT 422，PLAN-DM-021 Task 3）
+    readonly messageKey?: string, // 已知错误稳定文案键（PLAN-DM-021 Task 9 / I18N-11）
+    readonly params?: StructuredParams, // 结构化插值参数（稳定值，禁止本地化 label/句子）
+    readonly rawMessage?: string, // 后端兼容原始文本；已知错误不用于主提示，未知错误仅进诊断详情
   ) {
     super(message);
   }
@@ -15,9 +23,13 @@ export class ApiError extends Error {
 export interface ApiFieldError {
   code: string;
   messageKey?: string;
-  params?: Record<string, string | number | boolean | string[]>;
+  params?: StructuredParams;
   message?: string;
 }
+
+// 最近一次未知错误的原始诊断（I18N-11）：主提示只显示本地化摘要，
+// 原始文本仅在 App.vue 的可展开“原始错误详情”中呈现，不进入正常界面翻译。
+export const lastErrorDiagnostic = ref("");
 
 function isFieldErrorPayload(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && "code" in value;
@@ -33,7 +45,7 @@ function toFieldError(value: Record<string, unknown>): ApiFieldError {
   return {
     code: String(value.code ?? ""),
     messageKey: typeof messageKey === "string" ? messageKey : undefined,
-    params: isPlainObject(value.params) ? value.params as ApiFieldError["params"] : undefined,
+    params: isPlainObject(value.params) ? value.params as StructuredParams : undefined,
     message: typeof value.message === "string" ? value.message : undefined,
   };
 }
@@ -65,6 +77,32 @@ function splitFieldErrors(errors: unknown): {
   };
 }
 
+// 统一错误渲染（I18N-11）：已知错误按 message_key+params 渲染并忽略兼容 message；
+// 未知错误显示本地化摘要，原文只进可展开诊断详情（lastErrorDiagnostic）。
+function renderError(
+  messageKey: string | undefined,
+  params: StructuredParams | undefined,
+  raw: string,
+): {display: string; diagnostic: string} {
+  if (messageKey && i18n.global.te(messageKey)) {
+    // 换新错误时清掉上一次未知错误的诊断；已知错误不重复展示原始文本
+    lastErrorDiagnostic.value = "";
+    return {display: i18n.global.t(messageKey, params ?? {}), diagnostic: raw};
+  }
+  lastErrorDiagnostic.value = raw;
+  return {display: i18n.global.t("errors.ui.unknownSummary"), diagnostic: raw};
+}
+
+// Shell 桥已知错误渲染：有 message_key 按 key 渲染，否则回退原始文本
+export function localizedError(
+  messageKey: string | undefined,
+  params: StructuredParams | undefined,
+  fallback: string,
+): string {
+  if (messageKey && i18n.global.te(messageKey)) return i18n.global.t(messageKey, params ?? {});
+  return fallback;
+}
+
 export async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -75,7 +113,11 @@ export async function request<T>(url: string, options?: RequestInit): Promise<T>
     // 字段级错误：设置 PUT 422 返回结构化对象（ARCH-DM-005 §6.2），
     // 草稿等端点仍返回 {key: message}；统一映射进 ApiError 供行内错误/摘要消费
     const {fields, fieldErrors} = splitFieldErrors(body.errors ?? body.fields);
-    throw new ApiError(body.message ?? body.detail ?? "请求失败", response.status, body.code, fields, fieldErrors);
+    const messageKey = typeof body.message_key === "string" && body.message_key ? body.message_key : undefined;
+    const params = isPlainObject(body.params) ? body.params as StructuredParams : undefined;
+    const raw = [body.message, body.detail].find(value => typeof value === "string" && value) ?? "";
+    const {display, diagnostic} = renderError(messageKey, params, raw);
+    throw new ApiError(display, response.status, body.code, fields, fieldErrors, messageKey, params, diagnostic || undefined);
   }
   return body as T;
 }
