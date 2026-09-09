@@ -14,7 +14,7 @@
 
 详细计划：
 
-- [多语言支持实施计划（PLAN-DM-021，proposed；SPEC-DM-013 G0～G6 已通过）](PLAN-DM-021-multilingual-support.md)
+- [多语言支持实施计划（PLAN-DM-021，active；批次一～三与 Task 11/12 已实施，全量 e2e 有批次三遗留回归待修复，G8 待 D3 裁决、G9 待真实桌面验收）](PLAN-DM-021-multilingual-support.md)
 - [内置扩展平台与图纸目录 XLSX 实施计划（PLAN-DM-020，proposed；SPEC-DM-012 G0～G6 已通过）](PLAN-DM-020-sheet-catalog-builtin-extension.md)
 - [设置中心实施计划（PLAN-DM-019，proposed，依据 ARCH-DM-004 与 SPEC-DM-011；G0～G5 门禁已通过，G4 设计已冻结）](PLAN-DM-019-settings-center.md)
 - [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证通过，真实桌面双开冒烟待用户复验）](PLAN-DM-018-desktop-single-instance.md)

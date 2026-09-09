@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-021
 title: DST Manager 多语言支持实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-09
@@ -444,3 +444,59 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 ## 实际验证
 
 2026-09-09：计划建立，状态 `proposed`；G4 已由用户确认，G5 技术映射通过，G6 追踪矩阵与任务拆分通过。尚未修改生产代码，也未执行 G7～G9。实施时按批次追加日期、commit、实际命令/退出码、测试数量、G8 证据、G9 操作者与结果、跳过理由和偏差裁决。
+
+### 批次一～三（Task 1～10）
+
+- 2026-09-09，commit `973e696` 及此前：批次一（语言基础/设置事务/文件种类）、批次二（8 域全量迁移）、批次三（统一错误目录、`check:i18n` 四类门禁、兼容层删除）逐任务 TDD 完成；各任务实际命令与退出码记录于对应 `changelog.md` 条目。批次检查点均有停止复核。
+- 兼容层删除（I18N-17）：设置 `label/category/text/file_filter`、前端 `code → 中文` 主路径与旧 `select_file(file_types)` 已删；诊断 `message` 兼容字段与 `DraftActionsPanel.vue` 旧草稿 `label` 回退仍处迁移窗口（见剩余项）。
+
+### Task 11（设计 QA 与业务不变量）— commit `4112518`，2026-09-09
+
+- `npm --prefix web run test:e2e -- tests/e2e/i18n-workflows.spec.ts tests/e2e/i18n-visual-evidence.spec.ts --workers=1` 退出码 0，语言切换不变量与视觉/可访问性矩阵通过。
+- G8 设计 QA 取证记录于 [MEMO-DM-025](../../memos/dst-manager/PLAN-DM-021-multilingual-design-qa.md)：无未关闭 P0/P1；**D3（生产 UI language vs Demo Display language）待用户裁决后 G8 才登记通过**。
+- 说明：本任务仅运行了增量 e2e 文件；当时未运行全量 `test:e2e`，全量状态由 Task 12 的新鲜运行揭示（见下）。
+
+### Task 12（打包、完整验证、G9 与状态收口）— 2026-09-09，本文件与 MEMO-DM-026 更新 commit 待填
+
+完整自动验证按计划 Step 2 顺序执行，全部为新鲜运行（日志存 `.superpowers/sdd/PLAN-DM-021-multilingual-support/verify-*.log`，不入库）：
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `uv sync --dev`（UV_LINK_MODE=copy） | 0 | Resolved 68 packages |
+| `uv run ruff check .` | 0 | All checks passed |
+| `uv run pytest`（pyproject `addopts=-q` 等效 `-q`） | 0 | **779 passed, 72 skipped**（59.88s） |
+| `uv lock --check` | 0 | Resolved 68 packages |
+| `uv run alembic upgrade head` | 0 | 迁移至 head |
+| `npm --prefix web ci` | 0 | 安装成功 |
+| `npm --prefix web run check:i18n` | 0 | 759 键 / 8 域对称，无未登记硬编码 |
+| `npm --prefix web run test:unit` | 0 | 4 文件 **28 tests** 全过 |
+| `npm --prefix web run check:api` | 0 | OpenAPI/类型契约一致 |
+| `npm --prefix web run build`（含 check:api + check:i18n + vue-tsc） | 0 | 153 modules，dist 395.56 kB JS |
+| `npm --prefix web run test:e2e` | **1** | **318 passed, 12 failed, 2 flaky（3.2m）——验证不通过，见下** |
+| `powershell ... build_release.ps1` | 未执行 | 按失败即停规则未运行 |
+
+Step 1 打包测试（`tests/unit/test_packaging_spec.py` 新增 4 项：spec datas 必含 `web\dist`、生产 JS 同时嵌入 zh-CN/en-US 全部 8 域资源、产物不回指 `web/src`/`node_modules`/绝对盘符路径、i18n 资源仅构建期静态装配）：与既有 5 项共 9 项通过（退出码 0），并在 Task 12 的 `npm run build` 新鲜产物上复跑通过。红验证经突变测试证实有效性（剥离 bundle 中 en-US revisions 最长文案后测试失败，还原后通过；当前产物本就合规，故首次编写即绿）。注：命令行追加 `-q` 会与 `addopts=-q` 叠加为 `-qq` 而隐藏统计行，统计口径以 `uv run pytest` 输出为准。
+
+**Step 2 不通过——批次三遗留 e2e 回归（12 failed, 2 flaky, 318 passed，退出码 1）：**
+
+- 现象：`properties-buffer/layout/values/visual-evidence/workspace` 与 `sheets-drafts` 共 12 个用例失败；即使 `--workers=1` 重跑失败子集仍 12 failed / 2 passed（诊断日志 `diag-e2e-failed-subset.log`）。
+- 根因（已定位）：Task 9/10 按 I18N-11 把前端错误呈现改为“已知 code 按 `message_key` 渲染；未知 code 显示本地化摘要 `errors.ui.unknownSummary`（操作失败，发生未知错误）且原文只进诊断详情”。而批次三之前的 e2e 夹具以**虚构 code** `DRAFT_SAVE_FAILED`（`failDraftSave`，如 `properties-buffer.spec.ts:90`）注入草稿保存失败并断言兼容 `message` 文案“草稿保存失败”出现在摘要——该 code 不在目录，前端按未知错误渲染，断言失败。此回归自批次三起即存在，Task 12 全量运行首次揭示；Task 12 未改动任何前端/夹具代码（仅 Python 测试文件），非本任务引入。
+- 处理（留待后续任务，属批次三修复范畴）：裁决呈现语义后二选一——(a) 夹具改用目录内真实 code 并按新契约改断言；(b) 若产品要求草稿保存失败有专用摘要标题，则后端真实返回该 code 并登记目录 + 中英资源。不得用运行时回退掩盖（批次三红线）。
+
+Step 3 反查（I18N-01～18，自动化可执行部分全部通过）：
+
+- locale 入库/草稿/日志：`src/dst_manager` 中 locale 相关仅 `config.py`（三值设置）、`settings/registry.py`（`label_key` 等稳定键）、`message_catalog.py`（键与参数）；`migrations/`、`application/`、`infrastructure/` 零命中（`worker.py:202` 的 `"/l","zh-CN"` 为 2026-08-10（commit `5c64d3c`）既有 Core Console 脚本语言参数，属 CAD 语义、计划未触碰）。
+- 旧 Shell 签名/旧中文元数据：`select_file` 仅新签名 `select_file(file_kind, localized_description)`；registry 无中文字段，派生告错为开发者可见 ValueError（非 UI 文案），未登记硬编码由 `check:i18n` 门禁守护（退出码 0）。
+- 缺键回退：键对称与参数一致由 `check:i18n` 构建期强制（build 链内），运行时 `fallbackLocale: "zh-CN"` 仅作兜底；未以运行时回退替代交付。
+- 用户数据不被翻译：e2e 断言 DST 路径、`workspace-name`、属性名/值、CSV 内容原样（i18n-workflows / sheets / properties 套件 318 passed 内含）。
+- I18N-16 文件不变量（自动化层）：对去敏副本 `sample/project2`（1 DST + 5 DWG）以真实后端（桌面壳同款装配 + 隔离 settings/drafts 目录）打开工作区并执行 `ui_locale` zh-CN→en-US→zh-CN 设置事务，全部文件 SHA-256 与 mtime_ns 零变化；`settings.json` 只落隔离目录，工程目录无写入。**打包壳上的物理复验属 G9**（MEMO-DM-026 §3）。
+
+Step 4（G9）：无法在本环境执行（无真实桌面壳）。已准备 [MEMO-DM-026](../../memos/dst-manager/PLAN-DM-021-multilingual-g9-checklist.md) 填空清单，覆盖中文/英文/非中英显示语言、显式覆盖、读取失败降级、保存成功/失败、四类过滤器与取消、英文窄屏/200%、发布与任务不中断及物理 hash 复验；全部结果字段留空待操作者填写。
+
+### 剩余项（计划保持 `active` 的原因）
+
+1. **G8 人工确认**：D3 文案裁决（UI language vs Display language，MEMO-DM-025）待用户裁决后 G8 才登记通过。
+2. **批次三遗留 e2e 回归**：12 failed / 2 flaky（根因见上）须按批次三修复范畴裁决并修复后，全量 `test:e2e` 退出码 0。
+3. **`build_release.ps1` 完整运行**：按失败即停未执行，须在 e2e 修复后补跑并记录分发包产物。
+4. **G9 真实桌面验收**：按 MEMO-DM-026 执行并填写，含 I18N-16 物理 hash 复验；通过且 G8 闭合后才可改 `completed`。
+5. **I18N-17 迁移窗口收尾（窗口结束时）**：删除 `DraftActionsPanel.vue` 旧草稿 `label` 兼容回退并补全仓扫描；确认无调用方后移除诊断 `message` 兼容字段。

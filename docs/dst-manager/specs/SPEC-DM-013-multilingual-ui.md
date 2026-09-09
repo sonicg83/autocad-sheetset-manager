@@ -18,7 +18,7 @@ related:
 
 # DST Manager 多语言界面与本地化契约规范
 
-> 状态：已接受；G0～G6 已闭合，G7～G9 等待 PLAN-DM-021 分批实施、设计 QA 与真实桌面验收。
+> 状态：已接受；G0～G7 自动验证部分已闭合（G7 有批次三遗留 e2e 回归待修复），G8 待用户裁决 D3，G9 待真实桌面执行——统一以 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」与 MEMO-DM-025/026 为准。
 > 权威边界：ARCH-DM-005 决定语言架构与契约方向；本文决定用户可见行为、状态和验收；[双语交互 Demo](../mockups/SPEC-DM-013-multilingual-demo.html)仅作为 G4 视觉与交互基准。
 
 ## 1. G0 立项与范围
@@ -200,7 +200,8 @@ related:
 - 前端单元测试覆盖语言解析、键集合/参数一致性、切换事务与错误回退；
 - Playwright 继续运行中文全量回归，并为英文运行启动、设置、图纸、属性、修订、任务和发布关键矩阵；
 - `npm run build` 必须包含语言包完整性扫描，新增用户可见硬编码进入允许清单审查；
-- 切换前后使用测试夹具断言工作区身份、命令、选区和任务状态不变。
+- 打包静态守护（`tests/unit/test_packaging_spec.py`）：spec datas 必含 `web\dist`，生产 JS 同时嵌入中英全部 8 域语言资源且不回指源码目录；
+- 切换前后使用测试夹具断言工作区身份、命令、选区和任务状态不变；语言设置事务前后工作区 DST/DWG 的 SHA-256 与 mtime 不变（自动化层已验证，打包壳复验属 G9）。
 
 ### 7.2 设计 QA 与真实验收
 
@@ -221,9 +222,9 @@ related:
 | G4 Demo 与设计冻结 | 通过 | 本文 §6；双语 Demo；commit `3ecb754` | 用户 | 2026-09-09 | — |
 | G5 技术映射 | 通过 | [G5 技术映射备忘](../../../.planning/memos/dst-manager/2026-09-09-multilingual-g5-technical-mapping.md) | 技术负责人 | 2026-09-09 | 真实 WebView2 留至 G9 |
 | G6 计划就绪 | 通过 | [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md) 追踪矩阵与 12 个 TDD 任务 | 用户、技术负责人 | 2026-09-09 | — |
-| G7 分批实施 | 未开始 | — | 实施者 | — | G6 通过后开始 |
-| G8 设计 QA | 未开始 | — | 用户、验证者 | — | 等待生产实现 |
-| G9 真实验收与关闭 | 未开始 | — | 用户、技术负责人 | — | 等待真实 Windows 桌面壳 |
+| G7 分批实施 | 通过（自动验证 10/12 门） | 2026-09-09 全量新鲜验证：`uv run pytest` 779 passed / 72 skipped、`check:i18n` 759 键 8 域、`test:unit` 28 passed、`build` 通过；全量 `test:e2e` 318 passed / 12 failed / 2 flaky（批次三夹具以虚构 code `DRAFT_SAVE_FAILED` 断言旧兼容文案，与 I18N-11 新呈现冲突），`build_release.ps1` 按失败即停未执行——见 [PLAN-DM-021](../../../.planning/plans/dst-manager/PLAN-DM-021-multilingual-support.md)「实际验证」 | 实施者 | 2026-09-09 | e2e 回归修复 + 发布构建补跑 |
+| G8 设计 QA | 自动取证完成，待用户裁决 | [MEMO-DM-025](../../../.planning/memos/dst-manager/PLAN-DM-021-multilingual-design-qa.md)：无未关闭 P0/P1；D3（UI language vs Display language）待用户裁决 | 用户、验证者 | — | D3 裁决后登记通过 |
+| G9 真实验收与关闭 | 未开始 | [MEMO-DM-026 填空清单](../../../.planning/memos/dst-manager/PLAN-DM-021-multilingual-g9-checklist.md)已就绪 | 用户、技术负责人 | — | 等待真实 Windows 桌面壳逐项执行 |
 
 ## 9. 完成标准
 

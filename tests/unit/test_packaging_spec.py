@@ -93,3 +93,81 @@ def test_entry_redirects_windowless_stdio_before_imports():
     assert text.index("redirect_frozen_stdio") < text.index("from dst_manager.interfaces.cli import app"), (
         "重定向必须发生在导入 dst_manager.interfaces.cli 之前，否则 uvicorn 等库在导入期绑定的 stderr 已指向丢失的控制台"
     )
+
+
+# ---------------------------------------------------------------------------
+# PLAN-DM-021 Task 12（I18N-01/18）：生产 Web 产物多语言静态守护。
+# 打包只 datas web/dist，不打包 web/src；两套语言资源必须已随构建嵌入 JS 产物，
+# 产物不得回指源码目录（frozen 态没有 web/src，任何源码路径依赖都是运行期断链）。
+# ---------------------------------------------------------------------------
+
+WEB_DIST = ROOT / "web" / "dist"
+LOCALES_DIR = ROOT / "web" / "src" / "i18n" / "locales"
+I18N_LOCALES = ("zh-CN", "en-US")
+I18N_DOMAINS = ("common", "errors", "jobs", "properties", "revisions", "settings", "shell", "sheets")
+
+
+def _bundle_text() -> str:
+    """读取 web/dist 全部 JS 产物文本；产物缺失时按打包前置条件报错。"""
+    js_files = sorted((WEB_DIST / "assets").glob("*.js"))
+    assert js_files, "web/dist/assets 缺少 JS 产物：打包前必须先 `npm --prefix web run build`（spec datas 依赖 web/dist）"
+    return "".join(js.read_text(encoding="utf-8") for js in js_files)
+
+
+def _domain_literals(locale: str, domain: str) -> list[str]:
+    """提取语言资源文件中的字符串字面量（排除插值模板标记 '@' 开头与转义片段）。"""
+    source = (LOCALES_DIR / locale / f"{domain}.ts").read_text(encoding="utf-8")
+    return [
+        value
+        for value in re.findall(r'"([^"\\\n]{6,})"', source)
+        if not value.startswith("@")
+    ]
+
+
+def test_spec_datas_bundles_web_dist():
+    """spec datas 必须包含 web\\dist：两套语言资源随产物整体入包（I18N-01）。"""
+    assert re.search(r"web\\+dist", _spec_text()), (
+        "packaging/dst-manager.spec 的 datas 缺少 web\\dist 条目："
+        "frozen 态 api.py 的 StaticFiles 将无前端可挂载"
+    )
+
+
+def test_production_bundle_contains_both_locales():
+    """生产 JS 产物必须同时嵌入 zh-CN 与 en-US 全部 8 个域的语言资源（I18N-01/18）。"""
+    bundle = _bundle_text()
+    for locale in I18N_LOCALES:
+        for domain in I18N_DOMAINS:
+            literals = _domain_literals(locale, domain)
+            assert literals, f"{locale}/{domain}.ts 未扫描到可断言字面量：请确认提取正则仍有效"
+            marker = max(literals, key=len)
+            assert marker in bundle, (
+                f"生产 Web 产物缺少 {locale}/{domain} 语言资源（基准文案 {marker!r} 不在 dist JS 中）："
+                "语言资源必须随构建嵌入 bundle，不得依赖源码目录或运行期外链"
+            )
+
+
+def test_production_bundle_does_not_reference_source_tree():
+    """dist 产物不得回指 web/src / node_modules / 绝对源码路径（frozen 态无源码目录）。"""
+    bundle = _bundle_text()
+    for needle in ("web/src", "/@fs/", "node_modules"):
+        assert needle not in bundle, f"生产 Web 产物引用了源码目录标记 {needle!r}：frozen 态会断链"
+    assert not re.search(r"[A-Za-z]:[\\/](?:Users|Windows|workspace)", bundle), (
+        "生产 Web 产物包含绝对盘符路径：疑似把源码目录地址打进 bundle"
+    )
+
+
+def test_i18n_resources_statically_bundled_not_runtime_fetched():
+    """i18n/index.ts 必须静态 import 全部 16 个域资源；不得运行期 fetch/动态 import 语言文件。"""
+    index_text = (ROOT / "web" / "src" / "i18n" / "index.ts").read_text(encoding="utf-8")
+    for locale in I18N_LOCALES:
+        for domain in I18N_DOMAINS:
+            assert f'locales/{locale}/{domain}' in index_text, (
+                f"i18n/index.ts 缺少 locales/{locale}/{domain} 的静态导入："
+                "唯一 i18n 实例必须在构建期装配两套同构资源（I18N-01）"
+            )
+    assert not re.search(r"import\(\s*[\"'`]\./locales", index_text), (
+        "i18n/index.ts 出现 locales 动态 import：语言资源会脱离主 bundle，frozen 产物可能缺语言"
+    )
+    assert not re.search(r"fetch\([^)]*locales", index_text), (
+        "i18n/index.ts 运行期 fetch 语言资源：违背构建期装配唯一实例的架构约束"
+    )

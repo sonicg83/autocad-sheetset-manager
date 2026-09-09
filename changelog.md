@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 12：打包、完整验证、G9 与状态收口）
+
+- 打包静态守护扩展 `tests/unit/test_packaging_spec.py`（+4 项）：spec datas 必含 `web\dist`；生产 JS 产物同时嵌入 zh-CN/en-US 全部 8 域语言资源（逐域最长文案基准）；产物不回指 `web/src`/`node_modules`/绝对盘符路径；`web/src/i18n/index.ts` 仅构建期静态装配 16 个域资源、无 locales 动态 import/fetch。与既有 5 项共 9 项通过；在 Task 12 新鲜 `npm run build` 产物上复跑通过。当前产物本就合规，红验证经突变测试证实（剥离 bundle 内 en-US 最长文案 → 失败，还原 → 通过）。
+- 全量新鲜验证（Task 12 Step 2 顺序，日志存 `.superpowers` 不入库）：`uv sync --dev`、`ruff check .`、`uv run pytest`（**779 passed / 72 skipped**）、`uv lock --check`、`alembic upgrade head`、`npm ci`、`check:i18n`（**759 键 / 8 域**）、`test:unit`（**28 passed**）、`check:api`、`build` 全部退出码 0；**`test:e2e` 退出码 1（318 passed / 12 failed / 2 flaky）**；`build_release.ps1` 按失败即停未执行。
+- 定位批次三遗留 e2e 回归（非本任务引入，`--workers=1` 复跑失败子集仍 12 failed）：Task 9/10 按 I18N-11 改为"已知 code 按 `message_key` 渲染、未知 code 显示本地化摘要 `errors.ui.unknownSummary` 且原文只进诊断详情"，而批次三之前的 e2e 夹具以虚构 code `DRAFT_SAVE_FAILED` 注入草稿保存失败并断言兼容 `message`"草稿保存失败"出现在摘要，与现契约冲突。修复裁决（夹具改真实 code + 新断言，或后端真实返回专用 code 并登记目录）留待后续任务，不得以运行时回退掩盖。
+- Step 3 反查（I18N-01～18 自动化部分）：locale 不入 migrations/application/infrastructure（`worker.py` `"/l zh-CN"` 为计划前既有 Core Console 参数）；`select_file` 仅新 `file_kind` 签名；registry 无中文元数据；`check:i18n` 守护未登记硬编码；I18N-16 文件不变量——对去敏副本 `sample/project2`（1 DST + 5 DWG）以真实后端执行打开 + `ui_locale` zh-CN→en-US→zh-CN 设置事务，SHA-256 与 mtime_ns 全部零变化，`settings.json` 只落隔离目录。
+- G9 准备：新增 [MEMO-DM-026 填空清单](.planning/memos/dst-manager/PLAN-DM-021-multilingual-g9-checklist.md)（中文/英文/非中英显示语言、显式覆盖、读取失败降级、保存成功/失败、四类过滤器与取消、英文窄屏/200%、发布与任务不中断、物理 hash 复验；结果字段留空）。计划状态保持 **`active`**，剩余项：D3 文案裁决（G8）、批次三 e2e 回归修复 + 全量 e2e 绿、`build_release.ps1` 补跑、G9 真实桌面执行、I18N-17 窗口收尾（`DraftActionsPanel.vue` 旧草稿 `label` 回退与诊断 `message` 兼容字段）。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 11：英文关键矩阵、响应式与业务不变量）
 
 - 新增 `web/tests/e2e/i18n-workflows.spec.ts`（3 例）：zh-CN 与 en-US 各跑一遍 启动→设置→打开→图纸→属性→预览→发布→任务→修订 九域关键矩阵（语义键渲染 + 用户数据原样，I18N-07/16）；语言切换不变量——切换前后 workspace 标识（DST 路径 title/顶栏名）、未提交输入、选区、草稿计数、任务状态、修订哈希一致，发布不重跑（execute 仅一次）、SSE 事件 URL 不携带语言（I18N-06/12）。
