@@ -18,12 +18,12 @@ import type {DefinitionScopeFilter} from "../features/properties/model";
 import type {
   PropertyBuffer, PropertyKey, PropertySearchMode, PropertySubmitResult, ValueKey, ValueStatus,
 } from "../features/properties/types";
-import type {GuardChoice} from "../features/sheets/types";
+import type {DraftActionLabel, GuardChoice} from "../features/sheets/types";
 
 export type PropertiesWorkspaceDeps = {
   workspace: Ref<Workspace | null>;
   baseWorkspace: Ref<Workspace | null>;
-  submitCommands: (commands: ChangeCommand[], label: string, category: "metadata" | "structural" | "property") => Promise<PropertySubmitResult>;
+  submitCommands: (commands: ChangeCommand[], label: DraftActionLabel, category: "metadata" | "structural" | "property") => Promise<PropertySubmitResult>;
   // 新增属性定义命令簿门禁（App 既有 addCommand(...,'property')）：返回 false 表示未入栈
   addPropertyDefinition: (form: {type: PropertyType; name: string; defaultValue: string}) => boolean;
   // 页面级错误呈现（App 既有 error 通知条）
@@ -210,7 +210,7 @@ export function usePropertiesWorkspace(deps: PropertiesWorkspaceDeps) {
     } catch {
       return {ok: false, message: t("properties.errors.staleFields")};
     }
-    const result = await deps.submitCommands([command], t("shell.commands.updateSheetSet"), "metadata");
+    const result = await deps.submitCommands([command], {key: "shell.commands.updateSheetSet"}, "metadata");
     if (result.ok) {
       summaryError.value = "";
       errors.value = {};

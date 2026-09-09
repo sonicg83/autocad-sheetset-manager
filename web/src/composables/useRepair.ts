@@ -1,6 +1,8 @@
 // 内存修复域组合式函数：修复预览、独立修订发布与写入门禁（Task 3 拆分，行为零变化）
+// PLAN-DM-021 Task 8（I18N-07）：面向用户的确认框与错误文案经语言包渲染，语言不进入业务域
 import {computed,ref} from "vue";
 import type {ComputedRef,Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import {request} from "../api/client";
 import type {DstValidation,Job,RepairPreview,Workspace} from "../api/contracts";
 import type {ConfirmOptions} from "./useConfirm";
@@ -28,6 +30,7 @@ export function useRepair(deps:{
   repairWritesDisabled:ComputedRef<boolean>;
   dstValidation:ComputedRef<DstValidation|null>;
 }{
+  const {t}=useI18n();
   const repairPreview=ref<RepairPreview|null>(null);
   const repairContext=ref<RepairContext|null>(null);
   const isRepairPreviewing=ref(false);
@@ -60,9 +63,9 @@ export function useRepair(deps:{
     const context=repairContext.value;
     if(!context||isRepairExecuting.value)return;
     const current=deps.workspace.value;
-    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){repairPreview.value=null;repairContext.value=null;deps.error.value="工作区或基准修订已变化，请重新生成修复预览";return}
+    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){repairPreview.value=null;repairContext.value=null;deps.error.value=t("shell.repair.contextStale");return}
     // 发布独立修复修订属不可逆破坏类操作：需要显式勾选后才可确认
-    const ok=await deps.confirmAction({title:"确认把内存修复发布为独立修订",message:"原 DST 将永久备份。",confirmText:"确认把内存修复发布",danger:true,requireCheckbox:true,reversibility:"irreversible"});
+    const ok=await deps.confirmAction({title:t("shell.repair.confirmTitle"),message:t("shell.repair.confirmMessage"),confirmText:t("shell.repair.confirmConfirm"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=deps.invalidateJobMonitor(false);
     isRepairExecuting.value=true;
@@ -71,7 +74,7 @@ export function useRepair(deps:{
       if(!deps.isCurrentJobGeneration(generation)||deps.isWorkspaceLoading.value||deps.workspace.value?.id!==context.workspaceId)return;
       deps.setJob(result);
       if(result.status==="SUCCEEDED"){repairPreview.value=null;repairContext.value=null;await deps.refreshWorkspace(context.workspaceId)}
-      else if(result.status==="FAILED"){deps.error.value=result.error_code??"修复发布失败"}
+      else if(result.status==="FAILED"){deps.error.value=result.error_code??t("shell.repair.publishFailed")}
     }
     catch(e){if(deps.isCurrentJobGeneration(generation)&&deps.workspace.value?.id===context.workspaceId&&!deps.isWorkspaceLoading.value)deps.error.value=String(e)}
     finally{if(deps.isCurrentJobGeneration(generation))isRepairExecuting.value=false}

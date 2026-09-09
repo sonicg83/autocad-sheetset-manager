@@ -217,6 +217,15 @@ def _require_string_map(value: object) -> None:
         raise ValueError("DRAFT_CONTENT_INVALID")
 
 
+def _require_label_params(value: object) -> None:
+    """PLAN-DM-021（I18N-12）：命名 params 只允许标量用户数据（字符串/数量），不允许语言文本结构。"""
+    if not isinstance(value, dict) or any(
+        not isinstance(key, str) or not isinstance(item, (str, int)) or isinstance(item, bool)
+        for key, item in value.items()
+    ):
+        raise ValueError("DRAFT_CONTENT_INVALID")
+
+
 def _validate_source(value: object) -> None:
     if not isinstance(value, dict):
         raise ValueError("DRAFT_CONTENT_INVALID")  # noqa: TRY004 - 文件内容损坏统一归类
@@ -306,9 +315,17 @@ def _validate_draft_document(draft: dict[str, Any]) -> None:
     for action in actions:
         if not isinstance(action, dict):
             raise ValueError("DRAFT_CONTENT_INVALID")  # noqa: TRY004 - 文件内容损坏统一归类
-        _require_keys(action, {"id", "kind", "label", "commands"})
+        _require_keys(action, {"id", "kind", "commands"}, optional={"label", "label_key", "params"})
         _require_text(action["id"])
-        _require_text(action["label"])
+        # PLAN-DM-021（I18N-12）：新建动作持久化 label_key（+可选 params）；label 仅为旧草稿迁移窗口兼容，二者二选一
+        if ("label" in action) == ("label_key" in action):
+            raise ValueError("DRAFT_CONTENT_INVALID")
+        if "label" in action:
+            _require_text(action["label"])
+        else:
+            _require_text(action["label_key"])
+            if "params" in action:
+                _require_label_params(action["params"])
         if action["kind"] != "command_batch" or not isinstance(action["commands"], list) or not action["commands"]:
             raise ValueError("DRAFT_CONTENT_INVALID")
         for command in action["commands"]:

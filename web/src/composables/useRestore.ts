@@ -1,6 +1,8 @@
 // 修订恢复域组合式函数：修订历史、恢复预览与"恢复为新修订"执行（Task 3 拆分，行为零变化）
+// PLAN-DM-021 Task 8（I18N-07）：确认框与错误文案经语言包渲染，语言不进入业务域
 import {ref} from "vue";
 import type {Ref} from "vue";
+import {useI18n} from "vue-i18n";
 import {request} from "../api/client";
 import type {Job,RestorePreview,Revision,Workspace} from "../api/contracts";
 import type {ConfirmOptions} from "./useConfirm";
@@ -29,6 +31,7 @@ export function useRestore(deps:{
   restoreRevision():Promise<void>;
   invalidateRevisionState():void;
 }{
+  const {t}=useI18n();
   const revisions=ref<Revision[]>([]);
   const restorePreview=ref<RestorePreview|null>(null);
   const restorePreviewContext=ref<RestorePreviewContext|null>(null);
@@ -59,9 +62,9 @@ export function useRestore(deps:{
   async function restoreRevision(){
     const context=restorePreviewContext.value,current=deps.workspace.value;
     if(deps.isRestoreExecuting.value||!context||!context.result.executable)return;
-    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){restorePreview.value=null;restorePreviewContext.value=null;deps.error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
+    if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){restorePreview.value=null;restorePreviewContext.value=null;deps.error.value=t("revisions.errors.contextStale");return}
     // 恢复为新修订属不可逆破坏类操作：需要显式勾选后才可确认
-    const ok=await deps.confirmAction({title:"确认恢复为新修订",message:"历史修订不会被覆盖。",confirmText:"确认恢复",danger:true,requireCheckbox:true,reversibility:"irreversible"});
+    const ok=await deps.confirmAction({title:t("revisions.confirm.title"),message:t("revisions.confirm.message"),confirmText:t("revisions.confirm.confirmText"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=++restoreExecutionGeneration;
     deps.isRestoreExecuting.value=true;deps.invalidateJobMonitor(true);revisionGeneration+=1;

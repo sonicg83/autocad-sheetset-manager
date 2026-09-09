@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 8：修订、预览、修复、草稿与任务状态迁移）
+
+- 新增修订与任务域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/revisions.ts`、`jobs.ts`（键对称）并注册进唯一 i18n 实例（681 键 / 7 域，`check:i18n` 通过）；`common` 域新增共享 `cadOperation` 映射与 `listSeparator`，`shell` 域新增 `draft`/`preview`/`repair` 分节（草稿栈、完整变更预览与修复面板属外壳浮层/操作栏域）。
+- 迁移（I18N-07/08）：`RevisionsView.vue`（tabpanel aria 与空状态卡）、`RevisionHistoryPanel.vue`（表头、恢复入口、恢复确认与冲突提示；时间经新增 `web/src/i18n/format.ts` 的 `formatDateTime` 按 `Intl` 生效语言格式化，Task 5 遗留项落地）、`PreviewPanel.vue`（全部标题/表头/估算摘要与来源样本复数插值、数量前沿、诊断行 `{code}：{message}` 分隔取自语言包）、`RepairStatusPanel.vue`（状态码→语义键、修复/阻断计数、前后值差异、预览摘要）、`JobStatusPanel.vue`（任务标题/尝试次数/状态码→语义键、逐 DWG 表头、起止时间本地化、耗时插值）、`DraftActionsPanel.vue`（待处理/动作计数、清空/移除、过期原因连接符取语言包、`{count} 条命令` 复数）全部改用 `$t`/`useI18n`；composables：`useJobMonitor.ts` 终态 toast 与 NEEDS_REVIEW 禁止重试文案改语义键、`connectionMode` 存稳定 code（`sse`/`polling`）展示层映射；`useRepair.ts`/`useRestore.ts` 确认框与上下文失效文案改语义键。SSE/任务 payload 保持稳定状态码（I18N-12），未知状态码回退原码；错误码、DWG 名、路径、哈希、属性名/值与后端 suggestion 保持原样（I18N-16）。
+- 绑定修复（Tasks 5-7 裁决，I18N-12「语言不得写入 job、draft」）：草稿动作标签由创建时 `t(...)` 本地化文本改为持久化稳定 `label_key` + 可选命名 `params`。存储侧：`App.vue` `addCommand`/`addCommandBatch`/`applyBulkBatch`（label_key + `{name,count}` 参数）、`useSheetEditor.ts` 四处 `submitCommands` 调用点、`usePropertiesWorkspace.ts` `update_sheet_set` 调用点，`features/sheets/types.ts` `SubmitCommands` 签名改为 `DraftActionLabel`；渲染侧：`DraftActionsPanel.vue` 按存储 `label_key`(+params) 在渲染期翻译，旧版本草稿的本地化 `label` 仅迁移窗口内回退展示。已 rg 核验：`draftActions` 仅两处构造点（`App.vue:472/481`）均存 `label_key`，全部 5 处 `submitCommands`/`addCommandBatch` 调用点传稳定键，无其他创建时 `t()` 标签流入。
+- 草稿后端最小扩展（核验结论：草稿并非不透明存储——`DraftPutRequest`（`interfaces/contracts.py`）与 `DraftStore._validate_draft_document`（`infrastructure/drafts.py`）均按固定键集校验 `label` 非空文本）：`DraftAction`/`DraftActionResponse` 增加可选 `label_key`、`params`（值仅限字符串/数量标量），`label` 与 `label_key` 必须二选一，`params` 形状违规按损坏草稿隔离；schema_version 与端点契约不变。`web/src/api/openapi.json`/`schema.d.ts` 经 `generate:api` 再生。
+- 测试（TDD）：`tests/unit/test_drafts.py` 新增 label_key+params 合法、旧 `label` 兼容加载与 5 种形状违规隔离用例（红灯先行）；`main.spec.ts` 新增 8 例红灯先行：草稿 PUT 断言 `label_key`/`params` 且动作栈随语言切换双语渲染（绑定修复）、英文完整变更预览（字段名/路径/哈希原样）、英文任务状态+错误码原样+安全重试、英文 NEEDS_REVIEW 锁定与禁止重试提示、语言切换不变量（QUEUED→RUNNING→FAILED→重试 NEEDS_REVIEW 跨切换状态保持、SSE 事件 URL 不携带语言）、英文修订历史+日期本地化+恢复冲突提示、修订空态、英文修复状态全流程；既有两处中文断言随日期/状态本地化更新（任务起止时间改 `Intl` zh-CN 格式比对、重试后 `/QUEUED/` 改语义键文案）。
+- 验证：`npm run test:unit` 28 passed；`npm run build`（check:api + check:i18n + vue-tsc + vite）通过；全量 `npm run test:e2e` 313 passed（2.6m）；`uv run ruff check` 与全量 `uv run pytest -q` 通过（Python 中文全量基线）。
+- Files 清单外必要增量（已披露）：绑定修复触及 `web/src/features/sheets/types.ts`（签名）、`web/src/api/openapi.json`+`schema.d.ts`（再生）、后端 `src/dst_manager/interfaces/contracts.py`、`responses.py`、`src/dst_manager/infrastructure/drafts.py`、`tests/unit/test_drafts.py`；日期本地化新增 `web/src/i18n/format.ts`；`web/src/i18n/index.ts` 注册 revisions/jobs 域；`common.ts`/`shell.ts`（中英）按域新增必要键。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 7：属性工作区迁移）
 
 - 新增属性域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/properties.ts`（132 键对称）并注册进唯一 i18n 实例（548 键 / 5 域，`check:i18n` 通过）。

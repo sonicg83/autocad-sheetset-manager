@@ -6,14 +6,14 @@ defineProps<{revisions:Revision[];restorePreview:RestorePreview|null;executing:b
 defineEmits<{preview:[revision:Revision];restore:[]}>();
 </script>
 <template>
-  <section class="revisions-view" role="tabpanel" id="panel-revisions" aria-label="修订历史">
+  <section class="revisions-view" role="tabpanel" id="panel-revisions" :aria-label="$t('revisions.ariaLabel')">
     <template v-if="!isWorkspaceLoading">
       <RevisionHistoryPanel v-if="revisions.length" :revisions="revisions" :restore-preview="restorePreview" :executing="executing" @preview="$emit('preview',$event)" @restore="$emit('restore')" />
       <!-- 空状态卡（§6.5 说明 + 下一步动作，动作即提示去标签①发起变更，不设跳转按钮以免打断） -->
       <div v-else class="empty-card">
-        <h2 class="empty-title">暂无修订历史</h2>
-        <p class="empty-desc">发布首个变更后，此处会记录每个可恢复的修订版本。</p>
-        <p class="empty-action">前往「图纸」标签发起首个变更，发布后即可在此恢复。</p>
+        <h2 class="empty-title">{{ $t("revisions.empty.title") }}</h2>
+        <p class="empty-desc">{{ $t("revisions.empty.desc") }}</p>
+        <p class="empty-action">{{ $t("revisions.empty.action") }}</p>
       </div>
     </template>
   </section>

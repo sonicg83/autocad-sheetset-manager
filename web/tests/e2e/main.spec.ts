@@ -52,7 +52,9 @@ test("CAD 操作分流",async({page})=>{
   await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   // 任务详情迁入任务浮层实施进度页签：预览已展开浮层，切到实施进度页签再断言逐文件行
   const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();
-  const jobDetail=overlay.locator(".job-detail");const renameRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\001-002.dwg"});const rebuildRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\003-004.dwg"});await expect(renameRow.getByText("批量改名布局",{exact:true})).toBeVisible();await expect(renameRow.getByText("2026-08-26T10:00:00Z",{exact:true})).toBeVisible();await expect(renameRow.getByText("2026-08-26T10:00:02Z",{exact:true})).toBeVisible();await expect(renameRow.getByText("2000 ms",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("清除并重建布局",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("2026-08-26T10:00:03Z",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("2026-08-26T10:00:08Z",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("5000 ms",{exact:true})).toBeVisible();
+  const jobDetail=overlay.locator(".job-detail");const renameRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\001-002.dwg"});const rebuildRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\003-004.dwg"});await expect(renameRow.getByText("批量改名布局",{exact:true})).toBeVisible();await expect(renameRow.getByText("2000 ms",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("清除并重建布局",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("5000 ms",{exact:true})).toBeVisible();
+  // PLAN-DM-021 Task 8：任务起止时间经 Intl 按生效语言（zh-CN 基线）格式化
+  const zhFormatter=new Intl.DateTimeFormat("zh-CN",{dateStyle:"medium",timeStyle:"medium"});await expect(renameRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:00Z")),{exact:true})).toBeVisible();await expect(renameRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:02Z")),{exact:true})).toBeVisible();await expect(rebuildRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:03Z")),{exact:true})).toBeVisible();await expect(rebuildRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:08Z")),{exact:true})).toBeVisible();
 });
 
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(done=>{resolve=done});return {promise,resolve}}
@@ -565,7 +567,7 @@ test("属性命令与结构命令分批并支持 CSV 行级预览导入",async({
 test("失败任务显示逐 DWG 详情并可安全重试",async({page})=>{
   await installMockEventSource(page);await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-failed",status:"FAILED",progress:40,attempt:1,error_code:"CAD_TIMEOUT",suggestion:"检查 CAD 日志",files:[{target_path:"A.dwg",status:"FAILED",progress:0,duration_ms:600000,error_code:"CAD_TIMEOUT"}]}}));await page.route("**/api/jobs/job-failed/retry",route=>route.fulfill({json:{id:"job-failed",status:"QUEUED",progress:0,attempt:1,files:[]}}));await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   // 失败任务详情迁入任务浮层实施进度页签：预览已展开浮层，切到实施进度页签再断言逐 DWG 详情
-  const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();await expect(page.getByText("A.dwg")).toBeVisible();await expect(page.getByText("检查 CAD 日志")).toBeVisible();await expectActionAppearance(page, ".job-detail button");await page.getByRole("button",{name:"安全重试"}).click();await expect(page.getByText(/QUEUED/)).toBeVisible();
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();await expect(page.getByText("A.dwg")).toBeVisible();await expect(page.getByText("检查 CAD 日志")).toBeVisible();await expectActionAppearance(page, ".job-detail button");await page.getByRole("button",{name:"安全重试"}).click();await expect(page.getByText(/已排队 · 0% · 第 0 次/)).toBeVisible();
 });
 
 test("修订恢复先预览再确认为新修订",async({page})=>{
@@ -1142,4 +1144,231 @@ test("语言切换不变量：保存成功后 active tab、工作区与未提交
   await expect(page.getByText("测试图纸集")).toBeVisible();
   await expect(page.getByRole("button",{name:"Open the folder containing the sheet set"})).toBeVisible();
   await expect(nameInput).toHaveValue("改名后的图纸集");
+});
+
+// —— PLAN-DM-021 Task 8：修订、预览、修复、草稿与任务状态双语（I18N-07/08/12）——
+// 语言来源沿用 page 级 enSettingsSnapshot 路由；断言 SSE/任务/草稿 payload 保持稳定 code，
+// 状态在语言切换前后语义不变；草稿动作持久化 label_key（语言不得写入草稿），渲染期经语言包翻译。
+
+// 语言切换辅助：只拦截 PUT 驱动前端 applyLocale，GET 仍为 zh-CN 基线（同 Task 5 不变量用例）
+async function switchToEnglish(page:Page){
+  await page.route("**/api/settings",async route=>{
+    if(route.request().method()!=="PUT")return route.fallback();
+    return route.fulfill({json:{...enSettingsSnapshot,config_revision:2}});
+  });
+  await openSettingsDialog(page);
+  await page.locator('input[data-key="ui_locale"][value="en-US"]').check();
+  await page.getByRole("button",{name:"保存"}).click();
+  await expect(page.locator("html")).toHaveAttribute("lang","en-US");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog",{name:"Settings"})).toBeHidden();
+}
+
+test("草稿动作持久化 label_key 且动作栈渲染随语言切换",async({page})=>{
+  const draftPuts:any[]=[];
+  await page.route("**/api/workspaces/*/draft",async route=>{
+    if(route.request().method()==="PUT")draftPuts.push(await route.request().postDataJSON());
+    return route.fallback();
+  });
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();
+  await page.getByLabel("图纸集名称",{exact:true}).fill("改名集");
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  // 绑定修复（I18N-12）：草稿只持久化稳定 label_key，不写创建时语言文本
+  await expect.poll(()=>draftPuts.length).toBeGreaterThan(0);
+  const action=draftPuts.at(-1).actions.at(-1);
+  expect(action.label_key).toBe("shell.commands.updateSheetSet");
+  expect(action.label).toBeUndefined();
+  await openDraftPop(page);
+  await expect(page.getByText("更新图纸集 · 1 条命令")).toBeVisible();
+  // 批量动作：label_key + 命名参数（属性名与数量是用户数据参数，不是语言文本）
+  await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("checkbox",{name:"全选当前结果"}).check();
+  await page.getByRole("button",{name:"批量修改属性"}).click();
+  await page.getByLabel("既有图纸属性").selectOption("比例");
+  await page.getByLabel("批量值").fill("1:200");
+  await page.getByRole("button",{name:"批量加入草稿"}).click();
+  await expect.poll(()=>draftPuts.length).toBeGreaterThan(1);
+  const bulk=draftPuts.at(-1).actions.at(-1);
+  expect(bulk.label_key).toBe("shell.flows.bulk.setLabel");
+  expect(bulk.params).toEqual({name:"比例",count:2});
+  // 渲染期翻译：切换语言后同一存储键渲染为英文（语言不写入草稿）
+  await switchToEnglish(page);
+  await openDraftPop(page);
+  await expect(page.getByText("Update Sheet Set · 1 command")).toBeVisible();
+  await expect(page.getByText("Batch update 比例 (2 sheets) · 2 commands")).toBeVisible();
+});
+
+test("英文界面：完整变更预览双语且字段名与路径原样",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:true,changes:[{type:"number_range_changed",affected_sheet_count:2}],diagnostics:[],affected_files:["C:\\project\\test.dst","C:\\project\\001-002.dwg"],semantic_diff:{sheet_set:[{field:"name",before:"旧名称",after:"新名称"}],structure:{before:[],after:[]},properties:[{action:"update",type:"sheetset",name:"项目号",before:"P-001",after:"P-002",affected_sheet_count:2}],dwgs:[]},execution_intent:{cad_validation_deferred:true,cardinality_frontier:{index:1,subset_id:"subset-2"},estimate:{core_console_count:1,concurrency:2,duration_ms:{lower:1000,upper:2000},sources:[{cad_operation:"rename_only",source:"history",sample_count:1}]},subset_operations:[{subset_id:"subset-1",cad_operation:"rename_only",target_file:"C:\\project\\001-002.dwg",in_cardinality_scope:false}],source_baselines:[{path:"C:\\project\\001-002.dwg",sha256:"source-sha-256",identity:["source-id"],source_types:["existing_snapshot"],requested_layouts:["001 第一册(一)"]},],groups:[{subset_id:"subset-1",cad_operation:"rename_only",subset_name:"第一册",target_file:"C:\\project\\001-002.dwg",layouts:[]}]}}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("checkbox",{name:"Select all results"}).check();
+  await page.getByRole("button",{name:"Batch Edit Properties"}).click();
+  await page.getByLabel("Existing sheet property").selectOption("比例");
+  await page.getByLabel("Batch value").fill("1:200");
+  await page.getByRole("button",{name:"Add Batch to Draft"}).click();
+  await page.getByRole("button",{name:"Preview Changes"}).click();
+  // 标题与分节双语；CAD 操作码 → 语义键
+  await expect(page.getByRole("heading",{name:"Full Change Preview"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Core Console Estimate"})).toBeVisible();
+  await expect(page.getByText(/Estimated 1 task · concurrency \d+/)).toBeVisible();
+  await expect(page.getByText("Batch rename layouts",{exact:true}).first()).toBeVisible();
+  await expect(page.getByText("Cardinality frontier: subset 2")).toBeVisible();
+  await expect(page.getByText("Source baselines")).toBeVisible();
+  await expect(page.getByText("Sheet set field differences")).toBeVisible();
+  await expect(page.getByText("Property differences")).toBeVisible();
+  await expect(page.getByText("Affected sheets: 2")).toBeVisible();
+  await expect(page.getByText("CAD layout validation will run after confirmation")).toBeVisible();
+  await expect(page.getByText("Compatibility change list")).toBeVisible();
+  await expect(page.getByText("CAD execution groups")).toBeVisible();
+  await expect(page.getByText("No blocking diagnostics")).toBeVisible();
+  // 用户数据与协议值原样：属性名、路径、哈希
+  await expect(page.getByText("项目号",{exact:true})).toBeVisible();
+  await expect(page.getByText("source-sha-256",{exact:true})).toBeVisible();
+});
+
+test("英文界面：任务状态双语、错误码原样且安全重试不变",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-en-failed",status:"FAILED",progress:40,attempt:1,error_code:"CAD_TIMEOUT",suggestion:"检查 CAD 日志",files:[{target_path:"A.dwg",status:"FAILED",progress:0,started_at:"2026-08-26T10:00:00Z",finished_at:"2026-08-26T10:00:05Z",duration_ms:5000,error_code:"CAD_TIMEOUT"}]}}));
+  await page.route("**/api/jobs/job-en-failed/retry",route=>route.fulfill({json:{id:"job-en-failed",status:"QUEUED",progress:0,attempt:2,files:[]}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("tab",{name:"Properties"}).click();
+  await page.getByRole("button",{name:"Update Sheet Set"}).click();
+  await page.getByRole("tab",{name:"Sheets"}).click();
+  await page.getByRole("button",{name:"Preview Changes"}).click();
+  await page.getByRole("button",{name:"Confirm Write"}).click();
+  await confirmModal(page,/Confirm Publish/);
+  const overlay=page.getByRole("complementary",{name:"Task overlay"});
+  await overlay.getByRole("tab",{name:"Implementation Progress"}).click();
+  // 状态码 → 语义键（英文渲染）；错误码、DWG 名与后端消息保持原样
+  await expect(page.getByText("Failed",{exact:true}).first()).toBeVisible();
+  await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();
+  await expect(page.getByText("A.dwg")).toBeVisible();
+  await expect(page.getByText("检查 CAD 日志")).toBeVisible();
+  // 日期本地化（en-US 日期时间格式）
+  const expectedStarted=new Intl.DateTimeFormat("en-US",{dateStyle:"medium",timeStyle:"medium"}).format(new Date("2026-08-26T10:00:00Z"));
+  await expect(page.getByText(expectedStarted,{exact:true})).toBeVisible();
+  // 重试请求不携带语言：状态码 QUEUED 以英文语义键渲染
+  await page.getByRole("button",{name:"Safe Retry"}).click();
+  await expect(page.getByText(/Queued · 0% · Attempt 2/)).toBeVisible();
+});
+
+test("英文界面：NEEDS_REVIEW 锁定写入且重试禁止提示双语",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-review",status:"NEEDS_REVIEW",progress:100,attempt:1,error_code:"PUBLISH_INCOMPLETE",files:[]}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("tab",{name:"Properties"}).click();
+  await page.getByRole("button",{name:"Update Sheet Set"}).click();
+  await page.getByRole("tab",{name:"Sheets"}).click();
+  await page.getByRole("button",{name:"Preview Changes"}).click();
+  await page.getByRole("button",{name:"Confirm Write"}).click();
+  await confirmModal(page,/Confirm Publish/);
+  // NEEDS_REVIEW 语义在英文下保持：写入锁定 + 状态渲染 + 重试禁止提示（英文）
+  await expect(page.getByText("Needs manual review; direct retry is disabled").first()).toBeVisible();
+  await page.getByRole("button",{name:"Safe Retry"}).click();
+  await expect(page.locator(".error.notice")).toHaveText("The publish state needs manual review; direct retry is disabled");
+});
+
+test("语言切换不变量：任务运行/失败/需人工检查状态与 SSE code 保持",async({page})=>{
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-switch-1",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await page.route("**/api/jobs/job-switch-1/retry",route=>route.fulfill({json:{id:"job-switch-1",status:"NEEDS_REVIEW",progress:100,attempt:2,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByRole("button",{name:"确认写入"}).click();
+  await confirmModal(page,/确认发布/);
+  // SSE payload 保持稳定 code：事件 URL 不携带语言参数；状态码渲染为当前语言
+  await expect.poll(()=>page.evaluate(()=>(window as any).__eventSources.map((s:any)=>s.url))).toContain("/api/jobs/job-switch-1/events");
+  await expect(page.getByText(/已排队 · 0% · 第 0 次/)).toBeVisible();
+  await page.evaluate(()=>{(window as any).__emitJob({id:"job-switch-1",status:"RUNNING",progress:60,attempt:1,files:[]})});
+  await expect(page.getByText(/执行中 · 60% · 第 1 次/)).toBeVisible();
+  // 断线（SSE onerror）：connectionMode 落到轮询 code，渲染为当前语言且任务状态不变
+  await page.evaluate(()=>(window as any).__eventSources.filter((s:any)=>!s.closed).forEach((s:any)=>s.onerror?.()));
+  await expect(page.getByText(/轮询/)).toBeVisible();
+  await expect(page.getByText(/执行中 · 60% · 第 1 次/)).toBeVisible();
+  // 语言切换：任务不重建，状态语义不变（同一 code 渲染为英文）
+  await switchToEnglish(page);
+  await expect(page.getByText(/Running · 60% · Attempt 1/)).toBeVisible();
+  await expect(page.getByText(/Polling/)).toBeVisible(); // 断线状态跨切换保持（渲染随语言）
+  // 终态 FAILED：断线后经轮询到达（GET /api/jobs/:id 不携带语言），code 原样、安全重试仍可用
+  await page.route("**/api/jobs/job-switch-1",route=>route.fulfill({json:{id:"job-switch-1",status:"FAILED",progress:60,attempt:1,error_code:"CAD_TIMEOUT",files:[]}}));
+  await expect(page.getByText(/Failed · 60% · Attempt 1/)).toBeVisible();
+  await expect(page.getByText("CAD_TIMEOUT").first()).toBeVisible();
+  await page.getByRole("button",{name:"Safe Retry"}).click();
+  await expect(page.getByText(/Needs review · 100% · Attempt 2/)).toBeVisible();
+});
+
+test("英文界面：修订历史双语且日期本地化，恢复预览冲突提示英文",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+  await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:true}]}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("tab",{name:"Revision History"}).click();
+  await expect(page.getByRole("heading",{name:"Permanent Revisions"})).toBeVisible();
+  // 日期本地化（en-US 格式）；修订 ID 与哈希前缀（用户数据）原样
+  const expected=new Intl.DateTimeFormat("en-US",{dateStyle:"medium",timeStyle:"medium"}).format(new Date("2026-08-12T00:00:00Z"));
+  await expect(page.getByText(expected,{exact:true})).toBeVisible();
+  await expect(page.getByText("aaaaaaaa → bbbbbbbb")).toBeVisible();
+  await page.getByRole("button",{name:"Restore Preview"}).first().click();
+  // 恢复确认块渲染在修订历史面板（主视图），浮层仅切到修改预览页签
+  await expect(page.getByRole("heading",{name:"Restore Confirmation"})).toBeVisible();
+  // 协议 action 与路径原样；冲突提示双语
+  await expect(page.getByText("replace test.dst")).toBeVisible();
+  await expect(page.getByText("(current file conflict)")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Restore as New Revision"})).toBeVisible();
+});
+
+test("英文界面：修订历史空状态双语",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[]}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("tab",{name:"Revision History"}).click();
+  await expect(page.getByRole("heading",{name:"No revision history yet"})).toBeVisible();
+  await expect(page.getByText("After you publish the first change, every recoverable revision is recorded here.")).toBeVisible();
+  await expect(page.getByText("Go to the Sheets tab to make the first change; it can be restored here after publishing.")).toBeVisible();
+});
+
+test("英文界面：修复状态、修复明细与确认发布双语",async({page})=>{
+  const repaired:any=workspaceVersion("workspace-1","测试图纸集","revision-1");
+  repaired.dst_validation={status:"REPAIRED",actions:[{code:"REPAIR_ATTR_MISSING",node_path:"/AcSmDatabase/AcSmSheetSet[@ID=\"x\"]/AcSmSheet",object_id:null,confidence:"deterministic",before:{clsid:null},after:{clsid:"g16A07941-BC15-4D48-A880-9D5A211D5065"},message:"补齐 AcSmSheet 的 clsid"}],blocking_issues:[]};
+  const valid:any=workspaceVersion("workspace-1","测试图纸集","revision-2");
+  valid.dst_validation={status:"VALID",actions:[],blocking_issues:[]};
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/workspaces/open",route=>route.fulfill({json:repaired}));
+  await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:valid}));
+  await page.route("**/api/workspaces/workspace-1/repairs/preview",route=>route.fulfill({json:{status:"REPAIRED",actions:repaired.dst_validation.actions,blocking_issues:[],preview_digest:"digest-1234567890abcdef",executable:true}}));
+  await page.route("**/api/workspaces/workspace-1/repairs/execute",route=>route.fulfill({json:{id:"repair-job-en",status:"SUCCEEDED",progress:100,files:[]}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  const overlay=page.getByRole("complementary",{name:"Task overlay"});
+  await overlay.getByRole("button",{name:"Expand task overlay"}).click();
+  await overlay.getByRole("tab",{name:"Diagnostics"}).click();
+  await expect(page.getByText("DST repair status: Repaired (awaiting confirmation)")).toBeVisible();
+  await page.getByText("Repair details (1)").click();
+  // 修复码、节点路径与后端消息保持原样
+  await expect(page.getByText("REPAIR_ATTR_MISSING")).toBeVisible();
+  await expect(page.getByText("/AcSmDatabase/AcSmSheetSet[@ID=\"x\"]/AcSmSheet")).toBeVisible();
+  await expect(page.getByText("补齐 AcSmSheet 的 clsid")).toBeVisible();
+  await page.getByRole("button",{name:"Preview and Confirm Repair"}).click();
+  await expect(page.getByText(/1 repair item · summary digest-12345678/)).toBeVisible();
+  await expect(page.getByRole("button",{name:"Cancel Confirmation"})).toBeVisible();
+  await page.getByRole("button",{name:"Confirm Repair Revision Publication"}).click();
+  await confirmModal(page,/Confirm publishing the in-memory repair/);
+  await overlay.getByRole("button",{name:"Expand task overlay"}).click();
+  await overlay.getByRole("tab",{name:"Implementation Progress"}).click();
+  await expect(page.getByText("Job repair-job-en")).toBeVisible();
+  // 修复成功后刷新为 VALID：修复面板消失
+  await expect(page.getByText("DST repair status")).toHaveCount(0);
 });

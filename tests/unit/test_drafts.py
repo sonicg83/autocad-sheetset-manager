@@ -281,3 +281,51 @@ def test_draft_template_layout_source_rejects_empty_file(tmp_path):
     result = _write_and_load(tmp_path, draft)
 
     assert result == {"draft": None, "corrupted": True}
+
+
+def _label_key_draft(draft: dict) -> dict:
+    """PLAN-DM-021 Task 8（I18N-12）：草稿动作持久化稳定 label_key + 命名 params，不写语言文本。"""
+    action = draft["actions"][0]
+    action.pop("label", None)
+    action["label_key"] = "shell.flows.bulk.setLabel"
+    action["params"] = {"name": "比例", "count": 2}
+    return draft
+
+
+def test_draft_label_key_with_params_loads_clean(tmp_path):
+    """label_key + params（属性名/数量为用户数据参数）为合法草稿动作形状。"""
+    draft = _label_key_draft(_draft(version=1))
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": draft, "corrupted": False}
+
+
+def test_draft_legacy_label_still_loads_clean(tmp_path):
+    """迁移窗口兼容：旧版本草稿的本地化 label 仍可加载（不隔离），由前端按旧文本回退渲染。"""
+    result = _write_and_load(tmp_path, _draft(version=1))
+
+    assert result["corrupted"] is False
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda draft: draft["actions"][0].pop("label_key"),  # 缺少 label_key
+        lambda draft: draft["actions"][0].update(label_key=""),  # 空 label_key
+        lambda draft: draft["actions"][0].update(label="残留文本"),  # label 与 label_key 并存
+        lambda draft: draft["actions"][0].update(params="not-a-map"),  # params 非对象
+        lambda draft: draft["actions"][0].update(params={"count": [2]}),  # params 值非标量
+    ],
+)
+def test_draft_label_key_shape_violation_is_quarantined(tmp_path, mutation):
+    draft_dir = tmp_path / "drafts"
+    draft_dir.mkdir()
+    source = draft_dir / "workspace-1.json"
+    draft = mutation(_label_key_draft(_draft(version=1)))
+    source.write_text(__import__("json").dumps(draft), encoding="utf-8")
+
+    result = DraftStore(draft_dir).load("workspace-1")
+
+    assert result == {"draft": None, "corrupted": True}
+    assert not source.exists()

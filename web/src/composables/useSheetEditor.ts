@@ -225,7 +225,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   }
   async function submitSheet(ctx: PropertyEditContext): Promise<SubmitResult> {
     const command = createCommand.updateSheetProperties(ctx.objectId, {...ctx.values});
-    const result = await deps.submitCommands([command], t("shell.commands.updateSheetProperties"), "metadata");
+    const result = await deps.submitCommands([command], {key: "shell.commands.updateSheetProperties"}, "metadata");
     if (result.ok) {
       discard();
     } else {
@@ -239,7 +239,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
     if (!ctx.objectId) { ctx.summaryError = t("sheets.errors.pickRenameSubset"); return {ok: false, message: t("sheets.errors.pickRenameSubset")}; }
     const title = ctx.values.title.trim();
     if (!title) { ctx.summaryError = t("sheets.errors.subsetTitleEmpty"); return {ok: false, message: t("sheets.errors.subsetTitleEmpty")}; }
-    const result = await deps.submitCommands([createCommand.updateSubsetTitle(ctx.objectId, title)], t("shell.commands.updateSubsetTitle"), "structural");
+    const result = await deps.submitCommands([createCommand.updateSubsetTitle(ctx.objectId, title)], {key: "shell.commands.updateSubsetTitle"}, "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     await nextTick(); // 等权威投影 watch 应用到显示 workspace 后再定位
     deps.selectSubset?.(ctx.objectId);
@@ -285,7 +285,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       count,
       source,
     });
-    const result = await deps.submitCommands([command], t("shell.commands.insertSheet"), "structural");
+    const result = await deps.submitCommands([command], {key: "shell.commands.insertSheet"}, "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     // 成功：从权威派生结果取得新增 ID 并定位（不从计数拼造）；原筛选保留，隐藏目标由 locateSheet 提示
     await nextTick();
@@ -330,7 +330,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
       base_template_file: ctx.baseTemplateFile.trim(),
       source: {type: "template_layout", file: ctx.templateFile.trim(), layout: ctx.templateLayout.trim()},
     });
-    const result = await deps.submitCommands([command], t("shell.commands.insertSubset"), "structural");
+    const result = await deps.submitCommands([command], {key: "shell.commands.insertSubset"}, "structural");
     if (!result.ok) { ctx.summaryError = result.message; return result; }
     await nextTick();
     const after = deps.workspace.value;

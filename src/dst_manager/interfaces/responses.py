@@ -478,9 +478,14 @@ class CadCapabilitiesResponse(RootModel[dict[str, CadCapabilityResponse]]):
 
 
 class DraftActionResponse(ResponseModel):
+    """与 DraftAction 同构：``label_key``/``params`` 为多语言稳定键（PLAN-DM-021），
+    ``label`` 仅迁移窗口内旧草稿携带；``exclude_unset`` 序列化只回传存在的字段。"""
+
     id: str
     kind: Literal["command_batch"]
-    label: str
+    label: str | None = None
+    label_key: str | None = None
+    params: dict[str, str | int] | None = None
     commands: list[ChangeCommand]
 
 

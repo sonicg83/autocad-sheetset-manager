@@ -16,8 +16,11 @@ export type SheetRef = {subsetId:string;sheetId:string;placement:Placement};
 export type SubmitResult =
   | {ok:true}
   | {ok:false;message:string;fields?:Record<string,string>};
+// PLAN-DM-021 Task 8（I18N-12）：草稿动作标签持久化稳定 label_key + 命名 params，
+// 不写创建时语言文本；params 值只允许用户数据（字符串/数量）
+export type DraftActionLabel = {key:string;params?:Record<string,string|number>};
 export type SubmitCommands = (
-  commands:ChangeCommand[], label:string,
+  commands:ChangeCommand[], label:DraftActionLabel,
   category:'metadata'|'structural'
 ) => Promise<SubmitResult>;
 

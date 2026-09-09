@@ -6,7 +6,7 @@ import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as b
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
-import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult} from "./features/sheets/types";
+import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult, DraftActionLabel} from "./features/sheets/types";
 import type {GuardChoice} from "./features/sheets/types";
 import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/properties/types";
 import type {DefinitionScopeFilter} from "./features/properties/model";
@@ -162,7 +162,8 @@ const sheetPropertyNames=computed(()=>workspace.value?.sheet_set.property_defini
 const executionEstimate=computed(()=>preview.value?.execution_intent?.estimate??null);
 const saveStatusText=computed(()=>draftSaveFailed.value?t("shell.dock.saveStatusFailed"):draftSaving.value?t("shell.dock.saveStatusSaving"):draftStale.value?t("shell.dock.saveStatusStale"):t("shell.dock.saveStatusSaved"));
 // —— 提交命令（SubmitCommands）：加入草稿动作并等待持久化与投影成功，不以入队即宣称保存 ——
-async function submitCommands(commands:ChangeCommand[],label:string,category:"metadata"|"structural"|"property"):Promise<SubmitResult>{
+// label 为 DraftActionLabel（稳定 label_key + 命名 params，PLAN-DM-021 Task 8/I18N-12）：语言不写入草稿
+async function submitCommands(commands:ChangeCommand[],label:DraftActionLabel,category:"metadata"|"structural"|"property"):Promise<SubmitResult>{
   if(draftStale.value)return{ok:false,message:t("shell.errors.draftStaleAction")};
   // 结构变更与属性定义变更必须分批；属性值编辑（metadata）可与结构并存（混合批次显示由命令簿叠加合成）
   if(category==="structural"&&hasPropertyDefinitionCommands.value)return{ok:false,message:t("shell.errors.mixedBatches")};
@@ -416,11 +417,9 @@ async function loadDraft(loaded:Workspace){
   if(result.corrupted)error.value=t("shell.errors.draftCorrupted");
   else if(result.stale)error.value=t("shell.errors.draftStale");
 }
-// 命令类型 → 语义键（I18N-07）：稳定命令类型不进用户文案，显示文本经语言包渲染
+// 命令类型 → 语义键（I18N-07/I18N-12）：稳定命令类型不进用户文案；草稿动作只持久化
+// label_key，显示文本由 DraftActionsPanel 在渲染期经语言包翻译（语言不写入草稿）
 const COMMAND_LABEL_KEYS:Record<ChangeCommand["type"],string>={update_sheet_set:"shell.commands.updateSheetSet",update_subset_title:"shell.commands.updateSubsetTitle",update_sheet_properties:"shell.commands.updateSheetProperties",delete_sheet:"shell.commands.deleteSheet",insert_sheet:"shell.commands.insertSheet",insert_subset:"shell.commands.insertSubset",add_custom_property:"shell.commands.addCustomProperty",delete_custom_property:"shell.commands.deleteCustomProperty",delete_subset:"shell.commands.deleteSubset"};
-function commandLabel(command:ChangeCommand){
-  return t(COMMAND_LABEL_KEYS[command.type]);
-}
 function rebuildDraftProjection(){
   commands.value=draftStale.value?[]:projectCommands(draftActions.value,draftCursor.value);
   if(baseWorkspace.value){
@@ -470,16 +469,16 @@ function addCommand(command:ChangeCommand,category:"property"|"structural"|"meta
   if(category==="property"&&hasStructuralCommands.value){error.value=t("shell.errors.mixedBatches");return false}
   if(category==="structural"&&hasPropertyDefinitionCommands.value){error.value=t("shell.errors.mixedBatches");return false}
   draftActions.value=draftActions.value.slice(0,draftCursor.value);
-  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label:commandLabel(command),commands:[command]});
+  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label_key:COMMAND_LABEL_KEYS[command.type],commands:[command]});
   draftCursor.value=draftActions.value.length;rebuildDraftProjection();scheduleDraftSave();error.value="";return true;
 }
-function addCommandBatch(batch:ChangeCommand[],label:string,category:"property"|"structural"|"metadata"){
+function addCommandBatch(batch:ChangeCommand[],label:DraftActionLabel,category:"property"|"structural"|"metadata"){
   if(!batch.length)return false;
   if(draftStale.value){error.value=t("shell.errors.draftStaleAction");return false}
   if(category==="property"&&hasStructuralCommands.value){error.value=t("shell.errors.mixedBatches");return false}
   if(category==="structural"&&hasPropertyDefinitionCommands.value){error.value=t("shell.errors.mixedBatches");return false}
   draftActions.value=draftActions.value.slice(0,draftCursor.value);
-  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label,commands:batch});
+  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label_key:label.key,...(label.params?{params:label.params}:{}),commands:batch});
   draftCursor.value=draftActions.value.length;rebuildDraftProjection();scheduleDraftSave();error.value="";return true;
 }
 // 属性页名称/值的提交改走 usePropertiesWorkspace.submitValues()（一个完整 update_sheet_set 命令），
@@ -561,9 +560,8 @@ function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:
   const subsetCount=new Set(targets.map(({subset})=>subset.id)).size;
   const labelKey=mode==="set"?"shell.flows.bulk.setLabel":"shell.flows.bulk.clearLabel";
   const toastKey=mode==="set"?"shell.flows.bulk.setToast":"shell.flows.bulk.clearToast";
-  const label=t(labelKey,{name,count:batch.length});
-  // 提交摘要含完整数量与跨子集范围（toast 反馈；草稿动作标签保持既有「N 张」格式）
-  if(addCommandBatch(batch,label,"metadata")){
+  // 草稿动作持久化 label_key + 命名参数（属性名与数量是用户数据，I18N-12）；显示文本由动作栈渲染期翻译
+  if(addCommandBatch(batch,{key:labelKey,params:{name,count:batch.length}},"metadata")){
     // 连续批量编辑保留勾选集合与展开状态，只初始化本次属性输入。
     bulkMode.value="set";bulkPropertyName.value="";bulkPropertyValue.value="";
     pushToast({type:"ok",title:t("shell.flows.bulk.toastTitle"),body:t(toastKey,{name,count:batch.length,subsets:subsetCount})});

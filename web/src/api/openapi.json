@@ -938,6 +938,7 @@
       },
       "DraftAction": {
         "additionalProperties": false,
+        "description": "草稿动作。PLAN-DM-021（I18N-12）：语言不得写入草稿——新建动作持久化稳定\n``label_key`` 与命名 ``params``（值仅限用户数据字符串/数量）；``label`` 仅作\n迁移窗口内旧版本草稿的只读兼容，二者必须二选一。",
         "properties": {
           "commands": {
             "items": {
@@ -1000,21 +1001,61 @@
             "type": "string"
           },
           "label": {
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "label_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Key"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
           }
         },
         "required": [
           "id",
           "kind",
-          "label",
           "commands"
         ],
         "title": "DraftAction",
         "type": "object"
       },
       "DraftActionResponse": {
+        "description": "与 DraftAction 同构：``label_key``/``params`` 为多语言稳定键（PLAN-DM-021），\n``label`` 仅迁移窗口内旧草稿携带；``exclude_unset`` 序列化只回传存在的字段。",
         "properties": {
           "commands": {
             "items": {
@@ -1075,14 +1116,52 @@
             "type": "string"
           },
           "label": {
-            "title": "Label",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "label_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Key"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
           }
         },
         "required": [
           "id",
           "kind",
-          "label",
           "commands"
         ],
         "title": "DraftActionResponse",

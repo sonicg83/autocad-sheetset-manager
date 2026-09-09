@@ -7,20 +7,24 @@ import {fetchSettings, type SettingsSnapshot} from "../api/settings";
 import App from "../App.vue";
 import {resolveLocale, type EffectiveLocale, type UiLocaleSetting} from "./locale";
 import zhCNCommon from "./locales/zh-CN/common";
+import zhCNJobs from "./locales/zh-CN/jobs";
 import zhCNProperties from "./locales/zh-CN/properties";
+import zhCNRevisions from "./locales/zh-CN/revisions";
 import zhCNSettings from "./locales/zh-CN/settings";
 import zhCNShell from "./locales/zh-CN/shell";
 import zhCNSheets from "./locales/zh-CN/sheets";
 import enUSCommon from "./locales/en-US/common";
+import enUSJobs from "./locales/en-US/jobs";
 import enUSProperties from "./locales/en-US/properties";
+import enUSRevisions from "./locales/en-US/revisions";
 import enUSSettings from "./locales/en-US/settings";
 import enUSShell from "./locales/en-US/shell";
 import enUSSheets from "./locales/en-US/sheets";
 
 // 语言资源按功能域装两套同构文件，构建期合并（ARCH-DM-005 §5.1）
 const messages = {
-  "zh-CN": {common: zhCNCommon, properties: zhCNProperties, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets},
-  "en-US": {common: enUSCommon, properties: enUSProperties, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets},
+  "zh-CN": {common: zhCNCommon, jobs: zhCNJobs, properties: zhCNProperties, revisions: zhCNRevisions, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets},
+  "en-US": {common: enUSCommon, jobs: enUSJobs, properties: enUSProperties, revisions: enUSRevisions, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets},
 };
 
 // 唯一实例：语言状态全部经此实例流转；缺键运行时回退 zh-CN（键对称由 check:i18n 保证）

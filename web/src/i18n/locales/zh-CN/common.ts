@@ -17,4 +17,14 @@ export default {
       dll: "NET 程序集",
     },
   },
+  // 列表连接分隔符（PLAN-DM-021 Task 8）：分隔符属于可翻译内容，调用点不写死全角标点
+  listSeparator: "、",
+  // CAD 操作码 → 语义键（PLAN-DM-021 Task 8）：预览与任务面板共用；未知码回退原码
+  cadOperation: {
+    renameOnly: "批量改名布局",
+    rebuild: "清除并重建布局",
+    none: "无需 CAD 操作",
+    missing: "未提供 CAD 操作",
+    unknown: "未知 CAD 操作：{operation}",
+  },
 } as const;

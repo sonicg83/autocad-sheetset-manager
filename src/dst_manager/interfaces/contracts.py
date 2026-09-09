@@ -223,10 +223,22 @@ RepairStatus = Literal[
 
 
 class DraftAction(ContractModel):
+    """草稿动作。PLAN-DM-021（I18N-12）：语言不得写入草稿——新建动作持久化稳定
+    ``label_key`` 与命名 ``params``（值仅限用户数据字符串/数量）；``label`` 仅作
+    迁移窗口内旧版本草稿的只读兼容，二者必须二选一。"""
+
     id: str = Field(min_length=1)
     kind: Literal["command_batch"]
-    label: str = Field(min_length=1)
+    label: str | None = Field(default=None, min_length=1)
+    label_key: str | None = Field(default=None, min_length=1)
+    params: dict[str, str | int] | None = None
     commands: list[ChangeCommand] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _require_label_shape(self) -> "DraftAction":
+        if (self.label is None) == (self.label_key is None):
+            raise ValueError("label 与 label_key 必须二选一")
+        return self
 
 
 class DraftPutRequest(ContractModel):

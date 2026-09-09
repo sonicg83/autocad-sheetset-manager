@@ -17,4 +17,14 @@ export default {
       dll: "NET assembly",
     },
   },
+  // List join separator (PLAN-DM-021 Task 8): separators are translatable content; call sites never hardcode full-width punctuation
+  listSeparator: ", ",
+  // CAD operation code → semantic key (PLAN-DM-021 Task 8); shared by preview and job panels; unknown codes fall back to the raw code
+  cadOperation: {
+    renameOnly: "Batch rename layouts",
+    rebuild: "Clear and rebuild layouts",
+    none: "No CAD operation",
+    missing: "No CAD operation provided",
+    unknown: "Unknown CAD operation: {operation}",
+  },
 } as const;

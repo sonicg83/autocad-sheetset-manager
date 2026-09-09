@@ -658,7 +658,12 @@ export interface components {
             /** Severity */
             severity: string;
         };
-        /** DraftAction */
+        /**
+         * DraftAction
+         * @description 草稿动作。PLAN-DM-021（I18N-12）：语言不得写入草稿——新建动作持久化稳定
+         *     ``label_key`` 与命名 ``params``（值仅限用户数据字符串/数量）；``label`` 仅作
+         *     迁移窗口内旧版本草稿的只读兼容，二者必须二选一。
+         */
         DraftAction: {
             /** Commands */
             commands: (components["schemas"]["UpdateSheetSetCommand"] | components["schemas"]["UpdateSubsetTitleCommand"] | components["schemas"]["UpdateSheetPropertiesCommand"] | components["schemas"]["DeleteSheetCommand"] | components["schemas"]["InsertSheetCommand"] | components["schemas"]["InsertSubsetCommand"] | components["schemas"]["AddCustomPropertyCommand"] | components["schemas"]["DeleteCustomPropertyCommand"] | components["schemas"]["DeleteSubsetCommand"])[];
@@ -670,9 +675,19 @@ export interface components {
              */
             kind: "command_batch";
             /** Label */
-            label: string;
+            label?: string | null;
+            /** Label Key */
+            label_key?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: string | number;
+            } | null;
         };
-        /** DraftActionResponse */
+        /**
+         * DraftActionResponse
+         * @description 与 DraftAction 同构：``label_key``/``params`` 为多语言稳定键（PLAN-DM-021），
+         *     ``label`` 仅迁移窗口内旧草稿携带；``exclude_unset`` 序列化只回传存在的字段。
+         */
         DraftActionResponse: {
             /** Commands */
             commands: (components["schemas"]["UpdateSheetSetCommand"] | components["schemas"]["UpdateSubsetTitleCommand"] | components["schemas"]["UpdateSheetPropertiesCommand"] | components["schemas"]["DeleteSheetCommand"] | components["schemas"]["InsertSheetCommand"] | components["schemas"]["InsertSubsetCommand"] | components["schemas"]["AddCustomPropertyCommand"] | components["schemas"]["DeleteCustomPropertyCommand"] | components["schemas"]["DeleteSubsetCommand"])[];
@@ -684,7 +699,13 @@ export interface components {
              */
             kind: "command_batch";
             /** Label */
-            label: string;
+            label?: string | null;
+            /** Label Key */
+            label_key?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: string | number;
+            } | null;
         };
         /** DraftDeleteRequest */
         DraftDeleteRequest: {
