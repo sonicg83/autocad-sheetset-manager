@@ -4,8 +4,9 @@
 
 - `config.py` 新增 `ui_locale`（`Literal["system", "zh-CN", "en-US"]`，默认 `system`）：只保存显式覆盖值，支持 `DST_MANAGER_UI_LOCALE` 环境变量通道，沿用 默认 < env < settings.json 文件覆盖 优先级；不进工作区、草稿或数据库。
 - `settings/registry.py` 元数据 key 化（ARCH-DM-005 §6.1）：`SettingsItemMeta` 增加 `label_key`/`category_key`/`file_filter_key` 与稳定 `file_kind`（exe/dll），`ui_locale`（界面/语言）居首；枚举选项改为稳定 `text_key` + 兼容中文 `text`，取值扩展为 `int | str`；兼容中文 `label`/`category`/`file_filter` 迁移期保留。
+- `settings/errors.py`（评审裁决下沉）：权威定义 `ParamValue`/`FieldErrorModel`，使 `settings/runtime.py` 不再依赖 interfaces 层、`application` 不传递性依赖 interfaces；`interfaces/settings_contracts.py` 原样重导出，外部导入面不变。
 - `settings/runtime.py`：`SettingsValidationError.errors` 由 `key → 中文字符串` 改为 `key → FieldErrorModel`（`code`/`message_key`/`params`/兼容 `message`）；`params` 白名单为 `str | int | bool | list[str]`，只携带 `min`/`max`/`allowed_values` 等结构化参数，不含本地化 label 或完整句子。
-- `interfaces/settings_contracts.py` 增加 `ParamValue`/`FieldErrorModel`，`EnumOptionModel` 增加 `text_key` 且 `value` 支持 `int | str`，`SettingsItemModel` 并行返回新旧元数据字段；`interfaces/api.py` 仅调整 `_settings_items` 装配并把 422 响应改为 `{"code": "SETTINGS_VALIDATION_FAILED", "errors": {设置 key: 结构化错误}}`（`api.py` 其余部分未动）。
+- `interfaces/settings_contracts.py` 重导出 `ParamValue`/`FieldErrorModel`，`EnumOptionModel` 增加 `text_key` 且 `value` 支持 `int | str`，`SettingsItemModel` 并行返回新旧元数据字段；`interfaces/api.py` 仅调整 `_settings_items` 装配并把 422 响应改为 `{"code": "SETTINGS_VALIDATION_FAILED", "errors": {设置 key: 结构化错误}}`（`api.py` 其余部分未动）。
 - 测试：按 TDD 新增/修订 `tests/unit/test_config.py`、`tests/unit/test_settings_registry.py`、`tests/unit/test_settings_resolver.py`、`tests/unit/test_settings_runtime.py` 与 `tests/integration/test_api_settings.py` 共 26 个用例（三值白名单、env/file 优先级、注册表 key 覆盖、422 结构与参数白名单）；注册表完整性断言改为由 `Settings` 字段派生，不再使用固定数量/索引。验证：`uv run pytest`（focused 77 passed，全量 730 passed、72 skipped）、`uv run ruff check` 通过。
 
 ## 2026-09-09（冻结多语言设计并完成 G5～G6）

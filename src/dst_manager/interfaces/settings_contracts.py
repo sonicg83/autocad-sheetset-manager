@@ -76,21 +76,21 @@ class SettingsItemModel(ContractModel):
     max: int | None = None
 
 
-ParamValue = str | int | bool | list[str]
+# FieldErrorModel/ParamValue 权威定义在 settings 层（评审裁决：settings 层不得
+# 依赖 interfaces，application 不得传递性依赖 interfaces）；此处原样重导出，
+# 外部导入面保持 ``from dst_manager.interfaces.settings_contracts import ...``
+from dst_manager.settings.errors import FieldErrorModel, ParamValue
 
-
-class FieldErrorModel(ContractModel):
-    """设置逐字段校验错误对象（ARCH-DM-005 §6.2）。
-
-    ``code`` 为稳定错误码，``message_key`` 为前端文案键，``params`` 只携带
-    结构化插值参数（str/int/bool/list[str] 白名单，禁止本地化 label 或完整
-    句子）；``message`` 是迁移期兼容中文文本，仅服务旧调用方。
-    """
-
-    code: str
-    message_key: str
-    params: dict[str, ParamValue] = Field(default_factory=dict)
-    message: str
+__all__ = [
+    "AboutResponse",
+    "EnumOptionModel",
+    "FieldErrorModel",
+    "LicenseInfo",
+    "ParamValue",
+    "SettingsItemModel",
+    "SettingsPutRequest",
+    "SettingsResponse",
+]
 
 
 class SettingsResponse(ContractModel):

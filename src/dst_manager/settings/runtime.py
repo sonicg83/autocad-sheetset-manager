@@ -31,8 +31,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from dst_manager.config import Settings
-from dst_manager.interfaces.settings_contracts import FieldErrorModel
 
+from .errors import FieldErrorModel
 from .registry import REGISTRY, SettingsItemMeta, enum_options, min_max
 from .resolver import SettingsResolver, SettingsSnapshot
 from .store import UserSettingsStore
