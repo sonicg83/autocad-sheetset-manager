@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 5：共享外壳、通用组件与格式化能力）
+
+- 新增外壳域语言资源 `web/src/i18n/locales/{zh-CN,en-US}/shell.ts`（约 150 键对称）并注册进唯一 i18n 实例（237 键 / 3 域，`check:i18n` 通过）：覆盖顶栏（副标题、状态胶囊、文件夹/关闭/主题/设置入口及 ARIA、tooltip）、标签栏（分区/页签/预留位）、操作栏（草稿芯片计数插值、撤销/重做/预览/写入、草稿动作栈 ARIA）、任务浮层（页签/入口 ARIA、阻断诊断 aria-description、诊断计数、复制按钮、空状态）、欢迎区、通用模态与 Toast。
+- 共享外壳迁移（I18N-07）：`TopBar.vue`/`TabBar.vue`/`ActionDock.vue`/`TaskOverlay.vue`/`WelcomeView.vue` 模板全部改用 `$t`（页签 label 改为语义键 `labelKey`，稳定 id/枚举不进文案）；`UnsavedInputDialog.vue`/`ToastHost.vue`（新增关闭按钮 aria-label）双语化。
+- 通用组件与调用点迁移：`ConfirmModal.vue` 的 `reversibility` 由中文字面量类型 `"可撤销"|"不可逆"` 改为稳定语义值 `"reversible"|"irreversible"`，显示文本与危险勾选说明（命名参数）经语言包渲染，取消/确认缺省文案也走语言包；`useConfirm.ts` 状态层不再持有默认文案。`App.vue`（仅调用点）迁移恢复横幅（复数/计数插值）、加载/恢复状态、全部 `error` 提示、`saveStatusText`、操作栏禁用原因矩阵、命令标签映射（稳定命令类型→语义键）、8 处确认框与 5 处 Toast（删除图纸/删除子集/清空属性值/删除属性定义/关闭 CSV/发布/关闭工作区/放弃冲突，含批量标签与摘要），动态句子全部用命名参数，无调用点拼接。
+- 语言切换不变量（I18N-06）：切换前后 active tab、工作区身份与未提交输入保持不变（响应式重绘，不重建业务状态）；用户数据（图纸编号、图纸集名称、路径、错误码、原始消息）保持原样。
+- 测试（TDD）：`main.spec.ts` 新增 5 例红灯先行（英文外壳/欢迎区/标签栏/操作栏渲染、草稿恢复横幅计数+快捷键提示+任务浮层空状态、删除确认框与 Toast 双语且图纸编号不翻译、发布确认模态不可逆标记与危险勾选、保存成功切换前后 active tab/工作区/输入值不变）；英文用例以 page 级 `/api/settings` 路由提供语言来源（不写共享 settings.json，避免并行 worker 串扰；真实设置事务仍由 settings-dialog.spec 真实后端承担），切换不变量用例仅拦截 PUT 驱动前端 applyLocale；既有中文用例同步更新两处（`selectDst` 按钮名参数化、Toast 关闭按钮 aria-label）。验证：`npm run test:e2e -- tests/e2e/main.spec.ts --workers=1` 64 passed，`properties-buffer`/`sheets-drafts`/`sheets-editing` 抽样 38 passed，`npm run test:unit` 28 passed，`npm run build`（check:api + check:i18n + vue-tsc + vite）通过。
+- Files 清单外必要增量（已披露）：`web/src/i18n/index.ts` 注册 shell 域；`useCsvImport.ts`/`useRepair.ts`/`useRestore.ts` 各 1 处 `reversibility:"不可逆"` 字面量随类型契约改为 `"irreversible"`（显示文本不变）。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 4：ShellBridge 固定文件种类与本地化描述）
 
 - `src/dst_manager/interfaces/shell.py` 原生文件选择契约收紧（安全红线）：`select_file` 签名由 `file_types: list[str]`（前端任意过滤器字符串）改为 `select_file(file_kind: FileKind, localized_description: str)`，`FileKind = Literal["dst", "template", "exe", "dll"]`；扩展名白名单只由壳侧 `_FILE_KIND_PATTERNS` 按 kind 固定拼接（dst→`*.dst`、template→`*.dwg;*.dwt`、exe→`*.exe`、dll→`*.dll`），未知 kind 抛 `ValueError` 且不弹对话框；本地化描述经 `_sanitize_description` 净化为 pywebview `parse_file_type` 允许的 `[\w ]+` 文本——伪造 `危险 (*.bat)` 退化为纯文本、不能扩大白名单，也不会在对话框弹出前抛 `ValueError`；取消返回 None、无窗口报明确错误不变。文件夹选择不经 `file_kind`，维持独立 `select_folder`（FOLDER_DIALOG 无过滤器概念）。

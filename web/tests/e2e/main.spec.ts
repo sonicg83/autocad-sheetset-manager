@@ -1,6 +1,7 @@
 import {expect,test,type Page} from "@playwright/test";
 import {writeFileSync} from "node:fs";
 import {buildPreviewFromBase} from "./fixtures/sheets";
+import {openSettingsDialog} from "./fixtures/settings";
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(() => {
@@ -72,7 +73,8 @@ function workspaceWith300Sheets(){
 
 async function installMockEventSource(page:any){await page.addInitScript(()=>{class FakeEventSource{url:string;onmessage:((event:{data:string})=>void)|null=null;onerror:(()=>void)|null=null;closed=false;constructor(url:string){this.url=url;(window as any).__eventSources.push(this)}close(){this.closed=true}};(window as any).__eventSources=[];(window as any).__emitJob=(payload:any)=>{for(const source of (window as any).__eventSources)if(!source.closed)source.onmessage?.({data:JSON.stringify(payload)})};(window as any).__closedEventSources=()=>((window as any).__eventSources as FakeEventSource[]).filter(source=>source.closed).length;(window as any).EventSource=FakeEventSource})}
 
-function selectDst(page:Page,dst:string){return page.evaluate(p=>{(window as any).__fakeSelectResult=p},dst).then(()=>page.getByRole("button",{name:"选择 DST 文件"}).click())}
+// Task 5 起外壳双语：按钮可访问名随生效语言变化，name 参数允许英文用例传入英文名
+function selectDst(page:Page,dst:string,name="选择 DST 文件"){return page.evaluate(p=>{(window as any).__fakeSelectResult=p},dst).then(()=>page.getByRole("button",{name}).click())}
 
 async function openWorkspace(page:Page,dst="C:\\project\\test.dst"){
   await page.goto("/");
@@ -952,7 +954,8 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   await expect(toast).toBeVisible(); // 失败常驻
   await toast.getByRole("button",{name:"查看"}).click();
   await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
-  await toast.getByRole("button",{name:"✕"}).click();
+  // Task 5 起关闭按钮带 aria-label（忽略通知），可访问名不再依赖 ✕ 字形
+  await toast.getByRole("button",{name:"忽略通知"}).click();
   await expect(toast).toHaveCount(0);
 });
 
@@ -991,4 +994,152 @@ test("恢复预览在任务浮层修改预览页签呈现",async({page})=>{
   await page.getByRole("tab",{name:/修订历史/}).click();
   await page.getByRole("button",{name:"恢复预览"}).first().click();
   await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"修改预览"})).toHaveAttribute("aria-selected","true");
+});
+
+// —— PLAN-DM-021 Task 5：共享外壳、通用组件与格式化双语（SPEC-DM-013 I18N-06/07/08）——
+// 本节用 page 级路由提供语言来源（响应快照 ui_locale=en-US），不写全局 settings.json：
+// 壳层用例只消费语言来源，并行 worker 下写共享配置文件会与既有中文基线用例串扰；
+// 真实设置读写与保存切换事务已由 settings-dialog.spec 以真实后端承担。
+// 切换不变量用例只拦截 PUT（GET 仍走真实后端 zh-CN 基线）：保存成功响应驱动前端
+// applyLocale 事务，语言切换本身是前端行为，无需真实落盘。
+const enSettingsSnapshot={
+  schema_version:1,config_revision:1,diagnostics:[],schema_blocked:false,
+  items:[{key:"ui_locale",control:"enum",value:"en-US",default:"system",source:"file",has_file_override:true,
+    label_key:"settings.items.uiLocale",category_key:"settings.categories.interface",
+    options:[{value:"system",text_key:"settings.locale.system"},{value:"zh-CN",text_key:"settings.locale.zhCN"},{value:"en-US",text_key:"settings.locale.enUS"}]}],
+};
+
+test("英文界面：欢迎区、顶栏、标签栏与操作栏双语渲染",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("lang","en-US");
+  // 欢迎区（空状态）：标题、描述、主按钮与拖拽提示
+  await expect(page.getByRole("region",{name:"Open Sheet Set"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Open Sheet Set"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Select DST File"})).toBeVisible();
+  await expect(page.getByText("Or drag a .dst file into the window · drag and drop supported")).toBeVisible();
+await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  // 顶栏：副标题、文件夹入口、CAD 版本、关闭与主题/设置入口
+  await expect(page.getByText("v0.3 · Controlled daily editing with recoverable publishing")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Open the folder containing the sheet set"})).toBeVisible();
+  await expect(page.getByText("AutoCAD version")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Close"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Toggle theme"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Settings"})).toBeVisible();
+  // 用户数据不翻译：图纸集名称原样显示（顶栏工作区名）
+  await expect(page.locator(".workspace-name")).toHaveText("测试图纸集");
+  // 标签栏：role=tablist 名称与三个页签（激活态保留在图纸页）
+  await expect(page.getByRole("tablist",{name:"Sections"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Sheets"})).toHaveAttribute("aria-selected","true");
+  await expect(page.getByRole("tab",{name:"Properties"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Revision History"})).toBeVisible();
+  await expect(page.getByTitle("Reserved for future features: settings / plotting / sheet catalog generation")).toBeVisible();
+  // 操作栏：草稿芯片（数字插值）、撤销/重做/预览/写入与禁用原因
+  await expect(page.getByText("Draft 0/0")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Undo"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Redo"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Preview Changes"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Confirm Write"})).toBeVisible();
+  await expect(page.getByText("No changes to publish")).toBeVisible();
+});
+
+test("英文界面：草稿恢复横幅计数、快捷键提示与任务浮层空状态",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  // 载入即恢复 1 条草稿动作：恢复横幅计数插值
+  await page.route("**/api/workspaces/workspace-1/draft",async route=>{
+    if(route.request().method()!=="GET")return route.fallback();
+    return route.fulfill({json:{corrupted:false,stale:false,stale_reasons:[],draft:{schema_version:1,base_revision_id:"revision-1",repair_status:"VALID",expected_version:1,version:1,cursor:1,workspace_id:"workspace-1",actions:[{id:"a1",kind:"command_batch",label:"更新图纸集",commands:[{type:"update_sheet_set",name:"改名集",custom_properties:{项目号:"P-001"}}]}]}}});
+  });
+  await page.goto("/");
+await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  // 恢复横幅（计数插值）与两个动作按钮
+  await expect(page.getByText("Restored 1 unfinished change from the last session")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Resume"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Start Over"})).toBeVisible();
+  // 快捷键提示：Ctrl+O 在已打开工作区时给出英文关闭提示
+  await page.keyboard.press("Control+o");
+  await expect(page.locator(".error.notice")).toHaveText("Close the current workspace before opening a new DST file");
+  // Ctrl+S 写入：存在未预览草稿命令时的英文禁用原因（快捷键提示走错误条，静态原因走 dock 内联文本）
+  await page.keyboard.press("Control+s");
+  await expect(page.locator(".error.notice")).toHaveText("Preview first");
+  await expect(page.locator(".dock-reason")).toHaveText("Preview first");
+  // 任务浮层：页签与空状态（无阻断诊断）
+  await page.getByRole("complementary",{name:"Task overlay"}).getByRole("button",{name:"Implementation Progress"}).click();
+  await expect(page.getByRole("region",{name:"Implementation Progress"})).toBeVisible();
+  await expect(page.getByRole("tab",{name:"Diagnostics"})).toBeVisible();
+  await page.getByRole("tab",{name:"Diagnostics"}).click();
+  await expect(page.getByText("No blocking diagnostics")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Collapse task overlay"})).toBeVisible();
+});
+
+test("英文界面：删除确认框与 Toast 双语且图纸编号保持原样",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.goto("/");
+await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  await page.getByRole("button",{name:"删除"}).first().click();
+  // 确认框：标题/正文/确认按钮双语，图纸编号（用户数据）原样
+  const modal=page.locator('[role="dialog"][aria-modal="true"]');
+  await expect(modal).toBeVisible();
+  await expect(modal.getByRole("button",{name:"Add to Delete Draft"})).toBeVisible();
+  await expect(modal.getByText("Delete sheet 001?")).toBeVisible();
+  await modal.getByRole("button",{name:"Add to Delete Draft"}).click();
+  // Toast：标题/正文双语且编号不翻译
+  const toast=page.locator(".toast").first();
+  await expect(toast).toBeVisible();
+  await expect(toast.getByText("Added to Delete Draft")).toBeVisible();
+  await expect(toast.getByText("Sheet 001 has been added to the delete draft; view or undo it in the draft stack.")).toBeVisible();
+  await expect(toast.getByRole("button",{name:"Dismiss notification"})).toBeVisible();
+});
+
+test("英文界面：发布确认模态（不可逆标记与危险勾选）双语",async({page})=>{
+  await page.route("**/api/settings",route=>route.fulfill({json:enSettingsSnapshot}));
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-en",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await page.goto("/");
+  await selectDst(page,"C:\\project\\test.dst","Select DST File");
+  // 批量属性流程入草稿（图纸页域控件未迁移，仍中文），随后走英文预览/写入门禁
+  await page.getByRole("checkbox",{name:"全选当前结果"}).check();
+  await page.getByRole("button",{name:"批量修改属性"}).click();
+  await page.getByLabel("既有图纸属性").selectOption("比例");
+  await page.getByLabel("批量值").fill("1:200");
+  await page.getByRole("button",{name:"批量加入草稿"}).click();
+  await page.getByRole("button",{name:"Preview Changes"}).click();
+  await page.getByRole("button",{name:"Confirm Write"}).click();
+  const modal=page.locator('[role="dialog"][aria-modal="true"]');
+  await expect(modal.getByRole("heading",{name:"Confirm Publish"})).toBeVisible();
+  await expect(modal.getByText("The original DST and affected DWGs will be backed up permanently.")).toBeVisible();
+  await expect(modal.locator(".modal-irr")).toHaveText("Irreversible");
+  await expect(modal.getByText("I understand this operation is Irreversible and have reviewed the list of affected content")).toBeVisible();
+  await modal.getByRole("checkbox").check();
+  await modal.getByRole("button",{name:"Confirm Publish (original DST and affected DWGs backed up permanently)"}).click();
+  await expect(page.getByText("A task is running")).toBeVisible(); // execute 后任务进行中（英文禁用原因）
+});
+
+test("语言切换不变量：保存成功后 active tab、工作区与未提交输入保持",async({page})=>{
+  // 只拦截 PUT：保存成功响应返回 en-US 快照，驱动前端 applyLocale；不落盘、GET 仍为 zh-CN 基线
+  await page.route("**/api/settings",async route=>{
+    if(route.request().method()!=="PUT")return route.fallback();
+    return route.fulfill({json:{...enSettingsSnapshot,config_revision:2}});
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("lang","zh-CN");
+  await selectDst(page,"C:\\project\\test.dst");
+  // 背景：属性页签 + 更新图纸集表单未提交输入
+  await page.getByRole("tab",{name:"属性"}).click();
+  await page.getByRole("button",{name:"更新图纸集"}).click();
+  const nameInput=page.getByLabel("图纸集名称",{exact:true});
+  await nameInput.fill("改名后的图纸集");
+  // 设置中心保存切换 en-US
+  await openSettingsDialog(page);
+  await page.locator('input[data-key="ui_locale"][value="en-US"]').check();
+  await page.getByRole("button",{name:"保存"}).click();
+  await expect(page.locator("html")).toHaveAttribute("lang","en-US");
+  await expect(page.getByTestId("settings-saved-pill")).toHaveText("Saved"); // 对话框保持 + 本地化成功反馈
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog",{name:"Settings"})).toBeHidden();
+  // 不变量：active tab 不变、工作区未重建（名称仍为投影前名称、顶栏入口仍在）、输入值保留
+  await expect(page.getByRole("tab",{name:"Properties"})).toHaveAttribute("aria-selected","true");
+  await expect(page.getByText("测试图纸集")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Open the folder containing the sheet set"})).toBeVisible();
+  await expect(nameInput).toHaveValue("改名后的图纸集");
 });

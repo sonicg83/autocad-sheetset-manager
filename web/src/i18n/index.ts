@@ -8,13 +8,15 @@ import App from "../App.vue";
 import {resolveLocale, type EffectiveLocale, type UiLocaleSetting} from "./locale";
 import zhCNCommon from "./locales/zh-CN/common";
 import zhCNSettings from "./locales/zh-CN/settings";
+import zhCNShell from "./locales/zh-CN/shell";
 import enUSCommon from "./locales/en-US/common";
 import enUSSettings from "./locales/en-US/settings";
+import enUSShell from "./locales/en-US/shell";
 
 // 语言资源按功能域装两套同构文件，构建期合并（ARCH-DM-005 §5.1）
 const messages = {
-  "zh-CN": {common: zhCNCommon, settings: zhCNSettings},
-  "en-US": {common: enUSCommon, settings: enUSSettings},
+  "zh-CN": {common: zhCNCommon, settings: zhCNSettings, shell: zhCNShell},
+  "en-US": {common: enUSCommon, settings: enUSSettings, shell: enUSShell},
 };
 
 // 唯一实例：语言状态全部经此实例流转；缺键运行时回退 zh-CN（键对称由 check:i18n 保证）

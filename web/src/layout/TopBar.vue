@@ -1,35 +1,33 @@
 <script setup lang="ts">
 import {computed} from "vue";
+import {useI18n} from "vue-i18n";
 import {useTheme} from "../composables/useTheme";
 // 主题按钮迁入顶栏：useTheme 为模块级单例，TopBar 与 App.vue 共享同一主题状态
 const {theme,toggleTheme}=useTheme();
+const {t}=useI18n();
 const props=defineProps<{sheetSetName:string;dstPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean;hasShell?:boolean;workspaceId?:string}>();
 defineEmits<{"update:cadVersion":[value:string];close:[];"open-folder":[];"open-settings":[]}>();
 function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
-// 状态胶囊中文三态映射（枚举不进用户文案，与 RepairStatusPanel/App.vue dock 文案一致风格）
-function statusLabel(status:string){
-  if(status==="VALID")return "正常";
-  if(status==="REPAIRED")return "已修复";
-  if(status==="INVALID_UNRECOVERABLE")return "不可恢复";
-  return "需修复";
-}
+// 状态胶囊三态映射（稳定枚举 → 语义键，I18N-07；枚举值不进用户文案）
+const STATUS_KEYS:Record<string,string>={VALID:"shell.topbar.statusValid",REPAIRED:"shell.topbar.statusRepaired",INVALID_UNRECOVERABLE:"shell.topbar.statusUnrecoverable"};
+function statusLabel(status:string){return t(STATUS_KEYS[status]??"shell.topbar.statusNeedsRepair")}
 // 打开图纸集所在文件夹：无桌面壳时禁用并解释（桥晚到由 App.vue 的 shellReady 响应式更新）
 const folderDisabled=computed(()=>!props.hasShell);
-const folderTitle=computed(()=>folderDisabled.value?"桌面壳未就绪，无法打开图纸集所在文件夹":"打开图纸集所在文件夹");
+const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavailable"):t("shell.topbar.folderTooltip"));
 </script>
 <template>
   <header class="topbar" role="banner">
     <span class="brand">DST Manager</span>
-    <span class="brand-sub">v0.3 · 受控日常编辑与可恢复发布</span>
+    <span class="brand-sub">{{ $t("shell.topbar.tagline") }}</span>
     <span v-if="sheetSetName" class="workspace-name" :title="dstPath || sheetSetName">{{sheetSetName}}</span>
-    <button v-if="workspaceId" type="button" class="folder-btn" :disabled="folderDisabled" :title="folderTitle" aria-label="打开图纸集所在文件夹" @click="$emit('open-folder')">打开所在文件夹</button>
+    <button v-if="workspaceId" type="button" class="folder-btn" :disabled="folderDisabled" :title="folderTitle" :aria-label="$t('shell.topbar.openFolderAria')" @click="$emit('open-folder')">{{ $t("shell.topbar.openFolder") }}</button>
     <span class="spacer"></span>
     <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{statusLabel(dstStatus)}}</span>
-    <label class="cad-version">AutoCAD 版本<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
-    <button v-if="workspaceId" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" aria-label="关闭工作区">关闭</button>
-    <button type="button" class="iconbtn" aria-label="切换主题" :title="theme==='dark'?'切换为浅色':'切换为深色'" @click="toggleTheme">◐</button>
+    <label class="cad-version">{{ $t("shell.topbar.cadVersion") }}<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
+    <button v-if="workspaceId" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" :aria-label="$t('shell.topbar.closeAria')">{{ $t("shell.topbar.close") }}</button>
+    <button type="button" class="iconbtn" :aria-label="$t('shell.topbar.themeToggle')" :title="theme==='dark'?$t('shell.topbar.themeToLight'):$t('shell.topbar.themeToDark')" @click="toggleTheme">◐</button>
     <!-- 设置中心入口（SPEC-DM-011 SC-01）：常驻，未加载工作区同样可用；焦点归还由对话框负责 -->
-    <button type="button" class="settings-btn" aria-label="设置" aria-haspopup="dialog" title="设置" @click="$emit('open-settings')">⚙ 设置</button>
+    <button type="button" class="settings-btn" :aria-label="$t('shell.topbar.settings')" aria-haspopup="dialog" :title="$t('shell.topbar.settings')" @click="$emit('open-settings')">⚙ {{ $t("shell.topbar.settings") }}</button>
   </header>
 </template>
 <style scoped>

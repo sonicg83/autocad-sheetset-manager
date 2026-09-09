@@ -3,6 +3,7 @@
 // 受控组件：open/tab 状态由 App.vue 持有（Task 7 toast 抑制与"查看"跳转依赖）；页签行复用 useShellTabs 键盘模型
 // 折叠不卸载：固定入口栏始终可见，抽屉覆盖主区；收起后任务继续执行。
 import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {CadGroup,CardinalityFrontier,DerivedSubset,Diagnostic,DstValidation,ExecutionEstimate,Job,Preview,RepairPreview,SemanticDiff,SourceBaseline,SubsetOperation} from "../api/contracts";
 import {useShellTabs} from "../composables/useShellTabs";
 import JobStatusPanel from "../components/JobStatusPanel.vue";
@@ -42,10 +43,11 @@ const emit=defineEmits<{
   "execute-repair":[];
   "cancel-repair":[];
 }>();
+const {t}=useI18n();
 const OV_TABS=[
-  {id:"prog" as const,label:"实施进度"},
-  {id:"prev" as const,label:"修改预览"},
-  {id:"diag" as const,label:"诊断"},
+  {id:"prog" as const,labelKey:"shell.overlay.prog"},
+  {id:"prev" as const,labelKey:"shell.overlay.prev"},
+  {id:"diag" as const,labelKey:"shell.overlay.diag"},
 ];
 // 页签行复用 useShellTabs 键盘模型；受控：外部 tab prop 变化时同步激活态，内部激活变化回写外部
 const {active,select,onKeydown}=useShellTabs<OverlayTab>(["prog","prev","diag"],"prog");
@@ -56,7 +58,7 @@ function onTabKeydown(e:KeyboardEvent){
   if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
   onKeydown(e);void nextTick(focusActiveTab);
 }
-const activeTabLabel=computed(()=>OV_TABS.find(item=>item.id===active.value)?.label??"任务详情");
+const activeTabLabel=computed(()=>{const item=OV_TABS.find(entry=>entry.id===active.value);return item?t(item.labelKey):t("shell.overlay.fallbackTitle")});
 const drawer=ref<HTMLElement|null>(null);
 const rail=ref<HTMLElement|null>(null);
 const drawerBounds=ref({top:"0px",bottom:"52px"});
@@ -106,25 +108,25 @@ async function copyDiag(item:Diagnostic){
 }
 </script>
 <template>
-  <aside class="task-overlay" :class="{collapsed:!open}" role="complementary" aria-label="任务浮层">
-    <nav ref="rail" class="task-rail" aria-label="任务入口">
+  <aside class="task-overlay" :class="{collapsed:!open}" role="complementary" :aria-label="$t('shell.overlay.region')">
+    <nav ref="rail" class="task-rail" :aria-label="$t('shell.overlay.rail')">
       <button v-for="item in OV_TABS" :key="item.id" type="button" :data-entry="item.id"
         :aria-expanded="open&&active===item.id" aria-controls="task-drawer" @click="openTab(item.id)">
-        {{item.label}}<span v-if="item.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
+        {{ $t(item.labelKey) }}<span v-if="item.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
       </button>
-      <button v-if="!open" type="button" class="ov-fold" aria-label="展开任务浮层" aria-expanded="false" aria-controls="task-drawer" @click="openTab(active)">«</button>
+      <button v-if="!open" type="button" class="ov-fold" :aria-label="$t('shell.overlay.expand')" aria-expanded="false" aria-controls="task-drawer" @click="openTab(active)">«</button>
     </nav>
     <section ref="drawer" class="task-drawer" id="task-drawer" :hidden="!open" :style="drawerBounds" role="region" :aria-label="activeTabLabel" @keydown="onDrawerKeydown">
-    <div class="ov-tabs" role="tablist" aria-label="任务页签">
+    <div class="ov-tabs" role="tablist" :aria-label="$t('shell.overlay.tabs')">
       <button v-for="tab in OV_TABS" :key="tab.id" type="button" class="ov-tab" role="tab"
         :id="`ov-tab-${tab.id}`" :aria-selected="active===tab.id" :aria-controls="`ov-panel-${tab.id}`"
         :tabindex="active===tab.id?0:-1"
-        :aria-description="tab.id==='diag'&&hasBlocking?'存在阻断诊断，普通发布已让位给修复（§6.9）':undefined"
+        :aria-description="tab.id==='diag'&&hasBlocking?$t('shell.overlay.blockingDiag'):undefined"
         :hidden="!open" @click="clickTab(tab.id)" @keydown="onTabKeydown">
-        {{tab.label}}<span v-if="tab.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
+        {{ $t(tab.labelKey) }}<span v-if="tab.id==='diag'&&hasBlocking" class="ov-dot" aria-hidden="true">●</span>
       </button>
       <button type="button" class="ov-fold" :aria-expanded="open" aria-controls="ov-body"
-        aria-label="收起任务浮层" @click="closeDrawer">»</button>
+        :aria-label="$t('shell.overlay.collapse')" @click="closeDrawer">»</button>
     </div>
     <div class="ov-body" id="ov-body" :hidden="!open">
       <div v-if="active==='prog'" class="ov-panel" id="ov-panel-prog" role="tabpanel" aria-labelledby="ov-tab-prog">
@@ -134,9 +136,9 @@ async function copyDiag(item:Diagnostic){
         <PreviewPanel v-if="preview" :preview="preview" :semantic-diff="semanticDiff" :estimate="estimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="groups" />
       </div>
       <div v-else class="ov-panel" id="ov-panel-diag" role="tabpanel" aria-labelledby="ov-tab-diag">
-        <details v-if="diagnostics.length" class="ov-diagnostics"><summary>诊断（{{diagnostics.length}}）</summary><ul class="diagnostics"><li v-for="item in diagnostics" :key="item.code+item.message" :class="item.severity"><span class="diag-text">{{item.code}}：{{item.message}}</span><button type="button" class="diag-copy" :aria-label="`复制诊断 ${item.code}`" @click="copyDiag(item)">{{copiedCode===item.code?"已复制":"复制"}}</button></li></ul></details>
+        <details v-if="diagnostics.length" class="ov-diagnostics"><summary>{{ $t("shell.overlay.diagSummary",{count:diagnostics.length}) }}</summary><ul class="diagnostics"><li v-for="item in diagnostics" :key="item.code+item.message" :class="item.severity"><span class="diag-text">{{item.code}}：{{item.message}}</span><button type="button" class="diag-copy" :aria-label="$t('shell.overlay.copyDiagAria',{code:item.code})" @click="copyDiag(item)">{{copiedCode===item.code?$t("shell.overlay.copied"):$t("shell.overlay.copy")}}</button></li></ul></details>
         <RepairStatusPanel v-if="hasRepair&&dstValidation" :validation="dstValidation" :preview="repairPreview" :previewing="isRepairPreviewing" :executing="isRepairExecuting" @preview-repair="emit('preview-repair')" @execute-repair="emit('execute-repair')" @cancel="emit('cancel-repair')" />
-        <p v-if="!diagnostics.length&&!hasRepair" class="ov-empty">无阻断诊断</p>
+        <p v-if="!diagnostics.length&&!hasRepair" class="ov-empty">{{ $t("shell.overlay.empty") }}</p>
       </div>
     </div>
     </section>

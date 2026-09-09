@@ -1,10 +1,12 @@
 import {reactive} from "vue";
 
-export type ConfirmOptions={title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "可撤销"|"不可逆"};
+// reversibility 为稳定语义值（PLAN-DM-021 Task 5，I18N-07）：显示文本由 ConfirmModal 经语言包渲染
+export type ConfirmOptions={title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "reversible"|"irreversible"};
 type ConfirmModalState=ConfirmOptions&{open:boolean};
 
 export function useConfirm(){
-  const state=reactive<ConfirmModalState>({open:false,title:"",message:"",confirmText:"确认"});
+  // 默认文案（confirmText/cancel 缺省）由 ConfirmModal 经语言包兜底，状态层不持有文本
+  const state=reactive<ConfirmModalState>({open:false,title:"",message:"",confirmText:""});
   let pending:((value:boolean)=>void)|null=null;
   function confirmAction(options:ConfirmOptions):Promise<boolean>{
     return new Promise(resolve=>{

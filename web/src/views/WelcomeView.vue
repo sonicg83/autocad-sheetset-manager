@@ -5,18 +5,18 @@ const emit=defineEmits<{select:[];submitPath:[path:string]}>();
 const path=ref("");
 </script>
 <template>
-  <section class="welcome-card" role="region" aria-label="打开图纸集">
-    <h2 class="welcome-title">打开图纸集</h2>
-    <p class="welcome-desc">选择一个 .dst 文件打开工作区，进行受控日常编辑与可恢复发布。修改先进入草稿，正式发布前不改动工程文件。</p>
+  <section class="welcome-card" role="region" :aria-label="$t('shell.welcome.region')">
+    <h2 class="welcome-title">{{ $t("shell.welcome.title") }}</h2>
+    <p class="welcome-desc">{{ $t("shell.welcome.desc") }}</p>
     <template v-if="!hasShell">
       <div class="no-shell">
-        <input v-model="path" placeholder="输入 .dst 绝对路径" @keyup.enter="$emit('submitPath',path)">
-        <button type="button" @click="$emit('submitPath',path)">打开项目</button>
+        <input v-model="path" :placeholder="$t('shell.welcome.pathPlaceholder')" @keyup.enter="$emit('submitPath',path)">
+        <button type="button" @click="$emit('submitPath',path)">{{ $t("shell.welcome.openProject") }}</button>
       </div>
     </template>
     <template v-else>
-      <button type="button" class="primary" @click="$emit('select')">选择 DST 文件</button>
-      <p class="drop-hint">或将 .dst 文件拖入窗口 · 支持拖拽</p>
+      <button type="button" class="primary" @click="$emit('select')">{{ $t("shell.welcome.selectDst") }}</button>
+      <p class="drop-hint">{{ $t("shell.welcome.dropHint") }}</p>
     </template>
   </section>
 </template>

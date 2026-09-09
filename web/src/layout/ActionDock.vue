@@ -26,17 +26,17 @@ onBeforeUnmount(()=>window.removeEventListener("keydown",onGlobalKeydown));
 <template>
   <footer class="dock" role="contentinfo">
     <button type="button" class="draft-chip" ref="chipRef" :aria-expanded="popOpen" aria-controls="draft-pop" aria-haspopup="dialog" @click="togglePop">
-      草稿 {{cursor}}/{{actions.length}}<span class="arr">▲</span>
+      {{ $t("shell.dock.draftChip",{cursor,total:actions.length}) }}<span class="arr">▲</span>
     </button>
-    <button type="button" class="dock-btn ghost" :disabled="stale||cursor===0" @click="emit('undo')">撤销</button>
-    <button type="button" class="dock-btn ghost" :disabled="stale||cursor>=actions.length" @click="emit('redo')">重做</button>
+    <button type="button" class="dock-btn ghost" :disabled="stale||cursor===0" @click="emit('undo')">{{ $t("shell.dock.undo") }}</button>
+    <button type="button" class="dock-btn ghost" :disabled="stale||cursor>=actions.length" @click="emit('redo')">{{ $t("shell.dock.redo") }}</button>
     <span class="spacer"></span>
     <span v-if="writeDisabledReason" class="dock-reason" role="note">{{writeDisabledReason}}</span>
-    <button type="button" class="dock-btn primary" :class="{loading:previewing}" :disabled="!canPreview" :title="canPreview?'':writeDisabledReason" @click="emit('preview')">预览变更</button>
-    <button type="button" class="dock-btn danger" :disabled="!canWrite" :title="canWrite?'':writeDisabledReason" @click="onWrite">确认写入</button>
-    <div v-if="popOpen" id="draft-pop" class="pop" role="dialog" aria-label="草稿动作栈">
+    <button type="button" class="dock-btn primary" :class="{loading:previewing}" :disabled="!canPreview" :title="canPreview?'':writeDisabledReason" @click="emit('preview')">{{ $t("shell.dock.preview") }}</button>
+    <button type="button" class="dock-btn danger" :disabled="!canWrite" :title="canWrite?'':writeDisabledReason" @click="onWrite">{{ $t("shell.dock.write") }}</button>
+    <div v-if="popOpen" id="draft-pop" class="pop" role="dialog" :aria-label="$t('shell.dock.stackAria')">
       <DraftActionsPanel :actions="actions" :cursor="cursor" :command-count="commandCount" :stale="stale" :stale-reasons="staleReasons" :corrupted="corrupted" :writes-disabled="writesDisabled" :loading="false" @discard="emit('discard')" @reload-conflict="emit('reloadConflict')" @undo="emit('undo')" @redo="emit('redo')" @clear="emit('clear')" @preview="emit('preview')" @remove="emit('remove',$event)" />
-      <div class="draft-save-status"><span class="save-status" :class="{error:saveFailed}">{{saveStatusText}}</span><button v-if="saveFailed" type="button" @click="emit('retrySave')">重试</button></div>
+      <div class="draft-save-status"><span class="save-status" :class="{error:saveFailed}">{{saveStatusText}}</span><button v-if="saveFailed" type="button" @click="emit('retrySave')">{{ $t("shell.dock.retry") }}</button></div>
     </div>
   </footer>
 </template>

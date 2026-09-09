@@ -61,7 +61,7 @@ export function useRestore(deps:{
     if(deps.isRestoreExecuting.value||!context||!context.result.executable)return;
     if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){restorePreview.value=null;restorePreviewContext.value=null;deps.error.value="工作区或基准修订已变化，请重新生成恢复预览";return}
     // 恢复为新修订属不可逆破坏类操作：需要显式勾选后才可确认
-    const ok=await deps.confirmAction({title:"确认恢复为新修订",message:"历史修订不会被覆盖。",confirmText:"确认恢复",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+    const ok=await deps.confirmAction({title:"确认恢复为新修订",message:"历史修订不会被覆盖。",confirmText:"确认恢复",danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=++restoreExecutionGeneration;
     deps.isRestoreExecuting.value=true;deps.invalidateJobMonitor(true);revisionGeneration+=1;

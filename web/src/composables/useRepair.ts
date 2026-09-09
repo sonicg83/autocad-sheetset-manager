@@ -62,7 +62,7 @@ export function useRepair(deps:{
     const current=deps.workspace.value;
     if(deps.isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId||context.loadGeneration!==deps.workspaceLoadGeneration.value){repairPreview.value=null;repairContext.value=null;deps.error.value="工作区或基准修订已变化，请重新生成修复预览";return}
     // 发布独立修复修订属不可逆破坏类操作：需要显式勾选后才可确认
-    const ok=await deps.confirmAction({title:"确认把内存修复发布为独立修订",message:"原 DST 将永久备份。",confirmText:"确认把内存修复发布",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+    const ok=await deps.confirmAction({title:"确认把内存修复发布为独立修订",message:"原 DST 将永久备份。",confirmText:"确认把内存修复发布",danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=deps.invalidateJobMonitor(false);
     isRepairExecuting.value=true;

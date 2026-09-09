@@ -13,8 +13,8 @@ const emit=defineEmits<{dismiss:[id:number];jump:[tab:string]}>();
         <span>{{toast.body}}</span>
       </div>
       <div class="toast-actions">
-        <button v-if="toast.jumpTab" type="button" @click="emit('jump',toast.jumpTab)">查看</button>
-        <button type="button" class="toast-close" @click="emit('dismiss',toast.id)">✕</button>
+        <button v-if="toast.jumpTab" type="button" @click="emit('jump',toast.jumpTab)">{{ $t("shell.toast.view") }}</button>
+        <button type="button" class="toast-close" :aria-label="$t('shell.toast.close')" @click="emit('dismiss',toast.id)">✕</button>
       </div>
     </div>
   </div>

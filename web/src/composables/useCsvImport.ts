@@ -68,7 +68,7 @@ export function useCsvImport(deps:{
       return `${action}属性「${change.name}」（${scope}${change.affected_sheet_count?`，影响 ${change.affected_sheet_count} 张图纸`:""}）`;
     });
     if(impactLines.length===0)impactLines.push(...(context.result.affected_files.length>0?context.result.affected_files.map(file=>`受影响文件：${file}`):["本次导入不含属性定义变更"]));
-    const ok=await deps.confirmAction({title:"确认导入属性定义",message:"将按预览结果把属性定义合并写入图纸集，原 DST 将永久备份。",impactLines,confirmText:"确认导入",danger:true,requireCheckbox:true,reversibility:"不可逆"});
+    const ok=await deps.confirmAction({title:"确认导入属性定义",message:"将按预览结果把属性定义合并写入图纸集，原 DST 将永久备份。",impactLines,confirmText:"确认导入",danger:true,requireCheckbox:true,reversibility:"irreversible"});
     if(!ok)return;
     const generation=deps.invalidateJobMonitor(false);
     try{const result:Job=await request(`/api/workspaces/${context.workspaceId}/custom-properties/import`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,csv:context.csv,preview_digest:context.result.preview_digest})});if(!deps.isCurrentJobGeneration(generation)||deps.isWorkspaceLoading.value||deps.workspace.value?.id!==context.workspaceId)return;deps.setJob(result);if(result.status==="QUEUED"&&result.id)deps.watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"&&!result.no_op)await deps.refreshWorkspace(context.workspaceId)}

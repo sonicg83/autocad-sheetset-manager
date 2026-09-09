@@ -114,7 +114,8 @@ test("配置文件损坏：诊断横幅（amber）且回退默认值", async ({p
   // 故对话框可访问名称不固定，期望断言按中英双语容忍；诊断码与控件行为与语言无关
   writeSettingsFile("{ 这不是合法 JSON", 3);
   await page.goto("/");
-  await page.getByRole("button", {name: "设置"}).click();
+  // Task 5 起外壳随生效语言切换：system 解析随浏览器语言，齿轮名称中英容忍
+  await page.getByRole("button", {name: /设置|Settings/}).click();
   await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
   const banner = page.getByRole("alert").filter({hasText: "SETTINGS_FILE_CORRUPT"});
   await expect(banner).toBeVisible();
@@ -133,7 +134,8 @@ test("Schema 过新：红色只读诊断横幅，输入与保存禁用（SC-12�
   // "界面继续使用启动时已解析的语言"），故断言按中英双语容忍
   writeSettingsFile({}, 5, 99);
   await page.goto("/");
-  await page.getByRole("button", {name: "设置"}).click();
+  // Task 5 起外壳随生效语言切换：system 解析随浏览器语言，齿轮名称中英容忍
+  await page.getByRole("button", {name: /设置|Settings/}).click();
   await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
   const banner = page.getByRole("alert").filter({hasText: "SETTINGS_SCHEMA_NEWER"});
   await expect(banner).toBeVisible();
@@ -344,8 +346,8 @@ test("exe/dll 浏览：中英文只改变描述、固定种类（白名单）不
 
   const browseCalls = async (browseLabel: string) => {
     await page.goto("/");
-    // 齿轮入口/壳界面未随 Task 4 迁移，仍为中文基线；对话框标题随 ui_locale 切换
-    await page.getByRole("button", {name: "设置"}).click();
+    // Task 5 起齿轮入口/壳界面随 ui_locale 切换，名称中英容忍；对话框标题随 ui_locale 切换
+    await page.getByRole("button", {name: /设置|Settings/}).click();
     await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
     await page.locator('[data-field="autocad_2016_console"]').getByRole("button", {name: browseLabel}).click();
     await page.locator('[data-field="autocad_2016_plugin"]').getByRole("button", {name: browseLabel}).click();

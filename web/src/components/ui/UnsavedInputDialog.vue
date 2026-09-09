@@ -37,13 +37,13 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 <template>
   <div v-if="open" class="modal-mask" @keydown="onKeydown">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-label="未提交输入" tabindex="-1" ref="card">
-      <h2>未提交输入</h2>
-      <p class="modal-message">{{ summary }} 有未保存的修改。仅存于内存缓冲不会跨会话保留；加入草稿后才可重开恢复。加入草稿会更新草稿投影并使之前的预览失效，需重新预览。</p>
+    <div class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('shell.unsaved.title')" tabindex="-1" ref="card">
+      <h2>{{ $t("shell.unsaved.title") }}</h2>
+      <p class="modal-message">{{ $t("shell.unsaved.message", { summary }) }}</p>
       <div class="modal-actions">
-        <button type="button" @click="emit('stay')">留在此处</button>
-        <button type="button" @click="emit('discard')">放弃输入</button>
-        <button type="button" class="primary" :disabled="!canSave" @click="emit('saveAndContinue')">加入草稿后继续</button>
+        <button type="button" @click="emit('stay')">{{ $t("shell.unsaved.stay") }}</button>
+        <button type="button" @click="emit('discard')">{{ $t("shell.unsaved.discard") }}</button>
+        <button type="button" class="primary" :disabled="!canSave" @click="emit('saveAndContinue')">{{ $t("shell.unsaved.saveAndContinue") }}</button>
       </div>
     </div>
   </div>
