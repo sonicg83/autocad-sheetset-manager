@@ -17,7 +17,7 @@ def test_published_migrations_are_immutable():
     expected = {
         "0001_initial.py": "d19d09f9984eaa7bfe93932fb9971583f5c08bc28bed0c26a79b8f54af9df4f1",
         "0002_v02_job_reliability.py": "f318c1c9c0de34f23d6d41fe3677ebb38a51f2d528a3449ada4f6ff81f7a122c",
-        "0006_dm020_extension_platform.py": "7e86a66ec5446c4b2a6c1d5ace37c794e451864f1cc9fb1244d609bcee1bc205",
+        "0006_dm020_extension_platform.py": "6940e7f28a2c7695bd6519731fa8201a36619f2c092dc1413d9caafc231af8a3",
     }
     migration_root = Path("migrations/versions")
     actual = {

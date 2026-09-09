@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -40,6 +41,7 @@ class ExtensionSettingRow(Base):
     schema_version: Mapped[int] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(Integer)
     value_json: Mapped[dict[str, object]] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class WorkspaceExtensionPreferenceRow(Base):
@@ -49,6 +51,7 @@ class WorkspaceExtensionPreferenceRow(Base):
     schema_version: Mapped[int] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(Integer)
     value_json: Mapped[dict[str, object]] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ArtifactRow(Base):
@@ -169,31 +172,52 @@ class ExtensionStore:
         value: dict[str, object],
         expected_revision: int,
     ) -> VersionedJson:
+        """乐观并发写入：条件 UPDATE 以行数判定冲突，读-改-写不做窗口竞争。"""
+        now = datetime.now(UTC)
         with self._sessions.begin() as session:
-            row = session.get(ExtensionSettingRow, extension_id)
-            current_revision = row.revision if row is not None else 0
-            if expected_revision != current_revision:
+            updated = session.execute(
+                update(ExtensionSettingRow)
+                .where(
+                    ExtensionSettingRow.extension_id == extension_id,
+                    ExtensionSettingRow.revision == expected_revision,
+                )
+                .values(
+                    schema_version=schema_version,
+                    revision=expected_revision + 1,
+                    value_json=value,
+                    updated_at=now,
+                )
+            )
+            if updated.rowcount == 1:
+                return VersionedJson(
+                    schema_version=schema_version,
+                    revision=expected_revision + 1,
+                    value=dict(value),
+                )
+            if expected_revision != 0:
                 raise SettingsRevisionConflictError(
                     f"EXTENSION_SETTINGS_REVISION_CONFLICT: "
-                    f"expected=r{expected_revision}, current=r{current_revision}"
+                    f"expected=r{expected_revision}"
                 )
-            revision = current_revision + 1
-            if row is None:
-                session.add(
-                    ExtensionSettingRow(
-                        extension_id=extension_id,
-                        schema_version=schema_version,
-                        revision=revision,
-                        value_json=value,
-                    )
+            # 首次写入：行不存在；并发抢先插入由主键约束判为冲突。
+            session.add(
+                ExtensionSettingRow(
+                    extension_id=extension_id,
+                    schema_version=schema_version,
+                    revision=1,
+                    value_json=value,
+                    updated_at=now,
                 )
-            else:
-                row.schema_version = schema_version
-                row.revision = revision
-                row.value_json = value
+            )
+            try:
+                session.flush()
+            except IntegrityError as exc:
+                raise SettingsRevisionConflictError(
+                    "EXTENSION_SETTINGS_REVISION_CONFLICT: 首次写入被并发抢先"
+                ) from exc
             return VersionedJson(
                 schema_version=schema_version,
-                revision=revision,
+                revision=1,
                 value=dict(value),
             )
 
@@ -225,6 +249,7 @@ class ExtensionStore:
                 WorkspaceExtensionPreferenceRow,
                 (workspace_id, extension_id),
             )
+            now = datetime.now(UTC)
             revision = row.revision + 1 if row is not None else 1
             if row is None:
                 session.add(
@@ -234,12 +259,14 @@ class ExtensionStore:
                         schema_version=schema_version,
                         revision=revision,
                         value_json=value,
+                        updated_at=now,
                     )
                 )
             else:
                 row.schema_version = schema_version
                 row.revision = revision
                 row.value_json = value
+                row.updated_at = now
             return VersionedJson(
                 schema_version=schema_version,
                 revision=revision,

@@ -1,6 +1,8 @@
 """PLAN-DM-020 Task 2：扩展状态、设置、偏好与 Artifact 持久化。"""
 
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -103,7 +105,8 @@ def test_state_round_trip_and_upsert_keeps_single_row(tmp_path: Path):
 
 
 def test_settings_json_round_trip(tmp_path: Path):
-    store = make_store(make_database(tmp_path))
+    database = make_database(tmp_path)
+    store = make_store(database)
     value = {
         "templates": [{"path": "C:/t.xlsx", "layouts": ["封面", "正文"]}],
         "include_empty_sheets": False,
@@ -118,6 +121,8 @@ def test_settings_json_round_trip(tmp_path: Path):
 
     assert created == VersionedJson(schema_version=1, revision=1, value=value)
     assert store.get_settings("dst-manager.sheet-catalog") == created
+    first_updated_at = read_updated_at(database, "extension_settings")
+    assert first_updated_at is not None
 
     updated = store.put_settings(
         "dst-manager.sheet-catalog",
@@ -127,6 +132,45 @@ def test_settings_json_round_trip(tmp_path: Path):
     )
     assert updated.revision == 2
     assert store.get_settings("dst-manager.sheet-catalog") == updated
+    assert read_updated_at(database, "extension_settings") >= first_updated_at
+
+
+def read_updated_at(database: Database, table: str) -> str | None:
+    with database.engine.connect() as connection:
+        row = connection.exec_driver_sql(
+            f"SELECT updated_at FROM {table}"
+        ).fetchone()
+    return None if row is None else row[0]
+
+
+def test_concurrent_settings_writers_exactly_one_wins(tmp_path: Path):
+    """两个写者从同一 expected_revision 竞争：条件更新保证恰一个成功。"""
+    database = make_database(tmp_path)
+    store = make_store(database)
+    store.put_settings("ext-a", 1, {"v": "old"}, expected_revision=0)
+
+    start = threading.Barrier(2)
+    outcomes: dict[str, object] = {}
+
+    def attempt(name: str, new_value: str) -> None:
+        start.wait()
+        try:
+            result = store.put_settings("ext-a", 1, {"v": new_value}, expected_revision=1)
+            outcomes[name] = result.value
+        except SettingsRevisionConflictError:
+            outcomes[name] = "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(attempt, "a", "first"), pool.submit(attempt, "b", "second")]
+        for future in futures:
+            future.result()
+
+    winners = [value for value in outcomes.values() if value != "conflict"]
+    assert len(winners) == 1
+    final = store.get_settings("ext-a")
+    assert final is not None
+    assert final.revision == 2
+    assert final.value == winners[0]
 
 
 def test_settings_revision_conflict_rejects_and_keeps_old_value(tmp_path: Path):
@@ -187,6 +231,7 @@ def test_preference_upsert_keeps_single_row_and_bumps_revision(tmp_path: Path):
             "SELECT COUNT(*) FROM workspace_extension_preferences"
         ).scalar_one()
     assert count == 1
+    assert read_updated_at(database, "workspace_extension_preferences") is not None
 
 
 # ---------------------------------------------------------------------------

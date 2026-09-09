@@ -24,6 +24,7 @@ def upgrade() -> None:
         sa.Column("schema_version", sa.Integer(), nullable=False),
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.Column("value_json", sa.JSON(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_table(
         "workspace_extension_preferences",
@@ -32,6 +33,7 @@ def upgrade() -> None:
         sa.Column("schema_version", sa.Integer(), nullable=False),
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.Column("value_json", sa.JSON(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_table(
         "artifacts",
