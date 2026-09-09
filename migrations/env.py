@@ -4,6 +4,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from dst_manager.infrastructure.persistence import (
+    extensions as _extension_tables,  # noqa: F401
+)
 from dst_manager.infrastructure.persistence.database import Base
 
 config = context.config

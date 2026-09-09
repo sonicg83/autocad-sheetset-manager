@@ -17,6 +17,7 @@ def test_published_migrations_are_immutable():
     expected = {
         "0001_initial.py": "d19d09f9984eaa7bfe93932fb9971583f5c08bc28bed0c26a79b8f54af9df4f1",
         "0002_v02_job_reliability.py": "f318c1c9c0de34f23d6d41fe3677ebb38a51f2d528a3449ada4f6ff81f7a122c",
+        "0006_dm020_extension_platform.py": "7e86a66ec5446c4b2a6c1d5ace37c794e451864f1cc9fb1244d609bcee1bc205",
     }
     migration_root = Path("migrations/versions")
     actual = {
@@ -332,7 +333,7 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
     assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0005_dm019_job_lease_seconds"
+    assert revision == "0006_dm020_extension_platform"
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
@@ -548,7 +549,7 @@ def test_job_lease_seconds_migration_round_trip(tmp_path: Path):
     command.upgrade(alembic_config(), "head")
     assert "lease_seconds" in job_columns()
 
-    command.downgrade(alembic_config(), "-1")
+    command.downgrade(alembic_config(), "0004_dm007_layout_name_cache")
     assert "lease_seconds" not in job_columns()
 
     command.upgrade(alembic_config(), "head")
