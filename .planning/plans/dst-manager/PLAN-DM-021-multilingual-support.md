@@ -101,14 +101,16 @@ class SettingsItemMeta:
     file_filter_key: str | None = None
     file_kind: Literal["exe", "dll"] | None = None
 
+ParamValue = str | int | bool | list[str]
+
 class FieldErrorModel(ContractModel):
     code: str
     message_key: str
-    params: dict[str, str | int]
+    params: dict[str, ParamValue]
     message: str
 ```
 
-- [ ] **Step 1：写红灯。** 断言默认 `system`、env/file 优先级、三值白名单；registry 首项为“界面/语言”，所有项只靠 key 描述，enum 值支持 `str | int`；422 外层 key 是设置 key，参数不含 label/完整句子。
+- [ ] **Step 1：写红灯。** 断言默认 `system`、env/file 优先级、三值白名单；registry 首项为“界面/语言”，所有项只靠 key 描述，enum 值支持 `str | int`；422 外层 key 是设置 key，参数不含 label/完整句子，`params` 白名单覆盖 str/int/bool/list[str]。
 - [ ] **Step 2：运行红灯。** `uv run pytest tests/unit/test_config.py tests/unit/test_settings_registry.py tests/unit/test_settings_resolver.py tests/unit/test_settings_runtime.py tests/integration/test_api_settings.py -q`。
 - [ ] **Step 3：最小实现。** 增加字段与元数据；迁移期响应同时保留旧中文字段和新 key 字段。`SettingsValidationError.errors` 改为结构化对象，`message` 仅兼容，不作为前端新主路径。
 - [ ] **Step 4：绿灯与静态检查。** 重跑 Step 2；运行 `uv run ruff check src/dst_manager/config.py src/dst_manager/settings src/dst_manager/interfaces/settings_contracts.py tests/unit/test_settings_*.py tests/integration/test_api_settings.py`。
@@ -131,6 +133,7 @@ class FieldErrorModel(ContractModel):
 - Create: `web/src/i18n/bootstrap.test.ts`
 - Create: `web/vitest.config.ts`
 - Modify: `web/tests/global-setup.ts`
+- Create: `web/scripts/check-i18n.mjs`（最小版：仅中英文键集合对称并纳入 `build`；允许清单与硬编码扫描留 Task 10）
 - Modify: `changelog.md`
 
 **目标接口**
@@ -143,11 +146,11 @@ export function applyLocale(locale: EffectiveLocale): Promise<void>;
 export async function bootstrap(): Promise<void>;
 ```
 
-- [ ] **Step 1：先装测试能力。** 用 `npm --prefix web install vue-i18n` 与 `npm --prefix web install -D vitest` 更新依赖和锁文件；新增 `test:unit`，但尚不写生产实现。
-- [ ] **Step 2：写红灯。** 覆盖显式值、`zh-*`、非中文、空数组/异常回退；断言设置请求结束前不 mount，读取失败仍按系统规则 mount，只有一个 i18n 实例，`applyLocale` 同步 `<html lang>`。
+- [ ] **Step 1：先装测试能力。** 用 `npm --prefix web install vue-i18n` 与 `npm --prefix web install -D vitest` 更新依赖和锁文件；新增 `test:unit` 与 `check:i18n` 最小版（`web/scripts/check-i18n.mjs`：仅中英文键集合对称、非零退出、纳入 `build`，暂不接允许清单与硬编码扫描），但尚不写生产实现。
+- [ ] **Step 2：写红灯。** 覆盖显式值、`zh-*`、非中文、空数组/异常回退；断言设置请求结束前不 mount，读取失败或挂起超时（如 5s）仍按系统规则 mount，只有一个 i18n 实例，`applyLocale` 同步 `<html lang>`。
 - [ ] **Step 3：运行红灯。** `npm --prefix web run test:unit -- src/i18n/locale.test.ts src/i18n/bootstrap.test.ts`。
-- [ ] **Step 4：最小实现。** `main.ts` 只调用 `bootstrap()`；bootstrap 捕获设置读取失败并用系统规则继续，不渲染错误语言的完整 App。全局 E2E 临时 settings.json 显式写 `ui_locale: "zh-CN"` 固定既有中文基线。
-- [ ] **Step 5：绿灯。** 重跑 Step 3，再运行 `npm --prefix web run build`。
+- [ ] **Step 4：最小实现。** `main.ts` 只调用 `bootstrap()`；bootstrap 捕获设置读取失败并用系统规则继续，不渲染错误语言的完整 App；设置读取设超时（如 5s），超时视为失败降级。全局 E2E 临时 settings.json 显式写 `ui_locale: "zh-CN"` 固定既有中文基线。
+- [ ] **Step 5：绿灯。** 重跑 Step 3，再运行 `npm --prefix web run check:i18n` 与 `npm --prefix web run build`。
 - [ ] **Step 6：记录并提交。** 更新 changelog，提交 `建立前端多语言启动基础`。
 
 ### Task 3：设置中心语言事务与双语错误恢复
@@ -157,7 +160,7 @@ export async function bootstrap(): Promise<void>;
 - Modify: `web/src/api/settings.ts`
 - Modify: `web/src/api/client.ts`
 - Modify: `web/src/composables/useSettings.ts`
-- Modify: `web/src/components/settings/SettingsDialog.vue`
+- Modify: `web/src/components/settings/SettingsDialog.vue`（语言事务与双语错误恢复；浏览接线含 exe/dll 随 Task 4 桥签名同批迁移，本任务不改）
 - Modify: `web/src/components/settings/SettingsFormRow.vue`
 - Modify: `web/src/i18n/locales/zh-CN/settings.ts`
 - Modify: `web/src/i18n/locales/en-US/settings.ts`
@@ -181,6 +184,9 @@ export async function bootstrap(): Promise<void>;
 - Modify: `src/dst_manager/interfaces/shell.py`
 - Modify: `web/src/api/shell.ts`
 - Modify: `web/src/App.vue`（仅四处选择文件调用）
+- Create: `web/src/api/shell.test.ts`
+- Modify: `web/src/components/settings/SettingsDialog.vue`（浏览接线：`file_kind` + 本地化描述，与桥签名同批迁移）
+- Modify: `web/tests/e2e/settings-dialog.spec.ts`（exe/dll 浏览断言）
 - Modify: `tests/unit/test_shell.py`
 - Modify: `web/tests/e2e/main.spec.ts`
 - Modify: `web/tests/e2e/sheets-folder.spec.ts`
@@ -197,11 +203,11 @@ def select_file(self, file_kind: FileKind, localized_description: str) -> str | 
 select_file(fileKind:"dst"|"template"|"exe"|"dll", localizedDescription:string): Promise<string|null>;
 ```
 
-- [ ] **Step 1：写安全红灯。** Python 断言四种 kind 的固定扩展名、未知 kind 拒绝、本地化描述含伪造 `*.bat` 也不能扩大白名单、取消返回 null、无 window 报明确错误；TS/E2E 断言中英文只改变描述。
-- [ ] **Step 2：运行红灯。** `uv run pytest tests/unit/test_shell.py -q` 与 `npm --prefix web run test:e2e -- tests/e2e/main.spec.ts tests/e2e/sheets-folder.spec.ts --workers=1`。
-- [ ] **Step 3：最小实现。** Python 根据 kind 拼接固定模式；前端删除过滤器数组，以 i18n 生成描述。同包升级不保留旧 `file_types` 任意字符串签名。
-- [ ] **Step 4：绿灯。** 重跑 Step 2，运行 Ruff 与 `npm --prefix web run build`。
-- [ ] **Step 5：批次检查点与提交。** 演示设置保存成功/失败和四种选择调用；在 `PLAN-DM-020`“实际验证”记录 `PLAN-DM-021` 基础批次 commit/测试结果后，更新 changelog 并提交 `收紧原生文件选择本地化契约`，停止复核。
+- [ ] **Step 1：写安全红灯。** Python 断言四种 kind 的固定扩展名、未知 kind 拒绝、本地化描述含伪造 `*.bat` 也不能扩大白名单、取消返回 null、无 window 报明确错误；TS 单测断言 `selectSettingsPath` 按 `file_kind` 传白名单且描述参数化；settings-dialog E2E 断言 exe/dll 浏览中英文只改变描述、白名单不变。
+- [ ] **Step 2：运行红灯。** `uv run pytest tests/unit/test_shell.py -q`、`npm --prefix web run test:unit -- src/api/shell.test.ts` 与 `npm --prefix web run test:e2e -- tests/e2e/main.spec.ts tests/e2e/sheets-folder.spec.ts tests/e2e/settings-dialog.spec.ts --workers=1`。
+- [ ] **Step 3：最小实现。** Python 根据 kind 拼接固定模式；App.vue 四处调用与设置中心 `onBrowse`/`selectSettingsPath` 全部改为 `file_kind` + i18n 描述，删除 EXE/DLL 过滤器常量数组。同包升级不保留旧 `file_types` 任意字符串签名。
+- [ ] **Step 4：绿灯。** 重跑 Step 2，运行 Ruff、`npm --prefix web run test:unit` 与 `npm --prefix web run build`。
+- [ ] **Step 5：批次检查点与提交。** 演示设置保存成功/失败和四种选择调用（含设置中心 exe/dll“浏览”仍可用）；在 `PLAN-DM-020`“实际验证”记录 `PLAN-DM-021` 基础批次 commit/测试结果后，更新 changelog 并提交 `收紧原生文件选择本地化契约`，停止复核。
 
 ---
 
@@ -342,7 +348,7 @@ select_file(fileKind:"dst"|"template"|"exe"|"dll", localizedDescription:string):
 
 **Files**
 
-- Create: `web/scripts/check-i18n.mjs`
+- Modify: `web/scripts/check-i18n.mjs`（扩展：允许清单与硬编码扫描、参数一致性，Task 2 已落最小键对称版）
 - Create: `web/src/i18n/hardcoded-allowlist.json`
 - Modify: `web/package.json`
 - Modify: `src/dst_manager/settings/registry.py`
@@ -356,10 +362,10 @@ select_file(fileKind:"dst"|"template"|"exe"|"dll", localizedDescription:string):
 - Modify: `changelog.md`
 
 - [ ] **Step 1：写检查器红灯夹具。** 分别制造缺键、多键、命名参数不一致和新增硬编码中文，断言 `check:i18n` 非零退出并定位域/键/文件。
-- [ ] **Step 2：接入构建。** `build` 先运行 `check:i18n`；允许清单只收用户数据示例、协议常量和必要品牌名，每项注明原因，不能用于跳过普通 UI 文案。
+- [ ] **Step 2：完善门禁。** 允许清单只收用户数据示例、协议常量和必要品牌名，每项注明原因，不能用于跳过普通 UI 文案；`check:i18n` 扩展命名插值参数一致性校验（`build` 已从 Task 2 起运行）。
 - [ ] **Step 3：删除兼容层。** 全仓确认无调用后删除设置 `label/category/text/file_filter`、前端 `code -> 中文` 主路径与旧任意 `select_file(file_types)`；保留结构化错误的诊断 `message` 兼容字段到架构指定窗口结束。
 - [ ] **Step 4：生成并验证契约。** `npm --prefix web run generate:api`，运行设置/API/Shell Python 测试、`npm --prefix web run test:unit`、`npm --prefix web run build`。
-- [ ] **Step 5：反向扫描。** `rg -n "\blabel\b|\bcategory\b|file_filter|select_file\(\[|DIAG_TEXTS|[一-龥]" src/dst_manager web/src`，逐项确认只剩允许内容；不能以批量忽略替代迁移。
+- [ ] **Step 5：反向扫描。** `rg -n "\blabel\b|\bcategory\b|file_filter|select_file\(\[|DIAG_TEXTS|[一-龥]" src/dst_manager web/src`，逐项确认只剩允许内容；扫描排除 `web/src/i18n/hardcoded-allowlist.json` 自身（品牌名/用户数据示例按 Step 2 审查）；不能以批量忽略替代迁移。
 - [ ] **Step 6：记录并提交。** 更新 changelog，提交 `建立翻译完整性门禁并清理兼容字段`，停止复核。
 
 ---
