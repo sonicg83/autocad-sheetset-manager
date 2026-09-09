@@ -824,4 +824,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 
 2026-09-09：PLAN-DM-021 批次二（核心页面按域迁移）已完成。commits `f9dd914..bebe547`：Task 5 `d4cf4d1`（共享外壳与通用组件）、Task 6 `20cee67`（图纸工作区）、Task 7 `7a630f3`（属性工作区）、Task 8 `b159c86`+`bebe547`（修订/预览/修复/草稿/任务状态 + 草稿动作 label_key 持久化修复与消息键格式校验）。自动化证据：全量 e2e 314 passed、`npm --prefix web run test:unit` 28 passed、check:i18n 681 键/7 域对称、build 通过、Python 全量 pytest 与 ruff 通过。语言切换前后业务状态不变量（active tab/workspace/输入/草稿/job 状态）有 e2e 断言；「语言不得写入 draft」已在存储边界强制（消息键正则）。真机验证仍留 G9。
 
+2026-09-09：PLAN-DM-021 批次三（统一错误目录、构建门禁与兼容清理）已完成。commits `bebe547..973e696`（另含回归修复 `350a10b`）：Task 9 `fabb4be`（73 个已知 code 的接口层错误目录、统一负载、前端已知/未知错误分流，errors 域 74 键）、回归修复（main E2E 三处批次二遗留失败，测试侧修复）、Task 10 `973e696`（check:i18n 四类门禁 + 空允许清单、删除设置 label/category/file_filter/text 兼容层、ARCH-DM-005 §7 措辞修订）。自动化证据：Python 230 passed（11 模块）+ 全量 pytest/ruff 通过、test:unit 28 passed、main.spec 74 passed、build（check:api+check:i18n 759 键/8 域+vue-tsc+vite）通过。设置兼容层已删（rg 反查无残留）；草稿 `DraftAction.label` 兼容按 I18N-17 窗口保留，留 Task 12 收口；已知残留：useSheetColumns SHEET_PREFERENCES_INVALID 直显原始中文 message（Task 11 修复）。
+
 其余尚未实施。执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。
