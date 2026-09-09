@@ -1,10 +1,13 @@
 <script setup lang="ts">
-// 设置中心单字段行（PLAN-DM-019 任务 10，SPEC-DM-011 SC-03/04/05/06）。
+// 设置中心单字段行（PLAN-DM-019 任务 10；PLAN-DM-021 Task 3 双语化）。
 // 只负责展示与编辑事件上抛；编辑缓冲、校验与保存状态机在 SettingsDialog.vue。
-// DOM 约定（e2e 依赖）：行容器 data-field；可编辑控件 data-key；int 控件直接
-// 位于 .f-main 内，保证 `input[data-key]` 的父节点包含来源徽章文本。
+// 文本一律经语言包渲染：item 的稳定显示键（labelKey/textKey/fileFilterKey），
+// 缺键时回退迁移期兼容中文（I18N-17，阶段三删除）。DOM 约定（e2e 依赖）：
+// 行容器 data-field；可编辑控件 data-key；int 控件直接位于 .f-main 内，
+// 保证 `input[data-key]` 的父节点包含来源徽章文本。
 import {computed} from "vue";
-import type {SettingsItem, SettingsValue} from "../../api/settings";
+import {useI18n} from "vue-i18n";
+import type {SettingsEnumOption, SettingsItem, SettingsValue} from "../../api/settings";
 
 const props=defineProps<{
   item:SettingsItem;
@@ -16,6 +19,23 @@ const props=defineProps<{
 }>();
 const emit=defineEmits<{update:[key:string,value:SettingsValue];clear:[key:string];unset:[key:string];browse:[key:string]}>();
 
+const {t,locale}=useI18n();
+
+// 字段标签：稳定键优先，兼容中文仅作迁移期回退
+const label=computed(()=>props.item.labelKey!==undefined?t(props.item.labelKey):(props.item.label??props.item.key));
+
+// "跟随系统"选项的当前生效语言名：语言名保留自称形式（SPEC-DM-013 §5.1），
+// 与界面语言无关地显示 zh-CN → 简体中文 / en-US → English
+const currentLocaleName=computed(()=>locale.value==="zh-CN"?t("settings.locale.zhCN"):t("settings.locale.enUS"));
+
+// 枚举选项文本：textKey 走语言包；"跟随系统"为复合标签（SPEC-DM-013 §3.2），
+// 当前解析结果经命名参数注入（I18N-08），不在调用点拼接可翻译片段
+function optionText(option:SettingsEnumOption):string{
+  if(option.textKey===undefined)return option.text??String(option.value);
+  if(option.textKey==="settings.locale.system")return t("settings.locale.systemCurrent",{current:currentLocaleName.value});
+  return t(option.textKey);
+}
+
 // 编辑值与快照值不同即"未保存修改"（amber 边框依据）；null 与 null 视为相同
 const dirty=computed(()=>props.editValue!==undefined&&String(props.editValue)!==String(props.item.value??""));
 const hasError=computed(()=>props.error!==undefined&&props.error!=="");
@@ -26,42 +46,48 @@ const shown=computed(()=>{
 });
 const pathEmpty=computed(()=>props.item.control==="path"&&shown.value==="");
 
-const badgeText=computed(()=>props.item.source==="file"?"用户覆盖":props.item.source==="env"?"环境变量":"默认");
+const badgeText=computed(()=>props.item.source==="file"?t("settings.row.sourceFile"):props.item.source==="env"?t("settings.row.sourceEnv"):t("settings.row.sourceDefault"));
 const badgeClass=computed(()=>props.item.source==="file"?"badge-file":props.item.source==="env"?"badge-env":"badge-default");
 
 function commit(value:SettingsValue){emit("update",props.item.key,value)}
 
-// 控件归一化：int/enum 以 number 入缓冲，path/bool 原样；int 空串保留（触发"必须为整数"行内错误）
+// 控件归一化：int/enum 以 number 入缓冲，path/bool 原样；int 空串保留（触发"必须为整数"行内错误）。
+// ui_locale 为字符串枚举（system/zh-CN/en-US）：非数字原样入缓冲，数字枚举照旧转 number
 function onIntInput(event:Event){const raw=(event.target as HTMLInputElement).value;commit(raw===""?"":Number(raw))}
 function onBoolInput(event:Event){commit((event.target as HTMLInputElement).checked)}
-function onEnumInput(event:Event){commit(Number((event.target as HTMLInputElement).value))}
+function onEnumInput(event:Event){
+  const raw=(event.target as HTMLInputElement).value;
+  const num=Number(raw);
+  commit(raw!==""&&!Number.isNaN(num)?num:raw);
+}
 </script>
 <template>
   <div class="field" :class="{dirty,error:hasError}" :data-field="item.key">
-    <label class="f-label" :for="`settings-input-${item.key}`">{{item.label}}</label>
+    <label class="f-label" :for="`settings-input-${item.key}`">{{label}}</label>
     <div class="f-main">
       <template v-if="item.control==='path'">
         <div class="f-line">
-          <input :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="item.nullable?'未配置':''" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="commit(($event.target as HTMLInputElement).value)">
-          <button type="button" class="browse-btn" :disabled="disabled||browseDisabled" :title="browseDisabled?'桌面壳未就绪，可手动输入路径':undefined" @click="emit('browse',item.key)">浏览…</button>
-          <button v-if="item.nullable" type="button" class="link-btn" :disabled="disabled||pathEmpty" @click="emit('clear',item.key)">清除</button>
+          <input :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="item.nullable?t('settings.row.placeholderNotSet'):''" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="commit(($event.target as HTMLInputElement).value)">
+          <button type="button" class="browse-btn" :disabled="disabled||browseDisabled" :title="browseDisabled?t('settings.row.browseUnavailable'):undefined" @click="emit('browse',item.key)">{{t("settings.row.browse")}}</button>
+          <button v-if="item.nullable" type="button" class="link-btn" :disabled="disabled||pathEmpty" @click="emit('clear',item.key)">{{t("settings.row.clear")}}</button>
         </div>
       </template>
       <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="onIntInput">
       <span v-else-if="item.control==='bool'" class="switch">
         <input :id="`settings-input-${item.key}`" type="checkbox" role="switch" :data-key="item.key" :checked="Boolean(shown)" :disabled="disabled" @change="onBoolInput">
-        <span class="f-hint">{{shown?"开启":"关闭"}}</span>
+        <span class="f-hint">{{shown?t("settings.row.on"):t("settings.row.off")}}</span>
       </span>
-      <span v-else-if="item.control==='enum'" class="radio-line" role="radiogroup" :aria-label="item.label">
-        <label v-for="option in item.options" :key="option.value">
-          <input type="radio" :name="`settings-radio-${item.key}`" :data-key="item.key" :value="option.value" :checked="shown===option.value" :disabled="disabled" @change="onEnumInput">{{option.text}}
+      <span v-else-if="item.control==='enum'" class="radio-line" role="radiogroup" :aria-label="label">
+        <label v-for="option in item.options" :key="String(option.value)">
+          <input type="radio" :name="`settings-radio-${item.key}`" :data-key="item.key" :value="option.value" :checked="shown===option.value" :disabled="disabled" @change="onEnumInput">{{optionText(option)}}
         </label>
       </span>
 
       <div class="f-foot">
         <span class="badge" :class="badgeClass">{{badgeText}}</span>
-        <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?"撤销恢复继承":"恢复继承"}}</button>
-        <span v-if="item.control==='path'&&item.fileFilter" class="f-hint">{{item.fileFilter}}</span>
+        <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
+        <span v-if="item.control==='path'&&item.fileFilterKey!==undefined" class="f-hint">{{t(item.fileFilterKey)}}</span>
+        <span v-else-if="item.control==='path'&&item.fileFilter" class="f-hint">{{item.fileFilter}}</span>
         <span v-else-if="item.control==='int'&&item.min!==undefined&&item.max!==undefined" class="f-hint">{{item.min}}–{{item.max}}</span>
       </div>
       <p v-if="hasError" class="f-error" role="alert">{{error}}</p>

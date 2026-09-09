@@ -109,29 +109,39 @@ test("浏览器开发态浏览按钮禁用（SC-04 降级）", async ({page}) =>
 });
 
 test("配置文件损坏：诊断横幅（amber）且回退默认值", async ({page}) => {
-  await page.goto("/");
+  // 先写坏再加载：启动读取确定命中损坏文件（消除启动读取与写入的竞态）。
+  // 损坏使 ui_locale 回退默认 system，界面语言随系统（浏览器）解析（SPEC-DM-013 §3.1），
+  // 故对话框可访问名称不固定，期望断言按中英双语容忍；诊断码与控件行为与语言无关
   writeSettingsFile("{ 这不是合法 JSON", 3);
-  await openSettingsDialog(page);
+  await page.goto("/");
+  await page.getByRole("button", {name: "设置"}).click();
+  await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
   const banner = page.getByRole("alert").filter({hasText: "SETTINGS_FILE_CORRUPT"});
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("默认值");
+  await expect(banner).toContainText(/默认值|default values/);
   // 损坏仅回退默认值，不进入只读（schemaBlocked=false）：横幅为 amber 而非红色只读
   await expect(page.locator(".diag.readonly")).toBeHidden();
   await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("600");
-  // 还原合法文件，避免影响后续用例（文件已被后端备份改名，重写即恢复）
-  writeSettingsFile({}, 3);
+  // 还原合法文件，避免影响后续用例（文件已被后端备份改名，重写即恢复）；
+  // values 显式带回 ui_locale，防止后续用例随 system 解析漂移到浏览器语言
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 3);
 });
 
 test("Schema 过新：红色只读诊断横幅，输入与保存禁用（SC-12）", async ({page}) => {
-  await page.goto("/");
+  // 先写后加载（同损坏用例：消除启动读取与写入竞态）。schema 过新时 resolver 降级：
+  // values 整体失效（含 ui_locale → 默认 system），界面随系统语言解析（SPEC-DM-013 §3.3
+  // "界面继续使用启动时已解析的语言"），故断言按中英双语容忍
   writeSettingsFile({}, 5, 99);
-  await openSettingsDialog(page);
+  await page.goto("/");
+  await page.getByRole("button", {name: "设置"}).click();
+  await page.locator('input[data-key="cad_timeout_seconds"]').waitFor();
   const banner = page.getByRole("alert").filter({hasText: "SETTINGS_SCHEMA_NEWER"});
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("只读");
-  await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+  await expect(banner).toContainText(/只读|Read-only/);
+  await expect(page.locator(".dlg-foot button.primary")).toBeDisabled();
   await expect(page.locator(TIMEOUT_INPUT)).toBeDisabled();
-  writeSettingsFile({}, 5);
+  // 还原合法文件并保留 ui_locale（防止后续用例漂移到浏览器语言）
+  writeSettingsFile({ui_locale: "zh-CN"}, 5);
 });
 
 test("焦点圈闭与归还：打开聚焦首字段，Esc 关闭后焦点回到齿轮", async ({page}) => {
@@ -194,10 +204,116 @@ test("重复打开不产生多实例且字段无状态残留", async ({page}) =>
   await openSettingsDialog(page);
   await expect(page.getByRole("dialog", {name: "设置"})).toHaveCount(1);
   await expect(page.getByRole("dialog", {name: "有未保存的修改"})).toBeHidden();
-  // 字段与上次保存一致，无上一轮残留（无行内错误、无只读诊断）；
-  // 未编辑缓冲为纯净态：保存按钮按设计禁用（saveDisabled 含 !hasUnsaved），恰证无脏状态残留
+  // 字段与上次保存一致，无上一轮残留（无行内错误、无只读诊断、无脏字段高亮）；
+  // 保存按钮按设计保持可聚焦（空保存由 onSave no-op 守卫承担），无脏字段以 .dirty 计数为证
   await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("600");
   await expect(page.locator(TIMEOUT_ROW)).toContainText("默认");
   await expect(page.locator(".diag.readonly")).toBeHidden();
-  await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+  await expect(page.locator(".field.dirty")).toHaveCount(0);
+  await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+});
+
+// ---- PLAN-DM-021 Task 3：语言切换事务与双语错误恢复（SPEC-DM-013 §3.2/§3.3）----
+// 既有用例依赖中文基线，语言事务用例按"可回滚状态"排列：每个用例先显式写入
+// ui_locale 基线（前文"损坏/Schema"用例会把 values 清空，默认 system 会随
+// 浏览器非中文 navigator 解析成 en-US），切换语言的用例放串行链最后并还原。
+
+test("语言选择未保存不切换：取消后保持生效语言与快照选择", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 3);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  await page.locator('input[data-key="ui_locale"][value="en-US"]').check();
+  await page.keyboard.press("Escape");
+  const confirm = page.getByRole("dialog", {name: "有未保存的修改"});
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", {name: "放弃修改并关闭"}).click();
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  // 重开：取消不落盘，语言仍为快照中的简体中文
+  await openSettingsDialog(page);
+  await expect(page.locator('input[data-key="ui_locale"][value="zh-CN"]')).toBeChecked();
+});
+
+test("422 结构化错误：错误摘要聚焦并链接字段、语言与输入保留、对话框保持", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 3);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  // 契约红线的受限例外：仅拦截本次 PUT 复现 Task 1 冻结的 422 结构化错误体
+  //（UI 无法构造出后端才能判定的越界负载）；GET 与其余用例仍走真实后端。
+  await page.route("**/api/settings", async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "SETTINGS_VALIDATION_FAILED",
+        errors: {
+          cad_timeout_seconds: {
+            code: "SETTING_INTEGER_RANGE",
+            message_key: "settings.validation.integerRange",
+            params: {min: 30, max: 3600},
+            message: "CAD 超时（秒） 必须介于 30 和 3600 之间",
+          },
+        },
+      }),
+    });
+  });
+  const timeout = page.locator(TIMEOUT_INPUT);
+  await timeout.fill("120");
+  await page.getByRole("button", {name: "保存"}).click();
+  const summary = page.getByTestId("settings-error-summary");
+  await expect(summary).toBeFocused(); // 错误摘要取得焦点（tabindex=-1）
+  await expect(summary).toContainText("CAD 超时（秒）"); // 摘要条目解析字段标签
+  await expect(summary).toContainText("必须在 30–3600 之间"); // message_key + 结构化参数
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN"); // 语言不变
+  await expect(timeout).toHaveValue("120"); // 本地输入保留
+  // 摘要条目链接到字段：点击后焦点落到对应字段
+  await summary.getByRole("button").first().click();
+  await expect(timeout).toBeFocused();
+});
+
+test("409 冲突恢复：提示可见、输入与语言保留、对话框保持", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 3);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  // 同上：仅拦截 PUT 返回 409（并发修订冲突在单客户端 e2e 中无法自然复现）
+  await page.route("**/api/settings", async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({code: "SETTINGS_CONFLICT", message: "config revision conflict"}),
+    });
+  });
+  const timeout = page.locator(TIMEOUT_INPUT);
+  await timeout.fill("650");
+  await page.getByRole("button", {name: "保存"}).click();
+  await expect(page.getByText("配置已被其他窗口修改，已刷新为最新配置，请核对后重试")).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(timeout).toHaveValue("650"); // 本地选择保留，等待用户重试或取消
+});
+
+test("保存成功切换语言：html[lang] 同步、对话框保持、焦点恢复、背景输入不丢失", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 3);
+  await page.goto("/");
+  // 背景页面输入：打开对话框前在欢迎区路径框键入，切换后不得丢失（I18N-06）
+  const bgInput = page.locator(".no-shell input");
+  await bgInput.fill("C:\\temp\\keep.dst");
+  await openSettingsDialog(page);
+  await page.locator('input[data-key="ui_locale"][value="en-US"]').check();
+  await page.getByRole("button", {name: "保存"}).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  // 对话框保持打开，界面整体切换为英文（可访问名称随标题切换）
+  await expect(page.getByRole("dialog", {name: "Settings"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Save"})).toBeFocused(); // nextTick 焦点恢复
+  await expect(page.getByTestId("settings-saved-pill")).toHaveText("Saved"); // 本地化成功反馈
+  // "跟随系统（当前：…）"复合标签随语言切换；当前生效语言为 en-US，自称形式显示 English
+  //（SPEC-DM-013 §5.1：英文界面显示 "Follow system (current: English)"）
+  await expect(page.getByText("Follow system (current: English)")).toBeVisible();
+  await expect(page.getByText("CAD timeout (seconds)")).toBeVisible(); // 英文长标签完整渲染
+  await expect(bgInput).toHaveValue("C:\\temp\\keep.dst");
+  // 还原中文基线（本用例为串行链最后一个，覆盖值与 Task 3 之前的状态一致）
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 4);
 });

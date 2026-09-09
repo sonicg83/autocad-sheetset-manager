@@ -5,7 +5,9 @@
 // <dialog> showModal 提供原生焦点圈闭与 ::backdrop 遮罩（拖放不穿透，SC-14）；
 // 关闭确认 ConfirmModal 置于 <dialog> 子树内，使其遮罩能盖住对话框内容。
 import {computed,nextTick,ref,watch} from "vue";
+import {useI18n} from "vue-i18n";
 import {ApiError} from "../../api/client";
+import type {ApiFieldError} from "../../api/client";
 import {fetchAbout} from "../../api/settings";
 import type {AboutInfo,SettingsItem,SettingsValue} from "../../api/settings";
 import {getShellBridge,openExternalLink,selectSettingsPath,shellReady} from "../../api/shell";
@@ -22,20 +24,24 @@ const props=defineProps<{
 }>();
 const emit=defineEmits<{close:[]}>();
 
+const {t,te}=useI18n();
 const {snapshot,loading,load,save}=useSettings();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 
 const dialogEl=ref<HTMLDialogElement|null>(null);
+const saveButtonEl=ref<HTMLButtonElement|null>(null); // 保存成功语言切换后归还焦点的锚点
+const errorSummaryEl=ref<HTMLDivElement|null>(null); // 422 错误摘要（tabindex=-1，可聚焦）
 const section=ref<"general"|"about">("general");
 const about=ref<AboutInfo|null>(null);
 const aboutFailed=ref(false);
 const edits=ref<Record<string,SettingsValue>>({}); // key → 编辑缓冲；删除键=回退到快照值
 const pendingUnset=ref<string[]>([]); // 恢复继承标记：点击不落盘，随下次保存经 unset 提交
-const fieldErrors=ref<Record<string,string>>({}); // 即时校验 + 422 逐字段回显
+const fieldErrors=ref<Record<string,ApiFieldError>>({}); // 422 逐字段结构化错误（message_key+params）
 const saving=ref(false);
 const savedVisible=ref(false);
 const conflictNotice=ref(""); // 409：配置已被其他窗口修改（输入保留，快照已刷新）
-const saveFailedNotice=ref(""); // 其他保存失败（网络/5xx）：内存值不替换
+const saveFailedNotice=ref(""); // 其他保存失败（网络/5xx）：内存值不替换，文案按当前语言
+const saveFailedDetail=ref(""); // 原始错误消息：仅作诊断详情（tooltip），不作界面翻译
 const loadFailed=ref(false);
 let savedTimer:ReturnType<typeof setTimeout>|null=null;
 let opener:HTMLElement|null=null; // 触发按钮（齿轮），关闭时归还焦点
@@ -45,7 +51,7 @@ watch(()=>props.open,async open=>{
   if(open){
     opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
     section.value="general";edits.value={};pendingUnset.value=[];fieldErrors.value={};
-    conflictNotice.value="";saveFailedNotice.value="";loadFailed.value=false;about.value=null;aboutFailed.value=false;
+    conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";loadFailed.value=false;about.value=null;aboutFailed.value=false;
     dialogEl.value?.showModal();
     await loadSettings();
   }else if(dialogEl.value?.open){
@@ -73,10 +79,10 @@ async function tryClose(){
   if(!hasUnsaved.value){close();return}
   // SC-08：有未保存修改不静默丢弃——确认"放弃修改并关闭 / 留在此处"
   const discard=await confirmAction({
-    title:"有未保存的修改",
-    message:"关闭将放弃本次全部未保存修改，已保存的配置不受影响。",
-    confirmText:"放弃修改并关闭",
-    cancelText:"留在此处",
+    title:t("settings.confirm.title"),
+    message:t("settings.confirm.message"),
+    confirmText:t("settings.confirm.discard"),
+    cancelText:t("settings.confirm.stay"),
   });
   if(discard)close();
 }
@@ -99,32 +105,62 @@ function onCancel(event:Event){
 
 // ---- 编辑缓冲与校验 ----
 const items=computed(()=>snapshot.value?.items??[]);
+// 按 category key 分组（I18N-09）：稳定键优先，迁移期缺键回退中文 category；
+// 注册表顺序即首次出现顺序（后端稳定排序）
 const groups=computed(()=>{
-  const result:{category:string;items:SettingsItem[]}[]=[];
+  const result:{key:string;items:SettingsItem[]}[]=[];
   for(const item of items.value){
-    const group=result.find(entry=>entry.category===item.category);
+    const key=item.categoryKey??item.category??item.key;
+    const group=result.find(entry=>entry.key===key);
     if(group)group.items.push(item);
-    else result.push({category:item.category,items:[item]});
+    else result.push({key,items:[item]});
   }
-  return result; // 注册表顺序即首次出现顺序（后端稳定排序）
+  return result;
 });
+function groupTitle(key:string):string{
+  return key.startsWith("settings.")?t(key):key; // 非键形态=迁移期兼容中文，原样显示
+}
 const schemaBlocked=computed(()=>snapshot.value?.schemaBlocked??false);
 
 function localError(item:SettingsItem):string|undefined{
   if(item.control==="int"&&item.key in edits.value){
     const value=edits.value[item.key];
-    if(value===""||typeof value!=="number"||!Number.isInteger(value))return "必须为整数";
-    if(item.min!==undefined&&value<item.min||item.max!==undefined&&value>item.max)return `必须在 ${item.min}–${item.max} 之间`;
+    if(value===""||typeof value!=="number"||!Number.isInteger(value))return t("settings.validation.integerType");
+    if(item.min!==undefined&&value<item.min||item.max!==undefined&&value>item.max)return t("settings.validation.integerRange",{min:item.min,max:item.max});
   }
-  if(item.control==="path"&&typeof edits.value[item.key]==="string"&&/[<>"|?*]/.test(edits.value[item.key] as string))return "含有路径非法字符";
+  if(item.control==="path"&&typeof edits.value[item.key]==="string"&&/[<>"|?*]/.test(edits.value[item.key] as string))return t("settings.validation.pathIllegalChars");
   return undefined;
 }
-function rowError(item:SettingsItem):string|undefined{
-  return fieldErrors.value[item.key]??localError(item);
+// 结构化参数原样进入命名插值；list[str]（如 allowed_values）按后端消息风格以 / 连接，
+// 不做区域化转换（ARCH-DM-005 §6.2）
+function errorParams(error:ApiFieldError):Record<string,string|number|boolean>{
+  const out:Record<string,string|number|boolean>={};
+  for(const [key,value] of Object.entries(error.params??{})){
+    out[key]=Array.isArray(value)?value.join("/"):value;
+  }
+  return out;
 }
+function fieldErrorText(error:ApiFieldError):string{
+  // 渲染顺序（ARCH-DM-005 §6.2）：已知 message_key → 迁移期兼容 message → 稳定 code
+  if(error.messageKey!==undefined&&te(error.messageKey))return t(error.messageKey,errorParams(error));
+  return error.message??error.code;
+}
+function fieldLabel(key:string):string{
+  const item=items.value.find(entry=>entry.key===key);
+  if(item===undefined)return key;
+  return item.labelKey!==undefined?t(item.labelKey):(item.label??item.key);
+}
+function rowError(item:SettingsItem):string|undefined{
+  const error=fieldErrors.value[item.key];
+  if(error!==undefined)return fieldErrorText(error); // 422 行内错误与摘要并存（SPEC-DM-013 §3.3）
+  return localError(item);
+}
+const hasFieldErrors=computed(()=>Object.keys(fieldErrors.value).length>0);
 const hasValidationError=computed(()=>items.value.some(item=>rowError(item)!==undefined));
 const hasUnsaved=computed(()=>items.value.some(item=>item.key in edits.value&&String(edits.value[item.key])!==String(item.value??""))||pendingUnset.value.length>0);
-const saveDisabled=computed(()=>saving.value||schemaBlocked.value||!hasUnsaved.value||hasValidationError.value);
+// 无未保存修改时保存按钮保持可聚焦（与冻结 Demo 一致：成功保存后焦点回到保存按钮，
+// SPEC-DM-013 G6.3）：空保存由 onSave 的 no-op 守卫承担，不经 disabled 表达
+const saveDisabled=computed(()=>saving.value||schemaBlocked.value||hasValidationError.value);
 
 function onUpdate(key:string,value:SettingsValue){
   edits.value[key]=value;
@@ -146,13 +182,14 @@ function onUnset(key:string){
 async function onBrowse(key:string){
   const item=items.value.find(entry=>entry.key===key);
   if(!item)return;
-  const filter=item.fileFilter?.includes("exe")?"exe":item.fileFilter?.includes("dll")?"dll":"folder";
-  const result=await selectSettingsPath(filter); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
+  // file_kind 为后端注册表固定值（Task 1 起返回）；桥签名（file_kind+本地化描述）随 Task 4 迁移
+  const result=await selectSettingsPath(item.fileKind??"folder"); // undefined=桥不可用（按钮已禁用）/null=取消/string=路径
   if(typeof result==="string")onUpdate(key,result);
 }
 
-// ---- 保存状态机（SC-07）----
+// ---- 保存状态机（SC-07；PLAN-DM-021 Task 3 语言事务）----
 async function onSave(){
+  if(saving.value)return; // 忙碌期防重复提交（按钮同时 disabled）
   const firstError=items.value.find(item=>rowError(item)!==undefined);
   if(firstError){jumpToError(firstError.key);return}
   const set:Record<string,unknown>={};
@@ -164,28 +201,48 @@ async function onSave(){
     set[item.key]=item.control==="path"&&typeof value==="string"&&!value.trim()?null:value;
   }
   if(!Object.keys(set).length&&!pendingUnset.value.length)return;
-  saving.value=true;conflictNotice.value="";saveFailedNotice.value="";
+  saving.value=true;conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";
+  let savedOk=false;
   try{
+    // 组合式函数内完成语言切换事务：PUT 成功 → 以响应快照 ui_locale 切换一次；
+    // 失败（422/409/网络/5xx）语言与本地输入均保持不变（I18N-05）
     await save(set,[...pendingUnset.value]);
     edits.value={};pendingUnset.value=[];fieldErrors.value={};
     showSaved();
     // SC-13：编号规则/并发相关配置变更后，追加预览重算提示
     const previewKeys=["enable_add_number_suffix","number_suffix_type","cad_max_parallel"];
     const recalc=Object.keys(set).some(key=>previewKeys.includes(key));
-    props.pushToast({type:"ok",title:"已保存",body:recalc?"相关预览将按新配置重算":"设置已更新"});
+    props.pushToast({type:"ok",title:t("settings.toast.savedTitle"),body:recalc?t("settings.toast.savedRecalcBody"):t("settings.toast.savedBody")});
+    savedOk=true;
   }catch(error){
     if(error instanceof ApiError&&error.status===422){
-      fieldErrors.value=error.fields??{};
-      const key=Object.keys(fieldErrors.value)[0];
-      if(key)jumpToError(key); // SC-06：焦点落到第一个错误字段
+      // 结构化逐字段错误（message_key+params）优先；迁移期字符串 fields 包装为兼容对象
+      const structured=error.fieldErrors
+        ??Object.fromEntries(Object.entries(error.fields??{}).map(([key,message])=>[key,{code:"SETTING_INVALID",message}]));
+      if(Object.keys(structured).length>0){
+        fieldErrors.value=structured;
+        await nextTick();
+        errorSummaryEl.value?.focus(); // §3.3：错误摘要取得焦点（tabindex=-1），条目链接字段
+      }else{
+        saveFailedNotice.value=t("settings.errors.saveFailed");
+        saveFailedDetail.value=error.message;
+      }
     }else if(error instanceof ApiError&&error.status===409){
-      conflictNotice.value="配置已被其他窗口修改，已刷新为最新配置，请核对后重试";
-      await load(); // 输入缓冲保留，仅刷新快照与修订号
+      conflictNotice.value=t("settings.errors.conflict"); // 不自动切换语言（I18N-05）
+      await load(); // 输入缓冲保留，仅刷新快照与修订号（load 不触发语言切换）
     }else{
-      saveFailedNotice.value=error instanceof Error?error.message:"保存失败，请重试";
+      // 网络/5xx/未知错误：当前语言通用摘要，原始消息仅作诊断详情（tooltip）
+      saveFailedNotice.value=t("settings.errors.saveFailed");
+      saveFailedDetail.value=error instanceof Error?error.message:"";
     }
   }finally{
     saving.value=false;
+  }
+  if(savedOk){
+    // 语言切换（含忙碌态结束）会整体重渲染：nextTick 后把焦点归还保存按钮
+    //（与冻结 Demo 一致：保存成功后焦点回到保存按钮，SPEC-DM-013 G6.3 / I18N-06）
+    await nextTick();
+    saveButtonEl.value?.focus();
   }
 }
 
@@ -202,17 +259,18 @@ function showSaved(){
 }
 
 // ---- 诊断横幅（SC-12）----
-const DIAG_TEXTS:Record<string,string>={
-  SETTINGS_FILE_MISSING:"用户配置文件不存在，本次会话按默认值运行",
-  SETTINGS_FILE_CORRUPT:"用户配置文件无法读取（已备份），本次会话按默认值运行",
+// 已知机器码映射语言包键；未知条目（后端附带的中文说明）原样显示，不误译
+const DIAG_KEYS:Record<string,string>={
+  SETTINGS_FILE_MISSING:"settings.diagnostics.fileMissing",
+  SETTINGS_FILE_CORRUPT:"settings.diagnostics.fileCorrupt",
 };
 const diagLines=computed(()=>{
   const lines:string[]=[];
   // schema 过新时后端 diagnostics 为空（resolver 降级分支），只读态由 schema_blocked 驱动
-  if(schemaBlocked.value)lines.push("设置文件 schema 版本与当前程序不兼容，已进入只读模式，不能保存。（诊断码 SETTINGS_SCHEMA_NEWER）");
+  if(schemaBlocked.value)lines.push(t("settings.diagnostics.schemaNewer",{code:"SETTINGS_SCHEMA_NEWER"}));
   for(const entry of snapshot.value?.diagnostics??[]){
-    // 诊断元素为"机器码"或后端附带的中文说明；已知机器码映射为友好文案
-    lines.push(DIAG_TEXTS[entry]!==undefined?`${DIAG_TEXTS[entry]}。（诊断码 ${entry}）`:entry);
+    const key=DIAG_KEYS[entry];
+    lines.push(key!==undefined?t(key,{code:entry}):entry);
   }
   return lines;
 });
@@ -233,12 +291,12 @@ async function openExternal(url:string){
   if(getShellBridge()){
     const opened=await openExternalLink(url);
     if(opened===true){
-      props.pushToast({type:"ok",title:"外部链接",body:"已在系统浏览器打开"});
+      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkOpened")});
     }else if(opened===false){
-      props.pushToast({type:"fail",title:"外部链接",body:"仅允许打开登记的 https 链接"});
+      props.pushToast({type:"fail",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkRejected")});
     }else{
       // 旧壳缺 open_external 方法：维持降级提示
-      props.pushToast({type:"ok",title:"外部链接",body:"桌面版暂不支持在系统浏览器打开链接，请复制地址访问"});
+      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkUnsupported")});
     }
     return;
   }
@@ -259,31 +317,40 @@ const browseDisabled=computed(()=>{
   <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onCancel" @click="onBackdropClick" @dragover.prevent.stop @drop.prevent.stop>
     <div class="dlg">
       <div class="dlg-head">
-        <h2 id="settings-title">设置</h2>
-        <span v-if="snapshot" class="rev-pill">配置修订 r{{snapshot.configRevision}}</span>
+        <h2 id="settings-title">{{t("settings.title")}}</h2>
+        <span v-if="snapshot" class="rev-pill">{{t("settings.revision",{revision:snapshot.configRevision})}}</span>
         <span class="spacer"></span>
-        <button type="button" class="icon-btn" aria-label="关闭设置" :disabled="saving" @click="tryClose">✕</button>
+        <button type="button" class="icon-btn" :aria-label="t('settings.close')" :disabled="saving" @click="tryClose">✕</button>
       </div>
-      <p v-if="loading&&!snapshot" class="loading" role="status">正在加载设置…</p>
+      <p v-if="loading&&!snapshot" class="loading" role="status">{{t("settings.loading")}}</p>
       <div v-else-if="loadFailed" class="dlg-body">
         <div class="panel load-failed">
-          <p>设置加载失败，请检查服务是否可用。</p>
-          <button type="button" @click="loadSettings">重试</button>
+          <p>{{t("settings.loadFailed")}}</p>
+          <button type="button" @click="loadSettings">{{t("settings.retry")}}</button>
         </div>
       </div>
       <template v-else-if="snapshot">
         <div v-if="diagLines.length" class="diag" :class="{readonly:schemaBlocked}" role="alert">
           <p v-for="line in diagLines" :key="line">{{line}}</p>
         </div>
+        <!-- 422 错误摘要：tabindex=-1 可聚焦，取得焦点后经条目链接跳转字段（SPEC-DM-013 §3.3） -->
+        <div v-if="hasFieldErrors" ref="errorSummaryEl" class="error-summary" role="alert" tabindex="-1" data-testid="settings-error-summary">
+          <p>{{t("settings.errors.summaryTitle")}}</p>
+          <ul>
+            <li v-for="(error,key) in fieldErrors" :key="key">
+              <button type="button" class="es-link" @click="jumpToError(key)">{{fieldLabel(key)}}：{{fieldErrorText(error)}}</button>
+            </li>
+          </ul>
+        </div>
         <div class="dlg-body">
-          <nav class="sections" role="tablist" aria-label="设置分区">
-            <button type="button" role="tab" :aria-selected="section==='general'" @click="section='general'">常规配置</button>
-            <button type="button" role="tab" :aria-selected="section==='about'" @click="showAbout">关于</button>
+          <nav class="sections" role="tablist" :aria-label="t('settings.sections.nav')">
+            <button type="button" role="tab" :aria-selected="section==='general'" @click="section='general'">{{t("settings.sections.general")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='about'" @click="showAbout">{{t("settings.sections.about")}}</button>
           </nav>
           <div class="panel">
             <template v-if="section==='general'">
-              <div v-for="group in groups" :key="group.category" class="group">
-                <div class="group-title">{{group.category}}</div>
+              <div v-for="group in groups" :key="group.key" class="group">
+                <div class="group-title">{{groupTitle(group.key)}}</div>
                 <SettingsFormRow
                   v-for="item in group.items" :key="item.key" :item="item"
                   :edit-value="edits[item.key]" :error="rowError(item)"
@@ -295,34 +362,34 @@ const browseDisabled=computed(()=>{
             </template>
             <template v-else>
               <div class="about-block">
-                <h3>应用</h3>
+                <h3>{{t("settings.about.app")}}</h3>
                 <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>
-                <p v-else-if="aboutFailed" class="f-hint">关于信息加载失败。</p>
-                <p v-else class="f-hint" role="status">正在加载…</p>
+                <p v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</p>
+                <p v-else class="f-hint" role="status">{{t("settings.about.loading")}}</p>
               </div>
               <div class="about-block">
-                <h3>开源协议（MIT）</h3>
+                <h3>{{t("settings.about.licenseTitle")}}</h3>
                 <div v-if="about" class="license">{{about.license.text}}</div>
-                <div v-else-if="aboutFailed" class="f-hint">关于信息加载失败。</div>
+                <div v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</div>
               </div>
               <div class="about-block">
-                <h3>项目主页 / 反馈</h3>
+                <h3>{{t("settings.about.linksTitle")}}</h3>
                 <p v-if="about" class="link-line">
-                  <button type="button" class="link-btn" @click="openExternal(about.homepage)">项目主页</button>
-                  <button type="button" class="link-btn" @click="openExternal(about.feedbackUrl)">问题反馈</button>
+                  <button type="button" class="link-btn" @click="openExternal(about.homepage)">{{t("settings.about.homepage")}}</button>
+                  <button type="button" class="link-btn" @click="openExternal(about.feedbackUrl)">{{t("settings.about.feedback")}}</button>
                 </p>
-                <p v-else-if="!aboutFailed" class="f-hint" role="status">正在加载…</p>
+                <p v-else-if="!aboutFailed" class="f-hint" role="status">{{t("settings.about.loading")}}</p>
               </div>
             </template>
           </div>
         </div>
         <div class="dlg-foot">
           <span v-if="conflictNotice" class="foot-notice warn" role="alert">{{conflictNotice}}</span>
-          <span v-else-if="saveFailedNotice" class="foot-notice error" role="alert">{{saveFailedNotice}}</span>
-          <span v-if="savedVisible" class="saved-pill" role="status">已保存</span>
+          <span v-else-if="saveFailedNotice" class="foot-notice error" role="alert" :title="saveFailedDetail||undefined">{{saveFailedNotice}}</span>
+          <span v-if="savedVisible" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
           <span class="spacer"></span>
-          <button type="button" :disabled="saving" @click="tryClose">取消</button>
-          <button type="button" class="primary" :disabled="saveDisabled" @click="onSave">{{saving?"保存中…":"保存"}}</button>
+          <button type="button" :disabled="saving" @click="tryClose">{{t("settings.cancel")}}</button>
+          <button ref="saveButtonEl" type="button" class="primary" :disabled="saveDisabled" @click="onSave">{{saving?t("settings.saving"):t("settings.save")}}</button>
         </div>
       </template>
     </div>
@@ -345,6 +412,11 @@ const browseDisabled=computed(()=>{
 .diag{border:1px solid var(--color-warning);background:var(--color-warning-bg);color:var(--color-warning);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:12px;line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
 .diag p{margin:0}
 .diag.readonly{border-color:var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger)}
+.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:12px;line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
+.error-summary p{margin:0;font-weight:600}
+.error-summary ul{margin:0;padding:0;list-style:none}
+.es-link{border:0;background:transparent;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;line-height:1.8;text-align:left;text-decoration:underline}
+.es-link:hover{color:var(--color-danger);opacity:.8}
 .dlg-body{display:flex;flex:1;min-height:0}
 .sections{width:150px;flex-shrink:0;border-right:1px solid var(--color-border-subtle);padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-1)}
 .sections button{border:0;background:transparent;text-align:left;color:var(--color-text-secondary);padding:9px var(--space-3);border-radius:var(--radius-md);cursor:pointer;font-size:13px}

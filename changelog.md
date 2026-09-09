@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-09（实施 PLAN-DM-021 Task 3：设置中心语言事务与双语错误恢复）
+
+- `web/src/composables/useSettings.ts` 新增语言切换事务（I18N-05/06）：只有 PUT 成功才切换语言，且以响应快照的 `ui_locale` 为准（`system` 按系统规则解析）经 `applyLocale` 恰好切换一次；`load`（409 刷新/打开对话框）、选择未保存、取消与 422/409/网络/5xx 均不切换，快照不替换、本地编辑保留。
+- `web/src/api/client.ts` 支持结构化逐字段错误（ARCH-DM-005 §6.2）：`ApiError` 新增 `fieldErrors`（`{key: {code, messageKey, params, message}}`，snake_case `message_key` 归一化），原 `fields`（字符串消息）保持兼容，草稿等既有消费方不受影响。
+- `web/src/api/settings.ts` 映射只向组件暴露稳定显示键：`labelKey`/`categoryKey`/`fileFilterKey`/`fileKind` 与枚举选项 `textKey`（`value` 扩展为 `int | str` 以承载 `ui_locale`）；`label`/`category`/`text`/`fileFilter` 为迁移期兼容回退（I18N-17，阶段三删除）。
+- `web/src/components/settings/SettingsDialog.vue` 双语化（I18N-07）：标题/分区/按钮/确认模态/诊断横幅/关于分区/Toast 全部改走语言包；按 `category key` 分组；新增 422 错误摘要（`tabindex=-1` 可聚焦、逐条链接字段并跳转聚焦、字段标签 + `message_key` 结构化参数渲染）；409 冲突与网络/5xx 显示当前语言提示（原始消息仅作 tooltip 诊断详情）；保存成功在语言切换重渲染后 `nextTick` 归焦保存按钮（与冻结 Demo 一致：无未保存修改时保存按钮保持可聚焦、空保存由 `onSave` no-op 守卫承担）。浏览接线（`selectSettingsPath`）未改，仅以注册表 `file_kind` 取代过滤器文本解析（桥签名迁移留 Task 4）。
+- `web/src/components/settings/SettingsFormRow.vue`：标签/徽章/按钮/hint/placeholder/ARIA（radiogroup 标签）/tooltip 全部经语言包渲染；"跟随系统"选项用 `settings.locale.systemCurrent` 命名参数渲染"跟随系统（当前：…）"，当前生效语言名保留自称形式（I18N-08）；修复字符串枚举（`ui_locale`）被 `Number()` 强转的问题（非数字枚举值原样入缓冲）。
+- 语言资源扩展 `web/src/i18n/locales/{zh-CN,en-US}/settings.ts`（81 键对称，`check:i18n` 门禁通过）：设置中心全部静态文案、`settings.categories.*`/`settings.items.*`/`settings.validation.*`（与后端 `message_key` 对齐）/`settings.fileFilters.*`。
+- 测试（TDD）：新增 `web/src/composables/useSettings.test.ts` 8 例（选择/刷新不切换、成功恰好切换一次、响应快照优先、语言未变不切换、422/409/5xx 不切换且快照保持、快照未加载不切换）；`web/tests/e2e/settings-dialog.spec.ts` 新增 4 例（取消不切换、422 错误摘要聚焦/链接字段/输入与语言保留、409 冲突恢复、保存成功切换 `html[lang]`/对话框保持/焦点恢复/背景输入不丢失），并修正损坏/Schema 降级用例的语言竞态（先写文件后加载、还原时带回 `ui_locale`，降级场景断言按双语容忍）。验证：`test:unit` 23 passed、`settings-dialog` e2e 16 passed、`check:i18n` 81 键对称、`npm run build` 通过。
+
 ## 2026-09-09（实施 PLAN-DM-021 Task 2：前端多语言启动基础）
 
 - 新增 `web/src/i18n/locale.ts`：语言解析纯逻辑（I18N-03 / ARCH-DM-005 §4.2）——显式 `zh-CN`/`en-US` 优先于系统语言；`system` 按 `navigator.languages`（缺省读 `navigator.language`）解析，`zh-*` → `zh-CN`，其他可识别语言 → `en-US`；空列表/navigator 异常/全部不可识别标签回退 `zh-CN`。
