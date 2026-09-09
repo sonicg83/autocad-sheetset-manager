@@ -820,4 +820,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 
 2026-09-09：ARCH-DM-005 前置已形成已接受的 `SPEC-DM-013` 与 `PLAN-DM-021`（`proposed`），G4～G6 已关闭；生产多语言基础尚未实施，因此 Task 10 仍被阻断。解除条件为 PLAN-DM-021 批次一完成并记录实际 commit 与自动化结果。
 
+2026-09-09：PLAN-DM-021 批次一（语言基础、设置事务与原生对话框契约）已完成，Task 10 前置解除。分支 `feat/dm-021-multilingual`，commits `48f86d0..f9dd914`：Task 1 `bada4e5`+`d4d48f8`（后端 ui_locale 设置、registry key 化、结构化 422）、Task 2 `d6c2fcf`+`169317f`（唯一 vue-i18n 实例、挂载前 bootstrap、check:i18n 门禁）、Task 3 `065cd28`+`ebc53c9`（设置保存成功才切换语言的事务与双语错误恢复）、Task 4 `f9dd914`（select_file(file_kind, localized_description) 白名单契约）。自动化证据：`uv run pytest` 730 passed/72 skipped、`uv run ruff check .` 通过、`npm --prefix web run test:unit` 28 passed、`npm --prefix web run test:e2e` 全量 295+80 passed、`check:i18n` 81 键对称、`npm --prefix web run build` 通过。真机原生对话框演示（设置保存成功/失败、dst/template/exe/dll 四种选择调用）属 G9 边界，留待 Task 12 真实桌面验证，浏览器 mock 不作替代。
+
 其余尚未实施。执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。
