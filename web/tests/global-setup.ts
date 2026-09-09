@@ -27,8 +27,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   // 清场重建：上一轮残留的覆盖值/损坏文件不得影响本轮起点
   rmSync(SETTINGS_DIR, {recursive: true, force: true});
   mkdirSync(SETTINGS_DIR, {recursive: true});
-  // 预置合法空配置：diagnostics 为空，避免"文件缺失"诊断横幅干扰常规用例
-  writeFileSync(SETTINGS_PATH, JSON.stringify({schema_version: 1, config_revision: 0, values: {}}, null, 2), "utf-8");
+  // 预置合法空配置：diagnostics 为空，避免"文件缺失"诊断横幅干扰常规用例。
+  // 显式固定 ui_locale="zh-CN"（PLAN-DM-021 Task 2）：多语言启动上线后，e2e 浏览器
+  // navigator 默认非中文，必须固定既有中文基线，避免既有中文选择器与文案断言漂移。
+  writeFileSync(SETTINGS_PATH, JSON.stringify({schema_version: 1, config_revision: 0, values: {ui_locale: "zh-CN"}}, null, 2), "utf-8");
 
   const repoRoot = path.resolve(process.cwd(), "..");
   const logFd = openSync(path.join(SETTINGS_DIR, "serve.log"), "a");
