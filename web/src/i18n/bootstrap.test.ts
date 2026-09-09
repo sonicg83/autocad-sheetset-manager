@@ -3,17 +3,18 @@
 // 全程只有一个 i18n 实例；applyLocale 同步 i18n locale 与 <html lang>。
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
-const {fetchSettingsMock, createAppMock, mountMock} = vi.hoisted(() => ({
+const {fetchSettingsMock, createAppMock, useMock, mountMock} = vi.hoisted(() => ({
   fetchSettingsMock: vi.fn(),
   createAppMock: vi.fn(),
+  useMock: vi.fn(),
   mountMock: vi.fn(),
 }));
 
 vi.mock("../api/settings", () => ({fetchSettings: fetchSettingsMock}));
-// bootstrap 负责挂载；单测环境用桩 createApp 拦截，断言挂载时机而不真实渲染
+// bootstrap 负责挂载；单测环境用桩 createApp 拦截，断言插件注册与挂载时机而不真实渲染
 vi.mock("vue", async importOriginal => {
   const actual = await importOriginal<typeof import("vue")>();
-  return {...actual, createApp: createAppMock.mockImplementation(() => ({mount: mountMock}))};
+  return {...actual, createApp: createAppMock.mockImplementation(() => ({use: useMock, mount: mountMock}))};
 });
 // App.vue 仅为 bootstrap 的挂载目标；避免在 node 环境加载完整 SFC
 vi.mock("../App.vue", () => ({default: {name: "AppStub"}}));
@@ -71,6 +72,17 @@ describe("bootstrap", () => {
     await booting;
     expect(mountMock).toHaveBeenCalledTimes(1);
     expect(mountMock).toHaveBeenCalledWith("#app");
+  });
+
+  it("挂载前把唯一 i18n 实例注册为 Vue 插件（use 先于 mount）", async () => {
+    fetchSettingsMock.mockResolvedValue(snapshotWithUiLocale("zh-CN"));
+
+    await bootstrap();
+
+    expect(useMock).toHaveBeenCalledTimes(1);
+    expect(useMock).toHaveBeenCalledWith(i18n);
+    // 插件注册必须先于挂载，否则组件内 useI18n()/$t 运行时不可用
+    expect(useMock.mock.invocationCallOrder[0]).toBeLessThan(mountMock.mock.invocationCallOrder[0]);
   });
 
   it("设置读取失败时按系统规则继续启动，不阻断挂载", async () => {

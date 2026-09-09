@@ -3,13 +3,13 @@
 ## 2026-09-09（实施 PLAN-DM-021 Task 2：前端多语言启动基础）
 
 - 新增 `web/src/i18n/locale.ts`：语言解析纯逻辑（I18N-03 / ARCH-DM-005 §4.2）——显式 `zh-CN`/`en-US` 优先于系统语言；`system` 按 `navigator.languages`（缺省读 `navigator.language`）解析，`zh-*` → `zh-CN`，其他可识别语言 → `en-US`；空列表/navigator 异常/全部不可识别标签回退 `zh-CN`。
-- 新增 `web/src/i18n/index.ts` 唯一 i18n 入口（I18N-01）：创建并导出唯一 `vue-i18n` 实例（`legacy: false`，缺键运行时回退 `zh-CN`）；`applyLocale` 同步实例 locale 与 `<html lang>`；`bootstrap()` 在挂载前请求 `GET /api/settings` 提取 `ui_locale`（缺失/非法值视为 `system`），读取设 5s 超时，失败/超时按系统规则降级挂载、不渲染错误语言的完整 App（I18N-04）。
+- 新增 `web/src/i18n/index.ts` 唯一 i18n 入口（I18N-01）：创建并导出唯一 `vue-i18n` 实例（`legacy: false`，缺键运行时回退 `zh-CN`）；`applyLocale` 同步实例 locale 与 `<html lang>`；`bootstrap()` 在挂载前请求 `GET /api/settings` 提取 `ui_locale`（缺失/非法值视为 `system`），读取设 5s 超时，失败/超时按系统规则降级挂载、不渲染错误语言的完整 App（I18N-04）；挂载前以 `app.use(i18n)` 把唯一实例注册为 Vue 插件（评审修复：否则组件内 `useI18n()`/`$t` 运行时不可用），测试断言 use 先于 mount。
 - `web/src/main.ts` 只调用 `bootstrap()`（含 `style.css` 引入），挂载职责移入 bootstrap，保证"先定语言再挂载"。
 - 新增最小骨架语言资源 `web/src/i18n/locales/{zh-CN,en-US}/{common,settings}.ts`（`app.title`、`errors.settingsLoadFailed`、`settings.locale.*` 四键，语言名保留自称形式）；本任务未迁移任何既有组件文案。
 - 新增 `web/scripts/check-i18n.mjs` 并纳入 `build`（I18N-14 雏形）：校验中英文域文件集合与键集合（点路径）对称，叶子必须为字符串，缺键/多键非零退出；允许清单与硬编码扫描留 Task 10。已实测对不对称输入退出码 1。
 - `web/package.json` 新增依赖 `vue-i18n` 与 devDependency `vitest`（经 `npm --prefix web install` 同步 lock 文件），新增 `test:unit`、`check:i18n` 脚本，`build` 串联 `check:i18n`；新增 `web/vitest.config.ts`（node 环境，仅收 `src/**/*.test.ts`，不加载 vue 插件）。
 - `web/tests/global-setup.ts` 预置 settings.json 显式写入 `ui_locale: "zh-CN"`：多语言启动上线后固定既有中文 e2e 基线（Playwright 浏览器 navigator 默认非中文，否则中文文案选择器会漂移）。
-- 测试（TDD）：红灯（两测试文件因 `./locale`/`./index` 缺失整体失败）→ 最小实现 → 绿灯。`web/src/i18n/locale.test.ts`（7 例：显式覆盖、zh 系映射、非中文映射、navigator 读取顺序、空列表回退、navigator 异常回退、不可识别标签跳过）与 `web/src/i18n/bootstrap.test.ts`（7 例：请求结束前不 mount、读取失败降级、5s 超时降级、显式值覆盖系统语言并同步 `<html lang>`、缺失/非法 ui_locale 视为 system、唯一实例不重建、applyLocale 同步）。验证：focused `test:unit` 14 passed、`check:i18n` 通过、`npm run build` 通过；另跑 `settings-dialog` e2e 12 passed 确认 global-setup 改动无回归。
+- 测试（TDD）：红灯（两测试文件因 `./locale`/`./index` 缺失整体失败）→ 最小实现 → 绿灯。`web/src/i18n/locale.test.ts`（7 例：显式覆盖、zh 系映射、非中文映射、navigator 读取顺序、空列表回退、navigator 异常回退、不可识别标签跳过）与 `web/src/i18n/bootstrap.test.ts`（8 例：请求结束前不 mount、挂载前注册 i18n 插件且 use 先于 mount、读取失败降级、5s 超时降级、显式值覆盖系统语言并同步 `<html lang>`、缺失/非法 ui_locale 视为 system、唯一实例不重建、applyLocale 同步）。验证：focused `test:unit` 15 passed、`check:i18n` 通过、`npm run build` 通过；另跑 `settings-dialog` e2e 12 passed 确认 global-setup 改动无回归。
 
 ## 2026-09-09（实施 PLAN-DM-021 Task 1：后端语言设置与结构化字段错误）
 

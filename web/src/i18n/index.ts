@@ -52,7 +52,7 @@ export async function applyLocale(locale: EffectiveLocale): Promise<void> {
   if (typeof document !== "undefined") document.documentElement.lang = locale;
 }
 
-// 挂载前启动：请求设置 → 解析生效语言 → 初始化语言 → 挂载（ARCH-DM-005 §8.1）。
+// 挂载前启动：请求设置 → 解析生效语言 → 初始化语言 → 注册 i18n 插件 → 挂载（ARCH-DM-005 §8.1）。
 // 设置读取失败/超时不阻断启动：按系统语言规则继续挂载，不先渲染错误语言的完整 App；
 // 读取失败的呈现沿用既有设置加载错误处理，不在启动路径引入阻断。
 export async function bootstrap(): Promise<void> {
@@ -63,5 +63,8 @@ export async function bootstrap(): Promise<void> {
     // 降级：设置不可用时按 system 规则解析（显式 try 使降级路径显式可见）
   }
   await applyLocale(resolveLocale(setting));
-  createApp(App).mount("#app");
+  // 唯一实例必须先注册为插件再挂载，组件内 useI18n()/$t 才可用（I18N-01）
+  const app = createApp(App);
+  app.use(i18n);
+  app.mount("#app");
 }
