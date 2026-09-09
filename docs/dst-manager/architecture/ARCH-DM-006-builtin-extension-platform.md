@@ -134,11 +134,15 @@ ui_contributions:
     kind: workspace_page
     route_key: sheet-catalog
 actions:
-  - export-xlsx
+  - action_id: export-xlsx
+    output_kind: xlsx
+    media_type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 settings_schema: 1
 ```
 
 `extension_id`、贡献 ID 和动作 ID 使用稳定英文标识。用户文案使用 [ARCH-DM-005](ARCH-DM-005-multilingual-support.md) 的 i18n key，不把中文作为协议字段。
+
+动作声明必须包含稳定 `action_id`；会产生候选成果的动作还必须声明宿主支持的固定 `output_kind` 与 `media_type`。首期 `output_kind` 只允许 `xlsx`，由宿主映射到固定保存对话框、扩展名、候选验证器和发布策略，不能由前端或扩展提交任意过滤器、后缀或 MIME 类型。
 
 `artifact.output.propose` 只允许扩展返回由宿主校验的候选输出，不向扩展暴露 Artifact 仓储或文件目标；最终文件保存、哈希计算和 Artifact 登记仍完全由宿主执行。
 

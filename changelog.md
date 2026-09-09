@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-09（审查 PLAN-DM-020 实施计划）
+
+- 新增 [PLAN-DM-020 实施计划审查备忘](.planning/memos/dst-manager/2026-09-09-plan-dm-020-review.md)：对照 ARCH-DM-006 与 SPEC-DM-012 逐条核对追踪矩阵并验证代码事实，识别 3 项阻塞级缺口（SPEC §5.3 限制值 80/100/1024、SPEC §11 错误码词汇表、清单缺动作输出类型与 `name_key`/`description_key` 字段）、5 项重要偏差（日志语义反向、`SAVE_DIALOG` 非既有约定、Step 9 暂存措辞、changelog 时机、ARCH-DM-005 前置无排期）及若干测试锚点补强项；计划主体覆盖面确认无结构性遗漏，修订后可转 `active`。
+- 按审查修订 PLAN-DM-020：钉死模板/列名/表达式限制值和全部稳定错误码，补齐清单动作输出策略、跨任务数据类型、日志关联、建议文件名、启动顺序、并发授权、偏好降级、模板冲突/删除及逐 Task 变更记录要求；ARCH-DM-006 同步把 `actions` 收紧为结构化声明。
+- 新增 [ARCH-DM-005 多语言实施门禁待办](.planning/todos/dst-manager/2026-09-09-arch-dm-005-implementation-gates.md)，安排独立 G0～G6 工作流并明确其为 PLAN-DM-020 Task 10 的前置条件；计划保持 `proposed`，本次未开始生产实现。
+
 ## 2026-09-09（设计内置扩展平台与图纸目录 XLSX 试点）
 
 - 新增 [ARCH-DM-006](docs/dst-manager/architecture/ARCH-DM-006-builtin-extension-platform.md)（`review`）：确定首期只加载固定代码白名单与随包清单中的受信内置扩展，建立注册表、生命周期、Capability Broker、裁剪后的只读工作区快照、宿主管理页面贡献、扩展设置、一次性保存授权和后台 Artifact 边界。
