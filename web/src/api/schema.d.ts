@@ -662,7 +662,8 @@ export interface components {
          * DraftAction
          * @description 草稿动作。PLAN-DM-021（I18N-12）：语言不得写入草稿——新建动作持久化稳定
          *     ``label_key`` 与命名 ``params``（值仅限用户数据字符串/数量）；``label`` 仅作
-         *     迁移窗口内旧版本草稿的只读兼容，二者必须二选一。
+         *     迁移窗口内旧版本草稿的只读兼容，二者必须二选一。``label_key`` 限定消息键形态
+         *     （ASCII 点分键），拒绝任意本地化句子写入 ``label_key``。
          */
         DraftAction: {
             /** Commands */

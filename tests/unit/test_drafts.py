@@ -295,10 +295,30 @@ def _label_key_draft(draft: dict) -> dict:
 def test_draft_label_key_with_params_loads_clean(tmp_path):
     """label_key + params（属性名/数量为用户数据参数）为合法草稿动作形状。"""
     draft = _label_key_draft(_draft(version=1))
+    draft["actions"][0]["label_key"] = "shell.commands.updateSheetProperties"
 
     result = _write_and_load(tmp_path, draft)
 
     assert result == {"draft": draft, "corrupted": False}
+
+
+@pytest.mark.parametrize(
+    "bad_label_key",
+    [
+        "更新图纸属性（含中文）",  # 任意本地化句子不得冒充键写入草稿（I18N-12）
+        "shell.commands.update sheet properties",  # 含空格
+        "shell.commands.updateSheetProperties：",  # 含标点
+        "shell",  # 缺少点分键段
+        "1shell.commands.updateSheetProperties",  # 首段不得以数字开头
+    ],
+)
+def test_draft_label_key_arbitrary_text_is_quarantined(tmp_path, bad_label_key):
+    draft = _label_key_draft(_draft(version=1))
+    draft["actions"][0]["label_key"] = bad_label_key
+
+    result = _write_and_load(tmp_path, draft)
+
+    assert result == {"draft": None, "corrupted": True}
 
 
 def test_draft_legacy_label_still_loads_clean(tmp_path):

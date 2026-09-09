@@ -226,6 +226,15 @@ def _require_label_params(value: object) -> None:
         raise ValueError("DRAFT_CONTENT_INVALID")
 
 
+# PLAN-DM-021（I18N-12）：label_key 限定 ASCII 点分消息键形态，拒绝任意本地化句子冒充键写入草稿
+_LABEL_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")
+
+
+def _require_label_key(value: object) -> None:
+    if not isinstance(value, str) or not _LABEL_KEY.fullmatch(value):
+        raise ValueError("DRAFT_CONTENT_INVALID")
+
+
 def _validate_source(value: object) -> None:
     if not isinstance(value, dict):
         raise ValueError("DRAFT_CONTENT_INVALID")  # noqa: TRY004 - 文件内容损坏统一归类
@@ -323,7 +332,7 @@ def _validate_draft_document(draft: dict[str, Any]) -> None:
         if "label" in action:
             _require_text(action["label"])
         else:
-            _require_text(action["label_key"])
+            _require_label_key(action["label_key"])
             if "params" in action:
                 _require_label_params(action["params"])
         if action["kind"] != "command_batch" or not isinstance(action["commands"], list) or not action["commands"]:
