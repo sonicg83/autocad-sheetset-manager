@@ -131,6 +131,16 @@ export default {
     artifactNotFound: "The exported artifact no longer exists or has been moved",
     preferenceSaveFailed: "Saving workspace preferences failed; the export result is unaffected",
   },
+  // ---- Sheet catalog extension (PLAN-DM-020 Task 11; keys mirror SHEET_CATALOG_MESSAGE_KEYS) ----
+  sheetCatalog: {
+    expressionInvalid: "Invalid expression syntax (position {source_start})",
+    fieldUndefined: "The expression references an undefined field: [{scope}] {name}",
+    valueMissing: "Field value is empty: [{scope}] {name} ({sheet_count} sheets affected)",
+    columnDuplicate: "Duplicate name: {header}",
+    templateLimit: "Template limit exceeded {kind}: {actual}/{limit}",
+    templateConflict: "The template was updated by another save (local r{current_revision}, server r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
+    xlsxInvalid: "Candidate file validation failed: {check}",
+  },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",
     diagnosticsDetails: "Raw error details",

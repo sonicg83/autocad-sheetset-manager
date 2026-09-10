@@ -23,6 +23,7 @@ import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "./compo
 import {useSheetColumns} from "./composables/useSheetColumns";
 import {useSheetEditor} from "./composables/useSheetEditor";
 import {usePropertiesWorkspace} from "./composables/usePropertiesWorkspace";
+import {guardSheetCatalogPage,sheetCatalogNavigationNeeded} from "./composables/useSheetCatalog";
 import type {OperationKind} from "./components/sheets/SheetToolbar.vue";
 import UnsavedInputDialog from "./components/ui/UnsavedInputDialog.vue";
 import {useConfirm} from "./composables/useConfirm";
@@ -143,6 +144,25 @@ const tabIds=computed(()=>tabDescriptors.value.map(descriptor=>descriptor.id));
 // 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件；
 // 动态列表下激活项被移除时安全校正回首个核心标签
 const {active,select,onKeydown}=useShellTabs<string>(tabIds,"sheets","sheets");
+// 切换页签先过图纸目录页未保存草稿闸门（PLAN-DM-020 Task 11 / SPEC-DM-012 §3.2：
+// 目录页未挂载时守卫为空操作）；目录页自身草稿在离开前必须三选一。
+// 重复点击当前页签保留既有语义：不重开闸门，修订历史页签仍然重新加载列表
+function selectTab(id:string){
+  if(id===active.value){ if(id==="revisions")void loadRevisions(); return }
+  if(!sheetCatalogNavigationNeeded()){select(id);if(id==="revisions")void loadRevisions();return}
+  void doSelectTab(id);
+}
+async function doSelectTab(id:string){
+  await guardSheetCatalogPage(()=>{select(id);if(id==="revisions")void loadRevisions()});
+}
+function onTabKeydown(e:KeyboardEvent){
+  const before=active.value;onKeydown(e);
+  const target=active.value;
+  if(target===before)return;
+  // 无未保存草稿时保持既有同步切换（useShellTabs 已改写 active）；有草稿才走闸门
+  if(!sheetCatalogNavigationNeeded()){if(target==="revisions")void loadRevisions();return}
+  active.value=before;void doSelectTab(target);
+}
 // 停用/启用扩展页面（Task 10 最小离开保护）：有未提交输入先走全局三选一闸门，通过后
 // PATCH 状态并按服务端权威摘要收敛标签；被移除的是当前页时回图纸页，并把 DOM 焦点
 // 归还被移除标签原位置的安全邻近标签（ARCH-DM-006 §7）。目录页自身草稿的三选一深化由 Task 11 接入
@@ -168,8 +188,6 @@ async function onExtensionToggleEnabled(extensionId:string,enabled:boolean){
 const sheetSetName=computed(()=>workspace.value?.sheet_set.name??"");
 const dstPath=computed(()=>workspace.value?.dst_path??"");
 const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
-function selectTab(id:string){select(id);if(id==="revisions")void loadRevisions()}
-function onTabKeydown(e:KeyboardEvent){const before=active.value;onKeydown(e);if(active.value!==before&&active.value==="revisions")void loadRevisions()}
 // 恢复预览成功（restorePreview 已写入）后展开任务浮层到修改预览页签，与 showPreview 共用 §9.1 统一预览门禁呈现
 async function previewRestoreAndOpen(revision:Revision){await previewRestore(revision);if(restorePreview.value)openOverlay("prev")}
 function onCadVersionChange(value:string){cadVersion.value=value;layoutReadGeneration+=1;invalidatePreview()}
@@ -293,9 +311,11 @@ watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
 // —— 全局输入保护（PLAN-DM-016 任务 2）：图纸页与属性页两个活动输入域依次过闸 ——
 // 固定先处理当前主标签的活动编辑器，再处理另一域；任一步「留在此处」即终止 next。
 // 页面只挂载一个共享 UnsavedInputDialog（见模板），两个 guard 顺序开合同一实例，不叠加模态。
+// PLAN-DM-020 Task 11：核心输入域过闸后再征询图纸目录页未保存模板草稿的三选一守卫
+// （目录页未挂载时为空操作）；「留在此处」同样终止 next。
 async function guardAllInputs(next:()=>void|Promise<void>){
-  if(active.value==="properties")await properties.guard(()=>editor.guard(next));
-  else await editor.guard(()=>properties.guard(next));
+  const core=async()=>{if(active.value==="properties")await properties.guard(()=>editor.guard(next));else await editor.guard(()=>properties.guard(next))};
+  await guardSheetCatalogPage(core);
 }
 function resolveSharedGuard(choice:GuardChoice){editor.resolveGuard(choice);properties.resolveGuard(choice)}
 const sharedGuardState=computed(()=>properties.guardState.value.open?properties.guardState.value:editor.guardState.value);
@@ -737,7 +757,7 @@ useHotkeys({
         <!-- 扩展页面贡献（PLAN-DM-020 Task 10）：组件来自编译期 pageRegistry 映射，
              App 只装配挂载，不承载目录业务状态；加载/恢复期间暂停交互与其他主标签一致 -->
         <template v-for="page in extensionPages" :key="page.routeKey">
-          <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" @toggle-enabled="onExtensionToggleEnabled" />
+          <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" :workspace="workspace" @toggle-enabled="onExtensionToggleEnabled" />
         </template>
       </template>
     </main>
