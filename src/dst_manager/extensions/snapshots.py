@@ -97,12 +97,18 @@ def build_workspace_snapshot(
 ) -> WorkspaceSnapshot:
     """把当前 DST 投影裁剪为冻结、可序列化的最小快照（纯函数，零副作用）。"""
     definitions = property_definitions_from_document(document)
-    canonical = {definition.name.casefold(): definition.name for definition in definitions}
+    # 作用域各自的 casefold 规范映射：跨作用域同名（casefold 相撞）属性
+    # 不得互相覆盖，否则预览阶段按另一侧规范名查值会误报缺值。
+    canonical_by_scope: dict[str, dict[str, str]] = {"sheetset": {}, "sheet": {}}
+    for definition in definitions:
+        canonical_by_scope[definition.type][definition.name.casefold()] = definition.name
     sheetset_scope = SnapshotPropertyScope(
         custom_property_definitions=tuple(
             definition.name for definition in definitions if definition.type == "sheetset"
         ),
-        custom_properties=_sorted_properties(document.custom_properties, canonical),
+        custom_properties=_sorted_properties(
+            document.custom_properties, canonical_by_scope["sheetset"]
+        ),
     )
     sheet_definitions = tuple(
         definition.name for definition in definitions if definition.type == "sheet"
@@ -115,7 +121,9 @@ def build_workspace_snapshot(
             title=sheet.title,
             file_name=_basename(sheet.layout.file_name),
             custom_property_definitions=sheet_definitions,
-            custom_properties=_sorted_properties(sheet.custom_properties, canonical),
+            custom_properties=_sorted_properties(
+                sheet.custom_properties, canonical_by_scope["sheet"]
+            ),
         )
         for sheet in document.sheets
     )

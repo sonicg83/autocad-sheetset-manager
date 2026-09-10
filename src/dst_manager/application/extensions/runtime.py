@@ -22,6 +22,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
+from dst_manager.extensions.capabilities import (
+    CapabilityBroker,
+    CapabilityError,
+    ExtensionContext,
+)
 from dst_manager.extensions.contracts import (
     BuiltinExtensionEntry,
     ExtensionDescriptor,
@@ -29,6 +34,7 @@ from dst_manager.extensions.contracts import (
     ExtensionManifest,
 )
 from dst_manager.extensions.registry import ExtensionRegistry, ExtensionRegistryError
+from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
     ExtensionStateRecord,
@@ -43,6 +49,7 @@ __all__ = [
     "ExtensionPlatformError",
     "ExtensionRuntime",
     "ExtensionStatusView",
+    "capability_platform_error",
     "default_runtime",
 ]
 
@@ -88,16 +95,37 @@ class ExtensionStatusView:
 
 
 def default_runtime(sessions) -> ExtensionRuntime:
-    """宿主默认装配：注册表 + 绑定宿主数据库会话工厂的扩展仓储。"""
-    return ExtensionRuntime(ExtensionRegistry(), ExtensionStore(sessions))
+    """宿主默认装配：注册表 + 扩展仓储 + 只读工作区快照 reader。"""
+    return ExtensionRuntime(
+        ExtensionRegistry(),
+        ExtensionStore(sessions),
+        reader=ExtensionWorkspaceReader(sessions),
+    )
+
+
+def capability_platform_error(exc: CapabilityError) -> ExtensionPlatformError:
+    """能力/上下文拒绝 → 契约化平台错误（ARCH-DM-006 §12 状态映射）。"""
+    return ExtensionPlatformError(
+        exc.code,
+        str(exc),
+        status_code=_ERROR_STATUS.get(exc.code, 503),
+        params=dict(exc.params),
+    )
 
 
 class ExtensionRuntime:
     """组合 registry/store 的扩展运行时（线程安全由注册表保证）。"""
 
-    def __init__(self, registry: ExtensionRegistry, store: ExtensionStore) -> None:
+    def __init__(
+        self,
+        registry: ExtensionRegistry,
+        store: ExtensionStore,
+        *,
+        reader: ExtensionWorkspaceReader | None = None,
+    ) -> None:
         self._registry = registry
         self._store = store
+        self._reader = reader
 
     # ------------------------------------------------------------------ 启动
 
@@ -296,6 +324,42 @@ class ExtensionRuntime:
                 action_id=action_id,
             ) from exc
 
+    @contextmanager
+    def extension_context(
+        self, extension_id: str, workspace_id: str, required_revision_id: str
+    ) -> Iterator[ExtensionContext]:
+        """经 CapabilityBroker 发放短生命周期扩展上下文，退出即关闭。
+
+        修订漂移（``REPREVIEW_REQUIRED``）与工作区不可读由上下文在
+        ``workspace_snapshot()`` 时拒绝；能力拒绝统一经
+        :func:`capability_platform_error` 映射为契约化平台错误。
+        """
+        manifests = {
+            descriptor.manifest.extension_id: descriptor.manifest
+            for descriptor in self._registry.list()
+        }
+        if self._reader is None:
+            # 测试/定制装配未提供只读 reader：显式契约化拒绝，绝不 AttributeError → 500。
+            raise ExtensionPlatformError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                f"宿主未装配工作区快照读取通道：{extension_id}",
+                status_code=503,
+                params={"extension_id": extension_id, "workspace_id": workspace_id},
+            )
+        broker = CapabilityBroker(manifests, self._reader)
+        try:
+            context = broker.context(extension_id, workspace_id, required_revision_id)
+        except CapabilityError as exc:
+            raise capability_platform_error(exc) from exc
+        try:
+            yield context
+        finally:
+            context.close()
+
+    def settings_schema(self, extension_id: str) -> int:
+        """清单声明的设置/偏好 schema 版本（偏好保存用）。"""
+        return self._manifest(extension_id).settings_schema
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord:
         record = self._store.get_artifact(artifact_id)
         if record is None:
@@ -365,10 +429,12 @@ class ExtensionRuntime:
 
 #: 平台错误码默认 HTTP 状态（ARCH-DM-006 §12；能力不可用按环境问题归 503）。
 #: 未登记的注册表诊断码由 :meth:`ExtensionRuntime._platform_error` 兜底为 503。
+#: ``REPREVIEW_REQUIRED`` 仅来自能力上下文的修订漂移核对（409 语义：请刷新）。
 _ERROR_STATUS: dict[str, int] = {
     "EXTENSION_NOT_FOUND": 404,
     "EXTENSION_DISABLED": 409,
     "EXTENSION_INCOMPATIBLE": 409,
     "EXTENSION_CAPABILITY_UNAVAILABLE": 503,
     "EXTENSION_ACTION_NOT_FOUND": 404,
+    "REPREVIEW_REQUIRED": 409,
 }

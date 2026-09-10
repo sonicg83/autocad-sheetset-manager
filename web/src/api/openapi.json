@@ -1737,7 +1737,7 @@
       },
       "ExtensionActionRequest": {
         "additionalProperties": false,
-        "description": "动作请求占位契约（Task 3 只校验状态与声明；具体请求模型由 Task 6/9 接管）。",
+        "description": "动作请求占位契约（Task 3 只校验状态与声明；执行请求模型由 Task 9 接管）。",
         "properties": {
           "payload": {
             "additionalProperties": true,
@@ -1825,6 +1825,30 @@
           "value"
         ],
         "title": "ExtensionPreferencePutRequest",
+        "type": "object"
+      },
+      "ExtensionPreviewRequest": {
+        "additionalProperties": false,
+        "description": "预览请求契约：工作区、基准修订与模板快照（SPEC-DM-012 §8.1）。",
+        "properties": {
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/ExtensionTemplateRequest"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "base_revision_id",
+          "template"
+        ],
+        "title": "ExtensionPreviewRequest",
         "type": "object"
       },
       "ExtensionSettingsPutRequest": {
@@ -1947,6 +1971,73 @@
           "enabled"
         ],
         "title": "ExtensionSummaryModel",
+        "type": "object"
+      },
+      "ExtensionTemplateColumnRequest": {
+        "additionalProperties": false,
+        "description": "预览请求中的模板列快照（SPEC-DM-012 §8.1）。",
+        "properties": {
+          "column_id": {
+            "format": "uuid",
+            "title": "Column Id",
+            "type": "string"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "header": {
+            "title": "Header",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column_id",
+          "header",
+          "expression"
+        ],
+        "title": "ExtensionTemplateColumnRequest",
+        "type": "object"
+      },
+      "ExtensionTemplateRequest": {
+        "additionalProperties": false,
+        "description": "预览请求重复提交的模板快照；未知高 schema 由契约直接拒绝（422）。",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionTemplateColumnRequest"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          }
+        },
+        "required": [
+          "name",
+          "schema_version",
+          "columns"
+        ],
+        "title": "ExtensionTemplateRequest",
         "type": "object"
       },
       "ExtensionUiContributionModel": {
@@ -3515,6 +3606,247 @@
         "title": "SemanticDiffResponse",
         "type": "object"
       },
+      "SheetCatalogColumnModel": {
+        "additionalProperties": false,
+        "properties": {
+          "column_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Id"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "header": {
+            "title": "Header",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column_id",
+          "header",
+          "expression"
+        ],
+        "title": "SheetCatalogColumnModel",
+        "type": "object"
+      },
+      "SheetCatalogDiagnosticModel": {
+        "additionalProperties": false,
+        "description": "预览诊断：稳定 code/message_key/params + 可选列/字符定位。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "column_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Id"
+          },
+          "message_key": {
+            "title": "Message Key",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          },
+          "source_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Position"
+          }
+        },
+        "required": [
+          "code",
+          "message_key",
+          "params"
+        ],
+        "title": "SheetCatalogDiagnosticModel",
+        "type": "object"
+      },
+      "SheetCatalogFieldCatalogModel": {
+        "additionalProperties": false,
+        "properties": {
+          "sheet": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogFieldDefinitionModel"
+            },
+            "title": "Sheet",
+            "type": "array"
+          },
+          "sheetset": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogFieldDefinitionModel"
+            },
+            "title": "Sheetset",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sheetset",
+          "sheet"
+        ],
+        "title": "SheetCatalogFieldCatalogModel",
+        "type": "object"
+      },
+      "SheetCatalogFieldDefinitionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "title": "Builtin",
+            "type": "boolean"
+          },
+          "canonical_name": {
+            "title": "Canonical Name",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "sheetset",
+              "sheet"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "canonical_name",
+          "builtin"
+        ],
+        "title": "SheetCatalogFieldDefinitionModel",
+        "type": "object"
+      },
+      "SheetCatalogPreviewResponse": {
+        "additionalProperties": false,
+        "description": "预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogDiagnosticModel"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "field_catalog": {
+            "$ref": "#/components/schemas/SheetCatalogFieldCatalogModel"
+          },
+          "normalized_template": {
+            "$ref": "#/components/schemas/SheetCatalogTemplateModel"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogDiagnosticModel"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "normalized_template",
+          "field_catalog",
+          "errors",
+          "warnings",
+          "rows",
+          "total_rows",
+          "preview_digest",
+          "executable"
+        ],
+        "title": "SheetCatalogPreviewResponse",
+        "type": "object"
+      },
+      "SheetCatalogTemplateModel": {
+        "additionalProperties": false,
+        "description": "规范化模板回传（模板快照原样返回，字段目录/求值才做规范化）。",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogColumnModel"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          }
+        },
+        "required": [
+          "template_id",
+          "name",
+          "schema_version",
+          "columns"
+        ],
+        "title": "SheetCatalogTemplateModel",
+        "type": "object"
+      },
       "SheetResponse": {
         "properties": {
           "custom_properties": {
@@ -4466,7 +4798,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExtensionActionRequest"
+                "$ref": "#/components/schemas/ExtensionPreviewRequest"
               }
             }
           },
@@ -4476,7 +4808,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SheetCatalogPreviewResponse"
+                }
               }
             },
             "description": "Successful Response"

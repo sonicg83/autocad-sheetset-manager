@@ -63,8 +63,9 @@ _ExtensionStatus = Literal[
 #: 宿主已认识的能力词汇表（ARCH-DM-006 §6）。
 KNOWN_CAPABILITIES: frozenset[str] = frozenset({"workspace.snapshot.read.v1"})
 
-#: 当前真正可发放的能力；CapabilityBroker（Task 4）落地后由宿主装配更新。
-AVAILABLE_CAPABILITIES: frozenset[str] = frozenset()
+#: 当前真正可发放的能力（Task 6 已接入 CapabilityBroker + 只读 workspace
+#: reader，``workspace.snapshot.read.v1`` 由宿主真实提供）。
+AVAILABLE_CAPABILITIES: frozenset[str] = frozenset({"workspace.snapshot.read.v1"})
 
 
 class ExtensionRegistryError(RuntimeError):

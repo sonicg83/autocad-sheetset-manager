@@ -1,12 +1,15 @@
-"""扩展平台统一管理 API 集成测试（PLAN-DM-020 Task 3 / ARCH-DM-006 §8、§12）。
+"""扩展平台统一管理 API 集成测试（PLAN-DM-020 Task 3/6 / ARCH-DM-006 §8、§12）。
 
 覆盖：列表/启停/重启持久化、未知扩展、禁用动作、错误清单与工厂失败隔离、
 设置 ``expected_revision`` 冲突、偏好不存在默认值、Artifact 404、平台错误码
-的稳定 ``message_key`` 与结构化 ``params``、OpenAPI 端点与错误契约，以及
-启动顺序（数据库迁移完成 → 发布恢复完成 → ``registry.discover()``）。
+的稳定 ``message_key`` 与结构化 ``params``、OpenAPI 端点与错误契约、启动顺序
+（数据库迁移完成 → 发布恢复完成 → ``registry.discover()``），以及 Task 6 的
+真实数据预览动作（行/字段目录/摘要/错误警告契约、修订不匹配、偏好 best-effort
+降级）。
 """
 
 import json
+import uuid
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -19,7 +22,9 @@ from dst_manager.extensions.builtin.index import (
     BUILTIN_EXTENSION_INDEX,
     BuiltinExtensionEntry,
 )
+from dst_manager.extensions.builtin.sheet_catalog.templates import DEFAULT_TEMPLATE
 from dst_manager.extensions.registry import ExtensionRegistry
+from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.database import Database
 from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
@@ -64,7 +69,53 @@ def make_client(tmp_path, **kwargs) -> TestClient:
 def make_runtime(tmp_path, entries) -> ExtensionRuntime:
     """测试注入用运行时：独立 sqlite 库承载扩展状态/设置/偏好/Artifact。"""
     database = Database(f"sqlite:///{(tmp_path / 'extension-tests.db').as_posix()}")
-    return ExtensionRuntime(ExtensionRegistry(), ExtensionStore(database.sessions))
+    sessions = database.sessions
+    return ExtensionRuntime(
+        ExtensionRegistry(),
+        ExtensionStore(sessions),
+        reader=ExtensionWorkspaceReader(sessions),
+    )
+
+
+def template_payload(template=DEFAULT_TEMPLATE, template_id=None) -> dict:
+    """把模板对象投影为预览请求负载（SPEC-DM-012 §8.1 的模板快照形态）。"""
+    return {
+        "template_id": str(template_id) if template_id else None,
+        "name": template.name,
+        "schema_version": template.schema_version,
+        "columns": [
+            {
+                "column_id": str(column.column_id),
+                "header": column.header,
+                "expression": column.expression,
+            }
+            for column in template.columns
+        ],
+    }
+
+
+def open_workspace(client: TestClient, tiny_workspace) -> dict:
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(tiny_workspace[0])})
+    assert opened.status_code == 200
+    return opened.json()
+
+
+def post_preview(client: TestClient, workspace: dict, template=None, template_id="unset", **overrides):
+    if isinstance(template, dict):
+        template_dict = template
+    else:
+        template_dict = template_payload(template) if template is not None else template_payload()
+    if template_id != "unset":
+        template_dict["template_id"] = str(template_id) if template_id else None
+    payload = {
+        "workspace_id": workspace["id"],
+        "base_revision_id": workspace["revision_id"],
+        "template": template_dict,
+    }
+    payload.update(overrides)
+    return client.post(
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview", json=payload
+    )
 
 
 def assert_error_contract(body: dict) -> None:
@@ -88,11 +139,14 @@ def test_list_extensions_reports_real_sheet_catalog_state(tmp_path):
     items = body.json()
     assert [item["extension_id"] for item in items] == [SHEET_CATALOG_ID]
     item = items[0]
-    # 能力中心（Task 4）未落地：必须如实呈现 WAITING_DEPENDENCY，不得谎报 AVAILABLE
-    assert item["status"] == "WAITING_DEPENDENCY"
-    assert item["error_code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
-    # 摘要 error_code 只能取自封闭诊断码词汇（Ruling-7），禁止原始异常文本
-    assert all(entry["error_code"] in DIAGNOSTIC_CODES for entry in items)
+    # Task 6 已接线 CapabilityBroker：快照能力真实可发放，状态为 AVAILABLE
+    assert item["status"] == "AVAILABLE"
+    assert item["error_code"] is None
+    # 摘要 error_code 为 None（可用）或封闭诊断码词汇（Ruling-7），禁止原始异常文本
+    assert all(
+        entry["error_code"] is None or entry["error_code"] in DIAGNOSTIC_CODES
+        for entry in items
+    )
     assert item["enabled"] is True
     assert item["version"] == "0.1.0"
     assert item["name_key"] == "extensions.sheetCatalog.name"
@@ -118,18 +172,36 @@ def test_patch_state_persists_across_restart(tmp_path):
     body = patched.json()
     assert body["extension_id"] == SHEET_CATALOG_ID
     assert body["enabled"] is False
-    # 用户停用不改变"天然不可用"的状态机事实：状态保持 WAITING_DEPENDENCY
-    assert body["status"] == "WAITING_DEPENDENCY"
+    # 用户停用真实排空并停止扩展实例：状态机进入 STOPPED（能力已接线）
+    assert body["status"] == "STOPPED"
+    assert body["error_code"] is None
 
     restarted = make_client(tmp_path)
     assert restarted.get("/api/extensions").json()[0]["enabled"] is False
 
 
-def test_enable_rejected_while_capability_missing_keeps_persisted_intent(tmp_path):
+def test_enable_after_user_disable_returns_extension_to_available(tmp_path):
     client = make_client(tmp_path)
     assert client.patch(
         f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": False}
     ).status_code == 200
+
+    resp = client.patch(f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": True})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["enabled"] is True
+    assert body["status"] == "AVAILABLE"
+    assert body["error_code"] is None
+
+
+def test_enable_rejected_while_capability_missing_keeps_persisted_intent(tmp_path, monkeypatch):
+    client = make_client(tmp_path)
+    assert client.patch(
+        f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": False}
+    ).status_code == 200
+    # 快照能力重新不可发放（环境退化）：启用必须被拒绝而非伪装成功
+    monkeypatch.setattr(registry_module, "AVAILABLE_CAPABILITIES", frozenset())
 
     resp = client.patch(f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": True})
 
@@ -156,7 +228,12 @@ def test_unknown_extension_and_artifact_return_structured_404(tmp_path):
         "settings": client.get("/api/extensions/no-such/settings"),
         "preference": client.get("/api/extensions/no-such/workspaces/ws-1/preferences"),
         "preview": client.post(
-            "/api/extensions/no-such/actions/export-xlsx/preview", json={}
+            "/api/extensions/no-such/actions/export-xlsx/preview",
+            json={
+                "workspace_id": "ws-1",
+                "base_revision_id": "0" * 64,
+                "template": template_payload(),
+            },
         ),
         "artifact": client.get("/api/artifacts/no-such-artifact"),
     }
@@ -277,15 +354,17 @@ def test_preferences_default_and_workspace_isolation(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_action_endpoints_validate_availability_and_declared_action(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        registry_module, "AVAILABLE_CAPABILITIES", frozenset({"workspace.snapshot.read.v1"})
-    )
+def test_action_endpoints_validate_availability_and_declared_action(tmp_path):
     client = make_client(tmp_path)
     assert client.get("/api/extensions").json()[0]["status"] == "AVAILABLE"
 
     unknown_action = client.post(
-        f"/api/extensions/{SHEET_CATALOG_ID}/actions/no-such-action/preview", json={}
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/no-such-action/preview",
+        json={
+            "workspace_id": "ws-1",
+            "base_revision_id": "0" * 64,
+            "template": template_payload(),
+        },
     )
     assert unknown_action.status_code == 404
     body = unknown_action.json()
@@ -298,7 +377,12 @@ def test_action_endpoints_validate_availability_and_declared_action(tmp_path, mo
         f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": False}
     ).status_code == 200
     disabled = client.post(
-        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview", json={}
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview",
+        json={
+            "workspace_id": "ws-1",
+            "base_revision_id": "0" * 64,
+            "template": template_payload(),
+        },
     )
     assert disabled.status_code == 409
     body = disabled.json()
@@ -307,25 +391,43 @@ def test_action_endpoints_validate_availability_and_declared_action(tmp_path, mo
     assert body["message_key"] == "errors.extension.disabled"
     assert body["params"] == {"extension_id": SHEET_CATALOG_ID, "action_id": "export-xlsx"}
 
-    # 重新启用后动作已声明，但宿主动作执行通道未接入（Task 6/9）：不得编造预览/执行结果
+    # 重新启用后预览走真实分派（未登记工作区 → 稳定 404），执行通道仍属 Task 9
     assert client.patch(
         f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": True}
     ).status_code == 200
-    for suffix in ("preview", "execute"):
-        resp = client.post(
-            f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/{suffix}", json={}
-        )
-        assert resp.status_code == 503
-        body = resp.json()
-        assert_error_contract(body)
-        assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    preview = client.post(
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview",
+        json={
+            "workspace_id": "no-such-workspace",
+            "base_revision_id": "0" * 64,
+            "template": template_payload(),
+        },
+    )
+    assert preview.status_code == 404
+    assert preview.json()["code"] == "EXTENSION_NOT_FOUND"
+
+    execute = client.post(
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/execute", json={}
+    )
+    assert execute.status_code == 503
+    body = execute.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
 
 
-def test_action_endpoint_reports_unavailable_extension_without_capability_broker(tmp_path):
+def test_action_endpoint_reports_unavailable_extension(tmp_path, monkeypatch):
+    # 快照能力不可发放（WAITING_DEPENDENCY）：预览不得编造结果，返回稳定 503
+    monkeypatch.setattr(registry_module, "AVAILABLE_CAPABILITIES", frozenset())
     client = make_client(tmp_path)
+    assert client.get("/api/extensions").json()[0]["status"] == "WAITING_DEPENDENCY"
 
     resp = client.post(
-        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview", json={}
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/preview",
+        json={
+            "workspace_id": "ws-1",
+            "base_revision_id": "0" * 64,
+            "template": template_payload(),
+        },
     )
 
     assert resp.status_code == 503
@@ -334,6 +436,135 @@ def test_action_endpoint_reports_unavailable_extension_without_capability_broker
     assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
     assert body["message_key"] == "errors.extension.capabilityUnavailable"
     assert body["params"] == {"extension_id": SHEET_CATALOG_ID, "action_id": "export-xlsx"}
+
+
+# ---------------------------------------------------------------------------
+# Task 6：真实数据预览动作（SPEC-DM-012 §8.1）
+# ---------------------------------------------------------------------------
+
+
+def test_preview_action_returns_real_rows_field_catalog_and_digest(tmp_path, tiny_workspace):
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)
+
+    resp = post_preview(client, workspace)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    # 规范化模板快照原样回传
+    assert body["normalized_template"]["template_id"] is None
+    assert body["normalized_template"]["name"] == DEFAULT_TEMPLATE.name
+    assert [column["header"] for column in body["normalized_template"]["columns"]] == [
+        "图号",
+        "图名",
+        "文件名",
+    ]
+    assert body["normalized_template"]["columns"][0]["expression"] == "{sheet.number}"
+    # 字段目录按作用域分组，固有字段置 builtin
+    sheetset_names = [field["canonical_name"] for field in body["field_catalog"]["sheetset"]]
+    sheet_fields = {field["canonical_name"]: field["builtin"] for field in body["field_catalog"]["sheet"]}
+    assert sheetset_names == ["项目号"]
+    assert sheet_fields == {"number": True, "title": True, "file_name": True, "比例": False}
+    # 真实行（basename 裁剪）、总数、digest、可执行
+    assert body["rows"] == [["001", "平面", "A.dwg"]]
+    assert body["total_rows"] == 1
+    assert body["errors"] == []
+    assert body["warnings"] == []
+    assert body["executable"] is True
+    assert len(body["preview_digest"]) == 64
+
+    again = post_preview(client, workspace).json()
+    assert again["preview_digest"] == body["preview_digest"]
+
+
+def test_preview_action_reports_revision_mismatch_and_unknown_workspace(tmp_path, tiny_workspace):
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)
+
+    mismatch = post_preview(client, workspace, base_revision_id="f" * 64)
+    assert mismatch.status_code == 409
+    body = mismatch.json()
+    assert_error_contract(body)
+    assert body["code"] == "REPREVIEW_REQUIRED"
+    assert body["message_key"] == "errors.extension.repreviewRequired"
+    # 请求要求的基准修订 vs 工作区当前修订（SPEC §11：保留编辑，刷新后重试）
+    assert body["params"]["required_revision_id"] == "f" * 64
+    assert body["params"]["current_revision_id"] == workspace["revision_id"]
+
+    missing = post_preview(client, {"id": "no-such-workspace", "revision_id": "0" * 64})
+    assert missing.status_code == 404
+    body = missing.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_NOT_FOUND"
+    assert body["params"]["workspace_id"] == "no-such-workspace"
+
+
+def test_preview_action_blocks_undefined_field_with_structured_error(tmp_path, tiny_workspace):
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)
+    template = template_payload()
+    template["columns"] = [
+        {
+            "column_id": str(uuid.uuid5(uuid.NAMESPACE_URL, "preview:bad")),
+            "header": "图号",
+            "expression": "{sheet.不存在}",
+        }
+    ]
+
+    resp = post_preview(client, workspace, template)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["executable"] is False
+    assert body["rows"] == []
+    assert len(body["errors"]) == 1
+    error = body["errors"][0]
+    assert error["code"] == "SHEET_CATALOG_FIELD_UNDEFINED"
+    assert error["message_key"] == "errors.sheetCatalog.fieldUndefined"
+    assert error["params"] == {"scope": "sheet", "name": "不存在"}
+    assert error["column_id"] == str(uuid.uuid5(uuid.NAMESPACE_URL, "preview:bad"))
+
+
+def test_preview_saves_last_template_preference_and_skips_drafts(tmp_path, tiny_workspace):
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)
+    preference_url = (
+        f"/api/extensions/{SHEET_CATALOG_ID}/workspaces/{workspace['id']}/preferences"
+    )
+
+    saved_id = uuid.uuid5(uuid.NAMESPACE_URL, "preview:saved-template")
+    post_preview(client, workspace, template_id=saved_id)
+    assert client.get(preference_url).json()["value"] == {"template_id": str(saved_id)}
+
+    # 未保存草稿（template_id=null）不进入工作区偏好（ARCH-DM-006 §8.2）
+    post_preview(client, workspace)
+    assert client.get(preference_url).json()["value"] == {"template_id": str(saved_id)}
+
+
+def test_preview_preference_save_failure_degrades_to_non_blocking_warning(
+    tmp_path, tiny_workspace, monkeypatch
+):
+    def _broken_put_preference(self, *args, **kwargs):
+        raise RuntimeError("偏好库不可用")
+
+    monkeypatch.setattr(ExtensionStore, "put_preference", _broken_put_preference)
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)
+    saved_id = uuid.uuid5(uuid.NAMESPACE_URL, "preview:saved-template")
+
+    resp = post_preview(client, workspace, template_id=saved_id)
+
+    # 偏好保存失败不得升级为动作失败：预览照常成功并返回可诊断的非阻断 warning
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["executable"] is True
+    assert body["rows"] == [["001", "平面", "A.dwg"]]
+    assert len(body["warnings"]) == 1
+    warning = body["warnings"][0]
+    assert warning["code"] == "EXTENSION_PREFERENCE_SAVE_FAILED"
+    assert warning["message_key"] == "errors.extension.preferenceSaveFailed"
+    assert warning["params"] == {"template_id": str(saved_id)}
+    assert warning["column_id"] is None and warning["source_position"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -346,9 +577,6 @@ def _boom() -> None:
 
 
 def test_broken_manifest_and_factory_isolation_keeps_core_api_available(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        registry_module, "AVAILABLE_CAPABILITIES", frozenset({"workspace.snapshot.read.v1"})
-    )
     bad = tmp_path / "bad-manifest.yaml"
     bad.write_text("extension_id: [未闭合", encoding="utf-8")
     entries = (
@@ -429,9 +657,6 @@ settings_schema: 1
 
 def test_enable_factory_failed_extension_stays_contract_compliant(tmp_path, monkeypatch):
     """对工厂失败的扩展启用：注册表重试仍失败并保持 FAILED，响应契约合规、绝不 500。"""
-    monkeypatch.setattr(
-        registry_module, "AVAILABLE_CAPABILITIES", frozenset({"workspace.snapshot.read.v1"})
-    )
     entries = (
         BuiltinExtensionEntry(
             manifest_resource="dst_manager/extensions/builtin/sheet_catalog/manifest.yaml",

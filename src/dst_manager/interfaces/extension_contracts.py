@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field
 
@@ -26,10 +27,19 @@ __all__ = [
     "ExtensionLifecycleStatus",
     "ExtensionPlatformErrorCode",
     "ExtensionPreferencePutRequest",
+    "ExtensionPreviewRequest",
     "ExtensionSettingsPutRequest",
     "ExtensionStatePatchRequest",
     "ExtensionSummaryModel",
+    "ExtensionTemplateColumnRequest",
+    "ExtensionTemplateRequest",
     "ExtensionUiContributionModel",
+    "SheetCatalogColumnModel",
+    "SheetCatalogDiagnosticModel",
+    "SheetCatalogFieldCatalogModel",
+    "SheetCatalogFieldDefinitionModel",
+    "SheetCatalogPreviewResponse",
+    "SheetCatalogTemplateModel",
     "VersionedValueModel",
 ]
 
@@ -142,9 +152,83 @@ class ExtensionPreferencePutRequest(ContractModel):
 
 
 class ExtensionActionRequest(ContractModel):
-    """动作请求占位契约（Task 3 只校验状态与声明；具体请求模型由 Task 6/9 接管）。"""
+    """动作请求占位契约（Task 3 只校验状态与声明；执行请求模型由 Task 9 接管）。"""
 
     payload: dict[str, object] = Field(default_factory=dict)
+
+
+class ExtensionTemplateColumnRequest(ContractModel):
+    """预览请求中的模板列快照（SPEC-DM-012 §8.1）。"""
+
+    column_id: UUID
+    header: str
+    expression: str
+
+
+class ExtensionTemplateRequest(ContractModel):
+    """预览请求重复提交的模板快照；未知高 schema 由契约直接拒绝（422）。"""
+
+    template_id: UUID | None = None
+    name: str
+    schema_version: Literal[1]
+    columns: list[ExtensionTemplateColumnRequest]
+
+
+class ExtensionPreviewRequest(ContractModel):
+    """预览请求契约：工作区、基准修订与模板快照（SPEC-DM-012 §8.1）。"""
+
+    workspace_id: str
+    base_revision_id: str
+    template: ExtensionTemplateRequest
+
+
+class SheetCatalogDiagnosticModel(ContractModel):
+    """预览诊断：稳定 code/message_key/params + 可选列/字符定位。"""
+
+    code: str
+    message_key: str
+    params: dict[str, str | int]
+    column_id: str | None = None
+    source_position: int | None = None
+
+
+class SheetCatalogColumnModel(ContractModel):
+    column_id: str | None
+    header: str
+    expression: str
+
+
+class SheetCatalogTemplateModel(ContractModel):
+    """规范化模板回传（模板快照原样返回，字段目录/求值才做规范化）。"""
+
+    template_id: str | None
+    name: str
+    schema_version: int
+    columns: list[SheetCatalogColumnModel]
+
+
+class SheetCatalogFieldDefinitionModel(ContractModel):
+    scope: Literal["sheetset", "sheet"]
+    canonical_name: str
+    builtin: bool
+
+
+class SheetCatalogFieldCatalogModel(ContractModel):
+    sheetset: list[SheetCatalogFieldDefinitionModel]
+    sheet: list[SheetCatalogFieldDefinitionModel]
+
+
+class SheetCatalogPreviewResponse(ContractModel):
+    """预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。"""
+
+    normalized_template: SheetCatalogTemplateModel
+    field_catalog: SheetCatalogFieldCatalogModel
+    errors: list[SheetCatalogDiagnosticModel]
+    warnings: list[SheetCatalogDiagnosticModel]
+    rows: list[list[str]]
+    total_rows: int
+    preview_digest: str
+    executable: bool
 
 
 class ArtifactResponseModel(ContractModel):

@@ -62,18 +62,17 @@ def entry(manifest_resource: str, factory: Callable[[], Extension]) -> BuiltinEx
     return BuiltinExtensionEntry(manifest_resource=manifest_resource, factory=factory)
 
 
-def test_real_builtin_index_discovers_as_waiting_dependency() -> None:
-    # 能力 broker 属 Task 4：已知的 workspace.snapshot.read.v1 当前不可用
+def test_real_builtin_index_discovers_as_available() -> None:
+    # Task 6 已接线能力 broker：快照能力真实可发放，内置扩展发现即可用
     registry = ExtensionRegistry()
     registry.discover(BUILTIN_EXTENSION_INDEX)
     descriptors = registry.list()
     assert [d.manifest.extension_id for d in descriptors] == ["dst-manager.sheet-catalog"]
     assert descriptors[0].manifest.version == "0.1.0"
-    assert descriptors[0].status == "WAITING_DEPENDENCY"
-    assert descriptors[0].error_code == "EXTENSION_CAPABILITY_UNAVAILABLE"
-    with pytest.raises(ExtensionRegistryError) as excinfo, registry.invoke("dst-manager.sheet-catalog", "export-xlsx"):
-        pass
-    assert excinfo.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert descriptors[0].status == "AVAILABLE"
+    assert descriptors[0].error_code is None
+    with registry.invoke("dst-manager.sheet-catalog", "export-xlsx") as invocation:
+        assert invocation.manifest.extension_id == "dst-manager.sheet-catalog"
 
 
 def test_enabled_by_default_starts_and_serves_declared_actions(tmp_path: Path) -> None:
