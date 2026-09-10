@@ -29,8 +29,12 @@ export type SheetCatalogFixtureOptions = {
   empty?: boolean;                              // 空图纸集（0 张图纸，可导出）
   sheetsetProperties?: Record<string, string>;  // 图纸集作用域自定义属性（定义 + 全量值）
   sheetProperties?: Record<string, string>;     // 图纸作用域自定义属性（定义 + 全量值）
-  // 从 fromIndex 起的图纸把该属性值置为空串（缺值警告场景）
-  sheetPropertyValueOverrides?: {name: string; fromIndex: number}[];
+  // 缺值警告场景：fromIndex 起的图纸该属性置空串；values 提供按图纸索引的完整值
+  // 序列（空串 = 缺值，G8 同冻结 Demo 数据用）
+  sheetPropertyValueOverrides?: {name: string; fromIndex?: number; values?: string[]}[];
+  sheetTitles?: string[];                       // 按索引覆盖图纸标题（G8 同冻结 Demo 数据用）
+  dstPath?: string;                             // 覆盖 DST 路径（顶栏工作区标识）
+  sheetSetName?: string;                        // 覆盖图纸集名称
   userTemplates?: CatalogTemplate[];            // 预置用户模板（设置 GET 返回）
   preferenceTemplateId?: string | null;         // 预置"上次选中的已保存模板"偏好
   noShell?: boolean;                            // 不注入 pywebview 桥（无桌面壳）
@@ -93,13 +97,14 @@ function buildWorkspace(options: SheetCatalogFixtureOptions) {
   const sheets = Array.from({length: count}, (_, index) => {
     const custom: Record<string, string> = {...sheetProperties};
     for (const override of overrides) {
-      if (index >= override.fromIndex) custom[override.name] = "";
+      if (override.values) custom[override.name] = override.values[index] ?? "";
+      else if (index >= (override.fromIndex ?? 0)) custom[override.name] = "";
     }
     const number = pad3(index);
     return {
       id: `sheet-${number}`,
       number,
-      title: `图纸 ${number}`,
+      title: options.sheetTitles?.[index] ?? `图纸 ${number}`,
       custom_properties: custom,
       layout: {
         file_name: `C:\\虚构工程\\${number}.dwg`,
@@ -113,9 +118,9 @@ function buildWorkspace(options: SheetCatalogFixtureOptions) {
   return {
     id: WORKSPACE_ID,
     revision_id: "revision-1",
-    dst_path: "C:\\虚构工程\\图纸集.dst",
+    dst_path: options.dstPath ?? "C:\\虚构工程\\图纸集.dst",
     sheet_set: {
-      name: "测试图纸集",
+      name: options.sheetSetName ?? "测试图纸集",
       sheet_count: count,
       subset_count: 1,
       custom_properties: {...sheetsetProperties},

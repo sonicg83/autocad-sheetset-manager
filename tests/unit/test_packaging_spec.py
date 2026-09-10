@@ -171,3 +171,100 @@ def test_i18n_resources_statically_bundled_not_runtime_fetched():
     assert not re.search(r"fetch\([^)]*locales", index_text), (
         "i18n/index.ts 运行期 fetch 语言资源：违背构建期装配唯一实例的架构约束"
     )
+
+
+# ---------------------------------------------------------------------------
+# PLAN-DM-020 Task 12（EP-01/SC-09 打包守护）：随包清单、openpyxl 收集与许可证
+# 追溯、固定索引资源存在、不扫描用户扩展目录。
+# manifest.py 经 importlib.resources 按 `dst_manager/extensions/builtin/...`
+# 包内路径加载清单；frozen 态该资源必须以「包内相对路径」进入 spec datas，
+# 否则 ExtensionRegistry.discover() 在打包后必然降级为占位 FAILED 描述符。
+# ---------------------------------------------------------------------------
+
+MANIFEST_RESOURCE = "dst_manager/extensions/builtin/sheet_catalog/manifest.yaml"
+MANIFEST_FILE = ROOT / "src" / MANIFEST_RESOURCE
+INDEX_FILE = ROOT / "src" / "dst_manager" / "extensions" / "builtin" / "index.py"
+RUNTIME_FILE = ROOT / "src" / "dst_manager" / "application" / "extensions" / "runtime.py"
+
+
+def _normalized_spec_text() -> str:
+    """spec 文本中 `..\\x\\y` 的双反斜杠转义归一为 posix 路径，便于断言源/目标。"""
+    return _spec_text().replace("\\\\", "/")
+
+
+def test_builtin_manifest_yaml_exists():
+    """随包清单真实存在于源码树，是 spec datas 能打进去的前提。"""
+    assert MANIFEST_FILE.is_file(), "内置扩展 manifest.yaml 缺失：固定索引引用的资源必须先在源码树"
+
+
+def test_spec_datas_include_builtin_manifest_yaml():
+    """spec datas 必须把 manifest.yaml 打进包内同路径（frozen 态 importlib.resources 可定位）。"""
+    normalized = _normalized_spec_text()
+    assert f"src/{MANIFEST_RESOURCE}" in normalized, (
+        "packaging/dst-manager.spec 的 datas 缺少内置扩展 manifest.yaml 源条目："
+        "frozen 态 discover() 将因清单不可读降级为占位 FAILED"
+    )
+    # PyInstaller datas 的二元组是 (源文件, 目标目录)：文件被复制进目标目录并保留
+    # basename。目标若写成 manifest.yaml 结尾会被当作目录名，产出
+    # manifest.yaml/manifest.yaml 双层路径，frozen 态清单读取必然失败
+    # （实测 build_release 后在 dist 树复核过两种形态）。
+    entry = re.search(r'\("([^"]*manifest\.ya?ml)",\s*"([^"]+)"\)', _spec_text())
+    assert entry, "未找到 manifest.yaml 的 datas 条目：请确认 datas 列表结构"
+    source = entry.group(1).replace("\\\\", "/")
+    target = entry.group(2).replace("\\\\", "/")
+    assert source == f"../src/{MANIFEST_RESOURCE}", f"manifest.yaml datas 源路径错误：{source}"
+    assert target == "dst_manager/extensions/builtin/sheet_catalog", (
+        f"manifest.yaml datas 目标必须是包内目录 dst_manager/extensions/builtin/sheet_catalog"
+        f"（实际 {target}）：目标目录下文件名固定为 manifest.yaml，落到别处等价于缺失"
+    )
+
+
+def test_openpyxl_collected_with_license_provenance():
+    """openpyxl 必须可收集（生产依赖 + 未被排除）且许可证/版本记录可追溯。"""
+    import tomllib
+
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'"openpyxl>=', pyproject), "openpyxl 未声明为生产依赖：打包后 XLSX 生成将 ImportError"
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    packages = {package["name"]: package for package in lock["package"]}
+    assert "openpyxl" in packages, "uv.lock 缺少 openpyxl 条目：版本来源不可追溯"
+    root = packages.get("autocad-sheetset")
+    assert root is not None and any(dep["name"] == "openpyxl" for dep in root.get("dependencies", [])), (
+        "openpyxl 不在根包生产依赖组：会被误判为可裁剪的传递依赖"
+    )
+    spec = _spec_text()
+    assert not re.search(r"excludes\s*=\s*\[[^\]]*openpyxl", spec, re.DOTALL), "spec excludes 排除了 openpyxl"
+    # 许可证记录可追溯：spec datas 必须携带 LICENSE 与 pyproject.toml
+    # （设置中心 /api/about 的 frozen 态协议全文与版本兜底来源，spec 既有注释）
+    normalized = _normalized_spec_text()
+    assert '../LICENSE' in normalized and '../pyproject.toml' in normalized, (
+        "spec datas 缺少 LICENSE/pyproject.toml：许可证与版本记录在分发包内不可追溯"
+    )
+
+
+def test_fixed_index_resources_exist_and_are_packaged():
+    """固定索引列出的每个清单资源必须在源码树存在且被 spec datas 覆盖。"""
+    resources = re.findall(r'manifest_resource="([^"]+)"', INDEX_FILE.read_text(encoding="utf-8"))
+    assert resources, "固定索引未列出任何随包清单资源：扫描正则失效或索引被清空"
+    normalized = _normalized_spec_text()
+    for resource in resources:
+        assert (ROOT / "src" / resource).is_file(), f"固定索引资源 {resource} 在源码树缺失"
+        assert f"src/{resource}" in normalized, f"固定索引资源 {resource} 未进入 spec datas：frozen 态清单加载必失败"
+
+
+def test_spec_does_not_package_or_scan_user_extension_directories():
+    """分发包只携带固定索引资源：datas 条目不含用户可写目录，运行期发现不扫描文件系统。"""
+    datas_block = re.search(r"datas=\[(.*?)\n    \]", _spec_text(), re.DOTALL)
+    assert datas_block, "未解析到 spec datas 块：请确认 datas 列表结构仍为缩进 4 的列表字面量"
+    entries = [item.lower().replace("\\\\", "/") for item in re.findall(r'"([^"]+)"', datas_block.group(1))]
+    assert entries, "datas 块为空：解析正则失效"
+    for marker in ("localappdata", "appdata/", "site-packages", "extensions/user", "user_extensions"):
+        assert not any(marker in entry for entry in entries), (
+            f"spec datas 疑似打包用户可写目录标记 {marker!r}：包中不得携带用户扩展目录"
+        )
+    runtime = RUNTIME_FILE.read_text(encoding="utf-8")
+    for call in ("glob(", "iterdir(", "listdir(", "scandir("):
+        assert call not in runtime, (
+            f"runtime.py 出现 {call}：扩展发现必须只经 BUILTIN_EXTENSION_INDEX 固定索引（ARCH-DM-006 §4.1），"
+            "不得扫描文件系统或用户扩展目录"
+        )

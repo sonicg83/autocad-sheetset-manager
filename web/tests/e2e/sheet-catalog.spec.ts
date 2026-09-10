@@ -425,3 +425,64 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     await expect(page.getByText("图纸目录已保存到")).toBeVisible();
   });
 });
+
+test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
+  test("三选一守卫模态移入焦点、Tab 圈闭、Esc 留在此处并归还焦点", async ({page}) => {
+    await openCatalog(page);
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    // 记录打开前焦点（触发元素）：守卫关闭后必须归还
+    await page.getByRole("tablist").getByRole("tab").first().click();
+    const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
+    await expect(dialog).toBeVisible();
+    // 焦点已移入模态（Task 11 遗留缺口修复：不再停留在触发元素/页面正文）
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[role="dialog"][aria-modal="true"]') !== null)).toBe(true);
+    // Tab 圈闭：连续 Tab 焦点始终在模态卡片内（禁用的"保存为模板"不参与）
+    for (let step = 0; step < 8; step++) {
+      await page.keyboard.press("Tab");
+      const inside = await page.evaluate(() => Boolean(document.activeElement?.closest(".modal-card")));
+      expect(inside, `第 ${step + 1} 次 Tab 后焦点仍在守卫模态内`).toBe(true);
+    }
+    // Esc = 留在此处：模态关闭、草稿保留、焦点归还触发元素
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("tab-sheets");
+  });
+
+  test("表达式错误把焦点移到具体列的表达式输入框", async ({page}) => {
+    await openCatalog(page);
+    const expression = page.getByLabel("表达式 2");
+    await expression.fill("{sheet.不存在}");
+    // 模拟用户已离开编辑器（错误在防抖预览响应后到达）：焦点应移到出错列的表达式框
+    await expression.evaluate(element => (element as HTMLTextAreaElement).blur());
+    await expect(page.getByLabel("表达式 2")).toBeFocused();
+    await expect(page.getByRole("alert").filter({hasText: "未定义的字段"}).first()).toBeVisible();
+  });
+
+  test("重名列阻断错误（无列 ID）把焦点移到匹配的列名输入框", async ({page}) => {
+    await openCatalog(page);
+    const header = page.getByLabel("输出列名 2");
+    await header.fill("图号"); // 与内置默认第 1 列重名（服务端/预览诊断无 column_id）
+    await header.evaluate(element => (element as HTMLInputElement).blur());
+    // Task 11 遗留缺口修复：无 column_id 的错误此前无法聚焦任何输入
+    await expect(page.getByLabel("输出列名 2")).toBeFocused();
+    await expect(page.getByRole("alert").filter({hasText: "名称重复：图号"}).first()).toBeVisible();
+  });
+
+  test("另存为模态 Esc 关闭、Tab 圈闭并把焦点归还触发按钮", async ({page}) => {
+    await openCatalog(page);
+    const trigger = page.getByRole("button", {name: "另存为"});
+    await trigger.click();
+    const dialog = page.getByRole("dialog", {name: "另存为模板"});
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[role="dialog"][aria-modal="true"]') !== null)).toBe(true);
+    for (let step = 0; step < 6; step++) {
+      await page.keyboard.press("Tab");
+      const inside = await page.evaluate(() => Boolean(document.activeElement?.closest(".modal-card")));
+      expect(inside, `第 ${step + 1} 次 Tab 后焦点仍在另存为模态内`).toBe(true);
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+});

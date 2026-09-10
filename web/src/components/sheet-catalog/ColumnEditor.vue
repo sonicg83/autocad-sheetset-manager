@@ -28,7 +28,11 @@ function errorText(diagnostic: CatalogDiagnostic): string {
   return t(diagnostic.messageKey, diagnostic.params);
 }
 
-// 焦点管理：阻断错误首次出现（或换列）时聚焦首个出错输入；用户正在编辑器内输入时不抢焦点
+// 焦点管理：阻断错误首次出现（或换列）时聚焦首个可操作问题（SPEC §13：表达式错误
+// 聚焦具体编辑框）；用户正在编辑器内输入时不抢焦点。Task 12 补齐两类缺口：
+// 未知字段（FIELD_UNDEFINED）定位到该列表达式输入框（错误在表达式而非列名）；
+// 无 column_id 的阻断错误（重名列，诊断只携带 header 参数）按结构化参数定位到
+// 最后一个匹配列的列名输入框（后引入的重复列才是需要修正的列）。
 const focusedSignature = ref("");
 const errorSignature = computed(() => (props.catalog.preview.value?.errors ?? [])
   .map(error => `${error.code}:${error.columnId ?? String(error.params.header ?? "")}`).join("|"));
@@ -40,10 +44,18 @@ watch(errorSignature, signature => {
   const first = props.catalog.preview.value?.errors?.[0];
   if (!first) return;
   void nextTick(() => {
-    const byColumn = first.columnId !== null
-      ? (first.code === "SHEET_CATALOG_EXPRESSION_INVALID" ? expressionInputs.value[first.columnId] : headerInputs.value[first.columnId] ?? expressionInputs.value[first.columnId])
-      : undefined;
-    byColumn?.focus();
+    if (first.columnId !== null) {
+      const target = first.code === "SHEET_CATALOG_EXPRESSION_INVALID" || first.code === "SHEET_CATALOG_FIELD_UNDEFINED"
+        ? expressionInputs.value[first.columnId]
+        : headerInputs.value[first.columnId] ?? expressionInputs.value[first.columnId];
+      target?.focus();
+      return;
+    }
+    const header = typeof first.params.header === "string" ? first.params.header : "";
+    if (header === "") return;
+    const matches = props.catalog.draft.value.columns.filter(column => column.header.toLowerCase() === header.toLowerCase());
+    if (matches.length === 0) return;
+    headerInputs.value[matches[matches.length - 1]!.columnId]?.focus();
   });
 });
 

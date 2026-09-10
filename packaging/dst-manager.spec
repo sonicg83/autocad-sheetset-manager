@@ -22,6 +22,11 @@ a = Analysis(
         ("..\\migrations", "migrations"),
         # 严格后置校验 XSD（contract._load_schema 经 __file__ 定位）：frozen 态必须随包打入
         ("..\\src\\dst_manager\\infrastructure\\acsm_xml\\schema", "dst_manager/infrastructure/acsm_xml/schema"),
+        # 内置扩展随包清单（EP-01）：manifest.py 经 importlib.resources 按包内路径加载，
+        # datas 的目标是「目标目录」——文件复制进该目录并保留 basename，必须落在
+        # dst_manager/extensions/builtin/sheet_catalog/ 下；固定索引在 index.py 显式列出
+        # 资源，不做文件扫描（tests/unit/test_packaging_spec.py 静态守护）
+        ("..\\src\\dst_manager\\extensions\\builtin\\sheet_catalog\\manifest.yaml", "dst_manager/extensions/builtin/sheet_catalog"),
     ],
     hiddenimports=[
         # uvicorn 运行期动态导入的协议/事件循环实现

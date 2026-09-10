@@ -6,7 +6,7 @@ document_kind: spec
 owners:
   - dst-manager
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 related:
   - PRD-DM-001
   - ARCH-DM-006
@@ -432,8 +432,8 @@ npm run test:e2e
 | G4 Demo 与设计冻结 | 通过 | [Demo](../mockups/SPEC-DM-012-sheet-catalog-demo.html) commit `9f3dfb3` + [截图](assets/SPEC-DM-012/) + [自动化 QA 记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-demo-qa.md) | 用户 | 2026-09-09 | 冻结后主流程、结构或关键状态变化须重开 G4 |
 | G5 技术映射 | 通过 | 本文 §14 + [技术映射记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-g5-technical-mapping.md) | 技术负责人（Agent） | 2026-09-09 | 原生另存为和 Excel 结果保留到 G9 真机验证 |
 | G6 计划就绪 | 通过 | [PLAN-DM-020](../../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（含追踪矩阵、四批次和 12 个任务） | 技术负责人（Agent） | 2026-09-09 | 等待选择执行方式后进入 G7 |
-| G7 分批实施 | 未开始 | — | — | — | 等待 Plan |
-| G8 设计 QA | 未开始 | — | — | — | 等待生产实现 |
-| G9 真实验收与关闭 | 未开始 | — | — | — | 等待打包后的 Windows 桌面壳验证 |
+| G7 分批实施 | 通过 | PLAN-DM-020 Task 1～12 在分支 `worktree-plan-dm-020-sheet-catalog` 实施完成；全量自动验证通过（pytest 1176 项、ruff、uv lock、Alembic、check:api、check:i18n、vue-tsc/vite build、全量 Playwright e2e、`build_release.ps1`），批次一～三检查点证据见计划「实际验证」 | 技术负责人（Agent） | 2026-09-10 | G9 真机验收通过前计划保持 `active` |
+| G8 设计 QA | 通过 | [设计 QA 备忘（MEMO-DM-027）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md)：与冻结 Demo 同数据/状态/视口/主题成对截图逐项比对，一致或已接受差异（D1～D10），无未关闭 P0/P1 | 技术负责人（Agent），用户复核 | 2026-09-10 | D10 首屏密度与 D6 列数计数/有效徽章留用户裁决，不阻塞 |
+| G9 真实验收与关闭 | 未开始 | [G9 清单（MEMO-DM-028）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)已备妥（含 Ruling-10 一致性窗口复核项），等待打包后的 Windows 桌面壳 + 真实 Excel 由用户逐项验收 | 待用户 | — | 通过前 PLAN-DM-020 保持 `active` |
 
-G4～G6 已关闭。生产代码只能依据 PLAN-DM-020 分批进入 G7；若冻结设计或业务规则发生实质变化，先回到相应门禁更新 Spec 和追踪矩阵。
+G4～G8 已关闭。G9 真实验收由用户执行 [MEMO-DM-028](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 并确认后，PLAN-DM-020 才能标记 `completed`；若冻结设计或业务规则发生实质变化，先回到相应门禁更新 Spec 和追踪矩阵。

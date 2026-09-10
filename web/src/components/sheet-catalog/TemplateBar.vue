@@ -11,6 +11,8 @@ const emit = defineEmits<{saved: []; removed: []; confirmRemove: []}>();
 const saveAsOpen = ref(false);
 const saveAsName = ref("");
 const card = ref<HTMLElement | null>(null);
+// 模态焦点（SPEC §13：Esc、焦点圈闭与归还）：打开移入卡片、关闭归还触发按钮
+let opener: HTMLElement | null = null;
 
 async function onSave() {
   if (await props.catalog.saveInPlace()) emit("saved");
@@ -20,9 +22,35 @@ function openSaveAs() {
   saveAsName.value = props.catalog.canSaveInPlace.value ? props.catalog.draft.value.name : "";
   saveAsOpen.value = true;
 }
-watch(saveAsOpen, open => {
-  if (open) void nextTick(() => card.value?.focus());
+watch(saveAsOpen, async open => {
+  if (open) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    card.value?.focus();
+  } else {
+    opener?.focus?.();
+    opener = null;
+  }
 });
+function onModalKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    saveAsOpen.value = false;
+    return;
+  }
+  if (event.key !== "Tab" || !card.value) return;
+  const items = Array.from(card.value.querySelectorAll<HTMLElement>("button,input")).filter(element => !element.hasAttribute("disabled"));
+  if (items.length === 0) return;
+  const first = items[0]!;
+  const last = items[items.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 async function confirmSaveAs() {
   if (await props.catalog.saveAs(saveAsName.value)) {
     saveAsOpen.value = false;
@@ -56,7 +84,7 @@ async function confirmSaveAs() {
         <button type="button" :disabled="catalog.saving.value" @click="catalog.retryAfterConflict()">{{ $t("extensions.sheetCatalog.conflictRetry") }}</button>
       </div>
     </div>
-    <div v-if="saveAsOpen" class="modal-mask" @keydown.escape.prevent="saveAsOpen=false">
+    <div v-if="saveAsOpen" class="modal-mask" @keydown="onModalKeydown">
       <div class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('extensions.sheetCatalog.saveAsTitle')" tabindex="-1" ref="card">
         <h2>{{ $t("extensions.sheetCatalog.saveAsTitle") }}</h2>
         <label class="save-as-name">

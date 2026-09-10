@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-020
 title: 内置扩展平台与图纸目录 XLSX 实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 related:
   - PRD-DM-001
   - ARCH-DM-001
@@ -830,4 +830,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 
 2026-09-10：PLAN-DM-020 批次三 Task 9（执行动作、Artifact 查询和桌面共同装配）批次检查点复核 ARCH-DM-005 独立工作流前置：正式 Spec `SPEC-DM-013` 已接受、G4/G5 证据齐备、实施 Plan `PLAN-DM-021`（多语言支持）批次一～三已完成并记录实际 commit 与自动化证据——ARCH-DM-005 前置持续满足，Task 10 不阻断。批次检查点自动化证据：临时目录实际导出后 openpyxl 回读通过（表名/表头/行值/冻结/筛选）、目标漂移注入 `EXPORT_DESTINATION_CHANGED`、`os.replace` 故障注入旧目标字节保持，三条失败/注入路径均零半文件残留、零错误 Artifact 登记；整条预览→执行链路 DST/DWG 字节与 mtime、工程目录树、`jobs`/`document_revisions`/`workspace_write_locks` 零变化、应用临时候选清空。负责人：PLAN-DM-020 实施代理（Task 9）；下一检查点：批次四 Task 10 启动时复核 `npm run check:i18n` 与 `generate:api` 门禁。
 
-其余尚未实施。执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。
+2026-09-10：PLAN-DM-020 Task 11B 补充任务（Ruling-11：save_templates 服务端接线 + open_artifact_folder 桥方法）已完成（commits `b792f6f..8e1f1ad`，评审 clean）。
+
+2026-09-10：PLAN-DM-020 Task 12（响应式/可访问性、打包、G8 证据与 G9 清单）已完成，分支 `worktree-plan-dm-020-sheet-catalog`，BASE=8e1f1ad。Step 1/3（TDD）：a11y 红灯 4 例先行失败（守卫模态焦点未移入、表达式错误聚焦、重名列无 column_id 错误无法聚焦、另存为模态焦点归还），修复 `SheetCatalogView.vue`（守卫模态焦点移入/Tab 圈闭/Esc/归还）与 `ColumnEditor.vue`（未知字段/语法错误聚焦表达式框、按 header 参数定位重名列的列名输入框）与 `TemplateBar.vue`（另存为模态 Tab 圈闭与归还）后转绿；新建 `sheet-catalog-visual-evidence.spec.ts` 8 例（1440×1000 浅色/900×700 深色/200% 缩放 CDP 等价/1 列/50 列/长字段长值/500 张图纸大数据摘要/键盘 Tab 顺序与字段浏览器 Enter/Space 插入/非颜色状态文字；无整页横滚、主操作滚动后可达、预览区独立横滚断言）。Step 2：打包红灯 3 例先行失败，`packaging/dst-manager.spec` datas 补 `builtin/sheet_catalog/manifest.yaml`（包内同路径，EP-01），`test_packaging_spec.py` 新增 5 例（manifest 进 datas、openpyxl 生产依赖+许可证/版本可追溯、固定索引资源存在且打包、datas 不含用户可写目录 + runtime 不扫描文件系统）。Step 4（G8）：与冻结 Demo（commit `9f3dfb3`）同虚构数据/状态/视口/主题成对截图（浅色 1440×1000、深色 900×700），逐项比对一致或已接受差异 D1～D10、无未关闭 P0/P1，证据与结论见 [MEMO-DM-027](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md)（截图在 `.superpowers/g8/`，不入提交树）；取证中修复 a11y 缺陷 F1/F2（同 Task 11 遗留 minor）后重截。Step 5 完整自动验证（全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1176 项：1102 passed / 74 skipped / 0 failed）、`uv lock --check`、`uv run alembic upgrade head`、`npm --prefix web ci`、`check:api`、`npm --prefix web run build`（check:api+check:i18n+vue-tsc+vite）、`npm --prefix web run test:e2e`（全量）、`scripts/build_release.ps1`（PyInstaller onedir 产物含 manifest.yaml）。Step 6（安全与追踪反查）：追踪矩阵 EP-01～QA-01 逐行核对均有实现与自动测试（映射见 Task 12 报告）；全仓扫描无 TODO/FIXME/未完成标记、动态 import 仅 pageRegistry 编译期映射与测试自有模块、扩展代码无 eval/exec/Jinja/子进程、API 不接受客户端路径参数（保存路径仅授权链）、扩展/发布日志只含稳定标识与文件名 basename 不含完整路径与求值值；禁用扩展后核心 API/三页面回归由既有测试钉住（批次一检查点 + `extensions-navigation.spec.ts`）。Step 7（G9）：真实桌面验收无法由代理替代执行，清单 [MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 已备妥（含 Ruling-10 Artifact 登记一致性窗口复核项），全部结果字段留空待用户填写。Step 8：SPEC-DM-012 §16 门禁表 G7/G8=通过、G9=未开始（待用户）；计划 `status` 由 `proposed` 改为 `active`——矩阵必需项均已验证且无未关闭 P0/P1，唯 G9 真实验收未执行，故不标 `completed`。
+
+执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。

@@ -4,7 +4,7 @@
 // 保留：名称/描述经清单 name_key/description_key 由宿主 i18n 渲染，生命周期状态
 // 按九值登记键呈现；「停用扩展」经 App 的全局未提交输入闸门（含本页草稿三选一）。
 <script setup lang="ts">
-import {computed} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSummary, Workspace} from "../api/contracts";
 import {useSheetCatalog} from "../composables/useSheetCatalog";
@@ -44,6 +44,41 @@ async function confirmRemove() {
 function onSaved() {
   pushToast({type: "ok", title: t("extensions.sheetCatalog.toastSaved"), body: catalog.draft.value.name});
 }
+
+// 三选一守卫模态焦点（SPEC §13：Esc、焦点圈闭与归还）。打开时焦点移入模态卡片、
+// 关闭归还触发元素；Tab 在模态内可聚焦元素间圈闭（禁用的"保存为模板"不参与）。
+// Task 11 遗留缺口（焦点未移入模态）在本任务补齐并钉住。
+const guardCard = ref<HTMLElement | null>(null);
+let guardOpener: HTMLElement | null = null;
+watch(() => catalog.guardState.value.open, async open => {
+  if (open) {
+    guardOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    guardCard.value?.focus();
+  } else if (!confirmState.open) {
+    guardOpener?.focus?.();
+    guardOpener = null;
+  }
+});
+function onGuardKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    catalog.resolveGuard("stay");
+    return;
+  }
+  if (event.key !== "Tab" || !guardCard.value) return;
+  const items = Array.from(guardCard.value.querySelectorAll<HTMLElement>("button")).filter(element => !element.hasAttribute("disabled"));
+  if (items.length === 0) return;
+  const first = items[0]!;
+  const last = items[items.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 </script>
 <template>
   <section class="sheet-catalog" :aria-label="$t(extension.name_key)">
@@ -71,8 +106,8 @@ function onSaved() {
 
     <!-- 三选一保护（SPEC §3.2）：切换模板/切换页签/停用扩展/关闭工作区统一闸门；
          未命名草稿不提供"保存为模板"（需先命名另存为），只能放弃或留在此处 -->
-    <div v-if="catalog.guardState.value.open" class="modal-mask" @keydown.escape.prevent="catalog.resolveGuard('stay')">
-      <div class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('extensions.sheetCatalog.guardTitle')" tabindex="-1">
+    <div v-if="catalog.guardState.value.open" class="modal-mask" @keydown="onGuardKeydown">
+      <div ref="guardCard" class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('extensions.sheetCatalog.guardTitle')" tabindex="-1">
         <h2>{{ $t("extensions.sheetCatalog.guardTitle") }}</h2>
         <p class="modal-message">{{ $t("extensions.sheetCatalog.guardMessage", {summary: catalog.guardState.value.summary}) }}</p>
         <div class="modal-actions">
