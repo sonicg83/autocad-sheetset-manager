@@ -348,6 +348,63 @@ def test_publish_fails_on_artifact_insert_error(tmp_path: Path, monkeypatch):
     assert store.get_artifact("any") is None  # 失败无 Artifact
 
 
+class _FailingArtifactStore:
+    """create_artifact 恒失败的仓储替身（日志断言用，避开 Database 迁移）。"""
+
+    def create_artifact(self, record):
+        raise RuntimeError("database locked")
+
+
+@pytest.mark.parametrize(("preexisting", "old_bytes"), [(True, b"old"), (False, None)])
+def test_artifact_insert_failure_keeps_saved_file_without_record(
+    tmp_path: Path, monkeypatch, preexisting: bool, old_bytes: bytes | None
+):
+    """Ruling-10 钉住的已知窗口：replace 已成功、登记失败时用户目标已是完整的
+    新文件（非半文件，无回滚）——计划禁止预登记，只接受"文件已保存但未登记"。"""
+    target = tmp_path / "out.xlsx"
+    if preexisting:
+        target.write_bytes(old_bytes)
+    grant = make_grant(tmp_path, target)
+    candidate = tmp_path / "candidate.xlsx"
+    candidate.write_bytes(b"new-content")
+
+    with pytest.raises(ArtifactExportError) as exc:
+        ArtifactExporter(_FailingArtifactStore(), invocation_id=INVOCATION_ID).publish(
+            grant, candidate, make_metadata()
+        )
+    assert exc.value.code == "ARTIFACT_WRITE_FAILED"
+    # 新目标内容 == 候选内容：目标存在且完整，无论授权时是否存在旧文件
+    assert target.exists()
+    assert target.read_bytes() == b"new-content"
+    assert temp_leftovers(tmp_path) == []  # 目标临时文件已清理
+
+
+def test_artifact_insert_failure_logs_reconciliation_identity(tmp_path: Path, caplog):
+    """登记失败日志仍关联完整调用身份 + 失败阶段，便于运维 reconciliation。"""
+    artifacts_logger = logging.getLogger("dst_manager.extensions.artifacts")
+    artifacts_logger.disabled = False  # fileConfig 副作用防护（见成功路径日志测试）
+    target = tmp_path / "out.xlsx"
+    grant = make_grant(tmp_path, target)
+    candidate = tmp_path / "candidate.xlsx"
+    candidate.write_bytes(b"data")
+    with (
+        caplog.at_level(logging.WARNING, logger="dst_manager.extensions.artifacts"),
+        pytest.raises(ArtifactExportError),
+    ):
+        ArtifactExporter(_FailingArtifactStore(), invocation_id=INVOCATION_ID).publish(
+            grant, candidate, make_metadata()
+        )
+    text = caplog.text
+    assert "EXTENSION_ARTIFACT_PUBLISH_FAILED" in text
+    assert INVOCATION_ID in text
+    assert EXTENSION_ID in text
+    assert EXTENSION_VERSION in text
+    assert WORKSPACE_ID in text
+    assert "rev-42" in text
+    assert "stage=register-artifact" in text
+    assert str(target) not in text  # 完整路径不入普通日志
+
+
 # ---------------------------------------------------------------------------
 # 基线复核（发布前再核对目标漂移）
 # ---------------------------------------------------------------------------

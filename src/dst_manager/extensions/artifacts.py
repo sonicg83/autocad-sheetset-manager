@@ -9,6 +9,15 @@
 ``ARTIFACT_WRITE_FAILED`` / ``EXPORT_DESTINATION_CHANGED`` 契约化。日志只关联
 调用身份（invocation/扩展 ID/版本/workspace/来源修订/artifact ID），绝不记录
 求值属性值或完整输出路径。
+
+**已知窗口（Ruling-10 接受并显式钉住，记入 Task 12 G9 清单）**：``os.replace``
+成功之后、Artifact 插入失败（``register-artifact`` 阶段）时，用户目标已是
+完整的新文件（非半文件，用户可见结果正确），但后台元数据缺失——即该阶段的
+失败语义是"文件已保存但未登记"，与其余阶段"旧目标字节保持或新目标不存在"
+不同。不做回滚也不预登记：计划全局约束明文"Artifact 只有最终原子保存成功后
+才能登记"，预登记+事后确认违反该约束；运维可凭失败日志中的调用身份
+（invocation/扩展 ID/版本/workspace/来源修订 + stage=register-artifact）做
+reconciliation。
 """
 
 from __future__ import annotations
