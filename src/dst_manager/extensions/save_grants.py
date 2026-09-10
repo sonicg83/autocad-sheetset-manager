@@ -9,8 +9,9 @@
 - 授权只保存在进程内（Task 2 已确认授权不落库），宿主重启即全部失效；
 - 消费是原子的：同一授权只有一个消费者成功，其余一律 ``SAVE_GRANT_INVALID``
   （任何消费尝试——无论身份是否匹配——都会烧毁授权，防伪造探测）；
-- 消费时重新计算目标基线并与选择时基线比对，任何漂移（创建/修改/删除）按
-  ``EXPORT_DESTINATION_CHANGED`` 拒绝，绝不把旧决策用于新目标。
+- 消费时重新计算目标基线并与选择时基线比对，任何漂移（创建/修改/删除）
+  或基线不可读（锁定/权限/竞态）按 ``EXPORT_DESTINATION_CHANGED`` 拒绝，
+  绝不把旧决策用于新目标；基线读取不裸抛 OSError（fail-closed）。
 """
 
 from __future__ import annotations
@@ -82,19 +83,46 @@ class _Grant:
     expires_at: datetime
 
 
+#: 目标不存在：除 ``existed`` 外全为 None（授权创建与消费复核共用）。
+_ABSENT = TargetBaseline(
+    existed=False, device=None, inode=None, size_bytes=None, modified_ns=None,
+    sha256=None,
+)
+
+#: 目标存在但基线不可读（stat/open 之间的删除竞态、Excel/AV 独占锁定、
+#: 权限变化——Windows 上是常态）：身份无法确认，由调用方决定归类
+#: （Artifact 可用性 → CHANGED；授权消费 → EXPORT_DESTINATION_CHANGED），
+#: 绝不把读失败裸抛为非契约 500。
+_UNREADABLE = TargetBaseline(
+    existed=True, device=None, inode=None, size_bytes=None, modified_ns=None,
+    sha256=None,
+)
+
+
 def capture_baseline(target: Path) -> TargetBaseline:
-    """记录目标当前的存在性、文件身份与 SHA-256（授权创建与发布复核共用）。"""
+    """记录目标当前的存在性、文件身份与 SHA-256（授权创建与发布复核共用）。
+
+    不裸抛 OSError：``FileNotFoundError`` 返回不存在基线；其他 OS 级读失败
+    返回"目标存在但基线不可读"（``_UNREADABLE``，``existed=True`` 且身份
+    字段全 None），语义由调用方归类——可用性派生按 CHANGED、授权消费按
+    EXPORT_DESTINATION_CHANGED，均为 fail-closed 且契约化。
+    """
     try:
         stat = target.stat()
     except FileNotFoundError:
-        return TargetBaseline(
-            existed=False, device=None, inode=None, size_bytes=None,
-            modified_ns=None, sha256=None,
-        )
-    digest = hashlib.sha256()
-    with target.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(_HASH_CHUNK), b""):
-            digest.update(chunk)
+        return _ABSENT
+    except OSError:
+        # stat 失败（如父目录权限）：存在性本身无法确认，同样按不可读处理，
+        # 调用方 fail-closed 拒绝，绝不逃逸 500。
+        return _UNREADABLE
+    try:
+        digest = hashlib.sha256()
+        with target.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(_HASH_CHUNK), b""):
+                digest.update(chunk)
+    except OSError:
+        # 文件在 stat 与 open 之间被删除/锁定/权限变化：身份无法确认。
+        return _UNREADABLE
     return TargetBaseline(
         existed=True,
         device=stat.st_dev,
@@ -167,7 +195,17 @@ class SaveGrantStore:
             raise SaveGrantError(
                 "SAVE_GRANT_INVALID", "保存授权与请求的扩展/动作/工作区不匹配"
             )
-        if capture_baseline(grant.target) != grant.baseline:
+        baseline = capture_baseline(grant.target)
+        if baseline.existed and baseline.sha256 is None:
+            # 目标存在但基线不可读（锁定/权限/竞态）：身份无法确认，fail-closed
+            # 归类为 EXPORT_DESTINATION_CHANGED（授权已随消费烧毁——这正是
+            # execute 通道 OSError 兜底注释声称"不会发生在消费后"的例外来源，
+            # 此处显式包装为 SaveGrantError，保证不逃逸为非契约 500）。
+            raise SaveGrantError(
+                "EXPORT_DESTINATION_CHANGED",
+                "保存目标当前不可读（可能被其他程序占用或权限不足），无法确认其未变化",
+            )
+        if baseline != grant.baseline:
             raise SaveGrantError(
                 "EXPORT_DESTINATION_CHANGED", "保存目标在选择后发生了变化"
             )

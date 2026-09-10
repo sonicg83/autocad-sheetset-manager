@@ -89,7 +89,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "SHEET_CATALOG_VALUE_MISSING": "字段值为空：[{scope}] {name}（涉及 {sheet_count} 张图纸）",
     "SHEET_CATALOG_COLUMN_DUPLICATE": "名称重复：{header}",
     "SHEET_CATALOG_TEMPLATE_LIMIT": "超出模板限制 {kind}：{actual}/{limit}",
-    "SHEET_CATALOG_TEMPLATE_CONFLICT": "模板已被其他保存更新（本地 r{current_revision}/服务端 r{expected_revision}）",
+    # 参数语义（templates.save_templates / settings 乐观并发一致）：
+    # current_revision=服务端最新修订，expected_revision=客户端提交的过期修订。
+    "SHEET_CATALOG_TEMPLATE_CONFLICT": "模板已被其他保存更新（服务端 r{current_revision}/本地 r{expected_revision}）",
     "SHEET_CATALOG_XLSX_INVALID": "候选文件校验未通过：{check}",
 }
 

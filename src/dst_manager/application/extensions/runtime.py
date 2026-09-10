@@ -576,8 +576,11 @@ class ExtensionRuntime:
         except OSError as exc:
             # 候选目录创建/候选写入的 OS 级失败（磁盘满/AV 锁定/权限）同样按
             # ARTIFACT_WRITE_FAILED 契约化，绝不逃逸为非契约 500。此失败只会
-            # 发生在授权消费之前（ArtifactExporter 已把发布期 OS 错误包装为
-            # ArtifactExportError），授权未被烧毁，重试不要求重新"另存为"。
+            # 发生在授权消费之前：ArtifactExporter 已把发布期 OS 错误包装为
+            # ArtifactExportError（更早的分支），而 SaveGrantStore.consume 的
+            # 目标基线读取（stat/open）已由 capture_baseline 全量兜住并包装为
+            # SaveGrantError/EXPORT_DESTINATION_CHANGED——授权消费通道不再
+            # 产生裸 OSError，授权未被烧毁，重试不要求重新"另存为"。
             raise ExtensionPlatformError(
                 "ARTIFACT_WRITE_FAILED",
                 str(exc),
@@ -660,6 +663,10 @@ class ExtensionRuntime:
 
         ``AVAILABLE``：文件存在且 SHA-256 与登记一致；``MISSING``：文件已
         删除；``CHANGED``：文件存在但内容被移动/修改（SPEC-DM-012 §10）。
+        存在但基线不可读（被 Excel/AV 独占锁定、权限变化、stat/open 之间
+        被删除的竞态）也归为 ``CHANGED``：文件在但身份无法确认，与"内容
+        可能已被改动"同样不可信，宁可让用户复核也不伪称可用或逃逸 500
+        （``capture_baseline`` 已保证 OSError 不裸抛，此派生只返回三态）。
         """
         baseline = capture_baseline(Path(record.output_path))
         if not baseline.existed:

@@ -9,6 +9,7 @@
 分派：casefold 重名/100 上限/内置不可变/高 schema 保留/合法回读与通用路径隔离）。
 """
 
+import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -286,6 +287,57 @@ def test_artifact_lookup_returns_seeded_metadata(tmp_path):
     assert body["file_name"] == "图纸目录.xlsx"
     # 输出文件不存在：历史记录不伪装成当前可用（Task 9 可用性派生）
     assert body["availability"] == "MISSING"
+
+
+def test_artifact_availability_reports_changed_not_500_when_target_unreadable(
+    tmp_path, monkeypatch
+):
+    """fix round 3：目标文件在 stat 与 open 之间被锁定/权限变化（Windows 上
+    Excel/AV 占用是常态）时，``GET /api/artifacts/{id}`` 必须按契约返回
+    CHANGED 可用性，绝不逃逸为非契约 500。"""
+    from pathlib import Path
+
+    output_path = tmp_path / "图纸目录.xlsx"
+    content = b"catalog-bytes"
+    output_path.write_bytes(content)
+
+    client = make_client(tmp_path)
+    store = ExtensionStore(client.app.state.service.database.sessions)
+    store.create_artifact(
+        ArtifactRecord(
+            artifact_id="artifact-locked",
+            extension_id=SHEET_CATALOG_ID,
+            extension_version="0.1.0",
+            workspace_id="ws-1",
+            source_revision_id="rev-1",
+            kind="sheet-catalog",
+            media_type=XLSX_MEDIA_TYPE,
+            management_relation="external",
+            output_path=str(output_path),
+            file_name="图纸目录.xlsx",
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+            created_at=datetime(2026, 9, 10, 8, 0, 0, tzinfo=UTC),
+        )
+    )
+
+    real_open = Path.open
+
+    def locked_open(self, *args, **kwargs):
+        if self == output_path:
+            raise PermissionError(13, "被其他程序占用")
+        return real_open(self, *args, **kwargs)
+
+    # 健全性前置：文件可读时按登记身份判为 AVAILABLE
+    assert client.get("/api/artifacts/artifact-locked").json()["availability"] == "AVAILABLE"
+
+    monkeypatch.setattr(Path, "open", locked_open)
+
+    resp = client.get("/api/artifacts/artifact-locked")
+
+    assert resp.status_code == 200
+    # 文件在但身份无法确认：与"内容可能已被改动"同样不可信，归为 CHANGED
+    assert resp.json()["availability"] == "CHANGED"
 
 
 # ---------------------------------------------------------------------------

@@ -140,7 +140,7 @@ export default {
     valueMissing: "字段值为空：[{scope}] {name}（涉及 {sheet_count} 张图纸）",
     columnDuplicate: "名称重复：{header}",
     templateLimit: "超出模板限制 {kind}：{actual}/{limit}",
-    templateConflict: "模板已被其他保存更新（本地 r{current_revision}，服务端 r{expected_revision}），本地编辑已保留，可另存为新模板或按新修订重试",
+    templateConflict: "模板已被其他保存更新（服务端 r{current_revision}，本地 r{expected_revision}），本地编辑已保留，可另存为新模板或按新修订重试",
     xlsxInvalid: "候选文件校验未通过：{check}",
   },
   ui: {

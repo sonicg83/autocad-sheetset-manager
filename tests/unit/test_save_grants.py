@@ -179,6 +179,31 @@ def test_capture_baseline_reports_missing_target(tmp_path: Path):
     assert baseline.sha256 is None
 
 
+def test_capture_baseline_reports_unreadable_target_instead_of_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """目标存在但打开失败（AV/Excel 独占锁定、权限变化、stat/open 竞态）时
+    返回"存在但基线不可读"基线，绝不裸抛 OSError（fix round 3：非契约 500
+    逃逸窗口的源头封堵）。"""
+    target = make_target(tmp_path, content=b"base")
+    real_open = Path.open
+
+    def locked_open(self, *args, **kwargs):
+        if self == target:
+            raise PermissionError(13, "被其他程序占用")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", locked_open)
+
+    baseline = capture_baseline(target)
+    assert baseline.existed is True  # 文件在：不是 MISSING 语义
+    assert baseline.device is None
+    assert baseline.inode is None
+    assert baseline.size_bytes is None
+    assert baseline.modified_ns is None
+    assert baseline.sha256 is None  # 身份无法确认，由调用方归类
+
+
 # ---------------------------------------------------------------------------
 # 目标漂移拒绝
 # ---------------------------------------------------------------------------
@@ -202,6 +227,31 @@ def test_consume_rejects_target_drift(tmp_path: Path, mode: str):
     with pytest.raises(SaveGrantError) as exc:
         store.consume(receipt.save_grant_id, EXTENSION_ID, ACTION_ID, WORKSPACE_ID)
     assert exc.value.code == "EXPORT_DESTINATION_CHANGED"
+
+
+def test_consume_wraps_unreadable_target_io_as_contract_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """消费时目标哈希读取 IO 失败（锁定/权限/竞态）：按契约化
+    EXPORT_DESTINATION_CHANGED 拒绝（fail-closed），绝不裸抛 OSError 逃逸到
+    execute 通道的 OSError 兜底；授权随消费烧毁。"""
+    store = SaveGrantStore()
+    receipt = create_grant(store, make_target(tmp_path, content=b"base"))
+    real_open = Path.open
+
+    def locked_open(self, *args, **kwargs):
+        if self.name.endswith(".xlsx"):
+            raise PermissionError(13, "被其他程序占用")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", locked_open)
+
+    with pytest.raises(SaveGrantError) as exc:
+        store.consume(receipt.save_grant_id, EXTENSION_ID, ACTION_ID, WORKSPACE_ID)
+    assert exc.value.code == "EXPORT_DESTINATION_CHANGED"
+    assert "不可读" in str(exc.value)
+    # 授权已随消费烧毁（消费即销毁，任何后续尝试一律 INVALID）
+    assert store.active_count() == 0
 
 
 # ---------------------------------------------------------------------------

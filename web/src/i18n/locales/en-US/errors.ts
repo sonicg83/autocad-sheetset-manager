@@ -139,7 +139,7 @@ export default {
     valueMissing: "Field value is empty: [{scope}] {name} ({sheet_count} sheets affected)",
     columnDuplicate: "Duplicate name: {header}",
     templateLimit: "Template limit exceeded {kind}: {actual}/{limit}",
-    templateConflict: "The template was updated by another save (local r{current_revision}, server r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
+    templateConflict: "The template was updated by another save (server r{current_revision}, local r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
     xlsxInvalid: "Candidate file validation failed: {check}",
   },
   ui: {
