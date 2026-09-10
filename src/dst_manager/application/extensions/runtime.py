@@ -43,7 +43,6 @@ from dst_manager.extensions.builtin.sheet_catalog.extension import (
     SheetCatalogExecuteResponse,
 )
 from dst_manager.extensions.builtin.sheet_catalog.templates import (
-    TEMPLATE_SCHEMA_VERSION,
     _template_from_json,
     load_templates,
     save_templates,
@@ -338,12 +337,12 @@ class ExtensionRuntime:
                 status_code=422,
                 params={"settings_schema": manifest.settings_schema, "submitted": schema_version},
             )
-        if (
-            extension_id == _TEMPLATE_SETTINGS_EXTENSION_ID
-            and schema_version == TEMPLATE_SCHEMA_VERSION
-        ):
-            # SC-06 服务端接线（Task 11B）：图纸目录设置 PUT 经 save_templates
-            # 强制全部模板规则，存储的也是规范序列化负载（GET 回读一致）。
+        if extension_id == _TEMPLATE_SETTINGS_EXTENSION_ID:
+            # SC-06 服务端接线（Task 11B / fix round 1）：分派只按扩展身份，不
+            # 耦合字面 schema 版本——否则 settings_schema 升级后 v2 PUT 会静默
+            # 退回通用 JSON 路径（fail-open，重名/超限重新失去强制）。非 v1 负载
+            # 在分派内天然 fail-closed：模板条目按 v1 严格解析、服务端高 schema
+            # 行经 unknown_schema_preserved 走 Ruling-9 冲突拒绝。
             value = self._save_catalog_templates(extension_id, value, expected_revision)
         try:
             return self._store.put_settings(

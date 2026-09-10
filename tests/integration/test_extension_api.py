@@ -461,6 +461,61 @@ def test_settings_put_rejected_when_server_schema_higher_keeps_original_json(tmp
     assert client.get(url).json() == {"schema_version": 2, "revision": 1, "value": raw_value}
 
 
+def test_settings_put_dispatches_by_extension_even_when_manifest_schema_upgrades(tmp_path):
+    """fix round 1 fail-closed 钉子：分派只按扩展身份，不耦合字面 schema 版本。
+
+    模拟未来 sheet-catalog ``settings_schema`` 升级到 2：PUT 仍必须经
+    ``save_templates`` 强制模板规则（此处用 casefold 重名触发拒绝），绝不静默
+    退回通用 JSON 存储路径让重名/超限重新失去服务端强制。
+    """
+    manifest = tmp_path / "catalog-v2.yaml"
+    manifest.write_text(
+        f"""
+extension_id: {SHEET_CATALOG_ID}
+version: 0.2.0
+extension_type: builtin
+host_contract: 1
+enabled_by_default: false
+name_key: extensions.sheetCatalog.name
+description_key: extensions.sheetCatalog.description
+required_capabilities: []
+permissions: []
+ui_contributions: []
+actions: []
+settings_schema: 2
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    entries = (BuiltinExtensionEntry(manifest_resource=str(manifest), factory=_boom),)
+    client = make_client(
+        tmp_path, extension_runtime=make_runtime(tmp_path, entries), extension_index=entries
+    )
+
+    rejected = client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 2,
+            "expected_revision": 0,
+            "value": {
+                "schema_version": 2,
+                "user_templates": [
+                    catalog_template_json("Catalog"),
+                    catalog_template_json("catalog"),
+                ],
+            },
+        },
+    )
+
+    assert rejected.status_code == 409
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "SHEET_CATALOG_COLUMN_DUPLICATE"
+    assert body["message_key"] == "errors.sheetCatalog.columnDuplicate"
+    # 拒绝即未落库：通用路径不会接受任何负载
+    assert client.get(f"/api/extensions/{SHEET_CATALOG_ID}/settings").json()["value"] == {}
+
+
 def test_settings_put_other_extensions_keep_generic_json_path(tmp_path):
     """无 sheet-catalog 契约的扩展（未来）不受模板分派影响：value 原样存储回读。"""
     manifest = tmp_path / "plain-settings.yaml"
