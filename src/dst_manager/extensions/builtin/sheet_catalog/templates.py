@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from dst_manager.extensions.builtin.sheet_catalog.errors import (
@@ -67,6 +67,10 @@ class TemplateCollection:
     revision: int
     builtin: SheetCatalogTemplate
     user_templates: tuple[SheetCatalogTemplate, ...]
+    #: ``load_templates`` 检测到未知高 schema 时置 True：服务端原 JSON 已
+    #: 保留且高于当前可解析格式，``save_templates`` 必须拒绝以免 v1 负载
+    #: 静默覆盖原 JSON（Ruling-9）。带默认值，向后兼容既有构造。
+    unknown_schema_preserved: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +227,17 @@ def save_templates(
     冲突时本地编辑（传入的 collection）原样保留：调用方刷新服务端模板修订
     后可按新修订重试或另存为新模板。内置默认模板不可替换。
     """
+    if collection.unknown_schema_preserved:
+        # 服务端模板设置 schema 高于当前版本：按 v1 负载保存会静默销毁
+        # 原始 JSON。冲突语义（SPEC-DM-012 §11）保留本地编辑，等待升级。
+        raise sheet_catalog_error(
+            "SHEET_CATALOG_TEMPLATE_CONFLICT",
+            {},
+            message=(
+                "服务端模板设置 schema 高于当前版本，原 JSON 已保留，"
+                "请升级程序后再保存或另存为新模板"
+            ),
+        )
     if collection.revision != expected_revision:
         raise sheet_catalog_error(
             "SHEET_CATALOG_TEMPLATE_CONFLICT",
@@ -276,13 +291,17 @@ def load_templates(settings: VersionedJson | None) -> TemplateCollection:
             "SHEET_CATALOG_SETTINGS_SCHEMA_UNSUPPORTED: schema_version=%s",
             settings.schema_version,
         )
-        return TemplateCollection(settings.revision, DEFAULT_TEMPLATE, ())
+        return TemplateCollection(
+            settings.revision, DEFAULT_TEMPLATE, (), unknown_schema_preserved=True
+        )
     entries = settings.value.get("user_templates")
     if not isinstance(entries, list):
         _log_skip("user_templates_not_a_list")
         return TemplateCollection(settings.revision, DEFAULT_TEMPLATE, ())
     templates: list[SheetCatalogTemplate] = []
-    seen_names: set[str] = set()
+    # 与内置默认模板同名的用户模板不加载：否则之后的任何一次保存都会因
+    # 名字冲突被拒，卡死全部模板保存（save 路径把内置名预置进 seen_names）。
+    seen_names: set[str] = {_BUILTIN_TEMPLATE_NAME.casefold()}
     for entry in entries:
         if len(templates) >= MAX_USER_TEMPLATES:
             _log_skip("user_templates_over_limit")

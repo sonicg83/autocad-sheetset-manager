@@ -402,6 +402,59 @@ def test_load_templates_preserves_unknown_high_schema_json_with_diagnostic(caplo
     assert settings.value == raw_value
     assert settings.schema_version == 2
     assert "SHEET_CATALOG_SETTINGS_SCHEMA_UNSUPPORTED" in caplog.text
+    # Ruling-9：高 schema 集合必须带保留标记，堵住"按服务端修订原样覆盖 v2
+    # JSON"的数据丢失通路。
+    assert collection.unknown_schema_preserved is True
+
+
+def test_save_templates_rejects_collection_loaded_from_unknown_high_schema(caplog):
+    """高 schema 载入的集合即使 revision 与服务端一致也不得保存为 v1 负载。"""
+    raw_value = {"user_templates": [{"unknown": "future-shape"}], "future_field": 1}
+    settings = VersionedJson(schema_version=2, revision=5, value=raw_value)
+    with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
+        collection = load_templates(settings)
+    with pytest.raises(SheetCatalogError) as excinfo:
+        save_templates(collection, expected_revision=settings.revision)
+    error = excinfo.value
+    assert error.code == "SHEET_CATALOG_TEMPLATE_CONFLICT"
+    assert "schema" in error.message
+    # 本地无编辑可丢、服务端原 JSON 依旧原样保留。
+    assert settings.value == raw_value
+
+
+def test_template_collection_defaults_to_savable_unknown_schema_flag():
+    collection = make_collection((make_template(),))
+    assert collection.unknown_schema_preserved is False
+    payload = save_templates(collection, expected_revision=collection.revision)
+    assert payload["schema_version"] == 1
+
+
+def test_load_templates_skips_user_template_named_like_builtin(caplog):
+    """与内置默认模板同名的用户模板不得加载，否则会卡死之后的全部保存。"""
+    good = make_template(name="其他目录")
+    good_json = save_templates(make_collection((good,)), expected_revision=3)[
+        "user_templates"
+    ][0]
+    # 手改 settings JSON 注入与内置默认模板同名的用户模板（损坏数据形态）。
+    builtin_named_json = dict(
+        good_json,
+        template_id=str(uuid.uuid4()),
+        name=DEFAULT_TEMPLATE.name,
+    )
+    payload = {
+        "schema_version": 1,
+        "user_templates": [builtin_named_json, good_json],
+    }
+    with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
+        collection = load_templates(
+            VersionedJson(schema_version=1, revision=4, value=payload)
+        )
+    # 与内置名冲突的条目被跳过，其余正常加载。
+    assert collection.user_templates == (good,)
+    assert "SHEET_CATALOG_TEMPLATES_SKIPPED" in caplog.text
+    # 跳过后保存恢复正常，不再被同名条目卡死。
+    saved = save_templates(collection, expected_revision=4)
+    assert saved["user_templates"] == [good_json]
 
 
 def test_load_templates_ignores_non_list_user_templates_with_diagnostic(caplog):
