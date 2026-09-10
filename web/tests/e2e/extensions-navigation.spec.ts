@@ -172,3 +172,33 @@ test("停用当前目录页：有未保存输入先三选一，确认后才发�
   await expect(page.getByRole("tablist").getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
   await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("tab-revisions");
 });
+
+// 发布成功后的刷新窗口（isWorkspaceLoading=true 且工作区已在场）钉住旧 TabBar 的
+// revisions-disabled 守卫分支：加载期间修订历史与扩展页签禁用，刷新完成后恢复可点
+test("工作区刷新加载期间修订历史与扩展页签禁用（loading 守卫不随标签重构丢失）", async ({page}) => {
+  await installExtensions(page, [extensionSummary()]);
+  let refreshStarted = false;
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>(done => { releaseRefresh = done; });
+  await page.route("**/api/workspaces/workspace-1/changes/preview", route => route.fulfill({json: {executable: true, requires_cad: false, changes: [], diagnostics: [], affected_files: [], execution_intent: null, semantic_diff: {sheet_set: [], structure: {before: [], after: []}, properties: [], dwgs: []}, preview_digest: "digest-e2e"}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute", route => route.fulfill({json: {id: "job-1", status: "SUCCEEDED", progress: 100, files: []}}));
+  await page.route("**/api/workspaces/workspace-1", async route => { refreshStarted = true; await refreshGate; return route.fulfill({json: workspace}); });
+  await openWorkspace(page);
+  await page.getByRole("tab", {name: "属性"}).click();
+  await page.getByLabel("图纸集名称", {exact: true}).fill("刷新名称");
+  await page.getByRole("button", {name: "更新图纸集"}).click();
+  // 扩展标签在场：「图纸」子串会同时命中「图纸目录」，用位置定位首个核心标签
+  await page.getByRole("tablist").getByRole("tab").first().click();
+  await page.getByRole("button", {name: "预览变更"}).click();
+  await page.getByRole("button", {name: "确认写入"}).click();
+  const modal = page.locator('[role="dialog"][aria-modal="true"]');
+  if (await modal.getByRole("checkbox").count()) await modal.getByRole("checkbox").check();
+  await modal.getByRole("button", {name: /确认发布/}).click();
+  await expect.poll(() => refreshStarted).toBe(true);
+  // 刷新加载窗口：两个页签均禁用
+  await expect(page.locator("#tab-revisions")).toBeDisabled();
+  await expect(page.locator("#tab-sheet-catalog")).toBeDisabled();
+  releaseRefresh();
+  await expect(page.locator("#tab-revisions")).toBeEnabled();
+  await expect(page.locator("#tab-sheet-catalog")).toBeEnabled();
+});

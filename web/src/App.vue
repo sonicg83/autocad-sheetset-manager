@@ -126,15 +126,17 @@ const extensionPages=computed(()=>{
   return pages;
 });
 // 标签描述符：核心三标签（图纸/属性/修订历史）顺序固定不被扩展替换，扩展页面追加在后；
-// 无工作区时不显示 workspace_page 贡献
+// 无工作区时不显示 workspace_page 贡献。修订历史与扩展页在加载/恢复期间禁用（页面内容
+// 未渲染，防中途点击进入空态），守卫语义与旧 TabBar 的 revisions-disabled 绑定一致
 const tabDescriptors=computed<TabDescriptor[]>(()=>{
+  const busyDisabled=isRestoreExecuting.value||isWorkspaceLoading.value;
   const core:TabDescriptor[]=[
     {id:"sheets",label:t("shell.tabs.sheets"),number:"①",source:"core"},
     {id:"properties",label:t("shell.tabs.properties"),number:"②",source:"core"},
-    {id:"revisions",label:t("shell.tabs.revisions"),number:"③",source:"core",disabled:isRestoreExecuting.value},
+    {id:"revisions",label:t("shell.tabs.revisions"),number:"③",source:"core",disabled:busyDisabled},
   ];
   if(workspace.value===null)return core;
-  for(const page of extensionPages.value)core.push({id:page.routeKey,label:t(page.summary.name_key),source:"extension",disabled:isRestoreExecuting.value});
+  for(const page of extensionPages.value)core.push({id:page.routeKey,label:t(page.summary.name_key),source:"extension",disabled:busyDisabled});
   return core;
 });
 const tabIds=computed(()=>tabDescriptors.value.map(descriptor=>descriptor.id));
