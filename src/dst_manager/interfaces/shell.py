@@ -22,6 +22,9 @@ import webview
 
 from ..application.shell_context import ShellContext
 from ..config import Settings
+from ..extensions.contracts import XLSX_MEDIA_TYPE
+from ..extensions.registry import ExtensionRegistry
+from ..extensions.save_grants import SaveGrantStore
 from ..infrastructure.explorer import Explorer, ExplorerError
 from ..infrastructure.sheet_preferences import (
     InvalidSheetPreferencesError,
@@ -52,6 +55,27 @@ _FILE_KIND_PATTERNS: dict[str, str] = {
     "dll": "*.dll",
 }
 
+# ---- PLAN-DM-020 Task 8：扩展成果原生"另存为"（SAVE_DIALOG + 一次性授权） ----
+# 只允许 registry 中 output_kind=xlsx 且 MIME 匹配的动作；建议名由宿主从当前
+# 可信工作区快照严格生成（不接受前端建议名），过滤器固定 XLSX。
+_SAVE_DIALOG_DESCRIPTION = "XLSX 工作簿"
+_SAVE_DIALOG_PATTERN = "*.xlsx"
+_NAME_SUFFIX = "-图纸目录.xlsx"
+_NAME_FALLBACK_STEM = "图纸集"
+_MAX_STEM_LENGTH = 100
+_NAME_INVALID_PATTERN = r'[<>:"/\\|?*\x00-\x1f\x7f]'
+
+
+def _suggested_catalog_name(dst_path: Path) -> str:
+    """从可信工作区 DST 生成图纸目录建议文件名（SPEC-DM-012 §9）。
+
+    Windows 非法文件名字符（``<>:"/\\|?*``）与控制字符逐个替换为下划线，
+    剥离首尾空白与点，图纸集名称部分限制长度；清洗后为空回退稳定默认名。
+    """
+    stem = re.sub(_NAME_INVALID_PATTERN, "_", dst_path.stem)
+    stem = stem.strip(" .") or _NAME_FALLBACK_STEM
+    return f"{stem[:_MAX_STEM_LENGTH]}{_NAME_SUFFIX}"
+
 
 def _sanitize_description(description: str) -> str:
     """把本地化描述净化为 pywebview parse_file_type 允许的 ``[\\w ]+`` 文本。
@@ -80,11 +104,19 @@ class ShellBridge:
         context: ShellContext | None = None,
         preferences: SheetPreferences | None = None,
         explorer: Explorer | None = None,
+        registry: ExtensionRegistry | None = None,
+        save_grants: SaveGrantStore | None = None,
     ) -> None:
-        """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。"""
+        """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。
+
+        ``registry``/``save_grants`` 由桌面装配注入（Task 9 与 API runtime 共享
+        同一个 SaveGrantStore）；缺省时 request_extension_save 契约化拒绝。
+        """
         self._context = context
         self._preferences = preferences
         self._explorer = explorer if explorer is not None else Explorer()
+        self._registry = registry
+        self._save_grants = save_grants
         self._window: webview.Window | None = None
         self._drop_callback_id: str | None = None
         self._drop_listener_registered = False
@@ -192,6 +224,75 @@ class ShellBridge:
         except OSError as exc:
             return shell_error("SHELL_OPEN_FAILED", str(exc))
         return {"ok": True, "value": None}
+
+    def request_extension_save(self, extension_id: str, action_id: str, workspace_id: str) -> dict:
+        """扩展成果原生"另存为"（PLAN-DM-020 Task 8 / ARCH-DM-006 §9.1）。
+
+        只允许 registry 中 ``output_kind == "xlsx"`` 且 MIME 匹配的动作；桥不
+        接受前端建议名——建议文件名由宿主从当前可信工作区快照严格生成（
+        :func:`_suggested_catalog_name`），对话框固定 XLSX 过滤器。用户确认后
+        经共享的 :class:`SaveGrantStore` 创建一次性授权，返回
+        ``{ok:true;value:{save_grant_id,file_name,expires_at}}``——**不含目标
+        绝对路径**；用户取消返回 ``{ok:true;value:null}`` 且不创建授权。
+        """
+        error = self._context_error(workspace_id)
+        if error is not None:
+            return error
+        if self._save_grants is None or self._registry is None:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "保存授权通道未装配")
+        descriptor = next(
+            (
+                item
+                for item in self._registry.list()
+                if item.manifest.extension_id == extension_id
+            ),
+            None,
+        )
+        if descriptor is None:
+            return shell_error("EXTENSION_NOT_FOUND", f"扩展未登记：{extension_id}")
+        action = next(
+            (
+                item
+                for item in descriptor.manifest.actions
+                if item.action_id == action_id
+            ),
+            None,
+        )
+        if action is None:
+            return shell_error(
+                "EXTENSION_ACTION_NOT_FOUND",
+                f"扩展 {extension_id} 未声明动作：{action_id}",
+            )
+        if action.output_kind != "xlsx" or action.media_type != XLSX_MEDIA_TYPE:
+            return shell_error(
+                "EXTENSION_CAPABILITY_UNAVAILABLE", "该动作不支持 XLSX 保存"
+            )
+        if self._window is None:
+            raise RuntimeError("保存对话框窗口尚未就绪")
+        context = self._context.current
+        assert context is not None  # _context_error 通过后当前上下文必然存在
+        result = self._window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename=_suggested_catalog_name(context.dst_path),
+            file_types=[f"{_SAVE_DIALOG_DESCRIPTION} ({_SAVE_DIALOG_PATTERN})"],
+        )
+        if not result:
+            # 用户取消：立即结束，不生成授权、不登记 Artifact。
+            return {"ok": True, "value": None}
+        try:
+            receipt = self._save_grants.create(
+                extension_id, action_id, workspace_id, Path(result)
+            )
+        except OSError:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "无法读取所选保存目标")
+        return {
+            "ok": True,
+            "value": {
+                "save_grant_id": receipt.save_grant_id,
+                "file_name": receipt.file_name,
+                "expires_at": receipt.expires_at.isoformat(),
+            },
+        }
 
     def select_file(self, file_kind: FileKind, localized_description: str) -> str | None:
         """弹出原生文件选择对话框（PLAN-DM-021 Task 4：file_kind + 本地化描述）。
