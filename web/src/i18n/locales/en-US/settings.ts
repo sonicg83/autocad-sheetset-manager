@@ -16,6 +16,22 @@ export default {
     nav: "Settings sections",
     general: "General",
     about: "About",
+    extensions: "Extensions",
+  },
+  // Extensions section (disable must stay reversible / ARCH-DM-006 §7; PLAN-DM-022
+  // switched the control to a sliding switch). The toggle applies immediately,
+  // independent of the buffered Cancel/Save below. stateOn/stateOff is the visible
+  // state text next to the switch; enableNamed/disableNamed is the switch's
+  // accessible name.
+  extensions: {
+    immediateNotice: "Extension changes take effect immediately and are not affected by Cancel below.",
+    loading: "Loading extensions…",
+    loadFailed: "Failed to load the extension list.",
+    empty: "No registered extensions.",
+    stateOn: "Enabled",
+    stateOff: "Disabled",
+    enableNamed: "Enable {name}",
+    disableNamed: "Disable {name}",
   },
   confirm: {
     title: "Unsaved changes",

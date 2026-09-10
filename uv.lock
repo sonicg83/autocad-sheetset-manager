@@ -58,7 +58,7 @@ wheels = [
 
 [[package]]
 name = "autocad-sheetset"
-version = "0.3.3"
+version = "0.3.5"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

@@ -94,6 +94,12 @@ export function useSheetEditor(deps: SheetEditorDeps) {
     opener?.focus?.();
   }
   function cancel() { discard(); }
+  // 用户自己确认的删除命令成功进入草稿后调用：目标对象已被草稿投影移除，对应编辑上下文随之结束。
+  // 不结束会留下「无输入的失效上下文」，使下一次预览/写入被「未提交输入」弹框误报
+  // （2026-09-10 用户反馈 bug1）；通用 invalid guard 仍照原样保护真正有输入的失效场景。
+  function discardIfTargeting(objectId: string) {
+    if (context.value?.objectId === objectId) discard();
+  }
 
   // —— 操作表单打开（任务 6）：单子集范围预填目标，全部范围必须明确选择 ——
   function openRename(subsetId: string) {
@@ -395,7 +401,7 @@ export function useSheetEditor(deps: SheetEditorDeps) {
   return {
     context, guardState, hasUnsavedChanges, modifiedCount,
     openSheetEditor, startSheetEditor, openRename, openInsertSheet, openInsertSubset,
-    discard, cancel,
+    discard, cancel, discardIfTargeting,
     setFieldValue, setPage, setSearch, jumpToError,
     submit, guard, resolveGuard, reset,
   };

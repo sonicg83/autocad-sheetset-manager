@@ -84,6 +84,8 @@ export default {
   },
   page: {
     ready: "Select a template and configure the output columns to export the sheet catalog of the current sheet set.",
-    disable: "Disable extension",
+    // Enabling/disabling lives in the settings center only; disabling here would
+    // remove this page's own entry point and make the toggle one-way.
+    manageHint: "Enable or disable extensions in the settings.",
   },
 };

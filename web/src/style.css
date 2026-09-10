@@ -41,6 +41,12 @@ html[data-theme="dark"]{
 
 /* 确认模态（SPEC-DM-006 §6.2/§6.9）：全部引用顶部设计令牌，遮罩 rgba 常量除外 */
 .modal-mask{position:fixed;inset:0;background:rgba(16,24,40,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:var(--space-5)}
+/* 原生闸门模态（PLAN-DM-022 修订）：未提交输入三选一改走 <dialog showModal>，
+   遮罩由 ::backdrop 承接（与 .modal-mask 同色，令牌外的 rgba 常量沿用既有约定）。
+   dialog:modal 的 UA 样式已是 position:fixed + inset:0 + margin:auto，故只需清掉
+   边框/内边距/背景，让内部 .modal-card 保持既有外观。 */
+.gate-dialog{padding:0;border:0;background:transparent}
+.gate-dialog::backdrop{background:rgba(16,24,40,.55)}
 .modal-card{background:var(--color-bg-surface);color:var(--color-text-primary);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3);padding:var(--space-5);max-width:520px;width:100%;max-height:80vh;overflow:auto;outline:none}
 .modal-card h2{margin:0 0 var(--space-3);font-size:18px}
 .modal-irr{margin-left:var(--space-2);font-size:12px;font-weight:500;padding:2px 10px;border-radius:var(--radius-full);background:var(--color-danger-bg);color:var(--color-danger)}

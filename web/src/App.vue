@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import {computed,nextTick,ref,watch} from "vue";
+import {computed,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError,lastErrorDiagnostic,localizedError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
-import {listExtensions,patchExtensionState} from "./api/extensions";
+import {useExtensions} from "./composables/useExtensions";
+import type {ExtensionsPanel} from "./composables/useExtensions";
 import {EXTENSION_PAGE_COMPONENTS,isExtensionRouteKey,type ExtensionRouteKey} from "./features/extensions/pageRegistry";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
@@ -106,11 +107,12 @@ const cadVersion=ref("2020");
 const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
 watch(sheetProjection,(value)=>{if(value)workspace.value=value});
 // —— 扩展页面贡献（PLAN-DM-020 Task 10）：App 只装配列表与挂载组件，不承载目录业务状态 ——
-const extensions=ref<ExtensionSummary[]>([]);
-// 扩展列表 best-effort 装配：加载失败不阻断核心工作区，按无扩展呈现
-async function reloadExtensions(){
-  try{extensions.value=await listExtensions()}catch{extensions.value=[]}
-}
+// 扩展清单是应用级状态（不属于任何工作区），标签栏装配与设置中心扩展分区共用一份数据源
+const {extensions,loading:extensionsLoading,failed:extensionsFailed,reload:reloadExtensions,setEnabled:setExtensionEnabled,clear:clearExtensions}=useExtensions();
+// 打开设置即刷新扩展清单：扩展分区因此不依赖工作区加载，
+// “手头没打开 DST”的卡死用户也能在这里恢复被停用的扩展
+//（紧邻 reloadExtensions 定义，避免在 setup 期引用未初始化的 const）
+function openSettings(){settingsOpen.value=true;void reloadExtensions()}
 // 只挂载已加载（AVAILABLE）扩展声明的 workspace_page 贡献，且 route_key 必须命中
 // 编译期映射；未知 route_key 与非 workspace_page 贡献安全忽略，后端值绝不成为
 // 动态 import 路径（ARCH-DM-006 §7）
@@ -163,28 +165,25 @@ function onTabKeydown(e:KeyboardEvent){
   if(!sheetCatalogNavigationNeeded()){if(target==="revisions")void loadRevisions();return}
   active.value=before;void doSelectTab(target);
 }
-// 停用/启用扩展页面（Task 10 最小离开保护）：有未提交输入先走全局三选一闸门，通过后
-// PATCH 状态并按服务端权威摘要收敛标签；被移除的是当前页时回图纸页，并把 DOM 焦点
-// 归还被移除标签原位置的安全邻近标签（ARCH-DM-006 §7）。目录页自身草稿的三选一深化由 Task 11 接入
-async function onExtensionToggleEnabled(extensionId:string,enabled:boolean){
-  const tabId=extensionPages.value.find(page=>page.summary.extension_id===extensionId)?.routeKey;
-  const previousIds=tabIds.value;
-  const wasActive=tabId!==undefined&&active.value===tabId;
-  await guardAllInputs(async()=>{
-    try{
-      const updated=await patchExtensionState(extensionId,enabled);
-      extensions.value=extensions.value.map(ext=>ext.extension_id===extensionId?updated:ext);
-      if(!enabled&&wasActive&&tabId!==undefined){
-        // useShellTabs 已把 active 校正回核心标签；DOM 焦点归还被移除标签原位置的邻近标签
-        await nextTick();
-        const removedIndex=previousIds.indexOf(tabId);
-        const targetIndex=Math.max(0,Math.min(removedIndex,tabIds.value.length-1));
-        document.getElementById(`tab-${tabIds.value[targetIndex]}`)?.focus();
-      }
-    }
-    catch(e){error.value=String(e)}
-  });
+// 停用/启用扩展（本次修复：入口唯一在设置中心，扩展页面不再提供停用；否则停用会移除
+// 页面入口本身，开关变成单向、用户被永久卡死）。启用不移除任何入口，直接落库；
+// 停用可能移除当前目录页并丢弃页内草稿，必须先过全局未保存输入三选一闸门
+//（与切换页签/关闭工作区同一闸门）。PLAN-DM-022 起两个闸门模态都是原生 <dialog>，
+// 会自行叠在仍在打开的设置对话框之上，故停用流程不再需要先关闭设置窗口。失败向上
+// 抛出，由设置对话框就地行内呈现。
+async function toggleExtensionFromSettings(extensionId:string,enabled:boolean){
+  if(enabled){await setExtensionEnabled(extensionId,true);return}
+  await guardAllInputs(()=>setExtensionEnabled(extensionId,false));
 }
+// PLAN-DM-022 起不再做「焦点归还被移除标签的邻近标签」：停用发生在设置对话框打开期间，
+// 对话框是 top layer 模态、标签栏处于 inert，对 inert 元素调 focus() 是空操作（写了也
+// 无效的死代码）。焦点应收敛在对话框内部，由 SettingsDialog 在启停结束后归还到同一开关。
+// 设置中心扩展分区视图模型：列表状态来自 useExtensions，toggle 必须走上方的闸门编排
+//（设置分区自己调端点会绕过闸门直接丢草稿）
+const extensionsPanel=computed<ExtensionsPanel>(()=>({
+  list:extensions.value,loading:extensionsLoading.value,failed:extensionsFailed.value,
+  reload:reloadExtensions,toggle:toggleExtensionFromSettings,
+}));
 const sheetSetName=computed(()=>workspace.value?.sheet_set.name??"");
 const dstPath=computed(()=>workspace.value?.dst_path??"");
 const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
@@ -454,7 +453,7 @@ async function doCloseWorkspace(){
   const closedId=workspace.value?.id;
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
   workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();editor.reset();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";
-  extensions.value=[];
+  clearExtensions();
   // 关闭成功清空服务端可信上下文（best-effort：旧 ID 的迟到清除请求由服务端按上下文匹配拒绝，不影响新工作区）
   if(closedId)void clearWorkspaceContext(closedId);
   // 重置图纸页工作区状态；操作表单/编辑缓冲状态已由 editor.reset() 清空，旧模板路径不残留
@@ -591,6 +590,8 @@ async function doQueueDelete(sheet:Sheet){
   const ok=await confirmAction({title:t("shell.flows.deleteSheet.title"),message:t("shell.flows.deleteSheet.message",{number:sheet.number}),confirmText:t("shell.flows.deleteSheet.confirm"),danger:false});
   if(!ok)return;
   if(addCommand(createCommand.deleteSheet(sheet.id),"structural")){
+    // 删除成功进入草稿：目标已从投影移除，结束对应编辑上下文，避免预览/写入被「未提交输入」误报
+    editor.discardIfTargeting(sheet.id);
     pushToast({type:"ok",title:t("shell.flows.deleteSheet.toastTitle"),body:t("shell.flows.deleteSheet.toastBody",{number:sheet.number})});
   }
 }
@@ -609,6 +610,9 @@ async function doQueueDeleteSubset(subsetId:string){
   const ok=await confirmAction({title:t("shell.flows.deleteSubset.title"),message:t("shell.flows.deleteSubset.message",{name:subset.display_name,count:subset.sheets.length,drawing}),confirmText:t("shell.flows.deleteSubset.confirm"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
   if(!ok)return;
   if(addCommand(createCommand.deleteSubset(subset.id),"structural")){
+    // 删除成功进入草稿：目标已从投影移除，结束对应「编辑子集」上下文，
+    // 否则残留的失效上下文会在下一次预览/写入时被「未提交输入」误报（2026-09-10 用户反馈 bug1）
+    editor.discardIfTargeting(subset.id);
     pushToast({type:"ok",title:t("shell.flows.deleteSubset.toastTitle"),body:t("shell.flows.deleteSubset.toastBody",{name:subset.display_name,count:subset.sheets.length})});
   }
 }
@@ -737,7 +741,7 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" @open-settings="settingsOpen=true" />
+  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" @open-settings="openSettings" />
   <div class="shell-body">
     <main class="shell-main" :class="{'sheets-active': Boolean(workspace) && active === 'sheets'}">
       <p v-if="error" class="error notice">{{error}}</p>
@@ -755,9 +759,10 @@ useHotkeys({
         <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-base="properties.base.value" :property-draft="properties.draft.value" :property-status-of="properties.statusOf" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-matched-keys="properties.matchedKeys.value" :property-hidden-dirty-count="properties.hiddenDirtyCount.value" :property-search="properties.search.value" :property-search-mode="properties.searchMode.value" :property-changed-only="properties.changedOnly.value" :property-active-key="properties.activeKey.value" :property-definition-form="properties.definitionForm" :property-definitions-collapsed="properties.definitionsCollapsed.value" :property-values-collapsed="properties.valuesCollapsed.value" :property-csv-collapsed="properties.csvCollapsed.value" :property-csv-open="properties.csvOpen.value" :property-definitions-query="properties.definitionsQuery.value" :property-definitions-scope="properties.definitionsScope.value" :property-definitions-page="properties.definitionsPage.value" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:ValueKey,value:string)=>properties.setValue(key,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:ValueKey)=>properties.revertValue(key)" @update:property-search="(value:string)=>properties.search.value=value" @update:property-search-mode="(value:PropertySearchMode)=>properties.searchMode.value=value" @update:property-changed-only="(value:boolean)=>properties.changedOnly.value=value" @update:property-active-key="(key:ValueKey|null)=>properties.activeKey.value=key" @update:property-definitions-collapsed="(value:boolean)=>properties.definitionsCollapsed.value=value" @update:property-values-collapsed="(value:boolean)=>properties.valuesCollapsed.value=value" @update:property-csv-collapsed="(value:boolean)=>properties.csvCollapsed.value=value" @update:property-csv-open="(value:boolean)=>properties.csvOpen.value=value" @update:property-definitions-query="(value:string)=>properties.definitionsQuery.value=value" @update:property-definitions-scope="(value:DefinitionScopeFilter)=>properties.definitionsScope.value=value" @update:property-definitions-page="(value:number)=>properties.definitionsPage.value=value" @discard-property-input="properties.discardInput" @queue-property-definition="properties.queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" @close-csv="closeCsvImport" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
         <!-- 扩展页面贡献（PLAN-DM-020 Task 10）：组件来自编译期 pageRegistry 映射，
-             App 只装配挂载，不承载目录业务状态；加载/恢复期间暂停交互与其他主标签一致 -->
+             App 只装配挂载，不承载目录业务状态；加载/恢复期间暂停交互与其他主标签一致。
+             启停入口已收归设置中心扩展分区，页面不再暴露 toggle 事件 -->
         <template v-for="page in extensionPages" :key="page.routeKey">
-          <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" :workspace="workspace" @toggle-enabled="onExtensionToggleEnabled" />
+          <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" :workspace="workspace" />
         </template>
       </template>
     </main>
@@ -765,7 +770,7 @@ useHotkeys({
   </div>
   <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
-  <SettingsDialog :open="settingsOpen" :push-toast="pushToast" @close="settingsOpen=false" />
+  <SettingsDialog :open="settingsOpen" :push-toast="pushToast" :extensions-panel="extensionsPanel" @close="settingsOpen=false" />
   <!-- 唯一共享三选一模态：图纸页与属性页 guard 顺序开合同一实例，状态取当前打开者 -->
   <UnsavedInputDialog v-bind="sharedGuardState" @save-and-continue="resolveSharedGuard('save')" @discard="resolveSharedGuard('discard')" @stay="resolveSharedGuard('stay')" />
   <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />

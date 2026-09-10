@@ -2,9 +2,12 @@
 // 页面只做装配：业务状态全部由 useSheetCatalog 持有，模板栏/字段浏览器/输出列
 // 编辑器/兼容性摘要/预览表/操作区六组件经控制器交互。既有页面状态容器（Task 10）
 // 保留：名称/描述经清单 name_key/description_key 由宿主 i18n 渲染，生命周期状态
-// 按九值登记键呈现；「停用扩展」经 App 的全局未提交输入闸门（含本页草稿三选一）。
+// 按九值登记键呈现。启停入口唯一在设置中心（SPEC-DM-011 扩展分区）：本页原先自带
+// 「停用扩展」按钮，而停用会移除本页入口，开关因此变成单向、用户被永久卡死
+//（extension_states.enabled 持久化为 false，重启对账仍会重新停掉），故该按钮已移除。
+// 本页仍保留未保存草稿三选一守卫（切换模板/切换页签/关闭工作区）。
 <script setup lang="ts">
-import {computed, nextTick, ref, watch} from "vue";
+import {computed, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSummary, Workspace} from "../api/contracts";
 import {useSheetCatalog} from "../composables/useSheetCatalog";
@@ -20,7 +23,6 @@ import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 
 const props = defineProps<{extension: ExtensionSummary; workspace: Workspace | null}>();
-defineEmits<{toggleEnabled: [extensionId: string, enabled: boolean]}>();
 const {t} = useI18n();
 const workspaceRef = computed(() => props.workspace);
 const catalog = useSheetCatalog(workspaceRef);
@@ -47,25 +49,32 @@ function onSaved() {
 
 // 三选一守卫模态焦点（SPEC §13：Esc、焦点圈闭与归还）。打开时焦点移入模态卡片、
 // 关闭归还触发元素；Tab 在模态内可聚焦元素间圈闭（禁用的"保存为模板"不参与）。
-// Task 11 遗留缺口（焦点未移入模态）在本任务补齐并钉住。
+// PLAN-DM-022 修订：模态由页面内联遮罩改为原生 <dialog showModal>（与宿主未提交
+// 输入闸门同一原语）——设置中心在 top layer 打开时，内联遮罩会被其 inert 吞掉：
+// 用户看得见弹框却点不动。原生模态自带 top layer 与 ::backdrop，Esc 也只作用于
+// 最上层对话框（不会顺带触发下层设置窗口的关闭）。模态元素常驻 DOM（关闭即
+// display:none），不写 role/aria-modal：原生模态已自带 dialog 角色与模态语义，
+// 显式属性会让 e2e 通用的 [role="dialog"][aria-modal="true"] 选择器误命中隐藏闸门。
 const guardCard = ref<HTMLElement | null>(null);
+const guardDialogEl = ref<HTMLDialogElement | null>(null);
 let guardOpener: HTMLElement | null = null;
-watch(() => catalog.guardState.value.open, async open => {
+watch(() => catalog.guardState.value.open, open => {
+  const dialog = guardDialogEl.value;
   if (open) {
+    if (dialog === null || dialog.open) return;
     guardOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    await nextTick();
+    dialog.showModal();
     guardCard.value?.focus();
-  } else if (!confirmState.open) {
-    guardOpener?.focus?.();
-    guardOpener = null;
+  } else {
+    if (dialog?.open) dialog.close();
+    if (!confirmState.open) {
+      guardOpener?.focus?.();
+      guardOpener = null;
+    }
   }
 });
 function onGuardKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    catalog.resolveGuard("stay");
-    return;
-  }
+  // Esc 归原生模态的 cancel 处理（见模板 @cancel）
   if (event.key !== "Tab" || !guardCard.value) return;
   const items = Array.from(guardCard.value.querySelectorAll<HTMLElement>("button")).filter(element => !element.hasAttribute("disabled"));
   if (items.length === 0) return;
@@ -87,9 +96,9 @@ function onGuardKeydown(event: KeyboardEvent) {
       <p class="catalog-desc">{{ $t(extension.description_key) }}</p>
       <p class="catalog-meta">v{{ extension.version }} · {{ $t(statusKey) }}</p>
     </header>
-    <div class="catalog-status" role="status">
+    <div class="catalog-status">
       <p>{{ $t("extensions.page.ready") }}</p>
-      <button type="button" @click="$emit('toggleEnabled', extension.extension_id, false)">{{ $t("extensions.page.disable") }}</button>
+      <p class="catalog-manage-hint">{{ $t("extensions.page.manageHint") }}</p>
     </div>
     <p v-if="catalog.loading.value" class="loading" role="status">{{ $t("extensions.sheetCatalog.loading") }}</p>
     <p v-else-if="catalog.loadError.value" class="error notice" role="alert">{{ catalog.loadError.value }}</p>
@@ -105,9 +114,15 @@ function onGuardKeydown(event: KeyboardEvent) {
     </div>
 
     <!-- 三选一保护（SPEC §3.2）：切换模板/切换页签/停用扩展/关闭工作区统一闸门；
-         未命名草稿不提供"保存为模板"（需先命名另存为），只能放弃或留在此处 -->
-    <div v-if="catalog.guardState.value.open" class="modal-mask" @keydown="onGuardKeydown">
-      <div ref="guardCard" class="modal-card" role="dialog" aria-modal="true" :aria-label="$t('extensions.sheetCatalog.guardTitle')" tabindex="-1">
+         未命名草稿不提供"保存为模板"（需先命名另存为），只能放弃或留在此处。
+         原生模态：停用扩展时设置对话框正在 top layer，本闸门必须自行进入 top layer
+         才能叠在其上并被点击（PLAN-DM-022 修订）。 -->
+    <dialog
+      ref="guardDialogEl" class="gate-dialog"
+      :aria-label="$t('extensions.sheetCatalog.guardTitle')"
+      @cancel.prevent="catalog.resolveGuard('stay')" @keydown="onGuardKeydown"
+    >
+      <div ref="guardCard" class="modal-card" tabindex="-1">
         <h2>{{ $t("extensions.sheetCatalog.guardTitle") }}</h2>
         <p class="modal-message">{{ $t("extensions.sheetCatalog.guardMessage", {summary: catalog.guardState.value.summary}) }}</p>
         <div class="modal-actions">
@@ -116,7 +131,7 @@ function onGuardKeydown(event: KeyboardEvent) {
           <button type="button" class="primary" :disabled="!catalog.guardState.value.canSave" @click="catalog.resolveGuard('save')">{{ $t("extensions.sheetCatalog.guardSave") }}</button>
         </div>
       </div>
-    </div>
+    </dialog>
     <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
     <ToastHost :toasts="toasts" @dismiss="dismiss" />
   </section>
@@ -127,8 +142,9 @@ function onGuardKeydown(event: KeyboardEvent) {
 .catalog-head h2{margin:0;font-size:18px;color:var(--color-text-primary)}
 .catalog-desc{margin:0;color:var(--color-text-secondary);font-size:14px}
 .catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px}
-.catalog-status{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface)}
+.catalog-status{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface)}
 .catalog-status p{margin:0;color:var(--color-text-secondary);font-size:14px}
+.catalog-status .catalog-manage-hint{color:var(--color-text-muted);font-size:12px}
 .catalog-grid{display:flex;flex-direction:column;gap:var(--space-4);min-width:0}
 .catalog-row{display:grid;grid-template-columns:280px minmax(0,1fr);gap:var(--space-4);align-items:start}
 .loading{margin:0;color:var(--color-text-muted)}

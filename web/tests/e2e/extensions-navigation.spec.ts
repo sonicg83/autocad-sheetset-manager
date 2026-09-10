@@ -139,38 +139,17 @@ test("方向键在动态标签列表内循环并切换扩展页面", async ({pag
   await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
 });
 
-test("停用当前目录页：无未保存输入直接停用，回图纸页并把焦点归还目录标签原位置的邻近标签", async ({page}) => {
-  const ext = await installExtensions(page, [extensionSummary()]);
+// 启停入口迁入设置中心（本次修复）：扩展页面不再提供「停用扩展」，否则停用会移除
+// 页面入口本身，把开关变成单向、用户被永久卡死（再见 extensions-settings.spec.ts）。
+// 本用例钉住旧入口的移除与替代指引，防止回退；停用后的标签移除与焦点归还由
+// extensions-settings.spec.ts 从设置中心驱动验证。
+test("扩展页面不再提供停用入口，并指引到设置中心（防止停用不可逆回退）", async ({page}) => {
+  await installExtensions(page, [extensionSummary()]);
   await openWorkspace(page);
   await page.getByRole("tab", {name: "图纸目录"}).click();
-  await page.getByRole("button", {name: "停用扩展"}).click();
-  await expectTabIds(page, CORE_TABS);
-  // 回图纸页（核心首个标签成为激活页）
-  await expect(page.getByRole("tablist").getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("button", {name: "预览变更"})).toBeVisible();
-  // 焦点归还：目录标签原在索引 3，移除后原位置的安全邻近元素为末位标签（修订历史）
-  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("tab-revisions");
-  // 三选一未出现，停用请求按契约发出
-  await expect(page.locator('[role="dialog"][aria-modal="true"]')).toHaveCount(0);
-  expect(ext.patchBodies).toEqual([{enabled: false}]);
-});
-
-test("停用当前目录页：有未保存输入先三选一，确认后才发出停用并移除标签", async ({page}) => {
-  const ext = await installExtensions(page, [extensionSummary()]);
-  await openWorkspace(page);
-  // 属性页制造未提交输入（会话缓冲跨主标签保留）
-  await page.getByRole("tab", {name: "属性"}).click();
-  await page.getByLabel("图纸集名称", {exact: true}).fill("未保存名称");
-  await page.getByRole("tab", {name: "图纸目录"}).click();
-  await page.getByRole("button", {name: "停用扩展"}).click();
-  const dialog = page.locator('[role="dialog"][aria-modal="true"]');
-  await expect(dialog).toBeVisible();
-  expect(ext.patchBodies).toHaveLength(0);
-  await dialog.getByRole("button", {name: "放弃输入"}).click();
-  await expectTabIds(page, CORE_TABS);
-  expect(ext.patchBodies).toEqual([{enabled: false}]);
-  await expect(page.getByRole("tablist").getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
-  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("tab-revisions");
+  await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "停用扩展"})).toHaveCount(0);
+  await expect(page.getByText("扩展的启用与停用请在设置中心操作。")).toBeVisible();
 });
 
 // 发布成功后的刷新窗口（isWorkspaceLoading=true 且工作区已在场）钉住旧 TabBar 的

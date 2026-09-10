@@ -144,6 +144,61 @@ test("删除整个子集强确认字段不变且声明影响 DWG 与外部引用
   expect(last).toEqual([{type: "delete_subset", subset_id: "subset-1", confirm_delete_all_sheets: true, confirm_delete_main_dwg: true}]);
 });
 
+// 回归（2026-09-10 用户反馈 bug1）：内部结构投影与用户正式预览共用 /changes/preview，
+// 上方用例只断言「端点收到删除命令」会被内部投影请求满足而假通过（删除后被弹框拦截也通过）。
+// 因此这里必须显式区分：先在投影落地后取基线次数，再要求用户点击预览时新增一次请求。
+test("删除整个子集后编辑表单关闭且正式预览不误报未提交输入", async ({page}) => {
+  const previewBodies: {commands: Record<string, unknown>[]}[] = [];
+  const {workspace} = await installSheetsFixture(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => {
+    const body = route.request().postDataJSON();
+    previewBodies.push(body);
+    route.fulfill({json: buildPreviewFromBase(workspace, body.commands)});
+  });
+  await openWorkspace(page);
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByRole("button", {name: "删除整个子集"}).click();
+  const modal = page.getByRole("dialog", {name: "删除整个子集"});
+  await modal.getByRole("checkbox").check();
+  await modal.getByRole("button", {name: /确定删除整个子集/}).click();
+  // 1) 删除命令成功进入草稿后，编辑子集上下文必须结束（目标已被投影移除，不留下无输入的失效上下文）
+  await expect(page.getByRole("region", {name: "编辑子集"})).toHaveCount(0);
+  // 2) 等内部结构投影落地（subset-1 的 3 张图纸从投影表消失）后再取请求基线
+  await expect(page.getByText("匹配 10 / 全部 10 张", {exact: true})).toBeVisible();
+  const projectionRequests = previewBodies.length;
+  expect(projectionRequests).toBeGreaterThan(0);
+  // 3) 用户点击正式预览：不受任何未提交输入弹框拦截，直接新增一次同端点请求并展开修改预览
+  await page.getByRole("button", {name: "预览变更"}).click();
+  await expect(page.getByText("完整变更预览")).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
+  await expect.poll(() => previewBodies.length).toBe(projectionRequests + 1);
+});
+
+test("先改子集标题再删除：只出现删除前一次输入决策", async ({page}) => {
+  const {workspace} = await installSheetsFixture(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => {
+    const body = route.request().postDataJSON();
+    route.fulfill({json: buildPreviewFromBase(workspace, body.commands)});
+  });
+  await openWorkspace(page);
+  await page.getByRole("button", {name: "编辑子集"}).click();
+  await page.getByLabel("当前子集").selectOption("subset-1");
+  await page.getByLabel("子集标题").fill("平面图甲");
+  // 删除前的三选一是应有决策（未提交标题必须先处理），保存后继续进入删除确认
+  await page.getByRole("button", {name: "删除整个子集"}).click();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toBeVisible();
+  await page.getByRole("button", {name: "加入草稿后继续"}).click();
+  const modal = page.getByRole("dialog", {name: "删除整个子集"});
+  await modal.getByRole("checkbox").check();
+  await modal.getByRole("button", {name: /确定删除整个子集/}).click();
+  await expect(page.getByText("匹配 10 / 全部 10 张", {exact: true})).toBeVisible();
+  // 删除后不得再出现第二次误报：改标题的决策只在删除前发生一次
+  await page.getByRole("button", {name: "预览变更"}).click();
+  await expect(page.getByText("完整变更预览")).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
+});
+
 test("结构表单服务端失败保留完整输入且不展示为已创建", async ({page}) => {
   // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
   await installSheetsFixture(page, {

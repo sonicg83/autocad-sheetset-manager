@@ -16,6 +16,21 @@ export default {
     nav: "设置分区",
     general: "常规配置",
     about: "关于",
+    extensions: "扩展",
+  },
+  // 扩展分区（本次修复：停用后可再次启用 / ARCH-DM-006 §7；PLAN-DM-022 改为滑动开关）。
+  // 开关点击即落库，与底部"取消/保存"缓冲无关，故必须写明立即生效语义。
+  // stateOn/stateOff 是开关旁的可见状态文字；enableNamed/disableNamed 是开关的
+  // 可访问名（随状态翻转，与开关旁文字互补而不重复播报）。
+  extensions: {
+    immediateNotice: "扩展启停立即生效，不受下方取消影响。",
+    loading: "正在加载扩展列表…",
+    loadFailed: "扩展列表加载失败。",
+    empty: "没有已登记的扩展。",
+    stateOn: "已启用",
+    stateOff: "已停用",
+    enableNamed: "启用 {name}",
+    disableNamed: "停用 {name}",
   },
   confirm: {
     title: "有未保存的修改",

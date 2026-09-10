@@ -7,13 +7,15 @@
 import {computed,nextTick,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError} from "../../api/client";
-import type {ApiFieldError} from "../../api/client";
+import type {ApiFieldError,StructuredParams} from "../../api/client";
 import {fetchAbout} from "../../api/settings";
 import type {AboutInfo,SettingsItem,SettingsValue} from "../../api/settings";
 import {getShellBridge,openExternalLink,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
+import type {ExtensionsPanel} from "../../composables/useExtensions";
 import ConfirmModal from "../ui/ConfirmModal.vue";
+import ExtensionsSection from "./ExtensionsSection.vue";
 import SettingsFormRow from "./SettingsFormRow.vue";
 
 export type SettingsToast={type:"ok"|"fail";title:string;body:string};
@@ -21,6 +23,9 @@ const props=defineProps<{
   open:boolean;
   // SC-13 保存反馈复用宿主 useToast（ToastHost 挂在 App.vue）
   pushToast:(toast:SettingsToast)=>void;
+  // 扩展分区（本次修复：停用可逆 / ARCH-DM-006 §7）。列表与启停由 App 装配；
+  // 本对话框只做编排与错误呈现，绝不自行调扩展端点。
+  extensionsPanel:ExtensionsPanel;
 }>();
 const emit=defineEmits<{close:[]}>();
 
@@ -31,7 +36,7 @@ const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const dialogEl=ref<HTMLDialogElement|null>(null);
 const saveButtonEl=ref<HTMLButtonElement|null>(null); // 保存成功语言切换后归还焦点的锚点
 const errorSummaryEl=ref<HTMLDivElement|null>(null); // 422 错误摘要（tabindex=-1，可聚焦）
-const section=ref<"general"|"about">("general");
+const section=ref<"general"|"about"|"extensions">("general");
 const about=ref<AboutInfo|null>(null);
 const aboutFailed=ref(false);
 const edits=ref<Record<string,SettingsValue>>({}); // key → 编辑缓冲；删除键=回退到快照值
@@ -154,16 +159,16 @@ function localError(item:SettingsItem):string|undefined{
 }
 // 结构化参数原样进入命名插值；list[str]（如 allowed_values）按后端消息风格以 / 连接，
 // 不做区域化转换（ARCH-DM-005 §6.2）
-function errorParams(error:ApiFieldError):Record<string,string|number|boolean>{
+function errorParams(params:StructuredParams|undefined):Record<string,string|number|boolean>{
   const out:Record<string,string|number|boolean>={};
-  for(const [key,value] of Object.entries(error.params??{})){
+  for(const [key,value] of Object.entries(params??{})){
     out[key]=Array.isArray(value)?value.join("/"):value;
   }
   return out;
 }
 function fieldErrorText(error:ApiFieldError):string{
   // 渲染顺序（ARCH-DM-005 §6.2）：已知 message_key → 迁移期兼容 message → 稳定 code
-  if(error.messageKey!==undefined&&te(error.messageKey))return t(error.messageKey,errorParams(error));
+  if(error.messageKey!==undefined&&te(error.messageKey))return t(error.messageKey,errorParams(error.params));
   return error.message??error.code;
 }
 function fieldLabel(key:string):string{
@@ -310,6 +315,60 @@ async function showAbout(){
     aboutFailed.value=true;
   }
 }
+// ---- 扩展分区（本次修复：让扩展停用可逆 / ARCH-DM-006 §7）----
+// PLAN-DM-022 修订：启停不再关闭本对话框，也不再事先征询本对话框的未保存编辑。
+// 原先必须让出 top layer，是因为宿主闸门（未提交输入三选一）当时是页面内联遮罩，
+// 落在本对话框之下且被它 inert；该闸门与目录页三选一现已改为原生 <dialog showModal>，
+// 会自行进入 top layer 叠在本对话框之上，本对话框无需再让位。停用既然不再关闭窗口，
+// 也就不会丢本对话框的编辑缓冲，原先的"放弃修改并关闭"确认随之删除。
+// 于是启用与停用完全对称：落库（内部仍走 App 的 guardAllInputs 闸门）→ 成功就地
+// 收敛 → 失败就地行内呈现（不再经宿主 toast：对话框外的错误行会被遮罩压住）。
+const extensionsError=ref("");
+const extensionsBusy=ref(false);
+
+// 非字段级 ApiError 文案：已知 message_key 走语言包，否则回退后端原始文本/消息
+function apiErrorText(error:unknown):string{
+  if(error instanceof ApiError){
+    if(error.messageKey!==undefined&&te(error.messageKey))return t(error.messageKey,errorParams(error.params));
+    return error.rawMessage??error.message;
+  }
+  return String(error);
+}
+
+function showExtensions(){
+  section.value="extensions";
+  // 扩展清单是应用级状态，不依赖工作区是否已加载：打开分区即拉取，
+  // 因此“手头没打开 DST”的用户也能在这里恢复被停用的扩展
+  void props.extensionsPanel.reload();
+}
+
+async function onToggleExtension(extensionId:string,enabled:boolean){
+  if(extensionsBusy.value)return;
+  extensionsError.value="";
+  // 停用移除扩展页面入口、可能丢弃页内未保存草稿，因此仍经 App 的 guardAllInputs
+  // 三选一（闸门为原生模态，会叠在本对话框之上）；选"留在此处"则闸门不继续，
+  // 本次 toggle 静默结束——开关保持原位，不报错。
+  extensionsBusy.value=true;
+  try{await props.extensionsPanel.toggle(extensionId,enabled)}
+  catch(error){extensionsError.value=apiErrorText(error)}
+  finally{
+    extensionsBusy.value=false;
+    // 忙碌期开关被 disabled，焦点会落回 body；恢复可用后归还同一开关，否则键盘用户
+    // 每拨一次开关就丢一次位置。停用后标签栏处于 inert，不能把焦点送回页面。
+    await nextTick();
+    focusExtensionSwitch(extensionId);
+  }
+}
+// 按行数据属性定位开关：不把服务端返回的 extension_id 拼进选择器字符串
+function focusExtensionSwitch(extensionId:string){
+  const dialog=dialogEl.value;
+  if(dialog===null)return;
+  for(const row of Array.from(dialog.querySelectorAll<HTMLElement>("[data-extension-id]"))){
+    if(row.dataset.extensionId!==extensionId)continue;
+    row.querySelector<HTMLElement>(".switch")?.focus();
+    return;
+  }
+}
 async function openExternal(url:string){
   // SC-11：url 来自 GET /api/about 的后端登记值（api.py _HOMEPAGE 常量），前端不传任意字符串；
   // 壳侧 open_external 再按代码内白名单二次校验（github.com/sonicg83 前缀），拒绝结果不经 WebView 导航。
@@ -370,6 +429,7 @@ const browseDisabled=computed(()=>{
         <div class="dlg-body">
           <nav class="sections" role="tablist" :aria-label="t('settings.sections.nav')">
             <button type="button" role="tab" :aria-selected="section==='general'" @click="section='general'">{{t("settings.sections.general")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='extensions'" @click="showExtensions">{{t("settings.sections.extensions")}}</button>
             <button type="button" role="tab" :aria-selected="section==='about'" @click="showAbout">{{t("settings.sections.about")}}</button>
           </nav>
           <div class="panel">
@@ -385,7 +445,17 @@ const browseDisabled=computed(()=>{
                 />
               </div>
             </template>
-            <template v-else>
+            <template v-else-if="section==='extensions'">
+              <!-- 扩展启停入口（本次修复：停用后仍可重新启用）。启停失败一律就地行内
+                   呈现，本对话框不再关闭（见 onToggleExtension） -->
+              <ExtensionsSection
+                :list="extensionsPanel.list" :loading="extensionsPanel.loading"
+                :failed="extensionsPanel.failed" :error-text="extensionsError"
+                :busy="extensionsBusy"
+                @retry="extensionsPanel.reload()" @toggle="onToggleExtension"
+              />
+            </template>
+            <template v-else-if="section==='about'">
               <div class="about-block">
                 <h3>{{t("settings.about.app")}}</h3>
                 <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>

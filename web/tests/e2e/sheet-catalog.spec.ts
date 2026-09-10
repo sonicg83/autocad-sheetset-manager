@@ -263,14 +263,24 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     await expect(page.getByRole("button", {name: "选择 DST 文件"})).toBeVisible();
   });
 
-  test("停用扩展（离开页面）先经过三选一保护", async ({page}) => {
-    await openCatalog(page);
+  // 启停入口唯一在设置中心（扩展页面不再提供停用：否则停用会移除该页入口，开关单向）。
+  // PLAN-DM-022：目录页三选一已改为原生 <dialog showModal>，会自行进入 top layer 叠在
+  // 设置窗口之上，因此停用不再需要先关闭设置窗口；本用例钉住“设置窗口仍开着时闸门
+  // 可见可点”这一回归点（旧实现下内联遮罩会被 top layer 的设置窗口 inert 吞掉）。
+  test("停用扩展（离开页面）先经过三选一保护，且设置窗口不关闭", async ({page}) => {
+    const state = await openCatalog(page);
     await page.getByLabel("表达式 1").fill("{sheet.number}号");
-    await page.getByRole("button", {name: "停用扩展"}).click();
+    await page.getByRole("button", {name: "设置"}).click();
+    await page.getByRole("tab", {name: "扩展"}).click();
+    await page.getByRole("switch", {name: "停用 图纸目录"}).click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await expect(dialog).toBeVisible();
+    // 设置窗口仍在（未被停用关闭）：闸门必须叠在它之上才能被点到
+    await expect(page.locator('dialog[aria-labelledby="settings-title"]')).toBeVisible();
+    expect(state.extensionPatchBodies).toHaveLength(0);
     await dialog.getByRole("button", {name: "放弃修改"}).click();
     await expect(page.getByRole("tab", {name: "图纸目录"})).toHaveCount(0);
+    expect(state.extensionPatchBodies).toEqual([{enabled: false}]);
   });
 
   test("保存冲突保留本地编辑，可按新修订重试成功", async ({page}) => {
@@ -434,8 +444,9 @@ test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
     await page.getByRole("tablist").getByRole("tab").first().click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await expect(dialog).toBeVisible();
-    // 焦点已移入模态（Task 11 遗留缺口修复：不再停留在触发元素/页面正文）
-    await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[role="dialog"][aria-modal="true"]') !== null)).toBe(true);
+    // 焦点已移入模态（Task 11 遗留缺口修复：不再停留在触发元素/页面正文）。
+    // 锚点用模态卡片：原生模态不写显式 role/aria-modal（关闭时元素仍常驻 DOM）
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest(".modal-card") !== null)).toBe(true);
     // Tab 圈闭：连续 Tab 焦点始终在模态卡片内（禁用的"保存为模板"不参与）
     for (let step = 0; step < 8; step++) {
       await page.keyboard.press("Tab");

@@ -311,6 +311,30 @@ test("编辑未提交时点击删除先处理缓冲，删除命令不夹带属�
   expect(actions.map((action) => action.commands[0].type)).toEqual(["update_sheet_properties", "delete_sheet"]);
 });
 
+// 回归（2026-09-10 用户反馈 bug1 同类）：与整子集删除同理，用户自己确认的单张删除
+// 也会把当前编辑目标从草稿投影中移除；无未提交输入时必须结束编辑上下文，
+// 不能留下无输入的失效上下文在「预览变更」时弹出「未提交输入」。
+test("删除正在编辑的图纸后编辑区关闭且正式预览不误报未提交输入", async ({page}) => {
+  const {workspace} = await installSheetsFixture(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview", (route) => {
+    const body = route.request().postDataJSON();
+    route.fulfill({json: buildPreviewFromBase(workspace, body.commands)});
+  });
+  await openWorkspace(page);
+  await openEditor(page); // 打开 sheet-1 属性编辑，未做任何修改
+  const row = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("001", {exact: true})});
+  await row.getByRole("button", {name: "删除", exact: true}).click();
+  await expect(page.getByRole("dialog", {name: "删除图纸"})).toBeVisible();
+  await page.getByRole("button", {name: "加入删除草稿"}).click();
+  // 删除成功进入草稿后编辑区关闭，且投影表移除该行
+  await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toHaveCount(0);
+  await expect(page.getByText("匹配 12 / 全部 12 张", {exact: true})).toBeVisible();
+  // 正式预览不被未提交输入弹框拦截
+  await page.getByRole("button", {name: "预览变更"}).click();
+  await expect(page.getByText("完整变更预览")).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "未提交输入"})).toHaveCount(0);
+});
+
 test("删除整个子集先处理未提交输入：加入草稿后继续进入整子集删除确认", async ({page}) => {
   const draftBodies: unknown[] = [];
   const {workspace} = await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});

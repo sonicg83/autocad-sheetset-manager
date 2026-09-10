@@ -62,6 +62,9 @@ export type SheetCatalogState = {
   executeRequests: Record<string, unknown>[];
   lastDigest: string | null;
   artifacts: Map<string, Record<string, unknown>>;
+  // 扩展启停状态：必须由夹具接管（见 installSheetCatalogFixture 的 /state 路由）
+  extensionEnabled: boolean;
+  extensionPatchBodies: unknown[];
 };
 
 // 假桥调用记录保存在浏览器侧（window.__catalogBridge）：跨 Node/浏览器边界统一经本 helper 读取
@@ -238,6 +241,8 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     executeRequests: [],
     lastDigest: null,
     artifacts: new Map(),
+    extensionEnabled: true,
+    extensionPatchBodies: [],
   };
 
   if (!options.noShell) {
@@ -273,21 +278,29 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     }, {mode: controls.saveDialog, errorCode: controls.saveDialogError ?? null});
   }
 
-  const extensionSummary = {
+  const extensionSummary = () => ({
     extension_id: EXTENSION_ID,
     version: "0.1.0",
     name_key: "extensions.sheetCatalog.name",
     description_key: "extensions.sheetCatalog.description",
-    status: "AVAILABLE",
-    enabled: true,
+    status: state.extensionEnabled ? "AVAILABLE" : "DISABLED",
+    enabled: state.extensionEnabled,
     error_code: null,
     actions: [{action_id: "export-xlsx", output_kind: "xlsx", media_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}],
     ui_contributions: [{contribution_id: "workspace-page", kind: "workspace_page", route_key: "sheet-catalog"}],
-  };
+  });
 
   await page.route("**/api/workspaces/open", route => route.fulfill({json: workspace}));
   await page.route("**/api/workspaces/workspace-1", route => route.fulfill({json: workspace}));
-  await page.route("**/api/extensions", route => route.fulfill({json: [extensionSummary]}));
+  await page.route("**/api/extensions", route => route.fulfill({json: [extensionSummary()]}));
+  // 启停必须由夹具接管：真后端会写用户 .dst-manager-data/dst-manager.db 的
+  // extension_states，把扩展真停掉且持久化（曾因此把开发环境卡在停用态）
+  await page.route("**/api/extensions/*/state", async route => {
+    const body = (await route.request().postDataJSON()) as {enabled: boolean};
+    state.extensionPatchBodies.push(body);
+    state.extensionEnabled = body.enabled;
+    return route.fulfill({json: extensionSummary()});
+  });
   const drafts = new Map<string, unknown>();
   await page.route("**/api/workspaces/*/draft", async route => {
     const request = route.request();
