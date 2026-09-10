@@ -420,6 +420,73 @@ def test_invalid_candidate_fails_without_artifact(tmp_path, tiny_workspace, monk
         assert session.execute(text("SELECT COUNT(*) FROM artifacts")).scalar_one() == 0
 
 
+def test_candidate_directory_os_error_is_contract_artifact_write_failed(
+    tmp_path, tiny_workspace, monkeypatch
+):
+    """候选目录创建的 OS 级失败契约化为 ARTIFACT_WRITE_FAILED，授权未被消费。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "out.xlsx")
+    preview_body = preview_action(client, workspace)
+    proposal_root = Path(client.app.state.extension_runtime.proposal_root)
+    original_mkdir = Path.mkdir
+
+    def broken_mkdir(self, *args, **kwargs):
+        if self.parent == proposal_root:  # 只拦候选目录，不影响测试基础设施
+            raise OSError("cannot create candidate directory")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", broken_mkdir)
+
+    resp = execute_action(client, workspace, preview_body, grant.save_grant_id)
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert_error_contract(body)
+    assert body["code"] == "ARTIFACT_WRITE_FAILED"
+    assert body["message_key"] == "errors.extension.artifactWriteFailed"
+    # 失败发生在授权消费之前：授权保留，可刷新后重试；无残留、无 Artifact
+    assert grant_store(client).active_count() == 1
+    assert candidate_files(client) == []
+    with client.app.state.service.database.sessions() as session:
+        assert session.execute(text("SELECT COUNT(*) FROM artifacts")).scalar_one() == 0
+
+
+def test_candidate_save_os_error_is_contract_artifact_write_failed(
+    tmp_path, tiny_workspace, monkeypatch
+):
+    """workbook.save 的 OS 级失败（磁盘满/AV 锁定）契约化，绝不逃逸为 500。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "out.xlsx")
+    preview_body = preview_action(client, workspace)
+
+    def broken_save(self, path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        "dst_manager.extensions.builtin.sheet_catalog.workbook.Workbook.save", broken_save
+    )
+
+    resp = execute_action(client, workspace, preview_body, grant.save_grant_id)
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert_error_contract(body)
+    assert body["code"] == "ARTIFACT_WRITE_FAILED"
+    assert body["message_key"] == "errors.extension.artifactWriteFailed"
+    # 失败发生在授权消费之前：授权保留；目标未写入、无残留、无 Artifact
+    assert grant_store(client).active_count() == 1
+    assert not (exports / "out.xlsx").exists()
+    assert candidate_files(client) == []
+    with client.app.state.service.database.sessions() as session:
+        assert session.execute(text("SELECT COUNT(*) FROM artifacts")).scalar_one() == 0
+
+
 def test_replace_failure_keeps_old_target_without_artifact(tmp_path, tiny_workspace, monkeypatch):
     """批次三检查点：os.replace 失败 → 旧目标字节保持、零半文件、零 Artifact。"""
     client = make_client(tmp_path, save_grants=SaveGrantStore())

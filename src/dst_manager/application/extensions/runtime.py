@@ -463,8 +463,9 @@ class ExtensionRuntime:
                         repview, context, request
                     )
                     candidate_dir = self._proposal_root / uuid.uuid4().hex
-                    candidate_dir.mkdir(parents=True)
                     try:
+                        # mkdir 也纳入清理范围：创建本身可能半途失败留残目录。
+                        candidate_dir.mkdir(parents=True)
                         record = self._run_candidate_to_artifact(
                             invocation,
                             extension,
@@ -491,6 +492,21 @@ class ExtensionRuntime:
         except SheetCatalogError as exc:
             # 候选生成失败（模板/表达式/工作簿）按 ARTIFACT_WRITE_FAILED 契约化，
             # 不登记 Artifact（摘要复核已放行的模板不应走到这里，防御性兜底）。
+            raise ExtensionPlatformError(
+                "ARTIFACT_WRITE_FAILED",
+                str(exc),
+                status_code=_ERROR_STATUS["ARTIFACT_WRITE_FAILED"],
+                params={
+                    "extension_id": extension_id,
+                    "action_id": action_id,
+                    "workspace_id": request.workspace_id,
+                },
+            ) from exc
+        except OSError as exc:
+            # 候选目录创建/候选写入的 OS 级失败（磁盘满/AV 锁定/权限）同样按
+            # ARTIFACT_WRITE_FAILED 契约化，绝不逃逸为非契约 500。此失败只会
+            # 发生在授权消费之前（ArtifactExporter 已把发布期 OS 错误包装为
+            # ArtifactExportError），授权未被烧毁，重试不要求重新"另存为"。
             raise ExtensionPlatformError(
                 "ARTIFACT_WRITE_FAILED",
                 str(exc),
