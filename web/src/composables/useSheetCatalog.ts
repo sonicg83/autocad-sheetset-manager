@@ -380,6 +380,22 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     conflict.value = false;
   }
 
+  // 冲突恢复的第一步（SPEC §11）：刷新服务端模板修订，保证后续保存携带最新
+  // expected_revision——"另存为"与"按新修订重试"都必须走同一条 GET 路径
+  async function refreshServerRevision(): Promise<boolean> {
+    try {
+      const settings = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`);
+      settingsRevision.value = settings.revision;
+      templates.value = (settings.value.user_templates ?? [])
+        .map(fromEntry)
+        .filter((template): template is CatalogTemplate => template !== null);
+      return true;
+    } catch (error) {
+      handleSaveError(error);
+      return false;
+    }
+  }
+
   async function putSettings(userTemplates: CatalogTemplate[]): Promise<boolean> {
     const payload = settingsPayload(userTemplates);
     pendingReplay = {value: payload};
@@ -420,6 +436,13 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
       if (!trimmed) saveError.value = t("extensions.sheetCatalog.saveAsNameRequired");
       return false;
     }
+    // 冲突态进入另存为：先刷新服务端修订再保存，否则连续冲突时每次 PUT 都携带
+    // 过期 expected_revision，"另存为新模板"这条出路会陷入死循环（SPEC §11）
+    if (conflict.value) {
+      const refreshed = await refreshServerRevision();
+      if (!refreshed) return false;
+      conflict.value = false;
+    }
     saving.value = true;
     try {
       const template: CatalogTemplate = {templateId: crypto.randomUUID(), name: trimmed, columns: draft.value.columns.map(column => ({...column}))};
@@ -450,14 +473,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   // 冲突恢复（SPEC §11）：先刷新服务端模板修订，再原样重放上次保存负载
   async function retryAfterConflict(): Promise<boolean> {
     if (!pendingReplay) return false;
-    try {
-      const settings = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`);
-      settingsRevision.value = settings.revision;
-      templates.value = (settings.value.user_templates ?? []).map(fromEntry).filter((template): template is CatalogTemplate => template !== null);
-    } catch (error) {
-      handleSaveError(error);
-      return false;
-    }
+    if (!await refreshServerRevision()) return false;
     saving.value = true;
     try {
       const saved = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`, {
@@ -483,10 +499,6 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     } finally {
       saving.value = false;
     }
-  }
-  function dismissConflict() {
-    conflict.value = false;
-    pendingReplay = null;
   }
 
   // ---- 导出（SPEC §10：授权 → 执行；取消不变更草稿/预览） ----
@@ -613,7 +625,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     loading, templates, selectedId, selectedTemplate, draft, draftName, dirty, canSaveInPlace,
     settingsRevision, conflict, saveError, saving,
     selectTemplate, updateColumn, addColumn, removeColumn, moveColumn,
-    saveInPlace, saveAs, removeTemplate, retryAfterConflict, dismissConflict,
+    saveInPlace, saveAs, removeTemplate, retryAfterConflict,
     // 字段目录与预览
     fieldCatalog, preview, previewStatus, previewError, requestPreview,
     // 字段插入

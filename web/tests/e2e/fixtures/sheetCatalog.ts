@@ -52,6 +52,8 @@ export type SheetCatalogState = {
   revision: number;
   settingsValue: {schema_version: number; user_templates: CatalogTemplate[]};
   preferencePuts: {template_id?: string}[];
+  // 每次模板设置 PUT 携带的 expected_revision（冲突恢复/另存为语义断言用）
+  putExpectedRevisions: number[];
   previewRequests: {workspace_id: string; base_revision_id: string; template: unknown; preview_digest?: string}[];
   executeRequests: Record<string, unknown>[];
   lastDigest: string | null;
@@ -225,12 +227,12 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     revision: options.userTemplates?.length ? 3 : 0,
     settingsValue: {schema_version: 1, user_templates: options.userTemplates ?? []},
     preferencePuts: [],
+    putExpectedRevisions: [],
     previewRequests: [],
     executeRequests: [],
     lastDigest: null,
     artifacts: new Map(),
   };
-  let conflictConsumed = false;
 
   if (!options.noShell) {
     await page.addInitScript(({mode, errorCode}) => {
@@ -291,12 +293,22 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
       return route.fulfill({json: {schema_version: 1, revision: state.revision, value: state.settingsValue}});
     }
     const body = await request.postDataJSON();
-    if (state.controls.putSettingsMode === "conflict" && !conflictConsumed) {
-      conflictConsumed = true;
+    state.putExpectedRevisions.push(body?.expected_revision);
+    if (state.controls.putSettingsMode === "conflict") {
+      // 真实并发语义：其他窗口保存成功——服务端修订推进并写入冲突模板；冲突持续
+      // 到用例改写 controls.putSettingsMode，前端必须刷新修订后才能再次保存
+      state.revision += 1;
+      state.settingsValue = {
+        schema_version: 1,
+        user_templates: [
+          ...state.settingsValue.user_templates,
+          {template_id: fakeUuid(), name: `其他窗口的模板 ${state.revision}`, schema_version: 1, columns: []},
+        ],
+      };
       return route.fulfill({status: 409, json: {
         code: "SHEET_CATALOG_TEMPLATE_CONFLICT",
         message_key: "errors.sheetCatalog.templateConflict",
-        params: {expected_revision: state.revision, current_revision: state.revision + 1},
+        params: {expected_revision: body?.expected_revision ?? state.revision - 1, current_revision: state.revision},
         message: "模板已被其他保存更新",
       }});
     }
@@ -314,6 +326,15 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
         message_key: "errors.sheetCatalog.templateLimit",
         params: {kind: "user_templates", limit: 100, actual: 101},
         message: "超出模板限制",
+      }});
+    }
+    // 乐观并发核对（与 runtime.put_settings 同语义）：expected_revision 过期即 409
+    if (body?.expected_revision !== state.revision) {
+      return route.fulfill({status: 409, json: {
+        code: "EXTENSION_SETTINGS_INVALID",
+        message_key: "errors.extension.settingsInvalid",
+        params: {expected_revision: body?.expected_revision ?? -1, current_revision: state.revision},
+        message: "设置修订冲突",
       }});
     }
     state.revision += 1;

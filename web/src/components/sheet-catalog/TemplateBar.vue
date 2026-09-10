@@ -16,14 +16,12 @@ async function onSave() {
   if (await props.catalog.saveInPlace()) emit("saved");
 }
 function openSaveAs() {
-  props.catalog.dismissConflict();
+  // 冲突面板保持可见：saveAs 依据 conflict 状态决定先刷新服务端修订再保存
   saveAsName.value = props.catalog.canSaveInPlace.value ? props.catalog.draft.value.name : "";
   saveAsOpen.value = true;
-  void nextTick(() => card.value?.focus());
 }
 watch(saveAsOpen, open => {
   if (open) void nextTick(() => card.value?.focus());
-  else props.catalog.dismissConflict();
 });
 async function confirmSaveAs() {
   if (await props.catalog.saveAs(saveAsName.value)) {

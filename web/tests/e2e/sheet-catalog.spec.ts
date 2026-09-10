@@ -281,15 +281,20 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
-    // 本地编辑保留
+    // 本地编辑保留；服务端已被其他保存推进（r3→r4，并出现其他窗口的模板）
     await expect(page.getByLabel("输出列名 1")).toHaveValue("图纸编号");
-    // 按新修订重试：刷新服务端修订后重放保存
+    expect(state.revision).toBe(4);
+    expect(state.settingsValue.user_templates.map(item => item.name)).toContain("其他窗口的模板 4");
+    // 按新修订重试：刷新服务端修订（r4）后携带新 expected_revision 原样重放
+    state.controls.putSettingsMode = "ok";
     await conflict.getByRole("button", {name: "按新修订重试"}).click();
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    expect(state.putExpectedRevisions).toEqual([3, 4]);
+    expect(state.settingsValue.user_templates).toHaveLength(1);
     expect(state.settingsValue.user_templates[0].columns[0].header).toBe("图纸编号");
   });
 
-  test("保存冲突后可改走另存为新模板", async ({page}) => {
+  test("保存冲突后可改走另存为新模板，另存为携带刷新后的服务端修订", async ({page}) => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
     state.controls.putSettingsMode = "conflict";
@@ -297,12 +302,38 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
+    // 冲突后另存为：先刷新服务端修订（r4）再 PUT，携带过期 expected_revision 会再次 409
+    state.controls.putSettingsMode = "ok";
     await conflict.getByRole("button", {name: "另存为新模板"}).click();
     const dialog = page.getByRole("dialog", {name: "另存为模板"});
     await dialog.getByLabel("模板名称").fill("标准目录副本");
     await dialog.getByRole("button", {name: "保存", exact: true}).click();
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
-    expect(state.settingsValue.user_templates.map(item => item.name)).toEqual(["标准目录", "标准目录副本"]);
+    expect(state.putExpectedRevisions).toEqual([3, 4]);
+    expect(state.settingsValue.user_templates.map(item => item.name)).toEqual(["标准目录", "其他窗口的模板 4", "标准目录副本"]);
+  });
+
+  test("连续冲突下另存为每次携带最新服务端修订并最终成功", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    state.controls.putSettingsMode = "conflict";
+    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await page.getByRole("button", {name: "保存修改"}).click();
+    const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
+    await expect(conflict).toBeVisible();
+    // 第一次另存为：携带刷新后的 r4 仍冲突（并发持续，r4→r5）
+    await conflict.getByRole("button", {name: "另存为新模板"}).click();
+    const dialog = page.getByRole("dialog", {name: "另存为模板"});
+    await dialog.getByLabel("模板名称").fill("标准目录副本");
+    await dialog.getByRole("button", {name: "保存", exact: true}).click();
+    await expect.poll(() => state.revision).toBe(5);
+    expect(state.putExpectedRevisions).toEqual([3, 4]);
+    // 并发停止后用同一对话框再次保存：携带刷新后的 r5 成功，不陷入死循环
+    state.controls.putSettingsMode = "ok";
+    await dialog.getByRole("button", {name: "保存", exact: true}).click();
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    expect(state.putExpectedRevisions).toEqual([3, 4, 5]);
+    expect(state.settingsValue.user_templates.map(item => item.name)).toContain("标准目录副本");
   });
 });
 
