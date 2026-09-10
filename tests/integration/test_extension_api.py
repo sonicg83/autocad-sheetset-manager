@@ -262,7 +262,7 @@ def test_artifact_lookup_returns_seeded_metadata(tmp_path):
             kind="sheet-catalog",
             media_type=XLSX_MEDIA_TYPE,
             management_relation="external",
-            output_path="C:/out/图纸目录.xlsx",
+            output_path=str(tmp_path / "missing" / "图纸目录.xlsx"),
             file_name="图纸目录.xlsx",
             size_bytes=2048,
             sha256="a" * 64,
@@ -282,6 +282,8 @@ def test_artifact_lookup_returns_seeded_metadata(tmp_path):
     assert body["media_type"] == XLSX_MEDIA_TYPE
     assert body["management_relation"] == "external"
     assert body["file_name"] == "图纸目录.xlsx"
+    # 输出文件不存在：历史记录不伪装成当前可用（Task 9 可用性派生）
+    assert body["availability"] == "MISSING"
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +393,7 @@ def test_action_endpoints_validate_availability_and_declared_action(tmp_path):
     assert body["message_key"] == "errors.extension.disabled"
     assert body["params"] == {"extension_id": SHEET_CATALOG_ID, "action_id": "export-xlsx"}
 
-    # 重新启用后预览走真实分派（未登记工作区 → 稳定 404），执行通道仍属 Task 9
+    # 重新启用后预览与执行走真实分派（未登记工作区 → 稳定 404）
     assert client.patch(
         f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": True}
     ).status_code == 200
@@ -407,12 +409,25 @@ def test_action_endpoints_validate_availability_and_declared_action(tmp_path):
     assert preview.json()["code"] == "EXTENSION_NOT_FOUND"
 
     execute = client.post(
-        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/execute", json={}
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/execute",
+        json={
+            "workspace_id": "no-such-workspace",
+            "base_revision_id": "0" * 64,
+            "template": template_payload(),
+            "preview_digest": "0" * 64,
+            "save_grant_id": "grant-1",
+        },
     )
-    assert execute.status_code == 503
+    assert execute.status_code == 404
     body = execute.json()
     assert_error_contract(body)
-    assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert body["code"] == "EXTENSION_NOT_FOUND"
+    assert body["params"]["workspace_id"] == "no-such-workspace"
+
+    # 缺失必填字段的执行负载由契约校验直接拒绝（422），不进入分派
+    assert client.post(
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/export-xlsx/execute", json={}
+    ).status_code == 422
 
 
 def test_action_endpoint_reports_unavailable_extension(tmp_path, monkeypatch):

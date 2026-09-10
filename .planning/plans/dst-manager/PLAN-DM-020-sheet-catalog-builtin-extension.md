@@ -828,4 +828,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 
 2026-09-10：PLAN-DM-020 批次二 Task 6（图纸目录预览动作、兼容性与确定性摘要）批次检查点核对 ARCH-DM-005 独立工作流前置：已进入 G0～G6 并关闭——`SPEC-DM-013` 已接受（G4/G5 证据齐备）、`PLAN-DM-021` 批次一～三已完成并记录实际 commit（多语言基础、核心页面按域迁移、按域扩展收尾），Task 10 前置持续满足。负责人：PLAN-DM-020 实施代理（Task 6）；下一检查点：批次三 Task 7 启动时复核 PLAN-DM-021 批次三 commit 记录与 `npm run check:i18n` 门禁是否仍通过。
 
+2026-09-10：PLAN-DM-020 批次三 Task 9（执行动作、Artifact 查询和桌面共同装配）批次检查点复核 ARCH-DM-005 独立工作流前置：正式 Spec `SPEC-DM-013` 已接受、G4/G5 证据齐备、实施 Plan `PLAN-DM-021`（多语言支持）批次一～三已完成并记录实际 commit 与自动化证据——ARCH-DM-005 前置持续满足，Task 10 不阻断。批次检查点自动化证据：临时目录实际导出后 openpyxl 回读通过（表名/表头/行值/冻结/筛选）、目标漂移注入 `EXPORT_DESTINATION_CHANGED`、`os.replace` 故障注入旧目标字节保持，三条失败/注入路径均零半文件残留、零错误 Artifact 登记；整条预览→执行链路 DST/DWG 字节与 mtime、工程目录树、`jobs`/`document_revisions`/`workspace_write_locks` 零变化、应用临时候选清空。负责人：PLAN-DM-020 实施代理（Task 9）；下一检查点：批次四 Task 10 启动时复核 `npm run check:i18n` 与 `generate:api` 门禁。
+
 其余尚未实施。执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。

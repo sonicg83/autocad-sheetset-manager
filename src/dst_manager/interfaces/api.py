@@ -16,6 +16,7 @@ from dst_manager.application.extensions.runtime import ExtensionRuntime, default
 from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
+from dst_manager.extensions.save_grants import SaveGrantStore
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
 from dst_manager.interfaces import extension_api
 from dst_manager.interfaces.contracts import (
@@ -192,6 +193,7 @@ def create_app(
     runtime_settings: RuntimeSettings | None = None,
     extension_runtime: ExtensionRuntime | None = None,
     extension_index: Sequence | None = None,
+    save_grants: SaveGrantStore | None = None,
 ) -> FastAPI:
     """构建 FastAPI 应用。
 
@@ -207,13 +209,23 @@ def create_app(
     任务 3）：严格在 ``DstManagerService`` 完成数据库迁移与发布恢复之后才创建/
     接收运行时并调用 ``discover()``；单扩展发现失败由注册表隔离，不影响
     ``/api/health`` 与核心工作区 API。
+
+    ``save_grants`` 是扩展执行通道注入点（PLAN-DM-020 任务 9）：桌面壳把与
+    ``ShellBridge`` **同一个** :class:`SaveGrantStore` 传入，桥创建的一次性
+    保存授权才能被 API 执行消费；缺省时默认装配新建独立实例。
     """
     app = FastAPI(title="DST Manager", version="0.3.0")
     service = DstManagerService(settings)
     app.state.service = service
 
     if extension_runtime is None:
-        extension_runtime = default_runtime(service.database.sessions)
+        extension_runtime = default_runtime(
+            service.database.sessions,
+            # 未注入时默认装配新建独立实例：默认装配下执行通道可用，
+            # 桌面壳的共享实例经参数传入（PLAN-DM-020 任务 9）。
+            save_grants=save_grants if save_grants is not None else SaveGrantStore(),
+            proposal_root=(service.settings.data_dir) / "tmp" / "extension-candidates",
+        )
     app.state.extension_runtime = extension_runtime
     try:
         extension_runtime.start(extension_index or BUILTIN_EXTENSION_INDEX)

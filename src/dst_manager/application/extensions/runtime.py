@@ -1,4 +1,4 @@
-"""扩展平台运行时编排（PLAN-DM-020 Task 3 / ARCH-DM-006 §5、§7、§12）。
+"""扩展平台运行时编排（PLAN-DM-020 Task 3/9 / ARCH-DM-006 §5、§7、§11、§12）。
 
 :class:`ExtensionRuntime` 把 :class:`~dst_manager.extensions.registry.ExtensionRegistry`
 （生命周期状态机）与 :class:`~dst_manager.infrastructure.persistence.extensions.ExtensionStore`
@@ -9,6 +9,9 @@
   持久化启停意图对账）；
 - 用户启停意图持久化在 ``extension_states``；``WAITING_DEPENDENCY``/
   ``INCOMPATIBLE``/``FAILED`` 等"天然不可用"状态与用户停用在该表上可区分；
+- 执行通道（Task 9 / §11）：编排摘要复核 → 候选目录分配 → 扩展写候选 → 一次性
+  授权消费 → 宿主回读 + 原子保存 + Artifact 登记 → ``finally`` 清理候选；
+  授权存储与候选根由装配方注入（桌面壳与桥共享同一 :class:`SaveGrantStore`）；
 - 对接口层统一抛 :class:`ExtensionPlatformError`（ARCH §12 平台错误码 +
   HTTP 状态 + 结构化 params），注册表的具体诊断码不外溢到 API。
 """
@@ -16,24 +19,45 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
+from dst_manager.extensions.artifacts import (
+    ArtifactExporter,
+    ArtifactExportError,
+    ArtifactMetadata,
+)
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
+from dst_manager.extensions.builtin.sheet_catalog.errors import SheetCatalogError
+from dst_manager.extensions.builtin.sheet_catalog.extension import (
+    ArtifactProposalDirectory,
+    SheetCatalogExecuteRequest,
+    SheetCatalogExecuteResponse,
+)
+from dst_manager.extensions.builtin.sheet_catalog.workbook import validate_candidate
 from dst_manager.extensions.capabilities import (
     CapabilityBroker,
     CapabilityError,
     ExtensionContext,
 )
 from dst_manager.extensions.contracts import (
+    XLSX_MEDIA_TYPE,
     BuiltinExtensionEntry,
     ExtensionDescriptor,
     ExtensionInvocation,
     ExtensionManifest,
 )
 from dst_manager.extensions.registry import ExtensionRegistry, ExtensionRegistryError
+from dst_manager.extensions.save_grants import (
+    SaveGrantError,
+    SaveGrantStore,
+    capture_baseline,
+)
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
@@ -94,12 +118,24 @@ class ExtensionStatusView:
     manifest: ExtensionManifest
 
 
-def default_runtime(sessions) -> ExtensionRuntime:
-    """宿主默认装配：注册表 + 扩展仓储 + 只读工作区快照 reader。"""
+def default_runtime(
+    sessions,
+    *,
+    save_grants: SaveGrantStore | None = None,
+    proposal_root: Path | None = None,
+) -> ExtensionRuntime:
+    """宿主默认装配：注册表 + 扩展仓储 + 只读工作区快照 reader。
+
+    ``save_grants``/``proposal_root`` 是执行通道装配点（Task 9）：桌面壳经
+    ``create_app`` 注入与 :class:`~dst_manager.interfaces.shell.ShellBridge`
+    **同一个** :class:`SaveGrantStore`，桥创建的授权才能被 API 执行消费。
+    """
     return ExtensionRuntime(
         ExtensionRegistry(),
         ExtensionStore(sessions),
         reader=ExtensionWorkspaceReader(sessions),
+        save_grants=save_grants,
+        proposal_root=proposal_root,
     )
 
 
@@ -122,10 +158,29 @@ class ExtensionRuntime:
         store: ExtensionStore,
         *,
         reader: ExtensionWorkspaceReader | None = None,
+        save_grants: SaveGrantStore | None = None,
+        proposal_root: Path | None = None,
     ) -> None:
         self._registry = registry
         self._store = store
         self._reader = reader
+        self._save_grants = save_grants
+        self._proposal_root = proposal_root
+
+    @property
+    def registry(self) -> ExtensionRegistry:
+        """注册表（桌面壳桥只读消费：动作声明校验）。"""
+        return self._registry
+
+    @property
+    def save_grants(self) -> SaveGrantStore | None:
+        """一次性保存授权存储；未装配时执行通道契约化拒绝。"""
+        return self._save_grants
+
+    @property
+    def proposal_root(self) -> Path | None:
+        """候选临时目录的宿主根（应用数据目录内；按次在其下建唯一子目录）。"""
+        return self._proposal_root
 
     # ------------------------------------------------------------------ 启动
 
@@ -360,6 +415,175 @@ class ExtensionRuntime:
         """清单声明的设置/偏好 schema 版本（偏好保存用）。"""
         return self._manifest(extension_id).settings_schema
 
+    # ------------------------------------------------------------------ 执行
+
+    def execute_action(
+        self,
+        extension_id: str,
+        action_id: str,
+        request: SheetCatalogExecuteRequest,
+    ) -> SheetCatalogExecuteResponse:
+        """执行扩展动作（Task 9 / ARCH-DM-006 §11、SPEC-DM-012 §8.2）。
+
+        宿主编排：可用性与动作声明（注册表）→ 摘要复核（对当前快照重建预览，
+        修订/模板/扩展身份漂移 → ``REPREVIEW_REQUIRED``）→ 分配应用临时目录内
+        唯一候选目录 → 扩展只写候选 → 消费一次性授权 → 宿主回读校验 + 原子
+        保存 + 登记 Artifact → ``finally`` 清理候选目录（SPEC §10）。
+        扩展全程不见目标路径；导出不取得工作区写锁、不创建修订或 CAD 任务。
+        """
+        if self._save_grants is None:
+            raise ExtensionPlatformError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                f"保存授权通道未装配：{extension_id}/{action_id}",
+                status_code=503,
+                params={"extension_id": extension_id, "action_id": action_id},
+            )
+        if self._proposal_root is None:
+            raise ExtensionPlatformError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                f"宿主未分配候选临时目录：{extension_id}/{action_id}",
+                status_code=503,
+                params={"extension_id": extension_id, "action_id": action_id},
+            )
+        try:
+            with self.invoke_action(extension_id, action_id) as invocation:
+                extension = invocation.extension
+                repview = getattr(extension, "repreview", None)
+                if repview is None or not hasattr(extension, "execute"):
+                    raise ExtensionPlatformError(
+                        "EXTENSION_CAPABILITY_UNAVAILABLE",
+                        f"宿主尚未接入该扩展的执行通道：{extension_id}/{action_id}",
+                        status_code=503,
+                        params={"extension_id": extension_id, "action_id": action_id},
+                    )
+                with self.extension_context(
+                    extension_id, request.workspace_id, request.base_revision_id
+                ) as context:
+                    repreview = self._verify_repreview(
+                        repview, context, request
+                    )
+                    candidate_dir = self._proposal_root / uuid.uuid4().hex
+                    candidate_dir.mkdir(parents=True)
+                    try:
+                        record = self._run_candidate_to_artifact(
+                            invocation,
+                            extension,
+                            context,
+                            request,
+                            action_id,
+                            candidate_dir,
+                        )
+                    finally:
+                        shutil.rmtree(candidate_dir, ignore_errors=True)
+        except CapabilityError as exc:
+            raise capability_platform_error(exc) from exc
+        except (SaveGrantError, ArtifactExportError) as exc:
+            raise ExtensionPlatformError(
+                exc.code,
+                str(exc),
+                status_code=_ERROR_STATUS.get(exc.code, 503),
+                params={
+                    "extension_id": extension_id,
+                    "action_id": action_id,
+                    "workspace_id": request.workspace_id,
+                },
+            ) from exc
+        except SheetCatalogError as exc:
+            # 候选生成失败（模板/表达式/工作簿）按 ARTIFACT_WRITE_FAILED 契约化，
+            # 不登记 Artifact（摘要复核已放行的模板不应走到这里，防御性兜底）。
+            raise ExtensionPlatformError(
+                "ARTIFACT_WRITE_FAILED",
+                str(exc),
+                status_code=_ERROR_STATUS["ARTIFACT_WRITE_FAILED"],
+                params={
+                    "extension_id": extension_id,
+                    "action_id": action_id,
+                    "workspace_id": request.workspace_id,
+                },
+            ) from exc
+        return SheetCatalogExecuteResponse(
+            artifact_id=record.artifact_id,
+            file_name=record.file_name,
+            output_path=record.output_path,
+            warnings=repreview.warnings,
+        )
+
+    @staticmethod
+    def _verify_repreview(
+        repview, context: ExtensionContext, request: SheetCatalogExecuteRequest
+    ):
+        """摘要复核：可执行且摘要逐字节一致才放行；否则 REPREVIEW_REQUIRED。"""
+        repreview = repview(context, request)
+        if (
+            not repreview.executable
+            or repreview.preview_digest != request.preview_digest
+        ):
+            raise ExtensionPlatformError(
+                "REPREVIEW_REQUIRED",
+                "预览摘要与当前快照不一致，请刷新预览后重试",
+                status_code=_ERROR_STATUS["REPREVIEW_REQUIRED"],
+                params={
+                    "workspace_id": request.workspace_id,
+                    "base_revision_id": request.base_revision_id,
+                },
+            )
+        return repreview
+
+    def _run_candidate_to_artifact(
+        self,
+        invocation: ExtensionInvocation,
+        extension,
+        context: ExtensionContext,
+        request: SheetCatalogExecuteRequest,
+        action_id: str,
+        candidate_dir: Path,
+    ) -> ArtifactRecord:
+        """扩展写候选 → 消费授权 → 宿主回读 + 原子保存 + 登记。"""
+        candidate = extension.execute(
+            context, request, ArtifactProposalDirectory(root=candidate_dir)
+        )
+        grant = self._save_grants.consume(
+            request.save_grant_id,
+            invocation.manifest.extension_id,
+            action_id,
+            request.workspace_id,
+        )
+        exporter = ArtifactExporter(
+            self._store,
+            invocation_id=invocation.invocation_id,
+            candidate_validator=lambda path: validate_candidate(
+                path, candidate.expected_headers, candidate.expected_rows
+            ),
+        )
+        return exporter.publish(
+            grant,
+            candidate.path,
+            ArtifactMetadata(
+                extension_id=invocation.manifest.extension_id,
+                extension_version=invocation.manifest.version,
+                workspace_id=request.workspace_id,
+                source_revision_id=request.base_revision_id,
+                kind="sheet-catalog",
+                media_type=XLSX_MEDIA_TYPE,
+            ),
+        )
+
+    def artifact_availability(self, record: ArtifactRecord) -> str:
+        """按当前文件系统状态派生 Artifact 可用性（历史记录不伪装成可用）。
+
+        ``AVAILABLE``：文件存在且 SHA-256 与登记一致；``MISSING``：文件已
+        删除；``CHANGED``：文件存在但内容被移动/修改（SPEC-DM-012 §10）。
+        """
+        baseline = capture_baseline(Path(record.output_path))
+        if not baseline.existed:
+            return _ARTIFACT_MISSING
+        if (
+            baseline.sha256 == record.sha256
+            and baseline.size_bytes == record.size_bytes
+        ):
+            return _ARTIFACT_AVAILABLE
+        return _ARTIFACT_CHANGED
+
     def get_artifact(self, artifact_id: str) -> ArtifactRecord:
         record = self._store.get_artifact(artifact_id)
         if record is None:
@@ -427,9 +651,16 @@ class ExtensionRuntime:
         )
 
 
+#: Artifact 可用性派生词表（SPEC-DM-012 §10；只反映当前文件系统状态）。
+_ARTIFACT_AVAILABLE = "AVAILABLE"
+_ARTIFACT_MISSING = "MISSING"
+_ARTIFACT_CHANGED = "CHANGED"
+
 #: 平台错误码默认 HTTP 状态（ARCH-DM-006 §12；能力不可用按环境问题归 503）。
 #: 未登记的注册表诊断码由 :meth:`ExtensionRuntime._platform_error` 兜底为 503。
-#: ``REPREVIEW_REQUIRED`` 仅来自能力上下文的修订漂移核对（409 语义：请刷新）。
+#: ``REPREVIEW_REQUIRED``：来源修订或模板摘要已变化（409 语义：请刷新）。
+#: ``SAVE_GRANT_INVALID``/``EXPORT_DESTINATION_CHANGED``：授权状态冲突（409）。
+#: ``ARTIFACT_WRITE_FAILED``：候选/保存/登记失败，宿主环境问题（503）。
 _ERROR_STATUS: dict[str, int] = {
     "EXTENSION_NOT_FOUND": 404,
     "EXTENSION_DISABLED": 409,
@@ -437,4 +668,7 @@ _ERROR_STATUS: dict[str, int] = {
     "EXTENSION_CAPABILITY_UNAVAILABLE": 503,
     "EXTENSION_ACTION_NOT_FOUND": 404,
     "REPREVIEW_REQUIRED": 409,
+    "SAVE_GRANT_INVALID": 409,
+    "EXPORT_DESTINATION_CHANGED": 409,
+    "ARTIFACT_WRITE_FAILED": 503,
 }

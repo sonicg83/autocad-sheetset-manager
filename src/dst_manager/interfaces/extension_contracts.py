@@ -21,9 +21,9 @@ __all__ = [
     "EXTENSION_MESSAGE_KEYS",
     "ArtifactResponseModel",
     "ExtensionActionModel",
-    "ExtensionActionRequest",
     "ExtensionDiagnosticCode",
     "ExtensionErrorResponse",
+    "ExtensionExecuteRequest",
     "ExtensionLifecycleStatus",
     "ExtensionPlatformErrorCode",
     "ExtensionPreferencePutRequest",
@@ -36,6 +36,7 @@ __all__ = [
     "ExtensionUiContributionModel",
     "SheetCatalogColumnModel",
     "SheetCatalogDiagnosticModel",
+    "SheetCatalogExecuteResponseModel",
     "SheetCatalogFieldCatalogModel",
     "SheetCatalogFieldDefinitionModel",
     "SheetCatalogPreviewResponse",
@@ -151,10 +152,18 @@ class ExtensionPreferencePutRequest(ContractModel):
     value: dict[str, object]
 
 
-class ExtensionActionRequest(ContractModel):
-    """动作请求占位契约（Task 3 只校验状态与声明；执行请求模型由 Task 9 接管）。"""
+class ExtensionExecuteRequest(ContractModel):
+    """执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
 
-    payload: dict[str, object] = Field(default_factory=dict)
+    后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
+    执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+    """
+
+    workspace_id: str
+    base_revision_id: str
+    template: ExtensionTemplateRequest
+    preview_digest: str
+    save_grant_id: str
 
 
 class ExtensionTemplateColumnRequest(ContractModel):
@@ -231,8 +240,17 @@ class SheetCatalogPreviewResponse(ContractModel):
     executable: bool
 
 
+class SheetCatalogExecuteResponseModel(ContractModel):
+    """执行成功响应（SPEC-DM-012 §8.2）：不含 sha256/来源修订/扩展版本。"""
+
+    artifact_id: str
+    file_name: str
+    output_path: str
+    warnings: list[SheetCatalogDiagnosticModel] = Field(default_factory=list)
+
+
 class ArtifactResponseModel(ContractModel):
-    """Artifact 元数据响应：不含任何扩展内部状态或二进制内容。"""
+    """Artifact 元数据响应：后台字段 + 当前可用性派生，不含二进制内容。"""
 
     artifact_id: str
     extension_id: str
@@ -247,3 +265,4 @@ class ArtifactResponseModel(ContractModel):
     size_bytes: int
     sha256: str
     created_at: datetime
+    availability: Literal["AVAILABLE", "MISSING", "CHANGED"]

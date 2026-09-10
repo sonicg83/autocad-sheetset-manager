@@ -95,7 +95,8 @@ export async function openExternalLink(url:string):Promise<boolean|undefined>{
 }
 
 // ---- PLAN-DM-020 Task 8：扩展成果"另存为"统一封装 ----
-// 三态语义：undefined = 桥或方法缺失（浏览器开发态/旧壳，调用方禁用导出入口）；
+// 三态语义：null = 桥或 request_extension_save 方法缺失（浏览器开发态/旧壳，
+// 调用方禁用导出入口）；
 // ok:true value:null = 用户取消对话框（宿主未创建授权，草稿/预览保持不变）；
 // ok:true value = 一次性保存授权回执（save_grant_id/file_name/expires_at，
 // 不含目标绝对路径）；ok:false = 工作区/动作校验拒绝（SHELL_WORKSPACE_UNAVAILABLE/

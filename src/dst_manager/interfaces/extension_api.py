@@ -1,12 +1,16 @@
 """统一扩展管理 API（PLAN-DM-020 Task 3/6 / ARCH-DM-006 §8）。
 
 :func:`register_extension_routes` 只做装配、扩展状态/动作声明校验和请求模型
-校验；预览通道（Task 6）分派给扩展的真实预览实现，执行通道仍属 Task 9，
-在动作已声明且扩展可用时返回 ``EXTENSION_CAPABILITY_UNAVAILABLE``，绝不编造
-执行结果。预览请求模板快照经 :class:`ExtensionPreviewRequest` 契约校验，成功
-响应为 :class:`SheetCatalogPreviewResponse`；工作区偏好按 ARCH-DM-006 §8.2
-best-effort 更新——保存失败降级为响应内的非阻断 warning，不升级为动作失败。
-所有错误都走 :class:`ExtensionErrorResponse` 统一结构
+校验；预览通道（Task 6）与执行通道（Task 9）都分派给扩展的真实实现——执行
+由 :class:`ExtensionRuntime.execute_action` 编排摘要复核、候选生成、授权消费、
+原子保存与 Artifact 登记。预览请求模板快照经 :class:`ExtensionPreviewRequest`
+契约校验，成功响应为 :class:`SheetCatalogPreviewResponse`；执行请求经
+:class:`ExtensionExecuteRequest` 契约校验，成功响应为
+:class:`SheetCatalogExecuteResponseModel`（不含 sha256/来源修订/扩展版本，
+后台字段只经 Artifact 查询披露，查询响应含 ``AVAILABLE/MISSING/CHANGED``
+可用性派生）；工作区偏好按 ARCH-DM-006 §8.2 best-effort 更新——保存失败
+降级为响应内的非阻断 warning，不升级为动作失败。所有错误都走
+:class:`ExtensionErrorResponse` 统一结构
 （code/message_key/params/message），``message_key`` 由 :data:`EXTENSION_MESSAGE_KEYS`
 按平台码稳定映射。
 
@@ -26,6 +30,9 @@ from dst_manager.application.extensions.runtime import (
     ExtensionRuntime,
     capability_platform_error,
 )
+from dst_manager.extensions.builtin.sheet_catalog.extension import (
+    SheetCatalogExecuteRequest,
+)
 from dst_manager.extensions.builtin.sheet_catalog.preview import (
     SheetCatalogDiagnostic,
     SheetCatalogPreview,
@@ -42,16 +49,18 @@ from dst_manager.interfaces.extension_contracts import (
     EXTENSION_MESSAGE_KEYS,
     ArtifactResponseModel,
     ExtensionActionModel,
-    ExtensionActionRequest,
     ExtensionErrorResponse,
+    ExtensionExecuteRequest,
     ExtensionPreferencePutRequest,
     ExtensionPreviewRequest,
     ExtensionSettingsPutRequest,
     ExtensionStatePatchRequest,
     ExtensionSummaryModel,
+    ExtensionTemplateRequest,
     ExtensionUiContributionModel,
     SheetCatalogColumnModel,
     SheetCatalogDiagnosticModel,
+    SheetCatalogExecuteResponseModel,
     SheetCatalogFieldCatalogModel,
     SheetCatalogFieldDefinitionModel,
     SheetCatalogPreviewResponse,
@@ -156,24 +165,40 @@ def _dispatch_preview(
     return _preview_response(result, warnings)
 
 
+def _template_snapshot(body_template: ExtensionTemplateRequest) -> SheetCatalogTemplate:
+    """契约模板快照 → 扩展模板值对象（原样传递，规范化属预览阶段）。"""
+    return SheetCatalogTemplate(
+        template_id=body_template.template_id,
+        name=body_template.name,
+        schema_version=TEMPLATE_SCHEMA_VERSION,
+        columns=tuple(
+            TemplateColumn(
+                column_id=column.column_id,
+                header=column.header,
+                expression=column.expression,
+            )
+            for column in body_template.columns
+        ),
+    )
+
+
 def _preview_request(body: ExtensionPreviewRequest) -> SheetCatalogPreviewRequest:
     """契约模型 → 预览请求值对象（模板快照原样传递，规范化属预览阶段）。"""
     return SheetCatalogPreviewRequest(
         workspace_id=body.workspace_id,
         base_revision_id=body.base_revision_id,
-        template=SheetCatalogTemplate(
-            template_id=body.template.template_id,
-            name=body.template.name,
-            schema_version=TEMPLATE_SCHEMA_VERSION,
-            columns=tuple(
-                TemplateColumn(
-                    column_id=column.column_id,
-                    header=column.header,
-                    expression=column.expression,
-                )
-                for column in body.template.columns
-            ),
-        ),
+        template=_template_snapshot(body.template),
+    )
+
+
+def _execute_request(body: ExtensionExecuteRequest) -> SheetCatalogExecuteRequest:
+    """契约模型 → 执行请求值对象（模板快照与摘要原样传递，复核属宿主运行时）。"""
+    return SheetCatalogExecuteRequest(
+        workspace_id=body.workspace_id,
+        base_revision_id=body.base_revision_id,
+        template=_template_snapshot(body.template),
+        preview_digest=body.preview_digest,
+        save_grant_id=body.save_grant_id,
     )
 
 
@@ -262,19 +287,24 @@ def _preview_response(
     )
 
 
-def _dispatch_action(request: Request, extension_id: str, action_id: str) -> JSONResponse:
-    """执行分派：校验扩展可用与动作声明；执行通道属 Task 9，不编造结果。"""
+def _dispatch_execute(
+    request: Request,
+    extension_id: str,
+    action_id: str,
+    body: ExtensionExecuteRequest,
+):
+    """执行分派：契约校验后交宿主运行时编排（摘要复核→候选→授权→保存→登记）。"""
     runtime = _runtime(request)
     try:
-        with runtime.invoke_action(extension_id, action_id):
-            raise ExtensionPlatformError(
-                "EXTENSION_CAPABILITY_UNAVAILABLE",
-                f"宿主动作执行通道尚未接入：{extension_id}/{action_id}",
-                status_code=503,
-                params={"extension_id": extension_id, "action_id": action_id},
-            )
+        result = runtime.execute_action(extension_id, action_id, _execute_request(body))
     except ExtensionPlatformError as exc:
         return _error_response(exc)
+    return SheetCatalogExecuteResponseModel(
+        artifact_id=result.artifact_id,
+        file_name=result.file_name,
+        output_path=result.output_path,
+        warnings=[_diagnostic_model(warning) for warning in result.warnings],
+    )
 
 
 def register_extension_routes(app: FastAPI) -> None:
@@ -386,13 +416,14 @@ def register_extension_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/extensions/{extension_id}/actions/{action_id}/execute",
+        response_model=SheetCatalogExecuteResponseModel,
         responses=_ERROR_RESPONSES,
         tags=["extensions"],
     )
     def execute_extension_action(
-        extension_id: str, action_id: str, body: ExtensionActionRequest, request: Request
+        extension_id: str, action_id: str, body: ExtensionExecuteRequest, request: Request
     ):
-        return _dispatch_action(request, extension_id, action_id)
+        return _dispatch_execute(request, extension_id, action_id, body)
 
     @app.get(
         "/api/artifacts/{artifact_id}",
@@ -418,6 +449,7 @@ def register_extension_routes(app: FastAPI) -> None:
                 size_bytes=record.size_bytes,
                 sha256=record.sha256,
                 created_at=record.created_at,
+                availability=runtime.artifact_availability(record),
             )
         except ExtensionPlatformError as exc:
             return _error_response(exc)

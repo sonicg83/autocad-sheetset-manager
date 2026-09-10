@@ -466,13 +466,19 @@ def run_desktop(settings: Settings | None = None) -> None:
         # 设置快照持有者装配一次（PLAN-DM-019 任务 5）：API 与桌面服务共用同一实例，
         # 避免双实例缓存读到不同步的 config_revision（桌面服务消费在任务 6 接线）。
         runtime_settings = RuntimeSettings(default_store())
+        # 一次性保存授权存储装配一次（PLAN-DM-020 任务 9）：同一个实例注入 API
+        # extension runtime 与 ShellBridge——桥"另存为"创建的授权必须能被 API
+        # 执行消费，两处各建实例会让所有导出都报 SAVE_GRANT_INVALID。
+        save_grants = SaveGrantStore()
+        app = create_app(
+            settings,
+            on_workspace_opened=context.set_workspace,
+            runtime_settings=runtime_settings,
+            save_grants=save_grants,
+        )
         server = uvicorn.Server(
             uvicorn.Config(
-                create_app(
-                    settings,
-                    on_workspace_opened=context.set_workspace,
-                    runtime_settings=runtime_settings,
-                ),
+                app,
                 host="127.0.0.1",
                 port=0,
                 log_level="warning",
@@ -483,7 +489,12 @@ def run_desktop(settings: Settings | None = None) -> None:
         while not server.started:
             time.sleep(0.05)
         port = server.servers[0].sockets[0].getsockname()[1]
-        bridge = ShellBridge(context=context, preferences=preferences)
+        bridge = ShellBridge(
+            context=context,
+            preferences=preferences,
+            registry=app.state.extension_runtime.registry,
+            save_grants=save_grants,
+        )
         window = webview.create_window(
             APP_WINDOW_TITLE, f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800
         )

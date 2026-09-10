@@ -38,10 +38,19 @@
       },
       "ArtifactResponseModel": {
         "additionalProperties": false,
-        "description": "Artifact 元数据响应：不含任何扩展内部状态或二进制内容。",
+        "description": "Artifact 元数据响应：后台字段 + 当前可用性派生，不含二进制内容。",
         "properties": {
           "artifact_id": {
             "title": "Artifact Id",
+            "type": "string"
+          },
+          "availability": {
+            "enum": [
+              "AVAILABLE",
+              "MISSING",
+              "CHANGED"
+            ],
+            "title": "Availability",
             "type": "string"
           },
           "created_at": {
@@ -107,7 +116,8 @@
           "file_name",
           "size_bytes",
           "sha256",
-          "created_at"
+          "created_at",
+          "availability"
         ],
         "title": "ArtifactResponseModel",
         "type": "object"
@@ -1735,19 +1745,6 @@
         "title": "ExtensionActionModel",
         "type": "object"
       },
-      "ExtensionActionRequest": {
-        "additionalProperties": false,
-        "description": "动作请求占位契约（Task 3 只校验状态与声明；执行请求模型由 Task 9 接管）。",
-        "properties": {
-          "payload": {
-            "additionalProperties": true,
-            "title": "Payload",
-            "type": "object"
-          }
-        },
-        "title": "ExtensionActionRequest",
-        "type": "object"
-      },
       "ExtensionErrorResponse": {
         "additionalProperties": false,
         "description": "扩展平台统一错误负载（ARCH-DM-006 §12 平台码）。",
@@ -1805,6 +1802,40 @@
           "message"
         ],
         "title": "ExtensionErrorResponse",
+        "type": "object"
+      },
+      "ExtensionExecuteRequest": {
+        "additionalProperties": false,
+        "description": "执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。\n\n后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入\n执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。",
+        "properties": {
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "save_grant_id": {
+            "title": "Save Grant Id",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/ExtensionTemplateRequest"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "base_revision_id",
+          "template",
+          "preview_digest",
+          "save_grant_id"
+        ],
+        "title": "ExtensionExecuteRequest",
         "type": "object"
       },
       "ExtensionPreferencePutRequest": {
@@ -3694,6 +3725,38 @@
         "title": "SheetCatalogDiagnosticModel",
         "type": "object"
       },
+      "SheetCatalogExecuteResponseModel": {
+        "additionalProperties": false,
+        "description": "执行成功响应（SPEC-DM-012 §8.2）：不含 sha256/来源修订/扩展版本。",
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "output_path": {
+            "title": "Output Path",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SheetCatalogDiagnosticModel"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "file_name",
+          "output_path"
+        ],
+        "title": "SheetCatalogExecuteResponseModel",
+        "type": "object"
+      },
       "SheetCatalogFieldCatalogModel": {
         "additionalProperties": false,
         "properties": {
@@ -4709,7 +4772,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExtensionActionRequest"
+                "$ref": "#/components/schemas/ExtensionExecuteRequest"
               }
             }
           },
@@ -4719,7 +4782,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SheetCatalogExecuteResponseModel"
+                }
               }
             },
             "description": "Successful Response"
