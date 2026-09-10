@@ -110,6 +110,7 @@ export default {
     workspaceUnavailable: "当前没有匹配的已打开工作区",
     openFailed: "在资源管理器中打开失败",
     directoryNotFound: "图纸集目录不存在，可能已被移动或删除",
+    artifactDirectoryNotFound: "导出成果所在目录不存在，可能已被移动或删除",
     externalUrlRejected: "仅允许打开登记的 https 链接",
     preferencesIo: "图纸列偏好读写失败",
     preferencesInvalid: "图纸列偏好数据无效",

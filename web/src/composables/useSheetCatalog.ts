@@ -11,7 +11,7 @@ import {computed, onScopeDispose, reactive, ref, watch} from "vue";
 import type {Ref} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError, localizedError, request} from "../api/client";
-import {openWorkspaceFolder, requestExtensionSave, shellReady} from "../api/shell";
+import {openArtifactFolder, requestExtensionSave, shellReady} from "../api/shell";
 import type {Workspace} from "../api/contracts";
 
 export const CATALOG_EXTENSION_ID = "dst-manager.sheet-catalog";
@@ -159,6 +159,8 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     phase: "idle" as "idle" | "exporting" | "success" | "failed",
     outputPath: "",
     fileName: "",
+    // 成功导出的 Artifact 标识：「打开所在文件夹」桥方法只传标识，路径权威在宿主
+    artifactId: "",
     errorText: "",
     errorCode: "",
   });
@@ -527,6 +529,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     const digest = preview.value?.previewDigest;
     if (!current || !exportReady.value || !digest) return;
     exportState.phase = "exporting";
+    exportState.artifactId = "";
     exportState.errorText = "";
     exportState.errorCode = "";
     actionError.value = "";
@@ -563,6 +566,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
       exportState.phase = "success";
       exportState.outputPath = result.output_path;
       exportState.fileName = result.file_name;
+      exportState.artifactId = result.artifact_id;
     } catch (error) {
       exportState.phase = "failed";
       exportState.errorCode = error instanceof ApiError ? error.code ?? "" : "";
@@ -570,10 +574,14 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     }
   }
 
+  // SPEC §10「打开所在文件夹」：成功导出后用 execute 响应中的 artifact_id 调
+  // 专用桥方法——前端不传任何路径，路径权威在宿主（Task 11B 起不再用
+  // workspace_id 打开 DST 所在目录：用户把 XLSX 另存到任意目录后打开的才是
+  // 真实成果所在目录）
   async function openExportFolder() {
-    const current = workspace.value;
-    if (!current) return;
-    const result = await openWorkspaceFolder(current.id);
+    const artifactId = exportState.artifactId;
+    if (!artifactId) return;
+    const result = await openArtifactFolder(CATALOG_EXTENSION_ID, artifactId);
     if (!result) {
       actionError.value = t("extensions.sheetCatalog.shellUnsupported");
       return;

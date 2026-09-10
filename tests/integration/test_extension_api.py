@@ -5,13 +5,15 @@
 的稳定 ``message_key`` 与结构化 ``params``、OpenAPI 端点与错误契约、启动顺序
 （数据库迁移完成 → 发布恢复完成 → ``registry.discover()``），以及 Task 6 的
 真实数据预览动作（行/字段目录/摘要/错误警告契约、修订不匹配、偏好 best-effort
-降级）。
+降级），以及 Task 11B（SC-06）的模板设置 PUT 服务端强制矩阵（save_templates
+分派：casefold 重名/100 上限/内置不可变/高 schema 保留/合法回读与通用路径隔离）。
 """
 
 import json
 import uuid
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 import dst_manager.application.service as service_module
@@ -291,7 +293,39 @@ def test_artifact_lookup_returns_seeded_metadata(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_settings_roundtrip_revision_conflict_and_schema_guard(tmp_path):
+def catalog_template_json(name, columns=(("图号", "{sheet.number}"),), template_id=None) -> dict:
+    """模板设置负载中的单个用户模板 JSON（与前端 settingsPayload 同形态）。"""
+    base = template_id or uuid.uuid5(uuid.NAMESPACE_URL, f"settings:{name}")
+    return {
+        "template_id": str(base),
+        "name": name,
+        "schema_version": 1,
+        "columns": [
+            {
+                "column_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"settings:{name}:{header}")),
+                "header": header,
+                "expression": expression,
+            }
+            for header, expression in columns
+        ],
+    }
+
+
+def put_settings(client: TestClient, templates, expected_revision=0):
+    """按前端保存负载形态 PUT 图纸目录扩展设置。"""
+    return client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 1,
+            "expected_revision": expected_revision,
+            "value": {"schema_version": 1, "user_templates": list(templates)},
+        },
+    )
+
+
+def test_settings_put_validates_templates_and_roundtrips(tmp_path):
+    """Task 11B（SC-06 服务端接线）：图纸目录设置 PUT 分派 save_templates
+    强制全部模板规则；合法保存返回新修订且 GET 规范回读一致。"""
     client = make_client(tmp_path)
     url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
 
@@ -299,41 +333,175 @@ def test_settings_roundtrip_revision_conflict_and_schema_guard(tmp_path):
     assert default.status_code == 200
     assert default.json() == {"schema_version": 1, "revision": 0, "value": {}}
 
+    template = catalog_template_json("市政标准目录")
+    saved = put_settings(client, [template])
+    assert saved.status_code == 200
+    assert saved.json() == {
+        "schema_version": 1,
+        "revision": 1,
+        "value": {"schema_version": 1, "user_templates": [template]},
+    }
+    # 保存结果可回读：GET 返回规范负载（内置默认模板是代码常量，不在 value 中）
+    assert client.get(url).json() == saved.json()
+
+    # 未知 schema 仍由清单契约先行拒绝（422），不进入模板分派
+    mismatch = client.put(url, json={"schema_version": 2, "value": {}, "expected_revision": 1})
+    assert mismatch.status_code == 422
+    body = mismatch.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
+    assert body["params"] == {"settings_schema": 1, "submitted": 2}
+
+
+def test_settings_put_stale_revision_returns_template_conflict(tmp_path):
+    client = make_client(tmp_path)
+    url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+    assert put_settings(client, [catalog_template_json("市政标准目录")]).status_code == 200
+
+    stale = put_settings(client, [], expected_revision=0)
+
+    assert stale.status_code == 409
+    body = stale.json()
+    assert_error_contract(body)
+    # 修订冲突沿用 Task 5 模板冲突词汇（expected/current 结构化参数）
+    assert body["code"] == "SHEET_CATALOG_TEMPLATE_CONFLICT"
+    assert body["message_key"] == "errors.sheetCatalog.templateConflict"
+    assert body["params"] == {"expected_revision": 0, "current_revision": 1}
+    # 冲突时旧值未被覆盖
+    assert client.get(url).json()["revision"] == 1
+
+
+@pytest.mark.parametrize(
+    ("existing", "incoming"),
+    [
+        pytest.param(["市政标准目录"], "市政标准目录", id="用户模板名重复"),
+        pytest.param([], "默认图纸目录（内置）", id="与内置默认模板同名"),
+        pytest.param(["Catalog"], "catalog", id="casefold 重复"),
+    ],
+)
+def test_settings_put_rejects_duplicate_template_names_casefold(tmp_path, existing, incoming):
+    client = make_client(tmp_path)
+    url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+    assert put_settings(client, [catalog_template_json(name) for name in existing]).status_code == 200
+
+    rejected = put_settings(
+        client,
+        [*[catalog_template_json(name) for name in existing], catalog_template_json(incoming)],
+        expected_revision=1,
+    )
+
+    assert rejected.status_code == 409
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "SHEET_CATALOG_COLUMN_DUPLICATE"
+    assert body["message_key"] == "errors.sheetCatalog.columnDuplicate"
+    assert body["params"] == {"header": incoming}
+    # 原设置不变：不存在半保存状态
+    assert client.get(url).json()["value"]["user_templates"] == [
+        catalog_template_json(name) for name in existing
+    ]
+
+
+def test_settings_put_rejects_more_than_100_user_templates(tmp_path):
+    client = make_client(tmp_path)
+    templates = [catalog_template_json(f"模板{i:03d}") for i in range(101)]
+
+    rejected = put_settings(client, templates)
+
+    assert rejected.status_code == 422
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "SHEET_CATALOG_TEMPLATE_LIMIT"
+    assert body["message_key"] == "errors.sheetCatalog.templateLimit"
+    assert body["params"] == {"kind": "user_templates", "limit": 100, "actual": 101}
+    assert client.get(f"/api/extensions/{SHEET_CATALOG_ID}/settings").json()["value"] == {}
+
+
+def test_settings_put_rejects_builtin_mutations(tmp_path):
+    """内置默认模板是服务端代码常量：同名影子模板与内置形态（无 UUID）条目均拒绝。"""
+    client = make_client(tmp_path)
+
+    shadow = put_settings(client, [catalog_template_json("默认图纸目录（内置）")])
+    assert shadow.status_code == 409
+    body = shadow.json()
+    assert_error_contract(body)
+    assert body["code"] == "SHEET_CATALOG_COLUMN_DUPLICATE"
+    assert body["params"] == {"header": "默认图纸目录（内置）"}
+
+    builtin_shaped = dict(catalog_template_json("市政标准目录"), template_id=None)
+    rejected = put_settings(client, [builtin_shaped])
+    assert rejected.status_code == 422
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
+    assert "SHEET_CATALOG_TEMPLATE_ID_REQUIRED" in body["message"]
+    # 内置默认模板始终由代码常量提供：GET value 不含任何内置形态条目
+    assert client.get(f"/api/extensions/{SHEET_CATALOG_ID}/settings").json()["value"] == {}
+
+
+def test_settings_put_rejected_when_server_schema_higher_keeps_original_json(tmp_path):
+    """Ruling-9：服务端模板设置 schema 更高时按 v1 保存必须被拒且原 JSON 保留。"""
+    client = make_client(tmp_path)
+    store = ExtensionStore(client.app.state.service.database.sessions)
+    raw_value = {"user_templates": [{"unknown": "future-shape"}], "future_field": 1}
+    store.put_settings(SHEET_CATALOG_ID, 2, raw_value, 0)
+    url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+    assert client.get(url).json() == {"schema_version": 2, "revision": 1, "value": raw_value}
+
+    rejected = put_settings(
+        client, [catalog_template_json("市政标准目录")], expected_revision=1
+    )
+
+    assert rejected.status_code == 409
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "SHEET_CATALOG_TEMPLATE_CONFLICT"
+    assert body["message_key"] == "errors.sheetCatalog.templateConflict"
+    # 原 JSON 原样保留（schema 2、内容逐键一致，未被 v1 负载覆盖）
+    assert client.get(url).json() == {"schema_version": 2, "revision": 1, "value": raw_value}
+
+
+def test_settings_put_other_extensions_keep_generic_json_path(tmp_path):
+    """无 sheet-catalog 契约的扩展（未来）不受模板分派影响：value 原样存储回读。"""
+    manifest = tmp_path / "plain-settings.yaml"
+    manifest.write_text(
+        """
+extension_id: test.plain-settings
+version: 0.1.0
+extension_type: builtin
+host_contract: 1
+enabled_by_default: false
+name_key: extensions.test.name
+description_key: extensions.test.description
+required_capabilities: []
+permissions: []
+ui_contributions: []
+actions: []
+settings_schema: 1
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    entries = (BuiltinExtensionEntry(manifest_resource=str(manifest), factory=_boom),)
+    client = make_client(
+        tmp_path, extension_runtime=make_runtime(tmp_path, entries), extension_index=entries
+    )
+
     saved = client.put(
-        url,
+        "/api/extensions/test.plain-settings/settings",
         json={
             "schema_version": 1,
             "value": {"columns": ["{{sheet.number}}"]},
             "expected_revision": 0,
         },
     )
+
     assert saved.status_code == 200
     assert saved.json() == {
         "schema_version": 1,
         "revision": 1,
         "value": {"columns": ["{{sheet.number}}"]},
     }
-
-    conflict = client.put(
-        url, json={"schema_version": 1, "value": {}, "expected_revision": 0}
-    )
-    assert conflict.status_code == 409
-    body = conflict.json()
-    assert_error_contract(body)
-    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
-    assert body["message_key"] == "errors.extension.settingsInvalid"
-    assert body["params"] == {"expected_revision": 0, "current_revision": 1}
-    # 冲突时旧值未被覆盖
-    assert client.get(url).json()["value"] == {"columns": ["{{sheet.number}}"]}
-
-    schema_mismatch = client.put(
-        url, json={"schema_version": 2, "value": {}, "expected_revision": 1}
-    )
-    assert schema_mismatch.status_code == 422
-    body = schema_mismatch.json()
-    assert_error_contract(body)
-    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
-    assert body["params"] == {"settings_schema": 1, "submitted": 2}
 
 
 def test_preferences_default_and_workspace_isolation(tmp_path):

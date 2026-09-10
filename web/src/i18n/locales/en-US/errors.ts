@@ -110,6 +110,7 @@ export default {
     workspaceUnavailable: "No matching open workspace",
     openFailed: "Failed to open in File Explorer",
     directoryNotFound: "The sheet set directory does not exist; it may have been moved or deleted",
+    artifactDirectoryNotFound: "The folder containing the exported file does not exist; it may have been moved or deleted",
     externalUrlRejected: "Only registered https links can be opened",
     preferencesIo: "Failed to read or write sheet column preferences",
     preferencesInvalid: "Sheet column preference data is invalid",

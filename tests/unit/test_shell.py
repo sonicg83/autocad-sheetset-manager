@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,8 @@ from dst_manager.extensions.contracts import (
     ExtensionManifest,
 )
 from dst_manager.extensions.save_grants import SaveGrantError, SaveGrantStore
+from dst_manager.infrastructure.explorer import ExplorerError
+from dst_manager.infrastructure.persistence.extensions import ArtifactRecord
 from dst_manager.interfaces.shell import (
     _NAME_INVALID_PATTERN,
     ShellBridge,
@@ -695,3 +698,139 @@ def test_request_extension_save_composed_filter_matches_pywebview_parse_format()
     composed = window.calls[0]["file_types"][0]
     _, patterns = parse_file_type(composed)
     assert patterns == "*.xlsx"
+
+
+# ---- PLAN-DM-020 Task 11B：导出成果"打开所在文件夹"桥方法（SPEC §10） ----
+# 前端只传扩展与 Artifact 标识，路径权威在宿主：桥经 ExtensionStore 校验
+# Artifact 存在且 extension_id 匹配后才打开登记 output_path 的所在目录。
+
+
+def _artifact_record(output_path: Path) -> ArtifactRecord:
+    return ArtifactRecord(
+        artifact_id="artifact-1",
+        extension_id="dst-manager.sheet-catalog",
+        extension_version="0.1.0",
+        workspace_id="workspace-1",
+        source_revision_id="rev-1",
+        kind="sheet-catalog",
+        media_type=XLSX_MEDIA_TYPE,
+        management_relation="external",
+        output_path=str(output_path),
+        file_name="图纸目录.xlsx",
+        size_bytes=4096,
+        sha256="a" * 64,
+        created_at=datetime(2026, 9, 10, tzinfo=UTC),
+    )
+
+
+class _RecordingExplorer:
+    def __init__(self):
+        self.selected: list[Path] = []
+        self.opened: list[Path] = []
+
+    def open_folder_and_select(self, file: Path) -> None:
+        self.selected.append(file)
+
+    def open_folder(self, folder: Path) -> None:
+        self.opened.append(folder)
+
+
+class _FakeArtifactStore:
+    def __init__(self, record=None):
+        self._record = record
+        self.queries: list[str] = []
+
+    def get_artifact(self, artifact_id: str):
+        self.queries.append(artifact_id)
+        if self._record is not None and self._record.artifact_id == artifact_id:
+            return self._record
+        return None
+
+
+def _artifact_bridge(record=None):
+    explorer = _RecordingExplorer()
+    store = _FakeArtifactStore(record)
+    bridge = ShellBridge(extension_store=store, explorer=explorer)
+    return bridge, explorer, store
+
+
+def test_open_artifact_folder_selects_exported_file_in_explorer(tmp_path: Path):
+    output = tmp_path / "导出" / "图纸目录.xlsx"
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"xlsx")
+    bridge, explorer, store = _artifact_bridge(_artifact_record(output))
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result == {"ok": True, "value": None}
+    assert explorer.selected == [output]  # 尽量选中文件而非只开目录
+    assert store.queries == ["artifact-1"]
+
+
+def test_open_artifact_folder_missing_artifact_is_structured_failure():
+    bridge, explorer, _ = _artifact_bridge()
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "no-such")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_ARTIFACT_NOT_FOUND"
+    assert result["message_key"] == "errors.extension.artifactNotFound"
+    assert explorer.selected == [] and explorer.opened == []  # 不打开任何目录
+
+
+def test_open_artifact_folder_rejects_extension_mismatch(tmp_path: Path):
+    output = tmp_path / "图纸目录.xlsx"
+    output.write_bytes(b"xlsx")
+    bridge, explorer, _ = _artifact_bridge(_artifact_record(output))
+
+    result = bridge.open_artifact_folder("dst-manager.other", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_ARTIFACT_NOT_FOUND"
+    assert explorer.selected == [] and explorer.opened == []
+
+
+def test_open_artifact_folder_directory_moved_is_structured_failure(tmp_path: Path):
+    record = _artifact_record(tmp_path / "已移动" / "图纸目录.xlsx")
+    bridge, explorer, _ = _artifact_bridge(record)
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND"
+    assert result["message_key"] == "errors.shell.artifactDirectoryNotFound"
+    assert explorer.selected == [] and explorer.opened == []
+
+
+def test_open_artifact_folder_explorer_failure_maps_to_shell_open_failed(tmp_path: Path):
+    output = tmp_path / "图纸目录.xlsx"
+    output.write_bytes(b"xlsx")
+
+    class _BrokenExplorer:
+        def open_folder_and_select(self, file: Path) -> None:
+            raise ExplorerError("无法启动文件资源管理器")
+
+    bridge = ShellBridge(
+        extension_store=_FakeArtifactStore(_artifact_record(output)),
+        explorer=_BrokenExplorer(),
+    )
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_OPEN_FAILED"
+
+
+def test_open_artifact_folder_unwired_store_is_contract_failure():
+    result = ShellBridge().open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+
+
+def test_open_artifact_folder_accepts_only_identifier_signature():
+    """前端不传任何路径：签名只有扩展与 Artifact 两个标识参数。"""
+    import inspect
+
+    params = list(inspect.signature(ShellBridge.open_artifact_folder).parameters)
+    assert params == ["self", "extension_id", "artifact_id"]

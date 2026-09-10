@@ -5,7 +5,7 @@
 // 工作区/设置/动作路由经 fixtures/sheetCatalog.ts 模拟。
 import {expect, test, type Page} from "@playwright/test";
 import {
-  fakeUuid, installSheetCatalogFixture, openCatalogPage, readBridgeCalls,
+  EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, readBridgeCalls,
   type CatalogTemplate, type SheetCatalogState,
 } from "./fixtures/sheetCatalog";
 
@@ -384,9 +384,12 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     expect(execute.base_revision_id).toBe("revision-1");
     expect(execute.preview_digest).toBe(state.lastDigest);
     expect(execute.save_grant_id).toBe("grant-e2e");
-    // 打开所在文件夹经桌面壳桥
+    // 打开所在文件夹经专用桥方法：只传扩展与 Artifact 标识，不传 workspace_id/路径
     await page.getByRole("button", {name: "打开所在文件夹"}).click();
-    await expect.poll(async () => (await readBridgeCalls(page)).openFolderCalls.length).toBe(1);
+    await expect.poll(async () => (await readBridgeCalls(page)).artifactFolderCalls).toEqual([
+      {extension_id: EXTENSION_ID, artifact_id: "artifact-e2e"},
+    ]);
+    expect((await readBridgeCalls(page)).openFolderCalls).toHaveLength(0);
   });
 
   test("预览漂移（REPREVIEW_REQUIRED）保留编辑，刷新预览后重试成功", async ({page}) => {

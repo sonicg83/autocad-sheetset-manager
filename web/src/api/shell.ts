@@ -40,6 +40,9 @@ export interface SheetShellBridge {
   // 扩展成果原生"另存为"（PLAN-DM-020 Task 8）：桥不接受前端建议名/路径，
   // 建议文件名与固定 XLSX 过滤器由宿主从可信工作区快照生成。
   request_extension_save(extension_id:string,action_id:string,workspace_id:string):Promise<ShellResult<ShellSaveGrant|null>>;
+  // 导出成果"打开所在文件夹"（PLAN-DM-020 Task 11B / SPEC §10）：前端只传
+  // 扩展与 Artifact 标识，路径权威在宿主（登记 Artifact 的 output_path）。
+  open_artifact_folder(extension_id:string,artifact_id:string):Promise<ShellResult<null>>;
 }
 
 // 旧/部分桥可能只暴露 select_file/on_files_dropped：新方法缺失时返回 null，
@@ -105,4 +108,15 @@ export async function requestExtensionSave(extensionId:string,actionId:string,wo
   const bridge=getShellBridge();
   if(!bridge||typeof bridge.request_extension_save!=="function")return null;
   return bridge.request_extension_save(extensionId,actionId,workspaceId);
+}
+
+// ---- PLAN-DM-020 Task 11B：导出成果"打开所在文件夹"统一封装 ----
+// 三态语义：null = 桥或 open_artifact_folder 方法缺失（浏览器开发态/旧壳，
+// 调用方提示不支持）；ok:true = 壳已在资源管理器打开成果所在目录并尽量选中
+// 文件；ok:false = Artifact 不存在/扩展不匹配/目录已被移动删除
+// （EXTENSION_ARTIFACT_NOT_FOUND/SHELL_ARTIFACT_DIRECTORY_NOT_FOUND/SHELL_OPEN_FAILED）。
+export async function openArtifactFolder(extensionId:string,artifactId:string):Promise<ShellResult<null>|null>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.open_artifact_folder!=="function")return null;
+  return bridge.open_artifact_folder(extensionId,artifactId);
 }

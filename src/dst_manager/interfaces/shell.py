@@ -26,6 +26,7 @@ from ..extensions.contracts import XLSX_MEDIA_TYPE
 from ..extensions.registry import ExtensionRegistry
 from ..extensions.save_grants import SaveGrantStore
 from ..infrastructure.explorer import Explorer, ExplorerError
+from ..infrastructure.persistence.extensions import ExtensionStore
 from ..infrastructure.sheet_preferences import (
     InvalidSheetPreferencesError,
     SheetPreferences,
@@ -106,17 +107,21 @@ class ShellBridge:
         explorer: Explorer | None = None,
         registry: ExtensionRegistry | None = None,
         save_grants: SaveGrantStore | None = None,
+        extension_store: ExtensionStore | None = None,
     ) -> None:
         """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。
 
         ``registry``/``save_grants`` 由桌面装配注入（Task 9 与 API runtime 共享
         同一个 SaveGrantStore）；缺省时 request_extension_save 契约化拒绝。
+        ``extension_store``（Task 11B）由桌面装配注入与 API 同一个扩展仓储；
+        缺省时 open_artifact_folder 契约化拒绝。
         """
         self._context = context
         self._preferences = preferences
         self._explorer = explorer if explorer is not None else Explorer()
         self._registry = registry
         self._save_grants = save_grants
+        self._extension_store = extension_store
         self._window: webview.Window | None = None
         self._drop_callback_id: str | None = None
         self._drop_listener_registered = False
@@ -293,6 +298,42 @@ class ShellBridge:
                 "expires_at": receipt.expires_at.isoformat(),
             },
         }
+
+    def open_artifact_folder(self, extension_id: str, artifact_id: str) -> dict:
+        """在资源管理器中打开扩展导出成果所在目录并尽量选中文件（SPEC-DM-012 §10）。
+
+        前端只传扩展与 Artifact 标识，**路径权威在宿主**：经扩展仓储校验
+        Artifact 存在且 ``extension_id`` 匹配后才打开其登记 ``output_path`` 的
+        所在目录（文件仍在则选中文件）。Artifact 不存在/身份不匹配/目录已被
+        移动删除均返回结构化失败；除资源管理器外不执行任何命令，不打开任何
+        未登记路径。
+        """
+        if self._extension_store is None:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "扩展成果存储未装配")
+        record = (
+            self._extension_store.get_artifact(artifact_id)
+            if isinstance(artifact_id, str)
+            else None
+        )
+        if record is None:
+            return shell_error("EXTENSION_ARTIFACT_NOT_FOUND", "导出成果不存在或已被移动")
+        if record.extension_id != extension_id:
+            return shell_error("EXTENSION_ARTIFACT_NOT_FOUND", "导出成果不属于该扩展")
+        output = Path(record.output_path)
+        folder = output.parent
+        if not folder.is_dir():
+            return shell_error(
+                "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND",
+                "导出成果所在目录不存在，可能已被移动或删除",
+            )
+        try:
+            if output.is_file():
+                self._explorer.open_folder_and_select(output)
+            else:
+                self._explorer.open_folder(folder)
+        except ExplorerError as exc:
+            return shell_error("SHELL_OPEN_FAILED", str(exc))
+        return {"ok": True, "value": None}
 
     def select_file(self, file_kind: FileKind, localized_description: str) -> str | None:
         """弹出原生文件选择对话框（PLAN-DM-021 Task 4：file_kind + 本地化描述）。
@@ -494,6 +535,9 @@ def run_desktop(settings: Settings | None = None) -> None:
             preferences=preferences,
             registry=app.state.extension_runtime.registry,
             save_grants=save_grants,
+            # Task 11B：与 API 同一个扩展仓储——"打开所在文件夹"按登记的
+            # Artifact output_path 定位，前端不传任何路径。
+            extension_store=app.state.extension_runtime.store,
         )
         window = webview.create_window(
             APP_WINDOW_TITLE, f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800

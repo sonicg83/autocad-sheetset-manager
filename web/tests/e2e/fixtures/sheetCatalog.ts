@@ -61,12 +61,13 @@ export type SheetCatalogState = {
 };
 
 // 假桥调用记录保存在浏览器侧（window.__catalogBridge）：跨 Node/浏览器边界统一经本 helper 读取
-export async function readBridgeCalls(page: Page): Promise<{saveRequests: {extension_id: string; action_id: string; workspace_id: string}[]; openFolderCalls: string[]}> {
+export async function readBridgeCalls(page: Page): Promise<{saveRequests: {extension_id: string; action_id: string; workspace_id: string}[]; openFolderCalls: string[]; artifactFolderCalls: {extension_id: string; artifact_id: string}[]}> {
   return page.evaluate(() => {
-    const calls = (window as unknown as {__catalogBridge?: {saveRequests: unknown[]; openFolderCalls: string[]}}).__catalogBridge;
+    const calls = (window as unknown as {__catalogBridge?: {saveRequests: unknown[]; openFolderCalls: string[]; artifactFolderCalls: unknown[]}}).__catalogBridge;
     return {
       saveRequests: (calls?.saveRequests ?? []) as {extension_id: string; action_id: string; workspace_id: string}[],
       openFolderCalls: calls?.openFolderCalls ?? [],
+      artifactFolderCalls: (calls?.artifactFolderCalls ?? []) as {extension_id: string; artifact_id: string}[],
     };
   });
 }
@@ -236,7 +237,11 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
 
   if (!options.noShell) {
     await page.addInitScript(({mode, errorCode}) => {
-      const calls = {saveRequests: [] as unknown[], openFolderCalls: [] as string[]};
+      const calls = {
+        saveRequests: [] as unknown[],
+        openFolderCalls: [] as string[],
+        artifactFolderCalls: [] as {extension_id: string; artifact_id: string}[],
+      };
       (window as unknown as Record<string, unknown>).__catalogBridge = calls;
       (window as unknown as Record<string, unknown>).pywebview = {
         api: {
@@ -244,6 +249,11 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
           on_files_dropped: async () => {},
           open_workspace_folder: async (workspaceId: string) => {
             calls.openFolderCalls.push(workspaceId);
+            return {ok: true, value: null};
+          },
+          // Task 11B：导出成果"打开所在文件夹"专用桥方法（前端只传标识，不传路径）
+          open_artifact_folder: async (extensionId: string, artifactId: string) => {
+            calls.artifactFolderCalls.push({extension_id: extensionId, artifact_id: artifactId});
             return {ok: true, value: null};
           },
           request_extension_save: async (extensionId: string, actionId: string, workspaceId: string) => {

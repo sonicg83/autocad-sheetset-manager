@@ -23,7 +23,7 @@ import shutil
 import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,11 +33,20 @@ from dst_manager.extensions.artifacts import (
     ArtifactMetadata,
 )
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
-from dst_manager.extensions.builtin.sheet_catalog.errors import SheetCatalogError
+from dst_manager.extensions.builtin.sheet_catalog.errors import (
+    SHEET_CATALOG_MESSAGE_KEYS,
+    SheetCatalogError,
+)
 from dst_manager.extensions.builtin.sheet_catalog.extension import (
     ArtifactProposalDirectory,
     SheetCatalogExecuteRequest,
     SheetCatalogExecuteResponse,
+)
+from dst_manager.extensions.builtin.sheet_catalog.templates import (
+    TEMPLATE_SCHEMA_VERSION,
+    _template_from_json,
+    load_templates,
+    save_templates,
 )
 from dst_manager.extensions.builtin.sheet_catalog.workbook import validate_candidate
 from dst_manager.extensions.capabilities import (
@@ -79,6 +88,11 @@ __all__ = [
 
 #: 清单不可读时注册表用资源串占位（Task 1 披露）；占位记录不落库、不可启用。
 _PLACEHOLDER_ERROR = "EXTENSION_MANIFEST_INVALID"
+
+#: 模板校验分派的内置扩展（Task 11B / Ruling-11）：该扩展的设置 PUT 语义由
+#: :func:`save_templates` 全权解释（SC-06 服务端强制）；其余扩展（未来）保持
+#: 通用 JSON 存储路径，不受模板规则影响。
+_TEMPLATE_SETTINGS_EXTENSION_ID = "dst-manager.sheet-catalog"
 
 
 class ExtensionPlatformError(RuntimeError):
@@ -176,6 +190,11 @@ class ExtensionRuntime:
     def save_grants(self) -> SaveGrantStore | None:
         """一次性保存授权存储；未装配时执行通道契约化拒绝。"""
         return self._save_grants
+
+    @property
+    def store(self) -> ExtensionStore:
+        """扩展仓储（桌面壳桥只读消费：Task 11B 导出成果定位）。"""
+        return self._store
 
     @property
     def proposal_root(self) -> Path | None:
@@ -319,6 +338,13 @@ class ExtensionRuntime:
                 status_code=422,
                 params={"settings_schema": manifest.settings_schema, "submitted": schema_version},
             )
+        if (
+            extension_id == _TEMPLATE_SETTINGS_EXTENSION_ID
+            and schema_version == TEMPLATE_SCHEMA_VERSION
+        ):
+            # SC-06 服务端接线（Task 11B）：图纸目录设置 PUT 经 save_templates
+            # 强制全部模板规则，存储的也是规范序列化负载（GET 回读一致）。
+            value = self._save_catalog_templates(extension_id, value, expected_revision)
         try:
             return self._store.put_settings(
                 extension_id, schema_version, value, expected_revision
@@ -333,6 +359,52 @@ class ExtensionRuntime:
                     "expected_revision": expected_revision,
                     "current_revision": current.revision if current else 0,
                 },
+            ) from exc
+
+    def _save_catalog_templates(
+        self,
+        extension_id: str,
+        value: dict[str, object],
+        expected_revision: int,
+    ) -> dict[str, object]:
+        """图纸目录设置 PUT → 模板校验（Task 5 ``save_templates`` 全权解释）。
+
+        服务端权威：casefold 重名、100 上限、内置不可变（同名影子模板）、
+        修订冲突（expected/current）与未知高 schema 拒绝（Ruling-9：原 JSON
+        保留）全部由 ``save_templates`` 强制；结构性坏负载（缺 UUID/缺列等）
+        按设置无效契约化 422。成功返回可持久化的规范序列化负载。
+        """
+        current = self._store.get_settings(extension_id)
+        collection = load_templates(current)  # 服务端修订 + 未知高 schema 标记
+        try:
+            entries = value.get("user_templates")
+            if not isinstance(entries, list):
+                raise TypeError(
+                    "SHEET_CATALOG_TEMPLATES_INVALID: user_templates 必须是模板数组"
+                )
+            incoming = []
+            for entry in entries:
+                if isinstance(entry, dict) and entry.get("template_id") is None:
+                    raise ValueError(
+                        "SHEET_CATALOG_TEMPLATE_ID_REQUIRED: 保存前必须分配模板 UUID"
+                    )
+                incoming.append(_template_from_json(entry))
+            collection = replace(collection, user_templates=tuple(incoming))
+            return save_templates(collection, expected_revision)
+        except SheetCatalogError as exc:
+            raise ExtensionPlatformError(
+                exc.code,
+                str(exc),
+                status_code=_SHEET_CATALOG_ERROR_STATUS.get(exc.code, 503),
+                params=dict(exc.params),
+                key_override=SHEET_CATALOG_MESSAGE_KEYS[exc.code],
+            ) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExtensionPlatformError(
+                "EXTENSION_SETTINGS_INVALID",
+                str(exc),
+                status_code=422,
+                params={"extension_id": extension_id},
             ) from exc
 
     def get_preference(self, extension_id: str, workspace_id: str) -> VersionedJson:
@@ -687,4 +759,17 @@ _ERROR_STATUS: dict[str, int] = {
     "SAVE_GRANT_INVALID": 409,
     "EXPORT_DESTINATION_CHANGED": 409,
     "ARTIFACT_WRITE_FAILED": 503,
+}
+
+#: SheetCatalogError 目录码默认 HTTP 状态（沿用 ARCH-DM-006 §12 映射风格：
+#: 并发/状态冲突 409，负载校验 422，宿主环境失败 503）。模板保存路径只会
+#: 产生其中一部分；词汇保持封闭，未登记的新码兜底 503（对齐 _platform_error）。
+_SHEET_CATALOG_ERROR_STATUS: dict[str, int] = {
+    "SHEET_CATALOG_TEMPLATE_CONFLICT": 409,
+    "SHEET_CATALOG_COLUMN_DUPLICATE": 409,
+    "SHEET_CATALOG_TEMPLATE_LIMIT": 422,
+    "SHEET_CATALOG_EXPRESSION_INVALID": 422,
+    "SHEET_CATALOG_FIELD_UNDEFINED": 422,
+    "SHEET_CATALOG_VALUE_MISSING": 422,
+    "SHEET_CATALOG_XLSX_INVALID": 503,
 }
