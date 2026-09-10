@@ -98,9 +98,16 @@ def _column_widths(
 def _text_cell(
     worksheet, row: int, column: int, value: str, alignment: Alignment
 ):
-    """写入字符串单元格：``=`` 开头的值显式压回文本类型，绝不成为公式。"""
-    cell = worksheet.cell(row=row, column=column, value=value)
-    cell.data_type = "s"
+    """写入单元格：非空值为字符串类型（``=`` 开头压回文本，绝不成为公式）。
+
+    空值不赋内容但**仍创建单元格并施加样式**：XLSX 只落盘有样式的空单元格，
+    这样行尾全空的数据行读回后行仍存在（``max_row`` 覆盖全部数据行），
+    行数语义与输入一致；空单元格读回 ``None``/``n``。
+    """
+    cell = worksheet.cell(row=row, column=column)
+    if value != "":
+        cell.value = value
+        cell.data_type = "s"
     cell.alignment = alignment
     return cell
 
@@ -124,8 +131,7 @@ def write_candidate(
     for row_index, row in enumerate(row_tuples, start=2):
         for column in range(column_count):
             value = row[column] if column < len(row) else ""
-            if value == "":
-                continue  # XLSX 无持久化空串：空值保持空单元格（读回 None）。
+            # 空值也写占位单元格：保证全空/行尾全空数据行读回后行仍存在。
             _text_cell(worksheet, row_index, column + 1, value, _DATA_ALIGNMENT)
 
     worksheet.freeze_panes = "A2"

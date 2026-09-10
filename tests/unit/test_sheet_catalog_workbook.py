@@ -114,6 +114,31 @@ def test_write_candidate_empty_rows_yields_header_only_workbook(tmp_path):
     assert validate_candidate(path, HEADERS, 0).data_rows == 0
 
 
+def test_write_candidate_all_empty_rows_roundtrip(tmp_path):
+    """全部字段为空的数据行必须保住行数：写出、读回、自检三者一致。"""
+    path = tmp_path / "all-empty.xlsx"
+    summary = write_candidate(path, HEADERS, (("",) * 5, ("",) * 5, ("",) * 5))
+    _wb, ws = reload_candidate(path)
+    assert ws.max_row == 4
+    assert all(
+        cell.value is None for row in ws.iter_rows(min_row=2) for cell in row
+    )
+    assert summary.data_rows == 3
+    assert validate_candidate(path, HEADERS, 3).data_rows == 3
+
+
+def test_write_candidate_trailing_empty_row_keeps_row_count(tmp_path):
+    """行尾全空行读回后行仍存在，data_rows 与输入行数一致。"""
+    path = tmp_path / "trailing.xlsx"
+    rows = (("1", "JG-001", "总平面布置图", "A1", ""), ("", "", "", "", ""))
+    summary = write_candidate(path, HEADERS, rows)
+    _, ws = reload_candidate(path)
+    assert ws.max_row == 3
+    assert tuple(cell.value for cell in ws[3]) == (None,) * 5
+    assert summary.data_rows == 2
+    assert validate_candidate(path, HEADERS, 2).data_rows == 2
+
+
 def test_write_candidate_caps_column_width_and_wraps_long_content(tmp_path):
     long_title = "很长的图纸名称" * 12
     path = tmp_path / "wide.xlsx"
