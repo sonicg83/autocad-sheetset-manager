@@ -7,11 +7,16 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from dst_manager.application.service import ApplicationError
+from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
+from dst_manager.extensions.capabilities import CapabilityBroker
+from dst_manager.extensions.manifest import load_manifest
+from dst_manager.extensions.snapshots import SnapshotProperty
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
+from dst_manager.infrastructure.persistence.database import Database
 from dst_manager.interfaces.api import create_app
 from dst_manager.interfaces.error_contracts import ErrorPayloadModel
 
@@ -1441,3 +1446,77 @@ def test_unknown_api_error_omits_message_key(tmp_path, tiny_workspace, monkeypat
     assert body["code"] == "FUTURE_CODE"
     assert "message_key" not in body
     assert body["message"] == "未来新增的错误"
+
+
+# ---------------------------------------------------------------- PLAN-DM-020 Task 4：扩展只读快照的副作用回归
+def test_extension_snapshot_build_is_read_only(tmp_path, tiny_workspace, monkeypatch):
+    """构建扩展快照不写 DST/DWG、不改时间戳、不创建 .dst-manager/，
+    也不触发 workspace upsert（reader 只做只读查询，不调用 open_workspace）。"""
+    dst, _ = tiny_workspace
+    data_dir = tmp_path / "application-data"
+    client = TestClient(create_app(Settings(data_dir=data_dir)))
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    workspace_id = opened["id"]
+    revision_id = opened["revision_id"]
+
+    def _file_identities():
+        return {
+            path: (path.stat().st_mtime_ns, file_sha256(path))
+            for path in sorted(dst.parent.iterdir(), key=str)
+            if path.is_file()
+        }
+
+    def _project_tree():
+        # 工程目录树以顶层条目为准；应用数据库目录（data_dir）本身在 tmp_path 下，但
+        # 其内容变化与工程文件无关，快照回归只监控工程侧新增/删除。
+        return sorted(path.name for path in dst.parent.iterdir())
+
+    before_files = _file_identities()
+    before_tree = _project_tree()
+    row_before = client.app.state.service.database.get_workspace(workspace_id)
+
+    def _forbid_upsert(self, *args, **kwargs):
+        raise AssertionError("快照构建不得执行 workspace upsert")
+
+    def _forbid_open(self, *args, **kwargs):
+        raise AssertionError("快照构建不得调用 open_workspace")
+
+    monkeypatch.setattr(Database, "upsert_workspace", _forbid_upsert)
+    monkeypatch.setattr(DstManagerService, "open_workspace", _forbid_open)
+
+    broker = CapabilityBroker(
+        {
+            "dst-manager.sheet-catalog": load_manifest(
+                "dst_manager/extensions/builtin/sheet_catalog/manifest.yaml"
+            )
+        },
+        ExtensionWorkspaceReader(client.app.state.service.database.sessions),
+        allowed_capabilities=frozenset({"workspace.snapshot.read.v1"}),
+    )
+    context = broker.context("dst-manager.sheet-catalog", workspace_id, revision_id)
+    snapshot = context.workspace_snapshot()
+    context.close()
+
+    assert snapshot.workspace_id == workspace_id
+    assert snapshot.revision_id == revision_id
+    assert [sheet.number for sheet in snapshot.sheets] == ["001"]
+    assert [sheet.file_name for sheet in snapshot.sheets] == ["A.dwg"]
+    assert snapshot.sheetset.custom_properties == (SnapshotProperty("项目号", "P-000"),)
+    assert _file_identities() == before_files
+    assert _project_tree() == before_tree
+    assert not (dst.parent / ".dst-manager").exists()
+
+    row_after = client.app.state.service.database.get_workspace(workspace_id)
+    assert (
+        row_after.id,
+        row_after.root,
+        row_after.dst_path,
+        row_after.current_revision,
+        row_after.root_override,
+    ) == (
+        row_before.id,
+        row_before.root,
+        row_before.dst_path,
+        row_before.current_revision,
+        row_before.root_override,
+    )

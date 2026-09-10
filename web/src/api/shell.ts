@@ -26,6 +26,9 @@ window.addEventListener("pywebviewready",()=>{shellReady.value=true},{once:true}
 // PLAN-DM-021 Task 9（I18N-11）：桥错误补 message_key/params（与后端统一错误目录同构），
 // message 保留为兼容原始文本，仅在未知 code 时作为回退。
 export type ShellResult<T>={ok:true;value:T}|{ok:false;code:string;message:string;message_key?:string;params?:Record<string,string|number|boolean|string[]>};
+// PLAN-DM-020 Task 8：一次性保存授权回执。前端只拿到随机 ID/文件名/过期时间，
+// 绝不拿到目标绝对路径——最终落盘由宿主在执行阶段原子完成（ARCH-DM-006 §9）。
+export type ShellSaveGrant={save_grant_id:string;file_name:string;expires_at:string};
 export interface SheetShellBridge {
   open_workspace_folder(workspace_id:string):Promise<ShellResult<null>>;
   load_sheet_columns(workspace_id:string):Promise<ShellResult<ColumnPreferences|null>>;
@@ -34,6 +37,12 @@ export interface SheetShellBridge {
   // SC-11（SPEC-DM-011 §4 / ARCH-DM-004 §4.2）：外链经系统浏览器打开；
   // url 只能是 GET /api/about 返回的后端登记值，桥侧再按代码内白名单二次校验
   open_external(url:string):Promise<ShellResult<null>>;
+  // 扩展成果原生"另存为"（PLAN-DM-020 Task 8）：桥不接受前端建议名/路径，
+  // 建议文件名与固定 XLSX 过滤器由宿主从可信工作区快照生成。
+  request_extension_save(extension_id:string,action_id:string,workspace_id:string):Promise<ShellResult<ShellSaveGrant|null>>;
+  // 导出成果"打开所在文件夹"（PLAN-DM-020 Task 11B / SPEC §10）：前端只传
+  // 扩展与 Artifact 标识，路径权威在宿主（登记 Artifact 的 output_path）。
+  open_artifact_folder(extension_id:string,artifact_id:string):Promise<ShellResult<null>>;
 }
 
 // 旧/部分桥可能只暴露 select_file/on_files_dropped：新方法缺失时返回 null，
@@ -86,4 +95,28 @@ export async function openExternalLink(url:string):Promise<boolean|undefined>{
   if(!bridge||typeof bridge.open_external!=="function")return undefined;
   const result=await bridge.open_external(url);
   return result.ok===true?true:false;
+}
+
+// ---- PLAN-DM-020 Task 8：扩展成果"另存为"统一封装 ----
+// 三态语义：null = 桥或 request_extension_save 方法缺失（浏览器开发态/旧壳，
+// 调用方禁用导出入口）；
+// ok:true value:null = 用户取消对话框（宿主未创建授权，草稿/预览保持不变）；
+// ok:true value = 一次性保存授权回执（save_grant_id/file_name/expires_at，
+// 不含目标绝对路径）；ok:false = 工作区/动作校验拒绝（SHELL_WORKSPACE_UNAVAILABLE/
+// EXTENSION_NOT_FOUND/EXTENSION_ACTION_NOT_FOUND/EXTENSION_CAPABILITY_UNAVAILABLE）。
+export async function requestExtensionSave(extensionId:string,actionId:string,workspaceId:string):Promise<ShellResult<ShellSaveGrant|null>|null>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.request_extension_save!=="function")return null;
+  return bridge.request_extension_save(extensionId,actionId,workspaceId);
+}
+
+// ---- PLAN-DM-020 Task 11B：导出成果"打开所在文件夹"统一封装 ----
+// 三态语义：null = 桥或 open_artifact_folder 方法缺失（浏览器开发态/旧壳，
+// 调用方提示不支持）；ok:true = 壳已在资源管理器打开成果所在目录并尽量选中
+// 文件；ok:false = Artifact 不存在/扩展不匹配/目录已被移动删除
+// （EXTENSION_ARTIFACT_NOT_FOUND/SHELL_ARTIFACT_DIRECTORY_NOT_FOUND/SHELL_OPEN_FAILED）。
+export async function openArtifactFolder(extensionId:string,artifactId:string):Promise<ShellResult<null>|null>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.open_artifact_folder!=="function")return null;
+  return bridge.open_artifact_folder(extensionId,artifactId);
 }

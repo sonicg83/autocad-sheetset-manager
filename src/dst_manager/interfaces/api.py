@@ -1,8 +1,9 @@
 import asyncio
 import json
+import logging
 import os
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
@@ -11,9 +12,13 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from dst_manager.application.extensions.runtime import ExtensionRuntime, default_runtime
 from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
+from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
+from dst_manager.extensions.save_grants import SaveGrantStore
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
+from dst_manager.interfaces import extension_api
 from dst_manager.interfaces.contracts import (
     ChangeExecuteRequest,
     ChangePreviewRequest,
@@ -67,6 +72,8 @@ from dst_manager.settings.store import (
 )
 
 from ..runtime import resource_dir
+
+logger = logging.getLogger(__name__)
 
 
 class OpenRequest(ContractModel):
@@ -184,6 +191,9 @@ def create_app(
     settings: Settings | None = None,
     on_workspace_opened: Callable[[object], None] | None = None,
     runtime_settings: RuntimeSettings | None = None,
+    extension_runtime: ExtensionRuntime | None = None,
+    extension_index: Sequence | None = None,
+    save_grants: SaveGrantStore | None = None,
 ) -> FastAPI:
     """构建 FastAPI 应用。
 
@@ -194,10 +204,34 @@ def create_app(
     ``runtime_settings`` 是进程内设置快照持有者（PLAN-DM-019 任务 4）：由
     ``run_desktop`` 构造一次同时供 API 与桌面服务共用；为 None 时（开发态
     serve / 既有测试）不注册设置与关于端点，契约零变化。
+
+    ``extension_runtime``/``extension_index`` 是扩展平台注入点（PLAN-DM-020
+    任务 3）：严格在 ``DstManagerService`` 完成数据库迁移与发布恢复之后才创建/
+    接收运行时并调用 ``discover()``；单扩展发现失败由注册表隔离，不影响
+    ``/api/health`` 与核心工作区 API。
+
+    ``save_grants`` 是扩展执行通道注入点（PLAN-DM-020 任务 9）：桌面壳把与
+    ``ShellBridge`` **同一个** :class:`SaveGrantStore` 传入，桥创建的一次性
+    保存授权才能被 API 执行消费；缺省时默认装配新建独立实例。
     """
     app = FastAPI(title="DST Manager", version="0.3.0")
     service = DstManagerService(settings)
     app.state.service = service
+
+    if extension_runtime is None:
+        extension_runtime = default_runtime(
+            service.database.sessions,
+            # 未注入时默认装配新建独立实例：默认装配下执行通道可用，
+            # 桌面壳的共享实例经参数传入（PLAN-DM-020 任务 9）。
+            save_grants=save_grants if save_grants is not None else SaveGrantStore(),
+            proposal_root=(service.settings.data_dir) / "tmp" / "extension-candidates",
+        )
+    app.state.extension_runtime = extension_runtime
+    try:
+        extension_runtime.start(extension_index or BUILTIN_EXTENSION_INDEX)
+    except Exception:
+        logger.warning("EXTENSION_BOOTSTRAP_FAILED", exc_info=True)
+    extension_api.register_extension_routes(app)
 
     @app.exception_handler(ApplicationError)
     async def application_error(_, exc: ApplicationError):

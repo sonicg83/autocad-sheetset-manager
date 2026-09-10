@@ -33,6 +33,10 @@ export type SubsetOperation = components["schemas"]["SubsetOperationResponse"];
 export type SourceBaseline = components["schemas"]["SourceBaselineResponse"];
 export type DerivedSubset = components["schemas"]["DerivedSubsetResponse"];
 export type CadGroup = components["schemas"]["CadGroupResponse"];
+// 扩展平台契约（PLAN-DM-020 Task 10；ARCH-DM-006 §8）
+export type ExtensionSummary = components["schemas"]["ExtensionSummaryModel"];
+export type ExtensionUiContribution = components["schemas"]["ExtensionUiContributionModel"];
+export type ExtensionLifecycleStatus = ExtensionSummary["status"];
 
 export type ChangeCommand = NonNullable<
   components["schemas"]["ChangePreviewRequest"]["commands"]

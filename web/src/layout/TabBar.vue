@@ -1,22 +1,19 @@
 <script setup lang="ts">
-// 固定标签栏：role="tablist" + roving tabindex（SPEC-DM-006 §7.2）；键盘模型由 App.vue 经 useShellTabs 的 onKeydown 回退挂载到根元素
-const props=defineProps<{active:string;revisionsDisabled?:boolean}>();
+// 标签栏：role="tablist" + roving tabindex（SPEC-DM-006 §7.2 / PLAN-DM-020 Task 10）。
+// 标签列表由 App 以 TabDescriptor[] 提供：核心三标签顺序固定在前，扩展页面追加在后；
+// label 为已本地化文本（App 经宿主 i18n 渲染），id 为稳定标签标识与焦点归还目标。
+// 键盘模型由 App.vue 经 useShellTabs 的 onKeydown 回退挂载到根元素
+import type {TabDescriptor} from "../composables/useShellTabs";
+defineProps<{descriptors:TabDescriptor[];active:string}>();
 const emit=defineEmits<{select:[id:string]}>();
-// label 为语义键（I18N-07），模板经 $t 渲染；id 为稳定标签标识（业务不变）
-const TABS=[
-  {id:"sheets",labelKey:"shell.tabs.sheets",num:"①"},
-  {id:"properties",labelKey:"shell.tabs.properties",num:"②"},
-  {id:"revisions",labelKey:"shell.tabs.revisions",num:"③"},
-] as const;
-function isDisabled(id:string){return id==="revisions"&&props.revisionsDisabled===true}
-function clickTab(id:string){if(!isDisabled(id))emit("select",id)}
+function clickTab(tab:TabDescriptor){if(tab.disabled!==true)emit("select",tab.id)}
 </script>
 <template>
   <nav class="tabbar" role="tablist" :aria-label="$t('shell.tabs.region')">
-    <button v-for="tab in TABS" :key="tab.id" :id="`tab-${tab.id}`" type="button" class="tab" role="tab"
+    <button v-for="tab in descriptors" :key="tab.id" :id="`tab-${tab.id}`" type="button" class="tab" role="tab"
       :aria-selected="active===tab.id" :aria-controls="`panel-${tab.id}`" :tabindex="active===tab.id?0:-1"
-      :disabled="isDisabled(tab.id)" @click="clickTab(tab.id)">
-      <span class="num">{{tab.num}}</span>{{ $t(tab.labelKey) }}
+      :disabled="tab.disabled===true" @click="clickTab(tab)">
+      <span v-if="tab.number" class="num">{{tab.number}}</span>{{ tab.label }}
     </button>
     <span class="tab-ghost" :title="$t('shell.tabs.ghostTitle')">{{ $t("shell.tabs.ghost") }}</span>
   </nav>

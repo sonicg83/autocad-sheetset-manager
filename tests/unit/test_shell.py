@@ -1,12 +1,24 @@
 """pywebview 桌面壳轻量单测：桥可导入、未绑定窗口报错、绑定后对话框返回路径、拖拽回调注册与转发、Worker 子进程管理。"""
 
+import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from dst_manager.extensions.contracts import (
+    XLSX_MEDIA_TYPE,
+    ExtensionActionManifest,
+    ExtensionDescriptor,
+    ExtensionManifest,
+)
+from dst_manager.extensions.save_grants import SaveGrantError, SaveGrantStore
+from dst_manager.infrastructure.explorer import ExplorerError
+from dst_manager.infrastructure.persistence.extensions import ArtifactRecord
 from dst_manager.interfaces.shell import (
+    _NAME_INVALID_PATTERN,
     ShellBridge,
     _report_early_exit,
     _shutdown_worker,
@@ -441,3 +453,384 @@ def test_sheet_preferences_bridge_errors_carry_message_key():
     assert io_error["message_key"] == "errors.shell.preferencesIo"
     assert directory_missing["message_key"] == "errors.shell.directoryNotFound"
     assert unavailable["message_key"] == "errors.shell.workspaceUnavailable"
+
+
+# ---- PLAN-DM-020 Task 8：扩展成果原生"另存为"（SAVE_DIALOG + 一次性授权） ----
+# 安全红线：只允许 registry 中 output_kind=xlsx 且 MIME 匹配的动作；桥不接受前端
+# 建议名——宿主从当前可信工作区快照严格生成 `<图纸集名称>-图纸目录.xlsx` 并清洗
+# Windows 非法字符；对话框固定 XLSX filter；取消不创建授权；返回体不含目标绝对路径。
+
+XLSX_ACTION = ExtensionActionManifest(
+    action_id="export-xlsx", output_kind="xlsx", media_type=XLSX_MEDIA_TYPE
+)
+NON_XLSX_ACTION = ExtensionActionManifest(
+    action_id="export-xlsx", output_kind=None, media_type=None
+)
+BAD_MIME_ACTION = ExtensionActionManifest(
+    action_id="export-xlsx",
+    output_kind="xlsx",
+    media_type="application/zip",
+)
+
+
+def _manifest(actions) -> ExtensionManifest:
+    return ExtensionManifest(
+        extension_id="dst-manager.sheet-catalog",
+        version="0.1.0",
+        host_contract=1,
+        enabled_by_default=True,
+        name_key="extensions.sheetCatalog.name",
+        description_key="extensions.sheetCatalog.description",
+        required_capabilities=("workspace.snapshot.read.v1",),
+        permissions=(),
+        ui_contributions=(),
+        actions=tuple(actions),
+        settings_schema=1,
+    )
+
+
+class _FakeRegistry:
+    def __init__(self, *manifests: ExtensionManifest):
+        self._manifests = manifests
+
+    def list(self):
+        return [
+            ExtensionDescriptor(manifest=manifest, status="AVAILABLE", error_code=None)
+            for manifest in self._manifests
+        ]
+
+
+class _SaveWorkspace:
+    workspace_id = "workspace-1"
+    dst_path = Path(r"C:\proj\My Project<v2>.dst")
+    root = Path(r"C:\proj")
+
+
+class _SaveContext:
+    current = _SaveWorkspace()
+
+    def clear(self, workspace_id: str) -> bool:
+        return False
+
+
+class _SaveDialogWindow:
+    """记录 SAVE_DIALOG 调用参数并返回固定结果（None/""=取消；命中返回 str，
+    对齐 pywebview SAVE_DIALOG 真实返回形态）。"""
+
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def create_file_dialog(self, dialog_type, directory="", allow_multiple=False,
+                           save_filename="", file_types=None):
+        self.calls.append(
+            {
+                "dialog_type": dialog_type,
+                "save_filename": save_filename,
+                "file_types": file_types,
+            }
+        )
+        return self.result
+
+
+def _save_bridge(registry=None, save_grants=None, result=None):
+    bridge = ShellBridge(
+        context=_SaveContext(),
+        registry=registry if registry is not None else _FakeRegistry(_manifest([XLSX_ACTION])),
+        save_grants=save_grants if save_grants is not None else SaveGrantStore(),
+    )
+    window = _SaveDialogWindow(result)
+    bridge.bind(window)
+    return bridge, window
+
+
+def test_request_extension_save_requires_window():
+    bridge = ShellBridge(
+        context=_SaveContext(), registry=_FakeRegistry(_manifest([XLSX_ACTION])),
+        save_grants=SaveGrantStore(),
+    )
+    with pytest.raises(RuntimeError):
+        bridge.request_extension_save(
+            "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+        )
+
+
+def test_request_extension_save_rejects_without_matching_context():
+    result = ShellBridge().request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+
+
+def test_request_extension_save_rejects_unwired_bridge():
+    """授权通道未装配（run_desktop 之外的裸桥）时契约化拒绝而非 AttributeError。"""
+    bridge = ShellBridge(context=_SaveContext())
+    bridge.bind(_SaveDialogWindow("C:\\out.xlsx"))
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+
+
+def test_request_extension_save_rejects_unknown_extension_or_action():
+    bridge, window = _save_bridge()
+    unknown_extension = bridge.request_extension_save(
+        "dst-manager.other", "export-xlsx", "workspace-1"
+    )
+    unknown_action = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "other-action", "workspace-1"
+    )
+    assert unknown_extension["ok"] is False
+    assert unknown_extension["code"] == "EXTENSION_NOT_FOUND"
+    assert unknown_action["ok"] is False
+    assert unknown_action["code"] == "EXTENSION_ACTION_NOT_FOUND"
+    assert window.calls == []  # 校验失败不弹对话框
+
+
+@pytest.mark.parametrize("action", [NON_XLSX_ACTION, BAD_MIME_ACTION])
+def test_request_extension_save_only_allows_xlsx_actions_with_matching_mime(action):
+    bridge, window = _save_bridge(registry=_FakeRegistry(_manifest([action])))
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert window.calls == []  # 非 XLSX 动作不进入保存对话框
+
+
+def test_request_extension_save_accepts_only_expected_signature():
+    """桥不接受前端建议名/路径：签名只有扩展、动作与工作区三个标识参数。"""
+    import inspect
+
+    params = list(inspect.signature(ShellBridge.request_extension_save).parameters)
+    assert params == ["self", "extension_id", "action_id", "workspace_id"]
+
+
+def test_request_extension_save_opens_fixed_xlsx_save_dialog(tmp_path: Path):
+    import webview
+
+    target = tmp_path / "chosen.xlsx"
+    bridge, window = _save_bridge(result=str(target))
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result["ok"] is True
+    assert set(result["value"]) == {"save_grant_id", "file_name", "expires_at"}
+    assert result["value"]["save_grant_id"]
+    call = window.calls[0]
+    assert call["dialog_type"] == webview.SAVE_DIALOG
+    # 建议名由宿主从可信工作区快照生成并清洗非法字符，不接受前端建议名
+    assert call["save_filename"].endswith("-图纸目录.xlsx")
+    assert not any(char in call["save_filename"] for char in '<>:"/\\|?*')
+    assert call["file_types"] == ["XLSX 工作簿 (*.xlsx)"]
+
+
+def test_request_extension_save_return_value_never_carries_target_path(tmp_path: Path):
+    target = tmp_path / "chosen.xlsx"
+    bridge, _ = _save_bridge(result=str(target))
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert str(target) not in repr(result)
+    assert str(tmp_path) not in repr(result)
+
+
+def test_request_extension_save_creates_single_use_grant(tmp_path: Path):
+    target = tmp_path / "chosen.xlsx"
+    bridge, _ = _save_bridge(result=str(target))
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    store = bridge._save_grants
+    assert store.active_count() == 1
+    consumed = store.consume(
+        result["value"]["save_grant_id"],
+        "dst-manager.sheet-catalog",
+        "export-xlsx",
+        "workspace-1",
+    )
+    assert consumed.target == target.resolve()
+    with pytest.raises(SaveGrantError):
+        store.consume(
+            result["value"]["save_grant_id"],
+            "dst-manager.sheet-catalog",
+            "export-xlsx",
+            "workspace-1",
+        )
+
+
+def test_request_extension_save_cancel_returns_value_none_without_grant():
+    bridge, window = _save_bridge(result=None)
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result == {"ok": True, "value": None}
+    assert window.calls != []  # 确实弹出过对话框
+    assert bridge._save_grants.active_count() == 0  # 取消不创建授权
+
+
+def test_suggested_name_sanitizes_windows_illegal_characters_and_limits_length():
+    from dst_manager.interfaces.shell import _suggested_catalog_name
+
+    illegal = _suggested_catalog_name(Path('A<B>|"*?.dst'))
+    assert illegal.endswith("-图纸目录.xlsx")
+    stem = illegal[: -len("-图纸目录.xlsx")]
+    assert stem == "A_B_____"  # 每个非法字符替换为下划线，无残留
+    # / \ : 是 Windows 路径分隔符，无法出现在真实文件名 stem 中，但净化正则仍覆盖
+    assert re.search(r'[/\\:]', _NAME_INVALID_PATTERN)
+    long_stem = "字" * 200
+    limited = _suggested_catalog_name(Path(f"{long_stem}.dst"))
+    assert limited.endswith("-图纸目录.xlsx")
+    assert len(limited) <= 110  # 图纸集名称部分限制长度，留足扩展名与后缀
+    empty = _suggested_catalog_name(Path("  .dst"))
+    assert empty == "图纸集-图纸目录.xlsx"  # 清洗后为空回退到稳定默认名
+
+
+def test_request_extension_save_composed_filter_matches_pywebview_parse_format():
+    from webview.util import parse_file_type
+
+    bridge, window = _save_bridge(result=None)
+    bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    composed = window.calls[0]["file_types"][0]
+    _, patterns = parse_file_type(composed)
+    assert patterns == "*.xlsx"
+
+
+# ---- PLAN-DM-020 Task 11B：导出成果"打开所在文件夹"桥方法（SPEC §10） ----
+# 前端只传扩展与 Artifact 标识，路径权威在宿主：桥经 ExtensionStore 校验
+# Artifact 存在且 extension_id 匹配后才打开登记 output_path 的所在目录。
+
+
+def _artifact_record(output_path: Path) -> ArtifactRecord:
+    return ArtifactRecord(
+        artifact_id="artifact-1",
+        extension_id="dst-manager.sheet-catalog",
+        extension_version="0.1.0",
+        workspace_id="workspace-1",
+        source_revision_id="rev-1",
+        kind="sheet-catalog",
+        media_type=XLSX_MEDIA_TYPE,
+        management_relation="external",
+        output_path=str(output_path),
+        file_name="图纸目录.xlsx",
+        size_bytes=4096,
+        sha256="a" * 64,
+        created_at=datetime(2026, 9, 10, tzinfo=UTC),
+    )
+
+
+class _RecordingExplorer:
+    def __init__(self):
+        self.selected: list[Path] = []
+        self.opened: list[Path] = []
+
+    def open_folder_and_select(self, file: Path) -> None:
+        self.selected.append(file)
+
+    def open_folder(self, folder: Path) -> None:
+        self.opened.append(folder)
+
+
+class _FakeArtifactStore:
+    def __init__(self, record=None):
+        self._record = record
+        self.queries: list[str] = []
+
+    def get_artifact(self, artifact_id: str):
+        self.queries.append(artifact_id)
+        if self._record is not None and self._record.artifact_id == artifact_id:
+            return self._record
+        return None
+
+
+def _artifact_bridge(record=None):
+    explorer = _RecordingExplorer()
+    store = _FakeArtifactStore(record)
+    bridge = ShellBridge(extension_store=store, explorer=explorer)
+    return bridge, explorer, store
+
+
+def test_open_artifact_folder_selects_exported_file_in_explorer(tmp_path: Path):
+    output = tmp_path / "导出" / "图纸目录.xlsx"
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"xlsx")
+    bridge, explorer, store = _artifact_bridge(_artifact_record(output))
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result == {"ok": True, "value": None}
+    assert explorer.selected == [output]  # 尽量选中文件而非只开目录
+    assert store.queries == ["artifact-1"]
+
+
+def test_open_artifact_folder_missing_artifact_is_structured_failure():
+    bridge, explorer, _ = _artifact_bridge()
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "no-such")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_ARTIFACT_NOT_FOUND"
+    assert result["message_key"] == "errors.extension.artifactNotFound"
+    assert explorer.selected == [] and explorer.opened == []  # 不打开任何目录
+
+
+def test_open_artifact_folder_rejects_extension_mismatch(tmp_path: Path):
+    output = tmp_path / "图纸目录.xlsx"
+    output.write_bytes(b"xlsx")
+    bridge, explorer, _ = _artifact_bridge(_artifact_record(output))
+
+    result = bridge.open_artifact_folder("dst-manager.other", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_ARTIFACT_NOT_FOUND"
+    assert explorer.selected == [] and explorer.opened == []
+
+
+def test_open_artifact_folder_directory_moved_is_structured_failure(tmp_path: Path):
+    record = _artifact_record(tmp_path / "已移动" / "图纸目录.xlsx")
+    bridge, explorer, _ = _artifact_bridge(record)
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND"
+    assert result["message_key"] == "errors.shell.artifactDirectoryNotFound"
+    assert explorer.selected == [] and explorer.opened == []
+
+
+def test_open_artifact_folder_explorer_failure_maps_to_shell_open_failed(tmp_path: Path):
+    output = tmp_path / "图纸目录.xlsx"
+    output.write_bytes(b"xlsx")
+
+    class _BrokenExplorer:
+        def open_folder_and_select(self, file: Path) -> None:
+            raise ExplorerError("无法启动文件资源管理器")
+
+    bridge = ShellBridge(
+        extension_store=_FakeArtifactStore(_artifact_record(output)),
+        explorer=_BrokenExplorer(),
+    )
+
+    result = bridge.open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "SHELL_OPEN_FAILED"
+
+
+def test_open_artifact_folder_unwired_store_is_contract_failure():
+    result = ShellBridge().open_artifact_folder("dst-manager.sheet-catalog", "artifact-1")
+
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+
+
+def test_open_artifact_folder_accepts_only_identifier_signature():
+    """前端不传任何路径：签名只有扩展与 Artifact 两个标识参数。"""
+    import inspect
+
+    params = list(inspect.signature(ShellBridge.open_artifact_folder).parameters)
+    assert params == ["self", "extension_id", "artifact_id"]

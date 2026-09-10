@@ -93,6 +93,10 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "SHELL_EXTERNAL_URL_REJECTED": _E("errors.shell.externalUrlRejected"),
     "SHEET_PREFERENCES_IO": _E("errors.shell.preferencesIo"),
     "SHEET_PREFERENCES_INVALID": _E("errors.shell.preferencesInvalid"),
+    # 导出成果"打开所在文件夹"（PLAN-DM-020 Task 11B；artifactNotFound 复用
+    # 扩展域既有键，目录缺失用专用键区分图纸集目录语义）
+    "EXTENSION_ARTIFACT_NOT_FOUND": _E("errors.extension.artifactNotFound"),
+    "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND": _E("errors.shell.artifactDirectoryNotFound"),
     # ---- CAD/Acsm 结构校验（AcsmValidationError，422 handler） ----
     "SHEET_NOT_FOUND": _E("errors.sheet.notFound", {"object_id": str}, "object_id"),
     "ACSMSHEET_NOT_FOUND": _E("errors.sheet.nodeNotFound", {"object_id": str}, "object_id"),

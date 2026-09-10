@@ -22,7 +22,11 @@ import webview
 
 from ..application.shell_context import ShellContext
 from ..config import Settings
+from ..extensions.contracts import XLSX_MEDIA_TYPE
+from ..extensions.registry import ExtensionRegistry
+from ..extensions.save_grants import SaveGrantStore
 from ..infrastructure.explorer import Explorer, ExplorerError
+from ..infrastructure.persistence.extensions import ExtensionStore
 from ..infrastructure.sheet_preferences import (
     InvalidSheetPreferencesError,
     SheetPreferences,
@@ -52,6 +56,27 @@ _FILE_KIND_PATTERNS: dict[str, str] = {
     "dll": "*.dll",
 }
 
+# ---- PLAN-DM-020 Task 8：扩展成果原生"另存为"（SAVE_DIALOG + 一次性授权） ----
+# 只允许 registry 中 output_kind=xlsx 且 MIME 匹配的动作；建议名由宿主从当前
+# 可信工作区快照严格生成（不接受前端建议名），过滤器固定 XLSX。
+_SAVE_DIALOG_DESCRIPTION = "XLSX 工作簿"
+_SAVE_DIALOG_PATTERN = "*.xlsx"
+_NAME_SUFFIX = "-图纸目录.xlsx"
+_NAME_FALLBACK_STEM = "图纸集"
+_MAX_STEM_LENGTH = 100
+_NAME_INVALID_PATTERN = r'[<>:"/\\|?*\x00-\x1f\x7f]'
+
+
+def _suggested_catalog_name(dst_path: Path) -> str:
+    """从可信工作区 DST 生成图纸目录建议文件名（SPEC-DM-012 §9）。
+
+    Windows 非法文件名字符（``<>:"/\\|?*``）与控制字符逐个替换为下划线，
+    剥离首尾空白与点，图纸集名称部分限制长度；清洗后为空回退稳定默认名。
+    """
+    stem = re.sub(_NAME_INVALID_PATTERN, "_", dst_path.stem)
+    stem = stem.strip(" .") or _NAME_FALLBACK_STEM
+    return f"{stem[:_MAX_STEM_LENGTH]}{_NAME_SUFFIX}"
+
 
 def _sanitize_description(description: str) -> str:
     """把本地化描述净化为 pywebview parse_file_type 允许的 ``[\\w ]+`` 文本。
@@ -80,11 +105,23 @@ class ShellBridge:
         context: ShellContext | None = None,
         preferences: SheetPreferences | None = None,
         explorer: Explorer | None = None,
+        registry: ExtensionRegistry | None = None,
+        save_grants: SaveGrantStore | None = None,
+        extension_store: ExtensionStore | None = None,
     ) -> None:
-        """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。"""
+        """上下文与偏好仓库由 run_desktop 注入；缺省时仅文件选择/拖拽桥可用。
+
+        ``registry``/``save_grants`` 由桌面装配注入（Task 9 与 API runtime 共享
+        同一个 SaveGrantStore）；缺省时 request_extension_save 契约化拒绝。
+        ``extension_store``（Task 11B）由桌面装配注入与 API 同一个扩展仓储；
+        缺省时 open_artifact_folder 契约化拒绝。
+        """
         self._context = context
         self._preferences = preferences
         self._explorer = explorer if explorer is not None else Explorer()
+        self._registry = registry
+        self._save_grants = save_grants
+        self._extension_store = extension_store
         self._window: webview.Window | None = None
         self._drop_callback_id: str | None = None
         self._drop_listener_registered = False
@@ -190,6 +227,111 @@ class ShellBridge:
         try:
             webbrowser.open(url)
         except OSError as exc:
+            return shell_error("SHELL_OPEN_FAILED", str(exc))
+        return {"ok": True, "value": None}
+
+    def request_extension_save(self, extension_id: str, action_id: str, workspace_id: str) -> dict:
+        """扩展成果原生"另存为"（PLAN-DM-020 Task 8 / ARCH-DM-006 §9.1）。
+
+        只允许 registry 中 ``output_kind == "xlsx"`` 且 MIME 匹配的动作；桥不
+        接受前端建议名——建议文件名由宿主从当前可信工作区快照严格生成（
+        :func:`_suggested_catalog_name`），对话框固定 XLSX 过滤器。用户确认后
+        经共享的 :class:`SaveGrantStore` 创建一次性授权，返回
+        ``{ok:true;value:{save_grant_id,file_name,expires_at}}``——**不含目标
+        绝对路径**；用户取消返回 ``{ok:true;value:null}`` 且不创建授权。
+        """
+        error = self._context_error(workspace_id)
+        if error is not None:
+            return error
+        if self._save_grants is None or self._registry is None:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "保存授权通道未装配")
+        descriptor = next(
+            (
+                item
+                for item in self._registry.list()
+                if item.manifest.extension_id == extension_id
+            ),
+            None,
+        )
+        if descriptor is None:
+            return shell_error("EXTENSION_NOT_FOUND", f"扩展未登记：{extension_id}")
+        action = next(
+            (
+                item
+                for item in descriptor.manifest.actions
+                if item.action_id == action_id
+            ),
+            None,
+        )
+        if action is None:
+            return shell_error(
+                "EXTENSION_ACTION_NOT_FOUND",
+                f"扩展 {extension_id} 未声明动作：{action_id}",
+            )
+        if action.output_kind != "xlsx" or action.media_type != XLSX_MEDIA_TYPE:
+            return shell_error(
+                "EXTENSION_CAPABILITY_UNAVAILABLE", "该动作不支持 XLSX 保存"
+            )
+        if self._window is None:
+            raise RuntimeError("保存对话框窗口尚未就绪")
+        context = self._context.current
+        assert context is not None  # _context_error 通过后当前上下文必然存在
+        result = self._window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename=_suggested_catalog_name(context.dst_path),
+            file_types=[f"{_SAVE_DIALOG_DESCRIPTION} ({_SAVE_DIALOG_PATTERN})"],
+        )
+        if not result:
+            # 用户取消：立即结束，不生成授权、不登记 Artifact。
+            return {"ok": True, "value": None}
+        try:
+            receipt = self._save_grants.create(
+                extension_id, action_id, workspace_id, Path(result)
+            )
+        except OSError:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "无法读取所选保存目标")
+        return {
+            "ok": True,
+            "value": {
+                "save_grant_id": receipt.save_grant_id,
+                "file_name": receipt.file_name,
+                "expires_at": receipt.expires_at.isoformat(),
+            },
+        }
+
+    def open_artifact_folder(self, extension_id: str, artifact_id: str) -> dict:
+        """在资源管理器中打开扩展导出成果所在目录并尽量选中文件（SPEC-DM-012 §10）。
+
+        前端只传扩展与 Artifact 标识，**路径权威在宿主**：经扩展仓储校验
+        Artifact 存在且 ``extension_id`` 匹配后才打开其登记 ``output_path`` 的
+        所在目录（文件仍在则选中文件）。Artifact 不存在/身份不匹配/目录已被
+        移动删除均返回结构化失败；除资源管理器外不执行任何命令，不打开任何
+        未登记路径。
+        """
+        if self._extension_store is None:
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "扩展成果存储未装配")
+        record = (
+            self._extension_store.get_artifact(artifact_id)
+            if isinstance(artifact_id, str)
+            else None
+        )
+        if record is None:
+            return shell_error("EXTENSION_ARTIFACT_NOT_FOUND", "导出成果不存在或已被移动")
+        if record.extension_id != extension_id:
+            return shell_error("EXTENSION_ARTIFACT_NOT_FOUND", "导出成果不属于该扩展")
+        output = Path(record.output_path)
+        folder = output.parent
+        if not folder.is_dir():
+            return shell_error(
+                "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND",
+                "导出成果所在目录不存在，可能已被移动或删除",
+            )
+        try:
+            if output.is_file():
+                self._explorer.open_folder_and_select(output)
+            else:
+                self._explorer.open_folder(folder)
+        except ExplorerError as exc:
             return shell_error("SHELL_OPEN_FAILED", str(exc))
         return {"ok": True, "value": None}
 
@@ -365,13 +507,19 @@ def run_desktop(settings: Settings | None = None) -> None:
         # 设置快照持有者装配一次（PLAN-DM-019 任务 5）：API 与桌面服务共用同一实例，
         # 避免双实例缓存读到不同步的 config_revision（桌面服务消费在任务 6 接线）。
         runtime_settings = RuntimeSettings(default_store())
+        # 一次性保存授权存储装配一次（PLAN-DM-020 任务 9）：同一个实例注入 API
+        # extension runtime 与 ShellBridge——桥"另存为"创建的授权必须能被 API
+        # 执行消费，两处各建实例会让所有导出都报 SAVE_GRANT_INVALID。
+        save_grants = SaveGrantStore()
+        app = create_app(
+            settings,
+            on_workspace_opened=context.set_workspace,
+            runtime_settings=runtime_settings,
+            save_grants=save_grants,
+        )
         server = uvicorn.Server(
             uvicorn.Config(
-                create_app(
-                    settings,
-                    on_workspace_opened=context.set_workspace,
-                    runtime_settings=runtime_settings,
-                ),
+                app,
                 host="127.0.0.1",
                 port=0,
                 log_level="warning",
@@ -382,7 +530,15 @@ def run_desktop(settings: Settings | None = None) -> None:
         while not server.started:
             time.sleep(0.05)
         port = server.servers[0].sockets[0].getsockname()[1]
-        bridge = ShellBridge(context=context, preferences=preferences)
+        bridge = ShellBridge(
+            context=context,
+            preferences=preferences,
+            registry=app.state.extension_runtime.registry,
+            save_grants=save_grants,
+            # Task 11B：与 API 同一个扩展仓储——"打开所在文件夹"按登记的
+            # Artifact output_path 定位，前端不传任何路径。
+            extension_store=app.state.extension_runtime.store,
+        )
         window = webview.create_window(
             APP_WINDOW_TITLE, f"http://127.0.0.1:{port}/", js_api=bridge, width=1280, height=800
         )
