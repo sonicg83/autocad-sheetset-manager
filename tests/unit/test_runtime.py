@@ -59,7 +59,8 @@ def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(database_module, "resource_dir", lambda: tmp_path)
     url = f"sqlite:///{(tmp_path / 'migrate.db').as_posix()}"
     database_module.migrate_database(url)
-    assert database_module.LATEST_SCHEMA_REVISION == "0005_dm019_job_lease_seconds"
+    # PLAN-DM-020 Task 2 已把 head 前移到 0006（此处原漏更新，随 Task 3 全量回归修复）
+    assert database_module.LATEST_SCHEMA_REVISION == "0006_dm020_extension_platform"
     # 迁移真实发生：alembic_version 表存在且为最新修订
     from sqlalchemy import create_engine, text
 
