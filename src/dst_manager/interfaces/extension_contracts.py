@@ -21,6 +21,7 @@ __all__ = [
     "ArtifactResponseModel",
     "ExtensionActionModel",
     "ExtensionActionRequest",
+    "ExtensionDiagnosticCode",
     "ExtensionErrorResponse",
     "ExtensionLifecycleStatus",
     "ExtensionPlatformErrorCode",
@@ -56,6 +57,17 @@ ExtensionLifecycleStatus = Literal[
     "FAILED",
     "STOPPING",
     "STOPPED",
+]
+
+#: 列表摘要 ``error_code`` 的封闭诊断码词汇（Ruling-7：ARCH §4.3 诊断面只暴露
+#: 稳定诊断码，禁止原始异常文本或含路径/敏感值的字符串；错误响应仍用 §12 平台码）。
+ExtensionDiagnosticCode = Literal[
+    "EXTENSION_MANIFEST_INVALID",
+    "EXTENSION_HOST_CONTRACT_MISMATCH",
+    "EXTENSION_CAPABILITY_UNKNOWN",
+    "EXTENSION_CAPABILITY_UNAVAILABLE",
+    "EXTENSION_START_FAILED",
+    "EXTENSION_STOP_FAILED",
 ]
 
 #: 平台错误码 -> 稳定文案键（Task 10 前端 extensions 域逐一对应）。
@@ -101,7 +113,7 @@ class ExtensionSummaryModel(ContractModel):
     description_key: str
     status: ExtensionLifecycleStatus
     enabled: bool
-    error_code: str | None = None
+    error_code: ExtensionDiagnosticCode | None = None
     actions: list[ExtensionActionModel] = Field(default_factory=list)
     ui_contributions: list[ExtensionUiContributionModel] = Field(default_factory=list)
 

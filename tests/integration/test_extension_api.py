@@ -44,6 +44,18 @@ PLATFORM_ERROR_CODES = (
     "ARTIFACT_WRITE_FAILED",
 )
 
+#: 列表摘要 error_code 的封闭诊断码词汇（Ruling-7；错误响应用平台码，摘要暴露诊断码）。
+DIAGNOSTIC_CODES = frozenset(
+    {
+        "EXTENSION_MANIFEST_INVALID",
+        "EXTENSION_HOST_CONTRACT_MISMATCH",
+        "EXTENSION_CAPABILITY_UNKNOWN",
+        "EXTENSION_CAPABILITY_UNAVAILABLE",
+        "EXTENSION_START_FAILED",
+        "EXTENSION_STOP_FAILED",
+    }
+)
+
 
 def make_client(tmp_path, **kwargs) -> TestClient:
     return TestClient(create_app(Settings(data_dir=tmp_path / "data"), **kwargs))
@@ -79,6 +91,8 @@ def test_list_extensions_reports_real_sheet_catalog_state(tmp_path):
     # 能力中心（Task 4）未落地：必须如实呈现 WAITING_DEPENDENCY，不得谎报 AVAILABLE
     assert item["status"] == "WAITING_DEPENDENCY"
     assert item["error_code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    # 摘要 error_code 只能取自封闭诊断码词汇（Ruling-7），禁止原始异常文本
+    assert all(entry["error_code"] in DIAGNOSTIC_CODES for entry in items)
     assert item["enabled"] is True
     assert item["version"] == "0.1.0"
     assert item["name_key"] == "extensions.sheetCatalog.name"
@@ -351,11 +365,15 @@ def test_broken_manifest_and_factory_isolation_keeps_core_api_available(tmp_path
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/revisions").status_code == 200
 
-    listed = {item["extension_id"]: item for item in client.get("/api/extensions").json()}
-    assert listed[str(bad)]["status"] == "FAILED"
-    assert listed[str(bad)]["error_code"] == "EXTENSION_MANIFEST_INVALID"
+    rendered = client.get("/api/extensions").text
+    # Ruling-7：占位条目的 extension_id 不得把服务端绝对路径暴露给客户端
+    assert str(bad) not in rendered and str(tmp_path) not in rendered
+    listed = {item["extension_id"]: item for item in json.loads(rendered)}
+    assert listed["builtin.invalid-bad-manifest"]["status"] == "FAILED"
+    assert listed["builtin.invalid-bad-manifest"]["error_code"] == "EXTENSION_MANIFEST_INVALID"
     assert listed[SHEET_CATALOG_ID]["status"] == "FAILED"
     assert listed[SHEET_CATALOG_ID]["error_code"] == "EXTENSION_START_FAILED"
+    assert all(item["error_code"] in DIAGNOSTIC_CODES for item in listed.values())
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +420,55 @@ settings_schema: 1
     assert body["code"] == "EXTENSION_INCOMPATIBLE"
     assert body["message_key"] == "errors.extension.incompatible"
     assert body["params"] == {"extension_id": "test.broken-capability"}
+
+
+# ---------------------------------------------------------------------------
+# 启停不产生非契约 500（fix round 1 / Finding 1）
+# ---------------------------------------------------------------------------
+
+
+def test_enable_factory_failed_extension_stays_contract_compliant(tmp_path, monkeypatch):
+    """对工厂失败的扩展启用：注册表重试仍失败并保持 FAILED，响应契约合规、绝不 500。"""
+    monkeypatch.setattr(
+        registry_module, "AVAILABLE_CAPABILITIES", frozenset({"workspace.snapshot.read.v1"})
+    )
+    entries = (
+        BuiltinExtensionEntry(
+            manifest_resource="dst_manager/extensions/builtin/sheet_catalog/manifest.yaml",
+            factory=_boom,
+        ),
+    )
+    client = make_client(
+        tmp_path, extension_runtime=make_runtime(tmp_path, entries), extension_index=entries
+    )
+    assert client.get("/api/extensions").json()[0]["status"] == "FAILED"
+
+    resp = client.patch(f"/api/extensions/{SHEET_CATALOG_ID}/state", json={"enabled": True})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "FAILED"
+    assert body["error_code"] == "EXTENSION_START_FAILED"
+    assert body["error_code"] in DIAGNOSTIC_CODES
+
+
+def test_enable_placeholder_extension_returns_contract_error(tmp_path):
+    """对清单不可读的占位条目启用：契约化 503，而不是注册表断言逃逸成 500。"""
+    bad = tmp_path / "bad-manifest.yaml"
+    bad.write_text("extension_id: [未闭合", encoding="utf-8")
+    entries = (BuiltinExtensionEntry(manifest_resource=str(bad), factory=_boom),)
+    client = make_client(
+        tmp_path, extension_runtime=make_runtime(tmp_path, entries), extension_index=entries
+    )
+
+    resp = client.patch("/api/extensions/builtin.invalid-bad-manifest/state", json={"enabled": True})
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert body["message_key"] == "errors.extension.capabilityUnavailable"
+    assert body["params"] == {"extension_id": "builtin.invalid-bad-manifest"}
 
 
 # ---------------------------------------------------------------------------

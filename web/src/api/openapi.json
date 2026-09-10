@@ -1887,6 +1887,14 @@
           "error_code": {
             "anyOf": [
               {
+                "enum": [
+                  "EXTENSION_MANIFEST_INVALID",
+                  "EXTENSION_HOST_CONTRACT_MISMATCH",
+                  "EXTENSION_CAPABILITY_UNKNOWN",
+                  "EXTENSION_CAPABILITY_UNAVAILABLE",
+                  "EXTENSION_START_FAILED",
+                  "EXTENSION_STOP_FAILED"
+                ],
                 "type": "string"
               },
               {

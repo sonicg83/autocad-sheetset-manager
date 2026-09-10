@@ -183,6 +183,16 @@ class ExtensionRuntime:
     # ------------------------------------------------------------------ 启停
 
     def set_enabled(self, extension_id: str, enabled: bool) -> ExtensionStatusView:
+        descriptor = self._descriptor_or_404(extension_id)
+        if enabled and descriptor.error_code == _PLACEHOLDER_ERROR:
+            # 清单不可读的占位条目没有可用工厂：显式契约化拒绝，
+            # 绝不让注册表断言/异常逃逸成非契约 500。
+            raise ExtensionPlatformError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                f"清单不可读的扩展不能启用：{extension_id}",
+                status_code=503,
+                params={"extension_id": extension_id},
+            )
         try:
             descriptor = self._registry.set_enabled(extension_id, enabled)
         except ExtensionRegistryError as exc:
@@ -301,9 +311,12 @@ class ExtensionRuntime:
     # ------------------------------------------------------------------ 内部
 
     def _manifest(self, extension_id: str) -> ExtensionManifest:
+        return self._descriptor_or_404(extension_id).manifest
+
+    def _descriptor_or_404(self, extension_id: str) -> ExtensionDescriptor:
         for descriptor in self._registry.list():
             if descriptor.manifest.extension_id == extension_id:
-                return descriptor.manifest
+                return descriptor
         raise ExtensionPlatformError(
             "EXTENSION_NOT_FOUND",
             f"扩展未登记：{extension_id}",
@@ -313,7 +326,18 @@ class ExtensionRuntime:
 
     @staticmethod
     def _platform_error(code: str, message: str) -> ExtensionPlatformError:
-        return ExtensionPlatformError(code, message, status_code=_ERROR_STATUS[code])
+        """注册表平台码 → 契约化错误；未映射的诊断码兜底为"扩展当前不可用"。
+
+        注册表可能抛出的稳定码都已映射；任何未知/新增诊断码都不得变成
+        KeyError → 500，统一按 503 ``EXTENSION_CAPABILITY_UNAVAILABLE`` 返回
+        契约化错误体，原始诊断保留在 ``message`` 供排障。
+        """
+        status = _ERROR_STATUS.get(code)
+        if status is None:
+            return ExtensionPlatformError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE", message, status_code=503
+            )
+        return ExtensionPlatformError(code, message, status_code=status)
 
     @staticmethod
     def _with_identity(
@@ -340,6 +364,7 @@ class ExtensionRuntime:
 
 
 #: 平台错误码默认 HTTP 状态（ARCH-DM-006 §12；能力不可用按环境问题归 503）。
+#: 未登记的注册表诊断码由 :meth:`ExtensionRuntime._platform_error` 兜底为 503。
 _ERROR_STATUS: dict[str, int] = {
     "EXTENSION_NOT_FOUND": 404,
     "EXTENSION_DISABLED": 409,

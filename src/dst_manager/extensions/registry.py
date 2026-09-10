@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
@@ -34,6 +35,18 @@ from dst_manager.extensions.contracts import (
 from dst_manager.extensions.manifest import load_manifest
 
 logger = logging.getLogger(__name__)
+
+def _placeholder_id(resource: str) -> str:
+    """清单不可读条目的稳定占位 ID：只保留资源名末段并清洗为安全字符。
+
+    前缀 ``builtin.invalid-`` 保证不与真实扩展 ID 冲突；同名坏清单保留先
+    发现者（与重复扩展 ID 的策略一致）。
+    """
+    name = re.split(r"[/\\]", resource)[-1]
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")
+    return f"builtin.invalid-{slug or 'unknown'}"
+
 
 _ExtensionStatus = Literal[
     "DISCOVERED",
@@ -277,13 +290,25 @@ class ExtensionRegistry:
         record.status = "AVAILABLE"
 
     def _record_placeholder(self, resource: str) -> None:
-        """清单不可读时的占位清单：仅承载稳定诊断，不可启用、不可调用。"""
+        """清单不可读时的占位清单：仅承载稳定诊断，不可启用、不可调用。
+
+        占位 ID 用不含文件系统路径的稳定标识（:func:`_placeholder_id`，Ruling-7）：
+        该 ID 会原样进入 ``GET /api/extensions`` 摘要，绝不把服务端绝对路径
+        暴露给客户端；原始资源串只留在服务端日志里。
+        """
+        placeholder_id = _placeholder_id(resource)
         with self._condition:
-            if resource in self._records:
+            if placeholder_id in self._records:
+                # 重复占位 ID（如同名坏清单）：与业务扩展一致，保留先发现者。
+                logger.warning(
+                    "EXTENSION_ID_DUPLICATED extension_id=%s resource=%s",
+                    placeholder_id,
+                    resource,
+                )
                 return
-            self._records[resource] = _Record(
+            self._records[placeholder_id] = _Record(
                 manifest=ExtensionManifest(
-                    extension_id=resource,
+                    extension_id=placeholder_id,
                     version="0.0.0",
                     host_contract=HOST_CONTRACT,
                     enabled_by_default=False,

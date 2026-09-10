@@ -190,7 +190,9 @@ def test_manifest_load_failure_is_isolated(tmp_path: Path) -> None:
     )
 
     statuses = {d.manifest.extension_id: d.status for d in registry.list()}
-    assert statuses[str(tmp_path / "missing" / "manifest.yaml")] == "FAILED"
+    # Ruling-7（PLAN-DM-020 Task 3 fix round 1）：占位 ID 不得携带服务端路径，
+    # 改为不含路径的稳定标识 builtin.invalid-<资源名 slug>。
+    assert statuses["builtin.invalid-manifest"] == "FAILED"
     assert statuses["test.healthy"] == "AVAILABLE"
 
 
