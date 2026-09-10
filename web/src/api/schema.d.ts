@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact */
+        get: operations["get_artifact_api_artifacts__artifact_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/custom-properties/template": {
         parameters: {
             query?: never;
@@ -14,6 +31,110 @@ export interface paths {
         /** Custom Property Template */
         get: operations["custom_property_template_api_custom_properties_template_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/extensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Extensions */
+        get: operations["list_extensions_api_extensions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/extensions/{extension_id}/actions/{action_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Extension Action */
+        post: operations["execute_extension_action_api_extensions__extension_id__actions__action_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/extensions/{extension_id}/actions/{action_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Extension Action */
+        post: operations["preview_extension_action_api_extensions__extension_id__actions__action_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/extensions/{extension_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extension Settings */
+        get: operations["get_extension_settings_api_extensions__extension_id__settings_get"];
+        /** Put Extension Settings */
+        put: operations["put_extension_settings_api_extensions__extension_id__settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/extensions/{extension_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Extension State */
+        patch: operations["patch_extension_state_api_extensions__extension_id__state_patch"];
+        trace?: never;
+    };
+    "/api/extensions/{extension_id}/workspaces/{workspace_id}/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extension Preference */
+        get: operations["get_extension_preference_api_extensions__extension_id__workspaces__workspace_id__preferences_get"];
+        /** Put Extension Preference */
+        put: operations["put_extension_preference_api_extensions__extension_id__workspaces__workspace_id__preferences_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -403,6 +524,46 @@ export interface components {
              * @enum {string}
              */
             type: "add_custom_property";
+        };
+        /**
+         * ArtifactResponseModel
+         * @description Artifact 元数据响应：后台字段 + 当前可用性派生，不含二进制内容。
+         */
+        ArtifactResponseModel: {
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "AVAILABLE" | "MISSING" | "CHANGED";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Extension Id */
+            extension_id: string;
+            /** Extension Version */
+            extension_version: string;
+            /** File Name */
+            file_name: string;
+            /** Kind */
+            kind: string;
+            /** Management Relation */
+            management_relation: string;
+            /** Media Type */
+            media_type: string;
+            /** Output Path */
+            output_path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source Revision Id */
+            source_revision_id: string;
+            /** Workspace Id */
+            workspace_id: string;
         };
         /** CadCapabilitiesResponse */
         CadCapabilitiesResponse: {
@@ -871,6 +1032,150 @@ export interface components {
             source_baselines?: components["schemas"]["SourceBaselineResponse"][];
             /** Subset Operations */
             subset_operations: components["schemas"]["SubsetOperationResponse"][];
+        };
+        /** ExtensionActionModel */
+        ExtensionActionModel: {
+            /** Action Id */
+            action_id: string;
+            /** Media Type */
+            media_type?: string | null;
+            /** Output Kind */
+            output_kind?: "xlsx" | null;
+        };
+        /**
+         * ExtensionErrorResponse
+         * @description 扩展平台统一错误负载（ARCH-DM-006 §12 平台码）。
+         */
+        ExtensionErrorResponse: {
+            /** Code */
+            code: ("EXTENSION_NOT_FOUND" | "EXTENSION_DISABLED" | "EXTENSION_INCOMPATIBLE" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_SETTINGS_INVALID" | "EXTENSION_ACTION_NOT_FOUND" | "SAVE_GRANT_INVALID" | "EXPORT_DESTINATION_CHANGED" | "REPREVIEW_REQUIRED" | "ARTIFACT_WRITE_FAILED") | string;
+            /** Message */
+            message: string;
+            /** Message Key */
+            message_key: string;
+            /** Params */
+            params: {
+                [key: string]: string | number;
+            };
+        };
+        /**
+         * ExtensionExecuteRequest
+         * @description 执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
+         *
+         *     后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
+         *     执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+         */
+        ExtensionExecuteRequest: {
+            /** Base Revision Id */
+            base_revision_id: string;
+            /** Preview Digest */
+            preview_digest: string;
+            /** Save Grant Id */
+            save_grant_id: string;
+            template: components["schemas"]["ExtensionTemplateRequest"];
+            /** Workspace Id */
+            workspace_id: string;
+        };
+        /** ExtensionPreferencePutRequest */
+        ExtensionPreferencePutRequest: {
+            /** Schema Version */
+            schema_version: number;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExtensionPreviewRequest
+         * @description 预览请求契约：工作区、基准修订与模板快照（SPEC-DM-012 §8.1）。
+         */
+        ExtensionPreviewRequest: {
+            /** Base Revision Id */
+            base_revision_id: string;
+            template: components["schemas"]["ExtensionTemplateRequest"];
+            /** Workspace Id */
+            workspace_id: string;
+        };
+        /** ExtensionSettingsPutRequest */
+        ExtensionSettingsPutRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Schema Version */
+            schema_version: number;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+        };
+        /** ExtensionStatePatchRequest */
+        ExtensionStatePatchRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** ExtensionSummaryModel */
+        ExtensionSummaryModel: {
+            /** Actions */
+            actions?: components["schemas"]["ExtensionActionModel"][];
+            /** Description Key */
+            description_key: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Error Code */
+            error_code?: ("EXTENSION_MANIFEST_INVALID" | "EXTENSION_HOST_CONTRACT_MISMATCH" | "EXTENSION_CAPABILITY_UNKNOWN" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_START_FAILED" | "EXTENSION_STOP_FAILED") | null;
+            /** Extension Id */
+            extension_id: string;
+            /** Name Key */
+            name_key: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "DISCOVERED" | "DISABLED" | "STARTING" | "AVAILABLE" | "WAITING_DEPENDENCY" | "INCOMPATIBLE" | "FAILED" | "STOPPING" | "STOPPED";
+            /** Ui Contributions */
+            ui_contributions?: components["schemas"]["ExtensionUiContributionModel"][];
+            /** Version */
+            version: string;
+        };
+        /**
+         * ExtensionTemplateColumnRequest
+         * @description 预览请求中的模板列快照（SPEC-DM-012 §8.1）。
+         */
+        ExtensionTemplateColumnRequest: {
+            /**
+             * Column Id
+             * Format: uuid
+             */
+            column_id: string;
+            /** Expression */
+            expression: string;
+            /** Header */
+            header: string;
+        };
+        /**
+         * ExtensionTemplateRequest
+         * @description 预览请求重复提交的模板快照；未知高 schema 由契约直接拒绝（422）。
+         */
+        ExtensionTemplateRequest: {
+            /** Columns */
+            columns: components["schemas"]["ExtensionTemplateColumnRequest"][];
+            /** Name */
+            name: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Template Id */
+            template_id?: string | null;
+        };
+        /** ExtensionUiContributionModel */
+        ExtensionUiContributionModel: {
+            /** Contribution Id */
+            contribution_id: string;
+            /** Kind */
+            kind: string;
+            /** Route Key */
+            route_key: string;
         };
         /** HealthResponse */
         HealthResponse: {
@@ -1384,6 +1689,100 @@ export interface components {
             sheet_set: components["schemas"]["SheetSetFieldDiffResponse"][];
             structure: components["schemas"]["StructureDiffResponse"];
         };
+        /** SheetCatalogColumnModel */
+        SheetCatalogColumnModel: {
+            /** Column Id */
+            column_id: string | null;
+            /** Expression */
+            expression: string;
+            /** Header */
+            header: string;
+        };
+        /**
+         * SheetCatalogDiagnosticModel
+         * @description 预览诊断：稳定 code/message_key/params + 可选列/字符定位。
+         */
+        SheetCatalogDiagnosticModel: {
+            /** Code */
+            code: string;
+            /** Column Id */
+            column_id?: string | null;
+            /** Message Key */
+            message_key: string;
+            /** Params */
+            params: {
+                [key: string]: string | number;
+            };
+            /** Source Position */
+            source_position?: number | null;
+        };
+        /**
+         * SheetCatalogExecuteResponseModel
+         * @description 执行成功响应（SPEC-DM-012 §8.2）：不含 sha256/来源修订/扩展版本。
+         */
+        SheetCatalogExecuteResponseModel: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** File Name */
+            file_name: string;
+            /** Output Path */
+            output_path: string;
+            /** Warnings */
+            warnings?: components["schemas"]["SheetCatalogDiagnosticModel"][];
+        };
+        /** SheetCatalogFieldCatalogModel */
+        SheetCatalogFieldCatalogModel: {
+            /** Sheet */
+            sheet: components["schemas"]["SheetCatalogFieldDefinitionModel"][];
+            /** Sheetset */
+            sheetset: components["schemas"]["SheetCatalogFieldDefinitionModel"][];
+        };
+        /** SheetCatalogFieldDefinitionModel */
+        SheetCatalogFieldDefinitionModel: {
+            /** Builtin */
+            builtin: boolean;
+            /** Canonical Name */
+            canonical_name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "sheetset" | "sheet";
+        };
+        /**
+         * SheetCatalogPreviewResponse
+         * @description 预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。
+         */
+        SheetCatalogPreviewResponse: {
+            /** Errors */
+            errors: components["schemas"]["SheetCatalogDiagnosticModel"][];
+            /** Executable */
+            executable: boolean;
+            field_catalog: components["schemas"]["SheetCatalogFieldCatalogModel"];
+            normalized_template: components["schemas"]["SheetCatalogTemplateModel"];
+            /** Preview Digest */
+            preview_digest: string;
+            /** Rows */
+            rows: string[][];
+            /** Total Rows */
+            total_rows: number;
+            /** Warnings */
+            warnings: components["schemas"]["SheetCatalogDiagnosticModel"][];
+        };
+        /**
+         * SheetCatalogTemplateModel
+         * @description 规范化模板回传（模板快照原样返回，字段目录/求值才做规范化）。
+         */
+        SheetCatalogTemplateModel: {
+            /** Columns */
+            columns: components["schemas"]["SheetCatalogColumnModel"][];
+            /** Name */
+            name: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Template Id */
+            template_id: string | null;
+        };
         /** SheetResponse */
         SheetResponse: {
             /** Custom Properties */
@@ -1567,6 +1966,20 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * VersionedValueModel
+         * @description 设置/偏好统一版本化负载：``revision`` 为扩展自身乐观并发修订。
+         */
+        VersionedValueModel: {
+            /** Revision */
+            revision: number;
+            /** Schema Version */
+            schema_version: number;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+        };
         /** WorkspaceResponse */
         WorkspaceResponse: {
             /** Diagnostics */
@@ -1645,6 +2058,64 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_artifact_api_artifacts__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponseModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
     custom_property_template_api_custom_properties_template_get: {
         parameters: {
             query?: never;
@@ -1661,6 +2132,456 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_extensions_api_extensions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionSummaryModel"][];
+                };
+            };
+        };
+    };
+    execute_extension_action_api_extensions__extension_id__actions__action_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: string;
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetCatalogExecuteResponseModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_extension_action_api_extensions__extension_id__actions__action_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: string;
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetCatalogPreviewResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    get_extension_settings_api_extensions__extension_id__settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionedValueModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    put_extension_settings_api_extensions__extension_id__settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionSettingsPutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionedValueModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_extension_state_api_extensions__extension_id__state_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionStatePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionSummaryModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    get_extension_preference_api_extensions__extension_id__workspaces__workspace_id__preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extension_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionedValueModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    put_extension_preference_api_extensions__extension_id__workspaces__workspace_id__preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extension_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionPreferencePutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionedValueModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionErrorResponse"];
                 };
             };
         };

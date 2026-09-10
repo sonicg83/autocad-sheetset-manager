@@ -389,6 +389,8 @@ export async function installSheetsFixture(page: Page, options: SheetsFixtureOpt
     const body = transformWorkspaceGet ? transformWorkspaceGet(workspace) : workspace;
     return route.fulfill({json: body});
   });
+  // 扩展页面贡献不在使用本夹具的 spec 范围（Task 10 专属 spec 覆盖）：按无扩展呈现
+  await page.route("**/api/extensions", (route) => route.fulfill({json: []}));
   if (secondWorkspace) {
     await page.route(`**/api/workspaces/${secondWorkspace.id}`, (route) => route.fulfill({json: secondWorkspace}));
   }

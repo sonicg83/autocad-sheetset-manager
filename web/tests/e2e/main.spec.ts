@@ -35,6 +35,8 @@ test.beforeEach(async({page})=>{
       inject();
     }
   });
+  // 扩展页面贡献不在本 spec 范围（Task 10 专属 spec 覆盖）：按无扩展呈现，标签世界与既有用例一致
+  await page.route("**/api/extensions",route=>route.fulfill({json:[]}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
   const drafts=new Map<string,any>();

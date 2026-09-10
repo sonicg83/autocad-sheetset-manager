@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import {computed,ref,watch} from "vue";
+import {computed,nextTick,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError,lastErrorDiagnostic,localizedError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
+import {listExtensions,patchExtensionState} from "./api/extensions";
+import {EXTENSION_PAGE_COMPONENTS,isExtensionRouteKey,type ExtensionRouteKey} from "./features/extensions/pageRegistry";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftAction,DraftEnvelope,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
+import type {ChangeCommand,DraftAction,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import {projectCommands,projectWorkspace} from "./drafts";
 import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult, DraftActionLabel} from "./features/sheets/types";
 import type {GuardChoice} from "./features/sheets/types";
@@ -33,6 +35,7 @@ import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
 import TaskOverlay from "./layout/TaskOverlay.vue";
 import {useHotkeys} from "./composables/useHotkeys";
+import type {TabDescriptor} from "./composables/useShellTabs";
 import WelcomeView from "./views/WelcomeView.vue";
 import SheetsView from "./views/SheetsView.vue";
 import PropertiesView from "./views/PropertiesView.vue";
@@ -101,8 +104,65 @@ const cadVersion=ref("2020");
 // 只读 projection 由 watch 应用到显示 workspace；pending/error 供后续任务消费。
 const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
 watch(sheetProjection,(value)=>{if(value)workspace.value=value});
-// 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件
-const {active,select,onKeydown}=useShellTabs<string>(["sheets","properties","revisions"],"sheets");
+// —— 扩展页面贡献（PLAN-DM-020 Task 10）：App 只装配列表与挂载组件，不承载目录业务状态 ——
+const extensions=ref<ExtensionSummary[]>([]);
+// 扩展列表 best-effort 装配：加载失败不阻断核心工作区，按无扩展呈现
+async function reloadExtensions(){
+  try{extensions.value=await listExtensions()}catch{extensions.value=[]}
+}
+// 只挂载已加载（AVAILABLE）扩展声明的 workspace_page 贡献，且 route_key 必须命中
+// 编译期映射；未知 route_key 与非 workspace_page 贡献安全忽略，后端值绝不成为
+// 动态 import 路径（ARCH-DM-006 §7）
+const extensionPages=computed(()=>{
+  const pages:{routeKey:ExtensionRouteKey;summary:ExtensionSummary}[]=[];
+  for(const ext of extensions.value){
+    if(ext.status!=="AVAILABLE")continue;
+    for(const contribution of ext.ui_contributions??[]){
+      if(contribution.kind!=="workspace_page"||!isExtensionRouteKey(contribution.route_key))continue;
+      // 同一 route_key 只取首个声明（编译期映射键唯一，重复声明不产生重复标签）
+      if(!pages.some(page=>page.routeKey===contribution.route_key))pages.push({routeKey:contribution.route_key,summary:ext});
+    }
+  }
+  return pages;
+});
+// 标签描述符：核心三标签（图纸/属性/修订历史）顺序固定不被扩展替换，扩展页面追加在后；
+// 无工作区时不显示 workspace_page 贡献
+const tabDescriptors=computed<TabDescriptor[]>(()=>{
+  const core:TabDescriptor[]=[
+    {id:"sheets",label:t("shell.tabs.sheets"),number:"①",source:"core"},
+    {id:"properties",label:t("shell.tabs.properties"),number:"②",source:"core"},
+    {id:"revisions",label:t("shell.tabs.revisions"),number:"③",source:"core",disabled:isRestoreExecuting.value},
+  ];
+  if(workspace.value===null)return core;
+  for(const page of extensionPages.value)core.push({id:page.routeKey,label:t(page.summary.name_key),source:"extension",disabled:isRestoreExecuting.value});
+  return core;
+});
+const tabIds=computed(()=>tabDescriptors.value.map(descriptor=>descriptor.id));
+// 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件；
+// 动态列表下激活项被移除时安全校正回首个核心标签
+const {active,select,onKeydown}=useShellTabs<string>(tabIds,"sheets","sheets");
+// 停用/启用扩展页面（Task 10 最小离开保护）：有未提交输入先走全局三选一闸门，通过后
+// PATCH 状态并按服务端权威摘要收敛标签；被移除的是当前页时回图纸页，并把 DOM 焦点
+// 归还被移除标签原位置的安全邻近标签（ARCH-DM-006 §7）。目录页自身草稿的三选一深化由 Task 11 接入
+async function onExtensionToggleEnabled(extensionId:string,enabled:boolean){
+  const tabId=extensionPages.value.find(page=>page.summary.extension_id===extensionId)?.routeKey;
+  const previousIds=tabIds.value;
+  const wasActive=tabId!==undefined&&active.value===tabId;
+  await guardAllInputs(async()=>{
+    try{
+      const updated=await patchExtensionState(extensionId,enabled);
+      extensions.value=extensions.value.map(ext=>ext.extension_id===extensionId?updated:ext);
+      if(!enabled&&wasActive&&tabId!==undefined){
+        // useShellTabs 已把 active 校正回核心标签；DOM 焦点归还被移除标签原位置的邻近标签
+        await nextTick();
+        const removedIndex=previousIds.indexOf(tabId);
+        const targetIndex=Math.max(0,Math.min(removedIndex,tabIds.value.length-1));
+        document.getElementById(`tab-${tabIds.value[targetIndex]}`)?.focus();
+      }
+    }
+    catch(e){error.value=String(e)}
+  });
+}
 const sheetSetName=computed(()=>workspace.value?.sheet_set.name??"");
 const dstPath=computed(()=>workspace.value?.dst_path??"");
 const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
@@ -258,6 +318,7 @@ async function doOpenByPath(path:string){
     const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:path})});
     if(generation!==workspaceLoadGeneration.value)return;
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);resetSheetsWorkspace();await loadDraft(loaded);isWorkspaceLoading.value=false;
+    void reloadExtensions();
     // 打开成功后若停留在修订历史标签，重载修订列表（beginWorkspaceLoad 已 invalidateRevisionState 清空，避免虚假空态）
     if(active.value==="revisions")void loadRevisions();
   }
@@ -371,6 +432,7 @@ async function doCloseWorkspace(){
   const closedId=workspace.value?.id;
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
   workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();editor.reset();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";
+  extensions.value=[];
   // 关闭成功清空服务端可信上下文（best-effort：旧 ID 的迟到清除请求由服务端按上下文匹配拒绝，不影响新工作区）
   if(closedId)void clearWorkspaceContext(closedId);
   // 重置图纸页工作区状态；操作表单/编辑缓冲状态已由 editor.reset() 清空，旧模板路径不残留
@@ -395,6 +457,7 @@ async function doRefreshWorkspace(expectedWorkspaceId?:string){
     if(generation!==workspaceLoadGeneration.value)return;
     resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);
     await loadDraft(loaded);isWorkspaceLoading.value=false;
+    void reloadExtensions();
     // 刷新成功后若停留在修订历史标签，重载修订列表（发布/关闭等路径已 invalidateRevisionState 清空，避免虚假空态）
     if(active.value==="revisions")void loadRevisions();
   }
@@ -664,11 +727,16 @@ useHotkeys({
         <WelcomeView :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" />
       </template>
       <template v-else>
-        <TabBar :active="active" :revisions-disabled="isRestoreExecuting||isWorkspaceLoading" @select="selectTab" @keydown="onTabKeydown" />
+        <TabBar :descriptors="tabDescriptors" :active="active" @select="selectTab" @keydown="onTabKeydown" />
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">{{ $t("shell.workspace.recoveredBanner",{count:draftRecovered},draftRecovered) }}<button @click="draftRecovered=null">{{ $t("shell.workspace.resume") }}</button><button @click="clearDraftRestart">{{ $t("shell.workspace.restart") }}</button></div>
         <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:bulk-mode="bulkMode" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
         <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-base="properties.base.value" :property-draft="properties.draft.value" :property-status-of="properties.statusOf" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-matched-keys="properties.matchedKeys.value" :property-hidden-dirty-count="properties.hiddenDirtyCount.value" :property-search="properties.search.value" :property-search-mode="properties.searchMode.value" :property-changed-only="properties.changedOnly.value" :property-active-key="properties.activeKey.value" :property-definition-form="properties.definitionForm" :property-definitions-collapsed="properties.definitionsCollapsed.value" :property-values-collapsed="properties.valuesCollapsed.value" :property-csv-collapsed="properties.csvCollapsed.value" :property-csv-open="properties.csvOpen.value" :property-definitions-query="properties.definitionsQuery.value" :property-definitions-scope="properties.definitionsScope.value" :property-definitions-page="properties.definitionsPage.value" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:ValueKey,value:string)=>properties.setValue(key,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:ValueKey)=>properties.revertValue(key)" @update:property-search="(value:string)=>properties.search.value=value" @update:property-search-mode="(value:PropertySearchMode)=>properties.searchMode.value=value" @update:property-changed-only="(value:boolean)=>properties.changedOnly.value=value" @update:property-active-key="(key:ValueKey|null)=>properties.activeKey.value=key" @update:property-definitions-collapsed="(value:boolean)=>properties.definitionsCollapsed.value=value" @update:property-values-collapsed="(value:boolean)=>properties.valuesCollapsed.value=value" @update:property-csv-collapsed="(value:boolean)=>properties.csvCollapsed.value=value" @update:property-csv-open="(value:boolean)=>properties.csvOpen.value=value" @update:property-definitions-query="(value:string)=>properties.definitionsQuery.value=value" @update:property-definitions-scope="(value:DefinitionScopeFilter)=>properties.definitionsScope.value=value" @update:property-definitions-page="(value:number)=>properties.definitionsPage.value=value" @discard-property-input="properties.discardInput" @queue-property-definition="properties.queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" @close-csv="closeCsvImport" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
+        <!-- 扩展页面贡献（PLAN-DM-020 Task 10）：组件来自编译期 pageRegistry 映射，
+             App 只装配挂载，不承载目录业务状态；加载/恢复期间暂停交互与其他主标签一致 -->
+        <template v-for="page in extensionPages" :key="page.routeKey">
+          <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" @toggle-enabled="onExtensionToggleEnabled" />
+        </template>
       </template>
     </main>
     <TaskOverlay v-if="workspace" :open="overlayOpen" :tab="overlayTab" :has-blocking="blocking.length>0" :has-repair="Boolean(dstValidation&&dstValidation.status!=='VALID')" :job="job" :connection-mode="connectionMode" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :diagnostics="workspace.diagnostics" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" @update:tab="overlayTab=$event" @fold="overlayOpen=!overlayOpen" @retry="retryJob" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />

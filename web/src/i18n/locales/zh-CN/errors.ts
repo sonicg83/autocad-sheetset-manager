@@ -114,6 +114,23 @@ export default {
     preferencesIo: "图纸列偏好读写失败",
     preferencesInvalid: "图纸列偏好数据无效",
   },
+  // ---- 扩展平台（PLAN-DM-020 Task 10；键名与 extension_contracts.py 的
+  // EXTENSION_MESSAGE_KEYS 及 runtime.py/preview.py 的 key_override 逐一对应，
+  // 集合由 web/src/i18n/extensions-domain.test.ts 交叉锁定） ----
+  extension: {
+    notFound: "扩展不存在或未登记，无法执行该操作",
+    disabled: "扩展已停用，启用后才能执行该操作",
+    incompatible: "扩展与当前宿主版本不兼容，无法执行该操作",
+    capabilityUnavailable: "扩展当前不可用，无法执行该操作",
+    settingsInvalid: "扩展设置无效或已被其他窗口修改，请重新打开后重试",
+    actionNotFound: "扩展未声明该动作，无法执行",
+    saveGrantInvalid: "保存授权无效或已过期，请重新执行另存为",
+    exportDestinationChanged: "导出目标已变化，请重新选择保存位置",
+    repreviewRequired: "预览已过期，请重新预览后再导出",
+    artifactWriteFailed: "成果文件写入失败，原文件保持不变，可直接重试",
+    artifactNotFound: "导出成果不存在或已被移动",
+    preferenceSaveFailed: "工作区偏好保存失败，不影响本次导出结果",
+  },
   ui: {
     unknownSummary: "操作失败，发生未知错误",
     diagnosticsDetails: "原始错误详情",

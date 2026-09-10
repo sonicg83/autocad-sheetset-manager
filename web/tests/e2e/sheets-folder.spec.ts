@@ -15,6 +15,8 @@ const workspace={
 const FOLDER_BTN="打开图纸集所在文件夹";
 
 async function installRoutes(page:Page){
+  // 扩展页面贡献不在本 spec 范围：按无扩展呈现
+  await page.route("**/api/extensions",route=>route.fulfill({json:[]}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/*/draft",route=>route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}));

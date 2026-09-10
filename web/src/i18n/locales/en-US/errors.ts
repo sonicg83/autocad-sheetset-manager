@@ -114,6 +114,23 @@ export default {
     preferencesIo: "Failed to read or write sheet column preferences",
     preferencesInvalid: "Sheet column preference data is invalid",
   },
+  // Extension platform errors (PLAN-DM-020 Task 10); key names mirror
+  // extension_contracts.py EXTENSION_MESSAGE_KEYS plus the runtime/preview
+  // key_override entries. Key set cross-locked by web/src/i18n/extensions-domain.test.ts.
+  extension: {
+    notFound: "The extension is not registered and the operation cannot be performed",
+    disabled: "The extension is disabled; enable it before performing this operation",
+    incompatible: "The extension is incompatible with the current host version",
+    capabilityUnavailable: "The extension is currently unavailable",
+    settingsInvalid: "The extension settings are invalid or were changed elsewhere; reopen and retry",
+    actionNotFound: "The extension does not declare this action",
+    saveGrantInvalid: "The save grant is invalid or expired; run Save As again",
+    exportDestinationChanged: "The export destination changed; choose a save location again",
+    repreviewRequired: "The preview is stale; preview again before exporting",
+    artifactWriteFailed: "Writing the output file failed; the original file is unchanged and a retry is safe",
+    artifactNotFound: "The exported artifact no longer exists or has been moved",
+    preferenceSaveFailed: "Saving workspace preferences failed; the export result is unaffected",
+  },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",
     diagnosticsDetails: "Raw error details",
