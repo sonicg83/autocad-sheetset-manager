@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-10（新增多语言配置指引 GUIDE-DM-004）
+
+- 新增 `docs/dst-manager/guides/GUIDE-DM-004-multilingual-config-sop.md`，作为多语言与本地化配置的操作手册：核心不变量（唯一 i18n 实例、语言不入持久层、键对称硬门禁、稳定标识+前端翻译、用户数据原样）；五条链路总览（语言解析/切换、前端 8 域语言包、后端错误目录、设置元数据、ShellBridge 原生对话框）；SOP-A 新增/修改前端文案（键命名、命名参数、复数/分隔符/日期数字、硬编码扫描与豁免纪律）、SOP-B 新增后端错误码（message_catalog 与 errors.ts 双侧对称）、SOP-C 设置项本地化五类稳定键、SOP-D 原生对话框 file_kind 白名单、SOP-E 新增语言（如 ja-JP）十点改动清单；验证清单（check:i18n、vitest、pytest、build、e2e、G9）、故障处理表与反模式清单。权威边界以上游 ARCH-DM-005 / SPEC-DM-013 / PLAN-DM-021 为准。
+- 在 `docs/dst-manager/README.md` 指南区追加 GUIDE-DM-004 索引条目。仅新增文档，未修改任何源码、测试或既有文档正文。
+
 ## 2026-09-10（实施 PLAN-DM-021 e2e 回归修复：对齐错误契约的夹具断言）
 
 - 控制器裁决：Task 9 统一错误契约（I18N-11）为正确产品行为，不回退。Task 12 揭示的 12 个 e2e 失败根因全部是批次三之前夹具以虚构 code（`DRAFT_SAVE_FAILED`/`PROPERTY_VALIDATION`，不在 `message_catalog.CATALOG`）注入草稿保存失败并断言兼容 `message`"草稿保存失败"出现在摘要——该呈现已被"未知 code 显示本地化摘要 `errors.ui.unknownSummary`、原文只进诊断详情"取代。真实后端草稿保存失败仅产生 `DRAFT_CONFLICT`（409，走草稿过期专用 UX），与用例的"字段校验错误 + 输入保留"场景不匹配，故修测试：摘要断言改为本地化未知摘要、兼容原文断言不出现；草稿端点字符串 `fields` 兼容契约的字段错误/摘要跳转/错误计数断言全部保留；未新增重复的未知 code 专项用例。
@@ -7,6 +12,7 @@
 - 新鲜验证：失败子集 6 文件 `--workers=1` 70 passed（退出码 0）；全量 `npm --prefix web run test:e2e --workers=1` **332 passed / 0 failed / 0 flaky**（6.6m，退出码 0）；`scripts/build_release.ps1` **退出码 0**（产物 `dist/releases/dst-manager-v0.3.3-win64.zip`）。
 - flaky 复核：Task 12 的 2 个 flaky 隔离 8 连跑全过、无逻辑竞态；`--workers=4` 全量平行复跑 3 轮 flaky 名单逐轮随机且症状为 30s click 超时/高载几何偏差，与 `playwright.config.ts` 已记载的单一 vite dev server 高负载抖动一致，属基础设施抖动而非用例缺陷；门禁以 `--workers=1` 全量绿为准。PLAN-DM-021 剩余项 2、3 关闭。
 - 2026-09-10：修正 SPEC-DM-013 G7 记录与最终验证数字对齐（状态行与门禁表改为 12/12 门全通过：e2e 332 passed / 0 failed（workers=1）、`build_release.ps1` exit 0 产物 `dst-manager-v0.3.3-win64.zip`，移除「e2e 回归修复 + 发布构建补跑」未关闭事项；G8/G9 维持未关闭）。
+- 2026-09-10：新增概念解读备忘 `.planning/memos/dst-manager/2026-09-10-prd-dm-001-artifact-and-change-proposal.md`，整理 PRD-DM-001 中 `Artifact` 与 `Change Proposal` 的通俗解释与实例。备忘整理事实依据：PRD-DM-001 §2 决策 4/5、§7、§8.1、EXT-005/006/008/011、AC-005，ARCH-DM-006 §9.1/§9.3，SPEC-DM-012 §42，以及 2026-09-07 审查备忘。仅新增阅读笔记，未修改任何源码、测试或正式文档；备忘注明自身非权威定义，冲突时以 PRD/ARCH/SPEC 正文为准。
 
 ## 2026-09-09（实施 PLAN-DM-021 Task 12：打包、完整验证、G9 与状态收口）
 

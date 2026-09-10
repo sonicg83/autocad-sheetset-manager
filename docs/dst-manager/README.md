@@ -57,6 +57,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [前端功能设计与实施门禁清单（GUIDE-DM-001，评审中）](guides/GUIDE-DM-001-frontend-design-implementation-gates.md)
 - [前端功能设计与实施门禁通俗说明（GUIDE-DM-002，评审中）](guides/GUIDE-DM-002-frontend-gates-plain-language.md)
 - [配置中心配置项增删改 SOP（GUIDE-DM-003，评审中）](guides/GUIDE-DM-003-settings-config-sop.md)
+- [多语言与本地化配置 SOP（GUIDE-DM-004，评审中）](guides/GUIDE-DM-004-multilingual-config-sop.md)
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
 - [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 评审中）](mockups/SPEC-DM-011-settings-demo.html)
