@@ -85,13 +85,14 @@ test("布尔字段是滑动开关：role=switch + aria-checked + 可见状态文
   await openSettingsDialog(page);
   const toggle = page.getByRole("switch", {name: "图纸编号追加后缀"});
   await expect(toggle).toBeVisible();
-  // 初始为快照值 true；可见状态文字在开关右侧（与冻结件 g4-12 一致），仍对辅助技术隐藏
+  // 初始为快照值 true；可见状态文字在开关右侧（与冻结件 g4-12 一致）
+  // 注意必须限定 .bool-line：行内 .f-foot 里还有一个空的 .f-hint，直接取 .f-hint 会多元素命中
   await expect(toggle).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator('[data-field="enable_add_number_suffix"] .f-hint')).toHaveText("开启");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .bool-line .f-hint')).toHaveText("开启");
   // 缓冲语义：点击后进入编辑缓冲（保存按钮点亮），但未保存不落库
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await expect(page.locator('[data-field="enable_add_number_suffix"] .f-hint')).toHaveText("关闭");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .bool-line .f-hint')).toHaveText("关闭");
   await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
   // 放弃修改并关闭：回到快照值，不留持久化痕迹
   await page.keyboard.press("Escape");
