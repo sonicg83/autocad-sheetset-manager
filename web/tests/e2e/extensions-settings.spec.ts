@@ -4,7 +4,7 @@
 // （extension_states.enabled 持久化为 false，重启对账仍会重新停掉）。
 // 修复后设置中心成为唯一启停入口，扩展页面不再提供停用。
 //
-// PLAN-DM-022 修订：启停控件改为滑动开关（role=switch + aria-checked + 可见状态文字），
+// SPEC-DM-011 修订「启停交互改进」：启停控件改为滑动开关（role=switch + aria-checked + 可见状态文字），
 // 且停用不再关闭设置对话框。原先必须关窗让出 top layer，是因为闸门模态当时是页面内联
 // 遮罩；两个闸门（宿主未提交输入三选一、目录页三选一）现已改为原生 <dialog showModal>，
 // 自行进入 top layer 叠在设置窗口之上。本文件因此钉住两项新契约：

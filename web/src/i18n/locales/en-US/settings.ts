@@ -18,9 +18,9 @@ export default {
     about: "About",
     extensions: "Extensions",
   },
-  // Extensions section (disable must stay reversible / ARCH-DM-006 §7; PLAN-DM-022
-  // switched the control to a sliding switch). The toggle applies immediately,
-  // independent of the buffered Cancel/Save below. stateOn/stateOff is the visible
+  // Extensions section (disable must stay reversible / ARCH-DM-006 §7; SPEC-DM-011
+  // revision "extension toggle interaction" switched the control to a sliding switch).
+  // The toggle applies immediately, independent of the buffered Cancel/Save below. stateOn/stateOff is the visible
   // state text next to the switch; enableNamed/disableNamed is the switch's
   // accessible name.
   extensions: {

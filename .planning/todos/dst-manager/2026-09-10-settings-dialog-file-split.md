@@ -12,11 +12,11 @@
 
 | 文件 | 改动前 | 改动后 |
 | --- | --- | --- |
-| `web/src/components/settings/SettingsDialog.vue` | 465 行 | **534 行**（PLAN-DM-022 修订后 535 行） |
+| `web/src/components/settings/SettingsDialog.vue` | 465 行 | **534 行**（SPEC-DM-011 修订「启停交互改进」后 535 行） |
 
 拆分动作（新增 `components/settings/ExtensionsSection.vue`、`composables/useExtensions.ts`）本身已按契约执行——新功能没有堆进既有文件，但编排逻辑（让位给宿主三选一闸门、两处失败呈现路径）必须留在持有 `close()` 与 `hasUnsaved` 的对话框内，仍使该文件越过了软上限。
 
-> **PLAN-DM-022 修订后重估（2026-09-10）**：启停交互改进删掉了「停用前关闭对话框让出 top layer」整条路径（闸门已改为原生 `<dialog showModal>`，自行叠在设置窗口之上），`onToggleExtension` 精简为「落库 → 就地收敛/行内呈现 → 归还开关焦点」，文件净 +1 行。因此待办原因收窄为：扩展开关的编排、`extensionsError` 行内呈现与焦点归还仍需要对话框持有的 `dialogEl` 与 `extensionsPanel`，而那两处（`extensionsBusy`/`focusExtensionSwitch`）都是约 10 行的编排，不足以单独成模块。方案与裁决顺序不变，优先级可下调。
+> **SPEC-DM-011 修订「启停交互改进」后重估（2026-09-10）**：启停交互改进删掉了「停用前关闭对话框让出 top layer」整条路径（闸门已改为原生 `<dialog showModal>`，自行叠在设置窗口之上），`onToggleExtension` 精简为「落库 → 就地收敛/行内呈现 → 归还开关焦点」，文件净 +1 行。因此待办原因收窄为：扩展开关的编排、`extensionsError` 行内呈现与焦点归还仍需要对话框持有的 `dialogEl` 与 `extensionsPanel`，而那两处（`extensionsBusy`/`focusExtensionSwitch`）都是约 10 行的编排，不足以单独成模块。方案与裁决顺序不变，优先级可下调。
 
 ## 已评估的拆分方案与取舍
 

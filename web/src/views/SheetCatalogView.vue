@@ -49,7 +49,7 @@ function onSaved() {
 
 // 三选一守卫模态焦点（SPEC §13：Esc、焦点圈闭与归还）。打开时焦点移入模态卡片、
 // 关闭归还触发元素；Tab 在模态内可聚焦元素间圈闭（禁用的"保存为模板"不参与）。
-// PLAN-DM-022 修订：模态由页面内联遮罩改为原生 <dialog showModal>（与宿主未提交
+// SPEC-DM-011 修订「启停交互改进」：模态由页面内联遮罩改为原生 <dialog showModal>（与宿主未提交
 // 输入闸门同一原语）——设置中心在 top layer 打开时，内联遮罩会被其 inert 吞掉：
 // 用户看得见弹框却点不动。原生模态自带 top layer 与 ::backdrop，Esc 也只作用于
 // 最上层对话框（不会顺带触发下层设置窗口的关闭）。模态元素常驻 DOM（关闭即
@@ -116,7 +116,7 @@ function onGuardKeydown(event: KeyboardEvent) {
     <!-- 三选一保护（SPEC §3.2）：切换模板/切换页签/停用扩展/关闭工作区统一闸门；
          未命名草稿不提供"保存为模板"（需先命名另存为），只能放弃或留在此处。
          原生模态：停用扩展时设置对话框正在 top layer，本闸门必须自行进入 top layer
-         才能叠在其上并被点击（PLAN-DM-022 修订）。 -->
+         才能叠在其上并被点击（SPEC-DM-011 修订「启停交互改进」）。 -->
     <dialog
       ref="guardDialogEl" class="gate-dialog"
       :aria-label="$t('extensions.sheetCatalog.guardTitle')"

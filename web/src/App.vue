@@ -168,14 +168,14 @@ function onTabKeydown(e:KeyboardEvent){
 // 停用/启用扩展（本次修复：入口唯一在设置中心，扩展页面不再提供停用；否则停用会移除
 // 页面入口本身，开关变成单向、用户被永久卡死）。启用不移除任何入口，直接落库；
 // 停用可能移除当前目录页并丢弃页内草稿，必须先过全局未保存输入三选一闸门
-//（与切换页签/关闭工作区同一闸门）。PLAN-DM-022 起两个闸门模态都是原生 <dialog>，
+//（与切换页签/关闭工作区同一闸门）。SPEC-DM-011「启停交互改进」修订起两个闸门模态都是原生 <dialog>，
 // 会自行叠在仍在打开的设置对话框之上，故停用流程不再需要先关闭设置窗口。失败向上
 // 抛出，由设置对话框就地行内呈现。
 async function toggleExtensionFromSettings(extensionId:string,enabled:boolean){
   if(enabled){await setExtensionEnabled(extensionId,true);return}
   await guardAllInputs(()=>setExtensionEnabled(extensionId,false));
 }
-// PLAN-DM-022 起不再做「焦点归还被移除标签的邻近标签」：停用发生在设置对话框打开期间，
+// SPEC-DM-011「启停交互改进」修订起不再做「焦点归还被移除标签的邻近标签」：停用发生在设置对话框打开期间，
 // 对话框是 top layer 模态、标签栏处于 inert，对 inert 元素调 focus() 是空操作（写了也
 // 无效的死代码）。焦点应收敛在对话框内部，由 SettingsDialog 在启停结束后归还到同一开关。
 // 设置中心扩展分区视图模型：列表状态来自 useExtensions，toggle 必须走上方的闸门编排
