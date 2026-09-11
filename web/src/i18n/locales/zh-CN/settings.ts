@@ -31,6 +31,8 @@ export default {
     stateOff: "已停用",
     enableNamed: "启用 {name}",
     disableNamed: "停用 {name}",
+    // 诊断码前缀：与诊断横幅同一措辞（settings.diagnostics.* 的「（诊断码 {code}）」保持独立，不合并）
+    diagnosticCode: "诊断码 {code}",
   },
   confirm: {
     title: "有未保存的修改",

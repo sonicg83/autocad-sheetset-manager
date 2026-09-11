@@ -119,7 +119,8 @@ test("无工作区也能看到扩展列表并启用（列表不依赖工作区�
   await expect(page.getByRole("tablist")).toHaveCount(0);
   await openExtensionsSection(page);
   await expect(page.getByText("图纸目录", {exact: true})).toBeVisible();
-  await expect(page.getByText("v0.1.0 · 已停用")).toBeVisible();
+  await expect(page.locator(".ext-meta")).toContainText("v0.1.0");
+  await expect(page.locator(".ext-meta")).toContainText("已停用");
   // 立即生效语义：分区内必须有明确说明，避免与底部「取消」产生误导
   await expect(page.getByText("扩展启停立即生效，不受下方取消影响。")).toBeVisible();
   // 滑动开关：方向由 aria-checked 表达，可见状态文字与之一致（不靠颜色单向传达）
@@ -128,7 +129,7 @@ test("无工作区也能看到扩展列表并启用（列表不依赖工作区�
   await expect(page.locator(".ext-state")).toHaveText("已停用");
   await off.click();
   await expect.poll(() => ext.patchBodies).toEqual([{enabled: true}]);
-  await expect(page.getByText("v0.1.0 · 可用")).toBeVisible();
+  await expect(page.locator(".ext-meta")).toContainText("可用");
   await expect(page.getByRole("switch", {name: "停用 图纸目录"})).toHaveAttribute("aria-checked", "true");
   await expect(page.locator(".ext-state")).toHaveText("已启用");
 });
@@ -151,7 +152,7 @@ test("停用不关窗：对话框保留、开关就地翻转、标签移除；�
   await expect(page.locator(SETTINGS_DIALOG)).toBeVisible();
   await expect(page.getByRole("switch", {name: "启用 图纸目录"})).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".ext-state")).toHaveText("已停用");
-  await expect(page.getByText("v0.1.0 · 已停用")).toBeVisible();
+  await expect(page.locator(".ext-meta")).toContainText("已停用");
   // 标签移除发生在对话框背后（top layer 遮挡）；焦点留在对话框内的同一开关上
   await expectTabIds(page, CORE_TABS);
   await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("switch"))).toBe(true);
@@ -253,5 +254,27 @@ test("扩展列表加载失败时给出可见降级与重试，不静默呈现�
   await expect(page.getByText("没有已登记的扩展")).toBeHidden();
   fail = false;
   await page.getByRole("button", {name: "重试"}).click();
-  await expect(page.getByText("v0.1.0 · 已停用")).toBeVisible();
+  await expect(page.locator(".ext-meta")).toContainText("已停用");
+});
+
+test("SC-16 卡片四层信息与不可点击：唯一可聚焦元素是开关", async ({page}) => {
+  const ext = await installExtensions(page, [extensionSummary({status: "FAILED", enabled: true, error_code: "EXTENSION_START_FAILED"})]);
+  await openWorkspace(page);
+  await openExtensionsSection(page);
+
+  const card = page.locator('[data-extension-id="dst-manager.sheet-catalog"]');
+  // 四层：名称 + 描述（description_key）/ 版本 / 状态徽标 + 诊断码 / 开关与状态文字
+  await expect(card.getByText("图纸目录", {exact: true})).toBeVisible();
+  await expect(card.getByText("从当前工作区快照生成可配置的图纸目录表，并导出为 XLSX 文件")).toBeVisible();
+  await expect(card.getByText("v0.1.0")).toBeVisible();
+  await expect(card.locator(".badge", {hasText: "启动失败"})).toBeVisible();
+  await expect(card.getByText("诊断码 EXTENSION_START_FAILED")).toBeVisible();
+  // 「已启用 + 启动失败」必须同时成立：开关在开位，状态文字为已启用
+  await expect(card.getByRole("switch", {name: "停用 图纸目录"})).toHaveAttribute("aria-checked", "true");
+  await expect(card.locator(".ext-state")).toHaveText("已启用");
+  // 卡片不可点击：内部唯一可聚焦元素是开关（无链接、无按钮角色、无 tabindex 容器）
+  const focusables = await card.evaluate(el => Array.from(el.querySelectorAll("[tabindex],a[href],button,[role=button],[role=link]")).map(n => n.tagName + (n.getAttribute("role") ? `[${n.getAttribute("role")}]` : "")));
+  expect(focusables).toEqual(["BUTTON[switch]"]);
+  // 状态徽标与开关方向来自不同权威：FAILED 不改变开关方向（不由 status 反推）
+  expect(ext.patchBodies).toHaveLength(0);
 });

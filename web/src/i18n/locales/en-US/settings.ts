@@ -32,6 +32,7 @@ export default {
     stateOff: "Disabled",
     enableNamed: "Enable {name}",
     disableNamed: "Disable {name}",
+    diagnosticCode: "Code {code}",
   },
   confirm: {
     title: "Unsaved changes",
