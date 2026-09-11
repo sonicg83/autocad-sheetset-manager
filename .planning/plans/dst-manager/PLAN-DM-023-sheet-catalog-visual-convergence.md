@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-023
 title: 图纸目录页面视觉收敛整改
-status: active
+status: completed
 document_kind: plan
 owners:
   - dst-manager
@@ -30,7 +30,7 @@ related:
 
 ## 全局约束
 
-- PLAN-DM-024 是本计划的正确性前置；只有其 F1～F5 全部关闭、SPEC-DM-012 G7 重新通过后，才能开始本计划的生产代码任务。**2026-09-11 该前置已满足**：PLAN-DM-024 已标记 `completed`，F1～F5 关闭记录见 [MEMO-DM-031 §7](../../memos/dst-manager/2026-09-11-plan-dm022-final-review-defects.md)，G7 已恢复“通过”；本计划生产代码任务可以开始。G8 仍为“未通过（用户真实桌面复验）”，G9 仍由 G8 阻断。
+- PLAN-DM-024 是本计划的正确性前置；只有其 F1～F5 全部关闭、SPEC-DM-012 G7 重新通过后，才能开始本计划的生产代码任务。**2026-09-11 该前置已满足**：PLAN-DM-024 已标记 `completed`，F1～F5 关闭记录见 [MEMO-DM-031 §7](../../memos/dst-manager/2026-09-11-plan-dm022-final-review-defects.md)，G7 已恢复“通过”；本计划生产代码任务可以开始。（当时 G8 仍为“未通过（用户真实桌面复验）”、G9 仍由 G8 阻断；**本计划完成后，用户已于 2026-09-11 逐对确认重新通过 G8 并解除 G9 暂停，详见本文“实际验证”与 [MEMO-DM-030 §6.5](../../memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)。**）
 - G4 冻结件继续有效；本计划不重开 G3/G4、不改 Demo、不用当前生产布局反向改写 Spec。
 - 真实生产壳的顶栏、右缘任务入口和底部 ActionDock 属已接受壳层差异；比较范围从“图纸目录”页面正文开始。页面内容必须适配壳层剩余空间，不能以壳层占高为由放弃首屏密度。
 - 保留输出列 `↑`、`↓`、`✕` 图标按钮及现有完整 `aria-label`；不恢复为文字按钮。
@@ -261,7 +261,9 @@ related:
 
 - [x] **步骤 3：交给用户复核。** 在用户逐对确认前，SPEC-DM-012 G8 保持“待用户复核”，PLAN-DM-023 保持 `active`，MEMO-DM-028 的 G9 保持暂停。
 
-- [ ] **步骤 4：用户确认后更新门禁。** 只有用户明确通过，才把 G8 改为“通过”，记录确认人和日期，把 PLAN-DM-023 标记 `completed`，解除 G9 暂停；不得同时替用户填写 G9 结果。
+- [x] **步骤 4：用户确认后更新门禁。** 只有用户明确通过，才把 G8 改为“通过”，记录确认人和日期，把 PLAN-DM-023 标记 `completed`，解除 G9 暂停；不得同时替用户填写 G9 结果。
+
+  **2026-09-11 已完成：** 用户在逐对确认 V1～V8 全部关闭后明确通过 G8，并接受 [MEMO-DM-030 §6.4](../../memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md) 三项差异为可保留差异；确认人/日期与登记动作见 MEMO-DM-030 §6.5。SPEC-DM-012 §16 的 G8=通过（确认人：用户，2026-09-11），G9 暂停已解除且结果字段仍留空待用户执行；PLAN-DM-020 仍保持 `active`。
 
 - [x] **步骤 5：运行完整验证。** 所有输出必须新鲜且退出码为 0：
 
@@ -288,16 +290,16 @@ related:
 - 生产壳比 Demo 多占空间：只接受壳层差异，内容区用密度和内部滚动适配；不得删除全局 ActionDock 或任务入口来“通过截图”。
 - 任一任务造成模板、预览、导出或未保存闸门行为回退时，回退该任务的呈现改动并保持 PLAN-DM-023 `active`；不修改后端绕过。
 
-## 实际验证（2026-09-11，任务 1～5 与任务 6 步骤 1/2/3/5/6）
+## 实际验证（2026-09-11，任务 1～6 全部完成）
 
-生产改动 commit：`441b85c`（任务 1 红灯）→ `1cf0a8f`（任务 2）→ `0d69e45`（任务 3）→ `70b23c0`（任务 4）→ `241c7b5`（任务 5）。
+生产改动 commit：`441b85c`（任务 1 红灯）→ `1cf0a8f`（任务 2）→ `0d69e45`（任务 3）→ `70b23c0`（任务 4）→ `241c7b5`（任务 5）→ `6acc6e3`（任务 6 证据与比对）。
 
 新增自动验证（共 14 条，先红后绿）：
 
 - `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`：V1/V3 首屏密度、V1/V2/V5 表格式结构与 DOM 归属、V4 字段可见性、V7/V8 列数不撑高页面（任务 1）；Task 5 四档视口几何（1440×1000、1920×1080、900×700、200%）。
 - `web/tests/e2e/sheet-catalog.spec.ts`：Task 2 字段搜索与可用态头部（2 条）、Task 3 表格式输出列与图标列操作（2 条）、Task 4 兼容性归属与预览操作坞（2 条）。
 
-本轮新鲜输出（全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（432 passed / 0 failed / 1 flaky）；flaky 为 `main.spec.ts`「深色模式下中心视图区域随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动，已单独 `--workers=1 --retries=0` 复现通过（1 passed），确认非真实回归。
+本轮新鲜输出（全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（**432 passed / 0 failed / 1 flaky**）；flaky 为 `main.spec.ts`「深色模式下文本输入框与下拉选单随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动（同次运行中本计划 V4 用例亦因此超时，两条均重试后通过；当次退出码 1 来自 worker 停止超时的基础设施错误，非用例断言失败），已逐条单独 `--workers=1 --retries=0` 复现通过（各 1 passed），确认非真实回归。
 
 生产证据（入版本库）：`docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-catalog-light-1440x1000.png`（1440×1000）与 `g8-catalog-dark-900x700.png`（900×700）；复现命令：
 
@@ -306,7 +308,7 @@ $env:DST_MANAGER_WRITE_G8_EVIDENCE = "1"
 rtk npm --prefix web run test:e2e -- tests/e2e/sheet-catalog-visual-evidence.spec.ts --grep "G8 对" --workers=1 --retries=0
 ```
 
-逐项比对记录与差异候选见 [MEMO-DM-030 §6](../../memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)。G8 裁决权在用户：用户逐对确认前，SPEC-DM-012 §16 的 G8 保持“待用户复核”，本计划保持 `active`，G9 保持暂停。
+逐项比对记录与差异候选见 [MEMO-DM-030 §6](../../memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)。G8 裁决权在用户：用户已于 2026-09-11 逐对确认 V1～V8 全部关闭并 **通过 G8**，同时接受 §6.4 的三项差异为可保留差异（确认人/日期与登记动作见 MEMO-DM-030 §6.5）；SPEC-DM-012 §16 的 G8 已登记为“通过”（确认人：用户，日期 2026-09-11），G9 暂停已解除且结果字段仍留空待用户执行，PLAN-DM-020 继续保持 `active`。本计划据此标记 `completed`。
 
 ## 完成标准
 

@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 6 步骤 4：用户通过 G8、更新门禁并收口计划）
+
+- 用户裁决（确认人：用户，日期 2026-09-11）：对照冻结基准 JPG 与 `production/` 下两张生产 PNG，逐对确认 PLAN-DM-023 的 V1～V8 全部关闭，**G8 通过**；并接受 MEMO-DM-030 §6.4 三项差异为可保留差异（卡片标题保持 SPEC-DM-012 §7.2 区域名、页头保留版本/状态与启停指引、900×700 字段区 235px 限高不复制 Demo 塔陷）。裁决记录：MEMO-DM-030 §6.5。
+- SPEC-DM-012 §16 门禁表：G8 由“待用户复核”改为“通过”（确认人：用户，2026-09-11，预先保留差异全集 = A1/A2 + §6.4 三项）；G9 行由“未开始（G8 阻断）”改为“未开始（待用户执行）”。
+- PLAN-DM-023 `status` 由 `active` 改为 `completed`，任务 6 步骤 4 勾选并记录裁决依据；[MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”已全部满足表，G9 暂停解除。
+- **未代替用户执行/填写**：G9 的真实桌面与 Excel 逐项验收结果、操作者与日期、G9 结论均保持留空；G9 通过前 PLAN-DM-020 保持 `active`，不标 `completed`。
+- 同步治理文档：PLAN-DM-020 实际验证追加 G8 通过记录、两份 README 状态行（PLAN-DM-023=completed、SPEC-DM-012=G0～G8 已通过）。
+- 收口前完整验证（本轮新鲜输出，全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（**432 passed / 0 failed / 1 flaky，退出码 0**）。flaky 为 `main.spec.ts`「深色模式下文本输入框与下拉选单随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动；同一次 4 worker 运行中另有本计划 V4 用例因同一抖动超时，两条均重试后通过（当次退出码 1 来自 2 个 worker 停止超时的基础设施错误，非用例断言失败），且两条均已单独 `--workers=1 --retries=0` 复现通过（各 1 passed），确认非真实回归。
+
 ## 2026-09-11（PLAN-DM-023 任务 6：生成 G8 生产证据、逐对比对并交用户裁决）
 
 - 生产证据入版本库：新建 `docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-catalog-light-1440x1000.png`（1440×1000）与 `g8-catalog-dark-900x700.png`（900×700），尺寸与冻结基准图逐项一致；`sheet-catalog-visual-evidence.spec.ts` 的 `attachScreenshot` 新增可重复路径——默认只写测试附件，`DST_MANAGER_WRITE_G8_EVIDENCE=1` 时同步写入版本库目录，复现命令已写进该文件头与 PLAN-DM-023 实际验证。
