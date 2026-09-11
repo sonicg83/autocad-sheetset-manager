@@ -8,6 +8,7 @@
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import type {SettingsEnumOption, SettingsItem, SettingsValue} from "../../api/settings";
+import BooleanSwitch from "./BooleanSwitch.vue";
 
 const props=defineProps<{
   item:SettingsItem;
@@ -53,7 +54,8 @@ function commit(value:SettingsValue){emit("update",props.item.key,value)}
 // 控件归一化：int/enum 以 number 入缓冲，path/bool 原样；int 空串保留（触发"必须为整数"行内错误）。
 // ui_locale 为字符串枚举（system/zh-CN/en-US）：非数字原样入缓冲，数字枚举照旧转 number
 function onIntInput(event:Event){const raw=(event.target as HTMLInputElement).value;commit(raw===""?"":Number(raw))}
-function onBoolInput(event:Event){commit((event.target as HTMLInputElement).checked)}
+// 滑动开关直接给出目标值（不再是 checkbox 的 change 事件）
+function onBoolChange(value:boolean){commit(value)}
 function onEnumInput(event:Event){
   const raw=(event.target as HTMLInputElement).value;
   const num=Number(raw);
@@ -72,8 +74,12 @@ function onEnumInput(event:Event){
         </div>
       </template>
       <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="onIntInput">
-      <span v-else-if="item.control==='bool'" class="switch">
-        <input :id="`settings-input-${item.key}`" type="checkbox" role="switch" :data-key="item.key" :checked="Boolean(shown)" :disabled="disabled" @change="onBoolInput">
+      <span v-else-if="item.control==='bool'" class="bool-line">
+        <BooleanSwitch
+          :checked="Boolean(shown)" :disabled="disabled" :label="label"
+          :data-key="item.key" :input-id="`settings-input-${item.key}`"
+          @change="onBoolChange"
+        />
         <span class="f-hint">{{shown?t("settings.row.on"):t("settings.row.off")}}</span>
       </span>
       <span v-else-if="item.control==='enum'" class="radio-line" role="radiogroup" :aria-label="label">
@@ -103,7 +109,6 @@ function onEnumInput(event:Event){
 .f-line input{flex:1;min-width:0}
 input[type="text"],input[type="number"]{height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2)}
 input:disabled{opacity:.5;cursor:not-allowed}
-input[type="checkbox"]{width:16px;height:16px;accent-color:var(--color-accent)}
 .browse-btn{height:34px;padding:0 var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:13px;white-space:nowrap}
 .browse-btn:hover:not(:disabled){background:var(--color-bg-muted)}
 .browse-btn:disabled{cursor:not-allowed;opacity:.5}
@@ -116,7 +121,7 @@ input[type="checkbox"]{width:16px;height:16px;accent-color:var(--color-accent)}
 .badge-file{color:var(--color-accent);background:var(--color-info-bg)}
 .f-hint{font-size:12px;color:var(--color-text-secondary)}
 .f-error{margin:0;font-size:12px;color:var(--color-danger);line-height:1.6}
-.switch{display:inline-flex;align-items:center;gap:var(--space-2);padding-top:var(--space-2)}
+.bool-line{display:inline-flex;align-items:center;gap:var(--space-2);padding-top:var(--space-2)}
 .radio-line{display:flex;gap:var(--space-4);padding-top:var(--space-2);flex-wrap:wrap}
 .radio-line label{display:flex;gap:var(--space-1);align-items:center;font-size:13px;color:var(--color-text-primary)}
 @media (max-width:900px){.field{grid-template-columns:1fr}}

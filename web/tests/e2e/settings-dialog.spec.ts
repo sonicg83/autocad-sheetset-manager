@@ -369,3 +369,30 @@ test("exe/dll 浏览：中英文只改变描述、固定种类（白名单）不
   // 还原中文基线（本用例接为串行链末尾）
   writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 7);
 });
+
+// ---- PLAN-DM-022 任务 1：布尔状态控件统一为滑动开关 ----
+// 布尔状态控件唯一视觉语言（SPEC-DM-006 §6.3 / SPEC-DM-011 §3.3）。
+// 追加在文件末尾且**不落盘**：本文件串行共享同一配置文件，保存会污染后续基线。
+test("布尔字段是滑动开关：role=switch + aria-checked + 可见状态文字，且仍走保存缓冲", async ({page}) => {
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const toggle = page.getByRole("switch", {name: "图纸编号追加后缀"});
+  await expect(toggle).toBeVisible();
+  // 初始为快照值 true；可见状态文字在开关右侧（与冻结件 g4-12 一致）
+  // 注意必须限定 .bool-line：行内 .f-foot 里还有一个空的 .f-hint，直接取 .f-hint 会多元素命中
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .bool-line .f-hint')).toHaveText("开启");
+  // 缓冲语义：点击后进入编辑缓冲（保存按钮点亮），但未保存不落库
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .bool-line .f-hint')).toHaveText("关闭");
+  await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+  // 放弃修改并关闭：回到快照值，不留持久化痕迹
+  await page.keyboard.press("Escape");
+  await page.locator('[role="dialog"][aria-modal="true"]').getByRole("button", {name: "放弃修改并关闭"}).click();
+  await expect(page.locator('dialog[aria-labelledby="settings-title"]')).toBeHidden();
+  await page.getByRole("button", {name: "设置"}).click();
+  await expectDialog(page);
+  await expect(page.getByRole("switch", {name: "图纸编号追加后缀"})).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
+});
