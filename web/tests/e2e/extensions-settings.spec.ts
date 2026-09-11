@@ -271,3 +271,41 @@ test("SC-16 分段阈值上侧：6 条分两段且分组键与开关同一权威
   await expect(page.locator(".ext-group").first().locator('[aria-checked="false"]')).toHaveCount(0);
   await expect(page.locator(".ext-group").last().locator('[aria-checked="true"]')).toHaveCount(0);
 });
+
+// 并发代次闸门（PLAN-DM-024 / MEMO-DM-031 F1）：旧请求晚于新请求完成时，其响应不得
+// 提交——既不能覆盖新请求写入的失败状态，也不能提交旧列表把标签拉回来/踢出去。
+// 可控 Promise 在用例内接管 /api/extensions（本文件既有先例：用例内 route 覆盖）：
+// 第 1 次请求（工作区打开）直通成功；第 2 次请求（打开设置 = 旧请求）挂起；
+// 第 3 次请求（进入扩展分区 = 新请求）失败；最后放行旧请求并断言其成功响应被丢弃。
+test("活动扩展失效先过守卫的并发代次：旧响应晚到不覆盖新列表或失败状态", async ({page}) => {
+  let releaseOld: (() => void) | null = null;
+  let oldRequestArrived: () => void;
+  const oldRequestInFlight = new Promise<void>(resolve => { oldRequestArrived = resolve; });
+  let requestCount = 0;
+  await page.route("**/api/extensions", async route => {
+    requestCount += 1;
+    if (requestCount === 1) return route.fulfill({json: [extensionSummary()]});
+    if (requestCount === 2) {
+      oldRequestArrived();
+      await new Promise<void>(resolve => { releaseOld = resolve; });
+      // 旧请求最终以"成功但失效"响应收场：若被提交会移除目录标签
+      return route.fulfill({json: [extensionSummary({status: "FAILED", error_code: "EXTENSION_START_FAILED"})]});
+    }
+    return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "boom"}});
+  });
+  await openWorkspace(page);
+  await expectTabIds(page, [...CORE_TABS, "tab-sheet-catalog"]);
+
+  await page.getByRole("button", {name: "设置"}).click();
+  // 等旧请求确实发出并挂起，再让新请求上路
+  await oldRequestInFlight;
+  await page.getByRole("tab", {name: "扩展"}).click();
+  // 新请求失败：失败状态可见，旧列表保留（标签不消失）
+  await expect(page.getByText("扩展列表加载失败。")).toBeVisible();
+  await expectTabIds(page, [...CORE_TABS, "tab-sheet-catalog"]);
+
+  // 旧请求晚于新请求完成：其成功响应必须被代次闸门丢弃
+  releaseOld!();
+  await expect(page.getByText("扩展列表加载失败。")).toBeVisible();
+  await expectTabIds(page, [...CORE_TABS, "tab-sheet-catalog"]);
+});

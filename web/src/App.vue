@@ -4,7 +4,7 @@ import {useI18n} from "vue-i18n";
 import {ApiError,lastErrorDiagnostic,localizedError,request} from "./api/client";
 import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
 import {useExtensions} from "./composables/useExtensions";
-import type {ExtensionsPanel} from "./composables/useExtensions";
+import type {BeforeExtensionListReplace,ExtensionsPanel} from "./composables/useExtensions";
 import {EXTENSION_PAGE_COMPONENTS,isExtensionRouteKey,type ExtensionRouteKey} from "./features/extensions/pageRegistry";
 import {createCommand} from "./api/contracts";
 import type {ChangeCommand,DraftAction,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
@@ -112,7 +112,32 @@ const {extensions,loading:extensionsLoading,failed:extensionsFailed,reload:reloa
 // 打开设置即刷新扩展清单：扩展分区因此不依赖工作区加载，
 // “手头没打开 DST”的卡死用户也能在这里恢复被停用的扩展
 //（紧邻 reloadExtensions 定义，避免在 setup 期引用未初始化的 const）
-function openSettings(){settingsOpen.value=true;void reloadExtensions()}
+function openSettings(){settingsOpen.value=true;void guardedReloadExtensions()}
+// PLAN-DM-024 F1：扩展列表替换的草稿生命周期闸门（在 App 装配，草稿语义不进 useExtensions）。
+// 比较前后 workspace_page route 集合：仅当当前活动扩展页会从候选页面集合消失时征询
+// guardSheetCatalogPage 三选一；守卫结果为 continue 才允许替换。列表替换本身由 reload
+// 协议在本回调返回 true 后提交——guard 的 next 后续动作在此不双写列表。
+async function guardExtensionListReplace(previous:readonly ExtensionSummary[],next:readonly ExtensionSummary[]):Promise<boolean>{
+  const contributionRoutes=(list:readonly ExtensionSummary[])=>{
+    const routes=new Set<string>();
+    for(const ext of list){
+      if(ext.status!=="AVAILABLE")continue;
+      for(const contribution of ext.ui_contributions??[]){
+        if(contribution.kind==="workspace_page")routes.add(contribution.route_key);
+      }
+    }
+    return routes;
+  };
+  const currentRoute=active.value;
+  // 活动页不是扩展页直接放行；活动扩展页不在刷新前候选集合中亦无从"消失"（防御）
+  if(!isExtensionRouteKey(currentRoute)||!contributionRoutes(previous).has(currentRoute))return true;
+  // 活动扩展页刷新后仍在候选集合中：直接通过，不打扰用户
+  if(contributionRoutes(next).has(currentRoute))return true;
+  const result=await guardSheetCatalogPage(()=>{});
+  return result==="continue";
+}
+// 设置中心触发的刷新统一走闸门回调（打开设置与扩展分区"重试"共用）
+function guardedReloadExtensions(){return reloadExtensions(guardExtensionListReplace)}
 // 只挂载已加载（AVAILABLE）扩展声明的 workspace_page 贡献，且 route_key 必须命中
 // 编译期映射；未知 route_key 与非 workspace_page 贡献安全忽略，后端值绝不成为
 // 动态 import 路径（ARCH-DM-006 §7）
@@ -182,7 +207,7 @@ async function toggleExtensionFromSettings(extensionId:string,enabled:boolean){
 //（设置分区自己调端点会绕过闸门直接丢草稿）
 const extensionsPanel=computed<ExtensionsPanel>(()=>({
   list:extensions.value,loading:extensionsLoading.value,failed:extensionsFailed.value,
-  reload:reloadExtensions,toggle:toggleExtensionFromSettings,
+  reload:guardedReloadExtensions,toggle:toggleExtensionFromSettings,
 }));
 const sheetSetName=computed(()=>workspace.value?.sheet_set.name??"");
 const dstPath=computed(()=>workspace.value?.dst_path??"");

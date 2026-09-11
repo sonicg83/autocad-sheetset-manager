@@ -5,7 +5,7 @@
 // 工作区/设置/动作路由经 fixtures/sheetCatalog.ts 模拟。
 import {expect, test, type Page} from "@playwright/test";
 import {
-  EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, readBridgeCalls,
+  EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, planExtensionsReload, readBridgeCalls,
   type CatalogTemplate, type SheetCatalogState,
 } from "./fixtures/sheetCatalog";
 
@@ -495,5 +495,60 @@ test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
+  });
+});
+
+// 扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 / MEMO-DM-031 F1）。
+// 缺陷背景：openSettings 触发的 reloadExtensions 失败时清空列表、成功但状态失效时直接
+// 替换列表，两条路径都会让活动 sheet-catalog 标签被 useShellTabs 静默卸载，未保存草稿
+// 随视图卸载丢失，完全绕过 guardSheetCatalogPage 三选一守卫。
+test.describe("扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 F1）", () => {
+  test("打开设置触发刷新失败保留目录草稿：标签、激活态与表达式原样保留", async ({page}) => {
+    const state = await openCatalog(page);
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    // 打开设置与进入扩展分区各触发一次刷新（openSettings + showExtensions），两次都失败
+    planExtensionsReload(state, ["fail", "fail"]);
+    await page.getByRole("button", {name: "设置"}).click();
+    await page.getByRole("tab", {name: "扩展"}).click();
+    // 设置扩展区给出可见降级与重试（瞬时刷新失败不静默呈现为空列表）
+    await expect(page.getByText("扩展列表加载失败。")).toBeVisible();
+    // 标签仍存在且仍为活动标签：失败不得把用户踢回核心页签
+    const catalogTab = page.locator("#tab-sheet-catalog");
+    await expect(catalogTab).toBeVisible();
+    await expect(catalogTab).toHaveAttribute("aria-selected", "true");
+    // 关闭设置后回到目录页：草稿原样保留
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
+    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(page.getByText("有未保存修改")).toBeVisible();
+  });
+
+  test("活动扩展失效先过守卫：留在此处保留标签草稿与旧列表，放弃修改后才移除", async ({page}) => {
+    const state = await openCatalog(page);
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    planExtensionsReload(state, ["failedStatus"]);
+    await page.getByRole("button", {name: "设置"}).click();
+    // 先出现现有三选一守卫（打开设置的刷新先于分区切换返回），此时候选（FAILED）
+    // 列表不得提交：守卫不依赖所在分区
+    const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", {name: "留在此处"}).click();
+    // 守卫返回 stay：标签与草稿保留，进入分区后旧列表未被替换（卡片仍"可用"）
+    const catalogTab = page.locator("#tab-sheet-catalog");
+    await expect(catalogTab).toBeVisible();
+    await expect(catalogTab).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", {name: "扩展"}).click();
+    await expect(page.locator('[data-extension-id="dst-manager.sheet-catalog"] .ext-meta')).toContainText("可用");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
+    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    // 再次刷新并选择放弃修改：列表替换放行，标签移除并回到图纸页签
+    planExtensionsReload(state, ["failedStatus"]);
+    await page.getByRole("button", {name: "设置"}).click();
+    const dialogAgain = page.getByRole("dialog", {name: "未保存的模板修改"});
+    await expect(dialogAgain).toBeVisible();
+    await dialogAgain.getByRole("button", {name: "放弃修改"}).click();
+    await expect(page.getByRole("tab", {name: "图纸目录"})).toHaveCount(0);
+    await expect(page.locator("#tab-sheets")).toHaveAttribute("aria-selected", "true");
   });
 });

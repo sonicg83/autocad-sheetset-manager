@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-024 任务 1：为扩展列表替换增加草稿生命周期闸门）
+
+- 修复 MEMO-DM-031 F1：`openSettings` 触发的 `reloadExtensions()` 此前在请求失败时把扩展清成 `[]`、在成功但状态失效时直接替换列表，两条路径都会让活动 sheet-catalog 标签被 `useShellTabs` 的回退语义静默卸载、未保存草稿随视图卸载丢失，绕过 `guardSheetCatalogPage` 三选一守卫。
+- 失败保留最后成功列表：`useExtensions.reload` 失败时不再清空 `extensions`，只置 `failed=true` 让设置扩展区给出可见降级与重试；首次加载失败仍呈现空列表错误态。
+- 成功失效先过草稿守卫：`useExtensions.reload` 新增可选 `beforeReplace(previous, next)` 回调（返回 `false` 保留旧列表），并用递增 generation 保证只有最新请求可提交列表或改写 `loading/failed`，旧响应晚到不得覆盖新列表或失败状态；`App.vue` 比较前后 `workspace_page` route 集合，仅当当前活动扩展页会从候选集合消失时把列表替换交给 `guardSheetCatalogPage`（守卫 `continue` 才放行），打开设置与扩展分区"重试"共用该闸门；草稿语义与 route key 不下沉到 `useExtensions`，`useShellTabs` 通用回退语义未改。
+- TDD：`sheet-catalog`/`extensions-settings` 新增 3 个用例先红（失败清空列表致标签消失、成功失效未过守卫、旧响应晚到覆盖新结果）后绿；`web/tests/e2e/fixtures/sheetCatalog.ts` 增加 `/api/extensions` 下一次请求失败 / 下一次成功返回 FAILED 的可编程控制，不改变默认成功路径。聚焦回归 `sheet-catalog` + `extensions-navigation` + `extensions-settings` 共 52 用例全过（`--workers=1 --retries=0`），`vue-tsc -b` 通过。
+
 ## 2026-09-11（立项图纸目录正确性缺陷收口 PLAN-DM-024）
 
 - 基于 `MEMO-DM-031` 与针对性复核，新建 `PLAN-DM-024`「图纸目录扩展正确性缺陷收口」：4 个任务依次处理扩展列表刷新绕过草稿守卫、保存授权 Promise 拒绝导致导出卡死、Shell 扩展错误缺 `message_key`、本地化内置模板显示名碰撞及重复 `template_id` 服务端不变量，并要求逐项 TDD、聚焦/全量回归和独立提交。

@@ -23,6 +23,10 @@ export interface CatalogTemplate {
 export type SaveDialogMode = "grant" | "cancel" | "error";
 export type ExecuteMode = "ok" | "repreviewRequired" | "saveGrantInvalid" | "destinationChanged" | "writeFailed" | "digestMismatch";
 export type PutSettingsMode = "ok" | "conflict" | "duplicate" | "limit";
+// PLAN-DM-024 Task 1：/api/extensions 刷新的可编程控制（PLAN-DM-024/MEMO-DM-031 F1）。
+// "fail" = 下一次请求失败；"failedStatus" = 下一次成功响应把 sheet-catalog 置为 FAILED。
+// 步骤按请求顺序消费，队列取空后回到默认成功路径（不改变既有用例）。
+export type ExtensionsReloadControl = "fail" | "failedStatus";
 
 export type SheetCatalogFixtureOptions = {
   sheetCount?: number;                          // 图纸总数，默认 25（预览 20 行 < 总数）
@@ -65,6 +69,8 @@ export type SheetCatalogState = {
   // 扩展启停状态：必须由夹具接管（见 installSheetCatalogFixture 的 /state 路由）
   extensionEnabled: boolean;
   extensionPatchBodies: unknown[];
+  // 扩展列表刷新控制（PLAN-DM-024 Task 1）：按 /api/extensions 请求顺序消费的步骤队列
+  extensionsReloadPlan: ExtensionsReloadControl[];
 };
 
 // 假桥调用记录保存在浏览器侧（window.__catalogBridge）：跨 Node/浏览器边界统一经本 helper 读取
@@ -243,6 +249,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     artifacts: new Map(),
     extensionEnabled: true,
     extensionPatchBodies: [],
+    extensionsReloadPlan: [],
   };
 
   if (!options.noShell) {
@@ -292,7 +299,17 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
 
   await page.route("**/api/workspaces/open", route => route.fulfill({json: workspace}));
   await page.route("**/api/workspaces/workspace-1", route => route.fulfill({json: workspace}));
-  await page.route("**/api/extensions", route => route.fulfill({json: [extensionSummary()]}));
+  await page.route("**/api/extensions", route => {
+    // 可编程刷新控制（PLAN-DM-024 Task 1）：按请求顺序消费一步，队列空即默认成功路径
+    const control = state.extensionsReloadPlan.shift();
+    if (control === "fail") {
+      return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message_key: "errors.internal", params: {}, message: "扩展列表刷新失败"}});
+    }
+    if (control === "failedStatus") {
+      return route.fulfill({json: [{...extensionSummary(), status: "FAILED", error_code: "EXTENSION_START_FAILED"}]});
+    }
+    return route.fulfill({json: [extensionSummary()]});
+  });
   // 启停必须由夹具接管：真后端会写用户 .dst-manager-data/dst-manager.db 的
   // extension_states，把扩展真停掉且持久化（曾因此把开发环境卡在停用态）
   await page.route("**/api/extensions/*/state", async route => {
@@ -432,6 +449,11 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     return route.fulfill({json: record});
   });
   return {state};
+}
+
+// 布防后续 /api/extensions 请求的刷新行为（按请求顺序消费；见 ExtensionsReloadControl）
+export function planExtensionsReload(state: SheetCatalogState, controls: ExtensionsReloadControl[]): void {
+  state.extensionsReloadPlan.push(...controls);
 }
 
 export async function openCatalogPage(page: Page, options: {noShell?: boolean} = {}): Promise<void> {
