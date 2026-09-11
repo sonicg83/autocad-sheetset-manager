@@ -72,7 +72,7 @@ related:
 - Test: `web/tests/e2e/settings-dialog.spec.ts`（追加到文件末尾）
 
 **Interfaces:**
-- Produces: `BooleanSwitch` —— props `{checked:boolean; disabled?:boolean; label:string; dataKey?:string; inputId?:string}`，emits `change:[boolean]`；根元素为 `button.switch[role="switch"]`，内部 `span.switch-thumb`。**不渲染可见状态文字**：冻结件里两处的文字位置不同（扩展开关文字在左、bool 字段文字在右），故文字一律由调用方布局（卡片用 `.switch-state`，表单行沿用既有 `.f-hint`）。
+- Produces: `BooleanSwitch` —— props `{checked:boolean; disabled?:boolean; label:string; dataKey?:string; inputId?:string}`，emits `change:[boolean]`；根元素为 `button.switch[role="switch"]`，内部 `span.switch-thumb`。**不渲染可见状态文字**：冻结件里两处的文字位置不同（扩展开关文字在左、bool 字段文字在右），故文字一律由调用方布局（卡片沿用既有 `.ext-state`，表单行沿用既有 `.f-hint`）。
 - Consumes: 无。
 
 - [ ] **Step 1: 写失败测试（追加到 `settings-dialog.spec.ts` 末尾）**
@@ -227,7 +227,7 @@ test("SC-16 卡片四层信息与不可点击：唯一可聚焦元素是开关",
   await expect(card.getByText("诊断码 EXTENSION_START_FAILED")).toBeVisible();
   // 「已启用 + 启动失败」必须同时成立：开关在开位，状态文字为已启用
   await expect(card.getByRole("switch", {name: "停用 图纸目录"})).toHaveAttribute("aria-checked", "true");
-  await expect(card.locator(".switch-state")).toHaveText("已启用");
+  await expect(card.locator(".ext-state")).toHaveText("已启用");
   // 卡片不可点击：内部唯一可聚焦元素是开关（无链接、无按钮角色、无 tabindex 容器）
   const focusables = await card.evaluate(el => Array.from(el.querySelectorAll("[tabindex],a[href],button,[role=button],[role=link]")).map(n => n.tagName + (n.getAttribute("role") ? `[${n.getAttribute("role")}]` : "")));
   expect(focusables).toEqual(["BUTTON[switch]"]);
@@ -239,7 +239,7 @@ test("SC-16 卡片四层信息与不可点击：唯一可聚焦元素是开关",
 - [ ] **Step 2: 运行红灯**
 
 Run: `npx playwright test tests/e2e/extensions-settings.spec.ts -g "卡片四层信息与不可点击" --reporter=line --retries=0`
-Expected: FAIL —— 描述文案与 `诊断码 …` 尚未渲染（现列表只有名称、`v{version} · {status}`、开关）；`.switch-state` 类名不存在（现为 `.ext-state`）。
+Expected: FAIL —— 描述文案与 `诊断码 …` 尚未渲染（现列表只有名称、`v{version} · {status}`、开关），卡片的 `.ext-card` 容器与 `.ext-state` 位于开关左侧也不存在。
 
 - [ ] **Step 3: 新增语言包键（中英同步）**
 
@@ -306,7 +306,7 @@ const switchLabel = computed(() => enabled.value
       </span>
     </div>
     <div class="ext-side">
-      <span class="switch-state" :class="{on:enabled}" aria-hidden="true">{{ stateText }}</span>
+      <span class="ext-state" :class="{on:enabled}" aria-hidden="true">{{ stateText }}</span>
       <BooleanSwitch
         :checked="enabled" :disabled="busy" :label="switchLabel"
         :data-key="extension.extension_id"
@@ -328,8 +328,8 @@ const switchLabel = computed(() => enabled.value
 .badge.danger{background:var(--color-danger-bg);color:var(--color-danger)}
 .ext-diag{color:var(--color-text-muted)}
 .ext-side{display:flex;align-items:center;gap:var(--space-2);flex:none;padding-top:2px}
-.switch-state{font-size:12px;color:var(--color-text-muted)}
-.switch-state.on{color:var(--color-success)}
+.ext-state{font-size:12px;color:var(--color-text-muted)}
+.ext-state.on{color:var(--color-success)}
 </style>
 ```
 
@@ -344,7 +344,7 @@ const switchLabel = computed(() => enabled.value
       />
 ```
 
-（`ul.ext-list > li` 语义由 `ExtensionCard` 的根 `li` 承担；本任务删除分区内已迁走的 `.ext-row`/`.ext-info`/`.ext-control`/`.ext-state`/旧 `.switch` 样式与内联开关标记；`busy` 继续由分区透传给卡片用于禁用开关。）
+（`ul.ext-list > li` 语义由 `ExtensionCard` 的根 `li` 承担；本任务删除分区内已迁走的 `.ext-row`/`.ext-info`/`.ext-control`/旧 `.switch` 样式与内联开关标记；**`.ext-state` 这个类名必须保留在卡片的状态文字上**——它同时被冻结件与 `extensions-settings.spec.ts` 的既有断言（3 处）使用，重命名会打断它们。`busy` 继续由分区透传给卡片用于禁用开关。）
 
 - [ ] **Step 6: 运行绿灯 + 非回归**
 
