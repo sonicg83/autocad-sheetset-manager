@@ -65,7 +65,7 @@ const switchLabel = computed(() => enabled.value
 .badge.success{background:var(--color-success-bg);color:var(--color-success)}
 .badge.warning{background:var(--color-warning-bg);color:var(--color-warning)}
 .badge.danger{background:var(--color-danger-bg);color:var(--color-danger)}
-.ext-diag{color:var(--color-text-muted)}
+.ext-diag{color:var(--color-warning)}
 .ext-side{display:flex;align-items:center;gap:var(--space-2);flex:none;padding-top:2px}
 .ext-state{font-size:12px;color:var(--color-text-muted)}
 .ext-state.on{color:var(--color-success)}
