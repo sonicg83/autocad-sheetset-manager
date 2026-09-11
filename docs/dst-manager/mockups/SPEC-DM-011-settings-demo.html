@@ -11,17 +11,41 @@ html.dark{color-scheme:dark;--canvas:#10151e;--surface:#171e29;--muted:#212b39;-
 #app{height:100%;display:flex;flex-direction:column}.top{height:56px;flex-shrink:0;padding:0 22px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}.gear{font-size:17px;padding:6px 12px}.gear[aria-expanded=true]{background:var(--bluebg);border-color:var(--blue)}.demo-label{font-size:12px;color:var(--secondary)}.welcome{flex:1;display:flex;align-items:center;justify-content:center;text-align:center}.welcome .card{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:36px 44px;max-width:560px}
 dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh);border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:var(--shadow)}dialog::backdrop{background:#111c3266}.dlg{display:flex;flex-direction:column;height:100%}.dlg-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}.dlg-body{display:flex;flex:1;min-height:0}.sections{width:150px;flex-shrink:0;border-right:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:4px}.sections button{border:0;background:transparent;text-align:left;color:var(--secondary);padding:9px 12px;border-radius:7px}.sections button[aria-selected=true]{background:var(--bluebg);color:var(--blue);font-weight:600}.panel{flex:1;overflow:auto;padding:16px 20px;scroll-padding:16px}.diag{border:1px solid var(--amber);background:var(--amberbg);color:var(--amber);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.8;margin-bottom:14px}.diag.readonly{border-color:var(--red);background:var(--redbg);color:var(--red)}
 .group{margin-bottom:8px}.group-title{font-weight:600;font-size:13px;border-left:3px solid var(--blue);padding-left:8px;margin:14px 0 10px}.field{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;padding:8px 10px;border:1px solid transparent;border-radius:8px;align-items:start}.field:focus-within{background:var(--canvas)}.field.dirty{border-color:var(--amber);background:var(--amberbg)}.field.error{border-color:var(--red);background:var(--redbg)}label.f-label{font-size:13px;font-weight:500;padding-top:8px}.f-main{display:flex;flex-direction:column;gap:5px;min-width:0}.f-line{display:flex;gap:6px;align-items:center}.f-line input{flex:1}.f-foot{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:24px}.f-error{font-size:12px;color:var(--red);line-height:1.6}.f-hint{font-size:12px;color:var(--secondary)}.switch{display:inline-flex;align-items:center;gap:8px;padding-top:6px}.radio-line{display:flex;gap:18px;padding-top:6px}.radio-line label{display:flex;gap:6px;align-items:center}
+/* 统一滑动开关（PLAN-DM-022 基线）：布尔状态控件的唯一视觉语言，
+   扩展启停（即时生效）与常规配置的缓冲式 bool 字段（保存时落盘）共用同一形态，
+   两者语义差异靠文案与「保存」按钮是否点亮传达，不再靠控件形态区分。 */
+.switch-track{position:relative;width:44px;height:24px;min-height:24px;padding:0;border:1px solid var(--strong);border-radius:20px;background:var(--muted);cursor:pointer;flex:none;transition:background-color .15s ease,border-color .15s ease}
+.switch-track[aria-checked=true]{background:var(--blue);border-color:var(--blue)}
+.switch-track i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:20px;background:var(--surface);box-shadow:0 1px 2px #10151e26;transition:transform .15s ease}
+.switch-track[aria-checked=true] i{transform:translateX(20px)}
+@media(prefers-reduced-motion:reduce){.switch-track,.switch-track i{transition:none}}
+/* 扩展卡片基线（SC-16）：单列卡片 + 四层信息（名称版本 / 描述 / 状态徽标与诊断 / 状态文字与开关）；
+   卡片不可点击、不导航，唯一交互是开关。条目 ≥6 条时按 enabled 分「已启用/已停用」两段。 */
+.ext-notice{border:1px solid var(--border);background:var(--muted);color:var(--secondary);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.8;margin-bottom:12px}
+.ext-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ext-card{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:12px 14px}
+.ext-main{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.ext-name{font-size:14px;font-weight:600}
+.ext-desc{font-size:12px;line-height:1.7;color:var(--secondary)}
+.ext-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--secondary)}
+.ext-diag{font-size:12px;color:var(--amber)}
+.ext-side{display:flex;align-items:center;gap:8px;flex:none;padding-top:2px}
+.ext-state{font-size:12px;color:var(--secondary)}
+.ext-state.on{color:var(--green)}
 .dlg-foot{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}.saved-pill{font-size:12px;color:var(--green)}
 .about-block{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px}.about-block h3{margin-bottom:6px}.license{font-size:12px;line-height:1.7;color:var(--secondary);white-space:pre-wrap;background:var(--canvas);border-radius:7px;padding:10px 12px;max-height:200px;overflow:auto}
 .pick-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;cursor:pointer}.pick-item:hover{background:var(--muted)}
 #toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);max-width:80vw;z-index:30;background:var(--text);color:var(--surface);padding:12px 20px;border-radius:8px;box-shadow:var(--shadow);font-size:13px}#toast:empty{display:none}
-@media(max-width:900px){dialog{width:calc(100vw - 24px)}.sections{width:110px}.field{grid-template-columns:1fr}}
+@media(max-width:900px){dialog{width:calc(100vw - 24px)}.sections{width:110px}.field{grid-template-columns:1fr}
+/* 演示工具条在最小视口不换行：本页 chrome 不属于被证据化的设计，不占用截图注意力 */
+.top{gap:8px;padding:0 12px}.top h1{font-size:14px;white-space:nowrap}.top .hint{display:none}}
 </style>
 </head>
 <body>
 <div id="app">
   <header class="top"><h1 style="font-size:16px">DST Manager</h1><span class="badge muted">未加载工作区 · 模拟</span><span class="spacer"></span>
     <label class="hint" for="scenario">演示场景</label><select id="scenario"><option value="normal">正常编辑</option><option value="validation">下一次保存校验失败</option><option value="savefail">下一次保存写入失败</option><option value="corrupt">配置文件损坏</option></select>
+    <label class="hint" for="extCount">扩展条目数</label><select id="extCount"><option value="1">1 条（最小）</option><option value="4" selected>4 条（多状态）</option><option value="8">8 条（触发分组）</option></select>
     <button class="quiet" data-action="theme">切换主题</button>
     <button class="gear" data-action="open-settings" id="gear" aria-haspopup="dialog" aria-expanded="false" title="设置">⚙ 设置</button>
   </header>
@@ -35,6 +59,7 @@ dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh)
     <div class="dlg-body">
       <nav class="sections" role="tablist" aria-label="设置分区">
         <button role="tab" aria-selected="true" data-action="section" data-section="general">常规配置</button>
+        <button role="tab" aria-selected="false" data-action="section" data-section="extensions">扩展</button>
         <button role="tab" aria-selected="false" data-action="section" data-section="about">关于</button>
       </nav>
       <div class="panel" id="panel"></div>
@@ -96,14 +121,43 @@ function fieldHtml(it){const dirty=isDirty(it.key),err=errors[it.key];
   if(it.control==='path'){const shown=effValue(it);
     control=`<div class="f-line"><input data-key="${it.key}" value="${esc(shown)}" placeholder="未配置" aria-label="${esc(it.label)}" aria-invalid="${err?'true':'false'}"><button data-action="browse" data-key="${it.key}" aria-label="浏览 ${esc(it.label)}">浏览…</button>${it.nullable?`<button class="link" data-action="clear" data-key="${it.key}" ${shown===''?'disabled':''} aria-label="清除 ${esc(it.label)}">清除</button>`:''}</div>`;}
   else if(it.control==='int'){control=`<div class="f-line"><input data-key="${it.key}" type="number" min="${it.min}" max="${it.max}" value="${esc(effValue(it))}" aria-label="${esc(it.label)}" aria-invalid="${err?'true':'false'}"><span class="f-hint">${it.min}–${it.max}</span></div>`;}
-  else if(it.control==='bool'){const v=edits[it.key]??it.value;control=`<div class="switch"><input type="checkbox" role="switch" data-key="${it.key}" ${v?'checked':''} aria-label="${esc(it.label)}"><span class="f-hint">${v?'开启':'关闭'}</span></div>`;}
+  else if(it.control==='bool'){const v=edits[it.key]??it.value;control=`<div class="switch"><button class="switch-track" role="switch" data-action="bool" data-key="${it.key}" aria-checked="${v}" aria-label="${esc(it.label)}"><i></i></button><span class="f-hint">${v?'开启':'关闭'}</span></div>`;}
   else if(it.control==='enum'){const v=edits[it.key]??it.value;control=`<div class="radio-line" role="radiogroup" aria-label="${esc(it.label)}">${it.options.map(o=>`<label><input type="radio" name="rg-${it.key}" data-key="${it.key}" value="${o.value}" ${o.value===v?'checked':''}>${esc(o.text)}</label>`).join('')}</div>`;}
   const unset=it.hasFileOverride?`<button class="link" data-action="unset" data-key="${it.key}" aria-label="恢复继承 ${esc(it.label)}">恢复继承</button>`:'';
   return `<div class="field ${dirty?'dirty':''} ${err?'error':''}" data-field="${it.key}"><label class="f-label" id="lb-${it.key}">${esc(it.label)}</label><div class="f-main">${control}<div class="f-foot">${srcBadge(it.source)}${unset}<span class="f-hint">${it.control==='path'?it.fileFilter||'':''}</span></div>${err?`<div class="f-error" id="err-${it.key}" role="alert">${esc(err)}</div>`:''}</div></div>`;}
+// 扩展分区演示数据（模拟 GET /api/extensions 摘要；不调真实 API、不写任何数据库）
+const STATUS_TEXT={DISCOVERED:'已发现',DISABLED:'已停用',STARTING:'正在启动',AVAILABLE:'可用',WAITING_DEPENDENCY:'等待依赖',INCOMPATIBLE:'不兼容',FAILED:'启动失败',STOPPING:'正在停止',STOPPED:'已停止'};
+const EXT_GROUP_THRESHOLD=6; // 基线阈值：条目 ≥6 条时按 enabled 分「已启用/已停用」
+const EXT_SAMPLES=(()=>{
+  const all=[
+    {id:'dst-manager.sheet-catalog',name:'图纸目录',version:'0.1.0',desc:'从图纸集数据生成图纸目录工作簿（XLSX），支持输出模板与字段表达式。',status:'AVAILABLE',enabled:true,error:null},
+    {id:'demo.frame-update',name:'图框批量更新',version:'0.2.0',desc:'按图框属性表批量替换图框块并回写标题栏字段。',status:'DISABLED',enabled:false,error:null},
+    {id:'demo.attribute-export',name:'属性批量导出',version:'0.1.3',desc:'把图纸与子集属性导出为制表符分隔文本，供外部审计比对。',status:'FAILED',enabled:true,error:'EXTENSION_START_FAILED'},
+    {id:'demo.sheet-validate',name:'图纸一致性校验',version:'0.3.1',desc:'校验图号与文件名一致性并列出不一致项。',status:'INCOMPATIBLE',enabled:false,error:'EXTENSION_HOST_CONTRACT_MISMATCH'},
+    {id:'demo.batch-plot',name:'批量打印',version:'0.1.0',desc:'按子集输出 PDF 打印任务并记录每张图纸的结果。',status:'DISABLED',enabled:false,error:null},
+    {id:'demo.layer-audit',name:'图层审计',version:'0.2.2',desc:'汇总各图纸的图层使用情况与未使用图层。',status:'AVAILABLE',enabled:true,error:null},
+    {id:'demo.titleblock-sync',name:'标题栏同步',version:'0.1.1',desc:'把子集属性同步到标题栏的已登记字段。',status:'DISABLED',enabled:false,error:null},
+    {id:'demo.cad-version-report',name:'CAD 版本报告',version:'0.1.0',desc:'统计图纸保存版本并提示需转换的文件。',status:'AVAILABLE',enabled:true,error:null}
+  ];
+  return {pick:n=>all.slice(0,n)};
+})();
+let extSampleCount=4;
+// 卡片四层：名称 / 描述 / 状态徽标与诊断码 / 状态文字与开关。卡片不可点击、不导航。
+function extCardHtml(ext){
+  const tone=ext.status==='AVAILABLE'?'green':ext.status==='FAILED'?'red':(ext.status==='INCOMPATIBLE'||ext.status==='WAITING_DEPENDENCY')?'amber':'muted';
+  const diag=ext.error?`<span class="ext-diag">诊断码 ${esc(ext.error)}</span>`:'';
+  return `<li class="ext-card" data-ext="${esc(ext.id)}"><div class="ext-main"><span class="ext-name">${esc(ext.name)}</span><span class="ext-desc">${esc(ext.desc)}</span><span class="ext-meta"><span class="badge muted">v${esc(ext.version)}</span><span class="badge ${tone}">${esc(STATUS_TEXT[ext.status]??ext.status)}</span>${diag}</span></div><div class="ext-side"><span class="ext-state ${ext.enabled?'on':''}" aria-hidden="true">${ext.enabled?'已启用':'已停用'}</span><button class="switch-track" role="switch" data-action="ext-toggle" data-ext="${esc(ext.id)}" aria-checked="${ext.enabled}" aria-label="${ext.enabled?`停用 ${esc(ext.name)}`:`启用 ${esc(ext.name)}`}"><i></i></button></div></li>`;}
+function extGroupHtml(title,list){return list.length?`<div class="group"><div class="group-title">${title}</div><ul class="ext-list">${list.map(extCardHtml).join('')}</ul></div>`:'';}
+function extensionsHtml(){const list=EXT_SAMPLES.pick(extSampleCount);
+  const notice='<p class="ext-notice" role="note">扩展启停立即生效，不受下方取消影响。</p>';
+  if(list.length<EXT_GROUP_THRESHOLD)return notice+`<ul class="ext-list">${list.map(extCardHtml).join('')}</ul>`;
+  return notice+extGroupHtml('已启用',list.filter(e=>e.enabled))+extGroupHtml('已停用',list.filter(e=>!e.enabled));}
 function render(){$('rev-pill').textContent=`配置修订 r${snapshot.configRevision} · 模拟`;
   const diag=$('diag');if(snapshot.diagnostics.length){diag.hidden=false;diag.classList.toggle('readonly',snapshot.diagnostics.some(d=>d.code==='SETTINGS_SCHEMA_NEWER'));diag.innerHTML=snapshot.diagnostics.map(d=>`⚠ ${esc(d.message)}（诊断码 ${d.code}）`).join('<br>');}else diag.hidden=true;
   const categories=[...new Set(snapshot.items.map(i=>i.category))];
-  $('panel').innerHTML=section==='general'
+  $('panel').innerHTML=section==='extensions'
+    ?extensionsHtml()
+    :section==='general'
     ?categories.map(c=>`<div class="group"><div class="group-title">${esc(c)}</div>${snapshot.items.filter(i=>i.category===c).map(fieldHtml).join('')}</div>`).join('')
     :`<div class="about-block"><h3>应用</h3><p>DST Manager <strong>v0.9.9（模拟版本号）</strong></p><p class="hint">真实实现运行时读取包元数据（ARCH-DM-004 §3）。</p></div>
      <div class="about-block"><h3>开源协议（MIT）</h3><div class="license">MIT License
@@ -133,12 +187,17 @@ const fakeFiles={exe:[['C:\\Program Files\\Autodesk\\AutoCAD 2016\\accoreconsole
 async function browse(k){const it=item(k),list=it.fileFilter.includes('exe')?fakeFiles.exe:fakeFiles.dll;
   const r=await ask('模拟原生选择器 · '+it.fileFilter,`<p class="hint">桌面壳中此处为 pywebview create_file_dialog（ShellBridge select_file）。请选择模拟条目：</p>${list.map(([p])=>`<div class="pick-item" data-action="pick" data-path="${esc(p)}"><span class="mono">${esc(p)}</span></div>`).join('')}`,[{text:'取消',value:'cancel'}]);
   if(r&&r!=='cancel'){edits[k]=r;delete cleared[k];delete errors[k];render();}}
+// 输入委托：滑动开关改走 click（见上方 data-action="bool"），此处只处理文本/数值/单选
 document.addEventListener('input',e=>{const t=e.target,k=t.dataset?.key;if(!k)return;delete errors[k];dirtyFields.push(k);
-  if(t.type==='checkbox')edits[k]=t.checked;else if(t.type==='radio')edits[k]=Number(t.value);else edits[k]=t.value;
+  if(t.type==='radio')edits[k]=Number(t.value);else edits[k]=t.value;
   if(t.type==='number'&&(t.value===''||Number(t.value)<item(k).min||Number(t.value)>item(k).max)){errors[k]=t.value===''?'必须为整数':`必须在 ${item(k).min}–${item(k).max} 之间`;}
-  render();if(t.type!=='checkbox'&&t.type!=='radio'){const el=$('panel').querySelector(`[data-key="${k}"]`);el?.focus();}});
+  render();if(t.type!=='radio'){const el=$('panel').querySelector(`[data-key="${k}"]`);el?.focus();}});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const a=b.dataset.action;
   if(a==='modal'){finishModal(b.dataset.choice);return;}
+  if(a==='bool'){const k=b.dataset.key,cur=edits[k]??item(k).value;edits[k]=!cur;delete errors[k];render();$('panel').querySelector(`[data-key="${k}"]`)?.focus();return;}
+  if(a==='ext-toggle'){const ext=EXT_SAMPLES.pick(extSampleCount).find(x=>x.id===b.dataset.ext);
+    // 与实际后端一致：启用对非 AVAILABLE 条目是一次真实重试，仍失败则保持「已启用 + 启动失败」
+    if(ext){ext.enabled=!ext.enabled;ext.status=ext.enabled?(ext.error?'FAILED':'AVAILABLE'):'DISABLED';render();toast(`模拟 PATCH /api/extensions/${ext.id}/state → enabled=${ext.enabled}`);}return;}
   if(a==='theme'){document.documentElement.classList.toggle('dark');return;}
   if(a==='open-settings'){openSettings();return;}
   if(a==='section'){section=b.dataset.section;document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));render();return;}
@@ -154,6 +213,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-acti
 let unsetPending=[];
 function applyUnset(k){const it=item(k);const eff=it.source==='env'?it.default??it.value:it.default;it.value=eff;it.hasFileOverride=false;it.source=it.default===eff?'default':'env';delete edits[k];delete cleared[k];render();}
 $('settings').addEventListener('cancel',e=>{e.preventDefault();tryClose();});
+// 演示工具：切换扩展条目数，用于覆盖「<6 条不分段 / ≥6 条分段」两种基线呈现
+extSampleCount=Number($('extCount').value);
+$('extCount').addEventListener('change',()=>{extSampleCount=Number($('extCount').value);render();});
 </script>
 </body>
 </html>

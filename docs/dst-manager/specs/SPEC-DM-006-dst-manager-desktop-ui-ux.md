@@ -17,6 +17,7 @@ related:
   - SPEC-DM-007
   - SPEC-DM-008
   - SPEC-DM-009
+  - SPEC-DM-011
   - PLAN-DM-001
   - PLAN-DM-002
   - PLAN-DM-004
@@ -229,6 +230,7 @@ DST Manager 是面向单人单机真实工程的本地桌面工具，用于既�
 ### 6.3 表单与校验
 
 - 文本输入、下拉框和文本域统一消费 `--color-bg-surface`、`--color-border-strong`、`--color-text-primary`、`--color-focus`，高度 `36–40px`、圆角 `--radius-md`，并完整提供 `hover`、`focus-visible`、`disabled` 与错误态；不得依赖浏览器原生黑色直角边框或平台默认下拉样式构成最终视觉。
+- 布尔状态控件（含「点击即落库的启停开关」与「随表单保存的布尔字段」）统一为滑动开关形态（`role="switch"` + `aria-checked` + 令牌化轨道/滑块），不得使用依赖平台原生渲染的裸 checkbox；定义与两处用途见 [SPEC-DM-011](SPEC-DM-011-settings-center-ui.md) §3.3。当前唯一消费者是设置中心，故该组件规范正文仍留在那份 Spec；出现第二个消费者（非设置中心页面）时再提升为本节组件规范。
 - 每个输入都有可见 `<label>`（禁止仅用 placeholder）；hint 与 error 通过 `aria-describedby` 关联。
 - **失焦即时校验**（on blur）为主，提交时兜底；属性定义/结构变更分批的既有规则（"属性定义与结构变更必须分批预览和执行"）以行内提示 + 顶部错误摘要双重呈现。
 - 校验失败：字段下方红字行内错误 + 顶部**错误摘要**（`role="alert"`、`tabindex="-1"`、提交后聚焦摘要标题、每条链接到对应字段），保留行内错误不被摘要替代。

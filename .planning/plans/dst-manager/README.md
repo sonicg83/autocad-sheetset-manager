@@ -14,6 +14,7 @@
 
 详细计划：
 
+- [扩展卡片基线与布尔开关统一下沉（PLAN-DM-022，proposed，依据 SPEC-DM-011 SC-16；3 批次 4 任务，待批准开工）](PLAN-DM-022-extension-card-baseline.md)
 - [多语言支持实施计划（PLAN-DM-021，active；批次一～三与 Task 11/12 已实施，全量 e2e 有批次三遗留回归待修复，G8 待 D3 裁决、G9 待真实桌面验收）](PLAN-DM-021-multilingual-support.md)
 - [内置扩展平台与图纸目录 XLSX 实施计划（PLAN-DM-020，active；12 个任务全部实施，G7/G8 已通过，全量自动验证通过；G9 真实桌面验收待用户，见 [G9 清单（MEMO-DM-028）](../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)）](PLAN-DM-020-sheet-catalog-builtin-extension.md)
 - [设置中心实施计划（PLAN-DM-019，proposed，依据 ARCH-DM-004 与 SPEC-DM-011；G0～G5 门禁已通过，G4 设计已冻结）](PLAN-DM-019-settings-center.md)
