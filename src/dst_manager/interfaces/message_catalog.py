@@ -18,6 +18,7 @@
 
 from dataclasses import dataclass, field
 
+from dst_manager.interfaces.extension_contracts import EXTENSION_MESSAGE_KEYS
 from dst_manager.settings.errors import ParamValue
 
 __all__ = ["CATALOG", "ErrorCatalogEntry", "error_payload", "known_codes", "shell_error"]
@@ -97,6 +98,14 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     # 扩展域既有键，目录缺失用专用键区分图纸集目录语义）
     "EXTENSION_ARTIFACT_NOT_FOUND": _E("errors.extension.artifactNotFound"),
     "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND": _E("errors.shell.artifactDirectoryNotFound"),
+    # ---- ShellBridge 扩展平台码（PLAN-DM-024 Task 2 / MEMO-DM-031 F3） ----
+    # 三个 Shell 侧扩展错误此前只带中文 message、缺 message_key，en-US 用户看到
+    # 原始中文串。复用 extension_contracts.EXTENSION_MESSAGE_KEYS 的既有键：Shell
+    # 与 API 的同名平台码共用同一前端文案，不新建第二套文案键（无循环导入：
+    # extension_contracts -> contracts.py 不依赖本模块）。
+    "EXTENSION_NOT_FOUND": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_NOT_FOUND"]),
+    "EXTENSION_ACTION_NOT_FOUND": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_ACTION_NOT_FOUND"]),
+    "EXTENSION_CAPABILITY_UNAVAILABLE": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_CAPABILITY_UNAVAILABLE"]),
     # ---- CAD/Acsm 结构校验（AcsmValidationError，422 handler） ----
     "SHEET_NOT_FOUND": _E("errors.sheet.notFound", {"object_id": str}, "object_id"),
     "ACSMSHEET_NOT_FOUND": _E("errors.sheet.nodeNotFound", {"object_id": str}, "object_id"),

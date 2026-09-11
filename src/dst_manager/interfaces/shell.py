@@ -273,7 +273,11 @@ class ShellBridge:
                 "EXTENSION_CAPABILITY_UNAVAILABLE", "该动作不支持 XLSX 保存"
             )
         if self._window is None:
-            raise RuntimeError("保存对话框窗口尚未就绪")
+            # PLAN-DM-024 Task 2 / MEMO-DM-031 F2：窗口未就绪曾是裸 RuntimeError，
+            # pywebview 会把它变成 JS Promise 拒绝且前端无法捕获，exportState.phase
+            # 永久卡在 exporting。改为与其余桥错误同构的结构化失败，前端据此离开
+            # 导出中状态并可经同一出口重试。
+            return shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "保存对话框窗口尚未就绪")
         context = self._context.current
         assert context is not None  # _context_error 通过后当前上下文必然存在
         result = self._window.create_file_dialog(

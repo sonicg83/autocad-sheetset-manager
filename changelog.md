@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-024 任务 2：闭合保存授权异常与 Shell 扩展错误本地化）
+
+- 修复 MEMO-DM-031 F2：`ShellBridge.request_extension_save` 在保存对话框窗口未就绪时此前抛裸 `RuntimeError`，pywebview 将其变成 JS Promise 拒绝且 `exportXlsx()` 未捕获，`exportState.phase` 永久卡在 `exporting`、导出按钮死锁。壳改为返回结构化失败 `shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "保存对话框窗口尚未就绪")`；前端把授权请求置于 `try/catch`，捕获后写入 `phase="failed"`、`errorCode="EXTENSION_CAPABILITY_UNAVAILABLE"` 与本地化错误正文，同一出口可重试；用户取消的 `idle` 语义不变。
+- 修复 MEMO-DM-031 F3：`EXTENSION_NOT_FOUND` / `EXTENSION_ACTION_NOT_FOUND` / `EXTENSION_CAPABILITY_UNAVAILABLE` 三个 Shell 扩展错误此前只带中文 `message`、缺 `message_key`，en-US 用户看到原始中文串。登记进 `message_catalog.CATALOG`，复用 `extension_contracts.EXTENSION_MESSAGE_KEYS` 既有键（不新建第二套文案键，确认无循环导入）；shell.py 其余 `EXTENSION_CAPABILITY_UNAVAILABLE` 调用点（保存授权通道未装配 / 非 XLSX 动作 / 无法读取保存目标 / 扩展成果存储未装配）随目录登记自动获得 `message_key`，API 扩展错误既有映射未变。
+- TDD：Python 侧改 `test_request_extension_save_requires_window` 为结构化失败断言并新增三错误码 `code/message_key/params/message` 四字段参数化测试、`test_message_catalog.py` 锁定三码登记与键复用，先红（8 失败）后绿；前端新增「授权桥拒绝后可重试」（fixture 新增 `reject` 桥拒绝模式与 `setSaveDialog` 可编程控制）与「en-US 三个 Shell 扩展错误码正文均为英文资源」两用例，先红后绿。聚焦回归 `tests/unit/test_shell.py` + `tests/unit/test_message_catalog.py` 全过，`sheet-catalog.spec.ts` 37 用例全过（`--workers=1 --retries=0`），`check:i18n` 无告警，`vue-tsc -b` 通过。
+
 ## 2026-09-11（PLAN-DM-024 任务 1：为扩展列表替换增加草稿生命周期闸门）
 
 - 修复 MEMO-DM-031 F1：`openSettings` 触发的 `reloadExtensions()` 此前在请求失败时把扩展清成 `[]`、在成功但状态失效时直接替换列表，两条路径都会让活动 sheet-catalog 标签被 `useShellTabs` 的回退语义静默卸载、未保存草稿随视图卸载丢失，绕过 `guardSheetCatalogPage` 三选一守卫。

@@ -20,7 +20,19 @@ export interface CatalogTemplate {
   columns: CatalogColumn[];
 }
 
-export type SaveDialogMode = "grant" | "cancel" | "error";
+// PLAN-DM-024 Task 2：新增 "reject"——假桥直接抛错（对齐壳窗口未就绪时抛
+// RuntimeError、经 pywebview 变成 JS Promise 拒绝的行为，MEMO-DM-031 F2）。
+// PLAN-DM-024 Task 2：新增 "reject"——假桥直接抛错（对齐壳窗口未就绪时抛
+// RuntimeError、经 pywebview 变成 JS Promise 拒绝的行为，MEMO-DM-031 F2）。
+export type SaveDialogMode = "grant" | "cancel" | "error" | "reject";
+
+// 修复后的 Shell 桥对已知扩展平台码返回的文案键（与后端 message_catalog.CATALOG
+// / extension_contracts.EXTENSION_MESSAGE_KEYS 同构），假桥据此模拟真实壳契约。
+export const SHELL_EXTENSION_MESSAGE_KEYS: Record<string, string> = {
+  EXTENSION_NOT_FOUND: "errors.extension.notFound",
+  EXTENSION_ACTION_NOT_FOUND: "errors.extension.actionNotFound",
+  EXTENSION_CAPABILITY_UNAVAILABLE: "errors.extension.capabilityUnavailable",
+};
 export type ExecuteMode = "ok" | "repreviewRequired" | "saveGrantInvalid" | "destinationChanged" | "writeFailed" | "digestMismatch";
 export type PutSettingsMode = "ok" | "conflict" | "duplicate" | "limit";
 // PLAN-DM-024 Task 1：/api/extensions 刷新的可编程控制（PLAN-DM-024/MEMO-DM-031 F1）。
@@ -253,13 +265,16 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
   };
 
   if (!options.noShell) {
-    await page.addInitScript(({mode, errorCode}) => {
+    await page.addInitScript(({mode, errorCode, extensionMessageKeys}) => {
       const calls = {
         saveRequests: [] as unknown[],
         openFolderCalls: [] as string[],
         artifactFolderCalls: [] as {extension_id: string; artifact_id: string}[],
       };
       (window as unknown as Record<string, unknown>).__catalogBridge = calls;
+      // PLAN-DM-024 Task 2：另存为行为暴露为浏览器侧可变控制，用例中途可经
+      // setSaveDialog 切换（"授权桥拒绝 → 恢复后重试成功"的闭环需要桥可编程）。
+      (window as unknown as Record<string, unknown>).__catalogSaveDialog = {mode, errorCode};
       (window as unknown as Record<string, unknown>).pywebview = {
         api: {
           select_file: async () => "C:\\虚构工程\\图纸集.dst",
@@ -275,14 +290,34 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
           },
           request_extension_save: async (extensionId: string, actionId: string, workspaceId: string) => {
             calls.saveRequests.push({extension_id: extensionId, action_id: actionId, workspace_id: workspaceId});
-            if (mode === "error") return {ok: false, code: errorCode ?? "EXTENSION_CAPABILITY_UNAVAILABLE", message: "保存对话框不可用"};
-            if (mode === "cancel") return {ok: true, value: null};
+            const dialog = (window as unknown as {__catalogSaveDialog?: {mode: string; errorCode: string | null}}).__catalogSaveDialog
+              ?? {mode, errorCode};
+            if (dialog.mode === "reject") {
+              // 对齐真实壳窗口未就绪时的行为：桥抛错经 pywebview 变成 Promise 拒绝
+              throw new Error("保存对话框窗口尚未就绪");
+            }
+            if (dialog.mode === "error") {
+              // 对齐修复后 shell_error 契约（PLAN-DM-024 Task 2 / MEMO-DM-031 F3）：
+              // 已知扩展平台码携带 message_key，中文 message 仅作兼容诊断。
+              const code = dialog.errorCode ?? "EXTENSION_CAPABILITY_UNAVAILABLE";
+              const messageKey = extensionMessageKeys ? extensionMessageKeys[code] : undefined;
+              return messageKey
+                ? {ok: false, code, message_key: messageKey, params: {}, message: "保存对话框不可用"}
+                : {ok: false, code, message: "保存对话框不可用"};
+            }
+            if (dialog.mode === "cancel") return {ok: true, value: null};
             return {ok: true, value: {save_grant_id: "grant-e2e", file_name: "测试图纸集-图纸目录.xlsx", expires_at: "2026-09-10T00:00:00Z"}};
           },
         },
       };
       window.dispatchEvent(new Event("pywebviewready"));
-    }, {mode: controls.saveDialog, errorCode: controls.saveDialogError ?? null});
+    }, {
+      mode: controls.saveDialog,
+      errorCode: controls.saveDialogError ?? null,
+      // 对齐修复后的 shell_error 契约（PLAN-DM-024 Task 2 / MEMO-DM-031 F3）：
+      // 已知扩展平台码必带 message_key，中文 message 仅作兼容诊断
+      extensionMessageKeys: SHELL_EXTENSION_MESSAGE_KEYS,
+    });
   }
 
   const extensionSummary = () => ({
@@ -454,6 +489,18 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
 // 布防后续 /api/extensions 请求的刷新行为（按请求顺序消费；见 ExtensionsReloadControl）
 export function planExtensionsReload(state: SheetCatalogState, controls: ExtensionsReloadControl[]): void {
   state.extensionsReloadPlan.push(...controls);
+}
+
+// 用例中途切换假桥另存为行为（PLAN-DM-024 Task 2）："授权桥拒绝 → 恢复后重试成功"
+// 的闭环与逐错误码切换都要求桥行为在页面加载后仍可编程。
+export async function setSaveDialog(page: Page, mode: SaveDialogMode, errorCode?: string): Promise<void> {
+  await page.evaluate(({nextMode, nextErrorCode}) => {
+    const dialog = (window as unknown as {__catalogSaveDialog?: {mode: string; errorCode: string | null}}).__catalogSaveDialog;
+    if (dialog) {
+      dialog.mode = nextMode;
+      dialog.errorCode = nextErrorCode;
+    }
+  }, {nextMode: mode, nextErrorCode: errorCode ?? null});
 }
 
 export async function openCatalogPage(page: Page, options: {noShell?: boolean} = {}): Promise<void> {

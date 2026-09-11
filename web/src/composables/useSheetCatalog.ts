@@ -12,6 +12,7 @@ import type {Ref} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError, localizedError, request} from "../api/client";
 import {openArtifactFolder, requestExtensionSave, shellReady} from "../api/shell";
+import type {ShellResult, ShellSaveGrant} from "../api/shell";
 import type {Workspace} from "../api/contracts";
 
 export const CATALOG_EXTENSION_ID = "dst-manager.sheet-catalog";
@@ -533,7 +534,23 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     exportState.errorText = "";
     exportState.errorCode = "";
     actionError.value = "";
-    const grant = await requestExtensionSave(CATALOG_EXTENSION_ID, CATALOG_ACTION_ID, current.id);
+    // PLAN-DM-024 Task 2 / MEMO-DM-031 F2：授权请求必须被 try/catch 覆盖——壳
+    // 窗口未就绪时桥抛 RuntimeError，pywebview 把它变成 JS Promise 拒绝；未捕获
+    // 会让 phase 永久卡在 exporting、导出按钮死锁。捕获后转成结构化失败离开
+    // 导出中状态，同一出口可重试；用户取消的 idle 语义（下方 value===null 分支）不变。
+    let grant: ShellResult<ShellSaveGrant | null> | null;
+    try {
+      grant = await requestExtensionSave(CATALOG_EXTENSION_ID, CATALOG_ACTION_ID, current.id);
+    } catch (error) {
+      exportState.phase = "failed";
+      exportState.errorCode = "EXTENSION_CAPABILITY_UNAVAILABLE";
+      exportState.errorText = localizedError(
+        "errors.extension.capabilityUnavailable",
+        {},
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
     if (grant === null) {
       // 桥缺失（浏览器/旧壳）：可见说明并停用导出
       exportState.phase = "failed";

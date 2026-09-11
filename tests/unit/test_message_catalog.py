@@ -108,9 +108,13 @@ SETTINGS_CODES = {
     "SETTINGS_VALIDATION_FAILED",
 }
 
-# ShellBridge {ok: false} 结果（interfaces/shell.py）
+# ShellBridge {ok: false} 结果（interfaces/shell.py；三个扩展平台码为
+# PLAN-DM-024 Task 2 / MEMO-DM-031 F3 新登记）
 SHELL_CODES = {
+    "EXTENSION_ACTION_NOT_FOUND",
     "EXTENSION_ARTIFACT_NOT_FOUND",
+    "EXTENSION_CAPABILITY_UNAVAILABLE",
+    "EXTENSION_NOT_FOUND",
     "SHELL_ARTIFACT_DIRECTORY_NOT_FOUND",
     "SHELL_DIRECTORY_NOT_FOUND",
     "SHELL_EXTERNAL_URL_REJECTED",
@@ -256,6 +260,23 @@ def test_shell_error_unknown_code_falls_back_without_key():
     assert result["ok"] is False
     assert "message_key" not in result
     assert result["message"] == "原始诊断"
+
+
+# ---- Shell 扩展错误复用 extension 域既有文案键（PLAN-DM-024 Task 2 / MEMO-DM-031 F3） ----
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["EXTENSION_NOT_FOUND", "EXTENSION_ACTION_NOT_FOUND", "EXTENSION_CAPABILITY_UNAVAILABLE"],
+)
+def test_shell_extension_codes_reuse_extension_message_keys(code):
+    """三个 Shell 扩展 code 必须登记为 UI 可见错误（进 CATALOG），且复用
+    extension_contracts.EXTENSION_MESSAGE_KEYS 的既有键，不新建第二套文案键。"""
+    from dst_manager.interfaces.extension_contracts import EXTENSION_MESSAGE_KEYS
+
+    assert code in known_codes()
+    assert code in EXTENSION_MESSAGE_KEYS
+    assert CATALOG[code].message_key == EXTENSION_MESSAGE_KEYS[code]
 
 
 # ---- 分层约束 ----

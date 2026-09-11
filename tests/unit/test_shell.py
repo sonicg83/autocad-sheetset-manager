@@ -545,14 +545,55 @@ def _save_bridge(registry=None, save_grants=None, result=None):
 
 
 def test_request_extension_save_requires_window():
+    """窗口未就绪不再抛 RuntimeError（PLAN-DM-024 Task 2 / MEMO-DM-031 F2）：
+    pywebview 会把桥异常变成 JS Promise 拒绝，前端 exportXlsx 此前无法捕获，
+    exportState.phase 永久卡在 exporting、导出按钮死锁。改为与其余桥错误同构的
+    结构化失败，前端据此离开导出中状态并可通过同一出口重试。"""
     bridge = ShellBridge(
         context=_SaveContext(), registry=_FakeRegistry(_manifest([XLSX_ACTION])),
         save_grants=SaveGrantStore(),
     )
-    with pytest.raises(RuntimeError):
-        bridge.request_extension_save(
-            "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    result = bridge.request_extension_save(
+        "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
+    )
+    assert result["ok"] is False
+    assert result["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert result["message_key"] == "errors.extension.capabilityUnavailable"
+    assert result["params"] == {}
+    assert result["message"] == "保存对话框窗口尚未就绪"
+
+
+@pytest.mark.parametrize(
+    ("code", "message_key", "trigger"),
+    [
+        ("EXTENSION_NOT_FOUND", "errors.extension.notFound", "extension"),
+        ("EXTENSION_ACTION_NOT_FOUND", "errors.extension.actionNotFound", "action"),
+        ("EXTENSION_CAPABILITY_UNAVAILABLE", "errors.extension.capabilityUnavailable", "window"),
+    ],
+)
+def test_shell_extension_errors_carry_complete_structured_fields(code, message_key, trigger):
+    """三个 Shell 扩展错误码逐一断言 code/message_key/params/message 四字段完整
+    （PLAN-DM-024 Task 2 / MEMO-DM-031 F3）：message_key 是前端本地化唯一依据，
+    缺键时 en-US 用户会看到原始中文兼容 message。"""
+    extension_id = "dst-manager.sheet-catalog"
+    action_id = "export-xlsx"
+    if trigger == "extension":
+        extension_id = "dst-manager.other"
+        bridge, _ = _save_bridge()
+    elif trigger == "action":
+        action_id = "other-action"
+        bridge, _ = _save_bridge()
+    else:  # window：绑定前调用，触发"窗口尚未就绪"分支
+        bridge = ShellBridge(
+            context=_SaveContext(), registry=_FakeRegistry(_manifest([XLSX_ACTION])),
+            save_grants=SaveGrantStore(),
         )
+    result = bridge.request_extension_save(extension_id, action_id, "workspace-1")
+    assert result["ok"] is False
+    assert result["code"] == code
+    assert result["message_key"] == message_key
+    assert result["params"] == {}
+    assert result["message"]  # 兼容文本保留（迁移窗口），仅作诊断
 
 
 def test_request_extension_save_rejects_without_matching_context():

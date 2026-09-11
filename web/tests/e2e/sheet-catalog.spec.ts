@@ -5,7 +5,7 @@
 // 工作区/设置/动作路由经 fixtures/sheetCatalog.ts 模拟。
 import {expect, test, type Page} from "@playwright/test";
 import {
-  EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, planExtensionsReload, readBridgeCalls,
+  EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, planExtensionsReload, readBridgeCalls, setSaveDialog,
   type CatalogTemplate, type SheetCatalogState,
 } from "./fixtures/sheetCatalog";
 
@@ -434,6 +434,25 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     await page.getByRole("button", {name: "重试导出"}).click();
     await expect(page.getByText("图纸目录已保存到")).toBeVisible();
   });
+
+  // PLAN-DM-024 Task 2 / MEMO-DM-031 F2：壳窗口未就绪时桥抛 RuntimeError，经
+  // pywebview 变成 JS Promise 拒绝。此前 exportXlsx 未捕获该拒绝，phase 永久
+  // 卡在 exporting、导出按钮死锁；修复后必须落回 failed 并可经同一出口重试。
+  test("授权桥拒绝后可重试：本地化错误可见、退出导出中状态，桥恢复后重试成功", async ({page}) => {
+    const state = await openCatalog(page, {saveDialog: "reject"});
+    await page.getByRole("button", {name: "导出 XLSX"}).click();
+    expect((await readBridgeCalls(page)).saveRequests).toHaveLength(1);
+    const alert = page.getByRole("alert").filter({hasText: "扩展当前不可用，无法执行该操作"});
+    await expect(alert).toBeVisible();
+    // 不卡死在"正在导出"：导出按钮回到可点击状态，可再次发起导出
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+    await expect(page.getByText("正在导出")).toHaveCount(0);
+    // 桥恢复后同一出口重试成功：重新取授权并执行
+    await setSaveDialog(page, "grant");
+    await alert.getByRole("button", {name: "重试导出"}).click();
+    await expect(page.getByText("图纸目录已保存到")).toBeVisible();
+    expect(state.executeRequests).toHaveLength(1);
+  });
 });
 
 test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
@@ -550,5 +569,43 @@ test.describe("扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 F1）
     await dialogAgain.getByRole("button", {name: "放弃修改"}).click();
     await expect(page.getByRole("tab", {name: "图纸目录"})).toHaveCount(0);
     await expect(page.locator("#tab-sheets")).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+// PLAN-DM-024 Task 2 / MEMO-DM-031 F3：Shell 扩展错误必须按当前语言渲染
+// errors.extension.* 英文资源；桥返回的中文兼容 message 不得出现在 en-US 正文。
+// 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写全局 settings.json。
+const enSettingsSnapshot = {
+  schema_version: 1, config_revision: 1, diagnostics: [], schema_blocked: false,
+  items: [{key: "ui_locale", control: "enum", value: "en-US", default: "system", source: "file", has_file_override: true,
+    label_key: "settings.items.uiLocale", category_key: "settings.categories.interface",
+    options: [{value: "system", text_key: "settings.locale.system"}, {value: "zh-CN", text_key: "settings.locale.zhCN"}, {value: "en-US", text_key: "settings.locale.enUS"}]}],
+};
+
+test.describe("Shell 扩展错误使用当前语言（PLAN-DM-024 F3）", () => {
+  test("en-US：三个 Shell 扩展错误码正文均为英文资源，不显示桥返回的中文兼容 message", async ({page}) => {
+    await page.route("**/api/settings", route => route.fulfill({json: enSettingsSnapshot}));
+    await installSheetCatalogFixture(page, {saveDialog: "error", saveDialogError: "EXTENSION_NOT_FOUND"});
+    await page.goto("/");
+    await page.getByRole("button", {name: "Select DST File"}).click();
+    await page.getByRole("tab", {name: "Sheet Catalog"}).click();
+    const cases = [
+      {code: "EXTENSION_NOT_FOUND", text: "The extension is not registered and the operation cannot be performed"},
+      {code: "EXTENSION_ACTION_NOT_FOUND", text: "The extension does not declare this action"},
+      {code: "EXTENSION_CAPABILITY_UNAVAILABLE", text: "The extension is currently unavailable"},
+    ];
+    for (const [index, item] of cases.entries()) {
+      await setSaveDialog(page, "error", item.code);
+      if (index === 0) {
+        await page.getByRole("button", {name: "Export XLSX"}).click();
+      } else {
+        await page.getByRole("alert").filter({hasText: cases[index - 1]!.text}).getByRole("button", {name: "Retry export"}).click();
+      }
+      const alert = page.getByRole("alert").filter({hasText: item.text});
+      await expect(alert).toBeVisible();
+      // 桥的中文兼容 message 只作诊断，不得进入 en-US 正文
+      const body = await page.textContent("body");
+      expect(body, `桥的中文兼容 message 不得进入 en-US 正文（${item.code}）`).not.toContain("保存对话框不可用");
+    }
   });
 });
