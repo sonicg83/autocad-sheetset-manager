@@ -1,8 +1,8 @@
 // 扩展卡片 G8 生产同状态证据（GUIDE-DM-001 G8 / SPEC-DM-011 §7、§9）。
 //
-// 真实后端 + mock /api/extensions（真实 PATCH 会写用户数据库）。只打开设置对话框并
-// 切换到扩展分区，**不保存任何设置**——`settings-dialog.spec.ts` 串行共享同一个隔离
-// 配置文件，本文件写配置会污染它的基线。
+// 真实后端 + 夹具装配的 mock /api/extensions 与 /api/extensions/*/state（真实 PATCH 会写
+// 用户数据库）。只打开设置对话框并切换到扩展分区，**不保存任何设置**——
+// `settings-dialog.spec.ts` 串行共享同一个隔离配置文件，本文件写配置会污染它的基线。
 //
 // 截图经 testInfo 附件留档；G8 验收时把标准集复制到
 // docs/dst-manager/specs/assets/SPEC-DM-011/production/，与 §7 冻结件 g4-* 同名对应
@@ -13,7 +13,7 @@
 // 字面中文（vue-i18n 未登记键按原文回退），与冻结 Demo 的虚构样本同口径。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
 import {openSettingsDialog} from "./fixtures/settings";
-import {extensionSummary} from "./fixtures/extensions";
+import {extensionSummary, installExtensions} from "./fixtures/extensions";
 
 // 4 条多状态样本：可用 / 已停用 / 启动失败（且用户意图启用）/ 不兼容（含诊断码）
 function multiList(): unknown[] {
@@ -44,7 +44,9 @@ async function shoot(page: Page, info: TestInfo, name: string): Promise<void> {
 
 // 打开设置并切到扩展分区（未加载工作区即可达，SC-15）
 async function openExtensions(page: Page, list: unknown[]): Promise<void> {
-  await page.route("**/api/extensions", route => route.fulfill({json: list}));
+  // 由夹具统一拦 /api/extensions 与 /api/extensions/*/state：本文件当前不拨动开关，
+  // 但一旦新增切换动作，state 路由缺失就会真写用户 .dst-manager-data/dst-manager.db。
+  await installExtensions(page, list);
   await page.goto("/");
   await openSettingsDialog(page);
   await page.getByRole("tab", {name: "扩展"}).click();
