@@ -66,10 +66,21 @@ export default {
     editorLabel: "输出列编辑器",
     columnHeader: "输出列名 {index}",
     columnExpression: "表达式 {index}",
-    addColumn: "添加列",
+    addColumn: "添加输出列",
     removeColumn: "删除列 {index}",
     moveUp: "上移 {index}",
     moveDown: "下移 {index}",
+    // 表格式输出列（PLAN-DM-023 Task 3）：列计数、五列表头与行状态
+    columnCount: "{count} / {limit} 列",
+    columnsHeadOrder: "顺序",
+    columnsHeadHeader: "列名",
+    columnsHeadExpression: "表达式",
+    columnsHeadStatus: "状态",
+    columnsHeadActions: "操作",
+    columnStatusValid: "有效",
+    columnStatusInvalid: "需修正",
+    // 花括号用 vue-i18n 字面量转义写成 {{ / }}，避免被解析为插值
+    expressionSyntaxHint: "表达式只支持文字、字段引用和 {'{'}{'{'} / {'}'}{'}'} 花括号转义。",
     // 兼容性摘要
     compatibilityLabel: "兼容性摘要",
     blockingTitle: "阻断问题",

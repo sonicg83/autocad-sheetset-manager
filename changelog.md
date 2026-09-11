@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 3：恢复图纸目录紧凑表格式编辑器）
+
+- `ColumnEditor.vue` 由逐列大卡片重写为冻结 Demo 的紧凑表格式：新增唯一 `.columns-head`（顺序/列名/表达式/状态/操作）与每行五列 `.column-row`，两者共用同一组 grid 轨道 `34px minmax(110px,.62fr) minmax(250px,1.8fr) 92px 112px`；状态单元格完全由服务端诊断驱动（有错显示“需修正”、无错显示“有效”），表达式错误从整行下方移入表达式单元格内，不复制后端校验规则。
+- 表头与数据行放进同一个滚动容器（`.columns`，`flex:1;max-height:330px;overflow:auto`，表头 `position:sticky`），因此出现纵向滚动条时表头与数据行的列宽始终一致（对齐误差为 0），且 50 列只滚动该容器、不撑高页面。
+- 列区头部显示列计数 `N / 50 列`（新增展示镜像常量 `SHEET_CATALOG_MAX_COLUMNS`，注释明确权威校验仍在后端 `templates.MAX_COLUMNS`，前端不据此拦截）；卡片底部新增操作脚，放“添加输出列”（原“添加列”，同步中英文键）与常显表达式语法说明（花括号用 vue-i18n 字面量转义）。
+- A1（唯一预先接受差异）继续保留：上移/下移/删除仍为 `↑`/`↓`/`✕` 图标按钮与完整 `aria-label`，因此操作轨道取 112px（冻结 Demo 为 188px 的文字按钮）。
+- 测试：`sheet-catalog.spec.ts` 新增“表格式输出列”（五列表头、表头与四行列边界误差 ≤ 1px、`4 / 50 列`、四列状态、未知字段转“需修正”且错误正文在表达式单元格内）与“图标列操作”（无可见文字按钮、`aria-label` 可定位、首尾禁用、顺序变更、删除规则）两用例，先红后绿。
+- 本任务只改呈现层与语言包；不动 `useSheetCatalog` 的业务状态、请求时机、闸门与错误码映射。本轮回归 `sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts`（`--workers=1 --retries=0`）54 passed；剩余 2 条冻结布局红用例（兼容性/操作区 DOM 归属、1440×1000 首屏密度）留给任务 4。
+
 ## 2026-09-11（PLAN-DM-023 任务 2：收敛图纸目录头部与字段浏览器）
 
 - `SheetCatalogView.vue`：删除可用态整行 `.catalog-status` 卡（含冗余的 `extensions.page.ready` 文案，该键已从中英文语言包移除），标题、说明、`v{version} · {status}` 与启停指引合并为单行紧凑 `.catalog-head`（flex + baseline，窄屏换行）；启停指引文案仍为可见正文（`extensions-navigation.spec.ts` 的“防停用回退”用例继续通过）。页面与卡间距从 `--space-4` 收敛到 `--space-3`，工作区栅格改为 `258px minmax(470px,1fr)` + `min-height:425px`，对齐冻结 Demo 的轨道比例。

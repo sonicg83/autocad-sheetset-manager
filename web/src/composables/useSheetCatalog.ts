@@ -24,6 +24,11 @@ const PREVIEW_DEBOUNCE_MS = 300;
 const DOT_NAME_FORBIDDEN = new Set(' \t\r\n.[]{}"\'(),;:=\\'.split(""));
 const SHEET_BUILTIN_FIELDS = ["number", "title", "file_name"] as const;
 
+// SPEC-DM-012 §5.3 首版限制值的展示镜像（PLAN-DM-023 Task 3“N / 50 列”计数）。
+// 权威校验仍在后端 templates.MAX_COLUMNS（超限报 SHEET_CATALOG_COLUMN_LIMIT）；
+// 前端只用它渲染分母，不据此拦截输入、不复制任何校验规则。
+export const SHEET_CATALOG_MAX_COLUMNS = 50;
+
 export interface CatalogColumn {columnId: string; header: string; expression: string}
 export interface CatalogTemplate {templateId: string | null; name: string; columns: CatalogColumn[]}
 export interface CatalogField {scope: "sheetset" | "sheet"; canonicalName: string; builtin: boolean}

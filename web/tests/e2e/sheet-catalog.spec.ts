@@ -65,7 +65,7 @@ test.describe("核心流程（SPEC §3.1）", () => {
     await browser.getByRole("button", {name: /sheet\.number/}).click();
     await expect(expression).toHaveValue("RQ-{sheet.number}{sheet.title}");
     // 特殊名称（含空格）必须插入方括号 JSON 字符串形式：先添加一个空列再插入
-    await page.getByRole("button", {name: "添加列"}).click();
+    await page.getByRole("button", {name: "添加输出列"}).click();
     await page.getByLabel("表达式 4").click();
     await browser.getByRole("button", {name: /sheetset\["项目 名称"\]/}).click();
     await expect(page.getByLabel("表达式 4")).toHaveValue('{sheetset["项目 名称"]}');
@@ -163,6 +163,83 @@ test.describe("字段搜索与可用态头部（PLAN-DM-023 Task 2）", () => {
     await page.getByLabel("输出列名 1").fill("图号（改）");
     await expect(bar.getByText("有未保存修改")).toBeVisible();
     await expect(bar.getByText("已保存", {exact: true})).toHaveCount(0);
+  });
+});
+
+// PLAN-DM-023 Task 3（追踪矩阵 V1/V5/V8/A1）：输出列恢复为冻结 Demo 的紧凑表格式——
+// `.columns-head` 与 `.column-row` 共用同一组 grid 轨道，每行同时显示顺序、列名、
+// 表达式、状态和操作；列区自身限高滚动，列数增长不得撑高页面。
+// A1 是唯一预先接受差异：操作列继续使用 ↑ / ↓ / ✕ 图标按钮与现有完整 aria-label，
+// 因此该轨道比冻结 Demo 的 188px 更窄。
+test.describe("表格式输出列（PLAN-DM-023 Task 3）", () => {
+  // 与 PLAN-DM-023 Task 1 同口径的几何读取（表头 + 每个数据行的五列轨道）
+  async function readColumnGrid(page: Page): Promise<{left: number; right: number}[][]> {
+    return page.evaluate(() => {
+      const rect = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return {left: box.left, right: box.right};
+      };
+      return [
+        Array.from(document.querySelectorAll(".columns-head > *")).map(rect),
+        ...Array.from(document.querySelectorAll(".columns .column-row")).map(row => Array.from(row.children).map(rect)),
+      ];
+    });
+  }
+
+  test("表格式输出列：五列表头、列边界对齐、状态与列计数", async ({page}) => {
+    const template = userTemplate("市政标准目录", [
+      {header: "图纸编号", expression: "{sheet.专业代码}-{sheet.number}"},
+      {header: "图名", expression: "{sheet.title}"},
+      {header: "设计院", expression: "{sheetset.设计院}"},
+      {header: "专业代码", expression: "{sheet.专业代码}"},
+    ]);
+    await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    await expect(editor.locator(".columns-head > *")).toHaveText(["顺序", "列名", "表达式", "状态", "操作"]);
+    await expect(editor.getByText("4 / 50 列")).toBeVisible();
+    // 四列均无阻断问题 → 状态列逐行显示“有效”
+    await expect(editor.locator(".columns .column-row .status-cell")).toHaveText(["有效", "有效", "有效", "有效"]);
+    // 表头与每个数据行共用同一组列边界（误差 ≤ 1px）
+    const grid = await readColumnGrid(page);
+    expect(grid.length, "表头 + 四个数据行").toBe(5);
+    for (const row of grid.slice(1)) {
+      expect(row).toHaveLength(5);
+      for (let index = 0; index < 5; index++) {
+        expect(Math.abs(row[index]!.left - grid[0]![index]!.left), `第 ${index + 1} 列左边界对齐`).toBeLessThanOrEqual(1);
+        expect(Math.abs(row[index]!.right - grid[0]![index]!.right), `第 ${index + 1} 列右边界对齐`).toBeLessThanOrEqual(1);
+      }
+    }
+    // 未知字段：该行变“需修正”，错误正文就在表达式单元格内
+    await page.getByLabel("表达式 1").fill("{sheet.不存在属性}");
+    const firstRow = editor.locator(".columns .column-row").first();
+    await expect(firstRow.locator(".status-cell")).toHaveText("需修正");
+    await expect(firstRow.getByText("[sheet] 不存在属性")).toBeVisible();
+    await expect(editor.locator(".columns .column-row").nth(1).locator(".status-cell")).toHaveText("有效");
+    await expect(editor.getByText("4 / 50 列")).toBeVisible();
+  });
+
+  test("图标列操作：无可见文字按钮，aria-label、禁用边界与顺序变更保持", async ({page}) => {
+    await openCatalog(page);
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    // A1：可见内容仍是图标，不是“上移/下移/删除”文字按钮
+    await expect(editor.getByText("上移", {exact: true})).toHaveCount(0);
+    await expect(editor.getByText("下移", {exact: true})).toHaveCount(0);
+    await expect(editor.getByText("删除列", {exact: true})).toHaveCount(0);
+    const up = editor.getByRole("button", {name: "上移 2"});
+    await expect(up).toHaveText("↑");
+    await expect(editor.getByRole("button", {name: "上移 1"})).toBeDisabled();
+    await expect(editor.getByRole("button", {name: "下移 3"})).toBeDisabled();
+    const headers = editor.getByLabel(/^输出列名 \d+$/);
+    await expect(headers).toHaveCount(3);
+    await expect(headers.nth(0)).toHaveValue("图号");
+    await expect(headers.nth(1)).toHaveValue("图名");
+    await up.click();
+    await expect(editor.getByLabel("输出列名 1")).toHaveValue("图名");
+    await expect(editor.getByLabel("输出列名 2")).toHaveValue("图号");
+    // 删除仍走现有规则（直接移除该列，无额外确认）
+    await editor.getByRole("button", {name: "删除列 1"}).click();
+    await expect(headers).toHaveCount(2);
+    await expect(editor.getByLabel("输出列名 1")).toHaveValue("图号");
   });
 });
 
