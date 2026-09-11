@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-09-08
-updated: 2026-09-10
+updated: 2026-09-11
 related:
   - ARCH-DM-004
   - ARCH-DM-006
@@ -164,6 +164,17 @@ document_kind: spec
 | `g4-12-general-bool-switch-light.png` | 编号规则：缓冲式 bool 字段与扩展开关同形态（统一滑动开关） | 浅色 | 基准 |
 
 - **证据位置与复现方式（本次重冻结新增约定）**：`g4-01～g4-12` 由 `web/tests/e2e/settings-demo-visual-evidence.spec.ts` 驱动本 Demo（`file://`、无后端）产出，运行后从 `test-results/` 复制到本目录进入版本库。上一轮 G4/G8 的截图只作为测试附件与 `.superpowers/` 本地产物存在，而 `.superpowers/` 已被 `.gitignore` 忽略，导致 §7/§8 引用的证据在仓库中无法核验、本地也已不可复现——重冻结起以本目录为权威证据位置。
+- **生产同状态证据位置（2026-09-11 G8 重跑新增）**：`assets/SPEC-DM-011/production/` 存放**生产实现**（非 Demo）在相同状态下产出的 G8 对照证据，由 `web/tests/e2e/settings-extensions-production-evidence.spec.ts` 驱动（真实后端 + mock `/api/extensions`，只打开对话框并切换分区，不保存任何设置），运行后从 `web/test-results/` 复制进本目录：
+
+| 生产证据 | 冻结对照 | 状态 | 主题 | 视口 |
+| --- | --- | --- | --- | --- |
+| `production/g8-ext-01-single-light.png` | `g4-07-extensions-single-light.png` | 扩展分区：1 条 | 浅色 | 基准 |
+| `production/g8-ext-02-multi-light.png` | `g4-08-extensions-multi-light.png` | 扩展分区：4 条多状态 | 浅色 | 基准 |
+| `production/g8-ext-03-grouped-light.png` | `g4-10-extensions-grouped-boundary-light.png` | 扩展分区：8 条分段边界（取景与 g4-10 一致） | 浅色 | 基准 |
+| `production/g8-ext-04-multi-dark.png` | `g4-11-extensions-dark.png` | 扩展分区：4 条 | 深色 | 基准 |
+| `production/g8-ext-05-min-viewport-light.png` | **无冻结对照** | 扩展分区：4 条 | 浅色 | 最小 |
+
+- `g8-ext-05` 的对齐例外（**必须显式声明**）：本目录的冻结件在扩展分区只覆盖基准视口（1280×720），没有该分区的最小视口图，因此这张**不构成与冻结件的比对通过**，只作 900×600 断点下的补充证据（对话框框架的取景可对照 `g4-06`，同为最小视口但分区不同）。
 - 组件与令牌表：沿用 SPEC-DM-006 令牌，无新增（滑动开关的轨道/滑块只用 `--color-accent`/`--color-bg-muted`/`--radius-full` 类既有令牌）。
 - 交互与状态规则：本文 §3；Demo 模拟限制见 §6 差异表。
 - 非目标见 §1。
@@ -180,13 +191,28 @@ document_kind: spec
 | G5 技术映射 | 通过 | 本文 §6 | 技术负责人（Agent） | 2026-09-08 | — |
 | G6 计划就绪 | 通过 | [PLAN-DM-019](../../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md) 创建（含 SC-01～SC-14 与 A-01～A-07 追踪矩阵、全局约束、12 任务四批次）；扩展卡片基线（SC-15/SC-16）另立 [PLAN-DM-022](../../../.planning/plans/dst-manager/PLAN-DM-022-extension-card-baseline.md)（追踪矩阵 + 3 批次 + G8 收口任务），已就绪待批准开工 | 技术负责人（Agent） | 2026-09-08；2026-09-10 补 PLAN-DM-022 | — |
 | G7 分批实施 | 通过 | PLAN-DM-019「实际验证」：批次 1–4（Task 1–11）全部实施并评审收口；`uv run ruff check .` 全绿、全量 pytest 0 失败、`npm run build` 通过、Playwright e2e 全量通过（数字见 Plan） | 技术负责人（Agent） | 2026-09-08 | G8 截图比对、G9 真实桌面验收未开始 |
-| G8 设计 QA | 通过 | [MEMO-DM-024](../../../.planning/memos/dst-manager/2026-09-08-plan-dm019-g8-design-qa.md)（逐对截图裁决 + 控制器终局裁决）；原引用的 `assets/SPEC-DM-011/production/`（g4-01～g4-06）**未提交且本地已不可复现**，待实现批次后重跑 G8 时重新产出 | 设计 QA（Agent）+ 控制器裁决 | 2026-09-08 | D4 cad_timeout_seconds 边界（后续项，须用户裁决，见 MEMO-DM-024）；本次 G8 覆盖 SC-01～SC-14，**不含**扩展分区（SC-15）与卡片基线（SC-16）——后者需在卡片实现批次后重跑 G8 |
+| G8 设计 QA | 通过 | 第一轮 SC-01～SC-14：[MEMO-DM-024](../../../.planning/memos/dst-manager/2026-09-08-plan-dm019-g8-design-qa.md)（逐对截图裁决 + 控制器终局裁决）；第二轮 SC-15/SC-16（2026-09-11 重跑，PLAN-DM-022 任务 4）：`assets/SPEC-DM-011/production/` 的 `g8-ext-01～g8-ext-05`（与 g4-07/g4-08/g4-10/g4-11 对照，逐对裁决见下表） | 设计 QA（Agent）+ 控制器裁决 | 2026-09-08（首轮）；2026-09-11 重跑覆盖 SC-15/SC-16 | D4 cad_timeout_seconds 边界（后续项，须用户裁决，见 MEMO-DM-024）；原「本次 G8 不含扩展分区（SC-15）与卡片基线（SC-16）」已收口（见下表）；**未关闭**：首轮 G8 引用的 `production/` 里 SC-01～SC-14 的生产侧截图（原 g4-01～g4-06 对照物）仍未入库、本地不可复现，本轮重跑只补了扩展分区（SC-15/SC-16），该缺口待重开 G4/G8 时补齐；G9 真实验收未开始 |
 | G9 真实验收与关闭 | 未开始 | — | — | — | 桌面壳路径选择器真实弹窗、外链系统浏览器、frozen 版本/LICENSE 读取、保存后真实 CAD 任务生效需真实环境 |
+
+**G8 重跑（2026-09-11）：扩展卡片基线（SC-15/SC-16）逐对裁决**
+
+证据：`assets/SPEC-DM-011/production/g8-ext-01～g8-ext-05`，由 `web/tests/e2e/settings-extensions-production-evidence.spec.ts` 5 例全绿一次产出（`npx playwright test tests/e2e/settings-extensions-production-evidence.spec.ts --reporter=line --retries=0`）。比对方式：逐张打开生产图与冻结图目视对比（可像素采样者已实采）。
+
+| 生产证据 | 冻结对照 | 相同点 | 差异与分类 | 依据 |
+| --- | --- | --- | --- | --- |
+| `g8-ext-01` | `g4-07` | 对话框尺寸与居中位置、左分区列表（常规配置/扩展/关于）与选中高亮、分区说明文案逐字相同、卡片四层信息的位置与层级、开关位置与几何（轨道 `#2f5be0`）、徽标底色 `#e7f4ec` | 全属 Demo 固有：①顶部演示工具条与「未加载工作区·模拟」徽章（对照顶部栏）；②`配置修订 r7 · 模拟` vs 真实 `r0`；③页脚「模拟数据·保存仅作用于演示内容」提示（生产无）；④页脚 `保存` 按钮 Demo 用近似色 `#a1b5f1`、生产用 `--color-accent` `#2f5be0`；⑤描述文案取自真实清单键 `extensions.sheetCatalog.description` | 有意偏差：§6 差异表（Demo 模拟数据 + demo chrome）+ MEMO-DM-024「已接受差异」D2/D3 与「顶部栏差异」条。卡片布局、四层信息与开关语义**均一致**；无缺陷 |
+| `g8-ext-02` | `g4-08` | 4 张卡片同序、同四层信息；「已启用 + 启动失败」组合（开关开 + 徽标「启动失败」+ 诊断码 `EXTENSION_START_FAILED`）与「不兼容 + 诊断码」（`EXTENSION_HOST_CONTRACT_MISMATCH`）同时呈现；停用项徽标灰、开关关；徽标字号与诊断码前缀「诊断码」逐字相同 | 同上一行，另加版本号字面差异（Demo 模拟 `v0.2.0`/`v0.1.3`/`v0.3.1` vs mock 统一 `v0.1.0`）、卡片行高因真实字号有像素级微差（实测卡片项距 Demo ≈103px、生产 ≈101px，不改变四层信息的层级与顺序） | 有意偏差：§6 数据字面差异（MEMO-DM-024 D3）。关键行为正确：开关方向取自 `enabled` 而非 `status`（§3.3），「已启用 + 启动失败」合法组合未被错误反转；无缺陷 |
+| `g8-ext-03` | `g4-10` | 分段边界取景与 g4-10 一致（上一段尾部 + 「已停用」段标题 + 该段卡片）；「已启用」段 4 条、「已停用」段 4 条，分组标题无计数、左侧 accent 竖条；两段卡片与开关状态一一对应 | 同上 | 有意偏差同上。分组键与开关同一权威（`enabled`）、阈值 6 生效（§3.3）；无缺陷 |
+| `g8-ext-04` | `g4-11` | 深色主题下对话框/分区/卡片底色（实采 `#171e29`）与浅色版语义一一对应，徽标与开关状态色语言不变 | 同上 | 有意偏差同上；无缺陷 |
+| `g8-ext-05` | **无** | — | **不计为比对通过**：本目录没有扩展分区的最小视口冻结件；此图仅展示 900×600 下对话框不横向溢出、面板内滚动、页脚固定、第四张卡片被面板裁切 | §7 已声明该例外；G8 判据不引入无对照结论；扩展分区的最小视口覆盖待重开 G4 时补图 |
+
+- 逐对裁决**未发现须修缺陷**（无 `web/src/**` 改动），差异全部落在上表所列「有意偏差」类别内，因此不另立 memo（MEMO-DM-024 已载同类裁决）。
+- SC-15 的启停语义不靠截图证明，由 `web/tests/e2e/extensions-settings.spec.ts` 10 例全绿承担（含停用不关窗、闸门叠于设置窗口之上、启停失败就地行内呈现）。
 
 ## 9. 验收标准（G8/G9 锚点）
 
-- 追踪矩阵每条 SC-xx 达到"已验证"；G8 用同状态截图对比 Demo 与生产（默认/编辑/校验失败/诊断/浅深主题/最小视口）。
+- 追踪矩阵每条 SC-xx 达到“已验证”；G8 用同状态截图对比 Demo 与生产（默认/编辑/校验失败/诊断/浅深主题/最小视口）。2026-09-11：SC-15/SC-16 已纳入 G8（逐对裁决见 §8 表），扩展卡片基线视为达成。
 - G9 必须在打包后桌面壳验证：齿轮入口、原生路径选择器真实弹窗（EXE/DLL 过滤器）、保存后配置对真实 CAD 任务生效、外链系统浏览器打开、关于页版本与 LICENSE 读取。
 - e2e 必须覆盖：未加载工作区打开、修改→保存→重开保留、行内校验失败与焦点、未保存关闭确认、来源标记与恢复继承。
-- SC-15 另需覆盖：停用→标签移除→重新启用→标签恢复（停用可逆的核心回归钉子）、扩展页面不再提供停用入口、停用不关窗且设置编辑保留、闸门叠在设置窗口之上可见可点且 Esc 只关闸门、启停失败就地行内呈现、清单加载失败降级与重试。
-- SC-16 另需覆盖：分段阈值（<6 不分段、≥6 按 `enabled` 分两段）、卡片不可点击（卡片内唯一可聚焦元素是开关）、开关 `aria-checked` 与可见状态文字同步、常规配置 bool 字段与扩展开关同形态（同一滑动开关）、描述与诊断码随 `description_key`/`error_code` 呈现；并以 Demo 证据截图覆盖 1/4/8 条目数与浅/深/最小视口。
+- SC-15（✅ 2026-09-11 达成）：停用→标签移除→重新启用→标签恢复（停用可逆的核心回归钉子）、停用不关窗且设置编辑保留、闸门叠在设置窗口之上可见可点且 Esc 只关闸门、启停失败就地行内呈现、清单加载失败降级与重试——由 `web/tests/e2e/extensions-settings.spec.ts` 10 例承担，2026-09-11 实跑 10 passed（`--retries=0`，无 flaky）；「扩展页面不再提供停用入口」由 `web/tests/e2e/extensions-navigation.spec.ts`「扩展页面不再提供停用入口，并指引到设置中心」1 例承担。
+- SC-16（✅ 2026-09-11 达成）：自动侧由 `web/tests/e2e/extensions-settings.spec.ts` 承担——分段阈值（5 条不分段 / 6 条分两段且分组键与开关同一权威）、卡片不可点击（卡片内唯一可聚焦元素是开关）、开关 `aria-checked` 与可见状态文字同步、描述与诊断码随 `description_key`/`error_code` 呈现；统一滑动开关（常规配置 bool 字段与扩展开关同形态）由 `web/tests/e2e/settings-dialog.spec.ts`「布尔字段是滑动开关：role=switch + aria-checked + 可见状态文字，且仍走保存缓冲」1 例承担。证据侧由 §7 `production/` 的 5 张（g8-ext-01～05）覆盖 1/4/8 条目数与浅/深主题、基准/最小视口；其中 `g8-ext-05`（900×600）**无冻结对照**，不构成比对通过（见 §7）。

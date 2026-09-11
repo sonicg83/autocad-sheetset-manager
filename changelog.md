@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-11（交付扩展卡片基线实现与 G8 生产证据收口：统一滑动开关 + 四层信息卡片 + 按 enabled 分段）
+
+- 交付范围：`PLAN-DM-022`「扩展卡片基线与布尔开关统一下沉」三批次全部落地（批次 1–3 的代码变更在各自提交时未写本次变更记录，本次一并登记，仅记为变更清单与守卫，不重述实现理由）。
+- 批次 1（`2bfac5c` 统一设置中心布尔状态控件为滑动开关）：新增 `web/src/components/settings/BooleanSwitch.vue`（32 行，布尔状态控件唯一视觉语言，`button.switch[role="switch"]` + `aria-checked`，SPEC-DM-006 §6.3 / SPEC-DM-011 §3.3），`SettingsFormRow.vue` 的 bool 分支由原生 checkbox 改为复用该原语且仍走保存缓冲（不即时落盘）；`.switch` 类名让给新按钮，保住 `SettingsDialog.focusExtensionSwitch` 的选择器契约。
+- 批次 2（`fa041de` 下沉扩展卡片承接四层信息）：新增 `ExtensionCard.vue`（72 行，四层信息顺序固定：名称+版本 / 描述 / 状态徽标+诊断码 / 开关+可见状态文字；卡片不可点击、不导航，唯一可聚焦元素是开关），`ExtensionsSection.vue` 退化为「取数 + 分段 + 列表」（89 → 77 行）；语言包中英同步新增 `settings.extensions.diagnosticCode`。
+- 批次 2（`4d67755` 为扩展分区补按启用状态分段的增长机制）：条目 ≥6 条按服务端 `enabled` 分「已启用 / 已停用」两段（阈值 6 为 Spec 固定值，不引入可配置阈值/搜索），分组标题不显示计数。`SettingsDialog.vue` 全程未增长（仍 535 行，未越过本次计划的“不得增长”约束）。
+- 批次 3（本次，G8 收口）：新增 `web/tests/e2e/settings-extensions-production-evidence.spec.ts` 5 例（`g8-ext-01` 1 条 / `g8-ext-02` 4 条多状态 / `g8-ext-03` 8 条分段边界 / `g8-ext-04` 4 条深色 / `g8-ext-05` 4 条最小视口），共用新提取的 `web/tests/e2e/fixtures/extensions.ts`（`extensionSummary`/`installExtensions` 从 `extensions-settings.spec.ts` **纯搬移**提取，原文件改 import，行为不变）；只打开设置对话框与切换分区，`/api/extensions` 全 mock，不保存任何设置。
+- G8 证据入版本库：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-01～05`（1280×720 四张 + 900×600 一张），由证据 spec 从 `web/test-results/` 复制。**可读图**：逐张与冻结件 `g4-07`/`g4-08`/`g4-10`/`g4-11` 目视 + 像素采样比对——四层信息位置与层级、开关几何与轨道色（实采 `#2f5be0`）、徽标底色（实采 `#e7f4ec`）、四段状态色语言（可用/已停用/启动失败/不兼容）、诊断码字面、「已启用 + 启动失败」合法组合（开关方向取自 `enabled`、未由 `status` 反推）**均一致**；差异全部属 Demo 固有（演示工具条、`配置修订 r7 · 模拟`、页脚模拟提示、`保存` 按钮近似色 `#a1b5f1`、描述/版本号取自真实数据、卡片行高像素级微差），分类为「有意偏差（依据 SPEC-DM-011 §6 差异表 + MEMO-DM-024 已接受差异 D2/D3/顶部栏条）」，**未发现须修缺陷**，因此本任务未改任何 `web/src/**`、也未另立 memo。
+- 证据修正（本任务自查）：`g8-ext-03` 按冻结件 `g4-10` 重新取景——原 `scrollIntoViewIfNeeded()` 只把「已停用」段标题贴到面板底边，拍不到该段任何卡片；改为 `scrollIntoView({block:"center"})` 并断言段标题与首张停用卡片在视口内，重取后取景与 g4-10 一致（上一段尾部 + 段标题 + 该段卡片）。`g8-ext-05`（最小视口）在冻结件里**没有对照图**，已在 §7/§8/§9 显式标注「不构成与冻结件的比对通过」，不冒充比对结论。
+- 文档：`SPEC-DM-011` §7 补 `production/` 证据位置与 5 个文件名/冻结对照关系（含 `g8-ext-05` 无对照声明）、§8 G8 行由「通过（覆盖 SC-01～SC-14）」改为「第一轮 SC-01～SC-14 + 2026-09-11 重跑覆盖 SC-15/SC-16」并新增逐对裁决表（相同点/差异分类/依据）、§9 SC-15 与 SC-16 按实跑结论打勾并写明证据文件名与例外，元数据 `updated` 同步 2026-09-11。首轮 G8 的 `production/`（SC-01～SC-14 生产侧）仍未入库，该缺口保持未关闭并在 §8 写明。
+- 验证（全部实跑）：`uv run ruff check .` → All checks passed；`uv run pytest -o addopts="" -q` → **1112 passed / 72 skipped**（本计划未改 Python 代码，作为交付基线兜底）；`web` 下 `npm run check:i18n` → **868 键 / 9 域对称**、`npx vue-tsc -b --pretty false` → **exit 0**、`npm run build` → **通过**；证据 spec 单跑 **5 passed**（`--retries=0`）、`extensions-settings.spec.ts` 单跑 **10 passed**（与夹具提取前一致）。`npx playwright test` 全量连跑两次：第一次 **411 项：408 passed / 1 failed / 2 flaky**，第二次 **411 项：408 passed / 0 failed / 3 flaky**。唯一 failed 为 `properties-layout.spec.ts`「四视口双主题覆盖 dirty+pending、…、CSV 状态无整页横向溢出」（`page.goto` 超时；该用例单测内部 32 次导航、单跑耗时 29.6s 已贴 30s 上限，`--workers=1` 单跑通过），与本次改动无关；两次 flaky 集合不同（`g8-ext-03`、`main.spec.ts` ActionDock、`sheet-catalog-visual-evidence.spec.ts` 200% 缩放、`properties-layout.spec.ts` 同一用例），均为 `playwright.config.ts` 已记录的 4 worker 下 dev server 启动抖动，重跑全部通过。
+- 跳过项：无。未执行 `$env:DST_MANAGER_RUN_AUTOCAD=1` 的真实 AutoCAD 系统测试（本计划不涉及 CAD 侧，环境亦未启用）。
+
 ## 2026-09-10（确立扩展卡片基线：Spec 条款 + Demo 重冻结件 + 可复现证据）
 
 - 背景：用户提出「扩展卡片重排」以后会需要，应先定基线。本次只交付**基线本身**（设计条款 + 冻结件 + 证据），**不写生产卡片布局**——卡片实现与设置中心 bool 控件打通并入同一实现批次（G6 之后另开 Plan）。
