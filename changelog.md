@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 2：收敛图纸目录头部与字段浏览器）
+
+- `SheetCatalogView.vue`：删除可用态整行 `.catalog-status` 卡（含冗余的 `extensions.page.ready` 文案，该键已从中英文语言包移除），标题、说明、`v{version} · {status}` 与启停指引合并为单行紧凑 `.catalog-head`（flex + baseline，窄屏换行）；启停指引文案仍为可见正文（`extensions-navigation.spec.ts` 的“防停用回退”用例继续通过）。页面与卡间距从 `--space-4` 收敛到 `--space-3`，工作区栅格改为 `258px minmax(470px,1fr)` + `min-height:425px`，对齐冻结 Demo 的轨道比例。
+- `TemplateBar.vue`：恢复“内置模板/已保存模板”身份徒标与“已保存/有未保存修改”状态文字（新增对称键 `templateBadgeBuiltin`/`templateBadgeUser`/`templateStateSaved`）；标签与选择框改为同排，整行内边距收敛到 `--space-2/--space-3`；删除按钮改为低强调危险文字（透明底 + `--color-danger`），确认流程不变。
+- `FieldBrowser.vue`：恢复本地搜索（`ref<string>` 页面瞬时状态，不进控制器、不发请求、不持久化），分组标题参与匹配因此可接作用域关键字过滤，无匹配时显示可见空态；条目改为冻结 Demo 的双行形态：第一行常显规范引用（不带外层花括号，特殊属性自动为方括号形式）、第二行显示用户名称，固有字段经新增键 `fieldBuiltinNumber/Title/FileName` 映射为图号/图名/文件名，自定义属性显示规范属性名（DST 原文不翻译）；新增键 `fieldSearchLabel/fieldSearchPlaceholder/fieldSearchEmpty/fieldSyntaxHint`。字段列表改为卡内独立滚动区域。
+- 测试：`sheet-catalog.spec.ts` 新增“字段搜索与可用态头部”两用例（覆盖中文名/规范引用/作用域过滤、空态、插入语义不变、无状态大卡、版本与生命周期可见、模板栏两类状态文字），先红后绿；既有字段条目选择器从精确文本改为规范引用正则。`check:i18n` 通过（879 键 / 9 域）。
+- 本任务只改呈现层与语言包：不动 `useSheetCatalog` 的业务状态、请求时机、未保存闸门与错误码映射；不动 API、ShellBridge、XLSX、Artifact。冻结布局红用例（`.columns-head`/首屏密度/列数增长）仍为红，待任务 3～5 转绿；本轮回归 `sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` + `extensions-navigation.spec.ts`（`--workers=1 --retries=0`）共 57 passed。
+
 ## 2026-09-11（PLAN-DM-023 任务 1：钉住图纸目录冻结布局回归）
 
 - `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 新增四组生产证据用例，把 G4 冻结件（SPEC-DM-012 §7.4 / commit `9f3dfb3`）的硬要求写成会失败的断言：1440×1000 首屏同时可见预览标题、第三行数据与「导出 XLSX」（底缘不得越过 `.dock`）；输出列必须存在唯一 `.columns-head`（顺序/列名/表达式/状态/操作）且表头与每个数据行共用同一组列边界（误差 ≤ 1px）；兼容性摘要必须是输出列 region 的后代，刷新与导出必须是预览 region 的后代；字段浏览器必须有可见「搜索可用字段」输入框，且 `sheet.number` 与「图号」同时作为可见正文；六列模板不得让预览位置继续下移（≤ 2px），列编辑区必须自身可滚动。

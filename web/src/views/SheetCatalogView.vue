@@ -95,11 +95,10 @@ function onGuardKeydown(event: KeyboardEvent) {
       <h2>{{ $t(extension.name_key) }}</h2>
       <p class="catalog-desc">{{ $t(extension.description_key) }}</p>
       <p class="catalog-meta">v{{ extension.version }} · {{ $t(statusKey) }}</p>
-    </header>
-    <div class="catalog-status">
-      <p>{{ $t("extensions.page.ready") }}</p>
+      <span class="spacer"></span>
+      <!-- 启停入口唯一在设置中心（见文件头注释）：指引保留为紧凑可见正文，不再占整行状态卡 -->
       <p class="catalog-manage-hint">{{ $t("extensions.page.manageHint") }}</p>
-    </div>
+    </header>
     <p v-if="catalog.loading.value" class="loading" role="status">{{ $t("extensions.sheetCatalog.loading") }}</p>
     <p v-else-if="catalog.loadError.value" class="error notice" role="alert">{{ catalog.loadError.value }}</p>
     <div v-else class="catalog-grid">
@@ -137,16 +136,16 @@ function onGuardKeydown(event: KeyboardEvent) {
   </section>
 </template>
 <style scoped>
-.sheet-catalog{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
-.catalog-head{display:flex;flex-direction:column;gap:var(--space-2)}
+.sheet-catalog{display:flex;flex-direction:column;gap:var(--space-3);min-height:0}
+/* PLAN-DM-023 Task 2：标题、说明、版本/生命周期与启停指引组合为单行紧凑头部 */
+.catalog-head{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;min-width:0}
 .catalog-head h2{margin:0;font-size:18px;color:var(--color-text-primary)}
-.catalog-desc{margin:0;color:var(--color-text-secondary);font-size:14px}
-.catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px}
-.catalog-status{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface)}
-.catalog-status p{margin:0;color:var(--color-text-secondary);font-size:14px}
-.catalog-status .catalog-manage-hint{color:var(--color-text-muted);font-size:12px}
-.catalog-grid{display:flex;flex-direction:column;gap:var(--space-4);min-width:0}
-.catalog-row{display:grid;grid-template-columns:280px minmax(0,1fr);gap:var(--space-4);align-items:start}
+.catalog-head .spacer{flex:1}
+.catalog-desc{margin:0;color:var(--color-text-secondary);font-size:13px;min-width:0}
+.catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px;white-space:nowrap}
+.catalog-manage-hint{margin:0;color:var(--color-text-muted);font-size:12px}
+.catalog-grid{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
+.catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);min-height:425px;align-items:stretch;min-width:0}
 .loading{margin:0;color:var(--color-text-muted)}
 @media (max-width: 960px){.catalog-row{grid-template-columns:1fr}}
 </style>

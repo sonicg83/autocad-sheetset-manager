@@ -41,6 +41,16 @@ export default {
     fieldGroupSheet: "Sheet custom properties",
     fieldGroupEmpty: "No custom properties in this scope for the current sheet set",
     fieldHint: "Click to insert at the current cursor position of the expression",
+    fieldSearchLabel: "Search available fields",
+    fieldSearchPlaceholder: "Search fields or scope",
+    fieldSearchEmpty: "No matching fields",
+    fieldBuiltinNumber: "Sheet No.",
+    fieldBuiltinTitle: "Sheet Title",
+    fieldBuiltinFileName: "File Name",
+    fieldSyntaxHint: "When a property contains spaces, dots, or shadows a built-in field, the field browser inserts bracket syntax automatically.",
+    templateBadgeBuiltin: "Built-in template",
+    templateBadgeUser: "Saved template",
+    templateStateSaved: "Saved",
     editorLabel: "Column editor",
     columnHeader: "Column header {index}",
     columnExpression: "Expression {index}",
@@ -87,7 +97,6 @@ export default {
     STOPPED: "Stopped",
   },
   page: {
-    ready: "Select a template and configure the output columns to export the sheet catalog of the current sheet set.",
     // Enabling/disabling lives in the settings center only; disabling here would
     // remove this page's own entry point and make the toggle one-way.
     manageHint: "Enable or disable extensions in the settings.",

@@ -79,12 +79,15 @@ async function confirmSaveAs() {
           <option v-for="template in catalog.templates.value" :key="template.templateId ?? template.name" :value="template.templateId">{{ templateOptionLabel(template.name) }}</option>
         </select>
       </label>
-      <span v-if="catalog.dirty.value" class="dirty-badge">{{ $t("extensions.sheetCatalog.dirtyBadge") }}</span>
+      <!-- PLAN-DM-023 V6：恢复“内置模板/已保存模板”身份徽标与“已保存/有未保存修改”状态文字；
+           两者都是可见正文，不只靠颜色区分 -->
+      <span class="template-badge" :class="catalog.canSaveInPlace.value ? 'saved' : 'builtin'">{{ catalog.canSaveInPlace.value ? $t("extensions.sheetCatalog.templateBadgeUser") : $t("extensions.sheetCatalog.templateBadgeBuiltin") }}</span>
+      <span class="template-state">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
       <span v-if="catalog.dirty.value && !catalog.canSaveInPlace.value" class="draft-name">{{ $t("extensions.sheetCatalog.unnamedDraft") }}</span>
       <span class="spacer"></span>
       <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="!catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
       <button type="button" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
-      <button v-if="catalog.canSaveInPlace.value" type="button" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
+      <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
     <p v-if="catalog.saveError.value" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
     <div v-if="catalog.conflict.value" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
@@ -111,13 +114,23 @@ async function confirmSaveAs() {
   </section>
 </template>
 <style scoped>
-.template-bar{display:flex;flex-direction:column;gap:var(--space-3)}
-.template-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
-.template-select{display:grid;gap:4px;font-size:13px;color:var(--color-text-secondary)}
-.template-select select{min-width:220px;padding:8px;border:1px solid var(--color-border-strong);border-radius:5px}
-.dirty-badge{color:var(--color-warning);font-size:13px}
-.draft-name{color:var(--color-text-muted);font-size:13px}
+.template-bar{display:flex;flex-direction:column;gap:var(--space-2)}
+.template-bar.panel{padding:var(--space-2) var(--space-3)}
+.template-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-width:0}
+/* 标签与选择框同排，窄屏时整行换行（PLAN-DM-023 Task 2：模板选择与三项管理操作单行优先） */
+.template-select{display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-text-secondary);min-width:0}
+.template-select select{min-width:220px;padding:6px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md)}
+.template-badge{font-size:12px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.template-badge.builtin{color:var(--color-accent);background:var(--color-info-bg)}
+.template-badge.saved{color:var(--color-success);background:var(--color-success-bg)}
+.template-state{font-size:12px;color:var(--color-text-muted);white-space:nowrap}
+.draft-name{color:var(--color-text-muted);font-size:12px}
 .spacer{flex:1}
+.template-row button{padding:0 var(--space-3);min-height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
+.template-row button:hover:not(:disabled){background:var(--color-bg-muted)}
+/* 危险删除保持低强调：透明底 + 危险文字，确认流程不变 */
+.template-row button.danger-text{color:var(--color-danger);border-color:transparent;background:transparent}
+.template-row button.danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
 .conflict{border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);background:var(--color-warning-bg)}
 .conflict h3{margin:0 0 var(--space-2);font-size:14px}
 .conflict p{margin:0 0 var(--space-3);color:var(--color-text-primary);font-size:14px}

@@ -42,13 +42,26 @@ export default {
     conflictRetry: "按新修订重试",
     toastSaved: "模板已保存",
     toastDeleted: "模板已删除",
-    // 字段浏览器
+    // 字段浏览器（SPEC-DM-012 §7.2 区域 2；PLAN-DM-023 Task 2 收敛）
     fieldBrowserLabel: "字段浏览器",
     fieldGroupBuiltin: "图纸固有字段",
     fieldGroupSheetset: "图纸集自定义属性",
     fieldGroupSheet: "图纸自定义属性",
     fieldGroupEmpty: "当前图纸集没有此作用域的自定义属性",
     fieldHint: "点击插入到当前表达式光标位置",
+    // 本地搜索只过滤当前已取得的字段目录（不发请求、不持久化）
+    fieldSearchLabel: "搜索可用字段",
+    fieldSearchPlaceholder: "搜索字段或作用域",
+    fieldSearchEmpty: "没有匹配的字段",
+    // 三个固有字段在条目第二行显示用户名称（第一行是规范引用）
+    fieldBuiltinNumber: "图号",
+    fieldBuiltinTitle: "图名",
+    fieldBuiltinFileName: "文件名",
+    fieldSyntaxHint: "属性含空格、点号或与固有字段重名时，字段浏览器自动插入方括号语法。",
+    // 模板栏状态（PLAN-DM-023 V6：内置/已保存模板 + 已保存/有未保存修改）
+    templateBadgeBuiltin: "内置模板",
+    templateBadgeUser: "已保存模板",
+    templateStateSaved: "已保存",
     // 输出列编辑器
     editorLabel: "输出列编辑器",
     columnHeader: "输出列名 {index}",
@@ -100,7 +113,6 @@ export default {
     STOPPED: "已停止",
   },
   page: {
-    ready: "选择模板并配置输出列后即可导出当前图纸集的图纸目录。",
     // 启停入口唯一在设置中心（否则停用会移除本页入口，开关变成单向）
     manageHint: "扩展的启用与停用请在设置中心操作。",
   },

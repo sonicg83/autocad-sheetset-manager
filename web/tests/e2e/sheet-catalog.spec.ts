@@ -47,9 +47,10 @@ test.describe("核心流程（SPEC §3.1）", () => {
     await expect(browser.getByRole("heading", {name: "图纸固有字段"})).toBeVisible();
     await expect(browser.getByRole("heading", {name: "图纸集自定义属性"})).toBeVisible();
     await expect(browser.getByRole("heading", {name: "图纸自定义属性"})).toBeVisible();
-    await expect(browser.getByRole("button", {name: "number", exact: true})).toBeVisible();
-    await expect(browser.getByRole("button", {name: "设计院", exact: true})).toBeVisible();
-    await expect(browser.getByRole("button", {name: "专业代码", exact: true})).toBeVisible();
+    // 字段条目为冻结 Demo 的双行形态（第一行规范引用、第二行用户名称），可访问名包含两者
+    await expect(browser.getByRole("button", {name: /sheet\.number/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheetset\.设计院/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheet\.专业代码/})).toBeVisible();
   });
 
   test("特殊属性在当前光标位置插入 JSON 方括号语法，普通字段插入点号语法", async ({page}) => {
@@ -61,12 +62,12 @@ test.describe("核心流程（SPEC §3.1）", () => {
       (element as HTMLTextAreaElement).blur();
     });
     const browser = page.getByRole("region", {name: "字段浏览器"});
-    await browser.getByRole("button", {name: "number", exact: true}).click();
+    await browser.getByRole("button", {name: /sheet\.number/}).click();
     await expect(expression).toHaveValue("RQ-{sheet.number}{sheet.title}");
     // 特殊名称（含空格）必须插入方括号 JSON 字符串形式：先添加一个空列再插入
     await page.getByRole("button", {name: "添加列"}).click();
     await page.getByLabel("表达式 4").click();
-    await browser.getByRole("button", {name: "项目 名称", exact: true}).click();
+    await browser.getByRole("button", {name: /sheetset\["项目 名称"\]/}).click();
     await expect(page.getByLabel("表达式 4")).toHaveValue('{sheetset["项目 名称"]}');
   });
 
@@ -74,7 +75,7 @@ test.describe("核心流程（SPEC §3.1）", () => {
     await openCatalog(page);
     const expression = page.getByLabel("表达式 1");
     await expression.fill("RQ-");
-    await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: "number", exact: true}).click();
+    await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: /sheet\.number/}).click();
     await expect(expression).toHaveValue("RQ-{sheet.number}");
     const preview = page.getByRole("region", {name: "预览"});
     await expect(preview.getByRole("cell", {name: "RQ-001", exact: true})).toBeVisible();
@@ -102,6 +103,66 @@ test.describe("核心流程（SPEC §3.1）", () => {
     await expect(preview.getByText("共 0 张图纸")).toBeVisible();
     await expect(preview.getByText("当前图纸集没有图纸")).toBeVisible();
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+  });
+});
+
+// PLAN-DM-023 Task 2（追踪矩阵 V4/V6）：字段本地搜索、常显引用语法与可用态头部密度。
+// 搜索只过滤当前已取得的字段目录（页面本地瞬时状态，不进控制器、不发请求）；
+// 可用态不再保留整行 `.catalog-status` 冗余卡，但版本/生命周期与启停指引仍为可见正文。
+test.describe("字段搜索与可用态头部（PLAN-DM-023 Task 2）", () => {
+  test("字段搜索：按中文名、规范引用与作用域过滤，且无结果显示可见空态", async ({page}) => {
+    await openCatalog(page);
+    const browser = page.getByRole("region", {name: "字段浏览器"});
+    const search = page.getByLabel("搜索可用字段");
+    await expect(search).toBeVisible();
+    // 按中文名搜索：只留图名字段
+    await search.fill("图名");
+    await expect(browser.getByRole("button", {name: /sheet\.title/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheet\.number/})).toHaveCount(0);
+    // 按规范引用搜索：“设计院”是图纸集自定义属性
+    await search.fill("设计院");
+    await expect(browser.getByRole("button", {name: /sheetset\.设计院/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheet\.title/})).toHaveCount(0);
+    // 按作用域搜索：只留图纸固有字段
+    await search.fill("图纸固有字段");
+    await expect(browser.getByRole("button", {name: /sheet\.number/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheetset\.设计院/})).toHaveCount(0);
+    // 无结果显示可见空态（不能只剩空白）
+    await search.fill("不存在的字段名称");
+    await expect(browser.getByText("没有匹配的字段")).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheet\.number/})).toHaveCount(0);
+    // 清空后恢复完整目录
+    await search.fill("");
+    await expect(browser.getByRole("button", {name: /sheet\.number/})).toBeVisible();
+    await expect(browser.getByRole("button", {name: /sheetset\.设计院/})).toBeVisible();
+    // 搜索不改变插入语义
+    await page.getByLabel("表达式 1").fill("");
+    await browser.getByRole("button", {name: /sheet\.number/}).click();
+    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+  });
+
+  test("可用态头部：无独立状态大卡、版本可见且模板栏状态文字完整", async ({page}) => {
+    const template = userTemplate("市政标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    // V6：可用态不再有整行状态卡，也不再有与模板栏重复的引导文案
+    await expect(page.locator(".catalog-status")).toHaveCount(0);
+    await expect(page.getByText("选择模板并配置输出列后即可导出当前图纸集的图纸目录。")).toHaveCount(0);
+    // 版本与生命周期仍是可见正文（不是只有 title/aria-label）
+    const head = page.locator(".catalog-head");
+    await expect(head).toContainText("v0.1.0");
+    await expect(head).toContainText("可用");
+    // 启停入口唯一在设置中心：指引必须保持可见
+    await expect(page.getByText("扩展的启用与停用请在设置中心操作。")).toBeVisible();
+    // 模板栏恢复“内置模板/已保存模板”和“已保存/有未保存修改”两类状态文字
+    const bar = page.getByRole("region", {name: "模板栏"});
+    await expect(bar.getByText("已保存模板")).toBeVisible();
+    await expect(bar.getByText("已保存", {exact: true})).toBeVisible();
+    await page.getByLabel("选择模板").selectOption("");
+    await expect(bar.getByText("内置模板")).toBeVisible();
+    await expect(bar.getByText("已保存", {exact: true})).toBeVisible();
+    await page.getByLabel("输出列名 1").fill("图号（改）");
+    await expect(bar.getByText("有未保存修改")).toBeVisible();
+    await expect(bar.getByText("已保存", {exact: true})).toHaveCount(0);
   });
 });
 

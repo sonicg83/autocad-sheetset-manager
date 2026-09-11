@@ -334,7 +334,7 @@ test("PLAN-DM-023 V7/V8：六列模板不撑高页面且列编辑区自身可滚
 test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、状态文字化", async ({page}) => {
   await openDemoState(page, "light", {width: 1440, height: 1000});
   // 有序子序列断言：Tab 环按 DOM 顺序经过模板栏 → 字段浏览器 → 列编辑器 → 预览/操作区
-  const anchors = ["选择模板", "另存为", "number", "输出列名 1", "表达式 1", "下移 1", "刷新预览", "导出 XLSX"];
+  const anchors = ["选择模板", "另存为", "sheet.number", "输出列名 1", "表达式 1", "下移 1", "刷新预览", "导出 XLSX"];
   const visited: string[] = [];
   for (let step = 0; step < 140; step++) {
     await page.keyboard.press("Tab");
@@ -352,10 +352,10 @@ test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、
   // 字段浏览器按钮键盘激活：Enter 与 Space 都在光标位置插入语法
   const expression = page.getByLabel("表达式 1");
   await expression.fill("RQ-");
-  await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: "number", exact: true}).focus();
+  await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: /sheet\.number/}).focus();
   await page.keyboard.press("Enter");
   await expect(expression).toHaveValue("RQ-{sheet.number}");
-  await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: "title", exact: true}).focus();
+  await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: /sheet\.title/}).focus();
   await page.keyboard.press("Space");
   await expect(expression).toHaveValue("RQ-{sheet.number}{sheet.title}");
   // 状态不只靠颜色：脏标记、兼容性摘要、模板状态均为文字
