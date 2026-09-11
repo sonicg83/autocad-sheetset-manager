@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 6：生成 G8 生产证据、逐对比对并交用户裁决）
+
+- 生产证据入版本库：新建 `docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-catalog-light-1440x1000.png`（1440×1000）与 `g8-catalog-dark-900x700.png`（900×700），尺寸与冻结基准图逐项一致；`sheet-catalog-visual-evidence.spec.ts` 的 `attachScreenshot` 新增可重复路径——默认只写测试附件，`DST_MANAGER_WRITE_G8_EVIDENCE=1` 时同步写入版本库目录，复现命令已写进该文件头与 PLAN-DM-023 实际验证。
+- [MEMO-DM-030](../../.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md) 新增 §6：实施与证据、同口径几何对照表（页头 48→24px、模板栏 85→50px、栅格 443→425px、字段栏均 258px、兼容带 66→42px、数据行 80→74px、预览卡 250→259px）、V1～V8 与 A1/A2 逐项判定，以及 §6.4 三项**未被实施代理接受**的差异候选（卡片标题文案、页头两段保留正文、900×700 字段区 235px 限高不复制 Demo 的 2px 塌陷）。
+- SPEC-DM-012 §16 门禁表 G8 由“未通过（用户真实桌面复验）”改为“待用户复核（PLAN-DM-023 已实施）”，确认人/日期留空；G9 仍为“未开始（G8 阻断）”。PLAN-DM-023 `status` 改为 `active`（37 个步骤勾选，仅“用户确认后更新门禁”未勾），并追加“实际验证”章节。
+- 同步治理文档：[MEMO-DM-027](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md) 声明的 D1～D10“已接受差异”全部失效（仅 A1/A2 保留）、[MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”表（唯一未满足项为用户逐对确认）、PLAN-DM-020 与实际验证追加本轮新鲜回归、两份 README 状态行同步。
+- 完整验证（本轮新鲜输出、退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（432 passed / 0 failed / 1 flaky）；flaky 为 `main.spec.ts`「深色模式下中心视图区域随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动，已单独 `--workers=1 --retries=0` 复现通过。
+- **未完成事项（需用户裁决）：G8 保持“待用户复核”，PLAN-DM-023 保持 `active`，G9 保持暂停；实施代理未自行登记通过、未自行接受任何差异。**
+
 ## 2026-09-11（PLAN-DM-023 任务 5：完善图纸目录响应式与宽屏密度）
 
 - 工作区栅格改为冻结 Demo 的确定高度 `height:425px`（桌面）而非 min-height：字段条目与输出列数量都不再驱动栅格高度；先前用 `min-height:0` 允许压缩会在小视口把栅格内容溢出到预览卡上（重叠），已改为栅格不参与压缩、由 `.sheet-catalog` 自身滚动。预览卡改为 `flex:1 1 auto;min-height:250px`，吃掉栅格之后的剩余高度（1440×1000 得 259px，1920×1080 得 375px）。

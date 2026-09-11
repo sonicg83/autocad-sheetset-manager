@@ -18,7 +18,19 @@ related:
 
 # PLAN-DM-020 G9 真实桌面验收清单（MEMO-DM-028）
 
-> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；同日 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 已完成并使 G7 恢复“通过”（MEMO-DM-031 §7），但 G8 仍为“未通过（用户真实桌面复验）”，本清单继续暂停执行，待 PLAN-DM-023 完成并由用户重新通过 G8。暂停期间 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 保持“未开始（G8 阻断）”。**
+> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；同日 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 已完成并使 G7 恢复“通过”（MEMO-DM-031 §7）。[PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) 的整改与自动验证已完成，生产截图已入版本库（`docs/dst-manager/specs/assets/SPEC-DM-012/production/`），SPEC-DM-012 §16 的 G8 现为“待用户复核（PLAN-DM-023 已实施）”：**在用户逐对确认 MEMO-DM-030 §6 的比对记录与 §6.4 的三项差异候选前，本清单继续暂停执行，PLAN-DM-020 保持 `active`，SPEC-DM-012 §16 的 G9 保持“未开始（G8 阻断）”。**
+
+## 0.1 暂停解除条件（2026-09-11 PLAN-DM-023 完成后更新）
+
+| 条件 | 状态 |
+| --- | --- |
+| PLAN-DM-024 完成、G7 恢复通过 | 已满足（MEMO-DM-031 §7） |
+| PLAN-DM-023 生产改动与回归测试完成 | 已满足（commit `441b85c`/`1cf0a8f`/`0d69e45`/`70b23c0`/`241c7b5`；全量 E2E 432 passed / 0 failed / 1 flaky、全量 pytest 1121 passed / 72 skipped） |
+| 1440×1000 浅色与 900×700 深色同状态成对截图进入 `docs/dst-manager/specs/assets/SPEC-DM-012/production/` | 已满足（`g8-catalog-light-1440x1000.png`、`g8-catalog-dark-900x700.png`） |
+| V1～V8 均有几何/可见正文证据 | 已满足（14 条新 E2E 用例，见 PLAN-DM-023 实际验证） |
+| **用户逐对确认 G8 并记录日期** | **未满足——这是当前唯一未满足项，也是本清单继续暂停的原因** |
+
+用户确认时需一并裁决 [MEMO-DM-030 §6.4](2026-09-11-plan-dm020-g8-user-revalidation.md) 列出的三项可见差异候选（卡片标题文案、页头两段保留正文、900×700 字段区高度）；实施代理未自行接受任何一项。
 
 ## 0. 前置条件（操作者核对）
 

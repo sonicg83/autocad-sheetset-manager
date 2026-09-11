@@ -18,7 +18,9 @@ document_kind: memo
 
 # PLAN-DM-020 Task 12 G8 设计 QA 备忘（图纸目录生产实现 vs G4 冻结基准）
 
-> **2026-09-11 复验裁决：** 本文原 G8“通过”结论已被用户真实 Windows 桌面复验推翻，D1～D10 不再视为已获用户接受。历史取证和当时判断保留用于追溯；现行结论、偏差重新分类与恢复条件以 [MEMO-DM-030](2026-09-11-plan-dm020-g8-user-revalidation.md) 为准，整改实施见 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md)。G4 冻结件继续有效。
+> **2026-09-11 复验裁决（历史）：** 本文原 G8“通过”结论已被用户真实 Windows 桌面复验推翻，D1～D10 不再视为已获用户接受。历史取证和当时判断保留用于追溯；现行结论、偏差重新分类与恢复条件以 [MEMO-DM-030](2026-09-11-plan-dm020-g8-user-revalidation.md) 为准，整改实施见 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md)。G4 冻结件继续有效。
+>
+> **2026-09-11 整改完成（本文件所列“已接受差异”全部失效）：** PLAN-DM-023 已按 [MEMO-DM-030 §3](2026-09-11-plan-dm020-g8-user-revalidation.md) 的 V1～V8 重新分类把生产实现收敛回冻结件（commit `441b85c`/`1cf0a8f`/`0d69e45`/`70b23c0`/`241c7b5`）：表格式输出列（含列头/状态/`N / 50 列`）、字段搜索与两行条目、首屏预览+导出、紧凑可用态头部、900px 字段区限高均已恢复；D1～D10 中仅 A1（`↑`/`↓`/`✕` 图标按钮）与 A2（生产壳层）仍保留，其余差异已被本计划消除或重新列为待裁决项（见 MEMO-DM-030 §6.4）。本文件的 D 编号不再作为任何差异的接受依据。
 
 ## 元信息
 

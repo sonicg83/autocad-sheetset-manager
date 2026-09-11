@@ -9,6 +9,8 @@
 // 表格式输出列、字段可见性、列数增长不撑高页面）。这些用例代替
 // “滚动后可达”作为 G4 一致性证据；差异裁决权仍在用户（MEMO-DM-030）。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
+import {copyFileSync, mkdirSync} from "node:fs";
+import path from "node:path";
 import {demoSixColumnTemplate, installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
 
 async function expectNoPageHScroll(page: Page, label: string) {
@@ -54,10 +56,21 @@ async function expectPreviewScrollsInternally(page: Page, label: string) {
   expect(scroll.sw, `${label}：预览内容宽于容器（确实存在可滚动溢出）`).toBeGreaterThan(scroll.cw);
 }
 
+// G8 生产证据人版本库目录（MEMO-DM-030 §5）：不得只留在 web/test-results 或被忽略的
+// .superpowers/。默认只写测试附件；显式设 DST_MANAGER_WRITE_G8_EVIDENCE=1 时同时写入
+// 版本库目录，供 G8 逐对比对与交接：
+//   $env:DST_MANAGER_WRITE_G8_EVIDENCE = "1"
+//   npm run test:e2e -- tests/e2e/sheet-catalog-visual-evidence.spec.ts --grep "G8 对" --workers=1 --retries=0
+const PRODUCTION_EVIDENCE_DIR = path.resolve(process.cwd(), "..", "docs", "dst-manager", "specs", "assets", "SPEC-DM-012", "production");
+
 async function attachScreenshot(page: Page, info: TestInfo, name: string) {
-  const path = info.outputPath(name);
-  await page.screenshot({path, animations: "disabled"});
-  await info.attach(name, {path, contentType: "image/png"});
+  const screenshotPath = info.outputPath(name);
+  await page.screenshot({path: screenshotPath, animations: "disabled"});
+  await info.attach(name, {path: screenshotPath, contentType: "image/png"});
+  if (process.env.DST_MANAGER_WRITE_G8_EVIDENCE === "1") {
+    mkdirSync(PRODUCTION_EVIDENCE_DIR, {recursive: true});
+    copyFileSync(screenshotPath, path.join(PRODUCTION_EVIDENCE_DIR, name));
+  }
 }
 
 // ---- 与冻结 Demo（SPEC-DM-012 §7.4，commit 9f3dfb3）同口径的虚构数据 ----
