@@ -14,11 +14,12 @@
 // 纯呈现组件：列表、加载/失败/错误文案全部由 SettingsDialog 传入。启停编排
 //（未保存输入三选一闸门、标签与焦点收敛）由 SettingsDialog + App 负责，本组件
 // 绝不自行调用扩展端点——绕过闸门会静默丢草稿。
+import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSummary} from "../../api/contracts";
 import ExtensionCard from "./ExtensionCard.vue";
 
-defineProps<{
+const props = defineProps<{
   list: ExtensionSummary[];
   loading: boolean;
   failed: boolean;
@@ -27,6 +28,18 @@ defineProps<{
 }>();
 defineEmits<{retry: []; toggle: [extensionId: string, enabled: boolean]}>();
 const {t}=useI18n();
+
+// 增长机制的唯一预设答案（SPEC-DM-011 §3.3）：单列 + 面板滚动；条目 ≥6 条按
+// enabled 分「已启用 / 已停用」两段——分组键必须与开关同一权威，否则同一卡片
+// 会在两段之间跳变。搜索/筛选/排序/分页/多列网格是明确的非目标。
+const GROUP_THRESHOLD = 6;
+const groups = computed(() => {
+  if (props.list.length < GROUP_THRESHOLD) return [{key: "", title: "", items: props.list}];
+  return [
+    {key: "on", title: t("settings.extensions.stateOn"), items: props.list.filter(item => item.enabled)},
+    {key: "off", title: t("settings.extensions.stateOff"), items: props.list.filter(item => !item.enabled)},
+  ].filter(group => group.items.length > 0);
+});
 </script>
 <template>
   <section class="ext-section" :aria-label="t('settings.sections.extensions')">
@@ -39,12 +52,17 @@ const {t}=useI18n();
       <button type="button" @click="$emit('retry')">{{ t("settings.retry") }}</button>
     </div>
     <p v-else-if="list.length===0" class="f-hint">{{ t("settings.extensions.empty") }}</p>
-    <ul v-else class="ext-list">
-      <ExtensionCard
-        v-for="extension in list" :key="extension.extension_id"
-        :extension="extension" :busy="busy" @toggle="(id, value) => $emit('toggle', id, value)"
-      />
-    </ul>
+    <template v-else>
+      <div v-for="group in groups" :key="group.key" class="ext-group">
+        <div v-if="group.title" class="group-title">{{ group.title }}</div>
+        <ul class="ext-list">
+          <ExtensionCard
+            v-for="extension in group.items" :key="extension.extension_id"
+            :extension="extension" :busy="busy" @toggle="(id, value) => $emit('toggle', id, value)"
+          />
+        </ul>
+      </div>
+    </template>
     <p v-if="errorText" class="ext-error" role="alert">{{ errorText }}</p>
   </section>
 </template>
@@ -53,5 +71,7 @@ const {t}=useI18n();
 .ext-notice{margin:0;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-secondary);font-size:12px}
 .ext-failed{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2)}
 .ext-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.ext-group{display:flex;flex-direction:column;gap:var(--space-2)}
+.group-title{font-weight:600;font-size:13px;border-left:3px solid var(--color-accent);padding-left:var(--space-2)}
 .ext-error{margin:0;color:var(--color-danger);font-size:13px}
 </style>

@@ -119,8 +119,9 @@ test("无工作区也能看到扩展列表并启用（列表不依赖工作区�
   await expect(page.getByRole("tablist")).toHaveCount(0);
   await openExtensionsSection(page);
   await expect(page.getByText("图纸目录", {exact: true})).toBeVisible();
-  await expect(page.locator(".ext-meta")).toContainText("v0.1.0");
-  await expect(page.locator(".ext-meta")).toContainText("已停用");
+  const card = page.locator('[data-extension-id="dst-manager.sheet-catalog"]');
+  await expect(card.locator(".ext-meta")).toContainText("v0.1.0");
+  await expect(card.locator(".ext-meta")).toContainText("已停用");
   // 立即生效语义：分区内必须有明确说明，避免与底部「取消」产生误导
   await expect(page.getByText("扩展启停立即生效，不受下方取消影响。")).toBeVisible();
   // 滑动开关：方向由 aria-checked 表达，可见状态文字与之一致（不靠颜色单向传达）
@@ -129,7 +130,7 @@ test("无工作区也能看到扩展列表并启用（列表不依赖工作区�
   await expect(page.locator(".ext-state")).toHaveText("已停用");
   await off.click();
   await expect.poll(() => ext.patchBodies).toEqual([{enabled: true}]);
-  await expect(page.locator(".ext-meta")).toContainText("可用");
+  await expect(card.locator(".ext-meta")).toContainText("可用");
   await expect(page.getByRole("switch", {name: "停用 图纸目录"})).toHaveAttribute("aria-checked", "true");
   await expect(page.locator(".ext-state")).toHaveText("已启用");
 });
@@ -152,7 +153,7 @@ test("停用不关窗：对话框保留、开关就地翻转、标签移除；�
   await expect(page.locator(SETTINGS_DIALOG)).toBeVisible();
   await expect(page.getByRole("switch", {name: "启用 图纸目录"})).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".ext-state")).toHaveText("已停用");
-  await expect(page.locator(".ext-meta")).toContainText("已停用");
+  await expect(page.locator('[data-extension-id="dst-manager.sheet-catalog"] .ext-meta')).toContainText("已停用");
   // 标签移除发生在对话框背后（top layer 遮挡）；焦点留在对话框内的同一开关上
   await expectTabIds(page, CORE_TABS);
   await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("switch"))).toBe(true);
@@ -254,7 +255,7 @@ test("扩展列表加载失败时给出可见降级与重试，不静默呈现�
   await expect(page.getByText("没有已登记的扩展")).toBeHidden();
   fail = false;
   await page.getByRole("button", {name: "重试"}).click();
-  await expect(page.locator(".ext-meta")).toContainText("已停用");
+  await expect(page.locator('[data-extension-id="dst-manager.sheet-catalog"] .ext-meta')).toContainText("已停用");
 });
 
 test("SC-16 卡片四层信息与不可点击：唯一可聚焦元素是开关", async ({page}) => {
@@ -277,4 +278,31 @@ test("SC-16 卡片四层信息与不可点击：唯一可聚焦元素是开关",
   expect(focusables).toEqual(["BUTTON[switch]"]);
   // 状态徽标与开关方向来自不同权威：FAILED 不改变开关方向（不由 status 反推）
   expect(ext.patchBodies).toHaveLength(0);
+});
+
+// 扩展清单缩放（SPEC-DM-011 §3.3）：<6 条保持单列不分段；≥6 条按 enabled 分两段。
+// 两条用例各自独立装数据，不依赖执行顺序。
+test("SC-16 分段阈值下侧：5 条不分段", async ({page}) => {
+  await installExtensions(page, [1, 2, 3, 4, 5].map((n) => extensionSummary({
+    extension_id: `demo.ext-${n}`, enabled: n % 2 === 1, status: n % 2 === 1 ? "AVAILABLE" : "DISABLED",
+  })));
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await expect(page.locator(".ext-card")).toHaveCount(5);
+  await expect(page.locator(".group-title")).toHaveCount(0);
+});
+
+test("SC-16 分段阈值上侧：6 条分两段且分组键与开关同一权威", async ({page}) => {
+  await installExtensions(page, [1, 2, 3, 4, 5, 6].map((n) => extensionSummary({
+    extension_id: `demo.ext-${n}`, enabled: n % 2 === 1, status: n % 2 === 1 ? "AVAILABLE" : "DISABLED",
+  })));
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await expect(page.locator(".ext-card")).toHaveCount(6);
+  await expect(page.locator(".group-title")).toHaveCount(2);
+  await expect(page.locator(".group-title").first()).toHaveText("已启用");
+  await expect(page.locator(".group-title").last()).toHaveText("已停用");
+  // 分组键与开关同一权威：任何一段内不得出现与段名矛盾的开关方向
+  await expect(page.locator(".ext-group").first().locator('[aria-checked="false"]')).toHaveCount(0);
+  await expect(page.locator(".ext-group").last().locator('[aria-checked="true"]')).toHaveCount(0);
 });
