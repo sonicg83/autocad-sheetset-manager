@@ -86,6 +86,12 @@ export default {
     blockingTitle: "阻断问题",
     warningTitle: "警告",
     noIssues: "模板与当前图纸集兼容",
+    previewFailedTitle: "预览失败",
+    // 输出列卡头兼容徒标（PLAN-DM-023 Task 4；与摘要正文同源判定）
+    compatBadgeExecutable: "可以导出",
+    compatBadgeWarning: "可以导出，有 {count} 项提示",
+    compatBadgeChecking: "检查中",
+    compatBadgeBlocked: "不能导出",
     // 预览
     previewLabel: "预览",
     previewTotal: "共 {total} 张图纸",
@@ -97,6 +103,7 @@ export default {
     refreshPreview: "刷新预览",
     exportButton: "导出 XLSX",
     exporting: "正在导出…",
+    exportConsistentHint: "预览与当前模板草稿、工作区修订一致",
     noShellNotice: "桌面壳不可用，无法打开原生“另存为”对话框；导出仅在桌面应用中可用。",
     exportStaleHint: "草稿已修改，预览更新后才能导出",
     exportNotExecutableHint: "存在阻断问题，导出不可用",

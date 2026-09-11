@@ -243,6 +243,47 @@ test.describe("表格式输出列（PLAN-DM-023 Task 3）", () => {
   });
 });
 
+// PLAN-DM-023 Task 4（追踪矩阵 V2/V3）：兼容性摘要嵌回输出列上下文、刷新与导出入
+// 预览上下文（刷新在头部、导出与反馈在底部）。组件仍各自独立存在且保留 aria-label
+// region，只由业务上下文组件组合；诊断计算仍完全来自服务端。
+test.describe("兼容性与预览操作坞（PLAN-DM-023 Task 4）", () => {
+  test("兼容性归属：摘要嵌入输出列卡，警告可导出、错误禁用导出且正文不回退", async ({page}) => {
+    await openCatalog(page, {sheetPropertyValueOverrides: [{name: "专业代码", fromIndex: 20}]});
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}");
+    const summary = editor.getByRole("region", {name: "兼容性摘要"});
+    await expect(summary).toHaveCount(1);
+    await expect(summary).toContainText("[sheet] 专业代码（涉及 5 张图纸）");
+    await expect(editor.locator(".compat-badge")).toHaveText("可以导出，有 1 项提示");
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+    // 未知字段：徽标转为“不能导出”，详细正文与禁用状态不回退
+    await page.getByLabel("表达式 1").fill("{sheet.不存在属性}");
+    await expect(summary).toContainText("[sheet] 不存在属性");
+    await expect(editor.locator(".compat-badge")).toHaveText("不能导出");
+    await expect(summary.locator(".compat-title")).toHaveText("阻断问题");
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeDisabled();
+    // 该列同时转“需修正”，状态与摘要来自同一处判定
+    await expect(editor.locator(".columns .column-row").first().locator(".status-cell")).toHaveText("需修正");
+  });
+
+  test("预览操作坞：刷新在预览头部，导出与成功反馈在预览底部", async ({page}) => {
+    await openCatalog(page);
+    const preview = page.getByRole("region", {name: "预览"});
+    await expect(preview.getByRole("button", {name: "刷新预览"})).toHaveCount(1);
+    const actions = preview.getByRole("region", {name: "导出操作"});
+    await expect(actions).toHaveCount(1);
+    // 刷新已上提到预览头部，不再和导出挤在同一排
+    await expect(actions.getByRole("button", {name: "刷新预览"})).toHaveCount(0);
+    await expect(actions.getByRole("button", {name: "导出 XLSX"})).toHaveCount(1);
+    // 一致性反馈与导出按钮同处预览底部
+    await expect(actions.getByText("预览与当前模板草稿、工作区修订一致")).toBeVisible();
+    // 成功反馈留在预览卡内
+    await preview.getByRole("button", {name: "导出 XLSX"}).click();
+    await expect(preview.getByText("图纸目录已保存到")).toBeVisible();
+    await expect(preview.getByRole("button", {name: "打开所在文件夹"})).toBeVisible();
+  });
+});
+
 test.describe("模板状态（SPEC §3.2/§6）", () => {
   test("内置模板编辑即变为未命名草稿，只能另存不能原位保存", async ({page}) => {
     await openCatalog(page);

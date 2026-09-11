@@ -16,9 +16,7 @@ import {useToast} from "../composables/useToast";
 import TemplateBar from "../components/sheet-catalog/TemplateBar.vue";
 import FieldBrowser from "../components/sheet-catalog/FieldBrowser.vue";
 import ColumnEditor from "../components/sheet-catalog/ColumnEditor.vue";
-import CompatibilitySummary from "../components/sheet-catalog/CompatibilitySummary.vue";
 import CatalogPreview from "../components/sheet-catalog/CatalogPreview.vue";
-import CatalogActions from "../components/sheet-catalog/CatalogActions.vue";
 import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 
@@ -107,9 +105,7 @@ function onGuardKeydown(event: KeyboardEvent) {
         <FieldBrowser :catalog="catalog" />
         <ColumnEditor :catalog="catalog" />
       </div>
-      <CompatibilitySummary :catalog="catalog" />
       <CatalogPreview :catalog="catalog" />
-      <CatalogActions :catalog="catalog" />
     </div>
 
     <!-- 三选一保护（SPEC §3.2）：切换模板/切换页签/停用扩展/关闭工作区统一闸门；
@@ -136,7 +132,10 @@ function onGuardKeydown(event: KeyboardEvent) {
   </section>
 </template>
 <style scoped>
-.sheet-catalog{display:flex;flex-direction:column;gap:var(--space-3);min-height:0}
+/* PLAN-DM-023 Task 4：页面占满桌面壳剩余高度，栅格与预览卡可压缩到各自 min-height，
+   因此 1440×1000 首屏完整容纳“页头 + 模板栏 + 字段/输出列 + 预览与导出”；
+   内容超过可用高度时由本容器自身滚动（小视口与单列布局）。 */
+.sheet-catalog{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;flex:1;overflow:auto}
 /* PLAN-DM-023 Task 2：标题、说明、版本/生命周期与启停指引组合为单行紧凑头部 */
 .catalog-head{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;min-width:0}
 .catalog-head h2{margin:0;font-size:18px;color:var(--color-text-primary)}
@@ -144,8 +143,8 @@ function onGuardKeydown(event: KeyboardEvent) {
 .catalog-desc{margin:0;color:var(--color-text-secondary);font-size:13px;min-width:0}
 .catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px;white-space:nowrap}
 .catalog-manage-hint{margin:0;color:var(--color-text-muted);font-size:12px}
-.catalog-grid{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
+.catalog-grid{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;min-height:0;flex:1 1 auto}
 .catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);min-height:425px;align-items:stretch;min-width:0}
 .loading{margin:0;color:var(--color-text-muted)}
-@media (max-width: 960px){.catalog-row{grid-template-columns:1fr}}
+@media (max-width: 980px){.catalog-row{grid-template-columns:1fr}}
 </style>

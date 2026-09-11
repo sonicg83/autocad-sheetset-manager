@@ -11,9 +11,23 @@
 import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {SHEET_CATALOG_MAX_COLUMNS, type CatalogDiagnostic, type SheetCatalogController} from "../../composables/useSheetCatalog";
+import CompatibilitySummary from "./CompatibilitySummary.vue";
+import {catalogCompatibility} from "./catalogCompatibility";
 
 const props = defineProps<{catalog: SheetCatalogController}>();
 const {t} = useI18n();
+
+// 兼容徒标与摘要正文同源（PLAN-DM-023 Task 4）：判定只在 catalogCompatibility 一处
+const compat = computed(() => catalogCompatibility(props.catalog));
+const badgeText = computed(() => {
+  switch (compat.value.tone) {
+    case "ok": return t("extensions.sheetCatalog.compatBadgeExecutable");
+    case "warning": return t("extensions.sheetCatalog.compatBadgeWarning", {count: compat.value.warnings.length});
+    case "checking": return t("extensions.sheetCatalog.compatBadgeChecking");
+    default: return t("extensions.sheetCatalog.compatBadgeBlocked");
+  }
+});
+const badgeClass = computed(() => (compat.value.tone === "ok" ? "good" : compat.value.tone === "warning" ? "warn" : compat.value.tone === "checking" ? "checking" : "bad"));
 
 const headerInputs = ref<Record<string, HTMLInputElement | null>>({});
 const expressionInputs = ref<Record<string, HTMLTextAreaElement | null>>({});
@@ -89,9 +103,12 @@ watch(() => props.catalog.caretRequest.value, async request => {
   <section ref="region" class="column-editor panel" :aria-label="$t('extensions.sheetCatalog.editorLabel')">
     <div class="editor-head">
       <h3>{{ $t("extensions.sheetCatalog.editorLabel") }}</h3>
+      <span class="compat-badge" :class="badgeClass">{{ badgeText }}</span>
       <span class="spacer"></span>
       <span class="column-count">{{ $t("extensions.sheetCatalog.columnCount", {count: catalog.draft.value.columns.length, limit: SHEET_CATALOG_MAX_COLUMNS}) }}</span>
     </div>
+    <!-- 兼容性摘要嵌在输出列卡内（V2）：详细正文紧随卡头，不再作为独立全宽卡片 -->
+    <CompatibilitySummary :catalog="catalog" />
     <div class="columns">
       <div class="columns-head">
         <span>{{ $t("extensions.sheetCatalog.columnsHeadOrder") }}</span>
@@ -150,6 +167,11 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .editor-head{display:flex;align-items:center;gap:var(--space-2);padding:11px 14px;min-width:0}
 .editor-head h3{margin:0;font-size:14px}
 .editor-head .spacer{flex:1}
+.compat-badge{font-size:12px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.compat-badge.good{color:var(--color-success);background:var(--color-success-bg)}
+.compat-badge.warn{color:var(--color-warning);background:var(--color-warning-bg)}
+.compat-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
+.compat-badge.checking{color:var(--color-text-secondary);background:var(--color-bg-muted)}
 .column-count{color:var(--color-text-muted);font-size:12px;white-space:nowrap}
 .columns{overflow:auto;min-height:0;flex:1;max-height:330px}
 /* 表头与数据行共用同一组 grid 轨道：任何一处的列宽改动都必须同步两处 */

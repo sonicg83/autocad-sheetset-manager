@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 4：合并图纸目录兼容性与预览操作区）
+
+- 新增 `components/sheet-catalog/catalogCompatibility.ts`：把“阻断/警告/检查中/失败”的呈现层归一集中到一处，卡头徒标与摘要正文同源；判定完全依据服务端诊断与预览状态，不重新实现后端校验规则。
+- `CompatibilitySummary.vue` 去掉独立 `.panel` 外观，改为嵌在输出列卡内的紧凑整行状态带（ok/warning/error/失败/检查中各一色），region 名称与 `alert`/`status` 实时区域语义保留。
+- `ColumnEditor.vue` 卡头新增兼容徒标（可以导出 / 可以导出、有 N 项提示 / 检查中 / 不能导出），摘要正文紧随卡头；删除了 `SheetCatalogView.vue` 中独立的 `<CompatibilitySummary>` 兄弟。
+- `CatalogActions.vue` 从“预览同级卡片”改为预览卡底部操作坞：不再包含刷新按钮（上提至预览卡头），导出与一致性/过期/阻断/失败/成功反馈全部在卡内；`CatalogPreview.vue` 内嵌该操作坞，并把表区改为吃掉卡片剩余高度且自身滚动（`min-height:250px`、`max-height:300px`）。
+- `SheetCatalogView.vue`：页面改为占满桌面壳剩余高度（`flex:1;min-height:0;overflow:auto`），栅格可压缩到各自 min-height，因此 1440×1000 首屏完整容纳页头、模板栏、字段/输出列与预览+导出；单列断点由 `960px` 改为 Demo 同口径的 `980px`。
+- 新增对称 i18n 键：`previewFailedTitle`、`compatBadgeExecutable/Warning/Checking/Blocked`、`exportConsistentHint`（`compatBadgeWarning` 携带 `{count}`）。
+- 测试：`sheet-catalog.spec.ts` 新增“兼容性与预览操作坞”两用例（摘要属于输出列 region 且警告/错误两态文案与禁用状态正确、刷新在预览头部而导出/成功反馈在预览底部），先红后绿。
+- 几何比对（同一虚构数据集，与冻结 Demo 同口径）：1440×1000 得页头 24 / 模板栏 50 / 工作区栅格 434（Demo 443）/ 预览卡 250（Demo 250），第三行数据底缘 887、导出按钮底缘 914，均在 ActionDock（y=948）之上，页面容器 `scrollHeight == clientHeight`（无内部滚动）；1920×1080 与 Demo 同向增长。
+- 本轮回归 `sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts`（`--workers=1 --retries=0`）58 passed，冻结布局红用例（V1/V2/V3/V5/V7/V8）全部转绿；900×700 单列布局的字段区限高与编辑区挤压留给任务 5。
+
 ## 2026-09-11（PLAN-DM-023 任务 3：恢复图纸目录紧凑表格式编辑器）
 
 - `ColumnEditor.vue` 由逐列大卡片重写为冻结 Demo 的紧凑表格式：新增唯一 `.columns-head`（顺序/列名/表达式/状态/操作）与每行五列 `.column-row`，两者共用同一组 grid 轨道 `34px minmax(110px,.62fr) minmax(250px,1.8fr) 92px 112px`；状态单元格完全由服务端诊断驱动（有错显示“需修正”、无错显示“有效”），表达式错误从整行下方移入表达式单元格内，不复制后端校验规则。
