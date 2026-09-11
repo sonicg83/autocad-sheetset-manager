@@ -72,7 +72,7 @@ related:
 - Test: `web/tests/e2e/settings-dialog.spec.ts`（追加到文件末尾）
 
 **Interfaces:**
-- Produces: `BooleanSwitch` —— props `{checked:boolean; disabled?:boolean; label:string; stateText?:string; dataKey?:string; inputId?:string}`，emits `change:[boolean]`；根元素为 `button.switch[role="switch"]`，内部 `span.switch-thumb`，可选前置 `span.switch-state`（`aria-hidden`）。
+- Produces: `BooleanSwitch` —— props `{checked:boolean; disabled?:boolean; label:string; dataKey?:string; inputId?:string}`，emits `change:[boolean]`；根元素为 `button.switch[role="switch"]`，内部 `span.switch-thumb`。**不渲染可见状态文字**：冻结件里两处的文字位置不同（扩展开关文字在左、bool 字段文字在右），故文字一律由调用方布局（卡片用 `.switch-state`，表单行沿用既有 `.f-hint`）。
 - Consumes: 无。
 
 - [ ] **Step 1: 写失败测试（追加到 `settings-dialog.spec.ts` 末尾）**
@@ -85,13 +85,13 @@ test("布尔字段是滑动开关：role=switch + aria-checked + 可见状态文
   await openSettingsDialog(page);
   const toggle = page.getByRole("switch", {name: "图纸编号追加后缀"});
   await expect(toggle).toBeVisible();
-  // 初始为快照值 true；可见状态文字与 aria-checked 同步，且文字对辅助技术隐藏
+  // 初始为快照值 true；可见状态文字在开关右侧（与冻结件 g4-12 一致），仍对辅助技术隐藏
   await expect(toggle).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator('[data-field="enable_add_number_suffix"] .switch-state')).toHaveText("开启");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .f-hint')).toHaveText("开启");
   // 缓冲语义：点击后进入编辑缓冲（保存按钮点亮），但未保存不落库
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await expect(page.locator('[data-field="enable_add_number_suffix"] .switch-state')).toHaveText("关闭");
+  await expect(page.locator('[data-field="enable_add_number_suffix"] .f-hint')).toHaveText("关闭");
   await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
   // 放弃修改并关闭：回到快照值，不留持久化痕迹
   await page.keyboard.press("Escape");
@@ -107,7 +107,7 @@ test("布尔字段是滑动开关：role=switch + aria-checked + 可见状态文
 - [ ] **Step 2: 运行红灯**
 
 Run: `npx playwright test tests/e2e/settings-dialog.spec.ts -g "布尔字段是滑动开关" --reporter=line --retries=0`
-Expected: FAIL —— `getByRole("switch", {name:"图纸编号追加后缀"})` 虽能匹配原生 checkbox（`role="switch"` 已存在），但 `.switch-state` 不存在（`.f-hint` 而非 `.switch-state`），且 `aria-checked` 未显式设置 → 断言行失败。
+Expected: FAIL —— 原生 checkbox 虽已带 `role="switch"`（可访问名可解析），但**不写** `aria-checked` 属性（浏览器不把 checked 属性化为该 ARIA 属性）→ `toHaveAttribute("aria-checked", "true")` 失败；红即成立。
 
 - [ ] **Step 3: 新建 `web/src/components/settings/BooleanSwitch.vue`**
 
@@ -116,33 +116,27 @@ Expected: FAIL —— `getByRole("switch", {name:"图纸编号追加后缀"})` �
 // 布尔状态控件唯一视觉语言（SPEC-DM-006 §6.3 / SPEC-DM-011 §3.3）：
 // 「点击即落库的启停开关」与「随表单保存的布尔字段」共用本组件，语义差异由
 // 调用方文案与"保存"按钮是否点亮传达，不由控件形态区分。
-// 根元素是 button[role=switch]：Space/Enter 原生可切换，方向由 aria-checked 承担；
-// 可见状态文字只作视觉提示（aria-hidden），避免与 aria-checked 重复播报。
+// 根元素是 button[role=switch]：Space/Enter 原生可切换，方向由 aria-checked 承担。
+// 不渲染可见状态文字：冻结件中扩展开关的文字在左、bool 字段的文字在右，
+// 文字由调用方布局（避免为一个组件引入两种内部顺序）。
 // dataKey/inputId 保持既有契约：错误跳转依赖 [data-key] 可聚焦、表单 label 依赖 :for。
 defineProps<{
   checked: boolean;
   disabled?: boolean;
   label: string;        // 可访问名（调用方本地化后传入）
-  stateText?: string;   // 可见状态文字；不传则不渲染
   dataKey?: string;     // 写入根按钮的 [data-key]
   inputId?: string;     // 写入根按钮的 id，供 <label for> 关联
 }>();
 const emit = defineEmits<{change: [boolean]}>();
 </script>
 <template>
-  <span class="boolean-switch">
-    <span v-if="stateText" class="switch-state" :class="{on:checked}" aria-hidden="true">{{ stateText }}</span>
-    <button
-      :id="inputId" type="button" class="switch" role="switch"
-      :data-key="dataKey" :aria-checked="checked" :aria-label="label" :disabled="disabled === true"
-      @click="emit('change', !checked)"
-    ><span class="switch-thumb" aria-hidden="true"></span></button>
-  </span>
+  <button
+    :id="inputId" type="button" class="switch" role="switch"
+    :data-key="dataKey" :aria-checked="checked" :aria-label="label" :disabled="disabled === true"
+    @click="emit('change', !checked)"
+  ><span class="switch-thumb" aria-hidden="true"></span></button>
 </template>
 <style scoped>
-.boolean-switch{display:inline-flex;align-items:center;gap:var(--space-2)}
-.switch-state{font-size:12px;color:var(--color-text-muted)}
-.switch-state.on{color:var(--color-success)}
 .switch{position:relative;flex:none;width:44px;height:24px;padding:0;border:1px solid var(--color-border-strong);border-radius:var(--radius-full);background:var(--color-bg-muted);cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
 .switch[aria-checked="true"]{background:var(--color-accent);border-color:var(--color-accent)}
 .switch:disabled{cursor:not-allowed}
@@ -166,13 +160,14 @@ const emit = defineEmits<{change: [boolean]}>();
 替换为
 
 ```vue
-      <BooleanSwitch
-        v-else-if="item.control==='bool'"
-        :checked="Boolean(shown)" :disabled="disabled" :label="label"
-        :state-text="shown?t('settings.row.on'):t('settings.row.off')"
-        :data-key="item.key" :input-id="`settings-input-${item.key}`"
-        @change="onBoolChange"
-      />
+      <span v-else-if="item.control==='bool'" class="bool-line">
+        <BooleanSwitch
+          :checked="Boolean(shown)" :disabled="disabled" :label="label"
+          :data-key="item.key" :input-id="`settings-input-${item.key}`"
+          @change="onBoolChange"
+        />
+        <span class="f-hint">{{shown?t("settings.row.on"):t("settings.row.off")}}</span>
+      </span>
 ```
 
 脚本：`import BooleanSwitch from "./BooleanSwitch.vue";`，并把事件型处理器改为值型
@@ -182,7 +177,7 @@ const emit = defineEmits<{change: [boolean]}>();
 function onBoolChange(value:boolean){commit(value)}
 ```
 
-样式：删除 `SettingsFormRow.vue` 中已无用的 `input[type="checkbox"]{...}` 与 `.switch{...}` 规则（开关样式已收进 `BooleanSwitch`）。
+样式：删除 `SettingsFormRow.vue` 中已无用的 `input[type="checkbox"]{...}` 规则，并把原 `.switch{display:inline-flex;align-items:center;gap:var(--space-2);padding-top:var(--space-2)}` 改名为 `.bool-line{...}`（`.switch` 类名现在属于 `BooleanSwitch` 的按钮，`SettingsDialog.focusExtensionSwitch` 依赖它，不得占用）。
 
 - [ ] **Step 5: 运行绿灯 + 语言包与类型门禁**
 
@@ -211,7 +206,7 @@ git commit -m "统一设置中心布尔状态控件为滑动开关"
 - Test: `web/tests/e2e/extensions-settings.spec.ts`
 
 **Interfaces:**
-- Consumes: `BooleanSwitch`（任务 1）——`{checked,disabled,label,stateText,dataKey}` + `change`。
+- Consumes: `BooleanSwitch`（任务 1）——`{checked,disabled,label,dataKey}` + `change`（可见状态文字由本卡片自己渲染在开关左侧）。
 - Produces: `ExtensionCard` —— props `{extension:ExtensionSummary; busy:boolean}`，emits `toggle:[extensionId:string, enabled:boolean]`；根元素 `li.ext-card[data-extension-id]`。
 
 - [ ] **Step 1: 写失败测试（`extensions-settings.spec.ts` 追加）**
@@ -290,7 +285,8 @@ const tone = computed(() => {
     default: return "muted";
   }
 });
-// 可见状态文字与分组标题共用措辞（同一状态不出现两套说法）
+// 可见状态文字与分组标题共用措辞（同一状态不出现两套说法）；位置在开关左侧，
+// 与冻结件 g4-07～g4-11 一致（控件本身不渲染文字，由本卡片布局）
 const stateText = computed(() => enabled.value ? t("settings.extensions.stateOn") : t("settings.extensions.stateOff"));
 const switchLabel = computed(() => enabled.value
   ? t("settings.extensions.disableNamed", {name: name.value})
@@ -309,9 +305,10 @@ const switchLabel = computed(() => enabled.value
       </span>
     </div>
     <div class="ext-side">
+      <span class="switch-state" :class="{on:enabled}" aria-hidden="true">{{ stateText }}</span>
       <BooleanSwitch
         :checked="enabled" :disabled="busy" :label="switchLabel"
-        :state-text="stateText" :data-key="extension.extension_id"
+        :data-key="extension.extension_id"
         @change="value => emit('toggle', extension.extension_id, value)"
       />
     </div>
@@ -329,7 +326,9 @@ const switchLabel = computed(() => enabled.value
 .badge.warning{background:var(--color-warning-bg);color:var(--color-warning)}
 .badge.danger{background:var(--color-danger-bg);color:var(--color-danger)}
 .ext-diag{color:var(--color-text-muted)}
-.ext-side{flex:none;padding-top:2px}
+.ext-side{display:flex;align-items:center;gap:var(--space-2);flex:none;padding-top:2px}
+.switch-state{font-size:12px;color:var(--color-text-muted)}
+.switch-state.on{color:var(--color-success)}
 </style>
 ```
 
