@@ -16,9 +16,9 @@
 
 - [扩展卡片基线与布尔开关统一下沉（PLAN-DM-022，completed，依据 SPEC-DM-011 SC-16；3 批次 4 任务全部实施并逐任务评审通过，G8 已覆盖 SC-15/SC-16，G9 真实桌面验收待用户）](PLAN-DM-022-extension-card-baseline.md)
 - [多语言支持实施计划（PLAN-DM-021，active；批次一～三与 Task 11/12 已实施，G8 待 D3 裁决、G9 待真实桌面验收）](PLAN-DM-021-multilingual-support.md)
-- [图纸目录扩展正确性缺陷收口计划（PLAN-DM-024，proposed；关闭 MEMO-DM-031 F1～F5，恢复 SPEC-DM-012 G7，并作为 PLAN-DM-023 实施前置）](PLAN-DM-024-sheet-catalog-correctness-closure.md)
-- [图纸目录页面视觉收敛整改计划（PLAN-DM-023，proposed；以 PLAN-DM-024 完成为前置，保持 G4 冻结件，收敛表格式编辑器、字段可见性、首屏预览/导出与响应式）](PLAN-DM-023-sheet-catalog-visual-convergence.md)
-- [内置扩展平台与图纸目录 XLSX 实施计划（PLAN-DM-020，active；12 个原实施任务已完成，但 G7 被最终评审复核重新打开、G8 被用户真实桌面复验推翻；依次执行 PLAN-DM-024、PLAN-DM-023，再进行 G8/G9）](PLAN-DM-020-sheet-catalog-builtin-extension.md)；G9 记录见 [MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)。
+- [图纸目录扩展正确性缺陷收口计划（PLAN-DM-024，completed；MEMO-DM-031 F1～F5 已全部关闭，SPEC-DM-012 G7 已于 2026-09-11 恢复通过，PLAN-DM-023 实施前置已解除）](PLAN-DM-024-sheet-catalog-correctness-closure.md)
+- [图纸目录页面视觉收敛整改计划（PLAN-DM-023，proposed；PLAN-DM-024 前置已解除、可开始实施，保持 G4 冻结件，收敛表格式编辑器、字段可见性、首屏预览/导出与响应式）](PLAN-DM-023-sheet-catalog-visual-convergence.md)
+- [内置扩展平台与图纸目录 XLSX 实施计划（PLAN-DM-020，active；12 个原实施任务已完成，G7 已由 PLAN-DM-024 恢复通过，G8 仍被用户真实桌面复验推翻；先执行 PLAN-DM-023，再进行 G8/G9）](PLAN-DM-020-sheet-catalog-builtin-extension.md)；G9 记录见 [MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)。
 - [设置中心实施计划（PLAN-DM-019，proposed，依据 ARCH-DM-004 与 SPEC-DM-011；G0～G5 门禁已通过，G4 设计已冻结）](PLAN-DM-019-settings-center.md)
 - [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证通过，真实桌面双开冒烟待用户复验）](PLAN-DM-018-desktop-single-instance.md)
 - [图纸工作区与任务浮层视觉收敛整改计划（PLAN-DM-017，completed；用户真实桌面复验通过）](PLAN-DM-017-sheets-visual-convergence.md)

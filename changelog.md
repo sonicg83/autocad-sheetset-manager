@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-024 任务 4：完整回归、关闭 G7 并移交视觉整改）
+
+- PLAN-DM-024 收口（本批无生产代码改动）：完整回归全部通过后，MEMO-DM-031 F1～F5 正式逐项关闭并在 MEMO-DM-031 §7 登记对应测试、实现 commit（F1 `ecdc3d7`、F2/F3 `43eafa2`、F4/F5 `89cab15`）与实际结果；F4 按复核边界登记为「本地化显示碰撞」，不声称 UUID 身份混淆。
+- SPEC-DM-012 §16 门禁表 G7 由「未通过（最终评审复核）」恢复为「通过」，记录负责人（技术负责人 Agent）、日期（2026-09-11）与本轮新鲜验证计数；G9 行改为「未开始（G8 阻断）」，G8 维持「未通过（用户真实桌面复验）」，G8/G9 未被提前关闭。
+- 完整回归（全部本轮新鲜输出、退出码 0）：`uv run ruff check .` 通过；聚焦 pytest（test_shell/test_message_catalog/test_sheet_catalog_templates/test_extension_api）146 passed；`uv lock --check` 通过；`check:api`、`check:i18n`（870 键 / 9 域对称）、`npm run build` 通过；聚焦 E2E（sheet-catalog + extensions-navigation + extensions-settings，`--workers=1 --retries=0`）57 passed；全量 pytest 1121 passed / 72 skipped / 0 failed；全量 E2E 418 passed / 0 failed / 1 flaky——flaky 为 `main.spec.ts`「任务回滚终态后 ActionDock 解锁」在 4 worker 下的 dev server 启动 `page.goto` 超时，已按计划规则单独 `--workers=1 --retries=0` 复现（1 passed），确认非真实回归。
+- 计划状态与移交：PLAN-DM-024 标记 `completed` 并记录实际验证章节；PLAN-DM-023 的实施前置解除（状态保持 `proposed`、可开始生产代码任务）；PLAN-DM-020 实际验证章节追加收口记录并继续保持 `active`；G9 清单（MEMO-DM-028）头部暂停说明更新为「G7 已恢复、G8 仍阻断」；`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 状态摘要同步。
+- 本批只修改治理文档（MEMO-DM-031、PLAN-DM-020/023/024、两个 README、G9 清单、SPEC-DM-012、changelog），不修改生产代码、测试、API、冻结 Demo 或用户数据；TDD 证据工作区报告文件不入提交树，治理文档只引用 commit SHA 与验证计数。
+
 ## 2026-09-11（PLAN-DM-024 任务 3：收紧图纸目录模板名称与 UUID 不变量）
 
 - 修复 MEMO-DM-031 F5：`save_templates` 此前只做模板名 casefold 唯一检查，不校验 `template_id` 唯一，直接 PUT 扩展设置端点可持久化两条名字不同但 UUID 相同的模板，`delete_template` 按 ID 过滤会一次带走两条。现在在同一循环内按「非空 ID → `seen_ids` 重复 → 模板内容与名称检查」顺序强制：重复 UUID 抛稳定 `ValueError` 前缀 `SHEET_CATALOG_TEMPLATE_ID_DUPLICATE`，沿现有设置 PUT 边界映射为 `EXTENSION_SETTINGS_INVALID`（422），不扩张 SPEC-DM-012 §11 的目录业务错误码；不自动改写客户端提交的 UUID，`delete_template` 按 ID 删除接口不变。集成测试断言拒绝后持久化 revision/value 均不变。

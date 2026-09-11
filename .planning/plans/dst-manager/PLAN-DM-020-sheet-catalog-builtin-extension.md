@@ -840,4 +840,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 
 2026-09-11：未推送提交全量评审登记的 [MEMO-DM-031](../../memos/dst-manager/2026-09-11-plan-dm022-final-review-defects.md) F1～F5 经针对性复核确认：扩展刷新可绕过目录草稿守卫、保存授权 Promise 拒绝可令导出永久停在 `exporting`、Shell 扩展错误缺 `message_key`、本地化内置模板名可与用户模板显示碰撞、服务端未拒绝重复 `template_id`。已立项 [PLAN-DM-024](PLAN-DM-024-sheet-catalog-correctness-closure.md) 先行关闭正确性缺陷；SPEC-DM-012 G7 因此重新打开。执行顺序固定为 PLAN-DM-024 → PLAN-DM-023 → 用户 G8 → G9。
 
+2026-09-11：[PLAN-DM-024](PLAN-DM-024-sheet-catalog-correctness-closure.md) 已完成，MEMO-DM-031 F1～F5 全部关闭（F1 `ecdc3d7`、F2/F3 `43eafa2`、F4/F5 `89cab15`，逐项测试与实际结果见 MEMO-DM-031 §7）。恢复 G7 的新鲜验证（全部退出码 0）：`uv run ruff check .` 通过、聚焦 pytest 146 passed、`uv lock --check` 通过、`check:api` 与 `check:i18n`（870 键 / 9 域）及 `build` 通过、聚焦 E2E（`--workers=1 --retries=0`）57 passed、全量 pytest 1121 passed / 72 skipped / 0 failed、全量 E2E 418 passed / 0 failed / 1 flaky（`main.spec.ts` 任务回滚用例为 4 worker 下 dev server 启动超时，`--workers=1 --retries=0` 单独复现 1 passed，非真实回归）。SPEC-DM-012 G7 已恢复“通过”；G8 仍为“未通过（用户真实桌面复验）”、G9 仍由 G8 阻断。[PLAN-DM-023](PLAN-DM-023-sheet-catalog-visual-convergence.md) 的实施前置已解除。本计划继续保持 `active`，待 PLAN-DM-023 完成、用户重新通过 G8 并执行 G9 后再收口。
+
 执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。
