@@ -95,6 +95,39 @@ export async function readBridgeCalls(page: Page): Promise<{saveRequests: {exten
   });
 }
 
+// ---- PLAN-DM-023 Task 1：与冻结 Demo（SPEC-DM-012 §7.4，commit 9f3dfb3）同口径的
+// 复用水印模板。四列“市政标准目录”是 G8 基准态；六列模板只用于验证列数增长不撑高
+// 首屏；错误态模板含一个未定义图纸属性，用于“需修正”状态证据。全部为虚构数据。
+export function demoSixColumnTemplate(): CatalogTemplate {
+  return {
+    template_id: "template-demo-six",
+    name: "市政标准目录（六列）",
+    schema_version: 1,
+    columns: [
+      {column_id: "col-six-1", header: "图纸编号", expression: "{sheet.专业代码}-{sheet.number}"},
+      {column_id: "col-six-2", header: "图名", expression: "{sheet.title}"},
+      {column_id: "col-six-3", header: "文件名", expression: "{sheet.file_name}"},
+      {column_id: "col-six-4", header: "项目名称", expression: "{sheetset.项目名称}"},
+      {column_id: "col-six-5", header: "项目编号", expression: "{sheetset.项目编号}"},
+      {column_id: "col-six-6", header: "设计人", expression: "{sheet.设计人}"},
+    ],
+  };
+}
+
+export function demoErrorTemplate(): CatalogTemplate {
+  return {
+    template_id: "template-demo-error",
+    name: "市政标准目录（含未知字段）",
+    schema_version: 1,
+    columns: [
+      {column_id: "col-err-1", header: "图纸编号", expression: "{sheet.专业代码}-{sheet.number}"},
+      {column_id: "col-err-2", header: "图名", expression: "{sheet.title}"},
+      {column_id: "col-err-3", header: "建筑图号", expression: "{sheet.建筑专业}"},
+      {column_id: "col-err-4", header: "设计人", expression: "{sheet.设计人}"},
+    ],
+  };
+}
+
 const BUILTIN_SHEET_FIELDS = ["number", "title", "file_name"];
 
 let uuidCounter = 0;

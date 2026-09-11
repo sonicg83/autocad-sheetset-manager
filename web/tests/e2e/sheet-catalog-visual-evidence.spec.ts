@@ -3,10 +3,13 @@
 // 无整页横向溢出、主操作可见、预览区独立横滚；键盘：Tab 顺序、字段浏览器
 // Enter/Space 插入、状态不只靠颜色。G8 成对截图（1440×1000 浅色 / 900×700 深色）
 // 使用与冻结 Demo（commit 9f3dfb3）相同的虚构数据与展开状态，截图经 testInfo
-// 附件留档（g8-catalog-{主题}-{宽}x{高}.png），由验收时复制到 .superpowers/ 与
-// docs/dst-manager/specs/assets/SPEC-DM-012/ 的冻结基准图比对（备忘记录逐项结论）。
+// 附件留档（g8-catalog-{主题}-{宽}x{高}.png），验收时复制到版本库
+// docs/dst-manager/specs/assets/SPEC-DM-012/production/ 与冻结基准图比对。
+// PLAN-DM-023 Task 1 追加：V1/V2/V3/V4/V5/V7/V8 的冻结布局硬要求（首屏密度、
+// 表格式输出列、字段可见性、列数增长不撑高页面）。这些用例代替
+// “滚动后可达”作为 G4 一致性证据；差异裁决权仍在用户（MEMO-DM-030）。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
-import {installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
+import {demoSixColumnTemplate, installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
 
 async function expectNoPageHScroll(page: Page, label: string) {
   const metrics = await page.evaluate(() => ({
@@ -30,8 +33,8 @@ async function expectActionsReachable(page: Page, names: string[]) {
   }
 }
 
-// 纵向滚动后可达：主操作允许在页面滚动流下方（SPEC §13 只约束"不被遮挡"与
-// 无整页横滚），滚动到该操作后必须完整落在视口内（重点是无横向裁剪）。
+// 纵向滚动后可达：仅作为“无横向裁剪”的补充守卫（SPEC §13）。
+// 注意：这不能证明 G4 一致——首屏密度由 PLAN-DM-023 的专用用例断言。
 async function expectActionReachableAfterScroll(page: Page, name: string) {
   const viewport = page.viewportSize()!;
   const button = page.getByRole("button", {name}).first();
@@ -87,10 +90,10 @@ const DEMO_DATASET = {
   preferenceTemplateId: "template-demo-municipal",
 };
 
-async function openDemoState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}) {
+async function openDemoState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}, dataset: typeof DEMO_DATASET = DEMO_DATASET) {
   await page.setViewportSize(viewport);
   await page.addInitScript(t => localStorage.setItem("dst-manager-theme", t), theme);
-  await installSheetCatalogFixture(page, {...DEMO_DATASET});
+  await installSheetCatalogFixture(page, {...dataset});
   await openCatalogPage(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   const preview = page.getByRole("region", {name: "预览"});
@@ -104,8 +107,7 @@ test("G8 对 1：1440×1000 浅色缺值警告状态截图 + 布局守卫", asyn
   await openDemoState(page, "light", {width: 1440, height: 1000});
   await expectNoPageHScroll(page, "1440×1000 浅色");
   await expectActionsReachable(page, ["另存为"]);
-  // 预览/操作区在纵向滚动流下方：滚动后可达且无横向裁剪（G8 记为与冻结 Demo 的
-  // 已接受差异——Demo 基准视口一屏容纳，生产页面需轻微纵向滚动）
+  // 补充守卫：滚动后仍无横向裁剪（首屏密度见 PLAN-DM-023 V1/V3 用例）
   await expectActionReachableAfterScroll(page, "刷新预览");
   await expectActionReachableAfterScroll(page, "导出 XLSX");
   await page.evaluate(() => { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; for (const element of document.querySelectorAll<HTMLElement>("*")) if (element.scrollTop > 0) element.scrollTop = 0; });
@@ -213,6 +215,119 @@ test("大数据摘要：500 张图纸显示总数与 20 行上限", async ({page
   await expect(preview.getByText("显示前 20 行")).toBeVisible();
   await expect(preview.locator(".table-window")).toHaveCSS("overflow-x", "auto");
   await expectNoPageHScroll(page, "大数据");
+});
+
+// =====================================================================
+// PLAN-DM-023 Task 1：把冻结布局（SPEC-DM-012 §7.4 / commit 9f3dfb3）的硬要求
+// 写成会失败的生产证据。追踪矩阵 V1/V3/V4/V5/V7/V8 的自动验证入口在这里；
+// 断言只用几何与可见正文，不用像素比对，也不把“滚动后可达”当作一致。
+// =====================================================================
+
+// 首屏密度与结构断言都从页面顶部开始：先把所有层级的滚动位置归零
+// （焦点移入输入框或前一个断言滚动过页面时都会改变起点）。
+async function resetPageScroll(page: Page) {
+  await page.evaluate(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    for (const element of document.querySelectorAll<HTMLElement>("*")) if (element.scrollTop > 0) element.scrollTop = 0;
+  });
+}
+
+async function previewCardTop(page: Page): Promise<number> {
+  const box = await page.getByRole("heading", {name: "预览"}).boundingBox();
+  expect(box, "预览标题存在").not.toBeNull();
+  return box!.y;
+}
+
+// 输出列表头与每行的五列网格轨道（`.columns-head` 与 `.column-row` 共用同一 grid），
+// 以 getBoundingClientRect 的 left/right 校验列边界一致。
+async function readColumnGrid(page: Page): Promise<{left: number; right: number}[][]> {
+  return page.evaluate(() => {
+    const rect = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return {left: box.left, right: box.right};
+    };
+    return [
+      Array.from(document.querySelectorAll(".columns-head > *")).map(rect),
+      ...Array.from(document.querySelectorAll(".columns .column-row")).map(row => Array.from(row.children).map(rect)),
+    ];
+  });
+}
+
+// —— V1/V3：1440×1000 首屏必须同时可见预览标题、前三行数据与导出按钮 ——
+test("PLAN-DM-023 V1/V3：1440×1000 首屏同时可见预览标题、第三行数据与导出按钮", async ({page}) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000});
+  await resetPageScroll(page);
+  const dockTop = await page.locator(".dock").evaluate(element => element.getBoundingClientRect().top);
+  for (const target of [
+    page.getByRole("heading", {name: "预览"}),
+    page.getByRole("region", {name: "预览"}).getByRole("row").nth(3),
+    page.getByRole("button", {name: "导出 XLSX"}),
+  ]) {
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y + box!.height, "首屏内容底缘不越过 ActionDock").toBeLessThanOrEqual(dockTop);
+  }
+});
+
+// —— V1/V2/V5：输出列表格式结构 + 兼容性与操作区的 DOM 归属 ——
+test("PLAN-DM-023 V1/V2/V5：输出列表格式结构与兼容性/操作区归属", async ({page}) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000});
+  await resetPageScroll(page);
+  const editor = page.getByRole("region", {name: "输出列编辑器"});
+  // 唯一表头行，五个列标签顺序固定
+  await expect(editor.locator(".columns-head")).toHaveCount(1);
+  const headLabels = (await editor.locator(".columns-head > *").allTextContents()).map(text => text.trim());
+  expect(headLabels).toEqual(["顺序", "列名", "表达式", "状态", "操作"]);
+  // 表头与每个数据行共用同一组列边界（误差 ≤ 1px），且每行都是五个单元格
+  const grid = await readColumnGrid(page);
+  expect(grid.length, "表头 + 四列模板的四个数据行").toBe(5);
+  expect(grid[0]).toHaveLength(5);
+  for (const row of grid.slice(1)) {
+    expect(row).toHaveLength(5);
+    for (let index = 0; index < 5; index++) {
+      expect(Math.abs(row[index]!.left - grid[0]![index]!.left), `第 ${index + 1} 列左边界对齐`).toBeLessThanOrEqual(1);
+      expect(Math.abs(row[index]!.right - grid[0]![index]!.right), `第 ${index + 1} 列右边界对齐`).toBeLessThanOrEqual(1);
+    }
+  }
+  // 兼容性摘要必须在输出列上下文内，刷新与导出必须在预览上下文内
+  await expect(editor.getByRole("region", {name: "兼容性摘要"})).toHaveCount(1);
+  const preview = page.getByRole("region", {name: "预览"});
+  await expect(preview.getByRole("button", {name: "刷新预览"})).toHaveCount(1);
+  await expect(preview.getByRole("button", {name: "导出 XLSX"})).toHaveCount(1);
+});
+
+// —— V4：字段本地搜索 + 规范引用与用户名称同为可见正文 ——
+test("PLAN-DM-023 V4：字段搜索可见且规范引用与用户名称同为可见正文", async ({page}) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000});
+  await resetPageScroll(page);
+  const browser = page.getByRole("region", {name: "字段浏览器"});
+  await expect(page.getByLabel("搜索可用字段")).toBeVisible();
+  await expect(browser.getByText("sheet.number", {exact: true})).toBeVisible();
+  await expect(browser.getByText("图号", {exact: true})).toBeVisible();
+  // 搜索框不改变插入语义：点击条目仍按规范引用插入
+  await page.getByLabel("表达式 1").fill("");
+  await browser.getByRole("button", {name: /sheet\.number/}).click();
+  await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+});
+
+// —— V7/V8：列数从 4 增到 6 不得继续撑高页面，编辑区自身滚动 ——
+test("PLAN-DM-023 V7/V8：六列模板不撑高页面且列编辑区自身可滚动", async ({page}) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000}, {
+    ...DEMO_DATASET,
+    userTemplates: [demoMunicipalTemplate(), demoSixColumnTemplate()],
+  });
+  await resetPageScroll(page);
+  const fourColumnTop = await previewCardTop(page);
+  await page.getByLabel("选择模板").selectOption("template-demo-six");
+  await expect(page.getByRole("region", {name: "预览"}).getByRole("columnheader")).toHaveCount(6);
+  await resetPageScroll(page);
+  const sixColumnTop = await previewCardTop(page);
+  expect(Math.abs(sixColumnTop - fourColumnTop), "预览位置不随列数增长继续下移").toBeLessThanOrEqual(2);
+  const columns = page.getByRole("region", {name: "输出列编辑器"}).locator(".columns");
+  await expect(columns).toHaveCSS("overflow-y", "auto");
+  const scroll = await columns.evaluate(element => ({sh: element.scrollHeight, ch: element.clientHeight}));
+  expect(scroll.sh, "列编辑区内部可滚动").toBeGreaterThan(scroll.ch);
 });
 
 // —— 键盘：完整 Tab 顺序、字段浏览器 Enter/Space 插入、状态不只靠颜色 ——
