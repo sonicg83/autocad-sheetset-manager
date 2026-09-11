@@ -132,6 +132,10 @@ watch(() => props.catalog.caretRequest.value, async request => {
           >
           <div class="expression-cell">
             <textarea
+              spellcheck="false"
+              autocorrect="off"
+              autocapitalize="off"
+              autocomplete="off"
               :ref="element => { expressionInputs[row.column.columnId] = element as HTMLTextAreaElement | null }"
               rows="2"
               :aria-label="$t('extensions.sheetCatalog.columnExpression', {index: row.index + 1})"
