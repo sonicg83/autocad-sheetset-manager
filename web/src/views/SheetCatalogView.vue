@@ -144,7 +144,11 @@ function onGuardKeydown(event: KeyboardEvent) {
 .catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px;white-space:nowrap}
 .catalog-manage-hint{margin:0;color:var(--color-text-muted);font-size:12px}
 .catalog-grid{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;min-height:0;flex:1 1 auto}
-.catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);min-height:425px;align-items:stretch;min-width:0}
+/* 工作区栅格取冻结 Demo 的确定高度（min-height 425px），不随字段条目或列数增长：
+   字段列表与列区各自内部滚动，避免栅格被压缩后内容溢出叠到预览卡上。 */
+.catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);height:425px;align-items:stretch;min-width:0;flex:0 0 auto}
 .loading{margin:0;color:var(--color-text-muted)}
-@media (max-width: 980px){.catalog-row{grid-template-columns:1fr}}
+/* PLAN-DM-023 Task 5：≤980px 降为单列（与冻结 Demo 同断点），高度由内容决定：
+   字段区限高 235px + 输出列卡 min-height 425px，超出时由 .sheet-catalog 滚动 */
+@media (max-width: 980px){.catalog-row{grid-template-columns:1fr;height:auto}}
 </style>

@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-023 任务 5：完善图纸目录响应式与宽屏密度）
+
+- 工作区栅格改为冻结 Demo 的确定高度 `height:425px`（桌面）而非 min-height：字段条目与输出列数量都不再驱动栅格高度；先前用 `min-height:0` 允许压缩会在小视口把栅格内容溢出到预览卡上（重叠），已改为栅格不参与压缩、由 `.sheet-catalog` 自身滚动。预览卡改为 `flex:1 1 auto;min-height:250px`，吃掉栅格之后的剩余高度（1440×1000 得 259px，1920×1080 得 375px）。
+- ≤980px（与冻结 Demo 同断点）单列布局：`.catalog-row` 改为 `grid-template-columns:1fr;height:auto`，字段卡 `max-height:235px` 且列表内部滚动，输出列卡 `min-height:425px`；≤720px 隐藏 `.columns-head`、每行降为“顺序 + 单列字段”两轨、操作图标左对齐。冻结 Demo 在 900×700 下的字段卡会被页面 flex 压缩到 2px（实测），本计划 Task 5 步骤 2 明确要求限高 235px，故此处按计划实现而非复现 Demo 的塌陷。
+- 字段浏览器卡头提示由“点击插入到当前表达式光标位置”收短为“点击插入”（中英文同步），否则 258px 卡宽下列头会换行。
+- 测试：`sheet-catalog-visual-evidence.spec.ts` 新增“四档视口几何与响应式”四条：1440×1000、1920×1080、900×700、200%（CSS 720×500），每档均断言无整页横滚、宽预览只在 `.table-window` 内横滚、导出按钮不被 ActionDock 遮挡且无横向裁剪；另分别钉住 1920 字段栏 258px 与五列轨道、900 字段区限高与内部滚动、720 列头隐藏与两轨降级。先红后绿。
+- 本轮验证（全部新鲜输出、退出码 0）：`check:i18n` 894 键 / 9 域；聚焦 E2E（sheet-catalog + visual-evidence + extensions-navigation + main，`--workers=1 --retries=0`）142 passed；`npm run build`（含 `check:api`、`check:i18n`、`vue-tsc -b`、vite build）通过。
+
 ## 2026-09-11（PLAN-DM-023 任务 4：合并图纸目录兼容性与预览操作区）
 
 - 新增 `components/sheet-catalog/catalogCompatibility.ts`：把“阻断/警告/检查中/失败”的呈现层归一集中到一处，卡头徒标与摘要正文同源；判定完全依据服务端诊断与预览状态，不重新实现后端校验规则。

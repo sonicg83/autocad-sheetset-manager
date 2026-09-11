@@ -138,7 +138,7 @@ test("200% 缩放：无整页横滚、主操作可达、预览区独立横滚", 
   await expectNoPageHScroll(page, "200% 缩放主视图");
   await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeVisible();
   // 最小 CSS 视口下长表达式使预览横向溢出：只允许在表容器内滚动
-  await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}-{sheet.title}-" + "超长组合表达式列内容".repeat(8));
+  await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}-{sheet.title}-" + "超长组合表达式列内容".repeat(24));
   await expect(page.getByRole("region", {name: "预览"}).getByRole("cell").first()).toContainText("超长组合表达式列内容");
   await expectPreviewScrollsInternally(page, "200% 缩放");
   await expectNoPageHScroll(page, "200% 缩放宽预览");
@@ -328,6 +328,83 @@ test("PLAN-DM-023 V7/V8：六列模板不撑高页面且列编辑区自身可滚
   await expect(columns).toHaveCSS("overflow-y", "auto");
   const scroll = await columns.evaluate(element => ({sh: element.scrollHeight, ch: element.clientHeight}));
   expect(scroll.sh, "列编辑区内部可滚动").toBeGreaterThan(scroll.ch);
+});
+
+// =====================================================================
+// PLAN-DM-023 Task 5（追踪矩阵 V7/V8）：四档视口几何与响应式降级。
+// 每档都要求：无整页横滚、宽预览只在表容器内横滚、主操作不被 ActionDock 遮挡；
+// 900px 单列要钉住字段区限高与内部滚动；1920px 要钉住字段栏宽度与列轨道；
+// 200%（CSS 720×500）要钉住列头隐藏与“顺序 + 单列字段”降级。
+// =====================================================================
+
+// 四档共用的几何门禁：先制造一个超长表达式，验证宽列只在预览表容器内横滚；
+// 再滚动到导出按钮，验证不被 ActionDock 遮住且无横向裁剪。
+async function expectTierGuards(page: Page, label: string) {
+  await expectNoPageHScroll(page, label);
+  await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}-" + "超长组合表达式列内容".repeat(24));
+  await expect(page.getByRole("region", {name: "预览"}).getByRole("cell").first()).toContainText("超长组合表达式列内容");
+  await expectPreviewScrollsInternally(page, label);
+  await expectNoPageHScroll(page, `${label}（宽预览）`);
+  const dockTop = await page.locator(".dock").evaluate(element => element.getBoundingClientRect().top);
+  const viewport = page.viewportSize()!;
+  const exportButton = page.getByRole("button", {name: "导出 XLSX"}).first();
+  await exportButton.scrollIntoViewIfNeeded();
+  const box = await exportButton.boundingBox();
+  expect(box, `${label}：导出按钮存在`).not.toBeNull();
+  expect(box!.x, `${label}：导出按钮左缘在视口内`).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width, `${label}：导出按钮右缘无横向裁剪`).toBeLessThanOrEqual(viewport.width);
+  expect(box!.y + box!.height, `${label}：导出按钮不被 ActionDock 遮挡`).toBeLessThanOrEqual(dockTop);
+}
+
+test.describe("PLAN-DM-023 Task 5：四档视口几何与响应式", () => {
+  test("1440×1000：无整页横滚、宽预览只在表容器横滚、导出不被 ActionDock 遮挡", async ({page}) => {
+    await openDemoState(page, "light", {width: 1440, height: 1000});
+    await expectTierGuards(page, "1440×1000");
+  });
+
+  test("1920×1080：字段栏保持 258px，五列轨道各自明确", async ({page}) => {
+    await openDemoState(page, "light", {width: 1920, height: 1080});
+    await expectTierGuards(page, "1920×1080");
+    // 字段浏览器不随剩余宽度膨胀（冻结 Demo 的 258px）
+    const field = await page.locator(".field-browser").boundingBox();
+    expect(field!.width, "字段栏宽度").toBeGreaterThanOrEqual(256);
+    expect(field!.width, "字段栏宽度").toBeLessThanOrEqual(260);
+    // 五列轨道：顺序/状态/操作固定，表达式宽于列名，不产生无轨道的整片空白
+    const tracks = await page.locator(".columns-head").evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" "));
+    expect(tracks).toHaveLength(5);
+    expect(tracks[0]).toBe("34px");
+    expect(tracks[3]).toBe("92px");
+    expect(tracks[4]).toBe("112px");
+    expect(parseFloat(tracks[2]!), "表达式轨道宽于列名轨道").toBeGreaterThan(parseFloat(tracks[1]!));
+  });
+
+  test("900×700：字段区限高 235px 且内部滚动，输出列紧随其后", async ({page}) => {
+    await openDemoState(page, "dark", {width: 900, height: 700});
+    await expectTierGuards(page, "900×700");
+    const field = page.locator(".field-browser");
+    const fieldBox = await field.boundingBox();
+    expect(fieldBox!.height, "字段区可见高度 ≤ 235px").toBeLessThanOrEqual(235);
+    const list = field.locator(".field-list");
+    await expect(list).toHaveCSS("overflow-y", "auto");
+    const listScroll = await list.evaluate(element => ({sh: element.scrollHeight, ch: element.clientHeight}));
+    expect(listScroll.sh, "字段列表内部可滚动").toBeGreaterThan(listScroll.ch);
+    const editorBox = await page.locator(".column-editor").boundingBox();
+    expect(editorBox!.y, "输出列在字段区之后").toBeGreaterThanOrEqual(fieldBox!.y + fieldBox!.height);
+    expect(editorBox!.height, "输出列卡不被字段区挤压").toBeGreaterThanOrEqual(400);
+  });
+
+  test("200%（CSS 720×500）：无整页横滚、列头隐藏、每行降级为顺序 + 单列字段", async ({page}) => {
+    await openDemoState(page, "light", {width: 1440, height: 1000});
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setDeviceMetricsOverride", {width: 720, height: 500, deviceScaleFactor: 2, mobile: false});
+    await expectTierGuards(page, "200% 缩放");
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    await expect(editor.locator(".columns-head")).toBeHidden();
+    const row = editor.locator(".columns .column-row").first();
+    expect(await row.evaluate(element => element.children.length), "每行仍是五个单元格").toBe(5);
+    expect(await row.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length), "降级为两轨").toBe(2);
+    expect(await row.locator(".row-actions").evaluate(element => getComputedStyle(element).justifyContent), "操作图标左对齐").toBe("flex-start");
+  });
 });
 
 // —— 键盘：完整 Tab 顺序、字段浏览器 Enter/Space 插入、状态不只靠颜色 ——

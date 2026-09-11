@@ -38,7 +38,7 @@ defineProps<{catalog: SheetCatalogController}>();
   </section>
 </template>
 <style scoped>
-.catalog-preview{display:flex;flex-direction:column;gap:0;min-width:0;min-height:0;min-height:250px;overflow:hidden}
+.catalog-preview{display:flex;flex-direction:column;gap:0;min-width:0;min-height:250px;flex:1 1 auto;overflow:hidden}
 .catalog-preview.panel{padding:0}
 .preview-head{display:flex;align-items:center;gap:var(--space-2);padding:11px 14px;flex-wrap:wrap;min-width:0;border-bottom:1px solid var(--color-border-subtle)}
 .preview-head h3{margin:0;font-size:14px}

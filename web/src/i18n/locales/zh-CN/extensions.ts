@@ -48,7 +48,7 @@ export default {
     fieldGroupSheetset: "图纸集自定义属性",
     fieldGroupSheet: "图纸自定义属性",
     fieldGroupEmpty: "当前图纸集没有此作用域的自定义属性",
-    fieldHint: "点击插入到当前表达式光标位置",
+    fieldHint: "点击插入",
     // 本地搜索只过滤当前已取得的字段目录（不发请求、不持久化）
     fieldSearchLabel: "搜索可用字段",
     fieldSearchPlaceholder: "搜索字段或作用域",

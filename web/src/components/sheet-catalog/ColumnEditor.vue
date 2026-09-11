@@ -197,6 +197,10 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .editor-foot button{padding:0 var(--space-3);min-height:32px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
 .editor-foot button:hover{background:var(--color-bg-muted)}
 .syntax-hint{color:var(--color-text-muted);font-size:12px;min-width:0}
+@media (max-width: 980px){
+  /* 单列布局下输出列卡保留可编辑高度（列区自身滚动，不拉长整页） */
+  .column-editor{min-height:425px}
+}
 @media (max-width: 720px){
   .columns-head{display:none}
   .column-row{grid-template-columns:28px minmax(0,1fr);gap:7px}

@@ -116,4 +116,7 @@ const noMatches = computed(() => searching.value && visibleGroups.value.length =
 .field-empty{margin:var(--space-2) 2px;color:var(--color-text-muted);font-size:12px}
 .empty-hint{margin:var(--space-1) 2px;color:var(--color-text-muted);font-size:12px}
 .field-syntax{margin:var(--space-2) 2px 0;color:var(--color-text-muted);font-size:12px;line-height:1.7}
+/* PLAN-DM-023 Task 5：≤980px 单列布局下限高 235px，字段列表内部滚动，
+   输出列与预览不因字段数量继续下移（与冻结 Demo 的 field-card max-height 一致） */
+@media (max-width: 980px){.field-browser{max-height:235px}}
 </style>

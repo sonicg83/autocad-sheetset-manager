@@ -40,7 +40,7 @@ export default {
     fieldGroupSheetset: "Sheet set custom properties",
     fieldGroupSheet: "Sheet custom properties",
     fieldGroupEmpty: "No custom properties in this scope for the current sheet set",
-    fieldHint: "Click to insert at the current cursor position of the expression",
+    fieldHint: "Click to insert",
     fieldSearchLabel: "Search available fields",
     fieldSearchPlaceholder: "Search fields or scope",
     fieldSearchEmpty: "No matching fields",
