@@ -22,8 +22,6 @@ export interface CatalogTemplate {
 
 // PLAN-DM-024 Task 2：新增 "reject"——假桥直接抛错（对齐壳窗口未就绪时抛
 // RuntimeError、经 pywebview 变成 JS Promise 拒绝的行为，MEMO-DM-031 F2）。
-// PLAN-DM-024 Task 2：新增 "reject"——假桥直接抛错（对齐壳窗口未就绪时抛
-// RuntimeError、经 pywebview 变成 JS Promise 拒绝的行为，MEMO-DM-031 F2）。
 export type SaveDialogMode = "grant" | "cancel" | "error" | "reject";
 
 // 修复后的 Shell 桥对已知扩展平台码返回的文案键（与后端 message_catalog.CATALOG

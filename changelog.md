@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-024 任务 3：收紧图纸目录模板名称与 UUID 不变量）
+
+- 修复 MEMO-DM-031 F5：`save_templates` 此前只做模板名 casefold 唯一检查，不校验 `template_id` 唯一，直接 PUT 扩展设置端点可持久化两条名字不同但 UUID 相同的模板，`delete_template` 按 ID 过滤会一次带走两条。现在在同一循环内按「非空 ID → `seen_ids` 重复 → 模板内容与名称检查」顺序强制：重复 UUID 抛稳定 `ValueError` 前缀 `SHEET_CATALOG_TEMPLATE_ID_DUPLICATE`，沿现有设置 PUT 边界映射为 `EXTENSION_SETTINGS_INVALID`（422），不扩张 SPEC-DM-012 §11 的目录业务错误码；不自动改写客户端提交的 UUID，`delete_template` 按 ID 删除接口不变。集成测试断言拒绝后持久化 revision/value 均不变。
+- 修复 MEMO-DM-031 F4（前端）：内置模板显示名随宿主语言变化（zh-CN「默认图纸目录（内置）」/ en-US "Default catalog (built-in)"），服务端不认识本地化文案——`saveAs` 现在在当前 locale 按 trim + locale-aware 小写比较拦截与内置显示名相同的另存名，显示新增对称 i18n 键 `saveAsBuiltinConflict` 的本地化原因，不发送 PUT、对话框保留输入；另存名继续原样持久化，语言包文案不下发后端。
+- 历史碰撞消歧：历史数据或直接 API 注入的用户模板与内置模板在当前语言下显示同名时，`TemplateBar` 只对碰撞的用户 option 追加本地化「用户模板」后缀（`userTemplateSuffix`）；option 的 `value` 与选择、原位保存、删除全部继续按 UUID 操作，持久化名称不带后缀。
+- TDD：Python 新增重复 UUID 单元红灯（DID NOT RAISE）与 PUT 集成红灯（200≠422）后转绿（聚焦回归 68 passed）；重名用例的构造改为独立 UUID（原 uuid5 按 name 派生会让同名条目先撞 ID 检查，钉不住名称唯一性语义）。前端新增 zh-CN/en-US 内置显示名冲突与 en-US 历史同名消歧 3 用例先红后绿；`sheet-catalog.spec.ts` 40 用例全过（`--workers=1 --retries=0`），`check:i18n` 870 键 / 9 域对称，`vue-tsc -b` 通过，`ruff check` 通过。顺手清理 `fixtures/sheetCatalog.ts` 中整块重复的 Task 2 注释。
+
 ## 2026-09-11（PLAN-DM-024 任务 2：闭合保存授权异常与 Shell 扩展错误本地化）
 
 - 修复 MEMO-DM-031 F2：`ShellBridge.request_extension_save` 在保存对话框窗口未就绪时此前抛裸 `RuntimeError`，pywebview 将其变成 JS Promise 拒绝且 `exportXlsx()` 未捕获，`exportState.phase` 永久卡在 `exporting`、导出按钮死锁。壳改为返回结构化失败 `shell_error("EXTENSION_CAPABILITY_UNAVAILABLE", "保存对话框窗口尚未就绪")`；前端把授权请求置于 `try/catch`，捕获后写入 `phase="failed"`、`errorCode="EXTENSION_CAPABILITY_UNAVAILABLE"` 与本地化错误正文，同一出口可重试；用户取消的 `idle` 语义不变。

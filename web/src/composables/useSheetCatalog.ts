@@ -107,7 +107,7 @@ function stableColumns(columns: CatalogColumn[]): string {
 }
 
 export function useSheetCatalog(workspace: Ref<Workspace | null>) {
-  const {t} = useI18n();
+  const {t, locale} = useI18n();
 
   // ---- 内置默认模板（SPEC §6.2，随扩展交付；表头文案经宿主 i18n） ----
   function builtinTemplate(): CatalogTemplate {
@@ -437,6 +437,14 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     const trimmed = name.trim();
     if (!trimmed || saving.value) {
       if (!trimmed) saveError.value = t("extensions.sheetCatalog.saveAsNameRequired");
+      return false;
+    }
+    // PLAN-DM-024 Task 3 / MEMO-DM-031 F4：内置模板显示名随宿主语言变化，服务端
+    // 不认识本地化文案——与内置显示名（当前 locale）大小写不敏感相同的另存名必须
+    // 在前端拦截，否则 en-US 用户可保存与内置条目可见名完全相同的模板。
+    const builtinName = t("extensions.sheetCatalog.builtinName");
+    if (trimmed.toLocaleLowerCase(locale.value) === builtinName.trim().toLocaleLowerCase(locale.value)) {
+      saveError.value = t("extensions.sheetCatalog.saveAsBuiltinConflict");
       return false;
     }
     // 冲突态进入另存为：先刷新服务端修订再保存，否则连续冲突时每次 PUT 都携带

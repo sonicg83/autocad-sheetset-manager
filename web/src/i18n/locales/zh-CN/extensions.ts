@@ -30,6 +30,9 @@ export default {
     saveAsConfirm: "保存",
     cancel: "取消",
     saveAsNameRequired: "请输入模板名称",
+    // PLAN-DM-024 Task 3 / MEMO-DM-031 F4：内置显示名碰撞在当前 locale 前端拦截
+    saveAsBuiltinConflict: "该名称与内置默认模板的显示名相同，请改用其他名称。",
+    userTemplateSuffix: "（用户模板）",
     removeConfirmTitle: "删除模板",
     removeConfirmMessage: "删除模板“{name}”？删除后回到内置默认模板，历史导出记录保留。",
     removeConfirmConfirm: "删除",

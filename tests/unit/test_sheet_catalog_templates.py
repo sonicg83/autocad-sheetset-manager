@@ -345,12 +345,42 @@ def test_save_templates_accepts_exactly_100_user_templates():
 def test_save_templates_rejects_casefold_duplicate_template_names(
     existing, incoming
 ):
-    collection = make_collection((*existing, make_template(name=incoming)))
+    # 冲突名用独立 UUID：uuid5 按 name 派生会让同名条目同时撞 ID 检查，
+    # 而本用例钉住的是名称唯一性（UUID 唯一性另有专门用例）。
+    collection = make_collection(
+        (*existing, make_template(name=incoming, template_id=uuid.uuid4()))
+    )
     with pytest.raises(SheetCatalogError) as excinfo:
         save_templates(collection, expected_revision=collection.revision)
     error = excinfo.value
     assert error.code == "SHEET_CATALOG_COLUMN_DUPLICATE"
     assert error.params == {"header": incoming}
+
+
+def test_save_templates_rejects_duplicate_template_ids():
+    """PLAN-DM-024 Task 3 / MEMO-DM-031 F5：``template_id`` 是用户模板身份权威，
+    两个名字不同的用户模板不得共享同一 UUID——否则 ``delete_template`` 按 ID
+    过滤会一次带走两条。"""
+    template_id = uuid.uuid4()
+    first = make_template(name="市政标准目录", template_id=template_id)
+    second = make_template(name="建筑专业目录", template_id=template_id)
+    with pytest.raises(ValueError, match="SHEET_CATALOG_TEMPLATE_ID_DUPLICATE"):
+        save_templates(make_collection((first, second)), expected_revision=3)
+
+
+def test_save_templates_accepts_distinct_ids_and_names():
+    """保留正常通路：不同 UUID、不同名称的多模板照常序列化。"""
+    first = make_template(name="市政标准目录")
+    second = make_template(name="建筑专业目录")
+    payload = save_templates(make_collection((first, second)), expected_revision=3)
+    assert [entry["template_id"] for entry in payload["user_templates"]] == [
+        str(first.template_id),
+        str(second.template_id),
+    ]
+    assert [entry["name"] for entry in payload["user_templates"]] == [
+        "市政标准目录",
+        "建筑专业目录",
+    ]
 
 
 def test_save_templates_requires_saved_template_ids():

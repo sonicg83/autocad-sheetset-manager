@@ -3,10 +3,21 @@
      不只显示泛化保存失败）。删除确认模态由页面装配层提供。 -->
 <script setup lang="ts">
 import {nextTick, ref, watch} from "vue";
+import {useI18n} from "vue-i18n";
 import type {SheetCatalogController} from "../../composables/useSheetCatalog";
 
 const props = defineProps<{catalog: SheetCatalogController}>();
 const emit = defineEmits<{saved: []; removed: []; confirmRemove: []}>();
+const {t, locale} = useI18n();
+
+// PLAN-DM-024 Task 3 / MEMO-DM-031 F4：历史数据或直接 API 注入的用户模板可能与
+// 内置模板在当前语言下显示同名。只对碰撞的用户 option 追加“用户模板”后缀消歧，
+// option 的 value 与所有模板操作仍按 UUID，不改持久化名称。
+function templateOptionLabel(name: string): string {
+  const builtin = t("extensions.sheetCatalog.builtinName").trim().toLocaleLowerCase(locale.value);
+  const collides = name.trim().toLocaleLowerCase(locale.value) === builtin;
+  return collides ? `${name}${t("extensions.sheetCatalog.userTemplateSuffix")}` : name;
+}
 
 const saveAsOpen = ref(false);
 const saveAsName = ref("");
@@ -65,7 +76,7 @@ async function confirmSaveAs() {
         <span>{{ $t("extensions.sheetCatalog.templateLabel") }}</span>
         <select :aria-label="$t('extensions.sheetCatalog.templateLabel')" :value="catalog.selectedId.value ?? ''" @change="catalog.selectTemplate(($event.target as HTMLSelectElement).value || null)">
           <option value="">{{ $t("extensions.sheetCatalog.builtinName") }}</option>
-          <option v-for="template in catalog.templates.value" :key="template.templateId ?? template.name" :value="template.templateId">{{ template.name }}</option>
+          <option v-for="template in catalog.templates.value" :key="template.templateId ?? template.name" :value="template.templateId">{{ templateOptionLabel(template.name) }}</option>
         </select>
       </label>
       <span v-if="catalog.dirty.value" class="dirty-badge">{{ $t("extensions.sheetCatalog.dirtyBadge") }}</span>

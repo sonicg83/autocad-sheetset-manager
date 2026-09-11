@@ -609,3 +609,73 @@ test.describe("Shell 扩展错误使用当前语言（PLAN-DM-024 F3）", () => 
     }
   });
 });
+
+// PLAN-DM-024 Task 3 / MEMO-DM-031 F4：内置模板显示名随宿主语言变化，与内置
+// 显示名的碰撞只能在当前 locale 前端拦截（服务端不认识本地化文案）；历史数据
+// 或直接 API 注入的显示碰撞在下拉框消歧，但身份与操作仍按 UUID。
+test.describe("模板显示名与身份不变量（PLAN-DM-024 F4）", () => {
+  test("zh-CN 内置模板显示名冲突：另存为被本地拦截，不发送 PUT 且对话框保留输入", async ({page}) => {
+    const state = await openCatalog(page);
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await page.getByRole("button", {name: "另存为"}).click();
+    const dialog = page.getByRole("dialog", {name: "另存为模板"});
+    await dialog.getByLabel("模板名称").fill("默认图纸目录（内置）");
+    await dialog.getByRole("button", {name: "保存", exact: true}).click();
+    // 本地化错误可见：不把语言包文案发给后端，也不依赖服务端重名错误
+    await expect(page.getByText("该名称与内置默认模板的显示名相同")).toBeVisible();
+    // 不发送 PUT：客户端拦截发生在设置端点之前
+    expect(state.putExpectedRevisions).toEqual([]);
+    expect(state.settingsValue.user_templates).toHaveLength(0);
+    // 对话框保留输入
+    await expect(dialog.getByLabel("模板名称")).toHaveValue("默认图纸目录（内置）");
+  });
+
+  test("en-US 内置模板显示名冲突：另存为被本地拦截并显示英文原因", async ({page}) => {
+    await page.route("**/api/settings", route => route.fulfill({json: enSettingsSnapshot}));
+    const {state} = await installSheetCatalogFixture(page);
+    await page.goto("/");
+    await page.getByRole("button", {name: "Select DST File"}).click();
+    await page.getByRole("tab", {name: "Sheet Catalog"}).click();
+    await page.getByLabel("Expression 1").fill("{sheet.number}#");
+    await page.getByRole("button", {name: "Save as"}).click();
+    const dialog = page.getByRole("dialog", {name: "Save as template"});
+    await dialog.getByLabel("Template name").fill("Default catalog (built-in)");
+    await dialog.getByRole("button", {name: "Save", exact: true}).click();
+    await expect(page.getByText("matches the built-in default template")).toBeVisible();
+    expect(state.putExpectedRevisions).toEqual([]);
+    expect(state.settingsValue.user_templates).toHaveLength(0);
+    await expect(dialog.getByLabel("Template name")).toHaveValue("Default catalog (built-in)");
+  });
+
+  test("历史同名模板可区分：en-US 下内置项与用户项文本可区分且按 UUID 操作", async ({page}) => {
+    await page.route("**/api/settings", route => route.fulfill({json: enSettingsSnapshot}));
+    const template = userTemplate("Default catalog (built-in)", [{header: "Sheet No.", expression: "{sheet.number}"}]);
+    const {state} = await installSheetCatalogFixture(page, {userTemplates: [template]});
+    await page.goto("/");
+    await page.getByRole("button", {name: "Select DST File"}).click();
+    await page.getByRole("tab", {name: "Sheet Catalog"}).click();
+    // 内置项与用户项文本可区分：只有碰撞的用户项带“用户模板”后缀
+    const select = page.getByRole("combobox", {name: "Select template"});
+    await expect(select.locator("option")).toHaveText([
+      "Default catalog (built-in)",
+      "Default catalog (built-in) (user template)",
+    ]);
+    // 选择用户项仍按 UUID：option value 与选中值为该模板 UUID
+    await select.selectOption({label: "Default catalog (built-in) (user template)"});
+    await expect(page.getByLabel("Select template")).toHaveValue(template.template_id);
+    // 原位保存：PUT 负载按 UUID 更新该模板，持久化名称不带消歧后缀
+    await page.getByLabel("Column header 1").fill("Drawing No.");
+    await page.getByRole("button", {name: "Save changes"}).click();
+    // en 的 guardMessage 常驻隐藏 dialog 且含 "unsaved changes" 子串，不能用
+    // getByText 宽松匹配；按脏标记元素精确断言。
+    await expect(page.locator(".dirty-badge")).toHaveCount(0);
+    expect(state.settingsValue.user_templates).toHaveLength(1);
+    expect(state.settingsValue.user_templates[0]!.template_id).toBe(template.template_id);
+    expect(state.settingsValue.user_templates[0]!.name).toBe("Default catalog (built-in)");
+    // 删除：仍按该用户模板 UUID 删除
+    await page.getByRole("button", {name: "Delete template"}).click();
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await dialog.getByRole("button", {name: "Delete", exact: true}).click();
+    expect(state.settingsValue.user_templates).toEqual([]);
+  });
+});

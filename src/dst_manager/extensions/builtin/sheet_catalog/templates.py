@@ -4,7 +4,8 @@
 为新模板）；``load_templates`` 合并代码常量与 settings JSON，坏条目逐条隔离
 并输出稳定诊断，未知高 schema 保留原 JSON 不加载为可编辑状态。
 ``save_templates`` 做乐观并发核对（冲突时本地编辑原样保留，刷新服务端模板
-修订后可另存为或按新修订重试）、封闭限制值校验与 casefold 唯一性检查；
+修订后可另存为或按新修订重试）、封闭限制值校验、用户模板 UUID 唯一与
+模板名 casefold 唯一性检查；
 删除用户模板是纯函数，只动模板设置，不触碰历史 Artifact。
 """
 
@@ -255,11 +256,21 @@ def save_templates(
             "user_templates", MAX_USER_TEMPLATES, len(collection.user_templates)
         )
     seen_names: dict[str, str] = {_BUILTIN_TEMPLATE_NAME.casefold(): _BUILTIN_TEMPLATE_NAME}
+    # PLAN-DM-024 Task 3 / MEMO-DM-031 F5：``template_id`` 是用户模板身份权威，
+    # 重复 UUID 必须在序列化前拒绝——否则 ``delete_template`` 按 ID 过滤会一次
+    # 带走两条名字不同但同 ID 的模板。
+    seen_ids: set[uuid.UUID] = set()
     for template in collection.user_templates:
         if template.template_id is None:
             raise ValueError(
                 "SHEET_CATALOG_TEMPLATE_ID_REQUIRED: 保存前必须分配模板 UUID"
             )
+        if template.template_id in seen_ids:
+            raise ValueError(
+                "SHEET_CATALOG_TEMPLATE_ID_DUPLICATE: "
+                f"重复的用户模板 UUID（{template.template_id}）"
+            )
+        seen_ids.add(template.template_id)
         validate_template(template)
         folded = template.name.casefold()
         if folded in seen_names:

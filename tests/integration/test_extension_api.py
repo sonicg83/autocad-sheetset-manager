@@ -438,7 +438,10 @@ def test_settings_put_rejects_duplicate_template_names_casefold(tmp_path, existi
 
     rejected = put_settings(
         client,
-        [*[catalog_template_json(name) for name in existing], catalog_template_json(incoming)],
+        # 冲突名用独立 UUID：catalog_template_json 按 name 派生 template_id，
+        # 同名条目会先撞 UUID 唯一检查；本用例钉住的是名称唯一性。
+        [*[catalog_template_json(name) for name in existing],
+         catalog_template_json(incoming, template_id=uuid.uuid4())],
         expected_revision=1,
     )
 
@@ -489,6 +492,32 @@ def test_settings_put_rejects_builtin_mutations(tmp_path):
     assert "SHEET_CATALOG_TEMPLATE_ID_REQUIRED" in body["message"]
     # 内置默认模板始终由代码常量提供：GET value 不含任何内置形态条目
     assert client.get(f"/api/extensions/{SHEET_CATALOG_ID}/settings").json()["value"] == {}
+
+
+def test_settings_put_rejects_duplicate_template_ids(tmp_path):
+    """PLAN-DM-024 Task 3 / MEMO-DM-031 F5：直接 PUT 设置端点提交重复
+    ``template_id`` 必须失败，持久化 revision/value 均不变；错误体保持现有
+    扩展设置无效契约（EXTENSION_SETTINGS_INVALID，不扩张目录业务错误码）。"""
+    client = make_client(tmp_path)
+    url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+    template = catalog_template_json("市政标准目录")
+    assert put_settings(client, [template]).status_code == 200
+
+    duplicate_id = dict(catalog_template_json("建筑专业目录"), template_id=template["template_id"])
+    rejected = put_settings(client, [template, duplicate_id], expected_revision=1)
+
+    assert rejected.status_code == 422
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
+    # 稳定诊断前缀（与 TEMPLATE_ID_REQUIRED 同通道），不是新的目录业务错误码
+    assert "SHEET_CATALOG_TEMPLATE_ID_DUPLICATE" in body["message"]
+    # 拒绝后持久化原样：revision 与 value 都不变，不存在半保存状态
+    assert client.get(url).json() == {
+        "schema_version": 1,
+        "revision": 1,
+        "value": {"schema_version": 1, "user_templates": [template]},
+    }
 
 
 def test_settings_put_rejected_when_server_schema_higher_keeps_original_json(tmp_path):

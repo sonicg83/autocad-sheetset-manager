@@ -22,6 +22,10 @@ export default {
     saveAsConfirm: "Save",
     cancel: "Cancel",
     saveAsNameRequired: "Enter a template name",
+    // PLAN-DM-024 Task 3 / MEMO-DM-031 F4: built-in display-name collisions are
+    // rejected client-side in the current locale
+    saveAsBuiltinConflict: "This name matches the built-in default template's display name; choose a different one.",
+    userTemplateSuffix: " (user template)",
     removeConfirmTitle: "Delete template",
     removeConfirmMessage: "Delete template \"{name}\"? The built-in default template is selected afterwards; historical export records are kept.",
     removeConfirmConfirm: "Delete",
