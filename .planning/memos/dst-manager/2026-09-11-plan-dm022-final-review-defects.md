@@ -11,6 +11,7 @@ related:
   - PLAN-DM-022
   - PLAN-DM-020
   - PLAN-DM-023
+  - PLAN-DM-024
   - ARCH-DM-006
   - SPEC-DM-012
 ---
@@ -31,7 +32,7 @@ related:
 - **位置**：`web/src/App.vue:115`（`openSettings` 触发的 `reloadExtensions()`），配合 `web/src/composables/useExtensions.ts:44-46`。
 - **问题**：`reloadExtensions()` 的 catch 分支把扩展清成 `[]`；用户停在 sheet-catalog 标签页且草稿未保存时打开设置，一旦 `listExtensions()` 失败，`extensionPages`/`tabIds` 不再包含 `sheet-catalog`，`useShellTabs` 的 watch 会把 active 重置回 `sheets`——该路径**绕过** `guardSheetCatalogPage` 脏检查（停用路径有闸门，错误路径没有）。
 - **后果**：`SheetCatalogView` 被卸载（无 KeepAlive，草稿是实例内状态），未保存草稿静默丢失。
-- **修复方向**：加载失败时保留旧列表或把标签页标记为「失效但驻留」，卸载前过导航守卫；与 SC-15「停用不关窗」的闸门语义对齐。
+- **修复方向**：加载失败时保留旧列表；成功刷新若使当前活动扩展页从可用页面集合消失，也必须在提交新列表和卸载页面前经过导航守卫。与 SC-15「停用不关窗」的闸门语义对齐。
 
 ### F2 保存授权桥接失败后导出状态永久卡死
 
@@ -53,7 +54,7 @@ related:
 - **位置**：`src/dst_manager/extensions/builtin/sheet_catalog/templates.py:92`（`_BUILTIN_TEMPLATE_NAME = "默认图纸目录（内置）"`）与 `:257`（`save_templates` 的 `seen_names`）。
 - **问题**：服务端唯一性守卫只预置中文保留名；en-US 下前端渲染的是本地化名（`en-US/extensions.ts:7` 的 `Default catalog (built-in)`），`saveAs` 又没有客户端名校验。
 - **后果**：en-US 用户能保存一个与内置条目**可见名称完全相同**的模板——下拉框出现两条不可区分的条目，守卫/冲突提示语义失效。
-- **修复方向**：以 `builtin` 标志或 `template_id` 而非显示名做唯一性权威（显示名随 locale 变化，不能当键）。
+- **修复方向**：`template_id` 继续作为身份权威；当前 locale 下另存为与内置显示名碰撞时由前端拒绝，历史数据或直接 API 注入的碰撞项在下拉框追加“用户模板”标识。不能把语言包显示文案引入 Python 领域层，也不能只改用 ID 后仍留下两个不可区分的可见选项。
 - **复核**：评审人独立读码属实。
 
 ### F5 `save_templates` 不校验 template_id 唯一，删除时一次带走两条
@@ -82,3 +83,9 @@ related:
 - F1、F2 是**用户可见的功能缺陷**（草稿丢失 / 按钮死锁），建议独立小计划或并入下一个 DM-020 系计划优先处理，不等 PLAN-DM-023（其范围是视觉收敛）。
 - F3、F4、F5 涉及 DM-020 的后端契约与 i18n 不变量，可与 F1、F2 合并成一个「DM-020 遗留缺陷修复」批次；F3 与 I18N-11 的关系建议在修复时顺带复核 `shell_error` 全部调用点。
 - §3 的 gitlink 清理已完成，无须再排。
+
+## 6. 针对性复核结论与实施入口
+
+2026-09-11 针对当前代码、调用链和测试进行二次复核：F1～F5 均确认存在；其中 F1 的边界扩展到“成功刷新后活动扩展变为非 AVAILABLE”，F4 重新定性为本地化显示碰撞而非 UUID 身份混淆。最小运行时复现确认英文内置显示名可保存为用户模板，且两个不同名称、相同 `template_id` 的模板可被 `save_templates` 接受并在一次删除中同时移除；既有 `test_shell.py`、`test_sheet_catalog_templates.py`、`test_message_catalog.py` 仍全绿，证明缺少相应回归用例。
+
+F1～F5 统一进入 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md)，与视觉整改 PLAN-DM-023 分开实施。执行顺序为 PLAN-DM-024 → PLAN-DM-023；本计划完成并使 SPEC-DM-012 G7 重新通过前，不开始视觉生产改动。
