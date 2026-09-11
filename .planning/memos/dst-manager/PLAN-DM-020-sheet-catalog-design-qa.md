@@ -1,20 +1,24 @@
 ---
 id: MEMO-DM-027
 title: PLAN-DM-020 G8 设计 QA——图纸目录生产实现 vs SPEC-DM-012 G4 冻结截图比对
-status: final
+status: superseded
 owners:
   - dst-manager
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 related:
   - PLAN-DM-020
   - SPEC-DM-012
   - ARCH-DM-006
   - MEMO-DM-026
+  - MEMO-DM-030
+  - PLAN-DM-023
 document_kind: memo
 ---
 
 # PLAN-DM-020 Task 12 G8 设计 QA 备忘（图纸目录生产实现 vs G4 冻结基准）
+
+> **2026-09-11 复验裁决：** 本文原 G8“通过”结论已被用户真实 Windows 桌面复验推翻，D1～D10 不再视为已获用户接受。历史取证和当时判断保留用于追溯；现行结论、偏差重新分类与恢复条件以 [MEMO-DM-030](2026-09-11-plan-dm020-g8-user-revalidation.md) 为准，整改实施见 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md)。G4 冻结件继续有效。
 
 ## 元信息
 
@@ -77,3 +81,10 @@ document_kind: memo
 ## 结论（供控制器登记门禁表）
 
 **G8 设计 QA：无未关闭 P0/P1。** 两对截图的页面结构、六区域功能、虚构数据与状态、双主题令牌、最小视口行为与冻结设计一致或属已接受差异（D1～D9，均为呈现层差异且 SPEC §7.2/§13 语义齐备）；D10（首屏密度）与 D6（列数计数/有效徽章）提请用户裁决，不阻塞 G8 登记。G8 通过；G9（真实 Windows 桌面壳/原生另存为/Explorer/Excel 验收）按 SPEC-DM-012 §16 留待用户执行 [G9 清单](PLAN-DM-020-sheet-catalog-g9-checklist.md)。
+
+## 2026-09-11 用户复验追加裁决
+
+- 上述“G8 通过”仅保留为 2026-09-10 的历史记录，不再是当前门禁状态。
+- 用户未接受 D1～D10 的整体呈现变化，仅明确接受输出列 `↑`、`↓`、`✕` 图标操作按钮。
+- 表格式输出列改为逐列卡片、字段搜索和常显语法缺失、兼容性与操作区拆成独立卡片、预览/导出退出首屏、900px 字段区不限高等均重新分类为 G8 缺陷。
+- 当前 G8 状态为“未通过（用户真实桌面复验）”；恢复条件见 MEMO-DM-030，实施入口为 PLAN-DM-023。

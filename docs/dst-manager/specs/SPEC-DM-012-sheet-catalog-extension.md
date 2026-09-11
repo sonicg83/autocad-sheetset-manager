@@ -6,7 +6,7 @@ document_kind: spec
 owners:
   - dst-manager
 created: 2026-09-09
-updated: 2026-09-10
+updated: 2026-09-11
 related:
   - PRD-DM-001
   - ARCH-DM-006
@@ -16,6 +16,8 @@ related:
   - SPEC-DM-010
   - GUIDE-DM-001
   - PLAN-DM-020
+  - PLAN-DM-023
+  - MEMO-DM-030
 ---
 
 # 图纸目录 XLSX 内置扩展设计规范
@@ -433,7 +435,7 @@ npm run test:e2e
 | G5 技术映射 | 通过 | 本文 §14 + [技术映射记录](../../../.planning/memos/dst-manager/2026-09-09-sheet-catalog-g5-technical-mapping.md) | 技术负责人（Agent） | 2026-09-09 | 原生另存为和 Excel 结果保留到 G9 真机验证 |
 | G6 计划就绪 | 通过 | [PLAN-DM-020](../../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（含追踪矩阵、四批次和 12 个任务） | 技术负责人（Agent） | 2026-09-09 | 等待选择执行方式后进入 G7 |
 | G7 分批实施 | 通过 | PLAN-DM-020 Task 1～12 在分支 `worktree-plan-dm-020-sheet-catalog` 实施完成；全量自动验证通过（pytest 1176 项、ruff、uv lock、Alembic、check:api、check:i18n、vue-tsc/vite build、全量 Playwright e2e、`build_release.ps1`），批次一～三检查点证据见计划「实际验证」 | 技术负责人（Agent） | 2026-09-10 | G9 真机验收通过前计划保持 `active` |
-| G8 设计 QA | 通过 | [设计 QA 备忘（MEMO-DM-027）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md)：与冻结 Demo 同数据/状态/视口/主题成对截图逐项比对，一致或已接受差异（D1～D10），无未关闭 P0/P1 | 技术负责人（Agent），用户复核 | 2026-09-10 | D10 首屏密度与 D6 列数计数/有效徽章留用户裁决，不阻塞 |
-| G9 真实验收与关闭 | 未开始 | [G9 清单（MEMO-DM-028）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)已备妥（含 Ruling-10 一致性窗口复核项），等待打包后的 Windows 桌面壳 + 真实 Excel 由用户逐项验收 | 待用户 | — | 通过前 PLAN-DM-020 保持 `active` |
+| G8 设计 QA | 未通过（用户真实桌面复验） | 2026-09-10 的 [原设计 QA 备忘（MEMO-DM-027）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md)已被 2026-09-11 用户复验推翻；现行裁决见 [MEMO-DM-030](../../../.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)，整改计划见 [PLAN-DM-023](../../../.planning/plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) | 用户 | 2026-09-11 | 表格式编辑器、字段可见性、首屏预览/导出、状态区密度和响应式偏差待收敛；仅图标列操作与生产壳层差异已接受 |
+| G9 真实验收与关闭 | 未开始（G8 阻断） | [G9 清单（MEMO-DM-028）](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)已备妥；先完成 PLAN-DM-023 并由用户重新通过 G8，再执行打包 Windows 壳 + 真实 Excel 验收 | 待用户 | — | G8 与 G9 通过前 PLAN-DM-020 保持 `active` |
 
-G4～G8 已关闭。G9 真实验收由用户执行 [MEMO-DM-028](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 并确认后，PLAN-DM-020 才能标记 `completed`；若冻结设计或业务规则发生实质变化，先回到相应门禁更新 Spec 和追踪矩阵。
+G4～G7 已关闭；G8 因 2026-09-11 用户真实桌面复验未通过而重新打开，G4 冻结设计继续有效。先按 PLAN-DM-023 把生产实现收敛回冻结件并取得用户 G8 确认，再执行 [MEMO-DM-028](../../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 的 G9 真实验收；G8/G9 均通过前，PLAN-DM-020 不得标记 `completed`。只有用户选择新的主流程、布局结构或关键状态时才重开 G3/G4，生产实现偏离本身不是重开冻结设计的理由。

@@ -4,7 +4,7 @@
 
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
-2026-09-10 交付 [内置扩展平台与图纸目录 XLSX（PLAN-DM-020，active；G7/G8 已通过，G9 真实桌面验收待用户）](../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（依据 [ARCH-DM-006](architecture/ARCH-DM-006-builtin-extension-platform.md) 与 [SPEC-DM-012](specs/SPEC-DM-012-sheet-catalog-extension.md)）：内置扩展平台（固定索引清单、生命周期注册表、扩展设置/偏好与 Artifact 持久化、统一管理/动作 API、一次性保存授权与宿主原子发布）+ 首个内置扩展「图纸目录」独立页面（内置默认与用户命名模板、受限表达式、字段浏览器、真实数据预览、原生另存为导出 XLSX、后台 Artifact 登记）。全量自动验证通过（pytest 1176 项、全量 Playwright e2e、打包静态守护与 `build_release.ps1`）；G8 设计 QA（[MEMO-DM-027](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md)）与冻结 Demo 成对截图逐项比对通过；G9（原生另存为/Explorer/Excel 真机验收，[MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)）待用户执行，通过前计划保持 `active`。
+2026-09-10 交付 [内置扩展平台与图纸目录 XLSX（PLAN-DM-020，active）](../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（依据 [ARCH-DM-006](architecture/ARCH-DM-006-builtin-extension-platform.md) 与 [SPEC-DM-012](specs/SPEC-DM-012-sheet-catalog-extension.md)）：内置扩展平台与图纸目录功能实现、自动验证和打包守护已完成。2026-09-11 用户真实 Windows 桌面复验推翻原 G8 视觉通过结论（[MEMO-DM-030](../../.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)）：除图标列操作外，卡片式输出列、字段可见性、首屏预览/导出、状态区密度和响应式均需向原 G4 冻结 Demo 收敛；整改已立项为 [PLAN-DM-023](../../.planning/plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md)。G8 重新通过前暂停 [G9 真机验收（MEMO-DM-028）](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)，PLAN-DM-020 保持 `active`。
 
 2026-09-08 交付 [设置中心（PLAN-DM-019，active；自动化验证 703 passed / 72 skipped、e2e 291 passed，G8 截图比对与 G9 真实桌面验收待进行）](../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](architecture/ARCH-DM-004-settings-center.md)）：顶部齿轮入口 + 模态对话框，未加载 DST 即可配置 9 个应用配置项（`settings.json` 只存显式覆盖值、保存即时生效并跨 API/Worker 进程传播）并查看关于页（版本/MIT 协议/外链）。
 
@@ -51,7 +51,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015，视觉整改 PLAN-DM-017）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，已接受；实施计划 PLAN-DM-016）](specs/SPEC-DM-010-properties-workspace-ui.md)
 - [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
-- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；G0～G8 已通过，G9 真机验收待用户，实施计划 PLAN-DM-020）](specs/SPEC-DM-012-sheet-catalog-extension.md)
+- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；G0～G7 已通过，G8 用户复验未通过，视觉整改 PLAN-DM-023，G9 暂停）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 
 ## 指南

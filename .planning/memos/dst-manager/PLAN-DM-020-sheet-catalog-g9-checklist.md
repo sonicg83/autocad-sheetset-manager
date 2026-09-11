@@ -5,17 +5,19 @@ status: draft
 owners:
   - dst-manager
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 related:
   - PLAN-DM-020
   - SPEC-DM-012
   - ARCH-DM-006
   - MEMO-DM-027
+  - MEMO-DM-030
+  - PLAN-DM-023
 ---
 
 # PLAN-DM-020 G9 真实桌面验收清单（MEMO-DM-028）
 
-> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**在全部字段填写并由用户确认前，PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 保持"未开始"。**
+> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 用户真实桌面复验已推翻原 G8 通过结论；本清单暂停执行，先完成 PLAN-DM-023 并由用户重新通过 G8。暂停期间 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 保持“未开始”。**
 
 ## 0. 前置条件（操作者核对）
 
@@ -87,10 +89,12 @@ related:
 
 - 结论：_待填写_（通过 / 部分通过 + 遗留缺陷清单）。
 - 操作者签名/日期：_待填写_。
+- 前置闸门：PLAN-DM-023 已完成，SPEC-DM-012 G8 已由用户重新确认通过并记录日期。
 - 通过后动作：由用户确认后将 PLAN-DM-020 `status` 改为 `completed`，同步 SPEC-DM-012 §16 门禁表 G9=通过、`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态行，以及本文 `status` → `final`。
 
-## 4. 与 G9 一并留给用户裁决的遗留项
+## 4. G8 遗留项的 2026-09-11 裁决
 
-1. **G8 D10 首屏密度**：冻结 Demo 在 1440×1000 一屏容纳到结果预览；生产因页面状态区、卡片式列编辑器与留白，预览/操作区需轻微纵向滚动。SPEC §13 约束（200%/最小视口不遮挡、无整页横滚）满足且有自动化守卫；是否向 Demo 密度收敛由用户裁决，若收敛需重开 G4（见 [MEMO-DM-027](PLAN-DM-020-sheet-catalog-design-qa.md)）。
-2. **G8 D6 列数计数/有效徽章**：Demo 显示「N / 50 列」计数与每列「有效」徽章；生产为错误态行内文字 alert、正态无徽章、无计数。是否补充由用户裁决（低优先级，信息等价）。
-3. **SDD ledger 延后 Minor 清单**（`.superpowers/sdd/PLAN-DM-020-sheet-catalog-builtin-extension/progress.md`，不入提交树）：Task 1～11B 评审延后的 Minor 项已逐条 triage（见 Task 12 报告），其中与用户可观察行为相关的项已并入上文 1～2；其余为内部代码质量项，随后续维护处理，不阻塞 G9。
+1. 原 D10 首屏密度不再是“留用户裁决”的低优先级观察：用户已明确要求向冻结 Demo 收敛，列入 PLAN-DM-023 V3，阻断 G8。
+2. 原 D6 列数计数/有效徽章与表格式结构一并列入 PLAN-DM-023 V1/V5；仅 `↑`、`↓`、`✕` 图标按钮获用户接受并保留。
+3. 其他可见偏差的重新分类、证据边界与恢复条件见 [MEMO-DM-030](2026-09-11-plan-dm020-g8-user-revalidation.md)。G4 冻结件没有改变，不因生产实现偏离而重开。
+4. **SDD ledger 延后 Minor 清单**（`.superpowers/sdd/PLAN-DM-020-sheet-catalog-builtin-extension/progress.md`，不入提交树）：内部代码质量项仍随后续维护处理；不得再把其中与页面可观察行为相关的项目作为 G8 非阻断项。
