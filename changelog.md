@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-11（用户修正：关闭表达式输入框的拼写检查）
+
+- 用户提交 `37f569c`：在 `ColumnEditor.vue` 的表达式 `<textarea>` 上显式声明 `spellcheck="false"`、`autocorrect="off"`、`autocapitalize="off"`、`autocomplete="off"`。表达式是字段引用语法而非自然语言，浏览器拼写/自动更正提示会干扰输入。本批不修改该实现，仅复核并记录。
+- 复核（本轮新鲜输出、退出码 0）：聚焦 E2E（`sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts`，`--workers=1 --retries=0`）62 passed；`npm run build`（含 `check:api`、`check:i18n`、`vue-tsc -b`、vite build）通过。
+
 ## 2026-09-11（PLAN-DM-023 任务 6 步骤 4：用户通过 G8、更新门禁并收口计划）
 
 - 用户裁决（确认人：用户，日期 2026-09-11）：对照冻结基准 JPG 与 `production/` 下两张生产 PNG，逐对确认 PLAN-DM-023 的 V1～V8 全部关闭，**G8 通过**；并接受 MEMO-DM-030 §6.4 三项差异为可保留差异（卡片标题保持 SPEC-DM-012 §7.2 区域名、页头保留版本/状态与启停指引、900×700 字段区 235px 限高不复制 Demo 塔陷）。裁决记录：MEMO-DM-030 §6.5。
