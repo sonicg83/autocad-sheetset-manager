@@ -1,12 +1,12 @@
 ---
 id: PLAN-DM-022
 title: 扩展卡片基线与布尔开关统一下沉
-status: proposed
+status: completed
 document_kind: plan
 owners:
   - dst-manager
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 related:
   - ARCH-DM-006
   - SPEC-DM-006
@@ -559,4 +559,85 @@ git commit -m "补扩展卡片 G8 生产证据并收口文档"
 
 ## 实际验证
 
-> 执行完成后在此登记：每批次改动的文件与 commit、每道命令的原始结果（含 e2e 总数/通过数/flaky 明细）、任何跳过项与原因、G8 逐张比对结论与偏差裁决。未登记的批次不得标记 `completed`。
+登记日期：2026-09-11。4 个任务全部实施、逐任务评审通过，并经最终全分支评审与一次合并前修复波。以下数字均为实测原始记录，未重跑、未补造；未登记项即未验证项。
+
+### 批次 1｜任务 1：`BooleanSwitch` 统一滑动开关 + `SettingsFormRow` bool 分支下沉
+
+**commit**：`cdbe7a2`（修正计划中开关文字位置与红灯预期——计划文本修正）、`e93f482`（修正 bool 行断言的元素限定避免多元素命中——计划文本修正）、`2bfac5c`（统一设置中心布尔状态控件为滑动开关）。
+
+**改动文件**：
+
+- 新增 `web/src/components/settings/BooleanSwitch.vue`；
+- `web/src/components/settings/SettingsFormRow.vue`：bool 分支改复用新原语；`.switch` 类名让给按钮，原表单行类名改 `.bool-line`；
+- `web/tests/e2e/settings-dialog.spec.ts`：末尾追加 1 例。
+
+**实测结果**：
+
+| 命令 | 原始结果 |
+| --- | --- |
+| `npx playwright test tests/e2e/settings-dialog.spec.ts` | **18 passed** |
+| `npx playwright test tests/e2e/extensions-settings.spec.ts` | **7 passed** |
+| `npm run check:i18n` | **867 键** |
+| `npx vue-tsc -b --pretty false` | 通过 |
+| 控制器独立复跑（两 spec 合计） | **25 passed** |
+
+### 批次 2｜任务 2 与任务 3：卡片四层信息 + 按 `enabled` 分段
+
+**commit**：`addf04c`（按冻结件统一卡片状态文字类名——计划修正）、`fa041de`（下沉扩展卡片承接四层信息）、`4d67755`（为扩展分区补按启用状态分段的增长机制）。
+
+**改动文件**：
+
+- 新增 `web/src/components/settings/ExtensionCard.vue`；
+- `web/src/components/settings/ExtensionsSection.vue`：行渲染改卡片（任务 2）→ 再补 `GROUP_THRESHOLD = 6` 的 `enabled` 分段（任务 3）；
+- 语言包中英同步新增 `settings.extensions.diagnosticCode`；
+- `web/tests/e2e/extensions-settings.spec.ts`：新增用例。
+
+**实测结果**：
+
+| 命令 | 任务 2 原始结果 | 任务 3 原始结果 |
+| --- | --- | --- |
+| `npx playwright test tests/e2e/extensions-settings.spec.ts` | **8 passed** | **10 passed** |
+| `npx playwright test tests/e2e/settings-dialog.spec.ts` | **18 passed** | 未在本任务重跑 |
+| `npx playwright test tests/e2e/sheet-catalog.spec.ts tests/e2e/extensions-navigation.spec.ts` | 未在本任务重跑 | **39 passed** |
+| `npm run check:i18n` | **868 键**（+`diagnosticCode`） | **868** |
+| `npx vue-tsc -b --pretty false` | 通过 | 通过 |
+| 控制器独立复跑（本任务 spec 合计） | **26 passed** | **49 passed** |
+
+**已知偏离（已裁决接受）**：任务 2 改动了 4 处既有**合并断言**（把 `v0.1.0 · 状态` 拆成版本/状态两条），超出计划明文授权。经任务评审独立核查，语义覆盖未削弱（版本仍被 SC-16 新用例钉住），且是冻结件卡片布局的必然结果——接受，不回退。
+
+### 批次 3｜任务 4：G8 生产证据与文档收口
+
+**commit**：`c19149f`（补扩展卡片 G8 生产证据并收口文档）、`1de7b4e`（复用扩展夹具装配证据 spec 的 mock 路由——任务评审第 1 轮 Important 修复）、`a61ecd5`（对齐扩展诊断码配色并校正 G8 证据表述——最终全分支评审修复波）。
+
+**改动文件**：
+
+- 新增 `web/tests/e2e/settings-extensions-production-evidence.spec.ts`（5 例）；
+- 新增 `web/tests/e2e/fixtures/extensions.ts`（从 `extensions-settings.spec.ts` 纯搬移提取，原文件改 import）；
+- 新增 `docs/dst-manager/specs/assets/SPEC-DM-011/production/` 下 5 张 `g8-ext-*.png`；
+- `docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md` §7/§8/§9；
+- `changelog.md`。
+
+**实测结果**：
+
+| 命令 | 原始结果 |
+| --- | --- |
+| `npx playwright test tests/e2e/settings-extensions-production-evidence.spec.ts --retries=0` | **5 passed** |
+| `npx playwright test tests/e2e/extensions-settings.spec.ts --retries=0` | **10 passed** |
+| `npx playwright test tests/e2e/settings-dialog.spec.ts --retries=0` | **18 passed** |
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -o addopts="" -q` | **1112 passed / 72 skipped** |
+| `npm run check:i18n` | **868 键 / 9 域对称** |
+| `npx vue-tsc -b --pretty false` | **exit 0** |
+| `npm run build` | 通过 |
+| `npx playwright test`（全量，第一次） | **411 项：408 passed / 1 failed / 2 flaky** |
+| `npx playwright test`（全量，第二次） | **411 项：408 passed / 0 failed / 3 flaky** |
+
+全量 e2e 唯一 failed 为 `properties-layout.spec.ts`「四视口双主题覆盖 dirty+pending…CSV 状态无整页横向溢出」（`page.goto` 超时；该用例单跑耗时 29.6s 已贴 30s 上限，`--workers=1` 单跑通过），与本次改动无关；两次 flaky 集合不同，均为 `playwright.config.ts` 已记录的 4 worker 下 dev server 启动抖动，重跑全部通过。
+
+**G8 逐张比对结论**：`g8-ext-01↔g4-07`、`g8-ext-02↔g4-08`、`g8-ext-03↔g4-10`、`g8-ext-04↔g4-11` 四对在结构、四层信息、状态徽标色、开关方向、诊断码字面上一致；差异属 Demo 固有（演示工具条、`配置修订 r7 · 模拟`、页脚模拟提示、`保存` 按钮近似色、数据字面与像素级行高微差）。**发现并修复 1 项须修缺陷**——生产诊断码用 `--color-text-muted`（浅 `#6B7280` / 深 `#8592A3`）而冻结件用 `--amber`（浅 `#896000` / 深 `#eac784`，即生产 `--color-warning` 浅 `#946200` / 深 `#E0B15A` 的近似映射），已在 `a61ecd5` 把 `.ext-diag` 对齐为 `var(--color-warning)` 并重取受影响的 4 张证据图（`g8-ext-02/03/04/05`；`g8-ext-01` 无诊断码、字节未变）。`g8-ext-05`（900×600）**冻结件里没有对照图**，只作 §3.2 视口维度证据，不构成比对通过。
+
+**范围偏离（已裁决接受）**：`g8-ext-03` 由 `scrollIntoViewIfNeeded()` 改为 `scrollIntoView({block:"center"})` + 视口内断言，否则只拍得到段标题、拍不到该段卡片；评审独立读图确认取景与 `g4-10` 同构。
+
+**跳过项与原因**：未执行 `$env:DST_MANAGER_RUN_AUTOCAD=1` 的真实 AutoCAD 系统测试（本计划不涉及 CAD 侧，环境亦未启用）；首轮 G8（SC-01～SC-14）的 `production/` 截图仍未入库，该缺口在 `SPEC-DM-011` §8 保持未关闭（非本批引入）。
+
+**收尾状态**：G9 真实桌面验收仍待用户（`SPEC-DM-011` §8 的 G9 行为「未开始」），与 `PLAN-DM-018`「completed；真实桌面复验待用户」同口径处理。

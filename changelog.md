@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-11（PLAN-DM-022 收尾登记：计划状态与实际验证）
+
+- 计划状态：`.planning/plans/dst-manager/PLAN-DM-022-extension-card-baseline.md` 的元数据 `status` 由 `proposed` 改为 `completed`、`updated` 改为 2026-09-11；末尾「实际验证」章节由引导语改为真实登记（改动文件、commit、逐命令原始结果、跳过项与原因、G8 逐张比对结论与偏差裁决）。未改动计划正文条款、追踪矩阵、批次划分与风险章节。
+- 批次 1（任务 1，`cdbe7a2`/`e93f482`/`2bfac5c`）：`settings-dialog` **18 passed**、`extensions-settings` **7 passed**、`check:i18n` **867 键**、`vue-tsc` 通过；控制器独立复跑 **25 passed**。
+- 批次 2（任务 2/3，`addf04c`/`fa041de`/`4d67755`）：任务 2 → `extensions-settings` **8 passed**、`settings-dialog` **18 passed**、`check:i18n` **868 键**（+`diagnosticCode`）、`vue-tsc` 通过，控制器独立复跑 **26 passed**；任务 3 → `extensions-settings` **10 passed**、`sheet-catalog` + `extensions-navigation` **39 passed**、`check:i18n` **868**、`vue-tsc` 通过，控制器独立复跑 **49 passed**。已知偏离（裁决接受）：任务 2 改动 4 处既有合并断言（把 `v0.1.0 · 状态` 拆成版本/状态两条），超出计划明文授权，但为冻结件卡片布局的必然结果、语义覆盖经评审独立核查未削弱，不回退。
+- 批次 3（任务 4，`c19149f`/`1de7b4e`/`a61ecd5`）：证据 spec **5 passed**、`extensions-settings` **10 passed**、`settings-dialog` **18 passed**（均 `--retries=0`）；`uv run ruff check .` → All checks passed；`uv run pytest -o addopts="" -q` → **1112 passed / 72 skipped**；`npm run check:i18n` → **868 键 / 9 域对称**；`npx vue-tsc -b --pretty false` → **exit 0**；`npm run build` → 通过。全量 e2e 连跑两次：第一次 **411 项：408 passed / 1 failed / 2 flaky**，第二次 **411 项：408 passed / 0 failed / 3 flaky**；唯一 failed 为 `properties-layout.spec.ts` 的四视口双主题覆盖用例（`page.goto` 超时，单跑 29.6s 已贴 30s 上限，`--workers=1` 单跑通过），与本次改动无关；两次 flaky 集合不同，均为 `playwright.config.ts` 已记录的 4 worker 下 dev server 启动抖动，重跑全部通过。
+- G8 逐张比对结论：`g8-ext-01↔g4-07`、`g8-ext-02↔g4-08`、`g8-ext-03↔g4-10`、`g8-ext-04↔g4-11` 四对在结构、四层信息、状态徽标色、开关方向、诊断码字面上一致，差异属 Demo 固有（演示工具条、`配置修订 r7 · 模拟`、页脚模拟提示、`保存` 按钮近似色、数据字面与像素级行高微差）；**发现并修复 1 项须修缺陷**——生产诊断码用 `--color-text-muted` 而冻结件用 `--amber`（即生产 `--color-warning` 的近似映射），已在 `a61ecd5` 把 `.ext-diag` 对齐为 `var(--color-warning)` 并重取受影响的 4 张证据图（`g8-ext-02/03/04/05`；`g8-ext-01` 无诊断码、字节未变）；`g8-ext-05`（900×600）冻结件无对照图，不构成比对通过。范围偏离（裁决接受）：`g8-ext-03` 取景由 `scrollIntoViewIfNeeded()` 改为 `scrollIntoView({block:"center"})` + 视口内断言。
+- 跳过项：未执行 `$env:DST_MANAGER_RUN_AUTOCAD=1` 的真实 AutoCAD 系统测试（本计划不涉及 CAD 侧，环境亦未启用）；首轮 G8（SC-01～SC-14）的 `production/` 截图仍未入库，该缺口在 `SPEC-DM-011` §8 保持未关闭（非本批引入）。收尾状态：G9 真实桌面验收仍待用户（`SPEC-DM-011` §8 的 G9 行为「未开始」），与 `PLAN-DM-018`「completed；真实桌面复验待用户」同口径。
+- 文档同步：`.planning/plans/dst-manager/README.md` 第 17 行 PLAN-DM-022 摘要由「proposed，…待批准开工」改为与事实一致的 `completed`（见上）；第 18 行 PLAN-DM-021 摘要删去未经核实的「全量 e2e 有批次三遗留回归待修复」一句（本次会话两次全量 e2e 均为 0 failed，唯一 failed 为 `properties-layout.spec.ts` 超时抖动、`--workers=1` 单跑通过，与 PLAN-DM-021 无关），其余内容与状态未改，改动处未新增断言。
+
 ## 2026-09-11（合并前修复波：对齐扩展诊断码配色并校正 G8 证据表述）
 
 - 修复（最终全分支评审唯一修复派发；Important + 1 条 Minor，控制器 Ruling 8）：①`web/src/components/settings/ExtensionCard.vue` 的 `.ext-diag` 由 `color:var(--color-text-muted)` 改为 `color:var(--color-warning)`——冻结 Demo 的 `.ext-diag` 用 `--amber`（浅 `#896000` / 深 `#eac784`），即生产 `--color-warning`（浅 `#946200` / 深 `#E0B15A`）的近似映射，冻结意图是「诊断码＝警告色调」；修复前生产实采浅色 `#6B7280` / 深色 `#8592A3` 是真实偏差（G8 门禁的存在意义即防生产背离冻结件）。只用一个 SPEC-DM-006 既有令牌，未新增令牌与全局 CSS，无契约影响。
