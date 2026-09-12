@@ -198,13 +198,17 @@ class ExtensionSettingsService:
         清单的排序和 i18n key 合并（ARCH-DM-006 §8.2）；``custom`` 呈现或未
         声明设置的扩展没有可持续生成的字段，返回空元组。Provider 登记或配对
         异常与读取一致，上抛同一稳定诊断，由调用方映射为契约化错误。
+
+        ``generated`` 声明必然伴随已登记且配对一致的 Provider：字段覆盖由
+        :func:`settings_provider_error` 在 :meth:`_provider_or_none` 里唯一放行，
+        因此这里不保留“Provider 缺席就返回空字段”的静默降级（§8.1 要求诊断，
+        而空元组会让接口层默默渲染出一份缺字段的部分结果）。
         """
         contribution = manifest.settings_contribution
         if contribution is None or contribution.presentation != "generated":
             return ()
         provider = self._provider_or_none(manifest)
-        if provider is None:
-            return ()
+        assert provider is not None, "generated 声明必须经 settings_provider_error 放行"
         return tuple(provider.field_definitions)
 
     # ------------------------------------------------------------------ 保存

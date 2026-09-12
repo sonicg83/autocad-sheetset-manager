@@ -439,6 +439,8 @@ class ExtensionRuntime:
 
         接口层只需要呈现方式与受控路由键；字段的 label/description/order 由
         响应映射从同一 ``ExtensionManifest`` 读取，Provider 语义单独取。
+        本访问器只读清单字段，不经设置服务：未知扩展得到稳定 404，其余情况
+        总是返回（总函数），不可能产生设置链路诊断。
         """
         return self._manifest(extension_id).settings_contribution
 
@@ -446,9 +448,16 @@ class ExtensionRuntime:
         """``generated`` 字段的 Provider 元数据（无生成呈现时为空元组）。
 
         Provider 是控件类型、默认值与约束的唯一权威（ARCH-DM-006 §8.2）；
-        接口层把它与清单的排序/i18n key 合并成响应字段项。
+        接口层把它与清单的排序/i18n key 合并成响应字段项。Provider 登记与配对
+        诊断与 :meth:`get_settings` 同形映射为稳定的
+        ``EXTENSION_CAPABILITY_UNAVAILABLE``/503：``bind_providers`` 在读取视图
+        与取字段规格之间重跑（:meth:`start`）时也不得泄漏成未处理异常（HTTP 500）。
         """
-        return self._settings.field_specs(self._manifest(extension_id))
+        manifest = self._manifest(extension_id)
+        try:
+            return self._settings.field_specs(manifest)
+        except ExtensionSettingsError as exc:
+            raise self._settings_error(exc) from exc
 
     # ------------------------------------------------------------------ 执行
 

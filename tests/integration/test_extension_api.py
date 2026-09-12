@@ -12,7 +12,9 @@ Provider 全权校验、过滤关键词规范回读与字段级超限错误、�
 以及 PLAN-DM-025 Task 3 的设置呈现与只读诊断契约（摘要 ``settings_contribution``、
 ``generated`` 字段项由 Provider 元数据与 Manifest 呈现合并、``custom`` 空字段项、
 ``effective_value``/``read_only``/``diagnostic_code``，以及更高 Schema 的
-HTTP 409 ``EXTENSION_SETTINGS_SCHEMA_NEWER``）。
+HTTP 409 ``EXTENSION_SETTINGS_SCHEMA_NEWER``），以及修复轮 1 的 R9 复核（
+声明设置却无法由 Provider 解释时的 503 诊断与无部分结果、Provider 重绑定
+时字段规格访问器与 ``get_settings`` 同形的错误映射）。
 """
 
 import hashlib
@@ -702,7 +704,13 @@ def test_generated_settings_read_only_view_still_exposes_current_field_items(tmp
     assert_settings_versioned(payload, 2, 1, raw_value)
     assert payload["read_only"] is True
     assert payload["diagnostic_code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
-    assert [item["key"] for item in payload["items"]] == ["notify", "title", "max_rows"]
+    assert [item["key"] for item in payload["items"]] == [
+        "notify",
+        "title",
+        "mode",
+        "max_rows",
+        "ratio",
+    ]
 
     rejected = client.put(
         url,
@@ -870,6 +878,13 @@ settings_schema: 1
 settings_contribution:
   presentation: generated
   fields:
+    - key: ratio
+      label_key: extensions.testGenerated.ratio
+      order: 30
+    - key: mode
+      label_key: extensions.testGenerated.mode
+      description_key: extensions.testGenerated.modeDescription
+      order: 15
     - key: max_rows
       label_key: extensions.testGenerated.maxRows
       description_key: extensions.testGenerated.maxRowsDescription
@@ -885,10 +900,12 @@ settings_contribution:
 
 
 class _GeneratedSettingsProvider:
-    """generated 假 Provider：三个字段覆盖控件词表、默认值与全部约束位。
+    """generated 假 Provider：五个字段覆盖控件词表、默认值与全部约束位。
 
-    只强制 ``max_rows`` 范围与 ``notify`` 类型（Provider 是校验权威）；
-    ``nullable``/``max_length`` 在该假 Provider 里只作为元数据映射的载体。
+    控件词表按 R8 逐项出现：``integer``（上下界）、``number``（上下界）、
+    ``string``（``nullable`` + ``max_length``）、``boolean``、``enum``
+    （非空 ``options``）。只强制 ``max_rows`` 范围与 ``notify`` 类型（Provider
+    是校验权威）；其余字段在该假 Provider 里只作为元数据映射的载体。
     解析时补齐代码默认值，用于区分持久值 ``value`` 与有效值 ``effective_value``。
     """
 
@@ -902,10 +919,19 @@ class _GeneratedSettingsProvider:
         SettingsFieldSpec(
             key="title", control="string", default="", nullable=True, max_length=20
         ),
+        SettingsFieldSpec(
+            key="mode",
+            control="enum",
+            default="fast",
+            options=("fast", "thorough"),
+        ),
+        SettingsFieldSpec(
+            key="ratio", control="number", default=1.5, min_value=0.1, max_value=10.0
+        ),
     )
 
     def default_value(self) -> dict[str, object]:
-        return {"max_rows": 10, "notify": False, "title": ""}
+        return dict(GENERATED_SETTINGS_DEFAULTS)
 
     def migrate(
         self, stored_schema_version: int, value: dict[str, object]
@@ -929,18 +955,37 @@ class _GeneratedSettingsProvider:
 
 GENERATED_SETTINGS_PROVIDER = _GeneratedSettingsProvider()
 
+#: 假 Provider 的代码默认零值：GET 未保存时 ``value`` 与 ``effective_value`` 都是它。
+GENERATED_SETTINGS_DEFAULTS = {
+    "max_rows": 10,
+    "notify": False,
+    "title": "",
+    "mode": "fast",
+    "ratio": 1.5,
+}
 
-def generated_settings_client(tmp_path) -> TestClient:
-    """注入测试内 generated 扩展的客户端（清单 + 假 Provider + 临时运行时）。"""
+
+def generated_settings_entries(
+    tmp_path, provider=GENERATED_SETTINGS_PROVIDER
+) -> tuple[BuiltinExtensionEntry, ...]:
+    """测试内 generated 扩展的固定索引条目（临时清单 + 指定 Provider）。
+
+    ``provider=None`` 得到“声明了设置却没有 Provider”的条目（§8.1 诊断载体）。
+    """
     manifest = tmp_path / "generated-settings.yaml"
     manifest.write_text(GENERATED_SETTINGS_MANIFEST, encoding="utf-8")
-    entries = (
+    return (
         BuiltinExtensionEntry(
             manifest_resource=str(manifest),
             factory=_boom,
-            settings_provider=GENERATED_SETTINGS_PROVIDER,
+            settings_provider=provider,
         ),
     )
+
+
+def generated_settings_client(tmp_path, provider=GENERATED_SETTINGS_PROVIDER) -> TestClient:
+    """注入测试内 generated 扩展的客户端（清单 + 假 Provider + 临时运行时）。"""
+    entries = generated_settings_entries(tmp_path, provider)
     return make_client(
         tmp_path,
         extension_runtime=make_runtime(tmp_path, entries),
@@ -961,11 +1006,12 @@ def test_generated_settings_items_merge_provider_specs_with_manifest_presentatio
     assert payload["schema_version"] == 1
     assert payload["revision"] == 0
     # 从未保存：value 是 Provider 默认零值，effective_value 是解析后的有效配置
-    assert payload["value"] == {"max_rows": 10, "notify": False, "title": ""}
-    assert payload["effective_value"] == {"max_rows": 10, "notify": False, "title": ""}
+    assert payload["value"] == GENERATED_SETTINGS_DEFAULTS
+    assert payload["effective_value"] == GENERATED_SETTINGS_DEFAULTS
     assert payload["read_only"] is False
     assert payload["diagnostic_code"] is None
-    # 清单声明顺序是 max_rows/title/notify：结果必须按 (order, key) 重排
+    # 清单声明顺序是 ratio/mode/max_rows/title/notify：结果必须按 (order, key) 重排
+    # （notify 与 title 同为 10 时按 key，mode 15 插在中间，max_rows 20、ratio 30）
     assert payload["items"] == [
         {
             "key": "notify",
@@ -994,6 +1040,19 @@ def test_generated_settings_items_merge_provider_specs_with_manifest_presentatio
             "max_length": 20,
         },
         {
+            "key": "mode",
+            "label_key": "extensions.testGenerated.mode",
+            "description_key": "extensions.testGenerated.modeDescription",
+            "order": 15,
+            "control": "enum",
+            "default": "fast",
+            "nullable": False,
+            "min_value": None,
+            "max_value": None,
+            "options": ["fast", "thorough"],
+            "max_length": None,
+        },
+        {
             "key": "max_rows",
             "label_key": "extensions.testGenerated.maxRows",
             "description_key": "extensions.testGenerated.maxRowsDescription",
@@ -1006,6 +1065,19 @@ def test_generated_settings_items_merge_provider_specs_with_manifest_presentatio
             "options": [],
             "max_length": None,
         },
+        {
+            "key": "ratio",
+            "label_key": "extensions.testGenerated.ratio",
+            "description_key": None,
+            "order": 30,
+            "control": "number",
+            "default": 1.5,
+            "nullable": False,
+            "min_value": 0.1,
+            "max_value": 10.0,
+            "options": [],
+            "max_length": None,
+        },
     ]
     # 摘要声明呈现方式；generated 不携带 route_key（专属组件只用于 custom）
     listed = client.get("/api/extensions").json()
@@ -1013,6 +1085,98 @@ def test_generated_settings_items_merge_provider_specs_with_manifest_presentatio
         "presentation": "generated",
         "route_key": None,
     }
+
+
+class _UnexplainableFieldProvider(_GeneratedSettingsProvider):
+    """配对不一致的假 Provider：清单声明了 ``title`` 却给不出它的字段元数据。
+
+    ARCH-DM-006 §8.1 的“字段元数据无法由 Provider 解释”只能产生稳定诊断，
+    不得让宿主渲染一份缺字段的 ``items`` 部分结果。
+    """
+
+    field_definitions = tuple(
+        spec
+        for spec in _GeneratedSettingsProvider.field_definitions
+        if spec.key != "title"
+    )
+
+
+@pytest.mark.parametrize(
+    ("provider", "reason"),
+    [
+        (None, "EXTENSION_SETTINGS_PROVIDER_MISSING"),
+        (_UnexplainableFieldProvider(), "EXTENSION_SETTINGS_PROVIDER_FIELD_UNKNOWN"),
+    ],
+    ids=["missing-provider", "unexplainable-field"],
+)
+def test_generated_settings_without_explainable_provider_returns_diagnostic(
+    tmp_path, provider, reason
+):
+    """ARCH-DM-006 §8.1：声明设置但缺少 Provider（或清单字段无法由 Provider 解释）
+    时，只使该扩展设置不可用并产生诊断：GET 与 PUT 都必须以 503 + 稳定
+    ``params.reason`` 返回，不得静默渲染一份缺字段的 ``items`` 部分结果。
+    """
+    client = generated_settings_client(tmp_path, provider)
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+
+    read = client.get(url)
+
+    assert read.status_code == 503
+    body = read.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert body["message_key"] == "errors.extension.capabilityUnavailable"
+    assert body["params"] == {"extension_id": GENERATED_SETTINGS_ID, "reason": reason}
+    # 无任何 items：诊断之外的字段列表（部分结果）绝不出现在错误体里
+    assert "items" not in body
+
+    rejected = client.put(
+        url,
+        json={"schema_version": 1, "expected_revision": 0, "value": {"max_rows": 5}},
+    )
+
+    assert rejected.status_code == 503
+    assert rejected.json() == body
+
+
+def test_generated_settings_maps_rebind_diagnostic_instead_of_unhandled_500(
+    tmp_path, monkeypatch
+):
+    """R9 复核：Provider 在“读取设置视图”与“取字段规格”之间失效时仍必须是契约化 503。
+
+    真实触发点是 :meth:`ExtensionRuntime.start` 重跑 ``bind_providers``（FastAPI
+    在线程池里同步执行端点，两次调用之间可插入重绑定）；这里在端点内部模拟该
+    交错，钉住 ``settings_field_specs`` 与 ``get_settings`` 的错误映射同形，
+    不泄漏 :class:`ExtensionSettingsError` 为未处理异常（HTTP 500）。
+    """
+    client = generated_settings_client(tmp_path)
+    runtime = client.app.state.extension_runtime
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+    assert client.get(url).status_code == 200  # 基线：Provider 登记有效
+
+    original_get_settings = runtime.get_settings
+
+    def get_settings_then_rebind(extension_id: str):
+        view = original_get_settings(extension_id)
+        # 重启式重绑定：同 ID 的第二份 Provider 实例触发重复登记诊断（§8.1）
+        runtime.start(generated_settings_entries(tmp_path, _GeneratedSettingsProvider()))
+        return view
+
+    monkeypatch.setattr(runtime, "get_settings", get_settings_then_rebind)
+
+    response = client.get(url)
+
+    assert response.status_code == 503
+    body = response.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert body["params"] == {
+        "extension_id": GENERATED_SETTINGS_ID,
+        "reason": "EXTENSION_SETTINGS_PROVIDER_DUPLICATE",
+    }
+    # 呈现访问器只读清单、不经设置服务：登记失效后仍是总函数（无诊断、无异常）
+    contribution = runtime.settings_contribution(GENERATED_SETTINGS_ID)
+    assert contribution is not None and contribution.presentation == "generated"
 
 
 def test_generated_settings_put_roundtrips_and_keeps_effective_defaults(tmp_path):
@@ -1034,9 +1198,19 @@ def test_generated_settings_put_roundtrips_and_keeps_effective_defaults(tmp_path
     assert payload["revision"] == 1
     # value 只存用户显式配置；effective_value 由 Provider 补齐代码默认值
     assert payload["value"] == {"max_rows": 5, "notify": True}
-    assert payload["effective_value"] == {"max_rows": 5, "notify": True, "title": ""}
+    assert payload["effective_value"] == {
+        **GENERATED_SETTINGS_DEFAULTS,
+        "max_rows": 5,
+        "notify": True,
+    }
     assert payload["read_only"] is False and payload["diagnostic_code"] is None
-    assert [item["key"] for item in payload["items"]] == ["notify", "title", "max_rows"]
+    assert [item["key"] for item in payload["items"]] == [
+        "notify",
+        "title",
+        "mode",
+        "max_rows",
+        "ratio",
+    ]
     assert client.get(url).json() == payload
 
 

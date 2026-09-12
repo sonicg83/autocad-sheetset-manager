@@ -133,30 +133,34 @@ def _settings_items(
     """``generated`` 字段项：Provider 语义 ⊕ Manifest 呈现，按 ``order, key`` 排序。
 
     清单只声明可发现性（key/顺序/i18n key），控件类型、默认值与约束只由
-    Provider 定义（ARCH-DM-006 §8.2）。配对校验已保证清单声明的字段都能被
-    Provider 解释（§8.1）；Provider 自报但清单未声明的字段不进入呈现。
-    ``custom`` 与未声明设置的扩展没有宿主生成字段，返回空列表。
+    Provider 定义（ARCH-DM-006 §8.2）。配对校验（``settings_provider_error``）
+    是清单字段可解释性的唯一放行点：声明了 ``generated`` 而字段无法被 Provider
+    解释时，读取早已给出稳定诊断，永远不会走到这里；因此本函数不做“解释不了
+    就跳过”的静默过滤——那正是 §8.1 禁止的部分结果。Provider 自报但清单未
+    声明的字段不进入呈现。``custom`` 与未声明设置的扩展返回空列表。
     """
     if contribution is None or contribution.presentation != "generated":
         return []
     specs = {spec.key: spec for spec in field_specs}
-    items = [
-        ExtensionSettingsItemModel(
-            key=field.key,
-            label_key=field.label_key,
-            description_key=field.description_key,
-            order=field.order,
-            control=spec.control,
-            default=spec.default,
-            nullable=spec.nullable,
-            min_value=spec.min_value,
-            max_value=spec.max_value,
-            options=list(spec.options),
-            max_length=spec.max_length,
+    items: list[ExtensionSettingsItemModel] = []
+    for field in contribution.fields:
+        # 契约破坏（清单字段无 Provider 元数据）直接 KeyError 失败报错，绝不静默省略
+        spec = specs[field.key]
+        items.append(
+            ExtensionSettingsItemModel(
+                key=field.key,
+                label_key=field.label_key,
+                description_key=field.description_key,
+                order=field.order,
+                control=spec.control,
+                default=spec.default,
+                nullable=spec.nullable,
+                min_value=spec.min_value,
+                max_value=spec.max_value,
+                options=list(spec.options),
+                max_length=spec.max_length,
+            )
         )
-        for field in contribution.fields
-        if (spec := specs.get(field.key)) is not None
-    ]
     return sorted(items, key=lambda item: (item.order, item.key))
 
 
