@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-12（新增 DST 诊断阻断设计评审备忘 MEMO-DM-032）
+
+- 新增 `.planning/memos/dst-manager/2026-09-12-dst-diagnostics-blocking-design-review.md`，登记 DST 诊断数据模型、分层阻断码清单、判定设计现状，以及本次复盘发现的问题、实测证据与收敛建议。
+- 记录 `AcsmDocument.validate()` 与 `RepairReport.blocking_issues` 的码集边界对照矩阵（9 项变异中 4 项为“`validate()` 报 `error` 但 `status=VALID`”），以及 `DWG_PATH_NOT_FOUND`、`LAYOUT_HANDLE_INVALID` 等 `error` 级诊断不参与写入门禁的端到端实测结果。
+- 登记 `Flags` 缺失导致的双实现码名漂移、必需子节点缺独立校验器、诊断缺 `message_key` 与 `ARCH-DM-005:191,254` 不符等 P0/P1 问题；仅登记结论，未修复、未立项。
+- 本次仅新增备忘并更新变更记录，未修改源码、配置、依赖或样本。
+
 ## 2026-09-12（细化 Builtin 扩展全局设置架构）
 
 - 更新 `ARCH-DM-006`，明确扩展全局设置作用域为当前 Windows 用户且跨工作区共享，并规定只保存用户显式配置或用户创建的数据。
