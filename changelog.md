@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-12（合并前评审修复：格式码入口 key 同名串扰）
+
+- **评审确认 bug**：`FieldBrowser.vue` 条目 key 原为 `${scope}:${canonicalName}`，而快照 `build_field_catalog` 不阻止图纸自定义属性与固有字段同名（如自定义属性 `number` 与固有 `number` 同时出现），“固有字段”组与“图纸自定义属性”组会各渲染一个 key 为 `sheet:number` 的条目，共用单一 `openFormatKey` 导致两个格式码菜单同时展开、后一条目的菜单无法打开。修复：key 拼入 `builtin`/`custom` 标志（`sheet:builtin:number` / `sheet:custom:number`），保证跨组唯一；`li :key` 与菜单 `v-if`/`aria-expanded` 比较随之消歧。
+- 同轮外部评审另记录 3 条非阻断事项（Escape 处理器不判断焦点位置、e2e fixture 字段引用正则比后端语法宽松、`formatCode.ts` 以字符串拼接扩展引用而非扩展 `fieldReference`），待后续处理，不在本修复范围。
+- 验证：`npm run build`（含 `vue-tsc -b`、`check:i18n`）通过；`npm run test:unit` 7 文件 / 40 例通过；`npx playwright test sheet-catalog.spec.ts sheet-catalog-visual-evidence.spec.ts` 68 passed。Python 侧无改动。
+
 ## 2026-09-12（数字格式码评审后修正：断言强度、宽度校验与焦点事实核对）
 
 - **F1（终审 I-M1）文档 off-by-one**：可失败性反例的 Tab 步数多算 1。实测 Tab 序为「选择模板 → 另存为 → 搜索可用字段 → sheet.number 条目 → 格式触发按钮」，第 5 次恰好落在格式入口、第 4 次才失败。把按 5 次 Tab → 按 4 次 Tab（`changelog.md` 上一章节与 `PLAN-DM-026` `## 实际验证` 各一处）。

@@ -36,7 +36,9 @@ function toEntry(field: CatalogField): FieldEntry {
   const reference = props.catalog.fieldReference(field.scope, field.canonicalName);
   const labelKey = field.builtin ? BUILTIN_LABEL_KEYS[field.canonicalName.toLowerCase()] : undefined;
   return {
-    key: `${field.scope}:${field.canonicalName}`,
+    // key 必须跨组唯一：快照不阻止图纸自定义属性与固有字段同名（如 number），
+    // 需要拼入 builtin 标志，否则两个同名条目会共用 openFormatKey 串扰菜单状态
+    key: `${field.scope}:${field.builtin ? "builtin" : "custom"}:${field.canonicalName}`,
     reference,
     display: reference.slice(1, -1),
     label: labelKey === undefined ? field.canonicalName : t(labelKey),
