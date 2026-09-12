@@ -73,15 +73,22 @@ export interface GeneratedSettingsItem {
   max_length: number | null;
 }
 
-/** 字段顺序由后端合并后给出，前端不得重排：这里即服务端返回顺序（order 1..5）。 */
+/** 字段顺序由后端合并后给出，前端不得重排：这里即服务端返回顺序（数组顺序）。
+ *
+ * `order` 值刻意写成**非单调**（3/1/5/2/4）：若写成 1..5，则「前端按数组顺序渲染」
+ * 与「前端按 order 客户端重排」两种实现对同一断言都会通过，断言就退化成恒真。
+ * 非单调取值下，只有真正按数组顺序渲染才会得到用例期望的 `data-field` 序列；
+ * `settings-extensions-production-evidence.spec.ts` 的 g8-ext-07 另有一条自守护断言，
+ * 防止后续把 order 改回单调而使该断言重新变成恒真。渲染顺序不变，故 g8-ext-07
+ * 的归档图不受影响。 */
 export function generatedSettingsItems(): GeneratedSettingsItem[] {
   const base = {nullable: false, min_value: null, max_value: null, options: [] as string[], max_length: null};
   return [
-    {key: "frame_block_prefix", label_key: "图框块名前缀", description_key: "写入图框块名的固定前缀", order: 1, control: "string", default: "TK-", ...base, max_length: 8},
-    {key: "batch_limit", label_key: "单批处理上限", description_key: null, order: 2, control: "integer", default: 50, ...base, min_value: 1, max_value: 200},
-    {key: "write_back_titleblock", label_key: "回写标题栏", description_key: null, order: 3, control: "boolean", default: true, ...base},
-    {key: "ratio_threshold", label_key: "比例容差", description_key: null, order: 4, control: "number", default: 0.5, ...base, min_value: 0, max_value: 1},
-    {key: "conflict_strategy", label_key: "属性冲突处理", description_key: null, order: 5, control: "enum", default: "ask", ...base, options: ["skip", "overwrite", "ask"]},
+    {key: "frame_block_prefix", label_key: "图框块名前缀", description_key: "写入图框块名的固定前缀", order: 3, control: "string", default: "TK-", ...base, max_length: 8},
+    {key: "batch_limit", label_key: "单批处理上限", description_key: null, order: 1, control: "integer", default: 50, ...base, min_value: 1, max_value: 200},
+    {key: "write_back_titleblock", label_key: "回写标题栏", description_key: null, order: 5, control: "boolean", default: true, ...base},
+    {key: "ratio_threshold", label_key: "比例容差", description_key: null, order: 2, control: "number", default: 0.5, ...base, min_value: 0, max_value: 1},
+    {key: "conflict_strategy", label_key: "属性冲突处理", description_key: null, order: 4, control: "enum", default: "ask", ...base, options: ["skip", "overwrite", "ask"]},
   ];
 }
 

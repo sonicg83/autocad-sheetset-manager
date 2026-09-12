@@ -559,24 +559,63 @@ def test_revision_drift_on_settings_put_reports_extension_settings_invalid_with_
 
 
 @pytest.mark.parametrize(
-    ("label", "value"),
+    ("label", "value", "code", "status_code"),
     [
-        ("模板重复（409）", {"user_templates": [template_json("同名"), template_json("同名")]}),
-        ("关键词数量超限（422）", {"excluded_title_keywords": [f"k{i}" for i in range(51)]}),
-        ("模板缺 UUID（422）", {"user_templates": [dict(template_json(), template_id=None)]}),
+        # 目录域自有 409：模板名 casefold 重复保留域码（templates.py 的
+        # SHEET_CATALOG_COLUMN_DUPLICATE），不是 EXTENSION_SETTINGS_INVALID。
+        (
+            "模板名仅大小写重复（目录域 409）",
+            {"user_templates": [template_json("Catalog"), template_json("catalog")]},
+            "SHEET_CATALOG_COLUMN_DUPLICATE",
+            409,
+        ),
+        (
+            "关键词数量超限（422）",
+            {"excluded_title_keywords": [f"k{i}" for i in range(51)]},
+            "EXTENSION_SETTINGS_INVALID",
+            422,
+        ),
+        (
+            "模板缺 UUID（422）",
+            {"user_templates": [dict(template_json(), template_id=None)]},
+            "EXTENSION_SETTINGS_INVALID",
+            422,
+        ),
     ],
 )
-def test_provider_validation_never_emits_revision_conflict_params(label, value):
+def test_provider_validation_never_emits_revision_conflict_params(label, value, code, status_code):
     """Provider 校验错误——包含目录域自己的 409——一律不带修订参数。
 
-    带上了就意味着前端只看 params 的那条判别会把它当修订漂移。
+    带上了就意味着前端只看 params 的那条判别会把它当修订漂移。目录域 409 与同端点
+    上的修订冲突 409 只靠稳定 code 区分，所以两边的 ``params`` 形态都必须被钉住。
     """
     with pytest.raises(ExtensionSettingsError) as excinfo:
         SHEET_CATALOG_SETTINGS_PROVIDER.validate_and_normalize(value)
 
     error = excinfo.value
+    assert error.code == code, label
+    assert error.status_code == status_code, label
     assert "expected_revision" not in error.params, f"{label}：Provider 错误带上了期望修订"
     assert "current_revision" not in error.params, f"{label}：Provider 错误带上了当前修订"
+
+
+def test_duplicate_template_name_casefold_maps_to_domain_409_without_revisions():
+    """同名（casefold）用户模板：目录域 409 的 params 只带定位字段 ``header``。
+
+    与上一条参数化用例互补：证明「Provider 级 409 存在且不带修订参数」不是靠
+    422 分支凑数，而是真的走通了域码 409 分支。
+    """
+    value = {"user_templates": [template_json("Catalog"), template_json("catalog")]}
+
+    with pytest.raises(ExtensionSettingsError) as excinfo:
+        SHEET_CATALOG_SETTINGS_PROVIDER.validate_and_normalize(value)
+
+    error = excinfo.value
+    assert error.code == "SHEET_CATALOG_COLUMN_DUPLICATE"
+    assert error.status_code == 409
+    assert error.params == {"header": "catalog"}
+    assert "expected_revision" not in error.params
+    assert "current_revision" not in error.params
 
 
 def test_template_conflict_with_explicit_revision_carries_both_revisions():

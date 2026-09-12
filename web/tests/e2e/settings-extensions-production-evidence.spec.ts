@@ -137,6 +137,10 @@ const CATALOG_FILTER = '[data-testid="catalog-settings-filter"]';
 const CATALOG_FILTER_ERROR = '[data-testid="catalog-settings-filter-error"]';
 const FILTER_FIELD = "excluded_title_keywords";
 const FILTER_HINT = "图名包含任一关键词时不写入目录，多个关键词用逗号分隔";
+// 编辑态「未提交」断言需要覆盖防抖窗口：只写 `toHaveLength(0)` 在请求尚未发出时同样成立，
+// 等待窗口后再断言才真的排除了「输入即自动保存」。取值见 catalogs 保存为显式动作（无自动保存），
+// 这里只排除防抖/延时提交，不影响用例实际耗时感知。
+const DRAFT_DEBOUNCE_WINDOW_MS = 400;
 
 // 进入某个扩展的配置子视图（同一设置 <dialog> 内的平级子视图，SC-17）
 async function openConfigView(page: Page, name: string): Promise<void> {
@@ -184,8 +188,14 @@ test("g8-ext-06 扩展配置入口：声明设置的卡片动作行出现「配�
 
 test("g8-ext-07 扩展配置子视图·generated 通用表单（浅色·1280×720，对照 g4-14）", async ({page}, info) => {
   await page.setViewportSize({width: 1280, height: 720});
-  await installExtensionSettings(page);
+  const mock = await installExtensionSettings(page);
   await openExtensions(page, multiList());
+  // 自守护：字段顺序断言只有在本载荷的 order 非单调时才有鉴别力（夹具刻意写成 3/1/5/2/4）。
+  // 若把 order 改回 1..5，「按数组顺序渲染」与「客户端按 order 重排」会同样通过，断言即成恒真。
+  expect(
+    mock.server.items.map(item => item.order),
+    "载荷 order 变成单调递增：字段顺序断言已失去鉴别力，请恢复夹具的非单调取值",
+  ).not.toEqual([...mock.server.items.map(item => item.order)].sort((a, b) => a - b));
   // 声明 generated 的样本同样走统一入口（入口只取决于「是否声明设置」，与呈现类型无关）
   await expect(page.locator(`[data-config-opener="${GENERATED_EXTENSION_ID}"]`)).toBeVisible();
   await openConfigView(page, GENERATED_NAME);
@@ -197,7 +207,8 @@ test("g8-ext-07 扩展配置子视图·generated 通用表单（浅色·1280×72
   await expect(dialog.locator("[role=\"dialog\"]")).toHaveCount(0);
 
   const form = dialog.locator(".ef-form");
-  // 字段顺序 = 服务端合并后的 order（前端不重排、不丢弃未知字段）
+  // 字段顺序 = 服务端给出的数组顺序（前端不重排、不丢弃未知字段）。载荷 order 非单调，
+  // 因此该序列同时排除「客户端按 order 重排」的实现，不是恒真断言。
   expect(await form.locator(".ef-row").evaluateAll(rows => rows.map(row => row.getAttribute("data-field"))))
     .toEqual(["frame_block_prefix", "batch_limit", "write_back_titleblock", "ratio_threshold", "conflict_strategy"]);
   // 控件词表逐一落到契约控件：boolean→开关、integer/number→数字框、string→文本框、enum→单选组
@@ -259,8 +270,10 @@ test("g8-ext-09 custom 面板输出图纸过滤编辑态（浅色·1280×720，�
   await expect(filter).toHaveAttribute("aria-invalid", "false");
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
   await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
-  // 编辑态不等于已提交：没有任何 PUT 发出，服务端值仍为空
-  expect(mock.puts).toHaveLength(0);
+  // 编辑态不等于已提交：等待覆盖防抖窗口后仍无任何 PUT 发出，服务端值仍为空
+  // （不能只写 `expect(mock.puts).toHaveLength(0)`：请求尚未发出时它同样会通过）
+  await page.waitForTimeout(DRAFT_DEBOUNCE_WINDOW_MS);
+  expect(mock.puts, "过滤输入编辑态在防抖窗口内不得发出 PUT").toHaveLength(0);
 
   await filter.scrollIntoViewIfNeeded();
   await expect(filter).toBeInViewport();

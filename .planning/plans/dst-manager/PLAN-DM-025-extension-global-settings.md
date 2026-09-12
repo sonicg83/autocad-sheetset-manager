@@ -479,14 +479,29 @@ related:
 **文件：**
 
 - 修改：`tests/unit/test_packaging_spec.py`
+- 修改：`tests/unit/test_sheet_catalog_settings.py`（R26 可达性前提的行为化回归钉）
 - 修改：`docs/dst-manager/guides/GUIDE-DM-005-builtin-extension-development.md`
 - 修改：`docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md`
 - 修改：`docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md`
+- 修改：`docs/dst-manager/architecture/ARCH-DM-006-builtin-extension-platform.md`（R19：设置 PUT 复用 `EXTENSION_SETTINGS_INVALID` + 409 的口径）
 - 修改：`docs/dst-manager/README.md`
 - 修改：`.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`
 - 修改：`web/tests/e2e/settings-extensions-production-evidence.spec.ts`
-- 修改：`web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`
+- 新增：`.planning/todos/dst-manager/2026-09-13-settings-dialog-escape-gate.md`
+- 新增：`.planning/todos/dst-manager/2026-09-13-extension-settings-capacity-debt.md`
+- 清理失效引用：`.planning/memos/dst-manager/2026-09-10-plan-dm022-sdd-handoff.md`、`.planning/memos/dst-manager/2026-09-12-plan-dm025-review.md`、`.planning/plans/dst-manager/PLAN-DM-022-extension-card-baseline.md`
 - 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-06-config-entry-light.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-07-generated-light.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-08-custom-dark.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-09-custom-filter-edited-light.png`（控制者裁定追加，R27）
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-10-custom-filter-error-light.png`（控制者裁定追加，R27）
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-filter-partial-light-1440x1000.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-filter-all-dark-900x700.png`
+- 修改：`.planning/plans/dst-manager/PLAN-DM-025-extension-global-settings.md`
+- 修改：`.planning/plans/dst-manager/README.md`
+- 修改：`changelog.md`
+
+**只运行、不修改：** `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`。两张目录过滤证据由它在 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 下产出，用例本身在任务 8 之后已存在，本任务未改动该文件（修复轮也未改）。
 - 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-07-generated-light.png`
 - 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-08-custom-dark.png`
 - 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-09-custom-filter-edited-light.png`（控制者裁定追加，R27）
@@ -579,7 +594,7 @@ related:
 - **提交链**：任务 1～9 共 28 个提交（基 `main` 79c61a3，功能分支 `feature/plan-dm-025-extension-global-settings`；含 G4 用户确认记录与最终验收提交），逐任务实施、逐任务独立评审并对评审意见做定向复审；每个任务至少一次修复轮，修复均有可失败性证据（变异 → 失败断言 `文件:行` → 按字节还原）。
 - **后端**：`uv sync --dev` 通过；`uv run ruff check .` All checks passed；`uv run pytest -q` **1327 passed / 72 skipped / 0 failed**（86s；PLAN-DM-026 收口时为 1182 passed / 72 skipped，本计划新增 145 例）；`uv lock --check` 无漂移；`uv run alembic upgrade head` 迁移链到 `0006_dm020_extension_platform` 正常。
 - **前端**：`npm ci` 通过；`check:api` 无漂移（未手改 `openapi.json`/`schema.d.ts`）；`check:i18n` **938 键 / 9 域**且无未登记硬编码中文；`build` exit 0（`vue-tsc -b` + `vite build ✓ built in 1.51s`）；`test:e2e` 全量 **486 passed / 0 failed / 2 flaky**（`g8-ext-07` 与「50 列极限」在 4 worker 并行下首跑 30s 超时、重跑通过；与 PLAN-DM-026 收口时记录的同类抖动一致）。
-- **容量**：`SettingsDialog.vue` 535 → **469** 行（软上限内）；`useSheetCatalog.ts` 701 → **409**；`useSheetCatalogSettings.ts` **494**（接近上限，已立待办）；`extensions-settings.spec.ts` **1109** 行（超上限，已立待办）。其余新增/改动文件均在 500 行以内。
+- **容量**：`SettingsDialog.vue` 535 → **469** 行（软上限内）；`useSheetCatalog.ts` 701 → **409**；`useSheetCatalogSettings.ts` **496**（接近上限，已立待办）；`extensions-settings.spec.ts` **1148** 行、`sheet-catalog.spec.ts` **1233** 行（均超上限，已立待办）。以上为收口提交 `04f303f` 的实测值；修复轮已更正早前误抄的 494/1109（见 changelog 2026-09-13 修复轮）。其余新增/改动文件均在 500 行以内。
 - **G4**：2026-09-12 经用户确认通过（MEMO-DM-034），确认时显式告知的 4 项保留条件已在任务 9 收口（第 ④ 项关闭，①②③ 由 `g8-ext-06～g8-ext-10` 部分补足并写明像素级复核归 G9）。
 - **G8**：2026-09-11 用户确认结论不变；2026-09-13 由 `settings-extensions-production-evidence.spec.ts`（10 例）补 5 张扩展设置证据与 2 张输出过滤证据（后者由 `sheet-catalog-visual-evidence.spec.ts` 产出）。既有冻结件 `g4-01～g4-15`、`g8-ext-01～05`、`g8-catalog-*`、`g8-format-menu-*` **未重取、未覆盖**。
 - **PLAN-DM-026 回归再验证**：全量后端与全量 E2E 均在 PLAN-DM-026 的改动之上重跑通过（数字见上），未发现 PLAN-DM-026 引入的行为回退；`catalogCompatibility.ts`、数字格式码入口与其证据链未被本计划改动。

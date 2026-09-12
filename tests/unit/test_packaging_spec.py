@@ -212,6 +212,34 @@ MANIFEST_FORBIDDEN_KEYS = {
     "path",
     "file",
 }
+
+# 键名按词段（下划线/连字符 + 驼峰边界）切开后的**词段**黑名单：`provider_class`、
+# `modulePath`、`exec_path`、`handler_class` 这类变体在精确名匹配下会漏过，而它们
+# 的语义与禁用键完全相同。按词段（而非子串）匹配：`description_key` 的词段是
+# `description`/`key`，不会被 `script` 子串误伤。
+MANIFEST_FORBIDDEN_KEY_TOKENS = (
+    "module",
+    "class",
+    "script",
+    "command",
+    "entry",
+    "point",
+    "handler",
+    "provider",
+    "import",
+    "executable",
+    "exec",
+    "python",
+    "path",
+    "file",
+)
+
+
+def _key_segments(key: str) -> tuple[str, ...]:
+    """把键名切成可比对的词段：`modulePath` -> (module, path)，`exec_path` -> (exec, path)。"""
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key)
+    segments = re.split(r"[^A-Za-z0-9]+", spaced)
+    return tuple(segment.casefold() for segment in segments if segment)
 MANIFEST_FILE = ROOT / "src" / MANIFEST_RESOURCE
 INDEX_FILE = ROOT / "src" / "dst_manager" / "extensions" / "builtin" / "index.py"
 RUNTIME_FILE = ROOT / "src" / "dst_manager" / "application" / "extensions" / "runtime.py"
@@ -327,37 +355,62 @@ def _walk_manifest(node, path: tuple[str, ...] = ()):
 
 
 def _module_level_imports(tree: ast.Module) -> dict[str, str]:
-    """模块级 `from <module> import <name>`：返回 标识符 -> 模块点分路径。"""
-    imported: dict[str, str] = {}
+    """模块级 `from <module> import <name>`：返回 本地名 -> (模块点分路径, 原名)。
+
+    保留 `as` 别名映射：`from m import f as g` 时本地名是 `g`，但目标模块里被定义
+    的符号是 `f`。只记本地名会让合法的别名导入被误判为「符号不存在」。
+    """
+    imported: dict[str, tuple[str, str]] = {}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
-                imported[alias.asname or alias.name] = node.module
+                imported[alias.asname or alias.name] = (node.module, alias.name)
     return imported
 
 
-def _defines_module_level_name(module: str, name: str) -> bool:
-    """目标模块文件里是否存在模块级符号 `name`（赋值、带注解赋值、函数或类）。"""
+def _bound_expression(node: ast.stmt, name: str) -> ast.expr | None:
+    """该语句是否把模块级名字 `name` 绑定到某个表达式；是则返回右值。"""
+    if isinstance(node, ast.Assign):
+        if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            return node.value
+        return None
+    if (
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == name
+    ):
+        return node.value
+    return None
+
+
+def _module_level_binding(module: str, name: str) -> str:
+    """目标模块里模块级符号 `name` 的绑定形态。
+
+    返回值：`missing`、`literal`（绑定到字符串/数字等字面量）、`call`（构造或调用
+    结果）、`name`（指向另一个模块级名字）、`def`（函数/类定义）、`assign`（其他
+    赋值）。`literal` 必须被守护拒绝：把 Provider 登记成模块级字符串常量，静态分析
+    与打包收集都跟随不了，等价于运行期按名解析。
+    """
     target = ROOT / "src" / Path(*module.split(".")).with_suffix(".py")
     if not target.is_file():
-        return False
+        return "missing"
     tree = ast.parse(target.read_text(encoding="utf-8"))
     for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(origin, ast.Name) and origin.id == name for origin in node.targets
-        ):
-            return True
-        if (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == name
-        ):
-            return True
-        if isinstance(
-            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ) and node.name == name:
-            return True
-    return False
+        bound = _bound_expression(node, name)
+        if bound is None:
+            if isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ) and node.name == name:
+                return "def"
+            continue
+        if isinstance(bound, ast.Constant):
+            return "literal"
+        if isinstance(bound, ast.Call):
+            return "call"
+        if isinstance(bound, ast.Name):
+            return "name"
+        return "assign"
+    return "missing"
 
 
 def test_fixed_index_registers_factory_and_provider_as_compile_time_references():
@@ -391,11 +444,41 @@ def test_fixed_index_registers_factory_and_provider_as_compile_time_references()
                 f"实际是 {type(value).__name__}：字符串形式的入口等价于运行期动态加载"
             )
             if isinstance(value, ast.Name):
-                module = imported.get(value.id)
-                assert module, f"固定索引 {keyword.arg}={value.id} 不是模块级导入的标识符"
-                assert _defines_module_level_name(module, value.id), (
-                    f"{module} 未在模块级定义 {value.id}：索引引用的编译期符号必须真实存在"
+                resolved = imported.get(value.id)
+                assert resolved, f"固定索引 {keyword.arg}={value.id} 不是模块级导入的标识符"
+                module, original = resolved
+                kind = _module_level_binding(module, original)
+                assert kind != "missing", (
+                    f"{module} 未在模块级定义 {original}：索引引用的编译期符号必须真实存在"
                 )
+                assert kind != "literal", (
+                    f"{module}.{original} 绑定到字面量（字符串/数字）：入口必须是编译期可跟随的"
+                    "构造结果或函数/类，字符串形式的入口等价于运行期按名动态加载"
+                )
+                # 一层传递：`X = Y` 时继续校验 Y 的形态（各模块内的重新导出很常见）。
+                if kind == "name":
+                    inner_tree = ast.parse(
+                        (ROOT / "src" / Path(*module.split(".")).with_suffix(".py")).read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    inner_imported = _module_level_imports(inner_tree)
+                    inner_name = next(
+                        node.value.id
+                        for node in inner_tree.body
+                        if isinstance(node, ast.Assign)
+                        and any(
+                            isinstance(origin, ast.Name) and origin.id == original
+                            for origin in node.targets
+                        )
+                        and isinstance(node.value, ast.Name)
+                    )
+                    inner = inner_imported.get(inner_name)
+                    if inner:
+                        assert _module_level_binding(*inner) != "literal", (
+                            f"{module}.{original} -> {inner[0]}.{inner[1]} 最终绑定到字面量："
+                            "入口必须是编译期可跟随的构造结果或函数/类"
+                        )
     assert {"factory", "settings_provider"} <= seen, (
         "固定索引未同时登记 factory 与 settings_provider：设置语义必须由 Provider 在"
         "编译期登记（ARCH-DM-006 §8.1），不得回退到按扩展 ID 的宿主特判"
@@ -415,10 +498,18 @@ def test_builtin_manifest_carries_no_executable_entry_or_url_fields():
     data = _manifest_data()
     assert data.get("extension_type") == "builtin", "清单解析异常：extension_type 不再是 builtin"
     for path, _ in _walk_manifest(data):
+        # 词段切分必须在原键名上做（`modulePath` → module/path）：先 casefold 会把
+        # 驼峰边界抹平成一个词段，`modulePath`/`providerClass` 一类变体就会漏判。
         key = str(path[-1]).casefold()
+        normalized_segments = _key_segments(str(path[-1]))
         assert key not in MANIFEST_FORBIDDEN_KEYS, (
             f"随包清单出现可执行入口字段 {'.'.join(path)}：清单是数据契约，"
             "扩展实例与 Provider 只能由固定索引的编译期引用创建"
+        )
+        hits = [token for token in MANIFEST_FORBIDDEN_KEY_TOKENS if token in normalized_segments]
+        assert not hits, (
+            f"随包清单字段 {'.'.join(path)} 命中入口词段 {hits}："
+            "`provider_class`/`modulePath`/`exec_path` 一类变体与禁用键语义相同，同样不得出现"
         )
     for path, value in _walk_manifest(data):
         if isinstance(value, str):
@@ -447,8 +538,8 @@ def test_custom_settings_route_hits_frontend_compile_time_whitelist():
     assert f'"{route_key}"' in host or f"'{route_key}'" in host, (
         f"前端白名单未登记 route_key {route_key!r}：声明 custom 的扩展点「配置」会 fail-closed"
     )
-    assert not re.search(r"\bimport\s*\(", host), (
-        "ExtensionSettingsHost.vue 出现动态 import：custom 组件解析必须是编译期事实"
+    assert not re.search(r"\bimport\s*\(|\bimport\s*\.\s*meta", host), (
+        "ExtensionSettingsHost.vue 出现动态 import / import.meta：custom 组件解析必须是编译期事实"
         "（ARCH-DM-006 §8.2），不得按服务端字符串加载模块"
     )
     assert "defineAsyncComponent" not in host, (
@@ -472,8 +563,9 @@ def test_spec_excludes_and_pathex_keep_builtin_extension_provider_packaged():
             f"spec excludes 排除了 {entry}：内置扩展 Provider 是固定索引的编译期引用，"
             "被排除后 frozen 态设置框架不可用"
         )
-    assert 'pathex=["../src"]' in _normalized_spec_text(), (
+    assert re.search(r'pathex\s*=\s*\[\s*[rR]?["\']\.\.[\\/]+src["\']', text), (
         "spec pathex 缺少 ../src：源码树不在分析路径上，静态导入的 Provider 无法被收集"
+        "（断言允许 raw/单斜杠等等价写法）"
     )
     assert f"src/{MANIFEST_RESOURCE}" in _normalized_spec_text(), (
         "spec datas 不再包含内置扩展清单资源：frozen 态 discover() 会降级为占位 FAILED"
