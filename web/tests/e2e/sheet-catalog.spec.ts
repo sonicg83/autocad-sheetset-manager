@@ -1198,4 +1198,36 @@ test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
     await expect(preview.getByRole("cell", {name: "001号", exact: true}).first()).toBeVisible();
     await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
   });
+
+  // 修复轮 1（C 部分）：只读转换窗口（GET 仍可写 → 首次 PUT 被 409 SCHEMA_NEWER 拒绝）
+  // 内已经打开的"另存为"模态，确认按钮必须与三个保存入口同源停用。生产上这条窗口对应
+  // "客户端落后于服务端升版"：控制器在只读态直接返回 false，按钮可点就是"点了没反应"的静默出口。
+  test("只读转换窗口：已打开的另存为模态确认按钮同源停用，不再静默失败", async ({page}) => {
+    const state = await openCatalog(page, {settingsReadOnlyAfterPut: true});
+    await expect(page.getByTestId("sheet-catalog-readonly")).toHaveCount(0);
+
+    await page.getByRole("button", {name: "另存为"}).click();
+    const modal = page.getByRole("dialog", {name: "另存为模板"});
+    await expect(modal).toBeVisible();
+    await modal.getByLabel("模板名称").fill("转换窗口目录");
+    // 服务端已升版：这一发 PUT 以 409 SCHEMA_NEWER 被拒，客户端就地转入粘性只读
+    await modal.getByRole("button", {name: "保存", exact: true}).click();
+    await expect(page.getByTestId("sheet-catalog-readonly")).toBeVisible();
+    await expect(page.getByTestId("sheet-catalog-readonly")).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
+    // 模态仍开着（失败不关闭、输入不丢），但确认按钮已停用：再点也只会静默返回 false
+    await expect(modal).toBeVisible();
+    await expect(modal.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+    await expect(modal.getByLabel("模板名称")).toHaveValue("转换窗口目录");
+    expect(state.settingsPutBodies).toHaveLength(1);
+    // 取消后回到可编辑正文，但三个保存入口一律停用（与既有只读用例同一口径）
+    await modal.getByRole("button", {name: "取消"}).click();
+    await expect(modal).toBeHidden();
+    await expect(page.getByRole("button", {name: "另存为"})).toBeDisabled();
+    // 关键回归：只读拒绝（409 SCHEMA_NEWER）会在保存过程中丢弃本地编辑，使得"仍脏"不再
+    // 成立；若成功判定只看脏位，这次未落盘的保存会被误报为成功（模态关闭 + 成功提示）。
+    // 本地编辑已丢弃，因此保存入口不存在而不是停用。
+    await expect(page.getByRole("button", {name: "保存修改"})).toHaveCount(0);
+    // 未落盘的保存不得发成功通知（此前只读拒绝会被误报为成功）
+    await expect(page.locator(".toast-host .toast")).toHaveCount(0);
+  });
 });

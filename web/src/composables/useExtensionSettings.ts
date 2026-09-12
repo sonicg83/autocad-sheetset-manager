@@ -30,9 +30,9 @@ export interface ExtensionSettingsConflict {
   // 服务端是否在 params 里同时给出了期望与当前修订：修订漂移的判别依据之一
   //（另一依据是码属 REVISION_CONFLICT_CODES），见 isRevisionConflict
   revisionParamsPresent: boolean;
-  // 服务端响应里的正文（PLAN-DM-025 Task 8）：协议层按状态码把 409 一律归为修订冲突，
-  // 而同一 PUT 端点上的 Provider 级 409（如 SHEET_CATALOG_COLUMN_DUPLICATE 名称重复）
-  // 不是修订冲突。消费方按 code 判定后需要原文才能给出可见诊断，故一并透传。
+  // 服务端响应里的正文（PLAN-DM-025 Task 8）：同一 PUT 端点上的 409 不止修订冲突
+  //（Provider 级 409 如 SHEET_CATALOG_COLUMN_DUPLICATE 名称重复共用该状态码）。
+  // 消费方按 isRevisionConflict 判定后需要原文才能给出可见诊断，故一并透传。
   message: string;
 }
 
@@ -66,8 +66,11 @@ const FALLBACK_INVALID_CODE = "EXTENSION_SETTINGS_INVALID";
 export const REVISION_CONFLICT_CODES: readonly string[] = ["EXTENSION_SETTINGS_INVALID"];
 
 // 判别口径 = 码在集合内，或服务端在 params 里同时给出期望与当前修订。后者是判据的拓展：
-// 修订漂移的语义就是这对参数，服务端换码时它仍成立；而 Provider 级 409 的 params 受错误
-// 词汇表白名单约束（SHEET_CATALOG_COLUMN_DUPLICATE 只允许 header），不会带到「冲突」的困境里
+// 修订漂移的语义就是这对参数，服务端换码时它仍成立。**不靠 Provider 错误参数白名单立论**：
+// SHEET_CATALOG_TEMPLATE_CONFLICT 的声明里也允许这两个参数（extensions/builtin/
+// sheet_catalog/errors.py），它今天不构成误判只因设置 PUT 路径上的 save_templates 不传
+// expected_revision（application/extensions/settings.py），两条抛出点因而都不带参数。
+// 该可达性前提由任务 9 的后端回归钉住：设置 PUT 路径不得传 expected_revision。
 export function isRevisionConflict(value: ExtensionSettingsConflict | null): boolean {
   if (value === null) return false;
   if (REVISION_CONFLICT_CODES.includes(value.code)) return true;

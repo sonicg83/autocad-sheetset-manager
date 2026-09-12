@@ -137,7 +137,10 @@ function onGuardKeydown(event: KeyboardEvent) {
         </div>
       </div>
     </dialog>
-    <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
+    <!-- confirmDisabled：只读态下删除必然不落盘（控制器保存门禁直接返回 false，确认后模态关闭但既无落盘也无提示，
+         是一个静默出口）。当前删除入口已随只读停用，所以这里不会在正常路径上到达；
+         但仍按同一口径写死门禁，避免以后新增删除入口时重新引入静默出口 -->
+    <ConfirmModal v-bind="confirmState" :confirm-disabled="catalog.readOnly.value" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
     <ToastHost :toasts="toasts" @dismiss="dismiss" />
   </section>
 </template>

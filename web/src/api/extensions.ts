@@ -26,8 +26,9 @@ export async function fetchExtensionSettings(extensionId: string): Promise<Exten
 }
 
 // 保存单个扩展设置：schema_version 与 expected_revision 都取自服务端快照（乐观并发）。
-// 409 = 修订冲突（本地输入保留，按 409 判定，不依赖文案）；422 = 字段级无效
-// （params.field 定位到字段）；两条路径都由 useExtensionSettings 收口。
+// 409 不都是修订冲突：只有 isRevisionConflict()（useExtensionSettings）认下的码/参数才是，
+// 其余 409（Provider 级拒绝，如模板重名）按普通保存失败呈现；422 = 字段级无效
+// （params.field 定位到字段）；各路径都由 useExtensionSettings 收口。
 export async function putExtensionSettings(extensionId: string, body: ExtensionSettingsWrite): Promise<ExtensionSettingsView> {
   return request(`/api/extensions/${encodeURIComponent(extensionId)}/settings`, {
     method: "PUT",

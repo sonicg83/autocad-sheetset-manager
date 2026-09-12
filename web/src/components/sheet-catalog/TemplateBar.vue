@@ -95,7 +95,9 @@ async function confirmSaveAs() {
       <button type="button" :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
       <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" :disabled="catalog.readOnly.value" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
-    <p v-if="catalog.saveError.value" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
+    <!-- 同一句失败正文不渲染两次：设置中心子视图（hideConflict）由宿主横幅统一呈现，
+         否则两个 role="alert" 会重复播报同一句话 -->
+    <p v-if="catalog.saveError.value && !hideConflict" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
     <div v-if="catalog.conflict.value && !hideConflict" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
       <h3>{{ $t("extensions.sheetCatalog.conflictTitle") }}</h3>
       <p>{{ $t("extensions.sheetCatalog.conflictMessage") }}</p>
@@ -113,7 +115,7 @@ async function confirmSaveAs() {
         </label>
         <div class="modal-actions">
           <button type="button" @click="saveAsOpen=false">{{ $t("extensions.sheetCatalog.cancel") }}</button>
-          <button type="button" class="primary" :disabled="catalog.saving.value || saveAsName.trim() === ''" @click="confirmSaveAs">{{ $t("extensions.sheetCatalog.saveAsConfirm") }}</button>
+          <button type="button" class="primary" :disabled="catalog.saving.value || saveAsName.trim() === '' || catalog.readOnly.value" @click="confirmSaveAs">{{ $t("extensions.sheetCatalog.saveAsConfirm") }}</button>
         </div>
       </div>
     </div>

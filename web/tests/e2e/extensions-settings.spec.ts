@@ -1008,6 +1008,45 @@ test("custom 面板：模板名重复是 Provider 级 409，按普通保存失�
   await expect(notice).toHaveCount(0);
 });
 
+// 修复轮 1（C 部分）：`conflict` 只在保存成功 / 放弃本地修改 / 只读收口时清除，而普通失败
+// 横幅此前永远优先取 `conflict.message`。于是「先 Provider 级 409、再一发非 409 失败」时，
+// 用户只能看到陈旧的「名称重复」，新失败的正文无处可见。
+test("custom 面板：Provider 级 409 之后的非 409 失败不被陈旧冲突正文压掉", async ({page}) => {
+  const mock = await installCatalogSettings(page, {value: {user_templates: [catalogTemplate("标准目录")]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const saveAs = page.getByRole("dialog", {name: "另存为模板"});
+  const notice = dialog.getByTestId("extension-settings-save-failed");
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  await saveAs.getByLabel("模板名称").fill("标准目录");
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+  await expect(notice).toContainText("名称重复：标准目录");
+
+  // 第二发换成非 409 失败（网络/5xx）：夹具的普通失败正文必须可见
+  let failures = 0;
+  await page.route("**/api/extensions/*/settings", async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    failures += 1;
+    return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "保存失败：服务暂时不可用"}});
+  });
+  await saveAs.getByRole("button", {name: "取消"}).click();
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  await saveAs.getByLabel("模板名称").fill("另一目录");
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => failures).toBe(1);
+  // 客户端对无 message_key 的 5xx 给通用文案（不是夹具正文），关键是它不再被陈旧冲突正文压掉
+  await expect(notice).toHaveText("操作失败，发生未知错误");
+  // 陈旧的 Provider 冲突正文不得与之一同/取而代之呈现
+  await expect(notice).not.toContainText("名称重复");
+  await expect(dialog.getByText(/名称重复/)).toHaveCount(0);
+  await expect(dialog.locator(".cfg-conflict")).toHaveCount(0);
+});
+
 test("custom 面板：删除用户模板先确认，取消保留、确认后回内置模板并落盘", async ({page}) => {
   const mock = await installCatalogSettings(page, {revision: 3, value: {user_templates: [catalogTemplate("标准目录")]}});
   await installExtensions(page, [extensionSummary()]);

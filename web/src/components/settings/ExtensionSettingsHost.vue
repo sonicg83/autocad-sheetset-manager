@@ -53,11 +53,13 @@ const revisionConflictInfo = computed(() => ({
   expectedRevision: conflict.value?.expectedRevision ?? 0,
   currentRevision: conflict.value?.currentRevision ?? 0,
 }));
-// 普通保存失败的唯一文案来源：网络/5xx/未知（saveFailed）与 Provider 级 409（服务端正文）
+// 普通保存失败的唯一文案来源：网络/5xx/未知（saveFailed）与 Provider 级 409（服务端正文）。
+// 优先取 saveFailed：conflict 只在保存成功/放弃本地修改/只读收口时清除，因此
+// 「Provider 级 409 之后再发一次非 409 失败」的新正文不能被陈旧的冲突正文压掉。
 const failureNotice = computed(() => {
   if (revisionConflict.value) return "";
-  const providerFailure = conflict.value?.message ?? "";
-  return providerFailure !== "" ? providerFailure : saveFailed.value;
+  if (saveFailed.value !== "") return saveFailed.value;
+  return conflict.value?.message ?? "";
 });
 const name = computed(() => t(props.extension.name_key));
 const customRouteKey = computed(() => props.extension.settings_contribution?.route_key ?? "");

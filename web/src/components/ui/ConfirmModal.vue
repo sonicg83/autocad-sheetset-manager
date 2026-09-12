@@ -2,7 +2,7 @@
 import {computed,watch,ref,nextTick} from "vue";
 import {useI18n} from "vue-i18n";
 // reversibility 为稳定语义值（I18N-07）：显示文本经语言包渲染，不把中文枚举作为类型
-const props=defineProps<{open:boolean;title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "reversible"|"irreversible"}>();
+const props=defineProps<{open:boolean;title:string;message:string;impactLines?:string[];confirmText:string;cancelText?:string;danger?:boolean;requireCheckbox?:boolean;reversibility?: "reversible"|"irreversible";confirmDisabled?:boolean}>();
 const emit=defineEmits<{confirm:[];cancel:[]}>();
 const {t}=useI18n();
 const checked=ref(false);const card=ref<HTMLElement|null>(null);const opener=ref<Element|null>(null);
@@ -32,7 +32,7 @@ function onKeydown(e:KeyboardEvent){
       <label v-if="requireCheckbox" class="modal-check"><input type="checkbox" v-model="checked">{{checkboxLabel}}</label>
       <div class="modal-actions">
         <button type="button" @click="emit('cancel')">{{cancelText??$t("shell.modal.cancel")}}</button>
-        <button type="button" :class="{danger}" :disabled="Boolean(requireCheckbox)&&!checked" @click="emit('confirm')">{{confirmText||$t("shell.modal.confirm")}}</button>
+        <button type="button" :class="{danger}" :disabled="confirmDisabled || (Boolean(requireCheckbox)&&!checked)" @click="emit('confirm')">{{confirmText||$t("shell.modal.confirm")}}</button>
       </div>
     </div>
   </div>

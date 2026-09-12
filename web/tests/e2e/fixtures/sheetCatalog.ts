@@ -62,6 +62,9 @@ export type SheetCatalogFixtureOptions = {
   // effective_value/read_only/diagnostic_code），并支持预置输出过滤与只读态。
   excludedTitleKeywords?: string[];             // 预置规范化后的输出图纸过滤关键词
   settingsReadOnly?: boolean;                   // 服务端已存更高 Schema：GET 只读、PUT 409
+  // 只读转换窗口（修复轮 1 C 部分）：GET 仍可写，首次 PUT 以 409 SCHEMA_NEWER 拒绝，
+  // 之后服务端进入只读（后续 GET 也返回只读）——生产上对应「客户端落后于服务端升版」
+  settingsReadOnlyAfterPut?: boolean;
   settingsGetFailure?: boolean;                 // 设置 GET 一律 500：页面初始化失败态（不渲染正文）
   omitPreviewSettingsRevision?: boolean;        // 预览响应违约（缺 settings_revision 绑定，R15）
 };
@@ -100,7 +103,9 @@ export type SheetCatalogState = {
   extensionsReloadPlan: ExtensionsReloadControl[];
   // 服务端已存更高 Schema（只读保护）：GET 返回 read_only + 诊断码，PUT 一律 409
   settingsReadOnly: boolean;
-  // 设置 GET 失败开关：初始化失败态用例在打开页面后置 true 再重载
+  // 只读转换窗口：由首次被拒的 PUT 置位（见 settingsReadOnlyAfterPut 选项）
+  settingsReadOnlyAfterPut: boolean;
+  // 设置 GET 失败开关：与 settingsReadOnly 一样作为 openCatalog 的入口选项传入（安装夹具时即生效）
   settingsGetFailure: boolean;
   // 预览响应违约（缺 settings_revision 绑定）：R15 的可见诊断由此驱动
   previewContractBroken: boolean;
@@ -358,6 +363,9 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     // 缺字段是另一回事：真实后端契约校验直接 422，不进入漂移门禁。
     // R15：previewContractBroken 制造契约违约响应（字段缺失），前端必须有可见诊断
     settings_revision: state.previewContractBroken ? undefined : state.revision,
+    // 摘要只按请求序号生成，未参与列 UUID：本夹具不实现 REPREVIEW_REQUIRED 复核，
+    // 因此「不重放预览就不能导出」这条产品论点由 previewRequests 长度断言钉住，
+    // 不由这里的 digest 钉住（夹具保真度改进见任务 9 债务清单）。
     preview_digest: `digest-${state.previewRequests.length + 1}`,
     executable,
   };
@@ -392,6 +400,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     extensionPatchBodies: [],
     extensionsReloadPlan: [],
     settingsReadOnly: options.settingsReadOnly === true,
+    settingsReadOnlyAfterPut: options.settingsReadOnlyAfterPut === true,
     settingsGetFailure: options.settingsGetFailure === true,
     previewContractBroken: options.omitPreviewSettingsRevision === true,
   };
@@ -529,8 +538,10 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     const body = await request.postDataJSON();
     state.settingsPutBodies.push(body);
     state.putExpectedRevisions.push(body?.expected_revision);
-    // 只读保护：已存更高 Schema，PUT 一律以同一稳定码 409 拒绝
-    if (state.settingsReadOnly) {
+    // 只读保护：已存更高 Schema，PUT 一律以同一稳定码 409 拒绝；
+    // 转换窗口模式下本次同样以该码被拒，并就地转入只读（后续 GET 与 PUT 也如此）
+    if (state.settingsReadOnly || state.settingsReadOnlyAfterPut) {
+      state.settingsReadOnly = true;
       return route.fulfill({status: 409, json: {
         code: "EXTENSION_SETTINGS_SCHEMA_NEWER",
         message_key: "errors.extension.schemaNewer",

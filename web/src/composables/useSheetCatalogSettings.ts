@@ -402,8 +402,10 @@ export function useSheetCatalogSettings(
     nameError.value = "";
     syncEdits(payload);
     await settings.save();
-    // 成功判定只看协议层：仍脏（含 Provider 级失败与只读短路）即未落盘
-    if (settings.dirty.value) return false;
+    // 成功判定只看协议层，且不得把“只读保护拒绝”当成成功：409 SCHEMA_NEWER 会在保存过程中
+    // 上调只读并丢弃本地编辑（dirty 因此变假），若只看 dirty 会把未落盘误报为保存成功
+    //（模态关闭 + 成功提示）。
+    if (settings.readOnly.value || settings.dirty.value) return false;
     refresh();
     return true;
   }
