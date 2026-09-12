@@ -410,6 +410,8 @@ test("SC-17 服务端状态就地呈现：字段超限、修订冲突保留输�
   await page.locator('[data-action="open-settings"]').click();
   await openConfigFor(page, "dst-manager.sheet-catalog");
   await expect(page.locator("#cfg-readonly")).toBeVisible();
+  // 只读子视图内每个控件都禁用，焦点必须落在只读诊断条上（tabindex="-1"），不得退回 <body>（§3.3）
+  await expect(page.locator("#cfg-readonly")).toBeFocused();
   await expect(page.locator("#cfg-readonly")).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
   await expect(page.locator("#cfg-readonly")).toContainText("已只读保留，无法覆盖保存");
   await expect(page.locator('input[data-key="excluded_title_keywords"]')).toBeDisabled();

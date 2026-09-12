@@ -232,7 +232,8 @@ function generatedPanelHtml(snap){const readOnly=cfgReadOnly(snap),server=snap.v
     return cfgFieldWrapHtml(f.key,f.label,`<div class="f-line"><input id="cfg-${f.key}" data-key="${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder??'')}" aria-label="${esc(f.label)}" ${disabled}></div>`,'');});
   return `<p class="ext-notice" role="note">generated 呈现：字段类型、默认值与约束来自扩展 Provider，清单只给顺序与文案。</p><div class="group"><div class="group-title">图框批量更新</div>${fields.join('')}</div>`;}
 function cfgViewHtml(ext){const snap=settingsOf(ext.id),readOnly=cfgReadOnly(snap);
-  return `<div class="cfg" data-view="extension-config">${cfgHeadHtml(ext,snap)}${readOnly?`<div class="diag readonly" role="note" id="cfg-readonly">⚠ 扩展设置的版本高于当前程序支持的范围，已只读保留，无法覆盖保存（诊断码 EXTENSION_SETTINGS_SCHEMA_NEWER · HTTP 409）。</div>`:''}${cfgConflict?cfgConflictHtml(ext,snap):''}${ext.settings.presentation==='generated'?generatedPanelHtml(snap):catalogPanelHtml(snap)}</div>`;}
+  // 只读态下 .cfg 内所有控件都带 disabled，子视图便没有可聚焦控件：诊断条加 tabindex="-1" 作为确定落点（见 openConfig）。
+  return `<div class="cfg" data-view="extension-config">${cfgHeadHtml(ext,snap)}${readOnly?`<div class="diag readonly" role="note" id="cfg-readonly" tabindex="-1">⚠ 扩展设置的版本高于当前程序支持的范围，已只读保留，无法覆盖保存（诊断码 EXTENSION_SETTINGS_SCHEMA_NEWER · HTTP 409）。</div>`:''}${cfgConflict?cfgConflictHtml(ext,snap):''}${ext.settings.presentation==='generated'?generatedPanelHtml(snap):catalogPanelHtml(snap)}</div>`;}
 // 页脚随视图切换：列表视图=核心配置的取消/保存；子视图=返回扩展列表/本扩展保存
 function syncFooterView(){
   document.querySelectorAll('.sections [role=tab]').forEach(t=>{t.disabled=Boolean(cfgExt);});
@@ -279,9 +280,11 @@ async function save(){if(validateLocal()){render();focusFirstError();return;}
   if(['enable_add_number_suffix','number_suffix_type','cad_max_parallel'].some(k=>k in set))toast('已保存。相关预览将按新配置重算（SC-13 提示）');else toast('已保存（模拟 PUT 成功，修订号 +1）');}
 function focusFirstError(){const k=Object.keys(errors)[0];if(!k)return;const el=$('panel').querySelector(`[data-key="${k}"]`);el?.scrollIntoView({block:'center'});el?.focus();}
 // —— 子视图进入/返回/保存与脏状态闸门（SC-17）——
-// 「配置」按钮是 opener：进入子视图后聚焦首个字段控件，返回/关闭后焦点归还该按钮（通过 data-ext 定位）。
+// 「配置」按钮是 opener：进入子视图后聚焦首个可用控件（只读态落到只读诊断条），返回列表后焦点归还该按钮（通过 data-ext 定位），关闭对话框则归还齿轮（closeSettings）。
 function openConfig(id){cfgExt=id;cfgEdits={};cfgErrors={};cfgConflict=null;cfgSaved=false;render();
-  $('panel').querySelector('.cfg input:not([disabled]),.cfg select:not([disabled]),.cfg button:not([disabled])')?.focus();}
+  // 进入焦点：优先子视图首个可用控件；只读态（EXTENSION_SETTINGS_SCHEMA_NEWER）里全部控件都禁用，
+  // 此时落到只读诊断条（tabindex="-1"），保证任何状态下都有确定落点、不退回 body。
+  ($('panel').querySelector('.cfg input:not([disabled]),.cfg select:not([disabled]),.cfg button:not([disabled])') ?? $('panel').querySelector('#cfg-readonly'))?.focus();}
 function focusCfgOpener(id){$('panel').querySelector(`[data-action="ext-config"][data-ext="${id}"]`)?.focus();}
 async function backToList(){
   if(cfgDirty){const r=await ask('有未保存的扩展设置修改',`<p>返回扩展列表将放弃“${esc(extName(cfgExt))}”的本次未保存修改；已保存的设置不受影响。</p>`,[{text:'留在此处',value:'cancel'},{text:'放弃修改并返回',value:'discard',cls:'primary'}]);
