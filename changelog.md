@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-11（新增 Builtin 内置扩展开发指南 GUIDE-DM-005）
+
+- 新增 `docs/dst-manager/guides/GUIDE-DM-005-builtin-extension-development.md`，以 `dst-manager.sheet-catalog` 图纸目录实现为完整范例，说明 Builtin 业务扩展与 AutoCAD Worker Plugin 的边界，并覆盖固定索引、Manifest、生命周期、Capability、预览与执行摘要、设置/偏好、HTTP 契约、前端页面白名单、i18n、候选成果、Artifact、数据库迁移、PyInstaller 打包、测试矩阵、故障排查和交付检查表。
+- 明确记录扩展平台首期限制：扩展管理、设置与偏好已经通用化，但 preview/execute 请求响应、图纸目录模板设置校验和 XLSX 执行验证仍含图纸目录专用接线；新增异构动作、输出格式或 Capability 时必须先扩展宿主契约，不得通过复制特例或绕过安全边界接入。
+- 在 `docs/dst-manager/README.md` 指南区新增 GUIDE-DM-005 导航；本批仅修改文档，不改变运行时代码或依赖。
+
 ## 2026-09-11（用户修正：关闭表达式输入框的拼写检查）
 
 - 用户提交 `37f569c`：在 `ColumnEditor.vue` 的表达式 `<textarea>` 上显式声明 `spellcheck="false"`、`autocorrect="off"`、`autocapitalize="off"`、`autocomplete="off"`。表达式是字段引用语法而非自然语言，浏览器拼写/自动更正提示会干扰输入。本批不修改该实现，仅复核并记录。
