@@ -294,6 +294,10 @@ v1 → v2 迁移保留既有 `user_templates` 并把缺失的 `excluded_title_ke
 
 过滤发生在表达式求值和缺值统计之前，因此被排除图纸不产生 `SHEET_CATALOG_VALUE_MISSING`。全部图纸被过滤仍是可执行状态，生成只有表头的有效工作簿。
 
+**计数语义与界面文案（PLAN-DM-025 R14，不得二义）**：预览响应的 `total_rows` 是**过滤后**的输出行数（即实际写入工作簿的图纸数），`filtered_rows` 是被排除的图纸数；全部过滤时 `total_rows=0`、`filtered_rows` 为原图纸数。业务页在既有预览区域显示「已过滤 N 张图纸」（N = `filtered_rows`），`filtered_rows=0` 时该提示不出现；它复用既有预览卡头，不新增区域、不新增列级控件、不列出被过滤图名。预览进行中不显示陈旧计数：提示与总行数取自同一份预览响应。
+
+**与冻结 Demo 的关系（已声明，不重开 G4）**：该提示是 2026-09-12 §6.4 修订新增的界面正文，冻结截图 `default-light-1440x1000`/`default-dark-900x700` 早于本次修订，不含该提示；过滤证据见 §16 的 `production/g8-filter-*`（无冻结对照，属补充检查）。
+
 ## 7. 页面结构与状态
 
 ### 7.1 选定方向
@@ -311,7 +315,7 @@ v1 → v2 迁移保留既有 `user_templates` 并把缺失的 `excluded_title_ke
 
 1. 模板栏：当前模板、兼容状态、保存、另存为、删除。
 2. 字段浏览器：分为“图纸固有字段、图纸集自定义属性、图纸自定义属性”；点击将正确语法插入当前表达式光标位置。每个字段条目另有格式入口，可直接插入 §5.4 格式码（去前导零，补零到 2/3/4/5/6 位），不需要用户手写语法。
-3. 输出列编辑器：列名、表达式、校验状态、添加、删除和顺序调整。**不提供列级格式控件**：格式码按字段生效，避免对 `{sheet.专业代码}-{sheet.number}` 这类组合结果整串补零（会得到 `0RQ-01`）。
+3. 输出列编辑器：列名、表达式、校验状态、添加、删除和顺序调整。校验状态徽标取当前校验反馈：有反馈时按业务页语义显示「有效」或错误原因；**无任何校验反馈时显示中性「未校验」**，不伪造绿色「有效」（设置中心的扩展配置子面板不加载工作区快照、不伪造预览，2026-09-12 §6.4 修订引入）。**不提供列级格式控件**：格式码按字段生效，避免对 `{sheet.专业代码}-{sheet.number}` 这类组合结果整串补零（会得到 `0RQ-01`）。
 4. 兼容性摘要：缺少定义为阻断错误；缺少值为带数量的警告。
 5. 预览表：最多 20 行真实数据，显示过滤后的总行数；命中过滤词时另显示“已过滤 N 张图纸”，不列出被过滤图名；宽列只在受控内容区横向滚动。
 6. 操作区：刷新预览、导出 XLSX；导出是唯一高强调操作。
@@ -455,7 +459,7 @@ save_grant_id
 | 只读字段 | `WorkspaceResponse` 与领域 `Workspace` 已含 number/title/layout/custom properties/revision | HTTP 工作区响应包含的信息过宽，不能直接交给扩展 | `workspace.snapshot.read.v1` 冻结值对象 | 新建 `extensions/snapshots.py`、`capabilities.py` | Windows/Posix basename、路径泄漏、打开动作重复计算修订 | 快照表驱动测试 + DST/DWG 时间戳回归 |
 | 属性定义 | `property_definitions_from_document` 已合并声明和实际图纸属性并按 `casefold()` 规范化 | 需按 `sheetset`/`sheet` 输出目录并保留规范名称 | `FieldCatalog` | `extensions/snapshots.py` 复用领域函数，不复制规则 | 保留字段与同名自定义属性冲突 | 领域/应用单测 |
 | 模板与偏好 | SQLite 仅有通用 `application_settings`；设置中心文件存储不适合扩展业务 JSON | 缺隔离设置、乐观修订和工作区偏好 | settings/preferences GET/PUT | 新建 `extensions/settings.py`；迁移 `0006` 与独立仓储 | 旧 Schema、大小写重名、并发保存 | 迁移 + 仓储/接口测试 |
-| 输出图纸过滤 | 当前扩展设置只存 `user_templates`，预览/执行遍历全部 `snapshot.sheets` | 缺 Provider Schema v2、custom 文本框、规范化过滤与过滤数量 | `excluded_title_keywords`、`filtered_rows`、设置 snapshot digest | PLAN-DM-025 的 `sheet_catalog/settings.py`、`preview.py`、`extension.py`、custom 设置面板与 OpenAPI 契约 | 预览/导出规则漂移、过滤后仍计缺值、设置变化执行旧预览 | 纯函数表驱动 + Provider 迁移 + API/Workbook + E2E/G8/G9 |
+| 输出图纸过滤 |（**现状列为实施前快照**）当前扩展设置只存 `user_templates`，预览/执行遍历全部 `snapshot.sheets` | 缺 Provider Schema v2、custom 文本框、规范化过滤与过滤数量 | `excluded_title_keywords`、`filtered_rows`、设置 snapshot digest | PLAN-DM-025 的 `sheet_catalog/settings.py`、`preview.py`、`extension.py`、custom 设置面板与 OpenAPI 契约 | 预览/导出规则漂移、过滤后仍计缺值、设置变化执行旧预览 | 纯函数表驱动 + Provider 迁移 + API/Workbook + E2E/G8/G9 |
 | 表达式与预览 | 无通用模板执行器 | 缺受限 parser、绑定、求值、摘要和兼容性诊断 | preview action | `builtin/sheet_catalog/expressions.py`、`extension.py` | 恶意输入、未知字段、缺值统计、摘要漂移 | 表驱动单测 + 集成测试 |
 | XLSX | `pyproject.toml` 无 `openpyxl` | 缺生成与回读验证适配器 | 候选文件契约 | `builtin/sheet_catalog/workbook.py`；UV 增加锁定依赖 | 公式注入、前导零、超宽列、候选伪造 | `openpyxl` 回读测试 + 打包检查 |
 | 保存位置 | `ShellBridge` 已支持打开/文件夹选择，API 与桥在桌面进程内装配 | 缺固定 XLSX SAVE_DIALOG、一次性授权和宿主原子落盘 | `request_save_xlsx()`、`SaveGrantStore.consume()` | 新建 `extensions/save_grants.py`、`artifacts.py`；修改 `interfaces/shell.py` 与桌面装配 | 授权复用、路径/用途错配、目标漂移、失败残留 | 桥/授权/故障注入单测 + G9 |
@@ -517,6 +521,10 @@ npm run test:e2e
 
 本功能不需要 AutoCAD；真实 AutoCAD 系统测试不是本功能的新增验收项，但既有非 CAD 与核心发布回归不得失败。
 
+**门禁覆盖范围（已知缺口，必须知道它挡不住什么）**：`web/scripts/check-i18n.mjs` 只校验四类约束——中英域文件集合一致、域内键集合一致、命名插值参数一致、`web/src` 无未登记硬编码中文。它**不校验「代码引用的键是否存在」**：`t("extensions.sheetCatalog.settingsLoadFailed")` 这类引用即使键缺失，`check:i18n`、`check:api`、`vue-tsc -b` 与生产构建也都不会报错，只在运行期回退成键名原文（PLAN-DM-025 任务 8 评审 I2 的根因）。当前缓解手段：受影响的可见文案由 E2E 断言实际正文（如业务页设置加载失败提示、冲突横幅文案），并在评审中人工核对新增键的引用与登记；触发重开条件——若将来要求「构建期拦截未登记键引用」，需给 `check-i18n.mjs` 增加对 `t()` 字面量参数的反向扫描（本计划不修）。
+
+**E2E 夹具与生产 digest 的一致性缺口（同上，不得当作已解决）**：`web/tests/e2e/fixtures/sheetCatalog.ts` 的 `preview_digest` 不参与列 UUID（生产 `preview.py` 的摘要载荷包含 `column_id`），且夹具不实现 `REPREVIEW_REQUIRED` 复核门禁。因此「换模板导致列 UUID 变化」与「预览后设置变化必须重新预览」两条语义在 E2E 里只被夹具的等价实现近似覆盖，**生产侧的权威约束**由后端实现与测试共同承担：`preview.py` 的 `_digest_columns` 把 `column_id` 计入摘要载荷，设置 Schema/revision/digest 绑定与 `EXTENSION_SETTINGS_CHANGED`/409 由 §15.1 的预览摘要与过滤设置变化两条回归覆盖。注意：现有后端摘要测试只固定 `column_id` 后比较 token/表头差异，**没有一条显式断言「仅列 UUID 变化即改变摘要」**。夹具保真度提升属后续项（PLAN-DM-025 任务 9 记录），不阻塞本 Spec。
+
 ## 16. 前端门禁记录
 
 | 门禁 | 状态 | 证据 | 确认人 | 日期 | 未关闭事项 |
@@ -537,3 +545,11 @@ G4～G8 已关闭；G7 曾因 2026-09-11 最终评审确认 F1～F5 重新打开
 2026-09-12 修订（§5.4 数字格式码）的门禁影响：主流程、页面布局结构与关键状态类别均未改变（§7.2 区域 2 只是新增条目内格式入口，区域 3 明确不新增列级控件），因此 **G3/G4 不重开**；字段条目格式入口属于新控件，已由 PLAN-DM-026 任务 4 补足**自动化**门禁证据：打开格式菜单后的 1440×1000 浅色与 900×700 深色同状态截图 [g8-format-menu-light-1440x1000.png](assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png)、[g8-format-menu-dark-900x700.png](assets/SPEC-DM-012/production/g8-format-menu-dark-900x700.png)，断言覆盖菜单盒在视口内、无整页横向溢出、真实 Tab 环可在 140 步内到达格式入口（`toBeFocused()`）、Enter 展开与 Esc 关闭（`aria-expanded` 回到 `false` 且选项列表消失、焦点归还），以及 200% 缩放下入口仍落在字段栏盒内；≤980px 限高 235px 时被裁切的菜单尾部由字段列表内部滚动可达（`expectActionReachableAfterScroll`）。上述结论仅为自动化证据，**不构成用户对 G8 的重新确认**：G8 的确认人、日期与三项保留差异仍以本表 G8 行（用户，2026-09-11）为准。G9 真实验收清单（MEMO-DM-028）已追加 `### 1.9`“导出 XLSX 中补零图号为文本单元格（如 `0001`，Excel 显示不丢前导零）且未使用格式码的模板导出结果与升级前一致”，该项由用户执行，实施代理不代填。
 
 2026-09-12 修订（§6.4 输出图纸过滤）的门禁影响：图纸目录业务页只增加“已过滤 N 张图纸”汇总，不改变既有页面主流程和布局结构，因此 SPEC-DM-012 的 G3/G4 不重开；但该配置进入 PLAN-DM-025 新增的“设置 → 扩展 → 图纸目录 → 配置”custom 面板，必须随 SPEC-DM-011 的扩展配置入口重新通过 G4 后才能实施生产 UI。G8 同时覆盖 custom 文本框与目录页过滤汇总的浅深主题、最小视口和 200% 缩放；G9 追加“无工作区保存过滤词、真实项目部分/全部过滤、空表头 XLSX、修改设置后旧预览失效”四项，均由用户执行，实施代理不代填。
+
+2026-09-13 生产证据批次（PLAN-DM-025 任务 9，§6.4 输出图纸过滤的自动化归档）：
+
+- 新增两张生产同状态截图（视口/主题与冻结基准对齐，图放在 `assets/SPEC-DM-012/production/`）：[g8-filter-partial-light-1440x1000.png](assets/SPEC-DM-012/production/g8-filter-partial-light-1440x1000.png)（1440×1000 浅色，5 张排除 1 张：`输出 4 张图纸` + `已过滤 1 张图纸`）与 [g8-filter-all-dark-900x700.png](assets/SPEC-DM-012/production/g8-filter-all-dark-900x700.png)（900×700 深色，全部排除：`输出 0 张图纸` + `已过滤 5 张图纸` + 空态正文 + 导出仍可用）。
+- 生产方：`web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 的两例「G8 补充：1440×1000 浅色部分过滤截图 + 行数与几何守卫」「G8 补充：900×700 深色全部过滤截图 + 空态与几何守卫」，走**生产页面**（同名夹具装配，非冻结 Demo，`file://` 不可达该状态）；默认只挂测试附件，仅在 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 时写入版本库目录。
+- **这两张没有冻结对照**：冻结基准 `default-light-1440x1000.jpg`/`default-dark-900x700.jpg` 产生于 2026-09-09（commit `9f3dfb3`），其演示数据没有过滤设置，因此不存在「仅差过滤提示」的同状态冻结件。它们只作**补充检查**（几何守卫：无整页横向溢出、提示元素在视口内、导出可达），**不得写成比对通过或 G8 重新确认**。
+- 与本批次同时归档的扩展配置入口/子视图证据（`assets/SPEC-DM-011/production/g8-ext-06～g8-ext-10`）覆盖了自定义设置面板：其中与冻结件 `g4-15` 的差异、模具与口径声明见 SPEC-DM-011 §7。图纸目录侧受影响的两处生产事实在此登记：① 设置中心的列编辑器**无校验反馈时显示中性「未校验」**，不伪造「有效」（§7.2 区域 3，业务页行为不变）；② custom 面板复用生产 `TemplateBar`/`ColumnEditor`/过滤行，与冻结 Demo 的可见差异（组标题文案、标签与控件同行/竖排、模板组承载完整模板栏与列表格）属已声明差异，**不重开 G3/G4**（主流程、布局结构与关键状态类别未变）。
+- 冻结件（`g4-*`、`g8-catalog-*`、`g8-format-menu-*`、`default-*`）本批次**未重取、未覆盖**；G8 的确认人与日期仍以本表 G8 行（用户，2026-09-11）为准；G9 真实验收待用户在真实桌面与 Excel 环境执行。
