@@ -17,7 +17,7 @@ import type {ShellResult, ShellSaveGrant} from "../api/shell";
 import type {Workspace} from "../api/contracts";
 import {useExtensionSettings} from "./useExtensionSettings";
 import {
-  CATALOG_EXTENSION_ID, CATALOG_SETTINGS_SCHEMA_VERSION, catalogColumnSignature, catalogTemplateSnapshot, fieldReference,
+  CATALOG_EXTENSION_ID, CATALOG_SETTINGS_SCHEMA_VERSION, catalogColumnChangeKey, catalogTemplateSnapshot, fieldReference,
   useSheetCatalogSettings,
 } from "./useSheetCatalogSettings";
 import type {
@@ -99,7 +99,9 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   // 取值只接受契约要求的数字：响应违约（字段缺失/类型不符）时不发布预览，而是给出可见
   // 诊断（R15）——静默返回会让导出按钮看似可用却点不动。
   const previewedSettingsRevision = ref<number | null>(null);
-  const draftSignature = computed(() => catalogColumnSignature(draft.value.columns));
+  // 变更键含列 UUID（catalogColumnChangeKey）：等值但列 ID 不同的模板切换必须重放预览，
+  // 否则导出按钮看似可用、执行却被 REPREVIEW_REQUIRED 拒绝（I3）。
+  const draftSignature = computed(() => catalogColumnChangeKey(draft.value.columns));
   let previewGeneration = 0;
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -370,8 +372,9 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     // 基准修订漂移使旧预览失效：以新修订重新预览
     schedulePreview();
   });
-  // 草稿内容变化才重放预览：按内容签名比较，避免"保存成功后以服务端值重建草稿"
-  // 这类等值替换也触发一次多余预览（会推进摘要，可能作废刚取得的导出摘要）。
+  // 草稿变化才重放预览：按变更键比较，避免"保存成功后以服务端值重建草稿"这类
+  // 等值同 ID 替换也触发一次多余预览（会推进摘要，可能作废刚取得的导出摘要）。
+  // 键含列 UUID，因此等值模板切换同样会重放（I3）。
   watch(draftSignature, signature => {
     if (signature === previewedColumns.value) return;
     schedulePreview();
@@ -381,6 +384,8 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     // 设置（模板/草稿/过滤词：见 useSheetCatalogSettings）
     loading, templates, selectedId, selectedTemplate: owner.selectedTemplate, draft, draftName, dirty, canSaveInPlace,
     conflict: owner.conflict, saving: owner.saving, saveError: owner.saveError,
+    // 高版本只读（I5）：页面据此显示可见通知，与设置中心同一 readOnlyCode 语义
+    readOnly: owner.readOnly, readOnlyCode: settings.readOnlyCode,
     selectTemplate: owner.selectTemplate, updateColumn: owner.updateColumn, addColumn: owner.addColumn,
     removeColumn: owner.removeColumn, moveColumn: owner.moveColumn,
     saveInPlace: owner.saveInPlace, saveAs: owner.saveAs, removeTemplate: owner.removeTemplate,

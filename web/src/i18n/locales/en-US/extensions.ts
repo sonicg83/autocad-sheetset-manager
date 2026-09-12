@@ -73,6 +73,7 @@ export default {
     columnsHeadActions: "Actions",
     columnStatusValid: "Valid",
     columnStatusInvalid: "Needs fixing",
+    columnStatusUnchecked: "Not checked",
     expressionSyntaxHint: "Expressions support only text, field references, and {'{'}{'{'} / {'}'}{'}'} brace escapes.",
     compatibilityLabel: "Compatibility summary",
     blockingTitle: "Blocking issues",

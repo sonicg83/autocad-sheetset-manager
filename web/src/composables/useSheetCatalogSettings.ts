@@ -91,6 +91,9 @@ export interface SheetCatalogTemplateController {
   saving: ComputedRef<boolean>;
   saveError: ComputedRef<string>;
   conflict: ComputedRef<boolean>;
+  // 高版本只读（协议层判定，来源见 useExtensionSettings 的 readOnly）：保存入口据此停用，
+  // 不留"点了没反应"的静默出口（I5）。
+  readOnly: ComputedRef<boolean>;
   caretRequest: Ref<{columnId: string; position: number} | null>;
   selectTemplate(id: string | null): Promise<void>;
   saveInPlace(): Promise<boolean>;
@@ -126,10 +129,19 @@ export function fieldReference(scope: "sheetset" | "sheet", canonicalName: strin
   return `{${scope}.${canonicalName}}`;
 }
 
-// 只比较列内容（列名 + 表达式）的稳定投影：与 UUID 无关的脏判定与导出就绪判据。
-// 脏判定与页面装配层共用同一投影，避免两处各写一份。
+// 只比较列内容（列名 + 表达式）的稳定投影：与 UUID 无关的脏判定。
+// 脏判定只用它：表头与表达式逐一相同、仅列 UUID 不同的两份模板之间切换不是"未保存修改"。
 export function catalogColumnSignature(columns: {header: string; expression: string}[]): string {
   return JSON.stringify(columns.map(column => [column.header, column.expression]));
+}
+
+// 预览重放与导出门禁的变更键：在内容投影之上**纳入列 UUID**。
+// 后端 preview_digest 按列的规范 ID 计算（preview.py 的 DigestColumn），因此等值但列 ID 不同的
+// 两份模板（例如另存为后的内置默认模板会重新铸造 UUID）是两次不同的预览输入。
+// 只比较内容会让切换后的导出按钮保持可用：前端带着新列 ID 复用旧摘要上送，执行被
+// REPREVIEW_REQUIRED 拒绝，而页面上连"预览已过期"的提示都不会出现（I3）。
+export function catalogColumnChangeKey(columns: {columnId: string; header: string; expression: string}[]): string {
+  return JSON.stringify(columns.map(column => [column.columnId, column.header, column.expression]));
 }
 
 // 模板 → 设置负载条目（templates.py 的 template_to_json 同形）
@@ -460,7 +472,7 @@ export function useSheetCatalogSettings(
 
   return {
     loading, templates, selectedId, selectedTemplate, draft, draftName, dirty, canSaveInPlace,
-    saving, saveError, conflict, caretRequest,
+    saving, saveError, conflict, readOnly: settings.readOnly, caretRequest,
     selectTemplate, saveInPlace, saveAs, removeTemplate, retryAfterConflict,
     addColumn, updateColumn, removeColumn, moveColumn, trackCaret,
     filterText, filterError, filterDirty, setFilterText, saveFilter,

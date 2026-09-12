@@ -1074,3 +1074,36 @@ test("custom 面板：修订冲突保留过滤词草稿，横幅给出两条出�
   await expect(filter).toHaveValue("草图—待保存");
   await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
 });
+
+// PLAN-DM-025 Task 8 修复轮 1（B 部分）I5/M2：custom 面板的只读路径此前没有任何用例，
+// <fieldset disabled> 分支从未执行过（夹具的 readOnly 开关是死代码）。高版本只读时
+// 面板必须整体不可操作、宿主给出只读诊断条、页脚"保存"停用——不留"点了没反应"的出口；
+// 同时列状态在无校验反馈时不得冒充绿色"有效"（M2）。
+test("custom 面板：高版本只读进入配置子视图，面板整体 disabled 且列状态不冒充有效", async ({page}) => {
+  const mock = await installCatalogSettings(page, {readOnly: true, revision: 3, value: {user_templates: [catalogTemplate("标准目录")]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const panel = dialog.locator(CATALOG_PANEL);
+  await expect(panel).toBeVisible();
+  // 宿主只读诊断条：与业务页同一语义（errors.extension.schemaNewer + readOnlyCode）
+  const readonly = dialog.getByTestId("extension-settings-readonly");
+  await expect(readonly).toBeVisible();
+  await expect(readonly).toContainText("已只读保留，无法覆盖保存");
+  await expect(readonly).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
+  // <fieldset disabled> 覆盖全部后代控件：模板选择、过滤输入、表达式与列操作都不可操作
+  await expect(panel.getByLabel("选择模板")).toBeDisabled();
+  await expect(panel.locator(CATALOG_FILTER)).toBeDisabled();
+  await expect(panel.getByLabel("表达式 1")).toBeDisabled();
+  await expect(panel.getByRole("button", {name: "添加输出列"})).toBeDisabled();
+  await expect(panel.getByRole("button", {name: "另存为"})).toBeDisabled();
+  // 宿主页脚"保存"同样停用：只读态不产生静默无效保存
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+  expect(mock.puts).toHaveLength(0);
+  // M2：没有工作区反馈就没有"已校验"这回事，状态列必须是中性"未校验"而不是"有效"
+  await expect(panel.locator(".status-badge").first()).toHaveText("未校验");
+  await expect(panel.locator(".status-badge").first()).toHaveClass(/neutral/);
+});

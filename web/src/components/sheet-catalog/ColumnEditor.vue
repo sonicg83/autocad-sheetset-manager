@@ -157,7 +157,11 @@ watch(() => props.catalog.caretRequest.value, async request => {
             <p v-if="row.error" class="error column-error" role="alert">{{ errorText(row.error) }}</p>
           </div>
           <span class="status-cell">
-            <span class="status-badge" :class="row.error ? 'bad' : 'good'">{{ row.error ? $t("extensions.sheetCatalog.columnStatusInvalid") : $t("extensions.sheetCatalog.columnStatusValid") }}</span>
+            <!-- 列状态只能来自服务端诊断：同一服务端下，无诊断（含"不传校验反馈"的设置中心
+                 面板）不等于"已校验通过"。此前无反馈时每列都顶着绿色"有效"，而那次校验
+                 根本没发生过（M2）。有反馈时行为完全不变。 -->
+            <span v-if="feedback" class="status-badge" :class="row.error ? 'bad' : 'good'">{{ row.error ? $t("extensions.sheetCatalog.columnStatusInvalid") : $t("extensions.sheetCatalog.columnStatusValid") }}</span>
+            <span v-else class="status-badge neutral">{{ $t("extensions.sheetCatalog.columnStatusUnchecked") }}</span>
           </span>
           <div class="row-actions">
             <button type="button" :disabled="row.index === 0" :aria-label="$t('extensions.sheetCatalog.moveUp', {index: row.index + 1})" @click="catalog.moveColumn(row.column.columnId, -1)">↑</button>
@@ -202,6 +206,8 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .status-badge{font-size:12px;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .status-badge.good{color:var(--color-success);background:var(--color-success-bg)}
 .status-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
+/* 无校验反馈：中性色，不得冒充"有效" */
+.status-badge.neutral{color:var(--color-text-muted);background:var(--color-bg-muted)}
 .row-actions{display:flex;gap:4px;justify-content:flex-end;padding-top:2px}
 .row-actions button{width:30px;min-height:30px;border:1px solid var(--color-border-strong);border-radius:6px;background:var(--color-bg-surface);font-size:13px;line-height:1}
 .row-actions button:hover:not(:disabled){background:var(--color-bg-muted)}

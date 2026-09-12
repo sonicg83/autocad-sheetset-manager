@@ -86,6 +86,8 @@ export default {
     columnsHeadActions: "操作",
     columnStatusValid: "有效",
     columnStatusInvalid: "需修正",
+    // 无校验反馈（设置中心 custom 面板没有工作区快照）时的中性列状态：不冒充"有效"
+    columnStatusUnchecked: "未校验",
     // 花括号用 vue-i18n 字面量转义写成 {{ / }}，避免被解析为插值
     expressionSyntaxHint: "表达式只支持文字、字段引用和 {'{'}{'{'} / {'}'}{'}'} 花括号转义。",
     // 兼容性摘要

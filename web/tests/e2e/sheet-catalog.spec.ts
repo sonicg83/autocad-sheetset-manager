@@ -1104,3 +1104,98 @@ test.describe("初始化设置读取失败（PLAN-DM-025 Task 8 修复轮 I2）"
     await expect(page.getByRole("region", {name: "预览"})).toHaveCount(0);
   });
 });
+
+// ---- PLAN-DM-025 Task 8 修复轮 1（B 部分）：草稿变更键（I3）与只读呈现（I5）、
+//      列状态徽标（M2）、进行中总行数（M6）----
+test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
+  // I3：变更键必须含列 UUID。后端 preview_digest 按列的规范 ID 计算，因此表头与表达式
+  // 逐一相同、只有列 UUID 不同的两份模板是两次不同的预览输入。只比较内容时切换模板
+  // 既不重放预览、也不显示"草稿已修改，预览更新后才能导出"（previewedColumns 没变），
+  // 导出按钮保持可用，执行却会被 REPREVIEW_REQUIRED 拒绝。
+  test("等值模板切换（列 UUID 不同）重放预览并允许导出", async ({page}) => {
+    const columns = [{header: "图号", expression: "{sheet.number}"}, {header: "图名", expression: "{sheet.title}"}];
+    const first = userTemplate("等值模板甲", columns);
+    const second = userTemplate("等值模板乙", columns);
+    // 前置：两份模板的表头与表达式逐一相同（唯一差别是列 UUID），否则本用例证明不了 I3
+    expect(first.columns.map(column => [column.header, column.expression]))
+      .toEqual(second.columns.map(column => [column.header, column.expression]));
+    expect(first.columns.map(column => column.column_id)).not.toEqual(second.columns.map(column => column.column_id));
+
+    const state = await openCatalog(page, {userTemplates: [first, second], preferenceTemplateId: first.template_id});
+    const submittedColumnIds = (index: number) => (state.previewRequests[index]!.template as {columns: {column_id: string}[]}).columns.map(column => column.column_id);
+    await expect(page.getByLabel("选择模板")).toHaveValue(first.template_id);
+    // 首帧预览（偏好选中的等值模板甲）
+    await expect.poll(() => state.previewRequests.length).toBe(1);
+    expect(submittedColumnIds(0)).toEqual(first.columns.map(column => column.column_id));
+
+    await page.getByLabel("选择模板").selectOption(second.template_id);
+    // 列 UUID 不同就是新的预览输入：必须重放（旧实现按内容签名比较，这里不会发出请求）
+    await expect.poll(() => state.previewRequests.length).toBe(2);
+    expect(submittedColumnIds(1)).toEqual(second.columns.map(column => column.column_id));
+    // 列状态仍由服务端诊断驱动（M2 不得拿业务页开刀）：本次预览无错误 → 逐列"有效"
+    await expect(page.getByRole("region", {name: "输出列编辑器"}).locator(".status-badge").first()).toHaveText("有效");
+    // 导出门禁回到就绪态：按钮可用且执行成功（模板快照带的是选中模板的列 UUID）
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+    await page.getByRole("button", {name: "导出 XLSX"}).click();
+    await expect(page.getByText("图纸目录已保存到")).toBeVisible();
+    expect((state.executeRequests.at(-1)!.template as {columns: {column_id: string}[]}).columns.map(column => column.column_id))
+      .toEqual(second.columns.map(column => column.column_id));
+  });
+
+  // I5：高版本只读（EXTENSION_SETTINGS_SCHEMA_NEWER）此前在业务页完全不可见——控制器在
+  // 只读态直接返回 false，点"保存修改"没有任何反馈。现在业务页给出与设置中心同源的
+  // 只读通知，并把三个保存入口（保存修改/另存为/删除模板）与守卫的"保存为模板"停用。
+  test("高版本只读：业务页可见通知且保存入口停用，不留下无反馈的按钮", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {settingsReadOnly: true, userTemplates: [template], preferenceTemplateId: template.template_id});
+
+    const notice = page.getByTestId("sheet-catalog-readonly");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("已只读保留，无法覆盖保存");
+    await expect(notice).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
+
+    // 有未保存修改（本地草稿仍然可编辑）时保存入口也必须停用：控制器只读短路不落盘，
+    // 按钮可点就是"点了没反应"的静默出口
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await expect(page.getByText("有未保存修改")).toBeVisible();
+    await expect(page.getByRole("button", {name: "保存修改"})).toBeDisabled();
+    await expect(page.getByRole("button", {name: "另存为"})).toBeDisabled();
+    await expect(page.getByRole("button", {name: "删除模板"})).toBeDisabled();
+    expect(state.settingsPutBodies).toHaveLength(0);
+
+    // 导航守卫的"保存为模板"同源停用（此前点它只静默停在原地）
+    await page.getByRole("tablist").getByRole("tab").first().click();
+    const guard = page.getByRole("dialog", {name: "未保存的模板修改"});
+    await expect(guard).toBeVisible();
+    await expect(guard.getByRole("button", {name: "保存为模板"})).toBeDisabled();
+    await guard.getByRole("button", {name: "留在此处"}).click();
+    await expect(guard).toBeHidden();
+    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+  });
+
+  // M6：进行中状态不得让文案与数字自相矛盾。过滤提示与总数文案必须来自同一份预览：
+  // 此前提示只在 ready 态显示，而总数一直用旧预览的（已过滤）行数，重算过程中会出现
+  // "输出 24 张图纸"却没有"已过滤 1 张图纸"。
+  test("预览进行中：过滤提示与总数取自同一份预览，不出现自相矛盾的计数", async ({page}) => {
+    await openCatalog(page, {excludedTitleKeywords: ["003"]});
+    const preview = page.getByRole("region", {name: "预览"});
+    await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+
+    // 挂起下一次预览响应，把页面钉在 pending 态：这一期间仍展示旧预览的数字与其过滤提示
+    let release = () => {};
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/extensions/*/actions/*/preview", async route => {
+      await held;
+      await route.fallback(); // 交给夹具的预览处理器（fallback 保持既有路由生效）
+    });
+    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await expect(preview.getByText("正在更新预览…")).toBeVisible();
+    await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+    release();
+    // 新预览到达后回到就绪态（表格首列按新表达式求值），过滤计数仍与服务端一致
+    await expect(preview.getByRole("cell", {name: "001号", exact: true}).first()).toBeVisible();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+  });
+});

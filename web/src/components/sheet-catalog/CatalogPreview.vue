@@ -1,6 +1,7 @@
 <!-- 预览表（SPEC-DM-012 §7.2 区域 5）：最多 20 行真实数据 + 过滤后的总行数；命中过滤
      时在同一卡头追加可见「已过滤 N 张图纸」（R14：不新增布局区域，filtered_rows=0 时不出现，
-     SPEC §8.1）。宽列只在受控内容区横向滚动（overflow-x 限制在表容器），不造成整页横向
+     SPEC §8.1）。总数与过滤提示始终来自同一份预览（M6），进行中状态只额外显示
+     「正在更新预览…」，不隐藏或改写已经展示的那组数字。宽列只在受控内容区横向滚动（overflow-x 限制在表容器），不造成整页横向
      溢出（SPEC §13）。
      PLAN-DM-023 Task 4（V3）：刷新预览上提到卡头，导出与反馈由 CatalogActions 作为
      卡底操作坞内嵌；卡片按冻结 Demo 压缩到 min-height:250px，表区吃掉剩余高度并
@@ -11,8 +12,9 @@ import type {SheetCatalogController} from "../../composables/useSheetCatalog";
 import CatalogActions from "./CatalogActions.vue";
 
 const props = defineProps<{catalog: SheetCatalogController}>();
-// 只有 status=ready 时的 filtered_rows 是可信的（过期预览/失败预览不显示过滤提示）
-const filteredCount = computed(() => (props.catalog.previewStatus.value === "ready" ? props.catalog.preview.value?.filteredRows ?? 0 : 0));
+// 过滤计数与总数文案同源：两者都取自当前展示的那份预览。只让 ready 态生效会让进行中
+// （或失败但保留旧预览）时出现"输出 24 张图纸"却没有"已过滤 1 张图纸"的自相矛盾（M6）。
+const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?? 0);
 </script>
 <template>
   <section class="catalog-preview panel" :aria-label="$t('extensions.sheetCatalog.previewLabel')">

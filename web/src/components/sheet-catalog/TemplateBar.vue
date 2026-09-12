@@ -10,6 +10,8 @@ import type {SheetCatalogTemplateController} from "../../composables/useSheetCat
 // 不依赖预览或导出——同一份接口既服务业务页，也服务设置中心的 custom 面板。
 // hideConflict：设置中心子视图的修订冲突横幅由宿主（ExtensionSettingsHost）渲染，
 // 与冻结设计一致；面板内不再叠一份，避免同一冲突出现两条一模一样的出路按钮。
+// 三步保存入口（保存/另存为/删除）在高版本只读（catalog.readOnly）下一律停用：
+// 控制器在只读时直接返回 false，按钮若仍可点就是"点了没反应"的静默出口（I5）。
 const props = defineProps<{catalog: SheetCatalogTemplateController; hideConflict?: boolean}>();
 const emit = defineEmits<{saved: []; removed: []; confirmRemove: []}>();
 const {t, locale} = useI18n();
@@ -89,9 +91,9 @@ async function confirmSaveAs() {
       <span class="template-state">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
       <span v-if="catalog.dirty.value && !catalog.canSaveInPlace.value" class="draft-name">{{ $t("extensions.sheetCatalog.unnamedDraft") }}</span>
       <span class="spacer"></span>
-      <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="!catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
-      <button type="button" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
-      <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
+      <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="catalog.readOnly.value || !catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
+      <button type="button" :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
+      <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" :disabled="catalog.readOnly.value" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
     <p v-if="catalog.saveError.value" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
     <div v-if="catalog.conflict.value && !hideConflict" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
