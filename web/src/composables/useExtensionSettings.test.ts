@@ -2,7 +2,9 @@
 // 两条服务端 409 的收口必须在组合层可测，而不是只靠 E2E 的整条链路——
 // ① 修订冲突横幅回显「服务端响应里的稳定码」，前端不得写死字面量；
 // ② 高版本只读判定必须与「读取只读横幅数据的那次刷新」解耦：刷新失败仍粘住只读，
-//    否则会退回陈旧的可写快照，保存按钮可用且每次保存都重复同一个 409（确定性死循环）。
+//    否则会退回陈旧的可写快照，保存按钮可用且每次保存都重复同一个 409（确定性死循环）；
+// ③ 修订冲突后的刷新失败必须在状态层留下「快照可能已过期」的可观测事实（loadFailed），
+//    否则 .cfg 级别的陈旧提示没有数据源，冲突横幅会叫用户按陈旧徽标重试。
 import {beforeEach, describe, expect, it, vi} from "vitest";
 
 const {fetchMock, putMock} = vi.hoisted(() => ({
@@ -81,5 +83,26 @@ describe("useExtensionSettings 服务端 409 收口", () => {
 
     await state.save(); // 只读态下再保存是 no-op：不产生第二个必然 409 的请求
     expect(putMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("修订冲突后的刷新失败：快照与冲突都保留，只留下可见的刷新失败事实", async () => {
+    fetchMock.mockResolvedValueOnce(view()); // 首次加载成功：冲突横幅要回显的陈旧快照
+    putMock.mockRejectedValue(new ApiError(
+      "设置已被其他保存更新", 409, "EXTENSION_SETTINGS_INVALID",
+      undefined, undefined, undefined, {expected_revision: 0, current_revision: 1},
+    ));
+    const state = useExtensionSettings("demo.frame-update");
+    await state.load();
+    state.setField("batch_limit", 70);
+    fetchMock.mockRejectedValue(new Error("refresh failed")); // 冲突后的那次刷新失败
+
+    await state.save();
+
+    // 快照降级保留（不因刷新失败清空子视图），本地编辑不被丢弃
+    expect(state.snapshot.value).toEqual(view());
+    expect(state.edits.value).toEqual({batch_limit: 70});
+    expect(state.conflict.value).toEqual({code: "EXTENSION_SETTINGS_INVALID", expectedRevision: 0, currentRevision: 1});
+    // 「下方内容可能已过期」的可观测事实：呈现层据此在 .cfg 级别就地提示
+    expect(state.loadFailed.value).toBe(true);
   });
 });

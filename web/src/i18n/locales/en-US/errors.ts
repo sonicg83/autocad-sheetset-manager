@@ -124,7 +124,7 @@ export default {
     incompatible: "The extension is incompatible with the current host version",
     capabilityUnavailable: "The extension is currently unavailable",
     settingsInvalid: "The extension settings are invalid or were changed elsewhere; reopen and retry",
-    schemaNewer: "These extension settings were saved by a newer version and are kept read-only; saving is blocked",
+    schemaNewer: "These extension settings were saved by a newer version and are kept read-only; saving is blocked and unsaved input is not kept",
     settingsChanged: "The extension settings changed; preview again before exporting",
     actionNotFound: "The extension does not declare this action",
     saveGrantInvalid: "The save grant is invalid or expired; run Save As again",

@@ -52,9 +52,15 @@ export default {
     saved: "Extension settings saved",
     loading: "Loading extension settings…",
     loadFailed: "Failed to load the extension settings.",
+    // Refresh failure while a snapshot exists: one in-place notice shared by the
+    // read-only, conflict and normal editing states (the snapshot is kept).
+    refreshFailed: "Refreshing the extension settings failed; the content below may be stale.",
     closeExtra: "Closing will also discard the unsaved changes of the current extension settings.",
     unsupportedControl: "The control type ({control}) of this field is not supported by the settings center; no JSON text box is provided.",
     customUnavailable: "The settings component declared by this extension (route_key {route_key}) is not in this build's compile-time allowlist; its content is not rendered and is never degraded into a JSON text box.",
+    // Distinct cause from the line above: custom declared without a component key,
+    // so there is no key value to echo back.
+    customUnavailableMissingRouteKey: "This extension declares a dedicated settings component but registers no component key (route_key); its content is not rendered and is never degraded into a JSON text box.",
     confirmBack: {
       title: "Unsaved extension settings changes",
       message: "Going back to the extension list discards the unsaved changes of “{name}”; saved settings are not affected.",
@@ -63,7 +69,8 @@ export default {
     conflict: {
       title: "Save conflict",
       message: "The settings of “{name}” were updated by another save; your local edits are kept. Retry with the server's new revision or discard the local edits.",
-      diagnostic: "409 {code} (expected_revision={expected_revision}, current_revision={current_revision})",
+      // The endpoint prefix matches the frozen demo's wire contract line.
+      diagnostic: "PUT /api/extensions/{extension_id}/settings → 409 {code} (expected_revision={expected_revision}, current_revision={current_revision})",
       retry: "Retry with new revision",
       discard: "Discard local edits",
     },

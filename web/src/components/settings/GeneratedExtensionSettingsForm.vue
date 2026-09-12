@@ -40,6 +40,16 @@ const {t} = useI18n();
 function inputId(key: string): string {
   return `extension-settings-input-${key}`;
 }
+function labelId(key: string): string {
+  return `extension-settings-label-${key}`;
+}
+// 只有真正渲染出可聚焦控件的行才把可见标签用 <label for> 绑上去：enum 行是
+// span[role=radiogroup]、契约外控件行只有诊断文案，两者的 for 都会指向不存在的 id，
+// 所以这两行的可见标签改为 span[id]，由控件自身用 aria-labelledby 指向它
+function hasOwnControl(item: ExtensionSettingsItem): boolean {
+  const kind = controlKind(item.control);
+  return kind === "boolean" || kind === "integer" || kind === "number" || kind === "string";
+}
 // 生效显示值：编辑缓冲优先 → 服务端持久值 → Provider 默认值
 function current(item: ExtensionSettingsItem): unknown {
   if (item.key in props.edits) return props.edits[item.key];
@@ -71,7 +81,8 @@ function errorOf(item: ExtensionSettingsItem): ExtensionFieldError | undefined {
       v-for="item in items" :key="item.key" class="ef-row"
       :class="{dirty: item.key in edits, error: errorOf(item) !== undefined}" :data-field="item.key"
     >
-      <label class="ef-label" :for="inputId(item.key)">{{ t(item.label_key) }}</label>
+      <label v-if="hasOwnControl(item)" class="ef-label" :for="inputId(item.key)">{{ t(item.label_key) }}</label>
+      <span v-else class="ef-label" :id="labelId(item.key)">{{ t(item.label_key) }}</span>
       <div class="ef-main">
         <BooleanSwitch
           v-if="controlKind(item.control) === 'boolean'"
@@ -95,7 +106,7 @@ function errorOf(item: ExtensionSettingsItem): ExtensionFieldError | undefined {
         >
         <span
           v-else-if="controlKind(item.control) === 'enum'" class="ef-radio-line"
-          role="radiogroup" :aria-label="t(item.label_key)"
+          role="radiogroup" :aria-labelledby="labelId(item.key)"
         >
           <label v-for="option in item.options" :key="option">
             <input

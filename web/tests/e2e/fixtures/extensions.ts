@@ -84,6 +84,13 @@ export interface ExtensionSettingsMock {
   puts: {schema_version: number; expected_revision: number; value: Record<string, unknown>}[];
   /** 置 true 后所有后续 GET 都以 500 失败（覆盖“只读判定不得依赖刷新”的场景） */
   failGets: boolean;
+  /** 置 true 后所有后续 PUT 都以 500 失败（覆盖非字段级保存失败横幅的场景） */
+  failPuts: boolean;
+  /**
+   * 修订冲突时服务端返回的稳定码（默认为线上设置 PUT 的 EXTENSION_SETTINGS_INVALID）。
+   * 用例可改成另一个已登记码，以证明横幅是“原样透传服务端响应”而不是写死字面量。
+   */
+  conflictCode: string;
   /** 服务端当前快照：测试可在两次请求之间直接推进 revision 模拟“另一窗口已保存” */
   server: {
     schema_version: number;
@@ -125,12 +132,15 @@ export async function installExtensionSettings(page: Page, options: {
   value?: Record<string, unknown>;
   readOnly?: boolean;
   items?: GeneratedSettingsItem[];
+  conflictCode?: string;
 } = {}): Promise<ExtensionSettingsMock> {
   const items = options.items ?? generatedSettingsItems();
   const state: ExtensionSettingsMock = {
     gets: 0,
     puts: [],
     failGets: false,
+    failPuts: false,
+    conflictCode: options.conflictCode ?? "EXTENSION_SETTINGS_INVALID",
     server: {
       schema_version: options.schemaVersion ?? 1,
       revision: options.revision ?? 0,
@@ -157,6 +167,8 @@ export async function installExtensionSettings(page: Page, options: {
     }
     const body = (await route.request().postDataJSON()) as ExtensionSettingsMock["puts"][number];
     state.puts.push(body);
+    // 非字段级保存失败（5xx）：前端须就地横幅、保留输入并保持保存可用
+    if (state.failPuts) return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "boom"}});
     // 高版本只读：PUT 一律 409 拒绝覆盖（ARCH-DM-006 §8.1）
     if (state.server.read_only) {
       return route.fulfill({
@@ -180,7 +192,7 @@ export async function installExtensionSettings(page: Page, options: {
     if (body.expected_revision !== state.server.revision) {
       return route.fulfill({
         status: 409,
-        json: {code: "EXTENSION_SETTINGS_INVALID", message_key: "errors.extension.settingsInvalid", params: {expected_revision: body.expected_revision, current_revision: state.server.revision}, message: "设置已被其他保存更新"},
+        json: {code: state.conflictCode, message_key: "errors.extension.settingsInvalid", params: {expected_revision: body.expected_revision, current_revision: state.server.revision}, message: "设置已被其他保存更新"},
       });
     }
     state.server = {...state.server, revision: state.server.revision + 1, value: body.value};

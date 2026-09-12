@@ -51,9 +51,14 @@ export default {
     saved: "扩展设置已保存",
     loading: "正在加载扩展设置…",
     loadFailed: "扩展设置加载失败。",
+    // 快照已存在时的刷新失败：只读、冲突与普通编辑态共用同一条就地提示
+    // （快照保留，徽标与字段值可能落后于服务端）
+    refreshFailed: "扩展设置刷新失败，下方内容可能已过期。",
     closeExtra: "关闭将同时放弃当前扩展设置中未保存的修改。",
     unsupportedControl: "该字段的控件类型（{control}）在当前设置中心不受支持，不提供 JSON 文本框。",
     customUnavailable: "该扩展声明的设置组件（route_key {route_key}）不在本程序的编译期白名单内，设置中心不呈现其内容，也不会退化为 JSON 文本框。",
+    // 与上一条不同因：声明了 custom 却没登记组件键，此时没有任何键值可回显
+    customUnavailableMissingRouteKey: "该扩展声明了专属设置组件但没有登记组件键（route_key），设置中心不呈现其内容，也不会退化为 JSON 文本框。",
     confirmBack: {
       title: "有未保存的扩展设置修改",
       message: "返回扩展列表将放弃“{name}”的本次未保存修改；已保存的设置不受影响。",
@@ -62,7 +67,8 @@ export default {
     conflict: {
       title: "保存冲突",
       message: "“{name}”的设置已被其他保存更新，本地编辑已保留。可按服务端新修订重试，或放弃本地修改。",
-      diagnostic: "409 {code}（expected_revision={expected_revision}, current_revision={current_revision}）",
+      // 端点前缀与冻结 Demo 的线契约行一致（PUT /api/extensions/{id}/settings → 409 …）
+      diagnostic: "PUT /api/extensions/{extension_id}/settings → 409 {code}（expected_revision={expected_revision}, current_revision={current_revision}）",
       retry: "按新修订重试",
       discard: "放弃本地修改",
     },

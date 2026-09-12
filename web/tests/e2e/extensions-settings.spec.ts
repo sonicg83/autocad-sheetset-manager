@@ -265,6 +265,11 @@ test("SC-16 卡片四层信息与不可点击：声明设置时可聚焦元素�
 const GENERATED_ID = "demo.frame-update";
 const GENERATED_NAME = "图框批量更新";
 
+// 修订冲突码探针：刻意不同于设置 PUT 的线上默认码（EXTENSION_SETTINGS_INVALID），
+// 使「冲突横幅回显服务端返回的稳定码」这条断言在 E2E 里同样可失败——
+// 前端一旦写死字面量即红，不再只靠单测钉住透传。
+const CONFLICT_PROBE_CODE = "EXTENSION_SETTINGS_CHANGED";
+
 // 虚构 generated 扩展（Demo 的 g4-14 同一条；不写入 src/dst_manager/extensions/builtin/index.py）
 function generatedExtension(overrides: Record<string, unknown> = {}) {
   return extensionSummary({
@@ -320,6 +325,9 @@ test("扩展配置入口：未知 custom route_key fail-closed 成稳定诊断�
   await installExtensions(page, [
     extensionSummary(),
     extensionSummary({extension_id: "demo.unknown-custom", name_key: "未知组件扩展", description_key: "声明了白名单外的设置组件。", settings_contribution: {presentation: "custom", route_key: "../views/UnknownSettings.vue"}, ui_contributions: []}),
+    // 声明 custom 却没登记组件键（空 route_key）：原因与白名单未命中不同，
+    // 不能把空值塞进「route_key {route_key}」模板印出带空白值的假原因
+    extensionSummary({extension_id: "demo.missing-route-key", name_key: "缺组件键扩展", description_key: "声明了专属设置组件但没登记组件键。", settings_contribution: {presentation: "custom"}, ui_contributions: []}),
   ]);
   await installExtensionSettings(page, {items: [], value: {}});
   const requests: string[] = [];
@@ -343,6 +351,14 @@ test("扩展配置入口：未知 custom route_key fail-closed 成稳定诊断�
   await openConfigView(page, "未知组件扩展");
   await expect(dialog.getByTestId("extension-settings-unavailable")).toContainText("../views/UnknownSettings.vue");
   expect(requests.filter(url => url.includes("UnknownSettings") || url.includes("sheet-catalog-settings"))).toEqual([]);
+
+  // 空 route_key：换一条诊断，不回显一个不存在的键值
+  await dialog.getByRole("button", {name: "返回扩展列表"}).click();
+  await openConfigView(page, "缺组件键扩展");
+  const missing = dialog.getByTestId("extension-settings-unavailable");
+  await expect(missing).toContainText("没有登记组件键（route_key）");
+  await expect(missing).not.toContainText("（route_key ）");
+  await expect(missing).not.toContainText("不在本程序的编译期白名单内");
 });
 
 test("generated 设置：字段按服务端顺序呈现、默认值来自 Provider，保存只提交本扩展快照", async ({page}) => {
@@ -365,6 +381,14 @@ test("generated 设置：字段按服务端顺序呈现、默认值来自 Provid
   await expect(dialog.locator('input[data-key="batch_limit"]')).toHaveValue("50");
   await expect(dialog.locator('input[data-key="ratio_threshold"]')).toHaveValue("0.5");
   await expect(dialog.getByRole("radio", {name: "ask"})).toBeChecked();
+  // enum 行的可见标签即 radiogroup 的可访问名（aria-labelledby 指向标签元素）：
+  // enum 行不渲染带 id 的控件，所以不能挂 <label for>（会指向不存在的 id）
+  const enumRow = dialog.locator('[data-field="conflict_strategy"]');
+  await expect(enumRow.locator(".ef-label")).toHaveCount(1);
+  expect(await enumRow.locator(".ef-label").evaluate(el => el.tagName)).toBe("SPAN");
+  expect(await enumRow.locator(".ef-label").getAttribute("for")).toBeNull();
+  await expect(enumRow.getByRole("radiogroup")).toHaveAttribute("aria-labelledby", "extension-settings-label-conflict_strategy");
+  await expect(enumRow.getByRole("radiogroup")).toHaveAccessibleName("属性冲突处理");
   // boolean 复用设置中心既有滑动开关（与核心 bool 字段同形态）
   const boolSwitch = dialog.getByRole("switch", {name: "回写标题栏"});
   await expect(boolSwitch).toHaveClass(/switch/);
@@ -451,8 +475,62 @@ test("generated 设置：保存 422 按 params.field 行内定位、输入保留
   await expect(dialog.locator('[data-field="batch_limit"] .ef-error')).toHaveCount(0);
 });
 
-test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订，可按新修订重试或放弃本地修改", async ({page}) => {
+test("扩展设置 加载失败：就地提示与重试；重试成功后焦点落在首个字段控件（不退回 <body>）", async ({page}) => {
   const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  mock.failGets = true; // 打开子视图的首次 GET 失败
+  await page.getByRole("button", {name: `配置 ${GENERATED_NAME}`}).click();
+  // 无快照时是独立失败态：不得静默呈现为空表单，也不得渲染任何字段控件
+  const notice = dialog.getByTestId("extension-settings-load-failed");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("扩展设置加载失败。");
+  await expect(dialog.locator(".ef-row")).toHaveCount(0);
+  // 失败态下没有字段控件：焦点落在该状态唯一的可用控件（重试）上，不退回 <body>
+  await expect(notice.getByRole("button", {name: "重试"})).toBeFocused();
+
+  mock.failGets = false;
+  await notice.getByRole("button", {name: "重试"}).click();
+  await expect(dialog.locator('input[data-key="batch_limit"]')).toHaveValue("50");
+  // 重试成功与进入时同一落点语义：重试按钮随失败态被移除，焦点必须重新定在首字段控件上
+  await expect(dialog.getByLabel("图框块名前缀")).toBeFocused();
+});
+
+test("扩展设置 保存失败（5xx）：非字段级就地横幅可见、输入保留、保存按钮仍可用", async ({page}) => {
+  const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const limit = dialog.locator('input[data-key="batch_limit"]');
+  await limit.fill("70");
+  mock.failPuts = true; // 保存一律 500（非 422/409 的非字段级失败）
+  await dialog.getByRole("button", {name: "保存"}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+  // 未知错误的服务端响应没有 message_key：横幅显示本地化摘要，不把原始文本当正文
+  const banner = dialog.getByTestId("extension-settings-save-failed");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("操作失败，发生未知错误");
+  // 输入不被替换、子视图不关闭、保存仍可用（可直接重试）
+  await expect(limit).toHaveValue("70");
+  await expect(dialog.locator(CONFIG_VIEW)).toBeVisible();
+  await expect(dialog.getByRole("button", {name: "保存"})).toBeEnabled();
+  // 修正后重试成功：横幅随下一次编辑/保存收敛
+  mock.failPuts = false;
+  await dialog.getByRole("button", {name: "保存"}).click();
+  await expect(dialog.getByTestId("extension-settings-saved-pill")).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  expect(mock.server.value.batch_limit).toBe(70);
+});
+
+test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订，可按新修订重试或放弃本地修改", async ({page}) => {
+  // 夹具的冲突码换成探针码：横幅必须回显服务端返回的码，写死字面量即红
+  const mock = await installExtensionSettings(page, {conflictCode: CONFLICT_PROBE_CODE});
   await installExtensions(page, [generatedExtension()]);
   await page.goto("/");
   await openExtensionsSection(page);
@@ -466,9 +544,9 @@ test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订
   await dialog.getByRole("button", {name: "保存"}).click();
   const conflict = dialog.locator(".cfg-conflict");
   await expect(conflict).toBeVisible();
-  // 横幅回显的是线上实际返回的稳定码（夹具与后端同一路径：设置 PUT 冲突码即 EXTENSION_SETTINGS_INVALID），
+  // 横幅回显的是线上实际返回的稳定码（夹具与后端同一路径）与端点前缀，
   // 不是前端写死的字面量——服务端换码时这里必须跟着变
-  await expect(conflict).toContainText("409 EXTENSION_SETTINGS_INVALID");
+  await expect(conflict).toContainText(`PUT /api/extensions/${GENERATED_ID}/settings → 409 ${CONFLICT_PROBE_CODE}`);
   await expect(conflict).toContainText("expected_revision=0, current_revision=1");
   await expect(limit).toHaveValue("70");
   // 冲突后刷新服务端快照（第二次 GET），但保留本地编辑
@@ -491,6 +569,38 @@ test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订
   await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
 });
 
+test("扩展设置 冲突后刷新失败：就地提示「内容可能已过期」与冲突横幅同时可见，输入保留", async ({page}) => {
+  const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const limit = dialog.locator('input[data-key="batch_limit"]');
+  await limit.fill("70");
+  mock.server.revision = 1; // 另一窗口已保存：本地 expected_revision 过期
+  mock.failGets = true; // 冲突后的快照刷新失败
+  await dialog.getByRole("button", {name: "保存"}).click();
+
+  const conflict = dialog.locator(".cfg-conflict");
+  await expect(conflict).toBeVisible();
+  await expect(limit).toHaveValue("70");
+  // 头部徽标仍是刷新前的陈旧快照（服务端已是 r1）：横幅让人「按新修订重试」时，
+  // 必须有一条在 .cfg 级别可见的提示说明下方内容可能已过期（不只长在只读横幅里）
+  await expect(dialog.locator(".cfg-title .badge").first()).toHaveText("设置修订 r0");
+  const stale = dialog.getByTestId("extension-settings-refresh-failed");
+  await expect(stale).toBeVisible();
+  await expect(stale).toContainText("扩展设置刷新失败，下方内容可能已过期。");
+  // 刷新确实发生过（失败）且本地输入未被丢弃
+  await expect.poll(() => mock.gets).toBe(2);
+  expect(mock.server.value.batch_limit).toBe(50);
+  // 冲突出路仍可用：放弃本地修改后横幅与陈旧提示一并收敛
+  await dialog.getByRole("button", {name: "放弃本地修改"}).click();
+  await expect(conflict).toHaveCount(0);
+  await expect(limit).toHaveValue("50");
+});
+
 test("扩展设置 高版本只读：EXTENSION_SETTINGS_SCHEMA_NEWER 禁用输入与保存，进入焦点落在只读诊断条", async ({page}) => {
   await installExtensionSettings(page, {readOnly: true, schemaVersion: 3});
   await installExtensions(page, [generatedExtension()]);
@@ -503,6 +613,8 @@ test("扩展设置 高版本只读：EXTENSION_SETTINGS_SCHEMA_NEWER 禁用输�
   await expect(readonly).toBeVisible();
   await expect(readonly).toContainText("已只读保留，无法覆盖保存");
   await expect(readonly).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
+  // 只读态不保留未保存的输入（只读不可脏）：横幅必须说明这一点，不静默丢弃
+  await expect(readonly).toContainText("只读子视图不保留未保存的输入");
   // 只读子视图内所有控件都禁用，焦点必须落在只读诊断条（tabindex=-1），不得退回 <body>
   await expect(readonly).toBeFocused();
   await expect(dialog.locator('input[data-key="batch_limit"]')).toBeDisabled();
@@ -603,6 +715,19 @@ test("扩展配置入口：Esc 与遮罩在子视图内等价于返回扩展列�
   await limit.fill("70");
   const confirm = page.getByRole("dialog", {name: "有未保存的扩展设置修改"});
   await page.keyboard.press("Escape");
+  await expect(confirm).toBeVisible();
+  // 3) 确认框已打开时再按 Esc：只作用于最上层确认框（留在此处），
+  // 子视图仍开着、输入仍在，且不得连带关闭整个设置对话框
+  await page.keyboard.press("Escape");
+  await expect(confirm).toBeHidden();
+  await expect(dialog.locator(CONFIG_VIEW)).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(limit).toHaveValue("70");
+  // 闸门关掉后焦点归还打开它的控件（原生模态的 close 语义），不丢回 <body>
+  await expect(limit).toBeFocused();
+  // 再次打开闸门走可见入口：连续 Esc 会触发平台层对同一对话框的关闭请求节流，
+  // 与本用例要钉的「Esc 只关最上层闸门」无关
+  await dialog.getByRole("button", {name: "返回扩展列表"}).click();
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", {name: "留在此处"}).click();
   await expect(limit).toHaveValue("70");

@@ -124,7 +124,7 @@ export default {
     incompatible: "扩展与当前宿主版本不兼容，无法执行该操作",
     capabilityUnavailable: "扩展当前不可用，无法执行该操作",
     settingsInvalid: "扩展设置无效或已被其他窗口修改，请重新打开后重试",
-    schemaNewer: "扩展设置的版本高于当前程序支持的范围，已只读保留，无法覆盖保存",
+    schemaNewer: "扩展设置的版本高于当前程序支持的范围，已只读保留，无法覆盖保存；只读子视图不保留未保存的输入",
     settingsChanged: "扩展设置已变化，请重新预览后再导出",
     actionNotFound: "扩展未声明该动作，无法执行",
     saveGrantInvalid: "保存授权无效或已过期，请重新执行另存为",
