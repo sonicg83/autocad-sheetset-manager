@@ -29,12 +29,12 @@ const LIFECYCLE_STATUSES = [
   "INCOMPATIBLE", "FAILED", "STOPPING", "STOPPED",
 ] as const;
 
-// 后端扩展错误文案键全集：EXTENSION_MESSAGE_KEYS 十平台码 + runtime.py Artifact 404
+// 后端扩展错误文案键全集：EXTENSION_MESSAGE_KEYS 十一平台码 + runtime.py Artifact 404
 // key_override + preview.py 偏好保存失败 warning（errors 域 extension 小节承接）
 const BACKEND_ERROR_KEYS = [
   "notFound", "disabled", "incompatible", "capabilityUnavailable", "settingsInvalid",
-  "actionNotFound", "saveGrantInvalid", "exportDestinationChanged", "repreviewRequired",
-  "artifactWriteFailed", "artifactNotFound", "preferenceSaveFailed",
+  "schemaNewer", "actionNotFound", "saveGrantInvalid", "exportDestinationChanged",
+  "repreviewRequired", "artifactWriteFailed", "artifactNotFound", "preferenceSaveFailed",
 ] as const;
 
 describe("extensions 域语言资源（PLAN-DM-020 Task 10）", () => {

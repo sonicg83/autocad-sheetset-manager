@@ -10,6 +10,8 @@
   PUT 以 ``EXTENSION_SETTINGS_SCHEMA_NEWER``/409 拒绝覆盖；
 - 保存：Provider 校验与规范化 → ``ExtensionStore`` 条件更新（乐观并发，
   竞争写入 409），Provider 业务错误原样上抛；
+- 呈现：``field_specs()`` 只读返回 ``generated`` 的 Provider 字段元数据，
+  供接口层与清单的排序/i18n key 合并（§8.2），不读取 Store；
 - 快照：把有效值递归冻结，并以 ``extension_id`` + ``settings_schema`` + 有效值
   计算稳定摘要，供动作调用绑定（§11）。
 
@@ -29,6 +31,7 @@ from dst_manager.extensions.settings import (
     ExtensionSettingsProvider,
     ExtensionSettingsSnapshot,
     FrozenJson,
+    SettingsFieldSpec,
     freeze_json,
     settings_digest,
 )
@@ -185,6 +188,24 @@ class ExtensionSettingsService:
     def get(self, manifest: ExtensionManifest) -> ExtensionSettingsView:
         """读取设置视图：零值 / 内存迁移 / 有效值解析 / 未知高版本只读保护。"""
         return self._view_or_read_only(manifest, self._provider_or_none(manifest))
+
+    # ------------------------------------------------------------------ 呈现
+
+    def field_specs(self, manifest: ExtensionManifest) -> tuple[SettingsFieldSpec, ...]:
+        """该扩展可生成字段的 Provider 元数据（只读，不访问 Store）。
+
+        ``generated`` 呈现的字段项由接口层把这里的控件类型、默认值与约束与
+        清单的排序和 i18n key 合并（ARCH-DM-006 §8.2）；``custom`` 呈现或未
+        声明设置的扩展没有可持续生成的字段，返回空元组。Provider 登记或配对
+        异常与读取一致，上抛同一稳定诊断，由调用方映射为契约化错误。
+        """
+        contribution = manifest.settings_contribution
+        if contribution is None or contribution.presentation != "generated":
+            return ()
+        provider = self._provider_or_none(manifest)
+        if provider is None:
+            return ()
+        return tuple(provider.field_definitions)
 
     # ------------------------------------------------------------------ 保存
 

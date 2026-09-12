@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from dst_manager.extensions.settings import SettingsFieldControl
 from dst_manager.interfaces.contracts import ContractModel
 
 __all__ = [
@@ -28,7 +29,10 @@ __all__ = [
     "ExtensionPlatformErrorCode",
     "ExtensionPreferencePutRequest",
     "ExtensionPreviewRequest",
+    "ExtensionSettingsContributionModel",
+    "ExtensionSettingsItemModel",
     "ExtensionSettingsPutRequest",
+    "ExtensionSettingsResponseModel",
     "ExtensionStatePatchRequest",
     "ExtensionSummaryModel",
     "ExtensionTemplateColumnRequest",
@@ -50,6 +54,7 @@ ExtensionPlatformErrorCode = Literal[
     "EXTENSION_INCOMPATIBLE",
     "EXTENSION_CAPABILITY_UNAVAILABLE",
     "EXTENSION_SETTINGS_INVALID",
+    "EXTENSION_SETTINGS_SCHEMA_NEWER",
     "EXTENSION_ACTION_NOT_FOUND",
     "SAVE_GRANT_INVALID",
     "EXPORT_DESTINATION_CHANGED",
@@ -88,6 +93,7 @@ EXTENSION_MESSAGE_KEYS: dict[str, str] = {
     "EXTENSION_INCOMPATIBLE": "errors.extension.incompatible",
     "EXTENSION_CAPABILITY_UNAVAILABLE": "errors.extension.capabilityUnavailable",
     "EXTENSION_SETTINGS_INVALID": "errors.extension.settingsInvalid",
+    "EXTENSION_SETTINGS_SCHEMA_NEWER": "errors.extension.schemaNewer",
     "EXTENSION_ACTION_NOT_FOUND": "errors.extension.actionNotFound",
     "SAVE_GRANT_INVALID": "errors.extension.saveGrantInvalid",
     "EXPORT_DESTINATION_CHANGED": "errors.extension.exportDestinationChanged",
@@ -127,6 +133,57 @@ class ExtensionSummaryModel(ContractModel):
     error_code: ExtensionDiagnosticCode | None = None
     actions: list[ExtensionActionModel] = Field(default_factory=list)
     ui_contributions: list[ExtensionUiContributionModel] = Field(default_factory=list)
+    #: 未声明设置时为 None（设置中心不显示“配置”）；只声明呈现方式，不重复语义。
+    settings_contribution: ExtensionSettingsContributionModel | None = None
+
+
+class ExtensionSettingsContributionModel(ContractModel):
+    """设置呈现声明（ARCH-DM-006 §4.2）：摘要只暴露呈现方式与受控路由键。
+
+    ``generated`` 由宿主按设置响应的 ``items`` 动态渲染；``custom`` 由宿主编译
+    期白名单里的专属组件按 ``route_key`` 呈现。未声明设置时不携带本对象。
+    """
+
+    presentation: Literal["generated", "custom"]
+    route_key: str | None = None
+
+
+class ExtensionSettingsItemModel(ContractModel):
+    """``generated`` 设置的单个字段项：Provider 语义 + Manifest 呈现的合并结果。
+
+    控件词表（:data:`~dst_manager.extensions.settings.SettingsFieldControl`）
+    与设置中心应用设置词表独立，消费方必须显式映射；本模型只做 1:1 透传。
+    """
+
+    key: str
+    label_key: str
+    description_key: str | None = None
+    order: int
+    control: SettingsFieldControl
+    default: object
+    nullable: bool = False
+    min_value: int | float | None = None
+    max_value: int | float | None = None
+    options: list[str] = Field(default_factory=list)
+    max_length: int | None = None
+
+
+class ExtensionSettingsResponseModel(ContractModel):
+    """扩展设置读写响应：持久值 + 有效值 + 只读诊断 + 可呈现字段项。
+
+    ``value`` 是 ``extension_settings`` 的规范持久值（从未保存时是 Provider
+    默认零值），``effective_value`` 是 Provider 解析后的有效配置（含代码默认
+    值），两者语义不同且不得互相代替。``items`` 恒存在：``custom`` 呈现与未
+    声明设置的扩展为空数组。
+    """
+
+    schema_version: int
+    revision: int
+    value: dict[str, object]
+    effective_value: dict[str, object]
+    read_only: bool = False
+    diagnostic_code: str | None = None
+    items: list[ExtensionSettingsItemModel] = Field(default_factory=list)
 
 
 class ExtensionStatePatchRequest(ContractModel):

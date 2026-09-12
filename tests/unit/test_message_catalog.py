@@ -124,7 +124,12 @@ SHELL_CODES = {
     "SHEET_PREFERENCES_IO",
 }
 
-ALL_KNOWN_CODES = APPLICATION_CODES | CAD_CODES | SETTINGS_CODES | SHELL_CODES
+# 扩展平台设置码（PLAN-DM-025 Task 3；GET 只读视图与 PUT 409 共用同一稳定 code）
+EXTENSION_CODES = {
+    "EXTENSION_SETTINGS_SCHEMA_NEWER",
+}
+
+ALL_KNOWN_CODES = APPLICATION_CODES | CAD_CODES | SETTINGS_CODES | SHELL_CODES | EXTENSION_CODES
 
 
 def test_catalog_covers_every_known_api_cad_shell_code():
@@ -277,6 +282,18 @@ def test_shell_extension_codes_reuse_extension_message_keys(code):
     assert code in known_codes()
     assert code in EXTENSION_MESSAGE_KEYS
     assert CATALOG[code].message_key == EXTENSION_MESSAGE_KEYS[code]
+
+
+def test_settings_schema_newer_code_reuses_extension_message_key():
+    """PLAN-DM-025 Task 3：更高 Schema 的只读/409 稳定码必须进 UI 可见目录，
+    且与扩展域 EXTENSION_MESSAGE_KEYS 共用同一文案键（前端 errors.extension
+    承接，集合由 web/src/i18n/extensions-domain.test.ts 交叉锁定）。"""
+    from dst_manager.interfaces.extension_contracts import EXTENSION_MESSAGE_KEYS
+
+    assert "EXTENSION_SETTINGS_SCHEMA_NEWER" in known_codes()
+    assert CATALOG["EXTENSION_SETTINGS_SCHEMA_NEWER"].message_key == (
+        EXTENSION_MESSAGE_KEYS["EXTENSION_SETTINGS_SCHEMA_NEWER"]
+    )
 
 
 # ---- 分层约束 ----

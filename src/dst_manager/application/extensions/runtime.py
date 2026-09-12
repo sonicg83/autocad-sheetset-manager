@@ -65,6 +65,7 @@ from dst_manager.extensions.save_grants import (
     SaveGrantStore,
     capture_baseline,
 )
+from dst_manager.extensions.settings import SettingsContribution, SettingsFieldSpec
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
@@ -432,6 +433,22 @@ class ExtensionRuntime:
     def settings_schema(self, extension_id: str) -> int:
         """清单声明的设置/偏好 schema 版本（偏好保存用）。"""
         return self._manifest(extension_id).settings_schema
+
+    def settings_contribution(self, extension_id: str) -> SettingsContribution | None:
+        """清单声明的设置呈现（未声明设置时为 ``None``）。
+
+        接口层只需要呈现方式与受控路由键；字段的 label/description/order 由
+        响应映射从同一 ``ExtensionManifest`` 读取，Provider 语义单独取。
+        """
+        return self._manifest(extension_id).settings_contribution
+
+    def settings_field_specs(self, extension_id: str) -> tuple[SettingsFieldSpec, ...]:
+        """``generated`` 字段的 Provider 元数据（无生成呈现时为空元组）。
+
+        Provider 是控件类型、默认值与约束的唯一权威（ARCH-DM-006 §8.2）；
+        接口层把它与清单的排序/i18n key 合并成响应字段项。
+        """
+        return self._settings.field_specs(self._manifest(extension_id))
 
     # ------------------------------------------------------------------ 执行
 

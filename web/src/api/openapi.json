@@ -1758,6 +1758,7 @@
                   "EXTENSION_INCOMPATIBLE",
                   "EXTENSION_CAPABILITY_UNAVAILABLE",
                   "EXTENSION_SETTINGS_INVALID",
+                  "EXTENSION_SETTINGS_SCHEMA_NEWER",
                   "EXTENSION_ACTION_NOT_FOUND",
                   "SAVE_GRANT_INVALID",
                   "EXPORT_DESTINATION_CHANGED",
@@ -1882,6 +1883,131 @@
         "title": "ExtensionPreviewRequest",
         "type": "object"
       },
+      "ExtensionSettingsContributionModel": {
+        "additionalProperties": false,
+        "description": "设置呈现声明（ARCH-DM-006 §4.2）：摘要只暴露呈现方式与受控路由键。\n\n``generated`` 由宿主按设置响应的 ``items`` 动态渲染；``custom`` 由宿主编译\n期白名单里的专属组件按 ``route_key`` 呈现。未声明设置时不携带本对象。",
+        "properties": {
+          "presentation": {
+            "enum": [
+              "generated",
+              "custom"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "route_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Key"
+          }
+        },
+        "required": [
+          "presentation"
+        ],
+        "title": "ExtensionSettingsContributionModel",
+        "type": "object"
+      },
+      "ExtensionSettingsItemModel": {
+        "additionalProperties": false,
+        "description": "``generated`` 设置的单个字段项：Provider 语义 + Manifest 呈现的合并结果。\n\n控件词表（:data:`~dst_manager.extensions.settings.SettingsFieldControl`）\n与设置中心应用设置词表独立，消费方必须显式映射；本模型只做 1:1 透传。",
+        "properties": {
+          "control": {
+            "$ref": "#/components/schemas/SettingsFieldControl"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "description_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description Key"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "max_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Value"
+          },
+          "min_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Value"
+          },
+          "nullable": {
+            "default": false,
+            "title": "Nullable",
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label_key",
+          "order",
+          "control",
+          "default"
+        ],
+        "title": "ExtensionSettingsItemModel",
+        "type": "object"
+      },
       "ExtensionSettingsPutRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1905,6 +2031,61 @@
           "expected_revision"
         ],
         "title": "ExtensionSettingsPutRequest",
+        "type": "object"
+      },
+      "ExtensionSettingsResponseModel": {
+        "additionalProperties": false,
+        "description": "扩展设置读写响应：持久值 + 有效值 + 只读诊断 + 可呈现字段项。\n\n``value`` 是 ``extension_settings`` 的规范持久值（从未保存时是 Provider\n默认零值），``effective_value`` 是 Provider 解析后的有效配置（含代码默认\n值），两者语义不同且不得互相代替。``items`` 恒存在：``custom`` 呈现与未\n声明设置的扩展为空数组。",
+        "properties": {
+          "diagnostic_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Code"
+          },
+          "effective_value": {
+            "additionalProperties": true,
+            "title": "Effective Value",
+            "type": "object"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionSettingsItemModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "read_only": {
+            "default": false,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "value": {
+            "additionalProperties": true,
+            "title": "Value",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_version",
+          "revision",
+          "value",
+          "effective_value"
+        ],
+        "title": "ExtensionSettingsResponseModel",
         "type": "object"
       },
       "ExtensionStatePatchRequest": {
@@ -1965,6 +2146,16 @@
           "name_key": {
             "title": "Name Key",
             "type": "string"
+          },
+          "settings_contribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionSettingsContributionModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "enum": [
@@ -3637,6 +3828,16 @@
         "title": "SemanticDiffResponse",
         "type": "object"
       },
+      "SettingsFieldControl": {
+        "enum": [
+          "boolean",
+          "integer",
+          "number",
+          "string",
+          "enum"
+        ],
+        "type": "string"
+      },
       "SheetCatalogColumnModel": {
         "additionalProperties": false,
         "properties": {
@@ -4946,7 +5147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionedValueModel"
+                  "$ref": "#/components/schemas/ExtensionSettingsResponseModel"
                 }
               }
             },
@@ -5026,7 +5227,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionedValueModel"
+                  "$ref": "#/components/schemas/ExtensionSettingsResponseModel"
                 }
               }
             },

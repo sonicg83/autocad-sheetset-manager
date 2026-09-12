@@ -8,7 +8,11 @@
 降级），以及 Task 11B（SC-06）的模板设置 PUT 服务端强制矩阵（save_templates
 分派：casefold 重名/100 上限/内置不可变/高 schema 保留/合法回读与通用路径隔离），
 以及 PLAN-DM-025 Task 2 的通用设置编排（Schema v2 升级、
-Provider 全权校验、过滤关键词规范回读与字段级超限错误、未知高版本只读保留）。
+Provider 全权校验、过滤关键词规范回读与字段级超限错误、未知高版本只读保留），
+以及 PLAN-DM-025 Task 3 的设置呈现与只读诊断契约（摘要 ``settings_contribution``、
+``generated`` 字段项由 Provider 元数据与 Manifest 呈现合并、``custom`` 空字段项、
+``effective_value``/``read_only``/``diagnostic_code``，以及更高 Schema 的
+HTTP 409 ``EXTENSION_SETTINGS_SCHEMA_NEWER``）。
 """
 
 import hashlib
@@ -21,10 +25,7 @@ from fastapi.testclient import TestClient
 
 import dst_manager.application.service as service_module
 import dst_manager.extensions.registry as registry_module
-from dst_manager.application.extensions.runtime import (
-    ExtensionPlatformError,
-    ExtensionRuntime,
-)
+from dst_manager.application.extensions.runtime import ExtensionRuntime
 from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import (
     BUILTIN_EXTENSION_INDEX,
@@ -37,6 +38,7 @@ from dst_manager.extensions.builtin.sheet_catalog.settings import (
 )
 from dst_manager.extensions.builtin.sheet_catalog.templates import DEFAULT_TEMPLATE
 from dst_manager.extensions.registry import ExtensionRegistry
+from dst_manager.extensions.settings import SettingsFieldSpec
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.database import Database
 from dst_manager.infrastructure.persistence.extensions import (
@@ -55,6 +57,7 @@ PLATFORM_ERROR_CODES = (
     "EXTENSION_INCOMPATIBLE",
     "EXTENSION_CAPABILITY_UNAVAILABLE",
     "EXTENSION_SETTINGS_INVALID",
+    "EXTENSION_SETTINGS_SCHEMA_NEWER",
     "EXTENSION_ACTION_NOT_FOUND",
     "SAVE_GRANT_INVALID",
     "EXPORT_DESTINATION_CHANGED",
@@ -174,6 +177,11 @@ def test_list_extensions_reports_real_sheet_catalog_state(tmp_path):
             "route_key": "sheet-catalog",
         }
     ]
+    # 摘要只声明设置呈现方式：图纸目录使用宿主编译期白名单里的专属组件
+    assert item["settings_contribution"] == {
+        "presentation": "custom",
+        "route_key": "sheet-catalog-settings",
+    }
 
 
 def test_patch_state_persists_across_restart(tmp_path):
@@ -373,6 +381,17 @@ def catalog_template_json(name, columns=(("图号", "{sheet.number}"),), templat
     }
 
 
+def assert_settings_versioned(
+    body: dict, schema_version: int, revision: int, value: dict
+) -> None:
+    """设置响应既有的版本化三字段（Task 3 追加的呈现/诊断字段由专项用例覆盖）。"""
+    assert {key: body[key] for key in ("schema_version", "revision", "value")} == {
+        "schema_version": schema_version,
+        "revision": revision,
+        "value": value,
+    }
+
+
 def put_settings(client: TestClient, templates, expected_revision=0, keywords=None):
     """按前端保存负载形态 PUT 图纸目录扩展设置（Schema v2 完整快照）。
 
@@ -396,17 +415,15 @@ def test_settings_put_validates_templates_and_roundtrips(tmp_path):
     default = client.get(url)
     assert default.status_code == 200
     # 从未保存：返回当前 Schema 的零值（内置模板是代码常量，不在 value 中）
-    assert default.json() == {"schema_version": 2, "revision": 0, "value": {}}
+    assert_settings_versioned(default.json(), 2, 0, {})
 
     template = catalog_template_json("市政标准目录")
     saved = put_settings(client, [template])
     assert saved.status_code == 200
-    assert saved.json() == {
-        "schema_version": 2,
-        "revision": 1,
-        "value": {"schema_version": 2, "user_templates": [template]},
-    }
-    # 保存结果可回读：GET 返回规范负载（内置默认模板是代码常量，不在 value 中）
+    assert_settings_versioned(
+        saved.json(), 2, 1, {"schema_version": 2, "user_templates": [template]}
+    )
+    # 保存结果可回读：GET 返回同一规范负载（内置默认模板是代码常量，不在 value 中）
     assert client.get(url).json() == saved.json()
 
     # 未知 schema 仍由设置契约先行拒绝（422），不进入 Provider 校验
@@ -442,29 +459,42 @@ def test_settings_put_stale_revision_returns_settings_conflict(tmp_path):
 
 
 def test_settings_put_normalizes_filter_keywords_and_roundtrips(tmp_path):
-    """SPEC-DM-012 §6.4：PUT 原始文本，GET 返回规范化数组；空文本清除覆盖。"""
+    """SPEC-DM-012 §6.4：PUT 原始文本，GET 返回规范化数组；空文本清除覆盖。
+
+    PLAN-DM-025 Task 3：规范化结果同时体现在持久值（``value``）与 Provider
+    解析后的有效值（``effective_value``）上，custom 呈现不生成 ``items``。
+    """
     client = make_client(tmp_path)
     url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
 
     saved = put_settings(client, [catalog_template_json("市政标准目录")], keywords="草图， TEMP,,作废,temp")
     assert saved.status_code == 200
-    assert saved.json() == {
-        "schema_version": 2,
-        "revision": 1,
-        "value": {
+    assert_settings_versioned(
+        saved.json(),
+        2,
+        1,
+        {
             "schema_version": 2,
             "user_templates": [catalog_template_json("市政标准目录")],
             "excluded_title_keywords": ["草图", "TEMP", "作废"],
         },
-    }
+    )
+    assert saved.json()["items"] == []
+    assert saved.json()["effective_value"]["excluded_title_keywords"] == [
+        "草图",
+        "TEMP",
+        "作废",
+    ]
+    # 保存结果可回读：GET 返回同一完整契约（含有效值与字段项）
     assert client.get(url).json() == saved.json()
-
     cleared = put_settings(client, [catalog_template_json("市政标准目录")], expected_revision=1, keywords="  ,, ")
     assert cleared.status_code == 200
     assert cleared.json()["value"] == {
         "schema_version": 2,
         "user_templates": [catalog_template_json("市政标准目录")],
     }
+    # 空文本清除显式覆盖：有效值仍返回空数组（默认值不是用户配置）
+    assert cleared.json()["effective_value"]["excluded_title_keywords"] == []
 
 
 def test_settings_put_rejects_filter_keyword_count_over_limit(tmp_path):
@@ -598,39 +628,111 @@ def test_settings_put_rejects_duplicate_template_ids(tmp_path):
     # 稳定诊断前缀（与 TEMPLATE_ID_REQUIRED 同通道），不是新的目录业务错误码
     assert "SHEET_CATALOG_TEMPLATE_ID_DUPLICATE" in body["message"]
     # 拒绝后持久化原样：revision 与 value 都不变，不存在半保存状态
-    assert client.get(url).json() == {
-        "schema_version": 2,
-        "revision": 1,
-        "value": {"schema_version": 2, "user_templates": [template]},
-    }
+    assert_settings_versioned(
+        client.get(url).json(),
+        2,
+        1,
+        {"schema_version": 2, "user_templates": [template]},
+    )
 
 
-def test_settings_put_rejected_when_server_schema_higher_keeps_original_json(tmp_path):
+def test_settings_schema_newer_get_is_read_only_and_put_rejected_with_409(tmp_path):
     """ARCH-DM-006 §8.1/§12：已存设置 Schema 高于当前版本时只读保留且拒绝覆盖。
 
-    HTTP 层的 ``EXTENSION_SETTINGS_SCHEMA_NEWER`` 文案键由任务 3 登记，本任务
-    先钉住 Runtime 契约（同码同状态 + 原 JSON 原样保留 + 未写库）。
+    Ruling R9：Task 2 曾把本用例降级为 Runtime 层断言，导致 HTTP 层的
+    ``_error_response`` 文案键缺口（缺 ``EXTENSION_SETTINGS_SCHEMA_NEWER`` →
+    ``KeyError`` → 500）逃过测试。本用例重新钉住 HTTP 契约：GET 为 200 只读
+    视图（``read_only`` + 稳定 ``diagnostic_code``），PUT 以同一稳定 ``code``
+    与 409 拒绝，且原 JSON 逐键保留。
     """
     client = make_client(tmp_path)
     store = ExtensionStore(client.app.state.service.database.sessions)
     raw_value = {"user_templates": [{"unknown": "future-shape"}], "future_field": 1}
     store.put_settings(SHEET_CATALOG_ID, 3, raw_value, 0)
     url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+
+    read = client.get(url)
+
+    assert read.status_code == 200
+    payload = read.json()
     # GET 返回原 JSON 的只读视图：Schema 与内容逐键一致
-    assert client.get(url).json() == {"schema_version": 3, "revision": 1, "value": raw_value}
+    assert_settings_versioned(payload, 3, 1, raw_value)
+    assert payload["read_only"] is True
+    assert payload["diagnostic_code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    # custom 呈现不生成字段项，也不得把未知高版本渲染成当前语义
+    assert payload["items"] == []
 
-    with pytest.raises(ExtensionPlatformError) as excinfo:
-        client.app.state.extension_runtime.put_settings(
-            SHEET_CATALOG_ID,
-            2,
-            {"schema_version": 2, "user_templates": []},
-            1,
-        )
+    rejected = client.put(
+        url,
+        json={
+            "schema_version": 2,
+            "expected_revision": 1,
+            "value": {"schema_version": 2, "user_templates": []},
+        },
+    )
 
-    assert excinfo.value.code == "EXTENSION_SETTINGS_SCHEMA_NEWER"
-    assert excinfo.value.status_code == 409
+    assert rejected.status_code == 409
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    assert body["message_key"] == "errors.extension.schemaNewer"
+    assert body["params"] == {
+        "extension_id": SHEET_CATALOG_ID,
+        "settings_schema": 3,
+        "current_schema": 2,
+    }
     # 原 JSON 原样保留（schema 3、内容逐键一致，未被 v2 负载覆盖）
-    assert client.get(url).json() == {"schema_version": 3, "revision": 1, "value": raw_value}
+    assert client.get(url).json() == payload
+
+
+def test_generated_settings_read_only_view_still_exposes_current_field_items(tmp_path):
+    """未知高版本的 GET 仍返回当前程序可生成的字段项：``items`` 与 ``read_only``
+    正交——前者描述当前可渲染字段集，后者只说明持久值来自更高版本、禁止覆盖。"""
+    client = generated_settings_client(tmp_path)
+    raw_value = {"max_rows": 999, "future_field": True}
+    client.app.state.extension_runtime.store.put_settings(
+        GENERATED_SETTINGS_ID, 2, raw_value, 0
+    )
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+
+    read = client.get(url)
+
+    assert read.status_code == 200
+    payload = read.json()
+    assert_settings_versioned(payload, 2, 1, raw_value)
+    assert payload["read_only"] is True
+    assert payload["diagnostic_code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    assert [item["key"] for item in payload["items"]] == ["notify", "title", "max_rows"]
+
+    rejected = client.put(
+        url,
+        json={
+            "schema_version": 1,
+            "expected_revision": 1,
+            "value": {"max_rows": 5, "notify": False},
+        },
+    )
+
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    assert client.get(url).json() == payload
+
+
+def test_custom_settings_presentation_returns_empty_items_and_resolved_value(tmp_path):
+    """custom 呈现由宿主编译期白名单里的专属组件承载：``items`` 恒为空数组，
+    有效值仍由 Provider 解析（内置模板来自代码常量，不进持久值）。"""
+    client = make_client(tmp_path)
+    url = f"/api/extensions/{SHEET_CATALOG_ID}/settings"
+
+    payload = client.get(url).json()
+
+    assert payload["items"] == []
+    assert payload["read_only"] is False
+    assert payload["diagnostic_code"] is None
+    assert payload["value"] == {}
+    assert payload["effective_value"]["builtin_template"]["name"] == DEFAULT_TEMPLATE.name
+    assert payload["effective_value"]["user_templates"] == []
+    assert payload["effective_value"]["excluded_title_keywords"] == []
 
 
 def test_settings_put_dispatches_to_registered_provider_on_schema_v2(tmp_path):
@@ -695,7 +797,11 @@ settings_schema: 2
 
 
 def test_settings_put_other_extensions_keep_generic_json_path(tmp_path):
-    """无 sheet-catalog 契约的扩展（未来）不受模板分派影响：value 原样存储回读。"""
+    """无 sheet-catalog 契约的扩展（未来）不受模板分派影响：value 原样存储回读。
+
+    未声明设置的扩展同时锁定呈现与字段项：摘要 ``settings_contribution`` 为
+    ``None``（设置中心不显示“配置”），设置响应 ``items`` 恒为空数组。
+    """
     manifest = tmp_path / "plain-settings.yaml"
     manifest.write_text(
         """
@@ -730,11 +836,252 @@ settings_schema: 1
     )
 
     assert saved.status_code == 200
-    assert saved.json() == {
-        "schema_version": 1,
-        "revision": 1,
-        "value": {"columns": ["{{sheet.number}}"]},
+    assert_settings_versioned(saved.json(), 1, 1, {"columns": ["{{sheet.number}}"]})
+    # 无 Provider 的通用路径：有效值即持久值，且没有可生成字段
+    assert saved.json()["effective_value"] == {"columns": ["{{sheet.number}}"]}
+    assert saved.json()["items"] == []
+    listed = client.get("/api/extensions").json()
+    assert listed[0]["settings_contribution"] is None
+    assert client.get("/api/extensions/test.plain-settings/settings").json()["items"] == []
+
+
+# ---------------------------------------------------------------------------
+# Task 3：设置呈现（settings_contribution / items）与只读诊断契约
+# ---------------------------------------------------------------------------
+
+#: generated 呈现的测试内载体（MEMO-DM-033 M1 / Ruling R5）：临时清单 + 假
+#: Provider，经既有 ``extension_index``/``ExtensionRuntime`` 注入；生产固定
+#: 索引只登记 custom 呈现的图纸目录，不为测试新增虚构扩展。
+GENERATED_SETTINGS_ID = "test.generated-settings"
+
+GENERATED_SETTINGS_MANIFEST = """
+extension_id: test.generated-settings
+version: 0.1.0
+extension_type: builtin
+host_contract: 1
+enabled_by_default: false
+name_key: extensions.testGenerated.name
+description_key: extensions.testGenerated.description
+required_capabilities: []
+permissions: []
+ui_contributions: []
+actions: []
+settings_schema: 1
+settings_contribution:
+  presentation: generated
+  fields:
+    - key: max_rows
+      label_key: extensions.testGenerated.maxRows
+      description_key: extensions.testGenerated.maxRowsDescription
+      order: 20
+    - key: title
+      label_key: extensions.testGenerated.title
+      description_key: extensions.testGenerated.titleDescription
+      order: 10
+    - key: notify
+      label_key: extensions.testGenerated.notify
+      order: 10
+"""
+
+
+class _GeneratedSettingsProvider:
+    """generated 假 Provider：三个字段覆盖控件词表、默认值与全部约束位。
+
+    只强制 ``max_rows`` 范围与 ``notify`` 类型（Provider 是校验权威）；
+    ``nullable``/``max_length`` 在该假 Provider 里只作为元数据映射的载体。
+    解析时补齐代码默认值，用于区分持久值 ``value`` 与有效值 ``effective_value``。
+    """
+
+    extension_id = GENERATED_SETTINGS_ID
+    schema_version = 1
+    field_definitions = (
+        SettingsFieldSpec(
+            key="max_rows", control="integer", default=10, min_value=1, max_value=100
+        ),
+        SettingsFieldSpec(key="notify", control="boolean", default=False),
+        SettingsFieldSpec(
+            key="title", control="string", default="", nullable=True, max_length=20
+        ),
+    )
+
+    def default_value(self) -> dict[str, object]:
+        return {"max_rows": 10, "notify": False, "title": ""}
+
+    def migrate(
+        self, stored_schema_version: int, value: dict[str, object]
+    ) -> dict[str, object]:
+        raise AssertionError("generated 假 Provider 是首版 Schema，没有迁移路径")
+
+    def validate_and_normalize(self, value: dict[str, object]) -> dict[str, object]:
+        rows = value.get("max_rows")
+        if isinstance(rows, bool) or not isinstance(rows, int):
+            raise TypeError("EXTENSION_SETTINGS_TEST_INVALID: max_rows 必须是整数")
+        if not 1 <= rows <= 100:
+            raise ValueError("EXTENSION_SETTINGS_TEST_INVALID: max_rows 必须在 1..100")
+        notify = value.get("notify")
+        if not isinstance(notify, bool):
+            raise TypeError("EXTENSION_SETTINGS_TEST_INVALID: notify 必须是布尔值")
+        return {"max_rows": rows, "notify": notify}
+
+    def resolve(self, value: dict[str, object]) -> dict[str, object]:
+        return {**self.default_value(), **value}
+
+
+GENERATED_SETTINGS_PROVIDER = _GeneratedSettingsProvider()
+
+
+def generated_settings_client(tmp_path) -> TestClient:
+    """注入测试内 generated 扩展的客户端（清单 + 假 Provider + 临时运行时）。"""
+    manifest = tmp_path / "generated-settings.yaml"
+    manifest.write_text(GENERATED_SETTINGS_MANIFEST, encoding="utf-8")
+    entries = (
+        BuiltinExtensionEntry(
+            manifest_resource=str(manifest),
+            factory=_boom,
+            settings_provider=GENERATED_SETTINGS_PROVIDER,
+        ),
+    )
+    return make_client(
+        tmp_path,
+        extension_runtime=make_runtime(tmp_path, entries),
+        extension_index=entries,
+    )
+
+
+def test_generated_settings_items_merge_provider_specs_with_manifest_presentation(tmp_path):
+    """ARCH-DM-006 §8.2：字段项由 Provider 的类型/默认值/约束与 Manifest 的
+    label/description/order 合并，按 ``order, key`` 排序；控件词表原样输出。"""
+    client = generated_settings_client(tmp_path)
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == 1
+    assert payload["revision"] == 0
+    # 从未保存：value 是 Provider 默认零值，effective_value 是解析后的有效配置
+    assert payload["value"] == {"max_rows": 10, "notify": False, "title": ""}
+    assert payload["effective_value"] == {"max_rows": 10, "notify": False, "title": ""}
+    assert payload["read_only"] is False
+    assert payload["diagnostic_code"] is None
+    # 清单声明顺序是 max_rows/title/notify：结果必须按 (order, key) 重排
+    assert payload["items"] == [
+        {
+            "key": "notify",
+            "label_key": "extensions.testGenerated.notify",
+            "description_key": None,
+            "order": 10,
+            "control": "boolean",
+            "default": False,
+            "nullable": False,
+            "min_value": None,
+            "max_value": None,
+            "options": [],
+            "max_length": None,
+        },
+        {
+            "key": "title",
+            "label_key": "extensions.testGenerated.title",
+            "description_key": "extensions.testGenerated.titleDescription",
+            "order": 10,
+            "control": "string",
+            "default": "",
+            "nullable": True,
+            "min_value": None,
+            "max_value": None,
+            "options": [],
+            "max_length": 20,
+        },
+        {
+            "key": "max_rows",
+            "label_key": "extensions.testGenerated.maxRows",
+            "description_key": "extensions.testGenerated.maxRowsDescription",
+            "order": 20,
+            "control": "integer",
+            "default": 10,
+            "nullable": False,
+            "min_value": 1,
+            "max_value": 100,
+            "options": [],
+            "max_length": None,
+        },
+    ]
+    # 摘要声明呈现方式；generated 不携带 route_key（专属组件只用于 custom）
+    listed = client.get("/api/extensions").json()
+    assert listed[0]["settings_contribution"] == {
+        "presentation": "generated",
+        "route_key": None,
     }
+
+
+def test_generated_settings_put_roundtrips_and_keeps_effective_defaults(tmp_path):
+    """generated 扩展的每次保存/读取都返回同一呈现契约：值仍分持久值与有效值。"""
+    client = generated_settings_client(tmp_path)
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+
+    saved = client.put(
+        url,
+        json={
+            "schema_version": 1,
+            "expected_revision": 0,
+            "value": {"max_rows": 5, "notify": True},
+        },
+    )
+
+    assert saved.status_code == 200
+    payload = saved.json()
+    assert payload["revision"] == 1
+    # value 只存用户显式配置；effective_value 由 Provider 补齐代码默认值
+    assert payload["value"] == {"max_rows": 5, "notify": True}
+    assert payload["effective_value"] == {"max_rows": 5, "notify": True, "title": ""}
+    assert payload["read_only"] is False and payload["diagnostic_code"] is None
+    assert [item["key"] for item in payload["items"]] == ["notify", "title", "max_rows"]
+    assert client.get(url).json() == payload
+
+
+def test_generated_settings_put_invalid_field_returns_422_and_keeps_value(tmp_path):
+    """非法字段值必须由 Provider 拒绝（422），不落库、不截断。"""
+    client = generated_settings_client(tmp_path)
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+
+    rejected = client.put(
+        url,
+        json={
+            "schema_version": 1,
+            "expected_revision": 0,
+            "value": {"max_rows": 101, "notify": False},
+        },
+    )
+
+    assert rejected.status_code == 422
+    body = rejected.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_INVALID"
+    assert body["message_key"] == "errors.extension.settingsInvalid"
+    assert body["params"] == {"extension_id": GENERATED_SETTINGS_ID}
+    assert "EXTENSION_SETTINGS_TEST_INVALID" in body["message"]
+    assert client.get(url).json()["revision"] == 0
+
+
+def test_generated_settings_put_stale_revision_returns_409(tmp_path):
+    """ARCH-DM-006 §8.1：PUT 未携带当前 ``expected_revision`` 时竞争写入 409。"""
+    client = generated_settings_client(tmp_path)
+    url = f"/api/extensions/{GENERATED_SETTINGS_ID}/settings"
+    body = {"schema_version": 1, "expected_revision": 0, "value": {"max_rows": 5, "notify": False}}
+    assert client.put(url, json=body).status_code == 200
+
+    stale = client.put(
+        url,
+        json={"schema_version": 1, "expected_revision": 0, "value": {"max_rows": 7, "notify": False}},
+    )
+
+    assert stale.status_code == 409
+    payload = stale.json()
+    assert_error_contract(payload)
+    assert payload["code"] == "EXTENSION_SETTINGS_INVALID"
+    assert payload["params"] == {"expected_revision": 0, "current_revision": 1}
+    assert client.get(url).json()["value"] == {"max_rows": 5, "notify": False}
 
 
 def test_preferences_default_and_workspace_isolation(tmp_path):
