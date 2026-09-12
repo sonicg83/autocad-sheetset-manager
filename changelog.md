@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-12（建立扩展设置 Provider 与清单契约）
+
+- 新建 `src/dst_manager/extensions/settings.py`：产出后续任务依赖的稳定契约。`SettingsFieldDefinition`（`key`/`label_key`/`description_key`/`order`）、`SettingsContribution`（`generated`/`custom` 呈现）、`ExtensionSettingsSnapshot`（冻结 dataclass，字段序为 `extension_id`/`schema_version`/`revision`/`value`/`digest`）与 `ExtensionSettingsProvider` Protocol（`default_value`/`migrate`/`validate_and_normalize`/`resolve` 加 `extension_id`/`schema_version`/`field_definitions`）。`freeze_json()` 递归把 Mapping 转为只读 `MappingProxyType`、数组转为 `tuple`（含数组内嵌 dict），结果不共享源可变容器；`settings_digest()` 对冻结值的规范 JSON（`sort_keys=True`、`separators=(",", ":")`、`ensure_ascii=False`）取 SHA-256，并把 `extension_id` 与 `schema_version` 纳入摘要输入，因此取值相同的不同扩展或不同 Schema 绝不共享摘要，且不使用 `hash()`/`id()`，跨进程稳定。
+- `contracts.py`：`ExtensionManifest` 新增可选 `settings_contribution`，`BuiltinExtensionEntry` 新增 `settings_provider`（默认 `None`）；两者都是编译期白名单引用，既有索引条目与占位清单构造点无需改动，清单仍不携带模块名、类名、URL 或 Vue 模块路径。
+- `manifest.py`：新增严格呈现声明校验。`generated` 要求非空且 `key` 唯一的 `fields` 并禁止 `route_key`；`custom` 要求非空 `route_key`（含非空字符串）并禁止 `fields`；未知 `presentation`、`settings_contribution` 或字段级未知键（`module`/`class_name`/`script`/`command`/`entry_point`、`type`/`default` 等）均由 `extra="forbid"` 拒绝，字段只承载 `key`/`label_key`/`description_key`/`order`，不重复类型与业务约束。
+- `builtin/sheet_catalog/manifest.yaml`：声明 `settings_contribution.presentation=custom`、`route_key=sheet-catalog-settings`；`settings_schema` 保持 `1`（升到 2 由任务 2 与 Provider 同批交付，避免中间提交让既有模板保存被版本检查拒绝）。
+- 测试：新建 `tests/unit/test_extension_settings_contracts.py` 12 例（冻结递归与不可变性、不共享源、摘要规范 JSON 独立复算、跨进程一致、身份/版本隔离、快照字段序与冻结、Protocol 成员与替身实现、两类呈现值对象、索引条目默认 `None`）；`tests/unit/test_extension_manifest.py` 新增 15 例（两类呈现成功解析、缺 route、空/缺 fields、重复 key、混用负载、未知 presentation、可执行入口字段、字段级多余类型声明、缺 label_key、真实清单断言），并把该文件既有夹具统一为 `valid_manifest()`（R3 裁定，原 `valid_manifest_data` 仅本文件引用）。
+- 先红后绿：先加测试 → `ModuleNotFoundError: No module named 'dst_manager.extensions.settings'`（两个测试文件均收集失败）；补齐值对象后 Manifest 测试仍 15 例红（`settings_contribution` 被 `extra_forbid` 拒绝或断言的稳定消息未出现）；实现后全绿。可失败性另以变异确认：临时删除 `settings_contribution 字段 key 必须唯一` 校验 → `test_generated_settings_fields_must_be_unique` 报 `DID NOT RAISE`，按字节还原后该文件 blob 哈希不变。
+- 本轮只建立契约与声明，不改 API 字段、不加数据库表或迁移、不新增生产扩展；**未**改 `settings_schema` 数值。验证：`rtk uv run ruff check .` 通过；`rtk uv run pytest tests/unit/test_extension_manifest.py tests/unit/test_extension_settings_contracts.py tests/unit/test_extension_registry.py -q` 64 passed（41 + 12 + 11）；全量 `uv run pytest` **1209 passed / 72 skipped / 0 failed**（较基线 1182/72 增 27 例，均为本任务新增测试）。
+
 ## 2026-09-12（修正 PLAN-DM-026 计划索引的过时回归数字）
 
 - **问题**：`.planning/plans/dst-manager/README.md` 的 PLAN-DM-026 条目把全量回归记为 `pytest 1161 passed / 74 skipped / 0 failed`，该数字取自任务 4 收口时（评审后修正之前）的基线，未随终审 I-M4 补入的 19 例回填，与计划文件自身“实际验证”小节的 `1180 passed / 74 skipped / 0 failed`（collected 1254）不一致。

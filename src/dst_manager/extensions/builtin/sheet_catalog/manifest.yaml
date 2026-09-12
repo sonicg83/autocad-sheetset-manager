@@ -23,3 +23,6 @@ actions:
     output_kind: xlsx
     media_type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 settings_schema: 1
+settings_contribution:
+  presentation: custom
+  route_key: sheet-catalog-settings
