@@ -23,7 +23,7 @@ describe("applyNumberFormat", () => {
     expect(() => applyNumberFormat("{sheet.number", 4)).toThrow();
   });
 
-  it("可选宽度集合在 1..16 内且不含 1（去零由专门入口承担）", () => {
+  it("可选宽度集合为 2/3/4/5/6", () => {
     expect(NUMBER_FORMAT_WIDTHS).toEqual([2, 3, 4, 5, 6]);
   });
 });

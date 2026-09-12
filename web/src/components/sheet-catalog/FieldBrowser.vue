@@ -68,7 +68,9 @@ const searching = computed(() => query.value.trim() !== "");
 const noMatches = computed(() => searching.value && visibleGroups.value.length === 0);
 
 // ---- 数字格式码入口（PLAN-DM-026 Task 3 / SPEC-DM-012 §7.2 区域 2）----
-// 轻量 disclosure 菜单：原生按钮 + aria-haspopup/aria-expanded，菜单仅在打开时渲染。
+// 轻量 disclosure（非 ARIA menu）：原生按钮 + aria-expanded/aria-controls，菜单仅在打开时渲染。
+// 选项是普通 Tab 停靠点，没有 roving tabindex / 方向键 / type-ahead，也不在打开时移动焦点，
+// 因此不声明 menu/menuitem，避免向辅助技术承诺一套未实现的键盘模型。
 // 菜单在流内展开而非浮层，避免被 .field-browser/.field-list 的 overflow 裁切；
 // 触发按钮与选项的可访问名都不含字段引用文本（如 sheet.number），否则区域内
 // 既有的 getByRole("button", {name: /sheet\.number/}) 严格定位会多出一个匹配。
@@ -78,6 +80,16 @@ let activeTrigger: HTMLButtonElement | null = null;
 
 // 触发按钮与当前菜单的公共祖先选择器：命中即视为“点在格式入口内部”
 const FORMAT_ENTRY_SELECTOR = ".field-format-entry, .field-format-menu";
+
+// disclosure 的 DOM id：分组 id + 行内序号组合，保证 aria-controls/aria-labelledby 的 IDREF
+// 唯一且不含空白（字段规范名可能含空格或冒号，直接拼进 id 会破坏 IDREF）。
+function formatTriggerId(groupId: string, index: number) {
+  return `field-format-trigger-${groupId}-${index}`;
+}
+
+function formatMenuId(groupId: string, index: number) {
+  return `field-format-menu-${groupId}-${index}`;
+}
 
 function toggleFormatMenu(key: string, event: MouseEvent) {
   const trigger = event.currentTarget as HTMLButtonElement;
@@ -142,7 +154,7 @@ onBeforeUnmount(() => {
       <section v-for="group in visibleGroups" :key="group.id" class="field-group">
         <h4>{{ group.label }}</h4>
         <ul v-if="group.entries.length > 0">
-          <li v-for="entry in group.entries" :key="entry.key" class="field-entry">
+          <li v-for="(entry, index) in group.entries" :key="entry.key" class="field-entry">
             <div class="field-entry-main">
               <button
                 type="button"
@@ -155,11 +167,12 @@ onBeforeUnmount(() => {
               </button>
               <div class="field-format-entry">
                 <button
+                  :id="formatTriggerId(group.id, index)"
                   type="button"
                   class="format-trigger"
                   :aria-label="$t('extensions.sheetCatalog.fieldFormatButton')"
-                  aria-haspopup="menu"
                   :aria-expanded="openFormatKey === entry.key"
+                  :aria-controls="formatMenuId(group.id, index)"
                   @click="toggleFormatMenu(entry.key, $event)"
                 >
                   {{ $t("extensions.sheetCatalog.fieldFormatButton") }}
@@ -168,17 +181,18 @@ onBeforeUnmount(() => {
             </div>
             <ul
               v-if="openFormatKey === entry.key"
+              :id="formatMenuId(group.id, index)"
               class="field-format-menu"
-              role="menu"
-              :aria-label="$t('extensions.sheetCatalog.fieldFormatMenuLabel')"
+              role="group"
+              :aria-labelledby="formatTriggerId(group.id, index)"
             >
-              <li role="none">
-                <button type="button" role="menuitem" class="format-option" @click="insertFormatCode(entry, STRIP_ZEROS_WIDTH)">
+              <li>
+                <button type="button" class="format-option" @click="insertFormatCode(entry, STRIP_ZEROS_WIDTH)">
                   {{ $t("extensions.sheetCatalog.fieldFormatStripZeros") }}
                 </button>
               </li>
-              <li v-for="width in NUMBER_FORMAT_WIDTHS" :key="width" role="none">
-                <button type="button" role="menuitem" class="format-option" @click="insertFormatCode(entry, width)">
+              <li v-for="width in NUMBER_FORMAT_WIDTHS" :key="width">
+                <button type="button" class="format-option" @click="insertFormatCode(entry, width)">
                   {{ $t("extensions.sheetCatalog.fieldFormatPad", {width}) }}
                 </button>
               </li>

@@ -876,7 +876,7 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
     await entry.getByRole("button", {name: "格式"}).click();
-    await entry.getByRole("menuitem", {name: "补零到 4 位"}).click();
+    await entry.getByRole("button", {name: "补零到 4 位"}).click();
     await expect(expression).toHaveValue("{sheet.number:0000}");
     // 夹具由 pad3 生成图号，首张为 001；补零只作用于输出侧，工作区快照不变
     await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "0001", exact: true})).toBeVisible();
@@ -888,7 +888,7 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
     await entry.getByRole("button", {name: "格式"}).click();
-    await entry.getByRole("menuitem", {name: "去前导零"}).click();
+    await entry.getByRole("button", {name: "去前导零"}).click();
     await expect(expression).toHaveValue("{sheet.number:0}");
     await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "1", exact: true})).toBeVisible();
   });
@@ -905,19 +905,19 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     // 去前导零 + NUMBER_FORMAT_WIDTHS 的 5 个补零选项
-    await expect(entry.getByRole("menuitem")).toHaveCount(6);
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(6);
     expect((await browser.boundingBox())!.width, "菜单展开不改变字段栏宽度").toBeCloseTo(widthBefore, 0);
 
     // Esc 关闭并归还焦点到触发按钮
     await page.keyboard.press("Escape");
-    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(0);
     await expect(trigger).toBeFocused();
 
     // 外部点击关闭（搜索框不属于格式入口）
     await trigger.click();
-    await expect(entry.getByRole("menuitem")).toHaveCount(6);
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(6);
     await page.getByLabel("搜索可用字段").click();
-    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(0);
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
 
     // 键盘展开后行被搜索过滤：菜单状态同步关闭，清空搜索不意外重新展开
@@ -928,7 +928,7 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     await page.getByLabel("搜索可用字段").fill("图名");
     await expect(entry).toHaveCount(0);
     await page.getByLabel("搜索可用字段").fill("");
-    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(0);
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 });

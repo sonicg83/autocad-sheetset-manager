@@ -204,10 +204,9 @@ function formatValue(value: string, width: number | null): string {
 
 // 按表达式文本求值单张图纸行（最小语义：字段引用替换为值，其余文字原样保留）
 function evaluateRow(expression: string, sheet: {number: string; title: string; custom_properties: Record<string, string>}, sheetsetProperties: Record<string, string>): string {
-  const fieldRe = FIELD_REFERENCE_RE;
   let result = "";
   let cursor = 0;
-  for (const match of expression.matchAll(fieldRe)) {
+  for (const match of expression.matchAll(FIELD_REFERENCE_RE)) {
     result += expression.slice(cursor, match.index);
     cursor = match.index + match[0].length;
     const scope = match[1];
