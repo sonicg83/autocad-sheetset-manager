@@ -78,7 +78,7 @@ related:
 - **`ExtensionCard.vue`**：props `{extension, busy}`，emits `toggle:[id, enabled]`；根元素 `li.ext-card[data-extension-id]`；四层信息＝名称 / 描述（`description_key`）/ `.ext-meta` 内「版本徽标 + 状态徽标 + 诊断码」/ `.ext-state` + 开关；**卡片不可点击、不导航**，卡内唯一可聚焦元素是开关。
 - **`ExtensionsSection.vue`**：`GROUP_THRESHOLD = 6`，≥6 条按 **`enabled`**（不是 `status`）分「已启用/已停用」，空段不渲染；分组标题复用语言包既有 `settings.extensions.stateOn/stateOff`（未新增同义键）。
 - **开关方向只取服务端 `enabled`**；「已启用 + 启动失败」是合法组合，必须能同时呈现（`FAILED`/`INCOMPATIBLE` 属"天然不可用"，与用户意图在 `extension_states` 上可区分）。
-- **`SettingsDialog.vue` 已 535 行**（越过 500 行软上限，待办 `.planning/todos/dst-manager/2026-09-10-settings-dialog-file-split.md`）：本计划不允许它增长，卡片与开关都落在新组件里。
+- **`SettingsDialog.vue` 已 535 行**（越过 500 行软上限；该缺陷已于 2026-09-13 由 PLAN-DM-025 任务 6/7 关闭——先抽出 `AboutSection.vue`、再由 `ExtensionSettingsHost.vue` 承担扩展设置子视图，`SettingsDialog.vue` 回落至 469 行，无需另立待办）：本计划不允许它增长，卡片与开关都落在新组件里。
 - **不新增全局 CSS 规则**（`web/src/style.css` 未改）；样式只在组件 `<style scoped>` 内，只用 SPEC-DM-006 令牌。
 - **e2e 纪律**：`/api/extensions` 必须 mock（真实后端会写用户数据库的 `extension_states`）；除 `settings-dialog.spec.ts` 外任何 e2e 文件不得保存设置（该文件串行共享同一配置文件）。
 

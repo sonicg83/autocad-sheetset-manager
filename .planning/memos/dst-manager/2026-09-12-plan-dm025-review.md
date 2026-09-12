@@ -54,7 +54,7 @@ ARCH-DM-006 §11 明确要求每次预览绑定"**相关工作区偏好修订**"
 
 ### M2. SettingsDialog.vue 拆分待办未协调
 
-文件实测 535 行（已越过而非计划所称"超过或接近"500 行软上限），且存在未立项的拆分待办 `.planning/todos/dst-manager/2026-09-10-settings-dialog-file-split.md`（首选方案：抽 `AboutSection.vue` + `fetchAbout` 模块级 memo）。任务 6 还要往里加"当前 ID 与 dirty 装配"。建议把该待办的裁决与抽出动作并入任务 6 的前置步骤，否则违反"不得把新方法追加进已超限的既有文件"的容量契约。另：`application/extensions/runtime.py` 实测 781 行（计划判断属实且更紧迫），任务 2 删除模板特判后会明显回缩。
+文件实测 535 行（已越过而非计划所称"超过或接近"500 行软上限），且当时存在拆分缺口（首选方案：抽 `AboutSection.vue` + `fetchAbout` 模块级 memo）——**该缺口已于 2026-09-13 由任务 6/7 关闭**：`AboutSection.vue` 已抽出、扩展设置落 `ExtensionSettingsHost.vue`，`SettingsDialog.vue` 实测 469 行；本条不复建待办文件。任务 6 还要往里加"当前 ID 与 dirty 装配"。建议把该待办的裁决与抽出动作并入任务 6 的前置步骤，否则违反"不得把新方法追加进已超限的既有文件"的容量契约。另：`application/extensions/runtime.py` 实测 781 行（计划判断属实且更紧迫），任务 2 删除模板特判后会明显回缩。
 
 ### M3. 既有 E2E 钉子与生产证据未纳入回归范围
 
