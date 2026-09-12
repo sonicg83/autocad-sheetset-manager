@@ -590,8 +590,10 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     expect(execute.preview_digest).toBe(state.lastDigest);
     expect(execute.save_grant_id).toBe("grant-e2e");
     // PLAN-DM-025 Task 4：预览回传的设置修订必须原样重复提交（夹具缺失该字段
-    // 或前端改用最新 settingsRevision 时此处红）
-    expect(execute.settings_revision).toBe(0);
+    // 或前端改用最新 settingsRevision 时此处红）；不可失败版本（两值确实不同）
+    // 在同组"预览后保存模板推进设置修订"用例里，本用例修订 0 == 最新修订 0
+    expect(state.previewSettingsRevisions.at(-1)).toBe(0);
+    expect(execute.settings_revision).toBe(state.previewSettingsRevisions.at(-1));
     // 打开所在文件夹经专用桥方法：只传扩展与 Artifact 标识，不传 workspace_id/路径
     await page.getByRole("button", {name: "打开所在文件夹"}).click();
     await expect.poll(async () => (await readBridgeCalls(page)).artifactFolderCalls).toEqual([
@@ -611,6 +613,47 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     await page.getByRole("button", {name: "刷新预览"}).click();
     await page.getByRole("button", {name: "导出 XLSX"}).click();
     await expect(page.getByText("图纸目录已保存到")).toBeVisible();
+  });
+
+  // PLAN-DM-025 Task 4 修复轮 1：夹具 /execute 现在按设置修订做漂移门禁（提交值必须
+  // 等于当前修订且是某次预览实际绑定的修订），本用例是 Fix 1（漂移必须给出可见的
+  // "先刷新预览"出路）与 Fix 2（提交值必须来自预览、不得用最新修订）的真护栏。
+  test("预览后保存模板推进设置修订：导出 409 EXTENSION_SETTINGS_CHANGED 并给出重新预览出路", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const exportButton = page.getByRole("button", {name: "导出 XLSX"});
+    await expect(exportButton).toBeEnabled();
+    // 草稿改动触发的重新预览仍绑定保存前的设置修订（夹具记录每次预览绑定的修订）
+    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await expect.poll(() => state.previewSettingsRevisions.length).toBeGreaterThan(1);
+    await expect(exportButton).toBeEnabled();
+    // 保存修改推进服务端设置修订：预览不再与当前设置一致
+    await page.getByRole("button", {name: "保存修改"}).click();
+    await expect.poll(() => state.revision).toBe(4);
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    await exportButton.click();
+    await expect.poll(() => state.executeRequests.length).toBe(1);
+    // 不可失败断言：提交值等于预览时捕获的修订，而该值不等于最新修订（两值必须不同）
+    const boundRevision = state.previewSettingsRevisions.at(-1);
+    expect(boundRevision).toBe(3); // 预置 userTemplates 时夹具初始修订为 3
+    expect(state.revision).toBe(4);
+    expect(state.executeRequests[0].settings_revision).toBe(boundRevision);
+    // 漂移的可见出路：稳定错误文案 + "先刷新预览"提示（不再只有"重试导出"）
+    const alert = page.getByRole("alert").filter({hasText: "扩展设置已变化"});
+    await expect(alert).toBeVisible();
+    await expect(alert.getByText("预览已过期，请先刷新预览再重试导出")).toBeVisible();
+    // 不刷新预览直接"重试导出"：同一份过期修订被重复提交，必然再次 409（死循环本体）
+    await alert.getByRole("button", {name: "重试导出"}).click();
+    await expect.poll(() => state.executeRequests.length).toBe(2);
+    expect(state.executeRequests[1].settings_revision).toBe(boundRevision);
+    await expect(alert).toBeVisible();
+    // 刷新预览重新绑定修订后，同一出口导出成功
+    await page.getByRole("button", {name: "刷新预览"}).click();
+    await page.getByRole("button", {name: "导出 XLSX"}).click();
+    await expect(page.getByText("图纸目录已保存到")).toBeVisible();
+    expect(state.previewSettingsRevisions.at(-1)).toBe(4);
+    expect(state.executeRequests).toHaveLength(3);
+    expect(state.executeRequests.at(-1)!.settings_revision).toBe(4);
   });
 
   test("授权失效保留编辑并可重试", async ({page}) => {

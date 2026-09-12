@@ -169,6 +169,8 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   // 本次预览绑定的扩展设置修订：导出时原样重复提交，后端据此拒绝"预览后设置已变"
   // （EXTENSION_SETTINGS_CHANGED/409）；不得用最新 settingsRevision 代替，否则会把
   // 设置漂移误报成通用预览漂移（REPREVIEW_REQUIRED）。
+  // 取值只接受契约要求的数字：响应违约（字段缺失/类型不符）时保持 null，导出侧
+  // 以 typeof 判定直接拒绝，不让未绑定修订的执行请求发出去（后端会判 422）。
   const previewedSettingsRevision = ref<number | null>(null);
   let previewGeneration = 0;
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
@@ -373,7 +375,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
       };
       previewError.value = "";
       previewedColumns.value = snapshotColumns;
-      previewedSettingsRevision.value = result.settings_revision;
+      previewedSettingsRevision.value = typeof result.settings_revision === "number" ? result.settings_revision : null;
       previewStatus.value = "ready";
     } catch (error) {
       if (generation !== previewGeneration) return;
@@ -556,7 +558,9 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     const current = workspace.value;
     const digest = preview.value?.previewDigest;
     const previewSettingsRevision = previewedSettingsRevision.value;
-    if (!current || !exportReady.value || !digest || previewSettingsRevision === null) return;
+    // 无工作区/不可导出/无摘要/无绑定设置修订都拒绝导出：最后一项必须是数字，
+    // 否则请求体会丢掉 settings_revision 字段（JSON.stringify 丢弃 undefined）
+    if (!current || !exportReady.value || !digest || typeof previewSettingsRevision !== "number") return;
     exportState.phase = "exporting";
     exportState.artifactId = "";
     exportState.errorText = "";

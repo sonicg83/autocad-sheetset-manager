@@ -500,9 +500,9 @@ def test_filter_everything_away_exports_header_only_xlsx(tmp_path, tiny_workspac
 
 
 def test_settings_change_after_preview_rejects_execute_before_side_effects(
-    tmp_path, tiny_workspace
+    tmp_path, tiny_workspace, monkeypatch
 ):
-    """预览后设置变化：候选目录与授权消费之前返回 EXTENSION_SETTINGS_CHANGED/409。"""
+    """预览后设置变化：候选目录分配与授权消费之前返回 EXTENSION_SETTINGS_CHANGED/409。"""
     client = make_client(tmp_path, save_grants=SaveGrantStore())
     workspace = open_workspace(client, tiny_workspace)
     exports = tmp_path / "exports"
@@ -520,6 +520,23 @@ def test_settings_change_after_preview_rejects_execute_before_side_effects(
     )
     assert saved.status_code == 200, saved.text
 
+    # 候选目录分配的不可失败断言：候选目录的 ``finally: shutil.rmtree`` 在成功路径上
+    # 也会清空该目录，因此 ``candidate_files(client) == []`` 无法区分“从未分配”与
+    # “分配后清理”（同一断言在本文件成功用例里同样成立）；直接拦 ``Path.mkdir`` 记录
+    # ``proposal_root`` 的直接子目录（即候选目录）被分配的路径集合。
+    proposal_root = Path(client.app.state.extension_runtime.proposal_root)
+    allocated: set[Path] = set()
+    original_mkdir = Path.mkdir
+
+    def counting_mkdir(self, *args, **kwargs):
+        result = original_mkdir(self, *args, **kwargs)
+        if self.parent == proposal_root:  # 只拦候选目录，不影响测试基础设施
+            # 按路径去重：pathlib 的 parents=True 会在父目录缺失时递归调用自身
+            allocated.add(self)
+        return result
+
+    monkeypatch.setattr(Path, "mkdir", counting_mkdir)
+
     response = execute_action(client, workspace, preview_body, grant.save_grant_id)
 
     assert response.status_code == 409
@@ -529,7 +546,8 @@ def test_settings_change_after_preview_rejects_execute_before_side_effects(
     assert body["message_key"] == "errors.extension.settingsChanged"
     assert body["params"]["expected_revision"] == preview_body["settings_revision"]
     assert body["params"]["current_revision"] == saved.json()["revision"]
-    # 漂移必须在候选目录分配与授权消费之前拒绝：无候选文件、无目标文件、无 Artifact
+    # 漂移必须在候选目录分配与授权消费之前拒绝：零分配、无候选文件、无目标文件、无 Artifact
+    assert allocated == set()
     assert candidate_files(client) == []
     assert not target.exists()
     assert artifact_count(client) == 0
@@ -539,6 +557,9 @@ def test_settings_change_after_preview_rejects_execute_before_side_effects(
     assert refreshed["settings_revision"] == saved.json()["revision"]
     retried = execute_action(client, workspace, refreshed, grant.save_grant_id)
     assert retried.status_code == 200, retried.text
+    # 对照组：同一路径的成功执行确实分配了一次候选目录（计数器不是恒为空）
+    assert len(allocated) == 1
+    assert candidate_files(client) == []
 
 
 def test_stale_settings_revision_from_client_rejects_execute(tmp_path, tiny_workspace):

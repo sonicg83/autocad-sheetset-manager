@@ -12,8 +12,12 @@ import type {SheetCatalogController} from "../../composables/useSheetCatalog";
 const props = defineProps<{catalog: SheetCatalogController}>();
 const {t} = useI18n();
 
-// 修订漂移需要先刷新预览再重试；其余失败可直接重试导出（重新取授权）
-const needRepreview = () => props.catalog.exportState.errorCode === "REPREVIEW_REQUIRED";
+// 修订漂移需要先刷新预览再重试；其余失败可直接重试导出（重新取授权）。
+// 两个码的出路相同：REPREVIEW_REQUIRED 是预览摘要/修订漂移，EXTENSION_SETTINGS_CHANGED
+// 是预览之后扩展设置已变（后端 409）。后者若只按通用失败处理，用户点"重试导出"
+// 仍会重复提交同一份预览修订，后端必然再次 409——死循环且没有可见出路。
+const REPREVIEW_ERROR_CODES = ["REPREVIEW_REQUIRED", "EXTENSION_SETTINGS_CHANGED"];
+const needRepreview = () => REPREVIEW_ERROR_CODES.includes(props.catalog.exportState.errorCode);
 const retryText = () => needRepreview() ? t("extensions.sheetCatalog.exportRepreviewHint") : "";
 
 // 一致性反馈：无壳 → 过期 → 阻断 → 预览失败 → 与草稿/工作区修订一致

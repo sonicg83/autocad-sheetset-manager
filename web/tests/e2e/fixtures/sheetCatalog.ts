@@ -77,6 +77,9 @@ export type SheetCatalogState = {
   // 每次模板设置 PUT 携带的 expected_revision（冲突恢复/另存为语义断言用）
   putExpectedRevisions: number[];
   previewRequests: {workspace_id: string; base_revision_id: string; template: unknown; preview_digest?: string}[];
+  // 每次预览绑定的设置修订（与预览响应里的 settings_revision 同值）：
+  // /execute 的漂移门禁据此拒绝未绑定/已过期的提交值，用例据此断言提交值来自预览
+  previewSettingsRevisions: number[];
   executeRequests: Record<string, unknown>[];
   lastDigest: string | null;
   artifacts: Map<string, Record<string, unknown>>;
@@ -283,11 +286,16 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     errors,
     warnings,
     rows,
+    // PLAN-DM-025 Task 4 修复轮 1：与真实后端同口径——total_rows 是过滤后的实际
+    // 输出行数，filtered_rows 是被排除的图纸数。夹具不模拟过滤语义（设置里也没有
+    // 过滤词），因此 filtered_rows 恒为 0、total_rows 等于全部图纸数；两个字段都
+    // 必须存在，否则夹具会把"缺字段"的响应形状当成正确形状。
     total_rows: sheets.length,
+    filtered_rows: 0,
+    // 本次预览绑定的扩展设置修订；前端导出时必须原样重复提交，否则 /execute 的
+    // 漂移门禁（下方 settings_revision 校验）会把请求判为未绑定并回 409。
+    // 缺字段是另一回事：真实后端契约校验直接 422，不进入漂移门禁。
     settings_revision: state.revision,
-    // PLAN-DM-025 Task 4：预览回传本次绑定的扩展设置修订；前端导出时原样重复提交，
-    // 缺该字段会让执行请求丢失绑定值（真实后端 422 EXTENSION_SETTINGS_CHANGED 门禁失效），
-    // 而全量 mock 的 E2E 仍旧全绿。此处与真实后端保持同形。
     preview_digest: `digest-${state.previewRequests.length + 1}`,
     executable,
   };
@@ -310,6 +318,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     preferencePutBodies: [],
     putExpectedRevisions: [],
     previewRequests: [],
+    previewSettingsRevisions: [],
     executeRequests: [],
     lastDigest: null,
     artifacts: new Map(),
@@ -491,6 +500,8 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     const body = await route.request().postDataJSON();
     state.previewRequests.push(body);
     state.lastDigest = `digest-${state.previewRequests.length}`;
+    // 先记录本次预览绑定的设置修订，再构造响应：两者取同一 state.revision
+    state.previewSettingsRevisions.push(state.revision);
     const response = buildPreviewResponse(body, workspace, state);
     response.preview_digest = state.lastDigest; // 执行摘要复核按同一摘要核对
     return route.fulfill({json: response});
@@ -498,6 +509,23 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
   await page.route("**/api/extensions/*/actions/*/execute", async route => {
     const body = await route.request().postDataJSON();
     state.executeRequests.push(body);
+    // 契约层：settings_revision 必填且必须是数字（真实后端缺必填字段直接 422），
+    // 与下面的漂移门禁（同一字段对不上当前设置修订）不是同一件事，不能混为一个 409
+    if (typeof body.settings_revision !== "number") {
+      return route.fulfill({status: 422, json: {code: "VALIDATION_ERROR", message: "settings_revision 缺失或类型不符"}});
+    }
+    // 漂移门禁（与 runtime._verify_repreview 同序：先核对设置修订，再核对摘要）：
+    // 提交值必须等于当前设置修订，也必须是某次预览实际绑定的修订；两者任一不符
+    // 即拒绝，夹具绝不接受"任意值"——否则"前端改用最新修订"一类回归会静默通过
+    const boundRevision = state.previewSettingsRevisions.at(-1);
+    if (body.settings_revision !== state.revision || body.settings_revision !== boundRevision) {
+      return route.fulfill({status: 409, json: {
+        code: "EXTENSION_SETTINGS_CHANGED",
+        message_key: "errors.extension.settingsChanged",
+        params: {expected_revision: body.settings_revision, current_revision: state.revision},
+        message: "扩展设置已变化，请重新预览后再导出",
+      }});
+    }
     const mode = state.controls.executeMode;
     if (mode !== "ok" || body.preview_digest !== state.lastDigest) {
       const mapping: Record<string, {status: number; code: string; messageKey: string; params?: Record<string, unknown>}> = {
