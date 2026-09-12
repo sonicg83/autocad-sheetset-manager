@@ -55,6 +55,7 @@ ExtensionPlatformErrorCode = Literal[
     "EXTENSION_CAPABILITY_UNAVAILABLE",
     "EXTENSION_SETTINGS_INVALID",
     "EXTENSION_SETTINGS_SCHEMA_NEWER",
+    "EXTENSION_SETTINGS_CHANGED",
     "EXTENSION_ACTION_NOT_FOUND",
     "SAVE_GRANT_INVALID",
     "EXPORT_DESTINATION_CHANGED",
@@ -87,6 +88,9 @@ ExtensionDiagnosticCode = Literal[
 ]
 
 #: 平台错误码 -> 稳定文案键（Task 10 前端 extensions 域逐一对应）。
+#: ``EXTENSION_SETTINGS_CHANGED``：预览后应用级扩展设置变化（ACTION 执行 409）；
+#: 必须在 :mod:`dst_manager.interfaces.message_catalog` 同步登记，否则
+#: ``extension_api._error_response`` 按码索引文案键会 KeyError → HTTP 500。
 EXTENSION_MESSAGE_KEYS: dict[str, str] = {
     "EXTENSION_NOT_FOUND": "errors.extension.notFound",
     "EXTENSION_DISABLED": "errors.extension.disabled",
@@ -94,6 +98,7 @@ EXTENSION_MESSAGE_KEYS: dict[str, str] = {
     "EXTENSION_CAPABILITY_UNAVAILABLE": "errors.extension.capabilityUnavailable",
     "EXTENSION_SETTINGS_INVALID": "errors.extension.settingsInvalid",
     "EXTENSION_SETTINGS_SCHEMA_NEWER": "errors.extension.schemaNewer",
+    "EXTENSION_SETTINGS_CHANGED": "errors.extension.settingsChanged",
     "EXTENSION_ACTION_NOT_FOUND": "errors.extension.actionNotFound",
     "SAVE_GRANT_INVALID": "errors.extension.saveGrantInvalid",
     "EXPORT_DESTINATION_CHANGED": "errors.extension.exportDestinationChanged",
@@ -210,10 +215,13 @@ class ExtensionPreferencePutRequest(ContractModel):
 
 
 class ExtensionExecuteRequest(ContractModel):
-    """执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
+    """执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。
 
     后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
-    执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+    执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；
+    ``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值
+    （ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``
+    拒绝，不得用新设置执行旧预览。
     """
 
     workspace_id: str
@@ -221,6 +229,7 @@ class ExtensionExecuteRequest(ContractModel):
     template: ExtensionTemplateRequest
     preview_digest: str
     save_grant_id: str
+    settings_revision: int
 
 
 class ExtensionTemplateColumnRequest(ContractModel):
@@ -285,7 +294,12 @@ class SheetCatalogFieldCatalogModel(ContractModel):
 
 
 class SheetCatalogPreviewResponse(ContractModel):
-    """预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。"""
+    """预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。
+
+    ``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被
+    排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，
+    执行时必须原样重复提交（ARCH-DM-006 §11）。
+    """
 
     normalized_template: SheetCatalogTemplateModel
     field_catalog: SheetCatalogFieldCatalogModel
@@ -293,6 +307,8 @@ class SheetCatalogPreviewResponse(ContractModel):
     warnings: list[SheetCatalogDiagnosticModel]
     rows: list[list[str]]
     total_rows: int
+    filtered_rows: int
+    settings_revision: int
     preview_digest: str
     executable: bool
 

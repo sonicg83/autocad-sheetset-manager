@@ -11,6 +11,11 @@ from dst_manager.application.service import ApplicationError, DstManagerService
 from dst_manager.config import Settings
 from dst_manager.extensions.capabilities import CapabilityBroker
 from dst_manager.extensions.manifest import load_manifest
+from dst_manager.extensions.settings import (
+    ExtensionSettingsSnapshot,
+    freeze_json,
+    settings_digest,
+)
 from dst_manager.extensions.snapshots import SnapshotProperty
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
@@ -1449,6 +1454,17 @@ def test_unknown_api_error_omits_message_key(tmp_path, tiny_workspace, monkeypat
 
 
 # ---------------------------------------------------------------- PLAN-DM-020 Task 4：扩展只读快照的副作用回归
+#: PLAN-DM-025 Task 4：CapabilityBroker 只转交宿主在创建上下文前取得的设置快照
+#: （本用例只验证工作区快照只读，故快照内容为空但与调用扩展身份一致）。
+EXTENSION_SETTINGS_SNAPSHOT = ExtensionSettingsSnapshot(
+    extension_id="dst-manager.sheet-catalog",
+    schema_version=2,
+    revision=0,
+    value=freeze_json({}),
+    digest=settings_digest("dst-manager.sheet-catalog", 2, {}),
+)
+
+
 def test_extension_snapshot_build_is_read_only(tmp_path, tiny_workspace, monkeypatch):
     """构建扩展快照不写 DST/DWG、不改时间戳、不创建 .dst-manager/，
     也不触发 workspace upsert（reader 只做只读查询，不调用 open_workspace）。"""
@@ -1493,7 +1509,12 @@ def test_extension_snapshot_build_is_read_only(tmp_path, tiny_workspace, monkeyp
         ExtensionWorkspaceReader(client.app.state.service.database.sessions),
         allowed_capabilities=frozenset({"workspace.snapshot.read.v1"}),
     )
-    context = broker.context("dst-manager.sheet-catalog", workspace_id, revision_id)
+    context = broker.context(
+        "dst-manager.sheet-catalog",
+        workspace_id,
+        revision_id,
+        settings=EXTENSION_SETTINGS_SNAPSHOT,
+    )
     snapshot = context.workspace_snapshot()
     context.close()
 

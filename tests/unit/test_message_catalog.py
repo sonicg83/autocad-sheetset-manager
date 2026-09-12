@@ -124,9 +124,11 @@ SHELL_CODES = {
     "SHEET_PREFERENCES_IO",
 }
 
-# 扩展平台设置码（PLAN-DM-025 Task 3；GET 只读视图与 PUT 409 共用同一稳定 code）
+# 扩展平台设置码（PLAN-DM-025 Task 3/4；GET 只读视图与 PUT 409 共用同一稳定 code，
+# 预览后设置变化由动作执行返回同一目录的稳定 code）
 EXTENSION_CODES = {
     "EXTENSION_SETTINGS_SCHEMA_NEWER",
+    "EXTENSION_SETTINGS_CHANGED",
 }
 
 ALL_KNOWN_CODES = APPLICATION_CODES | CAD_CODES | SETTINGS_CODES | SHELL_CODES | EXTENSION_CODES
@@ -293,6 +295,17 @@ def test_settings_schema_newer_code_reuses_extension_message_key():
     assert "EXTENSION_SETTINGS_SCHEMA_NEWER" in known_codes()
     assert CATALOG["EXTENSION_SETTINGS_SCHEMA_NEWER"].message_key == (
         EXTENSION_MESSAGE_KEYS["EXTENSION_SETTINGS_SCHEMA_NEWER"]
+    )
+
+
+def test_settings_changed_code_reuses_extension_message_key():
+    """PLAN-DM-025 Task 4：预览后设置变化（409）的稳定码必须进 UI 可见目录，
+    否则 extension_api._error_response 按码索引文案键会直接 KeyError → HTTP 500。"""
+    from dst_manager.interfaces.extension_contracts import EXTENSION_MESSAGE_KEYS
+
+    assert "EXTENSION_SETTINGS_CHANGED" in known_codes()
+    assert CATALOG["EXTENSION_SETTINGS_CHANGED"].message_key == (
+        EXTENSION_MESSAGE_KEYS["EXTENSION_SETTINGS_CHANGED"]
     )
 
 

@@ -1048,7 +1048,7 @@ export interface components {
          */
         ExtensionErrorResponse: {
             /** Code */
-            code: ("EXTENSION_NOT_FOUND" | "EXTENSION_DISABLED" | "EXTENSION_INCOMPATIBLE" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_SETTINGS_INVALID" | "EXTENSION_SETTINGS_SCHEMA_NEWER" | "EXTENSION_ACTION_NOT_FOUND" | "SAVE_GRANT_INVALID" | "EXPORT_DESTINATION_CHANGED" | "REPREVIEW_REQUIRED" | "ARTIFACT_WRITE_FAILED") | string;
+            code: ("EXTENSION_NOT_FOUND" | "EXTENSION_DISABLED" | "EXTENSION_INCOMPATIBLE" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_SETTINGS_INVALID" | "EXTENSION_SETTINGS_SCHEMA_NEWER" | "EXTENSION_SETTINGS_CHANGED" | "EXTENSION_ACTION_NOT_FOUND" | "SAVE_GRANT_INVALID" | "EXPORT_DESTINATION_CHANGED" | "REPREVIEW_REQUIRED" | "ARTIFACT_WRITE_FAILED") | string;
             /** Message */
             message: string;
             /** Message Key */
@@ -1060,10 +1060,13 @@ export interface components {
         };
         /**
          * ExtensionExecuteRequest
-         * @description 执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
+         * @description 执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。
          *
          *     后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
-         *     执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+         *     执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；
+         *     ``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值
+         *     （ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``
+         *     拒绝，不得用新设置执行旧预览。
          */
         ExtensionExecuteRequest: {
             /** Base Revision Id */
@@ -1072,6 +1075,8 @@ export interface components {
             preview_digest: string;
             /** Save Grant Id */
             save_grant_id: string;
+            /** Settings Revision */
+            settings_revision: number;
             template: components["schemas"]["ExtensionTemplateRequest"];
             /** Workspace Id */
             workspace_id: string;
@@ -1836,6 +1841,10 @@ export interface components {
         /**
          * SheetCatalogPreviewResponse
          * @description 预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。
+         *
+         *     ``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被
+         *     排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，
+         *     执行时必须原样重复提交（ARCH-DM-006 §11）。
          */
         SheetCatalogPreviewResponse: {
             /** Errors */
@@ -1843,11 +1852,15 @@ export interface components {
             /** Executable */
             executable: boolean;
             field_catalog: components["schemas"]["SheetCatalogFieldCatalogModel"];
+            /** Filtered Rows */
+            filtered_rows: number;
             normalized_template: components["schemas"]["SheetCatalogTemplateModel"];
             /** Preview Digest */
             preview_digest: string;
             /** Rows */
             rows: string[][];
+            /** Settings Revision */
+            settings_revision: number;
             /** Total Rows */
             total_rows: number;
             /** Warnings */

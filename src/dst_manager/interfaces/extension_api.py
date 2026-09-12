@@ -270,13 +270,14 @@ def _preview_request(body: ExtensionPreviewRequest) -> SheetCatalogPreviewReques
 
 
 def _execute_request(body: ExtensionExecuteRequest) -> SheetCatalogExecuteRequest:
-    """契约模型 → 执行请求值对象（模板快照与摘要原样传递，复核属宿主运行时）。"""
+    """契约模型 → 执行请求值对象（模板快照、摘要与设置修订原样传递）。"""
     return SheetCatalogExecuteRequest(
         workspace_id=body.workspace_id,
         base_revision_id=body.base_revision_id,
         template=_template_snapshot(body.template),
         preview_digest=body.preview_digest,
         save_grant_id=body.save_grant_id,
+        settings_revision=body.settings_revision,
     )
 
 
@@ -360,6 +361,8 @@ def _preview_response(
         warnings=[_diagnostic_model(diagnostic) for diagnostic in warnings],
         rows=[list(row) for row in result.rows],
         total_rows=result.total_rows,
+        filtered_rows=result.filtered_rows,
+        settings_revision=result.settings_revision,
         preview_digest=result.preview_digest,
         executable=result.executable,
     )

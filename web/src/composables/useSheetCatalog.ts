@@ -61,6 +61,9 @@ type PreviewResponse = {
   warnings: {code: string; message_key: string; params: Record<string, string | number>; column_id?: string | null; source_position?: number | null}[];
   rows: string[][];
   total_rows: number;
+  filtered_rows: number;
+  // 本次预览绑定的扩展设置修订：执行时必须原样重复提交（ARCH-DM-006 §11）
+  settings_revision: number;
   preview_digest: string;
   executable: boolean;
 };
@@ -163,6 +166,10 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   const previewError = ref("");
   // 本次预览对应的草稿列快照：导出只允许"预览与草稿一致"时进行（SPEC §3.1 第 7 步）
   const previewedColumns = ref("");
+  // 本次预览绑定的扩展设置修订：导出时原样重复提交，后端据此拒绝"预览后设置已变"
+  // （EXTENSION_SETTINGS_CHANGED/409）；不得用最新 settingsRevision 代替，否则会把
+  // 设置漂移误报成通用预览漂移（REPREVIEW_REQUIRED）。
+  const previewedSettingsRevision = ref<number | null>(null);
   let previewGeneration = 0;
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -366,6 +373,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
       };
       previewError.value = "";
       previewedColumns.value = snapshotColumns;
+      previewedSettingsRevision.value = result.settings_revision;
       previewStatus.value = "ready";
     } catch (error) {
       if (generation !== previewGeneration) return;
@@ -547,7 +555,8 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   async function exportXlsx() {
     const current = workspace.value;
     const digest = preview.value?.previewDigest;
-    if (!current || !exportReady.value || !digest) return;
+    const previewSettingsRevision = previewedSettingsRevision.value;
+    if (!current || !exportReady.value || !digest || previewSettingsRevision === null) return;
     exportState.phase = "exporting";
     exportState.artifactId = "";
     exportState.errorText = "";
@@ -596,6 +605,8 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
           template: toSnapshot({...draft.value, name: draftName.value}),
           preview_digest: digest,
           save_grant_id: grant.value.save_grant_id,
+          // 预览响应回传的设置修订原样重复：与当前设置不一致时后端拒绝执行
+          settings_revision: previewSettingsRevision,
         }),
       });
       // SPEC §10：只显示最终路径与文件名，不显示 Artifact/修订/哈希

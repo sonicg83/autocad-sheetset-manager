@@ -1759,6 +1759,7 @@
                   "EXTENSION_CAPABILITY_UNAVAILABLE",
                   "EXTENSION_SETTINGS_INVALID",
                   "EXTENSION_SETTINGS_SCHEMA_NEWER",
+                  "EXTENSION_SETTINGS_CHANGED",
                   "EXTENSION_ACTION_NOT_FOUND",
                   "SAVE_GRANT_INVALID",
                   "EXPORT_DESTINATION_CHANGED",
@@ -1807,7 +1808,7 @@
       },
       "ExtensionExecuteRequest": {
         "additionalProperties": false,
-        "description": "执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。\n\n后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入\n执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。",
+        "description": "执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。\n\n后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入\n执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；\n``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值\n（ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``\n拒绝，不得用新设置执行旧预览。",
         "properties": {
           "base_revision_id": {
             "title": "Base Revision Id",
@@ -1820,6 +1821,10 @@
           "save_grant_id": {
             "title": "Save Grant Id",
             "type": "string"
+          },
+          "settings_revision": {
+            "title": "Settings Revision",
+            "type": "integer"
           },
           "template": {
             "$ref": "#/components/schemas/ExtensionTemplateRequest"
@@ -1834,7 +1839,8 @@
           "base_revision_id",
           "template",
           "preview_digest",
-          "save_grant_id"
+          "save_grant_id",
+          "settings_revision"
         ],
         "title": "ExtensionExecuteRequest",
         "type": "object"
@@ -4013,7 +4019,7 @@
       },
       "SheetCatalogPreviewResponse": {
         "additionalProperties": false,
-        "description": "预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。",
+        "description": "预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。\n\n``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被\n排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，\n执行时必须原样重复提交（ARCH-DM-006 §11）。",
         "properties": {
           "errors": {
             "items": {
@@ -4028,6 +4034,10 @@
           },
           "field_catalog": {
             "$ref": "#/components/schemas/SheetCatalogFieldCatalogModel"
+          },
+          "filtered_rows": {
+            "title": "Filtered Rows",
+            "type": "integer"
           },
           "normalized_template": {
             "$ref": "#/components/schemas/SheetCatalogTemplateModel"
@@ -4045,6 +4055,10 @@
             },
             "title": "Rows",
             "type": "array"
+          },
+          "settings_revision": {
+            "title": "Settings Revision",
+            "type": "integer"
           },
           "total_rows": {
             "title": "Total Rows",
@@ -4065,6 +4079,8 @@
           "warnings",
           "rows",
           "total_rows",
+          "filtered_rows",
+          "settings_revision",
           "preview_digest",
           "executable"
         ],

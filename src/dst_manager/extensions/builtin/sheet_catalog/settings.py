@@ -36,6 +36,7 @@ from dst_manager.extensions.builtin.sheet_catalog.templates import (
 from dst_manager.extensions.settings import SettingsFieldSpec
 
 __all__ = [
+    "EXCLUDED_TITLE_KEYWORDS_FIELD",
     "MAX_EXCLUDED_TITLE_KEYWORDS",
     "MAX_EXCLUDED_TITLE_KEYWORD_CHARS",
     "SHEET_CATALOG_SETTINGS_PROVIDER",

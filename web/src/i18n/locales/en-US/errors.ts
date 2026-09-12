@@ -125,6 +125,7 @@ export default {
     capabilityUnavailable: "The extension is currently unavailable",
     settingsInvalid: "The extension settings are invalid or were changed elsewhere; reopen and retry",
     schemaNewer: "These extension settings were saved by a newer version and are kept read-only; saving is blocked",
+    settingsChanged: "The extension settings changed; preview again before exporting",
     actionNotFound: "The extension does not declare this action",
     saveGrantInvalid: "The save grant is invalid or expired; run Save As again",
     exportDestinationChanged: "The export destination changed; choose a save location again",

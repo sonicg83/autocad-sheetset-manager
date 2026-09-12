@@ -583,12 +583,15 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     await expect(page.getByText("revision-1")).toHaveCount(0);
     const body = await page.textContent("body");
     expect(body).not.toContain("sha256");
-    // 执行请求契约：重复提交模板快照 + 预览摘要 + 保存授权
+    // 执行请求契约：重复提交模板快照 + 预览摘要 + 设置修订 + 保存授权
     const execute = state.executeRequests[0];
     expect(execute.workspace_id).toBe("workspace-1");
     expect(execute.base_revision_id).toBe("revision-1");
     expect(execute.preview_digest).toBe(state.lastDigest);
     expect(execute.save_grant_id).toBe("grant-e2e");
+    // PLAN-DM-025 Task 4：预览回传的设置修订必须原样重复提交（夹具缺失该字段
+    // 或前端改用最新 settingsRevision 时此处红）
+    expect(execute.settings_revision).toBe(0);
     // 打开所在文件夹经专用桥方法：只传扩展与 Artifact 标识，不传 workspace_id/路径
     await page.getByRole("button", {name: "打开所在文件夹"}).click();
     await expect.poll(async () => (await readBridgeCalls(page)).artifactFolderCalls).toEqual([

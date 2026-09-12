@@ -3,11 +3,15 @@
 覆盖：预览后执行成功并回读 XLSX/Artifact、未保存模板可执行、修订/模板/扩展
 版本/动作摘要变化 ``REPREVIEW_REQUIRED``、无效/漂移/复用授权拒绝、候选失败不
 登记、成功响应无后台字段、Artifact 三态可用性、桥与 API runtime 共享同一
-``SaveGrantStore``，以及整条预览→执行链路的只读不变量。
+``SaveGrantStore``，以及整条预览→执行链路的只读不变量；PLAN-DM-025 Task 4 的
+设置快照绑定：过滤投影同时作用于预览与候选行、全部过滤导出只有表头、预览后
+设置变化在候选目录与授权消费之前以 ``EXTENSION_SETTINGS_CHANGED``/409 拒绝，
+以及预览末尾 best-effort 偏好写入不使该预览自行过期。
 """
 
 import hashlib
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -21,6 +25,8 @@ from dst_manager.config import Settings
 from dst_manager.extensions.builtin.sheet_catalog.templates import DEFAULT_TEMPLATE
 from dst_manager.extensions.registry import ExtensionRegistry
 from dst_manager.extensions.save_grants import SaveGrantStore
+from dst_manager.infrastructure.acsm_xml import AcsmDocument
+from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.database import Database
 from dst_manager.infrastructure.persistence.extensions import ExtensionStore
@@ -99,6 +105,24 @@ def format_code_template(expression: str) -> dict:
     }
 
 
+def add_excluded_sheet(dst: Path, *, number: str, title: str) -> None:
+    """在测试工作区追加一张图纸（复制首张节点并改写 ID/编号/图名与布局名）。"""
+    document = AcsmDocument(DstCodec().decode_file(dst))
+    subset = document.root.xpath("//*[local-name()='AcSmSubset']")[0]
+    first = subset.xpath("./*[local-name()='AcSmSheet']")[0]
+    second = deepcopy(first)
+    for index, node in enumerate([second, *second.xpath(".//*[@ID]")], start=20):
+        node.set("ID", f"g00000000-0000-0000-0000-{index:012X}")
+    second.xpath("./*[local-name()='AcSmProp' and @propname='Number']")[0].text = number
+    second.xpath("./*[local-name()='AcSmProp' and @propname='Title']")[0].text = title
+    second.xpath(
+        "./*[local-name()='AcSmAcDbLayoutReference']"
+        "/*[local-name()='AcSmProp' and @propname='Name']",
+    )[0].text = f"{number} {title}"
+    subset.append(second)
+    DstCodec().encode_file(document.to_bytes(), dst)
+
+
 def open_workspace(client: TestClient, tiny_workspace) -> dict:
     opened = client.post("/api/workspaces/open", json={"dst_path": str(tiny_workspace[0])})
     assert opened.status_code == 200
@@ -123,7 +147,14 @@ def create_grant(store: SaveGrantStore, workspace: dict, target: Path):
     return store.create(SHEET_CATALOG_ID, ACTION_ID, workspace["id"], target)
 
 
-def execute_action(client: TestClient, workspace: dict, preview_body: dict, grant_id: str, template=None):
+def execute_action(
+    client: TestClient,
+    workspace: dict,
+    preview_body: dict,
+    grant_id: str,
+    template=None,
+    settings_revision="unset",
+):
     body = template if template is not None else template_payload()
     return client.post(
         f"/api/extensions/{SHEET_CATALOG_ID}/actions/{ACTION_ID}/execute",
@@ -133,8 +164,20 @@ def execute_action(client: TestClient, workspace: dict, preview_body: dict, gran
             "template": body,
             "preview_digest": preview_body["preview_digest"],
             "save_grant_id": grant_id,
+            # 默认原样重复提交预览绑定的设置修订（前端契约）；用例可显式提交过期值
+            "settings_revision": (
+                preview_body.get("settings_revision", 0)
+                if settings_revision == "unset"
+                else settings_revision
+            ),
         },
     )
+
+
+def artifact_count(client: TestClient) -> int:
+    """Artifact 登记数（漂移拒绝必须不留下成功登记）。"""
+    with client.app.state.service.database.sessions() as session:
+        return session.execute(text("SELECT COUNT(*) FROM artifacts")).scalar_one()
 
 
 def assert_error_contract(body: dict) -> None:
@@ -371,6 +414,223 @@ def test_disabled_extension_rejects_execute(tmp_path, tiny_workspace):
     body = resp.json()
     assert_error_contract(body)
     assert body["code"] == "EXTENSION_DISABLED"
+
+
+# ---------------------------------------------------------------------------
+# 设置快照绑定：过滤投影与漂移拒绝（PLAN-DM-025 Task 4 / ARCH-DM-006 §11）
+# ---------------------------------------------------------------------------
+
+
+def test_filter_settings_project_preview_and_candidate_rows(tmp_path, tiny_workspace):
+    """预览与候选行从同一设置快照读取过滤词，计数与导出内容一致（部分过滤）。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    add_excluded_sheet(tiny_workspace[0], number="002", title="作废-平面")
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "过滤.xlsx")
+
+    saved = client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 2,
+            "expected_revision": 0,
+            "value": {"excluded_title_keywords": " 作废，DRAFT "},
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["value"]["excluded_title_keywords"] == ["作废", "DRAFT"]
+
+    preview_body = preview_action(client, workspace)
+
+    assert preview_body["settings_revision"] == saved.json()["revision"]
+    assert preview_body["executable"] is True
+    assert preview_body["rows"] == [["001", "平面", "A.dwg"]]
+    assert (preview_body["total_rows"], preview_body["filtered_rows"]) == (1, 1)
+
+    resp = execute_action(client, workspace, preview_body, grant.save_grant_id)
+
+    assert resp.status_code == 200, resp.text
+    workbook = load_workbook(resp.json()["output_path"])
+    worksheet = workbook["图纸目录"]
+    assert [cell.value for cell in worksheet[1]] == ["图号", "图名", "文件名"]
+    assert [[cell.value for cell in row] for row in worksheet.iter_rows(min_row=2)] == [
+        ["001", "平面", "A.dwg"]
+    ]
+    workbook.close()
+    assert candidate_files(client) == []
+
+
+def test_filter_everything_away_exports_header_only_xlsx(tmp_path, tiny_workspace):
+    """全部过滤仍可执行：登记 Artifact 且候选工作簿只有表头。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "空目录.xlsx")
+    saved = client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 2,
+            "expected_revision": 0,
+            "value": {"excluded_title_keywords": ["平面"]},
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    preview_body = preview_action(client, workspace)
+
+    assert preview_body["executable"] is True
+    assert preview_body["errors"] == []
+    assert preview_body["rows"] == []
+    assert (preview_body["total_rows"], preview_body["filtered_rows"]) == (0, 1)
+
+    resp = execute_action(client, workspace, preview_body, grant.save_grant_id)
+
+    assert resp.status_code == 200, resp.text
+    workbook = load_workbook(resp.json()["output_path"])
+    worksheet = workbook["图纸目录"]
+    assert [cell.value for cell in worksheet[1]] == ["图号", "图名", "文件名"]
+    assert worksheet.max_row == 1
+    assert list(worksheet.iter_rows(min_row=2)) == []
+    workbook.close()
+    artifact = client.get(f"/api/artifacts/{resp.json()['artifact_id']}")
+    assert artifact.status_code == 200
+    assert artifact.json()["availability"] == "AVAILABLE"
+
+
+def test_settings_change_after_preview_rejects_execute_before_side_effects(
+    tmp_path, tiny_workspace
+):
+    """预览后设置变化：候选目录与授权消费之前返回 EXTENSION_SETTINGS_CHANGED/409。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    target = exports / "图纸目录.xlsx"
+    grant = create_grant(grant_store(client), workspace, target)
+    preview_body = preview_action(client, workspace)
+    saved = client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 2,
+            "expected_revision": preview_body["settings_revision"],
+            "value": {"excluded_title_keywords": ["作废"]},
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    response = execute_action(client, workspace, preview_body, grant.save_grant_id)
+
+    assert response.status_code == 409
+    body = response.json()
+    assert_error_contract(body)
+    assert body["code"] == "EXTENSION_SETTINGS_CHANGED"
+    assert body["message_key"] == "errors.extension.settingsChanged"
+    assert body["params"]["expected_revision"] == preview_body["settings_revision"]
+    assert body["params"]["current_revision"] == saved.json()["revision"]
+    # 漂移必须在候选目录分配与授权消费之前拒绝：无候选文件、无目标文件、无 Artifact
+    assert candidate_files(client) == []
+    assert not target.exists()
+    assert artifact_count(client) == 0
+    # 授权未被烧毁：重新预览（携带新设置修订）后同一授权仍可使用
+    assert grant_store(client).active_count() == 1
+    refreshed = preview_action(client, workspace)
+    assert refreshed["settings_revision"] == saved.json()["revision"]
+    retried = execute_action(client, workspace, refreshed, grant.save_grant_id)
+    assert retried.status_code == 200, retried.text
+
+
+def test_stale_settings_revision_from_client_rejects_execute(tmp_path, tiny_workspace):
+    """客户端重复提交过期设置修订（预览后外部修改设置的另一路径）同样 409。"""
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "out.xlsx")
+    preview_body = preview_action(client, workspace)
+
+    response = execute_action(
+        client, workspace, preview_body, grant.save_grant_id, settings_revision=99
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "EXTENSION_SETTINGS_CHANGED"
+    assert artifact_count(client) == 0
+
+
+def test_higher_schema_settings_fail_closed_for_preview_and_execute(tmp_path, tiny_workspace):
+    """已存设置 Schema 高于当前版本：动作调用 fail-closed，不按当前语义执行。
+
+    ARCH-DM-006 §8.1/§11：未知高版本只能只读保留；Runtime 在创建上下文前取得
+    快照失败时必须拒绝动作（预览 409 与执行 409 同一稳定码），而不是当成空配置
+    或 Provider 默认值。
+    """
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    ExtensionStore(client.app.state.service.database.sessions).put_settings(
+        SHEET_CATALOG_ID, 3, {"future_field": 1}, 0
+    )
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    target = exports / "out.xlsx"
+    grant = create_grant(grant_store(client), workspace, target)
+
+    preview = client.post(
+        f"/api/extensions/{SHEET_CATALOG_ID}/actions/{ACTION_ID}/preview",
+        json={
+            "workspace_id": workspace["id"],
+            "base_revision_id": workspace["revision_id"],
+            "template": template_payload(),
+        },
+    )
+    assert preview.status_code == 409
+    assert preview.json()["code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+
+    response = execute_action(
+        client, workspace, {"preview_digest": "0" * 64}, grant.save_grant_id
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    assert candidate_files(client) == []
+    assert not target.exists()
+    assert artifact_count(client) == 0
+    assert grant_store(client).active_count() == 1
+
+
+def test_workspace_preference_write_never_expires_the_same_preview(tmp_path, tiny_workspace):
+    """预览末尾的 best-effort“上次选中模板”偏好写入不得使该预览自行过期。
+
+    ARCH-DM-006 §11（MEMO-DM-033 已修订）：只有会改变动作输出且未进入规范化
+    动作请求的工作区偏好才绑定其修订。当前唯一偏好是“上次选中的已保存模板
+    ID”，模板身份与内容已进入规范化动作请求，因此它不绑定；若绑定，每次预览
+    都会被自己的偏好写入立即作废。未来新增任何会改变输出且未进入规范化动作
+    请求的偏好时，必须把其修订绑定进 ``preview_digest``，并以
+    ``REPREVIEW_REQUIRED``/409 拒绝漂移。
+    """
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "out.xlsx")
+    template_id = uuid.uuid5(uuid.NAMESPACE_URL, "export:preference-template")
+    template = template_payload(template_id=template_id)
+
+    preview_body = preview_action(client, workspace, template)
+
+    preference = client.get(
+        f"/api/extensions/{SHEET_CATALOG_ID}/workspaces/{workspace['id']}/preferences"
+    ).json()
+    assert preference["value"] == {"template_id": str(template_id)}
+    # 偏好词汇目前只有唯一一项非输出绑定项；新增输出相关偏好必须重定绑定规则
+    assert set(preference["value"]) == {"template_id"}
+
+    resp = execute_action(
+        client, workspace, preview_body, grant.save_grant_id, template=template
+    )
+
+    assert resp.status_code == 200, resp.text
 
 
 # ---------------------------------------------------------------------------

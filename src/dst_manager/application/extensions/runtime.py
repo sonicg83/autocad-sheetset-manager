@@ -65,7 +65,11 @@ from dst_manager.extensions.save_grants import (
     SaveGrantStore,
     capture_baseline,
 )
-from dst_manager.extensions.settings import SettingsContribution, SettingsFieldSpec
+from dst_manager.extensions.settings import (
+    ExtensionSettingsSnapshot,
+    SettingsContribution,
+    SettingsFieldSpec,
+)
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
 from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
@@ -404,10 +408,16 @@ class ExtensionRuntime:
     ) -> Iterator[ExtensionContext]:
         """经 CapabilityBroker 发放短生命周期扩展上下文，退出即关闭。
 
+        §11：宿主在这里（创建上下文**之前**）读取并解析一次设置，生成不可变
+        快照随上下文注入；Broker 只转交、不读 Store。未知更高 Schema 无法解析，
+        ``snapshot()`` fail-closed 拒绝动作调用，不会按当前语义执行一份来自
+        更高版本的配置。
+
         修订漂移（``REPREVIEW_REQUIRED``）与工作区不可读由上下文在
         ``workspace_snapshot()`` 时拒绝；能力拒绝统一经
         :func:`capability_platform_error` 映射为契约化平台错误。
         """
+        snapshot = self.settings_snapshot(extension_id)
         manifests = {
             descriptor.manifest.extension_id: descriptor.manifest
             for descriptor in self._registry.list()
@@ -422,13 +432,23 @@ class ExtensionRuntime:
             )
         broker = CapabilityBroker(manifests, self._reader)
         try:
-            context = broker.context(extension_id, workspace_id, required_revision_id)
+            context = broker.context(
+                extension_id, workspace_id, required_revision_id, settings=snapshot
+            )
         except CapabilityError as exc:
             raise capability_platform_error(exc) from exc
         try:
             yield context
         finally:
             context.close()
+
+    def settings_snapshot(self, extension_id: str) -> ExtensionSettingsSnapshot:
+        """一次动作调用的不可变设置快照（Provider 配对 + 迁移 + 冻结 + 摘要）。"""
+        manifest = self._manifest(extension_id)
+        try:
+            return self._settings.snapshot(manifest)
+        except ExtensionSettingsError as exc:
+            raise self._settings_error(exc) from exc
 
     def settings_schema(self, extension_id: str) -> int:
         """清单声明的设置/偏好 schema 版本（偏好保存用）。"""
@@ -575,7 +595,27 @@ class ExtensionRuntime:
     def _verify_repreview(
         repview, context: ExtensionContext, request: SheetCatalogExecuteRequest
     ):
-        """摘要复核：可执行且摘要逐字节一致才放行；否则 REPREVIEW_REQUIRED。"""
+        """摘要复核：设置绑定、可执行与摘要逐字节一致都通过才放行。
+
+        先核对设置修订，再核对预览摘要：设置变化会使重建的 ``preview_digest``
+        也不同，若不先判就会把“设置已变”误报为通用 ``REPREVIEW_REQUIRED``，
+        丢失 §12 要求的稳定区分（应用级设置变化 → ``EXTENSION_SETTINGS_CHANGED``）。
+        整个复核发生在候选目录分配与授权消费之前（测试钉住：无候选文件、
+        无 Artifact、授权未消费）。
+        """
+        snapshot = context.settings
+        if snapshot.revision != request.settings_revision:
+            raise ExtensionPlatformError(
+                "EXTENSION_SETTINGS_CHANGED",
+                "预览后扩展设置已变化，请重新预览后再导出",
+                status_code=_ERROR_STATUS["EXTENSION_SETTINGS_CHANGED"],
+                params={
+                    "extension_id": snapshot.extension_id,
+                    "workspace_id": request.workspace_id,
+                    "expected_revision": request.settings_revision,
+                    "current_revision": snapshot.revision,
+                },
+            )
         repreview = repview(context, request)
         if (
             not repreview.executable
@@ -725,7 +765,8 @@ _ARTIFACT_CHANGED = "CHANGED"
 
 #: 平台错误码默认 HTTP 状态（ARCH-DM-006 §12；能力不可用按环境问题归 503）。
 #: 未登记的注册表诊断码由 :meth:`ExtensionRuntime._platform_error` 兜底为 503。
-#: ``REPREVIEW_REQUIRED``：来源修订或模板摘要已变化（409 语义：请刷新）。
+#: ``EXTENSION_SETTINGS_CHANGED``：预览后应用级扩展设置变化（409，需重新预览）。
+#: ``REPREVIEW_REQUIRED``：来源修订、影响输出的偏好、模板或能力摘要已变化（409 语义：请刷新）。
 #: ``SAVE_GRANT_INVALID``/``EXPORT_DESTINATION_CHANGED``：授权状态冲突（409）。
 #: ``ARTIFACT_WRITE_FAILED``：候选/保存/登记失败，宿主环境问题（503）。
 _ERROR_STATUS: dict[str, int] = {
@@ -733,6 +774,7 @@ _ERROR_STATUS: dict[str, int] = {
     "EXTENSION_DISABLED": 409,
     "EXTENSION_INCOMPATIBLE": 409,
     "EXTENSION_CAPABILITY_UNAVAILABLE": 503,
+    "EXTENSION_SETTINGS_CHANGED": 409,
     "EXTENSION_ACTION_NOT_FOUND": 404,
     "REPREVIEW_REQUIRED": 409,
     "SAVE_GRANT_INVALID": 409,

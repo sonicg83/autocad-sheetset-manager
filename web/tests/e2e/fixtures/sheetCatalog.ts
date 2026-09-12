@@ -284,6 +284,10 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     warnings,
     rows,
     total_rows: sheets.length,
+    settings_revision: state.revision,
+    // PLAN-DM-025 Task 4：预览回传本次绑定的扩展设置修订；前端导出时原样重复提交，
+    // 缺该字段会让执行请求丢失绑定值（真实后端 422 EXTENSION_SETTINGS_CHANGED 门禁失效），
+    // 而全量 mock 的 E2E 仍旧全绿。此处与真实后端保持同形。
     preview_digest: `digest-${state.previewRequests.length + 1}`,
     executable,
   };

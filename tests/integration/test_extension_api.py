@@ -14,7 +14,9 @@ Provider 全权校验、过滤关键词规范回读与字段级超限错误、�
 ``effective_value``/``read_only``/``diagnostic_code``，以及更高 Schema 的
 HTTP 409 ``EXTENSION_SETTINGS_SCHEMA_NEWER``），以及修复轮 1 的 R9 复核（
 声明设置却无法由 Provider 解释时的 503 诊断与无部分结果、Provider 重绑定
-时字段规格访问器与 ``get_settings`` 同形的错误映射）。
+时字段规格访问器与 ``get_settings`` 同形的错误映射），以及 PLAN-DM-025
+Task 4 的设置快照绑定（预览回传 ``settings_revision``/``filtered_rows``、
+输出图纸过滤经服务端规范化关键词作用于预览行与计数）。
 """
 
 import hashlib
@@ -1338,6 +1340,8 @@ def test_action_endpoints_validate_availability_and_declared_action(tmp_path):
             "template": template_payload(),
             "preview_digest": "0" * 64,
             "save_grant_id": "grant-1",
+            # PLAN-DM-025 Task 4：执行必须重复提交预览时绑定的设置修订
+            "settings_revision": 0,
         },
     )
     assert execute.status_code == 404
@@ -1460,6 +1464,42 @@ def test_preview_action_blocks_undefined_field_with_structured_error(tmp_path, t
     assert error["message_key"] == "errors.sheetCatalog.fieldUndefined"
     assert error["params"] == {"scope": "sheet", "name": "不存在"}
     assert error["column_id"] == str(uuid.uuid5(uuid.NAMESPACE_URL, "preview:bad"))
+
+
+def test_preview_projects_filter_settings_and_reports_settings_revision(tmp_path, tiny_workspace):
+    """预览从同一冻结设置快照取过滤词，并回传绑定的设置修订与过滤计数。"""
+    client = make_client(tmp_path)
+    workspace = open_workspace(client, tiny_workspace)  # 单张图纸：001/平面
+
+    baseline = post_preview(client, workspace).json()
+    assert baseline["executable"] is True
+    assert (baseline["total_rows"], baseline["filtered_rows"]) == (1, 0)
+    assert baseline["rows"] == [["001", "平面", "A.dwg"]]
+    # 从未保存过设置：revision = 0（Provider 默认零值），预览仍携带绑定值
+    assert baseline["settings_revision"] == 0
+
+    saved = client.put(
+        f"/api/extensions/{SHEET_CATALOG_ID}/settings",
+        json={
+            "schema_version": 2,
+            "expected_revision": 0,
+            "value": {"excluded_title_keywords": " 平面，PLAN "},
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    # 服务端规范化（半/全角逗号、trim、去重）后的持久值即预览使用的过滤词
+    assert saved.json()["value"]["excluded_title_keywords"] == ["平面", "PLAN"]
+    revision = saved.json()["revision"]
+
+    filtered = post_preview(client, workspace).json()
+
+    assert filtered["settings_revision"] == revision
+    assert filtered["executable"] is True
+    assert filtered["errors"] == []
+    assert filtered["rows"] == []
+    assert (filtered["total_rows"], filtered["filtered_rows"]) == (0, 1)
+    # 设置修订变化后旧预览摘要失效（不得用新设置执行旧预览）
+    assert filtered["preview_digest"] != baseline["preview_digest"]
 
 
 def test_preview_saves_last_template_preference_and_skips_drafts(tmp_path, tiny_workspace):
