@@ -14,7 +14,7 @@
 
 详细计划：
 
-- [图纸目录数字格式码实施计划（PLAN-DM-026，proposed；依据 SPEC-DM-012 §5.4 与 RES-DM-001，只做只读导出的输出格式化：表达式新增 `:0{1,16}` 格式码、预览与 XLSX 贯通、字段浏览器格式入口）](PLAN-DM-026-sheet-catalog-number-format-code.md)
+- [图纸目录数字格式码实施计划（PLAN-DM-026，completed；依据 SPEC-DM-012 §5.4 与 RES-DM-001，只做只读导出的输出格式化：表达式新增 `:0{1,16}` 格式码、预览与 XLSX 贯通、字段浏览器格式入口。4 个任务全部实施并逐任务评审通过；任务 4 补足格式入口的 G8 自动化证据（浅/深主题截图 + 200% 缩放）入 `docs/dst-manager/specs/assets/SPEC-DM-012/production/`，G9 清单（MEMO-DM-028）已追加 `### 1.9` 待用户执行；全量回归 ruff 通过、pytest 1161 passed / 74 skipped / 0 failed、unit 40 passed、build 通过（898 键 / 9 域）、E2E 437 passed / 0 failed / 2 flaky（均重跑通过）)](PLAN-DM-026-sheet-catalog-number-format-code.md)
 - [Builtin 扩展全局设置框架实施计划（PLAN-DM-025，proposed；已按 MEMO-DM-033 关闭 2 个阻断项，并纳入“输出图纸过滤”作为真实设置验证，共 9 项任务；前端 generated/custom 实施前须重开并通过 SPEC-DM-011 G4）](PLAN-DM-025-extension-global-settings.md)
 - [扩展卡片基线与布尔开关统一下沉（PLAN-DM-022，completed，依据 SPEC-DM-011 SC-16；3 批次 4 任务全部实施并逐任务评审通过，G8 已覆盖 SC-15/SC-16，G9 真实桌面验收待用户）](PLAN-DM-022-extension-card-baseline.md)
 - [多语言支持实施计划（PLAN-DM-021，active；批次一～三与 Task 11/12 已实施，G8 待 D3 裁决、G9 待真实桌面验收）](PLAN-DM-021-multilingual-support.md)

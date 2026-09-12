@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-12（合并前评审修复：格式码入口 key 同名串扰）
+
+- **评审确认 bug**：`FieldBrowser.vue` 条目 key 原为 `${scope}:${canonicalName}`，而快照 `build_field_catalog` 不阻止图纸自定义属性与固有字段同名（如自定义属性 `number` 与固有 `number` 同时出现），“固有字段”组与“图纸自定义属性”组会各渲染一个 key 为 `sheet:number` 的条目，共用单一 `openFormatKey` 导致两个格式码菜单同时展开、后一条目的菜单无法打开。修复：key 拼入 `builtin`/`custom` 标志（`sheet:builtin:number` / `sheet:custom:number`），保证跨组唯一；`li :key` 与菜单 `v-if`/`aria-expanded` 比较随之消歧。
+- 同轮外部评审另记录 3 条非阻断事项（Escape 处理器不判断焦点位置、e2e fixture 字段引用正则比后端语法宽松、`formatCode.ts` 以字符串拼接扩展引用而非扩展 `fieldReference`），待后续处理，不在本修复范围。
+- 验证：`npm run build`（含 `vue-tsc -b`、`check:i18n`）通过；`npm run test:unit` 7 文件 / 40 例通过；`npx playwright test sheet-catalog.spec.ts sheet-catalog-visual-evidence.spec.ts` 68 passed。Python 侧无改动。
+
 ## 2026-09-12（为图纸目录新增输出图纸过滤设计）
 
 - 修订 `SPEC-DM-012`：新增当前 Windows 用户级“输出图纸过滤”，按半/全角逗号拆分、trim、Unicode 大小写不敏感去重，并以 OR 字面子串匹配 `SheetSnapshot.title`；限制 50 项、单项 100 字符。
@@ -12,6 +18,48 @@
 - 把 `EXTENSION_SETTINGS_SCHEMA_NEWER` 明确定义为 GET 只读诊断与 PUT 409 共用的稳定错误码；generated 后端集成测试改用测试内 Manifest/Provider/固定索引注入，不向生产登记虚构扩展。
 - PLAN-DM-025 由八项调整为九项任务：新增独立的 `SettingsDialog.vue` 关于分区拆分任务并吸收原 Todo；补齐 SC-16 焦点钉子、两套生产证据回归、`SheetCatalogTemplateController`/可选校验反馈接口和 `useSheetCatalog.ts` 行数回落门禁。
 - 核实当前模板设置一直只持久化 `user_templates`，因此不新增不存在的“完整模板集剥离”迁移，只增加现有存量形状兼容回归测试；本批未修改运行时代码或依赖。
+
+## 2026-09-12（数字格式码评审后修正：断言强度、宽度校验与焦点事实核对）
+
+- **F1（终审 I-M1）文档 off-by-one**：可失败性反例的 Tab 步数多算 1。实测 Tab 序为「选择模板 → 另存为 → 搜索可用字段 → sheet.number 条目 → 格式触发按钮」，第 5 次恰好落在格式入口、第 4 次才失败。把按 5 次 Tab → 按 4 次 Tab（`changelog.md` 上一章节与 `PLAN-DM-026` `## 实际验证` 各一处）。
+- **F2（终审 I-M2）选中即关闭菜单缺断言**：在 `web/tests/e2e/sheet-catalog.spec.ts` 已点击过选项的两例（补零到 4 位、去前导零）末尾各补断言：菜单选项 `toHaveCount(0)` 与触发按钮 `aria-expanded="false"`；若 `closeFormatMenu()` 回归为不执行，选项仍在（实测变异下 `Expected: 0 / Received: 6`）。
+- **F3（终审 I-M3）永真断言换成能失败的断言**：原 `expect(boundingBox().width).toBeCloseTo(widthBefore, 0)` 尺寸恒为 258px、不可能失败，已改为把字段栏宽度钉在冻结区间 `>=256 && <=260`（与 `sheet-catalog-visual-evidence.spec.ts` 既有轨道守卫同口径）。变异证明：临时把 `SheetCatalogView.vue` 的 grid 轨道 `258px` 改为 `320px` → 红（`Expected: <= 260 / Received: 320`）；按字节还原后该文件 blob `77077d10…` 不变。
+- **F4（终审 I-M4）生成侧宽度校验**：`field_reference` 新增 1～16 显式校验，0 / 17 / 负数一律抛 `ValueError`（消息英文），不再能产出自身解析器拒绝的 `{sheet.number:}`；docstring 说明 0 是前端“去前导零”哨兵、由前端物化为 `:0`，Python 侧不接受。`tests/unit/test_sheet_catalog_expressions.py` 新增 19 例（1..16 生成→`parse_expression` 回读同宽度的往返性质 16 例 + 0/17/负数拒绝 3 例）。确认 `src/` 内无生产调用者。
+- **F5（终审 I-M5）经实测证伪**：选中格式码后焦点由既有 caret 协议（`insertReference` → `caretRequest` → `ColumnEditor` watcher）交给表达式输入框，**不是** `document.body`，与点击 `.field-chip` 插入字段行为一致；因此不新增焦点归还代码，改为在两例末尾断言表达式输入框 `toBeFocused()`。变异证明：临时移除 `insertField` 的 `caretRequest` 移交 → 红（`Received: inactive`），按字节还原后 `useSheetCatalog.ts` blob `e18af760…` 不变。
+- 本轮为本分支持的第 2 轮评审后修正，不改 DST/DWG、不加依赖、不改 API 字段与 DB 结构，模板 `schema_version` 保持 1，`formatCode.ts`、`ColumnEditor.vue` 与冻结 5 轨道布局均未触碰。验证：`uv run ruff check .` 通过；`uv run pytest` **1180 passed / 74 skipped / 0 failed**（collected 1254，较基线 1161/74/0、1235 增 19 例，均为 F4 新增）；`npm run test:unit` 7 文件 / 40 例通过；`npm run build` 通过（`check:i18n` 898 键 / 9 域）；`sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` + `extensions-navigation.spec.ts` 共 **74 passed / 0 failed**（`--workers=1 --retries=0`）。
+
+## 2026-09-12（图纸目录数字格式码门禁证据、索引与全量回归收口）
+
+- `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 新增 3 例（文件内 16 → 19 例）：`G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫`、`G8 补充：900×700 深色格式菜单截图 + 几何守卫`、`G8 补充：200% 缩放下格式入口不被遮挡`；新增盒模型视口守卫 `expectElementInsideViewport`。断言覆盖菜单盒在视口内、无整页横向溢出、140 步真实 Tab 环内 `toBeFocused()` 到达格式入口、Enter 展开与 Esc 关闭（`aria-expanded` 回 `false`、选项列表消失、焦点归还）、200% 缩放下入口落在字段栏盒内，以及被 235px 限高裁切的菜单尾部由字段列表内部滚动可达。
+- 生产证据真正落盘（`DST_MANAGER_WRITE_G8_EVIDENCE=1`）：`docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png`（110781 字节 / 1440×1000）、`g8-format-menu-dark-900x700.png`（60247 字节 / 900×700），两张均为打开格式菜单后的画面。
+- 先红后绿证据：把这 3 条用例先跑在任务 3 之前的 `FieldBrowser.vue`（临时回退到 `0929a5c`，随后按字节恢复，生产文件 blob 哈希 `6f5dc19c…` 不变）→ 3 failed（区域内无“格式”按钮，定位器 30s 超时）；恢复后同命令 3 passed。可失败性另用三条自然反例确认（菜单盒底缘 370 > 300、“按 4 次 Tab”时 `toBeFocused()` 失败、条目滚出字段栏后 190 < 256），反例脚本已删除、未入提交树。
+- `docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md` §16 只更新门禁影响段落：登记“G3/G4 不重开”结论与两个新证据文件名，并明确本轮为**自动化证据**、G8 的确认人与日期仍为“用户 / 2026-09-11”，不冒充用户重新确认 G8；门禁表 G8 行未改动。
+- `.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`（MEMO-DM-028）新增 `### 1.9 数字格式码：补零图号为文本单元格（SC-01 / SPEC-DM-012 §5.4；PLAN-DM-026）`（导出后核对 `0001` 为文本单元格，且未用格式码的模板导出结果与升级前一致），结论字段全部保持 `_待填写_`；§3 前置闸门登记 PLAN-DM-026 已完成（未改动 §1.6 既有条目）。
+- 索引与计划状态：`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 的 PLAN-DM-026/RES-DM-001/SPEC-DM-012 状态行更新；`PLAN-DM-026` `status: proposed` → `completed`，`## 实际验证` 占位替换为真实记录（G8 证据文件名与字节数、RED→GREEN、全量回归数字、跳过项与原因、G9 待用户执行项）。
+- 本轮不改生产源码、不加依赖、不改 API 字段与 DB 结构，模板 `schema_version` 保持 1。全量回归：`uv run ruff check .` 通过、`uv run pytest` 1161 passed / 74 skipped / 0 failed（collected 1235）、`uv lock --check` 通过、`npm run test:unit` 40 passed、`npm run build` 通过（`check:i18n` 898 键 / 9 域）、全量 E2E 439 项 437 passed / 0 failed / 2 flaky（`main.spec.ts` 主题切换与 `sheet-catalog.spec.ts` 方括号语法插入的 30s 超时，单独 `--workers=1 --retries=0` 时 123 passed / 0 failed，非本次改动引入）。
+
+## 2026-09-12（字段浏览器新增图号数字格式码入口）
+
+- 新增 `web/src/components/sheet-catalog/formatCode.ts` 纯模块：`NUMBER_FORMAT_WIDTHS`（2/3/4/5/6）、`STRIP_ZEROS_WIDTH`（0）与 `applyNumberFormat(reference, width)`，把 `{sheet.number}` 拼成 `{sheet.number:0000}`/`{sheet.number:0}`；越界宽度与未闭合引用抛错，仅作开发期护栏。同目录新增 `formatCode.test.ts` 5 例。
+- `FieldBrowser.vue` 每个字段条目新增格式入口：原生触发按钮（`aria-expanded` + `aria-controls`）加仅打开时渲染的 disclosure 选项列表（`<ul>` 带 `aria-label`，去前导零、补零到 2/3/4/5/6 位），插入走既有 `insertReference`，光标协议与列签名不变。选项是普通 Tab 停靠点，不声明 `role="menu"`/`menuitem`（没有 roving tabindex 与方向键，避免承诺未实现的键盘模型）。菜单在条目内流式展开而非浮层，避免被字段栏 `overflow` 裁切；选中、Esc（归还焦点）、外部点击与搜索过滤变化均关闭。触发按钮与选项的可访问名不含字段引用文本，字段栏轨道宽度仍为 258px。
+- `zh-CN`/`en-US` 两份 `extensions.ts` 各新增 `fieldFormatButton`、`fieldFormatMenuLabel`、`fieldFormatStripZeros`、`fieldFormatPad`（带 `{width}` 插值）四键，并在 `fieldSyntaxHint` 追加格式码示例；示例中的字面花括号按 vue-i18n 转义写成 `{'{'}`/`{'}'}`，否则消息在渲染期编译失败。
+- `web/tests/e2e/fixtures/sheetCatalog.ts` 的字段引用正则同时支持可选格式码（求值与校验循环共用同一形态），并新增与 Python `format_value` 同语义的 `formatValue`；缺值统计仍按原始值，`SHEET_CATALOG_VALUE_MISSING` 行为不变。`sheet-catalog.spec.ts` 新增 3 例（补零到 4 位、去前导零、菜单在选中/Esc/外部点击/搜索过滤时关闭且不改变字段栏宽度）。
+- 本轮只做只读导出的输出格式化：未修改 DST/DWG、未写回属性值、未做重编号；模板 `schema_version` 仍为 1，无 API 字段变化、无新依赖。
+- 验证：`npm run test:unit` 7 文件 / 40 例通过；`npm run check:i18n` 与 `npm run build`（含 `vue-tsc -b`）通过；`sheet-catalog.spec.ts` + `extensions-navigation.spec.ts` 55 例通过；`sheet-catalog-visual-evidence.spec.ts` 16 例通过（含 1920×1080 字段栏 256～260px、≤980px 限高 235px 与 Tab 顺序子序列）。评审修复轮后复跑 `sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` 共 65 例通过。
+
+## 2026-09-12（图纸目录预览摘要贯通数字格式码）
+
+- `preview.py` 的 `_digest_token` 在字段带数字格式码时追加 `("format", "0" * width)` 投影：预览行与 XLSX 已由 `evaluate_expression` 应用数字格式码，摘要纳入格式宽度且无格式模板摘要不变。修复变宽/增删格式码时摘要不变导致“模板已变→需重新预览”门禁比对相等、可拿旧预览直接导出（SPEC-DM-012 §5.2）。
+- `tests/unit/test_sheet_catalog_preview.py` 新增 4 例：预览行套用 `:0000`/`:0` 补零、摘要对格式码增删与宽度变化敏感（同列 ID/表头走真实 `build_preview` 投影）、带格式码列的缺值仍报 `SHEET_CATALOG_VALUE_MISSING` 且不被补成零。
+- `tests/integration/test_sheet_catalog_export.py` 新增 2 例：`:0000` 导出回读为文本单元格 `0001`（非数值单元格），以及仅格式码不同的模板必须返回 409 `REPREVIEW_REQUIRED`。
+- 本次未修改 DST/DWG、模板 schema、API 契约与依赖；全量 `uv run pytest` 1235 tests / 1161 passed / 74 skipped / 0 failed，`uv run ruff check .` 通过。
+
+## 2026-09-12（图纸目录表达式新增数字格式码解析与求值）
+
+- `expressions.py` 解析 `format := ":" "0"{1,16}`：`FieldToken`/`BoundFieldToken` 新增 `format_width`，点号与方括号形式均可附加格式码；`""` 空宽度、非零字符、重复格式码、宽度超过 16 与引用未闭合均复用 `SHEET_CATALOG_EXPRESSION_INVALID`，`source_start` 指向该引用的 `:`（重复格式码指向第二个 `:`），未新增错误码。
+- 新增纯函数 `format_value(value, width)` 并在唯一求值出口 `evaluate_expression` 套用：先归一化前导零再左补零到目标宽度（`00123` + `:0000` → `0123`、`01` + `:0` → `1`），空值与非常规数字原样输出，缺值不被补成零，超过宽度不截断。
+- `field_reference` 新增可选 `format_width` 参数生成带格式码的引用语法；未使用格式码时 token 形态与既有输出逐字节不变。
+- `tests/unit/test_sheet_catalog_expressions.py` 新增 36 例（解析接受/拒绝两张参数表、§5.4 语义逐行、绑定透传与语法生成）；全量 `uv run pytest` 1229 collected / 1155 passed / 74 skipped / 0 failed，`uv run ruff check .` 通过。
 
 ## 2026-09-12（新增 PLAN-DM-025 实施计划审查备忘 MEMO-DM-033）
 

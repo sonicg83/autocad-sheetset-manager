@@ -47,7 +47,14 @@ export default {
     fieldBuiltinNumber: "Sheet No.",
     fieldBuiltinTitle: "Sheet Title",
     fieldBuiltinFileName: "File Name",
-    fieldSyntaxHint: "When a property contains spaces, dots, or shadows a built-in field, the field browser inserts bracket syntax automatically.",
+    fieldSyntaxHint: "When a property contains spaces, dots, or shadows a built-in field, the field browser inserts bracket syntax automatically; the number format entry inserts format codes such as {'{'}sheet.number:0000{'}'} → 0001 and {'{'}sheet.number:0{'}'} → 1.",
+    // PLAN-DM-026 Task 3: number format entry per field entry (SPEC-DM-012 §4.2/§5.4).
+    // Literal braces use vue-i18n escapes ({'{'} / {'}'}) so the message compiles at render
+    // time; the {width} placeholder in fieldFormatPad is a real interpolation.
+    fieldFormatButton: "Number format",
+    fieldFormatMenuLabel: "Insert a number format code",
+    fieldFormatStripZeros: "Strip leading zeros",
+    fieldFormatPad: "Pad to {width} digits",
     templateBadgeBuiltin: "Built-in template",
     templateBadgeUser: "Saved template",
     templateStateSaved: "Saved",

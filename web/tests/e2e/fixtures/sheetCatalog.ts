@@ -189,16 +189,29 @@ function buildWorkspace(options: SheetCatalogFixtureOptions) {
   };
 }
 
+// 字段引用正则（PLAN-DM-026 Task 3 / SPEC-DM-012 §4.2）：可选数字格式码捕获在 match[4]，
+// 宽度等于 0 的个数；点号名的字符类排除 ":"，因此不会把格式码吃进字段名。
+// 求值与校验循环共用同一形态（否则预览不可执行）；matchAll 内部克隆正则，
+// 共享实例的 lastIndex 不会被改写，但不要对该常量改用 test()/exec()。
+const FIELD_REFERENCE_RE = /\{(sheetset|sheet)(?:\.([^{}:]+?)|\["((?:[^"\\]|\\.)*)"\])(?::(0{1,16}))?\}/g;
+
+// 与 Python format_value 同语义（SPEC-DM-012 §5.4），仅测试夹具使用：
+// 空串或非纯 ASCII 数字串原样返回，其余去前导零后补宽（全零值保留一位 "0"）。
+function formatValue(value: string, width: number | null): string {
+  if (width === null || value === "" || !/^[0-9]+$/.test(value)) return value;
+  return (value.replace(/^0+/, "") || "0").padStart(width, "0");
+}
+
 // 按表达式文本求值单张图纸行（最小语义：字段引用替换为值，其余文字原样保留）
 function evaluateRow(expression: string, sheet: {number: string; title: string; custom_properties: Record<string, string>}, sheetsetProperties: Record<string, string>): string {
-  const fieldRe = /\{(sheetset|sheet)(?:\.([^{}]+?)|\["((?:[^"\\]|\\.)*)"\])\}/g;
   let result = "";
   let cursor = 0;
-  for (const match of expression.matchAll(fieldRe)) {
+  for (const match of expression.matchAll(FIELD_REFERENCE_RE)) {
     result += expression.slice(cursor, match.index);
     cursor = match.index + match[0].length;
     const scope = match[1];
     let name = match[2] ?? JSON.parse(`"${match[3]}"`) as string;
+    const formatWidth = match[4]?.length ?? null;
     let value = "";
     if (scope === "sheetset") {
       value = Object.entries(sheetsetProperties).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? "";
@@ -208,7 +221,7 @@ function evaluateRow(expression: string, sheet: {number: string; title: string; 
     } else {
       value = Object.entries(sheet.custom_properties).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? "";
     }
-    result += value;
+    result += formatValue(value, formatWidth);
   }
   return result + expression.slice(cursor).replace(/\{\{/g, "{").replace(/\}\}/g, "}");
 }
@@ -235,7 +248,7 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
       errors.push({code: "SHEET_CATALOG_COLUMN_DUPLICATE", message_key: "errors.sheetCatalog.columnDuplicate", params: {header: column.header}, column_id: null, source_position: null});
     }
     seenHeaders.set(folded, column.header);
-    for (const match of column.expression.matchAll(/\{(sheetset|sheet)(?:\.([^{}]+?)|\["((?:[^"\\]|\\.)*)"\])\}/g)) {
+    for (const match of column.expression.matchAll(FIELD_REFERENCE_RE)) {
       const scope = match[1] as "sheetset" | "sheet";
       const name = match[2] ?? JSON.parse(`"${match[3]}"`) as string;
       const lower = name.toLowerCase();

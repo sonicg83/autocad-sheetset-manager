@@ -83,6 +83,22 @@ def draft_template() -> dict:
     }
 
 
+def format_code_template(expression: str) -> dict:
+    """带数字格式码的未保存草稿模板（SPEC-DM-012 §5.4）。"""
+    return {
+        "template_id": None,
+        "name": "格式码草稿",
+        "schema_version": 1,
+        "columns": [
+            {
+                "column_id": str(uuid.uuid5(uuid.NAMESPACE_URL, "export:format-code")),
+                "header": "图号",
+                "expression": expression,
+            }
+        ],
+    }
+
+
 def open_workspace(client: TestClient, tiny_workspace) -> dict:
     opened = client.post("/api/workspaces/open", json={"dst_path": str(tiny_workspace[0])})
     assert opened.status_code == 200
@@ -205,6 +221,31 @@ def test_unsaved_draft_template_executes_without_server_state(tmp_path, tiny_wor
     assert candidate_files(client) == []
 
 
+def test_number_format_code_exports_string_cell_with_leading_zeros(tmp_path, tiny_workspace):
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    template = format_code_template("{sheet.number:0000}")
+    target = tmp_path / "exports"
+    target.mkdir()
+    grant = create_grant(grant_store(client), workspace, target / "带格式码.xlsx")
+    preview_body = preview_action(client, workspace, template=template)
+
+    assert preview_body["executable"] is True
+    assert preview_body["rows"] == [["0001"]]
+
+    resp = execute_action(
+        client, workspace, preview_body, grant.save_grant_id, template=template
+    )
+    assert resp.status_code == 200, resp.text
+
+    workbook = load_workbook(resp.json()["output_path"])
+    worksheet = workbook[workbook.sheetnames[0]]
+    cell = worksheet.cell(row=2, column=1)
+    assert cell.value == "0001"
+    assert cell.data_type == "s"  # 文本单元格，不是数值
+    workbook.close()
+
+
 # ---------------------------------------------------------------------------
 # REPREVIEW_REQUIRED：修订 / 模板 / 扩展版本 / 动作摘要变化
 # ---------------------------------------------------------------------------
@@ -243,6 +284,23 @@ def test_template_change_requires_repreview(tmp_path, tiny_workspace):
     changed = draft_template()  # 与预览所用模板不同列
 
     resp = execute_action(client, workspace, preview_body, grant.save_grant_id, changed)
+
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "REPREVIEW_REQUIRED"
+
+
+def test_number_format_code_change_requires_repreview(tmp_path, tiny_workspace):
+    client = make_client(tmp_path, save_grants=SaveGrantStore())
+    workspace = open_workspace(client, tiny_workspace)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    grant = create_grant(grant_store(client), workspace, exports / "带格式码.xlsx")
+    # 预览用无格式码表达式，导出改用只差格式码的模板：
+    # 列 ID 与表头完全相同，只有 token 的格式宽度不同。
+    preview_body = preview_action(client, workspace, template=format_code_template("{sheet.number}"))
+    changed = format_code_template("{sheet.number:0000}")
+
+    resp = execute_action(client, workspace, preview_body, grant.save_grant_id, template=changed)
 
     assert resp.status_code == 409
     assert resp.json()["code"] == "REPREVIEW_REQUIRED"

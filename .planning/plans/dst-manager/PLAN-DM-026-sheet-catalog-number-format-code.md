@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-026
 title: 图纸目录数字格式码实施计划
-status: proposed
+status: completed
 document_kind: plan
 owners:
   - dst-manager
@@ -82,7 +82,7 @@ related:
 - 错误：一律 `SHEET_CATALOG_EXPRESSION_INVALID`（`blocking=True`），`params["source_start"]` 指向该引用的 `:`；`{sheet.number:0:0}` 指向第二个 `:`。
 - 有意的行为微调：`_parse_quoted_name` 改为消费到 `]` 之后返回（原实现要求 `]}` 相邻）。因此 `'{sheet["a" ]}'` 仍在 10 处报错（既有断言不变），而 `'{sheet["a"]x}'` 的报错位置由 10 变为 11（指向 `x`）。这是新的、更精确的位置，不要为“保持旧位置”改回 `]}` 相邻检查。
 
-- [ ] **步骤 1：写解析接受红灯。** 在 `tests/unit/test_sheet_catalog_expressions.py` 的 `test_parse_expression_accepts_restricted_grammar` 之后新增：
+- [x] **步骤 1：写解析接受红灯。** 在 `tests/unit/test_sheet_catalog_expressions.py` 的 `test_parse_expression_accepts_restricted_grammar` 之后新增：
 
   ```python
   @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ related:
       assert parse_expression(source) == expected
   ```
 
-- [ ] **步骤 2：写解析拒绝红灯。** 紧跟其后新增（位置均为 0-based）：
+- [x] **步骤 2：写解析拒绝红灯。** 紧跟其后新增（位置均为 0-based）：
 
   ```python
   @pytest.mark.parametrize(
@@ -146,7 +146,7 @@ related:
       assert error.params["source_start"] == source_start
   ```
 
-- [ ] **步骤 3：跑红灯。**
+- [x] **步骤 3：跑红灯。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_expressions.py -q -k "number_format_code"
@@ -154,7 +154,7 @@ related:
 
   预期：接受表因 `FieldToken` 不接受第 5 个参数、拒绝表因 `:` 落入 `_DOT_NAME_FORBIDDEN` 而失败。
 
-- [ ] **步骤 4：实现解析。** 在 `expressions.py` 中：给 `FieldToken`/`BoundFieldToken` 增加 `format_width: int | None = None`；`_parse_dot_name` 的循环终止集合改为 `"}:"`（保留循环内的 `_DOT_NAME_FORBIDDEN` 检查，因此 `{sheet.number()}`、`{sheet.a=b}` 的既有位置断言不变）；`_parse_quoted_name` 改为消费到 `]` 后返回 `index + 1`；新增 `_parse_format` 并在 `_parse_field` 中统一调用：
+- [x] **步骤 4：实现解析。** 在 `expressions.py` 中：给 `FieldToken`/`BoundFieldToken` 增加 `format_width: int | None = None`；`_parse_dot_name` 的循环终止集合改为 `"}:"`（保留循环内的 `_DOT_NAME_FORBIDDEN` 检查，因此 `{sheet.number()}`、`{sheet.a=b}` 的既有位置断言不变）；`_parse_quoted_name` 改为消费到 `]` 后返回 `index + 1`；新增 `_parse_format` 并在 `_parse_field` 中统一调用：
 
   ```python
   def _parse_format(source: str, start: int) -> tuple[int | None, int]:
@@ -209,13 +209,13 @@ related:
       return "".join(chars), index + 1
   ```
 
-- [ ] **步骤 5：跑解析绿灯。**
+- [x] **步骤 5：跑解析绿灯。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_expressions.py -q
   ```
 
-- [ ] **步骤 6：写语义红灯。** 在导入列表中加入 `format_value`（`from dst_manager...expressions import (...)` 内按字母序放在 `field_reference` 之后），并新增语义表用例：
+- [x] **步骤 6：写语义红灯。** 在导入列表中加入 `format_value`（`from dst_manager...expressions import (...)` 内按字母序放在 `field_reference` 之后），并新增语义表用例：
 
   ```python
   @pytest.mark.parametrize(
@@ -259,7 +259,7 @@ related:
 
   该文件尚未导入 `replace`，需在顶部新增 `from dataclasses import replace`（ruff isort 会把它排在 `from pathlib import Path` 之前）；`make_catalog()` 已包含 `专业代码`，`make_sheet()` 的 `number="002"`、`专业代码="水"`。
 
-- [ ] **步骤 7：跑语义红灯。**
+- [x] **步骤 7：跑语义红灯。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_expressions.py -q -k "format_value or format_code"
@@ -267,7 +267,7 @@ related:
 
   预期：`format_value` 尚未定义导致导入失败。
 
-- [ ] **步骤 8：实现语义。** 新增 `format_value` 并在 `evaluate_expression` 组装 `parts` 的唯一位置接入：
+- [x] **步骤 8：实现语义。** 新增 `format_value` 并在 `evaluate_expression` 组装 `parts` 的唯一位置接入：
 
   ```python
   def format_value(value: str, width: int | None) -> str:
@@ -279,7 +279,7 @@ related:
 
   字段分支改为 `parts.append(format_value(value, token.format_width))`；字面量分支不变，且**只在此处调用一次**，不得在 `_catalog_rows` 或 `build_preview` 里二次格式化。
 
-- [ ] **步骤 9：写绑定与语法生成红灯。** 追加：
+- [x] **步骤 9：写绑定与语法生成红灯。** 追加：
 
   ```python
   def test_bind_expression_propagates_format_width():
@@ -303,7 +303,7 @@ related:
       assert field_reference(scope, name, width) == expected
   ```
 
-- [ ] **步骤 10：实现绑定透传与语法生成绿灯。** `_bind_field` 复制 `format_width`；`field_reference` 增加第三参并在引用闭合大括号前拼 `":0" * width`（`width is None` 时保持原输出，`width` 传入时不再做 `_DOT_NAME_FORBIDDEN` 判定，因为已知是规范名）：
+- [x] **步骤 10：实现绑定透传与语法生成绿灯。** `_bind_field` 复制 `format_width`；`field_reference` 增加第三参并在引用闭合大括号前拼 `":0" * width`（`width is None` 时保持原输出，`width` 传入时不再做 `_DOT_NAME_FORBIDDEN` 判定，因为已知是规范名）：
 
   ```python
   def field_reference(scope: str, canonical_name: str, format_width: int | None = None) -> str:
@@ -332,14 +332,14 @@ related:
   uv run pytest tests/unit/test_sheet_catalog_expressions.py -q
   ```
 
-- [ ] **步骤 11：聚焦回归与静态检查。**
+- [x] **步骤 11：聚焦回归与静态检查。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_expressions.py tests/unit/test_sheet_catalog_templates.py -q
   uv run ruff check .
   ```
 
-- [ ] **步骤 12：记录并提交。** `changelog.md` 新增当日条目，记录“表达式新增数字格式码 `:0{1,16}`、语义先归一化再补宽、错误复用 `EXPRESSION_INVALID`”；只暂存本任务文件，commit message：`支持图纸目录表达式数字格式码解析与求值`。
+- [x] **步骤 12：记录并提交。** `changelog.md` 新增当日条目，记录“表达式新增数字格式码 `:0{1,16}`、语义先归一化再补宽、错误复用 `EXPRESSION_INVALID`”；只暂存本任务文件，commit message：`支持图纸目录表达式数字格式码解析与求值`。
 
 ## 任务 2：预览摘要、预览行与 XLSX 文本单元格
 
@@ -355,7 +355,7 @@ related:
 - `_digest_token(token) -> tuple[str, ...]` 签名不变；无格式码时返回既有 4 元组，有格式码时返回 `("field", scope, canonical_name, "builtin"|"custom", "format", "0" * width)`。
 - 预览行、`extension._catalog_rows` 与 XLSX 写入路径不改：格式已经在 `evaluate_expression` 内完成。
 
-- [ ] **步骤 1：写预览与摘要红灯。** 在 `tests/unit/test_sheet_catalog_preview.py` 追加：
+- [x] **步骤 1：写预览与摘要红灯。** 在 `tests/unit/test_sheet_catalog_preview.py` 追加：
 
   ```python
   def test_preview_rows_apply_number_format_code():
@@ -406,7 +406,7 @@ related:
 
   夹具事实（已核对）：`result.rows` 是元组嵌套（既有断言形如 `result.rows == (("001",), ("002",))`）；`make_sheet()` 默认 `number="001"`、`properties=(SnapshotProperty("比例", "1:100"),)`，快照项目号为 `P-000`；缺值形参是 `properties` 而不是 `custom_properties`，构造“已定义但缺值”要在保留 `definitions` 默认值的同时传空 `properties`；文件顶部已导入 `DigestColumn`、`preview_digest` 与 `SnapshotProperty`，无需新增导入。`test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separators` 继续用同一形态的 token 钉住无格式码摘要不变。
 
-- [ ] **步骤 2：跑红灯。**
+- [x] **步骤 2：跑红灯。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_preview.py -q -k "number_format_code"
@@ -414,7 +414,7 @@ related:
 
   预期：行值仍是 `001`/`P-000-1`（格式未被求值），而 `padded != baseline` 失败。
 
-- [ ] **步骤 3：实现摘要投影。**
+- [x] **步骤 3：实现摘要投影。**
 
   ```python
   def _digest_token(token: LiteralToken | BoundFieldToken) -> tuple[str, ...]:
@@ -433,14 +433,14 @@ related:
 
   不要调整 `_digest_columns`、`preview_digest` 的 payload 键集或 `json.dumps` 参数：既有 `test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separators` 是“无格式码摘要不变”的钉桩，必须原样通过。
 
-- [ ] **步骤 4：跑绿灯并钉住无格式不变量。**
+- [x] **步骤 4：跑绿灯并钉住无格式不变量。**
 
   ```powershell
   uv run pytest tests/unit/test_sheet_catalog_preview.py -q
   uv run pytest "tests/unit/test_sheet_catalog_preview.py::test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separators" -q
   ```
 
-- [ ] **步骤 5：写导出红灯。** 在 `tests/integration/test_sheet_catalog_export.py` 追加（新建 `format_code_template`，与既有 `draft_template` 并列）：
+- [x] **步骤 5：写导出红灯。** 在 `tests/integration/test_sheet_catalog_export.py` 追加（新建 `format_code_template`，与既有 `draft_template` 并列）：
 
   ```python
   def format_code_template(expression: str) -> dict:
@@ -486,7 +486,7 @@ related:
 
   `tiny_workspace` 的 `Number` 为 `001`，因此补零到 4 位应得到 `0001`；表名取 `workbook.sheetnames[0]`，不硬编码模板名。
 
-- [ ] **步骤 6：跑红灯。**
+- [x] **步骤 6：跑红灯。**
 
   ```powershell
   uv run pytest tests/integration/test_sheet_catalog_export.py -q -k "number_format_code"
@@ -494,7 +494,7 @@ related:
 
   预期：预览 `executable` 为 `False`，`errors[0]["code"] == "SHEET_CATALOG_EXPRESSION_INVALID"` 且 `source_start` 指向表达式里的 `:`，导出拿不到可用预览。步骤 3～4 之后该用例必须转绿；若仍是红的，优先核对 `evaluate_expression` 是否真的在求值阶段套用格式，而不是靠测试放宽断言。
 
-- [ ] **步骤 7：跑绿灯与聚焦回归。**
+- [x] **步骤 7：跑绿灯与聚焦回归。**
 
   ```powershell
   uv run pytest tests/integration/test_sheet_catalog_export.py tests/unit/test_sheet_catalog_preview.py -q
@@ -502,7 +502,7 @@ related:
   uv run ruff check .
   ```
 
-- [ ] **步骤 8：记录并提交。** changelog 记录“预览行与 XLSX 应用数字格式码、摘要纳入格式宽度且无格式模板摘要不变”；commit message：`在预览摘要与导出链路贯通数字格式码`。
+- [x] **步骤 8：记录并提交。** changelog 记录“预览行与 XLSX 应用数字格式码、摘要纳入格式宽度且无格式模板摘要不变”；commit message：`在预览摘要与导出链路贯通数字格式码`。
 
 ## 任务 3：字段浏览器格式入口
 
@@ -524,7 +524,7 @@ related:
 - 新 i18n 键（两语言各一组，键集合必须一致，`npm run check:i18n` 会校验）：`extensions.sheetCatalog.fieldFormatButton`、`fieldFormatMenuLabel`、`fieldFormatStripZeros`、`fieldFormatPad`（带 `{width}` 占位）。`fieldSyntaxHint` 文案追加格式码说明，覆盖纯文本输入路径。
 - **可访问名约束：** 条目按钮名不得包含 `sheet.number` 之类的字段引用文本（用 `fieldFormatButton` 的短文案，如“格式”/“Number format”），否则既有 `getByRole("button", { name: /sheet\.number/ })` 严格模式定位器会因多个匹配而失败。
 
-- [ ] **步骤 1：写纯函数红灯。** 新建 `web/src/components/sheet-catalog/formatCode.test.ts`（Vitest 只收 `src/**/*.test.ts`，node 环境，不加载 SFC）：
+- [x] **步骤 1：写纯函数红灯。** 新建 `web/src/components/sheet-catalog/formatCode.test.ts`（Vitest 只收 `src/**/*.test.ts`，node 环境，不加载 SFC）：
 
   ```ts
   import {describe, expect, it} from "vitest";
@@ -555,13 +555,13 @@ related:
   });
   ```
 
-- [ ] **步骤 2：跑红灯。**
+- [x] **步骤 2：跑红灯。**
 
   ```powershell
   npm --prefix web run test:unit -- formatCode
   ```
 
-- [ ] **步骤 3：实现 `formatCode.ts`。**
+- [x] **步骤 3：实现 `formatCode.ts`。**
 
   ```ts
   /** 图纸目录字段引用的数字格式码（SPEC-DM-012 §5.4）：宽度 = 0 的个数。 */
@@ -581,17 +581,17 @@ related:
 
   `width === 0` 时重复一次 `0`，因此去零入口产出 `:0`。
 
-- [ ] **步骤 4：跑绿灯。**
+- [x] **步骤 4：跑绿灯。**
 
   ```powershell
   npm --prefix web run test:unit -- formatCode
   ```
 
-- [ ] **步骤 5：写 E2E 红灯。** 在 `web/tests/e2e/sheet-catalog.spec.ts` 追加两个用例，标题必须含“数字格式码”四字（供步骤 6/9 的 `--grep` 选中），例如 `test("数字格式码入口把图号补零到 4 位", ...)` 与 `test("数字格式码入口可去掉前导零", ...)`。用例内容：打开图纸目录 → 在字段浏览器中定位 `sheet.number` 条目所在行 → 点击该行格式入口 → 选择“补零到 4 位” → 断言表达式输入框出现 `{sheet.number:0000}`、预览单元格出现 `0001`；第二个用例选“去前导零”并断言得到 `1`（夹具由 `pad3` 生成图号，首张为 `001`，行内容可在文件内既有断言里核对）。定位器要求：格式入口按钮按 `fieldFormatButton` 文案定位，字段条目按既有 `getByRole("button", { name: /sheet\.number/ })` 定位，二者可访问名不重叠，避免严格模式多重匹配。
+- [x] **步骤 5：写 E2E 红灯。** 在 `web/tests/e2e/sheet-catalog.spec.ts` 追加两个用例，标题必须含“数字格式码”四字（供步骤 6/9 的 `--grep` 选中），例如 `test("数字格式码入口把图号补零到 4 位", ...)` 与 `test("数字格式码入口可去掉前导零", ...)`。用例内容：打开图纸目录 → 在字段浏览器中定位 `sheet.number` 条目所在行 → 点击该行格式入口 → 选择“补零到 4 位” → 断言表达式输入框出现 `{sheet.number:0000}`、预览单元格出现 `0001`；第二个用例选“去前导零”并断言得到 `1`（夹具由 `pad3` 生成图号，首张为 `001`，行内容可在文件内既有断言里核对）。定位器要求：格式入口按钮按 `fieldFormatButton` 文案定位，字段条目按既有 `getByRole("button", { name: /sheet\.number/ })` 定位，二者可访问名不重叠，避免严格模式多重匹配。
 
   同时给 `web/tests/e2e/fixtures/sheetCatalog.ts` 的格式码支持写红灯断言（fixture 的 `evaluateRow` 目前会把 `number:0000` 当成字段名，导致预览出现 `SHEET_CATALOG_FIELD_UNDEFINED` 而不是 `0001`）。
 
-- [ ] **步骤 6：跑红灯。**
+- [x] **步骤 6：跑红灯。**
 
   ```powershell
   npm --prefix web run test:e2e -- tests/e2e/sheet-catalog.spec.ts --grep "数字格式码" --workers=1 --retries=0
@@ -599,7 +599,7 @@ related:
 
   预期：找不到格式入口按钮（定位器超时），因为 `FieldBrowser.vue` 尚未渲染该控件；即使绕过 UI 直接写入表达式，夹具的 `evaluateRow` 也会把 `number:0000` 当成字段名而报 `SHEET_CATALOG_FIELD_UNDEFINED`。
 
-- [ ] **步骤 7：实现 fixture 格式码求值。** 把 `evaluateRow` 与校验循环中的字段正则同时改为捕获可选格式码，并让缺值判定继续使用**原始值**：
+- [x] **步骤 7：实现 fixture 格式码求值。** 把 `evaluateRow` 与校验循环中的字段正则同时改为捕获可选格式码，并让缺值判定继续使用**原始值**：
 
   ```ts
   const fieldRe = /\{(sheetset|sheet)(?:\.([^{}:]+?)|\["((?:[^"\\]|\\.)*)"\])(?::(0{1,16}))?\}/g;
@@ -618,9 +618,9 @@ related:
 
   校验循环只需从同一个正则读取 `match[2]`（点号名不含 `:`），`emptyCount` 仍按原始值统计，因此 `VALUE_MISSING` 警告行为不变。
 
-- [ ] **步骤 8：实现字段浏览器入口与文案。** `FieldBrowser.vue` 在每个字段条目内新增格式菜单（原生按钮 + 现有菜单组件，不引入新依赖）：条目选项为“去前导零”和 `fieldFormatPad`（2/3/4/5/6 位，遍历 `NUMBER_FORMAT_WIDTHS`）；点击后调用 `applyNumberFormat(entry.reference, width)` 并把结果交给既有 `insertReference`（光标协议、`caretRequest` 与列签名逻辑不改）。格式入口与其菜单选项的可访问名**不得包含字段引用文本**（如 `sheet.number`）：既有用例用 `getByRole("button", { name: /sheet\.number/ })` 在“字段浏览器”区域内作严格模式定位（`sheet-catalog.spec.ts` 第 78 行等），区域内多一个匹配就会变红。`zh-CN`/`en-US` 两份 `extensions.ts` 同步新增四个键并更新 `fieldSyntaxHint`（中文示例 `{sheet.number:0000} → 0001`、`{sheet.number:0} → 1`）。
+- [x] **步骤 8：实现字段浏览器入口与文案。** `FieldBrowser.vue` 在每个字段条目内新增格式菜单（原生按钮 + 现有菜单组件，不引入新依赖）：条目选项为“去前导零”和 `fieldFormatPad`（2/3/4/5/6 位，遍历 `NUMBER_FORMAT_WIDTHS`）；点击后调用 `applyNumberFormat(entry.reference, width)` 并把结果交给既有 `insertReference`（光标协议、`caretRequest` 与列签名逻辑不改）。格式入口与其菜单选项的可访问名**不得包含字段引用文本**（如 `sheet.number`）：既有用例用 `getByRole("button", { name: /sheet\.number/ })` 在“字段浏览器”区域内作严格模式定位（`sheet-catalog.spec.ts` 第 78 行等），区域内多一个匹配就会变红。`zh-CN`/`en-US` 两份 `extensions.ts` 同步新增四个键并更新 `fieldSyntaxHint`（中文示例 `{sheet.number:0000} → 0001`、`{sheet.number:0} → 1`）。
 
-- [ ] **步骤 9：跑绿与前端门禁。**
+- [x] **步骤 9：跑绿与前端门禁。**
 
   ```powershell
   npm --prefix web run test:e2e -- tests/e2e/sheet-catalog.spec.ts --grep "数字格式码" --workers=1 --retries=0
@@ -628,14 +628,14 @@ related:
   npm --prefix web run build
   ```
 
-- [ ] **步骤 10：聚焦回归。** 字段浏览器是共享控件，需覆盖导航与既有目录用例：
+- [x] **步骤 10：聚焦回归。** 字段浏览器是共享控件，需覆盖导航与既有目录用例：
 
   ```powershell
   npm --prefix web run test:e2e -- tests/e2e/sheet-catalog.spec.ts tests/e2e/extensions-navigation.spec.ts --workers=1 --retries=0
   npm --prefix web run test:unit
   ```
 
-- [ ] **步骤 11：记录并提交。** changelog 记录“字段浏览器新增格式入口，可插入 `:0`/`:0000` 等格式码”；commit message：`在字段浏览器提供图号格式码入口`。
+- [x] **步骤 11：记录并提交。** changelog 记录“字段浏览器新增格式入口，可插入 `:0`/`:0000` 等格式码”；commit message：`在字段浏览器提供图号格式码入口`。
 
 ## 任务 4：G8 证据、索引与全量回归
 
@@ -648,7 +648,7 @@ related:
 - 修改：`.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`（MEMO-DM-028，G9 真实桌面/Excel 验收清单）
 - 修改：`changelog.md`
 
-- [ ] **步骤 1：补 G8 视觉与可访问性证据。** 在 `sheet-catalog-visual-evidence.spec.ts` 追加用例：打开格式菜单后的 1440×1000 浅色与 900×700 深色截图（沿用文件内 `screenshotPath`/附件与 `PRODUCTION_EVIDENCE_DIR` 复制约定，命名如 `g8-format-menu-light-1440x1000.png`），断言菜单在视口内、无整页横向溢出、Tab 可到达格式按钮、菜单可用键盘 Esc 关闭；200% 缩放下格式入口不被遮挡。
+- [x] **步骤 1：补 G8 视觉与可访问性证据。** 在 `sheet-catalog-visual-evidence.spec.ts` 追加用例：打开格式菜单后的 1440×1000 浅色与 900×700 深色截图（沿用文件内 `screenshotPath`/附件与 `PRODUCTION_EVIDENCE_DIR` 复制约定，命名如 `g8-format-menu-light-1440x1000.png`），断言菜单在视口内、无整页横向溢出、Tab 可到达格式按钮、菜单可用键盘 Esc 关闭；200% 缩放下格式入口不被遮挡。
 
   ```powershell
   npm --prefix web run test:e2e -- tests/e2e/sheet-catalog-visual-evidence.spec.ts --workers=1 --retries=0
@@ -656,11 +656,11 @@ related:
 
   把附件截图复制到 `docs/dst-manager/specs/assets/SPEC-DM-012/production/`，并在 SPEC-DM-012 §16 记录“G3/G4 未重开、G8 已复核”的结论与这次证据文件名。
 
-- [ ] **步骤 2：追加 G9 真实验收项。** 在 `.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`（MEMO-DM-028）中新增一条并标记待用户执行：导出 XLSX 后确认补零图号是文本单元格（如 `0001`），且未使用格式码的模板导出结果与升级前一致。
+- [x] **步骤 2：追加 G9 真实验收项。** 在 `.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`（MEMO-DM-028）中新增一条并标记待用户执行：导出 XLSX 后确认补零图号是文本单元格（如 `0001`），且未使用格式码的模板导出结果与升级前一致。
 
-- [ ] **步骤 3：核对并推进索引状态。** `docs/dst-manager/README.md` 的“研究与分析”小节与 `.planning/plans/dst-manager/README.md` 的 PLAN-DM-026 条目已在文档批次加入（状态 `proposed`）；实施完成后只需把 PLAN-DM-026 条目状态改为 `active`/`completed` 并补一句实际验证结论，不重复新增链接。
+- [x] **步骤 3：核对并推进索引状态。** `docs/dst-manager/README.md` 的“研究与分析”小节与 `.planning/plans/dst-manager/README.md` 的 PLAN-DM-026 条目已在文档批次加入（状态 `proposed`）；实施完成后只需把 PLAN-DM-026 条目状态改为 `active`/`completed` 并补一句实际验证结论，不重复新增链接。
 
-- [ ] **步骤 4：全量回归。**
+- [x] **步骤 4：全量回归。**
 
   ```powershell
   $env:UV_LINK_MODE = "copy"
@@ -675,7 +675,7 @@ related:
 
   真实 AutoCAD 系统测试不属本计划范围（本次不触碰 SCR、插件或布局重建），无需执行 `tests/system_autocad`。
 
-- [ ] **步骤 5：记录并提交。** changelog 记录“门禁证据、索引与全量回归结论”；只暂存本任务文件（含新截图），commit message：`收口图纸目录数字格式码门禁与索引`。
+- [x] **步骤 5：记录并提交。** changelog 记录“门禁证据、索引与全量回归结论”；只暂存本任务文件（含新截图），commit message：`收口图纸目录数字格式码门禁与索引`。
 
 ## 风险与回退
 
@@ -697,4 +697,52 @@ related:
 
 ## 实际验证
 
-（执行完成后填写：每条命令的实际输出要点、跳过的检查及原因、G8 证据文件名与 G9 待用户执行项。）
+执行时间：2026-09-12（工作树 `plan-dm-026`）。实现与评审记录：任务 1 `a97b4b7`、任务 2 `0929a5c`、任务 3 `5a73b32` → `c271957` → `789e3e6` → `70136db`（含两轮评审修复），任务 4 为本节收口提交。
+
+本文 36 个步骤复选框在收口时统一勾选（与 PLAN-DM-024 已完成后同样式一致），依据是逐任务派发与独立评审记录（`.superpowers/sdd/PLAN-DM-026-sheet-catalog-number-format-code/progress.md`，不入提交树）以及下文的逐命令实际输出；每个任务的“写出红灯/实现/跑绿灯”顺序均有该记录中的命令与结果对应。
+
+### 新增 G8 证据（步骤 1）
+
+- `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 追加 3 条用例（该文件 16 → 19 条）：`G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫`、`G8 补充：900×700 深色格式菜单截图 + 几何守卫`、`G8 补充：200% 缩放下格式入口不被遮挡`。断言只用几何与键盘事实：菜单盒在视口内、无整页横向溢出、140 步真实 Tab 环内 `toBeFocused()` 到达格式入口、Enter 展开后 Esc 关闭（`aria-expanded` 回 `false`、选项列表消失、焦点归还）、200% 缩放下入口落在字段栏盒内；被 235px 限高裁切的菜单尾部另有 `expectActionReachableAfterScroll` 证明可由字段列表内部滚动到达。
+- 证据已真正落盘（`DST_MANAGER_WRITE_G8_EVIDENCE=1`）：[g8-format-menu-light-1440x1000.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png)（110781 字节，1440×1000）、[g8-format-menu-dark-900x700.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-dark-900x700.png）（60247 字节，900×700），两张都是打开格式菜单后的画面。
+- 先红后绿：先把 `FieldBrowser.vue` 临时回退到任务 3 之前的修订（`0929a5c`）跑这 3 条用例 → 3 failed（区域内不存在名为“格式”的按钮，定位器 30s 超时）；按字节恢复生产文件后同命令 3 passed（9.9s）。可失败性另用三条自然反例确认（矮视口菜单盒底缘 370 > 300；只按 4 次 Tab 时 `toBeFocused()` 失败；条目被滚出字段栏后 190 < 256），反例脚本为临时文件，跑完已删、未入提交树。
+- 前提说明：≤980px（含 CSS 720×500 的 200%）下字段栏限高 235px、`.field-list` 内部滚动是 PLAN-DM-023 Task 5 的冻结设计，用例先显式 `scrollIntoViewIfNeeded()` 再取几何，不把“需滚动才可见”当作缺陷。
+
+### 全量回归（步骤 4）
+
+| 命令 | 结果（实际输出要点） |
+| --- | --- |
+| `uv sync --dev` | 退出码 0；70 packages resolved / 63 audited |
+| `uv run ruff check .` | 通过（All checks passed!） |
+| `uv run pytest -q` | 退出码 0；汇总以 `uv run pytest` 取得（`addopts` 已含 `-q`，双 `-q` 时 pytest 不回显汇总行）：1161 passed / 74 skipped / 0 failed（collected 1235，与任务 1、2 基线一致；任务 3、4 只改前端） |
+| `uv lock --check` | 通过 |
+| `npm --prefix web run test:unit` | 7 个文件 / 40 例通过 |
+| `npm --prefix web run build` | 通过：`check:api` 通过、`check:i18n` 898 键 / 9 域、`vue-tsc -b` + `vite build` 成功 |
+| `npm --prefix web run test:e2e` | 439 项：437 passed / 0 failed / 2 flaky（重跑通过），2.4m |
+| `npm --prefix web run test:e2e -- tests/e2e/sheet-catalog-visual-evidence.spec.ts --workers=1 --retries=0` | 19 passed（25.6s） |
+| `npm --prefix web run test:e2e -- tests/e2e/main.spec.ts tests/e2e/sheet-catalog.spec.ts --workers=1 --retries=0` | 123 passed / 0 failed（用于归因 2 条 flaky） |
+
+- 2 条 flaky 点名：`tests/e2e/main.spec.ts` 的“深色模式下中心视图区域随主题切换背景”、`tests/e2e/sheet-catalog.spec.ts` 的“核心流程（SPEC §3.1）› 特殊属性在当前光标位置插入 JSON 方括号语法，普通字段插入点号语法”；失败形态均为 30s 定位/点击超时（`playwright.config.ts` 已记录单一 vite dev server 高负载抖动），单独 `--workers=1 --retries=0` 复跑 123 passed / 0 failed，与本次改动无关。
+
+### 跳过的检查及原因
+
+- `tests/system_autocad`（真实 AutoCAD 2016/2020）：本计划不触碰 SCR、插件、布局重建与 DST 写入，按计划属范围外，未执行。
+- `uv run alembic upgrade head`：无迁移、无 ORM 变化（模板 `schema_version` 仍为 1），未执行。
+
+### 门禁与 G9 待用户执行项
+
+- SPEC-DM-012 §16 只更新门禁影响段落：G3/G4 不重开的结论与浅/深主题 + 200% 缩放证据文件名；G8 行的确认人与日期仍为“用户 / 2026-09-11”，本轮补的是自动化证据，**不冒充用户重新确认 G8**。
+- MEMO-DM-028 新增 `### 1.9 数字格式码：补零图号为文本单元格（SC-01 / SPEC-DM-012 §5.4；PLAN-DM-026）`，结论字段全部保持 `_待填写_`，由操作者在真实 Windows 桌面 + 真实 Excel 执行；§3 前置闸门已登记本计划完成。
+
+### 评审后修正（第 2 轮）
+
+针对终审 I-M1～I-M5 逐条修正；不改本文步骤勾选与其他正文（本小节为追加）。
+
+- I-M1（文档 off-by-one）：Tab 步数多算 1，`5 次` → `4 次`（本文件上文与本轮 `changelog.md`）。
+- I-M2（断言与用例名不符）：`web/tests/e2e/sheet-catalog.spec.ts` 的“补零到 4 位”“去前导零”两例末尾补断言：菜单选项 `toHaveCount(0)` 与触发按钮 `aria-expanded="false"`，覆盖“选中即关闭”。
+- I-M3（永真断言）：把“展开前后盒宽相等”替换为字段栏冻结区间 `>=256 && <=260`（同 `sheet-catalog-visual-evidence.spec.ts` 轨道守卫口径）；变异（grid 轨道 `258px`→`320px`）实测红（`Expected: <= 260 / Received: 320`），按字节还原后 `SheetCatalogView.vue` blob `77077d10…` 不变。
+- I-M4（生成侧越界宽度）：`field_reference` 增加 1～16 显式校验，0/17/负数抛 `ValueError`；`tests/unit/test_sheet_catalog_expressions.py` 补 19 例（1..16 生成→解析回读的往返性质 16 例 + 0/17/负数拒绝 3 例）。
+- I-M5（焦点落空）**经实测证伪**：选中格式码后焦点由既有 caret 协议（`insertReference` → `caretRequest` → `ColumnEditor` watcher）交给表达式输入框，**并非** `document.body`，与点击 `.field-chip` 一致；故不新增焦点归还代码，改为在两条用例断言表达式输入框 `toBeFocused()`。变异（移除 `caretRequest` 移交）实测红（`Received: inactive`），按字节还原后 `useSheetCatalog.ts` blob `e18af760…` 不变。
+- 复跑：`uv run ruff check .` 通过；`uv run pytest` **1180 passed / 74 skipped / 0 failed**（collected 1254，较基线 1161/74/0、1235 增 19 例）；`npm run test:unit` 40 passed；`npm run build` 通过（`check:i18n` 898 键 / 9 域）；`sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` + `extensions-navigation.spec.ts` **74 passed / 0 failed**（`--workers=1 --retries=0`）。
+- 评审后修正提交：`按终审修正格式码断言强度、宽度校验与焦点归还`（`42433e16a297bc71f590e8ccf59b4d20074b2007`）。
+

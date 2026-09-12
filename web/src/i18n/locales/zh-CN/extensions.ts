@@ -57,7 +57,14 @@ export default {
     fieldBuiltinNumber: "图号",
     fieldBuiltinTitle: "图名",
     fieldBuiltinFileName: "文件名",
-    fieldSyntaxHint: "属性含空格、点号或与固有字段重名时，字段浏览器自动插入方括号语法。",
+    fieldSyntaxHint: "属性含空格、点号或与固有字段重名时，字段浏览器自动插入方括号语法；格式入口可插入数字格式码，例如 {'{'}sheet.number:0000{'}'} → 0001、{'{'}sheet.number:0{'}'} → 1。",
+    // PLAN-DM-026 Task 3：字段条目的数字格式码入口（SPEC-DM-012 §4.2/§5.4）。
+    // 文案里的字面量花括号用 vue-i18n 转义写成 {'{'}/{'}'}，否则整条消息在渲染期编译失败；
+    // fieldFormatPad 的 {width} 是真实插值，不加转义。
+    fieldFormatButton: "格式",
+    fieldFormatMenuLabel: "插入数字格式码",
+    fieldFormatStripZeros: "去前导零",
+    fieldFormatPad: "补零到 {width} 位",
     // 模板栏状态（PLAN-DM-023 V6：内置/已保存模板 + 已保存/有未保存修改）
     templateBadgeBuiltin: "内置模板",
     templateBadgeUser: "已保存模板",
