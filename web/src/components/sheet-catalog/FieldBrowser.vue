@@ -81,12 +81,8 @@ let activeTrigger: HTMLButtonElement | null = null;
 // 触发按钮与当前菜单的公共祖先选择器：命中即视为“点在格式入口内部”
 const FORMAT_ENTRY_SELECTOR = ".field-format-entry, .field-format-menu";
 
-// disclosure 的 DOM id：分组 id + 行内序号组合，保证 aria-controls/aria-labelledby 的 IDREF
-// 唯一且不含空白（字段规范名可能含空格或冒号，直接拼进 id 会破坏 IDREF）。
-function formatTriggerId(groupId: string, index: number) {
-  return `field-format-trigger-${groupId}-${index}`;
-}
-
+// 选项组的 DOM id：分组 id + 行内序号组合，保证 aria-controls 的 IDREF 唯一且不含空白
+// （字段规范名可能含空格或冒号，直接拼进 id 会破坏 IDREF；group.id 只取 builtin/sheetset/sheet）。
 function formatMenuId(groupId: string, index: number) {
   return `field-format-menu-${groupId}-${index}`;
 }
@@ -167,7 +163,6 @@ onBeforeUnmount(() => {
               </button>
               <div class="field-format-entry">
                 <button
-                  :id="formatTriggerId(group.id, index)"
                   type="button"
                   class="format-trigger"
                   :aria-label="$t('extensions.sheetCatalog.fieldFormatButton')"
@@ -184,7 +179,7 @@ onBeforeUnmount(() => {
               :id="formatMenuId(group.id, index)"
               class="field-format-menu"
               role="group"
-              :aria-labelledby="formatTriggerId(group.id, index)"
+              :aria-label="$t('extensions.sheetCatalog.fieldFormatMenuLabel')"
             >
               <li>
                 <button type="button" class="format-option" @click="insertFormatCode(entry, STRIP_ZEROS_WIDTH)">
