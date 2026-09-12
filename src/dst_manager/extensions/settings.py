@@ -39,8 +39,11 @@ class SettingsFieldDefinition:
     order: int
 
 
-#: 设置字段的控件类型；与设置中心的 ``SettingsItemModel.control`` 同一词表。
-type SettingsFieldControl = Literal["boolean", "int", "number", "string", "enum"]
+#: 扩展设置字段的控件类型。扩展设置有独立词表，是设置中心应用设置词表
+#: （``SettingsItemModel.control``：``path``/``bool``/``int``/``enum``）的**超集但不同源**，
+#: 消费方必须显式映射（``integer`` → ``int``、``boolean`` → ``bool``、``enum`` → ``enum``），
+#: ``number`` 与 ``string`` 在设置中心没有对应项，``path`` 在扩展设置中不存在。
+type SettingsFieldControl = Literal["boolean", "integer", "number", "string", "enum"]
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping
-from typing import get_type_hints
+from typing import get_args, get_type_hints
 
 import pytest
 
@@ -15,6 +15,7 @@ from dst_manager.extensions.settings import (
     ExtensionSettingsProvider,
     ExtensionSettingsSnapshot,
     SettingsContribution,
+    SettingsFieldControl,
     SettingsFieldDefinition,
     SettingsFieldSpec,
     freeze_json,
@@ -36,7 +37,7 @@ class _StubProvider:
     extension_id = "test.a"
     schema_version = 2
     field_definitions = (
-        SettingsFieldSpec(key="max_rows", control="int", default=10, min_value=1),
+        SettingsFieldSpec(key="max_rows", control="integer", default=10, min_value=1),
         SettingsFieldSpec(key="locale", control="enum", default="zh-CN", options=("zh-CN", "en-US")),
     )
 
@@ -197,6 +198,24 @@ def test_provider_protocol_declares_settings_semantics() -> None:
     assert annotations["field_definitions"] == tuple[SettingsFieldSpec, ...]
     for member in ("default_value", "migrate", "validate_and_normalize", "resolve"):
         assert callable(getattr(ExtensionSettingsProvider, member))
+
+
+def test_settings_field_control_vocabulary_is_pinned() -> None:
+    """控件词表必须精确：改名词、增词或减词都会让本断言失败。
+
+    扩展设置词表与设置中心应用设置词表（`path`/`bool`/`int`/`enum`）不同源，
+    消费方显式映射；本断言把这一独立词表钉死，防止跟回设置中心词表。
+
+    ``SettingsFieldControl`` 是 PEP 695 别名（``get_type_hints`` 不会展开），
+    因此取其 ``__value__`` 上的 ``Literal`` 实参。
+    """
+    assert get_args(SettingsFieldControl.__value__) == (
+        "boolean",
+        "integer",
+        "number",
+        "string",
+        "enum",
+    )
 
 
 def test_settings_field_spec_declares_provider_owned_metadata_only() -> None:
