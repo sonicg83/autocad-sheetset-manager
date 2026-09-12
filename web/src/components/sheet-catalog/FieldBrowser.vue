@@ -178,7 +178,6 @@ onBeforeUnmount(() => {
               v-if="openFormatKey === entry.key"
               :id="formatMenuId(group.id, index)"
               class="field-format-menu"
-              role="group"
               :aria-label="$t('extensions.sheetCatalog.fieldFormatMenuLabel')"
             >
               <li>
