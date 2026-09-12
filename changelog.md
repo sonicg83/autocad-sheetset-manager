@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-12（按 MEMO-DM-033 修订 PLAN-DM-025）
+
+- 修复两个阻断项：把不存在的 `scripts/export_openapi.ps1` 改为既有 `npm --prefix web run generate:api`；同步收窄 ARCH-DM-006 的偏好绑定契约，仅绑定会改变输出且未进入规范化动作请求的工作区偏好，明确 last-selected 模板偏好不参与摘要以避免预览自行失效。
+- 把 `EXTENSION_SETTINGS_SCHEMA_NEWER` 明确定义为 GET 只读诊断与 PUT 409 共用的稳定错误码；generated 后端集成测试改用测试内 Manifest/Provider/固定索引注入，不向生产登记虚构扩展。
+- PLAN-DM-025 由八项调整为九项任务：新增独立的 `SettingsDialog.vue` 关于分区拆分任务并吸收原 Todo；补齐 SC-16 焦点钉子、两套生产证据回归、`SheetCatalogTemplateController`/可选校验反馈接口和 `useSheetCatalog.ts` 行数回落门禁。
+- 核实当前模板设置一直只持久化 `user_templates`，因此不新增不存在的“完整模板集剥离”迁移，只增加现有存量形状兼容回归测试；本批未修改运行时代码或依赖。
+
 ## 2026-09-12（新增 PLAN-DM-025 实施计划审查备忘 MEMO-DM-033）
 
 - 新增 `.planning/memos/dst-manager/2026-09-12-plan-dm025-review.md`，登记对 PLAN-DM-025 的只读方案审查：2 个阻断级问题（`scripts/export_openapi.ps1` 不存在；任务 4 偏离 ARCH-DM-006 §11/§12 偏好绑定裁决但未安排修订架构文档）、4 项建议修订（generated 测试载体、SettingsDialog 拆分待办协调、既有 E2E 钉子与生产证据回归、ColumnEditor controller 收窄边界）与 3 项提示。

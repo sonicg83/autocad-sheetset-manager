@@ -16,6 +16,7 @@ related:
   - SPEC-DM-011
   - SPEC-DM-012
   - PLAN-DM-025
+  - MEMO-DM-033
 ---
 
 # DST Manager 内置扩展平台首期架构
@@ -263,7 +264,7 @@ GET   /api/artifacts/{artifact_id}
 - 从未保存时返回当前 Schema、`revision = 0` 和 Provider 默认零值；
 - PUT 必须携带 `expected_revision`，成功后修订递增，竞争写入返回 `409`；
 - 较旧 Schema 先在内存逐级迁移并校验，用户下次保存时再正式写回，应用启动不得仅因读取设置而修改数据库；
-- 未知高版本保留原始 JSON 并进入只读保护，旧程序不得覆盖；
+- 未知高版本保留原始 JSON 并进入只读保护，旧程序不得覆盖；GET 以 `diagnostic_code=EXTENSION_SETTINGS_SCHEMA_NEWER` 返回只读视图，PUT 以同一稳定错误码和 HTTP `409` 拒绝；
 - 畸形 JSON、迁移或校验失败仅禁用该扩展的设置与动作，不影响宿主启动；
 - 停用、重新启用或暂时缺少扩展均保留设置；重置必须是显式用户动作并递增修订；
 - 凭据、令牌和 API Key 不进入 `extension_settings`，后续连接器必须使用宿主凭据代理。
@@ -340,7 +341,7 @@ created_at
 
 每次动作调用前，Runtime 读取并解析一次设置，生成包含 `extension_id`、`schema_version`、`revision`、规范化值与 `digest` 的不可变设置快照，并随短生命周期 `ExtensionContext` 注入。用户保存后只影响后续新调用；已开始的调用继续使用冻结快照。首期不增加全局 `on_settings_changed`、事件总线、后台线程或可变设置缓存。
 
-每次预览绑定 `workspace_id`、`base_revision_id`、规范化动作请求、设置 Schema/修订/摘要和相关工作区偏好修订，生成 `preview_digest`。执行阶段重新构建快照并核对全部绑定项；应用级扩展设置变化返回 `EXTENSION_SETTINGS_CHANGED`，来源修订、偏好、模板、能力或扩展状态变化返回 `REPREVIEW_REQUIRED`，两者均使用 HTTP `409` 并要求重新预览，不得使用新设置执行旧预览。
+每次预览绑定 `workspace_id`、`base_revision_id`、规范化动作请求、设置 Schema/修订/摘要，以及会改变动作输出的相关工作区偏好修订，生成 `preview_digest`。执行阶段重新构建快照并核对全部绑定项；应用级扩展设置变化返回 `EXTENSION_SETTINGS_CHANGED`，来源修订、影响输出的偏好、模板、能力或扩展状态变化返回 `REPREVIEW_REQUIRED`，两者均使用 HTTP `409` 并要求重新预览，不得使用新设置执行旧预览。图纸目录当前的工作区偏好只记录“上次选中的已保存模板 ID”，模板身份及内容已进入规范化动作请求；预览后还会 best-effort 更新该偏好，因此它不进入当前摘要，否则预览会被自身的偏好写入立即作废。未来新增任何会改变输出且未进入规范化动作请求的偏好时，仍必须绑定其修订。
 
 同一 `save_grant_id` 只能有一个执行者。多个不同授权可以并发导出；它们不取得工作区写锁，也不能阻塞 CAD 发布。若生成耗时达到后续 Spec 定义的长任务阈值，应另立扩展任务设计，不在首期中复用 CAD 状态机或临时增加后台线程。
 
@@ -357,11 +358,12 @@ created_at
 | `EXTENSION_INCOMPATIBLE` | 宿主契约不兼容 |
 | `EXTENSION_CAPABILITY_UNAVAILABLE` | 必需能力不可用 |
 | `EXTENSION_SETTINGS_INVALID` | 设置 Schema 或数据无效 |
+| `EXTENSION_SETTINGS_SCHEMA_NEWER` | 已存设置 Schema 高于当前扩展支持版本，只读保留且拒绝覆盖 |
 | `EXTENSION_SETTINGS_CHANGED` | 预览后扩展设置发生变化 |
 | `EXTENSION_ACTION_NOT_FOUND` | 动作未声明 |
 | `SAVE_GRANT_INVALID` | 保存授权不存在、过期、重复使用或不匹配 |
 | `EXPORT_DESTINATION_CHANGED` | 目标在选择后发生变化 |
-| `REPREVIEW_REQUIRED` | 来源修订、偏好、模板、能力或动作摘要已变化 |
+| `REPREVIEW_REQUIRED` | 来源修订、影响输出的偏好、模板、能力或动作摘要已变化 |
 | `ARTIFACT_WRITE_FAILED` | 候选生成、验证或最终保存失败 |
 
 错误响应遵循 ARCH-DM-005 的 `code`、`message_key`、`params` 和兼容 `message` 结构。日志关联 invocation ID、扩展 ID、版本、工作区和来源修订；不记录表达式求值后的敏感属性值，不把完整输出路径写入普通日志。

@@ -15,6 +15,7 @@ related:
   - SPEC-DM-012
   - GUIDE-DM-005
   - PLAN-DM-020
+  - MEMO-DM-033
 ---
 
 # Builtin 扩展全局设置框架实施计划
@@ -38,7 +39,7 @@ related:
 - `value_json` 只存用户显式配置或用户创建的数据；默认值、校验和迁移语义只存在于 Provider。
 - 凭据、令牌和 API Key 不进入普通扩展设置；错误、日志、任务记录或摘要不得记录完整设置值。
 - Manifest 不携带 Python 模块名、类名、Vue 模块路径或 URL；工厂、Provider 和自定义组件均由编译期白名单直接引用。
-- `application/extensions/runtime.py` 与 `SettingsDialog.vue` 已超过或接近容量软上限；新增语义必须进入新模块，入口只保留委托和装配。
+- `application/extensions/runtime.py` 已有 781 行，`SettingsDialog.vue` 已有 535 行，均越过容量软上限；新增语义必须进入新模块，入口只保留委托和装配。任务 7 开始前先由任务 6 抽出关于分区，使 `SettingsDialog.vue` 回落到约 500 行以内。
 - 每项运行时代码先写能因目标能力缺失而失败的测试；每个任务更新 `changelog.md` 并只提交自身文件。
 
 ## 文件职责
@@ -52,6 +53,8 @@ related:
 | `web/src/components/settings/ExtensionSettingsHost.vue` | generated/custom 分派、返回和焦点协调 |
 | `web/src/components/settings/GeneratedExtensionSettingsForm.vue` | 简单字段动态表单 |
 | `web/src/components/settings/SheetCatalogSettingsPanel.vue` | 不依赖工作区的复杂模板设置界面 |
+| `web/src/components/settings/AboutSection.vue` | 关于分区呈现与单次懒加载 |
+| `web/src/composables/useSheetCatalogTemplates.ts` | 模板 CRUD、草稿、光标与设置修订冲突 |
 
 ---
 
@@ -151,7 +154,7 @@ related:
 
 **接口：** `ExtensionSettingsService.get/put/snapshot` 返回版本化视图或不可变快照；未知高版本返回原 JSON 的只读视图；旧版本只做内存迁移，用户下一次保存时才写回。
 
-- [ ] **步骤 1：写服务红灯。** 使用 FakeStore/FakeProvider 覆盖零值、默认值解析、合法/非法保存、冲突、v1→v2 内存迁移不落库、迁移失败、未知 v3 保留、ID/Schema 不一致和重复 Provider。
+- [ ] **步骤 1：写服务红灯。** 使用 FakeStore/FakeProvider 覆盖零值、默认值解析、合法/非法保存、冲突、v1→v2 内存迁移不落库、迁移失败、未知 v3 保留、ID/Schema 不一致和重复 Provider；另用现有 `{schema_version: 1, user_templates: [...]}` 持久值覆盖同 Schema 兼容读取与再次保存，证明不会把代码内置模板误当用户数据，也不凭空设计存量迁移。
 
   ```python
   def test_older_schema_is_migrated_without_writing_store():
@@ -177,7 +180,7 @@ related:
 
 - [ ] **步骤 3：实现独立设置服务。** 服务可依赖 `ExtensionStore`；Provider 不依赖基础设施。Provider 异常转换成 `ExtensionSettingsError(code,status_code,params)`，Runtime 再映射为平台错误。
 
-- [ ] **步骤 4：实现 `SheetCatalogSettingsProvider`。** 把 Runtime 的模板解析、UUID/重名/数量/内置不可变校验迁入 Provider；默认持久值为 `{}`，有效值合并代码内置模板，只把用户模板序列化回 Store。
+- [ ] **步骤 4：实现 `SheetCatalogSettingsProvider`。** 把 Runtime 的模板解析、UUID/重名/数量/内置不可变校验迁入 Provider；默认持久值为 `{}`，有效值合并代码内置模板，只把用户模板序列化回 Store。现有实现本来只持久化 `user_templates`，同 Schema 存量直接规范化复用，不新增“完整模板集剥离”迁移。
 
 - [ ] **步骤 5：固定索引登记 Provider 并校验 Manifest/Provider 的 ID、Schema 与字段覆盖；单扩展错误只隔离自身。**
 
@@ -204,9 +207,9 @@ related:
 - 修改：`web/src/api/schema.d.ts`
 - 修改：`changelog.md`
 
-**接口：** Summary 新增 `settings_contribution`；GET/PUT settings 使用 `ExtensionSettingsResponseModel`，保留 `schema_version/revision/value` 并增加 `effective_value/read_only/diagnostic_code/items`。未知高版本 GET 为 200 只读，PUT 为 409。
+**接口：** Summary 新增 `settings_contribution`；GET/PUT settings 使用 `ExtensionSettingsResponseModel`，保留 `schema_version/revision/value` 并增加 `effective_value/read_only/diagnostic_code/items`。未知高版本 GET 为 200 只读且 `diagnostic_code=EXTENSION_SETTINGS_SCHEMA_NEWER`，PUT 返回同一稳定 `code` 和 HTTP 409。
 
-- [ ] **步骤 1：写 API 红灯。** 覆盖 generated 字段合并、custom route、无设置扩展、未知高版本 GET/PUT、非法字段 422 与并发 409。
+- [ ] **步骤 1：写 API 红灯。** 覆盖 generated 字段合并、custom route、无设置扩展、未知高版本 GET/PUT、非法字段 422 与并发 409。generated 后端全链路使用测试内临时 Manifest、FakeProvider 和 `BuiltinExtensionEntry(settings_provider=...)`，通过既有 `extension_index`/`ExtensionRuntime` 注入；不得为测试向生产固定索引增加虚构扩展。
 
 - [ ] **步骤 2：运行红灯。**
 
@@ -227,10 +230,10 @@ related:
       items: list[ExtensionSettingsItemModel] = Field(default_factory=list)
   ```
 
-- [ ] **步骤 4：登记 `EXTENSION_SETTINGS_SCHEMA_NEWER` 文案键并生成 OpenAPI。**
+- [ ] **步骤 4：把 `EXTENSION_SETTINGS_SCHEMA_NEWER` 登记为稳定错误码及文案键，并生成 OpenAPI。**
 
   ```powershell
-  rtk powershell -NoProfile -ExecutionPolicy Bypass -File scripts/export_openapi.ps1
+  rtk npm --prefix web run generate:api
   rtk npm --prefix web run check:api
   ```
 
@@ -261,11 +264,11 @@ related:
 - 修改：`web/src/api/schema.d.ts`
 - 修改：`changelog.md`
 
-**接口：** `ExtensionContext.settings` 返回冻结快照；Preview 响应和 Execute 请求新增 `settings_revision`；摘要加入设置 Schema/修订/digest。修订不一致返回 `EXTENSION_SETTINGS_CHANGED`/409，且发生在候选目录与授权消费之前。
+**接口：** `ExtensionContext.settings` 返回冻结快照；Preview 响应和 Execute 请求新增 `settings_revision`；摘要加入设置 Schema/修订/digest。修订不一致返回 `EXTENSION_SETTINGS_CHANGED`/409，且发生在候选目录与授权消费之前。只有会改变输出的工作区偏好才进入动作摘要；当前“上次选中模板 ID”不改变规范化动作请求或输出，因此不绑定。
 
 - [ ] **步骤 1：写 Context 红灯。** 断言嵌套值递归冻结、源 dict 修改不影响快照、Context 关闭后设置与工作区能力都拒绝。
 
-- [ ] **步骤 2：写摘要/执行漂移红灯。** 只改设置身份也改变摘要；预览后 PUT 再执行返回 409、授权未消费、没有 Artifact。
+- [ ] **步骤 2：写摘要/执行漂移红灯。** 只改设置身份也改变摘要；预览后 PUT 再执行返回 409、授权未消费、没有 Artifact；预览结束后的 best-effort“上次选中模板”偏好写入不得使该预览自行过期。
 
   ```python
   preview = client.post(preview_url, json=preview_payload()).json()
@@ -287,12 +290,12 @@ related:
 
 - [ ] **步骤 4：Runtime 在创建 Capability Context 前取得快照，Broker 只转交、不读 Store；ExtensionContext 对关闭后的 settings 访问 fail-closed。**
 
-- [ ] **步骤 5：扩展 canonical 摘要和 HTTP/前端请求。** 图纸目录预览回传设置修订，前端执行时原样重复提交；当前工作区偏好只决定上次选择，不影响输出，因此不进入当前动作摘要。
+- [ ] **步骤 5：扩展 canonical 摘要和 HTTP/前端请求。** 图纸目录预览回传设置修订，前端执行时原样重复提交；按已由 MEMO-DM-033 修订的 ARCH-DM-006 §11/§12，只绑定影响输出且未进入规范化动作请求的工作区偏好。当前 last-selected 偏好不绑定，未来新增影响输出的偏好仍须以 `REPREVIEW_REQUIRED`/409 拒绝漂移。
 
 - [ ] **步骤 6：在副作用前检查设置漂移，重新生成 OpenAPI并运行绿灯。**
 
   ```powershell
-  rtk powershell -NoProfile -ExecutionPolicy Bypass -File scripts/export_openapi.ps1
+  rtk npm --prefix web run generate:api
   rtk uv run pytest tests/unit/test_extension_snapshot.py tests/unit/test_sheet_catalog_preview.py tests/integration/test_extension_api.py tests/integration/test_sheet_catalog_export.py -q
   rtk npm --prefix web run check:api
   ```
@@ -325,11 +328,49 @@ related:
 
 - [ ] **步骤 4：仅用键盘完成进入、编辑、返回确认、保存和焦点归还，确认所有焦点可见且不被页脚遮挡。**
 
-- [ ] **步骤 5：暂停并请求用户确认 G4。** 展示三张新冻结图和 Demo；没有明确确认不得开始任务 6、7。确认后记录确认人和日期。
+- [ ] **步骤 5：暂停并请求用户确认 G4。** 展示三张新冻结图和 Demo；没有明确确认不得开始任务 7、8，任务 6 的容量拆分可独立进行。确认后记录确认人和日期。
 
 - [ ] **步骤 6：记录并提交。** commit message：`重开扩展全局设置入口设计门禁`。
 
-### 任务 6：实现 generated 设置宿主与导航
+### 任务 6：先拆分超限的 SettingsDialog 关于分区
+
+**文件：**
+
+- 新建：`web/src/components/settings/AboutSection.vue`
+- 修改：`web/src/components/settings/SettingsDialog.vue`
+- 修改：`web/src/api/settings.ts`
+- 新建：`web/src/api/settings.test.ts`
+- 修改：`web/tests/e2e/settings-dialog.spec.ts`
+- 修改：`docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md`
+- 修改：`changelog.md`
+
+**接口：** `fetchAbout()` 使用模块级 Promise memo，首次调用完成后复用同一静态应用元数据；`AboutSection.vue` 自持 loading/error/about 呈现，反复切换分区不重放 GET；SettingsDialog 只装配分区，不保留关于页请求逻辑。
+
+- [ ] **步骤 1：写拆分红灯。** 在 `settings.test.ts` mock `fetch`，并发调用两次 `fetchAbout()` 只允许一个网络请求；首次 Promise reject 后再次调用必须重新请求。在 `settings-dialog.spec.ts` 统计 `/api/about` 请求次数，断言“关于 → 扩展 → 关于”仍只请求一次，并锁定应用名、版本、MIT 正文、外链可访问名和焦点行为。
+
+- [ ] **步骤 2：运行红灯。**
+
+  ```powershell
+  rtk npm --prefix web run test:unit -- src/api/settings.test.ts
+  rtk npm --prefix web run test:e2e -- tests/e2e/settings-dialog.spec.ts --grep "关于分区.*不重复请求" --workers=1 --retries=0
+  ```
+
+  预期：单元测试因当前 `fetchAbout()` 每次直接请求而失败；既有 E2E 行为保持通过，作为拆分前安全网。
+
+- [ ] **步骤 3：实现模块级 memo 与 AboutSection。** Promise 失败时清除 memo，允许下次显式重试；成功结果在应用会话内复用。迁移现有模板和样式时保持 i18n key、可访问名、加载/失败态与外链行为不变。
+
+- [ ] **步骤 4：复核容量与完整回归。** `SettingsDialog.vue` 必须回落到 500 行以内；若仍超限，不得开始任务 7，应在本任务继续抽取具有独立职责的分区呈现，而不是追加 generated 装配。
+
+  ```powershell
+  rtk powershell -NoProfile -Command "(Get-Content -LiteralPath 'web/src/components/settings/SettingsDialog.vue' -Encoding UTF8).Count"
+  rtk npm --prefix web run test:unit -- src/api/settings.test.ts
+  rtk npm --prefix web run build
+  rtk npm --prefix web run test:e2e -- tests/e2e/settings-dialog.spec.ts tests/e2e/extensions-settings.spec.ts --workers=1 --retries=0
+  ```
+
+- [ ] **步骤 5：更新 SPEC-DM-011 的关于分区加载语义，记录并提交。** commit message：`拆分设置对话框关于分区`。
+
+### 任务 7：实现 generated 设置宿主与导航
 
 **文件：**
 
@@ -344,11 +385,12 @@ related:
 - 修改：`web/src/i18n/locales/en-US/settings.ts`
 - 修改：`web/tests/e2e/fixtures/extensions.ts`
 - 修改：`web/tests/e2e/extensions-settings.spec.ts`
+- 修改：`web/tests/e2e/settings-extensions-production-evidence.spec.ts`
 - 修改：`changelog.md`
 
 **接口：** `useExtensionSettings(id)` 独占该扩展的快照、edits、dirty、loading、saving、fieldErrors、conflict 和 readOnly；Host 负责分派和焦点，SettingsDialog 只装配当前 ID 与 dirty。
 
-- [ ] **步骤 1：写 generated E2E 红灯。** 覆盖按钮条件、无工作区、默认值、保存与重开、422 聚焦、409 保留输入、未知高版本只读、返回/关闭确认和焦点归还。
+- [ ] **步骤 1：写 generated E2E 红灯。** 覆盖按钮条件、无工作区、默认值、保存与重开、422 聚焦、409 保留输入、未知高版本只读、返回/关闭确认和焦点归还。显式重写 SC-16 旧钉子：声明设置的卡片按 DOM 顺序只有“配置”按钮与开关两个可聚焦元素；无设置卡片仍只有开关；卡片容器本身继续不可点击、不可聚焦。
 
 - [ ] **步骤 2：运行红灯。**
 
@@ -375,12 +417,12 @@ related:
   ```powershell
   rtk npm --prefix web run check:i18n
   rtk npm --prefix web run build
-  rtk npm --prefix web run test:e2e -- tests/e2e/extensions-settings.spec.ts tests/e2e/settings-dialog.spec.ts --workers=1 --retries=0
+  rtk npm --prefix web run test:e2e -- tests/e2e/extensions-settings.spec.ts tests/e2e/settings-dialog.spec.ts tests/e2e/settings-extensions-production-evidence.spec.ts --workers=1 --retries=0
   ```
 
 - [ ] **步骤 7：记录并提交。** commit message：`接入扩展 generated 设置与统一入口`。
 
-### 任务 7：迁移图纸目录 custom 设置界面
+### 任务 8：迁移图纸目录 custom 设置界面
 
 **文件：**
 
@@ -388,16 +430,21 @@ related:
 - 修改：`web/src/composables/useSheetCatalog.ts`
 - 修改：`web/src/components/sheet-catalog/TemplateBar.vue`
 - 修改：`web/src/components/sheet-catalog/ColumnEditor.vue`
+- 修改：`web/src/components/sheet-catalog/CompatibilitySummary.vue`
+- 修改：`web/src/components/sheet-catalog/catalogCompatibility.ts`
 - 新建：`web/src/components/settings/SheetCatalogSettingsPanel.vue`
 - 修改：`web/src/components/settings/ExtensionSettingsHost.vue`
 - 修改：`web/src/i18n/locales/zh-CN/extensions.ts`
 - 修改：`web/src/i18n/locales/en-US/extensions.ts`
 - 修改：`web/tests/e2e/fixtures/sheetCatalog.ts`
 - 修改：`web/tests/e2e/sheet-catalog.spec.ts`
+- 修改：`web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`
 - 修改：`web/tests/e2e/extensions-settings.spec.ts`
 - 修改：`changelog.md`
 
-**接口：** `useSheetCatalogTemplates()` 只管理全局模板 CRUD、草稿和修订冲突；`useSheetCatalog()` 组合该 controller 与工作区预览/导出；`CUSTOM_EXTENSION_SETTINGS_COMPONENTS` 固定映射 `sheet-catalog-settings` 到专属组件。
+**接口：** `useSheetCatalogTemplates()` 只管理全局模板 CRUD、草稿、光标和修订冲突；`useSheetCatalog()` 组合该 controller 与工作区预览/导出；`CUSTOM_EXTENSION_SETTINGS_COMPONENTS` 固定映射 `sheet-catalog-settings` 到专属组件。
+
+`SheetCatalogTemplateController` 明确只暴露 `loading/templates/selectedId/draft/dirty/canSaveInPlace/saving/saveError/conflict/caretRequest`，以及 `selectTemplate(id): Promise<void>`、`saveInPlace(): Promise<boolean>`、`saveAs(name): Promise<boolean>`、`retryAfterConflict(): Promise<boolean>`、`addColumn()`、`updateColumn(columnId, patch)`、`removeColumn(columnId)`、`moveColumn(columnId, direction)`、`trackCaret(columnId,start,end)`。另定义 `SheetCatalogValidationFeedback`，只含 `preview/previewStatus/previewError`。`TemplateBar` 只接收前者；`ColumnEditor` 接收前者和可选的后者。业务页传入二者并显示兼容性徽标/摘要；无工作区的设置面板只传模板 controller，隐藏兼容性徽标与摘要，不伪造 preview，也不把 `trackCaret` 降级为 no-op。
 
 - [ ] **步骤 1：写 custom E2E 红灯。** 无工作区新增模板/列、保存、重开保留；打开工作区后同一模板可选。覆盖删除确认、冲突保留草稿、未知 route fail-closed 和无设置按钮。
 
@@ -407,23 +454,23 @@ related:
   rtk npm --prefix web run test:e2e -- tests/e2e/extensions-settings.spec.ts tests/e2e/sheet-catalog.spec.ts --grep "custom 设置|无工作区配置模板|模板设置冲突" --workers=1 --retries=0
   ```
 
-- [ ] **步骤 3：抽取唯一模板状态所有者。** `TemplateBar`/`ColumnEditor` 接收缩窄的 `SheetCatalogTemplateController`，不要求完整预览 controller；保留 UUID、名称和导航闸门语义。
+- [ ] **步骤 3：抽取唯一模板状态所有者。** 按本任务接口段拆出 `SheetCatalogTemplateController` 与可选 `SheetCatalogValidationFeedback`；同步收窄 `catalogCompatibility`/`CompatibilitySummary`。保留 UUID、名称、光标和导航闸门语义。
 
 - [ ] **步骤 4：实现 custom 面板和编译期白名单。** 未加载工作区时不显示字段浏览器，允许编辑表达式文本；服务端最终校验语法与结构。绝不按服务端 route 动态 import。
 
-- [ ] **步骤 5：验证业务页无回归。** 两处共享 API/状态模型但不共享可变实例；并行编辑靠 revision 冲突，不采用最后写入覆盖。
+- [ ] **步骤 5：验证业务页无回归与容量回落。** 两处共享 API/状态模型但不共享可变实例；并行编辑靠 revision 冲突，不采用最后写入覆盖。抽取后 `useSheetCatalog.ts` 必须回落到 500 行以内；目录生产证据测试保持通过，若出现预期视觉变化只新增经 G4/G8 裁决的证据，不覆盖既有历史截图。
 
 - [ ] **步骤 6：运行绿灯。**
 
   ```powershell
   rtk npm --prefix web run check:i18n
   rtk npm --prefix web run build
-  rtk npm --prefix web run test:e2e -- tests/e2e/extensions-settings.spec.ts tests/e2e/sheet-catalog.spec.ts tests/e2e/extensions-navigation.spec.ts --workers=1 --retries=0
+  rtk npm --prefix web run test:e2e -- tests/e2e/extensions-settings.spec.ts tests/e2e/sheet-catalog.spec.ts tests/e2e/sheet-catalog-visual-evidence.spec.ts tests/e2e/extensions-navigation.spec.ts --workers=1 --retries=0
   ```
 
 - [ ] **步骤 7：记录并提交。** commit message：`迁移图纸目录 custom 全局设置界面`。
 
-### 任务 8：文档、打包守护和全量验收
+### 任务 9：文档、打包守护和全量验收
 
 **文件：**
 
@@ -431,6 +478,11 @@ related:
 - 修改：`docs/dst-manager/guides/GUIDE-DM-005-builtin-extension-development.md`
 - 修改：`docs/dst-manager/specs/SPEC-DM-011-settings-center-ui.md`
 - 修改：`docs/dst-manager/README.md`
+- 修改：`web/tests/e2e/settings-extensions-production-evidence.spec.ts`
+- 修改：`web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-06-config-entry-light.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-07-generated-light.png`
+- 新增：`docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-08-custom-dark.png`
 - 修改：`.planning/plans/dst-manager/PLAN-DM-025-extension-global-settings.md`
 - 修改：`.planning/plans/dst-manager/README.md`
 - 修改：`changelog.md`
@@ -460,7 +512,7 @@ related:
   rtk npm --prefix web run test:e2e
   ```
 
-- [ ] **步骤 5：执行 G8。** 对任务 5 的三张冻结图，在浅/深主题、1280×720、900×600、200% 缩放下取生产证据并逐张记录差异；无冻结对照只能算补充检查。
+- [ ] **步骤 5：执行 G8。** 对任务 5 的三张冻结图，在浅/深主题、1280×720、900×600、200% 缩放下生成 `g8-ext-06～08` 生产证据并逐张记录差异；重跑既有设置扩展与图纸目录视觉证据用例。既有 `g8-ext-01～05` 和图纸目录历史截图不得覆盖；无冻结对照只能算补充检查，目录页若无获批视觉变化则其历史证据必须继续通过。
 
 - [ ] **步骤 6：执行 G9。** 在 pywebview/WebView2 壳验证无工作区配置、键盘焦点、保存后新动作生效和预览后外部修改触发重新预览。环境缺失时保持 `active` 并记录恢复条件，不代替用户填写通过。
 
@@ -474,6 +526,20 @@ related:
   ```
 
   commit message：`完成扩展全局设置框架验收`。
+
+## MEMO-DM-033 审查处置
+
+| 意见 | 处置 | 落点 |
+| --- | --- | --- |
+| B1 OpenAPI 命令不存在 | 采纳 | 任务 3、4 改用既有 `npm --prefix web run generate:api` |
+| B2 偏好绑定与架构冲突 | 采纳并收窄规则 | ARCH-DM-006 §11/§12；任务 4 只绑定影响输出且未进入动作请求的偏好 |
+| M1 generated 无运行载体 | 采纳 | 任务 3 使用测试内 Manifest/Provider/index 注入，不增加生产扩展 |
+| M2 SettingsDialog 超限待办 | 采纳并独立成任务 | 任务 6；原 Todo 已被正式计划吸收并移除 |
+| M3 既有 E2E 与生产证据 | 采纳 | 任务 5、7～9 的 SC-16、设置扩展证据和目录证据回归 |
+| M4 ColumnEditor 边界含糊 | 采纳 | 任务 8 固定模板 controller 与可选 validation feedback 的字段/方法 |
+| 高版本错误码含糊 | 采纳 | ARCH-DM-006 §8/§12；任务 3 使用 `EXTENSION_SETTINGS_SCHEMA_NEWER` |
+| `useSheetCatalog.ts` 超限 | 采纳 | 任务 8 设置 500 行以内门禁 |
+| 可能存在“完整模板集”存量 | 经代码核实不成立，不设计迁移 | 当前 `save_templates()` 只写 `user_templates`；任务 2 增加真实存量形状兼容测试 |
 
 ## 风险与回退
 

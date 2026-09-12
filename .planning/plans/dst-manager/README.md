@@ -15,7 +15,7 @@
 详细计划：
 
 - [图纸目录数字格式码实施计划（PLAN-DM-026，proposed；依据 SPEC-DM-012 §5.4 与 RES-DM-001，只做只读导出的输出格式化：表达式新增 `:0{1,16}` 格式码、预览与 XLSX 贯通、字段浏览器格式入口）](PLAN-DM-026-sheet-catalog-number-format-code.md)
-- [Builtin 扩展全局设置框架实施计划（PLAN-DM-025，proposed；覆盖 Provider/Manifest、通用编排与 API、动作设置快照、设置中心 generated/custom 呈现；前端实施前须重开并通过 SPEC-DM-011 G4）](PLAN-DM-025-extension-global-settings.md)
+- [Builtin 扩展全局设置框架实施计划（PLAN-DM-025，proposed；已按 MEMO-DM-033 关闭 2 个阻断项并补齐实施边界，共 9 项任务；前端 generated/custom 实施前须重开并通过 SPEC-DM-011 G4）](PLAN-DM-025-extension-global-settings.md)
 - [扩展卡片基线与布尔开关统一下沉（PLAN-DM-022，completed，依据 SPEC-DM-011 SC-16；3 批次 4 任务全部实施并逐任务评审通过，G8 已覆盖 SC-15/SC-16，G9 真实桌面验收待用户）](PLAN-DM-022-extension-card-baseline.md)
 - [多语言支持实施计划（PLAN-DM-021，active；批次一～三与 Task 11/12 已实施，G8 待 D3 裁决、G9 待真实桌面验收）](PLAN-DM-021-multilingual-support.md)
 - [图纸目录扩展正确性缺陷收口计划（PLAN-DM-024，completed；MEMO-DM-031 F1～F5 已全部关闭，SPEC-DM-012 G7 已于 2026-09-11 恢复通过，PLAN-DM-023 实施前置已解除）](PLAN-DM-024-sheet-catalog-correctness-closure.md)
