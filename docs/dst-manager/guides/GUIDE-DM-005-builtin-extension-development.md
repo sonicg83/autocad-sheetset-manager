@@ -42,6 +42,7 @@ Builtin 扩展适合承载只读检查、统计、预览和受控成果导出。
 - Manifest 严格校验、宿主契约版本和 Capability 分类；
 - `start()` / `stop()` 生命周期、启停持久化和活动调用排空；
 - 应用级 JSON 设置与工作区级 JSON 偏好；
+- 扩展设置的编译期 Provider 登记（`settings_provider=`）与两类呈现（`generated`/`custom`）；
 - `workspace.snapshot.read.v1` 只读快照；
 - `workspace_page` 前端页面贡献；
 - 统一扩展列表、启停、设置、偏好、预览和执行 URL；
@@ -55,7 +56,7 @@ Builtin 扩展适合承载只读检查、统计、预览和受控成果导出。
 1. `src/dst_manager/interfaces/extension_contracts.py` 的预览、执行模型仍是图纸目录模板模型。
 2. `src/dst_manager/interfaces/extension_api.py` 的 `_dispatch_preview()`、`_dispatch_execute()` 直接构造和序列化图纸目录对象。
 3. `src/dst_manager/application/extensions/runtime.py` 的 `execute_action()` 接收 `SheetCatalogExecuteRequest`，并使用图纸目录 XLSX 校验器。
-4. 图纸目录模板保存通过 `_TEMPLATE_SETTINGS_EXTENSION_ID` 进入专用服务端校验；其他扩展设置只走通用 JSON 乐观并发存储。
+4. 扩展设置语义由 `ExtensionSettingsProvider` 独占，并在固定索引里以 `settings_provider=` 编译期登记（图纸目录即此形态）；宿主已删除按扩展身份的设置特判（`_TEMPLATE_SETTINGS_EXTENSION_ID`、`_save_catalog_templates()` 一类分支）。未登记 Provider 的扩展设置只走通用 JSON 乐观并发存储，不获得业务校验与规范化。
 5. `ExtensionActionManifest.output_kind` 当前只支持 `xlsx` 或无输出；`xlsx` 只接受固定 MIME。
 6. 宿主当前只认识和发放 `workspace.snapshot.read.v1`。
 7. 前端当前只支持 `workspace_page`，页面必须命中编译期 `route_key -> Vue component` 白名单。
@@ -131,7 +132,7 @@ BuiltinExtensionIndex
   -> extension.preview(冻结快照, 请求)
   -> 返回诊断、预览行、preview_digest、executable
   -> ShellBridge 创建一次性 save_grant
-  -> execute 请求重复提交模板快照与 preview_digest
+  -> execute 请求重复提交模板快照、settings_revision 与 preview_digest
   -> 宿主 repreview 并核对摘要
   -> 扩展写候选文件
   -> 宿主消费授权、回读校验、原子保存、登记 Artifact
@@ -410,17 +411,69 @@ PUT /api/extensions/{extension_id}/workspaces/{workspace_id}/preferences
 
 ### C-3 扩展专属设置校验
 
-通用存储只保证 JSON、schema 版本和乐观并发，不理解业务不变量。图纸目录通过 `runtime.py` 的专用分派强制模板 UUID、大小写重名、100 个上限、内置不可变和未知高版本保护。
+通用存储只保证 JSON、schema 版本和乐观并发，不理解业务不变量。图纸目录的业务约束（模板 UUID、重名拒绝、模板数量上限、内置模板不可变、未知高版本保护）全部由 `src/dst_manager/extensions/builtin/sheet_catalog/settings.py` 的 `SheetCatalogSettingsProvider` 强制，运行时不再有按扩展身份的专用分派。
 
 新扩展若有业务约束，必须：
 
-1. 在扩展域模块实现纯校验、规范化、序列化和迁移；
-2. 在应用层建立明确的按扩展身份分派，不在接口层复制规则；
+1. 在扩展域模块实现 Provider（纯校验、规范化、序列化和迁移，不依赖基础设施）；
+2. 在固定索引以 `settings_provider=` 编译期登记，由宿主设置服务统一编排，不在接口层或运行时复制规则；
 3. 对畸形 JSON fail-closed；
 4. 保留未知高版本原 JSON，防止旧程序写回丢数据；
 5. 覆盖新增、更新、并发冲突、超限、旧版本迁移和高版本降级测试。
 
-不要照抄 `_TEMPLATE_SETTINGS_EXTENSION_ID` 再增加一串 `if`。当第二个专属校验出现时，应抽出 `extension_id -> settings codec/validator` 的受信编译期注册表。
+宿主侧按扩展身份写 `if` 分支的旧形态已被 Provider 注册表取代：需要新规则时扩 Provider，不要再回到 `runtime.py` 里加特判。
+
+### C-4 设置 Provider：语义归属与编译期登记
+
+扩展设置的默认值、Schema 迁移、校验与规范化、有效值解析全部由 `ExtensionSettingsProvider`（`src/dst_manager/extensions/settings.py`）独占；宿主与接口层只做编排与错误映射。
+
+| 成员 | 职责 | 边界 |
+| --- | --- | --- |
+| `extension_id` / `schema_version` | 身份与当前 Schema 版本，必须与清单 `settings_schema` 一致 | 不按调用点推断版本 |
+| `field_definitions` | `SettingsFieldSpec` 元数据：控件类型、默认值与约束（`nullable`/`min_value`/`max_value`/`options`/`max_length`） | 不重复清单里的顺序与 i18n key |
+| `default_value()` | 代码级默认值；持久层只存用户显式配置 | 不读数据库、文件或环境 |
+| `migrate()` | 只把低版本持久值搬运到当前版本 | 不借迁移改写用户数据、不写回显式覆盖 |
+| `validate_and_normalize()` | 保存前 fail-closed 校验 + 规范化（保留用户可见拼写） | 不静默截断、不忽略非法项 |
+| `resolve()` | 把持久值解析为有效配置（叠加默认值），动作只消费解析结果 | 动作内不再读原始持久值 |
+
+Provider 在固定索引 `src/dst_manager/extensions/builtin/index.py` 里以 `settings_provider=` 与工厂并列登记，是**编译期引用**（模块级导入的标识符），不是清单字段。清单只声明可发现性、字段顺序与 i18n key（`settings_schema`、`settings_contribution`），宿主在调用点把 Provider 元数据与清单呈现合并。把模块名、类名或 URL 写进清单会让打包静态分析失去跟随目标（`packaging/dst-manager.spec` 靠静态导入收集模块），`tests/unit/test_packaging_spec.py` 对索引引用形态、清单禁用字段与 spec 排除项都有守护。
+
+字段控件词表是扩展设置**自有**词表（`boolean`/`integer`/`number`/`string`/`enum`），与设置中心应用设置的 `path`/`bool`/`int`/`enum` 不同源，消费方必须显式映射（`integer`→`int`、`boolean`→`bool`、`enum`→`enum`）；`number`/`string` 在应用设置中没有对应项，`path` 在扩展设置中不存在。
+
+### C-5 两类呈现与选择判据
+
+| 呈现 | 控件来源 | 适用形态 | 登记位置 | 越界行为 |
+| --- | --- | --- | --- | --- |
+| `generated` | 宿主按 Provider 字段定义生成（控件映射编译期穷尽） | 布尔、整数/浮点、文本、枚举 | 清单 `settings_contribution` 的 `fields`（顺序 + i18n key） | 未知控件或未登记字段 fail-closed，不回落成文本框 |
+| `custom` | 扩展自带专属面板组件 | 模板集合、字段映射、表达式等结构化配置 | 清单 `route_key` + 前端编译期白名单 `CUSTOM_SETTINGS_PANELS`（`web/src/components/settings/ExtensionSettingsHost.vue`） | 白名单外的 `route_key` 只显示稳定诊断并保持不可配置，绝不按字符串动态 import 组件 |
+
+选择判据：配置能拆成标量或枚举就用 `generated`（宿主统一承担生成表单、并发、i18n 与字段级错误定位）；只有控件需要自定义交互（列表增删、字段映射、表达式编辑）才用 `custom`。不要为了省事把结构化配置塞进 JSON 文本框，也不要让 `generated` 承载嵌套结构。
+
+### C-6 迁移、高版本保护与并发快照
+
+- **迁移**：Schema 版本推进时 `migrate()` 只搬运必要字段；缺失的新字段不写回显式覆盖，默认值仍来自 `default_value()`。
+- **高版本保护**：服务端已存更高 Schema 时，GET 返回 `read_only` 视图，PUT fail-closed（`EXTENSION_SETTINGS_SCHEMA_NEWER` / 409，`params` 含 `extension_id`、`settings_schema`、`current_schema`）。绝不允许当成空配置保存，否则旧程序会覆盖新结构；前端收到该码后进入粘性只读，不再回到可写。
+- **快照与复核**：每次动作调用冻结一份设置快照（revision + digest）；预览响应回传 `settings_revision`，执行必须原样重复提交。设置变化会让预览摘要（覆盖 `settings_digest` 与 `settings_revision`）不一致，执行前复核抛 `EXTENSION_SETTINGS_CHANGED` / 409 要求重新预览；该复核发生在候选文件分配与授权消费之前，因此不消费授权、不创建 Artifact。
+- **修订冲突与错误判别**：同一 PUT 上的修订漂移用 `EXTENSION_SETTINGS_INVALID` / 409 + `params{expected_revision, current_revision}` 表达。判别口径是「状态 409，且码在修订冲突集合内，或 params 同时给出两个修订」；**Provider 级 409 不得携带修订参数**（如模板重名 `SHEET_CATALOG_COLUMN_DUPLICATE`、内置模板不可改 `SHEET_CATALOG_TEMPLATE_CONFLICT`），否则用户看到的「按新修订重试」只会反复重发同一个已是最新的 `expected_revision`，形成确定性死循环。可达性前提是设置 PUT 路径上的模板保存不传 `expected_revision`，由 `tests/unit/test_sheet_catalog_settings.py` 行为化钉住。
+- **字段级错误**：字段级负载错误（如关键词超限）以 `EXTENSION_SETTINGS_INVALID` / 422 + `params{field, kind, limit, actual}` 定位到具体设置字段，前端把错误落回该控件；整负载级错误只带 `extension_id`。两类都不进入冲突横幅。
+- **不外泄取值**：错误、日志、任务和摘要只允许出现 SHA-256 摘要，不得记录完整设置值；凭据、令牌、API Key 不得进入扩展设置。
+
+### C-7 新增扩展的设置侧 SOP（实例：输出图纸过滤）
+
+1. 在扩展域模块写 Provider：纯函数、无基础设施依赖，字段元数据用 `SettingsFieldSpec` 声明。
+2. 在固定索引登记 `settings_provider=`（与工厂同一处，编译期引用）。
+3. 在 manifest 声明 `settings_schema` 与 `settings_contribution`；`generated` 给 `fields`（key/label/description/order），`custom` 给 `route_key`。
+4. `custom` 呈现还需在前端登记 `CUSTOM_SETTINGS_PANELS` 白名单项。
+5. 测试至少覆盖：Provider 表驱动的规范化与超限拒绝、迁移与高版本只读、设置快照与重新预览门禁、E2E 的入口与保存路径、打包守护。
+
+图纸目录的「输出图纸过滤」（`excluded_title_keywords`，见 SPEC-DM-012 §6.4）是按此框架落地的第一个非模板全局设置，可作为贯穿范例：
+
+- **输入**：文本按半角或全角逗号拆分（`normalize_excluded_title_keywords`）；数组形态视为已规范化的持久形态，不再二次拆分；每项 trim 后忽略空项；按 `casefold()` 去重并保留首次出现的原文与顺序（`草图， TEMP,,作废,temp` → `草图`、`TEMP`、`作废`）。
+- **上限**：`MAX_EXCLUDED_TITLE_KEYWORDS` = 50 项、`MAX_EXCLUDED_TITLE_KEYWORD_CHARS` = 100 字符；超限以 `EXTENSION_SETTINGS_INVALID` / 422 + `params{field, kind, limit, actual}` 拒绝保存，**绝不截断**。
+- **匹配**：`title_matches_exclusion` 对图纸固有字段 `SheetSnapshot.title` 与关键词分别 `casefold()` 后做字面子串匹配，关键词之间是 OR；不支持通配符、正则或转义逗号。预览与执行共用 `projected_sheets` 同一投影（`SheetCatalogExtension.execute` 也走它），不会出现「预览过滤了、导出没过滤」。
+- **为什么必须进快照**：过滤会改变动作输出，所以它进入设置 digest 并触发重新预览门禁；执行前的摘要复核会拒绝旧预览。
+- **预览数字**：`total_rows` 是过滤后的导出行数，`filtered_rows` 是被排除数（两者之和等于快照图纸总数）；`filtered_rows=0` 时界面不显示过滤提示。全部图纸被过滤时仍允许导出只有表头的 XLSX，且不返回被过滤图纸名称。
+- **空值语义**：`None` 或空文本等价于不过滤；规范化后为空时该字段从持久值移除（有效值仍返回空数组），清空不等于写入空覆盖。
 
 ## 9. SOP-D：接入 HTTP 契约
 
@@ -761,11 +814,13 @@ Set-Location ..
 - [ ] preview/repreview/execute 共享同一规范化语义并绑定 digest。
 - [ ] 错误码、HTTP 状态、message_key 和 params 已形成闭合契约。
 - [ ] 设置的 schema、并发、迁移和高版本保护已覆盖。
+- [ ] 设置语义由 Provider 独占并在固定索引编译期登记，宿主无按扩展身份特判。
 - [ ] 候选输出不接触最终路径，失败不登记 Artifact。
 
 ### 前端
 
 - [ ] `route_key` 已加入编译期页面白名单和精确键测试。
+- [ ] `custom` 设置面板的 `route_key` 已加入 `CUSTOM_SETTINGS_PANELS` 编译期白名单。
 - [ ] 页面状态在独立 composable，未继续膨胀 `App.vue`。
 - [ ] API 类型来自 OpenAPI，不手写漂移结构。
 - [ ] 中英文键与插值参数对称，用户数据不翻译。

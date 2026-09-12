@@ -16,6 +16,7 @@ from dst_manager.application.extensions.settings import (
     ExtensionSettingsService,
 )
 from dst_manager.extensions.builtin.sheet_catalog import settings as catalog_settings
+from dst_manager.extensions.builtin.sheet_catalog.errors import SheetCatalogError
 from dst_manager.extensions.builtin.sheet_catalog.settings import (
     MAX_EXCLUDED_TITLE_KEYWORD_CHARS,
     MAX_EXCLUDED_TITLE_KEYWORDS,
@@ -24,9 +25,16 @@ from dst_manager.extensions.builtin.sheet_catalog.settings import (
     normalize_excluded_title_keywords,
     title_matches_exclusion,
 )
-from dst_manager.extensions.builtin.sheet_catalog.templates import DEFAULT_TEMPLATE
+from dst_manager.extensions.builtin.sheet_catalog.templates import (
+    DEFAULT_TEMPLATE,
+    TemplateCollection,
+    save_templates,
+)
 from dst_manager.extensions.manifest import load_manifest
-from dst_manager.infrastructure.persistence.extensions import VersionedJson
+from dst_manager.infrastructure.persistence.extensions import (
+    SettingsRevisionConflictError,
+    VersionedJson,
+)
 
 SHEET_CATALOG_ID = "dst-manager.sheet-catalog"
 MANIFEST_RESOURCE = "dst_manager/extensions/builtin/sheet_catalog/manifest.yaml"
@@ -463,3 +471,158 @@ def test_unknown_newer_schema_is_preserved_and_rejected_on_put():
 def test_provider_module_exposes_the_shared_provider_instance():
     assert isinstance(SHEET_CATALOG_SETTINGS_PROVIDER, SheetCatalogSettingsProvider)
     assert catalog_settings.SHEET_CATALOG_SETTINGS_PROVIDER is SHEET_CATALOG_SETTINGS_PROVIDER
+
+
+# ---------------------------------------------------------------------------
+# R26：设置 PUT 路径不得带修订核对（前端修订漂移判别的可达性前提）
+#
+# 前端 ``web/src/composables/useExtensionSettings.ts`` 的 ``isRevisionConflict``
+# 把「码 ∈ {EXTENSION_SETTINGS_INVALID}」或「params 同时给出 expected_revision /
+# current_revision」判为修订漂移，据此给出「按新修订重试」；否则按普通保存失败
+# 呈现。``SHEET_CATALOG_TEMPLATE_CONFLICT`` 的参数白名单里同样允许这两个参数
+#（sheet_catalog/errors.py），它今天不构成误判**只因设置 PUT 路径上的
+# ``save_templates`` 不传 ``expected_revision``**：带参时才会抛带修订参数的冲突。
+# 本节用行为钉住这条可达性前提。改坏了会怎样：Provider 级 409 被当成修订漂移，
+# 用户点「按新修订重试」只会反复重发同一个已是最新的 expected_revision——确定性
+# 死循环，且真正的冲突原因（模板名重复、内置模板不可改）永远不显示。
+# ---------------------------------------------------------------------------
+
+
+class DriftingStore(RecordingStore):
+    """按 ``expected_revision`` 核对的设置仓储替身：不一致即抛修订冲突。"""
+
+    def put_settings(
+        self,
+        extension_id: str,
+        schema_version: int,
+        value: dict[str, object],
+        expected_revision: int,
+    ) -> VersionedJson:
+        if self.current is not None and self.current.revision != expected_revision:
+            raise SettingsRevisionConflictError(
+                f"设置修订冲突：期望 {expected_revision}，当前 {self.current.revision}"
+            )
+        return super().put_settings(extension_id, schema_version, value, expected_revision)
+
+
+def test_settings_put_path_never_passes_expected_revision_to_save_templates(monkeypatch):
+    """设置 PUT 路径只调 ``save_templates(collection)``，不把 ``expected_revision`` 交给 Provider。
+
+    钉住的前端假设：设置 PUT 端点上的 Provider 级 409 永远不带修订参数。
+    用调用形态（实参）而不是源码文本断言：源码改写等价形态也能被看见。
+    """
+    recorded: list[dict[str, object]] = []
+    real_save_templates = catalog_settings.save_templates
+
+    def spy(collection, **kwargs):
+        recorded.append(kwargs)
+        return real_save_templates(collection, **kwargs)
+
+    monkeypatch.setattr(catalog_settings, "save_templates", spy)
+
+    service(RecordingStore()).put(
+        catalog_manifest(),
+        2,
+        {"user_templates": [template_json()]},
+        expected_revision=0,
+    )
+
+    assert len(recorded) == 1, "设置 PUT 路径必须且只能经 Provider 校验一次"
+    assert "expected_revision" not in recorded[0], (
+        "设置 PUT 路径把 expected_revision 交给了 Provider：带修订参数的"
+        " SHEET_CATALOG_TEMPLATE_CONFLICT 因此变成可达，前端 isRevisionConflict"
+        " 会把它当修订漂移，给出反复重发同一个期望修订的「重试」出路"
+    )
+
+
+def test_revision_drift_on_settings_put_reports_extension_settings_invalid_with_both_revisions():
+    """设置 PUT 的修订漂移只以 ``EXTENSION_SETTINGS_INVALID`` + 双修订参数 409 呈现。
+
+    这是前端码集合里唯一的修订冲突码：若宿主换用别的码而不同步前端，
+    「按新修订重试」出口会消失（用户只能放弃本地输入）。
+    """
+    store = DriftingStore(VersionedJson(2, 7, {"schema_version": 2, "user_templates": []}))
+
+    with pytest.raises(ExtensionSettingsError) as excinfo:
+        service(store).put(
+            catalog_manifest(),
+            2,
+            {"user_templates": [template_json()]},
+            expected_revision=3,
+        )
+
+    error = excinfo.value
+    assert error.code == "EXTENSION_SETTINGS_INVALID"
+    assert error.status_code == 409
+    assert error.params == {"expected_revision": 3, "current_revision": 7}
+    assert store.put_calls == []
+
+
+@pytest.mark.parametrize(
+    ("label", "value"),
+    [
+        ("模板重复（409）", {"user_templates": [template_json("同名"), template_json("同名")]}),
+        ("关键词数量超限（422）", {"excluded_title_keywords": [f"k{i}" for i in range(51)]}),
+        ("模板缺 UUID（422）", {"user_templates": [dict(template_json(), template_id=None)]}),
+    ],
+)
+def test_provider_validation_never_emits_revision_conflict_params(label, value):
+    """Provider 校验错误——包含目录域自己的 409——一律不带修订参数。
+
+    带上了就意味着前端只看 params 的那条判别会把它当修订漂移。
+    """
+    with pytest.raises(ExtensionSettingsError) as excinfo:
+        SHEET_CATALOG_SETTINGS_PROVIDER.validate_and_normalize(value)
+
+    error = excinfo.value
+    assert "expected_revision" not in error.params, f"{label}：Provider 错误带上了期望修订"
+    assert "current_revision" not in error.params, f"{label}：Provider 错误带上了当前修订"
+
+
+def test_template_conflict_with_explicit_revision_carries_both_revisions():
+    """反证：``save_templates`` 带 ``expected_revision`` 时确实抛双参数冲突。
+
+    证明「不是错误码不存在，而是设置 PUT 路径不可达」——这正是前端判别
+    成立的必要条件，也是上一条用例的反面。
+    """
+    collection = TemplateCollection(4, DEFAULT_TEMPLATE, ())
+
+    with pytest.raises(SheetCatalogError) as excinfo:
+        save_templates(collection, expected_revision=9)
+
+    error = excinfo.value
+    assert error.code == "SHEET_CATALOG_TEMPLATE_CONFLICT"
+    assert error.params == {"expected_revision": 9, "current_revision": 4}
+
+
+def test_template_conflict_without_explicit_revision_carries_no_revision_params():
+    """另一条冲突抛出点（未知高版本原 JSON 保留）不带任何修订参数。
+
+    前端若只看 params 判别，这类冲突必须落回普通失败呈现，不能给「重试」。
+    """
+    preserved = TemplateCollection(9, DEFAULT_TEMPLATE, (), unknown_schema_preserved=True)
+
+    with pytest.raises(SheetCatalogError) as excinfo:
+        save_templates(preserved)
+
+    error = excinfo.value
+    assert error.code == "SHEET_CATALOG_TEMPLATE_CONFLICT"
+    assert error.params == {}
+
+
+def test_higher_schema_read_only_rejection_carries_no_revision_params():
+    """服务端已存更高 Schema 的 409 只带 schema 参数，不带修订参数。
+
+    它由 ``EXTENSION_SETTINGS_SCHEMA_NEWER`` 承担（前端据此进入只读态），
+    与 ``EXTENSION_SETTINGS_INVALID`` 的修订漂移必须能区分开。
+    """
+    store = RecordingStore(VersionedJson(3, 2, {"schema_version": 3}))
+
+    with pytest.raises(ExtensionSettingsError) as excinfo:
+        service(store).put(catalog_manifest(), 2, {"user_templates": []}, expected_revision=2)
+
+    error = excinfo.value
+    assert error.code == "EXTENSION_SETTINGS_SCHEMA_NEWER"
+    assert error.status_code == 409
+    assert "expected_revision" not in error.params
+    assert "current_revision" not in error.params
