@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-12（修正 PLAN-DM-026 计划索引的过时回归数字）
+
+- **问题**：`.planning/plans/dst-manager/README.md` 的 PLAN-DM-026 条目把全量回归记为 `pytest 1161 passed / 74 skipped / 0 failed`，该数字取自任务 4 收口时（评审后修正之前）的基线，未随终审 I-M4 补入的 19 例回填，与计划文件自身“实际验证”小节的 `1180 passed / 74 skipped / 0 failed`（collected 1254）不一致。
+- **修正**：索引条目改为 `1180 passed / 74 skipped / 0 failed`（collected 1254，含评审后补的 19 例），并附本轮复核重跑结果 `1182 passed / 72 skipped / 0 failed`。同一 collected 数下 2 例由 skip 转 pass，属本机环境差异（真实 AutoCAD / 私有样本相关用例的启用条件），非回归。
+- 仅修改该索引行的验证数字，不改计划正文、状态、链接与生产代码。
+- 验证：`uv run ruff check .` 通过；`uv run pytest` 1182 passed / 72 skipped / 0 failed（collected 1254，71.19s）；`uv run pytest tests/unit/test_sheet_catalog_expressions.py` 114 passed；`npm --prefix web run test:unit` 7 文件 / 40 例通过；`npm --prefix web run build` 通过（`check:api` 通过、`check:i18n` 898 键 / 9 域、`vue-tsc -b` + `vite build` 成功）；`npm --prefix web run test:e2e -- tests/e2e/sheet-catalog.spec.ts tests/e2e/sheet-catalog-visual-evidence.spec.ts tests/e2e/extensions-navigation.spec.ts --workers=1 --retries=0` 74 passed / 0 failed。以上重跑确认 PLAN-DM-026 的完成结论与门禁证据仍然成立（G9 真实验收仍待用户执行，实施代理不代填）。
+
 ## 2026-09-12（合并前评审修复：格式码入口 key 同名串扰）
 
 - **评审确认 bug**：`FieldBrowser.vue` 条目 key 原为 `${scope}:${canonicalName}`，而快照 `build_field_catalog` 不阻止图纸自定义属性与固有字段同名（如自定义属性 `number` 与固有 `number` 同时出现），“固有字段”组与“图纸自定义属性”组会各渲染一个 key 为 `sheet:number` 的条目，共用单一 `openFormatKey` 导致两个格式码菜单同时展开、后一条目的菜单无法打开。修复：key 拼入 `builtin`/`custom` 标志（`sheet:builtin:number` / `sheet:custom:number`），保证跨组唯一；`li :key` 与菜单 `v-if`/`aria-expanded` 比较随之消歧。
