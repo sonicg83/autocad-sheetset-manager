@@ -6,6 +6,7 @@
 缺定义结构化报错、缺值求值为空且分隔符保留；实现源码不含通用执行器。
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from dst_manager.extensions.builtin.sheet_catalog.expressions import (
     bind_expression,
     evaluate_expression,
     field_reference,
+    format_value,
     parse_expression,
 )
 from dst_manager.extensions.snapshots import (
@@ -132,6 +134,70 @@ def make_sheet() -> SheetSnapshot:
 )
 def test_parse_expression_accepts_restricted_grammar(source, expected):
     assert parse_expression(source) == expected
+
+
+# ---------------------------------------------------------------------------
+# 解析：数字格式码（SPEC-DM-012 §5.1）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "{sheet.number:0000}",
+            (FieldToken("sheet", "number", 0, False, 4),),
+            id="补零到 4 位",
+        ),
+        pytest.param(
+            "{sheet.number:0}",
+            (FieldToken("sheet", "number", 0, False, 1),),
+            id="宽度 1 去前导零",
+        ),
+        pytest.param(
+            '{sheet["专业:代码"]:000}',
+            (FieldToken("sheet", "专业:代码", 0, True, 3),),
+            id="方括号形式带格式码",
+        ),
+        pytest.param(
+            "{sheet.专业代码}-{sheet.number:00}",
+            (
+                FieldToken("sheet", "专业代码", 0, False),
+                LiteralToken("-"),
+                FieldToken("sheet", "number", 13, False, 2),
+            ),
+            id="组合表达式只格式化一个引用",
+        ),
+        pytest.param(
+            "{sheet.number:0}0",
+            (FieldToken("sheet", "number", 0, False, 1), LiteralToken("0")),
+            id="引用后紧跟字面量零",
+        ),
+    ],
+)
+def test_parse_expression_accepts_number_format_code(source, expected):
+    assert parse_expression(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "source_start"),
+    [
+        pytest.param("{sheet.number:}", 13, id="格式码为空"),
+        pytest.param("{sheet.number:abc}", 13, id="格式码含非零字符"),
+        pytest.param("{sheet.number:0:0}", 15, id="重复格式码定位第二个冒号"),
+        pytest.param("{sheet.number:" + "0" * 17 + "}", 13, id="宽度 17 超限"),
+        pytest.param("{sheet.number:0000", 13, id="带格式码未闭合"),
+        pytest.param('{sheet["a"]:0 }', 11, id="格式码后有多余内容"),
+        pytest.param('{sheet["a"]x}', 11, id="方括号引用后多余内容定位到多余字符"),
+    ],
+)
+def test_parse_expression_rejects_invalid_number_format_code(source, source_start):
+    with pytest.raises(SheetCatalogError) as excinfo:
+        parse_expression(source)
+    error = excinfo.value
+    assert error.code == "SHEET_CATALOG_EXPRESSION_INVALID"
+    assert error.blocking is True
+    assert error.params["source_start"] == source_start
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +311,13 @@ def test_bind_expression_keeps_literals_and_binds_each_field():
     )
 
 
+def test_bind_expression_propagates_format_width():
+    bound = bind_expression(parse_expression("{sheet.number:0000}"), make_catalog())
+    token = bound.tokens[0]
+    assert isinstance(token, BoundFieldToken)
+    assert token.format_width == 4
+
+
 # ---------------------------------------------------------------------------
 # 求值：缺值为空且分隔符保留、转义输出、固有字段原样
 # ---------------------------------------------------------------------------
@@ -300,6 +373,50 @@ def test_evaluate_expression_sheetset_scope_repeats_on_every_row():
 
 
 # ---------------------------------------------------------------------------
+# 数字格式码：纯字符串变换与求值接入（SPEC-DM-012 §5.4）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "width", "expected"),
+    [
+        pytest.param("1", 4, "0001", id="短值补零"),
+        pytest.param("01", 4, "0001", id="已有前导零补到目标宽度"),
+        pytest.param("0001", 4, "0001", id="目标宽度幂等"),
+        pytest.param("00123", 4, "0123", id="先归一化再补宽"),
+        pytest.param("12345", 4, "12345", id="超出宽度不截断"),
+        pytest.param("01", 1, "1", id="宽度 1 去前导零"),
+        pytest.param("000", 1, "0", id="全零保留一位"),
+        pytest.param("0", 4, "0000", id="零补到宽度"),
+        pytest.param("", 4, "", id="空值空入空出"),
+        pytest.param("A01", 4, "A01", id="非纯数字原样"),
+        pytest.param("01A", 4, "01A", id="尾部字母原样"),
+        pytest.param("1-2", 4, "1-2", id="区间值原样"),
+        pytest.param("1.2", 4, "1.2", id="小数原样"),
+        pytest.param("１２３", 4, "１２３", id="全角数字原样"),
+        pytest.param(" 01", 4, " 01", id="不 trim 空格"),
+        pytest.param("01", None, "01", id="无格式码原样"),
+    ],
+)
+def test_format_value_applies_number_format_code(value, width, expected):
+    assert format_value(value, width) == expected
+
+
+def test_evaluate_expression_applies_format_code_per_field():
+    bound = bind_expression(
+        parse_expression("{sheet.专业代码}-{sheet.number:0000}"), make_catalog()
+    )
+    assert evaluate_expression(bound, make_sheetset_scope(), make_sheet()) == "水-0002"
+
+
+def test_evaluate_expression_format_code_never_fakes_missing_value():
+    sheet = make_sheet()
+    sheet = replace(sheet, custom_properties=())
+    bound = bind_expression(parse_expression("{sheet.专业代码:0000}"), make_catalog())
+    assert evaluate_expression(bound, make_sheetset_scope(), sheet) == ""
+
+
+# ---------------------------------------------------------------------------
 # field_reference：字段浏览器按规范名称插入正确语法
 # ---------------------------------------------------------------------------
 
@@ -319,6 +436,20 @@ def test_evaluate_expression_sheetset_scope_repeats_on_every_row():
 )
 def test_field_reference_emits_correct_syntax(scope, name, expected):
     assert field_reference(scope, name) == expected
+
+
+@pytest.mark.parametrize(
+    ("scope", "name", "width", "expected"),
+    [
+        pytest.param("sheet", "number", 4, "{sheet.number:0000}", id="点号形式补零"),
+        pytest.param("sheet", "number", 1, "{sheet.number:0}", id="点号形式去零"),
+        pytest.param("sheet", "number", None, "{sheet.number}", id="无格式码保持旧语法"),
+        pytest.param("sheet", "专业.代码", 3, '{sheet["专业.代码"]:000}', id="方括号形式补零"),
+        pytest.param("sheetset", "项目 名称", None, '{sheetset["项目 名称"]}', id="方括号无格式码"),
+    ],
+)
+def test_field_reference_appends_number_format_code(scope, name, width, expected):
+    assert field_reference(scope, name, width) == expected
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-12（图纸目录表达式新增数字格式码解析与求值）
+
+- `expressions.py` 解析 `format := ":" "0"{1,16}`：`FieldToken`/`BoundFieldToken` 新增 `format_width`，点号与方括号形式均可附加格式码；`""` 空宽度、非零字符、重复格式码、宽度超过 16 与引用未闭合均复用 `SHEET_CATALOG_EXPRESSION_INVALID`，`source_start` 指向该引用的 `:`（重复格式码指向第二个 `:`），未新增错误码。
+- 新增纯函数 `format_value(value, width)` 并在唯一求值出口 `evaluate_expression` 套用：先归一化前导零再左补零到目标宽度（`00123` + `:0000` → `0123`、`01` + `:0` → `1`），空值与非常规数字原样输出，缺值不被补成零，超过宽度不截断。
+- `field_reference` 新增可选 `format_width` 参数生成带格式码的引用语法；未使用格式码时 token 形态与既有输出逐字节不变。
+- `tests/unit/test_sheet_catalog_expressions.py` 新增 36 例（解析接受/拒绝两张参数表、§5.4 语义逐行、绑定透传与语法生成）；全量 `uv run pytest` 1229 collected / 1155 passed / 74 skipped / 0 failed，`uv run ruff check .` 通过。
+
 ## 2026-09-12（新增 PLAN-DM-025 实施计划审查备忘 MEMO-DM-033）
 
 - 新增 `.planning/memos/dst-manager/2026-09-12-plan-dm025-review.md`，登记对 PLAN-DM-025 的只读方案审查：2 个阻断级问题（`scripts/export_openapi.ps1` 不存在；任务 4 偏离 ARCH-DM-006 §11/§12 偏好绑定裁决但未安排修订架构文档）、4 项建议修订（generated 测试载体、SettingsDialog 拆分待办协调、既有 E2E 钉子与生产证据回归、ColumnEditor controller 收窄边界）与 3 项提示。

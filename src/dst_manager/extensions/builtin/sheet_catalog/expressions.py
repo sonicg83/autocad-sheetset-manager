@@ -3,7 +3,9 @@
 语法（SPEC-DM-012 §5.1）::
 
     expression      := (literal | field_reference | escaped_brace)*
-    field_reference := "{" scope ("." identifier | "[" json_string "]") "}"
+    field_reference := "{" scope name_part format? "}"
+    name_part       := "." identifier | "[" json_string "]"
+    format          := ":" "0"{1,16}
     scope           := "sheetset" | "sheet"
     escaped_brace   := "{{" | "}}"
 
@@ -11,7 +13,9 @@
 不支持函数/条件/运算/过滤器，任何输入只会产出结构化 token 或结构化错误，
 绝不执行代码。``FieldToken.quoted`` 记录方括号 JSON 形式，绑定阶段据此
 落实保留名裁决：点号形式的固有字段优先，与固有字段同名的自定义保留属性
-只能经方括号形式寻址（SPEC-DM-012 §4.1/§4.2）。
+只能经方括号形式寻址（SPEC-DM-012 §4.1/§4.2）。``FieldToken.format_width``
+记录数字格式码宽度（`0` 的个数，1～16），求值阶段统一由 :func:`format_value`
+套用（SPEC-DM-012 §5.4）。
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ __all__ = [
     "bind_expression",
     "evaluate_expression",
     "field_reference",
+    "format_value",
     "parse_expression",
 ]
 
@@ -55,6 +60,8 @@ class FieldToken:
     source_start: int
     #: 是否以 ``["..."]`` JSON 字符串形式书写（决定绑定阶段的保留名裁决）。
     quoted: bool = False
+    #: 数字格式码宽度（`0` 的个数，1～16）；``None`` 表示未附加格式码。
+    format_width: int | None = None
 
 
 ExpressionToken = LiteralToken | FieldToken
@@ -65,6 +72,7 @@ class BoundFieldToken:
     scope: Literal["sheetset", "sheet"]
     canonical_name: str
     builtin: bool
+    format_width: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +86,10 @@ _BUILTIN_CASEFOLD = frozenset(name.casefold() for name in SHEET_BUILTIN_FIELDS)
 _DOT_NAME_FORBIDDEN = frozenset(' \t\r\n.[]{}"\'(),;:=\\')
 _JSON_ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+#: 数字格式码宽度上限（SPEC-DM-012 §5.3）。
+_MAX_FORMAT_WIDTH = 16
+#: 数字格式码只对纯 ASCII 数字串生效（SPEC-DM-012 §5.4）。
+_DIGITS = frozenset("0123456789")
 
 
 def _invalid(source_start: int, *, column_header: str | None = None):
@@ -136,23 +148,43 @@ def _parse_field(source: str, start: int) -> tuple[FieldToken, int]:
     if scope not in _SCOPES:
         raise _invalid(start)
     if source[index] == "[":
-        # 方括号形式在内部已消费到 `}` 之后的位置，直接返回。
         name, index = _parse_quoted_name(source, index + 1, start)
-        return FieldToken(scope, name, start, quoted=True), index
-    if source[index] == ".":
+        quoted = True
+    elif source[index] == ".":
         name, index = _parse_dot_name(source, index + 1)
         quoted = False
     else:  # "}": 引用缺少名称部分。
         raise _invalid(start)
+    width, index = _parse_format(source, index)
+    if index >= len(source):
+        # 未闭合引用（缺 ``}``）：沿用改动前语义，位置指向引用起始的 ``{``。
+        raise _invalid(start)
+    if source[index] != "}":
+        raise _invalid(index)
+    return FieldToken(scope, name, start, quoted=quoted, format_width=width), index + 1
+
+
+def _parse_format(source: str, start: int) -> tuple[int | None, int]:
+    """解析字段引用尾部的数字格式码，返回 (宽度, 新游标)；无格式码时游标原样返回。"""
+    if start >= len(source) or source[start] != ":":
+        return None, start
+    index = start + 1
+    while index < len(source) and source[index] == "0":
+        index += 1
+    width = index - start - 1
+    if width == 0 or width > _MAX_FORMAT_WIDTH:
+        raise _invalid(start)
+    if index < len(source) and source[index] == ":":
+        raise _invalid(index)
     if index >= len(source) or source[index] != "}":
         raise _invalid(start)
-    return FieldToken(scope, name, start, quoted=quoted), index + 1
+    return width, index
 
 
 def _parse_dot_name(source: str, start: int) -> tuple[str, int]:
     index = start
     length = len(source)
-    while index < length and source[index] != "}":
+    while index < length and source[index] not in "}:":
         if source[index] in _DOT_NAME_FORBIDDEN:
             raise _invalid(index)
         index += 1
@@ -163,7 +195,10 @@ def _parse_dot_name(source: str, start: int) -> tuple[str, int]:
 
 
 def _parse_quoted_name(source: str, start: int, field_start: int) -> tuple[str, int]:
-    """扫描 ``["..."]``：手写状态机校验，转义按 JSON 字符串规则解码。"""
+    """扫描 ``["..."]``：手写状态机校验，转义按 JSON 字符串规则解码；
+
+    只在 ``]`` 之后返回，闭合 ``}`` 由 :func:`_parse_field` 统一断言（其后可跟格式码）。
+    """
     index = start
     length = len(source)
     if index >= length or source[index] != '"':
@@ -185,9 +220,9 @@ def _parse_quoted_name(source: str, start: int, field_start: int) -> tuple[str, 
             raise _invalid(index)
         chars.append(char)
         index += 1
-    if index + 1 >= length or source[index] != "]" or source[index + 1] != "}":
+    if index >= length or source[index] != "]":
         raise _invalid(index)
-    return "".join(chars), index + 2
+    return "".join(chars), index + 1
 
 
 def _parse_escape(source: str, backslash: int) -> tuple[int, str]:
@@ -228,7 +263,9 @@ def _bind_field(token: FieldToken, fields: FieldCatalog) -> BoundFieldToken:
         matches, key=lambda definition: definition.builtin != preferred_builtin
     )
     chosen = ordered[0]
-    return BoundFieldToken(token.scope, chosen.canonical_name, chosen.builtin)
+    return BoundFieldToken(
+        token.scope, chosen.canonical_name, chosen.builtin, token.format_width
+    )
 
 
 def bind_expression(
@@ -245,8 +282,16 @@ def bind_expression(
 
 
 # ---------------------------------------------------------------------------
-# 求值：缺定义已在绑定阶段阻断；缺值求值为空串，字面量原样保留
+# 求值：缺定义已在绑定阶段阻断；缺值求值为空串，字面量原样保留；
+# 数字格式码在唯一出口统一套用（SPEC-DM-012 §5.4）
 # ---------------------------------------------------------------------------
+
+
+def format_value(value: str, width: int | None) -> str:
+    """按 SPEC-DM-012 §5.4 变换：非纯数字或空值原样，否则先归一化再补宽。"""
+    if width is None or not value or any(char not in _DIGITS for char in value):
+        return value
+    return (value.lstrip("0") or "0").rjust(width, "0")
 
 
 def _lookup(properties: tuple, canonical_name: str) -> str:
@@ -261,17 +306,22 @@ def evaluate_expression(
     sheetset: SnapshotPropertyScope,
     sheet: SheetSnapshot,
 ) -> str:
-    """对单张图纸求值；缺失的属性值按空字符串处理，分隔符等字面量保留。"""
+    """对单张图纸求值；缺失的属性值按空字符串处理，分隔符等字面量保留。
+
+    数字格式码只作用于它紧跟的那一个引用，且不把缺值补成零。
+    """
     parts: list[str] = []
     for token in expression.tokens:
         if isinstance(token, LiteralToken):
             parts.append(token.value)
-        elif token.scope == "sheetset":
-            parts.append(_lookup(sheetset.custom_properties, token.canonical_name))
+            continue
+        if token.scope == "sheetset":
+            value = _lookup(sheetset.custom_properties, token.canonical_name)
         elif token.builtin:
-            parts.append(getattr(sheet, token.canonical_name, ""))
+            value = getattr(sheet, token.canonical_name, "")
         else:
-            parts.append(_lookup(sheet.custom_properties, token.canonical_name))
+            value = _lookup(sheet.custom_properties, token.canonical_name)
+        parts.append(format_value(value, token.format_width))
     return "".join(parts)
 
 
@@ -280,8 +330,8 @@ def evaluate_expression(
 # ---------------------------------------------------------------------------
 
 
-def field_reference(scope: str, canonical_name: str) -> str:
-    """生成指向规范名称的规范引用语法：点号或方括号 JSON 字符串。"""
+def field_reference(scope: str, canonical_name: str, format_width: int | None = None) -> str:
+    """生成指向规范名称的引用语法：点号或方括号 JSON 字符串，可附加数字格式码。"""
     needs_quoted = (
         not canonical_name
         or any(char in _DOT_NAME_FORBIDDEN for char in canonical_name)
@@ -292,5 +342,9 @@ def field_reference(scope: str, canonical_name: str) -> str:
         )
     )
     if needs_quoted:
-        return f'{{{scope}[{json.dumps(canonical_name, ensure_ascii=False)}]}}'
-    return f"{{{scope}.{canonical_name}}}"
+        reference = f'{{{scope}[{json.dumps(canonical_name, ensure_ascii=False)}]}}'
+    else:
+        reference = f"{{{scope}.{canonical_name}}}"
+    if format_width is None:
+        return reference
+    return f"{reference[:-1]}:{'0' * format_width}}}"
