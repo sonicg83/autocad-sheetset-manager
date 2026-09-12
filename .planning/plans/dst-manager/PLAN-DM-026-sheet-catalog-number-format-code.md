@@ -742,4 +742,5 @@ related:
 - I-M4（生成侧越界宽度）：`field_reference` 增加 1～16 显式校验，0/17/负数抛 `ValueError`；`tests/unit/test_sheet_catalog_expressions.py` 补 19 例（1..16 生成→解析回读的往返性质 16 例 + 0/17/负数拒绝 3 例）。
 - I-M5（焦点落空）**经实测证伪**：选中格式码后焦点由既有 caret 协议（`insertReference` → `caretRequest` → `ColumnEditor` watcher）交给表达式输入框，**并非** `document.body`，与点击 `.field-chip` 一致；故不新增焦点归还代码，改为在两条用例断言表达式输入框 `toBeFocused()`。变异（移除 `caretRequest` 移交）实测红（`Received: inactive`），按字节还原后 `useSheetCatalog.ts` blob `e18af760…` 不变。
 - 复跑：`uv run ruff check .` 通过；`uv run pytest` **1180 passed / 74 skipped / 0 failed**（collected 1254，较基线 1161/74/0、1235 增 19 例）；`npm run test:unit` 40 passed；`npm run build` 通过（`check:i18n` 898 键 / 9 域）；`sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` + `extensions-navigation.spec.ts` **74 passed / 0 failed**（`--workers=1 --retries=0`）。
+- 评审后修正提交：`按终审修正格式码断言强度、宽度校验与焦点归还`（`42433e16a297bc71f590e8ccf59b4d20074b2007`）。
 
