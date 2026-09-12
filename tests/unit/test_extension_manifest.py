@@ -74,7 +74,8 @@ def test_builtin_sheet_catalog_manifest_loads_with_expected_contract() -> None:
     assert [(a.action_id, a.output_kind, a.media_type) for a in manifest.actions] == [
         ("export-xlsx", "xlsx", XLSX_MEDIA_TYPE)
     ]
-    assert manifest.settings_schema == 1
+    # PLAN-DM-025 Task 2：设置 Schema 1 → 2（SPEC-DM-012 §6.4）
+    assert manifest.settings_schema == 2
     assert manifest.settings_contribution == SettingsContribution(
         presentation="custom", route_key="sheet-catalog-settings"
     )

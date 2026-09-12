@@ -13,7 +13,9 @@
   授权消费 → 宿主回读 + 原子保存 + Artifact 登记 → ``finally`` 清理候选；
   授权存储与候选根由装配方注入（桌面壳与桥共享同一 :class:`SaveGrantStore`）；
 - 对接口层统一抛 :class:`ExtensionPlatformError`（ARCH §12 平台错误码 +
-  HTTP 状态 + 结构化 params），注册表的具体诊断码不外溢到 API。
+  HTTP 状态 + 结构化 params），注册表的具体诊断码不外溢到 API；
+- 设置链路（Task 2）只委托 :class:`ExtensionSettingsService`：启动时把固定
+  索引登记的 Provider 交给它，读写端点不做任何扩展专用分派。
 """
 
 from __future__ import annotations
@@ -23,29 +25,26 @@ import shutil
 import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dst_manager.application.extensions.settings import (
+    ExtensionSettingsError,
+    ExtensionSettingsService,
+    ExtensionSettingsView,
+)
 from dst_manager.extensions.artifacts import (
     ArtifactExporter,
     ArtifactExportError,
     ArtifactMetadata,
 )
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
-from dst_manager.extensions.builtin.sheet_catalog.errors import (
-    SHEET_CATALOG_MESSAGE_KEYS,
-    SheetCatalogError,
-)
+from dst_manager.extensions.builtin.sheet_catalog.errors import SheetCatalogError
 from dst_manager.extensions.builtin.sheet_catalog.extension import (
     ArtifactProposalDirectory,
     SheetCatalogExecuteRequest,
     SheetCatalogExecuteResponse,
-)
-from dst_manager.extensions.builtin.sheet_catalog.templates import (
-    _template_from_json,
-    load_templates,
-    save_templates,
 )
 from dst_manager.extensions.builtin.sheet_catalog.workbook import validate_candidate
 from dst_manager.extensions.capabilities import (
@@ -71,7 +70,6 @@ from dst_manager.infrastructure.persistence.extensions import (
     ArtifactRecord,
     ExtensionStateRecord,
     ExtensionStore,
-    SettingsRevisionConflictError,
     VersionedJson,
 )
 
@@ -87,11 +85,6 @@ __all__ = [
 
 #: 清单不可读时注册表用资源串占位（Task 1 披露）；占位记录不落库、不可启用。
 _PLACEHOLDER_ERROR = "EXTENSION_MANIFEST_INVALID"
-
-#: 模板校验分派的内置扩展（Task 11B / Ruling-11）：该扩展的设置 PUT 语义由
-#: :func:`save_templates` 全权解释（SC-06 服务端强制）；其余扩展（未来）保持
-#: 通用 JSON 存储路径，不受模板规则影响。
-_TEMPLATE_SETTINGS_EXTENSION_ID = "dst-manager.sheet-catalog"
 
 
 class ExtensionPlatformError(RuntimeError):
@@ -179,6 +172,9 @@ class ExtensionRuntime:
         self._reader = reader
         self._save_grants = save_grants
         self._proposal_root = proposal_root
+        # 设置编排服务（Task 2）：Provider 由 start() 按固定索引登记；
+        # Runtime 只做错误映射，不做任何扩展专用的设置分派。
+        self._settings = ExtensionSettingsService(store)
 
     @property
     def registry(self) -> ExtensionRegistry:
@@ -205,8 +201,18 @@ class ExtensionRuntime:
     def start(
         self, entries: Sequence[BuiltinExtensionEntry] = BUILTIN_EXTENSION_INDEX
     ) -> None:
-        """发现固定索引条目并按持久化意图对账；单扩展失败只留下稳定诊断。"""
+        """发现固定索引条目、登记 Provider 并按持久化意图对账。
+
+        设置 Provider 与工厂一样属于编译期白名单：这里把索引声明的 Provider
+        交给设置服务登记，Manifest/Provider 的 ID、Schema 与字段覆盖在首次
+        读取时核对；不一致只隔离该扩展的设置，不影响其他扩展。
+        """
         self._registry.discover(entries)
+        self._settings.bind_providers(
+            entry.settings_provider
+            for entry in entries
+            if entry.settings_provider is not None
+        )
         self._reconcile_persisted_states()
 
     def _reconcile_persisted_states(self) -> None:
@@ -312,15 +318,13 @@ class ExtensionRuntime:
 
     # ------------------------------------------------------------------ 设置与偏好
 
-    def get_settings(self, extension_id: str) -> VersionedJson:
+    def get_settings(self, extension_id: str) -> ExtensionSettingsView:
+        """读取扩展设置视图（默认零值 / 内存迁移 / 有效值 / 只读诊断）。"""
         manifest = self._manifest(extension_id)
-        versioned = self._store.get_settings(extension_id)
-        if versioned is None:
-            # 从未保存：返回清单 schema 的零值默认，而不是 404。
-            return VersionedJson(
-                schema_version=manifest.settings_schema, revision=0, value={}
-            )
-        return versioned
+        try:
+            return self._settings.get(manifest)
+        except ExtensionSettingsError as exc:
+            raise self._settings_error(exc) from exc
 
     def put_settings(
         self,
@@ -328,83 +332,26 @@ class ExtensionRuntime:
         schema_version: int,
         value: dict[str, object],
         expected_revision: int,
-    ) -> VersionedJson:
+    ) -> ExtensionSettingsView:
+        """校验并保存扩展设置（Provider 全权解释语义 + 乐观并发）。"""
         manifest = self._manifest(extension_id)
-        if schema_version != manifest.settings_schema:
-            raise ExtensionPlatformError(
-                "EXTENSION_SETTINGS_INVALID",
-                f"设置 schema 版本不匹配：声明 {manifest.settings_schema}，提交 {schema_version}",
-                status_code=422,
-                params={"settings_schema": manifest.settings_schema, "submitted": schema_version},
-            )
-        if extension_id == _TEMPLATE_SETTINGS_EXTENSION_ID:
-            # SC-06 服务端接线（Task 11B / fix round 1）：分派只按扩展身份，不
-            # 耦合字面 schema 版本——否则 settings_schema 升级后 v2 PUT 会静默
-            # 退回通用 JSON 路径（fail-open，重名/超限重新失去强制）。非 v1 负载
-            # 在分派内天然 fail-closed：模板条目按 v1 严格解析、服务端高 schema
-            # 行经 unknown_schema_preserved 走 Ruling-9 冲突拒绝。
-            value = self._save_catalog_templates(extension_id, value, expected_revision)
         try:
-            return self._store.put_settings(
-                extension_id, schema_version, value, expected_revision
+            return self._settings.put(
+                manifest, schema_version, value, expected_revision
             )
-        except SettingsRevisionConflictError as exc:
-            current = self._store.get_settings(extension_id)
-            raise ExtensionPlatformError(
-                "EXTENSION_SETTINGS_INVALID",
-                str(exc),
-                status_code=409,
-                params={
-                    "expected_revision": expected_revision,
-                    "current_revision": current.revision if current else 0,
-                },
-            ) from exc
+        except ExtensionSettingsError as exc:
+            raise self._settings_error(exc) from exc
 
-    def _save_catalog_templates(
-        self,
-        extension_id: str,
-        value: dict[str, object],
-        expected_revision: int,
-    ) -> dict[str, object]:
-        """图纸目录设置 PUT → 模板校验（Task 5 ``save_templates`` 全权解释）。
-
-        服务端权威：casefold 重名、100 上限、内置不可变（同名影子模板）、
-        修订冲突（expected/current）与未知高 schema 拒绝（Ruling-9：原 JSON
-        保留）全部由 ``save_templates`` 强制；结构性坏负载（缺 UUID/缺列等）
-        按设置无效契约化 422。成功返回可持久化的规范序列化负载。
-        """
-        current = self._store.get_settings(extension_id)
-        collection = load_templates(current)  # 服务端修订 + 未知高 schema 标记
-        try:
-            entries = value.get("user_templates")
-            if not isinstance(entries, list):
-                raise TypeError(
-                    "SHEET_CATALOG_TEMPLATES_INVALID: user_templates 必须是模板数组"
-                )
-            incoming = []
-            for entry in entries:
-                if isinstance(entry, dict) and entry.get("template_id") is None:
-                    raise ValueError(
-                        "SHEET_CATALOG_TEMPLATE_ID_REQUIRED: 保存前必须分配模板 UUID"
-                    )
-                incoming.append(_template_from_json(entry))
-            collection = replace(collection, user_templates=tuple(incoming))
-            return save_templates(collection, expected_revision)
-        except SheetCatalogError as exc:
-            raise ExtensionPlatformError(
-                exc.code,
-                str(exc),
-                status_code=_SHEET_CATALOG_ERROR_STATUS.get(exc.code, 503),
-                params=dict(exc.params),
-                key_override=SHEET_CATALOG_MESSAGE_KEYS[exc.code],
-            ) from exc
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ExtensionPlatformError(
-                "EXTENSION_SETTINGS_INVALID",
-                str(exc),
-                status_code=422,
-                params={"extension_id": extension_id},
-            ) from exc
+    @staticmethod
+    def _settings_error(error: ExtensionSettingsError) -> ExtensionPlatformError:
+        """设置链路错误 → 平台错误：Provider 自带的目录码与文案键原样透传。"""
+        return ExtensionPlatformError(
+            error.code,
+            str(error),
+            status_code=error.status_code,
+            params=dict(error.params),
+            key_override=error.key_override,
+        )
 
     def get_preference(self, extension_id: str, workspace_id: str) -> VersionedJson:
         manifest = self._manifest(extension_id)
@@ -765,17 +712,4 @@ _ERROR_STATUS: dict[str, int] = {
     "SAVE_GRANT_INVALID": 409,
     "EXPORT_DESTINATION_CHANGED": 409,
     "ARTIFACT_WRITE_FAILED": 503,
-}
-
-#: SheetCatalogError 目录码默认 HTTP 状态（沿用 ARCH-DM-006 §12 映射风格：
-#: 并发/状态冲突 409，负载校验 422，宿主环境失败 503）。模板保存路径只会
-#: 产生其中一部分；词汇保持封闭，未登记的新码兜底 503（对齐 _platform_error）。
-_SHEET_CATALOG_ERROR_STATUS: dict[str, int] = {
-    "SHEET_CATALOG_TEMPLATE_CONFLICT": 409,
-    "SHEET_CATALOG_COLUMN_DUPLICATE": 409,
-    "SHEET_CATALOG_TEMPLATE_LIMIT": 422,
-    "SHEET_CATALOG_EXPRESSION_INVALID": 422,
-    "SHEET_CATALOG_FIELD_UNDEFINED": 422,
-    "SHEET_CATALOG_VALUE_MISSING": 422,
-    "SHEET_CATALOG_XLSX_INVALID": 503,
 }

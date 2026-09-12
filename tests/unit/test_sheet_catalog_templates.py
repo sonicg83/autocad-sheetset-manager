@@ -22,17 +22,20 @@ from dst_manager.extensions.builtin.sheet_catalog.expressions import (
     LiteralToken,
 )
 from dst_manager.extensions.builtin.sheet_catalog.templates import (
+    CATALOG_SETTINGS_SCHEMA_VERSION,
     DEFAULT_TEMPLATE,
     MAX_COLUMNS,
     MAX_EXPRESSION_CHARS,
     MAX_HEADER_CHARS,
     MAX_NAME_CHARS,
     MAX_USER_TEMPLATES,
+    TEMPLATE_SCHEMA_VERSION,
     SheetCatalogTemplate,
     TemplateCollection,
     TemplateColumn,
     delete_template,
     load_templates,
+    parse_user_templates,
     save_templates,
     validate_template,
 )
@@ -250,15 +253,22 @@ def test_validate_template_does_not_require_current_field_catalog_compatibility(
 # ---------------------------------------------------------------------------
 
 
+def test_settings_and_template_schema_versions_are_separate_constants():
+    """SPEC-DM-012 §6.1/§6.4：设置行声明 v2，模板条目仍声明 v1。"""
+    assert CATALOG_SETTINGS_SCHEMA_VERSION == 2
+    assert TEMPLATE_SCHEMA_VERSION == 1
+    assert DEFAULT_TEMPLATE.schema_version == TEMPLATE_SCHEMA_VERSION
+
+
 def test_save_templates_serializes_user_templates_with_stable_uuids():
     template = make_template()
     payload = save_templates(make_collection((template,)), expected_revision=3)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == CATALOG_SETTINGS_SCHEMA_VERSION
     assert payload["user_templates"] == [
         {
             "template_id": str(template.template_id),
             "name": template.name,
-            "schema_version": 1,
+            "schema_version": TEMPLATE_SCHEMA_VERSION,
             "columns": [
                 {
                     "column_id": str(column.column_id),
@@ -274,7 +284,9 @@ def test_save_templates_serializes_user_templates_with_stable_uuids():
 def test_load_templates_round_trips_save_payload_with_stable_uuids():
     template = make_template()
     payload = save_templates(make_collection((template,)), expected_revision=3)
-    settings = VersionedJson(schema_version=1, revision=7, value=payload)
+    settings = VersionedJson(
+        schema_version=CATALOG_SETTINGS_SCHEMA_VERSION, revision=7, value=payload
+    )
     collection = load_templates(settings)
     assert collection.revision == 7
     assert collection.builtin is DEFAULT_TEMPLATE
@@ -414,7 +426,11 @@ def test_load_templates_skips_invalid_entry_with_stable_diagnostic(caplog):
     broken["name"] = ""
     payload = dict(payload, user_templates=[broken, payload["user_templates"][0]])
     with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
-        collection = load_templates(VersionedJson(schema_version=1, revision=2, value=payload))
+        collection = load_templates(
+            VersionedJson(
+                schema_version=CATALOG_SETTINGS_SCHEMA_VERSION, revision=2, value=payload
+            )
+        )
     assert collection.user_templates == (good,)
     assert "SHEET_CATALOG_TEMPLATES_SKIPPED" in caplog.text
     assert good.name not in caplog.text
@@ -422,7 +438,7 @@ def test_load_templates_skips_invalid_entry_with_stable_diagnostic(caplog):
 
 def test_load_templates_preserves_unknown_high_schema_json_with_diagnostic(caplog):
     raw_value = {"user_templates": [{"unknown": "future-shape"}], "future_field": 1}
-    settings = VersionedJson(schema_version=2, revision=5, value=raw_value)
+    settings = VersionedJson(schema_version=3, revision=5, value=raw_value)
     with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
         collection = load_templates(settings)
     # 未知高 schema 不加载为可编辑状态，但原 JSON 原样保留（不重写、不变更）。
@@ -430,7 +446,7 @@ def test_load_templates_preserves_unknown_high_schema_json_with_diagnostic(caplo
     assert collection.builtin is DEFAULT_TEMPLATE
     assert collection.user_templates == ()
     assert settings.value == raw_value
-    assert settings.schema_version == 2
+    assert settings.schema_version == 3
     assert "SHEET_CATALOG_SETTINGS_SCHEMA_UNSUPPORTED" in caplog.text
     # Ruling-9：高 schema 集合必须带保留标记，堵住"按服务端修订原样覆盖 v2
     # JSON"的数据丢失通路。
@@ -440,7 +456,7 @@ def test_load_templates_preserves_unknown_high_schema_json_with_diagnostic(caplo
 def test_save_templates_rejects_collection_loaded_from_unknown_high_schema(caplog):
     """高 schema 载入的集合即使 revision 与服务端一致也不得保存为 v1 负载。"""
     raw_value = {"user_templates": [{"unknown": "future-shape"}], "future_field": 1}
-    settings = VersionedJson(schema_version=2, revision=5, value=raw_value)
+    settings = VersionedJson(schema_version=3, revision=5, value=raw_value)
     with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
         collection = load_templates(settings)
     with pytest.raises(SheetCatalogError) as excinfo:
@@ -456,7 +472,37 @@ def test_template_collection_defaults_to_savable_unknown_schema_flag():
     collection = make_collection((make_template(),))
     assert collection.unknown_schema_preserved is False
     payload = save_templates(collection, expected_revision=collection.revision)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == CATALOG_SETTINGS_SCHEMA_VERSION
+
+
+def test_save_templates_without_expected_revision_skips_concurrency_check():
+    """Provider 保存前规范化时不做修订核对（并发由 ExtensionStore 条件更新判定）。"""
+    collection = make_collection((make_template(),), revision=0)
+
+    payload = save_templates(collection)
+
+    assert [entry["name"] for entry in payload["user_templates"]] == ["市政标准目录"]
+
+
+def test_parse_user_templates_accepts_absent_and_empty_input():
+    assert parse_user_templates(None) == ()
+    assert parse_user_templates([]) == ()
+
+
+def test_parse_user_templates_round_trips_serialized_entries():
+    template = make_template()
+    payload = save_templates(make_collection((template,)), expected_revision=3)
+
+    assert parse_user_templates(payload["user_templates"]) == (template,)
+
+
+def test_parse_user_templates_rejects_non_list_and_unsaved_entries():
+    with pytest.raises(TypeError, match="user_templates 必须是模板数组"):
+        parse_user_templates("broken")
+    with pytest.raises(ValueError, match="SHEET_CATALOG_TEMPLATE_ID_REQUIRED"):
+        parse_user_templates([{"template_id": None}])
+    with pytest.raises(TypeError):
+        parse_user_templates(["not-an-object"])
 
 
 def test_load_templates_skips_user_template_named_like_builtin(caplog):
@@ -472,12 +518,14 @@ def test_load_templates_skips_user_template_named_like_builtin(caplog):
         name=DEFAULT_TEMPLATE.name,
     )
     payload = {
-        "schema_version": 1,
+        "schema_version": CATALOG_SETTINGS_SCHEMA_VERSION,
         "user_templates": [builtin_named_json, good_json],
     }
     with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
         collection = load_templates(
-            VersionedJson(schema_version=1, revision=4, value=payload)
+            VersionedJson(
+                schema_version=CATALOG_SETTINGS_SCHEMA_VERSION, revision=4, value=payload
+            )
         )
     # 与内置名冲突的条目被跳过，其余正常加载。
     assert collection.user_templates == (good,)
@@ -490,7 +538,11 @@ def test_load_templates_skips_user_template_named_like_builtin(caplog):
 def test_load_templates_ignores_non_list_user_templates_with_diagnostic(caplog):
     with caplog.at_level(logging.WARNING, logger="dst_manager.extensions.builtin.sheet_catalog.templates"):
         collection = load_templates(
-            VersionedJson(schema_version=1, revision=1, value={"user_templates": "broken"})
+            VersionedJson(
+                schema_version=CATALOG_SETTINGS_SCHEMA_VERSION,
+                revision=1,
+                value={"user_templates": "broken"},
+            )
         )
     assert collection.builtin is DEFAULT_TEMPLATE
     assert collection.user_templates == ()

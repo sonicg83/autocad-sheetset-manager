@@ -10,11 +10,17 @@ from __future__ import annotations
 from dst_manager.extensions.builtin.sheet_catalog.extension import (
     create_sheet_catalog_extension,
 )
+from dst_manager.extensions.builtin.sheet_catalog.settings import (
+    SHEET_CATALOG_SETTINGS_PROVIDER,
+)
 from dst_manager.extensions.contracts import BuiltinExtensionEntry
 
 BUILTIN_EXTENSION_INDEX: tuple[BuiltinExtensionEntry, ...] = (
     BuiltinExtensionEntry(
         manifest_resource="dst_manager/extensions/builtin/sheet_catalog/manifest.yaml",
         factory=create_sheet_catalog_extension,
+        # 设置语义（默认值、迁移、校验、解析）是编译期白名单引用，与工厂
+        # 一样由本索引登记；宿主绝不从清单导入模块（ARCH-DM-006 §4.1/§8.1）。
+        settings_provider=SHEET_CATALOG_SETTINGS_PROVIDER,
     ),
 )

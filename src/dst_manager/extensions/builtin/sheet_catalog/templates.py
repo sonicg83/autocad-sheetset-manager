@@ -7,6 +7,11 @@
 修订后可另存为或按新修订重试）、封闭限制值校验、用户模板 UUID 唯一与
 模板名 casefold 唯一性检查；
 删除用户模板是纯函数，只动模板设置，不触碰历史 Artifact。
+
+自 PLAN-DM-025 Task 2 起，本模块只负责“模板”这一部分：设置行声明
+:data:`CATALOG_SETTINGS_SCHEMA_VERSION`（v2，SPEC-DM-012 §6.4），模板条目仍
+声明 :data:`TEMPLATE_SCHEMA_VERSION`（v1，§6.1）；过滤关键词、Schema 迁移与
+设置编排分别在 ``sheet_catalog/settings.py`` 与 ``application/extensions/settings.py``。
 """
 
 from __future__ import annotations
@@ -29,19 +34,23 @@ if TYPE_CHECKING:
     from dst_manager.infrastructure.persistence.extensions import VersionedJson
 
 __all__ = [
+    "CATALOG_SETTINGS_SCHEMA_VERSION",
     "DEFAULT_TEMPLATE",
     "MAX_COLUMNS",
     "MAX_EXPRESSION_CHARS",
     "MAX_HEADER_CHARS",
     "MAX_NAME_CHARS",
     "MAX_USER_TEMPLATES",
+    "TEMPLATE_SCHEMA_VERSION",
     "SheetCatalogTemplate",
     "TemplateCollection",
     "TemplateColumn",
     "ValidatedTemplate",
     "delete_template",
     "load_templates",
+    "parse_user_templates",
     "save_templates",
+    "template_to_json",
     "validate_template",
 ]
 
@@ -87,7 +96,12 @@ MAX_NAME_CHARS = 80
 MAX_HEADER_CHARS = 100
 MAX_EXPRESSION_CHARS = 1024
 
+#: 单个模板条目的 JSON schema 版本（SPEC-DM-012 §6.1）。
 TEMPLATE_SCHEMA_VERSION: Literal[1] = 1
+
+#: 图纸目录扩展设置 ``value_json`` 的 schema 版本（SPEC-DM-012 §6.4）。
+#: v2 起与单模板 schema 分离：设置行声明 v2，模板条目仍声明 v1。
+CATALOG_SETTINGS_SCHEMA_VERSION: Literal[2] = 2
 
 #: SPEC-DM-012 §6.2 内置默认模板：随扩展版本交付的代码常量。
 _BUILTIN_TEMPLATE_NAME = "默认图纸目录（内置）"
@@ -177,13 +191,43 @@ def _column_to_json(column: TemplateColumn) -> dict[str, object]:
     }
 
 
-def _template_to_json(template: SheetCatalogTemplate) -> dict[str, object]:
+def template_to_json(template: SheetCatalogTemplate) -> dict[str, object]:
+    """模板 → JSON；未分配 UUID 的内置默认模板写 ``null``。
+
+    持久化负载只含用户模板（UUID 必填，由 :func:`save_templates` 强制）；
+    内置默认模板只出现在有效值里，以 ``null`` 标明它不来自数据库。
+    """
     return {
-        "template_id": str(template.template_id),
+        "template_id": (
+            str(template.template_id) if template.template_id is not None else None
+        ),
         "name": template.name,
         "schema_version": template.schema_version,
         "columns": [_column_to_json(column) for column in template.columns],
     }
+
+
+def parse_user_templates(entries: object) -> tuple[SheetCatalogTemplate, ...]:
+    """严格回读设置负载中的 ``user_templates`` 数组。
+
+    字段缺省（``None``）等价于空数组；非数组或条目结构/类型不符抛
+    ``TypeError``/``ValueError``（含稳定诊断前缀），由调用方按设置无效契约化。
+    限制值、名称唯一与 UUID 唯一仍由 :func:`save_templates` 统一强制。
+    """
+    if entries is None:
+        return ()
+    if not isinstance(entries, list):
+        raise TypeError(
+            "SHEET_CATALOG_TEMPLATES_INVALID: user_templates 必须是模板数组"
+        )
+    parsed: list[SheetCatalogTemplate] = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("template_id") is None:
+            raise ValueError(
+                "SHEET_CATALOG_TEMPLATE_ID_REQUIRED: 保存前必须分配模板 UUID"
+            )
+        parsed.append(_template_from_json(entry))
+    return tuple(parsed)
 
 
 def _template_from_json(entry: object) -> SheetCatalogTemplate:
@@ -221,12 +265,15 @@ def _template_from_json(entry: object) -> SheetCatalogTemplate:
 
 
 def save_templates(
-    collection: TemplateCollection, expected_revision: int
+    collection: TemplateCollection, expected_revision: int | None = None
 ) -> dict[str, object]:
-    """校验并序列化用户模板；``expected_revision`` 与集合修订不一致即冲突。
+    """校验并序列化用户模板为可持久化的设置负载。
 
-    冲突时本地编辑（传入的 collection）原样保留：调用方刷新服务端模板修订
-    后可按新修订重试或另存为新模板。内置默认模板不可替换。
+    ``expected_revision`` 给出时先做乐观并发核对：与集合修订不一致即冲突，
+    冲突时本地编辑（传入的 collection）原样保留，调用方刷新服务端模板修订
+    后可按新修订重试或另存为新模板。为 ``None`` 时不做修订核对，只校验与
+    规范化——扩展设置服务用它规范化客户端负载，并发由 ``ExtensionStore``
+    的条件更新判定（PLAN-DM-025 Task 2）。内置默认模板不可替换。
     """
     if collection.unknown_schema_preserved:
         # 服务端模板设置 schema 高于当前版本：按 v1 负载保存会静默销毁
@@ -239,7 +286,7 @@ def save_templates(
                 "请升级程序后再保存或另存为新模板"
             ),
         )
-    if collection.revision != expected_revision:
+    if expected_revision is not None and collection.revision != expected_revision:
         raise sheet_catalog_error(
             "SHEET_CATALOG_TEMPLATE_CONFLICT",
             {
@@ -279,9 +326,9 @@ def save_templates(
             )
         seen_names[folded] = template.name
     return {
-        "schema_version": TEMPLATE_SCHEMA_VERSION,
+        "schema_version": CATALOG_SETTINGS_SCHEMA_VERSION,
         "user_templates": [
-            _template_to_json(template) for template in collection.user_templates
+            template_to_json(template) for template in collection.user_templates
         ],
     }
 
@@ -292,10 +339,16 @@ def _log_skip(reason: str) -> None:
 
 
 def load_templates(settings: VersionedJson | None) -> TemplateCollection:
-    """合并代码常量内置模板与 settings JSON；坏条目隔离，不阻止宿主启动。"""
+    """合并代码常量内置模板与 settings JSON；坏条目逐条隔离，不阻止宿主启动。
+
+    Schema 不符（未知高版本或旧版本）时不加载为可编辑状态，只保留原 JSON 与
+    稳定诊断。自 PLAN-DM-025 Task 2 起，扩展设置链路先由设置服务判定 Schema
+    （旧版本内存迁移、高版本只读拒绝）再由 Provider 严格校验，本函数因此不再
+    是设置读写路径上的必经环节，保留为容错读取语义与回归基准。
+    """
     if settings is None:
         return TemplateCollection(0, DEFAULT_TEMPLATE, ())
-    if settings.schema_version != TEMPLATE_SCHEMA_VERSION:
+    if settings.schema_version != CATALOG_SETTINGS_SCHEMA_VERSION:
         # 未知高 schema：原 JSON 原样保留（只读不重写），输出稳定诊断，
         # 不加载为可编辑状态。
         logger.warning(
