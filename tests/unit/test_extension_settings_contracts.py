@@ -16,6 +16,7 @@ from dst_manager.extensions.settings import (
     ExtensionSettingsSnapshot,
     SettingsContribution,
     SettingsFieldDefinition,
+    SettingsFieldSpec,
     freeze_json,
     settings_digest,
 )
@@ -35,12 +36,8 @@ class _StubProvider:
     extension_id = "test.a"
     schema_version = 2
     field_definitions = (
-        SettingsFieldDefinition(
-            key="max_rows",
-            label_key="extensions.test.fields.maxRows",
-            description_key=None,
-            order=0,
-        ),
+        SettingsFieldSpec(key="max_rows", control="int", default=10, min_value=1),
+        SettingsFieldSpec(key="locale", control="enum", default="zh-CN", options=("zh-CN", "en-US")),
     )
 
     def default_value(self) -> dict[str, object]:
@@ -112,6 +109,17 @@ def test_freeze_json_keeps_scalars_hashable_inside_tuples() -> None:
     frozen = freeze_json(["a", 1, 1.5, True, None])
     assert isinstance(frozen, tuple)
     assert hash(frozen) == hash(("a", 1, 1.5, True, None))
+
+
+def test_freeze_json_rejects_non_json_values() -> None:
+    with pytest.raises(TypeError, match="set"):
+        freeze_json({"tags": {"x", "y"}})
+
+    with pytest.raises(TypeError, match="object"):
+        freeze_json({"path": object()})
+
+    with pytest.raises(TypeError, match="bytes"):
+        freeze_json(b"raw")
 
 
 # ------------------------------------------------------------------ 摘要
@@ -186,9 +194,58 @@ def test_provider_protocol_declares_settings_semantics() -> None:
     annotations = get_type_hints(ExtensionSettingsProvider)
     assert annotations["extension_id"] is str
     assert annotations["schema_version"] is int
-    assert annotations["field_definitions"] == tuple[SettingsFieldDefinition, ...]
+    assert annotations["field_definitions"] == tuple[SettingsFieldSpec, ...]
     for member in ("default_value", "migrate", "validate_and_normalize", "resolve"):
         assert callable(getattr(ExtensionSettingsProvider, member))
+
+
+def test_settings_field_spec_declares_provider_owned_metadata_only() -> None:
+    spec = SettingsFieldSpec(key="max_rows", control="enum", default=10)
+
+    assert [field.name for field in dataclasses.fields(spec)] == [
+        "key",
+        "control",
+        "default",
+        "nullable",
+        "min_value",
+        "max_value",
+        "options",
+        "max_length",
+    ]
+    # 约束缺省：不约束可空、无上下界、无枚举选项、无长度上限
+    assert spec.nullable is False
+    assert spec.min_value is None
+    assert spec.max_value is None
+    assert spec.options == ()
+    assert spec.max_length is None
+    # 呈现信息（i18n key、顺序）不属于 Provider 元数据；两者只共享合并键 ``key``
+    assert {"label_key", "description_key", "order"}.isdisjoint(
+        field.name for field in dataclasses.fields(spec)
+    )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        spec.default = 20  # type: ignore[misc]
+
+
+def test_settings_field_spec_carries_explicit_constraints() -> None:
+    spec = SettingsFieldSpec(
+        key="locale",
+        control="enum",
+        default="zh-CN",
+        nullable=False,
+        options=("zh-CN", "en-US"),
+        max_length=8,
+    )
+
+    assert (spec.key, spec.control, spec.default) == ("locale", "enum", "zh-CN")
+    assert spec.options == ("zh-CN", "en-US")
+    assert spec.max_length == 8
+    assert spec == SettingsFieldSpec(
+        key="locale",
+        control="enum",
+        default="zh-CN",
+        options=("zh-CN", "en-US"),
+        max_length=8,
+    )
 
 
 def test_provider_shaped_object_can_be_used_through_protocol() -> None:

@@ -1,12 +1,14 @@
 """扩展设置值对象与 Provider 契约（PLAN-DM-025 Task 1 / ARCH-DM-006 §8、§11）。
 
 这里只定义宿主与扩展共享的稳定语义：冻结设置值、规范内容摘要、不可变设置快照
-与 :class:`ExtensionSettingsProvider` 协议。默认值、校验、迁移与解析的唯一权威
-是 Provider；持久层只按 ``extension_id`` 保存用户显式配置，不保存解析后的默认值。
+与 :class:`ExtensionSettingsProvider` 协议。默认值、字段类型与约束、校验、迁移
+与解析的唯一权威是 Provider（其字段元数据即 :class:`SettingsFieldSpec`）；持久层
+只按 ``extension_id`` 保存用户显式配置，不保存解析后的默认值。
 
-清单里的设置声明（:class:`SettingsContribution`）只描述可发现性与呈现，不重复
-类型、默认值或业务约束。摘要仅以 SHA-256 十六进制串外泄，日志、错误与任务记录
-不得写入完整设置值。
+清单里的设置声明（:class:`SettingsContribution` 及其 :class:`SettingsFieldDefinition`）
+只描述可发现性、顺序与 i18n key，不重复类型、默认值或业务约束；宿主在调用点把
+Provider 的字段元数据与清单的呈现合并（ARCH-DM-006 §8.2）。摘要仅以 SHA-256
+十六进制串外泄，日志、错误与任务记录不得写入完整设置值。
 """
 
 from __future__ import annotations
@@ -35,6 +37,31 @@ class SettingsFieldDefinition:
     label_key: str
     description_key: str | None
     order: int
+
+
+#: 设置字段的控件类型；与设置中心的 ``SettingsItemModel.control`` 同一词表。
+type SettingsFieldControl = Literal["boolean", "int", "number", "string", "enum"]
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsFieldSpec:
+    """Provider 一侧的字段元数据：控件类型、默认值与约束（ARCH-DM-006 §4.2、§8.2）。
+
+    清单不重复这些语义，因此宿主解释字段时只认 Provider 的声明：把 ``default``
+    作为默认值来源，按 ``nullable``/``min_value``/``max_value``/``options``/
+    ``max_length`` 渲染与校验，再叠加清单 :class:`SettingsFieldDefinition` 的
+    顺序与 i18n key。Provider 无法解释清单里的字段时只隔离该扩展设置并产生诊断
+    （§8.1），不阻止宿主启动。
+    """
+
+    key: str
+    control: SettingsFieldControl
+    default: object
+    nullable: bool = False
+    min_value: int | float | None = None
+    max_value: int | float | None = None
+    options: tuple[str, ...] = ()
+    max_length: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +101,7 @@ class ExtensionSettingsProvider(Protocol):
 
     extension_id: str
     schema_version: int
-    field_definitions: tuple[SettingsFieldDefinition, ...]
+    field_definitions: tuple[SettingsFieldSpec, ...]
 
     def default_value(self) -> dict[str, object]: ...
 
@@ -93,12 +120,20 @@ def freeze_json(value: object) -> FrozenJson:
     冻结结果不与入参共享可变容器，调用方之后修改原 dict/list 不会改变已冻结值。
     只读 Mapping（``MappingProxyType``）本身不可哈希，需要哈希时取其中的 tuple
     与标量；数组转 tuple 后，纯标量数组可直接作为键或放进集合。
+
+    非 JSON 取值（``set``、日期、任意对象等）在此处直接抛 :class:`TypeError`，
+    失败点即冻结本身，而不是推迟到 :func:`settings_digest` 的序列化。
     """
     if isinstance(value, Mapping):
         return MappingProxyType({key: freeze_json(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(freeze_json(item) for item in value)
-    return value
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(
+        f"设置值必须是 JSON 取值（Mapping/list/tuple/str/int/float/bool/null），"
+        f"收到 {type(value).__name__}"
+    )
 
 
 def _plain_json(value: FrozenJson) -> object:

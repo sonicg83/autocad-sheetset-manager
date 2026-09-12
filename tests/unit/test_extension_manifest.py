@@ -93,7 +93,11 @@ def test_fixed_index_references_factory_directly_and_yaml_has_no_execution_field
     ).read_text(encoding="utf-8")
     raw = yaml.safe_load(text)
     assert set(FORBIDDEN_EXECUTION_FIELDS).isdisjoint(raw)
-    assert set(FORBIDDEN_EXECUTION_FIELDS).isdisjoint(raw["settings_contribution"])
+    # 呈现声明自身与嵌套 fields[i] 都是数据，逐层扫描可执行入口字段
+    contribution = raw["settings_contribution"]
+    assert set(FORBIDDEN_EXECUTION_FIELDS).isdisjoint(contribution)
+    for field_entry in contribution.get("fields", []):
+        assert set(FORBIDDEN_EXECUTION_FIELDS).isdisjoint(field_entry)
 
 
 def test_parse_manifest_maps_declared_fields_into_frozen_contract() -> None:
@@ -257,6 +261,19 @@ def test_generated_settings_fields_require_label_key() -> None:
         "fields": [field_data],
     }
     with pytest.raises(ManifestError, match=r"settings_contribution\.fields\.0\.label_key"):
+        parse_manifest(data)
+
+
+def test_generated_settings_fields_reject_blank_description_key() -> None:
+    # 可缺省，但声明后必须是非空 i18n key（与 name_key/description_key 同口径）
+    data = valid_manifest()
+    data["settings_contribution"] = {
+        "presentation": "generated",
+        "fields": [field("max_rows", description_key="")],
+    }
+    with pytest.raises(
+        ManifestError, match=r"settings_contribution\.fields\.0\.description_key"
+    ):
         parse_manifest(data)
 
 

@@ -86,7 +86,8 @@ class _SettingsFieldModel(BaseModel):
 
     key: str = Field(min_length=1)
     label_key: str = Field(min_length=1)
-    description_key: str | None = None
+    #: 可缺省，但一旦声明就必须是稳定的非空 i18n key（与其他 ``*_key`` 同口径）。
+    description_key: str | None = Field(default=None, min_length=1)
     order: int
 
 
