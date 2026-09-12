@@ -51,7 +51,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015，视觉整改 PLAN-DM-017）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，已接受；实施计划 PLAN-DM-016）](specs/SPEC-DM-010-properties-workspace-ui.md)
 - [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
-- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；G0～G8 已通过，G9 真实验收待用户执行）](specs/SPEC-DM-012-sheet-catalog-extension.md)
+- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；含数字格式码与输出图纸过滤设计，G0～G8 既有基线已通过，增量 G4/G8/G9 按 PLAN-DM-025/026 执行）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 
 ## 研究与分析

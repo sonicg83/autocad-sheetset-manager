@@ -14,6 +14,7 @@ related:
   - ARCH-DM-006
   - PLAN-DM-020
   - PLAN-DM-023
+  - PLAN-DM-025
 ---
 
 # 图纸目录数字格式码实施计划
@@ -37,6 +38,7 @@ related:
 - 不新增错误码：格式码缺失、非法字符、重复、宽度越界与未闭合全部复用 `SHEET_CATALOG_EXPRESSION_INVALID`，`source_start` 指向该引用的 `:`（重复格式码指向第二个 `:`）。因此 `errors.py` 四张登记表、双语消息目录与 `tests/unit/test_message_catalog.py` 均不改。
 - 模板 `schema_version` 保持 1，无数据迁移、无 API 字段变化、无数据库结构变化、无新依赖。
 - 未使用格式码时列投影 token 形态与本次改动前完全一致；`tests/unit/test_sheet_catalog_preview.py::test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separators` 是这条不变量的人工钉桩，不得为“顺手统一格式”而改写它。
+- 本计划与 PLAN-DM-025 都会修改 `preview.py`、API 类型和前端目录组件，不得并行实施。若 PLAN-DM-025 已先完成，本计划的“无 API 字段变化”指不再新增格式码专用字段，必须保留其 `settings_revision`、`filtered_rows`、设置 digest 与输出过滤语义，并以合并后的当前 canonical 摘要为回归基线。
 - 前端不改 `ColumnEditor.vue` 的 5 轨道布局、列签名与光标协议；格式入口只加在 `FieldBrowser.vue` 的字段条目上，插入的引用仍走既有 `insertReference`。新按钮的可访问名不得包含字段引用文本（如 `sheet.number`），否则 `web/tests/e2e/sheet-catalog.spec.ts` 中按 `/sheet\.number/` 定位的严格模式选择器会因多个匹配而失败。
 - SPEC §16 门禁：主流程、布局结构与关键状态类别未变，**G3/G4 不重开**；新控件需补 G8 浅深主题与 200% 缩放证据；G9 真实验收清单追加“导出 XLSX 中补零图号为文本单元格”。
 - 目标系统 Windows 11 + PowerShell；Python 依赖用 UV 管理，不执行 `pip install`；每个任务更新 `changelog.md`，只提交本任务文件。
