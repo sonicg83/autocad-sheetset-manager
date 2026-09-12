@@ -262,7 +262,8 @@ GET   /api/artifacts/{artifact_id}
 设置读取与写入遵循以下规则：
 
 - 从未保存时返回当前 Schema、`revision = 0` 和 Provider 默认零值；
-- PUT 必须携带 `expected_revision`，成功后修订递增，竞争写入返回 `409`；
+- PUT 必须携带 `expected_revision`，成功后修订递增，竞争写入返回 `409`。**修订冲突不新增错误码，复用 `EXTENSION_SETTINGS_INVALID`**：当前唯一真实触发点是 `src/dst_manager/application/extensions/settings.py` 的 `put()`——Store 抛出 `SettingsRevisionConflictError`，运行时捕获后映射为 `EXTENSION_SETTINGS_INVALID` + HTTP `409`，并在 `params` 中给出 `expected_revision` 与 `current_revision`。因此同一 PUT 端点出现三个必须区分的信号：请求体不合法（HTTP `422`）、已存 Schema 过新（`409` + `EXTENSION_SETTINGS_SCHEMA_NEWER`）、修订冲突（`409` + `EXTENSION_SETTINGS_INVALID` + 修订参数对）。Provider 级校验失败同样复用 `EXTENSION_SETTINGS_INVALID`（`409`），**但不带修订参数**——客户端因此**不得**只按错误码判断冲突，判别式是「码在冲突码集合内 **或** `params` 同时带 `expected_revision`/`current_revision`」（前端实现见 `web/src/composables/useExtensionSettings.ts` 的 `REVISION_CONFLICT_CODES` 与 `isRevisionConflict`）。
+- 上述判别式有一条**可达性前提**：设置 PUT 路径上 Provider 不得把模板级并发检查透出成修订冲突。图纸目录 Provider（`extensions/builtin/sheet_catalog/settings.py`）调用 `templates.save_templates()` 时**不传** `expected_revision`，模板并发由设置修订统一承担，因此该前提当前成立，并由回归测试 `tests/unit/test_sheet_catalog_settings.py` 钉住（断言该调用不透传 `expected_revision`，且设置 PUT 的冲突只以 `EXTENSION_SETTINGS_INVALID` + 修订参数对出现）。Provider 若改为透传 `expected_revision`，判别式即失效，必须同步修正前端判别与架构此处；
 - 较旧 Schema 先在内存逐级迁移并校验，用户下次保存时再正式写回，应用启动不得仅因读取设置而修改数据库；
 - 未知高版本保留原始 JSON 并进入只读保护，旧程序不得覆盖；GET 以 `diagnostic_code=EXTENSION_SETTINGS_SCHEMA_NEWER` 返回只读视图，PUT 以同一稳定错误码和 HTTP `409` 拒绝；
 - 畸形 JSON、迁移或校验失败仅禁用该扩展的设置与动作，不影响宿主启动；
@@ -357,7 +358,7 @@ created_at
 | `EXTENSION_DISABLED` | 扩展已停用或正在停用 |
 | `EXTENSION_INCOMPATIBLE` | 宿主契约不兼容 |
 | `EXTENSION_CAPABILITY_UNAVAILABLE` | 必需能力不可用 |
-| `EXTENSION_SETTINGS_INVALID` | 设置 Schema 或数据无效 |
+| `EXTENSION_SETTINGS_INVALID` | 设置 Schema 或数据无效；**同时承载乐观并发冲突**（HTTP `409`，`params` 含 `expected_revision`/`current_revision`，见 §8.1） |
 | `EXTENSION_SETTINGS_SCHEMA_NEWER` | 已存设置 Schema 高于当前扩展支持版本，只读保留且拒绝覆盖 |
 | `EXTENSION_SETTINGS_CHANGED` | 预览后扩展设置发生变化 |
 | `EXTENSION_ACTION_NOT_FOUND` | 动作未声明 |
