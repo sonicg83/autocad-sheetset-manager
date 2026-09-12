@@ -331,7 +331,14 @@ def evaluate_expression(
 
 
 def field_reference(scope: str, canonical_name: str, format_width: int | None = None) -> str:
-    """生成指向规范名称的引用语法：点号或方括号 JSON 字符串，可附加数字格式码。"""
+    """生成指向规范名称的引用语法：点号或方括号 JSON 字符串，可附加数字格式码。
+
+    ``format_width`` 是格式码里 ``0`` 的个数，合法区间 1～16，与 SPEC-DM-012 §5.1 的
+    ``format := ":" "0"{1,16}`` 一致；``None`` 表示不附加格式码。前端 ``STRIP_ZEROS_WIDTH = 0``
+    是 UI 侧的“去前导零”哨兵值，由前端物化为 ``:0``；这里收到的是语法宽度本身，不接受 0。
+    """
+    if format_width is not None and not 1 <= format_width <= _MAX_FORMAT_WIDTH:
+        raise ValueError(f"format_width must be between 1 and {_MAX_FORMAT_WIDTH}, got {format_width}")
     needs_quoted = (
         not canonical_name
         or any(char in _DOT_NAME_FORBIDDEN for char in canonical_name)

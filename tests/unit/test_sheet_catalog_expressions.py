@@ -452,6 +452,23 @@ def test_field_reference_appends_number_format_code(scope, name, width, expected
     assert field_reference(scope, name, width) == expected
 
 
+@pytest.mark.parametrize("width", range(1, 17))
+def test_field_reference_round_trips_any_legal_width_through_parser(width):
+    """任一合法宽度生成 → 解析回读，宽度原样保留（生成侧不得产出自身解析器拒绝的语法）。"""
+    tokens = parse_expression(field_reference("sheet", "number", width))
+    assert len(tokens) == 1
+    token = tokens[0]
+    assert isinstance(token, FieldToken)
+    assert token.format_width == width
+
+
+@pytest.mark.parametrize("width", [0, 17, -1], ids=["零", "超过上限", "负数"])
+def test_field_reference_rejects_out_of_range_width(width):
+    """0（前端“去前导零”哨兵，不属 Python 语法宽度）、大于 16 与负数一律拒绝。"""
+    with pytest.raises(ValueError, match="format_width"):
+        field_reference("sheet", "number", width)
+
+
 # ---------------------------------------------------------------------------
 # 错误词汇表：7 个目录码的 message_key、参数白名单与用户结果
 # ---------------------------------------------------------------------------

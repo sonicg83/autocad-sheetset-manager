@@ -875,11 +875,17 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     const expression = page.getByLabel("表达式 1");
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
-    await entry.getByRole("button", {name: "格式"}).click();
+    const trigger = entry.getByRole("button", {name: "格式"});
+    await trigger.click();
     await entry.getByRole("button", {name: "补零到 4 位"}).click();
     await expect(expression).toHaveValue("{sheet.number:0000}");
     // 夹具由 pad3 生成图号，首张为 001；补零只作用于输出侧，工作区快照不变
     await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "0001", exact: true})).toBeVisible();
+    // 选中即关闭菜单（选项随 v-if 卸载，回归为不关闭时这里会数到 6）；
+    // 焦点由既有 caret 协议交给表达式输入框，不会落到 body（与点击 .field-chip 一致）
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(expression).toBeFocused();
   });
 
   test("数字格式码入口可去掉前导零", async ({page}) => {
@@ -887,10 +893,15 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     const expression = page.getByLabel("表达式 1");
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
-    await entry.getByRole("button", {name: "格式"}).click();
+    const trigger = entry.getByRole("button", {name: "格式"});
+    await trigger.click();
     await entry.getByRole("button", {name: "去前导零"}).click();
     await expect(expression).toHaveValue("{sheet.number:0}");
     await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "1", exact: true})).toBeVisible();
+    // 同上：选中即关闭菜单，焦点交给表达式输入框（caret 协议），不落回 body
+    await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(expression).toBeFocused();
   });
 
   // 轻量 disclosure 菜单的键盘/指针契约：选中、Esc、外部点击与搜索过滤都要关闭；
@@ -900,13 +911,17 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     const browser = page.getByRole("region", {name: "字段浏览器"});
     const entry = fieldEntry(page, /sheet\.number/);
     const trigger = entry.getByRole("button", {name: "格式"});
-    const widthBefore = (await browser.boundingBox())!.width;
 
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     // 去前导零 + NUMBER_FORMAT_WIDTHS 的 5 个补零选项
     await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(6);
-    expect((await browser.boundingBox())!.width, "菜单展开不改变字段栏宽度").toBeCloseTo(widthBefore, 0);
+    // 字段栏宽度由父级 SheetCatalogView 的固定 grid 轨道（258px）决定、且 .field-browser 带
+    // overflow:hidden，因此不能拿“展开前后盒宽相等”当断言（永真）。这里改钉绝对冻结区间，
+    // 与 sheet-catalog-visual-evidence.spec.ts 的轨道守卫同口径：轨道被改宽或菜单撑开布局即失败。
+    const widthOpen = (await browser.boundingBox())!.width;
+    expect(widthOpen, "菜单展开时字段栏仍为冻结的 258px 轨道").toBeGreaterThanOrEqual(256);
+    expect(widthOpen, "菜单展开时字段栏仍为冻结的 258px 轨道").toBeLessThanOrEqual(260);
 
     // Esc 关闭并归还焦点到触发按钮
     await page.keyboard.press("Escape");

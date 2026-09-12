@@ -703,7 +703,7 @@ related:
 
 - `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 追加 3 条用例（该文件 16 → 19 条）：`G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫`、`G8 补充：900×700 深色格式菜单截图 + 几何守卫`、`G8 补充：200% 缩放下格式入口不被遮挡`。断言只用几何与键盘事实：菜单盒在视口内、无整页横向溢出、140 步真实 Tab 环内 `toBeFocused()` 到达格式入口、Enter 展开后 Esc 关闭（`aria-expanded` 回 `false`、选项列表消失、焦点归还）、200% 缩放下入口落在字段栏盒内；被 235px 限高裁切的菜单尾部另有 `expectActionReachableAfterScroll` 证明可由字段列表内部滚动到达。
 - 证据已真正落盘（`DST_MANAGER_WRITE_G8_EVIDENCE=1`）：[g8-format-menu-light-1440x1000.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png)（110781 字节，1440×1000）、[g8-format-menu-dark-900x700.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-dark-900x700.png）（60247 字节，900×700），两张都是打开格式菜单后的画面。
-- 先红后绿：先把 `FieldBrowser.vue` 临时回退到任务 3 之前的修订（`0929a5c`）跑这 3 条用例 → 3 failed（区域内不存在名为“格式”的按钮，定位器 30s 超时）；按字节恢复生产文件后同命令 3 passed（9.9s）。可失败性另用三条自然反例确认（矮视口菜单盒底缘 370 > 300；只按 5 次 Tab 时 `toBeFocused()` 失败；条目被滚出字段栏后 190 < 256），反例脚本为临时文件，跑完已删、未入提交树。
+- 先红后绿：先把 `FieldBrowser.vue` 临时回退到任务 3 之前的修订（`0929a5c`）跑这 3 条用例 → 3 failed（区域内不存在名为“格式”的按钮，定位器 30s 超时）；按字节恢复生产文件后同命令 3 passed（9.9s）。可失败性另用三条自然反例确认（矮视口菜单盒底缘 370 > 300；只按 4 次 Tab 时 `toBeFocused()` 失败；条目被滚出字段栏后 190 < 256），反例脚本为临时文件，跑完已删、未入提交树。
 - 前提说明：≤980px（含 CSS 720×500 的 200%）下字段栏限高 235px、`.field-list` 内部滚动是 PLAN-DM-023 Task 5 的冻结设计，用例先显式 `scrollIntoViewIfNeeded()` 再取几何，不把“需滚动才可见”当作缺陷。
 
 ### 全量回归（步骤 4）
@@ -731,3 +731,15 @@ related:
 
 - SPEC-DM-012 §16 只更新门禁影响段落：G3/G4 不重开的结论与浅/深主题 + 200% 缩放证据文件名；G8 行的确认人与日期仍为“用户 / 2026-09-11”，本轮补的是自动化证据，**不冒充用户重新确认 G8**。
 - MEMO-DM-028 新增 `### 1.9 数字格式码：补零图号为文本单元格（SC-01 / SPEC-DM-012 §5.4；PLAN-DM-026）`，结论字段全部保持 `_待填写_`，由操作者在真实 Windows 桌面 + 真实 Excel 执行；§3 前置闸门已登记本计划完成。
+
+### 评审后修正（第 2 轮）
+
+针对终审 I-M1～I-M5 逐条修正；不改本文步骤勾选与其他正文（本小节为追加）。
+
+- I-M1（文档 off-by-one）：Tab 步数多算 1，`5 次` → `4 次`（本文件上文与本轮 `changelog.md`）。
+- I-M2（断言与用例名不符）：`web/tests/e2e/sheet-catalog.spec.ts` 的“补零到 4 位”“去前导零”两例末尾补断言：菜单选项 `toHaveCount(0)` 与触发按钮 `aria-expanded="false"`，覆盖“选中即关闭”。
+- I-M3（永真断言）：把“展开前后盒宽相等”替换为字段栏冻结区间 `>=256 && <=260`（同 `sheet-catalog-visual-evidence.spec.ts` 轨道守卫口径）；变异（grid 轨道 `258px`→`320px`）实测红（`Expected: <= 260 / Received: 320`），按字节还原后 `SheetCatalogView.vue` blob `77077d10…` 不变。
+- I-M4（生成侧越界宽度）：`field_reference` 增加 1～16 显式校验，0/17/负数抛 `ValueError`；`tests/unit/test_sheet_catalog_expressions.py` 补 19 例（1..16 生成→解析回读的往返性质 16 例 + 0/17/负数拒绝 3 例）。
+- I-M5（焦点落空）**经实测证伪**：选中格式码后焦点由既有 caret 协议（`insertReference` → `caretRequest` → `ColumnEditor` watcher）交给表达式输入框，**并非** `document.body`，与点击 `.field-chip` 一致；故不新增焦点归还代码，改为在两条用例断言表达式输入框 `toBeFocused()`。变异（移除 `caretRequest` 移交）实测红（`Received: inactive`），按字节还原后 `useSheetCatalog.ts` blob `e18af760…` 不变。
+- 复跑：`uv run ruff check .` 通过；`uv run pytest` **1180 passed / 74 skipped / 0 failed**（collected 1254，较基线 1161/74/0、1235 增 19 例）；`npm run test:unit` 40 passed；`npm run build` 通过（`check:i18n` 898 键 / 9 域）；`sheet-catalog.spec.ts` + `sheet-catalog-visual-evidence.spec.ts` + `extensions-navigation.spec.ts` **74 passed / 0 failed**（`--workers=1 --retries=0`）。
+
