@@ -15,6 +15,7 @@ related:
   - SPEC-DM-006
   - SPEC-DM-011
   - SPEC-DM-012
+  - PLAN-DM-025
 ---
 
 # DST Manager 内置扩展平台首期架构
