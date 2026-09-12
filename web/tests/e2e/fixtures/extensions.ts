@@ -82,6 +82,8 @@ export function generatedSettingsItems(): GeneratedSettingsItem[] {
 export interface ExtensionSettingsMock {
   gets: number;
   puts: {schema_version: number; expected_revision: number; value: Record<string, unknown>}[];
+  /** 置 true 后所有后续 GET 都以 500 失败（覆盖“只读判定不得依赖刷新”的场景） */
+  failGets: boolean;
   /** 服务端当前快照：测试可在两次请求之间直接推进 revision 模拟“另一窗口已保存” */
   server: {
     schema_version: number;
@@ -128,6 +130,7 @@ export async function installExtensionSettings(page: Page, options: {
   const state: ExtensionSettingsMock = {
     gets: 0,
     puts: [],
+    failGets: false,
     server: {
       schema_version: options.schemaVersion ?? 1,
       revision: options.revision ?? 0,
@@ -149,6 +152,7 @@ export async function installExtensionSettings(page: Page, options: {
   await page.route("**/api/extensions/*/settings", async route => {
     if (route.request().method() === "GET") {
       state.gets += 1;
+      if (state.failGets) return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "boom"}});
       return route.fulfill({json: view()});
     }
     const body = (await route.request().postDataJSON()) as ExtensionSettingsMock["puts"][number];

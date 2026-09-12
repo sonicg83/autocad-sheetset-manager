@@ -20,8 +20,11 @@ export interface ExtensionFieldError {
   message: string;
 }
 
-// 修订冲突：服务端已推进修订，本地编辑保留待用户裁决
+// 修订冲突：服务端已推进修订，本地编辑保留待用户裁决。
+// code 是服务端响应里的稳定码原样透传（设置 PUT 的冲突路径当前发
+// EXTENSION_SETTINGS_INVALID）：呈现层不得写死字面量，否则服务端换码时横幅会撒谎。
 export interface ExtensionSettingsConflict {
+  code: string;
   expectedRevision: number;
   currentRevision: number;
 }
@@ -38,6 +41,7 @@ export interface ExtensionSettingsState {
   conflict: Ref<ExtensionSettingsConflict | null>;
   saveFailed: Ref<string>;
   readOnly: ComputedRef<boolean>;
+  readOnlyCode: ComputedRef<string>;
   dirty: ComputedRef<boolean>;
   load: () => Promise<void>;
   setField: (key: string, value: unknown) => void;
@@ -66,10 +70,18 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
   const fieldErrors = ref<Record<string, ExtensionFieldError>>({});
   const conflict = ref<ExtensionSettingsConflict | null>(null);
   const saveFailed = ref("");
+  // 高版本只读的粘性判定：服务端一旦以 EXTENSION_SETTINGS_SCHEMA_NEWER 拒绝保存，
+  // 本次子视图不再回到可写。只读若只从刷新后的快照推导，刷新失败就会退回陈旧的可写快照
+  // （横幅不出现、保存按钮可用、每次保存重复 409）——这是确定的死循环，必须与刷新解耦。
+  // 存字符串而非布尔：拒绝保存时返回的稳定码与只读判定同源，供诊断条原样回显。
+  const schemaNewerCode = ref("");
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const items = computed<ExtensionSettingsItem[]>(() => snapshot.value?.items ?? []);
-  const readOnly = computed(() => snapshot.value?.read_only === true);
+  // 只读来源二选一：本次会话被服务端以 409 拒绝覆盖（粘性），或当前快照自报只读（首次读取即高版本）
+  const readOnly = computed(() => schemaNewerCode.value !== "" || snapshot.value?.read_only === true);
+  // 诊断条回显的码优先取粘性码：否则刷新失败时只读横幅会显示空码（快照是陈旧的）
+  const readOnlyCode = computed(() => schemaNewerCode.value || snapshot.value?.diagnostic_code || "");
   // 脏 = 至少一个字段的编辑值不同于服务端持久值（输回原值即回到干净）
   const dirty = computed(() => Object.keys(edits.value).some(key => !sameValue(edits.value[key], snapshot.value?.value?.[key])));
 
@@ -121,9 +133,11 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
     fieldErrors.value = {...fieldErrors.value, [field]: {code: error.code ?? FALLBACK_INVALID_CODE, message: error.message}};
   }
 
-  // 未知更高 Schema：服务端已存更高版本，无法覆盖保存；本地编辑不能落盘，只读态必须不脏
-  async function applyReadOnly(): Promise<void> {
+  // 未知更高 Schema：服务端已存更高版本，无法覆盖保存；本地编辑不能落盘，只读态必须不脏。
+  // 先立只读判定再刷新：刷新失败也不撤销只读（刷新只用来把修订与 Schema 徽标对齐服务端）
+  async function applyReadOnly(code: string): Promise<void> {
     discardLocalEdits();
+    schemaNewerCode.value = code;
     await load();
   }
 
@@ -150,10 +164,12 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
         applyFieldError(error);
       } else if (error instanceof ApiError && error.status === 409) {
         if (error.code === "EXTENSION_SETTINGS_SCHEMA_NEWER") {
-          await applyReadOnly();
+          await applyReadOnly(error.code);
         } else {
-          // 修订冲突（服务端以 409 表达 expected_revision 漂移）：保留本地输入、刷新快照
+          // 修订冲突（服务端以 409 表达 expected_revision 漂移）：保留本地输入、刷新快照。
+          // 码原样取服务端响应，不在前端写死（线上当前为 EXTENSION_SETTINGS_INVALID）
           conflict.value = {
+            code: error.code ?? FALLBACK_INVALID_CODE,
             expectedRevision: typeof error.params?.expected_revision === "number" ? error.params.expected_revision : current.revision,
             currentRevision: typeof error.params?.current_revision === "number" ? error.params.current_revision : current.revision,
           };
@@ -169,6 +185,6 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
 
   return {
     snapshot, items, loading, loadFailed, saving, saved, edits, fieldErrors, conflict, saveFailed,
-    readOnly, dirty, load, setField, save, discardLocalEdits,
+    readOnly, readOnlyCode, dirty, load, setField, save, discardLocalEdits,
   };
 }

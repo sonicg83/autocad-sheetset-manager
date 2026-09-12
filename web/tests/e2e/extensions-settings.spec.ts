@@ -466,6 +466,9 @@ test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订
   await dialog.getByRole("button", {name: "保存"}).click();
   const conflict = dialog.locator(".cfg-conflict");
   await expect(conflict).toBeVisible();
+  // 横幅回显的是线上实际返回的稳定码（夹具与后端同一路径：设置 PUT 冲突码即 EXTENSION_SETTINGS_INVALID），
+  // 不是前端写死的字面量——服务端换码时这里必须跟着变
+  await expect(conflict).toContainText("409 EXTENSION_SETTINGS_INVALID");
   await expect(conflict).toContainText("expected_revision=0, current_revision=1");
   await expect(limit).toHaveValue("70");
   // 冲突后刷新服务端快照（第二次 GET），但保留本地编辑
@@ -509,6 +512,43 @@ test("扩展设置 高版本只读：EXTENSION_SETTINGS_SCHEMA_NEWER 禁用输�
   await dialog.getByRole("button", {name: "返回扩展列表"}).click();
   await expect(dialog.locator(CONFIG_VIEW)).toHaveCount(0);
   await expect(dialog.locator('[role="dialog"]')).toHaveCount(0);
+  await expect(page.getByRole("button", {name: `配置 ${GENERATED_NAME}`})).toBeFocused();
+});
+
+test("扩展设置 高版本只读：运行时 409 EXTENSION_SETTINGS_SCHEMA_NEWER 进入只读，刷新失败也不丢只读保护", async ({page}) => {
+  const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  // 打开时服务端仍是可写快照（GET 200 read_only=false），因此只读判定不可能来自首次加载
+  const limit = dialog.locator('input[data-key="batch_limit"]');
+  await expect(limit).toBeEnabled();
+  await limit.fill("70");
+  await expect(dialog.getByRole("button", {name: "保存"})).toBeEnabled();
+
+  // 另一进程写入更高 Schema：本次 PUT 以 409 EXTENSION_SETTINGS_SCHEMA_NEWER 拒绝；
+  // 同时让后续刷新 GET 失败——只读判定必须与这次刷新解耦
+  mock.server.read_only = true;
+  mock.server.diagnostic_code = "EXTENSION_SETTINGS_SCHEMA_NEWER";
+  mock.failGets = true;
+  await dialog.getByRole("button", {name: "保存"}).click();
+
+  const readonly = dialog.getByTestId("extension-settings-readonly");
+  await expect(readonly).toBeVisible();
+  await expect(readonly).toContainText("已只读保留，无法覆盖保存");
+  await expect(readonly).toContainText("EXTENSION_SETTINGS_SCHEMA_NEWER");
+  // 刷新失败可见（不静默），且不覆盖只读判定
+  await expect(dialog.getByTestId("extension-settings-refresh-failed")).toBeVisible();
+  // 控件与保存都禁用：不再可能重复提交必然 409 的保存
+  await expect(limit).toBeDisabled();
+  await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
+  expect(mock.puts.length).toBe(1);
+  // 只读不可脏：返回不弹确认，焦点归还卡片「配置」按钮
+  await dialog.getByRole("button", {name: "返回扩展列表"}).click();
+  await expect(dialog.locator(CONFIG_VIEW)).toHaveCount(0);
   await expect(page.getByRole("button", {name: `配置 ${GENERATED_NAME}`})).toBeFocused();
 });
 

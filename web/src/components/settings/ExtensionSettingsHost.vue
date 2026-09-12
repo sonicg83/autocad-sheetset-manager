@@ -36,7 +36,7 @@ const {state: confirmState, confirmAction, resolve: resolveConfirm} = useConfirm
 const settings = useExtensionSettings(props.extension.extension_id);
 const {
   snapshot, items, loading, loadFailed, saving, saved, edits, fieldErrors,
-  conflict, saveFailed, readOnly, dirty, load, setField, save, discardLocalEdits,
+  conflict, saveFailed, readOnly, readOnlyCode, dirty, load, setField, save, discardLocalEdits,
 } = settings;
 
 const hostEl = ref<HTMLElement | null>(null);
@@ -134,13 +134,15 @@ defineExpose({dirty, saving, saved, saveDisabled, save: saveAndFocus, back});
            焦点必须落在这条诊断上（tabindex=-1），不得退回 body -->
       <div v-if="readOnly" class="cfg-notice readonly" role="note" tabindex="-1" data-entry-focus data-testid="extension-settings-readonly">
         <p class="cfg-notice-text">{{ t("errors.extension.schemaNewer") }}</p>
-        <p class="cfg-hint">{{ t("settings.extensions.diagnosticCode", {code: snapshot.diagnostic_code ?? ""}) }}</p>
+        <p class="cfg-hint">{{ t("settings.extensions.diagnosticCode", {code: readOnlyCode}) }}</p>
+        <!-- 只读判定与刷新解耦：刷新失败仍保住只读，但必须就地说明徽标可能是陈旧的 -->
+        <p v-if="loadFailed" class="cfg-hint" data-testid="extension-settings-refresh-failed">{{ t("settings.extensionSettings.loadFailed") }}</p>
       </div>
       <!-- 修订冲突（服务端 409）：本地编辑保留，提供「按新修订重试 / 放弃本地修改」两条出路 -->
       <div v-if="conflict" class="cfg-conflict" role="alert">
         <p class="cfg-conflict-title">{{ t("settings.extensionSettings.conflict.title") }}</p>
         <p class="cfg-conflict-text">{{ t("settings.extensionSettings.conflict.message", {name}) }}</p>
-        <p class="cfg-hint">{{ t("settings.extensionSettings.conflict.diagnostic", {code: "EXTENSION_SETTINGS_INVALID", expected_revision: conflict.expectedRevision, current_revision: conflict.currentRevision}) }}</p>
+        <p class="cfg-hint">{{ t("settings.extensionSettings.conflict.diagnostic", {code: conflict.code, expected_revision: conflict.expectedRevision, current_revision: conflict.currentRevision}) }}</p>
         <div class="cfg-actions">
           <button type="button" :disabled="saving" @click="saveAndFocus">{{ t("settings.extensionSettings.conflict.retry") }}</button>
           <button type="button" :disabled="saving" @click="discardLocalEdits">{{ t("settings.extensionSettings.conflict.discard") }}</button>
