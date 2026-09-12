@@ -22,7 +22,7 @@ vi.mock("../i18n", () => ({i18n: {global: {t: (key: string) => key, te: () => fa
 
 import {ApiError} from "../api/client";
 import type {ExtensionSettingsView} from "../api/contracts";
-import {useExtensionSettings} from "./useExtensionSettings";
+import {useExtensionSettings, isRevisionConflict} from "./useExtensionSettings";
 
 function view(overrides: Partial<ExtensionSettingsView> = {}): ExtensionSettingsView {
   return {
@@ -59,8 +59,32 @@ describe("useExtensionSettings 服务端 409 收口", () => {
     await state.save();
 
     expect(state.conflict.value).toMatchObject({code: wireCode, expectedRevision: 0, currentRevision: 1});
+    // 探针码 + 服务端的两个修订参数：仍判为修订冲突（判别不写死码，见 isRevisionConflict）
+    expect(isRevisionConflict(state.conflict.value)).toBe(true);
+    // 服务端正文必须一并透传：Provider 级 409（如名称重复）不是修订冲突，呈现层只靠
+    // conflict.message 给出可见诊断（宿主普通失败横幅）
+    expect(state.conflict.value?.message).toBe("设置已被其他保存更新");
     expect(state.edits.value).toEqual({batch_limit: 70}); // 本地输入不丢
     expect(fetchMock).toHaveBeenCalledTimes(2); // 冲突后就地刷新服务端快照
+  });
+
+  it("Provider 级 409（名称重复）：码与正文原样透传，但不属修订冲突集合", async () => {
+    fetchMock.mockResolvedValueOnce(view()).mockResolvedValueOnce(view());
+    putMock.mockRejectedValue(new ApiError(
+      "名称重复：标准目录", 409, "SHEET_CATALOG_COLUMN_DUPLICATE",
+      undefined, undefined, undefined, {header: "标准目录"},
+    ));
+    const state = useExtensionSettings("dst-manager.sheet-catalog");
+    await state.load();
+    state.setField("user_templates", []);
+
+    await state.save();
+
+    // 同一 PUT 端点上的 Provider 级 409 也归入 conflict（附录状态不丢），但判别为
+    // 非修订冲突：呈现层据此给普通失败横幅（服务端正文）而不是「按新修订重试」
+    expect(state.conflict.value).toMatchObject({code: "SHEET_CATALOG_COLUMN_DUPLICATE", message: "名称重复：标准目录"});
+    expect(isRevisionConflict(state.conflict.value)).toBe(false);
+    expect(isRevisionConflict(null)).toBe(false);
   });
 
   it("高版本只读：随后的刷新失败也不撤销只读判定，且不再重复提交必然 409 的保存", async () => {

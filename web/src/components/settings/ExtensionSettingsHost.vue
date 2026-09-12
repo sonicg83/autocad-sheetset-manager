@@ -12,7 +12,7 @@ import type {Component} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSummary} from "../../api/contracts";
 import {useConfirm} from "../../composables/useConfirm";
-import {useExtensionSettings} from "../../composables/useExtensionSettings";
+import {useExtensionSettings, isRevisionConflict} from "../../composables/useExtensionSettings";
 import GeneratedExtensionSettingsForm from "./GeneratedExtensionSettingsForm.vue";
 import SheetCatalogSettingsPanel from "./SheetCatalogSettingsPanel.vue";
 
@@ -42,6 +42,23 @@ const {
 } = settings;
 
 const hostEl = ref<HTMLElement | null>(null);
+// 409 不是一种冲突：只有 expected_revision 漂移才配得上「按新修订重试 / 放弃本地修改」
+// 两条出路（协议层按码判别，见 REVISION_CONFLICT_CODES）。Provider 级 409（名称重复等）
+// 在这里没有出路可给，重试只会重发同一个已是最新的 expected_revision，故按普通保存失败呈现。
+const revisionConflict = computed(() => isRevisionConflict(conflict.value));
+// 冲突诊断行回显的三个稳定值：横幅只在判别为修订冲突时渲染，此处按同一事实取值
+//（不用 v-if="conflict" 收窄：判别与 ref 是两个对象，模板窄化不再成立）
+const revisionConflictInfo = computed(() => ({
+  code: conflict.value?.code ?? "",
+  expectedRevision: conflict.value?.expectedRevision ?? 0,
+  currentRevision: conflict.value?.currentRevision ?? 0,
+}));
+// 普通保存失败的唯一文案来源：网络/5xx/未知（saveFailed）与 Provider 级 409（服务端正文）
+const failureNotice = computed(() => {
+  if (revisionConflict.value) return "";
+  const providerFailure = conflict.value?.message ?? "";
+  return providerFailure !== "" ? providerFailure : saveFailed.value;
+});
 const name = computed(() => t(props.extension.name_key));
 const customRouteKey = computed(() => props.extension.settings_contribution?.route_key ?? "");
 // 白名单只认自有键（Object.hasOwn）：不命中 Object.prototype 上的同名属性
@@ -185,18 +202,20 @@ defineExpose({dirty, saving, saved, saveDisabled, save: saveAndFocus, back});
         <p class="cfg-notice-text">{{ t("errors.extension.schemaNewer") }}</p>
         <p class="cfg-hint">{{ t("settings.extensions.diagnosticCode", {code: readOnlyCode}) }}</p>
       </div>
-      <!-- 修订冲突（服务端 409）：本地编辑保留，提供「按新修订重试 / 放弃本地修改」两条出路 -->
-      <div v-if="conflict" class="cfg-conflict" role="alert">
+      <!-- 修订冲突（服务端 409 且码属修订冲突集合）：本地编辑保留，提供「按新修订重试 / 放弃本地修改」两条出路 -->
+      <div v-if="revisionConflict" class="cfg-conflict" role="alert">
         <p class="cfg-conflict-title">{{ t("settings.extensionSettings.conflict.title") }}</p>
         <p class="cfg-conflict-text">{{ t("settings.extensionSettings.conflict.message", {name}) }}</p>
-        <p class="cfg-hint">{{ t("settings.extensionSettings.conflict.diagnostic", {extension_id: extension.extension_id, code: conflict.code, expected_revision: conflict.expectedRevision, current_revision: conflict.currentRevision}) }}</p>
+        <p class="cfg-hint">{{ t("settings.extensionSettings.conflict.diagnostic", {extension_id: extension.extension_id, code: revisionConflictInfo.code, expected_revision: revisionConflictInfo.expectedRevision, current_revision: revisionConflictInfo.currentRevision}) }}</p>
         <div class="cfg-actions">
           <button type="button" :disabled="saving" @click="saveAndFocus">{{ t("settings.extensionSettings.conflict.retry") }}</button>
           <button type="button" :disabled="saving" @click="discardLocalEdits">{{ t("settings.extensionSettings.conflict.discard") }}</button>
         </div>
       </div>
-      <!-- 非字段级保存失败（网络/5xx/未知）：就地横幅，输入不替换 -->
-      <p v-if="saveFailed" class="cfg-notice error" role="alert" data-testid="extension-settings-save-failed">{{ saveFailed }}</p>
+      <!-- 非字段级保存失败（网络/5xx/未知，以及 Provider 级 409）：就地横幅，输入不替换。
+           Provider 级 409 的正文取服务端响应（conflict.message），不重新措辞、不谎报「已被
+           其他保存更新」——那个说法只在修订冲突横幅里成立 -->
+      <p v-if="failureNotice" class="cfg-notice error" role="alert" data-testid="extension-settings-save-failed">{{ failureNotice }}</p>
       <!-- 422 摘要：取得焦点，条目链接字段（与核心配置保存失败同一交互） -->
       <div v-if="hasFieldErrors" class="cfg-summary" role="alert" tabindex="-1" data-testid="extension-settings-error-summary">
         <p class="cfg-summary-title">{{ t("settings.extensionSettings.errors.summaryTitle") }}</p>

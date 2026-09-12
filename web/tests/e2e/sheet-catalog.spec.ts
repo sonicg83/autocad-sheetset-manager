@@ -1089,3 +1089,18 @@ test.describe("输出图纸过滤与预览契约（PLAN-DM-025 Task 8）", () =>
     await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
   });
 });
+
+test.describe("初始化设置读取失败（PLAN-DM-025 Task 8 修复轮 I2）", () => {
+  // 协议层只给 loadFailed 布尔，页面层的正文来自 extensions.sheetCatalog.settingsLoadFailed。
+  // 该键缺失时 check-i18n 不会报错（只查 zh/en 对称与硬编码中文），页面会直接把原始 key
+  // 当作正文印给用户——本用例钉住键存在且被真正使用。
+  test("业务页以已登记文案键给出可见失败提示，不渲染原始 key 也不伪造可编辑正文", async ({page}) => {
+    await openCatalog(page, {settingsGetFailure: true});
+
+    await expect(page.getByRole("alert").filter({hasText: "图纸目录设置加载失败，请重试"})).toBeVisible();
+    await expect(page.getByText("extensions.sheetCatalog.settingsLoadFailed")).toHaveCount(0);
+    // 失败态下不渲染模板栏/预览（没有可编辑正文，也不伪造默认模板可保存）
+    await expect(page.getByRole("button", {name: "另存为"})).toHaveCount(0);
+    await expect(page.getByRole("region", {name: "预览"})).toHaveCount(0);
+  });
+});

@@ -17,7 +17,7 @@ import type {ShellResult, ShellSaveGrant} from "../api/shell";
 import type {Workspace} from "../api/contracts";
 import {useExtensionSettings} from "./useExtensionSettings";
 import {
-  CATALOG_EXTENSION_ID, catalogColumnSignature, catalogTemplateSnapshot, fieldReference,
+  CATALOG_EXTENSION_ID, CATALOG_SETTINGS_SCHEMA_VERSION, catalogColumnSignature, catalogTemplateSnapshot, fieldReference,
   useSheetCatalogSettings,
 } from "./useSheetCatalogSettings";
 import type {
@@ -155,7 +155,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     try {
       await request(`/api/extensions/${CATALOG_EXTENSION_ID}/workspaces/${current.id}/preferences`, {
         method: "PUT",
-        body: JSON.stringify({schema_version: 2, value: {template_id: id}}),
+        body: JSON.stringify({schema_version: CATALOG_SETTINGS_SCHEMA_VERSION, value: {template_id: id}}),
       });
     } catch {
       // 偏好 best-effort：失败可诊断但不阻断模板选择

@@ -62,6 +62,7 @@ export type SheetCatalogFixtureOptions = {
   // effective_value/read_only/diagnostic_code），并支持预置输出过滤与只读态。
   excludedTitleKeywords?: string[];             // 预置规范化后的输出图纸过滤关键词
   settingsReadOnly?: boolean;                   // 服务端已存更高 Schema：GET 只读、PUT 409
+  settingsGetFailure?: boolean;                 // 设置 GET 一律 500：页面初始化失败态（不渲染正文）
   omitPreviewSettingsRevision?: boolean;        // 预览响应违约（缺 settings_revision 绑定，R15）
 };
 
@@ -99,6 +100,8 @@ export type SheetCatalogState = {
   extensionsReloadPlan: ExtensionsReloadControl[];
   // 服务端已存更高 Schema（只读保护）：GET 返回 read_only + 诊断码，PUT 一律 409
   settingsReadOnly: boolean;
+  // 设置 GET 失败开关：初始化失败态用例在打开页面后置 true 再重载
+  settingsGetFailure: boolean;
   // 预览响应违约（缺 settings_revision 绑定）：R15 的可见诊断由此驱动
   previewContractBroken: boolean;
 };
@@ -389,6 +392,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     extensionPatchBodies: [],
     extensionsReloadPlan: [],
     settingsReadOnly: options.settingsReadOnly === true,
+    settingsGetFailure: options.settingsGetFailure === true,
     previewContractBroken: options.omitPreviewSettingsRevision === true,
   };
 
@@ -516,6 +520,10 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
       items: [],
     });
     if (request.method() === "GET") {
+      // 初始化读取失败：页面装配层以 loadError 替换正文（文案键必须存在，否则渲染原始 key）
+      if (state.settingsGetFailure) {
+        return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "boom"}});
+      }
       return route.fulfill({json: settingsResponse()});
     }
     const body = await request.postDataJSON();

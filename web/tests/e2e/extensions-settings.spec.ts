@@ -945,6 +945,9 @@ test("custom 面板：过滤关键词 50/51 项与 100/101 字符的字段级错
   await filter.fill(longKeyword(100));
   await dialog.getByRole("button", {name: "保存", exact: true}).click();
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  // 等这一发真的落盘（缓冲区回到干净态）再继续输入：行内错误的清除已不再依赖保存返回，
+  // 不等的话下一发输入会被刚返回的成功响应（清空编辑缓冲）当掉
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
   expect(mock.server.value[FILTER_FIELD]).toEqual([longKeyword(100)]);
 
   // 101 字符：同样字段级拒绝，输入保留
@@ -953,11 +956,56 @@ test("custom 面板：过滤关键词 50/51 项与 100/101 字符的字段级错
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toContainText("扩展设置无效");
   await expect(filter).toHaveValue(longKeyword(101));
   expect(mock.server.value[FILTER_FIELD]).toEqual([longKeyword(100)]);
-  // 输入仍可修正：回到合法值后保存成功且行内错误收敛
+  // 输入仍可修正：回到合法值后保存成功且行内错误收敛（不存盘）
   await filter.fill("作废");
+  // 继续输入即清除字段级错误：字段错误不自行消失会让修正后的输入继续顶着红框与
+  // aria-invalid=true，直到下一次成功保存（清错不是本地校验，Provider 仍是唯一校验者）
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  await expect(filter).toHaveAttribute("aria-invalid", "false");
+  expect(mock.server.value[FILTER_FIELD]).toEqual([longKeyword(100)]); // 清错不代表落盘
   await dialog.getByRole("button", {name: "保存", exact: true}).click();
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  // 同样等保存返回：下面的服务端值断言不再是可重试断言，不能靠已提前满足的错误清除来同步
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
   expect(mock.server.value[FILTER_FIELD]).toEqual(["作废"]);
+});
+
+test("custom 面板：模板名重复是 Provider 级 409，按普通保存失败呈现且不冒充修订冲突", async ({page}) => {
+  const mock = await installCatalogSettings(page, {value: {user_templates: [catalogTemplate("标准目录")]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  // 另存为与已有模板重名（前端只拦内置显示名，重名由 Provider 判定）：PUT 得到
+  // 409 SHEET_CATALOG_COLUMN_DUPLICATE——与修订冲突同状态码、不同 code
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  const saveAs = page.getByRole("dialog", {name: "另存为模板"});
+  await saveAs.getByLabel("模板名称").fill("标准目录");
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+
+  // 普通失败横幅显示服务端自己的正文（名称重复），且没有任何“落在“修订冲突”上的说法：
+  // 断言“已被其他保存更新”之类的伪造不得出现，也不得给出无法成功的“按新修订重试”
+  const notice = dialog.getByTestId("extension-settings-save-failed");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("名称重复：标准目录");
+  await expect(dialog.locator(".cfg-conflict")).toHaveCount(0);
+  await expect(dialog.getByRole("button", {name: "按新修订重试"})).toHaveCount(0);
+  await expect(dialog.getByText(/已被其他保存更新/)).toHaveCount(0);
+  // 子视图未关闭、输入未被丢弃（用户可以改名字再存），也没有自动重试的第二发请求
+  await expect(dialog.locator(CATALOG_PANEL)).toBeVisible();
+  expect(mock.puts).toHaveLength(1);
+
+  // 修正重名后按同一入口保存：Provider 放行，修订仍是本地值（未被误推向新修订）
+  await saveAs.getByRole("button", {name: "取消"}).click();
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  await saveAs.getByLabel("模板名称").fill("另一目录");
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(2);
+  expect(mock.puts[1]!.expected_revision).toBe(0);
+  await expect(notice).toHaveCount(0);
 });
 
 test("custom 面板：删除用户模板先确认，取消保留、确认后回内置模板并落盘", async ({page}) => {

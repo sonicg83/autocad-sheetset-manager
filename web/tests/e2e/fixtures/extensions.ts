@@ -112,6 +112,23 @@ function defaultZeroValue(items: GeneratedSettingsItem[]): Record<string, unknow
   return Object.fromEntries(items.map(item => [item.key, item.default]));
 }
 
+// 图纸目录 Provider 的模板名唯一性最小同构（templates.py 的 _validate_names）：用户模板名
+// casefold 后重复即拒绝保存。真实后端把它映射为 409 SHEET_CATALOG_COLUMN_DUPLICATE，
+// 而同一 PUT 端点上的修订冲突也是 409——两者只能靠稳定 code 区分（见用例）。
+function duplicateTemplateName(value: Record<string, unknown>): string | null {
+  const templates = value.user_templates;
+  if (!Array.isArray(templates)) return null;
+  const seen = new Set<string>();
+  for (const entry of templates) {
+    const name = (entry as {name?: unknown} | null)?.name;
+    if (typeof name !== "string") continue;
+    const folded = name.toLowerCase();
+    if (seen.has(folded)) return name;
+    seen.add(folded);
+  }
+  return null;
+}
+
 // Provider 校验的最小同构：整数越界与字符串超长拒绝并定位字段（不改写用户输入）
 function providerFieldError(
   items: GeneratedSettingsItem[],
@@ -213,6 +230,19 @@ export async function installExtensionSettings(page: Page, options: {
       return route.fulfill({
         status: 422,
         json: {code: "EXTENSION_SETTINGS_INVALID", message_key: "errors.extension.settingsInvalid", params: invalid, message: "超出 Provider 声明的字段约束"},
+      });
+    }
+    // 模板名重复：Provider 级 409（修订与它无关，预期修订也没漂移）
+    const duplicate = duplicateTemplateName(body.value);
+    if (duplicate !== null) {
+      return route.fulfill({
+        status: 409,
+        json: {
+          code: "SHEET_CATALOG_COLUMN_DUPLICATE",
+          message_key: "errors.sheetCatalog.columnDuplicate",
+          params: {header: duplicate},
+          message: `名称重复：${duplicate}`,
+        },
       });
     }
     if (body.expected_revision !== state.server.revision) {

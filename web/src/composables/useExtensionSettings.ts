@@ -20,13 +20,16 @@ export interface ExtensionFieldError {
   message: string;
 }
 
-// 修订冲突：服务端已推进修订，本地编辑保留待用户裁决。
-// code 是服务端响应里的稳定码原样透传（设置 PUT 的冲突路径当前发
-// EXTENSION_SETTINGS_INVALID）：呈现层不得写死字面量，否则服务端换码时横幅会撒谎。
+// 409 的服务端原样回显：可能是修订冲突，也可能是同一端点上的 Provider 级冲突。
+// code 是服务端响应里的稳定码原样透传：呈现层用 isRevisionConflict() 判别，
+// 判别之外一律按普通保存失败呈现（横幅文案取 message，即服务端自己的正文）。
 export interface ExtensionSettingsConflict {
   code: string;
   expectedRevision: number;
   currentRevision: number;
+  // 服务端是否在 params 里同时给出了期望与当前修订：修订漂移的判别依据之一
+  //（另一依据是码属 REVISION_CONFLICT_CODES），见 isRevisionConflict
+  revisionParamsPresent: boolean;
   // 服务端响应里的正文（PLAN-DM-025 Task 8）：协议层按状态码把 409 一律归为修订冲突，
   // 而同一 PUT 端点上的 Provider 级 409（如 SHEET_CATALOG_COLUMN_DUPLICATE 名称重复）
   // 不是修订冲突。消费方按 code 判定后需要原文才能给出可见诊断，故一并透传。
@@ -54,6 +57,22 @@ export interface ExtensionSettingsState {
 }
 
 const FALLBACK_INVALID_CODE = "EXTENSION_SETTINGS_INVALID";
+
+// 修订冲突（expected_revision 漂移）的稳定码：服务端在 SettingsRevisionConflictError 映射里
+// 发这个码 + params.expected_revision/current_revision（application/extensions/settings.py）。
+// 同一 PUT 端点上还有 Provider 级 409（图纸目录的 SHEET_CATALOG_COLUMN_DUPLICATE 名称重复等），
+// 它们不是修订问题：把这类 409 当作修订冲突会让用户看到「按新修订重试」却反复重发同一个
+// 已是最新的 expected_revision（确定性死循环）。
+export const REVISION_CONFLICT_CODES: readonly string[] = ["EXTENSION_SETTINGS_INVALID"];
+
+// 判别口径 = 码在集合内，或服务端在 params 里同时给出期望与当前修订。后者是判据的拓展：
+// 修订漂移的语义就是这对参数，服务端换码时它仍成立；而 Provider 级 409 的 params 受错误
+// 词汇表白名单约束（SHEET_CATALOG_COLUMN_DUPLICATE 只允许 header），不会带到「冲突」的困境里
+export function isRevisionConflict(value: ExtensionSettingsConflict | null): boolean {
+  if (value === null) return false;
+  if (REVISION_CONFLICT_CODES.includes(value.code)) return true;
+  return value.revisionParamsPresent;
+}
 
 // 编辑值与服务端持久值的比较：生成表单只产生 JSON 标量，比较按值不做字符串化
 function sameValue(left: unknown, right: unknown): boolean {
@@ -171,11 +190,15 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
           await applyReadOnly(error.code);
         } else {
           // 修订冲突（服务端以 409 表达 expected_revision 漂移）：保留本地输入、刷新快照。
-          // 码原样取服务端响应，不在前端写死（线上当前为 EXTENSION_SETTINGS_INVALID）
+          // 码原样取服务端响应，不在前端写死（线上当前为 EXTENSION_SETTINGS_INVALID）；
+          // 是否向用户提供「按新修订重试」的出路由 isRevisionConflict 判别，不在此处分岔
+          const expectedRevision = typeof error.params?.expected_revision === "number" ? error.params.expected_revision : null;
+          const currentRevision = typeof error.params?.current_revision === "number" ? error.params.current_revision : null;
           conflict.value = {
             code: error.code ?? FALLBACK_INVALID_CODE,
-            expectedRevision: typeof error.params?.expected_revision === "number" ? error.params.expected_revision : current.revision,
-            currentRevision: typeof error.params?.current_revision === "number" ? error.params.current_revision : current.revision,
+            expectedRevision: expectedRevision ?? current.revision,
+            currentRevision: currentRevision ?? current.revision,
+            revisionParamsPresent: expectedRevision !== null && currentRevision !== null,
             message: error.message,
           };
           await load();

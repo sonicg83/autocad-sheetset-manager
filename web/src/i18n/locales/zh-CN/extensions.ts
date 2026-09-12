@@ -133,6 +133,9 @@ export default {
     settingsFilterHint: "图名包含任一关键词时不写入目录，多个关键词用逗号分隔",
     settingsFilterPlaceholder: "草图, 作废, TEMP",
     settingsPanelLabel: "图纸目录设置",
+    // 业务页初始化读取设置快照失败时的页面正文（useSheetCatalog.initialize）：
+    // 协议层只给 loadFailed 布尔，正文由页面层给出
+    settingsLoadFailed: "图纸目录设置加载失败，请重试",
     // 三选一守卫（SPEC §3.2）
     guardTitle: "未保存的模板修改",
     guardMessage: "{summary} 有未保存的修改。可保存为模板、放弃修改或留在此处。",

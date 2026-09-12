@@ -15,6 +15,7 @@
 import {computed, ref, watch} from "vue";
 import type {ComputedRef, Ref} from "vue";
 import {useI18n} from "vue-i18n";
+import {isRevisionConflict} from "./useExtensionSettings";
 import type {ExtensionSettingsState} from "./useExtensionSettings";
 
 export const CATALOG_EXTENSION_ID = "dst-manager.sheet-catalog";
@@ -232,7 +233,8 @@ export function useSheetCatalogSettings(
   // 修订冲突（expected_revision 漂移）才是有专属面板与两条出路的那种冲突：设置 PUT 端点上
   // 还有 Provider 级 409（名称重复/模板上限等），它们不是修订问题，按普通保存失败呈现，
   // 否则用户会看到"按新修订重试"的出路却永远重试不成（确定性死循环）。
-  const revisionConflict = computed(() => settings.conflict.value !== null && settings.conflict.value.code === "EXTENSION_SETTINGS_INVALID");
+  // 判别口径与宿主横幅同源，不在这里再写一份码字面量。
+  const revisionConflict = computed(() => isRevisionConflict(settings.conflict.value));
   const conflict = computed(() => revisionConflict.value);
 
   // ---- 协议层编辑缓冲同步：待保存的完整设置值 ----
@@ -362,6 +364,14 @@ export function useSheetCatalogSettings(
   // ---- 输出图纸过滤（SPEC §6.4；规格化在 Provider，前端只回显服务端数组） ----
   function setFilterText(value: string): void {
     filterText.value = value;
+    // 输入即清除本字段的服务端错误（协议层 setField 的同一语义）：字段错误不自行消失会让
+    // 修正后的输入继续顶着红框与 aria-invalid=true，直到下一次成功保存。清错不等于本地校验——
+    // 值仍原样上送，Provider 仍是唯一校验者。
+    if (settings.fieldErrors.value[EXCLUDED_TITLE_KEYWORDS_FIELD] !== undefined) {
+      const next = {...settings.fieldErrors.value};
+      delete next[EXCLUDED_TITLE_KEYWORDS_FIELD];
+      settings.fieldErrors.value = next;
+    }
     syncEdits();
   }
   const filterError = computed(() => settings.fieldErrors.value[EXCLUDED_TITLE_KEYWORDS_FIELD]?.message ?? "");

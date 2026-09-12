@@ -110,6 +110,8 @@ export default {
     settingsFilterHint: "Sheets whose title contains any keyword are left out of the catalog; separate multiple keywords with commas",
     settingsFilterPlaceholder: "draft, void, TEMP",
     settingsPanelLabel: "Sheet catalog settings",
+    // Business page body when the initial settings GET fails (useSheetCatalog.initialize)
+    settingsLoadFailed: "Failed to load sheet catalog settings; please retry",
     guardTitle: "Unsaved template changes",
     guardMessage: "{summary} has unsaved changes. Save as a template, discard the changes, or stay here.",
     guardStay: "Stay here",
