@@ -97,7 +97,8 @@ class DigestColumn:
     """摘要输入的规范化列投影：列 ID、表头与规范化 token 序列。
 
     token 形态：``("literal", 文本)`` 或
-    ``("field", scope, canonical_name, "builtin"|"custom")``。
+    ``("field", scope, canonical_name, "builtin"|"custom")``；字段带数字格式码
+    时后接 ``("format", "0" * width)``，使宽度变化同样改变摘要（SPEC §5.2）。
     """
 
     column_id: str
@@ -215,12 +216,15 @@ def preview_digest(
 def _digest_token(token: LiteralToken | BoundFieldToken) -> tuple[str, ...]:
     if isinstance(token, LiteralToken):
         return ("literal", token.value)
-    return (
+    base = (
         "field",
         token.scope,
         token.canonical_name,
         "builtin" if token.builtin else "custom",
     )
+    if token.format_width is None:
+        return base
+    return (*base, "format", "0" * token.format_width)
 
 
 def _digest_columns(

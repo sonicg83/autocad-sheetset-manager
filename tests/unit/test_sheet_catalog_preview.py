@@ -2,9 +2,10 @@
 
 覆盖：默认模板真实行、图纸集/图纸作用域组合、20 行上限与总图纸数、空图纸集
 可执行、缺定义/重复列/超限/语法错误阻断、缺值字段与受影响图纸数（诊断不含
-属性值）、Windows/Posix basename、跨作用域 casefold 同名属性、摘要对任一
-绑定项变化敏感且相同输入稳定（canonical JSON 固定键 + 紧凑分隔符 + SHA-256）、
-扩展模块常量与随包清单一致。
+属性值）、Windows/Posix basename、跨作用域 casefold 同名属性、数字格式码对
+预览行的补零与对摘要的敏感性（未使用格式码时摘要不变）、摘要对任一绑定项变化
+敏感且相同输入稳定（canonical JSON 固定键 + 紧凑分隔符 + SHA-256）、扩展模块
+常量与随包清单一致。
 """
 
 import hashlib
@@ -149,6 +150,17 @@ def test_preview_combines_sheetset_and_sheet_scopes():
     assert result.executable is True
 
 
+def test_preview_rows_apply_number_format_code():
+    template = make_template(
+        make_column("图号", "{sheet.number:0000}"),
+        make_column("目录号", "{sheetset.项目号}-{sheet.number:0}"),
+    )
+    result = build(make_sheet(), template=template)
+
+    assert result.executable is True
+    assert result.rows == (("0001", "P-000-1"),)
+
+
 def test_preview_caps_rows_at_20_and_reports_total_sheet_count():
     sheets = tuple(
         make_sheet(sheet_id=f"sheet-{index}", number=f"{index:03d}")
@@ -288,6 +300,27 @@ def test_missing_sheetset_value_reports_sheet_scope_and_count():
     assert diagnostic.params == {"scope": "sheetset", "name": "阶段", "sheet_count": 2}
 
 
+def test_preview_missing_value_warning_survives_number_format_code():
+    # 格式码只作用于求值输出：缺值必须照旧计入 SHEET_CATALOG_VALUE_MISSING，
+    # 且绝不被补成 0000。
+    sheets = (
+        make_sheet("sheet-1", properties=(SnapshotProperty("比例", ""),)),
+        make_sheet("sheet-2", properties=()),
+    )
+    template = make_template(make_column("比例", "{sheet.比例:0000}"))
+
+    result = build(*sheets, template=template)
+
+    assert result.executable is True
+    assert [warning.code for warning in result.warnings] == ["SHEET_CATALOG_VALUE_MISSING"]
+    assert result.warnings[0].params == {
+        "scope": "sheet",
+        "name": "比例",
+        "sheet_count": 2,
+    }
+    assert result.rows == (("",), ("",))
+
+
 def test_missing_field_counted_once_per_sheet_even_when_referenced_twice():
     template = make_template(make_column("组合", "{sheet.比例}-{sheet.比例}"))
 
@@ -397,6 +430,45 @@ DIGEST_COLUMNS = (
     DigestColumn("c-1", "图号", (("field", "sheet", "number", "builtin"),)),
     DigestColumn("c-2", "图名", (("literal", "A"), ("field", "sheet", "title", "builtin"))),
 )
+
+
+def test_preview_digest_changes_with_number_format_code():
+    # 固定 column_id/表头，只让 token 不同，避免列 ID 差异掩盖 token 差异
+    def digest_with(tokens):
+        return preview_digest(
+            workspace_id="ws-1",
+            revision_id="rev-1",
+            template_schema=1,
+            normalized_columns=(DigestColumn("c-1", "图号", (tokens,)),),
+            extension_version="0.1.0",
+            action_id="export-xlsx",
+            extension_id="dst-manager.sheet-catalog",
+        )
+
+    baseline = digest_with(("field", "sheet", "number", "builtin"))
+    padded = digest_with(("field", "sheet", "number", "builtin", "format", "0000"))
+    narrower = digest_with(("field", "sheet", "number", "builtin", "format", "000"))
+
+    assert padded != baseline
+    assert padded != narrower
+
+
+def test_preview_digest_changes_when_template_format_code_changes():
+    # 固定列 ID/表头，只改表达式里的格式码，摘要仍必须变化：否则“模板已变→需
+    # 重新预览”门禁会把无格式码预览的摘要误认为适用于带格式码模板（SPEC §5.2）。
+    def digest_with(expression: str) -> str:
+        column_id = uuid.uuid5(_COLUMN_NAMESPACE, "图号")
+        return build(
+            make_sheet(),
+            template=make_template(
+                TemplateColumn(column_id=column_id, header="图号", expression=expression)
+            ),
+        ).preview_digest
+
+    assert digest_with("{sheet.number}") != digest_with("{sheet.number:0000}")
+    assert digest_with("{sheet.number:0000}") != digest_with("{sheet.number:000}")
+    # 引用大小写不同但绑定到同一规范名与同一格式宽度 → 摘要不变
+    assert digest_with("{sheet.number:0000}") == digest_with("{sheet.NUMBER:0000}")
 
 
 def test_preview_digest_is_stable_for_identical_inputs():

@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-12（图纸目录预览摘要贯通数字格式码）
+
+- `preview.py` 的 `_digest_token` 在字段带数字格式码时追加 `("format", "0" * width)` 投影：预览行与 XLSX 已由 `evaluate_expression` 应用数字格式码，摘要纳入格式宽度且无格式模板摘要不变。修复变宽/增删格式码时摘要不变导致“模板已变→需重新预览”门禁比对相等、可拿旧预览直接导出（SPEC-DM-012 §5.2）。
+- `tests/unit/test_sheet_catalog_preview.py` 新增 4 例：预览行套用 `:0000`/`:0` 补零、摘要对格式码增删与宽度变化敏感（同列 ID/表头走真实 `build_preview` 投影）、带格式码列的缺值仍报 `SHEET_CATALOG_VALUE_MISSING` 且不被补成零。
+- `tests/integration/test_sheet_catalog_export.py` 新增 2 例：`:0000` 导出回读为文本单元格 `0001`（非数值单元格），以及仅格式码不同的模板必须返回 409 `REPREVIEW_REQUIRED`。
+- 本次未修改 DST/DWG、模板 schema、API 契约与依赖；全量 `uv run pytest` 1235 tests / 1161 passed / 74 skipped / 0 failed，`uv run ruff check .` 通过。
+
 ## 2026-09-12（图纸目录表达式新增数字格式码解析与求值）
 
 - `expressions.py` 解析 `format := ":" "0"{1,16}`：`FieldToken`/`BoundFieldToken` 新增 `format_width`，点号与方括号形式均可附加格式码；`""` 空宽度、非零字符、重复格式码、宽度超过 16 与引用未闭合均复用 `SHEET_CATALOG_EXPRESSION_INVALID`，`source_start` 指向该引用的 `:`（重复格式码指向第二个 `:`），未新增错误码。
