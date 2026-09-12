@@ -858,3 +858,77 @@ test.describe("模板显示名与身份不变量（PLAN-DM-024 F4）", () => {
     expect(state.settingsValue.user_templates).toEqual([]);
   });
 });
+
+// PLAN-DM-026 Task 3（SPEC-DM-012 §4.2/§5.4/§7.2 区域 2）：字段条目的数字格式码入口。
+// 入口只把 `:0`/`:0000` 这类格式码拼进表达式文本，属于只读导出的输出格式化——
+// 不修改 DST/DWG、不写回属性值、不做重编号。
+test.describe("数字格式码入口（PLAN-DM-026）", () => {
+  // 条目行 = 字段引用按钮 + 同行格式入口；格式入口与菜单项的可访问名不含字段引用文本，
+  // 因此可与既有的 getByRole("button", {name: /sheet\.number/}) 严格定位共存。
+  function fieldEntry(page: Page, reference: RegExp) {
+    const browser = page.getByRole("region", {name: "字段浏览器"});
+    return browser.locator(".field-entry").filter({has: page.getByRole("button", {name: reference})});
+  }
+
+  test("数字格式码入口把图号补零到 4 位", async ({page}) => {
+    await openCatalog(page);
+    const expression = page.getByLabel("表达式 1");
+    await expression.fill("");
+    const entry = fieldEntry(page, /sheet\.number/);
+    await entry.getByRole("button", {name: "格式"}).click();
+    await entry.getByRole("menuitem", {name: "补零到 4 位"}).click();
+    await expect(expression).toHaveValue("{sheet.number:0000}");
+    // 夹具由 pad3 生成图号，首张为 001；补零只作用于输出侧，工作区快照不变
+    await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "0001", exact: true})).toBeVisible();
+  });
+
+  test("数字格式码入口可去掉前导零", async ({page}) => {
+    await openCatalog(page);
+    const expression = page.getByLabel("表达式 1");
+    await expression.fill("");
+    const entry = fieldEntry(page, /sheet\.number/);
+    await entry.getByRole("button", {name: "格式"}).click();
+    await entry.getByRole("menuitem", {name: "去前导零"}).click();
+    await expect(expression).toHaveValue("{sheet.number:0}");
+    await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "1", exact: true})).toBeVisible();
+  });
+
+  // 轻量 disclosure 菜单的键盘/指针契约：选中、Esc、外部点击与搜索过滤都要关闭；
+  // 菜单在流内展开，打开时不得把字段栏撑宽（SPEC-DM-012 §7.2 冻结宽度 258px）。
+  test("数字格式码菜单在选中、Esc、外部点击和搜索过滤时关闭", async ({page}) => {
+    await openCatalog(page);
+    const browser = page.getByRole("region", {name: "字段浏览器"});
+    const entry = fieldEntry(page, /sheet\.number/);
+    const trigger = entry.getByRole("button", {name: "格式"});
+    const widthBefore = (await browser.boundingBox())!.width;
+
+    await trigger.click();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    // 去前导零 + NUMBER_FORMAT_WIDTHS 的 5 个补零选项
+    await expect(entry.getByRole("menuitem")).toHaveCount(6);
+    expect((await browser.boundingBox())!.width, "菜单展开不改变字段栏宽度").toBeCloseTo(widthBefore, 0);
+
+    // Esc 关闭并归还焦点到触发按钮
+    await page.keyboard.press("Escape");
+    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    // 外部点击关闭（搜索框不属于格式入口）
+    await trigger.click();
+    await expect(entry.getByRole("menuitem")).toHaveCount(6);
+    await page.getByLabel("搜索可用字段").click();
+    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    // 键盘展开后行被搜索过滤：菜单状态同步关闭，清空搜索不意外重新展开
+    // （fill 不派发 pointerdown，因此这里只能靠 query 变化关闭菜单）
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await page.getByLabel("搜索可用字段").fill("图名");
+    await expect(entry).toHaveCount(0);
+    await page.getByLabel("搜索可用字段").fill("");
+    await expect(entry.getByRole("menuitem")).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+});

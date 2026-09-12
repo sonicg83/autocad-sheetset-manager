@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-12（字段浏览器新增图号数字格式码入口）
+
+- 新增 `web/src/components/sheet-catalog/formatCode.ts` 纯模块：`NUMBER_FORMAT_WIDTHS`（2/3/4/5/6）、`STRIP_ZEROS_WIDTH`（0）与 `applyNumberFormat(reference, width)`，把 `{sheet.number}` 拼成 `{sheet.number:0000}`/`{sheet.number:0}`；越界宽度与未闭合引用抛错，仅作开发期护栏。同目录新增 `formatCode.test.ts` 5 例。
+- `FieldBrowser.vue` 每个字段条目新增格式入口：原生触发按钮（`aria-haspopup="menu"` + `aria-expanded`）加仅打开时渲染的 `role="menu"` 选项（去前导零、补零到 2/3/4/5/6 位），插入走既有 `insertReference`，光标协议与列签名不变。菜单在条目内流式展开而非浮层，避免被字段栏 `overflow` 裁切；选中、Esc（归还焦点）、外部点击与搜索过滤变化均关闭。触发按钮与选项的可访问名不含字段引用文本，字段栏轨道宽度仍为 258px。
+- `zh-CN`/`en-US` 两份 `extensions.ts` 各新增 `fieldFormatButton`、`fieldFormatMenuLabel`、`fieldFormatStripZeros`、`fieldFormatPad`（带 `{width}` 插值）四键，并在 `fieldSyntaxHint` 追加格式码示例；示例中的字面花括号按 vue-i18n 转义写成 `{'{'}`/`{'}'}`，否则消息在渲染期编译失败。
+- `web/tests/e2e/fixtures/sheetCatalog.ts` 的字段引用正则同时支持可选格式码（求值与校验循环共用同一形态），并新增与 Python `format_value` 同语义的 `formatValue`；缺值统计仍按原始值，`SHEET_CATALOG_VALUE_MISSING` 行为不变。`sheet-catalog.spec.ts` 新增 3 例（补零到 4 位、去前导零、菜单在选中/Esc/外部点击/搜索过滤时关闭且不改变字段栏宽度）。
+- 本轮只做只读导出的输出格式化：未修改 DST/DWG、未写回属性值、未做重编号；模板 `schema_version` 仍为 1，无 API 字段变化、无新依赖。
+- 验证：`npm run test:unit` 7 文件 / 40 例通过；`npm run check:i18n` 与 `npm run build`（含 `vue-tsc -b`）通过；`sheet-catalog.spec.ts` + `extensions-navigation.spec.ts` 55 例通过；`sheet-catalog-visual-evidence.spec.ts` 16 例通过（含 1920×1080 字段栏 256～260px、≤980px 限高 235px 与 Tab 顺序子序列）。
+
 ## 2026-09-12（图纸目录预览摘要贯通数字格式码）
 
 - `preview.py` 的 `_digest_token` 在字段带数字格式码时追加 `("format", "0" * width)` 投影：预览行与 XLSX 已由 `evaluate_expression` 应用数字格式码，摘要纳入格式宽度且无格式模板摘要不变。修复变宽/增删格式码时摘要不变导致“模板已变→需重新预览”门禁比对相等、可拿旧预览直接导出（SPEC-DM-012 §5.2）。
