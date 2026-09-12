@@ -58,7 +58,7 @@ describe("useExtensionSettings 服务端 409 收口", () => {
 
     await state.save();
 
-    expect(state.conflict.value).toEqual({code: wireCode, expectedRevision: 0, currentRevision: 1});
+    expect(state.conflict.value).toMatchObject({code: wireCode, expectedRevision: 0, currentRevision: 1});
     expect(state.edits.value).toEqual({batch_limit: 70}); // 本地输入不丢
     expect(fetchMock).toHaveBeenCalledTimes(2); // 冲突后就地刷新服务端快照
   });
@@ -101,7 +101,7 @@ describe("useExtensionSettings 服务端 409 收口", () => {
     // 快照降级保留（不因刷新失败清空子视图），本地编辑不被丢弃
     expect(state.snapshot.value).toEqual(view());
     expect(state.edits.value).toEqual({batch_limit: 70});
-    expect(state.conflict.value).toEqual({code: "EXTENSION_SETTINGS_INVALID", expectedRevision: 0, currentRevision: 1});
+    expect(state.conflict.value).toMatchObject({code: "EXTENSION_SETTINGS_INVALID", expectedRevision: 0, currentRevision: 1});
     // 「下方内容可能已过期」的可观测事实：呈现层据此在 .cfg 级别就地提示
     expect(state.loadFailed.value).toBe(true);
   });

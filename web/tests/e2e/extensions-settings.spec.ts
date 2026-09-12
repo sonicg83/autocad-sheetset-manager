@@ -319,11 +319,11 @@ test("扩展配置入口：无工作区也能进入同一对话框子视图，�
   await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
 });
 
-test("扩展配置入口：未知 custom route_key fail-closed 成稳定诊断，不动态加载、不退化为 JSON 文本框", async ({page}) => {
-  // 生产图纸目录声明 custom/sheet-catalog-settings，而白名单专属面板属任务 8——
-  // 本任务不注册该键，子视图因此必须 fail-closed（SPEC-DM-011 §3.3 / ARCH-DM-006 §7）
+test("扩展配置入口：白名单外与空 route_key 仍 fail-closed，不动态加载、不退化为 JSON 文本框", async ({page}) => {
+  // PLAN-DM-025 Task 8 已把生产图纸目录的 sheet-catalog-settings 登记进编译期白名单
+  // （其专属面板用例见下方 custom 面板分组），因此 fail-closed 分支的载体改为白名单外的
+  // route_key——该分支必须保持可达且被覆盖（R20）。
   await installExtensions(page, [
-    extensionSummary(),
     extensionSummary({extension_id: "demo.unknown-custom", name_key: "未知组件扩展", description_key: "声明了白名单外的设置组件。", settings_contribution: {presentation: "custom", route_key: "../views/UnknownSettings.vue"}, ui_contributions: []}),
     // 声明 custom 却没登记组件键（空 route_key）：原因与白名单未命中不同，
     // 不能把空值塞进「route_key {route_key}」模板印出带空白值的假原因
@@ -336,20 +336,16 @@ test("扩展配置入口：未知 custom route_key fail-closed 成稳定诊断�
   await openExtensionsSection(page);
 
   const dialog = page.locator(SETTINGS_DIALOG);
-  await openConfigView(page, "图纸目录");
+  // 未识别的 route_key 必须 fail-closed，且绝不按字符串动态加载（没有任何请求携带该键）
+  await openConfigView(page, "未知组件扩展");
   const unavailable = dialog.getByTestId("extension-settings-unavailable");
   await expect(unavailable).toBeVisible();
-  await expect(unavailable).toContainText("sheet-catalog-settings");
+  await expect(unavailable).toContainText("../views/UnknownSettings.vue");
   // 不退化为 JSON 文本框：子视图内没有 textarea/JSON 编辑器
   await expect(dialog.locator("textarea")).toHaveCount(0);
   // 进入焦点确定：没有可用字段控件时落在诊断条（tabindex=-1），不退回 <body>
   await expect(unavailable).toBeFocused();
   await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
-
-  // 未识别的 route_key 同样 fail-closed，且绝不按字符串动态加载（没有任何请求携带该键）
-  await dialog.getByRole("button", {name: "返回扩展列表"}).click();
-  await openConfigView(page, "未知组件扩展");
-  await expect(dialog.getByTestId("extension-settings-unavailable")).toContainText("../views/UnknownSettings.vue");
   expect(requests.filter(url => url.includes("UnknownSettings") || url.includes("sheet-catalog-settings"))).toEqual([]);
 
   // 空 route_key：换一条诊断，不回显一个不存在的键值
@@ -563,7 +559,7 @@ test("扩展设置 设置冲突：409 保留本地输入并刷新服务端修订
   mock.server.revision = 3; // 上一次重试已经推进到 r2，本次由第三次服务端保存推进到 r3
   await dialog.getByRole("button", {name: "保存"}).click();
   await expect(conflict).toBeVisible();
-  await dialog.getByRole("button", {name: "放弃本地修改"}).click();
+  await conflict.getByRole("button", {name: "放弃本地修改"}).click();
   await expect(conflict).toHaveCount(0);
   await expect(limit).toHaveValue("70");
   await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
@@ -596,7 +592,7 @@ test("扩展设置 冲突后刷新失败：就地提示「内容可能已过期�
   await expect.poll(() => mock.gets).toBe(2);
   expect(mock.server.value.batch_limit).toBe(50);
   // 冲突出路仍可用：放弃本地修改后横幅与陈旧提示一并收敛
-  await dialog.getByRole("button", {name: "放弃本地修改"}).click();
+  await conflict.getByRole("button", {name: "放弃本地修改"}).click();
   await expect(conflict).toHaveCount(0);
   await expect(limit).toHaveValue("50");
 });
@@ -827,4 +823,206 @@ test("活动扩展失效先过守卫的并发代次：旧响应晚到不覆盖�
   releaseOld!();
   await expect(page.getByText("扩展列表加载失败。")).toBeVisible();
   await expectTabIds(page, [...CORE_TABS, "tab-sheet-catalog"]);
+});
+
+// ---- SC-17：图纸目录 custom 设置面板（PLAN-DM-025 Task 8 / SPEC-DM-012 §6.2/§6.4）----
+// 生产固定索引里唯一声明 settings 的扩展就是图纸目录，其 presentation=custom、
+// route_key=sheet-catalog-settings：任务 8 把专属面板静态登记进编译期白名单，
+// 因此下面的用例必须走真实面板（fail-closed 分支的覆盖见上方 route_key 用例）。
+const CATALOG_NAME = "图纸目录";
+const CATALOG_PANEL = '[data-testid="sheet-catalog-settings-panel"]';
+const CATALOG_FILTER = '[data-testid="catalog-settings-filter"]';
+const CATALOG_FILTER_ERROR = '[data-testid="catalog-settings-filter-error"]';
+const FILTER_FIELD = "excluded_title_keywords";
+
+function catalogTemplate(name: string, columns: {header: string; expression: string}[] = [{header: "图号", expression: "{sheet.number}"}]) {
+  return {
+    template_id: `tpl-${name}`,
+    name,
+    schema_version: 1,
+    columns: columns.map((column, index) => ({column_id: `col-${name}-${index}`, ...column})),
+  };
+}
+
+// 图纸目录设置 mock：schema_version 取自 Manifest（2），value 是持久值（user_templates +
+// 可选 excluded_title_keywords），关键词上限与规范化由 extensions.ts 夹具按 settings.py 复刻。
+async function installCatalogSettings(page: Page, options: {value?: Record<string, unknown>; revision?: number} = {}) {
+  return installExtensionSettings(page, {schemaVersion: 2, items: [], value: {user_templates: []}, ...options});
+}
+
+test("custom 面板：无工作区可进入、可编辑表达式与另存模板，过滤词保存后按服务端数组规范化回显", async ({page}) => {
+  const mock = await installCatalogSettings(page);
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await expect(page.getByRole("tablist")).toHaveCount(0); // 前置：没有打开工作区
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const panel = dialog.locator(CATALOG_PANEL);
+  await expect(panel).toBeVisible();
+  // 无工作区：不渲染字段浏览器，也不伪造兼容性徽标/摘要（不伪造 preview）
+  await expect(dialog.locator(".field-browser")).toHaveCount(0);
+  await expect(dialog.locator(".compatibility")).toHaveCount(0);
+  await expect(dialog.locator(".compat-badge")).toHaveCount(0);
+  // 表达式文本仍可编辑（不因无工作区降级为只读），列增删可用
+  const expression = dialog.getByLabel("表达式 1");
+  await expect(expression).toBeEnabled();
+  await expression.fill("{sheet.number}号");
+  await dialog.getByRole("button", {name: "添加输出列"}).click();
+  await expect(dialog.getByLabel("输出列名 4")).toBeVisible();
+
+  // 另存为：内置模板不可原地保存，草稿只能另存为新模板（新模板带 4 列）
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  const saveAs = page.getByRole("dialog", {name: "另存为模板"});
+  await saveAs.getByLabel("模板名称").fill("无工作区模板");
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+  expect(mock.puts[0]!.schema_version).toBe(2);
+  const savedTemplates = mock.puts[0]!.value.user_templates as {name: string; columns: unknown[]}[];
+  expect(savedTemplates.map(template => template.name)).toEqual(["无工作区模板"]);
+  expect(savedTemplates[0]!.columns).toHaveLength(4);
+  const createdTemplateId = (savedTemplates[0] as {template_id: string}).template_id;
+  await expect(dialog.getByLabel("选择模板")).toHaveValue(createdTemplateId);
+
+  // 输出图纸过滤：单行输入 + 说明 + 示例占位；PUT 提交原始文本，Provider 负责规范化
+  const filter = dialog.locator(CATALOG_FILTER);
+  await expect(filter).toHaveValue("");
+  await expect(filter).toHaveAttribute("placeholder", "草图, 作废, TEMP");
+  await filter.fill("草图， TEMP,,作废,temp");
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(2);
+  expect(mock.puts[1]!.value[FILTER_FIELD]).toBe("草图， TEMP,,作废,temp");
+  // 规范化回显：半/全角逗号拆分、去空白与空项、大小写去重保留首见原文，逗号加空格连接
+  expect(mock.server.value[FILTER_FIELD]).toEqual(["草图", "TEMP", "作废"]);
+  await expect(dialog.getByTestId("extension-settings-saved-pill")).toBeVisible();
+  await expect(filter).toHaveValue("草图, TEMP, 作废");
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+
+  // 重开子视图：模板与过滤词都从服务端回读（内存缓冲不是权威）
+  await dialog.getByRole("button", {name: "返回扩展列表"}).click();
+  await openConfigView(page, CATALOG_NAME);
+  await expect(dialog.locator(CATALOG_FILTER)).toHaveValue("草图, TEMP, 作废");
+  // 模板与过滤词都从服务端回读；子视图的“当前选中模板”是视图态（不进入扩展设置），
+  // 重开后回到内置默认模板，但用户模板仍在列表中可选
+  await expect(dialog.getByLabel("选择模板").locator("option")).toHaveCount(2);
+  await expect(dialog.getByLabel("选择模板")).toContainText("无工作区模板");
+  await expect(dialog.getByLabel("输出列名 1")).toHaveValue("图号");
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+});
+
+test("custom 面板：过滤关键词 50/51 项与 100/101 字符的字段级错误定位，输入保留且不落盘", async ({page}) => {
+  const mock = await installCatalogSettings(page);
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const filter = dialog.locator(CATALOG_FILTER);
+  const longKeyword = (length: number) => "k".repeat(length);
+
+  // 50 项（上限）保存成功
+  const fifty = Array.from({length: 50}, (_, index) => `k${index}`).join(", ");
+  await filter.fill(fifty);
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(dialog.getByTestId("extension-settings-saved-pill")).toBeVisible();
+  expect(mock.server.value[FILTER_FIELD] as string[]).toHaveLength(50);
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+
+  // 51 项：服务端拒绝并定位到 excluded_title_keywords，不截断输入
+  const fiftyOne = `${fifty}, k51`;
+  await filter.fill(fiftyOne);
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  // 字段级 422：错误定位在这一行（aria-invalid + 行内正文），限额数字取自服务端稳定参数，
+  // 文案按 errors.extension.settingsInvalid 渲染（扩展设置端点唯一已登记的 422 文案键）
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toContainText("扩展设置无效");
+  await expect(filter).toHaveAttribute("aria-invalid", "true");
+  await expect(filter).toHaveValue(fiftyOne);
+  expect(mock.server.value[FILTER_FIELD] as string[]).toHaveLength(50);
+
+  // 单项 100 字符（上限）保存成功
+  await filter.fill(longKeyword(100));
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  expect(mock.server.value[FILTER_FIELD]).toEqual([longKeyword(100)]);
+
+  // 101 字符：同样字段级拒绝，输入保留
+  await filter.fill(longKeyword(101));
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toContainText("扩展设置无效");
+  await expect(filter).toHaveValue(longKeyword(101));
+  expect(mock.server.value[FILTER_FIELD]).toEqual([longKeyword(100)]);
+  // 输入仍可修正：回到合法值后保存成功且行内错误收敛
+  await filter.fill("作废");
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  expect(mock.server.value[FILTER_FIELD]).toEqual(["作废"]);
+});
+
+test("custom 面板：删除用户模板先确认，取消保留、确认后回内置模板并落盘", async ({page}) => {
+  const mock = await installCatalogSettings(page, {revision: 3, value: {user_templates: [catalogTemplate("标准目录")]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await dialog.getByLabel("选择模板").selectOption({label: "标准目录"});
+  await dialog.getByRole("button", {name: "删除模板"}).click();
+  const confirm = page.getByRole("dialog", {name: "删除模板"});
+  await expect(confirm).toBeVisible();
+  // 取消：模板与选择都不变，也没有发出 PUT
+  await confirm.getByRole("button", {name: "取消"}).click();
+  await expect(confirm).toBeHidden();
+  await expect(dialog.getByLabel("选择模板")).toHaveValue("tpl-标准目录");
+  expect(mock.puts).toHaveLength(0);
+  // 确认：删除落盘并回到内置默认模板
+  await dialog.getByRole("button", {name: "删除模板"}).click();
+  await confirm.getByRole("button", {name: "删除", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+  expect(mock.puts[0]!.value.user_templates).toEqual([]);
+  expect(mock.server.value.user_templates).toEqual([]);
+  await expect(dialog.getByLabel("选择模板")).toHaveValue("");
+});
+
+test("custom 面板：修订冲突保留过滤词草稿，横幅给出两条出路，重试成功后不丢输入", async ({page}) => {
+  const mock = await installCatalogSettings(page);
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const filter = dialog.locator(CATALOG_FILTER);
+  await filter.fill("草图—待保存");
+  mock.server.revision = 1; // 另一窗口已保存：本地 expected_revision 过期
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+
+  const conflict = dialog.locator(".cfg-conflict");
+  await expect(conflict).toBeVisible();
+  await expect(conflict).toContainText("409 EXTENSION_SETTINGS_INVALID");
+  // 草稿保留：输入不被替换、子视图未关闭、缓冲仍脏
+  await expect(filter).toHaveValue("草图—待保存");
+  await expect(dialog.locator(CATALOG_PANEL)).toBeVisible();
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
+
+  // 出路一：按新修订重试（提交刷新后的 expected_revision），值原样落盘。
+  // 冲突横幅只在宿主一处渲染（面板内的 TemplateBar 用 hide-conflict 收起重复的那一份）
+  await conflict.getByRole("button", {name: "按新修订重试"}).click();
+  await expect.poll(() => mock.puts.length).toBe(2);
+  expect(mock.puts[1]!.expected_revision).toBe(1);
+  await expect(conflict).toHaveCount(0);
+  await expect(filter).toHaveValue("草图—待保存");
+  expect(mock.server.value[FILTER_FIELD]).toEqual(["草图—待保存"]);
+
+  // 出路二：再制造一次冲突后放弃本地修改——回到服务端值、不再脏
+  await filter.fill("作废");
+  mock.server.revision = 3;
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(conflict).toBeVisible();
+  await conflict.getByRole("button", {name: "放弃本地修改"}).click();
+  await expect(conflict).toHaveCount(0);
+  await expect(filter).toHaveValue("草图—待保存");
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
 });

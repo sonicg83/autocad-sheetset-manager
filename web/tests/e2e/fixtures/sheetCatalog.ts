@@ -6,6 +6,8 @@
 import {expect, type Page} from "@playwright/test";
 
 export const EXTENSION_ID = "dst-manager.sheet-catalog";
+// 扩展当前设置 Schema（Manifest settings_schema）：GET 返回它，PUT 必须携带同一个值
+export const CATALOG_SETTINGS_SCHEMA_VERSION = 2;
 export const WORKSPACE_ID = "workspace-1";
 
 export interface CatalogColumn {
@@ -56,6 +58,11 @@ export type SheetCatalogFixtureOptions = {
   saveDialogError?: string;                     // saveDialog=error 时的稳定 code
   executeMode?: ExecuteMode;                    // 执行响应行为，默认 ok
   putSettingsMode?: PutSettingsMode;            // 模板设置 PUT 行为，默认 ok
+  // PLAN-DM-025 Task 8：设置 GET 返回真实契约形状（schema_version/revision/value/
+  // effective_value/read_only/diagnostic_code），并支持预置输出过滤与只读态。
+  excludedTitleKeywords?: string[];             // 预置规范化后的输出图纸过滤关键词
+  settingsReadOnly?: boolean;                   // 服务端已存更高 Schema：GET 只读、PUT 409
+  omitPreviewSettingsRevision?: boolean;        // 预览响应违约（缺 settings_revision 绑定，R15）
 };
 
 export type CatalogControls = {
@@ -68,7 +75,9 @@ export type CatalogControls = {
 export type SheetCatalogState = {
   controls: CatalogControls;
   revision: number;
-  settingsValue: {schema_version: number; user_templates: CatalogTemplate[]};
+  // 持久值（与后端 Provider 同形）：只含用户显式配置，不含 schema_version 这类协议字段；
+  // 过滤词规范化为空时该键整体移除（settings.py 的 validate_and_normalize 同语义）
+  settingsValue: {user_templates: CatalogTemplate[]; excluded_title_keywords?: string[]};
   preferencePuts: {template_id?: string}[];
   // 设置/偏好 PUT 的完整请求体（PLAN-DM-025 Task 2 修复）：前端提交的 schema_version
   // 必须与后端 Manifest settings_schema 一致，用于断言该绑定不被静默回退。
@@ -88,6 +97,10 @@ export type SheetCatalogState = {
   extensionPatchBodies: unknown[];
   // 扩展列表刷新控制（PLAN-DM-024 Task 1）：按 /api/extensions 请求顺序消费的步骤队列
   extensionsReloadPlan: ExtensionsReloadControl[];
+  // 服务端已存更高 Schema（只读保护）：GET 返回 read_only + 诊断码，PUT 一律 409
+  settingsReadOnly: boolean;
+  // 预览响应违约（缺 settings_revision 绑定）：R15 的可见诊断由此驱动
+  previewContractBroken: boolean;
 };
 
 // 假桥调用记录保存在浏览器侧（window.__catalogBridge）：跨 Node/浏览器边界统一经本 helper 读取
@@ -136,6 +149,48 @@ export function demoErrorTemplate(): CatalogTemplate {
 }
 
 const BUILTIN_SHEET_FIELDS = ["number", "title", "file_name"];
+
+// ---- 输出图纸过滤（PLAN-DM-025 Task 8 / SPEC-DM-012 §6.4）----
+// 与 settings.py 的 normalize_excluded_title_keywords 同语义：两种逗号拆分 → trim →
+// 忽略空项 → casefold 去重保留首见原文；上限 50 项 / 单项 100 字符由 PUT 拒绝。
+export const MAX_EXCLUDED_TITLE_KEYWORDS = 50;
+export const MAX_EXCLUDED_TITLE_KEYWORD_CHARS = 100;
+export const EXCLUDED_TITLE_KEYWORDS_FIELD = "excluded_title_keywords";
+
+export function normalizeExcludedTitleKeywords(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  const items: unknown[] = typeof value === "string" ? value.split(/[,，]/) : Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  for (const item of items) {
+    if (typeof item !== "string") continue;
+    const keyword = item.trim();
+    if (keyword === "") continue;
+    const folded = keyword.toLowerCase();
+    if (seen.has(folded)) continue;
+    seen.add(folded);
+    keywords.push(keyword);
+  }
+  return keywords;
+}
+
+// 字段级设置无效错误（定位到 excluded_title_keywords，与 settings.py 的
+// _keyword_limit_error 同形：params.field 供前端行内定位，绝不截断用户输入）
+function keywordLimitError(kind: string, limit: number, actual: number) {
+  return {
+    code: "EXTENSION_SETTINGS_INVALID",
+    message_key: "errors.extension.settingsInvalid",
+    params: {field: EXCLUDED_TITLE_KEYWORDS_FIELD, kind, limit, actual},
+    message: `超出输出图纸过滤限制 ${kind}：${actual}/${limit}`,
+  };
+}
+
+// 图名是否命中任一关键词（casefold 后字面子串匹配，关键词之间为 OR）
+function titleMatchesExclusion(title: string, keywords: string[]): boolean {
+  if (keywords.length === 0) return false;
+  const folded = title.toLowerCase();
+  return keywords.some(keyword => folded.includes(keyword.toLowerCase()));
+}
 
 let uuidCounter = 0;
 export function fakeUuid(): string {
@@ -234,6 +289,7 @@ function evaluateRow(expression: string, sheet: {number: string; title: string; 
 }
 
 function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, workspace: ReturnType<typeof buildWorkspace>, state: SheetCatalogState) {
+  const keywords = state.settingsValue.excluded_title_keywords ?? [];
   const sheetsetProperties = workspace.sheet_set.custom_properties;
   const sheetsetDefs = Object.keys(sheetsetProperties);
   const sheetDefs = Object.keys(workspace.sheet_set.subsets[0]?.sheets[0]?.custom_properties ?? {});
@@ -277,8 +333,11 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     }
   }
   const executable = errors.length === 0;
+  // 过滤发生在表达式求值与缺值统计之前（SPEC §6.4）：被排除图纸既不出现在行里，
+  // 也不进 total_rows，更不产生缺值警告之外的统计
+  const projected = sheets.filter(sheet => !titleMatchesExclusion(sheet.title, keywords));
   const rows = executable
-    ? sheets.slice(0, 20).map(sheet => body.template.columns.map(column => evaluateRow(column.expression, sheet, sheetsetProperties)))
+    ? projected.slice(0, 20).map(sheet => body.template.columns.map(column => evaluateRow(column.expression, sheet, sheetsetProperties)))
     : [];
   return {
     normalized_template: {template_id: null, name: "e2e", schema_version: 1, columns: body.template.columns ?? []},
@@ -286,16 +345,16 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     errors,
     warnings,
     rows,
-    // PLAN-DM-025 Task 4 修复轮 1：与真实后端同口径——total_rows 是过滤后的实际
-    // 输出行数，filtered_rows 是被排除的图纸数。夹具不模拟过滤语义（设置里也没有
-    // 过滤词），因此 filtered_rows 恒为 0、total_rows 等于全部图纸数；两个字段都
-    // 必须存在，否则夹具会把"缺字段"的响应形状当成正确形状。
-    total_rows: sheets.length,
-    filtered_rows: 0,
+    // 与真实后端同口径（PLAN-DM-025 Task 4/8）：total_rows 是过滤后的实际输出行数，
+    // filtered_rows 是被排除的图纸数（SPEC-DM-012 §8.1）。过滤词来自设置持久值，
+    // 两个字段都必须存在，否则夹具会把"缺字段"的响应形状当成正确形状。
+    total_rows: projected.length,
+    filtered_rows: sheets.length - projected.length,
     // 本次预览绑定的扩展设置修订；前端导出时必须原样重复提交，否则 /execute 的
     // 漂移门禁（下方 settings_revision 校验）会把请求判为未绑定并回 409。
     // 缺字段是另一回事：真实后端契约校验直接 422，不进入漂移门禁。
-    settings_revision: state.revision,
+    // R15：previewContractBroken 制造契约违约响应（字段缺失），前端必须有可见诊断
+    settings_revision: state.previewContractBroken ? undefined : state.revision,
     preview_digest: `digest-${state.previewRequests.length + 1}`,
     executable,
   };
@@ -312,7 +371,11 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
   const state: SheetCatalogState = {
     controls,
     revision: options.userTemplates?.length ? 3 : 0,
-    settingsValue: {schema_version: 1, user_templates: options.userTemplates ?? []},
+    // 与后端 Provider 同形：value 只含用户显式配置；过滤词规范化为空时键不出现
+    settingsValue: {
+      user_templates: options.userTemplates ?? [],
+      ...(options.excludedTitleKeywords?.length ? {excluded_title_keywords: options.excludedTitleKeywords} : {}),
+    },
     preferencePuts: [],
     settingsPutBodies: [],
     preferencePutBodies: [],
@@ -325,6 +388,8 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     extensionEnabled: true,
     extensionPatchBodies: [],
     extensionsReloadPlan: [],
+    settingsReadOnly: options.settingsReadOnly === true,
+    previewContractBroken: options.omitPreviewSettingsRevision === true,
   };
 
   if (!options.noShell) {
@@ -393,6 +458,9 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     error_code: null,
     actions: [{action_id: "export-xlsx", output_kind: "xlsx", media_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}],
     ui_contributions: [{contribution_id: "workspace-page", kind: "workspace_page", route_key: "sheet-catalog"}],
+    // 与生产 manifest.yaml 事实一致：图纸目录声明 custom 设置（route_key = 编译期白名单键），
+    // 因此设置中心卡片动作行有「配置」，可进入 SheetCatalogSettingsPanel
+    settings_contribution: {presentation: "custom", route_key: "sheet-catalog-settings"},
   });
 
   await page.route("**/api/workspaces/open", route => route.fulfill({json: workspace}));
@@ -432,28 +500,73 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
   });
   await page.route("**/api/extensions/*/settings", async route => {
     const request = route.request();
+    // 真实契约（PLAN-DM-025 Task 8）：schema_version 是扩展当前的设置 Schema（Manifest
+    // settings_schema = 2），value 是持久值、effective_value 是 Provider 解析后的有效值，
+    // read_only/diagnostic_code 是服务端权威的只读保护。
+    const settingsResponse = () => ({
+      schema_version: CATALOG_SETTINGS_SCHEMA_VERSION,
+      revision: state.revision,
+      value: state.settingsValue,
+      effective_value: {
+        user_templates: state.settingsValue.user_templates,
+        [EXCLUDED_TITLE_KEYWORDS_FIELD]: state.settingsValue[EXCLUDED_TITLE_KEYWORDS_FIELD] ?? [],
+      },
+      read_only: state.settingsReadOnly,
+      diagnostic_code: state.settingsReadOnly ? "EXTENSION_SETTINGS_SCHEMA_NEWER" : null,
+      items: [],
+    });
     if (request.method() === "GET") {
-      return route.fulfill({json: {schema_version: 1, revision: state.revision, value: state.settingsValue}});
+      return route.fulfill({json: settingsResponse()});
     }
     const body = await request.postDataJSON();
     state.settingsPutBodies.push(body);
     state.putExpectedRevisions.push(body?.expected_revision);
+    // 只读保护：已存更高 Schema，PUT 一律以同一稳定码 409 拒绝
+    if (state.settingsReadOnly) {
+      return route.fulfill({status: 409, json: {
+        code: "EXTENSION_SETTINGS_SCHEMA_NEWER",
+        message_key: "errors.extension.schemaNewer",
+        params: {extension_id: EXTENSION_ID},
+        message: "已存设置 schema 更高，只读保留",
+      }});
+    }
+    // 设置 Schema 版本必须先与 Manifest 一致（不一致即 422，SPEC-DM-012 §6.4）
+    if (body?.schema_version !== CATALOG_SETTINGS_SCHEMA_VERSION) {
+      return route.fulfill({status: 422, json: {
+        code: "EXTENSION_SETTINGS_INVALID",
+        message_key: "errors.extension.settingsInvalid",
+        params: {settings_schema: CATALOG_SETTINGS_SCHEMA_VERSION, submitted: body?.schema_version},
+        message: "设置 schema 版本不匹配",
+      }});
+    }
+    // Provider 规范化 + 关键词上限（50 项 / 单项 100 字符）：超限定位到字段并拒绝，绝不截断
+    const keywords = normalizeExcludedTitleKeywords(body?.value?.[EXCLUDED_TITLE_KEYWORDS_FIELD]);
+    if (keywords.length > MAX_EXCLUDED_TITLE_KEYWORDS) {
+      return route.fulfill({status: 422, json: keywordLimitError("count", MAX_EXCLUDED_TITLE_KEYWORDS, keywords.length)});
+    }
+    const overlong = keywords.find(keyword => keyword.length > MAX_EXCLUDED_TITLE_KEYWORD_CHARS);
+    if (overlong !== undefined) {
+      return route.fulfill({status: 422, json: keywordLimitError("length", MAX_EXCLUDED_TITLE_KEYWORD_CHARS, overlong.length)});
+    }
     if (state.controls.putSettingsMode === "conflict") {
       // 真实并发语义：其他窗口保存成功——服务端修订推进并写入冲突模板；冲突持续
       // 到用例改写 controls.putSettingsMode，前端必须刷新修订后才能再次保存
       state.revision += 1;
       state.settingsValue = {
-        schema_version: 1,
+        ...state.settingsValue,
         user_templates: [
           ...state.settingsValue.user_templates,
           {template_id: fakeUuid(), name: `其他窗口的模板 ${state.revision}`, schema_version: 1, columns: []},
         ],
       };
+      // 修订冲突用生产实际发出的稳定码与参数（settings.py 的 SettingsRevisionConflictError：
+      // EXTENSION_SETTINGS_INVALID + 409 + expected_revision/current_revision）；旧夹具用的
+      // SHEET_CATALOG_TEMPLATE_CONFLICT 在设置 PUT 路径上生产不可达（R10/R19）。
       return route.fulfill({status: 409, json: {
-        code: "SHEET_CATALOG_TEMPLATE_CONFLICT",
-        message_key: "errors.sheetCatalog.templateConflict",
+        code: "EXTENSION_SETTINGS_INVALID",
+        message_key: "errors.extension.settingsInvalid",
         params: {expected_revision: body?.expected_revision ?? state.revision - 1, current_revision: state.revision},
-        message: "模板已被其他保存更新",
+        message: "设置修订冲突",
       }});
     }
     if (state.controls.putSettingsMode === "duplicate") {
@@ -482,8 +595,12 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
       }});
     }
     state.revision += 1;
-    state.settingsValue = body.value;
-    return route.fulfill({json: {schema_version: 1, revision: state.revision, value: state.settingsValue}});
+    // 持久化只在有内容时写入过滤词（与 settings.py 的"规范化结果为空则移除该字段"同语义）
+    state.settingsValue = {
+      user_templates: body.value.user_templates ?? [],
+      ...(keywords.length ? {[EXCLUDED_TITLE_KEYWORDS_FIELD]: keywords} : {}),
+    };
+    return route.fulfill({json: settingsResponse()});
   });
   await page.route("**/api/extensions/*/workspaces/*/preferences", async route => {
     const request = route.request();

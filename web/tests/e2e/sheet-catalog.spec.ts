@@ -1009,3 +1009,83 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+// ---- PLAN-DM-025 Task 8：输出图纸过滤的呈现（R14）、预览响应违约的可见诊断（R15）、
+//      设置中心 custom 面板与业务页两个实例不共享可变状态（SPEC-DM-011 SC-17）----
+// 过滤语义在服务端（settings.py 的 normalize/title_matches_exclusion），夹具按同一规则
+// 计算 total_rows/filtered_rows；页面只呈现：total_rows 是过滤后的输出行数，filtered_rows=0
+// 时不显示任何过滤提示（SPEC-DM-012 §8.1）。
+test.describe("输出图纸过滤与预览契约（PLAN-DM-025 Task 8）", () => {
+  test("部分过滤：预览显示过滤后的行数与「已过滤 1 张图纸」，命中为 0 时不出现该提示", async ({page}) => {
+    const state = await openCatalog(page, {excludedTitleKeywords: ["003"]});
+    const preview = page.getByRole("region", {name: "预览"});
+    // 25 张图纸中「图纸 003」被排除：输出 24 行（仍只显示前 20 行）
+    await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+    await expect(preview.getByText("共 24 张图纸")).toHaveCount(0);
+    await expectPreviewRows(page, 20);
+
+    // 过滤词被清空（等价于在设置中心 custom 面板保存空过滤词）：提示消失、文案回到未过滤形态
+    state.settingsValue = {user_templates: state.settingsValue.user_templates};
+    await preview.getByRole("button", {name: "刷新预览"}).click();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveCount(0);
+    await expect(preview.getByText("共 25 张图纸")).toBeVisible();
+  });
+
+  test("全部过滤：显示「已过滤 25 张图纸」与输出 0 行，仍可导出（空工作簿）", async ({page}) => {
+    await openCatalog(page, {excludedTitleKeywords: ["图纸"]});
+    const preview = page.getByRole("region", {name: "预览"});
+    await expect(preview.getByText("输出 0 张图纸")).toBeVisible();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 25 张图纸");
+    await expect(preview.getByText("当前图纸集没有图纸")).toBeVisible();
+    // 全部被过滤仍是可执行状态：导出不被阻断（后端生成只有表头的有效工作簿）
+    const exportButton = page.getByRole("button", {name: "导出 XLSX"});
+    await expect(exportButton).toBeEnabled();
+    await exportButton.click();
+    await expect(page.getByText("图纸目录已保存到")).toBeVisible();
+  });
+
+  test("预览响应违约（缺 settings_revision 绑定）：给出可见诊断与可重试出口，不静默禁用导出", async ({page}) => {
+    const state = await openCatalog(page, {omitPreviewSettingsRevision: true});
+    // 违约响应不发布预览：兼容性状态带显示失败正文，而不是静默无反应（R15）
+    const summary = page.getByRole("region", {name: "兼容性摘要"});
+    await expect(summary).toContainText("预览失败");
+    await expect(summary).toContainText("预览响应缺少设置修订绑定");
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeDisabled();
+    // 重试出口可用：服务端恢复契约后刷新预览即回到就绪态
+    state.previewContractBroken = false;
+    await page.getByRole("region", {name: "预览"}).getByRole("button", {name: "刷新预览"}).click();
+    await expect(summary).toContainText("模板与当前图纸集兼容");
+    await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+  });
+
+  test("设置中心 custom 面板与业务页是两个实例：面板改模板/过滤词不改变业务页草稿状态", async ({page}) => {
+    const state = await openCatalog(page);
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    // 打开设置中心 → 扩展 → 配置（生产图纸目录的唯一 custom 面板）
+    await page.getByRole("button", {name: "设置"}).click();
+    const dialog = page.locator('dialog[aria-labelledby="settings-title"]');
+    await expect(dialog).toBeVisible();
+    await page.getByRole("tab", {name: "扩展"}).click();
+    await page.getByRole("button", {name: "配置 图纸目录"}).click();
+    const panel = dialog.locator('[data-testid="sheet-catalog-settings-panel"]');
+    await expect(panel).toBeVisible();
+    // 面板内改过滤词并保存：写的是扩展设置（PUT /settings），业务页草稿不受影响
+    await panel.locator('[data-testid="catalog-settings-filter"]').fill("003");
+    await dialog.getByRole("button", {name: "保存", exact: true}).click();
+    await expect(dialog.getByTestId("extension-settings-saved-pill")).toBeVisible();
+    expect(state.settingsValue.excluded_title_keywords).toEqual(["003"]);
+    // 业务页草稿仍是未修改状态（面板实例的编辑不进入页面实例）
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    // 两处「表达式 1」同时存在（业务页 + 面板）正说明是两个实例：断言页面那一份未被改动
+    await expect(page.getByRole("region", {name: "图纸目录", exact: true}).getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    // 返回扩展列表并关闭设置后刷新预览：服务端按新过滤词重算，业务页显示过滤结果
+    await dialog.getByRole("button", {name: "返回扩展列表"}).click();
+    await dialog.getByRole("button", {name: "关闭设置"}).click();
+    await expect(dialog).toBeHidden();
+    const preview = page.getByRole("region", {name: "预览"});
+    await preview.getByRole("button", {name: "刷新预览"}).click();
+    await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+    await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
+  });
+});

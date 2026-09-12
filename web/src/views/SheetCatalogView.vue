@@ -103,7 +103,8 @@ function onGuardKeydown(event: KeyboardEvent) {
       <TemplateBar :catalog="catalog" @saved="onSaved" @confirm-remove="confirmRemove" />
       <div class="catalog-row">
         <FieldBrowser :catalog="catalog" />
-        <ColumnEditor :catalog="catalog" />
+        <!-- 业务页传入真实校验反馈：兼容性徽标与摘要显示（设置中心 custom 面板不传） -->
+        <ColumnEditor :catalog="catalog" :feedback="catalog.feedback" />
       </div>
       <CatalogPreview :catalog="catalog" />
     </div>

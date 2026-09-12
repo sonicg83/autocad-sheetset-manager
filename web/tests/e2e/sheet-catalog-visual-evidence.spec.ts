@@ -585,3 +585,57 @@ test("G8 补充：200% 缩放下格式入口不被遮挡", async ({page}) => {
   await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(6);
   await expectNoPageHScroll(page, "200% 缩放格式菜单");
 });
+
+// =====================================================================
+// PLAN-DM-025 Task 8（R14）：输出图纸过滤的 G8 补充证据——浅色 1440×1000 部分过滤、
+// 深色 900×700 全部过滤。断言只用可见正文与几何事实（过滤提示文本、过滤后的输出行数、
+// 无整页横溢、预览卡头盒在视口内），不做像素比对。生产证据命名
+// g8-filter-{场景}-{主题}-{宽}x{高}.png，截图必须包含「已过滤 N 张图纸」正文；
+// 经 attachScreenshot 写附件，并在 DST_MANAGER_WRITE_G8_EVIDENCE=1 时复制进
+// docs/dst-manager/specs/assets/SPEC-DM-012/production/（本任务不写 docs/**）。
+// 冻结历史图（g8-catalog-*、g8-format-menu-*）未触碰、未重取。
+// =====================================================================
+async function openFilteredDemo(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}, keywords: string[]) {
+  await page.setViewportSize(viewport);
+  await page.addInitScript(t => localStorage.setItem("dst-manager-theme", t), theme);
+  await installSheetCatalogFixture(page, {...DEMO_DATASET, excludedTitleKeywords: keywords});
+  await openCatalogPage(page);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+  const preview = page.getByRole("region", {name: "预览"});
+  await expect(preview.getByTestId("catalog-preview-filtered")).toBeVisible();
+  return preview;
+}
+
+// —— G8 补充证据 3：1440×1000 浅色 + 部分过滤（5 张里排除 1 张）——
+test("G8 补充：1440×1000 浅色部分过滤截图 + 行数与几何守卫", async ({page}, info) => {
+  const preview = await openFilteredDemo(page, "light", {width: 1440, height: 1000}, ["纵断面"]);
+  // 输出行数与提示同源：total_rows 是过滤后的行数（5 - 1 = 4），提示给出被排除的 1 张
+  await expect(preview.getByText("输出 4 张图纸")).toBeVisible();
+  await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
+  await expect(preview.getByRole("row")).toHaveCount(5); // 表头 + 4 行
+  await expect(preview.getByRole("cell", {name: "纵断面图", exact: true})).toHaveCount(0);
+  await expectNoPageHScroll(page, "1440×1000 浅色部分过滤");
+  await expectElementInsideViewport(page, preview.getByTestId("catalog-preview-filtered"), "1440×1000 浅色：过滤提示");
+  await expectActionsReachable(page, ["导出 XLSX"]);
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "g8-filter-partial-light-1440x1000.png");
+});
+
+// —— G8 补充证据 4：900×700 深色 + 全部过滤（5 张全排除，仍可导出）——
+test("G8 补充：900×700 深色全部过滤截图 + 空态与几何守卫", async ({page}, info) => {
+  const preview = await openFilteredDemo(page, "dark", {width: 900, height: 700}, ["图"]);
+  await expect(preview.getByText("输出 0 张图纸")).toBeVisible();
+  await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 5 张图纸");
+  await expect(preview.getByRole("row")).toHaveCount(0); // 无数据行时预览表整体不渲染
+  await expect(preview.getByText("当前图纸集没有图纸")).toBeVisible();
+  await expectNoPageHScroll(page, "900×700 深色全部过滤");
+  // 全部过滤仍是可执行状态：导出按钮可用（SPEC-DM-012 §6.4/§8.1）
+  await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
+  // ≤980px 是单列布局，预览卡落在首屏之下：先滚入可视区再取几何（与格式菜单深色证据同一
+  // 口径——这不是"首屏同时可见"的证明，只证明滚动后可达且无横向裁剪）
+  await preview.getByTestId("catalog-preview-filtered").scrollIntoViewIfNeeded();
+  await expectElementInsideViewport(page, preview.getByTestId("catalog-preview-filtered"), "900×700 深色：过滤提示");
+  await expectNoPageHScroll(page, "900×700 深色全部过滤（滚入可视区后）");
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "g8-filter-all-dark-900x700.png");
+});

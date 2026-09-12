@@ -4,9 +4,13 @@
 <script setup lang="ts">
 import {nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
-import type {SheetCatalogController} from "../../composables/useSheetCatalog";
+import type {SheetCatalogTemplateController} from "../../composables/useSheetCatalogSettings";
 
-const props = defineProps<{catalog: SheetCatalogController}>();
+// PLAN-DM-025 Task 8：本组件只依赖模板编辑接口（模板选择/草稿/保存/另存/删除），
+// 不依赖预览或导出——同一份接口既服务业务页，也服务设置中心的 custom 面板。
+// hideConflict：设置中心子视图的修订冲突横幅由宿主（ExtensionSettingsHost）渲染，
+// 与冻结设计一致；面板内不再叠一份，避免同一冲突出现两条一模一样的出路按钮。
+const props = defineProps<{catalog: SheetCatalogTemplateController; hideConflict?: boolean}>();
 const emit = defineEmits<{saved: []; removed: []; confirmRemove: []}>();
 const {t, locale} = useI18n();
 
@@ -90,7 +94,7 @@ async function confirmSaveAs() {
       <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
     <p v-if="catalog.saveError.value" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
-    <div v-if="catalog.conflict.value" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
+    <div v-if="catalog.conflict.value && !hideConflict" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
       <h3>{{ $t("extensions.sheetCatalog.conflictTitle") }}</h3>
       <p>{{ $t("extensions.sheetCatalog.conflictMessage") }}</p>
       <div class="template-row">

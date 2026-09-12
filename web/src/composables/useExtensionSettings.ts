@@ -27,6 +27,10 @@ export interface ExtensionSettingsConflict {
   code: string;
   expectedRevision: number;
   currentRevision: number;
+  // 服务端响应里的正文（PLAN-DM-025 Task 8）：协议层按状态码把 409 一律归为修订冲突，
+  // 而同一 PUT 端点上的 Provider 级 409（如 SHEET_CATALOG_COLUMN_DUPLICATE 名称重复）
+  // 不是修订冲突。消费方按 code 判定后需要原文才能给出可见诊断，故一并透传。
+  message: string;
 }
 
 export interface ExtensionSettingsState {
@@ -172,6 +176,7 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
             code: error.code ?? FALLBACK_INVALID_CODE,
             expectedRevision: typeof error.params?.expected_revision === "number" ? error.params.expected_revision : current.revision,
             currentRevision: typeof error.params?.current_revision === "number" ? error.params.current_revision : current.revision,
+            message: error.message,
           };
           await load();
         }

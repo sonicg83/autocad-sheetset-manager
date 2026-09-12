@@ -14,6 +14,7 @@ import type {ExtensionSummary} from "../../api/contracts";
 import {useConfirm} from "../../composables/useConfirm";
 import {useExtensionSettings} from "../../composables/useExtensionSettings";
 import GeneratedExtensionSettingsForm from "./GeneratedExtensionSettingsForm.vue";
+import SheetCatalogSettingsPanel from "./SheetCatalogSettingsPanel.vue";
 
 // custom 专属组件的契约：与 generated 表单消费同一份 per-extension 状态
 //（快照/编辑缓冲/脏标记/保存都在宿主，面板只做复杂交互）。
@@ -22,10 +23,12 @@ export interface CustomExtensionSettingsPanelProps {
   state: ReturnType<typeof useExtensionSettings>;
 }
 
-// 编译期白名单：route_key → 专属组件。当前为空——图纸目录的 custom 面板属
-// PLAN-DM-025 任务 8 的交付物，任务 7 不注册任何条目，因此生产卡片（唯一的
-// dst-manager.sheet-catalog 声明 custom）此刻走 fail-closed 诊断态。
-const CUSTOM_SETTINGS_PANELS: Record<string, Component<CustomExtensionSettingsPanelProps>> = {};
+// 编译期白名单：route_key → 专属组件。静态 import、静态键——组件解析是编译期事实，
+// 绝不按服务端字符串动态 import 或按名字查组件。登记 sheet-catalog-settings 后，生产
+// 图纸目录卡片（唯一声明 custom 的扩展）进入真实面板；白名单外/空 route_key 仍 fail-closed。
+const CUSTOM_SETTINGS_PANELS: Record<string, Component<CustomExtensionSettingsPanelProps>> = {
+  "sheet-catalog-settings": SheetCatalogSettingsPanel,
+};
 
 const props = defineProps<{extension: ExtensionSummary}>();
 const emit = defineEmits<{back: []}>();
@@ -213,7 +216,7 @@ defineExpose({dirty, saving, saved, saveDisabled, save: saveAndFocus, back});
         :is="customPanel" v-else-if="subView === 'custom'"
         :extension-id="extension.extension_id" :state="settings"
       />
-      <!-- 未命中编译期白名单：稳定诊断 + 确定焦点落点（本任务生产卡片即此态） -->
+      <!-- 未命中编译期白名单：稳定诊断 + 确定焦点落点（本分支必须保持可达且被覆盖） -->
       <div v-else class="cfg-notice" role="note" tabindex="-1" data-entry-focus data-testid="extension-settings-unavailable">
         <p class="cfg-notice-text">{{ unavailableText }}</p>
       </div>

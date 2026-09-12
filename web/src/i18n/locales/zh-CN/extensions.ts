@@ -102,9 +102,15 @@ export default {
     // 预览
     previewLabel: "预览",
     previewTotal: "共 {total} 张图纸",
+    // PLAN-DM-025 Task 8（R14）：total_rows 是过滤后的输出行数，filtered_rows 是被排除的
+    // 图纸数（SPEC-DM-012 §8.1）。存在过滤时"共 N 张图纸"会误导，改说"输出 N 张图纸"。
+    previewTotalFiltered: "输出 {total} 张图纸",
+    previewFiltered: "已过滤 {count} 张图纸",
     previewShown: "显示前 {shown} 行",
     previewEmptySheets: "当前图纸集没有图纸",
     previewPending: "正在更新预览…",
+    // 预览响应违约（R15）：缺少 settings_revision 绑定时不发布预览，给出可见诊断与重试出口
+    previewContractInvalid: "预览响应缺少设置修订绑定，本次预览未采用；请刷新预览重试。",
     // 操作区与导出
     actionsLabel: "导出操作",
     refreshPreview: "刷新预览",
@@ -119,6 +125,14 @@ export default {
     exportRetry: "重试导出",
     exportRepreviewHint: "预览已过期，请先刷新预览再重试导出",
     shellUnsupported: "当前桌面壳不支持打开文件夹",
+    // 设置中心 custom 面板（PLAN-DM-025 Task 8 / SPEC-DM-011 SC-17、SPEC-DM-012 §6.4）：
+    // 无工作区时不显示字段浏览器，表达式文本仍可编辑；过滤词以服务端规范化数组回显。
+    settingsGroupTemplate: "模板设置",
+    settingsGroupOutput: "输出",
+    settingsFilterLabel: "输出图纸过滤",
+    settingsFilterHint: "图名包含任一关键词时不写入目录，多个关键词用逗号分隔",
+    settingsFilterPlaceholder: "草图, 作废, TEMP",
+    settingsPanelLabel: "图纸目录设置",
     // 三选一守卫（SPEC §3.2）
     guardTitle: "未保存的模板修改",
     guardMessage: "{summary} 有未保存的修改。可保存为模板、放弃修改或留在此处。",
