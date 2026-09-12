@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-12（细化 Builtin 扩展全局设置架构）
+
+- 更新 `ARCH-DM-006`，明确扩展全局设置作用域为当前 Windows 用户且跨工作区共享，并规定只保存用户显式配置或用户创建的数据。
+- 增补编译期 `ExtensionSettingsProvider` 注册、Schema 迁移、高版本只读保护、乐观并发、统一设置入口及 generated/custom 两类呈现契约。
+- 明确动作级不可变设置快照，以及 preview/execute 必须绑定设置修订与摘要；本批仅更新架构文档，不修改运行时代码或依赖。
+
 ## 2026-09-11（新增 Builtin 内置扩展开发指南 GUIDE-DM-005）
 
 - 新增 `docs/dst-manager/guides/GUIDE-DM-005-builtin-extension-development.md`，以 `dst-manager.sheet-catalog` 图纸目录实现为完整范例，说明 Builtin 业务扩展与 AutoCAD Worker Plugin 的边界，并覆盖固定索引、Manifest、生命周期、Capability、预览与执行摘要、设置/偏好、HTTP 契约、前端页面白名单、i18n、候选成果、Artifact、数据库迁移、PyInstaller 打包、测试矩阵、故障排查和交付检查表。

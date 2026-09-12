@@ -6,7 +6,7 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-09
-updated: 2026-09-10
+updated: 2026-09-12
 related:
   - PRD-DM-001
   - ARCH-DM-001
@@ -139,6 +139,9 @@ actions:
     output_kind: xlsx
     media_type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 settings_schema: 1
+settings_contribution:
+  presentation: custom
+  route_key: sheet-catalog-settings
 ```
 
 `extension_id`、贡献 ID 和动作 ID 使用稳定英文标识。用户文案使用 [ARCH-DM-005](ARCH-DM-005-multilingual-support.md) 的 i18n key，不把中文作为协议字段。
@@ -146,6 +149,8 @@ settings_schema: 1
 动作声明必须包含稳定 `action_id`；会产生候选成果的动作还必须声明宿主支持的固定 `output_kind` 与 `media_type`。首期 `output_kind` 只允许 `xlsx`，由宿主映射到固定保存对话框、扩展名、候选验证器和发布策略，不能由前端或扩展提交任意过滤器、后缀或 MIME 类型。
 
 `artifact.output.propose` 只允许扩展返回由宿主校验的候选输出，不向扩展暴露 Artifact 仓储或文件目标；最终文件保存、哈希计算和 Artifact 登记仍完全由宿主执行。
+
+声明设置时，`settings_schema` 是配置语义版本；`settings_contribution.presentation` 只允许 `generated` 或 `custom`。`generated` 必须列出稳定字段键、顺序和 i18n key，`custom` 必须引用宿主编译期白名单中的 `route_key`。清单只描述可发现性和呈现，不重复默认值、类型约束或业务校验；这些语义由设置 Provider 唯一定义。
 
 ### 4.3 校验与故障隔离
 
@@ -215,7 +220,7 @@ sheets[]（按子集顺序、图纸顺序展平）:
 
 ## 7. 页面与动作贡献
 
-首期只实现 `workspace_page`。清单中的 `route_key` 必须存在于宿主编译期的前端组件映射；扩展不能提交 URL、HTML、JavaScript、CSS 或 Vue 模块路径。
+首期业务页面只实现 `workspace_page`。清单中的业务页和自定义设置页 `route_key` 都必须存在于宿主编译期的前端组件映射；扩展不能提交 URL、HTML、JavaScript、CSS 或 Vue 模块路径。
 
 宿主根据扩展状态和工作区状态生成导航：
 
@@ -246,11 +251,31 @@ GET   /api/artifacts/{artifact_id}
 
 ### 8.1 应用级扩展设置
 
-扩展设置与 [ARCH-DM-004](ARCH-DM-004-settings-center.md) 的核心应用设置分离，按 `extension_id` 保存 `schema_version`、乐观并发 `revision` 和 `value_json`。扩展只能通过宿主提供的设置端口读取自身命名空间，不能自行迁移数据库。
+扩展设置与 [ARCH-DM-004](ARCH-DM-004-settings-center.md) 的核心应用设置分离，作用域固定为当前 Windows 用户、跨全部工作区共享。存储按 `extension_id` 隔离，只保存 `schema_version`、乐观并发 `revision`、用户显式配置或用户创建的数据 `value_json`，不保存解析后的完整默认值。代码默认值随扩展版本演进；用户没有覆盖的字段自动继承新默认值。
+
+宿主固定索引为声明设置的扩展登记 `ExtensionSettingsProvider`。Provider 至少负责默认零值、旧 Schema 逐级迁移、保存前校验与规范化，以及把代码默认值和持久值解析为不可变有效配置。`ExtensionStore` 只持久化版本化 JSON，不理解业务；`ExtensionRuntime` 负责查找 Provider、并发控制和错误映射。扩展代码不得取得数据库、Store、FastAPI Request 或完整应用服务。
+
+启动发现必须核对 Manifest、工厂和 Provider 的 `extension_id`，并保证 `settings_schema` 与 Provider 当前版本一致。声明设置但缺少 Provider、登记重复 Provider 或字段元数据无法由 Provider 解释时，只使该扩展配置不可用并产生诊断，不阻止宿主和其他扩展启动。
+
+设置读取与写入遵循以下规则：
+
+- 从未保存时返回当前 Schema、`revision = 0` 和 Provider 默认零值；
+- PUT 必须携带 `expected_revision`，成功后修订递增，竞争写入返回 `409`；
+- 较旧 Schema 先在内存逐级迁移并校验，用户下次保存时再正式写回，应用启动不得仅因读取设置而修改数据库；
+- 未知高版本保留原始 JSON 并进入只读保护，旧程序不得覆盖；
+- 畸形 JSON、迁移或校验失败仅禁用该扩展的设置与动作，不影响宿主启动；
+- 停用、重新启用或暂时缺少扩展均保留设置；重置必须是显式用户动作并递增修订；
+- 凭据、令牌和 API Key 不进入 `extension_settings`，后续连接器必须使用宿主凭据代理。
 
 图纸目录的用户命名模板属于应用级扩展设置，可跨图纸集复用。内置默认模板来自随包代码，不写入数据库、不可覆盖或删除。停用扩展保留设置。
 
-### 8.2 工作区偏好
+### 8.2 设置入口与呈现
+
+设置中心是所有扩展配置的统一入口。扩展卡片在声明设置时显示“配置”；没有设置时不显示。简单标量与枚举配置使用 `generated`：宿主把 Provider 产生的字段类型、默认值和约束与 Manifest 的排序及 i18n key 合并，沿用设置中心控件渲染。模板集合、字段映射、表达式、预览或多步骤流程使用 `custom`：宿主从编译期白名单打开对应专属组件。
+
+自定义组件只负责编辑缓冲和复杂交互，仍使用统一的设置 GET/PUT、Provider 校验、Schema 迁移和乐观并发。设置应在未打开工作区时也可访问；复杂设置不能被降级为任意 JSON 文本框。核心应用设置与不同扩展设置分别保存，不能共享一次提交或一个修订号。
+
+### 8.3 工作区偏好
 
 工作区偏好只保存上次选中的已保存模板 ID。选择模板后宿主以 best-effort 方式更新偏好；偏好保存失败不阻止当前预览或导出，但必须可诊断。未保存草稿不进入工作区偏好。
 
@@ -312,9 +337,13 @@ created_at
 
 图纸目录预览和 XLSX 生成首期同步执行，不进入现有 CAD `jobs` 队列。注册表按扩展维护活动调用计数；停用先拒绝新调用，再等待已有调用结束。
 
-每次预览绑定 `workspace_id`、`base_revision_id` 和规范化模板摘要，生成 `preview_digest`。执行阶段重新构建快照并核对三者；来源修订、模板、能力或扩展状态变化均返回 `REPREVIEW_REQUIRED`。
+每次动作调用前，Runtime 读取并解析一次设置，生成包含 `extension_id`、`schema_version`、`revision`、规范化值与 `digest` 的不可变设置快照，并随短生命周期 `ExtensionContext` 注入。用户保存后只影响后续新调用；已开始的调用继续使用冻结快照。首期不增加全局 `on_settings_changed`、事件总线、后台线程或可变设置缓存。
+
+每次预览绑定 `workspace_id`、`base_revision_id`、规范化动作请求、设置 Schema/修订/摘要和相关工作区偏好修订，生成 `preview_digest`。执行阶段重新构建快照并核对全部绑定项；应用级扩展设置变化返回 `EXTENSION_SETTINGS_CHANGED`，来源修订、偏好、模板、能力或扩展状态变化返回 `REPREVIEW_REQUIRED`，两者均使用 HTTP `409` 并要求重新预览，不得使用新设置执行旧预览。
 
 同一 `save_grant_id` 只能有一个执行者。多个不同授权可以并发导出；它们不取得工作区写锁，也不能阻塞 CAD 发布。若生成耗时达到后续 Spec 定义的长任务阈值，应另立扩展任务设计，不在首期中复用 CAD 状态机或临时增加后台线程。
+
+后续扩展动作若进入持久任务队列，任务认领时必须冻结并记录扩展版本、设置 Schema、修订和摘要，Worker 全程使用同一设置快照，不在任务中途重新读取当前值。普通日志只记录身份、版本、修订和摘要，不记录完整设置。
 
 ## 12. 错误与可观察性
 
@@ -327,10 +356,11 @@ created_at
 | `EXTENSION_INCOMPATIBLE` | 宿主契约不兼容 |
 | `EXTENSION_CAPABILITY_UNAVAILABLE` | 必需能力不可用 |
 | `EXTENSION_SETTINGS_INVALID` | 设置 Schema 或数据无效 |
+| `EXTENSION_SETTINGS_CHANGED` | 预览后扩展设置发生变化 |
 | `EXTENSION_ACTION_NOT_FOUND` | 动作未声明 |
 | `SAVE_GRANT_INVALID` | 保存授权不存在、过期、重复使用或不匹配 |
 | `EXPORT_DESTINATION_CHANGED` | 目标在选择后发生变化 |
-| `REPREVIEW_REQUIRED` | 来源修订或模板摘要已变化 |
+| `REPREVIEW_REQUIRED` | 来源修订、偏好、模板、能力或动作摘要已变化 |
 | `ARTIFACT_WRITE_FAILED` | 候选生成、验证或最终保存失败 |
 
 错误响应遵循 ARCH-DM-005 的 `code`、`message_key`、`params` 和兼容 `message` 结构。日志关联 invocation ID、扩展 ID、版本、工作区和来源修订；不记录表达式求值后的敏感属性值，不把完整输出路径写入普通日志。
@@ -352,6 +382,9 @@ created_at
 - 只读打开、预览和导出不创建工程管理目录，不修改 DST/DWG 或工程文件时间戳。
 - 停用后页面与动作消失，活动同步调用得到安全终态，核心页面仍可用。
 - 保存授权无法被伪造、复用、越权或改作其他扩展和路径。
+- 扩展设置按当前 Windows 用户跨工作区复用；Provider 覆盖默认值、校验、迁移、并发冲突和未知高版本保护。
+- 保存设置立即影响新调用但不改变活动调用；preview 后设置或偏好变化必须重新预览。
+- 简单设置由宿主动态表单呈现，复杂设置只能打开编译期白名单中的专属组件；两者使用同一持久化和校验链路。
 - 目标漂移或任一步失败不留下半写 XLSX，也不登记成功 Artifact。
 - 成功 Artifact 可追溯到扩展、宿主工作区和来源修订；普通前端不强制展示技术元数据。
 - 全新数据库可从头升级，既有数据库迁移后核心回归通过。
