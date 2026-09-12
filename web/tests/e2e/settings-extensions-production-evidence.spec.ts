@@ -11,28 +11,35 @@
 //
 // 虚构扩展条目仅为驱动卡片四层信息/徽标/分段渲染：name_key/description_key 用
 // 字面中文（vue-i18n 未登记键按原文回退），与冻结 Demo 的虚构样本同口径。
+//
+// PLAN-DM-025 任务 7（SC-17）起，声明设置的卡片动作行多出「配置」文字按钮：本文件的
+// 两份样本按冻结 Demo 的设置声明复原（图纸目录 = custom、图框批量更新 = generated，
+// 其余不声明），所以重取产物与目录中 2026-09-11 归档的 g8-ext-02～05 在动作行上不再
+// 逐字相同。动作行的权威冻结件是 g4-13；本文件不重取归档件（G8 重跑不在本任务范围）。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
 import {openSettingsDialog} from "./fixtures/settings";
 import {extensionSummary, installExtensions} from "./fixtures/extensions";
 
-// 4 条多状态样本：可用 / 已停用 / 启动失败（且用户意图启用）/ 不兼容（含诊断码）
+// 4 条多状态样本：可用 / 已停用 / 启动失败（且用户意图启用）/ 不兼容（含诊断码）。
+// 设置声明与冻结 Demo 的虚构样本一致：图纸目录 = custom、图框批量更新 = generated，
+// 另两条不声明（无设置时动作行不出现「配置」）。停用/失败不隐藏配置入口（ARCH-DM-006 §8.1）。
 function multiList(): unknown[] {
   return [
     extensionSummary({extension_id: "dst-manager.sheet-catalog", name_key: "图纸目录", description_key: "从图纸集数据生成图纸目录工作簿（XLSX），支持输出模板与字段表达式。"}),
-    extensionSummary({extension_id: "demo.frame-update", name_key: "图框批量更新", description_key: "按图框属性表批量替换图框块并回写标题栏字段。", status: "DISABLED", enabled: false}),
-    extensionSummary({extension_id: "demo.attribute-export", name_key: "属性批量导出", description_key: "把图纸与子集属性导出为制表符分隔文本，供外部审计比对。", status: "FAILED", enabled: true, error_code: "EXTENSION_START_FAILED"}),
-    extensionSummary({extension_id: "demo.sheet-validate", name_key: "图纸一致性校验", description_key: "校验图号与文件名一致性并列出不一致项。", status: "INCOMPATIBLE", enabled: false, error_code: "EXTENSION_HOST_CONTRACT_MISMATCH"}),
+    extensionSummary({extension_id: "demo.frame-update", name_key: "图框批量更新", description_key: "按图框属性表批量替换图框块并回写标题栏字段。", status: "DISABLED", enabled: false, settings_contribution: {presentation: "generated"}}),
+    extensionSummary({extension_id: "demo.attribute-export", name_key: "属性批量导出", description_key: "把图纸与子集属性导出为制表符分隔文本，供外部审计比对。", status: "FAILED", enabled: true, error_code: "EXTENSION_START_FAILED", settings_contribution: null}),
+    extensionSummary({extension_id: "demo.sheet-validate", name_key: "图纸一致性校验", description_key: "校验图号与文件名一致性并列出不一致项。", status: "INCOMPATIBLE", enabled: false, error_code: "EXTENSION_HOST_CONTRACT_MISMATCH", settings_contribution: null}),
   ];
 }
 
-// 8 条触发分段样本：已启用 4、已停用 4（分段键 = enabled）
+// 8 条触发分段样本：已启用 4、已停用 4（分段键 = enabled）；新增的 4 条均不声明设置
 function groupedList(): unknown[] {
   return [
     ...multiList(),
-    extensionSummary({extension_id: "demo.batch-plot", name_key: "批量打印", description_key: "按子集输出 PDF 打印任务并记录每张图纸的结果。", status: "DISABLED", enabled: false}),
-    extensionSummary({extension_id: "demo.layer-audit", name_key: "图层审计", description_key: "汇总各图纸的图层使用情况与未使用图层。", status: "AVAILABLE", enabled: true}),
-    extensionSummary({extension_id: "demo.titleblock-sync", name_key: "标题栏同步", description_key: "把子集属性同步到标题栏的已登记字段。", status: "DISABLED", enabled: false}),
-    extensionSummary({extension_id: "demo.cad-version-report", name_key: "CAD 版本报告", description_key: "统计图纸保存版本并提示需转换的文件。", status: "AVAILABLE", enabled: true}),
+    extensionSummary({extension_id: "demo.batch-plot", name_key: "批量打印", description_key: "按子集输出 PDF 打印任务并记录每张图纸的结果。", status: "DISABLED", enabled: false, settings_contribution: null}),
+    extensionSummary({extension_id: "demo.layer-audit", name_key: "图层审计", description_key: "汇总各图纸的图层使用情况与未使用图层。", status: "AVAILABLE", enabled: true, settings_contribution: null}),
+    extensionSummary({extension_id: "demo.titleblock-sync", name_key: "标题栏同步", description_key: "把子集属性同步到标题栏的已登记字段。", status: "DISABLED", enabled: false, settings_contribution: null}),
+    extensionSummary({extension_id: "demo.cad-version-report", name_key: "CAD 版本报告", description_key: "统计图纸保存版本并提示需转换的文件。", status: "AVAILABLE", enabled: true, settings_contribution: null}),
   ];
 }
 
