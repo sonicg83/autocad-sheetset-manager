@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-12（图纸目录数字格式码门禁证据、索引与全量回归收口）
+
+- `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 新增 3 例（文件内 16 → 19 例）：`G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫`、`G8 补充：900×700 深色格式菜单截图 + 几何守卫`、`G8 补充：200% 缩放下格式入口不被遮挡`；新增盒模型视口守卫 `expectElementInsideViewport`。断言覆盖菜单盒在视口内、无整页横向溢出、140 步真实 Tab 环内 `toBeFocused()` 到达格式入口、Enter 展开与 Esc 关闭（`aria-expanded` 回 `false`、选项列表消失、焦点归还）、200% 缩放下入口落在字段栏盒内，以及被 235px 限高裁切的菜单尾部由字段列表内部滚动可达。
+- 生产证据真正落盘（`DST_MANAGER_WRITE_G8_EVIDENCE=1`）：`docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png`（110781 字节 / 1440×1000）、`g8-format-menu-dark-900x700.png`（60247 字节 / 900×700），两张均为打开格式菜单后的画面。
+- 先红后绿证据：把这 3 条用例先跑在任务 3 之前的 `FieldBrowser.vue`（临时回退到 `0929a5c`，随后按字节恢复，生产文件 blob 哈希 `6f5dc19c…` 不变）→ 3 failed（区域内无“格式”按钮，定位器 30s 超时）；恢复后同命令 3 passed。可失败性另用三条自然反例确认（菜单盒底缘 370 > 300、“按 5 次 Tab”时 `toBeFocused()` 失败、条目滚出字段栏后 190 < 256），反例脚本已删除、未入提交树。
+- `docs/dst-manager/specs/SPEC-DM-012-sheet-catalog-extension.md` §16 只更新门禁影响段落：登记“G3/G4 不重开”结论与两个新证据文件名，并明确本轮为**自动化证据**、G8 的确认人与日期仍为“用户 / 2026-09-11”，不冒充用户重新确认 G8；门禁表 G8 行未改动。
+- `.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md`（MEMO-DM-028）新增 `### 1.9 数字格式码：补零图号为文本单元格（SC-01 / SPEC-DM-012 §5.4；PLAN-DM-026）`（导出后核对 `0001` 为文本单元格，且未用格式码的模板导出结果与升级前一致），结论字段全部保持 `_待填写_`；§3 前置闸门登记 PLAN-DM-026 已完成（未改动 §1.6 既有条目）。
+- 索引与计划状态：`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 的 PLAN-DM-026/RES-DM-001/SPEC-DM-012 状态行更新；`PLAN-DM-026` `status: proposed` → `completed`，`## 实际验证` 占位替换为真实记录（G8 证据文件名与字节数、RED→GREEN、全量回归数字、跳过项与原因、G9 待用户执行项）。
+- 本轮不改生产源码、不加依赖、不改 API 字段与 DB 结构，模板 `schema_version` 保持 1。全量回归：`uv run ruff check .` 通过、`uv run pytest` 1161 passed / 74 skipped / 0 failed（collected 1235）、`uv lock --check` 通过、`npm run test:unit` 40 passed、`npm run build` 通过（`check:i18n` 898 键 / 9 域）、全量 E2E 439 项 437 passed / 0 failed / 2 flaky（`main.spec.ts` 主题切换与 `sheet-catalog.spec.ts` 方括号语法插入的 30s 超时，单独 `--workers=1 --retries=0` 时 123 passed / 0 failed，非本次改动引入）。
+
 ## 2026-09-12（字段浏览器新增图号数字格式码入口）
 
 - 新增 `web/src/components/sheet-catalog/formatCode.ts` 纯模块：`NUMBER_FORMAT_WIDTHS`（2/3/4/5/6）、`STRIP_ZEROS_WIDTH`（0）与 `applyNumberFormat(reference, width)`，把 `{sheet.number}` 拼成 `{sheet.number:0000}`/`{sheet.number:0}`；越界宽度与未闭合引用抛错，仅作开发期护栏。同目录新增 `formatCode.test.ts` 5 例。

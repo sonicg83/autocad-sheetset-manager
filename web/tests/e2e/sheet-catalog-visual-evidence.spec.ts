@@ -8,7 +8,7 @@
 // PLAN-DM-023 Task 1 追加：V1/V2/V3/V4/V5/V7/V8 的冻结布局硬要求（首屏密度、
 // 表格式输出列、字段可见性、列数增长不撑高页面）。这些用例代替
 // “滚动后可达”作为 G4 一致性证据；差异裁决权仍在用户（MEMO-DM-030）。
-import {expect, test, type Page, type TestInfo} from "@playwright/test";
+import {expect, test, type Locator, type Page, type TestInfo} from "@playwright/test";
 import {copyFileSync, mkdirSync} from "node:fs";
 import path from "node:path";
 import {demoSixColumnTemplate, installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
@@ -46,6 +46,18 @@ async function expectActionReachableAfterScroll(page: Page, name: string) {
   expect(box!.x, name).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width, `${name} 右缘在视口内（无横向裁剪）`).toBeLessThanOrEqual(viewport.width);
   expect(box!.y + box!.height, `${name} 底缘在视口内`).toBeLessThanOrEqual(viewport.height);
+}
+
+// 盒模型视口守卫：给定元素必须存在且整个盒子落在当前视口内（与上面的
+// expectActionsReachable 同口径：page.viewportSize + boundingBox，不做像素比对）。
+async function expectElementInsideViewport(page: Page, locator: Locator, label: string) {
+  const viewport = page.viewportSize()!;
+  const box = await locator.boundingBox();
+  expect(box, `${label} 存在`).not.toBeNull();
+  expect(box!.x, `${label} 左缘在视口内`).toBeGreaterThanOrEqual(0);
+  expect(box!.y, `${label} 顶缘在视口内`).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width, `${label} 右缘在视口内`).toBeLessThanOrEqual(viewport.width);
+  expect(box!.y + box!.height, `${label} 底缘在视口内`).toBeLessThanOrEqual(viewport.height);
 }
 
 // 横向滚动只发生在预览表容器内：容器 overflow-x:auto 且确实存在溢出
@@ -452,4 +464,124 @@ test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、
   await expect(page.getByText("有未保存修改")).toBeVisible();
   await expect(page.getByRole("region", {name: "兼容性摘要"})).toContainText("警告");
   await expect(page.locator(".catalog-meta")).toContainText("可用");
+});
+
+// =====================================================================
+// PLAN-DM-026 Task 4（SPEC-DM-012 §7.2 区域 2 格式入口 / §16 2026-09-12 门禁影响）：
+// 新增字段格式入口的 G8 补充证据——浅色 1440×1000、深色 900×700 与 200% 缩放。
+// 断言只用几何与键盘事实（视口盒、无整页横溢、真实 Tab 焦点、aria-expanded），
+// 不做像素比对。生产证据命名 g8-format-menu-{主题}-{宽}x{高}.png，截图必须包含
+// 打开后的格式选项菜单；经 attachScreenshot 写附件，并在
+// DST_MANAGER_WRITE_G8_EVIDENCE=1 时复制进 docs/dst-manager/specs/assets/SPEC-DM-012/production/。
+// 本批只补证据与断言，不修改 FieldBrowser.vue 等生产代码。
+// =====================================================================
+
+// 字段条目定位与 fieldBrowser 内条目同口径（sheet-catalog.spec.ts 数字格式码入口用例）：
+// 外层 .field-entry 用 page 起根的按钮定位器过滤——从 region 起根的定位器在 filter 内会恒不匹配。
+function formatEntry(page: Page, reference: RegExp): Locator {
+  return page.getByRole("region", {name: "字段浏览器"}).locator(".field-entry")
+    .filter({has: page.getByRole("button", {name: reference})});
+}
+
+// —— G8 补充证据 1：1440×1000 浅色 + 打开格式菜单 ——
+test("G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫", async ({page}, info) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000});
+  const entry = formatEntry(page, /sheet\.number/);
+  const trigger = entry.getByRole("button", {name: "格式"});
+  const menu = entry.locator(".field-format-menu");
+
+  // Tab 环必须真的经过格式入口：有限步内逐次按 Tab，并断言焦点最终落在触发按钮上。
+  // 140 步与文件内既有 Tab 顺序子序列用例同一预算。
+  let stepsToReach = -1;
+  for (let step = 1; step <= 140; step++) {
+    await page.keyboard.press("Tab");
+    if (await trigger.evaluate(element => element === document.activeElement)) {
+      stepsToReach = step;
+      break;
+    }
+  }
+  expect(stepsToReach, "格式入口必须在 140 步 Tab 环内可达").toBeGreaterThan(0);
+  await expect(trigger).toBeFocused();
+
+  // 键盘展开：Enter 打开菜单，6 个选项（去前导零 + 补零 2/3/4/5/6 位）
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(menu.getByRole("button")).toHaveCount(6);
+  await expectNoPageHScroll(page, "1440×1000 浅色格式菜单");
+  await expectElementInsideViewport(page, trigger, "1440×1000 浅色：格式入口触发按钮");
+  await expectElementInsideViewport(page, menu, "1440×1000 浅色：格式选项菜单");
+
+  // Esc 关闭：aria-expanded 回到 false、选项列表消失、焦点归还触发按钮
+  await page.keyboard.press("Escape");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(menu.getByRole("button")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  // 重新打开后留档：截图画面必须是“打开格式菜单后”的状态
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(menu.getByRole("button")).toHaveCount(6);
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "g8-format-menu-light-1440x1000.png");
+});
+
+// —— G8 补充证据 2：900×700 深色 + 打开格式菜单 ——
+test("G8 补充：900×700 深色格式菜单截图 + 几何守卫", async ({page}, info) => {
+  await openDemoState(page, "dark", {width: 900, height: 700});
+  await expectNoPageHScroll(page, "900×700 深色格式菜单");
+  const entry = formatEntry(page, /sheet\.number/);
+  const trigger = entry.getByRole("button", {name: "格式"});
+  const menu = entry.locator(".field-format-menu");
+
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(menu.getByRole("button")).toHaveCount(6);
+  // ≤980px 单列下限高 235px 且 .field-list 内部滚动（PLAN-DM-023 Task 5 的冻结设计），
+  // 菜单在流内展开会把条目撑高，因此先显式滚动条目使格式入口落在字段栏可视区内，
+  // 再取几何并截图；这里只证明“滚动一次即可见”，不要求首屏同时可见、也不改限高。
+  await trigger.scrollIntoViewIfNeeded();
+  await expect(trigger).toBeVisible();
+  await expectElementInsideViewport(page, trigger, "900×700 深色：格式入口触发按钮");
+  const fieldBox = (await page.locator(".field-browser").boundingBox())!;
+  const triggerBox = (await trigger.boundingBox())!;
+  expect(triggerBox.y, "900×700 深色：格式入口顶缘在字段栏内").toBeGreaterThanOrEqual(fieldBox.y);
+  expect(triggerBox.y + triggerBox.height, "900×700 深色：格式入口底缘在字段栏内").toBeLessThanOrEqual(fieldBox.y + fieldBox.height);
+  // 菜单盒本身也落在页面视口内（几何断言：菜单若被布局挤到 700px 之下即失败）。
+  // 注意 boundingBox 不受祖先裁剪影响：235px 限高会把菜单尾部裁掉，
+  // 那段可达性由下面的“滚动后可达”断言覆盖，不靠这条盒子断言冒充“全部可见”。
+  await expectElementInsideViewport(page, menu, "900×700 深色：格式选项菜单");
+  await expectNoPageHScroll(page, "900×700 深色格式菜单（条目滚入可视区后）");
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "g8-format-menu-dark-900x700.png");
+  // 被 235px 字段栏裁掉的尾部选项仍可由字段列表内部滚动到达（与文件既有
+  // “纵向滚动后可达”守卫同口径；这不是“首屏同时可见”的证明）
+  await expectActionReachableAfterScroll(page, "补零到 6 位");
+});
+
+// —— G8 补充证据 3：200% 缩放（1440×1000 的浏览器 200% = CSS 720×500 + 2x 渲染）——
+test("G8 补充：200% 缩放下格式入口不被遮挡", async ({page}) => {
+  await openDemoState(page, "light", {width: 1440, height: 1000});
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setDeviceMetricsOverride", {width: 720, height: 500, deviceScaleFactor: 2, mobile: false});
+  await expectNoPageHScroll(page, "200% 缩放格式入口");
+  const entry = formatEntry(page, /sheet\.number/);
+  const trigger = entry.getByRole("button", {name: "格式"});
+
+  // CSS 720×500 下字段栏限高 235px、字段列表内部滚动（既有设计）：先滚动条目让格式入口
+  // 进入字段栏可视区。断言用字段栏自身盒（不是 page.viewportSize()——它返回 1440×1000
+  // 的配置视口，在 CDP 覆盖后与 CSS 视口不一致，作断言会失去意义）。
+  await trigger.scrollIntoViewIfNeeded();
+  await expect(trigger).toBeVisible();
+  const fieldBox = (await page.locator(".field-browser").boundingBox())!;
+  const triggerBox = (await trigger.boundingBox())!;
+  expect(triggerBox.x, "200% 缩放：格式入口左缘在字段栏内").toBeGreaterThanOrEqual(fieldBox.x);
+  expect(triggerBox.x + triggerBox.width, "200% 缩放：格式入口右缘在字段栏内").toBeLessThanOrEqual(fieldBox.x + fieldBox.width);
+  expect(triggerBox.y, "200% 缩放：格式入口顶缘在字段栏内").toBeGreaterThanOrEqual(fieldBox.y);
+  expect(triggerBox.y + triggerBox.height, "200% 缩放：格式入口底缘在字段栏内").toBeLessThanOrEqual(fieldBox.y + fieldBox.height);
+
+  // 打开菜单后仍不造成整页横向溢出（菜单在流内展开，选项文字在菜单内换行）
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(entry.locator(".field-format-menu").getByRole("button")).toHaveCount(6);
+  await expectNoPageHScroll(page, "200% 缩放格式菜单");
 });

@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-026
 title: 图纸目录数字格式码实施计划
-status: proposed
+status: completed
 document_kind: plan
 owners:
   - dst-manager
@@ -695,4 +695,37 @@ related:
 
 ## 实际验证
 
-（执行完成后填写：每条命令的实际输出要点、跳过的检查及原因、G8 证据文件名与 G9 待用户执行项。）
+执行时间：2026-09-12（工作树 `plan-dm-026`）。实现与评审记录：任务 1 `a97b4b7`、任务 2 `0929a5c`、任务 3 `5a73b32` → `c271957` → `789e3e6` → `70136db`（含两轮评审修复），任务 4 为本节收口提交。
+
+### 新增 G8 证据（步骤 1）
+
+- `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts` 追加 3 条用例（该文件 16 → 19 条）：`G8 补充：1440×1000 浅色格式菜单截图 + 键盘与几何守卫`、`G8 补充：900×700 深色格式菜单截图 + 几何守卫`、`G8 补充：200% 缩放下格式入口不被遮挡`。断言只用几何与键盘事实：菜单盒在视口内、无整页横向溢出、140 步真实 Tab 环内 `toBeFocused()` 到达格式入口、Enter 展开后 Esc 关闭（`aria-expanded` 回 `false`、选项列表消失、焦点归还）、200% 缩放下入口落在字段栏盒内；被 235px 限高裁切的菜单尾部另有 `expectActionReachableAfterScroll` 证明可由字段列表内部滚动到达。
+- 证据已真正落盘（`DST_MANAGER_WRITE_G8_EVIDENCE=1`）：[g8-format-menu-light-1440x1000.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-light-1440x1000.png)（110781 字节，1440×1000）、[g8-format-menu-dark-900x700.png](../../../docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-format-menu-dark-900x700.png）（60247 字节，900×700），两张都是打开格式菜单后的画面。
+- 先红后绿：先把 `FieldBrowser.vue` 临时回退到任务 3 之前的修订（`0929a5c`）跑这 3 条用例 → 3 failed（区域内不存在名为“格式”的按钮，定位器 30s 超时）；按字节恢复生产文件后同命令 3 passed（9.9s）。可失败性另用三条自然反例确认（矮视口菜单盒底缘 370 > 300；只按 5 次 Tab 时 `toBeFocused()` 失败；条目被滚出字段栏后 190 < 256），反例脚本为临时文件，跑完已删、未入提交树。
+- 前提说明：≤980px（含 CSS 720×500 的 200%）下字段栏限高 235px、`.field-list` 内部滚动是 PLAN-DM-023 Task 5 的冻结设计，用例先显式 `scrollIntoViewIfNeeded()` 再取几何，不把“需滚动才可见”当作缺陷。
+
+### 全量回归（步骤 4）
+
+| 命令 | 结果（实际输出要点） |
+| --- | --- |
+| `uv sync --dev` | 退出码 0；70 packages resolved / 63 audited |
+| `uv run ruff check .` | 通过（All checks passed!） |
+| `uv run pytest -q` | 退出码 0；汇总以 `uv run pytest` 取得（`addopts` 已含 `-q`，双 `-q` 时 pytest 不回显汇总行）：1161 passed / 74 skipped / 0 failed（collected 1235，与任务 1、2 基线一致；任务 3、4 只改前端） |
+| `uv lock --check` | 通过 |
+| `npm --prefix web run test:unit` | 7 个文件 / 40 例通过 |
+| `npm --prefix web run build` | 通过：`check:api` 通过、`check:i18n` 898 键 / 9 域、`vue-tsc -b` + `vite build` 成功 |
+| `npm --prefix web run test:e2e` | 439 项：437 passed / 0 failed / 2 flaky（重跑通过），2.4m |
+| `npm --prefix web run test:e2e -- tests/e2e/sheet-catalog-visual-evidence.spec.ts --workers=1 --retries=0` | 19 passed（25.6s） |
+| `npm --prefix web run test:e2e -- tests/e2e/main.spec.ts tests/e2e/sheet-catalog.spec.ts --workers=1 --retries=0` | 123 passed / 0 failed（用于归因 2 条 flaky） |
+
+- 2 条 flaky 点名：`tests/e2e/main.spec.ts` 的“深色模式下中心视图区域随主题切换背景”、`tests/e2e/sheet-catalog.spec.ts` 的“核心流程（SPEC §3.1）› 特殊属性在当前光标位置插入 JSON 方括号语法，普通字段插入点号语法”；失败形态均为 30s 定位/点击超时（`playwright.config.ts` 已记录单一 vite dev server 高负载抖动），单独 `--workers=1 --retries=0` 复跑 123 passed / 0 failed，与本次改动无关。
+
+### 跳过的检查及原因
+
+- `tests/system_autocad`（真实 AutoCAD 2016/2020）：本计划不触碰 SCR、插件、布局重建与 DST 写入，按计划属范围外，未执行。
+- `uv run alembic upgrade head`：无迁移、无 ORM 变化（模板 `schema_version` 仍为 1），未执行。
+
+### 门禁与 G9 待用户执行项
+
+- SPEC-DM-012 §16 只更新门禁影响段落：G3/G4 不重开的结论与浅/深主题 + 200% 缩放证据文件名；G8 行的确认人与日期仍为“用户 / 2026-09-11”，本轮补的是自动化证据，**不冒充用户重新确认 G8**。
+- MEMO-DM-028 新增 `### 1.9 数字格式码：补零图号为文本单元格（SC-01 / SPEC-DM-012 §5.4；PLAN-DM-026）`，结论字段全部保持 `_待填写_`，由操作者在真实 Windows 桌面 + 真实 Excel 执行；§3 前置闸门已登记本计划完成。
