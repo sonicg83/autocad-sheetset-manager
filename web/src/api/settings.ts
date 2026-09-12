@@ -150,6 +150,22 @@ export async function putSettings(
   return mapSnapshot(raw);
 }
 
-export async function fetchAbout(): Promise<AboutInfo> {
-  return mapAbout(await request<RawAboutResponse>("/api/about"));
+// 关于元数据在应用会话内静态不变（ARCH-DM-004 §8 的只读登记值：应用名/版本/协议/链接都由
+// 后端按包元数据固定登记，不随配置或工作区变化）：首次请求后在模块级复用在途/已完成的
+// Promise，使并发调用只发一个 GET、反复进入关于分区也不再重放。
+// 失败必须清掉 memo：否则一次网络抖动会把「关于→扩展→关于」固化成永久失败页。
+let aboutMemo:Promise<AboutInfo>|null=null;
+
+async function loadAbout():Promise<AboutInfo>{
+  try{
+    return mapAbout(await request<RawAboutResponse>("/api/about"));
+  }catch(error){
+    aboutMemo=null; // 失败不缓存：下次调用（重进分区）即显式重试
+    throw error;
+  }
+}
+
+export function fetchAbout():Promise<AboutInfo>{
+  aboutMemo??=loadAbout();
+  return aboutMemo;
 }

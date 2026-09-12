@@ -1,19 +1,20 @@
 <script setup lang="ts">
 // 设置中心模态对话框（PLAN-DM-019 任务 10，SPEC-DM-011 SC-02/03/05/06/07/08/09/11/12/14）。
 // 容器职责：分区导航、编辑缓冲、即时校验、保存状态机、关闭守卫与焦点管理；
-// 单字段渲染拆分至 SettingsFormRow.vue。样式全部组件作用域，仅引用 SPEC-DM-006 令牌。
+// 单字段渲染拆分至 SettingsFormRow.vue，关于分区呈现拆分至 AboutSection.vue。样式全部组件作用域，
+// 仅引用 SPEC-DM-006 令牌。
 // <dialog> showModal 提供原生焦点圈闭与 ::backdrop 遮罩（拖放不穿透，SC-14）；
 // 关闭确认 ConfirmModal 置于 <dialog> 子树内，使其遮罩能盖住对话框内容。
 import {computed,nextTick,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError} from "../../api/client";
 import type {ApiFieldError,StructuredParams} from "../../api/client";
-import {fetchAbout} from "../../api/settings";
-import type {AboutInfo,SettingsItem,SettingsValue} from "../../api/settings";
-import {getShellBridge,openExternalLink,selectSettingsPath,shellReady} from "../../api/shell";
+import type {SettingsItem,SettingsValue} from "../../api/settings";
+import {getShellBridge,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
 import type {ExtensionsPanel} from "../../composables/useExtensions";
+import AboutSection from "./AboutSection.vue";
 import ConfirmModal from "../ui/ConfirmModal.vue";
 import ExtensionsSection from "./ExtensionsSection.vue";
 import SettingsFormRow from "./SettingsFormRow.vue";
@@ -37,8 +38,6 @@ const dialogEl=ref<HTMLDialogElement|null>(null);
 const saveButtonEl=ref<HTMLButtonElement|null>(null); // 保存成功语言切换后归还焦点的锚点
 const errorSummaryEl=ref<HTMLDivElement|null>(null); // 422 错误摘要（tabindex=-1，可聚焦）
 const section=ref<"general"|"about"|"extensions">("general");
-const about=ref<AboutInfo|null>(null);
-const aboutFailed=ref(false);
 const edits=ref<Record<string,SettingsValue>>({}); // key → 编辑缓冲；删除键=回退到快照值
 const pendingUnset=ref<string[]>([]); // 恢复继承标记：点击不落盘，随下次保存经 unset 提交
 const fieldErrors=ref<Record<string,ApiFieldError>>({}); // 422 逐字段结构化错误（message_key+params）
@@ -56,7 +55,7 @@ watch(()=>props.open,async open=>{
   if(open){
     opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
     section.value="general";edits.value={};pendingUnset.value=[];fieldErrors.value={};
-    conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";loadFailed.value=false;about.value=null;aboutFailed.value=false;
+    conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";loadFailed.value=false;
     dialogEl.value?.showModal();
     await loadSettings();
   }else if(dialogEl.value?.open){
@@ -305,16 +304,6 @@ const diagLines=computed(()=>{
   return lines;
 });
 
-// ---- 关于分区（SC-11）----
-async function showAbout(){
-  section.value="about";
-  if(about.value||aboutFailed.value)return;
-  try{
-    about.value=await fetchAbout();
-  }catch{
-    aboutFailed.value=true;
-  }
-}
 // ---- 扩展分区（本次修复：让扩展停用可逆 / ARCH-DM-006 §7）----
 // SPEC-DM-011 修订「启停交互改进」：启停不再关闭本对话框，也不再事先征询本对话框的未保存编辑。
 // 原先必须让出 top layer，是因为宿主闸门（未提交输入三选一）当时是页面内联遮罩，
@@ -369,24 +358,6 @@ function focusExtensionSwitch(extensionId:string){
     return;
   }
 }
-async function openExternal(url:string){
-  // SC-11：url 来自 GET /api/about 的后端登记值（api.py _HOMEPAGE 常量），前端不传任意字符串；
-  // 壳侧 open_external 再按代码内白名单二次校验（github.com/sonicg83 前缀），拒绝结果不经 WebView 导航。
-  if(getShellBridge()){
-    const opened=await openExternalLink(url);
-    if(opened===true){
-      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkOpened")});
-    }else if(opened===false){
-      props.pushToast({type:"fail",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkRejected")});
-    }else{
-      // 旧壳缺 open_external 方法：维持降级提示
-      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkUnsupported")});
-    }
-    return;
-  }
-  // 浏览器开发态（无桥）：维持 window.open（e2e 依赖此路径断言 popup URL）
-  window.open(url,"_blank","noopener");
-}
 
 // 浏览按钮可用性随桥就绪响应式更新（浏览器开发态/桥缺失 → 禁用）
 const browseDisabled=computed(()=>{
@@ -430,7 +401,7 @@ const browseDisabled=computed(()=>{
           <nav class="sections" role="tablist" :aria-label="t('settings.sections.nav')">
             <button type="button" role="tab" :aria-selected="section==='general'" @click="section='general'">{{t("settings.sections.general")}}</button>
             <button type="button" role="tab" :aria-selected="section==='extensions'" @click="showExtensions">{{t("settings.sections.extensions")}}</button>
-            <button type="button" role="tab" :aria-selected="section==='about'" @click="showAbout">{{t("settings.sections.about")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='about'" @click="section='about'">{{t("settings.sections.about")}}</button>
           </nav>
           <div class="panel">
             <template v-if="section==='general'">
@@ -456,25 +427,8 @@ const browseDisabled=computed(()=>{
               />
             </template>
             <template v-else-if="section==='about'">
-              <div class="about-block">
-                <h3>{{t("settings.about.app")}}</h3>
-                <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>
-                <p v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</p>
-                <p v-else class="f-hint" role="status">{{t("settings.about.loading")}}</p>
-              </div>
-              <div class="about-block">
-                <h3>{{t("settings.about.licenseTitle")}}</h3>
-                <div v-if="about" class="license">{{about.license.text}}</div>
-                <div v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</div>
-              </div>
-              <div class="about-block">
-                <h3>{{t("settings.about.linksTitle")}}</h3>
-                <p v-if="about" class="link-line">
-                  <button type="button" class="link-btn" @click="openExternal(about.homepage)">{{t("settings.about.homepage")}}</button>
-                  <button type="button" class="link-btn" @click="openExternal(about.feedbackUrl)">{{t("settings.about.feedback")}}</button>
-                </p>
-                <p v-else-if="!aboutFailed" class="f-hint" role="status">{{t("settings.about.loading")}}</p>
-              </div>
+              <!-- 关于分区呈现与取数归 AboutSection（PLAN-DM-025 任务 6）；本对话框只装配分区 -->
+              <AboutSection :push-toast="pushToast" />
             </template>
           </div>
         </div>
@@ -519,11 +473,6 @@ const browseDisabled=computed(()=>{
 .panel{flex:1;overflow:auto;padding:var(--space-3) var(--space-4)}
 .group{margin-bottom:var(--space-2)}
 .group-title{font-weight:600;font-size:13px;border-left:3px solid var(--color-accent);padding-left:var(--space-2);margin:var(--space-3) 0 var(--space-2)}
-.about-block{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3)}
-.about-block h3{margin:0 0 var(--space-2);font-size:13px}
-.about-block p{margin:0}
-.license{font-size:12px;line-height:1.7;color:var(--color-text-secondary);white-space:pre-wrap;background:var(--color-bg-canvas);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);max-height:200px;overflow:auto}
-.link-line{display:flex;gap:var(--space-2)}
 .dlg-foot{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border-subtle);flex-shrink:0}
 .foot-notice{font-size:12px;line-height:1.6}
 .foot-notice.warn{color:var(--color-warning)}

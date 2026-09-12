@@ -74,12 +74,14 @@ document_kind: spec
 | 视图 | 浅色、深色、最小支持视口、200% 缩放、面板内滚动 |
 | 权限与能力 | 桌面壳（桥可用 → 浏览按钮可用）、浏览器开发态（浏览禁用、手输保留）、外链能力 |
 | 扩展分区 | 清单加载中、加载失败（重试）、空（无已登记扩展）、已启用、已停用、天然不可用（启动失败/不兼容）、启停处理中、启停失败 |
+| 关于分区（SC-11） | 元数据加载中、加载成功（应用名/版本/MIT 全文/两条外链）、加载失败（重进本分区即重试）；元数据在应用会话内只请求一次：分区来回切换与关闭重开对话框都不重放 GET |
 | 扩展卡片（SC-16） | 条目数 1（最小、不分段）/ 4（多状态：启用、停用、启动失败、不兼容）/ 8（触发按 `enabled` 分段）；卡片信息：名称+版本、描述、状态徽标、诊断码（有值时）；动作行按声明呈现：有设置时出现「配置」按钮，无设置时不出现；与上述主题/视口/缩放维度组合 |
 | 扩展配置子视图（SC-17） | 表单加载中、加载失败（重试）、未修改、编辑中、逐字段校验失败（含关键词数量/长度超限）、保存中、保存成功、保存失败、修订冲突（`expected_revision` 不对、保留输入）、只读（`EXTENSION_SETTINGS_SCHEMA_NEWER`，禁用保存）；`generated` 表单与 `custom` 面板；返回确认（脏状态闸门）；返回后焦点归还卡片「配置」按钮 |
 
 ### 3.3 关键状态规则
 
 - 保存采用"全有或全无"（ARCH-DM-004 §3）；失败时逐字段显示后端错误，输入保留。
+- **关于分区加载语义（SC-11）**：`GET /api/about` 返回的是按包元数据登记的静态值（应用名/版本/协议/链接，ARCH-DM-004 §8），不随配置、工作区或会话过程变化，因此 `fetchAbout()` 在**应用会话内只请求一次**：并发调用共享同一在途请求，成功后复用同一份元数据，分区来回切换与关闭重开对话框都不重放 GET（取数 memo 在 `web/src/api/settings.ts`，呈现归 `components/settings/AboutSection.vue`）。首次请求失败**不缓存**：memo 立即清除，重进关于分区即显式重试，避免一次网络抖动被固化成永久失败页；失败态就地显示「关于信息加载失败。」，不阻塞常规配置分区与保存路径。
 - 编辑期间后端值被外部改变（本设计下仅另一进程 `serve` 可能）→ 保存返回 409，对话框刷新快照并提示重新确认（输入保留）。
 - `enable_add_number_suffix`、`number_suffix_type`、`cad_max_parallel` 保存成功后显示"已保存，相关预览将按新配置重算"提示（SC-13）。
 - 扩展分区开关点击即落库（`PATCH /api/extensions/{id}/state`），**不**进入底部「保存/取消」缓冲；分区内固定说明该语义，避免用户误以为取消可回滚开关。
@@ -146,11 +148,11 @@ document_kind: spec
 | SC-05 来源标记 | 无 | 无 | `items[].source/has_file_override` | `useSettings` 状态 + 渲染徽章 | — | e2e |
 | SC-07 保存 | 既有 PUT 模式（如属性保存） | 新端点 | `PUT /api/settings`（`set`/`unset`/`expected_revision`） | api 客户端 + 对话框保存逻辑 | 409/422 逐字段路径 | 集成测试 + e2e |
 | SC-09 键盘 | 既有模态焦点管理模式 | 对话框级焦点圈闭 | — | 复用确认模态模式 | 与 document 级拖拽桥兼容（SC-14） | e2e 键盘用例 |
-| SC-11 关于页 | 无 | 无 | `GET /api/about` | 关于分区组件 | frozen 态版本元数据（ARCH-DM-004 §8） | 集成测试 + G9 |
+| SC-11 关于页 | 无 | 无 | `GET /api/about` | `components/settings/AboutSection.vue`（呈现）；`web/src/api/settings.ts` 的 `fetchAbout()` 持有会话级 memo | frozen 态版本元数据（ARCH-DM-004 §8）；会话内单次请求，失败不缓存 | 前端单测 + e2e（分区切换/重开不重放）+ G9 |
 | SC-12 诊断 | 无 | 无 | `diagnostics[]` | 横幅组件 | — | e2e |
 | SC-13 预览重算提示 | 既有 preview digest 机制 | 无 | — | 保存成功回调内条件提示 | — | e2e |
 | SC-15 扩展分区 | `App.vue` 持有扩展清单（标签栏装配），`GET /api/extensions` 已返回含停用/失败条目 | 无启停入口；原入口在扩展页面内，停用即随页面消失 | `GET /api/extensions`、`PATCH /api/extensions/{id}/state` | 新建 `components/settings/ExtensionsSection.vue`、`composables/useExtensions.ts`；`SettingsDialog.vue` 加分区与编排；`App.vue` 接入闸门 | 闸门模态必须是原生 `<dialog showModal>`（top layer）才能叠在设置窗口之上，页面内联遮罩会被 inert 吞掉；停用不得关闭设置窗口（会丢本对话框编辑缓冲），启停失败一律就地行内呈现 | e2e（停用不关窗且可再启用、闸门叠于设置窗口之上且 Esc 只关闸门、启停失败行内呈现、无工作区可用） |
-| SC-16 卡片基线 | `ExtensionsSection.vue` 现为单行列表（名称 + 版本·状态 + 按钮），`SettingsFormRow.vue` 的 bool 控件为原生 checkbox | 无卡片、无描述、无诊断码、无增长机制；两种“开关”并存 | 无新增接口（`GET /api/extensions` 已含 `description_key`/`error_code`） | 新建 `components/settings/ExtensionCard.vue`（纯呈现）；`ExtensionsSection.vue` 改为可分组渲染；`SettingsFormRow.vue` 的 bool 控件改滑动开关 | `SettingsDialog.vue` 已 535 行（越过 500 行软上限，见 `.planning/todos/dst-manager/2026-09-10-settings-dialog-file-split.md`）：卡片不得再堆进对话框，只在分区内组合 | e2e（分组阈值、卡片不可点击、开关语义、统一形态）+ Demo 证据截图 |
+| SC-16 卡片基线 | `ExtensionsSection.vue` 现为单行列表（名称 + 版本·状态 + 按钮），`SettingsFormRow.vue` 的 bool 控件为原生 checkbox | 无卡片、无描述、无诊断码、无增长机制；两种“开关”并存 | 无新增接口（`GET /api/extensions` 已含 `description_key`/`error_code`） | 新建 `components/settings/ExtensionCard.vue`（纯呈现）；`ExtensionsSection.vue` 改为可分组渲染；`SettingsFormRow.vue` 的 bool 控件改滑动开关 | `SettingsDialog.vue` 拆分前 535 行（越过 500 行软上限）：PLAN-DM-025 任务 6 抽出关于分区后已回落到上限内（实测行数见 `changelog.md`）；卡片不得再堆进对话框，只在分区内组合 | e2e（分组阈值、卡片不可点击、开关语义、统一形态）+ Demo 证据截图 |
 | SC-17 扩展配置入口 | `GET /api/extensions` 已返回 `settings_contribution`（`presentation` + 受控 `route_key`，未声明时为 `null`）；`GET/PUT /api/extensions/{id}/settings` 已返回/接受 `schema_version`/`revision`/`value`/`effective_value`/`read_only`/`diagnostic_code`/`items`（PLAN-DM-025 任务 3）；卡片无配置入口 | 无配置按钮、无子视图、无独立保存、无脏状态闸门、无焦点归还 | `settings_contribution`、`GET/PUT /api/extensions/{extension_id}/settings` | 新建 `composables/useExtensionSettings.ts`、`components/settings/ExtensionSettingsHost.vue`、`GeneratedExtensionSettingsForm.vue`（`generated`）、`SheetCatalogSettingsPanel.vue`（`custom`）；`ExtensionCard.vue` 加「配置」；`SettingsDialog.vue` 只装配当前 ID 与 dirty（其容量回落由 PLAN-DM-025 任务 6/7 负责） | 未知 `route_key` 必须 fail-closed（不按字符串动态 import）；子视图 dirty 必须并入 `hasUnsaved`；`custom` 面板不得退化为 JSON 文本框 | e2e（入口条件与 DOM 顺序、无工作区、独立保存、返回/关闭确认、焦点归还、422 字段定位、409 保留输入、高版本只读）+ Demo 证据截图 g4-13～g4-15 |
 
 - **预期 Demo 与生产差异**：Demo 不调用真实 API（模拟 `items` 快照）；"浏览…"用模拟原生选择器；外链点击仅提示；版本号为虚构值；"恢复继承"在 Demo 中即时改内存展示，生产语义为保存时经 `unset` 提交（ARCH-DM-004 §3）。差异表随设计冻结包归档。
@@ -235,6 +237,7 @@ document_kind: spec
 - 追踪矩阵每条 SC-xx 达到“已验证”；G8 用同状态截图对比 Demo 与生产（默认/编辑/校验失败/诊断/浅深主题/最小视口）。2026-09-11：SC-15/SC-16 已纳入 G8（逐对裁决见 §8 表），扩展卡片基线视为达成。
 - G9 必须在打包后桌面壳验证：齿轮入口、原生路径选择器真实弹窗（EXE/DLL 过滤器）、保存后配置对真实 CAD 任务生效、外链系统浏览器打开、关于页版本与 LICENSE 读取。
 - e2e 必须覆盖：未加载工作区打开、修改→保存→重开保留、行内校验失败与焦点、未保存关闭确认、来源标记与恢复继承。
+- SC-11（✅ 2026-09-12 拆分后重述）：关于分区的呈现与取数抽到 `components/settings/AboutSection.vue`，应用会话内只请求一次 `GET /api/about`（模块级 memo，失败不缓存；加载语义见 §3.3）。自动证据：`web/src/api/settings.test.ts` 4 例（并发共享同一在途请求、成功后复用、失败后重试、在途失败共享同一拒绝）与 `web/tests/e2e/settings-dialog.spec.ts` 2 例（「关于分区：来回切换不重复请求 /api/about，元数据/外链可访问名与焦点稳定」「关于分区：关闭重开对话框不重复请求 /api/about」——两者都用 `page.on("request")` 观察真实请求，**不** mock `/api/about`，遵守本文件契约红线）；2026-09-12 实跑单测 4 passed、E2E 2 passed（`--workers=1 --retries=0`）。证据侧（G8/G9）仍按 §7、下方 G9 条。
 - SC-15（✅ 2026-09-11 达成）：停用→标签移除→重新启用→标签恢复（停用可逆的核心回归钉子）、停用不关窗且设置编辑保留、闸门叠在设置窗口之上可见可点且 Esc 只关闸门、启停失败就地行内呈现、清单加载失败降级与重试——由 `web/tests/e2e/extensions-settings.spec.ts` 10 例承担，2026-09-11 实跑 10 passed（`--retries=0`，无 flaky）；「扩展页面不再提供停用入口」由 `web/tests/e2e/extensions-navigation.spec.ts`「扩展页面不再提供停用入口，并指引到设置中心」1 例承担。
 - SC-16（✅ 2026-09-11 达成；「声明设置时动作行出现『配置』按钮」是 2026-09-12 才产生的规则，属 SC-17，不计入本条口径）：自动侧由 `web/tests/e2e/extensions-settings.spec.ts` 承担——分段阈值（5 条不分段 / 6 条分两段且分组键与开关同一权威）、卡片不可点击（该套件夹具 `extensionSummary()` 未声明 `settings_contribution`，它实际钉住的是卡片内可聚焦元素等于 `["BUTTON[switch]"]`，即动作行只有开关；「配置」按钮的对应断言在 `settings-demo-visual-evidence.spec.ts` 的 SC-17 用例里，见下条必交项）、开关 `aria-checked` 与可见状态文字同步、描述与诊断码随 `description_key`/`error_code` 呈现；统一滑动开关（常规配置 bool 字段与扩展开关同形态）由 `web/tests/e2e/settings-dialog.spec.ts`「布尔字段是滑动开关：role=switch + aria-checked + 可见状态文字，且仍走保存缓冲」1 例承担。证据侧由 §7 `production/` 的 5 张（g8-ext-01～05）覆盖 1/4/8 条目数与浅/深主题、基准/最小视口；其中 `g8-ext-05`（900×600）**无冻结对照**，不构成比对通过（见 §7）。
 - SC-17（✅ 2026-09-12 G4 确认：设计证据达成；生产实现由任务 7/8 交付）：设计证据由 §7 的 `g4-13～g4-15` 与 `settings-demo-visual-evidence.spec.ts` 的 SC-17 行为/键盘用例承担（2026-09-12 实跑 21 passed）；生产实现的 e2e（入口条件与 DOM 顺序、无工作区、独立保存、返回/关闭确认、焦点归还、422 字段定位、409 保留输入、高版本只读）由 PLAN-DM-025 任务 7、8 交付，本 Spec 在此仅锁定交互与状态契约。**任务 7/8 必交项（不得遗漏）**：更新 `web/tests/e2e/extensions-settings.spec.ts:226-243` 的可聚焦元素钉子，并让夹具 `extensionSummary()`（`web/tests/e2e/fixtures/extensions.ts`）声明 `settings_contribution`——当前该套件断言 `["BUTTON[switch]"]` 且夹具没有该字段，卡片一旦真的长出「配置」按钮这条断言必然变红；在该钉子更新之前，不得把 SC-17 当作已有自动化证据。
