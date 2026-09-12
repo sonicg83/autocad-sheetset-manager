@@ -6,7 +6,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 
 2026-09-10 交付 [内置扩展平台与图纸目录 XLSX（PLAN-DM-020，active）](../../.planning/plans/dst-manager/PLAN-DM-020-sheet-catalog-builtin-extension.md)（依据 [ARCH-DM-006](architecture/ARCH-DM-006-builtin-extension-platform.md) 与 [SPEC-DM-012](specs/SPEC-DM-012-sheet-catalog-extension.md)）：内置扩展平台与图纸目录功能实现、自动验证和打包守护已完成。2026-09-11 最终评审确认 5 项未被既有测试覆盖的正确性缺陷（[MEMO-DM-031](../../.planning/memos/dst-manager/2026-09-11-plan-dm022-final-review-defects.md)），[PLAN-DM-024](../../.planning/plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md)（completed）已同日收口 F1～F5 并使 G7 恢复通过；同日用户真实 Windows 桌面复验推翻原 G8 视觉通过结论（[MEMO-DM-030](../../.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)），视觉整改由 [PLAN-DM-023](../../.planning/plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md)（completed，commit `441b85c`/`1cf0a8f`/`0d69e45`/`70b23c0`/`241c7b5`/`6acc6e3`）承接并实施完毕，生产证据已入 [SPEC-DM-012 production 目录](specs/assets/SPEC-DM-012/production/)；用户于 2026-09-11 逐对确认 V1～V8 全部关闭并通过 G8。2026-09-12 另完成 [图纸目录数字格式码实施计划（PLAN-DM-026，completed）](../../.planning/plans/dst-manager/PLAN-DM-026-sheet-catalog-number-format-code.md)：字段引用尾部新增 `:0{1,16}` 数字格式码（只做只读导出的输出格式化，不修改 DST/DWG、不写回属性值、不做重编号），预览与 XLSX 贯通，字段浏览器提供格式入口；格式入口的 G8 自动化证据（浅/深主题与 200% 缩放）已入 [SPEC-DM-012 production 目录](specs/assets/SPEC-DM-012/production/)，G9 清单 [MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 已追加补零图号为文本单元格的验收项。**仅剩 [G9 真实桌面/Excel 验收（MEMO-DM-028）](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 待用户执行并填写结果**，期间 PLAN-DM-020 保持 `active`。
 
-2026-09-08 交付 [设置中心（PLAN-DM-019，active；自动化验证 703 passed / 72 skipped、e2e 291 passed，G8 截图比对与 G9 真实桌面验收待进行）](../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](architecture/ARCH-DM-004-settings-center.md)）：顶部齿轮入口 + 模态对话框，未加载 DST 即可配置 9 个应用配置项（`settings.json` 只存显式覆盖值、保存即时生效并跨 API/Worker 进程传播）并查看关于页（版本/MIT 协议/外链）。
+2026-09-08 交付 [设置中心（PLAN-DM-019，active；自动化验证 703 passed / 72 skipped、e2e 291 passed，G8 截图比对与 G9 真实桌面验收待进行）](../../.planning/plans/dst-manager/PLAN-DM-019-settings-center.md)（依据 [ARCH-DM-004](architecture/ARCH-DM-004-settings-center.md)）：顶部齿轮入口 + 模态对话框，未加载 DST 即可配置 9 个应用配置项（`settings.json` 只存显式覆盖值、保存即时生效并跨 API/Worker 进程传播）并查看关于页（版本/MIT 协议/外链）。2026-09-13 由 [Builtin 扩展全局设置框架实施计划（PLAN-DM-025，active）](../../.planning/plans/dst-manager/PLAN-DM-025-extension-global-settings.md) 在同一对话框内交付**扩展全局设置框架**：扩展卡片在声明设置时出现「配置」入口，进入同一 `<dialog>` 的平级子视图；`generated` 由宿主按 `ExtensionSettingsProvider` 字段定义生成表单，`custom` 打开编译期白名单组件；设置作用域为当前 Windows 用户、跨工作区共享，乐观并发与预览设置快照门禁（Schema/revision/digest）与核心设置分离；首个真正的全局配置项为图纸目录「输出图纸过滤」（图名命中任一关键词即不写入目录，业务页显示「已过滤 N 张图纸」）。门禁：G4 第三次重开已于 2026-09-12 由用户确认，生产证据入 [SPEC-DM-011](specs/SPEC-DM-011-settings-center-ui.md) §7 与 [SPEC-DM-012 production 目录](specs/assets/SPEC-DM-012/production/)，**G9 真实桌面/Excel 验收仍待用户执行**。
 
 2026-09-07 完成 [桌面壳单实例守卫（PLAN-DM-018，completed；自动化验证 638 passed / 72 skipped，真实桌面双开冒烟待用户复验）](../../.planning/plans/dst-manager/PLAN-DM-018-desktop-single-instance.md)：同一会话只允许一个壳进程，第二个实例弹置顶告警框并在用户确认后把既有窗口还原置前（命名互斥量 + Win32 前台唤起，仅限 `desktop` 入口，不涉及 API 契约与 Worker 链路）。
 
@@ -50,8 +50,8 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [v0.3.2 命名与模板流程需求变更规范（SPEC-DM-008，已接受）](specs/SPEC-DM-008-v032-naming-and-template-flows.md)
 - [图纸页单表工作区设计规范（SPEC-DM-009，已接受；实施计划 PLAN-DM-015，视觉整改 PLAN-DM-017）](specs/SPEC-DM-009-sheets-workspace-ui.md)
 - [属性页分区编辑设计规范（SPEC-DM-010，已接受；实施计划 PLAN-DM-016）](specs/SPEC-DM-010-properties-workspace-ui.md)
-- [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004）](specs/SPEC-DM-011-settings-center-ui.md)
-- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；含数字格式码与输出图纸过滤设计，G0～G8 既有基线已通过——格式入口的门禁证据已由 PLAN-DM-026 补足，增量 G4/G8 按 PLAN-DM-025 执行，G9 真实验收待用户）](specs/SPEC-DM-012-sheet-catalog-extension.md)
+- [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004；2026-09-12 的第三次 G4 重开（SC-17 扩展全局设置入口）已由用户确认，生产实现由 PLAN-DM-025 任务 7/8 交付，G8 扩展配置入口/子视图生产证据已入 §7，G9 真实验收待用户）](specs/SPEC-DM-011-settings-center-ui.md)
+- [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；含数字格式码与输出图纸过滤设计，G0～G8 既有基线已通过——格式入口的门禁证据已由 PLAN-DM-026 补足，输出图纸过滤由 PLAN-DM-025 交付且过滤证据（部分/全部）已入 production 目录，未重开 G3/G4，G9 真实验收待用户）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 
 ## 研究与分析
@@ -67,7 +67,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [Builtin 内置扩展开发指南（GUIDE-DM-005，评审中；以图纸目录为例）](guides/GUIDE-DM-005-builtin-extension-development.md)
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
-- [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 评审中）](mockups/SPEC-DM-011-settings-demo.html)
+- [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 已冻结：第三次重开于 2026-09-12 由用户确认）](mockups/SPEC-DM-011-settings-demo.html)
 - [图纸目录交互 Demo（模拟数据，SPEC-DM-012 G4 已冻结）](mockups/SPEC-DM-012-sheet-catalog-demo.html)
 - [多语言界面交互 Demo（模拟数据，SPEC-DM-013 G4 已冻结）](mockups/SPEC-DM-013-multilingual-demo.html)
 

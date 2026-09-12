@@ -5,7 +5,7 @@ status: draft
 owners:
   - dst-manager
 created: 2026-09-10
-updated: 2026-09-12
+updated: 2026-09-13
 related:
   - PLAN-DM-020
   - SPEC-DM-012
@@ -15,11 +15,13 @@ related:
   - PLAN-DM-023
   - PLAN-DM-024
   - PLAN-DM-026
+  - PLAN-DM-025
+  - SPEC-DM-011
 ---
 
 # PLAN-DM-020 G9 真实桌面验收清单（MEMO-DM-028）
 
-> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；G7 由 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 收口恢复通过，G8 由 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) 实施整改后由用户逐对确认重新通过（确认人：用户，2026-09-11）。G8 通过后暂停已解除，本清单现可执行；执行前 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 维持“未开始（待用户执行）”。**
+> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；G7 由 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 收口恢复通过，G8 由 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) 实施整改后由用户逐对确认重新通过（确认人：用户，2026-09-11）。G8 通过后暂停已解除，本清单现可执行；执行前 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 维持“未开始（待用户执行）”。2026-09-13 追加 `### 1.10`：PLAN-DM-025 的扩展全局设置入口与「输出图纸过滤」验收项（该计划自身的 G9 与本节共用同一次真实桌面/Excel 执行）。**
 
 ## 0.1 暂停解除条件（2026-09-11 G8 通过后：已全部满足）
 
@@ -98,6 +100,16 @@ related:
 - 同一批用未使用格式码的模板再导出一份，确认结果与升级前一致：图号不增不减前导零、单元格类型与列宽不变。字段浏览器条目内的「格式」入口可直接插入去前导零与补零到 2/3/4/5/6 位。
 - 结果：_待填写_；截图：_待填写_；备注：_待填写_。
 
+### 1.10 全局输出图纸过滤（SC-01 / SPEC-DM-012 §6.4；PLAN-DM-025）
+
+- **无工作区也能保存过滤词**：不打开任何工作区，设置 → 扩展 → 图纸目录卡片「配置」→ custom 面板，在「输出图纸过滤」输入 `草图, 作废` 并保存；不出现错误，重进面板回显与保存内容一致（`草图,作废` 规范化后回显）。关闭应用后重开，设置仍在（作用域是当前 Windows 用户，不是工作区）。
+- **真实项目部分过滤**：打开真实图纸集，用上面保存的过滤词导出并打开 XLSX，逐行核对目录：图名含任一关键词的图纸都不在表中，其余图纸齐全且顺序不变；业务页预览显示「已过滤 N 张图纸」，N 等于被排除的图纸数，且总行数与 XLSX 数据行数一致（`total_rows` 是过滤后的行数）。
+- **真实项目全部过滤**：把过滤词改成能命中全部图名的词（例如只填 `图`）后刷新预览，确认预览显示「输出 0 张图纸」与「已过滤 N 张图纸」，导出仍可用，且 XLSX 是**只有表头**的有效工作簿（Excel 能正常打开，无数据行）。
+- **修改设置后旧预览失效**：先在图纸目录刷新预览（不导出），再到设置中心修改过滤词并保存，回到图纸目录**直接导出**；必须看到要求重新预览的提示（`EXTENSION_SETTINGS_CHANGED`），不得按旧预览写出结果；重新预览后再导出，结果与修改后的过滤词一致（依据 SPEC-DM-012 §16 的 `EXTENSION_SETTINGS_CHANGED` 绑定）。
+- **扩展配置子视图（键盘与返回）**：只用键盘进入「配置」、编辑过滤词、用 Esc/遮罩/✕ 尝试离开（脏状态先确认），确认「留在此处」不丢输入、确认离开后焦点归还卡片「配置」按钮；关闭整个对话框后焦点归还齿轮入口。该键盘走查在 Demo 侧已有自动化（`settings-demo-visual-evidence.spec.ts` 的 R4 用例），此处为真实桌面壳复核。
+- **已声明差异的像素级复核**：对照 `docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-06～g8-ext-10` 与冻结件 `g4-13～g4-15`，逐张确认 SPEC-DM-011 §7 已声明的差异（Demo 固有外壳/样本字面、`generated` 面板无呈现说明、布尔行无开启/关闭文字、枚举显示原始选项值 `skip/overwrite/ask`、custom 面板组标题与字段排布、模板组承载完整模板栏、无反馈列显示「未校验」）**是否接受为可保留差异**；差异清单与口径（结构化对比，非像素比对）见 SPEC-DM-011 §7。
+- 结果：_待填写_；截图：_待填写_；备注：_待填写_。
+
 ## 2. 已知一致性窗口（Ruling-10，操作者复核）
 
 - **Artifact 插入失败的一致性窗口（低危，已裁决接受并钉住）**：`os.replace` 成功但后台 Artifact 登记失败（如存储故障）时，导出文件已完整保存在用户选择的目标（文件本身可见且正确），但后台无 Artifact 记录。该窗口由 `tests/unit/test_artifact_exporter.py` 的两条路径测试钉住（目标原存在→新内容保持；原不存在→新文件存在），并在发布器日志记录 reconciliation 诊断（含 invocation ID/扩展 ID/workspace ID/source revision ID）。
@@ -108,7 +120,7 @@ related:
 
 - 结论：_待填写_（通过 / 部分通过 + 遗留缺陷清单）。
 - 操作者签名/日期：_待填写_。
-- 前置闸门：PLAN-DM-024 与 PLAN-DM-023 均已完成；[PLAN-DM-026](../../plans/dst-manager/PLAN-DM-026-sheet-catalog-number-format-code.md)（数字格式码，`completed`）已完成并补入 `### 1.9`，其门禁证据见 SPEC-DM-012 §16；SPEC-DM-012 G7 已重新通过；G8 已由用户于 2026-09-11 重新确认通过并记录日期与三项保留差异，G9 暂停已解除。
+- 前置闸门：PLAN-DM-024 与 PLAN-DM-023 均已完成；[PLAN-DM-026](../../plans/dst-manager/PLAN-DM-026-sheet-catalog-number-format-code.md)（数字格式码，`completed`）已完成并补入 `### 1.9`，其门禁证据见 SPEC-DM-012 §16；SPEC-DM-012 G7 已重新通过；G8 已由用户于 2026-09-11 重新确认通过并记录日期与三项保留差异，G9 暂停已解除。 [PLAN-DM-025](../../plans/dst-manager/PLAN-DM-025-extension-global-settings.md)（Builtin 扩展全局设置框架，`active`）的扩展配置入口已补入 `### 1.10`：其 G4 第三次重开于 2026-09-12 由用户确认，生产证据见 SPEC-DM-011 §7，G9 前需由用户执行本节并填写结果。
 - 通过后动作：由用户确认后将 PLAN-DM-020 `status` 改为 `completed`，同步 SPEC-DM-012 §16 门禁表 G9=通过、`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态行，以及本文 `status` → `final`。
 
 ## 4. G8 遗留项的 2026-09-11 裁决
