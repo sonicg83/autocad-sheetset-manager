@@ -19,6 +19,12 @@ export const CATALOG_EXTENSION_ID = "dst-manager.sheet-catalog";
 const CATALOG_ACTION_ID = "export-xlsx";
 const PREVIEW_DEBOUNCE_MS = 300;
 
+// 扩展设置 Schema 版本：设置/偏好 PUT 提交的 schema_version 必须等于后端 Manifest
+// `settings_schema`（src/dst_manager/extensions/builtin/sheet_catalog/manifest.yaml），
+// 不一致时后端直接 422；升级 Manifest 的 settings_schema 必须同步提升本常量。
+// （模板条目自身的 schema_version 是另一件事，见 toSnapshot/settingsPayload。）
+export const CATALOG_SETTINGS_SCHEMA_VERSION = 2;
+
 // SPEC §4.2：点号形式只接受可作单一标识符读取的名称；与固有字段重名的自定义
 // 属性必须走方括号形式。字符集与 expressions.py 的 _DOT_NAME_FORBIDDEN 对齐。
 const DOT_NAME_FORBIDDEN = new Set(' \t\r\n.[]{}"\'(),;:=\\'.split(""));
@@ -264,7 +270,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     try {
       await request(`/api/extensions/${CATALOG_EXTENSION_ID}/workspaces/${current.id}/preferences`, {
         method: "PUT",
-        body: JSON.stringify({schema_version: 1, value: {template_id: id}}),
+        body: JSON.stringify({schema_version: CATALOG_SETTINGS_SCHEMA_VERSION, value: {template_id: id}}),
       });
     } catch {
       // 偏好 best-effort：失败可诊断但不阻断模板选择
@@ -410,7 +416,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     try {
       const saved = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`, {
         method: "PUT",
-        body: JSON.stringify({schema_version: 1, expected_revision: settingsRevision.value, value: payload}),
+        body: JSON.stringify({schema_version: CATALOG_SETTINGS_SCHEMA_VERSION, expected_revision: settingsRevision.value, value: payload}),
       });
       settingsRevision.value = saved.revision;
       templates.value = userTemplates;
@@ -494,7 +500,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     try {
       const saved = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`, {
         method: "PUT",
-        body: JSON.stringify({schema_version: 1, expected_revision: settingsRevision.value, value: pendingReplay.value}),
+        body: JSON.stringify({schema_version: CATALOG_SETTINGS_SCHEMA_VERSION, expected_revision: settingsRevision.value, value: pendingReplay.value}),
       });
       settingsRevision.value = saved.revision;
       templates.value = (saved.value.user_templates ?? []).map(fromEntry).filter((template): template is CatalogTemplate => template !== null);

@@ -306,6 +306,22 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     expect(put.columns[0].header).toBe("图纸编号");
   });
 
+  // PLAN-DM-025 Task 2 修复：设置/偏好 PUT 提交的 schema_version 必须与后端 Manifest
+  // 的 settings_schema 一致（不一致即 422）；本断言在常量回退到 1 时立即失败。
+  test("设置与偏好 PUT 携带与 Manifest 一致的 settings schema_version", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    // 不带预置偏好：初始选中内置模板，切到已保存模板才写工作区偏好
+    const state = await openCatalog(page, {userTemplates: [template]});
+    await page.getByLabel("选择模板").selectOption({label: "标准目录"});
+    await expect.poll(() => state.preferencePutBodies.length).toBe(1);
+    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await page.getByRole("button", {name: "保存修改"}).click();
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    expect(state.settingsPutBodies).toHaveLength(1);
+    expect(state.settingsPutBodies[0].schema_version).toBe(2);
+    expect(state.preferencePutBodies[0].schema_version).toBe(2);
+  });
+
   test("另存为新模板：输入名称保存后进入模板列表并记录工作区偏好", async ({page}) => {
     const state = await openCatalog(page);
     await page.getByLabel("表达式 1").fill("{sheet.number}号");

@@ -70,6 +70,10 @@ export type SheetCatalogState = {
   revision: number;
   settingsValue: {schema_version: number; user_templates: CatalogTemplate[]};
   preferencePuts: {template_id?: string}[];
+  // 设置/偏好 PUT 的完整请求体（PLAN-DM-025 Task 2 修复）：前端提交的 schema_version
+  // 必须与后端 Manifest settings_schema 一致，用于断言该绑定不被静默回退。
+  settingsPutBodies: Record<string, unknown>[];
+  preferencePutBodies: Record<string, unknown>[];
   // 每次模板设置 PUT 携带的 expected_revision（冲突恢复/另存为语义断言用）
   putExpectedRevisions: number[];
   previewRequests: {workspace_id: string; base_revision_id: string; template: unknown; preview_digest?: string}[];
@@ -298,6 +302,8 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     revision: options.userTemplates?.length ? 3 : 0,
     settingsValue: {schema_version: 1, user_templates: options.userTemplates ?? []},
     preferencePuts: [],
+    settingsPutBodies: [],
+    preferencePutBodies: [],
     putExpectedRevisions: [],
     previewRequests: [],
     executeRequests: [],
@@ -417,6 +423,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
       return route.fulfill({json: {schema_version: 1, revision: state.revision, value: state.settingsValue}});
     }
     const body = await request.postDataJSON();
+    state.settingsPutBodies.push(body);
     state.putExpectedRevisions.push(body?.expected_revision);
     if (state.controls.putSettingsMode === "conflict") {
       // 真实并发语义：其他窗口保存成功——服务端修订推进并写入冲突模板；冲突持续
@@ -473,6 +480,7 @@ export async function installSheetCatalogFixture(page: Page, options: SheetCatal
     }
     const body = await request.postDataJSON();
     state.preferencePuts.push(body.value);
+    state.preferencePutBodies.push(body);
     return route.fulfill({json: {schema_version: 1, revision: (state.preferencePuts.length), value: body.value}});
   });
   await page.route("**/api/extensions/*/actions/*/preview", async route => {
