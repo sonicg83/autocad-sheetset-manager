@@ -54,6 +54,10 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；G0～G8 已通过，G9 真实验收待用户执行）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 
+## 研究与分析
+
+- [图号前导零格式化与格式码惯例调研（RES-DM-001，已接受；方案选型证据，实施计划 PLAN-DM-026）](research/RES-DM-001-number-format-code-conventions.md)
+
 ## 指南
 
 - [前端功能设计与实施门禁清单（GUIDE-DM-001，评审中）](guides/GUIDE-DM-001-frontend-design-implementation-gates.md)
