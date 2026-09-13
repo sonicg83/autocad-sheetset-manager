@@ -21,7 +21,7 @@ related:
 
 # PLAN-DM-020 G9 真实桌面验收清单（MEMO-DM-028）
 
-> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；G7 由 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 收口恢复通过，G8 由 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) 实施整改后由用户逐对确认重新通过（确认人：用户，2026-09-11）。G8 通过后暂停已解除，本清单现可执行；执行前 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 维持“未开始（待用户执行）”。2026-09-13 追加 `### 1.10`：PLAN-DM-025 的扩展全局设置入口与「输出图纸过滤」验收项（该计划自身的 G9 与本节共用同一次真实桌面/Excel 执行）。**
+> **性质：** 待执行记录单。G9（打包后的 Windows 桌面壳真实验收，SPEC-DM-012 §15.2/§16）无法由实施代理在浏览器/自动化环境中替代执行，本清单由实施代理按 Task 12 Step 7 准备，全部结果字段留空，由操作者在真实 Windows 桌面逐项填写。**2026-09-11 正确性复核与用户真实桌面复验曾分别重新打开 G7、G8；G7 由 [PLAN-DM-024](../../plans/dst-manager/PLAN-DM-024-sheet-catalog-correctness-closure.md) 收口恢复通过，G8 由 [PLAN-DM-023](../../plans/dst-manager/PLAN-DM-023-sheet-catalog-visual-convergence.md) 实施整改后由用户逐对确认重新通过（确认人：用户，2026-09-11）。G8 通过后暂停已解除，本清单现可执行；执行前 PLAN-DM-020 保持 `active`、SPEC-DM-012 §16 的 G9 维持“未开始（待用户执行）”。2026-09-13 追加 `### 1.10`：PLAN-DM-025 的扩展全局设置入口与「输出图纸过滤」验收项（该计划自身的 G9 与本节共用同一次真实桌面/Excel 执行）。2026-09-13 追加 [`## 5`](#5-plan-dm-025-g9-操作手册正文2026-09-13)：PLAN-DM-025 的操作手册正文（步骤 1～8），并同步 §0 的「被测 commit / 被测分支」两行——该计划的被测包必须从**未合并**的特性分支构建。**
 
 ## 0.1 暂停解除条件（2026-09-11 G8 通过后：已全部满足）
 
@@ -39,7 +39,8 @@ related:
 | 项 | 值 |
 | --- | --- |
 | 被测分发包 | _待填写_（`scripts/build_release.ps1` 产物 `dist/releases/dst-manager-v<版本>-win64.zip` 的 SHA-256） |
-| 被测 commit | _待填写_（应为 `worktree-plan-dm-020-sheet-catalog` 合入 `main` 后的最终 commit） |
+| 被测 commit | _待填写_（构建时 `feature/plan-dm-025-extension-global-settings` 分支的 HEAD SHA；该分支尚未合入 `main`） |
+| 被测分支 | `feature/plan-dm-025-extension-global-settings`（**构建必须用本分支**：`main` 的 HEAD 不含 PLAN-DM-025 的扩展设置框架与「输出图纸过滤」）。分支合并方式由用户在本轮 G9 有结论后再定 |
 | pyproject 版本 | _待填写_（0.3.3；`/api/about` 与顶栏/设置中心一致） |
 | Windows 版本与区域 | _待填写_ |
 | WebView2 Runtime 版本 | _待填写_ |
@@ -120,7 +121,7 @@ related:
 
 - 结论：_待填写_（通过 / 部分通过 + 遗留缺陷清单）。
 - 操作者签名/日期：_待填写_。
-- 前置闸门：PLAN-DM-024 与 PLAN-DM-023 均已完成；[PLAN-DM-026](../../plans/dst-manager/PLAN-DM-026-sheet-catalog-number-format-code.md)（数字格式码，`completed`）已完成并补入 `### 1.9`，其门禁证据见 SPEC-DM-012 §16；SPEC-DM-012 G7 已重新通过；G8 已由用户于 2026-09-11 重新确认通过并记录日期与三项保留差异，G9 暂停已解除。 [PLAN-DM-025](../../plans/dst-manager/PLAN-DM-025-extension-global-settings.md)（Builtin 扩展全局设置框架，`active`）的扩展配置入口已补入 `### 1.10`：其 G4 第三次重开于 2026-09-12 由用户确认，生产证据见 SPEC-DM-011 §7，G9 前需由用户执行本节并填写结果。
+- 前置闸门：PLAN-DM-024 与 PLAN-DM-023 均已完成；[PLAN-DM-026](../../plans/dst-manager/PLAN-DM-026-sheet-catalog-number-format-code.md)（数字格式码，`completed`）已完成并补入 `### 1.9`，其门禁证据见 SPEC-DM-012 §16；SPEC-DM-012 G7 已重新通过；G8 已由用户于 2026-09-11 重新确认通过并记录日期与三项保留差异，G9 暂停已解除。 [PLAN-DM-025](../../plans/dst-manager/PLAN-DM-025-extension-global-settings.md)（Builtin 扩展全局设置框架）的自动化与 G8 证据已全部完成，计划因 G9 待执行保持 `active`；其扩展配置入口已补入 `### 1.10`，可执行步骤见 [`## 5`](#5-plan-dm-025-g9-操作手册正文2026-09-13)。**注意被测包必须从分支 `feature/plan-dm-025-extension-global-settings` 构建**（该分支未合入 `main`，`main` 的 HEAD 不含扩展设置框架与「输出图纸过滤」）；其 G4 第三次重开于 2026-09-12 由用户确认，生产证据见 SPEC-DM-011 §7，G9 前需由用户执行本节并填写结果。
 - 通过后动作：由用户确认后将 PLAN-DM-020 `status` 改为 `completed`，同步 SPEC-DM-012 §16 门禁表 G9=通过、`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态行，以及本文 `status` → `final`。
 
 ## 4. G8 遗留项的 2026-09-11 裁决
@@ -129,3 +130,77 @@ related:
 2. 原 D6 列数计数/有效徽章与表格式结构一并列入 PLAN-DM-023 V1/V5；仅 `↑`、`↓`、`✕` 图标按钮获用户接受并保留。
 3. 其他可见偏差的重新分类、证据边界与恢复条件见 [MEMO-DM-030](2026-09-11-plan-dm020-g8-user-revalidation.md)。G4 冻结件没有改变，不因生产实现偏离而重开。
 4. **SDD ledger 延后 Minor 清单**（`.superpowers/sdd/PLAN-DM-020-sheet-catalog-builtin-extension/progress.md`，不入提交树）：内部代码质量项仍随后续维护处理；不得再把其中与页面可观察行为相关的项目作为 G8 非阻断项。
+
+## 5. PLAN-DM-025 G9 操作手册正文（2026-09-13）
+
+> 本节是上面 `### 1.10` 六条验收项的**可执行步骤**，由实施代理按 PLAN-DM-025 步骤 6 准备（用户 2026-09-13 选择「交接清单」路径，不在实施会话内代跑）。执行人＝用户；实施代理不得代填任何结论。编号步骤与 `### 1.10` 的对应关系写在每步标题里。
+
+**被测**：分支 `feature/plan-dm-025-extension-global-settings`（未合并 `main`），commit 取构建时 HEAD；被测分发包由该分支构建。
+
+**前置条件（先填 §0 表）**：
+
+1. 构建被测包：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1`，产物 `dist/releases/dst-manager-v<版本>-win64.zip`，用 `Get-FileHash -Algorithm SHA256` 记录哈希。
+2. 记录被测 commit（分支 HEAD SHA）与被测分支名。
+3. 记录环境：Windows 版本与区域；WebView2 Runtime 版本（`Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' | Select-Object pv`）；Excel 版本（必须真实 Microsoft Excel，不用 WPS/LibreOffice 替代）。
+4. 图纸集副本：复制去敏样本到 `%TEMP%`，**绝不在原件上操作**；记录副本路径。
+5. 记录操作者与日期。
+
+不合格即停：任何一步现象与期望不符，先记录再继续，不得跳过或改写结论。
+
+### 步骤 1　无工作区保存过滤词（对应 `1.10` 第 1 条）
+
+1. 启动打包壳，**不打开任何工作区**；顶栏齿轮 → 设置 → 扩展 → 「图纸目录」卡片 → 「配置」。
+2. 「输出图纸过滤」输入 `草图, 作废` → 「保存修改」（仅在脏状态可用）。
+3. 期望：无错误提示；重新进入面板回显为规范化后的 `草图,作废`。
+4. 完全退出应用再启动 → 回显不变（证明作用域是**当前 Windows 用户**，与工作区无关）。
+5. 留证：`g9-filter-noworkspace-light.png` + 重启后回显截图。
+
+### 步骤 2　修改设置后旧预览失效（对应 `1.10` 第 4 条，`EXTENSION_SETTINGS_CHANGED`）
+
+1. 打开图纸集 → 刷新预览（**不导出**）。
+2. 设置中心把过滤词改成 `草图` 并保存。
+3. 回图纸目录**直接导出**。
+4. 期望：导出被拒并提示需要重新预览（`EXTENSION_SETTINGS_CHANGED`）；**不得**写出任何文件。
+5. 重新预览 → 导出成功，结果与 `草图` 一致。
+6. 留证：拒绝提示截图 `g9-settings-changed-light.png`。
+
+### 步骤 3　真实项目部分过滤（对应 `1.10` 第 2 条）
+
+1. 过滤词 `草图, 作废`（或真实命中词）→ 刷新预览 → 导出。
+2. Excel 逐行核对：图名含任一关键词的图纸一条都不出现；其余齐全且顺序与业务页一致。
+3. 业务页显示「已过滤 N 张图纸」，N ＝ 被排除图纸数；XLSX 数据行数 ＝ 预览的 `total_rows`（过滤后行数）。
+4. 留证：业务页与 XLSX 对照截图 + 过滤词截图。
+
+### 步骤 4　真实项目全部过滤（对应 `1.10` 第 3 条：只有表头的 XLSX）
+
+1. 过滤词改为 `图`（命中全部）→ 刷新预览。
+2. 期望：预览显示「输出 0 张图纸」+「已过滤 N 张图纸」；导出按钮仍可用。
+3. 用 Excel 打开导出件：**只有表头一行**，可正常打开、无数据行、无错误提示。
+4. 留证：预览文案截图 + XLSX 截图。
+
+### 步骤 5　扩展配置子视图的键盘与返回（对应 `1.10` 第 5 条）
+
+1. **只用键盘**：Tab 到卡片「配置」→ Enter 进入子视图。
+2. 编辑过滤词使面板变脏 → 按 Esc（另外各试一次点遮罩、点 ✕）。
+3. 期望：出现离开确认；选「留在此处」不丢输入；确认离开后焦点回到卡片「配置」按钮。
+4. 关闭整个设置对话框 → 焦点回到齿轮入口。
+5. 留证：确认框截图（含焦点可见态）。
+
+### 步骤 6　启停与核心页面不回退（对应 `1.10` 第 6 条与 §1.8）
+
+1. 扩展管理中停用「图纸目录」→ 标签消失、核心三页面可用；重启后仍停用；重新启用后标签恢复、模板与工作区偏好保留。
+2. 覆盖写/导出后确认：不修改 DST/DWG、不在工程内创建 `.dst-manager/`、不产生新修订/任务。
+3. 留证：启停前后截图。
+
+### 步骤 7　已声明差异的像素级复核（对应 `1.10` 第 6 条后半；G9 才做）
+
+1. 打开 `docs/dst-manager/specs/assets/SPEC-DM-011/production/g8-ext-06…g8-ext-10` 与冻结件 `g4-13…g4-15` 逐张对照。
+2. 逐条确认 SPEC-DM-011 §7 已声明的差异**是否接受为可保留**：Demo 固有外壳与样本字面、`generated` 面板无「呈现」说明、布尔行无「开启/关闭」文字、枚举显示 Provider 原始选项值（`skip/overwrite/ask`）、custom 面板组标题与字段排布、模板组承载完整模板栏、无反馈列显示「未校验」。
+3. 口径：9B 的差异说明来自源码与断言的结构化对比，**不是像素比对结论**；像素级判定只能由本步骤给出。
+4. 若出现**未声明**差异 → 记录并计缺陷（不得算作「接受保留」）。
+
+### 步骤 8　填写结论与通过后动作
+
+1. 填本 memo §1（各项结果/截图/备注）、§2（Ruling-10 复核）、§3（G9 裁决：通过／部分通过 + 遗留缺陷清单）与签名日期。
+2. **通过**后同步：`PLAN-DM-025` `status` → `completed`；`.planning/plans/dst-manager/README.md` 状态行；`docs/dst-manager/README.md`；`SPEC-DM-011` §7/§9 的 G9 行；本 memo `status` → `final`；`changelog.md` 追加验收条目；再按用户决定合并分支。
+3. **不通过**：`PLAN-DM-025` 保持 `active`，缺陷按「批次四失败」记录，修复后重新取证。

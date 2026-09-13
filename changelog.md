@@ -40,7 +40,8 @@
   - **验证（实测）**：`uv run ruff check .` All checks passed；`uv run pytest -q -o addopts=""` **1329 passed / 72 skipped / 0 failed**（77.45s）；两处守护单测 **69 passed**（18 + 51）；`uv lock --check` 无漂移。全量 E2E 未重跑：本轮唯一触碰的 E2E 文件是一处夹具注释。
   - **残留（只声明不修，已立待办 `2026-09-13-extension-packaging-guard-gaps.md`）**：frozen 守护对「含 `path`/`file` 词段的合法未来清单键」与 `os.path.join(...)` 形式 `pathex` 属 fail-closed **误伤**（拦合法扩展，但不放过非法扩展）；属性形式入口（`module.SYMBOL`）仍不做符号存在性校验（既有缺口）；夹具 `preview_digest` 的 `+1` 是死表达式。
   - 本轮只改 `tests/unit/**`、`web/tests/e2e/fixtures/sheetCatalog.ts`（注释）、`docs/**`、`.planning/**`、`changelog.md`，未改生产代码、未新增依赖、未触碰任何 PNG。
-- **未完成（保留 active）**：G9 真实验收（pywebview/WebView2 桌面壳 + Excel；含无工作区配置过滤词、子视图键盘焦点与返回/关闭确认、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效、预览后外部修改设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览、以及对本批 `g8-ext-*` 已声明差异的像素级复核）必须由用户或具备环境的执行者填写，实施代理不代填。PLAN-DM-025 因此保持 `active`。
+- **G9 交接（用户裁定，非通过）**：2026-09-13 用户选定「先交接清单、由用户后续执行」的路径，实施会话内**不执行**真实验收。操作者手册正文并入 `MEMO-DM-028` §5（步骤 1～8：无工作区保存过滤词、改设置后旧预览失效、真实项目部分/全部过滤、配置子视图键盘与返回、启停与核心页面不回退、已声明差异的像素级复核、结论与通过后动作），与本计划 G9 验收项及 PLAN-DM-020 的 `### 1.10` 一一对应；同步修改该 memo §0：`被测 commit` 改为「构建时分支 HEAD SHA」，新增 `被测分支` 行并注明**被测包必须从未合并的特性分支构建**（`main` 的 HEAD 不含扩展设置框架与输出过滤），§3 前置闸门同步。
+- **未完成（保留 active）**：G9 真实验收（pywebview/WebView2 桌面壳 + Excel；含无工作区配置过滤词、子视图键盘焦点与返回/关闭确认、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效、预览后外部修改设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览、以及对本批 `g8-ext-*` 已声明差异的像素级复核）必须由用户或具备环境的执行者填写，实施代理不代填。步骤 1～8 操作手册见 `MEMO-DM-028` §5；被测包从**未合并**的分支 `feature/plan-dm-025-extension-global-settings` 构建，合并方式待 G9 有结论后再定。PLAN-DM-025 因此保持 `active`。
 - 未新增 Python/npm 依赖、未新增数据库表或迁移、未改 `src/dst_manager/**` 的生产代码、未改 `web/src/**`（任务 9 只改测试与文档）、未改 `web/src/api/openapi.json`/`schema.d.ts`、未触碰 DST/DWG 与发布链路。
 
 ## 2026-09-13（PLAN-DM-025 任务 8 迁移图纸目录 custom 全局设置界面）

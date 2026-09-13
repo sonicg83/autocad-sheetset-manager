@@ -533,6 +533,13 @@ related:
 
 - [ ] **步骤 6：执行 G9。** 在 pywebview/WebView2 壳验证无工作区配置过滤词、键盘焦点、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效，以及预览后外部修改过滤设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览。环境缺失时保持 `active` 并记录恢复条件，不代替用户填写通过。
 
+  **2026-09-13 控制者记录（交接，非通过）**：用户选定「先交接清单、由用户后续执行」的路径，本轮**未执行**真实验收，因此步骤 6 保持未勾选。
+
+  - 操作者手册正文：[MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 §G9 验收项一一对应）；该 memo 的 §0 已补「被测 commit / 被测分支」两行，§1.10 仍为结果留空。
+  - 被测对象：分支 `feature/plan-dm-025-extension-global-settings`（**未合并 `main`**），未测 commit（用户 2026-09-13 决定：G9 有结论后再定合并方式）。
+  - 恢复条件：用户具备真实 Windows 桌面 + WebView2 + Microsoft Excel 环境，且能在副本工程上操作时，按 MEMO-DM-028 §5 步骤 1～8 执行并回填结果。
+  - G9 通过前本计划保持 `active`、本分支不合入 `main`。
+
 - [x] **步骤 7：更新状态与索引。** 自动化、G8、G9 全部通过后才标记 `completed`；否则记录实际验证并保留 `active`。
 
 - [x] **步骤 8：最终检查并提交。**
@@ -583,8 +590,9 @@ related:
 
 实施与自动化验收已全部完成；**G9 真实验收待用户执行，本计划因此保持 `active`，不标记 `completed`。**
 
-- **提交链**：任务 1～9 共 28 个实施/收口提交，另有 2 个评审修复轮提交（`c3c5b6d` 与第二轮修复提交），分支合计 **30** 个提交（基 `main` 79c61a3，功能分支 `feature/plan-dm-025-extension-global-settings`；含 G4 用户确认记录与最终验收提交），逐任务实施、逐任务独立评审并对评审意见做定向复审；每个任务至少一次修复轮，修复均有可失败性证据（变异 → 失败断言 `文件:行` → 按字节还原）。
+- **提交链**：任务 1～9 共 28 个实施/收口提交，另有 2 个评审修复轮提交（`c3c5b6d` 与第二轮修复提交），分支合计 **30** 个实施/评审修复提交（基 `main` 79c61a3，功能分支 `feature/plan-dm-025-extension-global-settings`；含 G4 用户确认记录与最终验收提交；其后仅记录 G9 交接与口径的文档提交不计入本数），逐任务实施、逐任务独立评审并对评审意见做定向复审；每个任务至少一次修复轮，修复均有可失败性证据（变异 → 失败断言 `文件:行` → 按字节还原）。
 - **评审与修复轮**：任务 1～9 的逐任务独立评审与定向复审均已闭环；任务 9 评审（1 项 Important + 10 项 Minor）由控制器直接修复并提交 `c3c5b6d`；随后两条只读通道对全分支 `79c61a3..c3c5b6d` 做最终复核（通道 A「门禁复算」Approved、通道 B「修复闭环复核」Needs fixes），**以验证为准**合并判为 Needs fixes 后按第二轮修复收口（计划清单回归、打包守护传递链、用例覆盖退化、口径与数字）。已知残留缺口不施加修，登记为待办 `.planning/todos/dst-manager/2026-09-13-extension-packaging-guard-gaps.md`。
+- **G9 交接（2026-09-13，用户裁定）**：用户选择「先交接清单、由用户后续执行」的路径，**本轮未执行真实验收**，故步骤 6 保持未勾选、本计划保持 `active`。操作者手册正文见 [MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 G9 验收项一一对应）；该 memo §0 已补「被测 commit / 被测分支」两行，并注明**被测包必须从未合并的分支 `feature/plan-dm-025-extension-global-settings` 构建**（`main` 的 HEAD 不含本计划的扩展设置框架与「输出图纸过滤」），即 G9 同时承担 PLAN-DM-020 的 `### 1.10` 与本计划 G9。分支合并方式待 G9 有结论后再定；恢复条件：用户具备真实 Windows 桌面 + WebView2 + Microsoft Excel，且能在副本工程上操作。
 - **后端**：`uv sync --dev` 通过；`uv run ruff check .` All checks passed；`uv run pytest -q` **1327 passed / 72 skipped / 0 failed**（86s；两轮评审修复各补 1 例，分支 HEAD 复测 **1329 passed / 72 skipped / 0 failed**，77.45s；PLAN-DM-026 收口时为 1182 passed / 72 skipped，本计划新增 147 例）；`uv lock --check` 无漂移；`uv run alembic upgrade head` 迁移链到 `0006_dm020_extension_platform` 正常。
 - **前端**：`npm ci` 通过；`check:api` 无漂移（未手改 `openapi.json`/`schema.d.ts`）；`check:i18n` **938 键 / 9 域**且无未登记硬编码中文；`build` exit 0（`vue-tsc -b` + `vite build ✓ built in 1.51s`）；`test:e2e` 全量首测 **486 passed / 0 failed / 2 flaky**（`g8-ext-07` 与「50 列极限」在 4 worker 并行下首跑 30s 超时、重跑通过；与 PLAN-DM-026 收口时记录的同类抖动一致）。**flaky 成员每次运行随机漂移，不得当作已收敛的名单**：独立复核复跑一次为 **484 passed / 0 failed / 4 flaky**（`extensions-settings.spec.ts:443`、`main.spec.ts:216`、`main.spec.ts:644`、`properties-csv.spec.ts:258`），用例总数 488 一致；门禁判据是 **exit 0 + 0 failed**，超时项重跑通过即可。
 - **容量**：`SettingsDialog.vue` 535 → **469** 行（软上限内）；`useSheetCatalog.ts` 701 → **409**；`useSheetCatalogSettings.ts` **496**（接近上限，已立待办）；`extensions-settings.spec.ts` **1148** 行、`sheet-catalog.spec.ts` **1233** 行（均超上限，已立待办）。以上为收口提交 `04f303f` 的实测值；修复轮已更正早前误抄的 494/1109（见 changelog 2026-09-13 修复轮）。其余新增/改动文件均在 500 行以内。
