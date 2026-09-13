@@ -5,15 +5,18 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-08-21
-updated: 2026-08-22
+updated: 2026-09-13
 related:
   - VISION-DM-001
   - ARCH-DM-001
   - ADR-DM-001
   - PLAN-DM-006
+  - SPEC-DM-014
 ---
 
 # DST Manager v0.21 图纸集编辑需求调整规范
+
+> **修订指引（2026-09-13）：** 本文的「统一派生」编号规则由 [SPEC-DM-014](SPEC-DM-014-unnumbered-subset-keywords.md)（不编号图纸关键字）**增量**修订——子集可编辑标题命中用户维护的关键字时，该子集整体不编号（图号固定为 `0`×项目位数）且不消耗序号。本文其余规则不变；不编号语义以 SPEC-DM-014 为唯一权威。
 
 ## 背景
 

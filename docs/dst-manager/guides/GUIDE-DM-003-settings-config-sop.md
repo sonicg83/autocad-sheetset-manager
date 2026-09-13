@@ -6,10 +6,11 @@ document_kind: guide
 owners:
   - dst-manager
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-13
 related:
   - ARCH-DM-004
   - SPEC-DM-011
+  - SPEC-DM-014
   - PLAN-DM-019
   - GUIDE-DM-001
 ---
@@ -34,11 +35,11 @@ related:
 | 只有开发者会用、无需图形界面？ | **不进**。`.env`/环境变量通道已覆盖 |
 | 运行期业务参数、用户可能需要调整？ | **进**。走 SOP-A |
 
-"进配置中心"的完整交付 = `config.py` 语义定义 + `registry.py` 展示登记 + **生产消费点接线** + 测试 + 文档同步。仅当新项复用现有 `path`/`bool`/`int`/`enum` 控件、现有路径选择语义和通用 API 序列化时，`GET /api/settings` 与前端表单才可零改动；新增控件、文件过滤类型或特殊交互必须同步修改 API/前端。扩展平台（PRD-DM-001）未来可复用的是这套“描述驱动渲染”机制，不代表业务消费逻辑自动生成。
+"进配置中心"的完整交付 = `config.py` 语义定义 + `registry.py` 展示登记 + **生产消费点接线** + 测试 + 文档同步。仅当新项复用现有 `path`/`bool`/`int`/`enum`/`text` 控件、现有路径选择语义和通用 API 序列化时，`GET /api/settings` 与前端表单才可零改动；新增控件、文件过滤类型或特殊交互必须同步修改 API/前端。扩展平台（PRD-DM-001）未来可复用的是这套“描述驱动渲染”机制，不代表业务消费逻辑自动生成。
 
 ## 2. SOP-A：新增配置项
 
-按顺序执行，每步含验证点。全程参考既有样例：`cad_max_parallel`（int 带范围）、`enable_add_number_suffix`（bool 带 alias 容错）、`autocad_2016_console`（nullable path 带 file_filter）、`number_suffix_type`（enum）。
+按顺序执行，每步含验证点。全程参考既有样例：`cad_max_parallel`（int 带范围）、`enable_add_number_suffix`（bool 带 alias 容错）、`autocad_2016_console`（nullable path 带 file_filter）、`number_suffix_type`（enum）、`unnumbered_subset_keywords`（text，带保存事务上限校验，SPEC-DM-014）。
 
 ### A-1 `config.py` 定义字段（语义权威）
 
@@ -85,14 +86,14 @@ SettingsItemMeta(key="template_dir", label="模板目录", category="路径", co
 
 ### A-5 前端与 API：确认是否可零改动工作
 
-- 复用既有四类控件时，`GET /api/settings` 会自动带出新项（`_settings_items` 遍历 REGISTRY），`SettingsDialog` 会按描述渲染。
+- 复用既有五类控件（`path`/`bool`/`int`/`enum`/`text`）时，`GET /api/settings` 会自动带出新项（`_settings_items` 遍历 REGISTRY），`SettingsDialog` 会按描述渲染。
 - 新控件、新过滤类型、特殊禁用/联动规则或额外值类型都不属于零改动范围；须更新 `SettingsItemModel`、前端类型/映射、组件和 OpenAPI 契约。
 - 运行 `Set-Location web`、`npm run build`（含 OpenAPI 契约校验）和 `npm run test:e2e` 确认无回归。
 - 若新项需要 e2e：在 `web/tests/e2e/settings-dialog.spec.ts` serial 链**尾部**追加（链尾状态是"恢复默认"后的干净态）。
 
 ### A-6 文档与验证收尾
 
-- `ARCH-DM-004` §2.1 的 9 项字段清单更新（数量与清单同步）。
+- `ARCH-DM-004` §2.1 的界面配置项清单更新（当前 10 项，数量与清单同步）。
 - 根 `changelog.md` 追加条目。
 - 全量验证：`uv run ruff check .`、`uv run pytest -q`、`uv lock --check`、`npm run build`、`npm run test:e2e`。
 - GUIDE-DM-001 分级：纯后端字段+登记通常 S 级（走快速通道，G0/G1/G5–G9）；若引入新分组/新控件类型，升 M 级。
@@ -117,7 +118,7 @@ SettingsItemMeta(key="template_dir", label="模板目录", category="路径", co
 - 只改 `label`/`category`/`_ENUM_TEXTS` + 对应测试断言。无数据迁移。
 - 改 `category` 分组顺序影响 API items 排序 → 更新 `test_api_settings.py` 硬锚索引。
 
-### B-4 改控件类型（path↔bool↔int↔enum）
+### B-4 改控件类型（path↔bool↔int↔enum↔text）
 
 - 罕见；意味着用户 `settings.json` 里的旧覆盖值类型可能不再合法，降级与自愈范围同 B-2，不能假设只影响该键。
 - 属交互变更：按 GUIDE-DM-001 评估等级，重开 SPEC-DM-011 对应条目与 G4（若视觉受影响）。

@@ -31,6 +31,12 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from dst_manager.config import Settings
+from dst_manager.domain.keywords import (
+    KeywordLimitError,
+    format_keywords,
+    normalize_keywords,
+    parse_keywords,
+)
 
 from .errors import FieldErrorModel
 from .registry import REGISTRY, SettingsItemMeta, enum_options, min_max
@@ -67,8 +73,40 @@ def default_store() -> UserSettingsStore:
     return UserSettingsStore(base / "dst-manager" / "settings.json")
 
 
+def _keyword_limit_error(key: str, exc: KeywordLimitError) -> FieldErrorModel:
+    """关键字数量/长度超限的结构化 422 错误（params 只带结构化插值参数）。"""
+    is_count = exc.kind == "count"
+    return FieldErrorModel(
+        code="SETTING_KEYWORD_LIMIT",
+        message_key=(
+            "settings.validation.keywordCountLimit"
+            if is_count
+            else "settings.validation.keywordLengthLimit"
+        ),
+        params={"limit": exc.limit, "actual": exc.actual},
+        message=(
+            f"{key} 最多 50 个关键字（当前 {exc.actual} 个）"
+            if is_count
+            else f"{key} 单个关键字最长 100 个字符（当前 {exc.actual} 个）"
+        ),
+    )
+
+
 def _validate_value(meta: SettingsItemMeta, value: object) -> FieldErrorModel | None:
     """按 registry 控件类型校验单个取值；通过返回 None，否则返回结构化错误。"""
+    if meta.control == "text":
+        # 文本控件（不编号子集关键字）：只收字符串，超限拒绝保存（绝不截断）
+        if not isinstance(value, str):
+            return FieldErrorModel(
+                code="SETTING_TEXT_TYPE",
+                message_key="settings.validation.textType",
+                message=f"{meta.key} 必须为文本",
+            )
+        try:
+            parse_keywords(value)
+        except KeywordLimitError as exc:
+            return _keyword_limit_error(meta.key, exc)
+        return None
     if meta.control == "path":
         if value is None:
             return None  # 显式置空与"清空覆盖"等价
@@ -216,7 +254,8 @@ class RuntimeSettings:
             if error is not None:
                 errors[key] = error
                 continue
-            fresh[key] = value
+            # 文本控件落盘前规范化：用户输入 `封面， 目录,封面` 存为 `封面,目录`
+            fresh[key] = format_keywords(parse_keywords(value)) if meta.control == "text" else value
         if errors:
             raise SettingsValidationError(errors)
         return fresh
@@ -232,6 +271,9 @@ class RuntimeSettings:
                 continue  # 手编文件中的未知键不注入，避免 pydantic 拒绝
             if meta.control == "path" and isinstance(value, str) and not value.strip():
                 value = None
+            elif meta.control == "text" and isinstance(value, str):
+                # 文本控件：手编文件里的非规范写法在保存时随合并规整为持久形态
+                value = format_keywords(normalize_keywords(value))
             merged[key] = value
         return merged
 

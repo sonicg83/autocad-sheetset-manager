@@ -75,3 +75,21 @@ def test_ui_locale_enum_options_are_string_values_with_keys() -> None:
         "settings.locale.enUS",
     ]
     assert all("text" not in o for o in options)  # 兼容中文 text 已随阶段三删除
+
+
+def test_numbering_category_declares_keyword_text_control() -> None:
+    # 不编号子集关键字（SPEC-DM-014）：编号规则分组内的 text 控件，排在既有两项之后
+    controls = [
+        (meta.key, meta.control)
+        for meta in REGISTRY
+        if meta.category_key == "settings.categories.numbering"
+    ]
+    assert controls == [
+        ("enable_add_number_suffix", "bool"),
+        ("number_suffix_type", "enum"),
+        ("unnumbered_subset_keywords", "text"),
+    ]
+    meta = next(item for item in REGISTRY if item.key == "unnumbered_subset_keywords")
+    assert meta.label_key == "settings.items.unnumberedSubsetKeywords"
+    assert meta.nullable is False  # 空串是显式取值（无关键字），不写 null
+    assert meta.file_filter_key is None and meta.file_kind is None

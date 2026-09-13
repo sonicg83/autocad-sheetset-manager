@@ -450,3 +450,72 @@ test("布尔字段是滑动开关：role=switch + aria-checked + 可见状态文
   await expect(page.getByRole("switch", {name: "图纸编号追加后缀"})).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");
 });
+
+// ---- SPEC-DM-014 任务 5：编号规则分区新增"不编号图纸关键字"文本控件 ----
+// 追加在文件末尾：本用例会短暂写入覆盖值，收尾以「恢复继承 + 保存」回到默认。
+const KEYWORDS_INPUT = 'input[data-key="unnumbered_subset_keywords"]';
+const KEYWORDS_ROW = '[data-field="unnumbered_subset_keywords"]';
+
+test("不编号图纸关键字：文本控件渲染、规范化保存与恢复继承", async ({page}) => {
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const row = page.locator(KEYWORDS_ROW);
+  await row.scrollIntoViewIfNeeded();
+  await expect(row.locator(".f-label")).toHaveText("不编号图纸关键字");
+  await expect(row.locator(".f-hint")).toContainText("最多 50 个");
+  await expect(row).toContainText("默认"); // 未配置覆盖时来源徽章
+  // 半/全角逗号混用 + 重复项：保存后由后端规范化（半角逗号、去重、保留首次原文）
+  const input = page.locator(KEYWORDS_INPUT);
+  await input.fill("封面， 目录,封面");
+  await expect(row).toHaveClass(/dirty/);
+  await page.getByRole("button", {name: "保存"}).click();
+  await expect(page.getByText("已保存").first()).toBeVisible();
+  // SC-13：关键字参与编号派生，保存后须追加"相关预览将按新配置重算"
+  await expect(page.getByText("相关预览将按新配置重算")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", {name: "设置"}).click();
+  await expectDialog(page);
+  const reopened = page.locator(KEYWORDS_ROW);
+  await expect(reopened.locator(KEYWORDS_INPUT)).toHaveValue("封面,目录");
+  await expect(reopened).toContainText("用户覆盖");
+  // 收尾：恢复继承 → 回到默认空值（标记随下次保存提交，不污染后续用例基线）
+  await reopened.getByRole("button", {name: "恢复继承"}).click();
+  await page.getByRole("button", {name: "保存"}).click();
+  await expect(page.getByText("已保存").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", {name: "设置"}).click();
+  await expectDialog(page);
+  const restored = page.locator(KEYWORDS_ROW);
+  await expect(restored.locator(KEYWORDS_INPUT)).toHaveValue("");
+  await expect(restored).toContainText("默认");
+  await page.keyboard.press("Escape");
+});
+
+test("不编号图纸关键字：数量/长度超限即时行内错误并禁用保存", async ({page}) => {
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const row = page.locator(KEYWORDS_ROW);
+  const input = page.locator(KEYWORDS_INPUT);
+  await row.scrollIntoViewIfNeeded();
+  // 51 个不重复关键字 → 数量超限（后端上限 50）
+  await input.fill(Array.from({length: 51}, (_, index) => `K${index}`).join(","));
+  await expect(page.getByText("最多 50 个关键字（当前 51 个）")).toBeVisible();
+  await expect(row).toHaveClass(/error/);
+  await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+  // 单个关键字超过 100 字符 → 长度超限（按最长关键字报数，不报总数）
+  await input.fill("测".repeat(101));
+  await expect(page.getByText("单个关键字最长 100 个字符（当前 101 个）")).toBeVisible();
+  await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+  // 计数口径与后端一致：去重后再判数量（50 个唯一项 + 重复项仍合法）
+  await input.fill(Array.from({length: 50}, (_, index) => `K${index}`).join(",") + ",k0,K1");
+  await expect(row).not.toHaveClass(/error/);
+  await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+  // 未保存的编辑不落库：放弃修改并关闭
+  await page.keyboard.press("Escape");
+  await page.locator('[role="dialog"][aria-modal="true"]').getByRole("button", {name: "放弃修改并关闭"}).click();
+  await page.getByRole("button", {name: "设置"}).click();
+  await expectDialog(page);
+  await expect(page.locator(KEYWORDS_ROW)).toContainText("默认");
+  await expect(page.locator(KEYWORDS_INPUT)).toHaveValue("");
+  await page.keyboard.press("Escape");
+});

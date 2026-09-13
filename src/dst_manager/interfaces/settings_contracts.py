@@ -53,7 +53,9 @@ class SettingsItemModel(ContractModel):
     ``label_key``/``category_key`` 为稳定显示键，前端按语言包渲染；迁移期兼容
     中文字段（``label``/``category``/``file_filter``）已随阶段三删除。
     ``nullable``/``file_filter_key``/``file_kind`` 仅 path 控件返回；
-    ``options`` 仅 enum 控件；``min``/``max`` 仅带 ge/le 约束的 int 控件。
+    ``options`` 仅 enum 控件；``min``/``max`` 仅带 ge/le 约束的 int 控件；
+    ``text`` 控件（SPEC-DM-014 的不编号子集关键字）无额外展示元数据，
+    取值恒为字符串，数量/长度上限由保存事务校验并返回结构化 422。
     """
 
     key: str

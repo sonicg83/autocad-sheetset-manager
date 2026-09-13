@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .domain.keywords import format_keywords, normalize_keywords
 from .runtime import is_frozen
 
 # 界面语言三值白名单（I18N-02）：system 表示跟随系统语言，解析在前端完成
@@ -55,6 +56,11 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = Field(default=120, ge=30, le=3600)
     enable_add_number_suffix: bool = Field(default=True, validation_alias="EnableAddNumberSuffix")
     number_suffix_type: Literal[1, 2] = Field(default=1, validation_alias="NumberSuffixType")
+    # 不编号子集关键字（SPEC-DM-014）：半角/全角逗号分隔的单行文本，持久形态恒为
+    # 规范化结果（半角逗号分隔、trim、casefold 去重）；空串 = 全部子集照常编号。
+    # 字段类型保持 str 而非 list：env/.env 通道对 list 字段会按 JSON 解析，
+    # 用户写 封面,目录 会直接启动报错；数量/长度上限由保存事务强制（拒绝保存、绝不截断）
+    unnumbered_subset_keywords: str = ""
     # 界面语言（ARCH-DM-005 §4.1）：只保存显式覆盖值，不进工作区/草稿/数据库；
     # 仅接受三值白名单，system 的解析（含非中英回落 en-US、无法读取回落 zh-CN）
     # 由前端负责，后端不按语言生成文本。env 通道 DST_MANAGER_UI_LOCALE 沿用
@@ -87,6 +93,18 @@ class Settings(BaseSettings):
         if value in ("1", "2"):
             return int(value)  # type: ignore[arg-type]
         return value
+
+    @field_validator("unnumbered_subset_keywords", mode="before")
+    @classmethod
+    def validate_unnumbered_subset_keywords(cls, value: object) -> str:
+        # 四条通道（API / env / .env / 手编 settings.json）在源头统一规范化，
+        # 使快照里的取值恒为规范形态。此处只规范化、不强制数量/长度上限：
+        # 上限是保存入口（PUT /api/settings）的输入约束，若在此拒绝，手编文件里
+        # 一个超长关键字会让 resolver 丢弃全部文件覆盖，代价过大。
+        try:
+            return format_keywords(normalize_keywords(value))
+        except TypeError as exc:
+            raise ValueError(f"不编号子集关键字无效：{exc}") from exc
 
     @field_validator("draft_dir")
     @classmethod

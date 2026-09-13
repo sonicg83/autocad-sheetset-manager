@@ -150,11 +150,12 @@ def _settings_items(snapshot: SettingsSnapshot) -> list[SettingsItemModel]:
             item.options = [
                 EnumOptionModel(**option) for option in enum_options(meta.key)
             ]
-        else:  # int 控件：无 ge/le 约束的字段（cad_timeout_seconds）不设范围
+        elif meta.control == "int":  # int 控件：无 ge/le 约束的字段（cad_timeout_seconds）不设范围
             try:
                 item.min, item.max = min_max(meta.key)
             except ValueError:
                 pass
+        # text 控件（不编号子集关键字）：值为字符串，无 options/min/max 元数据
         items.append(item)
     return items
 

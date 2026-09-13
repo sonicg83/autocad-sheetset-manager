@@ -113,3 +113,30 @@ def test_ui_locale_rejects_values_outside_whitelist(monkeypatch, value: str):
     monkeypatch.setenv("DST_MANAGER_UI_LOCALE", value)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+# ---- 不编号子集关键字（SPEC-DM-014）----
+
+
+def test_unnumbered_keywords_default_to_empty(monkeypatch):
+    monkeypatch.delenv("DST_MANAGER_UNNUMBERED_SUBSET_KEYWORDS", raising=False)
+    # 默认空串 = 全部子集照常编号（向后兼容）
+    assert Settings(_env_file=None).unnumbered_subset_keywords == ""
+
+
+@pytest.mark.parametrize("raw", ["封面,图纸目录", "封面， 图纸目录 ", "封面,封面,图纸目录"])
+def test_unnumbered_keywords_env_value_is_normalized(monkeypatch, raw: str):
+    """env/.env 通道与设置文件、API 落到同一持久形态：半角逗号分隔、trim、去重。"""
+    monkeypatch.setenv("DST_MANAGER_UNNUMBERED_SUBSET_KEYWORDS", raw)
+    assert Settings(_env_file=None).unnumbered_subset_keywords == "封面,图纸目录"
+
+
+def test_unnumbered_keywords_accept_sequence_value():
+    # 手编 settings.json 用序列时同样规范化，不报类型错误
+    settings = Settings(_env_file=None, unnumbered_subset_keywords=["封面", " 图纸目录 "])
+    assert settings.unnumbered_subset_keywords == "封面,图纸目录"
+
+
+def test_unnumbered_keywords_reject_non_string_payload():
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, unnumbered_subset_keywords={"a": 1})

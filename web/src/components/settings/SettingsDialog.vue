@@ -11,6 +11,7 @@ import {ApiError} from "../../api/client";
 import type {ApiFieldError,StructuredParams} from "../../api/client";
 import type {ExtensionSummary} from "../../api/contracts";
 import type {SettingsItem,SettingsValue} from "../../api/settings";
+import {MAX_UNNUMBERED_KEYWORD_CHARS,MAX_UNNUMBERED_KEYWORDS} from "../../api/settings";
 import {getShellBridge,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
@@ -160,6 +161,23 @@ function groupTitle(key:string):string{
 }
 const schemaBlocked=computed(()=>snapshot.value?.schemaBlocked??false);
 
+// 关键字规范化的前端副本（SPEC-DM-014）：半/全角逗号分隔、trim、忽略空项、
+// casefold 去重——与后端 domain/keywords.py 同规则；仅用于编辑中的即时反馈，
+// 数量/长度上限的最终判定仍以保存时的 422 逐字段错误为准（ARCH-DM-005 §6.2）
+function keywordsOf(value:string):string[]{
+  const seen=new Set<string>();
+  const keywords:string[]=[];
+  for(const raw of value.split(/[,，]/)){
+    const keyword=raw.trim();
+    if(!keyword)continue;
+    const folded=keyword.toLowerCase();
+    if(seen.has(folded))continue;
+    seen.add(folded);
+    keywords.push(keyword);
+  }
+  return keywords;
+}
+
 function localError(item:SettingsItem):string|undefined{
   if(item.control==="int"&&item.key in edits.value){
     const value=edits.value[item.key];
@@ -167,6 +185,13 @@ function localError(item:SettingsItem):string|undefined{
     if(item.min!==undefined&&value<item.min||item.max!==undefined&&value>item.max)return t("settings.validation.integerRange",{min:item.min,max:item.max});
   }
   if(item.control==="path"&&typeof edits.value[item.key]==="string"&&/[<>"|?*]/.test(edits.value[item.key] as string))return t("settings.validation.pathIllegalChars");
+  if(item.control==="text"&&typeof edits.value[item.key]==="string"){
+    // 关键字即时校验（SPEC-DM-014）：仅提前反馈数量/长度超限，最终校验以后端 422 为准
+    const keywords=keywordsOf(edits.value[item.key] as string);
+    if(keywords.length>MAX_UNNUMBERED_KEYWORDS)return t("settings.validation.keywordCountLimit",{limit:MAX_UNNUMBERED_KEYWORDS,actual:keywords.length});
+    const longest=keywords.reduce((max,keyword)=>Math.max(max,keyword.length),0);
+    if(longest>MAX_UNNUMBERED_KEYWORD_CHARS)return t("settings.validation.keywordLengthLimit",{limit:MAX_UNNUMBERED_KEYWORD_CHARS,actual:longest});
+  }
   return undefined;
 }
 // 结构化参数原样进入命名插值；list[str]（如 allowed_values）按后端消息风格以 / 连接，
@@ -252,7 +277,8 @@ async function onSave(){
     edits.value={};pendingUnset.value=[];fieldErrors.value={};
     showSaved();
     // SC-13：编号规则/并发相关配置变更后，追加预览重算提示
-    const previewKeys=["enable_add_number_suffix","number_suffix_type","cad_max_parallel"];
+    //（不编号图纸关键字参与编号派生，故与后缀两项、并行度同属重算键集）
+    const previewKeys=["enable_add_number_suffix","number_suffix_type","unnumbered_subset_keywords","cad_max_parallel"];
     const recalc=Object.keys(set).some(key=>previewKeys.includes(key));
     props.pushToast({type:"ok",title:t("settings.toast.savedTitle"),body:recalc?t("settings.toast.savedRecalcBody"):t("settings.toast.savedBody")});
     savedOk=true;

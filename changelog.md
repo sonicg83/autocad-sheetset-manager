@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-13（新增不编号图纸关键字：SPEC-DM-014 + PLAN-DM-027）
+
+用户需求：在「图纸管理」中维护关键字列表，新建子集的名称包含关键字时该子集及其图纸不编号（且不影响其他子集编号）；设置项放在「设置 → 编号规则」，与图纸目录的「输出图纸过滤」同输入口径。
+
+- **领域层（新增 `src/dst_manager/domain/keywords.py`）**：`normalize_keywords`（半/全角逗号切分、trim、丢空项、`casefold` 去重保留首次原文）、`format_keywords`、`parse_keywords`（上限校验，抛 `KeywordLimitError(kind, limit, actual)`）、`title_matches_keywords`；常量 `MAX_UNNUMBERED_KEYWORDS = 50`、`MAX_UNNUMBERED_KEYWORD_CHARS = 100`。
+- **编号派生（`domain/editing.py`、`domain/models.py`）**：`SuffixOptions` 增第三字段 `unnumbered_keywords`；命令循环后按**最终**子集标题计算不编号子集集合（动态判定，不在 DST/数据库持久化任何标记）；不编号子集内每张图号恒为 `"0" * width`（单一取值、不是范围）且**不递增计数器**，因此对其他子集编号零影响；`_number_seed` 跳过不编号子集（否则 `000` 会把起始号拉成 0），并新增「全部不编号时借用文档既有数字图号位数」兜底；`_number_range` 首尾相等时返回单值；后缀与排序沿用既有全局设置。关键字为空时与既有行为完全一致。
+- **设置层（`config.py`、`settings/registry.py`、`settings/runtime.py`、`interfaces/api.py`、`interfaces/settings_contracts.py`）**：新增字段 `unnumbered_subset_keywords: str = ""`（保持 `str` 而非 `list`：`.env`/env 通道对 `list` 字段按 JSON 解析会让服务启动失败），`config.py` 的 `field_validator(mode="before")` **只规范化、不强制上限**（避免一条超长关键字使 resolver 丢弃整个文件覆盖）；注册表新增 `text` 控件类型与该项登记（分组「编号规则」）；保存事务强制上限并写回规范形态，新增结构化错误码 `SETTING_TEXT_TYPE`（非字符串）与 `SETTING_KEYWORD_LIMIT`（数量/长度超限，`message_key` 区分两条文案，`params` 为 `{limit, actual}`），超限**拒绝保存、绝不截断**。API 契约与前端类型无需扩展（`value`/`default` 已容纳 `str`）。
+- **应用层**：`application/editing.py` 构造 `SuffixOptions(..., normalize_keywords(self.settings.unnumbered_subset_keywords))`。
+- **Web（`settings.ts`、`SettingsFormRow.vue`、`SettingsDialog.vue`、两份 `settings.ts` 语言资源）**：新增 `text` 控件单行输入（含占位与上限提示）、数量/长度即时行内错误并禁用保存（与后端同规范化规则的去重计数口径，仅即时反馈，最终以 422 为准）；`previewKeys` 纳入该键，保存后提示相关预览将按新配置重算；中英文案键与插值参数双向对称。
+- **新增测试**：`tests/unit/test_keywords.py`（11 例）、`tests/unit/test_unnumbered_subsets.py`（含领域编号与服务接线 18 例）；`test_config.py`、`test_settings_registry.py`、`test_settings_runtime.py`、`tests/integration/test_api_settings.py` 补 `text` 控件与上限用例；`web/tests/e2e/settings-dialog.spec.ts` 尾部新增 2 例（渲染/规范化保存/恢复继承、超限即时错误）。
+- **文档**：新增 [SPEC-DM-014](docs/dst-manager/specs/SPEC-DM-014-unnumbered-subset-keywords.md)（`status: accepted`，不编号语义的唯一权威）与 [PLAN-DM-027](.planning/plans/dst-manager/PLAN-DM-027-unnumbered-subset-keywords.md)（`completed`）；`SPEC-DM-001` 加修订指引、`SPEC-DM-011` SC-03 控件集合补 `text`；`ARCH-DM-004` §2.1 清单 9 → 10 项并补 `text` 控件与两类错误行；`GUIDE-DM-003` 同步控件集合与字段数量口径；两份索引 README 同步。
+- **验证**：`uv run ruff check .` 通过（`__all__` 排序与导入分组由 `ruff --fix` 修正）；`uv run pytest -q` **1374 passed / 72 skipped / 0 failed**（1446 collected）；`npm run build` 通过（`check:api` 无漂移、`check:i18n` 944 键 / 9 域）；`npx playwright test tests/e2e/settings-dialog.spec.ts` **22 passed**。真实 AutoCAD 2016/2020 系统测试未执行（改动不涉及 SCR/插件/布局重建）。
+- **门禁口径（如实记录）**：本项引入新控件类型 `text`，按 GUIDE-DM-003 A-6 属 GUIDE-DM-001 的 **M 级**。G3/G4（新视觉方向与冻结件、Demo）与 G8（新的同态截图证据）**未重开**（无新视觉选择，复用设置对话框既有行渲染与错误态，既有冻结件与生产证据未重取），G9 真实桌面验收未发起；逐项状态与最小补证动作见 PLAN-DM-027「门禁分级与证据缺口」。
+- **已知代价（已登记，不在本次范围）**：不编号子集之后的子集在结构调整时可能因基准确认边界进入 `rename_only`（多一次 CAD 处理、图号不变）。
+
 ## 2026-09-13（新增 RES-DM-002：图纸目录标准模板库分发方案提案）
 
 - **新增文档**：`docs/dst-manager/research/RES-DM-002-standard-template-library-distribution.md`（`status: draft`，提案性质）。内容：图纸目录模板的现状存储事实（`extension_settings` 行结构、本地 HTTP API 与直接写库两条路径、全部校验约束与稳定错误码、`data_dir` 的打包态/开发态分支）、pack 格式提案（含 `uuid5` 稳定 ID 派生规则与「额外键不落库」的源码实证）、四条分发通道对比（A 独立标准库仓库 + 本地 API 导入脚本 / B 装机预置写库 / C 随包发布 / D 产品化入口）、导入算法与失败语义表、升级与删除语义的模型局限，以及五项开放问题。

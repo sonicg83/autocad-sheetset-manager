@@ -10,6 +10,10 @@ Task 10 / I18N-17）删除。数值范围与枚举值从 :mod:`dst_manager.confi
 
 ``REGISTRY`` 的顺序即设置 API 的稳定排序；``ui_locale``（界面/语言）居首，
 设置对话框按首次出现分组（SPEC-DM-013 §3.2）。
+
+控件类型为 ``path``/``bool``/``int``/``enum``/``text``：``text`` 是自由文本
+单行输入（SPEC-DM-014 的不编号子集关键字），不声明 min/max/options，
+取值上限由保存事务强制。
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ class SettingsItemMeta:
     key: str  # 与 Settings 字段同名，同时是 422 逐字段错误的外层稳定 key
     label_key: str  # 前端文案键，如 settings.items.uiLocale
     category_key: str  # 前端文案键，如 settings.categories.interface
-    control: Literal["path", "bool", "int", "enum"]
+    control: Literal["path", "bool", "int", "enum", "text"]
     nullable: bool = False  # 仅 path：允许清空（写入 null）
     file_filter_key: str | None = None  # 仅 path：过滤器显示名文案键
     file_kind: Literal["exe", "dll"] | None = None  # 仅 path：固定扩展名种类
@@ -107,6 +111,14 @@ REGISTRY: tuple[SettingsItemMeta, ...] = (
         label_key="settings.items.numberSuffixType",
         category_key="settings.categories.numbering",
         control="enum",
+    ),
+    SettingsItemMeta(
+        # 不编号子集关键字（SPEC-DM-014）：text 控件为单行逗号分隔文本，
+        # 取值恒为字符串，无 options/min/max 衍生元数据
+        key="unnumbered_subset_keywords",
+        label_key="settings.items.unnumberedSubsetKeywords",
+        category_key="settings.categories.numbering",
+        control="text",
     ),
 )
 

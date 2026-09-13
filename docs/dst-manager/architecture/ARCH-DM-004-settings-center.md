@@ -5,12 +5,14 @@ status: draft
 owners:
   - dst-manager
 created: 2026-09-07
-updated: 2026-09-08
+updated: 2026-09-13
 related:
   - PRD-DM-001
   - ARCH-DM-001
   - ARCH-DM-002
   - ARCH-DM-003
+  - SPEC-DM-011
+  - SPEC-DM-014
 document_kind: architecture
 ---
 
@@ -54,7 +56,7 @@ document_kind: architecture
 | `key` | 与 `Settings` 字段同名 |
 | `label` | 中文显示名 |
 | `category` | 分组（"AutoCAD 2016"、"AutoCAD 2020"、"任务执行"、"编号规则"） |
-| `control` | 控件类型：`path` / `bool` / `int` / `enum` |
+| `control` | 控件类型：`path` / `bool` / `int` / `enum` / `text`（`text` 为单行自由文本，无 min/max/options，取值上限由保存事务强制） |
 | `nullable` | 仅 `path` 有：是否允许"未配置"（四个 CAD 路径字段均为 `true`） |
 | `file_filter` | 仅 `path` 有：`exe`（Core Console）/ `dll`（Worker 插件），按字段分别声明 |
 | 帮助文案 | 说明文字 |
@@ -63,7 +65,7 @@ document_kind: architecture
 - **依赖方向单向**：`registry.py` → `config.py`；`config.py` 不得反向导入注册表（避免循环依赖）。完整性测试保证：`Settings` 每个 UI 字段都有注册项、派生的默认值/约束与 Schema 一致。
 - **可空路径契约**：`null` 表示"未配置"；空字符串/纯空白在进入 Settings 之前统一按 `null` 处理（pydantic 会把 `Path("")` 解析为当前工作目录，绝不允许该值落盘或生效）。路径控件提供"清除"动作。
 
-现有 9 个界面配置项全部登记：`autocad_2016_console`、`autocad_2016_plugin`、`autocad_2020_console`、`autocad_2020_plugin`、`cad_timeout_seconds`、`cad_max_parallel`、`worker_lease_seconds`、`enable_add_number_suffix`、`number_suffix_type`。
+现有 10 个界面配置项全部登记：`autocad_2016_console`、`autocad_2016_plugin`、`autocad_2020_console`、`autocad_2020_plugin`、`cad_timeout_seconds`、`cad_max_parallel`、`worker_lease_seconds`、`enable_add_number_suffix`、`number_suffix_type`、`unnumbered_subset_keywords`（`text` 控件，语义见 [SPEC-DM-014](../specs/SPEC-DM-014-unnumbered-subset-keywords.md)）。
 
 ### 2.2 用户配置文件：只存显式覆盖值
 
@@ -146,6 +148,8 @@ document_kind: architecture
 | 场景 | 行为 |
 | --- | --- |
 | 前端即时校验 | 类型、数字范围输入时反馈；不落盘 |
+| `text` 控件取值为非字符串（`SETTING_TEXT_TYPE`） | 保存事务拒绝并返回逐字段 422 |
+| `text` 控件的格式化上限被突破（`SETTING_KEYWORD_LIMIT`，如关键字数量/长度超限） | 保存事务拒绝并返回逐字段 422，`params` 带 `limit`/`actual`；**绝不截断用户输入**（读取既有文件/环境变量只规范化、不丢项） |
 | 后端权威校验 | Settings/Pydantic 语义为唯一权威（注册表只派生展示元数据）；PUT 全量重验 |
 | 路径输入为相对路径 | **保持现有兼容行为**：允许输入，进入有效配置与用户文件前统一规范化为绝对路径（沿用 `validate_cad_paths` 与 `test_cad_paths_resolve_relative_to_absolute` 守护的行为）；`.env` 行为不变 |
 | 路径为空字符串/纯空白 | 统一按"未配置"（`null`）处理，绝不解析为当前工作目录 |

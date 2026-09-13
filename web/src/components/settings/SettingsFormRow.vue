@@ -3,11 +3,11 @@
 // 只负责展示与编辑事件上抛；编辑缓冲、校验与保存状态机在 SettingsDialog.vue。
 // 文本一律经语言包渲染：item 的稳定显示键（labelKey/textKey/fileFilterKey），
 // 迁移期兼容中文回退（I18N-17）已随阶段三（Task 10）删除。DOM 约定（e2e 依赖）：
-// 行容器 data-field；可编辑控件 data-key；int 控件直接位于 .f-main 内，
+// 行容器 data-field；可编辑控件 data-key；int/text 控件直接位于 .f-main 内，
 // 保证 `input[data-key]` 的父节点包含来源徽章文本。
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
-import type {SettingsEnumOption, SettingsItem, SettingsValue} from "../../api/settings";
+import {MAX_UNNUMBERED_KEYWORD_CHARS,MAX_UNNUMBERED_KEYWORDS,type SettingsEnumOption,type SettingsItem,type SettingsValue} from "../../api/settings";
 import BooleanSwitch from "./BooleanSwitch.vue";
 
 const props=defineProps<{
@@ -74,6 +74,7 @@ function onEnumInput(event:Event){
         </div>
       </template>
       <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="onIntInput">
+      <input v-else-if="item.control==='text'" :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="t('settings.row.keywordPlaceholder')" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="commit(($event.target as HTMLInputElement).value)">
       <span v-else-if="item.control==='bool'" class="bool-line">
         <BooleanSwitch
           :checked="Boolean(shown)" :disabled="disabled" :label="label"
@@ -93,6 +94,7 @@ function onEnumInput(event:Event){
         <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
         <span v-if="item.control==='path'&&item.fileFilterKey!==undefined" class="f-hint">{{t(item.fileFilterKey)}}</span>
         <span v-else-if="item.control==='int'&&item.min!==undefined&&item.max!==undefined" class="f-hint">{{item.min}}–{{item.max}}</span>
+        <span v-else-if="item.control==='text'" class="f-hint">{{t("settings.row.keywordHint",{limit:MAX_UNNUMBERED_KEYWORDS,chars:MAX_UNNUMBERED_KEYWORD_CHARS})}}</span>
       </div>
       <p v-if="hasError" class="f-error" role="alert">{{error}}</p>
     </div>

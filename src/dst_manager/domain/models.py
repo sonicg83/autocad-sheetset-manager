@@ -117,8 +117,17 @@ class CustomPropertyDefinition:
 
 @dataclass(frozen=True, slots=True)
 class SuffixOptions:
+    """编号规则选项（设置中心「编号规则」分组）：
+
+    ``enabled``/``suffix_type`` 控制同标题图纸的标题后缀；
+    ``unnumbered_keywords`` 是「不编号子集」关键字清单（SPEC-DM-014），
+    子集可编辑标题命中任一关键字时该子集全部图纸图号固定为 0 填充且不消耗序号。
+    默认空元组 = 全部子集照常编号（向后兼容）。
+    """
+
     enabled: bool
     suffix_type: Literal[1, 2]
+    unnumbered_keywords: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

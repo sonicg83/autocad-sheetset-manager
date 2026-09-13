@@ -3,11 +3,17 @@
 // 本层负责 snake_case→camelCase 映射，composable 与组件只见 camelCase。
 import {request} from "./client";
 
-export type SettingsControl = "path" | "bool" | "int" | "enum";
+export type SettingsControl = "path" | "bool" | "int" | "enum" | "text";
 export type SettingsValue = string | number | boolean | null;
 export type SettingsSource = "default" | "env" | "file";
 // 仅 path 控件返回：ShellBridge 固定扩展名种类（PLAN-DM-021 Task 1）
 export type SettingsFileKind = "exe" | "dll";
+
+// text 控件（unnumbered_subset_keywords）的上限，与后端 domain/keywords.py 同值：
+// 超出上限的保存一律被后端 422 拒绕（绝不截断），本层常量只用于前端即时提示
+// 与编辑中的即时校验（ARCH-DM-005 §6.2 最终校验仍在后端）
+export const MAX_UNNUMBERED_KEYWORDS = 50;
+export const MAX_UNNUMBERED_KEYWORD_CHARS = 100;
 
 export interface SettingsEnumOption {
   // ui_locale 为字符串枚举（system/zh-CN/en-US），其余枚举为 int
@@ -27,7 +33,8 @@ export interface SettingsItem {
   default: SettingsValue;
   source: SettingsSource;
   hasFileOverride: boolean;
-  // 以下仅特定控件返回（path → nullable/fileFilterKey/fileKind；enum → options；int → min/max）
+  // 以下仅特定控件返回（path → nullable/fileFilterKey/fileKind；enum → options；int → min/max）；
+  // text 控件（unnumbered_subset_keywords）取值恒为字符串，无额外展示元数据
   nullable?: boolean;
   fileFilterKey?: string; // 过滤器显示名文案键，如 settings.fileFilters.executable
   fileKind?: SettingsFileKind; // ShellBridge 固定扩展名种类

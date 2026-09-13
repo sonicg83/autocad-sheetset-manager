@@ -56,6 +56,52 @@ def test_get_settings_returns_items_with_metadata(client_with_runtime) -> None:
     assert set(items) == set(Settings.model_fields) - {"data_dir", "draft_dir"}
     item = items["cad_timeout_seconds"]
     assert item["label_key"] and item["category_key"] and item["source"] in ("default", "env", "file")
+    # 文本控件（不编号子集关键字）：值为字符串，不携带 path/enum/int 专属字段
+    keyword_item = items["unnumbered_subset_keywords"]
+    assert keyword_item["control"] == "text"
+    assert keyword_item["value"] == "" and keyword_item["default"] == ""
+    assert keyword_item["options"] is None and keyword_item["min"] is None and keyword_item["max"] is None
+    assert keyword_item["nullable"] is None
+
+
+def test_put_unnumbered_keywords_normalizes_and_round_trips(client_with_runtime) -> None:
+    """文本控件保存链路：规范化后落盘，GET 回读同一规范形态（SPEC-DM-014）。"""
+    rev = client_with_runtime.get("/api/settings").json()["config_revision"]
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={
+            "expected_revision": rev,
+            "set": {"unnumbered_subset_keywords": "封面， 图纸目录,封面"},
+            "unset": [],
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["config_revision"] == rev + 1
+    item = next(i for i in body["items"] if i["key"] == "unnumbered_subset_keywords")
+    assert item["value"] == "封面,图纸目录" and item["source"] == "file"
+    reread = client_with_runtime.get("/api/settings").json()
+    item = next(i for i in reread["items"] if i["key"] == "unnumbered_subset_keywords")
+    assert item["value"] == "封面,图纸目录"
+
+
+def test_put_unnumbered_keywords_over_limit_returns_structured_422(client_with_runtime) -> None:
+    rev = client_with_runtime.get("/api/settings").json()["config_revision"]
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={
+            "expected_revision": rev,
+            "set": {"unnumbered_subset_keywords": "封" * 101},
+            "unset": [],
+        },
+    )
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "SETTINGS_VALIDATION_FAILED"
+    error = body["errors"]["unnumbered_subset_keywords"]
+    assert error["code"] == "SETTING_KEYWORD_LIMIT"
+    assert error["message_key"] == "settings.validation.keywordLengthLimit"
+    assert error["params"] == {"limit": 100, "actual": 101}
 
 
 def test_settings_items_carry_key_metadata_only(client_with_runtime) -> None:

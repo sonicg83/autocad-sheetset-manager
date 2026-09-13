@@ -18,6 +18,7 @@ from dst_manager.application.summaries import (
     operation_digest,
     parallel_makespan,
 )
+from dst_manager.domain.keywords import normalize_keywords
 from dst_manager.domain.models import JobStatus, Severity, SuffixOptions, Workspace
 from dst_manager.domain.planning import (
     PlanningError,
@@ -94,6 +95,7 @@ class EditingOperations:
                     SuffixOptions(
                         self.settings.enable_add_number_suffix,
                         self.settings.number_suffix_type,
+                        normalize_keywords(self.settings.unnumbered_subset_keywords),
                     ),
                 )
             except PlanningError as exc:

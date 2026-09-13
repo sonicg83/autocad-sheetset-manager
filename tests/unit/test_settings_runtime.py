@@ -247,6 +247,8 @@ def test_field_error_params_stay_within_whitelist(tmp_path) -> None:
         {"number_suffix_type": 3},
         {"number_suffix_type": ["1"]},
         {"ui_locale": "fr-FR"},
+        {"unnumbered_subset_keywords": ["封面"]},
+        {"unnumbered_subset_keywords": ",".join(f"关键字{i}" for i in range(51))},
         {"no_such_key": 1},
     ]
     keys = {meta.key for meta in REGISTRY}
@@ -274,3 +276,82 @@ def test_pydantic_fallback_error_is_structured() -> None:
     assert error.message_key == "settings.validation.invalidFormat"
     assert error.params == {}
     assert error.message
+
+
+# ---- 文本控件：不编号子集关键字（SPEC-DM-014）----
+
+
+def test_text_setting_persists_normalized_value(tmp_path) -> None:
+    """文本控件的持久形态是规范化结果：半角逗号分隔、trim、casefold 去重。"""
+    rt = _runtime(tmp_path)
+    snap = rt.apply_changes({"unnumbered_subset_keywords": " 封面 ，图纸目录,封面 "}, [], expected_revision=0)
+    assert snap.settings.unnumbered_subset_keywords == "封面,图纸目录"
+    assert snap.sources["unnumbered_subset_keywords"].source == "file"
+    assert snap.sources["unnumbered_subset_keywords"].has_file_override is True
+    assert json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))["values"] == {
+        "unnumbered_subset_keywords": "封面,图纸目录"
+    }
+
+
+def test_empty_text_setting_is_explicit_override_meaning_no_keyword(tmp_path) -> None:
+    """清空文本框是显式取值（无关键字），不按 path 控件的空串语义写成 null。"""
+    rt = _runtime(tmp_path)
+    rt.apply_changes({"unnumbered_subset_keywords": "封面"}, [], expected_revision=0)
+    snap = rt.apply_changes({"unnumbered_subset_keywords": ""}, [], expected_revision=1)
+    assert snap.settings.unnumbered_subset_keywords == ""
+    assert snap.sources["unnumbered_subset_keywords"].source == "file"
+    assert json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))["values"] == {
+        "unnumbered_subset_keywords": ""
+    }
+
+
+def test_text_setting_unset_restores_inheritance(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DST_MANAGER_UNNUMBERED_SUBSET_KEYWORDS", "封面")
+    rt = _runtime(tmp_path)
+    rt.apply_changes({"unnumbered_subset_keywords": "封面,目录"}, [], expected_revision=0)
+    snap = rt.apply_changes({}, ["unnumbered_subset_keywords"], expected_revision=1)
+    assert snap.settings.unnumbered_subset_keywords == "封面"          # file → env
+    assert snap.sources["unnumbered_subset_keywords"].source == "env"
+
+
+def test_text_setting_rejects_non_string_payload(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes({"unnumbered_subset_keywords": ["封面"]}, [], expected_revision=0)
+    error = exc_info.value.errors["unnumbered_subset_keywords"]
+    assert error.code == "SETTING_TEXT_TYPE"
+    assert error.message_key == "settings.validation.textType"
+    assert error.params == {}
+    assert not (tmp_path / "settings.json").exists()
+
+
+def test_text_setting_rejects_keyword_count_over_limit(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes(
+            {"unnumbered_subset_keywords": ",".join(f"关键字{i}" for i in range(51))},
+            [],
+            expected_revision=0,
+        )
+    error = exc_info.value.errors["unnumbered_subset_keywords"]
+    assert error.code == "SETTING_KEYWORD_LIMIT"
+    assert error.message_key == "settings.validation.keywordCountLimit"
+    assert error.params == {"limit": 50, "actual": 51}
+    assert not (tmp_path / "settings.json").exists()
+
+
+def test_text_setting_rejects_single_keyword_over_length_limit(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    with pytest.raises(SettingsValidationError) as exc_info:
+        rt.apply_changes({"unnumbered_subset_keywords": "封" * 101}, [], expected_revision=0)
+    error = exc_info.value.errors["unnumbered_subset_keywords"]
+    assert error.code == "SETTING_KEYWORD_LIMIT"
+    assert error.message_key == "settings.validation.keywordLengthLimit"
+    assert error.params == {"limit": 100, "actual": 101}
+
+
+def test_text_setting_at_limits_is_accepted(tmp_path) -> None:
+    rt = _runtime(tmp_path)
+    value = ",".join(f"关键字{i}" for i in range(50))
+    snap = rt.apply_changes({"unnumbered_subset_keywords": value}, [], expected_revision=0)
+    assert snap.settings.unnumbered_subset_keywords == value

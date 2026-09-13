@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dst_manager.domain.keywords import title_matches_keywords
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
@@ -400,11 +401,24 @@ def derive_document_structure(
 
     _apply_added_sheet_property_defaults(subsets, property_diff.added)
 
-    start, width = _number_seed(document)
+    # 不编号子集判定：动态读取「当前关键字清单 + 子集当前可编辑标题」，不持久化标记（SPEC-DM-014 §3.1）
+    unnumbered_subset_ids = {
+        subset.acsm_id
+        for subset in subsets
+        if title_matches_keywords(titles[subset.acsm_id], suffix_options.unnumbered_keywords)
+    }
+
+    start, width = _number_seed(document, unnumbered_subset_ids)
     current = start
     for subset in subsets:
         if not subset.sheets:
             raise EditingError("EMPTY_SUBSET", "子集必须至少包含一张图纸")
+        if subset.acsm_id in unnumbered_subset_ids:
+            # 不编号子集（SPEC-DM-014）：全部图纸图号恒为 0 填充（如 000），
+            # 位数继承项目编号位数，且不消耗全局序号，故不影响其他子集编号
+            for sheet in subset.sheets:
+                sheet.number = "0" * width
+            continue
         for sheet in subset.sheets:
             sheet.number = str(current).zfill(width)
             current += 1
@@ -586,17 +600,34 @@ def _insertion_index(
     raise EditingError(code, f"插入方向无效：{placement}")
 
 
-def _number_seed(document: SheetSetDocument) -> tuple[int, int]:
-    for sheet in document.sheets:
-        if sheet.number.isdigit():
-            return int(sheet.number), len(sheet.number)
+def _number_seed(document: SheetSetDocument, unnumbered_subset_ids: set[str]) -> tuple[int, int]:
+    """编号起点与位数取自首个「有编号子集」的首张纯数字图号。
+
+    不编号子集的 0 填充图号（如 000）必须排除，否则会把起点拉成 0，
+    使全部子集都从 000 开始编号（SPEC-DM-014 §3.2）。
+    """
+    for subset in document.subsets:
+        if subset.acsm_id in unnumbered_subset_ids:
+            continue
+        for sheet in subset.sheets:
+            if sheet.number.isdigit():
+                return int(sheet.number), len(sheet.number)
+    # 全部子集都不编号时无编号种子：仅借用文档既有数字图号的位数（图号仍全为 0 填充），
+    # 使「符合项目编号位数」不因关键字命中而丢失；确实无数字图号时回退 1 位
+    for subset in document.subsets:
+        for sheet in subset.sheets:
+            if sheet.number.isdigit():
+                return 1, len(sheet.number)
     return 1, 1
 
 
 def _number_range(sheets: list[Sheet]) -> str:
     if not sheets:
         raise EditingError("EMPTY_SUBSET", "子集必须至少包含一张图纸")
-    return sheets[0].number if len(sheets) == 1 else f"{sheets[0].number}-{sheets[-1].number}"
+    # 不编号子集内所有图纸图号相同 → 图号范围退化为单值（如 000），不写成 000-000
+    if sheets[0].number == sheets[-1].number:
+        return sheets[0].number
+    return f"{sheets[0].number}-{sheets[-1].number}"
 
 
 def _range_start(number_range: str) -> int:
