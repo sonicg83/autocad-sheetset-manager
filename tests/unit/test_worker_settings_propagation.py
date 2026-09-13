@@ -1,6 +1,7 @@
 """Worker 配置热更新与任务级快照（PLAN-DM-019 任务 6，ARCH-DM-004 §2.4）。
 
 覆盖要点：
+- 进程内运行期字段读取（``_live_settings``）按文件指纹刷新，保存后即时生效；
 - 认领时把 worker_lease_seconds 冻结进 jobs.lease_seconds 行快照；
 - recover_stale_jobs 按行快照判定过期，调用方全局默认只兜底空值；
 - 认领事件 detail 记录 cfg=r<config_revision>，可追溯任务实际配置；
@@ -10,6 +11,7 @@
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 from dst_manager.application import service as service_module
@@ -148,3 +150,49 @@ def test_run_next_job_uses_claim_time_snapshot_per_task(tmp_path: Path, monkeypa
     assert second.heartbeat_interval == 30.0  # min(30, 90/3)
     assert _row_lease_seconds(service.database, "job-2") == 90
     assert service.database.get_job("job-2")["timeline"][-1]["detail"].endswith("cfg=r2")
+
+
+# ------------------------------------ API 进程内运行期字段读取（_live_settings）
+
+
+def test_live_settings_refreshes_external_file_change(tmp_path: Path) -> None:
+    """外部改设置文件后，进程内运行期字段读取立即反映新值（无需重启）。"""
+    store = UserSettingsStore(tmp_path / "settings.json")
+    service = DstManagerService(
+        Settings(data_dir=tmp_path / "data"), runtime_settings=RuntimeSettings(store)
+    )
+    assert service._live_settings().cad_max_parallel == 4  # 未保存覆盖时取默认值
+
+    store.save_overrides({"cad_max_parallel": 9}, previous_revision=0)
+
+    assert service._live_settings().cad_max_parallel == 9
+    # 启动期字段（data_dir/draft_dir/database_url）不经运行期快照，
+    # 服务始终读构造期 self.settings（ARCH-DM-004 §2.2 非目标）
+    assert service.settings.data_dir == (tmp_path / "data").resolve()
+
+
+def test_live_settings_without_runtime_returns_constructor_settings(tmp_path: Path) -> None:
+    """未注入 RuntimeSettings（serve/既有测试）时退化为实例属性，零行为变化。"""
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    assert service._runtime is None
+    assert service._live_settings() is service.settings
+
+    # 既有测试直接替换 self.settings（SimpleNamespace 替身）必须继续生效
+    service.settings = SimpleNamespace(cad_max_parallel=7, data_dir=tmp_path / "data")
+    assert service._live_settings().cad_max_parallel == 7
+
+
+def test_live_settings_keeps_last_snapshot_on_older_schema_file(tmp_path: Path) -> None:
+    """设置文件被替换为旧 Schema 时保持上一份快照，不让运行期读取抛异常。"""
+    store = UserSettingsStore(tmp_path / "settings.json")
+    store.save_overrides({"cad_max_parallel": 6}, previous_revision=0)
+    runtime = RuntimeSettings(store)
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"), runtime_settings=runtime)
+    assert service._live_settings().cad_max_parallel == 6
+
+    store.path.write_text(
+        '{"schema_version": 0, "config_revision": 9, "values": {"cad_max_parallel": 12}}',
+        encoding="utf-8",
+    )
+
+    assert service._live_settings().cad_max_parallel == 6  # 旧 Schema 只读，保持旧快照

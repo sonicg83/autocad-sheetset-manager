@@ -216,7 +216,9 @@ def create_app(
     保存授权才能被 API 执行消费；缺省时默认装配新建独立实例。
     """
     app = FastAPI(title="DST Manager", version="0.3.0")
-    service = DstManagerService(settings)
+    # RuntimeSettings 必须注入服务：否则进程内预览/布局读取/运行期恢复只读启动期
+    # Settings，设置中心保存的文件值永不可见（ARCH-DM-004 §2.4"保存后即时生效"）。
+    service = DstManagerService(settings, runtime_settings=runtime_settings)
     app.state.service = service
 
     if extension_runtime is None:

@@ -58,7 +58,7 @@ class TransactionRecoveryOperations:
                 return
             if heartbeat.tzinfo is None:
                 heartbeat = heartbeat.replace(tzinfo=UTC)
-            if heartbeat < datetime.now(UTC) - timedelta(seconds=self.settings.worker_lease_seconds):
+            if heartbeat < datetime.now(UTC) - timedelta(seconds=self._live_settings().worker_lease_seconds):
                 return
         try:
             if journal.get("identity_version") != 1:

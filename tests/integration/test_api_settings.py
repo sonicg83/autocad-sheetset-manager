@@ -7,6 +7,7 @@
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -299,3 +300,87 @@ def test_get_refreshes_after_external_file_change(client_with_runtime, tmp_path)
     items = {item["key"]: item for item in body["items"]}
     assert items["cad_max_parallel"]["has_file_override"] is True
     assert items["cad_max_parallel"]["value"] == 3
+
+
+# ------------------------------------------- 运行期配置即时生效（ARCH-DM-004 §2.4）
+
+
+def _open_workspace(client, dst_path) -> dict:
+    """打开工作区，返回 API 上报的工作区视图（含 revision_id）。"""
+    resp = client.post("/api/workspaces/open", json={"dst_path": str(dst_path)})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _preview_insert_subset(client, workspace: dict, title: str, source: Path) -> dict:
+    """预览"在首位插入标题为 ``title`` 的子集"，返回预览响应体。"""
+    resp = client.post(
+        f"/api/workspaces/{workspace['id']}/changes/preview",
+        json={
+            "base_revision_id": workspace["revision_id"],
+            "commands": [
+                {
+                    "type": "insert_subset",
+                    "ordinal": 1,
+                    "placement": "before",
+                    "title": title,
+                    "initial_sheet_count": 1,
+                    "base_template_file": str(source),
+                    "source": {"type": "template_layout", "file": str(source), "layout": "001 平面"},
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_saved_keywords_apply_to_next_preview_without_restart(
+    client_with_runtime, tiny_workspace
+) -> None:
+    """保存"不编号图纸关键字"后，同进程内下一次预览必须立即按不编号子集派生编号。
+
+    回归：``create_app`` 未把 RuntimeSettings 注入 DstManagerService 时，服务只
+    读启动期 Settings，设置文件的值对预览完全不可见——用户填了关键字、新建
+    "封面"子集仍被编号（SPEC-DM-014 设置项承诺"保存后对下一次操作生效"）。
+    """
+    dst, _ = tiny_workspace
+    template = str(dst.parent / "A.dwg")
+    assert (
+        client_with_runtime.put(
+            "/api/settings",
+            json={
+                "expected_revision": 0,
+                "set": {"unnumbered_subset_keywords": "封面，扉页"},
+            },
+        ).status_code
+        == 200
+    )
+
+    after = _preview_insert_subset(
+        client_with_runtime, _open_workspace(client_with_runtime, dst), "封面", template
+    )["semantic_diff"]["structure"]["after"]
+    assert [subset["number_range"] for subset in after] == ["000", "001"]
+    assert [sheet["number"] for sheet in after[0]["sheets"]] == ["000"]
+    # 既有子集编号不受影响（SPEC-DM-014 行为 2）
+    assert [sheet["number"] for sheet in after[1]["sheets"]] == ["001"]
+
+
+def test_settings_file_change_while_running_applies_to_next_preview(
+    client_with_runtime, tmp_path, tiny_workspace
+) -> None:
+    """外部改设置文件（另一窗口保存/手编）后，运行中的进程下一次预览即生效。
+
+    与 Worker 的按文件指纹热更新（ARCH-DM-004 §2.4）同一规则：预览路径先
+    ``refresh_if_changed()`` 再取快照，不读进程启动期的陈旧副本。
+    """
+    dst, _ = tiny_workspace
+    template = str(dst.parent / "A.dwg")
+    _write_settings_file(
+        tmp_path, schema_version=1, revision=7, values={"unnumbered_subset_keywords": "封面"}
+    )
+
+    after = _preview_insert_subset(
+        client_with_runtime, _open_workspace(client_with_runtime, dst), "封面", template
+    )["semantic_diff"]["structure"]["after"]
+    assert after[0]["number_range"] == "000"

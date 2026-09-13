@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-13（修复：设置中心保存的配置对预览不生效，PLAN-DM-028）
+
+用户缺陷报告（打包 EXE）：在「设置 → 编号规则 → 不编号图纸关键字」填入 `封面，扉页` 并保存后，在图纸编辑中新建名为「封面」的子集**仍被编号**。定位为设置中心接线缺陷，不是 SPEC-DM-014 的领域规则错误。
+
+- **根因**：`create_app` 只把 `RuntimeSettings` 用于注册 `/api/settings`、`/api/about` 端点，构造 `DstManagerService` 时**未注入**该快照持有者 → `service._runtime is None`，服务内所有 `self.settings.<运行期字段>` 读取的都是构造期副本（桌面壳传入的 `Settings()` = 默认值 + `env`/`.env`，**不含** `settings.json` 覆盖）。后果：设置中心保存的值只更新了内存快照与文件，预览派生编号、CAD 路径/超时、`cad_max_parallel`、`worker_lease_seconds` 全为旧值，**重启同样无效**（文件值也进不了构造期 `Settings()`）。Worker 侧在 PLAN-DM-019 任务 6 已正确接线，仅 API 进程漏接。
+- **修复（`application/service.py`、`application/editing.py`、`application/recovery.py`、`interfaces/api.py`）**：新增统一运行期读取口 `_live_settings()`——注入时先 `refresh_if_changed()` 再取 `current()` 快照（设置文件被本进程、其他窗口或手工编辑改写都能立即感知；文件被替换为旧 Schema 时保持上一份快照，不让预览报 500），未注入时退化为构造期 `self.settings`（`serve` 与既有测试行为零变化）；编号规则 `SuffixOptions`（后缀开关/类型、不编号关键字）、`cad_max_parallel`、`cad_timeout_seconds`、`_capability()` 的 CAD 控制台/插件路径、`worker_lease_seconds` 全部改走该读取口；`create_app` 改为 `DstManagerService(settings, runtime_settings=runtime_settings)` 并留注释。启动期字段（`data_dir`/`draft_dir`/`database_url`）仍只读构造期快照。
+- **新增回归测试**：`tests/integration/test_api_settings.py` 2 例（保存关键字后同进程下一次预览即按不编号子集派生 `000` 且既有子集仍 `001`；外部改设置文件后预览立即生效）——修复前 RED（`['001','000'] == ['000','001']`、`'001' == '000'`，正是用户症状）；`tests/unit/test_worker_settings_propagation.py` 3 例（外部改文件即刷新、未注入时退化为实例属性含 `SimpleNamespace` 替身、旧 Schema 文件保持上一份快照不抛异常）。
+- **验证**：`uv run ruff check .` EXIT=0；`uv run pytest -q` **1451 tests / 0 failures / 0 errors / 72 skipped**（修复前 1446，+5 用例）；`npm run build` EXIT=0（`check:api` 无漂移、`check:i18n` 944 键 / 9 域）；`npx playwright test` 全量 **490 passed / 0 failed**（exit 0，3.1 分钟，真实后端 + 隔离 `settings.json`）；另以临时脚本复现用户场景：保存前 `[[1,'001'], [2,'002']]` → 保存后 `[[1,'000'], [2,'001']]`，关键字子串命中（「扉页说明」）同样 `000`。真实 AutoCAD 系统测试未执行（本修复不涉及 SCR/插件/布局重建）。
+- **文档**：新增 [PLAN-DM-028](.planning/plans/dst-manager/PLAN-DM-028-runtime-settings-live-consumption.md)（`completed`，含缺陷机理、实际验证与门禁缺口）；[ARCH-DM-004 §2.4](docs/dst-manager/architecture/ARCH-DM-004-settings-center.md) 增补第 6 条「API 进程内的运行期字段读取必须走注入的 `RuntimeSettings`」（含覆盖点清单、启动期例外、旧 Schema 容忍）并同步 §7 测试策略与 §8 实现注意点；[SPEC-DM-014](docs/dst-manager/specs/SPEC-DM-014-unnumbered-subset-keywords.md) 追记实现缺陷修复指引；`.planning/plans/dst-manager/README.md` 增索引行；顺带修正本文件 4 处既存越级链接（`../../.planning/...` → `.planning/...`，该 4 处早于本次改动）；G8/G9 缺口登记为待办 `.planning/todos/dst-manager/2026-09-13-unnumbered-keywords-gate-gaps.md`（用户裁定暂不补）。
+- **遗留（待用户执行）**：打包 EXE 需按 `scripts/build_release.ps1` 重新构建（本次未执行 PyInstaller，因为修复不改变代码以外的产物规则），并在真实桌面做一次 G9 验收（保存关键字 → 新建「封面」子集不编号）。
+
 ## 2026-09-13（新增不编号图纸关键字：SPEC-DM-014 + PLAN-DM-027）
 
 用户需求：在「图纸管理」中维护关键字列表，新建子集的名称包含关键字时该子集及其图纸不编号（且不影响其他子集编号）；设置项放在「设置 → 编号规则」，与图纸目录的「输出图纸过滤」同输入口径。
@@ -382,7 +393,7 @@
 
 - 用户裁决（确认人：用户，日期 2026-09-11）：对照冻结基准 JPG 与 `production/` 下两张生产 PNG，逐对确认 PLAN-DM-023 的 V1～V8 全部关闭，**G8 通过**；并接受 MEMO-DM-030 §6.4 三项差异为可保留差异（卡片标题保持 SPEC-DM-012 §7.2 区域名、页头保留版本/状态与启停指引、900×700 字段区 235px 限高不复制 Demo 塔陷）。裁决记录：MEMO-DM-030 §6.5。
 - SPEC-DM-012 §16 门禁表：G8 由“待用户复核”改为“通过”（确认人：用户，2026-09-11，预先保留差异全集 = A1/A2 + §6.4 三项）；G9 行由“未开始（G8 阻断）”改为“未开始（待用户执行）”。
-- PLAN-DM-023 `status` 由 `active` 改为 `completed`，任务 6 步骤 4 勾选并记录裁决依据；[MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”已全部满足表，G9 暂停解除。
+- PLAN-DM-023 `status` 由 `active` 改为 `completed`，任务 6 步骤 4 勾选并记录裁决依据；[MEMO-DM-028](.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”已全部满足表，G9 暂停解除。
 - **未代替用户执行/填写**：G9 的真实桌面与 Excel 逐项验收结果、操作者与日期、G9 结论均保持留空；G9 通过前 PLAN-DM-020 保持 `active`，不标 `completed`。
 - 同步治理文档：PLAN-DM-020 实际验证追加 G8 通过记录、两份 README 状态行（PLAN-DM-023=completed、SPEC-DM-012=G0～G8 已通过）。
 - 收口前完整验证（本轮新鲜输出，全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（**432 passed / 0 failed / 1 flaky，退出码 0**）。flaky 为 `main.spec.ts`「深色模式下文本输入框与下拉选单随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动；同一次 4 worker 运行中另有本计划 V4 用例因同一抖动超时，两条均重试后通过（当次退出码 1 来自 2 个 worker 停止超时的基础设施错误，非用例断言失败），且两条均已单独 `--workers=1 --retries=0` 复现通过（各 1 passed），确认非真实回归。
@@ -390,9 +401,9 @@
 ## 2026-09-11（PLAN-DM-023 任务 6：生成 G8 生产证据、逐对比对并交用户裁决）
 
 - 生产证据入版本库：新建 `docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-catalog-light-1440x1000.png`（1440×1000）与 `g8-catalog-dark-900x700.png`（900×700），尺寸与冻结基准图逐项一致；`sheet-catalog-visual-evidence.spec.ts` 的 `attachScreenshot` 新增可重复路径——默认只写测试附件，`DST_MANAGER_WRITE_G8_EVIDENCE=1` 时同步写入版本库目录，复现命令已写进该文件头与 PLAN-DM-023 实际验证。
-- [MEMO-DM-030](../../.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md) 新增 §6：实施与证据、同口径几何对照表（页头 48→24px、模板栏 85→50px、栅格 443→425px、字段栏均 258px、兼容带 66→42px、数据行 80→74px、预览卡 250→259px）、V1～V8 与 A1/A2 逐项判定，以及 §6.4 三项**未被实施代理接受**的差异候选（卡片标题文案、页头两段保留正文、900×700 字段区 235px 限高不复制 Demo 的 2px 塌陷）。
+- [MEMO-DM-030](.planning/memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md) 新增 §6：实施与证据、同口径几何对照表（页头 48→24px、模板栏 85→50px、栅格 443→425px、字段栏均 258px、兼容带 66→42px、数据行 80→74px、预览卡 250→259px）、V1～V8 与 A1/A2 逐项判定，以及 §6.4 三项**未被实施代理接受**的差异候选（卡片标题文案、页头两段保留正文、900×700 字段区 235px 限高不复制 Demo 的 2px 塌陷）。
 - SPEC-DM-012 §16 门禁表 G8 由“未通过（用户真实桌面复验）”改为“待用户复核（PLAN-DM-023 已实施）”，确认人/日期留空；G9 仍为“未开始（G8 阻断）”。PLAN-DM-023 `status` 改为 `active`（37 个步骤勾选，仅“用户确认后更新门禁”未勾），并追加“实际验证”章节。
-- 同步治理文档：[MEMO-DM-027](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md) 声明的 D1～D10“已接受差异”全部失效（仅 A1/A2 保留）、[MEMO-DM-028](../../.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”表（唯一未满足项为用户逐对确认）、PLAN-DM-020 与实际验证追加本轮新鲜回归、两份 README 状态行同步。
+- 同步治理文档：[MEMO-DM-027](.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-design-qa.md) 声明的 D1～D10“已接受差异”全部失效（仅 A1/A2 保留）、[MEMO-DM-028](.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 新增“暂停解除条件”表（唯一未满足项为用户逐对确认）、PLAN-DM-020 与实际验证追加本轮新鲜回归、两份 README 状态行同步。
 - 完整验证（本轮新鲜输出、退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 `npm run test:e2e`（432 passed / 0 failed / 1 flaky）；flaky 为 `main.spec.ts`「深色模式下中心视图区域随主题切换背景」在 4 worker 下的 dev server `page.goto` 抖动，已单独 `--workers=1 --retries=0` 复现通过。
 - **未完成事项（需用户裁决）：G8 保持“待用户复核”，PLAN-DM-023 保持 `active`，G9 保持暂停；实施代理未自行登记通过、未自行接受任何差异。**
 

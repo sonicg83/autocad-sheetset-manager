@@ -43,6 +43,7 @@ from dst_manager.infrastructure.filesystem.workspace import write_workspace_meta
 from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
 from dst_manager.settings.runtime import RuntimeSettings
+from dst_manager.settings.store import SettingsSchemaOlder
 
 
 class DstManagerService(
@@ -117,6 +118,28 @@ class DstManagerService(
         if self._runtime is not None:
             return self._runtime.current().settings
         return self.settings
+
+    def _live_settings(self) -> Settings:
+        """API/Worker 进程内运行期配置读取口（ARCH-DM-004 §2.4"保存后即时生效"）。
+
+        注入 RuntimeSettings 时先按文件指纹刷新（设置文件可能被本进程的
+        ``/api/settings``、另一个窗口或手工编辑改写），再取当前快照；未注入时
+        仍退化为 ``self.settings``（serve/既有测试零变化，测试可直接替换属性）。
+        必须在取快照**前**刷新：只刷新后读 ``current()`` 才拿得到新值。
+
+        设置文件被替换为旧 Schema（``SettingsSchemaOlder``，需迁移）时保持上一份
+        已加载快照：只读语义下继续用旧值，不让预览/布局读取变成 500。
+
+        仅用于运行期字段（编号规则、CAD 路径与超时、并发度、租约等）；``data_dir``、
+        ``draft_dir``、``database_url`` 属启动期字段（ARCH-DM-004 §2.2 非目标），
+        一律读构造期 ``self.settings``。
+        """
+        if self._runtime is not None:
+            try:
+                self._runtime.refresh_if_changed()
+            except SettingsSchemaOlder:
+                pass
+        return self._snapshot_settings()
 
     def _snapshot_config_revision(self) -> int | None:
         """当前配置修订号；未注入 RuntimeSettings 时为 None（detail 保持既有格式）。"""
@@ -242,7 +265,9 @@ class DstManagerService(
             shutil.copy2(resolved, work_dir / "source.dwg")
             script = renderer.render_layout_names(capability, work_dir)
             try:
-                executor.run(capability, work_dir / "source.dwg", script, self.settings.cad_timeout_seconds)
+                executor.run(
+                    capability, work_dir / "source.dwg", script, self._live_settings().cad_timeout_seconds
+                )
             except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
                 raise ApplicationError("LAYOUT_READ_FAILED", "读取布局失败：DWG 可能正被 AutoCAD 占用或 CAD 环境不可用", 502) from exc
             sidecar = work_dir / "source.dst-layout-names.json"
@@ -253,8 +278,8 @@ class DstManagerService(
         return {"layouts": layouts, "cached": False, "file_hash": digest}
 
     def _capability(self, version: str, settings: Settings | None = None) -> CadCapability:
-        # settings 缺省回退启动期配置；run_next_job 必须传认领时冻结的快照
-        settings = settings or self.settings
+        # settings 缺省回退运行期配置；run_next_job 必须传认领时冻结的快照
+        settings = settings or self._live_settings()
         if version == "2016":
             return CadCapability(version, settings.autocad_2016_console, settings.autocad_2016_plugin)
         if version == "2020":

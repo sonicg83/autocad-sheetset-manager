@@ -88,14 +88,17 @@ class EditingOperations:
             )
         execution_intent = None
         if structural and not diagnostics:
+            # 编号规则（后缀开关/类型、不编号关键字）取运行期快照：保存后
+            # 下一次预览即生效（ARCH-DM-004 §2.4），不读启动期副本。
+            live = self._live_settings()
             try:
                 execution_intent = build_structural_plan(
                     workspace,
                     [command for command in normalized_commands if command not in property_commands],
                     SuffixOptions(
-                        self.settings.enable_add_number_suffix,
-                        self.settings.number_suffix_type,
-                        normalize_keywords(self.settings.unnumbered_subset_keywords),
+                        live.enable_add_number_suffix,
+                        live.number_suffix_type,
+                        normalize_keywords(live.unnumbered_subset_keywords),
                     ),
                 )
             except PlanningError as exc:
@@ -416,7 +419,8 @@ class EditingOperations:
             "2020": {"rename_only": (10_000, 30_000), "rebuild": (45_000, 120_000)},
         }
         groups = list(execution_intent.get("groups", []))
-        concurrency = min(self.settings.cad_max_parallel, len(groups)) if groups else 0
+        live = self._live_settings()
+        concurrency = min(live.cad_max_parallel, len(groups)) if groups else 0
         sources: list[dict[str, Any]] = []
         ranges: dict[str, tuple[int, int]] = {}
         for operation in sorted({str(group["cad_operation"]) for group in groups}):

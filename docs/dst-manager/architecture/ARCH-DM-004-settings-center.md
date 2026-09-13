@@ -88,7 +88,7 @@ document_kind: architecture
 
 - `SettingsResolver` 分别读取代码默认值、环境变量/`.env`、`settings.json` 显式覆盖值，产出**不可变 `SettingsSnapshot`**：有效 `Settings`、逐字段 `source`（`default` / `env` / `file`，在合并时记录，不从最终值反推——相同数值可能来自不同层级）、文件覆盖集合、诊断码、`config_revision`。
 - **保存事务**：进程内锁覆盖"读取基准快照 → 全量校验 → 同目录临时文件写入 → `os.replace` → 替换进程内快照"全过程；保存响应必须来自锁内已提交的同一快照，不得锁外重新拼装。临时文件、备份、锁均只落用户配置目录，不写程序目录或项目目录。
-- 启动期字段（`data_dir`/`draft_dir`，未界面化）只在进程启动时消费；运行期字段的生效边界见 §2.4。
+- 启动期字段（`data_dir`/`draft_dir`，未界面化）只在进程启动时消费；运行期字段的生效边界见 §2.4（含 API 进程内读取口与例外）。
 
 ### 2.4 跨进程传播：API 进程与 CAD Worker
 
@@ -99,6 +99,11 @@ document_kind: architecture
 3. 已运行任务继续用旧快照，不做中断。
 4. **租约安全规则**：任务认领时把该任务使用的 `worker_lease_seconds` 随快照写入任务记录；API 过期恢复（`recover_stale_jobs`）按各任务记录的 lease 快照判断，不统一用 API 当前值——新旧 lease 并存的过渡期不会误回收仍在执行的任务。
 5. 不采用"保存后受控重启 Worker"方案：生命周期干扰大，且与本节"新任务新配置、旧任务旧快照"的语义不匹配。
+6. **API 进程内的运行期字段读取必须走注入的 `RuntimeSettings`**（2026-09-13 补充）：`create_app` 必须把快照持有者传给 `DstManagerService`；服务经统一读取口（`_live_settings()`：先 `refresh_if_changed()` 再取 `current()`）读运行期字段，不得直接读构造期 `self.settings`。
+   - 覆盖面（服务内全部运行期读取点）：编号规则（`domain.SuffixOptions`：后缀开关/后缀类型/不编号关键字）、CAD 控制台与插件路径与 `cad_timeout_seconds`、`cad_max_parallel`、`worker_lease_seconds`。
+   - 例外：`data_dir`/`draft_dir`/`database_url` 属启动期字段（§2.2 非目标），永远只读构造期快照。
+   - 该读取口按文件指纹刷新，因此**手工编辑或其他窗口保存**的 `settings.json` 对同进程的下一次预览/布局读取同样生效；文件被替换为旧 Schema（`SETTINGS_SCHEMA_OLDER`）时保持上一份快照（§5 只读语义），不让预览报错。
+   - 缺陷背景与回归证据见 [PLAN-DM-028](../../../.planning/plans/dst-manager/PLAN-DM-028-runtime-settings-live-consumption.md)：`create_app` 曾未注入快照持有者，导致设置中心保存的**文件值**对进程内预览完全不可见（仅 `env`/`.env` 生效）。
 
 ## 3. API 契约（版本化）
 
@@ -181,7 +186,7 @@ document_kind: architecture
   - 并发与一致性（P1-03）：两个并发 PUT 后内存与磁盘最终快照一致；过期 `expected_revision` 返回 409 且不修改任何状态；文件写入成功但内存提交前异常时，重启按文件权威恢复。
   - Worker 热更新（P1-01）：Worker 启动后修改 CAD 路径，下一任务用新路径；新任务新值、已认领任务保持旧值；租约过渡期 API 恢复判断与 Worker 心跳不产生误回收；任务日志可追溯实际使用的 `config_revision`。
   - Schema 与故障恢复（P2-02）：JSON 截断、非法 UTF-8、字段类型损坏分别产生稳定诊断；过新高版本 Schema 不被 GET 或失败 PUT 改写（字节不变）；用户明确重置前保留原文件、重置后保留可恢复备份。
-- **API 集成测试**：GET 契约快照（OpenAPI 模型 + 稳定排序）；PUT 逐字段 422、全有或全无、409；落盘文件只含显式覆盖；`GET /api/about` 版本与 LICENSE 读取。
+- **API 集成测试**：GET 契约快照（OpenAPI 模型 + 稳定排序）；PUT 逐字段 422、全有或全无、409；落盘文件只含显式覆盖；`GET /api/about` 版本与 LICENSE 读取；**保存后的运行期字段对同进程下一次预览立即生效**（不重启）、外部改文件后同样生效（PLAN-DM-028 回归）。
 - **Playwright e2e**：未加载工作区时齿轮可见可开；修改 → 保存 → 重开对话框值保留；校验失败行内错误与焦点；未保存关闭确认；`npm run build` 生产构建。
 - **手工验收**（e2e 无法覆盖，列入 rc 验证清单）：打包后桌面壳内路径选择器真实弹窗（EXE/DLL 过滤器各一）；保存后配置对真实 CAD 任务生效；移动绿色包后未覆盖的插件默认路径跟随新 exe 目录；frozen 包内版本元数据与 `LICENSE` 可从 `runtime.resource_dir()` 读取。
 - 回归安全网：`config.py` 保持权威、validator 语义不变，既有测试（当前 642 passed 基线）必须保持通过。
@@ -190,4 +195,5 @@ document_kind: architecture
 
 - **frozen 态包元数据**：`importlib.metadata` 需要 PyInstaller 收集 `dst-manager-*.dist-info`；若默认未收集，在 `packaging/dst-manager.spec` 补 hook。连同 §3 的 `LICENSE` 数据文件，spec 共两处新增——这是本设计仅有的打包配置触点；两者统一经 `runtime.resource_dir()` 定位。
 - **一致性核查项**：修订实施前核查 ARCH-DM-002、根 README、`setup.bat` 中 `.env` 用户路径的描述与新优先级（默认 < env < 用户覆盖）及恢复继承语义一致；不一致处以本文档为准并同步修订。
+- **运行期字段读取口（PLAN-DM-028 教训）**：服务方法里直接写 `self.settings.<运行期字段>` 就是缺陷——它只看构造期快照（桌面壳传入的 `Settings()`，即默认+env），设置文件的值永远不可见。新增/修改任何预览、CAD 调用、恢复逻辑时必须用 `self._live_settings()`；单测若直接替换 `self.settings`（`SimpleNamespace` 替身），未注入 `RuntimeSettings` 时读取口仍退化到该属性，既有测试不受影响。
 - **文档索引**：本文接受后同步维护 `docs/dst-manager/README.md` 索引与根 `changelog.md`。

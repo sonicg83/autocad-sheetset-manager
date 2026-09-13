@@ -14,6 +14,7 @@ related:
   - ARCH-DM-004
   - GUIDE-DM-003
   - PLAN-DM-027
+  - PLAN-DM-028
 ---
 
 # 不编号图纸关键字规范
@@ -156,3 +157,5 @@ related:
 设计与关键字语义由用户于 2026-09-13 在设计问答中确认（动态判定、图号统一 `000`、标题后缀沿用全局设置、关键字输入与输出图纸过滤同口径）。
 
 **门禁分级（如实记录）：** 本项引入新控件类型 `text`，按 GUIDE-DM-003 A-6 属 [GUIDE-DM-001](../guides/GUIDE-DM-001-frontend-design-implementation-gates.md) 的 **M 级**。G3/G4（新视觉方向与冻结、Demo）与 G8（新的同态截图证据）**未重开**——本项无新视觉选择，直接复用设置对话框既有行渲染与错误态，既有冻结件与生产证据未重取；G9 真实桌面验收未发起。门禁逐项状态与待补动作见 [PLAN-DM-027](../../../.planning/plans/dst-manager/PLAN-DM-027-unnumbered-subset-keywords.md)「门禁分级与证据缺口」。
+
+**实现缺陷修复（2026-09-13 追记）：** 打包 EXE 内出现「保存了关键字但新建「封面」子集仍被编号」——根因不在本 SPEC 的领域规则，而是设置层到预览的接线：`create_app` 未把 `RuntimeSettings` 注入 `DstManagerService`，服务的运行期字段读取（含 `unnumbered_subset_keywords`）恒为构造期快照，`settings.json` 覆盖值对预览不可见（重启也不生效）。修复与回归证据见 [PLAN-DM-028](../../../.planning/plans/dst-manager/PLAN-DM-028-runtime-settings-live-consumption.md)，并已回写 [ARCH-DM-004 §2.4](../architecture/ARCH-DM-004-settings-center.md)；本节上述行为的定义不变，仅实现现已与之相符。
