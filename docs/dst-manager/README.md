@@ -59,6 +59,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 ## 研究与分析
 
 - [图号前导零格式化与格式码惯例调研（RES-DM-001，已接受；方案选型证据，实施计划 PLAN-DM-026 已完成）](research/RES-DM-001-number-format-code-conventions.md)
+- [图纸目录标准模板库分发方案调研与提案（RES-DM-002，草稿；提案性质，标准模板库的分发通道与 pack 格式设计，不改动现有实现）](research/RES-DM-002-standard-template-library-distribution.md)
 
 ## 指南
 

@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-13（新增 RES-DM-002：图纸目录标准模板库分发方案提案）
+
+- **新增文档**：`docs/dst-manager/research/RES-DM-002-standard-template-library-distribution.md`（`status: draft`，提案性质）。内容：图纸目录模板的现状存储事实（`extension_settings` 行结构、本地 HTTP API 与直接写库两条路径、全部校验约束与稳定错误码、`data_dir` 的打包态/开发态分支）、pack 格式提案（含 `uuid5` 稳定 ID 派生规则与「额外键不落库」的源码实证）、四条分发通道对比（A 独立标准库仓库 + 本地 API 导入脚本 / B 装机预置写库 / C 随包发布 / D 产品化入口）、导入算法与失败语义表、升级与删除语义的模型局限，以及五项开放问题。
+- **索引同步**：`docs/dst-manager/README.md` 的「研究与分析」段新增该文档链接。
+- **验证口径**：本次**未改动任何源码、测试与配置**，未运行代码门禁（无代码改动）；文档事实来自源码只读阅读与 `%LOCALAPPDATA%\dst-manager\data\dst-manager.db` 的只读查询（SQLite `mode=ro`，未修改任何数据）。
+
 ## 2026-09-13（G9 真实桌面/Excel 验收通过，PLAN-DM-020 与 PLAN-DM-025 关闭）
 
 用户于本日在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境执行 [MEMO-DM-028](.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) `### 1.1～1.10` 全套后**整体确认通过**，无遗留缺陷；`g8-ext-06～10` 与冻结件的已声明差异经像素级复核后获接受（无未声明差异）。
