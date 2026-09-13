@@ -39,8 +39,8 @@ related:
 | 项 | 值 |
 | --- | --- |
 | 被测分发包 | _待填写_（`scripts/build_release.ps1` 产物 `dist/releases/dst-manager-v<版本>-win64.zip` 的 SHA-256） |
-| 被测 commit | _待填写_（构建时 `feature/plan-dm-025-extension-global-settings` 分支的 HEAD SHA；该分支尚未合入 `main`） |
-| 被测分支 | `feature/plan-dm-025-extension-global-settings`（**构建必须用本分支**：`main` 的 HEAD 不含 PLAN-DM-025 的扩展设置框架与「输出图纸过滤」）。分支合并方式由用户在本轮 G9 有结论后再定 |
+| 被测 commit | _待填写_（构建时 `feature/plan-dm-025-extension-global-settings` 分支的 HEAD SHA；该分支尚未合入 `main`）**（2026-09-13 后续：该分支已于同日合并到 `main`（合并提交 `b77d8bb`）并删除，届时分支 HEAD = `8833e0a`；本条保留 G9 交接时的口径。）** |
+| 被测分支 | `feature/plan-dm-025-extension-global-settings`（**构建必须用本分支**：`main` 的 HEAD 不含 PLAN-DM-025 的扩展设置框架与「输出图纸过滤」）。分支合并方式由用户在本轮 G9 有结论后再定 **（2026-09-13 后续：已由用户裁定合并到 `main`（不推送，合并提交 `b77d8bb`）并删除本地分支；今后构建直接用 `main` 的 HEAD 即可，内容已全部包含。）** |
 | pyproject 版本 | _待填写_（0.3.3；`/api/about` 与顶栏/设置中心一致） |
 | Windows 版本与区域 | _待填写_ |
 | WebView2 Runtime 版本 | _待填写_ |
@@ -139,7 +139,7 @@ related:
 
 > 本节是上面 `### 1.10` 六条验收项的**可执行步骤**，由实施代理按 PLAN-DM-025 步骤 6 准备（用户 2026-09-13 选择「交接清单」路径，不在实施会话内代跑）。执行人＝用户；实施代理不得代填任何结论。编号步骤与 `### 1.10` 的对应关系写在每步标题里。
 
-**被测**：分支 `feature/plan-dm-025-extension-global-settings`（未合并 `main`），commit 取构建时 HEAD；被测分发包由该分支构建。
+**被测**：分支 `feature/plan-dm-025-extension-global-settings`（未合并 `main`；**2026-09-13 后续：已合并到 `main` 并删除，见 §0 表注**），commit 取构建时 HEAD；被测分发包由该分支构建。
 
 **前置条件（先填 §0 表）**：
 
