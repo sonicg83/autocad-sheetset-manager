@@ -37,6 +37,13 @@ export type CadGroup = components["schemas"]["CadGroupResponse"];
 export type ExtensionSummary = components["schemas"]["ExtensionSummaryModel"];
 export type ExtensionUiContribution = components["schemas"]["ExtensionUiContributionModel"];
 export type ExtensionLifecycleStatus = ExtensionSummary["status"];
+// 扩展设置契约（PLAN-DM-025 Task 7；ARCH-DM-006 §8.1/§8.2）：呈现声明只给方式与受控路由键，
+// 字段项与快照由 GET /api/extensions/{id}/settings 返回，写入必须携带 schema_version 与 expected_revision。
+export type ExtensionSettingsContribution = components["schemas"]["ExtensionSettingsContributionModel"];
+export type ExtensionSettingsItem = components["schemas"]["ExtensionSettingsItemModel"];
+export type ExtensionSettingsFieldControl = ExtensionSettingsItem["control"];
+export type ExtensionSettingsView = components["schemas"]["ExtensionSettingsResponseModel"];
+export type ExtensionSettingsWrite = components["schemas"]["ExtensionSettingsPutRequest"];
 
 export type ChangeCommand = NonNullable<
   components["schemas"]["ChangePreviewRequest"]["commands"]

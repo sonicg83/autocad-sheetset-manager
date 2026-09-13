@@ -1,4 +1,4 @@
-"""Capability Broker 与最小 ExtensionContext（PLAN-DM-020 Task 4 / ARCH-DM-006 §6.1）。
+"""Capability Broker 与最小 ExtensionContext（PLAN-DM-020 Task 4 / ARCH-DM-006 §6.1、§11）。
 
 扩展只能通过短生命周期 :class:`ExtensionContext` 请求**清单已声明 ∩ 宿主
 allowlist** 的能力；每次上下文绑定 ``extension_id``、``workspace_id``、
@@ -10,6 +10,10 @@ allowlist** 的能力；每次上下文绑定 ``extension_id``、``workspace_id`
 返回的冻结快照。本任务只交付 broker 本体；接入 ``ExtensionRuntime``/
 ``discover`` 对账属 Task 6，宿主可用性（``AVAILABLE_CAPABILITIES``）缺省
 沿用注册表模块的同一份 allowlist。
+
+PLAN-DM-025 Task 4：每次动作调用的不可变设置快照随上下文一同发放。快照由
+宿主运行时在创建上下文**之前**取得（§11），Broker 只按调用转交、不读 Store、
+不重新解析设置；``close()`` 后设置与工作区能力同样失效（fail-closed）。
 
 错误 ``code`` 只取自既有封闭词汇（``ExtensionDiagnosticCode`` 六值诊断码与
 ARCH-DM-006 §12 平台码），不新增诊断码。
@@ -33,6 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from dst_manager.extensions.contracts import ExtensionManifest
+    from dst_manager.extensions.settings import ExtensionSettingsSnapshot
     from dst_manager.infrastructure.extension_workspace import DecodedWorkspace
 
 __all__ = [
@@ -58,7 +63,11 @@ class CapabilityError(RuntimeError):
 
 
 class ExtensionContext:
-    """一次调用的最小能力上下文：``close()`` 后所有请求失败。"""
+    """一次调用的最小能力上下文：``close()`` 后所有请求失败。
+
+    ``settings`` 是宿主运行时在创建本上下文前取得的不可变设置快照（§11）；
+    Broker 只转交，不读取 Store、不重新解析设置，也不缓存可变设置。
+    """
 
     def __init__(
         self,
@@ -67,12 +76,14 @@ class ExtensionContext:
         required_revision_id: str,
         capability: str,
         reader: object,
+        settings: ExtensionSettingsSnapshot,
     ) -> None:
         self._extension_id = extension_id
         self._workspace_id = workspace_id
         self._required_revision_id = required_revision_id
         self._capability = capability
         self._reader = reader
+        self._settings = settings
         self._invocation_id = uuid.uuid4().hex
         self._closed = False
 
@@ -83,6 +94,17 @@ class ExtensionContext:
     @property
     def invocation_id(self) -> str:
         return self._invocation_id
+
+    @property
+    def settings(self) -> ExtensionSettingsSnapshot:
+        """本次调用的冻结设置快照（含规范化有效值）；关闭后拒绝访问。"""
+        if self._closed:
+            raise CapabilityError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                "扩展上下文已关闭，设置快照不再可用",
+                params={"extension_id": self._extension_id},
+            )
+        return self._settings
 
     def workspace_snapshot(self) -> WorkspaceSnapshot:
         if self._closed:
@@ -142,8 +164,10 @@ class CapabilityBroker:
         workspace_id: str,
         required_revision_id: str,
         *,
+        settings: ExtensionSettingsSnapshot,
         capability: str = WORKSPACE_SNAPSHOT_CAPABILITY,
     ) -> ExtensionContext:
+        """发放上下文；``settings`` 由调用方（Runtime）取好后原样转交。"""
         params = {"extension_id": extension_id, "capability": capability}
         manifest = self._manifests.get(extension_id)
         if manifest is None:
@@ -175,10 +199,19 @@ class CapabilityBroker:
                 f"扩展未声明能力：{capability}",
                 params=params,
             )
+        if settings.extension_id != extension_id:
+            # 快照与调用身份绑错会把另一个扩展的有效配置（如输出图纸过滤）
+            # 当作本扩展的设置执行：拒绝而不是静默采用。
+            raise CapabilityError(
+                "EXTENSION_CAPABILITY_UNAVAILABLE",
+                f"设置快照与调用扩展不一致：{settings.extension_id} != {extension_id}",
+                params={"extension_id": extension_id},
+            )
         return ExtensionContext(
             extension_id,
             workspace_id,
             required_revision_id,
             capability,
             self._reader,
+            settings,
         )

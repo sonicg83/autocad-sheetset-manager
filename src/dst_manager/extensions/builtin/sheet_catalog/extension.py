@@ -1,4 +1,4 @@
-"""图纸目录内置扩展：生命周期、预览与执行动作（PLAN-DM-020 Task 1/6/9）。
+"""图纸目录内置扩展：生命周期、预览与执行动作（PLAN-DM-020 Task 1/6/9 / PLAN-DM-025 Task 4）。
 
 预览动作只从 :class:`~dst_manager.extensions.capabilities.ExtensionContext`
 获取冻结工作区快照（SPEC-DM-012 §12 只读边界：不触碰 reader、DST、数据库
@@ -6,18 +6,25 @@
 确定性摘要。受限表达式与模板（Task 5）、候选 XLSX 导出（Task 7～9）分别
 在各自模块落地。首期不注册后台计时器、外部进程或网络连接。
 
+设置绑定（PLAN-DM-025 Task 4 / ARCH-DM-006 §11）：预览与执行都从同一
+``ExtensionContext.settings`` 冻结快照读取规范化的“输出图纸过滤”关键词，
+并调用 Provider 的同一 :func:`title_matches_exclusion` 做图名排除；扩展不读
+Store、不缓存设置，也不二次解释用户输入。
+
 执行通道（Task 9 / SPEC §8.2）：
 
 - :meth:`SheetCatalogExtension.repreview` 由宿主运行时在执行前调用，对当前
-  快照重建预览供摘要复核（修订/模板/扩展身份漂移 → ``REPREVIEW_REQUIRED``）；
+  快照重建预览供摘要复核（修订/模板/扩展身份/设置漂移 → ``REPREVIEW_REQUIRED``
+  或 ``EXTENSION_SETTINGS_CHANGED``）；
 - :meth:`SheetCatalogExtension.execute` 只组装"上下文快照 → 候选文件"：把
-  全量行写成宿主分配的 :class:`ArtifactProposalDirectory` 内唯一候选 XLSX 并
-  返回 :class:`CandidateArtifact`（扩展不见目标路径、不消费授权、不登记）；
-  宿主回读校验、消费授权、原子保存与 Artifact 登记都在宿主侧完成。
+  过滤后的目录行写成宿主分配的 :class:`ArtifactProposalDirectory` 内唯一候选
+  XLSX 并返回 :class:`CandidateArtifact`（扩展不见目标路径、不消费授权、不
+  登记）；宿主回读校验、消费授权、原子保存与 Artifact 登记都在宿主侧完成。
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +37,11 @@ from dst_manager.extensions.builtin.sheet_catalog.preview import (
     SheetCatalogPreview,
     SheetCatalogPreviewRequest,
     build_preview,
+    projected_sheets,
+)
+from dst_manager.extensions.builtin.sheet_catalog.settings import (
+    EXCLUDED_TITLE_KEYWORDS_FIELD,
+    normalize_excluded_title_keywords,
 )
 from dst_manager.extensions.builtin.sheet_catalog.templates import (
     SheetCatalogTemplate,
@@ -38,7 +50,12 @@ from dst_manager.extensions.builtin.sheet_catalog.templates import (
 from dst_manager.extensions.builtin.sheet_catalog.workbook import write_candidate
 from dst_manager.extensions.capabilities import ExtensionContext
 from dst_manager.extensions.contracts import XLSX_MEDIA_TYPE, Extension
-from dst_manager.extensions.snapshots import WorkspaceSnapshot, build_field_catalog
+from dst_manager.extensions.settings import ExtensionSettingsSnapshot
+from dst_manager.extensions.snapshots import (
+    SheetSnapshot,
+    WorkspaceSnapshot,
+    build_field_catalog,
+)
 
 #: 与随包 manifest.yaml 保持一致（由单元测试钉住，防止漂移）。
 EXTENSION_ID = "dst-manager.sheet-catalog"
@@ -51,13 +68,18 @@ CANDIDATE_FILE_NAME = "sheet-catalog-candidate.xlsx"
 
 @dataclass(frozen=True, slots=True)
 class SheetCatalogExecuteRequest:
-    """执行请求（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。"""
+    """执行请求（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。
+
+    ``settings_revision`` 是预览响应回传、前端原样重复提交的乐观并发绑定值；
+    宿主在执行前用它核对已应用的设置是否仍是预览时那一份（§11）。
+    """
 
     workspace_id: str
     base_revision_id: str
     template: SheetCatalogTemplate
     preview_digest: str
     save_grant_id: str
+    settings_revision: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,14 +125,19 @@ class SheetCatalogExtension:
     def preview(
         self, context: ExtensionContext, request: SheetCatalogPreviewRequest
     ) -> SheetCatalogPreview:
-        """对上下文冻结快照构建图纸目录预览（修订漂移由上下文拒绝）。"""
+        """对上下文冻结快照与冻结设置构建图纸目录预览（漂移由上下文拒绝）。"""
         snapshot = context.workspace_snapshot()
+        settings = context.settings
         return build_preview(
             snapshot,
             request.template,
             extension_id=EXTENSION_ID,
             extension_version=EXTENSION_VERSION,
             action_id=PREVIEW_ACTION_ID,
+            excluded_title_keywords=_excluded_title_keywords(settings),
+            settings_schema_version=settings.schema_version,
+            settings_revision=settings.revision,
+            settings_digest=settings.digest,
         )
 
     def repreview(
@@ -132,13 +159,15 @@ class SheetCatalogExtension:
         request: SheetCatalogExecuteRequest,
         proposal_directory: ArtifactProposalDirectory,
     ) -> CandidateArtifact:
-        """把全量目录行写成候选 XLSX；保存/登记由宿主完成（SPEC §8.2）。
+        """把过滤后的目录行写成候选 XLSX；保存/登记由宿主完成（SPEC §8.2）。
 
         摘要复核已在宿主侧通过：此处模板必然可解析、字段必然可绑定；缺值
-        仍按空字符串求值（允许导出的 warning 语义与预览一致）。
+        仍按空字符串求值（允许导出的 warning 语义与预览一致）。过滤词与预览
+        取自同一 ``context.settings`` 快照，行投影与预览计数因此同源。
         """
         snapshot = context.workspace_snapshot()
-        headers, rows = _catalog_rows(snapshot, request.template)
+        sheets = projected_sheets(snapshot, _excluded_title_keywords(context.settings))
+        headers, rows = _catalog_rows(snapshot, request.template, sheets)
         candidate_path = proposal_directory.root / CANDIDATE_FILE_NAME
         summary = write_candidate(candidate_path, headers, rows)
         return CandidateArtifact(
@@ -149,10 +178,28 @@ class SheetCatalogExtension:
         )
 
 
+def _excluded_title_keywords(settings: ExtensionSettingsSnapshot) -> tuple[str, ...]:
+    """从冻结设置快照取得规范化的“输出图纸过滤”关键词。
+
+    快照的有效值由 Provider 的 ``resolve()`` 生成（已是规范数组），此处仍走
+    同一 :func:`normalize_excluded_title_keywords` 纯函数：预览与执行不各自
+    解释用户输入，缺失该字段（无用户显式过滤词）等价于不过滤。
+    """
+    return normalize_excluded_title_keywords(
+        settings.value.get(EXCLUDED_TITLE_KEYWORDS_FIELD)
+    )
+
+
 def _catalog_rows(
-    snapshot: WorkspaceSnapshot, template: SheetCatalogTemplate
+    snapshot: WorkspaceSnapshot,
+    template: SheetCatalogTemplate,
+    sheets: Sequence[SheetSnapshot],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
-    """求值全部图纸行（预览只回 20 行；导出必须全量，求值语义与预览一致）。"""
+    """求值给定图纸行（预览只回 20 行；导出必须全量，求值语义与预览一致）。
+
+    ``sheets`` 是已经过输出图纸过滤的投影（与预览同一 ``projected_sheets``），
+    因此候选 XLSX 的数据行数等于预览的 ``total_rows``。
+    """
     field_catalog = build_field_catalog(snapshot)
     validated = validate_template(template)
     expressions = [
@@ -163,7 +210,7 @@ def _catalog_rows(
             evaluate_expression(expression, snapshot.sheetset, sheet)
             for expression in expressions
         )
-        for sheet in snapshot.sheets
+        for sheet in sheets
     )
     headers = tuple(column.header for column in validated.template.columns)
     return headers, rows

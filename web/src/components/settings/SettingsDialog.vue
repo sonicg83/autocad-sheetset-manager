@@ -1,20 +1,23 @@
 <script setup lang="ts">
 // 设置中心模态对话框（PLAN-DM-019 任务 10，SPEC-DM-011 SC-02/03/05/06/07/08/09/11/12/14）。
 // 容器职责：分区导航、编辑缓冲、即时校验、保存状态机、关闭守卫与焦点管理；
-// 单字段渲染拆分至 SettingsFormRow.vue。样式全部组件作用域，仅引用 SPEC-DM-006 令牌。
+// 单字段渲染拆分至 SettingsFormRow.vue，关于分区呈现拆分至 AboutSection.vue。样式全部组件作用域，
+// 仅引用 SPEC-DM-006 令牌。
 // <dialog> showModal 提供原生焦点圈闭与 ::backdrop 遮罩（拖放不穿透，SC-14）；
 // 关闭确认 ConfirmModal 置于 <dialog> 子树内，使其遮罩能盖住对话框内容。
 import {computed,nextTick,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
 import {ApiError} from "../../api/client";
 import type {ApiFieldError,StructuredParams} from "../../api/client";
-import {fetchAbout} from "../../api/settings";
-import type {AboutInfo,SettingsItem,SettingsValue} from "../../api/settings";
-import {getShellBridge,openExternalLink,selectSettingsPath,shellReady} from "../../api/shell";
+import type {ExtensionSummary} from "../../api/contracts";
+import type {SettingsItem,SettingsValue} from "../../api/settings";
+import {getShellBridge,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
 import type {ExtensionsPanel} from "../../composables/useExtensions";
+import AboutSection from "./AboutSection.vue";
 import ConfirmModal from "../ui/ConfirmModal.vue";
+import ExtensionSettingsHost from "./ExtensionSettingsHost.vue";
 import ExtensionsSection from "./ExtensionsSection.vue";
 import SettingsFormRow from "./SettingsFormRow.vue";
 
@@ -24,7 +27,7 @@ const props=defineProps<{
   // SC-13 保存反馈复用宿主 useToast（ToastHost 挂在 App.vue）
   pushToast:(toast:SettingsToast)=>void;
   // 扩展分区（本次修复：停用可逆 / ARCH-DM-006 §7）。列表与启停由 App 装配；
-  // 本对话框只做编排与错误呈现，绝不自行调扩展端点。
+  // 编排（取数、启停、失败就地呈现与开关焦点）归 ExtensionsSection，本对话框只把面板传下去。
   extensionsPanel:ExtensionsPanel;
 }>();
 const emit=defineEmits<{close:[]}>();
@@ -37,8 +40,11 @@ const dialogEl=ref<HTMLDialogElement|null>(null);
 const saveButtonEl=ref<HTMLButtonElement|null>(null); // 保存成功语言切换后归还焦点的锚点
 const errorSummaryEl=ref<HTMLDivElement|null>(null); // 422 错误摘要（tabindex=-1，可聚焦）
 const section=ref<"general"|"about"|"extensions">("general");
-const about=ref<AboutInfo|null>(null);
-const aboutFailed=ref(false);
+// SC-17：当前进入的扩展配置子视图（同一 <dialog> 内的平级视图）与其宿主引用；
+// 本对话框只装配「当前扩展 + 子视图页脚 + dirty 并入 hasUnsaved」，不承载设置状态
+const configExtension=ref<ExtensionSummary|null>(null);
+const configHost=ref<InstanceType<typeof ExtensionSettingsHost>|null>(null);
+const extensionsSectionEl=ref<InstanceType<typeof ExtensionsSection>|null>(null);
 const edits=ref<Record<string,SettingsValue>>({}); // key → 编辑缓冲；删除键=回退到快照值
 const pendingUnset=ref<string[]>([]); // 恢复继承标记：点击不落盘，随下次保存经 unset 提交
 const fieldErrors=ref<Record<string,ApiFieldError>>({}); // 422 逐字段结构化错误（message_key+params）
@@ -56,7 +62,8 @@ watch(()=>props.open,async open=>{
   if(open){
     opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
     section.value="general";edits.value={};pendingUnset.value=[];fieldErrors.value={};
-    conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";loadFailed.value=false;about.value=null;aboutFailed.value=false;
+    configExtension.value=null; // 每次打开都从扩展列表视图开始（子视图不跨会话保留）
+    conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";loadFailed.value=false;
     dialogEl.value?.showModal();
     await loadSettings();
   }else if(dialogEl.value?.open){
@@ -85,7 +92,7 @@ async function tryClose(){
   // SC-08：有未保存修改不静默丢弃——确认"放弃修改并关闭 / 留在此处"
   const discard=await confirmAction({
     title:t("settings.confirm.title"),
-    message:t("settings.confirm.message"),
+    message:t("settings.confirm.message")+(configHost.value?.dirty===true?` ${t("settings.extensionSettings.closeExtra")}`:""),
     confirmText:t("settings.confirm.discard"),
     cancelText:t("settings.confirm.stay"),
   });
@@ -100,7 +107,10 @@ function close(){
 
 // 点击遮罩（::backdrop 命中 dialog 元素自身）等同取消
 function onBackdropClick(event:MouseEvent){
-  if(event.target===dialogEl.value)void tryClose();
+  if(event.target!==dialogEl.value)return;
+  // SC-17：子视图内遮罩点击与 Esc 同一分级（等价于返回扩展列表）
+  if(configExtension.value){void configHost.value?.back();return}
+  void tryClose();
 }
 
 // Tab 焦点圈闭（SPEC-DM-013 §5.3 / PLAN-DM-021 Task 11）：showModal 原生圈闭在
@@ -126,6 +136,8 @@ function onDialogKeydown(event:KeyboardEvent){
 
 function onCancel(event:Event){
   event.preventDefault(); // 接管 Esc：走关闭守卫而非直接关闭
+  // SC-17：子视图内 Esc 等价于「返回扩展列表」（脏时先确认），不是关闭本对话框
+  if(configExtension.value){void configHost.value?.back();return}
   void tryClose();
 }
 
@@ -183,7 +195,7 @@ function rowError(item:SettingsItem):string|undefined{
 }
 const hasFieldErrors=computed(()=>Object.keys(fieldErrors.value).length>0);
 const hasValidationError=computed(()=>items.value.some(item=>rowError(item)!==undefined));
-const hasUnsaved=computed(()=>items.value.some(item=>item.key in edits.value&&String(edits.value[item.key])!==String(item.value??""))||pendingUnset.value.length>0);
+const hasUnsaved=computed(()=>configHost.value?.dirty===true||items.value.some(item=>item.key in edits.value&&String(edits.value[item.key])!==String(item.value??""))||pendingUnset.value.length>0);
 // 无未保存修改时保存按钮保持可聚焦（与冻结 Demo 一致：成功保存后焦点回到保存按钮，
 // SPEC-DM-013 G6.3）：空保存由 onSave 的 no-op 守卫承担，不经 disabled 表达
 const saveDisabled=computed(()=>saving.value||schemaBlocked.value||hasValidationError.value);
@@ -305,87 +317,20 @@ const diagLines=computed(()=>{
   return lines;
 });
 
-// ---- 关于分区（SC-11）----
-async function showAbout(){
-  section.value="about";
-  if(about.value||aboutFailed.value)return;
-  try{
-    about.value=await fetchAbout();
-  }catch{
-    aboutFailed.value=true;
-  }
-}
-// ---- 扩展分区（本次修复：让扩展停用可逆 / ARCH-DM-006 §7）----
-// SPEC-DM-011 修订「启停交互改进」：启停不再关闭本对话框，也不再事先征询本对话框的未保存编辑。
+// ---- 扩展分区与配置子视图（SC-15/SC-16/SC-17）----
+// 扩展列表与启停编排已下移到 ExtensionsSection（含失败就地行内呈现与开关焦点收敛）；
+// 扩展配置子视图（SC-17）只在这里装配：当前扩展、子视图页脚与返回时的焦点归还。
 // 原先必须让出 top layer，是因为宿主闸门（未提交输入三选一）当时是页面内联遮罩，
 // 落在本对话框之下且被它 inert；该闸门与目录页三选一现已改为原生 <dialog showModal>，
-// 会自行进入 top layer 叠在本对话框之上，本对话框无需再让位。停用既然不再关闭窗口，
-// 也就不会丢本对话框的编辑缓冲，原先的"放弃修改并关闭"确认随之删除。
-// 于是启用与停用完全对称：落库（内部仍走 App 的 guardAllInputs 闸门）→ 成功就地
-// 收敛 → 失败就地行内呈现（不再经宿主 toast：对话框外的错误行会被遮罩压住）。
-const extensionsError=ref("");
-const extensionsBusy=ref(false);
+// 会自行进入 top layer 叠在本对话框之上，本对话框无需再让位。
 
-// 非字段级 ApiError 文案：已知 message_key 走语言包，否则回退后端原始文本/消息
-function apiErrorText(error:unknown):string{
-  if(error instanceof ApiError){
-    if(error.messageKey!==undefined&&te(error.messageKey))return t(error.messageKey,errorParams(error.params));
-    return error.rawMessage??error.message;
-  }
-  return String(error);
-}
-
-function showExtensions(){
-  section.value="extensions";
-  // 扩展清单是应用级状态，不依赖工作区是否已加载：打开分区即拉取，
-  // 因此“手头没打开 DST”的用户也能在这里恢复被停用的扩展
-  void props.extensionsPanel.reload();
-}
-
-async function onToggleExtension(extensionId:string,enabled:boolean){
-  if(extensionsBusy.value)return;
-  extensionsError.value="";
-  // 停用移除扩展页面入口、可能丢弃页内未保存草稿，因此仍经 App 的 guardAllInputs
-  // 三选一（闸门为原生模态，会叠在本对话框之上）；选"留在此处"则闸门不继续，
-  // 本次 toggle 静默结束——开关保持原位，不报错。
-  extensionsBusy.value=true;
-  try{await props.extensionsPanel.toggle(extensionId,enabled)}
-  catch(error){extensionsError.value=apiErrorText(error)}
-  finally{
-    extensionsBusy.value=false;
-    // 忙碌期开关被 disabled，焦点会落回 body；恢复可用后归还同一开关，否则键盘用户
-    // 每拨一次开关就丢一次位置。停用后标签栏处于 inert，不能把焦点送回页面。
-    await nextTick();
-    focusExtensionSwitch(extensionId);
-  }
-}
-// 按行数据属性定位开关：不把服务端返回的 extension_id 拼进选择器字符串
-function focusExtensionSwitch(extensionId:string){
-  const dialog=dialogEl.value;
-  if(dialog===null)return;
-  for(const row of Array.from(dialog.querySelectorAll<HTMLElement>("[data-extension-id]"))){
-    if(row.dataset.extensionId!==extensionId)continue;
-    row.querySelector<HTMLElement>(".switch")?.focus();
-    return;
-  }
-}
-async function openExternal(url:string){
-  // SC-11：url 来自 GET /api/about 的后端登记值（api.py _HOMEPAGE 常量），前端不传任意字符串；
-  // 壳侧 open_external 再按代码内白名单二次校验（github.com/sonicg83 前缀），拒绝结果不经 WebView 导航。
-  if(getShellBridge()){
-    const opened=await openExternalLink(url);
-    if(opened===true){
-      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkOpened")});
-    }else if(opened===false){
-      props.pushToast({type:"fail",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkRejected")});
-    }else{
-      // 旧壳缺 open_external 方法：维持降级提示
-      props.pushToast({type:"ok",title:t("settings.toast.linkTitle"),body:t("settings.toast.linkUnsupported")});
-    }
-    return;
-  }
-  // 浏览器开发态（无桥）：维持 window.open（e2e 依赖此路径断言 popup URL）
-  window.open(url,"_blank","noopener");
+// 返回扩展列表：子视图（含未保存编辑）已就地处置，这里只切回列表并归还焦点
+async function leaveConfig(){
+  const extension=configExtension.value;
+  configExtension.value=null;
+  await nextTick();
+  // SC-17：返回子视图后焦点归还触发它的卡片「配置」按钮（关闭对话框才归还齿轮）
+  if(extension)extensionsSectionEl.value?.focusConfigOpener(extension.extension_id);
 }
 
 // 浏览按钮可用性随桥就绪响应式更新（浏览器开发态/桥缺失 → 禁用）
@@ -428,9 +373,9 @@ const browseDisabled=computed(()=>{
         </div>
         <div class="dlg-body">
           <nav class="sections" role="tablist" :aria-label="t('settings.sections.nav')">
-            <button type="button" role="tab" :aria-selected="section==='general'" @click="section='general'">{{t("settings.sections.general")}}</button>
-            <button type="button" role="tab" :aria-selected="section==='extensions'" @click="showExtensions">{{t("settings.sections.extensions")}}</button>
-            <button type="button" role="tab" :aria-selected="section==='about'" @click="showAbout">{{t("settings.sections.about")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='general'" :disabled="configExtension!==null" @click="section='general'">{{t("settings.sections.general")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='extensions'" :disabled="configExtension!==null" @click="section='extensions'">{{t("settings.sections.extensions")}}</button>
+            <button type="button" role="tab" :aria-selected="section==='about'" :disabled="configExtension!==null" @click="section='about'">{{t("settings.sections.about")}}</button>
           </nav>
           <div class="panel">
             <template v-if="section==='general'">
@@ -446,45 +391,39 @@ const browseDisabled=computed(()=>{
               </div>
             </template>
             <template v-else-if="section==='extensions'">
-              <!-- 扩展启停入口（本次修复：停用后仍可重新启用）。启停失败一律就地行内
-                   呈现，本对话框不再关闭（见 onToggleExtension） -->
+              <!-- SC-17：配置子视图与扩展列表是同一 <dialog> 内的平级视图，切换靠可见
+                   「返回扩展列表」；列表取数、启停编排与失败就地呈现已归 ExtensionsSection。
+                   列表用 v-show 保留在 DOM（仅隐藏）：返回时不得重挂载重取，
+                   否则列表会被 loading 占位替代，焦点归还只能退回 <body>（§3.3）。 -->
+              <ExtensionSettingsHost
+                v-if="configExtension" ref="configHost" :extension="configExtension" @back="leaveConfig"
+              />
               <ExtensionsSection
-                :list="extensionsPanel.list" :loading="extensionsPanel.loading"
-                :failed="extensionsPanel.failed" :error-text="extensionsError"
-                :busy="extensionsBusy"
-                @retry="extensionsPanel.reload()" @toggle="onToggleExtension"
+                v-show="configExtension===null" ref="extensionsSectionEl" :panel="extensionsPanel"
+                @open-config="extension => configExtension = extension"
               />
             </template>
             <template v-else-if="section==='about'">
-              <div class="about-block">
-                <h3>{{t("settings.about.app")}}</h3>
-                <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>
-                <p v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</p>
-                <p v-else class="f-hint" role="status">{{t("settings.about.loading")}}</p>
-              </div>
-              <div class="about-block">
-                <h3>{{t("settings.about.licenseTitle")}}</h3>
-                <div v-if="about" class="license">{{about.license.text}}</div>
-                <div v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</div>
-              </div>
-              <div class="about-block">
-                <h3>{{t("settings.about.linksTitle")}}</h3>
-                <p v-if="about" class="link-line">
-                  <button type="button" class="link-btn" @click="openExternal(about.homepage)">{{t("settings.about.homepage")}}</button>
-                  <button type="button" class="link-btn" @click="openExternal(about.feedbackUrl)">{{t("settings.about.feedback")}}</button>
-                </p>
-                <p v-else-if="!aboutFailed" class="f-hint" role="status">{{t("settings.about.loading")}}</p>
-              </div>
+              <!-- 关于分区呈现与取数归 AboutSection（PLAN-DM-025 任务 6）；本对话框只装配分区 -->
+              <AboutSection :push-toast="pushToast" />
             </template>
           </div>
         </div>
         <div class="dlg-foot">
-          <span v-if="conflictNotice" class="foot-notice warn" role="alert">{{conflictNotice}}</span>
-          <span v-else-if="saveFailedNotice" class="foot-notice error" role="alert" :title="saveFailedDetail||undefined">{{saveFailedNotice}}</span>
-          <span v-if="savedVisible" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
+          <span v-if="configExtension===null&&conflictNotice" class="foot-notice warn" role="alert">{{conflictNotice}}</span>
+          <span v-else-if="configExtension===null&&saveFailedNotice" class="foot-notice error" role="alert" :title="saveFailedDetail||undefined">{{saveFailedNotice}}</span>
+          <span v-if="configExtension===null&&savedVisible" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
+          <span v-if="configExtension&&configHost?.saved" class="saved-pill" role="status" data-testid="extension-settings-saved-pill">{{t("settings.extensionSettings.saved")}}</span>
           <span class="spacer"></span>
-          <button type="button" :disabled="saving" @click="tryClose">{{t("settings.cancel")}}</button>
-          <button ref="saveButtonEl" type="button" class="primary" :disabled="saveDisabled" @click="onSave">{{saving?t("settings.saving"):t("settings.save")}}</button>
+          <!-- SC-17 子视图页脚：本扩展独立保存（不与核心配置共享一次提交或修订号） -->
+          <template v-if="configExtension">
+            <button type="button" @click="configHost?.back()">{{t("settings.extensionSettings.back")}}</button>
+            <button type="button" class="primary" :disabled="configHost===null||configHost.saveDisabled" @click="configHost?.save()">{{configHost?.saving?t("settings.extensionSettings.saving"):t("settings.extensionSettings.save")}}</button>
+          </template>
+          <template v-else>
+            <button type="button" :disabled="saving" @click="tryClose">{{t("settings.cancel")}}</button>
+            <button ref="saveButtonEl" type="button" class="primary" :disabled="saveDisabled" @click="onSave">{{saving?t("settings.saving"):t("settings.save")}}</button>
+          </template>
         </div>
       </template>
     </div>
@@ -519,11 +458,6 @@ const browseDisabled=computed(()=>{
 .panel{flex:1;overflow:auto;padding:var(--space-3) var(--space-4)}
 .group{margin-bottom:var(--space-2)}
 .group-title{font-weight:600;font-size:13px;border-left:3px solid var(--color-accent);padding-left:var(--space-2);margin:var(--space-3) 0 var(--space-2)}
-.about-block{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3)}
-.about-block h3{margin:0 0 var(--space-2);font-size:13px}
-.about-block p{margin:0}
-.license{font-size:12px;line-height:1.7;color:var(--color-text-secondary);white-space:pre-wrap;background:var(--color-bg-canvas);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);max-height:200px;overflow:auto}
-.link-line{display:flex;gap:var(--space-2)}
 .dlg-foot{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border-subtle);flex-shrink:0}
 .foot-notice{font-size:12px;line-height:1.6}
 .foot-notice.warn{color:var(--color-warning)}

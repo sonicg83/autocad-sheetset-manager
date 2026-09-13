@@ -1048,7 +1048,7 @@ export interface components {
          */
         ExtensionErrorResponse: {
             /** Code */
-            code: ("EXTENSION_NOT_FOUND" | "EXTENSION_DISABLED" | "EXTENSION_INCOMPATIBLE" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_SETTINGS_INVALID" | "EXTENSION_ACTION_NOT_FOUND" | "SAVE_GRANT_INVALID" | "EXPORT_DESTINATION_CHANGED" | "REPREVIEW_REQUIRED" | "ARTIFACT_WRITE_FAILED") | string;
+            code: ("EXTENSION_NOT_FOUND" | "EXTENSION_DISABLED" | "EXTENSION_INCOMPATIBLE" | "EXTENSION_CAPABILITY_UNAVAILABLE" | "EXTENSION_SETTINGS_INVALID" | "EXTENSION_SETTINGS_SCHEMA_NEWER" | "EXTENSION_SETTINGS_CHANGED" | "EXTENSION_ACTION_NOT_FOUND" | "SAVE_GRANT_INVALID" | "EXPORT_DESTINATION_CHANGED" | "REPREVIEW_REQUIRED" | "ARTIFACT_WRITE_FAILED") | string;
             /** Message */
             message: string;
             /** Message Key */
@@ -1060,10 +1060,13 @@ export interface components {
         };
         /**
          * ExtensionExecuteRequest
-         * @description 执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
+         * @description 执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。
          *
          *     后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
-         *     执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+         *     执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；
+         *     ``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值
+         *     （ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``
+         *     拒绝，不得用新设置执行旧预览。
          */
         ExtensionExecuteRequest: {
             /** Base Revision Id */
@@ -1072,6 +1075,8 @@ export interface components {
             preview_digest: string;
             /** Save Grant Id */
             save_grant_id: string;
+            /** Settings Revision */
+            settings_revision: number;
             template: components["schemas"]["ExtensionTemplateRequest"];
             /** Workspace Id */
             workspace_id: string;
@@ -1096,10 +1101,91 @@ export interface components {
             /** Workspace Id */
             workspace_id: string;
         };
+        /**
+         * ExtensionSettingsContributionModel
+         * @description 设置呈现声明（ARCH-DM-006 §4.2）：摘要只暴露呈现方式与受控路由键。
+         *
+         *     ``generated`` 由宿主按设置响应的 ``items`` 动态渲染；``custom`` 由宿主编译
+         *     期白名单里的专属组件按 ``route_key`` 呈现。未声明设置时不携带本对象。
+         */
+        ExtensionSettingsContributionModel: {
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "generated" | "custom";
+            /** Route Key */
+            route_key?: string | null;
+        };
+        /**
+         * ExtensionSettingsItemModel
+         * @description ``generated`` 设置的单个字段项：Provider 语义 + Manifest 呈现的合并结果。
+         *
+         *     控件词表（:data:`~dst_manager.extensions.settings.SettingsFieldControl`）
+         *     与设置中心应用设置词表独立，消费方必须显式映射；本模型只做 1:1 透传。
+         */
+        ExtensionSettingsItemModel: {
+            control: components["schemas"]["SettingsFieldControl"];
+            /** Default */
+            default: unknown;
+            /** Description Key */
+            description_key?: string | null;
+            /** Key */
+            key: string;
+            /** Label Key */
+            label_key: string;
+            /** Max Length */
+            max_length?: number | null;
+            /** Max Value */
+            max_value?: number | null;
+            /** Min Value */
+            min_value?: number | null;
+            /**
+             * Nullable
+             * @default false
+             */
+            nullable: boolean;
+            /** Options */
+            options?: string[];
+            /** Order */
+            order: number;
+        };
         /** ExtensionSettingsPutRequest */
         ExtensionSettingsPutRequest: {
             /** Expected Revision */
             expected_revision: number;
+            /** Schema Version */
+            schema_version: number;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExtensionSettingsResponseModel
+         * @description 扩展设置读写响应：持久值 + 有效值 + 只读诊断 + 可呈现字段项。
+         *
+         *     ``value`` 是 ``extension_settings`` 的规范持久值（从未保存时是 Provider
+         *     默认零值），``effective_value`` 是 Provider 解析后的有效配置（含代码默认
+         *     值），两者语义不同且不得互相代替。``items`` 恒存在：``custom`` 呈现与未
+         *     声明设置的扩展为空数组。
+         */
+        ExtensionSettingsResponseModel: {
+            /** Diagnostic Code */
+            diagnostic_code?: string | null;
+            /** Effective Value */
+            effective_value: {
+                [key: string]: unknown;
+            };
+            /** Items */
+            items?: components["schemas"]["ExtensionSettingsItemModel"][];
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only: boolean;
+            /** Revision */
+            revision: number;
             /** Schema Version */
             schema_version: number;
             /** Value */
@@ -1126,6 +1212,7 @@ export interface components {
             extension_id: string;
             /** Name Key */
             name_key: string;
+            settings_contribution?: components["schemas"]["ExtensionSettingsContributionModel"] | null;
             /**
              * Status
              * @enum {string}
@@ -1689,6 +1776,8 @@ export interface components {
             sheet_set: components["schemas"]["SheetSetFieldDiffResponse"][];
             structure: components["schemas"]["StructureDiffResponse"];
         };
+        /** @enum {string} */
+        SettingsFieldControl: "boolean" | "integer" | "number" | "string" | "enum";
         /** SheetCatalogColumnModel */
         SheetCatalogColumnModel: {
             /** Column Id */
@@ -1752,6 +1841,10 @@ export interface components {
         /**
          * SheetCatalogPreviewResponse
          * @description 预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。
+         *
+         *     ``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被
+         *     排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，
+         *     执行时必须原样重复提交（ARCH-DM-006 §11）。
          */
         SheetCatalogPreviewResponse: {
             /** Errors */
@@ -1759,11 +1852,15 @@ export interface components {
             /** Executable */
             executable: boolean;
             field_catalog: components["schemas"]["SheetCatalogFieldCatalogModel"];
+            /** Filtered Rows */
+            filtered_rows: number;
             normalized_template: components["schemas"]["SheetCatalogTemplateModel"];
             /** Preview Digest */
             preview_digest: string;
             /** Rows */
             rows: string[][];
+            /** Settings Revision */
+            settings_revision: number;
             /** Total Rows */
             total_rows: number;
             /** Warnings */
@@ -2299,7 +2396,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VersionedValueModel"];
+                    "application/json": components["schemas"]["ExtensionSettingsResponseModel"];
                 };
             };
             /** @description Not Found */
@@ -2361,7 +2458,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VersionedValueModel"];
+                    "application/json": components["schemas"]["ExtensionSettingsResponseModel"];
                 };
             };
             /** @description Not Found */

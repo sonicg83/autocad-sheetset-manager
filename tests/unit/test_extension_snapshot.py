@@ -1,11 +1,14 @@
-"""PLAN-DM-020 Task 4：裁剪的冻结工作区快照与 Capability Broker。
+"""PLAN-DM-020 Task 4 / PLAN-DM-025 Task 4：裁剪的冻结工作区快照与 Capability Broker。
 
 覆盖：属性定义/值合并与 casefold() 规范化、两作用域、跨 Windows/Posix
 分隔符 basename、顺序、冻结不可变与可序列化、无路径泄漏；能力上下文的
-清单声明 ∩ 宿主 allowlist 校验、修订绑定与 close() 后失效。
+清单声明 ∩ 宿主 allowlist 校验、修订绑定与 close() 后失效；PLAN-DM-025
+Task 4 的上下文设置快照（Runtime 在创建上下文前取得、Broker 只转交）——
+嵌套值递归冻结、源 dict 修改不影响快照、close() 后设置与工作区能力都拒绝。
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, asdict
 
 import pytest
@@ -22,6 +25,11 @@ from dst_manager.extensions.capabilities import (
     CapabilityError,
 )
 from dst_manager.extensions.manifest import load_manifest
+from dst_manager.extensions.settings import (
+    ExtensionSettingsSnapshot,
+    freeze_json,
+    settings_digest,
+)
 from dst_manager.extensions.snapshots import (
     SnapshotProperty,
     build_field_catalog,
@@ -34,6 +42,9 @@ from dst_manager.infrastructure.extension_workspace import (
 
 SHEET_CATALOG_ID = "dst-manager.sheet-catalog"
 SHEET_CATALOG_MANIFEST = "dst_manager/extensions/builtin/sheet_catalog/manifest.yaml"
+
+#: 图纸目录 Provider 当前 Schema（设置快照的 schema_version 由 Provider 声明）。
+SETTINGS_SCHEMA_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +227,24 @@ class StubReader:
         return self.source
 
 
+def make_settings_snapshot(
+    value: dict[str, object] | None = None, *, revision: int = 0
+) -> ExtensionSettingsSnapshot:
+    """构造不可变设置快照（Runtime 取快照后随上下文注入，Broker 不读 Store）。"""
+    payload = value if value is not None else {"excluded_title_keywords": []}
+    return ExtensionSettingsSnapshot(
+        extension_id=SHEET_CATALOG_ID,
+        schema_version=SETTINGS_SCHEMA_VERSION,
+        revision=revision,
+        value=freeze_json(payload),
+        digest=settings_digest(SHEET_CATALOG_ID, SETTINGS_SCHEMA_VERSION, payload),
+    )
+
+
+#: 未被特定用例改写的默认快照（内容无关，只要与扩展身份一致）。
+DEFAULT_SETTINGS = make_settings_snapshot()
+
+
 def make_broker(source=None, **kwargs) -> tuple[CapabilityBroker, StubReader]:
     reader = StubReader(source or make_source(make_document()))
     kwargs.setdefault(
@@ -232,12 +261,16 @@ def make_broker(source=None, **kwargs) -> tuple[CapabilityBroker, StubReader]:
 def test_context_serves_declared_capability_and_binds_identity():
     broker, reader = make_broker()
 
-    context = broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1")
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+    )
     snapshot = context.workspace_snapshot()
 
     assert reader.requested == ["ws-1"]
     assert context.extension_id == SHEET_CATALOG_ID
     assert context.invocation_id
+    # Broker 只转交 Runtime 取到的快照，不自行读取 Store 或重新解析设置
+    assert context.settings is DEFAULT_SETTINGS
     assert snapshot.workspace_id == "ws-1"
     assert snapshot.revision_id == "rev-1"
     assert [sheet.file_name for sheet in snapshot.sheets] == ["A.dwg", "A.dwg"]
@@ -245,7 +278,9 @@ def test_context_serves_declared_capability_and_binds_identity():
 
 def test_context_fails_after_close():
     broker, _ = make_broker()
-    context = broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1")
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+    )
     assert context.workspace_snapshot() is not None
 
     context.close()
@@ -253,6 +288,84 @@ def test_context_fails_after_close():
     with pytest.raises(CapabilityError) as exc_info:
         context.workspace_snapshot()
     assert exc_info.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
+
+
+def test_context_settings_snapshot_is_recursively_frozen_and_detached_from_source():
+    source: dict[str, object] = {
+        "excluded_title_keywords": ["草图", "作废"],
+        "builtin_template": {"columns": [{"header": "图号"}]},
+    }
+    snapshot = make_settings_snapshot(source)
+    broker, _ = make_broker()
+
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-1", "rev-1", settings=snapshot
+    )
+    settings = context.settings
+    template = settings.value["builtin_template"]
+
+    assert isinstance(template, Mapping)
+    # 递归冻结：Mapping → 只读 Mapping，list → tuple，写入必须被拒绝
+    with pytest.raises(TypeError):
+        template["columns"] = ()  # type: ignore[index]
+    assert settings.value["excluded_title_keywords"] == ("草图", "作废")
+    assert template == {"columns": ({"header": "图号"},)}
+
+    # 取快照后再修改源 dict（原地 append、替换嵌套结构、新增键）都不影响快照
+    keywords = source["excluded_title_keywords"]
+    assert isinstance(keywords, list)
+    keywords.append("TEMP")
+    source["builtin_template"] = {"columns": []}
+    source["new_key"] = "x"
+
+    assert settings.value["excluded_title_keywords"] == ("草图", "作废")
+    assert settings.value["builtin_template"] == {"columns": ({"header": "图号"},)}
+    assert "new_key" not in settings.value
+    # 摘要同样只绑定冻结时的值
+    assert settings.digest == make_settings_snapshot(
+        {
+            "excluded_title_keywords": ["草图", "作废"],
+            "builtin_template": {"columns": [{"header": "图号"}]},
+        }
+    ).digest
+
+
+def test_context_refuses_settings_and_capability_after_close():
+    broker, _ = make_broker()
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+    )
+    assert context.settings is DEFAULT_SETTINGS
+    assert context.workspace_snapshot() is not None
+
+    context.close()
+
+    with pytest.raises(CapabilityError) as settings_error:
+        _ = context.settings
+    assert settings_error.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert settings_error.value.params == {"extension_id": SHEET_CATALOG_ID}
+
+    with pytest.raises(CapabilityError) as capability_error:
+        context.workspace_snapshot()
+    assert capability_error.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert capability_error.value.params["workspace_id"] == "ws-1"
+
+
+def test_context_rejects_settings_snapshot_of_another_extension():
+    broker, _ = make_broker()
+    foreign = ExtensionSettingsSnapshot(
+        extension_id="dst-manager.other",
+        schema_version=SETTINGS_SCHEMA_VERSION,
+        revision=0,
+        value=freeze_json({}),
+        digest=settings_digest("dst-manager.other", SETTINGS_SCHEMA_VERSION, {}),
+    )
+
+    with pytest.raises(CapabilityError) as exc_info:
+        broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1", settings=foreign)
+
+    assert exc_info.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
+    assert exc_info.value.params["extension_id"] == SHEET_CATALOG_ID
 
 
 def test_undeclared_capability_is_rejected():
@@ -279,7 +392,9 @@ def test_undeclared_capability_is_rejected():
     )
 
     with pytest.raises(CapabilityError) as exc_info:
-        broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1")
+        broker.context(
+            SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+        )
     assert exc_info.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
     assert exc_info.value.params == {
         "extension_id": SHEET_CATALOG_ID,
@@ -295,6 +410,7 @@ def test_capability_outside_host_vocabulary_is_rejected():
             SHEET_CATALOG_ID,
             "ws-1",
             "rev-1",
+            settings=DEFAULT_SETTINGS,
             capability="workspace.snapshot.write.v9",
         )
     assert exc_info.value.code == "EXTENSION_CAPABILITY_UNKNOWN"
@@ -304,7 +420,9 @@ def test_capability_outside_host_allowlist_is_rejected():
     broker, _ = make_broker(allowed_capabilities=frozenset())
 
     with pytest.raises(CapabilityError) as exc_info:
-        broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1")
+        broker.context(
+            SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+        )
     assert exc_info.value.code == "EXTENSION_CAPABILITY_UNAVAILABLE"
 
 
@@ -312,7 +430,9 @@ def test_unknown_extension_is_rejected():
     broker, _ = make_broker()
 
     with pytest.raises(CapabilityError) as exc_info:
-        broker.context("dst-manager.unknown", "ws-1", "rev-1")
+        broker.context(
+            "dst-manager.unknown", "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+        )
     assert exc_info.value.code == "EXTENSION_NOT_FOUND"
 
 
@@ -325,7 +445,9 @@ def test_revision_mismatch_requires_repreview():
     )
     broker, _ = make_broker(stale)
 
-    context = broker.context(SHEET_CATALOG_ID, "ws-1", "rev-1")
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-1", "rev-1", settings=DEFAULT_SETTINGS
+    )
     with pytest.raises(CapabilityError) as exc_info:
         context.workspace_snapshot()
     assert exc_info.value.code == "REPREVIEW_REQUIRED"
@@ -335,7 +457,9 @@ def test_revision_mismatch_requires_repreview():
 def test_reader_failures_are_mapped_to_structured_capability_errors():
     broker, _ = make_broker()
 
-    context = broker.context(SHEET_CATALOG_ID, "ws-other", "rev-1")
+    context = broker.context(
+        SHEET_CATALOG_ID, "ws-other", "rev-1", settings=DEFAULT_SETTINGS
+    )
     with pytest.raises(CapabilityError) as exc_info:
         context.workspace_snapshot()
     assert exc_info.value.code == "EXTENSION_NOT_FOUND"

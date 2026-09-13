@@ -31,6 +31,10 @@ from dst_manager.extensions.contracts import (
     ExtensionManifest,
     UiContribution,
 )
+from dst_manager.extensions.settings import (
+    SettingsContribution,
+    SettingsFieldDefinition,
+)
 
 _SEMVER_PATTERN = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -75,6 +79,45 @@ class _ActionModel(BaseModel):
         return self
 
 
+class _SettingsFieldModel(BaseModel):
+    """``generated`` 字段声明：只描述呈现，不重复类型、默认值或业务约束。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1)
+    label_key: str = Field(min_length=1)
+    #: 可缺省，但一旦声明就必须是稳定的非空 i18n key（与其他 ``*_key`` 同口径）。
+    description_key: str | None = Field(default=None, min_length=1)
+    order: int
+
+
+class _SettingsContributionModel(BaseModel):
+    """设置呈现声明（ARCH-DM-006 §4.2）：两类呈现不得混用负载。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    presentation: Literal["generated", "custom"]
+    route_key: str | None = None
+    fields: tuple[_SettingsFieldModel, ...] = ()
+
+    @model_validator(mode="after")
+    def _check_presentation_payload(self) -> _SettingsContributionModel:
+        if self.presentation == "generated":
+            if self.route_key is not None:
+                raise ValueError("generated 呈现不能携带 route_key")
+            if not self.fields:
+                raise ValueError("generated 呈现必须声明非空 fields")
+            keys = [field.key for field in self.fields]
+            if len(keys) != len(set(keys)):
+                raise ValueError("settings_contribution 字段 key 必须唯一")
+        else:
+            if not self.route_key:
+                raise ValueError("custom 呈现必须声明 route_key")
+            if self.fields:
+                raise ValueError("custom 呈现不能携带 fields")
+        return self
+
+
 class _ManifestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -90,6 +133,7 @@ class _ManifestModel(BaseModel):
     ui_contributions: tuple[_UiContributionModel, ...] = ()
     actions: tuple[_ActionModel, ...] = ()
     settings_schema: int
+    settings_contribution: _SettingsContributionModel | None = None
 
     @field_validator("version")
     @classmethod
@@ -104,6 +148,26 @@ class _ManifestModel(BaseModel):
         if len(action_ids) != len(set(action_ids)):
             raise ValueError("动作 ID 必须唯一")
         return self
+
+
+def _to_settings_contribution(
+    model: _SettingsContributionModel | None,
+) -> SettingsContribution | None:
+    if model is None:
+        return None
+    return SettingsContribution(
+        presentation=model.presentation,
+        route_key=model.route_key,
+        fields=tuple(
+            SettingsFieldDefinition(
+                key=field.key,
+                label_key=field.label_key,
+                description_key=field.description_key,
+                order=field.order,
+            )
+            for field in model.fields
+        ),
+    )
 
 
 def parse_manifest(data: Mapping[str, object]) -> ExtensionManifest:
@@ -138,6 +202,7 @@ def parse_manifest(data: Mapping[str, object]) -> ExtensionManifest:
             for action in model.actions
         ),
         settings_schema=model.settings_schema,
+        settings_contribution=_to_settings_contribution(model.settings_contribution),
     )
 
 

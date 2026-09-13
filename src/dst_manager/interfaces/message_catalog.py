@@ -106,6 +106,21 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "EXTENSION_NOT_FOUND": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_NOT_FOUND"]),
     "EXTENSION_ACTION_NOT_FOUND": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_ACTION_NOT_FOUND"]),
     "EXTENSION_CAPABILITY_UNAVAILABLE": _E(EXTENSION_MESSAGE_KEYS["EXTENSION_CAPABILITY_UNAVAILABLE"]),
+    # ---- 扩展平台设置码（PLAN-DM-025 Task 3/4 / ARCH-DM-006 §8.1、§11、§12） ----
+    # 已存设置 Schema 高于当前版本：GET 为 200 只读视图，PUT 以同一稳定 code
+    # 与 HTTP 409 拒绝（extension_api 直接返回统一错误负载）；此处登记使该码
+    # 进入 UI 可见错误名录并复用扩展域既有文案键。参数只携带扩展 ID 与两个
+    # Schema 版本号，不登记占位符。
+    "EXTENSION_SETTINGS_SCHEMA_NEWER": _E(
+        EXTENSION_MESSAGE_KEYS["EXTENSION_SETTINGS_SCHEMA_NEWER"]
+    ),
+    # 预览后应用级扩展设置变化：动作执行以同一稳定 code 与 HTTP 409 拒绝
+    # （必须重新预览）。
+    # 登记本身也是防 500 的硬要求：不登记就会让 extension_api 按码索引文案键
+    # 抛 KeyError（与 R9 同类缺陷），参数同样只携带标识与修订号、无占位符。
+    "EXTENSION_SETTINGS_CHANGED": _E(
+        EXTENSION_MESSAGE_KEYS["EXTENSION_SETTINGS_CHANGED"]
+    ),
     # ---- CAD/Acsm 结构校验（AcsmValidationError，422 handler） ----
     "SHEET_NOT_FOUND": _E("errors.sheet.notFound", {"object_id": str}, "object_id"),
     "ACSMSHEET_NOT_FOUND": _E("errors.sheet.nodeNotFound", {"object_id": str}, "object_id"),

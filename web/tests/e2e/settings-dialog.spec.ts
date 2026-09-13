@@ -2,7 +2,7 @@
 // 契约红线：不 mock /api/settings 与 /api/about——全局 setup 已否动真实后端，
 // 配置经 DST_MANAGER_SETTINGS_PATH 指向固定临时目录；本文件用例串行执行
 //（共享同一配置文件，保存/损坏/Schema 场景彼此有状态依赖）。
-import {expect, test} from "@playwright/test";
+import {expect, test, type Page} from "@playwright/test";
 import {SETTINGS_PATH, expectDialog, openSettingsDialog, writeSettingsFile} from "./fixtures/settings";
 
 test.describe.configure({mode: "serial"});
@@ -100,6 +100,60 @@ test("关于分区：应用名+版本、MIT 全文与外链（浏览器开发态
   ]);
   await expect(popup).toHaveURL(new RegExp(`^${homepage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   await popup.close();
+});
+
+// ---- PLAN-DM-025 任务 6：关于分区抽为 AboutSection 后仍只请求一次 ----
+// 契约红线（本文件头）不变：不 mock /api/about，只观察真实请求次数（page.on("request")）。
+// 计数只在本文件内辅助断言，不影响当前用例串行共享的配置文件。
+function countAboutRequests(page: Page): string[] {
+  const aboutRequests: string[] = [];
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/api/about") aboutRequests.push(request.url());
+  });
+  return aboutRequests;
+}
+
+// 拆分前安全网：分区来回切换不得重放 GET，且呈现与焦点与拆分前一致
+test("关于分区：来回切换不重复请求 /api/about，元数据/外链可访问名与焦点稳定", async ({page}) => {
+  const aboutRequests = countAboutRequests(page);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const aboutTab = page.getByRole("tab", {name: "关于"});
+  const aboutBlocks = page.locator(".about-block");
+  await aboutTab.click();
+  await expect(aboutBlocks.first()).toContainText("DST Manager");
+  await expect(aboutBlocks.first()).toContainText(/v\d+\.\d+\.\d+/);
+  await expect(aboutBlocks.nth(1)).toContainText("MIT License");
+  // 外链可访问名固定（SC-11）；外链打开行为由上一用例断言，这里只钉住按钮仍在
+  await expect(page.getByRole("button", {name: "项目主页"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "问题反馈"})).toBeVisible();
+  // 进入关于分区不抢焦点：键盘用户仍停在分区标签上
+  await expect(aboutTab).toBeFocused();
+  // 切走再切回：分区组件重新挂载，模块级 memo 让整轮仍只有一个 GET
+  await page.getByRole("tab", {name: "扩展"}).click();
+  await expect(page.getByRole("tab", {name: "扩展"})).toBeFocused();
+  await aboutTab.click();
+  await expect(aboutBlocks.first()).toContainText("DST Manager");
+  await expect(aboutTab).toBeFocused();
+  expect(aboutRequests).toHaveLength(1);
+});
+
+// 会话级 memo：应用元数据静态不变（后端登记常量），关闭重开对话框也不得重放 GET
+test("关于分区：关闭重开对话框不重复请求 /api/about", async ({page}) => {
+  const aboutRequests = countAboutRequests(page);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const aboutTab = page.getByRole("tab", {name: "关于"});
+  await aboutTab.click();
+  await expect(page.locator(".about-block").first()).toContainText("DST Manager");
+  expect(aboutRequests).toHaveLength(1);
+  // 关闭（分区回落常规配置）后重开：仍复用同一份元数据
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+  await openSettingsDialog(page);
+  await page.getByRole("tab", {name: "关于"}).click();
+  await expect(page.locator(".about-block").first()).toContainText("DST Manager");
+  expect(aboutRequests).toHaveLength(1);
 });
 
 test("浏览器开发态浏览按钮禁用（SC-04 降级）", async ({page}) => {

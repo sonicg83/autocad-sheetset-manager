@@ -10,24 +10,32 @@
 <script setup lang="ts">
 import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
-import {SHEET_CATALOG_MAX_COLUMNS, type CatalogDiagnostic, type SheetCatalogController} from "../../composables/useSheetCatalog";
+import {
+  SHEET_CATALOG_MAX_COLUMNS, type CatalogDiagnostic, type SheetCatalogTemplateController,
+  type SheetCatalogValidationFeedback,
+} from "../../composables/useSheetCatalogSettings";
 import CompatibilitySummary from "./CompatibilitySummary.vue";
 import {catalogCompatibility} from "./catalogCompatibility";
 
-const props = defineProps<{catalog: SheetCatalogController}>();
+// PLAN-DM-025 Task 8：本组件只依赖模板编辑接口 + 可选校验反馈。设置中心的 custom 面板
+// 没有工作区快照，因此不传反馈——兼容性徽标与摘要整体隐藏，列编辑仍可用。
+const props = defineProps<{catalog: SheetCatalogTemplateController; feedback?: SheetCatalogValidationFeedback}>();
 const {t} = useI18n();
 
 // 兼容徒标与摘要正文同源（PLAN-DM-023 Task 4）：判定只在 catalogCompatibility 一处
-const compat = computed(() => catalogCompatibility(props.catalog));
+const compat = computed(() => (props.feedback ? catalogCompatibility(props.feedback) : null));
 const badgeText = computed(() => {
-  switch (compat.value.tone) {
+  switch (compat.value?.tone) {
     case "ok": return t("extensions.sheetCatalog.compatBadgeExecutable");
     case "warning": return t("extensions.sheetCatalog.compatBadgeWarning", {count: compat.value.warnings.length});
     case "checking": return t("extensions.sheetCatalog.compatBadgeChecking");
     default: return t("extensions.sheetCatalog.compatBadgeBlocked");
   }
 });
-const badgeClass = computed(() => (compat.value.tone === "ok" ? "good" : compat.value.tone === "warning" ? "warn" : compat.value.tone === "checking" ? "checking" : "bad"));
+const badgeClass = computed(() => {
+  const tone = compat.value?.tone;
+  return tone === "ok" ? "good" : tone === "warning" ? "warn" : tone === "checking" ? "checking" : "bad";
+});
 
 const headerInputs = ref<Record<string, HTMLInputElement | null>>({});
 const expressionInputs = ref<Record<string, HTMLTextAreaElement | null>>({});
@@ -38,7 +46,7 @@ function trackCaret(columnId: string, element: HTMLTextAreaElement) {
 }
 
 function columnError(columnId: string, header: string): CatalogDiagnostic | null {
-  const errors = props.catalog.preview.value?.errors ?? [];
+  const errors = props.feedback?.preview.value?.errors ?? [];
   return errors.find(error => error.columnId === columnId)
     ?? errors.find(error => error.columnId === null && typeof error.params.header === "string" && error.params.header.toLowerCase() === header.toLowerCase())
     ?? null;
@@ -62,14 +70,14 @@ const rows = computed(() => props.catalog.draft.value.columns.map((column, index
 // 无 column_id 的阻断错误（重名列，诊断只携带 header 参数）按结构化参数定位到
 // 最后一个匹配列的列名输入框（后引入的重复列才是需要修正的列）。
 const focusedSignature = ref("");
-const errorSignature = computed(() => (props.catalog.preview.value?.errors ?? [])
+const errorSignature = computed(() => (props.feedback?.preview.value?.errors ?? [])
   .map(error => `${error.code}:${error.columnId ?? String(error.params.header ?? "")}`).join("|"));
 watch(errorSignature, signature => {
   if (!signature || signature === focusedSignature.value) return;
   const active = document.activeElement;
   if (active instanceof HTMLElement && region.value?.contains(active)) return;
   focusedSignature.value = signature;
-  const first = props.catalog.preview.value?.errors?.[0];
+  const first = props.feedback?.preview.value?.errors?.[0];
   if (!first) return;
   void nextTick(() => {
     if (first.columnId !== null) {
@@ -103,12 +111,13 @@ watch(() => props.catalog.caretRequest.value, async request => {
   <section ref="region" class="column-editor panel" :aria-label="$t('extensions.sheetCatalog.editorLabel')">
     <div class="editor-head">
       <h3>{{ $t("extensions.sheetCatalog.editorLabel") }}</h3>
-      <span class="compat-badge" :class="badgeClass">{{ badgeText }}</span>
+      <span v-if="feedback" class="compat-badge" :class="badgeClass">{{ badgeText }}</span>
       <span class="spacer"></span>
       <span class="column-count">{{ $t("extensions.sheetCatalog.columnCount", {count: catalog.draft.value.columns.length, limit: SHEET_CATALOG_MAX_COLUMNS}) }}</span>
     </div>
-    <!-- 兼容性摘要嵌在输出列卡内（V2）：详细正文紧随卡头，不再作为独立全宽卡片 -->
-    <CompatibilitySummary :catalog="catalog" />
+    <!-- 兼容性摘要嵌在输出列卡内（V2）：详细正文紧随卡头，不再作为独立全宽卡片。
+         无校验反馈（设置中心 custom 面板）时不渲染：不伪造一份空诊断 -->
+    <CompatibilitySummary v-if="feedback" :feedback="feedback" />
     <div class="columns">
       <div class="columns-head">
         <span>{{ $t("extensions.sheetCatalog.columnsHeadOrder") }}</span>
@@ -148,7 +157,11 @@ watch(() => props.catalog.caretRequest.value, async request => {
             <p v-if="row.error" class="error column-error" role="alert">{{ errorText(row.error) }}</p>
           </div>
           <span class="status-cell">
-            <span class="status-badge" :class="row.error ? 'bad' : 'good'">{{ row.error ? $t("extensions.sheetCatalog.columnStatusInvalid") : $t("extensions.sheetCatalog.columnStatusValid") }}</span>
+            <!-- 列状态只能来自服务端诊断：同一服务端下，无诊断（含"不传校验反馈"的设置中心
+                 面板）不等于"已校验通过"。此前无反馈时每列都顶着绿色"有效"，而那次校验
+                 根本没发生过（M2）。有反馈时行为完全不变。 -->
+            <span v-if="feedback" class="status-badge" :class="row.error ? 'bad' : 'good'">{{ row.error ? $t("extensions.sheetCatalog.columnStatusInvalid") : $t("extensions.sheetCatalog.columnStatusValid") }}</span>
+            <span v-else class="status-badge neutral">{{ $t("extensions.sheetCatalog.columnStatusUnchecked") }}</span>
           </span>
           <div class="row-actions">
             <button type="button" :disabled="row.index === 0" :aria-label="$t('extensions.sheetCatalog.moveUp', {index: row.index + 1})" @click="catalog.moveColumn(row.column.columnId, -1)">↑</button>
@@ -193,6 +206,8 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .status-badge{font-size:12px;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .status-badge.good{color:var(--color-success);background:var(--color-success-bg)}
 .status-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
+/* 无校验反馈：中性色，不得冒充"有效" */
+.status-badge.neutral{color:var(--color-text-muted);background:var(--color-bg-muted)}
 .row-actions{display:flex;gap:4px;justify-content:flex-end;padding-top:2px}
 .row-actions button{width:30px;min-height:30px;border:1px solid var(--color-border-strong);border-radius:6px;background:var(--color-bg-surface);font-size:13px;line-height:1}
 .row-actions button:hover:not(:disabled){background:var(--color-bg-muted)}

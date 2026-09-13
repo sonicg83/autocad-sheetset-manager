@@ -12,8 +12,11 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).parents[2]
 SPEC = ROOT / "packaging" / "dst-manager.spec"
@@ -182,6 +185,61 @@ def test_i18n_resources_statically_bundled_not_runtime_fetched():
 # ---------------------------------------------------------------------------
 
 MANIFEST_RESOURCE = "dst_manager/extensions/builtin/sheet_catalog/manifest.yaml"
+CATALOG_SETTINGS_FILE = (
+    ROOT / "src" / "dst_manager" / "extensions" / "builtin" / "sheet_catalog" / "settings.py"
+)
+HOST_FILE = ROOT / "web" / "src" / "components" / "settings" / "ExtensionSettingsHost.vue"
+
+# 随包清单不得出现可执行入口/模块定位字段（ARCH-DM-006 §4.2）：这些键的值必然是
+# Python 模块名、类名、脚本路径或命令，一旦允许就把「数据契约」变成隐式代码入口。
+MANIFEST_FORBIDDEN_KEYS = {
+    "module",
+    "module_name",
+    "module_path",
+    "class",
+    "class_name",
+    "script",
+    "script_path",
+    "command",
+    "entry_point",
+    "entrypoint",
+    "provider",
+    "settings_provider",
+    "import",
+    "import_path",
+    "python_path",
+    "executable",
+    "path",
+    "file",
+}
+
+# 键名按词段（下划线/连字符 + 驼峰边界）切开后的**词段**黑名单：`provider_class`、
+# `modulePath`、`exec_path`、`handler_class` 这类变体在精确名匹配下会漏过，而它们
+# 的语义与禁用键完全相同。按词段（而非子串）匹配：`description_key` 的词段是
+# `description`/`key`，不会被 `script` 子串误伤。
+MANIFEST_FORBIDDEN_KEY_TOKENS = (
+    "module",
+    "class",
+    "script",
+    "command",
+    "entry",
+    "point",
+    "handler",
+    "provider",
+    "import",
+    "executable",
+    "exec",
+    "python",
+    "path",
+    "file",
+)
+
+
+def _key_segments(key: str) -> tuple[str, ...]:
+    """把键名切成可比对的词段：`modulePath` -> (module, path)，`exec_path` -> (exec, path)。"""
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key)
+    segments = re.split(r"[^A-Za-z0-9]+", spaced)
+    return tuple(segment.casefold() for segment in segments if segment)
 MANIFEST_FILE = ROOT / "src" / MANIFEST_RESOURCE
 INDEX_FILE = ROOT / "src" / "dst_manager" / "extensions" / "builtin" / "index.py"
 RUNTIME_FILE = ROOT / "src" / "dst_manager" / "application" / "extensions" / "runtime.py"
@@ -268,3 +326,277 @@ def test_spec_does_not_package_or_scan_user_extension_directories():
             f"runtime.py 出现 {call}：扩展发现必须只经 BUILTIN_EXTENSION_INDEX 固定索引（ARCH-DM-006 §4.1），"
             "不得扫描文件系统或用户扩展目录"
         )
+
+
+# ---------------------------------------------------------------------------
+# PLAN-DM-025 任务 9（步骤 1）：扩展全局设置框架的打包守护。
+# 设置语义（默认值/迁移/校验/解析）由 Provider 独占，Provider 与工厂一样是
+# 固定索引里的**编译期引用**；清单只声明呈现。frozen 态下 Provider 模块被
+# 排除、或 custom 呈现的路由键脱离前端编译期白名单，都会让设置入口静默失效。
+# 扫描口径说明：索引/清单用 AST 与 YAML 解析（识别等价写法），前端 .vue 含
+# TypeScript 语法无法用 AST，故只用文本正则做「不得出现」类断言。
+# ---------------------------------------------------------------------------
+
+
+def _manifest_data() -> dict:
+    """解析随包清单数据（PyYAML，与 manifest.py 同一加载语义）。"""
+    return yaml.safe_load(MANIFEST_FILE.read_text(encoding="utf-8"))
+
+
+def _walk_manifest(node, path: tuple[str, ...] = ()):
+    """深度遍历清单，产出 (键路径, 值) 对：键与值两侧都要守护。"""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield path + (str(key),), value
+            yield from _walk_manifest(value, path + (str(key),))
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from _walk_manifest(item, path + (str(index),))
+
+
+def _module_level_imports(tree: ast.Module) -> dict[str, tuple[str, str]]:
+    """模块级 `from <module> import <name>`：返回 本地名 -> (模块点分路径, 原名)。
+
+    保留 `as` 别名映射：`from m import f as g` 时本地名是 `g`，但目标模块里被定义
+    的符号是 `f`。只记本地名会让合法的别名导入被误判为「符号不存在」。
+    """
+    imported: dict[str, tuple[str, str]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                imported[alias.asname or alias.name] = (node.module, alias.name)
+    return imported
+
+
+def _bound_expression(node: ast.stmt, name: str) -> ast.expr | None:
+    """该语句是否把模块级名字 `name` 绑定到某个表达式；是则返回右值。"""
+    if isinstance(node, ast.Assign):
+        if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            return node.value
+        return None
+    if (
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == name
+    ):
+        return node.value
+    return None
+
+
+def _module_level_binding(module: str, name: str) -> str:
+    """目标模块里模块级符号 `name` 的绑定形态。
+
+    返回值：`missing`、`literal`（绑定到字符串/数字等字面量）、`call`（构造或调用
+    结果）、`name`（指向另一个模块级名字）、`def`（函数/类定义）、`assign`（其他
+    赋值）。`literal` 必须被守护拒绝：把 Provider 登记成模块级字符串常量，静态分析
+    与打包收集都跟随不了，等价于运行期按名解析。
+    """
+    target = ROOT / "src" / Path(*module.split(".")).with_suffix(".py")
+    if not target.is_file():
+        return "missing"
+    tree = ast.parse(target.read_text(encoding="utf-8"))
+    for node in tree.body:
+        bound = _bound_expression(node, name)
+        if bound is None:
+            if isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ) and node.name == name:
+                return "def"
+            continue
+        if isinstance(bound, ast.Constant):
+            return "literal"
+        if isinstance(bound, ast.Call):
+            return "call"
+        if isinstance(bound, ast.Name):
+            return "name"
+        return "assign"
+    return "missing"
+
+
+def _module_level_name_target(module: str, name: str) -> tuple[str, str] | None:
+    """模块级 `name` 的重导出目标：`name = <其他名字>` 时给出该名字的解析坐标。
+
+    两种目标都要跟随：指向本模块别名的（继续在同一模块内追踪），以及指向导入
+    符号的（跳到被导入模块里的原名）。`AnnAssign`（`x: T = y`）与 `Assign` 的
+    形态必须同等处理，否则生成器为空会抛裸 `StopIteration` 而不是给出诊断。
+    """
+    target = ROOT / "src" / Path(*module.split(".")).with_suffix(".py")
+    if not target.is_file():
+        return None
+    tree = ast.parse(target.read_text(encoding="utf-8"))
+    for node in tree.body:
+        bound = _bound_expression(node, name)
+        if isinstance(bound, ast.Name):
+            imported = _module_level_imports(tree)
+            if bound.id in imported:
+                return imported[bound.id]
+            return (module, bound.id)
+    return None
+
+
+def _transitive_literal(module: str, name: str, *, max_hops: int = 4) -> str | None:
+    """沿模块级重导出链追踪 `name`，返回第一个字面量落点的可读描述；否则 None。
+
+    链路可以任意长：`X = Y`、`Y = "<模块:符号>"` 这类「本地常量再导出」与
+    「导入别的模块里的再导出」都要看穿。只跟一跳、且只跟「内层名是导入符号」
+    的写法会让字符串入口从第二跳起静默绕过守护。
+    """
+    seen: set[tuple[str, str]] = set()
+    current: tuple[str, str] | None = (module, name)
+    for _ in range(max_hops):
+        if current is None or current in seen:
+            return None
+        seen.add(current)
+        kind = _module_level_binding(*current)
+        if kind == "literal":
+            return f"{current[0]}.{current[1]}"
+        if kind != "name":
+            return None
+        current = _module_level_name_target(*current)
+    return None
+
+
+def test_fixed_index_registers_factory_and_provider_as_compile_time_references():
+    """固定索引的 factory/settings_provider 必须是模块级导入的标识符，不得是字符串。
+
+    守护意图（ARCH-DM-006 §4.1/§8.1）：宿主绝不从清单或字符串导入模块。若把
+    Provider 写成字符串路径，frozen 态只能靠运行期动态导入解析——那就是「清单
+    携带可执行入口」的变体，且打包分析无法跟随，Provider 会静默丢失（设置 CRUD
+    降级为不可用而不是报错）。
+    """
+    source = INDEX_FILE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    entries = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "BuiltinExtensionEntry"
+    ]
+    assert entries, "固定索引未找到 BuiltinExtensionEntry 调用：请确认索引仍以构造器登记条目"
+    imported = _module_level_imports(tree)
+    seen = set()
+    for entry in entries:
+        for keyword in entry.keywords:
+            if keyword.arg not in ("factory", "settings_provider"):
+                continue
+            seen.add(keyword.arg)
+            value = keyword.value
+            assert isinstance(value, (ast.Name, ast.Attribute)), (
+                f"固定索引 {keyword.arg}= 必须是编译期引用（模块级导入的标识符），"
+                f"实际是 {type(value).__name__}：字符串形式的入口等价于运行期动态加载"
+            )
+            if isinstance(value, ast.Name):
+                resolved = imported.get(value.id)
+                assert resolved, f"固定索引 {keyword.arg}={value.id} 不是模块级导入的标识符"
+                module, original = resolved
+                kind = _module_level_binding(module, original)
+                assert kind != "missing", (
+                    f"{module} 未在模块级定义 {original}：索引引用的编译期符号必须真实存在"
+                )
+                assert kind != "literal", (
+                    f"{module}.{original} 绑定到字面量（字符串/数字）：入口必须是编译期可跟随的"
+                    "构造结果或函数/类，字符串形式的入口等价于运行期按名动态加载"
+                )
+                # 重导出链：`X = Y`、`X = Y = Z`、`X = 导入符号` 都要追到落点，
+                # 各模块内再导出很常见，字符串入口正是从第二跳起容易漏掉。
+                literal_origin = _transitive_literal(module, original)
+                assert literal_origin is None, (
+                    f"{module}.{original} 的重导出链最终落在字面量 {literal_origin}："
+                    "入口必须是编译期可跟随的构造结果或函数/类，字符串形式的入口等价于"
+                    "运行期按名动态加载"
+                )
+    assert {"factory", "settings_provider"} <= seen, (
+        "固定索引未同时登记 factory 与 settings_provider：设置语义必须由 Provider 在"
+        "编译期登记（ARCH-DM-006 §8.1），不得回退到按扩展 ID 的宿主特判"
+    )
+    for forbidden in ("importlib", "__import__", "import_module"):
+        assert not re.search(rf"\b{re.escape(forbidden)}\b", source), (
+            f"固定索引出现 {forbidden}：白名单索引不得按名动态加载（ARCH-DM-006 §4.1）"
+        )
+
+
+def test_builtin_manifest_carries_no_executable_entry_or_url_fields():
+    """随包清单是数据契约：不得携带 module/class/script/command/url 一类字段。
+
+    守护意图（ARCH-DM-006 §4.2）：清单只声明身份、能力、权限与呈现；扩展实例与
+    设置 Provider 由固定索引的编译期引用创建，URL 会破坏离线可审计与无动态加载。
+    """
+    data = _manifest_data()
+    assert data.get("extension_type") == "builtin", "清单解析异常：extension_type 不再是 builtin"
+    for path, _ in _walk_manifest(data):
+        # 词段切分必须在原键名上做（`modulePath` → module/path）：先 casefold 会把
+        # 驼峰边界抹平成一个词段，`modulePath`/`providerClass` 一类变体就会漏判。
+        key = str(path[-1]).casefold()
+        normalized_segments = _key_segments(str(path[-1]))
+        assert key not in MANIFEST_FORBIDDEN_KEYS, (
+            f"随包清单出现可执行入口字段 {'.'.join(path)}：清单是数据契约，"
+            "扩展实例与 Provider 只能由固定索引的编译期引用创建"
+        )
+        hits = [token for token in MANIFEST_FORBIDDEN_KEY_TOKENS if token in normalized_segments]
+        assert not hits, (
+            f"随包清单字段 {'.'.join(path)} 命中入口词段 {hits}："
+            "`provider_class`/`modulePath`/`exec_path` 一类变体与禁用键语义相同，同样不得出现"
+        )
+    for path, value in _walk_manifest(data):
+        if isinstance(value, str):
+            assert "://" not in value, (
+                f"随包清单字段 {'.'.join(path)} 含外部地址：清单不得携带 URL（离线可审计）"
+            )
+
+
+def test_custom_settings_route_hits_frontend_compile_time_whitelist():
+    """custom 呈现的路由键必须在前端编译期白名单里，且前端不得动态 import 组件。
+
+    守护意图（ARCH-DM-006 §8.2 / SPEC-DM-011 SC-17）：未知 route_key 必须
+    fail-closed。路由键脱离白名单时，用户点「配置」只会看到稳定诊断；若为了
+    "修好"它而改成 import(route_key) 动态加载，则等于把服务端字符串当代码入口。
+    """
+    contribution = _manifest_data()["settings_contribution"]
+    host = HOST_FILE.read_text(encoding="utf-8")
+    assert "CUSTOM_SETTINGS_PANELS" in host, (
+        "ExtensionSettingsHost.vue 未找到 custom 白名单常量：custom 呈现必须经编译期白名单解析"
+        "（计划正文里的旧名 CUSTOM_EXTENSION_SETTINGS_COMPONENTS 已废弃）"
+    )
+    assert contribution["presentation"] == "custom", (
+        "本守护针对图纸目录的 custom 呈现：清单呈现类型变化时请同步改断言口径"
+    )
+    route_key = contribution["route_key"]
+    assert f'"{route_key}"' in host or f"'{route_key}'" in host, (
+        f"前端白名单未登记 route_key {route_key!r}：声明 custom 的扩展点「配置」会 fail-closed"
+    )
+    assert not re.search(r"\bimport\s*\(|\bimport\s*\.\s*meta", host), (
+        "ExtensionSettingsHost.vue 出现动态 import / import.meta：custom 组件解析必须是编译期事实"
+        "（ARCH-DM-006 §8.2），不得按服务端字符串加载模块"
+    )
+    assert "defineAsyncComponent" not in host, (
+        "ExtensionSettingsHost.vue 使用 defineAsyncComponent：组件解析变成运行期事实，"
+        "与编译期白名单 fail-closed 契约冲突"
+    )
+
+
+def test_spec_excludes_and_pathex_keep_builtin_extension_provider_packaged():
+    """spec 不得排除 dst_manager 包，且 ..\\src 必须在 pathex 上。
+
+    守护意图：Provider 是编译期引用，PyInstaller 只能沿静态导入收集；若 excludes
+    排掉 dst_manager.extensions.builtin（或其子模块），frozen 态设置校验与读写全部
+    失效，而源码树测试不会有任何察觉。
+    """
+    text = _spec_text()
+    excludes_block = re.search(r"excludes=\[(.*?)\]", text, re.DOTALL)
+    assert excludes_block, "未解析到 spec excludes 块：请确认 excludes 仍为列表字面量"
+    for entry in re.findall(r'"([^"]+)"', excludes_block.group(1)):
+        assert "dst_manager" not in entry, (
+            f"spec excludes 排除了 {entry}：内置扩展 Provider 是固定索引的编译期引用，"
+            "被排除后 frozen 态设置框架不可用"
+        )
+    assert re.search(r'pathex\s*=\s*\[\s*[rR]?["\']\.\.[\\/]+src["\']', text), (
+        "spec pathex 缺少 ../src：源码树不在分析路径上，静态导入的 Provider 无法被收集"
+        "（断言允许 raw/单斜杠等等价写法）"
+    )
+    assert f"src/{MANIFEST_RESOURCE}" in _normalized_spec_text(), (
+        "spec datas 不再包含内置扩展清单资源：frozen 态 discover() 会降级为占位 FAILED"
+    )
+    assert CATALOG_SETTINGS_FILE.is_file(), (
+        "目录设置 Provider 模块不存在：固定索引的编译期引用会直接 ImportError"
+    )

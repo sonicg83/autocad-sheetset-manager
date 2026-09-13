@@ -32,6 +32,14 @@ dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh)
 .ext-side{display:flex;align-items:center;gap:8px;flex:none;padding-top:2px}
 .ext-state{font-size:12px;color:var(--secondary)}
 .ext-state.on{color:var(--green)}
+/* 扩展全局设置入口（SC-17）：配置进入同一 <dialog> 的子视图，不叠加第二个模态；
+   子视图有独立的保存与可见「返回扩展列表」，脏状态闸门覆盖返回/Esc/遮罩/关闭确认。
+   卡片动作行 DOM 顺序固定为「配置按钮 → 状态文字 → 开关」。 */
+.cfg-head{border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:12px}
+.cfg-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.cfg-conflict{border:1px solid var(--amber);background:var(--amberbg);color:var(--amber);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.8;margin-bottom:14px}
+.cfg-wire{font-family:Consolas,monospace;margin-top:6px;overflow-wrap:anywhere}
+.dlg-foot button[hidden]{display:none}
 .dlg-foot{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}.saved-pill{font-size:12px;color:var(--green)}
 .about-block{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px}.about-block h3{margin-bottom:6px}.license{font-size:12px;line-height:1.7;color:var(--secondary);white-space:pre-wrap;background:var(--canvas);border-radius:7px;padding:10px 12px;max-height:200px;overflow:auto}
 .pick-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;cursor:pointer}.pick-item:hover{background:var(--muted)}
@@ -44,7 +52,7 @@ dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh)
 <body>
 <div id="app">
   <header class="top"><h1 style="font-size:16px">DST Manager</h1><span class="badge muted">未加载工作区 · 模拟</span><span class="spacer"></span>
-    <label class="hint" for="scenario">演示场景</label><select id="scenario"><option value="normal">正常编辑</option><option value="validation">下一次保存校验失败</option><option value="savefail">下一次保存写入失败</option><option value="corrupt">配置文件损坏</option></select>
+    <label class="hint" for="scenario">演示场景</label><select id="scenario"><option value="normal">正常编辑</option><option value="validation">下一次保存校验失败</option><option value="savefail">下一次保存写入失败</option><option value="corrupt">配置文件损坏</option><option value="extconflict">下一次扩展设置保存冲突</option><option value="extreadonly">扩展设置只读（Schema 过新）</option></select>
     <label class="hint" for="extCount">扩展条目数</label><select id="extCount"><option value="1">1 条（最小）</option><option value="4" selected>4 条（多状态）</option><option value="8">8 条（触发分组）</option></select>
     <button class="quiet" data-action="theme">切换主题</button>
     <button class="gear" data-action="open-settings" id="gear" aria-haspopup="dialog" aria-expanded="false" title="设置">⚙ 设置</button>
@@ -64,7 +72,7 @@ dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh)
       </nav>
       <div class="panel" id="panel"></div>
     </div>
-    <div class="dlg-foot"><span class="hint" id="foot-hint">模拟数据 · 保存仅作用于演示内存</span><span id="saved-pill" class="saved-pill" hidden>已保存</span><span class="spacer"></span><button data-action="cancel" id="btn-cancel">取消</button><button class="primary" data-action="save" id="btn-save">保存</button></div>
+    <div class="dlg-foot"><span class="hint" id="foot-hint">模拟数据 · 保存仅作用于演示内存</span><span id="saved-pill" class="saved-pill" hidden>已保存</span><span id="cfg-saved-pill" class="saved-pill" hidden>扩展设置已保存</span><span class="spacer"></span><button data-action="cancel" id="btn-cancel">取消</button><button class="primary" data-action="save" id="btn-save">保存</button><button data-action="cfg-back" id="btn-cfg-back" hidden>返回扩展列表</button><button class="primary" data-action="cfg-save" id="btn-cfg-save" hidden>保存</button></div>
   </div>
 </dialog>
 
@@ -109,9 +117,12 @@ let modalResolve=null,returnFocus=null;
 function ask(title,body,choices){returnFocus=document.activeElement;$('modal-title').textContent=title;$('modal-body').innerHTML=body;$('modal-actions').innerHTML=choices.map(c=>`<button data-action="modal" data-choice="${c.value}" class="${c.cls||''}">${c.text}</button>`).join('');$('modal').showModal();return new Promise(r=>modalResolve=r);}
 function finishModal(v){$('modal').close();modalResolve?.(v);modalResolve=null;if(returnFocus?.isConnected)returnFocus.focus();}
 $('modal').addEventListener('cancel',e=>{e.preventDefault();finishModal('cancel')});
-function openSettings(){opened=true;dirty=false;edits={};cleared={};errors={};section='general';dirtyFields=[];applyScenario();document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));$('settings').showModal();$('gear').setAttribute('aria-expanded','true');render();}
+function openSettings(){opened=true;dirty=false;edits={};cleared={};errors={};section='general';dirtyFields=[];cfgExt=null;cfgEdits={};cfgErrors={};cfgConflict=null;cfgSaved=false;applyScenario();document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));$('settings').showModal();$('gear').setAttribute('aria-expanded','true');render();}
 function closeSettings(){$('settings').close();opened=false;$('gear').setAttribute('aria-expanded','false');$('gear').focus();}
 function applyScenario(){snapshot=SC.seed();scenario=$('scenario').value;
+  // 扩展设置快照同样回到初始值；只读场景模拟服务端已存更高 Schema（v3 > 当前 v2）
+  EXT_SETTINGS=EXT_SETTINGS_INIT();
+  if(scenario==='extreadonly')EXT_SETTINGS['dst-manager.sheet-catalog'].storedSchemaVersion=3;
   if(scenario==='corrupt')snapshot.diagnostics=[{code:'SETTINGS_FILE_CORRUPT',message:'用户配置文件无法读取（已备份为 settings.json.corrupt-20260908），本次会话按默认值运行。'}];}
 function isDirty(k){const it=item(k);if(cleared[k])return it.value!==null;if(k in edits)return String(edits[k])!==String(it.value??'');return false;}
 function anyDirty(){return snapshot.items.some(it=>isDirty(it.key));}
@@ -128,10 +139,14 @@ function fieldHtml(it){const dirty=isDirty(it.key),err=errors[it.key];
 // 扩展分区演示数据（模拟 GET /api/extensions 摘要；不调真实 API、不写任何数据库）
 const STATUS_TEXT={DISCOVERED:'已发现',DISABLED:'已停用',STARTING:'正在启动',AVAILABLE:'可用',WAITING_DEPENDENCY:'等待依赖',INCOMPATIBLE:'不兼容',FAILED:'启动失败',STOPPING:'正在停止',STOPPED:'已停止'};
 const EXT_GROUP_THRESHOLD=6; // 基线阈值：条目 ≥6 条时按 enabled 分「已启用/已停用」
+// settings 声明只决定呈现：custom 打开专属组件，generated 由宿主生成表单；
+// 未声明设置的扩展不显示「配置」（ARCH-DM-006 §8.2）。图纸目录是生产固定索引
+// 当前唯一声明设置的扩展（custom）；demo.frame-update 的 generated 声明只服务
+// 本页设计证据，不据此向 src/dst_manager/extensions/builtin/index.py 新增扩展。
 const EXT_SAMPLES=(()=>{
   const all=[
-    {id:'dst-manager.sheet-catalog',name:'图纸目录',version:'0.1.0',desc:'从图纸集数据生成图纸目录工作簿（XLSX），支持输出模板与字段表达式。',status:'AVAILABLE',enabled:true,error:null},
-    {id:'demo.frame-update',name:'图框批量更新',version:'0.2.0',desc:'按图框属性表批量替换图框块并回写标题栏字段。',status:'DISABLED',enabled:false,error:null},
+    {id:'dst-manager.sheet-catalog',name:'图纸目录',version:'0.1.0',desc:'从图纸集数据生成图纸目录工作簿（XLSX），支持输出模板与字段表达式。',status:'AVAILABLE',enabled:true,error:null,settings:{presentation:'custom',routeKey:'sheet-catalog-settings'}},
+    {id:'demo.frame-update',name:'图框批量更新',version:'0.2.0',desc:'按图框属性表批量替换图框块并回写标题栏字段。',status:'DISABLED',enabled:false,error:null,settings:{presentation:'generated'}},
     {id:'demo.attribute-export',name:'属性批量导出',version:'0.1.3',desc:'把图纸与子集属性导出为制表符分隔文本，供外部审计比对。',status:'FAILED',enabled:true,error:'EXTENSION_START_FAILED'},
     {id:'demo.sheet-validate',name:'图纸一致性校验',version:'0.3.1',desc:'校验图号与文件名一致性并列出不一致项。',status:'INCOMPATIBLE',enabled:false,error:'EXTENSION_HOST_CONTRACT_MISMATCH'},
     {id:'demo.batch-plot',name:'批量打印',version:'0.1.0',desc:'按子集输出 PDF 打印任务并记录每张图纸的结果。',status:'DISABLED',enabled:false,error:null},
@@ -139,23 +154,108 @@ const EXT_SAMPLES=(()=>{
     {id:'demo.titleblock-sync',name:'标题栏同步',version:'0.1.1',desc:'把子集属性同步到标题栏的已登记字段。',status:'DISABLED',enabled:false,error:null},
     {id:'demo.cad-version-report',name:'CAD 版本报告',version:'0.1.0',desc:'统计图纸保存版本并提示需转换的文件。',status:'AVAILABLE',enabled:true,error:null}
   ];
-  return {pick:n=>all.slice(0,n)};
+  return {all,pick:n=>all.slice(0,n)};
 })();
 let extSampleCount=4;
-// 卡片四层：名称 / 描述 / 状态徽标与诊断码 / 状态文字与开关。卡片不可点击、不导航。
+// 扩展设置快照：模拟 GET /api/extensions/{id}/settings 的 schema_version/revision/value。
+// storedSchemaVersion 高于 schemaVersion 时服务端已存更高版本，客户端只读保留
+// 并以 EXTENSION_SETTINGS_SCHEMA_NEWER/409 拒绝覆盖（ARCH-DM-006 §8.1）。
+const EXT_SETTINGS_INIT=()=>({
+  'dst-manager.sheet-catalog':{schemaVersion:2,revision:7,storedSchemaVersion:2,value:{template_id:'builtin-default',excluded_title_keywords:[]}},
+  'demo.frame-update':{schemaVersion:1,revision:2,storedSchemaVersion:1,value:{frame_block_prefix:'TK-',batch_limit:50,write_back_titleblock:true,conflict_strategy:'ask'}}
+});
+let EXT_SETTINGS=EXT_SETTINGS_INIT();
+const CATALOG_TEMPLATES=[{value:'builtin-default',text:'默认图纸目录（内置）'},{value:'tpl-bid',text:'投标图纸目录（用户模板）'}];
+// generated 表单字段：类型、默认值与约束来自扩展 Provider，清单只给顺序与文案。
+const GENERATED_FIELDS=[
+  {key:'frame_block_prefix',label:'图框块名前缀',control:'text',placeholder:'TK-'},
+  {key:'batch_limit',label:'单批处理上限',control:'int',min:1,max:200},
+  {key:'write_back_titleblock',label:'回写标题栏',control:'bool'},
+  {key:'conflict_strategy',label:'属性冲突处理',control:'enum',options:[{value:'skip',text:'跳过'},{value:'overwrite',text:'覆盖'},{value:'ask',text:'询问'}]}
+];
+const MAX_EXCLUDED_KEYWORDS=50,MAX_KEYWORD_CHARS=100;
+let cfgExt=null,cfgEdits={},cfgErrors={},cfgDirty=false,cfgConflict=null,cfgSaved=false;
+const settingsOf=id=>EXT_SETTINGS[id];
+const extName=id=>EXT_SAMPLES.all.find(x=>x.id===id)?.name??id;
+function splitKeywords(text){return String(text??'').split(/[,，]/).map(s=>s.trim()).filter(s=>s!=='');}
+// 规范化：半/全角逗号拆分 → trim → 忽略空项 → casefold 去重且保留首见原文（Provider 同一语义）
+function normalizeKeywords(text){const seen=new Set(),out=[];for(const word of splitKeywords(text)){const folded=word.toLowerCase();if(seen.has(folded))continue;seen.add(folded);out.push(word);}return out;}
+function keywordError(text){const words=normalizeKeywords(text);
+  if(words.length>MAX_EXCLUDED_KEYWORDS)return `最多 ${MAX_EXCLUDED_KEYWORDS} 个关键词，当前 ${words.length} 个（EXTENSION_SETTINGS_INVALID）`;
+  const long=words.find(w=>w.length>MAX_KEYWORD_CHARS);
+  return long?`单个关键词最多 ${MAX_KEYWORD_CHARS} 个字符，当前 ${long.length} 个（EXTENSION_SETTINGS_INVALID）`:'';}
+function fieldError(k,raw){if(k==='excluded_title_keywords')return keywordError(raw);
+  const field=GENERATED_FIELDS.find(f=>f.key===k);
+  if(field?.control==='int'){const n=Number(raw);
+    if(!Number.isInteger(n))return '必须为整数（EXTENSION_SETTINGS_INVALID）';
+    if(n<field.min||n>field.max)return `必须在 ${field.min}–${field.max} 之间（EXTENSION_SETTINGS_INVALID）`;}
+  return '';}
+function fieldDirty(k){if(!(k in cfgEdits))return false;const server=settingsOf(cfgExt).value;
+  if(k==='excluded_title_keywords')return normalizeKeywords(cfgEdits[k]).join('\u0001')!==(server.excluded_title_keywords||[]).join('\u0001');
+  return String(cfgEdits[k])!==String(server[k]??'');}
+function cfgEditsDirty(){return Object.keys(cfgEdits).some(fieldDirty);}
+// 卡片四层：名称 / 描述 / 状态徽标与诊断码 / 动作行（配置 → 状态文字 → 开关）。
+// 卡片本体不可点击、不导航、不可聚焦；只有声明设置的扩展才出现文字按钮「配置」，
+// 可访问名为「配置 {name}」（SC-16 / SC-17）。
 function extCardHtml(ext){
   const tone=ext.status==='AVAILABLE'?'green':ext.status==='FAILED'?'red':(ext.status==='INCOMPATIBLE'||ext.status==='WAITING_DEPENDENCY')?'amber':'muted';
   const diag=ext.error?`<span class="ext-diag">诊断码 ${esc(ext.error)}</span>`:'';
-  return `<li class="ext-card" data-ext="${esc(ext.id)}"><div class="ext-main"><span class="ext-name">${esc(ext.name)}</span><span class="ext-desc">${esc(ext.desc)}</span><span class="ext-meta"><span class="badge muted">v${esc(ext.version)}</span><span class="badge ${tone}">${esc(STATUS_TEXT[ext.status]??ext.status)}</span>${diag}</span></div><div class="ext-side"><span class="ext-state ${ext.enabled?'on':''}" aria-hidden="true">${ext.enabled?'已启用':'已停用'}</span><button class="switch-track" role="switch" data-action="ext-toggle" data-ext="${esc(ext.id)}" aria-checked="${ext.enabled}" aria-label="${ext.enabled?`停用 ${esc(ext.name)}`:`启用 ${esc(ext.name)}`}"><i></i></button></div></li>`;}
+  // 动作行 DOM 顺序固定：配置按钮 → 状态文字 → 开关
+  const config=ext.settings?`<button class="link" data-action="ext-config" data-ext="${esc(ext.id)}" aria-label="配置 ${esc(ext.name)}">配置</button>`:'';
+  return `<li class="ext-card" data-ext="${esc(ext.id)}"><div class="ext-main"><span class="ext-name">${esc(ext.name)}</span><span class="ext-desc">${esc(ext.desc)}</span><span class="ext-meta"><span class="badge muted">v${esc(ext.version)}</span><span class="badge ${tone}">${esc(STATUS_TEXT[ext.status]??ext.status)}</span>${diag}</span></div><div class="ext-side">${config}<span class="ext-state ${ext.enabled?'on':''}" aria-hidden="true">${ext.enabled?'已启用':'已停用'}</span><button class="switch-track" role="switch" data-action="ext-toggle" data-ext="${esc(ext.id)}" aria-checked="${ext.enabled}" aria-label="${ext.enabled?`停用 ${esc(ext.name)}`:`启用 ${esc(ext.name)}`}"><i></i></button></div></li>`;}
 function extGroupHtml(title,list){return list.length?`<div class="group"><div class="group-title">${title}</div><ul class="ext-list">${list.map(extCardHtml).join('')}</ul></div>`:'';}
 function extensionsHtml(){const list=EXT_SAMPLES.pick(extSampleCount);
   const notice='<p class="ext-notice" role="note">扩展启停立即生效，不受下方取消影响。</p>';
   if(list.length<EXT_GROUP_THRESHOLD)return notice+`<ul class="ext-list">${list.map(extCardHtml).join('')}</ul>`;
   return notice+extGroupHtml('已启用',list.filter(e=>e.enabled))+extGroupHtml('已停用',list.filter(e=>!e.enabled));}
+// —— 扩展全局设置子视图（SC-17）——
+// 同一 Settings <dialog> 内的子视图：不叠加第二个模态，子视图内分区导航禁用，
+// 唯一出路是可见的「返回扩展列表」（脏状态先确认）。
+function cfgReadOnly(snap){return snap.storedSchemaVersion>snap.schemaVersion;}
+function cfgHeadHtml(ext,snap){
+  return `<div class="cfg-head"><div class="cfg-title"><h3 id="cfg-title">配置 · ${esc(ext.name)}</h3><span class="badge muted">设置修订 r${snap.revision}</span><span class="badge muted">Schema v${snap.schemaVersion}</span>${cfgReadOnly(snap)?'<span class="badge amber">只读</span>':''}</div><p class="hint">扩展设置属于当前 Windows 用户、跨工作区共享：未加载工作区也能进入、编辑与保存。本扩展独立保存，不进入下方核心配置的保存缓冲，也不共享修订号。</p></div>`;}
+function cfgConflictHtml(ext,snap){
+  return `<div class="cfg-conflict" role="alert" id="cfg-conflict"><strong>保存冲突</strong><p>“${esc(ext.name)}”的设置已被其他保存更新，本地编辑已保留。可按服务端新修订重试，或放弃本地修改。</p><p class="cfg-wire">PUT /api/extensions/${esc(ext.id)}/settings → 409 EXTENSION_SETTINGS_INVALID（expected_revision=${cfgConflict.expectedRevision}, current_revision=${cfgConflict.currentRevision}）</p><div class="row"><button data-action="cfg-retry" id="btn-cfg-retry">按新修订重试</button><button data-action="cfg-discard" id="btn-cfg-discard">放弃本地修改</button></div></div>`;}
+function cfgFieldWrapHtml(key,label,control,foot){const msg=cfgErrors[key];
+  return `<div class="field ${fieldDirty(key)?'dirty':''} ${msg?'error':''}" data-field="${key}"><span class="f-label">${esc(label)}</span><div class="f-main">${control}<div class="f-foot">${foot}</div>${msg?`<div class="f-error" id="err-${key}" role="alert">${esc(msg)}</div>`:''}</div></div>`;}
+function catalogPanelHtml(snap){const readOnly=cfgReadOnly(snap),server=snap.value;
+  const templateId=('template_id' in cfgEdits)?cfgEdits.template_id:server.template_id;
+  const filterText=('excluded_title_keywords' in cfgEdits)?cfgEdits.excluded_title_keywords:(server.excluded_title_keywords||[]).join(', ');
+  const templateControl=`<div class="f-line"><select id="cfg-template" data-key="template_id" aria-label="命名模板" ${readOnly?'disabled':''}>${CATALOG_TEMPLATES.map(o=>`<option value="${esc(o.value)}" ${o.value===templateId?'selected':''}>${esc(o.text)}</option>`).join('')}</select></div>`;
+  const filterControl=`<div class="f-line"><input id="cfg-excluded" data-key="excluded_title_keywords" aria-label="输出图纸过滤" value="${esc(filterText)}" placeholder="草图, 作废, TEMP" aria-describedby="hint-excluded_title_keywords" aria-invalid="${cfgErrors.excluded_title_keywords?'true':'false'}" ${readOnly?'disabled':''}></div>`;
+  return `<div class="group"><div class="group-title">模板设置（custom 专属组件）</div>${cfgFieldWrapHtml('template_id','命名模板',templateControl,'<span class="f-hint">模板集合、字段映射与表达式属复杂设置：由编译期白名单组件（route_key <span class="mono">sheet-catalog-settings</span>）呈现，不退化为 JSON 文本框。</span>')}</div><div class="group"><div class="group-title">输出</div>${cfgFieldWrapHtml('excluded_title_keywords','输出图纸过滤',filterControl,'<span class="f-hint" id="hint-excluded_title_keywords">图名包含任一关键词时不写入目录，多个关键词用逗号分隔</span>')}</div>`;}
+function generatedPanelHtml(snap){const readOnly=cfgReadOnly(snap),server=snap.value,disabled=readOnly?'disabled':'';
+  const fields=GENERATED_FIELDS.map(f=>{const value=(f.key in cfgEdits)?cfgEdits[f.key]:server[f.key];
+    if(f.control==='bool')return cfgFieldWrapHtml(f.key,f.label,`<div class="switch"><button class="switch-track" id="cfg-${f.key}" role="switch" data-action="cfg-bool" data-key="${f.key}" aria-checked="${value}" aria-label="${esc(f.label)}" ${disabled}><i></i></button><span class="f-hint">${value?'开启':'关闭'}</span></div>`,'');
+    if(f.control==='int')return cfgFieldWrapHtml(f.key,f.label,`<div class="f-line"><input id="cfg-${f.key}" data-key="${f.key}" type="number" min="${f.min}" max="${f.max}" value="${esc(value)}" aria-label="${esc(f.label)}" aria-invalid="${cfgErrors[f.key]?'true':'false'}" ${disabled}><span class="f-hint">${f.min}–${f.max}</span></div>`,'');
+    if(f.control==='enum')return cfgFieldWrapHtml(f.key,f.label,`<div class="radio-line" role="radiogroup" aria-label="${esc(f.label)}">${f.options.map(o=>`<label><input type="radio" name="cfg-rg-${f.key}" data-key="${f.key}" value="${esc(o.value)}" ${o.value===value?'checked':''} ${disabled}>${esc(o.text)}</label>`).join('')}</div>`,'');
+    return cfgFieldWrapHtml(f.key,f.label,`<div class="f-line"><input id="cfg-${f.key}" data-key="${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder??'')}" aria-label="${esc(f.label)}" ${disabled}></div>`,'');});
+  return `<p class="ext-notice" role="note">generated 呈现：字段类型、默认值与约束来自扩展 Provider，清单只给顺序与文案。</p><div class="group"><div class="group-title">图框批量更新</div>${fields.join('')}</div>`;}
+function cfgViewHtml(ext){const snap=settingsOf(ext.id),readOnly=cfgReadOnly(snap);
+  // 只读态下 .cfg 内所有控件都带 disabled，子视图便没有可聚焦控件：诊断条加 tabindex="-1" 作为确定落点（见 openConfig）。
+  return `<div class="cfg" data-view="extension-config">${cfgHeadHtml(ext,snap)}${readOnly?`<div class="diag readonly" role="note" id="cfg-readonly" tabindex="-1">⚠ 扩展设置的版本高于当前程序支持的范围，已只读保留，无法覆盖保存（诊断码 EXTENSION_SETTINGS_SCHEMA_NEWER · HTTP 409）。</div>`:''}${cfgConflict?cfgConflictHtml(ext,snap):''}${ext.settings.presentation==='generated'?generatedPanelHtml(snap):catalogPanelHtml(snap)}</div>`;}
+// 页脚随视图切换：列表视图=核心配置的取消/保存；子视图=返回扩展列表/本扩展保存
+function syncFooterView(){
+  document.querySelectorAll('.sections [role=tab]').forEach(t=>{t.disabled=Boolean(cfgExt);});
+  $('btn-cancel').hidden=Boolean(cfgExt);$('btn-save').hidden=Boolean(cfgExt);
+  $('btn-cfg-back').hidden=!cfgExt;$('btn-cfg-save').hidden=!cfgExt;
+  $('cfg-saved-pill').hidden=!(cfgExt&&cfgSaved);
+  if(!cfgExt){const n=snapshot.items.filter(it=>isDirty(it.key)).length;
+    $('btn-save').disabled=!n;$('foot-hint').textContent=n?`${n} 项修改待保存 · 即时校验，保存前不落盘`:'模拟数据 · 保存仅作用于演示内存';return;}
+  const snap=settingsOf(cfgExt),readOnly=cfgReadOnly(snap);
+  $('saved-pill').hidden=true;$('btn-cfg-save').disabled=readOnly||!cfgDirty;
+  $('foot-hint').textContent=readOnly?'只读：服务端已存更高 Schema，无法覆盖保存'
+    :cfgConflict?'保存冲突：本地编辑已保留，可按新修订重试或放弃本地修改'
+    :cfgDirty?`${Object.keys(cfgEdits).filter(fieldDirty).length} 项扩展设置修改待保存 · 本扩展独立保存`
+    :'扩展设置独立保存，与核心配置不共享一次提交或修订号';}
 function render(){$('rev-pill').textContent=`配置修订 r${snapshot.configRevision} · 模拟`;
   const diag=$('diag');if(snapshot.diagnostics.length){diag.hidden=false;diag.classList.toggle('readonly',snapshot.diagnostics.some(d=>d.code==='SETTINGS_SCHEMA_NEWER'));diag.innerHTML=snapshot.diagnostics.map(d=>`⚠ ${esc(d.message)}（诊断码 ${d.code}）`).join('<br>');}else diag.hidden=true;
+  const cfgEntry=cfgExt?EXT_SAMPLES.all.find(x=>x.id===cfgExt):null;
+  cfgDirty=cfgEntry?cfgEditsDirty():false;
   const categories=[...new Set(snapshot.items.map(i=>i.category))];
-  $('panel').innerHTML=section==='extensions'
+  $('panel').innerHTML=cfgEntry
+    ?cfgViewHtml(cfgEntry)
+    :section==='extensions'
     ?extensionsHtml()
     :section==='general'
     ?categories.map(c=>`<div class="group"><div class="group-title">${esc(c)}</div>${snapshot.items.filter(i=>i.category===c).map(fieldHtml).join('')}</div>`).join('')
@@ -166,8 +266,7 @@ Copyright (c) 2026 DST Manager 作者
 
 特此免费授予任何获得本软件副本的人不受限制地处理本软件的权利，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或销售本软件的副本……（演示摘录；真实实现读取随包 LICENSE 全文）</div></div>
      <div class="about-block"><h3>项目主页 / 反馈</h3><p><button class="link" data-action="ext-link" data-url="https://github.com/sonicg83/autocad-sheetset">项目主页（模拟）</button> <button class="link" data-action="ext-link" data-url="https://github.com/sonicg83/autocad-sheetset/issues">问题反馈（模拟）</button></p><p class="hint">真实实现经系统默认浏览器打开，仅允许代码登记的 https 地址。</p></div>`;
-  const n=snapshot.items.filter(it=>isDirty(it.key)).length;
-  $('btn-save').disabled=!n;$('foot-hint').textContent=n?`${n} 项修改待保存 · 即时校验，保存前不落盘`:'模拟数据 · 保存仅作用于演示内存';}
+  syncFooterView();}
 function validateLocal(){errors={};for(const it of snapshot.items){if(it.control==='int'&&it.key in edits){const n=Number(edits[it.key]);if(!Number.isInteger(n))errors[it.key]='必须为整数';else if(n<it.min||n>it.max)errors[it.key]=`必须在 ${it.min}–${it.max} 之间`;}}return Object.keys(errors).length;}
 async function save(){if(validateLocal()){render();focusFirstError();return;}
   if(scenario==='validation'){const k='cad_timeout_seconds';errors[k]='演示校验错误：超出执行窗口允许范围';render();focusFirstError();$('scenario').value='normal';toast('模拟后端 422：逐字段错误已显示，输入保留');return;}
@@ -180,15 +279,61 @@ async function save(){if(validateLocal()){render();focusFirstError();return;}
   const sp=$('saved-pill');sp.hidden=false;setTimeout(()=>sp.hidden=true,2500);
   if(['enable_add_number_suffix','number_suffix_type','cad_max_parallel'].some(k=>k in set))toast('已保存。相关预览将按新配置重算（SC-13 提示）');else toast('已保存（模拟 PUT 成功，修订号 +1）');}
 function focusFirstError(){const k=Object.keys(errors)[0];if(!k)return;const el=$('panel').querySelector(`[data-key="${k}"]`);el?.scrollIntoView({block:'center'});el?.focus();}
-async function tryClose(){if(!anyDirty())return closeSettings();
-  const r=await ask('有未保存的修改','<p>关闭将放弃本次全部未保存修改，已保存的配置不受影响。</p>',[{text:'留在此处',value:'cancel'},{text:'放弃修改并关闭',value:'discard',cls:'primary'}]);
-  if(r==='discard'){edits={};cleared={};errors={};closeSettings();}}
+// —— 子视图进入/返回/保存与脏状态闸门（SC-17）——
+// 「配置」按钮是 opener：进入子视图后聚焦首个可用控件（只读态落到只读诊断条），返回列表后焦点归还该按钮（通过 data-ext 定位），关闭对话框则归还齿轮（closeSettings）。
+function openConfig(id){cfgExt=id;cfgEdits={};cfgErrors={};cfgConflict=null;cfgSaved=false;render();
+  // 进入焦点：优先子视图首个可用控件；只读态（EXTENSION_SETTINGS_SCHEMA_NEWER）里全部控件都禁用，
+  // 此时落到只读诊断条（tabindex="-1"），保证任何状态下都有确定落点、不退回 body。
+  ($('panel').querySelector('.cfg input:not([disabled]),.cfg select:not([disabled]),.cfg button:not([disabled])') ?? $('panel').querySelector('#cfg-readonly'))?.focus();}
+function focusCfgOpener(id){$('panel').querySelector(`[data-action="ext-config"][data-ext="${id}"]`)?.focus();}
+async function backToList(){
+  if(cfgDirty){const r=await ask('有未保存的扩展设置修改',`<p>返回扩展列表将放弃“${esc(extName(cfgExt))}”的本次未保存修改；已保存的设置不受影响。</p>`,[{text:'留在此处',value:'cancel'},{text:'放弃修改并返回',value:'discard',cls:'primary'}]);
+    if(r!=='discard')return;}
+  const id=cfgExt;cfgExt=null;cfgEdits={};cfgErrors={};cfgConflict=null;cfgSaved=false;render();focusCfgOpener(id);}
+function focusCfgError(){const k=Object.keys(cfgErrors)[0];if(!k)return;const el=$('panel').querySelector(`[data-field="${k}"]`);el?.scrollIntoView({block:'center'});$('panel').querySelector(`[data-key="${k}"]`)?.focus();}
+async function cfgSave(){if(!cfgExt)return;const snap=settingsOf(cfgExt);
+  if(cfgReadOnly(snap))return;  // 高版本只读：按钮已禁用，此处仍 fail-closed
+  // 客户端即时校验与服务端最终校验同一语义：超限拒绝保存、绝不截断
+  cfgErrors={};GENERATED_FIELDS.forEach(f=>{if(f.key in cfgEdits){const m=fieldError(f.key,cfgEdits[f.key]);if(m)cfgErrors[f.key]=m;}});
+  if('excluded_title_keywords' in cfgEdits){const m=keywordError(cfgEdits.excluded_title_keywords);if(m)cfgErrors.excluded_title_keywords=m;}
+  if(Object.keys(cfgErrors).length){render();focusCfgError();toast('模拟后端 422：EXTENSION_SETTINGS_INVALID 已定位到字段，输入保留');return;}
+  $('btn-cfg-save').disabled=true;$('btn-cfg-save').textContent='保存中…';
+  await new Promise(r=>setTimeout(r,300));
+  if(scenario==='extconflict'){const expected=snap.revision;snap.revision+=1;cfgConflict={expectedRevision:expected,currentRevision:snap.revision};
+    $('btn-cfg-save').textContent='保存';render();
+    toast(`模拟 PUT /api/extensions/${cfgExt}/settings → 409 冲突（expected_revision=${expected}, current_revision=${snap.revision}），本地编辑保留`);return;}
+  const value=structuredClone(snap.value);
+  for(const [k,v] of Object.entries(cfgEdits)){
+    if(k==='excluded_title_keywords'){const words=normalizeKeywords(v);if(words.length)value[k]=words;else delete value[k];continue;}
+    value[k]=(GENERATED_FIELDS.find(f=>f.key===k)?.control==='int'&&v!=='')?Number(v):v;}
+  snap.value=value;snap.revision+=1;cfgEdits={};cfgErrors={};cfgConflict=null;cfgSaved=true;
+  $('btn-cfg-save').textContent='保存';render();
+  setTimeout(()=>{cfgSaved=false;syncFooterView();},2500);
+  toast('已保存（模拟 PUT 成功：本扩展设置修订 +1，规范化后的值已回读）');}
+async function tryClose(){const cfgDirtyNow=Boolean(cfgExt)&&cfgDirty;
+  if(!anyDirty()&&!cfgDirtyNow)return closeSettings();
+  const extra=cfgDirtyNow?`<p>“${esc(extName(cfgExt))}”的扩展设置也有未保存修改。</p>`:'';
+  const r=await ask('有未保存的修改',`<p>关闭将放弃本次全部未保存修改（核心配置与扩展设置），已保存的内容不受影响。</p>${extra}`,[{text:'留在此处',value:'cancel'},{text:'放弃修改并关闭',value:'discard',cls:'primary'}]);
+  if(r==='discard'){edits={};cleared={};errors={};cfgExt=null;cfgEdits={};cfgErrors={};cfgConflict=null;closeSettings();}}
 const fakeFiles={exe:[['C:\\Program Files\\Autodesk\\AutoCAD 2016\\accoreconsole.exe','accoreconsole.exe'],['C:\\Program Files\\Autodesk\\AutoCAD 2020\\accoreconsole.exe','accoreconsole.exe']],dll:[['C:\\Apps\\dst-manager\\autocad2016\\DstManager.AutoCAD.dll','DstManager.AutoCAD.dll'],['C:\\Apps\\dst-manager\\autocad2020\\DstManager.AutoCAD.dll','DstManager.AutoCAD.dll']]};
 async function browse(k){const it=item(k),list=it.fileFilter.includes('exe')?fakeFiles.exe:fakeFiles.dll;
   const r=await ask('模拟原生选择器 · '+it.fileFilter,`<p class="hint">桌面壳中此处为 pywebview create_file_dialog（ShellBridge select_file）。请选择模拟条目：</p>${list.map(([p])=>`<div class="pick-item" data-action="pick" data-path="${esc(p)}"><span class="mono">${esc(p)}</span></div>`).join('')}`,[{text:'取消',value:'cancel'}]);
   if(r&&r!=='cancel'){edits[k]=r;delete cleared[k];delete errors[k];render();}}
-// 输入委托：滑动开关改走 click（见上方 data-action="bool"），此处只处理文本/数值/单选
-document.addEventListener('input',e=>{const t=e.target,k=t.dataset?.key;if(!k)return;delete errors[k];dirtyFields.push(k);
+// 输入委托：滑动开关改走 click（见上方 data-action="bool" 与 cfg-bool），此处只处理文本/数值/单选/下拉。
+// 子视图（config）的编辑进入 cfgEdits，与核心配置的 edits 完全分开（独立保存）。
+document.addEventListener('input',e=>{const t=e.target,k=t.dataset?.key;if(!k)return;
+  if(cfgExt){
+    cfgEdits[k]=t.value;
+    const msg=fieldError(k,t.value);if(msg)cfgErrors[k]=msg;else delete cfgErrors[k];
+    // 只就地更新该字段与页脚，不重绘输入框（避免光标跳位）
+    const field=t.closest('.field');
+    if(field){field.classList.toggle('dirty',fieldDirty(k));field.classList.toggle('error',Boolean(cfgErrors[k]));
+      let node=field.querySelector(`#err-${k}`);
+      if(cfgErrors[k]){if(!node){node=document.createElement('div');node.id=`err-${k}`;node.className='f-error';node.setAttribute('role','alert');field.querySelector('.f-main').appendChild(node);}node.textContent=cfgErrors[k];}
+      else if(node)node.remove();
+      if(t.hasAttribute('aria-invalid'))t.setAttribute('aria-invalid',cfgErrors[k]?'true':'false');}
+    cfgDirty=cfgEditsDirty();syncFooterView();return;}
+  delete errors[k];dirtyFields.push(k);
   if(t.type==='radio')edits[k]=Number(t.value);else edits[k]=t.value;
   if(t.type==='number'&&(t.value===''||Number(t.value)<item(k).min||Number(t.value)>item(k).max)){errors[k]=t.value===''?'必须为整数':`必须在 ${item(k).min}–${item(k).max} 之间`;}
   render();if(t.type!=='radio'){const el=$('panel').querySelector(`[data-key="${k}"]`);el?.focus();}});
@@ -198,6 +343,14 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-acti
   if(a==='ext-toggle'){const ext=EXT_SAMPLES.pick(extSampleCount).find(x=>x.id===b.dataset.ext);
     // 与实际后端一致：启用对非 AVAILABLE 条目是一次真实重试，仍失败则保持「已启用 + 启动失败」
     if(ext){ext.enabled=!ext.enabled;ext.status=ext.enabled?(ext.error?'FAILED':'AVAILABLE'):'DISABLED';render();toast(`模拟 PATCH /api/extensions/${ext.id}/state → enabled=${ext.enabled}`);}return;}
+  if(a==='ext-config'){openConfig(b.dataset.ext);return;}
+  if(a==='cfg-back'){await backToList();return;}
+  if(a==='cfg-save'){await cfgSave();return;}
+  if(a==='cfg-bool'){const k=b.dataset.key,cur=(k in cfgEdits)?cfgEdits[k]:settingsOf(cfgExt).value[k];
+    cfgEdits[k]=!cur;const m=fieldError(k,cfgEdits[k]);if(m)cfgErrors[k]=m;else delete cfgErrors[k];
+    render();$('panel').querySelector(`[data-key="${k}"]`)?.focus();return;}
+  if(a==='cfg-retry'){scenario='normal';$('scenario').value='normal';cfgConflict=null;await cfgSave();return;}
+  if(a==='cfg-discard'){const id=cfgExt;cfgEdits={};cfgErrors={};cfgConflict=null;render();toast(`已放弃本地修改：“${extName(id)}”回到服务端修订 r${settingsOf(id).revision}`);return;}
   if(a==='theme'){document.documentElement.classList.toggle('dark');return;}
   if(a==='open-settings'){openSettings();return;}
   if(a==='section'){section=b.dataset.section;document.querySelectorAll('.sections [role=tab]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.section===section)));render();return;}
@@ -212,7 +365,12 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-acti
   if(a==='reset'){snapshot=SC.seed();edits={};cleared={};errors={};unsetPending=[];render();toast('演示已重置');return;}});
 let unsetPending=[];
 function applyUnset(k){const it=item(k);const eff=it.source==='env'?it.default??it.value:it.default;it.value=eff;it.hasFileOverride=false;it.source=it.default===eff?'default':'env';delete edits[k];delete cleared[k];render();}
-$('settings').addEventListener('cancel',e=>{e.preventDefault();tryClose();});
+// Esc：子视图内等价于「返回扩展列表」（dirty 时先确认），列表视图内按关闭处理。
+// 闸门模态是原生 <dialog showModal>，Esc 只作用于最上层模态，不会连带关闭设置窗口。
+$('settings').addEventListener('cancel',e=>{e.preventDefault();if(cfgExt)backToList();else tryClose();});
+// 遮罩点击：与 Esc 同一分级（子视图=返回扩展列表，列表视图=关闭）。
+// 弹窗内内容由 .dlg 铺满，落在遮罩上的点击事件目标就是 dialog 本体。
+$('settings').addEventListener('click',e=>{if(e.target!==$('settings'))return;if(cfgExt)backToList();else tryClose();});
 // 演示工具：切换扩展条目数，用于覆盖「<6 条不分段 / ≥6 条分段」两种基线呈现
 extSampleCount=Number($('extCount').value);
 $('extCount').addEventListener('change',()=>{extSampleCount=Number($('extCount').value);render();});

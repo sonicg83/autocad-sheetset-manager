@@ -1,12 +1,13 @@
 // 图纸目录页面唯一状态所有者（PLAN-DM-020 Task 11 / SPEC-DM-012 §3/§7/§8/§10/§11）。
-// 持有模板集合/当前模板/未保存草稿/脏标记/字段目录/防抖预览/保存与导出状态；
-// 六个 sheet-catalog 组件与 SheetCatalogView 只经本组合式函数读写状态，不复制
-// 后端最终校验规则（超限/重名/语法错误以后端诊断为准做展示层）。
+// PLAN-DM-025 Task 8：全局设置（模板集合/草稿/过滤词/光标/修订冲突）已抽到
+// useSheetCatalogSettings.ts；本模块只保留工作区绑定部分——字段目录、防抖预览、导出与
+// 三选一导航守卫，并把设置接口组合给页面组件。业务页与设置中心 custom 面板各持一份设置
+// 实例（同一 API 与状态模型、不共享任何可变状态），并行编辑靠 revision 冲突收敛。
 //
-// 导航保护（SPEC §3.2）：guardNavigation(next) 是切换模板/切换页签/离开/关闭
-// 的统一三选一闸门。页面状态属于视图实例，视图只在工作区页签激活时挂载，因此
-// 通过模块级守卫登记（useTheme 同款模块级单例先例）让宿主 App.vue 在切页签、
-// 停用扩展与关闭/刷新工作区时征询本页守卫；视图卸载时自动注销。
+// 导航保护（SPEC §3.2）：guardNavigation(next) 是切换模板/切换页签/离开/关闭的统一
+// 三选一闸门。页面状态属于视图实例，视图只在工作区页签激活时挂载，因此通过模块级守卫
+// 登记（useTheme 同款模块级单例先例）让宿主 App.vue 在切页签、停用扩展与关闭/刷新
+// 工作区时征询本页守卫；视图卸载时自动注销。
 import {computed, onScopeDispose, reactive, ref, watch} from "vue";
 import type {Ref} from "vue";
 import {useI18n} from "vue-i18n";
@@ -14,39 +15,21 @@ import {ApiError, localizedError, request} from "../api/client";
 import {openArtifactFolder, requestExtensionSave, shellReady} from "../api/shell";
 import type {ShellResult, ShellSaveGrant} from "../api/shell";
 import type {Workspace} from "../api/contracts";
+import {useExtensionSettings} from "./useExtensionSettings";
+import {
+  CATALOG_EXTENSION_ID, CATALOG_SETTINGS_SCHEMA_VERSION, catalogColumnChangeKey, catalogTemplateSnapshot, fieldReference,
+  useSheetCatalogSettings,
+} from "./useSheetCatalogSettings";
+import type {
+  CatalogDiagnostic, CatalogField, CatalogPreviewData, GuardChoice, NavigationResult,
+  SheetCatalogNavigationGuard, SheetCatalogValidationFeedback,
+} from "./useSheetCatalogSettings";
 
-export const CATALOG_EXTENSION_ID = "dst-manager.sheet-catalog";
+export {CATALOG_EXTENSION_ID, CATALOG_SETTINGS_SCHEMA_VERSION, EXCLUDED_TITLE_KEYWORDS_FIELD, SHEET_CATALOG_MAX_COLUMNS, fieldReference} from "./useSheetCatalogSettings";
+export type {CatalogColumn, CatalogField, CatalogPreviewData, CatalogTemplate, PreviewStatus, SheetCatalogValidationFeedback} from "./useSheetCatalogSettings";
+
 const CATALOG_ACTION_ID = "export-xlsx";
 const PREVIEW_DEBOUNCE_MS = 300;
-
-// SPEC §4.2：点号形式只接受可作单一标识符读取的名称；与固有字段重名的自定义
-// 属性必须走方括号形式。字符集与 expressions.py 的 _DOT_NAME_FORBIDDEN 对齐。
-const DOT_NAME_FORBIDDEN = new Set(' \t\r\n.[]{}"\'(),;:=\\'.split(""));
-const SHEET_BUILTIN_FIELDS = ["number", "title", "file_name"] as const;
-
-// SPEC-DM-012 §5.3 首版限制值的展示镜像（PLAN-DM-023 Task 3“N / 50 列”计数）。
-// 权威校验仍在后端 templates.MAX_COLUMNS（超限报 SHEET_CATALOG_COLUMN_LIMIT）；
-// 前端只用它渲染分母，不据此拦截输入、不复制任何校验规则。
-export const SHEET_CATALOG_MAX_COLUMNS = 50;
-
-export interface CatalogColumn {columnId: string; header: string; expression: string}
-export interface CatalogTemplate {templateId: string | null; name: string; columns: CatalogColumn[]}
-export interface CatalogField {scope: "sheetset" | "sheet"; canonicalName: string; builtin: boolean}
-export interface CatalogDiagnostic {
-  code: string;
-  messageKey: string;
-  params: Record<string, string | number>;
-  columnId: string | null;
-  sourcePosition: number | null;
-}
-export interface CatalogPreviewData {
-  errors: CatalogDiagnostic[];
-  warnings: CatalogDiagnostic[];
-  rows: string[][];
-  totalRows: number;
-  previewDigest: string;
-  executable: boolean;
-}
 
 type PreviewResponse = {
   normalized_template: {template_id: string | null; name: string; schema_version: number; columns: {column_id: string | null; header: string; expression: string}[]};
@@ -54,18 +37,17 @@ type PreviewResponse = {
   errors: {code: string; message_key: string; params: Record<string, string | number>; column_id?: string | null; source_position?: number | null}[];
   warnings: {code: string; message_key: string; params: Record<string, string | number>; column_id?: string | null; source_position?: number | null}[];
   rows: string[][];
+  // total_rows 是过滤后的实际输出行数；filtered_rows 是被过滤掉的图纸数（SPEC-DM-012 §8.1）
   total_rows: number;
+  filtered_rows: number;
+  // 本次预览绑定的扩展设置修订：执行时必须原样重复提交（ARCH-DM-006 §11）
+  settings_revision: number;
   preview_digest: string;
   executable: boolean;
 };
 
-type SettingsResponse = {schema_version: number; revision: number; value: {user_templates?: unknown[]}};
 type PreferenceResponse = {schema_version: number; revision: number; value: {template_id?: unknown}};
 type ExecuteResponse = {artifact_id: string; file_name: string; output_path: string; warnings?: {code: string; message_key: string; params: Record<string, string | number>}[]};
-
-export type GuardChoice = "save" | "discard" | "stay";
-export type NavigationResult = "continue" | "stay";
-export type SheetCatalogNavigationGuard = (next: () => void | Promise<void>) => Promise<NavigationResult>;
 
 // 模块级守卫登记：目录页挂载期间注册，卸载注销（见文件头说明）。
 // isDirty 探针供宿主在同步路径上先判断是否需要闸门：无未保存草稿时键盘/点击
@@ -94,61 +76,15 @@ export async function guardSheetCatalogPage(next: () => void | Promise<void>): P
   return guard(next);
 }
 
-// 字段引用语法（SPEC §4.2）：按规范名称自动选择点号或方括号 JSON 字符串形式
-export function fieldReference(scope: "sheetset" | "sheet", canonicalName: string): string {
-  const lower = canonicalName.toLowerCase();
-  const reservedConflict = scope === "sheet"
-    && SHEET_BUILTIN_FIELDS.includes(lower as (typeof SHEET_BUILTIN_FIELDS)[number])
-    && !(SHEET_BUILTIN_FIELDS as readonly string[]).includes(canonicalName);
-  const needsQuoted = canonicalName === ""
-    || reservedConflict
-    || [...canonicalName].some(char => DOT_NAME_FORBIDDEN.has(char));
-  if (needsQuoted) return `{${scope}[${JSON.stringify(canonicalName)}]}`;
-  return `{${scope}.${canonicalName}}`;
-}
-
-function stableColumns(columns: CatalogColumn[]): string {
-  return JSON.stringify(columns.map(column => [column.header, column.expression]));
-}
-
 export function useSheetCatalog(workspace: Ref<Workspace | null>) {
-  const {t, locale} = useI18n();
-
-  // ---- 内置默认模板（SPEC §6.2，随扩展交付；表头文案经宿主 i18n） ----
-  function builtinTemplate(): CatalogTemplate {
-    return {
-      templateId: null,
-      name: t("extensions.sheetCatalog.builtinName"),
-      columns: [
-        {columnId: crypto.randomUUID(), header: t("extensions.sheetCatalog.defaultHeaderNumber"), expression: "{sheet.number}"},
-        {columnId: crypto.randomUUID(), header: t("extensions.sheetCatalog.defaultHeaderTitle"), expression: "{sheet.title}"},
-        {columnId: crypto.randomUUID(), header: t("extensions.sheetCatalog.defaultHeaderFileName"), expression: "{sheet.file_name}"},
-      ],
-    };
-  }
-
-  // ---- 模板与草稿 ----
-  const templates = ref<CatalogTemplate[]>([]);
-  const settingsRevision = ref(0);
-  const selectedId = ref<string | null>(null); // null = 内置默认模板
-  const draft = ref<CatalogTemplate>(builtinTemplate());
-  // 与初始草稿一致：加载窗口内 dirty 恒为 false，导航不被误判为未保存草稿
-  const savedSnapshot = ref(stableColumns(draft.value.columns));
-  const loading = ref(true);
-  // 保存冲突（SPEC §11）：保留本地编辑，提供"另存为新模板 / 按新修订重试"
-  const conflict = ref(false);
-  const saveError = ref("");
-  const saving = ref(false);
-  // 待重放的保存负载（冲突重试用）：刷新服务端修订后原样重放
-  let pendingReplay: {value: Record<string, unknown>} | null = null;
-
-  const selectedTemplate = computed<CatalogTemplate>(() => {
-    if (selectedId.value === null) return builtinTemplate();
-    return templates.value.find(template => template.templateId === selectedId.value) ?? builtinTemplate();
+  const {t} = useI18n();
+  const settings = useExtensionSettings(CATALOG_EXTENSION_ID);
+  // 业务页实例：修订冲突与只读由协议层承担（与设置中心面板同一状态模型）
+  const owner = useSheetCatalogSettings(settings, {
+    guard: guardNavigation,
+    onSelected: id => { if (id !== null) void recordPreference(id); },
   });
-  const dirty = computed(() => stableColumns(draft.value.columns) !== savedSnapshot.value);
-  const canSaveInPlace = computed(() => selectedId.value !== null);
-  const draftName = computed(() => (dirty.value && !canSaveInPlace.value ? t("extensions.sheetCatalog.unnamedDraft") : draft.value.name));
+  const {templates, selectedId, draft, dirty, draftName, canSaveInPlace, loading} = owner;
 
   // ---- 字段目录 / 预览 ----
   const fieldCatalog = ref<{sheetset: CatalogField[]; sheet: CatalogField[]}>({sheetset: [], sheet: []});
@@ -157,8 +93,20 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   const previewError = ref("");
   // 本次预览对应的草稿列快照：导出只允许"预览与草稿一致"时进行（SPEC §3.1 第 7 步）
   const previewedColumns = ref("");
+  // 本次预览绑定的扩展设置修订：导出时原样重复提交，后端据此拒绝"预览后设置已变"
+  // （EXTENSION_SETTINGS_CHANGED/409）；不得用最新修订代替，否则会把设置漂移误报成
+  // 通用预览漂移（REPREVIEW_REQUIRED）。
+  // 取值只接受契约要求的数字：响应违约（字段缺失/类型不符）时不发布预览，而是给出可见
+  // 诊断（R15）——静默返回会让导出按钮看似可用却点不动。
+  const previewedSettingsRevision = ref<number | null>(null);
+  // 变更键含列 UUID（catalogColumnChangeKey）：等值但列 ID 不同的模板切换必须重放预览，
+  // 否则导出按钮看似可用、执行却被 REPREVIEW_REQUIRED 拒绝（I3）。
+  const draftSignature = computed(() => catalogColumnChangeKey(draft.value.columns));
   let previewGeneration = 0;
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 校验反馈（兼容性徽标与摘要的唯一来源）：业务页传真实预览状态，不伪造
+  const feedback: SheetCatalogValidationFeedback = {preview, previewStatus, previewError};
 
   // ---- 保存授权 / 导出状态（SPEC §10） ----
   const exportState = reactive({
@@ -181,81 +129,26 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   const guardState = ref({open: false, summary: "", canSave: false});
   let guardResolver: ((choice: GuardChoice) => void) | null = null;
 
-  // ---- 模板快照与设置负载 ----
-  function toSnapshot(template: CatalogTemplate) {
-    return {
-      template_id: template.templateId,
-      name: template.name,
-      schema_version: 1 as const,
-      columns: template.columns.map(column => ({column_id: column.columnId, header: column.header, expression: column.expression})),
-    };
-  }
-  function fromEntry(entry: unknown): CatalogTemplate | null {
-    if (typeof entry !== "object" || entry === null) return null;
-    const record = entry as Record<string, unknown>;
-    const id = record.template_id;
-    const name = record.name;
-    const columns = record.columns;
-    if (typeof id !== "string" || typeof name !== "string" || !Array.isArray(columns)) return null;
-    const mapped: CatalogColumn[] = [];
-    for (const item of columns) {
-      if (typeof item !== "object" || item === null) return null;
-      const column = item as Record<string, unknown>;
-      if (typeof column.column_id !== "string" || typeof column.header !== "string" || typeof column.expression !== "string") return null;
-      mapped.push({columnId: column.column_id, header: column.header, expression: column.expression});
-    }
-    return {templateId: id, name, columns: mapped};
-  }
-  function settingsPayload(userTemplates: CatalogTemplate[]) {
-    return {schema_version: 1, user_templates: userTemplates.map(toSnapshot)};
-  }
-
   // ---- 初始装配：设置 + 偏好（上次选中的已保存模板） ----
   async function initialize() {
     const current = workspace.value;
     if (!current) return;
-    loading.value = true;
+    await settings.load();
+    if (settings.snapshot.value === null) {
+      // 协议层只有 loadFailed 布尔（不发错误文本）：页面层给出可见正文并停用编辑
+      loadError.value = t("extensions.sheetCatalog.settingsLoadFailed");
+      return;
+    }
+    owner.refresh();
     try {
-      const [settings, preference] = await Promise.all([
-        request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`),
-        request<PreferenceResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/workspaces/${current.id}/preferences`),
-      ]);
-      settingsRevision.value = settings.revision;
-      templates.value = (settings.value.user_templates ?? [])
-        .map(fromEntry)
-        .filter((template): template is CatalogTemplate => template !== null);
+      const preference = await request<PreferenceResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/workspaces/${current.id}/preferences`);
       const preferred = typeof preference.value?.template_id === "string" ? preference.value.template_id : null;
-      applySelection(templates.value.some(template => template.templateId === preferred) ? preferred : null);
-      void schedulePreview(0);
-    } catch (error) {
-      loadError.value = error instanceof Error ? error.message : String(error);
-      applySelection(null);
-    } finally {
-      loading.value = false;
+      // 偏好 best-effort：读取失败退回内置默认模板，不阻断页面
+      owner.applySelection(preferred !== null && templates.value.some(template => template.templateId === preferred) ? preferred : null);
+    } catch {
+      owner.applySelection(null);
     }
-  }
-
-  function applySelection(id: string | null) {
-    selectedId.value = id;
-    const source = id === null ? builtinTemplate() : templates.value.find(template => template.templateId === id);
-    if (!source) return;
-    draft.value = {templateId: source.templateId, name: source.name, columns: source.columns.map(column => ({...column}))};
-    savedSnapshot.value = stableColumns(source.columns);
-    conflict.value = false;
-    saveError.value = "";
-    pendingReplay = null;
-  }
-
-  // 选择模板（SPEC §3.2：有未保存修改先三选一）；只有已保存模板写入工作区偏好
-  async function selectTemplate(id: string | null) {
-    if (id === selectedId.value) return;
-    if (dirty.value) {
-      const result = await guardNavigation(async () => applySelection(id));
-      if (result === "stay") return;
-    } else {
-      applySelection(id);
-    }
-    await recordPreference(id);
+    void schedulePreview(0);
   }
 
   async function recordPreference(id: string | null) {
@@ -264,62 +157,11 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     try {
       await request(`/api/extensions/${CATALOG_EXTENSION_ID}/workspaces/${current.id}/preferences`, {
         method: "PUT",
-        body: JSON.stringify({schema_version: 1, value: {template_id: id}}),
+        body: JSON.stringify({schema_version: CATALOG_SETTINGS_SCHEMA_VERSION, value: {template_id: id}}),
       });
     } catch {
       // 偏好 best-effort：失败可诊断但不阻断模板选择
     }
-  }
-
-  // ---- 草稿编辑 ----
-  function updateColumn(columnId: string, patch: Partial<Pick<CatalogColumn, "header" | "expression">>) {
-    draft.value = {
-      ...draft.value,
-      columns: draft.value.columns.map(column => (column.columnId === columnId ? {...column, ...patch} : column)),
-    };
-  }
-  function addColumn() {
-    draft.value = {
-      ...draft.value,
-      columns: [...draft.value.columns, {columnId: crypto.randomUUID(), header: "", expression: ""}],
-    };
-  }
-  function removeColumn(columnId: string) {
-    draft.value = {...draft.value, columns: draft.value.columns.filter(column => column.columnId !== columnId)};
-  }
-  function moveColumn(columnId: string, direction: -1 | 1) {
-    const index = draft.value.columns.findIndex(column => column.columnId === columnId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= draft.value.columns.length) return;
-    const columns = [...draft.value.columns];
-    [columns[index], columns[target]] = [columns[target], columns[index]];
-    draft.value = {...draft.value, columns};
-  }
-
-  // ---- 字段插入（textarea selection API；光标由 ColumnEditor 跟踪） ----
-  const caret = ref<{columnId: string; start: number; end: number} | null>(null);
-  const caretRequest = ref<{columnId: string; position: number} | null>(null);
-  function trackCaret(columnId: string, start: number, end: number) {
-    caret.value = {columnId, start, end};
-  }
-  function insertField(columnId: string, reference: string, selectionStart: number, selectionEnd: number) {
-    const column = draft.value.columns.find(item => item.columnId === columnId);
-    if (!column) return;
-    const start = Math.max(0, Math.min(selectionStart, column.expression.length));
-    const end = Math.max(start, Math.min(selectionEnd, column.expression.length));
-    const expression = column.expression.slice(0, start) + reference + column.expression.slice(end);
-    updateColumn(columnId, {expression});
-    caretRequest.value = {columnId, position: start + reference.length};
-  }
-  function insertReference(reference: string) {
-    const column = draft.value.columns[0];
-    if (!column) return;
-    const tracked = caret.value;
-    if (tracked && draft.value.columns.some(item => item.columnId === tracked.columnId)) {
-      insertField(tracked.columnId, reference, tracked.start, tracked.end);
-      return;
-    }
-    insertField(column.columnId, reference, column.expression.length, column.expression.length);
   }
 
   // ---- 防抖预览（SPEC §7.2：页面本地未保存草稿即时校验） ----
@@ -334,7 +176,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     const current = workspace.value;
     if (!current) return;
     const generation = ++previewGeneration;
-    const snapshotColumns = stableColumns(draft.value.columns);
+    const snapshotColumns = draftSignature.value;
     previewStatus.value = "pending";
     try {
       const result = await request<PreviewResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/actions/${CATALOG_ACTION_ID}/preview`, {
@@ -342,7 +184,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
         body: JSON.stringify({
           workspace_id: current.id,
           base_revision_id: current.revision_id,
-          template: toSnapshot({...draft.value, name: draftName.value}),
+          template: catalogTemplateSnapshot({...draft.value, name: draftName.value}),
         }),
       });
       if (generation !== previewGeneration || workspace.value?.id !== current.id) return;
@@ -350,16 +192,28 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
         sheetset: result.field_catalog.sheetset.map(field => ({scope: field.scope, canonicalName: field.canonical_name, builtin: field.builtin})),
         sheet: result.field_catalog.sheet.map(field => ({scope: field.scope, canonicalName: field.canonical_name, builtin: field.builtin})),
       };
+      // 响应违约（R15）：settings_revision 非数字时不得发布预览，否则导出按钮看似可用
+      // 却点不动（点击静默返回）。给出可见失败正文 + 可用「刷新预览」重试出口。
+      if (typeof result.settings_revision !== "number") {
+        preview.value = null;
+        previewedColumns.value = "";
+        previewedSettingsRevision.value = null;
+        previewStatus.value = "failed";
+        previewError.value = t("extensions.sheetCatalog.previewContractInvalid");
+        return;
+      }
       preview.value = {
         errors: result.errors.map(normalizeDiagnostic),
         warnings: result.warnings.map(normalizeDiagnostic),
         rows: result.rows,
         totalRows: result.total_rows,
+        filteredRows: result.filtered_rows,
         previewDigest: result.preview_digest,
         executable: result.executable,
       };
       previewError.value = "";
       previewedColumns.value = snapshotColumns;
+      previewedSettingsRevision.value = result.settings_revision;
       previewStatus.value = "ready";
     } catch (error) {
       if (generation !== previewGeneration) return;
@@ -377,152 +231,12 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     };
   }
 
-  // ---- 保存 / 另存为 / 删除（PUT 设置，乐观并发；冲突保留本地编辑） ----
-  function handleSaveError(error: unknown) {
-    if (error instanceof ApiError && (error.code === "SHEET_CATALOG_TEMPLATE_CONFLICT" || (error.status === 409 && error.code === "EXTENSION_SETTINGS_INVALID"))) {
-      conflict.value = true;
-      saveError.value = "";
-      return;
-    }
-    saveError.value = error instanceof Error ? error.message : String(error);
-    conflict.value = false;
-  }
-
-  // 冲突恢复的第一步（SPEC §11）：刷新服务端模板修订，保证后续保存携带最新
-  // expected_revision——"另存为"与"按新修订重试"都必须走同一条 GET 路径
-  async function refreshServerRevision(): Promise<boolean> {
-    try {
-      const settings = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`);
-      settingsRevision.value = settings.revision;
-      templates.value = (settings.value.user_templates ?? [])
-        .map(fromEntry)
-        .filter((template): template is CatalogTemplate => template !== null);
-      return true;
-    } catch (error) {
-      handleSaveError(error);
-      return false;
-    }
-  }
-
-  async function putSettings(userTemplates: CatalogTemplate[]): Promise<boolean> {
-    const payload = settingsPayload(userTemplates);
-    pendingReplay = {value: payload};
-    try {
-      const saved = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`, {
-        method: "PUT",
-        body: JSON.stringify({schema_version: 1, expected_revision: settingsRevision.value, value: payload}),
-      });
-      settingsRevision.value = saved.revision;
-      templates.value = userTemplates;
-      pendingReplay = null;
-      conflict.value = false;
-      saveError.value = "";
-      return true;
-    } catch (error) {
-      handleSaveError(error);
-      return false;
-    }
-  }
-
-  async function saveInPlace(): Promise<boolean> {
-    const id = selectedId.value;
-    if (id === null || saving.value) return false;
-    saving.value = true;
-    try {
-      const next = templates.value.map(template => (template.templateId === id ? {...draft.value, templateId: id} : template));
-      const ok = await putSettings(next);
-      if (ok) savedSnapshot.value = stableColumns(draft.value.columns);
-      return ok;
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  async function saveAs(name: string): Promise<boolean> {
-    const trimmed = name.trim();
-    if (!trimmed || saving.value) {
-      if (!trimmed) saveError.value = t("extensions.sheetCatalog.saveAsNameRequired");
-      return false;
-    }
-    // PLAN-DM-024 Task 3 / MEMO-DM-031 F4：内置模板显示名随宿主语言变化，服务端
-    // 不认识本地化文案——与内置显示名（当前 locale）大小写不敏感相同的另存名必须
-    // 在前端拦截，否则 en-US 用户可保存与内置条目可见名完全相同的模板。
-    const builtinName = t("extensions.sheetCatalog.builtinName");
-    if (trimmed.toLocaleLowerCase(locale.value) === builtinName.trim().toLocaleLowerCase(locale.value)) {
-      saveError.value = t("extensions.sheetCatalog.saveAsBuiltinConflict");
-      return false;
-    }
-    // 冲突态进入另存为：先刷新服务端修订再保存，否则连续冲突时每次 PUT 都携带
-    // 过期 expected_revision，"另存为新模板"这条出路会陷入死循环（SPEC §11）
-    if (conflict.value) {
-      const refreshed = await refreshServerRevision();
-      if (!refreshed) return false;
-      conflict.value = false;
-    }
-    saving.value = true;
-    try {
-      const template: CatalogTemplate = {templateId: crypto.randomUUID(), name: trimmed, columns: draft.value.columns.map(column => ({...column}))};
-      const ok = await putSettings([...templates.value, template]);
-      if (ok) {
-        applySelection(template.templateId);
-        void recordPreference(template.templateId);
-      }
-      return ok;
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  async function removeTemplate(): Promise<boolean> {
-    const id = selectedId.value;
-    if (id === null || saving.value) return false;
-    saving.value = true;
-    try {
-      const ok = await putSettings(templates.value.filter(template => template.templateId !== id));
-      if (ok) applySelection(null); // 删除后回到内置默认模板（SPEC §3.2）
-      return ok;
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  // 冲突恢复（SPEC §11）：先刷新服务端模板修订，再原样重放上次保存负载
-  async function retryAfterConflict(): Promise<boolean> {
-    if (!pendingReplay) return false;
-    if (!await refreshServerRevision()) return false;
-    saving.value = true;
-    try {
-      const saved = await request<SettingsResponse>(`/api/extensions/${CATALOG_EXTENSION_ID}/settings`, {
-        method: "PUT",
-        body: JSON.stringify({schema_version: 1, expected_revision: settingsRevision.value, value: pendingReplay.value}),
-      });
-      settingsRevision.value = saved.revision;
-      templates.value = (saved.value.user_templates ?? []).map(fromEntry).filter((template): template is CatalogTemplate => template !== null);
-      pendingReplay = null;
-      conflict.value = false;
-      // 重放后把当前草稿对齐到同 ID 的已保存模板（原位保存场景）
-      if (selectedId.value !== null) {
-        const savedTemplate = templates.value.find(template => template.templateId === selectedId.value);
-        if (savedTemplate) {
-          draft.value = {templateId: savedTemplate.templateId, name: savedTemplate.name, columns: savedTemplate.columns.map(column => ({...column}))};
-          savedSnapshot.value = stableColumns(savedTemplate.columns);
-        }
-      }
-      return true;
-    } catch (error) {
-      handleSaveError(error);
-      return false;
-    } finally {
-      saving.value = false;
-    }
-  }
-
   // ---- 导出（SPEC §10：授权 → 执行；取消不变更草稿/预览） ----
   const exportReady = computed(() =>
     previewStatus.value === "ready"
     && preview.value !== null
     && preview.value.executable
-    && previewedColumns.value === stableColumns(draft.value.columns)
+    && previewedColumns.value === draftSignature.value
     && hasShell.value
     && exportState.phase !== "exporting",
   );
@@ -531,7 +245,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     hasShell.value
     && !exportReady.value
     && previewStatus.value !== "failed"
-    && (previewStatus.value === "pending" || previewedColumns.value !== stableColumns(draft.value.columns)),
+    && (previewStatus.value === "pending" || previewedColumns.value !== draftSignature.value),
   );
 
   function detectShell(): boolean {
@@ -541,7 +255,10 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
   async function exportXlsx() {
     const current = workspace.value;
     const digest = preview.value?.previewDigest;
-    if (!current || !exportReady.value || !digest) return;
+    const previewSettingsRevision = previewedSettingsRevision.value;
+    // 无工作区/不可导出/无摘要/无绑定设置修订都拒绝导出：最后一项必须是数字，
+    // 否则请求体会丢掉 settings_revision 字段（JSON.stringify 丢弃 undefined）
+    if (!current || !exportReady.value || !digest || typeof previewSettingsRevision !== "number") return;
     exportState.phase = "exporting";
     exportState.artifactId = "";
     exportState.errorText = "";
@@ -587,9 +304,11 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
         body: JSON.stringify({
           workspace_id: current.id,
           base_revision_id: current.revision_id,
-          template: toSnapshot({...draft.value, name: draftName.value}),
+          template: catalogTemplateSnapshot({...draft.value, name: draftName.value}),
           preview_digest: digest,
           save_grant_id: grant.value.save_grant_id,
+          // 预览响应回传的设置修订原样重复：与当前设置不一致时后端拒绝执行
+          settings_revision: previewSettingsRevision,
         }),
       });
       // SPEC §10：只显示最终路径与文件名，不显示 Artifact/修订/哈希
@@ -635,8 +354,7 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     if (choice === "stay") return "stay";
     if (choice === "save") {
       // 未命名草稿不提供该分支（canSave=false）；用户模板原位保存成功后继续
-      const saved = await saveInPlace();
-      if (!saved) return "stay";
+      if (!await owner.saveInPlace()) return "stay";
       await next();
       return "continue";
     }
@@ -654,20 +372,31 @@ export function useSheetCatalog(workspace: Ref<Workspace | null>) {
     // 基准修订漂移使旧预览失效：以新修订重新预览
     schedulePreview();
   });
-  watch(() => draft.value.columns, () => {
+  // 草稿变化才重放预览：按变更键比较，避免"保存成功后以服务端值重建草稿"这类
+  // 等值同 ID 替换也触发一次多余预览（会推进摘要，可能作废刚取得的导出摘要）。
+  // 键含列 UUID，因此等值模板切换同样会重放（I3）。
+  watch(draftSignature, signature => {
+    if (signature === previewedColumns.value) return;
     schedulePreview();
-  }, {deep: true});
+  });
 
   return {
-    // 模板与草稿
-    loading, templates, selectedId, selectedTemplate, draft, draftName, dirty, canSaveInPlace,
-    settingsRevision, conflict, saveError, saving,
-    selectTemplate, updateColumn, addColumn, removeColumn, moveColumn,
-    saveInPlace, saveAs, removeTemplate, retryAfterConflict,
+    // 设置（模板/草稿/过滤词：见 useSheetCatalogSettings）
+    loading, templates, selectedId, selectedTemplate: owner.selectedTemplate, draft, draftName, dirty, canSaveInPlace,
+    conflict: owner.conflict, saving: owner.saving, saveError: owner.saveError,
+    // 高版本只读（I5）：页面据此显示可见通知，与设置中心同一 readOnlyCode 语义
+    readOnly: owner.readOnly, readOnlyCode: settings.readOnlyCode,
+    selectTemplate: owner.selectTemplate, updateColumn: owner.updateColumn, addColumn: owner.addColumn,
+    removeColumn: owner.removeColumn, moveColumn: owner.moveColumn,
+    saveInPlace: owner.saveInPlace, saveAs: owner.saveAs, removeTemplate: owner.removeTemplate,
+    retryAfterConflict: owner.retryAfterConflict,
+    filterText: owner.filterText, filterError: owner.filterError, filterDirty: owner.filterDirty,
+    setFilterText: owner.setFilterText, saveFilter: owner.saveFilter,
     // 字段目录与预览
-    fieldCatalog, preview, previewStatus, previewError, requestPreview,
+    fieldCatalog, preview, previewStatus, previewError, requestPreview, feedback,
     // 字段插入
-    caret, caretRequest, trackCaret, insertField, insertReference, fieldReference,
+    caret: owner.caret, caretRequest: owner.caretRequest, trackCaret: owner.trackCaret,
+    insertField: owner.insertField, insertReference: owner.insertReference, fieldReference,
     // 导出
     hasShell, exportState, exportReady, exportStale, actionError, loadError, exportXlsx, openExportFolder,
     // 守卫

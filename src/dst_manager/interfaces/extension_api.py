@@ -9,7 +9,11 @@
 :class:`SheetCatalogExecuteResponseModel`（不含 sha256/来源修订/扩展版本，
 后台字段只经 Artifact 查询披露，查询响应含 ``AVAILABLE/MISSING/CHANGED``
 可用性派生）；工作区偏好按 ARCH-DM-006 §8.2 best-effort 更新——保存失败
-降级为响应内的非阻断 warning，不升级为动作失败。所有错误都走
+降级为响应内的非阻断 warning，不升级为动作失败。扩展设置的 GET/PUT 统一返回
+:class:`ExtensionSettingsResponseModel`（持久值 + 有效值 + 只读诊断 +
+``generated`` 字段项）；字段项在接口层把 Provider 的控件类型/默认值/约束与
+清单的 label/description/order 合并，按 ``order, key`` 排序（§8.2）。
+所有错误都走
 :class:`ExtensionErrorResponse` 统一结构
 （code/message_key/params/message），``message_key`` 由 :data:`EXTENSION_MESSAGE_KEYS`
 按平台码稳定映射。
@@ -30,6 +34,7 @@ from dst_manager.application.extensions.runtime import (
     ExtensionRuntime,
     capability_platform_error,
 )
+from dst_manager.application.extensions.settings import ExtensionSettingsView
 from dst_manager.extensions.builtin.sheet_catalog.extension import (
     SheetCatalogExecuteRequest,
 )
@@ -45,6 +50,8 @@ from dst_manager.extensions.builtin.sheet_catalog.templates import (
     TemplateColumn,
 )
 from dst_manager.extensions.capabilities import CapabilityError
+from dst_manager.extensions.contracts import ExtensionManifest
+from dst_manager.extensions.settings import SettingsContribution, SettingsFieldSpec
 from dst_manager.interfaces.extension_contracts import (
     EXTENSION_MESSAGE_KEYS,
     ArtifactResponseModel,
@@ -53,7 +60,10 @@ from dst_manager.interfaces.extension_contracts import (
     ExtensionExecuteRequest,
     ExtensionPreferencePutRequest,
     ExtensionPreviewRequest,
+    ExtensionSettingsContributionModel,
+    ExtensionSettingsItemModel,
     ExtensionSettingsPutRequest,
+    ExtensionSettingsResponseModel,
     ExtensionStatePatchRequest,
     ExtensionSummaryModel,
     ExtensionTemplateRequest,
@@ -103,6 +113,73 @@ def _versioned(versioned) -> VersionedValueModel:
     )
 
 
+def _settings_contribution(
+    manifest: ExtensionManifest,
+) -> ExtensionSettingsContributionModel | None:
+    """清单的设置呈现声明 → 摘要契约；未声明设置时为 ``None``。"""
+    contribution = manifest.settings_contribution
+    if contribution is None:
+        return None
+    return ExtensionSettingsContributionModel(
+        presentation=contribution.presentation,
+        route_key=contribution.route_key,
+    )
+
+
+def _settings_items(
+    contribution: SettingsContribution | None,
+    field_specs: tuple[SettingsFieldSpec, ...],
+) -> list[ExtensionSettingsItemModel]:
+    """``generated`` 字段项：Provider 语义 ⊕ Manifest 呈现，按 ``order, key`` 排序。
+
+    清单只声明可发现性（key/顺序/i18n key），控件类型、默认值与约束只由
+    Provider 定义（ARCH-DM-006 §8.2）。配对校验（``settings_provider_error``）
+    是清单字段可解释性的唯一放行点：声明了 ``generated`` 而字段无法被 Provider
+    解释时，读取早已给出稳定诊断，永远不会走到这里；因此本函数不做“解释不了
+    就跳过”的静默过滤——那正是 §8.1 禁止的部分结果。Provider 自报但清单未
+    声明的字段不进入呈现。``custom`` 与未声明设置的扩展返回空列表。
+    """
+    if contribution is None or contribution.presentation != "generated":
+        return []
+    specs = {spec.key: spec for spec in field_specs}
+    items: list[ExtensionSettingsItemModel] = []
+    for field in contribution.fields:
+        # 契约破坏（清单字段无 Provider 元数据）直接 KeyError 失败报错，绝不静默省略
+        spec = specs[field.key]
+        items.append(
+            ExtensionSettingsItemModel(
+                key=field.key,
+                label_key=field.label_key,
+                description_key=field.description_key,
+                order=field.order,
+                control=spec.control,
+                default=spec.default,
+                nullable=spec.nullable,
+                min_value=spec.min_value,
+                max_value=spec.max_value,
+                options=list(spec.options),
+                max_length=spec.max_length,
+            )
+        )
+    return sorted(items, key=lambda item: (item.order, item.key))
+
+
+def _settings_response(
+    runtime: ExtensionRuntime, extension_id: str, view: ExtensionSettingsView
+) -> ExtensionSettingsResponseModel:
+    """设置视图 → 响应契约：保留版本化三字段，追加有效值/只读诊断/字段项。"""
+    contribution = runtime.settings_contribution(extension_id)
+    return ExtensionSettingsResponseModel(
+        schema_version=view.schema_version,
+        revision=view.revision,
+        value=dict(view.value),
+        effective_value=dict(view.effective_value),
+        read_only=view.read_only,
+        diagnostic_code=view.diagnostic_code,
+        items=_settings_items(contribution, runtime.settings_field_specs(extension_id)),
+    )
+
+
 def _summary(view) -> ExtensionSummaryModel:
     manifest = view.manifest
     return ExtensionSummaryModel(
@@ -129,6 +206,7 @@ def _summary(view) -> ExtensionSummaryModel:
             )
             for contribution in manifest.ui_contributions
         ],
+        settings_contribution=_settings_contribution(manifest),
     )
 
 
@@ -192,13 +270,14 @@ def _preview_request(body: ExtensionPreviewRequest) -> SheetCatalogPreviewReques
 
 
 def _execute_request(body: ExtensionExecuteRequest) -> SheetCatalogExecuteRequest:
-    """契约模型 → 执行请求值对象（模板快照与摘要原样传递，复核属宿主运行时）。"""
+    """契约模型 → 执行请求值对象（模板快照、摘要与设置修订原样传递）。"""
     return SheetCatalogExecuteRequest(
         workspace_id=body.workspace_id,
         base_revision_id=body.base_revision_id,
         template=_template_snapshot(body.template),
         preview_digest=body.preview_digest,
         save_grant_id=body.save_grant_id,
+        settings_revision=body.settings_revision,
     )
 
 
@@ -282,6 +361,8 @@ def _preview_response(
         warnings=[_diagnostic_model(diagnostic) for diagnostic in warnings],
         rows=[list(row) for row in result.rows],
         total_rows=result.total_rows,
+        filtered_rows=result.filtered_rows,
+        settings_revision=result.settings_revision,
         preview_digest=result.preview_digest,
         executable=result.executable,
     )
@@ -338,20 +419,21 @@ def register_extension_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/extensions/{extension_id}/settings",
-        response_model=VersionedValueModel,
+        response_model=ExtensionSettingsResponseModel,
         responses=_ERROR_RESPONSES,
         tags=["extensions"],
     )
     def get_extension_settings(extension_id: str, request: Request):
         runtime = _runtime(request)
         try:
-            return _versioned(runtime.get_settings(extension_id))
+            view = runtime.get_settings(extension_id)
+            return _settings_response(runtime, extension_id, view)
         except ExtensionPlatformError as exc:
             return _error_response(exc)
 
     @app.put(
         "/api/extensions/{extension_id}/settings",
-        response_model=VersionedValueModel,
+        response_model=ExtensionSettingsResponseModel,
         responses=_ERROR_RESPONSES,
         tags=["extensions"],
     )
@@ -360,11 +442,10 @@ def register_extension_routes(app: FastAPI) -> None:
     ):
         runtime = _runtime(request)
         try:
-            return _versioned(
-                runtime.put_settings(
-                    extension_id, body.schema_version, body.value, body.expected_revision
-                )
+            view = runtime.put_settings(
+                extension_id, body.schema_version, body.value, body.expected_revision
             )
+            return _settings_response(runtime, extension_id, view)
         except ExtensionPlatformError as exc:
             return _error_response(exc)
 

@@ -7,12 +7,13 @@
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import {catalogCompatibility} from "./catalogCompatibility";
-import type {CatalogDiagnostic, SheetCatalogController} from "../../composables/useSheetCatalog";
+import type {CatalogDiagnostic, SheetCatalogValidationFeedback} from "../../composables/useSheetCatalogSettings";
 
-const props = defineProps<{catalog: SheetCatalogController}>();
+// 校验反馈由页面装配层注入（设置中心的 custom 面板不渲染本组件，见 ColumnEditor）
+const props = defineProps<{feedback: SheetCatalogValidationFeedback}>();
 const {t} = useI18n();
 
-const compat = computed(() => catalogCompatibility(props.catalog));
+const compat = computed(() => catalogCompatibility(props.feedback));
 
 const title = computed(() => {
   switch (compat.value.tone) {
@@ -43,7 +44,7 @@ function text(diagnostic: CatalogDiagnostic): string {
     <p class="compat-line" :role="liveRole">
       <strong class="compat-title">{{ title }}</strong>
       <template v-if="compat.tone === 'failed'">
-        <span class="compat-message">{{ catalog.previewError.value }}</span>
+        <span class="compat-message">{{ feedback.previewError.value }}</span>
       </template>
       <template v-else>
         <span v-for="(diagnostic, index) in messages" :key="`m${index}`" class="compat-message">{{ text(diagnostic) }}</span>

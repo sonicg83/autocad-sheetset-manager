@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from dst_manager.extensions.settings import SettingsFieldControl
 from dst_manager.interfaces.contracts import ContractModel
 
 __all__ = [
@@ -28,7 +29,10 @@ __all__ = [
     "ExtensionPlatformErrorCode",
     "ExtensionPreferencePutRequest",
     "ExtensionPreviewRequest",
+    "ExtensionSettingsContributionModel",
+    "ExtensionSettingsItemModel",
     "ExtensionSettingsPutRequest",
+    "ExtensionSettingsResponseModel",
     "ExtensionStatePatchRequest",
     "ExtensionSummaryModel",
     "ExtensionTemplateColumnRequest",
@@ -50,6 +54,8 @@ ExtensionPlatformErrorCode = Literal[
     "EXTENSION_INCOMPATIBLE",
     "EXTENSION_CAPABILITY_UNAVAILABLE",
     "EXTENSION_SETTINGS_INVALID",
+    "EXTENSION_SETTINGS_SCHEMA_NEWER",
+    "EXTENSION_SETTINGS_CHANGED",
     "EXTENSION_ACTION_NOT_FOUND",
     "SAVE_GRANT_INVALID",
     "EXPORT_DESTINATION_CHANGED",
@@ -82,12 +88,17 @@ ExtensionDiagnosticCode = Literal[
 ]
 
 #: 平台错误码 -> 稳定文案键（Task 10 前端 extensions 域逐一对应）。
+#: ``EXTENSION_SETTINGS_CHANGED``：预览后应用级扩展设置变化（ACTION 执行 409）；
+#: 必须在 :mod:`dst_manager.interfaces.message_catalog` 同步登记，否则
+#: ``extension_api._error_response`` 按码索引文案键会 KeyError → HTTP 500。
 EXTENSION_MESSAGE_KEYS: dict[str, str] = {
     "EXTENSION_NOT_FOUND": "errors.extension.notFound",
     "EXTENSION_DISABLED": "errors.extension.disabled",
     "EXTENSION_INCOMPATIBLE": "errors.extension.incompatible",
     "EXTENSION_CAPABILITY_UNAVAILABLE": "errors.extension.capabilityUnavailable",
     "EXTENSION_SETTINGS_INVALID": "errors.extension.settingsInvalid",
+    "EXTENSION_SETTINGS_SCHEMA_NEWER": "errors.extension.schemaNewer",
+    "EXTENSION_SETTINGS_CHANGED": "errors.extension.settingsChanged",
     "EXTENSION_ACTION_NOT_FOUND": "errors.extension.actionNotFound",
     "SAVE_GRANT_INVALID": "errors.extension.saveGrantInvalid",
     "EXPORT_DESTINATION_CHANGED": "errors.extension.exportDestinationChanged",
@@ -127,6 +138,57 @@ class ExtensionSummaryModel(ContractModel):
     error_code: ExtensionDiagnosticCode | None = None
     actions: list[ExtensionActionModel] = Field(default_factory=list)
     ui_contributions: list[ExtensionUiContributionModel] = Field(default_factory=list)
+    #: 未声明设置时为 None（设置中心不显示“配置”）；只声明呈现方式，不重复语义。
+    settings_contribution: ExtensionSettingsContributionModel | None = None
+
+
+class ExtensionSettingsContributionModel(ContractModel):
+    """设置呈现声明（ARCH-DM-006 §4.2）：摘要只暴露呈现方式与受控路由键。
+
+    ``generated`` 由宿主按设置响应的 ``items`` 动态渲染；``custom`` 由宿主编译
+    期白名单里的专属组件按 ``route_key`` 呈现。未声明设置时不携带本对象。
+    """
+
+    presentation: Literal["generated", "custom"]
+    route_key: str | None = None
+
+
+class ExtensionSettingsItemModel(ContractModel):
+    """``generated`` 设置的单个字段项：Provider 语义 + Manifest 呈现的合并结果。
+
+    控件词表（:data:`~dst_manager.extensions.settings.SettingsFieldControl`）
+    与设置中心应用设置词表独立，消费方必须显式映射；本模型只做 1:1 透传。
+    """
+
+    key: str
+    label_key: str
+    description_key: str | None = None
+    order: int
+    control: SettingsFieldControl
+    default: object
+    nullable: bool = False
+    min_value: int | float | None = None
+    max_value: int | float | None = None
+    options: list[str] = Field(default_factory=list)
+    max_length: int | None = None
+
+
+class ExtensionSettingsResponseModel(ContractModel):
+    """扩展设置读写响应：持久值 + 有效值 + 只读诊断 + 可呈现字段项。
+
+    ``value`` 是 ``extension_settings`` 的规范持久值（从未保存时是 Provider
+    默认零值），``effective_value`` 是 Provider 解析后的有效配置（含代码默认
+    值），两者语义不同且不得互相代替。``items`` 恒存在：``custom`` 呈现与未
+    声明设置的扩展为空数组。
+    """
+
+    schema_version: int
+    revision: int
+    value: dict[str, object]
+    effective_value: dict[str, object]
+    read_only: bool = False
+    diagnostic_code: str | None = None
+    items: list[ExtensionSettingsItemModel] = Field(default_factory=list)
 
 
 class ExtensionStatePatchRequest(ContractModel):
@@ -153,10 +215,13 @@ class ExtensionPreferencePutRequest(ContractModel):
 
 
 class ExtensionExecuteRequest(ContractModel):
-    """执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。
+    """执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。
 
     后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入
-    执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。
+    执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；
+    ``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值
+    （ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``
+    拒绝，不得用新设置执行旧预览。
     """
 
     workspace_id: str
@@ -164,6 +229,7 @@ class ExtensionExecuteRequest(ContractModel):
     template: ExtensionTemplateRequest
     preview_digest: str
     save_grant_id: str
+    settings_revision: int
 
 
 class ExtensionTemplateColumnRequest(ContractModel):
@@ -228,7 +294,12 @@ class SheetCatalogFieldCatalogModel(ContractModel):
 
 
 class SheetCatalogPreviewResponse(ContractModel):
-    """预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。"""
+    """预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。
+
+    ``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被
+    排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，
+    执行时必须原样重复提交（ARCH-DM-006 §11）。
+    """
 
     normalized_template: SheetCatalogTemplateModel
     field_catalog: SheetCatalogFieldCatalogModel
@@ -236,6 +307,8 @@ class SheetCatalogPreviewResponse(ContractModel):
     warnings: list[SheetCatalogDiagnosticModel]
     rows: list[list[str]]
     total_rows: int
+    filtered_rows: int
+    settings_revision: int
     preview_digest: str
     executable: bool
 

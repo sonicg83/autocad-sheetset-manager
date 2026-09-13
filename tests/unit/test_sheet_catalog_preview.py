@@ -1,11 +1,13 @@
-"""PLAN-DM-020 Task 6：图纸目录预览构建、兼容性诊断与确定性摘要。
+"""PLAN-DM-020 Task 6 / PLAN-DM-025 Task 4：图纸目录预览构建、兼容性诊断与确定性摘要。
 
 覆盖：默认模板真实行、图纸集/图纸作用域组合、20 行上限与总图纸数、空图纸集
 可执行、缺定义/重复列/超限/语法错误阻断、缺值字段与受影响图纸数（诊断不含
 属性值）、Windows/Posix basename、跨作用域 casefold 同名属性、数字格式码对
 预览行的补零与对摘要的敏感性（未使用格式码时摘要不变）、摘要对任一绑定项变化
 敏感且相同输入稳定（canonical JSON 固定键 + 紧凑分隔符 + SHA-256）、扩展模块
-常量与随包清单一致。
+常量与随包清单一致；PLAN-DM-025 Task 4 的输出图纸过滤投影（规范关键词对
+图名大小写不敏感 OR 字面匹配、先过滤再求值与统计缺值、过滤后 total_rows/
+filtered_rows、全部过滤仍可执行）与设置摘要/修订进入预览摘要。
 """
 
 import hashlib
@@ -30,6 +32,9 @@ from dst_manager.extensions.builtin.sheet_catalog.preview import (
     preference_save_failed_warning,
     preview_digest,
 )
+from dst_manager.extensions.builtin.sheet_catalog.settings import (
+    normalize_excluded_title_keywords,
+)
 from dst_manager.extensions.builtin.sheet_catalog.templates import (
     DEFAULT_TEMPLATE,
     MAX_COLUMNS,
@@ -38,6 +43,11 @@ from dst_manager.extensions.builtin.sheet_catalog.templates import (
     TemplateColumn,
 )
 from dst_manager.extensions.manifest import load_manifest
+from dst_manager.extensions.settings import (
+    ExtensionSettingsSnapshot,
+    freeze_json,
+    settings_digest,
+)
 from dst_manager.extensions.snapshots import (
     SheetSnapshot,
     SnapshotProperty,
@@ -47,6 +57,9 @@ from dst_manager.extensions.snapshots import (
 )
 
 _COLUMN_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "dst-manager.sheet-catalog:preview-tests")
+
+#: 图纸目录 Provider 当前 Schema（预览摘要绑定的设置快照版本）。
+SETTINGS_SCHEMA_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -105,13 +118,38 @@ def make_snapshot(
     )
 
 
-def build(*sheets: SheetSnapshot, template=None, **kwargs) -> SheetCatalogPreview:
+def settings_snapshot(
+    value: dict[str, object] | None = None, *, revision: int = 0
+) -> ExtensionSettingsSnapshot:
+    """构造设置快照：预览与执行都从 Runtime 注入的同一冻结快照读取过滤词。"""
+    payload = value if value is not None else {"excluded_title_keywords": []}
+    return ExtensionSettingsSnapshot(
+        extension_id=EXTENSION_ID,
+        schema_version=SETTINGS_SCHEMA_VERSION,
+        revision=revision,
+        value=freeze_json(payload),
+        digest=settings_digest(EXTENSION_ID, SETTINGS_SCHEMA_VERSION, payload),
+    )
+
+
+def build(
+    *sheets: SheetSnapshot,
+    template=None,
+    keywords: tuple[str, ...] = (),
+    settings: ExtensionSettingsSnapshot | None = None,
+    **kwargs,
+) -> SheetCatalogPreview:
+    snapshot = settings if settings is not None else settings_snapshot()
     return build_preview(
         make_snapshot(*sheets, **kwargs.pop("snapshot_kwargs", {})),
         template if template is not None else DEFAULT_TEMPLATE,
         extension_id=EXTENSION_ID,
         extension_version=EXTENSION_VERSION,
         action_id=PREVIEW_ACTION_ID,
+        excluded_title_keywords=keywords,
+        settings_schema_version=snapshot.schema_version,
+        settings_revision=snapshot.revision,
+        settings_digest=snapshot.digest,
         **kwargs,
     )
 
@@ -373,6 +411,9 @@ def test_preview_rows_carry_basename_across_separators():
         extension_id=EXTENSION_ID,
         extension_version=EXTENSION_VERSION,
         action_id=PREVIEW_ACTION_ID,
+        settings_schema_version=SETTINGS_SCHEMA_VERSION,
+        settings_revision=0,
+        settings_digest=settings_snapshot().digest,
     )
 
     assert result.rows == (("A.dwg",), ("B.dwg",))
@@ -414,11 +455,104 @@ def test_cross_scope_casefold_collision_keeps_scope_specific_values():
         extension_id=EXTENSION_ID,
         extension_version=EXTENSION_VERSION,
         action_id=PREVIEW_ACTION_ID,
+        settings_schema_version=SETTINGS_SCHEMA_VERSION,
+        settings_revision=0,
+        settings_digest=settings_snapshot().digest,
     )
 
     assert result.rows == (("X-SET", "Y-SHEET"),)
     assert result.warnings == ()
     assert result.errors == ()
+
+
+# ---------------------------------------------------------------------------
+# 输出图纸过滤：图名关键词排除先于求值与缺值统计（SPEC-DM-012 §6.4 / ARCH-DM-006 §11）
+# ---------------------------------------------------------------------------
+
+
+def test_filter_uses_normalized_keywords_with_case_insensitive_or_match():
+    # 半/全角逗号拆分、trim、忽略空项、casefold 去重后的规范关键词
+    keywords = normalize_excluded_title_keywords("草图， TEMP,,作废,temp")
+    assert keywords == ("草图", "TEMP", "作废")
+
+    result = build(
+        make_sheet("s-1", "001", "平面"),
+        make_sheet("s-2", "002", "结构草图"),
+        make_sheet("s-3", "003", "temp 参考"),
+        make_sheet("s-4", "004", "说明"),
+        keywords=keywords,
+    )
+
+    assert [row[1] for row in result.rows] == ["平面", "说明"]
+    assert result.total_rows == 2
+    assert result.filtered_rows == 2
+    assert result.errors == ()
+    assert result.executable is True
+
+
+def test_filter_matches_literally_without_wildcards_or_regex():
+    result = build(
+        make_sheet("s-1", "001", "草图"),
+        make_sheet("s-2", "002", "草*图"),
+        keywords=("草*",),
+    )
+
+    # ``草*`` 只按字面匹配（不是通配符或正则）：只有含该字面串的图名被排除
+    assert [row[1] for row in result.rows] == ["草图"]
+    assert result.filtered_rows == 1
+
+
+def test_filtered_sheets_do_not_report_missing_values():
+    template = make_template(make_column("比例", "{sheet.比例}"))
+
+    result = build(
+        make_sheet("s-1", "001", "平面"),
+        # 缺值只出现在被排除的图纸上：不计入缺值 warning 也不进入 rows
+        make_sheet("s-2", "002", "作废-平面", properties=()),
+        template=template,
+        keywords=("作废",),
+    )
+
+    assert result.warnings == ()
+    assert result.rows == (("1:100",),)
+    assert (result.total_rows, result.filtered_rows) == (1, 1)
+
+
+def test_filtering_happens_before_row_limit_and_missing_statistics():
+    template = make_template(
+        make_column("图名", "{sheet.title}"),
+        make_column("比例", "{sheet.比例}"),
+    )
+    sheets = (
+        make_sheet("s-0", "000", "作废-平面", properties=()),
+        *(
+            make_sheet(f"s-{index}", f"{index:03d}", "平面")
+            for index in range(1, 22)
+        ),
+    )
+
+    result = build(*sheets, template=template, keywords=("作废",))
+
+    # 先过滤再截取 20 行窗口：被排除的首张图纸既不占用窗口也不进入缺值统计
+    assert len(result.rows) == 20
+    assert result.rows[0] == ("平面", "1:100")
+    assert result.total_rows == 21
+    assert result.filtered_rows == 1
+    assert result.warnings == ()
+
+
+def test_filter_everything_away_is_still_executable_with_zero_rows():
+    result = build(
+        make_sheet("s-1", "001", "作废-平面"),
+        make_sheet("s-2", "002", "作废-剖面"),
+        keywords=("作废",),
+    )
+
+    assert result.executable is True
+    assert result.errors == ()
+    assert result.rows == ()
+    assert result.total_rows == 0
+    assert result.filtered_rows == 2
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +564,13 @@ DIGEST_COLUMNS = (
     DigestColumn("c-1", "图号", (("field", "sheet", "number", "builtin"),)),
     DigestColumn("c-2", "图名", (("literal", "A"), ("field", "sheet", "title", "builtin"))),
 )
+
+#: 摘要绑定的设置快照三要素（Task 4：Schema / 修订 / 摘要）。
+DIGEST_SETTINGS = {
+    "settings_schema_version": SETTINGS_SCHEMA_VERSION,
+    "settings_revision": 0,
+    "settings_digest": "settings-digest",
+}
 
 
 def test_preview_digest_changes_with_number_format_code():
@@ -443,6 +584,7 @@ def test_preview_digest_changes_with_number_format_code():
             extension_version="0.1.0",
             action_id="export-xlsx",
             extension_id="dst-manager.sheet-catalog",
+            **DIGEST_SETTINGS,
         )
 
     baseline = digest_with(("field", "sheet", "number", "builtin"))
@@ -516,6 +658,10 @@ def test_preview_digest_changes_with_normalized_tokens_and_headers():
         ("extension_version", "0.2.0"),
         ("action_id", "export-xlsx-next"),
         ("extension_id", "dst-manager.other"),
+        # 设置快照三要素：设置变化必须使旧预览摘要失效（否则会用新设置执行旧预览）
+        ("settings_schema_version", SETTINGS_SCHEMA_VERSION + 1),
+        ("settings_revision", 7),
+        ("settings_digest", "other-settings-digest"),
     ],
 )
 def test_preview_digest_is_sensitive_to_every_bound_input(field, value):
@@ -527,11 +673,35 @@ def test_preview_digest_is_sensitive_to_every_bound_input(field, value):
         "extension_version": "0.1.0",
         "action_id": "export-xlsx",
         "extension_id": "dst-manager.sheet-catalog",
+        **DIGEST_SETTINGS,
     }
     baseline = preview_digest(**kwargs)
     kwargs[field] = value
 
     assert preview_digest(**kwargs) != baseline
+
+
+def test_preview_digest_changes_when_only_filter_settings_change():
+    # 同模板、同快照，只改“输出图纸过滤”设置：设置修订与摘要随之变化，
+    # 预览摘要必须变化，否则“设置已变→需重新预览”的门禁会放行旧预览。
+    sheets = (make_sheet("s-1", "001", "平面"), make_sheet("s-2", "002", "作废"))
+    baseline = build(*sheets)
+    filtered = build(
+        *sheets,
+        keywords=("作废",),
+        settings=settings_snapshot({"excluded_title_keywords": ["作废"]}, revision=1),
+    )
+
+    assert filtered.rows != baseline.rows
+    assert filtered.preview_digest != baseline.preview_digest
+    assert filtered.settings_revision == 1
+    # 设置内容相同但修订推进（如再次 PUT 同一值）也改变摘要：绑定的是修订，不是“有效值等价”
+    bumped = build(
+        *sheets,
+        keywords=("作废",),
+        settings=settings_snapshot({"excluded_title_keywords": ["作废"]}, revision=2),
+    )
+    assert bumped.preview_digest != filtered.preview_digest
 
 
 def test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separators():
@@ -543,6 +713,7 @@ def test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separato
         extension_version="0.1.0",
         action_id="export-xlsx",
         extension_id="dst-manager.sheet-catalog",
+        **DIGEST_SETTINGS,
     )
     # 列顺序参与摘要：交换列后摘要必须变化
     reordered = preview_digest(
@@ -553,6 +724,7 @@ def test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separato
         extension_version="0.1.0",
         action_id="export-xlsx",
         extension_id="dst-manager.sheet-catalog",
+        **DIGEST_SETTINGS,
     )
 
     payload = {
@@ -573,6 +745,9 @@ def test_preview_digest_uses_canonical_json_with_fixed_keys_and_compact_separato
         "extension_version": "0.1.0",
         "revision_id": "rev-1",
         "schema_version": 1,
+        "settings_digest": "settings-digest",
+        "settings_revision": 0,
+        "settings_schema_version": SETTINGS_SCHEMA_VERSION,
         "workspace_id": "ws-1",
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

@@ -34,6 +34,48 @@ export default {
     // 诊断码前缀：与诊断横幅同一措辞（settings.diagnostics.* 的「（诊断码 {code}）」保持独立，不合并）
     diagnosticCode: "诊断码 {code}",
   },
+  // 扩展全局设置入口与配置子视图（SC-17）：入口文案、子视图头部、独立保存、
+  // 脏状态闸门与两条服务端状态出路（修订冲突 / 高版本只读）。
+  // 只读诊断正文复用 errors.extension.schemaNewer（同一稳定码不立第二份措辞）。
+  extensionSettings: {
+    open: "配置",
+    openNamed: "配置 {name}",
+    title: "配置 · {name}",
+    revision: "设置修订 r{revision}",
+    schemaVersion: "Schema v{schema_version}",
+    readOnlyBadge: "只读",
+    sharedNotice: "扩展设置属于当前 Windows 用户、跨工作区共享：未加载工作区也能进入、编辑与保存。本扩展独立保存，不进入下方核心配置的保存缓冲，也不共享修订号。",
+    back: "返回扩展列表",
+    save: "保存",
+    saving: "保存中…",
+    saved: "扩展设置已保存",
+    loading: "正在加载扩展设置…",
+    loadFailed: "扩展设置加载失败。",
+    // 快照已存在时的刷新失败：只读、冲突与普通编辑态共用同一条就地提示
+    // （快照保留，徽标与字段值可能落后于服务端）
+    refreshFailed: "扩展设置刷新失败，下方内容可能已过期。",
+    closeExtra: "关闭将同时放弃当前扩展设置中未保存的修改。",
+    unsupportedControl: "该字段的控件类型（{control}）在当前设置中心不受支持，不提供 JSON 文本框。",
+    customUnavailable: "该扩展声明的设置组件（route_key {route_key}）不在本程序的编译期白名单内，设置中心不呈现其内容，也不会退化为 JSON 文本框。",
+    // 与上一条不同因：声明了 custom 却没登记组件键，此时没有任何键值可回显
+    customUnavailableMissingRouteKey: "该扩展声明了专属设置组件但没有登记组件键（route_key），设置中心不呈现其内容，也不会退化为 JSON 文本框。",
+    confirmBack: {
+      title: "有未保存的扩展设置修改",
+      message: "返回扩展列表将放弃“{name}”的本次未保存修改；已保存的设置不受影响。",
+      discard: "放弃修改并返回",
+    },
+    conflict: {
+      title: "保存冲突",
+      message: "“{name}”的设置已被其他保存更新，本地编辑已保留。可按服务端新修订重试，或放弃本地修改。",
+      // 端点前缀与冻结 Demo 的线契约行一致（PUT /api/extensions/{id}/settings → 409 …）
+      diagnostic: "PUT /api/extensions/{extension_id}/settings → 409 {code}（expected_revision={expected_revision}, current_revision={current_revision}）",
+      retry: "按新修订重试",
+      discard: "放弃本地修改",
+    },
+    errors: {
+      summaryTitle: "扩展设置未能保存，请修正以下错误后重试",
+    },
+  },
   confirm: {
     title: "有未保存的修改",
     message: "关闭将放弃本次全部未保存修改，已保存的配置不受影响。",

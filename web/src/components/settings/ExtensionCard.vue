@@ -1,20 +1,23 @@
 <script setup lang="ts">
-// 扩展卡片（SPEC-DM-011 §3.3 / SC-16）。纯呈现：状态容器 + 唯一开关，
-// 不可点击、不导航——卡片上不得长出扩展自身设置的入口（后者归扩展页面，ARCH-DM-006 §8）。
-// 四层信息固定顺序：①名称+版本 ②描述 ③状态徽标+诊断码 ④开关与可见状态文字。
+// 扩展卡片（SPEC-DM-011 §3.3 / SC-16、SC-17）。纯呈现：状态容器 + 动作行，
+// 不可点击、不导航——卡片本体永远不长出导航，进入扩展配置只能通过动作行的显式
+// 「配置」文字按钮（声明设置时出现，ARCH-DM-006 §8.2）。
+// 四层信息固定顺序：①名称+版本 ②描述 ③状态徽标+诊断码 ④动作行（配置按钮 → 状态文字 → 开关）。
 // 开关方向只取服务端 enabled；status 只决定徽标色调与诊断码，"已启用 + 启动失败"
-// 是合法组合，不得互相否认（ARCH-DM-006 §5）。
+// 是合法组合，不得互相否认（ARCH-DM-006 §5）。停用/失败/不兼容不隐藏「配置」（§8.1）。
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSummary} from "../../api/contracts";
 import BooleanSwitch from "./BooleanSwitch.vue";
 
 const props = defineProps<{extension: ExtensionSummary; busy: boolean}>();
-const emit = defineEmits<{toggle: [extensionId: string, enabled: boolean]}>();
+const emit = defineEmits<{toggle: [extensionId: string, enabled: boolean]; openConfig: [extension: ExtensionSummary]}>();
 const {t} = useI18n();
 
 const name = computed(() => t(props.extension.name_key));
 const enabled = computed(() => props.extension.enabled);
+// 动作行入口只在扩展声明了设置时出现（settings_contribution 为 null 即未声明）
+const hasSettings = computed(() => props.extension.settings_contribution != null);
 // 徽标色调：可用=成功、启动失败=危险、不兼容/等待依赖=警告，其余（已停用/过渡态）=弱化
 const tone = computed(() => {
   switch (props.extension.status) {
@@ -45,6 +48,12 @@ const switchLabel = computed(() => enabled.value
       </span>
     </div>
     <div class="ext-side">
+      <!-- SC-17：声明设置时的统一入口（可访问名「配置 {name}」）；卡片本体仍不可点击 -->
+      <button
+        v-if="hasSettings" type="button" class="ext-config"
+        :data-config-opener="extension.extension_id" :aria-label="t('settings.extensionSettings.openNamed', {name})"
+        @click="emit('openConfig', extension)"
+      >{{ t("settings.extensionSettings.open") }}</button>
       <span class="ext-state" :class="{on:enabled}" aria-hidden="true">{{ stateText }}</span>
       <BooleanSwitch
         :checked="enabled" :disabled="busy" :label="switchLabel"
@@ -67,6 +76,8 @@ const switchLabel = computed(() => enabled.value
 .badge.danger{background:var(--color-danger-bg);color:var(--color-danger)}
 .ext-diag{color:var(--color-warning)}
 .ext-side{display:flex;align-items:center;gap:var(--space-2);flex:none;padding-top:2px}
+.ext-config{border:0;background:transparent;color:var(--color-accent);cursor:pointer;padding:0 var(--space-1);font-size:12px;min-height:24px;border-radius:var(--radius-md)}
+.ext-config:hover{background:var(--color-bg-muted)}
 .ext-state{font-size:12px;color:var(--color-text-muted)}
 .ext-state.on{color:var(--color-success)}
 </style>

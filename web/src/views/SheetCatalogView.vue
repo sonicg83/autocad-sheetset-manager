@@ -97,13 +97,21 @@ function onGuardKeydown(event: KeyboardEvent) {
       <!-- 启停入口唯一在设置中心（见文件头注释）：指引保留为紧凑可见正文，不再占整行状态卡 -->
       <p class="catalog-manage-hint">{{ $t("extensions.page.manageHint") }}</p>
     </header>
+    <!-- 只读保护（EXTENSION_SETTINGS_SCHEMA_NEWER）：服务端已存更高 Schema，本次
+         设置写不进去。文案与诊断码沿用设置中心（ExtensionSettingsHost）同一键，
+         不另造一套说法；没有这条通知时业务页的保存入口只会静默失败（I5）。 -->
+    <p v-if="catalog.readOnly.value" class="readonly-notice" role="note" data-testid="sheet-catalog-readonly">
+      <span>{{ t("errors.extension.schemaNewer") }}</span>
+      <span class="readonly-code">{{ t("settings.extensions.diagnosticCode", {code: catalog.readOnlyCode.value}) }}</span>
+    </p>
     <p v-if="catalog.loading.value" class="loading" role="status">{{ $t("extensions.sheetCatalog.loading") }}</p>
     <p v-else-if="catalog.loadError.value" class="error notice" role="alert">{{ catalog.loadError.value }}</p>
     <div v-else class="catalog-grid">
       <TemplateBar :catalog="catalog" @saved="onSaved" @confirm-remove="confirmRemove" />
       <div class="catalog-row">
         <FieldBrowser :catalog="catalog" />
-        <ColumnEditor :catalog="catalog" />
+        <!-- 业务页传入真实校验反馈：兼容性徽标与摘要显示（设置中心 custom 面板不传） -->
+        <ColumnEditor :catalog="catalog" :feedback="catalog.feedback" />
       </div>
       <CatalogPreview :catalog="catalog" />
     </div>
@@ -123,11 +131,16 @@ function onGuardKeydown(event: KeyboardEvent) {
         <div class="modal-actions">
           <button type="button" @click="catalog.resolveGuard('stay')">{{ $t("extensions.sheetCatalog.guardStay") }}</button>
           <button type="button" @click="catalog.resolveGuard('discard')">{{ $t("extensions.sheetCatalog.guardDiscard") }}</button>
-          <button type="button" class="primary" :disabled="!catalog.guardState.value.canSave" @click="catalog.resolveGuard('save')">{{ $t("extensions.sheetCatalog.guardSave") }}</button>
+          <!-- 只读态下"保存为模板"必然失败（控制器直接返回 false，模态停在原地）：
+               与 TemplateBar 同一口径停用，不留下没有反馈的按钮 -->
+          <button type="button" class="primary" :disabled="!catalog.guardState.value.canSave || catalog.readOnly.value" @click="catalog.resolveGuard('save')">{{ $t("extensions.sheetCatalog.guardSave") }}</button>
         </div>
       </div>
     </dialog>
-    <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
+    <!-- confirmDisabled：只读态下删除必然不落盘（控制器保存门禁直接返回 false，确认后模态关闭但既无落盘也无提示，
+         是一个静默出口）。当前删除入口已随只读停用，所以这里不会在正常路径上到达；
+         但仍按同一口径写死门禁，避免以后新增删除入口时重新引入静默出口 -->
+    <ConfirmModal v-bind="confirmState" :confirm-disabled="catalog.readOnly.value" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
     <ToastHost :toasts="toasts" @dismiss="dismiss" />
   </section>
 </template>
@@ -148,6 +161,9 @@ function onGuardKeydown(event: KeyboardEvent) {
    字段列表与列区各自内部滚动，避免栅格被压缩后内容溢出叠到预览卡上。 */
 .catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);height:425px;align-items:stretch;min-width:0;flex:0 0 auto}
 .loading{margin:0;color:var(--color-text-muted)}
+/* 高版本只读通知：中性底 + 边线，与"加载失败"的红色 notice 区分 */
+.readonly-notice{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:baseline;margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:13px}
+.readonly-code{color:var(--color-text-muted);font-size:12px}
 /* PLAN-DM-023 Task 5：≤980px 降为单列（与冻结 Demo 同断点），高度由内容决定：
    字段区限高 235px + 输出列卡 min-height 425px，超出时由 .sheet-catalog 滚动 */
 @media (max-width: 980px){.catalog-row{grid-template-columns:1fr;height:auto}}

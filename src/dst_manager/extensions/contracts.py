@@ -11,6 +11,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from dst_manager.extensions.settings import (
+    ExtensionSettingsProvider,
+    SettingsContribution,
+)
+
 HOST_CONTRACT = 1
 
 #: 首期唯一允许的候选成果 MIME；由宿主映射到固定保存对话框与验证器，
@@ -52,14 +57,21 @@ class ExtensionManifest:
     ui_contributions: tuple[UiContribution, ...]
     actions: tuple[ExtensionActionManifest, ...]
     settings_schema: int
+    #: 清单只声明呈现；未声明设置时为空（默认值、校验与迁移由 Provider 定义）。
+    settings_contribution: SettingsContribution | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class BuiltinExtensionEntry:
-    """固定索引条目：直接引用随包清单资源与已审核工厂函数。"""
+    """固定索引条目：直接引用随包清单资源与已审核工厂函数。
+
+    ``settings_provider`` 同样是编译期白名单引用：声明设置的扩展必须有 Provider，
+    未声明设置的扩展保持 ``None``，宿主绝不从清单导入模块。
+    """
 
     manifest_resource: str
     factory: Callable[[], Extension]
+    settings_provider: ExtensionSettingsProvider | None = None
 
 
 @dataclass(frozen=True, slots=True)

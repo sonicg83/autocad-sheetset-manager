@@ -4,9 +4,15 @@
 <script setup lang="ts">
 import {nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
-import type {SheetCatalogController} from "../../composables/useSheetCatalog";
+import type {SheetCatalogTemplateController} from "../../composables/useSheetCatalogSettings";
 
-const props = defineProps<{catalog: SheetCatalogController}>();
+// PLAN-DM-025 Task 8：本组件只依赖模板编辑接口（模板选择/草稿/保存/另存/删除），
+// 不依赖预览或导出——同一份接口既服务业务页，也服务设置中心的 custom 面板。
+// hideConflict：设置中心子视图的修订冲突横幅由宿主（ExtensionSettingsHost）渲染，
+// 与冻结设计一致；面板内不再叠一份，避免同一冲突出现两条一模一样的出路按钮。
+// 三步保存入口（保存/另存为/删除）在高版本只读（catalog.readOnly）下一律停用：
+// 控制器在只读时直接返回 false，按钮若仍可点就是"点了没反应"的静默出口（I5）。
+const props = defineProps<{catalog: SheetCatalogTemplateController; hideConflict?: boolean}>();
 const emit = defineEmits<{saved: []; removed: []; confirmRemove: []}>();
 const {t, locale} = useI18n();
 
@@ -85,12 +91,14 @@ async function confirmSaveAs() {
       <span class="template-state">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
       <span v-if="catalog.dirty.value && !catalog.canSaveInPlace.value" class="draft-name">{{ $t("extensions.sheetCatalog.unnamedDraft") }}</span>
       <span class="spacer"></span>
-      <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="!catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
-      <button type="button" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
-      <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
+      <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="catalog.readOnly.value || !catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
+      <button type="button" :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
+      <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" :disabled="catalog.readOnly.value" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
-    <p v-if="catalog.saveError.value" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
-    <div v-if="catalog.conflict.value" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
+    <!-- 同一句失败正文不渲染两次：设置中心子视图（hideConflict）由宿主横幅统一呈现，
+         否则两个 role="alert" 会重复播报同一句话 -->
+    <p v-if="catalog.saveError.value && !hideConflict" class="error notice" role="alert">{{ catalog.saveError.value }}</p>
+    <div v-if="catalog.conflict.value && !hideConflict" class="conflict" role="alert" :aria-label="$t('extensions.sheetCatalog.conflictTitle')">
       <h3>{{ $t("extensions.sheetCatalog.conflictTitle") }}</h3>
       <p>{{ $t("extensions.sheetCatalog.conflictMessage") }}</p>
       <div class="template-row">
@@ -107,7 +115,7 @@ async function confirmSaveAs() {
         </label>
         <div class="modal-actions">
           <button type="button" @click="saveAsOpen=false">{{ $t("extensions.sheetCatalog.cancel") }}</button>
-          <button type="button" class="primary" :disabled="catalog.saving.value || saveAsName.trim() === ''" @click="confirmSaveAs">{{ $t("extensions.sheetCatalog.saveAsConfirm") }}</button>
+          <button type="button" class="primary" :disabled="catalog.saving.value || saveAsName.trim() === '' || catalog.readOnly.value" @click="confirmSaveAs">{{ $t("extensions.sheetCatalog.saveAsConfirm") }}</button>
         </div>
       </div>
     </div>

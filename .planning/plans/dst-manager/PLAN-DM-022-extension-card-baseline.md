@@ -31,7 +31,7 @@ related:
 
 - 文件一律 UTF-8；注释、文档与 commit message 用简体中文，commit 动词开头（AGENTS.md）。
 - 只用 SPEC-DM-006 令牌，**不新增全局 CSS 规则**（SPEC-DM-011 §5）：开关与卡片的样式写在组件 `<style scoped>` 内。
-- 单源文件约 500 行软上限：`SettingsDialog.vue` 已 535 行（待办 `.planning/todos/dst-manager/2026-09-10-settings-dialog-file-split.md`）——**本计划不允许它增长**；卡片与开关一律落在新组件内。
+- 单源文件约 500 行软上限：`SettingsDialog.vue` 已 535 行（**已由 PLAN-DM-025 任务 6/7 于 2026-09-13 关闭**：抽出 `AboutSection.vue` 与 `ExtensionSettingsHost.vue`，实测回落至 469 行）——**本计划不允许它增长**；卡片与开关一律落在新组件内。
 - 语言包键中英必须对称（`npm run check:i18n`）：本计划只新增 `settings.extensions.diagnosticCode`（en-US 同步）；分组标题与卡片状态文字共用 `stateOn/stateOff` 的同一措辞，**不另造同义键**（如后续确实需要区分，再单独拆键并同步 Spec）。
 - **不改**任何后端代码、API 契约、序列化字段或 `web/src/api/**`；`GET /api/extensions` 已含 `description_key`/`error_code`，无须扩展契约。
 - 既有契约不得破坏：`jumpToError` 依赖 `[data-key="<key>"]` 可聚焦；`SettingsDialog.focusExtensionSwitch` 依赖行容器 `[data-extension-id]`；开关可访问名沿用「启用 {name}」/「停用 {name}」；可见状态文字对辅助技术隐藏（`aria-hidden`）。

@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-020
 title: 内置扩展平台与图纸目录 XLSX 实施计划
-status: active
+status: completed
 owners:
   - dst-manager
 created: 2026-09-09
-updated: 2026-09-11
+updated: 2026-09-13
 related:
   - PRD-DM-001
   - ARCH-DM-001
@@ -798,10 +798,16 @@ npm --prefix web run test:e2e
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 ```
 
-- [ ] **Step 6：执行安全与追踪反查。** 逐行核对本计划矩阵：每项 Spec 要求至少有实现和测试，每个实际改动能指回要求；搜索未完成标记、临时占位实现、非白名单动态 import、通用代码执行器、客户端路径参数和日志路径泄漏；禁用扩展后运行核心 API/三页面回归。
-- [ ] **Step 7：准备并执行 G9。** 使用打包后的 Windows 桌面壳和去敏工程副本，人工验证：启停跨重启、默认/自定义/跨图纸集不兼容模板、原生另存为取消与覆盖确认、目标选择后外部改动、成功打开所在文件夹、Excel 中前导零/筛选/冻结/文本公式安全、文件移动/修改后的 Artifact 可用性、核心页面不回退。记录操作者、日期、版本、commit、结果和遗留项。
-- [ ] **Step 8：收口门禁与状态。** 自动验证和 G8 通过后把 G7/G8 记为通过；G9 只有用户真实桌面确认后才能通过。仅当矩阵必需项均已验证且无未关闭 P0/P1，才把本计划标为 `completed`；否则保持 `active` 并准确记录剩余验收。
-- [ ] **Step 9：最终提交。** 在 `changelog.md` 追加 G8/G9、完整回归和实际遗留项；只暂存本任务涉及的文件，提交 `git commit -m "完成图纸目录扩展验证与交付记录"`。
+- [x] **Step 6：执行安全与追踪反查。** 逐行核对本计划矩阵：每项 Spec 要求至少有实现和测试，每个实际改动能指回要求；搜索未完成标记、临时占位实现、非白名单动态 import、通用代码执行器、客户端路径参数和日志路径泄漏；禁用扩展后运行核心 API/三页面回归。
+- [x] **Step 7：准备并执行 G9。** 使用打包后的 Windows 桌面壳和去敏工程副本，人工验证：启停跨重启、默认/自定义/跨图纸集不兼容模板、原生另存为取消与覆盖确认、目标选择后外部改动、成功打开所在文件夹、Excel 中前导零/筛选/冻结/文本公式安全、文件移动/修改后的 Artifact 可用性、核心页面不回退。记录操作者、日期、版本、commit、结果和遗留项。
+
+  **2026-09-13 结果：通过（用户，整体判定）。** 用户按 [MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境执行 `### 1.1～1.10` 全套后整体确认通过，无遗留缺陷（操作者/日期：用户 / 2026-09-13）。记录粒度：整体判定，MEMO-DM-028 的 §0/§1 逐项字段（被测包哈希/commit、版本、截图、逐项结果）保持留空并已注明，实施代理未代填；可执行步骤见该 memo §5（PLAN-DM-025 部分）。
+- [x] **Step 8：收口门禁与状态。** 自动验证和 G8 通过后把 G7/G8 记为通过；G9 只有用户真实桌面确认后才能通过。仅当矩阵必需项均已验证且无未关闭 P0/P1，才把本计划标为 `completed`；否则保持 `active` 并准确记录剩余验收。
+
+  **2026-09-13：** G7（PLAN-DM-024 恢复）、G8（用户 2026-09-11 重新确认）、G9（用户 2026-09-13 确认通过）均已关闭，矩阵必需项均已验证且无未关闭 P0/P1，本计划标记 `completed`。
+- [x] **Step 9：最终提交。** 在 `changelog.md` 追加 G8/G9、完整回归和实际遗留项；只暂存本任务涉及的文件，提交 `git commit -m "完成图纸目录扩展验证与交付记录"`。
+
+  **2026-09-13：** G8/G9 与完整回归已记入 `changelog.md`（PLAN-DM-020 各批次条目与 PLAN-DM-025 条目）；本次 G9 通过的收口以文档提交落地（含本计划、MEMO-DM-028、SPEC-DM-011/012 与两份 README）。
 
 ## 批次回退与失败处理
 
@@ -845,3 +851,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release.ps1
 2026-09-11：[PLAN-DM-023](PLAN-DM-023-sheet-catalog-visual-convergence.md) 的 6 个任务已全部完成（生产改动 commit `441b85c`（红灯）`1cf0a8f`/`0d69e45`/`70b23c0`/`241c7b5`、证据与比对 `6acc6e3`），并由用户于同日逐对确认 V1～V8 全部关闭、**通过 G8**（确认人：用户，日期：2026-09-11；三项保留差异见 [MEMO-DM-030 §6.5](../../memos/dst-manager/2026-09-11-plan-dm020-g8-user-revalidation.md)）。SPEC-DM-012 §16 已登记 G8=通过（仅 A1/A2 与三项保留差异），G9 行改为“未开始（待用户执行）”，[MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 的暂停解除。本轮新鲜验证（全部退出码 0）：`uv sync --dev`、`uv run ruff check .`、`uv run pytest`（1121 passed / 72 skipped / 0 failed）、`uv lock --check`、`check:api`、`check:i18n`（894 键 / 9 域）、`npm run build`、全量 E2E 432 passed / 0 failed / 1 flaky（同前 dev server 抖动，单独 `--workers=1 --retries=0` 复现 1 passed）。本计划继续保持 `active`：G9 真实桌面与 Excel 验收由用户执行并填写结果，实施代理未代替填写。
 
 执行时按批次追加：日期、commit、实际命令与退出码、测试数量、G8 截图位置、G9 操作者与结果、跳过项理由、偏差裁决和剩余风险。不得用计划中的“预期通过”替代实际证据。
+
+2026-09-13：**G9 通过、本计划关闭。** 用户按 [MEMO-DM-028](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) `### 1.1～1.10` 在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境执行后整体确认通过，无遗留缺陷（操作者/日期：用户 / 2026-09-13）；同日 PLAN-DM-025 的扩展全局设置入口与「输出图纸过滤」共用同一次执行并一并通过（记录粒度与逐项字段留空口径见 MEMO-DM-028 §0 上方说明与 §3，实施代理未代填）。据此本计划 `status` → `completed`；SPEC-DM-012 §16 的 G9 行改为通过，`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态行同步，MEMO-DM-028 `status` → `final`。本轮为**验收与文档收口**，未改动源码，也没重跑全量门禁：全量证据仍以 PLAN-DM-025 分支上的新鲜全量结果为准（`ruff` 通过、**1329 passed / 72 skipped / 0 failed**、`check:i18n` 938 键 / 9 域、`build` 通过、E2E exit 0 且 0 failed），未发现 PLAN-DM-026 引入的行为回退。仍未实施且已登记的遗留项：扩展设置容量债拆分、打包守护 fail-closed 误伤等（见 `.planning/todos/dst-manager/`），与本计划门禁无关。

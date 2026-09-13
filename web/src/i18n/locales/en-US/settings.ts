@@ -34,6 +34,50 @@ export default {
     disableNamed: "Disable {name}",
     diagnosticCode: "Code {code}",
   },
+  // Extension settings entry and config sub-view (SC-17): entry copy, sub-view header,
+  // independent saving, dirty-state gate and the two server-state exits (revision
+  // conflict / newer schema read-only). The read-only body reuses
+  // errors.extension.schemaNewer instead of a second wording for the same code.
+  extensionSettings: {
+    open: "Configure",
+    openNamed: "Configure {name}",
+    title: "Configure · {name}",
+    revision: "Settings revision r{revision}",
+    schemaVersion: "Schema v{schema_version}",
+    readOnlyBadge: "Read-only",
+    sharedNotice: "Extension settings belong to the current Windows user and are shared across workspaces: you can enter, edit and save them without a loaded workspace. Each extension saves independently — it does not enter the core settings buffer below and does not share its revision.",
+    back: "Back to extension list",
+    save: "Save",
+    saving: "Saving…",
+    saved: "Extension settings saved",
+    loading: "Loading extension settings…",
+    loadFailed: "Failed to load the extension settings.",
+    // Refresh failure while a snapshot exists: one in-place notice shared by the
+    // read-only, conflict and normal editing states (the snapshot is kept).
+    refreshFailed: "Refreshing the extension settings failed; the content below may be stale.",
+    closeExtra: "Closing will also discard the unsaved changes of the current extension settings.",
+    unsupportedControl: "The control type ({control}) of this field is not supported by the settings center; no JSON text box is provided.",
+    customUnavailable: "The settings component declared by this extension (route_key {route_key}) is not in this build's compile-time allowlist; its content is not rendered and is never degraded into a JSON text box.",
+    // Distinct cause from the line above: custom declared without a component key,
+    // so there is no key value to echo back.
+    customUnavailableMissingRouteKey: "This extension declares a dedicated settings component but registers no component key (route_key); its content is not rendered and is never degraded into a JSON text box.",
+    confirmBack: {
+      title: "Unsaved extension settings changes",
+      message: "Going back to the extension list discards the unsaved changes of “{name}”; saved settings are not affected.",
+      discard: "Discard and go back",
+    },
+    conflict: {
+      title: "Save conflict",
+      message: "The settings of “{name}” were updated by another save; your local edits are kept. Retry with the server's new revision or discard the local edits.",
+      // The endpoint prefix matches the frozen demo's wire contract line.
+      diagnostic: "PUT /api/extensions/{extension_id}/settings → 409 {code} (expected_revision={expected_revision}, current_revision={current_revision})",
+      retry: "Retry with new revision",
+      discard: "Discard local edits",
+    },
+    errors: {
+      summaryTitle: "The extension settings could not be saved; fix the errors below and retry",
+    },
+  },
   confirm: {
     title: "Unsaved changes",
     message: "Closing discards all unsaved changes in this dialog. Saved settings are not affected.",

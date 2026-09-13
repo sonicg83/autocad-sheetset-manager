@@ -1758,6 +1758,8 @@
                   "EXTENSION_INCOMPATIBLE",
                   "EXTENSION_CAPABILITY_UNAVAILABLE",
                   "EXTENSION_SETTINGS_INVALID",
+                  "EXTENSION_SETTINGS_SCHEMA_NEWER",
+                  "EXTENSION_SETTINGS_CHANGED",
                   "EXTENSION_ACTION_NOT_FOUND",
                   "SAVE_GRANT_INVALID",
                   "EXPORT_DESTINATION_CHANGED",
@@ -1806,7 +1808,7 @@
       },
       "ExtensionExecuteRequest": {
         "additionalProperties": false,
-        "description": "执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照与预览摘要。\n\n后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入\n执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对。",
+        "description": "执行请求契约（SPEC-DM-012 §8.2）：重复提交模板快照、预览摘要与设置修订。\n\n后端不依赖前端缓存或 ``template_id`` 推断导出内容；模板快照原样进入\n执行链路，``preview_digest`` 由宿主对当前快照重新解析后核对；\n``settings_revision`` 是预览响应回传、必须原样重复提交的设置绑定值\n（ARCH-DM-006 §11）：与当前设置不一致时以 ``EXTENSION_SETTINGS_CHANGED``\n拒绝，不得用新设置执行旧预览。",
         "properties": {
           "base_revision_id": {
             "title": "Base Revision Id",
@@ -1819,6 +1821,10 @@
           "save_grant_id": {
             "title": "Save Grant Id",
             "type": "string"
+          },
+          "settings_revision": {
+            "title": "Settings Revision",
+            "type": "integer"
           },
           "template": {
             "$ref": "#/components/schemas/ExtensionTemplateRequest"
@@ -1833,7 +1839,8 @@
           "base_revision_id",
           "template",
           "preview_digest",
-          "save_grant_id"
+          "save_grant_id",
+          "settings_revision"
         ],
         "title": "ExtensionExecuteRequest",
         "type": "object"
@@ -1882,6 +1889,131 @@
         "title": "ExtensionPreviewRequest",
         "type": "object"
       },
+      "ExtensionSettingsContributionModel": {
+        "additionalProperties": false,
+        "description": "设置呈现声明（ARCH-DM-006 §4.2）：摘要只暴露呈现方式与受控路由键。\n\n``generated`` 由宿主按设置响应的 ``items`` 动态渲染；``custom`` 由宿主编译\n期白名单里的专属组件按 ``route_key`` 呈现。未声明设置时不携带本对象。",
+        "properties": {
+          "presentation": {
+            "enum": [
+              "generated",
+              "custom"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "route_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Key"
+          }
+        },
+        "required": [
+          "presentation"
+        ],
+        "title": "ExtensionSettingsContributionModel",
+        "type": "object"
+      },
+      "ExtensionSettingsItemModel": {
+        "additionalProperties": false,
+        "description": "``generated`` 设置的单个字段项：Provider 语义 + Manifest 呈现的合并结果。\n\n控件词表（:data:`~dst_manager.extensions.settings.SettingsFieldControl`）\n与设置中心应用设置词表独立，消费方必须显式映射；本模型只做 1:1 透传。",
+        "properties": {
+          "control": {
+            "$ref": "#/components/schemas/SettingsFieldControl"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "description_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description Key"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "max_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Value"
+          },
+          "min_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Value"
+          },
+          "nullable": {
+            "default": false,
+            "title": "Nullable",
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label_key",
+          "order",
+          "control",
+          "default"
+        ],
+        "title": "ExtensionSettingsItemModel",
+        "type": "object"
+      },
       "ExtensionSettingsPutRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1905,6 +2037,61 @@
           "expected_revision"
         ],
         "title": "ExtensionSettingsPutRequest",
+        "type": "object"
+      },
+      "ExtensionSettingsResponseModel": {
+        "additionalProperties": false,
+        "description": "扩展设置读写响应：持久值 + 有效值 + 只读诊断 + 可呈现字段项。\n\n``value`` 是 ``extension_settings`` 的规范持久值（从未保存时是 Provider\n默认零值），``effective_value`` 是 Provider 解析后的有效配置（含代码默认\n值），两者语义不同且不得互相代替。``items`` 恒存在：``custom`` 呈现与未\n声明设置的扩展为空数组。",
+        "properties": {
+          "diagnostic_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Code"
+          },
+          "effective_value": {
+            "additionalProperties": true,
+            "title": "Effective Value",
+            "type": "object"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionSettingsItemModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "read_only": {
+            "default": false,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "value": {
+            "additionalProperties": true,
+            "title": "Value",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_version",
+          "revision",
+          "value",
+          "effective_value"
+        ],
+        "title": "ExtensionSettingsResponseModel",
         "type": "object"
       },
       "ExtensionStatePatchRequest": {
@@ -1965,6 +2152,16 @@
           "name_key": {
             "title": "Name Key",
             "type": "string"
+          },
+          "settings_contribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionSettingsContributionModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "enum": [
@@ -3637,6 +3834,16 @@
         "title": "SemanticDiffResponse",
         "type": "object"
       },
+      "SettingsFieldControl": {
+        "enum": [
+          "boolean",
+          "integer",
+          "number",
+          "string",
+          "enum"
+        ],
+        "type": "string"
+      },
       "SheetCatalogColumnModel": {
         "additionalProperties": false,
         "properties": {
@@ -3812,7 +4019,7 @@
       },
       "SheetCatalogPreviewResponse": {
         "additionalProperties": false,
-        "description": "预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。",
+        "description": "预览响应（SPEC-DM-012 §8.1）：错误与警告分列，行最多 20 条。\n\n``total_rows`` 是输出图纸过滤后的实际导出行数，``filtered_rows`` 是被\n排除的图纸数；``settings_revision`` 是本次预览绑定的扩展设置修订，\n执行时必须原样重复提交（ARCH-DM-006 §11）。",
         "properties": {
           "errors": {
             "items": {
@@ -3827,6 +4034,10 @@
           },
           "field_catalog": {
             "$ref": "#/components/schemas/SheetCatalogFieldCatalogModel"
+          },
+          "filtered_rows": {
+            "title": "Filtered Rows",
+            "type": "integer"
           },
           "normalized_template": {
             "$ref": "#/components/schemas/SheetCatalogTemplateModel"
@@ -3844,6 +4055,10 @@
             },
             "title": "Rows",
             "type": "array"
+          },
+          "settings_revision": {
+            "title": "Settings Revision",
+            "type": "integer"
           },
           "total_rows": {
             "title": "Total Rows",
@@ -3864,6 +4079,8 @@
           "warnings",
           "rows",
           "total_rows",
+          "filtered_rows",
+          "settings_revision",
           "preview_digest",
           "executable"
         ],
@@ -4946,7 +5163,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionedValueModel"
+                  "$ref": "#/components/schemas/ExtensionSettingsResponseModel"
                 }
               }
             },
@@ -5026,7 +5243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionedValueModel"
+                  "$ref": "#/components/schemas/ExtensionSettingsResponseModel"
                 }
               }
             },
