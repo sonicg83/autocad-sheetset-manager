@@ -538,7 +538,7 @@ related:
   **交接记录（保留，已完成）：** 2026-09-13 用户曾选定「先交接清单、由用户后续执行」的路径，本轮先**未执行**真实验收，因此步骤 6 当时保持未勾选。
 
   - 操作者手册正文：[MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 §G9 验收项一一对应）。
-  - 被测对象：分支 `feature/plan-dm-025-extension-global-settings`（G9 通过后于同日合并到 `main`，不推送），被测包需由该分支构建。
+  - 被测对象：分支 `feature/plan-dm-025-extension-global-settings`（G9 通过后于同日合并到 `main`，不推送），被测包需由该分支构建。合并提交为 `b77d8bb`（`--no-ff`）；经内容一致核验（`git diff --stat` 为空）后已删除本地特性分支，相关提交仍在 `main` 历史中。
 
 - [x] **步骤 7：更新状态与索引。** 自动化、G8、G9 全部通过后才标记 `completed`；否则记录实际验证并保留 `active`。
 
