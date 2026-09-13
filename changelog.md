@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-13（G9 真实桌面/Excel 验收通过，PLAN-DM-020 与 PLAN-DM-025 关闭）
+
+用户于本日在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境执行 [MEMO-DM-028](.planning/memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) `### 1.1～1.10` 全套后**整体确认通过**，无遗留缺陷；`g8-ext-06～10` 与冻结件的已声明差异经像素级复核后获接受（无未声明差异）。
+
+- **覆盖范围**：PLAN-DM-020 的 G9 项（启停跨重启、默认/自定义/跨图纸集不兼容模板、原生另存为取消与覆盖确认、目标选择后外部改动、打开所在文件夹、Excel 前导零/筛选/冻结/文本公式安全、文件移动/修改后的 Artifact 可用性、核心页面不回退）＋ `### 1.9` 补零图号为文本单元格 ＋ PLAN-DM-025 的 `### 1.10` 六项（无工作区配置过滤词、`EXTENSION_SETTINGS_CHANGED` 拒绝后重新预览、真实项目部分过滤、全部过滤时只有表头 XLSX、扩展配置子视图键盘焦点与返回/关闭确认、启停与核心页面不回退）。用户同日另裁定「两个计划都通过（全套 §1.1～1.10）」，即 PLAN-DM-020 的 G9 一并关闭；操作手册正文见该 memo §5（步骤 1～8）。
+- **记录口径（用户选定）**：MEMO-DM-028 的 §0（被测包 SHA-256、被测 commit/分支、Windows/WebView2/Excel 版本、图纸集副本路径、实测值）与 §1 的逐项结果/截图字段**保持留空**——用户在本轮未提供这些明细，实施代理不代填、不推测（事前交接时也明确该口径）；已在 memo §0 上方与 §3 写明，`status` → `final`。
+- **同步**：`PLAN-DM-020` 与 `PLAN-DM-025` 的 `status` → `completed`（前者 Task 12 Step 6～9 勾选并附记录）；`SPEC-DM-012` §16 门禁表 G9 → 通过（含操作者/日期与验收范围）；`SPEC-DM-011` §8 门禁表 G9 → 通过、§9 的 G9 锚点与头部状态行同步（G7 行备注列的「G9 真实验收未开始」为历史记录，加注保留）；`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 状态行同步。
+- **被测对象与分支处置**：被测分支 `feature/plan-dm-025-extension-global-settings`（构建时 HEAD；G9 裁定日为 `840dc11`），用户同日裁定**合并到 `main`（不推送）**，用 `--no-ff` 保留逐任务与逐评审轮提交边界；本文与状态收口为一个文档提交，合并提交紧随其后。
+- **验证口径**：本轮为验收与文档收口，**未改动源码、未重跑全量门禁**；全量证据仍取 PLAN-DM-025 分支上的新鲜结果（`ruff check .` 通过、`uv run pytest -q` **1329 passed / 72 skipped / 0 failed**、`uv lock --check` 无漂移、`check:i18n` 938 键 / 9 域、`npm run build` exit 0、`test:e2e` exit 0 且 0 failed（首测 486 passed / 2 flaky，独立复跑 484 / 4 flaky，flaky 成员随机漂移）），未发现 PLAN-DM-026 引入的行为回退。G9 通过后新增的提交均为文档与索引收口，不含源码改动。
+- **遗留（与本门禁无关，已登记待办）**：扩展设置容量债拆分（`.planning/todos/dst-manager/2026-09-13-extension-settings-capacity-debt.md`）、打包守护 fail-closed 误伤与传递链口径（`2026-09-13-extension-packaging-guard-gaps.md`）、设置对话框 Esc 门禁缺陷类（`2026-09-13-settings-dialog-escape-gate.md`）。
+
 ## 2026-09-13（PLAN-DM-025 任务 9 文档、打包守护与全量验收）
 
 任务 9 拆为三路串行实施（9B 生产证据 → 9A-1 打包守护与开发指南 → 9A-2 规格与索引），全量门禁由控制器执行。
@@ -40,8 +51,8 @@
   - **验证（实测）**：`uv run ruff check .` All checks passed；`uv run pytest -q -o addopts=""` **1329 passed / 72 skipped / 0 failed**（77.45s）；两处守护单测 **69 passed**（18 + 51）；`uv lock --check` 无漂移。全量 E2E 未重跑：本轮唯一触碰的 E2E 文件是一处夹具注释。
   - **残留（只声明不修，已立待办 `2026-09-13-extension-packaging-guard-gaps.md`）**：frozen 守护对「含 `path`/`file` 词段的合法未来清单键」与 `os.path.join(...)` 形式 `pathex` 属 fail-closed **误伤**（拦合法扩展，但不放过非法扩展）；属性形式入口（`module.SYMBOL`）仍不做符号存在性校验（既有缺口）；夹具 `preview_digest` 的 `+1` 是死表达式。
   - 本轮只改 `tests/unit/**`、`web/tests/e2e/fixtures/sheetCatalog.ts`（注释）、`docs/**`、`.planning/**`、`changelog.md`，未改生产代码、未新增依赖、未触碰任何 PNG。
-- **G9 交接（用户裁定，非通过）**：2026-09-13 用户选定「先交接清单、由用户后续执行」的路径，实施会话内**不执行**真实验收。操作者手册正文并入 `MEMO-DM-028` §5（步骤 1～8：无工作区保存过滤词、改设置后旧预览失效、真实项目部分/全部过滤、配置子视图键盘与返回、启停与核心页面不回退、已声明差异的像素级复核、结论与通过后动作），与本计划 G9 验收项及 PLAN-DM-020 的 `### 1.10` 一一对应；同步修改该 memo §0：`被测 commit` 改为「构建时分支 HEAD SHA」，新增 `被测分支` 行并注明**被测包必须从未合并的特性分支构建**（`main` 的 HEAD 不含扩展设置框架与输出过滤），§3 前置闸门同步。
-- **未完成（保留 active）**：G9 真实验收（pywebview/WebView2 桌面壳 + Excel；含无工作区配置过滤词、子视图键盘焦点与返回/关闭确认、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效、预览后外部修改设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览、以及对本批 `g8-ext-*` 已声明差异的像素级复核）必须由用户或具备环境的执行者填写，实施代理不代填。步骤 1～8 操作手册见 `MEMO-DM-028` §5；被测包从**未合并**的分支 `feature/plan-dm-025-extension-global-settings` 构建，合并方式待 G9 有结论后再定。PLAN-DM-025 因此保持 `active`。
+- **G9 交接（用户裁定，非通过）**：2026-09-13 用户选定「先交接清单、由用户后续执行」的路径，实施会话内**不执行**真实验收。操作者手册正文并入 `MEMO-DM-028` §5（步骤 1～8：无工作区保存过滤词、改设置后旧预览失效、真实项目部分/全部过滤、配置子视图键盘与返回、启停与核心页面不回退、已声明差异的像素级复核、结论与通过后动作），与本计划 G9 验收项及 PLAN-DM-020 的 `### 1.10` 一一对应；同步修改该 memo §0：`被测 commit` 改为「构建时分支 HEAD SHA」，新增 `被测分支` 行并注明**被测包必须从未合并的特性分支构建**（`main` 的 HEAD 不含扩展设置框架与输出过滤），§3 前置闸门同步。**（2026-09-13 同日稍后：用户已按该手册执行并整体确认通过，G9 关闭；但上述「逐项字段留空、由用户回填」的口径继续生效，见 MEMO-DM-028 §0 说明。）**
+- **未完成（保留 active）**：G9 真实验收（pywebview/WebView2 桌面壳 + Excel；含无工作区配置过滤词、子视图键盘焦点与返回/关闭确认、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效、预览后外部修改设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览、以及对本批 `g8-ext-*` 已声明差异的像素级复核）必须由用户或具备环境的执行者填写，实施代理不代填。步骤 1～8 操作手册见 `MEMO-DM-028` §5；被测包从**未合并**的分支 `feature/plan-dm-025-extension-global-settings` 构建，合并方式待 G9 有结论后再定。PLAN-DM-025 因此保持 `active`。**（2026-09-13 同日后续：G9 已由用户整体确认通过，上述七项与像素级复核均关闭；`PLAN-DM-025` 与 `PLAN-DM-020` 已标记 `completed`，分支裁定为合并到 `main`（不推送），详见本文件顶部 2026-09-13 G9 记录节。本行作为当日交接时的状态记录保留。）**
 - 未新增 Python/npm 依赖、未新增数据库表或迁移、未改 `src/dst_manager/**` 的生产代码、未改 `web/src/**`（任务 9 只改测试与文档）、未改 `web/src/api/openapi.json`/`schema.d.ts`、未触碰 DST/DWG 与发布链路。
 
 ## 2026-09-13（PLAN-DM-025 任务 8 迁移图纸目录 custom 全局设置界面）

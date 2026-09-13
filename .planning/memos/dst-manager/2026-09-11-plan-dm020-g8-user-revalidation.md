@@ -6,7 +6,7 @@ document_kind: memo
 owners:
   - dst-manager
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-13
 related:
   - PLAN-DM-020
   - PLAN-DM-023
@@ -35,7 +35,7 @@ related:
 1. MEMO-DM-027 的 G8“通过”结论自 2026-09-11 起失效；SPEC-DM-012 §16 的 G8 恢复为“未通过（用户真实桌面复验）”。
 2. G4 设计冻结继续有效，不重开 G4。当前目标是把生产实现拉回既有冻结件；只有用户未来决定采用另一套布局时才重开 G3/G4。
 3. G9 暂停执行。先完成 PLAN-DM-023 并由用户重新通过 G8，再使用 MEMO-DM-028 执行真实桌面功能验收。
-4. PLAN-DM-020 保持 `active`，不得在 G8/G9 重新通过前标记 `completed`。
+4. PLAN-DM-020 保持 `active`，不得在 G8/G9 重新通过前标记 `completed`。（2026-09-13 状态更新：G8 已于 2026-09-11 重获通过、G9 已于 2026-09-13 由用户整体确认通过，条件已满足，PLAN-DM-020 同日标记 `completed`；本条作为当时裁决保留。）
 
 ## 3. 偏差重新分类
 

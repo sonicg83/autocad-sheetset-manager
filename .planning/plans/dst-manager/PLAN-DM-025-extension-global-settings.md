@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-025
 title: Builtin 扩展全局设置框架实施计划
-status: active
+status: completed
 document_kind: plan
 owners:
   - dst-manager
@@ -531,14 +531,14 @@ related:
 
 - [x] **步骤 5：执行 G8。** 对任务 5 的三张冻结图，在浅/深主题、1280×720、900×600、200% 缩放下生成 `g8-ext-06～08` 生产证据并逐张记录差异；custom 图必须覆盖“输出图纸过滤”默认、编辑和字段错误态。重跑既有设置扩展与图纸目录视觉证据用例，并新增 `g8-filter-partial-light-1440x1000.png` 和 `g8-filter-all-dark-900x700.png`，分别证明部分过滤汇总与全部过滤空表状态。既有 `g8-ext-01～05` 和图纸目录历史截图不得覆盖；新增目录图无冻结对照，只能算补充检查，目录页其余区域若无获批视觉变化则历史证据必须继续通过。
 
-- [ ] **步骤 6：执行 G9。** 在 pywebview/WebView2 壳验证无工作区配置过滤词、键盘焦点、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效，以及预览后外部修改过滤设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览。环境缺失时保持 `active` 并记录恢复条件，不代替用户填写通过。
+- [x] **步骤 6：执行 G9。** 在 pywebview/WebView2 壳验证无工作区配置过滤词、键盘焦点、真实项目部分/全部过滤、全部过滤时只有表头的 XLSX、保存后新动作生效，以及预览后外部修改过滤设置触发 `EXTENSION_SETTINGS_CHANGED` 并重新预览。环境缺失时保持 `active` 并记录恢复条件，不代替用户填写通过。
 
-  **2026-09-13 控制者记录（交接，非通过）**：用户选定「先交接清单、由用户后续执行」的路径，本轮**未执行**真实验收，因此步骤 6 保持未勾选。
+  **2026-09-13 结果：通过（用户，整体判定）。** 用户于 2026-09-13 在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境按 [MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md) 步骤 1～8 执行后整体确认通过，涵盖本计划全部 G9 验收项与 `g8-ext-06～10` 已声明差异的像素级复核，无遗留缺陷；同日用户裁定「两个计划都通过（全套 §1.1～1.10）」。记录粒度：整体判定，MEMO-DM-028 的 §0/§1 逐项字段保持留空（用户未提供被测包哈希/commit 与逐项截图，实施代理不代填，口径见该 memo §0 上方说明）；分支合并由用户同日裁定为「合并到 `main`（不推送）」。
 
-  - 操作者手册正文：[MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 §G9 验收项一一对应）；该 memo 的 §0 已补「被测 commit / 被测分支」两行，§1.10 仍为结果留空。
-  - 被测对象：分支 `feature/plan-dm-025-extension-global-settings`（**未合并 `main`**），未测 commit（用户 2026-09-13 决定：G9 有结论后再定合并方式）。
-  - 恢复条件：用户具备真实 Windows 桌面 + WebView2 + Microsoft Excel 环境，且能在副本工程上操作时，按 MEMO-DM-028 §5 步骤 1～8 执行并回填结果。
-  - G9 通过前本计划保持 `active`、本分支不合入 `main`。
+  **交接记录（保留，已完成）：** 2026-09-13 用户曾选定「先交接清单、由用户后续执行」的路径，本轮先**未执行**真实验收，因此步骤 6 当时保持未勾选。
+
+  - 操作者手册正文：[MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 §G9 验收项一一对应）。
+  - 被测对象：分支 `feature/plan-dm-025-extension-global-settings`（G9 通过后于同日合并到 `main`，不推送），被测包需由该分支构建。
 
 - [x] **步骤 7：更新状态与索引。** 自动化、G8、G9 全部通过后才标记 `completed`；否则记录实际验证并保留 `active`。
 
@@ -588,15 +588,16 @@ related:
 
 ## 实际验证（2026-09-13）
 
-实施与自动化验收已全部完成；**G9 真实验收待用户执行，本计划因此保持 `active`，不标记 `completed`。**
+实施与自动化验收已全部完成。**2026-09-13 更新：G9 已由用户在真实桌面/Excel 环境整体确认通过，本计划已标记 `completed`（见下方「G9 通过」条）。**（原文为：“G9 真实验收待用户执行，本计划因此保持 `active`，不标记 `completed`。”）
 
 - **提交链**：任务 1～9 共 28 个实施/收口提交，另有 2 个评审修复轮提交（`c3c5b6d` 与第二轮修复提交），分支合计 **30** 个实施/评审修复提交（基 `main` 79c61a3，功能分支 `feature/plan-dm-025-extension-global-settings`；含 G4 用户确认记录与最终验收提交；其后仅记录 G9 交接与口径的文档提交不计入本数），逐任务实施、逐任务独立评审并对评审意见做定向复审；每个任务至少一次修复轮，修复均有可失败性证据（变异 → 失败断言 `文件:行` → 按字节还原）。
 - **评审与修复轮**：任务 1～9 的逐任务独立评审与定向复审均已闭环；任务 9 评审（1 项 Important + 10 项 Minor）由控制器直接修复并提交 `c3c5b6d`；随后两条只读通道对全分支 `79c61a3..c3c5b6d` 做最终复核（通道 A「门禁复算」Approved、通道 B「修复闭环复核」Needs fixes），**以验证为准**合并判为 Needs fixes 后按第二轮修复收口（计划清单回归、打包守护传递链、用例覆盖退化、口径与数字）。已知残留缺口不施加修，登记为待办 `.planning/todos/dst-manager/2026-09-13-extension-packaging-guard-gaps.md`。
-- **G9 交接（2026-09-13，用户裁定）**：用户选择「先交接清单、由用户后续执行」的路径，**本轮未执行真实验收**，故步骤 6 保持未勾选、本计划保持 `active`。操作者手册正文见 [MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 G9 验收项一一对应）；该 memo §0 已补「被测 commit / 被测分支」两行，并注明**被测包必须从未合并的分支 `feature/plan-dm-025-extension-global-settings` 构建**（`main` 的 HEAD 不含本计划的扩展设置框架与「输出图纸过滤」），即 G9 同时承担 PLAN-DM-020 的 `### 1.10` 与本计划 G9。分支合并方式待 G9 有结论后再定；恢复条件：用户具备真实 Windows 桌面 + WebView2 + Microsoft Excel，且能在副本工程上操作。
+- **G9 交接（2026-09-13 用户裁定；同日已完成并确认为通过，见上条「G9」）**：用户选择「先交接清单、由用户后续执行」的路径，**本轮未执行真实验收**，故步骤 6 保持未勾选、本计划保持 `active`。操作者手册正文见 [MEMO-DM-028 §5](../../memos/dst-manager/PLAN-DM-020-sheet-catalog-g9-checklist.md)（步骤 1～8，与本计划 G9 验收项一一对应）；该 memo §0 已补「被测 commit / 被测分支」两行，并注明**被测包必须从未合并的分支 `feature/plan-dm-025-extension-global-settings` 构建**（`main` 的 HEAD 不含本计划的扩展设置框架与「输出图纸过滤」），即 G9 同时承担 PLAN-DM-020 的 `### 1.10` 与本计划 G9。分支合并方式待 G9 有结论后再定；恢复条件：用户具备真实 Windows 桌面 + WebView2 + Microsoft Excel，且能在副本工程上操作。
+- **G9（2026-09-13 通过，用户整体判定）**：用户在真实 Windows 桌面（pywebview/WebView2）与真实 Microsoft Excel 环境按 MEMO-DM-028 §5 步骤 1～8 执行后**整体确认通过**（覆盖 PLAN-DM-020 `### 1.1～1.9` 与本计划 `### 1.10` 全套），无遗留缺陷；`g8-ext-06～10` 与冻结件的已声明差异经像素级复核后获接受。记录粒度：整体判定，MEMO-DM-028 的逐项字段（被测包哈希/commit、逐项截图与结果）保持留空并已注明，不代填；据此本计划 `status` → `completed`，`plans/README.md`、`docs/dst-manager/README.md`、SPEC-DM-011 §8/§9、SPEC-DM-012 §16、MEMO-DM-028（`final`）与 changelog 已同步。
 - **后端**：`uv sync --dev` 通过；`uv run ruff check .` All checks passed；`uv run pytest -q` **1327 passed / 72 skipped / 0 failed**（86s；两轮评审修复各补 1 例，分支 HEAD 复测 **1329 passed / 72 skipped / 0 failed**，77.45s；PLAN-DM-026 收口时为 1182 passed / 72 skipped，本计划新增 147 例）；`uv lock --check` 无漂移；`uv run alembic upgrade head` 迁移链到 `0006_dm020_extension_platform` 正常。
 - **前端**：`npm ci` 通过；`check:api` 无漂移（未手改 `openapi.json`/`schema.d.ts`）；`check:i18n` **938 键 / 9 域**且无未登记硬编码中文；`build` exit 0（`vue-tsc -b` + `vite build ✓ built in 1.51s`）；`test:e2e` 全量首测 **486 passed / 0 failed / 2 flaky**（`g8-ext-07` 与「50 列极限」在 4 worker 并行下首跑 30s 超时、重跑通过；与 PLAN-DM-026 收口时记录的同类抖动一致）。**flaky 成员每次运行随机漂移，不得当作已收敛的名单**：独立复核复跑一次为 **484 passed / 0 failed / 4 flaky**（`extensions-settings.spec.ts:443`、`main.spec.ts:216`、`main.spec.ts:644`、`properties-csv.spec.ts:258`），用例总数 488 一致；门禁判据是 **exit 0 + 0 failed**，超时项重跑通过即可。
 - **容量**：`SettingsDialog.vue` 535 → **469** 行（软上限内）；`useSheetCatalog.ts` 701 → **409**；`useSheetCatalogSettings.ts` **496**（接近上限，已立待办）；`extensions-settings.spec.ts` **1148** 行、`sheet-catalog.spec.ts` **1233** 行（均超上限，已立待办）。以上为收口提交 `04f303f` 的实测值；修复轮已更正早前误抄的 494/1109（见 changelog 2026-09-13 修复轮）。其余新增/改动文件均在 500 行以内。
 - **G4**：2026-09-12 经用户确认通过（MEMO-DM-034），确认时显式告知的 4 项保留条件已在任务 9 收口（第 ④ 项关闭，①②③ 由 `g8-ext-06～g8-ext-10` 部分补足并写明像素级复核归 G9）。
 - **G8**：2026-09-11 用户确认结论不变；2026-09-13 由 `settings-extensions-production-evidence.spec.ts`（10 例）补 5 张扩展设置证据与 2 张输出过滤证据（后者由 `sheet-catalog-visual-evidence.spec.ts` 产出）。既有冻结件 `g4-01～g4-15`、`g8-ext-01～05`、`g8-catalog-*`、`g8-format-menu-*` **未重取、未覆盖**。
 - **PLAN-DM-026 回归再验证**：全量后端与全量 E2E 均在 PLAN-DM-026 的改动之上重跑通过（数字见上），未发现 PLAN-DM-026 引入的行为回退；`catalogCompatibility.ts`、数字格式码入口与其证据链未被本计划改动。
-- **未由实施代理完成的事**：G9 真实验收（pywebview/WebView2 + Excel）与其像素级差异裁决；两处容量债拆分（待办已立）；枚举选项文案键的契约扩展（需要时另立计划）。
+- **未由实施代理完成的事**：G9 真实验收（pywebview/WebView2 + Excel）与其像素级差异裁决**已于 2026-09-13 由用户执行并整体确认通过**（见上条「G9」，实施代理未代填其逐项字段）；仍待办：两处容量债拆分（待办已立）；枚举选项文案键的契约扩展（需要时另立计划）。
