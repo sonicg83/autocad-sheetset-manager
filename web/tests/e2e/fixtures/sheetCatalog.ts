@@ -363,9 +363,11 @@ function buildPreviewResponse(body: {template: {columns: CatalogColumn[]}}, work
     // 缺字段是另一回事：真实后端契约校验直接 422，不进入漂移门禁。
     // R15：previewContractBroken 制造契约违约响应（字段缺失），前端必须有可见诊断
     settings_revision: state.previewContractBroken ? undefined : state.revision,
-    // 摘要只按请求序号生成，未参与列 UUID：本夹具不实现 REPREVIEW_REQUIRED 复核，
-    // 因此「不重放预览就不能导出」这条产品论点由 previewRequests 长度断言钉住，
-    // 不由这里的 digest 钉住（夹具保真度改进见任务 9 债务清单）。
+    // 摘要只按请求序号生成，未参与列 UUID（生产 preview.py 的摘要载荷含 column_id）。
+    // 两道漂移门禁本夹具都实现：上面的 settings_revision 与 /execute 里的 preview_digest
+    // 复核（真实响应摘要统一由下方 route 覆写，见 installSheetCatalogFixture）。缺口只在
+    // 摘要内容对列 UUID 不敏感，因此「仅列 UUID 变化即要求重预览」这条产品论点不由这里的
+    // digest 钉住，而由 previewRequests 长度断言钉住（见 SPEC-DM-012 §15.3 与任务 9 债务清单）。
     preview_digest: `digest-${state.previewRequests.length + 1}`,
     executable,
   };

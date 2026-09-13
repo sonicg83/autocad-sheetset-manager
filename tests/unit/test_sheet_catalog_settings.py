@@ -576,6 +576,20 @@ def test_revision_drift_on_settings_put_reports_extension_settings_invalid_with_
             422,
         ),
         (
+            "模板 UUID 重复（422）",
+            # 同名模板由 ``template_json`` 派生出同一个 UUID，两例撞 UUID、名字不同：
+            # 走的是 uuid5 碰撞 → ``ValueError`` → 422 分支，与上面的 casefold 域 409
+            # 是两条不同路径（M-8 修复时误删了这条矩阵项，本轮补回）。
+            {
+                "user_templates": [
+                    template_json("甲"),
+                    dict(template_json("乙"), template_id=template_json("甲")["template_id"]),
+                ]
+            },
+            "EXTENSION_SETTINGS_INVALID",
+            422,
+        ),
+        (
             "模板缺 UUID（422）",
             {"user_templates": [dict(template_json(), template_id=None)]},
             "EXTENSION_SETTINGS_INVALID",

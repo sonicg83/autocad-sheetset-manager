@@ -354,7 +354,7 @@ def _walk_manifest(node, path: tuple[str, ...] = ()):
             yield from _walk_manifest(item, path + (str(index),))
 
 
-def _module_level_imports(tree: ast.Module) -> dict[str, str]:
+def _module_level_imports(tree: ast.Module) -> dict[str, tuple[str, str]]:
     """模块级 `from <module> import <name>`：返回 本地名 -> (模块点分路径, 原名)。
 
     保留 `as` 别名映射：`from m import f as g` 时本地名是 `g`，但目标模块里被定义
@@ -413,6 +413,49 @@ def _module_level_binding(module: str, name: str) -> str:
     return "missing"
 
 
+def _module_level_name_target(module: str, name: str) -> tuple[str, str] | None:
+    """模块级 `name` 的重导出目标：`name = <其他名字>` 时给出该名字的解析坐标。
+
+    两种目标都要跟随：指向本模块别名的（继续在同一模块内追踪），以及指向导入
+    符号的（跳到被导入模块里的原名）。`AnnAssign`（`x: T = y`）与 `Assign` 的
+    形态必须同等处理，否则生成器为空会抛裸 `StopIteration` 而不是给出诊断。
+    """
+    target = ROOT / "src" / Path(*module.split(".")).with_suffix(".py")
+    if not target.is_file():
+        return None
+    tree = ast.parse(target.read_text(encoding="utf-8"))
+    for node in tree.body:
+        bound = _bound_expression(node, name)
+        if isinstance(bound, ast.Name):
+            imported = _module_level_imports(tree)
+            if bound.id in imported:
+                return imported[bound.id]
+            return (module, bound.id)
+    return None
+
+
+def _transitive_literal(module: str, name: str, *, max_hops: int = 4) -> str | None:
+    """沿模块级重导出链追踪 `name`，返回第一个字面量落点的可读描述；否则 None。
+
+    链路可以任意长：`X = Y`、`Y = "<模块:符号>"` 这类「本地常量再导出」与
+    「导入别的模块里的再导出」都要看穿。只跟一跳、且只跟「内层名是导入符号」
+    的写法会让字符串入口从第二跳起静默绕过守护。
+    """
+    seen: set[tuple[str, str]] = set()
+    current: tuple[str, str] | None = (module, name)
+    for _ in range(max_hops):
+        if current is None or current in seen:
+            return None
+        seen.add(current)
+        kind = _module_level_binding(*current)
+        if kind == "literal":
+            return f"{current[0]}.{current[1]}"
+        if kind != "name":
+            return None
+        current = _module_level_name_target(*current)
+    return None
+
+
 def test_fixed_index_registers_factory_and_provider_as_compile_time_references():
     """固定索引的 factory/settings_provider 必须是模块级导入的标识符，不得是字符串。
 
@@ -455,30 +498,14 @@ def test_fixed_index_registers_factory_and_provider_as_compile_time_references()
                     f"{module}.{original} 绑定到字面量（字符串/数字）：入口必须是编译期可跟随的"
                     "构造结果或函数/类，字符串形式的入口等价于运行期按名动态加载"
                 )
-                # 一层传递：`X = Y` 时继续校验 Y 的形态（各模块内的重新导出很常见）。
-                if kind == "name":
-                    inner_tree = ast.parse(
-                        (ROOT / "src" / Path(*module.split(".")).with_suffix(".py")).read_text(
-                            encoding="utf-8"
-                        )
-                    )
-                    inner_imported = _module_level_imports(inner_tree)
-                    inner_name = next(
-                        node.value.id
-                        for node in inner_tree.body
-                        if isinstance(node, ast.Assign)
-                        and any(
-                            isinstance(origin, ast.Name) and origin.id == original
-                            for origin in node.targets
-                        )
-                        and isinstance(node.value, ast.Name)
-                    )
-                    inner = inner_imported.get(inner_name)
-                    if inner:
-                        assert _module_level_binding(*inner) != "literal", (
-                            f"{module}.{original} -> {inner[0]}.{inner[1]} 最终绑定到字面量："
-                            "入口必须是编译期可跟随的构造结果或函数/类"
-                        )
+                # 重导出链：`X = Y`、`X = Y = Z`、`X = 导入符号` 都要追到落点，
+                # 各模块内再导出很常见，字符串入口正是从第二跳起容易漏掉。
+                literal_origin = _transitive_literal(module, original)
+                assert literal_origin is None, (
+                    f"{module}.{original} 的重导出链最终落在字面量 {literal_origin}："
+                    "入口必须是编译期可跟随的构造结果或函数/类，字符串形式的入口等价于"
+                    "运行期按名动态加载"
+                )
     assert {"factory", "settings_provider"} <= seen, (
         "固定索引未同时登记 factory 与 settings_provider：设置语义必须由 Provider 在"
         "编译期登记（ARCH-DM-006 §8.1），不得回退到按扩展 ID 的宿主特判"
