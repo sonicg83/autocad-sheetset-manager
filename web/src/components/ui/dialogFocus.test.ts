@@ -23,10 +23,13 @@ function markupChildren(markup: string): HarnessChildren {
   return () => [h("div", {innerHTML: markup})];
 }
 
+/** 关闭落点解析器（可选）；与工具同名选项，用于「打开期间容器内状态已变」的场景。 */
+type ReturnFocusResolver = () => HTMLElement | null | undefined;
+
 /** 测试宿主：容器（tabindex=-1）+ 子节点。默认子节点是三个按钮，DOM 顺序为 first、initial、
  * last；「初始焦点」按钮刻意夹在中间，才能区分「聚焦 initialFocus」与「回退到容器内第一个
  * 可聚焦元素」两种行为。 */
-function createHarness(onEscape: EscapeHandler, renderChildren?: HarnessChildren) {
+function createHarness(onEscape: EscapeHandler, renderChildren?: HarnessChildren, returnFocus?: ReturnFocusResolver) {
   return defineComponent({
     props: {
       open: {type: Boolean, required: true},
@@ -43,6 +46,7 @@ function createHarness(onEscape: EscapeHandler, renderChildren?: HarnessChildren
         container,
         initialFocus: () => (props.withInitial ? initial.value : null),
         onEscape,
+        returnFocus,
       });
       return () => h(
         "div",
@@ -68,11 +72,11 @@ function pressKey(target: Element, init: KeyboardEventInit = {}) {
 }
 
 /** 以「先聚焦外部触发元素、再打开对话框」的方式铺开场景，覆盖打开前焦点捕获。 */
-async function openHarness(options: {withInitial?: boolean; withActions?: boolean} = {}, onEscape: EscapeHandler = vi.fn(), renderChildren?: HarnessChildren) {
+async function openHarness(options: {withInitial?: boolean; withActions?: boolean} = {}, onEscape: EscapeHandler = vi.fn(), renderChildren?: HarnessChildren, returnFocus?: ReturnFocusResolver) {
   const opener = document.createElement("button");
   document.body.appendChild(opener);
   opener.focus();
-  const wrapper = mount(createHarness(onEscape, renderChildren), {props: {open: false, ...options}, attachTo: document.body});
+  const wrapper = mount(createHarness(onEscape, renderChildren, returnFocus), {props: {open: false, ...options}, attachTo: document.body});
   await wrapper.setProps({open: true});
   await nextTick();
   return {wrapper, opener, onEscape};
@@ -163,6 +167,57 @@ describe("useDialogFocus", () => {
     expect(document.activeElement).toBe(wrapper.element);
     const event = pressKey(wrapper.element, {key: "Tab"});
     expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+// 以下覆盖关闭落点：缺省归还「打开前的元素」，可用 `returnFocus` 覆盖（任务浮层打开后
+// 切换过页签时，正确落点是当前激活入口而不是打开时那个元素；见 `TaskOverlay.vue`）。
+// 无论哪种落点，`shouldReturnFocus` 都先行判定：焦点已被移到容器外时不抢回来。
+describe("useDialogFocus 的关闭落点", () => {
+  it("传入 returnFocus 时优先于打开前的元素", async () => {
+    const target: {el: HTMLElement | null} = {el: null};
+    const {wrapper, opener} = await openHarness({}, vi.fn(), undefined, () => target.el);
+    target.el = wrapper.find(".last").element as HTMLElement;
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(target.el);
+    expect(document.activeElement).not.toBe(opener);
+  });
+
+  it("returnFocus 返回 null 时回退到打开前的元素", async () => {
+    const {wrapper, opener} = await openHarness({}, vi.fn(), undefined, () => null);
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("returnFocus 返回已从文档移除的元素时回退到打开前的元素", async () => {
+    const detached = document.createElement("button");
+    const {wrapper, opener} = await openHarness({}, vi.fn(), undefined, () => detached);
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("焦点已被移到容器外时 returnFocus 的落点也不抢回来", async () => {
+    const target: {el: HTMLElement | null} = {el: null};
+    const {wrapper} = await openHarness({}, vi.fn(), undefined, () => target.el);
+    target.el = wrapper.find(".last").element as HTMLElement;
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(outside);
+    expect(document.activeElement).not.toBe(target.el);
+  });
+
+  it("不传 returnFocus 时仍归还打开前的元素（新增选项不改变既有行为）", async () => {
+    const {wrapper, opener} = await openHarness();
+    expect(document.activeElement).not.toBe(opener);
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
   });
 });
 

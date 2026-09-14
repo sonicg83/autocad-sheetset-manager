@@ -3,7 +3,8 @@ import {toValue, watch, type MaybeRefOrGetter} from "vue";
 // 对话框焦点管理（PLAN-DM-029 Task 3 Step 3；ARCH-DM-007 §5）。
 //
 // 只做四件可判定的事：打开时把焦点送进对话框、Tab/Shift+Tab 在对话框内圈闭、
-// Escape 回调、关闭时把焦点归还给打开前的元素。它**不**决定对话框是否可关闭、
+// Escape 回调、关闭时把焦点归还给打开前的元素（落点可用 `returnFocus` 覆盖，用于
+// 「打开期间容器内状态已变」的调用方，见 `DialogFocusOptions.returnFocus`）。它**不**决定对话框是否可关闭、
 // 不处理点击遮罩、不写 `aria-modal`；这些都留在调用方。
 //
 // 因此 Escape 只回调、不 `preventDefault`也不 `stopPropagation`：调用方可能配置「不可 Escape
@@ -50,6 +51,13 @@ export interface DialogFocusOptions {
   open: MaybeRefOrGetter<boolean>;
   container: MaybeRefOrGetter<HTMLElement | null | undefined>;
   initialFocus?: MaybeRefOrGetter<HTMLElement | null | undefined>;
+  /** 关闭时把焦点交还给谁；缺省为打开时捕获的 `opener`。
+   *
+   * 用于「打开期间容器内状态已变」的调用方：例如任务浮层打开后用户切换过页签，此时回焦目标
+   * 是**当前激活页签对应的入口**而不是打开时那个元素。解析器在关闭那一刻调用，返回 `null`
+   * 或已从文档移除的元素时回退到 `opener`；焦点已被移到容器外时两者都不抢
+   * （`shouldReturnFocus` 仍然先行判定）。 */
+  returnFocus?: () => HTMLElement | null | undefined;
   /** Escape 回调；收到原始的 `KeyboardEvent`。工具自己不 `preventDefault`、不 `stopPropagation`，
    * 是否需要阻止行为/停止传播由调用方在那个事件上表达。 */
   onEscape?: (event: KeyboardEvent) => void;
@@ -163,7 +171,9 @@ export function useDialogFocus(options: DialogFocusOptions) {
         focusInitial();
         return;
       }
-      if (opener && opener.isConnected && shouldReturnFocus(container)) opener.focus();
+      const resolved = options.returnFocus?.() ?? null;
+      const target = (resolved && resolved.isConnected ? resolved : null) ?? opener;
+      if (target && target.isConnected && shouldReturnFocus(container)) target.focus();
       opener = null;
     },
     {immediate: true, flush: "post"},

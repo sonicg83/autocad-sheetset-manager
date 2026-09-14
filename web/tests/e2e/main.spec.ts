@@ -941,7 +941,9 @@ test("存在阻断诊断时任务浮层诊断页签显示红点并可打开",asy
   const overlay=page.getByRole("complementary",{name:"任务浮层"});
   // 折叠态页签行仅剩触发按钮窄条（§4.3）：先展开再断言诊断页签红点
   await overlay.getByRole("button",{name:"展开任务浮层"}).click();
-  await expect(overlay.getByRole("tab",{name:/诊断/})).toContainText("●");
+  // 阻断红点已从 Unicode `●` 迁到 `UiIcon name="status-dot"`（Task 4 Step 2 的图形清单）：
+  // 图标对读屏隐藏，因此按本仓自有钩子类断言可见性，而不是断言页签文本里含字形。
+  await expect(overlay.getByRole("tab",{name:/诊断/}).locator(".ov-dot")).toBeVisible();
   await overlay.getByRole("tab",{name:/诊断/}).click();
   await expect(overlay.getByRole("tab",{name:/诊断/})).toHaveAttribute("aria-selected","true");
 });
@@ -1629,16 +1631,24 @@ test("任务浮层焦点：展开后落在当前激活页签、关闭回焦当�
   await expect(drawer).toBeVisible();
   await expect.poll(activeId).toBe("ov-tab-diag");
 
-  // ③ 隐藏形态的**端点级**验证：探针放在抽屉两端 → 若 `display:none` 的候选被算作停靠点，
-  //    首/尾端点与回绕目标都会跟着变（Task 3 的 happy-dom 用例只能验过滤结果）。
-  //    只覆盖 `display:none`：`inert` 不影响布局、`visibility:hidden` 仍产生盒子，当前实现
-  //    都不过滤，本轮不写不诚实的断言；缺口与端点级补测一并登记在计划 Task 10。
-  //    这里用内联 `display:none`（而非属性写法）。
+  // ③ 隐藏形态的**端点级**验证：四种形态的探针都放在抽屉最前面（首端点侧）与最后面（尾端点侧），
+  //    只要其中任何一个候选被算作停靠点，首/尾端点与回绕目标都会跟着变（Task 3 的 happy-dom
+  //    用例只能验过滤结果，验不到真实布局与焦点可达性）。
+  //    四种形态：属性 `[hidden]`、祖先 `display:none`、祖先 `inert`、自身 `visibility:hidden`。
+  //    注意（控制器实测，`evidence/controller-task-4-probe-hidden.json`）：浮层内组件自己的元素有
+  //    `.task-overlay [hidden]{display:none!important}` 兜底，但这里用 `createElement` 造的裸按钮会
+  //    被 `legacy.css:24` 的 `:where(#app) aside button{display:flex}` 抢在 UA 的 `[hidden]{display:none}`
+  //    之前，所以在 CSS 上仍然占位——本断言真正验证的是焦点工具**按属性**过滤。
   await page.evaluate(()=>{
     const drawerEl=document.querySelector(".task-drawer")!;
     const head=document.createElement("div");
     head.id="focus-probe-head";
-    head.innerHTML='<div style="display:none"><button id="probe-head-hidden">端点前不显示</button></div>';
+    head.innerHTML=[
+      '<button id="probe-head-hidden" hidden>属性隐藏</button>',
+      '<div style="display:none"><button id="probe-head-display">祖先不显示</button></div>',
+      '<div inert><button id="probe-head-inert">祖先惰性</button></div>',
+      '<button id="probe-head-visibility" style="visibility:hidden">不可见</button>',
+    ].join("");
     const tailNote=document.createElement("div");
     tailNote.id="focus-probe-tail";
     tailNote.style.display="none";

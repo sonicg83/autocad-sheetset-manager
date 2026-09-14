@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-09-14（迁移任务浮层到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2）
+
+任务浮层与提示宿主也改用 Task 3 的原语与 Task 2 的令牌，浮层的手写焦点副本迁到 `useDialogFocus`；本段为 `TaskOverlay.vue` 部分（`ToastHost.vue` 见下一段）。
+
+- **范围依据（计划缺陷补齐，Ruling 28）**：`TaskOverlay.vue`/`ToastHost.vue` 属 Task 4——计划 line 46 括注明文授权 Task 4 修改自己 Files 里的这两个文件，Step 2 的图形清单点名 `«/»`、`●`、`✕`（只存在于这两个文件），Step 4 的验收口径是「只剩页面级债务和 `ColumnEditor.vue` 临时例外」。Task 10 Step 3/4 的「四个模态」是 `ConfirmModal`/`UnsavedInputDialog`/`PropertyValueCompareDialog`/`SettingsDialog`，不含 `TaskOverlay.vue`；Task 7 对本文件降为验证。
+- **焦点副本迁移（Step 3）**：删除 `onDrawerKeydown` 的内联选择器 + `getClientRects()` 过滤与 `focusActiveTab`，改用 `useDialogFocus`（`@keydown="onDialogKeydown"`，浮层内部不对 Tab 做 `stopPropagation`）。三处行为对齐：① 显式传 `initialFocus`＝当前激活页签（**订正计划理由**：非激活页签带 `tabindex="-1"`，工具的 `isTabStop` 已排除，`focusables()[0]` 恒等于激活页签，「不传就会落到第一个页签」不成立）；② 关闭回焦用新选项 `returnFocus` 保留「回焦当前激活入口」原语义（工具缺省回焦「打开前元素」，打开期间切过页签时两者不同）；③ `getClientRects()` 丢弃由 `isHidden`（属性含祖先 + 祖先计算 `display:none` + 自身 `visibility`）取代，是改进（旧副本不过滤 `inert`/`visibility`），`[tabindex]` 放宽在浮层 DOM 内无实际影响，`0×0` 仍算停靠点（行为不变）。
+- **工具能力扩展**：`dialogFocus.ts` 新增可选 `returnFocus?: () => HTMLElement | null | undefined`（关闭时解析，返回 `null`/已卸载元素则回退 opener；`shouldReturnFocus` 仍先行判定），纯向后兼容。单测 RED→GREEN：撤掉实现时「传入 returnFocus 时优先于打开前的元素」转红；另一项变异（忽略 `isConnected` 判定）使「返回已从文档移除的元素时回退」转红；两项均逐字节还原。
+- **图标与可访问名称**：`«/»` → `UiIconButton icon="chevron-left"/"chevron-right"`（`label` 仍用 `shell.overlay.expand`/`collapse`，`title` 由原语取自 `label`）；状态点 `●` → `UiIcon name="status-dot" size="sm"`（标记为对读屏隐藏）；`data-entry` 入口按钮保持 40px 方框与 12px 字号。`main.spec.ts` 里「诊断页签含 `●` 文本」的断言相应改为按 `.ov-dot` 钩子断言（字形已不再是文本）。
+- **隐藏形态端点级断言（Step 1）**：四种形态（属性 `[hidden]`、祖先 `display:none`、祖先 `inert`、自身 `visibility:hidden`）的探针都置于抽屉首/尾两端；迁移前实测**红**（`Expected "ov-tab-diag" / Received "probe-head-hidden"`，旧副本把 `[hidden]` 探针当停靠点），迁移后**绿**（证据 `evidence/task-4-r2-{red,green}-hidden-forms.txt`）。
+- **令牌**：组件层新增 `--task-rail-width:48px`、`--task-rail-action-size:40px`、`--task-drawer-max-width:390px`；`.task-rail button` 收窄为 `.task-rail button[data-entry]`，不再用裸元素选择器兜住折叠按钮（否则 40px 块级声明会抢掉原语的内联居中）；字号一律 `--font-label`/`--font-caption`/`--button-font-size`，**不消费原始层字号**。未新增 `--task-fold-size`（折叠尺寸由 `--icon-button-size` 承接，避免死令牌）。
+- **例外与不变量**：清退 `TaskOverlay.vue` **15 条**（2 unicode + 13 raw）→ `registeredExceptions` 341 → **326**，`dynamicVariables` 仍 1，不变量实测 **327 = 326 + 1**，`check:ui` 退出 0 且零新增违规。
+- **有意像素变化**：折叠按钮展开态 32→**36**、收起态 40→**36**（两态统一到 `--icon-button-size`，满足「图标按钮 ≥36×36 px」且不再随展开/收起跳变）；阻断红点由 10px 字形变 12px 图标。其余与 `right`/`min(390px,calc(100vw - 48px))` 等同值改写为**零视觉差**。
+- **截图重拍（Step 5）**：`1440×900` 浅/深与 `900×768` 深共 3 张壳层默认截图重拍（154324 / 155791 / 98185 字节，PNG 头实测尺寸未变），`PLAN-DM-017/` 的 19 张未动。
+- **实测事实（控制器探针 `evidence/controller-task-4-probe-hidden.json`）**：真实浮层 DOM 里 `.task-drawer[hidden]` 得 `display:none`/0×0（组件自带 `.task-overlay [hidden]{display:none!important}` 兜底）；但对 `<aside>` 内用 `createElement` 造的**裸** `[hidden]` 按钮，`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会抢在 UA 的 `[hidden]{display:none}` 之前，元素仍`display:flex`、高 21px 且可 `focus()` → 隐藏判定只能依赖**属性**而不是浏览器是否拒焦；登记为计划 Task 12 收口责任 M。
+- **验证**：`check:ui` 退出 0；`test:unit` **102 passed**（新增 5 条关闭落点用例）；`test:contracts` **83 passed**；`build` 退出 0；e2e `main.spec.ts` **81 passed / 0 failed**、`i18n-visual-evidence.spec.ts` **10 passed**（每次 e2e 运行的用途与结果见报告）。
+
 ## 2026-09-14（迁移桌面壳层到统一视觉原语，PLAN-DM-029 Task 4）
 
 桌面壳层（顶栏、页签栏、操作栏）改用 Task 3 的原语与 Task 2 的令牌，并清退本任务名下全部 **41 条** UI 契约例外；`check:ui` 现在只剩其它任务名下的例外。
