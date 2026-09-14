@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-14（迁移桌面壳层到统一视觉原语，PLAN-DM-029 Task 4）
+
+桌面壳层（顶栏、页签栏、操作栏）改用 Task 3 的原语与 Task 2 的令牌，并清退本任务名下全部 **41 条** UI 契约例外；`check:ui` 现在只剩其它任务名下的例外。
+
+- 图标去字形化（A 类 5 条）：`TopBar` 的 `◐` 换成 `UiIconButton icon="theme"`（可访问名称走既有 i18n key `shell.topbar.themeToggle`，`title` 保留明暗切换提示）、`⚙` 换成 `UiIcon name="settings"`；`ActionDock` 的 `▲` 换成 `UiIcon name="chevron-up" size="sm"`。随字形一起消失的两条裸值例外一并清退：`.iconbtn`（`width/height:32px`、`font-size:15px`）整条类删除，尺寸与悬停/禁用态交给原语；`.draft-chip .arr` 的 `font-size:10px` 改由 `size="sm"`（12px）承载。
+- 控件尺寸归位（B 类 8 条）：`.draft-chip`/`.close-btn`/`.folder-btn`/`.settings-btn` 由 `32px` 改 `var(--button-height)`（36px），图标按钮由原语给 36×36，CAD 版本下拉由 `30px` 改 `var(--input-height)`（38px，其真实计算高度由本任务 e2e 断言）；`.dock-btn` 保持紧凑档 `var(--control-height-compact)`（34px，无视觉变化）。这些放大是计划 Step 1/3 要求的目标，不是在途附带影响。
+- 字号归一（C 类 12 条 + D 类 2 条）：刻度内一律走 `--font-label`/`--font-caption`/`--button-font-size`/`--font-size-14`；两处**刻度外**字号归一到刻度：`.tab .num` 11px → `--font-caption`（12px，+1px）、`.brand` 15px → `--font-size-14`（−1px）。**不为壳层新增字号令牌**，以免重新打开「任意字号」的口子。
+- 结构尺寸令牌化（E 类 14 条）：`tokens.css` 的组件层新增桌面壳层组件令牌——`--shell-bar-height:52px`（顶栏与操作栏条高，4 条）、`--workspace-name-max-width:180px` 与 `--workspace-name-max-width-narrow:130px`（两条媒体查询各消费一条，零行为变化）、`--folder-action-min-width:112px`、`--badge-size:18px`（`.tab .num` 宽高）、`--status-dot-size:7px`（`.pill .dot` 宽高）、`--overlay-pop-width:420px` 与 `--overlay-pop-max-height:300px`（草稿浮窗）、`--dock-note-max-width:240px`——这 14 条**零视觉差**。原始层未动（ARCH-DM-007 §4.1 把原始层定义为「有限值域」，布局常量不进去）。计划 Task 4 的 Files 漏列 `tokens.css`，属**计划缺陷补齐（Ruling 25）**。
+- 例外表：`exceptions` **382 → 341**（移除此任务名下 41 条：`ActionDock.vue` 11 raw + 1 unicode、`TabBar.vue` 5 raw、`TopBar.vue` 22 raw + 2 unicode），`dynamicVariables` 不变（1 条）。棘轮不变量实测 **342 = 341 + 1**（空例外扫描的规则直方图：`raw-visual-value` 300、`unicode-structure-icon` 17、`explicit-button-type` 16、`visible-input-label` 7、`raw-hex-color` 1、`undefined-css-variable` 1）。
+- 相邻范围按计划原文归属，**本任务不动**：`TaskOverlay.vue`（其 15 条例外）与 `ToastHost.vue`（6 条）留各自任务——TaskOverlay 内部控件归 Task 7（Step 2/6），ToastHost 归 Task 10，模态/浮层焦点代码统一（含 `TaskOverlay.vue:74-82` 的手写副本）归 **Task 10 Step 4**（计划 line 300「消除各模态重复焦点代码，统一使用 `dialogFocus.ts`」；能力表 line 399「模态焦点复用 | Task 3、9、10」）。计划 Task 4 的 Files 列这两个文件是**许可而非义务**；计划 Step 4「只剩页面级债务」是措辞缺陷，本任务验收口径为「本任务名下 41 条清零 + 零新增违规 + `check:ui` 只剩其它任务名下例外」。
+- 证据：`main.spec.ts` 增壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积（≥32px）断言，并新增一条**特性化**用例冻结任务浮层焦点语义（初始焦点=当前激活页签、关闭回焦当前激活入口、Tab 圈闭跳过 `[hidden]`/`inert`/`display:none`/`visibility:hidden` 四种隐藏形态），供 Task 10 迁 `useDialogFocus` 时当回归网；`i18n-visual-evidence.spec.ts` 增 3 条壳层默认状态用例（1440×900 浅/深、900×768 深），持久截图存 `.planning/memos/dst-manager/assets/PLAN-DM-029/default-1440x900-light.png`、`default-1440x900-dark.png`、`default-900x768-dark.png`（PNG 头实测 1440×900 / 1440×900 / 900×768，154408 / 155876 / 98273 B；`PLAN-DM-017/` 的 19 张未动）。
+- 测试与验证：`playwright test main.spec.ts i18n-visual-evidence.spec.ts` **90 passed / 0 failed / 0 flaky**（1.4m）；`test:unit` **94 passed**（11 文件）；`test:contracts` **83 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0（`vue-tsc -b` 通过 + `vite build` 1.51s）。
+
 ## 2026-09-14（订正令牌统计口径与缺口登记落点，PLAN-DM-029 Task 3 三轮再审收口）
 
 本轮**纯文本**：只改注释、文档与计划，`web/src` 实现逻辑零变化（`dialogFocus.ts` 只有注释被改写），无用例增减、无 e2e。

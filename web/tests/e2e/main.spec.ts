@@ -1526,3 +1526,97 @@ test("Task 2 字体资源：两套本地 WOFF2 且不引用远程 URL",async({pa
     expect.soft(covers(face.unicodeRange,0x4e00,0x9fff),`${face.family} 不得打包 CJK`).toBe(false);
   }
 });
+
+// ===== PLAN-DM-029 Task 4：壳层纵向验证 =====
+// 尺寸必须在真实浏览器里量：happy-dom 不做布局，Task 3 只在源码与令牌链层面锁定了这组尺寸
+// （`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件）。
+// 本节同时补齐 Task 3 无法在本地验证的真实可见性叠加（`[hidden]`/`inert`/`display:none`/
+// `visibility`）与任务浮层的焦点语义（手写副本迁到 `useDialogFocus` 后必须保住的三条）。
+
+test("壳层已迁移控件：本地 SVG 图标、统一尺寸与可访问名称",async({page})=>{
+  await openWorkspace(page);
+  const topbar=page.locator(".topbar");
+  const shell=page.locator(".topbar button, .tabbar button, .dock button");
+  const heightOf=async(selector:string)=>Math.round((await page.locator(selector).first().boundingBox())!.height);
+
+  // A：Unicode 字形不再充当结构图标，图标是本仓库的本地 SVG 且对读屏隐藏
+  expect.soft(await topbar.textContent(),"顶栏不应再出现字形图标").not.toContain("◐");
+  expect.soft(await topbar.textContent(),"顶栏不应再出现字形图标").not.toContain("⚙");
+  expect.soft(await page.locator(".topbar svg.ui-icon[aria-hidden='true']").count(),"顶栏本地 SVG 图标").toBeGreaterThan(0);
+  expect.soft(await page.locator(".dock svg.ui-icon[aria-hidden='true']").count(),"操作栏本地 SVG 图标").toBeGreaterThan(0);
+  await expect(page.locator(".topbar svg.ui-icon").first()).toHaveAttribute("focusable","false");
+  // 装饰图标不进可访问名称：顶栏两个入口的名称仍来自 i18n 的 aria-label
+  await expect(page.getByRole("button",{name:"切换主题"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"设置"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"打开图纸集所在文件夹"})).toBeVisible();
+
+  // B/E：输入类 38px、普通按钮 36px、图标按钮 36×36、紧凑动作 34px
+  expect.soft(await topbar.locator("select").first().evaluate(el=>getComputedStyle(el).height),"CAD 版本选择框").toBe("38px");
+  for(const selector of [".topbar .folder-btn",".topbar .close-btn",".topbar .settings-btn",".dock .draft-chip"]){
+    expect.soft(await heightOf(selector),selector).toBe(36);
+  }
+  expect.soft(await page.locator(".topbar .ui-icon-button").count(),"顶栏图标按钮数量").toBeGreaterThan(0);
+  const iconButton=(await page.locator(".topbar .ui-icon-button").first().boundingBox())??{width:0,height:0};
+  expect.soft(Math.round(iconButton.width),"图标按钮宽度").toBe(36);
+  expect.soft(Math.round(iconButton.height),"图标按钮高度").toBe(36);
+  expect.soft(await heightOf(".dock .dock-btn"),"紧凑工具栏按钮").toBe(34);
+
+  // 可点目标下限 32px（壳层所有按钮）
+  for(const control of await shell.all()){
+    const box=(await control.boundingBox())!;
+    expect.soft(Math.round(box.height),`可点目标 ${await control.getAttribute("class")}`).toBeGreaterThanOrEqual(32);
+  }
+});
+
+test("任务浮层焦点：初始焦点在当前激活页签、关闭回焦当前激活入口、Tab 圈闭跳过隐藏候选",async({page})=>{
+  await openWorkspace(page);
+  const drawer=page.locator(".task-drawer");
+  const activeId=()=>page.evaluate(()=>document.activeElement?.id??null);
+  const activeEntry=()=>page.evaluate(()=>document.activeElement?.getAttribute("data-entry")??null);
+
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  await expect(drawer).toBeVisible();
+  // ② 关闭回焦：先在抽屉内切到「诊断」再收起，回焦的是**当前**激活入口（不是展开时那一个）
+  await drawer.getByRole("tab",{name:/诊断/}).click();
+  await page.getByRole("button",{name:"收起任务浮层"}).click();
+  await expect(drawer).toBeHidden();
+  await expect.poll(activeEntry).toBe("diag");
+  // ① 初始焦点：从「诊断」入口展开时焦点必须在当前激活页签，而不是抽屉里第一个页签
+  await page.locator('.task-rail [data-entry="diag"]').click();
+  await expect(drawer).toBeVisible();
+  await expect.poll(activeId).toBe("ov-tab-diag");
+
+  // ③ 真实可见性叠加：四种隐藏形态都不作停靠点（Task 3 的 happy-dom 用例只能验过滤结果）
+  await page.evaluate(()=>{
+    const host=document.createElement("div");
+    host.id="focus-probe";
+    host.innerHTML=[
+      '<button id="probe-hidden" hidden>隐藏属性</button>',
+      '<div inert><button id="probe-inert">惰性祖先</button></div>',
+      '<div style="display:none"><button id="probe-display">祖先不显示</button></div>',
+      '<div style="visibility:hidden"><button id="probe-visibility">不可见</button></div>',
+      '<button id="probe-last">真实最后</button>',
+    ].join("");
+    document.querySelector(".task-drawer")!.appendChild(host);
+  });
+  // 非激活页签带 `tabindex="-1"`，不是停靠点 → 抽屉内**第一个真实停靠点**就是当前激活页签
+  await page.locator("#probe-last").focus();
+  await page.keyboard.press("Tab");
+  await expect.poll(activeId).toBe("ov-tab-diag");
+  // Shift+Tab 从第一个停靠点回绕到最后一个真实停靠点
+  await page.locator("#ov-tab-diag").focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect.poll(activeId).toBe("probe-last");
+
+  // 0×0 候选：记录**迁移前后一致**的现有行为（原手写副本的 `getClientRects().length>0` 对
+  // 零尺寸元素同样成立，故这不是本轮引入的缺口）；已知未覆盖，见计划 Task 12 收口责任 J。
+  await page.evaluate(()=>{
+    const zero=document.createElement("div");
+    zero.style.cssText="width:0;height:0;overflow:hidden";
+    zero.innerHTML='<button id="probe-zero">零尺寸</button>';
+    document.querySelector(".task-drawer")!.appendChild(zero);
+  });
+  await page.locator("#probe-zero").focus();
+  await page.keyboard.press("Tab");
+  await expect.poll(activeId).toBe("ov-tab-diag");
+});

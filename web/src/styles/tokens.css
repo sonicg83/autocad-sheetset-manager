@@ -3,7 +3,8 @@
  * 三层职责：
  * - 原始令牌：颜色、阴影、间距、圆角，以及字号、控件高度、点击下限和图标规格的有限值域。
  * - 语义令牌：正文、标签、表格、辅助文字、表单控件与紧凑工具栏等用途。
- * - 组件令牌：按钮、输入框、图标按钮和模态的默认值。
+ * - 组件令牌：按钮、输入框、图标按钮和模态的默认值，以及桌面壳层（顶栏、页签栏、
+ *   操作栏）的固定条高、浮窗与徽章尺寸（PLAN-DM-029 Task 4）。
  * 业务规则只消费后两层；本层与 `html[data-theme="dark"]` 是十六进制颜色与原始档位的
  * 唯一合法定义处，浅色与深色主题只在这里重映射，业务规则不写主题分支。
  * `--font-body` 是 `font` 简写形态（`14px / 1.5`），只用于根元素排版；需要单独的
@@ -66,6 +67,15 @@
     --input-font-size:var(--font-size-14);
     --icon-button-size:var(--height-36);
     --modal-title-font-size:var(--font-size-18);
+    --shell-bar-height:52px;
+    --workspace-name-max-width:180px;
+    --workspace-name-max-width-narrow:130px;
+    --folder-action-min-width:112px;
+    --badge-size:18px;
+    --status-dot-size:7px;
+    --overlay-pop-width:420px;
+    --overlay-pop-max-height:300px;
+    --dock-note-max-width:240px;
   }
 
   html[data-theme="dark"]{
