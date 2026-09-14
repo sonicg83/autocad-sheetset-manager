@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // 对话框焦点工具契约（PLAN-DM-029 Task 3 Step 3）：初始焦点、Tab/Shift+Tab 圈闭、Escape
-// 回调（含事件透传）、关闭后焦点归还、无可聚焦元素时不拦截；以及可聚焦元素集合的边界：
-// 隐藏态（自身/祖先/visibility）、`tabindex` 缺省与非法值、`contenteditable`、禁用、单选组、
-// `fieldset` 禁用继承缺口（本仓库当前不可达，计划 Task 12 收口责任 F）。工具只管理焦点，
-// 不决定是否可关闭，也不阻止 Escape 的传播。
+// 回调（含事件透传）、关闭后焦点归还（焦点已移到容器外不抢、落在 `body` 无处停留时仍归还）、
+// 无可聚焦元素时不拦截；以及可聚焦元素集合的边界：
+// 隐藏态（自身/祖先/visibility）、`tabindex` 缺省与非法值、`contenteditable`、禁用、单选组
+// （具名成组折叠、**无名 radio 各自独立停靠**）、`fieldset` 禁用继承缺口（本仓库当前不可达，
+// 计划 Task 12 收口责任 F）。工具只管理焦点，不决定是否可关闭，也不阻止 Escape 的传播。
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {mount} from "@vue/test-utils";
 import {defineComponent,h,nextTick,ref,type VNode} from "vue";
@@ -135,6 +136,28 @@ describe("useDialogFocus", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("关闭时焦点已在容器外则不抢回来（调用方可能在关闭时已把焦点移到别处）", async () => {
+    const {wrapper, opener} = await openHarness();
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    // 容器仍挂载，所以走到的是 `contains` 判定而不是「容器已卸载」的兜底分支。
+    expect(wrapper.element.contains(document.activeElement)).toBe(false);
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(outside);
+    expect(document.activeElement).not.toBe(opener);
+  });
+
+  it("关闭时焦点落在 body 则仍归还给打开前的元素（此时没有别的落点可保留）", async () => {
+    const {wrapper, opener} = await openHarness();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    await wrapper.setProps({open: false});
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("容器内没有可聚焦元素时聚焦容器本身，且不拦截 Tab", async () => {
     const {wrapper} = await openHarness({withActions: false});
     expect(document.activeElement).toBe(wrapper.element);
@@ -202,6 +225,22 @@ describe("useDialogFocus 的可聚焦元素集合", () => {
       '<input class="radio-b" type="radio" name="group">',
     ].join("")));
     (wrapper.find(".radio-a").element as HTMLElement).focus();
+    const event = pressKey(wrapper.element, {key: "Tab"});
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(wrapper.find(".first").element);
+  });
+
+  it("无名 radio 各自独立停靠：不按组折叠，最后一个仍是端点", async () => {
+    const {wrapper} = await openHarness({}, vi.fn(), markupChildren([
+      '<button class="first">一</button>',
+      '<input class="radio-a" type="radio">',
+      '<input class="radio-b" type="radio">',
+      '<input class="radio-c" type="radio">',
+    ].join("")));
+    // 无名 radio 不构成单选组（浏览器也不会把它们的 Tab 序列折叠），因此三个各自是停靠点，
+    // `.radio-c` 是容器内最后一个停靠点：Tab 从它出发必须回绕到 `.first`。若被当成一组折叠，
+    // 停靠点只剩组内首个 `.radio-a`，`.radio-c` 就不是端点、Tab 不会被拦截。
+    (wrapper.find(".radio-c").element as HTMLElement).focus();
     const event = pressKey(wrapper.element, {key: "Tab"});
     expect(event.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(wrapper.find(".first").element);
