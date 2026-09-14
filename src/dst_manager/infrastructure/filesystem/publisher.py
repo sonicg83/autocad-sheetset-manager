@@ -1,10 +1,8 @@
 import ctypes
-import hashlib
 import json
 import os
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 from dst_manager.infrastructure.filesystem import atomic
@@ -12,15 +10,6 @@ from dst_manager.infrastructure.filesystem.locking import (
     WindowsResultGuards,
     WorkspaceTransactionLock,
 )
-
-
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
 
 # 既有公共接口：application 层从 publisher 导入这些异常，拆分后此处必须继续可导入。
 from dst_manager.infrastructure.filesystem.publish_errors import (
@@ -30,31 +19,16 @@ from dst_manager.infrastructure.filesystem.publish_errors import (
     PublishRecoveryError,
     PublishRolledBackError,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class ExpectedFileBaseline:
-    """调用方在发布前确认的不可变文件内容与身份基准。"""
-
-    sha256: str
-    identity: tuple[int, int]
-
-
-def capture_file_baseline(path: Path) -> ExpectedFileBaseline | None:
-    """同时捕获文件哈希和身份；不存在的路径以 ``None`` 表示。"""
-    if not path.exists():
-        return None
-    before = path.stat()
-    digest = file_sha256(path)
-    try:
-        after = path.stat()
-    except FileNotFoundError as exc:
-        raise PublishBaselineError(f"捕获发布基准时目标已变化：{path}") from exc
-    before_identity = (before.st_dev, before.st_ino)
-    after_identity = (after.st_dev, after.st_ino)
-    if after_identity != before_identity:
-        raise PublishBaselineError(f"捕获发布基准时目标已变化：{path}")
-    return ExpectedFileBaseline(digest, before_identity)
+from dst_manager.infrastructure.filesystem.publish_primitives import (
+    ExpectedFileBaseline,
+    before_snapshot_path,
+    capture_file_baseline,
+    file_identity,
+    file_sha256,
+    move_no_replace,
+    replace_existing,
+    replacement_backup_path,
+)
 
 
 class RecoverablePublisher:
@@ -64,55 +38,6 @@ class RecoverablePublisher:
 
     def __init__(self, replace_file: Callable[[Path, Path], None] | None = None):
         self._replace_file = replace_file
-
-    @staticmethod
-    def _move_no_replace(source: Path, target: Path) -> None:
-        if os.name != "nt":
-            os.link(source, target)
-            source.unlink()
-            return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        move_file = kernel32.MoveFileW
-        move_file.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
-        move_file.restype = ctypes.c_int
-        ctypes.set_last_error(0)
-        if not move_file(str(source), str(target)):
-            raise ctypes.WinError(ctypes.get_last_error())
-
-    @staticmethod
-    def _replace_existing(source: Path, target: Path, backup: Path) -> None:
-        if backup.exists():
-            raise FileExistsError(f"PUBLISH_REPLACE_BACKUP_EXISTS: {backup}")
-        if os.name != "nt":
-            os.replace(target, backup)
-            try:
-                os.replace(source, target)
-            except Exception:
-                os.replace(backup, target)
-                raise
-            return
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        replace_file = kernel32.ReplaceFileW
-        replace_file.argtypes = [
-            ctypes.c_wchar_p,
-            ctypes.c_wchar_p,
-            ctypes.c_wchar_p,
-            ctypes.c_uint32,
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-        ]
-        replace_file.restype = ctypes.c_int
-        ctypes.set_last_error(0)
-        if not replace_file(str(target), str(source), str(backup), 0x2, None, None):
-            raise ctypes.WinError(ctypes.get_last_error())
-
-    @staticmethod
-    def _before_snapshot_path(before_dir: Path, workspace_root: Path, target: Path) -> Path:
-        return before_dir / target.relative_to(workspace_root)
-
-    @staticmethod
-    def _replacement_backup_path(target: Path, operation_id: str) -> Path:
-        return target.with_name(f".{target.name}.{operation_id}.replaced")
 
     def publish(
         self,
@@ -198,19 +123,19 @@ class RecoverablePublisher:
             expected_baseline = baselines[target]
             target_existed = expected_baseline is not None
             baseline_identity = list(expected_baseline.identity) if expected_baseline else None
-            backup = self._before_snapshot_path(before_dir, workspace_root, target)
+            backup = before_snapshot_path(before_dir, workspace_root, target)
             if target_existed:
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(target, backup)
                 if (
                     file_sha256(backup) != expected_baseline.sha256
                     or file_sha256(target) != expected_baseline.sha256
-                    or self._file_identity(target) != baseline_identity
+                    or file_identity(target) != baseline_identity
                 ):
                     raise PublishBaselineError(f"发布前快照与预期基准不一致：{target}")
             elif staged_file is None:
                 raise FileNotFoundError(f"DELETE_TARGET_NOT_FOUND: {target}")
-            replace_backup = self._replacement_backup_path(target, operation_uid)
+            replace_backup = replacement_backup_path(target, operation_uid)
             if replace_backup.exists():
                 raise FileExistsError(f"PUBLISH_REPLACE_BACKUP_EXISTS: {replace_backup}")
             entries.append(
@@ -222,8 +147,8 @@ class RecoverablePublisher:
                     "before_hash": expected_baseline.sha256 if expected_baseline else None,
                     "staged_hash": file_sha256(staged_file) if staged_file else None,
                     "baseline_identity": baseline_identity,
-                    "before_identity": self._file_identity(backup) if target_existed else None,
-                    "staged_identity": self._file_identity(staged_file) if staged_file else None,
+                    "before_identity": file_identity(backup) if target_existed else None,
+                    "staged_identity": file_identity(staged_file) if staged_file else None,
                     "expected_backup_identity": baseline_identity,
                     "publish_source": None,
                     "publish_identity": None,
@@ -273,7 +198,7 @@ class RecoverablePublisher:
                     if file_sha256(publish_temp) != entry["staged_hash"]:
                         raise PublishBaselineError(f"发布暂存文件已偏离计划内容：{staged_file}")
                     entry["publish_source"] = str(publish_temp)
-                    entry["publish_identity"] = self._file_identity(publish_temp)
+                    entry["publish_identity"] = file_identity(publish_temp)
                     entry["attempted"] = True
                     entry["api_state"] = "STARTED"
                     self._write_journal(journal_path, journal)
@@ -432,7 +357,7 @@ class RecoverablePublisher:
         target = Path(entry["target"])
         try:
             if self._replace_file is None:
-                self._move_no_replace(publish_temp, target)
+                move_no_replace(publish_temp, target)
             else:
                 self._replace_file(publish_temp, target)
         except OSError as exc:
@@ -442,7 +367,7 @@ class RecoverablePublisher:
             raise
         if (
             not target.exists()
-            or self._file_identity(target) != entry["publish_identity"]
+            or file_identity(target) != entry["publish_identity"]
             or file_sha256(target) != entry["staged_hash"]
         ):
             entry["conflict_preserved"] = True
@@ -452,12 +377,12 @@ class RecoverablePublisher:
         target = Path(entry["target"])
         replace_backup = Path(entry["replace_backup"])
         if self._replace_file is not None:
-            self._move_no_replace(target, replace_backup)
-            entry["replace_backup_identity"] = self._file_identity(replace_backup)
+            move_no_replace(target, replace_backup)
+            entry["replace_backup_identity"] = file_identity(replace_backup)
             self._replace_file(publish_temp, target)
         else:
-            self._replace_existing(publish_temp, target, replace_backup)
-        captured_identity = self._file_identity(replace_backup)
+            replace_existing(publish_temp, target, replace_backup)
+        captured_identity = file_identity(replace_backup)
         entry["replace_backup_identity"] = captured_identity
         captured_hash = file_sha256(replace_backup)
         if (
@@ -470,7 +395,7 @@ class RecoverablePublisher:
         if (
             not target.exists()
             or file_sha256(target) != entry["staged_hash"]
-            or self._file_identity(target) != entry["publish_identity"]
+            or file_identity(target) != entry["publish_identity"]
         ):
             entry["conflict_preserved"] = True
             raise PublishBaselineError(f"正式替换后目标被外部版本再次改动：{target}")
@@ -478,15 +403,15 @@ class RecoverablePublisher:
     def _commit_delete(self, entry: dict) -> None:
         target = Path(entry["target"])
         replace_backup = Path(entry["replace_backup"])
-        self._move_no_replace(target, replace_backup)
-        captured_identity = self._file_identity(replace_backup)
+        move_no_replace(target, replace_backup)
+        captured_identity = file_identity(replace_backup)
         entry["replace_backup_identity"] = captured_identity
         if (
             file_sha256(replace_backup) != entry["before_hash"]
             or captured_identity != entry["expected_backup_identity"]
         ):
             try:
-                self._move_no_replace(replace_backup, target)
+                move_no_replace(replace_backup, target)
             except OSError as recovery_error:
                 entry["conflict_preserved"] = True
                 raise PublishRecoveryError(f"外部版本已保存在 {replace_backup}：{target}") from recovery_error
@@ -507,15 +432,15 @@ class RecoverablePublisher:
         if (
             not target.exists()
             or file_sha256(target) != entry["staged_hash"]
-            or self._file_identity(target) != entry["publish_identity"]
+            or file_identity(target) != entry["publish_identity"]
         ):
             raise PublishRecoveryError(f"外部版本已保存在 {captured_external}，目标又发生变化：{target}")
         displaced_publish = target.with_name(f".{target.name}.{operation_id}.conflict-published")
-        self._replace_existing(captured_external, target, displaced_publish)
+        replace_existing(captured_external, target, displaced_publish)
         if (
             not target.exists()
-            or self._file_identity(target) != captured_identity
-            or self._file_identity(displaced_publish) != entry["publish_identity"]
+            or file_identity(target) != captured_identity
+            or file_identity(displaced_publish) != entry["publish_identity"]
         ):
             raise PublishRecoveryError(f"恢复外部版本时目标再次变化：{target}")
         self._unlink_owned(displaced_publish, entry["publish_identity"], recovery=True)
@@ -530,7 +455,7 @@ class RecoverablePublisher:
         if (
             not target.exists()
             or file_sha256(target) != before_hash
-            or self._file_identity(target) != entry["baseline_identity"]
+            or file_identity(target) != entry["baseline_identity"]
         ):
             raise PublishBaselineError(f"发布目标已偏离预期基准：{target}")
 
@@ -546,7 +471,7 @@ class RecoverablePublisher:
         if (
             not target.exists()
             or file_sha256(target) != entry["staged_hash"]
-            or self._file_identity(target) != entry["publish_identity"]
+            or file_identity(target) != entry["publish_identity"]
         ):
             entry["conflict_preserved"] = True
             raise PublishBaselineError(f"正式发布结果复核时目标身份已变化：{target}")
@@ -570,7 +495,7 @@ class RecoverablePublisher:
             if (
                 not target.exists()
                 or file_sha256(target) != result_hash
-                or self._file_identity(target) != entry.get("result_identity")
+                or file_identity(target) != entry.get("result_identity")
             ):
                 raise PublishBaselineError(f"发布结果在提交闭环前已变化：{target}")
 
@@ -585,9 +510,9 @@ class RecoverablePublisher:
                     raise PublishBaselineError(f"发布目标已偏离预期基准：{target}")
                 continue
             try:
-                identity_before = cls._file_identity(target)
+                identity_before = file_identity(target)
                 actual = file_sha256(target)
-                identity_after = cls._file_identity(target)
+                identity_after = file_identity(target)
             except FileNotFoundError as exc:
                 raise PublishBaselineError(f"发布目标已偏离预期基准：{target}") from exc
             if (
@@ -615,7 +540,7 @@ class RecoverablePublisher:
         if before_hash is None:
             if not target.exists():
                 return
-            current_identity = self._file_identity(target)
+            current_identity = file_identity(target)
             if current_identity not in self._published_identities(entry):
                 raise PublishRecoveryError(f"回滚时新建目标已被外部版本替换：{target}")
             self._unlink_owned(target, current_identity, recovery=True)
@@ -632,13 +557,13 @@ class RecoverablePublisher:
                 and not self._publish_source_still_owned(entry)
             ):
                 raise PublishRecoveryError(f"回滚时既有目标缺失且无法证明属于本批：{target}")
-            self._move_no_replace(replacement_backup, target)
-            if self._file_identity(target) != baseline_identity:
+            move_no_replace(replacement_backup, target)
+            if file_identity(target) != baseline_identity:
                 raise PublishRecoveryError(f"回滚时原始目标身份不一致：{target}")
             self._cleanup_publish_source(entry)
             return
 
-        current_identity = self._file_identity(target)
+        current_identity = file_identity(target)
         if current_identity == baseline_identity:
             self._cleanup_publish_source(entry)
             return
@@ -649,14 +574,14 @@ class RecoverablePublisher:
             raise PublishRecoveryError(f"回滚缺少可保持原始身份的替换备份：{target}")
         displaced = target.with_name(f".{target.name}.{operation_id}.rollback-displaced")
         try:
-            self._replace_existing(replacement_backup, target, displaced)
+            replace_existing(replacement_backup, target, displaced)
         except OSError as replace_error:
             if (
                 getattr(replace_error, "winerror", None) != 32
                 or displaced.exists()
                 or not target.exists()
-                or self._file_identity(target) != current_identity
-                or self._file_identity(replacement_backup) != baseline_identity
+                or file_identity(target) != current_identity
+                or file_identity(replacement_backup) != baseline_identity
             ):
                 raise
             self._restore_backup_by_rename(
@@ -667,9 +592,9 @@ class RecoverablePublisher:
                 current_identity,
             )
             return
-        if self._file_identity(displaced) != current_identity:
+        if file_identity(displaced) != current_identity:
             raise PublishRecoveryError(f"回滚原子替换期间目标再次变化：{target}")
-        if self._file_identity(target) != baseline_identity:
+        if file_identity(target) != baseline_identity:
             raise PublishRecoveryError(f"回滚后原始目标身份不一致：{target}")
         if file_sha256(target) != before_hash:
             raise PublishRecoveryError(f"回滚后原始目标内容不一致：{target}")
@@ -683,25 +608,25 @@ class RecoverablePublisher:
         baseline_identity: list[int],
         published_identity: list[int],
     ) -> None:
-        self._move_no_replace(target, displaced)
+        move_no_replace(target, displaced)
         try:
-            self._move_no_replace(replacement_backup, target)
+            move_no_replace(replacement_backup, target)
         except OSError as restore_error:
             if (
                 not target.exists()
                 and displaced.exists()
-                and self._file_identity(displaced) == published_identity
+                and file_identity(displaced) == published_identity
             ):
                 try:
-                    self._move_no_replace(displaced, target)
+                    move_no_replace(displaced, target)
                 except OSError as preserve_error:
                     raise PublishRecoveryError(
                         f"回滚换名失败，发布结果保存在 {displaced}：{target}",
                     ) from preserve_error
             raise PublishRecoveryError(f"无法按原始身份换名恢复：{target}") from restore_error
         if (
-            self._file_identity(target) != baseline_identity
-            or self._file_identity(displaced) != published_identity
+            file_identity(target) != baseline_identity
+            or file_identity(displaced) != published_identity
         ):
             raise PublishRecoveryError(f"回滚换名期间文件身份发生变化：{target}")
         self._unlink_owned(displaced, published_identity, recovery=True)
@@ -715,7 +640,7 @@ class RecoverablePublisher:
         path = Path(raw_path)
         return (
             path.exists()
-            and self._file_identity(path) == expected_identity
+            and file_identity(path) == expected_identity
             and file_sha256(path) == expected_hash
         )
 
@@ -738,7 +663,7 @@ class RecoverablePublisher:
         expected_identity = entry.get("replace_backup_identity") or entry.get("expected_backup_identity")
         if expected_identity is None:
             raise PublishRecoveryError(f"PUBLISH_BACKUP_IDENTITY_MISSING: {entry['target']}")
-        if self._file_identity(path) != expected_identity or file_sha256(path) != before_hash:
+        if file_identity(path) != expected_identity or file_sha256(path) != before_hash:
             raise PublishRecoveryError(f"PUBLISH_REPLACEMENT_BACKUP_CHANGED: {entry['target']}")
         return path
 
@@ -750,7 +675,7 @@ class RecoverablePublisher:
         path = Path(raw_path)
         if (
             not path.exists()
-            or self._file_identity(path) != expected_identity
+            or file_identity(path) != expected_identity
             or file_sha256(path) != before_hash
         ):
             raise PublishRecoveryError(f"PUBLISH_BACKUP_CORRUPTED: {entry['target']}")
@@ -764,25 +689,20 @@ class RecoverablePublisher:
             if identity is not None
         ]
 
-    @staticmethod
-    def _file_identity(path: Path) -> list[int]:
-        stat = path.stat()
-        return [stat.st_dev, stat.st_ino]
-
     def _cleanup_replace_backups(self, entries: list[dict]) -> None:
         for entry in entries:
             replace_backup = Path(entry["replace_backup"])
             if not replace_backup.exists():
                 continue
             expected_identity = entry.get("replace_backup_identity") or entry.get("expected_backup_identity")
-            if expected_identity is None or self._file_identity(replace_backup) != expected_identity:
+            if expected_identity is None or file_identity(replace_backup) != expected_identity:
                 raise PublishBaselineError(f"清理替换备份时文件身份已变化：{replace_backup}")
             self._unlink_owned(replace_backup, expected_identity, recovery=False)
 
     def _unlink_owned(self, path: Path, expected_identity: list[int], *, recovery: bool) -> None:
         error_type = PublishRecoveryError if recovery else PublishBaselineError
         if os.name != "nt":
-            if self._file_identity(path) != expected_identity:
+            if file_identity(path) != expected_identity:
                 raise error_type(f"删除前文件身份已变化：{path}")
             path.unlink()
             return
@@ -818,7 +738,7 @@ class RecoverablePublisher:
         if handle == ctypes.c_void_p(-1).value:
             raise error_type(f"无法取得待删除文件的身份锁：{path}") from ctypes.WinError(ctypes.get_last_error())
         try:
-            if self._file_identity(path) != expected_identity:
+            if file_identity(path) != expected_identity:
                 raise error_type(f"删除前文件身份已变化：{path}")
             delete_file = ctypes.c_ubyte(1)
             ctypes.set_last_error(0)

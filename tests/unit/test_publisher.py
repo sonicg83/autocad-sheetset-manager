@@ -333,14 +333,14 @@ def test_mixed_create_replace_delete_publish_failure_restores_batch(
         os.replace(source, target)
 
     publisher = RecoverablePublisher(replace)
-    original_move = publisher._move_no_replace
+    original_move = publisher_module.move_no_replace
 
     def move(source: Path, target: Path):
         if fail_at == 3 and source == deleted:
             raise OSError("注入第 3 项发布故障")
         original_move(source, target)
 
-    monkeypatch.setattr(publisher, "_move_no_replace", move)
+    monkeypatch.setattr(publisher_module, "move_no_replace", move)
 
     with pytest.raises(PublishRolledBackError, match=f"注入第 {fail_at} 项发布故障"):
         publisher.publish(
@@ -446,8 +446,8 @@ def test_locked_mixed_publish_failure_restores_whole_batch(tmp_path: Path, monke
     staged_created.write_bytes(b"new-created")
     staged_replaced.write_bytes(b"new-replaced")
     publisher = RecoverablePublisher()
-    original_move = publisher._move_no_replace
-    original_replace = publisher._replace_existing
+    original_move = publisher_module.move_no_replace
+    original_replace = publisher_module.replace_existing
     publish_calls = 0
 
     def next_call() -> None:
@@ -464,8 +464,8 @@ def test_locked_mixed_publish_failure_restores_whole_batch(tmp_path: Path, monke
         next_call()
         original_move(source, target)
 
-    monkeypatch.setattr(publisher, "_replace_existing", replace)
-    monkeypatch.setattr(publisher, "_move_no_replace", move)
+    monkeypatch.setattr(publisher_module, "replace_existing", replace)
+    monkeypatch.setattr(publisher_module, "move_no_replace", move)
     expected = {
         created: None,
         replaced: capture_file_baseline(replaced),
@@ -552,7 +552,7 @@ def test_create_commit_atomically_rejects_target_appearing_after_last_check(tmp_
         destination.write_bytes(b"external")
         os.rename(source, destination)
 
-    monkeypatch.setattr(publisher, "_move_no_replace", appear_then_commit, raising=False)
+    monkeypatch.setattr(publisher_module, "move_no_replace", appear_then_commit, raising=False)
 
     with pytest.raises(PublishBaselineError) as exc_info:
         publisher.publish(
@@ -575,7 +575,7 @@ def test_existing_commit_restores_external_version_swapped_after_last_check(tmp_
     staged.write_bytes(b"published")
     external.write_bytes(b"external")
     publisher = RecoverablePublisher()
-    original_replace = publisher._replace_existing
+    original_replace = publisher_module.replace_existing
     calls = 0
 
     def swap_then_replace(source: Path, destination: Path, backup: Path):
@@ -585,7 +585,7 @@ def test_existing_commit_restores_external_version_swapped_after_last_check(tmp_
             os.replace(external, destination)
         original_replace(source, destination, backup)
 
-    monkeypatch.setattr(publisher, "_replace_existing", swap_then_replace, raising=False)
+    monkeypatch.setattr(publisher_module, "replace_existing", swap_then_replace, raising=False)
 
     with pytest.raises(PublishBaselineError) as exc_info:
         publisher.publish(
@@ -615,7 +615,7 @@ def test_replace_api_partial_failure_restores_attempted_target_and_error_chain(t
         os.replace(destination, backup)
         raise OSError("ReplaceFileW 1177 注入故障")
 
-    monkeypatch.setattr(publisher, "_replace_existing", fail_after_moving_target, raising=False)
+    monkeypatch.setattr(publisher_module, "replace_existing", fail_after_moving_target, raising=False)
 
     with pytest.raises(PublishRolledBackError) as exc_info:
         publisher.publish(
@@ -645,7 +645,7 @@ def test_existing_commit_rejects_same_bytes_external_identity(tmp_path: Path, mo
     external.write_bytes(b"baseline")
     external_identity = _identity(external)
     publisher = RecoverablePublisher()
-    original_replace = publisher._replace_existing
+    original_replace = publisher_module.replace_existing
     calls = 0
 
     def swap_same_bytes_then_replace(source: Path, destination: Path, backup: Path):
@@ -655,7 +655,7 @@ def test_existing_commit_rejects_same_bytes_external_identity(tmp_path: Path, mo
             os.replace(external, destination)
         original_replace(source, destination, backup)
 
-    monkeypatch.setattr(publisher, "_replace_existing", swap_same_bytes_then_replace, raising=False)
+    monkeypatch.setattr(publisher_module, "replace_existing", swap_same_bytes_then_replace, raising=False)
 
     with pytest.raises(PublishBaselineError) as exc_info:
         publisher.publish(
@@ -934,7 +934,7 @@ def test_partial_replace_with_staged_result_at_target_restores_original_identity
     baseline_identity = _identity(target)
     published_identity: list[int] | None = None
     publisher = RecoverablePublisher()
-    original_replace = publisher._replace_existing
+    original_replace = publisher_module.replace_existing
     calls = 0
 
     def fail_after_installing_staged(source: Path, destination: Path, backup: Path):
@@ -948,7 +948,7 @@ def test_partial_replace_with_staged_result_at_target_restores_original_identity
         published_identity = _identity(destination)
         raise OSError("ReplaceFileW 1176 注入故障")
 
-    monkeypatch.setattr(publisher, "_replace_existing", fail_after_installing_staged, raising=False)
+    monkeypatch.setattr(publisher_module, "replace_existing", fail_after_installing_staged, raising=False)
 
     with pytest.raises(PublishRolledBackError) as exc_info:
         publisher.publish(
@@ -983,7 +983,7 @@ def test_startup_recovery_restores_partial_replace_when_publish_source_still_exi
         os.replace(destination, backup)
         raise _SimulatedProcessCrash
 
-    monkeypatch.setattr(publisher, "_replace_existing", crash_after_moving_baseline)
+    monkeypatch.setattr(publisher_module, "replace_existing", crash_after_moving_baseline)
 
     with pytest.raises(_SimulatedProcessCrash):
         publisher.publish(
@@ -1025,7 +1025,7 @@ def test_startup_recovery_does_not_restore_after_publish_source_moved_and_target
         destination.unlink()
         raise _SimulatedProcessCrash
 
-    monkeypatch.setattr(publisher, "_replace_existing", crash_after_api_success)
+    monkeypatch.setattr(publisher_module, "replace_existing", crash_after_api_success)
 
     with pytest.raises(_SimulatedProcessCrash):
         publisher.publish(
@@ -1595,7 +1595,7 @@ def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
     staged.write_bytes(b"published")
     baseline_identity = _identity(target)
     publisher = RecoverablePublisher()
-    original_replace = publisher._replace_existing
+    original_replace = publisher_module.replace_existing
     calls = 0
 
     def fail_first_rollback_replace(source: Path, destination: Path, backup: Path):
@@ -1608,7 +1608,7 @@ def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
     def fail_after_commit(_entry: dict):
         raise OSError("注入结果复核故障")
 
-    monkeypatch.setattr(publisher, "_replace_existing", fail_first_rollback_replace)
+    monkeypatch.setattr(publisher_module, "replace_existing", fail_first_rollback_replace)
     monkeypatch.setattr(publisher, "_capture_result", fail_after_commit)
 
     with pytest.raises((PublishRolledBackError, PublishRecoveryError)):
