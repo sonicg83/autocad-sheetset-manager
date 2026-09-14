@@ -129,7 +129,7 @@ related:
 - Modify: `web/package-lock.json`
 
 - [ ] **Step 1（测试环境）**：用 `rtk npm --prefix web install --save-dev @vue/test-utils happy-dom` 更新两份依赖清单；组件测试文件使用 `// @vitest-environment happy-dom`，不改变现有测试默认环境。
-- [ ] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联。
+- [ ] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联；`UiSelect` 默认高度 = `38px`（消费 `--input-height`，该契约当前只由 `web/tests/e2e/properties-definitions.spec.ts:344-346` 兜住）。
 - [ ] **Step 3（RED：焦点契约）**：为 `dialogFocus.ts` 写初始焦点、Tab/Shift+Tab 圈闭、Escape 回调、关闭后焦点归还和无可聚焦元素五类失败测试。
 - [ ] **Step 4（图标注册表）**：在 `icons.ts` 导出封闭的 `UiIconName` 与 SVG path 数据；首批名称固定为 `theme`、`settings`、`close`、`chevron-left/right/up/down`、`status-dot`、`search`、`folder`、`copy`，记录 Lucide MIT 来源，不接受任意字符串或 `v-html`。
 - [ ] **Step 5（GREEN：视觉原语）**：实现各组件，只处理语义、外观、焦点和状态；尺寸通过 variant 和 CSS 自定义属性消费 Task 2 令牌，不导入业务 composable 或 API 类型。
@@ -281,7 +281,7 @@ related:
 - [ ] **Step 1（RED）**：为欢迎页选择文件、修订恢复、修复、草稿动作、任务状态和确认流程补按钮 type、最小点击面积、可见标签、danger 层级和焦点归还断言。
 - [ ] **Step 2（迁移）**：旧页面按钮、输入和选择器改用原语；保留恢复确认、修复预览、草稿撤销/重做和任务取消行为。
 - [ ] **Step 3（模态接入）**：`ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 复用 `dialogFocus.ts`；保持 SPEC-DM-006 的嵌套模态原生 dialog 裁决，不把原生 dialog 强改为遮罩层。
-- [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。
+- [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除（它们的前置内联注释已进入例外指纹，删规则时必须同一次更新 `ui-contract-exceptions.json`）。
 - [ ] **Step 5（证据）**：保存欢迎默认、修订危险确认、修复错误、深色任务状态共 4 张。
 - [ ] **Step 6（门禁闭合）**：清退除可能保留的 ColumnEditor 图标外全部视觉债务例外；运行检查器验证无陈旧例外。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-workflows.spec.ts sheets-drafts.spec.ts`、`rtk npm --prefix web run test:unit` 与 `rtk npm --prefix web run build`。
@@ -367,6 +367,12 @@ related:
 - [ ] **Step 8（计划关闭）**：只有全量门禁和真实桌面复验均通过后，将本计划状态改为 `completed`，更新两个索引和 changelog；若真实桌面未完成，保持 `active` 并准确列出证据缺口。
 - [ ] **Step 9（最终提交）**：commit：`完成前端视觉基础整改验收闭环`。
 
+> **收口责任（字体子集化命令）**：两套 WOFF2 的原始 `pyftsubset` 命令行未被记录，且在本机无法逐字复原
+> （Plex 复原物 11220 B ≠ 已入库 12488 B，Inter 上游发行包不可达），详见
+> `web/src/assets/fonts/README.md` 与 Task 2 报告 4.5 节。如需命令级可复现，必须在可访问上游的环境重做
+> 子集化并同步替换产物（含体积、字符集、浏览器加载三类复核），并把新命令写入该 README；
+> **不得用推测的命令文本或其他环境下的复原物替换已入库资产**。
+
 ## 依赖与提交顺序
 
 ```text
@@ -422,7 +428,8 @@ Task 10 → Task 11 → Task 12
 | Task 2 | `rtk npm --prefix web run test:contracts`、`check:ui`、`build`、`test:unit`、`test:e2e -- main.spec.ts` | **80 passed / 0 failed**（新增 14 条资产/入口规则用例 + 4 条 CLI 级变异；覆盖面守卫 15 类/16 条注入/14 条规则）；`check:ui` 退出 0；`build` 退出 0（`dist` 产出两个本地 WOFF2，`url()` 为 `/assets/...`）；`unit` 48 passed；`e2e` **78 passed / 0 failed**；三项针对性变异（预算 `>` 改 `>=`、相对路径忽略样式表目录、移除 `NON_EXEMPTIBLE_RULES` 判定）均使对应用例转红，还原后复跑全绿；例外 422 → 382（Task 2 名下 53 条结清：40 清退 + 13 重定向 Task 9），不变量 383 = 382 + 1；字体 56928 + 12488 = 69416 ≤ 256000，实测无 CJK | 提交 `统一前端字体令牌与样式分层`；报告与证据见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/task-2-report.md`（证据文件 `.tmp-tc-b.txt`/`.tmp-cu-b.txt`/`.tmp-build-b.txt`/`.tmp-unit-b.txt`/`.tmp-e2e-c.txt` 已摘录后删除） |
 | Task 2（收口轮修复） | 同上；另做主流程 `pytest -q` 之外的独立核验：清空例外表复算原始违规、`git show BASE:ui-contract-exceptions.json` 指纹级比对、fontTools 直读 `cmap`、独立 Chromium 探针复现 `select` 行高 | 修复两处「门禁空转」缺陷（入口规则 `report` 未 push、`@font-face` 被 `parseRules` 默认过滤）后才由红转绿；修复前 12 项失败均为「期望恰好 1 条 X，实际：[]」 | 同报告第 2、3.1、5 节 |
 | Task 2–11 | 各任务列出的 RED/GREEN 命令 | Task 3 起待实施 | 本表逐任务追加 |
-| Task 12 | 全量门禁与真实 Windows 缩放 | 待实施 | `assets/PLAN-DM-029/README.md` |
+| Task 2（评审修复轮 2） | `rtk npm --prefix web run test:contracts`、`check:ui`、三条新用例的聚焦变异运行 | **83 passed / 0 failed**（+3：例外 `rule`/指纹不一致 2 条 + 入口缺失 1 条）；382 条存量例外审计 **382/382 自洽、指纹零改动**；变异 A（停用一致性校验）使 2 条转红、变异 B（停用入口缺失判定）使 1 条转红，逐字节还原后复绿；`check:ui` 退出 0；未跑 `build`/`test:unit`（改动不触 `.vue`/`.ts`/入口样式表） | 提交 `收紧 UI 契约例外一致性与字体溯源记录`；报告见 `task-2-report.md` 第 11 节 |
+| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体子集化命令的收口责任（计划 Task 12 节末「收口责任」） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
 

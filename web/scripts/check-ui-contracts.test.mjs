@@ -4,8 +4,8 @@
 // `collectUiContractViolations({root, exceptions})` 与真实 CLI 子进程验证。
 //
 // 变异证据套件（Step 8）向合法夹具逐类注入违规并断言真实 CLI 子进程退出 1；它只在
-// 检查器、规则或例外格式变化时要求重跑。整套用例实测 5.7～9.7 秒（三次运行 5.7 s /
-// 9.0 s / 9.7 s，随机器负载波动），其中 14 次 CLI 子进程启动各占 0.52～0.62 秒，
+// 检查器、规则或例外格式变化时要求重跑。整套用例实测 5.7～13.6 秒（四次运行 5.7 s /
+// 9.0 s / 9.7 s / 13.6 s，随机器负载波动），其中 14 次 CLI 子进程启动各占 0.52～0.62 秒，
 // 因此新增 CLI 级变异用例时按「每次 spawn 约 0.6 秒」估算预算。
 
 import assert from "node:assert/strict";
@@ -49,11 +49,19 @@ function fontFace(family, url) {
 
 const roots = [];
 
-/** 在临时目录里创建一套工作区夹具；返回工作区根目录。 */
+/**
+ * 在临时目录里创建一套工作区夹具；返回工作区根目录。
+ *
+ * 默认补上一个合法的 `src/style.css` 入口：Task 2 起「入口文件必须存在且只做导入」本身
+ * 就是硬门禁，缺入口的夹具就是一个违规工作区（详见「样式入口缺失」用例）。需要验证入口
+ * 内容的用例自己传入 `src/style.css` 覆盖默认值；需要验证「入口缺失」的用例在夹具建好后
+ * 删掉它。
+ */
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), "ui-contracts-"));
   roots.push(root);
-  for (const [relative, content] of Object.entries(files)) {
+  const withEntry = "src/style.css" in files ? files : {"src/style.css": ENTRY_CSS, ...files};
+  for (const [relative, content] of Object.entries(withEntry)) {
     const path = join(root, relative);
     mkdirSync(dirname(path), {recursive: true});
     writeFileSync(path, content, "utf8");
@@ -711,6 +719,63 @@ describe("字体资产与样式入口门禁（Task 2 Step 7）", () => {
     only(violations, "invalid-exception-entry");
     // 关键：登记条目被拒绝后，真实违规仍然存在，白名单没有把它吃掉。
     assert.equal(only(violations, "missing-font-asset").fingerprint, missing.fingerprint);
+  });
+
+  test("例外条目的 rule 与指纹首段不一致时被拒绝，且底层违规不被掩盖", () => {
+    const files = {"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Missing.woff2")}`};
+    const missing = only(rawViolations(files), "missing-font-asset");
+    const violations = collectUiContractViolations({
+      root: fixture(files),
+      exceptions: {
+        exceptions: [
+          {
+            // 只把 rule 换成可豁免的规则名，指纹仍指向真实的硬门禁违规。掩盖只看指纹，
+            // 因此这里必须由一致性校验挡住，否则整条硬门禁会被一个字段改写吃掉。
+            rule: "raw-visual-value",
+            file: missing.file,
+            fingerprint: missing.fingerprint,
+            reason: "尝试把硬门禁改写成可豁免的规则名",
+            expiresWith: "PLAN-DM-029 Task 9",
+          },
+        ],
+        dynamicVariables: [],
+      },
+    });
+    assert.match(only(violations, "invalid-exception-entry").message, /rule 与指纹首段不一致/);
+    // 关键：条目被拒绝后指纹没有进入登记表，底层硬门禁违规仍然报出来。
+    assert.equal(only(violations, "missing-font-asset").fingerprint, missing.fingerprint);
+  });
+
+  test("例外条目的 rule 写成大小写别名同样被拒绝", () => {
+    const files = {"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Missing.woff2")}`};
+    const missing = only(rawViolations(files), "missing-font-asset");
+    const violations = collectUiContractViolations({
+      root: fixture(files),
+      exceptions: {
+        exceptions: [
+          {
+            rule: "Missing-Font-Asset",
+            file: missing.file,
+            fingerprint: missing.fingerprint,
+            reason: "用大小写别名绕过硬门禁清单",
+            expiresWith: "PLAN-DM-029 Task 9",
+          },
+        ],
+        dynamicVariables: [],
+      },
+    });
+    assert.match(only(violations, "invalid-exception-entry").message, /rule 与指纹首段不一致/);
+    assert.equal(only(violations, "missing-font-asset").fingerprint, missing.fingerprint);
+  });
+
+  test("样式入口缺失时被拒绝，而不是静默通过", () => {
+    const root = fixture({"src/styles/tokens.css": TOKENS_CSS});
+    // 夹具默认带合法入口：删掉它以后，入口门禁必须显式报缺失（逐文件循环一条都不走
+    // 等于把「入口只能是入口」这条约束删掉）。
+    rmSync(join(root, "src/style.css"), {force: true});
+    const violation = only(collectUiContractViolations({root, exceptions: emptyExceptions()}), "entry-stylesheet-not-import-only");
+    assert.equal(violation.file, "src/style.css");
+    assert.match(violation.message, /样式入口文件不存在/);
   });
 });
 

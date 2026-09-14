@@ -57,7 +57,7 @@ export function collectAssetViolations({root, files, emitFor, budgetBytes = FONT
   }
   return [
     ...collectFontAssetViolations({root, regions, emit, budgetBytes}),
-    ...collectEntryStylesheetViolations({files, emit}),
+    ...collectEntryStylesheetViolations({root, files, emit}),
   ];
 }
 
@@ -117,8 +117,24 @@ function collectFontAssetViolations({root, regions, emit, budgetBytes}) {
  * 注释与空行先用 `maskNonCode` 抹平再切分语句，因此后续任务可以自由添加入口注释；出现
  * 规则块、多余语句、层顺序不符或导入清单不完整都算违规。
  */
-function collectEntryStylesheetViolations({files, emit}) {
+function collectEntryStylesheetViolations({root, files, emit}) {
   const violations = [];
+  // 入口文件缺失（或未被扫描）时，下面的逐文件循环一条都不走，整条入口门禁会静默失效：
+  // 「入口只能是入口」这条约束等于被删除，而这恰好是删掉/改名入口文件时才会发生的场景。
+  // 这里先断言入口确实在扫描结果里。
+  if (!files.some((file) => file.relative === ENTRY_STYLESHEET)) {
+    const onDisk = existsSync(resolve(root, ENTRY_STYLESHEET));
+    violations.push(
+      emit({
+        rule: RULE.entryStylesheetNotImportOnly,
+        file: ENTRY_STYLESHEET,
+        line: 1,
+        column: 1,
+        message: onDisk ? `样式入口未被扫描：${ENTRY_STYLESHEET}` : `样式入口文件不存在：${ENTRY_STYLESHEET}`,
+        semantic: onDisk ? "unscanned-entry-stylesheet" : "missing-entry-stylesheet",
+      }),
+    );
+  }
   for (const entry of files) {
     if (entry.relative !== ENTRY_STYLESHEET) continue;
     const report = (offset, message, semantic) =>

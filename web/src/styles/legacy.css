@@ -113,12 +113,28 @@
   .error-raw{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:var(--font-caption)}
 
   /* 本层说明：本文件是 `src/style.css` 里原有全局业务规则的**原样迁入**，顺序与迁移前
-     完全一致——同层内后写的规则仍然覆盖先写的规则，因此迁移不改变任何页面渲染结果。
-     迁移时唯一的结构调整是元素/伪类开头的选择器统一加上 `:where(#app)` 根限定：
-     `:where()` 特异性为 0，级联结果与迁移前逐字一致，同时满足「业务样式不得写裸全局
-     选择器」的门禁要求（应用全部 DOM，含 `showModal()` 的 `<dialog>`，都在 `#app` 内）。
+     一致——同层内后写的规则仍然覆盖先写的规则，因此这些规则之间的相对优先级不变。
+     迁移时有两处结构调整，必须如实区分：
+
+     1. 元素/伪类开头的选择器（共 13 条：`main`、`aside`、`aside button`、`aside .active`、
+        `article`、`table`、`th,td`、`td input`、`fieldset`、`fieldset>button`、`details`，
+        其中 `main` 与 `aside` 各出现两次）加上 `:where(#app)` 根限定。`:where()` 自身
+        特异性为 0、`#app` 覆盖全部应用 DOM（含 `showModal()` 的 `<dialog>`），因此这 13 条
+        的匹配范围与优先级和迁移前一致，同时满足「业务样式不得写裸全局选择器」的门禁要求。
+     2. 元素级重置没有留在这里，而是迁到 `reset.css`（共 10 条：`*`、`*,*::before,*::after`、
+        `body`、`button`、`button,a`、`button,input,select,textarea`、`a`、`button:disabled`、
+        `:focus-visible`、`input:not([type="checkbox"]):not([type="radio"]),select,textarea`）；
+        reset 层本就承载裸元素选择器，且 `src/styles/reset.css` 不参与
+        `global-selector-in-component` 扫描。
+
+     级联方向（ARCH-DM-007 §7）：`@layer tokens, reset, primitives, legacy` 只决定命名层之间
+     的顺序，而 Vue 单文件组件的无层 `<style scoped>` 优先于全部命名层——这是页面在迁移期
+     覆盖全局默认值的明确前提。因此上面第 2 类重置规则现在让位于未分层的组件 scoped 样式
+     （它们迁入 `reset` 层后优先级下降，这是分层设计的既定方向，不是意外），而本层的规则仍
+     高于 `reset`/`primitives` 两层。除这两处结构调整外，本文件不静默改写任何声明值。
+
      尚未令牌化的裸视觉值（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号 22px、
-     旧布局宽度 1440px）同样原样保留、不静默改写，它们登记在
+     旧布局宽度 1440px）原样保留、不静默改写，它们登记在
      `scripts/ui-contract-exceptions.json`，由 Task 9 在逐条证明消费方已迁移后删除或归并
      （Task 9 Step 4/Step 6）。本文件仍是 `GLOBAL_BUSINESS_STYLESHEETS` 的成员，
      照受门禁扫描，不是视觉债务的逃逸口。 */

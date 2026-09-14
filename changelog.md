@@ -1,8 +1,18 @@
 # 变更记录
 
+## 2026-09-14（收紧 UI 契约例外一致性与字体溯源记录，PLAN-DM-029 Task 2 评审修复）
+
+- 修复唯一一处实现级缺陷：例外条目原先只按自报的 `rule` 字段判定是否属硬门禁，而登记表索引与棘轮掩盖都按 `fingerprint` 建立，导致把 `rule` 改写成可豁免规则名（或写成大小写别名）即可用真实指纹静默吃掉一条 `missing-font-asset`/`remote-font-url`/`font-budget-exceeded`/`entry-stylesheet-not-import-only` 违规（评审复现：违规数 2 → 1，且 `invalid-exception-entry` 与 `stale-exception` 均为 0）。现改为先取指纹首段（`buildFingerprint` 首段即规则 id），要求 `rule` 与逐字一致，不一致即 `invalid-exception-entry`；一致性通过后再按指纹首段判定不可豁免。
+- 存量例外审计：`ui-contract-exceptions.json` 现有 382 条逐条比对，`rule` 与指纹首段不一致 0 条、指纹空/格式异常 0 条、指纹重复 0 条，按指纹修正数据 0 条、**指纹零改动**；条目数与按规则/按 `expiresWith` 分布均与收口时实测一致（`raw-visual-value` 338 / `unicode-structure-icon` 20 / `explicit-button-type` 16 / `visible-input-label` 7 / `raw-hex-color` 1；4:41、5:62、6:75、7:89、8:66、9:13、10:34、11:2）。
+- 修复第二处门禁空转：`collectEntryStylesheetViolations` 原先只按扫描到的文件逐一循环找 `src/style.css`，入口文件缺失（或未被扫描）时循环一条都不走，「入口只能是入口」这条约束等于被删除；现先断言入口在扫描结果内，缺失即报 `entry-stylesheet-not-import-only`（语义 `missing-entry-stylesheet`；存在却未扫到时语义 `unscanned-entry-stylesheet`）。
+- 新增 3 条回归用例（例外 `rule`/指纹不一致被拒且底层违规不被掩盖、大小写别名同样被拒、样式入口缺失被拒）；测试夹具助手 `fixture()` 默认补上一个合法的 `src/style.css` 入口（缺入口的夹具在 Task 2 之后就是违规工作区），既有 80 条用例断言全部不受影响。变异自证：停用一致性校验使 2 条新用例转红，停用入口缺失判定使 1 条转红，逐字节还原后复绿。
+- 新增字体溯源文档 `web/src/assets/fonts/README.md`：上游发行物与用 `name`/`fvar` 表实测的版本（Inter 4.1 `InterVariable.woff2` / `Version 4.001;git-9221beed3`；npm `@ibm/plex-mono@2.5.0` `IBMPlexMono-Regular` / `Version 2.005`）、声明字符集与 `unicode-range`（各 199 码位、`U+0020–U+2026`，Plex 少 `U+201B`）、可复制执行的复核命令，以及「子集化命令行未经证实」的显式保留项（复原物 11220 字节 ≠ 已入库 12488 字节，不得用它替换已入库资产）；该保留项同时登记到计划 Task 12 的收口责任。
+- 措辞与账目修正：23 条裸全局选择器的实际去向为 **`reset.css` 10 条（保持裸元素选择器）+ `legacy.css` 13 条（加 `:where(#app)`）**，原「统一加 `:where(#app)`」的说法不准确；`legacy.css` 尾部层说明重写，区分这两处结构调整并按 ARCH-DM-007 §7 说明级联方向（命名层顺序只决定层间顺序，无层 `<style scoped>` 优先于全部命名层；重写后该文件 125 → 141 行，仅注释变化、无规则增删）；两份许可证 git blob 字节数修正为 4366 / 4363（Plex 工作区落盘 4456 字节来自 CRLF）；`.summary strong{font-size:22px}` 的理由改为与 Task 9 Step 4 对齐（该族在 `src/` 内已无 `class="summary"` 渲染点，属待删死规则，应随 legacy 清理整体删除而非令牌化）。
+- 实际验证：`npm --prefix web run test:contracts` **83 passed / 0 failed**（8 suites，+3 条）；`npm --prefix web run check:ui` 退出 0；聚焦变异运行（`node --test --test-name-pattern`）基线绿 / 变异 A、B 各自红 / 还原后绿。本轮未跑 `build`、`test:unit` 与全量 e2e：改动仅涉及 `web/scripts/**`、样式注释文本与一份 `.md`，不触碰 `.vue`/`.ts`/入口样式表。
+
 ## 2026-09-14（前端字体令牌与样式分层落地，PLAN-DM-029 Task 2）
 
-- 样式分层：`web/src/style.css` 瘦身为分层入口（`@layer tokens, reset, primitives, legacy;` + 四个 `@import`，原 86 行旧内容全部迁出），新增 `web/src/styles/tokens.css`（84 行，primitive→semantic→component 三层变量，浅/深主题只在此映射）、`reset.css`（42 行）、`primitives.css`（39 行）、`legacy.css`（125 行，旧全局业务规则按原值迁入并改为有根类限定选择器）。
+- 样式分层：`web/src/style.css` 瘦身为分层入口（`@layer tokens, reset, primitives, legacy;` + 四个 `@import`，原 86 行旧内容全部迁出），新增 `web/src/styles/tokens.css`（84 行，primitive→semantic→component 三层变量，浅/深主题只在此映射）、`reset.css`（42 行）、`primitives.css`（39 行）、`legacy.css`（125 行，旧全局业务规则按原值迁入；13 条元素/伪类选择器加 `:where(#app)` 根限定，10 条元素级重置另迁 `reset.css` 保持裸元素选择器）。
 - 字体本地化：入库 `web/src/assets/fonts/InterLatin.woff2`（56928 字节）与 `IBMPlexMonoLatin.woff2`（12488 字节），合计 69416 字节，预算 256000 字节；两条 `@font-face` 均声明 `font-display: swap` 与 `unicode-range: U+0020-007E, U+00A0-00FF, U+2013-2014, U+2018-201D, U+2026`，不引用任何远程 URL，OFL 许可证文本随字体入库。字符集用 fontTools 直读 `cmap` 复核：各 199 个码位、最大 U+2026、CJK 各区块命中 0；上游身份由 `name` 表实测（Inter Variable 4.001 git-9221beed3、IBM Plex Mono 2.005），构建产物中的 `url()` 为 `/assets/*.woff2` 本地路径。
 - 门禁收紧：新增 `missing-font-asset`、`remote-font-url`、`font-budget-exceeded`、`entry-stylesheet-not-import-only` 四条资产事实规则（`web/scripts/ui-contracts/font-assets.mjs`），并由 `NON_EXEMPTIBLE_RULES` 固定为不可登记例外的硬门禁；`css-vars.mjs` 的 `parseRules` 增加可选 `includeAtRules`（默认行为与既有过滤条件不变）。
 - 修复收口期发现的两处门禁空转缺陷（否则四条新规则会以「永远通过」的姿态入库）：① `collectEntryStylesheetViolations` 的 `report` 只调用 `emit` 而未 push 返回值，入口结构规则永不产出违规；② `parseRules` 默认过滤 `@` 开头的 at-rule，`@font-face` 完全不进入字体检查，三条字体规则恒不放行。修复前新增用例 12 项失败（信息为「期望恰好 1 条 X，实际：[]」，其中 4 项为 CLI 级变异），修复后全绿。

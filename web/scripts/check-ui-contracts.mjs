@@ -158,9 +158,24 @@ export function collectUiContractViolations(options = {}) {
       violations.push(configViolation(`例外条目缺少必填字段：${missing.join("、")}`, `exception-entry-${entry?.fingerprint ?? "unknown"}-${missing.join(",")}`));
       continue;
     }
+    // 例外条目是「按指纹登记、按指纹掩盖」的：下面 `registered` 以 `entry.fingerprint` 为键，
+    // 而棘轮掩盖时只查 `item.fingerprint`。若条目的 `rule` 字段与指纹首段不一致，就会用
+    // 一个可豁免的规则名把一条硬门禁违规掩盖掉（例如 `rule:"raw-visual-value"` 配上
+    // `missing-font-asset|…` 的指纹），因此两个字段必须逐字一致，并且以指纹首段为准做
+    // 硬门禁判定——指纹才是掩盖时真正生效的键。
+    const fingerprintRule = String(entry.fingerprint).split("|")[0];
+    if (entry.rule !== fingerprintRule) {
+      violations.push(
+        configViolation(
+          `例外条目的 rule 与指纹首段不一致：rule=${entry.rule}，指纹=${entry.fingerprint}`,
+          `rule-fingerprint-mismatch-${entry.fingerprint}`,
+        ),
+      );
+      continue;
+    }
     // 资产事实类硬门禁不可登记例外（Task 2 Step 7）：可白名单化等于没有门禁。
-    if (NON_EXEMPTIBLE_RULES.includes(entry.rule)) {
-      violations.push(configViolation(`硬门禁规则不允许登记例外：${entry.rule}`, `non-exemptible-${entry.rule}-${entry.fingerprint}`));
+    if (NON_EXEMPTIBLE_RULES.includes(fingerprintRule)) {
+      violations.push(configViolation(`硬门禁规则不允许登记例外：${fingerprintRule}`, `non-exemptible-${fingerprintRule}-${entry.fingerprint}`));
       continue;
     }
     // 重复指纹会让后写入的条目静默生效、前一条永远不再命中，属于棘轮里的黑洞，必须拒绝。
