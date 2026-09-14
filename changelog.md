@@ -6,6 +6,7 @@
 - **新增架构**：[ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md)（`review`）固定“基线与门禁 → 公共视觉原语 → 页面渐进迁移 → 结构治理 → 真实桌面验收”路径，定义三层令牌、离线字体、本地 SVG、样式分层、公共控件边界、`App.vue` 拆分、图纸树键盘模型和五阶段退出条件。
 - **范围裁决**：不引入大型 UI 框架，不改变后端 API、草稿投影、发布安全、DST/DWG、数据库、CAD SCR 或 Worker；既有页面按属性、图纸目录、图纸/任务浮层、设置、旧页面顺序渐进迁移。
 - **验证口径**：本轮只新增架构文档和索引，未修改生产代码；书面设计完成后先由用户复核，再另立实施计划并按 TDD、构建、单测、全量 Playwright、浅深主题、视口/缩放矩阵和真实桌面壳证据执行。
+- **评审修订并接受**：依据 [ARCH-DM-007 评审报告](.planning/memos/dst-manager/ARCH-DM-007-frontend-ui-foundations-review.md) 的逐条核对，精确说明嵌套 CSS fallback 在 computed-value 阶段失效及递归门禁；明确 unlayered scoped 样式优先于命名 layer、组件只通过变量/props/variant 定制；将视觉矩阵改为状态/主题/视口/缩放正交抽样（单页 `4–6` 张、整轮预计 `24–30` 张）；固定阶段 `1 → 2 → 3 → 4 → 5` 串行关系；字体子集限定 Latin/Latin-1 与实际标点、WOFF2 合计不超过 `250 KiB`，并补等宽字形迁移复核。保留 SPEC-DM-010 已接受的 `38px` 表单档；补 GUIDE-DM-002 关联并同步其 G8/G9 抽样与真实 Windows 缩放说明，明确壳层图标迁移归属和变异测试运行频次。ARCH-DM-007 状态转为 `accepted`。
 
 ## 2026-09-13（修复：设置中心保存的配置对预览不生效，PLAN-DM-028）
 
