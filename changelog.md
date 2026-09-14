@@ -8,15 +8,21 @@
 - 修正 `web/src/layout/TaskOverlay.vue` 诊断复制按钮的两个未定义变量：`--color-bg-surface-2` 与 `--color-border` 分别替换为已声明的 `--color-border-subtle`、`--color-border-strong`（原 fallback 为死代码，hover 边框恢复为强边框）。
 - 接入方式：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
 - 实际验证：`npm --prefix web run test:contracts` **49 passed / 0 failed**（含 9 类违规注入的变异套件与回滚断言）；注入临时违规后 `check:ui` 退出 1、移除后退出 0；`npm --prefix web run check:ui` 退出 0（仅因已登记债务通过）；`npm --prefix web run build` 退出 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全链通过）；`npm --prefix web run test:unit` 48 passed 无回归。
-- 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。
+- 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。（宽度家族已在评审修复中补齐；最终口径见下方修复记录与报告第 6 节。）
 - **评审修复（commit `修正 UI 契约检查器位置计算与令牌块豁免`）**：修正 5 项重要缺陷与 5 项次要缺陷。
   - 位置计算：声明值下标已经是整份文件的绝对下标，原实现又加了一层规则内容起点，导致行号正确但列号系统性偏后；修正后 `raw-visual-value`/`raw-hex-color` 的 `line:column` 精确指向值起点，并新增手算行列的回归测试。
   - 图标定位：原实现用变长替换剔除 HTML 注释，吞掉注释内换行后使注释之后的图标整体前移；改为逐字符等长遮罩（保留换行），新增含多行注释的模板回归测试。
   - 令牌块豁免收窄：原实现在逗号列表里只要有一段命中 `:root`/`html` 前缀就整块豁免，使 `html body .panel`、`html[data-theme="dark"] .panel`、`:root,.panel` 静默通过；现要求**每一段**都恰为 `:root`/`html[...]` 且不含后代组合，三种逃逸用例均已被拒绝。
   - 尺寸规则补全：`raw-visual-value` 增加 `width`/`min-width`/`max-width`，与高度家族对齐（图标成对书写宽高）；同时新增回归测试证明 `@media (max-width:…)`/`@container … (max-width:…)` 前奏不会被当成声明。
   - 变异证据补全：Step 1 的 11 类判定全部改为真实 CLI 子进程注入（新增“嵌套 fallback 未定义”“动态变量缺生产者”“图标尺寸裸值”），并加测试锁定 11 类/12 条注入的覆盖面。
-  - 次要修复：`@keyframes` 内的 `from`/`to`/`0%` 不再当作选择器规则；动态白名单条目校验生产者文件真实存在（幽灵条目不再放行）；源码根目录不可读时退出 2 而不是静默零违规；测试文件注释改为真实耗时量级；报告中的到期任务分布表按真实数据重写。
+  - 次要修复：`@keyframes` 内的 `from`/`to`/`0%` 不再当作选择器规则；动态白名单条目校验生产者文件真实存在（幽灵条目不再放行）；源码根目录不可读时退出 2 而不是静默零违规；测试文件注释改为贴近量级的耗时说明（精确值在复审修复中补齐）。
 - 评审修复后重新验证：`test:contracts` **62 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0；`test:unit` 48 passed 无回归。债务基线 386 → 422 条，**零删除、仅新增 36 条**（宽度家族 20 + `max-width` 12 + `min-width` 4），不变量重新实测为 **423 = 422 + 1**。
+- **复审修复（commit `补齐 UI 契约门禁文档与回归测试细节`）**：收尾文档与回归测试细节，不动规则判定范围。
+  - 报告第 5 节债务基线表改为直接用 `ui-contract-exceptions.json` 统计的真实数据（422 条；按规则与按 `expiresWith` 的逐项分布），与第 8 节同源同值；第 6 节范围口径同步为「宽度与高度家族均覆盖」。
+  - 注释修正：`check-ui-contracts.mjs` 说明 `offset` 是 `<style>` 块在文件中的起点、`declaration.valueStart` 相对块内容，两者相加才是文件绝对下标；`visual-values.mjs` 写明「裸 `html` 与 `:root` 等价、同为令牌定义处」这一有意保留的取舍。
+  - 回归测试加固：`@media`/`@container` 前奏测试改为在全局业务样式表里写裸值，并同时断言「三条内层裸值全部命中」（正向控制）与「没有任何违规提及 `900px`/`511px`/`600px`」；临时移除 `parseRules` 的 `@` 跳过可复现 3 条 `global-selector-in-component` 误报，该测试确实变红，已还原并复跑为绿（证据见报告 §9）。
+  - 耗时注释改为实测值：整套用例 5.7～9.7 秒，14 次 CLI 子进程启动各 0.52～0.62 秒。
+- 复审修复后重新验证：`test:contracts` **62 passed / 0 failed**（连续两次运行一致）；`check:ui` 退出 0；`build` 退出 0；`test:unit` 48 passed。债务基线仍为 **422 条**（本轮不改变判定范围），不变量仍为 423 = 422 + 1。
 
 ## 2026-09-14（计划修订：发布 attempt 命名空间与证据永久保留）
 

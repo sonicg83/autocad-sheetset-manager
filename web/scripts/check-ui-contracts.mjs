@@ -285,8 +285,8 @@ function analyzeStyleSource({file, text, offset, emit, isDefined, violations, ap
     }
     if (isTokenBlock(rule.selector)) continue;
     for (const declaration of parseDeclarations(text, rule)) {
-      // `declaration.valueStart` 已经是相对整份文件文本的绝对下标（切分以 rule.contentStart
-      // 为起点），这里只能再加一次块本身的偏移。
+      // `offset` 是该 `<style>` 块在文件中的起点，`declaration.valueStart` 相对块内容文本；
+      // 两者相加才是文件绝对下标（`.css` 文件的块起点为 0，故与整份文件下标重合）。
       const position = toPosition(file.text, offset + declaration.valueStart);
       for (const hex of findHexColorsInValue(declaration.value)) {
         violations.push(

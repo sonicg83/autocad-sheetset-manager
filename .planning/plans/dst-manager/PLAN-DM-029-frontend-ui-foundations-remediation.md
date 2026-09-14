@@ -409,6 +409,7 @@ Task 10 → Task 11 → Task 12
 | 计划编制基线 | `rtk npm --prefix web run build` | 待实施前复核；最近审计基线通过 | 实施时填写 |
 | Task 1 | `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run check:ui`、`rtk npm --prefix web run build`、`rtk npm --prefix web run test:unit` | **49 passed / 0 failed**（含 9 类违规注入变异套件）；`check:ui` 退出 0（仅因已登记债务）；注入临时违规探针后退出 1、移除后退出 0；`build` 退出 0；`unit` 48 passed 无回归 | 提交 `建立前端 UI 静态契约门禁`；386 条基线见 `web/scripts/ui-contract-exceptions.json` |
 | Task 1（评审修复） | 同上四条 + 临时探针逐条复现 I1–I5/M1–M2 | **62 passed / 0 failed**（11 类/12 条 CLI 级注入）；`check:ui` 退出 0；`build` 退出 0；`unit` 48 passed；基线 386 → 422（零删除、仅新增 36 条宽度家族）；不变量 423 = 422 + 1 | 提交 `修正 UI 契约检查器位置计算与令牌块豁免`；修复报告见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/task-1-report.md` 第 8 节 |
+| Task 1（复审修复） | 同上四条；另做「临时移除 `parseRules` 的 `@` 跳过」红/绿对照实验 | **62 passed / 0 failed**（连续两次运行）；`check:ui` 退出 0；`build` 退出 0；`unit` 48 passed；基线仍 422 条、不变量仍 423 = 422 + 1；前奏测试在该注入下确实变红（3 条 `global-selector-in-component` 误报），还原后复跑为绿 | 提交 `补齐 UI 契约门禁文档与回归测试细节`；证据见同报告第 9 节 |
 | Task 2–11 | 各任务列出的 RED/GREEN 命令 | 待实施 | 本表逐任务追加 |
 | Task 12 | 全量门禁与真实 Windows 缩放 | 待实施 | `assets/PLAN-DM-029/README.md` |
 

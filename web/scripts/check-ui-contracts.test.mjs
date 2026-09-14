@@ -4,8 +4,9 @@
 // `collectUiContractViolations({root, exceptions})` 与真实 CLI 子进程验证。
 //
 // 变异证据套件（Step 8）向合法夹具逐类注入违规并断言真实 CLI 子进程退出 1；它只在
-// 检查器、规则或例外格式变化时要求重跑。整套用例约 7.5 秒，其中单次 CLI 子进程
-// 启动约 0.5 秒，因此新增 CLI 级变异用例时按「每次 spawn 约 0.5 秒」估算预算。
+// 检查器、规则或例外格式变化时要求重跑。整套用例实测 5.7～9.7 秒（三次运行 5.7 s /
+// 9.0 s / 9.7 s，随机器负载波动），其中 14 次 CLI 子进程启动各占 0.52～0.62 秒，
+// 因此新增 CLI 级变异用例时按「每次 spawn 约 0.6 秒」估算预算。
 
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
@@ -496,17 +497,27 @@ main{padding:24px}
   });
 
   test("@media/@container 的 max-width 前奏不被当成声明", () => {
+    // 刻意放在全局业务样式表并写裸值：
+    // - 裸值确保内层真的被扫到（扫不到就是检查器漏扫，本测试必须变红）；
+    // - 非 scoped 上下文确保前奏一旦被当成规则，就会以 `裸全局选择器` 形式把
+    //   `@media (max-width:900px)` 写进消息，从而被下面的前奏断言钉住。
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
-      "src/components/Query.vue": `<template><p>文本</p></template>
-<style scoped>
-@media (max-width:900px){.panel{font-size:var(--font-label)}}
-@container value-body (max-width:511px){.panel{line-height:var(--font-label)}}
-@media (min-width:600px) and (max-width:900px){.panel{height:var(--font-label)}}
-</style>
+      "src/style.css": `${TOKENS_CSS}
+@media (max-width:900px){.panel{font-size:15px}}
+@container value-body (max-width:511px){.panel{line-height:15px}}
+@media (min-width:600px) and (max-width:900px){.panel{height:15px}}
 `,
     });
-    assert.deepEqual(rulesOf(violations), []);
+    // 正向控制：三条内层裸值都必须命中。
+    assert.deepEqual(
+      violations.filter((violation) => violation.rule === "raw-visual-value").map((violation) => violation.message.replace(/^.*?：/, "")),
+      ["font-size:15px", "line-height:15px", "height:15px"],
+    );
+    // 前奏里的断点不是声明：任何违规都不得把 900px/511px/600px 当成属性值或选择器。
+    const preludeMentions = violations
+      .filter((violation) => /900px|511px|600px/.test(violation.message))
+      .map((violation) => `${violation.rule}: ${violation.message}`);
+    assert.deepEqual(preludeMentions, []);
   });
 
   test("@keyframes 的 from/to/百分比关键帧不作为规则参与判定", () => {
