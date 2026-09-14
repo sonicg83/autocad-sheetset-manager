@@ -3,11 +3,11 @@ import hashlib
 import json
 import os
 import shutil
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from dst_manager.infrastructure.filesystem import atomic
 from dst_manager.infrastructure.filesystem.locking import (
     WindowsResultGuards,
     WorkspaceTransactionLock,
@@ -30,8 +30,32 @@ class PublishRecoveryError(RuntimeError):
     code = "PUBLISH_RECOVERY_FAILED"
 
 
+class PublishOperationConflictError(PublishRecoveryError):
+    """同一发布操作的修订目录无法安全复用（已提交修订或上一次尝试状态不明）。
+
+    ``retry_job`` 复用 ``job_id``，而发布器以 ``job_id`` 作为 ``operation_id``，所以任务重试
+    必然第二次面对第一次留下的 ``revisions/<operation_id>``。只有在能证明「上一次尝试已
+    整批回到发布前状态」时才允许复用；证据不足时必须转人工复核：既不能覆盖已提交的修订
+    历史，也不能在证据不足时做破坏性清理。继承 ``PublishRecoveryError`` 以沿用「隔离而不
+    是循环重试」的既有处置。
+    """
+
+    code = "PUBLISH_OPERATION_CONFLICT"
+
+
 class PublishBaselineError(RuntimeError):
     code = "PUBLISH_BASE_CHANGED"
+
+
+class PublishJournalWriteError(OSError):
+    """发布日志在限定重试后仍写入失败（外部文件过滤驱动占用或真实写盘故障）。
+
+    继承 ``OSError`` 以保持发布器「日志写失败即普通发布故障」的既有语义；该异常最终
+    由通用失败分支包装成 ``PublishRolledBackError``，其消息直接成为任务 ``error_detail``，
+    因此这里必须给出人能看懂的原因而不是裸 WinError。
+    """
+
+    code = "PUBLISH_JOURNAL_WRITE_FAILED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +132,59 @@ class RecoverablePublisher:
         if not replace_file(str(target), str(source), str(backup), 0x2, None, None):
             raise ctypes.WinError(ctypes.get_last_error())
 
+    @staticmethod
+    def _before_snapshot_path(before_dir: Path, workspace_root: Path, target: Path) -> Path:
+        return before_dir / target.relative_to(workspace_root)
+
+    @staticmethod
+    def _replacement_backup_path(target: Path, operation_id: str) -> Path:
+        return target.with_name(f".{target.name}.{operation_id}.replaced")
+
+    def _reclaim_previous_attempt(
+        self,
+        operation_id: str,
+        workspace_root: Path,
+        revision_dir: Path,
+        before_dir: Path,
+        journal_path: Path,
+        baselines: dict[Path, ExpectedFileBaseline | None],
+    ) -> None:
+        """为重试回收同一 ``operation_id`` 的修订目录，证据不足时拒绝继续。
+
+        判断只看可核验的事实：调用方基准已由 ``_verify_baselines`` 确认等于正式文件当前的
+        内容与身份，因此「与基准逐字节相同」的发布前快照或替换备份都是冗余副本，删除它们不
+        会丢失任何信息；一旦无法证明冗余（内容不一致、已存在提交清单），就必须转人工复核，
+        而不是猜测性清理。
+        """
+        manifest_path = revision_dir / "manifest.json"
+        if manifest_path.exists():
+            raise PublishOperationConflictError(f"同一发布操作已存在提交清单，禁止复用修订目录：{manifest_path}")
+        for target, expected in baselines.items():
+            snapshot = self._before_snapshot_path(before_dir, workspace_root, target)
+            if snapshot.exists() and (expected is None or file_sha256(snapshot) != expected.sha256):
+                raise PublishOperationConflictError(f"上一次尝试的发布前快照与当前基准不一致，禁止复用：{snapshot}")
+            replace_backup = self._replacement_backup_path(target, operation_id)
+            if replace_backup.exists() and (expected is None or file_sha256(replace_backup) != expected.sha256):
+                raise PublishOperationConflictError(f"上一次尝试的替换备份无法证明可回收：{replace_backup}")
+        # 先校验全部目标再动手：任何冲突都必须在零改动的前提下拒绝。
+        for target in baselines:
+            replace_backup = self._replacement_backup_path(target, operation_id)
+            if replace_backup.exists():
+                atomic.retry_transient_contention(lambda path=replace_backup: path.unlink(missing_ok=True))
+        before_dir.mkdir(parents=True, exist_ok=True)
+        self._preserve_superseded_journal(revision_dir, journal_path)
+
+    @staticmethod
+    def _preserve_superseded_journal(revision_dir: Path, journal_path: Path) -> None:
+        """留档上一次尝试的发布日志，避免重试覆盖后丢失那一次的文件级证据。"""
+        if not journal_path.exists():
+            return
+        superseded_dir = revision_dir / "superseded-journals"
+        superseded_dir.mkdir(parents=True, exist_ok=True)
+        index = len(list(superseded_dir.glob("publish-journal.*.json"))) + 1
+        destination = superseded_dir / f"publish-journal.{index:03d}.json"
+        atomic.retry_transient_contention(lambda: shutil.copy2(journal_path, destination))
+
     def publish(
         self,
         operation_id: str,
@@ -158,7 +235,16 @@ class RecoverablePublisher:
         revision_dir = manager_dir / "revisions" / operation_id
         before_dir = revision_dir / "before"
         journal_path = manager_dir / "jobs" / operation_id / "publish-journal.json"
-        before_dir.mkdir(parents=True, exist_ok=False)
+        # 重试会复用 job_id（即 operation_id），因此必须先在能证明一致时回收上一次尝试留下的
+        # 修订目录，否则第二次发布必然撞上已存在的 before 目录而整批失败。
+        self._reclaim_previous_attempt(
+            operation_id,
+            workspace_root,
+            revision_dir,
+            before_dir,
+            journal_path,
+            baselines,
+        )
         journal_path.parent.mkdir(parents=True, exist_ok=True)
         entries = []
         for target, staged_file in staged.items():
@@ -167,7 +253,7 @@ class RecoverablePublisher:
             expected_baseline = baselines[target]
             target_existed = expected_baseline is not None
             baseline_identity = list(expected_baseline.identity) if expected_baseline else None
-            backup = before_dir / target.relative_to(workspace_root)
+            backup = self._before_snapshot_path(before_dir, workspace_root, target)
             if target_existed:
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(target, backup)
@@ -179,7 +265,7 @@ class RecoverablePublisher:
                     raise PublishBaselineError(f"发布前快照与预期基准不一致：{target}")
             elif staged_file is None:
                 raise FileNotFoundError(f"DELETE_TARGET_NOT_FOUND: {target}")
-            replace_backup = target.with_name(f".{target.name}.{operation_id}.replaced")
+            replace_backup = self._replacement_backup_path(target, operation_id)
             if replace_backup.exists():
                 raise FileExistsError(f"PUBLISH_REPLACE_BACKUP_EXISTS: {replace_backup}")
             entries.append(
@@ -276,13 +362,14 @@ class RecoverablePublisher:
         except PublishBaselineError as publish_error:
             if result_guard is not None:
                 result_guard.__exit__(None, None, None)
-            self._write_journal(journal_path, journal)
+            self._write_journal_best_effort(journal_path, journal)
             if any(entry["replaced"] or entry["attempted"] for entry in entries):
                 try:
                     self._rollback(journal_path, journal, entries)
                 except Exception as recovery_error:  # noqa: BLE001 - 基准冲突后的恢复故障必须显式终止
                     journal["status"] = "ROLLBACK_FAILED"
-                    self._write_journal(journal_path, journal)
+                    # 记录故障状态的日志同样不得掩盖真正的恢复故障。
+                    self._write_journal_best_effort(journal_path, journal)
                     raise PublishRecoveryError(str(recovery_error)) from publish_error
             else:
                 journal["status"] = "ABORTED_BASELINE_CHANGED"
@@ -294,12 +381,12 @@ class RecoverablePublisher:
             for entry in entries:
                 if entry.get("attempted") and not entry.get("replaced") and not entry.get("conflict_preserved"):
                     entry["api_failed"] = True
-            self._write_journal(journal_path, journal)
+            self._write_journal_best_effort(journal_path, journal)
             try:
                 self._rollback(journal_path, journal, entries)
             except Exception as recovery_error:  # noqa: BLE001 - 任何恢复故障都必须进入可再次恢复状态
                 journal["status"] = "ROLLBACK_FAILED"
-                self._write_journal(journal_path, journal)
+                self._write_journal_best_effort(journal_path, journal)
                 raise PublishRecoveryError(str(recovery_error)) from publish_error
             raise PublishRolledBackError(str(publish_error)) from publish_error
         except BaseException:
@@ -358,15 +445,13 @@ class RecoverablePublisher:
     @staticmethod
     def _archive_journal(revision_dir: Path, journal_path: Path, journal: dict) -> None:
         manifest_path = revision_dir / "manifest.json"
-        manifest_temp = revision_dir / ".manifest.json.tmp"
         # manifest 是数据库 finalize 的可见性闸门，因此必须最后原子发布；任何前置归档
-        # 失败都只能留下不可枚举的临时文件或 journal 副本。
-        shutil.copy2(journal_path, revision_dir / "publish-journal.json")
-        manifest_temp.write_text(
-            json.dumps(journal, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+        # 失败都只能留下不可枚举的临时文件或 journal 副本。两处写入都对外部文件过滤
+        # 驱动的瞬时占用做有界重试：归档失败会在下次启动被升级为发布恢复故障。
+        atomic.retry_transient_contention(
+            lambda: shutil.copy2(journal_path, revision_dir / "publish-journal.json"),
         )
-        os.replace(manifest_temp, manifest_path)
+        atomic.atomic_write_text(manifest_path, json.dumps(journal, ensure_ascii=False, indent=2))
 
     @staticmethod
     def _immutable_transaction_projection(workspace_root: Path, journal: dict) -> dict:
@@ -568,7 +653,8 @@ class RecoverablePublisher:
 
     def _rollback(self, journal_path: Path, journal: dict, entries: list[dict]) -> None:
         journal["status"] = "ROLLING_BACK"
-        self._write_journal(journal_path, journal)
+        # 回填正式文件不能被日志写入故障阻断：日志记录降级为尽力而为。
+        self._write_journal_best_effort(journal_path, journal)
         for entry in reversed(entries):
             if entry.get("conflict_preserved"):
                 continue
@@ -797,12 +883,27 @@ class RecoverablePublisher:
 
     @staticmethod
     def _write_journal(path: Path, journal: dict) -> None:
-        temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
         try:
-            temp.write_text(json.dumps(journal, ensure_ascii=False, indent=2), encoding="utf-8")
-            os.replace(temp, path)
-        finally:
-            temp.unlink(missing_ok=True)
+            atomic.atomic_write_text(path, json.dumps(journal, ensure_ascii=False, indent=2))
+        except OSError as error:
+            hint = (
+                f"（已按瞬时占用退避重试 {atomic.DEFAULT_ATTEMPTS} 次仍被拒绝，通常是安全软件或同步工具持有该文件）"
+                if atomic.is_transient_contention(error)
+                else ""
+            )
+            raise PublishJournalWriteError(f"发布日志写入失败{hint}：{error}") from error
+
+    @staticmethod
+    def _write_journal_best_effort(path: Path, journal: dict) -> None:
+        """回滚前的日志记录：日志不可写时不得阻止正式文件的回填。
+
+        日志只是诊断记录，磁盘上正式文件的一致性优先级更高。这里只吞掉写入类故障，
+        其他编程错误继续向上抛出。
+        """
+        try:
+            RecoverablePublisher._write_journal(path, journal)
+        except OSError:
+            pass
 
     def _rollback_legacy_attempted(self, journal_path: Path, journal: dict) -> None:
         journal["status"] = "ROLLING_BACK"

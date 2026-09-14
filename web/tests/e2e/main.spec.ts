@@ -973,6 +973,32 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   await expect(toast).toHaveCount(0);
 });
 
+test("发布回滚终态展示可读真因：toast 与实施进度面板均带 error_detail",async({page})=>{
+  // 回归 2026-09-14：PUBLISH_ROLLED_BACK 只是终态结论（写盘中途失败、已整批回滚），
+  // 界面若只显示错误码则无法排查；需把后端 error_detail 同时呈现到失败 toast 与实施进度面板
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-detail",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+  await page.getByRole("button",{name:"预览变更"}).click();
+  await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
+  const detail="发布日志写入失败（已按瞬时占用退避重试 5 次仍被拒绝）：[WinError 5] 拒绝访问";
+  // 折叠浮层后 toast 抑制规则（overlayOpen&&overlayTab==="prog"）不命中
+  await page.getByRole("complementary",{name:"任务浮层"}).getByRole("button",{name:"收起任务浮层"}).click();
+  await page.evaluate(payload=>(window as any).__emitJob(payload),{id:"job-detail",workspace_id:"workspace-1",status:"ROLLED_BACK",progress:100,attempt:1,error_code:"PUBLISH_ROLLED_BACK",error_detail:detail,files:[]});
+  // 失败 toast 常驻并带真因（而非仅错误码）
+  const toast=page.getByRole("alert").filter({hasText:"任务失败"});
+  await expect(toast).toContainText("PUBLISH_ROLLED_BACK，整批未发布");
+  await expect(toast).toContainText(`原因：${detail}`);
+  // 从 toast "查看"回到浮层实施进度页签：面板同样展示错误码与真因
+  await toast.getByRole("button",{name:"查看"}).click();
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});
+  await expect(overlay.getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
+  await expect(overlay.getByText("PUBLISH_ROLLED_BACK")).toBeVisible();
+  await expect(overlay.getByText(`原因：${detail}`)).toBeVisible();
+});
+
 test("修订历史标签激活时加载列表，空修订显示暂无修订历史",async({page})=>{
   await openWorkspace(page);
   let asked=false;

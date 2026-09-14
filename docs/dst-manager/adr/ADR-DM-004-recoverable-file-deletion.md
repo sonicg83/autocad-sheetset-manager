@@ -6,7 +6,7 @@ document_kind: adr
 owners:
   - dst-manager
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-14
 related:
   - ARCH-DM-001
   - ADR-DM-001
@@ -47,3 +47,11 @@ related:
 ## 替代关系
 
 本 ADR 细化 `ARCH-DM-001` 第 8 节的多文件事务语义；不替代其永久修订、文件锁和启动恢复要求。
+
+## 补记（2026-09-14）：同一 `operation_id` 重试时的修订目录复用契约
+
+`retry_job` 复用 `job_id`，发布器又以 `job_id` 作为 `operation_id`，因此回滚后的重试必然第二次面对 `revisions/<operation-id>/`。上述决策（同一 `operation_id`、永久 `before`、`COMMITTED` 闸门、无法证明即 `NEEDS_REVIEW`）**不变**，仅补充复用前提：
+
+- 重试可在**证明上一次尝试已整批回到发布前状态**时复用既有修订目录：`before` 快照与当前正式文件基准（哈希与文件身份）逐字节相同，才允许复用并按需覆盖；与基准逐字节相同的残留 `.<名称>.<operation_id>.replaced` 替换备份属冗余副本，可在持锁发布器内回收。回收只发生在已证明一致之后，不做猜测性清理，也不删除无法证明的残留。
+- `manifest.json` 已存在（即该 `operation_id` 已有已提交修订）或证据不足时一律拒绝复用，返回 `PUBLISH_OPERATION_CONFLICT` 并进入 `NEEDS_REVIEW` 人工复核，**不得自动重跑**（避免覆盖已提交修订历史或把半发布状态当成基准）。
+- 重试覆盖前，上一次尝试的 `publish-journal.json` 必须复制留档到 `revisions/<operation-id>/superseded-journals/publish-journal.<NNN>.json`：journal 是文件级证据的唯一载体，不得因重试静默丢失。用复制而非移动，使「回收完成但新 `PREPARED` 未写入」的崩溃窗口下启动恢复仍能看到旧日志。

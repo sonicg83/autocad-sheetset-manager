@@ -28,12 +28,15 @@ export function useJobMonitor(deps:{
   function terminal(status:string){return ["SUCCEEDED","FAILED","ROLLED_BACK","BLOCKED_FILE_LOCK","NEEDS_REVIEW"].includes(status)}
   function monitorMatches(generation:number,workspaceId:string){return generation===jobMonitorGeneration&&!deps.isWorkspaceLoading.value&&deps.workspace.value?.id===workspaceId}
   // Task 7 终态通知（SPEC-DM-006 §6.6）：SUCCEEDED→ok、FAILED/ROLLED_BACK/BLOCKED_FILE_LOCK→fail（含 error_code 与"整批未发布"语义）、NEEDS_REVIEW→fail（沿用既有禁止直接重试文案）；用户正停留在浮层实施进度页签（shouldSuppress）时不弹
+  // 带 error_detail 时追加可读真因：ROLLED_BACK 等码只表示终态结论，根因由后端 error_detail 提供
+  function withDetail(text:string,detail?:string|null){return detail?text+t("jobs.toasts.detailSuffix",{detail}):text}
   function notifyTerminal(job:Job){
     if(deps.shouldSuppress?.())return;
     if(job.status==="SUCCEEDED"){deps.pushToast?.({type:"ok",title:t("jobs.toasts.succeededTitle"),body:t("jobs.toasts.succeededBody"),jumpTab:"prog"});return}
-    if(job.status==="NEEDS_REVIEW"){deps.pushToast?.({type:"fail",title:t("jobs.toasts.needsReviewTitle"),body:t("jobs.toasts.needsReviewBody"),jumpTab:"prog"});return}
+    if(job.status==="NEEDS_REVIEW"){deps.pushToast?.({type:"fail",title:t("jobs.toasts.needsReviewTitle"),body:withDetail(t("jobs.toasts.needsReviewBody"),job.error_detail),jumpTab:"prog"});return}
     const code=job.error_code??"";
-    deps.pushToast?.({type:"fail",title:t("jobs.toasts.failedTitle"),body:code?t("jobs.toasts.failedBody",{code}):t("jobs.toasts.failedBodyNoCode"),jumpTab:"prog"});
+    const body=code?t("jobs.toasts.failedBody",{code}):t("jobs.toasts.failedBodyNoCode");
+    deps.pushToast?.({type:"fail",title:t("jobs.toasts.failedTitle"),body:withDetail(body,job.error_detail),jumpTab:"prog"});
   }
   function watchJob(id:string,workspaceId:string){
     const generation=invalidateJobMonitor(false);

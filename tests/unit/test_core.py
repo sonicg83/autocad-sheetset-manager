@@ -48,9 +48,11 @@ from dst_manager.infrastructure.autocad.worker import (
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.dst_codec.codec import _DECODE, _ENCODE
+from dst_manager.infrastructure.filesystem import atomic as atomic_module
 from dst_manager.infrastructure.filesystem.publisher import (
     ExpectedFileBaseline,
     PublishBaselineError,
+    PublishOperationConflictError,
     PublishRecoveryError,
     PublishRolledBackError,
     RecoverablePublisher,
@@ -3999,3 +4001,165 @@ def test_cad_staging_accepts_valid_dst_after_repair(tmp_path: Path):
     final = load_acsm(DstCodec().decode_file(staged))
     assert final.repair_report.status == "VALID"
     assert len(final.project(tmp_path).sheets) == 24
+
+
+def _deny_publish_journal_replacement(monkeypatch, *, denied_budget: int):
+    """模拟安全软件/EDR：发布日志的原子替换返回 WinError 5，预算用完后恢复正常。"""
+    original_replace = atomic_module.os.replace
+    denied = 0
+
+    def replace(source, destination):
+        nonlocal denied
+        if Path(destination).name == "publish-journal.json" and denied < denied_budget:
+            denied += 1
+            error = PermissionError(13, "拒绝访问")
+            error.winerror = 5  # type: ignore[attr-defined]
+            raise error
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(atomic_module.os, "replace", replace)
+    return lambda: denied
+
+
+def _job_events(workspace_root: Path, job_id: str) -> list[dict]:
+    path = workspace_root / ".dst-manager" / "jobs" / job_id / "logs" / "events.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_transient_journal_denial_keeps_publish_succeeding(tiny_workspace, tmp_path: Path, monkeypatch):
+    """回归 2026-09-14：发布日志被瞬时拒绝（安全软件占用）不得让整批发布回滚。"""
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    denial_count = _deny_publish_journal_replacement(monkeypatch, denied_budget=2)
+
+    job = _execute_confirmed(
+        service,
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "瞬时日志拒绝"}],
+    )
+
+    assert denial_count() == 2
+    assert job["status"] == "SUCCEEDED"
+    assert job.get("error_code") is None
+    assert job.get("error_detail") is None
+
+
+def test_persistent_journal_denial_reports_readable_reason(tiny_workspace, tmp_path: Path, monkeypatch):
+    """日志长时间不可写时：任务可重试、原因可读，正式 DST 保持发布前字节。"""
+    dst, _ = tiny_workspace
+    service = DstManagerService(Settings(data_dir=tmp_path / "data"))
+    workspace = service.open_workspace(dst)
+    base_hash = file_sha256(dst)
+    _deny_publish_journal_replacement(monkeypatch, denied_budget=10_000)
+
+    job = _execute_confirmed(
+        service,
+        workspace.id,
+        workspace.revision_id,
+        [{"type": "update_sheet_set", "name": "持续日志拒绝"}],
+    )
+
+    assert job["status"] == "FAILED"
+    assert job["error_code"] == "PUBLISH_JOURNAL_WRITE_FAILED"
+    assert "发布日志写入失败" in job["error_detail"]
+    assert "拒绝访问" in job["error_detail"]
+    assert file_sha256(dst) == base_hash
+    assert service.database.list_revisions(workspace.id) == []
+
+
+def test_publish_rollback_event_and_job_record_true_reason(tmp_path: Path):
+    """PUBLISH_ROLLED_BACK 必须带真因：界面只显示错误码，真因只能从事件与 error_detail 查。"""
+    workspace, _ = _chained_rename_workspace(tmp_path, count=1)
+    reason = (
+        "发布日志写入失败（已按瞬时占用退避重试 5 次仍被拒绝，通常是安全软件或同步工具持有该文件）："
+        "[WinError 5] 拒绝访问"
+    )
+    database = Mock()
+    database.update_job.return_value = True
+    database.get_job.return_value = {"id": "job-rolled", "status": "ROLLED_BACK", "error_code": "PUBLISH_ROLLED_BACK"}
+    runner = CadJobRunner(database, DstCodec(), Mock(), 30, max_parallel=1)
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+
+    def fail(*_args, **_kwargs):
+        raise PublishRolledBackError(reason)
+
+    runner._execute = fail  # type: ignore[method-assign]
+    job = {
+        "id": "job-rolled",
+        "worker_id": "worker",
+        "attempt": 1,
+        "payload": {
+            "base_revision_id": workspace.revision_id,
+            "commands": [],
+            "plan": {
+                "execution_intent": {
+                    "cad_validation_deferred": True,
+                    "source_baselines": [],
+                    "expected_file_hashes": {},
+                },
+            },
+        },
+    }
+
+    result = runner.run(job, workspace, CadCapability("2020", None, plugin))
+
+    assert result["id"] == "job-rolled"
+    terminal_updates = [call for call in database.update_job.call_args_list if call.args[3] == "PUBLISH_ROLLED_BACK"]
+    assert len(terminal_updates) == 1
+    assert terminal_updates[0].args[1] == JobStatus.ROLLED_BACK
+    assert terminal_updates[0].args[4] == reason
+    rollback_event = next(item for item in _job_events(workspace.root, "job-rolled") if item["event"] == "PUBLISH_ROLLED_BACK")
+    assert rollback_event["error"] == reason
+
+
+def test_publish_operation_conflict_is_quarantined_with_specific_code(tmp_path: Path):
+    """修订目录无法安全复用（如重试撞上已提交修订）时必须转人工复核，并暴露具体错误码。"""
+    workspace, _ = _chained_rename_workspace(tmp_path, count=1)
+    reason = f"同一发布操作已存在提交清单，禁止复用修订目录：{workspace.root}/manifest.json"
+    database = Mock()
+    database.update_job.return_value = True
+    database.get_job.return_value = {
+        "id": "job-conflict",
+        "status": "NEEDS_REVIEW",
+        "error_code": "PUBLISH_OPERATION_CONFLICT",
+    }
+    runner = CadJobRunner(database, DstCodec(), Mock(), 30, max_parallel=1)
+    plugin = tmp_path / "plugin.dll"
+    plugin.write_bytes(b"plugin")
+
+    def fail(*_args, **_kwargs):
+        raise PublishOperationConflictError(reason)
+
+    runner._execute = fail  # type: ignore[method-assign]
+    job = {
+        "id": "job-conflict",
+        "worker_id": "worker",
+        "attempt": 2,
+        "payload": {
+            "base_revision_id": workspace.revision_id,
+            "commands": [],
+            "plan": {
+                "execution_intent": {
+                    "cad_validation_deferred": True,
+                    "source_baselines": [],
+                    "expected_file_hashes": {},
+                },
+            },
+        },
+    }
+
+    result = runner.run(job, workspace, CadCapability("2020", None, plugin))
+
+    assert result["error_code"] == "PUBLISH_OPERATION_CONFLICT"
+    terminal = database.finalize_job_terminal.call_args
+    assert terminal.args[0] == "job-conflict"
+    assert terminal.args[1] == JobStatus.NEEDS_REVIEW
+    assert terminal.args[2] == "PUBLISH_OPERATION_CONFLICT"
+    assert terminal.args[3] == reason
+    event = next(
+        item for item in _job_events(workspace.root, "job-conflict") if item["event"] == "PUBLISH_OPERATION_CONFLICT"
+    )
+    assert event["error"] == reason

@@ -7,6 +7,7 @@ export default {
     noChange: "(no change)",
     attempt: "Attempt {attempt}",
     retry: "Safe Retry",
+    errorDetail: "Reason: {detail}",
   },
   connection: {
     sse: "SSE",
@@ -43,6 +44,7 @@ export default {
     failedTitle: "Task failed",
     failedBody: "{code}; the batch was not published",
     failedBodyNoCode: "The batch was not published",
+    detailSuffix: ". Reason: {detail}",
   },
   errors: {
     needsReviewRetry: "The publish state needs manual review; direct retry is disabled",

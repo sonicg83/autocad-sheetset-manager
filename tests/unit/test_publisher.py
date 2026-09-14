@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from dst_manager.infrastructure.filesystem import atomic as atomic_module
 from dst_manager.infrastructure.filesystem import locking as locking_module
 from dst_manager.infrastructure.filesystem import publisher as publisher_module
 from dst_manager.infrastructure.filesystem.locking import (
@@ -18,6 +19,8 @@ from dst_manager.infrastructure.filesystem.locking import (
 )
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishBaselineError,
+    PublishJournalWriteError,
+    PublishOperationConflictError,
     PublishRecoveryError,
     PublishRolledBackError,
     RecoverablePublisher,
@@ -111,6 +114,111 @@ def test_concurrent_journal_writes_use_independent_temporary_files(tmp_path: Pat
     assert written in journals
     assert len(set(replace_sources)) == 2
     assert list(tmp_path.glob("*.tmp")) == []
+
+
+def _deny_journal_replacement(monkeypatch, *, denied_budget: int):
+    """模拟安全软件/EDR：发布日志的原子替换返回 WinError 5，预算用完后恢复正常。"""
+    original_replace = publisher_module.os.replace
+    denied = 0
+
+    def replace(source, destination):
+        nonlocal denied
+        if Path(destination).name == "publish-journal.json" and denied < denied_budget:
+            denied += 1
+            error = PermissionError(13, "拒绝访问")
+            error.winerror = 5  # type: ignore[attr-defined]
+            raise error
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(publisher_module.os, "replace", replace)
+    return lambda: denied
+
+
+def test_transient_journal_denial_is_retried_without_rolling_back(tmp_path: Path, monkeypatch):
+    """2026-09-14 现场回归：日志被瞬时拒绝不得让整批发布回滚。"""
+    targets = {}
+    for index in range(3):
+        target = tmp_path / f"target-{index}.txt"
+        source = tmp_path / f"staged-{index}.txt"
+        target.write_text(f"before-{index}")
+        source.write_text(f"after-{index}")
+        targets[target] = source
+    denial_count = _deny_journal_replacement(monkeypatch, denied_budget=2)
+
+    RecoverablePublisher().publish("transient-journal-denial", tmp_path, targets)
+
+    assert denial_count() == 2
+    assert [path.read_text() for path in targets] == ["after-0", "after-1", "after-2"]
+    job_dir = tmp_path / ".dst-manager/jobs/transient-journal-denial"
+    journal = json.loads((job_dir / "publish-journal.json").read_text(encoding="utf-8"))
+    assert journal["status"] == "COMMITTED"
+    assert list(job_dir.glob("*.tmp")) == []
+
+
+def test_persistent_journal_denial_fails_before_touching_files(tmp_path: Path, monkeypatch):
+    """重试预算耗尽时必须给出可读原因，且不得留下半发布状态或临时文件。"""
+    target, staged = tmp_path / "target.txt", tmp_path / "staged.txt"
+    target.write_text("before")
+    staged.write_text("after")
+    denial_count = _deny_journal_replacement(monkeypatch, denied_budget=1000)
+
+    with pytest.raises(PublishJournalWriteError) as exc_info:
+        RecoverablePublisher().publish("journal-denied", tmp_path, {target: staged})
+
+    assert "发布日志写入失败" in str(exc_info.value)
+    assert "拒绝访问" in str(exc_info.value)
+    assert PublishJournalWriteError.code == "PUBLISH_JOURNAL_WRITE_FAILED"
+    # 首条日志（PREPARED）就写不进去，说明尚未触碰任何正式文件
+    assert denial_count() == atomic_module.DEFAULT_ATTEMPTS
+    assert target.read_text() == "before"
+    job_dir = tmp_path / ".dst-manager/jobs/journal-denied"
+    assert not (job_dir / "publish-journal.json").exists()
+    assert list(job_dir.glob("*.tmp")) == []
+
+
+def test_journal_denial_after_first_replacement_still_restores_files(tmp_path: Path, monkeypatch):
+    """日志中途不可写时，已替换的正式文件仍必须被回填（磁盘一致性优先于日志记录）。"""
+    replaced, staged, untouched, untouched_staged = (
+        tmp_path / "replaced.txt",
+        tmp_path / "staged-replaced.txt",
+        tmp_path / "untouched.txt",
+        tmp_path / "staged-untouched.txt",
+    )
+    replaced.write_text("before-replaced")
+    untouched.write_text("before-untouched")
+    staged.write_text("after-replaced")
+    untouched_staged.write_text("after-untouched")
+    original_replace = publisher_module.os.replace
+    journal_writes = 0
+
+    def replace(source, destination):
+        nonlocal journal_writes
+        if Path(destination).name == "publish-journal.json":
+            journal_writes += 1
+            # 前三条（PREPARED/PUBLISHING/首项 STARTED）成功，之后持续被拒绝。
+            if journal_writes > 3:
+                error = PermissionError(13, "拒绝访问")
+                error.winerror = 5  # type: ignore[attr-defined]
+                raise error
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(publisher_module.os, "replace", replace)
+
+    with pytest.raises(PublishRecoveryError):
+        RecoverablePublisher().publish(
+            "journal-denied-midway",
+            tmp_path,
+            {replaced: staged, untouched: untouched_staged},
+        )
+
+    assert replaced.read_text() == "before-replaced"
+    assert untouched.read_text() == "before-untouched"
+    job_dir = tmp_path / ".dst-manager/jobs/journal-denied-midway"
+    # 日志保留最后一次成功写入的状态，供启动恢复与人工核对
+    journal = json.loads((job_dir / "publish-journal.json").read_text(encoding="utf-8"))
+    assert journal["status"] == "PUBLISHING"
+    assert journal["files"][0]["api_state"] == "STARTED"
+    assert list(job_dir.glob("*.tmp")) == []
 
 
 def test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish(tmp_path: Path):
@@ -1493,3 +1601,215 @@ def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
         assert journal["status"] == "ROLLBACK_FAILED"
         assert replace_backup.is_file()
         assert _identity(replace_backup) == baseline_identity
+
+
+class _JournalDenialWindow:
+    """模拟安全软件在「正式文件已替换、日志待落盘」窗口内持续占用发布日志。
+
+    只在日志已经出现 ``api_state == "SUCCEEDED"`` 时拒绝，保证注入点一定发生在正式文件
+    被替换之后——这正是 2026-09-14 现场整批回滚的形态。``reset()`` 用于在同一测试内制造
+    第二次独立占用窗口。
+    """
+
+    def __init__(self, monkeypatch, *, budget: int = atomic_module.DEFAULT_ATTEMPTS) -> None:
+        self.budget = budget
+        self.denied = 0
+        self._original_replace = publisher_module.os.replace
+        monkeypatch.setattr(publisher_module.os, "replace", self._replace)
+
+    def reset(self) -> None:
+        self.denied = 0
+
+    def _replace(self, source, destination):
+        if Path(destination).name == "publish-journal.json" and self.denied < self.budget:
+            try:
+                journal = json.loads(Path(source).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                journal = {}
+            if any(entry.get("api_state") == "SUCCEEDED" for entry in journal.get("files", [])):
+                self.denied += 1
+                error = PermissionError(13, "拒绝访问")
+                error.winerror = 5  # type: ignore[attr-defined]
+                raise error
+        return self._original_replace(source, destination)
+
+
+def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path: Path, monkeypatch):
+    """2026-09-14 现场回归：回滚后的任务重试（同一 job_id/operation_id）必须能再次发布。
+
+    ``retry_job`` 复用 ``job_id``，发布器又用 ``job_id`` 作为 ``operation_id``，因此第二次
+    发布必然面对第一次留下的 ``revisions/<operation_id>/before``。
+    """
+    operation = "job-retry-reuse"
+    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    publisher = RecoverablePublisher()
+    revision_dir = tmp_path / ".dst-manager" / "revisions" / operation
+    journal_path = tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json"
+    denial = _JournalDenialWindow(monkeypatch)
+
+    with pytest.raises(PublishRolledBackError):
+        publisher.publish(
+            operation,
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: capture_file_baseline(target)},
+        )
+
+    assert denial.denied == atomic_module.DEFAULT_ATTEMPTS
+    assert target.read_bytes() == b"before"
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    snapshot = revision_dir / "before" / target.name
+    assert snapshot.read_bytes() == b"before"
+
+    publisher.publish(
+        operation,
+        tmp_path,
+        {target: staged},
+        expected_baselines={target: capture_file_baseline(target)},
+    )
+
+    assert target.read_bytes() == b"after"
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "COMMITTED"
+    # 复用而不是重建：发布前快照必须仍是第一次尝试留下的原始字节
+    assert snapshot.read_bytes() == b"before"
+    # 上一次尝试的日志必须留档，不能被重试静默覆盖
+    superseded = sorted((revision_dir / "superseded-journals").glob("publish-journal.*.json"))
+    assert len(superseded) == 1
+    assert json.loads(superseded[0].read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    assert [item["operation_id"] for item in publisher.list_committed_operations(tmp_path)] == [operation]
+    assert publisher.recover(tmp_path) == []
+
+
+def test_reused_revision_dir_rollback_still_restores_formal_files(tmp_path: Path, monkeypatch):
+    """复用上一次尝试的修订目录后再次整批回滚，正式文件必须仍回到发布前字节。"""
+    operation = "job-retry-double-rollback"
+    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    publisher = RecoverablePublisher()
+    denial = _JournalDenialWindow(monkeypatch)
+
+    for _ in range(2):
+        denial.reset()
+        with pytest.raises(PublishRolledBackError):
+            publisher.publish(
+                operation,
+                tmp_path,
+                {target: staged},
+                expected_baselines={target: capture_file_baseline(target)},
+            )
+        assert target.read_bytes() == b"before"
+
+    journal = json.loads(
+        (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "ROLLED_BACK"
+    assert list(tmp_path.glob(f".{target.name}.*.replaced")) == []
+    assert list(tmp_path.glob("*.tmp")) == []
+    superseded = (tmp_path / ".dst-manager" / "revisions" / operation / "superseded-journals").glob(
+        "publish-journal.*.json",
+    )
+    assert len(list(superseded)) == 1
+
+
+def test_reusing_committed_operation_is_refused_without_touching_files(tmp_path: Path):
+    """已提交的 operation_id 不得被再次发布覆盖，必须转受控冲突错误。"""
+    operation = "job-committed-once"
+    target, staged, later = tmp_path / "target.dwg", tmp_path / "staged.dwg", tmp_path / "later.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    later.write_bytes(b"later")
+    publisher = RecoverablePublisher()
+    publisher.publish(
+        operation,
+        tmp_path,
+        {target: staged},
+        expected_baselines={target: capture_file_baseline(target)},
+    )
+    revision_dir = tmp_path / ".dst-manager" / "revisions" / operation
+    assert (revision_dir / "manifest.json").is_file()
+
+    with pytest.raises(PublishOperationConflictError) as exc_info:
+        publisher.publish(
+            operation,
+            tmp_path,
+            {target: later},
+            expected_baselines={target: capture_file_baseline(target)},
+        )
+
+    assert exc_info.value.code == "PUBLISH_OPERATION_CONFLICT"
+    assert isinstance(exc_info.value, PublishRecoveryError)
+    assert "提交清单" in str(exc_info.value)
+    assert target.read_bytes() == b"after"
+    journal = json.loads(
+        (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").read_text(encoding="utf-8"),
+    )
+    assert journal["status"] == "COMMITTED"
+
+
+def test_stale_snapshot_inconsistent_with_baseline_is_refused(tmp_path: Path):
+    """残留快照与当前基准不一致时不得继续发布，也不得做破坏性清理。"""
+    operation = "job-stale-snapshot"
+    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    snapshot = tmp_path / ".dst-manager" / "revisions" / operation / "before" / target.name
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_bytes(b"half-published")
+
+    with pytest.raises(PublishOperationConflictError) as exc_info:
+        RecoverablePublisher().publish(
+            operation,
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: capture_file_baseline(target)},
+        )
+
+    assert "快照与当前基准不一致" in str(exc_info.value)
+    assert target.read_bytes() == b"before"
+    assert snapshot.read_bytes() == b"half-published"
+    assert not (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").exists()
+
+
+def test_redundant_replacement_backup_is_reclaimed_on_retry(tmp_path: Path):
+    """与当前基准逐字节相同的替换备份是冗余副本，重试时必须回收而不是拒发。"""
+    operation = "job-redundant-replaced"
+    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    stale = tmp_path / f".{target.name}.{operation}.replaced"
+    stale.write_bytes(b"before")
+
+    RecoverablePublisher().publish(
+        operation,
+        tmp_path,
+        {target: staged},
+        expected_baselines={target: capture_file_baseline(target)},
+    )
+
+    assert target.read_bytes() == b"after"
+    assert not stale.exists()
+
+
+def test_replacement_backup_with_unknown_content_is_refused(tmp_path: Path):
+    """替换备份内容无法证明冗余时必须拒发并要求人工复核。"""
+    operation = "job-unknown-replaced"
+    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"after")
+    stale = tmp_path / f".{target.name}.{operation}.replaced"
+    stale.write_bytes(b"mystery")
+
+    with pytest.raises(PublishOperationConflictError) as exc_info:
+        RecoverablePublisher().publish(
+            operation,
+            tmp_path,
+            {target: staged},
+            expected_baselines={target: capture_file_baseline(target)},
+        )
+
+    assert "替换备份无法证明可回收" in str(exc_info.value)
+    assert target.read_bytes() == b"before"
+    assert stale.read_bytes() == b"mystery"

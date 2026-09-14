@@ -207,8 +207,9 @@ class XmlExportOperations:
                     on_committed=finalize_xml,
                 )
                 published = True
-        except PublishRolledBackError:
-            self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, "PUBLISH_ROLLED_BACK")
+        except PublishRolledBackError as exc:
+            # 回滚原因必须进 error_detail，否则 XML 导入/导出只能看到裸错误码。
+            self.database.finalize_job_terminal(job_id, JobStatus.ROLLED_BACK, "PUBLISH_ROLLED_BACK", str(exc))
             return self.database.get_job(job_id) or {}
         except PublishRecoveryError as exc:
             self.database.finalize_job_terminal(job_id, JobStatus.NEEDS_REVIEW, exc.code, str(exc))

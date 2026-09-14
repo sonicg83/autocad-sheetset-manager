@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-08-10
-updated: 2026-08-27
+updated: 2026-09-14
 related:
   - PLAN-DM-001
   - PLAN-DM-005
@@ -317,6 +317,8 @@ Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定�
    │     ├─ before/
    │     │  ├─ 图纸集数据文件.dst
    │     │  └─ <受影响DWG>
+   │     ├─ superseded-journals/
+   │     │  └─ publish-journal.<NNN>.json
    │     ├─ input/
    │     │  └─ imported.xml
    │     ├─ plan/
@@ -338,7 +340,7 @@ Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定�
 Windows文件系统没有跨多个文件的原子事务，MVP使用可恢复发布协议实现用户可见的整批成功/失败：
 
 1. 对原DST和所有受影响DWG计算SHA-256，并尝试取得排他写锁。
-2. 把原文件永久复制到revision的 `before`，复制后校验哈希。
+2. 把原文件永久复制到revision的 `before`，复制后校验哈希。同一 `operation_id` 在回滚后被重试时，只有在既有 `before` 快照与当前基准逐字节相同（或该操作尚无已提交 `manifest.json`）时才复用目录，否则以 `PUBLISH_OPERATION_CONFLICT` 隔离为 `NEEDS_REVIEW`；旧 `publish-journal.json` 先留档到 `superseded-journals/`。
 3. 所有修改只发生在job暂存区。
 4. 暂存成果全部通过校验后写入 `publish-journal.json`，状态为 `PREPARED`。
 5. 对每个目标文件在同卷创建临时发布文件，再用 `os.replace` 逐文件原子替换；每一步同步记录日志。

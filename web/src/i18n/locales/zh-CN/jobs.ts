@@ -7,6 +7,7 @@ export default {
     noChange: "（无变更）",
     attempt: "第 {attempt} 次",
     retry: "安全重试",
+    errorDetail: "原因：{detail}",
   },
   connection: {
     sse: "SSE",
@@ -43,6 +44,7 @@ export default {
     failedTitle: "任务失败",
     failedBody: "{code}，整批未发布",
     failedBodyNoCode: "整批未发布",
+    detailSuffix: "；原因：{detail}",
   },
   errors: {
     needsReviewRetry: "发布状态需要人工检查，禁止直接重试",

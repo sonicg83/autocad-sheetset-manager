@@ -20,7 +20,11 @@ from dst_manager.extensions.snapshots import SnapshotProperty
 from dst_manager.infrastructure.acsm_xml import AcsmDocument
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.extension_workspace import ExtensionWorkspaceReader
-from dst_manager.infrastructure.filesystem.publisher import file_sha256
+from dst_manager.infrastructure.filesystem.publisher import (
+    PublishRolledBackError,
+    capture_file_baseline,
+    file_sha256,
+)
 from dst_manager.infrastructure.persistence.database import Database
 from dst_manager.interfaces.api import create_app
 from dst_manager.interfaces.error_contracts import ErrorPayloadModel
@@ -508,6 +512,67 @@ def test_retry_then_pre_cad_failure_does_not_expose_previous_file_terminal_state
         "error_code": None,
         "error_detail": None,
     }
+
+
+def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path, tiny_workspace, monkeypatch):
+    """2026-09-14 现场回归：回滚任务经重试接口重置后，同一 operation_id 必须能再次发布。"""
+    dst, _ = tiny_workspace
+    app = create_app(Settings(data_dir=tmp_path / "data"))
+    client = TestClient(app)
+    opened = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()
+    database = app.state.service.database
+    publisher = app.state.service.publisher
+    database.create_job(
+        "job-rolled-retry",
+        opened["id"],
+        "change_set",
+        "QUEUED",
+        {"plan": {"requires_cad": True}},
+        "2020",
+    )
+    revision_dir = dst.parent / ".dst-manager" / "revisions" / "job-rolled-retry"
+    origin = dst.read_bytes()
+    staged = tmp_path / "staged.dst"
+    staged.write_bytes(origin + b"\n")
+
+    def fail_after_replacement(entry):
+        # 模拟「正式文件已替换、日志待落盘」时失败：这是 2026-09-14 现场整批回滚的形态
+        raise OSError(f"注入发布故障：正式文件已替换 {entry['target']}")
+
+    monkeypatch.setattr(publisher, "_capture_result", fail_after_replacement)
+    with pytest.raises(PublishRolledBackError) as exc_info:
+        publisher.publish(
+            "job-rolled-retry",
+            dst.parent,
+            {dst: staged},
+            expected_baselines={dst: capture_file_baseline(dst)},
+        )
+
+    assert dst.read_bytes() == origin
+    assert (revision_dir / "before" / dst.name).read_bytes() == origin
+    database.finalize_job_terminal("job-rolled-retry", "ROLLED_BACK", "PUBLISH_ROLLED_BACK", str(exc_info.value))
+    monkeypatch.undo()
+
+    retry = client.post("/api/jobs/job-rolled-retry/retry")
+
+    assert retry.status_code == 200
+    assert retry.json()["status"] == "QUEUED"
+    assert retry.json()["error_code"] is None
+    assert dst.read_bytes() == origin
+
+    # Worker 重新领取重试后的任务：同一 operation_id 必须能发布成功，且保留上一次尝试的证据
+    publisher.publish(
+        "job-rolled-retry",
+        dst.parent,
+        {dst: staged},
+        expected_baselines={dst: capture_file_baseline(dst)},
+    )
+
+    assert dst.read_bytes() == staged.read_bytes()
+    assert (revision_dir / "manifest.json").is_file()
+    assert (revision_dir / "before" / dst.name).read_bytes() == origin
+    superseded = list((revision_dir / "superseded-journals").glob("publish-journal.*.json"))
+    assert len(superseded) == 1
 
 
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):

@@ -152,26 +152,28 @@ class CadJobRunner:
             self._validate_source_baselines(plan)
             return self._execute(job_id, worker_id, attempt, workspace, capability, payload["commands"], plan)
         except FileLockError as exc:
-            append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK")
+            append_operation_event(workspace.root, job_id, "BLOCKED_FILE_LOCK", error=str(exc))
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.BLOCKED_FILE_LOCK, 0, "BLOCKED_FILE_LOCK", str(exc))
         except PublishRolledBackError as exc:
-            append_operation_event(workspace.root, job_id, "PUBLISH_ROLLED_BACK")
+            # 事件必须携带真因：UI 只展示 error_code 时，发布回滚的真实原因只能从这里查。
+            append_operation_event(workspace.root, job_id, "PUBLISH_ROLLED_BACK", error=str(exc))
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.ROLLED_BACK, 0, "PUBLISH_ROLLED_BACK", str(exc))
         except PublishRecoveryError as exc:
-            append_operation_event(workspace.root, job_id, "PUBLISH_RECOVERY_FAILED")
+            # 事件与任务记录都带具体错误码（如 PUBLISH_OPERATION_CONFLICT），便于定位真因。
+            append_operation_event(workspace.root, job_id, exc.code, error=str(exc))
             self.database.finalize_job_terminal(
                 job_id,
                 JobStatus.NEEDS_REVIEW,
-                "PUBLISH_RECOVERY_FAILED",
+                exc.code,
                 str(exc),
                 worker_id=worker_id,
                 attempt=attempt,
             )
         except subprocess.TimeoutExpired as exc:
-            append_operation_event(workspace.root, job_id, "CAD_TIMEOUT")
+            append_operation_event(workspace.root, job_id, "CAD_TIMEOUT", error=str(exc))
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_TIMEOUT", str(exc))
         except subprocess.CalledProcessError as exc:
-            append_operation_event(workspace.root, job_id, "CAD_PROCESS_FAILED", returncode=exc.returncode)
+            append_operation_event(workspace.root, job_id, "CAD_PROCESS_FAILED", returncode=exc.returncode, error=str(exc))
             self._write_failure_log(workspace, job_id, attempt, exc.stdout or "", exc.stderr or "")
             self._update_owned_job(job_id, worker_id, attempt, JobStatus.FAILED, 0, "CAD_PROCESS_FAILED", str(exc))
         except Exception as exc:  # noqa: BLE001 - Worker边界必须把任意故障持久化为终态
