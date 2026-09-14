@@ -225,7 +225,7 @@ onBeforeUnmount(() => {
 .format-option{display:block;width:100%;text-align:left;padding:4px 6px;border-radius:var(--radius-sm);background:transparent;color:inherit;font-size:12px;overflow-wrap:anywhere}
 .format-option:hover{background:var(--color-info-bg)}
 .field-chip:hover{border-color:var(--color-border-subtle);background:var(--color-info-bg)}
-.field-chip code{display:block;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--color-text-primary);white-space:normal;overflow-wrap:anywhere}
+.field-chip code{display:block;font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);white-space:normal;overflow-wrap:anywhere}
 .field-chip small{display:block;margin-top:2px;color:var(--color-text-secondary);font-size:12px;overflow-wrap:anywhere}
 .field-empty{margin:var(--space-2) 2px;color:var(--color-text-muted);font-size:12px}
 .empty-hint{margin:var(--space-1) 2px;color:var(--color-text-muted);font-size:12px}

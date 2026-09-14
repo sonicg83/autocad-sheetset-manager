@@ -30,7 +30,8 @@ import {
   parseDeclarations,
   parseRules,
 } from "./ui-contracts/css-vars.mjs";
-import {RULE, compareViolations, formatViolation, violation} from "./ui-contracts/types.mjs";
+import {collectAssetViolations} from "./ui-contracts/font-assets.mjs";
+import {NON_EXEMPTIBLE_RULES, RULE, compareViolations, formatViolation, violation} from "./ui-contracts/types.mjs";
 import {findHexColorsInValue, isBareGlobalSelector, isRawVisualValue, isTokenBlock} from "./ui-contracts/visual-values.mjs";
 import {
   findRanges,
@@ -157,6 +158,11 @@ export function collectUiContractViolations(options = {}) {
       violations.push(configViolation(`例外条目缺少必填字段：${missing.join("、")}`, `exception-entry-${entry?.fingerprint ?? "unknown"}-${missing.join(",")}`));
       continue;
     }
+    // 资产事实类硬门禁不可登记例外（Task 2 Step 7）：可白名单化等于没有门禁。
+    if (NON_EXEMPTIBLE_RULES.includes(entry.rule)) {
+      violations.push(configViolation(`硬门禁规则不允许登记例外：${entry.rule}`, `non-exemptible-${entry.rule}-${entry.fingerprint}`));
+      continue;
+    }
     // 重复指纹会让后写入的条目静默生效、前一条永远不再命中，属于棘轮里的黑洞，必须拒绝。
     if (registered.has(entry.fingerprint)) {
       violations.push(configViolation(`例外指纹重复登记：${entry.fingerprint}`, `duplicate-fingerprint-${entry.fingerprint}`));
@@ -215,6 +221,9 @@ export function collectUiContractViolations(options = {}) {
       });
     }
   }
+
+  // 第三遍：资产事实类规则（Task 2 Step 7）：字体文件是否存在/是否远程/合计体积与样式入口结构。
+  violations.push(...collectAssetViolations({root, files, emitFor: createEmitter}));
 
   return applyRatchet(violations, registered).sort(compareViolations);
 }

@@ -86,19 +86,28 @@ related:
 - Create: `web/src/assets/fonts/IBMPlexMonoLatin.woff2`
 - Create: `web/src/assets/fonts/OFL-Inter.txt`
 - Create: `web/src/assets/fonts/OFL-IBM-Plex-Mono.txt`
+- Create: `web/scripts/ui-contracts/font-assets.mjs`（计划原 Files 列表漏列检查器侧文件，实施时按控制器裁定补齐）
 - Modify: `web/src/style.css`
 - Modify: `web/tests/e2e/main.spec.ts`
 - Modify: `web/scripts/check-ui-contracts.test.mjs`
+- Modify: `web/scripts/check-ui-contracts.mjs`
+- Modify: `web/scripts/ui-contracts/types.mjs`
+- Modify: `web/scripts/ui-contracts/css-vars.mjs`（`parseRules` 增加可选 `includeAtRules`，默认行为不变）
+- Modify: `web/scripts/ui-contract-exceptions.json`
+- Modify: `web/src/components/SheetTable.vue`
+- Modify: `web/src/components/sheet-catalog/CatalogActions.vue`
+- Modify: `web/src/components/sheet-catalog/ColumnEditor.vue`
+- Modify: `web/src/components/sheet-catalog/FieldBrowser.vue`
 
-- [ ] **Step 1（资产核验）**：从 Inter 与 IBM Plex Mono 官方 OFL 发行物生成/选取 WOFF2 拉丁子集；记录字符范围 `U+0020–007E,U+00A0–00FF` 和实际标点；检查文件合计大小不超过 `256000` 字节，许可证文本与字体一同入库。
-- [ ] **Step 2（RED）**：在 `main.spec.ts` 增加根计算样式断言：正文 `14px/21px`、首选字体含 `Inter`，等宽探针含 `IBM Plex Mono`，`button/input/select/textarea` 均继承字体；确认当前基线失败。
-- [ ] **Step 3（令牌）**：建立 primitive → semantic → component 三层变量，至少覆盖字体、12/13/14px 字号、34/36/38px 高度、32px 点击下限、36px 图标按钮、间距、圆角、边框、焦点、状态色和图标尺寸；浅/深主题只在 `tokens.css` 映射。
-- [ ] **Step 4（重置）**：在 `reset.css` 设置 `box-sizing`、body margin、继承字体、`:focus-visible` 和 `prefers-reduced-motion`；确保字体失败时仍由固定高度/line-height 保持盒模型。
-- [ ] **Step 5（分层）**：把 `style.css` 内容无行为变化地迁入四层，`style.css` 只保留层顺序声明和四个导入；既有全局业务选择器全部置于有根类限定的 `legacy.css`。
-- [ ] **Step 6（字体规则）**：添加本地 `@font-face`、`font-display: swap` 和 unicode-range；路径/哈希/错误码等宽区域改消费 `--font-mono`，中文继续回落 `Microsoft YaHei, system-ui`。
-- [ ] **Step 7（门禁收紧）**：检查器增加字体文件存在、不得远程 URL、体积预算、`style.css` 仅入口的断言；清退已被本任务关闭的 raw visual/global selector 例外。
-- [ ] **Step 8（GREEN）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts`、`rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run build`。
-- [ ] **Step 9（提交）**：commit：`统一前端字体令牌与样式分层`。
+- [x] **Step 1（资产核验）**：从 Inter 与 IBM Plex Mono 官方 OFL 发行物生成/选取 WOFF2 拉丁子集；记录字符范围 `U+0020–007E,U+00A0–00FF` 和实际标点；检查文件合计大小不超过 `256000` 字节，许可证文本与字体一同入库。
+- [x] **Step 2（RED）**：在 `main.spec.ts` 增加根计算样式断言：正文 `14px/21px`、首选字体含 `Inter`，等宽探针含 `IBM Plex Mono`，`button/input/select/textarea` 均继承字体；确认当前基线失败。
+- [x] **Step 3（令牌）**：建立 primitive → semantic → component 三层变量，至少覆盖字体、12/13/14px 字号、34/36/38px 高度、32px 点击下限、36px 图标按钮、间距、圆角、边框、焦点、状态色和图标尺寸；浅/深主题只在 `tokens.css` 映射。
+- [x] **Step 4（重置）**：在 `reset.css` 设置 `box-sizing`、body margin、继承字体、`:focus-visible` 和 `prefers-reduced-motion`；确保字体失败时仍由固定高度/line-height 保持盒模型。
+- [x] **Step 5（分层）**：把 `style.css` 内容无行为变化地迁入四层，`style.css` 只保留层顺序声明和四个导入；既有全局业务选择器全部置于有根类限定的 `legacy.css`。
+- [x] **Step 6（字体规则）**：添加本地 `@font-face`、`font-display: swap` 和 unicode-range；路径/哈希/错误码等宽区域改消费 `--font-mono`，中文继续回落 `Microsoft YaHei, system-ui`。
+- [x] **Step 7（门禁收紧）**：检查器增加字体文件存在、不得远程 URL、体积预算、`style.css` 仅入口的断言；清退已被本任务关闭的 raw visual/global selector 例外。
+- [x] **Step 8（GREEN）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts`、`rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run build`。
+- [x] **Step 9（提交）**：commit：`统一前端字体令牌与样式分层`。
 
 ## 阶段 2：公共视觉原语与壳层纵向验证
 
@@ -410,7 +419,9 @@ Task 10 → Task 11 → Task 12
 | Task 1 | `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run check:ui`、`rtk npm --prefix web run build`、`rtk npm --prefix web run test:unit` | **49 passed / 0 failed**（含 9 类违规注入变异套件）；`check:ui` 退出 0（仅因已登记债务）；注入临时违规探针后退出 1、移除后退出 0；`build` 退出 0；`unit` 48 passed 无回归 | 提交 `建立前端 UI 静态契约门禁`；386 条基线见 `web/scripts/ui-contract-exceptions.json` |
 | Task 1（评审修复） | 同上四条 + 临时探针逐条复现 I1–I5/M1–M2 | **62 passed / 0 failed**（11 类/12 条 CLI 级注入）；`check:ui` 退出 0；`build` 退出 0；`unit` 48 passed；基线 386 → 422（零删除、仅新增 36 条宽度家族）；不变量 423 = 422 + 1 | 提交 `修正 UI 契约检查器位置计算与令牌块豁免`；修复报告见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/task-1-report.md` 第 8 节 |
 | Task 1（复审修复） | 同上四条；另做「临时移除 `parseRules` 的 `@` 跳过」红/绿对照实验 | **62 passed / 0 failed**（连续两次运行）；`check:ui` 退出 0；`build` 退出 0；`unit` 48 passed；基线仍 422 条、不变量仍 423 = 422 + 1；前奏测试在该注入下确实变红（3 条 `global-selector-in-component` 误报），还原后复跑为绿 | 提交 `补齐 UI 契约门禁文档与回归测试细节`；证据见同报告第 9 节 |
-| Task 2–11 | 各任务列出的 RED/GREEN 命令 | 待实施 | 本表逐任务追加 |
+| Task 2 | `rtk npm --prefix web run test:contracts`、`check:ui`、`build`、`test:unit`、`test:e2e -- main.spec.ts` | **80 passed / 0 failed**（新增 14 条资产/入口规则用例 + 4 条 CLI 级变异；覆盖面守卫 15 类/16 条注入/14 条规则）；`check:ui` 退出 0；`build` 退出 0（`dist` 产出两个本地 WOFF2，`url()` 为 `/assets/...`）；`unit` 48 passed；`e2e` **78 passed / 0 failed**；三项针对性变异（预算 `>` 改 `>=`、相对路径忽略样式表目录、移除 `NON_EXEMPTIBLE_RULES` 判定）均使对应用例转红，还原后复跑全绿；例外 422 → 382（Task 2 名下 53 条结清：40 清退 + 13 重定向 Task 9），不变量 383 = 382 + 1；字体 56928 + 12488 = 69416 ≤ 256000，实测无 CJK | 提交 `统一前端字体令牌与样式分层`；报告与证据见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/task-2-report.md`（证据文件 `.tmp-tc-b.txt`/`.tmp-cu-b.txt`/`.tmp-build-b.txt`/`.tmp-unit-b.txt`/`.tmp-e2e-c.txt` 已摘录后删除） |
+| Task 2（收口轮修复） | 同上；另做主流程 `pytest -q` 之外的独立核验：清空例外表复算原始违规、`git show BASE:ui-contract-exceptions.json` 指纹级比对、fontTools 直读 `cmap`、独立 Chromium 探针复现 `select` 行高 | 修复两处「门禁空转」缺陷（入口规则 `report` 未 push、`@font-face` 被 `parseRules` 默认过滤）后才由红转绿；修复前 12 项失败均为「期望恰好 1 条 X，实际：[]」 | 同报告第 2、3.1、5 节 |
+| Task 2–11 | 各任务列出的 RED/GREEN 命令 | Task 3 起待实施 | 本表逐任务追加 |
 | Task 12 | 全量门禁与真实 Windows 缩放 | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准

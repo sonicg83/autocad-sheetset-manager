@@ -66,7 +66,7 @@ const summaryText = computed(() => {
 .hint{margin:0;color:var(--color-text-secondary);font-size:13px}
 .success{border:1px solid var(--color-success);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .success-path{margin:0;display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
-.success-path .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--color-text-secondary);overflow-wrap:anywhere}
+.success-path .mono{font-family:var(--font-mono);font-size:12px;color:var(--color-text-secondary);overflow-wrap:anywhere}
 .success button{padding:0 var(--space-3);min-height:30px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
 .export-error{border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;flex-direction:column;gap:var(--space-1)}
 .export-error p{margin:0;font-size:13px}

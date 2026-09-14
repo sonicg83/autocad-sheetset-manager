@@ -19,9 +19,27 @@ export const RULE = {
   globalSelectorInComponent: "global-selector-in-component",
   rawHexColor: "raw-hex-color",
   rawVisualValue: "raw-visual-value",
+  missingFontAsset: "missing-font-asset",
+  remoteFontUrl: "remote-font-url",
+  fontBudgetExceeded: "font-budget-exceeded",
+  entryStylesheetNotImportOnly: "entry-stylesheet-not-import-only",
   invalidExceptionEntry: "invalid-exception-entry",
   staleException: "stale-exception",
 };
+
+/**
+ * 不允许登记例外的硬门禁规则（PLAN-DM-029 Task 2 Step 7）。
+ *
+ * 这四条判定的是资产事实与入口结构：字体文件是否存在、是否引用远程 URL、本地字体合计
+ * 是否超预算、样式入口是否仍只是入口。一旦允许它们进白名单，离线约束与体积预算就形同
+ * 虚设，因此检查器显式拒绝针对这些规则的例外条目（见 `check-ui-contracts.mjs`）。
+ */
+export const NON_EXEMPTIBLE_RULES = Object.freeze([
+  RULE.missingFontAsset,
+  RULE.remoteFontUrl,
+  RULE.fontBudgetExceeded,
+  RULE.entryStylesheetNotImportOnly,
+]);
 
 /**
  * 构造指纹：`<rule>|<file>|<semantic>|<occurrence>`。

@@ -150,7 +150,7 @@ tbody tr td{background:inherit}
 .title-text{max-width:280px}
 .multiline-text:focus-visible,.ellipsis:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}
 .ellipsis{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.mono{font-family:var(--font-mono);font-size:12px}
 .col-status{white-space:normal}
 .status{padding:1px 5px;border-radius:10px;font-size:12px;display:inline-block;margin:1px 2px 1px 0;white-space:nowrap}
 .status.pending{background:var(--color-warning-bg);color:var(--color-warning)}

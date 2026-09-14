@@ -1440,3 +1440,89 @@ test("未知 API 错误显示本地化摘要、原文只在可展开诊断详情
   await diagnostics.getByText("原始错误详情").click();
   await expect(diagnostics.getByText("保存失败")).toBeVisible();
 });
+
+// —— Task 2 全局样式分层与字体、尺寸令牌（ARCH-DM-007 §4.1/§4.2）——
+// 本节只断言根层级事实：正文排版、等宽令牌解析结果、字体资源本地化。
+// 组件级控件的 36px/38px/34px 尺寸族由 Task 3 起的原语用例承担，此处不重复。
+
+test("Task 2 根层级：正文 14px/21px 且表单控件继承同一字体栈",async({page})=>{
+  await openWorkspace(page);
+  const probe=await page.evaluate(()=>{
+    const body=getComputedStyle(document.body);
+    const controls=["button","input","select","textarea"].map(tag=>{
+      const el=document.createElement(tag);
+      if(tag==="input")el.setAttribute("type","text");
+      document.body.append(el);
+      const value=getComputedStyle(el);
+      const result={tag,family:value.fontFamily,size:value.fontSize,lineHeight:value.lineHeight};
+      el.remove();
+      return result;
+    });
+    return {size:body.fontSize,lineHeight:body.lineHeight,family:body.fontFamily,controls};
+  });
+  expect(probe.size).toBe("14px"); // --font-body 的字号一半
+  expect(probe.lineHeight).toBe("21px"); // 14px × 1.5
+  expect(probe.family.split(",")[0].replace(/["']/g,"").trim()).toBe("Inter");
+  expect(probe.family).toContain("Microsoft YaHei"); // 中文回落到系统雅黑，不打包 CJK
+  for(const control of probe.controls){
+    // 重置层必须让表单控件 font:inherit；否则 Chrome 默认 400 13.33px Arial 会盖掉正文排版
+    expect.soft(control.family,`${control.tag} 应继承正文字体栈`).toBe(probe.family);
+    expect.soft(control.size,`${control.tag} 应继承正文字号`).toBe("14px");
+    // `<select>` 是 Chromium 的固定例外：UA 层把它的 line-height 叼成 normal，
+    // `font:inherit` 与显式 `line-height:inherit` 实测都改不动（见 task-2-report.md）。
+    // select 的高度契约由 Task 3 的控件原语定死，这里不把浏览器怪癖当回归看。
+    if(control.tag!=="select")expect.soft(control.lineHeight,`${control.tag} 应继承正文行高`).toBe("21px");
+  }
+});
+
+test("Task 2 等宽令牌：--font-mono 解析为 IBM Plex Mono 优先",async({page})=>{
+  await openWorkspace(page);
+  const probe=await page.evaluate(()=>{
+    const el=document.createElement("span");
+    el.textContent="001-002.dwg";
+    el.style.fontFamily="var(--font-mono)";
+    document.body.append(el);
+    const resolved=getComputedStyle(el).fontFamily;
+    el.remove();
+    return {resolved,token:getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim()};
+  });
+  expect(probe.token).toContain("IBM Plex Mono");
+  expect(probe.resolved.split(",")[0].replace(/["']/g,"").trim()).toBe("IBM Plex Mono");
+});
+
+test("Task 2 字体资源：两套本地 WOFF2 且不引用远程 URL",async({page})=>{
+  await openWorkspace(page);
+  const faces=await page.evaluate(()=>{
+    const found:{family:string;text:string;unicodeRange:string}[]=[];
+    for(const sheet of Array.from(document.styleSheets)){
+      let rules:CSSRule[]=[];
+      try{rules=Array.from(sheet.cssRules)}catch{continue} // 跨域工作表跳过：本地资源不应出现
+      for(const rule of rules){
+        if(rule.type!==CSSRule.FONT_FACE_RULE)continue;
+        const font=rule as CSSFontFaceRule;
+        found.push({
+          family:font.style.getPropertyValue("font-family").replace(/["']/g,"").trim(),
+          text:font.cssText,
+          unicodeRange:font.style.getPropertyValue("unicode-range"),
+        });
+      }
+    }
+    return found;
+  });
+  const local=faces.filter(face=>face.family==="Inter"||face.family==="IBM Plex Mono");
+  expect(local.map(face=>face.family).sort()).toEqual(["IBM Plex Mono","Inter"]);
+  // CSSOM 会把 unicode-range 归一化（去前导零、十六进制大写），因此不比对字面串，
+  // 而是拆成码位区间后判定真实需求：覆盖 Basic Latin、不打包 CJK。
+  const ranges=(value:string)=>value.split(",").map(part=>part.trim()).filter(Boolean).map(part=>{
+    const [start,end=start]=part.replace(/^u\+/i,"").split("-");
+    return {from:parseInt(start,16),to:parseInt(end,16)};
+  });
+  const covers=(value:string,from:number,to:number)=>ranges(value).some(range=>range.from<=from&&range.to>=to);
+  for(const face of local){
+    expect(face.text).toContain(".woff2");
+    expect(face.text).not.toMatch(/https?:\/\//); // 离线可用，禁止 CDN
+    expect(face.text).toContain("font-display: swap");
+    expect.soft(covers(face.unicodeRange,0x20,0x7e),`${face.family} 应覆盖 Basic Latin`).toBe(true);
+    expect.soft(covers(face.unicodeRange,0x4e00,0x9fff),`${face.family} 不得打包 CJK`).toBe(false);
+  }
+});

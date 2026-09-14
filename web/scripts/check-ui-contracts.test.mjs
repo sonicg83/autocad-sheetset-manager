@@ -17,6 +17,7 @@ import {fileURLToPath} from "node:url";
 import {after, describe, test} from "node:test";
 
 import {collectUiContractViolations, formatViolation, runCli} from "./check-ui-contracts.mjs";
+import {NON_EXEMPTIBLE_RULES} from "./ui-contracts/types.mjs";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = join(SCRIPTS_DIR, "check-ui-contracts.mjs");
@@ -30,6 +31,21 @@ const TOKENS_CSS = `:root{
 }
 html[data-theme="dark"]{--color-text-primary:#E6EAF2}
 `;
+
+/** 合法的样式入口夹具：层顺序声明 + 四个分层导入（注释与空行都不影响判定）。 */
+const ENTRY_CSS = `/* 分层入口：层顺序固定，正文只在 @import 的分层样式表里 */
+@layer tokens, reset, primitives, legacy;
+
+@import "./styles/tokens.css";
+@import "./styles/reset.css";
+@import "./styles/primitives.css";
+@import "./styles/legacy.css";
+`;
+
+/** 生成一条 `@font-face` 声明，用于字体资产夹具。 */
+function fontFace(family, url) {
+  return `@font-face{font-family:"${family}";src:url("${url}") format("woff2")}`;
+}
 
 const roots = [];
 
@@ -71,7 +87,7 @@ after(() => {
 describe("CSS 变量解析", () => {
   test("未定义变量被拒绝", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Bad.vue": `<template><p>文本</p></template>
 <style scoped>.a{color:var(--color-missing)}</style>
 `,
@@ -86,7 +102,7 @@ describe("CSS 变量解析", () => {
   test("嵌套 fallback 中未定义的变量仍被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Nested.vue": `<template><p>文本</p></template>
 <style scoped>.a{border:1px solid var(--color-border-subtle,var(--color-bg-surface-2))}</style>
 `,
@@ -99,7 +115,7 @@ describe("CSS 变量解析", () => {
   test("外层已定义但 fallback 未定义时按未定义引用拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Outer.vue": `<template><p>文本</p></template>
 <style scoped>.a{border-color:var(--color-border-strong,var(--color-nope))}</style>
 `,
@@ -111,7 +127,7 @@ describe("CSS 变量解析", () => {
 
   test("已声明变量（含合法 fallback）不报", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Good.vue": `<template><p>文本</p></template>
 <style scoped>.a{color:var(--color-text-primary);padding:var(--space-2,var(--font-label))}</style>
 `,
@@ -121,7 +137,7 @@ describe("CSS 变量解析", () => {
 
   test("组件局部声明可解析自身引用", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Local.vue": `<template><p>文本</p></template>
 <style scoped>.a{--local-gap:var(--space-2);gap:var(--local-gap)}</style>
 `,
@@ -132,7 +148,7 @@ describe("CSS 变量解析", () => {
   test("循环引用被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`,
+        "src/styles/tokens.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`,
         "src/components/Cycle.vue": `<template><p>文本</p></template>
 <style scoped>.a{color:var(--loop-a)}</style>
 `,
@@ -144,7 +160,7 @@ describe("CSS 变量解析", () => {
 
   test("var() 使用平衡括号解析，嵌套括号不误判", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Balanced.vue": `<template><p>文本</p></template>
 <style scoped>.a{width:min(390px,calc(100vw - var(--space-2)));color:var(--color-text-primary)}</style>
 `,
@@ -160,7 +176,7 @@ describe("动态变量白名单", () => {
 
   test("缺生产者的动态变量条目被拒绝", () => {
     const violations = collectUiContractViolations({
-      root: fixture({"src/style.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
+      root: fixture({"src/styles/tokens.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
       exceptions: {
         exceptions: [],
         dynamicVariables: [{variable: "--tree-width", consumer: "src/views/Sheets.vue", reason: "运行时写入", expiresWith: "Task 7"}],
@@ -172,7 +188,7 @@ describe("动态变量白名单", () => {
 
   test("字段完整的动态变量条目通过", () => {
     const violations = collectUiContractViolations({
-      root: fixture({"src/style.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
+      root: fixture({"src/styles/tokens.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
       exceptions: {
         exceptions: [],
         dynamicVariables: [
@@ -191,7 +207,7 @@ describe("动态变量白名单", () => {
 
   test("生产者文件不存在的幽灵条目被拒绝", () => {
     const violations = collectUiContractViolations({
-      root: fixture({"src/style.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
+      root: fixture({"src/styles/tokens.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
       exceptions: {
         exceptions: [],
         dynamicVariables: [
@@ -213,7 +229,7 @@ describe("动态变量白名单", () => {
   test("未登记的动态变量按未定义引用拒绝", () => {
     const violation = only(
       collectUiContractViolations({
-        root: fixture({"src/style.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
+        root: fixture({"src/styles/tokens.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
         exceptions: emptyExceptions(),
       }),
       "undefined-css-variable",
@@ -226,7 +242,7 @@ describe("Vue 语义规则", () => {
   test("按钮缺 type 被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Buttons.vue": `<template><button @click="save">保存</button></template>
 `,
       }),
@@ -238,7 +254,7 @@ describe("Vue 语义规则", () => {
 
   test("显式 type 的按钮通过", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Buttons.vue": `<template><button type="button" @click="save">保存</button><button type="submit">提交</button></template>
 `,
     });
@@ -248,7 +264,7 @@ describe("Vue 语义规则", () => {
   test("搜索输入缺可见 label 被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Search.vue": `<template><div class="search"><input v-model="query" :placeholder="hint" /></div></template>
 `,
       }),
@@ -259,7 +275,7 @@ describe("Vue 语义规则", () => {
 
   test("label 包裹或 label[for] 关联的输入通过", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Search.vue": `<template>
   <label class="weak"><span>搜索</span><input v-model="query" /></label>
   <label for="name">名称</label><input id="name" v-model="name" />
@@ -273,7 +289,7 @@ describe("Vue 语义规则", () => {
   test("图标按钮缺可读名称被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/IconButton.vue": `<template><button type="button" class="icon" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6L18 18" /></svg></button></template>
 `,
       }),
@@ -284,7 +300,7 @@ describe("Vue 语义规则", () => {
 
   test("有 aria-label 的图标按钮通过", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/IconButton.vue": `<template><button type="button" class="icon" :aria-label="label" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6L18 18" /></svg></button></template>
 `,
     });
@@ -293,7 +309,7 @@ describe("Vue 语义规则", () => {
 
   test("Unicode 结构图标被拒绝", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Unicode.vue": `<template><span aria-hidden="true">▸</span><span aria-hidden="true">◐</span></template>
 `,
     });
@@ -302,7 +318,7 @@ describe("Vue 语义规则", () => {
 
   test("中文文案与普通标点不被当作结构图标", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Text.vue": `<template><p>保存（另存为）— 已复制，共 3 项；引用“目录”模板。</p></template>
 `,
     });
@@ -311,7 +327,7 @@ describe("Vue 语义规则", () => {
 
   test("属性值里的 > 不截断标签：type 与可见文字仍被正确读取", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Operators.vue": `<template><button :disabled="count>=1" type="button">保存</button></template>
 `,
     });
@@ -321,7 +337,7 @@ describe("Vue 语义规则", () => {
   test("属性值里的 > 之后仍能定位缺 type 的按钮", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Operators.vue": `<template><button :disabled="count>=1" @click="go">前往</button></template>
 `,
       }),
@@ -332,7 +348,7 @@ describe("Vue 语义规则", () => {
 
   test("图标在文字之前的按钮不误判为缺少可读名称", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/WithIcon.vue": `<template><button type="button" @click="save"><svg viewBox="0 0 24 24"><path d="M6 6L18 18" /></svg>保存</button></template>
 `,
     });
@@ -348,7 +364,7 @@ describe("Vue 语义规则", () => {
 </template>
 `;
     const violation = only(
-      rawViolations({"src/style.css": TOKENS_CSS, "src/components/Comment.vue": source}),
+      rawViolations({"src/styles/tokens.css": TOKENS_CSS, "src/components/Comment.vue": source}),
       "unicode-structure-icon",
     );
     // 手算：第 5 行 `  <button type="button">` 共 24 字符，`✕` 在第 25 列。
@@ -368,7 +384,7 @@ describe("视觉值规则", () => {
 .b{color:#123456}
 </style>
 `;
-    const violations = rawViolations({"src/style.css": TOKENS_CSS, "src/components/Positions.vue": source});
+    const violations = rawViolations({"src/styles/tokens.css": TOKENS_CSS, "src/components/Positions.vue": source});
     const lines = source.split("\n");
     // 手算：第 5 行 `.a{font-size:` 共 13 字符，`15px` 起于第 14 列；
     // 第 6 行 `.b{color:` 共 9 字符，`#123456` 起于第 10 列。
@@ -383,7 +399,7 @@ describe("视觉值规则", () => {
   test("未登记的十六进制色被拒绝", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Color.vue": `<template><p>文本</p></template>
 <style scoped>.a{color:#17203333}</style>
 `,
@@ -395,7 +411,7 @@ describe("视觉值规则", () => {
 
   test("令牌定义块内的十六进制色与 rgba 常量通过", () => {
     const violations = rawViolations({
-      "src/style.css": `${TOKENS_CSS}.mask{background:rgba(16,24,40,.55)}`,
+      "src/styles/tokens.css": `${TOKENS_CSS}.mask{background:rgba(16,24,40,.55)}`,
       "src/components/Color.vue": `<template><p>文本</p></template>
 <style scoped>.a{color:var(--color-text-primary);background:rgba(16,24,40,.55)}</style>
 `,
@@ -405,7 +421,7 @@ describe("视觉值规则", () => {
 
   test("裸字号、高度与圆角被拒绝，令牌与合法常量通过", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Size.vue": `<template><p>文本</p></template>
 <style scoped>.a{font-size:15px;min-height:36px;border-radius:7px}.b{font-size:var(--font-label);border:1px solid var(--color-border-subtle);height:100%;min-height:0;line-height:1.5;border-radius:50%}</style>
 `,
@@ -420,7 +436,7 @@ describe("视觉值规则", () => {
   test("裸全局选择器被拒绝，根类限定选择器通过", () => {
     const violation = only(
       rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Scope.vue": `<template><p>文本</p></template>
 <style>
 button{background:none}
@@ -435,7 +451,7 @@ button{background:none}
 
   test("选择器列表逐段判定：逗号后段的裸选择器也会被拒绝", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Scope.vue": `<template><p>文本</p></template>
 <style>
 .panel,.panel div,button{background:none}
@@ -450,7 +466,7 @@ button{background:none}
 
   test("全局业务样式表的裸选择器被拒绝，令牌块通过", () => {
     const violations = rawViolations({
-      "src/style.css": `${TOKENS_CSS}
+      "src/styles/legacy.css": `${TOKENS_CSS}
 main{padding:24px}
 .topbar div{margin:auto}
 `,
@@ -463,7 +479,7 @@ main{padding:24px}
   test("令牌块豁免只认整条规则恰为 :root/html[...]", () => {
     for (const selector of ["html body .panel", 'html[data-theme="dark"] .panel', ":root,.panel"]) {
       const violations = rawViolations({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Token.vue": `<template><p>文本</p></template>
 <style scoped>${selector}{font-size:15px}</style>
 `,
@@ -475,7 +491,7 @@ main{padding:24px}
 
   test(":root 与 html[...] 令牌块仍被豁免（含多段全为令牌块）", () => {
     const violations = rawViolations({
-      "src/style.css": `:root{--font-label:13px;font-size:13px}html[data-theme="dark"]{--font-label:14px;font-size:14px}:root,html[data-theme="light"]{--font-label:15px;font-size:15px}`,
+      "src/styles/tokens.css": `:root{--font-label:13px;font-size:13px}html[data-theme="dark"]{--font-label:14px;font-size:14px}:root,html[data-theme="light"]{--font-label:15px;font-size:15px}`,
       "src/components/Token.vue": `<template><p>文本</p></template>
 <style scoped>.panel{font-size:var(--font-label)}</style>
 `,
@@ -485,7 +501,7 @@ main{padding:24px}
 
   test("图标尺寸（宽度家族）与高度家族同等判定", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Icon.vue": `<template><p>文本</p></template>
 <style scoped>.icon{width:18px;min-width:20px;max-width:22px;height:18px;min-height:20px;max-height:22px;border-radius:6px}</style>
 `,
@@ -502,7 +518,7 @@ main{padding:24px}
     // - 非 scoped 上下文确保前奏一旦被当成规则，就会以 `裸全局选择器` 形式把
     //   `@media (max-width:900px)` 写进消息，从而被下面的前奏断言钉住。
     const violations = rawViolations({
-      "src/style.css": `${TOKENS_CSS}
+      "src/styles/tokens.css": `${TOKENS_CSS}
 @media (max-width:900px){.panel{font-size:15px}}
 @container value-body (max-width:511px){.panel{line-height:15px}}
 @media (min-width:600px) and (max-width:900px){.panel{height:15px}}
@@ -525,7 +541,7 @@ main{padding:24px}
 
   test("@keyframes 的 from/to/百分比关键帧不作为规则参与判定", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Toast.vue": `<template><p>文本</p></template>
 <style>
 @keyframes toast-in{from{height:0;opacity:0}0%{opacity:.2}100%{height:10px;opacity:1}to{height:10px}}
@@ -536,9 +552,171 @@ main{padding:24px}
   });
 });
 
+describe("字体资产与样式入口门禁（Task 2 Step 7）", () => {
+  const FONT_DIR = "src/assets/fonts";
+  const asset = (bytes) => "x".repeat(bytes);
+
+  test("字体引用的本地文件不存在被拒绝", () => {
+    const violation = only(
+      rawViolations({"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Missing.woff2")}`}),
+      "missing-font-asset",
+    );
+    assert.equal(violation.file, "src/styles/tokens.css");
+    assert.match(violation.message, /字体文件不存在：\.\.\/assets\/fonts\/Missing\.woff2/);
+  });
+
+  test("字体引用的本地文件存在时通过", () => {
+    const violations = rawViolations({
+      [`${FONT_DIR}/InterLatin.woff2`]: asset(1024),
+      "src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/InterLatin.woff2")}`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("字体引用远程 URL 被拒绝：带 scheme 与协议相对都算", () => {
+    for (const url of ["https://cdn.example.com/Inter.woff2", "//cdn.example.com/Inter.woff2"]) {
+      const violation = only(
+        rawViolations({"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", url)}`}),
+        "remote-font-url",
+      );
+      assert.match(violation.message, /字体不得引用远程 URL/);
+      assert.ok(violation.message.includes(url), violation.message);
+    }
+  });
+
+  test("本地相对路径与工作区根路径都不算远程", () => {
+    // `../` 相对样式表所在目录解析，`/` 相对工作区根解析；两者都是本地资产。
+    const violations = rawViolations({
+      [`${FONT_DIR}/InterLatin.woff2`]: asset(1024),
+      "assets/fonts/IBMPlexMonoLatin.woff2": asset(2048),
+      "src/styles/tokens.css":
+        TOKENS_CSS +
+        fontFace("Inter", "../assets/fonts/InterLatin.woff2") +
+        fontFace("IBM Plex Mono", "/assets/fonts/IBMPlexMonoLatin.woff2"),
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("本地字体资产合计超预算被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        [`${FONT_DIR}/Big.woff2`]: asset(256001),
+        "src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Big.woff2")}`,
+      }),
+      "font-budget-exceeded",
+    );
+    assert.match(violation.message, /合计 256001 字节，超过预算 256000 字节/);
+    // 报在第一条被引用的资产上：超预算是整批资产的事实，不是某一条 @font-face 的错。
+    assert.equal(violation.file, "src/styles/tokens.css");
+  });
+
+  test("多套资产合计恰好等于预算时通过（边界）", () => {
+    const violations = rawViolations({
+      [`${FONT_DIR}/A.woff2`]: asset(200000),
+      [`${FONT_DIR}/B.woff2`]: asset(56000),
+      "src/styles/tokens.css":
+        TOKENS_CSS +
+        fontFace("Inter", "../assets/fonts/A.woff2") +
+        fontFace("IBM Plex Mono", "../assets/fonts/B.woff2"),
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("合法样式入口（层顺序 + 四个导入 + 注释空行）通过", () => {
+    assert.deepEqual(rulesOf(rawViolations({"src/style.css": ENTRY_CSS})), []);
+  });
+
+  test("样式入口承载样式规则被拒绝", () => {
+    const violation = only(
+      rawViolations({"src/style.css": `${ENTRY_CSS}\n.panel{color:red}\n`}),
+      "entry-stylesheet-not-import-only",
+    );
+    assert.match(violation.message, /样式入口不得承载样式规则：\.panel/);
+  });
+
+  test("样式入口缺少层顺序声明被拒绝", () => {
+    const violation = only(
+      rawViolations({"src/style.css": ENTRY_CSS.replace("@layer tokens, reset, primitives, legacy;\n", "")}),
+      "entry-stylesheet-not-import-only",
+    );
+    assert.match(violation.message, /缺少层顺序声明/);
+  });
+
+  test("样式入口层顺序不符被拒绝", () => {
+    const violation = only(
+      rawViolations({"src/style.css": ENTRY_CSS.replace("tokens, reset, primitives, legacy", "tokens, primitives, legacy")}),
+      "entry-stylesheet-not-import-only",
+    );
+    assert.match(violation.message, /层顺序必须为/);
+  });
+
+  test("样式入口漏导入分层样式表被拒绝", () => {
+    const violation = only(
+      rawViolations({"src/style.css": ENTRY_CSS.replace('@import "./styles/legacy.css";\n', "")}),
+      "entry-stylesheet-not-import-only",
+    );
+    assert.match(violation.message, /必须导入四个分层样式表/);
+  });
+
+  test("硬门禁规则清单固定为四条", () => {
+    assert.deepEqual([...NON_EXEMPTIBLE_RULES].sort(), [
+      "entry-stylesheet-not-import-only",
+      "font-budget-exceeded",
+      "missing-font-asset",
+      "remote-font-url",
+    ]);
+  });
+
+  test("四条资产事实规则一律不允许登记例外", () => {
+    for (const rule of NON_EXEMPTIBLE_RULES) {
+      const violations = collectUiContractViolations({
+        root: fixture({"src/styles/tokens.css": TOKENS_CSS}),
+        exceptions: {
+          exceptions: [
+            {
+              rule,
+              file: "src/styles/tokens.css",
+              fingerprint: `${rule}|src/styles/tokens.css|尝试登记|1`,
+              reason: "尝试把硬门禁加白",
+              expiresWith: "PLAN-DM-029 Task 9",
+            },
+          ],
+          dynamicVariables: [],
+        },
+      });
+      const violation = only(violations, "invalid-exception-entry");
+      assert.match(violation.message, /硬门禁规则不允许登记例外/);
+      assert.ok(violation.message.includes(rule), violation.message);
+    }
+  });
+
+  test("硬门禁规则的真实违规不因例外条目而放行", () => {
+    const files = {"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Missing.woff2")}`};
+    const missing = only(rawViolations(files), "missing-font-asset");
+    const violations = collectUiContractViolations({
+      root: fixture(files),
+      exceptions: {
+        exceptions: [
+          {
+            rule: missing.rule,
+            file: missing.file,
+            fingerprint: missing.fingerprint,
+            reason: "尝试把硬门禁加白",
+            expiresWith: "PLAN-DM-029 Task 9",
+          },
+        ],
+        dynamicVariables: [],
+      },
+    });
+    only(violations, "invalid-exception-entry");
+    // 关键：登记条目被拒绝后，真实违规仍然存在，白名单没有把它吃掉。
+    assert.equal(only(violations, "missing-font-asset").fingerprint, missing.fingerprint);
+  });
+});
+
 describe("棘轮：例外登记与陈旧例外", () => {
   const files = {
-    "src/style.css": TOKENS_CSS,
+    "src/styles/tokens.css": TOKENS_CSS,
     "src/components/Legacy.vue": `<template><button @click="go">前往</button></template>
 <style scoped>.a{font-size:15px}</style>
 `,
@@ -568,7 +746,7 @@ describe("棘轮：例外登记与陈旧例外", () => {
   test("已不再命中的例外被拒绝", () => {
     const violations = collectUiContractViolations({
       root: fixture({
-        "src/style.css": TOKENS_CSS,
+        "src/styles/tokens.css": TOKENS_CSS,
         "src/components/Legacy.vue": `<template><button type="button">前往</button></template>
 `,
       }),
@@ -620,12 +798,12 @@ describe("棘轮：例外登记与陈旧例外", () => {
 
   test("指纹含规则、文件与稳定语义，不含行号", () => {
     const compact = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Finger.vue": `<template><button @click="go">前往</button></template>
 `,
     });
     const shifted = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Finger.vue": `
 
 <template>
@@ -642,7 +820,7 @@ describe("棘轮：例外登记与陈旧例外", () => {
 
   test("同一文件内同语义的重复违规各有独立指纹", () => {
     const violations = rawViolations({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Repeat.vue": `<template><button @click="go">前往</button><button @click="go">前往</button></template>
 `,
     });
@@ -654,7 +832,7 @@ describe("棘轮：例外登记与陈旧例外", () => {
 describe("CLI 契约", () => {
   test("无违规时退出 0 且不输出", () => {
     const root = fixture({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Clean.vue": `<template><button type="button">保存</button></template>
 `,
       "scripts/ui-contract-exceptions.json": JSON.stringify(emptyExceptions()),
@@ -666,7 +844,7 @@ describe("CLI 契约", () => {
 
   test("有违规时按 file:line:column [rule] message 输出并退出 1", () => {
     const root = fixture({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "src/components/Dirty.vue": `<template><button @click="go">前往</button></template>
 `,
       "scripts/ui-contract-exceptions.json": JSON.stringify(emptyExceptions()),
@@ -678,7 +856,7 @@ describe("CLI 契约", () => {
   });
 
   test("例外文件缺失时明确失败而不是静默通过", () => {
-    const root = fixture({"src/style.css": TOKENS_CSS});
+    const root = fixture({"src/styles/tokens.css": TOKENS_CSS});
     const result = runCli([`--root=${root}`]);
     assert.equal(result.exitCode, 2);
     assert.match(result.stderr, /ui-contract-exceptions\.json/);
@@ -686,7 +864,7 @@ describe("CLI 契约", () => {
 
   test("源码根目录不可读时明确失败而不是静默通过", () => {
     const root = fixture({
-      "src/style.css": TOKENS_CSS,
+      "src/styles/tokens.css": TOKENS_CSS,
       "scripts/ui-contract-exceptions.json": JSON.stringify(emptyExceptions()),
     });
     // 把 src 换成同名文件，模拟扫描根目录读不进来（ENOTDIR）。
@@ -707,7 +885,7 @@ describe("CLI 契约", () => {
 
 describe("变异证据：每类违规都使 CLI 退出 1", () => {
   const clean = {
-    "src/style.css": TOKENS_CSS,
+    "src/styles/tokens.css": TOKENS_CSS,
     "src/components/Clean.vue": `<template>
   <label for="name">名称</label><input id="name" v-model="name" />
   <button type="button" :aria-label="label" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6L18 18" /></svg></button>
@@ -738,7 +916,7 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       step1Class: "循环引用",
       name: "循环引用",
       rule: "circular-css-variable",
-      files: {"src/style.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`},
+      files: {"src/styles/tokens.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`},
     },
     {
       step1Class: "动态变量缺生产者",
@@ -802,7 +980,52 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       rule: "raw-visual-value",
       files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("</style>", ".icon{width:18px;height:18px}</style>")},
     },
+    {
+      step1Class: "字体资产缺失",
+      name: "字体引用的本地文件不存在",
+      rule: "missing-font-asset",
+      files: {"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Missing.woff2")}`},
+    },
+    {
+      step1Class: "远程字体 URL",
+      name: "字体引用远程 URL",
+      rule: "remote-font-url",
+      files: {"src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "https://cdn.example.com/Inter.woff2")}`},
+    },
+    {
+      step1Class: "字体体积超预算",
+      name: "本地字体资产合计超预算",
+      rule: "font-budget-exceeded",
+      files: {
+        "src/assets/fonts/Big.woff2": "x".repeat(256001),
+        "src/styles/tokens.css": `${TOKENS_CSS}${fontFace("Inter", "../assets/fonts/Big.woff2")}`,
+      },
+    },
+    {
+      // 在入口追加规则块：类选择器不属于裸全局选择器，因此这条注入只命中入口结构规则。
+      step1Class: "样式入口承载规则",
+      name: "样式入口承载样式规则",
+      rule: "entry-stylesheet-not-import-only",
+      files: {"src/style.css": `${ENTRY_CSS}\n.panel{color:red}\n`},
+    },
   ];
+
+  /** Task 1 Step 1 的十一类判定。 */
+  const STEP1_CLASSES = [
+    "未定义变量",
+    "嵌套 fallback 未定义",
+    "循环引用",
+    "动态变量缺生产者",
+    "按钮无 type",
+    "搜索输入无可见 label",
+    "图标按钮无可读名称",
+    "Unicode 结构图标",
+    "裸全局选择器",
+    "未登记十六进制色",
+    "裸视觉值",
+  ];
+  /** Task 2 Step 7 新增的四类资产事实与入口结构判定。 */
+  const TASK2_CLASSES = ["字体资产缺失", "远程字体 URL", "字体体积超预算", "样式入口承载规则"];
 
   function runFixture(files) {
     const root = fixture({
@@ -813,20 +1036,29 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     return spawnSync(process.execPath, [CLI_PATH, `--root=${root}`], {encoding: "utf8"});
   }
 
-  test("Step 1 的 11 类判定都有 CLI 级变异证据", () => {
+  test("每类判定都有 CLI 级变异证据（Step 1 十一类 + Task 2 四条）", () => {
     // 裸视觉值一类在 brief 里是一个分类，这里拆成字号与图标尺寸两条注入。
     const classes = new Set(mutations.map((mutation) => mutation.step1Class));
-    assert.equal(classes.size, 11, [...classes].join("、"));
-    assert.equal(mutations.length, 12);
-    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 12);
+    for (const name of [...STEP1_CLASSES, ...TASK2_CLASSES]) {
+      assert.ok(classes.has(name), `缺少「${name}」的 CLI 级变异证据`);
+    }
+    // 分类集合必须恰好是这两组，不允许默默少测或凭空多出未归类的注入。
+    assert.deepEqual([...classes].filter((name) => !STEP1_CLASSES.includes(name)).sort(), [...TASK2_CLASSES].sort());
+    assert.equal(classes.size, 15, [...classes].join("、"));
+    assert.equal(mutations.length, 16);
+    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 16);
     assert.deepEqual([...new Set(mutations.map((mutation) => mutation.rule))].sort(), [
       "circular-css-variable",
       "dynamic-variable-not-registered",
+      "entry-stylesheet-not-import-only",
       "explicit-button-type",
+      "font-budget-exceeded",
       "global-selector-in-component",
       "icon-button-name",
+      "missing-font-asset",
       "raw-hex-color",
       "raw-visual-value",
+      "remote-font-url",
       "undefined-css-variable",
       "unicode-structure-icon",
       "visible-input-label",

@@ -2402,375 +2402,95 @@
       "expiresWith": "PLAN-DM-029 Task 4"
     },
     {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|input:not([type=\"checkbox\"]):not([type=\"radio\"]),select,textarea|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|*|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|body|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "rule": "raw-visual-value",
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 旧顶栏规则：布局度量已被 `layout/TopBar.vue` 的 scoped 样式覆盖，仅旧页面残留。 */ .topbar min-height:68px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.topbar min-height:68px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|.topbar div max-width:1440px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.topbar div max-width:1440px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|main|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|:where(#app) main max-width:1440px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|main max-width:1440px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|button,input,select,textarea|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|button,a|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|button|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|a|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|:focus-visible|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|button:disabled|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 度量字号刻意保留原值：字号突增的收敛属于属性页与图纸目录迁移任务。 */ .summary strong font-size:22px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.summary div,.panel border-radius:8px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 内容驱动高度 520px 保留原值：删除内联滚动区需先证明消费方迁移。 */ .editor min-height:520px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.summary strong font-size:22px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 离刻度圆角 5px 保留原值：归并到 `--radius-sm/md` 会改变渲染，故登记为例外。 */ .form-grid input,.form-grid select,.form-row input,.form-row select,.csv-flow input border-radius:5px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.editor min-height:520px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|:where(#app) fieldset border-radius:7px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.editor border-radius:8px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|aside|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|aside button|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|aside .active|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|article|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|table|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|th,td|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|td input|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|.execution-group border-radius:7px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.notice border-radius:6px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|.filter-grid input,.filter-grid select,.bulk-bar input,.bulk-bar select border-radius:5px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.form-grid label,.form-row label,.csv-flow label,.property-values label font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 表格窗口的高度上限是内容驱动滚动区，保留原值并登记例外。 */ .sheet-table-window max-height:520px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.form-grid input,.form-grid select,.form-row input,.form-row select,.csv-flow input border-radius:5px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|fieldset|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/legacy.css",
+      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 草稿动作区高度上限同样是内容驱动滚动区，保留原值并登记例外。 */ .draft-actions max-height:180px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|fieldset border-radius:7px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|fieldset>button|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|details|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/primitives.css",
+      "fingerprint": "raw-visual-value|src/styles/primitives.css|/* 模态卡体：宽度上限 520px 是 SPEC 固定值，尚未令牌化，见例外清单。 */ .modal-card max-width:520px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.execution-group border-radius:7px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|main|2",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|aside|2",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.attr-diff font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.filter-grid label,.bulk-bar label font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.filter-grid input,.filter-grid select,.bulk-bar input,.bulk-bar select border-radius:5px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.sheet-table-window max-height:520px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.sheet-table-window border-radius:6px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.draft-actions max-height:180px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.recover-banner border-radius:6px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.draft-save-status font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.drop-hint font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|/* 旧功能入口的受控按钮基线；图标、页签和文字操作继续由各组件定义。 */ :where(.sheets-toolbar .operations button,.sheets-toolbar .selection-bar button,.sheets-toolbar .select-entry button,.sheets-toolbar .filter-toggle,.sheets-toolbar .chips-clear-all,.sheets-view .empty-state button,.sheets-view .hidden-target-notice button,.sheets-view .load-more,.properties-view button,.property-panel .link-actions a,.repair .link-actions button,.recover-banner button,#draft-pop button,.job-detail button,.revisions-view button,.sheet-property-editor .editor-footer button):is(button,a) min-height:36px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-card max-width:520px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-card h2 font-size:18px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-irr font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-impact max-height:200px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-impact .mono font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-check font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|.modal-actions button font-size:14px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "global-selector-in-component",
-      "file": "src/style.css",
-      "fingerprint": "global-selector-in-component|src/style.css|*,*::before,*::after|1",
-      "reason": "迁移前全局业务样式表里的裸选择器，待迁入有根类限定的 legacy 层后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/style.css",
-      "fingerprint": "raw-visual-value|src/style.css|/* PLAN-DM-021 Task 9（I18N-11/15）：未知错误诊断详情的原始文本按容器换行，不产生横向溢出 */ .error-raw font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 2"
+      "file": "src/styles/primitives.css",
+      "fingerprint": "raw-visual-value|src/styles/primitives.css|/* 受影响文件列表的高度上限是内容驱动滚动区，未令牌化，见例外清单。 */ .modal-impact max-height:200px|1",
+      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
+      "expiresWith": "PLAN-DM-029 Task 9"
     },
     {
       "rule": "raw-visual-value",

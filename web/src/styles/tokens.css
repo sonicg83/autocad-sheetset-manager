@@ -1,0 +1,84 @@
+/* 设计令牌（ARCH-DM-007 §4.1）：原始令牌 → 语义令牌 → 组件令牌三层。
+ *
+ * 三层职责：
+ * - 原始令牌：颜色、阴影、间距、圆角，以及字号、控件高度、点击下限和图标规格的有限值域。
+ * - 语义令牌：正文、标签、表格、辅助文字、表单控件与紧凑工具栏等用途。
+ * - 组件令牌：按钮、输入框、图标按钮和模态的默认值。
+ * 业务规则只消费后两层；本层与 `html[data-theme="dark"]` 是十六进制颜色与原始档位的
+ * 唯一合法定义处，浅色与深色主题只在这里重映射，业务规则不写主题分支。
+ * `--font-body` 是 `font` 简写形态（`14px / 1.5`），只用于根元素排版；需要单独的
+ * `font-size` 档位时消费组件层令牌 `--button-font-size` 等。
+ *
+ * 字体资源（ARCH-DM-007 §4.2）：本地 WOFF2、`font-display: swap`、只含 Basic Latin
+ * （U+0020–007E）、Latin-1 Supplement（U+00A0–00FF）和界面通用标点（– — ‘ ’ “ ” …）。
+ * 不打包 CJK：中文继续由 `--font-ui` 回落栈里的 Microsoft YaHei 承接；中文与图标字形
+ * 都不在这两个文件里，故必须显式声明 `unicode-range`，缺字时立即回落而不去下载。
+ * `@font-face` 有意放在 `@layer` 之外：字体资源声明不属于层叠竞争，写在层外可以保证它
+ * 在任何规则之前被解析，也避免把资源加载顺序牵扯进四层顺序约束。
+ *
+ * 说明：令牌块的**前面**不写注释。检查器把规则前的注释并入规则选择器原文，会让
+ * `:root` / `html[...]` 不再是「整条规则就是令牌块」，令牌自身反而被登记成债务；
+ * 因此本文件的解释统一放在这个文件头，不在令牌块前或块内声明前插入注释。
+ */
+@font-face{font-family:"Inter";src:url("../assets/fonts/InterLatin.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap;unicode-range:U+0020-007E,U+00A0-00FF,U+2013-2014,U+2018-201D,U+2026}
+@font-face{font-family:"IBM Plex Mono";src:url("../assets/fonts/IBMPlexMonoLatin.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0020-007E,U+00A0-00FF,U+2013-2014,U+2018-201D,U+2026}
+
+@layer tokens {
+  :root{
+    color-scheme:light;
+    --color-bg-canvas:#F6F7F9; --color-bg-surface:#FFFFFF; --color-bg-muted:#EEF1F5;
+    --color-text-primary:#1A2233; --color-text-secondary:#4A5568; --color-text-muted:#6B7280;
+    --color-border-subtle:#E3E8EF; --color-border-strong:#C7D0DB;
+    --color-accent:#2F5BE0; --color-accent-hover:#2A50C8; --color-accent-active:#2445AD;
+    --color-on-accent:#FFFFFF; --color-focus:#2F5BE0;
+    --color-success:#1B7F4B; --color-success-bg:#E7F4EC;
+    --color-warning:#946200; --color-warning-bg:#FBF1DB;
+    --color-danger:#C2302B; --color-danger-bg:#FBEAE8;
+    --color-info:#245FA6; --color-info-bg:#E8F0F9;
+    --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-full:9999px;
+    --shadow-1:0 1px 2px rgba(16,24,40,.06); --shadow-2:0 4px 12px rgba(16,24,40,.10); --shadow-3:0 12px 32px rgba(16,24,40,.16);
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --font-size-12:12px; --font-size-13:13px; --font-size-14:14px; --font-size-18:18px;
+    --line-height-body:1.5;
+    --height-34:34px; --height-36:36px; --height-38:38px;
+    --tap-target-min:32px;
+    --icon-size-sm:12px; --icon-size-md:16px; --icon-size-lg:20px;
+    --border-width-1:1px;
+  }
+
+  :root{
+    --font-ui:"Inter", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --font-body:var(--font-size-14) / var(--line-height-body);
+    --font-label:var(--font-size-13);
+    --font-table:var(--font-size-13);
+    --font-caption:var(--font-size-12);
+    --control-height-compact:var(--height-34);
+    --control-height-default:var(--height-36);
+    --control-height-form:var(--height-38);
+    --min-tap-height:var(--tap-target-min);
+  }
+
+  :root{
+    --button-height:var(--control-height-default);
+    --button-font-size:var(--font-size-14);
+    --input-height:var(--control-height-form);
+    --icon-button-size:var(--height-36);
+    --modal-title-font-size:var(--font-size-18);
+  }
+
+  html[data-theme="dark"]{
+    color-scheme:dark;
+    --color-bg-canvas:#10151E; --color-bg-surface:#171E29; --color-bg-muted:#212B39;
+    --color-text-primary:#E6EAF2; --color-text-secondary:#AEB8C7; --color-text-muted:#8592A3;
+    --color-border-subtle:#2A3444; --color-border-strong:#3B485C;
+    --color-accent:#6B8DFF; --color-accent-hover:#7E9CFF; --color-accent-active:#5A7BE8;
+    --color-on-accent:#0B1220; --color-focus:#8FAAFF;
+    --color-success:#54C98A; --color-success-bg:#12301F;
+    --color-warning:#E0B15A; --color-warning-bg:#332712;
+    --color-danger:#F0776E; --color-danger-bg:#3A1917;
+    --color-info:#7CB0E8; --color-info-bg:#132739;
+    --shadow-1:0 1px 2px rgba(0,0,0,.30); --shadow-2:0 4px 12px rgba(0,0,0,.40); --shadow-3:0 12px 32px rgba(0,0,0,.50);
+    /* 深色主题只重映射颜色与阴影：字号、尺寸档位与浅色共用。 */
+  }
+}

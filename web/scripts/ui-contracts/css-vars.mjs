@@ -64,11 +64,20 @@ const KEYFRAMES_AT_RULE_PATTERN = /^@(?:-\w+-)?keyframes\b/i;
 /**
  * 解析样式规则块。
  *
+ * 默认只返回样式规则：`@media` 等条件块与 `@font-face` 等 at-rule 本身不是选择器规则，
+ * 把它们当规则会引出裸选择器与裸视觉值误报。需要检查 at-rule 本身的调用方（如
+ * `font-assets.mjs` 校验 `@font-face` 的资源引用）传 `{includeAtRules: true}` 显式索取，
+ * 从而不必在别处复制一套花括号平衡解析。
+ *
+ * @param {string} css
+ * @param {{includeAtRules?: boolean}} [options]
  * @returns {{selector: string, atRules: string[], selectorStart: number, openIndex: number,
  *   contentStart: number, contentEnd: number}[]} 仅样式规则（`@media` 等条件块本身
- *   不作为规则返回，但会出现在其内部规则的 `atRules` 里）。
+ *   不作为规则返回，但会出现在其内部规则的 `atRules` 里）；`includeAtRules` 为真时
+ *   额外包含选择器以 `@` 开头的 at-rule 块。
  */
-export function parseRules(css) {
+export function parseRules(css, options = {}) {
+  const includeAtRules = options.includeAtRules === true;
   const masked = maskNonCode(css);
   const rules = [];
   const stack = [];
@@ -95,8 +104,9 @@ export function parseRules(css) {
       if (entry) {
         entry.contentEnd = i;
         // 关键帧块内的条目不是选择器规则：`from`/`to`/`0%` 会被当成元素选择器
-        // 与裸视觉值产生误报，必须整块排除。
-        if (!entry.selector.startsWith("@") && entry.selector !== "" && entry.inKeyframes !== true) rules.push(entry);
+        // 与裸视觉值产生误报，必须整块排除；at-rule 块同样默认排除。
+        const isAtRule = entry.selector.startsWith("@");
+        if ((!isAtRule || includeAtRules) && entry.selector !== "" && entry.inKeyframes !== true) rules.push(entry);
       }
       segmentStart = i + 1;
       continue;

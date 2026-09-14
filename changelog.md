@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-14（前端字体令牌与样式分层落地，PLAN-DM-029 Task 2）
+
+- 样式分层：`web/src/style.css` 瘦身为分层入口（`@layer tokens, reset, primitives, legacy;` + 四个 `@import`，原 86 行旧内容全部迁出），新增 `web/src/styles/tokens.css`（84 行，primitive→semantic→component 三层变量，浅/深主题只在此映射）、`reset.css`（42 行）、`primitives.css`（39 行）、`legacy.css`（125 行，旧全局业务规则按原值迁入并改为有根类限定选择器）。
+- 字体本地化：入库 `web/src/assets/fonts/InterLatin.woff2`（56928 字节）与 `IBMPlexMonoLatin.woff2`（12488 字节），合计 69416 字节，预算 256000 字节；两条 `@font-face` 均声明 `font-display: swap` 与 `unicode-range: U+0020-007E, U+00A0-00FF, U+2013-2014, U+2018-201D, U+2026`，不引用任何远程 URL，OFL 许可证文本随字体入库。字符集用 fontTools 直读 `cmap` 复核：各 199 个码位、最大 U+2026、CJK 各区块命中 0；上游身份由 `name` 表实测（Inter Variable 4.001 git-9221beed3、IBM Plex Mono 2.005），构建产物中的 `url()` 为 `/assets/*.woff2` 本地路径。
+- 门禁收紧：新增 `missing-font-asset`、`remote-font-url`、`font-budget-exceeded`、`entry-stylesheet-not-import-only` 四条资产事实规则（`web/scripts/ui-contracts/font-assets.mjs`），并由 `NON_EXEMPTIBLE_RULES` 固定为不可登记例外的硬门禁；`css-vars.mjs` 的 `parseRules` 增加可选 `includeAtRules`（默认行为与既有过滤条件不变）。
+- 修复收口期发现的两处门禁空转缺陷（否则四条新规则会以「永远通过」的姿态入库）：① `collectEntryStylesheetViolations` 的 `report` 只调用 `emit` 而未 push 返回值，入口结构规则永不产出违规；② `parseRules` 默认过滤 `@` 开头的 at-rule，`@font-face` 完全不进入字体检查，三条字体规则恒不放行。修复前新增用例 12 项失败（信息为「期望恰好 1 条 X，实际：[]」，其中 4 项为 CLI 级变异），修复后全绿。
+- 债务清退：`web/scripts/ui-contract-exceptions.json` 422 → 382 条，Task 2 名下 53 条全部结清——40 条清退（23 条裸全局选择器 + 17 条可精确令牌化的裸视觉值），13 条按原值迁入分层样式表后重定向到 Task 9（`legacy.css` 11 条 + `primitives.css` 2 条，全是离刻度圆角、内容驱动高度与旧度量宽度）。棘轮不变量实测 383 = 382 + 1（动态白名单掩盖 1 条 `undefined-css-variable`）。
+- 等宽区域改消费 `--font-mono`：`SheetTable.vue`、`sheet-catalog/{CatalogActions,ColumnEditor,FieldBrowser}.vue` 各 1 行替换；中文继续回落 `Microsoft YaHei, system-ui`。
+- 实际验证：`npm --prefix web run test:contracts` **80 passed / 0 failed**（新增 14 条资产与入口规则用例、4 条 CLI 级变异，覆盖面守卫扩展为 15 类/16 条注入/14 条规则）；`npm --prefix web run check:ui` 退出 0；`npm --prefix web run build` 退出 0（`dist` 产出两个本地 WOFF2）；`npm --prefix web run test:unit` 48 passed；`npm --prefix web run test:e2e -- main.spec.ts` **78 passed / 0 failed**。另做三项针对性变异（预算 `>` 改 `>=`、相对路径解析忽略样式表目录、移除 `NON_EXEMPTIBLE_RULES` 判定）均使对应用例转红，还原后复跑全绿。
+- 偏离与限制：计划 Task 2 的 Files 列表漏列检查器侧文件，经裁定补齐；`main.spec.ts` 的 `select` 行高断言收窄（Chromium 把 `select` 行高钉为 `normal`，`font:inherit` 与显式 `line-height:inherit` 都改不动，其高度契约归 Task 3），`unicode-range` 断言由字面串改为码位区间语义判定（CSSOM 会归一化为 `U+20-7E`）；两套 WOFF2 的原始子集化命令行未被中断前的实现者记录且收口轮无法复原（上游 Inter 发行包在本机不可达，用 npm 包内 `woff` 原件重跑得 11220 字节 ≠ 已入库 12488 字节），故只声明实测可确认的上游身份、字符集、工具版本与字节数，不声称命令可复现。
+
 ## 2026-09-14（前端 UI 静态契约门禁落地，PLAN-DM-029 Task 1）
 
 - 新增前端 UI 静态契约检查器：`web/scripts/check-ui-contracts.mjs` 与 `web/scripts/ui-contracts/{types,css-vars,vue-source,visual-values}.mjs`。CSS `var()` 走平衡括号解析（不用单层正则），递归校验 fallback 中的引用、检测同文件循环引用，并支持含 `producer`/`consumer`/`reason`/`expiresWith` 的动态变量白名单。

@@ -200,7 +200,7 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .order-cell{padding-top:9px;color:var(--color-text-secondary);font-size:12px;text-align:center}
 .column-row input{width:100%;min-width:0;padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:5px;font:inherit;font-size:13px;background:var(--color-bg-surface);color:var(--color-text-primary)}
 .expression-cell{display:grid;gap:4px;min-width:0}
-.column-row textarea{width:100%;min-width:0;min-height:52px;padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:5px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
+.column-row textarea{width:100%;min-width:0;min-height:52px;padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:5px;font-family:var(--font-mono);font-size:13px;line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
 .column-error{margin:0;font-size:12px;line-height:1.5;color:var(--color-danger)}
 .status-cell{padding-top:8px}
 .status-badge{font-size:12px;padding:3px 8px;border-radius:999px;white-space:nowrap}
