@@ -1,12 +1,24 @@
 # 变更记录
 
+## 2026-09-14（校正字体溯源文档与契约注释措辞，PLAN-DM-029 Task 2 三轮再审修复）
+
+- 本轮只改文档与注释，不碰任何代码、`.vue`/`.ts`、入口样式表与例外表；三条 e2e 断言、四条硬门禁规则行为均不变。
+- 字体字符集事实订正（上一节把差集说成只涉及 Plex，不准确）：声明集合 200 个码位，两套字体各提供 199 个，并用 fontTools 复算双向差集——**Inter 缺 `U+00AD`（软连字符）、Plex 缺 `U+201B`（‛）**，两套字体**均无声明范围外码位**（越界 0），缺失码位也都不落在 Basic Latin 区间内。`web/src/assets/fonts/README.md` 与 Task 2 报告 §4.3 同步改为实测值，并给出逐条命令与实测输出。
+- 删除 `document.fonts` 误述并把缺口标清：`main.spec.ts` 内 `document.fonts` **零命中**，三条 Task 2 用例（`:1448/1478/1493`）只读 CSSOM 的 `@font-face` 规则与 `getComputedStyle().fontFamily`，**不验证 WOFF2 是否被真实请求/加载**。已按首选方案（不增加本任务成本）把「运行时确认两套 WOFF2 被真实请求且无远程字体访问」登记为计划 Task 12 的验收证据（收口责任 A，含若采断言则把 `main.spec.ts` 加入 Task 12 Files 的要求）。
+- 补齐可复制复核命令并逐条实际执行：Plex 的码位/极值命令、两套字体的声明范围与实取差集命令、两套字体的 CJK 区段扫描命令；README 附上真实输出（`199 0x20 0x2026` ×2；`declared 200 actual 199 font-missing ['0xad']/['0x201b'] out-of-declared []`；`cjk-hits 0` ×2）。
+- 引用与数量修正：删除指向不入库路径 `.superpowers/` 的 `（Ruling 9）`，改为指向计划文件 Task 2 Step 1 与 Task 12；硬门禁描述由「三条」改为**四条**并点名 `entry-stylesheet-not-import-only`（前面三条针对字体资产，入口那条针对入口结构）。
+- `legacy.css` 层说明收窄：`:where()` 改写只保证「这 13 条**选择器自身**的特异性和匹配范围不变」，不再宣称优先级与迁移前一致——它们同时从无层迁入 `@layer legacy`，相对未分层的组件 `scoped` 样式优先级是**下降**的。
+- 同时修改了计划文件：**Task 3 Step 2** 追加「`UiSelect` 默认高度 = 38px（消费 `--input-height`）」的 RED 项、**Task 9 Step 4** 把「删死规则时同一次更新例外表」的义务从 `.summary` 一个族推广到全部 23 条注释–指纹耦合项，**Task 12** 新增收口责任 A/B/C（字体真实加载、子集化命令、例外表跟踪项）；上一节未写明这些计划修改的来源，本节补齐。
+- 实际验证：`npm --prefix web run check:ui` 退出 0（382 条例外仍全通过，基线未被扰动）；`npm --prefix web run test:contracts` **83 passed / 0 failed**；`legacy.css` 去注释后与上一提交逐字节一致（仅注释变化）。本轮未跑 e2e 与 build。
+- 已知残留（已记入计划 Task 12 收口责任 C）：例外条目的 `rule` 字段已是冗余的临时防御（安全语义由指纹首段承载），下次重新生成例外表时删除；例外表理论上可自掩蔽自身的配置错误（当前 0 条）；全表 **23 条**指纹内嵌了前置注释（9 个文件、18 段注释文本），改注释即改指纹。
+
 ## 2026-09-14（收紧 UI 契约例外一致性与字体溯源记录，PLAN-DM-029 Task 2 评审修复）
 
 - 修复唯一一处实现级缺陷：例外条目原先只按自报的 `rule` 字段判定是否属硬门禁，而登记表索引与棘轮掩盖都按 `fingerprint` 建立，导致把 `rule` 改写成可豁免规则名（或写成大小写别名）即可用真实指纹静默吃掉一条 `missing-font-asset`/`remote-font-url`/`font-budget-exceeded`/`entry-stylesheet-not-import-only` 违规（评审复现：违规数 2 → 1，且 `invalid-exception-entry` 与 `stale-exception` 均为 0）。现改为先取指纹首段（`buildFingerprint` 首段即规则 id），要求 `rule` 与逐字一致，不一致即 `invalid-exception-entry`；一致性通过后再按指纹首段判定不可豁免。
 - 存量例外审计：`ui-contract-exceptions.json` 现有 382 条逐条比对，`rule` 与指纹首段不一致 0 条、指纹空/格式异常 0 条、指纹重复 0 条，按指纹修正数据 0 条、**指纹零改动**；条目数与按规则/按 `expiresWith` 分布均与收口时实测一致（`raw-visual-value` 338 / `unicode-structure-icon` 20 / `explicit-button-type` 16 / `visible-input-label` 7 / `raw-hex-color` 1；4:41、5:62、6:75、7:89、8:66、9:13、10:34、11:2）。
 - 修复第二处门禁空转：`collectEntryStylesheetViolations` 原先只按扫描到的文件逐一循环找 `src/style.css`，入口文件缺失（或未被扫描）时循环一条都不走，「入口只能是入口」这条约束等于被删除；现先断言入口在扫描结果内，缺失即报 `entry-stylesheet-not-import-only`（语义 `missing-entry-stylesheet`；存在却未扫到时语义 `unscanned-entry-stylesheet`）。
 - 新增 3 条回归用例（例外 `rule`/指纹不一致被拒且底层违规不被掩盖、大小写别名同样被拒、样式入口缺失被拒）；测试夹具助手 `fixture()` 默认补上一个合法的 `src/style.css` 入口（缺入口的夹具在 Task 2 之后就是违规工作区），既有 80 条用例断言全部不受影响。变异自证：停用一致性校验使 2 条新用例转红，停用入口缺失判定使 1 条转红，逐字节还原后复绿。
-- 新增字体溯源文档 `web/src/assets/fonts/README.md`：上游发行物与用 `name`/`fvar` 表实测的版本（Inter 4.1 `InterVariable.woff2` / `Version 4.001;git-9221beed3`；npm `@ibm/plex-mono@2.5.0` `IBMPlexMono-Regular` / `Version 2.005`）、声明字符集与 `unicode-range`（各 199 码位、`U+0020–U+2026`，Plex 少 `U+201B`）、可复制执行的复核命令，以及「子集化命令行未经证实」的显式保留项（复原物 11220 字节 ≠ 已入库 12488 字节，不得用它替换已入库资产）；该保留项同时登记到计划 Task 12 的收口责任。
+- 新增字体溯源文档 `web/src/assets/fonts/README.md`：上游发行物与用 `name`/`fvar` 表实测的版本（Inter 4.1 `InterVariable.woff2` / `Version 4.001;git-9221beed3`；npm `@ibm/plex-mono@2.5.0` `IBMPlexMono-Regular` / `Version 2.005`）、声明字符集与 `unicode-range`（各 199 码位、`U+0020–U+2026`，Plex 少 `U+201B`；此处差集描述经三轮再审订正，见上一节）、可复制执行的复核命令，以及「子集化命令行未经证实」的显式保留项（复原物 11220 字节 ≠ 已入库 12488 字节，不得用它替换已入库资产）；该保留项同时登记到计划 Task 12 的收口责任。
 - 措辞与账目修正：23 条裸全局选择器的实际去向为 **`reset.css` 10 条（保持裸元素选择器）+ `legacy.css` 13 条（加 `:where(#app)`）**，原「统一加 `:where(#app)`」的说法不准确；`legacy.css` 尾部层说明重写，区分这两处结构调整并按 ARCH-DM-007 §7 说明级联方向（命名层顺序只决定层间顺序，无层 `<style scoped>` 优先于全部命名层；重写后该文件 125 → 141 行，仅注释变化、无规则增删）；两份许可证 git blob 字节数修正为 4366 / 4363（Plex 工作区落盘 4456 字节来自 CRLF）；`.summary strong{font-size:22px}` 的理由改为与 Task 9 Step 4 对齐（该族在 `src/` 内已无 `class="summary"` 渲染点，属待删死规则，应随 legacy 清理整体删除而非令牌化）。
 - 实际验证：`npm --prefix web run test:contracts` **83 passed / 0 failed**（8 suites，+3 条）；`npm --prefix web run check:ui` 退出 0；聚焦变异运行（`node --test --test-name-pattern`）基线绿 / 变异 A、B 各自红 / 还原后绿。本轮未跑 `build`、`test:unit` 与全量 e2e：改动仅涉及 `web/scripts/**`、样式注释文本与一份 `.md`，不触碰 `.vue`/`.ts`/入口样式表。
 

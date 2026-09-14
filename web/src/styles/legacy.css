@@ -119,8 +119,11 @@
      1. 元素/伪类开头的选择器（共 13 条：`main`、`aside`、`aside button`、`aside .active`、
         `article`、`table`、`th,td`、`td input`、`fieldset`、`fieldset>button`、`details`，
         其中 `main` 与 `aside` 各出现两次）加上 `:where(#app)` 根限定。`:where()` 自身
-        特异性为 0、`#app` 覆盖全部应用 DOM（含 `showModal()` 的 `<dialog>`），因此这 13 条
-        的匹配范围与优先级和迁移前一致，同时满足「业务样式不得写裸全局选择器」的门禁要求。
+        特异性为 0、`#app` 覆盖全部应用 DOM（含 `showModal()` 的 `<dialog>`），因此 `:where()`
+        改写**不改变这 13 条选择器自身的特异性和匹配范围**（都是全部应用 DOM），同时满足
+        「业务样式不得写裸全局选择器」的门禁要求。注意这里只谈选择器自身：这 13 条同时也从
+        无层样式迁进了 `@layer legacy`，相对未分层的组件 `scoped` 样式，它们的优先级反而
+        是**下降**的（见下方级联方向一段），不因 `:where()` 而保持不变。
      2. 元素级重置没有留在这里，而是迁到 `reset.css`（共 10 条：`*`、`*,*::before,*::after`、
         `body`、`button`、`button,a`、`button,input,select,textarea`、`a`、`button:disabled`、
         `:focus-visible`、`input:not([type="checkbox"]):not([type="radio"]),select,textarea`）；

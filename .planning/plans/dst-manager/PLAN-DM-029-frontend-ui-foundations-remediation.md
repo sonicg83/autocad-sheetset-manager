@@ -281,7 +281,7 @@ related:
 - [ ] **Step 1（RED）**：为欢迎页选择文件、修订恢复、修复、草稿动作、任务状态和确认流程补按钮 type、最小点击面积、可见标签、danger 层级和焦点归还断言。
 - [ ] **Step 2（迁移）**：旧页面按钮、输入和选择器改用原语；保留恢复确认、修复预览、草稿撤销/重做和任务取消行为。
 - [ ] **Step 3（模态接入）**：`ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 复用 `dialogFocus.ts`；保持 SPEC-DM-006 的嵌套模态原生 dialog 裁决，不把原生 dialog 强改为遮罩层。
-- [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除（它们的前置内联注释已进入例外指纹，删规则时必须同一次更新 `ui-contract-exceptions.json`）。
+- [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除。注意：`parseRules` 会把紧邻规则的前置注释并入选择器，**注释文本因此进入例外指纹**（全表 **23 条**受影响，涉及 9 个文件、18 段不同注释文本），因此删除或改写这些注释必须与 `ui-contract-exceptions.json` 的更新落在同一次改动里，否则会立即变成陈旧例外。
 - [ ] **Step 5（证据）**：保存欢迎默认、修订危险确认、修复错误、深色任务状态共 4 张。
 - [ ] **Step 6（门禁闭合）**：清退除可能保留的 ColumnEditor 图标外全部视觉债务例外；运行检查器验证无陈旧例外。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-workflows.spec.ts sheets-drafts.spec.ts`、`rtk npm --prefix web run test:unit` 与 `rtk npm --prefix web run build`。
@@ -367,11 +367,32 @@ related:
 - [ ] **Step 8（计划关闭）**：只有全量门禁和真实桌面复验均通过后，将本计划状态改为 `completed`，更新两个索引和 changelog；若真实桌面未完成，保持 `active` 并准确列出证据缺口。
 - [ ] **Step 9（最终提交）**：commit：`完成前端视觉基础整改验收闭环`。
 
-> **收口责任（字体子集化命令）**：两套 WOFF2 的原始 `pyftsubset` 命令行未被记录，且在本机无法逐字复原
+> **收口责任 A（字体真实加载当前未被自动化覆盖）**：Task 2 的三条 e2e 用例只断言 **CSSOM 声明层**
+> （`@font-face` 规则文本、`getComputedStyle()` 字体栈、`unicode-range` 区间语义），**不验证两套 WOFF2
+> 在运行时被真实请求**（仓库内 `document.fonts` 零命中，也无任何网络请求断言）。Task 12 的验收证据必须
+> 包含这一项：运行时确认两套 WOFF2 被真实请求且响应来自本地 `/assets/…`、全程无远程字体访问
+> （推荐在 `main.spec.ts` 的 Task 2 一节补 `document.fonts.ready` + 请求监听断言；若选该方式，需把
+> `web/tests/e2e/main.spec.ts` 一并加入本任务 Files；若改为人工核验，必须在
+> `.planning/memos/dst-manager/assets/PLAN-DM-029/README.md` 留下可核查记录）。在该证据到位前，
+> 不得在任何文档里声称「字体产物真的被加载」已覆盖。
+>
+> **收口责任 B（字体子集化命令）**：两套 WOFF2 的原始 `pyftsubset` 命令行未被记录，且在本机无法逐字复原
 > （Plex 复原物 11220 B ≠ 已入库 12488 B，Inter 上游发行包不可达），详见
 > `web/src/assets/fonts/README.md` 与 Task 2 报告 4.5 节。如需命令级可复现，必须在可访问上游的环境重做
 > 子集化并同步替换产物（含体积、字符集、浏览器加载三类复核），并把新命令写入该 README；
 > **不得用推测的命令文本或其他环境下的复原物替换已入库资产**。
+>
+> **收口责任 C（例外表跟踪项，Task 2 本轮不动数据）**：
+> ① 例外条目的 `rule` 字段已是冗余项——安全语义完全由 `fingerprint` 首段承载，`rule` 只参与一致性
+> 卫生检查。它是**临时防御**：单一事实源应在指纹首段，两处事实源必留漂移面。下次重新生成例外表时
+> 删除该字段、改为从指纹派生，并同步调整 `check-ui-contracts.mjs` 的那处一致性断言（当前 382 条数据
+> 与一处消息字符串被等值断言绑在一起）。
+> ② 例外表可自掩蔽自身的配置错误（低危）：配置类违规（`invalid-exception-entry`、`stale-exception`）的
+> `file` 恒为 `scripts/ui-contract-exceptions.json`，其规则 id 不在 `NON_EXEMPTIBLE_RULES` 中，理论上可
+> 再登一条条目把「关于例外文件本身的配置错误」吃掉（当前此类条目 0 条）。加固方向：拒绝
+> `entry.file` 等于例外文件自身的登记。
+> ③ 注释–指纹耦合：全表 23 条指纹内嵌了前置注释（9 个文件、18 段注释文本），改动这些注释会同时改动
+> 指纹；处置义务已写在 Task 9 Step 4。
 
 ## 依赖与提交顺序
 
@@ -429,7 +450,8 @@ Task 10 → Task 11 → Task 12
 | Task 2（收口轮修复） | 同上；另做主流程 `pytest -q` 之外的独立核验：清空例外表复算原始违规、`git show BASE:ui-contract-exceptions.json` 指纹级比对、fontTools 直读 `cmap`、独立 Chromium 探针复现 `select` 行高 | 修复两处「门禁空转」缺陷（入口规则 `report` 未 push、`@font-face` 被 `parseRules` 默认过滤）后才由红转绿；修复前 12 项失败均为「期望恰好 1 条 X，实际：[]」 | 同报告第 2、3.1、5 节 |
 | Task 2–11 | 各任务列出的 RED/GREEN 命令 | Task 3 起待实施 | 本表逐任务追加 |
 | Task 2（评审修复轮 2） | `rtk npm --prefix web run test:contracts`、`check:ui`、三条新用例的聚焦变异运行 | **83 passed / 0 failed**（+3：例外 `rule`/指纹不一致 2 条 + 入口缺失 1 条）；382 条存量例外审计 **382/382 自洽、指纹零改动**；变异 A（停用一致性校验）使 2 条转红、变异 B（停用入口缺失判定）使 1 条转红，逐字节还原后复绿；`check:ui` 退出 0；未跑 `build`/`test:unit`（改动不触 `.vue`/`.ts`/入口样式表） | 提交 `收紧 UI 契约例外一致性与字体溯源记录`；报告见 `task-2-report.md` 第 11 节 |
-| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体子集化命令的收口责任（计划 Task 12 节末「收口责任」） | 待实施 | `assets/PLAN-DM-029/README.md` |
+| Task 2（评审修复轮 3：文档/注释级） | 只跑 `check:ui`、`test:contracts` 与 PowerShell 字体复核命令（不跑 e2e/build） | 按三轮再审落实 D1–D7：差集复算为 Inter 缺 `U+00AD`、Plex 缺 `U+201B`（均为字体未提供，越界 0）；README 四条硬门禁区分为「字体类三条 + 入口一条」，补齐 Plex/差集/CJK 三条可复制命令并附实测输出；删除 `document.fonts` 误述，将「真实加载」标为未覆盖并登记为本任务收口责任 A；`legacy.css` 的 `:where()` 措辞收窄 | 提交 `校正字体溯源文档与契约注释措辞`；报告见 `task-2-report.md` 第 12 节 |
+| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
 
