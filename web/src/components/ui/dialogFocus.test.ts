@@ -172,7 +172,8 @@ describe("useDialogFocus", () => {
 
 // 以下覆盖关闭落点：缺省归还「打开前的元素」，可用 `returnFocus` 覆盖（任务浮层打开后
 // 切换过页签时，正确落点是当前激活入口而不是打开时那个元素；见 `TaskOverlay.vue`）。
-// 无论哪种落点，`shouldReturnFocus` 都先行判定：焦点已被移到容器外时不抢回来。
+// 无论哪种落点，关闭守卫都会拦下「焦点已被移到容器外」时的抢焦：解析器总会被调用，但只有
+// `target.isConnected && shouldReturnFocus(container)` 同时成立才移动焦点。
 describe("useDialogFocus 的关闭落点", () => {
   it("传入 returnFocus 时优先于打开前的元素", async () => {
     const target: {el: HTMLElement | null} = {el: null};

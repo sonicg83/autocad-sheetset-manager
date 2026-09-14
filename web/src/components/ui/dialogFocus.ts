@@ -54,9 +54,10 @@ export interface DialogFocusOptions {
   /** 关闭时把焦点交还给谁；缺省为打开时捕获的 `opener`。
    *
    * 用于「打开期间容器内状态已变」的调用方：例如任务浮层打开后用户切换过页签，此时回焦目标
-   * 是**当前激活页签对应的入口**而不是打开时那个元素。解析器在关闭那一刻调用，返回 `null`
-   * 或已从文档移除的元素时回退到 `opener`；焦点已被移到容器外时两者都不抢
-   * （`shouldReturnFocus` 仍然先行判定）。 */
+   * 是**当前激活页签对应的入口**而不是打开时那个元素。解析器在关闭那一刻**总会被调用**
+   * （不要在里面写副作用）；返回 `null` 或已从文档移除的元素时回退到 `opener`，焦点已被移到
+   * 容器外时两者都不抢——只有 `target.isConnected && shouldReturnFocus(container)` 同时成立
+   * 才移动焦点（守卫在解析之后求值，顺序见 `watch` 的关闭分支）。 */
   returnFocus?: () => HTMLElement | null | undefined;
   /** Escape 回调；收到原始的 `KeyboardEvent`。工具自己不 `preventDefault`、不 `stopPropagation`，
    * 是否需要阻止行为/停止传播由调用方在那个事件上表达。 */
@@ -144,9 +145,13 @@ export function useDialogFocus(options: DialogFocusOptions) {
     return candidates.filter((element) => !isNamedRadio(element) || radioStops.has(element));
   }
 
+  /** 打开时把焦点送进容器。`preventScroll` 是旧手写副本的语义（`TaskOverlay.vue` 的
+   * `focusActiveTab`）：模态/浮层打开、Tab 回绕与关闭归还都不应带动页面滚动——
+   * `sheets-layout.spec.ts` 对 `scrollTop` 有零容差断言（`expect(await snapshot()).toEqual(before)`），
+   * 一次隐式滚动就会把它打红。 */
   function focusInitial() {
     const target = toValue(options.initialFocus) ?? focusables()[0] ?? toValue(options.container);
-    target?.focus();
+    target?.focus({preventScroll: true});
   }
 
   /** 关闭时是否把焦点交还给打开前的元素。
@@ -173,7 +178,7 @@ export function useDialogFocus(options: DialogFocusOptions) {
       }
       const resolved = options.returnFocus?.() ?? null;
       const target = (resolved && resolved.isConnected ? resolved : null) ?? opener;
-      if (target && target.isConnected && shouldReturnFocus(container)) target.focus();
+      if (target && target.isConnected && shouldReturnFocus(container)) target.focus({preventScroll: true});
       opener = null;
     },
     {immediate: true, flush: "post"},
@@ -196,7 +201,7 @@ export function useDialogFocus(options: DialogFocusOptions) {
       : active === last;
     if (!atEdge) return;
     event.preventDefault();
-    (event.shiftKey ? last : first).focus();
+    (event.shiftKey ? last : first).focus({preventScroll: true});
   }
 
   return {onDialogKeydown};

@@ -968,6 +968,16 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   await expect(toast).toBeVisible();
   await page.waitForTimeout(6000); // 超过成功类自动消失时长
   await expect(toast).toBeVisible(); // 失败常驻
+  // Task 4 迁移轮 2：关闭按钮由 `✕` 字形改为 `UiIconButton`（`.toast-actions .ui-icon-button`，
+  // 尺寸由 `--icon-button-size` 给到 36×36），「查看」仍是有可见文案的描边按钮（`.toast-view`）。
+  // 本用例原先只按可访问名定位，旧的裸 `<button class="toast-close">✕</button>` 同样能通过，
+  // 所以补上结构与尺寸断言，作为提示宿主迁移的回归网。
+  const closeBtn=toast.locator(".toast-actions .ui-icon-button");
+  await expect(closeBtn).toHaveAttribute("aria-label","忽略通知");
+  const closeBox=(await closeBtn.boundingBox())!;
+  expect.soft(Math.round(closeBox.width),"toast 关闭按钮宽度").toBe(36);
+  expect.soft(Math.round(closeBox.height),"toast 关闭按钮高度").toBe(36);
+  await expect(toast.locator(".toast-actions .toast-view")).toHaveText("查看");
   await toast.getByRole("button",{name:"查看"}).click();
   await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
   // Task 5 起关闭按钮带 aria-label（忽略通知），可访问名不再依赖 ✕ 字形
