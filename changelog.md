@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-14（备忘：阻断状态下放开属性编辑的可行性评估）
+
+- **新增备忘**：[MEMO-DM-035](.planning/memos/dst-manager/2026-09-14-relaxed-blocking-property-edit-feasibility.md) 记录一次只读调研结论：`INVALID_REPAIR_REQUIRED` 状态下放开元数据命令（图纸/图纸集属性、自定义属性）而保持结构命令（CAD Worker）禁用的可行性评估。结论为实现难度中低：`_gate_writable`（`application/service.py`）需按命令类型分级；`execute_changes` 非 CAD 分支的全量 `validate()` 需改为差集（增量）校验，否则既有阻断错误会令提交 100% 失败；CAD 侧已有 `DST_REPAIR_GATE_BLOCKED` 双保险；前端按状态禁用控件的逻辑需同步调整。未修改源码。
+
 ## 2026-09-14（编制前端视觉基础与一致性整改实施计划）
 
 - **新增计划**：[PLAN-DM-029](.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md)（`proposed`）把已接受的 ARCH-DM-007 转为 12 个可逐任务执行的实施单元，严格固定“基线与门禁 → 公共原语 → 页面迁移 → 结构治理 → 验收闭环”顺序。
