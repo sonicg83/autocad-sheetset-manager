@@ -98,5 +98,5 @@ related:
 
 ## 后续项
 
-- `cardinality_frontier` 会让不编号子集之后的子集进入 `rename_only`（多一次 CAD 处理，图号不变）——PLAN-DM-027 已记录，本次不优化。
+- `cardinality_frontier` 会让不编号子集之后的子集进入 `rename_only`（多一次 CAD 处理，图号不变）——PLAN-DM-027 已记录，本次不优化。**2026-09-14 追记（已关闭）：** 已由 [ADR-DM-005](../../../docs/dst-manager/adr/ADR-DM-005-provable-diff-cad-scope.md) 与 [PLAN-DM-030](PLAN-DM-030-provable-diff-cad-scope.md) 修复——CAD 工作单元只由可证明差异决定，前沿仅作展示；`pytest -q` 1476 项 / 1404 passed / 72 skipped / 0 failed，`ruff` 通过。
 - 若后续新增运行期设置项，必须同时在服务内使用 `self._live_settings()` 并在 `tests/integration/test_api_settings.py` 或 `tests/unit/test_worker_settings_propagation.py` 补「保存后即时生效」回归。

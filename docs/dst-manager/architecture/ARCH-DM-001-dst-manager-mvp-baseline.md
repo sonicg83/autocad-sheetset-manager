@@ -12,6 +12,7 @@ related:
   - ADR-DM-001
   - ADR-DM-002
   - ADR-DM-003
+  - ADR-DM-005
   - SPEC-DM-001
   - SPEC-DM-002
   - SPEC-DM-003
@@ -27,7 +28,7 @@ document_kind: architecture-baseline
 > 定位：完整现代化重构前的独立技术验证项目，不直接替换现有 PowerShell 工具  
 > 核心链路：`DST → AcSm XML → 领域命令修改 → DST`；结构预览不启动 CAD，确认后 `DWG → 单次 accoreconsole → rename_only 保留 Handle / rebuild 回读 Handle`
 >
-> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。[ADR-DM-002](../adr/ADR-DM-002-v021-cad-single-script-execution.md) 与 [SPEC-DM-002](../specs/SPEC-DM-002-v021-cad-single-script-execution.md) 将每个 DWG 分组的布局重建与 Handle 获取收敛为一次 Core Console；[ADR-DM-003](../adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 与 [SPEC-DM-003](../specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 进一步规定快速预览无 CAD、确认阶段延期校验及 `none`、`rename_only`、`rebuild` 分流。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以对应规范和 ADR 为准。
+> **v0.21 替代说明：** [ADR-DM-001](../adr/ADR-DM-001-controlled-sheetset-editing.md) 与 [SPEC-DM-001](../specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md) 已用受控位置插入和统一派生模型替代本文旧有的自由排序、跨子集移动、手工图号/标题编辑表述。[ADR-DM-002](../adr/ADR-DM-002-v021-cad-single-script-execution.md) 与 [SPEC-DM-002](../specs/SPEC-DM-002-v021-cad-single-script-execution.md) 将每个 DWG 分组的布局重建与 Handle 获取收敛为一次 Core Console；[ADR-DM-003](../adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 与 [SPEC-DM-003](../specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md) 进一步规定快速预览无 CAD、确认阶段延期校验及 `none`、`rename_only`、`rebuild` 分流；[ADR-DM-005](../adr/ADR-DM-005-provable-diff-cad-scope.md) 把 CAD 工作范围收窄为「只由可证明差异决定」，数量变化前沿仅作展示。本文关于 DST/XML、Worker、路径解析、永久快照和可恢复发布的安全基线继续有效；凡编辑能力与 v0.21 规范冲突，均以对应规范和 ADR 为准。
 
 ## 1. MVP目标与边界
 
@@ -241,7 +242,7 @@ SQLite 是本地 CAD 预算的权威边界：`claim_next_job` 在 `BEGIN IMMEDIA
 
 ### 6.3 单个 DWG 的操作分流
 
-领域规划器先按数量变化前沿确定 CAD 工作范围，再逐子集分类：稳定图纸 ID、顺序、来源以及按十六进制数值合法、非零且在同一目标 DWG 内唯一的 Handle 均可证明时使用 `rename_only`；数量、集合、顺序、内容来源或 Handle 资格变化时使用 `rebuild`；范围外且无布局差异时为 `none`。前沿只扩大工作范围，不把可证明安全的下游单元强制升级为重建。发布前再次按 `(resolved DWG casefold, int(handle, 16))` 检查全部最终图纸，允许不同 DWG 复用同一 Handle，禁止同一 DWG 内的数值重复。
+领域规划器逐子集按可证明差异分类：稳定图纸 ID、顺序、来源以及按十六进制数值合法、非零且在同一目标 DWG 内唯一的 Handle 均可证明时使用 `rename_only`；数量、集合、顺序、内容来源或 Handle 资格变化时使用 `rebuild`；原始与派生结构在可证明范围内完全一致时为 `none`。数量变化前沿仍按最终子集顺序计算并逐子集上报 `in_cardinality_scope`，但只作为「结构顺序可能受影响的范围」展示，不决定工作范围，[ADR-DM-005](../adr/ADR-DM-005-provable-diff-cad-scope.md) 已替代此前「前沿之后必须进入 CAD 工作范围」的规定。发布前再次按 `(resolved DWG casefold, int(handle, 16))` 检查全部最终图纸，允许不同 DWG 复用同一 Handle，禁止同一 DWG 内的数值重复。
 
 Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定脚本。每个 `rename_only` 或 `rebuild` 工作单元在暂存 DWG 上只调用一次 Core Console，并与所有其他单元共享 `cad_max_parallel` 预算；默认值为 4，合法范围为 1–10。
 

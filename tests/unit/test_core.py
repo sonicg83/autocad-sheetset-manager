@@ -805,10 +805,10 @@ def _existing_sources(subsets: list[Subset]) -> dict[str, dict[str, str]]:
 
 
 @pytest.mark.parametrize(
-    ("removed_subset_id", "expected_frontier", "expected_groups"),
+    ("removed_subset_id", "expected_frontier", "expected_operations"),
     [
-        ("subset-2", {"index": 1, "subset_id": "subset-3"}, [("subset-3", "rename_only")]),
-        ("subset-3", {"index": 2, "subset_id": None}, []),
+        ("subset-2", {"index": 1, "subset_id": "subset-3"}, [("subset-1", "none"), ("subset-3", "none")]),
+        ("subset-3", {"index": 2, "subset_id": None}, [("subset-1", "none"), ("subset-2", "none")]),
     ],
 )
 def test_cardinality_frontier_propagates_after_subset_deletion(
@@ -816,8 +816,13 @@ def test_cardinality_frontier_propagates_after_subset_deletion(
     monkeypatch,
     removed_subset_id: str,
     expected_frontier: dict[str, int | str | None],
-    expected_groups: list[tuple[str, str]],
+    expected_operations: list[tuple[str, str]],
 ):
+    """删除子集仍要传播前沿信息，但工作单元只由可证明差异决定（ADR-DM-005）。
+
+    本用例用 monkeypatch 保持派生结构不变：此时既有子集没有需要落盘的布局差异，
+    不得仅凭「位于前沿之后」就为它们启动 Core Console。
+    """
     subsets = []
     for index, title in enumerate(("第一册", "第二册", "第三册"), start=1):
         drawing = tmp_path / f"{index:03d} {title}.dwg"
@@ -838,8 +843,133 @@ def test_cardinality_frontier_propagates_after_subset_deletion(
     plan = build_structural_plan(workspace, [], SuffixOptions(True, 1))
 
     assert plan["cardinality_frontier"] == expected_frontier
-    assert [(group["subset_id"], group["cad_operation"]) for group in plan["groups"]] == expected_groups
-    assert [item["subset_id"] for item in plan["subset_operations"]] == [subset.acsm_id for subset in final_subsets]
+    assert [(item["subset_id"], item["cad_operation"]) for item in plan["subset_operations"]] == expected_operations
+    assert plan["groups"] == []
+    assert [item["subset_id"] for item in plan["deleted_subsets"]] == [removed_subset_id]
+
+
+@pytest.mark.parametrize("position", [0, 1])
+def test_inserted_unnumbered_subset_adds_no_cad_work_for_unchanged_subsets(tmp_path: Path, position: int):
+    """不编号子集不消耗序号：插入它不改变既有子集的图号、布局名与目标 DWG。
+
+    前沿信息照旧上报，但既有子集派生态与现状完全一致，不得进入 CAD 工作范围，
+    否则每个子集都会白白多启动一次 Core Console（ADR-DM-005）。
+    """
+    first = tmp_path / "001 说明.dwg"
+    second = tmp_path / "002 平面图.dwg"
+    template = tmp_path / "模板.dwt"
+    for path in (first, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 说明", 0, [_planning_sheet("sheet-1", "001", "说明", first, "A1")]),
+            Subset("subset-2", "002 平面图", 1, [_planning_sheet("sheet-2", "002", "平面图", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "insert_subset",
+            "position": position,
+            "title": "封面",
+            "initial_sheet_count": 1,
+            "base_template_file": str(template),
+            "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+        }],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    inserted_id = plan["subset_operations"][position]["subset_id"]
+    assert plan["cardinality_frontier"] == {"index": position, "subset_id": inserted_id}
+    assert {item["subset_id"]: item["cad_operation"] for item in plan["subset_operations"]} == {
+        inserted_id: "rebuild",
+        "subset-1": "none",
+        "subset-2": "none",
+    }
+    assert [group["subset_id"] for group in plan["groups"]] == [inserted_id]
+
+
+def test_numbered_subset_change_skips_unchanged_unnumbered_subset(tmp_path: Path):
+    """编号子集插图纸会让后续编号子集顺移，但不编号子集的派生态不变，无需 CAD 工作。"""
+    first = tmp_path / "001 说明.dwg"
+    cover = tmp_path / "000 封面.dwg"
+    second = tmp_path / "002 平面图.dwg"
+    template = tmp_path / "模板.dwt"
+    for path in (first, cover, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 说明", 0, [_planning_sheet("sheet-1", "001", "说明", first, "A1")]),
+            Subset("subset-u", "000 封面", 1, [_planning_sheet("sheet-u", "000", "封面", cover, "AC")]),
+            Subset("subset-2", "002 平面图", 2, [_planning_sheet("sheet-2", "002", "平面图", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "insert_sheet",
+            "target_subset_id": "subset-1",
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+        }],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    assert {item["subset_id"]: item["cad_operation"] for item in plan["subset_operations"]} == {
+        "subset-1": "rebuild",
+        "subset-u": "none",
+        "subset-2": "rename_only",
+    }
+    renames = {
+        group["subset_id"]: [(layout["original_layout"], layout["target_layout"]) for layout in group["layouts"]]
+        for group in plan["groups"]
+    }
+    assert renames["subset-2"] == [("002 平面图", "003 平面图")]
+
+
+def test_change_inside_unnumbered_subset_skips_unchanged_numbered_subset(tmp_path: Path):
+    """不编号子集内加图纸时，其后的编号子集图号未变，不得进入 CAD 工作范围。"""
+    first = tmp_path / "001 说明.dwg"
+    cover = tmp_path / "000 封面.dwg"
+    second = tmp_path / "002 平面图.dwg"
+    template = tmp_path / "模板.dwt"
+    for path in (first, cover, second, template):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-1", "001 说明", 0, [_planning_sheet("sheet-1", "001", "说明", first, "A1")]),
+            Subset("subset-u", "000 封面", 1, [_planning_sheet("sheet-u", "000", "封面", cover, "AC")]),
+            Subset("subset-2", "002 平面图", 2, [_planning_sheet("sheet-2", "002", "平面图", second, "A2")]),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "insert_sheet",
+            "target_subset_id": "subset-u",
+            "ordinal": 1,
+            "placement": "after",
+            "count": 1,
+            "source": {"type": "template_layout", "file": str(template), "layout": "A3"},
+        }],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    assert plan["cardinality_frontier"] == {"index": 1, "subset_id": "subset-u"}
+    assert {item["subset_id"]: item["cad_operation"] for item in plan["subset_operations"]} == {
+        "subset-1": "none",
+        "subset-u": "rebuild",
+        "subset-2": "none",
+    }
+    assert [group["subset_id"] for group in plan["groups"]] == ["subset-u"]
 
 
 def test_inserted_subset_rebuilds_and_renames_following_subset(tmp_path: Path):

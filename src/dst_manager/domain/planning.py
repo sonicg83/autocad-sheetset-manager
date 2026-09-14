@@ -135,11 +135,12 @@ def build_structural_plan(
         subset.source_target_file = source_target or ""
         final_targets.append(str(target))
         in_cardinality_scope = cardinality_frontier_index is not None and index >= cardinality_frontier_index
+        # 前沿只用于预览与诊断（ADR-DM-005）：工作单元必须由可证明差异决定，
+        # 否则「图号未变的子集」会被无条件送进 CAD 并白白启动一次 Core Console。
         cad_operation = _cad_operation(
             original,
             subset,
             derived.layout_sources,
-            in_frontier_scope=in_cardinality_scope,
             source_target=source_target,
             target=target,
         )
@@ -264,10 +265,15 @@ def _cad_operation(
     derived: DerivedSubset,
     layout_sources: Mapping[str, dict[str, str]],
     *,
-    in_frontier_scope: bool,
     source_target: str | None,
     target: Path,
 ) -> CadOperation:
+    """按可证明差异选择 CAD 操作，不看数量变化前沿。
+
+    ``_subset_changed`` 已逐张比较图号、标题、布局名、属性与目标 DWG 路径，
+    图号真发生顺移时必然为真；「位于前沿之后」本身不构成需要落盘的差异
+    （ADR-DM-005）。
+    """
     if original is None:
         return "rebuild"
     same_ids = [sheet.acsm_id for sheet in original.sheets] == [sheet.acsm_id for sheet in derived.sheets]
@@ -301,7 +307,7 @@ def _cad_operation(
     if not same_ids or not stable_handles or not same_sources:
         return "rebuild"
     changed = _subset_changed(original, derived, source_target or "", target)
-    return "rename_only" if changed or in_frontier_scope else "none"
+    return "rename_only" if changed else "none"
 
 
 def _validate_derived_object_ids(derived: DerivedDocument) -> None:

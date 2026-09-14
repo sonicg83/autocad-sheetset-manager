@@ -6,15 +6,18 @@ document_kind: spec
 owners:
   - dst-manager
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 related:
   - SPEC-DM-001
   - SPEC-DM-011
   - SPEC-DM-012
+  - SPEC-DM-003
+  - ADR-DM-005
   - ARCH-DM-004
   - GUIDE-DM-003
   - PLAN-DM-027
   - PLAN-DM-028
+  - PLAN-DM-030
 ---
 
 # 不编号图纸关键字规范
@@ -134,7 +137,7 @@ related:
 - **关键字为空时行为与既有版本完全一致**，SPEC-DM-001 的全部编号规则原样适用；本规范纯增量。
 - 既有工作区不需要迁移：判定是动态的，DST、数据库与草稿格式均无变化，无新增迁移。
 - 后缀关闭且同一不编号子集内出现多张同标题图纸时，仍由既有 `DUPLICATE_LAYOUT_NAME` 拦截（与普通子集同口径）。
-- 已知代价（不在本次范围）：不编号子集之后的子集在结构调整时可能因基准确认边界进入 `rename_only`（多一次 CAD 处理、图号不变）；后续如需优化另行立项。
+- 已关闭的已知代价（2026-09-14）：曾记录「不编号子集之后的子集在结构调整时可能因基准确认边界进入 `rename_only`（多一次 CAD 处理、图号不变）」。按 [ADR-DM-005](../adr/ADR-DM-005-provable-diff-cad-scope.md)，CAD 工作单元只由可证明差异决定，例如向图纸集插入不编号子集、或在不编号子集内增删图纸时（其他子集图号与布局名事实上未变），其后子集不再进入 CAD 工作范围；本规范 §行为 5 的「不消耗序号」语义与用户可见效果自此在 CAD 侧也成立。前沿信息继续展示，但不再决定工作范围（详见 [SPEC-DM-003](SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md) §3.1）。
 
 ## 测试
 

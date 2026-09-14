@@ -4,11 +4,12 @@ title: 延后 CAD 校验与子集级 CAD 操作分流
 status: accepted
 document_kind: adr
 created: 2026-08-25
-updated: 2026-08-26
+updated: 2026-09-14
 related:
   - ARCH-DM-001
   - ADR-DM-001
   - ADR-DM-002
+  - ADR-DM-005
   - SPEC-DM-001
   - SPEC-DM-002
   - SPEC-DM-003
@@ -57,6 +58,8 @@ v0.21 的结构差异预览会逐个启动 Core Console 检查模板和既有 DW
 | `rebuild` | 图纸数量、图纸集合、顺序、布局内容来源发生变化，或无法证明仅改名 | 清除子集全部纸空间布局并按最终列表重建，再读取 Handle | 用新读取的 Handle 写入派生 DST |
 
 因此，“数量变化前沿之后”规定工作范围，不强制所有单元都重建；其中能够证明布局内容未变的单元使用 `rename_only`。
+
+> **2026-09-14 部分替代：** 本节“数量变化前沿及其后的所有最终子集都必须进入 CAD 工作范围”已由 [ADR-DM-005](ADR-DM-005-provable-diff-cad-scope.md) 替代——逐子集可证明差异已经完整覆盖“图号/布局名可能顺移”这一全部理由，前沿不再参与操作分流，只作展示；`none` 一律不生成工作单元。本 ADR 其余决策（快速预览不启动 AutoCAD、一个工作单元一次 Core Console、`rename_only` 由受限插件命令执行、事务边界不变）继续有效，三分类本身也不变。
 
 ### `rename_only` 由受限插件命令执行
 

@@ -38,6 +38,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流（ADR-DM-003，已实施）](adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
 - [正式工程文件删除纳入可恢复发布事务（ADR-DM-004，已接受）](adr/ADR-DM-004-recoverable-file-deletion.md)
+- [CAD 工作范围按可证明差异收敛（ADR-DM-005，已实施；部分替代 ADR-DM-003 的「前沿之后必须进入 CAD 工作范围」）](adr/ADR-DM-005-provable-diff-cad-scope.md)
 - [实施路线图（ROADMAP-DM-001）](../../.planning/roadmaps/dst-manager.md)
 - [当前 Plan 索引](../../.planning/plans/dst-manager/README.md)
 
@@ -49,7 +50,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 
 - [v0.21 图纸集编辑需求调整规范（SPEC-DM-001，已接受）](specs/SPEC-DM-001-v021-sheetset-editing-adjustment.md)
 - [v0.21 CAD 单脚本布局重建需求调整规范（SPEC-DM-002，已接受）](specs/SPEC-DM-002-v021-cad-single-script-execution.md)
-- [延后 CAD 校验与子集级 CAD 操作分流规范（SPEC-DM-003，已验收）](specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
+- [延后 CAD 校验与子集级 CAD 操作分流规范（SPEC-DM-003，已验收；§3.1/§9 已按 ADR-DM-005 修订为「前沿只作展示、工作单元只由可证明差异决定」）](specs/SPEC-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
 - [DST XML Schema 校验与可修复加载契约（SPEC-DM-004，已接受）](specs/SPEC-DM-004-dst-schema-validation-and-repair.md)
 - [受控子集整体删除与文件事务规范（SPEC-DM-005，已接受）](specs/SPEC-DM-005-controlled-subset-deletion.md)
 - [单人桌面界面人性化与易用性设计规范（SPEC-DM-006，评审中）](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md)
@@ -60,7 +61,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [设置中心 UI 设计规范（SPEC-DM-011，已接受；G7 已通过，依据 ARCH-DM-004；2026-09-12 的第三次 G4 重开（SC-17 扩展全局设置入口）已由用户确认，生产实现由 PLAN-DM-025 任务 7/8 交付，G8 扩展配置入口/子视图生产证据已入 §7，G9 已于 2026-09-13 由用户真实桌面验收通过）](specs/SPEC-DM-011-settings-center-ui.md)
 - [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；含数字格式码与输出图纸过滤设计，G0～G8 既有基线已通过——格式入口的门禁证据已由 PLAN-DM-026 补足，输出图纸过滤由 PLAN-DM-025 交付且过滤证据（部分/全部）已入 production 目录，未重开 G3/G4，G9 已于 2026-09-13 由用户真实桌面/Excel 验收通过）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
-- [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
+- [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
 
 ## 研究与分析
 

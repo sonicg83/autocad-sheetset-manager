@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-14（修复：插入不编号子集时其他子集被无效送入 CAD）
+
+用户报告：向图纸集**插入不编号子集**（图号固定 `000`、不消耗序号）时，其他子集的图号与布局名实际没有任何变化，但预览仍为它们标注 `rename_only`，确认后每个子集都多启动一次 AutoCAD Core Console（10–45 s），属纯浪费。
+
+- **根因（`src/dst_manager/domain/planning.py`）**：`_cardinality_frontier` 求出首个图纸数量变化的最终子集下标后，`in_cardinality_scope` 被作为 `in_frontier_scope` 传给 `_cad_operation`，操作判定的末行为 `return "rename_only" if changed or in_frontier_scope else "none"`——「位于前沿之后」本身（哪怕派生结果与现状完全一致）也被当成需要落盘的差异。该规定源自 ADR-DM-003 的保守上界「前沿及之后所有最终子集必须进入 CAD 工作范围（全局图号/布局名可能顺移）」；而 `_subset_changed` 的逐张可证明比较（稳定图纸 ID、顺序、内容来源、图号、图名、布局名、目标 DWG 路径、子集显示名）已经**完整覆盖**这一唯一理由：真顺移时判定必然为真，故 `in_frontier_scope` 只在无任何差异时额外生效。插入不编号子集是最典型触发：它改变图纸数量（前沿成立）但不消耗序号（SPEC-DM-014 §行为 5），其后子集图号不变。
+- **修复**：`_cad_operation` 去掉 `in_frontier_scope` 入参，末行改为 `return "rename_only" if changed else "none"`；调用点停止传入，但**保留** `in_cardinality_scope` 的计算与输出，语义收窄为「结构顺序可能受影响的范围（上界）」。HTTP 契约（`cardinality_frontier`、`in_cardinality_scope`、`CardinalityFrontierResponse`）与前端均不变。安全边界不变：数量/集合/顺序/来源变化或 Handle 资格不成立时仍为 `rebuild`，`rename_only` 仍走受限 `DstRenameLayouts` 且不重写 `AcDbHandle`。
+- **新增/修订测试（TDD，先红后绿）**：`tests/unit/test_core.py` 把前沿传播测试改为断言「删除后存续但未变化的子集为 `none`、`groups` 为空、`deleted_subsets` 完整」，并新增 3 例——插入不编号子集（`position` 参数化 0/1）不得为未变化子集生成工作单元、编号子集内插图纸时未变化的不编号子集保持 `none`（同时断言下游真实顺移仍为 `rename_only`）、不编号子集内插图纸时其后未变化的编号子集保持 `none`。**红态已实测**：把 `planning.py` 临时还原后定向复跑为 **5 failed / 1 passed**（失败点均为实际得到 `rename_only`），修复后 **6 passed**。
+- **稳态复现**：临时脚本以「第一轮派生结果 = 第二轮现状」模拟发布后的稳态，连续两轮在不编号子集内加图纸；修复前后续子集为 `rename_only` 而改名对照为空，修复后为 `none`、`in_cardinality_scope` 仍为 `true`、`groups` 只含真正变化的不编号子集。临时脚本与临时目录已清理。
+- **文档**：新增 `ADR-DM-005`（CAD 工作范围按可证明差异收敛，并部分替代 ADR-DM-003 的「前沿之后必须进入 CAD 工作范围」；ADR-DM-003 决策处加 2026-09-14 部分替代注记，不静默改写旧决策）；修订 `SPEC-DM-003` §2.1/§3.1/§3.2/§9/§10 与 `SPEC-DM-014`「已知代价」（转为已关闭）；同步 `ARCH-DM-001` §6.3 与 v0.21 替代说明、`docs/dst-manager/README.md`、`.planning/plans/dst-manager/README.md`、`PLAN-DM-028` 后续项追记；新增 `PLAN-DM-030` 实施计划。
+- **验证**：`uv run ruff check .` All checks passed（EXIT=0）；`uv run pytest -q -p no:warnings --junitxml=...` **1476 项 / 1404 passed / 0 failed / 0 errors / 72 skipped**（91.2 s；修复前 1472 项 = 1400 passed / 72 skipped，本次 +4 用例）。前端零改动（契约与字段未变，既有 e2e 断言仍成立，未重跑 Playwright）；真实 AutoCAD 系统测试未执行（不涉及 SCR、插件命令、布局重建与 Handle 回读）。
+- **遗留（用户可裁决）**：「子集 CAD 操作」表的「数量前沿范围」列现在会出现「是 + 无需 CAD 操作」组合——语义正确（前沿是上界、操作列是实际执行），故未改前端文案；若需把该列改为「可能受影响」之类表述，属独立前端变更，需重跑构建与 e2e 门禁。打包 EXE 重建后的真实桌面验收（确认其他子集不再出现在实施进度中）待用户执行。
+
 ## 2026-09-14（修复 (b)：回滚后重试撞修订目录导致必然再失败）
 
 上一节登记为遗留的 (b) 已按用户追加授权修复。`retry_job` **复用同一 `job_id`**（= 发布器的 `operation_id`），第一次回滚后 `revisions/<operation_id>/before` 依旧存在，第二次发布在 `before_dir.mkdir(parents=True, exist_ok=False)` 抛 `FileExistsError`（`[WinError 183]`），因此**任何回滚过的任务点「安全重试」必然再次失败**。
