@@ -314,12 +314,13 @@ Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定�
    ├─ workspace.json
    ├─ revisions/
    │  └─ <operation-id>/
+   │     ├─ attempt-NNN/
+   │     │  ├─ manifest.json
+   │     │  ├─ before/
+   │     │  │  ├─ 图纸集数据文件.dst
+   │     │  │  └─ <受影响DWG>
+   │     │  └─ publish-journal.json
    │     ├─ manifest.json
-   │     ├─ before/
-   │     │  ├─ 图纸集数据文件.dst
-   │     │  └─ <受影响DWG>
-   │     ├─ superseded-journals/
-   │     │  └─ publish-journal.<NNN>.json
    │     ├─ input/
    │     │  └─ imported.xml
    │     ├─ plan/
@@ -328,28 +329,32 @@ Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定�
    │     └─ logs/
    └─ jobs/
       └─ <operation-id>/
+         ├─ attempt-NNN/
+         │  └─ publish-journal.json
          ├─ staging/
          ├─ scripts/
          ├─ handles/
          └─ publish-journal.json
 ```
 
-修订目录永久保留，不提供自动清理。任务成功后可删除可再生的 `jobs/<operation-id>/staging`，但发布日志和执行日志归档到对应revision；是否清理临时副本由显式维护命令控制。
+修订目录按发布尝试嵌套：新写入一律落在 `attempt-NNN/` 子目录（`NNN` 为三位零填充的 attempt 序号）；旧平铺布局的 `revisions/<operation-id>/manifest.json`、`jobs/<operation-id>/publish-journal.json`（含历史 `superseded-journals/` 留档）仅由升级前的历史工作区产生，读取侧继续兼容（只读），新发布永不写入或复用。每次尝试的修订目录、发布日志与 before 快照永久保留，不提供自动清理。任务成功后可删除可再生的 `jobs/<operation-id>/staging`，但发布日志和执行日志归档到对应revision；是否清理临时副本由显式维护命令控制。
 
 ### 8.2 整批事务语义
 
 Windows文件系统没有跨多个文件的原子事务，MVP使用可恢复发布协议实现用户可见的整批成功/失败：
 
 1. 对原DST和所有受影响DWG计算SHA-256，并尝试取得排他写锁。
-2. 把原文件永久复制到revision的 `before`，复制后校验哈希。同一 `operation_id` 在回滚后被重试时，只有在既有 `before` 快照与当前基准逐字节相同（或该操作尚无已提交 `manifest.json`）时才复用目录，否则以 `PUBLISH_OPERATION_CONFLICT` 隔离为 `NEEDS_REVIEW`；旧 `publish-journal.json` 先留档到 `superseded-journals/`。
+2. 把原文件永久复制到本次尝试修订目录的 `before`（`revisions/<operation-id>/attempt-NNN/before`），复制后校验哈希。重试永远写入严格递增的新 attempt 目录，不复用、不覆盖、不自动清扫任何旧尝试。同一 `operation_id` 的任一新旧布局 COMMITTED `manifest.json` 已存在（同一 job 最多一个已提交修订），或当前 attempt 的日志/修订命名空间已被占用时，以 `PUBLISH_OPERATION_CONFLICT` 隔离为 `NEEDS_REVIEW`，均零改动。
 3. 所有修改只发生在job暂存区。
-4. 暂存成果全部通过校验后写入 `publish-journal.json`，状态为 `PREPARED`。
+4. 暂存成果全部通过校验后写入本次尝试的 `publish-journal.json`（含 `"attempt"` 字段，`operation_id` 保持等于 job_id），状态为 `PREPARED`。
 5. 对每个目标文件在同卷创建临时发布文件，再用 `os.replace` 逐文件原子替换；每一步同步记录日志。
 6. 任一步失败立即按 `before` 逆序恢复已替换文件并校验哈希。
 7. 全部替换成功后标记 `COMMITTED`，更新SQLite当前修订。
 8. 应用启动时扫描未终结发布日志，自动完成回滚，不允许带着半发布状态继续编辑。
 
 同一工作区同一时刻只允许一个写任务。文件锁、基准哈希变化、磁盘空间不足或恢复失败均为阻断错误。
+
+每次尝试的 `publish-journal.json`、`before` 快照与终态记录永久保留，发布路径不存在自动清扫（保持 DM-ADR-009「每次操作永久保存原文件与日志」结论）。旧平铺布局只读兼容；不支持降级——旧版本程序读不到嵌套日志，升级前须确认工作区无进行中发布任务。
 
 ### 8.3 文件锁策略
 

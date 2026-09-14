@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-14（交付：PLAN-DM-031 发布事务按 attempt 嵌套命名空间与 publisher 模块拆分）
+
+[PLAN-DM-031](.planning/plans/dst-manager/PLAN-DM-031-publisher-attempt-namespace-and-split.md) 全部 10 个任务实施完成（9 个实现提交，`b248ff1` 至 `77bca26`）。
+
+- **嵌套 attempt 命名空间**：`publish()` 新增必填关键字参数 `attempt`（非严格正整数抛 `ValueError("PUBLISH_ATTEMPT_INVALID")` 且不创建 `.dst-manager/`）；磁盘布局改为 `jobs/<job_id>/attempt-NNN/publish-journal.json` 与 `revisions/<job_id>/attempt-NNN/{before/, manifest.json, publish-journal.json}`（`NNN = f"{attempt:03d}"`）；journal 新增 `"attempt"` 字段，`operation_id` 保持等于 job_id（启动恢复与提交闭环查库键不变）；临时文件名使用 `uid = f"{job_id}~{attempt:03d}"`。
+- **删除 reclaim 目录复用机制**：`_reclaim_previous_attempt` 与 `superseded-journals/` 留档机制整体删除；重试永远写入新的 attempt 目录，所有 attempt 的 journal、before 快照与终态记录永久保留，发布路径不存在自动清扫（磁盘保留策略须未来独立立项）。
+- **双层防重复提交守卫**：同一 job 的任一新旧布局 COMMITTED manifest 已存在即以 `PUBLISH_OPERATION_CONFLICT` 拒绝（隔离为 `NEEDS_REVIEW`）；当前 attempt 的 jobs 或 revisions 任一命名空间已占用（重复进入或未恢复现场）同样拒绝，两种拒绝均零改动。
+- **旧布局只读兼容**：启动恢复、已提交清单枚举与隔离扫描均按双 glob 同时识别新旧布局；不支持降级——旧版本程序读不到嵌套日志，升级前须确认工作区无进行中发布任务。
+- **publisher 模块拆分（纯移动）**：1077 行 `publisher.py` 按职责拆出 4 个同层模块——`publish_errors.py`（异常）、`publish_primitives.py`（无状态文件原语）、`publish_journal.py`（日志读写）、`publish_recovery.py`（启动恢复与清单枚举，首参鸭子类型引用 publisher，依赖单向）；`publisher.py` 保留编排门面并 re-export 全部公共名，application 层既有 import 零改动。测试同步拆分为 `test_publish_journal.py`、`test_publish_recovery.py`、`test_publish_guards.py`、`test_publish_primitives.py`。
+- **文档**：`ARCH-DM-001` §8.1/§8.2 按嵌套布局修订（保持 DM-ADR-009「每次操作永久保存原文件与日志」结论，不新增 ADR）；`docs/dst-manager/README.md` 与计划索引同步登记。
+- **验证**：`uv run ruff check .` 通过；`uv run pytest tests/unit -q` 1262 passed / 4 skipped（CAD 真实测试默认跳过）、`tests/integration/test_api.py` 通过（Task 2 时全量 unit + test_api 为 1330 passed / 4 skipped）。`publisher.py` 最终 721 行，超出计划 500-600 预期：计划对 Task 8 迁移量的算术预期有误，残留回滚/提交原语的外移留作后续计划，依赖方向与接口契约已达成。
+
 ## 2026-09-14（计划修订：发布 attempt 命名空间与证据永久保留）
 
 - 修订 `PLAN-DM-031`：取消按终态自动清扫旧 attempt 的设计，明确所有 attempt 的 journal、before 快照与终态记录永久保留；未来磁盘保留策略须通过独立 ADR 与显式维护命令立项。

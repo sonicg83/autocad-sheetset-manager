@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-031
 title: 发布事务按 attempt 嵌套命名空间并拆分 publisher 模块实施计划
-status: proposed
+status: completed
 owners:
   - dst-manager
 created: 2026-09-14
@@ -84,7 +84,7 @@ related:
 - Consumes: 现有 `RecoverablePublisher.recover()/_recover_locked()/list_committed_operations()` 签名不变。
 - Produces: 私有方法 `RecoverablePublisher._parse_attempt_dir_name(name: str) -> int` 与 `_iter_journal_records(jobs: Path, workspace_root: Path) -> list[tuple[Path, str, int | None, Path]]`（返回 `(journal_path, job_id, attempt, revision_dir)` 四元组；旧平铺布局的 `attempt` 为 `None`；Task 8 将二者随恢复逻辑一并迁入 `publish_recovery.py`）。
 
-- [ ] **Step 1: 写失败测试——新布局日志能被启动恢复识别**
+- [x] **Step 1: 写失败测试——新布局日志能被启动恢复识别**
 
 在 `tests/unit/test_publisher.py` 末尾追加（fixture 手工构造 journal，模式同 `test_startup_recovery_closes_unfinished_journal` :356）：
 
@@ -132,12 +132,12 @@ def test_startup_recovery_rejects_noncanonical_or_mismatched_attempt_identity(
         RecoverablePublisher().recover(tmp_path)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/unit/test_publisher.py::test_startup_recovery_reads_nested_attempt_journal -q`
 Expected: FAIL（新布局日志不被现有 glob 发现，`recovered` 为空或目标未被恢复）
 
-- [ ] **Step 3: 实现 `_iter_journal_records` 并改造 `_recover_locked`**
+- [x] **Step 3: 实现 `_iter_journal_records` 并改造 `_recover_locked`**
 
 `publisher.py` 中新增（放在 `_recover_locked` 上方）：
 
@@ -204,7 +204,7 @@ Expected: FAIL（新布局日志不被现有 glob 发现，`recovered` 为空或
 
 （`revision_dir` 已由 `_iter_journal_records` 给出，删除原构造行；`recovered.append(journal["operation_id"])` 与其余逻辑不动。）
 
-- [ ] **Step 4: 改造 `list_committed_operations` 双 glob**
+- [x] **Step 4: 改造 `list_committed_operations` 双 glob**
 
 `_list_committed_operations_locked`（:1051）中按路径携带预期身份：
 
@@ -218,7 +218,7 @@ Expected: FAIL（新布局日志不被现有 glob 发现，`recovered` 为空或
 
 循环改为 `for path, expected_job_id, expected_attempt in candidates:`；JSON 解析成功后，只有 `journal["operation_id"] == expected_job_id` 且旧布局 `expected_attempt is None`，或新布局满足 `type(journal.get("attempt")) is int and journal["attempt"] == expected_attempt` 时，才进入既有 COMMITTED/files 校验与去重。路径身份不一致的 manifest 不得用于数据库闭环。按 `operation_id` 排序逻辑不变。
 
-- [ ] **Step 5: 改造 `application/recovery.py`**
+- [x] **Step 5: 改造 `application/recovery.py`**
 
 :97 处 `revision_dir` 重建改为按 attempt 字段：
 
@@ -248,12 +248,12 @@ Expected: FAIL（新布局日志不被现有 glob 发现，`recovered` 为空或
 
 `_quarantine_unproven_publish_jobs` 只从受控目录层级取得 `operation_id`，不得读取 journal 内容来决定数据库主键；attempt 目录名与 journal 身份的一致性由前述 `_recover_locked` 严格校验，失败后本方法按路径中的 job_id 隔离对应任务。其余 `database.get_job` / `finalize_job_terminal` 逻辑不动。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 Run: `uv run pytest tests/unit/test_publisher.py tests/unit/test_core.py -q`
 Expected: PASS（含 Step 1 新测试）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add src/dst_manager/infrastructure/filesystem/publisher.py src/dst_manager/application/recovery.py tests/unit/test_publisher.py
@@ -273,7 +273,7 @@ git commit -m "feat: 发布日志与清单枚举兼容按 attempt 嵌套的新�
 - Consumes: Task 1 的双 glob 读取（新布局写入的日志立即可恢复）。
 - Produces: `RecoverablePublisher.publish(job_id: str, workspace_root: Path, staged: dict[Path, Path | None], *, attempt: int, expected_baselines: ... , before_commit: ..., on_committed: ...) -> Path`——`attempt` 为必填正整数关键字参数；journal 含 `"attempt"` 字段；临时文件名使用 `uid = f"{job_id}~{attempt:03d}"`；同一 job 已有任一 COMMITTED manifest 或当前 attempt 的 jobs/revisions 任一命名空间已占用时，均以 `PUBLISH_OPERATION_CONFLICT` 零改动拒绝。
 
-- [ ] **Step 1: 重写重试相关测试（先写失败测试）**
+- [x] **Step 1: 重写重试相关测试（先写失败测试）**
 
 删除以下 3 个只针对「复用同一目录前回收文件」机制的测试（机制不复存在，其证据保护由 attempt 独占目录替代）：
 - `test_stale_snapshot_inconsistent_with_baseline_is_refused`（:1752）
@@ -384,12 +384,12 @@ def test_second_attempt_rollback_still_restores_formal_files(tmp_path: Path):
 
 > 说明：Task 2 先证明新 attempt 能独立发布；Task 3 再明确断言 attempt-001 的 journal 与 before 快照逐字节保留。任何终态都不得触发发布前自动清扫。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/unit/test_publisher.py -k "attempt" -q`
 Expected: FAIL（publish 尚无 attempt 参数：TypeError）
 
-- [ ] **Step 3: 改 `publish` 签名与 `_publish_locked` 路径派生**
+- [x] **Step 3: 改 `publish` 签名与 `_publish_locked` 路径派生**
 
 `publish`（:188）签名改为（首参更名 `job_id`，五个调用点都是位置传参，不受影响）：
 
@@ -442,19 +442,19 @@ Expected: FAIL（publish 尚无 attempt 参数：TypeError）
     用于按路径重建修订目录。
 ```
 
-- [ ] **Step 4: 更新生产调用点与所有直接测试调用**
+- [x] **Step 4: 更新生产调用点与所有直接测试调用**
 
 - `cad_job.py:336`：`self.publisher.publish(job_id, workspace.root, staged_files, attempt=attempt, expected_baselines=...)`（`attempt` 变量在 `_execute` 作用域内已存在）
 - `editing.py:292`、`repair.py:165`、`revisions.py:207`、`xml_io.py:202`：各加 `attempt=1,`（这四类任务不可重试，恒为首次尝试）
 - `tests/unit/test_publisher.py`、`tests/unit/test_core.py` 与 `tests/integration/test_api.py` 中所有直接调用 `RecoverablePublisher.publish(...)` 的位置显式补 `attempt`。`tests/integration/test_api.py:524-575` 的旧 reclaim 回归改为真实领取序列：创建任务后先 `claim_next_job("retry-worker")` 取得 `attempt=1` 并用于首次发布，回滚落终态后调用 retry API，再次领取取得 `attempt=2` 并成功发布；断言两个 attempt 的 journal/before 均永久保留，删除 `superseded-journals` 断言。
 - 用 `rg -n '\.dst-manager.*(jobs|revisions)|publish-journal\.json|manifest\.json' tests/unit/test_publisher.py tests/unit/test_core.py tests/integration/test_api.py` 枚举磁盘路径断言：凡由本任务新调用 `publish(..., attempt=N)` 生成的路径改为包含 `attempt-NNN`；手工构造、专门验证旧布局兼容的 fixture 保持平铺路径，禁止机械全局替换。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `uv run pytest tests/unit tests/integration/test_api.py -q`
 Expected: PASS。测试不得依赖最终收尾才发现遗漏的直接调用或旧平铺路径断言。
 
-- [ ] **Step 6: Ruff 与提交**
+- [x] **Step 6: Ruff 与提交**
 
 Run: `uv run ruff check .`
 Expected: 无错误（确认删除 reclaim 后无残留 import）
@@ -477,7 +477,7 @@ git commit -m "feat: 发布写入侧按 attempt 嵌套命名空间并删除目�
 - Consumes: Task 2 的 attempt 独占命名空间、跨 attempt COMMITTED 守卫。
 - Produces: 无新生产接口；固化「ROLLED_BACK、ABORTED_BASELINE_CHANGED、ROLLBACK_FAILED 与旧平铺现场均永久保留」契约。
 
-- [ ] **Step 1: 写证据保留回归测试**
+- [x] **Step 1: 写证据保留回归测试**
 
 ```python
 def test_retry_preserves_rolled_back_previous_attempt_evidence(tmp_path: Path):
@@ -526,12 +526,12 @@ def test_new_attempt_never_deletes_previous_terminal_or_unproven_evidence(tmp_pa
     assert evidence.read_bytes() == b"keep"
 ```
 
-- [ ] **Step 2: 运行回归测试**
+- [x] **Step 2: 运行回归测试**
 
 Run: `uv run pytest tests/unit/test_publisher.py -k "preserve and attempt" -q`
 Expected: PASS；若失败，修正 Task 2 实现，禁止引入自动清扫作为修法。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add tests/unit/test_publisher.py
@@ -549,7 +549,7 @@ git commit -m "test: 固化发布 attempt 证据永久保留契约"
 - Consumes: Task 1-3 的读写两侧实现。
 - Produces: 无新接口；固化「升级现场」回归防线。
 
-- [ ] **Step 1: 写端到端回归测试**
+- [x] **Step 1: 写端到端回归测试**
 
 ```python
 def test_legacy_flat_committed_manifest_is_listed_after_upgrade(tmp_path: Path):
@@ -603,12 +603,12 @@ def test_legacy_flat_publishing_journal_recovers_before_new_publish(tmp_path: Pa
     assert backup.read_text() == "before"
 ```
 
-- [ ] **Step 2: 运行确认失败或通过**
+- [x] **Step 2: 运行确认失败或通过**
 
 Run: `uv run pytest tests/unit/test_publisher.py -k legacy -q`
 Expected: PASS（若 FAIL 则按失败点修正 Task 1-3 的兼容分支——本任务是防线，不是功能）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add tests/unit/test_publisher.py
@@ -629,7 +629,7 @@ git commit -m "test: 固化新旧发布布局共存的端到端兼容回归"
 **Interfaces:**
 - Produces: `publish_errors.py` 导出 `PublishRolledBackError`、`PublishRecoveryError`、`PublishOperationConflictError`、`PublishBaselineError`、`PublishJournalWriteError`（含各自 docstring 与 `code` 属性，逐字保留）。
 
-- [ ] **Step 1: 新建 `publish_errors.py`**
+- [x] **Step 1: 新建 `publish_errors.py`**
 
 将 publisher.py :25-60 的 5 个异常类（含 docstring 与 `code = "..."` 类属性）**逐字**剪切入新文件，文件头：
 
@@ -637,7 +637,7 @@ git commit -m "test: 固化新旧发布布局共存的端到端兼容回归"
 """发布事务异常（自 publisher.py 拆分；错误码与继承关系逐字保留）。"""
 ```
 
-- [ ] **Step 2: publisher.py 改为 re-export**
+- [x] **Step 2: publisher.py 改为 re-export**
 
 原类定义位置替换为：
 
@@ -654,14 +654,14 @@ from dst_manager.infrastructure.filesystem.publish_errors import (  # noqa: F401
 
 注意：`publish_errors.py` 不得 import publisher.py（叶模块，依赖方向只能是 publisher → publish_errors）。
 
-- [ ] **Step 3: 全量验证**
+- [x] **Step 3: 全量验证**
 
 Run: `uv run pytest tests/unit -q`
 
 Run: `uv run ruff check .`
 Expected: PASS / 无错误
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add src/dst_manager/infrastructure/filesystem/publish_errors.py src/dst_manager/infrastructure/filesystem/publisher.py
@@ -687,7 +687,7 @@ git commit -m "refactor: 发布事务异常外移到 publish_errors 模块（纯
   - `before_snapshot_path(before_dir: Path, workspace_root: Path, target: Path) -> Path`（原 :136）
   - `replacement_backup_path(target: Path, operation_uid: str) -> Path`（原 :140）
 
-- [ ] **Step 1: 新建模块并剪切**
+- [x] **Step 1: 新建模块并剪切**
 
 文件头：`"""发布事务文件原语（自 publisher.py 拆分；哈希、基线、替换与身份识别）。"""`
 
@@ -708,7 +708,7 @@ from dst_manager.infrastructure.filesystem.publish_primitives import (  # noqa: 
 
 （`application/recovery.py:17` 现从 publisher 导入 `capture_file_baseline`，re-export 保证其不变。）
 
-- [ ] **Step 2: 新增原语直接单测**
+- [x] **Step 2: 新增原语直接单测**
 
 `tests/unit/test_publish_primitives.py` 新建（import 路径以拆分后模块为准）：
 
@@ -762,7 +762,7 @@ def test_replace_existing_preserves_previous_content_in_backup(tmp_path: Path):
     assert not source.exists()
 ```
 
-- [ ] **Step 3: 全量验证**
+- [x] **Step 3: 全量验证**
 
 Run: `uv run pytest tests/unit -q`
 
@@ -771,7 +771,7 @@ Run: `uv run ruff check .`
 Run: `(Get-Content src/dst_manager/infrastructure/filesystem/publisher.py | Measure-Object -Line).Lines`
 Expected: PASS / 无错误 / publisher.py 行数下降约 120 行
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add src/dst_manager/infrastructure/filesystem/publish_primitives.py src/dst_manager/infrastructure/filesystem/publisher.py tests/unit/test_publish_primitives.py
@@ -794,18 +794,18 @@ git commit -m "refactor: 发布事务文件原语外移到 publish_primitives �
   - `archive_journal(revision_dir: Path, journal_path: Path, journal: dict) -> None`（原 `_archive_journal` :446）
   - `immutable_transaction_projection(workspace_root: Path, journal: dict) -> dict`（原 :457）
 
-- [ ] **Step 1: 剪切与替换调用点**
+- [x] **Step 1: 剪切与替换调用点**
 
 publisher.py 内 `self._write_journal(...)`（约 18 处）、`self._write_journal_best_effort(...)`（3 处）、`self._archive_journal(...)`（3 处）、`self._immutable_transaction_projection(...)`（2 处）全部改为模块函数调用；`_rollback_legacy_attempted` 中的 `RecoverablePublisher._write_journal(...)`（:904）改为 `write_journal(...)`。re-export `write_journal`/`write_journal_best_effort`（测试可能直接引用，先 grep `tests/` 确认清单）。
 
-- [ ] **Step 2: 全量验证**
+- [x] **Step 2: 全量验证**
 
 Run: `uv run pytest tests/unit -q`
 
 Run: `uv run ruff check .`
 Expected: PASS / 无错误
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add src/dst_manager/infrastructure/filesystem/publish_journal.py src/dst_manager/infrastructure/filesystem/publisher.py
@@ -828,7 +828,7 @@ git commit -m "refactor: 发布日志读写外移到 publish_journal 模块（�
   - `read_committed_operation(publisher, workspace_root: Path, operation_id: str) -> dict | None`
   - `_rollback_legacy_attempted`（:908）与 `_legacy_rollback_source`（:930）随迁移（经 publisher 参数调用其恢复原语）
 
-- [ ] **Step 1: 剪切为以 publisher 为首参的模块函数**
+- [x] **Step 1: 剪切为以 publisher 为首参的模块函数**
 
 `RecoverablePublisher` 中原方法改为薄委托：
 
@@ -845,14 +845,14 @@ git commit -m "refactor: 发布日志读写外移到 publish_journal 模块（�
 
 `publish_recovery.py` 内对 `self._rollback`、`self._finish_committed_cleanup`、`self._restore_entry`、`self._restore_backup_by_rename` 等实例方法的调用改为 `publisher._rollback(...)` 形式；`_parse_attempt_dir_name` 与 `_iter_journal_records` 一并迁入为模块私有函数，并把恢复/清单枚举的调用改为直接调用这两个函数。
 
-- [ ] **Step 2: 行数与依赖检查**
+- [x] **Step 2: 行数与依赖检查**
 
 Run: `Get-ChildItem src/dst_manager/infrastructure/filesystem -Filter '*.py' | ForEach-Object { [pscustomobject]@{ File = $_.Name; Lines = (Get-Content $_.FullName | Measure-Object -Line).Lines } }`
 
 Run: `uv run ruff check .`
 Expected: `publisher.py` ≤ 600 行；ruff 无循环依赖告警
 
-- [ ] **Step 3: 全量验证并提交**
+- [x] **Step 3: 全量验证并提交**
 
 Run: `uv run pytest tests/unit -q`
 Expected: PASS
@@ -872,7 +872,7 @@ git commit -m "refactor: 启动恢复与已提交清单枚举外移到 publish_r
 
 **Interfaces:** 无生产代码改动；`_deny_journal_replacement` 与 `_JournalDenialWindow` 随日志测试移动，其他辅助函数留在仍使用它们的测试模块；若一个辅助被多个目标模块使用，在各目标模块保留最小同名副本，避免测试模块之间互相 import。
 
-- [ ] **Step 1: 按主题映射搬移测试**
+- [x] **Step 1: 按主题映射搬移测试**
 
 以 `rg -n "^def test_|^class " tests/unit/test_publisher.py` 取当前清单后按下表搬移（函数体逐字移动，不加不改）：
 
@@ -884,7 +884,7 @@ git commit -m "refactor: 启动恢复与已提交清单枚举外移到 publish_r
 | `test_publish_primitives.py` | `test_caller_identity_baseline_allows_unchanged_target`、`test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish`、Task 6 新增的原语单测 |
 | `test_publisher.py`（保留） | 发布/回滚/提交编排与失败注入路径（其余全部），含 `_SimulatedProcessCrash` |
 
-- [ ] **Step 2: 全量验证与行数核对**
+- [x] **Step 2: 全量验证与行数核对**
 
 Run: `uv run pytest tests/unit --collect-only -q`（搬移前记录末尾 collected 数）
 
@@ -898,7 +898,7 @@ Run: `uv run pytest tests/unit --collect-only -q`（搬移后核对 collected �
 
 Expected: 用例总数不变；pytest 与 ruff 全绿；各文件向 500 行靠拢
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add tests/unit/test_publisher.py tests/unit/test_publish_journal.py tests/unit/test_publish_recovery.py tests/unit/test_publish_primitives.py tests/unit/test_publish_guards.py
@@ -912,28 +912,28 @@ git commit -m "test: 发布事务测试按日志、恢复、平台守卫、原�
 **Files:**
 - Modify: `docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md`、`docs/dst-manager/README.md`、`changelog.md`、`.planning/plans/dst-manager/README.md`、本文件（status → `completed` 并记录验证）
 
-- [ ] **Step 1: 更新 changelog**
+- [x] **Step 1: 更新 changelog**
 
 按 `changelog.md` 既有格式追加条目：嵌套 attempt 命名空间、reclaim 目录复用机制删除、全部 attempt 证据永久保留、跨 attempt 防重复提交、旧布局兼容、publisher 拆分（列出 4 个新模块）。
 
-- [ ] **Step 2: 同步权威架构与导航**
+- [x] **Step 2: 同步权威架构与导航**
 
 更新 `ARCH-DM-001` §8.1 目录树与 §8.2 发布协议：新写入使用 `jobs/<job_id>/attempt-NNN/` 与 `revisions/<job_id>/attempt-NNN/`；重试不复用目录；同一 job 最多一个 COMMITTED manifest；每次 attempt 的 journal 与 before 永久保留；旧平铺布局只读兼容。同步 `updated` 日期。该修订保持 DM-ADR-009「每次操作永久保存原文件与日志」结论，不改变既有 ADR，故无需新增 ADR。
 
 在 `docs/dst-manager/README.md` 当前状态摘要中登记本计划交付，并更新 `.planning/plans/dst-manager/README.md` 中 PLAN-DM-031 的状态。
 
-- [ ] **Step 3: 更新计划状态**
+- [x] **Step 3: 更新计划状态**
 
 本文件 frontmatter `status` 改 `completed`，`updated` 改为当日，并在文末「实际验证」小节记录：全量 pytest 结果、ruff 结果、PowerShell 行数统计结果。
 
-- [ ] **Step 4: 交付前全量验证**
+- [x] **Step 4: 交付前全量验证**
 
 Run: `uv run ruff check .`
 
 Run: `uv run pytest -q`
 Expected: 全绿
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md docs/dst-manager/README.md changelog.md .planning/plans/dst-manager/README.md .planning/plans/dst-manager/PLAN-DM-031-publisher-attempt-namespace-and-split.md
@@ -949,3 +949,16 @@ git commit -m "docs: PLAN-DM-031 嵌套命名空间与 publisher 拆分完成归
 - **证据保留**：所有 attempt 的日志与快照永久保留，不存在自动清扫路径；磁盘保留策略不在本计划范围内，未来必须独立立项。
 - **降级不兼容**：旧版本程序读不到嵌套日志。发布说明中注明「升级前确认无进行中发布任务」。
 - **回退方式**：每个任务独立 commit；Task 1-4（行为）与 Task 5-9（拆分）分段，任何一段可单独 revert。
+
+---
+
+## 实际验证
+
+10 个任务全部实施完成（9 个实现提交，`b248ff1` 至 `77bca26`，均在 main 分支），交付前全量验证结果如下（2026-09-14）：
+
+- **静态检查**：`uv run ruff check .` 全部通过（最新代码）。
+- **全量测试**：`uv run pytest tests/unit -q` → **1262 passed / 4 skipped / 0 failed**（skip 均为 CAD 真实测试默认跳过）；`uv run pytest tests/integration/test_api.py -q` 通过。Task 2 切换写入布局时曾跑全量 `tests/unit` + `tests/integration/test_api.py`：**1330 passed / 4 skipped / 0 failed**。
+- **行数统计（PowerShell `Measure-Object -Line`）**：
+  - 拆分后模块：`publisher.py` **721 行**（超出计划 500-600 预期，见下方偏差说明）、`publish_errors.py` 约 38 行、`publish_primitives.py` 约 96 行、`publish_journal.py` 75 行、`publish_recovery.py` 约 248 行。
+  - 测试拆分：`test_publisher.py` 567 行、`test_publish_recovery.py` 887 行（brief 主题映射将 27 个恢复类测试指定到同一文件）、`test_publish_guards.py` 307 行、`test_publish_journal.py` 150 行、`test_publish_primitives.py` 100 行。
+- **偏差说明（publisher.py 721 行）**：计划对 Task 8 迁移量的算术预期有误——恢复与清单枚举外移后，`publisher.py` 仍保留发布/回滚/提交编排路径中使用的原语调用，未达到 500-600 区间。依赖方向（`publish_recovery` 不 import `publisher`，首参鸭子类型）与接口契约（re-export 全部公共名、application 层 import 零改动）均已达成；残留回滚/提交原语的外移留作后续计划，本计划不追加行为或结构性改动。
