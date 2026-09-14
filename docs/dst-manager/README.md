@@ -31,6 +31,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [设置中心：应用内配置与关于页（ARCH-DM-004，草稿）](architecture/ARCH-DM-004-settings-center.md)
 - [多语言支持架构（ARCH-DM-005，已接受）](architecture/ARCH-DM-005-multilingual-support.md)
 - [内置扩展平台首期架构（ARCH-DM-006，评审中）](architecture/ARCH-DM-006-builtin-extension-platform.md)
+- [前端视觉基础与渐进整改架构（ARCH-DM-007，评审中）](architecture/ARCH-DM-007-frontend-ui-foundations.md)
 - [受控图纸集编辑替代自由调整模型（ADR-DM-001）](adr/ADR-DM-001-controlled-sheetset-editing.md)
 - [CAD 单脚本布局重建（ADR-DM-002）](adr/ADR-DM-002-v021-cad-single-script-execution.md)
 - [延后 CAD 校验与子集级 CAD 操作分流（ADR-DM-003，已实施）](adr/ADR-DM-003-deferred-cad-validation-and-subset-cad-operations.md)
