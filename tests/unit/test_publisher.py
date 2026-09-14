@@ -1859,3 +1859,54 @@ def test_new_attempt_never_deletes_previous_terminal_or_unproven_evidence(tmp_pa
     RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=2)
     assert (jobs_attempt / "publish-journal.json").is_file()
     assert evidence.read_bytes() == b"keep"
+
+
+def test_legacy_flat_committed_manifest_is_listed_after_upgrade(tmp_path: Path):
+    """旧布局 COMMITTED 清单在升级后仍可被 list/read_committed_operation 枚举。"""
+    operation = "legacy-committed"
+    revisions = tmp_path / ".dst-manager" / "revisions" / operation
+    revisions.mkdir(parents=True)
+    manifest = {
+        "identity_version": 1,
+        "operation_id": operation,
+        "status": "COMMITTED",
+        "files": [{"target": str(tmp_path / "target.txt")}],
+    }
+    (revisions / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    publisher = RecoverablePublisher()
+    listed = publisher.list_committed_operations(tmp_path)
+    assert [journal["operation_id"] for journal in listed] == [operation]
+    assert publisher.read_committed_operation(tmp_path, operation) == manifest
+
+
+def test_legacy_flat_publishing_journal_recovers_before_new_publish(tmp_path: Path):
+    """旧平铺 PUBLISHING 残留先被恢复并永久保留，随后新 attempt 正常发布。"""
+    operation = "legacy-publishing"
+    target = tmp_path / "target.txt"
+    target.write_text("after")
+    backup = tmp_path / ".dst-manager" / "revisions" / operation / "before" / target.name
+    backup.parent.mkdir(parents=True)
+    backup.write_text("before")
+    legacy_journal = tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json"
+    legacy_journal.parent.mkdir(parents=True)
+    legacy_journal.write_text(
+        json.dumps({
+            "operation_id": operation,
+            "status": "PUBLISHING",
+            "files": [{"target": str(target), "backup": str(backup), "staged": None, "replaced": True}],
+        }),
+        encoding="utf-8",
+    )
+    publisher = RecoverablePublisher()
+    assert publisher.recover(tmp_path) == [operation]
+    assert target.read_text() == "before"
+
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+    revision_dir = publisher.publish(operation, tmp_path, {target: staged}, attempt=1)
+    assert revision_dir == tmp_path / ".dst-manager" / "revisions" / operation / "attempt-001"
+    assert target.read_text() == "after"
+    # 旧布局证据同样永久保留；新 attempt 不复用也不覆盖它。
+    assert legacy_journal.is_file()
+    assert json.loads(legacy_journal.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    assert backup.read_text() == "before"
