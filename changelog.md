@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-09-14（迁移提示宿主到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2 续）
+
+- 关闭按钮 `✕` → `UiIconButton icon="close"`（可访问名称仍走 `shell.toast.close`）；字形消失后 `.toast-close` 整条类删除，尺寸改由 `--icon-button-size`（36×36，满足全局约束「图标按钮 ≥36×36 px」），属**有意像素变化**：26 → 36。
+- 字号：`.toast-main strong` 14px → `--button-font-size`（**权宜**：语义层没有「非控件用途的独立 14px 档位」，与 `.brand`/`.tab` 同因，登记为计划 Task 12 收口责任 K）；`.toast-main span` 13px → `--font-label`；`.toast-actions button` 12px → `--font-caption`。
+- 结构尺寸：组件层新增 `--toast-max-width:360px`（`.toast-host max-width`，**零视觉差**）。`.toast-actions button` 收窄为 `.toast-actions .toast-view`：只有带可见文案的「查看」按钮需要这套描边，关闭按钮的外观由原语承担，裸元素选择器会抢掉原语的内联居中。
+- 例外与不变量：清退 `ToastHost.vue` **6 条**（1 unicode + 5 raw）→ `registeredExceptions` 326 → **320**，`dynamicVariables` 仍 1，不变量实测 **321 = 320 + 1**，`check:ui` 退出 0 且零新增违规。至此 Task 4 Files 里的五个壳层组件全部迁移完毕。
+- 验证：`test:unit` **102 passed**、`test:contracts` **83 passed**、`build` 退出 0；e2e `-g "toast"` **3 passed**。
+
 ## 2026-09-14（迁移任务浮层到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2）
 
 任务浮层与提示宿主也改用 Task 3 的原语与 Task 2 的令牌，浮层的手写焦点副本迁到 `useDialogFocus`；本段为 `TaskOverlay.vue` 部分（`ToastHost.vue` 见下一段）。
