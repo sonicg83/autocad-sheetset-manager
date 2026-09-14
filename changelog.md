@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-14（计划册记：Task 4 收口与 Ruling 26/28 写回）
+
+- 勾选 PLAN-DM-029 Task 4 的 Step 1–7，并新增三条「实际验证」行（主提交、评审修复轮 1、迁移轮 2：浮层与提示宿主），逐条记录实测数字与口径订正。
+- 订正计划两处缺陷：① Task 4 Step 3 ① 的理由错误（非激活页签带 `tabindex="-1"`，`dialogFocus.ts` 的 `isTabStop` 已排除，故迁移后 `focusables()[0]` 恒等于激活页签——「不传 `initialFocus` 会落到第一个页签」不成立）② Task 4 Step 4 的验收口径（清退后仍有其它任务名下例外）→ 改为「本任务名下 62 条清零 + 零新增违规 + `check:ui` 只剩其它任务名下例外」。Task 4 Files 补列 `web/src/styles/tokens.css` 与 `web/src/components/ui/dialogFocus.ts`/`dialogFocus.test.ts`（Ruling 25/28 的计划缺陷补齐）。
+- 写回 Ruling 28：Task 4 覆盖整个桌面壳层（含 `TaskOverlay.vue`/`ToastHost.vue`）；Task 7 对本文件降级为验证（Step 2/6 加注）；Task 10 Step 3/4 明确「四个模态」= `ConfirmModal`/`UnsavedInputDialog`/`PropertyValueCompareDialog`/`SettingsDialog`，**不含** `TaskOverlay.vue`；`dialogFocus.ts` 的 `returnFocus` 选项在 Task 10 加注。
+- 新增 Task 12 收口责任 **H**（检查器 `calc/min/max/clamp/env` 只放行不查参数）、**I**（ARCH-DM-007 §4.1/§5 与新增组件层令牌/`UiButton.label` 对齐）、**J**（`0×0` 仍算停靠点的语义决策）、**K**（语义层缺非控件用途的独立 14px 档位）、**L**（例外 `expiresWith` 与任务 Files 错位清单）、**M**（`<aside>` 内 `[hidden]` 不是可靠隐藏手段），并更新 Task 12 的职责摘要行。
+- Task 10 Step 5 加注：确认 `<aside>` 内不再用 `[hidden]` 作隐藏手段（指向责任 M）。
+- 事实订正：Task 4 主提交段落里「供 Task 10 迁 `useDialogFocus` 时当回归网」已改为「供本任务迁移时当回归网」（Ruling 28 后迁移在 `ec9b41b` 完成）。
+- 本次为计划册记提交（仅改 `.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md` 与 `changelog.md`），实现与门禁未变。
+
 ## 2026-09-14（迁移提示宿主到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2 续）
 
 - 关闭按钮 `✕` → `UiIconButton icon="close"`（可访问名称仍走 `shell.toast.close`）；字形消失后 `.toast-close` 整条类删除，尺寸改由 `--icon-button-size`（36×36，满足全局约束「图标按钮 ≥36×36 px」），属**有意像素变化**：26 → 36。
@@ -34,7 +44,7 @@
 - 结构尺寸令牌化（E 类 14 条）：`tokens.css` 的组件层新增桌面壳层组件令牌——`--shell-bar-height:52px`（顶栏与操作栏条高，4 条）、`--workspace-name-max-width:180px` 与 `--workspace-name-max-width-narrow:130px`（两条媒体查询各消费一条，零行为变化）、`--folder-action-min-width:112px`、`--badge-size:18px`（`.tab .num` 宽高）、`--status-dot-size:7px`（`.pill .dot` 宽高）、`--overlay-pop-width:420px` 与 `--overlay-pop-max-height:300px`（草稿浮窗）、`--dock-note-max-width:240px`——这 14 条**零视觉差**。原始层未动（ARCH-DM-007 §4.1 把原始层定义为「有限值域」，布局常量不进去）。计划 Task 4 的 Files 漏列 `tokens.css`，属**计划缺陷补齐（Ruling 25）**。
 - 例外表：`exceptions` **382 → 341**（移除此任务名下 41 条：`ActionDock.vue` 11 raw + 1 unicode、`TabBar.vue` 5 raw、`TopBar.vue` 22 raw + 2 unicode），`dynamicVariables` 不变（1 条）。棘轮不变量实测 **342 = 341 + 1**（空例外扫描的规则直方图：`raw-visual-value` 300、`unicode-structure-icon` 17、`explicit-button-type` 16、`visible-input-label` 7、`raw-hex-color` 1、`undefined-css-variable` 1）。
 - 相邻范围按计划原文归属，**本任务不动**：`TaskOverlay.vue`（其 15 条例外）与 `ToastHost.vue`（6 条）留各自任务——TaskOverlay 内部控件归 Task 7（Step 2/6），ToastHost 归 Task 10，模态/浮层焦点代码统一（含 `TaskOverlay.vue:74-82` 的手写副本）归 **Task 10 Step 4**（计划 line 300「消除各模态重复焦点代码，统一使用 `dialogFocus.ts`」；能力表 line 399「模态焦点复用 | Task 3、9、10」）。计划 Task 4 的 Files 列这两个文件是**许可而非义务**；计划 Step 4「只剩页面级债务」是措辞缺陷，本任务验收口径为「本任务名下 41 条清零 + 零新增违规 + `check:ui` 只剩其它任务名下例外」。
-- 证据：`main.spec.ts` 增壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积（≥32px）断言，并新增一条**特性化**用例冻结任务浮层焦点语义（展开后聚焦当前激活页签、关闭回焦当前激活入口、Tab 在首尾**真实停靠点**之间回绕），供 Task 10 迁 `useDialogFocus` 时当回归网；另新增一条壳层交互态用例覆盖键盘焦点环与悬停/禁用态计算样式（修复轮 1 补齐，见下）；`i18n-visual-evidence.spec.ts` 增 3 条壳层默认状态用例（1440×900 浅/深、900×768 深），持久截图存 `.planning/memos/dst-manager/assets/PLAN-DM-029/default-1440x900-light.png`、`default-1440x900-dark.png`、`default-900x768-dark.png`（PNG 头实测 1440×900 / 1440×900 / 900×768，154408 / 155876 / 98273 B；`PLAN-DM-017/` 的 19 张未动）。
+- 证据：`main.spec.ts` 增壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积（≥32px）断言，并新增一条**特性化**用例冻结任务浮层焦点语义（展开后聚焦当前激活页签、关闭回焦当前激活入口、Tab 在首尾**真实停靠点**之间回绕），供本任务迁移 `useDialogFocus` 时当回归网（迁移已在 `ec9b41b` 完成；Ruling 28 后不再属 Task 10）；另新增一条壳层交互态用例覆盖键盘焦点环与悬停/禁用态计算样式（修复轮 1 补齐，见下）；`i18n-visual-evidence.spec.ts` 增 3 条壳层默认状态用例（1440×900 浅/深、900×768 深），持久截图存 `.planning/memos/dst-manager/assets/PLAN-DM-029/default-1440x900-light.png`、`default-1440x900-dark.png`、`default-900x768-dark.png`（PNG 头实测 1440×900 / 1440×900 / 900×768，154408 / 155876 / 98273 B；`PLAN-DM-017/` 的 19 张未动）。
 - 测试与验证：`playwright test main.spec.ts i18n-visual-evidence.spec.ts` **90 passed / 0 failed / 0 flaky**（1.4m）；`test:unit` **94 passed**（11 文件）；`test:contracts` **83 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0（`vue-tsc -b` 通过 + `vite build` 1.51s）。
 - 焦点守卫存活变异补测（本任务第二个提交）：`dialogFocus.ts` 的两处 `shouldReturnFocus` 分支与「无名 `radio` 各自独立停靠」原先改坏实现仍全绿，现补 3 条用例——① 关闭时焦点已在容器外则不抢回（容器仍挂载，走的是 `contains` 判定而非「容器已卸载」兜底）、② 关闭时焦点落在 `body` 则仍归还（`active === body` 分支）、③ 连续三个无名 `radio` 各自是停靠点、最后一个仍是回绕端点。3 项实现变异逐一转红（恒归还、去掉 `body` 分支、`isNamedRadio` 丢掉 `name` 非空判定），随后逐字节还原（sha256 `b70e7d0a…` 与变异前一致，`git diff` 空）。`test:unit` **94 → 97 passed**（11 文件），`build` 退出 0。
 - 修复轮 1（独立复审 `Needs fixes`：0 must-fix / 6 should-fix / 4 nit，本节只落与本任务相关的代码与测试项）：

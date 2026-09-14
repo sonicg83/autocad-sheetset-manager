@@ -151,20 +151,30 @@ related:
 - Modify: `web/src/layout/ActionDock.vue`
 - Modify: `web/src/layout/TaskOverlay.vue`
 - Modify: `web/src/components/ui/ToastHost.vue`
+- Modify: `web/src/styles/tokens.css`（**计划缺陷补齐，Ruling 25**：新增壳层/浮层/提示宿主的组件层结构尺寸令牌）
+- Modify: `web/src/components/ui/dialogFocus.ts`（**计划缺陷补齐，Ruling 28/R2-1**：新增可选 `returnFocus` 解析器）
+- Modify: `web/src/components/ui/dialogFocus.test.ts`（同上，新增 5 条用例）
 - Modify: `web/tests/e2e/main.spec.ts`
 - Modify: `web/tests/e2e/i18n-visual-evidence.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED）**：在 `main.spec.ts` 增加壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积、键盘焦点和任务浮层折叠状态断言；确认 Unicode 图标和尺寸断言失败。计算样式必须直接量壳层里已迁移控件的 `getBoundingClientRect()`：**输入类 38px、普通与图标按钮 36px、紧凑按钮 34px、可点目标 ≥ 32px**。Task 3 只在源码与令牌链层面锁定了这组尺寸（happy-dom 不算布局，`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件），所以真实计算高度由本步骤补齐（首轮评审 F3）。同时把 Task 3 无法在本地验证的焦点可见性（`[hidden]`/`inert`/`display:none`/`visibility` 叠加、`0×0`）在浏览器里覆盖（首轮评审 F2）。
-- [ ] **Step 2（迁移）**：把 `◐`、`⚙`、`✕`、`▸/▾`、`«/»`、`●` 替换为 `UiIcon`/`UiIconButton`；保留可见文案和 i18n key，状态按钮补 `aria-expanded`/`aria-pressed`。**纯图标按钮必须用 `UiIconButton`（`label` 必填）**；`UiButton` 只用于「插槽无可读文案」的图形性按钮并可传 `label`，而带可见文案的 `UiButton` 若同时传 `label`，两者文字必须一致（WCAG 2.5.3「名称包含可见文本」）；`UiIconButton`/`UiButton.label` 对 ARCH-DM-007 §5 的补充属文档收口，登记为 Task 12 收口责任 D，本任务不改 ARCH 正文（首轮评审 F4）。
-- [ ] **Step 3（尺寸与焦点语义）**：壳层普通按钮使用 `default`，任务浮层紧凑动作使用 `compact`；所有独立图标按钮达到 `36×36px`，不以 SVG 尺寸充当点击面积。同时把 `TaskOverlay.vue:74-82` 的手写焦点副本（`onDrawerKeydown` + 内联选择器 + `tabIndex`/`getClientRects` 过滤）整体换成 `useDialogFocus`，**用 `onEscape(event)` 保留原有 `preventDefault` + `stopPropagation` 语义**（浮层下还有文档/window 级 Escape 处理器，传播一旦被工具吞掉就会变成误关闭）；迁移后浮层内 **不得对 Tab 调 `stopPropagation`**，否则事件到不了绑在容器上的 `onDialogKeydown`，Tab 圈闭静默失效。**按字面「整体换成 `useDialogFocus`」会丢三处行为，本步骤验收时逐条对齐（Task 3 三轮评审 H4）**：
-    - ① **必须传 `initialFocus`**：浮层现在打开时聚焦**当前激活**页签（`:71` 的 `focusActiveTab`，`watch(open)` 内 `:87` 调用），而工具的回退是 `focusables()[0]`（抽屉里即**第一个**页签）→ 不传 `initialFocus` 会让打开浮层落到错误页签。
+- [x] **Step 1（RED）**：在 `main.spec.ts` 增加壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积、键盘焦点和任务浮层折叠状态断言；确认 Unicode 图标和尺寸断言失败。计算样式必须直接量壳层里已迁移控件的 `getBoundingClientRect()`：**输入类 38px、普通与图标按钮 36px、紧凑按钮 34px、可点目标 ≥ 32px**。Task 3 只在源码与令牌链层面锁定了这组尺寸（happy-dom 不算布局，`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件），所以真实计算高度由本步骤补齐（首轮评审 F3）。同时把 Task 3 无法在本地验证的焦点可见性（`[hidden]`/`inert`/`display:none`/`visibility` 叠加、`0×0`）在浏览器里覆盖（首轮评审 F2）。
+- [x] **Step 2（迁移）**：把 `◐`、`⚙`、`✕`、`▸/▾`、`«/»`、`●` 替换为 `UiIcon`/`UiIconButton`；保留可见文案和 i18n key，状态按钮补 `aria-expanded`/`aria-pressed`。**纯图标按钮必须用 `UiIconButton`（`label` 必填）**；`UiButton` 只用于「插槽无可读文案」的图形性按钮并可传 `label`，而带可见文案的 `UiButton` 若同时传 `label`，两者文字必须一致（WCAG 2.5.3「名称包含可见文本」）；`UiIconButton`/`UiButton.label` 对 ARCH-DM-007 §5 的补充属文档收口，登记为 Task 12 收口责任 D，本任务不改 ARCH 正文（首轮评审 F4）。
+- [x] **Step 3（尺寸与焦点语义）**：壳层普通按钮使用 `default`，任务浮层紧凑动作使用 `compact`；所有独立图标按钮达到 `36×36px`，不以 SVG 尺寸充当点击面积。同时把 `TaskOverlay.vue:74-82` 的手写焦点副本（`onDrawerKeydown` + 内联选择器 + `tabIndex`/`getClientRects` 过滤）整体换成 `useDialogFocus`，**用 `onEscape(event)` 保留原有 `preventDefault` + `stopPropagation` 语义**（浮层下还有文档/window 级 Escape 处理器，传播一旦被工具吞掉就会变成误关闭）；迁移后浮层内 **不得对 Tab 调 `stopPropagation`**，否则事件到不了绑在容器上的 `onDialogKeydown`，Tab 圈闭静默失效。**按字面「整体换成 `useDialogFocus`」会丢三处行为，本步骤验收时逐条对齐（Task 3 三轮评审 H4）**：
+    - ① **显式传 `initialFocus`**：浮层打开时聚焦**当前激活**页签，迁移后由 `initialFocus: activeTabElement` 显式承载。**本句原理由已订正（Task 4 迁移轮 2；独立复审 F2-2 指出、控制器复核通过）**：非激活页签带 `:tabindex="active===tab.id?0:-1"`，而 `dialogFocus.ts` 的 `isTabStop` 排除负 `tabindex`，故迁移后 `focusables()[0]` **恒等于**当前激活页签——「不传 `initialFocus` 就会落到第一个页签」不成立；显式传参是表达意图，不是修 bug。
     - ② **关闭回焦语义不同**：现在回焦的是 `rail` 上 `[data-entry="${active}"]`（`closeDrawer`，`:73`），工具归还的是**打开时捕获的 `opener`** → 「打开后切换过页签」时两者不同；必须保留原语义，或明确接受变更并记录理由与用户可见差异。
     - ③ **过滤条件有变**：现有 `el.tabIndex>=0 && el.getClientRects().length>0`（`:78`）中的 `getClientRects()`（真实布局可见）会被**丢弃**（工具只按属性 + 计算样式判定），候选也从 `[tabindex="0"]` **放宽**为 `[tabindex]`（带正 `tabindex` 的元素会成为停靠点）；两点必须在本步骤写明并判断是否可接受，不可接受就先补工具能力，不得在迁移里用本地副本绕过。
-- [ ] **Step 4（例外清退）**：删除上述壳层 Unicode 例外；运行检查器并确认只剩页面级债务和 `ColumnEditor.vue` 临时例外。
-- [ ] **Step 5（证据）**：在 `1440×900` 浅/深主题各保留壳层默认截图，在 `900×768` 保留窄视口一张，并用计算样式覆盖 hover/focus/disabled，不额外保存状态截图。**壳层截图必须重拍基准**：Task 2 的基准里壳层还是 Unicode 字符与旧尺寸，Task 4 迁移后像素必变；重拍件要按计划的全轮配额计账。同时记录级联事实：`primitives.css:36` 的 `.modal-actions button{padding:9px 16px}` 会被原语的固定高度 + `padding:0 var(--space-4)` 静默覆盖（scoped/无层优先于命名层），属**预期行为**，不再为旧选择器补声明；发现其他同类覆盖时同例处理，不引入特异性竞争（首轮评审 F5）。
-- [ ] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-visual-evidence.spec.ts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`。
-- [ ] **Step 7（提交）**：commit：`迁移桌面壳层到统一视觉原语`。
+- [x] **Step 4（例外清退）**：删除上述壳层 Unicode 例外；运行检查器并确认只剩页面级债务和 `ColumnEditor.vue` 临时例外。
+- [x] **Step 5（证据）**：在 `1440×900` 浅/深主题各保留壳层默认截图，在 `900×768` 保留窄视口一张，并用计算样式覆盖 hover/focus/disabled，不额外保存状态截图。**壳层截图必须重拍基准**：Task 2 的基准里壳层还是 Unicode 字符与旧尺寸，Task 4 迁移后像素必变；重拍件要按计划的全轮配额计账。同时记录级联事实：`primitives.css:36` 的 `.modal-actions button{padding:9px 16px}` 会被原语的固定高度 + `padding:0 var(--space-4)` 静默覆盖（scoped/无层优先于命名层），属**预期行为**，不再为旧选择器补声明；发现其他同类覆盖时同例处理，不引入特异性竞争（首轮评审 F5）。
+- [x] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-visual-evidence.spec.ts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`。
+- [x] **Step 7（提交）**：commit：`迁移桌面壳层到统一视觉原语`。
+
+> **Task 4 实测与口径（Ruling 25/26/28 收口，2026-09-14）**
+> **范围**：本任务把**整个桌面壳层**迁完——`TopBar`/`TabBar`/`ActionDock`/`TaskOverlay`/`ToastHost`（视觉 + 焦点 + 例外全部清退）。依据：本条 Files 已列 `TaskOverlay.vue`，line 46 括注明文允许「阶段 2 的 Task 4 修改它自己 Files 里已列的 `TopBar.vue`/`TaskOverlay.vue`」，Step 2 的图形清单含 `«/»`、`●`、`✕`（只存在于这两个文件），Step 4 的验收要求「只剩**页面级**债务」。**Ruling 26 曾把这两个文件判给 Task 7/Task 10，已在 Ruling 28 撤回**；Task 7 对本文件的浮层内部控件降级为**验证**（其 Step 2 的相关子句与 Step 6 的浮层部分事实上清零），Task 10 Step 4 只负责 `ConfirmModal`/`UnsavedInputDialog`/`PropertyValueCompareDialog`/`SettingsDialog` 四个模态（其 Files 不含 `TaskOverlay.vue`）。
+> **Step 4 验收口径订正**：「只剩页面级债务和 `ColumnEditor.vue` 临时例外」在本任务范围内不可达且不准确——清退后仍会有其它任务名下例外（Task 5/6/7/8/9/10/11）。实际口径：**本任务名下 62 条清零（41 + 21）+ 零新增违规 + `check:ui` 只剩其它任务名下例外**。
+> **结果**：例外表 **382 → 320**（Task 4 名下 62 条：`ActionDock` 12、`TabBar` 5、`TopBar` 24、`TaskOverlay` 15、`ToastHost` 6），`dynamicVariables` 恒为 1，棘轮不变量 **321 = 320 + 1**、`waivedViolations 0`。
+> **计划缺陷补齐**：本条 Files 另补 `web/src/styles/tokens.css`（Ruling 25）与 `web/src/components/ui/dialogFocus.ts`/`dialogFocus.test.ts`（Ruling 28/R2-1，新增可选 `returnFocus` 解析器以保留「关闭回焦当前激活入口」的原语义）。
+> **提交**：`4f0082d 迁移桌面壳层到统一视觉原语`、`d078249 补齐焦点守卫存活变异用例`、`e9750c8 修正壳层字号令牌层级与焦点测试覆盖`、`ec9b41b 迁移任务浮层焦点与控件到公共原语`、`3834e26 迁移提示宿主并清退壳层例外`。
 
 ## 阶段 3：按固定顺序迁移页面
 
@@ -234,11 +244,11 @@ related:
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
 - [ ] **Step 1（RED）**：为截图第 1 张的批量模式、属性选择、批量值、批量加入草稿写同行中心、字号、36/38px 档位、disabled 与长文本溢出断言；补任务浮层动作与状态控件断言。
-- [ ] **Step 2（迁移）**：工具栏、表单、列设置、属性编辑、表格动作和浮层内部动作改用原语；保持选中、批量修改、草稿与任务 SSE 流程不变。
+- [ ] **Step 2（迁移）**：工具栏、表单、列设置、属性编辑、表格动作和浮层内部动作改用原语（**注：`TaskOverlay.vue` 的浮层内部控件与手写焦点副本已由 Task 4 按 Ruling 28 迁完，本步骤对该文件是验证性 no-op**）；保持选中、批量修改、草稿与任务 SSE 流程不变。
 - [ ] **Step 3（动态变量）**：对图纸树宽度等运行时 CSS 变量，在白名单中同时登记写入方与消费方；能改为静态令牌的变量立即清退，不以 fallback 隐藏未定义变量。
 - [ ] **Step 4（密集布局）**：在 `900/1024/1120/1440` 四视口验证批量编辑区不撑破表格、操作列可达、横向滚动条不遮挡内容；关键控件 200% 浏览器韧性测试通过。
 - [ ] **Step 5（正交证据）**：保存浅/深默认、批量编辑启用、批量编辑禁用、最窄视口、200% 共 6 张。
-- [ ] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项外，图纸页视觉值、按钮和 label 例外清零。
+- [ ] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
 - [ ] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
 
@@ -313,9 +323,9 @@ related:
 
 - [ ] **Step 1（RED：树）**：先写 roving tabindex 测试：容器不是额外 Tab 停靠点、仅活动 `treeitem` 为 0、其余为 -1；方向键、Home/End、展开/收起、激活、树更新后焦点恢复均失败后再实现。
 - [ ] **Step 2（树实现）**：移除根容器 tabindex 和 `treeitem` 内常驻嵌套按钮；展开行为合并到树项统一点击/键盘模型，保留现有选中与定位事件载荷。
-- [ ] **Step 3（RED：模态）**：为四个模态补初始焦点、Tab 圈闭、Escape、关闭归还、嵌套时顶层唯一响应测试。
-- [ ] **Step 4（模态复用）**：消除各模态重复焦点代码，统一使用 `dialogFocus.ts`；由业务组件决定 Escape 是否允许关闭。
-- [ ] **Step 5（全仓语义扫描）**：运行 `rtk npm --prefix web run check:ui`，并由 `explicit-button-type`、`visible-input-label`、`icon-button-name` 三条规则完成全仓扫描；所有真按钮显式 `button` 或 `submit`，所有搜索输入具有可见弱化 label，所有图标按钮有可读名称。
+- [ ] **Step 3（RED：模态）**：为四个模态补初始焦点、Tab 圈闭、Escape、关闭归还、嵌套时顶层唯一响应测试（四个模态 = `ConfirmModal.vue`/`UnsavedInputDialog.vue`/`PropertyValueCompareDialog.vue`/`SettingsDialog.vue`，均在本任务 Files 内；**不含** `TaskOverlay.vue`——它的焦点副本已由 Task 4 迁完，见 Ruling 28）。
+- [ ] **Step 4（模态复用）**：消除各模态重复焦点代码，统一使用 `dialogFocus.ts`；由业务组件决定 Escape 是否允许关闭（`dialogFocus.ts` 另可选传 `returnFocus` 解析器，用于「关闭回焦触发按钮之外」的落点，见 Task 4/R2-1）。
+- [ ] **Step 5（全仓语义扫描）**：运行 `rtk npm --prefix web run check:ui`，并由 `explicit-button-type`、`visible-input-label`、`icon-button-name` 三条规则完成全仓扫描；所有真按钮显式 `button` 或 `submit`，所有搜索输入具有可见弱化 label，所有图标按钮有可读名称。同时确认 `<aside>` 内不再用 `[hidden]` 作为隐藏手段：`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会压过 UA 的 `[hidden]{display:none}`，浮层靠自己的 `.task-overlay [hidden]{display:none!important}` 兜底而散落元素没有（控制器实测证据见 Task 4 报告；已登记 Task 12 收口责任 M）。
 - [ ] **Step 6（GREEN）**：运行 SheetTree 单测、`sheets-navigation.spec.ts`、`sheets-layout.spec.ts`、设置/属性模态相关 spec。
 - [ ] **Step 7（提交）**：commit：`收口图纸树与模态无障碍模型`。
 
@@ -447,6 +457,45 @@ related:
 > `UiButton.label` 只用于「插槽无可读文案」的边界），并同时校正 §6 的图标许可描述（Lucide 是 **ISC**，
 > 不是 MIT；几何数据为按名称转写、未与上游版本同步，逐图标比对结论见 Task 3 报告）。
 
+> **收口责任 H（检查器对 `calc/min/max/clamp/env` 无参数检查；Task 4 Ruling 25 实测）**：
+> `web/scripts/ui-contracts/visual-values.mjs:37` 的 `COMPUTED_VALUE_PATTERN` 只要值里出现 `var(`/`calc(`/`min(`/
+> `max(`/`clamp(`/`env(` 就在 `:66` 直接放行，**不检查参数是否含裸值**。因此 `width:clamp(32px,32px,32px)` 这类
+> 「用函数包裹常量」的写法能绕过 `raw-visual-value`。收口方向：对上述函数**递归检查参数**，只含常量
+> （无 `var(`/`%`/视口单位/`env(`）时仍判裸值。Task 4 未使用该手法，但检查器漏洞必须堵。
+
+> **收口责任 I（ARCH-DM-007 §4.1/§5 与新增令牌/约束对齐）**：Task 4 在组件层新增壳层、浮层、提示宿主的
+> 结构尺寸令牌（`--shell-bar-height`、`--workspace-name-max-width(-narrow)`、`--folder-action-min-width`、
+> `--badge-size`、`--status-dot-size`、`--overlay-pop-width/-max-height`、`--dock-note-max-width`、
+> `--task-rail-width`、`--task-rail-action-size`、`--task-drawer-max-width`、`--toast-max-width`），§4.1 对该层的
+> 枚举不再完整；`tokens.css:4/8` 又把原始层描述为「十六进制颜色与原始档位的唯一合法定义处」，与
+> 「组件层写入字面 px 常量」存在措辞张力。需一并收窄措辞并把组件层枚举补全。
+
+> **收口责任 J（`0×0` 候选仍算停靠点）**：`getClientRects()`（及迁移后的 `isHidden`）都不排除零尺寸元素，
+> `main.spec.ts` 的浮层焦点用例把这一行为冻结为特性化断言。若终局判定「零尺寸元素不应成为 Tab 端点」，
+> 需在 `dialogFocus.ts` 与断言两侧同步改并说明理由。
+
+> **收口责任 K（语义层缺「非控件用途的独立 14px 档位」）**：语义层的字号只有 `--font-body`（`font` 简写形态，
+> 仅供根元素）、`--font-label`(13)、`--font-table`(13)、`--font-caption`(12)，没有独立 14px；因此顶栏品牌名
+> `.brand` 与提示标题 `.toast-main strong` 只能**借用组件层** `--button-font-size`。需在 Task 12 决策：补一个
+> 语义令牌（如 `--font-title`）还是明文允许这种借用，避免每处靠注释解释。
+
+> **收口责任 L（例外 `expiresWith` 与任务 Files 的错位）**：复审机械统计发现多条债务的「到期任务」改不到
+> 承载它的文件：Task 10 名下 34 条分布在 7 个文件且**无一在其 Files 内**（`DraftActionsPanel.vue` 7、
+> `JobStatusPanel.vue` 1、`RepairStatusPanel.vue` 3、`RevisionHistoryPanel.vue` 3、`ToastHost.vue` 6、
+> `RevisionsView.vue` 2、`WelcomeView.vue` 12）；同类的还有 Task 7 的 `SheetTree.vue`(9，只在 Task 10 Files)、
+> Task 8 的 `ExtensionSettingsHost.vue`(10)、Task 6 的 `CompatibilitySummary.vue`(1)、Task 9 的 `primitives.css`(2)。
+> 检查器不校验这件事（只要求字段存在）。收口方向：在终局审计前把这些文件补进对应任务的 Files，或统一
+> 改写 `expiresWith`；否则 Task 12 会以「债务无法清零」的形式暴露。
+
+> **收口责任 M（`<aside>` 内 `[hidden]` 不是可靠的隐藏手段；Task 4 控制器实测）**：`legacy.css:24` 的
+> `:where(#app) aside button{display:flex}`（命名层作者规则）压过 UA 的 `[hidden]{display:none}`：在真实浮层里
+> `createElement` 造的 `<button hidden>` 仍 `display:flex`（高 21px、有 client rect、`focus()` 成功），
+> 证据 `evidence/controller-task-4-probe-hidden.json`。浮层自己的元素之所以正常，是因为组件 scoped 规则里有
+> `.task-overlay [hidden]{display:none!important}` 兜底（scoped 选择器带 `[data-v-*]`，裸元素命中不了）。
+> 结论：能否真隐藏取决于元素是否落在组件 scoped 兜底内；`dialogFocus.ts` 只能按属性判定，所以它在这类元素上
+> 「判为隐藏但浏览器仍可聚焦」的偏差是有意的。收口方向：审计 `<aside>` 内是否还有依赖 `[hidden]` 做视觉隐藏的元素，
+> 必要时改用 `v-if` 或 `display:none` 的样式钩子。
+
 ## 依赖与提交顺序
 
 ```text
@@ -508,7 +557,10 @@ Task 10 → Task 11 → Task 12
 | Task 3（首轮评审修复） | `test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`test:unit`、`check:ui`、`test:contracts`、`build`；另做图标溯源逐名称比对与三项变异重跑 | 定向 RED **29 passed / 7 failed**（F1 的 2 条 + F2 的 4 条 + 一条因注释里出现 `v-html` 而误报的断言），修正后 **36 passed / 0 failed**；全量 `unit` **84 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0；例外表 blob 仍 `b82f03f0…`（382 条），不变量 383 = 382 + 1 | 提交 `修正原语实例标识与焦点圈闭边界`；报告与证据见 `task-3-report.md` 第 12–14 节与 `evidence/task-3-fix-*.txt` |
 | Task 3（二轮评审收口） | 同上一行的五道门禁；另做 12 项变异重跑（含新增边界项） | 定向 RED **43 passed / 3 failed**（新增的禁用两例 + Escape 事件透传一例）→ GREEN **46 passed / 0 failed**（`dialogFocus.test.ts` 11 → 21 条，共 25 + 21 = 46）；全量 `unit` **94 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0；12 项变异均转红并逐字节还原（去掉禁用守卫 2 红、`closest`→`matches` 1 红、单选组恒取首个 1 红、祖先 `display` 上溯 1 红、`visibility` 1 红、非法 `tabindex` 1 红、Escape 不传事件 1 红等）；不变量 383 = 382 + 1，例外表 blob 仍 `b82f03f0…`（配额 0） | 提交 `订正溯源表述并补齐焦点边界守卫`；报告见 `task-3-report.md` 第 16 节与 `evidence/task-3-fix2-*.txt` |
 | Task 3（三轮评审收口：纯文本轮） | `npx vitest run`（全量）、`check:ui`、`test:contracts`、`build`；实现源码仅注释变化 | 全量 `unit` **94 passed**（与二轮收口相同，无用例增减）；`check:ui` 退出 0、例外表 blob 仍 `b82f03f0276155cd0be2b7a2430e9ea031da9118`（382 条，Task 3 配额 0）、`test:contracts` **83 passed / 0 failed**、`build` 退出 0；不变量 383 = 382 + 1、`components/ui` 新增文件零新增违规；本提交只改注释/文档/计划（`dialogFocus.ts` 无逻辑变化），无 e2e | 提交 `订正令牌统计口径与缺口登记落点`；报告见 `task-3-report.md` 第 17 节 |
-| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C）、`UiButton.label`/`UiIconButton` 的 ARCH 补充（收口责任 D）、令牌分层收口（收口责任 E）、`fieldset[disabled]` 禁用继承与禁用态欠虑（收口责任 F）、存活变异补测的 4 处未覆盖分支（收口责任 G） | 待实施 | `assets/PLAN-DM-029/README.md` |
+| Task 4 | `check:ui`、`test:unit`、`test:contracts`、`build`、`test:e2e -- main.spec.ts i18n-visual-evidence.spec.ts`；控制器另跑全量 e2e | 定向 **90 passed / 0 failed / 0 flaky**；`test:unit` **94**；`test:contracts` **83**；`check:ui` 0；`build` 0；例外 382 → 341（本任务名下 41 条 = 38 raw + 3 unicode）；不变量 **342 = 341 + 1**；控制器独立取证：全量 e2e **498 passed / 1 flaky / 0 failed**（flaky 为负载型，隔离 5/5 通过）、4 项变异确认新断言有杀伤力（令牌 `--button-height` 36→34 → e2e 报 `Expected 36 / Received 34`）、3 张截图像素分析非空且主题正确 | 提交 `迁移桌面壳层到统一视觉原语` + `补齐焦点守卫存活变异用例`；报告 `task-4-report.md` |
+| Task 4（评审修复轮 1） | 四门禁 + `main.spec.ts` 聚焦 e2e | 四门禁全绿（`test:unit` 97）；`font-size:var(--font-size-14)` → `var(--button-font-size)` 两处（业务侧原始层消费 0 → 2 处，检查器与债务口径**双向不可见**）；原隐藏探针在**非端点**、不参与断言（控制器变异证明：去掉 `getClientRects()` 过滤后仍全绿）→ 改为端点级 + 补 hover/focus/disabled 计算样式断言 | 提交 `修正壳层字号令牌层级与焦点测试覆盖`；复审判定 `Needs fixes`（0 must-fix / 6 should-fix / 4 nit）逐条落实 |
+| Task 4（迁移轮 2：浮层与提示宿主） | 四门禁 + `main.spec.ts i18n-visual-evidence.spec.ts` + toast 聚焦 e2e；控制器跑全量 e2e | `test:unit` **102**（+5 条 `returnFocus` 用例）、`test:contracts` **83**、`check:ui` 0、`build` 0；例外 **341 → 320**（删除恰 21 条：`TaskOverlay` 15 + `ToastHost` 6；18 raw + 3 unicode；**零新增**），不变量 **321 = 320 + 1**、`waivedViolations 0`；隐藏形态**先红后绿**（RED `Received "probe-head-hidden"` → GREEN 1 passed）；3 张截图重拍（blob 均变化、尺寸不变）；控制器全量 e2e **498 passed / 2 flaky / 0 failed**（两个 flaky 的失败点分别是 `openWorkspace` 的「选择 DST 文件」按钮 30s 未出现与既有 spec 的负载超时，均与本轮无因果） | 提交 `迁移任务浮层焦点与控件到公共原语` + `迁移提示宿主并清退壳层例外`；报告 `task-4-report.md` §11 |
+| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C）、`UiButton.label`/`UiIconButton` 的 ARCH 补充（收口责任 D）、令牌分层收口（收口责任 E）、`fieldset[disabled]` 禁用继承与禁用态欠虑（收口责任 F）、存活变异补测的 4 处未覆盖分支（收口责任 G）、检查器 `calc/min/max/clamp/env` 参数检查（收口责任 H）、ARCH-DM-007 §4.1/§5 对齐（收口责任 I）、`0×0` 停靠点语义（收口责任 J）、非控件 14px 语义档位（收口责任 K）、例外 `expiresWith` 与 Files 错位（收口责任 L）、`<aside>` 内 `[hidden]` 兜底（收口责任 M） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
 
