@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-14（Task 4 二审修复与收口，PLAN-DM-029）
+
+- **评审闭环**：二审 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，无代码级缺陷）→ `76dcb92` 全部清项 → 复审复核 **`Approve`**。
+- **must-fix 归控制器**（迁移轮 2 的全量 e2e 日志被随临时文件删除，复审用 mtime + 测试行号 + flaky 数当场证明证据不覆盖本轮）：重跑并归档 `evidence/controller-task-4-final-full-e2e.txt` = **499 passed / 1 flaky / 0 failed**（行号 1551/1586/1624 自证版本）；旧日志改名 `controller-task-4-round1-full-e2e.txt`；另归档四道门禁日志（0 / 102 / 83 / 0）与 `returnFocus` 变异复现日志（两项变异各杀 1 条、逐字节还原）。
+- `dialogFocus.ts` 三处 `.focus()` 补回 `{preventScroll:true}`（旧 `TaskOverlay` 手写副本同语义；`sheets-layout.spec.ts` 有零容差 `scrollTop` 断言）；JSDoc 订正为「`returnFocus()` 总会被调用（不要写副作用）……只有 `target.isConnected && shouldReturnFocus(container)` 同时成立才移动焦点」——**不重排代码**。
+- 提示宿主补回归网：`.toast-actions .ui-icon-button` + `aria-label="忽略通知"` + **36×36** + `.toast-view` 文本（注入 `width:30px` 后 `Expected 36 / Received 30`，还原 sha256 一致）。
+- 像素/差异清单补齐与订正：`.toast-close` 丢掉 `padding:4px 10px`/1px 描边/`--color-bg-surface` 背景/`--radius-sm` 圆角（由 `UiIconButton` 无边框透明基线接管）；折叠按钮 hover 态新增（文字色 + 圆角底色 + 原生 `title`）；阻断红点墨迹 **≈6px → ≈5px**（原措辞方向写反）；Task 4 报告 §11.2 ② 的「用户可见差异 = 0」收窄到交互路径（唯一剩余差异 = `App.vue:351` 程序化关闭）。
+- 计划册记（控制器 `da4d3bb`）：Task 4 Step 1–7 勾选、三条实际验证行、Step 3 ① 理由与 Step 4 验收口径订正、Files 补 `tokens.css`/`dialogFocus.ts`/`dialogFocus.test.ts`、Task 7/10 归属写回（Ruling 28）、新增 Task 12 收口责任 **H–M**；本次再补二审修复轮行与评审闭环段。
+- Task 4 控制器终验：例外 **382 → 320**（本任务名下 62 条全清）、`dynamicVariables` 1、不变量 **321 = 320 + 1**、四门禁 **0 / 102 / 83 / 0**、全量 e2e 499 passed / 1 flaky / 0 failed、7 项变异全程留档、3 张壳层截图重拍且与 `PLAN-DM-017/` 隔离。
 ## 2026-09-14（二审修复轮：补齐防滚动参数与提示宿主断言，PLAN-DM-029 Task 4）
 
 独立复审对迁移轮 2 的判定为 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，**无代码级缺陷**）。must-fix（全量 e2e 证据版本）由控制器补跑归档，本节落 F2–F6：
@@ -11,15 +20,6 @@
 - **证据口径（F6）**：`evidence/task-4-r2-{red,green}-hidden-forms.txt` 对应 `main.spec.ts:944` 改动前的版本（行号 1612，提交后 1614）；本次另归档 `evidence/task-4-fix2-toast-{green,mutation-red}.txt` 与 `evidence/task-4-fix2-shell-and-sheets-layout.txt`。
 - **验证**：`check:ui` 退出 0、`test:unit` **102 passed**、`test:contracts` **83 passed**、`build` 退出 0；e2e 共 3 次（`-g toast` 绿、`-g toast` 变异红、`main.spec.ts sheets-layout.spec.ts` 98 passed）。
 
-## 2026-09-14（Task 4 二审修复与收口，PLAN-DM-029）
-
-- **评审闭环**：二审 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，无代码级缺陷）→ `76dcb92` 全部清项 → 复审复核 **`Approve`**。
-- **must-fix 归控制器**（迁移轮 2 的全量 e2e 日志被随临时文件删除，复审用 mtime + 测试行号 + flaky 数当场证明证据不覆盖本轮）：重跑并归档 `evidence/controller-task-4-final-full-e2e.txt` = **499 passed / 1 flaky / 0 failed**（行号 1551/1586/1624 自证版本）；旧日志改名 `controller-task-4-round1-full-e2e.txt`；另归档四道门禁日志（0 / 102 / 83 / 0）与 `returnFocus` 变异复现日志（两项变异各杀 1 条、逐字节还原）。
-- `dialogFocus.ts` 三处 `.focus()` 补回 `{preventScroll:true}`（旧 `TaskOverlay` 手写副本同语义；`sheets-layout.spec.ts` 有零容差 `scrollTop` 断言）；JSDoc 订正为「`returnFocus()` 总会被调用（不要写副作用）……只有 `target.isConnected && shouldReturnFocus(container)` 同时成立才移动焦点」——**不重排代码**。
-- 提示宿主补回归网：`.toast-actions .ui-icon-button` + `aria-label="忽略通知"` + **36×36** + `.toast-view` 文本（注入 `width:30px` 后 `Expected 36 / Received 30`，还原 sha256 一致）。
-- 像素/差异清单补齐与订正：`.toast-close` 丢掉 `padding:4px 10px`/1px 描边/`--color-bg-surface` 背景/`--radius-sm` 圆角（由 `UiIconButton` 无边框透明基线接管）；折叠按钮 hover 态新增（文字色 + 圆角底色 + 原生 `title`）；阻断红点墨迹 **≈6px → ≈5px**（原措辞方向写反）；Task 4 报告 §11.2 ② 的「用户可见差异 = 0」收窄到交互路径（唯一剩余差异 = `App.vue:351` 程序化关闭）。
-- 计划册记（控制器 `da4d3bb`）：Task 4 Step 1–7 勾选、三条实际验证行、Step 3 ① 理由与 Step 4 验收口径订正、Files 补 `tokens.css`/`dialogFocus.ts`/`dialogFocus.test.ts`、Task 7/10 归属写回（Ruling 28）、新增 Task 12 收口责任 **H–M**；本次再补二审修复轮行与评审闭环段。
-- Task 4 控制器终验：例外 **382 → 320**（本任务名下 62 条全清）、`dynamicVariables` 1、不变量 **321 = 320 + 1**、四门禁 **0 / 102 / 83 / 0**、全量 e2e 499 passed / 1 flaky / 0 failed、7 项变异全程留档、3 张壳层截图重拍且与 `PLAN-DM-017/` 隔离。
 
 ## 2026-09-14（计划册记：Task 4 收口与 Ruling 26/28 写回）
 
