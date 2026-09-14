@@ -14,6 +14,8 @@
 
 详细计划：
 
+- [发布事务按 attempt 嵌套命名空间并拆分 publisher 模块实施计划（PLAN-DM-031，proposed；消除 job_id 与 attempt 混用导致的重试撞修订目录问题：`revisions/<job_id>/attempt-NNN` 嵌套布局 + `journal["attempt"]` 字段 + 按日志终态清扫旧尝试，整体删除 reclaim 证据回收机制（评审发现 #8）；随后将 1077 行 `publisher.py` 拆分为 `publish_errors`/`publish_primitives`/`publish_journal`/`publish_recovery` 四个同层模块并同步拆分测试文件，满足 AGENTS.md 500 行软上限（评审发现 #9）；旧平铺布局只读兼容，不支持降级。10 个任务，先行为后拆分，每任务独立可回退）](PLAN-DM-031-publisher-attempt-namespace-and-split.md)
+
 - [数量变化前沿不再强制 CAD 工作范围修复计划（PLAN-DM-030，completed；用户缺陷报告：插入不编号子集（图号 `000`、不消耗序号）时其他子集图号/布局名未变，却仍被生成 `rename_only` 工作单元，每个多启动一次 Core Console。根因：`planning.py` 把 `in_cardinality_scope` 传给 `_cad_operation`，使「数量变化前沿之后」成为操作分流输入；而 `_subset_changed` 的逐张可证明比较已完整覆盖「图号/布局名可能顺移」这一唯一理由。修复：`return "rename_only" if changed else "none"`，前沿字段保留为展示信息，HTTP 契约不变。TDD：先改/新增 4 例、修复前 5 failed / 1 passed。实际验证：`ruff` 通过、`pytest -q` **1476 项 / 1404 passed / 0 failed / 72 skipped**（修复前 1472 项，+4 用例）、稳态复现脚本证明不编号子集后续子集由 `rename_only` 变为 `none` 且 `in_cardinality_scope` 仍为 `true`；前端未改动、真实 CAD 系统测试未执行。决策变更见 ADR-DM-005，规范修订见 SPEC-DM-003 §3.1/§9 与 SPEC-DM-014「已知代价」）](PLAN-DM-030-provable-diff-cad-scope.md)
 
 - [前端视觉基础与一致性整改实施计划（PLAN-DM-029，proposed；依据已接受的 ARCH-DM-007，按“基线与门禁 → 公共原语 → 属性/目录/图纸与浮层/设置/旧页面迁移 → 结构治理 → 真实桌面验收”实施；含 TDD、静态契约棘轮、24–30 张正交证据与 Windows 100/125/150/200% WebView2 关闭条件）](PLAN-DM-029-frontend-ui-foundations-remediation.md)
