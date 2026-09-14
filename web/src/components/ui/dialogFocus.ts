@@ -7,10 +7,11 @@ import {toValue, watch, type MaybeRefOrGetter} from "vue";
 // 不处理点击遮罩、不写 `aria-modal`；这些都留在调用方。
 //
 // 因此 Escape 只回调、不 `preventDefault`也不 `stopPropagation`：调用方可能配置「不可 Escape
-// 关闭」，也可能像现网模态那样依赖 `stopPropagation` 挡住文档级 Escape 处理器（`ActionDock`/
-// `SheetsView`/`FieldBrowser` 都有文档级 Escape 监听）。是否阻止行为、是否停止传播都属于调用方
-// 的判断，所以工具把原始的 `KeyboardEvent` 交给回调，由调用方表达原有传播语义。唯一会阻止
-// 默认行为的是 Tab 圈闭，因为回绕必须挡住浏览器的默认焦点移动才生效。
+// 关闭」，也可能像现网模态那样依赖 `stopPropagation` 挡住文档/window 级 Escape 处理器
+// （`ActionDock.vue:23`、`SheetsView.vue:139` 挂在 `window`，`FieldBrowser.vue:130` 挂在
+// `document`）。是否阻止行为、是否停止传播都属于调用方的判断，所以工具把原始的
+// `KeyboardEvent` 交给回调，由调用方表达原有传播语义。唯一会阻止默认行为的是 Tab 圈闭，因为
+// 回绕必须挡住浏览器的默认焦点移动才生效。
 //
 // 圈闭生效的前提：
 // ① 模态/浮层**内部不得对 Tab 做 `stopPropagation`**，否则事件到不了容器，圈闭静默失效；
@@ -18,8 +19,9 @@ import {toValue, watch, type MaybeRefOrGetter} from "vue";
 //
 // `FOCUSABLE_SELECTOR` 是**候选**集合，不等于 Tab 停靠点集合：候选还要再过 `isTabStop`
 // （禁用、负 `tabindex`、非法 `tabindex`）与 `isHidden`（隐藏态）两道过滤，且单选组会折叠为
-// 一个停靠点。它由 `layout/TaskOverlay.vue:77` 那份副本同源扩写而来，**只在本模块内部消费**
-// （外部不要拿它当停靠点列表；计划 Task 4 Step 3 会把那份副本整体换成这个工具）。
+// 一个停靠点。它由 `layout/TaskOverlay.vue:77` 那份副本同源扩写而来，**目前仅本模块消费**（外部
+// 不要拿它当停靠点列表）；保留 `export` 是为计划 Task 4 Step 3 的迁移复用，不是为了把候选集合
+// 当公共契约。
 export const FOCUSABLE_SELECTOR = [
   "button:not(:disabled)",
   "a[href]",
@@ -71,8 +73,18 @@ export function useDialogFocus(options: DialogFocusOptions) {
    * 变成候选，若放行，它出现在序列首位时 `focusInitial()` 会把焦点留在对话框外，之后键盘事件
    * 不再进入容器，圈闭静默失效——比「Tab 无响应」严重得多。判定用 `[disabled]` 属性而不是
    * `:disabled`：选择器实现对禁用继承的建模不一致（happy-dom 的 `:disabled` 只看元素自身是否
-   * 带该属性）。已知缺口：`fieldset[disabled]` 的后代控件不自带该属性，本实现仍把它算作
-   * 停靠点（真实浏览器里它不可聚焦），留 Task 4 的 e2e 覆盖。 */
+   * 带该属性）。
+   *
+   * 该守卫按**属性存在**判定，因此会一并排除**非表单元素**上用作样式钩子的 `disabled`
+   * （包含 Vue 把 `:disabled="false"` 渲染成 `disabled="false"` 的情形，属性仍然存在）；
+   * 已核 `web/src` 现无此类用法（`disabled` 属性只出现在表单控件上）。**不要**因此把守卫收窄到
+   * 表单控件：收窄会重新放行真实浏览器里可聚焦的 `[tabindex][disabled]`，反而离浏览器语义更远。
+   *
+   * 已知缺口（**本仓库当前不可达**，登记为计划 Task 12 收口责任 F）：`fieldset[disabled]` 的后代
+   * 控件不自带该属性，本实现仍把它算作停靠点。缺口只能从候选集合的 `[tabindex]` 分支漏入——
+   * `button`/`input` 分支由真实浏览器的 `:disabled` 继承正确挡住；而仓库唯一的 `<fieldset disabled>`
+   * （`SheetCatalogSettingsPanel.vue:84-85`，只读态）内没有非负 `tabindex`：带 `tabindex` 的是
+   * `:118` 的 `tabindex="-1"`，两个按钮（`:122`、`:123`）不带。 */
   function isTabStop(element: HTMLElement) {
     if (element.matches("[disabled]")) return false;
     const attribute = element.getAttribute("tabindex");

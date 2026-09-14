@@ -2,7 +2,8 @@
 // 对话框焦点工具契约（PLAN-DM-029 Task 3 Step 3）：初始焦点、Tab/Shift+Tab 圈闭、Escape
 // 回调（含事件透传）、关闭后焦点归还、无可聚焦元素时不拦截；以及可聚焦元素集合的边界：
 // 隐藏态（自身/祖先/visibility）、`tabindex` 缺省与非法值、`contenteditable`、禁用、单选组、
-// `fieldset` 禁用继承缺口。工具只管理焦点，不决定是否可关闭，也不阻止 Escape 的传播。
+// `fieldset` 禁用继承缺口（本仓库当前不可达，计划 Task 12 收口责任 F）。工具只管理焦点，
+// 不决定是否可关闭，也不阻止 Escape 的传播。
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {mount} from "@vue/test-utils";
 import {defineComponent,h,nextTick,ref,type VNode} from "vue";
@@ -143,7 +144,9 @@ describe("useDialogFocus", () => {
 });
 
 // 以下覆盖可聚焦元素集合的边界：隐藏元素（自身属性、祖先、`visibility`）、非默认可聚焦元素
-// （含 `tabindex` 缺省/非法值）、禁用元素、单选组，以及 `fieldset` 禁用继承的已知缺口。
+// （含 `tabindex` 缺省/非法值）、禁用元素、单选组，以及 `fieldset` 禁用继承的已知缺口
+// （缺口只能从 `[tabindex]` 分支漏入，而本仓库没有「禁用 `fieldset` + 非负 `tabindex`」的写法，
+// 属计划 Task 12 收口责任 F）。
 // 注：happy-dom 允许 `focus()` 落到隐藏元素上（真实浏览器不会，真实浏览器也不能把焦点停在
 // `[hidden]`/`inert` 子树上），因此这里验证的是**端点过滤结果**（回绕点与落点），
 // 而不是「浏览器拒焦」；真实布局可见性（0×0、离屏、`visibility` 叠加）留 Task 4 的 e2e。
@@ -307,9 +310,13 @@ describe("useDialogFocus 的可聚焦元素集合", () => {
     expect(document.activeElement).toBe(wrapper.find(".real-first").element);
   });
 
-  // 已知缺口（记录当前行为，不是期望行为）：`fieldset[disabled]` 的后代控件在真实浏览器里
-  // 不可聚焦，但本实现按元素自身的 `[disabled]` 属性判定（happy-dom 也不建模禁用继承），
-  // 因此该子控件仍算停靠点。真实浏览器行为留 Task 4 的 e2e 覆盖；修好本缺口时本条需同步更新。
+  // 已知缺口（记录当前行为，不是期望行为，**本仓库当前不可达**）：`fieldset[disabled]` 的后代
+  // 控件在真实浏览器里不可聚焦，但本实现按元素自身的 `[disabled]` 属性判定（happy-dom 也不建模
+  // 禁用继承），因此该子控件仍算停靠点。缺口只能从候选集合的 `[tabindex]` 分支漏入（`button`/
+  // `input` 分支由真实浏览器的 `:disabled` 继承挡住）；仓库唯一的 `<fieldset disabled>`
+  // （`SheetCatalogSettingsPanel.vue:84-85` 只读态）内没有非负 `tabindex`，所以不可达。
+  // 登记为计划 Task 12 收口责任 F（含不能用朴素 `closest("fieldset[disabled]")` 的原因）；
+  // 修好本缺口时本条需同步更新。
   it("已知缺口：fieldset 禁用继承未建模，其子控件仍算停靠点", async () => {
     const {wrapper} = await openHarness({}, vi.fn(), markupChildren([
       '<button class="first">一</button>',
