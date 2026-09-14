@@ -1,4 +1,5 @@
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,15 @@ from dst_manager.infrastructure.filesystem.publish_primitives import (
     move_no_replace,
     replace_existing,
 )
+from dst_manager.infrastructure.filesystem.publisher import (
+    PublishBaselineError,
+    RecoverablePublisher,
+)
+
+
+def _identity(path: Path) -> list[int]:
+    stat = path.stat()
+    return [stat.st_dev, stat.st_ino]
 
 
 def test_file_sha256_matches_known_digest(tmp_path: Path):
@@ -45,3 +55,46 @@ def test_replace_existing_preserves_previous_content_in_backup(tmp_path: Path):
     assert target.read_text() == "new"
     assert backup.read_text() == "old"
     assert not source.exists()
+
+
+def test_caller_identity_baseline_allows_unchanged_target(tmp_path: Path):
+    target = tmp_path / "caller-baseline.dwg"
+    staged = tmp_path / "staged-caller-baseline.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    expected = capture_file_baseline(target)
+
+    RecoverablePublisher().publish(
+        "caller-baseline-unchanged",
+        tmp_path,
+        {target: staged},
+        attempt=1,
+        expected_baselines={target: expected},
+    )
+
+    assert target.read_bytes() == b"published"
+
+
+def test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish(tmp_path: Path):
+    target = tmp_path / "caller-race.dwg"
+    staged = tmp_path / "staged-caller-race.dwg"
+    external = tmp_path / "external-caller-race.dwg"
+    target.write_bytes(b"baseline")
+    staged.write_bytes(b"published")
+    external.write_bytes(b"baseline")
+    expected = capture_file_baseline(target)
+    external_identity = _identity(external)
+    os.replace(external, target)
+
+    with pytest.raises(PublishBaselineError) as exc_info:
+        RecoverablePublisher().publish(
+            "caller-identity-race",
+            tmp_path,
+            {target: staged},
+            attempt=1,
+            expected_baselines={target: expected},
+        )
+
+    assert exc_info.value.code == "PUBLISH_BASE_CHANGED"
+    assert target.read_bytes() == b"baseline"
+    assert _identity(target) == external_identity
