@@ -1814,3 +1814,48 @@ def test_startup_recovery_rejects_noncanonical_or_mismatched_attempt_identity(
     )
     with pytest.raises(PublishRecoveryError, match="PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"):
         RecoverablePublisher().recover(tmp_path)
+
+def test_retry_preserves_rolled_back_previous_attempt_evidence(tmp_path: Path):
+    """attempt-002 成功后，attempt-001 的回滚日志与 before 快照仍永久存在。"""
+    job_id = "preserve-rolled-back"
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+
+    def replace(source: Path, target_path: Path):
+        raise OSError("注入首次发布故障")
+
+    with pytest.raises(PublishRolledBackError):
+        RecoverablePublisher(replace).publish(job_id, tmp_path, {target: staged}, attempt=1)
+    first_journal = tmp_path / ".dst-manager" / "jobs" / job_id / "attempt-001" / "publish-journal.json"
+    first_before = tmp_path / ".dst-manager" / "revisions" / job_id / "attempt-001" / "before" / target.name
+    journal_bytes = first_journal.read_bytes()
+    before_bytes = first_before.read_bytes()
+
+    revision_dir = RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=2)
+    assert revision_dir.name == "attempt-002"
+    assert first_journal.read_bytes() == journal_bytes
+    assert first_before.read_bytes() == before_bytes
+
+
+@pytest.mark.parametrize("status", ["ABORTED_BASELINE_CHANGED", "ROLLBACK_FAILED"])
+def test_new_attempt_never_deletes_previous_terminal_or_unproven_evidence(tmp_path: Path, status: str):
+    """旧 attempt 无论已安全终结还是需要人工复核，都不由发布路径自动删除。"""
+    job_id = f"preserve-{status.lower()}"
+    jobs_attempt = tmp_path / ".dst-manager" / "jobs" / job_id / "attempt-001"
+    revisions_attempt = tmp_path / ".dst-manager" / "revisions" / job_id / "attempt-001"
+    jobs_attempt.mkdir(parents=True)
+    revisions_attempt.mkdir(parents=True)
+    journal = {"operation_id": job_id, "attempt": 1, "status": status, "files": []}
+    (jobs_attempt / "publish-journal.json").write_text(json.dumps(journal), encoding="utf-8")
+    evidence = revisions_attempt / "evidence.bin"
+    evidence.write_bytes(b"keep")
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+
+    RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=2)
+    assert (jobs_attempt / "publish-journal.json").is_file()
+    assert evidence.read_bytes() == b"keep"
