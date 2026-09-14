@@ -3,8 +3,9 @@
 // 本文件是所有规则的可执行契约：夹具全部写在系统临时目录里，通过
 // `collectUiContractViolations({root, exceptions})` 与真实 CLI 子进程验证。
 //
-// 变异证据套件（Step 8）向合法夹具逐类注入违规并断言 CLI 退出 1；它只在检查器、
-// 规则或例外格式变化时要求重跑，因此整体成本保持在十几毫秒级的子进程启动量级。
+// 变异证据套件（Step 8）向合法夹具逐类注入违规并断言真实 CLI 子进程退出 1；它只在
+// 检查器、规则或例外格式变化时要求重跑。整套用例约 7.5 秒，其中单次 CLI 子进程
+// 启动约 0.5 秒，因此新增 CLI 级变异用例时按「每次 spawn 约 0.5 秒」估算预算。
 
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
@@ -187,6 +188,27 @@ describe("动态变量白名单", () => {
     assert.deepEqual(rulesOf(violations), []);
   });
 
+  test("生产者文件不存在的幽灵条目被拒绝", () => {
+    const violations = collectUiContractViolations({
+      root: fixture({"src/style.css": TOKENS_CSS, "src/views/Sheets.vue": sheets}),
+      exceptions: {
+        exceptions: [],
+        dynamicVariables: [
+          {
+            variable: "--tree-width",
+            producer: "src/does-not-exist.vue",
+            consumer: "src/views/Sheets.vue",
+            reason: "声称由不存在的文件写入",
+            expiresWith: "Task 7",
+          },
+        ],
+      },
+    });
+    const violation = only(violations, "dynamic-variable-not-registered");
+    assert.match(violation.message, /生产者文件不存在/);
+    assert.match(violation.message, /--tree-width/);
+  });
+
   test("未登记的动态变量按未定义引用拒绝", () => {
     const violation = only(
       collectUiContractViolations({
@@ -315,9 +337,48 @@ describe("Vue 语义规则", () => {
     });
     assert.deepEqual(rulesOf(violations), []);
   });
+
+  test("含 HTML 注释的模板里图标位置不漂移到前面的行", () => {
+    const source = `<template>
+  <!-- 一行注释
+       第二行注释
+       第三行注释 -->
+  <button type="button">✕</button>
+</template>
+`;
+    const violation = only(
+      rawViolations({"src/style.css": TOKENS_CSS, "src/components/Comment.vue": source}),
+      "unicode-structure-icon",
+    );
+    // 手算：第 5 行 `  <button type="button">` 共 24 字符，`✕` 在第 25 列。
+    assert.deepEqual({line: violation.line, column: violation.column}, {line: 5, column: 25});
+    const text = source.split("\n")[violation.line - 1];
+    assert.ok(text.slice(violation.column - 1).startsWith("✕"), text);
+  });
 });
 
 describe("视觉值规则", () => {
+  test("违规位置精确指向值的起点", () => {
+    const source = `<template>
+<p>文本</p>
+</template>
+<style scoped>
+.a{font-size:15px}
+.b{color:#123456}
+</style>
+`;
+    const violations = rawViolations({"src/style.css": TOKENS_CSS, "src/components/Positions.vue": source});
+    const lines = source.split("\n");
+    // 手算：第 5 行 `.a{font-size:` 共 13 字符，`15px` 起于第 14 列；
+    // 第 6 行 `.b{color:` 共 9 字符，`#123456` 起于第 10 列。
+    const visual = only(violations, "raw-visual-value");
+    assert.deepEqual({line: visual.line, column: visual.column}, {line: 5, column: 14});
+    assert.ok(lines[visual.line - 1].slice(visual.column - 1).startsWith("15px"));
+    const hex = only(violations, "raw-hex-color");
+    assert.deepEqual({line: hex.line, column: hex.column}, {line: 6, column: 10});
+    assert.ok(lines[hex.line - 1].slice(hex.column - 1).startsWith("#123456"));
+  });
+
   test("未登记的十六进制色被拒绝", () => {
     const violation = only(
       rawViolations({
@@ -396,6 +457,68 @@ main{padding:24px}
     const found = violations.filter((violation) => violation.rule === "global-selector-in-component");
     assert.equal(found.length, 1);
     assert.match(found[0].message, /main/);
+  });
+
+  test("令牌块豁免只认整条规则恰为 :root/html[...]", () => {
+    for (const selector of ["html body .panel", 'html[data-theme="dark"] .panel', ":root,.panel"]) {
+      const violations = rawViolations({
+        "src/style.css": TOKENS_CSS,
+        "src/components/Token.vue": `<template><p>文本</p></template>
+<style scoped>${selector}{font-size:15px}</style>
+`,
+      });
+      const found = violations.filter((violation) => violation.rule === "raw-visual-value");
+      assert.equal(found.length, 1, `期望 ${selector} 仍被判定为裸视觉值：${JSON.stringify(violations)}`);
+    }
+  });
+
+  test(":root 与 html[...] 令牌块仍被豁免（含多段全为令牌块）", () => {
+    const violations = rawViolations({
+      "src/style.css": `:root{--font-label:13px;font-size:13px}html[data-theme="dark"]{--font-label:14px;font-size:14px}:root,html[data-theme="light"]{--font-label:15px;font-size:15px}`,
+      "src/components/Token.vue": `<template><p>文本</p></template>
+<style scoped>.panel{font-size:var(--font-label)}</style>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("图标尺寸（宽度家族）与高度家族同等判定", () => {
+    const violations = rawViolations({
+      "src/style.css": TOKENS_CSS,
+      "src/components/Icon.vue": `<template><p>文本</p></template>
+<style scoped>.icon{width:18px;min-width:20px;max-width:22px;height:18px;min-height:20px;max-height:22px;border-radius:6px}</style>
+`,
+    });
+    assert.deepEqual(
+      violations.map((violation) => violation.message.replace(/^.*?：/, "")),
+      ["width:18px", "min-width:20px", "max-width:22px", "height:18px", "min-height:20px", "max-height:22px", "border-radius:6px"],
+    );
+  });
+
+  test("@media/@container 的 max-width 前奏不被当成声明", () => {
+    const violations = rawViolations({
+      "src/style.css": TOKENS_CSS,
+      "src/components/Query.vue": `<template><p>文本</p></template>
+<style scoped>
+@media (max-width:900px){.panel{font-size:var(--font-label)}}
+@container value-body (max-width:511px){.panel{line-height:var(--font-label)}}
+@media (min-width:600px) and (max-width:900px){.panel{height:var(--font-label)}}
+</style>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("@keyframes 的 from/to/百分比关键帧不作为规则参与判定", () => {
+    const violations = rawViolations({
+      "src/style.css": TOKENS_CSS,
+      "src/components/Toast.vue": `<template><p>文本</p></template>
+<style>
+@keyframes toast-in{from{height:0;opacity:0}0%{opacity:.2}100%{height:10px;opacity:1}to{height:10px}}
+</style>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
   });
 });
 
@@ -547,6 +670,19 @@ describe("CLI 契约", () => {
     assert.match(result.stderr, /ui-contract-exceptions\.json/);
   });
 
+  test("源码根目录不可读时明确失败而不是静默通过", () => {
+    const root = fixture({
+      "src/style.css": TOKENS_CSS,
+      "scripts/ui-contract-exceptions.json": JSON.stringify(emptyExceptions()),
+    });
+    // 把 src 换成同名文件，模拟扫描根目录读不进来（ENOTDIR）。
+    rmSync(join(root, "src"), {recursive: true, force: true});
+    writeFileSync(join(root, "src"), "不是目录", "utf8");
+    const result = runCli([`--root=${root}`]);
+    assert.equal(result.exitCode, 2, result.stdout + result.stderr);
+    assert.match(result.stderr, /无法读取目录/);
+  });
+
   test("formatViolation 输出可点击定位", () => {
     assert.equal(
       formatViolation({rule: "raw-hex-color", file: "src/a.vue", line: 3, column: 9, message: "未登记的十六进制颜色：#123456"}),
@@ -566,39 +702,133 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
 `,
   };
 
-  const mutations = {
-    "undefined-css-variable": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--font-label)", "var(--font-nope)")},
-    "circular-css-variable": {"src/style.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`},
-    "explicit-button-type": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace('type="button" ', "")},
-    "visible-input-label": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace('<label for="name">名称</label>', "")},
-    "icon-button-name": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace(':aria-label="label" ', "")},
-    "unicode-structure-icon": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace(">名称<", ">▸<")},
-    "global-selector-in-component": {
-      "src/components/Clean.vue": clean["src/components/Clean.vue"].replace("<style scoped>", "<style>").replace("</style>", "button{background:none}</style>"),
+  const mutations = [
+    {
+      step1Class: "未定义变量",
+      name: "未定义变量",
+      rule: "undefined-css-variable",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--font-label)", "var(--font-nope)")},
     },
-    "raw-hex-color": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--color-text-primary)", "#17203333")},
-    "raw-visual-value": {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--font-label)", "15px")},
-  };
+    {
+      step1Class: "嵌套 fallback 未定义",
+      name: "嵌套 fallback 中未定义的变量",
+      rule: "undefined-css-variable",
+      files: {
+        "src/components/Clean.vue": clean["src/components/Clean.vue"].replace(
+          "var(--font-label)",
+          "var(--color-text-primary,var(--font-nope))",
+        ),
+      },
+    },
+    {
+      step1Class: "循环引用",
+      name: "循环引用",
+      rule: "circular-css-variable",
+      files: {"src/style.css": `${TOKENS_CSS}:root{--loop-a:var(--loop-b);--loop-b:var(--loop-a)}`},
+    },
+    {
+      step1Class: "动态变量缺生产者",
+      name: "动态变量缺少生产者",
+      rule: "dynamic-variable-not-registered",
+      files: {
+        "src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--font-label)", "var(--tree-width)"),
+        "scripts/ui-contract-exceptions.json": JSON.stringify({
+          exceptions: [],
+          dynamicVariables: [{variable: "--tree-width", consumer: "src/components/Clean.vue", reason: "运行时写入", expiresWith: "PLAN-DM-029 Task 7"}],
+        }),
+      },
+    },
+    {
+      step1Class: "按钮无 type",
+      name: "按钮缺 type",
+      rule: "explicit-button-type",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace('type="button" ', "")},
+    },
+    {
+      step1Class: "搜索输入无可见 label",
+      name: "输入缺可见 label",
+      rule: "visible-input-label",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace('<label for="name">名称</label>', "")},
+    },
+    {
+      step1Class: "图标按钮无可读名称",
+      name: "图标按钮缺可读名称",
+      rule: "icon-button-name",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace(':aria-label="label" ', "")},
+    },
+    {
+      step1Class: "Unicode 结构图标",
+      name: "Unicode 结构图标",
+      rule: "unicode-structure-icon",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace(">名称<", ">▸<")},
+    },
+    {
+      step1Class: "裸全局选择器",
+      name: "组件内裸全局选择器",
+      rule: "global-selector-in-component",
+      files: {
+        "src/components/Clean.vue": clean["src/components/Clean.vue"].replace("<style scoped>", "<style>").replace("</style>", "button{background:none}</style>"),
+      },
+    },
+    {
+      step1Class: "未登记十六进制色",
+      name: "裸十六进制色",
+      rule: "raw-hex-color",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--color-text-primary)", "#17203333")},
+    },
+    {
+      step1Class: "裸视觉值",
+      name: "裸字号",
+      rule: "raw-visual-value",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("var(--font-label)", "15px")},
+    },
+    {
+      step1Class: "裸视觉值",
+      name: "图标尺寸（宽度家族）裸值",
+      rule: "raw-visual-value",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace("</style>", ".icon{width:18px;height:18px}</style>")},
+    },
+  ];
 
   function runFixture(files) {
     const root = fixture({
       ...clean,
-      ...files,
       "scripts/ui-contract-exceptions.json": JSON.stringify(emptyExceptions()),
+      ...files,
     });
     return spawnSync(process.execPath, [CLI_PATH, `--root=${root}`], {encoding: "utf8"});
   }
+
+  test("Step 1 的 11 类判定都有 CLI 级变异证据", () => {
+    // 裸视觉值一类在 brief 里是一个分类，这里拆成字号与图标尺寸两条注入。
+    const classes = new Set(mutations.map((mutation) => mutation.step1Class));
+    assert.equal(classes.size, 11, [...classes].join("、"));
+    assert.equal(mutations.length, 12);
+    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 12);
+    assert.deepEqual([...new Set(mutations.map((mutation) => mutation.rule))].sort(), [
+      "circular-css-variable",
+      "dynamic-variable-not-registered",
+      "explicit-button-type",
+      "global-selector-in-component",
+      "icon-button-name",
+      "raw-hex-color",
+      "raw-visual-value",
+      "undefined-css-variable",
+      "unicode-structure-icon",
+      "visible-input-label",
+    ]);
+  });
 
   test("合法夹具退出 0", () => {
     const result = runFixture({});
     assert.equal(result.status, 0, result.stdout + result.stderr);
   });
 
-  for (const [rule, files] of Object.entries(mutations)) {
-    test(`注入 ${rule} 后退出 1`, () => {
-      const result = runFixture(files);
-      assert.equal(result.status, 1, `期望 ${rule} 使 CLI 失败，实际输出：${result.stdout}${result.stderr}`);
-      assert.match(result.stdout, new RegExp(`\\[${rule}\\]`));
+  for (const mutation of mutations) {
+    test(`注入${mutation.name}后退出 1`, () => {
+      const result = runFixture(mutation.files);
+      assert.equal(result.status, 1, `期望${mutation.name}使 CLI 失败，实际输出：${result.stdout}${result.stderr}`);
+      assert.match(result.stdout, new RegExp(`\\[${mutation.rule}\\]`));
     });
   }
 

@@ -68,8 +68,10 @@ function listSourceFiles(directory) {
     let entries;
     try {
       entries = readdirSync(current, {withFileTypes: true});
-    } catch {
-      return;
+    } catch (error) {
+      // 目录读不了必须让整次扫描失败：默默跳过一层目录等于把这一层的债务从门禁里删掉，
+      // 属于假绿。调用方（runCli）把它转成退出码 2 并说明原因。
+      throw new Error(`无法读取目录：${current}（${error.code ?? error.message}）`, {cause: error});
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
@@ -122,14 +124,27 @@ export function collectUiContractViolations(options = {}) {
   const dynamicEntries = Array.isArray(exceptions.dynamicVariables) ? exceptions.dynamicVariables : [];
   for (const [index, entry] of dynamicEntries.entries()) {
     const missing = missingDynamicFields(entry);
-    if (missing.length === 0) continue;
-    violations.push(
-      configViolation(
-        `动态变量条目必须同时登记 ${REQUIRED_DYNAMIC_FIELDS.join("、")}，第 ${index + 1} 条缺少：${missing.join("、")}`,
-        `dynamic-entry-${index + 1}-${missing.join(",")}`,
-        RULE.dynamicVariableNotRegistered,
-      ),
-    );
+    if (missing.length !== 0) {
+      violations.push(
+        configViolation(
+          `动态变量条目必须同时登记 ${REQUIRED_DYNAMIC_FIELDS.join("、")}，第 ${index + 1} 条缺少：${missing.join("、")}`,
+          `dynamic-entry-${index + 1}-${missing.join(",")}`,
+          RULE.dynamicVariableNotRegistered,
+        ),
+      );
+      continue;
+    }
+    // 生产者文件必须真实存在，否则白名单就是幽灵条目：它会让一个根本不存在的运行时
+    // 来源静默通过。（只校验生产者：消费方可能有多处，但那不影响来源是否成立。）
+    if (!existsSync(resolve(root, entry.producer))) {
+      violations.push(
+        configViolation(
+          `动态变量 ${entry.variable} 登记的生产者文件不存在：${entry.producer}`,
+          `dynamic-producer-missing-${entry.variable}`,
+          RULE.dynamicVariableNotRegistered,
+        ),
+      );
+    }
   }
   // 只要变量名出现在动态白名单里就视为「已登记」：条目本身缺字段时只报条目错误，
   // 不再对每个使用点重复报未定义引用，避免一次根因产生多条噪声。
@@ -270,8 +285,9 @@ function analyzeStyleSource({file, text, offset, emit, isDefined, violations, ap
     }
     if (isTokenBlock(rule.selector)) continue;
     for (const declaration of parseDeclarations(text, rule)) {
-      const valueIndex = offset + rule.contentStart + declaration.valueStart;
-      const position = toPosition(file.text, valueIndex);
+      // `declaration.valueStart` 已经是相对整份文件文本的绝对下标（切分以 rule.contentStart
+      // 为起点），这里只能再加一次块本身的偏移。
+      const position = toPosition(file.text, offset + declaration.valueStart);
       for (const hex of findHexColorsInValue(declaration.value)) {
         violations.push(
           emit({
@@ -294,6 +310,15 @@ function analyzeStyleSource({file, text, offset, emit, isDefined, violations, ap
       }
     }
   }
+}
+
+/** 把 HTML 注释**逐字符等长**换成空格（保留换行）。
+ *
+ * 不能用变长替换（如把整段注释换成一个空格）：那样 `match.index` 之后再回查原文
+ * 会产生整体偏移，把注释之后的图标位置算到前面的行上。
+ */
+function maskHtmlComments(html) {
+  return html.replace(/<!--[\s\S]*?-->/g, (match) => match.replace(/[^\n]/g, " "));
 }
 
 function analyzeVueFile(file, emit, isDefined, violations) {
@@ -376,7 +401,7 @@ function analyzeVueFile(file, emit, isDefined, violations) {
 
   // 结构图标只在模板与样式块里判定；脚本与 i18n 文案里的普通标点不参与。
   const iconRegions = [
-    {text: html.replace(/<!--[\s\S]*?-->/g, " "), offset: template.offset},
+    {text: maskHtmlComments(html), offset: template.offset},
     ...file.sfc.styles.map((style) => ({text: style.content, offset: style.offset})),
   ];
   for (const region of iconRegions) {
@@ -444,7 +469,13 @@ export function runCli(argv = []) {
   } catch (error) {
     return {exitCode: 2, stdout: "", stderr: `无法解析 ${exceptionsPath}：${error.message}\n`};
   }
-  const violations = collectUiContractViolations({root, exceptions});
+  let violations;
+  try {
+    violations = collectUiContractViolations({root, exceptions});
+  } catch (error) {
+    // 扫描根目录不可读/不存在时不能默默当作「零违规」通过，必须明确失败。
+    return {exitCode: 2, stdout: "", stderr: `扫描源码失败：${error.message}\n`};
+  }
   if (violations.length === 0) return {exitCode: 0, stdout: "", stderr: ""};
   return {exitCode: 1, stdout: `${violations.map(formatViolation).join("\n")}\n`, stderr: ""};
 }

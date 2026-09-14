@@ -9,6 +9,14 @@
 - 接入方式：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
 - 实际验证：`npm --prefix web run test:contracts` **49 passed / 0 failed**（含 9 类违规注入的变异套件与回滚断言）；注入临时违规后 `check:ui` 退出 1、移除后退出 0；`npm --prefix web run check:ui` 退出 0（仅因已登记债务通过）；`npm --prefix web run build` 退出 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全链通过）；`npm --prefix web run test:unit` 48 passed 无回归。
 - 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。
+- **评审修复（commit `修正 UI 契约检查器位置计算与令牌块豁免`）**：修正 5 项重要缺陷与 5 项次要缺陷。
+  - 位置计算：声明值下标已经是整份文件的绝对下标，原实现又加了一层规则内容起点，导致行号正确但列号系统性偏后；修正后 `raw-visual-value`/`raw-hex-color` 的 `line:column` 精确指向值起点，并新增手算行列的回归测试。
+  - 图标定位：原实现用变长替换剔除 HTML 注释，吞掉注释内换行后使注释之后的图标整体前移；改为逐字符等长遮罩（保留换行），新增含多行注释的模板回归测试。
+  - 令牌块豁免收窄：原实现在逗号列表里只要有一段命中 `:root`/`html` 前缀就整块豁免，使 `html body .panel`、`html[data-theme="dark"] .panel`、`:root,.panel` 静默通过；现要求**每一段**都恰为 `:root`/`html[...]` 且不含后代组合，三种逃逸用例均已被拒绝。
+  - 尺寸规则补全：`raw-visual-value` 增加 `width`/`min-width`/`max-width`，与高度家族对齐（图标成对书写宽高）；同时新增回归测试证明 `@media (max-width:…)`/`@container … (max-width:…)` 前奏不会被当成声明。
+  - 变异证据补全：Step 1 的 11 类判定全部改为真实 CLI 子进程注入（新增“嵌套 fallback 未定义”“动态变量缺生产者”“图标尺寸裸值”），并加测试锁定 11 类/12 条注入的覆盖面。
+  - 次要修复：`@keyframes` 内的 `from`/`to`/`0%` 不再当作选择器规则；动态白名单条目校验生产者文件真实存在（幽灵条目不再放行）；源码根目录不可读时退出 2 而不是静默零违规；测试文件注释改为真实耗时量级；报告中的到期任务分布表按真实数据重写。
+- 评审修复后重新验证：`test:contracts` **62 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0；`test:unit` 48 passed 无回归。债务基线 386 → 422 条，**零删除、仅新增 36 条**（宽度家族 20 + `max-width` 12 + `min-width` 4），不变量重新实测为 **423 = 422 + 1**。
 
 ## 2026-09-14（计划修订：发布 attempt 命名空间与证据永久保留）
 

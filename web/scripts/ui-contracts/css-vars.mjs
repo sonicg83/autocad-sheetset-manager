@@ -58,6 +58,9 @@ function collapseWhitespace(text) {
   return text.trim().replace(/\s+/g, " ");
 }
 
+/** 关键帧块：其内的 `from`/`to`/`0%` 是动画关键帧，不是可选选择器的规则。 */
+const KEYFRAMES_AT_RULE_PATTERN = /^@(?:-\w+-)?keyframes\b/i;
+
 /**
  * 解析样式规则块。
  *
@@ -81,6 +84,7 @@ export function parseRules(css) {
         openIndex: i,
         contentStart: i + 1,
         contentEnd: -1,
+        inKeyframes: parent !== undefined && (parent.inKeyframes === true || KEYFRAMES_AT_RULE_PATTERN.test(parent.selector)),
       };
       stack.push(entry);
       segmentStart = i + 1;
@@ -90,7 +94,9 @@ export function parseRules(css) {
       const entry = stack.pop();
       if (entry) {
         entry.contentEnd = i;
-        if (!entry.selector.startsWith("@") && entry.selector !== "") rules.push(entry);
+        // 关键帧块内的条目不是选择器规则：`from`/`to`/`0%` 会被当成元素选择器
+        // 与裸视觉值产生误报，必须整块排除。
+        if (!entry.selector.startsWith("@") && entry.selector !== "" && entry.inKeyframes !== true) rules.push(entry);
       }
       segmentStart = i + 1;
       continue;

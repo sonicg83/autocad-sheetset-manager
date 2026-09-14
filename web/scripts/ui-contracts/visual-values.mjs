@@ -2,15 +2,16 @@
 //
 // 覆盖三类静态可判定的视觉债务：
 // - 未登记的十六进制颜色；
-// - 未使用令牌的裸字号、裸高度与裸圆角；
+// - 未使用令牌的裸字号、裸尺寸（宽高家族）与裸圆角；
 // - 业务代码里不带根类限定的裸全局选择器。
 //
 // 范围说明（有意收窄，避免规则退化成噪声）：
-// - `raw-visual-value` 只覆盖 ARCH-DM-007 §4.1 点名的四类原始值（字号、高度、圆角）
-//   及其等宽行高；`padding`/`margin`/`gap` 等间距属性与纯粹的内容驱动宽度不属于本
-//   规则，间距令牌迁移由各页面任务按布局证据处理。
-// - `raw-hex-color` 与 `raw-visual-value` 都跳过令牌定义块（`:root` 与 `html[...]`），
-//   因为令牌文件正是十六进制色与原始档位的合法定义处。
+// - `raw-visual-value` 覆盖 ARCH-DM-007 §4.1 点名的原始值：字号及其行高、图标/控件
+//   尺寸（宽高家族成对书写，只覆盖高度会漏掉图标）与圆角；`padding`/`margin`/`gap`
+//   等间距属性不属于本规则，间距令牌迁移由各页面任务按布局证据处理。
+// - `raw-hex-color` 与 `raw-visual-value` 都跳过令牌定义块，因为令牌文件正是十六进制
+//   色与原始档位的合法定义处；豁免只认「整条规则就是 `:root` / `html[...]`」，
+//   带后代组合或混排选择器一律不豁免，否则会变成静默逃逸口。
 // - `global-selector-in-component` 只作用于「组件里非 scoped 的 `<style>` 块」与全局
 //   业务样式表；Vue scoped 样式按 ARCH-DM-007 §7 是页面覆盖全局默认值的明确前提，
 //   其中的元素选择器不属于裸全局选择器。
@@ -21,6 +22,9 @@ import {maskNonCode} from "./css-vars.mjs";
 export const RAW_VISUAL_PROPERTIES = Object.freeze([
   "font-size",
   "line-height",
+  "width",
+  "min-width",
+  "max-width",
   "height",
   "min-height",
   "max-height",
@@ -33,12 +37,22 @@ const ALLOWED_VALUE_PATTERN =
 const COMPUTED_VALUE_PATTERN = /(var\(|calc\(|min\(|max\(|clamp\(|env\()/i;
 const TOKENIZED_UNITS = /^-?\d*\.?\d+(px|rem|em)$/i;
 
-/** 令牌定义块（十六进制色与原始档位的合法定义处）。 */
+/** 令牌定义块的选择器：整条规则恰为 `:root` 或 `html` 加若干属性限定。
+ *
+ * 刻意不允许后代组合（空格/`>`/`+`/`~`）：`html body .panel` 这类选择器作用在业务
+ * 元素上，整块豁免会让真实债务静默通过。
+ */
+const TOKEN_BLOCK_SELECTOR = /^(?::root|html)(?:\[[^\]]*\])*$/;
+
+/** 令牌定义块（十六进制色与原始档位的合法定义处）。
+ *
+ * 逐段精确匹配且要求**每一段**都是令牌块：`:root,html[data-theme=dark]` 是令牌块，
+ * `:root,.panel` 因含业务选择器而不是。
+ */
 export function isTokenBlock(selector) {
-  return selector
-    .split(",")
-    .map((part) => part.trim())
-    .some((part) => part === ":root" || /^html(\[|$|\s)/.test(part));
+  const parts = splitSelectorList(selector);
+  if (parts.length === 0) return false;
+  return parts.every((part) => TOKEN_BLOCK_SELECTOR.test(part));
 }
 
 /** 判断一条声明是否是「裸视觉值」。 */
