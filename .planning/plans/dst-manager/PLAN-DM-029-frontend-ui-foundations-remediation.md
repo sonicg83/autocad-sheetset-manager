@@ -43,7 +43,7 @@ related:
 - Inter 与 IBM Plex Mono 只打包 Basic Latin、Latin-1 Supplement 和界面实际通用标点，不含 CJK；两套生产 WOFF2 合计不超过 `250 KiB`，许可证随资产入库，运行时不得访问 CDN。
 - 图标只接受 `UiIconName` 联合类型中的本地 SVG；不允许任意 HTML/SVG 注入。`ColumnEditor.vue` 的 `↑ / ↓ / ✕` 是唯一初始用户可见临时例外，复核前保持行为与外观。
 - 每页持久截图控制在 `4–6` 张，全轮新增基准控制在 `24–30` 张；其余状态以行为和计算样式断言覆盖。浏览器 `zoom` 只做韧性测试，不能替代 Windows 显示缩放验收。
-- 阶段 4 必须等待阶段 3 全部完成；不得与页面迁移并行修改 `App.vue`、`SheetTree.vue`、`TopBar.vue`、`TaskOverlay.vue` 或直接依赖。
+- 阶段 4 必须等待阶段 3 全部完成；**阶段 4 不得与页面迁移并行修改** `App.vue`、`SheetTree.vue`、`TopBar.vue`、`TaskOverlay.vue` 或直接依赖（本条只约束「阶段 4 与页面迁移并行」，不限制阶段 2 的 Task 4 修改它自己 Files 里已列的 `TopBar.vue`/`TaskOverlay.vue`）。
 - 每个任务完成后更新本计划勾选项与“实际验证”表，并在根 `changelog.md` 当前日期下追加可核验证据；commit message 使用简体中文动词短语。
 
 ## 阶段 1：基线、令牌与自动门禁
@@ -157,7 +157,7 @@ related:
 
 - [ ] **Step 1（RED）**：在 `main.spec.ts` 增加壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积、键盘焦点和任务浮层折叠状态断言；确认 Unicode 图标和尺寸断言失败。计算样式必须直接量壳层里已迁移控件的 `getBoundingClientRect()`：**输入类 38px、普通与图标按钮 36px、紧凑按钮 34px、可点目标 ≥ 32px**。Task 3 只在源码与令牌链层面锁定了这组尺寸（happy-dom 不算布局，`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件），所以真实计算高度由本步骤补齐（首轮评审 F3）。同时把 Task 3 无法在本地验证的焦点可见性（`[hidden]`/`inert`/`display:none`/`visibility` 叠加、`0×0`）在浏览器里覆盖（首轮评审 F2）。
 - [ ] **Step 2（迁移）**：把 `◐`、`⚙`、`✕`、`▸/▾`、`«/»`、`●` 替换为 `UiIcon`/`UiIconButton`；保留可见文案和 i18n key，状态按钮补 `aria-expanded`/`aria-pressed`。**纯图标按钮必须用 `UiIconButton`（`label` 必填）**；`UiButton` 只用于「插槽无可读文案」的图形性按钮并可传 `label`，而带可见文案的 `UiButton` 若同时传 `label`，两者文字必须一致（WCAG 2.5.3「名称包含可见文本」）；`UiIconButton`/`UiButton.label` 对 ARCH-DM-007 §5 的补充属文档收口，登记为 Task 12 收口责任 D，本任务不改 ARCH 正文（首轮评审 F4）。
-- [ ] **Step 3（尺寸）**：壳层普通按钮使用 `default`，任务浮层紧凑动作使用 `compact`；所有独立图标按钮达到 `36×36px`，不以 SVG 尺寸充当点击面积。
+- [ ] **Step 3（尺寸与焦点语义）**：壳层普通按钮使用 `default`，任务浮层紧凑动作使用 `compact`；所有独立图标按钮达到 `36×36px`，不以 SVG 尺寸充当点击面积。同时把 `TaskOverlay.vue:75-84` 的手写焦点副本（`onDrawerKeydown` + 内联选择器 + `tabIndex`/`getClientRects` 过滤）整体换成 `useDialogFocus`，**用 `onEscape(event)` 保留原有 `preventDefault` + `stopPropagation` 语义**（浮层下还有文档级 Escape 处理器，传播一旦被工具吞掉就会变成误关闭）；迁移后浮层内 **不得对 Tab 调 `stopPropagation`**，否则事件到不了绑在容器上的 `onDialogKeydown`，Tab 圈闭静默失效（Task 3 首轮评审 F2/G4、二轮评审 G5）。
 - [ ] **Step 4（例外清退）**：删除上述壳层 Unicode 例外；运行检查器并确认只剩页面级债务和 `ColumnEditor.vue` 临时例外。
 - [ ] **Step 5（证据）**：在 `1440×900` 浅/深主题各保留壳层默认截图，在 `900×768` 保留窄视口一张，并用计算样式覆盖 hover/focus/disabled，不额外保存状态截图。**壳层截图必须重拍基准**：Task 2 的基准里壳层还是 Unicode 字符与旧尺寸，Task 4 迁移后像素必变；重拍件要按计划的全轮配额计账。同时记录级联事实：`primitives.css:36` 的 `.modal-actions button{padding:9px 16px}` 会被原语的固定高度 + `padding:0 var(--space-4)` 静默覆盖（scoped/无层优先于命名层），属**预期行为**，不再为旧选择器补声明；发现其他同类覆盖时同例处理，不引入特异性竞争（首轮评审 F5）。
 - [ ] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-visual-evidence.spec.ts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`。
@@ -399,6 +399,13 @@ related:
 > ③ 注释–指纹耦合：全表 23 条指纹内嵌了前置注释（9 个文件、18 段注释文本），改动这些注释会同时改动
 > 指纹；处置义务已写在 Task 9 Step 4。
 >
+> **收口责任 E（令牌分层未落实到位，Task 3 二轮评审 G1）**：Task 3 新增原语中尺寸、字号、字体族
+> 消费语义/组件令牌，但**颜色、间距、圆角、图标尺寸仍是跨层直取原始令牌**（`--color-*`/`--space-*`/
+> `--radius-*`/`--icon-size-*`）——ARCH-DM-007 §3 要求「组件只能消费已声明的语义令牌或组件令牌」，
+> 而仓库当前没有颜色/间距/圆角/图标尺寸这一层的语义令牌。按既有约定（`web/src` 已有 40 个 `.vue`
+> 文件、1079 处同类直取）先保持一致，不得为本轮新造色板；待语义层补齐后统一收口，并同时把这条
+> 实际约束写回 ARCH-DM-007 §3 或明确豁免口径。
+>
 > **收口责任 D（`UiButton.label`/`UiIconButton` 尚未写进 ARCH-DM-007 §5，Task 3 首轮评审 F4）**：
 > ARCH-DM-007 §5 未记录两点新增约束——① 纯图标按钮用 `UiIconButton`（`label` 必填）而非
 > `UiButton` + `label`；② `UiButton` 带可见文案时若同时传 `label`，两者文字必须一致（WCAG 2.5.3）。
@@ -465,7 +472,8 @@ Task 10 → Task 11 → Task 12
 | Task 2（评审修复轮 2） | `rtk npm --prefix web run test:contracts`、`check:ui`、三条新用例的聚焦变异运行 | **83 passed / 0 failed**（+3：例外 `rule`/指纹不一致 2 条 + 入口缺失 1 条）；382 条存量例外审计 **382/382 自洽、指纹零改动**；变异 A（停用一致性校验）使 2 条转红、变异 B（停用入口缺失判定）使 1 条转红，逐字节还原后复绿；`check:ui` 退出 0；未跑 `build`/`test:unit`（改动不触 `.vue`/`.ts`/入口样式表） | 提交 `收紧 UI 契约例外一致性与字体溯源记录`；报告见 `task-2-report.md` 第 11 节 |
 | Task 2（评审修复轮 3：文档/注释级） | 只跑 `check:ui`、`test:contracts` 与 PowerShell 字体复核命令（不跑 e2e/build） | 按三轮再审落实 D1–D7：差集复算为 Inter 缺 `U+00AD`、Plex 缺 `U+201B`（均为字体未提供，越界 0）；README 四条硬门禁区分为「字体类三条 + 入口一条」，补齐 Plex/差集/CJK 三条可复制命令并附实测输出；删除 `document.fonts` 误述，将「真实加载」标为未覆盖并登记为本任务收口责任 A；`legacy.css` 的 `:where()` 措辞收窄 | 提交 `校正字体溯源文档与契约注释措辞`；报告见 `task-2-report.md` 第 12 节 |
 | Task 3（首轮评审修复） | `test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`test:unit`、`check:ui`、`test:contracts`、`build`；另做图标溯源逐名称比对与三项变异重跑 | 定向 RED **29 passed / 7 failed**（F1 的 2 条 + F2 的 4 条 + 一条因注释里出现 `v-html` 而误报的断言），修正后 **36 passed / 0 failed**；全量 `unit` **84 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0；例外表 blob 仍 `b82f03f0…`（382 条），不变量 383 = 382 + 1 | 提交 `修正原语实例标识与焦点圈闭边界`；报告与证据见 `task-3-report.md` 第 12–14 节与 `evidence/task-3-fix-*.txt` |
-| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C） | 待实施 | `assets/PLAN-DM-029/README.md` |
+| Task 3（二轮评审收口） | 同上一行的五道门禁；另做 12 项变异重跑（含新增边界项） | 定向 RED **43 passed / 3 failed**（新增的禁用两例 + Escape 事件透传一例）→ GREEN **46 passed / 0 failed**（`dialogFocus.test.ts` 11 → 21 条，共 25 + 21 = 46）；全量 `unit` **94 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0；12 项变异均转红并逐字节还原（去掉禁用守卫 2 红、`closest`→`matches` 1 红、单选组恒取首个 1 红、祖先 `display` 上溯 1 红、`visibility` 1 红、非法 `tabindex` 1 红、Escape 不传事件 1 红等）；不变量 383 = 382 + 1，例外表 blob 仍 `b82f03f0…`（配额 0） | 提交 `订正溯源表述并补齐焦点边界守卫`；报告见 `task-3-report.md` 第 16 节与 `evidence/task-3-fix2-*.txt` |
+| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C）、`UiButton.label`/`UiIconButton` 的 ARCH 补充（收口责任 D）、令牌分层收口（收口责任 E） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
 

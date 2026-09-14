@@ -6,14 +6,20 @@ import {toValue, watch, type MaybeRefOrGetter} from "vue";
 // Escape 回调、关闭时把焦点归还给打开前的元素。它**不**决定对话框是否可关闭、
 // 不处理点击遮罩、不写 `aria-modal`；这些都留在调用方。
 //
-// 因此 Escape 只回调、不 `preventDefault`：调用方可能配置「不可 Escape 关闭」，
-// 是否阻止默认行为属于调用方的判断。唯一会阻止默认行为的是 Tab 圈闭，因为回绕
-// 必须挡住浏览器的默认焦点移动才生效。
+// 因此 Escape 只回调、不 `preventDefault`也不 `stopPropagation`：调用方可能配置「不可 Escape
+// 关闭」，也可能像现网模态那样依赖 `stopPropagation` 挡住文档级 Escape 处理器（`ActionDock`/
+// `SheetsView`/`FieldBrowser` 都有文档级 Escape 监听）。是否阻止行为、是否停止传播都属于调用方
+// 的判断，所以工具把原始的 `KeyboardEvent` 交给回调，由调用方表达原有传播语义。唯一会阻止
+// 默认行为的是 Tab 圈闭，因为回绕必须挡住浏览器的默认焦点移动才生效。
 //
-// `FOCUSABLE_SELECTOR` 与 `layout/TaskOverlay.vue:77` 那份副本同源，但这里是 Task 4/8/9/10
-// 共用的工具，所以在本文件补全：隐藏元素不过滤会让端点错位（把焦点 `focus()` 到不可聚焦
-// 元素，或漏判端点后让 Tab 把焦点推出容器，而处理函数绑在容器上、焦点一出容器圈闭就失效）。
-// Task 4 会把 `TaskOverlay.vue` 那份副本整体换成这个工具。
+// 圈闭生效的前提：
+// ① 模态/浮层**内部不得对 Tab 做 `stopPropagation`**，否则事件到不了容器，圈闭静默失效；
+// ② 打开时的初始焦点必须落在容器内的真实停靠点上（见 `isTabStop` 的禁用过滤）。
+//
+// `FOCUSABLE_SELECTOR` 是**候选**集合，不等于 Tab 停靠点集合：候选还要再过 `isTabStop`
+// （禁用、负 `tabindex`、非法 `tabindex`）与 `isHidden`（隐藏态）两道过滤，且单选组会折叠为
+// 一个停靠点。它由 `layout/TaskOverlay.vue:77` 那份副本同源扩写而来，**只在本模块内部消费**
+// （外部不要拿它当停靠点列表；计划 Task 4 Step 3 会把那份副本整体换成这个工具）。
 export const FOCUSABLE_SELECTOR = [
   "button:not(:disabled)",
   "a[href]",
@@ -25,17 +31,26 @@ export const FOCUSABLE_SELECTOR = [
   "[tabindex]",
 ].join(",");
 
-/** 无需 `tabindex` 就默认可聚焦的分支；用于判断 `tabindex` 取非法值时的真实可聚焦性。 */
+/** 无需 `tabindex` 就默认可聚焦的分支；用于判断 `tabindex` 取非法值时（按 HTML 规范等同
+ * 缺省）元素是否真的可聚焦。这里同样排除禁用元素，与 `isTabStop` 的快速路径保持一致。 */
 const DEFAULT_FOCUSABLE_SELECTOR =
-  "button,a[href],input,select,textarea,summary,[contenteditable]:not([contenteditable='false'])";
-/** 被这些属性（或带这些属性的祖先）命中的元素不参与 Tab 循环。 */
+  "button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[contenteditable]:not([contenteditable='false'])";
+/** 被这些属性（或带这些属性的祖先）命中的元素不参与 Tab 循环。
+ *
+ * 排除 `aria-hidden="true"` 是**对浏览器焦点可达性的有意偏离**：浏览器仍允许聚焦这类元素，
+ * 但「对读屏隐藏却又可聚焦」在界面里几乎总是模板缺陷。取舍理由是 under-filter 更常见也更
+ * 隐蔽（漏掉一个隐藏元素会让端点错位、圈闭静默失效），宁可多排除。已知代价：极端模板
+ * （对话框内只有 `aria-hidden="true"` 的可聚焦元素）会得到空集合，此时圈闭静默关闭；
+ * 真实浏览器的可见性叠加（`0×0`、离屏、`visibility` 叠加）留 Task 4 的 e2e。 */
 const HIDDEN_SELECTOR = "[hidden],[inert],[aria-hidden='true' i]";
 
 export interface DialogFocusOptions {
   open: MaybeRefOrGetter<boolean>;
   container: MaybeRefOrGetter<HTMLElement | null | undefined>;
   initialFocus?: MaybeRefOrGetter<HTMLElement | null | undefined>;
-  onEscape?: () => void;
+  /** Escape 回调；收到原始的 `KeyboardEvent`。工具自己不 `preventDefault`、不 `stopPropagation`，
+   * 是否需要阻止行为/停止传播由调用方在那个事件上表达。 */
+  onEscape?: (event: KeyboardEvent) => void;
 }
 
 /** 具名 `radio` 才成组（无名 radio 各自独立停靠）；用 `tagName` 判定而不是 `instanceof`，
@@ -50,8 +65,16 @@ export function useDialogFocus(options: DialogFocusOptions) {
 
   /** `tabindex` 为显式负值（含 `-1`）→ 不参与 Tab 循环；非法值按 HTML 规范等同缺省，
    * 此时退回「元素本身是否默认可聚焦」。不用 `element.tabIndex` 判定：`contenteditable`
-   * 没有 `tabindex` 属性时按规范可聚焦，但部分实现（含 happy-dom）的 `tabIndex` 返回 -1。 */
+   * 没有 `tabindex` 属性时按规范可聚焦，但部分实现（含 happy-dom）的 `tabIndex` 返回 -1。
+   *
+   * 禁用元素一律排除：候选集合的 `[tabindex]` 分支会把 `<button disabled tabindex="0">`
+   * 变成候选，若放行，它出现在序列首位时 `focusInitial()` 会把焦点留在对话框外，之后键盘事件
+   * 不再进入容器，圈闭静默失效——比「Tab 无响应」严重得多。判定用 `[disabled]` 属性而不是
+   * `:disabled`：选择器实现对禁用继承的建模不一致（happy-dom 的 `:disabled` 只看元素自身是否
+   * 带该属性）。已知缺口：`fieldset[disabled]` 的后代控件不自带该属性，本实现仍把它算作
+   * 停靠点（真实浏览器里它不可聚焦），留 Task 4 的 e2e 覆盖。 */
   function isTabStop(element: HTMLElement) {
+    if (element.matches("[disabled]")) return false;
     const attribute = element.getAttribute("tabindex");
     if (attribute === null) return true;
     const parsed = Number.parseInt(attribute, 10);
@@ -137,7 +160,7 @@ export function useDialogFocus(options: DialogFocusOptions) {
   /** 绑定在对话框外层元素的 `keydown` 上。 */
   function onDialogKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
-      options.onEscape?.();
+      options.onEscape?.(event);
       return;
     }
     if (event.key !== "Tab") return;

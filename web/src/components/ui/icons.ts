@@ -3,9 +3,10 @@
 // `UiIconName` 是封闭联合类型，`UiIcon.vue` 只按本文件登记的几何数据渲染本地 SVG，
 // 不使用 `v-html`，也不接受调用方传入任意字符串或标记。
 //
-// 几何数据按 Lucide 图标集（https://lucide.dev）的 24×24 描边规格逐图标转写，保留其
-// 路径数据与 1.5 描边规格，并按本仓库的 `--icon-size-*` 令牌缩放。许可证文本在同目录
-// `ISC-Lucide.txt`（Lucide 为 ISC 而非 MIT，取自 `lucide-static@1.46.0`，git blob 3208 字节）。
+// 几何数据按 Lucide 图标集（https://lucide.dev）的图标名与 24×24 视窗转写，按本仓库的
+// `--icon-size-*` 令牌缩放；`stroke-width` 取 1.5，是 ARCH-DM-007 §6 允许的仓库取值（Lucide
+// 上游默认 `2`），不是上游规格。许可原文在同目录 `ISC-Lucide.txt`（Lucide 为 **ISC** 而非 MIT，
+// 取自 `lucide-static@1.46.0`，git blob 3208 字节）。
 //
 // 来源可核验到什么程度（2026-09-14 本机按名称逐个比对
 // `https://unpkg.com/lucide-static@1.46.0/icons/<name>.svg`）：`contrast`（theme）、`folder`、`copy`
