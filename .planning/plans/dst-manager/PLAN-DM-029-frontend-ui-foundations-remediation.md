@@ -63,16 +63,16 @@ related:
 - Modify: `web/package-lock.json`
 - Modify: `web/src/layout/TaskOverlay.vue`
 
-- [ ] **Step 1（RED）**：用 Node 内置 `node:test` 写临时目录夹具，覆盖未定义变量、嵌套 fallback 未定义、循环引用、动态变量缺生产者、按钮无 `type`、搜索输入无可见 label、图标按钮无可读名称、Unicode 结构图标、裸全局选择器、未登记十六进制色和裸字号/高度/圆角/图标尺寸；运行 `rtk npm --prefix web run test:contracts`，确认命令缺失或断言失败。
-- [ ] **Step 2（接口）**：实现 `collectUiContractViolations(options): Violation[]`，其中 `Violation` 固定为 `{rule, file, line, column, message, fingerprint}`；CLI 无违规返回 0，有违规按 `file:line:column [rule] message` 输出并返回 1。
-- [ ] **Step 3（CSS 变量）**：实现平衡括号解析，不用单层正则处理 `var()`；递归解析 fallback、检测循环，并让动态白名单条目必须同时包含 `variable`、`producer`、`consumer`、`reason`、`expiresWith`。
-- [ ] **Step 4（Vue/视觉规则）**：实现 `explicit-button-type`、`visible-input-label`、`icon-button-name`、`unicode-structure-icon`、`global-selector-in-component`、`raw-hex-color`、`raw-visual-value`；对 `style`、模板和脚本分别定位，不扫描 i18n 文案中的普通标点。
-- [ ] **Step 5（棘轮）**：把现存违规逐条写入 `ui-contract-exceptions.json`，fingerprint 必须含规则、文件和稳定语义，不使用纯行号；检查器同时拒绝“未登记新违规”和“已不再命中的过期例外”。
-- [ ] **Step 6（先修确定缺陷）**：将 `TaskOverlay.vue` 的未定义 `--color-border`、`--color-bg-surface-2` 替换为 ARCH-DM-007 已声明语义令牌，不为这两项建立例外。
-- [ ] **Step 7（接入）**：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
-- [ ] **Step 8（变异证据）**：测试中依次向合法夹具注入 Step 1 所列每类违规并断言每类都使 CLI 退出 1；恢复夹具后断言退出 0。该测试仅在检查器、规则或例外格式变化时要求重跑。
-- [ ] **Step 9（验证）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run build`，确认检查器测试通过且现仓库只因已登记债务而通过。
-- [ ] **Step 10（提交）**：只提交本任务文件，commit：`建立前端 UI 静态契约门禁`。
+- [x] **Step 1（RED）**：用 Node 内置 `node:test` 写临时目录夹具，覆盖未定义变量、嵌套 fallback 未定义、循环引用、动态变量缺生产者、按钮无 `type`、搜索输入无可见 label、图标按钮无可读名称、Unicode 结构图标、裸全局选择器、未登记十六进制色和裸字号/高度/圆角/图标尺寸；运行 `rtk npm --prefix web run test:contracts`，确认命令缺失或断言失败。
+- [x] **Step 2（接口）**：实现 `collectUiContractViolations(options): Violation[]`，其中 `Violation` 固定为 `{rule, file, line, column, message, fingerprint}`；CLI 无违规返回 0，有违规按 `file:line:column [rule] message` 输出并返回 1。
+- [x] **Step 3（CSS 变量）**：实现平衡括号解析，不用单层正则处理 `var()`；递归解析 fallback、检测循环，并让动态白名单条目必须同时包含 `variable`、`producer`、`consumer`、`reason`、`expiresWith`。
+- [x] **Step 4（Vue/视觉规则）**：实现 `explicit-button-type`、`visible-input-label`、`icon-button-name`、`unicode-structure-icon`、`global-selector-in-component`、`raw-hex-color`、`raw-visual-value`；对 `style`、模板和脚本分别定位，不扫描 i18n 文案中的普通标点。
+- [x] **Step 5（棘轮）**：把现存违规逐条写入 `ui-contract-exceptions.json`，fingerprint 必须含规则、文件和稳定语义，不使用纯行号；检查器同时拒绝“未登记新违规”和“已不再命中的过期例外”。
+- [x] **Step 6（先修确定缺陷）**：将 `TaskOverlay.vue` 的未定义 `--color-border`、`--color-bg-surface-2` 替换为 ARCH-DM-007 已声明语义令牌，不为这两项建立例外。
+- [x] **Step 7（接入）**：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
+- [x] **Step 8（变异证据）**：测试中依次向合法夹具注入 Step 1 所列每类违规并断言每类都使 CLI 退出 1；恢复夹具后断言退出 0。该测试仅在检查器、规则或例外格式变化时要求重跑。
+- [x] **Step 9（验证）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run build`，确认检查器测试通过且现仓库只因已登记债务而通过。
+- [x] **Step 10（提交）**：只提交本任务文件，commit：`建立前端 UI 静态契约门禁`。
 
 ### Task 2: 拆分全局样式并落地字体、尺寸和主题令牌
 
@@ -407,7 +407,8 @@ Task 10 → Task 11 → Task 12
 | --- | --- | --- | --- |
 | 计划编制基线 | `rtk npm --prefix web run test:unit` | 待实施前复核；最近审计基线为 48 passed | 实施时填写 |
 | 计划编制基线 | `rtk npm --prefix web run build` | 待实施前复核；最近审计基线通过 | 实施时填写 |
-| Task 1–11 | 各任务列出的 RED/GREEN 命令 | 待实施 | 本表逐任务追加 |
+| Task 1 | `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run check:ui`、`rtk npm --prefix web run build`、`rtk npm --prefix web run test:unit` | **49 passed / 0 failed**（含 9 类违规注入变异套件）；`check:ui` 退出 0（仅因已登记债务）；注入临时违规探针后退出 1、移除后退出 0；`build` 退出 0；`unit` 48 passed 无回归 | 提交 `建立前端 UI 静态契约门禁`；386 条基线见 `web/scripts/ui-contract-exceptions.json` |
+| Task 2–11 | 各任务列出的 RED/GREEN 命令 | 待实施 | 本表逐任务追加 |
 | Task 12 | 全量门禁与真实 Windows 缩放 | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准

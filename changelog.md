@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-14（前端 UI 静态契约门禁落地，PLAN-DM-029 Task 1）
+
+- 新增前端 UI 静态契约检查器：`web/scripts/check-ui-contracts.mjs` 与 `web/scripts/ui-contracts/{types,css-vars,vue-source,visual-values}.mjs`。CSS `var()` 走平衡括号解析（不用单层正则），递归校验 fallback 中的引用、检测同文件循环引用，并支持含 `producer`/`consumer`/`reason`/`expiresWith` 的动态变量白名单。
+- 规则清单：`undefined-css-variable`、`circular-css-variable`、`dynamic-variable-not-registered`、`explicit-button-type`、`visible-input-label`、`icon-button-name`、`unicode-structure-icon`、`global-selector-in-component`、`raw-hex-color`、`raw-visual-value`，另加棘轮两条 `invalid-exception-entry`、`stale-exception`。违规固定为 `{rule, file, line, column, message, fingerprint}`，CLI 按 `file:line:column [rule] message` 输出并返回 1。
+- 棘轮机制：`web/scripts/ui-contract-exceptions.json` 登记现存债务 386 条（按规则：裸视觉值 319、全局选择器 23、Unicode 图标 20、按钮缺 `type` 16、输入缺 label 7、裸十六进制色 1），每条带 `reason` 与 `expiresWith`（归属到 PLAN-DM-029 的具体任务）。新增未登记违规即失败，已不再命中的例外即失败，重复指纹与缺字段条目同样失败；动态变量白名单登记 `--sheet-tree-width`（生产者与消费方均为 `src/views/SheetsView.vue`）。
+- 修正 `web/src/layout/TaskOverlay.vue` 诊断复制按钮的两个未定义变量：`--color-bg-surface-2` 与 `--color-border` 分别替换为已声明的 `--color-border-subtle`、`--color-border-strong`（原 fallback 为死代码，hover 边框恢复为强边框）。
+- 接入方式：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
+- 实际验证：`npm --prefix web run test:contracts` **49 passed / 0 failed**（含 9 类违规注入的变异套件与回滚断言）；注入临时违规后 `check:ui` 退出 1、移除后退出 0；`npm --prefix web run check:ui` 退出 0（仅因已登记债务通过）；`npm --prefix web run build` 退出 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全链通过）；`npm --prefix web run test:unit` 48 passed 无回归。
+- 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。
+
 ## 2026-09-14（计划修订：发布 attempt 命名空间与证据永久保留）
 
 - 修订 `PLAN-DM-031`：取消按终态自动清扫旧 attempt 的设计，明确所有 attempt 的 journal、before 快照与终态记录永久保留；未来磁盘保留策略须通过独立 ADR 与显式维护命令立项。

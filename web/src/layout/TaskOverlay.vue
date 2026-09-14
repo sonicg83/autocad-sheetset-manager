@@ -164,6 +164,6 @@ async function copyDiag(item:Diagnostic){
 .diagnostics{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
 .diagnostics li{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.6;color:var(--color-text-primary)}
 .diag-text{flex:1;min-width:0;word-break:break-word}
-.diag-copy{flex-shrink:0;border:1px solid var(--color-border-subtle,var(--color-bg-surface-2));background:none;color:var(--color-text-secondary);border-radius:var(--radius-sm,6px);padding:1px 8px;font-size:12px;cursor:pointer;font-family:inherit}
-.diag-copy:hover{color:var(--color-text-primary);border-color:var(--color-border,var(--color-bg-surface-2))}
+.diag-copy{flex-shrink:0;border:1px solid var(--color-border-subtle);background:none;color:var(--color-text-secondary);border-radius:var(--radius-sm,6px);padding:1px 8px;font-size:12px;cursor:pointer;font-family:inherit}
+.diag-copy:hover{color:var(--color-text-primary);border-color:var(--color-border-strong)}
 </style>
