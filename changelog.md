@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-14（前端公共视觉与焦点原语落地，PLAN-DM-029 Task 3）
+
+- 新增视觉原语（均用组件 `<style scoped>`，只消费 Task 2 的语义/组件令牌，不导入任何业务 composable 或 API 类型）：`UiButton.vue`（`primary/secondary/danger/link` + `default` 36px / `compact` 34px，默认 `type="button"`，disabled 与 loading 都落到原生 `disabled`，loading 额外 `aria-busy` 并保留文案，禁用态不换色）、`UiIconButton.vue`（固定 `--icon-button-size` 36×36px，必填 `label` → `aria-label`，空/缺失时抛错而非渲染不可访问控件）、`UiIcon.vue` + `icons.ts`（封闭 `UiIconName`，首批 11 名 `theme/settings/close/chevron-left/right/up/down/status-dot/search/folder/copy`，几何取自 Lucide 24×24 描边图标并保留 1.5 描边，`currentColor` 继承颜色，`sm/md/lg` 映射 `--icon-size-*`，不使用 `v-html`、不接受任意字符串）、`UiInput.vue`/`UiSelect.vue`（`inheritAttrs:false` + `v-bind="$attrs"` 把属性透传到真正的控件，自带 `label` 时渲染 `label[for]` 关联自身 `id`，省略时由 `FormField` 提供；`UiSelect` 默认高度消费 `--input-height`）、`FormField.vue`（可见 label + hint/error 元素及其 `-hint/-error` id + `aria-describedby` 聚合，`invalid` 由 `error` 派生，插槽属性 `{id, describedBy, invalid}`）。
+- 新增焦点工具 `dialogFocus.ts`：`useDialogFocus({open, container, initialFocus, onEscape})` 返回 `{onDialogKeydown}`；打开时保存打开前焦点并聚焦 `initialFocus` → 首个可聚焦元素 → 容器，Tab/Shift+Tab 在首尾回绕并 `preventDefault`，Escape 只回调**不** `preventDefault`（是否可关闭由调用方决定），关闭时按「焦点仍在对话框内或已落到 `body`/容器已卸载」交还焦点，容器内无可聚焦元素时不拦截。`FOCUSABLE_SELECTOR` 沿用 `TaskOverlay.vue` 既有拼写。
+- 测试环境：`vitest.config.ts` 只加 `plugins: [vue()]`（`environment: "node"` 与 `include` 不变），组件测试逐文件声明 `// @vitest-environment happy-dom`；devDependencies 新增 `@vue/test-utils@2.5.0`、`happy-dom@20.14.5`（`package.json` + `package-lock.json` 同步）。
+- 新增 30 条契约用例（`uiPrimitives.test.ts` 23 条 + `dialogFocus.test.ts` 7 条），全量单测 48 → **78 passed**。
+- 两处置信度取舍（均已在测试与报告中留痕）：① `tokens.css` 组件令牌层新增 `--input-font-size:var(--font-size-14)`（组件层本就是「输入框默认值」的定义处，控件不直接消费原始令牌；14px 与 SPEC-DM-006 正文字号及 Task 2 「控件继承 14px」的 e2e 断言同档）；② `UiButton` 增加可选 `label` → `aria-label`，因为静态门禁 `icon-button-name` 看不到插槽里的可见文案（插槽文案仍可作可访问名称，`label` 仅给「插槽无文字」的用法）。颜色只复用既有令牌，未新造色板值；`primitives.css`、`style.css` 与例外表均未改动，Task 3 例外配额保持 0。
+- 实际验证：定向单测 **30 passed / 0 failed**；全量 `test:unit` **78 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（`vue-tsc -b` 类型检查通过、`check:i18n` 946 键、`check:api` 与 `vite build` 均通过）。棘轮不变量未被扰动：原始违规（不含动态白名单）仍 **383 = 382 条例外 + 1 条动态变量登记项**，例外表 blob 仍为 `b82f03f0276155cd0be2b7a2430e9ea031da9118`（382 条），新增的 `components/ui` 文件零新增违规。三项变异自证均转红并逐字节还原：`UiSelect` 高度令牌改写 1 红、删除 `UiIconButton` 空 label 守卫 1 红、关闭 Tab 圈闭 2 红。
+- 未跑 e2e：本轮改动不被任何页面消费（Task 4 起才接入），且并发工作线占用 e2e 端口，故按派发约束只跑单测与静态门禁；`UiSelect` 的 38px 真实计算高度仍由 `properties-definitions.spec.ts`「新增区与查询控件密度」用例在浏览器里兜住（happy-dom 不算布局，本地只断言「消费 `--input-height` + 令牌链解出 38px」）。
+- 同时修改了计划文件：Task 3 的 Files 补登 `web/vitest.config.ts` 与 `web/src/styles/tokens.css`，Step 1/5 标注两处补充，Step 7 记实测命令与结果，并在「实际验证」表新增 Task 3 行。
+
 ## 2026-09-14（校正字体溯源文档与契约注释措辞，PLAN-DM-029 Task 2 三轮再审修复）
 
 - 本轮只改文档与注释，不碰任何代码、`.vue`/`.ts`、入口样式表与例外表；三条 e2e 断言、四条硬门禁规则行为均不变。

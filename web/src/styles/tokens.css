@@ -63,6 +63,7 @@
     --button-height:var(--control-height-default);
     --button-font-size:var(--font-size-14);
     --input-height:var(--control-height-form);
+    --input-font-size:var(--font-size-14);
     --icon-button-size:var(--height-36);
     --modal-title-font-size:var(--font-size-18);
   }

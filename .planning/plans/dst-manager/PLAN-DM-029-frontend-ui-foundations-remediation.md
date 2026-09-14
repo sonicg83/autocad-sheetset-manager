@@ -127,15 +127,17 @@ related:
 - Create: `web/src/components/ui/dialogFocus.test.ts`
 - Modify: `web/package.json`
 - Modify: `web/package-lock.json`
+- Modify: `web/vitest.config.ts`（挂载 SFC 所需：加载 vue 插件，默认 environment 与 include 不变）
+- Modify: `web/src/styles/tokens.css`（组件令牌层补 `--input-font-size`）
 
-- [ ] **Step 1（测试环境）**：用 `rtk npm --prefix web install --save-dev @vue/test-utils happy-dom` 更新两份依赖清单；组件测试文件使用 `// @vitest-environment happy-dom`，不改变现有测试默认环境。
-- [ ] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联；`UiSelect` 默认高度 = `38px`（消费 `--input-height`，该契约当前只由 `web/tests/e2e/properties-definitions.spec.ts:344-346` 兜住）。
-- [ ] **Step 3（RED：焦点契约）**：为 `dialogFocus.ts` 写初始焦点、Tab/Shift+Tab 圈闭、Escape 回调、关闭后焦点归还和无可聚焦元素五类失败测试。
-- [ ] **Step 4（图标注册表）**：在 `icons.ts` 导出封闭的 `UiIconName` 与 SVG path 数据；首批名称固定为 `theme`、`settings`、`close`、`chevron-left/right/up/down`、`status-dot`、`search`、`folder`、`copy`，记录 Lucide MIT 来源，不接受任意字符串或 `v-html`。
-- [ ] **Step 5（GREEN：视觉原语）**：实现各组件，只处理语义、外观、焦点和状态；尺寸通过 variant 和 CSS 自定义属性消费 Task 2 令牌，不导入业务 composable 或 API 类型。
-- [ ] **Step 6（GREEN：焦点工具）**：导出 `useDialogFocus({open, container, initialFocus, onEscape})`，返回 `onDialogKeydown`；工具只管理焦点，不决定是否可关闭。
-- [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`rtk npm --prefix web run build`。
-- [ ] **Step 8（提交）**：commit：`新增前端公共视觉与焦点原语`。
+- [x] **Step 1（测试环境）**：用 `rtk npm --prefix web install --save-dev @vue/test-utils happy-dom` 更新两份依赖清单（实得 `@vue/test-utils@2.5.0`、`happy-dom@20.14.5`）；组件测试文件使用 `// @vitest-environment happy-dom`，不改变现有测试默认环境（已完成：`vitest.config.ts` 只加 `plugins: [vue()]`，`environment: "node"` 与 `include` 保持原样）。
+- [x] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联；`UiSelect` 默认高度 = `38px`（消费 `--input-height`，该契约当前只由 `web/tests/e2e/properties-definitions.spec.ts:344-346` 兜住）。
+- [x] **Step 3（RED：焦点契约）**：为 `dialogFocus.ts` 写初始焦点、Tab/Shift+Tab 圈闭、Escape 回调、关闭后焦点归还和无可聚焦元素五类失败测试。
+- [x] **Step 4（图标注册表）**：在 `icons.ts` 导出封闭的 `UiIconName` 与 SVG path 数据；首批名称固定为 `theme`、`settings`、`close`、`chevron-left/right/up/down`、`status-dot`、`search`、`folder`、`copy`，记录 Lucide MIT 来源，不接受任意字符串或 `v-html`。
+- [x] **Step 5（GREEN：视觉原语）**：实现各组件，只处理语义、外观、焦点和状态；尺寸通过 variant 和 CSS 自定义属性消费 Task 2 令牌，不导入业务 composable 或 API 类型（实得两处补充：`tokens.css` 组件令牌层新增 `--input-font-size`；`UiButton` 增加可选 `label` → `aria-label`，理由见 Task 3 报告）。
+- [x] **Step 6（GREEN：焦点工具）**：导出 `useDialogFocus({open, container, initialFocus, onEscape})`，返回 `onDialogKeydown`；工具只管理焦点，不决定是否可关闭。
+- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`（30 passed）、`rtk npm --prefix web run test:unit`（78 passed）、`rtk npm --prefix web run check:ui`（退出 0）、`rtk npm --prefix web run test:contracts`（83 passed）、`rtk npm --prefix web run build`（退出 0）。
+- [x] **Step 8（提交）**：commit：`新增前端公共视觉与焦点原语`。
 
 ### Task 4: 用壳层完成原语纵向验证
 
@@ -448,7 +450,8 @@ Task 10 → Task 11 → Task 12
 | Task 1（复审修复） | 同上四条；另做「临时移除 `parseRules` 的 `@` 跳过」红/绿对照实验 | **62 passed / 0 failed**（连续两次运行）；`check:ui` 退出 0；`build` 退出 0；`unit` 48 passed；基线仍 422 条、不变量仍 423 = 422 + 1；前奏测试在该注入下确实变红（3 条 `global-selector-in-component` 误报），还原后复跑为绿 | 提交 `补齐 UI 契约门禁文档与回归测试细节`；证据见同报告第 9 节 |
 | Task 2 | `rtk npm --prefix web run test:contracts`、`check:ui`、`build`、`test:unit`、`test:e2e -- main.spec.ts` | **80 passed / 0 failed**（新增 14 条资产/入口规则用例 + 4 条 CLI 级变异；覆盖面守卫 15 类/16 条注入/14 条规则）；`check:ui` 退出 0；`build` 退出 0（`dist` 产出两个本地 WOFF2，`url()` 为 `/assets/...`）；`unit` 48 passed；`e2e` **78 passed / 0 failed**；三项针对性变异（预算 `>` 改 `>=`、相对路径忽略样式表目录、移除 `NON_EXEMPTIBLE_RULES` 判定）均使对应用例转红，还原后复跑全绿；例外 422 → 382（Task 2 名下 53 条结清：40 清退 + 13 重定向 Task 9），不变量 383 = 382 + 1；字体 56928 + 12488 = 69416 ≤ 256000，实测无 CJK | 提交 `统一前端字体令牌与样式分层`；报告与证据见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/task-2-report.md`（证据文件 `.tmp-tc-b.txt`/`.tmp-cu-b.txt`/`.tmp-build-b.txt`/`.tmp-unit-b.txt`/`.tmp-e2e-c.txt` 已摘录后删除） |
 | Task 2（收口轮修复） | 同上；另做主流程 `pytest -q` 之外的独立核验：清空例外表复算原始违规、`git show BASE:ui-contract-exceptions.json` 指纹级比对、fontTools 直读 `cmap`、独立 Chromium 探针复现 `select` 行高 | 修复两处「门禁空转」缺陷（入口规则 `report` 未 push、`@font-face` 被 `parseRules` 默认过滤）后才由红转绿；修复前 12 项失败均为「期望恰好 1 条 X，实际：[]」 | 同报告第 2、3.1、5 节 |
-| Task 2–11 | 各任务列出的 RED/GREEN 命令 | Task 3 起待实施 | 本表逐任务追加 |
+| Task 2–11 | 各任务列出的 RED/GREEN 命令 | Task 4 起待实施 | 本表逐任务追加 |
+| Task 3 | `rtk npm --prefix web run test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`test:unit`、`check:ui`、`test:contracts`、`build` | 定向 **30 passed / 0 failed**（新增 `uiPrimitives.test.ts` 23 条 + `dialogFocus.test.ts` 7 条）；全量 `unit` **78 passed**（48 基线 + 30 新增，无回归）；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（`vue-tsc` 类型检查通过、`check:i18n` 946 键、`dist` 产出不变）；三项变异（`UiSelect` 高度令牌改写 1 红、删除 `UiIconButton` 空 label 守卫 1 红、关闭 Tab 圈闭 2 红）均转红并逐字节还原；棘轮不变量 383 = 382 + 1 未被扰动，`components/ui` 新增文件零新增违规；例外表 blob 仍为 `b82f03f0…`（382 条，Task 3 例外配额 0） | 提交 `新增前端公共视觉与焦点原语`；报告与证据见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/`（`task-3-report.md`、`evidence/task-3-{red,green,mutations,invariant}.txt`） |
 | Task 2（评审修复轮 2） | `rtk npm --prefix web run test:contracts`、`check:ui`、三条新用例的聚焦变异运行 | **83 passed / 0 failed**（+3：例外 `rule`/指纹不一致 2 条 + 入口缺失 1 条）；382 条存量例外审计 **382/382 自洽、指纹零改动**；变异 A（停用一致性校验）使 2 条转红、变异 B（停用入口缺失判定）使 1 条转红，逐字节还原后复绿；`check:ui` 退出 0；未跑 `build`/`test:unit`（改动不触 `.vue`/`.ts`/入口样式表） | 提交 `收紧 UI 契约例外一致性与字体溯源记录`；报告见 `task-2-report.md` 第 11 节 |
 | Task 2（评审修复轮 3：文档/注释级） | 只跑 `check:ui`、`test:contracts` 与 PowerShell 字体复核命令（不跑 e2e/build） | 按三轮再审落实 D1–D7：差集复算为 Inter 缺 `U+00AD`、Plex 缺 `U+201B`（均为字体未提供，越界 0）；README 四条硬门禁区分为「字体类三条 + 入口一条」，补齐 Plex/差集/CJK 三条可复制命令并附实测输出；删除 `document.fonts` 误述，将「真实加载」标为未覆盖并登记为本任务收口责任 A；`legacy.css` 的 `:where()` 措辞收窄 | 提交 `校正字体溯源文档与契约注释措辞`；报告见 `task-2-report.md` 第 12 节 |
 | Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C） | 待实施 | `assets/PLAN-DM-029/README.md` |
