@@ -3,9 +3,16 @@
 // `UiIconName` 是封闭联合类型，`UiIcon.vue` 只按本文件登记的几何数据渲染本地 SVG，
 // 不使用 `v-html`，也不接受调用方传入任意字符串或标记。
 //
-// 几何数据取自 Lucide（https://lucide.dev，MIT 许可）的 24×24 描边图标：保留其道路
-// 数据与 1.5 描边规格，并按本仓库的 `--icon-size-*` 令牌缩放。`settings` 使用齿轮
-// 路径加 3 半径内圆；`copy` 保留 Lucide 的圆角矩形加后页路径。
+// 几何数据按 Lucide 图标集（https://lucide.dev）的 24×24 描边规格逐图标转写，保留其
+// 路径数据与 1.5 描边规格，并按本仓库的 `--icon-size-*` 令牌缩放。许可证文本在同目录
+// `ISC-Lucide.txt`（Lucide 为 ISC 而非 MIT，取自 `lucide-static@1.46.0`，git blob 3208 字节）。
+//
+// 来源可核验到什么程度（2026-09-14 本机按名称逐个比对
+// `https://unpkg.com/lucide-static@1.46.0/icons/<name>.svg`）：`contrast`（theme）、`folder`、`copy`
+// 逐字节一致；`x`（close）、`chevron-*`、`search` 是同一几何的绝对坐标写法（路径命令不同、
+// 端点相同）；`settings` 是**旧版**齿轮路径，与 1.46.0 不同。因此**不能**声明「整体取自
+// 1.46.0」：数据是按公开坐标转写的，未与上游版本同步，是否同步到上游当前路径不在本任务范围。
+// `status-dot` 不是 Lucide 图标，是本仓库自定义的实心圆，只沿用同一 24×24 视窗。
 export type UiIconName =
   | "theme"
   | "settings"

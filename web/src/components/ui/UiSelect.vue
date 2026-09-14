@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {computed} from "vue";
+import {nextInstanceId} from "./instanceId";
 
 // 选择器原语（PLAN-DM-029 Task 3 Step 5；ARCH-DM-007 §5）：只负责字体、盒模型、焦点、
 // 禁用与错误态透传；`<option>` 由调用方经默认插槽提供，选项数据来自调用方的业务状态。
 //
 // 默认高度固定消费 `--input-height`（38px，SPEC-DM-010 生产输入密度），与 `UiInput`
-// 同一档；可见 label 的提供方式与 `UiInput` 一致（自带 `label` 或由 `FormField` 提供）。
+// 同一档；可见 label 的提供方式与 `UiInput` 一致（自带 `label` 或由 `FormField` 提供），
+// 未传 `id` 时用 `nextInstanceId()` 生成同页唯一的兜底 id（模块级计数器，见 `instanceId.ts`）。
 const props = defineProps<{
   modelValue?: string;
   label?: string;
@@ -19,8 +21,7 @@ const emit = defineEmits<{"update:modelValue": [value: string]}>();
 // 属性透传落到真正的 `<select>` 上，根元素只承载布局类。
 defineOptions({inheritAttrs: false});
 
-let idSequence = 0;
-const fallbackId = `ui-select-${(idSequence += 1)}`;
+const fallbackId = nextInstanceId("ui-select");
 const controlId = computed(() => props.id ?? fallbackId);
 
 function onChange(event: Event) {

@@ -2,14 +2,15 @@
 // 公共视觉原语契约（PLAN-DM-029 Task 3 Step 2）：按钮 variant/size/禁用/加载、图标按钮的
 // 可访问名称、图标注册表封闭性、字段 label 与 hint/error 关联、选择框默认高度。
 //
-// happy-dom 不解析样式表与 CSS 自定义属性链，故「UiSelect 默认高度 38px」按「样式块声明
-// 消费的令牌 + 令牌链最终值」断言：先证明实现消费 `--input-height`，再沿
-// `--input-height → --control-height-form → --height-38` 解出 38px。真实计算高度仍由
-// `web/tests/e2e/properties-definitions.spec.ts` 的「新增区与查询控件密度」用例在
-// 浏览器里兜住（输入 38px、普通按钮 ≥36px），本文件不重复计算布局。
+// happy-dom 不解析样式表与 CSS 自定义属性链，故「默认高度 38px」只能按「样式块声明消费的
+// 令牌 + 令牌链最终值」断言：先证明实现消费 `--input-height`，再沿
+// `--input-height → --control-height-form → --height-38` 解出 38px。这**不能**证明该声明
+// 挂在活选择器上，更不能证明浏览器算出的高度：本任务的新原语当前没有任何页面消费，
+// `web/tests/e2e/properties-definitions.spec.ts` 量的是 `.definition-panel` 里的遗留控件，
+// 与本任务无关。真实计算高度（输入 38px、按钮 36px）须在 Task 4 接入壳层后新增计算样式断言。
 import {describe,expect,it,vi} from "vitest";
 import {mount} from "@vue/test-utils";
-import {h} from "vue";
+import {defineComponent,h} from "vue";
 import {readFileSync} from "node:fs";
 import UiButton from "./UiButton.vue";
 import UiIcon from "./UiIcon.vue";
@@ -31,6 +32,14 @@ function scopedStyle(source: string) {
   const match = /<style scoped>([\s\S]*?)<\/style>/.exec(source);
   if (match === null) throw new Error("组件缺少 scoped 样式块");
   return match[1];
+}
+
+/** 剥掉注释后的源码：用于「不得出现某指令」一类硬约束断言，避免把说明文字判成用法。 */
+function stripComments(source: string) {
+  return source
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
 }
 
 /** 解析 CSS 里的自定义属性声明（测试只解析令牌文件，不实现完整 CSS 语法）。 */
@@ -126,6 +135,10 @@ describe("UiIcon 与图标注册表", () => {
     expect(wrapper.attributes("aria-hidden")).toBe("true");
     expect(wrapper.attributes("focusable")).toBe("false");
     expect(wrapper.findAll("path").length).toBeGreaterThan(0);
+    // `v-html` 与 `innerHTML` 是硬约束（静态门禁把任意 HTML 注入视作风险）：注释里可以
+    // 提到它们，源码的有效部分不得出现，故先剥注释再断言。
+    const code = stripComments(readSource("./UiIcon.vue"));
+    for (const forbidden of ["v-html", "innerHTML"]) expect(code).not.toContain(forbidden);
   });
 
   it("注册表键集合等于 Step 4 固定的首批图标", () => {
@@ -136,7 +149,6 @@ describe("UiIcon 与图标注册表", () => {
     for (const [name, definition] of Object.entries(UI_ICONS)) {
       expect(definition.shapes.length, name).toBeGreaterThan(0);
       for (const shape of definition.shapes) {
-        expect(name).not.toBe("");
         if (shape.kind === "path") {
           expect(shape.d, name).toMatch(/^[MmLlHhVvCcSsQqTtAaZz0-9.,\s-]+$/);
           continue;
@@ -264,5 +276,51 @@ describe("FormField", () => {
     const forId = wrapper.find("label").attributes("for");
     expect(forId).toMatch(/^form-field-/);
     expect(wrapper.find("select").attributes("id")).toBe(forId);
+  });
+});
+
+// 兜底 id 必须在**同一页面**内唯一。@vue/test-utils 每次 `mount()` 都是新的 app，
+// 所以「挂两次再比 id」既可能放过「app 内唯一」的实现、也可能误判正确实现；
+// 这两条用例在同一个 app 里挂多个未传 `id` 的实例，断言各自成对关联。
+describe("实例标识（同页多实例）", () => {
+  it("同一 app 内的两个 FormField 各自生成不同 id，label[for] 与 aria-describedby 都指向自己", () => {
+    const slot = (slotProps: {id: string; describedBy?: string; invalid: boolean}) => h(UiInput, {...slotProps});
+    const wrapper = mount(defineComponent({
+      render: () => h("div", [
+        h(FormField, {label: "第一个", hint: "提示一", error: "错误一"}, {default: slot}),
+        h(FormField, {label: "第二个", hint: "提示二", error: "错误二"}, {default: slot}),
+      ]),
+    }));
+    const fields = wrapper.findAll(".form-field");
+    expect(fields.length).toBe(2);
+    const ids = fields.map((field) => field.find("input").attributes("id"));
+    expect(ids[0]).toMatch(/^form-field-/);
+    expect(ids[0]).not.toBe(ids[1]);
+    fields.forEach((field, index) => {
+      expect(field.find("label").attributes("for")).toBe(ids[index]);
+      expect(field.find(".form-field__hint").attributes("id")).toBe(`${ids[index]}-hint`);
+      expect(field.find(".form-field__error").attributes("id")).toBe(`${ids[index]}-error`);
+      expect(field.find("input").attributes("aria-describedby")).toBe(`${ids[index]}-hint ${ids[index]}-error`);
+    });
+  });
+
+  it("同一 app 内的两个 UiInput 与两个 UiSelect 各自生成不同 id，label[for] 指向自己的控件", () => {
+    const wrapper = mount(defineComponent({
+      render: () => h("div", [
+        h(UiInput, {label: "搜索"}),
+        h(UiInput, {label: "替换"}),
+        h(UiSelect, {label: "范围"}, {default: () => h("option", {value: "a"}, "A")}),
+        h(UiSelect, {label: "排序"}, {default: () => h("option", {value: "b"}, "B")}),
+      ]),
+    }));
+    const controls = [...wrapper.findAll("input"), ...wrapper.findAll("select")];
+    const ids = controls.map((control) => control.attributes("id"));
+    expect(ids.length).toBe(4);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids[0]).toMatch(/^ui-input-/);
+    expect(ids[2]).toMatch(/^ui-select-/);
+    wrapper.findAll("label").forEach((label, index) => {
+      expect(label.attributes("for")).toBe(ids[index]);
+    });
   });
 });

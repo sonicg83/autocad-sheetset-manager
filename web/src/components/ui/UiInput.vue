@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed} from "vue";
+import {nextInstanceId} from "./instanceId";
 
 // 文本输入原语（PLAN-DM-029 Task 3 Step 5；ARCH-DM-007 §5）：只负责字体、盒模型、
 // 焦点、禁用与错误态透传，不做业务校验，也不导入业务 composable 或 API 类型。
@@ -8,8 +9,9 @@ import {computed} from "vue";
 // - 自带 `label`：控件渲染 `label[for]` 并关联到自己的 `id`，用于工具栏搜索框等独立场景；
 // - 由 `FormField` 提供：`FormField` 渲染可见 label，经插槽把 `id`/`describedBy` 下发，
 //   此时不要再传 `label`，否则会渲染两个可见标签。
-// 控件始终有 `id`（`label[for]` 与 `aria-describedby` 都以它为锚），属性透传落到真正的
-// `<input>` 上（`type`/`placeholder`/`autocomplete`/`aria-*`）。
+// 控件始终有 `id`（`label[for]` 与 `aria-describedby` 都以它为锚），未传时用
+// `nextInstanceId()` 生成同页唯一的兜底 id（模块级计数器，见 `instanceId.ts`）；
+// 属性透传落到真正的 `<input>` 上（`type`/`placeholder`/`autocomplete`/`aria-*`）。
 const props = defineProps<{
   modelValue?: string;
   label?: string;
@@ -25,8 +27,7 @@ const emit = defineEmits<{"update:modelValue": [value: string]}>();
 // 属性透传落到真正的 `<input>` 上，根元素只承载布局类。
 defineOptions({inheritAttrs: false});
 
-let idSequence = 0;
-const fallbackId = `ui-input-${(idSequence += 1)}`;
+const fallbackId = nextInstanceId("ui-input");
 const controlId = computed(() => props.id ?? fallbackId);
 
 function onInput(event: Event) {

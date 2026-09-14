@@ -123,6 +123,8 @@ related:
 - Create: `web/src/components/ui/UiSelect.vue`
 - Create: `web/src/components/ui/FormField.vue`
 - Create: `web/src/components/ui/dialogFocus.ts`
+- Create: `web/src/components/ui/instanceId.ts`（首轮评审修复：兜底 DOM id 的模块级计数器）
+- Create: `web/src/components/ui/ISC-Lucide.txt`（Lucide 图标集的 ISC 许可原文，取自 `lucide-static@1.46.0`）
 - Create: `web/src/components/ui/uiPrimitives.test.ts`
 - Create: `web/src/components/ui/dialogFocus.test.ts`
 - Modify: `web/package.json`
@@ -131,13 +133,14 @@ related:
 - Modify: `web/src/styles/tokens.css`（组件令牌层补 `--input-font-size`）
 
 - [x] **Step 1（测试环境）**：用 `rtk npm --prefix web install --save-dev @vue/test-utils happy-dom` 更新两份依赖清单（实得 `@vue/test-utils@2.5.0`、`happy-dom@20.14.5`）；组件测试文件使用 `// @vitest-environment happy-dom`，不改变现有测试默认环境（已完成：`vitest.config.ts` 只加 `plugins: [vue()]`，`environment: "node"` 与 `include` 保持原样）。
-- [x] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联；`UiSelect` 默认高度 = `38px`（消费 `--input-height`，该契约当前只由 `web/tests/e2e/properties-definitions.spec.ts:344-346` 兜住）。
+- [x] **Step 2（RED：组件契约）**：先写失败测试，覆盖 `UiButton` 的 `primary/secondary/danger/link`、`default/compact`、disabled/loading 与默认 `type=button`；`UiIconButton` 缺 `label` 时类型/运行期失败；`FormField` 的 label、hint/error ID 与 `aria-describedby` 关联；`UiSelect` 默认高度 = `38px`（消费 `--input-height`）。**该 38px 只测到「声明消费了令牌 + 令牌链解出 38px」**：happy-dom 不算布局，且 `web/tests/e2e/properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 里的遗留控件，与本案新增原语无关；真实计算高度必须在 Task 4 接入壳层后另加计算样式断言（首轮评审 F3 订正）。
 - [x] **Step 3（RED：焦点契约）**：为 `dialogFocus.ts` 写初始焦点、Tab/Shift+Tab 圈闭、Escape 回调、关闭后焦点归还和无可聚焦元素五类失败测试。
-- [x] **Step 4（图标注册表）**：在 `icons.ts` 导出封闭的 `UiIconName` 与 SVG path 数据；首批名称固定为 `theme`、`settings`、`close`、`chevron-left/right/up/down`、`status-dot`、`search`、`folder`、`copy`，记录 Lucide MIT 来源，不接受任意字符串或 `v-html`。
+- [x] **Step 4（图标注册表）**：在 `icons.ts` 导出封闭的 `UiIconName` 与 SVG path 数据；首批名称固定为 `theme`、`settings`、`close`、`chevron-left/right/up/down`、`status-dot`、`search`、`folder`、`copy`，记录 Lucide 来源与许可（ISC，许可原文随代码入库；几何数据是按 24×24 规格转写、不与上游版本同步，逐图标比对结果与可复跑命令见 Task 3 报告与 `icons.ts` 注释），不接受任意字符串或 `v-html`。
 - [x] **Step 5（GREEN：视觉原语）**：实现各组件，只处理语义、外观、焦点和状态；尺寸通过 variant 和 CSS 自定义属性消费 Task 2 令牌，不导入业务 composable 或 API 类型（实得两处补充：`tokens.css` 组件令牌层新增 `--input-font-size`；`UiButton` 增加可选 `label` → `aria-label`，理由见 Task 3 报告）。
 - [x] **Step 6（GREEN：焦点工具）**：导出 `useDialogFocus({open, container, initialFocus, onEscape})`，返回 `onDialogKeydown`；工具只管理焦点，不决定是否可关闭。
 - [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`（30 passed）、`rtk npm --prefix web run test:unit`（78 passed）、`rtk npm --prefix web run check:ui`（退出 0）、`rtk npm --prefix web run test:contracts`（83 passed）、`rtk npm --prefix web run build`（退出 0）。
 - [x] **Step 8（提交）**：commit：`新增前端公共视觉与焦点原语`。
+- [x] **Step 9（首轮评审修复）**：修 `FormField`/`UiInput`/`UiSelect` 的兜底 id（原实现在实例作用域计数，同页多实例会生成同一个 DOM id，`label[for]`/`aria-describedby` 全部指错）与 `dialogFocus.ts` 的可聚焦元素集合（原拼写让隐藏元素、`contenteditable`、非 `0` 的 `tabindex`、单选组全部错位）；新增 `instanceId.ts` 与 `ISC-Lucide.txt`；测试增至 `uiPrimitives.test.ts` 25 条 + `dialogFocus.test.ts` 11 条 = **36 条**；commit：`修正原语实例标识与焦点圈闭边界`。
 
 ### Task 4: 用壳层完成原语纵向验证
 
@@ -152,11 +155,11 @@ related:
 - Modify: `web/tests/e2e/i18n-visual-evidence.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED）**：在 `main.spec.ts` 增加壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积、键盘焦点和任务浮层折叠状态断言；确认 Unicode 图标和尺寸断言失败。
-- [ ] **Step 2（迁移）**：把 `◐`、`⚙`、`✕`、`▸/▾`、`«/»`、`●` 替换为 `UiIcon`/`UiIconButton`；保留可见文案和 i18n key，状态按钮补 `aria-expanded`/`aria-pressed`。
+- [ ] **Step 1（RED）**：在 `main.spec.ts` 增加壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积、键盘焦点和任务浮层折叠状态断言；确认 Unicode 图标和尺寸断言失败。计算样式必须直接量壳层里已迁移控件的 `getBoundingClientRect()`：**输入类 38px、普通与图标按钮 36px、紧凑按钮 34px、可点目标 ≥ 32px**。Task 3 只在源码与令牌链层面锁定了这组尺寸（happy-dom 不算布局，`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件），所以真实计算高度由本步骤补齐（首轮评审 F3）。同时把 Task 3 无法在本地验证的焦点可见性（`[hidden]`/`inert`/`display:none`/`visibility` 叠加、`0×0`）在浏览器里覆盖（首轮评审 F2）。
+- [ ] **Step 2（迁移）**：把 `◐`、`⚙`、`✕`、`▸/▾`、`«/»`、`●` 替换为 `UiIcon`/`UiIconButton`；保留可见文案和 i18n key，状态按钮补 `aria-expanded`/`aria-pressed`。**纯图标按钮必须用 `UiIconButton`（`label` 必填）**；`UiButton` 只用于「插槽无可读文案」的图形性按钮并可传 `label`，而带可见文案的 `UiButton` 若同时传 `label`，两者文字必须一致（WCAG 2.5.3「名称包含可见文本」）；`UiIconButton`/`UiButton.label` 对 ARCH-DM-007 §5 的补充属文档收口，登记为 Task 12 收口责任 D，本任务不改 ARCH 正文（首轮评审 F4）。
 - [ ] **Step 3（尺寸）**：壳层普通按钮使用 `default`，任务浮层紧凑动作使用 `compact`；所有独立图标按钮达到 `36×36px`，不以 SVG 尺寸充当点击面积。
 - [ ] **Step 4（例外清退）**：删除上述壳层 Unicode 例外；运行检查器并确认只剩页面级债务和 `ColumnEditor.vue` 临时例外。
-- [ ] **Step 5（证据）**：在 `1440×900` 浅/深主题各保留壳层默认截图，在 `900×768` 保留窄视口一张，并用计算样式覆盖 hover/focus/disabled，不额外保存状态截图。
+- [ ] **Step 5（证据）**：在 `1440×900` 浅/深主题各保留壳层默认截图，在 `900×768` 保留窄视口一张，并用计算样式覆盖 hover/focus/disabled，不额外保存状态截图。**壳层截图必须重拍基准**：Task 2 的基准里壳层还是 Unicode 字符与旧尺寸，Task 4 迁移后像素必变；重拍件要按计划的全轮配额计账。同时记录级联事实：`primitives.css:36` 的 `.modal-actions button{padding:9px 16px}` 会被原语的固定高度 + `padding:0 var(--space-4)` 静默覆盖（scoped/无层优先于命名层），属**预期行为**，不再为旧选择器补声明；发现其他同类覆盖时同例处理，不引入特异性竞争（首轮评审 F5）。
 - [ ] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-visual-evidence.spec.ts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`。
 - [ ] **Step 7（提交）**：commit：`迁移桌面壳层到统一视觉原语`。
 
@@ -395,6 +398,13 @@ related:
 > `entry.file` 等于例外文件自身的登记。
 > ③ 注释–指纹耦合：全表 23 条指纹内嵌了前置注释（9 个文件、18 段注释文本），改动这些注释会同时改动
 > 指纹；处置义务已写在 Task 9 Step 4。
+>
+> **收口责任 D（`UiButton.label`/`UiIconButton` 尚未写进 ARCH-DM-007 §5，Task 3 首轮评审 F4）**：
+> ARCH-DM-007 §5 未记录两点新增约束——① 纯图标按钮用 `UiIconButton`（`label` 必填）而非
+> `UiButton` + `label`；② `UiButton` 带可见文案时若同时传 `label`，两者文字必须一致（WCAG 2.5.3）。
+> 这两条现在只存在于源码注释、测试与 Task 4 Step 2；需在 Task 12 的文档收口轮把 §5 补齐（含
+> `UiButton.label` 只用于「插槽无可读文案」的边界），并同时校正 §6 的图标许可描述（Lucide 是 **ISC**，
+> 不是 MIT；几何数据为按名称转写、未与上游版本同步，逐图标比对结论见 Task 3 报告）。
 
 ## 依赖与提交顺序
 
@@ -454,6 +464,7 @@ Task 10 → Task 11 → Task 12
 | Task 3 | `rtk npm --prefix web run test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`test:unit`、`check:ui`、`test:contracts`、`build` | 定向 **30 passed / 0 failed**（新增 `uiPrimitives.test.ts` 23 条 + `dialogFocus.test.ts` 7 条）；全量 `unit` **78 passed**（48 基线 + 30 新增，无回归）；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（`vue-tsc` 类型检查通过、`check:i18n` 946 键、`dist` 产出不变）；三项变异（`UiSelect` 高度令牌改写 1 红、删除 `UiIconButton` 空 label 守卫 1 红、关闭 Tab 圈闭 2 红）均转红并逐字节还原；棘轮不变量 383 = 382 + 1 未被扰动，`components/ui` 新增文件零新增违规；例外表 blob 仍为 `b82f03f0…`（382 条，Task 3 例外配额 0） | 提交 `新增前端公共视觉与焦点原语`；报告与证据见 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/`（`task-3-report.md`、`evidence/task-3-{red,green,mutations,invariant}.txt`） |
 | Task 2（评审修复轮 2） | `rtk npm --prefix web run test:contracts`、`check:ui`、三条新用例的聚焦变异运行 | **83 passed / 0 failed**（+3：例外 `rule`/指纹不一致 2 条 + 入口缺失 1 条）；382 条存量例外审计 **382/382 自洽、指纹零改动**；变异 A（停用一致性校验）使 2 条转红、变异 B（停用入口缺失判定）使 1 条转红，逐字节还原后复绿；`check:ui` 退出 0；未跑 `build`/`test:unit`（改动不触 `.vue`/`.ts`/入口样式表） | 提交 `收紧 UI 契约例外一致性与字体溯源记录`；报告见 `task-2-report.md` 第 11 节 |
 | Task 2（评审修复轮 3：文档/注释级） | 只跑 `check:ui`、`test:contracts` 与 PowerShell 字体复核命令（不跑 e2e/build） | 按三轮再审落实 D1–D7：差集复算为 Inter 缺 `U+00AD`、Plex 缺 `U+201B`（均为字体未提供，越界 0）；README 四条硬门禁区分为「字体类三条 + 入口一条」，补齐 Plex/差集/CJK 三条可复制命令并附实测输出；删除 `document.fonts` 误述，将「真实加载」标为未覆盖并登记为本任务收口责任 A；`legacy.css` 的 `:where()` 措辞收窄 | 提交 `校正字体溯源文档与契约注释措辞`；报告见 `task-2-report.md` 第 12 节 |
+| Task 3（首轮评审修复） | `test:unit -- src/components/ui/uiPrimitives.test.ts src/components/ui/dialogFocus.test.ts`、`test:unit`、`check:ui`、`test:contracts`、`build`；另做图标溯源逐名称比对与三项变异重跑 | 定向 RED **29 passed / 7 failed**（F1 的 2 条 + F2 的 4 条 + 一条因注释里出现 `v-html` 而误报的断言），修正后 **36 passed / 0 failed**；全量 `unit` **84 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0；例外表 blob 仍 `b82f03f0…`（382 条），不变量 383 = 382 + 1 | 提交 `修正原语实例标识与焦点圈闭边界`；报告与证据见 `task-3-report.md` 第 12–14 节与 `evidence/task-3-fix-*.txt` |
 | Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
