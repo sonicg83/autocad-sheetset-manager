@@ -234,6 +234,24 @@ def test_same_attempt_revision_dir_conflict_is_refused(tmp_path: Path):
     assert not (tmp_path / ".dst-manager" / "jobs" / job_id).exists()
 
 
+def test_bare_attempt_revision_dir_conflict_is_refused(tmp_path: Path):
+    """revision_dir 已存在但尚无 manifest 与 journal（如 before 快照复制期间崩溃）同样拒绝发布。"""
+    job_id = "bare-revision-dir-job"
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+    revision_dir = tmp_path / ".dst-manager" / "revisions" / job_id / "attempt-001"
+    (revision_dir / "before").mkdir(parents=True)
+    with pytest.raises(PublishOperationConflictError) as exc_info:
+        RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=1)
+    assert exc_info.value.code == "PUBLISH_OPERATION_CONFLICT"
+    assert target.read_text() == "before"
+    assert not (tmp_path / ".dst-manager" / "jobs" / job_id).exists()
+    assert not (revision_dir / "manifest.json").exists()
+    assert not (revision_dir / "publish-journal.json").exists()
+
+
 def test_same_attempt_job_namespace_conflict_is_refused(tmp_path: Path):
     """仅 jobs attempt 目录存在也属于未恢复现场，禁止覆盖 journal。"""
     job_id = "job-journal-conflict"

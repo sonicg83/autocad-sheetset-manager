@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-14（修复：PLAN-DM-031 全分支评审发现的文档矛盾与守卫测试缺口）
+
+- **`ADR-DM-004`**：文末追加第二次补记，声明 2026-09-14 第一次补记中的目录复用契约（证明一致后复用修订目录、回收与基准逐字节相同的 `.replaced` 替换备份、`superseded-journals/` 留档）已被 PLAN-DM-031 的 attempt 嵌套命名空间整体取代并废止；重试永远写入新 `attempt-NNN/` 目录，所有 attempt 的 journal、before 快照与终态记录永久保留。旧补记原文不动。
+- **`ARCH-DM-001` §8.1**：目录树改为与磁盘实况一致——`jobs/<operation-id>/` 下 `staging/`、`scripts/`、`logs/`、`publish-journal.json` 均位于 `attempt-NNN/` 下，`staging/` 内画出 `group-NNN/`、`final-dst/` 与 `.dst-handles.txt` 旁车文件；删除已不存在的 `handles/` 目录；`revisions/` 侧标明旧平铺 `manifest.json`、`input/`、`logs/` 为只读遗留，`plan/` 仍为平铺现行布局。**§8.2** 补一句：同一 `operation_id` 新旧布局 manifest 并存时，已提交清单枚举按嵌套布局（`attempt-NNN/`）优先用于数据库闭环（`publish_recovery.py` 的 `setdefault` 枚举顺序保证）。
+- **测试**：`tests/unit/test_publish_guards.py` 新增 `test_bare_attempt_revision_dir_conflict_is_refused`——只构造含 `before/` 子目录但无 manifest 与 journal 的 `revisions/<job_id>/attempt-001/`（快照复制期间崩溃窗口），断言 `publish(attempt=1)` 抛 `PublishOperationConflictError`（`PUBLISH_OPERATION_CONFLICT`）、正式文件内容不变、jobs 侧不建目录。
+- **验证**：`uv run pytest tests/unit/test_publish_guards.py -q` 18 passed（含新增 1 例）；`uv run ruff check .` All checks passed；`uv run pytest -q` 共 1503 项 / 1431 passed / 0 failed / 72 skipped（junitxml 统计）。
+
 ## 2026-09-14（交付：PLAN-DM-031 发布事务按 attempt 嵌套命名空间与 publisher 模块拆分）
 
 [PLAN-DM-031](.planning/plans/dst-manager/PLAN-DM-031-publisher-attempt-namespace-and-split.md) 全部 10 个任务实施完成（9 个实现提交，`b248ff1` 至 `77bca26`）。

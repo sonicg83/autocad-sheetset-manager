@@ -314,30 +314,39 @@ Python 不接受用户提供 SCR 文本，只把结构化意图渲染为固定�
    ├─ workspace.json
    ├─ revisions/
    │  └─ <operation-id>/
-   │     ├─ attempt-NNN/
-   │     │  ├─ manifest.json
-   │     │  ├─ before/
-   │     │  │  ├─ 图纸集数据文件.dst
-   │     │  │  └─ <受影响DWG>
-   │     │  └─ publish-journal.json
-   │     ├─ manifest.json
-   │     ├─ input/
-   │     │  └─ imported.xml
    │     ├─ plan/
    │     │  ├─ change-set.json
    │     │  └─ execution-plan.json
-   │     └─ logs/
+   │     ├─ attempt-NNN/
+   │     │  ├─ manifest.json
+   │     │  ├─ publish-journal.json
+   │     │  ├─ before/
+   │     │  │  ├─ 图纸集数据文件.dst
+   │     │  │  └─ <受影响DWG>
+   │     │  ├─ input/
+   │     │  │  ├─ sources/
+   │     │  │  └─ imported.xml
+   │     │  ├─ scripts/
+   │     │  └─ logs/
+   │     ├─ manifest.json        （仅旧平铺布局，历史工作区只读遗留）
+   │     ├─ input/               （同上）
+   │     └─ logs/                （同上）
    └─ jobs/
       └─ <operation-id>/
          ├─ attempt-NNN/
-         │  └─ publish-journal.json
-         ├─ staging/
-         ├─ scripts/
-         ├─ handles/
-         └─ publish-journal.json
+         │  ├─ publish-journal.json
+         │  ├─ staging/
+         │  │  ├─ group-NNN/
+         │  │  │  ├─ <暂存DWG>
+         │  │  │  └─ <暂存DWG>.dst-handles.txt
+         │  │  └─ final-dst/
+         │  │     └─ <暂存DST>
+         │  ├─ scripts/
+         │  └─ logs/
+         └─ publish-journal.json （仅旧平铺布局，历史工作区只读遗留）
 ```
 
-修订目录按发布尝试嵌套：新写入一律落在 `attempt-NNN/` 子目录（`NNN` 为三位零填充的 attempt 序号）；旧平铺布局的 `revisions/<operation-id>/manifest.json`、`jobs/<operation-id>/publish-journal.json`（含历史 `superseded-journals/` 留档）仅由升级前的历史工作区产生，读取侧继续兼容（只读），新发布永不写入或复用。每次尝试的修订目录、发布日志与 before 快照永久保留，不提供自动清理。任务成功后可删除可再生的 `jobs/<operation-id>/staging`，但发布日志和执行日志归档到对应revision；是否清理临时副本由显式维护命令控制。
+修订目录按发布尝试嵌套：新写入一律落在 `attempt-NNN/` 子目录（`NNN` 为三位零填充的 attempt 序号）；旧平铺布局的 `revisions/<operation-id>/manifest.json`、`jobs/<operation-id>/publish-journal.json`（含历史 `superseded-journals/` 留档）仅由升级前的历史工作区产生，读取侧继续兼容（只读），新发布永不写入或复用。每次尝试的修订目录、发布日志与 before 快照永久保留，不提供自动清理。任务成功后可删除可再生的 `jobs/<operation-id>/attempt-NNN/staging`，但发布日志和执行日志归档到对应revision；是否清理临时副本由显式维护命令控制。布局 Handle 清单不再使用独立的 `handles/` 目录：`<暂存副本>.dst-handles.txt` 与暂存副本同目录存放，随暂存区一起管理。提交成功后，本次尝试的 `input`、`scripts`、`logs` 归档副本写入 `revisions/<operation-id>/attempt-NNN/` 对应子目录。
 
 ### 8.2 整批事务语义
 
@@ -354,7 +363,7 @@ Windows文件系统没有跨多个文件的原子事务，MVP使用可恢复发�
 
 同一工作区同一时刻只允许一个写任务。文件锁、基准哈希变化、磁盘空间不足或恢复失败均为阻断错误。
 
-每次尝试的 `publish-journal.json`、`before` 快照与终态记录永久保留，发布路径不存在自动清扫（保持 DM-ADR-009「每次操作永久保存原文件与日志」结论）。旧平铺布局只读兼容；不支持降级——旧版本程序读不到嵌套日志，升级前须确认工作区无进行中发布任务。
+每次尝试的 `publish-journal.json`、`before` 快照与终态记录永久保留，发布路径不存在自动清扫（保持 DM-ADR-009「每次操作永久保存原文件与日志」结论）。旧平铺布局只读兼容；不支持降级——旧版本程序读不到嵌套日志，升级前须确认工作区无进行中发布任务。同一 `operation_id` 若新旧布局的已提交 manifest 并存（升级前后各发布过一次），已提交清单枚举按嵌套布局（`attempt-NNN/`）优先用于数据库闭环。
 
 ### 8.3 文件锁策略
 

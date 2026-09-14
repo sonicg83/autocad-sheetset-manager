@@ -55,3 +55,13 @@ related:
 - 重试可在**证明上一次尝试已整批回到发布前状态**时复用既有修订目录：`before` 快照与当前正式文件基准（哈希与文件身份）逐字节相同，才允许复用并按需覆盖；与基准逐字节相同的残留 `.<名称>.<operation_id>.replaced` 替换备份属冗余副本，可在持锁发布器内回收。回收只发生在已证明一致之后，不做猜测性清理，也不删除无法证明的残留。
 - `manifest.json` 已存在（即该 `operation_id` 已有已提交修订）或证据不足时一律拒绝复用，返回 `PUBLISH_OPERATION_CONFLICT` 并进入 `NEEDS_REVIEW` 人工复核，**不得自动重跑**（避免覆盖已提交修订历史或把半发布状态当成基准）。
 - 重试覆盖前，上一次尝试的 `publish-journal.json` 必须复制留档到 `revisions/<operation-id>/superseded-journals/publish-journal.<NNN>.json`：journal 是文件级证据的唯一载体，不得因重试静默丢失。用复制而非移动，使「回收完成但新 `PREPARED` 未写入」的崩溃窗口下启动恢复仍能看到旧日志。
+
+## 补记（2026-09-14，第二次）：修订目录复用契约已被 attempt 嵌套命名空间取代（PLAN-DM-031）
+
+上一节「补记（2026-09-14）：同一 `operation_id` 重试时的修订目录复用契约」中与目录复用相关的机制**自本补记起全部废止**，原文保留于上文仅作历史记录，不再构成现行契约。
+
+`retry_job` 复用 `job_id`（即发布器的 `operation_id`）这一事实不变，但 PLAN-DM-031 引入 attempt 嵌套命名空间后，每次重试永远写入严格递增的新 attempt 目录——`revisions/<job_id>/attempt-NNN/` 与 `jobs/<job_id>/attempt-NNN/`（`NNN` 为三位零填充的 attempt 序号）——不再存在「重试第二次面对同一修订目录」的前提。据此：
+
+- 上一补记的三个机制已全部删除：重试不再复用既有修订目录（故「证明一致后按需覆盖」的前提消失）；与基准逐字节相同的 `.<名称>.<operation_id>.replaced` 替换备份不再回收（临时文件与替换备份改按 `job~attempt` 命名，跨 attempt 天然隔离，无需回收旧副本）；`superseded-journals/` 留档机制整体删除（每个 attempt 有独立的 `publish-journal.json`，覆盖场景不复存在）。
+- 「与基准逐字节相同的替换备份属冗余副本、可回收」的表述同时废止：它与本 ADR 决策中 before 快照与证据永久保留的契约直接冲突。现行契约为：**所有 attempt** 的 `publish-journal.json`、`before` 快照与终态记录一律永久保留，发布路径不存在自动清扫；磁盘保留策略须未来通过独立 ADR 与显式维护命令立项。
+- 上一补记中仍然有效并被强化的部分：`manifest.json` 已存在（该 `operation_id` 已有已提交修订，现覆盖同一 job 的任一新旧布局 manifest）或当前 attempt 的发布命名空间已被占用时，一律拒绝发布，返回 `PUBLISH_OPERATION_CONFLICT` 并进入 `NEEDS_REVIEW` 人工复核，不得自动重跑。
