@@ -942,16 +942,56 @@ class RecoverablePublisher:
         with WorkspaceTransactionLock(lock_path):
             return self._recover_locked(workspace_root)
 
+    @staticmethod
+    def _parse_attempt_dir_name(name: str) -> int:
+        raw_attempt = name.removeprefix("attempt-")
+        try:
+            attempt = int(raw_attempt)
+        except ValueError as error:
+            raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH") from error
+        if attempt < 1 or name != f"attempt-{attempt:03d}":
+            raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+        return attempt
+
+    def _iter_journal_records(
+        self,
+        jobs: Path,
+        workspace_root: Path,
+    ) -> list[tuple[Path, str, int | None, Path]]:
+        """按新旧两种布局枚举发布日志并严格校验 attempt 目录名。返回
+        ``(journal_path, job_id, attempt, revision_dir)``。
+
+        嵌套布局 ``jobs/<job_id>/attempt-NNN/`` 与旧平铺布局 ``jobs/<job_id>/`` 并存：
+        升级后旧工作区仍必须能被启动恢复与清单枚举读取，因此两套 glob 都要扫。
+        """
+        records: list[tuple[Path, str, int | None, Path]] = []
+        revisions = workspace_root / ".dst-manager" / "revisions"
+        for path in jobs.glob("*/attempt-*/publish-journal.json"):
+            job_id = path.parent.parent.name
+            attempt_dir_name = path.parent.name
+            attempt = self._parse_attempt_dir_name(attempt_dir_name)
+            records.append((path, job_id, attempt, revisions / job_id / attempt_dir_name))
+        for path in jobs.glob("*/publish-journal.json"):
+            records.append((path, path.parent.name, None, revisions / path.parent.name))
+        return records
+
     def _recover_locked(self, workspace_root: Path) -> list[str]:
         recovered: list[str] = []
         jobs = workspace_root / ".dst-manager" / "jobs"
         if not jobs.exists():
             return recovered
-        for path in jobs.glob("*/publish-journal.json"):
+        for path, job_id, attempt, revision_dir in self._iter_journal_records(jobs, workspace_root):
             journal = json.loads(path.read_text(encoding="utf-8"))
             status = journal["status"]
             if status in {"ROLLED_BACK", "ABORTED_BASELINE_CHANGED"}:
                 continue
+            # 嵌套布局额外校验 attempt 目录名与 journal 字段一致；该校验必须
+            # 覆盖所有未终结状态（含 PREPARED/PUBLISHING/ROLLING_BACK），
+            # 因此放在状态分发之前。
+            if attempt is not None:
+                journal_attempt = journal.get("attempt")
+                if type(journal_attempt) is not int or journal_attempt != attempt:
+                    raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
             if status == "COMMITTED":
                 if "identity_version" in journal and journal["identity_version"] != 1:
                     journal["cleanup_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
@@ -960,10 +1000,8 @@ class RecoverablePublisher:
                     raise PublishRecoveryError(
                         f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                     )
-                operation_id = path.parent.name
-                if journal.get("operation_id") != operation_id:
+                if journal.get("operation_id") != job_id:
                     raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
-                revision_dir = workspace_root / ".dst-manager" / "revisions" / operation_id
                 manifest_path = revision_dir / "manifest.json"
                 try:
                     archived_journal = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1049,17 +1087,31 @@ class RecoverablePublisher:
             return self._list_committed_operations_locked(workspace_root)
 
     def _list_committed_operations_locked(self, workspace_root: Path) -> list[dict]:
-        candidates = (workspace_root / ".dst-manager" / "revisions").glob("*/manifest.json")
+        revisions = workspace_root / ".dst-manager" / "revisions"
+        # 新旧两种布局并存：嵌套 ``revisions/<job_id>/attempt-NNN/`` 与旧平铺
+        # ``revisions/<job_id>/``。候选 manifest 按路径携带预期身份，身份不一致
+        # 的清单不得用于数据库闭环。
+        candidates: list[tuple[Path, str, int | None]] = []
+        for path in revisions.glob("*/attempt-*/manifest.json"):
+            candidates.append((path, path.parent.parent.name, self._parse_attempt_dir_name(path.parent.name)))
+        candidates.extend((path, path.parent.name, None) for path in revisions.glob("*/manifest.json"))
         committed: dict[str, dict] = {}
-        for path in candidates:
+        for path, expected_job_id, expected_attempt in candidates:
             try:
                 journal = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             operation_id = journal.get("operation_id")
+            if expected_attempt is None:
+                identity_matches = True
+            else:
+                journal_attempt = journal.get("attempt")
+                identity_matches = type(journal_attempt) is int and journal_attempt == expected_attempt
             if (
                 journal.get("status") != "COMMITTED"
                 or not isinstance(operation_id, str)
+                or operation_id != expected_job_id
+                or not identity_matches
                 or not isinstance(journal.get("files"), list)
             ):
                 continue

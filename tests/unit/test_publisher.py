@@ -1813,3 +1813,46 @@ def test_replacement_backup_with_unknown_content_is_refused(tmp_path: Path):
     assert "替换备份无法证明可回收" in str(exc_info.value)
     assert target.read_bytes() == b"before"
     assert stale.read_bytes() == b"mystery"
+
+
+@pytest.mark.parametrize("status", ["PREPARED", "PUBLISHING", "ROLLING_BACK"])
+def test_startup_recovery_reads_nested_attempt_journal(tmp_path: Path, status: str):
+    """嵌套 attempt 布局下的未完成日志在启动恢复时按嵌套路径回滚。"""
+    operation = "nested-crash"
+    target = tmp_path / "target.txt"
+    target.write_text("after")
+    backup = tmp_path / ".dst-manager" / "revisions" / operation / "attempt-001" / "before" / target.name
+    backup.parent.mkdir(parents=True)
+    backup.write_text("before")
+    journal_path = tmp_path / ".dst-manager" / "jobs" / operation / "attempt-001" / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal = {
+        "operation_id": operation,
+        "attempt": 1,
+        "status": status,
+        "files": [{"target": str(target), "backup": str(backup), "staged": None, "replaced": status != "PREPARED"}],
+    }
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    assert RecoverablePublisher().recover(tmp_path) == [operation]
+    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    assert target.read_text() == ("after" if status == "PREPARED" else "before")
+
+
+@pytest.mark.parametrize(
+    ("attempt_dir_name", "journal_attempt"),
+    [("attempt-foo", 1), ("attempt-000", 0), ("attempt-01", 1), ("attempt-001", 2)],
+)
+def test_startup_recovery_rejects_noncanonical_or_mismatched_attempt_identity(
+    tmp_path: Path,
+    attempt_dir_name: str,
+    journal_attempt: int,
+):
+    operation = "bad-attempt-identity"
+    journal_path = tmp_path / ".dst-manager" / "jobs" / operation / attempt_dir_name / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    journal_path.write_text(
+        json.dumps({"operation_id": operation, "attempt": journal_attempt, "status": "PREPARED", "files": []}),
+        encoding="utf-8",
+    )
+    with pytest.raises(PublishRecoveryError, match="PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"):
+        RecoverablePublisher().recover(tmp_path)

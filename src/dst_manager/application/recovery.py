@@ -94,7 +94,14 @@ class TransactionRecoveryOperations:
                     revision_id = f"xml-{operation_id}"
                 else:
                     revision_id = f"change-{operation_id}"
-                revision_dir = workspace_root / ".dst-manager" / "revisions" / operation_id
+                # 按 journal 的 attempt 字段重建修订目录：嵌套布局为
+                # revisions/<job_id>/attempt-NNN/，旧平铺布局保持原路径。
+                attempt = journal.get("attempt")
+                revision_dir = (
+                    workspace_root / ".dst-manager" / "revisions" / operation_id / f"attempt-{attempt:03d}"
+                    if type(attempt) is int and attempt >= 1
+                    else workspace_root / ".dst-manager" / "revisions" / operation_id
+                )
                 self.database.finalize_committed_job(
                     revision_id,
                     job["workspace_id"],
@@ -119,9 +126,18 @@ class TransactionRecoveryOperations:
         if not jobs_root.is_dir():
             return
         error_code = str(error) or error.code
-        for journal_path in jobs_root.glob("*/publish-journal.json"):
-            operation_id = journal_path.parent.name
-            if not operation_id or journal_path.parent.parent != jobs_root:
+        # 只从受控目录层级取得 operation_id，不读取 journal 内容来决定数据库主键；
+        # attempt 目录名与 journal 身份的一致性由 _recover_locked 严格校验，失败后
+        # 本方法按路径中的 job_id 隔离对应任务。
+        candidates = list(jobs_root.glob("*/attempt-*/publish-journal.json")) + list(
+            jobs_root.glob("*/publish-journal.json")
+        )
+        for journal_path in candidates:
+            if journal_path.parent.parent == jobs_root:
+                operation_id = journal_path.parent.name
+            else:
+                operation_id = journal_path.parent.parent.name
+            if not operation_id:
                 continue
             job = self.database.get_job(operation_id)
             if job is None or job["status"] == JobStatus.SUCCEEDED:
