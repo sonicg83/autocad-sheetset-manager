@@ -518,6 +518,9 @@ main{padding:24px}
       .filter((violation) => /900px|511px|600px/.test(violation.message))
       .map((violation) => `${violation.rule}: ${violation.message}`);
     assert.deepEqual(preludeMentions, []);
+    // 钉住「不多不少」：该夹具的违规集合必须恰好是这 3 条裸视觉值，
+    // 冒出规则外的额外违规（如 `undefined-css-variable`）同样必须判错。
+    assert.deepEqual(rulesOf(violations), ["raw-visual-value", "raw-visual-value", "raw-visual-value"]);
   });
 
   test("@keyframes 的 from/to/百分比关键帧不作为规则参与判定", () => {

@@ -10,7 +10,7 @@
 - 实际验证：`npm --prefix web run test:contracts` **49 passed / 0 failed**（含 9 类违规注入的变异套件与回滚断言）；注入临时违规后 `check:ui` 退出 1、移除后退出 0；`npm --prefix web run check:ui` 退出 0（仅因已登记债务通过）；`npm --prefix web run build` 退出 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全链通过）；`npm --prefix web run test:unit` 48 passed 无回归。
 - 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。（宽度家族已在评审修复中补齐；最终口径见下方修复记录与报告第 6 节。）
 - **评审修复（commit `修正 UI 契约检查器位置计算与令牌块豁免`）**：修正 5 项重要缺陷与 5 项次要缺陷。
-  - 位置计算：声明值下标已经是整份文件的绝对下标，原实现又加了一层规则内容起点，导致行号正确但列号系统性偏后；修正后 `raw-visual-value`/`raw-hex-color` 的 `line:column` 精确指向值起点，并新增手算行列的回归测试。
+  - 位置计算：声明值下标相对 `<style>` 块内容文本（切分已以规则内容起点为基点，仅 `.css` 文件才与整份文件下标重合），原实现误按「已是文件绝对下标」又额外加了一层规则内容起点，导致行号正确但列号系统性偏后；修正后按「块在文件中的偏移 + 块内下标」定位，`raw-visual-value`/`raw-hex-color` 的 `line:column` 精确指向值起点，并新增手算行列的回归测试。
   - 图标定位：原实现用变长替换剔除 HTML 注释，吞掉注释内换行后使注释之后的图标整体前移；改为逐字符等长遮罩（保留换行），新增含多行注释的模板回归测试。
   - 令牌块豁免收窄：原实现在逗号列表里只要有一段命中 `:root`/`html` 前缀就整块豁免，使 `html body .panel`、`html[data-theme="dark"] .panel`、`:root,.panel` 静默通过；现要求**每一段**都恰为 `:root`/`html[...]` 且不含后代组合，三种逃逸用例均已被拒绝。
   - 尺寸规则补全：`raw-visual-value` 增加 `width`/`min-width`/`max-width`，与高度家族对齐（图标成对书写宽高）；同时新增回归测试证明 `@media (max-width:…)`/`@container … (max-width:…)` 前奏不会被当成声明。
