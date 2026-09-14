@@ -34,7 +34,7 @@ const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavai
 </template>
 <style scoped>
 .topbar{display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);height:var(--shell-bar-height);min-height:var(--shell-bar-height);background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
-.brand{font-weight:600;font-size:var(--font-size-14);color:var(--color-text-primary);white-space:nowrap}
+.brand{font-weight:600;font-size:var(--button-font-size);color:var(--color-text-primary);white-space:nowrap}
 .brand-sub{color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}
 .workspace-name{color:var(--color-text-primary);font-size:var(--font-label);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:clamp(140px,24vw,300px)}
 .spacer{flex:1}

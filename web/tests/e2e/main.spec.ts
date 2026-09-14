@@ -1530,8 +1530,11 @@ test("Task 2 字体资源：两套本地 WOFF2 且不引用远程 URL",async({pa
 // ===== PLAN-DM-029 Task 4：壳层纵向验证 =====
 // 尺寸必须在真实浏览器里量：happy-dom 不做布局，Task 3 只在源码与令牌链层面锁定了这组尺寸
 // （`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件）。
-// 本节同时补齐 Task 3 无法在本地验证的真实可见性叠加（`[hidden]`/`inert`/`display:none`/
-// `visibility`）与任务浮层的焦点语义（手写副本迁到 `useDialogFocus` 后必须保住的三条）。
+// 本节同时补齐 Task 3 无法在本地验证的真实可见性叠加（`display:none`，含祖先与自身）与
+// 任务浮层的焦点语义（手写副本迁到 `useDialogFocus` 后必须保住的三条）以及 Step 5 要求的
+// hover/focus/disabled 计算样式。注：**不拿 `[hidden]` 当隐藏形态**——壳层按钮位于 `<aside>` 内，
+// `legacy.css:24` 的 `:where(#app) aside button{display:flex}` 是作者规则，按层叠直接覆盖
+// UA 的 `[hidden]{display:none}`，`[hidden]` 按钮仍会产生盒子（实测可被 `focus()`）。
 
 test("壳层已迁移控件：本地 SVG 图标、统一尺寸与可访问名称",async({page})=>{
   await openWorkspace(page);
@@ -1568,7 +1571,45 @@ test("壳层已迁移控件：本地 SVG 图标、统一尺寸与可访问名称
   }
 });
 
-test("任务浮层焦点：初始焦点在当前激活页签、关闭回焦当前激活入口、Tab 圈闭跳过隐藏候选",async({page})=>{
+test("壳层交互态：键盘焦点环、悬停与禁用态的计算样式",async({page})=>{
+  await openWorkspace(page);
+  // 令牌解析：断言落在令牌真值上而不是硬编码 rgb
+  const tokenColor=(name:string)=>page.evaluate(token=>{
+    const probe=document.createElement("span");
+    probe.style.color=`var(${token})`;
+    document.body.appendChild(probe);
+    const value=getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  },name);
+
+  // 键盘焦点（Step 1）：`:focus-visible` 的统一焦点环（`reset.css:34`）对壳层控件同样生效
+  await page.locator(".topbar .theme-btn").focus();
+  await page.keyboard.press("Tab");
+  const settings=page.locator(".topbar .settings-btn");
+  await expect(settings).toBeFocused();
+  const ring=await settings.evaluate(el=>{const s=getComputedStyle(el);return {style:s.outlineStyle,width:s.outlineWidth,color:s.outlineColor}});
+  expect.soft(ring.style,"键盘焦点环线型").toBe("solid");
+  expect.soft(ring.width,"键盘焦点环线宽").toBe("2px");
+  expect.soft(ring.color,"键盘焦点环颜色").toBe(await tokenColor("--color-focus"));
+
+  // 悬停（Step 5）：`.settings-btn:hover` 命中 `--color-bg-muted`，且与常态不同
+  const muted=await tokenColor("--color-bg-muted");
+  const normalBg=await settings.evaluate(el=>getComputedStyle(el).backgroundColor);
+  await settings.hover();
+  const hoverBg=await settings.evaluate(el=>getComputedStyle(el).backgroundColor);
+  expect.soft(normalBg,"悬停前背景与悬停态不同").not.toBe(muted);
+  expect.soft(hoverBg,"悬停背景命中 --color-bg-muted").toBe(muted);
+
+  // 禁用态（Step 5）：默认无草稿时撤销必然禁用（`cursor===0`），禁用样式由壳层自己声明
+  const undo=page.locator(".dock .dock-btn.ghost").first();
+  await expect(undo).toBeDisabled();
+  const disabledStyle=await undo.evaluate(el=>{const s=getComputedStyle(el);return {opacity:s.opacity,cursor:s.cursor}});
+  expect.soft(disabledStyle.opacity,"禁用态透明度").toBe("0.5");
+  expect.soft(disabledStyle.cursor,"禁用态光标").toBe("not-allowed");
+});
+
+test("任务浮层焦点：展开后落在当前激活页签、关闭回焦当前激活入口、Tab 在首尾回绕",async({page})=>{
   await openWorkspace(page);
   const drawer=page.locator(".task-drawer");
   const activeId=()=>page.evaluate(()=>document.activeElement?.id??null);
@@ -1581,23 +1622,33 @@ test("任务浮层焦点：初始焦点在当前激活页签、关闭回焦当�
   await page.getByRole("button",{name:"收起任务浮层"}).click();
   await expect(drawer).toBeHidden();
   await expect.poll(activeEntry).toBe("diag");
-  // ① 初始焦点：从「诊断」入口展开时焦点必须在当前激活页签，而不是抽屉里第一个页签
+  // ① 展开后焦点必须落在当前激活页签（不是抽屉里第一个页签）。注：非激活页签带
+  //    `tabindex="-1"`，迁移到 `useDialogFocus` 后 `focusables()[0]` 恒等于当前激活页签，
+  //    因此这条断言**不是**「必须显式传 `initialFocus`」的回归网，只是行为冻结。
   await page.locator('.task-rail [data-entry="diag"]').click();
   await expect(drawer).toBeVisible();
   await expect.poll(activeId).toBe("ov-tab-diag");
 
-  // ③ 真实可见性叠加：四种隐藏形态都不作停靠点（Task 3 的 happy-dom 用例只能验过滤结果）
+  // ③ 隐藏形态的**端点级**验证：探针放在抽屉两端 → 若 `display:none` 的候选被算作停靠点，
+  //    首/尾端点与回绕目标都会跟着变（Task 3 的 happy-dom 用例只能验过滤结果）。
+  //    只覆盖 `display:none`：`inert` 不影响布局、`visibility:hidden` 仍产生盒子，当前实现
+  //    都不过滤，本轮不写不诚实的断言；缺口与端点级补测一并登记在计划 Task 10。
+  //    这里用内联 `display:none`（而非属性写法）。
   await page.evaluate(()=>{
-    const host=document.createElement("div");
-    host.id="focus-probe";
-    host.innerHTML=[
-      '<button id="probe-hidden" hidden>隐藏属性</button>',
-      '<div inert><button id="probe-inert">惰性祖先</button></div>',
-      '<div style="display:none"><button id="probe-display">祖先不显示</button></div>',
-      '<div style="visibility:hidden"><button id="probe-visibility">不可见</button></div>',
-      '<button id="probe-last">真实最后</button>',
-    ].join("");
-    document.querySelector(".task-drawer")!.appendChild(host);
+    const drawerEl=document.querySelector(".task-drawer")!;
+    const head=document.createElement("div");
+    head.id="focus-probe-head";
+    head.innerHTML='<div style="display:none"><button id="probe-head-hidden">端点前不显示</button></div>';
+    const tailNote=document.createElement("div");
+    tailNote.id="focus-probe-tail";
+    tailNote.style.display="none";
+    tailNote.innerHTML='<button id="probe-tail-hidden">端点后不显示</button>';
+    const tail=document.createElement("button");
+    tail.id="probe-last";
+    tail.textContent="真实最后";
+    drawerEl.prepend(head);
+    drawerEl.appendChild(tail);
+    drawerEl.appendChild(tailNote);
   });
   // 非激活页签带 `tabindex="-1"`，不是停靠点 → 抽屉内**第一个真实停靠点**就是当前激活页签
   await page.locator("#probe-last").focus();

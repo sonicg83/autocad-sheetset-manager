@@ -20,7 +20,7 @@ function clickTab(tab:TabDescriptor){if(tab.disabled!==true)emit("select",tab.id
 </template>
 <style scoped>
 .tabbar{display:flex;align-items:stretch;gap:2px;padding:0 var(--space-4);background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);overflow-x:auto;flex-shrink:0}
-.tab{display:flex;align-items:center;gap:6px;padding:10px var(--space-4);color:var(--color-text-secondary);border:none;background:none;border-bottom:2px solid transparent;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;font-size:var(--font-size-14)}
+.tab{display:flex;align-items:center;gap:6px;padding:10px var(--space-4);color:var(--color-text-secondary);border:none;background:none;border-bottom:2px solid transparent;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;font-size:var(--button-font-size)}
 .tab:hover:not(:disabled){color:var(--color-text-primary)}
 .tab[aria-selected="true"]{color:var(--color-accent);border-bottom-color:var(--color-accent)}
 .tab:disabled{cursor:not-allowed;opacity:.5}
