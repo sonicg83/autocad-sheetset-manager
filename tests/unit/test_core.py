@@ -2363,6 +2363,7 @@ def test_startup_finalizes_committed_publish_exactly_once_after_repeated_restart
         operation_id,
         workspace.root,
         {workspace.dst_path: staged},
+        attempt=1,
         expected_baselines={workspace.dst_path: capture_file_baseline(workspace.dst_path)},
     )
     result_hash = file_sha256(workspace.dst_path)
@@ -2402,6 +2403,7 @@ def test_startup_quarantines_committed_publish_when_result_changed(
         operation_id,
         workspace.root,
         {workspace.dst_path: staged},
+        attempt=1,
         expected_baselines={workspace.dst_path: capture_file_baseline(workspace.dst_path)},
     )
     replacement = tmp_path / "external-after-committed.dst"
@@ -3420,7 +3422,7 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
     )
     assert database.finalize_committed_job.call_args.kwargs["worker_id"] == "worker"
     assert database.finalize_committed_job.call_args.kwargs["attempt"] == 1
-    assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "manifest.json").is_file()
+    assert (dst.parent / ".dst-manager" / "revisions" / "job-create" / "attempt-001" / "manifest.json").is_file()
 
 
 def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
@@ -4288,7 +4290,7 @@ def test_publish_rollback_event_and_job_record_true_reason(tmp_path: Path):
 def test_publish_operation_conflict_is_quarantined_with_specific_code(tmp_path: Path):
     """修订目录无法安全复用（如重试撞上已提交修订）时必须转人工复核，并暴露具体错误码。"""
     workspace, _ = _chained_rename_workspace(tmp_path, count=1)
-    reason = f"同一发布操作已存在提交清单，禁止复用修订目录：{workspace.root}/manifest.json"
+    reason = "同一发布操作已存在提交清单，禁止再次发布：job-conflict"
     database = Mock()
     database.update_job.return_value = True
     database.get_job.return_value = {

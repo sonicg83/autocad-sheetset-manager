@@ -325,7 +325,7 @@ def test_draft_api_persists_actions_detects_conflicts_and_marks_stale(tmp_path, 
 def test_open_preview_execute(tmp_path,tiny_workspace):
     dst,sheet_id=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); assert opened["sheet_set"]["sheet_count"]==1
     payload={"base_revision_id":opened["revision_id"],"commands":[{"type":"update_sheet_properties","sheet_id":sheet_id,"custom_properties":{"比例":"1:200"}}]}; preview=client.post(f"/api/workspaces/{opened['id']}/changes/preview",json=payload).json(); assert preview["requires_cad"] is False
-    job=client.post(f"/api/workspaces/{opened['id']}/changes/execute",json={**payload,"preview_digest":preview["preview_digest"]}).json(); assert job["status"]=="SUCCEEDED"; assert (dst.parent/".dst-manager"/"revisions"/job["id"]/"before"/dst.name).is_file()
+    job=client.post(f"/api/workspaces/{opened['id']}/changes/execute",json={**payload,"preview_digest":preview["preview_digest"]}).json(); assert job["status"]=="SUCCEEDED"; assert (dst.parent/".dst-manager"/"revisions"/job["id"]/"attempt-001"/"before"/dst.name).is_file()
 def test_revision_conflict(tmp_path,tiny_workspace):
     dst,_=tiny_workspace; client=TestClient(create_app(Settings(data_dir=tmp_path/"data"))); opened=client.post("/api/workspaces/open",json={"dst_path":str(dst)}).json(); response=client.post(f"/api/workspaces/{opened['id']}/changes/preview",json={"base_revision_id":"stale","commands":[]}); assert response.status_code==409 and response.json()["code"]=="REVISION_CONFLICT"
 
@@ -514,8 +514,8 @@ def test_retry_then_pre_cad_failure_does_not_expose_previous_file_terminal_state
     }
 
 
-def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path, tiny_workspace, monkeypatch):
-    """2026-09-14 现场回归：回滚任务经重试接口重置后，同一 operation_id 必须能再次发布。"""
+def test_retry_after_rolled_back_publish_uses_claimed_attempt_directories(tmp_path, tiny_workspace, monkeypatch):
+    """2026-09-14 现场回归：回滚任务经重试接口重置后，按领取的 attempt 写入独立目录再次发布。"""
     dst, _ = tiny_workspace
     app = create_app(Settings(data_dir=tmp_path / "data"))
     client = TestClient(app)
@@ -530,7 +530,7 @@ def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path, tiny_work
         {"plan": {"requires_cad": True}},
         "2020",
     )
-    revision_dir = dst.parent / ".dst-manager" / "revisions" / "job-rolled-retry"
+    revisions_root = dst.parent / ".dst-manager" / "revisions" / "job-rolled-retry"
     origin = dst.read_bytes()
     staged = tmp_path / "staged.dst"
     staged.write_bytes(origin + b"\n")
@@ -540,16 +540,23 @@ def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path, tiny_work
         raise OSError(f"注入发布故障：正式文件已替换 {entry['target']}")
 
     monkeypatch.setattr(publisher, "_capture_result", fail_after_replacement)
+    first_claim = database.claim_next_job("retry-worker")
+    assert first_claim is not None and first_claim["attempt"] == 1
     with pytest.raises(PublishRolledBackError) as exc_info:
         publisher.publish(
             "job-rolled-retry",
             dst.parent,
             {dst: staged},
+            attempt=first_claim["attempt"],
             expected_baselines={dst: capture_file_baseline(dst)},
         )
 
     assert dst.read_bytes() == origin
-    assert (revision_dir / "before" / dst.name).read_bytes() == origin
+    first_journal = (
+        dst.parent / ".dst-manager" / "jobs" / "job-rolled-retry" / "attempt-001" / "publish-journal.json"
+    )
+    assert json.loads(first_journal.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    assert (revisions_root / "attempt-001" / "before" / dst.name).read_bytes() == origin
     database.finalize_job_terminal("job-rolled-retry", "ROLLED_BACK", "PUBLISH_ROLLED_BACK", str(exc_info.value))
     monkeypatch.undo()
 
@@ -560,19 +567,26 @@ def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path, tiny_work
     assert retry.json()["error_code"] is None
     assert dst.read_bytes() == origin
 
-    # Worker 重新领取重试后的任务：同一 operation_id 必须能发布成功，且保留上一次尝试的证据
+    # Worker 重新领取重试后的任务：attempt 计数递增，写入 attempt-002 新目录发布成功
+    second_claim = database.claim_next_job("retry-worker")
+    assert second_claim is not None and second_claim["attempt"] == 2
     publisher.publish(
         "job-rolled-retry",
         dst.parent,
         {dst: staged},
+        attempt=second_claim["attempt"],
         expected_baselines={dst: capture_file_baseline(dst)},
     )
 
     assert dst.read_bytes() == staged.read_bytes()
-    assert (revision_dir / "manifest.json").is_file()
-    assert (revision_dir / "before" / dst.name).read_bytes() == origin
-    superseded = list((revision_dir / "superseded-journals").glob("publish-journal.*.json"))
-    assert len(superseded) == 1
+    assert (revisions_root / "attempt-002" / "manifest.json").is_file()
+    # 两次尝试的 journal 与 before 快照永久保留，重试不回收上一次尝试的任何产物
+    assert json.loads(first_journal.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+    assert (revisions_root / "attempt-001" / "before" / dst.name).read_bytes() == origin
+    second_journal = (
+        dst.parent / ".dst-manager" / "jobs" / "job-rolled-retry" / "attempt-002" / "publish-journal.json"
+    )
+    assert json.loads(second_journal.read_text(encoding="utf-8"))["status"] == "COMMITTED"
 
 
 def test_preview_blocks_invalid_custom_property_before_job_creation(tmp_path, tiny_workspace):
@@ -624,7 +638,7 @@ def test_xml_preview_and_export_are_revisioned(tmp_path,tiny_workspace):
     destination=tmp_path/"export.dst"; payload={"base_revision_id":opened["revision_id"],"xml":xml,"destination":str(destination)}
     preview=client.post(f"/api/workspaces/{opened['id']}/xml/import/preview",json=payload).json(); assert any(item["type"]=="sheet_changed" for item in preview["changes"])
     payload["destination_revision_id"]=preview["destination_revision_id"]; payload["preview_digest"]=preview["preview_digest"]; job=client.post(f"/api/workspaces/{opened['id']}/xml/export-dst",json=payload).json(); assert job["status"]=="SUCCEEDED" and destination.is_file()
-    assert (tmp_path/".dst-manager"/"revisions"/job["id"]).is_dir()
+    assert (tmp_path/".dst-manager"/"revisions"/job["id"]/"attempt-001").is_dir()
 
 
 def test_xml_export_rejects_digest_that_does_not_match_current_preview(tmp_path, tiny_workspace):
@@ -867,7 +881,7 @@ def test_property_csv_import_preview_executes_domain_commands_and_skips_repeat(t
         json={**payload, "preview_digest": preview["preview_digest"]},
     ).json()
     assert job["status"] == "SUCCEEDED"
-    assert (dst.parent / ".dst-manager" / "revisions" / job["id"] / "before" / dst.name).is_file()
+    assert (dst.parent / ".dst-manager" / "revisions" / job["id"] / "attempt-001" / "before" / dst.name).is_file()
     reopened = client.get(f"/api/workspaces/{opened['id']}").json()
     assert reopened["revision_id"] != opened["revision_id"]
     assert reopened["sheet_set"]["custom_properties"]["项目阶段"] == "施工图"
@@ -977,7 +991,7 @@ def test_delete_custom_property_uses_revisioned_dst_publish(tmp_path, tiny_works
     assert preview["executable"] is True
     assert preview["requires_cad"] is False
     assert job["status"] == "SUCCEEDED"
-    assert (dst.parent / ".dst-manager" / "revisions" / job["id"] / "before" / dst.name).is_file()
+    assert (dst.parent / ".dst-manager" / "revisions" / job["id"] / "attempt-001" / "before" / dst.name).is_file()
     reopened = client.get(f"/api/workspaces/{opened['id']}").json()
     assert {item["name"] for item in reopened["sheet_set"]["property_definitions"]} == {"项目号"}
     assert reopened["sheet_set"]["subsets"][0]["sheets"][0]["custom_properties"] == {}

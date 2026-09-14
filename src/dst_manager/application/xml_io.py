@@ -203,6 +203,7 @@ class XmlExportOperations:
                     job_id,
                     workspace.root,
                     {destination: staged},
+                    attempt=1,  # XML 导入/导出任务不可重试，恒为首次尝试
                     expected_baselines={destination: expected_baseline},
                     on_committed=finalize_xml,
                 )

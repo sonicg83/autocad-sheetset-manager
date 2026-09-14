@@ -208,6 +208,7 @@ class RevisionRestoreOperations:
                     job_id,
                     workspace.root,
                     staged,
+                    attempt=1,  # 恢复任务不可重试，恒为首次尝试
                     expected_baselines=expected_baselines,
                     on_committed=finalize_restore,
                 )

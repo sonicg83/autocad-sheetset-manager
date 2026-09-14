@@ -31,13 +31,14 @@ class PublishRecoveryError(RuntimeError):
 
 
 class PublishOperationConflictError(PublishRecoveryError):
-    """同一发布操作的修订目录无法安全复用（已提交修订或上一次尝试状态不明）。
+    """同一发布操作的修订目录无法安全复用（已提交修订或同号 attempt 现场未恢复）。
 
-    ``retry_job`` 复用 ``job_id``，而发布器以 ``job_id`` 作为 ``operation_id``，所以任务重试
-    必然第二次面对第一次留下的 ``revisions/<operation_id>``。只有在能证明「上一次尝试已
-    整批回到发布前状态」时才允许复用；证据不足时必须转人工复核：既不能覆盖已提交的修订
-    历史，也不能在证据不足时做破坏性清理。继承 ``PublishRecoveryError`` 以沿用「隔离而不
-    是循环重试」的既有处置。
+    每次发布尝试独占 ``revisions/<job_id>/attempt-NNN/`` 目录：任务重试由数据库
+    attempt 计数严格递增，永远落在新目录上，因此不存在「回收上一次尝试」问题；
+    上一次尝试的目录永久保留，不由发布路径自动删除。``journal["operation_id"]``
+    保持等于 job_id，是启动恢复与提交后闭环查库的键；``journal["attempt"]``
+    用于按路径重建修订目录。继承 ``PublishRecoveryError`` 以沿用「隔离而不是
+    循环重试」的既有处置。
     """
 
     code = "PUBLISH_OPERATION_CONFLICT"
@@ -140,68 +141,28 @@ class RecoverablePublisher:
     def _replacement_backup_path(target: Path, operation_id: str) -> Path:
         return target.with_name(f".{target.name}.{operation_id}.replaced")
 
-    def _reclaim_previous_attempt(
-        self,
-        operation_id: str,
-        workspace_root: Path,
-        revision_dir: Path,
-        before_dir: Path,
-        journal_path: Path,
-        baselines: dict[Path, ExpectedFileBaseline | None],
-    ) -> None:
-        """为重试回收同一 ``operation_id`` 的修订目录，证据不足时拒绝继续。
-
-        判断只看可核验的事实：调用方基准已由 ``_verify_baselines`` 确认等于正式文件当前的
-        内容与身份，因此「与基准逐字节相同」的发布前快照或替换备份都是冗余副本，删除它们不
-        会丢失任何信息；一旦无法证明冗余（内容不一致、已存在提交清单），就必须转人工复核，
-        而不是猜测性清理。
-        """
-        manifest_path = revision_dir / "manifest.json"
-        if manifest_path.exists():
-            raise PublishOperationConflictError(f"同一发布操作已存在提交清单，禁止复用修订目录：{manifest_path}")
-        for target, expected in baselines.items():
-            snapshot = self._before_snapshot_path(before_dir, workspace_root, target)
-            if snapshot.exists() and (expected is None or file_sha256(snapshot) != expected.sha256):
-                raise PublishOperationConflictError(f"上一次尝试的发布前快照与当前基准不一致，禁止复用：{snapshot}")
-            replace_backup = self._replacement_backup_path(target, operation_id)
-            if replace_backup.exists() and (expected is None or file_sha256(replace_backup) != expected.sha256):
-                raise PublishOperationConflictError(f"上一次尝试的替换备份无法证明可回收：{replace_backup}")
-        # 先校验全部目标再动手：任何冲突都必须在零改动的前提下拒绝。
-        for target in baselines:
-            replace_backup = self._replacement_backup_path(target, operation_id)
-            if replace_backup.exists():
-                atomic.retry_transient_contention(lambda path=replace_backup: path.unlink(missing_ok=True))
-        before_dir.mkdir(parents=True, exist_ok=True)
-        self._preserve_superseded_journal(revision_dir, journal_path)
-
-    @staticmethod
-    def _preserve_superseded_journal(revision_dir: Path, journal_path: Path) -> None:
-        """留档上一次尝试的发布日志，避免重试覆盖后丢失那一次的文件级证据。"""
-        if not journal_path.exists():
-            return
-        superseded_dir = revision_dir / "superseded-journals"
-        superseded_dir.mkdir(parents=True, exist_ok=True)
-        index = len(list(superseded_dir.glob("publish-journal.*.json"))) + 1
-        destination = superseded_dir / f"publish-journal.{index:03d}.json"
-        atomic.retry_transient_contention(lambda: shutil.copy2(journal_path, destination))
-
     def publish(
         self,
-        operation_id: str,
+        job_id: str,
         workspace_root: Path,
         staged: dict[Path, Path | None],
         *,
+        attempt: int,
         expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
         before_commit: Callable[[], None] | None = None,
         on_committed: Callable[[Path, dict], None] | None = None,
     ) -> Path:
+        # attempt 校验必须先于任何磁盘副作用：无效输入不得创建 .dst-manager/。
+        if type(attempt) is not int or attempt < 1:
+            raise ValueError("PUBLISH_ATTEMPT_INVALID")
         workspace_root = workspace_root.resolve()
         lock_path = workspace_root / ".dst-manager" / "publish-transaction.lock"
         with WorkspaceTransactionLock(lock_path, timeout_seconds=30):
             return self._publish_locked(
-                operation_id,
+                job_id,
                 workspace_root,
                 staged,
+                attempt=attempt,
                 expected_baselines=expected_baselines,
                 before_commit=before_commit,
                 on_committed=on_committed,
@@ -209,10 +170,11 @@ class RecoverablePublisher:
 
     def _publish_locked(
         self,
-        operation_id: str,
+        job_id: str,
         workspace_root: Path,
         staged: dict[Path, Path | None],
         *,
+        attempt: int,
         expected_baselines: dict[Path, ExpectedFileBaseline | None] | None = None,
         before_commit: Callable[[], None] | None = None,
         on_committed: Callable[[Path, dict], None] | None = None,
@@ -232,19 +194,29 @@ class RecoverablePublisher:
                 raise TypeError("PUBLISH_BASELINE_IDENTITY_REQUIRED")
         self._verify_baselines(baselines)
         manager_dir = workspace_root / ".dst-manager"
-        revision_dir = manager_dir / "revisions" / operation_id
+        attempt_dir_name = f"attempt-{attempt:03d}"
+        revisions_root = manager_dir / "revisions" / job_id
+        jobs_root = manager_dir / "jobs" / job_id
+        revision_dir = revisions_root / attempt_dir_name
         before_dir = revision_dir / "before"
-        journal_path = manager_dir / "jobs" / operation_id / "publish-journal.json"
-        # 重试会复用 job_id（即 operation_id），因此必须先在能证明一致时回收上一次尝试留下的
-        # 修订目录，否则第二次发布必然撞上已存在的 before 目录而整批失败。
-        self._reclaim_previous_attempt(
-            operation_id,
-            workspace_root,
-            revision_dir,
-            before_dir,
-            journal_path,
-            baselines,
-        )
+        journal_path = jobs_root / attempt_dir_name / "publish-journal.json"
+        # operation_id 仍等于 job_id，因此一个 job 最多只能有一个已提交结果；不能因
+        # attempt 目录隔离而放宽既有的防重复提交闸门。manifest 文件存在即视为不可
+        # 覆盖的提交证据，内容损坏时也不能猜测性忽略。
+        committed_manifests = [revisions_root / "manifest.json", *revisions_root.glob("attempt-*/manifest.json")]
+        if any(path.exists() for path in committed_manifests):
+            raise PublishOperationConflictError(f"同一发布操作已存在提交清单，禁止再次发布：{job_id}")
+        # 当前 attempt 已有 journal 或修订目录都代表重复进入或未恢复现场；尤其是纯新增
+        # 文件事务可能已有 journal 而尚未创建 before/revision 目录。jobs/<job_id>/attempt-NNN
+        # 同时承载 CAD 暂存（staging/scripts/logs），暂存目录先于发布创建属于正常流程，
+        # 因此重复进入的判定只看 journal 文件本身，而不是整个 attempt 目录是否存在。
+        if revision_dir.exists() or journal_path.exists():
+            raise PublishOperationConflictError(f"同一次尝试的发布命名空间已存在，禁止复用：{attempt_dir_name}")
+        # 临时文件与替换备份按「job~attempt」命名，跨 attempt 天然隔离，无需回收旧副本。
+        operation_uid = f"{job_id}~{attempt:03d}"
+        # 提交后的归档（journal 副本与 manifest）要求修订目录已存在；纯新增文件事务
+        # 没有 before 快照，因此这里无条件准备目录（与旧复用路径的目录准备行为一致）。
+        revision_dir.mkdir(parents=True, exist_ok=True)
         journal_path.parent.mkdir(parents=True, exist_ok=True)
         entries = []
         for target, staged_file in staged.items():
@@ -265,7 +237,7 @@ class RecoverablePublisher:
                     raise PublishBaselineError(f"发布前快照与预期基准不一致：{target}")
             elif staged_file is None:
                 raise FileNotFoundError(f"DELETE_TARGET_NOT_FOUND: {target}")
-            replace_backup = self._replacement_backup_path(target, operation_id)
+            replace_backup = self._replacement_backup_path(target, operation_uid)
             if replace_backup.exists():
                 raise FileExistsError(f"PUBLISH_REPLACE_BACKUP_EXISTS: {replace_backup}")
             entries.append(
@@ -292,7 +264,8 @@ class RecoverablePublisher:
             )
         journal = {
             "identity_version": 1,
-            "operation_id": operation_id,
+            "operation_id": job_id,
+            "attempt": attempt,
             "status": "PREPARED",
             "files": entries,
         }
@@ -322,7 +295,7 @@ class RecoverablePublisher:
                         raise
                 else:
                     staged_file = Path(entry["staged"])
-                    publish_temp = target.with_name(f".{target.name}.{operation_id}.tmp")
+                    publish_temp = target.with_name(f".{target.name}.{operation_uid}.tmp")
                     shutil.copy2(staged_file, publish_temp)
                     if file_sha256(publish_temp) != entry["staged_hash"]:
                         raise PublishBaselineError(f"发布暂存文件已偏离计划内容：{staged_file}")
@@ -337,7 +310,7 @@ class RecoverablePublisher:
                         if entry["before_hash"] is None:
                             self._commit_create(entry, publish_temp)
                         else:
-                            self._commit_existing(entry, publish_temp, operation_id)
+                            self._commit_existing(entry, publish_temp, operation_uid)
                     except Exception:
                         entry["api_failed"] = True
                         entry["api_state"] = "FAILED"

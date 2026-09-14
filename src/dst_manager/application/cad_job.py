@@ -337,6 +337,7 @@ class CadJobRunner:
                 job_id,
                 workspace.root,
                 staged_files,
+                attempt=attempt,
                 expected_baselines=staged_baselines,
                 before_commit=ensure_publish_ownership,
                 on_committed=finalize_cad,

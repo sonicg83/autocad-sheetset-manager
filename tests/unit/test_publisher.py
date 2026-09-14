@@ -49,6 +49,7 @@ def test_caller_identity_baseline_allows_unchanged_target(tmp_path: Path):
         "caller-baseline-unchanged",
         tmp_path,
         {target: staged},
+        attempt=1,
         expected_baselines={target: expected},
     )
 
@@ -76,12 +77,12 @@ def test_recovery_rejects_a_publish_holding_the_workspace_transaction_lock(tmp_p
 
     monkeypatch.setattr(publisher, "_write_journal", recover_while_publishing)
 
-    publisher.publish("active-job", tmp_path, {target: staged})
+    publisher.publish("active-job", tmp_path, {target: staged}, attempt=1)
 
     assert recovery_was_blocked is True
     assert target.read_bytes() == b"after"
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs/active-job/publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs/active-job/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "COMMITTED"
 
@@ -145,11 +146,11 @@ def test_transient_journal_denial_is_retried_without_rolling_back(tmp_path: Path
         targets[target] = source
     denial_count = _deny_journal_replacement(monkeypatch, denied_budget=2)
 
-    RecoverablePublisher().publish("transient-journal-denial", tmp_path, targets)
+    RecoverablePublisher().publish("transient-journal-denial", tmp_path, targets, attempt=1)
 
     assert denial_count() == 2
     assert [path.read_text() for path in targets] == ["after-0", "after-1", "after-2"]
-    job_dir = tmp_path / ".dst-manager/jobs/transient-journal-denial"
+    job_dir = tmp_path / ".dst-manager/jobs/transient-journal-denial/attempt-001"
     journal = json.loads((job_dir / "publish-journal.json").read_text(encoding="utf-8"))
     assert journal["status"] == "COMMITTED"
     assert list(job_dir.glob("*.tmp")) == []
@@ -163,7 +164,7 @@ def test_persistent_journal_denial_fails_before_touching_files(tmp_path: Path, m
     denial_count = _deny_journal_replacement(monkeypatch, denied_budget=1000)
 
     with pytest.raises(PublishJournalWriteError) as exc_info:
-        RecoverablePublisher().publish("journal-denied", tmp_path, {target: staged})
+        RecoverablePublisher().publish("journal-denied", tmp_path, {target: staged}, attempt=1)
 
     assert "发布日志写入失败" in str(exc_info.value)
     assert "拒绝访问" in str(exc_info.value)
@@ -171,7 +172,7 @@ def test_persistent_journal_denial_fails_before_touching_files(tmp_path: Path, m
     # 首条日志（PREPARED）就写不进去，说明尚未触碰任何正式文件
     assert denial_count() == atomic_module.DEFAULT_ATTEMPTS
     assert target.read_text() == "before"
-    job_dir = tmp_path / ".dst-manager/jobs/journal-denied"
+    job_dir = tmp_path / ".dst-manager/jobs/journal-denied/attempt-001"
     assert not (job_dir / "publish-journal.json").exists()
     assert list(job_dir.glob("*.tmp")) == []
 
@@ -209,11 +210,12 @@ def test_journal_denial_after_first_replacement_still_restores_files(tmp_path: P
             "journal-denied-midway",
             tmp_path,
             {replaced: staged, untouched: untouched_staged},
+            attempt=1,
         )
 
     assert replaced.read_text() == "before-replaced"
     assert untouched.read_text() == "before-untouched"
-    job_dir = tmp_path / ".dst-manager/jobs/journal-denied-midway"
+    job_dir = tmp_path / ".dst-manager/jobs/journal-denied-midway/attempt-001"
     # 日志保留最后一次成功写入的状态，供启动恢复与人工核对
     journal = json.loads((job_dir / "publish-journal.json").read_text(encoding="utf-8"))
     assert journal["status"] == "PUBLISHING"
@@ -237,6 +239,7 @@ def test_caller_identity_baseline_rejects_same_bytes_replacement_before_publish(
             "caller-identity-race",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: expected},
         )
 
@@ -259,11 +262,12 @@ def test_publish_fence_aborts_before_replacing_formal_file(tmp_path: Path):
             "fenced-publish",
             tmp_path,
             {target: staged},
+            attempt=1,
             before_commit=reject_publish,
         )
 
     assert target.read_bytes() == b"before"
-    assert not (tmp_path / ".dst-manager" / "revisions" / "fenced-publish" / "manifest.json").exists()
+    assert not (tmp_path / ".dst-manager" / "revisions" / "fenced-publish" / "attempt-001" / "manifest.json").exists()
 
 
 @pytest.mark.parametrize("fail_at", [1, 2, 3])
@@ -285,11 +289,13 @@ def test_publish_failure_rolls_back_every_replaced_file(tmp_path: Path, fail_at:
         os.replace(source, target)
 
     with pytest.raises(PublishRolledBackError, match="注入发布故障"):
-        RecoverablePublisher(replace).publish("fault", tmp_path, targets)
+        RecoverablePublisher(replace).publish("fault", tmp_path, targets, attempt=1)
     assert [path.read_text() for path in targets] == ["before-0", "before-1", "before-2"]
-    journal = json.loads((tmp_path / ".dst-manager/jobs/fault/publish-journal.json").read_text(encoding="utf-8"))
+    journal = json.loads(
+        (tmp_path / ".dst-manager/jobs/fault/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
+    )
     assert journal["status"] == "ROLLED_BACK"
-    assert all((tmp_path / ".dst-manager/revisions/fault/before" / path.name).is_file() for path in targets)
+    assert all((tmp_path / ".dst-manager/revisions/fault/attempt-001/before" / path.name).is_file() for path in targets)
 
 
 def test_deleted_file_is_restored_when_later_publish_fails(tmp_path: Path):
@@ -298,7 +304,7 @@ def test_deleted_file_is_restored_when_later_publish_fails(tmp_path: Path):
     def fail(*_): raise OSError("fail")
     # 删除项先执行，第二项替换失败。
     with pytest.raises(PublishRolledBackError):
-        RecoverablePublisher(fail).publish("delete-fault", tmp_path, {deleted: None, replaced: staged})
+        RecoverablePublisher(fail).publish("delete-fault", tmp_path, {deleted: None, replaced: staged}, attempt=1)
     assert deleted.read_text() == "keep-delete" and replaced.read_text() == "keep-replace"
 
 
@@ -341,13 +347,14 @@ def test_mixed_create_replace_delete_publish_failure_restores_batch(
             f"mixed-{fail_at}",
             tmp_path,
             {created: staged_created, replaced: staged_replaced, deleted: None},
+            attempt=1,
         )
 
     assert not created.exists()
     assert replaced.read_bytes() == b"old-replaced"
     assert deleted.read_bytes() == b"old-deleted"
     journal = json.loads(
-        (tmp_path / ".dst-manager" / "jobs" / f"mixed-{fail_at}" / "publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager" / "jobs" / f"mixed-{fail_at}" / "attempt-001" / "publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "ROLLED_BACK"
 
@@ -420,6 +427,7 @@ def test_publish_can_atomically_replace_target_while_write_lock_is_held(tmp_path
             "locked-publish",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: expected},
         )
 
@@ -469,6 +477,7 @@ def test_locked_mixed_publish_failure_restores_whole_batch(tmp_path: Path, monke
             f"locked-mixed-{fail_at}",
             tmp_path,
             {created: staged_created, replaced: staged_replaced, deleted: None},
+            attempt=1,
             expected_baselines=expected,
         )
 
@@ -498,6 +507,7 @@ def test_publish_rechecks_existing_target_before_first_replace(tmp_path: Path, m
             "race-existing",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: expected},
         )
 
@@ -524,6 +534,7 @@ def test_publish_rechecks_absent_create_target_before_first_replace(tmp_path: Pa
             "race-create",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: None},
         )
 
@@ -548,6 +559,7 @@ def test_create_commit_atomically_rejects_target_appearing_after_last_check(tmp_
             "atomic-create-race",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: None},
         )
 
@@ -580,13 +592,14 @@ def test_existing_commit_restores_external_version_swapped_after_last_check(tmp_
             "atomic-existing-race",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
     assert exc_info.value.code == "PUBLISH_BASE_CHANGED"
     assert target.read_bytes() == b"external"
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs/atomic-existing-race/publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs/atomic-existing-race/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "ROLLED_BACK"
 
@@ -609,6 +622,7 @@ def test_replace_api_partial_failure_restores_attempted_target_and_error_chain(t
             "partial-replace",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
@@ -616,7 +630,7 @@ def test_replace_api_partial_failure_restores_attempted_target_and_error_chain(t
     assert isinstance(exc_info.value.__cause__, OSError)
     assert "1177" in str(exc_info.value.__cause__)
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs/partial-replace/publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs/partial-replace/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "ROLLED_BACK"
     assert journal["files"][0]["attempted"] is True
@@ -648,6 +662,7 @@ def test_existing_commit_rejects_same_bytes_external_identity(tmp_path: Path, mo
             "same-bytes-existing-race",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
@@ -678,14 +693,15 @@ def test_committed_cleanup_preserves_same_bytes_external_backup_as_pending(tmp_p
         "same-bytes-cleanup-race",
         tmp_path,
         {target: staged},
+        attempt=1,
         expected_baselines={target: capture_file_baseline(target)},
     )
 
-    replace_backup = target.with_name(f".{target.name}.same-bytes-cleanup-race.replaced")
+    replace_backup = target.with_name(f".{target.name}.same-bytes-cleanup-race~001.replaced")
     assert target.read_bytes() == b"published"
     assert replace_backup.read_bytes() == b"baseline"
     assert _identity(replace_backup) == external_identity
-    journal_path = tmp_path / ".dst-manager/jobs/same-bytes-cleanup-race/publish-journal.json"
+    journal_path = tmp_path / ".dst-manager/jobs/same-bytes-cleanup-race/attempt-001/publish-journal.json"
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     assert journal["status"] == "COMMITTED"
     assert journal["cleanup_status"] == "PENDING"
@@ -719,6 +735,7 @@ def test_existing_result_identity_recheck_preserves_late_external_target(tmp_pat
             "late-result-existing-race",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
@@ -746,6 +763,7 @@ def test_delete_result_identity_recheck_preserves_late_external_target(tmp_path:
             "late-result-delete-race",
             tmp_path,
             {target: None},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
@@ -937,6 +955,7 @@ def test_partial_replace_with_staged_result_at_target_restores_original_identity
             "partial-staged-result",
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
@@ -971,10 +990,11 @@ def test_startup_recovery_restores_partial_replace_when_publish_source_still_exi
             operation,
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: expected},
         )
 
-    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "attempt-001" / "publish-journal.json"
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     publish_source = Path(journal["files"][0]["publish_source"])
     assert publish_source.is_file()
@@ -1012,10 +1032,11 @@ def test_startup_recovery_does_not_restore_after_publish_source_moved_and_target
             operation,
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: expected},
         )
 
-    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "attempt-001" / "publish-journal.json"
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     publish_source = Path(journal["files"][0]["publish_source"])
     replace_backup = Path(journal["files"][0]["replace_backup"])
@@ -1095,6 +1116,7 @@ def test_crash_before_committed_journal_recovers_batch_with_original_identities(
             operation,
             tmp_path,
             targets,
+            attempt=1,
             expected_baselines=expected,
         )
 
@@ -1102,7 +1124,7 @@ def test_crash_before_committed_journal_recovers_batch_with_original_identities(
     for index, target in enumerate(targets):
         assert target.read_bytes() == f"baseline-{index}".encode()
         assert _identity(target) == baseline_identities[target]
-        assert not target.with_name(f".{target.name}.{operation}.replaced").exists()
+        assert not target.with_name(f".{target.name}.{operation}~001.replaced").exists()
 
 
 def test_committed_cleanup_failure_keeps_results_and_retries_on_startup(
@@ -1125,11 +1147,12 @@ def test_committed_cleanup_failure_keeps_results_and_retries_on_startup(
         operation,
         tmp_path,
         {target: staged},
+        attempt=1,
         expected_baselines={target: capture_file_baseline(target)},
     )
 
     committed_identity = _identity(target)
-    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "attempt-001" / "publish-journal.json"
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     replace_backup = Path(journal["files"][0]["replace_backup"])
     assert target.read_bytes() == b"published"
@@ -1168,10 +1191,11 @@ def test_startup_resumes_cleanup_after_crash_following_committed_journal(
             operation,
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
-    journal_path = tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json"
+    journal_path = tmp_path / ".dst-manager/jobs" / operation / "attempt-001" / "publish-journal.json"
     assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "COMMITTED"
 
 
@@ -1192,7 +1216,7 @@ def test_committed_operation_is_not_visible_without_manifest(tmp_path: Path):
     staged.write_bytes(b"after")
     publisher = RecoverablePublisher()
 
-    revision_dir = publisher.publish("job-committed", root, {target: staged})
+    revision_dir = publisher.publish("job-committed", root, {target: staged}, attempt=1)
     (revision_dir / "manifest.json").unlink()
 
     assert publisher.list_committed_operations(root) == []
@@ -1218,13 +1242,14 @@ def test_archive_failure_does_not_invoke_committed_callback_or_expose_operation(
         "archive-failure",
         tmp_path,
         {target: staged},
+        attempt=1,
         on_committed=lambda _revision_dir, _journal: callback_results.append("called"),
     )
 
     assert callback_results == []
     assert publisher.list_committed_operations(tmp_path) == []
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs/archive-failure/publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs/archive-failure/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "COMMITTED"
     assert journal["cleanup_error_code"] == "PUBLISH_ARCHIVE_FAILED"
@@ -1245,6 +1270,7 @@ def test_committed_callback_runs_after_publish_cleanup_attempt(tmp_path: Path):
         "callback-order",
         tmp_path,
         {target: staged},
+        attempt=1,
         on_committed=observe_cleanup,
     )
 
@@ -1275,9 +1301,10 @@ def test_archive_copy_failure_does_not_leave_visible_manifest(
         "archive-copy-failure",
         tmp_path,
         {target: staged},
+        attempt=1,
     )
 
-    revision_dir = tmp_path / ".dst-manager/revisions/archive-copy-failure"
+    revision_dir = tmp_path / ".dst-manager/revisions/archive-copy-failure/attempt-001"
     assert not (revision_dir / "manifest.json").exists()
 
 
@@ -1301,9 +1328,9 @@ def test_startup_refreshes_pending_manifest_after_second_archive_failure(
         return original_archive(*args)
 
     monkeypatch.setattr(publisher, "_archive_journal", fail_second_archive)
-    publisher.publish("cleanup-archive-retry", tmp_path, {target: staged})
-    journal_path = tmp_path / ".dst-manager/jobs/cleanup-archive-retry/publish-journal.json"
-    manifest_path = tmp_path / ".dst-manager/revisions/cleanup-archive-retry/manifest.json"
+    publisher.publish("cleanup-archive-retry", tmp_path, {target: staged}, attempt=1)
+    journal_path = tmp_path / ".dst-manager/jobs/cleanup-archive-retry/attempt-001/publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions/cleanup-archive-retry/attempt-001/manifest.json"
     assert json.loads(journal_path.read_text(encoding="utf-8"))["cleanup_status"] == "COMPLETE"
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["cleanup_status"] == "PENDING"
 
@@ -1320,9 +1347,9 @@ def test_startup_refreshes_manifest_when_content_differs_from_committed_journal(
     target.write_bytes(b"before")
     staged.write_bytes(b"published")
     publisher = RecoverablePublisher()
-    publisher.publish("manifest-content-refresh", tmp_path, {target: staged})
-    journal_path = tmp_path / ".dst-manager/jobs/manifest-content-refresh/publish-journal.json"
-    manifest_path = tmp_path / ".dst-manager/revisions/manifest-content-refresh/manifest.json"
+    publisher.publish("manifest-content-refresh", tmp_path, {target: staged}, attempt=1)
+    journal_path = tmp_path / ".dst-manager/jobs/manifest-content-refresh/attempt-001/publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions/manifest-content-refresh/attempt-001/manifest.json"
     stale_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     stale_manifest["cleanup_error_detail"] = "stale-manifest"
     manifest_path.write_text(json.dumps(stale_manifest), encoding="utf-8")
@@ -1352,9 +1379,9 @@ def test_startup_rejects_main_journal_file_identity_projection_tampering(
     staged.write_bytes(b"published")
     publisher = RecoverablePublisher()
     operation_id = f"immutable-{field}"
-    publisher.publish(operation_id, tmp_path, {target: staged})
-    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "publish-journal.json"
-    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "manifest.json"
+    publisher.publish(operation_id, tmp_path, {target: staged}, attempt=1)
+    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "attempt-001" / "publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "attempt-001" / "manifest.json"
     safe_manifest = manifest_path.read_bytes()
     tampered = json.loads(journal_path.read_text(encoding="utf-8"))
     tampered["files"][0][field] = tampered_value
@@ -1373,9 +1400,9 @@ def test_startup_rejects_main_journal_operation_id_tampering(tmp_path: Path):
     staged.write_bytes(b"published")
     publisher = RecoverablePublisher()
     operation_id = "immutable-operation"
-    publisher.publish(operation_id, tmp_path, {target: staged})
-    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "publish-journal.json"
-    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "manifest.json"
+    publisher.publish(operation_id, tmp_path, {target: staged}, attempt=1)
+    journal_path = tmp_path / ".dst-manager/jobs" / operation_id / "attempt-001" / "publish-journal.json"
+    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "attempt-001" / "manifest.json"
     safe_manifest = manifest_path.read_bytes()
     tampered = json.loads(journal_path.read_text(encoding="utf-8"))
     tampered["operation_id"] = "tampered-operation"
@@ -1412,12 +1439,12 @@ def test_result_guard_blocks_replace_between_final_verification_and_committed_jo
 
     publisher._write_journal = inject_replace_before_committed
 
-    publisher.publish("guarded-operation", tmp_path, {target: staged})
+    publisher.publish("guarded-operation", tmp_path, {target: staged}, attempt=1)
 
     assert replacement_blocked is True
     assert target.read_bytes() == b"published"
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs/guarded-operation/publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs/guarded-operation/attempt-001/publish-journal.json").read_text(encoding="utf-8"),
     )
     assert journal["status"] == "COMMITTED"
 
@@ -1440,6 +1467,7 @@ def test_result_guard_blocks_recreation_of_deleted_target_during_committed_callb
         "delete-guarded-operation",
         tmp_path,
         {target: None},
+        attempt=1,
         on_committed=recreate_deleted,
     )
 
@@ -1467,6 +1495,7 @@ def test_result_guard_blocks_replacement_of_new_target_during_committed_callback
         "create-guarded-operation",
         tmp_path,
         {target: staged},
+        attempt=1,
         on_committed=replace_created,
     )
 
@@ -1587,11 +1616,12 @@ def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
             operation,
             tmp_path,
             {target: staged},
+            attempt=1,
             expected_baselines={target: capture_file_baseline(target)},
         )
 
     journal = json.loads(
-        (tmp_path / ".dst-manager/jobs" / operation / "publish-journal.json").read_text(encoding="utf-8"),
+        (tmp_path / ".dst-manager/jobs" / operation / "attempt-001" / "publish-journal.json").read_text(encoding="utf-8"),
     )
     replace_backup = Path(journal["files"][0]["replace_backup"])
     if journal["status"] == "ROLLED_BACK":
@@ -1603,216 +1633,144 @@ def test_winerror32_rollback_preserves_original_identity_or_reports_failure(
         assert _identity(replace_backup) == baseline_identity
 
 
-class _JournalDenialWindow:
-    """模拟安全软件在「正式文件已替换、日志待落盘」窗口内持续占用发布日志。
-
-    只在日志已经出现 ``api_state == "SUCCEEDED"`` 时拒绝，保证注入点一定发生在正式文件
-    被替换之后——这正是 2026-09-14 现场整批回滚的形态。``reset()`` 用于在同一测试内制造
-    第二次独立占用窗口。
-    """
-
-    def __init__(self, monkeypatch, *, budget: int = atomic_module.DEFAULT_ATTEMPTS) -> None:
-        self.budget = budget
-        self.denied = 0
-        self._original_replace = publisher_module.os.replace
-        monkeypatch.setattr(publisher_module.os, "replace", self._replace)
-
-    def reset(self) -> None:
-        self.denied = 0
-
-    def _replace(self, source, destination):
-        if Path(destination).name == "publish-journal.json" and self.denied < self.budget:
-            try:
-                journal = json.loads(Path(source).read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                journal = {}
-            if any(entry.get("api_state") == "SUCCEEDED" for entry in journal.get("files", [])):
-                self.denied += 1
-                error = PermissionError(13, "拒绝访问")
-                error.winerror = 5  # type: ignore[attr-defined]
-                raise error
-        return self._original_replace(source, destination)
-
-
-def test_retry_after_rolled_back_publish_reuses_revision_dir(tmp_path: Path, monkeypatch):
-    """2026-09-14 现场回归：回滚后的任务重试（同一 job_id/operation_id）必须能再次发布。
-
-    ``retry_job`` 复用 ``job_id``，发布器又用 ``job_id`` 作为 ``operation_id``，因此第二次
-    发布必然面对第一次留下的 ``revisions/<operation_id>/before``。
-    """
-    operation = "job-retry-reuse"
-    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
-    target.write_bytes(b"before")
-    staged.write_bytes(b"after")
+def test_retry_publishes_into_new_attempt_directory(tmp_path: Path):
+    """重试写入 attempt-002 新目录并正常提交，不依赖上一次尝试的任何产物。"""
+    job_id = "retry-jobs"
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
     publisher = RecoverablePublisher()
-    revision_dir = tmp_path / ".dst-manager" / "revisions" / operation
-    journal_path = tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json"
-    denial = _JournalDenialWindow(monkeypatch)
+
+    def replace(source: Path, target_path: Path):
+        raise OSError("注入首次发布故障")
 
     with pytest.raises(PublishRolledBackError):
-        publisher.publish(
-            operation,
-            tmp_path,
-            {target: staged},
-            expected_baselines={target: capture_file_baseline(target)},
-        )
+        RecoverablePublisher(replace).publish(job_id, tmp_path, {target: staged}, attempt=1)
+    assert target.read_text() == "before"
 
-    assert denial.denied == atomic_module.DEFAULT_ATTEMPTS
-    assert target.read_bytes() == b"before"
-    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
-    snapshot = revision_dir / "before" / target.name
-    assert snapshot.read_bytes() == b"before"
-
-    publisher.publish(
-        operation,
-        tmp_path,
-        {target: staged},
-        expected_baselines={target: capture_file_baseline(target)},
+    revision_dir = publisher.publish(job_id, tmp_path, {target: staged}, attempt=2)
+    assert revision_dir == tmp_path / ".dst-manager" / "revisions" / job_id / "attempt-002"
+    assert target.read_text() == "after"
+    second_journal = json.loads(
+        (tmp_path / ".dst-manager" / "jobs" / job_id / "attempt-002" / "publish-journal.json").read_text(encoding="utf-8"),
     )
-
-    assert target.read_bytes() == b"after"
-    assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "COMMITTED"
-    # 复用而不是重建：发布前快照必须仍是第一次尝试留下的原始字节
-    assert snapshot.read_bytes() == b"before"
-    # 上一次尝试的日志必须留档，不能被重试静默覆盖
-    superseded = sorted((revision_dir / "superseded-journals").glob("publish-journal.*.json"))
-    assert len(superseded) == 1
-    assert json.loads(superseded[0].read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
-    assert [item["operation_id"] for item in publisher.list_committed_operations(tmp_path)] == [operation]
-    assert publisher.recover(tmp_path) == []
+    assert second_journal["status"] == "COMMITTED"
+    assert second_journal["operation_id"] == job_id
+    assert second_journal["attempt"] == 2
 
 
-def test_reused_revision_dir_rollback_still_restores_formal_files(tmp_path: Path, monkeypatch):
-    """复用上一次尝试的修订目录后再次整批回滚，正式文件必须仍回到发布前字节。"""
-    operation = "job-retry-double-rollback"
-    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
-    target.write_bytes(b"before")
-    staged.write_bytes(b"after")
-    publisher = RecoverablePublisher()
-    denial = _JournalDenialWindow(monkeypatch)
-
-    for _ in range(2):
-        denial.reset()
-        with pytest.raises(PublishRolledBackError):
-            publisher.publish(
-                operation,
-                tmp_path,
-                {target: staged},
-                expected_baselines={target: capture_file_baseline(target)},
-            )
-        assert target.read_bytes() == b"before"
-
-    journal = json.loads(
-        (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").read_text(encoding="utf-8"),
-    )
-    assert journal["status"] == "ROLLED_BACK"
-    assert list(tmp_path.glob(f".{target.name}.*.replaced")) == []
-    assert list(tmp_path.glob("*.tmp")) == []
-    superseded = (tmp_path / ".dst-manager" / "revisions" / operation / "superseded-journals").glob(
-        "publish-journal.*.json",
-    )
-    assert len(list(superseded)) == 1
+def test_same_attempt_revision_dir_conflict_is_refused(tmp_path: Path):
+    """同号 attempt 的修订目录已存在（重复提交防护）时拒绝且不触碰任何文件。"""
+    job_id = "conflict-job"
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+    revision_dir = tmp_path / ".dst-manager" / "revisions" / job_id / "attempt-001"
+    revision_dir.mkdir(parents=True)
+    (revision_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(PublishOperationConflictError):
+        RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=1)
+    assert target.read_text() == "before"
+    assert not (tmp_path / ".dst-manager" / "jobs" / job_id).exists()
 
 
-def test_reusing_committed_operation_is_refused_without_touching_files(tmp_path: Path):
-    """已提交的 operation_id 不得被再次发布覆盖，必须转受控冲突错误。"""
-    operation = "job-committed-once"
+def test_same_attempt_job_namespace_conflict_is_refused(tmp_path: Path):
+    """仅 jobs attempt 目录存在也属于未恢复现场，禁止覆盖 journal。"""
+    job_id = "job-journal-conflict"
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+    journal_path = tmp_path / ".dst-manager" / "jobs" / job_id / "attempt-001" / "publish-journal.json"
+    journal_path.parent.mkdir(parents=True)
+    original = b'{"operation_id":"job-journal-conflict","attempt":1,"status":"PUBLISHING","files":[]}'
+    journal_path.write_bytes(original)
+    with pytest.raises(PublishOperationConflictError):
+        RecoverablePublisher().publish(job_id, tmp_path, {target: staged}, attempt=1)
+    assert target.read_text() == "before"
+    assert journal_path.read_bytes() == original
+    assert not (tmp_path / ".dst-manager" / "revisions" / job_id).exists()
+
+
+@pytest.mark.parametrize("attempt", [0, -1, True, 1.5, "1"])
+def test_invalid_attempt_is_rejected_without_creating_manager_files(tmp_path: Path, attempt):
+    target = tmp_path / "target.txt"
+    target.write_text("before")
+    staged = tmp_path / "staged.txt"
+    staged.write_text("after")
+    with pytest.raises((TypeError, ValueError), match="PUBLISH_ATTEMPT_INVALID"):
+        RecoverablePublisher().publish(job_id="invalid-attempt", workspace_root=tmp_path, staged={target: staged}, attempt=attempt)
+    assert target.read_text() == "before"
+    assert not (tmp_path / ".dst-manager").exists()
+
+
+def test_second_attempt_rollback_still_restores_formal_files(tmp_path: Path):
+    """连续两次发布均失败时，attempt-002 仍独立恢复到本次发布前内容。"""
+    job_id = "second-rollback"
+    target = tmp_path / "target.txt"
+    staged = tmp_path / "staged.txt"
+    target.write_text("v0")
+    staged.write_text("v1")
+
+    def replace(source: Path, target_path: Path):
+        raise OSError("注入发布故障")
+
+    with pytest.raises(PublishRolledBackError):
+        RecoverablePublisher(replace).publish(job_id, tmp_path, {target: staged}, attempt=1)
+    assert target.read_text() == "v0"
+    staged.write_text("v2")
+
+    with pytest.raises(PublishRolledBackError):
+        RecoverablePublisher(replace).publish(job_id, tmp_path, {target: staged}, attempt=2)
+    assert target.read_text() == "v0"
+    for attempt in (1, 2):
+        journal_path = tmp_path / ".dst-manager" / "jobs" / job_id / f"attempt-{attempt:03d}" / "publish-journal.json"
+        assert json.loads(journal_path.read_text(encoding="utf-8"))["status"] == "ROLLED_BACK"
+
+
+@pytest.mark.parametrize(
+    ("committed_dir", "retry_attempt"),
+    [("attempt-001", 2), (".", 1)],
+    ids=["nested-attempt", "legacy-flat"],
+)
+def test_reusing_committed_operation_is_refused_without_touching_files(
+    tmp_path: Path,
+    committed_dir: str,
+    retry_attempt: int,
+):
+    """已提交清单存在时禁止再次发布且必须零改动：嵌套布局经真实提交，旧平铺布局由 fixture 构造。"""
+    job_id = "job-committed-once"
     target, staged, later = tmp_path / "target.dwg", tmp_path / "staged.dwg", tmp_path / "later.dwg"
     target.write_bytes(b"before")
     staged.write_bytes(b"after")
     later.write_bytes(b"later")
     publisher = RecoverablePublisher()
-    publisher.publish(
-        operation,
-        tmp_path,
-        {target: staged},
-        expected_baselines={target: capture_file_baseline(target)},
-    )
-    revision_dir = tmp_path / ".dst-manager" / "revisions" / operation
-    assert (revision_dir / "manifest.json").is_file()
+    revision_dir = tmp_path / ".dst-manager" / "revisions" / job_id / committed_dir
+    journal_path = tmp_path / ".dst-manager" / "jobs" / job_id / committed_dir / "publish-journal.json"
+    if committed_dir == ".":
+        # 旧平铺布局无法由新写入侧产出，只能手工构造提交清单；内容损坏也必须被尊重
+        revision_dir.mkdir(parents=True)
+        (revision_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    else:
+        publisher.publish(job_id, tmp_path, {target: staged}, attempt=1)
+        assert target.read_bytes() == b"after"
+    manifest_bytes = (revision_dir / "manifest.json").read_bytes()
+    journal_bytes = journal_path.read_bytes() if journal_path.exists() else None
 
     with pytest.raises(PublishOperationConflictError) as exc_info:
-        publisher.publish(
-            operation,
-            tmp_path,
-            {target: later},
-            expected_baselines={target: capture_file_baseline(target)},
-        )
+        publisher.publish(job_id, tmp_path, {target: later}, attempt=retry_attempt)
 
     assert exc_info.value.code == "PUBLISH_OPERATION_CONFLICT"
     assert isinstance(exc_info.value, PublishRecoveryError)
     assert "提交清单" in str(exc_info.value)
-    assert target.read_bytes() == b"after"
-    journal = json.loads(
-        (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").read_text(encoding="utf-8"),
-    )
-    assert journal["status"] == "COMMITTED"
-
-
-def test_stale_snapshot_inconsistent_with_baseline_is_refused(tmp_path: Path):
-    """残留快照与当前基准不一致时不得继续发布，也不得做破坏性清理。"""
-    operation = "job-stale-snapshot"
-    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
-    target.write_bytes(b"before")
-    staged.write_bytes(b"after")
-    snapshot = tmp_path / ".dst-manager" / "revisions" / operation / "before" / target.name
-    snapshot.parent.mkdir(parents=True)
-    snapshot.write_bytes(b"half-published")
-
-    with pytest.raises(PublishOperationConflictError) as exc_info:
-        RecoverablePublisher().publish(
-            operation,
-            tmp_path,
-            {target: staged},
-            expected_baselines={target: capture_file_baseline(target)},
-        )
-
-    assert "快照与当前基准不一致" in str(exc_info.value)
-    assert target.read_bytes() == b"before"
-    assert snapshot.read_bytes() == b"half-published"
-    assert not (tmp_path / ".dst-manager" / "jobs" / operation / "publish-journal.json").exists()
-
-
-def test_redundant_replacement_backup_is_reclaimed_on_retry(tmp_path: Path):
-    """与当前基准逐字节相同的替换备份是冗余副本，重试时必须回收而不是拒发。"""
-    operation = "job-redundant-replaced"
-    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
-    target.write_bytes(b"before")
-    staged.write_bytes(b"after")
-    stale = tmp_path / f".{target.name}.{operation}.replaced"
-    stale.write_bytes(b"before")
-
-    RecoverablePublisher().publish(
-        operation,
-        tmp_path,
-        {target: staged},
-        expected_baselines={target: capture_file_baseline(target)},
-    )
-
-    assert target.read_bytes() == b"after"
-    assert not stale.exists()
-
-
-def test_replacement_backup_with_unknown_content_is_refused(tmp_path: Path):
-    """替换备份内容无法证明冗余时必须拒发并要求人工复核。"""
-    operation = "job-unknown-replaced"
-    target, staged = tmp_path / "target.dwg", tmp_path / "staged.dwg"
-    target.write_bytes(b"before")
-    staged.write_bytes(b"after")
-    stale = tmp_path / f".{target.name}.{operation}.replaced"
-    stale.write_bytes(b"mystery")
-
-    with pytest.raises(PublishOperationConflictError) as exc_info:
-        RecoverablePublisher().publish(
-            operation,
-            tmp_path,
-            {target: staged},
-            expected_baselines={target: capture_file_baseline(target)},
-        )
-
-    assert "替换备份无法证明可回收" in str(exc_info.value)
-    assert target.read_bytes() == b"before"
-    assert stale.read_bytes() == b"mystery"
+    assert target.read_bytes() == (b"after" if journal_bytes is not None else b"before")
+    assert (revision_dir / "manifest.json").read_bytes() == manifest_bytes
+    if journal_bytes is not None:
+        assert journal_path.read_bytes() == journal_bytes
+    assert not (tmp_path / ".dst-manager" / "revisions" / job_id / f"attempt-{retry_attempt:03d}").exists()
+    assert not (tmp_path / ".dst-manager" / "jobs" / job_id / f"attempt-{retry_attempt:03d}").exists()
 
 
 @pytest.mark.parametrize("status", ["PREPARED", "PUBLISHING", "ROLLING_BACK"])

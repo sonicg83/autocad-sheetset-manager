@@ -293,6 +293,7 @@ class EditingOperations:
                     operation_id,
                     workspace.root,
                     {workspace.dst_path: staging},
+                    attempt=1,  # 编辑任务不可重试，恒为首次尝试
                     expected_baselines={workspace.dst_path: expected_baseline},
                     on_committed=finalize_metadata,
                 )
