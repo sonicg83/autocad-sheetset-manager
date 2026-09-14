@@ -1,6 +1,6 @@
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
-from dst_manager.infrastructure.filesystem.publisher import RecoverablePublisher
+from dst_manager.infrastructure.filesystem import publisher as publisher_module
 
 
 def _execute_confirmed(service, workspace, commands):
@@ -23,10 +23,17 @@ def test_archive_failure_enters_needs_review_then_startup_finalizes_after_manife
     service = DstManagerService(settings)
     workspace = service.open_workspace(dst)
 
-    def fail_archive_once(*_args):
-        raise OSError("注入首次 manifest 归档失败")
+    original_archive = publisher_module.archive_journal
+    archive_calls = 0
 
-    monkeypatch.setattr(service.publisher, "_archive_journal", fail_archive_once)
+    def fail_archive_once(*args):
+        nonlocal archive_calls
+        archive_calls += 1
+        if archive_calls == 1:
+            raise OSError("注入首次 manifest 归档失败")
+        return original_archive(*args)
+
+    monkeypatch.setattr(publisher_module, "archive_journal", fail_archive_once)
 
     result = _execute_confirmed(
         service,
@@ -55,12 +62,12 @@ def test_persistent_archive_failure_never_finalizes_without_manifest_and_later_r
     settings = Settings(data_dir=tmp_path / "data")
     service = DstManagerService(settings)
     workspace = service.open_workspace(dst)
-    original_archive = RecoverablePublisher._archive_journal
+    original_archive = publisher_module.archive_journal
 
     def fail_archive(*_args):
         raise OSError("注入持续 manifest 归档失败")
 
-    monkeypatch.setattr(RecoverablePublisher, "_archive_journal", staticmethod(fail_archive))
+    monkeypatch.setattr(publisher_module, "archive_journal", fail_archive)
     result = _execute_confirmed(
         service,
         workspace,
@@ -75,11 +82,7 @@ def test_persistent_archive_failure_never_finalizes_without_manifest_and_later_r
     with failed_restart.database.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
-    monkeypatch.setattr(
-        RecoverablePublisher,
-        "_archive_journal",
-        staticmethod(original_archive),
-    )
+    monkeypatch.setattr(publisher_module, "archive_journal", original_archive)
     recovered_restart = DstManagerService(settings)
 
     assert recovered_restart.database.get_job(result["id"])["status"] == "SUCCEEDED"

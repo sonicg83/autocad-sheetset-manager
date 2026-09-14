@@ -62,7 +62,7 @@ def test_recovery_rejects_a_publish_holding_the_workspace_transaction_lock(tmp_p
     target.write_bytes(b"before")
     staged.write_bytes(b"after")
     publisher = RecoverablePublisher()
-    original_write = publisher._write_journal
+    original_write = publisher_module.write_journal
     recovery_was_blocked = False
     injected = False
 
@@ -75,7 +75,7 @@ def test_recovery_rejects_a_publish_holding_the_workspace_transaction_lock(tmp_p
                 RecoverablePublisher().recover(tmp_path)
             recovery_was_blocked = True
 
-    monkeypatch.setattr(publisher, "_write_journal", recover_while_publishing)
+    monkeypatch.setattr(publisher_module, "write_journal", recover_while_publishing)
 
     publisher.publish("active-job", tmp_path, {target: staged}, attempt=1)
 
@@ -107,7 +107,7 @@ def test_concurrent_journal_writes_use_independent_temporary_files(tmp_path: Pat
     ]
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(RecoverablePublisher._write_journal, journal_path, item) for item in journals]
+        futures = [executor.submit(publisher_module.write_journal, journal_path, item) for item in journals]
         for future in futures:
             future.result()
 
@@ -493,14 +493,14 @@ def test_publish_rechecks_existing_target_before_first_replace(tmp_path: Path, m
     staged.write_bytes(b"new")
     expected = capture_file_baseline(target)
     publisher = RecoverablePublisher()
-    original_write_journal = publisher._write_journal
+    original_write_journal = publisher_module.write_journal
 
     def mutate_after_publishing(path: Path, journal: dict):
         original_write_journal(path, journal)
         if journal["status"] == "PUBLISHING":
             target.write_bytes(b"external")
 
-    monkeypatch.setattr(publisher, "_write_journal", mutate_after_publishing)
+    monkeypatch.setattr(publisher_module, "write_journal", mutate_after_publishing)
 
     with pytest.raises(PublishBaselineError) as exc:
         publisher.publish(
@@ -520,14 +520,14 @@ def test_publish_rechecks_absent_create_target_before_first_replace(tmp_path: Pa
     staged = tmp_path / "staged-new.dwg"
     staged.write_bytes(b"new")
     publisher = RecoverablePublisher()
-    original_write_journal = publisher._write_journal
+    original_write_journal = publisher_module.write_journal
 
     def create_after_publishing(path: Path, journal: dict):
         original_write_journal(path, journal)
         if journal["status"] == "PUBLISHING":
             target.write_bytes(b"external")
 
-    monkeypatch.setattr(publisher, "_write_journal", create_after_publishing)
+    monkeypatch.setattr(publisher_module, "write_journal", create_after_publishing)
 
     with pytest.raises(PublishBaselineError) as exc:
         publisher.publish(
@@ -1102,14 +1102,14 @@ def test_crash_before_committed_journal_recovers_batch_with_original_identities(
         baseline_identities[target] = _identity(target)
         expected[target] = capture_file_baseline(target)
     publisher = RecoverablePublisher()
-    original_write_journal = publisher._write_journal
+    original_write_journal = publisher_module.write_journal
 
     def crash_before_commit(path: Path, journal: dict):
         if journal["status"] == "COMMITTED":
             raise _SimulatedProcessCrash
         original_write_journal(path, journal)
 
-    monkeypatch.setattr(publisher, "_write_journal", crash_before_commit)
+    monkeypatch.setattr(publisher_module, "write_journal", crash_before_commit)
 
     with pytest.raises(_SimulatedProcessCrash):
         publisher.publish(
@@ -1236,7 +1236,7 @@ def test_archive_failure_does_not_invoke_committed_callback_or_expose_operation(
     def fail_archive(*_args):
         raise OSError("注入 manifest 归档失败")
 
-    monkeypatch.setattr(publisher, "_archive_journal", fail_archive)
+    monkeypatch.setattr(publisher_module, "archive_journal", fail_archive)
 
     publisher.publish(
         "archive-failure",
@@ -1317,7 +1317,7 @@ def test_startup_refreshes_pending_manifest_after_second_archive_failure(
     target.write_bytes(b"before")
     staged.write_bytes(b"published")
     publisher = RecoverablePublisher()
-    original_archive = publisher._archive_journal
+    original_archive = publisher_module.archive_journal
     archive_calls = 0
 
     def fail_second_archive(*args):
@@ -1327,7 +1327,7 @@ def test_startup_refreshes_pending_manifest_after_second_archive_failure(
             raise OSError("注入 cleanup 完成后的归档失败")
         return original_archive(*args)
 
-    monkeypatch.setattr(publisher, "_archive_journal", fail_second_archive)
+    monkeypatch.setattr(publisher_module, "archive_journal", fail_second_archive)
     publisher.publish("cleanup-archive-retry", tmp_path, {target: staged}, attempt=1)
     journal_path = tmp_path / ".dst-manager/jobs/cleanup-archive-retry/attempt-001/publish-journal.json"
     manifest_path = tmp_path / ".dst-manager/revisions/cleanup-archive-retry/attempt-001/manifest.json"
@@ -1415,14 +1415,14 @@ def test_startup_rejects_main_journal_operation_id_tampering(tmp_path: Path):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="验证 Windows ReplaceFile/rename 共享删除竞态")
-def test_result_guard_blocks_replace_between_final_verification_and_committed_journal(tmp_path: Path):
+def test_result_guard_blocks_replace_between_final_verification_and_committed_journal(tmp_path: Path, monkeypatch):
     target = tmp_path / "guarded.dst"
     staged = tmp_path / "staged.dst"
     replacement = tmp_path / "external.dst"
     target.write_bytes(b"before")
     staged.write_bytes(b"published")
     publisher = RecoverablePublisher()
-    original_write = publisher._write_journal
+    original_write = publisher_module.write_journal
     replacement_blocked = False
     injected = False
 
@@ -1437,7 +1437,7 @@ def test_result_guard_blocks_replace_between_final_verification_and_committed_jo
                 replacement_blocked = True
         original_write(path, journal)
 
-    publisher._write_journal = inject_replace_before_committed
+    monkeypatch.setattr(publisher_module, "write_journal", inject_replace_before_committed)
 
     publisher.publish("guarded-operation", tmp_path, {target: staged}, attempt=1)
 

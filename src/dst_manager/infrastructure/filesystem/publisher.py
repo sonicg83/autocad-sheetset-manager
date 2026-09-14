@@ -5,7 +5,6 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from dst_manager.infrastructure.filesystem import atomic
 from dst_manager.infrastructure.filesystem.locking import (
     WindowsResultGuards,
     WorkspaceTransactionLock,
@@ -14,10 +13,16 @@ from dst_manager.infrastructure.filesystem.locking import (
 # 既有公共接口：application 层从 publisher 导入这些异常，拆分后此处必须继续可导入。
 from dst_manager.infrastructure.filesystem.publish_errors import (
     PublishBaselineError,
-    PublishJournalWriteError,
+    PublishJournalWriteError,  # noqa: F401 - 测试直接从此处导入；publisher 内部已不再使用
     PublishOperationConflictError,
     PublishRecoveryError,
     PublishRolledBackError,
+)
+from dst_manager.infrastructure.filesystem.publish_journal import (
+    archive_journal,
+    immutable_transaction_projection,
+    write_journal,
+    write_journal_best_effort,
 )
 from dst_manager.infrastructure.filesystem.publish_primitives import (
     ExpectedFileBaseline,
@@ -167,11 +172,11 @@ class RecoverablePublisher:
             "status": "PREPARED",
             "files": entries,
         }
-        self._write_journal(journal_path, journal)
+        write_journal(journal_path, journal)
         result_guard: WindowsResultGuards | None = None
         try:
             journal["status"] = "PUBLISHING"
-            self._write_journal(journal_path, journal)
+            write_journal(journal_path, journal)
             self._verify_baselines(baselines)
             for entry in entries:
                 target = Path(entry["target"])
@@ -181,7 +186,7 @@ class RecoverablePublisher:
                 if entry["staged"] is None:
                     entry["attempted"] = True
                     entry["api_state"] = "STARTED"
-                    self._write_journal(journal_path, journal)
+                    write_journal(journal_path, journal)
                     try:
                         if before_commit is not None:
                             before_commit()
@@ -189,7 +194,7 @@ class RecoverablePublisher:
                     except Exception:
                         entry["api_failed"] = True
                         entry["api_state"] = "FAILED"
-                        self._write_journal(journal_path, journal)
+                        write_journal(journal_path, journal)
                         raise
                 else:
                     staged_file = Path(entry["staged"])
@@ -201,7 +206,7 @@ class RecoverablePublisher:
                     entry["publish_identity"] = file_identity(publish_temp)
                     entry["attempted"] = True
                     entry["api_state"] = "STARTED"
-                    self._write_journal(journal_path, journal)
+                    write_journal(journal_path, journal)
                     try:
                         if before_commit is not None:
                             before_commit()
@@ -212,13 +217,13 @@ class RecoverablePublisher:
                     except Exception:
                         entry["api_failed"] = True
                         entry["api_state"] = "FAILED"
-                        self._write_journal(journal_path, journal)
+                        write_journal(journal_path, journal)
                         raise
                 entry["api_state"] = "SUCCEEDED"
-                self._write_journal(journal_path, journal)
+                write_journal(journal_path, journal)
                 self._capture_result(entry)
                 entry["replaced"] = True
-                self._write_journal(journal_path, journal)
+                write_journal(journal_path, journal)
             result_guard = WindowsResultGuards(
                 [Path(entry["target"]) for entry in entries if entry.get("result_hash") is not None],
                 [Path(entry["target"]) for entry in entries if entry.get("result_hash") is None],
@@ -229,22 +234,22 @@ class RecoverablePublisher:
                 before_commit()
             journal["status"] = "COMMITTED"
             journal["cleanup_status"] = "PENDING"
-            self._write_journal(journal_path, journal)
+            write_journal(journal_path, journal)
         except PublishBaselineError as publish_error:
             if result_guard is not None:
                 result_guard.__exit__(None, None, None)
-            self._write_journal_best_effort(journal_path, journal)
+            write_journal_best_effort(journal_path, journal)
             if any(entry["replaced"] or entry["attempted"] for entry in entries):
                 try:
                     self._rollback(journal_path, journal, entries)
                 except Exception as recovery_error:  # noqa: BLE001 - 基准冲突后的恢复故障必须显式终止
                     journal["status"] = "ROLLBACK_FAILED"
                     # 记录故障状态的日志同样不得掩盖真正的恢复故障。
-                    self._write_journal_best_effort(journal_path, journal)
+                    write_journal_best_effort(journal_path, journal)
                     raise PublishRecoveryError(str(recovery_error)) from publish_error
             else:
                 journal["status"] = "ABORTED_BASELINE_CHANGED"
-                self._write_journal(journal_path, journal)
+                write_journal(journal_path, journal)
             raise
         except Exception as publish_error:
             if result_guard is not None:
@@ -252,12 +257,12 @@ class RecoverablePublisher:
             for entry in entries:
                 if entry.get("attempted") and not entry.get("replaced") and not entry.get("conflict_preserved"):
                     entry["api_failed"] = True
-            self._write_journal_best_effort(journal_path, journal)
+            write_journal_best_effort(journal_path, journal)
             try:
                 self._rollback(journal_path, journal, entries)
             except Exception as recovery_error:  # noqa: BLE001 - 任何恢复故障都必须进入可再次恢复状态
                 journal["status"] = "ROLLBACK_FAILED"
-                self._write_journal_best_effort(journal_path, journal)
+                write_journal_best_effort(journal_path, journal)
                 raise PublishRecoveryError(str(recovery_error)) from publish_error
             raise PublishRolledBackError(str(publish_error)) from publish_error
         except BaseException:
@@ -268,14 +273,14 @@ class RecoverablePublisher:
             raise
         archive_succeeded = False
         try:
-            self._archive_journal(revision_dir, journal_path, journal)
+            archive_journal(revision_dir, journal_path, journal)
             archive_succeeded = True
         except Exception as archive_error:  # noqa: BLE001 - COMMITTED 后归档失败不得伪装成发布失败
             journal["cleanup_status"] = "PENDING"
             journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
             journal["cleanup_error_detail"] = str(archive_error)
             try:
-                self._write_journal(journal_path, journal)
+                write_journal(journal_path, journal)
             except Exception:  # noqa: BLE001, S110 - COMMITTED 主记录已先持久化
                 pass
         if archive_succeeded:
@@ -303,55 +308,15 @@ class RecoverablePublisher:
             journal["cleanup_status"] = "PENDING"
             journal["cleanup_error_code"] = "PUBLISH_CLEANUP_FAILED"
             journal["cleanup_error_detail"] = str(cleanup_error)
-            self._write_journal(journal_path, journal)
-            self._archive_journal(revision_dir, journal_path, journal)
+            write_journal(journal_path, journal)
+            archive_journal(revision_dir, journal_path, journal)
             return False
         journal["cleanup_status"] = "COMPLETE"
         journal.pop("cleanup_error_code", None)
         journal.pop("cleanup_error_detail", None)
-        self._write_journal(journal_path, journal)
-        self._archive_journal(revision_dir, journal_path, journal)
+        write_journal(journal_path, journal)
+        archive_journal(revision_dir, journal_path, journal)
         return True
-
-    @staticmethod
-    def _archive_journal(revision_dir: Path, journal_path: Path, journal: dict) -> None:
-        manifest_path = revision_dir / "manifest.json"
-        # manifest 是数据库 finalize 的可见性闸门，因此必须最后原子发布；任何前置归档
-        # 失败都只能留下不可枚举的临时文件或 journal 副本。两处写入都对外部文件过滤
-        # 驱动的瞬时占用做有界重试：归档失败会在下次启动被升级为发布恢复故障。
-        atomic.retry_transient_contention(
-            lambda: shutil.copy2(journal_path, revision_dir / "publish-journal.json"),
-        )
-        atomic.atomic_write_text(manifest_path, json.dumps(journal, ensure_ascii=False, indent=2))
-
-    @staticmethod
-    def _immutable_transaction_projection(workspace_root: Path, journal: dict) -> dict:
-        operation_id = journal.get("operation_id")
-        files = journal.get("files")
-        if (
-            not isinstance(operation_id, str)
-            or journal.get("status") != "COMMITTED"
-            or not isinstance(files, list)
-            or any(not isinstance(entry, dict) for entry in files)
-        ):
-            raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
-        root = workspace_root.resolve()
-        for entry in files:
-            target_raw = entry.get("target")
-            if not isinstance(target_raw, str):
-                raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
-            target = Path(target_raw).resolve()
-            if root != target and root not in target.parents:
-                raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
-        return {
-            "identity_version": journal.get("identity_version"),
-            "operation_id": operation_id,
-            "root": str(root).casefold(),
-            "status": journal["status"],
-            # COMMITTED 后 files 的完整审计向量均不可变，包括目标、staged/backup、
-            # before/result hash 与 identity、Win32 source 及 API 状态。
-            "files": files,
-        }
 
     def _commit_create(self, entry: dict, publish_temp: Path) -> None:
         target = Path(entry["target"])
@@ -525,14 +490,14 @@ class RecoverablePublisher:
     def _rollback(self, journal_path: Path, journal: dict, entries: list[dict]) -> None:
         journal["status"] = "ROLLING_BACK"
         # 回填正式文件不能被日志写入故障阻断：日志记录降级为尽力而为。
-        self._write_journal_best_effort(journal_path, journal)
+        write_journal_best_effort(journal_path, journal)
         for entry in reversed(entries):
             if entry.get("conflict_preserved"):
                 continue
             if entry.get("replaced") or entry.get("attempted"):
                 self._restore_entry(entry, journal["operation_id"])
         journal["status"] = "ROLLED_BACK"
-        self._write_journal(journal_path, journal)
+        write_journal(journal_path, journal)
 
     def _restore_entry(self, entry: dict, operation_id: str) -> None:
         target = Path(entry["target"])
@@ -747,33 +712,9 @@ class RecoverablePublisher:
         finally:
             close_handle(handle)
 
-    @staticmethod
-    def _write_journal(path: Path, journal: dict) -> None:
-        try:
-            atomic.atomic_write_text(path, json.dumps(journal, ensure_ascii=False, indent=2))
-        except OSError as error:
-            hint = (
-                f"（已按瞬时占用退避重试 {atomic.DEFAULT_ATTEMPTS} 次仍被拒绝，通常是安全软件或同步工具持有该文件）"
-                if atomic.is_transient_contention(error)
-                else ""
-            )
-            raise PublishJournalWriteError(f"发布日志写入失败{hint}：{error}") from error
-
-    @staticmethod
-    def _write_journal_best_effort(path: Path, journal: dict) -> None:
-        """回滚前的日志记录：日志不可写时不得阻止正式文件的回填。
-
-        日志只是诊断记录，磁盘上正式文件的一致性优先级更高。这里只吞掉写入类故障，
-        其他编程错误继续向上抛出。
-        """
-        try:
-            RecoverablePublisher._write_journal(path, journal)
-        except OSError:
-            pass
-
     def _rollback_legacy_attempted(self, journal_path: Path, journal: dict) -> None:
         journal["status"] = "ROLLING_BACK"
-        self._write_journal(journal_path, journal)
+        write_journal(journal_path, journal)
         for entry in reversed(journal["files"]):
             if entry.get("conflict_preserved") or not (entry.get("replaced") or entry.get("attempted")):
                 continue
@@ -790,7 +731,7 @@ class RecoverablePublisher:
             shutil.copy2(backup, restore_temp)
             os.replace(restore_temp, target)
         journal["status"] = "ROLLED_BACK"
-        self._write_journal(journal_path, journal)
+        write_journal(journal_path, journal)
 
     @staticmethod
     def _legacy_rollback_source(entry: dict, before_hash: str) -> Path:
@@ -862,7 +803,7 @@ class RecoverablePublisher:
                 if "identity_version" in journal and journal["identity_version"] != 1:
                     journal["cleanup_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
                     journal["cleanup_error_detail"] = repr(journal["identity_version"])
-                    self._write_journal(path, journal)
+                    write_journal(path, journal)
                     raise PublishRecoveryError(
                         f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                     )
@@ -875,16 +816,16 @@ class RecoverablePublisher:
                     archived_journal = None
                 except (OSError, json.JSONDecodeError) as manifest_error:
                     raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH") from manifest_error
-                if archived_journal is not None and self._immutable_transaction_projection(
+                if archived_journal is not None and immutable_transaction_projection(
                     workspace_root,
                     archived_journal,
-                ) != self._immutable_transaction_projection(workspace_root, journal):
+                ) != immutable_transaction_projection(workspace_root, journal):
                     raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
                 try:
                     if journal.get("cleanup_status") == "PENDING":
                         self._finish_committed_cleanup(path, journal, revision_dir)
                     elif archived_journal is None:
-                        self._archive_journal(revision_dir, path, journal)
+                        archive_journal(revision_dir, path, journal)
                     else:
                         synchronized_manifest = dict(archived_journal)
                         for field in self.CLEANUP_FIELDS:
@@ -892,12 +833,12 @@ class RecoverablePublisher:
                             if field in journal:
                                 synchronized_manifest[field] = journal[field]
                         if synchronized_manifest != archived_journal:
-                            self._archive_journal(revision_dir, path, synchronized_manifest)
+                            archive_journal(revision_dir, path, synchronized_manifest)
                 except Exception as recovery_error:
                     journal["cleanup_error_code"] = "PUBLISH_ARCHIVE_FAILED"
                     journal["cleanup_error_detail"] = str(recovery_error)
                     try:
-                        self._write_journal(path, journal)
+                        write_journal(path, journal)
                     except Exception:  # noqa: BLE001, S110 - 保留原始归档恢复故障
                         pass
                     raise PublishRecoveryError(str(recovery_error)) from recovery_error
@@ -905,7 +846,7 @@ class RecoverablePublisher:
             if "identity_version" in journal and journal["identity_version"] != 1:
                 journal["status"] = "ROLLBACK_FAILED"
                 journal["recovery_error_code"] = "PUBLISH_IDENTITY_VERSION_UNSUPPORTED"
-                self._write_journal(path, journal)
+                write_journal(path, journal)
                 raise PublishRecoveryError(
                     f"PUBLISH_IDENTITY_VERSION_UNSUPPORTED: {journal['identity_version']!r}",
                 )
@@ -914,7 +855,7 @@ class RecoverablePublisher:
                     self._rollback(path, journal, journal["files"])
                 except Exception as recovery_error:
                     journal["status"] = "ROLLBACK_FAILED"
-                    self._write_journal(path, journal)
+                    write_journal(path, journal)
                     raise PublishRecoveryError(str(recovery_error)) from recovery_error
                 recovered.append(journal["operation_id"])
                 continue
@@ -923,7 +864,7 @@ class RecoverablePublisher:
                     self._rollback_legacy_attempted(path, journal)
                 except Exception as recovery_error:
                     journal["status"] = "ROLLBACK_FAILED"
-                    self._write_journal(path, journal)
+                    write_journal(path, journal)
                     raise PublishRecoveryError(str(recovery_error)) from recovery_error
                 recovered.append(journal["operation_id"])
                 continue
@@ -938,7 +879,7 @@ class RecoverablePublisher:
                         shutil.copy2(backup, restore_temp)
                         os.replace(restore_temp, target)
             journal["status"] = "ROLLED_BACK"
-            self._write_journal(path, journal)
+            write_journal(path, journal)
             recovered.append(journal["operation_id"])
         return recovered
 
