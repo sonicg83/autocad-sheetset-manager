@@ -891,6 +891,46 @@ def test_inserted_unnumbered_subset_adds_no_cad_work_for_unchanged_subsets(tmp_p
     assert [group["subset_id"] for group in plan["groups"]] == [inserted_id]
 
 
+def test_deleting_unnumbered_subset_keeps_following_numbers_and_cad_scope(tmp_path: Path):
+    """删除不编号封面：后续子集图号不变，也不该产生任何 CAD 工作单元。
+
+    用户报告（2026-09-14）：删除已应用的「00 封面」后，图纸目录被重编为「00 图纸目录」
+    并按改名进入 CAD。根因在编号种子（`_number_seed`）误用了命令前文档里被删除子集的
+    0 填充图号，与 CAD 工作范围无关（SPEC-DM-014 §行为 5、ADR-DM-005）。
+    """
+    cover = tmp_path / "00 封面.dwg"
+    catalogue = tmp_path / "01 图纸目录.dwg"
+    for path in (cover, catalogue):
+        path.write_bytes(path.name.encode("utf-8"))
+    workspace = _planning_workspace(
+        tmp_path,
+        [
+            Subset("subset-u", "00 封面", 0, [_planning_sheet("sheet-u", "00", "封面", cover, "AC")]),
+            Subset(
+                "subset-c",
+                "01 图纸目录",
+                1,
+                [_planning_sheet("sheet-c", "01", "图纸目录", catalogue, "A1")],
+            ),
+        ],
+    )
+
+    plan = build_structural_plan(
+        workspace,
+        [{
+            "type": "delete_subset",
+            "subset_id": "subset-u",
+            "confirm_delete_all_sheets": True,
+            "confirm_delete_main_dwg": True,
+        }],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    assert {item["subset_id"]: item["cad_operation"] for item in plan["subset_operations"]} == {"subset-c": "none"}
+    assert plan["groups"] == []
+    assert [item["subset_id"] for item in plan["deleted_subsets"]] == ["subset-u"]
+
+
 def test_numbered_subset_change_skips_unchanged_unnumbered_subset(tmp_path: Path):
     """编号子集插图纸会让后续编号子集顺移，但不编号子集的派生态不变，无需 CAD 工作。"""
     first = tmp_path / "001 说明.dwg"

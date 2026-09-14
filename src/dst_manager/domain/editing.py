@@ -320,6 +320,14 @@ def derive_document_structure(
     document_seed = _document_state_seed(document)
     subset_by_id = {subset.acsm_id: subset for subset in subsets}
     titles = {subset.acsm_id: _editable_subset_title(subset.name) for subset in subsets}
+    # 命令前文档的不编号子集（按命令前标题判定）。编号种子读的是命令前文档里的既有图号，
+    # 因此排除集合必须覆盖同一份快照：否则本批命令删除/改名的首位不编号子集（如 00 封面）
+    # 会把它的 0 填充图号当成起点，使后续子集被重编为 0 起（SPEC-DM-014 §行为 3、§行为 5）。
+    original_unnumbered_subset_ids = {
+        subset_id
+        for subset_id, title in titles.items()
+        if title_matches_keywords(title, suffix_options.unnumbered_keywords)
+    }
     affected: set[str] = set()
     layout_sources = _existing_layout_sources(document)
     subset_base_templates: dict[str, str] = {}
@@ -408,7 +416,7 @@ def derive_document_structure(
         if title_matches_keywords(titles[subset.acsm_id], suffix_options.unnumbered_keywords)
     }
 
-    start, width = _number_seed(document, unnumbered_subset_ids)
+    start, width = _number_seed(document, unnumbered_subset_ids | original_unnumbered_subset_ids)
     current = start
     for subset in subsets:
         if not subset.sheets:

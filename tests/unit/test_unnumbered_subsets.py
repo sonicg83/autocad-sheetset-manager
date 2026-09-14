@@ -6,6 +6,8 @@
 #   * 图号范围退化为单值（000），DWG 文件名前缀沿用「前缀 + 图号范围 + 标题」既有规则。
 from pathlib import Path
 
+import pytest
+
 from dst_manager.domain.editing import SuffixOptions, derive_document_structure
 from dst_manager.domain.models import (
     LayoutReference,
@@ -37,6 +39,15 @@ def _insert_subset(title: str, position: int, count: int) -> dict[str, object]:
         "initial_sheet_count": count,
         "base_template_file": "C:/模板/图纸基底.dwg",
         "source": {"type": "template_layout", "file": "C:/模板/标准.dwt", "layout": "A3"},
+    }
+
+
+def _delete_subset(subset_id: str) -> dict[str, object]:
+    return {
+        "type": "delete_subset",
+        "subset_id": subset_id,
+        "confirm_delete_all_sheets": True,
+        "confirm_delete_main_dwg": True,
     }
 
 
@@ -100,6 +111,55 @@ def test_unnumbered_subset_at_project_start_does_not_drag_number_seed_to_zero() 
 
     assert _numbers(derived) == [["000"], ["002", "003"]]
     assert [subset.number_range for subset in derived.subsets] == ["000", "002-003"]
+
+
+@pytest.mark.parametrize(
+    ("cover_number", "first_number"),
+    [("00", "01"), ("000", "001"), ("0000", "0001")],
+)
+def test_deleting_applied_unnumbered_subset_does_not_drag_number_seed_to_zero(
+    cover_number: str,
+    first_number: str,
+) -> None:
+    # 用户报告（2026-09-14）：删除已应用的不编号封面后，紧随其后的图纸目录被重编为 0 起（00 图纸目录）。
+    # 原因：编号种子读的是**命令前**文档，而排除集合按**命令后**子集列表计算，被删除的封面
+    # 已不在集合里，它的 0 填充图号就成了种子（起点 0）。命令前文档的排除集合也必须按
+    # 命令前标题计算（SPEC-DM-014 §行为 3、§行为 5）。
+    document = _document(
+        [
+            Subset("subset-u", f"{cover_number} 封面", 1, [_sheet("u1", cover_number, "封面")]),
+            Subset("subset-a", f"{first_number} 图纸目录", 2, [_sheet("a1", first_number, "图纸目录")]),
+        ]
+    )
+
+    derived = derive_document_structure(
+        document,
+        [_delete_subset("subset-u")],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    assert _numbers(derived) == [[first_number]]
+    assert derived.subsets[0].display_name == f"{first_number} 图纸目录"
+
+
+def test_deleting_unnumbered_subset_keeps_following_numbers_without_zero_padding() -> None:
+    # 关键字刚开启、封面仍是既有编号（尚未应用 0 填充）时删除它：后续子集也不得前移
+    # （删除不消耗序号、也不释放号段给后续子集，SPEC-DM-014 §行为 5）
+    document = _document(
+        [
+            Subset("subset-u", "1 封面", 1, [_sheet("u1", "001", "封面")]),
+            Subset("subset-a", "2 说明", 2, [_sheet("a1", "002", "说明")]),
+        ]
+    )
+
+    derived = derive_document_structure(
+        document,
+        [_delete_subset("subset-u")],
+        SuffixOptions(True, 1, ("封面",)),
+    )
+
+    assert _numbers(derived) == [["002"]]
+    assert derived.subsets[0].display_name == "002 说明"
 
 
 def test_number_seed_falls_back_to_one_digit_when_project_has_no_numbered_sheet() -> None:

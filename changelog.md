@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-14（修复：删除不编号子集导致后续子集被重编为 0 起）
+
+用户在上一条修复的验证中发现第二个缺陷：原第一个子集为 `01 图纸目录`，插入不编号「封面」得到 `00 封面；01 图纸目录`（正确），**再删除封面**却得到 `00 图纸目录`：紧随其后的编号子集被重编为 0 起，并按「改名」进入 CAD（每次删除都白改一次图号与布局名）。另一形态：关键字刚开启、封面尚未应用 0 填充（仍为 `001`）时删除它，后续子集整体前移一位。
+
+- **根因（`src/dst_manager/domain/editing.py::derive_document_structure`）**：「不编号子集」排除集合按**命令应用后**的子集列表与标题判定，而 `_number_seed` 读的是**命令前** `document` 的既有图号以继承项目编号起点与位数。`delete_subset`（及 `update_subset` 改名脱离关键字）会让该子集从排除集合中消失，但它的 `00`/`000` 仍在命令前文档里被当成种子：已应用 0 填充 → 起点被拉成 `0`（用户看到的 `00 图纸目录`）；未应用 0 填充 → 起点从 1 起算，后续子集整体前移。
+- **修复**：在 `titles` 初始化后立即计算「命令前快照」的不编号判定（`original_unnumbered_subset_ids`），与命令后判定取并集后传给 `_number_seed`；`_number_seed` 本体与「继承既有编号起点与位数」规则不变。删除不编号子集自此与新建对称：不改变其他子集图号/显示名/布局名/目标 DWG，因而不产生任何 CAD 工作单元。
+- **新增测试（TDD，先红后绿）**：`tests/unit/test_unnumbered_subsets.py` 新增 `test_deleting_applied_unnumbered_subset_does_not_drag_number_seed_to_zero`（位数参数化 `00/01`、`000/001`、`0000/0001`）与 `test_deleting_unnumbered_subset_keeps_following_numbers_without_zero_padding`；`tests/unit/test_core.py` 新增计划级用例 `test_deleting_unnumbered_subset_keeps_following_numbers_and_cad_scope`（`cad_operation == "none"`、`groups == []`、`deleted_subsets` 完整）。**红态已实测**：`[['00']] != [['01']]`、`[['000']] != [['001']]`、`[['0000']] != [['0001']]`、`[['001']] != [['002']]`、`{'subset-c': 'rename_only'} != {'subset-c': 'none'}` 共 5 项失败；修复后 `tests/unit/test_unnumbered_subsets.py` 22 passed。
+- **规范**：`SPEC-DM-014` §行为 3 补充「排除集合必须与种子取值的快照一致（命令前 ∪ 命令后判定）」、§行为 5 补充「删除图纸、删除命中关键字的子集同样不改变其他子集图号」，并追加「实现缺陷修复（2026-09-14 追记）」；新增实施计划 `PLAN-DM-032`，`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 增索引行。领域规则本身未变，属实现与规范的对齐。
+- **验证**：`uv run pytest -q -p no:warnings --junitxml=...` **1481 项 / 1409 passed / 0 failed / 0 errors / 72 skipped**（107.4 s；本次 +5 用例）；`uv run ruff check .` All checks passed。前端零改动（契约与字段未变，未重跑 Playwright）；真实 AutoCAD 系统测试未执行（不涉及 SCR、插件命令、布局重建与 Handle 回读）。
+
 ## 2026-09-14（修复：插入不编号子集时其他子集被无效送入 CAD）
 
 用户报告：向图纸集**插入不编号子集**（图号固定 `000`、不消耗序号）时，其他子集的图号与布局名实际没有任何变化，但预览仍为它们标注 `rename_only`，确认后每个子集都多启动一次 AutoCAD Core Console（10–45 s），属纯浪费。
