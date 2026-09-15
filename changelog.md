@@ -2,7 +2,7 @@
 
 ## 2026-09-15（Task 11 第 4 轮 11d：抽出工作区生命周期组合式函数，PLAN-DM-029）
 
-- **产出**：新建 `web/src/composables/useWorkspaceLifecycle.ts`（184 行），负责工作区**打开 / 关闭 / 刷新 / 清空编辑态**与壳桥接（选择 DST、拖拽接收、打开所在文件夹）；`appComposition.test.ts` 新增 9 例（合计 **160 passed**）。`App.vue` **766 → 671 行**（净 −95）。
+- **产出**：新建 `web/src/composables/useWorkspaceLifecycle.ts`（294 行，含接口与说明注释），负责工作区**打开 / 关闭 / 刷新 / 清空编辑态**与壳桥接（选择 DST、拖拽接收、打开所在文件夹）；`appComposition.test.ts` 新增 9 例（合计 **160 passed**）。`App.vue` **766 → 671 行**（净 −95）。
 - **只返回根装配需要的 state/actions**：只导出 `workspaceLoadGeneration`/`hasShell`/`openByPath`/`doRefreshWorkspace`/`closeWorkspace`/`refreshWorkspace`/`openFolder`/`selectAndOpenDst`；`doOpenByPath`/`doCloseWorkspace`/`beginWorkspaceLoad`/`resetEditingState`/`loadDraft`/`acceptDstPath`/`registerDropBridge` 一律内聚（`doRefreshWorkspace` 例外：草稿域的 `reloadWorkspace` 需要它做冲突后重载，且该路径自带确认、不再叠加三选一）。
 - **组合而非复制**（Step 3/4 原文）：草稿域经引用注入并直接复用其 `guardAllInputs`/`pendingDraftSave`/`discardDraft`/`resetDraftState`/`rebuildDraftProjection`，**未新建第二份草稿态、未复制投影或确认队列**。机械证据：模块运行时 import 仅 `vue`、`../api/client`、`../api/shell`；`App.vue` 中 `resetEditingState`/`beginWorkspaceLoad`/`openByPath`/`doCloseWorkspace`/`doRefreshWorkspace`/`loadDraft`/`hasShell`/`workspaceLoadGeneration` 的**声明残留均为 0**。
 - **原样保留的顺序语义**：等保存队列 → 保存失败则中止 → `invalidateJobMonitor(true)` → 代次递增 → 重置编辑/草稿态 → 快照 `baseWorkspace` → `loadDraft`；关闭时另推进代次，拦住关闭后迟到的打开/刷新响应。
