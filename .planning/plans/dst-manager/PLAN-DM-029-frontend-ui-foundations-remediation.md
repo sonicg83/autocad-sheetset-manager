@@ -318,6 +318,7 @@ Files（本轮）：
   - **原措辞为计划缺陷（Ruling 39 订正）**：原文写「保留的**唯一**条目」，但 `↑ / ↓ / ✕` 本就是 **3 条**独立例外，字面目标不可达。先例：Ruling 37。
   - **收口不变量**：Task 6 名下原 **75** 条（74 Files 内 + 1 `CompatibilitySummary.vue`）→ 清退 69 条 `raw-visual-value` + 2 条 `visible-input-label`，保留 3 条 → **终态 186 条 = 258 − 75 + 3**；`check:ui` 裸违规 **187 = 186 + 1 动态白名单**。
 - [x] **Step 7a（自动验证，控制器亲跑）**：`check:ui` **EXIT 0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。未跑全量 e2e（控制器收口时跑）。详见 T6-11。
+  - **评审轮后重跑（T6-12 落地后）**：spec **0**（**91 passed / 0 failed / 0 flaky**）、`check:ui` **0**；5 张 t6 PNG 已按终态重采入库。
 - [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。
 - [x] **Step 8（提交）**：本任务实际分为逐步提交（超时/崩溃后不再丢进度）：`eb7fa66` 承接迁移 → `43e5a72` 断言 → `2926cfb`/`392e8a3` 高度归一 → `7d3a214` 例外清退 → `b229729` 证据 spec → `387efb5` 证据入库与断言稳定性修正；报告 `task-6-report.md`。原计划的单一提交 `统一图纸目录页控件视觉基础` 被逐步提交取代（运维必要性，非计划偏离）。
 
@@ -348,7 +349,7 @@ Files（本轮）：
 - **授权范围（严格）**：`tokens.css` **仅追加**组件层结构令牌，**仅 7 个**，值**逐字等值**、零视觉变化；**禁止**改既有令牌的名字/值/顺序；**禁止**新增字号令牌（T6-3 不变）；**禁止**改令牌文件描述性注释（责任 I 措辞收窄由控制器收口时处理）。
 - **令牌名（按角色/域命名，单一一致前缀）**：沿用既有 `--definition-row-height`/`--compare-card-max-width` 先例。控制器**澄清**「令牌名不得含页面名」的原意是禁止**视图文件名派生**（如 `--sheet-catalog-view-*`）；`sheet-catalog` 是**功能域**非页面名，且统一前缀使这笔债可成组审计。7 个：`--catalog-pane-height:425px`、`--catalog-preview-min-height:250px`、`--catalog-preview-table-max-height:300px`、`--catalog-columns-max-height:330px`、`--catalog-field-browser-max-height:235px`、`--catalog-template-select-min-width:220px`、`--catalog-column-expression-min-height:52px`。
   - **其中 `--catalog-pane-height` 必须合并 worker 原提的两条**（`.catalog-row{height:425px}` 与 `.column-editor{min-height:425px}`@≤980px 属**同一套 425px 首屏密度预算**）。拆成两个同值令牌正是责任 I 点名的「单点组件令牌」重复，**照拆打回**。
-- **圆角授权**：`.column-row input`/`textarea` 的 `border-radius:5px` → `var(--radius-sm)`(6px) **批准**。理由：仓库无 5px 档位，为 1px 去动原始圆角刻度属更大的架构改动；先例为 Task 5 把 `999px` 归一到 `--radius-full`(9999px)。**这是本轮唯一的显式视觉偏离，必须在报告中单列披露。**
+- **圆角授权**：`.column-row input`/`textarea` 的 `border-radius:5px` → `var(--radius-sm)`(6px) **批准**。理由：仓库无 5px 档位，为 1px 去动原始圆角刻度属更大的架构改动；先例为 Task 5 把 `999px` 归一到 `--radius-full`(9999px)。**这是本轮唯一的显式视觉偏离，必须在报告中单列披露。** **→ 本项已被 T6-12 取代**（实际落点为 8px；文本域也改为 8px），以 T6-12 为准。
 - **责任 I 记账**：组件层结构令牌由 6 条增至 **13** 条。
 
 **T6-8（Step 3 图标复核结论与 `32px` 折中 → 新登记责任 R）**：worker 依 T6-4 授权判**保留**，控制器独立复核其四条理由**全部属实**（实读 `UiIconButton.vue:28-43`：确为 `border:1px solid transparent` + `--color-text-secondary` + `var(--icon-button-size)`(36px) + `background:none`；实读 `ColumnEditor.vue:195/211-214`：末轨确为 `112px`、`.row-actions{gap:4px}`，本行为 `--color-border-strong` 实边框 + `--color-bg-surface` 底 + `--color-text-primary` + ✕ 带 `--color-danger`）。
@@ -397,6 +398,15 @@ Files（本轮）：
 - **`g8-*.png` 主动还原**：以 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec 会**连带无条件覆盖** SPEC-DM-012 的 6 张既有生产证据。实测**本机截图逐字节不可复现**（同 spec 连跑两次，5 张 t6 PNG 的 md5 **全不同**）→ 这 6 张的字节变化**既不能归因**给 Task 6 的刻意改动、**也不能排除**是采集噪声。**在无法归因的情况下重写他 Spec 的验收资产不可接受** → `git checkout` 还原，只提交 Task 6 自己的 5 张。新登记**责任 T**。
 - **最终门禁（控制器亲跑，取真实 EXIT 码）**：`check:ui` **0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。e2e 共 4 次（RED、变异、GREEN×2）。
 - **工具陷阱（记入计划）**：`npm ... | tail -30; echo "EXIT=$?"` 打印的是 **`tail` 的退出码**；必须重定向到文件再取 `$?`——否则会把 `check:ui` 的 EXIT 1 **误报为 0**。
+- **评审轮**（`2ce5d5a5`，`opencode-go/deepseek-v4.1-flash`）：结论 **Needs fixes / 0 Critical**。技术面（72 删除/0 新增/186/保留 3、令牌 +7 逐字等值、`ui/**` 与 6 张 `g8-*` 未动、无 `size="compact"`、**控制器两处断言改动确实未削弱守卫**）均经**独立复核确认**。问题全部落在**披露表**即控制器自己写的那部分：报告把列名输入圆角写成 6px（**代码实为 8px**）、把删除按钮误列入 padding 12→16px、且漏披露两处输入迁到 `UiInput` 的高度/字号/padding 变化。**控制器已逐条复核为属实并全部修正**（见 T6-12 与报告 §10）。
+
+**T6-12（Ruling 43：圆角落点与输入类型还原 —— 评审轮处置）**：
+
+- **列名输入 5px → `--radius-md`(8px)：追认批准**。`.column-row input` 规则**整条删除**，输入改由 `UiInput` 渲染，半径由原语提供（`UiInput.vue:53`）。页面侧覆写原语半径会与 `UiInput`/`UiButton` 的分工相冲（同 Ruling 33/35 驳回页面侧 `:deep()` 的口径）。**它超出 T6-7 字面授权的 6px，必须以裁定追认，不得只靠改表含糊过去。**
+- **表达式文本域 5px → 也改为 `--radius-md`(8px)**。理由：同一行相邻控件的圆角必须一致（**T6-10 已就「同行高度不一致」立过同一原则**），且 8px 是全应用表单控件档；`--radius-sm`(6px) 在本仓属**文字/链接型按钮**档（Task 5 的 `button.link`、`.empty-values button` 先例）。保留 T6-7 的 6px 会留下「输入 8px / 文本域 6px」的同行不一致，与 T6-10 的裁定自相矛盾。
+- **字段搜索框 `type="search"` → 还原为 `type="text"`**。该变更**未获授权、未披露**，且会改变 role（textbox→searchbox）并引入原生清除控件，与本任务「行为保持」的契约不符；若确实想要 `searchbox`，属 **Spec 侧决策**，不由迁移任务单方面引入。
+- **落地与验证**：三项均已实现（提交 `aec713e`），5 张 t6 PNG 按终态重采入库（先前版本已过时）；重跑两个目录页 spec **91 passed / 0 failed / 0 flaky**、`check:ui` **EXIT 0**。
+- **备忘（Minor-6）**：`sheet-catalog.spec.ts` 已增至 ~1408 行；本次新增块属计划点名（plan-mandated），未来可把 Task 6 块拆为独立 spec。
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 
@@ -684,6 +694,8 @@ Files（本轮）：
 > **收口责任 S（缺「迁移不得改变既有计算值」的机械检查；Task 6 续轮 RED 暴露）**：`check:ui` 只验**规则合规性**（裸值是否使用令牌、例外是否陈旧），**无法**发现「迁移把某个计算值改掉了」——例如把 `min-height:34px` 换成 `UiButton` 默认 `36px` 后，两边都“合规”，检查器全绿。Task 6 续轮写断言后跑 RED、捕获 **5 条全红**，才发现承接的迁移把 6 个动作按钮高度从 34/34/30/30/30/32 统一成了 36px。**教训：规则合规 ≠ 值保持**；控制器当时只跑 `check:ui` 就判定「0 真实违规」是**必要但不充分**的验证。收口方向：考虑为迁移类任务提供「迁移前后计算值快照对比」的机械手段（或在计划中强制「每个被迁移规则至少一条计算样式断言」），使值变化只能是有意为之且必须披露。
 
 > **收口责任 T（SPEC-DM-012 生产证据 `g8-*.png` 已陈旧，且该证据不可逐字节复现；Task 6 收口发现）**：Task 6 的刻意视觉变化（Ruling 41 的 36px 归一 + T6-5 的可见 label）会影响图纸目录页，而 SPEC-DM-012 与冻结 Demo 的比对依赖 `docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-*.png`。实测两件事：① 这些图**对采集环境敏感**——同一 spec 连跑两次，新采集的 5 张 t6 PNG 的 md5 **全不同**（本机无 PNG 解码器，无法逐像素归因）；② 只要带 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec，就会**无条件覆盖**这 6 张。收口方向：视觉变更全部落定后（Task 12）**重新生成** SPEC-DM-012 生产证据，并在 Spec 侧写明该目录的**再生成时机**与「带该环境变量跑 e2e 会弄脏工作区」的提示，避免下一位开发者把噪声 diff 误提交。
+
+> **收口责任 U（`visible-input-label` 已看不见 `UiInput`；Task 6 评审轮发现）**：该规则从**模板源码**解析 `<input>` 标签（`check-ui-contracts.mjs:406-419`，遍历全部 `<input>` 且只跳过 `type="hidden"`）。Task 6 把列名输入与字段搜索迁到 `<UiInput>` 后，规则**根本看不到它们**，因而「必须有可见 label」这条保证**不再由检查器提供**，而只靠 `sheet-catalog.spec.ts` 里的断言守着。本轮结论正确（label 确实存在且被测试钉住），但 `UiInput` 的 `label` 是**可选**属性（`FormField` 是另一种提供方式），下一个消费者完全可能不传 `label` 而检查器**不会报**。收口方向：让 `check-ui-contracts.mjs` 能识别 `UiInput`/`FormField`（要么解析组件用法，要么要求必须经 `FormField`），或至少在 Rule 文档里声明「组件化输入不在本规则覆盖范围内、由 e2e 兜底」。
 
 ## 依赖与提交顺序
 

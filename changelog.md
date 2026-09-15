@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-15（Task 6 首轮评审与 Ruling 43 处置，PLAN-DM-029）
+
+- **评审结论**（`2ce5d5a5`）：**Needs fixes / 0 Critical**。技术面均获**独立确认**：例外表 **72 删除 / 0 新增 / 总 186 / 保留 3 条**（`expiresWith` 已改为「下一次目录页视觉 Spec 修订」）；`tokens.css` **恰 +7 行**（逐字等值、未改既有令牌、未新增字号令牌）；`ui/**` 与 6 张 `g8-*` **未被触及**；无 `size="compact"`；**控制器自写的两处断言改动确实未削弱守卫**（评审者按控制器要求作了独立判断）。
+- **问题全在控制器自己写的披露表（已逐条复核为属实并修正）**：
+  - **Important**：报告称列名输入圆角→`--radius-sm`(6px)，**代码实为 8px**（`.column-row input` 规则整条删除，半径由 `UiInput.vue:53` 的 `--radius-md` 提供，测试 `:1383` 即钉 `--radius-md`）。
+  - **Minor**：把删除按钮误列入「padding 12→16px」，实际删除**保留** `--space-3`（`TemplateBar.vue:142`；测试 `:1317` 钉 `--space-3`）。
+  - **Minor**：漏披露两处输入迁到 `UiInput` 的高度/字号/padding 变化，以及 `type="text"→"search"`。
+  - **Minor**：`sheet-catalog.spec.ts:1264-1265` 陈旧注释与 1267-1269 自相矛盾（旧注释还写「必须有 id」）。
+- **T6-12（Ruling 43）**：
+  - **列名输入 8px 追认批准**——原语拥有自己的半径，页面侧覆写会与 `UiInput`/`UiButton` 的分工相冲（同 Ruling 33/35 口径）。它超出 T6-7 字面授权的 6px，**必须以裁定追认**。
+  - **表达式文本域也改为 `--radius-md`(8px)**——同行相邻控件圆角必须一致（**T6-10 已就同行高度立过同一原则**）；`--radius-sm`(6px) 在本仓属文字/链接型按钮档。
+  - **字段搜索框 `type="search"` 还原为 `type="text"`**——未获授权、未披露，且改变 role 并引入原生清除控件；要做属 Spec 侧决策。
+- **落地**：提交 `aec713e 统一行内控件圆角并还原搜索框输入类型`；5 张 t6 PNG 按终态**重采**入库；重跑两个目录页 spec **91 passed / 0 failed / 0 flaky**、`check:ui` **EXIT 0**。
+- **新登记责任 U**：`visible-input-label` 从模板源解析 `<input>`，故**看不到** `<UiInput>`／`FormField` 这类组件化输入 → 该保证已不再由检查器提供，只靠一个 spec 文件守着；而 `UiInput` 的 `label` 是可选的。
+
 ## 2026-09-15（Task 6 收口：Ruling 42 与责任 T，PLAN-DM-029）
 
 - **runner 二次失败（非超时）**：续轮 worker `4b447117` 完成 **Steps 1–6** 后，runner 进程在 ~33 分钟（预算 60 分钟）消失（`proof-write-failed`）。**已提交的 6 个 commit 全部保全**——上轮新增的「每完成一步即提交」纪律直接兑现，未再丢工作。
