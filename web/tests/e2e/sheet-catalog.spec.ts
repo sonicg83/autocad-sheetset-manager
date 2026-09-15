@@ -1263,12 +1263,15 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
 
   // 可见 label：控件必须有 id，且存在指向它的可见 <label>。仅 aria-label 不算——
   // ≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签（T6-5）。
+  // 可见 label 关联（T6-5）：不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
+  // 来自模块级计数器（见 instanceId.ts），id 按挂载顺序分配而非行序，控件重挂载就会换 id，
+  // 两次往返之间发生重挂载即假失败（本用例曾因此 flaky）。这里改用 Playwright 自身的可访问
+  // 名称计算 + 独立定位可见 label 元素，两者都不依赖 id，也不依赖 getByLabel 命中的是哪个节点。
   async function expectVisibleLabel(page: Page, control: Locator, text: string): Promise<void> {
-    const id = await control.first().getAttribute("id");
-    expect(id, `控件「${text}」必须有 id 才能被可见 label 关联`).toBeTruthy();
-    const label = page.locator(`label[for="${id}"]`);
-    await expect(label, `可见 label「${text}」`).toHaveText(text);
-    await expect(label).toBeVisible();
+    await expect(control.first(), `「${text}」应命中控件本身而不是 label`).toHaveJSProperty("tagName", "INPUT");
+    await expect(control.first(), `「${text}」的可访问名称`).toHaveAccessibleName(text);
+    await expect(control.first(), `「${text}」的名称必须来自可见 label，而不是仅 aria-label`).not.toHaveAttribute("aria-label", /.+/);
+    await expect(page.locator("label.ui-input__label").filter({hasText: text}), `可见 label「${text}」`).toBeVisible();
   }
 
   // 同一工具区内所有动作按钮必须同高。这是迁移留下的真实缺陷的回归守卫：

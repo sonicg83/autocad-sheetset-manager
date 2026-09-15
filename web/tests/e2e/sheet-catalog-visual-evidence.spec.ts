@@ -440,8 +440,17 @@ test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、
   const visited: string[] = [];
   for (let step = 0; step < 140; step++) {
     await page.keyboard.press("Tab");
-    const name = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("aria-label")
-      ?? (document.activeElement as HTMLElement | null)?.textContent?.trim() ?? "");
+    // 可访问名称：显式 aria-label 优先；否则取关联的可见 label。T6-5 之后列名与字段搜索
+    // 改由 UiInput 的 label[for] 提供名称，只读 aria-label 会把这些控件从 Tab 环里漏掉，
+    // 使「Tab 顺序经过列编辑器」退化成空转断言。
+    const name = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active) return "";
+      const explicit = active.getAttribute("aria-label");
+      if (explicit) return explicit;
+      const labelled = (active as HTMLInputElement).labels?.[0]?.textContent;
+      return (labelled ?? active.textContent ?? "").trim();
+    });
     if (name) visited.push(name);
     if (visited.some(item => item.includes("导出 XLSX"))) break;
   }
