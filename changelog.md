@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-15（Task 5 派发前置：结构尺寸裁定 Ruling 31 与计划文件清单修正，PLAN-DM-029）
+
+- **Task 5 派发与基线复核**：阶段 3 首个页面迁移（属性页）开工，BASE `60844ed`。控制器自行从 `ui-contract-exceptions.json` 重算 Task 5 名下例外 **62 条**，与 Task 5 Files 集合**逐文件 1:1 重合**（无外溢/遗漏）：`PropertyValuePanel.vue` 27、`PropertyDefinitionPanel.vue` 16、`PropertyCsvPanel.vue` 11、`PropertyDefinitionTable.vue` 3、`PropertyValueCompareDialog.vue` 3、`PropertiesView.vue` 2；按规则 `raw-visual-value` 54 / `unicode-structure-icon` 6 / `visible-input-label` 2。开工前不变量 **321 = 320 例外 + 1 动态白名单**。
+- **字体层级落点裁定（T5-1）**：折叠标题落 `--font-label`(13px)、模态标题落 `--modal-title-font-size`；页面**不得**消费 `--font-body`（`font` 简写，`tokens.css:10` 限定根元素专用，写成 `font-size:var(--font-body)` 是无效值）与 `--font-size-*` 原始层令牌（依据 ARCH-DM-007 §4.1 与 Task 4 先例——迁移后壳层实测零 `--font-size-*` 命中）。控制器定位到原生字号泄漏源头：`.head-title` 显式 `16px` 三处（`PropertyCsvPanel.vue:104`、`PropertyDefinitionPanel.vue:212`、`PropertyValuePanel.vue:277`）与未设尺寸的 `<h2>` 两处（`PropertyValueCompareDialog.vue:51`、`PropertyValuePanel.vue:260`）。
+- **Ruling 31（实施者主动停下请示，控制器裁定）**：计划 Step 6「检查器对属性目录零例外」与「Files 不含 `tokens.css`」实测冲突。实施者用空例外探针证明 **6 项结构尺寸在 `tokens.css` 无任何令牌也无「最近令牌」**，控制器逐条复核属实：`min-height:60px` ×3、`width:280px` ×2、`height:44px`、`max-width:560px`、`max-height:180px`、`min-height:140px`。裁定沿用 **Ruling 25 先例**（Task 4 同类冲突的处置）——把 `tokens.css` 加入 Task 5 Files（**计划缺陷订正**），新增 6 个**零视觉变化**的组件层结构令牌（同名值逐字搬运）：`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`。三条收紧沿用 Ruling 25：不得用 `calc()/clamp()/min()/max()` 包裹常量绕检查器（`visual-values.mjs:37/66` 既有漏洞，Task 12 责任 H）、不新增任何字号令牌、令牌名不得含页面名。
+- **驳回的方案与理由**：驳回「将 4 项登记例外并推给 Task 12」——重蹈 Ruling 25 驳回 B2 的理由（把本任务债推给最终门禁任务）且与 Step 6 字面冲突；驳回「`60px`/`44px` 改内容驱动 padding」——二者是**固定节奏**而非内容驱动，改 padding 会产生可见高度抖动，正是 Ruling 25 驳回 B3 的理由。
+- **计划文件修正（控制器 `79e7d90`）**：Task 5 Files 增列 `web/src/styles/tokens.css`；Step 3 写入 T5-1 与 Ruling 31 的落点约束（含 6 个令牌名）；**收口责任 I** 扩写——后三项可能只被属性页消费，属**单点组件令牌**，收口时需复核是否应合并或下沉，「不能只补枚举了事」。
+- **影响范围**：仅计划文件与本文档。未触碰任何实现、测试、例外表或视觉证据；属性页实现改动由 Task 5 实施轮独立提交。
+
 ## 2026-09-15（会话恢复核验与订正 PLAN-DM-029 状态/索引，PLAN-DM-029）
 
 - **中断恢复核验（无工作丢失）**：工作树 `.worktrees/plan-dm-029`、分支 `plan-dm-029-frontend-ui-foundations`、HEAD `e40a932`；`git status --porcelain -uall` 零条，无 stash 可恢复（悬空的 `task5-wip` 实属 PLAN-DM-031 的 `publisher.py`，与本计划无关）；SDD 证据链 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/`（`task-1..4-report.md` + `progress.md`）与 3 张视觉证据 PNG 均在库。
