@@ -6,7 +6,12 @@
 // 入库的同状态 Demo/生产对比图由验收时按相同视口、主题和状态显式复制附件到
 // .planning/memos/dst-manager/assets/PLAN-DM-016/（demo 侧由临时采集脚本生成，脚本不进入提交树），
 // 只使用 properties.ts 虚构夹具，不读取用户截图、真实工程或 sample/。
-import {expect, test, type Page, type TestInfo} from "@playwright/test";
+//
+// PLAN-DM-029 任务 5 增补：属性页的控件视觉基础（字号档、控件高度、结构尺寸）必须由语义/组件令牌解析。
+// 期望值不硬编码 px，而是在真实渲染文档里用探针元素从令牌解析后比对（`tokenReference`），
+// 避免断言与令牌漂移；覆盖折叠标题与计数、折叠图标、查询/搜索可见 label、主次动作按钮档、
+// 定义表行高、CSV 面板、值面板工具行与字段、以及两个模态的标题与结构尺寸。
+import {expect, test, type Locator, type Page, type TestInfo} from "@playwright/test";
 import {installPropertiesFixture, openProperties, pendingDraft} from "./fixtures/properties";
 
 const THEMES = ["light", "dark"] as const;
@@ -36,6 +41,39 @@ async function expectToken(page: Page, selector: string, property: string, token
   expect(actual, `${selector} ${property} 应来自 ${token}`).toBe(expected);
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+// 在真实文档里解析令牌数值：`computed` 走计算样式（字号、最小高度等），`box` 走实际盒尺寸
+// （宽度、高度：边框盒下计算样式的 width/height 会被换算成内容盒，不能直接比令牌）。
+async function tokenReference(page: Page, token: string, property: string, mode: "computed" | "box"): Promise<number> {
+  return page.evaluate(({name, prop, kind}) => {
+    const probe = document.createElement("div");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.display = "block";
+    probe.style.setProperty(prop, `var(${name})`);
+    document.body.appendChild(probe);
+    const raw = kind === "computed"
+      ? parseFloat(getComputedStyle(probe).getPropertyValue(prop))
+      : Number(probe.getBoundingClientRect()[prop as "width" | "height"]);
+    probe.remove();
+    return raw;
+  }, {name: token, prop: property, kind: mode});
+}
+
+// 断言目标的数值（计算样式或实际盒尺寸）等于令牌解析值
+async function expectTokenValue(
+  page: Page, target: Locator, property: string, token: string, mode: "computed" | "box" = "computed",
+) {
+  const expected = round2(await tokenReference(page, token, property, mode));
+  const actual = round2(mode === "computed"
+    ? parseFloat(await target.first().evaluate((el, prop) => getComputedStyle(el).getPropertyValue(prop), property))
+    : await target.first().evaluate((el, prop) => Number(el.getBoundingClientRect()[prop as "width" | "height"]), property));
+  expect(actual, `${property} 应来自 ${token}`).toBe(expected);
+}
+
 async function attachScreenshot(page: Page, info: TestInfo, state: string, theme: string) {
   const viewport = page.viewportSize()!;
   const name = `${state}-${viewport.width}x${viewport.height}-${theme}.png`;
@@ -63,7 +101,7 @@ for (const theme of THEMES) {
     await openWorkspace(page, theme);
     // 先用键盘建立键盘焦点上下文，再聚焦主按钮，使 :focus-visible 生效
     await page.keyboard.press("Tab");
-    const focus = await page.locator(".definition-panel .link-actions button.primary").evaluate((el) => {
+    const focus = await page.getByRole("button", {name: "新增字段"}).evaluate((el) => {
       el.focus();
       const computed = getComputedStyle(el);
       return {visible: el.matches(":focus-visible"), color: computed.outlineColor, width: computed.outlineWidth, style: computed.outlineStyle};
@@ -134,16 +172,105 @@ for (const theme of THEMES) {
       }
     }
     // 同行控件垂直居中对齐：值面板搜索行与定义面板查询行的输入/选择器/按钮中点一致（±1px）
+    // 控件已由原语包裹（`UiInput`/`UiSelect` 的根是 span），故按后代取真实控件而非直接子元素；
+    // 可见 label 位于控件上方，行内用 flex-end 对齐控件底边，中心差不超过 1px。
     for (const rowSelector of [".value-panel .value-toolbar", ".definition-panel .query-bar"]) {
-      const centers = await page.locator(`${rowSelector} > *`).evaluateAll((elements) => elements
-        .filter((el) => /^(INPUT|SELECT|BUTTON)$/.test(el.tagName))
-        .map((el) => {
-          const rect = el.getBoundingClientRect();
-          return rect.top + rect.height / 2;
-        }));
+      const centers = await page.locator(`${rowSelector} input:not([type="checkbox"]):visible, ${rowSelector} select:visible, ${rowSelector} button:visible`).evaluateAll((elements) => elements.map((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      }));
       expect(centers.length, `${rowSelector} 存在同行控件`).toBeGreaterThanOrEqual(2);
       for (const center of centers) expect(Math.abs(center - centers[0]), `${rowSelector} 同行垂直对齐`).toBeLessThanOrEqual(1);
     }
+  });
+
+  test(`属性页控件视觉基础全部来自语义/组件令牌：${theme}`, async ({page}) => {
+    await openWorkspace(page, theme);
+
+    // 折叠标题栏：标题与计数档位、折叠图标、结构高度
+    await expectTokenValue(page, page.locator(".definition-panel .head-title"), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".definition-panel .head-title small"), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".definition-panel .panel-head"), "min-height", "--panel-head-min-height");
+    await expectTokenValue(page, page.locator(".definition-panel .head-toggle"), "min-height", "--control-height-default");
+    const chevron = page.locator(".definition-panel .head-toggle .ui-icon");
+    await expect(chevron, "折叠字形改用本地 SVG 图标").toHaveCount(1);
+    await expectTokenValue(page, chevron, "width", "--icon-size-sm", "box");
+    await expectTokenValue(page, chevron, "height", "--icon-size-sm", "box");
+
+    // 查询区：可见弱化 label（不靠 placeholder）、38px 输入、结构宽度与圆角令牌
+    const search = page.getByRole("searchbox", {name: "搜索字段"});
+    await expect(page.locator(".definition-panel .query-bar label").first(), "搜索框必须有可见 label").toHaveText("搜索字段");
+    await expectTokenValue(page, search, "height", "--input-height", "box");
+    await expectTokenValue(page, search, "width", "--panel-search-width", "box");
+    await expectTokenValue(page, search, "padding-left", "--space-2");
+    const scopeFilter = page.getByRole("combobox", {name: "作用域筛选"});
+    await expectTokenValue(page, scopeFilter, "height", "--input-height", "box");
+    await expectTokenValue(page, scopeFilter, "border-radius", "--radius-md");
+
+    // 主次动作：普通按钮档 36px + 主按钮层级由原语承载
+    await expectTokenValue(page, page.locator(".definition-panel .link-actions .ui-button"), "height", "--button-height", "box");
+    await expect(page.locator(".definition-panel .link-actions .ui-button--primary")).toHaveCount(1);
+
+    // 新增区：字段组合改用原语，可见 label、输入 38px、辅助与错误文案档
+    await page.getByRole("button", {name: "新增字段"}).click();
+    await expect(page.locator(".definition-panel .add-form")).toBeVisible();
+    for (const field of ["属性作用域", "属性名称", "默认值"]) {
+      await expectTokenValue(page, page.getByLabel(field, {exact: true}), "height", "--input-height", "box");
+    }
+    await expectTokenValue(page, page.locator(".definition-panel .add-actions .hint"), "font-size", "--font-caption");
+    await page.getByRole("button", {name: "加入草稿"}).click();
+    await expectTokenValue(page, page.locator(".definition-panel .field-error"), "font-size", "--font-caption");
+
+    // 定义表：表体字号档、行高令牌（表头行由 `th,td` 同条规则给定高度，表体行被单元格内的
+    // 展开/删除按钮撑高，属既有事实，故以表头行核对高度令牌）、页脚计数档、分页按钮普通档
+    await expectTokenValue(page, page.locator(".definition-panel table"), "font-size", "--font-table");
+    await expectTokenValue(page, page.locator(".definition-panel thead th").first(), "height", "--definition-row-height", "box");
+    await expectTokenValue(page, page.locator(".definition-panel .foot-info"), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".definition-panel .pager .ui-button").first(), "height", "--button-height", "box");
+
+    // CSV 面板：标题与状态档、标题栏高度、下载项点击高度、流程提示档
+    await expectTokenValue(page, page.locator(".csv-panel .head-title"), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".csv-panel .head-status"), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".csv-panel .panel-head"), "min-height", "--panel-head-min-height");
+    await expectTokenValue(page, page.locator(".csv-panel .io-menu a").first(), "min-height", "--control-height-default");
+    await page.getByRole("button", {name: "导入 CSV"}).click();
+    await expect(page.locator(".csv-panel .csv-flow")).toBeVisible();
+    await expectTokenValue(page, page.locator(".csv-panel .csv-flow label"), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".csv-panel .csv-hint").first(), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".csv-panel").getByRole("button", {name: "关闭导入"}), "height", "--button-height", "box");
+
+    // 值面板：标题栏、工具行、字段标签与输入、状态徽标、行内文字按钮
+    await expectTokenValue(page, page.locator(".value-panel .head-title"), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".value-panel .panel-head"), "min-height", "--panel-head-min-height");
+    await expectTokenValue(page, page.locator(".value-panel .flag").first(), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".value-panel .hint").first(), "font-size", "--font-caption");
+    const valueSearch = page.getByRole("searchbox", {name: "搜索属性值"});
+    await expectTokenValue(page, valueSearch, "height", "--input-height", "box");
+    await expectTokenValue(page, valueSearch, "width", "--panel-search-width", "box");
+    await expectTokenValue(page, page.getByRole("combobox", {name: "搜索范围"}), "height", "--input-height", "box");
+    await expectTokenValue(page, page.locator(".value-panel .value-toolbar .only-changed"), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".value-panel .match-count"), "font-size", "--font-caption");
+    await expectTokenValue(page, page.locator(".value-panel .value-item label").first(), "font-size", "--font-label");
+    await expectTokenValue(page, page.locator(".value-panel .value-item input").first(), "height", "--input-height", "box");
+    await expectTokenValue(page, page.locator(".value-panel .field-foot").first(), "min-height", "--control-height-default");
+    await expectTokenValue(page, page.locator(".value-panel button.link").first(), "min-height", "--control-height-default");
+    await expectTokenValue(page, page.locator(".value-panel .head-actions .ui-button--primary"), "height", "--button-height", "box");
+
+    // 两个模态：标题不再落 UA 原生尺度，结构尺寸来自令牌
+    const nameItem = page.locator(".value-panel .value-item").first();
+    await nameItem.getByRole("button", {name: /^展开编辑/}).click();
+    const expandCard = page.locator(".value-panel .modal-card");
+    await expect(expandCard).toBeVisible();
+    await expectTokenValue(page, expandCard.locator("h2"), "font-size", "--modal-title-font-size");
+    await expectTokenValue(page, expandCard.locator("textarea"), "min-height", "--expand-editor-min-height");
+    await expandCard.getByRole("button", {name: "取消"}).click();
+    await nameItem.getByRole("button", {name: /^值对照/}).click();
+    const compareCard = page.locator(".compare-card");
+    await expect(compareCard).toBeVisible();
+    await expectTokenValue(page, compareCard.locator("h2"), "font-size", "--modal-title-font-size");
+    await expectTokenValue(page, compareCard, "max-width", "--compare-card-max-width");
+    await expectTokenValue(page, compareCard.locator(".compare-hint"), "font-size", "--font-label");
+    await expectTokenValue(page, compareCard.locator(".compare-item pre").first(), "max-height", "--compare-item-max-height");
   });
 }
 

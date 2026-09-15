@@ -4,6 +4,7 @@
 <script setup lang="ts">
 import {nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
+import UiButton from "../ui/UiButton.vue";
 
 export type CompareStage = {label: string; value: string | undefined};
 
@@ -55,15 +56,15 @@ function onKeydown(event: KeyboardEvent) {
         <pre>{{ display(stage.value) }}</pre>
       </div>
       <div class="modal-actions">
-        <button type="button" @click="emit('close')">{{ $t("properties.compare.close") }}</button>
+        <UiButton variant="secondary" @click="emit('close')">{{ $t("properties.compare.close") }}</UiButton>
       </div>
     </div>
   </div>
 </template>
 <style scoped>
-.compare-card{max-width:560px}
-.compare-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:13px;line-height:1.7}
+.compare-card{max-width:var(--compare-card-max-width)}
+.compare-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.7}
 .compare-item{padding:var(--space-3);background:var(--color-bg-canvas);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);margin-top:var(--space-2)}
 .compare-item small{display:block;color:var(--color-text-secondary);margin-bottom:var(--space-1)}
-.compare-item pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:180px;overflow:auto}
+.compare-item pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:var(--compare-item-max-height);overflow:auto}
 </style>

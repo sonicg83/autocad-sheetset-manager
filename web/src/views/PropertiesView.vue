@@ -127,6 +127,6 @@ async function addSheetsetField(){
 /* 错误摘要：摘要文案 + 字段错误跳转项（展开目标面板并聚焦字段） */
 .error-summary{background:var(--color-danger-bg);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-1)}
 .error-summary-title{margin:0;color:var(--color-danger);font-weight:600}
-.error-summary-jump{align-self:flex-start;color:var(--color-danger);text-decoration:underline;text-align:left;font-size:13px;min-height:36px;padding:2px var(--space-2);border:1px solid transparent;border-radius:var(--radius-sm);background:transparent}
+.error-summary-jump{align-self:flex-start;color:var(--color-danger);text-decoration:underline;text-align:left;font-size:var(--font-label);min-height:var(--control-height-default);padding:2px var(--space-2);border:1px solid transparent;border-radius:var(--radius-sm);background:transparent}
 .error-summary-jump:hover{background:var(--color-bg-surface)}
 </style>

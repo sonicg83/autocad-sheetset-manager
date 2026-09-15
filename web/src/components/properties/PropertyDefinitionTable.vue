@@ -9,6 +9,7 @@ import {computed, onBeforeUnmount, onMounted, ref} from "vue";
 import {useI18n} from "vue-i18n";
 import type {PropertyDefinition} from "../../api/contracts";
 import {definitionKey} from "../../features/properties/model";
+import UiButton from "../ui/UiButton.vue";
 
 const props = defineProps<{
   rows: PropertyDefinition[];
@@ -115,8 +116,8 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
     <div class="table-foot">
       <span class="foot-info">{{ $t("properties.definitions.pageInfo", {matched: matchedCount, page, total: lastPage}) }}</span>
       <div class="pager">
-        <button type="button" :disabled="page <= 1" @click="emit('changePage', page - 1)">{{ $t("properties.definitions.prevPage") }}</button>
-        <button type="button" :disabled="page >= lastPage" @click="emit('changePage', page + 1)">{{ $t("properties.definitions.nextPage") }}</button>
+        <UiButton variant="secondary" :disabled="page <= 1" @click="emit('changePage', page - 1)">{{ $t("properties.definitions.prevPage") }}</UiButton>
+        <UiButton variant="secondary" :disabled="page >= lastPage" @click="emit('changePage', page + 1)">{{ $t("properties.definitions.nextPage") }}</UiButton>
       </div>
     </div>
   </div>
@@ -125,8 +126,8 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 /* 容器只承担横向滚动：分页限制行数，内容不产生第二个纵向滚动条。 */
 .table-window{overflow-x:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);outline:none}
 .table-window:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:13px}
-th,td{box-sizing:border-box;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;text-align:left;vertical-align:middle;height:44px}
+table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:var(--font-table)}
+th,td{box-sizing:border-box;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;text-align:left;vertical-align:middle;height:var(--definition-row-height)}
 /* 弱化表头背景 + 语义分隔线 + sticky header */
 th{position:sticky;top:0;z-index:2;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600}
 th:not(:first-child),td:not(:first-child){border-left:1px solid var(--color-border-subtle)}
@@ -148,6 +149,6 @@ td.col-default{white-space:normal}
 /* 空态与页脚 */
 .empty{margin:0;padding:var(--space-4);color:var(--color-text-secondary);text-align:center;border:1px dashed var(--color-border-subtle);border-top:0;border-radius:0 0 var(--radius-md) var(--radius-md)}
 .table-foot{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-3)}
-.foot-info{color:var(--color-text-muted);font-size:12px}
+.foot-info{color:var(--color-text-muted);font-size:var(--font-caption)}
 .pager{display:flex;gap:var(--space-2);margin-left:auto}
 </style>
