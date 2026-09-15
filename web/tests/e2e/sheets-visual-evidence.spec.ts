@@ -89,3 +89,53 @@ test("操作列仅在横向溢出时固定且宽视口恢复普通列", async ({
     }
   }
 });
+
+// PLAN-DM-029 Task 7 Step 5：图纸页控件视觉基础正交证据（正交 6 张）。
+// 沿用本文件既有约定：截图只作 testInfo 附件（不自动改写仓库文件，持久化由验收时显式复制）。
+// 每张均配计算样式或几何断言，避免「有图无证据」。
+test.describe("Task 7 控件视觉基础正交证据（PLAN-DM-029）", () => {
+  test("正交 6 张：默认浅/深成对、批量启用/禁用、最窄视口、200%", async ({page}, info) => {
+    await page.setViewportSize({width: 1440, height: 900});
+    await installSheetsFixture(page);
+
+    // ① / ② 默认态浅深成对：同状态、同视口，便于成对比对
+    for (const theme of ["light", "dark"] as const) {
+      await openWorkspace(page, theme);
+      await page.mouse.move(0, 0);
+      await expect(page.locator(".search-box input")).toHaveCSS("height", "38px");
+      await expect(page.locator(".tree-drawer-toggle")).toBeHidden();
+      await attachScreenshot(page, info, "task7-default", theme);
+    }
+
+    // ③ / ④ 批量编辑：未选属性时队列按钮禁用 → 选中后启用
+    await openWorkspace(page, "light");
+    await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+    await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+    const controls = page.locator(".bulk-controls");
+    await expect(controls).toBeVisible();
+    const queue = controls.locator("button").last();
+    await expect(queue).toBeDisabled();
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task7-bulk-disabled", "light");
+    await controls.locator("select").nth(1).selectOption({index: 1});
+    await expect(queue).toBeEnabled();
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task7-bulk-enabled", "light");
+
+    // ⑤ 最窄视口：树降级为抽屉且无横向溢出
+    await page.setViewportSize({width: 900, height: 768});
+    await openWorkspace(page, "light");
+    await expect(page.locator(".tree-drawer-toggle")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(900);
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task7-narrowest", "light");
+
+    // ⑥ 200% 缩放（CSS 视口 720×500）
+    await page.setViewportSize({width: 720, height: 500});
+    await openWorkspace(page, "light");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(720);
+    await expect(page.getByRole("table", {name: "图纸表格"})).toBeVisible();
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task7-zoom200", "light");
+  });
+});
