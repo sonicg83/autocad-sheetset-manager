@@ -131,7 +131,7 @@ const conditionChips = computed(() => {
     <div class="toolbar-filters">
       <label class="search-box">{{ $t("sheets.toolbar.searchLabel") }}<input v-model="searchText" :placeholder="$t('sheets.toolbar.searchPlaceholder')"></label>
       <label class="search-all"><input v-model="searchAll" type="checkbox">{{ $t("sheets.toolbar.searchAll") }}</label>
-      <button type="button" class="filter-toggle" @click="filtersVisible = !filtersVisible">{{ $t("sheets.toolbar.filterToggle") }}</button>
+      <UiButton size="compact" class="filter-toggle" @click="filtersVisible = !filtersVisible">{{ $t("sheets.toolbar.filterToggle") }}</UiButton>
       <ColumnSettings
         :options="columnOptions"
         :save-error="columnSaveError"

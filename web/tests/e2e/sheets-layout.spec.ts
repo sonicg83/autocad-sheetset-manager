@@ -3,7 +3,7 @@
 // 900px 树抽屉键盘开关与焦点归还且不与任务浮层同时锁焦、单一业务表与工具栏/选择条/固定列/ActionDock 不重叠、
 // 展开编辑页脚始终可滚动到达、a11y 语义（树方向键/表格可访问名/展开 aria-expanded/完整文本键盘读取）与对比度。
 // 截图仅作为 S-07 视觉证据（testInfo 附件），不替代上述行为断言。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {installSheetsFixture} from "./fixtures/sheets";
 
 const VIEWPORTS = [
@@ -460,4 +460,113 @@ test("批量编辑上下文不渲染空编辑卡片", async ({page}) => {
   await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
   await expect(page.locator(".sheet-editor-card")).toHaveCount(0);
   await expect(page.locator(".sheet-list-card .sheets-toolbar")).toHaveCount(1);
+});
+
+// PLAN-DM-029 Task 7：控件视觉基础（令牌 / 档位 / 同行对齐）。
+// 迁移是值保持的，故以下多数断言属「回归钉」（迁移前后均应通过，另做变异自证证明非空转）；
+// 工具栏动作按钮改用 UiButton 后字号由原语接管（13px → --button-font-size 14px），这类是真红。
+test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
+  async function resolveToken(page: Page, token: string, property: string): Promise<string> {
+    return page.evaluate(([name, prop]) => {
+      const probe = document.createElement("div");
+      probe.style.setProperty(prop, `var(${name})`);
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).getPropertyValue(prop);
+      probe.remove();
+      return value;
+    }, [token, property]);
+  }
+
+  async function expectToken(page: Page, target: Locator, property: string, token: string): Promise<void> {
+    const expected = await resolveToken(page, token, property);
+    expect(expected, `${token} 必须能解析成具体值`).not.toBe("");
+    const actual = await target.first().evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
+    expect(actual, `${property} 应来自 ${token}`).toBe(expected);
+  }
+
+  test("工具栏动作按钮：紧凑档 34px 且字号由原语接管", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const rename = page.getByRole("button", {name: "编辑子集", exact: true});
+    await expectToken(page, rename, "height", "--control-height-compact");
+    // UiButton 的下限来自原语的全局最小可点令牌（--min-tap-height=32px），而非页面的 34px；
+    // 生效高度仍是 34px（height 大于 min-height），属无视觉影响的值变化。
+    await expectToken(page, rename, "min-height", "--min-tap-height");
+    await expectToken(page, rename, "font-size", "--button-font-size");
+    await expectToken(page, page.locator(".filter-toggle"), "height", "--control-height-compact");
+    await expectToken(page, page.locator(".filter-toggle"), "font-size", "--button-font-size");
+  });
+
+  test("常驻搜索与筛选：38px 表单档与搜索框宽度令牌", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const search = page.locator(".search-box input");
+    await expectToken(page, search, "width", "--sheet-search-width");
+    await expectToken(page, search, "height", "--control-height-form");
+    await page.locator(".filter-toggle").click();
+    await expectToken(page, page.locator(".toolbar-filters select").first(), "height", "--control-height-form");
+  });
+
+  test("条件标签：圆角与字号取自语义令牌", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".filter-toggle").click();
+    await page.locator(".toolbar-filters select").first().selectOption("resolved");
+    const chip = page.locator(".chip").first();
+    await expect(chip).toBeVisible();
+    await expectToken(page, chip, "border-top-left-radius", "--radius-lg");
+    await expectToken(page, chip, "font-size", "--font-caption");
+  });
+
+  test("批量编辑：同行居中、38px 值输入、未选属性时队列按钮禁用", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+    await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+    const controls = page.locator(".bulk-controls");
+    await expect(controls).toBeVisible();
+    // 同行中心：各控件垂直中心必须一致（高度档不同也不许错位）
+    const centers = await controls.locator("select, input").evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return Math.round(rect.top + rect.height / 2);
+    }));
+    expect(centers.length).toBeGreaterThan(1);
+    expect(new Set(centers).size, `批量控件必须同行居中，实际 ${centers.join(" / ")}`).toBe(1);
+    await expectToken(page, controls.locator("input").first(), "height", "--control-height-form");
+    await expectToken(page, controls.locator("select").first(), "height", "--control-height-form");
+    // 未选属性 → 加入草稿禁用（行为不变）
+    await expect(controls.locator("button").last()).toBeDisabled();
+  });
+
+  test("表格结构令牌：行高、行盒高、窗口最小高与表内字号", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await expectToken(page, page.locator("table").first(), "font-size", "--font-label");
+    await expectToken(page, page.locator("th").first(), "height", "--sheet-table-row-height");
+    await expectToken(page, page.locator("th").first(), "line-height", "--sheet-table-line-height");
+    await expectToken(page, page.locator(".sheet-table-window"), "min-height", "--sheet-table-window-min-height");
+    await expectToken(page, page.locator(".title-text").first(), "max-width", "--sheet-title-max-width");
+  });
+
+  test("列设置面板：宽度令牌与保留的 15px 标题字号", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".cols-toggle").click();
+    const panel = page.locator(".cols-panel");
+    await expect(panel).toBeVisible();
+    await expectToken(page, panel, "width", "--sheet-columns-panel-width");
+    // 15px 保留为显式例外（责任 K）：此处钉住当前值，防被顺手改动
+    await expect(panel.locator(".cols-title")).toHaveCSS("font-size", "15px");
+  });
+
+  test("操作表单：38px 输入档与 36px 动作档", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.getByRole("button", {name: "编辑子集", exact: true}).click();
+    const form = page.locator(".operation-form");
+    await expect(form).toBeVisible();
+    await expectToken(page, form.locator("input").first(), "height", "--control-height-form");
+    await expectToken(page, form.locator("select").first(), "height", "--control-height-form");
+    await expectToken(page, form.locator("button").first(), "min-height", "--control-height-default");
+  });
 });
