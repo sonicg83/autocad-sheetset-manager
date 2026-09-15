@@ -206,8 +206,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .field-browser{display:flex;flex-direction:column;gap:var(--space-2);min-width:0;min-height:0;overflow:hidden}
 .field-head{display:flex;align-items:baseline;gap:var(--space-2);min-width:0}
-/* 14px 卡标题借用组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
-.field-head h3{margin:0;font-size:var(--button-font-size)}
+/* 14px 卡/区块标题：消费语义档位 --font-card-title（责任 K 已闭合，见 tokens.css 头注释） */
+.field-head h3{margin:0;font-size:var(--font-card-title)}
 .field-hint{margin-left:auto;color:var(--color-text-muted);font-size:var(--font-caption);text-align:right}
 .field-list{display:flex;flex-direction:column;overflow:auto;min-height:0;flex:1;margin:0 calc(-1 * var(--space-1));padding:0 var(--space-1)}
 .field-group h4{margin:var(--space-2) 0 var(--space-1);padding:0 2px;font-size:var(--font-caption);font-weight:600;color:var(--color-text-secondary)}

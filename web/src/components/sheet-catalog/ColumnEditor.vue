@@ -197,8 +197,8 @@ watch(() => props.catalog.caretRequest.value, async request => {
 /* 卡片自身不设内边距：状态带、表头行与操作脚各自铺满，与冻结 Demo 的分区一致 */
 .column-editor.panel{padding:0}
 .editor-head{display:flex;align-items:center;gap:var(--space-2);padding:11px 14px;min-width:0}
-/* 14px 卡标题借用组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
-.editor-head h3{margin:0;font-size:var(--button-font-size)}
+/* 14px 卡/区块标题：消费语义档位 --font-card-title（责任 K 已闭合，见 tokens.css 头注释） */
+.editor-head h3{margin:0;font-size:var(--font-card-title)}
 .editor-head .spacer{flex:1}
 .compat-badge{font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .compat-badge.good{color:var(--color-success);background:var(--color-success-bg)}

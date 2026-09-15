@@ -151,9 +151,9 @@ function onGuardKeydown(event: KeyboardEvent) {
 .sheet-catalog{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;flex:1;overflow:auto}
 /* PLAN-DM-023 Task 2：标题、说明、版本/生命周期与启停指引组合为单行紧凑头部 */
 .catalog-head{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;min-width:0}
-/* 18px 页标题借用组件层 --modal-title-font-size：语义层没有 18px 档位（收口责任 K）。
+/* 18px 页/视图标题：消费语义档位 --font-view-title（责任 K 已闭合，见 tokens.css 头注释）。
    层叠已核：全仓无全局 h2 规则，.modal-card h2 只作用于模态卡片内部，不覆盖本页标题。 */
-.catalog-head h2{margin:0;font-size:var(--modal-title-font-size);color:var(--color-text-primary)}
+.catalog-head h2{margin:0;font-size:var(--font-view-title);color:var(--color-text-primary)}
 .catalog-head .spacer{flex:1}
 .catalog-desc{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);min-width:0}
 .catalog-meta{margin:0;color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}

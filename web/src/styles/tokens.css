@@ -8,17 +8,19 @@
  * 业务规则只消费后两层；本层与 `html[data-theme="dark"]` 是十六进制颜色与原始档位的
  * 唯一合法定义处，浅色与深色主题只在这里重映射，业务规则不写主题分支。
  * `--font-body` 是 `font` 简写形态（`14px / 1.5`），只用于根元素排版；需要单独的
- * `font-size` 档位时消费组件层令牌 `--button-font-size` 等。
+ * `font-size` 档位时消费语义层字号令牌（`--font-card-title`、`--font-panel-title`、`--font-title`、
+ * `--font-toolbar-title`、`--font-view-title`、`--font-page-title`）；组件层令牌只服务于组件自身
+ * （按钮、输入框、模态），不得被标题等非控件跨层借用。
  *
  * 字号档位补齐（PLAN-DM-029 Task 12 责任 K，Spec 归属方 2026-09-15 裁定）：原字数刻度
  * 为 11/12/13/14/18，`15/16/17/20px` 四处离刻度值此前以显式例外挂着。经裁定将它们**升为
  * 正式档位**：原字层 `--font-size-15/16/17/20`，语义层对应 `--font-panel-title`（面板/区块
  * 标题）、`--font-title`（通用标题）、`--font-toolbar-title`（工具栏标题）、`--font-page-title`
  * （页面主标题）。值逐字等值，**零视觉变化**；**离刻度值这一半**的责任 K 就此闭合。
- * 注：责任 K 的**另一半**不在本次裁定范围内，仍然开放：语义层仍无独立的 14px/18px 非控件
- * 档位，5 处卡标题/页标题因此**借用组件层令牌**（`--button-font-size`/`--modal-title-font-size`）
- * —— 借用「值等值但语义不符」的令牌即语义说谎，需在后续字号阶修订中补齐。
- * 注意：该裁定**仅**覆盖这 4 个档位，其余字号仍不得由页面迁移自行新增档位；
+ * 责任 K 的另一半（T12-4，2026-09-15）：语义层再补齐 `--font-card-title`（14px，卡片/区块标题）
+ * 与 `--font-view-title`（18px，页面/视图标题），5 处卡/页标题原先只能跨层借用 `--button-font-size` /
+ * `--modal-title-font-size`，已改为消费这两个档位 —— 责任 K（含其原始主题）就此**全部闭合**。
+ * 注意：档位仍**只**覆盖上述已裁定的值，其余字号不得由页面迁移自行新增档位；
  * 借用「值等值但语义不符」的令牌仍属禁止（语义说谎）。
  *
  * 字体资源（ARCH-DM-007 §4.2）：本地 WOFF2、`font-display: swap`、只含 Basic Latin
@@ -72,9 +74,11 @@
     --font-label:var(--font-size-13);
     --font-table:var(--font-size-13);
     --font-caption:var(--font-size-12);
+    --font-card-title:var(--font-size-14);
     --font-panel-title:var(--font-size-15);
     --font-title:var(--font-size-16);
     --font-toolbar-title:var(--font-size-17);
+    --font-view-title:var(--font-size-18);
     --font-page-title:var(--font-size-20);
     --control-height-compact:var(--height-34);
     --control-height-default:var(--height-36);

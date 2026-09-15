@@ -142,8 +142,8 @@ async function confirmSaveAs() {
 .template-row .danger-text{min-height:var(--button-height);padding:0 var(--space-3);border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-danger)}
 .template-row .danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
 .conflict{border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);background:var(--color-warning-bg)}
-/* 14px 借组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
-.conflict h3{margin:0 0 var(--space-2);font-size:var(--button-font-size)}
+/* 14px 卡/区块标题：消费语义档位 --font-card-title（责任 K 已闭合，见 tokens.css 头注释） */
+.conflict h3{margin:0 0 var(--space-2);font-size:var(--font-card-title)}
 .conflict p{margin:0 0 var(--space-3);color:var(--color-text-primary);font-size:var(--button-font-size)}
 .save-as-name{display:grid;gap:5px;color:var(--color-text-secondary);font-size:var(--font-label)}
 .save-as-name input{padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm)}

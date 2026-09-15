@@ -52,8 +52,8 @@ const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?
 .catalog-preview{display:flex;flex-direction:column;gap:0;min-width:0;min-height:var(--catalog-preview-min-height);flex:1 1 auto;overflow:hidden}
 .catalog-preview.panel{padding:0}
 .preview-head{display:flex;align-items:center;gap:var(--space-2);padding:11px 14px;flex-wrap:wrap;min-width:0;border-bottom:1px solid var(--color-border-subtle)}
-/* 14px 卡标题借用组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
-.preview-head h3{margin:0;font-size:var(--button-font-size)}
+/* 14px 卡/区块标题：消费语义档位 --font-card-title（责任 K 已闭合，见 tokens.css 头注释） */
+.preview-head h3{margin:0;font-size:var(--font-card-title)}
 .preview-head .spacer{flex:1}
 .total{color:var(--color-text-secondary);font-size:var(--font-caption)}
 /* 已过滤 N 张图纸：预览卡头内的正文提示（R14），与总数同排但用中性强调色 */
