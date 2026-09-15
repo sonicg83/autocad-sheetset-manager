@@ -1058,7 +1058,8 @@ Files（本轮）：
 | **G** `dialogFocus` 存活变异面 | ✅ **闭合（前提被证据修正）** | 变异证明那 2 处**已被覆盖**（Task 10 的集成测试）→ **无需补测**，结论是「它们真是活的」✓ |
 | **H** `calc/clamp/min/max` 可绕过 | ⏸ 待裁决 | 漏洞已实证存在；属规则设计变更 |
 | **I** 组件层令牌「单点」重复 | ⏸ 待裁决 | 令牌数随 Task 4/5/6/7/8/9 持续增长 → 交 Spec 归属方 |
-| **K** 语义层缺 14/18px 档位 | ⏸ **部分闭合**（离刻度半边 ✓ / 14-18px 半边仍开 ✗） | 用户 2026-09-15 裁定新增档位 ⇒ **15/16/17/20px 已升为正式档位**（原字层 `--font-size-15/16/17/20` + 语义层 `--font-panel-title`/`--font-title`/`--font-toolbar-title`/`--font-page-title`），**7 条例外清零**（例外 14 → 7、裸违规 15 → 8）✓；**其余一半仍开**：5 处卡/页标题仍**跨层借用组件层令牌**（`SheetCatalogView.vue:154` 借 `--modal-title-font-size`；`CatalogPreview.vue:55`/`TemplateBar.vue:145`/`FieldBrowser.vue:209`/`ColumnEditor.vue:200` 借 `--button-font-size`）✗ → 见 T12-4 |
+| **K** 语义层缺 14/18px 档位 | ✅ **已闭合**（T12-4） | 两半均已补齐：15/16/17/20px（T12-3）+ **14/18px**（T12-4：`--font-card-title`/`--font-view-title`）→ **5 处跨层借用已抹除**（`SheetCatalogView:154` · `CatalogPreview:55` · `TemplateBar:145` · `FieldBrowser:209` · `ColumnEditor:200`）；**7 条例外清零**（14 → 7）✓。仍存**存疑借用**（非控件文本）→ 见下方**责任 Z** |
+| **Z**（新）语义字号借用的**存疑残留** | ⏸ **已登记** | T12-4 按指令**停下未改**的 5 处：`ExtensionCard` / `TopBar` / `SheetsView` / `ToastHost` 的非控件文本，以及 `TemplateBar:147` 的段落正文。它们**不是**上一轮点名的「标题借用按钮令牌」那一类（归属存疑）→ 交下次字号阶修订连同 Spec 定调；**不得一刀切** ✓ |
 | **L** `expiresWith` ↔ Files 错位 | ✅ **闭合** | 4 处孤儿均已归位（Task 6/7/8/9）→ **当前表 0 孤儿** ✓ |
 | **M** `<aside> [hidden]` 不可靠 | ⏸ 待裁决 | Task 10 审计：各现场无分散依赖 ✓ |
 | **N** line-height 无令牌层 | ⏸ 部分 | Task 7 已加组件层 `--sheet-table-line-height`；**语义层仍缺** |
@@ -1112,6 +1113,13 @@ Files（本轮）：
 5. **口径写回**：把 `ARCH-DM-007` 的「仍然开放的另一半」一段**改为已闭合**（并保留该段的历史记录价值：写明它曾是「语义说谎」的实例、现已由语义档位取代）✓。
 6. **文件边界**：`tokens.css` · `ARCH-DM-007` · 上述 5 个消费方（**均属已关闭的 Task 6 / Task 5，由本裁定授权；仅字号声明**）；**不动** `changelog.md`（控制器）、**_不动** SPEC-DM-006/GUIDE/README/memo ✓。
 7. **备注**：另有若干 `var(--button-font-size)` 用在**真正的按钮/标签**上是**语义相符**的（如 `ExtensionCard`/`SettingsDialog`/`ToastHost` 的某些用法）→ **不要**一刀切都改；只改「**标题**借用按钮令牌」那类语义说谎 ✓（若你判定某处归属存疑 → 停下报告）。
+
+**T12-5（T12-4 完成记录 + 两处修正）**
+
+- **T12-4 已完成**（`9f70368` RED → `e4bf4c7` 2 档位 + 5 处声明 → `480c977` ARCH-DM-007 写回 → `72f7760` 元素级锚）：新档位 **`--font-card-title`=14px**（卡片/区块标题）与 **`--font-view-title`=18px**（页面/视图标题）；5 处借用全部抹除（只改字号声明）+ 4 处失效注释同步改写；`check:ui` **0**（例外仍 **7**）· `unit` **0**（13/166）· `build` **0**。
+- **★ 它给出的「借用真实存在 → 已消失」对称证明（值得记）**：修复**前** override 新档位**无反应** / override 旧令牌**全部跟随**；修复**后** override 新档位**全部跟随**（30px）/ override 旧令牌**无反应** ✓✓ —— 这比「改了一行文本」强得多：它证明**接线真的换了**。
+- **★★ 它纠正了本计划一个沿用很久的测量口径（控制器沿用了错的算法）**：裸违规真值为 **7**（= 例外数），**不是**之前多轮上报的 **N+1** ✗。原因：那个「+1」来自一种**测量假象**——**清空整个对象会同时注销 `dynamicVariables`**（现为 1 条 `--sheet-tree-width`）→ 多出一个 `dynamic-variable-not-registered` ✗。→ **正确口径：仅清 `exceptions`、保留 `dynamicVariables`** ✓。历轮数字不改写（它们是按当时方式实测的 ✓），但**后续一切裸违规数字以此为准** ✓。
+- **责任 Z 已登记**（见上表）：T12-4 按指令**停下未改**的 5 处存疑借用 ✓（含 `TemplateBar:147` 段落正文）；控制器复核 `TemplateBar` 确实尚存 **1** 处 `var(--button-font-size)` ✓ = 即该已上报的那一处 ✓（**不是漏改** ✓）。
 
 > **收口责任 A（字体真实加载当前未被自动化覆盖）**：Task 2 的三条 e2e 用例只断言 **CSSOM 声明层**
 > （`@font-face` 规则文本、`getComputedStyle()` 字体栈、`unicode-range` 区间语义），**不验证两套 WOFF2
