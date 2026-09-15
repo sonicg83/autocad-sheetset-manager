@@ -698,9 +698,36 @@ Files（本轮）：
 - [ ] **Step 3（模态接入）**：`ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 复用 `dialogFocus.ts`；保持 SPEC-DM-006 的嵌套模态原生 dialog 裁决，不把原生 dialog 强改为遮罩层。
 - [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除。注意：`parseRules` 会把紧邻规则的前置注释并入选择器，**注释文本因此进入例外指纹**（全表 **23 条**受影响，涉及 9 个文件、18 段不同注释文本），因此删除或改写这些注释必须与 `ui-contract-exceptions.json` 的更新落在同一次改动里，否则会立即变成陈旧例外。
 - [ ] **Step 5（证据）**：保存欢迎默认、修订危险确认、修复错误、深色任务状态共 4 张。
-- [ ] **Step 6（门禁闭合）**：清退除可能保留的 ColumnEditor 图标外全部视觉债务例外；运行检查器验证无陈旧例外。
+- [ ] **Step 6（门禁闭合）**：除经 T9-1(F) 保留的 **3 条**字号例外（责任 K）外，清退 Task 9 域内全部视觉债务例外；运行检查器验证无陈旧例外。
+  - **原措辞为计划缺陷（T9-1(F) 订正）**：原文「除可能保留的 ColumnEditor 图标外全部清退」**不可达**——字号刻度为 11/12/13/14/18，而 Task 9 域内存在 **3 个离刻度字号**（`RevisionsView` 16px、`WelcomeView` 20px、`legacy.css` 22px），且政策禁止新增字号令牌、也无值等值的可借令牌 → 必须保留。先例：Ruling 39 订正 Task 6、T7-1(F) 订正 Task 7、T8-1(H) 订正 Task 8。
+  - **收口不变量**：Task 9 名下 **41** 条（Files 内 39 + `primitives.css` 孤儿 2）→ 清退 **38** 条、保留 **3** 条 → 全表 **63 → 25**；`check:ui` 裸违规应为 **26 = 25 + 1 动态白名单**。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-workflows.spec.ts sheets-drafts.spec.ts`、`rtk npm --prefix web run test:unit` 与 `rtk npm --prefix web run build`。
 - [ ] **Step 8（提交）**：commit：`完成旧页面视觉原语迁移`。
+
+#### Task 9 控制器裁定（T9-1，派发前下达）
+
+控制器已做同类侦察（`controller-task-baseline.mjs 9`）。实测：Files 内 **39** 条（`WelcomeView` 12、**`legacy.css` 11**、`DraftActionsPanel` 7、`RepairStatusPanel` 3、`RevisionHistoryPanel` 3、`RevisionsView` 2、`JobStatusPanel` 1；规则：`raw-visual-value` 24、**`explicit-button-type` 13**、`unicode-structure-icon` 1）+ **孤儿 2**；24 条裸值去重后 **14 个值**。
+
+**(A) Files 补列：`web/src/styles/primitives.css`**。孤儿是 `.modal-card max-width:520px` 与 `.modal-impact max-height:200px`（**责任 L** 已登记此事，原文就点了「Task 9 的 `primitives.css`(2)」）。这两条正是 **`ConfirmModal` 自己的样式**，而 `ConfirmModal.vue` 就是 Task 9 的 Files ✓ → 按责任 L 的收口方向与 Ruling 37 先例**把 `primitives.css` 补入 Files**。
+  - **注意指纹形态**：这两条的目标文本**包含其前置 CSS 描述性注释**（`/* 模态卡体：宽度上限 520px… */`）——改注释会**同时**使例外失效（先例：Ruling T5-5 的「注释–指纹耦合」）。
+
+**(B) 开放 `tokens.css`：仅追加字符串等值的组件层令牌**（值逐字等值、零视觉变化）——至少包括：`520px`（`.modal-card max-width` 与 `WelcomeView` 的 `max-width` 同值共享一个令牌）、`1440px`（legacy 的壳层内容宽）、`68px`（legacy 的 `min-height`）。具体名字由实现者按角色拟定并在报告列出。
+
+**(C) 禁止借用（值等值但语义不符）**：`7px` → `--status-dot-size`（状态点尺寸 ≠ 圆角）；`180px` → `--compare-item-max-height`/`--workspace-name-max-width`/`--sheet-property-search-width`；`420px` → `--overlay-pop-width`（浮窗宽 ≠ 页面最大宽）；`16px` → `--space-4`/`--icon-size-md`（间距/图标 ≠ 字号）；`20px` → `--icon-size-lg`/`--sheet-table-line-height`；`520px` → `--modal-*`（`--modal-title-font-size` 是字号）。**允许借用**：`13px` → `--font-label`；`36px` → `--control-height-default`；`38px` → `--control-height-form`。
+
+**(D) 离刻度字号 → 保留例外 + 责任 K（不得改值、不得新建字号令牌）**：`RevisionsView` 16px、`WelcomeView` 20px、`legacy.css` 22px（共 3 条）。`legacy.css` 的 `5px` 圆角 → `--radius-sm`(6px)，**1px 偏差披露**（先例：T6-7/T7-1/T8-1）。
+
+**(E) ★★ `legacy.css` 清理纪律（本任务最大的风险，不是迁完页面而是**删规则**）**：
+1. **Step 4 的「逐条证明消费方已迁移」必须跨任务审计，不能只看 Task 9 自己的页面。** 实测 `legacy.css:102` 是**一条共享控制规则**，其选择器清单**横跨已关闭的任务**：`.properties-view button`（**Task 5，已关闭**）、`.sheets-toolbar …` / `.sheets-view …`（**Task 7，已关闭**）、`.sheet-property-editor .editor-footer button`（Task 7），以及 Task 9 自己的 `.repair .link-actions button`/`.recover-banner button`/`#draft-pop button`/`.job-detail button`/`.revisions-view button`；`:105`（`.job-detail button,.repair .link-actions button`）同理。
+2. **硬约束**：删除任何 legacy 规则前，必须做出**可核验的消费方清单表**（规则 → 选择器 → 归属文件/任务 → 是否已迁移 → 是否仍依赖该规则 → 结论）。**若任一消费方属于已关闭任务的页面且仍依赖该规则 → 不得删除该规则**（删了就是让已评审/已关闭的页面回退），应改为**保留 + 登记责任**，交 Task 12/Spec 归属方定调。**Task 9 只能删除消费方完全落在自己域内的规则。**
+3. **删本地规则会让 legacy 元素选择器静默接管 → 渲染值可能变**（先例：Task 7 删页面规则后 `.filter-toggle` 落到 `legacy.css:102` 变成 **37.5px**，被它自己的断言当场抓住）。因此：**删任何页面本地规则前，必须度量删除前后的渲染结果（computed style / `getBoundingClientRect`）并证明未变**；若确实变而变是故意的，则作为**有意视觉变化披露**。
+4. 最终 `legacy.css` 只允许「仍有永久 Spec 例外的根类规则」；**不得**为凑「清空」而删掉仍有消费方的规则（假绿）。
+
+**(F) Step 6 措辞已订正**（见上）：必须保留 3 条字号例外；不变量 **63 → 25**、裸违规 **26**。
+
+**(G) `ui/**` 的定向授权（注意：与 Task 6/7/8 不同，本次**不**全面禁触 `ui/**`）**：Step 3 明确要求 `ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 接入 `dialogFocus.ts`，而这两个文件**就在 Files 内** ✓。授权范围：**仅**这两个文件、**仅**为 Step 3 的焦点逻辑复用；**不得改它们的公开 props/emits 与插槽契约**；保留 SPEC-DM-006 关于嵌套模态原生 dialog 的裁决。若发现需改变其对外行为才能完成 → **停下报告**。（其余 `ui/**` 文件仍**禁触**：尤其 `UiButton`/`UiInput`/`UiSelect`/`UiIconButton`/`UiIcon`/`FormField`/`ToastHost`。）
+
+**(H) 继承的运行纪律**：Task 9 体量最大（14 文件 + 重清 legacy），**每完成一步立即提交**（Task 7 靠它在 runner 崩溃时零损失）；**RED 先行**；对「迁移前后都通过」的断言抽 ≥2 条做**变异自证**；**关键尺寸/颜色用绝对值锚**，不要写「用令牌断言令牌」（Task 7 的教训）；**不得新增例外**（除本裁定明确的保留项）。证据 4 张（Step 5），沿用既有落盘约定、**不自创路径、不加 env 开关**（T7-4 先例），被连带改写的他 Spec PNG → `git checkout` 还原并说明。
 
 ## 阶段 4：结构与无障碍治理
 
