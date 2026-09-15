@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-15（Task 6 实施轮超时与承接裁定 Ruling 40，PLAN-DM-029）
+
+- **失败事实**：Task 6 首轮 worker（`2a200b54`，`opencode-go/deepseek-flash`）在 `timeoutMs:1800000`（30 分钟）**超时失败**，**未产生任何 commit**，工作区留下 8 个已改文件。
+- **控制器取证（全部亲跑）**：
+  - 两个 e2e spec 与例外表**均未被触碰** → Step 1（RED）、5、6、7、8 全未完成。
+  - 日志检索证明它**从未调用任何门禁或测试**（`check:ui`/`test:unit`/`test:contracts` 的全部命中都是提示词与计划正文）→ 改动属**未经任何验证**的代码。
+  - **死因已澄清（非纪律问题）**：它自写的清退脚本在每文件条数断言上抛错（`ColumnEditor.vue` 实际 **23** / 预期 24），随后把预期改回 **23** 再超时——它是在**修正自己的计数**，**不是**放宽断言。
+  - 控制器亲跑 `check:ui`：**EXIT=1 但真实违规 0 行**，全部为 `stale-exception`，共 **72** 条（70 `raw-visual-value` + 2 `visible-input-label`）→ **75 − 72 = 3**，恰为保留的 3 条 `↑/↓/✕`；终态 **186 = 258 − 72**，与 Ruling 39 预告值逐字吻合。
+  - `tokens.css` = **+7 行，恰为 Ruling 39 指定的 7 个令牌名与逐字等值**；`.row-actions button` 已落 `var(--tap-target-min)` 与 `var(--radius-sm)`；T6-5 两处可见 label 已补。未触 `ui/**` 与其他 `styles/**`。
+- **Ruling 40（承接，不重做）**：迁移经检查器亲测零真实违规、与 Ruling 39/T6-8 口径逐字一致 → 重做只会再耗 30 分钟并可能产出更差结果。控制器已把该 diff 存为补丁 `task-6-partial-timeout.diff` 并建参考分支 `wip/task6-timeout-2a200b54` 作锚点。
+- **暴露的流程偏差（如实登记）**：该轮把 Step 2（迁移）做在 Step 1（RED）**之前**，违返「RED → GREEN」。**补救要求**：续轮须先 `git stash` revert 迁移→写断言并捕获 RED→恢复迁移取 GREEN；对「迁移前后均通过」的回归钉断言，必须另做**变异自证**证明非空转。
+- **操作教训**：30 分钟默认超时不足以覆盖「8 文件迁移 + 2 spec + 例外表」的体量；续轮改为 60 分钟超时 + **每完成一步即提交**，使超时不致丢失进度。
+- **影响范围**：本次仅改计划文件（T6-9 裁定块）与本文档；未改任何源码。
 ## 2026-09-15（Task 6 派发前范围冲突裁定：Ruling 39 开放 tokens.css + 责任 R，PLAN-DM-029）
 
 - **背景**：Task 6 worker 侦察后**主动停下报告**「Step 6『图纸目录页零例外』在当前 Task 6 Files 内不可达」——页面上有 8 处 `raw-visual-value` 的**容器结构尺寸**在语义层/组件层无逐字等值令牌，而 `tokens.css` 不在 Files 且 T6-6 明文禁触 `web/src/styles/**`。**未开始任何改动。**
