@@ -588,6 +588,8 @@ Files（本轮）：
 
 ### Task 8: 迁移设置中心
 
+> **状态：已关闭**。Step 1–7 全部完成。实现经**两轮独立评审**闭环（首轮 Needs fixes / 0 Critical → 修复轮 → 二审 **All findings addressed**）。本任务**无用户截图人工门禁**（计划 Step 6 只要求 3 个 settings spec + build）。
+
 **Files:**
 
 - Modify: `web/src/components/settings/SettingsDialog.vue`
@@ -604,15 +606,25 @@ Files（本轮）：
 - Modify: `web/src/components/settings/ExtensionSettingsHost.vue`（**T8-1 补列**：它有 **10** 条 `expiresWith: PLAN-DM-029 Task 8` 的例外，但原 Files 没包含它——正是**责任 L** 已登记的「例外到期任务与承载文件错位」实例之一；按责任 L 的收口方向与 Ruling 37 先例补入）
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED）**：写设置表单 label/hint/error 关联、按钮档位、焦点、长路径等宽字体与 `BooleanSwitch` 实际点击盒 `≥44×32px` 断言；确认当前点击盒或继承字体失败。
-- [ ] **Step 2（迁移）**：表单行、扩展卡片、生成式设置、目录设置和关于页动作改用原语；保留设置 schema、即时保存与重启提示语义。
-- [ ] **Step 3（开关）**：视觉轨道保持 `44×24px`，外层 label/button 扩到至少 `44×32px`；键盘 Space 切换、disabled、accessible name 和状态文案不变。
-- [ ] **Step 4（证据）**：保存浅/深默认、校验错误、扩展禁用、窄屏共 5 张；生产证据继续使用虚构路径，不写入真实用户目录。
-- [ ] **Step 5（例外清退）**：除经 T8-1(F) 保留的 **1 条** 16px 字号例外（责任 K）外，设置目录零静态例外。
+- [x] **Step 1（RED）**：写设置表单 label/hint/error 关联、按钮档位、焦点、长路径等宽字体与 `BooleanSwitch` 实际点击盒 `≥44×32px` 断言；确认当前点击盒或继承字体失败。
+- [x] **Step 2（迁移）**：表单行、扩展卡片、生成式设置、目录设置和关于页动作改用原语；保留设置 schema、即时保存与重启提示语义。
+- [x] **Step 3（开关）**：视觉轨道保持 `44×24px`，外层 label/button 扩到至少 `44×32px`；键盘 Space 切换、disabled、accessible name 和状态文案不变。
+- [x] **Step 4（证据）**：保存浅/深默认、校验错误、扩展禁用、窄屏共 5 张；生产证据继续使用虚构路径，不写入真实用户目录。
+- [x] **Step 5（例外清退）**：除经 T8-1(F) 保留的 **1 条** 16px 字号例外（责任 K）外，设置目录零静态例外。
   - **原措辞为计划缺陷（T8-1(H) 订正）**：「零静态例外」**不可达**——`.dlg-head h2{font-size:16px}` 是**离刻度**值（刻度为 11/12/13/14/18），而政策禁止新增字号令牌，也无值等值的可借令牌 → 必须保留。先例：Ruling 39 订正 Task 6 Step 6、T7-1(F) 订正 Task 7 Step 6。
   - **收口不变量（T8-1）**：Task 8 名下 **66** 条（Files 内 56 + 孤儿 10）→ 清退 **65** 条、保留 **1** 条 → 全表 **128 → 63**；`check:ui` 裸违规应为 **64 = 63 + 1 动态白名单**。
-- [ ] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- settings-dialog.spec.ts settings-demo-visual-evidence.spec.ts settings-extensions-production-evidence.spec.ts`、`rtk npm --prefix web run test:unit -- src/composables/useSettings.test.ts src/composables/useExtensionSettings.test.ts` 与 `rtk npm --prefix web run build`。
-- [ ] **Step 7（提交）**：commit：`统一设置中心控件与开关交互`。
+- [x] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- settings-dialog.spec.ts settings-demo-visual-evidence.spec.ts settings-extensions-production-evidence.spec.ts`、`rtk npm --prefix web run test:unit -- src/composables/useSettings.test.ts src/composables/useExtensionSettings.test.ts` 与 `rtk npm --prefix web run build`。
+- [x] **Step 7（提交）**：commit：`统一设置中心控件与开关交互`。
+
+**T8-3（二审闭环 + Task 8 收口 —— 控制器复核）**：二审 verdict = **All findings addressed, no new Critical/Important breakage** ✓。
+
+- 评审者**逐条核过**（且比要求更严）：① bool 关联**确实成立**而非只写在调用处（`describedBy` 在 `hasError` 时 push `errorId`、无 id 时返回 `undefined` → 不渲染空属性）；DOM 断言**两种失效都排除**（读 `[role=switch]` 自身 `tagName` 排除「属性落到包裹节点」；要求被引用 id `toHaveCount(1)` + 非空文案排除**悬空引用**）；红→绿→再红闭环。
+- ② **Minor-4 的重构逐分支核过**，并指出一处最易踩空的正确处理：新代码用 **`!== undefined` 而非真值判断**，所以 `t()` 返回空串时新旧行为一致（老渲染空 span / 新 `"" !== undefined` 仍渲染）；int 分支的 `0` 与 en-dash、text 的无条件分支、bool/enum 返回 `undefined` **均语义等价**；且分支以 `control` 互斥，与老 `v-else-if` 顺序等价。
+- ③ 评审者**独立读图**确认重采后的 `task8-03` 里错误文案已在可视区 ✓（不只采信声称）。
+- **New Minor（非阻塞，已登记）**：`toBeInViewport()` 默认 `ratio: 0` 只要求**任意相交**（理论上一像素即算过）；若要「完全落入」应用 `{ratio: 1}`。此处经读图确认取景良好，且属同文件既有约定，**不阻塞**。
+- **Out-of-scope（已登记）**：`fontFamily` 仍为令牌自指断言（报告已如实登记）；bool 行的**视觉** on/off 文案（`.f-hint`，无 id）不进 `describedBy`——状态由 `aria-checked` 承担，**无实际缺口**，但措辞易与「hint 必须关联」混淆，**宜在 Task 10 无障碍收口时一并定调**；760px 对话框 <768px 视口未验（已裁定接受，有 `max-width` 兜底）。
+- **Task 8 最终账**：例外表 **128 → 63**（清退 **65**、新增 **0**）；`tokens.css` **+7** 令牌（逐字等值、无删除行、无死令牌）；新增 **1** 条例外保留（16px 字号 → 责任 K）；`check:ui` **0**；全量 `test:unit` **0（11 文件 / 104）**；3 个 settings spec **0（63 passed / 0 failed / 0 flaky）**；`test:contracts` **0（85/85）**；`build` **0**。持久证据 **5 张**in `docs/dst-manager/specs/assets/SPEC-DM-011/production/`。
+- **有意视觉变化**：`.link-btn` min-height 28→32（**硬下限违规修复**）；`.cs-field input` 圆角 5→6px；`.icon-btn` 图标 14px 字形 → 16px `UiIcon`（已补 16px 值锚）。
 
 #### Task 8 控制器裁定（T8-1，派发前下达）
 

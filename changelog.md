@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-15（Task 8 关闭，PLAN-DM-029）
+
+- **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 1 Important + 5 Minor 全部闭合；Minor-6 已裁定接受）。
+- **评审者比要求更严的三处**：
+  - bool 关联**确实成立**而非只写在调用处（`describedBy` 在 `hasError` 时 push `errorId`、无 id 时返回 `undefined` → 不渲染空属性）；DOM 断言**两种失效都排除**（读 `[role=switch]` 自身 `tagName` 排除「属性落到包裹节点」；要求被引用 id `toHaveCount(1)` + 非空文案排除**悬空引用**）。
+  - Minor-4 的 `hintText` 重构**逐分支核过**，并指出一处最易踩空的正确处理：新代码用 **`!== undefined` 而非真值判断**，所以 `t()` 返回空串时新旧行为一致（最易静默回归的地方）。
+  - **独立读图**确认重采后的 `task8-03` 错误文案已在可视区（不只采信声称）。
+- **新 Minor（非阻塞，已登记）**：`toBeInViewport()` 默认 `ratio: 0` 只要求任意相交（理论上一像素即算过），「完全落入」应用 `{ratio: 1}`；经读图确认取景良好且属同文件既有约定。
+- **Task 8 最终账**：例外表 **128 → 63**（清退 65、新增 0）；`tokens.css` **+7** 令牌；`check:ui` 0；全量 unit **0（11 文件/104）**；3 个 settings spec **0（63 passed）**；contracts **0（85/85）**；build **0**。持久证据 5 张in `SPEC-DM-011/production/`。
+- **Task 8 的三处有意视觉变化**：`.link-btn` min-height **28→32**（硬下限违规修复）；`.cs-field input` 圆角 **5→6px**；`.icon-btn` 图标 **14px 字形 → 16px `UiIcon`**（已补 16px 值锚）。
+- **Task 8 的意外收获（流程层）**：worker 上轮**主动披露**了 bool 行缺口，但**给出的阻断理由是错的**（「需改公开 props」，而单根无禁透传 → 属性可直接落根 button）；控制器实读源码证伪后，修复轮 worker 又用**源码 + DOM 三读**双重证伪了自己的理由，并用「红→绿→再红」闭环证明了关联与守卫。**教训：主动披露 ≠ 结论正确；披露的「理由」也必须核。**
+
 ## 2026-09-15（Task 8 首轮评审与 T8-2 裁定，PLAN-DM-029）
 
 - **评审结论（`f8aaa86c`）：Needs fixes / 0 Critical**（1 Important + 5 Minor）。**迁移本体与 T8-1 (A)–(J) 逐条经复核合规**：7 令牌逐字等值无删除行、零禁用借用、**34px 未被越权改成 38px**、`.link-btn` 28→32 已修、16px 逐字保留、5px→`--radius-sm`、开关三层尺寸**分开量**（外层 `≥44×32` / 轨道 44×24 / 滑块 18）、`ExtensionSettingsHost.vue` 确已清退、两个 spec **纯追加**（唯一触碰的既有行是 import）。
