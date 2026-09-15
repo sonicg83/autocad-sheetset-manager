@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-15（Task 5 人工门禁关闭；Task 6 派发前裁定 Ruling 37/38，PLAN-DM-029）
+
+- **Task 5 Step 7 人工门禁关闭**：用户本人于 2026-09-15 确认人工对照第 3 张截图「可以通过」。该步逐字要求的是**人工**比对，而那 3 张缺陷截图未入库、控制器无法代验，故此前只能登记为未完成。现由用户本人确认并回填至计划 Step 7。
+- **Ruling 37（计划缺陷订正：Task 6 Files 漏列）**：控制器实测 Task 6 名下例外 **74 条**（`SheetCatalogView.vue` 7、`CatalogActions.vue` 9、`CatalogPreview.vue` 8、`ColumnEditor.vue` 26、`FieldBrowser.vue` 13、`TemplateBar.vue` 11），与 Files 1:1 对应、零外溢；但 `expiresWith` 写 `Task 6` 的条目有 **75 条**——孤兒为 `sheet-catalog/CompatibilitySummary.vue` 的 `raw-visual-value|.compat-line font-size:13px`。该文件**仅被 Task 6 Files 内的 `ColumnEditor.vue` 引用**，其排除属计划漏列（收口责任 L 的一个实例）。**裁定：把 `CompatibilitySummary.vue` 加入 Task 6 Files**（沿用 Ruling 25/31 先例）。否则 Step 6 的「零例外」字面目标不可达，worker 只会撞上无解冲突。
+- **Ruling 38（字号层级落点，接续 T5-1 与责任 K）**：实测语义层**确实没有** 14px / 18px 独立档位（`--font-label`/`--font-table`=13px、`--font-caption`=12px、`--font-body` 是 size/line-height **对**且只许用于根元素、`--font-ui`/`--font-mono` 是**字族非字号**）。**裁定：本轮不新增任何字号令牌**（与 Ruling 31 口径一致）；14px 标题借用组件层 `--button-font-size`、18px 页标题借用 `--modal-title-font-size`，均**逐字等值、零视觉变化**，使用处加注释指向责任 K。**合规依据**：ARCH-DM-007 §4.1 要求「只消费**已声明的语义令牌或组件令牌**」——借用组件令牌**符合**该约束，**真正违规**的是直接用 `--font-size-*` 原语。先例：Task 4 已对 `.brand` 借用 `--button-font-size`。**责任 K 升级**：消费者由 1 处扩至 Task 6–8 至少 7 处，Task 12 必须裁决「补 `--font-title` 还是明文允许借用」。
+- **Ruling 32 教训的第二次应用（先查层叠再改字号）**：控制器先核实全仓**无**全局 `h3` 规则、`.modal-card h2` **不**覆盖 `.catalog-head h2`（页面本地规则，**有效**）——与 Task 5 两个 `<h2>` 被 `.modal-card h2` 覆盖的情形相反，故本轮没有可白拿的层叠覆盖；`.head-title` 先例落在 `--font-label`(13px)。
+- **T6-4/T6-5（可核验判据）**：`↑ / ↓ / ✕` 三条 `unicode-structure-icon` 例外必须走 Step 3 对照程序，四条判据全中才判「等价或更好」（点击面积 ≥`--tap-target-min`、有 accessible name、原生 `button` 键盘可达、同状态截图不劣化）；若判迁移，`UiIconName` **已含** `chevron-up`/`chevron-down`/`close`，无需扩联合类型；若判保留，例外 `expiresWith` 必须改写为「下一次目录页视觉 Spec 修订」而非 `Task 6`（否则留下永久假到期债务）。两处 `visible-input-label` 必须补**可见 label**，仅加 `aria-label` **不解除**例外。
+- **影响范围**：本次仅改计划文件（Task 6 Files 补 1 项 + T6-1…T6-6 裁定块 + Task 5 Step 7 回填）与本文档；未改任何源码。
+
 ## 2026-09-15（Task 5 收口：Ruling 35 第二轮修复完成，PLAN-DM-029）
 
 - **第二轮修复提交**：`58dbc90 修正原语中错误态优先于悬停的定序`（3 文件 +6/−2，父 `9fc1d93`）与 `8667b8d 补错误态悬停守卫并订正视觉证据注释`（1 文件 +24/−8）。共 4 个文件，恰为派发范围；工作区与索引干净；例外表 `git diff --quiet` 退出 0（**逐字节未变**）。

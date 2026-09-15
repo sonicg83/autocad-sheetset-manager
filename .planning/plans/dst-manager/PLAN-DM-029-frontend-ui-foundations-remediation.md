@@ -202,7 +202,7 @@ related:
 - [x] **Step 4（行为回归）**：验证字段定义展开、新增字段、CSV 导入导出、搜索、对照、撤回和更新图纸集行为及 accessible name 不变。
 - [x] **Step 5（正交证据）**：持久保存浅色默认、深色默认、错误态、`900×768` 单列、200% 定义表溢出共 5 张；其余状态沿用行为/计算样式断言。
 - [x] **Step 6（例外清退）**：删除属性页 raw size、裸颜色、无 label、按钮 type 等全部例外；检查器对属性目录零例外。
-- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- properties-layout.spec.ts properties-visual-evidence.spec.ts properties-definitions.spec.ts properties-values.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 3 张截图，确认同层级控件不再突大且主次层级清晰。
+- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- properties-layout.spec.ts properties-visual-evidence.spec.ts properties-definitions.spec.ts properties-values.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 3 张截图，确认同层级控件不再突大且主次层级清晰。**（2026-09-15 用户本人已人工确认「可以通过」，该门禁关闭；截图未入库，控制器无法代验，已如实登记）**
 - [x] **Step 8（提交）**：commit：`统一属性页控件视觉基础`。
 
 > **Task 5 实测与口径（Ruling 31/32/33/35 收口，2026-09-15）**
@@ -302,6 +302,7 @@ Files（本轮）：
 - Modify: `web/src/components/sheet-catalog/ColumnEditor.vue`
 - Modify: `web/src/components/sheet-catalog/FieldBrowser.vue`
 - Modify: `web/src/components/sheet-catalog/TemplateBar.vue`
+- Modify: `web/src/components/sheet-catalog/CompatibilitySummary.vue`（原计划漏列，经 Ruling 37 补齐：它仅被 Task 6 Files 内的 `ColumnEditor.vue` 引用，且有 1 条 `expiresWith: Task 6` 的例外）
 - Modify: `web/tests/e2e/sheet-catalog.spec.ts`
 - Modify: `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
@@ -314,6 +315,25 @@ Files（本轮）：
 - [ ] **Step 6（例外清退）**：除经 Step 3 复核保留的唯一条目外，图纸目录目录零例外。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheet-catalog.spec.ts sheet-catalog-visual-evidence.spec.ts`、`rtk npm --prefix web run build`；人工对照用户第 2 张截图。
 - [ ] **Step 8（提交）**：commit：`统一图纸目录页控件视觉基础`。
+
+#### Task 6 控制器裁定（T6-1 … T6-6，派发前下达）
+
+**T6-1（例外基线，控制器实测）**：Task 6 名下例外 = **74 条**，逐文件为 `SheetCatalogView.vue` 7、`CatalogActions.vue` 9、`CatalogPreview.vue` 8、`ColumnEditor.vue` 26、`FieldBrowser.vue` 13、`TemplateBar.vue` 11；按规则为 `raw-visual-value` 69、`unicode-structure-icon` 3、`visible-input-label` 2。与 Files **1:1 对应、零外溢**。开工前不变量 **259 = 258 例外 + 1 动态白名单**。
+
+**T6-2（Ruling 37，计划缺陷订正）**：`expiresWith` 写 `Task 6` 的条目共 **75** 条，比 Task 6 Files 内的 74 条多 **1** 条——孤儿为 `src/components/sheet-catalog/CompatibilitySummary.vue` 的 `raw-visual-value|.compat-line font-size:13px`。该文件**仅被 `ColumnEditor.vue` 引用**（Task 6 Files 内），其排除属计划漏列。**裁定：把 `CompatibilitySummary.vue` 加入 Task 6 Files**（沿用 Ruling 25/31 先例）。否则 Step 6 的「零例外」字面目标不可达，worker 只会撞上无解冲突。
+
+**T6-3（字号层级落点，接续 T5-1 与责任 K）**：控制器实测语义层**确实没有** 14px / 18px 独立档位（`--font-label`/`--font-table`=13px、`--font-caption`=12px、`--font-body` 是 **size/line-height 对**且只许用于根元素、`--font-ui`/`--font-mono` 是**字族非字号**）。故：
+- **裁定：本轮不新增任何字号令牌**，与 Ruling 31 口径一致。14px 标题**借用组件层 `--button-font-size`**、18px 页标题**借用 `--modal-title-font-size`**，均**逐字等值、零视觉变化**，并在使用处加注释指向责任 K。
+- **合规依据（重要，勿被误判为违规）**：ARCH-DM-007 §4.1 要求「只消费**已声明的语义令牌或组件令牌**」——借用组件令牌**符合**该约束；**真正违规**的是直接使用 `--font-size-*` 原语。
+- **先例**：Task 4 已对 `.brand` 借用 `--button-font-size`，责任 K 已把该借用登记为既有事实。
+- **责任 K 升级**：消费者从「Task 4 的 1 处」扩到「Task 6–8 至少 7 处」；Task 12 必须裁决「补 `--font-title` 语义令牌还是明文允许借用」，**不得**让借用沉淀为事实标准。
+- **先查层叠再改字号（Ruling 32 教训）**：控制器已核实全仓**无**全局 `h3` 规则、`.modal-card h2` 也不覆盖 `.catalog-head h2`（页面本地规则，**有效**）——与 Task 5 两个 `<h2>` 被 `.modal-card h2` 覆盖的情形不同。同理 `.head-title` 先例落 `--font-label`(13px)。
+
+**T6-4（Step 3 图标复核的可核验判据）**：`↑ / ↓ / ✕` 三条 `unicode-structure-icon` 例外**必须**走 Step 3 的对照程序，判据四条全中才判「等价或更好」：① 可点面积 ≥ `--tap-target-min`(32px)；② 有 accessible name（不能只靠字符本身）；③ 原生 `button` 键盘可聚焦可激活；④ 同状态（默认/悬停/禁用）截图视觉不劣化。若判迁移：`UiIconName` **已含** `chevron-up` / `chevron-down` / `close`，**无需扩联合类型**，直接删 3 条例外。若判保留：**必须**补齐 `type`、accessible name、点击面积，且例外 `expiresWith` 改写为「下一次目录页视觉 Spec 修订」——**不得**继续写 `PLAN-DM-029 Task 6`（否则留下永久假到期债务）。
+
+**T6-5（两处 `visible-input-label`）**：`ColumnEditor.vue` 的 `input:text:` 与 `FieldBrowser.vue` 的 `input:text:query` 必须补**可见 label**（检查器规则名为 `visible-input-label`，仅加 `aria-label` **不解除**该例外）。`CompatibilitySummary.vue` 虽无该规则条目，同一输入同样适用。
+
+**T6-6（门禁配额）**：每项门禁最多 **2** 次；Step 7 的 e2e 只跑两个 spec 文件（用文件名收窄，**禁跑全量**）；`build` ≤1 次。**禁触**：`web/src/components/ui/**`（原语已定稿）、`web/src/styles/**`、其他页面的 spec、`.planning/**`、`changelog.md`、`.superpowers/**`。**遇冲突停下报告，不得自行放宽任何约束。**
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 
