@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-15（Task 11 第 4 轮 11d：抽出工作区生命周期组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useWorkspaceLifecycle.ts`（184 行），负责工作区**打开 / 关闭 / 刷新 / 清空编辑态**与壳桥接（选择 DST、拖拽接收、打开所在文件夹）；`appComposition.test.ts` 新增 9 例（合计 **160 passed**）。`App.vue` **766 → 671 行**（净 −95）。
+- **只返回根装配需要的 state/actions**：只导出 `workspaceLoadGeneration`/`hasShell`/`openByPath`/`doRefreshWorkspace`/`closeWorkspace`/`refreshWorkspace`/`openFolder`/`selectAndOpenDst`；`doOpenByPath`/`doCloseWorkspace`/`beginWorkspaceLoad`/`resetEditingState`/`loadDraft`/`acceptDstPath`/`registerDropBridge` 一律内聚（`doRefreshWorkspace` 例外：草稿域的 `reloadWorkspace` 需要它做冲突后重载，且该路径自带确认、不再叠加三选一）。
+- **组合而非复制**（Step 3/4 原文）：草稿域经引用注入并直接复用其 `guardAllInputs`/`pendingDraftSave`/`discardDraft`/`resetDraftState`/`rebuildDraftProjection`，**未新建第二份草稿态、未复制投影或确认队列**。机械证据：模块运行时 import 仅 `vue`、`../api/client`、`../api/shell`；`App.vue` 中 `resetEditingState`/`beginWorkspaceLoad`/`openByPath`/`doCloseWorkspace`/`doRefreshWorkspace`/`loadDraft`/`hasShell`/`workspaceLoadGeneration` 的**声明残留均为 0**。
+- **原样保留的顺序语义**：等保存队列 → 保存失败则中止 → `invalidateJobMonitor(true)` → 代次递增 → 重置编辑/草稿态 → 快照 `baseWorkspace` → `loadDraft`；关闭时另推进代次，拦住关闭后迟到的打开/刷新响应。
+- **★ setup 期求值顺序（11c 交接的坑）**：本模块创建于 `useDraftGuards` **之后**、`useJobMonitor`/`useCsvImport`/`useRepair`/`useRestore` **之前**——后四者把 `refreshWorkspace`/`workspaceLoadGeneration` 当**直接实参**（setup 期即求值）。而草稿域又需要在 setup 期就拿到 `reloadWorkspace` 的可调用引用 ⇒ 用**提前声明的具名容器** `let lifecycle` + 调用期解引用解开这个环，`vue-tsc` 未再出现 11c 那种 `TS2448`。更晚创建的依赖（`invalidateJobMonitor`/`editor`/`sheets`/`active`/`settingsOpen` 等）与会被**重赋**的 `layoutReadGeneration`（解构会拿到快照）一律以**懒回调/取值函数**传入。
+- **`<template>` 逐字节未变**：两版 `<template>` 段提取后 `diff` 为空（59 行 / 8404 字节相同）；`git diff -U0` 的 8 个 hunk 触及的最大行号（旧 490 / 新 394）均**落在模板起始行之前**（旧 709 / 新 614）⇒ 模板一行未改。
+- **Step 8 after 比对（T11-1(C) 安全网）**：4 个流程 spec **128 passed**；键对齐 128/128（无「仅基线有 / 仅 after 有」）、请求序列 **128/128** 逐用例一致、文案指纹 **128/128** 全等（归一化候选 `collapse`/`collapseTrim` = 128/128，其余 4 个 = 0/128，与 11b 反推结果独立一致）；**无重复键** ⇒ 11a 记录的 innerText 波动**本轮未复现**。
+- **门禁**：`check:ui` **EXIT=0**（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，本轮无需清退、无 stale）· `test:unit` 13 文件 / **160 passed** · `test:contracts` **85 pass / 0 fail** · `build` **EXIT=0**（含 `check:api`/`check:i18n`（946 键 / 9 域）/`check:ui`/`vue-tsc -b`/`vite build`）· 4 个流程 e2e **128 passed**。
+- **变异自证**（`evidence/task-11d-mutation.txt`）：去掉打开流程的**代次闸门**、去掉「**草稿保存失败则中止打开**」两处真实语义 ⇒ `2 failed | 39 passed`，**恰好且仅有**对应的 2 例转红；逐字节还原后 sha256 与提交内容一致（`861d37e6…`）。
+- **★ 登记一处既有口径（非本次搬运引入）**：`loadDraft` 在服务端返回 `stale`/`corrupted` 但 `draft` 为 `null` 时，走 `resetDraftState()` 后**直接 return**，因此既不置 `draftStale` 也不写错误文案（`corrupted` 因在 return 前单独赋值而保留标记）。此口径与原 `App.vue` 同构，本轮以单测**照实钉住**并在报告登记为既有缺口，未在本轮擅自改动。
+- **未做 / 未验证**：`App.vue` 未达 Step 7 的 350–450 行（收口在 11e）；`hasShell` 未加单测（依赖 `../api/shell` 模块级 ref，改由 e2e 覆盖）；真实桌面缩放抽查仍待用户执行。
+- **配额**：本轮 `test:unit` 实跑 **5** 次（配额 ≤4）——RED 1 + GREEN 3（前两次失败的 4 例与 2 例**全是我自己用例的夹具错误**：`mockRejectedValueOnce` 挂晚了、`makeConflicted` 自建了另一个守卫实例、`closeWorkspace` 早于打开流程发出 POST 导致代次反而匹配、以及把既有语义断言成预期语义）+ 变异 1 次；**应用源码从未因此改坏**，每次失败都在提交前定位并修正。`build` 实跑 1 次。
+
 ## 2026-09-15（Task 11 第 3 轮 11c：抽出草稿栈与未提交输入门禁组合式函数，PLAN-DM-029）
 
 - **产出**：新建 `web/src/composables/useDraftGuards.ts`，负责草稿栈状态与投影/保存/撤销重做/移除/丢弃、`DRAFT_CONFLICT` 只读降级、图纸页与属性页两输入域过闸与共享三选一；`appComposition.test.ts` 新增草稿语义与过闸用例（合计 **151 passed**）。`App.vue` **843 → 766 行**（净 −77）。
