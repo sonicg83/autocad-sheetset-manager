@@ -185,6 +185,20 @@ describe("SheetTree：结构树键盘模型", () => {
     expect(treeitems(wrapper)[1]!.attributes("aria-expanded")).toBe("true");
   });
 
+  it("树恒有唯一可聚焦树项（抽屉打开时焦点兜底的前提）", async () => {
+    // `SheetsView` 打开抽屉后会把焦点交给**活动树项**（roving tabindex 的焦点所有者）：
+    // 先找 `[role=treeitem][tabindex="0"]`，再退回首个 treeitem。此处钉住该前提：
+    // 「全部图纸」恒存在且为唯一 tabindex=0，因此焦点不会无主可归。
+    const empty = {id: "workspace-empty", sheet_set: {sheet_count: 0, subsets: []}} as unknown as Workspace;
+    for (const workspace of [fixture(), empty]) {
+      const wrapper = mountTree();
+      await wrapper.setProps({workspace});
+      const stops = wrapper.findAll('[role="treeitem"][tabindex="0"]');
+      expect(stops).toHaveLength(1);
+      expect(stops[0]!.attributes("aria-label")).toContain("全部图纸");
+    }
+  });
+
   it("workspace 变化时重置折叠状态与活动节点", async () => {
     const wrapper = mountTree();
     await press(wrapper, 0, "ArrowDown");

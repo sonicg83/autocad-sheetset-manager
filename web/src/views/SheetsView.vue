@@ -127,8 +127,16 @@ function closeTreeDrawer() {
 function toggleTreeDrawer() {
   drawerOpen.value = !drawerOpen.value;
   void nextTick(() => {
-    if (drawerOpen.value) treeDrawerEl.value?.querySelector<HTMLElement>('[role="tree"]')?.focus();
-    else treeToggleEl.value?.focus();
+    if (drawerOpen.value) {
+      // 焦点所有者是 **treeitem**（roving tabindex：只有活动项 tabindex=0），不是 `role=tree` 容器
+      // （PLAN-DM-029 Task 10 Step 2；容器已刻意移除 tabindex，不再是 Tab 停靠点也不再是焦点落点）。
+      // 兵底：树恒有「全部图纸」一项，因此 `[tabindex="0"]` 理论上总存在；仍保留首次 treeitem 作
+      // 防御（树为空时不静默失败，而是把焦点交给唯一的候选，否则就留在切换按钮上）。
+      const tree = treeDrawerEl.value;
+      const target = tree?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+        ?? tree?.querySelector<HTMLElement>('[role="treeitem"]');
+      target?.focus();
+    } else treeToggleEl.value?.focus();
   });
 }
 // 全局 Esc 兜底：抽屉不设焦点困绕（可与任务浮层同时展开），焦点离开抽屉后仍能 Esc 关闭。

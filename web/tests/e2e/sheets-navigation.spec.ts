@@ -38,7 +38,10 @@ test("点击子集切换范围：全部 13 张、子集 3 张，全部图纸只�
 test("点击树中图纸切换到所属子集并定位且不自动勾选", async ({page}) => {
   await installSheetsFixture(page);
   await openWorkspace(page);
-  await page.getByRole("button", {name: /展开子集.*建筑施工图/}).click();
+  // 展开指示器已**不是** button（Task 10 Step 2：树项是唯一焦点所有者，指示器 `aria-hidden`、
+  // 展开态由树项 `aria-expanded` 传达）；鼠标路径仍在，故用 `.chevron` 类定位。该类刻意保留：
+  // `sheets-visual-regressions.spec.ts` 依赖它对「选中子集时指示器继承强调色」做断言。
+  await page.getByRole("treeitem", {name: /建筑施工图/}).locator(".chevron").click();
   await page.getByRole("treeitem", {name: "002 图纸 2"}).click();
   await expect(page.getByText("匹配 3 / 全部 3 张", {exact: true})).toBeVisible(); // 已切到子集 1
   const row = page.locator(".sheet-table-window tbody tr").filter({has: page.getByText("002", {exact: true})});
@@ -64,7 +67,7 @@ test("筛选排除目标时显示目标被筛选隐藏并可清除筛选定位",
   // 搜索只命中图纸 5 → 目标 002（子集 1）被筛选排除
   await page.getByLabel("搜索图纸").fill("图纸 5");
   await expect(page.getByText("匹配 1 / 全部 13 张", {exact: true})).toBeVisible();
-  await page.getByRole("button", {name: /展开子集.*建筑施工图/}).click();
+  await page.getByRole("treeitem", {name: /建筑施工图/}).locator(".chevron").click();
   await page.getByRole("treeitem", {name: "002 图纸 2"}).click();
   // 提示目标被筛选隐藏，条件不被暗中清除
   await expect(page.getByText("目标被筛选隐藏", {exact: true})).toBeVisible();

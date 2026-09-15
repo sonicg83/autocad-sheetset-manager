@@ -249,9 +249,12 @@ test("900px 树收起为可访问抽屉：键盘开关、焦点归还且不与�
   // 树抽屉初始收起
   await expect(page.getByRole("tree", {name: "图纸导航"})).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  // 键盘打开：焦点移入树
+  // 键盘打开：焦点移入树。权威落点是**活动 treeitem**（roving tabindex 的焦点所有者），
+  // 不再是 `role=tree` 容器（Task 10 Step 2 已移除容器 tabindex）。对读屏用户这是**改进**：
+  // 直接播报项名与状态，而不是先落在「树」这个容器上。
   await toggle.click();
-  await expect(page.getByRole("tree", {name: "图纸导航"})).toBeFocused();
+  await expect(page.locator('.sheet-tree-pane [role="treeitem"]:focus')).toHaveCount(1);
+  await expect(page.getByRole("treeitem", {name: /全部图纸/})).toBeFocused();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   // 任务浮层同时展开：两者不得锁焦，Tab 可离开树抽屉进入主区
   await page.getByRole("button", {name: "展开任务浮层"}).click();
@@ -335,11 +338,12 @@ test("小视口下属性编辑与操作表单页脚可滚动到达", async ({pag
 });
 
 // —— a11y：树方向键移动焦点、可访问名、aria-expanded、完整文本键盘读取 ——
-test("a11y 语义：树方向键移动焦点、展开按钮 aria-expanded、表格可访问名、完整文本键盘读取", async ({page}) => {
+test("a11y 语义：树方向键移动焦点、展开收起 aria-expanded、表格可访问名、完整文本键盘读取", async ({page}) => {
   await installSheetsFixture(page);
   await openWorkspace(page, "light");
-  const tree = page.getByRole("tree", {name: "图纸导航"});
-  await tree.focus();
+  // 焦点所有者是**活动 treeitem**（roving tabindex）；容器刻意不再可聚焦（Task 10 Step 2），
+  // 因此这里直接聚焦首个树项，而不是先 `getByRole("tree").focus()`。
+  await page.getByRole("treeitem").first().focus();
   // Up/Down 移动焦点（roving tabindex：方向键焦点落到目标节点）
   await page.keyboard.press("ArrowDown");
   const subsetItem = page.getByRole("treeitem", {name: /建筑施工图/});
