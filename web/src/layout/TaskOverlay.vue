@@ -179,7 +179,7 @@ async function copyDiag(item:Diagnostic){
 /* `width:auto` 是必需的，不要删：本组件根元素是 `<aside>`，命中 `legacy.css` 的
    `:where(#app) aside button{display:flex;justify-content:space-between;width:100%;border:0}`（:where 不带特异性，
    但它是 width 的**唯一声明方**，所以照常生效）。`.diag-copy` 自带 `flex-shrink:0`，拿到 width:100% 后
-   会独占整行，把 `.diag-text`（flex:1;min-width:0）挤成 0 宽 → `word-break:break-word` 导致
+   会独占整行，把 `.diag-text`（flex:1;min-width:0）挤成 0 宽，再叠加 `word-break:break-word` 就导致
    **诊断文本每行只显示一个字符**。此处显式收回宽度，内边距/圆角/字号仍自行声明。
    min-height 同样为满足 ≥32px 可点下限（实测原为 23px）。
 
