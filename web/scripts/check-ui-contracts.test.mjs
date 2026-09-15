@@ -333,6 +333,35 @@ describe("Vue 语义规则", () => {
     assert.deepEqual(rulesOf(violations), []);
   });
 
+  // 责任 X：模板区用 maskHtmlComments 剥了 HTML 注释，但样式区原先直接取原文，
+  // 于是「只出现在 CSS 注释里的装饰性箭头」被误判为结构图标（同一字符写在模板注释
+  // 或脚本注释里都不会）。修复后必须两侧都不报，同时**不得**把样式里真实的图标一起吞掉。
+  test("CSS 注释里的装饰性箭头不算结构图标", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Comment.vue": `<template><span class="ok">已复制</span></template>
+<style scoped>
+/* 注释里的 → 不是图标 */
+.ok{color:inherit}
+</style>
+`,
+    });
+    assert.equal(violations.filter((v) => v.rule === "unicode-structure-icon").length, 0);
+  });
+
+  test("遮蔽 CSS 注释不得吞掉样式区里真实的 Unicode 图标", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Real.vue": `<template><span class="ok">已复制</span></template>
+<style scoped>
+/* 注释里的 → 不算 */
+.ok::before{content:"▸"}
+</style>
+`,
+    });
+    assert.equal(violations.filter((v) => v.rule === "unicode-structure-icon").length, 1);
+  });
+
   test("属性值里的 > 不截断标签：type 与可见文字仍被正确读取", () => {
     const violations = rawViolations({
       "src/styles/tokens.css": TOKENS_CSS,

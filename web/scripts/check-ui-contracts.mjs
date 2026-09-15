@@ -345,6 +345,15 @@ function maskHtmlComments(html) {
   return html.replace(/<!--[\s\S]*?-->/g, (match) => match.replace(/[^\n]/g, " "));
 }
 
+// CSS 注释必须同样遮蔽（责任 X）：`iconRegions` 对模板区用了 `maskHtmlComments`，
+// 但样式区原先直接取 `style.content` 原文，于是「只出现在 CSS 注释里的装饰性箭头」
+// 被误判为结构图标——而同一字符写在模板注释或脚本注释里都不会。本规则自己的注释
+// 写着「脚本与 i18n 文案里的普通标点不参与」，可见本意就是「只算真实标记与样式」。
+// 与 maskHtmlComments 一致，**保持长度**（换行保留）以免扫描偏移错位（见上）。
+function maskCssComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
+}
+
 function analyzeVueFile(file, emit, isDefined, violations) {
   for (const style of file.sfc.styles) {
     analyzeStyleSource({
@@ -426,7 +435,7 @@ function analyzeVueFile(file, emit, isDefined, violations) {
   // 结构图标只在模板与样式块里判定；脚本与 i18n 文案里的普通标点不参与。
   const iconRegions = [
     {text: maskHtmlComments(html), offset: template.offset},
-    ...file.sfc.styles.map((style) => ({text: style.content, offset: style.offset})),
+    ...file.sfc.styles.map((style) => ({text: maskCssComments(style.content), offset: style.offset})),
   ];
   for (const region of iconRegions) {
     for (const match of region.text.matchAll(STRUCTURE_ICON_PATTERN)) {
