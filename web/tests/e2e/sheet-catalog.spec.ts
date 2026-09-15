@@ -1261,8 +1261,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     expect(actual, `${property} 应来自 ${token}`).toBe(expected);
   }
 
-  // 可见 label：控件必须有 id，且存在指向它的可见 <label>。仅 aria-label 不算——
-  // ≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签（T6-5）。
+  // 可见 label（T6-5）：仅 aria-label 不算——≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签。
   // 可见 label 关联（T6-5）：不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
   // 来自模块级计数器（见 instanceId.ts），id 按挂载顺序分配而非行序，控件重挂载就会换 id，
   // 两次往返之间发生重挂载即假失败（本用例曾因此 flaky）。这里改用 Playwright 自身的可访问
@@ -1367,7 +1366,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     expect(track.buttons[0]!.left, "三枚按钮不溢出轨道左边界").toBeGreaterThanOrEqual(track.left - 1);
     // 表达式文本域是等宽正文：最小高度、圆角与字号全部按令牌
     const expression = page.getByLabel("表达式 1");
-    await expectToken(page, expression, "border-top-left-radius", "--radius-sm");
+    await expectToken(page, expression, "border-top-left-radius", "--radius-md");
     await expectToken(page, expression, "min-height", "--catalog-column-expression-min-height");
     await expectToken(page, expression, "font-size", "--font-label");
     await expectToken(page, expression, "font-family", "--font-mono");

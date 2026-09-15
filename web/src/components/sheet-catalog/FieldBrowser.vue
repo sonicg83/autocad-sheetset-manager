@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
     <div class="field-search">
       <UiInput
         v-model="query"
-        type="search"
+        type="text"
         :label="$t('extensions.sheetCatalog.fieldSearchLabel')"
         :placeholder="$t('extensions.sheetCatalog.fieldSearchPlaceholder')"
       />

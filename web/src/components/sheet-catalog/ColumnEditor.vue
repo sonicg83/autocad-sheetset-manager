@@ -215,7 +215,7 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .column-row.is-error{background:var(--color-danger-bg)}
 .order-cell{padding-top:9px;color:var(--color-text-secondary);font-size:var(--font-caption);text-align:center}
 .expression-cell{display:grid;gap:4px;min-width:0}
-.column-row textarea{width:100%;min-width:0;min-height:var(--catalog-column-expression-min-height);padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:var(--font-label);line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
+.column-row textarea{width:100%;min-width:0;min-height:var(--catalog-column-expression-min-height);padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-label);line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
 .column-error{margin:0;font-size:var(--font-caption);line-height:1.5;color:var(--color-danger)}
 .status-cell{padding-top:8px}
 .status-badge{font-size:var(--font-caption);padding:3px 8px;border-radius:var(--radius-full);white-space:nowrap}
