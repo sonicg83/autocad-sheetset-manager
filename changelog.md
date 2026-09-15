@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-15（Task 5 实施轮与评审收口：Ruling 32/33，PLAN-DM-029）
+
+- **实施轮提交**：`0ff550e 统一属性页控件视觉基础`（父 `a0c0b24`），14 文件、+298/−576。工作区与索引干净；实施者越过控制器在其工作期间插入的两个文档/计划提交，无重叠文件、无冲突。
+- **控制器独立取证（不引用子代理自述）**：例外表 320 → **258**（−62），`ui-contract-exceptions.json` 差集 **0 增 / 434 删**（纯删除、无夹带）；「删 62 条 ∧ Task 5 名下 62→0」构成机械证明，被删集合恰为 Task 5 的 62 条，**零误删其他任务条目**。控制器自写空例外探针（`controller-task-5-probe.mjs`，独立于实施者探针）原始违规 **259**，不变量 **259 = 258 + 1**（基线 321 = 320 + 1，差 62 相符），**Task 5 六文件残留原始违规 = 0**（违规真被消除，非取消登记），陈旧例外 = 0。`check:ui` 退出 0 且静默；`test:contracts` **83 passed / 0 failed**。`tokens.css` **+12/−0 纯新增**，6 个令牌落在既有 `:root` 块内、值 **60/280/44/560/180/140 逐字等值**，注释按该文件自带要求写在文件头。T5-1 落地：`.head-title` 三处 **16px → `var(--font-label)`**；Task 5 六文件 `--font-size-*` 原始层消费 0、残留裸 `font-size:Npx` 0、`font-size:var(--font-body)` 误用 0。T5-4 边界：`PropertyValueCompareDialog.vue` 未引入 `useDialogFocus`、未碰焦点参数。
+- **Ruling 32（控制器自我更正）**：T5-1 中「两处未设尺寸的 `<h2>` 会落 UA 原生 16px」**前提有误**。复核确认两处 `<h2>`（`PropertyValueCompareDialog.vue:52`、`PropertyValuePanel.vue:268`）均在 `<div class="modal-card">` 内，Task 3 起已由 `primitives.css` 的 `.modal-card h2{font-size:var(--modal-title-font-size)}` 给到 18px；真泄漏只有 `.head-title` 显式 16px 三处。实施者拒绝在页面 SFC 新增重复声明是正确的（那正是 Step 3 禁止的局部重复）。教训：字号泄漏必须连**层叠来源**一起核，只按标记名（未设尺寸的 `<h2>`）判断会把「已被上游覆盖」误判成缺口。已同步计划 Step 3 加注，防止后续任务把非缺陷当缺陷修。
+- **Ruling 33（任务级评审两条 Important，控制器逐条复核属实）**：
+  - **死规则 + 失实注释**：`PropertyValuePanel.vue:309` 的 `.value-item input:hover` 在控件换成 `UiInput` 后**永不命中**——`UiInput` 根元素是 `<span class="ui-input">`，真正的 `<input class="ui-input__control">` 非根元素，而 Vue scoped CSS 的 `data-v-*` 只落到子组件根元素上；紧邻注释却声称「此处只保留悬停强调」。根因是 **Task 3 原语缺陷**：`UiInput`/`UiSelect` 已有 `focus-visible`（`reset.css:34`）、`disabled`、错误态，**独缺 `hover`**，而 `SPEC-DM-006:232` 明确要求文本输入/下拉框/文本域「完整提供 `hover`、`focus-visible`、`disabled` 与错误态」。
+  - **处置**：新建**原语补充轮**，在 `UiInput.vue`/`UiSelect.vue` 内逐字上移既有事实标准 `.ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}`（同一值已独立出现在 `PropertyValuePanel.vue:309` 与 `SheetPropertyEditor.vue:108`，零视觉变化），随后删除页面侧死亡规则。**驳回页面侧 `:deep()`**：会让每个消费 `UiInput` 的页面各自复制一条 hover 规则，正是 Step 3 要消除的局部重复；仓库内唯一 `:deep()` 先例（`SheetToolbar.vue:184`）在未迁移的遗留文件里，不构成新约定。**必须现在做**：`SheetPropertyEditor.vue:108` 正是 Task 6 目标文件且含同一条规则，迁移后会原样复现，集中修一次可免 Task 6–9 各撞一次。
+  - **断言缺失**：Step 1 逐字要求覆盖 `font-size/font-family/line-height/height/padding/radius`，实测 `properties-visual-evidence.spec.ts` 中 `font-family` 与 `line-height` **零命中**；处置为补**计算样式**断言，且 `line-height` **不新增令牌**（`tokens.css` 只有 `--line-height-body:1.5`，根元素专用；其余为裸倍数，检查器不计为视觉值）。
+  - **回归守卫必须活的**：缺陷本质是「看起来正确但永不命中的规则」，故除源文本断言外必须补**真实 hover 后的计算样式断言**，且该断言在补原语前须**先红**以自证诊断。
+- **新登记收口责任 N/O**：N = `line-height` 无令牌层（`primitives.css:29` 与 Task 5 三处为裸 `1.6`/`1.7`，属检查器盲区内既有债务）；O = `SPEC-DM-006 §232` 的「文本域」当前无原语（`components/ui/` 无 textarea，属性页展开编辑用原生 textarea；全仓 `textarea:hover` 零命中故本轮无回归）。
+- **评审未推翻的偏差（独立复核后认定合理）**：`link`/`.danger-text`/`.error-summary-jump`/`.csv-flow button.danger` 保留原生 + 纯令牌化——`UiButton` 确无 Ghost+Danger 与 Secondary+Danger 组合（`.ui-button--danger` 是实心填充），且 `--link` 的 `min-height` 为 32px 而现值为 `legacy.css:102` 给的 36px，换用会掉 4px；pager 与模态按钮 **39 → 36px** 归一为 SPEC-DM-010 钉死的普通档。
+- **评审包基线**：按 `a0c0b24..0ff550e` 生成（未用 brief 记录的 `60844ed`），否则会把控制器在其间的两个文档/计划提交混入评审 diff。
+- **影响范围**：仅计划文件与本文档；实现改动由 Task 5 实施轮与后续修复轮独立提交。
+
 ## 2026-09-15（Task 5 派发前置：结构尺寸裁定 Ruling 31 与计划文件清单修正，PLAN-DM-029）
 
 - **Task 5 派发与基线复核**：阶段 3 首个页面迁移（属性页）开工，BASE `60844ed`。控制器自行从 `ui-contract-exceptions.json` 重算 Task 5 名下例外 **62 条**，与 Task 5 Files 集合**逐文件 1:1 重合**（无外溢/遗漏）：`PropertyValuePanel.vue` 27、`PropertyDefinitionPanel.vue` 16、`PropertyCsvPanel.vue` 11、`PropertyDefinitionTable.vue` 3、`PropertyValueCompareDialog.vue` 3、`PropertiesView.vue` 2；按规则 `raw-visual-value` 54 / `unicode-structure-icon` 6 / `visible-input-label` 2。开工前不变量 **321 = 320 例外 + 1 动态白名单**。

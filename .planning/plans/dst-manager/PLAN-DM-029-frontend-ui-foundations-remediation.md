@@ -198,12 +198,38 @@ related:
 
 - [ ] **Step 1（RED）**：扩充计算样式断言，明确截图红框内折叠标题、导入导出、搜索、主次动作的 `font-size/font-family/line-height/height/padding/radius`；搜索框必须有可见弱化 label；确认当前原生 16px 泄漏失败。
 - [ ] **Step 2（原语迁移）**：按钮、输入、选择器和字段组合改用公共原语；生产输入继续保持 SPEC-DM-010 的 `38px`，不得为统一而降为 36px。
-- [ ] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。折叠标题落 `--font-label`（13px）、模态标题落 `--modal-title-font-size`，页面不得消费 `--font-body`（`font` 简写，根元素专用）或 `--font-size-*` 原始层令牌。**结构尺寸不得就地写常量**：新增 6 个组件层令牌落 `tokens.css`（Ruling 31，与 Ruling 25 同口径，零视觉变化的逐字搬运）——`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`；不新增字号令牌，不得用 `clamp()/min()/max()` 包裹常量绕检查器。
+- [ ] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。折叠标题落 `--font-label`（13px）、模态标题落 `--modal-title-font-size`（经原语层 `.modal-card h2` 覆盖，页面 SFC **不得**新增重复声明——**实测两处 `<h2>` 均在 `.modal-card` 内，T5-1 原判「UA16px 泄漏」有误，见 Ruling 32**），页面不得消费 `--font-body`（`font` 简写，根元素专用）或 `--font-size-*` 原始层令牌。**结构尺寸不得就地写常量**：新增 6 个组件层令牌落 `tokens.css`（Ruling 31，与 Ruling 25 同口径，零视觉变化的逐字搬运）——`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`；不新增字号令牌，不得用 `clamp()/min()/max()` 包裹常量绕检查器。
 - [ ] **Step 4（行为回归）**：验证字段定义展开、新增字段、CSV 导入导出、搜索、对照、撤回和更新图纸集行为及 accessible name 不变。
 - [ ] **Step 5（正交证据）**：持久保存浅色默认、深色默认、错误态、`900×768` 单列、200% 定义表溢出共 5 张；其余状态沿用行为/计算样式断言。
 - [ ] **Step 6（例外清退）**：删除属性页 raw size、裸颜色、无 label、按钮 type 等全部例外；检查器对属性目录零例外。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- properties-layout.spec.ts properties-visual-evidence.spec.ts properties-definitions.spec.ts properties-values.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 3 张截图，确认同层级控件不再突大且主次层级清晰。
 - [ ] **Step 8（提交）**：commit：`统一属性页控件视觉基础`。
+
+**修复轮（Ruling 33，两轮独立提交）**
+
+首轮任务级评审判 `Needs fixes`，两条 Important 均由控制器独立复核属实：
+
+- **Important-1（死规则 + 失实注释）**：`PropertyValuePanel.vue:309` 的 `.value-item input:hover:not(:disabled){border-color:var(--color-accent)}` 在控件换成 `UiInput` 后**永不可能命中**——`UiInput` 根元素是 `<span class="ui-input">`，真正的 `<input class="ui-input__control">` 不是根元素，而 Vue scoped CSS 的 `data-v-*` 只追加到子组件根元素上。该规则因此静默丢失字段输入的悬停强调，紧邻注释却声称「此处只保留悬停强调（原语无 hover 规则）」。
+  根因不在 Task 5 而在 Task 3 的原语缺陷：`UiInput`/`UiSelect` 已提供 `focus-visible`（`reset.css:34`）、`disabled` 与错误态，**独缺 `hover`**，而 SPEC-DM-006 §232 明确要求文本输入/下拉框/文本域「完整提供 `hover`、`focus-visible`、`disabled` 与错误态」。故属冻结 Spec 违规，不是可选打磨。
+  处置：**新建原语补充轮**，在 `UiInput.vue`/`UiSelect.vue` 的 scoped 样式内逐字补回既有事实标准 `.ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}`（同一值已独立出现在 `PropertyValuePanel.vue:309` 与 `SheetPropertyEditor.vue:108`，属零视觉变化的原样上移），随后删除页面侧的死亡规则。**驳回页面侧 `:deep(.ui-input__control)`**：那会让每个消费 `UiInput` 的页面各自复制一条 hover 规则，正是 Step 3 要消除的局部重复；仓库内唯一 `:deep()` 先例（`SheetToolbar.vue:184`）位于尚未迁移的遗留文件，不构成新约定。
+  **必须现在做而不是推给 Task 12**：`SheetPropertyEditor.vue:108` 正是 Task 6 的目标文件且含同一条规则，Task 6 迁移后会原样复现同一缺陷；集中修一次可避免 Task 6–9 各撞一次。
+
+- **Important-2（Step 1 点名的断言缺失）**：Step 1 逐字要求覆盖 `font-size/font-family/line-height/height/padding/radius`，实测 `properties-visual-evidence.spec.ts` 中 `font-family` 与 `line-height` **零命中**。处置：为 Step 1 点名的元素（折叠标题、导入导出、搜索、主次动作）补**计算样式**断言。
+  `line-height` **不得新增令牌**：`tokens.css` 只有 `--line-height-body:1.5`（`--font-body` 简写专用、根元素限定），`primitives.css:29` 与 Task 5 三处用的是裸 `1.6`/`1.7` 无单位倍数，静态检查器不将其计为视觉值。故本步骤只**锁定既有计算值**防回归，并在收口责任 N 登记「line-height 无令牌层」。
+
+**回归守卫必须是活的**：本次缺陷的本质是「看起来正确但永不命中的规则」，所以除 `uiPrimitives.test.ts` 的源文本断言外，必须在 `properties-visual-evidence.spec.ts` 增加**真实 hover 后的计算样式断言**（`locator.hover()` 后读 `getComputedStyle(input).borderColor`）。该断言在补原语之前必须**先红**，用以自证诊断成立。
+
+Files（`web/src/components/ui/**` 的修改权仅限本轮，Task 5 主体步骤仍受 T5-3 约束）：
+
+- Modify: `web/src/components/ui/UiInput.vue`
+- Modify: `web/src/components/ui/UiSelect.vue`
+- Modify: `web/src/components/ui/uiPrimitives.test.ts`
+- Modify: `web/src/components/properties/PropertyValuePanel.vue`
+- Modify: `web/tests/e2e/properties-visual-evidence.spec.ts`
+
+- [ ] **Step F1（RED）**：在 `properties-visual-evidence.spec.ts` 加真实 hover 计算样式断言 → 必须因 `borderColor` 不等于强调色而失败，保存失败输出自证诊断。
+- [ ] **Step F2（GREEN，提交一）**：在 `uiPrimitives.test.ts` 加源文本断言（RED）→ 在 `UiInput.vue`/`UiSelect.vue` 补 hover 声明（GREEN）。commit：`补齐输入原语的悬停状态`。
+- [ ] **Step F3（GREEN，提交二）**：删除 `PropertyValuePanel.vue` 的死亡规则并把注释改为陈述事实；补 `font-family`/`line-height` 计算样式断言。commit：`清除属性页死规则并补齐字体断言`。
 
 ### Task 6: 迁移图纸目录页并复核历史图标例外
 
@@ -500,6 +526,10 @@ related:
 > 结论：能否真隐藏取决于元素是否落在组件 scoped 兜底内；`dialogFocus.ts` 只能按属性判定，所以它在这类元素上
 > 「判为隐藏但浏览器仍可聚焦」的偏差是有意的。收口方向：审计 `<aside>` 内是否还有依赖 `[hidden]` 做视觉隐藏的元素，
 > 必要时改用 `v-if` 或 `display:none` 的样式钩子。
+>
+> **收口责任 N（`line-height` 没有令牌层；Task 5 修复轮实测）**：语义层只有 `--line-height-body:1.5`，且其用途被限定在 `--font-body` 简写（根元素专用）。界面其余行高散落为裸无单位倍数：`primitives.css:29` 的 `line-height:1.6`，以及 `PropertyValueCompareDialog.vue:66`、`PropertyValuePanel.vue:314`、`PropertyValuePanel.vue:330` 三处 `line-height:1.7`。静态检查器不把无单位倍数计为 `raw-visual-value`，所以这些值既无令牌也不进例外表，属「检查器盲区内的既有债务」。Task 5 只能锁定既有计算值（Important-2），不能新增字号/行高令牌。收口方向：评估是否补一档 `--line-height-*` 语义令牌并让检查器覆盖无单位行高；在此之前不得声称行高已令牌化。
+>
+> **收口责任 O（SPEC-DM-006 §232 的「文本域」当前无原语；Task 5 修复轮实测）**：`web/src/components/ui/` 没有 textarea 原语（`dialogFocus.ts:31` 只在焦点选择器里认 `textarea`），属性页的展开编辑用原生 textarea。因此 §232 对文本域的三态要求既无原语承载、也无页面 hover 规则可迁移（全仓 `textarea:hover` 零命中，故本轮无回归）。收口方向：要么新增 textarea 原语并补齐状态，要么在 Spec 里明确文本域沿用原生并给出可核验的状态声明。
 
 ## 依赖与提交顺序
 
@@ -566,7 +596,7 @@ Task 10 → Task 11 → Task 12
 | Task 4（评审修复轮 1） | 四门禁 + `main.spec.ts` 聚焦 e2e | 四门禁全绿（`test:unit` 97）；`font-size:var(--font-size-14)` → `var(--button-font-size)` 两处（业务侧原始层消费 0 → 2 处，检查器与债务口径**双向不可见**）；原隐藏探针在**非端点**、不参与断言（控制器变异证明：去掉 `getClientRects()` 过滤后仍全绿）→ 改为端点级 + 补 hover/focus/disabled 计算样式断言 | 提交 `修正壳层字号令牌层级与焦点测试覆盖`；复审判定 `Needs fixes`（0 must-fix / 6 should-fix / 4 nit）逐条落实 |
 | Task 4（迁移轮 2：浮层与提示宿主） | 四门禁 + `main.spec.ts i18n-visual-evidence.spec.ts` + toast 聚焦 e2e；控制器跑全量 e2e | `test:unit` **102**（+5 条 `returnFocus` 用例）、`test:contracts` **83**、`check:ui` 0、`build` 0；例外 **341 → 320**（删除恰 21 条：`TaskOverlay` 15 + `ToastHost` 6；18 raw + 3 unicode；**零新增**），不变量 **321 = 320 + 1**、`waivedViolations 0`；隐藏形态**先红后绿**（RED `Received "probe-head-hidden"` → GREEN 1 passed）；3 张截图重拍（blob 均变化、尺寸不变）；控制器全量 e2e **498 passed / 2 flaky / 0 failed**（两个 flaky 的失败点分别是 `openWorkspace` 的「选择 DST 文件」按钮 30s 未出现与既有 spec 的负载超时，均与本轮无因果） | 提交 `迁移任务浮层焦点与控件到公共原语` + `迁移提示宿主并清退壳层例外`；报告 `task-4-report.md` §11 |
 | Task 4（二审修复轮） | 四门禁 + `main.spec.ts sheets-layout.spec.ts` + 全量 e2e（控制器） | 三处 `.focus({preventScroll:true})` 补回（旧手写副本语义；`sheets-layout.spec.ts` 有零容差 `scrollTop` 断言）；toast 补结构/尺寸断言（36×36，变异 `width:30px` → `Expected 36 / Received 30`）；订正「`shouldReturnFocus` 先行判定」表述（解析器总会先被调用、守卫最后求值，**不重排代码**）；像素/差异清单补齐（`.toast-close` 描边外观丢失、折叠按钮 hover 态新增、红点墨迹 ≈6px→≈5px、「用户可见差异 = 0」收窄到交互路径）；控制器补归档本轮全量 e2e（499 passed / 1 flaky / 0 failed，行号 1551/1586/1624 自证）与 `returnFocus` 变异复现日志 | 提交 `补齐焦点工具防滚动参数与提示宿主断言`；**复审复核 `Approve`**（1 must-fix + 3 should-fix + 6 nit 全部清项） |
-| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C）、`UiButton.label`/`UiIconButton` 的 ARCH 补充（收口责任 D）、令牌分层收口（收口责任 E）、`fieldset[disabled]` 禁用继承与禁用态欠虑（收口责任 F）、存活变异补测的 4 处未覆盖分支（收口责任 G）、检查器 `calc/min/max/clamp/env` 参数检查（收口责任 H）、ARCH-DM-007 §4.1/§5 对齐（收口责任 I）、`0×0` 停靠点语义（收口责任 J）、非控件 14px 语义档位（收口责任 K）、例外 `expiresWith` 与 Files 错位（收口责任 L）、`<aside>` 内 `[hidden]` 兜底（收口责任 M） | 待实施 | `assets/PLAN-DM-029/README.md` |
+| Task 12 | 全量门禁与真实 Windows 缩放；另承担字体真实加载（收口责任 A）与字体子集化命令（收口责任 B）的收口，以及例外表跟踪项（收口责任 C）、`UiButton.label`/`UiIconButton` 的 ARCH 补充（收口责任 D）、令牌分层收口（收口责任 E）、`fieldset[disabled]` 禁用继承与禁用态欠虑（收口责任 F）、存活变异补测的 4 处未覆盖分支（收口责任 G）、检查器 `calc/min/max/clamp/env` 参数检查（收口责任 H）、ARCH-DM-007 §4.1/§5 对齐（收口责任 I）、`0×0` 停靠点语义（收口责任 J）、非控件 14px 语义档位（收口责任 K）、例外 `expiresWith` 与 Files 错位（收口责任 L）、`<aside>` 内 `[hidden]` 兜底（收口责任 M）、`line-height` 令牌层缺失（收口责任 N）、SPEC-DM-006 §232「文本域」无原语（收口责任 O） | 待实施 | `assets/PLAN-DM-029/README.md` |
 
 ## 完成标准
 
