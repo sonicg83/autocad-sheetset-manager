@@ -196,14 +196,41 @@ related:
 - Modify: `web/tests/e2e/properties-values.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED）**：扩充计算样式断言，明确截图红框内折叠标题、导入导出、搜索、主次动作的 `font-size/font-family/line-height/height/padding/radius`；搜索框必须有可见弱化 label；确认当前原生 16px 泄漏失败。
-- [ ] **Step 2（原语迁移）**：按钮、输入、选择器和字段组合改用公共原语；生产输入继续保持 SPEC-DM-010 的 `38px`，不得为统一而降为 36px。
-- [ ] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。折叠标题落 `--font-label`（13px）、模态标题落 `--modal-title-font-size`（经原语层 `.modal-card h2` 覆盖，页面 SFC **不得**新增重复声明——**实测两处 `<h2>` 均在 `.modal-card` 内，T5-1 原判「UA16px 泄漏」有误，见 Ruling 32**），页面不得消费 `--font-body`（`font` 简写，根元素专用）或 `--font-size-*` 原始层令牌。**结构尺寸不得就地写常量**：新增 6 个组件层令牌落 `tokens.css`（Ruling 31，与 Ruling 25 同口径，零视觉变化的逐字搬运）——`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`；不新增字号令牌，不得用 `clamp()/min()/max()` 包裹常量绕检查器。
-- [ ] **Step 4（行为回归）**：验证字段定义展开、新增字段、CSV 导入导出、搜索、对照、撤回和更新图纸集行为及 accessible name 不变。
-- [ ] **Step 5（正交证据）**：持久保存浅色默认、深色默认、错误态、`900×768` 单列、200% 定义表溢出共 5 张；其余状态沿用行为/计算样式断言。
-- [ ] **Step 6（例外清退）**：删除属性页 raw size、裸颜色、无 label、按钮 type 等全部例外；检查器对属性目录零例外。
-- [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- properties-layout.spec.ts properties-visual-evidence.spec.ts properties-definitions.spec.ts properties-values.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 3 张截图，确认同层级控件不再突大且主次层级清晰。
-- [ ] **Step 8（提交）**：commit：`统一属性页控件视觉基础`。
+- [x] **Step 1（RED）**：扩充计算样式断言，明确截图红框内折叠标题、导入导出、搜索、主次动作的 `font-size/font-family/line-height/height/padding/radius`；搜索框必须有可见弱化 label；确认当前原生 16px 泄漏失败。
+- [x] **Step 2（原语迁移）**：按钮、输入、选择器和字段组合改用公共原语；生产输入继续保持 SPEC-DM-010 的 `38px`，不得为统一而降为 36px。
+- [x] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。折叠标题落 `--font-label`（13px）、模态标题落 `--modal-title-font-size`（经原语层 `.modal-card h2` 覆盖，页面 SFC **不得**新增重复声明——**实测两处 `<h2>` 均在 `.modal-card` 内，T5-1 原判「UA16px 泄漏」有误，见 Ruling 32**），页面不得消费 `--font-body`（`font` 简写，根元素专用）或 `--font-size-*` 原始层令牌。**结构尺寸不得就地写常量**：新增 6 个组件层令牌落 `tokens.css`（Ruling 31，与 Ruling 25 同口径，零视觉变化的逐字搬运）——`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`；不新增字号令牌，不得用 `clamp()/min()/max()` 包裹常量绕检查器。
+- [x] **Step 4（行为回归）**：验证字段定义展开、新增字段、CSV 导入导出、搜索、对照、撤回和更新图纸集行为及 accessible name 不变。
+- [x] **Step 5（正交证据）**：持久保存浅色默认、深色默认、错误态、`900×768` 单列、200% 定义表溢出共 5 张；其余状态沿用行为/计算样式断言。
+- [x] **Step 6（例外清退）**：删除属性页 raw size、裸颜色、无 label、按钮 type 等全部例外；检查器对属性目录零例外。
+- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- properties-layout.spec.ts properties-visual-evidence.spec.ts properties-definitions.spec.ts properties-values.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 3 张截图，确认同层级控件不再突大且主次层级清晰。
+- [x] **Step 8（提交）**：commit：`统一属性页控件视觉基础`。
+
+> **Task 5 实测与口径（Ruling 31/32/33/35 收口，2026-09-15）**
+>
+> **提交链**：`0ff550e 统一属性页控件视觉基础`（14 文件 +298/−576，父 `a0c0b24`）→ `3ff847d 补齐输入原语的悬停状态` → `55ab38b 清除属性页死规则并补齐字体断言` → `58dbc90 修正原语中错误态优先于悬停的定序` → `8667b8d 补错误态悬停守卫并订正视觉证据注释`。控制器计划/文档提交穿插其间（`79e7d90`、`a0c0b24`、`e36d4cd`、`9fc1d93`），与实现提交无重叠文件。
+>
+> **三轮评审闭环**：首评 `Needs fixes`（0 Critical / 2 Important / 4 Minor）→ 修复轮 1（Ruling 33，原语补 hover + 删死规则 + 补字体断言）→ 二次评审判 `All findings addressed, no new Critical/Important breakage`，但把一项状态优先级交控制器裁定 → Ruling 35 裁定修正（错误态优先于 hover）→ 第二轮修复。**两条 Important 均由控制器独立复核属实后才派发，不是直接采纳评审意见**；Ruling 32 与 34 是控制器自我更正（分别纠正 T5-1 的「UA 16px 泄漏」误判、以及实施者把共享原语影响面说小）。
+>
+> **例外表**：320 → **258**（−62，纯删除，0 增）；被删集合恰为 Task 5 名下 62 条，与 Files **逐文件 1:1 重合**，零误删其他任务条目。控制器自写空例外探针（`controller-task-5-probe.mjs`，独立于实施者的）不变量 **259 = 258 + 1**（基线 321 = 320 + 1），**Task 5 六文件残留原始违规 = 0**（违规真被消除而非取消登记），陈旧例外 = 0。
+>
+> **令牌**：`tokens.css` +12/−0 **纯新增**，6 个结构令牌值 `60/280/44/560/180/140` **逐字等值**，无字号令牌、无 `calc/clamp/min/max` 包裹。
+>
+> **字号泄漏实况**：真泄漏只有 `.head-title` 显式 16px 三处（→ `--font-label`）；两处 `<h2>` 已被 `primitives.css` 的 `.modal-card h2` 覆盖（**不是**泄漏）。任务级步 3 的文件内消费约束实测：Task 5 六文件 `--font-size-*` 原始层消费 0、残留裸 `font-size:Npx` 0、`font-size:var(--font-body)` 误用 0。
+>
+> **实际验证（控制器亲跑，不引用子代理自述）**：
+>
+> | 项 | 命令 | 结果 |
+> |---|---|---|
+> | 静态契约 | `npm run check:ui` | EXIT 0（静默） |
+> | 契约测试 | `npm run test:contracts` | 83 passed / 0 failed |
+> | 单测 | `npm run test:unit` | 11 文件 / 104 passed |
+> | 属性页 e2e | `npx playwright test properties-visual-evidence.spec.ts` | 18 passed / 0 failed（首次即过，无 retry） |
+> | RED 归因 | `evidence/task-5-fix2-red.txt` | `:183` 非悬停断言**通过** + `:191` `toBeEnabled()` **通过** → 仅 `:193` 悬停后断言失败，`Received` = `--color-accent` 两主题值（`#2F5BE0`/`#6B8DFF`）、`Expected` = `--color-danger` 两主题值（`#C2302B`/`#F0776E`），四个 RGB 逐值对得上 `tokens.css` |
+> | 构建 | `npm run build` | EXIT 0 |
+>
+> **两轮 e2e 配额**：实施轮 5/5（55 passed / 1 flaky，retry 后过）、修复轮 1 用 2/2、修复轮 2 用 2/2。**全量 e2e 留到 Task 12 控制器收口时跑一次。**
+>
+> **未覆盖（如实登记）**：hover 与错误态的**组合**在修复轮 1 时无断言（守卫用了 `.value-item:not(.invalid)`），已由修复轮 2 补上**双向**守卫（invalid+hover → 危险色、非 invalid+hover → 强调色同时成立）；`UiSelect` 仍只有源文本断言、无独立 e2e；`SheetPropertyEditor.vue:108`（Task 6 目标文件）同款 hover 规则仍需在 Task 6 删除（原语已就位）；真实 Windows WebView2 与显示缩放复验留 Task 12。
 
 **修复轮（Ruling 33，两轮独立提交）**
 
@@ -253,9 +280,14 @@ Files（本轮）：
 - Modify: `web/src/components/ui/uiPrimitives.test.ts`（两处源文本断言锚定完整选择器字符串，必须同步改；其先红本身即该耦合的正面证明）
 - Modify: `web/tests/e2e/properties-visual-evidence.spec.ts`（新增 hover+invalid 活的守卫；订正注释不精确；搜索元素改用稳健定位器）
 
-- [ ] **Step G1（RED）**：在既有 `error` 状态夹具下，对 `.value-panel .value-item.invalid input` 先断言默认态为 `--color-danger`、**显式断言该控件为 enabled**（`toBeEnabled()`，否则禁用控件会让守卫假绿），再 `hover()` 后断言**仍为** `--color-danger` → 当前代码下必须失败（显示强调色），保存失败输出。同时订正 `properties-visual-evidence.spec.ts` 的两处注释不精确（`padding/radius` 覆盖高估；`prod-` 前缀与实现不符），并把搜索元素由顺序相关的 `.first()` 改为同用例已定义的 `valueSearch` 角色定位器（`expectTokenFontFamily` 需接受 `Locator`）。
-- [ ] **Step G2（GREEN，提交一）**：改 `UiInput.vue`/`UiSelect.vue` 两个选择器 + `uiPrimitives.test.ts` 两处断言。commit：`修正原语中错误态优先于悬停的定序`。
-- [ ] **Step G3（GREEN，提交二）**：确认新守卫与既有 hover 断言同时通过（非 invalid 悬停仍为强调色、invalid 悬停为危险色）。commit：`补错误态悬停守卫并订正视觉证据注释`。
+- [x] **Step G1（RED）**：在既有 `error` 状态夹具下，对 `.value-panel .value-item.invalid input` 先断言默认态为 `--color-danger`、**显式断言该控件为 enabled**（`toBeEnabled()`，否则禁用控件会让守卫假绿），再 `hover()` 后断言**仍为** `--color-danger` → 当前代码下必须失败（显示强调色），保存失败输出。同时订正 `properties-visual-evidence.spec.ts` 的两处注释不精确（`padding/radius` 覆盖高估；`prod-` 前缀与实现不符），并把搜索元素由顺序相关的 `.first()` 改为同用例已定义的 `valueSearch` 角色定位器（`expectTokenFontFamily` 需接受 `Locator`）。
+      **实测 RED（控制器逐行核验）**：失败位置 `:193` 正是**悬停后**那条断言，而 `:183`（非悬停=危险色）与 `:191`（`toBeEnabled()`）两条**先通过**——即「选择器确实命中真实、invalid、enabled 的控件」与「只有 hover 改变颜色」同时成立，失败只能归因 hover，**排除假红也排除禁用控件假绿**。
+- [x] **Step G2（GREEN，提交一）**：改 `UiInput.vue`/`UiSelect.vue` 两个选择器 + `uiPrimitives.test.ts` 两处断言。commit：`修正原语中错误态优先于悬停的定序`（`58dbc90`，3 文件 +6/−2）。两处源文本断言**锚定完整选择器字符串**（含 `:not(.ui-input--invalid)`），改选择器即红。
+- [x] **Step G3（GREEN，提交二）**：确认新守卫与既有 hover 断言同时通过（非 invalid 悬停仍为强调色、invalid 悬停为危险色）。commit：`补错误态悬停守卫并订正视觉证据注释`（`8667b8d`，1 文件 +24/−8）。**实测 18 passed / 0 failed，首次即过、无 retry。**
+
+**实现者一处主动汇报的自我更正要保留记录**：新加注释写的行号引用（`:243`/`:246`）被自己插入的守卫代码推得过期——**正是本轮在修的同一类缺陷**（注释声称与代码现状不符）。实现者改写为**不带行号**的表述并 `--amend` 了提交 2（仍为两个提交，仅注释文字变化），且主动写进报告而非隐藏。控制器判该处置正确（行号引用本就应在 spec 里避开，否则每次插入代码都会复发）；与 Ruling 33/35 追究的「失实注释」一脉相承，属正面行为。
+
+**未攞弱的既有断言（控制器机械核验）**：`8667b8d` 的全部 `-` 行只有四类——① 两条注释订正（`prod-` 前缀、`padding/radius` 覆盖高估）；② `expectTokenFontFamily` 签名重构（由仅接受 `string` 改为 `Locator | string`，旧的 1 条 `expect(` 被新的 1 条 1:1 取代）；③/④ 搜索元素由 `.value-panel .ui-input__control` + `.first()` 改为已定义的 `valueSearch`（共 2 处，对应新增 2 处）。**无任何断言被删除或放宽。** 断言数 112 → 114，增量恰为新增的双向 hover 守卫。
 
 **配额**：`check:ui` ≤2、`test:contracts` ≤2、`test:unit` ≤2、e2e（仅属性页 spec）≤2、`build` ≤1；**禁跑全量 e2e**（由控制器收口时执行）。
 
