@@ -319,7 +319,7 @@ Files（本轮）：
   - **收口不变量**：Task 6 名下原 **75** 条（74 Files 内 + 1 `CompatibilitySummary.vue`）→ 清退 69 条 `raw-visual-value` + 2 条 `visible-input-label`，保留 3 条 → **终态 186 条 = 258 − 75 + 3**；`check:ui` 裸违规 **187 = 186 + 1 动态白名单**。
 - [x] **Step 7a（自动验证，控制器亲跑）**：`check:ui` **EXIT 0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。未跑全量 e2e（控制器收口时跑）。详见 T6-11。
   - **评审轮后重跑（T6-12 落地后）**：spec **0**（**91 passed / 0 failed / 0 flaky**）、`check:ui` **0**；5 张 t6 PNG 已按终态重采入库。
-- [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。
+- [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。**实现与三轮评审均已闭环（T6-14），仅余此项。** 5 张持久 PNG 已入库：`docs/dst-manager/specs/assets/SPEC-DM-012/production/t6-{save-light-1440x1000,save-dark-1440x1000,save-disabled-light-1440x1000,delete-danger-light-1440x1000,narrow-900x700-light}.png`。
 - [x] **Step 8（提交）**：本任务实际分为逐步提交（超时/崩溃后不再丢进度）：`eb7fa66` 承接迁移 → `43e5a72` 断言 → `2926cfb`/`392e8a3` 高度归一 → `7d3a214` 例外清退 → `b229729` 证据 spec → `387efb5` 证据入库与断言稳定性修正；报告 `task-6-report.md`。原计划的单一提交 `统一图纸目录页控件视觉基础` 被逐步提交取代（运维必要性，非计划偏离）。
 
 #### Task 6 控制器裁定（T6-1 … T6-6，派发前下达）
@@ -419,6 +419,15 @@ Files（本轮）：
 **方法论教训（本计划第三次同类，已写入 T6-13）**：控制器在只有推理、**未检索既有先例**时就裁定了「未获授权」。
 - Ruling 36 教训 = 不得凭目录名推断归属；Ruling 39 教训 = 裁定前必须实读检查器源码；**本条 = 宣判「未授权/无先例」之前必须全仓检索同类用法（组件＋属性组合），把命中的先例写进裁定**。
 - 附带一条工具纪律：**当 `grep` 对评审者声称存在的东西返回空结果时，不得据此判定评审者失真**——本会话已知 bash 包装器会吞引号造成**假阴性**（控制器第一次 `grep 'type="search"'` 即得空结果，改用 `sed` 直读才看到真相，**差点据此误判评审者造假**）。必须换方法（`sed`/`read`）复核。
+
+**T6-14（评审闭环，Task 6 实现部分收口）**：三轮独立评审（`2ce5d5a5` 首轮 → `bbd6a82c` 二次 → `2638454a` 最终验证）均已闭环：
+
+- 最终验证结论：**All findings addressed, no new Critical/Important breakage**。
+- 首轮遗留的 Important（披露表把 8px 写成 6px）与 3 条 Minor 均已 ADDRESSED；二次评审新引入的 Important（`type` 还原方向错）已由 T6-13 纠正为 ADDRESSED，且评审者核实新守卫**有效且非空转**（`fieldSearchLabel` 与 `type="search"` 在该作用域各只出现一次）。
+- **本轮全部门禁（控制器亲跑，真实 EXIT）**：`check:ui` **0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。
+- **例外表**：目录页 **75 → 3**，全表 **258 → 186**（`186 = 258 − 72`）。
+- **仅剩 Step 7b 人工门禁未做**（需用户对照其第 2 张缺陷截图，该截图未入库），以及已单独登记的责任 A–U（Task 12 收口）。
+- **提交链**：`eb7fa66` → `43e5a72` → `2926cfb` → `392e8a3` → `7d3a214` → `b229729` → `387efb5` → `aec713e` → `416d11d`（+ 控制器计划/changelog 提交 `b11306c`/`6097924`/`08e0bd7`/`ad777e5`/`c4ef846`）。
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 

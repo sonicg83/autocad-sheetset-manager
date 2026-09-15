@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-15（Task 6 评审闭环实现部分收口，PLAN-DM-029）
+
+- **最终验证（`2638454a`）**：**All findings addressed, no new Critical/Important breakage**。三轮独立评审（`2ce5d5a5` → `bbd6a82c` → `2638454a`）全部闭环。
+- **新守卫被核实为「有效且非空转」**：评审者除验证 `type="search"` 与兄弟页组合**逐字等价**（`v-model` 即先例 `:model-value`+`@update:model-value` 的语法糖）外，还核得 `fieldSearchLabel` 在 `src/` 内**只出现一次**、该作用域内 `type="search"` **只出现一次** → 不存在第二个同名 searchbox 使断言假通过；且两个目录页 spec 中 `textbox` 出现 **0** 次 → 无既有定位器静默失效。
+- **New Breakage: None**；报告声称的测试证据 `evidence/task-6-gate-e2e-final2.txt` 实存且含新守卫所在用例的通过记录；提交范围未触碰任何 `g8-*`。
+- **收尾一条文档卫生 Minor**：报告 §10 的 T6-12 第③项补上删除线取代标记（计划侧上轮已加），同一文档不再并存两个矛盾结论。
+- **Task 6 实现部分收口**：门禁 `check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（11 文件/104）、`build` 0、两个目录页 spec **0（91 passed / 0 failed / 0 flaky）**；例外表目录页 **75 → 3**、全表 **258 → 186**。
+- **仅余 Step 7b 人工门禁**（需用户对照其第 2 张缺陷截图，该截图未入库）与已登记的责任 A–U（Task 12 收口）。
+
 ## 2026-09-15（Task 6 二次评审：Ruling 44 自纠与工具纪律，PLAN-DM-029）
 
 - **二次评审（`bbd6a82c`）**：上轮 6 条 finding **全部 ADDRESSED**，但**控制器自己的修复新引入 1 条 Important**。
