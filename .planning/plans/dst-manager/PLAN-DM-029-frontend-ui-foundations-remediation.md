@@ -189,6 +189,7 @@ related:
 - Modify: `web/src/components/properties/PropertyCsvPanel.vue`
 - Modify: `web/src/components/properties/PropertyValuePanel.vue`
 - Modify: `web/src/components/properties/PropertyValueCompareDialog.vue`
+- Modify: `web/src/styles/tokens.css`
 - Modify: `web/tests/e2e/properties-layout.spec.ts`
 - Modify: `web/tests/e2e/properties-visual-evidence.spec.ts`
 - Modify: `web/tests/e2e/properties-definitions.spec.ts`
@@ -197,7 +198,7 @@ related:
 
 - [ ] **Step 1（RED）**：扩充计算样式断言，明确截图红框内折叠标题、导入导出、搜索、主次动作的 `font-size/font-family/line-height/height/padding/radius`；搜索框必须有可见弱化 label；确认当前原生 16px 泄漏失败。
 - [ ] **Step 2（原语迁移）**：按钮、输入、选择器和字段组合改用公共原语；生产输入继续保持 SPEC-DM-010 的 `38px`，不得为统一而降为 36px。
-- [ ] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。
+- [ ] **Step 3（层级收敛）**：折叠标题、计数、状态徽标、工具行和主按钮分别消费 label/caption/body/action 语义令牌；移除局部重复字体、盒模型和焦点样式。折叠标题落 `--font-label`（13px）、模态标题落 `--modal-title-font-size`，页面不得消费 `--font-body`（`font` 简写，根元素专用）或 `--font-size-*` 原始层令牌。**结构尺寸不得就地写常量**：新增 6 个组件层令牌落 `tokens.css`（Ruling 31，与 Ruling 25 同口径，零视觉变化的逐字搬运）——`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`；不新增字号令牌，不得用 `clamp()/min()/max()` 包裹常量绕检查器。
 - [ ] **Step 4（行为回归）**：验证字段定义展开、新增字段、CSV 导入导出、搜索、对照、撤回和更新图纸集行为及 accessible name 不变。
 - [ ] **Step 5（正交证据）**：持久保存浅色默认、深色默认、错误态、`900×768` 单列、200% 定义表溢出共 5 张；其余状态沿用行为/计算样式断言。
 - [ ] **Step 6（例外清退）**：删除属性页 raw size、裸颜色、无 label、按钮 type 等全部例外；检查器对属性目录零例外。
@@ -469,7 +470,10 @@ related:
 > `--badge-size`、`--status-dot-size`、`--overlay-pop-width/-max-height`、`--dock-note-max-width`、
 > `--task-rail-width`、`--task-rail-action-size`、`--task-drawer-max-width`、`--toast-max-width`），§4.1 对该层的
 > 枚举不再完整；`tokens.css:4/8` 又把原始层描述为「十六进制颜色与原始档位的唯一合法定义处」，与
-> 「组件层写入字面 px 常量」存在措辞张力。需一并收窄措辞并把组件层枚举补全。
+> 「组件层写入字面 px 常量」存在措辞张力。需一并收窄措辞并把组件层枚举补全。**Task 5 沿用同一路径再新增 6 个
+> 组件层结构令牌**（`--panel-head-min-height`、`--panel-search-width`、`--definition-row-height`、
+> `--compare-card-max-width`、`--compare-item-max-height`、`--expand-editor-min-height`，Ruling 31）——
+> 其中后三项目前可能只被属性页消费，属**单点组件令牌**，收口时需复核是否应合并或下沉，不能只补枚举了事。
 
 > **收口责任 J（`0×0` 候选仍算停靠点）**：`getClientRects()`（及迁移后的 `isHidden`）都不排除零尺寸元素，
 > `main.spec.ts` 的浮层焦点用例把这一行为冻结为特性化断言。若终局判定「零尺寸元素不应成为 Tab 端点」，
