@@ -2,7 +2,7 @@
 // 断言（浅/深主题）：卡片表面、弱化表头、语义边框、焦点环、禁用态、错误与状态徽标色
 // 全部解析自已定义 CSS 变量（与 :root / html[data-theme=dark] 解析值逐一比对）；
 // 输入/选择器 38px、按钮 ≥36px 普通档、图标按钮 ≥36×36（属性页当前无图标按钮，若引入必须满足下限）、
-// 同行控件垂直居中对齐。本 spec 的截图仅作为 testInfo 附件（prod-{状态}-{宽}x{高}-{主题}.png）；
+// 同行控件垂直居中对齐。本 spec 的截图仅作为 testInfo 附件（{状态}-{宽}x{高}-{主题}.png，见 attachScreenshot）；
 // 入库的同状态 Demo/生产对比图由验收时按相同视口、主题和状态显式复制附件到
 // .planning/memos/dst-manager/assets/PLAN-DM-016/（demo 侧由临时采集脚本生成，脚本不进入提交树），
 // 只使用 properties.ts 虚构夹具，不读取用户截图、真实工程或 sample/。
@@ -53,11 +53,12 @@ async function tokenFontFamily(page: Page, token: string): Promise<string> {
   }, token);
 }
 
-// 断言元素的计算字体族等于指定令牌的解析值
-async function expectTokenFontFamily(page: Page, selector: string, token: string) {
+// 断言元素的计算字体族等于指定令牌的解析值（接受 Locator 或选择器字符串，与 expectTokenValue 一致）
+async function expectTokenFontFamily(page: Page, target: Locator | string, token: string) {
   const expected = await tokenFontFamily(page, token);
-  const actual = await page.locator(selector).first().evaluate((el) => getComputedStyle(el).fontFamily);
-  expect(actual, `${selector} font-family 应来自 ${token}`).toBe(expected);
+  const locator = typeof target === "string" ? page.locator(target) : target;
+  const actual = await locator.first().evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(actual, `${typeof target === "string" ? target : target.toString()} font-family 应来自 ${token}`).toBe(expected);
 }
 
 // 读数值型自定义属性（如 `--line-height-body:1.5`）
@@ -180,6 +181,16 @@ for (const theme of THEMES) {
     await expectToken(page, ".value-panel .flag.error", "backgroundColor", "--color-danger-bg");
     await expectToken(page, ".value-panel .field-error", "color", "--color-danger");
     await expectToken(page, ".value-panel .value-item.invalid input", "borderTopColor", "--color-danger");
+    // Ruling 35：错误态（持久语义态）必须优先于 hover（瞬时可供性反馈）。原语的
+    // `.ui-input:not(.ui-input--invalid) .ui-input__control:hover:not(:disabled)` 把无效控件排除在
+    // 悬停强调之外，所以悬停无效字段时描边**仍为危险色**。源文本断言看不见「声明写了但被更高特异度
+    // 压掉」，只有真实 hover 后的计算样式能看见，故这里必须真的 hover。
+    const invalidInput = page.locator(".value-panel .value-item.invalid input").first();
+    // 守卫的前提：被 hover 的规则含 `:not(:disabled)`。若控件是 disabled，修正前后都会显示危险色，
+    // 本条会**假绿**并失去证明力，故必须显式断言可交互。
+    await expect(invalidInput, "hover 守卫的前提：无效字段控件必须处于可交互状态").toBeEnabled();
+    await invalidInput.hover();
+    await expectToken(page, ".value-panel .value-item.invalid input", "borderTopColor", "--color-danger");
     await expectToken(page, ".value-panel .value-item.invalid", "backgroundColor", "--color-danger-bg");
     await expectToken(page, ".error-summary", "borderTopColor", "--color-danger");
     await expectToken(page, ".error-summary", "backgroundColor", "--color-danger-bg");
@@ -295,16 +306,21 @@ for (const theme of THEMES) {
     await expectTokenValue(page, page.locator(".value-panel .head-actions .ui-button--primary"), "height", "--button-height", "box");
 
     // Step 1 点名的六个排版属性中，`font-family` 与 `line-height` 此前零断言（首轮评审 Important-2）：
-    // 折叠标题、导入导出、搜索、主次动作四组逐项锁定（height/padding/radius 已由上方令牌断言覆盖）。
+    // 折叠标题、导入导出、搜索、主次动作四组逐项锁定。上面已覆盖的高度类属性只是**部分**的：
+    // 导入导出有 min-height、搜索框有 height/width、主按钮有 height，而折叠标题只断言了 font-size，
+    // 次按钮没有任何结构尺寸断言；`padding` 与 `border-radius` 全文件各只有一条，且都落在
+    // **定义面板查询区**（搜索框的 `padding-left`、作用域筛选的 `border-radius`），**不覆盖**本四组元素。
+    // 搜索用 `valueSearch` 角色定位器而非 `.value-panel .ui-input__control` + `.first()`：后者顺序相关，
+    // DOM 顺序一变就会静默改指某个值项输入并继续通过，而「搜索」不再被覆盖。
     await expectTokenFontFamily(page, ".value-panel .head-title", "--font-ui");
     await expectTokenFontFamily(page, ".csv-panel .io-menu a", "--font-ui");
-    await expectTokenFontFamily(page, ".value-panel .ui-input__control", "--font-ui");
+    await expectTokenFontFamily(page, valueSearch, "--font-ui");
     await expectTokenFontFamily(page, ".value-panel .head-actions .ui-button--primary", "--font-ui");
     await expectTokenFontFamily(page, ".value-panel .head-actions .ui-button--secondary", "--font-ui");
     const bodyLineHeight = await tokenNumber(page, "--line-height-body");
     await expectLineHeightRatio(page, page.locator(".value-panel .head-title"), bodyLineHeight, "折叠标题");
     await expectLineHeightRatio(page, page.locator(".csv-panel .io-menu a"), bodyLineHeight, "导入导出");
-    await expectLineHeightRatio(page, page.locator(".value-panel .ui-input__control"), bodyLineHeight, "搜索输入");
+    await expectLineHeightRatio(page, valueSearch, bodyLineHeight, "搜索输入");
     await expectLineHeightRatio(page, page.locator(".value-panel .head-actions .ui-button--primary"), bodyLineHeight, "主按钮");
     await expectLineHeightRatio(page, page.locator(".value-panel .head-actions .ui-button--secondary"), bodyLineHeight, "次按钮");
 
