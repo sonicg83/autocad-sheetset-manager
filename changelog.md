@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-09-15（整改：MEMO-DM-036 审查发现 F1–F3）
+
+- **F1（P2，修复）**：[MEMO-DM-036](.planning/memos/dst-manager/2026-09-15-plan-dm031-code-review.md) 发现嵌套 COMMITTED manifest 的 `attempt` 未进入 `immutable_transaction_projection()`，篡改后 `recover()` 不报错而清单枚举静默丢弃。修复：`publish_journal.py` 的不可变投影纳入 `attempt`（旧平铺布局两侧均为缺失值，兼容比较不受影响）；新增回归测试 `test_startup_rejects_archived_manifest_attempt_tampering`（先红后绿），断言显式抛 `PUBLISH_MANIFEST_IMMUTABLE_MISMATCH` 且原始证据不被覆盖。独立行为提交 `9b4f831`。
+- **F2（P2，更正）**：[PLAN-DM-031](.planning/plans/dst-manager/PLAN-DM-031-publisher-attempt-namespace-and-split.md) 实际验证一节更正措辞——交付时执行的是 `tests/unit` + `tests/integration/test_api.py` 局部测试，不是仓库级全量；2026-09-15 补验仓库级 `uv run pytest -q`：**1504 项 / 1432 passed / 72 skipped / 0 failed**（junitxml 统计，exit 0）。审查环境报告的 2 个 `test_setup_bat.py` 中文输出编码断言失败未复现，属该审查调用环境的控制台编码问题，非 PLAN-DM-031 回归。
+- **F3（P3，承接）**：新建 [PLAN-DM-033](.planning/plans/dst-manager/PLAN-DM-033-publisher-remaining-split.md)（proposed）正式承接 `publisher.py` 剩余拆分——新增 `publish_apply.py` 与 `publish_rollback.py` 两个叶模块、publisher 暂留极薄私有委托，纯移动重构、application 层 import 零改动、只拆生产代码不拆测试文件；完成门禁 `publisher.py` ≤ 400 行、两个新模块各 ≤ 300 行、全量 `pytest -q` 通过。同步更新 PLAN-DM-031 偏差说明与 plans 索引。
+- **验证**：`uv run ruff check .` All checks passed；发布/恢复/守卫/日志/原语/事务恢复专项测试全绿；全量 `uv run pytest -q` 通过（见 F2 数据）。真实 AutoCAD 系统测试未执行（F1 修复不涉及 SCR、Worker 插件命令或真实 CAD 布局重建）。
+
+## 2026-09-15（备忘：PLAN-DM-031 提交代码审查）
+
+- **新增备忘**：[MEMO-DM-036](.planning/memos/dst-manager/2026-09-15-plan-dm031-code-review.md) 归档 `fab9174..b9cfadf` 共 11 个提交的只读代码审查结论。
+- **发现**：嵌套 COMMITTED manifest 的 `attempt` 未进入不可变投影，字段损坏时 `recover()` 不报错而清单枚举静默丢弃，可能令已提交任务无法完成数据库闭环；PLAN-DM-031 把 `tests/unit` 加单个 API 集成文件误记为“全量测试”；`publisher.py` 仍为 721 行、`test_publish_recovery.py` 为 887 行，容量目标未完成且没有正式后续 Plan。
+- **后续拆分建议**：MEMO-DM-036 的 F3 已补充经用户确认的“两个叶模块 + `publisher.py` 编排门面”方案——新增 `publish_apply.py` 承载正向应用与结果校验，新增 `publish_rollback.py` 承载回滚、身份保护与清理，publisher 暂留极薄私有委托以维持恢复鸭子调用和故障注入语义；后续只拆生产代码，不拆测试文件，目标为 publisher 不超过 400 行、两个新模块各不超过 300 行。
+- **验证**：`git diff --check fab9174..b9cfadf`、`uv run ruff check .` 与发布/恢复专项测试通过；当前 RTK 调用环境下 `uv run pytest -q` 有 2 个范围外 `setup.bat` 中文输出编码断言失败，报告未将其归因为 PLAN-DM-031 回归，也未宣称仓库全量测试通过。未修改生产代码与测试代码。
+
 ## 2026-09-14（修复：PLAN-DM-031 全分支评审发现的文档矛盾与守卫测试缺口）
 
 - **`ADR-DM-004`**：文末追加第二次补记，声明 2026-09-14 第一次补记中的目录复用契约（证明一致后复用修订目录、回收与基准逐字节相同的 `.replaced` 替换备份、`superseded-journals/` 留档）已被 PLAN-DM-031 的 attempt 嵌套命名空间整体取代并废止；重试永远写入新 `attempt-NNN/` 目录，所有 attempt 的 journal、before 快照与终态记录永久保留。旧补记原文不动。

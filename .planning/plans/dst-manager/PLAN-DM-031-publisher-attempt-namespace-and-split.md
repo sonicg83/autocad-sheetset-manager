@@ -5,7 +5,7 @@ status: completed
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 related:
   - ARCH-DM-001
   - PLAN-DM-028
@@ -957,8 +957,8 @@ git commit -m "docs: PLAN-DM-031 嵌套命名空间与 publisher 拆分完成归
 10 个任务全部实施完成（9 个实现提交，`b248ff1` 至 `77bca26`，均在 main 分支），交付前全量验证结果如下（2026-09-14）：
 
 - **静态检查**：`uv run ruff check .` 全部通过（最新代码）。
-- **全量测试**：`uv run pytest tests/unit -q` → **1262 passed / 4 skipped / 0 failed**（skip 均为 CAD 真实测试默认跳过）；`uv run pytest tests/integration/test_api.py -q` 通过。Task 2 切换写入布局时曾跑全量 `tests/unit` + `tests/integration/test_api.py`：**1330 passed / 4 skipped / 0 failed**。
+- **测试**（措辞更正，见 MEMO-DM-036 F2）：交付时实际执行的验证为**局部测试**，不是仓库级全量——`uv run pytest tests/unit -q` → **1262 passed / 4 skipped / 0 failed**（skip 均为 CAD 真实测试默认跳过）；`uv run pytest tests/integration/test_api.py -q` 通过。Task 2 切换写入布局时曾执行 `tests/unit` + `tests/integration/test_api.py`：**1330 passed / 4 skipped / 0 failed**。这两条命令未覆盖其余 integration、脚本与其他测试目录。**2026-09-15 整改补验**：在可复现标准控制台编码的环境执行仓库级 `uv run pytest -q` → **1432 passed / 72 skipped / 0 failed**（exit 0），全量门禁现已补齐；MEMO-DM-036 审查环境报告的 2 个 `test_setup_bat.py` 中文输出编码断言失败未复现，属该审查调用环境的控制台编码问题，不是本计划引入的回归。
 - **行数统计（PowerShell `Measure-Object -Line`）**：
   - 拆分后模块：`publisher.py` **721 行**（超出计划 500-600 预期，见下方偏差说明）、`publish_errors.py` 约 38 行、`publish_primitives.py` 约 96 行、`publish_journal.py` 75 行、`publish_recovery.py` 约 248 行。
   - 测试拆分：`test_publisher.py` 567 行、`test_publish_recovery.py` 887 行（brief 主题映射将 27 个恢复类测试指定到同一文件）、`test_publish_guards.py` 307 行、`test_publish_journal.py` 150 行、`test_publish_primitives.py` 100 行。
-- **偏差说明（publisher.py 721 行）**：计划对 Task 8 迁移量的算术预期有误——恢复与清单枚举外移后，`publisher.py` 仍保留发布/回滚/提交编排路径中使用的原语调用，未达到 500-600 区间。依赖方向（`publish_recovery` 不 import `publisher`，首参鸭子类型）与接口契约（re-export 全部公共名、application 层 import 零改动）均已达成；残留回滚/提交原语的外移留作后续计划，本计划不追加行为或结构性改动。
+- **偏差说明（publisher.py 721 行）**：计划对 Task 8 迁移量的算术预期有误——恢复与清单枚举外移后，`publisher.py` 仍保留发布/回滚/提交编排路径中使用的原语调用，未达到 500-600 区间。依赖方向（`publish_recovery` 不 import `publisher`，首参鸭子类型）与接口契约（re-export 全部公共名、application 层 import 零改动）均已达成；残留回滚/提交原语的外移已由 [PLAN-DM-033](PLAN-DM-033-publisher-remaining-split.md) 正式承接（2026-09-15，依据 MEMO-DM-036 F3），本计划不追加行为或结构性改动。
