@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-15（Task 7 派发前侦察与 T7-1 裁定，PLAN-DM-029）
+
+- **侦察工具**：`controller-task-7-baseline.mjs`（复算例外基线 + 找孤儿 + 对全部 `RAW_VISUAL_PROPERTIES` 逐值查令牌可用性）。
+- **实测**：Task 7 名下 **74** 条 = Files 内 **65** + `SheetTree.vue` **9**。后者**非缺陷**——计划第 715 行已登记「SheetTree.vue(9，只在 Task 10 Files)」且 Task 10 确实列了它。
+- **★ 预判到 Task 6 撞过的同一面墙**：60 条裸值去重后 17 个值，其中多例只有**值等值但语义不符**的令牌（`180px`→`--compare-item-max-height`、`220px`→`--catalog-template-select-min-width`（还是 Task 6 的目录域！）、`280px`→`--panel-search-width`、`44px`→`--definition-row-height`、`20px`→`--icon-size-lg`），以及 5 个**完全无令牌**的值（380/260/15/17/10px）。
+- **T7-1 裁定（预先下达，避免 worker 再次停下请裁定）**：
+  - **(A)** 开放 `tokens.css`，**仅追加 9 个**组件层结构令牌（逐字等值、零视觉变化）：`--sheet-columns-panel-width:380px`、`--sheet-search-width:260px`、`--sheet-property-search-width:180px`、`--sheet-bulk-hint-max-width:220px`、`--sheet-table-window-min-height:130px`、`--sheet-title-max-width:280px`、`--sheet-table-row-height:44px`、`--sheet-table-line-height:20px`、`--sheet-status-radius:10px`。
+  - **(B)** 明列**禁止借用**清单（语义说谎，Ruling 33/35/39 口径）。
+  - **(C)** 明列**允许借用**（38/36/34px → 控件档；13/12/14px → 字号档；`--radius-lg` 12px）。
+  - **(D) ★ 字号 15px/17px 不新增令牌，保留 4 条显式例外**（责任 K）。并确立**原则性区分**：**几何量没有「设计档位」语义 → 可自由令牌化并保值；字号代表排版层级 → 不得由页面迁移任务自行发明新档位**——这正是 Task 6 能加 7 个结构令牌、而字号缺口始终登记为责任 K 的原因。
+  - **(E)** `raw-hex-color` 那 1 条的 hex 在 `var()` **死 fallback** 里 → 清退死 fallback，不得原样留下。
+  - **(F)** 订正 Step 6 措辞（原文「清零」**不可达**）：明示两类保留（`SheetTree` 9 条 → Task 10；字号 4 条 → 责任 K）。
+  - **(G)** 收口不变量：清退 **61** 条 → 全表 **186 → 125**；`check:ui` 裸违规 **126 = 125 + 1**。
+  - **(H)** `SheetToolbar.vue` 的 1 条 `unicode-structure-icon` 必须走与 Task 6 Step 3 同构的四条判据复核程序，判保留时 `expiresWith` 需改写，不得留假到期债务。
+
 ## 2026-09-15（Task 6 正式关闭 + 责任 R 裁定，PLAN-DM-029）
 
 - **Step 7b 人工门禁：用户确认通过**（第二轮比对，针对修复后的状态）→ **Task 6 正式关闭**。Step 1–8 全部完成，三轮独立评审闭环。

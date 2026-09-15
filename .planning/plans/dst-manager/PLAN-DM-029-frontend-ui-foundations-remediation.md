@@ -475,9 +475,54 @@ Files（本轮）：
 - [ ] **Step 3（动态变量）**：对图纸树宽度等运行时 CSS 变量，在白名单中同时登记写入方与消费方；能改为静态令牌的变量立即清退，不以 fallback 隐藏未定义变量。
 - [ ] **Step 4（密集布局）**：在 `900/1024/1120/1440` 四视口验证批量编辑区不撑破表格、操作列可达、横向滚动条不遮挡内容；关键控件 200% 浏览器韧性测试通过。
 - [ ] **Step 5（正交证据）**：保存浅/深默认、批量编辑启用、批量编辑禁用、最窄视口、200% 共 6 张。
-- [ ] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
+- [ ] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项（**9 条，属 Task 10 Files**）外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
+  - **原措辞为计划缺陷（T7-1(F) 订正）**：原文未含字号保留项，但 `15px`/`17px` **无可借值等值令牌且不得新增字号令牌**（T6-3/Ruling 38）→ 必须保留 **4 条**显式例外（`expiresWith` = 责任 K）。先例：Ruling 39 订正 Task 6 Step 6。
+  - **收口不变量（T7-1(G)）**：Task 7 清退 **61** 条 = 65 − 4（保留字号例外）→ 全表 **186 → 125**；`check:ui` 裸违规应为 **126 = 125 + 1 动态白名单**。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
 - [ ] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
+
+#### Task 7 控制器裁定（T7-1，派发前下达）
+
+**T7-1（令牌/借用政策：预先避开 Task 6 撞过的塔）**。Task 6 的 worker 因「结构尺寸无令牌」在第 6 步停下请裁定（Ruling 39）。控制器已对 Task 7 做同类侦察（`controller-task-7-baseline.mjs`），**同样的塔会重现，故提前裁定**。
+
+**侦察实测**：Task 7 名下 **74** 条 = Files 内 **65**（raw-visual-value 60、visible-input-label 2、raw-hex-color 1、unicode-structure-icon 1、explicit-button-type 1）+ `SheetTree.vue` **9**（只在 Task 10 Files，**已在计划第 715 行登记，非缺陷**）。65 条中的 60 条裸值去重后共 **17 个值**。
+
+**(A) 开放 `tokens.css`：仅追加以下 9 个组件层令牌（取值逐字等值、零视觉变化、按角色/域命名）**：
+
+| 令牌 | 值 | 消费处 |
+|---|---|---|
+| `--sheet-columns-panel-width` | `380px` | `ColumnSettings.vue` 列设置弹层宽 |
+| `--sheet-search-width` | `260px` | `SheetToolbar.vue` `.search-box input` |
+| `--sheet-property-search-width` | `180px` | `SheetPropertyEditor.vue` `.editor-search input` |
+| `--sheet-bulk-hint-max-width` | `220px` | `SheetToolbar.vue` `.bulk-hint` |
+| `--sheet-table-window-min-height` | `130px` | `SheetTable.vue` 表格窗口 |
+| `--sheet-title-max-width` | `280px` | `SheetTable.vue` `.title-text` |
+| `--sheet-table-row-height` | `44px` | `SheetTable.vue` `th,td` 行高 |
+| `--sheet-table-line-height` | `20px` | `SheetTable.vue` `th,td` 行盒高 |
+| `--sheet-status-radius` | `10px` | `SheetTable.vue` `.status` 胶囊圆角 |
+
+**(B) 禁止借用（值等值但语义不符 —— 语义说谎，按 Ruling 33/35/39 驳回）**：
+- `180px` → `--compare-item-max-height` / `--workspace-name-max-width`（一个是对比卡最大高、一个是工作区名最大宽）
+- `130px` → `--workspace-name-max-width-narrow`
+- `220px` → `--catalog-template-select-min-width`（**还是 Task 6 的目录域令牌，跨域借用更严重**）
+- `280px` → `--panel-search-width`
+- `44px` → `--definition-row-height`（属性定义表行高 ≠ 图纸表行高，借用会把两个功能域耦合）
+- `20px` → `--icon-size-lg`（图标尺寸 ≠ 行高）
+
+**(C) 允许借用（语义正确）**：`38px` → `--control-height-form`/`--input-height`；`36px` → `--control-height-default`/`--button-height`；`34px` → `--control-height-compact`；`13px` → `--font-label`/`--font-table`；`12px` → `--font-caption`；`14px` → 借组件令牌 `--button-font-size`/`--input-font-size`（**不得用 primitive `--font-size-14`**，同 Ruling 38）；`.chip border-radius:12px` → `--radius-lg`（12px 是真半径档）。
+
+**(D) ★ 字号 15px / 17px：不新增字号令牌，保留为显式例外**（沿用 T6-3 / Ruling 38 政策 + 责任 K）。
+- 这两个值**无值等值的可借令牌**（实测），而 T6-3 已定「不新增字号令牌」→ **保留为例外**，`expiresWith` 写「下一次字号阶修订（责任 K，Task 12）」。
+- `15px` 有 **3** 个消费者且语义相同（均为面板/区块标题）：`ColumnSettings.vue:109 .cols-title`、`SheetOperationForm.vue:312 .form-head h3`、`SheetPropertyEditor.vue:105 .editor-head h3`；`17px` **1** 个：`SheetToolbar.vue:181 .range-title`。
+- **原则性区分（重要，防止与 Task 6 自相矛盾）**：**几何量**（宽/高/最小高/最大宽/行高/圆角）**没有「设计档位」语义** → 可以自由令牌化并保值；**字号代表排版层级** → **不得由页面迁移任务自行发明新档位**，必须交 Spec 归属方。这正是 Task 6 能加 7 个结构令牌、而字号缺口一直登记为责任 K 的原因。
+
+**(E) `raw-hex-color`（1 条）**：`ColumnSettings.vue:107` 的 `box-shadow:var(--shadow-2,0 8px 24px #17203333)`——hex 在 **`var()` 的死 fallback** 里（`--shadow-2` 已定义）。修法：**清退死 fallback** 或把 fallback 里的颜色换成令牌；**不得原样留下**。同见 Step 3「不以 fallback 隐藏未定义变量」。
+
+**(F) Step 6 措辞需订正（先例：Ruling 39 订正 Task 6 Step 6）**：原文「图纸页视觉值、按钮和 label 例外清零」**不可达**，必须明示两类保留：① `SheetTree.vue` 结构项 **9 条**（Task 10）；② `15px`/`17px` 字号例外 **4 条**（责任 K）。
+
+**(G) 收口不变量（控制器实测预告）**：Task 7 清退 **61** 条（65 − 保留的 4 条字号例外）→ 全表 **186 → 125**；`check:ui` 裸违规应为 **126 = 125 + 1 动态白名单**。
+
+**(H) `SheetToolbar.vue` 的 `unicode-structure-icon`（1 条）必须走与 Task 6 Step 3 同构的复核程序**（T6-4 的四条判据：可点面积 ≥32px、有 accessible name、原生 button 键盘可及、同状态截图不劣化）；判迁移则用 `UiIconName` 联合类型（已含 `chevron-*`/`close`），判保留则**必须**把 `expiresWith` 改为「下一次图纸页视觉 Spec 修订」而不得继续写 `PLAN-DM-029 Task 7`。
 
 ### Task 8: 迁移设置中心
 
