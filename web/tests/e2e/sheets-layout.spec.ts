@@ -502,6 +502,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await openWorkspace(page, "light");
     const search = page.locator(".search-box input");
     await expectToken(page, search, "width", "--sheet-search-width");
+    // 绝对锚：expectToken 只证明「属性取自该令牌」——若令牌自身取值漂移，两侧同时变化仍会通过。
+    // 故对本次新增的结构令牌再钉一次字面值，让「值保持」也机械可查（对应责任 S）。
+    await expect(search).toHaveCSS("width", "260px");
     await expectToken(page, search, "height", "--control-height-form");
     await page.locator(".filter-toggle").click();
     await expectToken(page, page.locator(".toolbar-filters select").first(), "height", "--control-height-form");
@@ -536,6 +539,20 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, controls.locator("select").first(), "height", "--control-height-form");
     // 未选属性 → 加入草稿禁用（行为不变）
     await expect(controls.locator("button").last()).toBeDisabled();
+    // T7-1(A) 第 4 个令牌的消费点：bulkMode=clear 分支渲染 .bulk-hint
+    await controls.locator("select").first().selectOption("clear");
+    await expectToken(page, page.locator(".bulk-hint"), "max-width", "--sheet-bulk-hint-max-width");
+    await expect(page.locator(".bulk-hint")).toHaveCSS("max-width", "220px");
+  });
+
+  test("行状态徽章令牌：取值钉住", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    // `.status` 徽章只在行处于「待变更」或有诊断时渲染（SheetTable.vue:100-102）；
+    // pendingSheetIds 由壳层根据草稿计算，图纸页固定装置不产这两种行状态（已实测：
+    // 选中行 + 批量修改属性 + 点「加入草稿」后仍无 .status.pending）。
+    // 故此处钉**令牌取值本身**；消费者存在性由 check:ui 的变量定义/引用规则保证。
+    expect(await resolveToken(page, "--sheet-status-radius", "border-top-left-radius"), "--sheet-status-radius 必须解析为 10px").toBe("10px");
   });
 
   test("表格结构令牌：行高、行盒高、窗口最小高与表内字号", async ({page}) => {
@@ -546,6 +563,11 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, page.locator("th").first(), "line-height", "--sheet-table-line-height");
     await expectToken(page, page.locator(".sheet-table-window"), "min-height", "--sheet-table-window-min-height");
     await expectToken(page, page.locator(".title-text").first(), "max-width", "--sheet-title-max-width");
+    // 绝对锚（同责任 S）：结构性令牌的字面值也不得漂移
+    await expect(page.locator("th").first()).toHaveCSS("height", "44px");
+    await expect(page.locator("th").first()).toHaveCSS("line-height", "20px");
+    await expect(page.locator(".sheet-table-window")).toHaveCSS("min-height", "130px");
+    await expect(page.locator(".title-text").first()).toHaveCSS("max-width", "280px");
   });
 
   test("列设置面板：宽度令牌与保留的 15px 标题字号", async ({page}) => {
@@ -555,6 +577,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     const panel = page.locator(".cols-panel");
     await expect(panel).toBeVisible();
     await expectToken(page, panel, "width", "--sheet-columns-panel-width");
+    await expect(panel).toHaveCSS("width", "380px");
     // 15px 保留为显式例外（责任 K）：此处钉住当前值，防被顺手改动
     await expect(panel.locator(".cols-title")).toHaveCSS("font-size", "15px");
   });
@@ -568,5 +591,18 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, form.locator("input").first(), "height", "--control-height-form");
     await expectToken(page, form.locator("select").first(), "height", "--control-height-form");
     await expectToken(page, form.locator("button").first(), "min-height", "--control-height-default");
+  });
+
+  test("行内属性编辑器：搜索框宽度令牌与保留的 15px 标题字号", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    // 行内属性编辑器（SheetTable 内）——续轮补上 T7-1(A) 第 3 个令牌的覆盖缺口
+    await page.getByRole("button", {name: "编辑属性"}).first().click();
+    const editor = page.getByRole("region", {name: /属性编辑/});
+    await expect(editor).toBeVisible();
+    await expectToken(page, editor.locator(".editor-search input"), "width", "--sheet-property-search-width");
+    await expect(editor.locator(".editor-search input")).toHaveCSS("width", "180px");
+    // 15px 第 2 个消费者（3 处之一是 .editor-head h3）：同样保留为显式例外（责任 K），钉住当前值防顺手改动
+    await expect(editor.locator(".editor-head h3")).toHaveCSS("font-size", "15px");
   });
 });
