@@ -1,6 +1,6 @@
 // PLAN-DM-017 实现截图：仅使用虚构夹具，不代表已完成 Demo 同状态视觉验收。
 // 普通回归只生成测试附件；持久证据由验收时显式复制，避免自动改写仓库文件。
-// PLAN-DM-029 Task 7 的 6 张持久证据（`task7-*.png`）已按此约定显式复制到：
+// PLAN-DM-029 Task 7 的 7 张持久证据（`task7-*.png`：6 张正交 + 1 张浮层诊断修复后）已按此约定显式复制到：
 //   docs/dst-manager/specs/assets/SPEC-DM-009/production/
 // 刻意**不**为本 spec 增加 env 开关自动写库：图纸目录页那套（`DST_MANAGER_WRITE_G8_EVIDENCE`）
 // 会连带无条件覆盖既有验收资产，已登记为责任 T。

@@ -5,6 +5,8 @@
 // 同行控件垂直居中对齐。本 spec 的截图仅作为 testInfo 附件（{状态}-{宽}x{高}-{主题}.png，见 attachScreenshot）；
 // 入库的同状态 Demo/生产对比图由验收时按相同视口、主题和状态显式复制附件到
 // .planning/memos/dst-manager/assets/PLAN-DM-016/（demo 侧由临时采集脚本生成，脚本不进入提交树），
+// 而本计划（PLAN-DM-029）自身的持久证据则落在 .planning/memos/dst-manager/assets/PLAN-DM-029/：
+// 属性页的 5 张 `properties-*.png` 即在该目录（本 spec 不自动写库，由验收时显式复制）。
 // 只使用 properties.ts 虚构夹具，不读取用户截图、真实工程或 sample/。
 //
 // PLAN-DM-029 任务 5 增补：属性页的控件视觉基础（字号档、控件高度、结构尺寸）必须由语义/组件令牌解析。
