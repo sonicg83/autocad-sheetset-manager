@@ -171,10 +171,21 @@ async function copyDiag(item:Diagnostic){
 .ov-fold{align-self:center;flex-shrink:0;margin-left:auto}
 .ov-body{flex:1;overflow:auto;padding:var(--space-4);min-height:0}
 .ov-empty{color:var(--color-text-muted);font-size:var(--font-label)}
-.ov-diagnostics summary{cursor:pointer;font-weight:500}
+/* 诊断面板的可点控件必须过全局最小可点高度（ARCH-DM-007 §4.1：--tap-target-min = 32px）。 */
+.ov-diagnostics summary{cursor:pointer;font-weight:500;min-height:var(--tap-target-min)}
 .diagnostics{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
 .diagnostics li{display:flex;gap:8px;align-items:flex-start;font-size:var(--font-label);line-height:1.6;color:var(--color-text-primary)}
 .diag-text{flex:1;min-width:0;word-break:break-word}
-.diag-copy{flex-shrink:0;border:1px solid var(--color-border-subtle);background:none;color:var(--color-text-secondary);border-radius:var(--radius-sm);padding:1px 8px;font-size:var(--font-caption);cursor:pointer;font-family:inherit}
+/* `width:auto` 是必需的，不要删：本组件根元素是 `<aside>`，命中 `legacy.css` 的
+   `:where(#app) aside button{display:flex;justify-content:space-between;width:100%;border:0}`（:where 不带特异性，
+   但它是 width 的**唯一声明方**，所以照常生效）。`.diag-copy` 自带 `flex-shrink:0`，拿到 width:100% 后
+   会独占整行，把 `.diag-text`（flex:1;min-width:0）挤成 0 宽 → `word-break:break-word` 导致
+   **诊断文本每行只显示一个字符**。此处显式收回宽度，内边距/圆角/字号仍自行声明。
+   min-height 同样为满足 ≥32px 可点下限（实测原为 23px）。
+
+   为何本地声明能压过 legacy 层（本仓非显然事实）：组件 scoped 样式是**无层级**（unlayered）的，
+   而 CSS 级联中**无层级声明胜过任何 `@layer` 内的声明**（层顺序只在层与层之间比较）——
+   所以这里不需要 `!important`；反之，若把本规则挪进某个 `@layer`，它就会输给 `legacy.css`。 */
+.diag-copy{width:auto;min-height:var(--tap-target-min);flex-shrink:0;border:1px solid var(--color-border-subtle);background:none;color:var(--color-text-secondary);border-radius:var(--radius-sm);padding:1px 8px;font-size:var(--font-caption);cursor:pointer;font-family:inherit}
 .diag-copy:hover{color:var(--color-text-primary);border-color:var(--color-border-strong)}
 </style>
