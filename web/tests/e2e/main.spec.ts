@@ -1,4 +1,4 @@
-import {expect,test,type Page} from "@playwright/test";
+import {expect,test,type Page,type TestInfo} from "@playwright/test";
 import {writeFileSync} from "node:fs";
 import {buildPreviewFromBase, installSheetsFixture} from "./fixtures/sheets";
 import {openSettingsDialog} from "./fixtures/settings";
@@ -1901,5 +1901,124 @@ test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
     // 空草稿下撤销/重做/清空/预览均禁用（行为不变）
     await expect(pop.getByRole("button",{name:"撤销"})).toBeDisabled();
     await expect(pop.getByRole("button",{name:"重做"})).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-DM-029 Task 9 Step 5：旧页面四张持久证据（依 T9-2 裁定）
+// 落点：`docs/dst-manager/specs/assets/SPEC-DM-006/production/`（SPEC-DM-006 是桌面 UI/UX 的
+// 总纲 Spec，旧页面归它；先例：T7-4 新建了 SPEC-DM-009 的资产目录）。
+// 落盘方式与 `settings-extensions-production-evidence.spec.ts` 一致：截图**只作 testInfo 附件**，
+// 验收时**显式复制**到资产目录——**刻意不加 env 开关自动写库**（目录页那套会无差别覆盖
+// 其它 Spec 的既有验收资产，已登记为责任 T）。
+// 证据组落在本文件（而不另建 `*-visual-evidence.spec.ts`）是 T9-2 的刻意裁定：四张图的
+// 夹具流程（欢迎、修订、修复、任务事件）**已在本文件**，另建文件会重复不易写的夹具逻辑。
+// 每张图都配**计算样式或几何断言**，并先断言被证对象已入视口，避免“有图无证据”与
+// “拍到的不是该状态”（`toBeInViewport()` 默认 ratio 0 只要求任意相交）。
+async function shootLegacyEvidence(page: Page, info: TestInfo, name: string): Promise<void> {
+  const file = info.outputPath(name);
+  await page.screenshot({path: file, animations: "disabled"});
+  await info.attach(name, {path: file, contentType: "image/png"});
+}
+
+// 把语义令牌解析成当前主题下的计算色值（不能直接比 getPropertyValue 的原文）
+async function resolveDangerToken(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-danger)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
+}
+
+test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
+  test("t9-01 欢迎默认：未打开态浅色（welcome-card）", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto("/");
+    const card = page.locator(".welcome-card");
+    await expect(card).toBeVisible();
+    await expect(card).toBeInViewport();
+    // 与断言轮同一口径：主操作 38px 表单档、卡片宽度上限 520px 逐字等值
+    expect(await page.locator(".welcome-card .primary").evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
+    expect(await card.evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    await shootLegacyEvidence(page, info, "t9-01-welcome-default-1280x720-light.png");
+  });
+
+  test("t9-02 修订危险确认：确认模态危险层级浅色", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    await page.getByRole("button",{name:"恢复为新修订"}).click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(modal).toBeVisible();
+    await expect(modal).toBeInViewport();
+    const danger = modal.getByRole("button",{name:/确认恢复/});
+    await expect(danger).toBeVisible();
+    // 勾选不可逆确认：让危险按钮处于**可用**态取景（禁用态带 opacity:.5，不能体现危险层级）
+    await modal.getByRole("checkbox").check();
+    await expect(danger).toBeEnabled();
+    // Task 6 的红底红字回归守卫口径：危险按钮文字色不得等于底色
+    const colors = await danger.evaluate(el => {const css = getComputedStyle(el); return {color: css.color, background: css.backgroundColor};});
+    expect(colors.color, "危险确认按钮文字色不得与底色相同").not.toBe(colors.background);
+    expect(colors.background, "危险按钮底色应取自 --color-danger").toBe(await resolveDangerToken(page));
+    await shootLegacyEvidence(page, info, "t9-02-revision-danger-confirm-1280x720-light.png");
+  });
+
+  test("t9-03 修复错误：阻断问题只读态浅色", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    const blocked:any=workspaceVersion("workspace-1","测试图纸集","revision-1");
+    blocked.dst_validation={status:"INVALID_REPAIR_REQUIRED",actions:[],blocking_issues:[{code:"REPAIR_UNSUPPORTED_ENCODING",message:"无法解析 DST 文件编码",severity:"error"}]};
+    await page.route("**/api/workspaces/open",route=>route.fulfill({json:blocked}));
+    await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:blocked}));
+    await openWorkspace(page);
+    // 修复面板在任务浮层的诊断页签（与 :608 的修复流程同一路径）
+    const overlay=page.getByRole("complementary",{name:"任务浮层"});
+    await overlay.getByRole("button",{name:"展开任务浮层"}).click();
+    await overlay.getByRole("tab",{name:"诊断"}).click();
+    const panel = page.locator(".repair");
+    await expect(panel).toBeVisible();
+    await expect(panel).toBeInViewport();
+    await expect(page.getByText("DST 修复状态：需要人工修复")).toBeVisible();
+    await expect(page.getByText(/存在阻断问题/)).toBeVisible();
+    await expect(page.getByText("阻断原因（1）")).toBeVisible();
+    await shootLegacyEvidence(page, info, "t9-03-repair-error-1280x720-light.png");
+  });
+
+  test("t9-04 深色任务状态：浮层实施进度同状态", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+    await installMockEventSource(page);
+    await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+    await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-evidence",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+    await openWorkspace(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+    // 必须先由应用产生任务：对**未知**任务 id 的 SSE 事件会被忽略（既有用例均先经「确认写入」）
+    await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+    await page.getByRole("button",{name:"预览变更"}).click();
+    await page.getByRole("button",{name:"确认写入"}).click();
+    await confirmModal(page,/确认发布/);
+    await expect(page.getByText("任务进行中")).toBeVisible();
+    // 确认写入后浮层已被应用自动展开（既有用例随后即「收起」可证），因此这里不点「展开」；
+    // 只在未停在进度页签时切换，避免因“已经展开”而找不到展开按钮。
+    const overlay=page.getByRole("complementary",{name:"任务浮层"});
+    const progTab=overlay.getByRole("tab",{name:"实施进度"});
+    if ((await progTab.getAttribute("aria-selected")) !== "true") await progTab.click();
+    await expect(progTab).toHaveAttribute("aria-selected","true");
+    await page.evaluate(()=>(window as any).__emitJob({id:"job-evidence",workspace_id:"workspace-1",status:"ROLLED_BACK",progress:100,attempt:1,error_code:"PUBLISH_ROLLED_BACK",error_detail:"发布日志写入失败：[WinError 5] 拒绝访问",files:[]}));
+    const job = page.locator(".job-detail");
+    await expect(job).toBeVisible();
+    await expect(job).toBeInViewport();
+    await expect(page.getByText("任务 job-evidence")).toBeVisible();
+    await expect(job.getByText("PUBLISH_ROLLED_BACK")).toBeVisible();
+    // 计算样式断言：深色下抽屉底色必须取自当前主题的 --color-bg-surface（不得硬编码浅色）
+    const drawerBg = await page.locator(".task-drawer").evaluate(el => {const probe=document.createElement("span");probe.style.color="var(--color-bg-surface)";el.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {actual:getComputedStyle(el).backgroundColor,expected};});
+    expect(drawerBg.actual, "深色下抽屉底色应取自 --color-bg-surface").toBe(drawerBg.expected);
+    await shootLegacyEvidence(page, info, "t9-04-task-status-1280x720-dark.png");
   });
 });
