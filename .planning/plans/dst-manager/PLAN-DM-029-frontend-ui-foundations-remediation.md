@@ -319,7 +319,8 @@ Files（本轮）：
   - **收口不变量**：Task 6 名下原 **75** 条（74 Files 内 + 1 `CompatibilitySummary.vue`）→ 清退 69 条 `raw-visual-value` + 2 条 `visible-input-label`，保留 3 条 → **终态 186 条 = 258 − 75 + 3**；`check:ui` 裸违规 **187 = 186 + 1 动态白名单**。
 - [x] **Step 7a（自动验证，控制器亲跑）**：`check:ui` **EXIT 0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。未跑全量 e2e（控制器收口时跑）。详见 T6-11。
   - **评审轮后重跑（T6-12 落地后）**：spec **0**（**91 passed / 0 failed / 0 flaky**）、`check:ui` **0**；5 张 t6 PNG 已按终态重采入库。
-- [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。**实现与三轮评审均已闭环（T6-14），仅余此项。** 5 张持久 PNG 已入库：`docs/dst-manager/specs/assets/SPEC-DM-012/production/t6-{save-light-1440x1000,save-dark-1440x1000,save-disabled-light-1440x1000,delete-danger-light-1440x1000,narrow-900x700-light}.png`。
+- [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。**实现与三轮评审均已闭环（T6-14）。** 5 张持久 PNG 已入库：`docs/dst-manager/specs/assets/SPEC-DM-012/production/t6-{save-light-1440x1000,save-dark-1440x1000,save-disabled-light-1440x1000,delete-danger-light-1440x1000,narrow-900x700-light}.png`。
+  - **第一轮人工比对结果：发现缺陷**（删除确认对话框红色按钮文字不可见）→ 已诊断、修复、变异自证、全量 e2e 514 passed（详见 **T6-15**），相关证据 PNG 已按修复后状态重采。**需用户重新比对确认。**
 - [x] **Step 8（提交）**：本任务实际分为逐步提交（超时/崩溃后不再丢进度）：`eb7fa66` 承接迁移 → `43e5a72` 断言 → `2926cfb`/`392e8a3` 高度归一 → `7d3a214` 例外清退 → `b229729` 证据 spec → `387efb5` 证据入库与断言稳定性修正；报告 `task-6-report.md`。原计划的单一提交 `统一图纸目录页控件视觉基础` 被逐步提交取代（运维必要性，非计划偏离）。
 
 #### Task 6 控制器裁定（T6-1 … T6-6，派发前下达）
@@ -428,6 +429,18 @@ Files（本轮）：
 - **例外表**：目录页 **75 → 3**，全表 **258 → 186**（`186 = 258 − 72`）。
 - **仅剩 Step 7b 人工门禁未做**（需用户对照其第 2 张缺陷截图，该截图未入库），以及已单独登记的责任 A–U（Task 12 收口）。
 - **提交链**：`eb7fa66` → `43e5a72` → `2926cfb` → `392e8a3` → `7d3a214` → `b229729` → `387efb5` → `aec713e` → `416d11d`（+ 控制器计划/changelog 提交 `b11306c`/`6097924`/`08e0bd7`/`ad777e5`/`c4ef846`）。
+
+**T6-15（Step 7b 人工门禁发现的应用级缺陷与修复 —— 用户报告）**：用户在对照第 2 张截图时报告「`t6-delete-danger-light-1440x1000.png` 中删除模板确认对话框的红色按钮文字没有显示」。
+
+- **根因（已浏览器实测确认，非推理）**：`legacy.css:36` 的通用规则 `.danger,.error{color:var(--color-danger)}` 在 **legacy 层**，与 `primitives.css` 的 `.modal-actions button.…danger{color:var(--color-on-accent)}` 在 **primitives 层**——而**层顺序优先于选择器特异性** → legacy 层静默胜出 → `color` 与 `background` 都是 `--color-danger`，红底红字。实测：`{"text":"删除","color":"rgb(194, 48, 43)","bg":"rgb(194, 48, 43)","opacity":"1"}`。
+- **影响面**：`ConfirmModal` 是共享原语，`danger: true` 的调用点共 **8 处**（`App.vue` 关闭工作区/删除子集/发布、设置面板、CSV 导入、修复、恢复、目录页）→ **全部**确认按钮文字不可见。
+- **归因：不是 Task 6 引入**。Task 6 对 `styles/` 只改了 `tokens.css`（+7 行令牌）。该回归由**分层工作本身**引入（`b0786d7 统一前端字体令牌与样式分层` = 本计划 Phase 1）：分层前高特异性规则胜出，分层后 legacy 层无视特异性胜出。
+- **修复（不动被广泛依赖的通用 `.danger`，而是给原语修饰类做命名空间化）**：`ConfirmModal.vue` 的 `:class="{danger}"` → `:class="{'modal-danger': danger}"`，`primitives.css` 同名规则同改；并去掉 `.modal-irr` 上冗余的 `{danger}`（其颜色由 `.modal-irr` 无条件提供）。
+- **回归守卫（已变异自证）**：断言危险按钮 `color` **等于 `--color-on-accent`** 且 **不等于 background**；把类名改回 `danger` 时该用例**红**且报错正是预期那条。
+- **系统性扫描（`controller-layer-collision.mjs`）**：两层「同名 class 且属性重叠」——修复前 **1 个**（恰好就是 `.danger`/`color`，**别无他例**），修复后 **0 个**。
+- **验证**：原语被 8 处调用，故跑**全量 e2e**：**514 passed / EXIT 0**；`check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（104）、`build` 0；重采证据后**目视确认**白字「删除」已显示。
+
+> **收口责任 V（分层级联的静默覆写；本次由用户人工门禁发现）**：固定层顺序 `tokens, reset, primitives, legacy` 使**层顺序优先于特异性**，于是 legacy 层里任何与原语同名的通用 class 都会静默改写原语样式——本计划的 Phase 1 分层工作因此引入了**一个应用级的视觉回归**（红底红字，8 个确认弹窗受影响），而且**现有任何门禁都发现不了**：`check:ui` 只查规则合规性、e2e 没有对比度/可见性断言、也没有基线截图比对。这与责任 S（值变化）、责任 U（组件化输入脱离检查器覆盖）构成**同一模式：现有门禁验证的是「规则」，不是「渲染结果」**。收口方向：① 把「primitives 层不得使用与 legacy 同名的通用 class」变成**可机械检查的规则**（可扩展 `check-ui-contracts.mjs`；当前扫描结果 0，基底干净，正是立规则的好时机）；② 考虑补一类「不可见文字」检查（文字色 == 底色、或对比度过低），至少覆盖阴影/着色按钮；③ Task 12 把「门禁只能验规则、不能验渲染」作为一个共同风险统一裁决（S/U/V 三条已构成模式）。
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 

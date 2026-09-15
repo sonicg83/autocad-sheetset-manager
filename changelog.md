@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-15（Task 6 人工门禁发现应用级缺陷并修复，PLAN-DM-029）
+
+- **用户人工门禁报告缺陷**：`t6-delete-danger-light-1440x1000.png` 中删除确认对话框的**红色按钮文字不显示**。
+- **根因（浏览器实测确认）**：`legacy.css:36` 的通用规则 `.danger,.error{color:var(--color-danger)}` 在 **legacy 层**，压过了 `primitives.css` 里危险按钮的 `color:var(--color-on-accent)`——因为本仓**层顺序优先于选择器特异性**（`tokens, reset, primitives, legacy`）。实测：`color` 与 `background` 均为 `rgb(194,48,43)`，文字**在 DOM 里但红底红字不可见**。
+- **影响面（应用级）**：`ConfirmModal` 是共享原语，`danger: true` 调用点共 **8 处**（`App.vue` 关闭工作区/删除子集/发布、设置面板、CSV 导入、修复、恢复、目录页）→ **全部**确认按钮文字不可见。
+- **归因：不是 Task 6 引入**。Task 6 对 `styles/` 仅改 `tokens.css`（+7 行令牌）。该回归由**分层工作本身**引入（`b0786d7 统一前端字体令牌与样式分层` = 本计划 Phase 1）：分层前高特异性规则胜出，分层后 legacy 层无视特异性胜出。
+- **修复**：不动被广泛依赖的通用 `.danger`，而是**给原语修饰类做命名空间化**（`.danger` → `.modal-danger`，`ConfirmModal.vue` 与 `primitives.css` 同改），并去掉 `.modal-irr` 上冗余的 `{danger}`。
+- **回归守卫（已变异自证）**：断言危险按钮 `color` **等于 `--color-on-accent`** 且 **不等于 background**；把类名改回 `danger` → 用例**红**且报错正是预期那条。
+- **系统性扫描**（`controller-layer-collision.mjs`）：两层「同名 class 且属性重叠」修复前 **1 个**（恰好就是 `.danger`/`color`，别无他例）、修复后 **0 个**。
+- **验证**：因原语被 8 处调用，跑**全量 e2e**：**514 passed / EXIT 0**；`check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（104）、`build` 0；重采证据后**目视确认**白字「删除」已显示。
+- **新登记责任 V**：分层级联静默覆写 + **现有门禁验证「规则」而非「渲染结果」**（与责任 S 值变化、责任 U 组件化输入脱离覆盖构成同一模式，交 Task 12 统一裁决）。
+
 ## 2026-09-15（Task 6 评审闭环实现部分收口，PLAN-DM-029）
 
 - **最终验证（`2638454a`）**：**All findings addressed, no new Critical/Important breakage**。三轮独立评审（`2ce5d5a5` → `bbd6a82c` → `2638454a`）全部闭环。
