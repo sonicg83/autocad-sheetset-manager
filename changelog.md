@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-09-15（Task 10 关闭 + 责任 Y 登记，PLAN-DM-029）
+
+- **评审结论：Approved / 0 Critical / 0 Important**（10 Minor）。Task 10 交付 6 个提交（`c42038e` RED → `c21beed` 树实现 → `0163b85` 四模态契约+变异自证 → `dead814`/`63aaabc` 两个对话框焦点统一 → `8a0e813` 闸门永久断言）。
+- **不变量逐值吻合**：例外 **25 → 16**（清退 `SheetTree.vue` 的 **9** 条、**0 新增**），裸违规 **17 = 16+1**；`check:ui` 0 · unit **12 文件/119 passed** · build 0 · e2e 119 passed（2 flaky 已归因）。
+- **评审独立核实的关键点**：容器确实不再是 Tab 停靠点（唯一 tabindex 是 treeitem 的 roving）；`SheetsView.vue` 落点为**活动 treeitem** 且兵底有注释，并核实**无其它代码聚焦容器**（无第二个 no-op 现场）；四模态契约未变；**两条变异真红**且输出精确。
+- **评审特别肯定**：`font-size:11px` 是**被删除**而非被令牌化/被豁免（T10-1(B) 最想防住的一条）；16px 盒子用 `--icon-size-md` **未借**禁用的 `--space-4`；**`sheets-layout.spec.ts:254` 的改动是“强化”而非“削弱”**（一条断言变两条：恰好一个 treeitem 被聚焦 **+** 按名称断言）；`SettingsDialog` 的**三处刻意不统一**逐条成立（含被删的 `!dialog.contains(active)` 分支**确实不可达**）；**反空转的诚实处理**（`PropertyValueCompareDialog` 只有一个可聚焦元素时直接断言 `["关闭"]`，而不是造第二个元素来“测试”回绕）。
+- **★ 两处行为差异已在计划存档**（点评：由评审指出，实现不改）：① **chevron 字形实际渲染尺寸 11px → 16px**（`UiIcon` 定在 `--icon-size-md`；盒子未变故布局不跳）——**它是 T10-1(B) 把盒子定在 16px 的直接后果，归因于裁定的不完整**，报告未披露 → 已补登为**有意视觉变化**，无断言覆盖；若想保小箭头属 Task 12 的档位决定。② **点击 chevron 不再更新 `focusIndex`**（评审认为可能更好，但**未声明且两向无断言**）→ 已在计划声明并存档。
+- **Minor-3（死 CSS）控制器直接修**：删掉容器已不可触发的 `outline:none` 与 `.sheet-tree:focus-visible`（保留仍在用的布局声明），改后复核 `check:ui` 0 · 树相关 e2e 44 passed · unit 0 · build 0。
+- **★ 新登记责任 Y（SSE 订阅缺口）**：**重载页面或切工作区后，正在运行的 job 不再被订阅**（SSE 按 job 订阅；`watchJob` 共 **3** 处调用——`App.vue:729`、`useCsvImport.ts:81`、`useJobMonitor.ts:50`——**均为消费刚返回/当前 id、无一是发现路径**；`contracts.ts` 工作区响应无 job 字段；无列表 job 调用；无持久化 id）→ **真实缺口、用户可见**（长任务重载后状态停在旧值）→ 交 Task 12 与后端契约归属方定调。**注**：worker 报告 §5.2 称「唯一调用方」不精确，**以计划中的三处措辞为准**（结论不受影响）。
+- **其余 Minor 处置**：闸门断言无变异自证 → 接受为流程 note（评审判定**构造上就敏感**：~3 个可聚焦元素按 8 次 Tab 会回绕两轮，圈闭损坏则焦点离开闸门）；**孤儿 i18n 键** `sheets.tree.expandSubset`/`collapseSubset` 已无组件引用 → 登记供 Task 12 键卫生；证据文件 M2 措辞陈旧（描述已不存在的手写调用）→ 实质无误，以计划措辞为准。
+- **Task 12 补充登记**：**e2e 引导期 flaky**（`extensions-settings.spec.ts:484`、`sheets-layout.spec.ts:150`，均因等待**外壳引导按钮**超时，**在任何树/对话交互之前**；控制器与实现者各自独立复现）⇒ 与本 diff 无因果；**不得用放宽断言或提高超时来“修”**。
+
 ## 2026-09-15（Task 10 途中：T10-2 裁定（与 Step 2 提示不可兼得）+ Files 补列，PLAN-DM-029）
 
 - **worker 实测发现一个真实冲突并停下请裁定**（未自行扩权、未自行偏离）：Step 2 要求「**移除**根容器 tabindex」，但 `SheetsView.vue:130` 的 `querySelector('[role="tree"]')?.focus()` **只因容器可聚焦才生效** → 移除后变 no-op，900px 抽屉打开后焦点**留在切换按钮**（**a11y 回退**）；且 `sheets-layout.spec.ts:254`/`:341-346` 两条断言本就建立在「容器可聚焦」上；而 `SheetsView.vue` **不在 Files 内**（属**已关闭**的 Task 7）。

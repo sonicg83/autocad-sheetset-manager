@@ -768,6 +768,8 @@ Files（本轮）：
 
 ### Task 10: 收口按钮、搜索标签、图纸树与模态键盘模型
 
+> **状态：已关闭**。Step 1–7 全部交付（6 个提交）。评审结论 **Approved / 0 Critical / 0 Important**（10 Minor，绝大部分为披露/措辞 nit）。不变量 **25 → 16**（裸违规 **17**）与 T10-1(A) 逐值吻合。**本任务无用户截图人工门禁**。
+
 > **由 Task 9 评审转入的两项待办（T9-3）**：
 > 1. **网关的 Tab 圈闭缺永久断言**：Task 9 把它的手写 `onKeydown` 换成了共享 `dialogFocus.ts` 工具，并用**临时探针**验证行为后删掉了探针（其 spec `extensions-settings.spec.ts` 不在 Task 9 Files 内）。`ConfirmModal` 的接线**已被**新增的 5×Tab 断言永久覆盖，**网关的那一份没有** —— 本任务收口模态键盘模型时请把它补上（或把该 spec 加入本任务 Files）。
 > 2. **SSE 残留问题**（Task 9 评审无法从 diff 定论）：「对**未知 job id** 的 SSE 事件会被忽略」很可能属设计；但**重载/恢复一个进行中的 job 后，客户端是否会重新登记该 job 使其事件被接受？** 请在本任务或 Task 12 查清并定调，不要让它隐含。
@@ -788,13 +790,13 @@ Files（本轮）：
 - Modify: `web/tests/e2e/extensions-settings.spec.ts`（**T10-1 补列**：T9-3 转入项 1 要求给**网关的 Tab 圈闭**补**永久**断言，而其 spec 不在原 Files 内）
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED：树）**：先写 roving tabindex 测试：容器不是额外 Tab 停靠点、仅活动 `treeitem` 为 0、其余为 -1；方向键、Home/End、展开/收起、激活、树更新后焦点恢复均失败后再实现。
-- [ ] **Step 2（树实现）**：移除根容器 tabindex 和 `treeitem` 内常驻嵌套按钮；展开行为合并到树项统一点击/键盘模型，保留现有选中与定位事件载荷。
-- [ ] **Step 3（RED：模态）**：为四个模态补初始焦点、Tab 圈闭、Escape、关闭归还、嵌套时顶层唯一响应测试（四个模态 = `ConfirmModal.vue`/`UnsavedInputDialog.vue`/`PropertyValueCompareDialog.vue`/`SettingsDialog.vue`，均在本任务 Files 内；**不含** `TaskOverlay.vue`——它的焦点副本已由 Task 4 迁完，见 Ruling 28）。
-- [ ] **Step 4（模态复用）**：消除各模态重复焦点代码，统一使用 `dialogFocus.ts`；由业务组件决定 Escape 是否允许关闭（`dialogFocus.ts` 另可选传 `returnFocus` 解析器，用于「关闭回焦触发按钮之外」的落点，见 Task 4/R2-1）。
-- [ ] **Step 5（全仓语义扫描）**：运行 `rtk npm --prefix web run check:ui`，并由 `explicit-button-type`、`visible-input-label`、`icon-button-name` 三条规则完成全仓扫描；所有真按钮显式 `button` 或 `submit`，所有搜索输入具有可见弱化 label，所有图标按钮有可读名称。同时确认 `<aside>` 内不再用 `[hidden]` 作为隐藏手段：`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会压过 UA 的 `[hidden]{display:none}`，浮层靠自己的 `.task-overlay [hidden]{display:none!important}` 兜底而散落元素没有（控制器实测证据见 Task 4 报告；已登记 Task 12 收口责任 M）。
-- [ ] **Step 6（GREEN）**：运行 SheetTree 单测、`sheets-navigation.spec.ts`、`sheets-layout.spec.ts`、设置/属性模态相关 spec。
-- [ ] **Step 7（提交）**：commit：`收口图纸树与模态无障碍模型`。
+- [x] **Step 1（RED：树）**：先写 roving tabindex 测试：容器不是额外 Tab 停靠点、仅活动 `treeitem` 为 0、其余为 -1；方向键、Home/End、展开/收起、激活、树更新后焦点恢复均失败后再实现。
+- [x] **Step 2（树实现）**：移除根容器 tabindex 和 `treeitem` 内常驻嵌套按钮；展开行为合并到树项统一点击/键盘模型，保留现有选中与定位事件载荷。
+- [x] **Step 3（RED：模态）**：为四个模态补初始焦点、Tab 圈闭、Escape、关闭归还、嵌套时顶层唯一响应测试（四个模态 = `ConfirmModal.vue`/`UnsavedInputDialog.vue`/`PropertyValueCompareDialog.vue`/`SettingsDialog.vue`，均在本任务 Files 内；**不含** `TaskOverlay.vue`——它的焦点副本已由 Task 4 迁完，见 Ruling 28）。
+- [x] **Step 4（模态复用）**：消除各模态重复焦点代码，统一使用 `dialogFocus.ts`；由业务组件决定 Escape 是否允许关闭（`dialogFocus.ts` 另可选传 `returnFocus` 解析器，用于「关闭回焦触发按钮之外」的落点，见 Task 4/R2-1）。
+- [x] **Step 5（全仓语义扫描）**：运行 `rtk npm --prefix web run check:ui`，并由 `explicit-button-type`、`visible-input-label`、`icon-button-name` 三条规则完成全仓扫描；所有真按钮显式 `button` 或 `submit`，所有搜索输入具有可见弱化 label，所有图标按钮有可读名称。同时确认 `<aside>` 内不再用 `[hidden]` 作为隐藏手段：`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会压过 UA 的 `[hidden]{display:none}`，浮层靠自己的 `.task-overlay [hidden]{display:none!important}` 兜底而散落元素没有（控制器实测证据见 Task 4 报告；已登记 Task 12 收口责任 M）。
+- [x] **Step 6（GREEN）**：运行 SheetTree 单测、`sheets-navigation.spec.ts`、`sheets-layout.spec.ts`、设置/属性模态相关 spec。
+- [x] **Step 7（提交）**：commit：`收口图纸树与模态无障碍模型`。
 
 #### Task 10 控制器裁定（T10-1，派发前下达）
 
@@ -832,6 +834,38 @@ Files（本轮）：
 - **A 为何仍属合法**（记录在案，不抹杀 worker 的判断）：`tabindex="-1"` 既满足判据又零改动、零文件越界；其代价是把一个非标准的「可编程聚焦容器」永久留在无障碍模型里，而 Task 10 正是无障碍收口任务。
 - **执行要求**：`SheetsView.vue` 入 Files（仅焦点落点）；**无活动项的兵底必须显式定义并加断言**（聚焦第一个 treeitem，或**不强制移入树**）；容器 `@keydown` **不移**（keydown 从 treeitem **冒泡**到容器，方向键/Home/End 仍生效，需实测）；`sheets-layout.spec.ts` 两处断言改为「**活动 treeitem 被聚焦**」并**保持原意图 + 报告单列披露**；焦点由容器改为 treeitem 对读屏是**改进**（直接播报项名与状态）而非等价。
 - **worker 自提的 `sheets-navigation.spec.ts:41/:64` 处理已批准**：改点击树项的展开指示器（鼠标路径）、**保留 `.chevron` 类**以免破坏 `sheets-visual-regressions.spec.ts:101` 对该类的颜色断言、保留原测试意图；并明确 **`sheets-visual-regressions.spec.ts` 不在 Files 内 → 不得修改**。
+
+**T10-3（评审闭环 + Task 10 收口 —— 控制器复核）**：评审结论 **Approved / 0 Critical / 0 Important**（10 Minor）。
+
+**评审独立核实的合规项**：容器确实不再是 Tab 停靠点（`:127` 无 tabindex，唯一 tabindex 是 treeitem 的 roving `:137`）；嵌套 `<button>` → 不可聚焦的 `aria-hidden` `<span class="chevron">` + `UiIcon`（`:145-151`），`defineProps`/`defineEmits` 未动；`SheetsView.vue` 焦点落点为 **活动 treeitem** 且兵底有注释，**并核实“无其它代码聚焦容器”**（仅这两处 `querySelector`）⇒ 移除容器 tabindex **无第二个 no-op 现场**；四模态均接入工具且**契约未变**；`ui-contract-exceptions.json` **9 删除 / 0 新增**；两条变异**真红**且输出精确（`expected <button> to be <div class="modal-card">` 等）。
+
+**评审特别肯定（值得记）**：
+- T10-1(B) **逐条落实，包括控制器最想防住的那一条**：`font-size:11px` 是**被删除**而不是被令牌化或被豁免 ✓；16px 盒子用了 `--icon-size-md`，**没有**借禁用的 `--space-4` ✓。
+- **`sheets-layout.spec.ts:254` 的改动是「强化」而非「削弱」**：一条容器焦点断言变成了**两条**（恰好一个 treeitem 被聚焦 **+** `getByRole("treeitem", {name:/全部图纸/}).toBeFocused()`）✓ —— 这正是控制器要求核的「改动 vs 削弱」区分的正面答复。
+- `SettingsDialog` 的**三处刻意不统一**逐条经检成立：初始焦点**确实数据相关**（内容由 `loadSettings()` 到达，工具只在 open 翻转时跑）；被删的 `!dialog.contains(active)` 分支**确实不可达**（`<dialog>` 上的 `@keydown` 收不到 target 在外的事件，且 `contains` 含自身）；Esc 保留原生 `@cancel`（子视图 Esc 需降级为「回到扩展列表」）。
+- **反空转的诚实处理**：`PropertyValueCompareDialog` 只有一个可聚焦元素时，测试**直接断言 `["关闭"]`**，而不是**造第二个元素来“测试”回绕** ✓✓。
+- 它 Step 5 还**超出要求**：顺带审计了**责任 M**（`<aside> [hidden]`）的各个现场，未发现分散依赖 ✓。
+
+**★ 控制器记录的两处「未披露/未声明」行为差异（由评审指出；不改实现，在此存档）**：
+1. **chevron 字形实际渲染色尺寸变大（11px → 16px）**：`UiIcon` 把 `.ui-icon` 定在 `--icon-size-md`(16px)，而旧字形是 `font-size:11px` → **盒子未变（16×16）所以布局不跳**，但箭头**视觉变大**。它**是 T10-1(B) 的直接后果**（控制器把盒子定在 16px ⇒ 图标自然填满）→ **归因于裁定的不完整，不是实现错误**；报告 §4/§7 未列入披露 → **在此补登为有意视觉变化** ✓。无任何断言覆盖它（`sheets-visual-regressions.spec.ts:101` 只看**颜色**）；若希望保持小箭头，属 **Task 12 的档位决定**（`UiIcon` 提供 12/16/20+）。
+2. **点击 chevron 不再更新 `focusIndex`**：改前 `@click.stop="focusIndex = index; toggleCollapse(node)"`，改后 `@click.stop="toggleCollapse(node)"` → 点展开三角不再移动 roving 焦点。**评审认为“可能更好”**（遍历式点击不应移动键盘焦点）但**未声明且两向无断言** → **在此声明为已知行为差异**，并登记供 Task 12 补一条语义断言。
+
+**Minor 处置**：
+- **Minor-3（死 CSS）→ 控制器直接修**：`:158` 的 `outline:none` 与 `:159` 的 `.sheet-tree:focus-visible` 在容器不可聚焦后已不可触发 → **已删**（注意只删死声明，**保留** `:158` 里仍在用的布局声明 display/gap/padding），并留注释说明焦点环由 treeitem `:focus-visible` 承担。**改后复核：`check:ui` 0 · e2e（树相关 2 spec）44 passed · unit 0 · build 0** ✓
+- **Minor-4（闸门断言无变异自证）→ 接受为流程 note**：评审判定它**“构造上就敏感”**（~3 个可聚焦元素上按 8 次 Tab 会回绕两轮；若圈闭损坏，焦点会离开闸门 → `contains(activeElement)` 为假），且缺口已**主动披露** → 不算缺陷。
+- **Minor-5（孤儿 i18n 键）**：`sheets.tree.expandSubset`/`collapseSubset` 已无组件引用 → **登记供 Task 12 做键卫生**（未自行改 i18n，正确）。
+- **Minor-6（报告措辞不精确，结论不变）**：报告 §5.2 称 `watchJob` 的**唯一**调用方是提交路径（`App.vue:729`）——实际有**三处**：`App.vue:729`、`useCsvImport.ts:81`、`useJobMonitor.ts:50`（`retryJob`）。**结论仍成立**（三者都消费刚返回/当前的 id，**均非发现路径**），且评审**独立复核了关键点**（`contracts.ts` 无 job 字段、无列表 job 调用、无持久化 id）→ **正确措辞以此处为准**（报告原文属历史产物，不静默改写）。
+- **Minor-7（证据文件 M2 措辞陈旧）**：`evidence/task-10-mutation.txt` 描述的是**迁移前**的手写 `card.value?.focus()`，而该代码已不存在；实际变异对象是工具的 `initialFocus: card`（由观测到的红色反推）。实质无误，措辞以此处为准。
+- **Minor-1/2（上述两处行为差异）** → 已在本文登记，实现不改。
+- **无动作项**：`SheetsView` 的 `??` 兵底未被走到（**正确做法**：它的前提已被测试钉住——含空工作区的「恰好一个 `[tabindex="0"]`」）；`SettingsDialog` 焦点路径无单测（依赖真实设置快照，已由 `settings-dialog` + `extensions-settings` 两个 spec 覆盖）。
+
+> **收口责任 Y（SSE 订阅缺口：重载/切工作区后运行中任务不再被订阅）** —— 由 T9-3 转入项 2 查清，**用户可见**（长任务在重载后状态停在旧值）。
+> **事实链（评审已独立复核）**：SSE **按 job 订阅**；`watchJob` 的调用方共 **3 处**（`App.vue:729` 提交路径、`useCsvImport.ts:81`、`useJobMonitor.ts:50` 的 `retryJob`），**均为消费刚返回/当前 id，无一是发现路径**；`contracts.ts` 的工作区响应**无 job 字段**；**无列表 job 的调用**（`pollJob` 只按 id GET，而它本身就需要 id）；**无持久化 job id**。
+> → 结论：**真实缺口**，非 Task 10 缺陷，**本轮未修**。收口方向：要么在工作区响应里回传进行中任务 id（或提供列表端点），要么持久化/恢复订阅；交 Task 12 与后端契约归属方定调。
+
+> **Task 12 补充登记**：**e2e 引导期 flaky** —— `extensions-settings.spec.ts:484` 与 `sheets-layout.spec.ts:150` 均因 `locator.click: Test timeout of 30000ms exceeded` 等待**外壳引导按钮**（`设置`/`选择 DST 文件`）而失败，**发生在任何树/对话交互之前**；控制器（2 flaky）与实现者（3 flaky）**各自独立复现** ⇒ 与本 diff 无因果。**不得用放宽断言或提高超时来“修”**（它们未这么做 ✓）；全量矩阵运行时需留意。
+
+**Task 10 最终账**：例外表 **25 → 16**（`SheetTree.vue` 清退 **9** 条、**0 新增**）、裸违规 **17 = 16 + 1**；`check:ui` **0**；`test:unit` **0**（**12 文件 / 119 passed**，新增 `SheetTree.test.ts` + `dialogFocus.test.ts` 扩容）；`build` **0**；e2e **0**（119 passed，2 flaky 已归因）；`dialogFocus.ts` **无需改动即满足 Step 4**（T10-1 的「仅必要时才改」判定正确 ✓），其三个消费者与 21.7K 单测未受影响。
 
 ### Task 11: 拆分 App.vue 并保持跨域接线不变
 

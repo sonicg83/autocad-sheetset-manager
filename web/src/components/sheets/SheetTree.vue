@@ -155,8 +155,9 @@ function onKeydown(event: KeyboardEvent) {
   </div>
 </template>
 <style scoped>
-.sheet-tree{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2);outline:none}
-.sheet-tree:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
+/* 容器已不可聚焦（Task 10 移除 tabindex，焦点所有者改为 treeitem）→ `outline:none` 与容器的
+   `:focus-visible` 都已不可触发，故删除；焦点环由 treeitem 自己的 `:focus-visible` 承担。 */
+.sheet-tree{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2)}
 .sheet-tree [role=treeitem]{display:flex;align-items:flex-start;gap:6px;padding:5px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:var(--font-label);color:var(--color-text-primary)}
 .sheet-tree [role=treeitem]:hover{background:var(--color-bg-muted)}
 .sheet-tree [role=treeitem].active{background:var(--color-accent);color:var(--color-on-accent);font-weight:600}
