@@ -2,9 +2,10 @@
      只做呈现与焦点管理：阶段合并与取值由 PropertyValuePanel 计算；
      复用公共模态原语（modal-mask/modal-card），Esc=关闭、Tab 焦点圈闭、关闭后焦点回触发按钮。 -->
 <script setup lang="ts">
-import {nextTick, ref, watch} from "vue";
+import {ref} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import {useDialogFocus} from "../ui/dialogFocus";
 
 export type CompareStage = {label: string; value: string | undefined};
 
@@ -16,7 +17,21 @@ const props = defineProps<{
 const emit = defineEmits<{close: []}>();
 const {t} = useI18n();
 const card = ref<HTMLElement | null>(null);
-const opener = ref<Element | null>(null);
+
+// 焦点管理统一交给 dialogFocus.ts（PLAN-DM-029 Task 10 Step 4）：打开了送焦点、Tab 圈闭、
+// Escape 与关闭归还不再手写。与迁移前逐条等价：
+// · `initialFocus: card` —— 保持既有落点（打开时聚焦对话框本身，而不是首个按钮）；
+// · `opener` 由工具在打开时捕获（早于送焦点），无需本组件再存一个；
+// · `onEscape` —— 原实现是 `stopPropagation()` + `emit("close")`；工具自己不阻止也不停止传播，
+//   把原始事件交给回调，所以这段语义原样表达；
+// · 圈闭 —— 本对话框只有「关闭对照」一个可聚焦元素，工具在 `first === last` 时同样会
+//   `preventDefault()` 并把焦点留在原位：Tab 跑不出对话框（与手写实现一致）。
+const {onDialogKeydown} = useDialogFocus({
+  open: () => props.open,
+  container: card,
+  initialFocus: card,
+  onEscape: (event) => { event.stopPropagation(); emit("close"); },
+});
 
 function display(value: string | undefined): string {
   if (value === undefined) return t("properties.compare.fieldMissing");
@@ -24,30 +39,9 @@ function display(value: string | undefined): string {
   return value;
 }
 
-watch(() => props.open, async (open) => {
-  if (open) {
-    opener.value = document.activeElement;
-    await nextTick();
-    card.value?.focus();
-  } else {
-    (opener.value as HTMLElement | null)?.focus?.();
-  }
-});
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape") { event.stopPropagation(); emit("close"); return; }
-  if (event.key !== "Tab" || !card.value) return;
-  // 焦点圈闭：Tab 循环限制在模态内（对话框内只有「关闭对照」一个可聚焦控件）
-  const items = Array.from(card.value.querySelectorAll<HTMLElement>("button")).filter((el) => !el.hasAttribute("disabled"));
-  if (!items.length) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-}
 </script>
 <template>
-  <div v-if="open" class="modal-mask" @keydown="onKeydown">
+  <div v-if="open" class="modal-mask" @keydown="onDialogKeydown">
     <div ref="card" class="modal-card compare-card" role="dialog" aria-modal="true" :aria-label="heading" tabindex="-1">
       <h2>{{ heading }}</h2>
       <p class="compare-hint">{{ $t("properties.compare.dialogHint") }}</p>
