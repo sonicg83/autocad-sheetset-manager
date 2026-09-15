@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-15（Task 12 收尾轮：视觉证据盘点与文档同步，PLAN-DM-029）
+
+- **Step 4 证据盘点**：新建 `.planning/memos/dst-manager/assets/PLAN-DM-029/README.md`（171 行），登记本计划持久证据 **29 张**（`docs/…/assets/*/production/` 21 张 + `.planning/memos/…/PLAN-DM-029/` 8 张），逐张给出视口/主题/状态/夹具/产出测试/附件路径；并说明该目录下另有 16 张既有证据（`g8-*`/`g8-ext-*`，属 PLAN-DM-020/025）不应计入。
+- **★ 属性页（Task 5）证据查明结果：在库里** ✓ —— 5 张位于 `.planning/memos/dst-manager/assets/PLAN-DM-029/`，并非只存在于 gitignored 的 `.superpowers/` 证据目录。`docs/…/assets/SPEC-DM-010/production/` **不存在**：属性页沿用 PLAN-DM-016 以来的 memos 落点，而 Task 6/7/8/9 落在 `docs/…/assets/SPEC-DM-0XX/production/` ⇒ **两种落点并存（约定不统一，但不构成证据缺失）**。
+- **归属澄清（核实后修正了初步猜测）**：Task 8 的 `task8-*.png` 由 **`web/tests/e2e/settings-extensions-production-evidence.spec.ts`** 产出（5 个测试，:333–:391）；同目录的 `settings-demo-visual-evidence.spec.ts` 采集的是 **SPEC-DM-011 冻结交互 Demo**，只产出 `g4-*`。前者**不在 Task 12 的 Files 列内**，本轮**只登记路径、未改动**。
+- **用户三张缺陷截图的「修复前 → 修复后」映射**（第 1 张→图纸页 Task 7 / 第 2 张→目录页 Task 6 / 第 3 张→属性页 Task 5），并**显式声明能力边界**：三张原图未入库，映射为**页面级**，无法核对视口/主题/滚动是否与用户当时所见逐项同态；不依据记忆重建原图内容。
+- **本轮发现的注释漂移 2 处（新的一处，非已闭合的责任 P）**：① `properties-visual-evidence.spec.ts:5–7` 仍写「显式复制到 `.planning/memos/…/PLAN-DM-016/`」，实际入库在 `PLAN-DM-029/`；② `sheets-visual-evidence.spec.ts:3` 写「Task 7 的 **6 张**」，实际 **7** 张（修复轮补入 `task7-overlay-diagnostics-fixed-*`）。另记 **视口集合与 SPEC-DM-006 §10.2 声明矩阵不完全重合**（本计划证据含 `1440×1000`/`900×700`/`1280×720`/`900×600`/`720×500`，而声明矩阵中的 `1120×768` 未见本轮证据）⇒ 记为待对账项，未下结论。
+- **Step 7 文档一致性同步（5 份，只用实测值、不写未验证结论）**：`SPEC-DM-006`（§1.1 新增 2026-09-15 修订记录；§5.2 增加责任 K 的 4 个字号档位注，**明确「已裁定、尚未实现」**；§10.1 把「stylelint 规则」更正为实际的 `check-ui-contracts.mjs` 机制 + 例外表口径 + `test:contracts` **86 例**）；`GUIDE-DM-001` G9（新增显示缩放类验收口径：**必须真实桌面壳执行**，浏览器缩放/`deviceScaleFactor` 不构成证据；自动门禁全绿而真实复验未完成时 Plan 保持 `active`）；`GUIDE-DM-002` §9（把「测试全通过」误区扩写为门禁**双向失效**的具体教训：看不见组件化输入、`calc()` 绕过、令牌比令牌的自指断言，以及同名类跨层静默覆盖、注释解析不对称的误报）；`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态段（Task 1–11 关闭、`App.vue` 809 → 450、例外棘轮 **382 → … → 14**、Task 12 进行中、真实桌面复验未完成）。**两份 README 只改状态摘要与导航，不复制正文。**
+- **边界**：未改任何应用源码、测试、脚本与例外表（例外仍 **14**，裸违规 15）；未新增例外；**未跑 e2e 与门禁**（本轮只改 Markdown，按任务约定不需要跑）；`ARCH-DM-007` 未重复改动（责任 E 已由上一轮写回 §4.1）。
+- **未做/未验证（不得读作已完成）**：① **真实 Windows WebView2 100/125/150/200% 复验未完成**（Step 5–6，需用户执行；**不得**用浏览器 zoom 冒充）；② 未逐张打开图片复核内容与状态描述；③ `docs/…/assets/SPEC-DM-013/` 两张截图（`settings-en-US-dark-900x768.png`、`settings-zh-CN-light-1440x900.png`）的**产出者未核实在库**（文件名在 `web/tests/e2e/**` 与 `web/scripts/**` 均无匹配），本轮不下结论、不猜测。
+
 ## 2026-09-15（责任 K 裁定：新增 4 个语义字号档位；用户决定，PLAN-DM-029）
 
 - **用户（Spec 归属方）选择「新增语义字号档位」**（零视觉变化、例外清零）。**该裁定明确取代** T6-3 / Ruling 38 的「本轮不新增字号令牌」政策 —— 对**这 4 个档位**而言政策已被废止；**对其余字号仍不开放** ✓。
