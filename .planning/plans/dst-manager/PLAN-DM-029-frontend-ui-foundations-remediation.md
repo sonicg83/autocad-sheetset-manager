@@ -481,7 +481,9 @@ Files（本轮）：
 - [x] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项（**9 条，属 Task 10 Files**）外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
   - **原措辞为计划缺陷（T7-1(F) 订正）**：原文未含字号保留项，但 `15px`/`17px` **无可借值等值令牌且不得新增字号令牌**（T6-3/Ruling 38）→ 必须保留 **4 条**显式例外（`expiresWith` = 责任 K）。先例：Ruling 39 订正 Task 6 Step 6。
   - **收口不变量（T7-1(G)）**：Task 7 清退 **61** 条 = 65 − 4（保留字号例外）→ 全表 **186 → 125**；`check:ui` 裸违规应为 **126 = 125 + 1 动态白名单**。
-- [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
+- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
+  - **自动验证已由控制器亲跑完成**：`check:ui` **EXIT 0**（例外表 128、零新增）；`main.spec.ts` + 上述 7 个 sheets spec **EXIT 0：211 passed / 0 failed / 0 flaky**；`build` 0；`test:unit` 0（104）；`test:contracts` 0（83/83）。未跑全量 e2e（留待控制器在 Task 12 收口时跑）。
+  - **[ ] 人工对照用户第 1 张截图：待用户确认**（worker 被明确禁止声称完成）。
 - [x] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
 
 #### Task 7 控制器裁定（T7-1，派发前下达）
@@ -572,6 +574,15 @@ Files（本轮）：
   - **为何选 A 而非 B/C**：修复对象是**不可读的面板**（现状即是缺陷），且 ≥32px 可点下限是 ARCH-DM-007 §10 的硬验收线；B 会让我们自己的断言对已知缺陷失明；C 只修一半。**“可视变化”在此是修复而非回归**，但仍需在报告中单列披露（行变高 + 文本恢复可读）。
   - **要求**：代码里写明根因注释（否则后来者会把它「修回去」）；缺陷前后对比截图存 `evidence/`（**不入 `docs/`**）。
 - **附：要求一轮清点（只报不改）**：浮层根是 `<aside>`，所以 legacy 里**所有 `aside ...` 元素选择器规则**都会落到浮层内部 —— 请列出当前还有哪些此类规则命中浮层内部的哪些元素（`legacy.css:119` 附近已列出 13 条元素/伪类开头的选择器可作起点），并实测是否还有**第二个**类似实例。发现别的破损停下报告。
+
+**T7-7（二审闭环 —— 控制器复核）**：二审 verdict = **All findings addressed, no new Critical/Important breakage** ✓。
+- 上一轮 4 项（Important ×1 + Minor ×1 + 已裁定接受 ×2）全部逐条 ADDRESSED。
+- **评审者做得比控制器要求的两处更硬**：① 它不只采信「删后复量一致」，而是**独立核了结构前提**——`grep -rn "ColumnSettings" src/` 证明 `.cols-toggle` **恒在工具栏 `:deep()` 作用域内**，所以删子组件侧**不可能**波及其它上下文（「零视觉变化」的**推理**成立，不只是碰巧测出来一致）；② 它核了枚举的**完整性**——`grep -nE "<input|<select|<textarea|role=\"button\"|tabindex"` 在 `TaskOverlay.vue` **零命中**，证明浮层内**不存在**未被覆盖的可点元素类型。（并合理区分了「隐藏元素应排除」与「枚举落空不得真空通过」，后者有 `visible.length > 0` 守卫。）
+- **新登记责任 X（检查器缺陷，评审者发现并控制器实读源码核实）**：`unicode-structure-icon` 对注释的处理**不对称**——`check-ui-contracts.mjs:428` 对模板用 `maskHtmlComments(html)` **剥离了 HTML 注释**，而 `:429` 对 `<style>` 直接取 `style.content` **未剥离 CSS 注释**；`STRUCTURE_ICON_PATTERN` 含 `\u2190-\u21FF`（箭头区）→ **在 CSS 注释里写一个装饰性 `→` 会被判违规**，而同一字符写在模板注释或脚本注释里不会。该规则自己的注释写着「脚本与 i18n 文案里的普通标点不参与」，可见**本意就是「只算真实标记/样式，不算注释与文本」**，故这是**无意的设计缺口**（非有意的严格）。
+  - **实际代价**：修复轮 worker 真的踩到了——它在 CSS 注释里写 `→`，导致 `check:ui` 与 `build` **同时 EXIT=1**，多花一个提交（`477fe31`）去修。
+  - **收口方向**：对 style 块也做等价的注释剥离（或显式排除注释区），并在 Rule 文档里写明「注释不算」。
+- **两条 Minor（非阻塞，已登记不阻塞关闭）**：① `main.spec.ts` 新增的模块级 `tokenColorOf` 与既有「壳层交互态」用例内的局部 `tokenColor` **逐字重复**（6 行）——评审者**有意不按 rubric 升为 Important**，理由：它是**测试脚手架**、仅 6 行，且既有副本是**用例内局部**的，消重就得改动无关的既有用例，与「最小 diff」冲突；控制器**接受该判断**，登记为后续清理候选。② 非空转守卫用 `visible.length > 0`（枚举集合若意外缩小不会被察觉）——缓解因素是具体控件已被逐条钉住（`.ov-fold`/`.diag-text`/`.diag-copy`），风险低。
+- **Out-of-scope（已并入既有责任）**：① legacy 仍对浮层内**所有** button 强制 `display:flex` + `justify-content:space-between` + `text-align:left`（`legacy.css:24`）——今日被浮层自身 flex 布局掩盖，与责任 V 现有两例同族，**一并收口**；② 各 sheets spec 里的 `shell` 定位器仍按**选择器清单**枚举（`.topbar/.tabbar/.dock`），而非按**可点性**枚举——本次新增断言已把浮层纳入，但口径本身仍是弱点，登记供 Task 12 参考。
 
 ### Task 8: 迁移设置中心
 

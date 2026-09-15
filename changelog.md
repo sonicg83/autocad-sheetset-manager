@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-15（Task 7 二审闭环 + 责任 X，PLAN-DM-029）
+
+- **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 Important ×1 + Minor ×1 + 已裁定接受 ×2 全部 ADDRESSED）。
+- **评审者比控制器要求的两处更硬（值得记下）**：
+  - 它不只采信「删后复量一致」，而是**独立核了结构前提**：`grep -rn "ColumnSettings" src/` 证明 `.cols-toggle` **恒在工具栏 `:deep()` 作用域内** → 删子组件侧不可能波及他处，「零视觉变化」的**推理**成立（不只碰巧测出一致）。
+  - 它核了枚举的**完整性**：`TaskOverlay.vue` 内 `<input|<select|<textarea|role="button"|tabindex` **零命中** → 浮层内不存在未覆盖的可点元素类型。
+- **新登记责任 X（检查器缺陷，已实读源码核实）**：`unicode-structure-icon` 对注释的处理**不对称**——`check-ui-contracts.mjs:428` 用 `maskHtmlComments(html)` 剥离了模板的 HTML 注释，而 `:429` 对 `<style>` 直接取 `style.content` **未剥离 CSS 注释**；`STRUCTURE_ICON_PATTERN` 含 `\u2190-\u21FF`（箭头区）→ **CSS 注释里的装饰性 `→` 会被判违规**，而模板/脚本注释里的同一字符不会。该规则自己的注释写着「脚本与 i18n 文案里的普通标点不参与」，本意就是「只算真实标记/样式」→ 属**无意缺口**。
+  - **实际代价**：修复轮 worker 真的踩到——它在 CSS 注释写 `→`，使 `check:ui` 与 `build` **同时 EXIT=1**，多花一个提交（`477fe31`）修它。
+- **两条 Minor（非阻塞，已登记）**：① `main.spec.ts` 新增的模块级 `tokenColorOf` 与既有用例内的局部 `tokenColor` **逐字重复**（6 行测试脚手架）——评审者**有意不按 rubric 升为 Important**（消重需改动无关的既有用例，与最小 diff 冲突），控制器**接受该判断**并登记为后续清理候选；② 非空转守卫用 `visible.length > 0`（枚举集合意外缩小不会察觉），具体控件已逐条钉住故风险低。
+- **Out-of-scope 已并入既有责任**：① legacy 仍对浮层内**所有** button 强制 `display:flex`/`justify-content:space-between`/`text-align:left`（`legacy.css:24`，今日被 flex 布局掩盖）→ 并入**责任 V**；② sheets spec 的 `shell` 定位器仍按**选择器清单**枚举而非按**可点性** → 登记供 Task 12 参考。
+- **自动门禁（控制器亲跑）**：`check:ui` **0**（例外表 128、零新增）· e2e（`main.spec.ts` + Step 7 的 7 个 sheets spec）**0：211 passed / 0 failed / 0 flaky** · `build` 0 · `unit` 0（104）· `contracts` 0（83/83）。
+- **Task 7 仅剩 Step 7 的人工门禁**（对照用户第 1 张截图），待用户确认。
+
 ## 2026-09-15（Task 7 修复轮途中：发现浮层诊断面板既有缺陷 + T7-6 裁定，PLAN-DM-029）
 
 - **修复轮 worker 遇阻并正确停下报告**：它被要求「凡可点元素都要过 ≥32px 下限」，但发现该断言在此代码上**无法变绿**，因为任务浮层的**诊断面板是坏的** —— 它**没有放宽断言、也没越权改代码**，而是带实测值请示。**这是正确行为**。
