@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-15（Task 11 第 1 轮 11a：抽出纯展示 `WorkspaceShell.vue`，PLAN-DM-029）
+
+- **产出**：新建 `web/src/layout/WorkspaceShell.vue`（110 行）承载 `TopBar`/`TabBar`/`TaskOverlay`/`ActionDock` 与壳层级提示（错误/诊断详情/加载中/恢复中 + `shell-body`/`shell-main` 三块布局），页面内容经默认 slot 透出；`App.vue` 只保留状态与接线。
+- **子组件 props 以「整组对象」传入**（`InstanceType<typeof X>["$props"]`）：比逐个声明约 30 个 prop 更**类型安全**——对象键写错是编译错误，而逐个写 prop 名若拼错会静默落进 `$attrs`（正是本重构最想避免的隐性漂移）；`App.vue` 相应新增 `topBarProps`/`tabBarProps`/`taskOverlayProps` 三个 computed（`dock` 原样透传）。
+- **★ 澄清一处既有事实**：`TabBar` **只** emit `select`（`defineEmits<{select:[id:string]}>`）→ `App.vue` 的 `@keydown` 一直是**原生 DOM 监听**（TabBar 单根 `<nav>` 承接透传）→ 壳层按原样监听并转成壳层 emit，按键路径未变。
+- **例外 16 → 14**：`App.vue` 恢复横幅的「继续/重新开始」两按钮**就地**补 `type="button"`（两按钮不在 `<form>` 内 → 行为零变化，仅显式声明语义）；违反消失后原例外条目会变 stale → 删除 `explicit-button-type` 2 条。`check:ui` EXIT=0，余 14 条按规则为 `unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`。
+- **★ 纯展示约束的机械自证**（T11-1(E)①：「门禁不查，必须 grep」）：`WorkspaceShell.vue` 的 import 仅 4 个布局组件，`api/`、`composables/`、`use[A-Z]` 命中 **0**。
+- **★ Step 8 API 比对（T11-1(C)）**：两次采集各 `128 passed`；**请求序列 128/128 与指纹 128/128 与基线一致**。两次采集之间**唯一**差异是探针的**键取名**（基线含 describe 段；after1 用 `testInfo.title` 少了 describe 段、after2 用 `titlePath.slice(1)` 多了绝对路径段）→ 已用**对称规范形**（同一条规则同时处理两侧）比对到 128/128 键对齐，并按 T11-1(C) **如实报告差异而非自行判等**。
+- **★ 登记一处指纹波动（未定根因）**：`main.spec.ts › 移除 active 动作不会激活 redo 区命令` 在 after2 的归一化 innerText 为 **486 字符**，而基线 **374**、after1 **374**；两次 after 运行的是**逐字节相同**的代码（仅探针不同）→ 判定为**运行间波动**而非本次重构所致，但**根因未查明**（i18n 长度扫描因目录定位失败未完成）→ 建议控制器收口全量 e2e 时观察该用例。
+- **门禁**：`check:ui` EXIT=0（1 次）· `test:unit` 12 文件/119 passed · `test:contracts` 85 pass/0 fail · `build` EXIT=0（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build`）· 4 个流程 e2e `128 passed` ×2（本轮配额 ≤2 用满）。
+- **★ 诚实记账**：`App.vue` 行数 **809 → 869（+60）**——本轮只搬走约 14 行模板、却新增约 60 行接线；**减重发生在 11b–11e**（搬逻辑与状态时），本轮**未**达到 Step 7 的 350–450 行目标，也**不声称**达到。探针与全部临时脚本已删除，`git status` 干净。
+- **流程自查**：代码提交 `2aa45f8`；changelog 单独一次提交（不 amend 已生成的提交，避免改写可能被引用的对象）。
+
 ## 2026-09-15（Task 12 派发前侦察与 T12-1 裁定，PLAN-DM-029）
 
 - **侦察实测**：Task 12 Files **12 → +7 补列**（共 **19**）；Files 内例外条目 **0** → 不变量：例外 **14**、裸违规 **15**；**不得新增例外**。
