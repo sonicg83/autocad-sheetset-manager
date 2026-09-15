@@ -695,6 +695,10 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
     // 所以必须再钉一次绝对值（Task 7 已确立的做法，也是责任 S 的收口方式）。
     expect(fontSize, "控件字号绝对值应为 14px").toBe("14px");
 
+    // 责任 K（已裁定）：设置对话框标题 16px 已升为语义档位 --font-title（此前无锚）
+    expect(await tokenValue(page, "--font-title", "font-size"), "--font-title 必须解析为 16px").toBe("16px");
+    await expect(page.locator(".dlg-head h2")).toHaveCSS("font-size", "16px");
+
     // 长路径不得撑破本行：输入框右边界不越过行右边界
     await input.fill("C:\\" + "very-long-segment\\".repeat(12) + "tool.exe");
     const geometry = await page.evaluate(sel => {

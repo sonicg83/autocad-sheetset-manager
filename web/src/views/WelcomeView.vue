@@ -28,7 +28,7 @@ const pathInputId="welcome-path-input";
 </template>
 <style scoped>
 .welcome-card{max-width:var(--card-max-width);margin:12vh auto;padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);text-align:center}
-.welcome-title{font-size:20px;margin:0 0 var(--space-2);color:var(--color-text-primary)}
+.welcome-title{font-size:var(--font-page-title);margin:0 0 var(--space-2);color:var(--color-text-primary)}
 .welcome-desc{color:var(--color-text-secondary);font-size:var(--font-label);margin:0 0 var(--space-5);line-height:1.6}
 .no-shell{display:grid;gap:var(--space-2);margin:0 auto;max-width:var(--welcome-path-max-width);text-align:left}
 .no-shell-label{font-size:var(--font-label);color:var(--color-text-secondary)}

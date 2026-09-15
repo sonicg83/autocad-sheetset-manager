@@ -109,7 +109,7 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 .cols-mask{position:fixed;inset:0;z-index:1000;background:rgba(16,24,40,.4);display:flex;align-items:center;justify-content:center}
 .cols-panel{width:var(--sheet-columns-panel-width);max-width:calc(100vw - 32px);max-height:min(80vh,560px);display:flex;flex-direction:column;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);box-shadow:var(--shadow-2);padding:var(--space-4);outline:none}
 .cols-head{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
-.cols-title{margin:0;font-size:15px;color:var(--color-text-primary)}
+.cols-title{margin:0;font-size:var(--font-panel-title);color:var(--color-text-primary)}
 .cols-close{margin-left:auto;border:none;background:none;color:var(--color-text-secondary);cursor:pointer;font-size:var(--font-label);padding:4px 8px;border-radius:var(--radius-sm,6px);font-family:inherit}
 .cols-close:hover{background:var(--color-bg-muted);color:var(--color-text-primary)}
 .cols-hint{font-size:var(--font-caption);color:var(--color-text-secondary);margin:0 0 var(--space-2);line-height:1.6}

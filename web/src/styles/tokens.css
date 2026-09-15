@@ -10,6 +10,17 @@
  * `--font-body` 是 `font` 简写形态（`14px / 1.5`），只用于根元素排版；需要单独的
  * `font-size` 档位时消费组件层令牌 `--button-font-size` 等。
  *
+ * 字号档位补齐（PLAN-DM-029 Task 12 责任 K，Spec 归属方 2026-09-15 裁定）：原字数刻度
+ * 为 11/12/13/14/18，`15/16/17/20px` 四处离刻度值此前以显式例外挂着。经裁定将它们**升为
+ * 正式档位**：原字层 `--font-size-15/16/17/20`，语义层对应 `--font-panel-title`（面板/区块
+ * 标题）、`--font-title`（通用标题）、`--font-toolbar-title`（工具栏标题）、`--font-page-title`
+ * （页面主标题）。值逐字等值，**零视觉变化**；**离刻度值这一半**的责任 K 就此闭合。
+ * 注：责任 K 的**另一半**不在本次裁定范围内，仍然开放：语义层仍无独立的 14px/18px 非控件
+ * 档位，5 处卡标题/页标题因此**借用组件层令牌**（`--button-font-size`/`--modal-title-font-size`）
+ * —— 借用「值等值但语义不符」的令牌即语义说谎，需在后续字号阶修订中补齐。
+ * 注意：该裁定**仅**覆盖这 4 个档位，其余字号仍不得由页面迁移自行新增档位；
+ * 借用「值等值但语义不符」的令牌仍属禁止（语义说谎）。
+ *
  * 字体资源（ARCH-DM-007 §4.2）：本地 WOFF2、`font-display: swap`、只含 Basic Latin
  * （U+0020–007E）、Latin-1 Supplement（U+00A0–00FF）和界面通用标点（– — ‘ ’ “ ” …）。
  * 不打包 CJK：中文继续由 `--font-ui` 回落栈里的 Microsoft YaHei 承接；中文与图标字形
@@ -46,6 +57,7 @@
     --shadow-1:0 1px 2px rgba(16,24,40,.06); --shadow-2:0 4px 12px rgba(16,24,40,.10); --shadow-3:0 12px 32px rgba(16,24,40,.16);
     --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
     --font-size-12:12px; --font-size-13:13px; --font-size-14:14px; --font-size-18:18px;
+    --font-size-15:15px; --font-size-16:16px; --font-size-17:17px; --font-size-20:20px;
     --line-height-body:1.5;
     --height-34:34px; --height-36:36px; --height-38:38px;
     --tap-target-min:32px;
@@ -60,6 +72,10 @@
     --font-label:var(--font-size-13);
     --font-table:var(--font-size-13);
     --font-caption:var(--font-size-12);
+    --font-panel-title:var(--font-size-15);
+    --font-title:var(--font-size-16);
+    --font-toolbar-title:var(--font-size-17);
+    --font-page-title:var(--font-size-20);
     --control-height-compact:var(--height-34);
     --control-height-default:var(--height-36);
     --control-height-form:var(--height-38);

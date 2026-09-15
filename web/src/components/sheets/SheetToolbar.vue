@@ -179,7 +179,7 @@ const conditionChips = computed(() => {
 <style scoped>
 .sheets-toolbar{display:flex;flex-direction:column;gap:var(--space-3)}
 .toolbar-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
-.range-title{margin:0;font-size:17px;color:var(--color-text-primary)}
+.range-title{margin:0;font-size:var(--font-toolbar-title);color:var(--color-text-primary)}
 .counts{display:flex;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary)}
 .operations{margin-left:auto;display:flex;gap:var(--space-2)}
 /* Task 7：这些按钮已改用 UiButton size="compact"（34px），本页不再自建高度。仅保留 :deep(.cols-toggle)：

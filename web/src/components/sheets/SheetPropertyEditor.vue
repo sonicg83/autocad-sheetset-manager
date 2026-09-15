@@ -102,7 +102,7 @@ watch(() => hasError.value, (now) => {
 <style scoped>
 .sheet-property-editor{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);background:var(--color-info-bg)}
 .editor-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
-.editor-head h3{margin:0;font-size:15px}
+.editor-head h3{margin:0;font-size:var(--font-panel-title)}
 .editor-head-hint{color:var(--color-text-secondary);font-size:var(--font-caption)}
 .sheet-property-editor input{height:var(--control-height-form);min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
 .sheet-property-editor input:hover:not(:disabled){border-color:var(--color-accent)}

@@ -309,7 +309,7 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
 <style scoped>
 .operation-form{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);max-height:calc(100vh - 240px)}
 .form-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:0;padding:0;color:var(--color-text-primary)}
-.form-head h3{margin:0;font-size:15px}
+.form-head h3{margin:0;font-size:var(--font-panel-title)}
 .form-head-hint{color:var(--color-text-secondary);font-size:var(--font-caption)}
 /* 长表单内部滚动：保留标题与取消/加入草稿入口 */
 .form-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);overflow:auto;padding:4px var(--space-2) 4px 4px}

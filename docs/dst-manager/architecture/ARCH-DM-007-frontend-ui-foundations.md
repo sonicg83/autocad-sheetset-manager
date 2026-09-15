@@ -104,6 +104,10 @@ UiButton / UiIconButton / FormField / UiIcon / 对话框焦点工具
 | 正文 | `--font-body` | `14px / 1.5` |
 | 标签、表格 | `--font-label`、`--font-table` | `13px` |
 | 辅助文字 | `--font-caption` | `12px` |
+| 面板/区块标题 | `--font-panel-title` | `15px` |
+| 通用标题 | `--font-title` | `16px` |
+| 工具栏标题 | `--font-toolbar-title` | `17px` |
+| 页面主标题 | `--font-page-title` | `20px` |
 | 普通控件 | `--control-height-default` | `36px` |
 | 表单输入 | `--control-height-form` | `38px` |
 | 紧凑工具栏 | `--control-height-compact` | `34px` |
@@ -111,6 +115,11 @@ UiButton / UiIconButton / FormField / UiIcon / 对话框焦点工具
 | 最小可点高度 | 全局下限 | `32px` |
 
 组件只能消费已声明的语义令牌或组件令牌。断点、1px 边框、内容驱动高度和经 Spec 明确批准的例外可以使用常量；其余原始值必须由静态检查拒绝或进入有原因、有到期条件的白名单。
+
+**字号档位补齐（PLAN-DM-029 Task 12 责任 K，Spec 归属方 2026-09-15 裁定）**：原字数刻度为 `11/12/13/14/18`，`15/16/17/20px` 四处离刻度值此前以显式例外挂着（理由是本计划禁止为页面迁移新增字号令牌）。经裁定将它们**升为正式档位**（上表新增四行），值逐字等值、**零视觉变化**，对应的 7 条例外已清零 —— **离刻度值这一半**的责任 K 就此闭合。
+
+**仍然开放的另一半（责任 K 未闭合部分，本次裁定**未**覆盖）**：语义层仍无独立的 `14px` / `18px` 非控件档位，5 处卡标题/页标题因此跨层**借用组件层令牌**——`SheetCatalogView.vue:154` 借用 `--modal-title-font-size`；`CatalogPreview.vue:55`、`TemplateBar.vue:145`、`FieldBrowser.vue:209`、`ColumnEditor.vue:200` 借用 `--button-font-size`。借用「值等值但语义不符」的令牌即**语义说谎**，需在后续字号阶修订中补齐。
+注意该裁定**只**覆盖这四个档位：其余字号仍不得由页面迁移自行新增档位，也不得借用「值等值但语义不符」的令牌（语义说谎）。
 
 **当前落实程度与一条有界豁免（颜色、间距、圆角、图标尺寸）**：仓库尚未建立颜色、间距、圆角、图标尺寸这一层的**语义令牌**，因此上述四族目前仍是跨层直取原始令牌。口径（可跑，实测于 2026-09-15）：
 

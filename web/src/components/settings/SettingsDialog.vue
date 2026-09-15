@@ -460,7 +460,7 @@ const browseDisabled=computed(()=>{
 .settings-dialog::backdrop{background:rgba(16,24,40,.55)}
 .dlg{display:flex;flex-direction:column;height:100%}
 .dlg-head{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
-.dlg-head h2{margin:0;font-size:16px}
+.dlg-head h2{margin:0;font-size:var(--font-title)}
 .rev-pill{font-size:var(--font-caption);padding:2px 10px;border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary)}
 .spacer{flex:1}
 .icon-btn{border:0;background:transparent;color:var(--color-text-secondary);cursor:pointer;min-width:var(--tap-target-min);min-height:var(--tap-target-min);border-radius:var(--radius-md)}

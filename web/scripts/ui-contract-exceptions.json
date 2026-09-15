@@ -22,34 +22,6 @@
       "expiresWith": "下一次目录页视觉 Spec 修订"
     },
     {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-title font-size:15px|1",
-      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-head h3 font-size:15px|1",
-      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-head h3 font-size:15px|1",
-      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.range-title font-size:17px|1",
-      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
       "rule": "visible-input-label",
       "file": "src/components/SheetTable.vue",
       "fingerprint": "visible-input-label|src/components/SheetTable.vue|input:checkbox:|1",
@@ -64,32 +36,11 @@
       "expiresWith": "下一次表格无障碍 Spec 修订"
     },
     {
-      "rule": "raw-visual-value",
-      "file": "src/views/RevisionsView.vue",
-      "fingerprint": "raw-visual-value|src/views/RevisionsView.vue|.empty-title font-size:16px|1",
-      "reason": "字号在语义层无值等值的可借令牌（刻度 11/12/13/14/18，该值离刻度），且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-title font-size:20px|1",
-      "reason": "字号在语义层无值等值的可借令牌（刻度 11/12/13/14/18，该值离刻度），且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
-    },
-    {
       "rule": "unicode-structure-icon",
       "file": "src/components/sheets/SheetToolbar.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheets/SheetToolbar.vue|✕|1",
       "reason": "条件标签的清除按钮（chip-clear）保留 Unicode ✕。PLAN-DM-029 Task 7 Step 3 复核四条判据：① 可点面积不达标（padding:0 + 12px 字号，约 12×12px）——这是保留而非迁移的主因；② 可访问名称已具备（aria-label=sheets.toolbar.chips.*Clear）；③ 原生 button 且已显式 type=\"button\"，键盘可聚焦可激活；④ 迁移到 UiIconButton 会引入 36×36 图标按钮，撑破 12px 的标签胶囊布局（行内小控件），视觉劣化。故保留原字符，到期条件改为下一次图纸页视觉 Spec 修订，与责任 R（密集行内小控件 36px 不可达）同类。续轮补记：该可点面积低于全局最小可点下限 32px，与责任 R 同属「密集行内控件」待裁问题，并入其 SPEC 豁免申请。",
       "expiresWith": "下一次图纸页视觉 Spec 修订"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/settings/SettingsDialog.vue",
-      "fingerprint": "raw-visual-value|src/components/settings/SettingsDialog.vue|.dlg-head h2 font-size:16px|1",
-      "reason": "`.dlg-head h2` 的 16px 是**离刻度**字号（本仓字号刻度为 11/12/13/14/18），而本计划政策禁止为页面迁移新增字号令牌（T6-3 / Ruling 38），且无语义层/组件层的值等值令牌可借（`--space-4`/`--icon-size-md` 是间距/图标，借用即语义说谎）→ 保留为显式例外。",
-      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "unicode-structure-icon",

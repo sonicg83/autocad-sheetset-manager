@@ -499,6 +499,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, rename, "font-size", "--button-font-size");
     await expectToken(page, page.locator(".filter-toggle"), "height", "--control-height-compact");
     await expectToken(page, page.locator(".filter-toggle"), "font-size", "--button-font-size");
+    // 责任 K（已裁定）：17px 的唯一消费者 .range-title 此前无锚；绝对值锚 + 令牌消费
+    await expect(page.locator(".range-title")).toHaveCSS("font-size", "17px");
+    await expectToken(page, page.locator(".range-title"), "font-size", "--font-toolbar-title");
   });
 
   test("显示列入口：生效值由工具栏唯一声明（消除注入顺序依赖）", async ({page}) => {
@@ -588,7 +591,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(page.locator(".title-text").first()).toHaveCSS("max-width", "280px");
   });
 
-  test("列设置面板：宽度令牌与保留的 15px 标题字号", async ({page}) => {
+  test("列设置面板：宽度令牌与 15px 面板标题档位", async ({page}) => {
     await installSheetsFixture(page);
     await openWorkspace(page, "light");
     await page.locator(".cols-toggle").click();
@@ -596,8 +599,10 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(panel).toBeVisible();
     await expectToken(page, panel, "width", "--sheet-columns-panel-width");
     await expect(panel).toHaveCSS("width", "380px");
-    // 15px 保留为显式例外（责任 K）：此处钉住当前值，防被顺手改动
+    // 责任 K（已裁定）：15px 已升为语义档位 --font-panel-title。绝对值锚保留以钉住**零视觉变化**；
+    // 令牌断言用 expectToken（它先断言令牌能解析成具体值），避免令牌缺失时两侧同为 NaN 而静默通过
     await expect(panel.locator(".cols-title")).toHaveCSS("font-size", "15px");
+    await expectToken(page, panel.locator(".cols-title"), "font-size", "--font-panel-title");
   });
 
   test("操作表单：38px 输入档与 36px 动作档", async ({page}) => {
@@ -609,9 +614,12 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, form.locator("input").first(), "height", "--control-height-form");
     await expectToken(page, form.locator("select").first(), "height", "--control-height-form");
     await expectToken(page, form.locator("button").first(), "min-height", "--control-height-default");
+    // 责任 K：第 3 个 15px 消费者（.form-head h3）此前无锚，补绝对值锚 + 令牌消费
+    await expect(form.locator(".form-head h3")).toHaveCSS("font-size", "15px");
+    await expectToken(page, form.locator(".form-head h3"), "font-size", "--font-panel-title");
   });
 
-  test("行内属性编辑器：搜索框宽度令牌与保留的 15px 标题字号", async ({page}) => {
+  test("行内属性编辑器：搜索框宽度令牌与 15px 面板标题档位", async ({page}) => {
     await installSheetsFixture(page);
     await openWorkspace(page, "light");
     // 行内属性编辑器（SheetTable 内）——续轮补上 T7-1(A) 第 3 个令牌的覆盖缺口
@@ -620,8 +628,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(editor).toBeVisible();
     await expectToken(page, editor.locator(".editor-search input"), "width", "--sheet-property-search-width");
     await expect(editor.locator(".editor-search input")).toHaveCSS("width", "180px");
-    // 15px 第 2 个消费者（3 处之一是 .editor-head h3）：同样保留为显式例外（责任 K），钉住当前值防顺手改动
+    // 15px 第 2 个消费者（.editor-head h3）：责任 K 已裁定升为 --font-panel-title，绝对值锚保留
     await expect(editor.locator(".editor-head h3")).toHaveCSS("font-size", "15px");
+    await expectToken(page, editor.locator(".editor-head h3"), "font-size", "--font-panel-title");
   });
 });
 

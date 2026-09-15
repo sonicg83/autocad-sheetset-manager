@@ -1832,6 +1832,19 @@ function tokenColorOf(page: Page, token: string) {
   }, token);
 }
 
+// 读取令牌解析出的字号字符串（责任 K）。缺令牌时返回**空串**——
+// 令牌自指断言（元素 vs 令牌）在令牌缺失时两侧同为 NaN 仍会通过，故必须先把令牌本身钉成具体值。
+function tokenFontSizeOf(page: Page, token: string) {
+  return page.evaluate(name => {
+    const probe = document.createElement("span");
+    probe.style.fontSize = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return value;
+  }, token);
+}
+
 // 浮层内**所有**可点元素的可点高度必须 ≥32px（ARCH-DM-007 §4.1 全局最小可点下限）。
 // 枚举口径：button / a / summary / [role=tab] / [data-entry]（默认态 7 个、有诊断态 10 个）。
 // 刻意**不**缩小到“动作控件”：诊断行的 summary 与复制按钮正是在这里被发现低于下限的。
@@ -1952,6 +1965,20 @@ test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
     await expectLegacyControlContract(page, ".welcome-card .primary");
     expect(await primary.evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
     expect(await page.locator(".welcome-card").evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    // 责任 K（已裁定）：20px 已升为语义档位 --font-page-title，值逐字等值
+    expect(await tokenFontSizeOf(page, "--font-page-title"), "--font-page-title 必须解析为 20px").toBe("20px");
+    await expect(page.locator(".welcome-title")).toHaveCSS("font-size", "20px");
+  });
+
+  test("修订页空态：标题字号取语义档位 --font-title（16px）", async ({page}) => {
+    // 显式给空列表，落在空态而不是有列表态
+    await page.route("**/api/revisions?workspace_id=workspace-1", route => route.fulfill({json: []}));
+    await openWorkspace(page);
+    await page.getByRole("tab", {name: "修订历史"}).click();
+    const title = page.locator(".empty-title");
+    await expect(title).toBeVisible();
+    expect(await tokenFontSizeOf(page, "--font-title"), "--font-title 必须解析为 16px").toBe("16px");
+    await expect(title).toHaveCSS("font-size", "16px");
   });
 
   test("欢迎页降级态：路径输入必须有可见 label 关联，按钮带显式 type", async ({page}) => {
