@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-15（Task 5 修复轮与二次评审收口：Ruling 35，PLAN-DM-029）
+
+- **修复轮提交（Ruling 33）**：`3ff847d 补齐输入原语的悬停状态`（3 文件 +20/−1，父 `e36d4cd`）与 `55ab38b 清除属性页死规则并补齐字体断言`（2 文件 +71/−2）。两个提交边界各自自洽，整轮只碰派发清单的 5 个文件；`web/scripts/ui-contract-exceptions.json` **零改动**；未触碰 `web/src/styles/**`。
+- **控制器亲跑门禁**：`check:ui` 退出 0（静默）；`test:contracts` **83 passed / 0 failed**；`test:unit` **11 文件 / 104 passed**（与报告「102→104」相符，新增两条正是两个原语的 hover 源文本断言）。
+- **Important-1 闭环与 RED 证据真实性**：原语侧新增声明与既有事实标准**逐字等值**（`UiInput.vue` / `UiSelect.vue` 各插在 `:disabled` 之后、`--invalid` 之前），页面侧死规则确已删除，注释改写为**陈述事实**并记录 scoped `data-v-*` 机制与 Task 6 同款雷点。RED 证据可归因：失败值 `rgb(199, 208, 219)` / `rgb(59, 72, 92)` 恰为两主题 `--color-border-strong`（`#C7D0DB` / `#3B485C`），即 hover 后边框**仍是常规色**；且同一断言在 hover **之前**的默认态**先通过**，证明选择器命中真实、非 invalid、非 disabled 的 `.ui-input__control`，排除「选择器写错也报红」的假红。
+- **Important-2 闭环**：`font-family`/`line-height` 由 0 命中变为覆盖 Step 1 点名的四组元素（折叠标题、导入导出、搜索、主次动作），浅/深双主题。实现优于最低要求：字体族用探针元素从令牌解析（**不硬编码字体栈**）；行高断**比值**（`lineHeight / fontSize` == `--line-height-body`）而非 px，不随字号档位漂移；`line-height:normal` 显式转 `NaN` 使其**失败而非静默通过**；**未新增任何令牌**。
+- **二次评审闭环（re-review `d5020185`）**：BASE `e36d4cd` / HEAD `55ab38b`，判 `All findings addressed, no new Critical/Important breakage`。评审者独立用 `tokens.css` 逐值核验了上述四组 RED 颜色；确认新增声明未与全局层重复（`src/styles/*.css` 中 `:hover` 命中数均为 0）、无页面侧竞争规则、例外表零改动与 `check:ui` 退出 0 一致。
+- **Ruling 35（hover 压过错误态：控制器裁定修正）**：`UiInput` 的 `.ui-input__control:hover:not(:disabled)` 特异度 (0,3,0) 压过 `.ui-input--invalid .ui-input__control` (0,2,0)，插入位置在 `--invalid` 之前**不改变结论**（特异度优先于源顺序）。对**值面板是该页既有行为**（迁移前 (0,3,1) 压过 (0,2,1)，相对次序相同，外观未变）；但对**定义面板及其余消费方是本轮新引入**——`PropertyDefinitionPanel.vue` 传 `:invalid` 且迁移前**根本没有 hover 规则**（全仓 `input:hover` 仅值面板与 `SheetPropertyEditor.vue` 两处），其迁移前规则是 `.add-grid input[aria-invalid="true"]` (0,2,1)。实施者报告此前只识别出值面板的既有行为，**把共享原语的影响面说小了**。裁**定为必须修正**：错误态是持久语义态、hover 是瞬时可供性反馈，用可供性遮蔽语义态是已知反模式；该 hover 现已入**共享原语**，代价随 Task 6–9 每个新页面放大，此刻修最便宜；且 `SPEC-DM-006:169` 要求「**所有态须在前景观测下可分辨**」。**有意偏离**：修正会改变值面板迁移前外观（悬停无效字段时输入描边由强调色变危险色，容器级危险描边/底色不变），只影响 hover+invalid 一条路径，不影响默认态与错误态断言。错误态另有独立通道（`role="alert"` 的 `.field-error` + `aria-describedby` + 容器级危险色），故属**优先级定序**而非可感知性补救。
+- **新登记收口责任 P/Q**：P = 视觉证据注释与实现不符（附件名 `prod-` 前缀在实现中不存在；「padding/radius 已覆盖」高估实际断言），与 Ruling 33 追究的失实注释同类，已在第二轮 Step G1 一并订正（保留记录以说明「注释准确性」是本计划持续关注点）；Q = 输入 hover 的**表现形式**（描边变色）与 `SPEC-DM-006:169` 的「surface/muted 上升亮度约 +4%」通用规则不一致，且现已提升为**原语契约**会被 Task 6–9 逐页沿用——**本轮不动表现形式**（可见变化远大于定序修正、超出迁移任务范围），交 Spec 归属方确认或对齐，定调前不得声称输入 hover 已符合 §5.1。
+- **方法论记录（写入收口依据）**：既有断言 `.value-panel .value-item.invalid input` 「看起来能覆盖 input」，是因为 **e2e 选择器不受 scoped 限制、直接命中真实 DOM**；页面侧规则则受 scoped 限制。这正是「不做活的 hover 断言就会漏掉本类缺陷」的结构性原因，也是 Ruling 33 要求活守卫的依据。
+- **Minor-4 收口裁定（无需动作）**：首评认为 5 张持久 PNG「不可复现」，核验后判定**已被既有文档消解**——`properties-visual-evidence.spec.ts` 头部逐字记录「截图仅作 testInfo 附件，入库副本由**验收时按相同视口、主题和状态显式复制**（临时采集脚本不进入提交树）」，即代码不引用 assets 目录是设计如此；资产目录实测 8 个 PNG（3 张 Task 4 壳层 + 5 张 Task 5 属性页）。**证据效力边界**：只支撑「存在 + 视口/状态/主题标注正确」，**不支撑视觉主张本身**（二进制不可评审）。
+- **本轮改动范围**：仅计划文件与本文档（记录 Ruling 35、第二轮修复步骤与 Files、收口责任 P/Q、F1–F3 实测回填）。实现改动由第二轮修复轮独立提交。
+
 ## 2026-09-15（Task 5 实施轮与评审收口：Ruling 32/33，PLAN-DM-029）
 
 - **实施轮提交**：`0ff550e 统一属性页控件视觉基础`（父 `a0c0b24`），14 文件、+298/−576。工作区与索引干净；实施者越过控制器在其工作期间插入的两个文档/计划提交，无重叠文件、无冲突。

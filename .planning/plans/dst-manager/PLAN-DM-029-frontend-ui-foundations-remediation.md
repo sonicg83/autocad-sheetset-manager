@@ -227,9 +227,37 @@ Files（`web/src/components/ui/**` 的修改权仅限本轮，Task 5 主体步�
 - Modify: `web/src/components/properties/PropertyValuePanel.vue`
 - Modify: `web/tests/e2e/properties-visual-evidence.spec.ts`
 
-- [ ] **Step F1（RED）**：在 `properties-visual-evidence.spec.ts` 加真实 hover 计算样式断言 → 必须因 `borderColor` 不等于强调色而失败，保存失败输出自证诊断。
-- [ ] **Step F2（GREEN，提交一）**：在 `uiPrimitives.test.ts` 加源文本断言（RED）→ 在 `UiInput.vue`/`UiSelect.vue` 补 hover 声明（GREEN）。commit：`补齐输入原语的悬停状态`。
-- [ ] **Step F3（GREEN，提交二）**：删除 `PropertyValuePanel.vue` 的死亡规则并把注释改为陈述事实；补 `font-family`/`line-height` 计算样式断言。commit：`清除属性页死规则并补齐字体断言`。
+- [x] **Step F1（RED）**：在 `properties-visual-evidence.spec.ts` 加真实 hover 计算样式断言 → 必须因 `borderColor` 不等于强调色而失败，保存失败输出自证诊断。
+      **实测**：`2 failed / 2 passed`。失败值 `Received "rgb(199, 208, 219)"`（浅色 `--color-border-strong` `#C7D0DB`）与 `"rgb(59, 72, 92)"`（深色 `#3B485C`）恰为该令牌两主题解析值，即 hover 后边框**仍是常规色**；且 hover **之前**的默认态断言**先通过**，证明选择器命中的是真实、非 invalid、非 disabled 的 `.ui-input__control`。故失败只能归因「hover 无规则」，排除「选择器写错也报红」的假红。证据 `evidence/task-5-fix-red.txt`。
+- [x] **Step F2（GREEN，提交一）**：在 `uiPrimitives.test.ts` 加源文本断言（RED）→ 在 `UiInput.vue`/`UiSelect.vue` 补 hover 声明（GREEN）。commit：`补齐输入原语的悬停状态`（`3ff847d`）。
+- [x] **Step F3（GREEN，提交二）**：删除 `PropertyValuePanel.vue` 的死亡规则并把注释改为陈述事实；补 `font-family`/`line-height` 计算样式断言。commit：`清除属性页死规则并补齐字体断言`（`55ab38b`）。
+      **实测**：GREEN `6 passed / 0 failed`，且在**页面死亡规则已删除**的代码状态下取得 → 直接证明 hover 由原语提供。e2e 用 2/2 配额（RED 1 + GREEN 1）。
+
+**第一轮修复的评审闭环（re-review `d5020185`，BASE `e36d4cd` / HEAD `55ab38b`）**：判 `All findings addressed, no new Critical/Important breakage`；两条 Important 与「活的回归守卫」要求均闭环，RED 证据经评审者独立用 `tokens.css` 逐值核验成立。遗留 3 条 Minor + 1 项需控制器裁定的状态优先级（见下方第二轮修复）。
+
+**第二轮修复（Ruling 35，两轮独立提交）**
+
+re-review 把「hover 压过错误态」交由控制器显式裁定。控制器裁**定为必须修正**，理由与代价如下：
+
+- **事实**：`UiInput.vue` 的 `.ui-input__control:hover:not(:disabled)` 特异度 **(0,3,0)** 压过 `.ui-input--invalid .ui-input__control` 的 **(0,2,0)**（`UiSelect.vue` 同形）；插入位置在 `--invalid` 之前不改变结论，**特异度优先于源顺序**。
+- **对值面板是既有行为**：迁移前 `.value-item input:hover:not(:disabled)` (0,3,1) 已压过 `.value-item.invalid input` (0,2,1)，相对次序完全相同，故该页外观未变。
+- **对定义面板及其余消费方是本轮新引入**：`PropertyDefinitionPanel.vue` 传 `:invalid`，而其迁移前**根本没有 hover 规则**（全仓 `input:hover` 仅 `PropertyValuePanel.vue` 与 `SheetPropertyEditor.vue` 两处），迁移前规则是 `.add-grid input[aria-invalid="true"]` (0,2,1)。实施者报告此前只识别出值面板的既有行为，**把共享原语的影响面说小了**。
+- **裁定理由**：错误态是**持久语义态**、hover 是**瞬时可供性反馈**，用可供性遮蔽语义态是已知反模式；该 hover 现已位于**共享原语**，代价将随 Task 6–9 每个新迁移页面放大，此刻修最便宜（两个选择器 + 两处测试字符串 + 一条活的守卫）。且 `SPEC-DM-006:169` 明确「**所有态须在前景观测下可分辨**」，遮蔽方向与该条相悖。
+- **有意偏离**：本修正会**改变值面板迁移前的既有外观**——悬停无效字段时输入描边由强调色变为危险色（容器级危险描边/底色不变）。这是对「逐字搬移/零视觉变化」的**有意定序修正**，只影响 hover+invalid 这一条路径，不影响默认态与错误态断言（`properties-visual-evidence.spec.ts` 未悬停处仍断言 `--color-danger`）。
+- **未变得不可感知**：错误态另有独立通道——`PropertyDefinitionPanel.vue` 的 `<p v-if="nameError" id="definition-name-error" class="field-error" role="alert">`（配 `aria-invalid`/`aria-describedby`）与值面板容器级 `.value-item.invalid{border-color/background:--color-danger(-bg)}`；`aria-invalid` 不受 hover 影响。故本修正属**优先级定序**，不是可感知性补救。
+
+Files（本轮）：
+
+- Modify: `web/src/components/ui/UiInput.vue`（选择器改为 `.ui-input:not(.ui-input--invalid) .ui-input__control:hover:not(:disabled)`）
+- Modify: `web/src/components/ui/UiSelect.vue`（同形以 `.ui-select:not(.ui-select--invalid)`）
+- Modify: `web/src/components/ui/uiPrimitives.test.ts`（两处源文本断言锚定完整选择器字符串，必须同步改；其先红本身即该耦合的正面证明）
+- Modify: `web/tests/e2e/properties-visual-evidence.spec.ts`（新增 hover+invalid 活的守卫；订正注释不精确；搜索元素改用稳健定位器）
+
+- [ ] **Step G1（RED）**：在既有 `error` 状态夹具下，对 `.value-panel .value-item.invalid input` 先断言默认态为 `--color-danger`、**显式断言该控件为 enabled**（`toBeEnabled()`，否则禁用控件会让守卫假绿），再 `hover()` 后断言**仍为** `--color-danger` → 当前代码下必须失败（显示强调色），保存失败输出。同时订正 `properties-visual-evidence.spec.ts` 的两处注释不精确（`padding/radius` 覆盖高估；`prod-` 前缀与实现不符），并把搜索元素由顺序相关的 `.first()` 改为同用例已定义的 `valueSearch` 角色定位器（`expectTokenFontFamily` 需接受 `Locator`）。
+- [ ] **Step G2（GREEN，提交一）**：改 `UiInput.vue`/`UiSelect.vue` 两个选择器 + `uiPrimitives.test.ts` 两处断言。commit：`修正原语中错误态优先于悬停的定序`。
+- [ ] **Step G3（GREEN，提交二）**：确认新守卫与既有 hover 断言同时通过（非 invalid 悬停仍为强调色、invalid 悬停为危险色）。commit：`补错误态悬停守卫并订正视觉证据注释`。
+
+**配额**：`check:ui` ≤2、`test:contracts` ≤2、`test:unit` ≤2、e2e（仅属性页 spec）≤2、`build` ≤1；**禁跑全量 e2e**（由控制器收口时执行）。
 
 ### Task 6: 迁移图纸目录页并复核历史图标例外
 
@@ -530,6 +558,10 @@ Files（`web/src/components/ui/**` 的修改权仅限本轮，Task 5 主体步�
 > **收口责任 N（`line-height` 没有令牌层；Task 5 修复轮实测）**：语义层只有 `--line-height-body:1.5`，且其用途被限定在 `--font-body` 简写（根元素专用）。界面其余行高散落为裸无单位倍数：`primitives.css:29` 的 `line-height:1.6`，以及 `PropertyValueCompareDialog.vue:66`、`PropertyValuePanel.vue:314`、`PropertyValuePanel.vue:330` 三处 `line-height:1.7`。静态检查器不把无单位倍数计为 `raw-visual-value`，所以这些值既无令牌也不进例外表，属「检查器盲区内的既有债务」。Task 5 只能锁定既有计算值（Important-2），不能新增字号/行高令牌。收口方向：评估是否补一档 `--line-height-*` 语义令牌并让检查器覆盖无单位行高；在此之前不得声称行高已令牌化。
 >
 > **收口责任 O（SPEC-DM-006 §232 的「文本域」当前无原语；Task 5 修复轮实测）**：`web/src/components/ui/` 没有 textarea 原语（`dialogFocus.ts:31` 只在焦点选择器里认 `textarea`），属性页的展开编辑用原生 textarea。因此 §232 对文本域的三态要求既无原语承载、也无页面 hover 规则可迁移（全仓 `textarea:hover` 零命中，故本轮无回归）。收口方向：要么新增 textarea 原语并补齐状态，要么在 Spec 里明确文本域沿用原生并给出可核验的状态声明。
+>
+> **收口责任 P（视觉证据注释与实现不符；Task 5 第二轮修复已订正，保留记录）**：`properties-visual-evidence.spec.ts` 头部注释写「附件为 `prod-{状态}-{宽}x{高}-{主题}.png`」，而 `attachScreenshot` 实际写 `${state}-${宽}x${高}-${主题}.png`（**无 `prod-` 前缀**），调用点传入 `default`/`narrow-single-column`/`def-table-overflow`；同文件新增注释又声称「height/padding/radius 已由上方令牌断言覆盖」，而全文件 `padding`/`radius` 断言各仅 1 条且都指向定义面板查询区，**不覆盖**折叠标题、导入导出与两个按钮。两者均属「注释声称强于实际」的文档债务，与 Ruling 33 追究的失实注释同类，已在 Step G1 一并订正。保留本条以说明「注释准确性」是本计划的持续关注点。
+>
+> **收口责任 Q（输入 hover 的表现形式与 SPEC-DM-006 §5.1 通用规则不一致；Task 5 第二轮评审发现）**：`SPEC-DM-006:169` 的交互态映射规则写「`hover` 在 surface/muted 上升亮度约 +4%」，而本轮制度化到共享原语的输入 hover 是**描边变色** `border-color:var(--color-accent)`（`:232` 未规定输入 hover 的表现形式）。该形式是仓库既有事实标准（迁移前已逐字相同地出现在 `PropertyValuePanel.vue` 与 `SheetPropertyEditor.vue` 两处），且现已提升为**原语契约**，会被 Task 6–9 逐页沿用。收口方向：请 Spec 归属方确认「描边变色」是被接受的输入 hover 表现，或在文栅上对齐 +4% 规则；**本轮不动表现形式**（那比定序修正的可见变化大得多，超出迁移任务范围），但在定调前不得声称输入 hover 已符合 §5.1。
 
 ## 依赖与提交顺序
 
