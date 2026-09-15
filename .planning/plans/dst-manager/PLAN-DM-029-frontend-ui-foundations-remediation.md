@@ -676,6 +676,9 @@ Files（本轮）：
 
 ### Task 9: 迁移修订、修复、草稿和欢迎页等旧页面
 
+> **状态：已关闭**。Step 1–8 全部交付（跨三轮：首轮 Steps 1/2/4/6 → 续轮 Step 3 + 变异自证 → 第三轮 Step 5）。评审结论 **Approved / 0 Critical / 0 Important**（4 Minor，均为 cosmetic 或已登记归 Task 10/12）。
+> **两处结束态不可达已如实登记**（非实现者失败）：① Step 4 的「`legacy.css` 只允许仍有永久 Spec 例外的根类规则」在 `:102`/`:105` 仍有**已关闭任务**的消费方时**不可能达成**（正是 T9-1(E)2 所要保护的）→ 交 Task 12；② Step 6 的「除 ColumnEditor 图标外全部清退」不可达（3 条离刻度字号）→ 已由 T9-1(F) 订正为保留 2 条 + 随死规则消灭 1 条。
+
 **Files:**
 
 - Modify: `web/src/views/RevisionsView.vue`
@@ -693,16 +696,16 @@ Files（本轮）：
 - Modify: `web/tests/e2e/sheets-drafts.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
-- [ ] **Step 1（RED）**：为欢迎页选择文件、修订恢复、修复、草稿动作、任务状态和确认流程补按钮 type、最小点击面积、可见标签、danger 层级和焦点归还断言。
-- [ ] **Step 2（迁移）**：旧页面按钮、输入和选择器改用原语；保留恢复确认、修复预览、草稿撤销/重做和任务取消行为。
-- [ ] **Step 3（模态接入）**：`ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 复用 `dialogFocus.ts`；保持 SPEC-DM-006 的嵌套模态原生 dialog 裁决，不把原生 dialog 强改为遮罩层。
-- [ ] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除。注意：`parseRules` 会把紧邻规则的前置注释并入选择器，**注释文本因此进入例外指纹**（全表 **23 条**受影响，涉及 9 个文件、18 段不同注释文本），因此删除或改写这些注释必须与 `ui-contract-exceptions.json` 的更新落在同一次改动里，否则会立即变成陈旧例外。
-- [ ] **Step 5（证据）**：保存欢迎默认、修订危险确认、修复错误、深色任务状态共 4 张。
-- [ ] **Step 6（门禁闭合）**：除经 T9-1(F) 保留的 **3 条**字号例外（责任 K）外，清退 Task 9 域内全部视觉债务例外；运行检查器验证无陈旧例外。
+- [x] **Step 1（RED）**：为欢迎页选择文件、修订恢复、修复、草稿动作、任务状态和确认流程补按钮 type、最小点击面积、可见标签、danger 层级和焦点归还断言。
+- [x] **Step 2（迁移）**：旧页面按钮、输入和选择器改用原语；保留恢复确认、修复预览、草稿撤销/重做和任务取消行为。
+- [x] **Step 3（模态接入）**：`ConfirmModal.vue` 与 `UnsavedInputDialog.vue` 复用 `dialogFocus.ts`；保持 SPEC-DM-006 的嵌套模态原生 dialog 裁决，不把原生 dialog 强改为遮罩层。
+- [x] **Step 4（legacy 清理）**：逐条证明消费方已迁移后删除 `legacy.css` 对应规则；最终 `legacy.css` 只允许仍有永久 Spec 例外的根类规则，无条目时保留空 layer 文件和说明。`.summary` 等**已无 `class="summary"` 渲染点的死规则**随本次清理整体删除。注意：`parseRules` 会把紧邻规则的前置注释并入选择器，**注释文本因此进入例外指纹**（全表 **23 条**受影响，涉及 9 个文件、18 段不同注释文本），因此删除或改写这些注释必须与 `ui-contract-exceptions.json` 的更新落在同一次改动里，否则会立即变成陈旧例外。
+- [x] **Step 5（证据）**：保存欢迎默认、修订危险确认、修复错误、深色任务状态共 4 张。
+- [x] **Step 6（门禁闭合）**：除经 T9-1(F) 保留的 **3 条**字号例外（责任 K）外，清退 Task 9 域内全部视觉债务例外；运行检查器验证无陈旧例外。
   - **原措辞为计划缺陷（T9-1(F) 订正）**：原文「除可能保留的 ColumnEditor 图标外全部清退」**不可达**——字号刻度为 11/12/13/14/18，而 Task 9 域内存在 **3 个离刻度字号**（`RevisionsView` 16px、`WelcomeView` 20px、`legacy.css` 22px），且政策禁止新增字号令牌、也无值等值的可借令牌 → 必须保留。先例：Ruling 39 订正 Task 6、T7-1(F) 订正 Task 7、T8-1(H) 订正 Task 8。
   - **收口不变量**：Task 9 名下 **41** 条（Files 内 39 + `primitives.css` 孤儿 2）→ 清退 **38** 条、保留 **3** 条 → 全表 **63 → 25**；`check:ui` 裸违规应为 **26 = 25 + 1 动态白名单**。
-- [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-workflows.spec.ts sheets-drafts.spec.ts`、`rtk npm --prefix web run test:unit` 与 `rtk npm --prefix web run build`。
-- [ ] **Step 8（提交）**：commit：`完成旧页面视觉原语迁移`。
+- [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- main.spec.ts i18n-workflows.spec.ts sheets-drafts.spec.ts`、`rtk npm --prefix web run test:unit` 与 `rtk npm --prefix web run build`。
+- [x] **Step 8（提交）**：commit：`完成旧页面视觉原语迁移`。
 
 #### Task 9 控制器裁定（T9-1，派发前下达）
 
@@ -738,9 +741,36 @@ Files（本轮）：
   - ③ **显式复制、不加 env 开关**（T7-4 先例 + 责任 T：目录页那套 env 开关会无差别覆盖他 Spec 资产）；④ **每张图都必须配计算样式或几何断言**（不得“有图无证据”）；⑤ 只提交本任务自己的证据，被连带改写的他 Spec PNG → `git checkout` 还原并说明。
 - **裁定差异已登记（worker 主动、非静默对齐）**：T9-1(F) 预计保留 `legacy.css` 的 22px 字号例外，但 Step 4 要求删除**无渲染点**的 `.summary` 死规则，而该规则恰好承载那条例外 → 例外随规则一并消失 → **终态总数 25 与预告一致、构成不同**（Task 9 域内实为 2 条字号：RevisionsView 16px / WelcomeView 20px）。**不构成问题**：该规则无渲染点 → 例外本身也随之失效；终态**零 stale** ✓ 且每条到期条件均为真实条件 ✓。
 
+**T9-3（评审闭环 + Task 9 收口 —— 控制器复核）**：评审结论 **Approved / 0 Critical / 0 Important**（4 Minor）。
+
+**★ 头号项（已删 legacy 规则的渲染点审计）已由评审者用渲染度量独立完成，结论干净**：
+- 探了 **5 个活状态**（welcome-no-shell / sheets / properties / revisions / draft-pop），逐个核对**全部被删选择器**：**仅** `.sheet-table-window` 命中，且 `maxHeight: "none"` → 被删的 `max-height:520px` **确实**被 `SheetTable.vue` 的无层 scoped 规则接管 ✓；其余选择器匹配 **0**。
+- **★ 它在标记层交叉校验时点出了控制器审计脚本的方法缺陷**：控制器用**词边界正则**匹配类名，而词边界会**误计** `editor-head`/`draft-summary`（这正是控制器实测出「`App.vue` 里仍有 `.summary`」的原因——假阳性）；评审者改用**精确 class-token 匹配**，静态命中 **0**、动态 `:class` 提及 **0**。**方法上的这一纠正比结论本身更有价值，已记入教训。**
+- 对两条**确实仍有渲染**的被删子规则，它**指出了当前提供者**：`.csv-flow label`/`input` 的 `display:grid`/`padding:8px`/`border-radius:var(--radius-sm)` 来自 `PropertyCsvPanel.vue:114-115`（早已压过 legacy）✓。**无元素丢失样式。**
+
+**逐项复核结果（评审者）**：② `ui/**` diff 中 `defineProps|defineEmits|slot` **0 命中** ✓，两个顺序事实已在代码里写明理由（`UnsavedInputDialog.vue:28-34` 生命周期 watch 在工具之前；`:36-38` opener 在 `showModal()` 之前捕获），`returnFocus` 覆盖处 `:52-54` 也解释了为何不能用工具内部 opener 作返回点 ✓；③ 变异 **A** 红（`Expected: 38 / Received: 34`）、**B** 红（Tab 圈闭）、**C** 绿 ✓ 且**在机制上成立**（原生 `<dialog>` 的 `close()` 自己归还焦点；对已 `display:none` 的对话框内元素聚焦是 no-op）→ 该接线为**防御性**而非载荷 ✓；④ 16px/20px 逐字保留、`tokens.css` 无 `font-size` ✓；⑤ 10 个禁止借用令牌**零命中** ✓；⑥ 裁定差异已在 §5.6 与 §9.4 **两处**披露 ✓；⑧ `docs/` 下**恰好新增 4 张**于 `SPEC-DM-006/production/`、**无其他变更** ✓。
+
+**评审者额外肯定（值得记）**：① 最高风险的删除做对了——`.summary div,.panel` 是**组合规则**而 `.panel` 仍活（实测 `.panel` 有 **11** 处标记命中），**只删死的那一半**并把 `.panel` 拆出 ✓；② 迁移旧按钮**修掉了一个离档值而不是藏起来**——RED 实测 `.revisions-view button` 为 **39px**（legacy `min-height` + 内容，与 Task 7 的 37.5px 同一现象），现已归 **36px 控制档**并披露 ✓；③ `→` 保留理由**事实成立且评审者已核实**：`i18n-workflows.spec.ts:159/207/221` 按**文本**断言该单元 → 迁到 SVG 会**破坏 i18n 断言并丢掉可读文本** ✓；④ 它自曝的 3 个自造缺陷（`tokens.css` 的 `:root` 内注释、删除探测的假全零、`.all()` 不等待造成的 2 例假红）均如实登记 ✓。
+
+**Minor 处置**：
+1. `legacy.css` 中删空 `.filter-grid` 后遗留的**空 `@media(max-width:1000px){}` 块** → **控制器已直接清掉**（死代码，2 行；清后复核 `check:ui` **0**、例外表仍 **25**、`build` **0**）✓。
+2. `RevisionHistoryPanel.vue` 上冗余的 `class="primary"`（为保住 3 处既有 locator 而保留）→ **接受不修**（两路都解析为 accent；属 cosmetic）。
+3. **`.welcome-card .primary` 的 38 vs 36 档问题** → **并入责任 W**（与「工具栏 34 vs 36」「设置表单输入 34 vs 38」同族：**档位选择属 Spec 归属方**，不由页面迁移任务单方面裁定；它已按 T9-1(C) 借 `--control-height-form` 且**未把 38 降为 36** ✓）。
+4. **网关的 Tab 圈闭无永久断言**（本任务用临时探针验证后即删；`ConfirmModal` 的接线**已**被新增的 5×Tab 断言永久覆盖）→ **登记归 Task 10**（跟踪矩阵本就把模态键盘模型归 Task 10）✓。
+
+**另登记（评审者提出、控制器采纳）**：
+- **SSE 残留问题**（归 **Task 10/12**）：评审判定「对未知 job id 的 SSE 事件被忽略」**很可能属设计**（diff 内无 SSE/job 逻辑；测试适配方式与所有既有用例一致），但它**无法从 diff 定论**一个残留问题：**重载/恢复一个进行中的 job 后，客户端是否会重新登记该 job 使其事件被接受？** → 登记为待查问题，不要让它隐含。
+- **Step 4 的结束态不可达**（归 **Task 12**）：`legacy.css` 要缩到「只允许仍有永久 Spec 例外的根类规则」，**必须等 `:102`/`:105` 在已关闭任务里的消费方全部迁移**之后。报告 §3.3/§5.4 已披露并给出同一摘要。
+
+**Task 9 最终账**：例外表 **63 → 25**（清退 **38**、**0 stale**）；`tokens.css` **+6** 令牌（逐字等值）；`legacy.css` 规则 **144 → 129**（删 11 组死规则、余者就地令牌化）；`check:ui` **0**；`test:contracts` **0**（85/85）；`test:unit` **0**（11 文件/104）；`build` **0**；e2e（main + i18n-workflows + sheets-drafts）**0：106 passed / 0 failed / 0 flaky**（= 改前 102 + 新增 4）。持久证据 **4 张**（`SPEC-DM-006/production/`）。Step 3：两个模态接入 `useDialogFocus`，**公开契约未变**。
+
 ## 阶段 4：结构与无障碍治理
 
 ### Task 10: 收口按钮、搜索标签、图纸树与模态键盘模型
+
+> **由 Task 9 评审转入的两项待办（T9-3）**：
+> 1. **网关的 Tab 圈闭缺永久断言**：Task 9 把它的手写 `onKeydown` 换成了共享 `dialogFocus.ts` 工具，并用**临时探针**验证行为后删掉了探针（其 spec `extensions-settings.spec.ts` 不在 Task 9 Files 内）。`ConfirmModal` 的接线**已被**新增的 5×Tab 断言永久覆盖，**网关的那一份没有** —— 本任务收口模态键盘模型时请把它补上（或把该 spec 加入本任务 Files）。
+> 2. **SSE 残留问题**（Task 9 评审无法从 diff 定论）：「对**未知 job id** 的 SSE 事件会被忽略」很可能属设计；但**重载/恢复一个进行中的 job 后，客户端是否会重新登记该 job 使其事件被接受？** 请在本任务或 Task 12 查清并定调，不要让它隐含。
 
 **Files:**
 

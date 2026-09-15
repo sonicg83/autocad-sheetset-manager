@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-09-15（Task 9 全周期：裁定、三轮实施、评审通过与关闭，PLAN-DM-029）
+
+> **补记说明**：本任务跨三轮实施，裁定与收口当时只入计划/ledger，**未同步 changelog**（违反本仓「每次修改都要更新根 `changelog.md`」的约定）。此处一次补齐，并已记入流程教训。
+
+- **派发前裁定 T9-1**（提交 `d814b9f`）：Files 补列 `primitives.css`（责任 L 登记的孤儿 2 条）· `tokens.css` 仅追加逐字等值令牌（520/1440/68px 等）· 明列禁止借用与允许借用 · **3 条离刻度字号保留为例外 + 责任 K**（不得改值、不得新建字号令牌）· 5px 圆角 → `--radius-sm`(6px) 1px 偏差披露 · **Step 6 措辞订正**（原「除 ColumnEditor 图标外全部清退」不可达）→ 不变量 **63 → 25**。
+- **★ 本任务最大的风险不是「迁页面」而是「删规则」**：`legacy.css` 里唯一那条共享控制规则的选择器**横跨已关闭的任务**（`.properties-view button` = **Task 5 已关闭**、`.sheets-toolbar …` = **Task 7 已关闭**、`.sheet-property-editor …`）。→ **T9-1(E)2 硬约束：消费方跨已关闭任务时不得删除；Task 9 只能删消费方全在自己域内的规则；删任何页面本地规则前必须度量删除前后的渲染结果**（先例：Task 7 的 `.filter-toggle` 落到 legacy 后变 **37.5px**）。**结果：共享规则完整保留（现 `legacy.css:87`），已关闭页面未回退 ✓。**
+- **`ui/**` 定向授权**（与 Task 6/7/8 不同）：本任务 Files 含 `ConfirmModal.vue` + `UnsavedInputDialog.vue`，但**仅**为 Step 3 的焦点复用授权；**不得改公开契约**；其余 `ui/**` 仍禁触。
+- **三轮实施**：首轮 `5c28fa2`+`ec43808`（断言 + 迁移 + 清退死规则）→ 续轮 `66cafc2`（两模态接入 `useDialogFocus`，公开契约未变、SPEC-DM-006 裁决保留）+ 变异自证 → 第三轮 `6a73a0e`（4 张持久证据）。
+- **变异自证 3 例**：A（欢迎页 38px）与 B（移除 keydown 绑定）**均真红**；**C（网关 `returnFocus`→null）仍绿** → 它在机制上正确判定该接线是**防御性安全网**（原生 `<dialog>` 的 `close()` 自己归还焦点），**如实报告而非声称已证** ✓。
+- **T9-2 裁定**（提交 `642125f`）：Step 5 证据落点 = **新建 `docs/dst-manager/specs/assets/SPEC-DM-006/production/`**（SPEC-DM-006 是桌面 UI/UX 总纲 Spec）+ 证据组写在 **`main.spec.ts`**（接纳 worker 提议：4 个状态的夹具流程已在其中，另建 spec 会**重复不易写的夹具逻辑**；**对 `<scope>-visual-evidence` 命名惯例的偏离是刻意批准的**）· **显式复制、不加 env 开关**（T7-4 先例 + 责任 T）· 每张图必须配断言。
+- **worker 的正确行为**：Step 5 受阻时**没有自创路径**，而是带三个可核实的事实（无旧页面资产目录、Files 内无 `*visual-evidence*` spec、`main.spec.ts` 零截图）与可复用流程定位回来请裁定 ✓。
+- **发现的**应用行为知识**：① 对**未知 job id** 的 SSE 事件会被忽略（既有测试都先让应用经「确认写入 → `changes/execute`」创建 job 再推终态事件）；② 点「确认写入」后浮层**已自动展开**（不存在「展开浮层」按钮）→ 改为按 `aria-selected` 条件切页签。
+- **评审结论：Approved / 0 Critical / 0 Important**（4 Minor）。评审者用**渲染度量探 5 个活状态**完成头号项审计：仅 `.sheet-table-window` 命中且 `maxHeight:"none"`（被 `SheetTable.vue` 无层 scoped 规则接管），其余选择器匹配 **0**；对两条仍渲染的被删子规则指出当前提供者（`PropertyCsvPanel.vue:114-115`）→ **无元素丢失样式** ✓。
+- **★ 评审者纠正了控制器的方法缺陷**：控制器用**词边界正则**匹配类名 → **误计** `editor-head`/`draft-summary`，因而断言「`App.vue` 仍有 `.summary`」是**假阳性**；评审者改用**精确 class-token 匹配**后静态/动态命中均为 0。**方法纠正比结论更有价值。**
+- **Minor 处置**：空 `@media(max-width:1000px){}` 死块 → **控制器已清**（复核 `check:ui` 0、例外 25、build 0）；冗余 `class="primary"` → 接受不修；`.welcome-card .primary` 的 **38 vs 36 档 → 并入责任 W**；**网关 Tab 圈闭缺永久断言 → 登记归 Task 10**；**SSE 残留问题**（重载/恢复进行中 job 后是否重新登记）→ Task 10/12；**Step 4 结束态不可达**（需等 `:102`/`:105` 在已关闭任务中的消费方全部迁移）→ Task 12。
+- **最终账**：例外 **63 → 25**（清退 **38**、**0 stale**）；`tokens.css` **+6**；`legacy.css` **144 → 129** 规则（删 11 组死规则、余者**就地令牌化**）· `check:ui` **0** · contracts **85/85** · unit **104** · build **0** · e2e **106 passed / 0 failed / 0 flaky**（= 102 + 新增 4）· 持久证据 **4 张**。**另**：迁移旧按钮顺带**修掉一个离档值**（RED 实测 **39px** → 归 **36px** 控制档并披露）。
+
 ## 2026-09-15（Task 8 关闭，PLAN-DM-029）
 
 - **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 1 Important + 5 Minor 全部闭合；Minor-6 已裁定接受）。

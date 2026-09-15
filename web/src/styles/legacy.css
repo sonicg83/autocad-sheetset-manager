@@ -80,9 +80,6 @@
   .draft-save-status .save-status.error{color:var(--color-danger)}
   .drop-hint{color:var(--color-text-muted);font-size:var(--font-label)}
 
-  @media(max-width:1000px) {
-  }
-
   /* 旧功能入口的受控按钮基线；图标、页签和文字操作继续由各组件定义。 */
   :where(.sheets-toolbar .operations button,.sheets-toolbar .selection-bar button,.sheets-toolbar .select-entry button,.sheets-toolbar .filter-toggle,.sheets-toolbar .chips-clear-all,.sheets-view .empty-state button,.sheets-view .hidden-target-notice button,.sheets-view .load-more,.properties-view button,.property-panel .link-actions a,.repair .link-actions button,.recover-banner button,#draft-pop button,.job-detail button,.revisions-view button,.sheet-property-editor .editor-footer button):is(button,a){min-height:var(--control-height-default);padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface)}
 
