@@ -628,63 +628,63 @@
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheets/SheetTree.vue|▾|1",
       "reason": "迁移前既有 Unicode 结构图标；图纸目录 ↑/↓/✕ 为 PLAN-DM-023 已批准临时例外",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "unicode-structure-icon",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheets/SheetTree.vue|▸|1",
       "reason": "迁移前既有 Unicode 结构图标；图纸目录 ↑/↓/✕ 为 PLAN-DM-023 已批准临时例外",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.sheet-tree [role=treeitem] font-size:13px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.chevron font-size:11px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.chevron width:16px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.chevron height:16px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.chevron-placeholder width:16px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.chevron-placeholder height:16px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetTree.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetTree.vue|.node-count font-size:12px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
       "rule": "visible-input-label",
@@ -893,7 +893,7 @@
       "rule": "unicode-structure-icon",
       "file": "src/components/sheets/SheetToolbar.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheets/SheetToolbar.vue|✕|1",
-      "reason": "条件标签的清除按钮（chip-clear）保留 Unicode ✕。PLAN-DM-029 Task 7 Step 3 复核四条判据：① 可点面积不达标（padding:0 + 12px 字号，约 12×12px）——这是保留而非迁移的主因；② 可访问名称已具备（aria-label=sheets.toolbar.chips.*Clear）；③ 原生 button 且已显式 type=\"button\"，键盘可聚焦可激活；④ 迁移到 UiIconButton 会引入 36×36 图标按钮，撑破 12px 的标签胶囊布局（行内小控件），视觉劣化。故保留原字符，到期条件改为下一次图纸页视觉 Spec 修订，与责任 R（密集行内小控件 36px 不可达）同类。",
+      "reason": "条件标签的清除按钮（chip-clear）保留 Unicode ✕。PLAN-DM-029 Task 7 Step 3 复核四条判据：① 可点面积不达标（padding:0 + 12px 字号，约 12×12px）——这是保留而非迁移的主因；② 可访问名称已具备（aria-label=sheets.toolbar.chips.*Clear）；③ 原生 button 且已显式 type=\"button\"，键盘可聚焦可激活；④ 迁移到 UiIconButton 会引入 36×36 图标按钮，撑破 12px 的标签胶囊布局（行内小控件），视觉劣化。故保留原字符，到期条件改为下一次图纸页视觉 Spec 修订，与责任 R（密集行内小控件 36px 不可达）同类。续轮补记：该可点面积低于全局最小可点下限 32px，与责任 R 同属「密集行内控件」待裁问题，并入其 SPEC 豁免申请。",
       "expiresWith": "下一次图纸页视觉 Spec 修订"
     }
   ],
@@ -902,7 +902,7 @@
       "variable": "--sheet-tree-width",
       "producer": "src/views/SheetsView.vue",
       "consumer": "src/views/SheetsView.vue",
-      "reason": "图纸树宽度是用户可拖拽/键盘调整的运行时状态（SheetsView.vue:91 的 treeWidth ref，260–420px 夹取，:147 经内联 :style 写入），静态样式表无法声明；PLAN-DM-029 Task 7 复核：不可改为静态令牌（宽度由用户交互决定）",
+      "reason": "图纸树宽度是用户可拖拽/键盘调整的运行时状态（SheetsView.vue:91 的 treeWidth ref，260–420px 夹取，:147 经内联 :style 写入），静态样式表无法声明；PLAN-DM-029 Task 7 复核：不可改为静态令牌（宽度由用户交互决定）；续轮补记：该可点面积低于全局最小可点下限 32px，与责任 R 同属「密集行内控件」待裁问题，并入其 SPEC 豁免申请。",
       "expiresWith": "图纸树面板改为固定宽度、或撤销拖拽/键盘调整能力时"
     }
   ]
