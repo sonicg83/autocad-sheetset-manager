@@ -1413,6 +1413,14 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
     await expectToken(page, conflict.locator("h3"), "font-size", "--font-card-title");
+    // 零视觉变化的**直接绝对值锚**（值逐字等值）：上组断言只钉住「元素值 == 令牌解析值」，
+    // 本组直接钉住像素值，二者合起来才能同时证明「已消费新档位」与「渲染没变」（只有前者时，
+    // 把档位改成 18px 会两边一起变而仍然全绿 —— 上一轮 15px 档位的变异自证就吃过这一课）。
+    await expect(page.locator(".preview-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".field-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".editor-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".catalog-head h2")).toHaveCSS("font-size", "18px");
+    await expect(conflict.locator("h3")).toHaveCSS("font-size", "14px");
   });
 
   test("结构尺寸来自组件层令牌且表头轨道与数据行对齐", async ({page}) => {
