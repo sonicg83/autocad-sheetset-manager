@@ -606,3 +606,61 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(editor.locator(".editor-head h3")).toHaveCSS("font-size", "15px");
   });
 });
+
+// —— Step 4：批量编辑区四视口密集布局（不撑破表格、操作列可达、滚动条不遮内容） ——
+test("批量编辑：四视口不撑破页面、操作列横向可达、滚动条不遮末行", async ({page}) => {
+  await installSheetsFixture(page);
+  // 由窄到宽遍历四个约定视口
+  for (const vp of [VIEWPORTS[3], VIEWPORTS[0], VIEWPORTS[1], VIEWPORTS[2]]) {
+    await page.setViewportSize({width: vp.width, height: vp.height});
+    await openWorkspace(page, "light");
+    await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+    await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+    const controls = page.locator(".bulk-controls");
+    await expect(controls).toBeVisible();
+    // ① 批量编辑区不得把页面撑出横向滚动
+    await assertNoHorizontalOverflow(page, vp.width);
+    const box = (await controls.boundingBox())!;
+    expect(box.x, `${vp.width}：批量区左缘不得为负`).toBeGreaterThanOrEqual(-1);
+    expect(box.x + box.width, `${vp.width}：批量区右缘不得超出视口`).toBeLessThanOrEqual(vp.width + 1);
+    // ② 操作列高度可达：横向滚到最右后，末列单元格必须落在窗口可见区内
+    const win = page.locator(".sheet-table-window");
+    // 反空转：若窗口本身无横向溢出，「滚到最右仍可达」就是恒真断言
+    expect(await win.evaluate(el => el.scrollWidth > el.clientWidth), `${vp.width}：应确有横向溢出，否则可达性断言空转`).toBe(true);
+    const winBox = (await win.boundingBox())!;
+    const winLeft = winBox.x;
+    const winRight = winBox.x + winBox.width;
+    const winBottom = winBox.y + winBox.height;
+    await win.evaluate(el => { el.scrollLeft = el.scrollWidth; });
+    const lastCell = (await win.locator("tbody tr").first().locator("td").last().boundingBox())!;
+    const cellRight = lastCell.x + lastCell.width;
+    expect(cellRight, `${vp.width}：操作列滚到最右后可见`).toBeLessThanOrEqual(winRight + 1);
+    expect(cellRight, `${vp.width}：操作列不得被裁到窗口左侧之外`).toBeGreaterThan(winLeft);
+    // ③ 横向滚动条不遮挡内容：纵向滚到底后末行底缘不得低于窗口底缘
+    await win.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    const lastRow = (await win.locator("tbody tr").last().boundingBox())!;
+    expect(lastRow.y + lastRow.height, `${vp.width}：末行不得被横向滚动条覆盖`).toBeLessThanOrEqual(winBottom + 1);
+  }
+});
+
+// —— Step 4：200% 浏览器缩放韧性（CSS 视口 720×500，同 SPEC-DM-012 §13 口径） ——
+test("200% 缩放（720×500）：无整页横滚且关键控件仍可达", async ({page}) => {
+  await installSheetsFixture(page);
+  await page.setViewportSize({width: 720, height: 500});
+  await openWorkspace(page, "light");
+  await assertNoHorizontalOverflow(page, 720);
+  // 树降级为抽屉，触发按钮必须仍在
+  await expect(page.locator(".tree-drawer-toggle")).toBeVisible();
+  await expect(page.getByRole("table", {name: "图纸表格"})).toBeVisible();
+  // 关键控件仍可达（表格内动作需先横向滚入）
+  for (const name of ["编辑属性", "编辑子集"]) {
+    const target = page.getByRole("button", {name}).first();
+    await target.scrollIntoViewIfNeeded();
+    await expect(target, `200%：${name} 应在视口内`).toBeInViewport();
+  }
+  // 批量区在 200% 下仍可用且不撑破
+  await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+  await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+  await expect(page.locator(".bulk-controls")).toBeVisible();
+  await assertNoHorizontalOverflow(page, 720);
+});
