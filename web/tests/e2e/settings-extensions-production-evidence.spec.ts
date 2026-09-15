@@ -361,6 +361,10 @@ test.describe("Task 8 控件视觉基础正交证据（PLAN-DM-029）", () => {
     const described = ((await lease.getAttribute("aria-describedby")) ?? "").split(/\s+/).filter(Boolean);
     expect(described, "错误文字必须经 aria-describedby 关联（仅视觉相邻不算）").toContain(errorId);
     await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+    // Minor-D：取景约定（同文件头部 :129「被证对象必须先滚入可视区」）——
+    // 否则错误文案落在对话框可视区之外，这张图不能独立说明「校验错误」状态。
+    await error.scrollIntoViewIfNeeded();
+    await expect(error, "错误文案必须滚入可视区，截图才可独立作证").toBeInViewport();
     await shoot(page, info, "task8-03-validation-error-1280x720.png");
   });
 
