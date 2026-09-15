@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-15（会话恢复核验与订正 PLAN-DM-029 状态/索引，PLAN-DM-029）
+
+- **中断恢复核验（无工作丢失）**：工作树 `.worktrees/plan-dm-029`、分支 `plan-dm-029-frontend-ui-foundations`、HEAD `e40a932`；`git status --porcelain -uall` 零条，无 stash 可恢复（悬空的 `task5-wip` 实属 PLAN-DM-031 的 `publisher.py`，与本计划无关）；SDD 证据链 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/`（`task-1..4-report.md` + `progress.md`）与 3 张视觉证据 PNG 均在库。
+- **恢复后基线门禁（工作树亲跑，非引用历史记录）**：`check:ui` 退出 0、`test:contracts` **83 passed / 0 failed**、`test:unit` **102 passed / 11 文件**、例外表 **320 条**（与 Task 4 收口值 382 → 320 一致）。
+- **状态订正**：计划已开工且完成 4/12 任务，`status: proposed → active`、`updated: 2026-09-14 → 2026-09-15`；同步 `.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 两处索引，改记 `active` 并附进度摘要（阶段 1–2 完成、Task 5–12 待实施）。
+- **影响范围**：仅计划与索引文档，未触碰任何实现、测试、例外表或视觉证据。
+
 ## 2026-09-14（Task 4 二审修复与收口，PLAN-DM-029）
 
 - **评审闭环**：二审 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，无代码级缺陷）→ `76dcb92` 全部清项 → 复审复核 **`Approve`**。

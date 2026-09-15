@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-029
 title: 前端视觉基础与一致性整改实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 related:
   - ARCH-DM-007
   - SPEC-DM-006

@@ -4,7 +4,7 @@
 
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
-2026-09-14 已依据接受的 [前端视觉基础与渐进整改架构（ARCH-DM-007）](architecture/ARCH-DM-007-frontend-ui-foundations.md) 编制 [前端视觉基础与一致性整改实施计划（PLAN-DM-029，proposed）](../../.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md)：计划以静态契约棘轮和三层令牌为起点，建立公共视觉原语后按属性、图纸目录、图纸/任务浮层、设置、旧页面顺序迁移，再处理图纸树、模态焦点与 `App.vue` 拆分；全量自动门禁和真实 Windows WebView2 100/125/150/200% 缩放复验共同构成关闭条件。
+2026-09-14 已依据接受的 [前端视觉基础与渐进整改架构（ARCH-DM-007）](architecture/ARCH-DM-007-frontend-ui-foundations.md) 编制 [前端视觉基础与一致性整改实施计划（PLAN-DM-029，active）](../../.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md)：计划以静态契约棘轮和三层令牌为起点，建立公共视觉原语后按属性、图纸目录、图纸/任务浮层、设置、旧页面顺序迁移，再处理图纸树、模态焦点与 `App.vue` 拆分；全量自动门禁和真实 Windows WebView2 100/125/150/200% 缩放复验共同构成关闭条件。（2026-09-15 状态：阶段 1–2 的 Task 1–4 已完成、Task 4 复审 `Approve`，例外表 382 → 320、四门禁 0 / 102 / 83 / 0；阶段 3–5 的 Task 5–12 待实施。）
 
 2026-09-13 交付 [不编号图纸关键字（SPEC-DM-014）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)（实施计划 [PLAN-DM-027](../../.planning/plans/dst-manager/PLAN-DM-027-unnumbered-subset-keywords.md)，completed）：设置 → 编号规则新增「不编号图纸关键字」文本框；子集可编辑标题（大小写不敏感）包含任一关键字时，该子集整体不编号（图号为 `000` 单值而非范围）且**不消耗序号**，对其他子集编号零影响；关键字为空时行为与既有版本完全一致。关键字列表半/全角逗号分隔、上限 50 项/100 字符（超限拒绝保存、绝不截断）。门禁：`ruff` 通过、`pytest -q` 1446 项（1374 passed / 72 skipped / 0 failed）、`npm run build` 通过、`settings-dialog.spec.ts` e2e 22 passed。同日修复其打包版缺陷（设置保存的文件值对预览不可见，根因与修复见 [PLAN-DM-028](../../.planning/plans/dst-manager/PLAN-DM-028-runtime-settings-live-consumption.md)，`completed`；全量回归 `pytest` 1451 项、e2e 全量 490 passed）；打包 EXE 重建与真实桌面验收待用户执行。
 
