@@ -587,9 +587,53 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
     if (await discard.isVisible()) await discard.click();
   });
 
-  test("字段行：label[for] 关联控件，hint 与 error 经 aria-describedby 关联", async ({page}) => {
+  test("字段行：label[for] 关联控件，hint 与 error 经 aria-describedby 关联（含 bool 行开关）", async ({page}) => {
     await page.goto("/");
     await openSettingsDialog(page);
+
+    // ── bool 行（修复轮 Important-1）：开关的错误文字必须经 aria-describedby 落在
+    // **根 button[role=switch] 本身**上（BooleanSwitch 是单根且未禁用属性透传）。
+    // 开关无法产生本地校验错误，错误只能来自保存 422 的逐字段回显 → 用受限路由例外复现
+    // （同文件 :299 的既定做法：仅拦截本次 PUT）。
+    await page.route("**/api/settings", async route => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "SETTINGS_VALIDATION_FAILED",
+          errors: {
+            enable_add_number_suffix: {
+              code: "SETTING_BOOL_INVALID",
+              message_key: "settings.validation.integerRange",
+              params: {min: 0, max: 1},
+              message: "自动添加编号后缀 取值不合法",
+            },
+          },
+        }),
+      });
+    });
+    const switchControl = page.locator(`${SWITCH_FIELD} [role="switch"]`);
+    await expect(switchControl, "开关的根元素必须是 button[role=switch]").toBeVisible();
+    // 切换开关使表单变脏（保存按钮才会启用），再保存触发 422 逐字段回显
+    await switchControl.click();
+    const saveButton = page.getByRole("button", {name: "保存"});
+    await expect(saveButton, "切换开关后保存应可用").toBeEnabled();
+    await saveButton.click();
+
+    const switchError = page.locator(`${SWITCH_FIELD} .f-error`);
+    await expect(switchError, "bool 行必须显示逐字段回显的错误").toBeVisible();
+    const switchErrorId = await switchError.getAttribute("id");
+    expect(switchErrorId, "错误元素必须有 id").toBeTruthy();
+    // 关键断言：属性必须落在根 <button> 上，而不是某个包裹元素上
+    expect(await switchControl.evaluate(el => el.tagName), "承载 aria-describedby 的必须是 button 本身").toBe("BUTTON");
+    const switchDescribed = ((await switchControl.getAttribute("aria-describedby")) ?? "").split(/\s+/).filter(Boolean);
+    expect(switchDescribed, "开关的错误文字必须经 aria-describedby 关联").toContain(switchErrorId);
+    // 引用的 id 必须真实存在且有文案，否则是悬空引用（读屏取不到内容）
+    const referenced = page.locator(`#${switchErrorId}`);
+    await expect(referenced, "aria-describedby 指向的 id 必须存在").toHaveCount(1);
+    await expect(referenced, "被引用的错误元素必须有文案").not.toBeEmpty();
+
     const input = page.locator(`${LEASE_FIELD} input[data-key="worker_lease_seconds"]`);
     const controlId = await input.getAttribute("id");
     expect(controlId, "控件必须有 id 才能被 label[for] 关联").toBeTruthy();

@@ -93,9 +93,13 @@ function onEnumInput(event:Event){
       <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" :aria-describedby="describedBy" @input="onIntInput">
       <input v-else-if="item.control==='text'" :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="t('settings.row.keywordPlaceholder')" :disabled="disabled" :aria-invalid="hasError?'true':'false'" :aria-describedby="describedBy" @input="commit(($event.target as HTMLInputElement).value)">
       <span v-else-if="item.control==='bool'" class="bool-line">
+        <!-- `:aria-describedby` 经 Vue 默认属性透传直接落到 BooleanSwitch 的**根 button[role=switch]**
+             上（该组件单根且未用 `inheritAttrs: false`）——因此无需为其新增/修改任何 prop。
+             开关无法产生本地校验错误，错误只能来自保存 422 的逐字段回显（见 e2e）。 -->
         <BooleanSwitch
           :checked="Boolean(shown)" :disabled="disabled" :label="label"
           :data-key="item.key" :input-id="`settings-input-${item.key}`"
+          :aria-describedby="describedBy"
           @change="onBoolChange"
         />
         <span class="f-hint">{{shown?t("settings.row.on"):t("settings.row.off")}}</span>
