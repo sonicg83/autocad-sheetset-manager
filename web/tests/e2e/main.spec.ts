@@ -1539,6 +1539,128 @@ test("Task 2 字体资源：两套本地 WOFF2 且不引用远程 URL",async({pa
   }
 });
 
+// ===== PLAN-DM-029 Task 12 责任 A：字体"真实加载"的运行时证据 =====
+// Task 2 的三条用例（以及上方那条）只断言 **CSSOM 声明层**：`@font-face` 规则文本、
+// `getComputedStyle()` 字体栈与 `unicode-range` 区间语义；它们**不能**证明两套 WOFF2 在运行时
+// 真被请求、也不排除远程字体。本节补上运行时证据（这是责任 A 的收口要求）。
+//
+// 路径口径说明（避免误判）：e2e 跑在 `npm run dev`（playwright.config.ts 的 webServer）上，
+// 字体地址因此是 `/src/assets/fonts/*.woff2`；生产构建由 Vite 拷贝为 `/assets/<name>-<hash>.woff2`。
+// 本节断言同时适配两者（本地同源 + `.woff2` + 资产名），而「生产产物确实落在 `/assets/`」
+// 是对 `dist/` 产物的检查，见 task-12-report.md（与 `check:ui` 的字体资产规则互补）。
+test("Task 12 责任 A：两套 WOFF2 在运行时被真实请求、本地同源且无远程字体访问",async({page})=>{
+  const fontRequests:{url:string;pathname:string}[]=[];
+  const fontResponses:{url:string;status:number}[]=[];
+  const remoteFontRequests:string[]=[];
+  // 监听器必须在 `goto` **之前**挂上：字体请求发生在首帧渲染期间。
+  page.on("request",(request)=>{if(request.resourceType()!=="font")return;fontRequests.push({url:request.url(),pathname:new URL(request.url()).pathname});});
+  page.on("response",(response)=>{if(response.request().resourceType()!=="font")return;fontResponses.push({url:response.url(),status:response.status()});});
+  page.on("request",(request)=>{const {hostname,protocol}=new URL(request.url());if(protocol.startsWith("http")&&!["127.0.0.1","localhost"].includes(hostname)&&/\.(woff2?|ttf|otf|eot)(\?|$)/.test(request.url()))remoteFontRequests.push(request.url());});
+
+  await page.goto("/");
+  // 顶栏品牌名 `DST Sheet Set Manager`（i18n `app.title`，未翻译）是真实界面里的拉丁文本，
+  // 它足以触发 Inter 的 Basic Latin 子集请求——不需要为了测试去伪造文本。
+  await expect(page.locator(".topbar")).toBeVisible();
+  // 第二套字体（等宽）只在图纸表格/目录页出现，欢迎页不渲染，故用探针触发一次请求：
+  // 这里要证的是「产物可被真实请求并加载」，探针不改变这一性质（真实使用点仍由各页 e2e 覆盖）。
+  await page.evaluate(()=>{
+    const probe=document.createElement("span");
+    probe.id="font-probe";
+    probe.style.cssText="font-family:var(--font-mono);font-size:14px;position:absolute;left:-9999px;top:0";
+    probe.textContent="ABCDEF0123456789";
+    document.body.appendChild(probe);
+  });
+  const runtime=await page.evaluate(async()=>{
+    await document.fonts.ready;
+    return {
+      faces:Array.from(document.fonts).map(face=>({family:face.family.replace(/["']/g,""),status:face.status})),
+      inter:document.fonts.check("14px Inter"),
+      mono:document.fonts.check('14px "IBM Plex Mono"'),
+      loaded:Array.from(document.fonts).filter(face=>face.status==="loaded").map(face=>face.family.replace(/["']/g,"")),
+    };
+  });
+
+  // ① 两套字体都真的进入 loaded（status==="loaded" 表示字体二进制已取回并可用）
+  expect.soft(runtime.faces.map(face=>face.family).sort(),"声明的字体族").toEqual(["IBM Plex Mono","Inter"]);
+  expect.soft(runtime.loaded.sort(),"运行时已加载的字体族").toEqual(["IBM Plex Mono","Inter"]);
+  expect.soft(runtime.inter,"Inter 可渲染").toBe(true);
+  expect.soft(runtime.mono,"IBM Plex Mono 可渲染").toBe(true);
+
+  // ② 两套 WOFF2 都被真实请求，且都在本地同源、命中各自的资产文件名
+  const basenames=fontRequests.map(request=>request.pathname.split("/").pop()??"");
+  expect.soft(basenames.some(name=>name.startsWith("InterLatin")),`Inter 子集被请求，实测：${basenames.join(", ")}`).toBe(true);
+  expect.soft(basenames.some(name=>name.startsWith("IBMPlexMonoLatin")),`Plex 子集被请求，实测：${basenames.join(", ")}`).toBe(true);
+  for(const request of fontRequests){
+    expect.soft(request.pathname.endsWith(".woff2"),`字体必须来自 WOFF2：${request.url}`).toBe(true);
+    expect.soft(request.url.startsWith(new URL(page.url()).origin),`字体必须同源：${request.url}`).toBe(true);
+  }
+  // ③ 响应成功（被请求≠取回成功）
+  for(const response of fontResponses) expect.soft(response.status,"字体响应状态 ".concat(response.url)).toBe(200);
+  // ④ 全程无远程字体访问（离线可用是硬约束）
+  expect(remoteFontRequests,"不得访问远程字体").toEqual([]);
+});
+
+// ===== PLAN-DM-029 Task 12（T11-2 Minor-2）：壳层布局搬迁后的几何关系 =====
+// `WorkspaceShell.vue` 的三条布局规则是**逐字节**从 `App.vue` 搬来的（Task 11 Step 6），但搬迁后
+// **没有任何自动化断言**覆盖它们（`check:ui` 只看规则合规，看不到布局；Task 11 也无截图门禁）。
+// 评审因此把「这个搬迁的第一次真实验证」记在 Task 12 的截图/真实桌面证据上——本节把它先钉在
+// **真实浏览器的几何结果**上，使后续截图/真实桌面只剩「与本节一致」这一点要核。
+test("Task 12 壳层布局：shell-body/shell-main/sheets-active 三条搬迁规则的实际几何",async({page})=>{
+  await openWorkspace(page);
+  const readLayout=()=>page.evaluate(()=>{
+    const body=document.querySelector<HTMLElement>(".shell-body")!;
+    const main=document.querySelector<HTMLElement>(".shell-main")!;
+    const overlay=document.querySelector<HTMLElement>(".shell-body > aside");
+    const rect=(element:Element)=>{const r=element.getBoundingClientRect();return {left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),height:Math.round(r.height)};};
+    const bodyStyle=getComputedStyle(body);
+    const mainStyle=getComputedStyle(main);
+    return {
+      bodyDisplay:bodyStyle.display,
+      bodyAlignItems:bodyStyle.alignItems,
+      body:rect(body),
+      mainDisplay:mainStyle.display,
+      mainFlexDirection:mainStyle.flexDirection,
+      mainFlexGrow:mainStyle.flexGrow,
+      mainOverflow:mainStyle.overflow,
+      main:rect(main),
+      overlay:overlay?rect(overlay):null,
+      sheetsActive:main.classList.contains("sheets-active"),
+      viewportHeight:window.innerHeight,
+      scrollWidth:document.documentElement.scrollWidth,
+      clientWidth:document.documentElement.clientWidth,
+    };
+  });
+
+  // 默认页签是**图纸页**（实测；打开工作区即 active==='sheets'）⇒ 先读 sheets-active 态。
+  const sheetsState=await readLayout();
+  // ③ `.shell-main.sheets-active{overflow:hidden}`：图纸页把纵向滚动交给表格
+  expect.soft(sheetsState.sheetsActive,"图纸页应带 sheets-active").toBe(true);
+  expect.soft(sheetsState.mainOverflow,"图纸页：主区自身不滚动（交给表格）").toBe("hidden");
+  // ① `.shell-body{display:flex;align-items:stretch;height:calc(100vh - 104px);min-height:0}`
+  expect.soft(sheetsState.bodyDisplay,".shell-body 是 flex 容器").toBe("flex");
+  expect.soft(sheetsState.bodyAlignItems,".shell-body 拉伸子项（主区与浮层同高）").toBe("stretch");
+  expect.soft(sheetsState.body.height,".shell-body 高度 = 100vh − 104px（顶栏＋操作栏）").toBe(sheetsState.viewportHeight-104);
+  // ② `.shell-main{display:flex;flex-direction:column;flex:1;min-width:0;overflow:auto}`
+  expect.soft(sheetsState.mainDisplay,".shell-main 是 flex 容器").toBe("flex");
+  expect.soft(sheetsState.mainFlexDirection,".shell-main 纵向排列").toBe("column");
+  expect.soft(sheetsState.mainFlexGrow,".shell-main 占满剩余宽度").toBe("1");
+  // `flex:1` + `align-items:stretch` 的**几何结果**（不只是声明）：水平相邻、不重叠、同高
+  if(sheetsState.overlay){
+    expect.soft(sheetsState.main.right,"主区右缘不越过浮层左缘").toBeLessThanOrEqual(sheetsState.overlay.left+1);
+    expect.soft(sheetsState.main.height,"主区与浮层同高（stretch）").toBe(sheetsState.overlay.height);
+    expect.soft(sheetsState.main.width+sheetsState.overlay.width,"两者宽度之和 = 容器宽度（无重叠也无缝隙）").toBe(sheetsState.body.width);
+  }
+
+  // 切到属性页：`sheets-active` 必须移除、主区恢复自身滚动（反向分支，防只钉一个方向）
+  await page.locator("#tab-properties").click();
+  await expect(page.locator(".shell-main.sheets-active"),"属性页不应带 sheets-active").toHaveCount(0);
+  const propertiesState=await readLayout();
+  expect.soft(propertiesState.sheetsActive,"属性页不应带 sheets-active").toBe(false);
+  expect.soft(propertiesState.mainOverflow,"属性页：主区自身纵向可滚动").toBe("auto");
+  expect.soft(propertiesState.main.right,"切换页签不改变主区几何").toBe(sheetsState.main.right);
+  expect.soft(propertiesState.scrollWidth,"无整页横向溢出").toBeLessThanOrEqual(propertiesState.clientWidth);
+});
+
 // ===== PLAN-DM-029 Task 4：壳层纵向验证 =====
 // 尺寸必须在真实浏览器里量：happy-dom 不做布局，Task 3 只在源码与令牌链层面锁定了这组尺寸
 // （`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件）。
