@@ -66,18 +66,18 @@ const switchLabel = computed(() => enabled.value
 <style scoped>
 .ext-card{display:flex;align-items:flex-start;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface)}
 .ext-main{display:flex;flex-direction:column;gap:var(--space-1);min-width:0;flex:1}
-.ext-name{color:var(--color-text-primary);font-size:14px;font-weight:500;overflow-wrap:anywhere}
-.ext-desc{color:var(--color-text-secondary);font-size:12px;line-height:1.7}
-.ext-meta{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:12px}
-.badge{font-size:12px;padding:2px 10px;border-radius:var(--radius-full)}
+.ext-name{color:var(--color-text-primary);font-size:var(--button-font-size);font-weight:500;overflow-wrap:anywhere}
+.ext-desc{color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.7}
+.ext-meta{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--font-caption)}
+.badge{font-size:var(--font-caption);padding:2px 10px;border-radius:var(--radius-full)}
 .badge.muted{background:var(--color-bg-muted);color:var(--color-text-secondary)}
 .badge.success{background:var(--color-success-bg);color:var(--color-success)}
 .badge.warning{background:var(--color-warning-bg);color:var(--color-warning)}
 .badge.danger{background:var(--color-danger-bg);color:var(--color-danger)}
 .ext-diag{color:var(--color-warning)}
 .ext-side{display:flex;align-items:center;gap:var(--space-2);flex:none;padding-top:2px}
-.ext-config{border:0;background:transparent;color:var(--color-accent);cursor:pointer;padding:0 var(--space-1);font-size:12px;min-height:24px;border-radius:var(--radius-md)}
+.ext-config{border:0;background:transparent;color:var(--color-accent);cursor:pointer;padding:0 var(--space-1);font-size:var(--font-caption);min-height:var(--settings-foot-min-height);border-radius:var(--radius-md)}
 .ext-config:hover{background:var(--color-bg-muted)}
-.ext-state{font-size:12px;color:var(--color-text-muted)}
+.ext-state{font-size:var(--font-caption);color:var(--color-text-muted)}
 .ext-state.on{color:var(--color-success)}
 </style>

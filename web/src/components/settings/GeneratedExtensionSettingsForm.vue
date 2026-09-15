@@ -133,14 +133,14 @@ function errorOf(item: ExtensionSettingsItem): ExtensionFieldError | undefined {
 .ef-row:focus-within{background:var(--color-bg-canvas)}
 .ef-row.dirty{border-color:var(--color-warning);background:var(--color-warning-bg)}
 .ef-row.error{border-color:var(--color-danger);background:var(--color-danger-bg)}
-.ef-label{font-size:13px;font-weight:500;padding-top:var(--space-2);color:var(--color-text-primary)}
+.ef-label{font-size:var(--font-label);font-weight:500;padding-top:var(--space-2);color:var(--color-text-primary)}
 .ef-main{display:flex;flex-direction:column;gap:var(--space-1);min-width:0;align-items:flex-start}
-.ef-main input[type="text"],.ef-main input[type="number"]{width:100%;height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2)}
+.ef-main input[type="text"],.ef-main input[type="number"]{width:100%;height:var(--control-height-compact);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2)}
 .ef-main input:disabled{opacity:.5;cursor:not-allowed}
 .ef-radio-line{display:flex;gap:var(--space-4);padding-top:var(--space-2);flex-wrap:wrap}
-.ef-radio-line label{display:flex;gap:var(--space-1);align-items:center;font-size:13px;color:var(--color-text-primary)}
-.ef-foot{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;min-height:24px}
-.ef-hint{margin:0;font-size:12px;color:var(--color-text-secondary);line-height:1.7}
-.ef-error{margin:0;font-size:12px;color:var(--color-danger);line-height:1.6}
+.ef-radio-line label{display:flex;gap:var(--space-1);align-items:center;font-size:var(--font-label);color:var(--color-text-primary)}
+.ef-foot{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;min-height:var(--settings-foot-min-height)}
+.ef-hint{margin:0;font-size:var(--font-caption);color:var(--color-text-secondary);line-height:1.7}
+.ef-error{margin:0;font-size:var(--font-caption);color:var(--color-danger);line-height:1.6}
 @media (max-width:900px){.ef-row{grid-template-columns:1fr}}
 </style>

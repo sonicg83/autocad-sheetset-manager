@@ -108,6 +108,13 @@
     --sheet-table-row-height:44px;
     --sheet-table-line-height:20px;
     --sheet-status-radius:10px;
+    --settings-license-max-height:200px;
+    --settings-dialog-width:760px;
+    --settings-nav-width:150px;
+    --settings-switch-width:44px;
+    --settings-switch-height:24px;
+    --settings-switch-thumb-size:18px;
+    --settings-foot-min-height:24px;
   }
 
   html[data-theme="dark"]{

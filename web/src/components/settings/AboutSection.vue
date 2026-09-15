@@ -68,8 +68,8 @@ async function openExternal(url:string){
 </template>
 <style scoped>
 .about-block{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3)}
-.about-block h3{margin:0 0 var(--space-2);font-size:13px}
+.about-block h3{margin:0 0 var(--space-2);font-size:var(--font-label)}
 .about-block p{margin:0}
-.license{font-size:12px;line-height:1.7;color:var(--color-text-secondary);white-space:pre-wrap;background:var(--color-bg-canvas);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);max-height:200px;overflow:auto}
+.license{font-size:var(--font-caption);line-height:1.7;color:var(--color-text-secondary);white-space:pre-wrap;background:var(--color-bg-canvas);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);max-height:var(--settings-license-max-height);overflow:auto}
 .link-line{display:flex;gap:var(--space-2)}
 </style>

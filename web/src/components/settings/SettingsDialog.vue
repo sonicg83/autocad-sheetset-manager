@@ -18,6 +18,7 @@ import {useSettings} from "../../composables/useSettings";
 import type {ExtensionsPanel} from "../../composables/useExtensions";
 import AboutSection from "./AboutSection.vue";
 import ConfirmModal from "../ui/ConfirmModal.vue";
+import UiIcon from "../ui/UiIcon.vue";
 import ExtensionSettingsHost from "./ExtensionSettingsHost.vue";
 import ExtensionsSection from "./ExtensionsSection.vue";
 import SettingsFormRow from "./SettingsFormRow.vue";
@@ -375,7 +376,7 @@ const browseDisabled=computed(()=>{
         <h2 id="settings-title">{{t("settings.title")}}</h2>
         <span v-if="snapshot" class="rev-pill">{{t("settings.revision",{revision:snapshot.configRevision})}}</span>
         <span class="spacer"></span>
-        <button type="button" class="icon-btn" :aria-label="t('settings.close')" :disabled="saving" @click="tryClose">✕</button>
+        <button type="button" class="icon-btn" :aria-label="t('settings.close')" :disabled="saving" @click="tryClose"><UiIcon name="close" /></button>
       </div>
       <p v-if="loading&&!snapshot" class="loading" role="status">{{t("settings.loading")}}</p>
       <div v-else-if="loadFailed" class="dlg-body">
@@ -457,39 +458,39 @@ const browseDisabled=computed(()=>{
   </dialog>
 </template>
 <style scoped>
-.settings-dialog{padding:0;width:760px;max-width:calc(100vw - 32px);height:min(620px,86vh);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface);color:var(--color-text-primary);box-shadow:var(--shadow-3)}
+.settings-dialog{padding:0;width:var(--settings-dialog-width);max-width:calc(100vw - 32px);height:min(620px,86vh);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface);color:var(--color-text-primary);box-shadow:var(--shadow-3)}
 .settings-dialog::backdrop{background:rgba(16,24,40,.55)}
 .dlg{display:flex;flex-direction:column;height:100%}
 .dlg-head{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
 .dlg-head h2{margin:0;font-size:16px}
-.rev-pill{font-size:12px;padding:2px 10px;border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary)}
+.rev-pill{font-size:var(--font-caption);padding:2px 10px;border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary)}
 .spacer{flex:1}
-.icon-btn{border:0;background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:14px;min-width:32px;min-height:32px;border-radius:var(--radius-md)}
+.icon-btn{border:0;background:transparent;color:var(--color-text-secondary);cursor:pointer;min-width:var(--tap-target-min);min-height:var(--tap-target-min);border-radius:var(--radius-md)}
 .icon-btn:hover:not(:disabled){background:var(--color-bg-muted)}
 .loading{margin:var(--space-5);color:var(--color-text-secondary)}
 .load-failed{display:flex;flex-direction:column;gap:var(--space-3);align-items:flex-start}
 .load-failed button{padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);cursor:pointer}
-.diag{border:1px solid var(--color-warning);background:var(--color-warning-bg);color:var(--color-warning);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:12px;line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
+.diag{border:1px solid var(--color-warning);background:var(--color-warning-bg);color:var(--color-warning);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:var(--font-caption);line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
 .diag p{margin:0}
 .diag.readonly{border-color:var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger)}
-.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:12px;line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
+.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:var(--font-caption);line-height:1.8;margin:var(--space-3) var(--space-4) 0;flex-shrink:0}
 .error-summary p{margin:0;font-weight:600}
 .error-summary ul{margin:0;padding:0;list-style:none}
-.es-link{border:0;background:transparent;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;line-height:1.8;text-align:left;text-decoration:underline}
+.es-link{border:0;background:transparent;color:var(--color-danger);cursor:pointer;padding:0;font-size:var(--font-caption);line-height:1.8;text-align:left;text-decoration:underline}
 .es-link:hover{color:var(--color-danger);opacity:.8}
 .dlg-body{display:flex;flex:1;min-height:0}
-.sections{width:150px;flex-shrink:0;border-right:1px solid var(--color-border-subtle);padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-1)}
-.sections button{border:0;background:transparent;text-align:left;color:var(--color-text-secondary);padding:9px var(--space-3);border-radius:var(--radius-md);cursor:pointer;font-size:13px}
+.sections{width:var(--settings-nav-width);flex-shrink:0;border-right:1px solid var(--color-border-subtle);padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-1)}
+.sections button{border:0;background:transparent;text-align:left;color:var(--color-text-secondary);padding:9px var(--space-3);border-radius:var(--radius-md);cursor:pointer;font-size:var(--font-label)}
 .sections button[aria-selected="true"]{background:var(--color-info-bg);color:var(--color-accent);font-weight:600}
 .panel{flex:1;overflow:auto;padding:var(--space-3) var(--space-4)}
 .group{margin-bottom:var(--space-2)}
-.group-title{font-weight:600;font-size:13px;border-left:3px solid var(--color-accent);padding-left:var(--space-2);margin:var(--space-3) 0 var(--space-2)}
+.group-title{font-weight:600;font-size:var(--font-label);border-left:3px solid var(--color-accent);padding-left:var(--space-2);margin:var(--space-3) 0 var(--space-2)}
 .dlg-foot{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border-subtle);flex-shrink:0}
-.foot-notice{font-size:12px;line-height:1.6}
+.foot-notice{font-size:var(--font-caption);line-height:1.6}
 .foot-notice.warn{color:var(--color-warning)}
 .foot-notice.error{color:var(--color-danger)}
-.saved-pill{font-size:12px;color:var(--color-success)}
-.dlg-foot button{padding:9px var(--space-4);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:14px}
+.saved-pill{font-size:var(--font-caption);color:var(--color-success)}
+.dlg-foot button{padding:9px var(--space-4);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:var(--button-font-size)}
 .dlg-foot button:disabled{cursor:not-allowed;opacity:.5}
 .dlg-foot button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
 </style>
