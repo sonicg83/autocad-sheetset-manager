@@ -308,16 +308,18 @@ Files（本轮）：
 - Modify: `web/scripts/ui-contract-exceptions.json`
 - Modify: `web/src/styles/tokens.css`（原计划漏列，经 Ruling 39 补齐：本页有 8 处容器结构尺寸在既有令牌中**无逐字等值项**，而 `raw-visual-value` 按设计**有意覆盖宽高家族**，故唯一合法路径是追加组件层结构令牌）
 
-- [ ] **Step 1（RED）**：针对截图红框内保存/另存/删除、添加输出列、导出 XLSX 写计算样式和对齐断言；覆盖 disabled、danger、primary 层级和可见 label。
-- [ ] **Step 2（迁移）**：工具栏、列编辑器和预览动作改用公共原语；保持字段拖插、表达式、模板保存、预览刷新和 XLSX 导出契约不变。
-- [ ] **Step 3（图标复核）**：对 `ColumnEditor.vue` 的 `↑ / ↓ / ✕` 做同状态截图与键盘行为对照；若 SVG 在辨识度与行为上等价或更好则迁移并删除例外，否则保留原字符但补齐 `type`、accessible name、点击面积，并把例外到期条件改为下一次目录页视觉 Spec 修订。
-- [ ] **Step 4（字体复核）**：对表达式等宽字体、长列名、50 列计数和表格横向溢出做布局断言，确认 IBM Plex Mono 不造成截断或动作列覆盖。
-- [ ] **Step 5（正交证据）**：保存浅/深默认、禁用保存、删除危险态、窄屏溢出共 5 张。
-- [ ] **Step 6（例外清退）**：除经 Step 3 复核保留的 **3 条** `unicode-structure-icon`（`↑ / ↓ / ✕`，依 A1）外，图纸目录页零例外。
+- [x] **Step 1（RED）**：针对截图红框内保存/另存/删除、添加输出列、导出 XLSX 写计算样式和对齐断言；覆盖 disabled、danger、primary 层级和可见 label。
+  - 证据 `evidence/task-6-red.txt`：**5 failed**。红因是**本轮刻意的值变化**（6 个按钮高度归一 36px + 新增可见 label），不是断言写错——见 T6-10。
+- [x] **Step 2（迁移）**：工具栏、列编辑器和预览动作改用公共原语；保持字段拖插、表达式、模板保存、预览刷新和 XLSX 导出契约不变。
+- [x] **Step 3（图标复核）**：对 `ColumnEditor.vue` 的 `↑ / ↓ / ✕` 做同状态截图与键盘行为对照；**判保留**（依 T6-8 的四条判据 + `ColumnEditor.vue:8` 的 A1 用户已接受差异），未迁移、未加宽 112px 轨道；3 条例外的 `reason` 写全判据与 A1 依据，`expiresWith` 已改写为「下一次目录页视觉 Spec 修订」。
+- [x] **Step 4（字体复核）**：对表达式等宽字体、长列名、50 列计数和表格横向溢出做布局断言，确认 IBM Plex Mono 不造成截断或动作列覆盖。字号全部借语义/组件令牌，**未新增字号令牌**（T6-3 / Ruling 38）。
+- [x] **Step 5（正交证据）**：保存浅/深默认、禁用保存、删除危险态、窄屏溢出共 5 张。已入库 `docs/dst-manager/specs/assets/SPEC-DM-012/production/t6-*.png`（提交 `387efb5`）；每张均配计算样式或几何断言。需 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 才会写入版本库目录。
+- [x] **Step 6（例外清退）**：除经 Step 3 复核保留的 **3 条** `unicode-structure-icon`（`↑ / ↓ / ✕`，依 A1）外，图纸目录页零例外。**实测达成**：目录页 75 → 3，全表 258 → **186**；`check:ui` EXIT=0。
   - **原措辞为计划缺陷（Ruling 39 订正）**：原文写「保留的**唯一**条目」，但 `↑ / ↓ / ✕` 本就是 **3 条**独立例外，字面目标不可达。先例：Ruling 37。
   - **收口不变量**：Task 6 名下原 **75** 条（74 Files 内 + 1 `CompatibilitySummary.vue`）→ 清退 69 条 `raw-visual-value` + 2 条 `visible-input-label`，保留 3 条 → **终态 186 条 = 258 − 75 + 3**；`check:ui` 裸违规 **187 = 186 + 1 动态白名单**。
-- [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheet-catalog.spec.ts sheet-catalog-visual-evidence.spec.ts`、`rtk npm --prefix web run build`；人工对照用户第 2 张截图。
-- [ ] **Step 8（提交）**：commit：`统一图纸目录页控件视觉基础`。
+- [x] **Step 7a（自动验证，控制器亲跑）**：`check:ui` **EXIT 0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。未跑全量 e2e（控制器收口时跑）。详见 T6-11。
+- [ ] **Step 7b（人工门禁）**：人工对照用户第 2 张截图——**待用户确认**（该截图未入库，worker 被明确禁止声称完成）。
+- [x] **Step 8（提交）**：本任务实际分为逐步提交（超时/崩溃后不再丢进度）：`eb7fa66` 承接迁移 → `43e5a72` 断言 → `2926cfb`/`392e8a3` 高度归一 → `7d3a214` 例外清退 → `b229729` 证据 spec → `387efb5` 证据入库与断言稳定性修正；报告 `task-6-report.md`。原计划的单一提交 `统一图纸目录页控件视觉基础` 被逐步提交取代（运维必要性，非计划偏离）。
 
 #### Task 6 控制器裁定（T6-1 … T6-6，派发前下达）
 
@@ -384,6 +386,17 @@ Files（本轮）：
 **代价必须披露（不许含糊）**：**Task 6 对这部分控件不是「零视觉变化」**。报告需单列「有意视觉变化清单」（文件:规则 → 前值 → 后值 → 依据），至少覆盖 6 处高度 `34/34/30/30/30/32 → 36`，以及 **3 处水平内边距 `--space-3`(12px) → `--space-4`(16px)**（`.dock-row` 迁移前已是 `--space-4`，无变化）。
 
 **断言要求**：钉新值 36px + 额外加一条「行内一致性」断言（`--template-row` 与 `--dock-row` 内所有按钮 computed height 相等）并**先红自证**（改回 34px 必须能失败）。
+
+**T6-11（Ruling 42：runner 二次失败后的控制器收口 + 两处断言稳定性修正 + `g8` 资产还原）**：续轮 worker `4b447117` 完成 Steps 1–6 后，runner 进程在 ~33 分钟（**非超时**，预算 60 分钟）消失（`proof-write-failed`）。**已提交的 6 个 commit 全部保全**——「每完成一步即提交」的纪律直接兑现了，与首轮「超时即丢 30 分钟」形成对照。剩 Step 7/8。
+
+- **控制器接手 Step 7 的理由**：剩余工作**只剩跑命令**；`check:ui` 与 e2e 本来就是控制器的独立复核职责；连续两次 runner 失败，再派一轮的期望收益低于风险。
+- **首次 e2e 暴露 2 个问题**：① `sheet-catalog-visual-evidence.spec.ts:436` 的**既有**键盘 Tab 环用例**真红**（该用例在 `eb7fa66^` 就已存在且通过，anchors 一字未改）→ 初判象是产品回归；② `sheet-catalog.spec.ts` 的新用例 **flaky**（`label[for="ui-input-7"]` 找不到，重试通过）。
+- **根因（控制器实证，非推理）**：迁移把列名输入与字段搜索由 `aria-label` 改为 `UiInput :label`（T6-5 要求**可见 label**，仅 `aria-label` 不解除该例外）。那个键盘用例用 `getAttribute("aria-label") ?? textContent` 取可访问名称 → **看不到由 `label[for]` 命名的控件**，于是 anchors 里的「输出列名 1」永远不出现。而 `ui-input` 的兜底 id 来自**模块级计数器**（`instanceId.ts`），**按挂载顺序而非行序分配**（实测同一页为 `ui-input-1/8/9/10`），旧断言「先读 id 再查 `label[for]`」跨**两次往返**，控件重挂载即换 id → flaky。
+- **裁定：两处都是断言方法学问题，不是产品回归**（Tab 环本身完整、`label[for]` 关联本身正确，其实是可访问性**改善**）。修法**不得放宽语义**：Tab 环 anchors 一字未改，只把名称提取改为「`aria-label` 优先，否则取 `el.labels[0]`」；`expectVisibleLabel` 改为 Playwright 原生 `toHaveAccessibleName` + 独立可见 label 定位，并**新增**「命中 INPUT」「不是仅靠 `aria-label`」两条**更严**约束。
+- **变异自证（证明守卫是活的）**：`tabindex="-1"` → 键盘用例**红**；`.ui-input__label{display:none}` → 可见性断言**红**，而同次 `toHaveAccessibleName`（`:1272`）**仍通过** → 证明 Chrome 在 label 被隐藏时**仍**用它的文字命名，**必须靠可见性断言才真正落实 T6-5**。两处临时变异**已完全还原**（`git status` 确认）。
+- **`g8-*.png` 主动还原**：以 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec 会**连带无条件覆盖** SPEC-DM-012 的 6 张既有生产证据。实测**本机截图逐字节不可复现**（同 spec 连跑两次，5 张 t6 PNG 的 md5 **全不同**）→ 这 6 张的字节变化**既不能归因**给 Task 6 的刻意改动、**也不能排除**是采集噪声。**在无法归因的情况下重写他 Spec 的验收资产不可接受** → `git checkout` 还原，只提交 Task 6 自己的 5 张。新登记**责任 T**。
+- **最终门禁（控制器亲跑，取真实 EXIT 码）**：`check:ui` **0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。e2e 共 4 次（RED、变异、GREEN×2）。
+- **工具陷阱（记入计划）**：`npm ... | tail -30; echo "EXIT=$?"` 打印的是 **`tail` 的退出码**；必须重定向到文件再取 `$?`——否则会把 `check:ui` 的 EXIT 1 **误报为 0**。
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 
@@ -669,6 +682,8 @@ Files（本轮）：
 > **收口责任 R（密集表格行内动作按钮无法满足 SPEC-DM-010「图标按钮 ≥36×36」；Task 6 派发前侦察发现）**：`ColumnEditor.vue` 的 `↑ / ↓ / ✕` 行内动作按钮受 `ColumnEditor.vue:8` 记录的 **A1（用户已接受差异）** 约束：保留字符图标导致操作列轨道由冻结 Demo 的 188px 收窄为 **112px**。轨道预算实测：3×30+2×4=98；提到 `--tap-target-min`(32px) 后 3×32+8=104 ≤112；但 **36×36 需 116 >112**，把 gap 压到 2px 才恰好 112（零余量）——**即 SPEC-DM-010 的图标按钮下限在不推翻 A1 的前提下不可达**。本轮取 32×32 折中（满足可点目标 ≥32px）。收口方向：请 Spec 归属方在「调整轨道宽（推翻 A1）」与「为密集表格行内按钮豁免 36px 下限」之间裁定，并把该豁免写回 SPEC-DM-010。
 
 > **收口责任 S（缺「迁移不得改变既有计算值」的机械检查；Task 6 续轮 RED 暴露）**：`check:ui` 只验**规则合规性**（裸值是否使用令牌、例外是否陈旧），**无法**发现「迁移把某个计算值改掉了」——例如把 `min-height:34px` 换成 `UiButton` 默认 `36px` 后，两边都“合规”，检查器全绿。Task 6 续轮写断言后跑 RED、捕获 **5 条全红**，才发现承接的迁移把 6 个动作按钮高度从 34/34/30/30/30/32 统一成了 36px。**教训：规则合规 ≠ 值保持**；控制器当时只跑 `check:ui` 就判定「0 真实违规」是**必要但不充分**的验证。收口方向：考虑为迁移类任务提供「迁移前后计算值快照对比」的机械手段（或在计划中强制「每个被迁移规则至少一条计算样式断言」），使值变化只能是有意为之且必须披露。
+
+> **收口责任 T（SPEC-DM-012 生产证据 `g8-*.png` 已陈旧，且该证据不可逐字节复现；Task 6 收口发现）**：Task 6 的刻意视觉变化（Ruling 41 的 36px 归一 + T6-5 的可见 label）会影响图纸目录页，而 SPEC-DM-012 与冻结 Demo 的比对依赖 `docs/dst-manager/specs/assets/SPEC-DM-012/production/g8-*.png`。实测两件事：① 这些图**对采集环境敏感**——同一 spec 连跑两次，新采集的 5 张 t6 PNG 的 md5 **全不同**（本机无 PNG 解码器，无法逐像素归因）；② 只要带 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec，就会**无条件覆盖**这 6 张。收口方向：视觉变更全部落定后（Task 12）**重新生成** SPEC-DM-012 生产证据，并在 Spec 侧写明该目录的**再生成时机**与「带该环境变量跑 e2e 会弄脏工作区」的提示，避免下一位开发者把噪声 diff 误提交。
 
 ## 依赖与提交顺序
 

@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-09-15（Task 6 收口：Ruling 42 与责任 T，PLAN-DM-029）
+
+- **runner 二次失败（非超时）**：续轮 worker `4b447117` 完成 **Steps 1–6** 后，runner 进程在 ~33 分钟（预算 60 分钟）消失（`proof-write-failed`）。**已提交的 6 个 commit 全部保全**——上轮新增的「每完成一步即提交」纪律直接兑现，未再丢工作。
+- **控制器接手 Step 7**（剩余工作只剩跑命令；`check:ui`/e2e 本属控制器独立复核职责；连续两次 runner 失败）。
+- **首次 e2e 暴露 2 个问题，均判为断言方法学问题而非产品回归**：
+  - 既有键盘 Tab 环用例**真红**（该用例迁移前已存在且通过，anchors 一字未改）；
+  - 新用例 **flaky**（`label[for="ui-input-7"]` 找不到，重试通过）。
+- **根因（实证）**：迁移把列名输入与字段搜索由 `aria-label` 改为 `UiInput :label`（T6-5 要求**可见 label**）。旧用例用 `getAttribute("aria-label") ?? textContent` 取名 → **看不到由 `label[for]` 命名的控件**；而 `ui-input` 的兜底 id 来自**模块级计数器**且**按挂载顺序而非行序分配**（实测 `ui-input-1/8/9/10`）→ 「先读 id 再查 label」跨两次往返，重挂载即换 id → flaky。
+- **修法不放宽语义**：Tab 环 anchors 一字未改（只改名称提取）；`expectVisibleLabel` 改用 Playwright 原生 `toHaveAccessibleName` + 独立可见 label 定位，并**新增**两条更严约束。
+- **变异自证**：`tabindex="-1"` → 键盘用例**红**；`.ui-input__label{display:none}` → 可见性断言**红**，而同次 `toHaveAccessibleName` **仍通过** → 证明 Chrome 在 label 隐藏时**仍**用其文字命名，必须靠可见性断言才落实 T6-5。临时变异已完全还原。
+- **`g8-*.png` 主动还原（未提交）**：带 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec 会**无条件覆盖** SPEC-DM-012 的 6 张既有生产证据；实测**本机截图逐字节不可复现**（5 张 t6 PNG 连跑两次 md5 全不同）→ 变化**无法归因**，不能重写他 Spec 的验收资产 → `git checkout` 还原，只提交 Task 6 自己的 5 张。
+- **新登记责任 T**：视觉变更落定后（Task 12）需重新生成 SPEC-DM-012 生产证据，并在 Spec 侧写明再生成时机与该环境变量的副作用。
+- **最终门禁（控制器亲跑，真实 EXIT）**：`check:ui` **0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。
+- **例外表**：目录页 **75 → 3**，全表 **258 → 186**（不变量 `186 = 258 − 72` 与 Ruling 39 预告逐字吻合）。
+
 ## 2026-09-15（Task 6 控件高度归一裁定 Ruling 41 与责任 S，PLAN-DM-029）
 
 - **起因**：Task 6 续轮（`4b447117`）写完断言跑 RED，**5 条全红（EXIT=1）**；红因是承接的迁移把本页动作按钮高度**字面量归一为 `UiButton` 默认 36px**，而迁移前为 34/34/30/30/30/32。worker 主动停下请裁定 A（回 34px 紧凑档）或 B（接受 36px 归一），并同时推进 Step 3/6。
