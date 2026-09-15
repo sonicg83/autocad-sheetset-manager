@@ -23,5 +23,5 @@ defineEmits<{preview:[revision:Revision];restore:[]}>();
 .empty-card{padding:var(--space-6);text-align:center;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg)}
 .empty-title{margin:0 0 var(--space-2);font-size:16px;color:var(--color-text-primary)}
 .empty-desc{margin:0 0 var(--space-2);color:var(--color-text-secondary)}
-.empty-action{margin:0;color:var(--color-text-muted);font-size:13px}
+.empty-action{margin:0;color:var(--color-text-muted);font-size:var(--font-label)}
 </style>

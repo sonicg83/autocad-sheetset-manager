@@ -115,6 +115,12 @@
     --settings-switch-height:24px;
     --settings-switch-thumb-size:18px;
     --settings-foot-min-height:24px;
+    --card-max-width:520px;
+    --shell-content-max-width:1440px;
+    --topbar-min-height:68px;
+    --welcome-path-max-width:420px;
+    --modal-impact-max-height:200px;
+    --draft-actions-max-height:180px;
   }
 
   html[data-theme="dark"]{

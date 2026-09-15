@@ -1,24 +1,17 @@
 @layer legacy {
   /* 旧顶栏规则：布局度量已被 `layout/TopBar.vue` 的 scoped 样式覆盖，仅旧页面残留。 */
-  .topbar{min-height:68px;padding:12px 32px;background:var(--color-bg-surface);color:var(--color-on-accent)}
-  .topbar div{max-width:1440px;margin:auto;display:flex;align-items:baseline;gap:14px}
+  .topbar{min-height:var(--topbar-min-height);padding:12px 32px;background:var(--color-bg-surface);color:var(--color-on-accent)}
+  .topbar div{max-width:var(--shell-content-max-width);margin:auto;display:flex;align-items:baseline;gap:14px}
   .topbar h1{margin:0}
 
-  :where(#app) main{max-width:1440px;margin:auto;padding:24px}
+  :where(#app) main{max-width:var(--shell-content-max-width);margin:auto;padding:24px}
   .open,.toolbar,.form-row,.csv-flow,.link-actions,.section-title{display:flex;align-items:center;gap:12px}
   .open input{flex:1;padding:13px}
 
-  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}
-  .summary div,.panel{background:var(--color-bg-surface);padding:18px;border-radius:var(--radius-md);box-shadow:var(--shadow-1)}
-  .summary small,.summary strong{display:block}
-  /* 度量字号刻意保留原值：字号突增的收敛属于属性页与图纸目录迁移任务。 */
-  .summary strong{font-size:22px}
-  .summary input{max-width:100%;padding:7px;margin:5px 0}
-  .property-panel{margin-bottom:20px}
-  .section-title{justify-content:space-between}
-  .section-title h2,.section-title p{margin:0 0 6px}
-  /* 内容驱动高度 520px 保留原值：删除内联滚动区需先证明消费方迁移。 */
-  .editor{display:grid;grid-template-columns:260px minmax(0,1fr);background:var(--color-bg-surface);min-height:520px;border-radius:var(--radius-md);overflow:hidden}
+  /* PLAN-DM-029 Task 9：`.summary` 块（含 22px 离刻度字号）与 `.property-panel`、`.section-title`、
+     `.editor`、`.subset-editor` 已无任何 markup 渲染点，随本次清理整体删除；
+     `.panel` 仍活（多组件依赖），故从原 `.summary div,.panel` 组合中拆出单独保留。 */
+  .panel{background:var(--color-bg-surface);padding:18px;border-radius:var(--radius-md);box-shadow:var(--shadow-1)}
 
   :where(#app) aside{border-right:1px solid var(--color-border-subtle);padding:10px}
   :where(#app) aside button{display:flex;justify-content:space-between;width:100%;border:0;text-align:left}
@@ -38,13 +31,9 @@
   .job{display:flex;gap:20px;background:var(--color-bg-surface);padding:12px;margin-top:12px;border-left:4px solid var(--color-accent)}
   .job-detail>table{background:var(--color-bg-surface)}
 
-  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-  .form-row{margin-top:14px;align-items:end;flex-wrap:wrap}
-  .form-grid label,.form-row label,.csv-flow label,.property-values label{display:grid;gap:5px;color:var(--color-text-secondary);font-size:var(--font-label)}
-  /* 离刻度圆角 5px 保留原值：归并到 `--radius-sm/md` 会改变渲染，故登记为例外。 */
-  .form-grid input,.form-grid select,.form-row input,.form-row select,.csv-flow input{min-width:0;padding:8px;border:1px solid var(--color-border-strong);border-radius:5px}
-  .property-values{display:grid;gap:8px}
-  :where(#app) fieldset{margin-top:20px;padding:14px;border:1px solid var(--color-border-subtle);border-radius:7px}
+  /* PLAN-DM-029 Task 9：`.form-grid` / `.form-row` / `.property-values` 与 `.csv-flow`
+     均无 markup 渲染点，其 5px 离刻度圆角规则随之整体删除（**零视觉变化**）。 */
+  :where(#app) fieldset{margin-top:20px;padding:14px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
   :where(#app) fieldset>button{margin-top:12px}
   .csv-flow{margin-top:18px;padding-top:14px;border-top:1px solid var(--color-border-subtle);flex-wrap:wrap}
   .csv-preview{margin-top:12px;background:var(--color-bg-muted);padding:12px}
@@ -53,7 +42,9 @@
   .info{color:var(--color-accent)}
   :where(#app) details{background:var(--color-bg-surface);padding:12px;margin-bottom:12px}
   .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
-  .execution-group{border:1px solid var(--color-border-subtle);border-radius:7px;background:var(--color-bg-muted)}
+  /* PLAN-DM-029 Task 9：`.execution-group` 仍活（PreviewPanel），7px 离刻度圆角归入 `--radius-md`(8px)，
+     1px 偏差已在报告披露（先例：Task 6 / Task 7 / Task 8 的圆角落点裁定）。 */
+  .execution-group{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted)}
   .execution-group h4{margin:8px 0}
   .execution-group p{overflow-wrap:anywhere}
   .preview section+section{margin-top:18px}
@@ -62,10 +53,7 @@
 
   @media(max-width:800px) {
     :where(#app) main{padding:14px}
-    .summary{grid-template-columns:1fr 1fr}
-    .editor{grid-template-columns:1fr}
     :where(#app) aside{border-right:0;border-bottom:1px solid var(--color-border-subtle)}
-    .section-title{align-items:flex-start;flex-direction:column}
     .job{flex-wrap:wrap}
   }
 
@@ -77,25 +65,22 @@
   .repair-actions li{border-bottom:1px solid var(--color-border-subtle);padding:6px 0}
   .attr-diff{overflow-wrap:anywhere;word-break:break-all;color:var(--color-text-secondary);font-size:var(--font-label);font-family:var(--font-mono)}
 
-  .sheet-browser{margin-bottom:20px}
-  .filter-grid{display:grid;grid-template-columns:minmax(240px,2fr) repeat(4,minmax(130px,1fr));gap:10px;margin:14px 0}
-  .filter-grid label,.bulk-bar label{display:grid;gap:4px;font-size:var(--font-label);color:var(--color-text-secondary)}
-  .filter-grid input,.filter-grid select,.bulk-bar input,.bulk-bar select{padding:8px;border:1px solid var(--color-border-strong);border-radius:5px}
-  .bulk-bar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-  /* 表格窗口的高度上限是内容驱动滚动区，保留原值并登记例外。 */
-  .sheet-table-window{max-height:520px;overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-sm)}
+  /* PLAN-DM-029 Task 9：`.sheet-browser` / `.filter-grid` / `.bulk-bar` 均无渲染点，整体删除
+     （含其 5px 离刻度圆角规则）；`.sheet-table-window` 的 520px 高度上限已被
+     `SheetTable.vue` 的**无层 scoped** 规则 `max-height:none` 覆盖（无层声明胜于 `@layer`），
+     故该声明一并删除、零视觉变化。 */
+  .sheet-table-window{overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-sm)}
   .sheet-table-window thead{position:sticky;top:0;background:var(--color-bg-surface);z-index:1}
   .sheet-table-window small{display:block;color:var(--color-text-muted);overflow-wrap:anywhere}
   .link-button{padding:0;border:0;background:transparent;color:var(--color-accent)}
-  /* 草稿动作区高度上限同样是内容驱动滚动区，保留原值并登记例外。 */
-  .draft-actions{max-height:180px;overflow:auto}
+  /* 草稿动作区高度上限归入组件层令牌（逐字等值）。 */
+  .draft-actions{max-height:var(--draft-actions-max-height);overflow:auto}
   .recover-banner{background:var(--color-warning-bg);border:1px solid var(--color-warning);padding:10px 14px;border-radius:var(--radius-sm);margin:14px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .draft-save-status{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:var(--font-label);color:var(--color-text-muted)}
   .draft-save-status .save-status.error{color:var(--color-danger)}
   .drop-hint{color:var(--color-text-muted);font-size:var(--font-label)}
 
   @media(max-width:1000px) {
-    .filter-grid{grid-template-columns:1fr 1fr}
   }
 
   /* 旧功能入口的受控按钮基线；图标、页签和文字操作继续由各组件定义。 */

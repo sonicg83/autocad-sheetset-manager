@@ -15,104 +15,6 @@
       "expiresWith": "PLAN-DM-029 Task 11"
     },
     {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.draft.reloadConflict\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.draft.discardStale\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.dock.undo\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.dock.redo\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.draft.clear\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.dock.preview\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/DraftActionsPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/DraftActionsPanel.vue|{{ $t(\"shell.draft.remove\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/JobStatusPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/JobStatusPanel.vue|{{ $t(\"jobs.job.retry\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/RepairStatusPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/RepairStatusPanel.vue|{{ $t(\"shell.repair.previewAndConfirm\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/RepairStatusPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/RepairStatusPanel.vue|{{ $t(\"shell.repair.confirmPublish\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/RepairStatusPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/RepairStatusPanel.vue|{{ $t(\"shell.repair.cancelConfirm\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "unicode-structure-icon",
-      "file": "src/components/RevisionHistoryPanel.vue",
-      "fingerprint": "unicode-structure-icon|src/components/RevisionHistoryPanel.vue|→|1",
-      "reason": "迁移前既有 Unicode 结构图标；图纸目录 ↑/↓/✕ 为 PLAN-DM-023 已批准临时例外",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/RevisionHistoryPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/RevisionHistoryPanel.vue|{{ $t(\"revisions.panel.previewRestore\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/RevisionHistoryPanel.vue",
-      "fingerprint": "explicit-button-type|src/components/RevisionHistoryPanel.vue|{{ $t(\"revisions.panel.restoreAsNew\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
       "rule": "unicode-structure-icon",
       "file": "src/components/sheet-catalog/ColumnEditor.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheet-catalog/ColumnEditor.vue|↑|1",
@@ -240,192 +142,17 @@
     },
     {
       "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 旧顶栏规则：布局度量已被 `layout/TopBar.vue` 的 scoped 样式覆盖，仅旧页面残留。 */ .topbar min-height:68px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|.topbar div max-width:1440px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|:where(#app) main max-width:1440px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 度量字号刻意保留原值：字号突增的收敛属于属性页与图纸目录迁移任务。 */ .summary strong font-size:22px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 内容驱动高度 520px 保留原值：删除内联滚动区需先证明消费方迁移。 */ .editor min-height:520px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 离刻度圆角 5px 保留原值：归并到 `--radius-sm/md` 会改变渲染，故登记为例外。 */ .form-grid input,.form-grid select,.form-row input,.form-row select,.csv-flow input border-radius:5px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|:where(#app) fieldset border-radius:7px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|.execution-group border-radius:7px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|.filter-grid input,.filter-grid select,.bulk-bar input,.bulk-bar select border-radius:5px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 表格窗口的高度上限是内容驱动滚动区，保留原值并登记例外。 */ .sheet-table-window max-height:520px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "raw-visual-value|src/styles/legacy.css|/* 草稿动作区高度上限同样是内容驱动滚动区，保留原值并登记例外。 */ .draft-actions max-height:180px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/primitives.css",
-      "fingerprint": "raw-visual-value|src/styles/primitives.css|/* 模态卡体：宽度上限 520px 是 SPEC 固定值，尚未令牌化，见例外清单。 */ .modal-card max-width:520px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/styles/primitives.css",
-      "fingerprint": "raw-visual-value|src/styles/primitives.css|/* 受影响文件列表的高度上限是内容驱动滚动区，未令牌化，见例外清单。 */ .modal-impact max-height:200px|1",
-      "reason": "旧全局规则按 Task 2 Step 5 原样迁入分层样式表；该值不属令牌有限值域（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号/布局宽度），令牌化会改变渲染，故保留原值待该层清理时删除或归并",
-      "expiresWith": "PLAN-DM-029 Task 9"
-    },
-    {
-      "rule": "raw-visual-value",
       "file": "src/views/RevisionsView.vue",
       "fingerprint": "raw-visual-value|src/views/RevisionsView.vue|.empty-title font-size:16px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/RevisionsView.vue",
-      "fingerprint": "raw-visual-value|src/views/RevisionsView.vue|.empty-action font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "visible-input-label",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "visible-input-label|src/views/WelcomeView.vue|input:text:path|1",
-      "reason": "迁移前既有输入缺少可见 label",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-card max-width:520px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
+      "reason": "字号在语义层无值等值的可借令牌（刻度 11/12/13/14/18，该值离刻度），且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/views/WelcomeView.vue",
       "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-title font-size:20px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-desc font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.no-shell max-width:420px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.no-shell input height:36px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.no-shell input font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.no-shell button height:36px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.no-shell button font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.drop-hint font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-card .primary height:38px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/WelcomeView.vue",
-      "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-card .primary font-size:14px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 10"
+      "reason": "字号在语义层无值等值的可借令牌（刻度 11/12/13/14/18，该值离刻度），且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "unicode-structure-icon",
@@ -440,6 +167,13 @@
       "fingerprint": "raw-visual-value|src/components/settings/SettingsDialog.vue|.dlg-head h2 font-size:16px|1",
       "reason": "`.dlg-head h2` 的 16px 是**离刻度**字号（本仓字号刻度为 11/12/13/14/18），而本计划政策禁止为页面迁移新增字号令牌（T6-3 / Ruling 38），且无语义层/组件层的值等值令牌可借（`--space-4`/`--icon-size-md` 是间距/图标，借用即语义说谎）→ 保留为显式例外。",
       "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/RevisionHistoryPanel.vue",
+      "fingerprint": "unicode-structure-icon|src/components/RevisionHistoryPanel.vue|→|1",
+      "reason": "该 `→` 是两个哈希（before/after）之间的**文本分隔符**，不是充当结构图标的字形：它不承载任何交互、无可点面积、无键盘语义，属于单元格正文的一部分。既有 e2e 以 `getByText('aaaaaaaa → bbbbbbbb')` 直断言这段文本（i18n-workflows.spec.ts:159），迁到 SVG 会改变断言的语言无关性并使单元格失去可读文本，故**保留原字符**。PLAN-DM-029 Task 9 复核结论：保留，到期条件改为下一次修订页视觉 Spec 修订。",
+      "expiresWith": "下一次修订页视觉 Spec 修订"
     }
   ],
   "dynamicVariables": [
