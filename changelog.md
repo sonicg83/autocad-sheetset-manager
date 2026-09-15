@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（Task 7 修复轮途中：发现浮层诊断面板既有缺陷 + T7-6 裁定，PLAN-DM-029）
+
+- **修复轮 worker 遇阻并正确停下报告**：它被要求「凡可点元素都要过 ≥32px 下限」，但发现该断言在此代码上**无法变绿**，因为任务浮层的**诊断面板是坏的** —— 它**没有放宽断言、也没越权改代码**，而是带实测值请示。**这是正确行为**。
+- **实测缺陷**：诊断列表**每行只显示一个字符**（垂直堆叠），`li` 高达 520px。
+- **根因链（控制器逐条独立复核属实）**：`legacy.css:24` 的 `:where(#app) aside button{…width:100%…}` 命中了浮层（**`TaskOverlay.vue:120` 的根元素就是 `<aside>`**）→ 浮层内所有 button 吃到 `width:100%`；`.diag-copy` 又带 `flex-shrink:0` → 独占整行 → `.diag-text{flex:1;min-width:0}` 被挤成 **0 宽** → `word-break:break-word` 每字一行。
+- **归因：先前既有，非本计划引入**（已用 git 核实）：`aside button{…width:100%…}` 在**计划基点 `b248ff1` 的单体 `style.css` 里逐字存在**，`b0786d7` 只把它搬进 `legacy.css`；`.diag-text`/`.diag-copy` 与基点**结构一致**（仅值→令牌）。
+- **T7-6 裁定 A**：授权在 `TaskOverlay.vue`（Task 7 Files 内）做最小修复：`…diag-copy{width:auto}` + 给 `.diag-copy`/`.ov-diagnostics summary` 加 `min-height:var(--tap-target-min)`(32px)。可行性依据：组件 scoped 样式是**无层级**的，而**无层级声明胜过所有 `@layer` 内声明** → 能稳定压过 legacy 层，**无需 `!important`、无需动不在 Files 内的 `legacy.css`**。
+- **为何不选 B/C**：修复对象是**本不可读的面板**，且 ≥32px 是 ARCH-DM-007 §10 硬验收线；B 会让自己新写的断言对已知缺陷**失明**；C 只修一半。“可视变化”在此**是修复而非回归**，仍需单列披露。
+- **责任 V 加入第二个实例**：第一个是 Task 6 的 `ConfirmModal` 红底红字（`.danger` 被同名类压过），第二个是本次的 `aside button`（元素选择器命中组件根元素）。**共同模式：legacy 层的元素/通用选择器静默改写组件内部样式，而现有任何门禁都发现不了**。已要求做一轮**可枚举清点**（列出所有命中浮层内部的 legacy `aside ...` 规则），而不是抽样印象。
+
 ## 2026-09-15（Task 7 首轮评审与 T7-4/T7-5 裁定，PLAN-DM-029）
 
 - **评审（`1493bbe0`）**：**Needs fixes / 0 Critical**。迁移本体、令牌/借用政策、动态变量登记、保留范围、无断言削弱、`ui/**` 未触——**逐条核实合规**；并确认 `expectToken` 自指弱点的修复（绝对值锚）**真实有效**（评审者也认为这是本 diff 最有价值的贡献）。
