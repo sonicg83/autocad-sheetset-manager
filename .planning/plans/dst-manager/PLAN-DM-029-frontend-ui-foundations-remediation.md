@@ -601,15 +601,56 @@ Files（本轮）：
 - Modify: `web/tests/e2e/settings-dialog.spec.ts`
 - Modify: `web/tests/e2e/settings-demo-visual-evidence.spec.ts`
 - Modify: `web/tests/e2e/settings-extensions-production-evidence.spec.ts`
+- Modify: `web/src/components/settings/ExtensionSettingsHost.vue`（**T8-1 补列**：它有 **10** 条 `expiresWith: PLAN-DM-029 Task 8` 的例外，但原 Files 没包含它——正是**责任 L** 已登记的「例外到期任务与承载文件错位」实例之一；按责任 L 的收口方向与 Ruling 37 先例补入）
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
 - [ ] **Step 1（RED）**：写设置表单 label/hint/error 关联、按钮档位、焦点、长路径等宽字体与 `BooleanSwitch` 实际点击盒 `≥44×32px` 断言；确认当前点击盒或继承字体失败。
 - [ ] **Step 2（迁移）**：表单行、扩展卡片、生成式设置、目录设置和关于页动作改用原语；保留设置 schema、即时保存与重启提示语义。
 - [ ] **Step 3（开关）**：视觉轨道保持 `44×24px`，外层 label/button 扩到至少 `44×32px`；键盘 Space 切换、disabled、accessible name 和状态文案不变。
 - [ ] **Step 4（证据）**：保存浅/深默认、校验错误、扩展禁用、窄屏共 5 张；生产证据继续使用虚构路径，不写入真实用户目录。
-- [ ] **Step 5（例外清退）**：设置目录零静态例外。
+- [ ] **Step 5（例外清退）**：除经 T8-1(F) 保留的 **1 条** 16px 字号例外（责任 K）外，设置目录零静态例外。
+  - **原措辞为计划缺陷（T8-1(H) 订正）**：「零静态例外」**不可达**——`.dlg-head h2{font-size:16px}` 是**离刻度**值（刻度为 11/12/13/14/18），而政策禁止新增字号令牌，也无值等值的可借令牌 → 必须保留。先例：Ruling 39 订正 Task 6 Step 6、T7-1(F) 订正 Task 7 Step 6。
+  - **收口不变量（T8-1）**：Task 8 名下 **66** 条（Files 内 56 + 孤儿 10）→ 清退 **65** 条、保留 **1** 条 → 全表 **128 → 63**；`check:ui` 裸违规应为 **64 = 63 + 1 动态白名单**。
 - [ ] **Step 6（验证）**：运行 `rtk npm --prefix web run test:e2e -- settings-dialog.spec.ts settings-demo-visual-evidence.spec.ts settings-extensions-production-evidence.spec.ts`、`rtk npm --prefix web run test:unit -- src/composables/useSettings.test.ts src/composables/useExtensionSettings.test.ts` 与 `rtk npm --prefix web run build`。
 - [ ] **Step 7（提交）**：commit：`统一设置中心控件与开关交互`。
+
+#### Task 8 控制器裁定（T8-1，派发前下达）
+
+控制器已做同类侦察（`controller-task-baseline.mjs 8`，脚本已参数化）——**同样的塔会重现，故提前拆掉**。侦察实测：Files 内 **56** 条（`SettingsDialog` 16、`SettingsFormRow` 11、`ExtensionCard` 7、`GeneratedExtensionSettingsForm` 6、`SheetCatalogSettingsPanel` 6、`BooleanSwitch` 4、`AboutSection` 3、`ExtensionsSection` 3；规则：`raw-visual-value` 55 + `unicode-structure-icon` 1）+ **孤儿 10** 条；55 条裸值去重后 **14 个值**。
+
+**(A) 开放 `tokens.css`：仅追加以下 7 个组件层令牌（取值逐字等值、零视觉变化、按角色命名）**：
+
+| 令牌 | 值 | 消费处 |
+|---|---|---|
+| `--settings-license-max-height` | `200px` | `AboutSection.vue` `.license max-height` |
+| `--settings-dialog-width` | `760px` | `SettingsDialog.vue` `.settings-dialog width` |
+| `--settings-nav-width` | `150px` | `SettingsDialog.vue` `.sections width` |
+| `--settings-switch-width` | `44px` | `BooleanSwitch.vue` `.switch width`（Step 3 明示保持 44×24） |
+| `--settings-switch-height` | `24px` | `BooleanSwitch.vue` `.switch height` |
+| `--settings-switch-thumb-size` | `18px` | `BooleanSwitch.vue` `.switch-thumb width/height` |
+| `--settings-foot-min-height` | `24px` | `.ext-config` / `.ef-foot` / `.f-foot` 三处同语义 `min-height` |
+
+**(B) 禁止借用（值等值但语义不符 —— 语义说谎，按 Ruling 33/35/39 驳回）**：`24px` → `--space-5`（**间距令牌，不是高度**）；`18px` → `--badge-size` / `--font-size-18` / `--modal-title-font-size`（徽标/字号 ≠ 开关滑块）；`44px` → `--definition-row-height` / `--sheet-table-row-height`（他域行高）；`16px` → `--space-4` / `--icon-size-md`（间距/图标 ≠ 字号）。
+
+**(C) 允许借用**：`12px` → `--font-caption`；`13px` → `--font-label`；`14px` → `--button-font-size`/`--input-font-size`（**不得用 primitive `--font-size-14`**，同 Ruling 38）；`32px` → `--tap-target-min`（`.icon-btn min-width/min-height` 本就是可点目标 ✓）；`34px` → `--control-height-compact`。
+
+**(D) ★ 34px 表单输入的档位问题 → 先用 compact 令牌，档位本身不单方面改**：`SettingsFormRow`/`GeneratedExtensionSettingsForm` 的 `input[type=text|number] height:34px` 与 `.browse-btn height:34px`。
+- 34px 同名 `--control-height-compact`（令牌名中性：「紧凑控件高度」，不是「工具栏高度」）✓。
+- **但** ARCH-DM-007 §4.1 的档位表把**表单输入 = 38px**（`--control-height-form`）、34px 归「紧凑工具栏」；且**其它页面的表单输入已是 38px**（Task 6/Task 7 均如此）→ 存在**跨页不一致**。
+- 34px **不低于** 32px 下限，因此**不是硬违规，而是档位选择问题** → 与**责任 W**（工具栏密度）同族，**不属页面迁移任务单方面决定** → **保持 34px + 用 compact 令牌**，并把该不一致**并入责任 W** 交 Task 12 / Spec 归属方以档位表裁决。
+- **明令**：**不得**为「统一」把 34px 单方面改成 38px（那是替设计系统做档位决定）；也**不得**改成其它值。
+
+**(E) 硬违规必须修**：`SettingsFormRow.vue` `.link-btn min-height:28px` —— **低于 32px 最小可点下限**（ARCH-DM-007 §10 硬验收线）→ 提到 `--tap-target-min`(32px)，并作为**有意视觉变化披露**。先例：T6-8 的 30→32、Task 6 的 30→36。
+
+**(F) 字号 `16px`（`.dlg-head h2`）→ 保留为显式例外 + 责任 K**：字号刻度为 11/12/13/14/18，16px **离刻度**；按 T6-3 / Ruling 38「不新增字号令牌」政策，且**无值等值的可借令牌** → 保留例外，`expiresWith` = 责任 K。**不得**改成 18/14（那是视觉变化）。
+
+**(G) 圆角 `5px`（`.cs-field input`）→ `--radius-sm`(6px)**：**1px 偏差、作为有意视觉变化披露**。先例：T6-7 与 T7-1(C)；仓库半径档为 6/8/12/9999，无 5px。
+
+**(H) Step 5 措辞已订正**（见上）：必须保留 1 条 16px 字号例外；不变量 **128 → 63**。
+
+**(I) Step 3 的三层尺寸别混淆**：视觉**轨道 44×24**（Step 3 明示保持）、**滑块 18px**、**外层可点盒 ≥44×32**（Step 1/Step 3）。断言要量**外层 label/button 的点击盒**，不是轨道本身。
+
+**(J) 证据纪律**：Step 4 的 5 张（保存浅/深默认、校验错误、扩展禁用、窄屏）+ Step 6 的 3 个 settings spec。**生产证据必须用虚构路径、不得写真实用户目录**（Step 4 明示）。沿用 `settings-extensions-production-evidence.spec.ts` 的**既有落盘约定**——**不要自创路径、不要给 spec 加 env 开关**（T7-4 先例：目录页那套 env 开关会无差别覆盖他 Spec 资产，已登记责任 T）；若确需新建资产目录 → **停下报告**。若沿用机制仍连带改写了别的 Spec 的 PNG → `git checkout` 还原并在报告里说明。
 
 ### Task 9: 迁移修订、修复、草稿和欢迎页等旧页面
 
