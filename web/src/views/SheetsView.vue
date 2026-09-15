@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .sheets-view{display:flex;flex-direction:column;flex:1;min-height:0}
 .sheets-workspace{display:flex;align-items:stretch;flex:1;min-height:0;background:var(--color-bg-canvas)}
-.sheet-tree-pane{flex:0 0 var(--sheet-tree-width,320px);min-width:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);overflow:auto;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
+.sheet-tree-pane{flex:0 0 var(--sheet-tree-width);min-width:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);overflow:auto;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
 .tree-resizer{flex:0 0 9px;margin-right:var(--space-4);border-left:1px solid var(--color-border-subtle);cursor:col-resize;touch-action:none;outline:none}
 .tree-resizer:hover,.tree-resizer:focus-visible{border-left:3px solid var(--color-accent);background:var(--color-info-bg)}
 .tree-resizer:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}

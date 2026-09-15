@@ -902,8 +902,8 @@
       "variable": "--sheet-tree-width",
       "producer": "src/views/SheetsView.vue",
       "consumer": "src/views/SheetsView.vue",
-      "reason": "图纸树宽度由组件运行时状态经内联 :style 写入，静态样式表无法声明",
-      "expiresWith": "PLAN-DM-029 Task 7（复核可否改为静态令牌）"
+      "reason": "图纸树宽度是用户可拖拽/键盘调整的运行时状态（SheetsView.vue:91 的 treeWidth ref，260–420px 夹取，:147 经内联 :style 写入），静态样式表无法声明；PLAN-DM-029 Task 7 复核：不可改为静态令牌（宽度由用户交互决定）",
+      "expiresWith": "图纸树面板改为固定宽度、或撤销拖拽/键盘调整能力时"
     }
   ]
 }
