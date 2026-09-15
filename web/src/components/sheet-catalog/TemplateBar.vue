@@ -139,7 +139,7 @@ async function confirmSaveAs() {
 .spacer{flex:1}
 /* 危险删除保持低强调：透明底 + 危险文字（属性页 .danger-text 同一写法）；
    盒模型只用组件层令牌，不用 UiButton 的实心 danger 变体 */
-.template-row .danger-text{min-height:var(--control-height-compact);padding:0 var(--space-3);border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-danger)}
+.template-row .danger-text{min-height:var(--button-height);padding:0 var(--space-3);border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-danger)}
 .template-row .danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
 .conflict{border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);background:var(--color-warning-bg)}
 /* 14px 借组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
