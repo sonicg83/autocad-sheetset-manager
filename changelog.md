@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-15（Task 11 第 3 轮 11c：抽出草稿栈与未提交输入门禁组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useDraftGuards.ts`，负责草稿栈状态与投影/保存/撤销重做/移除/丢弃、`DRAFT_CONFLICT` 只读降级、图纸页与属性页两输入域过闸与共享三选一；`appComposition.test.ts` 新增草稿语义与过闸用例（合计 **151 passed**）。`App.vue` **843 → 766 行**（净 −77）。
+- **组合而非复制**（Step 4 原文）：确认队列仍来自既有 `useConfirm`（只调用注入的 `confirmAction`）、投影仍来自既有 `./drafts`（`projectCommands`/`projectWorkspace`）、图纸目录页守卫仍复用既有 `guardSheetCatalogPage` 纯函数；**未新建第二份确认队列、未复制投影实现**。机械证据：`App.vue` 中 `COMMAND_LABEL_KEYS`/`projectCommands`/`projectWorkspace`/`let draftSaveQueue` 残留均为 **0**。
+- **前向引用以懒取值函数注入**：`editor`/`properties`/`sheets`/`active`/`refreshSheetProjection`/`reloadWorkspace` 在本模块调用时尚未创建，而 `editor`/`properties` 又消费本模块的 `addCommand`/`submitCommands`（setup 期真实循环），故一律只在动作被调用时解引用。
+- **`<template>` 逐字节未变**（两版 `<template>` 段提取后 `diff` 为空）：抽取时把返回值解构回同名局部变量，模板一行未改。
+- **Step 8 after 比对（T11-1(C) 安全网）**：4 个流程 spec **128 passed**；键 128/128、请求序列 **128/128** 逐用例一致、文案指纹 **128/128** 全等（归一化反推为 `collapse`/`collapseTrim`，与 11b 独立一致）；**无重复键** ⇒ 11a 记录的 innerText 波动未复现。
+- **门禁**：`test:unit` 13 文件 / **151 passed** · `test:contracts` **85 pass / 0 fail** · `check:ui` **0**（例外表仍 **14**，未增未删）· `build` **0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`）。
+- **变异自证**：同时去掉 `DRAFT_CONFLICT` 分支的 `draftStale=true`、并对调过闸顺序 ⇒ `5 failed | 146 passed`，**恰好且仅有**预期 5 例转红；逐字节还原后 sha256 与提交内容一致。
+- **未做**：`App.vue` 未达 Step 7 的 350–450 行（减重主要发生在 11d/11e）；真实桌面缩放抽查仍待用户执行。
+
 ## 2026-09-15（Task 11 第 2 轮 11b：抽出壳层导航组合式函数，PLAN-DM-029）
 
 - **产出**：新建 `web/src/composables/useShellNavigation.ts`（93 行）负责页签栏状态与任务浮层开关；`web/src/composables/appComposition.test.ts`（新增，10 例）。`App.vue` **869 → 843 行**（净 −26）。
