@@ -870,9 +870,14 @@ describe("useWorkspaceCommands：提交命令与门禁编排", () => {
     deps.draft.addCommandBatch([createCommand.addCustomProperty("sheetset", "P", "")], {key: "k"}, "property");
     expect(deps.draft.hasPropertyDefinitionCommands.value).toBe(true);
     const commands = useWorkspaceCommands(deps);
+    const errorBefore = deps.error.value;
 
     const structural = await commands.submitCommands([createCommand.deleteSheet("s1")], {key: "k"}, "structural");
     expect(structural).toEqual({ok: false, message: "shell.errors.mixedBatches"});
+    // ★ 拒绝必须发生在**触碰草稿层之前**：否则草稿层也会以同一条混批文案拒绝，
+    // 本用例就无法区分「编排层裁决」与「下游兜底」了（变异自证时实测过这个盲点）。
+    // error 不被写入是「编排层直接裁决」的可见差别（下游失败会写 error 并回显）。
+    expect(deps.error.value).toBe(errorBefore);
 
     const metadata = await commands.submitCommands([createCommand.updateSheetProperties("s1", {})], {key: "k"}, "metadata");
     expect(metadata).toEqual({ok: true});
