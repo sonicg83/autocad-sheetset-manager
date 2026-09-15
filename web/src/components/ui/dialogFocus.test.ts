@@ -7,8 +7,12 @@
 // 计划 Task 12 收口责任 F）。工具只管理焦点，不决定是否可关闭，也不阻止 Escape 的传播。
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {mount} from "@vue/test-utils";
-import {defineComponent,h,nextTick,ref,type VNode} from "vue";
+import {defineComponent,h,nextTick,ref,type Component,type VNode} from "vue";
+import {createI18n} from "vue-i18n";
 import {useDialogFocus} from "./dialogFocus";
+import ConfirmModal from "./ConfirmModal.vue";
+import UnsavedInputDialog from "./UnsavedInputDialog.vue";
+import PropertyValueCompareDialog from "../properties/PropertyValueCompareDialog.vue";
 
 /** 子节点渲染函数；不传时用默认的三个按钮布局。 */
 type HarnessChildren = () => VNode[];
@@ -421,5 +425,138 @@ describe("useDialogFocus 的可聚焦元素集合", () => {
     const event = pressKey(wrapper.element, {key: "Tab"});
     expect(event.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(wrapper.find(".first").element);
+  });
+});
+
+// ── Task 10 Step 3：四个模态的**接入**契约 ─────────────────────────────────
+// 上面的用例覆盖**工具自身**；这里覆盖**接入正确性**——模态是否真的把初始焦点、Tab 圈闭、
+// Escape、关闭归还接到了 `dialogFocus.ts` 上。与 `uiPrimitives.test.ts` 同一形态：一个
+// describe 一个组件。happy-dom 不算布局也不实现原生 `<dialog>` 的焦点移动，因此：
+// · 四个模态都是 `watch(() => props.open)` 的**变迁**才送焦点 → 必须先关后开；
+// · `UnsavedInputDialog` 的 Escape 归原生 `cancel` 事件（happy-dom 不派发）→ 其 Escape
+//   与「只作用最上层」由 `extensions-settings.spec.ts` 在真实浏览器里钉（不在此处假测）。
+const modalMessages = {
+  "zh-CN": {
+    shell: {modal: {cancel: "取消", confirm: "确认", reversible: "可逆", irreversible: "不可逆", checkbox: "确认{reversibility}"}},
+    properties: {compare: {close: "关闭", dialogHint: "对照说明", fieldMissing: "缺值"}},
+  },
+};
+
+const openedModals: Array<{unmount: () => void}> = [];
+afterEach(() => {
+  for (const wrapper of openedModals.splice(0)) wrapper.unmount();
+});
+
+function mountModal(component: Component, props: Record<string, unknown>) {
+  const i18n = createI18n({legacy: false, locale: "zh-CN", messages: modalMessages});
+  // attachTo 必需：不入文档时 happy-dom 的 `.focus()` 不改 `document.activeElement`。
+  const wrapper = mount(component, {props: {open: false, ...props}, global: {plugins: [i18n]}, attachTo: document.body});
+  openedModals.push(wrapper);
+  return wrapper;
+}
+
+async function setOpen(wrapper: {setProps: (props: Record<string, unknown>) => Promise<void>}, open: boolean) {
+  await wrapper.setProps({open});
+  await nextTick();
+}
+
+const activeElement = () => document.activeElement as HTMLElement | null;
+const focusablesOf = (root: Element) =>
+  Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select, textarea, a[href]'));
+
+/** Tab 圈闭应当把焦点从末个可聚焦元素回绕到首个，反向同理。 */
+async function expectTabTrap(wrapper: {find: (selector: string) => {element: Element; trigger: (event: string, options?: Record<string, unknown>) => Promise<void>}}, root: Element) {
+  const nodes = focusablesOf(root);
+  expect(nodes.length, "模态内应至少有 2 个可聚焦元素").toBeGreaterThan(1);
+  nodes[nodes.length - 1]!.focus();
+  await wrapper.find("[role=dialog], dialog").trigger("keydown", {key: "Tab"});
+  expect(document.activeElement, "Tab 从末个回绕到首个").toBe(nodes[0]);
+  nodes[0]!.focus();
+  await wrapper.find("[role=dialog], dialog").trigger("keydown", {key: "Tab", shiftKey: true});
+  expect(document.activeElement, "Shift+Tab 从首个回绕到末个").toBe(nodes[nodes.length - 1]);
+}
+
+describe("四个模态的焦点接入", () => {
+  it("ConfirmModal：打开聚焦模态卡、Tab 圈闭、Escape 取消并停止传播、关闭归还开启控件", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const wrapper = mountModal(ConfirmModal, {title: "删除模板", message: "确认删除？", confirmText: "删除"});
+    await setOpen(wrapper, true);
+    const card = wrapper.find('[role="dialog"]').element as HTMLElement;
+    expect(activeElement(), "打开时聚焦对话框本身（保持既有落点）").toBe(card);
+    await expectTabTrap(wrapper, card);
+
+    const escape = new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true});
+    card.dispatchEvent(escape);
+    await nextTick();
+    expect(wrapper.emitted("cancel"), "Escape 触发取消").toHaveLength(1);
+    expect(escape.defaultPrevented, "工具不阻止默认行为，由调用方表达").toBe(false);
+
+    await setOpen(wrapper, false);
+    expect(activeElement(), "关闭后归还开启控件").toBe(opener);
+    opener.remove();
+  });
+
+  it("PropertyValueCompareDialog：接入工具后与 ConfirmModal 契约等价", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const wrapper = mountModal(PropertyValueCompareDialog, {heading: "值对照", stages: [{label: "图纸集", value: "滨河市政工程"}]});
+    await setOpen(wrapper, true);
+    const card = wrapper.find('[role="dialog"]').element as HTMLElement;
+    expect(activeElement(), "打开时聚焦对话框本身").toBe(card);
+    // 本对话框只有一个可聚焦元素（关闭）⇒ 圈闭实际上是**空转**的。这里如实断言这一点，
+    // 而不是凭空造第二个可聚焦元素去「测」圈闭。真正演练首尾回绕的是 ConfirmModal（2 个）
+    // 与 UnsavedInputDialog（3 个，且禁用项不应参与）。
+    expect(focusablesOf(card).map((node) => node.textContent?.trim()), "值对照对话框的可聚焦元素").toEqual(["关闭"]);
+
+    const escape = new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true});
+    card.dispatchEvent(escape);
+    await nextTick();
+    expect(wrapper.emitted("close"), "Escape 关闭").toHaveLength(1);
+    expect(escape.defaultPrevented, "Escape 必须停止传播（叠在其他模态之上时不连带关掉下层）").toBe(false);
+    expect(escape.cancelBubble, "调用方在回调里 stopPropagation").toBe(true);
+
+    await setOpen(wrapper, false);
+    expect(activeElement(), "关闭后归还开启控件").toBe(opener);
+    opener.remove();
+  });
+
+  it("UnsavedInputDialog：打开聚焦对话框、Tab 圈闭跳过禁用的「加入草稿并继续」、关闭归还开启控件", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const wrapper = mountModal(UnsavedInputDialog, {summary: "图纸 001 属性编辑", canSave: false});
+    await setOpen(wrapper, true);
+    const dialog = wrapper.find("dialog").element as HTMLElement;
+    expect(dialog.contains(activeElement()), "打开时焦点在对话框内（显式 initialFocus，不依赖平台）").toBe(true);
+
+    const nodes = focusablesOf(dialog);
+    expect(nodes.map((node) => node.textContent?.trim()), "禁用项不参与停靠").not.toContain("加入草稿并继续");
+    await expectTabTrap(wrapper, dialog);
+
+    await setOpen(wrapper, false);
+    expect(activeElement(), "关闭后归还开启控件（显式 returnFocus：工具内部 opener 读得太晚）").toBe(opener);
+    opener.remove();
+  });
+
+  it("嵌套：各模态自己的 keydown 处理器互不串台（Tab 只在本模态内回绕）", async () => {
+    const lower = mountModal(PropertyValueCompareDialog, {heading: "下层", stages: [{label: "a", value: "1"}]});
+    const upper = mountModal(ConfirmModal, {title: "上层", message: "确认？", confirmText: "确定"});
+    await setOpen(lower, true);
+    await setOpen(upper, true);
+    const lowerCard = lower.find('[role="dialog"]').element as HTMLElement;
+    const upperCard = upper.find('[role="dialog"]').element as HTMLElement;
+
+    await expectTabTrap(upper, upperCard);
+    // 上层按 Tab 不得把焦点送进下层
+    expect(lowerCard.contains(activeElement()), "上层圈闭不得溢入下层").toBe(false);
+
+    const escape = new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true});
+    upperCard.dispatchEvent(escape);
+    await nextTick();
+    expect(upper.emitted("cancel"), "Escape 只作用于事件所在的那一层").toHaveLength(1);
+    expect(lower.emitted("close"), "下层不得被连带关闭").toBeUndefined();
   });
 });
