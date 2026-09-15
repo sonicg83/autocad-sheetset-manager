@@ -13,7 +13,7 @@ import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult, Draf
 import type {GuardChoice} from "./features/sheets/types";
 import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/properties/types";
 import type {DefinitionScopeFilter} from "./features/properties/model";
-import {useShellTabs} from "./composables/useShellTabs";
+import {useShellNavigation} from "./composables/useShellNavigation";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
@@ -38,7 +38,6 @@ import ActionDock from "./layout/ActionDock.vue";
 import TaskOverlay from "./layout/TaskOverlay.vue";
 import WorkspaceShell from "./layout/WorkspaceShell.vue";
 import {useHotkeys} from "./composables/useHotkeys";
-import type {TabDescriptor} from "./composables/useShellTabs";
 import WelcomeView from "./views/WelcomeView.vue";
 import SheetsView from "./views/SheetsView.vue";
 import PropertiesView from "./views/PropertiesView.vue";
@@ -71,14 +70,10 @@ const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
 const workspaceLoadGeneration=ref(0);
-// 任务浮层状态（SPEC-DM-006 §4.1）：open/tab 由 App 持有（Task 7 toast 抑制与"查看"跳转依赖）；openOverlay 为唯一自动展开入口
-const overlayOpen=ref(false),overlayTab=ref<"prog"|"prev"|"diag">("prog");
-function openOverlay(tab:"prog"|"prev"|"diag"){overlayTab.value=tab;overlayOpen.value=true}
-// 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转仅放行合法页签后复用 openOverlay
+// 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转（jumpOverlay）复用浮层的唯一自动展开入口
 const {toasts,pushToast,dismiss}=useToast();
 // 设置中心（PLAN-DM-019 任务 10/11）：入口在 TopBar 齿轮；toast 复用宿主 useToast
 const settingsOpen=ref(false);
-function jumpOverlay(tab:string){if(tab==="prog"||tab==="prev"||tab==="diag")openOverlay(tab)}
 // 任务监控域（Task 3 拆分）：Job 订阅/轮询/重试与代次失效；job 为单一 ref，供 execute/CSV/修复/恢复写入
 const {job,connectionMode,watchJob,retryJob,invalidateJobMonitor,terminal,isCurrentJobGeneration}=useJobMonitor({
   isWorkspaceLoading,workspace,
@@ -154,43 +149,22 @@ const extensionPages=computed(()=>{
   }
   return pages;
 });
-// 标签描述符：核心三标签（图纸/属性/修订历史）顺序固定不被扩展替换，扩展页面追加在后；
-// 无工作区时不显示 workspace_page 贡献。修订历史与扩展页在加载/恢复期间禁用（页面内容
-// 未渲染，防中途点击进入空态），守卫语义与旧 TabBar 的 revisions-disabled 绑定一致
-const tabDescriptors=computed<TabDescriptor[]>(()=>{
-  const busyDisabled=isRestoreExecuting.value||isWorkspaceLoading.value;
-  const core:TabDescriptor[]=[
-    {id:"sheets",label:t("shell.tabs.sheets"),number:"①",source:"core"},
-    {id:"properties",label:t("shell.tabs.properties"),number:"②",source:"core"},
-    {id:"revisions",label:t("shell.tabs.revisions"),number:"③",source:"core",disabled:busyDisabled},
-  ];
-  if(workspace.value===null)return core;
-  for(const page of extensionPages.value)core.push({id:page.routeKey,label:t(page.summary.name_key),source:"extension",disabled:busyDisabled});
-  return core;
+// 壳层导航（页签 + 任务浮层）已抽出（Task 11 Step 4 上半 / 第 11b 轮）：页签 active/select/onKeydown
+// 由既有 `useShellTabs` **组合**而来（本模块不重新实现页签状态，也不注册快捷键）；浮层的 open/tab 与
+// 唯一自动展开入口 openOverlay 同样归它持有。
+// 解构回同名局部变量 ⇒ 本文件其余代码与 `<template>` 一行都不用改。注意上方若干闭包（如 useJobMonitor
+// 的 shouldSuppress、setJob）引用了 overlayOpen/openOverlay，它们都在本模块初始化**之后**才被调用，
+// 因此不存在“先用后定义”的求值顺序问题。
+const {tabDescriptors,active,overlayOpen,overlayTab,openOverlay,resetOverlay,jumpOverlay,selectTab,onTabKeydown}=useShellNavigation({
+  workspace,
+  extensionPages,
+  isRestoreExecuting,
+  isWorkspaceLoading,
+  t,
+  loadRevisions,
+  catalogNavigationNeeded:sheetCatalogNavigationNeeded,
+  guardCatalogPage:guardSheetCatalogPage,
 });
-const tabIds=computed(()=>tabDescriptors.value.map(descriptor=>descriptor.id));
-// 固定标签栏状态（SPEC-DM-006 §7.2）：active/select/onKeydown 由 useShellTabs 提供，TabBar 为受控组件；
-// 动态列表下激活项被移除时安全校正回首个核心标签
-const {active,select,onKeydown}=useShellTabs<string>(tabIds,"sheets","sheets");
-// 切换页签先过图纸目录页未保存草稿闸门（PLAN-DM-020 Task 11 / SPEC-DM-012 §3.2：
-// 目录页未挂载时守卫为空操作）；目录页自身草稿在离开前必须三选一。
-// 重复点击当前页签保留既有语义：不重开闸门，修订历史页签仍然重新加载列表
-function selectTab(id:string){
-  if(id===active.value){ if(id==="revisions")void loadRevisions(); return }
-  if(!sheetCatalogNavigationNeeded()){select(id);if(id==="revisions")void loadRevisions();return}
-  void doSelectTab(id);
-}
-async function doSelectTab(id:string){
-  await guardSheetCatalogPage(()=>{select(id);if(id==="revisions")void loadRevisions()});
-}
-function onTabKeydown(e:KeyboardEvent){
-  const before=active.value;onKeydown(e);
-  const target=active.value;
-  if(target===before)return;
-  // 无未保存草稿时保持既有同步切换（useShellTabs 已改写 active）；有草稿才走闸门
-  if(!sheetCatalogNavigationNeeded()){if(target==="revisions")void loadRevisions();return}
-  active.value=before;void doSelectTab(target);
-}
 // 停用/启用扩展（本次修复：入口唯一在设置中心，扩展页面不再提供停用；否则停用会移除
 // 页面入口本身，开关变成单向、用户被永久卡死）。启用不移除任何入口，直接落库；
 // 停用可能移除当前目录页并丢弃页内草稿，必须先过全局未保存输入三选一闸门
@@ -349,7 +323,7 @@ function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
 function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
-function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";return workspaceLoadGeneration.value}
+function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();resetOverlay();return workspaceLoadGeneration.value}
 async function openByPath(path:string){
   // 重新打开/切换工作区前先过全局输入保护（无未提交输入时直接通过）
   await guardAllInputs(()=>doOpenByPath(path));
@@ -478,7 +452,7 @@ async function doCloseWorkspace(){
   }
   const closedId=workspace.value?.id;
   // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
-  workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();editor.reset();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();overlayOpen.value=false;overlayTab.value="prog";
+  workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();editor.reset();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();resetOverlay();
   clearExtensions();
   // 关闭成功清空服务端可信上下文（best-effort：旧 ID 的迟到清除请求由服务端按上下文匹配拒绝，不影响新工作区）
   if(closedId)void clearWorkspaceContext(closedId);
