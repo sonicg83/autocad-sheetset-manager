@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（Task 10 途中：T10-2 裁定（与 Step 2 提示不可兼得）+ Files 补列，PLAN-DM-029）
+
+- **worker 实测发现一个真实冲突并停下请裁定**（未自行扩权、未自行偏离）：Step 2 要求「**移除**根容器 tabindex」，但 `SheetsView.vue:130` 的 `querySelector('[role="tree"]')?.focus()` **只因容器可聚焦才生效** → 移除后变 no-op，900px 抽屉打开后焦点**留在切换按钮**（**a11y 回退**）；且 `sheets-layout.spec.ts:254`/`:341-346` 两条断言本就建立在「容器可聚焦」上；而 `SheetsView.vue` **不在 Files 内**（属**已关闭**的 Task 7）。
+- **关键事实（控制器实测）**：Step 1 的**验收判据**（容器不是额外 Tab 停靠点）与 **Step 2 的实现提示**（移除 tabindex）**不一致**；而 **A（保留 `tabindex="-1"`）与 B（真移除）都满足判据** → 判据不决定取舍；决定取舍的是「**焦点所有者应该是谁**」。
+- **裁定 B**：容器 tabindex **完全移除**，`SheetsView.vue:130` 改为聚焦**活动 treeitem**（ARIA 树的焦点所有者）。理由：① Step 2 明文就是「移除」且 ARIA 树焦点归 treeitem；② 一致性——本任务（T10-1）刚为避撞墙两次补列 Files，并已有「跨已关闭任务文件的可访问性/焦点层编辑」约束先例（Task 9 编辑过 4 个已关闭任务的模态）→ 正确处理是**补 Files 缺口**，而不是为迁就缺口偏离计划提示。
+- **`SheetsView.vue` 入 Task 10 Files**（严格范围）：**只改焦点落点**，不改公开契约、不顺带改视觉/业务行为；既有测试须保绿，需调断言则**保持原意图 + 报告单列披露**。
+- **额外要求**：**无活动项的兵底必须显式定义并加断言**；容器 `@keydown` **不移**（keydown 从 treeitem 冒泡，方向键/Home/End 仍生效，需实测）；焦点由容器改为 treeitem 对读屏是**改进**而非等价；`sheets-layout.spec.ts` 两处断言改为「活动 treeitem 被聚焦」。
+- **已批准 worker 自提的 `sheets-navigation.spec.ts` 处理**（改点击展开指示器、**保留 `.chevron` 类**以免破坏 `sheets-visual-regressions.spec.ts:101` 的颜色断言；后者不在 Files 内→**不得修改**）。
+- **A 仍属合法选项并已记录在案**：`tabindex="-1"` 满足判据、零改动、零越界；代价是把非标准的「可编程聚焦容器」永久留在无障碍模型里。
+
 ## 2026-09-15（Task 10 派发前侦察与 T10-1 裁定，PLAN-DM-029）
 
 - **侦察工具**：`controller-task-baseline.mjs 10`。实测：Files 内条目 **10**（`SheetTree.vue` **9** + `SettingsDialog.vue` 1）；规则 `raw-visual-value` 8 + `unicode-structure-icon` 2；**孤儿 0**；8 条裸值去重后 **4 个值**（16px、13px、**11px 无令牌**、12px）。

@@ -775,6 +775,7 @@ Files（本轮）：
 **Files:**
 
 - Modify: `web/src/components/sheets/SheetTree.vue`
+- Modify: `web/src/views/SheetsView.vue`（**T10-2 补列**：它 `:130` 用 `querySelector('[role="tree"]')?.focus()` 把焦点落入树，而 Step 2 要求**移除容器的 tabindex** → 不移列就会变成 no-op（900px 抽屉打开后焦点留在切换按钮 ⇒ **a11y 回退**）。授权范围：**只改可访问性/焦点层面**（把落点改为**活动 treeitem**），不得改公开契约、不得顺带改视觉/业务行为；既有测试须保绿，需调断言则保持原意图 + 报告单列披露）
 - Modify: `web/tests/e2e/sheets-navigation.spec.ts`
 - Modify: `web/tests/e2e/sheets-layout.spec.ts`
 - Create: `web/src/components/sheets/SheetTree.test.ts`
@@ -822,6 +823,15 @@ Files（本轮）：
 **(G) T9-3 转入项 2（必须查清并定调）**：**重载/恢复一个进行中的 job 后，客户端是否会重新登记该 job 使其 SSE 事件被接受？** 已知「对未知 job id 的事件会被忽略」很可能属设计。请查清并给出**结论 + 依据**；若发现是**缺陷**（如重载后 job 永远不再更新）→ **停下报告并登记责任**，不要靠测试适配掩盖。
 
 **(H) 运行纪律**：**每完成一步立即提交**（简体中文、动词开头）；**RED 先行**（Steps 1/3 本就是 RED 步）；对「迁移前后都通过」的断言抽 **≥2 条做变异自证**；**关键尺寸/颜色用绝对值锚**，不要写「用令牌断言令牌」；**不得新增例外**（除本裁定明确的保留项）。配额：`check:ui` ≤3、e2e ≤3（`sheets-navigation` + `sheets-layout` + `extensions-settings`，加设置/属性模态相关 spec）、`test:unit` ≤2、`test:contracts` ≤1、`build` ≤1；**禁跑全量 e2e**。若本轮确实生成了持久证据（Step 里未要求），沿用既有落盘约定、**不自创路径、不加 env 开关**（T7-4 先例）。
+
+**T10-2（Step 1 验收判据 vs Step 2 实现提示的不一致 + `SheetsView.vue` Files 漏列 —— 裁定 B）**
+
+- **冲突（worker 实测发现，控制器逐条核实属实）**：① Step 1 的**验收判据**是「容器**不是额外 Tab 停靠点**；仅活动 `treeitem` 为 0、其余为 -1」，而 Step 2 的**实现提示**是「**移除**根容器 tabindex」；② 容器原本确有 `tabindex="0"`（树里因此有**两个** Tab 停靠点）；③ 但 `SheetsView.vue:130` 是 `querySelector('[role="tree"]')?.focus()` —— **只因容器可聚焦才生效**，移除后变 no-op → 900px 抽屉打开后焦点**留在切换按钮**，用户需再 Tab 才能进树 ⇒ **相对今天是 a11y 回退**；④ `sheets-layout.spec.ts:254`/`:341-346` 两条断言本就建立在「容器可聚焦」之上；⑤ `SheetsView.vue` **不在 Task 10 Files 内**（它是 **Task 7（已关闭）**的文件），worker **没有自行扩权** ✓。
+- **A 与 B 都满足 Step 1 判据**（都让树内恰好一个 `[tabindex="0"]`）→ 判据不决定取舍；决定取舍的是「**焦点所有者应该是谁**」。
+- **裁定 B**：容器 tabindex **完全移除**（即 worker 已做的），并把 `SheetsView.vue:130` 改为聚焦**活动 treeitem**（ARIA 树模式的焦点所有者）。理由：① Step 2 明文就是「移除」，且 ARIA 树的焦点所有者是 treeitem 而非容器；② **一致性**——本任务（T10-1）刚为避撞墙而两次补列 Files，并已明确「跨已关闭任务文件的可访问性/焦点层编辑」约束（Task 9 同样编辑过 4 个已关闭任务的模态），正确处理是**补 Files 缺口**而非为迁就缺口偏离计划提示。
+- **A 为何仍属合法**（记录在案，不抹杀 worker 的判断）：`tabindex="-1"` 既满足判据又零改动、零文件越界；其代价是把一个非标准的「可编程聚焦容器」永久留在无障碍模型里，而 Task 10 正是无障碍收口任务。
+- **执行要求**：`SheetsView.vue` 入 Files（仅焦点落点）；**无活动项的兵底必须显式定义并加断言**（聚焦第一个 treeitem，或**不强制移入树**）；容器 `@keydown` **不移**（keydown 从 treeitem **冒泡**到容器，方向键/Home/End 仍生效，需实测）；`sheets-layout.spec.ts` 两处断言改为「**活动 treeitem 被聚焦**」并**保持原意图 + 报告单列披露**；焦点由容器改为 treeitem 对读屏是**改进**（直接播报项名与状态）而非等价。
+- **worker 自提的 `sheets-navigation.spec.ts:41/:64` 处理已批准**：改点击树项的展开指示器（鼠标路径）、**保留 `.chevron` 类**以免破坏 `sheets-visual-regressions.spec.ts:101` 对该类的颜色断言、保留原测试意图；并明确 **`sheets-visual-regressions.spec.ts` 不在 Files 内 → 不得修改**。
 
 ### Task 11: 拆分 App.vue 并保持跨域接线不变
 
