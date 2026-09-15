@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // 公共视觉原语契约（PLAN-DM-029 Task 3 Step 2）：按钮 variant/size/禁用/加载、图标按钮的
-// 可访问名称、图标注册表封闭性、字段 label 与 hint/error 关联、选择框默认高度。
+// 可访问名称、图标注册表封闭性、字段 label 与 hint/error 关联、选择框默认高度、
+// 输入/选择框的 hover 状态（SPEC-DM-006 §232；Task 5 修复轮 Ruling 33 补）。
 //
 // happy-dom 不解析样式表与 CSS 自定义属性链，故「默认高度 38px」只能按「样式块声明消费的
 // 令牌 + 令牌链最终值」断言：先证明实现消费 `--input-height`，再沿
@@ -211,6 +212,17 @@ describe("UiInput", () => {
     expect(scopedStyle(readSource("./UiSelect.vue"))).toContain("font-size:var(--input-font-size)");
     expect(resolveToken(TOKENS, "--input-font-size")).toBe("14px");
   });
+
+  it("提供 SPEC-DM-006 §232 要求的 hover 状态，且挂在控件类上而不是根元素上", () => {
+    // 根元素是 `<span class="ui-input">`、真正的控件是内部 `<input class="ui-input__control">`：
+    // scoped 的 `data-v-*` 只追加到子组件根元素，所以页面侧写 `.value-item input:hover` 永不命中
+    // （Task 5 修复轮 Ruling 33）。hover 因此只能由原语自己提供，且必须挂在控件类上。
+    // 注意：本条是源文本断言，拓不到「声明写了但不命中」——那个由
+    // `tests/e2e/properties-visual-evidence.spec.ts` 的真实 hover 计算样式断言负责。
+    expect(scopedStyle(readSource("./UiInput.vue")))
+      .toContain(".ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}");
+    expect(resolveToken(TOKENS, "--color-accent")).toMatch(/^#[0-9A-F]{6}$/i);
+  });
 });
 
 describe("UiSelect", () => {
@@ -219,6 +231,11 @@ describe("UiSelect", () => {
     expect(resolveToken(TOKENS, "--input-height")).toBe("38px");
     expect(resolveToken(TOKENS, "--control-height-form")).toBe("38px");
     expect(TOKENS.get("--height-38")).toBe("38px");
+  });
+
+  it("同样提供 SPEC-DM-006 §232 要求的 hover 状态", () => {
+    expect(scopedStyle(readSource("./UiSelect.vue")))
+      .toContain(".ui-select__control:hover:not(:disabled){border-color:var(--color-accent)}");
   });
 
   it("渲染默认插槽提供的 option，并透传 v-model", async () => {
