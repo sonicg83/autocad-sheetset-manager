@@ -869,6 +869,8 @@ Files（本轮）：
 
 ### Task 11: 拆分 App.vue 并保持跨域接线不变
 
+> **状态：已关闭**。Steps 1–9 全部满足（跨 **5 轮**：11a 壳层 → 11b 导航 → 11c 草稿门禁 → 11d 生命周期 → 11e 命令编排 + 根收敛）。评审结论 **Approved / 0 Critical / 0 Important**（6 Minor，均为后续建议）。**`App.vue` 809 → 450 行**（落在 350–450 目标内）。**公开契约零触碰**（diff 内**无** `components/`/`views/` 下任何文件 ⇒ 子组件 props/emits/插槽不可能变）。**无用户截图人工门禁**。
+
 **Files:**
 
 - Create: `web/src/composables/useWorkspaceLifecycle.ts`
@@ -884,15 +886,15 @@ Files（本轮）：
 - Modify: `web/tests/e2e/sheets-navigation.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`（**T11-1 补列**：本任务名下有 **2** 条 `explicit-button-type` 例外（均 `src/App.vue`），清理它们必须编辑该文件；而原 Files **未列** → 不补列则 T11-1(B) 的不变量 **16 → 14** 不可达）
 
-- [ ] **Step 1（责任清单）**：在测试注释中冻结 App 当前五类接线：打开/关闭/恢复，未提交输入与草稿门禁，页签/浮层/焦点导航，页面事件到命令/API 的编排，纯壳层渲染；记录每类迁移目标。
-- [ ] **Step 2（RED）**：用 composable 单测和既有 e2e 固定公开事件载荷、错误传播、工作区切换、草稿恢复、任务跳转与当前 tab；确认待建模块导入失败。
-- [ ] **Step 3（生命周期）**：迁出 `useWorkspaceLifecycle`，只返回根装配需要的 state/actions；保留 shell bridge、工作区清理与错误码处理顺序。
-- [ ] **Step 4（门禁与导航）**：迁出 `useDraftGuards` 和 `useShellNavigation`；不得复制既有 `useShellTabs`、`useConfirm`、`useHotkeys` 的职责，改为组合它们。
-- [ ] **Step 5（命令编排）**：迁出 `useWorkspaceCommands`，只编排既有 `createCommand`、draft/project helpers 与页面 emits，不复制后端最终校验。
-- [ ] **Step 6（壳层）**：创建纯展示 `WorkspaceShell.vue` 承载 `TopBar/TabBar/TaskOverlay/ActionDock` 与 slot；它不得导入 API client、draft helpers 或业务 composable。
-- [ ] **Step 7（根收敛）**：`App.vue` 只保留根装配、跨域连接和顶层渲染，目标 350–450 行；若超过 450 行，逐段说明为何必须留根，禁止为达行数制造无语义 helper。
-- [ ] **Step 8（验证）**：运行新增单测、四个列出的 e2e、全量 unit 与 build；比较重构前后 API 请求序列和用户可见文案无变化。
-- [ ] **Step 9（提交）**：commit：`拆分前端根组件跨域职责`。
+- [x] **Step 1（责任清单）**：在测试注释中冻结 App 当前五类接线：打开/关闭/恢复，未提交输入与草稿门禁，页签/浮层/焦点导航，页面事件到命令/API 的编排，纯壳层渲染；记录每类迁移目标。
+- [x] **Step 2（RED）**：用 composable 单测和既有 e2e 固定公开事件载荷、错误传播、工作区切换、草稿恢复、任务跳转与当前 tab；确认待建模块导入失败。
+- [x] **Step 3（生命周期）**：迁出 `useWorkspaceLifecycle`，只返回根装配需要的 state/actions；保留 shell bridge、工作区清理与错误码处理顺序。
+- [x] **Step 4（门禁与导航）**：迁出 `useDraftGuards` 和 `useShellNavigation`；不得复制既有 `useShellTabs`、`useConfirm`、`useHotkeys` 的职责，改为组合它们。
+- [x] **Step 5（命令编排）**：迁出 `useWorkspaceCommands`，只编排既有 `createCommand`、draft/project helpers 与页面 emits，不复制后端最终校验。
+- [x] **Step 6（壳层）**：创建纯展示 `WorkspaceShell.vue` 承载 `TopBar/TabBar/TaskOverlay/ActionDock` 与 slot；它不得导入 API client、draft helpers 或业务 composable。
+- [x] **Step 7（根收敛）**：`App.vue` 只保留根装配、跨域连接和顶层渲染，目标 350–450 行；若超过 450 行，逐段说明为何必须留根，禁止为达行数制造无语义 helper。
+- [x] **Step 8（验证）**：运行新增单测、四个列出的 e2e、全量 unit 与 build；比较重构前后 API 请求序列和用户可见文案无变化。
+- [x] **Step 9（提交）**：commit：`拆分前端根组件跨域职责`。
 
 #### Task 11 控制器裁定（T11-1，派发前下达）
 
@@ -918,6 +920,31 @@ Files（本轮）：
 
 **(G) 公开契约不变（纯重构）**：子组件的 props/emits、对外事件载荷、错误传播路径、工作区切换与草稿恢复顺序**均不得变**；若发现必须改变才能完成拆分 → **停下报告**（先例：Task 9 Step 3、Task 10 Step 4）。
 
+**T11-2（评审闭环 + Task 11 收口 —— 控制器复核）**：评审结论 **Approved / 0 Critical / 0 Important**（6 Minor，均为后续建议）。
+
+**评审逐条核实的合规项**：9 个 Step + 12 个 Files 全部到位；2 条 `explicit-button-type` **是删除而非改指向**（正是 T11-1(A) 的要求 ✓）；例外 16 → 14 ✓；**4 个 e2e spec 整任务未改**（Files 是授权而非义务，纯重构里这是**期望**结果 ✓）；安全网 **128/128/128 + 0 重复键** ✓；**公开契约零触碰**——且评审给了一个比逐行检查更强的**结构性论据**：**diff 里根本没有 `components/`/`views/` 下的文件** ⇒ 子组件 props/emits/插槽**不可能**变 ✓✓。
+
+**评审特别肯定（值得逐条记下）**：
+- **模板不变是可证的**：`<template>` 块哈希从头到尾未变 → **五轮里有四轮是纯脚本搬迁**，模板变更被局限在唯一该改它的那一轮 ✓✓。
+- **“组合而非复制”是被测试钉住的，不是声称的** ✓✓：`useShellNavigation` 的单测**故意不 mock `useShellTabs`**（原话理由是「要固定的正是『组合它』这一事实本身」）；`useHotkeys` **恰好注册一次**（根里那次调用已移除，评审确认无双重注册）；`useConfirm`/`useToast`/`useJobMonitor`/`useCsvImport` 均为 **type-only** 导入 ⇒ **无第二份确认队列/保存队列/页签列表**。
+- **壳层细节被核实**：**21 个 emits 与根的 21 个 handler 精确对位** ✓；`v-if="hasWorkspace"` 在三个子组件上都保留 ✓；`TabBar` 的按键路径按**原生 DOM 监听 → 壳层 emit → 根 handler** 保留（“一个很容易静默打破的东西”）✓。
+- **11e 那条测试盲点的修复经核实“确实对变异敏感”** ✓✓：评审**自已推出了机制**——草稿层的同类守卫会**写入** `error.value`，而编排层在**触碰它之前**就返回 ⇒ 在那种变异下 `error` 会变 ⇒ 新增的 `expect(deps.error.value).toBe(errorBefore)` 会红 → 「**该闭合是成立的**」✓。
+- **四条隐性契约是被登记并钉住、而不是被“顺手清理”** ✓（`let` 陷阱 → 存取器；setup 求值顺序 → 前向声明 `let lifecycle` + 懒取器，并把 `TS2448/TS2454` 的理由写进注释；`loadDraft` 的 `draft:null` 分支以测试名「**照实钉住既有口径**」原样钉住 ✓；`reloadAfterDraftConflict` 的清标志顺序 + 钉住根装配接线 ✓）。
+- **台账干净**：新增行里 **零** `TODO`/`console.*`/`debugger`/`as any`/`@ts-ignore` ✓；五个模块均 ≤ 374 行（在仓的 500 行软上限内 ✓）。
+- **轨迹诚实**：它在真正到达 450 之前**从未声称**达标，并主动报了中间反弹（`809 → 869`）✓。
+
+**Minor 处置（均为后续建议，不阻塞关闭）**：
+1. **混批判据在两个模块各有一份比较**（预存重复：两份原本都在根里 ✓；**为纯重构保留它是对的** ✓；且**输入**已单源化 ✓）→ 登记：后续用一个导出的判定函数收口（本轮不动）。
+2. **★ `WorkspaceShell.vue` 的布局 CSS 无自动化覆盖** ✓：三条规则是**逐字节**搬迁（评审已比对 ✓），且它们只选中壳层自身渲染的元素（`.shell-body`/`.shell-main`/`.shell-main.sheets-active`）、不命中任何子组件根、无层级优先级变化 ✓ —— **但没有任何测试断言搬迁后的布局，而 Task 11 无截图门禁** ⇒ **这个搬迁的第一次真实验证就是 Task 12 的截图证据** ✓✓ → **已把这点写成 Task 12 的具体指令**（见本任务段之后的 T12 补充）。
+3. `appComposition.test.ts` **957 行 > 仓的 ~500 行新文件软上限** ✗（6 个 `describe` 已按域分组，拆分是机械的）→ **登记供 Task 12/后续**（属仓契约偏离，不影响本任务质量）。
+4. 安全网比的是方法+路径+顺序，**不含请求体** ✓（按 T11-1(C) 本就如此；评审另行逐一核过搬迁后的草稿 `PUT` 体为逐字一致 ✓）→ 记录：**体级相等未被机器检查**。
+5. **证据文件命名偏离简报**：T11-1(C) 写的是 `evidence/task-11-api-after.txt`，实际是**按轮分文件**（`task-11a-api-after.txt`、`task-11b-after-api.txt`、`task-11c-after-api.txt`、`task-11e-api-after.txt`、`task-11e-compare.txt`）→ **更严**（逐轮），但**按简报去找的人会找不到那个名字** ✗ → 在此**记录实际文件名**以保证可溯源 ✓。
+6. **一处边界模糊**：`useWorkspaceCommands.loadLayoutOptions` 会**写入 `editor.context`**（另一个域的状态）✗ → 作为「文件选择→编辑器上下文」的编排是可辩护的、且属**预存行为** ✓ → 登记为该模块**唯一**可说域名偏宽之处 ✓。
+
+**评审的两处「无法从 diff 判定」（已如实标注）**：① **逐提交自洽性**——压缩 diff 看不出中间提交是否曾把应用代码留在坏状态 ✗（它能确认：最终态自洽、无调试/死代码残留、证据目录里有一条**主动披露的失败**中间运行而非只有绿灯 ✓）→ 该声称依赖**控制器逐轮核过的绿灯门禁**（控制器确实逐轮亲跑/复核了 ✓）；② 4 个 e2e spec 的**内容**不在 diff 内 → 「契约未变」的结论依赖它们逐字节未变 ✓。
+
+**Task 11 最终账**：例外 **14**（裸违规 15）· `check:ui` **0** · `test:unit` **0（13 文件 / 166 passed）** · `test:contracts` **0（85/0）** · `build` **0** · e2e 4 流程 **0（128 passed）** · **`App.vue` 450 行** · 5 个新模块共 **1174 行** + 测试 **957 行** · 总 diff **2391 插入 / 566 删除**。
+
 **(H) 运行纪律**：**每完成一步立即提交**（9 个 Step → 约 9 个提交；本任务是本计划**最后一个大重构**，中途回退成本最高）；**RED 先行**（Step 2 本就是 RED）；对「迁移前后都通过」的断言抽 **≥2 条做变异自证**（证据 `evidence/task-11-mutation.txt`）；**关键值用绝对值锚**，不要写「用令牌断言令牌」。
 - 配额：`check:ui` ≤3、**e2e ≤4**（仅 Step 8 列出的 4 个 spec：`main`、`properties-workspace`、`sheets-drafts`、`sheets-navigation`；但上述探针需各跑前/后一遍 → 允许 4+4）、`test:unit` ≤3（含全量）、`test:contracts` ≤1、`build` ≤1。**禁跑全量 e2e**（那是 Task 12 的事）。
 - **禁触**：除 Files 外的任何源码文件（尤其 `web/src/components/ui/**`、`web/src/styles/**`、其它 composable——**只许导入，不许改**）；`.planning/**`；`changelog.md`；`.superpowers/**`（只写报告与证据）；`src/dst_manager/**`。
@@ -927,6 +954,13 @@ Files（本轮）：
 ## 阶段 5：验收、文档与关闭
 
 ### Task 12: 执行全量矩阵、真实桌面复验和文档收口
+
+> **由 Task 11 评审转入的三项（T11-2）**：
+> 1. **★ 必须专门检查「壳层 CSS 搬迁」**：`WorkspaceShell.vue` 的三条布局规则（`.shell-body` / `.shell-main` / `.shell-main.sheets-active`）是**逐字节**从 `App.vue` 搬来的，但它们**没有任何自动化测试覆盖**，而 Task 11 **无截图门禁** ⇒ **本任务 Step 4/5 的截图与真实桌面证据必须**针对性**地看这三个选择器的实际布局**（不是泛泛地“比对截图”）；若有差异 → **停下报告** ✓。
+> 2. **`appComposition.test.ts` 巳 957 行**，超出仓的 **~500 行新文件软上限** ✗ → 建议在本任务的文档/结构收口里按域拆为数个测试文件（**机械拆分、不得改变任何断言语义** ✓；若拆则需重跑单测并确认计数不变 ✓）。
+> 3. **混批判据的比较在两个模块各有一份**（属**预存**重复；其**输入**已单源化）→ 后续用一个导出的判定函数收口；本轮**不强制**，但若要动，**必须保持行为不变并跑前后比对** ✓。
+> 另：Task 11 的 after 证据是**按轮分文件**（`task-11a-api-after.txt`、`task-11b-after-api.txt`、`task-11c-after-api.txt`、`task-11e-api-after.txt`、`task-11e-compare.txt`），**不是**简报里写的 `task-11-api-after.txt` ✓。
+> 再者：`useWorkspaceCommands.loadLayoutOptions` 会写入 `editor.context`（另一个域的状态）——属**预存**行为、可辩护，但若本任务动到该处，需保持语义不变 ✓。
 
 **Files:**
 

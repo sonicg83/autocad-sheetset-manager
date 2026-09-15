@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-15（Task 11 关闭：Approved / 0 Critical / 0 Important，PLAN-DM-029）
+
+- **评审结论：Approved / 0 Critical / 0 Important**（6 Minor，均为后续建议）。Steps 1–9 跨 **11a–11e 五轮**全部满足；**`App.vue` 809 → 450 行**（**落在 350–450 目标内** ✓）。
+- **评审的最强结构性论据**：**diff 里根本没有 `components/`/`views/` 下的文件** ⇒ 子组件 props/emits/插槽**不可能**变 ✓✓（比逐行检查更强）。另：2 条 `explicit-button-type` **是删除而非改指向**（正是 T11-1(A) ✓）；例外 16 → 14 ✓；**4 个 e2e spec 整任务未改**（纯重构里这是**期望**结果 ✓）。
+- **模板不变是可证的**：`<template>` 块 sha256 跨轮未变 → **五轮里四轮是纯脚本搬迁**，模板变更被局限在唯一该改的那一轮 ✓✓。
+- **“组合而非复制”被测试钉住** ✓✓：`useShellNavigation` 的单测**故意不 mock `useShellTabs`**（理由：“要固定的正是『组合它』这一事实本身”）；`useHotkeys` **恰好注册一次**（根里那次已移除，无双重注册 ✓）；`useConfirm`/`useToast`/`useJobMonitor`/`useCsvImport` 均为 **type-only** 导入 ⇒ **无第二份队列/状态** ✓。另：**21 个 emits 与根的 21 个 handler 精确对位** ✓；`TabBar` 按键路径按原生 DOM 监听保留 ✓。
+- **11e 那条测试盲点的修复经核实“对变异敏感”** ✓✓：评审**自行推出机制**——草稿层同类守卫会**写入** `error.value`，而编排层在**触碰它之前**就返回 ⇒ 变异下 `error` 会变 ⇒ 新增断言会红 → 「**该闭合成立**」。
+- **四条隐性契约被登记并钉住**（而非“顺手清理”）✓；新增行里 **零** `TODO`/`console.*`/`debugger`/`as any`/`@ts-ignore` ✓；五模块均 ≤374 行（在 500 行软上限内 ✓）。**轨迹诚实**：未到 450 前从未声称达标，并主动报了中间反弹（809 → 869）✓。
+- **Minor 处置（均后续建议）**：① 混批判据比较在两个模块各一份（**预存**、输入已单源化）→ 后续用导出判定函数收口；② **★ `WorkspaceShell.vue` 的布局 CSS 无自动化覆盖** → **已写成 Task 12 的具体指令**（Step 4/5 必须针对性检查 `.shell-body`/`.shell-main`/`.shell-main.sheets-active` ✓）；③ `appComposition.test.ts` **957 行 > ~500 软上限** → 登记供 Task 12 按域机械拆分；④ 安全网比方法+路径+顺序、**不含请求体**（按 T11-1(C) 本就如此；评审另行逐一核过草稿 `PUT` 体逐字一致）；⑤ **证据文件命名偏离简报**（实际**按轮分文件**，更严）→ 已在计划里记录实际文件名以保证可溯源；⑥ `loadLayoutOptions` 写入 `editor.context`（**预存**行为）→ 仅登记为域名偏宽之处。
+- **最终账**：例外 **14**（裸违规 15）· `check:ui` **0** · unit **0（13 文件 / 166 passed）** · contracts **0（85/0）** · `build` **0** · e2e **0（128 passed）** · 5 个新模块共 **1174 行** + 测试 **957 行** · 总 diff **2391 插入 / 566 删除**。
+
 ## 2026-09-15（Task 11 第 5 轮 11e：抽出命令/API 编排组合式函数并收口根组件，PLAN-DM-029）
 
 - **产出**：新建 `web/src/composables/useWorkspaceCommands.ts`（374 行），负责页面事件到命令/API 的编排：`submitCommands`（分批规则 + 保存失败重试去重 + 投影刷新）、删除图纸/删除子集/批量属性/删除属性定义、CSV 导入闸门、预览与确认写入、ActionDock 门禁矩阵、布局模板读取、全局快捷键五动作；`appComposition.test.ts` 新增 6 例（合计 **166 passed** / 13 文件）。`App.vue` **671 → 450 行**（净 −221）⇒ **达成 Step 7 的 350–450 行目标**。
