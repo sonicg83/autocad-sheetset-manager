@@ -36,6 +36,7 @@ import TopBar from "./layout/TopBar.vue";
 import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
 import TaskOverlay from "./layout/TaskOverlay.vue";
+import WorkspaceShell from "./layout/WorkspaceShell.vue";
 import {useHotkeys} from "./composables/useHotkeys";
 import type {TabDescriptor} from "./composables/useShellTabs";
 import WelcomeView from "./views/WelcomeView.vue";
@@ -745,6 +746,49 @@ const dock=computed(()=>{ // ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一�
   if(context.result.executable===false)return{...base,canPreview:true,canWrite:false,writeDisabledReason:t("shell.dock.reasonNotExecutable"),writeNeedsModal:false};
   return{...base,canPreview:true,canWrite:true,writeDisabledReason:"",writeNeedsModal:true};
 });
+
+// 壳层 props 分组（Task 11 Step 6 / 11a）：把子组件所需 props 组装成对象交给 WorkspaceShell。
+// 分组而非逐个传递，是为了让「键名写错」成为**编译错误**（对象字面量受 excess property 检查约束），
+// 而逐个写 prop 名若拼错会静默落进 `$attrs`（正是本重构最想避免的隐性行为漂移）。
+// `dock` 已在上面定义，直接透传。
+type TopBarProps=InstanceType<typeof TopBar>["$props"];
+type TabBarProps=InstanceType<typeof TabBar>["$props"];
+type TaskOverlayProps=InstanceType<typeof TaskOverlay>["$props"];
+const topBarProps=computed<TopBarProps>(()=>({
+  sheetSetName:sheetSetName.value,
+  dstPath:dstPath.value,
+  dstStatus:dstStatus.value,
+  cadVersion:cadVersion.value,
+  closeDisabled:isRestoreExecuting.value||isRepairExecuting.value,
+  hasShell:hasShell.value,
+  workspaceId:workspace.value?.id??"",
+}));
+const tabBarProps=computed<TabBarProps>(()=>({
+  descriptors:tabDescriptors.value,
+  active:active.value,
+}));
+const taskOverlayProps=computed<TaskOverlayProps>(()=>({
+  open:overlayOpen.value,
+  tab:overlayTab.value,
+  hasBlocking:blocking.value.length>0,
+  hasRepair:Boolean(dstValidation.value&&dstValidation.value.status!=="VALID"),
+  job:job.value,
+  connectionMode:connectionMode.value,
+  preview:preview.value,
+  semanticDiff:semanticDiff.value,
+  estimate:executionEstimate.value,
+  cadValidationDeferred:cadValidationDeferred.value,
+  cardinalityFrontier:cardinalityFrontier.value,
+  subsetOperations:subsetOperations.value,
+  sourceBaselines:sourceBaselines.value,
+  derivedSubsets:derivedSubsets.value,
+  groups:previewGroups.value,
+  diagnostics:workspace.value?.diagnostics??[],
+  dstValidation:dstValidation.value,
+  repairPreview:repairPreview.value,
+  isRepairPreviewing:isRepairPreviewing.value,
+  isRepairExecuting:isRepairExecuting.value,
+}));
 // write 不能捕获旧 context 后在保存继续时执行：guard 保存后 previewContext 已失效，必须重新预览
 async function write(){
   await guardAllInputs(async()=>{await doWrite()});
@@ -766,20 +810,44 @@ useHotkeys({
 </script>
 
 <template>
-  <TopBar :sheet-set-name="sheetSetName" :dst-path="dstPath" :dst-status="dstStatus" :cad-version="cadVersion" :close-disabled="isRestoreExecuting||isRepairExecuting" :has-shell="hasShell" :workspace-id="workspace?.id ?? ''" @update:cadVersion="onCadVersionChange" @close="closeWorkspace" @open-folder="openFolder" @open-settings="openSettings" />
-  <div class="shell-body">
-    <main class="shell-main" :class="{'sheets-active': Boolean(workspace) && active === 'sheets'}">
-      <p v-if="error" class="error notice">{{error}}</p>
-      <!-- PLAN-DM-021 Task 9（I18N-11）：未知错误的原始文本只在可展开诊断详情呈现 -->
-      <details v-if="error && lastErrorDiagnostic" class="error notice"><summary>{{ $t("errors.ui.diagnosticsDetails") }}</summary><pre class="error-raw">{{ lastErrorDiagnostic }}</pre></details>
-      <p v-if="isWorkspaceLoading" class="panel loading" role="status">{{ $t("shell.workspace.loading") }}</p>
-      <p v-if="isRestoreExecuting" class="panel loading" role="status">{{ $t("shell.workspace.restoring") }}</p>
+  <WorkspaceShell
+    :has-workspace="Boolean(workspace)"
+    :sheets-active="Boolean(workspace) && active === 'sheets'"
+    :error="error"
+    :last-error-diagnostic="lastErrorDiagnostic"
+    :is-workspace-loading="isWorkspaceLoading"
+    :is-restore-executing="isRestoreExecuting"
+    :top-bar="topBarProps"
+    :tab-bar="tabBarProps"
+    :task-overlay="taskOverlayProps"
+    :dock="dock"
+    @update:cad-version="onCadVersionChange"
+    @close="closeWorkspace"
+    @open-folder="openFolder"
+    @open-settings="openSettings"
+    @select="selectTab"
+    @keydown="onTabKeydown"
+    @update:tab="overlayTab=$event"
+    @fold="overlayOpen=!overlayOpen"
+    @retry="retryJob"
+    @preview-repair="previewRepair"
+    @execute-repair="executeRepair"
+    @cancel-repair="repairPreview=null;repairContext=null"
+    @preview="showPreview"
+    @write="write"
+    @undo="undoDraft"
+    @redo="redoDraft"
+    @clear="clearCommands"
+    @remove="removeDraftAction"
+    @discard="discardDraft"
+    @reload-conflict="reloadAfterDraftConflict"
+    @retry-save="scheduleDraftSave"
+  >
       <template v-if="!workspace">
         <WelcomeView :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" />
       </template>
       <template v-else>
-        <TabBar :descriptors="tabDescriptors" :active="active" @select="selectTab" @keydown="onTabKeydown" />
-        <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">{{ $t("shell.workspace.recoveredBanner",{count:draftRecovered},draftRecovered) }}<button @click="draftRecovered=null">{{ $t("shell.workspace.resume") }}</button><button @click="clearDraftRestart">{{ $t("shell.workspace.restart") }}</button></div>
+        <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">{{ $t("shell.workspace.recoveredBanner",{count:draftRecovered},draftRecovered) }}<button type="button" @click="draftRecovered=null">{{ $t("shell.workspace.resume") }}</button><button type="button" @click="clearDraftRestart">{{ $t("shell.workspace.restart") }}</button></div>
         <SheetsView v-if="active==='sheets'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :scope="scope" :focused-sheet-id="focusedSheetId" :selected-ids="selectedIds" :filtered-rows="filteredRows" :visible-rows="visibleRows" :hidden-selected-count="hiddenSelectedCount" :all-filtered-selected="allFilteredSelected" :hidden-target="hiddenTarget" :prune-message="pruneMessage" :scope-total="scopeTotal" :all-total="allTotal" :range-total="rangeTotal" :pending-sheet-ids="pendingSheetIds" :diagnostic-object-ids="diagnosticObjectIds" :sheet-property-names="sheetPropertyNames" :visible-columns="visibleColumns" :column-options="columnOptions" :new-property-count="newPropertyCount" :column-save-error="columnSaveError" :edit-context="editor.context.value" :search-text="searchText" :search-all="searchAll" v-model:filters-visible="filtersVisible" :path-filter="pathFilter" :diagnostic-filter="diagnosticFilter" :pending-filter="pendingFilter" v-model:render-limit="renderLimit" v-model:bulk-property-name="bulkPropertyName" v-model:bulk-property-value="bulkPropertyValue" v-model:bulk-mode="bulkMode" @update:search-text="guardedSearchText" @update:search-all="guardedSearchAll" @update:path-filter="guardedPathFilter" @update:diagnostic-filter="guardedDiagnosticFilter" @update:pending-filter="guardedPendingFilter" @select-all="() => runScopeChange(() => sheetsSelectAll())" @select-subset="(id) => runScopeChange(() => sheetsSelectSubset(id))" @select-sheet="(id) => runScopeChange(() => locateSheet(id))" @toggle-filtered-selection="toggleFilteredSelection" @clear-selection="clearSelection" @clear-filters="clearFilters" @toggle-sheet="toggleSheet" @edit-sheet="onEditSheet" @delete-sheet="queueDelete" @editor-set-value="editor.setFieldValue" @editor-set-page="editor.setPage" @editor-set-search="editor.setSearch" @editor-submit="() => void editor.submit()" @editor-cancel="editor.cancel" @editor-jump-error="editor.jumpToError" @queue-bulk-sheet-property="queueBulkSheetProperty" @open-operation="openOperation" @operation-submit="() => void editor.submit()" @operation-cancel="editor.cancel" @operation-delete-subset="queueDeleteSubset" @select-template-file="selectTemplateFile" @select-subset-template-file="selectSubsetTemplateFile" @select-base-template-file="selectBaseTemplateFile" @toggle-builtin="setBuiltin" @toggle-property="setProperty" @reset-columns="resetColumns" @open-diagnostics="() => openOverlay('diag')" />
         <PropertiesView v-if="active==='properties'&&!isWorkspaceLoading&&!isRestoreExecuting" :workspace="workspace" :property-input="properties.input.value" :property-base="properties.base.value" :property-draft="properties.draft.value" :property-status-of="properties.statusOf" :property-errors="properties.errors.value" :property-summary-error="properties.summaryError.value" :property-matched-keys="properties.matchedKeys.value" :property-hidden-dirty-count="properties.hiddenDirtyCount.value" :property-search="properties.search.value" :property-search-mode="properties.searchMode.value" :property-changed-only="properties.changedOnly.value" :property-active-key="properties.activeKey.value" :property-definition-form="properties.definitionForm" :property-definitions-collapsed="properties.definitionsCollapsed.value" :property-values-collapsed="properties.valuesCollapsed.value" :property-csv-collapsed="properties.csvCollapsed.value" :property-csv-open="properties.csvOpen.value" :property-definitions-query="properties.definitionsQuery.value" :property-definitions-scope="properties.definitionsScope.value" :property-definitions-page="properties.definitionsPage.value" :has-csv="Boolean(csvText)" :csv-preview="csvPreview" :csv-executable="Boolean(csvPreviewContext?.result.executable)" :repair-writes-disabled="repairWritesDisabled" @set-property-value="(key:ValueKey,value:string)=>properties.setValue(key,value)" @submit-values="() => void properties.submitValues()" @revert-value="(key:ValueKey)=>properties.revertValue(key)" @update:property-search="(value:string)=>properties.search.value=value" @update:property-search-mode="(value:PropertySearchMode)=>properties.searchMode.value=value" @update:property-changed-only="(value:boolean)=>properties.changedOnly.value=value" @update:property-active-key="(key:ValueKey|null)=>properties.activeKey.value=key" @update:property-definitions-collapsed="(value:boolean)=>properties.definitionsCollapsed.value=value" @update:property-values-collapsed="(value:boolean)=>properties.valuesCollapsed.value=value" @update:property-csv-collapsed="(value:boolean)=>properties.csvCollapsed.value=value" @update:property-csv-open="(value:boolean)=>properties.csvOpen.value=value" @update:property-definitions-query="(value:string)=>properties.definitionsQuery.value=value" @update:property-definitions-scope="(value:DefinitionScopeFilter)=>properties.definitionsScope.value=value" @update:property-definitions-page="(value:number)=>properties.definitionsPage.value=value" @discard-property-input="properties.discardInput" @queue-property-definition="properties.queuePropertyDefinition" @queue-delete-property="queueDeleteProperty" @read-csv="readCsvFile" @preview-csv="previewCsv" @import-csv="guardedImportCsv" @close-csv="closeCsvImport" />
         <RevisionsView v-if="active==='revisions'" :revisions="revisions" :restore-preview="restorePreview" :executing="isRestoreExecuting" :is-workspace-loading="isWorkspaceLoading" @preview="previewRestoreAndOpen" @restore="restoreRevision" />
@@ -790,10 +858,7 @@ useHotkeys({
           <component :is="EXTENSION_PAGE_COMPONENTS[page.routeKey]" v-if="active===page.routeKey&&!isWorkspaceLoading&&!isRestoreExecuting" :extension="page.summary" :workspace="workspace" />
         </template>
       </template>
-    </main>
-    <TaskOverlay v-if="workspace" :open="overlayOpen" :tab="overlayTab" :has-blocking="blocking.length>0" :has-repair="Boolean(dstValidation&&dstValidation.status!=='VALID')" :job="job" :connection-mode="connectionMode" :preview="preview" :semantic-diff="semanticDiff" :estimate="executionEstimate" :cad-validation-deferred="cadValidationDeferred" :cardinality-frontier="cardinalityFrontier" :subset-operations="subsetOperations" :source-baselines="sourceBaselines" :derived-subsets="derivedSubsets" :groups="previewGroups" :diagnostics="workspace.diagnostics" :dst-validation="dstValidation" :repair-preview="repairPreview" :is-repair-previewing="isRepairPreviewing" :is-repair-executing="isRepairExecuting" @update:tab="overlayTab=$event" @fold="overlayOpen=!overlayOpen" @retry="retryJob" @preview-repair="previewRepair" @execute-repair="executeRepair" @cancel-repair="repairPreview=null;repairContext=null" />
-  </div>
-  <ActionDock v-if="workspace" v-bind="dock" @preview="showPreview" @write="write" @undo="undoDraft" @redo="redoDraft" @clear="clearCommands" @remove="removeDraftAction" @discard="discardDraft" @reload-conflict="reloadAfterDraftConflict" @retry-save="scheduleDraftSave" />
+  </WorkspaceShell>
   <ConfirmModal v-bind="confirmState" @confirm="resolveConfirm(true)" @cancel="resolveConfirm(false)" />
   <SettingsDialog :open="settingsOpen" :push-toast="pushToast" :extensions-panel="extensionsPanel" @close="settingsOpen=false" />
   <!-- 唯一共享三选一模态：图纸页与属性页 guard 顺序开合同一实例，状态取当前打开者 -->
@@ -801,9 +866,4 @@ useHotkeys({
   <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />
 </template>
 
-<style scoped>
-.shell-body{display:flex;align-items:stretch;height:calc(100vh - 104px);min-height:0}
-.shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:var(--space-5);overflow:auto}
-.shell-main.sheets-active{overflow:hidden}
-</style>
 

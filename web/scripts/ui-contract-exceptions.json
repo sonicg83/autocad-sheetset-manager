@@ -1,20 +1,6 @@
 {
   "exceptions": [
     {
-      "rule": "explicit-button-type",
-      "file": "src/App.vue",
-      "fingerprint": "explicit-button-type|src/App.vue|{{ $t(\"shell.workspace.resume\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 11"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/App.vue",
-      "fingerprint": "explicit-button-type|src/App.vue|{{ $t(\"shell.workspace.restart\") }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 11"
-    },
-    {
       "rule": "unicode-structure-icon",
       "file": "src/components/sheet-catalog/ColumnEditor.vue",
       "fingerprint": "unicode-structure-icon|src/components/sheet-catalog/ColumnEditor.vue|↑|1",
