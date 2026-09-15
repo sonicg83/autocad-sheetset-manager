@@ -13,6 +13,7 @@ import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/propert
 import type {DefinitionScopeFilter} from "./features/properties/model";
 import {useShellNavigation} from "./composables/useShellNavigation";
 import {useDraftGuards} from "./composables/useDraftGuards";
+import {useWorkspaceLifecycle} from "./composables/useWorkspaceLifecycle";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
@@ -56,8 +57,6 @@ const previewContext=ref<PreviewContext|null>(null);
 const isPreviewing=ref(false);
 const isWorkspaceLoading=ref(false);
 const isRestoreExecuting=ref(false);
-// 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
-const workspaceLoadGeneration=ref(0);
 // 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转（jumpOverlay）复用浮层的唯一自动展开入口
 // —— 草稿栈与未提交输入门禁（Task 11 第 11c 轮：抽出 useDraftGuards）——
 // 草稿栈状态与三选一 guard 已迁入组合式函数；此处解构回同名局部变量，模板与其余接线不变。
@@ -65,6 +64,19 @@ const workspaceLoadGeneration=ref(0);
 // （setup 期求值），故本调用必须早于它们；而本方依赖的 `editor`/`properties`/`sheets`/`active`
 // 在下面才创建，`refreshSheetProjection` 也晚于本处，故一律以**懒取值函数/闭包**传入，
 // 只在动作被调用时才解引用（见 useDraftGuards 头部说明）。
+// 生命周期域容器：草稿域在 setup 期就需要一个可调用的 `reloadWorkspace` 引用，而生命周期模块又依赖
+// 草稿域的返回值 ⇒ 提前声明容器、只在动作被调用时解引用（避免 setup 期循环依赖与声明顺序耦合）。
+let lifecycle:ReturnType<typeof useWorkspaceLifecycle>;
+const draftGuards=useDraftGuards({
+  workspace,baseWorkspace,error,t,cloneJson,invalidatePreview,
+  refreshSheetProjection:()=>refreshSheetProjection(),
+  getActive:()=>active.value,
+  getEditor:()=>editor,
+  getProperties:()=>properties,
+  getSheets:()=>sheets,
+  reloadWorkspace:(workspaceId)=>lifecycle.doRefreshWorkspace(workspaceId),
+  confirmAction,
+});
 const {
   commands, draftActions, draftCursor, draftVersion, draftStale, draftStaleReasons, draftCorrupted,
   draftSaveFailed, lastDraftError, draftSaving, draftRecovered,
@@ -73,16 +85,33 @@ const {
   undoDraft, redoDraft, removeDraftAction, discardDraft, reloadAfterDraftConflict,
   addCommand, addCommandBatch,
   runScopeChange, guardedFilter, guardAllInputs, resolveSharedGuard, sharedGuardState, pendingDraftSave,
-}=useDraftGuards({
-  workspace,baseWorkspace,error,t,cloneJson,invalidatePreview,
-  refreshSheetProjection:()=>refreshSheetProjection(),
+}=draftGuards;
+// —— 工作区生命周期域（Task 11 第 11d 轮：抽出 useWorkspaceLifecycle）——
+// 打开/关闭/刷新/清空编辑态与壳桥接（选择 DST、拖拽接收、打开所在文件夹）已迁入组合式函数；
+// 此处解构回同名局部变量，模板与其余接线不变（因此 `<template>` 一行未改）。
+// 位置要求：`refreshWorkspace`/`workspaceLoadGeneration` 是 useCsvImport/useRepair/useRestore 的
+// **直接实参**（setup 期求值），故本调用必须早于它们；而本方依赖的 `invalidateJobMonitor`/`editor`/
+// `sheets`/`active`/`settingsOpen` 等更晚创建，`layoutReadGeneration` 还是会被重赋的 `let`（不能靠
+// 解构或直接引用拿到），故一律以**懒取值函数/回调**传入，只在动作被调用时才解引用
+// （见 useWorkspaceLifecycle 头部说明）。
+lifecycle=useWorkspaceLifecycle({
+  workspace,baseWorkspace,error,isWorkspaceLoading,isRestoreExecuting,
+  draft:draftGuards,
+  cloneJson,invalidatePreview,t,confirmAction,
+  invalidateLayoutReads:()=>{layoutReadGeneration+=1},
+  resetSheetsWorkspace:()=>resetSheetsWorkspace(),
+  reloadExtensions:()=>reloadExtensions(),
+  clearExtensions:()=>clearExtensions(),
+  loadRevisions:()=>loadRevisions(),
+  invalidateRevisionState:()=>invalidateRevisionState(),
+  invalidateJobMonitor:(force)=>invalidateJobMonitor(force),
+  resetOverlay:()=>resetOverlay(),
+  resetEditor:()=>editor.reset(),
+  invalidateCsvPreview:(clearFile)=>invalidateCsvPreview(clearFile),
+  isSettingsOpen:()=>settingsOpen.value,
   getActive:()=>active.value,
-  getEditor:()=>editor,
-  getProperties:()=>properties,
-  getSheets:()=>sheets,
-  reloadWorkspace:(workspaceId)=>doRefreshWorkspace(workspaceId),
-  confirmAction,
 });
+const {workspaceLoadGeneration,hasShell,openByPath,closeWorkspace,refreshWorkspace,openFolder,selectAndOpenDst}=lifecycle;
 const {toasts,pushToast,dismiss}=useToast();
 // 设置中心（PLAN-DM-019 任务 10/11）：入口在 TopBar 齿轮；toast 复用宿主 useToast
 const settingsOpen=ref(false);
@@ -309,67 +338,6 @@ watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
-function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
-function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();resetOverlay();return workspaceLoadGeneration.value}
-async function openByPath(path:string){
-  // 重新打开/切换工作区前先过全局输入保护（无未提交输入时直接通过）
-  await guardAllInputs(()=>doOpenByPath(path));
-}
-async function doOpenByPath(path:string){
-  if(isRestoreExecuting.value){error.value=t("shell.errors.restoreRunning");return}
-  isWorkspaceLoading.value=true;
-  await pendingDraftSave();
-  if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
-  invalidateJobMonitor(true);
-  const generation=beginWorkspaceLoad();
-  try{
-    const loaded:Workspace=await request("/api/workspaces/open",{method:"POST",body:JSON.stringify({dst_path:path})});
-    if(generation!==workspaceLoadGeneration.value)return;
-    resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);resetSheetsWorkspace();await loadDraft(loaded);isWorkspaceLoading.value=false;
-    void reloadExtensions();
-    // 打开成功后若停留在修订历史标签，重载修订列表（beginWorkspaceLoad 已 invalidateRevisionState 清空，避免虚假空态）
-    if(active.value==="revisions")void loadRevisions();
-  }
-  catch(e){if(generation===workspaceLoadGeneration.value){isWorkspaceLoading.value=false;error.value=String(e)}}
-}
-// 桥晚于首帧注入（pywebviewready）：依赖 shellReady 才能在就绪时重算，否则永远显示无壳降级界面
-const hasShell=computed(()=>shellReady.value&&getShellBridge()!==null);
-// 打开图纸集所在文件夹（PLAN-DM-015 任务 2）：目标路径由服务端可信上下文解析，前端只传
-// workspace_id；异步返回后再比较一次，旧工作区结果不进入新工作区
-async function openFolder(){
-  const current=workspace.value;
-  if(!current||!hasShell.value)return;
-  const result=await bridgeOpenWorkspaceFolder(current.id);
-  if(workspace.value?.id!==current.id)return;
-  if(!result){error.value=t("shell.errors.shellFolderUnsupported");return}
-  if(!result.ok)error.value=result.code==="SHELL_WORKSPACE_UNAVAILABLE"?t("shell.errors.workspaceSwitched"):localizedError(result.message_key,result.params,result.message);
-}
-const DST_EXT=/\.dst$/i;
-const DROP_CALLBACK_ID="__dstManagerAcceptDst";
-async function acceptDstPath(path:string){
-  // 设置对话框打开时丢弃壳侧 document 级 drop 回调（SC-14 双保险：对话框已 stop 冒泡）
-  if(settingsOpen.value)return;
-  if(workspace.value){error.value=t("shell.errors.closeFirst");return}
-  if(!DST_EXT.test(path)){error.value=t("shell.errors.dstOnly");return}
-  await openByPath(path);
-}
-async function selectAndOpenDst(){
-  const bridge=getShellBridge();
-  if(!bridge){error.value=t("shell.errors.shellNotReady");return}
-  const path=await bridge.select_file("dst",t("common.shell.fileKinds.dst"));
-  if(!path)return;
-  await acceptDstPath(path);
-}
-function registerDropBridge(){
-  const bridge=getShellBridge();
-  // 老/部分桥面可能只暴露 select_file：on_files_dropped 缺失时静默跳过拖拽接桥
-  if(!bridge||typeof bridge.on_files_dropped!=="function")return;
-  // 拖拽热区接桥：壳侧 document drop 监听（pywebview 原生 pywebviewFullPath）→ 本全局回调
-  (window as unknown as Record<string,unknown>)[DROP_CALLBACK_ID]=(path:unknown)=>{void acceptDstPath(String(path))};
-  void bridge.on_files_dropped(DROP_CALLBACK_ID).catch(()=>{});
-}
-// 桥就绪时机不定（早于/晚于首帧注入都可能）：immediate 覆盖已就绪，watch 覆盖 pywebviewready 晚到
-watch(shellReady,ready=>{if(ready)registerDropBridge()},{immediate:true});
 // 布局读取写入当前活动表单上下文：经代次 + 对象身份校验，取消/切表单/切版本后的旧响应不回填
 function activeLayoutContext(kind:"insert-sheet"):InsertSheetEditContext|null;
 function activeLayoutContext(kind:"insert-subset"):InsertSubsetEditContext|null;
@@ -424,69 +392,6 @@ async function selectBaseTemplateFile(){
   const ctx=activeLayoutContext("insert-subset");
   if(!ctx)return;
   ctx.baseTemplateFile=path;ctx.dirty=true;
-}
-// 关闭工作区：先接全局输入保护（三选一），再纳入现有关闭确认，不静默丢弃
-async function closeWorkspace(){
-  await guardAllInputs(async()=>{await doCloseWorkspace()});
-}
-async function doCloseWorkspace(){
-  const pending=draftActions.value.length>0||draftSaveFailed.value||draftStale.value;
-  if(pending){
-    // 关闭工作区属于不可逆破坏类操作：需要显式勾选后才可确认
-    const ok=await confirmAction({title:t("shell.workspace.closeConfirmTitle"),message:t("shell.workspace.closeConfirmMessage"),confirmText:t("shell.workspace.closeConfirmConfirm"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
-    if(!ok)return;
-    await discardDraft();
-  }
-  const closedId=workspace.value?.id;
-  // 推进加载代次：关闭后迟到的打开/刷新/修订响应全部按代次失效，防止复活工作区
-  workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=false;resetDraftState();resetEditingState();editor.reset();baseWorkspace.value=null;workspace.value=null;invalidateJobMonitor(true);invalidateRevisionState();resetOverlay();
-  clearExtensions();
-  // 关闭成功清空服务端可信上下文（best-effort：旧 ID 的迟到清除请求由服务端按上下文匹配拒绝，不影响新工作区）
-  if(closedId)void clearWorkspaceContext(closedId);
-  // 重置图纸页工作区状态；操作表单/编辑缓冲状态已由 editor.reset() 清空，旧模板路径不残留
-  resetSheetsWorkspace();layoutReadGeneration+=1;
-}
-// 刷新工作区同样先过全局输入保护（基准即将重建，未提交输入须先三选一）
-async function refreshWorkspace(expectedWorkspaceId?:string){
-  await guardAllInputs(()=>doRefreshWorkspace(expectedWorkspaceId));
-}
-async function doRefreshWorkspace(expectedWorkspaceId?:string){
-  const current=workspace.value;
-  if(!current||isWorkspaceLoading.value)return;
-  const workspaceId=expectedWorkspaceId??current.id;
-  if(current.id!==workspaceId)return;
-  isWorkspaceLoading.value=true;
-  await pendingDraftSave();
-  if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
-  if(workspace.value?.id!==workspaceId)return;
-  const generation=beginWorkspaceLoad();
-  try{
-    const loaded:Workspace=await request(`/api/workspaces/${workspaceId}`);
-    if(generation!==workspaceLoadGeneration.value)return;
-    resetEditingState();baseWorkspace.value=cloneJson(loaded);workspace.value=cloneJson(loaded);
-    await loadDraft(loaded);isWorkspaceLoading.value=false;
-    void reloadExtensions();
-    // 刷新成功后若停留在修订历史标签，重载修订列表（发布/关闭等路径已 invalidateRevisionState 清空，避免虚假空态）
-    if(active.value==="revisions")void loadRevisions();
-  }
-  catch(e){if(generation===workspaceLoadGeneration.value){isWorkspaceLoading.value=false;error.value=String(e)}}
-}
-
-async function loadDraft(loaded:Workspace){
-  const result:DraftEnvelope=await request(`/api/workspaces/${loaded.id}/draft`);
-  if(workspace.value?.id!==loaded.id)return;
-  draftCorrupted.value=result.corrupted;
-  draftStale.value=result.stale;
-  draftStaleReasons.value=result.stale_reasons;
-  const draft=result.draft;
-  if(!draft){resetDraftState();draftCorrupted.value=result.corrupted;return}
-  draftActions.value=draft.actions;
-  draftCursor.value=draft.cursor;
-  draftVersion.value=draft.version;
-  rebuildDraftProjection();
-  draftRecovered.value=draft.actions.length>0?commands.value.length:null;
-  if(result.corrupted)error.value=t("shell.errors.draftCorrupted");
-  else if(result.stale)error.value=t("shell.errors.draftStale");
 }
 // 属性页名称/值的提交改走 usePropertiesWorkspace.submitValues()（一个完整 update_sheet_set 命令），
 // 不再直接读取 workspace props 编排（PLAN-DM-016 任务 2）
