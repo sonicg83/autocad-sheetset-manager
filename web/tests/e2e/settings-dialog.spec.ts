@@ -672,6 +672,14 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
     const iconBox = await boxOf(iconBtn, "图标按钮");
     expect(iconBox.w, "图标按钮可点宽度").toBeGreaterThanOrEqual(32);
     expect(iconBox.h, "图标按钮可点高度").toBeGreaterThanOrEqual(32);
+
+    // Minor-B：关闭按钮的字形由 14px `✕` 改为 16px 本地 SVG（`--icon-size-md`）——
+    // 这是本 diff 中唯一未被逐值钉住的视觉变化，故补一条**图标盒子 = 16px** 的绝对值锚。
+    const iconGlyph = iconBtn.locator("svg.ui-icon");
+    await expect(iconGlyph, "关闭按钮内应是本地 SVG 图标").toHaveCount(1);
+    const glyphBox = await boxOf(iconGlyph, "关闭按钮图标");
+    expect(glyphBox.w, "图标盒宽应为 16px").toBe(16);
+    expect(glyphBox.h, "图标盒高应为 16px").toBe(16);
   });
 
   test("路径字段：控件字体取自令牌、长路径不撑破本行", async ({page}) => {
@@ -683,6 +691,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
     expect(fontFamily, "控件字体族应取自 --font-ui").toBe(await tokenValue(page, "--font-ui", "font-family"));
     const fontSize = await input.evaluate(el => getComputedStyle(el).fontSize);
     expect(fontSize, "控件字号应取自 --input-font-size").toBe(await tokenValue(page, "--input-font-size", "font-size"));
+    // Minor-A：绝对值锚。上面那条是**令牌自指**断言——令牌取值被改时两侧同变仍然通过，
+    // 所以必须再钉一次绝对值（Task 7 已确立的做法，也是责任 S 的收口方式）。
+    expect(fontSize, "控件字号绝对值应为 14px").toBe("14px");
 
     // 长路径不得撑破本行：输入框右边界不越过行右边界
     await input.fill("C:\\" + "very-long-segment\\".repeat(12) + "tool.exe");

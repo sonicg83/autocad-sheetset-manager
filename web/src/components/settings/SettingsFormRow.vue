@@ -42,14 +42,18 @@ const dirty=computed(()=>props.editValue!==undefined&&String(props.editValue)!==
 const hasError=computed(()=>props.error!==undefined&&props.error!=="");
 
 // 辅助文字（hint）与错误文字必须**经 aria-describedby 与控件关联**：仅视觉相邻不会被读屏播报。
-// hint 的渲染条件与模板里的 v-if 链逐一对应，避免引用不存在的 id。
+// hint 的**渲染条件与文案由同一个 computed 决定**：此前 `hasHint` 与模板里的 v-if 链是同一
+// 逻辑的两份手写实现，一旦分叉会产生两种静默后果——hint 不播报，或 aria-describedby 指向
+// 不存在的 id。返回 undefined 即「本行没有 hint」。
 const hintId=computed(()=>`settings-hint-${props.item.key}`);
 const errorId=computed(()=>`settings-error-${props.item.key}`);
-const hasHint=computed(()=>{
-  if(props.item.control==="path")return props.item.fileFilterKey!==undefined;
-  if(props.item.control==="int")return props.item.min!==undefined&&props.item.max!==undefined;
-  return props.item.control==="text";
+const hintText=computed<string|undefined>(()=>{
+  if(props.item.control==="path")return props.item.fileFilterKey!==undefined?t(props.item.fileFilterKey):undefined;
+  if(props.item.control==="int")return props.item.min!==undefined&&props.item.max!==undefined?`${props.item.min}–${props.item.max}`:undefined;
+  if(props.item.control==="text")return t("settings.row.keywordHint",{limit:MAX_UNNUMBERED_KEYWORDS,chars:MAX_UNNUMBERED_KEYWORD_CHARS});
+  return undefined;
 });
+const hasHint=computed(()=>hintText.value!==undefined);
 const describedBy=computed(()=>{
   const ids:string[]=[];
   if(hasHint.value)ids.push(hintId.value);
@@ -113,9 +117,7 @@ function onEnumInput(event:Event){
       <div class="f-foot">
         <span class="badge" :class="badgeClass">{{badgeText}}</span>
         <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
-        <span v-if="item.control==='path'&&item.fileFilterKey!==undefined" :id="hintId" class="f-hint">{{t(item.fileFilterKey)}}</span>
-        <span v-else-if="item.control==='int'&&item.min!==undefined&&item.max!==undefined" :id="hintId" class="f-hint">{{item.min}}–{{item.max}}</span>
-        <span v-else-if="item.control==='text'" :id="hintId" class="f-hint">{{t("settings.row.keywordHint",{limit:MAX_UNNUMBERED_KEYWORDS,chars:MAX_UNNUMBERED_KEYWORD_CHARS})}}</span>
+        <span v-if="hintText!==undefined" :id="hintId" class="f-hint">{{hintText}}</span>
       </div>
       <p v-if="hasError" :id="errorId" class="f-error" role="alert">{{error}}</p>
     </div>
