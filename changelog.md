@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（责任 K 裁定：新增 4 个语义字号档位；用户决定，PLAN-DM-029）
+
+- **用户（Spec 归属方）选择「新增语义字号档位」**（零视觉变化、例外清零）。**该裁定明确取代** T6-3 / Ruling 38 的「本轮不新增字号令牌」政策 —— 对**这 4 个档位**而言政策已被废止；**对其余字号仍不开放** ✓。
+- **4 个档位与现有消费方（角色）**：**15px**（`ColumnSettings .cols-title` · `SheetOperationForm .form-head h3` · `SheetPropertyEditor .editor-head h3`，均为面板/区块标题）· **16px**（`RevisionsView .empty-title` 空态标题 · `SettingsDialog .dlg-head h2` 对话框标题）· **17px**（`SheetToolbar .range-title`）· **20px**（`WelcomeView .welcome-title`）。
+- **收口不变量**：例外表 **14 → 7**、裸违规 **15 → 8**；**不得新增例外**；旧指纹因声明改 `var(…)` 而 stale → **删除**（清零而非改指向）✓。
+- **零视觉变化必须被证明**：沿用**已有绝对值锚**；缺锚的值在对应页面 spec 补一条（`sheets-layout`/`settings-dialog` 已补入 Files；`main.spec.ts` 本就在 Files 内）+ **变异自证** ✓。
+- **口径写回**：补进 `ARCH-DM-007` **§4.1 的令牌表**（**注意是 §4.1，不是 §3** —— 计划与 T12-1 原文均写错，由 Task 12 第 1 轮实读纠正 ✓），并写明「责任 K 就此**闭合**」✓。
+- **文件边界（避免与收尾轮冲突）**：本轮**不动** `changelog.md`（控制器统一写入）、**不动** SPEC-DM-006/GUIDE-001/002/两个 README/memo（属收尾轮）✓；二者文件集**不相交**，可并行 ✓。
+- **用户选择「真实桌面我近期自己跑」** ⇒ **计划保持 `active`**，并在索引/changelog 写明「**仅差真实桌面一项**」；控制器的逐项步骤清单与记录模板将写入 memo（待收尾轮建好该文件后追加）✓。
+
 ## 2026-09-15（Task 12：控制器亲跑 Step 1/2/3 + 责任 A–Y 收口表，PLAN-DM-029）
 
 - **控制器亲跑 Step 1/2/3（真实 EXIT）**：`test:contracts` **0（86/86，比 85 多 1 条来自责任 C②）** · `test:unit` **0（13 文件 / 166 passed）** · `build` **0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc -b`/`vite build`） · **全量 e2e 矩阵 0（548 passed / 2 flaky / 3.6m）** · `ruff` **0** · `uv lock --check` **0** · `pytest` **0（tests=1488 / failures=0 / errors=0 / skipped=74 / 89.6s，与隔离基线逐值一致）**。

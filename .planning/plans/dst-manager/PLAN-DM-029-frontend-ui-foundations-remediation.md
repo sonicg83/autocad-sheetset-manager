@@ -983,6 +983,10 @@ Files（本轮）：
 - Modify: `docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md`（**T12-1 补列**：**责任 E** 原文要求「把这条实际约束**写回 ARCH-DM-007 §3** 或明确豁免口径」）
 - Modify: `web/scripts/check-ui-contracts.mjs`（**T12-1 补列**：**责任 C②** 的加固方向是「拒绝 `entry.file` 等于例外文件自身的登记」）
 - Modify: `web/scripts/check-ui-contracts.test.mjs`（同上；改检查器必须同步其单测）
+- Modify: `web/src/styles/tokens.css`（**T12-3 补列**：责任 K 裁定要求新增 **4 个语义字号档位**）
+- Modify: `web/scripts/ui-contract-exceptions.json`（**T12-3 补列**：清除责任 K 的 **7** 条例外）
+- Modify: `web/src/components/sheets/ColumnSettings.vue`、`web/src/components/sheets/SheetOperationForm.vue`、`web/src/components/sheets/SheetPropertyEditor.vue`、`web/src/components/sheets/SheetToolbar.vue`、`web/src/views/RevisionsView.vue`、`web/src/views/WelcomeView.vue`、`web/src/components/settings/SettingsDialog.vue`（**T12-3 补列**：责任 K 的 7 个消费方，均**仅**把字号声明改为消费新语义令牌）
+- Modify: `web/tests/e2e/sheets-layout.spec.ts`、`web/tests/e2e/settings-dialog.spec.ts`（**T12-3 补列**：仅在某个值缺**绝对值锚**时才需要在对应页面 spec 里补一条；不得顺手改其它断言）
 
 - [ ] **Step 1（静态/组件门禁）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`；记录测试数、耗时和 exit code，例外清单不得含陈旧项。
 - [ ] **Step 2（页面行为全量）**：运行 `rtk npm --prefix web run test:e2e`；失败必须定位并修复，禁止只更新截图或放宽断言。
@@ -1074,6 +1078,27 @@ Files（本轮）：
 ### Step 8 状态判定：**保持 `active`**（不得改 `completed`）
 理由：**真实桌面复验未完成**（Steps 5–6 需用户执行）；且责任 **K/Q/W 需 Spec 归属方裁定**，而 B/C①/F/H/I/M/N/O/T/U/V/Y 等仍有待裁决项。**证据缺口已如实列于上表** ✓。
 **距离 `completed` 只差**：① 用户做 Step 5–6（真实 Windows WebView2 100/125/150/200%，**125% 必须覆盖属性/目录/图纸三个缺陷场景**；**严禁用浏览器 zoom 冒充**）② 责任 K/Q/W 的 Spec 裁定 ③ Steps 4/7 的剩余文档工作（证据盘点 memo + SPEC-DM-006/GUIDE-001/002 同步）→ 已派发收尾轮。
+
+**T12-3（责任 K 裁定：**新增 4 个语义字号档位** —— Spec 归属方（用户）2026-09-15 决定）**
+
+用户选择「**新增语义字号档位**」（零视觉变化、例外清零）。**这同时取代了** T6-3 / Ruling 38 的「本轮不新增字号令牌」政策 —— 对该 4 个档位而言，**该政策已被明确废止**（用户为 Spec 归属方，有权修改）；**对其余字号仍不开放** ✓。
+
+| 档位（值） | 现有消费方（角色） |
+|---|---|
+| **15px** | `ColumnSettings .cols-title` · `SheetOperationForm .form-head h3` · `SheetPropertyEditor .editor-head h3`（均为**面板/区块标题**）|
+| **16px** | `RevisionsView .empty-title`（空态标题）· `SettingsDialog .dlg-head h2`（对话框标题）|
+| **17px** | `SheetToolbar .range-title`（图纸页区块标题）|
+| **20px** | `WelcomeView .welcome-title`（欢迎页主标题）|
+
+**执行要求**：
+1. **新增 4 个语义层令牌**（放入与 `--font-label`/`--font-caption` **同一块**，**不是**组件层块），**值逐字等值**；命名按**角色**（沿用既有风格；**不得含页面名**，如禁 `--welcome-*`/`--revisions-*`）；名字由实现者拟定并在报告列出（控制器复核）。
+2. **7 个消费方只改字号声明** → 改为消费新令牌（**不得**顺带改字族/行高/颜色/尺寸，**不得**改其它属性）。
+3. **清除责任 K 的 7 条例外**：声明从字面值改为 `var(…)` 后，旧指纹会变 **stale** → **删除**（目标是例外**清零**，不是改指向）✓。
+   - **收口不变量**：例外表 **14 → 7**、裸违规 **15 → 8**；**不得新增例外**。
+4. **零视觉变化必须被证明**：沿用**已有的绝对值锚**（Task 7/8/9 已为部分值钉过 `15px`/`16px`/`20px`）✓；**若某个值缺绝对值锚 → 在对应页面 spec 里补一条**（`sheets-layout.spec.ts` / `settings-dialog.spec.ts` 已由 T12-3 补入 Files；`main.spec.ts` 本就在 Files 内 ✓），并给出**变异自证**（把档位值改坏 → 锚必须红 → 还原 ✓）。
+5. **口径写回**：把该 4 个档位补进 `ARCH-DM-007` **§4.1 的令牌表**（注意：规则在 **§4.1**，**不是 §3** ✓），并明确「离刻度值已被声明为正式档位，责任 K 就此**闭合**」✓。
+6. **文件边界（重要，避免与收尾轮冲突）**：本轮**不得**动 `changelog.md`（由控制器统一写入）、**不得**动 SPEC-DM-006/GUIDE-001/002/两个 README/memo（**属于收尾轮的文件集**）✓；`tokens.css` + 7 个消费方 + `ui-contract-exceptions.json` + `ARCH-DM-007` + （必要时）两个页面 spec = 本轮全部 ✓。
+7. **RED 先行**：先写出会红的形式（如断言新令牌存在/消费方使用它）→ 再实现 ✓；配额：`check:ui` ≤2、`test:unit` ≤2、`build` ≤2、e2e ≤3（只跑受影响的 spec）。
 
 > **收口责任 A（字体真实加载当前未被自动化覆盖）**：Task 2 的三条 e2e 用例只断言 **CSSOM 声明层**
 > （`@font-face` 规则文本、`getComputedStyle()` 字体栈、`unicode-range` 区间语义），**不验证两套 WOFF2
