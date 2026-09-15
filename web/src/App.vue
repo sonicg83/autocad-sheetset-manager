@@ -7,13 +7,12 @@ import {useExtensions} from "./composables/useExtensions";
 import type {BeforeExtensionListReplace,ExtensionsPanel} from "./composables/useExtensions";
 import {EXTENSION_PAGE_COMPONENTS,isExtensionRouteKey,type ExtensionRouteKey} from "./features/extensions/pageRegistry";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftAction,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
-import {projectCommands,projectWorkspace} from "./drafts";
+import type {ChangeCommand,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
 import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult, DraftActionLabel} from "./features/sheets/types";
-import type {GuardChoice} from "./features/sheets/types";
 import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/properties/types";
 import type {DefinitionScopeFilter} from "./features/properties/model";
 import {useShellNavigation} from "./composables/useShellNavigation";
+import {useDraftGuards} from "./composables/useDraftGuards";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
@@ -51,17 +50,6 @@ const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const workspace=ref<Workspace|null>(null);
 const baseWorkspace=ref<Workspace|null>(null);
 const error=ref("");
-const commands=ref<ChangeCommand[]>([]);
-const draftActions=ref<DraftAction[]>([]);
-const draftCursor=ref(0);
-const draftVersion=ref(0);
-const draftStale=ref(false);
-const draftStaleReasons=ref<string[]>([]);
-const draftCorrupted=ref(false);
-const draftSaveFailed=ref(false);
-const lastDraftError=ref<ApiError|null>(null); // 最近一次草稿保存错误（字段级错误供编辑器行内/摘要消费）
-const draftSaving=ref(false);
-const draftRecovered=ref<number|null>(null);
 const preview=ref<Preview|null>(null);
 const previewContext=ref<PreviewContext|null>(null);
 // 预览请求进行中（Task 5 ActionDock 门禁：仅作按钮 loading 呈现，不阻止再次发起——竞态由 previewGeneration 丢弃乱序响应）
@@ -71,6 +59,30 @@ const isRestoreExecuting=ref(false);
 // 工作区加载代次为跨域共享的单一 ref：App.vue（打开/关闭/刷新）与修复/恢复域组合式函数共用
 const workspaceLoadGeneration=ref(0);
 // 非模态任务通知（SPEC-DM-006 §6.6）：toast 状态/推送/关闭；"查看"跳转（jumpOverlay）复用浮层的唯一自动展开入口
+// —— 草稿栈与未提交输入门禁（Task 11 第 11c 轮：抽出 useDraftGuards）——
+// 草稿栈状态与三选一 guard 已迁入组合式函数；此处解构回同名局部变量，模板与其余接线不变。
+// 位置要求：`commands` 是 useSheetsWorkspace/useSheetEditor/useSheetProjection 的**直接实参**
+// （setup 期求值），故本调用必须早于它们；而本方依赖的 `editor`/`properties`/`sheets`/`active`
+// 在下面才创建，`refreshSheetProjection` 也晚于本处，故一律以**懒取值函数/闭包**传入，
+// 只在动作被调用时才解引用（见 useDraftGuards 头部说明）。
+const {
+  commands, draftActions, draftCursor, draftVersion, draftStale, draftStaleReasons, draftCorrupted,
+  draftSaveFailed, lastDraftError, draftSaving, draftRecovered,
+  hasPropertyDefinitionCommands, hasStructuralCommands,
+  resetDraftState, rebuildDraftProjection, scheduleDraftSave, clearCommands, clearDraftRestart,
+  undoDraft, redoDraft, removeDraftAction, discardDraft, reloadAfterDraftConflict,
+  addCommand, addCommandBatch,
+  runScopeChange, guardedFilter, guardAllInputs, resolveSharedGuard, sharedGuardState, pendingDraftSave,
+}=useDraftGuards({
+  workspace,baseWorkspace,error,t,cloneJson,invalidatePreview,
+  refreshSheetProjection:()=>refreshSheetProjection(),
+  getActive:()=>active.value,
+  getEditor:()=>editor,
+  getProperties:()=>properties,
+  getSheets:()=>sheets,
+  reloadWorkspace:(workspaceId)=>doRefreshWorkspace(workspaceId),
+  confirmAction,
+});
 const {toasts,pushToast,dismiss}=useToast();
 // 设置中心（PLAN-DM-019 任务 10/11）：入口在 TopBar 齿轮；toast 复用宿主 useToast
 const settingsOpen=ref(false);
@@ -221,15 +233,12 @@ function doOpenOperation(kind:OperationKind){
   else if(kind==="insert-subset")editor.openInsertSubset();
 }
 let previewGeneration=0;
-let draftSaveQueue:Promise<void>=Promise.resolve();
 
 const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 // 布局读取代次：取消/切表单/切 CAD 版本后的旧布局响应不回填（任务 6）
 let layoutReadGeneration=0;
 
 const blocking=computed(()=>workspace.value?.diagnostics.filter(item=>item.severity==="error")??[]);
-const hasPropertyDefinitionCommands=computed(()=>commands.value.some(item=>item.type==="add_custom_property"||item.type==="delete_custom_property"));
-const hasStructuralCommands=computed(()=>commands.value.some(item=>["update_subset_title","delete_sheet","delete_subset","insert_sheet","insert_subset"].includes(String(item.type))));
 const previewGroups=computed(()=>preview.value?.execution_intent?.groups??[]);
 const derivedSubsets=computed(()=>preview.value?.execution_intent?.derived_document?.subsets??[]);
 const sourceBaselines=computed(()=>preview.value?.execution_intent?.source_baselines??[]);
@@ -254,7 +263,7 @@ async function submitCommands(commands:ChangeCommand[],label:DraftActionLabel,ca
   if(!sameBatch){if(!addCommandBatch(commands,label,category))return{ok:false,message:error.value||t("shell.errors.addDraftFailed")}}
   // 保存失败重试去重：不重复入栈，但用户确实执行了一次加入草稿动作，旧预览同样失效
   else {scheduleDraftSave();invalidatePreview()}
-  await draftSaveQueue;
+  await pendingDraftSave();
   if(draftSaveFailed.value)return{ok:false,message:lastDraftError.value?.message??t("shell.errors.draftSaveFailed"),fields:lastDraftError.value?.fields};
   const projection=await refreshSheetProjection();
   if(!projection.ok)return projection;
@@ -266,20 +275,8 @@ const editor=useSheetEditor({
   refreshSheetProjection,submitCommands,
   locateSheet,selectSubset:sheetsSelectSubset, // 操作表单成功后定位新增/编辑对象并更新到其所在范围
 });
-// 未提交输入保护接线（SPEC-DM-009 §6.2）：范围/筛选改变若隐藏当前编辑对象，
-// 先还原快照再三选一（加入草稿后继续/放弃输入/留在此处），保存/放弃后再应用
-function runScopeChange(apply:()=>void){
-  const ctx=editor.context.value;
-  if(!ctx||ctx.kind!=="sheet"||!editor.hasUnsavedChanges.value){apply();return}
-  const snapshot=sheetsSnapshotState();
-  apply();
-  const hidden=!sheets.filteredRows.value.some(row=>row.sheet.id===ctx.objectId);
-  if(!hidden)return;
-  sheetsRestoreState(snapshot);
-  void editor.guard(apply);
-}
-function guardedFilter<T>(apply:(value:T)=>void){return(value:T)=>runScopeChange(()=>apply(value))}
-// 过滤条件经保护接线（v-model 语义保持，仅在隐藏当前编辑对象时三选一）
+// 未提交输入保护接线（SPEC-DM-009 §6.2）：`runScopeChange`/`guardedFilter` 已迁入 useDraftGuards，
+// 此处只保留五个经保护接线的过滤条件（v-model 语义保持，仅在隐藏当前编辑对象时三选一）
 const guardedSearchText=guardedFilter((value:string)=>{searchText.value=value});
 const guardedSearchAll=guardedFilter((value:boolean)=>{searchAll.value=value});
 const guardedPathFilter=guardedFilter((value:SheetPathFilter)=>{pathFilter.value=value});
@@ -308,21 +305,11 @@ watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
   invalidateCsvPreview(false);
 },{immediate:true});
 // —— 全局输入保护（PLAN-DM-016 任务 2）：图纸页与属性页两个活动输入域依次过闸 ——
-// 固定先处理当前主标签的活动编辑器，再处理另一域；任一步「留在此处」即终止 next。
-// 页面只挂载一个共享 UnsavedInputDialog（见模板），两个 guard 顺序开合同一实例，不叠加模态。
-// PLAN-DM-020 Task 11：核心输入域过闸后再征询图纸目录页未保存模板草稿的三选一守卫
-// （目录页未挂载时为空操作）；「留在此处」同样终止 next。
-async function guardAllInputs(next:()=>void|Promise<void>){
-  const core=async()=>{if(active.value==="properties")await properties.guard(()=>editor.guard(next));else await editor.guard(()=>properties.guard(next))};
-  await guardSheetCatalogPage(core);
-}
-function resolveSharedGuard(choice:GuardChoice){editor.resolveGuard(choice);properties.resolveGuard(choice)}
-const sharedGuardState=computed(()=>properties.guardState.value.open?properties.guardState.value:editor.guardState.value);
+// `guardAllInputs`/`resolveSharedGuard`/`sharedGuardState` 已迁入 useDraftGuards（注释随迁）
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
 function resetEditingState(){commands.value=[];invalidatePreview();invalidateCsvPreview(true);error.value=""}
-function resetDraftState(){draftActions.value=[];draftCursor.value=0;draftVersion.value=0;draftStale.value=false;draftStaleReasons.value=[];draftCorrupted.value=false;draftSaveFailed.value=false;draftSaving.value=false;draftRecovered.value=null}
 function beginWorkspaceLoad(){workspaceLoadGeneration.value+=1;isWorkspaceLoading.value=true;resetEditingState();resetDraftState();invalidateRevisionState();resetOverlay();return workspaceLoadGeneration.value}
 async function openByPath(path:string){
   // 重新打开/切换工作区前先过全局输入保护（无未提交输入时直接通过）
@@ -331,7 +318,7 @@ async function openByPath(path:string){
 async function doOpenByPath(path:string){
   if(isRestoreExecuting.value){error.value=t("shell.errors.restoreRunning");return}
   isWorkspaceLoading.value=true;
-  await draftSaveQueue;
+  await pendingDraftSave();
   if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
   invalidateJobMonitor(true);
   const generation=beginWorkspaceLoad();
@@ -469,7 +456,7 @@ async function doRefreshWorkspace(expectedWorkspaceId?:string){
   const workspaceId=expectedWorkspaceId??current.id;
   if(current.id!==workspaceId)return;
   isWorkspaceLoading.value=true;
-  await draftSaveQueue;
+  await pendingDraftSave();
   if(draftSaveFailed.value){isWorkspaceLoading.value=false;return}
   if(workspace.value?.id!==workspaceId)return;
   const generation=beginWorkspaceLoad();
@@ -500,70 +487,6 @@ async function loadDraft(loaded:Workspace){
   draftRecovered.value=draft.actions.length>0?commands.value.length:null;
   if(result.corrupted)error.value=t("shell.errors.draftCorrupted");
   else if(result.stale)error.value=t("shell.errors.draftStale");
-}
-// 命令类型 → 语义键（I18N-07/I18N-12）：稳定命令类型不进用户文案；草稿动作只持久化
-// label_key，显示文本由 DraftActionsPanel 在渲染期经语言包翻译（语言不写入草稿）
-const COMMAND_LABEL_KEYS:Record<ChangeCommand["type"],string>={update_sheet_set:"shell.commands.updateSheetSet",update_subset_title:"shell.commands.updateSubsetTitle",update_sheet_properties:"shell.commands.updateSheetProperties",delete_sheet:"shell.commands.deleteSheet",insert_sheet:"shell.commands.insertSheet",insert_subset:"shell.commands.insertSubset",add_custom_property:"shell.commands.addCustomProperty",delete_custom_property:"shell.commands.deleteCustomProperty",delete_subset:"shell.commands.deleteSubset"};
-function rebuildDraftProjection(){
-  commands.value=draftStale.value?[]:projectCommands(draftActions.value,draftCursor.value);
-  if(baseWorkspace.value){
-    // 元数据/属性定义沿用本地只读副本投影；结构动作由内部投影请求以服务端权威派生结果显示
-    workspace.value=projectWorkspace(baseWorkspace.value,draftStale.value?[]:draftActions.value,draftStale.value?0:draftCursor.value);
-    void refreshSheetProjection();
-  }
-  invalidatePreview();
-}
-function scheduleDraftSave(){
-  const workspaceId=workspace.value?.id;
-  if(!workspaceId||draftStale.value)return;
-  draftSaving.value=true;
-  draftSaveQueue=draftSaveQueue.then(async()=>{
-    const current=workspace.value;
-    if(!current||current.id!==workspaceId||draftStale.value)return;
-    try{
-      const saved:DraftEnvelope=await request(`/api/workspaces/${workspaceId}/draft`,{method:"PUT",body:JSON.stringify({schema_version:1,base_revision_id:current.revision_id,repair_status:current.dst_validation?.status??"VALID",expected_version:draftVersion.value,cursor:draftCursor.value,actions:cloneJson(draftActions.value)})});
-      if(workspace.value?.id===workspaceId&&saved.draft){draftVersion.value=saved.draft.version;draftSaveFailed.value=false;lastDraftError.value=null}
-    }
-    catch(e){if(workspace.value?.id===workspaceId&&e instanceof ApiError&&e.code==="DRAFT_CONFLICT"){draftSaveFailed.value=true;lastDraftError.value=e;draftStale.value=true;draftStaleReasons.value=["DRAFT_VERSION_CONFLICT"];commands.value=[];invalidatePreview();error.value=t("shell.errors.draftConflictOverwrite")}else throw e}
-  }).catch(e=>{if(workspace.value?.id===workspaceId){draftSaveFailed.value=true;lastDraftError.value=e instanceof ApiError?e:null}}).finally(()=>{draftSaving.value=false});
-}
-function clearCommands(){draftActions.value=[];draftCursor.value=0;rebuildDraftProjection();scheduleDraftSave();error.value=""}
-function clearDraftRestart(){draftRecovered.value=null;clearCommands();void discardDraft()}
-function undoDraft(){if(draftStale.value||draftCursor.value===0)return;draftCursor.value-=1;rebuildDraftProjection();scheduleDraftSave()}
-function redoDraft(){if(draftStale.value||draftCursor.value>=draftActions.value.length)return;draftCursor.value+=1;rebuildDraftProjection();scheduleDraftSave()}
-function removeDraftAction(index:number){if(draftStale.value)return;const removedActive=index<draftCursor.value;draftActions.value.splice(index,1);if(removedActive)draftCursor.value-=1;draftCursor.value=Math.min(draftCursor.value,draftActions.value.length);rebuildDraftProjection();scheduleDraftSave()}
-async function discardDraft(){
-  const current=workspace.value;if(!current)return;
-  await draftSaveQueue;
-  if(workspace.value?.id!==current.id)return;
-  try{await request(`/api/workspaces/${current.id}/draft`,{method:"DELETE",body:JSON.stringify({expected_version:draftVersion.value})})}catch(e){if(e instanceof ApiError&&e.code==="DRAFT_CONFLICT"){draftStale.value=true;draftStaleReasons.value=["DRAFT_VERSION_CONFLICT"];error.value=t("shell.errors.draftConflictDelete");return}throw e}
-  resetDraftState();rebuildDraftProjection();
-}
-async function reloadAfterDraftConflict(){
-  const current=workspace.value;if(!current||!draftStaleReasons.value.includes("DRAFT_VERSION_CONFLICT"))return;
-  // 丢弃本地冲突动作并重新读取较新草稿：不改变服务器数据，属低风险动作（danger:false、无需勾选）
-  const ok=await confirmAction({title:t("shell.workspace.reloadConflictTitle"),message:t("shell.workspace.reloadConflictMessage"),confirmText:t("shell.workspace.reloadConflictConfirm"),danger:false});
-  if(!ok)return;
-  draftSaveFailed.value=false;
-  // 此路径已带明确「放弃并重新加载」确认：直接刷新，不再叠加三选一（保存对过期草稿也必然失败）
-  await doRefreshWorkspace(current.id);
-}
-function addCommand(command:ChangeCommand,category:"property"|"structural"|"metadata"){
-  if(draftStale.value){error.value=t("shell.errors.draftStaleAction");return false}
-  if(category==="property"&&hasStructuralCommands.value){error.value=t("shell.errors.mixedBatches");return false}
-  if(category==="structural"&&hasPropertyDefinitionCommands.value){error.value=t("shell.errors.mixedBatches");return false}
-  draftActions.value=draftActions.value.slice(0,draftCursor.value);
-  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label_key:COMMAND_LABEL_KEYS[command.type],commands:[command]});
-  draftCursor.value=draftActions.value.length;rebuildDraftProjection();scheduleDraftSave();error.value="";return true;
-}
-function addCommandBatch(batch:ChangeCommand[],label:DraftActionLabel,category:"property"|"structural"|"metadata"){
-  if(!batch.length)return false;
-  if(draftStale.value){error.value=t("shell.errors.draftStaleAction");return false}
-  if(category==="property"&&hasStructuralCommands.value){error.value=t("shell.errors.mixedBatches");return false}
-  if(category==="structural"&&hasPropertyDefinitionCommands.value){error.value=t("shell.errors.mixedBatches");return false}
-  draftActions.value=draftActions.value.slice(0,draftCursor.value);
-  draftActions.value.push({id:crypto.randomUUID(),kind:"command_batch",label_key:label.key,...(label.params?{params:label.params}:{}),commands:batch});
-  draftCursor.value=draftActions.value.length;rebuildDraftProjection();scheduleDraftSave();error.value="";return true;
 }
 // 属性页名称/值的提交改走 usePropertiesWorkspace.submitValues()（一个完整 update_sheet_set 命令），
 // 不再直接读取 workspace props 编排（PLAN-DM-016 任务 2）
