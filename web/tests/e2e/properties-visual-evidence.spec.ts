@@ -41,6 +41,44 @@ async function expectToken(page: Page, selector: string, property: string, token
   expect(actual, `${selector} ${property} 应来自 ${token}`).toBe(expected);
 }
 
+// 解析字体族令牌在当前环境下的 computed font-family（与 tokenColor 同思想：不把字体栈写死）
+async function tokenFontFamily(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.fontFamily = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    return value;
+  }, token);
+}
+
+// 断言元素的计算字体族等于指定令牌的解析值
+async function expectTokenFontFamily(page: Page, selector: string, token: string) {
+  const expected = await tokenFontFamily(page, token);
+  const actual = await page.locator(selector).first().evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(actual, `${selector} font-family 应来自 ${token}`).toBe(expected);
+}
+
+// 读数值型自定义属性（如 `--line-height-body:1.5`）
+async function tokenNumber(page: Page, token: string): Promise<number> {
+  const raw = await page.evaluate((name) => getComputedStyle(document.documentElement).getPropertyValue(name), token);
+  return parseFloat(raw);
+}
+
+// 行高断言：行高当前没有令牌层（收口责任 N），这里只锁定既有排版节奏。
+// 未自行声明行高的元素沿 `reset.css:15` 的 `html{font:var(--font-body) var(--font-ui)}`（即 14px/1.5）
+// 继承无单位行高，故「计算行高 ÷ 本元素字号」应等于 `--line-height-body`；
+// 断言比值而非像素，既不硬编码 px，也不随字号档位漂移。
+async function expectLineHeightRatio(page: Page, target: Locator, ratio: number, label: string) {
+  const actual = await target.first().evaluate((el) => {
+    const cs = getComputedStyle(el);
+    // `line-height:normal` 依赖字体度量，比不出稳定比值：显式暴露为 NaN 让断言失败而不是静默通过
+    return cs.lineHeight === "normal" ? Number.NaN : parseFloat(cs.lineHeight) / parseFloat(cs.fontSize);
+  });
+  expect(round2(actual), `${label} 计算行高与字号的比值`).toBe(ratio);
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -256,6 +294,20 @@ for (const theme of THEMES) {
     await expectTokenValue(page, page.locator(".value-panel button.link").first(), "min-height", "--control-height-default");
     await expectTokenValue(page, page.locator(".value-panel .head-actions .ui-button--primary"), "height", "--button-height", "box");
 
+    // Step 1 点名的六个排版属性中，`font-family` 与 `line-height` 此前零断言（首轮评审 Important-2）：
+    // 折叠标题、导入导出、搜索、主次动作四组逐项锁定（height/padding/radius 已由上方令牌断言覆盖）。
+    await expectTokenFontFamily(page, ".value-panel .head-title", "--font-ui");
+    await expectTokenFontFamily(page, ".csv-panel .io-menu a", "--font-ui");
+    await expectTokenFontFamily(page, ".value-panel .ui-input__control", "--font-ui");
+    await expectTokenFontFamily(page, ".value-panel .head-actions .ui-button--primary", "--font-ui");
+    await expectTokenFontFamily(page, ".value-panel .head-actions .ui-button--secondary", "--font-ui");
+    const bodyLineHeight = await tokenNumber(page, "--line-height-body");
+    await expectLineHeightRatio(page, page.locator(".value-panel .head-title"), bodyLineHeight, "折叠标题");
+    await expectLineHeightRatio(page, page.locator(".csv-panel .io-menu a"), bodyLineHeight, "导入导出");
+    await expectLineHeightRatio(page, page.locator(".value-panel .ui-input__control"), bodyLineHeight, "搜索输入");
+    await expectLineHeightRatio(page, page.locator(".value-panel .head-actions .ui-button--primary"), bodyLineHeight, "主按钮");
+    await expectLineHeightRatio(page, page.locator(".value-panel .head-actions .ui-button--secondary"), bodyLineHeight, "次按钮");
+
     // 两个模态：标题不再落 UA 原生尺度，结构尺寸来自令牌
     const nameItem = page.locator(".value-panel .value-item").first();
     await nameItem.getByRole("button", {name: /^展开编辑/}).click();
@@ -271,6 +323,22 @@ for (const theme of THEMES) {
     await expectTokenValue(page, compareCard, "max-width", "--compare-card-max-width");
     await expectTokenValue(page, compareCard.locator(".compare-hint"), "font-size", "--font-label");
     await expectTokenValue(page, compareCard.locator(".compare-item pre").first(), "max-height", "--compare-item-max-height");
+  });
+}
+
+// Ruling 33（Task 5 修复轮的核心回归守卫）：hover 必须真的命中控件。
+// 页面侧原有的 `.value-item input:hover` 在控件换成 `UiInput` 后永不生效——`UiInput` 的根元素是
+// `<span class="ui-input">`，真正的 `<input class="ui-input__control">` 不是根元素，而 scoped 的
+// `data-v-*` 只追加到子组件根元素上（Task 6 的 `SheetPropertyEditor.vue:108` 是同一个待爆的雷）。
+// 这类「声明写了但不命中」的失效源文本断言抓不到，只有真实 hover 后的计算样式能抓到。
+for (const theme of THEMES) {
+  test(`值面板字段输入 hover 后由 UiInput 原语提供强调色描边：${theme}`, async ({page}) => {
+    await openWorkspace(page, theme);
+    const fieldControl = ".value-panel .value-item:not(.invalid) .ui-input__control";
+    // 先确认默认态是常规边框色，避免把「本来就是强调色」误读成 hover 生效
+    await expectToken(page, fieldControl, "borderTopColor", "--color-border-strong");
+    await page.locator(fieldControl).first().hover();
+    await expectToken(page, fieldControl, "borderTopColor", "--color-accent");
   });
 }
 

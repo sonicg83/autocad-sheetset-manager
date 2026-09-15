@@ -305,8 +305,9 @@ function onExpandKeydown(event: KeyboardEvent) {
 .value-item.name{border-bottom:1px solid var(--color-border-subtle);border-radius:0;padding-bottom:var(--space-3);margin-bottom:var(--space-2)}
 .value-item.invalid{border-color:var(--color-danger);background:var(--color-danger-bg)}
 .value-item label{font-size:var(--font-label);font-weight:500;color:var(--color-text-secondary)}
-/* 字段控件盒模型与错误态由 UiInput 提供，此处只保留悬停强调（原语无 hover 规则，不争抢优先级） */
-.value-item input:hover:not(:disabled){border-color:var(--color-accent)}
+/* 字段控件的盒模型、错误态与悬停强调均由 UiInput 提供：原语根元素是 <span>、真正的控件是内部
+   <input class="ui-input__control">，scoped 的 data-v-* 只追加到子组件根元素，所以页面侧写
+   `.value-item input:hover` 永远不会命中（Task 5 修复轮 Ruling 33），此处不再自带悬停样式 */
 .input-line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-1)}
 .field-foot{min-height:var(--control-height-default);display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
 .field-foot .flags{display:flex;gap:var(--space-1);flex-wrap:wrap}
