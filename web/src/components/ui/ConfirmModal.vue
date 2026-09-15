@@ -26,13 +26,13 @@ function onKeydown(e:KeyboardEvent){
 <template>
   <div v-if="open" class="modal-mask" @keydown="onKeydown">
     <div class="modal-card" role="dialog" aria-modal="true" :aria-label="title" tabindex="-1" ref="card">
-      <h2>{{title}} <span v-if="reversibility" class="modal-irr" :class="{danger}">{{reversibilityText}}</span></h2>
+      <h2>{{title}} <span v-if="reversibility" class="modal-irr">{{reversibilityText}}</span></h2>
       <p class="modal-message">{{message}}</p>
       <ul v-if="impactLines?.length" class="modal-impact"><li v-for="line in impactLines" :key="line" class="mono">{{line}}</li></ul>
       <label v-if="requireCheckbox" class="modal-check"><input type="checkbox" v-model="checked">{{checkboxLabel}}</label>
       <div class="modal-actions">
         <button type="button" @click="emit('cancel')">{{cancelText??$t("shell.modal.cancel")}}</button>
-        <button type="button" :class="{danger}" :disabled="confirmDisabled || (Boolean(requireCheckbox)&&!checked)" @click="emit('confirm')">{{confirmText||$t("shell.modal.confirm")}}</button>
+        <button type="button" :class="{'modal-danger': danger}" :disabled="confirmDisabled || (Boolean(requireCheckbox)&&!checked)" @click="emit('confirm')">{{confirmText||$t("shell.modal.confirm")}}</button>
       </div>
     </div>
   </div>

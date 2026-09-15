@@ -715,6 +715,16 @@ test.describe("Task 6 控件视觉基础正交证据（PLAN-DM-029）", () => {
     const dialog = page.locator('[role="dialog"][aria-modal="true"]');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", {name: "删除", exact: true})).toBeVisible();
+    // 危险按钮的文字必须可辨：legacy 层的通用 `.danger{color:--color-danger}` 曾静默压过
+    // primitives 的 `color:--color-on-accent`（层顺序优先于特异性）→ 红底红字不可见。
+    // 用户在第 2 张截图上发现该缺陷，此处钉死颜色并断言与底色不同，防止复发。
+    const confirmButton = dialog.getByRole("button", {name: "删除", exact: true});
+    const dangerColors = await confirmButton.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {color: style.color, background: style.backgroundColor};
+    });
+    expect(dangerColors.color, "危险按钮文字色应来自 --color-on-accent").toBe(await resolveColorToken(page, "--color-on-accent"));
+    expect(dangerColors.color, "文字色不得与底色相同，否则文字不可见").not.toBe(dangerColors.background);
     await page.mouse.move(0, 0);
     await attachScreenshot(page, info, "t6-delete-danger-light-1440x1000.png");
   });
