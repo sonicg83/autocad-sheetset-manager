@@ -67,6 +67,9 @@ def immutable_transaction_projection(workspace_root: Path, journal: dict) -> dic
     return {
         "identity_version": journal.get("identity_version"),
         "operation_id": operation_id,
+        # attempt 是嵌套布局的身份字段，与目录名共同定位清单；两侧缺失（旧平铺
+        # 布局）均为 None，不影响兼容比较。
+        "attempt": journal.get("attempt"),
         "root": str(root).casefold(),
         "status": journal["status"],
         # COMMITTED 后 files 的完整审计向量均不可变，包括目标、staged/backup、

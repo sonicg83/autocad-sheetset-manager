@@ -727,6 +727,27 @@ def test_startup_rejects_main_journal_file_identity_projection_tampering(
     assert manifest_path.read_bytes() == safe_manifest
 
 
+def test_startup_rejects_archived_manifest_attempt_tampering(tmp_path: Path):
+    """manifest 的 attempt 必须进入不可变投影：篡改后启动恢复显式报错而非静默丢弃。"""
+    target = tmp_path / "immutable-attempt.dst"
+    staged = tmp_path / "staged-immutable-attempt.dst"
+    target.write_bytes(b"before")
+    staged.write_bytes(b"published")
+    publisher = RecoverablePublisher()
+    operation_id = "immutable-attempt"
+    publisher.publish(operation_id, tmp_path, {target: staged}, attempt=1)
+    manifest_path = tmp_path / ".dst-manager/revisions" / operation_id / "attempt-001" / "manifest.json"
+    tampered = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tampered["attempt"] = 2
+    tampered_bytes = json.dumps(tampered).encode("utf-8")
+    manifest_path.write_bytes(tampered_bytes)
+
+    with pytest.raises(PublishRecoveryError, match="PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"):
+        publisher.recover(tmp_path)
+
+    assert manifest_path.read_bytes() == tampered_bytes
+
+
 def test_startup_rejects_main_journal_operation_id_tampering(tmp_path: Path):
     target = tmp_path / "immutable-operation.dst"
     staged = tmp_path / "staged-immutable-operation.dst"
