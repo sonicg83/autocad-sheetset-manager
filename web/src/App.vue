@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import {computed,ref,watch} from "vue";
 import {useI18n} from "vue-i18n";
-import {ApiError,lastErrorDiagnostic,localizedError,request} from "./api/client";
-import {clearWorkspaceContext,getShellBridge,shellReady,openWorkspaceFolder as bridgeOpenWorkspaceFolder} from "./api/shell";
+import {lastErrorDiagnostic,localizedError} from "./api/client";
 import {useExtensions} from "./composables/useExtensions";
 import type {BeforeExtensionListReplace,ExtensionsPanel} from "./composables/useExtensions";
 import {EXTENSION_PAGE_COMPONENTS,isExtensionRouteKey,type ExtensionRouteKey} from "./features/extensions/pageRegistry";
 import {createCommand} from "./api/contracts";
-import type {ChangeCommand,DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,SemanticDiff,Sheet,Subset,Workspace} from "./api/contracts";
-import type {InsertSheetEditContext, InsertSubsetEditContext, SubmitResult, DraftActionLabel} from "./features/sheets/types";
+import type {DraftEnvelope,ExtensionSummary,Job,Preview,PropertyDefinition,Revision,Sheet,Subset,Workspace} from "./api/contracts";
 import type {PropertyKey, PropertySearchMode, ValueKey} from "./features/properties/types";
 import type {DefinitionScopeFilter} from "./features/properties/model";
 import {useShellNavigation} from "./composables/useShellNavigation";
 import {useDraftGuards} from "./composables/useDraftGuards";
 import {useWorkspaceLifecycle} from "./composables/useWorkspaceLifecycle";
+import {useWorkspaceCommands,type PreviewContext} from "./composables/useWorkspaceCommands";
 import {useJobMonitor} from "./composables/useJobMonitor";
 import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
@@ -37,15 +36,11 @@ import TabBar from "./layout/TabBar.vue";
 import ActionDock from "./layout/ActionDock.vue";
 import TaskOverlay from "./layout/TaskOverlay.vue";
 import WorkspaceShell from "./layout/WorkspaceShell.vue";
-import {useHotkeys} from "./composables/useHotkeys";
 import WelcomeView from "./views/WelcomeView.vue";
 import SheetsView from "./views/SheetsView.vue";
 import PropertiesView from "./views/PropertiesView.vue";
 import RevisionsView from "./views/RevisionsView.vue";
 
-type PreviewContext={workspaceId:string;baseRevisionId:string;cadVersion:string;commands:ChangeCommand[];result:Preview};
-
-// PLAN-DM-021 Task 4：文件选择经桥的 file_kind + 本地化描述（描述取自语言包，仅作对话框显示）
 const {t}=useI18n();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const workspace=ref<Workspace|null>(null);
@@ -231,9 +226,6 @@ const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
 // 恢复预览成功（restorePreview 已写入）后展开任务浮层到修改预览页签，与 showPreview 共用 §9.1 统一预览门禁呈现
 async function previewRestoreAndOpen(revision:Revision){await previewRestore(revision);if(restorePreview.value)openOverlay("prev")}
 function onCadVersionChange(value:string){cadVersion.value=value;layoutReadGeneration+=1;invalidatePreview()}
-const bulkPropertyName=ref("");
-const bulkPropertyValue=ref("");
-const bulkMode=ref<"set"|"clear">("set"); // 批量模式：设置值 / 清空值（SPEC-DM-009 §6.1 显式区分）
 // 图纸页工作区状态（PLAN-DM-015 任务 3）：范围/搜索/低频筛选/勾选集合/首屏加载。
 // 在主标签之外实例化，切换主标签保留勾选集合与筛选；行 ID 取服务端 ID。
 const sheets=useSheetsWorkspace({workspace,commands});
@@ -263,41 +255,47 @@ function doOpenOperation(kind:OperationKind){
 }
 let previewGeneration=0;
 
-const DWG_DWT_EXT=/\.(dwg|dwt)$/i;
 // 布局读取代次：取消/切表单/切 CAD 版本后的旧布局响应不回填（任务 6）
 let layoutReadGeneration=0;
 
 const blocking=computed(()=>workspace.value?.diagnostics.filter(item=>item.severity==="error")??[]);
-const previewGroups=computed(()=>preview.value?.execution_intent?.groups??[]);
-const derivedSubsets=computed(()=>preview.value?.execution_intent?.derived_document?.subsets??[]);
-const sourceBaselines=computed(()=>preview.value?.execution_intent?.source_baselines??[]);
-const subsetOperations=computed(()=>preview.value?.execution_intent?.subset_operations??[]);
-const cardinalityFrontier=computed(()=>preview.value?.execution_intent?.cardinality_frontier??null);
-const cadValidationDeferred=computed(()=>preview.value?.execution_intent?.cad_validation_deferred===true);
-const semanticDiff=computed<SemanticDiff>(()=>preview.value?.semantic_diff??{sheet_set:[],structure:{before:[],after:[]},properties:[],dwgs:[]});
 const sheetPropertyNames=computed(()=>workspace.value?.sheet_set.property_definitions.filter(item=>item.type==="sheet").map(item=>item.name)??[]);
-const executionEstimate=computed(()=>preview.value?.execution_intent?.estimate??null);
-const saveStatusText=computed(()=>draftSaveFailed.value?t("shell.dock.saveStatusFailed"):draftSaving.value?t("shell.dock.saveStatusSaving"):draftStale.value?t("shell.dock.saveStatusStale"):t("shell.dock.saveStatusSaved"));
-// —— 提交命令（SubmitCommands）：加入草稿动作并等待持久化与投影成功，不以入队即宣称保存 ——
-// label 为 DraftActionLabel（稳定 label_key + 命名 params，PLAN-DM-021 Task 8/I18N-12）：语言不写入草稿
-async function submitCommands(commands:ChangeCommand[],label:DraftActionLabel,category:"metadata"|"structural"|"property"):Promise<SubmitResult>{
-  if(draftStale.value)return{ok:false,message:t("shell.errors.draftStaleAction")};
-  // 结构变更与属性定义变更必须分批；属性值编辑（metadata）可与结构并存（混合批次显示由命令簿叠加合成）
-  if(category==="structural"&&hasPropertyDefinitionCommands.value)return{ok:false,message:t("shell.errors.mixedBatches")};
-  if(category==="property"&&hasStructuralCommands.value)return{ok:false,message:t("shell.errors.mixedBatches")};
-  // 草稿保存失败重试：仅当撤销/重做光标位于栈顶且与最后一条草稿动作等价时，
-  // 视为保存失败重试而不重复加入同一命令批次；撤销后重提交相同命令必须重新入栈（I-1 修复）
-  const last=draftActions.value[draftActions.value.length-1];
-  const sameBatch=last?.kind==="command_batch"&&draftCursor.value===draftActions.value.length&&JSON.stringify(last.commands)===JSON.stringify(commands);
-  if(!sameBatch){if(!addCommandBatch(commands,label,category))return{ok:false,message:error.value||t("shell.errors.addDraftFailed")}}
-  // 保存失败重试去重：不重复入栈，但用户确实执行了一次加入草稿动作，旧预览同样失效
-  else {scheduleDraftSave();invalidatePreview()}
-  await pendingDraftSave();
-  if(draftSaveFailed.value)return{ok:false,message:lastDraftError.value?.message??t("shell.errors.draftSaveFailed"),fields:lastDraftError.value?.fields};
-  const projection=await refreshSheetProjection();
-  if(!projection.ok)return projection;
-  return{ok:true};
-}
+// —— 页面事件 → 命令/API 编排（Task 11 第 11e 轮：抽出 useWorkspaceCommands）——
+// 提交命令/预览/写入/ActionDock 门禁矩阵/布局模板读取/全局快捷键与 CSV 导入编排已迁入组合式函数；
+// 此处解构回同名局部变量，`<template>` 与其余接线不变。
+// 位置要求：`submitCommands` 是 `useSheetEditor` 与 `usePropertiesWorkspace` 的**直接实参**
+// （setup 期求值），故本调用必须早于它们；而 `editor`/`properties` 在下方才创建，
+// 代次计数又是会被重赋值的 `let`（不能解构回同名），故一律以**懒取值函数/闭包**传入
+// （见 useWorkspaceCommands 头部说明）。
+const commandsApi=useWorkspaceCommands({
+  workspace,error,preview,previewContext,isPreviewing,isWorkspaceLoading,isRestoreExecuting,cadVersion,
+  t,confirmAction,pushToast,cloneJson,invalidatePreview,
+  nextPreviewGeneration:()=>++previewGeneration,
+  currentPreviewGeneration:()=>previewGeneration,
+  nextLayoutReadGeneration:()=>++layoutReadGeneration,
+  currentLayoutReadGeneration:()=>layoutReadGeneration,
+  draft:draftGuards,
+  nav:{openOverlay},
+  getLifecycle:()=>lifecycle,
+  getEditor:()=>editor,
+  getProperties:()=>properties,
+  getSheets:()=>sheets,
+  getJobMonitor:()=>({job,terminal,watchJob,invalidateJobMonitor,isCurrentJobGeneration}),
+  getRepair:()=>({dstValidation,repairWritesDisabled}),
+  getCsvImport:()=>({importCsv,invalidateCsvPreview,csvText,csvPreview}),
+  setJob,hasShell,selectAndOpenDst,
+  refreshSheetProjection:()=>refreshSheetProjection(),
+});
+const {
+  bulkPropertyName,bulkPropertyValue,bulkMode,
+  submitCommands,
+  queueDelete,queueDeleteSubset,queueBulkSheetProperty,queueDeleteProperty,
+  guardedImportCsv,closeCsvImport,
+  showPreview,execute,write,dock,
+  selectTemplateFile,selectSubsetTemplateFile,selectBaseTemplateFile,
+  previewGroups,derivedSubsets,sourceBaselines,subsetOperations,cardinalityFrontier,
+  cadValidationDeferred,semanticDiff,executionEstimate,
+}=commandsApi;
 // —— 分页编辑缓冲与全局输入保护（PLAN-DM-015 任务 5）：唯一活动编辑上下文，跨主标签保留 ——
 const editor=useSheetEditor({
   workspace,baseWorkspace,commands,sheetPropertyNames,
@@ -338,216 +336,14 @@ watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
-// 布局读取写入当前活动表单上下文：经代次 + 对象身份校验，取消/切表单/切版本后的旧响应不回填
-function activeLayoutContext(kind:"insert-sheet"):InsertSheetEditContext|null;
-function activeLayoutContext(kind:"insert-subset"):InsertSubsetEditContext|null;
-function activeLayoutContext(kind:"insert-sheet"|"insert-subset"):InsertSheetEditContext|InsertSubsetEditContext|null{
-  const ctx=editor.context.value;
-  return ctx&&ctx.kind===kind?(ctx as InsertSheetEditContext|InsertSubsetEditContext):null;
-}
-async function loadLayoutOptions(path:string,ctx:InsertSheetEditContext|InsertSubsetEditContext){
-  const gen=++layoutReadGeneration;
-  ctx.layoutLoading=true;ctx.layoutOptions=[];
-  // M4：cad_version 使用当前工作区的响应式版本，去除硬编码 "2020"
-  try{
-    const r=await request<{layouts:string[];cached:boolean;file_hash:string}>(`/api/layout-names`,{method:"POST",body:JSON.stringify({file_path:path,cad_version:cadVersion.value})});
-    if(gen!==layoutReadGeneration||editor.context.value!==ctx)return;
-    ctx.layoutOptions=r.layouts;
-  }catch(e){
-    if(gen!==layoutReadGeneration||editor.context.value!==ctx)return;
-    ctx.layoutError=e instanceof ApiError?e.message:t("shell.errors.layoutReadFailed");ctx.layoutManual=true;
-  }finally{
-    if(gen===layoutReadGeneration&&editor.context.value===ctx)ctx.layoutLoading=false;
-  }
-}
-async function selectTemplateFile(){
-  const bridge=getShellBridge();
-  if(!bridge){error.value=t("shell.errors.shellNotReadyShort");return}
-  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
-  if(!path)return;
-  if(!DWG_DWT_EXT.test(path)){error.value=t("shell.errors.templateOnly");return}
-  const ctx=activeLayoutContext("insert-sheet");
-  if(!ctx)return;
-  ctx.sourceFile=path;ctx.layoutError="";ctx.layoutManual=false;ctx.dirty=true;
-  await loadLayoutOptions(path,ctx);
-}
-async function selectSubsetTemplateFile(){
-  const bridge=getShellBridge();
-  if(!bridge){error.value=t("shell.errors.shellNotReadyShort");return}
-  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
-  if(!path)return;
-  if(!DWG_DWT_EXT.test(path)){error.value=t("shell.errors.templateOnly");return}
-  // 与新增图纸对齐：选文件后读取布局列表（缓存优先），下拉选择布局名称
-  const ctx=activeLayoutContext("insert-subset");
-  if(!ctx)return;
-  ctx.templateFile=path;ctx.layoutError="";ctx.layoutManual=false;ctx.dirty=true;
-  await loadLayoutOptions(path,ctx);
-}
-async function selectBaseTemplateFile(){
-  const bridge=getShellBridge();
-  if(!bridge){error.value=t("shell.errors.shellNotReadyShort");return}
-  const path=await bridge.select_file("template",t("common.shell.fileKinds.template"));
-  if(!path)return;
-  if(!DWG_DWT_EXT.test(path)){error.value=t("shell.errors.templateOnly");return}
-  const ctx=activeLayoutContext("insert-subset");
-  if(!ctx)return;
-  ctx.baseTemplateFile=path;ctx.dirty=true;
-}
-// 属性页名称/值的提交改走 usePropertiesWorkspace.submitValues()（一个完整 update_sheet_set 命令），
-// 不再直接读取 workspace props 编排（PLAN-DM-016 任务 2）
-async function guardedImportCsv(){
-  // CSV 是正式写入：确认导入前先处理普通未提交输入（三选一），不静默混批
-  await guardAllInputs(async()=>{await importCsv()});
-}
-async function closeCsvImport(){
-  // 关闭导入区（2026-09-06 用户裁决）：有未导入数据（已选文件/预览）先确认，确认后清空文件与预览缓存；
-  // 在途任务不取消（job 监控独立于导入区 UI）
-  if(Boolean(csvText.value)||Boolean(csvPreview.value)){
-    const ok=await confirmAction({title:t("shell.flows.closeCsv.title"),message:t("shell.flows.closeCsv.message"),confirmText:t("shell.flows.closeCsv.confirm"),danger:false});
-    if(!ok)return;
-  }
-  invalidateCsvPreview(true);
-  properties.csvOpen.value=false;
-}
-async function queueDelete(sheet:Sheet){
-  // 编辑未提交时先处理缓冲（三选一），再按删除确认流程；删除命令不得夹带未确认的属性变更
-  await editor.guard(async()=>{await doQueueDelete(sheet)});
-}
-async function doQueueDelete(sheet:Sheet){
-  // 单张图纸删除为低风险动作：danger:false、无需勾选；确认文案明确「加入删除草稿」，不是立即删除文件（SPEC-DM-009 §6.3）
-  const ok=await confirmAction({title:t("shell.flows.deleteSheet.title"),message:t("shell.flows.deleteSheet.message",{number:sheet.number}),confirmText:t("shell.flows.deleteSheet.confirm"),danger:false});
-  if(!ok)return;
-  if(addCommand(createCommand.deleteSheet(sheet.id),"structural")){
-    // 删除成功进入草稿：目标已从投影移除，结束对应编辑上下文，避免预览/写入被「未提交输入」误报
-    editor.discardIfTargeting(sheet.id);
-    pushToast({type:"ok",title:t("shell.flows.deleteSheet.toastTitle"),body:t("shell.flows.deleteSheet.toastBody",{number:sheet.number})});
-  }
-}
 // 删除整个子集：目标取编辑子集表单的编辑对象；编辑未提交时先三选一决策（保存后再删除），
 // 再走整子集删除确认流程。目标 ID 在 guard 前捕获——保存标题会关闭表单，删除仍作用于原目标。
-async function queueDeleteSubset(){
-  const ctx=editor.context.value;
-  const subsetId=ctx?.kind==="rename"?ctx.objectId:"";
-  await editor.guard(async()=>{await doQueueDeleteSubset(subsetId)});
-}
-async function doQueueDeleteSubset(subsetId:string){
-  const subset=workspace.value?.sheet_set.subsets.find(item=>item.id===subsetId);
-  if(!subset)return;
-  const drawing=subset.sheets[0]?.layout.resolved_path??subset.sheets[0]?.layout.file_name??t("shell.flows.deleteSubset.unknownDrawing");
-  // 删除整个子集属不可逆破坏类操作：需要显式勾选后才可确认
-  const ok=await confirmAction({title:t("shell.flows.deleteSubset.title"),message:t("shell.flows.deleteSubset.message",{name:subset.display_name,count:subset.sheets.length,drawing}),confirmText:t("shell.flows.deleteSubset.confirm"),danger:true,requireCheckbox:true,reversibility:"irreversible"});
-  if(!ok)return;
-  if(addCommand(createCommand.deleteSubset(subset.id),"structural")){
-    // 删除成功进入草稿：目标已从投影移除，结束对应「编辑子集」上下文，
-    // 否则残留的失效上下文会在下一次预览/写入时被「未提交输入」误报（2026-09-10 用户反馈 bug1）
-    editor.discardIfTargeting(subset.id);
-    pushToast({type:"ok",title:t("shell.flows.deleteSubset.toastTitle"),body:t("shell.flows.deleteSubset.toastBody",{name:subset.display_name,count:subset.sheets.length})});
-  }
-}
 // 批量加入草稿：与单行编辑共用一个活动编辑上下文，有未提交输入先三选一
-function queueBulkSheetProperty(){
-  void editor.guard(()=>doQueueBulkSheetProperty());
-}
-// 批量编辑（SPEC-DM-009 §4.2/§6.1）：遍历完整勾选集合（含未加载行，不隐式缩为当前可见行）；
-// 逐张复制 custom_properties 后仅改指定名称，已删除对象按 ID 匹配不到自然不进入批量。
-// 设置值模式空输入不生成修改只提示；清空值须显式选择并确认受影响数量（是否允许空值仍由服务端校验 S-11）。
-async function doQueueBulkSheetProperty(){
-  const name=bulkPropertyName.value;
-  if(!name||!selectedIds.value.length){error.value=t("shell.errors.selectSheetAndProperty");return}
-  const selected=new Set(selectedIds.value);
-  const targets=allRows.value.filter(({sheet})=>selected.has(sheet.id));
-  if(!targets.length){error.value=t("shell.errors.bulkTargetsUnavailable");return}
-  if(bulkMode.value==="set"){
-    if(!bulkPropertyValue.value.trim()){error.value=t("shell.errors.bulkEmptyValue");return}
-    applyBulkBatch(targets,name,bulkPropertyValue.value,"set");
-    return;
-  }
-  const affected=targets.filter(({sheet})=>(sheet.custom_properties[name]??"").trim()!=="");
-  if(!affected.length){error.value=t("shell.errors.bulkAllEmpty",{name});return}
-  const ok=await confirmAction({
-    title:t("shell.flows.clearValues.title"),
-    message:t("shell.flows.clearValues.message",{count:affected.length,name}),
-    confirmText:t("shell.flows.clearValues.confirm"),danger:false,
-  });
-  if(!ok)return;
-  applyBulkBatch(affected,name,"","clear"); // 只改实际受影响图纸，与确认数量一致
-}
-function applyBulkBatch(targets:{sheet:Sheet;subset:Subset}[],name:string,value:string,mode:"set"|"clear"){
-  const batch=targets.map(({sheet})=>createCommand.updateSheetProperties(sheet.id,{...sheet.custom_properties,[name]:value}));
-  const subsetCount=new Set(targets.map(({subset})=>subset.id)).size;
-  const labelKey=mode==="set"?"shell.flows.bulk.setLabel":"shell.flows.bulk.clearLabel";
-  const toastKey=mode==="set"?"shell.flows.bulk.setToast":"shell.flows.bulk.clearToast";
-  // 草稿动作持久化 label_key + 命名参数（属性名与数量是用户数据，I18N-12）；显示文本由动作栈渲染期翻译
-  if(addCommandBatch(batch,{key:labelKey,params:{name,count:batch.length}},"metadata")){
-    // 连续批量编辑保留勾选集合与展开状态，只初始化本次属性输入。
-    bulkMode.value="set";bulkPropertyName.value="";bulkPropertyValue.value="";
-    pushToast({type:"ok",title:t("shell.flows.bulk.toastTitle"),body:t(toastKey,{name,count:batch.length,subsets:subsetCount})});
-  }
-}
 // 删除属性定义（PLAN-DM-016 任务 4 / SPEC-DM-010 §4.2）：沿用既有草稿与确认语义；
 // 目标 sheetset 值仍 dirty 时先运行属性输入 guard（三选一）再弹删除确认；空文本值不视为删除定义。
 // 确认文案只说明作用域与草稿语义，不虚构级联影响数量；受影响范围以预览时服务端结果为准。
-function queueDeleteProperty(definition:PropertyDefinition){void properties.guard(()=>doQueueDeleteProperty(definition))}
-async function doQueueDeleteProperty(definition:PropertyDefinition){
-  const scopeLabel=t(definition.type==="sheetset"?"shell.flows.deleteProperty.scopeSheetset":"shell.flows.deleteProperty.scopeSheet");
-  const ok=await confirmAction({title:t("shell.flows.deleteProperty.title"),message:t("shell.flows.deleteProperty.message",{scope:scopeLabel,name:definition.name}),confirmText:t("shell.flows.deleteProperty.confirm"),danger:false});
-  if(!ok)return;
-  if(addCommand(createCommand.deleteCustomProperty(definition.type,definition.name),"property")){
-    pushToast({type:"ok",title:t("shell.flows.deleteProperty.toastTitle"),body:t("shell.flows.deleteProperty.toastBody",{scope:scopeLabel,name:definition.name})});
-  }
-}
 // 新增图纸/新建子集提交由 useSheetEditor 处理：参照对象 → ordinal 映射（commands.ts）、
 // 原 command schema、成功定位与失败保留输入（任务 6），不在 App.vue 重复实现。
-
-// 全局预览/确认写入：有未提交输入先三选一（图纸页与属性页依次过闸）；加入草稿使旧预览失效，不能静默忽略输入
-async function showPreview(){
-  await guardAllInputs(async()=>{await doShowPreview()});
-}
-async function doShowPreview(){
-  if(isWorkspaceLoading.value||draftStale.value||!workspace.value||!commands.value.length)return;
-  const workspaceId=workspace.value.id;
-  const baseRevisionId=workspace.value.revision_id;
-  const cadVersionSnapshot=cadVersion.value;
-  const commandSnapshot=cloneJson(commands.value);
-  const generation=++previewGeneration;
-  preview.value=null;previewContext.value=null;isPreviewing.value=true;
-  try{
-    const result:Preview=await request(`/api/workspaces/${workspaceId}/changes/preview`,{method:"POST",body:JSON.stringify({base_revision_id:baseRevisionId,commands:commandSnapshot,cad_version:cadVersionSnapshot})});
-    if(generation!==previewGeneration||workspace.value?.id!==workspaceId||workspace.value.revision_id!==baseRevisionId)return;
-    preview.value=result;previewContext.value={workspaceId,baseRevisionId,cadVersion:cadVersionSnapshot,commands:commandSnapshot,result};error.value="";openOverlay("prev");
-  }
-  catch(e){if(generation===previewGeneration)error.value=String(e)}
-  finally{if(generation===previewGeneration)isPreviewing.value=false}
-}
-// 执行正式写入（Task 5：模态上移到 write()，execute 不再自行开模态）
-async function execute(){
-  const context=previewContext.value;
-  if(!context||!context.result.executable)return;
-  const current=workspace.value;
-  if(isWorkspaceLoading.value||!current||current.id!==context.workspaceId||current.revision_id!==context.baseRevisionId){invalidatePreview();error.value=t("shell.errors.previewContextStale");return}
-  const generation=invalidateJobMonitor(false);
-  try{
-    const result:Job=await request(`/api/workspaces/${context.workspaceId}/changes/execute`,{method:"POST",body:JSON.stringify({base_revision_id:context.baseRevisionId,commands:cloneJson(context.commands),cad_version:context.cadVersion,preview_digest:context.result.preview_digest})});
-    if(!isCurrentJobGeneration(generation)||isWorkspaceLoading.value||workspace.value?.id!==context.workspaceId)return;
-    setJob(result);if(result.status==="QUEUED"&&result.id)watchJob(result.id,context.workspaceId);else if(result.status==="SUCCEEDED"){await discardDraft();await refreshWorkspace(context.workspaceId)}
-  }
-  catch(e){if(isCurrentJobGeneration(generation)&&workspace.value?.id===context.workspaceId&&!isWorkspaceLoading.value)error.value=String(e)}
-}
-
-const dock=computed(()=>{ // ActionDock 门禁（SPEC-DM-006 §6.9 矩阵唯一出口）
-  const taskRunning=isWorkspaceLoading.value||isRestoreExecuting.value||Boolean(job.value&&!terminal(job.value.status));
-  const base={commandCount:commands.value.length,actions:draftActions.value,cursor:draftCursor.value,stale:draftStale.value,staleReasons:draftStaleReasons.value,corrupted:draftCorrupted.value,saveStatusText:saveStatusText.value,saveFailed:draftSaveFailed.value,previewing:isPreviewing.value,writesDisabled:taskRunning||repairWritesDisabled.value};
-  if(taskRunning)return{...base,canPreview:false,canWrite:false,writeDisabledReason:t("shell.dock.reasonTaskRunning"),writeNeedsModal:false};
-  if(job.value?.status==="NEEDS_REVIEW")return{...base,canPreview:false,canWrite:false,writeDisabledReason:t("shell.dock.reasonNeedsReview"),writeNeedsModal:false}; // 终态但需人工检查：dst_validation 是加载快照仅 SUCCEEDED 刷新，须独立锁定（§6.9 行）
-  const status=dstValidation.value?.status??"VALID";
-  if(status!=="VALID")return{...base,canPreview:false,canWrite:false,writeDisabledReason:status==="REPAIRED"?t("shell.dock.reasonRepaired"):status==="INVALID_UNRECOVERABLE"?t("shell.dock.reasonUnrecoverable"):t("shell.dock.reasonNeedsRepair"),writeNeedsModal:false};
-  if(!commands.value.length)return{...base,canPreview:false,canWrite:false,writeDisabledReason:t("shell.dock.reasonNoChanges"),writeNeedsModal:false};
-  const context=previewContext.value;
-  if(!context)return{...base,canPreview:true,canWrite:false,writeDisabledReason:t("shell.dock.reasonPreviewFirst"),writeNeedsModal:false};
-  if(context.workspaceId!==workspace.value?.id||context.baseRevisionId!==workspace.value?.revision_id)return{...base,canPreview:true,canWrite:false,writeDisabledReason:t("shell.dock.reasonPreviewStale"),writeNeedsModal:false};
-  if(context.result.executable===false)return{...base,canPreview:true,canWrite:false,writeDisabledReason:t("shell.dock.reasonNotExecutable"),writeNeedsModal:false};
-  return{...base,canPreview:true,canWrite:true,writeDisabledReason:"",writeNeedsModal:true};
-});
 
 // 壳层 props 分组（Task 11 Step 6 / 11a）：把子组件所需 props 组装成对象交给 WorkspaceShell。
 // 分组而非逐个传递，是为了让「键名写错」成为**编译错误**（对象字面量受 excess property 检查约束），
@@ -591,23 +387,6 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
   isRepairPreviewing:isRepairPreviewing.value,
   isRepairExecuting:isRepairExecuting.value,
 }));
-// write 不能捕获旧 context 后在保存继续时执行：guard 保存后 previewContext 已失效，必须重新预览
-async function write(){
-  await guardAllInputs(async()=>{await doWrite()});
-}
-async function doWrite(){
-  const context=previewContext.value;
-  if(!context||context.result.executable===false)return;
-  if(await confirmAction({title:t("shell.flows.publish.title"),message:t("shell.flows.publish.message"),impactLines:context.result.affected_files,confirmText:t("shell.flows.publish.confirm"),danger:true,requireCheckbox:true,reversibility:"irreversible"}))await execute();
-}
-// 全局快捷键（SPEC-DM-006 §7.1）：Ctrl+S 只在 writeNeedsModal 时开模态，否则给非阻断提示（Task 7 toast 前用既有 error）
-useHotkeys({
-  open:()=>{if(workspace.value){error.value=t("shell.errors.closeFirst");return}if(hasShell.value)void selectAndOpenDst();else(document.querySelector<HTMLInputElement>(".no-shell input"))?.focus()},
-  preview:()=>{if(dock.value.canPreview)void showPreview();else error.value=dock.value.writeDisabledReason||t("shell.dock.reasonPreviewUnavailable")},
-  write:()=>{if(dock.value.writeNeedsModal)void write();else error.value=dock.value.writeDisabledReason||t("shell.dock.reasonWriteUnavailable")},
-  undo:()=>undoDraft(),
-  redo:()=>redoDraft(),
-});
 
 </script>
 
