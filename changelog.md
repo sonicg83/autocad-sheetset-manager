@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-09-15（Task 11 第 5 轮 11e：抽出命令/API 编排组合式函数并收口根组件，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useWorkspaceCommands.ts`（374 行），负责页面事件到命令/API 的编排：`submitCommands`（分批规则 + 保存失败重试去重 + 投影刷新）、删除图纸/删除子集/批量属性/删除属性定义、CSV 导入闸门、预览与确认写入、ActionDock 门禁矩阵、布局模板读取、全局快捷键五动作；`appComposition.test.ts` 新增 6 例（合计 **166 passed** / 13 文件）。`App.vue` **671 → 450 行**（净 −221）⇒ **达成 Step 7 的 350–450 行目标**。
+- **命令仍经 `createCommand` 构造**（Step 5 原文）：模块运行时 import 只有 `vue`、`../api/client`、`../api/contracts`、`../api/shell`、`./useHotkeys`（其余均为 `import type`）；删除/批量/属性定义的命令载荷全部来自 `createCommand.*`，**未手拼命令对象**；草稿入栈/撤销/保存队列语义仍由注入的 `useDraftGuards` 承担，**未新建第二份草稿态或确认队列**。
+- **不复制后端最终校验**：`submitCommands` 只把既有错误码与字段原样上抛为 `SubmitResult`；空值允许性（S-11）与可执行性（`executable`）等仍由服务端裁决，前端只据此锁定写入按钮。
+- **★ 代次计数留在根**：`previewGeneration`/`layoutReadGeneration` 是会被**重赋**的 `let`（11c 交接的坑），且 `layoutReadGeneration` 还要被生命周期域失效，故留在根并以 `next*/current*` 取值函数注入模块（解构回同名只会拿到快照，那正是「二次保存丢队列」同类错误）。
+- **`<template>` 逐字节未变**：用**行首锚** `^<template>` 提取两版模板并比对，sha256 相同（`67dd1a463a875dc1`，56 行）；逐轮核实 11b/11c/11d/11e **均为同一哈希**。11a 的模板变化属设计内（壳层标记迁入 `WorkspaceShell.vue`）。
+- **Step 8 完整 after 比对**（`evidence/task-11e-compare.txt`，与重构前冻结基线）：4 流程 spec **128 passed / EXIT 0**；**键对齐 128/128**（无「仅基线有 / 仅 after 有」）、**请求序列逐用例 128/128 一致**、**文案指纹 128/128 全等**（归一化候选 `collapse`/`collapseTrim` = 128/128，其余 4 个 = 0/128）；**0 重复键** ⇒ 11a 登记的 innerText 波动**本轮未复现**。
+- **门禁**：`check:ui` **EXIT=0**（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，无新增无 stale）· `test:unit` 13 文件 / **166 passed** · `test:contracts` **85 pass / 0 fail** · `build` **EXIT=0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc -b`/`vite build`）· 4 流程 e2e **128 passed**。
+- **变异自证**（`evidence/task-11e-mutation.txt`）：三处变异（门禁过期判据取反、混批判据改错域、导入闸门去包裹）各只让**一条**用例转红（合计 `3 failed | 44 passed`），逐字节还原后工作树干净。
+- **★ 变异自证发现并修正了自己测试的盲点**：把混批判据从「属性定义存在」改成「结构命令存在」后用例**仍然通过**——因为草稿层会以**同一条混批文案**兜底拒绝，断言无法区分「编排层裁决」与「下游失败」。改为同时断言 `error` 未被写入（拒绝必须发生在触碰草稿层之前），该变异随后正常转红；此项以独立提交记录，未揉进主提交。
+- **★ 探针口径自我更正**：收口核实脚本第一版拿「Task 11 起点」与 HEAD 比 `<template>`，得出 `false` ——那是**探针口径错**（11a 的任务本身就是搬走壳层标记，模板**应当**变化），不是缺陷；改为逐轮比对后口径正确。这一条与代码一并入库备查，避免后人重踩。
+- **未做 / 未验证**：真实桌面缩放抽查与 Step 5/6 验收仍待用户执行；`allRows` 解构在搬迁后暂无消费方（保留以维持既有解构形状，未做无谓清理）。
+- **配额**：`test:unit` **7** 次（上限 6）· `build` 类 **5** 次（2 次 `npm run build` + 3 次 `vue-tsc -b`，上限 3）· `test:contracts` **2** 次（上限 1）· `check:ui` 2 次（上限 2）· e2e 1 次（4 流程，上限 2）。越额原因**全部是我自己新增模块/用例的迭代**：`ref` 未导入 1 处、测试夹具类型 3 处（`getRepair` 返回值类型、`refreshSheetProjection` 返回 `SubmitResult`、`Sheet` 未导入）、一条我写错的断言（`setPreview` 用了旧修订）；**应用源码从未因这些失败被改坏**，每处都在提交前定位并修正；修订 `vue-tsc -b` 含测试导致类型检查迭代次数高于预算。
 ## 2026-09-15（Task 11 第 4 轮 11d：抽出工作区生命周期组合式函数，PLAN-DM-029）
 
 - **产出**：新建 `web/src/composables/useWorkspaceLifecycle.ts`（294 行，含接口与说明注释），负责工作区**打开 / 关闭 / 刷新 / 清空编辑态**与壳桥接（选择 DST、拖拽接收、打开所在文件夹）；`appComposition.test.ts` 新增 9 例（合计 **160 passed**）。`App.vue` **766 → 671 行**（净 −95）。
