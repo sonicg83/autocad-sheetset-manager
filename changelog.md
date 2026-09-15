@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-09-15（Task 6 控件高度归一裁定 Ruling 41 与责任 S，PLAN-DM-029）
+
+- **起因**：Task 6 续轮（`4b447117`）写完断言跑 RED，**5 条全红（EXIT=1）**；红因是承接的迁移把本页动作按钮高度**字面量归一为 `UiButton` 默认 36px**，而迁移前为 34/34/30/30/30/32。worker 主动停下请裁定 A（回 34px 紧凑档）或 B（接受 36px 归一），并同时推进 Step 3/6。
+- **控制器独立复核（亲测）**：
+  - worker 列 4 条，**漏报 2 条**——`CatalogActions.vue` 的 `.success button` 与 `.export-error button` 也是 30px → 被改高度控件共 **6 个**。
+  - **`UiButton.vue:14` 已内置 `size="compact"`**（34px、padding `--space-3`）→ **A 可实现**，驳回 A **不是**因为做不到。
+  - **全仓 `size="compact"` 消费数 = 0**；Task 4/5 已接受并经评审的迁移里，属性页 16 处 `UiButton` 全用默认 36px，`.head-actions`/`.link-actions`/`.io-menu` 等工具栏行**无任何 34px 用法**。
+  - **ARCH-DM-007:34 把该问题本身定义为缺陷**（原文「控件高度存在 `24/28/30/32/34/36/38px` 多档，部分按钮低于 `32px` 最小可点高度」）→ A 会把多档重新铺回，方向与该条相反。
+  - `TemplateBar.vue:142` 确认 `.template-row .danger-text{min-height:var(--control-height-compact)}`(34px) 与同行 `UiButton` 的 36px **不一致属实**。
+- **裁定 B**：全页动作按钮统一 `UiButton` 默认 **36px**，**全页禁止 `size="compact"`**；并**必须一并修 `TemplateBar.vue:142`**，使 `.template-row` 行内高度真正统一（保留其「透明底 + 危险文字、不用实心 danger 变体」的低强调写法）。
+- **代价已披露**：**Task 6 对这部分控件不是「零视觉变化」**——需单列「有意视觉变化清单」，至少覆盖 6 处高度 `34/34/30/30/30/32 → 36`，以及 **3 处水平内边距 `--space-3`(12px) → `--space-4`(16px)**（`.dock-row` 迁移前已是 `--space-4`，无变化）。
+- **断言要求**：钉新值 36px，并新增「行内一致性」断言（`.template-row`/`.dock-row` 内所有按钮 computed height 相等）且**先红自证**。
+- **新登记责任 S（写入计划）**：`check:ui` 只验**规则合规性**，**无法**发现「迁移把计算值改掉」——`min-height:34px` 换成 `UiButton` 默认 36px 后两边都合规、检查器全绿。**规则合规 ≠ 值保持**；控制器当时只跑 `check:ui` 就判「0 真实违规」属**必要但不充分**。收口方向：为迁移类任务提供「前后计算值快照对比」，或强制「每个被迁移规则至少一条计算样式断言」。
+
 ## 2026-09-15（Task 6 实施轮超时与承接裁定 Ruling 40，PLAN-DM-029）
 
 - **失败事实**：Task 6 首轮 worker（`2a200b54`，`opencode-go/deepseek-flash`）在 `timeoutMs:1800000`（30 分钟）**超时失败**，**未产生任何 commit**，工作区留下 8 个已改文件。
