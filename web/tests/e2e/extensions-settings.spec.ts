@@ -187,6 +187,16 @@ test("闸门内按 Esc = 留在此处：只关闸门，不连带关闭设置窗�
   await page.getByRole("switch", {name: "停用 图纸目录"}).click();
   const guard = page.getByRole("dialog", {name: "未提交输入"});
   await expect(guard).toBeVisible();
+  // Tab 圈闭：永久断言（T9-3 转入项 1）。Task 9 把闸门的手写 onKeydown 换成 dialogFocus.ts 后
+  // 只用**临时探针**验证过并被删掉——「圈闭」从此没有回归网。这里补上：在闸门内连按 Tab，
+  // 焦点必须一直留在闸门内（原生模态的圈闭在尾→首回绕时有一拍落到 body）。
+  // 刻意**不**断言「关闭归还焦点」：原生 <dialog> 自带归还（Task 9 的变异 C 因此不会变红），
+  // 为该行为写断言会得到一条注定不敏感的钉子。
+  for (let step = 1; step <= 8; step++) {
+    await page.keyboard.press("Tab");
+    const insideGuard = await guard.evaluate((el) => el.contains(document.activeElement));
+    expect(insideGuard, `第 ${step} 次 Tab 后焦点应仍在闸门内`).toBe(true);
+  }
   await page.keyboard.press("Escape");
   // 原生模态的 cancel 只作用于最上层：闸门关闭（留在此处），设置窗口与编辑都还在
   await expect(guard).toBeHidden();
