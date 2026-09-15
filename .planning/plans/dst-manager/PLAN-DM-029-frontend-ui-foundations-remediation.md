@@ -882,6 +882,7 @@ Files（本轮）：
 - Modify: `web/tests/e2e/properties-workspace.spec.ts`
 - Modify: `web/tests/e2e/sheets-drafts.spec.ts`
 - Modify: `web/tests/e2e/sheets-navigation.spec.ts`
+- Modify: `web/scripts/ui-contract-exceptions.json`（**T11-1 补列**：本任务名下有 **2** 条 `explicit-button-type` 例外（均 `src/App.vue`），清理它们必须编辑该文件；而原 Files **未列** → 不补列则 T11-1(B) 的不变量 **16 → 14** 不可达）
 
 - [ ] **Step 1（责任清单）**：在测试注释中冻结 App 当前五类接线：打开/关闭/恢复，未提交输入与草稿门禁，页签/浮层/焦点导航，页面事件到命令/API 的编排，纯壳层渲染；记录每类迁移目标。
 - [ ] **Step 2（RED）**：用 composable 单测和既有 e2e 固定公开事件载荷、错误传播、工作区切换、草稿恢复、任务跳转与当前 tab；确认待建模块导入失败。
@@ -892,6 +893,36 @@ Files（本轮）：
 - [ ] **Step 7（根收敛）**：`App.vue` 只保留根装配、跨域连接和顶层渲染，目标 350–450 行；若超过 450 行，逐段说明为何必须留根，禁止为达行数制造无语义 helper。
 - [ ] **Step 8（验证）**：运行新增单测、四个列出的 e2e、全量 unit 与 build；比较重构前后 API 请求序列和用户可见文案无变化。
 - [ ] **Step 9（提交）**：commit：`拆分前端根组件跨域职责`。
+
+#### Task 11 控制器裁定（T11-1，派发前下达）
+
+侦察实测（`controller-task-baseline.mjs 11`）：Files 内条目 **2**（均 `src/App.vue` 的 `explicit-button-type`）；**孤儿 0**；裸值 **0**（本任务不涉及令牌）。`App.vue` 当前 **809 行 / 74 个顶层声明**，拆分目标 **350–450 行**。
+
+**(A) Files 补列 `web/scripts/ui-contract-exceptions.json`**（见上）：本任务名下有 2 条 `explicit-button-type` 例外（`App.vue` 的 `{{ $t("shell.workspace.resume") }}` / `restart` 两个按钮缺 `type="button"`）。
+- **注意指纹与搬迁的交互**：例外指纹含 `file` 字段——**若这两个按钮在拆分中移入新文件**（例如 `WorkspaceShell.vue`），则旧指纹会变成 **stale**，正确处置是：① 在新位置给按钮补上 `type="button"`；② **删除**旧条目（而不是把旧条目改指向新文件——目标是**例外清零**，不是搬家）。
+
+**(B) 收口不变量：16 → 14** ✓；`check:ui` 裸违规应为 **15 = 14 + 1 动态白名单**；**不得新增任何例外**。
+
+**(C) ★ 纯重构必须具备可核验的安全网（把 Step 8 具体化）**：Step 8 要求「比较重构前后 **API 请求序列** 和**用户可见文案**无变化」——这是本任务唯一能证明「行为未变」的手段，必须**先取基线、后比差异**：
+1. **重构前**：用临时探针（Playwright 监听 `page.on("request")`）跑完 Step 8 列出的 4 个 e2e 流程，记录**每个 `/api/…` 请求的方法 + 路径（含查询参数）+ 相对顺序**，存 `evidence/task-11-api-baseline.txt`；
+2. **重构后**：同一探针、同一流程重录，存 `evidence/task-11-api-after.txt`；
+3. **逐行比对并报告差异**（预期：**零差异**；若有差异 → **停下报告**，不得自行解释为等价）。
+4. 用户可见文案：同样在前后各取一次关键路由/状态的可见文本快照并比对（或断言同一组 i18n 键渲染一致）。
+→ 探针文件用完即删（**不得留在提交树里**，先例：Task 7/8 的探针残留与 Task 10 的探针均已清理）。
+
+**(D) Step 7 的行数目标**：`809 → 350–450` 行 ✓；若超 450，按计划要求**逐段说明为何必须留根**；**严格遵守计划的禁令：不得为达行数制造无语义 helper** ✓。
+
+**(E) Step 6 的「纯展示」必须**机械证明****：`WorkspaceShell.vue` **不得**导入 API client / draft helpers / 业务 composable。请**实际 grep 它的 import 清单**并把结果（以及为何合规）写进报告——`check:ui` **不检查这个**，没人 grep 就等于没人验 ✓。
+
+**(F) Step 4 的「组合而非复制」也必须证明**：`useDraftGuards`/`useShellNavigation` 必须**组合**既有 `useShellTabs`/`useConfirm`/`useHotkeys`，**不得复制其职责** → 报告里给出「新模块导入了它们」+「未重新实现（例如无新的 tab 列表 state / 无新的确认队列）」的证据。
+
+**(G) 公开契约不变（纯重构）**：子组件的 props/emits、对外事件载荷、错误传播路径、工作区切换与草稿恢复顺序**均不得变**；若发现必须改变才能完成拆分 → **停下报告**（先例：Task 9 Step 3、Task 10 Step 4）。
+
+**(H) 运行纪律**：**每完成一步立即提交**（9 个 Step → 约 9 个提交；本任务是本计划**最后一个大重构**，中途回退成本最高）；**RED 先行**（Step 2 本就是 RED）；对「迁移前后都通过」的断言抽 **≥2 条做变异自证**（证据 `evidence/task-11-mutation.txt`）；**关键值用绝对值锚**，不要写「用令牌断言令牌」。
+- 配额：`check:ui` ≤3、**e2e ≤4**（仅 Step 8 列出的 4 个 spec：`main`、`properties-workspace`、`sheets-drafts`、`sheets-navigation`；但上述探针需各跑前/后一遍 → 允许 4+4）、`test:unit` ≤3（含全量）、`test:contracts` ≤1、`build` ≤1。**禁跑全量 e2e**（那是 Task 12 的事）。
+- **禁触**：除 Files 外的任何源码文件（尤其 `web/src/components/ui/**`、`web/src/styles/**`、其它 composable——**只许导入，不许改**）；`.planning/**`；`changelog.md`；`.superpowers/**`（只写报告与证据）；`src/dst_manager/**`。
+- **禁止**改公开 props/emits、API 路径/载荷、i18n key、错误码、序列化结构或用户流程；**禁止**用 `calc()/clamp()/min()/max()` 包裹常量绕过 `raw-visual-value`。
+- **遇冲突停下报告，不得自行放宽。** 不要派生子代理。**本任务无用户截图人工门禁**。
 
 ## 阶段 5：验收、文档与关闭
 
