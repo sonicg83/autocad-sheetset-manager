@@ -16,7 +16,7 @@ import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {after, describe, test} from "node:test";
 
-import {collectUiContractViolations, formatViolation, runCli} from "./check-ui-contracts.mjs";
+import {collectUiContractViolations, DEFAULT_EXCEPTIONS_FILE, formatViolation, runCli} from "./check-ui-contracts.mjs";
 import {NON_EXEMPTIBLE_RULES} from "./ui-contracts/types.mjs";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -888,6 +888,41 @@ describe("棘轮：例外登记与陈旧例外", () => {
     });
     const violation = only(violations, "invalid-exception-entry");
     assert.match(violation.message, /reason/);
+  });
+
+  test("例外条目不得豁免例外文件自身的配置错误（否则棘轮无法自我纠错）", () => {
+    const files = {
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Legacy.vue": `<template><button @click="go">前往</button></template>\n`,
+    };
+    const root = fixture(files);
+    // ① 先制造一个真实的配置类违规：缺 reason/expiresWith 的条目。
+    const broken = {rule: "explicit-button-type", file: "src/components/Legacy.vue", fingerprint: "x"};
+    const first = collectUiContractViolations({root, exceptions: {exceptions: [broken], dynamicVariables: []}});
+    const target = first.find((violation) => violation.rule === "invalid-exception-entry");
+    assert.ok(target, "夹具应产出配置类违规");
+    // 前提：配置类违规的 `file` 恒为例外文件自身——正因如此，它才可能被一条例外吃掉。
+    assert.equal(target.file, DEFAULT_EXCEPTIONS_FILE);
+    // ② 用该配置违规自己的指纹登记一条"豁免自身配置错误"的条目（字段全填，只差被拒绝）。
+    const selfExemption = {
+      rule: target.rule,
+      file: target.file,
+      fingerprint: target.fingerprint,
+      reason: "尝试把例外表自身的配置错误加白",
+      expiresWith: "PLAN-DM-029 Task 12",
+    };
+    const second = collectUiContractViolations({
+      root,
+      exceptions: {exceptions: [broken, selfExemption], dynamicVariables: []},
+    });
+    // ③ 该条目必须被拒绝……
+    const messages = second.filter((violation) => violation.rule === "invalid-exception-entry").map((violation) => violation.message);
+    assert.ok(messages.some((message) => /例外文件自身/.test(message)), `应拒绝豁免例外文件自身的条目，实际消息：${messages.join(" / ")}`);
+    // ④ ……且底层配置违规没有被掩盖（条目被拒后指纹没有进登记表）。
+    assert.ok(
+      second.some((violation) => violation.fingerprint === target.fingerprint),
+      "底层配置违规必须仍然报出",
+    );
   });
 
   test("指纹含规则、文件与稳定语义，不含行号", () => {

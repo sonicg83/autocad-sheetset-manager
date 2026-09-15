@@ -178,6 +178,20 @@ export function collectUiContractViolations(options = {}) {
       violations.push(configViolation(`硬门禁规则不允许登记例外：${fingerprintRule}`, `non-exemptible-${fingerprintRule}-${entry.fingerprint}`));
       continue;
     }
+    // 例外表不得豁免「关于例外文件自身」的配置错误（Task 2 收口责任 C②）：配置类违规
+    // （`invalid-exception-entry`、`stale-exception`）的 `file` 恒为例外文件自身，而它们的规则名
+    // 不在 `NON_EXEMPTIBLE_RULES` 里。因此若只看规则名，就能再登一条条目把它自己的配置错误吃掉——
+    // 棘轮将失去自我纠错能力（实测：自豁免条目会连同底层配置违规一起消失）。真正该挡住
+    // 这种情况的不是规则名，而是**被指向的文件**：例外表的错误永远不由例外表自己豁免。
+    if (normalizeExceptionFile(entry.file) === DEFAULT_EXCEPTIONS_FILE) {
+      violations.push(
+        configViolation(
+          `例外条目不得豁免例外文件自身的配置错误：${entry.file}`,
+          `exceptions-file-self-exemption-${entry.fingerprint}`,
+        ),
+      );
+      continue;
+    }
     // 重复指纹会让后写入的条目静默生效、前一条永远不再命中，属于棘轮里的黑洞，必须拒绝。
     if (registered.has(entry.fingerprint)) {
       violations.push(configViolation(`例外指纹重复登记：${entry.fingerprint}`, `duplicate-fingerprint-${entry.fingerprint}`));
@@ -241,6 +255,12 @@ export function collectUiContractViolations(options = {}) {
   violations.push(...collectAssetViolations({root, files, emitFor: createEmitter}));
 
   return applyRatchet(violations, registered).sort(compareViolations);
+}
+
+/** 归一化例外条目里的文件路径，仅用于与例外文件自身比较：统一分隔符、去掉 `./` 与可选的 `web/` 前缀
+ * （仓库里两种写法都存在：`src/App.vue` 与 `web/src/App.vue`）。 */
+function normalizeExceptionFile(file) {
+  return String(file).split("\\").join("/").replace(/^\.\//, "").replace(/^web\//, "");
 }
 
 function configViolation(message, semantic, rule = RULE.invalidExceptionEntry) {
