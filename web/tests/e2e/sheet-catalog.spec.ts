@@ -1262,7 +1262,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
   }
 
   // 可见 label（T6-5）：仅 aria-label 不算——≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签。
-  // 可见 label 关联（T6-5）：不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
+  // 实现上不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
   // 来自模块级计数器（见 instanceId.ts），id 按挂载顺序分配而非行序，控件重挂载就会换 id，
   // 两次往返之间发生重挂载即假失败（本用例曾因此 flaky）。这里改用 Playwright 自身的可访问
   // 名称计算 + 独立定位可见 label 元素，两者都不依赖 id，也不依赖 getByLabel 命中的是哪个节点。
@@ -1381,6 +1381,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     await expectToken(page, header1, "font-size", "--input-font-size");
     await expectToken(page, header1, "border-top-left-radius", "--radius-md");
     const query = page.getByLabel("搜索可用字段");
+    // 字段搜索框与属性页同惯例：type="search" → role searchbox（属性页 spec 也按角色钉死，
+    // 如 properties-definitions.spec.ts:106 / properties-buffer.spec.ts:72）。
+    await expect(page.getByRole("searchbox", {name: "搜索可用字段"}), "字段搜索框应为 searchbox 角色").toBeVisible();
     await expectVisibleLabel(page, query, "搜索可用字段");
     await expectToken(page, query, "height", "--input-height");
   });
