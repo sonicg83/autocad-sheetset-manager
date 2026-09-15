@@ -782,6 +782,9 @@ Files（本轮）：
 - Modify: `web/src/components/ui/UnsavedInputDialog.vue`
 - Modify: `web/src/components/properties/PropertyValueCompareDialog.vue`
 - Modify: `web/src/components/settings/SettingsDialog.vue`
+- Modify: `web/src/components/ui/dialogFocus.ts`（**T10-1 补列**：Step 4 明写要「由业务组件决定 Escape 是否允许关闭（`dialogFocus.ts` 另可选传 …）」——该文件**不在原 Files 内**。它当前已支持 `initialFocus`/`returnFocus` 且**刻意不决定可关闭性**，被 `ConfirmModal`/`UnsavedInputDialog`/`TaskOverlay` 三个消费者 + 21.7K 单测依赖 → **仅在 Step 4 确实需要时才改**，且**必须保持现有消费者全绿**）
+- Modify: `web/src/components/ui/dialogFocus.test.ts`（同上；改工具必须同步其单测）
+- Modify: `web/tests/e2e/extensions-settings.spec.ts`（**T10-1 补列**：T9-3 转入项 1 要求给**网关的 Tab 圈闭**补**永久**断言，而其 spec 不在原 Files 内）
 - Modify: `web/scripts/ui-contract-exceptions.json`
 
 - [ ] **Step 1（RED：树）**：先写 roving tabindex 测试：容器不是额外 Tab 停靠点、仅活动 `treeitem` 为 0、其余为 -1；方向键、Home/End、展开/收起、激活、树更新后焦点恢复均失败后再实现。
@@ -791,6 +794,34 @@ Files（本轮）：
 - [ ] **Step 5（全仓语义扫描）**：运行 `rtk npm --prefix web run check:ui`，并由 `explicit-button-type`、`visible-input-label`、`icon-button-name` 三条规则完成全仓扫描；所有真按钮显式 `button` 或 `submit`，所有搜索输入具有可见弱化 label，所有图标按钮有可读名称。同时确认 `<aside>` 内不再用 `[hidden]` 作为隐藏手段：`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会压过 UA 的 `[hidden]{display:none}`，浮层靠自己的 `.task-overlay [hidden]{display:none!important}` 兜底而散落元素没有（控制器实测证据见 Task 4 报告；已登记 Task 12 收口责任 M）。
 - [ ] **Step 6（GREEN）**：运行 SheetTree 单测、`sheets-navigation.spec.ts`、`sheets-layout.spec.ts`、设置/属性模态相关 spec。
 - [ ] **Step 7（提交）**：commit：`收口图纸树与模态无障碍模型`。
+
+#### Task 10 控制器裁定（T10-1，派发前下达）
+
+侦察实测（`controller-task-baseline.mjs 10`）：Files 内条目 **10**（`SheetTree.vue` **9** + `SettingsDialog.vue` 1）；规则 `raw-visual-value` 8 + `unicode-structure-icon` 2；**孤儿 0**；8 条裸值去重后 **4 个值**（16px、13px、**11px 无令牌**、12px）。
+
+**(A) 收口不变量：25 → 16**。Task 10 清退 **`SheetTree.vue` 的 9 条**；**`SettingsDialog.vue` 的 `.dlg-head h2 font-size:16px` 必须保留**（离刻度 → 责任 K，**不得改值**）。`check:ui` 裸违规应为 **17 = 16 + 1 动态白名单**。
+
+**(B) `SheetTree.vue` 9 条的处置（逐条，均已核实）**：
+- **2 条 Unicode 图标（`▾` / `▸`）→ 迁到 `UiIcon`**（`UiIconName` 联合类型**已含** `chevron-down` / `chevron-right`，无需扩联合类型）→ 迁完**删这两条例外** ✓
+- **4 条图标盒子 `width/height:16px`**（`.chevron` ×2 + `.chevron-placeholder` ×2）→ **`--icon-size-md`(16px)** ✓（语义正确：图标尺寸）。**禁止**借 `--space-4`（间距 ✗）。
+- **`.chevron font-size:11px` → 随字形消失**：图标改为 SVG 后 font-size 不再影响尺寸 → **不要为 11px 建令牌、也不要保留例外**（11px 是离刻度值且政策禁新增字号令牌；此例的正确结局是**消失**）。
+- **`.node-count font-size:12px`** → `--font-caption` ✓；**`.sheet-tree [role=treeitem] font-size:13px`** → `--font-label` ✓。
+
+**(C) Step 5 的三条规则扫描：`icon-button-name` 确实存在**（`scripts/ui-contracts/types.mjs` 的 `RULE.iconButtonName = "icon-button-name"`，用于 `check-ui-contracts.mjs:404`）✓ → Step 5 **可实现**。预期终态：`explicit-button-type` **2**（均为 `App.vue`，到期 Task 11）、`visible-input-label` **2**（`SheetTable.vue` 复选框，到期「表格无障碍 Spec 修订」）、**`icon-button-name` 0**。→ **若有新增违规，必须修实现而不是登记例外**（不得新增例外）。
+
+**(D) Steps 1–2（roving tabindex）按计划原意执行**：容器**不是**额外 Tab 停靠点；仅活动 `treeitem` 的 tabindex 为 **0**、其余为 **-1**；方向键（上/下/左/右）、`Home`/`End`、展开/收起、激活均需覆盖；**移除** `treeitem` 内常驻的嵌套按钮并把展开行为合并到树项的统一点击/键盘模型；**保留现有选中与定位事件的载体**（不得改公开 emit 契约）。单测用 **`Create: SheetTree.test.ts`**（计划已列）。
+
+**(E) ★ 跨已关闭任务的文件编辑（本任务的特殊风险）**：Files 里的 4 个模态中，`PropertyValueCompareDialog.vue` 属 **Task 5（已关闭）**、`SettingsDialog.vue` 属 **Task 8（已关闭）**、`ConfirmModal.vue`/`UnsavedInputDialog.vue` 属 **Task 9（已关闭）**。Files 已授权编辑，但**约束是**：
+1. **不得改它们的公开 props/emits/插槽契约**；
+2. 改动**只能是无障碍/焦点模型层面**，不得顺带改视觉或业务行为；
+3. **它们现有的测试必须保持绿**；若某条因语义改进而需调整 → **停下报告**（先例：Task 9 Step 3）。
+4. `dialogFocus.ts` 的任何改动必须让 `ConfirmModal`/`UnsavedInputDialog`/`TaskOverlay` **三个现有消费者 + 其 21.7K 单测**保持绿。
+
+**(F) T9-3 转入项 1（必须做）**：给**网关的 Tab 圈闭**补**永久**断言（落点 `extensions-settings.spec.ts`，已由 T10-1 补入 Files）。Task 9 把它的手写 `onKeydown` 换成共享工具后只用**临时探针**验证过就删了探针——**不能只留探针记忆**。同时注意：Task 9 的变异 **C（网关 `returnFocus`→null）不会变红**（原生 `<dialog>` 自己归还焦点）→ **请勿**为它写一条注定不敏感的断言；要断言的是**Tab 圈闭行为**（在网关内按 Tab 多次后焦点仍在对话框内）。
+
+**(G) T9-3 转入项 2（必须查清并定调）**：**重载/恢复一个进行中的 job 后，客户端是否会重新登记该 job 使其 SSE 事件被接受？** 已知「对未知 job id 的事件会被忽略」很可能属设计。请查清并给出**结论 + 依据**；若发现是**缺陷**（如重载后 job 永远不再更新）→ **停下报告并登记责任**，不要靠测试适配掩盖。
+
+**(H) 运行纪律**：**每完成一步立即提交**（简体中文、动词开头）；**RED 先行**（Steps 1/3 本就是 RED 步）；对「迁移前后都通过」的断言抽 **≥2 条做变异自证**；**关键尺寸/颜色用绝对值锚**，不要写「用令牌断言令牌」；**不得新增例外**（除本裁定明确的保留项）。配额：`check:ui` ≤3、e2e ≤3（`sheets-navigation` + `sheets-layout` + `extensions-settings`，加设置/属性模态相关 spec）、`test:unit` ≤2、`test:contracts` ≤1、`build` ≤1；**禁跑全量 e2e**。若本轮确实生成了持久证据（Step 里未要求），沿用既有落盘约定、**不自创路径、不加 env 开关**（T7-4 先例）。
 
 ### Task 11: 拆分 App.vue 并保持跨域接线不变
 

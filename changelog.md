@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（Task 10 派发前侦察与 T10-1 裁定，PLAN-DM-029）
+
+- **侦察工具**：`controller-task-baseline.mjs 10`。实测：Files 内条目 **10**（`SheetTree.vue` **9** + `SettingsDialog.vue` 1）；规则 `raw-visual-value` 8 + `unicode-structure-icon` 2；**孤儿 0**；8 条裸值去重后 **4 个值**（16px、13px、**11px 无令牌**、12px）。
+- **★ 预先拆掉两处 Files 缺口**（正是 T7-1/T9-1(A) 的同型风险）：
+  - Step 4 明写要讨论 `dialogFocus.ts` 的「另可选传 …」，但**该文件不在原 Files 内** → **补列 `dialogFocus.ts` + `dialogFocus.test.ts`**（仅当 Step 4 确实需要才改；它已被 `ConfirmModal`/`UnsavedInputDialog`/`TaskOverlay` **三个消费者 + 21.7K 单测**依赖，改动必须保持全绿）。
+  - T9-3 转入项 1 要求给**网关的 Tab 圈闭**补永久断言，而**其 spec 不在原 Files 内** → **补列 `extensions-settings.spec.ts`**。
+- **核实「Step 5 引用的规则存在」**：`icon-button-name` **确实存在**（`scripts/ui-contracts/types.mjs` 的 `RULE.iconButtonName`，用于 `check-ui-contracts.mjs:404`）→ Step 5 **可实现**（控制器的初始怀疑被实读源码推翻）。
+- **T10-1 裁定要点**：(A) 不变量 **25 → 16**（清退 SheetTree 的 9 条；**保留** `SettingsDialog` 的 16px → 责任 K），`check:ui` 裸违规 **17**；(B) SheetTree 9 条**逐条**处置——`▾`/`▸` 迁 `UiIcon`（联合类型**已含** `chevron-down`/`chevron-right`）、4 条 16px 图标盒子 → `--icon-size-md`（**禁借** `--space-4`）、**`.chevron font-size:11px` 随字形消失**（不建令牌、不留例外——离刻度值的正确结局是消失）、12px→`--font-caption`、13px→`--font-label`；(C) Step 5 三条规则的**预期终态**（`explicit-button-type` 2 属 Task 11、`visible-input-label` 2 属 SheetTable、`icon-button-name` 0），**新增违规必须修实现而非登记例外**；(D) Steps 1–2 按原意（容器不是额外 Tab 停靠点、仅活动 treeitem 为 0、方向键/Home/End/展开收起/激活、保留 emit 契约）；(E) **跨已关闭任务的文件编辑约束**（4 个模态分属 Task 5/8/9）：**不得改公开契约**、**只改无障碍/焦点层面**、**既有测试必须保绿**，需改测试则**停下报告**；(F) T9-3 转入项 1 的**正确断言对象**是 Tab 圈闭行为（**不要**为 Task 9 的变异 C 写一条注定不敏感的断言）；(G) T9-3 转入项 2（重载/恢复进行中 job 后是否重新登记）需**查清并定调**，若属缺陷**停下报告并登记**；(H) 运行纪律（每步提交、RED 先行、≥2 条变异自证、绝对值锚、配额）。
+- **流程自查**：本次裁定与 changelog **同批提交**（吸取 Task 9 只入计划/ledger 而漏 changelog 的教训）。
+
 ## 2026-09-15（Task 9 全周期：裁定、三轮实施、评审通过与关闭，PLAN-DM-029）
 
 > **补记说明**：本任务跨三轮实施，裁定与收口当时只入计划/ledger，**未同步 changelog**（违反本仓「每次修改都要更新根 `changelog.md`」的约定）。此处一次补齐，并已记入流程教训。
