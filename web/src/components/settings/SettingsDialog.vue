@@ -15,6 +15,7 @@ import {MAX_UNNUMBERED_KEYWORD_CHARS,MAX_UNNUMBERED_KEYWORDS} from "../../api/se
 import {getShellBridge,selectSettingsPath,shellReady} from "../../api/shell";
 import {useConfirm} from "../../composables/useConfirm";
 import {useSettings} from "../../composables/useSettings";
+import {useDialogFocus} from "../ui/dialogFocus";
 import type {ExtensionsPanel} from "../../composables/useExtensions";
 import AboutSection from "./AboutSection.vue";
 import ConfirmModal from "../ui/ConfirmModal.vue";
@@ -73,6 +74,24 @@ watch(()=>props.open,async open=>{
   }
 });
 
+// 焦点工具接在**原生生命周期之后**（两个 watch 都是 post flush，回调按注册顺序执行）：
+// 打开时要先 `showModal()` 才能看到 top layer 里的可聚焦元素，关闭时要先 `close()` 才能归还焦点。
+// 分工（PLAN-DM-029 Task 10 Step 4）：
+// · **Tab 圈闭**归工具（原先手写的那份已删）；它 @keydown 绑在 <dialog> 上，与原先一致。
+//   原先多出的 `!dialog.contains(active)` 分支在 <dialog> 绑定的 keydown 下**不可达**：
+//   焦点在对话框外时事件根本不会冒泡到本元素——该分支是防御性死代码，删去无行为差异。
+// · **初始焦点**仍由 `loadSettings()` 里的 `focusFirstField()` 负责：落点是**数据相关**的
+//   （要等设置快照渲染出 `.panel input` 才能在），工具只在 open 翻转那一刻跑，无法代替。
+// · **Escape** 仍走原生 `@cancel`（`onCancel`）：平台负责「只作用于最上层」，且子视图内
+//   的 Esc 要退化为「返回扩展列表」——所以**不**传 `onEscape`（与 UnsavedInputDialog 同一口径）。
+// · 归还焦点仍由 `close()` 显式完成（SC-09），`returnFocus` 只是把同一落点交给工具的关闭分支。
+const {onDialogKeydown}=useDialogFocus({
+  open:()=>props.open,
+  container:dialogEl,
+  initialFocus:()=>dialogEl.value,
+  returnFocus:()=>opener,
+});
+
 async function loadSettings(){
   loadFailed.value=false;
   try{
@@ -113,27 +132,6 @@ function onBackdropClick(event:MouseEvent){
   // SC-17：子视图内遮罩点击与 Esc 同一分级（等价于返回扩展列表）
   if(configExtension.value){void configHost.value?.back();return}
   void tryClose();
-}
-
-// Tab 焦点圈闭（SPEC-DM-013 §5.3 / PLAN-DM-021 Task 11）：showModal 原生圈闭在
-// 尾元素→首元素回绕时有一拍落到 body 的 Chromium 缺口，这里显式接住 Tab/Shift+Tab 回绕
-function onDialogKeydown(event:KeyboardEvent){
-  if(event.key!=="Tab")return;
-  const dialog=dialogEl.value;
-  if(!dialog)return;
-  const focusables=Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled]),input:not([disabled]),select,textarea,a[href],[tabindex]:not([tabindex=\"-1\"])"))
-    .filter(el=>el.offsetWidth>0||el.offsetHeight>0||el===document.activeElement);
-  if(!focusables.length)return;
-  const first=focusables[0];
-  const last=focusables[focusables.length-1];
-  const active=document.activeElement;
-  if(!dialog.contains(active)||(active===last&&!event.shiftKey)){
-    event.preventDefault();
-    first.focus();
-  }else if(active===first&&event.shiftKey){
-    event.preventDefault();
-    last.focus();
-  }
 }
 
 function onCancel(event:Event){
