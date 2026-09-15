@@ -99,6 +99,15 @@
     --catalog-field-browser-max-height:235px;
     --catalog-template-select-min-width:220px;
     --catalog-column-expression-min-height:52px;
+    --sheet-columns-panel-width:380px;
+    --sheet-search-width:260px;
+    --sheet-property-search-width:180px;
+    --sheet-bulk-hint-max-width:220px;
+    --sheet-table-window-min-height:130px;
+    --sheet-title-max-width:280px;
+    --sheet-table-row-height:44px;
+    --sheet-table-line-height:20px;
+    --sheet-status-radius:10px;
   }
 
   html[data-theme="dark"]{

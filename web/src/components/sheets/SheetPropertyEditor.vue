@@ -103,25 +103,25 @@ watch(() => hasError.value, (now) => {
 .sheet-property-editor{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);background:var(--color-info-bg)}
 .editor-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .editor-head h3{margin:0;font-size:15px}
-.editor-head-hint{color:var(--color-text-secondary);font-size:12px}
-.sheet-property-editor input{height:38px;min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+.editor-head-hint{color:var(--color-text-secondary);font-size:var(--font-caption)}
+.sheet-property-editor input{height:var(--control-height-form);min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
 .sheet-property-editor input:hover:not(:disabled){border-color:var(--color-accent)}
 .sheet-property-editor input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
-.editor-search{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px}
-.editor-search input{width:180px}
+.editor-search{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:var(--font-label)}
+.editor-search input{width:var(--sheet-property-search-width)}
 /* 桌面端三列；窄视口逐级收为两列和一列。 */
 .editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
 .prop-field{display:flex;flex-direction:column;gap:4px}
-.prop-field label{font-size:13px;color:var(--color-text-secondary)}
+.prop-field label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .prop-field input{width:100%;box-sizing:border-box}
 .prop-field.invalid input{border-color:var(--color-danger)}
-.field-error{color:var(--color-danger);font-size:12px}
+.field-error{color:var(--color-danger);font-size:var(--font-caption)}
 .error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);border-radius:var(--radius-md,8px);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);outline:none}
 .error-summary:focus-visible{outline:2px solid var(--color-focus)}
 .summary-title{font-weight:600;margin:0;color:var(--color-danger)}
-.summary-message{margin:0;font-size:13px}
-.summary-jump{align-self:flex-start;color:var(--color-danger);background:none;border:none;cursor:pointer;font-size:13px;padding:0;text-decoration:underline;text-align:left}
-.editor-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px;border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
+.summary-message{margin:0;font-size:var(--font-label)}
+.summary-jump{align-self:flex-start;color:var(--color-danger);background:none;border:none;cursor:pointer;font-size:var(--font-label);padding:0;text-decoration:underline;text-align:left}
+.editor-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:var(--font-label);border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
 .editor-counts{color:var(--color-text-secondary)}
 .editor-status{color:var(--color-text-secondary)}
 .editor-spacer{flex:1}

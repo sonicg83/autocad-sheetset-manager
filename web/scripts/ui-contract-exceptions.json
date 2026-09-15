@@ -598,338 +598,30 @@
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-toggle font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-panel width:380px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-hex-color",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-hex-color|src/components/sheets/ColumnSettings.vue|.cols-panel #17203333|1",
-      "reason": "迁移前既有的未登记十六进制色，待改为语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-title font-size:15px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-close font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-hint font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-error font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-search font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-option font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-option.locked small font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-option small.cols-new font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-section font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/ColumnSettings.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/ColumnSettings.vue|.cols-reset font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetOperationForm.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-head h3 font-size:15px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-head-hint font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-field font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.operation-form :is(input:not([type=\"checkbox\"]),select,textarea) height:38px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.operation-form button min-height:36px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-field .value font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.derived font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.notice font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.error font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.error-summary font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetOperationForm.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetOperationForm.vue|.form-footer font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetPropertyEditor.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-head h3 font-size:15px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-head-hint font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.sheet-property-editor input height:38px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-search font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-search input width:180px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.prop-field label font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.field-error font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.summary-message font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.summary-jump font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetPropertyEditor.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetPropertyEditor.vue|.editor-footer font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "unicode-structure-icon",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "unicode-structure-icon|src/components/sheets/SheetToolbar.vue|✕|1",
-      "reason": "迁移前既有 Unicode 结构图标；图纸目录 ↑/↓/✕ 为 PLAN-DM-023 已批准临时例外",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "raw-visual-value",
       "file": "src/components/sheets/SheetToolbar.vue",
       "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.range-title font-size:17px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.counts font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.operations button,.filter-toggle,:deep(.cols-toggle),.selection-bar button height:34px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.operations button,.filter-toggle,:deep(.cols-toggle),.selection-bar button min-height:34px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.operations button,.filter-toggle,:deep(.cols-toggle),.selection-bar button font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.toolbar-filters font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.search-box input width:260px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.sheets-toolbar :is(input:not([type=\"checkbox\"]),select) height:38px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.chip border-radius:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.chip font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.chip-clear font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.bulk-hint font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/sheets/SheetToolbar.vue",
-      "fingerprint": "raw-visual-value|src/components/sheets/SheetToolbar.vue|.bulk-hint max-width:220px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "字号 15px/17px 在语义层无值等值的可借令牌，且本计划禁止新增字号令牌（T6-3/Ruling 38）→ 作为显式例外保留，交责任 K 在 Task 12 统一裁决字号阶。",
+      "expiresWith": "下一次字号阶修订（责任 K，Task 12）"
     },
     {
       "rule": "unicode-structure-icon",
@@ -998,99 +690,15 @@
       "rule": "visible-input-label",
       "file": "src/components/SheetTable.vue",
       "fingerprint": "visible-input-label|src/components/SheetTable.vue|input:checkbox:|1",
-      "reason": "迁移前既有输入缺少可见 label",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "表格行选择/全选复选框按数据表无障碍惯例由列头承担可见标签，检查器只识别 <label> 包裹或 label[for] 关联、看不到 <th> 表头模式；可访问名称已由 aria-label 提供（sheets.table.selectRowAria）。",
+      "expiresWith": "下一次表格无障碍 Spec 修订"
     },
     {
       "rule": "visible-input-label",
       "file": "src/components/SheetTable.vue",
       "fingerprint": "visible-input-label|src/components/SheetTable.vue|input:checkbox:|2",
-      "reason": "迁移前既有输入缺少可见 label",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "explicit-button-type",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "explicit-button-type|src/components/SheetTable.vue|{{ row.subset.display_name }}|1",
-      "reason": "迁移前既有按钮未显式声明 type，行为不变",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.sheet-table-window min-height:130px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|table font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|th,td height:44px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|th,td line-height:20px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.title-text max-width:280px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.mono font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.status border-radius:10px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.status font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.danger-link font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.diag-link font-size:12px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/components/SheetTable.vue",
-      "fingerprint": "raw-visual-value|src/components/SheetTable.vue|.link-button font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
+      "reason": "表格行选择/全选复选框按数据表无障碍惯例由列头承担可见标签，检查器只识别 <label> 包裹或 label[for] 关联、看不到 <th> 表头模式；可访问名称已由 aria-label 提供（sheets.table.selectRowAria）。",
+      "expiresWith": "下一次表格无障碍 Spec 修订"
     },
     {
       "rule": "raw-visual-value",
@@ -1198,27 +806,6 @@
       "expiresWith": "PLAN-DM-029 Task 10"
     },
     {
-      "rule": "raw-visual-value",
-      "file": "src/views/SheetsView.vue",
-      "fingerprint": "raw-visual-value|src/views/SheetsView.vue|.tree-root font-size:14px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/SheetsView.vue",
-      "fingerprint": "raw-visual-value|src/views/SheetsView.vue|.notice font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
-      "rule": "raw-visual-value",
-      "file": "src/views/SheetsView.vue",
-      "fingerprint": "raw-visual-value|src/views/SheetsView.vue|.tree-drawer-toggle font-size:13px|1",
-      "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
-      "expiresWith": "PLAN-DM-029 Task 7"
-    },
-    {
       "rule": "visible-input-label",
       "file": "src/views/WelcomeView.vue",
       "fingerprint": "visible-input-label|src/views/WelcomeView.vue|input:text:path|1",
@@ -1301,6 +888,13 @@
       "fingerprint": "raw-visual-value|src/views/WelcomeView.vue|.welcome-card .primary font-size:14px|1",
       "reason": "迁移前既有的裸字号/尺寸（宽高家族）/圆角，待该页面统一消费语义令牌后清退",
       "expiresWith": "PLAN-DM-029 Task 10"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/sheets/SheetToolbar.vue",
+      "fingerprint": "unicode-structure-icon|src/components/sheets/SheetToolbar.vue|✕|1",
+      "reason": "条件标签的清除按钮（chip-clear）保留 Unicode ✕。PLAN-DM-029 Task 7 Step 3 复核四条判据：① 可点面积不达标（padding:0 + 12px 字号，约 12×12px）——这是保留而非迁移的主因；② 可访问名称已具备（aria-label=sheets.toolbar.chips.*Clear）；③ 原生 button 且已显式 type=\"button\"，键盘可聚焦可激活；④ 迁移到 UiIconButton 会引入 36×36 图标按钮，撑破 12px 的标签胶囊布局（行内小控件），视觉劣化。故保留原字符，到期条件改为下一次图纸页视觉 Spec 修订，与责任 R（密集行内小控件 36px 不可达）同类。",
+      "expiresWith": "下一次图纸页视觉 Spec 修订"
     }
   ],
   "dynamicVariables": [

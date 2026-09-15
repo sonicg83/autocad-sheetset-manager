@@ -8,6 +8,7 @@ import {useI18n} from "vue-i18n";
 import type {BuiltinPrefField, SheetColumnOption} from "../../composables/useSheetColumns";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "../../composables/useSheetsWorkspace";
 import ColumnSettings from "./ColumnSettings.vue";
+import UiButton from "../ui/UiButton.vue";
 
 export type OperationKind = "rename" | "insert-sheet" | "insert-subset";
 
@@ -122,9 +123,9 @@ const conditionChips = computed(() => {
       </div>
       <div class="operations">
         <!-- 三类操作入口常驻显示（任务 6）：同一表单已打开时点击不重开，另一表单经三选一保护切换 -->
-        <button type="button" @click="$emit('openOperation', 'rename')">{{ $t("sheets.toolbar.renameSubset") }}</button>
-        <button type="button" @click="$emit('openOperation', 'insert-sheet')">{{ $t("sheets.toolbar.insertSheet") }}</button>
-        <button type="button" @click="$emit('openOperation', 'insert-subset')">{{ $t("sheets.toolbar.insertSubset") }}</button>
+        <UiButton size="compact" @click="$emit('openOperation', 'rename')">{{ $t("sheets.toolbar.renameSubset") }}</UiButton>
+        <UiButton size="compact" @click="$emit('openOperation', 'insert-sheet')">{{ $t("sheets.toolbar.insertSheet") }}</UiButton>
+        <UiButton size="compact" @click="$emit('openOperation', 'insert-subset')">{{ $t("sheets.toolbar.insertSubset") }}</UiButton>
       </div>
     </div>
     <div class="toolbar-filters">
@@ -156,16 +157,16 @@ const conditionChips = computed(() => {
     <div v-if="selectedCount" class="selection-bar">
       <div class="selection-actions">
         <span class="selection-summary" role="status">{{ $t("sheets.toolbar.selectionSummary", {selected: selectedCount, hidden: hiddenSelectedCount}) }}</span>
-        <button type="button" :disabled="!canSelect" @click="exitBulkAndToggleFilteredSelection">{{ allFilteredSelected ? $t("sheets.toolbar.unselectAllFiltered") : $t("sheets.toolbar.selectAllFiltered") }}</button>
-        <button type="button" @click="exitBulkAndClearSelection">{{ $t("sheets.toolbar.clearSelection") }}</button>
-        <button type="button" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">{{ $t("sheets.toolbar.bulkToggle") }}</button>
+        <UiButton size="compact" :disabled="!canSelect" @click="exitBulkAndToggleFilteredSelection">{{ allFilteredSelected ? $t("sheets.toolbar.unselectAllFiltered") : $t("sheets.toolbar.selectAllFiltered") }}</UiButton>
+        <UiButton size="compact" @click="exitBulkAndClearSelection">{{ $t("sheets.toolbar.clearSelection") }}</UiButton>
+        <UiButton size="compact" class="bulk-toggle" @click="bulkExpanded = !bulkExpanded">{{ $t("sheets.toolbar.bulkToggle") }}</UiButton>
       </div>
       <div v-if="bulkExpanded" class="bulk-controls">
         <label>{{ $t("sheets.toolbar.bulkModeLabel") }}<select v-model="bulkMode"><option value="set">{{ $t("sheets.toolbar.bulkModeSet") }}</option><option value="clear">{{ $t("sheets.toolbar.bulkModeClear") }}</option></select></label>
         <label>{{ $t("sheets.toolbar.bulkPropertyLabel") }}<select v-model="bulkPropertyName"><option value="">{{ $t("sheets.toolbar.bulkPropertyPlaceholder") }}</option><option v-for="name in sheetPropertyNames" :key="name" :value="name">{{ name }}</option></select></label>
         <template v-if="bulkMode === 'set'">
           <label>{{ $t("sheets.toolbar.bulkValueLabel") }}<input v-model="bulkPropertyValue"></label>
-          <button type="button" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">{{ $t("sheets.toolbar.bulkQueue") }}</button>
+          <UiButton size="compact" :disabled="!bulkPropertyName" @click="$emit('queueBulkSheetProperty')">{{ $t("sheets.toolbar.bulkQueue") }}</UiButton>
         </template>
         <template v-else>
           <span class="bulk-hint">{{ $t("sheets.toolbar.bulkClearHint") }}</span>
@@ -179,25 +180,27 @@ const conditionChips = computed(() => {
 .sheets-toolbar{display:flex;flex-direction:column;gap:var(--space-3)}
 .toolbar-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .range-title{margin:0;font-size:17px;color:var(--color-text-primary)}
-.counts{display:flex;gap:var(--space-3);font-size:13px;color:var(--color-text-secondary)}
+.counts{display:flex;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary)}
 .operations{margin-left:auto;display:flex;gap:var(--space-2)}
-.operations button,.filter-toggle,:deep(.cols-toggle),.selection-bar button{height:34px;min-height:34px;padding:0 12px;border-radius:var(--radius-md);font-size:13px}
-.toolbar-filters{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px}
-.search-box input{width:260px}
-.sheets-toolbar :is(input:not([type="checkbox"]),select){height:38px;min-width:0;max-width:100%;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+/* Task 7：这些按钮已改用 UiButton size="compact"（34px），本页不再自建高度。仅保留 :deep(.cols-toggle)：
+   “显示列”入口在子组件内部，其行高/字号仍需由工具栏行统一约束。 */
+:deep(.cols-toggle){height:var(--control-height-compact);min-height:var(--control-height-compact);padding:0 var(--space-3);border-radius:var(--radius-md);font-size:var(--font-label)}
+.toolbar-filters{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:var(--font-label)}
+.search-box input{width:var(--sheet-search-width)}
+.sheets-toolbar :is(input:not([type="checkbox"]),select){height:var(--control-height-form);min-width:0;max-width:100%;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
 .sheets-toolbar :is(input,select):focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .sheets-toolbar :is(input:not([type="checkbox"]),select):hover:not(:disabled){border-color:var(--color-accent)}
 .sheets-toolbar :is(input,select):disabled{background:var(--color-bg-muted);color:var(--color-text-muted);cursor:not-allowed}
 .toolbar-filters label{display:inline-flex;align-items:center;gap:6px}
 .search-all{white-space:nowrap}
 .chips{display:inline-flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--color-info-bg);font-size:12px}
-.chip-clear{border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:12px;padding:0}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-lg);background:var(--color-info-bg);font-size:var(--font-caption)}
+.chip-clear{border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:var(--font-caption);padding:0}
 .selection-bar{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-2);position:sticky;top:0;z-index:5;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);background:var(--color-bg-surface)}
 .selection-actions,.bulk-controls{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .bulk-controls{padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
 .bulk-controls label{display:inline-flex;align-items:center;gap:6px}
 .selection-summary{font-weight:600;color:var(--color-text-primary)}
-.bulk-hint{color:var(--color-text-secondary);font-size:12px;max-width:220px}
+.bulk-hint{color:var(--color-text-secondary);font-size:var(--font-caption);max-width:var(--sheet-bulk-hint-max-width)}
 .bulk-hint + .danger,.selection-bar .danger{color:var(--color-danger)}
 </style>
