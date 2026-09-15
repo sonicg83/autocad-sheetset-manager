@@ -1388,12 +1388,40 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     await expectToken(page, query, "height", "--input-height");
   });
 
+  // 责任 K 的另一半（T12-4，PLAN-DM-029）：14px/18px 此前无独立语义档位，5 处卡/页标题只能跨层
+  // 借用组件层令牌（--button-font-size / --modal-title-font-size）——“值等值但语义不符”即语义说谎。
+  // 本用例是这批声明的**真实性守卫**：
+  //   ① 两个档位必须真实存在于语义层（直接读根元素自定义属性；缺失时读回空字符串）；
+  //   ② 零视觉变化：5 处计算字号仍逐字等于 14px / 18px。
+  // ①必须直接读自定义属性，**不能**用 resolveToken 探针代替：探针在令牌缺失时会回落到继承来的
+  // 14px，恰好等于 14px 档位的期望值，在 14px 上会假通过（本任务已实测确认这一盲点）。
+  test("语义字号档位：5 处卡/页标题消费语义层 14px/18px 档位", async ({page}) => {
+    const template = userTemplate("语义字号档位核查", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const rootToken = (name: string) => page.evaluate(
+      (token) => getComputedStyle(document.documentElement).getPropertyValue(token).trim(), name);
+    expect(await rootToken("--font-card-title"), "--font-card-title 必须是已声明的语义档位").toBe("14px");
+    expect(await rootToken("--font-view-title"), "--font-view-title 必须是已声明的语义档位").toBe("18px");
+    await expectToken(page, page.locator(".preview-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".field-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".editor-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--font-view-title");
+    // 冲突面板的 h3 同样是 14px 卡标题档位（由夹具布防冲突后可见）
+    state.controls.putSettingsMode = "conflict";
+    await page.getByLabel("输出列名 1").fill("语义字号档位核查");
+    await page.getByRole("button", {name: "保存修改"}).click();
+    const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
+    await expect(conflict).toBeVisible();
+    await expectToken(page, conflict.locator("h3"), "font-size", "--font-card-title");
+  });
+
   test("结构尺寸来自组件层令牌且表头轨道与数据行对齐", async ({page}) => {
     await openCatalog(page);
     const editor = page.getByRole("region", {name: "输出列编辑器"});
     // 工作区栅格与卡标题：首屏密度预算仍取冻结 Demo 的确定值（T6-7）
     await expectToken(page, page.locator(".catalog-row"), "height", "--catalog-pane-height");
-    await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--modal-title-font-size");
+    // 18px 页标题已升为语义档位 --font-view-title（责任 K 另一半，T12-4），不再借用组件层令牌
+    await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--font-view-title");
     await expectToken(page, page.locator(".catalog-preview"), "min-height", "--catalog-preview-min-height");
     await expectToken(page, page.locator(".table-window"), "max-height", "--catalog-preview-table-max-height");
     await expectToken(page, editor.locator(".columns"), "max-height", "--catalog-columns-max-height");
