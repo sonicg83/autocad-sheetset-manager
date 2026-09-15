@@ -1799,3 +1799,98 @@ test("任务浮层状态控件：状态色取语义令牌、诊断文本可读�
   // 该态下可点元素更多（含 summary 与复制按钮），整体再过一遍下限
   await expectOverlayTapTargets(page);
 });
+
+// ---------------------------------------------------------------------------
+// PLAN-DM-029 Task 9：旧页面（欢迎/修订/草稿）控件视觉基础
+// 契约：显式 type="button"、最小可点高度 ≥32px、非空可访问名称。
+// 关键尺寸一律用**绝对值锚**（Task 7 的教训：用令牌断言令牌时，令牌整体漂移两侧同变仍会通过）。
+async function expectLegacyControlContract(page: Page, selector: string): Promise<void> {
+  // 先等首个命中可见：`.all()` 不等待，否则会在视图尚未渲染时得到 0 个而假红
+  await expect(page.locator(selector).first()).toBeVisible();
+  const controls = await page.locator(selector).all();
+  expect(controls.length, `${selector} 至少命中一个控件`).toBeGreaterThan(0);
+  for (const control of controls) {
+    const info = await control.evaluate(el => ({
+      type: el.getAttribute("type"),
+      tag: el.tagName,
+      height: Math.round(el.getBoundingClientRect().height),
+      name: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim(),
+    }));
+    expect.soft(info.type, `${selector} <${info.tag}> 必须显式 type="button"`).toBe("button");
+    expect.soft(info.height, `${selector} 可点高度`).toBeGreaterThanOrEqual(32);
+    expect.soft(info.name.length, `${selector} 必须有可访问名称`).toBeGreaterThan(0);
+  }
+}
+
+test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
+  test("欢迎页：主操作为 38px 表单档，宽度上限 520px 逐字等值", async ({page}) => {
+    await page.goto("/");
+    const primary = page.locator(".welcome-card .primary");
+    await expect(primary).toBeVisible();
+    await expectLegacyControlContract(page, ".welcome-card .primary");
+    expect(await primary.evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
+    expect(await page.locator(".welcome-card").evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+  });
+
+  test("欢迎页降级态：路径输入必须有可见 label 关联，按钮带显式 type", async ({page}) => {
+    // 清掉壳桥后启动：稳定落在无壳降级态（不依赖 late-bridge 的 30ms 窗口）
+    await page.addInitScript(() => { delete (window as any).pywebview; });
+    await page.goto("/");
+    const pathInput = page.locator(".no-shell input");
+    await expect(pathInput).toBeVisible();
+    const label = await pathInput.evaluate(el => {
+      const associated = (el as HTMLInputElement).labels?.[0] ?? null;
+      return associated ? (associated.textContent ?? "").trim() : null;
+    });
+    expect(label, "路径输入必须由可见 label 关联（仅 aria-label/placeholder 不算）").not.toBeNull();
+    expect((label ?? "").length, "可见 label 文本不得为空").toBeGreaterThan(0);
+    await expectLegacyControlContract(page, ".no-shell button");
+    expect(await page.locator(".no-shell input").evaluate(el => Math.round(el.getBoundingClientRect().height)), "路径输入高度").toBe(36);
+  });
+
+  test("修订页：按钮契约 + 确认模态危险层级（文字色不得等于底色）", async ({page}) => {
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await expect(page.locator(".revisions-view")).toBeVisible();
+    await expectLegacyControlContract(page, ".revisions-view button");
+    expect(await page.locator(".revisions-view button").first().evaluate(el => Math.round(el.getBoundingClientRect().height)), "修订页按钮高度").toBe(36);
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    await page.getByRole("button",{name:"恢复为新修订"}).click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    const danger = modal.getByRole("button",{name:/确认恢复/});
+    await expect(danger).toBeVisible();
+    const colors = await danger.evaluate(el => { const css = getComputedStyle(el); return {color: css.color, background: css.backgroundColor}; });
+    expect(colors.color, "危险确认按钮文字色不得与底色相同（否则不可见）").not.toBe(colors.background);
+  });
+
+  test("确认模态焦点归还：取消后焦点回到开启控件", async ({page}) => {
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    const opener = page.getByRole("button",{name:"恢复为新修订"});
+    await expect(opener).toBeVisible();
+    await opener.click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(modal).toBeVisible();
+    await cancelModal(page);
+    await expect(modal).toHaveCount(0);
+    expect(await page.evaluate(() => (document.activeElement?.textContent ?? "").trim()), "取消后焦点应回到开启按钮").toContain("恢复为新修订");
+  });
+
+  test("草稿动作栈：按钮契约与 disabled 语义保持", async ({page}) => {
+    await openWorkspace(page);
+    await openDraftPop(page);
+    const pop = page.locator("#draft-pop");
+    await expect(pop).toBeVisible();
+    await expectLegacyControlContract(page, "#draft-pop button");
+    // 空草稿下撤销/重做/清空/预览均禁用（行为不变）
+    await expect(pop.getByRole("button",{name:"撤销"})).toBeDisabled();
+    await expect(pop.getByRole("button",{name:"重做"})).toBeDisabled();
+  });
+});
