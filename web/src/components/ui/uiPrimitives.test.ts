@@ -217,10 +217,13 @@ describe("UiInput", () => {
     // 根元素是 `<span class="ui-input">`、真正的控件是内部 `<input class="ui-input__control">`：
     // scoped 的 `data-v-*` 只追加到子组件根元素，所以页面侧写 `.value-item input:hover` 永不命中
     // （Task 5 修复轮 Ruling 33）。hover 因此只能由原语自己提供，且必须挂在控件类上。
+    // `:not(.ui-input--invalid)` 守卫是 Ruling 35：`.ui-input__control:hover:not(:disabled)` 特异度 (0,3,0)
+    // 会压过 `.ui-input--invalid .ui-input__control` 的 (0,2,0)（特异性优先于源顺序），
+    // 从而用瞬时可供性反馈遮蔽持久错误态。故 hover 只能作用于非无效控件。
     // 注意：本条是源文本断言，拓不到「声明写了但不命中」——那个由
     // `tests/e2e/properties-visual-evidence.spec.ts` 的真实 hover 计算样式断言负责。
     expect(scopedStyle(readSource("./UiInput.vue")))
-      .toContain(".ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}");
+      .toContain(".ui-input:not(.ui-input--invalid) .ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}");
     expect(resolveToken(TOKENS, "--color-accent")).toMatch(/^#[0-9A-F]{6}$/i);
   });
 });
@@ -234,8 +237,9 @@ describe("UiSelect", () => {
   });
 
   it("同样提供 SPEC-DM-006 §232 要求的 hover 状态", () => {
+    // 同 `UiInput`：`:not(.ui-select--invalid)` 守卫确保错误态优先于 hover（Ruling 35）。
     expect(scopedStyle(readSource("./UiSelect.vue")))
-      .toContain(".ui-select__control:hover:not(:disabled){border-color:var(--color-accent)}");
+      .toContain(".ui-select:not(.ui-select--invalid) .ui-select__control:hover:not(:disabled){border-color:var(--color-accent)}");
   });
 
   it("渲染默认插槽提供的 option，并透传 v-model", async () => {

@@ -51,6 +51,6 @@ function onChange(event: Event) {
   font-family:var(--font-ui);font-size:var(--input-font-size);
 }
 .ui-select__control:disabled{color:var(--color-text-muted);cursor:not-allowed}
-.ui-select__control:hover:not(:disabled){border-color:var(--color-accent)}
+.ui-select:not(.ui-select--invalid) .ui-select__control:hover:not(:disabled){border-color:var(--color-accent)}
 .ui-select--invalid .ui-select__control{border-color:var(--color-danger)}
 </style>

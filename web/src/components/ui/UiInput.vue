@@ -55,6 +55,6 @@ function onInput(event: Event) {
   font-family:var(--font-ui);font-size:var(--input-font-size);
 }
 .ui-input__control:disabled{color:var(--color-text-muted);cursor:not-allowed}
-.ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}
+.ui-input:not(.ui-input--invalid) .ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}
 .ui-input--invalid .ui-input__control{border-color:var(--color-danger)}
 </style>
