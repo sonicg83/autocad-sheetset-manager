@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-09-15（Task 11 第 2 轮 11b：抽出壳层导航组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useShellNavigation.ts`（93 行）负责页签栏状态与任务浮层开关；`web/src/composables/appComposition.test.ts`（新增，10 例）。`App.vue` **869 → 843 行**（净 −26）。
+- **组合而非复制**（Step 4 原文）：页签 `active/select/onKeydown` 仍由既有 `useShellTabs` 提供，**未另写一份页签列表状态**；全局快捷键仍由根组件那一次 `useHotkeys` 注册，本模块**不注册任何快捷键**。机械证据：新模块 import 仅 `useShellTabs`/`vue`；`App.vue` 对 `useShellTabs` 的引用只剩 1 处**注释**（`TabDescriptor` 引用 0）。
+- **依赖全部经 `deps` 注入**（含 i18n 的 `t`）：模块不反向依赖 `useRestore`/`useSheetCatalog`，也不自行取 i18n ⇒ 单测可在 happy-dom 直接构造依赖。
+- **两处浮层复位归并**为 `resetOverlay()`（原 `beginWorkspaceLoad` 与关闭工作区各写一遍 `overlayOpen=false;overlayTab="prog"`）。
+- **★ 一轮真实的 RED→GREEN→变异自证**：单测首跑 9 passed / 1 failed——失败的是**我的用例**而非实现（假闸门立即执行 `next()`，把「有草稿时回退 active」这一瞬态吃掉了）；改写为「闸门**取消**时不得留在错页签」后 10/10 绿。变异自证：摘掉「回退 `active.value`」与「重复点击当前页签提前返回」两处，**恰好预期的那 2 例**转红，还原后与快照逐字节一致。
+- **★ Step 8 本轮 after 比对：请求序列 128/128、文案指纹 128/128 全等**（与基线 `evidence/task-11-api-baseline.txt` 逐用例、顺序敏感）。
+  - **★ 指纹归一化是「反推」而非「假定」**：基线探针已删除、其归一化未留记录 ⇒ 本轮探针对同一份 `innerText` 同时记录 6 种候选归一化，再找哪种与基线全等 → **`collapse`（空白折叠为单空格）与 `collapseTrim` 均 128/128**，而 `raw`/`trim`/`perLine`/`nows` 均 0/128 ⇒ 既确认了基线归一化，也避免了把归一化差异误报成文案变化。
+  - 分组键用**对称规范形**（首个以 `.spec.ts` 结尾的段作 basename + 其后所有段）两侧同规则处理 ⇒ 键对齐 128/128，无「仅基线有」「仅 after 有」，也无重复键（本轮未发生重试/波动，11a 记录的 innerText 波动未复现）。
+- **门禁**：`check:ui` EXIT=0（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，本轮无需清退）· `test:unit` 13 文件/`129 passed`（+10 例）· `test:contracts` 85 pass/0 fail · `build` EXIT=0（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build`）· 4 个流程 e2e `128 passed`（EXIT=0）。
+- **探针纪律**：临时探针 `web/tests/e2e/__api-recorder.ts` 与 4 个 spec 的一行 import 改动**均已逐字节还原/删除**（`git diff -- web/tests/e2e/` 为空）。
+- **未完成项（如实记账）**：`App.vue` 距 Step 7 的 350–450 行目标仍远——11b 只搬走 45 行、接入 19 行；真正的减重来自 11c（草稿守卫）与 11d/11e（工作区生命周期与命令），本轮**不声称**达到行数目标。
+
 ## 2026-09-15（Task 11 第 1 轮 11a：抽出纯展示 `WorkspaceShell.vue`，PLAN-DM-029）
 
 - **产出**：新建 `web/src/layout/WorkspaceShell.vue`（110 行）承载 `TopBar`/`TabBar`/`TaskOverlay`/`ActionDock` 与壳层级提示（错误/诊断详情/加载中/恢复中 + `shell-body`/`shell-main` 三块布局），页面内容经默认 slot 透出；`App.vue` 只保留状态与接线。
