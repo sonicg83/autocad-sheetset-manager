@@ -2,7 +2,7 @@
 // 契约红线：不 mock /api/settings 与 /api/about——全局 setup 已否动真实后端，
 // 配置经 DST_MANAGER_SETTINGS_PATH 指向固定临时目录；本文件用例串行执行
 //（共享同一配置文件，保存/损坏/Schema 场景彼此有状态依赖）。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {SETTINGS_PATH, expectDialog, openSettingsDialog, writeSettingsFile} from "./fixtures/settings";
 
 test.describe.configure({mode: "serial"});
@@ -518,4 +518,159 @@ test("不编号图纸关键字：数量/长度超限即时行内错误并禁用�
   await expect(page.locator(KEYWORDS_ROW)).toContainText("默认");
   await expect(page.locator(KEYWORDS_INPUT)).toHaveValue("");
   await page.keyboard.press("Escape");
+});
+
+// ---------------------------------------------------------------------------
+// 控件视觉基础（PLAN-DM-029 Task 8，T8-1 裁定）：量真实 getBoundingClientRect() /
+// computed style —— 度量与断言的都是**渲染结果**，不是源码字面量。
+// T8-1(I)：开关的三层尺寸必须分开断言：视觉轨道 44×24、滑块 18px、外层可点盒 ≥44×32。
+// ---------------------------------------------------------------------------
+test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
+  const SWITCH_FIELD = '[data-field="enable_add_number_suffix"]';
+  const PATH_FIELD = '[data-field="autocad_2016_console"]';
+  const LEASE_FIELD = '[data-field="worker_lease_seconds"]';
+
+  async function boxOf(locator: Locator, label: string): Promise<{w: number; h: number}> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} 不可见，无法度量`);
+    return {w: Math.round(box.width), h: Math.round(box.height)};
+  }
+
+  // 令牌真值：注入探针元素解析 var()，不比 getPropertyValue 的原文
+  async function tokenValue(page: Page, token: string, property: string): Promise<string> {
+    return page.evaluate(
+      ([name, prop]) => {
+        const probe = document.createElement("span");
+        probe.style.setProperty(prop, `var(${name})`);
+        document.body.appendChild(probe);
+        const value = getComputedStyle(probe).getPropertyValue(prop);
+        probe.remove();
+        return value;
+      },
+      [token, property] as const,
+    );
+  }
+
+  test("开关：视觉轨道 44×24、滑块 18px、外层可点盒 ≥44×32，且 Space 切换与状态文案不变", async ({page}) => {
+    await page.goto("/");
+    await openSettingsDialog(page);
+    const sw = page.locator(`${SWITCH_FIELD} .switch`);
+    await expect(sw).toBeVisible();
+
+    // 外层可点盒（Step 3 / T8-1(I)）：≥44×32 —— 断的是外层，不是轨道
+    const outer = await boxOf(sw, "开关外层按钮");
+    expect(outer.w, "开关外层可点宽度").toBeGreaterThanOrEqual(44);
+    expect(outer.h, "开关外层可点高度必须 ≥32px（ARCH-DM-007 §10）").toBeGreaterThanOrEqual(32);
+
+    // 视觉轨道必须仍是 44×24、滑块 18px（放大可点盒不得改变轨道观感）
+    const track = sw.locator(".switch-track");
+    await expect(track, "轨道必须有独立元素，才能在不改变轨道尺寸的前提下放大可点盒").toHaveCount(1);
+    const trackBox = await boxOf(track, "开关轨道");
+    expect(trackBox.w, "轨道宽度").toBe(44);
+    expect(trackBox.h, "轨道高度").toBe(24);
+    const thumb = await boxOf(sw.locator(".switch-thumb"), "开关滑块");
+    expect(thumb.w, "滑块宽度").toBe(18);
+    expect(thumb.h, "滑块高度").toBe(18);
+
+    // 行为与文案不变：Space 切换 aria-checked，且状态文案随之变化
+    const statusText = page.locator(`${SWITCH_FIELD} .f-hint`);
+    const checkedBefore = await sw.getAttribute("aria-checked");
+    const textBefore = await statusText.innerText();
+    await sw.focus();
+    await page.keyboard.press("Space");
+    await expect(sw).toHaveAttribute("aria-checked", checkedBefore === "true" ? "false" : "true");
+    expect(await statusText.innerText(), "状态文案应随 aria-checked 改变").not.toBe(textBefore);
+
+    // 未保存：丢弃并关闭，不影响后续用例
+    await page.keyboard.press("Escape");
+    const discard = page.getByRole("button", {name: "放弃修改并关闭"});
+    if (await discard.isVisible()) await discard.click();
+  });
+
+  test("字段行：label[for] 关联控件，hint 与 error 经 aria-describedby 关联", async ({page}) => {
+    await page.goto("/");
+    await openSettingsDialog(page);
+    const input = page.locator(`${LEASE_FIELD} input[data-key="worker_lease_seconds"]`);
+    const controlId = await input.getAttribute("id");
+    expect(controlId, "控件必须有 id 才能被 label[for] 关联").toBeTruthy();
+    await expect(page.locator(`${LEASE_FIELD} label[for="${controlId}"]`), "可见 label").toBeVisible();
+
+    // hint 关联（仅有视觉相邻不算关联）
+    const hintId = await page.locator(`${LEASE_FIELD} .f-hint`).first().getAttribute("id");
+    expect(hintId, "hint 必须有 id 才能被 aria-describedby 引用").toBeTruthy();
+    const describedHint = ((await input.getAttribute("aria-describedby")) ?? "").split(/\s+/).filter(Boolean);
+    expect(describedHint, "hint 必须进入 aria-describedby").toContain(hintId);
+
+    // error 关联：超范围触发行内错误后，错误元素必须进入 aria-describedby
+    await input.fill("5000");
+    const error = page.locator(`${LEASE_FIELD} .f-error`);
+    await expect(error, "超范围应显示行内错误").toBeVisible();
+    const errorId = await error.getAttribute("id");
+    expect(errorId, "error 必须有 id").toBeTruthy();
+    const describedError = ((await input.getAttribute("aria-describedby")) ?? "").split(/\s+/).filter(Boolean);
+    expect(describedError, "error 必须进入 aria-describedby").toContain(errorId);
+
+    // 还原（不落库）
+    await input.fill("600");
+  });
+
+  test("按钮档位：浏览按钮 34px 紧凑档，链接型按钮 ≥32px，图标按钮 ≥32px", async ({page}) => {
+    await page.goto("/");
+    await openSettingsDialog(page);
+    const browse = page.locator(`${PATH_FIELD} .browse-btn`);
+    expect((await boxOf(browse, "浏览按钮")).h, "浏览按钮应保持 34px 紧凑档（T8-1(D)：档位不单方面改）").toBe(34);
+
+    const linkBtn = page.locator(`${PATH_FIELD} .link-btn`).first();
+    await expect(linkBtn).toBeAttached();
+    expect((await boxOf(linkBtn, "链接型按钮")).h, "链接型按钮必须 ≥32px（T8-1(E)：28px 违反下限）").toBeGreaterThanOrEqual(32);
+
+    const iconBtn = page.locator(".icon-btn").first();
+    const iconBox = await boxOf(iconBtn, "图标按钮");
+    expect(iconBox.w, "图标按钮可点宽度").toBeGreaterThanOrEqual(32);
+    expect(iconBox.h, "图标按钮可点高度").toBeGreaterThanOrEqual(32);
+  });
+
+  test("路径字段：控件字体取自令牌、长路径不撑破本行", async ({page}) => {
+    await page.goto("/");
+    await openSettingsDialog(page);
+    const input = page.locator(`${PATH_FIELD} input`);
+
+    const fontFamily = await input.evaluate(el => getComputedStyle(el).fontFamily);
+    expect(fontFamily, "控件字体族应取自 --font-ui").toBe(await tokenValue(page, "--font-ui", "font-family"));
+    const fontSize = await input.evaluate(el => getComputedStyle(el).fontSize);
+    expect(fontSize, "控件字号应取自 --input-font-size").toBe(await tokenValue(page, "--input-font-size", "font-size"));
+
+    // 长路径不得撑破本行：输入框右边界不越过行右边界
+    await input.fill("C:\\" + "very-long-segment\\".repeat(12) + "tool.exe");
+    const geometry = await page.evaluate(sel => {
+      const field = document.querySelector(sel)!;
+      const line = field.querySelector(".f-line")!;
+      const control = field.querySelector("input")!;
+      return {
+        controlRight: control.getBoundingClientRect().right,
+        lineRight: line.getBoundingClientRect().right,
+        lineScroll: line.scrollWidth - line.clientWidth,
+      };
+    }, PATH_FIELD);
+    expect(geometry.controlRight, "输入框不得溢出本行").toBeLessThanOrEqual(geometry.lineRight + 1);
+    expect(geometry.lineScroll, "本行不应出现横向溢出").toBeLessThanOrEqual(1);
+  });
+
+  test("焦点可见：键盘聚焦控件时轮廓可见（不是 none）", async ({page}) => {
+    await page.goto("/");
+    await openSettingsDialog(page);
+    const input = page.locator(`${PATH_FIELD} input`);
+    await input.focus();
+    await expect(input).toBeFocused();
+    // 用键盘走到下一个可聚焦控件，确保 :focus-visible 生效（程序化 focus 不一定匹配）
+    await page.keyboard.press("Tab");
+    const outline = await page.evaluate(() => {
+      const element = document.activeElement as HTMLElement | null;
+      if (!element) return {style: "none", width: "0px"};
+      const computed = getComputedStyle(element);
+      return {style: computed.outlineStyle, width: computed.outlineWidth};
+    });
+    expect(outline.style, "键盘聚焦必须可见轮廓").not.toBe("none");
+    expect(parseFloat(outline.width), "轮廓宽度应 > 0").toBeGreaterThan(0);
+  });
 });
