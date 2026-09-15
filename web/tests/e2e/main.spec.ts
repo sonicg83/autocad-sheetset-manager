@@ -1,6 +1,6 @@
 import {expect,test,type Page} from "@playwright/test";
 import {writeFileSync} from "node:fs";
-import {buildPreviewFromBase} from "./fixtures/sheets";
+import {buildPreviewFromBase, installSheetsFixture} from "./fixtures/sheets";
 import {openSettingsDialog} from "./fixtures/settings";
 
 test.beforeEach(async({page})=>{
@@ -1690,4 +1690,112 @@ test("任务浮层焦点：展开后落在当前激活页签、关闭回焦当�
   await page.locator("#probe-zero").focus();
   await page.keyboard.press("Tab");
   await expect.poll(activeId).toBe("ov-tab-diag");
+});
+
+// ===== PLAN-DM-029 Task 7：任务浮层内部控件（动作与状态） =====
+// 背景：Task 4 把浮层控件迁到原语（`.ov-fold` 由 40×40 改为 UiIconButton 的 36×36）时，
+// 它的尺寸断言循环 `shell = ".topbar button, .tabbar button, .dock button"` **不含浮层按钮**，
+// 全仓也搜不到任何 `.ov-*` / `.diag-*` 元素的计算样式或几何断言 —— 即“补任务浮层动作与状态
+// 控件断言”这一交付物此前是静默缺席的。本节补齐，并钉住可点下限与状态色来源。
+
+// 令牌 → 当前主题下的计算色值（与「壳层交互态」用例同口径，不硬编码 rgb）
+function tokenColorOf(page: Page, token: string) {
+  return page.evaluate(name => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  }, token);
+}
+
+// 浮层内**所有**可点元素的可点高度必须 ≥32px（ARCH-DM-007 §4.1 全局最小可点下限）。
+// 枚举口径：button / a / summary / [role=tab] / [data-entry]（默认态 7 个、有诊断态 10 个）。
+// 刻意**不**缩小到“动作控件”：诊断行的 summary 与复制按钮正是在这里被发现低于下限的。
+async function expectOverlayTapTargets(page: Page): Promise<void> {
+  const rows = await page.evaluate(() => {
+    const scope = document.querySelector(".task-overlay");
+    if (!scope) return [];
+    return Array.from(scope.querySelectorAll("button, a, summary, [role='tab'], [data-entry]")).map(element => {
+      const rect = (element as HTMLElement).getBoundingClientRect();
+      const style = getComputedStyle(element as HTMLElement);
+      const cls = String((element as HTMLElement).className || "").split(" ").filter(Boolean).join(".");
+      return {
+        sel: `${element.tagName.toLowerCase()}${cls ? "." + cls : ""}`,
+        h: Math.round(rect.height),
+        visible: rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden",
+      };
+    });
+  });
+  const visible = rows.filter(row => row.visible);
+  expect(visible.length, "应枚举到浮层内的可点元素").toBeGreaterThan(0);
+  expect(visible.filter(row => row.h < 32).map(row => `${row.sel}=${row.h}px`), "浮层内所有可点元素都必须 ≥32px").toEqual([]);
+}
+
+test("任务浮层动作控件：折叠按钮 36×36、页签档位与可点下限",async({page})=>{
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  const drawer=page.locator(".task-drawer");
+  await expect(drawer).toBeVisible();
+
+  // 折叠按钮：Task 4 把 40×40 改成 UiIconButton 的 36×36，此前无任何断言钉住（绝对值锚，
+  // 不用令牌自指——令牌整体漂移时两侧同变会漏报，同责任 S 的教训）
+  const fold=page.locator(".task-drawer .ov-fold");
+  await expect(fold).toHaveCSS("width","36px");
+  await expect(fold).toHaveCSS("height","36px");
+  const foldBox=(await fold.boundingBox())!;
+  expect(Math.round(foldBox.width),"折叠按钮宽度").toBe(36);
+  expect(Math.round(foldBox.height),"折叠按钮高度").toBe(36);
+  // 可访问名称来自 UiIconButton 的 label，而不是字形
+  await expect(fold).toHaveAttribute("aria-label","收起任务浮层");
+
+  // 页签：高度由 padding(10px)+行高决定（无固定档），字号取语义令牌
+  const tab=page.locator(".task-drawer .ov-tab").first();
+  await expect(tab).toHaveCSS("font-size","13px");
+  const tabBox=(await tab.boundingBox())!;
+  expect(Math.round(tabBox.height),"页签高度").toBe(42);
+
+  // 空态（默认夹具无诊断）：状态文案字号取令牌；可点元素整体过下限
+  await page.locator('.task-rail [data-entry="diag"]').click();
+  const empty=page.locator(".ov-empty");
+  await expect(empty).toBeVisible();
+  await expect(empty).toHaveCSS("font-size","13px");
+  await expectOverlayTapTargets(page);
+});
+
+test("任务浮层状态控件：状态色取语义令牌、诊断文本可读且过可点下限",async({page})=>{
+  await installSheetsFixture(page,{dualStatus:true});
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  const drawer=page.locator(".task-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("tab",{name:/诊断/}).click();
+
+  // 状态点（阻断诊断）颜色必须来自语义令牌，不硬编码 rgb
+  const dot=page.locator(".task-drawer .ov-dot").first();
+  await expect(dot).toBeVisible();
+  expect(await dot.evaluate(element=>getComputedStyle(element).color),"状态点颜色应来自 --color-danger").toBe(await tokenColorOf(page,"--color-danger"));
+
+  // 诊断文本：字号取语义令牌，且宽度必须 >0（回归守卫）——
+  // 曾因 `legacy.css` 的 `:where(#app) aside button{...width:100%...}` 命中浮层的 `<aside>` 根，
+  // `.diag-copy` 又带 `flex-shrink:0`，于是它独占整行、把 `.diag-text` 挤成 0 宽，
+  // `word-break:break-word` 导致**每行只显示一个字符**（evidence/task-7-fix-diag-broken-drawer.png）
+  await page.locator(".ov-diagnostics summary").click();
+  const text=page.locator(".diag-text").first();
+  await expect(text).toBeVisible();
+  await expect(text).toHaveCSS("font-size","13px");
+  const textBox=(await text.boundingBox())!;
+  expect(Math.round(textBox.width),"诊断文本宽度（0 宽 = 每字一行、不可读）").toBeGreaterThan(50);
+
+  // 复制按钮：达 ≥32px 下限，且按内容收缩（不得再被 width:100% 撑满整行）
+  const copy=page.locator(".diag-copy").first();
+  await expect(copy).toHaveCSS("min-height","32px");
+  const copyBox=(await copy.boundingBox())!;
+  const rowBox=(await page.locator(".diagnostics li").first().boundingBox())!;
+  expect(Math.round(copyBox.height),"复制按钮高度").toBeGreaterThanOrEqual(32);
+  expect(Math.round(copyBox.width),"复制按钮宽度必须小于整行（否则会挤掉诊断文本）").toBeLessThan(Math.round(rowBox.width)-10);
+
+  // 该态下可点元素更多（含 summary 与复制按钮），整体再过一遍下限
+  await expectOverlayTapTargets(page);
 });
