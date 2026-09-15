@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（Task 12：控制器亲跑 Step 1/2/3 + 责任 A–Y 收口表，PLAN-DM-029）
+
+- **控制器亲跑 Step 1/2/3（真实 EXIT）**：`test:contracts` **0（86/86，比 85 多 1 条来自责任 C②）** · `test:unit` **0（13 文件 / 166 passed）** · `build` **0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc -b`/`vite build`） · **全量 e2e 矩阵 0（548 passed / 2 flaky / 3.6m）** · `ruff` **0** · `uv lock --check` **0** · `pytest` **0（tests=1488 / failures=0 / errors=0 / skipped=74 / 89.6s，与隔离基线逐值一致）**。
+- **2 条 flaky 为同一签名**：`locator.click: Test timeout of 30000ms exceeded` 等待**外壳引导按钮**（`选择 DST 文件`）⇒ 即已登记的**引导期 flaky**（非行为差异）；**不得用放宽断言/提高超时来“修”** ✓。pytest 的警告均为既有依赖/Python 警告（Starlette/httpx、sqlite3 datetime、pytest ini），与本计划无关 ✓。
+- **新工具陷阱（同族于「`tail` 的退出码」）**：**harness 会截断重定向输出**（`pytest -q > file` 只得 57 行、停在 14%）且包装器会打出**假的** `Pytest: No tests collected` ✗ ⇒ **需要计数时改用 `--junit-xml` 并解析 XML** ✓。
+- **责任 A–Y 收口表已写入计划（T12-2）**：✅ 闭合/已修复 = **A · C② · C③ · E · G · L · P · R · X**（+ **S** 部分）；⚠️ 环境阻碍 = **B**；⏸ 待裁决/待办 = **C① · F · H · I · K · M · N · O · Q · S · T · U · V · W · Y** + Task 11 转入的 4 项（均**登记**）。
+  - **其中两项以「验证」而非「新增代码」闭合**：**G** 的 2 处存活变异经变异测试证明**已被 Task 10 的集成测试覆盖** → 计划里的前提过时，**无需补测** ✓；**C③** 实测**当前 14 条中内嵌前置注释者 = 0** ✓；**C②** 的 RED **先证明了漏洞真实可利用** ✓。
+  - **Task 12 的 7 条「孤儿」已查明并非文件错位** ✗ → 它们**就是责任 K 的 7 条离刻度字号例外**（『下一次字号阶修订（责任 K，Task 12）』）→ 是 **Task 12 应当裁决的决定**，而非应当编辑的文件 ✓。
+- **Step 8 状态判定：保持 `active`** ✓（**不得改 `completed`**）——**真实桌面复验未完成**，且 **K/Q/W 需 Spec 归属方裁定**。**距 `completed` 仅差**：① 用户执行 Steps 5–6（真实 Windows WebView2 100/125/150/200%，**125% 必须覆盖属性/目录/图纸三个缺陷场景**；**严禁用浏览器 zoom / `deviceScaleFactor` 冒充**）② K/Q/W 的 Spec 裁定 ③ Steps 4/7 的剩余文档工作（已派发收尾轮）。
+
 ## 2026-09-15（Task 12 第 1 轮：闭合责任 A/C②/R/E 与两项 T11-2 硬化，PLAN-DM-029）
 
 - **责任 A（字体真实加载）**：`main.spec.ts` 新增运行时断言——两套 WOFF2 **真的进入 `loaded`**、被**真实请求**且同源、响应 200、**全程无远程字体访问**；负控（临时阻断 `*.woff2`）使「IBM Plex Mono 可渲染」变红 ⇒ 断言非空转。生产产物路径另行核验：`dist/assets/*.woff2` 且 dist CSS 引用为 `url(/assets/…)`（e2e 跑 dev，路径口径已在测试注释写明）。
