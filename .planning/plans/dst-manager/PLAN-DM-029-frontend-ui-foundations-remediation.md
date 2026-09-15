@@ -230,7 +230,7 @@ related:
 >
 > **两轮 e2e 配额**：实施轮 5/5（55 passed / 1 flaky，retry 后过）、修复轮 1 用 2/2、修复轮 2 用 2/2。**全量 e2e 留到 Task 12 控制器收口时跑一次。**
 >
-> **未覆盖（如实登记）**：hover 与错误态的**组合**在修复轮 1 时无断言（守卫用了 `.value-item:not(.invalid)`），已由修复轮 2 补上**双向**守卫（invalid+hover → 危险色、非 invalid+hover → 强调色同时成立）；`UiSelect` 仍只有源文本断言、无独立 e2e；`SheetPropertyEditor.vue:108`（Task 6 目标文件）同款 hover 规则仍需在 Task 6 删除（原语已就位）；真实 Windows WebView2 与显示缩放复验留 Task 12。
+> **未覆盖（如实登记）**：hover 与错误态的**组合**在修复轮 1 时无断言（守卫用了 `.value-item:not(.invalid)`），已由修复轮 2 补上**双向**守卫（invalid+hover → 危险色、非 invalid+hover → 强调色同时成立）；`UiSelect` 仍只有源文本断言、无独立 e2e；`SheetPropertyEditor.vue:108`（**Task 7** 目标文件）同款 hover 规则仍需在 **Task 7** 删除（原语已就位）；真实 Windows WebView2 与显示缩放复验留 Task 12。
 
 **修复轮（Ruling 33，两轮独立提交）**
 
@@ -239,7 +239,8 @@ related:
 - **Important-1（死规则 + 失实注释）**：`PropertyValuePanel.vue:309` 的 `.value-item input:hover:not(:disabled){border-color:var(--color-accent)}` 在控件换成 `UiInput` 后**永不可能命中**——`UiInput` 根元素是 `<span class="ui-input">`，真正的 `<input class="ui-input__control">` 不是根元素，而 Vue scoped CSS 的 `data-v-*` 只追加到子组件根元素上。该规则因此静默丢失字段输入的悬停强调，紧邻注释却声称「此处只保留悬停强调（原语无 hover 规则）」。
   根因不在 Task 5 而在 Task 3 的原语缺陷：`UiInput`/`UiSelect` 已提供 `focus-visible`（`reset.css:34`）、`disabled` 与错误态，**独缺 `hover`**，而 SPEC-DM-006 §232 明确要求文本输入/下拉框/文本域「完整提供 `hover`、`focus-visible`、`disabled` 与错误态」。故属冻结 Spec 违规，不是可选打磨。
   处置：**新建原语补充轮**，在 `UiInput.vue`/`UiSelect.vue` 的 scoped 样式内逐字补回既有事实标准 `.ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}`（同一值已独立出现在 `PropertyValuePanel.vue:309` 与 `SheetPropertyEditor.vue:108`，属零视觉变化的原样上移），随后删除页面侧的死亡规则。**驳回页面侧 `:deep(.ui-input__control)`**：那会让每个消费 `UiInput` 的页面各自复制一条 hover 规则，正是 Step 3 要消除的局部重复；仓库内唯一 `:deep()` 先例（`SheetToolbar.vue:184`）位于尚未迁移的遗留文件，不构成新约定。
-  **必须现在做而不是推给 Task 12**：`SheetPropertyEditor.vue:108` 正是 Task 6 的目标文件且含同一条规则，Task 6 迁移后会原样复现同一缺陷；集中修一次可避免 Task 6–9 各撞一次。
+  **必须现在做而不是推给 Task 12**：`SheetPropertyEditor.vue:108` 正是 **Task 7**（图纸页）的目标文件且含同一条规则，Task 7 迁移后会原样复现同一缺陷；集中修一次可避免 Task 6–9 各撞一次。
+  **控制器自我更正（Ruling 36）**：本条与下方「实测与口径」初稿把该文件误记为「Task 6 目标文件」——实际它在 `web/src/components/sheets/`（图纸页），属 **Task 7** Files（计划 `:325`）。Task 6 是图纸**目录**页，其 Files 不含此文件。**不影响 Ruling 33 的实际结论**：原语已就位后，Task 7 只需删页面规则；仅任务编号错误，已全处订正。
 
 - **Important-2（Step 1 点名的断言缺失）**：Step 1 逐字要求覆盖 `font-size/font-family/line-height/height/padding/radius`，实测 `properties-visual-evidence.spec.ts` 中 `font-family` 与 `line-height` **零命中**。处置：为 Step 1 点名的元素（折叠标题、导入导出、搜索、主次动作）补**计算样式**断言。
   `line-height` **不得新增令牌**：`tokens.css` 只有 `--line-height-body:1.5`（`--font-body` 简写专用、根元素限定），`primitives.css:29` 与 Task 5 三处用的是裸 `1.6`/`1.7` 无单位倍数，静态检查器不将其计为视觉值。故本步骤只**锁定既有计算值**防回归，并在收口责任 N 登记「line-height 无令牌层」。
