@@ -100,7 +100,10 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 </template>
 <style scoped>
 .column-settings{display:inline-flex}
-.cols-toggle{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 10px;font-size:var(--font-label);cursor:pointer;font-family:inherit}
+/* 内边距/圆角由宿主工具栏统一约束（`SheetToolbar.vue` 的 `:deep(.cols-toggle)`）：两者特异性同为
+   (0,2,0)，若两侧都声明同一属性，生效值就取决于样式表注入顺序。实测当前生效值为
+   `padding:0 12px` / `border-radius:8px`（即工具栏侧），故此处不再重复声明，也不改变视觉结果。 */
+.cols-toggle{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);font-size:var(--font-label);cursor:pointer;font-family:inherit}
 .cols-toggle:hover{background:var(--color-bg-muted)}
 .cols-count{margin-left:6px;color:var(--color-accent);font-weight:600}
 .cols-mask{position:fixed;inset:0;z-index:1000;background:rgba(16,24,40,.4);display:flex;align-items:center;justify-content:center}

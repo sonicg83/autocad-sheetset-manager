@@ -183,7 +183,9 @@ const conditionChips = computed(() => {
 .counts{display:flex;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary)}
 .operations{margin-left:auto;display:flex;gap:var(--space-2)}
 /* Task 7：这些按钮已改用 UiButton size="compact"（34px），本页不再自建高度。仅保留 :deep(.cols-toggle)：
-   “显示列”入口在子组件内部，其行高/字号仍需由工具栏行统一约束。 */
+   “显示列”入口在子组件内部，其行高/内边距/圆角/字号仍需由工具栏行统一约束。
+   本规则是这些属性的**唯一**声明方（`ColumnSettings.vue` 侧已不再重复声明）：两侧同特异性时
+   重复声明会让生效值随样式表注入顺序变化。 */
 :deep(.cols-toggle){height:var(--control-height-compact);min-height:var(--control-height-compact);padding:0 var(--space-3);border-radius:var(--radius-md);font-size:var(--font-label)}
 .toolbar-filters{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:var(--font-label)}
 .search-box input{width:var(--sheet-search-width)}

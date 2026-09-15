@@ -497,6 +497,20 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, page.locator(".filter-toggle"), "font-size", "--button-font-size");
   });
 
+  test("显示列入口：生效值由工具栏唯一声明（消除注入顺序依赖）", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const toggle = page.locator(".sheets-toolbar .cols-toggle");
+    // `.cols-toggle` 的高度/内边距/圆角只由 `SheetToolbar.vue` 的 `:deep(.cols-toggle)` 声明。
+    // 曾两侧同特异性（均 0,2,0）重复声明不同取值（子组件侧 4px 10px / --radius-sm），
+    // 生效值取决于样式表注入顺序；现以**绝对值**钉住实测生效值，顺序变化会被立刻发现。
+    await expect(toggle).toHaveCSS("height", "34px");
+    await expect(toggle).toHaveCSS("padding-top", "0px");
+    await expect(toggle).toHaveCSS("padding-left", "12px");
+    await expect(toggle).toHaveCSS("border-top-left-radius", "8px");
+    await expect(toggle).toHaveCSS("font-size", "13px");
+  });
+
   test("常驻搜索与筛选：38px 表单档与搜索框宽度令牌", async ({page}) => {
     await installSheetsFixture(page);
     await openWorkspace(page, "light");
