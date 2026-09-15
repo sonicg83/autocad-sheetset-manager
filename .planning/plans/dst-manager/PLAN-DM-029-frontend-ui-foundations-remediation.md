@@ -469,17 +469,20 @@ Files（本轮）：
 - Modify: `web/tests/e2e/sheets-visual-evidence.spec.ts`
 - Modify: `web/tests/e2e/sheets-visual-regressions.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
+- Modify: `web/tests/e2e/main.spec.ts`（**T7-5 补列**：`main.spec.ts` 是壳层计算样式断言的**既定落点**——Task 2 的 Step 2、Task 4 的 Step 1 都写在它，且 Task 4 的 Step 1 已点名「任务浮层折叠状态」；Step 1 明文要求的「任务浮层动作与状态控件断言」在原 Files 内**无合适落点**——`sheets-*` 是页面 spec，而浮层是壳层组件）
 
-- [ ] **Step 1（RED）**：为截图第 1 张的批量模式、属性选择、批量值、批量加入草稿写同行中心、字号、36/38px 档位、disabled 与长文本溢出断言；补任务浮层动作与状态控件断言。
-- [ ] **Step 2（迁移）**：工具栏、表单、列设置、属性编辑、表格动作和浮层内部动作改用原语（**注：`TaskOverlay.vue` 的浮层内部控件与手写焦点副本已由 Task 4 按 Ruling 28 迁完，本步骤对该文件是验证性 no-op**）；保持选中、批量修改、草稿与任务 SSE 流程不变。
-- [ ] **Step 3（动态变量）**：对图纸树宽度等运行时 CSS 变量，在白名单中同时登记写入方与消费方；能改为静态令牌的变量立即清退，不以 fallback 隐藏未定义变量。
-- [ ] **Step 4（密集布局）**：在 `900/1024/1120/1440` 四视口验证批量编辑区不撑破表格、操作列可达、横向滚动条不遮挡内容；关键控件 200% 浏览器韧性测试通过。
-- [ ] **Step 5（正交证据）**：保存浅/深默认、批量编辑启用、批量编辑禁用、最窄视口、200% 共 6 张。
-- [ ] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项（**9 条，属 Task 10 Files**）外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
+- [x] **Step 1（RED）**：为截图第 1 张的批量模式、属性选择、批量值、批量加入草稿写同行中心、字号、36/38px 档位、disabled 与长文本溢出断言；补任务浮层动作与状态控件断言。
+  - **前半已交付**（`sheets-layout.spec.ts` 新增 11 用例，含四视口/200%/批量编辑/表格结构等）。
+  - **后半（任务浮层动作与状态控件断言）首轮静默缺席，已由 T7-5 裁定补交**（落点改为 `main.spec.ts`），修复轮 `a355aafe` 执行中。
+- [x] **Step 2（迁移）**：工具栏、表单、列设置、属性编辑、表格动作和浮层内部动作改用原语（**注：`TaskOverlay.vue` 的浮层内部控件与手写焦点副本已由 Task 4 按 Ruling 28 迁完，本步骤对该文件是验证性 no-op**）；保持选中、批量修改、草稿与任务 SSE 流程不变。
+- [x] **Step 3（动态变量）**：对图纸树宽度等运行时 CSS 变量，在白名单中同时登记写入方与消费方；能改为静态令牌的变量立即清退，不以 fallback 隐藏未定义变量。
+- [x] **Step 4（密集布局）**：在 `900/1024/1120/1440` 四视口验证批量编辑区不撑破表格、操作列可达、横向滚动条不遮挡内容；关键控件 200% 浏览器韧性测试通过。
+- [x] **Step 5（正交证据）**：保存浅/深默认、批量编辑启用、批量编辑禁用、最窄视口、200% 共 6 张。
+- [x] **Step 6（例外清退）**：除阶段 4 专门处理的 `SheetTree.vue` 结构项（**9 条，属 Task 10 Files**）外，图纸页视觉值、按钮和 label 例外清零（`TaskOverlay.vue` 名下 15 条已由 Task 4 清退，无需重复）。
   - **原措辞为计划缺陷（T7-1(F) 订正）**：原文未含字号保留项，但 `15px`/`17px` **无可借值等值令牌且不得新增字号令牌**（T6-3/Ruling 38）→ 必须保留 **4 条**显式例外（`expiresWith` = 责任 K）。先例：Ruling 39 订正 Task 6 Step 6。
   - **收口不变量（T7-1(G)）**：Task 7 清退 **61** 条 = 65 − 4（保留字号例外）→ 全表 **186 → 125**；`check:ui` 裸违规应为 **126 = 125 + 1 动态白名单**。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
-- [ ] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
+- [x] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
 
 #### Task 7 控制器裁定（T7-1，派发前下达）
 
@@ -543,6 +546,18 @@ Files（本轮）：
 - **责任 W 已登记**：两页工具栏密度不一致（见下），**不改 worker 实现**。
 
 **T7-3（续轮工作清单）**：Step 1 补强（`--sheet-property-search-width` 断言 + **回归钉变异自证 ≥2 条**）→ Step 3 动态变量（白名单登记写入方与消费方，可静态化的立即清退，不得用 fallback 掩盖）→ Step 4 四视口 + 200% → Step 5 六张截图 → 例外表两处机械修正 → Step 7 重跑（不变式：仍为 128 条、`check:ui` EXIT 0）→ Step 8 提交。
+
+**T7-4（证据持久化落点；worker 提出的「前提与实际不符」经核实为正确行为）**：指令里「带 env 开关写库」的前提与实际不符——`sheets-visual-evidence.spec.ts` **没有**写库目录与 env 开关，其头部明确写着「持久证据由验收时显式复制，**避免自动改写仓库文件**」；且 `docs/.../assets/` 下**没有图纸页资产目录**。worker **没有自创路径**，图另存到计划证据目录。
+- 控制器核实**属实**，且该「不自动写库」的设计**恰恰避开了 Task 6 踩过的坑**（目录页那套 env 开关会**无条件覆盖**既有验收资产 → 责任 T）。
+- **裁定**：① 新建 `docs/dst-manager/specs/assets/SPEC-DM-009/production/`（SPEC-DM-009 正是图纸工作区 Spec；011/012/013 已有资产目录，009 缺位属缺口），**显式复制** 6 张 PNG；② **不**给该 spec 增加 env 开关，但在其头部注明持久证据位置与为何不加自动写库。已执行（提交 `2589173`）。
+
+**T7-5（首轮评审 Important-1 的裁定：任务浮层断言静默缺席）**：评审者发现 Step 1 明文要求的「补任务浮层动作与状态控件断言」**未交付且未在报告中登记为缺口**（其它缺口都如实登记了）。
+- **控制器补充核实（比评审者所见更严重）**：`main.spec.ts:1554` 的 `shell = page.locator(".topbar button, .tabbar button, .dock button")` **不含浮层按钮** → Task 4 的尺寸循环**从未覆盖过浮层控件**；全仓 e2e **没有任何** `.ov-*`/`.diag-*` 元素的样式或几何断言（已 grep 核实）；而 Task 4 把 `.ov-fold` 从 **40×40 改为 36×36**，该变更**只写在报告里、无任何断言钉住** → 静默回归风险。
+- **裁定**：`main.spec.ts` **加入 Task 7 Files**（理由见上）；修复轮在该文件为浮层**动作控件**（`.ov-tab`/`.ov-fold`）与**状态控件**（`.ov-dot`/`.diagnostics`/`.diag-copy`/`.diag-text`/`.ov-empty`）补计算样式与几何断言，量真实 `getBoundingClientRect()`，**`.ov-fold` 必须钉到 36×36**，状态色用令牌探针而非硬编码 rgb，并做**变异自证**（尺寸/颜色/可点下限各 1 条）。
+- **另**：`.cols-toggle` 的特异性相等冲突（`ColumnSettings.vue` 本体 vs `SheetToolbar.vue` 的 `:deep()`）→ 先量当前生效 padding，再删冗余侧并钉住，**不得改变当前视觉结果**。
+- **已裁定接受的 Minor（不动）**：`--sheet-status-radius` 仅有取值钉（状态夹具到不了）；`.multiline-text` 的 line-clamp 未断言（该属性本次未改）。
+- **如实记录**：`sheets-forms.spec.ts` 与 `sheets-visual-regressions.spec.ts` 在首轮/续轮 diff 中**零 hunk**（Files 列表是**授权而非义务**）；浮层断言落在 `main.spec.ts` 是有依据的选择，不视为这些文件的缺口。
+- 修复轮已派发：`a355aafe-57ce-45e5-91e8-96483b32a356`。
 
 ### Task 8: 迁移设置中心
 

@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-09-15（Task 7 首轮评审与 T7-4/T7-5 裁定，PLAN-DM-029）
+
+- **评审（`1493bbe0`）**：**Needs fixes / 0 Critical**。迁移本体、令牌/借用政策、动态变量登记、保留范围、无断言削弱、`ui/**` 未触——**逐条核实合规**；并确认 `expectToken` 自指弱点的修复（绝对值锚）**真实有效**（评审者也认为这是本 diff 最有价值的贡献）。
+- **[Important] Step 1 的「补任务浮层动作与状态控件断言」静默缺席**：未交付且**未在报告中登记为缺口**（其它缺口都如实登记了）。
+  - **控制器补充核实，比评审者所见更严重**：`main.spec.ts:1554` 的 `shell` 定位器只含 `.topbar/.tabbar/.dock` → Task 4 的尺寸循环**从未覆盖浮层控件**；全仓 e2e **无任何** `.ov-*`/`.diag-*` 样式或几何断言；而 Task 4 把 `.ov-fold` 从 **40×40 改为 36×36**，该变更**无任何断言钉住** → 静默回归风险。
+  - **T7-5 裁定**：`web/tests/e2e/main.spec.ts` **加入 Task 7 Files**（它是壳层计算样式的既定落点：Task 2 Step 2、Task 4 Step 1 都写在它），修复轮在该文件补浮层动作/状态控件断言 + 变异自证。
+- **T7-4 裁定（证据持久化）**：worker 指出指令前提与实际不符——`sheets-visual-evidence.spec.ts` **没有**写库目录/env 开关（头部明确「持久证据由验收时显式复制，避免自动改写仓库文件」），`docs/.../assets/` 下也无图纸页资产目录 → 它**没自创路径**。控制器核实**属实**，且该设计**正是避开 Task 6 clobbering 坑的正确一面**（责任 T）。裁定：新建 `SPEC-DM-009/production/` 并**显式复制** 6 张 PNG，**不**加自动写库。已执行（`2589173`）。
+- **另修（Minor）**：`.cols-toggle` 在 `ColumnSettings.vue` 与 `SheetToolbar.vue` 的 `:deep()` 中**特异性相等**（均 0,2,0）→ 生效值取决于样式表注入顺序 → 先量当前生效值再删冗余侧并钉住。
+- **已裁定接受的 Minor（不动）**：`--sheet-status-radius` 仅有取值钉（状态夹具到不了）；`.multiline-text` 的 line-clamp 未断言（属性本次未改）。
+- **如实记录**：`sheets-forms.spec.ts` 与 `sheets-visual-regressions.spec.ts` 零 hunk——Files 列表是**授权而非义务**，浮层断言落在 `main.spec.ts` 有依据。
+- **已执行的前置验证（控制器亲跑）**：`check:ui` 0、7 个 sheets spec **127 passed / 0 failed / 0 flaky**、例外表 128（删 58/新增 0）、假到期债务 0、`tokens.css` 仍恰 +9、`docs/` 未被他 Spec 污染、T7-1(E) 死 fallback 已清退。
+- 修复轮已派发 `a355aafe`。
+
 ## 2026-09-15（Task 7 首轮交付复核与续轮裁定，PLAN-DM-029）
 
 - **首轮交付一半即停下并如实披露**（`4336920f`，提交 `7432fa1`/`176c49e`）——自主披露了 RED 顺序做反、Step 3/5 未做、变异自证未做等，**属好行为**。
