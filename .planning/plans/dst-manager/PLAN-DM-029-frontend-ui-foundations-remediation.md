@@ -455,6 +455,8 @@ Files（本轮）：
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 
+> **状态：已关闭**。Step 1–8 全部完成（Step 7 的人工门禁经用户确认通过）。实现经**两轮独立评审**闭环（首轮 Needs fixes / 0 Critical → 修复轮 → 二审 All findings addressed）。除迁移本体外，本任务还**发现并修复了一个先前既有的应用级缺陷**（浮层诊断面板不可读，见 T7-6）与**一个检查器假阳性**（责任 X）。
+
 **Files:**
 
 - Modify: `web/src/views/SheetsView.vue`
@@ -483,7 +485,7 @@ Files（本轮）：
   - **收口不变量（T7-1(G)）**：Task 7 清退 **61** 条 = 65 − 4（保留字号例外）→ 全表 **186 → 125**；`check:ui` 裸违规应为 **126 = 125 + 1 动态白名单**。
 - [x] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheets-layout.spec.ts sheets-forms.spec.ts sheets-visual-evidence.spec.ts sheets-visual-regressions.spec.ts sheets-columns.spec.ts sheets-editing.spec.ts sheets-navigation.spec.ts` 与 `rtk npm --prefix web run build`；人工对照用户第 1 张截图。
   - **自动验证已由控制器亲跑完成**：`check:ui` **EXIT 0**（例外表 128、零新增）；`main.spec.ts` + 上述 7 个 sheets spec **EXIT 0：211 passed / 0 failed / 0 flaky**；`build` 0；`test:unit` 0（104）；`test:contracts` 0（83/83）。未跑全量 e2e（留待控制器在 Task 12 收口时跑）。
-  - **[ ] 人工对照用户第 1 张截图：待用户确认**（worker 被明确禁止声称完成）。
+  - **[x] 人工对照用户第 1 张截图：用户已确认通过**（答「已确认通过，关闭 Task 7」）→ **Task 7 正式关闭**。
 - [x] **Step 8（提交）**：commit：`统一图纸页与任务浮层控件视觉基础`。
 
 #### Task 7 控制器裁定（T7-1，派发前下达）
@@ -578,9 +580,9 @@ Files（本轮）：
 **T7-7（二审闭环 —— 控制器复核）**：二审 verdict = **All findings addressed, no new Critical/Important breakage** ✓。
 - 上一轮 4 项（Important ×1 + Minor ×1 + 已裁定接受 ×2）全部逐条 ADDRESSED。
 - **评审者做得比控制器要求的两处更硬**：① 它不只采信「删后复量一致」，而是**独立核了结构前提**——`grep -rn "ColumnSettings" src/` 证明 `.cols-toggle` **恒在工具栏 `:deep()` 作用域内**，所以删子组件侧**不可能**波及其它上下文（「零视觉变化」的**推理**成立，不只是碰巧测出来一致）；② 它核了枚举的**完整性**——`grep -nE "<input|<select|<textarea|role=\"button\"|tabindex"` 在 `TaskOverlay.vue` **零命中**，证明浮层内**不存在**未被覆盖的可点元素类型。（并合理区分了「隐藏元素应排除」与「枚举落空不得真空通过」，后者有 `visible.length > 0` 守卫。）
-- **新登记责任 X（检查器缺陷，评审者发现并控制器实读源码核实）**：`unicode-structure-icon` 对注释的处理**不对称**——`check-ui-contracts.mjs:428` 对模板用 `maskHtmlComments(html)` **剥离了 HTML 注释**，而 `:429` 对 `<style>` 直接取 `style.content` **未剥离 CSS 注释**；`STRUCTURE_ICON_PATTERN` 含 `\u2190-\u21FF`（箭头区）→ **在 CSS 注释里写一个装饰性 `→` 会被判违规**，而同一字符写在模板注释或脚本注释里不会。该规则自己的注释写着「脚本与 i18n 文案里的普通标点不参与」，可见**本意就是「只算真实标记/样式，不算注释与文本」**，故这是**无意的设计缺口**（非有意的严格）。
+- **新登记责任 X（检查器缺陷，评审者发现并控制器实读源码核实）**：`unicode-structure-icon` 对注释的处理**不对称**（`check-ui-contracts.mjs:428` 对模板用 `maskHtmlComments(html)` **剥离了 HTML 注释**，而 `:429` 对 `<style>` 直接取 `style.content` **未剥离 CSS 注释**；`STRUCTURE_ICON_PATTERN` 含 `\u2190-\u21FF`（箭头区）→ **在 CSS 注释里写一个装饰性 `→` 会被判违规**，而同一字符写在模板注释或脚本注释里不会。该规则自己的注释写着「脚本与 i18n 文案里的普通标点不参与」，可见**本意就是「只算真实标记/样式，不算注释与文本」**，故这是**无意的设计缺口**（非有意的严格）。
   - **实际代价**：修复轮 worker 真的踩到了——它在 CSS 注释里写 `→`，导致 `check:ui` 与 `build` **同时 EXIT=1**，多花一个提交（`477fe31`）去修。
-  - **收口方向**：对 style 块也做等价的注释剥离（或显式排除注释区），并在 Rule 文档里写明「注释不算」。
+  - **收口方向**：对 style 块也做等价的注释剥离（或显式排除注释区），并在 Rule 文档里写明「注释不算」。**→ 已按此实现（提交 `6bf4613`，含 2 条回归测试与变异自证）；闭环记录见「依赖与提交顺序」前的责任 X 条目。**
 - **两条 Minor（非阻塞，已登记不阻塞关闭）**：① `main.spec.ts` 新增的模块级 `tokenColorOf` 与既有「壳层交互态」用例内的局部 `tokenColor` **逐字重复**（6 行）——评审者**有意不按 rubric 升为 Important**，理由：它是**测试脚手架**、仅 6 行，且既有副本是**用例内局部**的，消重就得改动无关的既有用例，与「最小 diff」冲突；控制器**接受该判断**，登记为后续清理候选。② 非空转守卫用 `visible.length > 0`（枚举集合若意外缩小不会被察觉）——缓解因素是具体控件已被逐条钉住（`.ov-fold`/`.diag-text`/`.diag-copy`），风险低。
 - **Out-of-scope（已并入既有责任）**：① legacy 仍对浮层内**所有** button 强制 `display:flex` + `justify-content:space-between` + `text-align:left`（`legacy.css:24`）——今日被浮层自身 flex 布局掩盖，与责任 V 现有两例同族，**一并收口**；② 各 sheets spec 里的 `shell` 定位器仍按**选择器清单**枚举（`.topbar/.tabbar/.dock`），而非按**可点性**枚举——本次新增断言已把浮层纳入，但口径本身仍是弱点，登记供 Task 12 参考。
 
@@ -863,7 +865,13 @@ Files（本轮）：
 >
 > **两个实例的共同模式（这才是要收口的东西）**：legacy 层的**元素/通用选择器**（`.danger`、`aside button`）会静默改写它不该管的组件内部样式，而**现有任何门禁都发现不了**（`check:ui` 只看裸值是否令牌化，看不到渲染结果）。已要求修复轮做一轮**可枚举的清点**（列出所有命中浮层内部的 legacy `aside ...` 规则），而不是抽样印象；清点结果归入本责任。
 >
-> **收口方向（补充）**：除「以档位表裁决工具栏密度」外，还需把「**primitives/组件内部不得被 legacy 层的元素/通用选择器接管**」变成可机械检查的规则（当前扫描已得「primitives 层与 legacy 层**零**同名 class」，基底干净，可在此基础上加元素选择器维度）。**
+> **收口方向（补充）**：除「以档位表裁决工具栏密度」外，还需把「**primitives/组件内部不得被 legacy 层的元素/通用选择器接管**」变成可机械检查的规则（当前扫描已得「primitives 层与 legacy 层**零**同名 class」，基底干净，可在此基础上加元素选择器维度）。
+
+> **收口责任 X（`unicode-structure-icon` 对注释处理不对称 → 假阳性）—— 已修复（2026-09-15，`6bf4613`）**
+> 问题：`check-ui-contracts.mjs` 对模板区用 `maskHtmlComments` 剥了 HTML 注释，但对 `<style>` 区直接取 `style.content` **未剥 CSS 注释** → 在 CSS 注释里写个装饰性 `→` 会被判违规（同字符写在模板/脚本注释里则不会），与规则自己「只算真实标记与样式」的本意相悖。
+> **已修**：新增 `maskCssComments`（与 `maskHtmlComments` 同样**保持长度**，以免扫描偏移错位），样式区改用遮蔽后的文本；并补 **2 条回归测试**（假阳性不报 + 遮蔽不得吞掉样式区**真实**图标）。
+> **验证**：修复前用临时探针复现了真违规（`EXIT=1` 并报出 `注释里的箭头`）；修复后 `check:ui` **EXIT 0**、例外表仍 **128**（无条目变陈旧）；`test:contracts` **85/85**（原 83 + 新增 2）；**变异自证**——撤销修复后 2 条新测试均**红**，还原后均绿。
+> → 本责任**已闭环**，不遗入 Task 12。**
 
 ## 依赖与提交顺序
 

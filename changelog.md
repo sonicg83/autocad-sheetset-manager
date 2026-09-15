@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-09-15（Task 7 关闭 + 责任 X 修复，PLAN-DM-029）
+
+- **Task 7 正式关闭**：Step 1–8 全部完成；Step 7 人工门禁经用户确认通过。两轮独立评审闭环（首轮 Needs fixes / 0 Critical → 修复轮 → 二审 All findings addressed）。
+- **责任 X 已修复**（用户选择「现在修」，提交 `6bf4613`）：`unicode-structure-icon` 原先对注释处理**不对称**——模板区用 `maskHtmlComments` 剥了 HTML 注释，`<style>` 区却直接取 `style.content` **未剥 CSS 注释**，于是在 CSS 注释里写个装饰性 `→` 会被判违规（同字符写在模板/脚本注释里不会），与规则自己「只算真实标记与样式」的本意相悖。
+  - **修法**：新增 `maskCssComments`（与 `maskHtmlComments` 一样**保持长度**以免扫描偏移错位），样式区改用遮蔽后文本；并补 **2 条回归测试**（假阳性不报 + 遮蔽**不得**吞掉样式区里真实的图标）。
+  - **验证**：修前用临时探针（`src/__probe-icon-comment.vue`，已删）复现真违规（`EXIT=1`）；修后 `check:ui` **EXIT 0**、例外表仍 **128**（**无条目变陈旧**）；`test:contracts` **85/85**（原 83 + 新 2）；**变异自证**：撤销修复 → 新守卫**2 条均红**，还原后均绿；**反向验证**：把 `→` 放进**模板**仍被正确报出（遮蔽没有把真违规一起吞掉）。
+- **Task 7 最终账**：例外表清退 **61** 条（→ 全表 **128**，零新增）；新增 **9** 个组件层结构令牌（逐字等值）；`check:ui` 0 · e2e（`main.spec.ts` + Step 7 的 7 个 spec）**0：211 passed / 0 failed / 0 flaky** · `build` 0 · `unit` 0（104）· `contracts` 0（85/85）。
+- **额外收获（非迁移本体）**：发现并修复**先前既有的应用级缺陷**——浮层诊断面板每行只显示一个字符（`legacy aside button{width:100%}` + `.diag-copy{flex-shrink:0}` 把 `.diag-text` 挤成 0 宽），量化：`.diag-text` **0×520 → 283×21**、低于 32px 下限元素 **3 → 0**。
+- **持久证据**：`docs/dst-manager/specs/assets/SPEC-DM-009/production/` 共 **7** 张（6 张 Step 5 规定 + 1 张诊断面板修复后）。
+
 ## 2026-09-15（Task 7 二审闭环 + 责任 X，PLAN-DM-029）
 
 - **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 Important ×1 + Minor ×1 + 已裁定接受 ×2 全部 ADDRESSED）。
