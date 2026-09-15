@@ -306,13 +306,16 @@ Files（本轮）：
 - Modify: `web/tests/e2e/sheet-catalog.spec.ts`
 - Modify: `web/tests/e2e/sheet-catalog-visual-evidence.spec.ts`
 - Modify: `web/scripts/ui-contract-exceptions.json`
+- Modify: `web/src/styles/tokens.css`（原计划漏列，经 Ruling 39 补齐：本页有 8 处容器结构尺寸在既有令牌中**无逐字等值项**，而 `raw-visual-value` 按设计**有意覆盖宽高家族**，故唯一合法路径是追加组件层结构令牌）
 
 - [ ] **Step 1（RED）**：针对截图红框内保存/另存/删除、添加输出列、导出 XLSX 写计算样式和对齐断言；覆盖 disabled、danger、primary 层级和可见 label。
 - [ ] **Step 2（迁移）**：工具栏、列编辑器和预览动作改用公共原语；保持字段拖插、表达式、模板保存、预览刷新和 XLSX 导出契约不变。
 - [ ] **Step 3（图标复核）**：对 `ColumnEditor.vue` 的 `↑ / ↓ / ✕` 做同状态截图与键盘行为对照；若 SVG 在辨识度与行为上等价或更好则迁移并删除例外，否则保留原字符但补齐 `type`、accessible name、点击面积，并把例外到期条件改为下一次目录页视觉 Spec 修订。
 - [ ] **Step 4（字体复核）**：对表达式等宽字体、长列名、50 列计数和表格横向溢出做布局断言，确认 IBM Plex Mono 不造成截断或动作列覆盖。
 - [ ] **Step 5（正交证据）**：保存浅/深默认、禁用保存、删除危险态、窄屏溢出共 5 张。
-- [ ] **Step 6（例外清退）**：除经 Step 3 复核保留的唯一条目外，图纸目录目录零例外。
+- [ ] **Step 6（例外清退）**：除经 Step 3 复核保留的 **3 条** `unicode-structure-icon`（`↑ / ↓ / ✕`，依 A1）外，图纸目录页零例外。
+  - **原措辞为计划缺陷（Ruling 39 订正）**：原文写「保留的**唯一**条目」，但 `↑ / ↓ / ✕` 本就是 **3 条**独立例外，字面目标不可达。先例：Ruling 37。
+  - **收口不变量**：Task 6 名下原 **75** 条（74 Files 内 + 1 `CompatibilitySummary.vue`）→ 清退 69 条 `raw-visual-value` + 2 条 `visible-input-label`，保留 3 条 → **终态 186 条 = 258 − 75 + 3**；`check:ui` 裸违规 **187 = 186 + 1 动态白名单**。
 - [ ] **Step 7（验证）**：运行 `rtk npm --prefix web run test:e2e -- sheet-catalog.spec.ts sheet-catalog-visual-evidence.spec.ts`、`rtk npm --prefix web run build`；人工对照用户第 2 张截图。
 - [ ] **Step 8（提交）**：commit：`统一图纸目录页控件视觉基础`。
 
@@ -334,6 +337,24 @@ Files（本轮）：
 **T6-5（两处 `visible-input-label`）**：`ColumnEditor.vue` 的 `input:text:` 与 `FieldBrowser.vue` 的 `input:text:query` 必须补**可见 label**（检查器规则名为 `visible-input-label`，仅加 `aria-label` **不解除**该例外）。`CompatibilitySummary.vue` 虽无该规则条目，同一输入同样适用。
 
 **T6-6（门禁配额）**：每项门禁最多 **2** 次；Step 7 的 e2e 只跑两个 spec 文件（用文件名收窄，**禁跑全量**）；`build` ≤1 次。**禁触**：`web/src/components/ui/**`（原语已定稿）、`web/src/styles/**`、其他页面的 spec、`.planning/**`、`changelog.md`、`.superpowers/**`。**遇冲突停下报告，不得自行放宽任何约束。**
+
+**T6-7（Ruling 39：结构尺寸无令牌 → 开放 `tokens.css`，新增 7 个组件层结构令牌）**：worker 侦察后停下报告「Step 6 在当前 Files 内不可达」，控制器**逐条独立复核为属实**：8 处容器结构尺寸在语义层/组件层无逐字等值令牌。裁定 **A（修正版）**，驳回「保留为残留例外」（B）。
+
+- **驳回 B 的依据（控制器实读检查器源码）**：`web/scripts/ui-contracts/visual-values.mjs` 的 `RAW_VISUAL_PROPERTIES` **有意包含** `width/min-width/max-width/height/min-height/max-height`，其文件头注释原文为「图标/控件**尺寸**（宽高家族成对书写，只覆盖高度会漏掉图标）」——**布局几何量按设计就是要令牌化的**，把结构尺寸留作永久例外与该规则的设计意图直接冲突。
+- **同一文件证实责任 H 为真**：`COMPUTED_VALUE_PATTERN` 豁免 `calc(`/`min(`/`max(`/`clamp(`/`env(`/`var(`，故用 `calc(425px)` 包裹常量可静默过检。worker **未**采用该手法，也**未**用 `flex-basis`/inline style 夹带尺寸，**保留记录**。
+- **8 条中的 2 条实为「值等值但语义不符」**：`--overlay-pop-max-height`=300px（语义为浮窗）、`--shell-bar-height`=52px（语义为壳层条高）。**借用它们才是真错误**（Ruling 33/35 所打的语义说谎反模式）→ 必须另立令牌。
+- **授权范围（严格）**：`tokens.css` **仅追加**组件层结构令牌，**仅 7 个**，值**逐字等值**、零视觉变化；**禁止**改既有令牌的名字/值/顺序；**禁止**新增字号令牌（T6-3 不变）；**禁止**改令牌文件描述性注释（责任 I 措辞收窄由控制器收口时处理）。
+- **令牌名（按角色/域命名，单一一致前缀）**：沿用既有 `--definition-row-height`/`--compare-card-max-width` 先例。控制器**澄清**「令牌名不得含页面名」的原意是禁止**视图文件名派生**（如 `--sheet-catalog-view-*`）；`sheet-catalog` 是**功能域**非页面名，且统一前缀使这笔债可成组审计。7 个：`--catalog-pane-height:425px`、`--catalog-preview-min-height:250px`、`--catalog-preview-table-max-height:300px`、`--catalog-columns-max-height:330px`、`--catalog-field-browser-max-height:235px`、`--catalog-template-select-min-width:220px`、`--catalog-column-expression-min-height:52px`。
+  - **其中 `--catalog-pane-height` 必须合并 worker 原提的两条**（`.catalog-row{height:425px}` 与 `.column-editor{min-height:425px}`@≤980px 属**同一套 425px 首屏密度预算**）。拆成两个同值令牌正是责任 I 点名的「单点组件令牌」重复，**照拆打回**。
+- **圆角授权**：`.column-row input`/`textarea` 的 `border-radius:5px` → `var(--radius-sm)`(6px) **批准**。理由：仓库无 5px 档位，为 1px 去动原始圆角刻度属更大的架构改动；先例为 Task 5 把 `999px` 归一到 `--radius-full`(9999px)。**这是本轮唯一的显式视觉偏离，必须在报告中单列披露。**
+- **责任 I 记账**：组件层结构令牌由 6 条增至 **13** 条。
+
+**T6-8（Step 3 图标复核结论与 `32px` 折中 → 新登记责任 R）**：worker 依 T6-4 授权判**保留**，控制器独立复核其四条理由**全部属实**（实读 `UiIconButton.vue:28-43`：确为 `border:1px solid transparent` + `--color-text-secondary` + `var(--icon-button-size)`(36px) + `background:none`；实读 `ColumnEditor.vue:195/211-214`：末轨确为 `112px`、`.row-actions{gap:4px}`，本行为 `--color-border-strong` 实边框 + `--color-bg-surface` 底 + `--color-text-primary` + ✕ 带 `--color-danger`）。
+
+- **控制器补入的决定性证据（worker 未引用）**：`ColumnEditor.vue:8` 逐字记录 **「A1（用户已接受差异）：操作列继续使用 ↑ / ↓ / ✕ 图标按钮与完整 aria-label，因此该轨道（112px）比冻结 Demo 的 188px 文字按钮列更窄。」** —— 保留图标是**已被用户接受的设计**，112px 轨道是其**后果**。故判**保留、不得迁移、不得把轨道加宽回 188px**。
+- **点击面积 `30px` → `var(--tap-target-min)`(32px) 批准**，轨道预算实测：现行 3×30+2×4=98 ≤112；32px 时 3×32+8=**104 ≤112 ✓**；36px 需 3×36+8=**116 >112 ✗**，gap 压到 2px 才恰好 112（零余量）。**即 36×36 在不推翻 A1 的前提下不可达。**
+- **新登记责任 R（Task 12 收口）**：密集表格行内动作按钮的尺寸上限受 A1 的 112px 冻结轨道约束，**无法**满足 SPEC-DM-010「图标按钮 ≥36×36」；本轮取 `--tap-target-min`(32×32) 折中，需由 Spec 归属方确认或调整轨道宽。
+- `30→32` 与圆角 1px 同属**可见变化**，必须一并单列披露（依据：Step 3「补齐…点击面积」）。`type="button"` 与完整 aria-label 已存在（`ColumnEditor.vue:167-169`），**保持不动**。
 
 ### Task 7: 迁移图纸页与任务浮层内部控件
 
@@ -615,6 +636,8 @@ Files（本轮）：
 > **收口责任 P（视觉证据注释与实现不符；Task 5 第二轮修复已订正，保留记录）**：`properties-visual-evidence.spec.ts` 头部注释写「附件为 `prod-{状态}-{宽}x{高}-{主题}.png`」，而 `attachScreenshot` 实际写 `${state}-${宽}x${高}-${主题}.png`（**无 `prod-` 前缀**），调用点传入 `default`/`narrow-single-column`/`def-table-overflow`；同文件新增注释又声称「height/padding/radius 已由上方令牌断言覆盖」，而全文件 `padding`/`radius` 断言各仅 1 条且都指向定义面板查询区，**不覆盖**折叠标题、导入导出与两个按钮。两者均属「注释声称强于实际」的文档债务，与 Ruling 33 追究的失实注释同类，已在 Step G1 一并订正。保留本条以说明「注释准确性」是本计划的持续关注点。
 >
 > **收口责任 Q（输入 hover 的表现形式与 SPEC-DM-006 §5.1 通用规则不一致；Task 5 第二轮评审发现）**：`SPEC-DM-006:169` 的交互态映射规则写「`hover` 在 surface/muted 上升亮度约 +4%」，而本轮制度化到共享原语的输入 hover 是**描边变色** `border-color:var(--color-accent)`（`:232` 未规定输入 hover 的表现形式）。该形式是仓库既有事实标准（迁移前已逐字相同地出现在 `PropertyValuePanel.vue` 与 `SheetPropertyEditor.vue` 两处），且现已提升为**原语契约**，会被 Task 6–9 逐页沿用。收口方向：请 Spec 归属方确认「描边变色」是被接受的输入 hover 表现，或在文栅上对齐 +4% 规则；**本轮不动表现形式**（那比定序修正的可见变化大得多，超出迁移任务范围），但在定调前不得声称输入 hover 已符合 §5.1。
+
+> **收口责任 R（密集表格行内动作按钮无法满足 SPEC-DM-010「图标按钮 ≥36×36」；Task 6 派发前侦察发现）**：`ColumnEditor.vue` 的 `↑ / ↓ / ✕` 行内动作按钮受 `ColumnEditor.vue:8` 记录的 **A1（用户已接受差异）** 约束：保留字符图标导致操作列轨道由冻结 Demo 的 188px 收窄为 **112px**。轨道预算实测：3×30+2×4=98；提到 `--tap-target-min`(32px) 后 3×32+8=104 ≤112；但 **36×36 需 116 >112**，把 gap 压到 2px 才恰好 112（零余量）——**即 SPEC-DM-010 的图标按钮下限在不推翻 A1 的前提下不可达**。本轮取 32×32 折中（满足可点目标 ≥32px）。收口方向：请 Spec 归属方在「调整轨道宽（推翻 A1）」与「为密集表格行内按钮豁免 36px 下限」之间裁定，并把该豁免写回 SPEC-DM-010。
 
 ## 依赖与提交顺序
 

@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-09-15（Task 6 派发前范围冲突裁定：Ruling 39 开放 tokens.css + 责任 R，PLAN-DM-029）
+
+- **背景**：Task 6 worker 侦察后**主动停下报告**「Step 6『图纸目录页零例外』在当前 Task 6 Files 内不可达」——页面上有 8 处 `raw-visual-value` 的**容器结构尺寸**在语义层/组件层无逐字等值令牌，而 `tokens.css` 不在 Files 且 T6-6 明文禁触 `web/src/styles/**`。**未开始任何改动。**
+- **控制器独立复核（不采信 worker 自述）**：逐条核验 8 条主张**全部属实**，且 worker 自述偏**保守**——其中 2 条其实**值等值**：`--overlay-pop-max-height`=300px（语义为浮窗）、`--shell-bar-height`=52px（语义为壳层条高）。**借用它们才是真错误**（Ruling 33/35 所打的语义说谎反模式）→ 必须另立令牌。
+- **Ruling 39（裁定 A 修正版：开放 `tokens.css`，仅追加 7 个组件层结构令牌）**：
+  - **驳回 B（保留为残留例外）**：控制器**实读检查器源码** `web/scripts/ui-contracts/visual-values.mjs` —— `RAW_VISUAL_PROPERTIES` **有意包含** `width/min-width/max-width/height/min-height/max-height`，文件头注释原文为「图标/控件**尺寸**（宽高家族成对书写，只覆盖高度会漏掉图标）」。**布局几何量按设计就是要令牌化的**，留作永久例外与该规则的设计意图直接冲突。
+  - **同一文件证实责任 H 为真**：`COMPUTED_VALUE_PATTERN` 豁免 `calc(`/`min(`/`max(`/`clamp(`/`env(`/`var(`，故 `calc(425px)` 包裹常量可静默过检。worker **未**采用该手法，也**未**用 `flex-basis`/inline style 夹带尺寸，**保留记录**。
+  - **7 个令牌（逐字等值、零视觉变化、仅追加）**：`--catalog-pane-height:425px`、`--catalog-preview-min-height:250px`、`--catalog-preview-table-max-height:300px`、`--catalog-columns-max-height:330px`、`--catalog-field-browser-max-height:235px`、`--catalog-template-select-min-width:220px`、`--catalog-column-expression-min-height:52px`。
+  - **其中 `--catalog-pane-height` 强制合并 worker 原提的两条**（`.catalog-row{height}` 与 `.column-editor{min-height}`@≤980px 属**同一套 425px 首屏密度预算**）：拆成两个同值令牌正是责任 I 点名的「单点组件令牌」重复。
+  - **令牌名口径澄清**：既有先例按**角色/域**命名（`--definition-row-height`、`--compare-card-max-width`）；控制器此前的「令牌名不得含页面名」原意是禁**视图文件名派生**（如 `--sheet-catalog-view-*`），而 `sheet-catalog` 是**功能域**，统一前缀反而使这笔债可成组审计。
+  - **圆角**：`border-radius:5px` → `var(--radius-sm)`(6px) **批准**（仓库无 5px 档位；先例为 Task 5 把 `999px` 归一到 `--radius-full`）——**本轮唯一显式视觉偏离，必须单列披露**。
+  - **责任 I 记账**：组件层结构令牌由 6 条增至 **13** 条。
+- **Ruling 39 附带订正（计划缺陷）**：Step 6 原文「除经 Step 3 复核保留的**唯一**条目外…零例外」——而 `↑ / ↓ / ✕` 本就是 **3 条**独立例外，字面目标不可达（先例 Ruling 37）。已订正为「**3 条** `unicode-structure-icon`」，并写入**收口不变量 186 = 258 − 75 + 3**（`check:ui` 裸违规 187 = 186 + 1）。
+- **T6-8（Step 3 图标判保留）**：worker 依 T6-4 授权判**保留**，控制器独立复核其四条理由**全部属实**（实读 `UiIconButton.vue:28-43` 与 `ColumnEditor.vue:195/211-214`）。**控制器补入 worker 未引用的决定性证据**：`ColumnEditor.vue:8` 逐字记录 **「A1（用户已接受差异）：操作列继续使用 ↑ / ↓ / ✕ 图标按钮与完整 aria-label，因此该轨道（112px）比冻结 Demo 的 188px 文字按钮列更窄。」** —— 保留图标是**已被用户接受的设计**，112px 轨道是其**后果**。
+- **新登记责任 R**：轨道预算实测 3×30+2×4=98、3×32+8=104 ≤112、**3×36+8=116 >112 ✗**（gap 压到 2px 才恰好 112，零余量）→ **36×36 在不推翻 A1 的前提下不可达**。本轮取 `--tap-target-min`(32×32) 折中；收口方向：请 Spec 归属方在「调整轨道宽（推翻 A1）」与「为密集表格行内按钮豁免 36px 下限」之间裁定并写回 SPEC-DM-010。
+- **影响范围**：本次仅改计划文件（Task 6 Files 补 `tokens.css` + Step 6 措辞订正 + T6-7/T6-8 裁定块 + 责任 R）与本文档；未改任何源码。
+- **待续**：worker 已按 Ruling 39 开工（BASE `0ede2dd`）。
 ## 2026-09-15（Task 5 人工门禁关闭；Task 6 派发前裁定 Ruling 37/38，PLAN-DM-029）
 
 - **Task 5 Step 7 人工门禁关闭**：用户本人于 2026-09-15 确认人工对照第 3 张截图「可以通过」。该步逐字要求的是**人工**比对，而那 3 张缺陷截图未入库、控制器无法代验，故此前只能登记为未完成。现由用户本人确认并回填至计划 Step 7。
