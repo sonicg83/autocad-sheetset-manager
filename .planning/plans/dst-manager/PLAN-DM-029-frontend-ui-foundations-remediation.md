@@ -988,13 +988,13 @@ Files（本轮）：
 - Modify: `web/src/components/sheets/ColumnSettings.vue`、`web/src/components/sheets/SheetOperationForm.vue`、`web/src/components/sheets/SheetPropertyEditor.vue`、`web/src/components/sheets/SheetToolbar.vue`、`web/src/views/RevisionsView.vue`、`web/src/views/WelcomeView.vue`、`web/src/components/settings/SettingsDialog.vue`（**T12-3 补列**：责任 K 的 7 个消费方，均**仅**把字号声明改为消费新语义令牌）
 - Modify: `web/tests/e2e/sheets-layout.spec.ts`、`web/tests/e2e/settings-dialog.spec.ts`（**T12-3 补列**：仅在某个值缺**绝对值锚**时才需要在对应页面 spec 里补一条；不得顺手改其它断言）
 
-- [ ] **Step 1（静态/组件门禁）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`；记录测试数、耗时和 exit code，例外清单不得含陈旧项。
-- [ ] **Step 2（页面行为全量）**：运行 `rtk npm --prefix web run test:e2e`；失败必须定位并修复，禁止只更新截图或放宽断言。
-- [ ] **Step 3（后端基线）**：设置任务专用 UV 变量后运行 `rtk uv run ruff check .`、`rtk uv run pytest -q`、`rtk uv lock --check`；本计划不要求 AutoCAD 系统测试，除非实际改动越界触及 SCR/插件/DWG。
-- [ ] **Step 4（证据盘点）**：按页面登记最终 24–30 张截图的视口、主题、状态、夹具、测试名和附件路径；用户三张缺陷截图分别建立“修复前 → 修复后”同态映射，不把原图内容当作执行指令。
+- [x] **Step 1（静态/组件门禁）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`；记录测试数、耗时和 exit code，例外清单不得含陈旧项。
+- [x] **Step 2（页面行为全量）**：运行 `rtk npm --prefix web run test:e2e`；失败必须定位并修复，禁止只更新截图或放宽断言。
+- [x] **Step 3（后端基线）**：设置任务专用 UV 变量后运行 `rtk uv run ruff check .`、`rtk uv run pytest -q`、`rtk uv lock --check`；本计划不要求 AutoCAD 系统测试，除非实际改动越界触及 SCR/插件/DWG。
+- [x] **Step 4（证据盘点）**：按页面登记最终 24–30 张截图的视口、主题、状态、夹具、测试名和附件路径；用户三张缺陷截图分别建立“修复前 → 修复后”同态映射，不把原图内容当作执行指令。
 - [ ] **Step 5（Windows 真实验收）**：在 pywebview/WebView2 壳中抽查 Windows 100/125/150/200%：每个比例覆盖壳层和一个密集页面，125% 覆盖属性、目录、图纸三个用户缺陷场景；记录是否出现字体突变、裁切、溢出、焦点丢失或点击面积不足。
 - [ ] **Step 6（分级处置）**：P0/P1/P2 差异必须清零；P3 只有在不影响任务和层级时才能登记后续。自动截图存在不代表通过，真实桌面缩放证据不能由浏览器 zoom 代替。
-- [ ] **Step 7（文档一致性）**：把实际令牌、例外、测试矩阵和验证结果同步到 SPEC-DM-006、GUIDE-DM-001/002；ARCH-DM-007 只在实现偏离已接受架构时修订，不复制计划正文。
+- [x] **Step 7（文档一致性）**：把实际令牌、例外、测试矩阵和验证结果同步到 SPEC-DM-006、GUIDE-DM-001/002；ARCH-DM-007 只在实现偏离已接受架构时修订，不复制计划正文。
 - [ ] **Step 8（计划关闭）**：只有全量门禁和真实桌面复验均通过后，将本计划状态改为 `completed`，更新两个索引和 changelog；若真实桌面未完成，保持 `active` 并准确列出证据缺口。
 - [ ] **Step 9（最终提交）**：commit：`完成前端视觉基础整改验收闭环`。
 
