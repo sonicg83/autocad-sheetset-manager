@@ -1304,9 +1304,9 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     await expectToken(page, save, "font-size", "--button-font-size");
     // 同行一致（回归守卫）：保存/另存为是 UiButton，删除是保留低强调写法的裸按钮；
     // 迁移曾把后者留在 34px（--control-height-compact）而前者是 36px，本用例正是
-    // 用户截图红框所在的行。三枚按钮现在必须同高，且都落在 36px 档。
-    await expectToken(page, remove, "height", "--button-height");
+    // 用户截图红框所在的行。等高断言排在单值断言之前，改回 34px 时由它先失败。
     await expectUniformButtonHeights(page, ".template-row button, .dock-row button");
+    await expectToken(page, remove, "height", "--button-height");
     // 横向内边距：UiButton 默认 --space-4（迁移前 .template-row button 是 --space-3）；
     // 删除按钮有意保留 --space-3 的低强调写法（透明底 + 危险文字，不用实心 danger 变体），
     // 因此本轮只统一高度、不统一内边距。
