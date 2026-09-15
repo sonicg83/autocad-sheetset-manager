@@ -12,6 +12,7 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {CatalogField, SheetCatalogController} from "../../composables/useSheetCatalog";
 import {applyNumberFormat, NUMBER_FORMAT_WIDTHS, STRIP_ZEROS_WIDTH} from "./formatCode";
+import UiInput from "../ui/UiInput.vue";
 
 const props = defineProps<{catalog: SheetCatalogController}>();
 const {t} = useI18n();
@@ -141,12 +142,12 @@ onBeforeUnmount(() => {
       <span class="field-hint">{{ $t("extensions.sheetCatalog.fieldHint") }}</span>
     </div>
     <div class="field-search">
-      <input
+      <UiInput
         v-model="query"
-        type="text"
-        :aria-label="$t('extensions.sheetCatalog.fieldSearchLabel')"
+        type="search"
+        :label="$t('extensions.sheetCatalog.fieldSearchLabel')"
         :placeholder="$t('extensions.sheetCatalog.fieldSearchPlaceholder')"
-      >
+      />
     </div>
     <div class="field-list">
       <section v-for="group in visibleGroups" :key="group.id" class="field-group">
@@ -205,32 +206,32 @@ onBeforeUnmount(() => {
 <style scoped>
 .field-browser{display:flex;flex-direction:column;gap:var(--space-2);min-width:0;min-height:0;overflow:hidden}
 .field-head{display:flex;align-items:baseline;gap:var(--space-2);min-width:0}
-.field-head h3{margin:0;font-size:14px}
-.field-hint{margin-left:auto;color:var(--color-text-muted);font-size:12px;text-align:right}
-.field-search input{width:100%;padding:7px 9px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);font-size:13px}
+/* 14px 卡标题借用组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
+.field-head h3{margin:0;font-size:var(--button-font-size)}
+.field-hint{margin-left:auto;color:var(--color-text-muted);font-size:var(--font-caption);text-align:right}
 .field-list{display:flex;flex-direction:column;overflow:auto;min-height:0;flex:1;margin:0 calc(-1 * var(--space-1));padding:0 var(--space-1)}
-.field-group h4{margin:var(--space-2) 0 var(--space-1);padding:0 2px;font-size:12px;font-weight:600;color:var(--color-text-secondary)}
+.field-group h4{margin:var(--space-2) 0 var(--space-1);padding:0 2px;font-size:var(--font-caption);font-weight:600;color:var(--color-text-secondary)}
 .field-group ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .field-entry{display:flex;flex-direction:column;min-width:0}
 .field-entry-main{display:flex;align-items:flex-start;gap:2px;min-width:0}
 .field-chip{display:block;flex:1 1 auto;min-width:0;text-align:left;padding:6px 8px;border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:inherit;min-height:0}
 /* 格式入口触发按钮固定宽度、不参与伸缩，字段栏轨道宽度因此保持 258px 不变 */
 .field-format-entry{flex:none}
-.format-trigger{padding:6px;border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);font-size:12px;white-space:nowrap}
+.format-trigger{padding:6px;border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);font-size:var(--font-caption);white-space:nowrap}
 .format-trigger:hover{border-color:var(--color-border-subtle);background:var(--color-info-bg)}
 .format-trigger[aria-expanded="true"]{border-color:var(--color-border-strong);color:var(--color-text-primary)}
 /* 菜单在流内展开：超长选项在菜单内换行，不把字段栏撑宽。
    选择器带上 .field-entry 以高于 .field-group ul 的优先级，否则菜单的内边距/外边距被后者覆盖 */
 .field-entry .field-format-menu{list-style:none;margin:2px 0 var(--space-1);padding:2px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);min-width:0}
-.format-option{display:block;width:100%;text-align:left;padding:4px 6px;border-radius:var(--radius-sm);background:transparent;color:inherit;font-size:12px;overflow-wrap:anywhere}
+.format-option{display:block;width:100%;text-align:left;padding:4px 6px;border-radius:var(--radius-sm);background:transparent;color:inherit;font-size:var(--font-caption);overflow-wrap:anywhere}
 .format-option:hover{background:var(--color-info-bg)}
 .field-chip:hover{border-color:var(--color-border-subtle);background:var(--color-info-bg)}
-.field-chip code{display:block;font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);white-space:normal;overflow-wrap:anywhere}
-.field-chip small{display:block;margin-top:2px;color:var(--color-text-secondary);font-size:12px;overflow-wrap:anywhere}
-.field-empty{margin:var(--space-2) 2px;color:var(--color-text-muted);font-size:12px}
-.empty-hint{margin:var(--space-1) 2px;color:var(--color-text-muted);font-size:12px}
-.field-syntax{margin:var(--space-2) 2px 0;color:var(--color-text-muted);font-size:12px;line-height:1.7}
-/* PLAN-DM-023 Task 5：≤980px 单列布局下限高 235px，字段列表内部滚动，
+.field-chip code{display:block;font-family:var(--font-mono);font-size:var(--font-caption);color:var(--color-text-primary);white-space:normal;overflow-wrap:anywhere}
+.field-chip small{display:block;margin-top:2px;color:var(--color-text-secondary);font-size:var(--font-caption);overflow-wrap:anywhere}
+.field-empty{margin:var(--space-2) 2px;color:var(--color-text-muted);font-size:var(--font-caption)}
+.empty-hint{margin:var(--space-1) 2px;color:var(--color-text-muted);font-size:var(--font-caption)}
+.field-syntax{margin:var(--space-2) 2px 0;color:var(--color-text-muted);font-size:var(--font-caption);line-height:1.7}
+/* PLAN-DM-023 Task 5：≤980px 单列布局下限高 --catalog-field-browser-max-height，字段列表内部滚动，
    输出列与预览不因字段数量继续下移（与冻结 Demo 的 field-card max-height 一致） */
-@media (max-width: 980px){.field-browser{max-height:235px}}
+@media (max-width: 980px){.field-browser{max-height:var(--catalog-field-browser-max-height)}}
 </style>

@@ -92,6 +92,13 @@
     --task-rail-action-size:40px;
     --task-drawer-max-width:390px;
     --toast-max-width:360px;
+    --catalog-pane-height:425px;
+    --catalog-preview-min-height:250px;
+    --catalog-preview-table-max-height:300px;
+    --catalog-columns-max-height:330px;
+    --catalog-field-browser-max-height:235px;
+    --catalog-template-select-min-width:220px;
+    --catalog-column-expression-min-height:52px;
   }
 
   html[data-theme="dark"]{

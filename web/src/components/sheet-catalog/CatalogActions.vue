@@ -8,6 +8,7 @@
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import type {SheetCatalogController} from "../../composables/useSheetCatalog";
+import UiButton from "../ui/UiButton.vue";
 
 const props = defineProps<{catalog: SheetCatalogController}>();
 const {t} = useI18n();
@@ -35,9 +36,9 @@ const summaryText = computed(() => {
     <div class="dock-row">
       <span class="dock-summary" role="status">{{ summaryText }}</span>
       <span class="spacer"></span>
-      <button type="button" class="primary" :disabled="!catalog.exportReady.value" @click="catalog.exportXlsx()">
+      <UiButton variant="primary" :disabled="!catalog.exportReady.value" @click="catalog.exportXlsx()">
         {{ catalog.exportState.phase === "exporting" ? $t("extensions.sheetCatalog.exporting") : $t("extensions.sheetCatalog.exportButton") }}
-      </button>
+      </UiButton>
     </div>
     <p v-if="catalog.actionError.value" class="error notice" role="alert">{{ catalog.actionError.value }}</p>
     <div v-if="catalog.exportState.phase === 'success'" class="success" role="status">
@@ -45,30 +46,27 @@ const summaryText = computed(() => {
         <strong>{{ $t("extensions.sheetCatalog.exportSuccessTitle") }}</strong>
         <span class="mono">{{ catalog.exportState.outputPath }}</span>
       </p>
-      <button type="button" @click="catalog.openExportFolder()">{{ $t("extensions.sheetCatalog.openFolder") }}</button>
+      <UiButton @click="catalog.openExportFolder()">{{ $t("extensions.sheetCatalog.openFolder") }}</UiButton>
     </div>
     <div v-if="catalog.exportState.phase === 'failed' && catalog.exportState.errorText" class="export-error" role="alert">
       <p>{{ catalog.exportState.errorText }}</p>
       <p v-if="retryText()" class="hint">{{ retryText() }}</p>
-      <button type="button" @click="catalog.exportXlsx()">{{ $t("extensions.sheetCatalog.exportRetry") }}</button>
+      <UiButton class="retry" @click="catalog.exportXlsx()">{{ $t("extensions.sheetCatalog.exportRetry") }}</UiButton>
     </div>
   </section>
 </template>
 <style scoped>
 .actions-dock{display:flex;flex-direction:column;gap:var(--space-2);min-width:0;padding:10px 14px}
 .dock-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-width:0}
-.dock-summary{color:var(--color-text-secondary);font-size:12px;min-width:0;overflow-wrap:anywhere}
+.dock-summary{color:var(--color-text-secondary);font-size:var(--font-caption);min-width:0;overflow-wrap:anywhere}
 .spacer{flex:1}
-.dock-row button{padding:0 var(--space-4);min-height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
-.dock-row button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
-.dock-row button.primary:hover:not(:disabled){background:var(--color-accent-hover)}
-.notice{margin:0;padding:8px 12px;border-radius:6px}
-.hint{margin:0;color:var(--color-text-secondary);font-size:13px}
+.notice{margin:0;padding:8px 12px;border-radius:var(--radius-sm)}
+.hint{margin:0;color:var(--color-text-secondary);font-size:var(--font-label)}
 .success{border:1px solid var(--color-success);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
-.success-path{margin:0;display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
-.success-path .mono{font-family:var(--font-mono);font-size:12px;color:var(--color-text-secondary);overflow-wrap:anywhere}
-.success button{padding:0 var(--space-3);min-height:30px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
+.success-path{margin:0;display:flex;flex-direction:column;gap:2px;font-size:var(--font-label);min-width:0}
+.success-path .mono{font-family:var(--font-mono);font-size:var(--font-caption);color:var(--color-text-secondary);overflow-wrap:anywhere}
 .export-error{border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;flex-direction:column;gap:var(--space-1)}
-.export-error p{margin:0;font-size:13px}
-.export-error button{align-self:flex-start;padding:0 var(--space-3);min-height:30px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
+.export-error p{margin:0;font-size:var(--font-label)}
+/* 重试按钮在纵向错误箱里不拉伸（UiButton 只承担外观，布局仍归本页） */
+.export-error .retry{align-self:flex-start}
 </style>

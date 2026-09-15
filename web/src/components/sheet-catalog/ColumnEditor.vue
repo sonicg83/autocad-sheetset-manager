@@ -6,9 +6,14 @@
      操作；列区自身限高滚动，列数增长不撑高页面。表头放进同一个滚动容器并 sticky，
      保证出现纵向滚动条时表头与数据行宽度始终一致（对齐误差为 0）。
      A1（用户已接受差异）：操作列继续使用 ↑ / ↓ / ✕ 图标按钮与完整 aria-label，
-     因此该轨道（112px）比冻结 Demo 的 188px 文字按钮列更窄。 -->
+     因此该轨道（112px）比冻结 Demo 的 188px 文字按钮列更窄。
+     PLAN-DM-029 Task 6（Step 3 图标复核）：保留分支。对照判据：可访问名与 type="button" 已具备；
+     点击面积由 30px 提到 --tap-target-min(32px)，行用量 3×32+2×4=104 ≤ 112 轨道，零布局变化；
+     迁移到 UiIconButton 会丢掉实边框、把字形降为 --color-text-secondary 并让 ✕ 失危险色，
+     36×36 需 3×36+8=116 > 112，除非改动轨道宽度（违反 A1）。同状态截图与键盘对照见
+     Task 6 报告；三条 unicode-structure-icon 例外的到期条件已改为“下一次目录页视觉 Spec 修订”。 -->
 <script setup lang="ts">
-import {computed, nextTick, ref, watch} from "vue";
+import {computed, nextTick, ref, watch, type ComponentPublicInstance} from "vue";
 import {useI18n} from "vue-i18n";
 import {
   SHEET_CATALOG_MAX_COLUMNS, type CatalogDiagnostic, type SheetCatalogTemplateController,
@@ -16,6 +21,8 @@ import {
 } from "../../composables/useSheetCatalogSettings";
 import CompatibilitySummary from "./CompatibilitySummary.vue";
 import {catalogCompatibility} from "./catalogCompatibility";
+import UiButton from "../ui/UiButton.vue";
+import UiInput from "../ui/UiInput.vue";
 
 // PLAN-DM-025 Task 8：本组件只依赖模板编辑接口 + 可选校验反馈。设置中心的 custom 面板
 // 没有工作区快照，因此不传反馈——兼容性徽标与摘要整体隐藏，列编辑仍可用。
@@ -40,6 +47,13 @@ const badgeClass = computed(() => {
 const headerInputs = ref<Record<string, HTMLInputElement | null>>({});
 const expressionInputs = ref<Record<string, HTMLTextAreaElement | null>>({});
 const region = ref<HTMLElement | null>(null);
+
+// 列名输入已改用 UiInput（Task 6）：模板 ref 拿到的是组件实例，而错误定位的焦点契约
+// 需要真正的 <input> 元素，因此从组件根元素里取控件并存入既有的 headerInputs 映射。
+function registerHeaderInput(columnId: string, instance: ComponentPublicInstance | null) {
+  const root = instance?.$el;
+  headerInputs.value[columnId] = root instanceof HTMLElement ? root.querySelector<HTMLInputElement>("input") : null;
+}
 
 function trackCaret(columnId: string, element: HTMLTextAreaElement) {
   props.catalog.trackCaret(columnId, element.selectionStart ?? 0, element.selectionEnd ?? 0);
@@ -132,13 +146,14 @@ watch(() => props.catalog.caretRequest.value, async request => {
           :class="{'is-error': row.error !== null}"
         >
           <span class="order-cell">{{ row.index + 1 }}</span>
-          <input
-            :ref="element => { headerInputs[row.column.columnId] = element as HTMLInputElement | null }"
-            type="text"
-            :aria-label="$t('extensions.sheetCatalog.columnHeader', {index: row.index + 1})"
-            :value="row.column.header"
-            @input="catalog.updateColumn(row.column.columnId, {header: ($event.target as HTMLInputElement).value})"
-          >
+          <!-- T6-5：可见 label 由 UiInput 渲染为 label[for]（仅 aria-label 不解除该例外）。
+               可见文字与 sticky 表头同义，在 ≤720px 表头隐藏时它正是唯一的可见列标签。 -->
+          <UiInput
+            :ref="instance => registerHeaderInput(row.column.columnId, instance as ComponentPublicInstance | null)"
+            :label="$t('extensions.sheetCatalog.columnHeader', {index: row.index + 1})"
+            :model-value="row.column.header"
+            @update:model-value="catalog.updateColumn(row.column.columnId, {header: $event})"
+          />
           <div class="expression-cell">
             <textarea
               spellcheck="false"
@@ -172,7 +187,7 @@ watch(() => props.catalog.caretRequest.value, async request => {
       </ol>
     </div>
     <div class="editor-foot">
-      <button type="button" @click="catalog.addColumn()">{{ $t("extensions.sheetCatalog.addColumn") }}</button>
+      <UiButton @click="catalog.addColumn()">{{ $t("extensions.sheetCatalog.addColumn") }}</UiButton>
       <span class="syntax-hint">{{ $t("extensions.sheetCatalog.expressionSyntaxHint") }}</span>
     </div>
   </section>
@@ -182,43 +197,41 @@ watch(() => props.catalog.caretRequest.value, async request => {
 /* 卡片自身不设内边距：状态带、表头行与操作脚各自铺满，与冻结 Demo 的分区一致 */
 .column-editor.panel{padding:0}
 .editor-head{display:flex;align-items:center;gap:var(--space-2);padding:11px 14px;min-width:0}
-.editor-head h3{margin:0;font-size:14px}
+/* 14px 卡标题借用组件层 --button-font-size：语义层没有 14px 非控件档位（收口责任 K） */
+.editor-head h3{margin:0;font-size:var(--button-font-size)}
 .editor-head .spacer{flex:1}
-.compat-badge{font-size:12px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.compat-badge{font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .compat-badge.good{color:var(--color-success);background:var(--color-success-bg)}
 .compat-badge.warn{color:var(--color-warning);background:var(--color-warning-bg)}
 .compat-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
 .compat-badge.checking{color:var(--color-text-secondary);background:var(--color-bg-muted)}
-.column-count{color:var(--color-text-muted);font-size:12px;white-space:nowrap}
-.columns{overflow:auto;min-height:0;flex:1;max-height:330px}
+.column-count{color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}
+.columns{overflow:auto;min-height:0;flex:1;max-height:var(--catalog-columns-max-height)}
 /* 表头与数据行共用同一组 grid 轨道：任何一处的列宽改动都必须同步两处 */
 .columns-head,.column-row{display:grid;grid-template-columns:34px minmax(110px,.62fr) minmax(250px,1.8fr) 92px 112px;gap:8px}
-.columns-head{position:sticky;top:0;z-index:1;padding:8px 12px;background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:12px}
+.columns-head{position:sticky;top:0;z-index:1;padding:8px 12px;background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-caption)}
 .column-list{list-style:none;margin:0;padding:0}
 .column-row{padding:9px 12px;border-bottom:1px solid var(--color-border-subtle);align-items:start}
 .column-row.is-error{background:var(--color-danger-bg)}
-.order-cell{padding-top:9px;color:var(--color-text-secondary);font-size:12px;text-align:center}
-.column-row input{width:100%;min-width:0;padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:5px;font:inherit;font-size:13px;background:var(--color-bg-surface);color:var(--color-text-primary)}
+.order-cell{padding-top:9px;color:var(--color-text-secondary);font-size:var(--font-caption);text-align:center}
 .expression-cell{display:grid;gap:4px;min-width:0}
-.column-row textarea{width:100%;min-width:0;min-height:52px;padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:5px;font-family:var(--font-mono);font-size:13px;line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
-.column-error{margin:0;font-size:12px;line-height:1.5;color:var(--color-danger)}
+.column-row textarea{width:100%;min-width:0;min-height:var(--catalog-column-expression-min-height);padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:var(--font-label);line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
+.column-error{margin:0;font-size:var(--font-caption);line-height:1.5;color:var(--color-danger)}
 .status-cell{padding-top:8px}
-.status-badge{font-size:12px;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.status-badge{font-size:var(--font-caption);padding:3px 8px;border-radius:var(--radius-full);white-space:nowrap}
 .status-badge.good{color:var(--color-success);background:var(--color-success-bg)}
 .status-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
 /* 无校验反馈：中性色，不得冒充"有效" */
 .status-badge.neutral{color:var(--color-text-muted);background:var(--color-bg-muted)}
 .row-actions{display:flex;gap:4px;justify-content:flex-end;padding-top:2px}
-.row-actions button{width:30px;min-height:30px;border:1px solid var(--color-border-strong);border-radius:6px;background:var(--color-bg-surface);font-size:13px;line-height:1}
+.row-actions button{width:var(--tap-target-min);min-height:var(--tap-target-min);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);font-size:var(--font-label);line-height:1}
 .row-actions button:hover:not(:disabled){background:var(--color-bg-muted)}
 .row-actions button.danger-text{color:var(--color-danger)}
 .editor-foot{display:flex;align-items:center;gap:var(--space-3);padding:10px 14px;flex-wrap:wrap;min-width:0}
-.editor-foot button{padding:0 var(--space-3);min-height:32px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
-.editor-foot button:hover{background:var(--color-bg-muted)}
-.syntax-hint{color:var(--color-text-muted);font-size:12px;min-width:0}
+.syntax-hint{color:var(--color-text-muted);font-size:var(--font-caption);min-width:0}
 @media (max-width: 980px){
   /* 单列布局下输出列卡保留可编辑高度（列区自身滚动，不拉长整页） */
-  .column-editor{min-height:425px}
+  .column-editor{min-height:var(--catalog-pane-height)}
 }
 @media (max-width: 720px){
   .columns-head{display:none}
