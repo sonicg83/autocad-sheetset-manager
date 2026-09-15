@@ -1878,6 +1878,15 @@ test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
     await opener.click();
     const modal = page.locator('[role="dialog"][aria-modal="true"]');
     await expect(modal).toBeVisible();
+    // Tab 圈闭（Task 9 Step 3 起由 dialogFocus.ts 承担，替代原先手写的 button/input 过滤）：
+    // 连续 Tab 必须始终留在对话框内。选 ConfirmModal 特有的 [role=dialog][aria-modal=true]
+    // 作作用域：未保存闸门刻意不写这两个属性，所以对隐藏的闸门不会假通过。
+    // 停靠点只有取消/确认两个，按 5 次足以触发两轮回绕。
+    const focusInsideDialog = () => page.evaluate(() => document.activeElement?.closest('[role="dialog"][aria-modal="true"]') !== null);
+    for (let step = 0; step < 5; step++) {
+      await page.keyboard.press("Tab");
+      expect(await focusInsideDialog(), `第 ${step + 1} 次 Tab 后焦点仍应在对话框内`).toBe(true);
+    }
     await cancelModal(page);
     await expect(modal).toHaveCount(0);
     expect(await page.evaluate(() => (document.activeElement?.textContent ?? "").trim()), "取消后焦点应回到开启按钮").toContain("恢复为新修订");
