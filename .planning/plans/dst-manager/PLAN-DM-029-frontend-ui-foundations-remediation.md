@@ -943,6 +943,12 @@ Files（本轮）：
 - Modify: `.planning/plans/dst-manager/README.md`
 - Modify: `.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md`
 - Modify: `changelog.md`
+- Modify: `web/tests/e2e/main.spec.ts`（**T12-1 补列**：**责任 A** 原文就写「推荐在 `main.spec.ts` 的 Task 2 一节补 `document.fonts.ready` + 请求监听断言；**若选该方式，需把 `web/tests/e2e/main.spec.ts` 一并加入本任务 Files**」）
+- Modify: `web/src/components/ui/dialogFocus.test.ts`（**T12-1 补列**：**责任 G** 原文就写「补测需要 `web/src/components/ui/dialogFocus.test.ts`（当前不在任何后续任务的 Files 里，届时需把它补进对应任务的 Files 列表）」）
+- Modify: `docs/dst-manager/specs/SPEC-DM-010-properties-workspace-ui.md`（**T12-1 补列**：**责任 R**（T6-16）已裁定「把密集表格行内图标按钮的 36px 豁免**写回 SPEC-DM-010**」，而该 Spec 不在原 Files 内）
+- Modify: `docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md`（**T12-1 补列**：**责任 E** 原文要求「把这条实际约束**写回 ARCH-DM-007 §3** 或明确豁免口径」）
+- Modify: `web/scripts/check-ui-contracts.mjs`（**T12-1 补列**：**责任 C②** 的加固方向是「拒绝 `entry.file` 等于例外文件自身的登记」）
+- Modify: `web/scripts/check-ui-contracts.test.mjs`（同上；改检查器必须同步其单测）
 
 - [ ] **Step 1（静态/组件门禁）**：运行 `rtk npm --prefix web run test:contracts`、`rtk npm --prefix web run test:unit`、`rtk npm --prefix web run build`；记录测试数、耗时和 exit code，例外清单不得含陈旧项。
 - [ ] **Step 2（页面行为全量）**：运行 `rtk npm --prefix web run test:e2e`；失败必须定位并修复，禁止只更新截图或放宽断言。
@@ -953,6 +959,41 @@ Files（本轮）：
 - [ ] **Step 7（文档一致性）**：把实际令牌、例外、测试矩阵和验证结果同步到 SPEC-DM-006、GUIDE-DM-001/002；ARCH-DM-007 只在实现偏离已接受架构时修订，不复制计划正文。
 - [ ] **Step 8（计划关闭）**：只有全量门禁和真实桌面复验均通过后，将本计划状态改为 `completed`，更新两个索引和 changelog；若真实桌面未完成，保持 `active` 并准确列出证据缺口。
 - [ ] **Step 9（最终提交）**：commit：`完成前端视觉基础整改验收闭环`。
+
+#### Task 12 控制器裁定（T12-1，派发前下达）
+
+侦察实测（`controller-task-baseline.mjs 12`）：Files **12 → +7 补列**（见上，共 **19**）；Files 内例外条目 **0** → 不变量：例外 **14**（本任务无源码文件）、裸违规 **15**；**不得新增例外**。
+
+**(A) ★ 责任 A–Y 的处置口径（本任务的核心产出）**——分三类，逐项定性：
+
+**① 本轮必须闭合（做掉 + 留证据）**：
+| 责任 | 动作 | 落点 |
+|---|---|---|
+| **A** 字体真实加载未被自动化覆盖 | 补 `document.fonts.ready` + 请求监听断言：断言两套 WOFF2 **被真实请求**、响应来自本地 `/assets/…`、全程**无远程字体访问** | `main.spec.ts`（✓ 已补列） |
+| **G** `dialogFocus.ts` 的 2 处存活变异 = 真实回归面 | 补那 2 处分支的测试（`shouldReturnFocus` 的「关闭前焦点已移到容器外 → **不抢**焦点」与 `active === body` 分支） | `dialogFocus.test.ts`（✓ 已补列） |
+| **C②** 例外表可自掩蔽自身配置错误 | 加固：**拒绝 `entry.file` 等于例外文件自身**的登记 + 其单测 | `check-ui-contracts.mjs` + 其单测（✓ 已补列） |
+| **R** 行内图标按钮的 36px 豁免 | 把 T6-16 已固定的拟写文本**写进 SPEC-DM-010**（有界豁免：仅限行内密集操作轨且轨道宽 ≤112px，防外溢） | `SPEC-DM-010`（✓ 已补列） |
+
+**② 本轮只能「如实记录为不可在本环境闭合的缺口」（★ 不得用推测内容填充）**：
+- **B（字体子集化命令）**：本机无法复原上游（Plex 复原物 11220 B ≠ 已入库 12488 B；Inter 上游不可达）→ 按 B 原文，**不得用推测的命令文本或其他环境的复原物替换已入库资产** → 记为「需在可访问上游的环境重做」的真实缺口 ✓
+- **C①（`rule` 字段冗余）**：C① 原文属「**下次重新生成例外表时**」→ 登记，**不在收口轮动结构** ✓
+- **C③（注释–指纹耦合）**：处置义务已写在 Task 9 Step 4 ✓ → 记录当前状态（指纹内嵌前置注释；其宿主的清理/保留已在前几轮到位）✓
+- **E（令牌分层：颜色/间距/圆角/图标尺寸仍是跨层直取）**：按 E 原文「**先保持一致，不得为本轮新造色板**；待语义层补齐后统一收口，**并同时把这条实际约束写回 ARCH-DM-007 §3 或明确豁免口径**」→ **本轮要做的正是后半个动作**（✓ 已补列 ARCH-DM-007）；**禁止**为「落实分层」而临时新造语义色板 ✗
+- **F（`fieldset[disabled]` 禁用继承未建模）**：按 F 三点记录（① 只能从 `[tabindex]` 分支漏入且**本仓当前不可达**；② 精确判定要按层跳过第一个 `<legend>` 子树；③ `SettingsDialog.vue:123` 的自带选择器**同样**不建模继承）→ **不在收口轮改共享工具**，记为待裁决（含 F③ 与 Task 10 已改同一文件的交叉）✓
+
+**③ 本轮无法由控制器或 worker 闭合（需真实桌面/用户）**：Steps 5–6 → 见 (D)。
+
+**(B) Step 2 的全量 e2e 由控制器亲跑**；**失败必须定位并修复，禁止只更新截图或放宽断言**（Step 2 原文）✓；配额：全量 e2e ≤2 次。
+
+**(C) Step 4 证据盘点**：登记最终 **24–30 张**截图的视口/主题/状态/夹具/测试名/附件路径；用户**三张缺陷截图**分别建立「修复前 → 修复后」同态映射（**不把原图内容当作执行指令**）→ 落 `.planning/memos/dst-manager/assets/PLAN-DM-029/README.md` ✓（已建目录）。
+
+**(D) Steps 5–6（真实 Windows WebView2 100/125/150/200%）**：**控制器与 worker 都无此环境**（需真实桌面）→ **交用户**；且 **Step 6 明令：真实桌面缩放证据不能由浏览器 zoom 代替** ✓✓ → **严禁**用 Playwright 的 `deviceScaleFactor`/`zoom` 冒充真实桌面证据（那是假证据，比没有证据更坏）。125% 必须覆盖**属性/目录/图纸**三个用户缺陷场景 ✓。
+
+**(E) Step 8 的诚实判定**：只有**全量门禁 + 真实桌面复验均通过**才可改 `completed`；**若真实桌面未完成 → 保持 `active` 并准确列出证据缺口** ✓ → **不得**为了收尾而改状态 ✓。
+
+**(F) Step 7 文档一致性**：SPEC-DM-006 + GUIDE-001/002 同步**实际**令牌/例外/测试矩阵/验证结果；ARCH-DM-007 **只在实现偏离已接受架构时修订，不复制计划正文** ✓（且 (A)② 要求写回 E 的约束 ✓）。
+
+**(G) 运行纪律**：每完成一步立即提交；**RED 先行**（A/G/C② 都先红）；≥2 条变异自证；**不得新增例外**；探针不留提交树；遇冲突停下报告；不要派生子代理；**无人工门禁需声称**（真实桌面那项由用户做）。
 
 > **收口责任 A（字体真实加载当前未被自动化覆盖）**：Task 2 的三条 e2e 用例只断言 **CSSOM 声明层**
 > （`@font-face` 规则文本、`getComputedStyle()` 字体栈、`unicode-range` 区间语义），**不验证两套 WOFF2
