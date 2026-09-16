@@ -320,7 +320,7 @@ function onExpandKeydown(event: KeyboardEvent) {
    或容器不足以容纳两个最小列时降一列。用户可切 4 列（Task 12 用户验收修复轮）：四列只在
    容器 ≥ 4×240px + 3×24px 列间距 = 1032px 时生效，否则自动回落两列，不产生横向滚动；
    长值跨两列，名称行占满整行。 */
-.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:center}
+.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:start}
 /* 四列只在容器 ≥ 4×240px 最小列宽 + 3×24px 列间距 = 1032px 时生效；不足时回落两列，不横向滚动 */
 @container value-body (min-width:1032px){.value-grid--cols-4{grid-template-columns:repeat(4,minmax(240px,360px))}}
 

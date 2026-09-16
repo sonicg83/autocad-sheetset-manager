@@ -135,6 +135,9 @@
     --settings-switch-height:24px;
     --settings-switch-thumb-size:18px;
     --settings-foot-min-height:24px;
+    --brand-logo-size-compact:28px;
+    --brand-logo-size-about:128px;
+    --brand-logo-size-about-narrow:96px;
     --card-max-width:520px;
     --shell-content-max-width:1440px;
     --topbar-min-height:68px;

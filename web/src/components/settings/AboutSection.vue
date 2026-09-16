@@ -11,6 +11,7 @@ import {fetchAbout} from "../../api/settings";
 import type {AboutInfo} from "../../api/settings";
 import {getShellBridge,openExternalLink} from "../../api/shell";
 import type {SettingsToast} from "./SettingsDialog.vue";
+const logoLargeUrl=new URL("../../assets/brand/dst-manager-logo-512.png",import.meta.url).href;
 
 const props=defineProps<{pushToast:(toast:SettingsToast)=>void}>();
 const {t}=useI18n();
@@ -48,9 +49,12 @@ async function openExternal(url:string){
 <template>
   <div class="about-block">
     <h3>{{t("settings.about.app")}}</h3>
-    <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>
-    <p v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</p>
-    <p v-else class="f-hint" role="status">{{t("settings.about.loading")}}</p>
+    <div class="about-app-summary">
+      <img class="brand-logo-large" :src="logoLargeUrl" :alt="t('settings.about.logoAlt')">
+      <p v-if="about">DST Manager <strong>v{{about.version}}</strong></p>
+      <p v-else-if="aboutFailed" class="f-hint">{{t("settings.about.loadFailed")}}</p>
+      <p v-else class="f-hint" role="status">{{t("settings.about.loading")}}</p>
+    </div>
   </div>
   <div class="about-block">
     <h3>{{t("settings.about.licenseTitle")}}</h3>
@@ -70,6 +74,9 @@ async function openExternal(url:string){
 .about-block{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3)}
 .about-block h3{margin:0 0 var(--space-2);font-size:var(--font-label)}
 .about-block p{margin:0}
+.about-app-summary{display:flex;align-items:center;gap:var(--space-5);min-height:var(--brand-logo-size-about);padding:var(--space-2) 0}
+.brand-logo-large{display:block;width:var(--brand-logo-size-about);height:var(--brand-logo-size-about);max-width:40%;object-fit:contain;flex:none}
 .license{font-size:var(--font-caption);line-height:1.7;color:var(--color-text-secondary);white-space:pre-wrap;background:var(--color-bg-canvas);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);max-height:var(--settings-license-max-height);overflow:auto}
 .link-line{display:flex;gap:var(--space-2)}
+@media (max-width:640px){.about-app-summary{gap:var(--space-3)}.brand-logo-large{width:var(--brand-logo-size-about-narrow);height:var(--brand-logo-size-about-narrow)}}
 </style>

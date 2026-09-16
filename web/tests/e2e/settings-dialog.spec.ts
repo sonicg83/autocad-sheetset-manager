@@ -102,6 +102,21 @@ test("关于分区：应用名+版本、MIT 全文与外链（浏览器开发态
   await popup.close();
 });
 
+test("品牌标志：顶栏使用小图标，关于分区使用带可访问名称的大图标", async ({page}) => {
+  await page.goto("/");
+  const compactLogo = page.locator(".brand-logo-small");
+  await expect(compactLogo).toBeVisible();
+  await expect(compactLogo).toHaveAttribute("src", /dst-manager-logo-64\.png$/);
+  await expect(compactLogo).toHaveAttribute("alt", "");
+  await expect(compactLogo).toHaveAttribute("aria-hidden", "true");
+
+  await openSettingsDialog(page);
+  await page.getByRole("tab", {name: "关于"}).click();
+  const aboutLogo = page.getByRole("img", {name: "DST Manager 标志"});
+  await expect(aboutLogo).toBeVisible();
+  await expect(aboutLogo).toHaveAttribute("src", /dst-manager-logo-512\.png$/);
+});
+
 // ---- PLAN-DM-025 任务 6：关于分区抽为 AboutSection 后仍只请求一次 ----
 // 契约红线（本文件头）不变：不 mock /api/about，只观察真实请求次数（page.on("request")）。
 // 计数只在本文件内辅助断言，不影响当前用例串行共享的配置文件。

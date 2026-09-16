@@ -93,6 +93,7 @@ export default {
   },
   about: {
     app: "应用",
+    logoAlt: "DST Manager 标志",
     licenseTitle: "开源协议（MIT）",
     linksTitle: "项目主页 / 反馈",
     homepage: "项目主页",

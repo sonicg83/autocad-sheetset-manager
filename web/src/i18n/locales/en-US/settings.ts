@@ -95,6 +95,7 @@ export default {
   },
   about: {
     app: "App",
+    logoAlt: "DST Manager logo",
     licenseTitle: "License (MIT)",
     linksTitle: "Project homepage / Feedback",
     homepage: "Project homepage",

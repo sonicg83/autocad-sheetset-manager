@@ -4,6 +4,7 @@ import {useI18n} from "vue-i18n";
 import {useApplicationPreferences} from "../composables/useApplicationPreferences";
 import UiIcon from "../components/ui/UiIcon.vue";
 import UiIconButton from "../components/ui/UiIconButton.vue";
+const logoSmallUrl=new URL("../assets/brand/dst-manager-logo-64.png",import.meta.url).href;
 // 顶栏主题按钮只切换本次运行；持久主题只由配置中心保存。
 const {theme,toggleTheme}=useApplicationPreferences();
 const {t}=useI18n();
@@ -19,8 +20,7 @@ const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavai
 </script>
 <template>
   <header class="topbar" role="banner">
-    <span class="brand">DST Manager</span>
-    <span class="brand-sub">{{ $t("shell.topbar.tagline") }}</span>
+    <span class="brand"><img class="brand-logo-small" :src="logoSmallUrl" alt="" aria-hidden="true"><span>DST Manager</span></span>
     <span v-if="sheetSetName" class="workspace-name" :title="dstPath || sheetSetName">{{sheetSetName}}</span>
     <button v-if="workspaceId" type="button" class="folder-btn" :disabled="folderDisabled" :title="folderTitle" :aria-label="$t('shell.topbar.openFolderAria')" @click="$emit('open-folder')">{{ $t("shell.topbar.openFolder") }}</button>
     <span class="spacer"></span>
@@ -33,7 +33,8 @@ const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavai
 </template>
 <style scoped>
 .topbar{display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);height:var(--shell-bar-height);min-height:var(--shell-bar-height);background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);flex-shrink:0}
-.brand{font-weight:600;font-size:var(--button-font-size);color:var(--color-text-primary);white-space:nowrap}
+.brand{display:inline-flex;align-items:center;gap:var(--space-2);font-weight:600;font-size:var(--button-font-size);color:var(--color-text-primary);white-space:nowrap}
+.brand-logo-small{display:block;width:var(--brand-logo-size-compact);height:var(--brand-logo-size-compact);object-fit:contain;flex:none}
 .brand-sub{color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}
 .workspace-name{color:var(--color-text-primary);font-size:var(--font-label);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:clamp(140px,24vw,300px)}
 .spacer{flex:1}
