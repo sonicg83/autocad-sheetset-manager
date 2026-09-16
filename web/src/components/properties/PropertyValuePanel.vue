@@ -1,11 +1,11 @@
 <!-- 图纸集属性值面板（PLAN-DM-016 任务 3，SPEC-DM-010 §5.2/§5.3）。
      消费 usePropertiesWorkspace 的缓冲/状态/过滤/动作（不直接 emit API 命令，不修改 Workspace）：
-     33 项按服务端映射顺序平铺（最多两列、无分组无分页、全部 text input 38px），
+     33 项按服务端映射顺序平铺（两列/四列可切换并记忆偏好、无分组无分页、全部 text input 38px），
      图纸集名称独立标注且不参与搜索；三态标记（琥珀未加入草稿/蓝待写入/红错误冲突）文字与颜色并存，
      输入 aria-describedby 关联状态与错误；搜索三模式与仅看修改取交集，活动字段暂留并标注；
      值对照与展开编辑走独立对话框；单项撤回仅回到草稿投影。样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
-import {computed, nextTick, ref, watch} from "vue";
+import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {PropertyBuffer, PropertySearchMode, ValueKey, ValueStatus} from "../../features/properties/types";
 import UiButton from "../ui/UiButton.vue";
@@ -72,9 +72,25 @@ function describedBy(key: ValueKey): string | undefined {
   if (errorOf(key)) parts.push(errorId(key));
   return parts.length ? parts.join(" ") : undefined;
 }
-// 长值整行展示（full-width），配合「展开编辑」保证长文本可完整读取
+// 长值固定跨两列（span 2）：两列模式下占整行、四列模式下占半行；名称行恒占满整行。
+// 配合「展开编辑」保证长文本可完整读取。
 function isLong(key: ValueKey): boolean {
   return (readOf(props.input, key) ?? "").length > 40;
+}
+
+// —— 展示列数偏好（Task 12 用户验收修复轮）——
+// 默认两列；用户可切 2/4 列，偏好记忆在 localStorage（纯展示偏好，不属于设置中心应用配置）。
+// 四列只在容器宽度足够时由 CSS 容器查询生效（.value-grid.cols-4），空间不足自动降为两列，
+// 窄屏继续降一列——选择值与实际渲染解耦，无需 JS 测量容器宽度。
+const COLUMN_PREF_KEY = "dst-manager.property-value-columns";
+const columnPref = ref<"2" | "4">("2");
+onMounted(() => {
+  const stored = window.localStorage.getItem(COLUMN_PREF_KEY);
+  if (stored === "2" || stored === "4") columnPref.value = stored;
+});
+function setColumnPref(value: string) {
+  columnPref.value = value === "4" ? "4" : "2";
+  window.localStorage.setItem(COLUMN_PREF_KEY, columnPref.value);
 }
 
 // —— 显示顺序：名称在最前，其后按匹配顺序（原顺序，不排序、不补造），活动字段暂留在末尾 ——
@@ -223,11 +239,15 @@ function onExpandKeydown(event: KeyboardEvent) {
           <option value="name">{{ $t("properties.values.searchNameOnly") }}</option>
           <option value="value">{{ $t("properties.values.searchValueOnly") }}</option>
         </UiSelect>
+        <UiSelect :label="$t('properties.values.columnDisplayLabel')" :model-value="columnPref" @update:model-value="setColumnPref">
+          <option value="2">{{ $t("properties.values.columnsTwo") }}</option>
+          <option value="4">{{ $t("properties.values.columnsFour") }}</option>
+        </UiSelect>
         <label class="only-changed"><input type="checkbox" :checked="changedOnly" @change="emit('update:changedOnly', ($event.target as HTMLInputElement).checked)">{{ $t("properties.values.changedOnly") }}</label>
         <button type="button" class="link" @click="clearSearch">{{ $t("properties.values.clearSearch") }}</button>
         <span class="match-count">{{ $t("properties.values.matchCount", {matched: matchedKeys.length, total: valueCount}) }}<template v-if="hiddenDirtyCount">{{ $t("properties.values.hiddenDirtySuffix", {count: hiddenDirtyCount}) }}</template></span>
       </div>
-      <div class="value-grid">
+      <div class="value-grid" :class="{'value-grid--cols-4': columnPref === '4'}">
         <div v-for="key in displayKeys" :key="key" class="value-item" :class="{name: key === NAME_KEY, full: isLong(key), invalid: Boolean(errorOf(key)), pinned: isPinned(key)}">
           <label :for="fieldId(key)">{{ labelOf(key) }}</label>
           <div class="input-line">
@@ -296,12 +316,18 @@ function onExpandKeydown(event: KeyboardEvent) {
 .hint{color:var(--color-text-muted);font-size:var(--font-caption)}
 /* 面板体作为容器查询上下文：缩放/极窄容器下两列最小宽度放不下时兜底降一列 */
 .panel-body{padding:var(--space-4) var(--space-5);container:value-body / inline-size}
-/* 双列节奏（minmax(240px,360px)）；视口 ≤900px（与 Demo 断点对齐）或容器不足以容纳两个最小列时降一列。
-   长值与名称行整行展示。 */
-.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:start}
+/* 双列节奏（minmax(240px,360px)），网格在可用区域内居中；视口 ≤900px（与 Demo 断点对齐）
+   或容器不足以容纳两个最小列时降一列。用户可切 4 列（Task 12 用户验收修复轮）：四列只在
+   容器 ≥ 4×240px + 3×24px 列间距 = 1032px 时生效，否则自动回落两列，不产生横向滚动；
+   长值跨两列，名称行占满整行。 */
+.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:center}
+/* 四列只在容器 ≥ 4×240px 最小列宽 + 3×24px 列间距 = 1032px 时生效；不足时回落两列，不横向滚动 */
+@container value-body (min-width:1032px){.value-grid--cols-4{grid-template-columns:repeat(4,minmax(240px,360px))}}
+
 .value-item{min-width:0;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-2);border:1px solid transparent;border-radius:var(--radius-md)}
 .value-item:focus-within{background:var(--color-bg-canvas)}
-.value-item.full,.value-item.name{grid-column:1 / -1}
+.value-item.full{grid-column:span 2}
+.value-item.name{grid-column:1 / -1}
 .value-item.name{border-bottom:1px solid var(--color-border-subtle);border-radius:0;padding-bottom:var(--space-3);margin-bottom:var(--space-2)}
 .value-item.invalid{border-color:var(--color-danger);background:var(--color-danger-bg)}
 .value-item label{font-size:var(--font-label);font-weight:500;color:var(--color-text-secondary)}
@@ -330,6 +356,7 @@ button.link:disabled{color:var(--color-text-muted);cursor:not-allowed}
 /* 展开编辑对话框（复用公共模态原语；textarea 长文本完整显示不截断） */
 .expand-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.7}
 textarea{width:100%;min-height:var(--expand-editor-min-height);resize:vertical;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
-@media (max-width:900px){.value-grid{grid-template-columns:minmax(0,1fr)}}
-@container value-body (max-width:511px){.value-grid{grid-template-columns:minmax(0,1fr)}}
+/* 单列降级时长值退回 auto：span 2 在单列网格会撑出隐式第二列，破坏降级断言与布局 */
+@media (max-width:900px){.value-grid{grid-template-columns:minmax(0,1fr)}.value-item.full{grid-column:auto}}
+@container value-body (max-width:511px){.value-grid{grid-template-columns:minmax(0,1fr)}.value-item.full{grid-column:auto}}
 </style>

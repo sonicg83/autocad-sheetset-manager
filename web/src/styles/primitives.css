@@ -33,6 +33,19 @@
   .modal-check{display:flex;align-items:flex-start;gap:var(--space-2);margin-bottom:var(--space-4);font-size:var(--font-label);color:var(--color-text-secondary);cursor:pointer}
   .modal-check input{margin-top:2px;accent-color:var(--color-danger)}
   .modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}
+  /* 悬停反馈统一（Task 12 用户验收修复轮）：可用按钮悬停时统一有抬升阴影；禁用按钮
+     不出现任何悬停反馈。底色变化只落在无自有底色的普通按钮上——`.primary`（legacy 层
+     在本层之后，无条件底色声明优先）与 `.modal-danger`（同层特异性更高）的主/危底色
+     悬停时保留原色，仅获得抬升阴影，不出现误导性变色。 */
+  .modal-actions button:hover:not(:disabled){box-shadow:var(--shadow-1)}
+  .modal-actions button:not(.ui-button):not(.modal-danger):hover:not(:disabled){background:var(--color-bg-muted)}
+  /* 表单弹窗操作区上间距（Task 12 用户验收修复轮）：表单控件与 .modal-actions 之间必须
+     有 16px 语义间距；确认文案与复选确认已有自身下间距（.modal-message/.modal-impact/
+     .modal-check 的 margin-bottom），不得叠加，故排除 .modal-check。 */
+  .modal-card textarea + .modal-actions,
+  .modal-card label:not(.modal-check) + .modal-actions,
+  .modal-card .ui-input + .modal-actions,
+  .modal-card .ui-select + .modal-actions{margin-top:var(--space-4)}
   .modal-actions button{padding:9px 16px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:var(--button-font-size)}
   /* 危险按钮的类名刻意不用通用 `.danger`：legacy 层的 `.danger,.error{color:--color-danger}` 会在
      层级级联里压过本层（层顺序优先于特异性），导致红底红字不可见。见责任 V。 */

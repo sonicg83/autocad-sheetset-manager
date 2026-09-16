@@ -229,3 +229,62 @@ test("定义表横向溢出时操作列冻结在容器右缘且表头同步冻�
   const head = await page.locator(".definition-panel th.col-actions").evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(head).not.toBe("rgba(0, 0, 0, 0)");
 });
+
+// —— Task 12 用户验收修复轮（审查报告「新发现的问题」3）——
+test("用户验收修复轮：值网格 2/4 列切换、长值跨两列、名称整行与降级", async ({page}) => {
+  await installPropertiesFixture(page);
+  await openProperties(page);
+  const grid = page.locator(".value-panel .value-grid");
+  const columns = () => grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
+  expect(await columns(), "默认保持两列").toBe(2);
+
+  // 长值（>40 字符）固定跨两列；名称行恒占满整行
+  const longText = "宽屏密度验证用长值".repeat(6);
+  await page.getByRole("textbox", {name: "属性 项目编号"}).fill(longText);
+  const longItem = page.locator(".value-panel .value-item.full").first();
+  await expect(longItem).toBeVisible();
+  expect(await longItem.evaluate((el) => getComputedStyle(el).gridColumnStart), "长值跨两列").toBe("span 2");
+  const nameItem = page.locator(".value-panel .value-item.name").first();
+  expect(await nameItem.evaluate((el) => getComputedStyle(el).gridColumnEnd), "名称整行").toBe("-1");
+
+  // 切到 4 列：容器宽度足够时生效；偏好记忆，重新进入页面后保持
+  await page.getByLabel("展示列数").selectOption("4");
+  expect(await columns(), "1440 视口四列").toBe(4);
+  await openProperties(page);
+  expect(await columns(), "重新进入后保持四列").toBe(4);
+  await expect(page.getByLabel("展示列数")).toHaveValue("4");
+
+  // 空间不足自动降两列，窄屏降一列，全程无整页横向溢出
+  await page.setViewportSize({width: 1024, height: 768});
+  expect(await columns(), "容器不足降两列").toBe(2);
+  await page.setViewportSize({width: 900, height: 768});
+  expect(await columns(), "窄屏降一列").toBe(1);
+  await assertNoPageOverflow(page, "切换过程无横向溢出");
+});
+
+test("用户验收修复轮：展开编辑弹窗按钮悬停抬升且操作区与表单控件有 16px 间距", async ({page}) => {
+  await installPropertiesFixture(page);
+  await openProperties(page);
+  await page.locator(".input-line button.link").first().click();
+  const dialog = page.locator(".value-panel .modal-card");
+  await expect(dialog).toBeVisible();
+  const textarea = dialog.locator("textarea");
+  const actions = dialog.locator(".modal-actions");
+
+  // 表单控件与按钮区不贴合：操作区上间距为 16px 语义档（可见间隙 ≥16px 且不重叠）
+  const gap = await dialog.evaluate((el) => {
+    const control = el.querySelector("textarea")!;
+    const bar = el.querySelector(".modal-actions")!;
+    return {
+      marginTop: parseFloat(getComputedStyle(bar).marginTop),
+      visible: bar.getBoundingClientRect().top - control.getBoundingClientRect().bottom,
+    };
+  });
+  expect(gap.marginTop, "操作区上间距取 16px 语义档").toBe(16);
+  expect(gap.visible, "表单控件与按钮区可见间隙").toBeGreaterThanOrEqual(16);
+
+  // 可用按钮悬停有抬升阴影（UiButton 也不例外的公共 .modal-actions 契约）
+  const cancel = actions.locator("button").first();
+  await cancel.hover();
+  expect(await cancel.evaluate((el) => getComputedStyle(el).boxShadow), "悬停抬升阴影").not.toBe("none");
+});

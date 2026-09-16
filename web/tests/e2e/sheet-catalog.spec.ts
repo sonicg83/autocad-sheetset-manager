@@ -1443,3 +1443,35 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     expect(Math.abs(alignment.headRight - alignment.rowRight), "操作轨道表头与数据行右边界对齐").toBeLessThanOrEqual(1);
   });
 });
+
+// —— Task 12 用户验收修复轮：.modal-actions 公共悬停契约（原生按钮路径）——
+test("用户验收修复轮：另存为模板弹窗原生按钮悬停抬升、禁用无误导反馈且操作区有 16px 间距", async ({page}) => {
+  await openCatalog(page);
+  await page.getByRole("button", {name: "另存为"}).click();
+  const dialog = page.getByRole("dialog", {name: "另存为模板"});
+  await expect(dialog).toBeVisible();
+  const actions = dialog.locator(".modal-actions");
+  const cancel = actions.locator("button").first();
+  const confirm = actions.locator("button").last();
+
+  // 输入为空时确认按钮禁用：悬停不得出现抬升阴影等误导性可点反馈
+  await expect(confirm).toBeDisabled();
+  await confirm.hover();
+  expect(await confirm.evaluate((el) => getComputedStyle(el).boxShadow), "禁用按钮无悬停反馈").toBe("none");
+
+  // 可用的取消按钮（原生 button）：悬停出现抬升阴影
+  await cancel.hover();
+  expect(await cancel.evaluate((el) => getComputedStyle(el).boxShadow), "原生按钮悬停抬升阴影").not.toBe("none");
+
+  // 表单控件（模板名称输入）与按钮区不贴合：可见间隙 ≥16px 且来自 16px 语义档上间距
+  const gap = await dialog.evaluate((el) => {
+    const control = el.querySelector(".save-as-name")!;
+    const bar = el.querySelector(".modal-actions")!;
+    return {
+      marginTop: parseFloat(getComputedStyle(bar).marginTop),
+      visible: bar.getBoundingClientRect().top - control.getBoundingClientRect().bottom,
+    };
+  });
+  expect(gap.marginTop, "操作区上间距取 16px 语义档").toBe(16);
+  expect(gap.visible, "表单控件与按钮区可见间隙").toBeGreaterThanOrEqual(16);
+});
