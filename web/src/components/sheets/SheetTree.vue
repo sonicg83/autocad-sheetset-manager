@@ -80,6 +80,16 @@ function toggleCollapse(node: TreeNode) {
   if (nextSet.has(node.id)) nextSet.delete(node.id); else nextSet.add(node.id);
   collapsed.value = nextSet;
 }
+// 鼠标点击展开指示器时同步 roving tabindex 与真实 DOM 焦点（SPEC-DM-006 §7.2 键盘模型的鼠标衔接）：
+// chevron 是不可聚焦的 span，若只切换折叠，tabindex 与 document.activeElement 会留在旧节点，
+// 用户随后按方向键会继续操作旧上下文（审查 I2）。指示器是树项点击/键盘模型的一部分，
+// 点击后由被点击的子集接管焦点，与键盘 ←/→ 的落点一致。
+function toggleCollapseFromChevron(node: TreeNode, index: number) {
+  focusIndex.value = index;
+  toggleCollapse(node);
+  scrollNodeIntoView(index);
+  treeEl.value?.querySelectorAll<HTMLElement>("[role=treeitem]")[index]?.focus();
+}
 function scrollNodeIntoView(index: number) {
   void nextTick(() => {
     treeEl.value?.querySelectorAll<HTMLElement>("[role=treeitem]")[index]?.scrollIntoView({block: "nearest"});
@@ -146,7 +156,7 @@ function onKeydown(event: KeyboardEvent) {
         v-if="node.kind === 'subset'"
         class="chevron"
         aria-hidden="true"
-        @click.stop="toggleCollapse(node)"
+        @click.stop="toggleCollapseFromChevron(node, index)"
       ><UiIcon :name="node.expanded ? 'chevron-down' : 'chevron-right'" /></span>
       <span v-else class="chevron-placeholder" aria-hidden="true"></span>
       <span class="node-label">{{ node.label }}</span>

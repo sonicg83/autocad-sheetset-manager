@@ -185,6 +185,26 @@ describe("SheetTree：结构树键盘模型", () => {
     expect(treeitems(wrapper)[1]!.attributes("aria-expanded")).toBe("true");
   });
 
+  it("点击非当前节点的展开指示器后，该节点取得唯一 tabindex=0 与真实焦点", async () => {
+    // 审查 I2：chevron 点击只收起/展开时，roving tabindex 与 document.activeElement 仍留在旧节点，
+    // 后续方向键会继续操作旧上下文（鼠标—键盘焦点衔接回归）。点击后焦点必须交给被点击的子集。
+    const wrapper = mountTree();
+    const chevron2 = treeitems(wrapper)[2]!.find(".chevron");
+    await chevron2.trigger("click");
+    await nextTick();
+    // 子集 2 展开后树为 [all, subset-1, subset-2, sheet-3]；tabindex 与真实焦点都移交给子集 2
+    expect(treeitems(wrapper)).toHaveLength(4);
+    expect(tabindexes(wrapper)).toEqual(["-1", "-1", "0", "-1"]);
+    expect(document.activeElement).toBe(treeitems(wrapper)[2]!.element);
+  });
+
+  it("点击展开指示器只切换折叠，不激活节点（不触发范围切换）", async () => {
+    const wrapper = mountTree();
+    await treeitems(wrapper)[2]!.find(".chevron").trigger("click");
+    expect(wrapper.emitted("selectSubset")).toBeUndefined();
+    expect(wrapper.emitted("selectAll")).toBeUndefined();
+  });
+
   it("树恒有唯一可聚焦树项（抽屉打开时焦点兜底的前提）", async () => {
     // `SheetsView` 打开抽屉后会把焦点交给**活动树项**（roving tabindex 的焦点所有者）：
     // 先找 `[role=treeitem][tabindex="0"]`，再退回首个 treeitem。此处钉住该前提：
