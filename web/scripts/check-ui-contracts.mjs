@@ -374,6 +374,17 @@ function maskCssComments(css) {
   return css.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
 }
 
+/** 读取模板开标签的插槽名；非具名插槽（含 `v-slot` 缩写与 `#default`）返回 `"default"`，
+ * 不是插槽模板返回 `null`。 */
+function templateSlotName(openTagText) {
+  const hash = /#([\w.-]+)/.exec(openTagText);
+  if (hash) return hash[1];
+  const named = /v-slot:([\w.-]+)/.exec(openTagText);
+  if (named) return named[1];
+  if (/\sv-slot(\s|=|>)/.test(openTagText)) return "default";
+  return null;
+}
+
 function analyzeVueFile(file, emit, isDefined, violations) {
   for (const style of file.sfc.styles) {
     analyzeStyleSource({
@@ -450,6 +461,81 @@ function analyzeVueFile(file, emit, isDefined, violations) {
         semantic: `input:${type ?? "text"}:${signature}`,
       }),
     );
+  }
+
+  // 组件化输入调用点（PLAN-DM-029 Task 12 责任 U / 审查 I3）：
+  // `<UiInput>`/`<UiSelect>` 的可见 label 在原语内部条件渲染，只看原语文件无法证明调用方
+  // 真的提供了标签——新增一个无标签的 `<UiInput />` 时 `check:ui` 仍会全绿。因此必须在
+  // 调用方模板里判定合法形态（同一字段只用其一，与 `UiInput.vue` 头注释一致）：
+  // 1) 调用点自带非空 `label`（静态字符串或非空绑定表达式）；
+  // 2) 位于 `FormField` 默认插槽内（`FormField` 渲染可见 label 并经插槽下发 `id`），
+  //    且 `FormField` 自身 label 非空——`FormField` 缺 label 是单独的违规，不落到控件头上；
+  // 3) 同一模板存在**有可见文字**的外部 `<label for="X">`，与控件的 `id` 值一致
+  //    （含 `:for`/`:id` 绑定表达式文本相等，判定口径与上方裸 `<input>` 扫描相同）。
+  // 已知静态边界：绑定表达式只能比对文本，不能求值——`:label="maybeEmpty"` 这类
+  // 「可能为空」的绑定按非空对待，由组件评审与 e2e 兜底。
+  const componentInputTags = [
+    ...findTags(html, "UiInput"),
+    ...findTags(html, "ui-input"),
+    ...findTags(html, "UiSelect"),
+    ...findTags(html, "ui-select"),
+  ].sort((a, b) => a.start - b.start);
+  if (componentInputTags.length > 0) {
+    const formFieldRanges = [...findRanges(html, "FormField"), ...findRanges(html, "form-field")];
+    // FormField 内的具名插槽内容不是默认插槽（`#hint` 里的控件不被 FormField 的 label 覆盖）。
+    const namedSlotRanges = findRanges(html, "template").filter((range) => {
+      const open = html.slice(range.start, range.contentStart);
+      const slotName = templateSlotName(open);
+      return slotName !== null && slotName !== "default";
+    });
+    const visibleLabelFors = new Set(
+      findTags(html, "label")
+        .map((tag) => {
+          const forValue = getAttribute(tag.text, "for");
+          const closeIndex = html.indexOf("</label>", tag.openEnd);
+          return {forValue, visible: closeIndex !== -1 && hasVisibleText(html.slice(tag.openEnd, closeIndex))};
+        })
+        .filter((item) => item.forValue !== null && item.visible)
+        .map((item) => item.forValue),
+    );
+
+    for (const tag of componentInputTags) {
+      const labelAttr = getAttribute(tag.text, "label");
+      if (labelAttr !== null && labelAttr.trim() !== "") continue;
+      const component = /^<([a-z-]+)/i.exec(tag.text)[1] ?? "component-input";
+      const inDefaultFormFieldSlot = formFieldRanges.some(
+        (range) =>
+          tag.start >= range.start && tag.start < range.end &&
+          !namedSlotRanges.some((slot) => slot.start >= range.start && slot.end <= range.end && tag.start >= slot.start && tag.start < slot.end),
+      );
+      if (inDefaultFormFieldSlot) continue;
+      const controlId = getAttribute(tag.text, "id");
+      if (controlId !== null && visibleLabelFors.has(controlId)) continue;
+      const signature = controlId ?? getAttribute(tag.text, "v-model") ?? getAttribute(tag.text, "placeholder") ?? "";
+      violations.push(
+        emit({
+          rule: RULE.visibleInputLabel,
+          ...at(tag.start),
+          message: "组件化输入缺少可见 label（自带非空 label、FormField 默认插槽或外部 label[for] 关联至少满足一项）",
+          semantic: `${component}:${signature}`,
+        }),
+      );
+    }
+
+    for (const range of formFieldRanges) {
+      const open = html.slice(range.start, range.contentStart);
+      const labelAttr = getAttribute(open, "label");
+      if (labelAttr !== null && labelAttr.trim() !== "") continue;
+      const signature = textSignature(html.slice(range.contentStart, range.contentEnd)) || "form-field";
+      violations.push(
+        emit({
+          rule: RULE.visibleInputLabel,
+          ...at(range.start),
+          message: "FormField 缺少非空 label（可见标签是字段的可访问名称来源）",
+          semantic: `form-field:${signature}`,
+        }),
+      );
+    }
   }
 
   // 结构图标只在模板与样式块里判定；脚本与 i18n 文案里的普通标点不参与。

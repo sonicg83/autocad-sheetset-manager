@@ -315,6 +315,121 @@ describe("Vue 语义规则", () => {
     assert.deepEqual(rulesOf(violations), []);
   });
 
+  test("组件化输入：自带非空 label 的 UiInput 通过", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Search.vue": `<template>
+  <UiInput type="search" :label="$t('search.label')" :model-value="query" @update:model-value="setQuery" />
+  <UiSelect :label="静态也行" :model-value="mode"><option value="all">全部</option></UiSelect>
+</template>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：无 label 的 UiInput / UiSelect 被拒绝（aria-label 不解除）", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Search.vue": `<template>
+  <UiInput :model-value="query" aria-label="搜索" @update:model-value="setQuery" />
+  <UiSelect :model-value="mode"><option value="all">全部</option></UiSelect>
+</template>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), ["visible-input-label", "visible-input-label"]);
+  });
+
+  test("组件化输入：空字符串 label 不算可见标签", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TOKENS_CSS,
+        "src/components/Search.vue": `<template><UiInput label="" :model-value="query" /></template>
+`,
+      }),
+      "visible-input-label",
+    );
+    assert.match(violation.message, /组件化输入/);
+  });
+
+  test("组件化输入：FormField 默认插槽提供 label 时通过", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Search.vue": `<template>
+  <FormField label="名称"><UiInput :model-value="name" @update:model-value="setName" /></FormField>
+</template>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：FormField 缺少非空 label 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TOKENS_CSS,
+        "src/components/Search.vue": `<template><FormField><UiInput :model-value="name" /></FormField></template>
+`,
+      }),
+      "visible-input-label",
+    );
+    assert.match(violation.message, /FormField/);
+  });
+
+  test("组件化输入：FormField 具名插槽内的控件不算被 FormField 覆盖", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TOKENS_CSS,
+        "src/components/Search.vue": `<template>
+  <FormField label="名称"><template #hint><UiInput :model-value="name" /></template></FormField>
+</template>
+`,
+      }),
+      "visible-input-label",
+    );
+    assert.match(violation.message, /组件化输入/);
+  });
+
+  test("组件化输入：外部可见 label[for] 与控件 id 表达式一致时通过", () => {
+    const violations = rawViolations({
+      "src/styles/tokens.css": TOKENS_CSS,
+      "src/components/Search.vue": `<template>
+  <label :for="fieldId(key)">{{ labelOf(key) }}</label>
+  <UiInput :id="fieldId(key)" :model-value="read(key)" @update:model-value="value => onInput(key, value)" />
+</template>
+`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：外部 label 表达式与控件 id 不一致被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TOKENS_CSS,
+        "src/components/Search.vue": `<template>
+  <label :for="fieldId(other)">{{ labelOf(other) }}</label>
+  <UiInput :id="fieldId(key)" :model-value="read(key)" />
+</template>
+`,
+      }),
+      "visible-input-label",
+    );
+    assert.match(violation.message, /组件化输入/);
+  });
+
+  test("组件化输入：外部 label 缺少可见文字不算关联", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TOKENS_CSS,
+        "src/components/Search.vue": `<template>
+  <label :for="fieldId(key)"></label>
+  <UiInput :id="fieldId(key)" :model-value="read(key)" />
+</template>
+`,
+      }),
+      "visible-input-label",
+    );
+    assert.match(violation.message, /组件化输入/);
+  });
+
   test("Unicode 结构图标被拒绝", () => {
     const violations = rawViolations({
       "src/styles/tokens.css": TOKENS_CSS,
@@ -1017,6 +1132,7 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     "src/styles/tokens.css": TOKENS_CSS,
     "src/components/Clean.vue": `<template>
   <label for="name">名称</label><input id="name" v-model="name" />
+  <UiInput :label="name" :model-value="name" />
   <button type="button" :aria-label="label" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6L18 18" /></svg></button>
 </template>
 <style scoped>.panel{font-size:var(--font-label);color:var(--color-text-primary);border:1px solid var(--color-border-subtle)}</style>
@@ -1070,6 +1186,13 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       name: "输入缺可见 label",
       rule: "visible-input-label",
       files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace('<label for="name">名称</label>', "")},
+    },
+    {
+      // 审查 I3（责任 U）：组件化输入的 label 在原语内部条件渲染，调用点缺失必须仍被 CLI 拒绝。
+      step1Class: "搜索输入无可见 label",
+      name: "组件化输入调用点缺可见 label",
+      rule: "visible-input-label",
+      files: {"src/components/Clean.vue": clean["src/components/Clean.vue"].replace(':label="name" ', "")},
     },
     {
       step1Class: "图标按钮无可读名称",
@@ -1174,8 +1297,8 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     // 分类集合必须恰好是这两组，不允许默默少测或凭空多出未归类的注入。
     assert.deepEqual([...classes].filter((name) => !STEP1_CLASSES.includes(name)).sort(), [...TASK2_CLASSES].sort());
     assert.equal(classes.size, 15, [...classes].join("、"));
-    assert.equal(mutations.length, 16);
-    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 16);
+    assert.equal(mutations.length, 17);
+    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 17);
     assert.deepEqual([...new Set(mutations.map((mutation) => mutation.rule))].sort(), [
       "circular-css-variable",
       "dynamic-variable-not-registered",
