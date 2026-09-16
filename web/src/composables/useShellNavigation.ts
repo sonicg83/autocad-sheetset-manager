@@ -35,9 +35,9 @@ export function useShellNavigation(deps: ShellNavigationDeps) {
   const tabDescriptors = computed<TabDescriptor[]>(() => {
     const busyDisabled = deps.isRestoreExecuting.value || deps.isWorkspaceLoading.value;
     const core: TabDescriptor[] = [
-      {id: "sheets", label: deps.t("shell.tabs.sheets"), number: "①", source: "core"},
-      {id: "properties", label: deps.t("shell.tabs.properties"), number: "②", source: "core"},
-      {id: "revisions", label: deps.t("shell.tabs.revisions"), number: "③", source: "core", disabled: busyDisabled},
+      {id: "sheets", label: deps.t("shell.tabs.sheets"), source: "core"},
+      {id: "properties", label: deps.t("shell.tabs.properties"), source: "core"},
+      {id: "revisions", label: deps.t("shell.tabs.revisions"), source: "core", disabled: busyDisabled},
     ];
     if (deps.workspace.value === null) return core;
     for (const page of deps.extensionPages.value) {
