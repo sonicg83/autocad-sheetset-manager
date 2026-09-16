@@ -531,7 +531,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expectToken(page, page.locator(".toolbar-filters select").first(), "height", "--control-height-form");
   });
 
-  test("条件标签：圆角与字号取自语义令牌", async ({page}) => {
+  test("条件标签：圆角与字号取自语义令牌，清除按钮满足 32px 点击下限", async ({page}) => {
     await installSheetsFixture(page);
     await openWorkspace(page, "light");
     await page.locator(".filter-toggle").click();
@@ -540,6 +540,15 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(chip).toBeVisible();
     await expectToken(page, chip, "border-top-left-radius", "--radius-lg");
     await expectToken(page, chip, "font-size", "--font-caption");
+    // 审查 I1：清除按钮的点击盒必须达到 --tap-target-min（32×32px），而胶囊视觉尺寸
+    // 不得被点击盒撑开（可见字形与点击盒分离，负 margin 抵消布局影响）。
+    const clear = page.locator(".chip-clear").first();
+    await expect(clear).toBeVisible();
+    const clearBox = await clear.boundingBox();
+    expect(clearBox!.width, "清除按钮点击宽度").toBeGreaterThanOrEqual(32);
+    expect(clearBox!.height, "清除按钮点击高度").toBeGreaterThanOrEqual(32);
+    const chipBox = await chip.boundingBox();
+    expect(chipBox!.height, "胶囊视觉高度不被点击盒撑开").toBeLessThan(32);
   });
 
   test("批量编辑：同行居中、38px 值输入、未选属性时队列按钮禁用", async ({page}) => {

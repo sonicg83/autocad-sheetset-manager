@@ -197,7 +197,11 @@ const conditionChips = computed(() => {
 .search-all{white-space:nowrap}
 .chips{display:inline-flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-lg);background:var(--color-info-bg);font-size:var(--font-caption)}
-.chip-clear{border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:var(--font-caption);padding:0}
+/* 审查 I1：可见 ✕ 与点击盒分离。内容盒保持字形大小（--icon-size-sm），透明 padding 把
+   点击区扩到 --tap-target-min（32px），再以负 margin 抵消 padding 对布局的撑开——
+   胶囊视觉尺寸不变。点击盒允许与相邻标签文本轻微重叠：标签不可交互，可点面积优先。
+   不另设 hover 背景，避免重叠区出现误导性反馈。 */
+.chip-clear{box-sizing:content-box;display:inline-flex;align-items:center;justify-content:center;width:var(--icon-size-sm);height:var(--icon-size-sm);padding:calc((var(--tap-target-min) - var(--icon-size-sm)) / 2);margin:calc((var(--icon-size-sm) - var(--tap-target-min)) / 2);border:none;background:none;cursor:pointer;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1;flex:none}
 .selection-bar{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-2);position:sticky;top:0;z-index:5;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);background:var(--color-bg-surface)}
 .selection-actions,.bulk-controls{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .bulk-controls{padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
