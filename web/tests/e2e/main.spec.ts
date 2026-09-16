@@ -1,6 +1,6 @@
-import {expect,test,type Page} from "@playwright/test";
+import {expect,test,type Page,type TestInfo} from "@playwright/test";
 import {writeFileSync} from "node:fs";
-import {buildPreviewFromBase} from "./fixtures/sheets";
+import {buildPreviewFromBase, installSheetsFixture} from "./fixtures/sheets";
 import {openSettingsDialog} from "./fixtures/settings";
 
 test.beforeEach(async({page})=>{
@@ -941,7 +941,9 @@ test("存在阻断诊断时任务浮层诊断页签显示红点并可打开",asy
   const overlay=page.getByRole("complementary",{name:"任务浮层"});
   // 折叠态页签行仅剩触发按钮窄条（§4.3）：先展开再断言诊断页签红点
   await overlay.getByRole("button",{name:"展开任务浮层"}).click();
-  await expect(overlay.getByRole("tab",{name:/诊断/})).toContainText("●");
+  // 阻断红点已从 Unicode `●` 迁到 `UiIcon name="status-dot"`（Task 4 Step 2 的图形清单）：
+  // 图标对读屏隐藏，因此按本仓自有钩子类断言可见性，而不是断言页签文本里含字形。
+  await expect(overlay.getByRole("tab",{name:/诊断/}).locator(".ov-dot")).toBeVisible();
   await overlay.getByRole("tab",{name:/诊断/}).click();
   await expect(overlay.getByRole("tab",{name:/诊断/})).toHaveAttribute("aria-selected","true");
 });
@@ -966,6 +968,16 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   await expect(toast).toBeVisible();
   await page.waitForTimeout(6000); // 超过成功类自动消失时长
   await expect(toast).toBeVisible(); // 失败常驻
+  // Task 4 迁移轮 2：关闭按钮由 `✕` 字形改为 `UiIconButton`（`.toast-actions .ui-icon-button`，
+  // 尺寸由 `--icon-button-size` 给到 36×36），「查看」仍是有可见文案的描边按钮（`.toast-view`）。
+  // 本用例原先只按可访问名定位，旧的裸 `<button class="toast-close">✕</button>` 同样能通过，
+  // 所以补上结构与尺寸断言，作为提示宿主迁移的回归网。
+  const closeBtn=toast.locator(".toast-actions .ui-icon-button");
+  await expect(closeBtn).toHaveAttribute("aria-label","忽略通知");
+  const closeBox=(await closeBtn.boundingBox())!;
+  expect.soft(Math.round(closeBox.width),"toast 关闭按钮宽度").toBe(36);
+  expect.soft(Math.round(closeBox.height),"toast 关闭按钮高度").toBe(36);
+  await expect(toast.locator(".toast-actions .toast-view")).toHaveText("查看");
   await toast.getByRole("button",{name:"查看"}).click();
   await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
   // Task 5 起关闭按钮带 aria-label（忽略通知），可访问名不再依赖 ✕ 字形
@@ -1439,4 +1451,723 @@ test("未知 API 错误显示本地化摘要、原文只在可展开诊断详情
   await expect(diagnostics.getByText("保存失败")).toBeHidden();
   await diagnostics.getByText("原始错误详情").click();
   await expect(diagnostics.getByText("保存失败")).toBeVisible();
+});
+
+// —— Task 2 全局样式分层与字体、尺寸令牌（ARCH-DM-007 §4.1/§4.2）——
+// 本节只断言根层级事实：正文排版、等宽令牌解析结果、字体资源本地化。
+// 组件级控件的 36px/38px/34px 尺寸族由 Task 3 起的原语用例承担，此处不重复。
+
+test("Task 2 根层级：正文 14px/21px 且表单控件继承同一字体栈",async({page})=>{
+  await openWorkspace(page);
+  const probe=await page.evaluate(()=>{
+    const body=getComputedStyle(document.body);
+    const controls=["button","input","select","textarea"].map(tag=>{
+      const el=document.createElement(tag);
+      if(tag==="input")el.setAttribute("type","text");
+      document.body.append(el);
+      const value=getComputedStyle(el);
+      const result={tag,family:value.fontFamily,size:value.fontSize,lineHeight:value.lineHeight};
+      el.remove();
+      return result;
+    });
+    return {size:body.fontSize,lineHeight:body.lineHeight,family:body.fontFamily,controls};
+  });
+  expect(probe.size).toBe("14px"); // --font-body 的字号一半
+  expect(probe.lineHeight).toBe("21px"); // 14px × 1.5
+  expect(probe.family.split(",")[0].replace(/["']/g,"").trim()).toBe("Inter");
+  expect(probe.family).toContain("Microsoft YaHei"); // 中文回落到系统雅黑，不打包 CJK
+  for(const control of probe.controls){
+    // 重置层必须让表单控件 font:inherit；否则 Chrome 默认 400 13.33px Arial 会盖掉正文排版
+    expect.soft(control.family,`${control.tag} 应继承正文字体栈`).toBe(probe.family);
+    expect.soft(control.size,`${control.tag} 应继承正文字号`).toBe("14px");
+    // `<select>` 是 Chromium 的固定例外：UA 层把它的 line-height 叼成 normal，
+    // `font:inherit` 与显式 `line-height:inherit` 实测都改不动（见 task-2-report.md）。
+    // select 的高度契约由 Task 3 的控件原语定死，这里不把浏览器怪癖当回归看。
+    if(control.tag!=="select")expect.soft(control.lineHeight,`${control.tag} 应继承正文行高`).toBe("21px");
+  }
+});
+
+test("Task 2 等宽令牌：--font-mono 解析为 IBM Plex Mono 优先",async({page})=>{
+  await openWorkspace(page);
+  const probe=await page.evaluate(()=>{
+    const el=document.createElement("span");
+    el.textContent="001-002.dwg";
+    el.style.fontFamily="var(--font-mono)";
+    document.body.append(el);
+    const resolved=getComputedStyle(el).fontFamily;
+    el.remove();
+    return {resolved,token:getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim()};
+  });
+  expect(probe.token).toContain("IBM Plex Mono");
+  expect(probe.resolved.split(",")[0].replace(/["']/g,"").trim()).toBe("IBM Plex Mono");
+});
+
+test("Task 2 字体资源：两套本地 WOFF2 且不引用远程 URL",async({page})=>{
+  await openWorkspace(page);
+  const faces=await page.evaluate(()=>{
+    const found:{family:string;text:string;unicodeRange:string}[]=[];
+    for(const sheet of Array.from(document.styleSheets)){
+      let rules:CSSRule[]=[];
+      try{rules=Array.from(sheet.cssRules)}catch{continue} // 跨域工作表跳过：本地资源不应出现
+      for(const rule of rules){
+        if(rule.type!==CSSRule.FONT_FACE_RULE)continue;
+        const font=rule as CSSFontFaceRule;
+        found.push({
+          family:font.style.getPropertyValue("font-family").replace(/["']/g,"").trim(),
+          text:font.cssText,
+          unicodeRange:font.style.getPropertyValue("unicode-range"),
+        });
+      }
+    }
+    return found;
+  });
+  const local=faces.filter(face=>face.family==="Inter"||face.family==="IBM Plex Mono");
+  expect(local.map(face=>face.family).sort()).toEqual(["IBM Plex Mono","Inter"]);
+  // CSSOM 会把 unicode-range 归一化（去前导零、十六进制大写），因此不比对字面串，
+  // 而是拆成码位区间后判定真实需求：覆盖 Basic Latin、不打包 CJK。
+  const ranges=(value:string)=>value.split(",").map(part=>part.trim()).filter(Boolean).map(part=>{
+    const [start,end=start]=part.replace(/^u\+/i,"").split("-");
+    return {from:parseInt(start,16),to:parseInt(end,16)};
+  });
+  const covers=(value:string,from:number,to:number)=>ranges(value).some(range=>range.from<=from&&range.to>=to);
+  for(const face of local){
+    expect(face.text).toContain(".woff2");
+    expect(face.text).not.toMatch(/https?:\/\//); // 离线可用，禁止 CDN
+    expect(face.text).toContain("font-display: swap");
+    expect.soft(covers(face.unicodeRange,0x20,0x7e),`${face.family} 应覆盖 Basic Latin`).toBe(true);
+    expect.soft(covers(face.unicodeRange,0x4e00,0x9fff),`${face.family} 不得打包 CJK`).toBe(false);
+  }
+});
+
+// ===== PLAN-DM-029 Task 12 责任 A：字体"真实加载"的运行时证据 =====
+// Task 2 的三条用例（以及上方那条）只断言 **CSSOM 声明层**：`@font-face` 规则文本、
+// `getComputedStyle()` 字体栈与 `unicode-range` 区间语义；它们**不能**证明两套 WOFF2 在运行时
+// 真被请求、也不排除远程字体。本节补上运行时证据（这是责任 A 的收口要求）。
+//
+// 路径口径说明（避免误判）：e2e 跑在 `npm run dev`（playwright.config.ts 的 webServer）上，
+// 字体地址因此是 `/src/assets/fonts/*.woff2`；生产构建由 Vite 拷贝为 `/assets/<name>-<hash>.woff2`。
+// 本节断言同时适配两者（本地同源 + `.woff2` + 资产名），而「生产产物确实落在 `/assets/`」
+// 是对 `dist/` 产物的检查，见 task-12-report.md（与 `check:ui` 的字体资产规则互补）。
+test("Task 12 责任 A：两套 WOFF2 在运行时被真实请求、本地同源且无远程字体访问",async({page})=>{
+  const fontRequests:{url:string;pathname:string}[]=[];
+  const fontResponses:{url:string;status:number}[]=[];
+  const remoteFontRequests:string[]=[];
+  // 监听器必须在 `goto` **之前**挂上：字体请求发生在首帧渲染期间。
+  page.on("request",(request)=>{if(request.resourceType()!=="font")return;fontRequests.push({url:request.url(),pathname:new URL(request.url()).pathname});});
+  page.on("response",(response)=>{if(response.request().resourceType()!=="font")return;fontResponses.push({url:response.url(),status:response.status()});});
+  page.on("request",(request)=>{const {hostname,protocol}=new URL(request.url());if(protocol.startsWith("http")&&!["127.0.0.1","localhost"].includes(hostname)&&/\.(woff2?|ttf|otf|eot)(\?|$)/.test(request.url()))remoteFontRequests.push(request.url());});
+
+  await page.goto("/");
+  // 顶栏品牌名 `DST Sheet Set Manager`（i18n `app.title`，未翻译）是真实界面里的拉丁文本，
+  // 它足以触发 Inter 的 Basic Latin 子集请求——不需要为了测试去伪造文本。
+  await expect(page.locator(".topbar")).toBeVisible();
+  // 第二套字体（等宽）只在图纸表格/目录页出现，欢迎页不渲染，故用探针触发一次请求：
+  // 这里要证的是「产物可被真实请求并加载」，探针不改变这一性质（真实使用点仍由各页 e2e 覆盖）。
+  await page.evaluate(()=>{
+    const probe=document.createElement("span");
+    probe.id="font-probe";
+    probe.style.cssText="font-family:var(--font-mono);font-size:14px;position:absolute;left:-9999px;top:0";
+    probe.textContent="ABCDEF0123456789";
+    document.body.appendChild(probe);
+  });
+  const runtime=await page.evaluate(async()=>{
+    await document.fonts.ready;
+    return {
+      faces:Array.from(document.fonts).map(face=>({family:face.family.replace(/["']/g,""),status:face.status})),
+      inter:document.fonts.check("14px Inter"),
+      mono:document.fonts.check('14px "IBM Plex Mono"'),
+      loaded:Array.from(document.fonts).filter(face=>face.status==="loaded").map(face=>face.family.replace(/["']/g,"")),
+    };
+  });
+
+  // ① 两套字体都真的进入 loaded（status==="loaded" 表示字体二进制已取回并可用）
+  expect.soft(runtime.faces.map(face=>face.family).sort(),"声明的字体族").toEqual(["IBM Plex Mono","Inter"]);
+  expect.soft(runtime.loaded.sort(),"运行时已加载的字体族").toEqual(["IBM Plex Mono","Inter"]);
+  expect.soft(runtime.inter,"Inter 可渲染").toBe(true);
+  expect.soft(runtime.mono,"IBM Plex Mono 可渲染").toBe(true);
+
+  // ② 两套 WOFF2 都被真实请求，且都在本地同源、命中各自的资产文件名
+  const basenames=fontRequests.map(request=>request.pathname.split("/").pop()??"");
+  expect.soft(basenames.some(name=>name.startsWith("InterLatin")),`Inter 子集被请求，实测：${basenames.join(", ")}`).toBe(true);
+  expect.soft(basenames.some(name=>name.startsWith("IBMPlexMonoLatin")),`Plex 子集被请求，实测：${basenames.join(", ")}`).toBe(true);
+  for(const request of fontRequests){
+    expect.soft(request.pathname.endsWith(".woff2"),`字体必须来自 WOFF2：${request.url}`).toBe(true);
+    expect.soft(request.url.startsWith(new URL(page.url()).origin),`字体必须同源：${request.url}`).toBe(true);
+  }
+  // ③ 响应成功（被请求≠取回成功）
+  for(const response of fontResponses) expect.soft(response.status,"字体响应状态 ".concat(response.url)).toBe(200);
+  // ④ 全程无远程字体访问（离线可用是硬约束）
+  expect(remoteFontRequests,"不得访问远程字体").toEqual([]);
+});
+
+// ===== PLAN-DM-029 Task 12（T11-2 Minor-2）：壳层布局搬迁后的几何关系 =====
+// `WorkspaceShell.vue` 的三条布局规则是**逐字节**从 `App.vue` 搬来的（Task 11 Step 6），但搬迁后
+// **没有任何自动化断言**覆盖它们（`check:ui` 只看规则合规，看不到布局；Task 11 也无截图门禁）。
+// 评审因此把「这个搬迁的第一次真实验证」记在 Task 12 的截图/真实桌面证据上——本节把它先钉在
+// **真实浏览器的几何结果**上，使后续截图/真实桌面只剩「与本节一致」这一点要核。
+test("Task 12 壳层布局：shell-body/shell-main/sheets-active 三条搬迁规则的实际几何",async({page})=>{
+  await openWorkspace(page);
+  const readLayout=()=>page.evaluate(()=>{
+    const body=document.querySelector<HTMLElement>(".shell-body")!;
+    const main=document.querySelector<HTMLElement>(".shell-main")!;
+    const overlay=document.querySelector<HTMLElement>(".shell-body > aside");
+    const rect=(element:Element)=>{const r=element.getBoundingClientRect();return {left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),height:Math.round(r.height)};};
+    const bodyStyle=getComputedStyle(body);
+    const mainStyle=getComputedStyle(main);
+    return {
+      bodyDisplay:bodyStyle.display,
+      bodyAlignItems:bodyStyle.alignItems,
+      body:rect(body),
+      mainDisplay:mainStyle.display,
+      mainFlexDirection:mainStyle.flexDirection,
+      mainFlexGrow:mainStyle.flexGrow,
+      mainOverflow:mainStyle.overflow,
+      main:rect(main),
+      overlay:overlay?rect(overlay):null,
+      sheetsActive:main.classList.contains("sheets-active"),
+      viewportHeight:window.innerHeight,
+      scrollWidth:document.documentElement.scrollWidth,
+      clientWidth:document.documentElement.clientWidth,
+    };
+  });
+
+  // 默认页签是**图纸页**（实测；打开工作区即 active==='sheets'）⇒ 先读 sheets-active 态。
+  const sheetsState=await readLayout();
+  // ③ `.shell-main.sheets-active{overflow:hidden}`：图纸页把纵向滚动交给表格
+  expect.soft(sheetsState.sheetsActive,"图纸页应带 sheets-active").toBe(true);
+  expect.soft(sheetsState.mainOverflow,"图纸页：主区自身不滚动（交给表格）").toBe("hidden");
+  // ① `.shell-body{display:flex;align-items:stretch;height:calc(100vh - 104px);min-height:0}`
+  expect.soft(sheetsState.bodyDisplay,".shell-body 是 flex 容器").toBe("flex");
+  expect.soft(sheetsState.bodyAlignItems,".shell-body 拉伸子项（主区与浮层同高）").toBe("stretch");
+  expect.soft(sheetsState.body.height,".shell-body 高度 = 100vh − 104px（顶栏＋操作栏）").toBe(sheetsState.viewportHeight-104);
+  // ② `.shell-main{display:flex;flex-direction:column;flex:1;min-width:0;overflow:auto}`
+  expect.soft(sheetsState.mainDisplay,".shell-main 是 flex 容器").toBe("flex");
+  expect.soft(sheetsState.mainFlexDirection,".shell-main 纵向排列").toBe("column");
+  expect.soft(sheetsState.mainFlexGrow,".shell-main 占满剩余宽度").toBe("1");
+  // `flex:1` + `align-items:stretch` 的**几何结果**（不只是声明）：水平相邻、不重叠、同高
+  if(sheetsState.overlay){
+    expect.soft(sheetsState.main.right,"主区右缘不越过浮层左缘").toBeLessThanOrEqual(sheetsState.overlay.left+1);
+    expect.soft(sheetsState.main.height,"主区与浮层同高（stretch）").toBe(sheetsState.overlay.height);
+    expect.soft(sheetsState.main.width+sheetsState.overlay.width,"两者宽度之和 = 容器宽度（无重叠也无缝隙）").toBe(sheetsState.body.width);
+  }
+
+  // 切到属性页：`sheets-active` 必须移除、主区恢复自身滚动（反向分支，防只钉一个方向）
+  await page.locator("#tab-properties").click();
+  await expect(page.locator(".shell-main.sheets-active"),"属性页不应带 sheets-active").toHaveCount(0);
+  const propertiesState=await readLayout();
+  expect.soft(propertiesState.sheetsActive,"属性页不应带 sheets-active").toBe(false);
+  expect.soft(propertiesState.mainOverflow,"属性页：主区自身纵向可滚动").toBe("auto");
+  expect.soft(propertiesState.main.right,"切换页签不改变主区几何").toBe(sheetsState.main.right);
+  expect.soft(propertiesState.scrollWidth,"无整页横向溢出").toBeLessThanOrEqual(propertiesState.clientWidth);
+});
+
+// ===== PLAN-DM-029 Task 4：壳层纵向验证 =====
+// 尺寸必须在真实浏览器里量：happy-dom 不做布局，Task 3 只在源码与令牌链层面锁定了这组尺寸
+// （`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 的遗留控件）。
+// 本节同时补齐 Task 3 无法在本地验证的真实可见性叠加（`display:none`，含祖先与自身）与
+// 任务浮层的焦点语义（手写副本迁到 `useDialogFocus` 后必须保住的三条）以及 Step 5 要求的
+// hover/focus/disabled 计算样式。注：**不拿 `[hidden]` 当隐藏形态**——壳层按钮位于 `<aside>` 内，
+// `legacy.css:24` 的 `:where(#app) aside button{display:flex}` 是作者规则，按层叠直接覆盖
+// UA 的 `[hidden]{display:none}`，`[hidden]` 按钮仍会产生盒子（实测可被 `focus()`）。
+
+test("壳层已迁移控件：本地 SVG 图标、统一尺寸与可访问名称",async({page})=>{
+  await openWorkspace(page);
+  const topbar=page.locator(".topbar");
+  const shell=page.locator(".topbar button, .tabbar button, .dock button");
+  const heightOf=async(selector:string)=>Math.round((await page.locator(selector).first().boundingBox())!.height);
+
+  // A：Unicode 字形不再充当结构图标，图标是本仓库的本地 SVG 且对读屏隐藏
+  expect.soft(await topbar.textContent(),"顶栏不应再出现字形图标").not.toContain("◐");
+  expect.soft(await topbar.textContent(),"顶栏不应再出现字形图标").not.toContain("⚙");
+  expect.soft(await page.locator(".topbar svg.ui-icon[aria-hidden='true']").count(),"顶栏本地 SVG 图标").toBeGreaterThan(0);
+  expect.soft(await page.locator(".dock svg.ui-icon[aria-hidden='true']").count(),"操作栏本地 SVG 图标").toBeGreaterThan(0);
+  await expect(page.locator(".topbar svg.ui-icon").first()).toHaveAttribute("focusable","false");
+  // 装饰图标不进可访问名称：顶栏两个入口的名称仍来自 i18n 的 aria-label
+  await expect(page.getByRole("button",{name:"切换主题"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"设置"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"打开图纸集所在文件夹"})).toBeVisible();
+
+  // B/E：输入类 38px、普通按钮 36px、图标按钮 36×36、紧凑动作 34px
+  expect.soft(await topbar.locator("select").first().evaluate(el=>getComputedStyle(el).height),"CAD 版本选择框").toBe("38px");
+  for(const selector of [".topbar .folder-btn",".topbar .close-btn",".topbar .settings-btn",".dock .draft-chip"]){
+    expect.soft(await heightOf(selector),selector).toBe(36);
+  }
+  expect.soft(await page.locator(".topbar .ui-icon-button").count(),"顶栏图标按钮数量").toBeGreaterThan(0);
+  const iconButton=(await page.locator(".topbar .ui-icon-button").first().boundingBox())??{width:0,height:0};
+  expect.soft(Math.round(iconButton.width),"图标按钮宽度").toBe(36);
+  expect.soft(Math.round(iconButton.height),"图标按钮高度").toBe(36);
+  expect.soft(await heightOf(".dock .dock-btn"),"紧凑工具栏按钮").toBe(34);
+
+  // 可点目标下限 32px（壳层所有按钮）
+  for(const control of await shell.all()){
+    const box=(await control.boundingBox())!;
+    expect.soft(Math.round(box.height),`可点目标 ${await control.getAttribute("class")}`).toBeGreaterThanOrEqual(32);
+  }
+});
+
+test("壳层交互态：键盘焦点环、悬停与禁用态的计算样式",async({page})=>{
+  await openWorkspace(page);
+  // 令牌解析：断言落在令牌真值上而不是硬编码 rgb
+  const tokenColor=(name:string)=>page.evaluate(token=>{
+    const probe=document.createElement("span");
+    probe.style.color=`var(${token})`;
+    document.body.appendChild(probe);
+    const value=getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  },name);
+
+  // 键盘焦点（Step 1）：`:focus-visible` 的统一焦点环（`reset.css:34`）对壳层控件同样生效
+  await page.locator(".topbar .theme-btn").focus();
+  await page.keyboard.press("Tab");
+  const settings=page.locator(".topbar .settings-btn");
+  await expect(settings).toBeFocused();
+  const ring=await settings.evaluate(el=>{const s=getComputedStyle(el);return {style:s.outlineStyle,width:s.outlineWidth,color:s.outlineColor}});
+  expect.soft(ring.style,"键盘焦点环线型").toBe("solid");
+  expect.soft(ring.width,"键盘焦点环线宽").toBe("2px");
+  expect.soft(ring.color,"键盘焦点环颜色").toBe(await tokenColor("--color-focus"));
+
+  // 悬停（Step 5）：`.settings-btn:hover` 命中 `--color-bg-muted`，且与常态不同
+  const muted=await tokenColor("--color-bg-muted");
+  const normalBg=await settings.evaluate(el=>getComputedStyle(el).backgroundColor);
+  await settings.hover();
+  const hoverBg=await settings.evaluate(el=>getComputedStyle(el).backgroundColor);
+  expect.soft(normalBg,"悬停前背景与悬停态不同").not.toBe(muted);
+  expect.soft(hoverBg,"悬停背景命中 --color-bg-muted").toBe(muted);
+
+  // 禁用态（Step 5）：默认无草稿时撤销必然禁用（`cursor===0`），禁用样式由壳层自己声明
+  const undo=page.locator(".dock .dock-btn.ghost").first();
+  await expect(undo).toBeDisabled();
+  const disabledStyle=await undo.evaluate(el=>{const s=getComputedStyle(el);return {opacity:s.opacity,cursor:s.cursor}});
+  expect.soft(disabledStyle.opacity,"禁用态透明度").toBe("0.5");
+  expect.soft(disabledStyle.cursor,"禁用态光标").toBe("not-allowed");
+});
+
+test("任务浮层焦点：展开后落在当前激活页签、关闭回焦当前激活入口、Tab 在首尾回绕",async({page})=>{
+  await openWorkspace(page);
+  const drawer=page.locator(".task-drawer");
+  const activeId=()=>page.evaluate(()=>document.activeElement?.id??null);
+  const activeEntry=()=>page.evaluate(()=>document.activeElement?.getAttribute("data-entry")??null);
+
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  await expect(drawer).toBeVisible();
+  // ② 关闭回焦：先在抽屉内切到「诊断」再收起，回焦的是**当前**激活入口（不是展开时那一个）
+  await drawer.getByRole("tab",{name:/诊断/}).click();
+  await page.getByRole("button",{name:"收起任务浮层"}).click();
+  await expect(drawer).toBeHidden();
+  await expect.poll(activeEntry).toBe("diag");
+  // ① 展开后焦点必须落在当前激活页签（不是抽屉里第一个页签）。注：非激活页签带
+  //    `tabindex="-1"`，迁移到 `useDialogFocus` 后 `focusables()[0]` 恒等于当前激活页签，
+  //    因此这条断言**不是**「必须显式传 `initialFocus`」的回归网，只是行为冻结。
+  await page.locator('.task-rail [data-entry="diag"]').click();
+  await expect(drawer).toBeVisible();
+  await expect.poll(activeId).toBe("ov-tab-diag");
+
+  // ③ 隐藏形态的**端点级**验证：四种形态的探针都放在抽屉最前面（首端点侧）与最后面（尾端点侧），
+  //    只要其中任何一个候选被算作停靠点，首/尾端点与回绕目标都会跟着变（Task 3 的 happy-dom
+  //    用例只能验过滤结果，验不到真实布局与焦点可达性）。
+  //    四种形态：属性 `[hidden]`、祖先 `display:none`、祖先 `inert`、自身 `visibility:hidden`。
+  //    注意（控制器实测，`evidence/controller-task-4-probe-hidden.json`）：浮层内组件自己的元素有
+  //    `.task-overlay [hidden]{display:none!important}` 兜底，但这里用 `createElement` 造的裸按钮会
+  //    被 `legacy.css:24` 的 `:where(#app) aside button{display:flex}` 抢在 UA 的 `[hidden]{display:none}`
+  //    之前，所以在 CSS 上仍然占位——本断言真正验证的是焦点工具**按属性**过滤。
+  await page.evaluate(()=>{
+    const drawerEl=document.querySelector(".task-drawer")!;
+    const head=document.createElement("div");
+    head.id="focus-probe-head";
+    head.innerHTML=[
+      '<button id="probe-head-hidden" hidden>属性隐藏</button>',
+      '<div style="display:none"><button id="probe-head-display">祖先不显示</button></div>',
+      '<div inert><button id="probe-head-inert">祖先惰性</button></div>',
+      '<button id="probe-head-visibility" style="visibility:hidden">不可见</button>',
+    ].join("");
+    const tailNote=document.createElement("div");
+    tailNote.id="focus-probe-tail";
+    tailNote.style.display="none";
+    tailNote.innerHTML='<button id="probe-tail-hidden">端点后不显示</button>';
+    const tail=document.createElement("button");
+    tail.id="probe-last";
+    tail.textContent="真实最后";
+    drawerEl.prepend(head);
+    drawerEl.appendChild(tail);
+    drawerEl.appendChild(tailNote);
+  });
+  // 非激活页签带 `tabindex="-1"`，不是停靠点 → 抽屉内**第一个真实停靠点**就是当前激活页签
+  await page.locator("#probe-last").focus();
+  await page.keyboard.press("Tab");
+  await expect.poll(activeId).toBe("ov-tab-diag");
+  // Shift+Tab 从第一个停靠点回绕到最后一个真实停靠点
+  await page.locator("#ov-tab-diag").focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect.poll(activeId).toBe("probe-last");
+
+  // 0×0 候选：记录**迁移前后一致**的现有行为（原手写副本的 `getClientRects().length>0` 对
+  // 零尺寸元素同样成立，故这不是本轮引入的缺口）；已知未覆盖，见计划 Task 12 收口责任 J。
+  await page.evaluate(()=>{
+    const zero=document.createElement("div");
+    zero.style.cssText="width:0;height:0;overflow:hidden";
+    zero.innerHTML='<button id="probe-zero">零尺寸</button>';
+    document.querySelector(".task-drawer")!.appendChild(zero);
+  });
+  await page.locator("#probe-zero").focus();
+  await page.keyboard.press("Tab");
+  await expect.poll(activeId).toBe("ov-tab-diag");
+});
+
+// ===== PLAN-DM-029 Task 7：任务浮层内部控件（动作与状态） =====
+// 背景：Task 4 把浮层控件迁到原语（`.ov-fold` 由 40×40 改为 UiIconButton 的 36×36）时，
+// 它的尺寸断言循环 `shell = ".topbar button, .tabbar button, .dock button"` **不含浮层按钮**，
+// 全仓也搜不到任何 `.ov-*` / `.diag-*` 元素的计算样式或几何断言 —— 即“补任务浮层动作与状态
+// 控件断言”这一交付物此前是静默缺席的。本节补齐，并钉住可点下限与状态色来源。
+
+// 令牌 → 当前主题下的计算色值（与「壳层交互态」用例同口径，不硬编码 rgb）
+function tokenColorOf(page: Page, token: string) {
+  return page.evaluate(name => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  }, token);
+}
+
+// 读取令牌解析出的字号字符串（责任 K）。缺令牌时返回**空串**——
+// 令牌自指断言（元素 vs 令牌）在令牌缺失时两侧同为 NaN 仍会通过，故必须先把令牌本身钉成具体值。
+function tokenFontSizeOf(page: Page, token: string) {
+  return page.evaluate(name => {
+    const probe = document.createElement("span");
+    probe.style.fontSize = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return value;
+  }, token);
+}
+
+// 浮层内**所有**可点元素的可点高度必须 ≥32px（ARCH-DM-007 §4.1 全局最小可点下限）。
+// 枚举口径：button / a / summary / [role=tab] / [data-entry]（默认态 7 个、有诊断态 10 个）。
+// 刻意**不**缩小到“动作控件”：诊断行的 summary 与复制按钮正是在这里被发现低于下限的。
+async function expectOverlayTapTargets(page: Page): Promise<void> {
+  const rows = await page.evaluate(() => {
+    const scope = document.querySelector(".task-overlay");
+    if (!scope) return [];
+    return Array.from(scope.querySelectorAll("button, a, summary, [role='tab'], [data-entry]")).map(element => {
+      const rect = (element as HTMLElement).getBoundingClientRect();
+      const style = getComputedStyle(element as HTMLElement);
+      const cls = String((element as HTMLElement).className || "").split(" ").filter(Boolean).join(".");
+      return {
+        sel: `${element.tagName.toLowerCase()}${cls ? "." + cls : ""}`,
+        h: Math.round(rect.height),
+        visible: rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden",
+      };
+    });
+  });
+  const visible = rows.filter(row => row.visible);
+  expect(visible.length, "应枚举到浮层内的可点元素").toBeGreaterThan(0);
+  expect(visible.filter(row => row.h < 32).map(row => `${row.sel}=${row.h}px`), "浮层内所有可点元素都必须 ≥32px").toEqual([]);
+}
+
+test("任务浮层动作控件：折叠按钮 36×36、页签档位与可点下限",async({page})=>{
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  const drawer=page.locator(".task-drawer");
+  await expect(drawer).toBeVisible();
+
+  // 折叠按钮：Task 4 把 40×40 改成 UiIconButton 的 36×36，此前无任何断言钉住（绝对值锚，
+  // 不用令牌自指——令牌整体漂移时两侧同变会漏报，同责任 S 的教训）
+  const fold=page.locator(".task-drawer .ov-fold");
+  await expect(fold).toHaveCSS("width","36px");
+  await expect(fold).toHaveCSS("height","36px");
+  const foldBox=(await fold.boundingBox())!;
+  expect(Math.round(foldBox.width),"折叠按钮宽度").toBe(36);
+  expect(Math.round(foldBox.height),"折叠按钮高度").toBe(36);
+  // 可访问名称来自 UiIconButton 的 label，而不是字形
+  await expect(fold).toHaveAttribute("aria-label","收起任务浮层");
+
+  // 页签：高度由 padding(10px)+行高决定（无固定档），字号取语义令牌
+  const tab=page.locator(".task-drawer .ov-tab").first();
+  await expect(tab).toHaveCSS("font-size","13px");
+  const tabBox=(await tab.boundingBox())!;
+  expect(Math.round(tabBox.height),"页签高度").toBe(42);
+
+  // 空态（默认夹具无诊断）：状态文案字号取令牌；可点元素整体过下限
+  await page.locator('.task-rail [data-entry="diag"]').click();
+  const empty=page.locator(".ov-empty");
+  await expect(empty).toBeVisible();
+  await expect(empty).toHaveCSS("font-size","13px");
+  await expectOverlayTapTargets(page);
+});
+
+test("任务浮层状态控件：状态色取语义令牌、诊断文本可读且过可点下限",async({page})=>{
+  await installSheetsFixture(page,{dualStatus:true});
+  await openWorkspace(page);
+  await page.getByRole("button",{name:"展开任务浮层"}).click();
+  const drawer=page.locator(".task-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("tab",{name:/诊断/}).click();
+
+  // 状态点（阻断诊断）颜色必须来自语义令牌，不硬编码 rgb
+  const dot=page.locator(".task-drawer .ov-dot").first();
+  await expect(dot).toBeVisible();
+  expect(await dot.evaluate(element=>getComputedStyle(element).color),"状态点颜色应来自 --color-danger").toBe(await tokenColorOf(page,"--color-danger"));
+
+  // 诊断文本：字号取语义令牌，且宽度必须 >0（回归守卫）——
+  // 曾因 `legacy.css` 的 `:where(#app) aside button{...width:100%...}` 命中浮层的 `<aside>` 根，
+  // `.diag-copy` 又带 `flex-shrink:0`，于是它独占整行、把 `.diag-text` 挤成 0 宽，
+  // `word-break:break-word` 导致**每行只显示一个字符**（evidence/task-7-fix-diag-broken-drawer.png）
+  await page.locator(".ov-diagnostics summary").click();
+  const text=page.locator(".diag-text").first();
+  await expect(text).toBeVisible();
+  await expect(text).toHaveCSS("font-size","13px");
+  const textBox=(await text.boundingBox())!;
+  expect(Math.round(textBox.width),"诊断文本宽度（0 宽 = 每字一行、不可读）").toBeGreaterThan(50);
+
+  // 复制按钮：达 ≥32px 下限，且按内容收缩（不得再被 width:100% 撑满整行）
+  const copy=page.locator(".diag-copy").first();
+  await expect(copy).toHaveCSS("min-height","32px");
+  const copyBox=(await copy.boundingBox())!;
+  const rowBox=(await page.locator(".diagnostics li").first().boundingBox())!;
+  expect(Math.round(copyBox.height),"复制按钮高度").toBeGreaterThanOrEqual(32);
+  expect(Math.round(copyBox.width),"复制按钮宽度必须小于整行（否则会挤掉诊断文本）").toBeLessThan(Math.round(rowBox.width)-10);
+
+  // 该态下可点元素更多（含 summary 与复制按钮），整体再过一遍下限
+  await expectOverlayTapTargets(page);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-DM-029 Task 9：旧页面（欢迎/修订/草稿）控件视觉基础
+// 契约：显式 type="button"、最小可点高度 ≥32px、非空可访问名称。
+// 关键尺寸一律用**绝对值锚**（Task 7 的教训：用令牌断言令牌时，令牌整体漂移两侧同变仍会通过）。
+async function expectLegacyControlContract(page: Page, selector: string): Promise<void> {
+  // 先等首个命中可见：`.all()` 不等待，否则会在视图尚未渲染时得到 0 个而假红
+  await expect(page.locator(selector).first()).toBeVisible();
+  const controls = await page.locator(selector).all();
+  expect(controls.length, `${selector} 至少命中一个控件`).toBeGreaterThan(0);
+  for (const control of controls) {
+    const info = await control.evaluate(el => ({
+      type: el.getAttribute("type"),
+      tag: el.tagName,
+      height: Math.round(el.getBoundingClientRect().height),
+      name: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim(),
+    }));
+    expect.soft(info.type, `${selector} <${info.tag}> 必须显式 type="button"`).toBe("button");
+    expect.soft(info.height, `${selector} 可点高度`).toBeGreaterThanOrEqual(32);
+    expect.soft(info.name.length, `${selector} 必须有可访问名称`).toBeGreaterThan(0);
+  }
+}
+
+test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
+  test("欢迎页：主操作为 38px 表单档，宽度上限 520px 逐字等值", async ({page}) => {
+    await page.goto("/");
+    const primary = page.locator(".welcome-card .primary");
+    await expect(primary).toBeVisible();
+    await expectLegacyControlContract(page, ".welcome-card .primary");
+    expect(await primary.evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
+    expect(await page.locator(".welcome-card").evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    // 责任 K（已裁定）：20px 已升为语义档位 --font-page-title，值逐字等值
+    expect(await tokenFontSizeOf(page, "--font-page-title"), "--font-page-title 必须解析为 20px").toBe("20px");
+    await expect(page.locator(".welcome-title")).toHaveCSS("font-size", "20px");
+  });
+
+  test("修订页空态：标题字号取语义档位 --font-title（16px）", async ({page}) => {
+    // 显式给空列表，落在空态而不是有列表态
+    await page.route("**/api/revisions?workspace_id=workspace-1", route => route.fulfill({json: []}));
+    await openWorkspace(page);
+    await page.getByRole("tab", {name: "修订历史"}).click();
+    const title = page.locator(".empty-title");
+    await expect(title).toBeVisible();
+    expect(await tokenFontSizeOf(page, "--font-title"), "--font-title 必须解析为 16px").toBe("16px");
+    await expect(title).toHaveCSS("font-size", "16px");
+  });
+
+  test("欢迎页降级态：路径输入必须有可见 label 关联，按钮带显式 type", async ({page}) => {
+    // 清掉壳桥后启动：稳定落在无壳降级态（不依赖 late-bridge 的 30ms 窗口）
+    await page.addInitScript(() => { delete (window as any).pywebview; });
+    await page.goto("/");
+    const pathInput = page.locator(".no-shell input");
+    await expect(pathInput).toBeVisible();
+    const label = await pathInput.evaluate(el => {
+      const associated = (el as HTMLInputElement).labels?.[0] ?? null;
+      return associated ? (associated.textContent ?? "").trim() : null;
+    });
+    expect(label, "路径输入必须由可见 label 关联（仅 aria-label/placeholder 不算）").not.toBeNull();
+    expect((label ?? "").length, "可见 label 文本不得为空").toBeGreaterThan(0);
+    await expectLegacyControlContract(page, ".no-shell button");
+    expect(await page.locator(".no-shell input").evaluate(el => Math.round(el.getBoundingClientRect().height)), "路径输入高度").toBe(36);
+  });
+
+  test("修订页：按钮契约 + 确认模态危险层级（文字色不得等于底色）", async ({page}) => {
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await expect(page.locator(".revisions-view")).toBeVisible();
+    await expectLegacyControlContract(page, ".revisions-view button");
+    expect(await page.locator(".revisions-view button").first().evaluate(el => Math.round(el.getBoundingClientRect().height)), "修订页按钮高度").toBe(36);
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    await page.getByRole("button",{name:"恢复为新修订"}).click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    const danger = modal.getByRole("button",{name:/确认恢复/});
+    await expect(danger).toBeVisible();
+    const colors = await danger.evaluate(el => { const css = getComputedStyle(el); return {color: css.color, background: css.backgroundColor}; });
+    expect(colors.color, "危险确认按钮文字色不得与底色相同（否则不可见）").not.toBe(colors.background);
+  });
+
+  test("确认模态焦点归还：取消后焦点回到开启控件", async ({page}) => {
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    const opener = page.getByRole("button",{name:"恢复为新修订"});
+    await expect(opener).toBeVisible();
+    await opener.click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(modal).toBeVisible();
+    // Tab 圈闭（Task 9 Step 3 起由 dialogFocus.ts 承担，替代原先手写的 button/input 过滤）：
+    // 连续 Tab 必须始终留在对话框内。选 ConfirmModal 特有的 [role=dialog][aria-modal=true]
+    // 作作用域：未保存闸门刻意不写这两个属性，所以对隐藏的闸门不会假通过。
+    // 停靠点只有取消/确认两个，按 5 次足以触发两轮回绕。
+    const focusInsideDialog = () => page.evaluate(() => document.activeElement?.closest('[role="dialog"][aria-modal="true"]') !== null);
+    for (let step = 0; step < 5; step++) {
+      await page.keyboard.press("Tab");
+      expect(await focusInsideDialog(), `第 ${step + 1} 次 Tab 后焦点仍应在对话框内`).toBe(true);
+    }
+    await cancelModal(page);
+    await expect(modal).toHaveCount(0);
+    expect(await page.evaluate(() => (document.activeElement?.textContent ?? "").trim()), "取消后焦点应回到开启按钮").toContain("恢复为新修订");
+  });
+
+  test("草稿动作栈：按钮契约与 disabled 语义保持", async ({page}) => {
+    await openWorkspace(page);
+    await openDraftPop(page);
+    const pop = page.locator("#draft-pop");
+    await expect(pop).toBeVisible();
+    await expectLegacyControlContract(page, "#draft-pop button");
+    // 空草稿下撤销/重做/清空/预览均禁用（行为不变）
+    await expect(pop.getByRole("button",{name:"撤销"})).toBeDisabled();
+    await expect(pop.getByRole("button",{name:"重做"})).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-DM-029 Task 9 Step 5：旧页面四张持久证据（依 T9-2 裁定）
+// 落点：`docs/dst-manager/specs/assets/SPEC-DM-006/production/`（SPEC-DM-006 是桌面 UI/UX 的
+// 总纲 Spec，旧页面归它；先例：T7-4 新建了 SPEC-DM-009 的资产目录）。
+// 落盘方式与 `settings-extensions-production-evidence.spec.ts` 一致：截图**只作 testInfo 附件**，
+// 验收时**显式复制**到资产目录——**刻意不加 env 开关自动写库**（目录页那套会无差别覆盖
+// 其它 Spec 的既有验收资产，已登记为责任 T）。
+// 证据组落在本文件（而不另建 `*-visual-evidence.spec.ts`）是 T9-2 的刻意裁定：四张图的
+// 夹具流程（欢迎、修订、修复、任务事件）**已在本文件**，另建文件会重复不易写的夹具逻辑。
+// 每张图都配**计算样式或几何断言**，并先断言被证对象已入视口，避免“有图无证据”与
+// “拍到的不是该状态”（`toBeInViewport()` 默认 ratio 0 只要求任意相交）。
+async function shootLegacyEvidence(page: Page, info: TestInfo, name: string): Promise<void> {
+  const file = info.outputPath(name);
+  await page.screenshot({path: file, animations: "disabled"});
+  await info.attach(name, {path: file, contentType: "image/png"});
+}
+
+// 把语义令牌解析成当前主题下的计算色值（不能直接比 getPropertyValue 的原文）
+async function resolveDangerToken(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-danger)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
+}
+
+test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
+  test("t9-01 欢迎默认：未打开态浅色（welcome-card）", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto("/");
+    const card = page.locator(".welcome-card");
+    await expect(card).toBeVisible();
+    await expect(card).toBeInViewport();
+    // 与断言轮同一口径：主操作 38px 表单档、卡片宽度上限 520px 逐字等值
+    expect(await page.locator(".welcome-card .primary").evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
+    expect(await card.evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    await shootLegacyEvidence(page, info, "t9-01-welcome-default-1280x720-light.png");
+  });
+
+  test("t9-02 修订危险确认：确认模态危险层级浅色", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+    await page.route("**/api/workspaces/workspace-1/revisions/revision-1/restore-preview",route=>route.fulfill({json:{revision_id:"revision-1",executable:true,files:[{path:"test.dst",action:"replace",conflict:false}]}}));
+    await openWorkspace(page);
+    await page.getByRole("tab",{name:"修订历史"}).click();
+    await page.getByRole("button",{name:"恢复预览"}).click();
+    await expect(page.getByText("replace test.dst")).toBeVisible();
+    await page.getByRole("button",{name:"恢复为新修订"}).click();
+    const modal = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(modal).toBeVisible();
+    await expect(modal).toBeInViewport();
+    const danger = modal.getByRole("button",{name:/确认恢复/});
+    await expect(danger).toBeVisible();
+    // 勾选不可逆确认：让危险按钮处于**可用**态取景（禁用态带 opacity:.5，不能体现危险层级）
+    await modal.getByRole("checkbox").check();
+    await expect(danger).toBeEnabled();
+    // Task 6 的红底红字回归守卫口径：危险按钮文字色不得等于底色
+    const colors = await danger.evaluate(el => {const css = getComputedStyle(el); return {color: css.color, background: css.backgroundColor};});
+    expect(colors.color, "危险确认按钮文字色不得与底色相同").not.toBe(colors.background);
+    expect(colors.background, "危险按钮底色应取自 --color-danger").toBe(await resolveDangerToken(page));
+    await shootLegacyEvidence(page, info, "t9-02-revision-danger-confirm-1280x720-light.png");
+  });
+
+  test("t9-03 修复错误：阻断问题只读态浅色", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    const blocked:any=workspaceVersion("workspace-1","测试图纸集","revision-1");
+    blocked.dst_validation={status:"INVALID_REPAIR_REQUIRED",actions:[],blocking_issues:[{code:"REPAIR_UNSUPPORTED_ENCODING",message:"无法解析 DST 文件编码",severity:"error"}]};
+    await page.route("**/api/workspaces/open",route=>route.fulfill({json:blocked}));
+    await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:blocked}));
+    await openWorkspace(page);
+    // 修复面板在任务浮层的诊断页签（与 :608 的修复流程同一路径）
+    const overlay=page.getByRole("complementary",{name:"任务浮层"});
+    await overlay.getByRole("button",{name:"展开任务浮层"}).click();
+    await overlay.getByRole("tab",{name:"诊断"}).click();
+    const panel = page.locator(".repair");
+    await expect(panel).toBeVisible();
+    await expect(panel).toBeInViewport();
+    await expect(page.getByText("DST 修复状态：需要人工修复")).toBeVisible();
+    await expect(page.getByText(/存在阻断问题/)).toBeVisible();
+    await expect(page.getByText("阻断原因（1）")).toBeVisible();
+    await shootLegacyEvidence(page, info, "t9-03-repair-error-1280x720-light.png");
+  });
+
+  test("t9-04 深色任务状态：浮层实施进度同状态", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+    await installMockEventSource(page);
+    await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+    await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-evidence",status:"QUEUED",progress:0,attempt:0,files:[]}}));
+    await openWorkspace(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+    // 必须先由应用产生任务：对**未知**任务 id 的 SSE 事件会被忽略（既有用例均先经「确认写入」）
+    await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();
+    await page.getByRole("button",{name:"预览变更"}).click();
+    await page.getByRole("button",{name:"确认写入"}).click();
+    await confirmModal(page,/确认发布/);
+    await expect(page.getByText("任务进行中")).toBeVisible();
+    // 确认写入后浮层已被应用自动展开（既有用例随后即「收起」可证），因此这里不点「展开」；
+    // 只在未停在进度页签时切换，避免因“已经展开”而找不到展开按钮。
+    const overlay=page.getByRole("complementary",{name:"任务浮层"});
+    const progTab=overlay.getByRole("tab",{name:"实施进度"});
+    if ((await progTab.getAttribute("aria-selected")) !== "true") await progTab.click();
+    await expect(progTab).toHaveAttribute("aria-selected","true");
+    await page.evaluate(()=>(window as any).__emitJob({id:"job-evidence",workspace_id:"workspace-1",status:"ROLLED_BACK",progress:100,attempt:1,error_code:"PUBLISH_ROLLED_BACK",error_detail:"发布日志写入失败：[WinError 5] 拒绝访问",files:[]}));
+    const job = page.locator(".job-detail");
+    await expect(job).toBeVisible();
+    await expect(job).toBeInViewport();
+    await expect(page.getByText("任务 job-evidence")).toBeVisible();
+    await expect(job.getByText("PUBLISH_ROLLED_BACK")).toBeVisible();
+    // 计算样式断言：深色下抽屉底色必须取自当前主题的 --color-bg-surface（不得硬编码浅色）
+    const drawerBg = await page.locator(".task-drawer").evaluate(el => {const probe=document.createElement("span");probe.style.color="var(--color-bg-surface)";el.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {actual:getComputedStyle(el).backgroundColor,expected};});
+    expect(drawerBg.actual, "深色下抽屉底色应取自 --color-bg-surface").toBe(drawerBg.expected);
+    await shootLegacyEvidence(page, info, "t9-04-task-status-1280x720-dark.png");
+  });
 });

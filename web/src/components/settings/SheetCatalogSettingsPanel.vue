@@ -130,11 +130,11 @@ async function confirmRemove(): Promise<void> {
 /* fieldset 默认边框/内边距复位：本面板在 .cfg 内是普通区块，不引入新的视觉语言 */
 .catalog-settings{display:flex;flex-direction:column;gap:var(--space-3);border:0;margin:0;padding:0;min-width:0}
 .cs-group{display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
-.cs-group h4{margin:0;font-size:13px;color:var(--color-text-secondary)}
+.cs-group h4{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .cs-field{display:grid;gap:5px;min-width:0}
-.cs-field label{font-size:13px;color:var(--color-text-secondary)}
-.cs-field input{padding:8px;border:1px solid var(--color-border-strong);border-radius:5px;font:inherit;font-size:13px;background:var(--color-bg-surface);color:var(--color-text-primary)}
+.cs-field label{font-size:var(--font-label);color:var(--color-text-secondary)}
+.cs-field input{padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;font-size:var(--font-label);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .cs-field.is-error input{border-color:var(--color-danger)}
-.cs-hint{margin:0;font-size:12px;color:var(--color-text-secondary);line-height:1.8}
-.cs-error{margin:0;font-size:12px;line-height:1.8;color:var(--color-danger)}
+.cs-hint{margin:0;font-size:var(--font-caption);color:var(--color-text-secondary);line-height:1.8}
+.cs-error{margin:0;font-size:var(--font-caption);line-height:1.8;color:var(--color-danger)}
 </style>

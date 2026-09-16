@@ -12,6 +12,7 @@
 //（关窗即 display:none），显式属性会让 e2e 通用的 [role="dialog"][aria-modal="true"]
 // 选择器同时命中隐藏的闸门与真正打开的确认模态（多元素命中）。
 import {ref, watch} from "vue";
+import {useDialogFocus} from "./dialogFocus";
 
 const props = defineProps<{
   open: boolean;
@@ -23,37 +24,40 @@ const dialogEl = ref<HTMLDialogElement | null>(null);
 const card = ref<HTMLElement | null>(null);
 const opener = ref<Element | null>(null);
 
+// 原生模态生命周期（showModal/close）留在本组件，而且**必须先于焦点工具运行**：打开时焦点工具
+// 需要一个已经 showModal 的容器（否则对话框还没进 top layer，内部元素无法聚焦）；关闭时需要
+// 一个已经 close 的容器（否则模态仍让页面处于 inert，归还焦点会被浏览器拒绝）。两个 watch 都是
+// post flush，回调按注册顺序执行，所以本 watch 必须写在 useDialogFocus 之前。
 watch(() => props.open, (open) => {
   const dialog = dialogEl.value;
   if (open) {
     if (dialog === null || dialog.open) return;
+    // 必须早于 showModal：原生模态会把焦点移进对话框，之后再读 activeElement 拿到的就不是开启控件
     opener.value = document.activeElement;
     dialog.showModal();
-    card.value?.focus();
     return;
   }
   if (dialog?.open) dialog.close();
-  (opener.value as HTMLElement | null)?.focus?.();
 });
 
-function onKeydown(e: KeyboardEvent) {
-  // Esc 不再在此处理：原生模态的关闭请求（cancel）自带「只作用于最上层」语义，
-  // 由模板的 @cancel 映射为「留在此处」。此处只保留 Tab 焦点困绕。
-  if (e.key !== "Tab" || !card.value) return;
-  // 焦点困绕：Tab 循环限制在模态内
-  const items = Array.from(card.value.querySelectorAll<HTMLElement>("button")).filter((el) => !el.hasAttribute("disabled"));
-  if (!items.length) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
+// 焦点管理统一交给 dialogFocus.ts（Task 9 Step 3）：Tab 圈闭不再手写。
+// Esc 仍不在此处理——原生模态的关闭请求（cancel）自带「只作用于最上层」语义，由模板的 @cancel
+// 映射为「留在此处」；工具在没有 onEscape 时对 Escape 完全无操作（不阻止默认、不停止传播）。
+const {onDialogKeydown} = useDialogFocus({
+  open: () => props.open,
+  container: card,
+  // 保持既有落点：打开时聚焦对话框本身（而不是首个按钮），不属于行为变化。
+  initialFocus: card,
+  // 显式交还上面捕获的 opener：工具内部的 opener 是在 showModal 之后读的 activeElement，
+  // 那时焦点已进对话框，不能作为归还目标。
+  returnFocus: () => opener.value as HTMLElement | null,
+});
 </script>
 <template>
   <dialog
     ref="dialogEl" class="gate-dialog"
     :aria-label="$t('shell.unsaved.title')"
-    @cancel.prevent="emit('stay')" @keydown="onKeydown"
+    @cancel.prevent="emit('stay')" @keydown="onDialogKeydown"
   >
     <div class="modal-card" tabindex="-1" ref="card">
       <h2>{{ $t("shell.unsaved.title") }}</h2>

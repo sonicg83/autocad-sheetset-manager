@@ -9,6 +9,7 @@ import {computed} from "vue";
 import {useI18n} from "vue-i18n";
 import {MAX_UNNUMBERED_KEYWORD_CHARS,MAX_UNNUMBERED_KEYWORDS,type SettingsEnumOption,type SettingsItem,type SettingsValue} from "../../api/settings";
 import BooleanSwitch from "./BooleanSwitch.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const props=defineProps<{
   item:SettingsItem;
@@ -39,6 +40,26 @@ function optionText(option:SettingsEnumOption):string{
 // 编辑值与快照值不同即"未保存修改"（amber 边框依据）；null 与 null 视为相同
 const dirty=computed(()=>props.editValue!==undefined&&String(props.editValue)!==String(props.item.value??""));
 const hasError=computed(()=>props.error!==undefined&&props.error!=="");
+
+// 辅助文字（hint）与错误文字必须**经 aria-describedby 与控件关联**：仅视觉相邻不会被读屏播报。
+// hint 的**渲染条件与文案由同一个 computed 决定**：此前 `hasHint` 与模板里的 v-if 链是同一
+// 逻辑的两份手写实现，一旦分叉会产生两种静默后果——hint 不播报，或 aria-describedby 指向
+// 不存在的 id。返回 undefined 即「本行没有 hint」。
+const hintId=computed(()=>`settings-hint-${props.item.key}`);
+const errorId=computed(()=>`settings-error-${props.item.key}`);
+const hintText=computed<string|undefined>(()=>{
+  if(props.item.control==="path")return props.item.fileFilterKey!==undefined?t(props.item.fileFilterKey):undefined;
+  if(props.item.control==="int")return props.item.min!==undefined&&props.item.max!==undefined?`${props.item.min}–${props.item.max}`:undefined;
+  if(props.item.control==="text")return t("settings.row.keywordHint",{limit:MAX_UNNUMBERED_KEYWORDS,chars:MAX_UNNUMBERED_KEYWORD_CHARS});
+  return undefined;
+});
+const hasHint=computed(()=>hintText.value!==undefined);
+const describedBy=computed(()=>{
+  const ids:string[]=[];
+  if(hasHint.value)ids.push(hintId.value);
+  if(hasError.value)ids.push(errorId.value);
+  return ids.length===0?undefined:ids.join(" ");
+});
 // 生效显示值：编辑缓冲优先；清除（null）与未配置（null/null）显示为空
 const shown=computed(()=>{
   if(props.editValue!==undefined)return props.editValue;
@@ -68,35 +89,37 @@ function onEnumInput(event:Event){
     <div class="f-main">
       <template v-if="item.control==='path'">
         <div class="f-line">
-          <input :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="item.nullable?t('settings.row.placeholderNotSet'):''" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="commit(($event.target as HTMLInputElement).value)">
-          <button type="button" class="browse-btn" :disabled="disabled||browseDisabled" :title="browseDisabled?t('settings.row.browseUnavailable'):undefined" @click="emit('browse',item.key)">{{t("settings.row.browse")}}</button>
+          <input :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="item.nullable?t('settings.row.placeholderNotSet'):''" :disabled="disabled" :aria-invalid="hasError?'true':'false'" :aria-describedby="describedBy" @input="commit(($event.target as HTMLInputElement).value)">
+          <UiButton size="compact" class="browse-btn" :disabled="disabled||browseDisabled" :title="browseDisabled?t('settings.row.browseUnavailable'):undefined" @click="emit('browse',item.key)">{{t("settings.row.browse")}}</UiButton>
           <button v-if="item.nullable" type="button" class="link-btn" :disabled="disabled||pathEmpty" @click="emit('clear',item.key)">{{t("settings.row.clear")}}</button>
         </div>
       </template>
-      <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="onIntInput">
-      <input v-else-if="item.control==='text'" :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="t('settings.row.keywordPlaceholder')" :disabled="disabled" :aria-invalid="hasError?'true':'false'" @input="commit(($event.target as HTMLInputElement).value)">
+      <input v-else-if="item.control==='int'" :id="`settings-input-${item.key}`" type="number" :data-key="item.key" :min="item.min" :max="item.max" :value="shown" :disabled="disabled" :aria-invalid="hasError?'true':'false'" :aria-describedby="describedBy" @input="onIntInput">
+      <input v-else-if="item.control==='text'" :id="`settings-input-${item.key}`" type="text" :data-key="item.key" :value="shown" :placeholder="t('settings.row.keywordPlaceholder')" :disabled="disabled" :aria-invalid="hasError?'true':'false'" :aria-describedby="describedBy" @input="commit(($event.target as HTMLInputElement).value)">
       <span v-else-if="item.control==='bool'" class="bool-line">
+        <!-- `:aria-describedby` 经 Vue 默认属性透传直接落到 BooleanSwitch 的**根 button[role=switch]**
+             上（该组件单根且未用 `inheritAttrs: false`）——因此无需为其新增/修改任何 prop。
+             开关无法产生本地校验错误，错误只能来自保存 422 的逐字段回显（见 e2e）。 -->
         <BooleanSwitch
           :checked="Boolean(shown)" :disabled="disabled" :label="label"
           :data-key="item.key" :input-id="`settings-input-${item.key}`"
+          :aria-describedby="describedBy"
           @change="onBoolChange"
         />
         <span class="f-hint">{{shown?t("settings.row.on"):t("settings.row.off")}}</span>
       </span>
       <span v-else-if="item.control==='enum'" class="radio-line" role="radiogroup" :aria-label="label">
         <label v-for="option in item.options" :key="String(option.value)">
-          <input type="radio" :name="`settings-radio-${item.key}`" :data-key="item.key" :value="option.value" :checked="shown===option.value" :disabled="disabled" @change="onEnumInput">{{optionText(option)}}
+          <input type="radio" :name="`settings-radio-${item.key}`" :data-key="item.key" :value="option.value" :checked="shown===option.value" :disabled="disabled" :aria-describedby="describedBy" @change="onEnumInput">{{optionText(option)}}
         </label>
       </span>
 
       <div class="f-foot">
         <span class="badge" :class="badgeClass">{{badgeText}}</span>
         <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
-        <span v-if="item.control==='path'&&item.fileFilterKey!==undefined" class="f-hint">{{t(item.fileFilterKey)}}</span>
-        <span v-else-if="item.control==='int'&&item.min!==undefined&&item.max!==undefined" class="f-hint">{{item.min}}–{{item.max}}</span>
-        <span v-else-if="item.control==='text'" class="f-hint">{{t("settings.row.keywordHint",{limit:MAX_UNNUMBERED_KEYWORDS,chars:MAX_UNNUMBERED_KEYWORD_CHARS})}}</span>
+        <span v-if="hintText!==undefined" :id="hintId" class="f-hint">{{hintText}}</span>
       </div>
-      <p v-if="hasError" class="f-error" role="alert">{{error}}</p>
+      <p v-if="hasError" :id="errorId" class="f-error" role="alert">{{error}}</p>
     </div>
   </div>
 </template>
@@ -105,26 +128,28 @@ function onEnumInput(event:Event){
 .field:focus-within{background:var(--color-bg-canvas)}
 .field.dirty{border-color:var(--color-warning);background:var(--color-warning-bg)}
 .field.error{border-color:var(--color-danger);background:var(--color-danger-bg)}
-.f-label{font-size:13px;font-weight:500;padding-top:var(--space-2);color:var(--color-text-primary)}
+.f-label{font-size:var(--font-label);font-weight:500;padding-top:var(--space-2);color:var(--color-text-primary)}
 .f-main{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
 .f-line{display:flex;gap:var(--space-2);align-items:center}
 .f-line input{flex:1;min-width:0}
-input[type="text"],input[type="number"]{height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2)}
+/* 控件字体显式取自令牌（而不是靠 `font:inherit` 从祖先继承）：继承值只是“碰巧一样”，
+   任一祖先改字号就会静默改变控件。档位按 T8-1(D) 保持 34px（紧凑档），不单方面改 38px。 */
+input[type="text"],input[type="number"]{height:var(--control-height-compact);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2);font-family:var(--font-ui);font-size:var(--input-font-size)}
 input:disabled{opacity:.5;cursor:not-allowed}
-.browse-btn{height:34px;padding:0 var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:13px;white-space:nowrap}
-.browse-btn:hover:not(:disabled){background:var(--color-bg-muted)}
-.browse-btn:disabled{cursor:not-allowed;opacity:.5}
-.link-btn{border:0;background:transparent;color:var(--color-accent);cursor:pointer;padding:var(--space-1) var(--space-1);font-size:12px;min-height:28px}
+/* 外观/高度均归 `UiButton size="compact"`（34px 紧凑档）；本页只保留布局用的不换行。 */
+.browse-btn{white-space:nowrap}
+/* 链接型按钮的可点高度提到全局下限 32px（T8-1(E)：原 28px 低于 ARCH-DM-007 §10 硬验收线）。 */
+.link-btn{border:0;background:transparent;color:var(--color-accent);cursor:pointer;padding:var(--space-1) var(--space-1);font-size:var(--font-caption);min-height:var(--tap-target-min)}
 .link-btn:disabled{cursor:not-allowed;opacity:.5}
-.f-foot{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;min-height:24px}
-.badge{display:inline-block;font-size:12px;padding:2px 9px;border-radius:var(--radius-full);white-space:nowrap}
+.f-foot{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;min-height:var(--settings-foot-min-height)}
+.badge{display:inline-block;font-size:var(--font-caption);padding:2px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .badge-default{color:var(--color-text-secondary);background:var(--color-bg-muted)}
 .badge-env{color:var(--color-warning);background:var(--color-warning-bg)}
 .badge-file{color:var(--color-accent);background:var(--color-info-bg)}
-.f-hint{font-size:12px;color:var(--color-text-secondary)}
-.f-error{margin:0;font-size:12px;color:var(--color-danger);line-height:1.6}
+.f-hint{font-size:var(--font-caption);color:var(--color-text-secondary)}
+.f-error{margin:0;font-size:var(--font-caption);color:var(--color-danger);line-height:1.6}
 .bool-line{display:inline-flex;align-items:center;gap:var(--space-2);padding-top:var(--space-2)}
 .radio-line{display:flex;gap:var(--space-4);padding-top:var(--space-2);flex-wrap:wrap}
-.radio-line label{display:flex;gap:var(--space-1);align-items:center;font-size:13px;color:var(--color-text-primary)}
+.radio-line label{display:flex;gap:var(--space-1);align-items:center;font-size:var(--font-label);color:var(--color-text-primary)}
 @media (max-width:900px){.field{grid-template-columns:1fr}}
 </style>

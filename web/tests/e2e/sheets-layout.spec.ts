@@ -3,7 +3,7 @@
 // 900px 树抽屉键盘开关与焦点归还且不与任务浮层同时锁焦、单一业务表与工具栏/选择条/固定列/ActionDock 不重叠、
 // 展开编辑页脚始终可滚动到达、a11y 语义（树方向键/表格可访问名/展开 aria-expanded/完整文本键盘读取）与对比度。
 // 截图仅作为 S-07 视觉证据（testInfo 附件），不替代上述行为断言。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {installSheetsFixture} from "./fixtures/sheets";
 
 const VIEWPORTS = [
@@ -249,9 +249,12 @@ test("900px 树收起为可访问抽屉：键盘开关、焦点归还且不与�
   // 树抽屉初始收起
   await expect(page.getByRole("tree", {name: "图纸导航"})).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  // 键盘打开：焦点移入树
+  // 键盘打开：焦点移入树。权威落点是**活动 treeitem**（roving tabindex 的焦点所有者），
+  // 不再是 `role=tree` 容器（Task 10 Step 2 已移除容器 tabindex）。对读屏用户这是**改进**：
+  // 直接播报项名与状态，而不是先落在「树」这个容器上。
   await toggle.click();
-  await expect(page.getByRole("tree", {name: "图纸导航"})).toBeFocused();
+  await expect(page.locator('.sheet-tree-pane [role="treeitem"]:focus')).toHaveCount(1);
+  await expect(page.getByRole("treeitem", {name: /全部图纸/})).toBeFocused();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   // 任务浮层同时展开：两者不得锁焦，Tab 可离开树抽屉进入主区
   await page.getByRole("button", {name: "展开任务浮层"}).click();
@@ -335,11 +338,12 @@ test("小视口下属性编辑与操作表单页脚可滚动到达", async ({pag
 });
 
 // —— a11y：树方向键移动焦点、可访问名、aria-expanded、完整文本键盘读取 ——
-test("a11y 语义：树方向键移动焦点、展开按钮 aria-expanded、表格可访问名、完整文本键盘读取", async ({page}) => {
+test("a11y 语义：树方向键移动焦点、展开收起 aria-expanded、表格可访问名、完整文本键盘读取", async ({page}) => {
   await installSheetsFixture(page);
   await openWorkspace(page, "light");
-  const tree = page.getByRole("tree", {name: "图纸导航"});
-  await tree.focus();
+  // 焦点所有者是**活动 treeitem**（roving tabindex）；容器刻意不再可聚焦（Task 10 Step 2），
+  // 因此这里直接聚焦首个树项，而不是先 `getByRole("tree").focus()`。
+  await page.getByRole("treeitem").first().focus();
   // Up/Down 移动焦点（roving tabindex：方向键焦点落到目标节点）
   await page.keyboard.press("ArrowDown");
   const subsetItem = page.getByRole("treeitem", {name: /建筑施工图/});
@@ -460,4 +464,239 @@ test("批量编辑上下文不渲染空编辑卡片", async ({page}) => {
   await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
   await expect(page.locator(".sheet-editor-card")).toHaveCount(0);
   await expect(page.locator(".sheet-list-card .sheets-toolbar")).toHaveCount(1);
+});
+
+// PLAN-DM-029 Task 7：控件视觉基础（令牌 / 档位 / 同行对齐）。
+// 迁移是值保持的，故以下多数断言属「回归钉」（迁移前后均应通过，另做变异自证证明非空转）；
+// 工具栏动作按钮改用 UiButton 后字号由原语接管（13px → --button-font-size 14px），这类是真红。
+test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
+  async function resolveToken(page: Page, token: string, property: string): Promise<string> {
+    return page.evaluate(([name, prop]) => {
+      const probe = document.createElement("div");
+      probe.style.setProperty(prop, `var(${name})`);
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).getPropertyValue(prop);
+      probe.remove();
+      return value;
+    }, [token, property]);
+  }
+
+  async function expectToken(page: Page, target: Locator, property: string, token: string): Promise<void> {
+    const expected = await resolveToken(page, token, property);
+    expect(expected, `${token} 必须能解析成具体值`).not.toBe("");
+    const actual = await target.first().evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
+    expect(actual, `${property} 应来自 ${token}`).toBe(expected);
+  }
+
+  test("工具栏动作按钮：紧凑档 34px 且字号由原语接管", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const rename = page.getByRole("button", {name: "编辑子集", exact: true});
+    await expectToken(page, rename, "height", "--control-height-compact");
+    // UiButton 的下限来自原语的全局最小可点令牌（--min-tap-height=32px），而非页面的 34px；
+    // 生效高度仍是 34px（height 大于 min-height），属无视觉影响的值变化。
+    await expectToken(page, rename, "min-height", "--min-tap-height");
+    await expectToken(page, rename, "font-size", "--button-font-size");
+    await expectToken(page, page.locator(".filter-toggle"), "height", "--control-height-compact");
+    await expectToken(page, page.locator(".filter-toggle"), "font-size", "--button-font-size");
+    // 责任 K（已裁定）：17px 的唯一消费者 .range-title 此前无锚；绝对值锚 + 令牌消费
+    await expect(page.locator(".range-title")).toHaveCSS("font-size", "17px");
+    await expectToken(page, page.locator(".range-title"), "font-size", "--font-toolbar-title");
+  });
+
+  test("显示列入口：生效值由工具栏唯一声明（消除注入顺序依赖）", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const toggle = page.locator(".sheets-toolbar .cols-toggle");
+    // `.cols-toggle` 的高度/内边距/圆角只由 `SheetToolbar.vue` 的 `:deep(.cols-toggle)` 声明。
+    // 曾两侧同特异性（均 0,2,0）重复声明不同取值（子组件侧 4px 10px / --radius-sm），
+    // 生效值取决于样式表注入顺序；现以**绝对值**钉住实测生效值，顺序变化会被立刻发现。
+    await expect(toggle).toHaveCSS("height", "34px");
+    await expect(toggle).toHaveCSS("padding-top", "0px");
+    await expect(toggle).toHaveCSS("padding-left", "12px");
+    await expect(toggle).toHaveCSS("border-top-left-radius", "8px");
+    await expect(toggle).toHaveCSS("font-size", "13px");
+  });
+
+  test("常驻搜索与筛选：38px 表单档与搜索框宽度令牌", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const search = page.locator(".search-box input");
+    await expectToken(page, search, "width", "--sheet-search-width");
+    // 绝对锚：expectToken 只证明「属性取自该令牌」——若令牌自身取值漂移，两侧同时变化仍会通过。
+    // 故对本次新增的结构令牌再钉一次字面值，让「值保持」也机械可查（对应责任 S）。
+    await expect(search).toHaveCSS("width", "260px");
+    await expectToken(page, search, "height", "--control-height-form");
+    await page.locator(".filter-toggle").click();
+    await expectToken(page, page.locator(".toolbar-filters select").first(), "height", "--control-height-form");
+  });
+
+  test("条件标签：圆角与字号取自语义令牌，清除按钮满足 32px 点击下限", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".filter-toggle").click();
+    await page.locator(".toolbar-filters select").first().selectOption("resolved");
+    const chip = page.locator(".chip").first();
+    await expect(chip).toBeVisible();
+    await expectToken(page, chip, "border-top-left-radius", "--radius-lg");
+    await expectToken(page, chip, "font-size", "--font-caption");
+    // 审查 I1：清除按钮的点击盒必须达到 --tap-target-min（32×32px），而胶囊视觉尺寸
+    // 不得被点击盒撑开（可见字形与点击盒分离，负 margin 抵消布局影响）。
+    const clear = page.locator(".chip-clear").first();
+    await expect(clear).toBeVisible();
+    const clearBox = await clear.boundingBox();
+    expect(clearBox!.width, "清除按钮点击宽度").toBeGreaterThanOrEqual(32);
+    expect(clearBox!.height, "清除按钮点击高度").toBeGreaterThanOrEqual(32);
+    const chipBox = await chip.boundingBox();
+    expect(chipBox!.height, "胶囊视觉高度不被点击盒撑开").toBeLessThan(32);
+  });
+
+  test("批量编辑：同行居中、38px 值输入、未选属性时队列按钮禁用", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+    await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+    const controls = page.locator(".bulk-controls");
+    await expect(controls).toBeVisible();
+    // 同行中心：各控件垂直中心必须一致（高度档不同也不许错位）
+    const centers = await controls.locator("select, input").evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return Math.round(rect.top + rect.height / 2);
+    }));
+    expect(centers.length).toBeGreaterThan(1);
+    expect(new Set(centers).size, `批量控件必须同行居中，实际 ${centers.join(" / ")}`).toBe(1);
+    await expectToken(page, controls.locator("input").first(), "height", "--control-height-form");
+    await expectToken(page, controls.locator("select").first(), "height", "--control-height-form");
+    // 未选属性 → 加入草稿禁用（行为不变）
+    await expect(controls.locator("button").last()).toBeDisabled();
+    // T7-1(A) 第 4 个令牌的消费点：bulkMode=clear 分支渲染 .bulk-hint
+    await controls.locator("select").first().selectOption("clear");
+    await expectToken(page, page.locator(".bulk-hint"), "max-width", "--sheet-bulk-hint-max-width");
+    await expect(page.locator(".bulk-hint")).toHaveCSS("max-width", "220px");
+  });
+
+  test("行状态徽章令牌：取值钉住", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    // `.status` 徽章只在行处于「待变更」或有诊断时渲染（SheetTable.vue:100-102）；
+    // pendingSheetIds 由壳层根据草稿计算，图纸页固定装置不产这两种行状态（已实测：
+    // 选中行 + 批量修改属性 + 点「加入草稿」后仍无 .status.pending）。
+    // 故此处钉**令牌取值本身**；消费者存在性由 check:ui 的变量定义/引用规则保证。
+    expect(await resolveToken(page, "--sheet-status-radius", "border-top-left-radius"), "--sheet-status-radius 必须解析为 10px").toBe("10px");
+  });
+
+  test("表格结构令牌：行高、行盒高、窗口最小高与表内字号", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await expectToken(page, page.locator("table").first(), "font-size", "--font-label");
+    await expectToken(page, page.locator("th").first(), "height", "--sheet-table-row-height");
+    await expectToken(page, page.locator("th").first(), "line-height", "--sheet-table-line-height");
+    await expectToken(page, page.locator(".sheet-table-window"), "min-height", "--sheet-table-window-min-height");
+    await expectToken(page, page.locator(".title-text").first(), "max-width", "--sheet-title-max-width");
+    // 绝对锚（同责任 S）：结构性令牌的字面值也不得漂移
+    await expect(page.locator("th").first()).toHaveCSS("height", "44px");
+    await expect(page.locator("th").first()).toHaveCSS("line-height", "20px");
+    await expect(page.locator(".sheet-table-window")).toHaveCSS("min-height", "130px");
+    await expect(page.locator(".title-text").first()).toHaveCSS("max-width", "280px");
+  });
+
+  test("列设置面板：宽度令牌与 15px 面板标题档位", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.locator(".cols-toggle").click();
+    const panel = page.locator(".cols-panel");
+    await expect(panel).toBeVisible();
+    await expectToken(page, panel, "width", "--sheet-columns-panel-width");
+    await expect(panel).toHaveCSS("width", "380px");
+    // 责任 K（已裁定）：15px 已升为语义档位 --font-panel-title。绝对值锚保留以钉住**零视觉变化**；
+    // 令牌断言用 expectToken（它先断言令牌能解析成具体值），避免令牌缺失时两侧同为 NaN 而静默通过
+    await expect(panel.locator(".cols-title")).toHaveCSS("font-size", "15px");
+    await expectToken(page, panel.locator(".cols-title"), "font-size", "--font-panel-title");
+  });
+
+  test("操作表单：38px 输入档与 36px 动作档", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    await page.getByRole("button", {name: "编辑子集", exact: true}).click();
+    const form = page.locator(".operation-form");
+    await expect(form).toBeVisible();
+    await expectToken(page, form.locator("input").first(), "height", "--control-height-form");
+    await expectToken(page, form.locator("select").first(), "height", "--control-height-form");
+    await expectToken(page, form.locator("button").first(), "min-height", "--control-height-default");
+    // 责任 K：第 3 个 15px 消费者（.form-head h3）此前无锚，补绝对值锚 + 令牌消费
+    await expect(form.locator(".form-head h3")).toHaveCSS("font-size", "15px");
+    await expectToken(page, form.locator(".form-head h3"), "font-size", "--font-panel-title");
+  });
+
+  test("行内属性编辑器：搜索框宽度令牌与 15px 面板标题档位", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    // 行内属性编辑器（SheetTable 内）——续轮补上 T7-1(A) 第 3 个令牌的覆盖缺口
+    await page.getByRole("button", {name: "编辑属性"}).first().click();
+    const editor = page.getByRole("region", {name: /属性编辑/});
+    await expect(editor).toBeVisible();
+    await expectToken(page, editor.locator(".editor-search input"), "width", "--sheet-property-search-width");
+    await expect(editor.locator(".editor-search input")).toHaveCSS("width", "180px");
+    // 15px 第 2 个消费者（.editor-head h3）：责任 K 已裁定升为 --font-panel-title，绝对值锚保留
+    await expect(editor.locator(".editor-head h3")).toHaveCSS("font-size", "15px");
+    await expectToken(page, editor.locator(".editor-head h3"), "font-size", "--font-panel-title");
+  });
+});
+
+// —— Step 4：批量编辑区四视口密集布局（不撑破表格、操作列可达、滚动条不遮内容） ——
+test("批量编辑：四视口不撑破页面、操作列横向可达、滚动条不遮末行", async ({page}) => {
+  await installSheetsFixture(page);
+  // 由窄到宽遍历四个约定视口
+  for (const vp of [VIEWPORTS[3], VIEWPORTS[0], VIEWPORTS[1], VIEWPORTS[2]]) {
+    await page.setViewportSize({width: vp.width, height: vp.height});
+    await openWorkspace(page, "light");
+    await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+    await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+    const controls = page.locator(".bulk-controls");
+    await expect(controls).toBeVisible();
+    // ① 批量编辑区不得把页面撑出横向滚动
+    await assertNoHorizontalOverflow(page, vp.width);
+    const box = (await controls.boundingBox())!;
+    expect(box.x, `${vp.width}：批量区左缘不得为负`).toBeGreaterThanOrEqual(-1);
+    expect(box.x + box.width, `${vp.width}：批量区右缘不得超出视口`).toBeLessThanOrEqual(vp.width + 1);
+    // ② 操作列高度可达：横向滚到最右后，末列单元格必须落在窗口可见区内
+    const win = page.locator(".sheet-table-window");
+    // 反空转：若窗口本身无横向溢出，「滚到最右仍可达」就是恒真断言
+    expect(await win.evaluate(el => el.scrollWidth > el.clientWidth), `${vp.width}：应确有横向溢出，否则可达性断言空转`).toBe(true);
+    const winBox = (await win.boundingBox())!;
+    const winLeft = winBox.x;
+    const winRight = winBox.x + winBox.width;
+    const winBottom = winBox.y + winBox.height;
+    await win.evaluate(el => { el.scrollLeft = el.scrollWidth; });
+    const lastCell = (await win.locator("tbody tr").first().locator("td").last().boundingBox())!;
+    const cellRight = lastCell.x + lastCell.width;
+    expect(cellRight, `${vp.width}：操作列滚到最右后可见`).toBeLessThanOrEqual(winRight + 1);
+    expect(cellRight, `${vp.width}：操作列不得被裁到窗口左侧之外`).toBeGreaterThan(winLeft);
+    // ③ 横向滚动条不遮挡内容：纵向滚到底后末行底缘不得低于窗口底缘
+    await win.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    const lastRow = (await win.locator("tbody tr").last().boundingBox())!;
+    expect(lastRow.y + lastRow.height, `${vp.width}：末行不得被横向滚动条覆盖`).toBeLessThanOrEqual(winBottom + 1);
+  }
+});
+
+// —— Step 4：200% 浏览器缩放韧性（CSS 视口 720×500，同 SPEC-DM-012 §13 口径） ——
+test("200% 缩放（720×500）：无整页横滚且关键控件仍可达", async ({page}) => {
+  await installSheetsFixture(page);
+  await page.setViewportSize({width: 720, height: 500});
+  await openWorkspace(page, "light");
+  await assertNoHorizontalOverflow(page, 720);
+  // 树降级为抽屉，触发按钮必须仍在
+  await expect(page.locator(".tree-drawer-toggle")).toBeVisible();
+  await expect(page.getByRole("table", {name: "图纸表格"})).toBeVisible();
+  // 关键控件仍可达（表格内动作需先横向滚入）
+  for (const name of ["编辑属性", "编辑子集"]) {
+    const target = page.getByRole("button", {name}).first();
+    await target.scrollIntoViewIfNeeded();
+    await expect(target, `200%：${name} 应在视口内`).toBeInViewport();
+  }
+  // 批量区在 200% 下仍可用且不撑破
+  await page.locator(".sheet-table-window tbody input[type=checkbox]").first().check();
+  await page.getByRole("button", {name: "批量修改属性", exact: true}).click();
+  await expect(page.locator(".bulk-controls")).toBeVisible();
+  await assertNoHorizontalOverflow(page, 720);
 });

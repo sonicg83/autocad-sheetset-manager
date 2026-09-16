@@ -151,20 +151,23 @@ function onGuardKeydown(event: KeyboardEvent) {
 .sheet-catalog{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;flex:1;overflow:auto}
 /* PLAN-DM-023 Task 2：标题、说明、版本/生命周期与启停指引组合为单行紧凑头部 */
 .catalog-head{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;min-width:0}
-.catalog-head h2{margin:0;font-size:18px;color:var(--color-text-primary)}
+/* 18px 页/视图标题：消费语义档位 --font-view-title（责任 K 已闭合，见 tokens.css 头注释）。
+   层叠已核：全仓无全局 h2 规则，.modal-card h2 只作用于模态卡片内部，不覆盖本页标题。 */
+.catalog-head h2{margin:0;font-size:var(--font-view-title);color:var(--color-text-primary)}
 .catalog-head .spacer{flex:1}
-.catalog-desc{margin:0;color:var(--color-text-secondary);font-size:13px;min-width:0}
-.catalog-meta{margin:0;color:var(--color-text-muted);font-size:12px;white-space:nowrap}
-.catalog-manage-hint{margin:0;color:var(--color-text-muted);font-size:12px}
+.catalog-desc{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);min-width:0}
+.catalog-meta{margin:0;color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}
+.catalog-manage-hint{margin:0;color:var(--color-text-muted);font-size:var(--font-caption)}
 .catalog-grid{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;min-height:0;flex:1 1 auto}
-/* 工作区栅格取冻结 Demo 的确定高度（min-height 425px），不随字段条目或列数增长：
+/* 工作区栅格取冻结 Demo 的确定高度（--catalog-pane-height = 425px），不随字段条目或列数增长：
    字段列表与列区各自内部滚动，避免栅格被压缩后内容溢出叠到预览卡上。 */
-.catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);height:425px;align-items:stretch;min-width:0;flex:0 0 auto}
+.catalog-row{display:grid;grid-template-columns:258px minmax(470px,1fr);gap:var(--space-3);height:var(--catalog-pane-height);align-items:stretch;min-width:0;flex:0 0 auto}
 .loading{margin:0;color:var(--color-text-muted)}
 /* 高版本只读通知：中性底 + 边线，与"加载失败"的红色 notice 区分 */
-.readonly-notice{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:baseline;margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:13px}
-.readonly-code{color:var(--color-text-muted);font-size:12px}
+.readonly-notice{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:baseline;margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label)}
+.readonly-code{color:var(--color-text-muted);font-size:var(--font-caption)}
 /* PLAN-DM-023 Task 5：≤980px 降为单列（与冻结 Demo 同断点），高度由内容决定：
-   字段区限高 235px + 输出列卡 min-height 425px，超出时由 .sheet-catalog 滚动 */
+   字段区限高 --catalog-field-browser-max-height + 输出列卡 min-height --catalog-pane-height，
+   超出时由 .sheet-catalog 滚动 */
 @media (max-width: 980px){.catalog-row{grid-template-columns:1fr;height:auto}}
 </style>

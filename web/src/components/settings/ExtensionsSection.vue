@@ -109,10 +109,10 @@ const groups = computed(() => {
 </template>
 <style scoped>
 .ext-section{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
-.ext-notice{margin:0;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-secondary);font-size:12px}
+.ext-notice{margin:0;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-secondary);font-size:var(--font-caption)}
 .ext-failed{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2)}
 .ext-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
 .ext-group{display:flex;flex-direction:column;gap:var(--space-2)}
-.group-title{font-weight:600;font-size:13px;border-left:3px solid var(--color-accent);padding-left:var(--space-2)}
-.ext-error{margin:0;color:var(--color-danger);font-size:13px}
+.group-title{font-weight:600;font-size:var(--font-label);border-left:3px solid var(--color-accent);padding-left:var(--space-2)}
+.ext-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 </style>

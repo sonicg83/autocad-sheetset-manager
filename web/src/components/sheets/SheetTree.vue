@@ -6,6 +6,7 @@ import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {Workspace} from "../../api/contracts";
 import type {SheetScope} from "../../features/sheets/types";
+import UiIcon from "../ui/UiIcon.vue";
 
 const props = defineProps<{
   workspace: Workspace;
@@ -79,6 +80,16 @@ function toggleCollapse(node: TreeNode) {
   if (nextSet.has(node.id)) nextSet.delete(node.id); else nextSet.add(node.id);
   collapsed.value = nextSet;
 }
+// 鼠标点击展开指示器时同步 roving tabindex 与真实 DOM 焦点（SPEC-DM-006 §7.2 键盘模型的鼠标衔接）：
+// chevron 是不可聚焦的 span，若只切换折叠，tabindex 与 document.activeElement 会留在旧节点，
+// 用户随后按方向键会继续操作旧上下文（审查 I2）。指示器是树项点击/键盘模型的一部分，
+// 点击后由被点击的子集接管焦点，与键盘 ←/→ 的落点一致。
+function toggleCollapseFromChevron(node: TreeNode, index: number) {
+  focusIndex.value = index;
+  toggleCollapse(node);
+  scrollNodeIntoView(index);
+  treeEl.value?.querySelectorAll<HTMLElement>("[role=treeitem]")[index]?.focus();
+}
 function scrollNodeIntoView(index: number) {
   void nextTick(() => {
     treeEl.value?.querySelectorAll<HTMLElement>("[role=treeitem]")[index]?.scrollIntoView({block: "nearest"});
@@ -123,7 +134,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 </script>
 <template>
-  <div ref="treeEl" class="sheet-tree" role="tree" :aria-label="$t('sheets.tree.navAria')" tabindex="0" @keydown="onKeydown">
+  <div ref="treeEl" class="sheet-tree" role="tree" :aria-label="$t('sheets.tree.navAria')" @keydown="onKeydown">
     <div
       v-for="(node, index) in visibleNodes"
       :key="`${node.kind}-${node.id}`"
@@ -138,23 +149,26 @@ function onKeydown(event: KeyboardEvent) {
       @click="focusIndex = index; activate(node)"
       @focus="focusIndex = index"
     >
-      <button
+      <!-- 展开指示器刻意**不是** `button`：它是树项自身点击/键盘模型的一部分。做成嵌套可聚焦控件会让
+           树里多出 N 个 Tab 停靠点，并让 AT 把树项当容器读。展开态由树项的 `aria-expanded` 传达，
+           故指示器自身 `aria-hidden`；键盘用 ←/→，鼠标用本元素的 click（`.stop` 以免重复激活）。 -->
+      <span
         v-if="node.kind === 'subset'"
-        type="button"
         class="chevron"
-        :aria-label="node.expanded ? $t('sheets.tree.collapseSubset', {label: node.label}) : $t('sheets.tree.expandSubset', {label: node.label})"
-        @click.stop="focusIndex = index; toggleCollapse(node)"
-      >{{ node.expanded ? "▾" : "▸" }}</button>
-      <span v-else class="chevron-placeholder"></span>
+        aria-hidden="true"
+        @click.stop="toggleCollapseFromChevron(node, index)"
+      ><UiIcon :name="node.expanded ? 'chevron-down' : 'chevron-right'" /></span>
+      <span v-else class="chevron-placeholder" aria-hidden="true"></span>
       <span class="node-label">{{ node.label }}</span>
       <span class="node-count">{{ node.kind === "sheet" ? "" : $t("sheets.tree.countSuffix", {count: node.count}) }}</span>
     </div>
   </div>
 </template>
 <style scoped>
-.sheet-tree{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2);outline:none}
-.sheet-tree:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
-.sheet-tree [role=treeitem]{display:flex;align-items:flex-start;gap:6px;padding:5px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:13px;color:var(--color-text-primary)}
+/* 容器已不可聚焦（Task 10 移除 tabindex，焦点所有者改为 treeitem）→ `outline:none` 与容器的
+   `:focus-visible` 都已不可触发，故删除；焦点环由 treeitem 自己的 `:focus-visible` 承担。 */
+.sheet-tree{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2)}
+.sheet-tree [role=treeitem]{display:flex;align-items:flex-start;gap:6px;padding:5px 8px;border-radius:var(--radius-sm,6px);cursor:pointer;font-size:var(--font-label);color:var(--color-text-primary)}
 .sheet-tree [role=treeitem]:hover{background:var(--color-bg-muted)}
 .sheet-tree [role=treeitem].active{background:var(--color-accent);color:var(--color-on-accent);font-weight:600}
 .sheet-tree [role=treeitem].active .node-count,.sheet-tree [role=treeitem].active .chevron{color:inherit}
@@ -163,8 +177,8 @@ function onKeydown(event: KeyboardEvent) {
 .sheet-tree [role=treeitem][aria-level="2"]{padding-left:20px}
 .sheet-tree [role=treeitem][aria-level="3"]{padding-left:36px}
 .sheet-tree [role=treeitem]:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
-.chevron{border:none;background:none;cursor:pointer;font-size:11px;width:16px;height:16px;padding:0;color:var(--color-text-secondary);flex:none}
-.chevron-placeholder{width:16px;height:16px;flex:none}
+.chevron{display:block;cursor:pointer;width:var(--icon-size-md);height:var(--icon-size-md);color:var(--color-text-secondary);flex:none}
+.chevron-placeholder{display:block;width:var(--icon-size-md);height:var(--icon-size-md);flex:none}
 .node-label{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;line-height:1.45;overflow-wrap:anywhere;flex:1}
-.node-count{font-size:12px;color:var(--color-text-secondary);white-space:nowrap;line-height:1.45;padding-top:1px}
+.node-count{font-size:var(--font-caption);color:var(--color-text-secondary);white-space:nowrap;line-height:1.45;padding-top:1px}
 </style>

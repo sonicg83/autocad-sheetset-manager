@@ -20,11 +20,11 @@ function clickTab(tab:TabDescriptor){if(tab.disabled!==true)emit("select",tab.id
 </template>
 <style scoped>
 .tabbar{display:flex;align-items:stretch;gap:2px;padding:0 var(--space-4);background:var(--color-bg-surface);border-bottom:1px solid var(--color-border-subtle);overflow-x:auto;flex-shrink:0}
-.tab{display:flex;align-items:center;gap:6px;padding:10px var(--space-4);color:var(--color-text-secondary);border:none;background:none;border-bottom:2px solid transparent;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;font-size:14px}
+.tab{display:flex;align-items:center;gap:6px;padding:10px var(--space-4);color:var(--color-text-secondary);border:none;background:none;border-bottom:2px solid transparent;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;font-size:var(--button-font-size)}
 .tab:hover:not(:disabled){color:var(--color-text-primary)}
 .tab[aria-selected="true"]{color:var(--color-accent);border-bottom-color:var(--color-accent)}
 .tab:disabled{cursor:not-allowed;opacity:.5}
-.tab .num{font-size:11px;background:var(--color-bg-muted);border-radius:var(--radius-full);width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;color:var(--color-text-muted)}
+.tab .num{font-size:var(--font-caption);background:var(--color-bg-muted);border-radius:var(--radius-full);width:var(--badge-size);height:var(--badge-size);display:inline-flex;align-items:center;justify-content:center;color:var(--color-text-muted)}
 .tab[aria-selected="true"] .num{background:var(--color-accent);color:var(--color-on-accent)}
-.tab-ghost{align-self:center;margin-left:auto;padding:4px 12px;color:var(--color-text-muted);font-size:12px;border:1px dashed var(--color-border-strong);border-radius:var(--radius-full);cursor:default;white-space:nowrap}
+.tab-ghost{align-self:center;margin-left:auto;padding:4px 12px;color:var(--color-text-muted);font-size:var(--font-caption);border:1px dashed var(--color-border-strong);border-radius:var(--radius-full);cursor:default;white-space:nowrap}
 </style>

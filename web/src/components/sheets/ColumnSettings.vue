@@ -100,27 +100,30 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
 </template>
 <style scoped>
 .column-settings{display:inline-flex}
-.cols-toggle{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 10px;font-size:13px;cursor:pointer;font-family:inherit}
+/* 内边距/圆角由宿主工具栏统一约束（`SheetToolbar.vue` 的 `:deep(.cols-toggle)`）：两者特异性同为
+   (0,2,0)，若两侧都声明同一属性，生效值就取决于样式表注入顺序。实测当前生效值为
+   `padding:0 12px` / `border-radius:8px`（即工具栏侧），故此处不再重复声明，也不改变视觉结果。 */
+.cols-toggle{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);font-size:var(--font-label);cursor:pointer;font-family:inherit}
 .cols-toggle:hover{background:var(--color-bg-muted)}
 .cols-count{margin-left:6px;color:var(--color-accent);font-weight:600}
 .cols-mask{position:fixed;inset:0;z-index:1000;background:rgba(16,24,40,.4);display:flex;align-items:center;justify-content:center}
-.cols-panel{width:380px;max-width:calc(100vw - 32px);max-height:min(80vh,560px);display:flex;flex-direction:column;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);box-shadow:var(--shadow-2,0 8px 24px #17203333);padding:var(--space-4);outline:none}
+.cols-panel{width:var(--sheet-columns-panel-width);max-width:calc(100vw - 32px);max-height:min(80vh,560px);display:flex;flex-direction:column;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);box-shadow:var(--shadow-2);padding:var(--space-4);outline:none}
 .cols-head{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
-.cols-title{margin:0;font-size:15px;color:var(--color-text-primary)}
-.cols-close{margin-left:auto;border:none;background:none;color:var(--color-text-secondary);cursor:pointer;font-size:13px;padding:4px 8px;border-radius:var(--radius-sm,6px);font-family:inherit}
+.cols-title{margin:0;font-size:var(--font-panel-title);color:var(--color-text-primary)}
+.cols-close{margin-left:auto;border:none;background:none;color:var(--color-text-secondary);cursor:pointer;font-size:var(--font-label);padding:4px 8px;border-radius:var(--radius-sm,6px);font-family:inherit}
 .cols-close:hover{background:var(--color-bg-muted);color:var(--color-text-primary)}
-.cols-hint{font-size:12px;color:var(--color-text-secondary);margin:0 0 var(--space-2);line-height:1.6}
-.cols-error{font-size:12px;color:var(--color-danger);margin:0 0 var(--space-2);background:var(--color-danger-bg);padding:6px 10px;border-radius:var(--radius-sm,6px)}
-.cols-search{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-secondary);margin-bottom:var(--space-2)}
+.cols-hint{font-size:var(--font-caption);color:var(--color-text-secondary);margin:0 0 var(--space-2);line-height:1.6}
+.cols-error{font-size:var(--font-caption);color:var(--color-danger);margin:0 0 var(--space-2);background:var(--color-danger-bg);padding:6px 10px;border-radius:var(--radius-sm,6px)}
+.cols-search{display:flex;align-items:center;gap:8px;font-size:var(--font-label);color:var(--color-text-secondary);margin-bottom:var(--space-2)}
 .cols-search input{flex:1;min-width:0}
 .cols-list{overflow:auto;margin:0 0 var(--space-2);max-height:40vh}
-.cols-option{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px}
+.cols-option{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:var(--font-label)}
 .cols-check{display:inline-flex;align-items:center;gap:8px;color:var(--color-text-primary);cursor:pointer}
 .cols-check input:disabled{cursor:not-allowed}
-.cols-option.locked small{color:var(--color-text-muted);font-size:12px;margin-left:2px}
-.cols-option small.cols-new{color:var(--color-accent);font-size:12px}
-.cols-section{margin:var(--space-2) 0 0;font-size:12px;color:var(--color-text-secondary);font-weight:600}
+.cols-option.locked small{color:var(--color-text-muted);font-size:var(--font-caption);margin-left:2px}
+.cols-option small.cols-new{color:var(--color-accent);font-size:var(--font-caption)}
+.cols-section{margin:var(--space-2) 0 0;font-size:var(--font-caption);color:var(--color-text-secondary);font-weight:600}
 .cols-actions{display:flex;justify-content:flex-end;padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
-.cols-reset{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.cols-reset{border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:4px 12px;font-size:var(--font-label);cursor:pointer;font-family:inherit}
 .cols-reset:hover{background:var(--color-bg-muted)}
 </style>

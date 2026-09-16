@@ -309,3 +309,85 @@ test("g8-ext-10 custom 面板输出图纸过滤字段错误态（浅色·1280×7
   await expect(error).toBeInViewport();
   await shoot(page, info, "g8-ext-10-custom-filter-error-light.png");
 });
+
+// ---------------------------------------------------------------------------
+// PLAN-DM-029 Task 8 控件视觉基础正交证据（Step 4）：保存浅/深默认、校验错误、扩展禁用、窄屏。
+// 落盘约定与既有 g8-ext-* 完全一致：截图经 testInfo 附件留档，验收时**显式复制**到
+// `docs/dst-manager/specs/assets/SPEC-DM-011/production/`（目录已存在）——**刻意不加 env 开关
+// 自动写库**（目录页那套会无差别覆盖既有验收资产，已登记为责任 T）。
+// 本文件**不保存任何设置**（settings-dialog.spec.ts 串行共享同一隔离配置文件）。
+// 每张图都配计算样式/几何断言，避免「有图无证据」。
+// ---------------------------------------------------------------------------
+test.describe("Task 8 控件视觉基础正交证据（PLAN-DM-029）", () => {
+  async function openSettingsWithTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+    await page.addInitScript(value => localStorage.setItem("dst-manager-theme", value), theme);
+    await page.goto("/");
+    await openSettingsDialog(page);
+  }
+
+  async function makeDirty(page: Page): Promise<void> {
+    await page.locator('input[data-key="cad_timeout_seconds"]').fill("900");
+    await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+  }
+
+  test("task8-01 保存浅色默认（1280×720）：脏状态保存可用 + 控件 34px 紧凑档", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await openSettingsWithTheme(page, "light");
+    await makeDirty(page);
+    const field = page.locator('[data-field="cad_timeout_seconds"]');
+    await expect(field.locator("label"), "字段行必有可见 label").toBeVisible();
+    const inputBox = (await field.locator("input").boundingBox())!;
+    expect(Math.round(inputBox.height), "设置输入保持 34px 紧凑档（T8-1(D)）").toBe(34);
+    await shoot(page, info, "task8-01-save-light-1280x720.png");
+  });
+
+  test("task8-02 保存深色默认（1280×720）：与浅色同状态成对比对", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await openSettingsWithTheme(page, "dark");
+    await makeDirty(page);
+    await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+    await shoot(page, info, "task8-02-save-dark-1280x720.png");
+  });
+
+  test("task8-03 校验错误：行内错误进入 aria-describedby 且保存禁用", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await openSettingsWithTheme(page, "light");
+    const lease = page.locator('input[data-key="worker_lease_seconds"]');
+    await lease.fill("5000");
+    const error = page.locator('[data-field="worker_lease_seconds"] .f-error');
+    await expect(error, "超范围必须显示行内错误").toBeVisible();
+    const errorId = await error.getAttribute("id");
+    expect(errorId, "error 必须有 id").toBeTruthy();
+    const described = ((await lease.getAttribute("aria-describedby")) ?? "").split(/\s+/).filter(Boolean);
+    expect(described, "错误文字必须经 aria-describedby 关联（仅视觉相邻不算）").toContain(errorId);
+    await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
+    // Minor-D：取景约定（同文件头部 :129「被证对象必须先滚入可视区」）——
+    // 否则错误文案落在对话框可视区之外，这张图不能独立说明「校验错误」状态。
+    await error.scrollIntoViewIfNeeded();
+    await expect(error, "错误文案必须滚入可视区，截图才可独立作证").toBeInViewport();
+    await shoot(page, info, "task8-03-validation-error-1280x720.png");
+  });
+
+  test("task8-04 扩展禁用：已停用卡片，开关可点盒 ≥44×32 且轨道仍 44×24", async ({page}, info) => {
+    await page.setViewportSize({width: 1280, height: 720});
+    await openExtensions(page, [extensionSummary({enabled: false, status: "DISABLED"})]);
+    const card = page.locator(".ext-card");
+    await expect(card.locator(".badge", {hasText: "已停用"})).toBeVisible();
+    await expect(card.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+    const switchBox = (await card.locator(".switch").boundingBox())!;
+    expect(Math.round(switchBox.width), "开关外层可点宽度").toBeGreaterThanOrEqual(44);
+    expect(Math.round(switchBox.height), "开关外层可点高度必须 ≥32px").toBeGreaterThanOrEqual(32);
+    const trackBox = (await card.locator(".switch-track").boundingBox())!;
+    expect(Math.round(trackBox.width), "视觉轨道宽度").toBe(44);
+    expect(Math.round(trackBox.height), "视觉轨道高度").toBe(24);
+    await shoot(page, info, "task8-04-extension-disabled-1280x720.png");
+  });
+
+  test("task8-05 窄屏（900×600）：设置对话框不产生整页横向溢出", async ({page}, info) => {
+    await page.setViewportSize({width: 900, height: 600});
+    await openSettingsWithTheme(page, "light");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, "窄屏不得出现整页横向溢出").toBeLessThanOrEqual(1);
+    await shoot(page, info, "task8-05-narrow-900x600.png");
+  });
+});

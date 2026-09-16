@@ -1,4 +1,694 @@
-# 变更记录
+## 2026-09-16（审查修复轮 + 用户验收修复轮，PLAN-DM-029）
+
+- **审查 Important 全部修复**（TDD 先红后绿；依据 [PLAN-DM-029 执行审查](.planning/memos/dst-manager/2026-09-16-plan-dm-029-execution-review.md)）：I1 条件标签清除按钮点击区扩至 32×32px（字形与点击盒分离，胶囊视觉尺寸不变，e2e 补几何断言）；I2 图纸树 chevron 点击同步 roving tabindex 与真实焦点（补双向组件测试）；I3 `visible-input-label` 门禁覆盖 `UiInput`/`UiSelect` 调用点（三种合法形态 + `FormField` 缺 label 独立违规，9 组夹具 + 1 条 CLI 变异，0 新例外）；I4 文档同步（合并边界经用户裁定取 `a923886`，SPEC-DM-006 与两个 README 更新责任 K 闭合、例外 14 → 7）。
+- **审查 Minor 全部处理**：M1 957 行 `appComposition.test.ts` 按域拆为 4 文件 + `appCompositionTestSupport.ts` 共享夹具（断言零改动；mock 工厂动态 import 接线，消除被测模块初始化环死锁）；M2 五份正式文档 `updated` 日期同步；M3 孤儿键 `sheets.tree.collapseSubset/expandSubset` 删除；M4 `App.vue` 文末空行与 OFL 许可行尾空格清理。
+- **用户验收修复轮**：`.modal-actions` 可用按钮统一悬停抬升、禁用零反馈（`.modal-danger` 仅抬升不变色——无 danger-hover 令牌不新造色板）；表单弹窗控件与操作区 16px 语义间距（排除 `.modal-check` 防叠加）；属性值面板新增可访问 2/4 列切换（默认两列、localStorage 记忆、四列 ≥1032px 容器查询生效并逐级降级、网格居中、长值 span 2、名称整行、单列降级退 `auto` 防隐式第二列）；SPEC-DM-006 §6.2 与 SPEC-DM-010（§1/P-03/修订记录）同步，Playwright 补悬停/间距/跨列/降级/无溢出断言。
+- **门禁实绩**：`test:contracts` 96/96 · `test:unit` 16 文件 / 168 passed · `build` 0 · `check:i18n` 947 键 / 9 域 · 受影响 e2e（sheets-layout / properties-layout / sheet-catalog）全绿；全量 e2e、后端 pytest 与 Windows WebView2 100/125/150/200% 真实桌面复验仍待最终验证/用户执行，PLAN-DM-029 保持 `active`。
+
+## 2026-09-16（PLAN-DM-029 关闭归档与合并）
+
+- [PLAN-DM-029](.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md) 状态 `active` → **`completed`**：审查修复轮与用户验收修复轮全部落地、全量自动门禁全绿后，**计划归属方（用户）裁定以当前状态关闭**；真实 Windows WebView2 100/125/150/200% 复验未执行，证据缺口与裁定记录如实保留于计划 Step 8 节与责任 A–Y 收口表。两个索引（`docs/dst-manager/README.md`、`.planning/plans/dst-manager/README.md`）同步。分支经用户确认合并 main。
+
+## 2026-09-16（归档 PLAN-DM-029 Task 1–11 执行审查结论）
+
+- 新增并补充 `.planning/memos/dst-manager/2026-09-16-plan-dm-029-execution-review.md`，保存 `b248ff1..a923886` 的完整只读审查结论：校正提交范围为 135（其中 Task 1–11 为 116、Task 12 为 19），记录 3 项 Important 实现缺口、Task 12 文档状态漂移、Task 1–11 覆盖矩阵及实际验证结果；追加真实桌面验收发现的模态悬停反馈不一致、表单弹窗操作区贴合、属性值宽屏布局与既有长值跨列规则，并明确拟纳入 Task 12 用户验收修复轮但暂不执行；不修改应用源码、测试、Spec 或计划正文。
+
+## 2026-09-15（责任 K 全闭合（T12-4）+ 纠正裸违规测量口径，PLAN-DM-029）
+
+- **T12-4 完成**（4 提交：`9f70368` RED → `e4bf4c7` 档位 + 5 处声明 → `480c977` ARCH-DM-007 写回 → `72f7760` 元素级锚；工作树干净、无探针残留）：新档位 **`--font-card-title`=14px**（卡片/区块标题）与 **`--font-view-title`=18px**（页面/视图标题）；**5 处跨层借用全部抹除**（只改字号声明，4 处失效注释同步改写）。
+- **责任 K 就此完全闭合**：两半 —— 15/16/17/20px（T12-3）+ **14/18px**（T12-4）—— 均已升为正式语义档位；`ARCH-DM-007` 的「仍然开放的另一半」一段已改写为已闭合 ✓（并保留其历史记录价值：它曾是「语义说谎」实例 ✓）。
+- **★ 它给出的「借用真实存在 → 已消失」对称证明（方法值得记）**：修复**前** override 新档位**无反应** / override 旧令牌**全部跟随**；修复**后** override 新档位**全部跟随**（30px）/ override 旧令牌**无反应** ✓✓ —— 比「改了一行文本」强得多：它证明**接线真的换了**。
+- **变异自证**：`--font-card-title` 改 18px → 锚红（`Expected "14px" / Received "18px"`）→ 还原 ✓；捕获者是**令牌级绝对值锚**，元素级锚未执行到（**等值锚对改值不敏感** —— 与上轮 15px 同一教训：绝对值锚不可省 ✓）。
+- **★★ 纠正了本计划沿用很久的一个测量口径（控制器此前沿用了错算法）**：裸违规真值为 **7**（= 例外数），**不是**多轮上报的 **N+1** ✗。那个「+1」是**测量假象**：**清空整个对象会同时注销 `dynamicVariables`**（现 1 条 `--sheet-tree-width`）→ 多出一个 `dynamic-variable-not-registered` ✗。→ **正确口径：仅清 `exceptions`、保留 `dynamicVariables`** ✓；**后续一律以此为准**（历轮数字保留原样，它们是按当时方式实测的 ✓）。
+- **新登记责任 Z**：T12-4 按指令**停下未改**的存疑借用 5 处（`ExtensionCard`/`TopBar`/`SheetsView`/`ToastHost` 的非控件文本 + `TemplateBar:147` 段落正文）—— 它们不属「标题借用按钮令牌」那一类，归属存疑 → 交下次字号阶修订连同 Spec 定调，**不得一刀切** ✓。控制器复核：`TemplateBar` 确实尚存 **1** 处 `var(--button-font-size)` = 即那已上报的一处 ✓（**非漏改** ✓）。
+- 门禁：`check:ui` **0**（例外仍 **7**）· `test:unit` **0**（13/166）· `build` **0** · 锚用例 RED 1 → GREEN 0 → 变异 1 ✓。越额披露：e2e 6/3（均单用例定向、无全量）· `check:ui` 5/2（含 3 次口径测量）。
+
+## 2026-09-15（责任 K 前半闭合（14 → 7）+ 后半裁定 T12-4，PLAN-DM-029）
+
+- **K 轮（`ac5370a`，13 文件 +76/−60）完成**：新增 **4 个语义字号档位**（原字层 `--font-size-15/16/17/20` + 语义层 `--font-panel-title`/`--font-title`/`--font-toolbar-title`/`--font-page-title` = 15/16/17/20px）；**7 个消费方各只改 1 行**；**7 条例外清零**；`ARCH-DM-007` **§4.1**（非 §3）写回 ✓；3 个 spec 补锚 ✓。它**未碰 `changelog.md`** ✓（按裁定由控制器写入）。
+- **不变量逐值吻合**：例外 **14 → 7**（`unicode-structure-icon` 5 + `visible-input-label` 2）、裸违规 **15 → 8**（worker 用**空例外表实测**得 8，且**4 个新档位命中 0** ✓ —— 即它们确实不再是裸值 ✓）；**未新增例外**；Task 12 名下 7 条「孤儿」随之归零 ✓。
+- **零视觉变化**：**7/7** 消费方均有绝对值锚（2 既有 + 5 新增）+ 7 条令牌消费断言 ✓；RED 全红 → GREEN 全绿 ✓；**变异自证 2 处**——★ 15px 档位的突变**只被「绝对值锚」捕获**（令牌自指断言保持绿 ⇒ **证明锚是必需的、不是冗余** ✓✓，正是责任 S 的教训实操化）；20px 双重捕获 ✓。
+- 门禁：`check:ui` **0** · 受影响 e2e **0（9 passed）** · `test:unit` **0（166 passed，计数未变）** · `build` **0**。越额披露：e2e **5 次定向 / 上限 3**（均为受影响 spec，**无全量运行**）。
+- **★★ worker 主动收窄自己的结论（应记下）**：它指出 T12-3 只闭合了「**离刻度值**」那一半，而责任 K 的**原始主题**（「语义层缺独立 `14px`/`18px` 档位」）**仍开放** ✗——5 处卡/页标题仍在**跨层借用组件层令牌**（`SheetCatalogView.vue:154` 借 `--modal-title-font-size`；`CatalogPreview.vue:55`/`TemplateBar.vue:145`/`FieldBrowser.vue:209`/`ColumnEditor.vue:200` 借 `--button-font-size`）⇒ 在 `ARCH-DM-007:121` 与 `tokens.css` 头注释里**如实记为「仍然开放的另一半」**，并把结论由「责任 K 就此闭合」**收紧为「离刻度值这一半就此闭合」** ✓✓。**主动缩小自己成果的适用范围，而非借一次裁定把整条债清零** —— 本计划的最佳示例。
+- **T12-4 裁定（控制器）**：用户裁定原话是「**新增语义字号档位**」（未限定仅那 4 个值）⇒ **同一原则适用于 K 的原始主题** → 续一轮完成：新增 **14px/18px** 两个语义档位 + 把 5 处跨层借用改为消费新令牌 + ARCH-DM-007 的「另一半」改为已闭合 ✓；**例外表不受影响（仍 7 / 裸 8）**；**不**一刀切改真正语义相符的按钮/标签用法 ✓（存疑则停下报告）✓。
+
+## 2026-09-15（Task 12 收尾轮：视觉证据盘点与文档同步，PLAN-DM-029）
+
+- **Step 4 证据盘点**：新建 `.planning/memos/dst-manager/assets/PLAN-DM-029/README.md`（171 行），登记本计划持久证据 **29 张**（`docs/…/assets/*/production/` 21 张 + `.planning/memos/…/PLAN-DM-029/` 8 张），逐张给出视口/主题/状态/夹具/产出测试/附件路径；并说明该目录下另有 16 张既有证据（`g8-*`/`g8-ext-*`，属 PLAN-DM-020/025）不应计入。
+- **★ 属性页（Task 5）证据查明结果：在库里** ✓ —— 5 张位于 `.planning/memos/dst-manager/assets/PLAN-DM-029/`，并非只存在于 gitignored 的 `.superpowers/` 证据目录。`docs/…/assets/SPEC-DM-010/production/` **不存在**：属性页沿用 PLAN-DM-016 以来的 memos 落点，而 Task 6/7/8/9 落在 `docs/…/assets/SPEC-DM-0XX/production/` ⇒ **两种落点并存（约定不统一，但不构成证据缺失）**。
+- **归属澄清（核实后修正了初步猜测）**：Task 8 的 `task8-*.png` 由 **`web/tests/e2e/settings-extensions-production-evidence.spec.ts`** 产出（5 个测试，:333–:391）；同目录的 `settings-demo-visual-evidence.spec.ts` 采集的是 **SPEC-DM-011 冻结交互 Demo**，只产出 `g4-*`。前者**不在 Task 12 的 Files 列内**，本轮**只登记路径、未改动**。
+- **用户三张缺陷截图的「修复前 → 修复后」映射**（第 1 张→图纸页 Task 7 / 第 2 张→目录页 Task 6 / 第 3 张→属性页 Task 5），并**显式声明能力边界**：三张原图未入库，映射为**页面级**，无法核对视口/主题/滚动是否与用户当时所见逐项同态；不依据记忆重建原图内容。
+- **本轮发现的注释漂移 2 处（新的一处，非已闭合的责任 P）**：① `properties-visual-evidence.spec.ts:5–7` 仍写「显式复制到 `.planning/memos/…/PLAN-DM-016/`」，实际入库在 `PLAN-DM-029/`；② `sheets-visual-evidence.spec.ts:3` 写「Task 7 的 **6 张**」，实际 **7** 张（修复轮补入 `task7-overlay-diagnostics-fixed-*`）。另记 **视口集合与 SPEC-DM-006 §10.2 声明矩阵不完全重合**（本计划证据含 `1440×1000`/`900×700`/`1280×720`/`900×600`/`720×500`，而声明矩阵中的 `1120×768` 未见本轮证据）⇒ 记为待对账项，未下结论。
+- **Step 7 文档一致性同步（5 份，只用实测值、不写未验证结论）**：`SPEC-DM-006`（§1.1 新增 2026-09-15 修订记录；§5.2 增加责任 K 的 4 个字号档位注，**明确「已裁定、尚未实现」**；§10.1 把「stylelint 规则」更正为实际的 `check-ui-contracts.mjs` 机制 + 例外表口径 + `test:contracts` **86 例**）；`GUIDE-DM-001` G9（新增显示缩放类验收口径：**必须真实桌面壳执行**，浏览器缩放/`deviceScaleFactor` 不构成证据；自动门禁全绿而真实复验未完成时 Plan 保持 `active`）；`GUIDE-DM-002` §9（把「测试全通过」误区扩写为门禁**双向失效**的具体教训：看不见组件化输入、`calc()` 绕过、令牌比令牌的自指断言，以及同名类跨层静默覆盖、注释解析不对称的误报）；`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 状态段（Task 1–11 关闭、`App.vue` 809 → 450、例外棘轮 **382 → … → 14**、Task 12 进行中、真实桌面复验未完成）。**两份 README 只改状态摘要与导航，不复制正文。**
+- **边界**：未改任何应用源码、测试、脚本与例外表（例外仍 **14**，裸违规 15）；未新增例外；**未跑 e2e 与门禁**（本轮只改 Markdown，按任务约定不需要跑）；`ARCH-DM-007` 未重复改动（责任 E 已由上一轮写回 §4.1）。
+- **未做/未验证（不得读作已完成）**：① **真实 Windows WebView2 100/125/150/200% 复验未完成**（Step 5–6，需用户执行；**不得**用浏览器 zoom 冒充）；② 未逐张打开图片复核内容与状态描述；③ `docs/…/assets/SPEC-DM-013/` 两张截图（`settings-en-US-dark-900x768.png`、`settings-zh-CN-light-1440x900.png`）的**产出者未核实在库**（文件名在 `web/tests/e2e/**` 与 `web/scripts/**` 均无匹配），本轮不下结论、不猜测。
+
+## 2026-09-15（责任 K 裁定：新增 4 个语义字号档位；用户决定，PLAN-DM-029）
+
+- **用户（Spec 归属方）选择「新增语义字号档位」**（零视觉变化、例外清零）。**该裁定明确取代** T6-3 / Ruling 38 的「本轮不新增字号令牌」政策 —— 对**这 4 个档位**而言政策已被废止；**对其余字号仍不开放** ✓。
+- **4 个档位与现有消费方（角色）**：**15px**（`ColumnSettings .cols-title` · `SheetOperationForm .form-head h3` · `SheetPropertyEditor .editor-head h3`，均为面板/区块标题）· **16px**（`RevisionsView .empty-title` 空态标题 · `SettingsDialog .dlg-head h2` 对话框标题）· **17px**（`SheetToolbar .range-title`）· **20px**（`WelcomeView .welcome-title`）。
+- **收口不变量**：例外表 **14 → 7**、裸违规 **15 → 8**；**不得新增例外**；旧指纹因声明改 `var(…)` 而 stale → **删除**（清零而非改指向）✓。
+- **零视觉变化必须被证明**：沿用**已有绝对值锚**；缺锚的值在对应页面 spec 补一条（`sheets-layout`/`settings-dialog` 已补入 Files；`main.spec.ts` 本就在 Files 内）+ **变异自证** ✓。
+- **口径写回**：补进 `ARCH-DM-007` **§4.1 的令牌表**（**注意是 §4.1，不是 §3** —— 计划与 T12-1 原文均写错，由 Task 12 第 1 轮实读纠正 ✓），并写明「责任 K 就此**闭合**」✓。
+- **文件边界（避免与收尾轮冲突）**：本轮**不动** `changelog.md`（控制器统一写入）、**不动** SPEC-DM-006/GUIDE-001/002/两个 README/memo（属收尾轮）✓；二者文件集**不相交**，可并行 ✓。
+- **用户选择「真实桌面我近期自己跑」** ⇒ **计划保持 `active`**，并在索引/changelog 写明「**仅差真实桌面一项**」；控制器的逐项步骤清单与记录模板将写入 memo（待收尾轮建好该文件后追加）✓。
+
+## 2026-09-15（Task 12：控制器亲跑 Step 1/2/3 + 责任 A–Y 收口表，PLAN-DM-029）
+
+- **控制器亲跑 Step 1/2/3（真实 EXIT）**：`test:contracts` **0（86/86，比 85 多 1 条来自责任 C②）** · `test:unit` **0（13 文件 / 166 passed）** · `build` **0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc -b`/`vite build`） · **全量 e2e 矩阵 0（548 passed / 2 flaky / 3.6m）** · `ruff` **0** · `uv lock --check` **0** · `pytest` **0（tests=1488 / failures=0 / errors=0 / skipped=74 / 89.6s，与隔离基线逐值一致）**。
+- **2 条 flaky 为同一签名**：`locator.click: Test timeout of 30000ms exceeded` 等待**外壳引导按钮**（`选择 DST 文件`）⇒ 即已登记的**引导期 flaky**（非行为差异）；**不得用放宽断言/提高超时来“修”** ✓。pytest 的警告均为既有依赖/Python 警告（Starlette/httpx、sqlite3 datetime、pytest ini），与本计划无关 ✓。
+- **新工具陷阱（同族于「`tail` 的退出码」）**：**harness 会截断重定向输出**（`pytest -q > file` 只得 57 行、停在 14%）且包装器会打出**假的** `Pytest: No tests collected` ✗ ⇒ **需要计数时改用 `--junit-xml` 并解析 XML** ✓。
+- **责任 A–Y 收口表已写入计划（T12-2）**：✅ 闭合/已修复 = **A · C② · C③ · E · G · L · P · R · X**（+ **S** 部分）；⚠️ 环境阻碍 = **B**；⏸ 待裁决/待办 = **C① · F · H · I · K · M · N · O · Q · S · T · U · V · W · Y** + Task 11 转入的 4 项（均**登记**）。
+  - **其中两项以「验证」而非「新增代码」闭合**：**G** 的 2 处存活变异经变异测试证明**已被 Task 10 的集成测试覆盖** → 计划里的前提过时，**无需补测** ✓；**C③** 实测**当前 14 条中内嵌前置注释者 = 0** ✓；**C②** 的 RED **先证明了漏洞真实可利用** ✓。
+  - **Task 12 的 7 条「孤儿」已查明并非文件错位** ✗ → 它们**就是责任 K 的 7 条离刻度字号例外**（『下一次字号阶修订（责任 K，Task 12）』）→ 是 **Task 12 应当裁决的决定**，而非应当编辑的文件 ✓。
+- **Step 8 状态判定：保持 `active`** ✓（**不得改 `completed`**）——**真实桌面复验未完成**，且 **K/Q/W 需 Spec 归属方裁定**。**距 `completed` 仅差**：① 用户执行 Steps 5–6（真实 Windows WebView2 100/125/150/200%，**125% 必须覆盖属性/目录/图纸三个缺陷场景**；**严禁用浏览器 zoom / `deviceScaleFactor` 冒充**）② K/Q/W 的 Spec 裁定 ③ Steps 4/7 的剩余文档工作（已派发收尾轮）。
+
+## 2026-09-15（Task 12 第 1 轮：闭合责任 A/C②/R/E 与两项 T11-2 硬化，PLAN-DM-029）
+
+- **责任 A（字体真实加载）**：`main.spec.ts` 新增运行时断言——两套 WOFF2 **真的进入 `loaded`**、被**真实请求**且同源、响应 200、**全程无远程字体访问**；负控（临时阻断 `*.woff2`）使「IBM Plex Mono 可渲染」变红 ⇒ 断言非空转。生产产物路径另行核验：`dist/assets/*.woff2` 且 dist CSS 引用为 `url(/assets/…)`（e2e 跑 dev，路径口径已在测试注释写明）。
+- **责任 G（两处“存活变异”分支）**：**实测否定了登记前提**——`shouldReturnFocus` 的「已移到容器外→不抢」与 `active === body` 两处**都已被后续任务补齐**（变异①红 2 条、变异②红 1 条），故本轮不重复写测试，产出的是“它们真是活的”这一实测保证。**G 自己列出的另两处（不同 form 同名 radio、Shift+Tab 起点在容器自身）实测仍未覆盖**，按“不自行扩大”仅登记。★ 教训：4 条变异同跑会**互相掩盖**（① 位于 ② 下游），归因必须逐条隔离。
+- **责任 C②（例外表自掩蔽）**：新增守卫——**拒绝 `entry.file` 等于例外文件自身**的登记（按被指向的文件判定，而非规则名）+ 单测。**RED 先证明了漏洞真实存在**：自豁免条目会把底层配置违规**完全掩盖**（断言到的消息数组为空）；修复后 `test:contracts` **86/86**、`check:ui` **EXIT 0**、例外仍 **14** 条。
+- **责任 R（36px 豁免）**：把 T6-16 已固定的文本按 SPEC-DM-010 **自身风格**融入三处（§3 密度条款后的有界豁免 + 前置条件 + 不外溢声明；§8 P-13 同步；§9 裁定记录），未改动该 Spec 其它要求。
+- **责任 E（令牌分层约束）**：定位修正——「组件只能消费已声明令牌」原文在 **§4.1 而非 §3**；实质约束写入 §4.1（含**可跑** `grep -rhoE`/`grep -rlE` 两条命令与**实测** 1025 处 / 44 文件；计划里记的是 Task 3 时代的 1104，本轮按实测值写入），§3 加一句指引。**未新造任何色板/间距层**，**未复制计划正文**。
+- **T11-2 Minor-2（壳层 CSS 搬迁无覆盖）**：`main.spec.ts` 新增断言把三条搬迁规则钉在**真实浏览器几何**上（`calc(100vh - 104px)` 的高度、`flex:1`+`stretch` 的相邻/同高/宽度和、`sheets-active` 的 `overflow` 双向）；负控（注入破坏性样式）恰好 3 条对应断言变红，含**几何结果**那条。★ 我曾据启发式文本误判默认页签为 properties，**被浏览器实测推翻并显式报出**，已改正。
+- **T11-2 Minor-3（957 行测试文件）**：**登记不拆**——该文件有 2 个文件作用域 hoisted mock、夹具按域交错，机械拆分需**新建共享 setup 文件**（不在 Task 12 Files 内，属越界），复制 mock 则会引入“第二份事实源”。
+- **改动 5 个文件（+193/−2）**，**未触碰任何非测试应用源码**；门禁：`test:contracts` **86/0 EXIT 0**、`check:ui` **EXIT 0（例外 14）**、e2e 子集 **2 passed**、定向单测 **33 passed**、`build` **EXIT 0**（含 `vue-tsc -b`）。
+- **未做（如实列出）**：全量矩阵（控制器）· 真实 Windows WebView2 100/125/150/200%（**需用户**，且**严禁**用浏览器 zoom/`deviceScaleFactor` 冒充）· 证据盘点 · 责任 B/C①/C③/F 与 G 的 ③④ 的裁定。**配额越额如实披露**（e2e 6 次/≤3、定向单测有效 4 次/≤3，原因均为我自己的探针/假设错误与逐条变异归因）。
+## 2026-09-15（Task 11 关闭：Approved / 0 Critical / 0 Important，PLAN-DM-029）
+
+- **评审结论：Approved / 0 Critical / 0 Important**（6 Minor，均为后续建议）。Steps 1–9 跨 **11a–11e 五轮**全部满足；**`App.vue` 809 → 450 行**（**落在 350–450 目标内** ✓）。
+- **评审的最强结构性论据**：**diff 里根本没有 `components/`/`views/` 下的文件** ⇒ 子组件 props/emits/插槽**不可能**变 ✓✓（比逐行检查更强）。另：2 条 `explicit-button-type` **是删除而非改指向**（正是 T11-1(A) ✓）；例外 16 → 14 ✓；**4 个 e2e spec 整任务未改**（纯重构里这是**期望**结果 ✓）。
+- **模板不变是可证的**：`<template>` 块 sha256 跨轮未变 → **五轮里四轮是纯脚本搬迁**，模板变更被局限在唯一该改的那一轮 ✓✓。
+- **“组合而非复制”被测试钉住** ✓✓：`useShellNavigation` 的单测**故意不 mock `useShellTabs`**（理由：“要固定的正是『组合它』这一事实本身”）；`useHotkeys` **恰好注册一次**（根里那次已移除，无双重注册 ✓）；`useConfirm`/`useToast`/`useJobMonitor`/`useCsvImport` 均为 **type-only** 导入 ⇒ **无第二份队列/状态** ✓。另：**21 个 emits 与根的 21 个 handler 精确对位** ✓；`TabBar` 按键路径按原生 DOM 监听保留 ✓。
+- **11e 那条测试盲点的修复经核实“对变异敏感”** ✓✓：评审**自行推出机制**——草稿层同类守卫会**写入** `error.value`，而编排层在**触碰它之前**就返回 ⇒ 变异下 `error` 会变 ⇒ 新增断言会红 → 「**该闭合成立**」。
+- **四条隐性契约被登记并钉住**（而非“顺手清理”）✓；新增行里 **零** `TODO`/`console.*`/`debugger`/`as any`/`@ts-ignore` ✓；五模块均 ≤374 行（在 500 行软上限内 ✓）。**轨迹诚实**：未到 450 前从未声称达标，并主动报了中间反弹（809 → 869）✓。
+- **Minor 处置（均后续建议）**：① 混批判据比较在两个模块各一份（**预存**、输入已单源化）→ 后续用导出判定函数收口；② **★ `WorkspaceShell.vue` 的布局 CSS 无自动化覆盖** → **已写成 Task 12 的具体指令**（Step 4/5 必须针对性检查 `.shell-body`/`.shell-main`/`.shell-main.sheets-active` ✓）；③ `appComposition.test.ts` **957 行 > ~500 软上限** → 登记供 Task 12 按域机械拆分；④ 安全网比方法+路径+顺序、**不含请求体**（按 T11-1(C) 本就如此；评审另行逐一核过草稿 `PUT` 体逐字一致）；⑤ **证据文件命名偏离简报**（实际**按轮分文件**，更严）→ 已在计划里记录实际文件名以保证可溯源；⑥ `loadLayoutOptions` 写入 `editor.context`（**预存**行为）→ 仅登记为域名偏宽之处。
+- **最终账**：例外 **14**（裸违规 15）· `check:ui` **0** · unit **0（13 文件 / 166 passed）** · contracts **0（85/0）** · `build` **0** · e2e **0（128 passed）** · 5 个新模块共 **1174 行** + 测试 **957 行** · 总 diff **2391 插入 / 566 删除**。
+
+## 2026-09-15（Task 11 第 5 轮 11e：抽出命令/API 编排组合式函数并收口根组件，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useWorkspaceCommands.ts`（374 行），负责页面事件到命令/API 的编排：`submitCommands`（分批规则 + 保存失败重试去重 + 投影刷新）、删除图纸/删除子集/批量属性/删除属性定义、CSV 导入闸门、预览与确认写入、ActionDock 门禁矩阵、布局模板读取、全局快捷键五动作；`appComposition.test.ts` 新增 6 例（合计 **166 passed** / 13 文件）。`App.vue` **671 → 450 行**（净 −221）⇒ **达成 Step 7 的 350–450 行目标**。
+- **命令仍经 `createCommand` 构造**（Step 5 原文）：模块运行时 import 只有 `vue`、`../api/client`、`../api/contracts`、`../api/shell`、`./useHotkeys`（其余均为 `import type`）；删除/批量/属性定义的命令载荷全部来自 `createCommand.*`，**未手拼命令对象**；草稿入栈/撤销/保存队列语义仍由注入的 `useDraftGuards` 承担，**未新建第二份草稿态或确认队列**。
+- **不复制后端最终校验**：`submitCommands` 只把既有错误码与字段原样上抛为 `SubmitResult`；空值允许性（S-11）与可执行性（`executable`）等仍由服务端裁决，前端只据此锁定写入按钮。
+- **★ 代次计数留在根**：`previewGeneration`/`layoutReadGeneration` 是会被**重赋**的 `let`（11c 交接的坑），且 `layoutReadGeneration` 还要被生命周期域失效，故留在根并以 `next*/current*` 取值函数注入模块（解构回同名只会拿到快照，那正是「二次保存丢队列」同类错误）。
+- **`<template>` 逐字节未变**：用**行首锚** `^<template>` 提取两版模板并比对，sha256 相同（`67dd1a463a875dc1`，56 行）；逐轮核实 11b/11c/11d/11e **均为同一哈希**。11a 的模板变化属设计内（壳层标记迁入 `WorkspaceShell.vue`）。
+- **Step 8 完整 after 比对**（`evidence/task-11e-compare.txt`，与重构前冻结基线）：4 流程 spec **128 passed / EXIT 0**；**键对齐 128/128**（无「仅基线有 / 仅 after 有」）、**请求序列逐用例 128/128 一致**、**文案指纹 128/128 全等**（归一化候选 `collapse`/`collapseTrim` = 128/128，其余 4 个 = 0/128）；**0 重复键** ⇒ 11a 登记的 innerText 波动**本轮未复现**。
+- **门禁**：`check:ui` **EXIT=0**（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，无新增无 stale）· `test:unit` 13 文件 / **166 passed** · `test:contracts` **85 pass / 0 fail** · `build` **EXIT=0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc -b`/`vite build`）· 4 流程 e2e **128 passed**。
+- **变异自证**（`evidence/task-11e-mutation.txt`）：三处变异（门禁过期判据取反、混批判据改错域、导入闸门去包裹）各只让**一条**用例转红（合计 `3 failed | 44 passed`），逐字节还原后工作树干净。
+- **★ 变异自证发现并修正了自己测试的盲点**：把混批判据从「属性定义存在」改成「结构命令存在」后用例**仍然通过**——因为草稿层会以**同一条混批文案**兜底拒绝，断言无法区分「编排层裁决」与「下游失败」。改为同时断言 `error` 未被写入（拒绝必须发生在触碰草稿层之前），该变异随后正常转红；此项以独立提交记录，未揉进主提交。
+- **★ 探针口径自我更正**：收口核实脚本第一版拿「Task 11 起点」与 HEAD 比 `<template>`，得出 `false` ——那是**探针口径错**（11a 的任务本身就是搬走壳层标记，模板**应当**变化），不是缺陷；改为逐轮比对后口径正确。这一条与代码一并入库备查，避免后人重踩。
+- **未做 / 未验证**：真实桌面缩放抽查与 Step 5/6 验收仍待用户执行；`allRows` 解构在搬迁后暂无消费方（保留以维持既有解构形状，未做无谓清理）。
+- **配额**：`test:unit` **7** 次（上限 6）· `build` 类 **5** 次（2 次 `npm run build` + 3 次 `vue-tsc -b`，上限 3）· `test:contracts` **2** 次（上限 1）· `check:ui` 2 次（上限 2）· e2e 1 次（4 流程，上限 2）。越额原因**全部是我自己新增模块/用例的迭代**：`ref` 未导入 1 处、测试夹具类型 3 处（`getRepair` 返回值类型、`refreshSheetProjection` 返回 `SubmitResult`、`Sheet` 未导入）、一条我写错的断言（`setPreview` 用了旧修订）；**应用源码从未因这些失败被改坏**，每处都在提交前定位并修正；修订 `vue-tsc -b` 含测试导致类型检查迭代次数高于预算。
+## 2026-09-15（Task 11 第 4 轮 11d：抽出工作区生命周期组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useWorkspaceLifecycle.ts`（294 行，含接口与说明注释），负责工作区**打开 / 关闭 / 刷新 / 清空编辑态**与壳桥接（选择 DST、拖拽接收、打开所在文件夹）；`appComposition.test.ts` 新增 9 例（合计 **160 passed**）。`App.vue` **766 → 671 行**（净 −95）。
+- **只返回根装配需要的 state/actions**：只导出 `workspaceLoadGeneration`/`hasShell`/`openByPath`/`doRefreshWorkspace`/`closeWorkspace`/`refreshWorkspace`/`openFolder`/`selectAndOpenDst`；`doOpenByPath`/`doCloseWorkspace`/`beginWorkspaceLoad`/`resetEditingState`/`loadDraft`/`acceptDstPath`/`registerDropBridge` 一律内聚（`doRefreshWorkspace` 例外：草稿域的 `reloadWorkspace` 需要它做冲突后重载，且该路径自带确认、不再叠加三选一）。
+- **组合而非复制**（Step 3/4 原文）：草稿域经引用注入并直接复用其 `guardAllInputs`/`pendingDraftSave`/`discardDraft`/`resetDraftState`/`rebuildDraftProjection`，**未新建第二份草稿态、未复制投影或确认队列**。机械证据：模块运行时 import 仅 `vue`、`../api/client`、`../api/shell`；`App.vue` 中 `resetEditingState`/`beginWorkspaceLoad`/`openByPath`/`doCloseWorkspace`/`doRefreshWorkspace`/`loadDraft`/`hasShell`/`workspaceLoadGeneration` 的**声明残留均为 0**。
+- **原样保留的顺序语义**：等保存队列 → 保存失败则中止 → `invalidateJobMonitor(true)` → 代次递增 → 重置编辑/草稿态 → 快照 `baseWorkspace` → `loadDraft`；关闭时另推进代次，拦住关闭后迟到的打开/刷新响应。
+- **★ setup 期求值顺序（11c 交接的坑）**：本模块创建于 `useDraftGuards` **之后**、`useJobMonitor`/`useCsvImport`/`useRepair`/`useRestore` **之前**——后四者把 `refreshWorkspace`/`workspaceLoadGeneration` 当**直接实参**（setup 期即求值）。而草稿域又需要在 setup 期就拿到 `reloadWorkspace` 的可调用引用 ⇒ 用**提前声明的具名容器** `let lifecycle` + 调用期解引用解开这个环，`vue-tsc` 未再出现 11c 那种 `TS2448`。更晚创建的依赖（`invalidateJobMonitor`/`editor`/`sheets`/`active`/`settingsOpen` 等）与会被**重赋**的 `layoutReadGeneration`（解构会拿到快照）一律以**懒回调/取值函数**传入。
+- **`<template>` 逐字节未变**：两版 `<template>` 段提取后 `diff` 为空（59 行 / 8404 字节相同）；`git diff -U0` 的 8 个 hunk 触及的最大行号（旧 490 / 新 394）均**落在模板起始行之前**（旧 709 / 新 614）⇒ 模板一行未改。
+- **Step 8 after 比对（T11-1(C) 安全网）**：4 个流程 spec **128 passed**；键对齐 128/128（无「仅基线有 / 仅 after 有」）、请求序列 **128/128** 逐用例一致、文案指纹 **128/128** 全等（归一化候选 `collapse`/`collapseTrim` = 128/128，其余 4 个 = 0/128，与 11b 反推结果独立一致）；**无重复键** ⇒ 11a 记录的 innerText 波动**本轮未复现**。
+- **门禁**：`check:ui` **EXIT=0**（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，本轮无需清退、无 stale）· `test:unit` 13 文件 / **160 passed** · `test:contracts` **85 pass / 0 fail** · `build` **EXIT=0**（含 `check:api`/`check:i18n`（946 键 / 9 域）/`check:ui`/`vue-tsc -b`/`vite build`）· 4 个流程 e2e **128 passed**。
+- **变异自证**（`evidence/task-11d-mutation.txt`）：去掉打开流程的**代次闸门**、去掉「**草稿保存失败则中止打开**」两处真实语义 ⇒ `2 failed | 39 passed`，**恰好且仅有**对应的 2 例转红；逐字节还原后 sha256 与提交内容一致（`861d37e6…`）。
+- **★ 登记一处既有口径（非本次搬运引入）**：`loadDraft` 在服务端返回 `stale`/`corrupted` 但 `draft` 为 `null` 时，走 `resetDraftState()` 后**直接 return**，因此既不置 `draftStale` 也不写错误文案（`corrupted` 因在 return 前单独赋值而保留标记）。此口径与原 `App.vue` 同构，本轮以单测**照实钉住**并在报告登记为既有缺口，未在本轮擅自改动。
+- **未做 / 未验证**：`App.vue` 未达 Step 7 的 350–450 行（收口在 11e）；`hasShell` 未加单测（依赖 `../api/shell` 模块级 ref，改由 e2e 覆盖）；真实桌面缩放抽查仍待用户执行。
+- **配额**：本轮 `test:unit` 实跑 **5** 次（配额 ≤4）——RED 1 + GREEN 3（前两次失败的 4 例与 2 例**全是我自己用例的夹具错误**：`mockRejectedValueOnce` 挂晚了、`makeConflicted` 自建了另一个守卫实例、`closeWorkspace` 早于打开流程发出 POST 导致代次反而匹配、以及把既有语义断言成预期语义）+ 变异 1 次；**应用源码从未因此改坏**，每次失败都在提交前定位并修正。`build` 实跑 1 次。
+
+## 2026-09-15（Task 11 第 3 轮 11c：抽出草稿栈与未提交输入门禁组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useDraftGuards.ts`，负责草稿栈状态与投影/保存/撤销重做/移除/丢弃、`DRAFT_CONFLICT` 只读降级、图纸页与属性页两输入域过闸与共享三选一；`appComposition.test.ts` 新增草稿语义与过闸用例（合计 **151 passed**）。`App.vue` **843 → 766 行**（净 −77）。
+- **组合而非复制**（Step 4 原文）：确认队列仍来自既有 `useConfirm`（只调用注入的 `confirmAction`）、投影仍来自既有 `./drafts`（`projectCommands`/`projectWorkspace`）、图纸目录页守卫仍复用既有 `guardSheetCatalogPage` 纯函数；**未新建第二份确认队列、未复制投影实现**。机械证据：`App.vue` 中 `COMMAND_LABEL_KEYS`/`projectCommands`/`projectWorkspace`/`let draftSaveQueue` 残留均为 **0**。
+- **前向引用以懒取值函数注入**：`editor`/`properties`/`sheets`/`active`/`refreshSheetProjection`/`reloadWorkspace` 在本模块调用时尚未创建，而 `editor`/`properties` 又消费本模块的 `addCommand`/`submitCommands`（setup 期真实循环），故一律只在动作被调用时解引用。
+- **`<template>` 逐字节未变**（两版 `<template>` 段提取后 `diff` 为空）：抽取时把返回值解构回同名局部变量，模板一行未改。
+- **Step 8 after 比对（T11-1(C) 安全网）**：4 个流程 spec **128 passed**；键 128/128、请求序列 **128/128** 逐用例一致、文案指纹 **128/128** 全等（归一化反推为 `collapse`/`collapseTrim`，与 11b 独立一致）；**无重复键** ⇒ 11a 记录的 innerText 波动未复现。
+- **门禁**：`test:unit` 13 文件 / **151 passed** · `test:contracts` **85 pass / 0 fail** · `check:ui` **0**（例外表仍 **14**，未增未删）· `build` **0**（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`）。
+- **变异自证**：同时去掉 `DRAFT_CONFLICT` 分支的 `draftStale=true`、并对调过闸顺序 ⇒ `5 failed | 146 passed`，**恰好且仅有**预期 5 例转红；逐字节还原后 sha256 与提交内容一致。
+- **未做**：`App.vue` 未达 Step 7 的 350–450 行（减重主要发生在 11d/11e）；真实桌面缩放抽查仍待用户执行。
+
+## 2026-09-15（Task 11 第 2 轮 11b：抽出壳层导航组合式函数，PLAN-DM-029）
+
+- **产出**：新建 `web/src/composables/useShellNavigation.ts`（93 行）负责页签栏状态与任务浮层开关；`web/src/composables/appComposition.test.ts`（新增，10 例）。`App.vue` **869 → 843 行**（净 −26）。
+- **组合而非复制**（Step 4 原文）：页签 `active/select/onKeydown` 仍由既有 `useShellTabs` 提供，**未另写一份页签列表状态**；全局快捷键仍由根组件那一次 `useHotkeys` 注册，本模块**不注册任何快捷键**。机械证据：新模块 import 仅 `useShellTabs`/`vue`；`App.vue` 对 `useShellTabs` 的引用只剩 1 处**注释**（`TabDescriptor` 引用 0）。
+- **依赖全部经 `deps` 注入**（含 i18n 的 `t`）：模块不反向依赖 `useRestore`/`useSheetCatalog`，也不自行取 i18n ⇒ 单测可在 happy-dom 直接构造依赖。
+- **两处浮层复位归并**为 `resetOverlay()`（原 `beginWorkspaceLoad` 与关闭工作区各写一遍 `overlayOpen=false;overlayTab="prog"`）。
+- **★ 一轮真实的 RED→GREEN→变异自证**：单测首跑 9 passed / 1 failed——失败的是**我的用例**而非实现（假闸门立即执行 `next()`，把「有草稿时回退 active」这一瞬态吃掉了）；改写为「闸门**取消**时不得留在错页签」后 10/10 绿。变异自证：摘掉「回退 `active.value`」与「重复点击当前页签提前返回」两处，**恰好预期的那 2 例**转红，还原后与快照逐字节一致。
+- **★ Step 8 本轮 after 比对：请求序列 128/128、文案指纹 128/128 全等**（与基线 `evidence/task-11-api-baseline.txt` 逐用例、顺序敏感）。
+  - **★ 指纹归一化是「反推」而非「假定」**：基线探针已删除、其归一化未留记录 ⇒ 本轮探针对同一份 `innerText` 同时记录 6 种候选归一化，再找哪种与基线全等 → **`collapse`（空白折叠为单空格）与 `collapseTrim` 均 128/128**，而 `raw`/`trim`/`perLine`/`nows` 均 0/128 ⇒ 既确认了基线归一化，也避免了把归一化差异误报成文案变化。
+  - 分组键用**对称规范形**（首个以 `.spec.ts` 结尾的段作 basename + 其后所有段）两侧同规则处理 ⇒ 键对齐 128/128，无「仅基线有」「仅 after 有」，也无重复键（本轮未发生重试/波动，11a 记录的 innerText 波动未复现）。
+- **门禁**：`check:ui` EXIT=0（例外表仍 **14**：`unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`，本轮无需清退）· `test:unit` 13 文件/`129 passed`（+10 例）· `test:contracts` 85 pass/0 fail · `build` EXIT=0（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build`）· 4 个流程 e2e `128 passed`（EXIT=0）。
+- **探针纪律**：临时探针 `web/tests/e2e/__api-recorder.ts` 与 4 个 spec 的一行 import 改动**均已逐字节还原/删除**（`git diff -- web/tests/e2e/` 为空）。
+- **未完成项（如实记账）**：`App.vue` 距 Step 7 的 350–450 行目标仍远——11b 只搬走 45 行、接入 19 行；真正的减重来自 11c（草稿守卫）与 11d/11e（工作区生命周期与命令），本轮**不声称**达到行数目标。
+
+## 2026-09-15（Task 11 第 1 轮 11a：抽出纯展示 `WorkspaceShell.vue`，PLAN-DM-029）
+
+- **产出**：新建 `web/src/layout/WorkspaceShell.vue`（110 行）承载 `TopBar`/`TabBar`/`TaskOverlay`/`ActionDock` 与壳层级提示（错误/诊断详情/加载中/恢复中 + `shell-body`/`shell-main` 三块布局），页面内容经默认 slot 透出；`App.vue` 只保留状态与接线。
+- **子组件 props 以「整组对象」传入**（`InstanceType<typeof X>["$props"]`）：比逐个声明约 30 个 prop 更**类型安全**——对象键写错是编译错误，而逐个写 prop 名若拼错会静默落进 `$attrs`（正是本重构最想避免的隐性漂移）；`App.vue` 相应新增 `topBarProps`/`tabBarProps`/`taskOverlayProps` 三个 computed（`dock` 原样透传）。
+- **★ 澄清一处既有事实**：`TabBar` **只** emit `select`（`defineEmits<{select:[id:string]}>`）→ `App.vue` 的 `@keydown` 一直是**原生 DOM 监听**（TabBar 单根 `<nav>` 承接透传）→ 壳层按原样监听并转成壳层 emit，按键路径未变。
+- **例外 16 → 14**：`App.vue` 恢复横幅的「继续/重新开始」两按钮**就地**补 `type="button"`（两按钮不在 `<form>` 内 → 行为零变化，仅显式声明语义）；违反消失后原例外条目会变 stale → 删除 `explicit-button-type` 2 条。`check:ui` EXIT=0，余 14 条按规则为 `unicode-structure-icon 5 / raw-visual-value 7 / visible-input-label 2`。
+- **★ 纯展示约束的机械自证**（T11-1(E)①：「门禁不查，必须 grep」）：`WorkspaceShell.vue` 的 import 仅 4 个布局组件，`api/`、`composables/`、`use[A-Z]` 命中 **0**。
+- **★ Step 8 API 比对（T11-1(C)）**：两次采集各 `128 passed`；**请求序列 128/128 与指纹 128/128 与基线一致**。两次采集之间**唯一**差异是探针的**键取名**（基线含 describe 段；after1 用 `testInfo.title` 少了 describe 段、after2 用 `titlePath.slice(1)` 多了绝对路径段）→ 已用**对称规范形**（同一条规则同时处理两侧）比对到 128/128 键对齐，并按 T11-1(C) **如实报告差异而非自行判等**。
+- **★ 登记一处指纹波动（未定根因）**：`main.spec.ts › 移除 active 动作不会激活 redo 区命令` 在 after2 的归一化 innerText 为 **486 字符**，而基线 **374**、after1 **374**；两次 after 运行的是**逐字节相同**的代码（仅探针不同）→ 判定为**运行间波动**而非本次重构所致，但**根因未查明**（i18n 长度扫描因目录定位失败未完成）→ 建议控制器收口全量 e2e 时观察该用例。
+- **门禁**：`check:ui` EXIT=0（1 次）· `test:unit` 12 文件/119 passed · `test:contracts` 85 pass/0 fail · `build` EXIT=0（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build`）· 4 个流程 e2e `128 passed` ×2（本轮配额 ≤2 用满）。
+- **★ 诚实记账**：`App.vue` 行数 **809 → 869（+60）**——本轮只搬走约 14 行模板、却新增约 60 行接线；**减重发生在 11b–11e**（搬逻辑与状态时），本轮**未**达到 Step 7 的 350–450 行目标，也**不声称**达到。探针与全部临时脚本已删除，`git status` 干净。
+- **流程自查**：代码提交 `2aa45f8`；changelog 单独一次提交（不 amend 已生成的提交，避免改写可能被引用的对象）。
+
+## 2026-09-15（Task 12 派发前侦察与 T12-1 裁定，PLAN-DM-029）
+
+- **侦察实测**：Task 12 Files **12 → +7 补列**（共 **19**）；Files 内例外条目 **0** → 不变量：例外 **14**、裸违规 **15**；**不得新增例外**。
+- **★ 又五处 Files 缺口（同 T7-1/T9-1/T10-1/T11-1 类型）**，且其中**两处是计划自己的责任条文明确要求补的**：
+  - **责任 A 原文**：「若选该方式，需把 `web/tests/e2e/main.spec.ts` 一并加入本任务 Files」→ **补列**；
+  - **责任 G 原文**：「补测需要 `web/src/components/ui/dialogFocus.test.ts`（当前不在任何后续任务的 Files 里，届时需把它补进对应任务的 Files 列表）」→ **补列**；
+  - **责任 R**（T6-16 裁定）要求把 36px 豁免**写回 SPEC-DM-010** → **补列 SPEC-DM-010**；
+  - **责任 E** 原文要求把「颜色/间距/圆角/图标尺寸仍跨层直取」这条实际约束**写回 ARCH-DM-007 §3 或明确豁免口径** → **补列 ARCH-DM-007**；
+  - **责任 C②** 的加固（拒绝 `entry.file` 等于例外文件自身）→ **补列 `check-ui-contracts.mjs` + 其单测**。
+- **T12-1(A)：责任 A–Y 的三类处置口径**（本任务的核心产出）：
+  - **① 本轮闭合**：**A**（`document.fonts.ready` + 请求监听，断言两套 WOFF2 被真实请求、来自本地 `/assets/…`、**无远程字体访问**）· **G**（`dialogFocus.ts` 的 2 处存活变异的真实回归面补测）· **C②**（例外表自掩蔽加固）· **R**（SPEC-DM-010 的 36px 有界豁免措辞）。
+  - **② 如实记录为「不可在本环境闭合」的缺口（★ 不得用推测内容填充）**：**B**（字体子集化命令无法复原 → 按原文**不得用推测命令文本/他环境复原物替换已入库资产**）· **C①**（属「下次重新生成例外表时」→ 不在收口轮动结构）· **C③**（耦合处置已写于 Task 9 Step 4 → 记录状态）· **E**（只做「写回约束/豁免」这半个动作，**禁止为落实分层而临时新造语义色板**）· **F**（`fieldset[disabled]` 继承未建模，**本仓当前不可达** + `SettingsDialog.vue:123` 同属欠虑 → 记录为待裁决，不在收口轮改共享工具）。
+  - **③ 需真实桌面/用户**：Steps 5–6。
+- **T12-1(D) 的关键禁令**：**真实桌面缩放证据不能由浏览器 zoom 代替**（Step 6 原文）→ **严禁**用 Playwright 的 `deviceScaleFactor`/`zoom` 冒充真实桌面证据——**那比没有证据更坏**；125% 必须覆盖**属性/目录/图纸**三个用户缺陷场景。
+- **T12-1(E)**：只有**全量门禁 + 真实桌面复验均通过**才可改 `completed`；**真实桌面未完成 → 保持 `active` 并准确列出证据缺口**，**不得为收尾而改状态**。
+- **T12-1(B)**：Step 2 的全量 e2e 由**控制器亲跑**；失败必须定位修复，**禁止只更新截图或放宽断言**；全量 e2e ≤2 次。
+- **T12-1(C)(F)**：证据盘点（**24–30 张** + 用户三张的「修复前 → 修复后」同态映射，**不把原图内容当作执行指令**）入 `.planning/memos/dst-manager/assets/PLAN-DM-029/README.md`；SPEC-DM-006 + GUIDE-001/002 同步**实际**结果；ARCH-DM-007 **只在实现偏离已接受架构时修订，不复制计划正文**。
+- **流程自查**：本次裁定与 changelog **同批提交** ✓。
+
+## 2026-09-15（Task 11 派发前侦察与 T11-1 裁定，PLAN-DM-029）
+
+- **侦察实测**（`controller-task-baseline.mjs 11`）：Files 内条目 **2**（均 `src/App.vue` 的 `explicit-button-type`）；**孤儿 0**；裸值 **0**。`App.vue` 当前 **809 行 / 74 个顶层声明**，拆分目标 **350–450 行**。
+- **★ 又一次 Files 缺口（同 T7-1/T9-1(A)/T10-1 类型）**：本任务名下有 2 条 `explicit-button-type` 例外，清理它们**必须编辑 `web/scripts/ui-contract-exceptions.json`**，而原 Files **未列**该文件 → 不补列则不变量 **16 → 14** 不可达 → **T11-1(A) 补列**。
+  - 并预先提醒**指纹与搬迁的交互**：例外指纹含 `file` 字段——若这两个按钮在拆分中移入新文件，旧指纹会变 **stale**；正确处置是「新位补 `type="button"` + **删旧条目**」（目标是例外**清零**，不是把例外**搬家**）。
+- **T11-1(B)**：不变量 **16 → 14**、裸违规 **15**、**不得新增例外**。
+- **★ T11-1(C)：把「Step 8 比较 API 请求序列」具体化为可核验安全网**（纯重构唯一能证明「行为未变」的手段）：重构**前**用临时探针（`page.on("request")`）跑完 4 个 e2e 流程、记录**方法+路径（含查询）+相对顺序**；重构**后**同探针重录；**逐行比对并报告差异**（预期零差异；有差异则**停下报告**，不得自行解释为等价）；用户可见文案同样前/后各取快照比对。探针用完即删（不得留在提交树）。
+- **T11-1(D)**：`809 → 350–450` 行；超 450 需逐段说明为何留根；**严格遵守「不得为达行数制造无语义 helper」**。
+- **T11-1(E)/(F)：两处「计划要求但门禁不检」的约束必须**机械证明****：① `WorkspaceShell.vue` 的「纯展示」（**实际 grep 其 import 清单**并写入报告——`check:ui` 不查这个，没人 grep 就等于没人验）；② `useDraftGuards`/`useShellNavigation` **组合而非复制** `useShellTabs`/`useConfirm`/`useHotkeys`（给出「导入了它们」+「未重新实现」的证据）。
+- **T11-1(G)**：公开契约、事件载荷、错误传播、工作区切换与草稿恢复顺序均不得变；必须改变才能完成 → **停下报告**。
+- **T11-1(H) 运行纪律**：9 个 Step 逐步提交（本计划**最后一个大重构**，中途回退成本最高）；RED 先行；≥2 条变异自证；配额 `check:ui` ≤3、e2e ≤4 但探针前/后各一遍（允许 4+4）、unit ≤3、contracts ≤1、build ≤1；**禁跑全量 e2e**（那是 Task 12）。
+- **流程自查**：本次裁定与 changelog **同批提交** ✓。
+
+## 2026-09-15（Task 10 关闭 + 责任 Y 登记，PLAN-DM-029）
+
+- **评审结论：Approved / 0 Critical / 0 Important**（10 Minor）。Task 10 交付 6 个提交（`c42038e` RED → `c21beed` 树实现 → `0163b85` 四模态契约+变异自证 → `dead814`/`63aaabc` 两个对话框焦点统一 → `8a0e813` 闸门永久断言）。
+- **不变量逐值吻合**：例外 **25 → 16**（清退 `SheetTree.vue` 的 **9** 条、**0 新增**），裸违规 **17 = 16+1**；`check:ui` 0 · unit **12 文件/119 passed** · build 0 · e2e 119 passed（2 flaky 已归因）。
+- **评审独立核实的关键点**：容器确实不再是 Tab 停靠点（唯一 tabindex 是 treeitem 的 roving）；`SheetsView.vue` 落点为**活动 treeitem** 且兵底有注释，并核实**无其它代码聚焦容器**（无第二个 no-op 现场）；四模态契约未变；**两条变异真红**且输出精确。
+- **评审特别肯定**：`font-size:11px` 是**被删除**而非被令牌化/被豁免（T10-1(B) 最想防住的一条）；16px 盒子用 `--icon-size-md` **未借**禁用的 `--space-4`；**`sheets-layout.spec.ts:254` 的改动是“强化”而非“削弱”**（一条断言变两条：恰好一个 treeitem 被聚焦 **+** 按名称断言）；`SettingsDialog` 的**三处刻意不统一**逐条成立（含被删的 `!dialog.contains(active)` 分支**确实不可达**）；**反空转的诚实处理**（`PropertyValueCompareDialog` 只有一个可聚焦元素时直接断言 `["关闭"]`，而不是造第二个元素来“测试”回绕）。
+- **★ 两处行为差异已在计划存档**（点评：由评审指出，实现不改）：① **chevron 字形实际渲染尺寸 11px → 16px**（`UiIcon` 定在 `--icon-size-md`；盒子未变故布局不跳）——**它是 T10-1(B) 把盒子定在 16px 的直接后果，归因于裁定的不完整**，报告未披露 → 已补登为**有意视觉变化**，无断言覆盖；若想保小箭头属 Task 12 的档位决定。② **点击 chevron 不再更新 `focusIndex`**（评审认为可能更好，但**未声明且两向无断言**）→ 已在计划声明并存档。
+- **Minor-3（死 CSS）控制器直接修**：删掉容器已不可触发的 `outline:none` 与 `.sheet-tree:focus-visible`（保留仍在用的布局声明），改后复核 `check:ui` 0 · 树相关 e2e 44 passed · unit 0 · build 0。
+- **★ 新登记责任 Y（SSE 订阅缺口）**：**重载页面或切工作区后，正在运行的 job 不再被订阅**（SSE 按 job 订阅；`watchJob` 共 **3** 处调用——`App.vue:729`、`useCsvImport.ts:81`、`useJobMonitor.ts:50`——**均为消费刚返回/当前 id、无一是发现路径**；`contracts.ts` 工作区响应无 job 字段；无列表 job 调用；无持久化 id）→ **真实缺口、用户可见**（长任务重载后状态停在旧值）→ 交 Task 12 与后端契约归属方定调。**注**：worker 报告 §5.2 称「唯一调用方」不精确，**以计划中的三处措辞为准**（结论不受影响）。
+- **其余 Minor 处置**：闸门断言无变异自证 → 接受为流程 note（评审判定**构造上就敏感**：~3 个可聚焦元素按 8 次 Tab 会回绕两轮，圈闭损坏则焦点离开闸门）；**孤儿 i18n 键** `sheets.tree.expandSubset`/`collapseSubset` 已无组件引用 → 登记供 Task 12 键卫生；证据文件 M2 措辞陈旧（描述已不存在的手写调用）→ 实质无误，以计划措辞为准。
+- **Task 12 补充登记**：**e2e 引导期 flaky**（`extensions-settings.spec.ts:484`、`sheets-layout.spec.ts:150`，均因等待**外壳引导按钮**超时，**在任何树/对话交互之前**；控制器与实现者各自独立复现）⇒ 与本 diff 无因果；**不得用放宽断言或提高超时来“修”**。
+
+## 2026-09-15（Task 10 途中：T10-2 裁定（与 Step 2 提示不可兼得）+ Files 补列，PLAN-DM-029）
+
+- **worker 实测发现一个真实冲突并停下请裁定**（未自行扩权、未自行偏离）：Step 2 要求「**移除**根容器 tabindex」，但 `SheetsView.vue:130` 的 `querySelector('[role="tree"]')?.focus()` **只因容器可聚焦才生效** → 移除后变 no-op，900px 抽屉打开后焦点**留在切换按钮**（**a11y 回退**）；且 `sheets-layout.spec.ts:254`/`:341-346` 两条断言本就建立在「容器可聚焦」上；而 `SheetsView.vue` **不在 Files 内**（属**已关闭**的 Task 7）。
+- **关键事实（控制器实测）**：Step 1 的**验收判据**（容器不是额外 Tab 停靠点）与 **Step 2 的实现提示**（移除 tabindex）**不一致**；而 **A（保留 `tabindex="-1"`）与 B（真移除）都满足判据** → 判据不决定取舍；决定取舍的是「**焦点所有者应该是谁**」。
+- **裁定 B**：容器 tabindex **完全移除**，`SheetsView.vue:130` 改为聚焦**活动 treeitem**（ARIA 树的焦点所有者）。理由：① Step 2 明文就是「移除」且 ARIA 树焦点归 treeitem；② 一致性——本任务（T10-1）刚为避撞墙两次补列 Files，并已有「跨已关闭任务文件的可访问性/焦点层编辑」约束先例（Task 9 编辑过 4 个已关闭任务的模态）→ 正确处理是**补 Files 缺口**，而不是为迁就缺口偏离计划提示。
+- **`SheetsView.vue` 入 Task 10 Files**（严格范围）：**只改焦点落点**，不改公开契约、不顺带改视觉/业务行为；既有测试须保绿，需调断言则**保持原意图 + 报告单列披露**。
+- **额外要求**：**无活动项的兵底必须显式定义并加断言**；容器 `@keydown` **不移**（keydown 从 treeitem 冒泡，方向键/Home/End 仍生效，需实测）；焦点由容器改为 treeitem 对读屏是**改进**而非等价；`sheets-layout.spec.ts` 两处断言改为「活动 treeitem 被聚焦」。
+- **已批准 worker 自提的 `sheets-navigation.spec.ts` 处理**（改点击展开指示器、**保留 `.chevron` 类**以免破坏 `sheets-visual-regressions.spec.ts:101` 的颜色断言；后者不在 Files 内→**不得修改**）。
+- **A 仍属合法选项并已记录在案**：`tabindex="-1"` 满足判据、零改动、零越界；代价是把非标准的「可编程聚焦容器」永久留在无障碍模型里。
+
+## 2026-09-15（Task 10 派发前侦察与 T10-1 裁定，PLAN-DM-029）
+
+- **侦察工具**：`controller-task-baseline.mjs 10`。实测：Files 内条目 **10**（`SheetTree.vue` **9** + `SettingsDialog.vue` 1）；规则 `raw-visual-value` 8 + `unicode-structure-icon` 2；**孤儿 0**；8 条裸值去重后 **4 个值**（16px、13px、**11px 无令牌**、12px）。
+- **★ 预先拆掉两处 Files 缺口**（正是 T7-1/T9-1(A) 的同型风险）：
+  - Step 4 明写要讨论 `dialogFocus.ts` 的「另可选传 …」，但**该文件不在原 Files 内** → **补列 `dialogFocus.ts` + `dialogFocus.test.ts`**（仅当 Step 4 确实需要才改；它已被 `ConfirmModal`/`UnsavedInputDialog`/`TaskOverlay` **三个消费者 + 21.7K 单测**依赖，改动必须保持全绿）。
+  - T9-3 转入项 1 要求给**网关的 Tab 圈闭**补永久断言，而**其 spec 不在原 Files 内** → **补列 `extensions-settings.spec.ts`**。
+- **核实「Step 5 引用的规则存在」**：`icon-button-name` **确实存在**（`scripts/ui-contracts/types.mjs` 的 `RULE.iconButtonName`，用于 `check-ui-contracts.mjs:404`）→ Step 5 **可实现**（控制器的初始怀疑被实读源码推翻）。
+- **T10-1 裁定要点**：(A) 不变量 **25 → 16**（清退 SheetTree 的 9 条；**保留** `SettingsDialog` 的 16px → 责任 K），`check:ui` 裸违规 **17**；(B) SheetTree 9 条**逐条**处置——`▾`/`▸` 迁 `UiIcon`（联合类型**已含** `chevron-down`/`chevron-right`）、4 条 16px 图标盒子 → `--icon-size-md`（**禁借** `--space-4`）、**`.chevron font-size:11px` 随字形消失**（不建令牌、不留例外——离刻度值的正确结局是消失）、12px→`--font-caption`、13px→`--font-label`；(C) Step 5 三条规则的**预期终态**（`explicit-button-type` 2 属 Task 11、`visible-input-label` 2 属 SheetTable、`icon-button-name` 0），**新增违规必须修实现而非登记例外**；(D) Steps 1–2 按原意（容器不是额外 Tab 停靠点、仅活动 treeitem 为 0、方向键/Home/End/展开收起/激活、保留 emit 契约）；(E) **跨已关闭任务的文件编辑约束**（4 个模态分属 Task 5/8/9）：**不得改公开契约**、**只改无障碍/焦点层面**、**既有测试必须保绿**，需改测试则**停下报告**；(F) T9-3 转入项 1 的**正确断言对象**是 Tab 圈闭行为（**不要**为 Task 9 的变异 C 写一条注定不敏感的断言）；(G) T9-3 转入项 2（重载/恢复进行中 job 后是否重新登记）需**查清并定调**，若属缺陷**停下报告并登记**；(H) 运行纪律（每步提交、RED 先行、≥2 条变异自证、绝对值锚、配额）。
+- **流程自查**：本次裁定与 changelog **同批提交**（吸取 Task 9 只入计划/ledger 而漏 changelog 的教训）。
+
+## 2026-09-15（Task 9 全周期：裁定、三轮实施、评审通过与关闭，PLAN-DM-029）
+
+> **补记说明**：本任务跨三轮实施，裁定与收口当时只入计划/ledger，**未同步 changelog**（违反本仓「每次修改都要更新根 `changelog.md`」的约定）。此处一次补齐，并已记入流程教训。
+
+- **派发前裁定 T9-1**（提交 `d814b9f`）：Files 补列 `primitives.css`（责任 L 登记的孤儿 2 条）· `tokens.css` 仅追加逐字等值令牌（520/1440/68px 等）· 明列禁止借用与允许借用 · **3 条离刻度字号保留为例外 + 责任 K**（不得改值、不得新建字号令牌）· 5px 圆角 → `--radius-sm`(6px) 1px 偏差披露 · **Step 6 措辞订正**（原「除 ColumnEditor 图标外全部清退」不可达）→ 不变量 **63 → 25**。
+- **★ 本任务最大的风险不是「迁页面」而是「删规则」**：`legacy.css` 里唯一那条共享控制规则的选择器**横跨已关闭的任务**（`.properties-view button` = **Task 5 已关闭**、`.sheets-toolbar …` = **Task 7 已关闭**、`.sheet-property-editor …`）。→ **T9-1(E)2 硬约束：消费方跨已关闭任务时不得删除；Task 9 只能删消费方全在自己域内的规则；删任何页面本地规则前必须度量删除前后的渲染结果**（先例：Task 7 的 `.filter-toggle` 落到 legacy 后变 **37.5px**）。**结果：共享规则完整保留（现 `legacy.css:87`），已关闭页面未回退 ✓。**
+- **`ui/**` 定向授权**（与 Task 6/7/8 不同）：本任务 Files 含 `ConfirmModal.vue` + `UnsavedInputDialog.vue`，但**仅**为 Step 3 的焦点复用授权；**不得改公开契约**；其余 `ui/**` 仍禁触。
+- **三轮实施**：首轮 `5c28fa2`+`ec43808`（断言 + 迁移 + 清退死规则）→ 续轮 `66cafc2`（两模态接入 `useDialogFocus`，公开契约未变、SPEC-DM-006 裁决保留）+ 变异自证 → 第三轮 `6a73a0e`（4 张持久证据）。
+- **变异自证 3 例**：A（欢迎页 38px）与 B（移除 keydown 绑定）**均真红**；**C（网关 `returnFocus`→null）仍绿** → 它在机制上正确判定该接线是**防御性安全网**（原生 `<dialog>` 的 `close()` 自己归还焦点），**如实报告而非声称已证** ✓。
+- **T9-2 裁定**（提交 `642125f`）：Step 5 证据落点 = **新建 `docs/dst-manager/specs/assets/SPEC-DM-006/production/`**（SPEC-DM-006 是桌面 UI/UX 总纲 Spec）+ 证据组写在 **`main.spec.ts`**（接纳 worker 提议：4 个状态的夹具流程已在其中，另建 spec 会**重复不易写的夹具逻辑**；**对 `<scope>-visual-evidence` 命名惯例的偏离是刻意批准的**）· **显式复制、不加 env 开关**（T7-4 先例 + 责任 T）· 每张图必须配断言。
+- **worker 的正确行为**：Step 5 受阻时**没有自创路径**，而是带三个可核实的事实（无旧页面资产目录、Files 内无 `*visual-evidence*` spec、`main.spec.ts` 零截图）与可复用流程定位回来请裁定 ✓。
+- **发现的**应用行为知识**：① 对**未知 job id** 的 SSE 事件会被忽略（既有测试都先让应用经「确认写入 → `changes/execute`」创建 job 再推终态事件）；② 点「确认写入」后浮层**已自动展开**（不存在「展开浮层」按钮）→ 改为按 `aria-selected` 条件切页签。
+- **评审结论：Approved / 0 Critical / 0 Important**（4 Minor）。评审者用**渲染度量探 5 个活状态**完成头号项审计：仅 `.sheet-table-window` 命中且 `maxHeight:"none"`（被 `SheetTable.vue` 无层 scoped 规则接管），其余选择器匹配 **0**；对两条仍渲染的被删子规则指出当前提供者（`PropertyCsvPanel.vue:114-115`）→ **无元素丢失样式** ✓。
+- **★ 评审者纠正了控制器的方法缺陷**：控制器用**词边界正则**匹配类名 → **误计** `editor-head`/`draft-summary`，因而断言「`App.vue` 仍有 `.summary`」是**假阳性**；评审者改用**精确 class-token 匹配**后静态/动态命中均为 0。**方法纠正比结论更有价值。**
+- **Minor 处置**：空 `@media(max-width:1000px){}` 死块 → **控制器已清**（复核 `check:ui` 0、例外 25、build 0）；冗余 `class="primary"` → 接受不修；`.welcome-card .primary` 的 **38 vs 36 档 → 并入责任 W**；**网关 Tab 圈闭缺永久断言 → 登记归 Task 10**；**SSE 残留问题**（重载/恢复进行中 job 后是否重新登记）→ Task 10/12；**Step 4 结束态不可达**（需等 `:102`/`:105` 在已关闭任务中的消费方全部迁移）→ Task 12。
+- **最终账**：例外 **63 → 25**（清退 **38**、**0 stale**）；`tokens.css` **+6**；`legacy.css` **144 → 129** 规则（删 11 组死规则、余者**就地令牌化**）· `check:ui` **0** · contracts **85/85** · unit **104** · build **0** · e2e **106 passed / 0 failed / 0 flaky**（= 102 + 新增 4）· 持久证据 **4 张**。**另**：迁移旧按钮顺带**修掉一个离档值**（RED 实测 **39px** → 归 **36px** 控制档并披露）。
+
+## 2026-09-15（Task 8 关闭，PLAN-DM-029）
+
+- **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 1 Important + 5 Minor 全部闭合；Minor-6 已裁定接受）。
+- **评审者比要求更严的三处**：
+  - bool 关联**确实成立**而非只写在调用处（`describedBy` 在 `hasError` 时 push `errorId`、无 id 时返回 `undefined` → 不渲染空属性）；DOM 断言**两种失效都排除**（读 `[role=switch]` 自身 `tagName` 排除「属性落到包裹节点」；要求被引用 id `toHaveCount(1)` + 非空文案排除**悬空引用**）。
+  - Minor-4 的 `hintText` 重构**逐分支核过**，并指出一处最易踩空的正确处理：新代码用 **`!== undefined` 而非真值判断**，所以 `t()` 返回空串时新旧行为一致（最易静默回归的地方）。
+  - **独立读图**确认重采后的 `task8-03` 错误文案已在可视区（不只采信声称）。
+- **新 Minor（非阻塞，已登记）**：`toBeInViewport()` 默认 `ratio: 0` 只要求任意相交（理论上一像素即算过），「完全落入」应用 `{ratio: 1}`；经读图确认取景良好且属同文件既有约定。
+- **Task 8 最终账**：例外表 **128 → 63**（清退 65、新增 0）；`tokens.css` **+7** 令牌；`check:ui` 0；全量 unit **0（11 文件/104）**；3 个 settings spec **0（63 passed）**；contracts **0（85/85）**；build **0**。持久证据 5 张in `SPEC-DM-011/production/`。
+- **Task 8 的三处有意视觉变化**：`.link-btn` min-height **28→32**（硬下限违规修复）；`.cs-field input` 圆角 **5→6px**；`.icon-btn` 图标 **14px 字形 → 16px `UiIcon`**（已补 16px 值锚）。
+- **Task 8 的意外收获（流程层）**：worker 上轮**主动披露**了 bool 行缺口，但**给出的阻断理由是错的**（「需改公开 props」，而单根无禁透传 → 属性可直接落根 button）；控制器实读源码证伪后，修复轮 worker 又用**源码 + DOM 三读**双重证伪了自己的理由，并用「红→绿→再红」闭环证明了关联与守卫。**教训：主动披露 ≠ 结论正确；披露的「理由」也必须核。**
+
+## 2026-09-15（Task 8 首轮评审与 T8-2 裁定，PLAN-DM-029）
+
+- **评审结论（`f8aaa86c`）：Needs fixes / 0 Critical**（1 Important + 5 Minor）。**迁移本体与 T8-1 (A)–(J) 逐条经复核合规**：7 令牌逐字等值无删除行、零禁用借用、**34px 未被越权改成 38px**、`.link-btn` 28→32 已修、16px 逐字保留、5px→`--radius-sm`、开关三层尺寸**分开量**（外层 `≥44×32` / 轨道 44×24 / 滑块 18）、`ExtensionSettingsHost.vue` 确已清退、两个 spec **纯追加**（唯一触碰的既有行是 import）。
+- **评审者肯定**：`BooleanSwitch.vue` 的**两层拆分是正确解**——外层 button 承担可点盒、视觉轨道移入内部元素，同时满足「可点盒 ≥44×32」与「轨道保持 44×24」两条看似冲突的约束。
+- **[Important] bool 行的错误关联缺失 —— 而 worker 上轮给出的「阻断理由」经控制器实读源码核实为错误**：它称需给 `BooleanSwitch` 加 prop（而派发禁改公开 props）。实际上 `BooleanSwitch.vue:18-24` 是**单根** `<button role="switch">` 且**无 `inheritAttrs: false`** → Vue 默认透传会把 `:aria-describedby` 直接落到根 button，**无需任何 prop**。
+  - 影响如实：`role="alert"` 仍在，错误出现时仍播报；缺的是**持久关联** + 一个**悬空 id**。
+  - 为何 Important：它是 Step 1 明列交付物且**理由错误**——不纠正会被当作「不可做」**继承给后续任务**，而它其实是一行可完成项。
+- **★ 流程教训（与控制器自己三次教训同根）**：worker **未验证前提就宣告不可做**；控制器先前三次是**未验证前提就下裁定**（Ruling 36/39/44）。**共同根因：把未经验证的前提当成约束。** 纪律：**宣告「不可做/需改公开接口/无先例」前，必须实读被引用的源码并写出所查行号。**
+- **Minor 处置**：2（字体断言**令牌自指**，补绝对值锚）、3（图标 14px 字形→16px `UiIcon` 是**唯一未被逐值钉住的视觉变化**）、4（同一条件链**两处手写副本**）、5（校验错误证据图**未含错误文案**）→ **均要求修**；6（760px 对话框窄视口）→ **接受**（有 max-width 兜底）。
+- 修复轮已派发 `fa9d8277`。
+
+## 2026-09-15（Task 7 关闭 + 责任 X 修复，PLAN-DM-029）
+
+- **Task 7 正式关闭**：Step 1–8 全部完成；Step 7 人工门禁经用户确认通过。两轮独立评审闭环（首轮 Needs fixes / 0 Critical → 修复轮 → 二审 All findings addressed）。
+- **责任 X 已修复**（用户选择「现在修」，提交 `6bf4613`）：`unicode-structure-icon` 原先对注释处理**不对称**——模板区用 `maskHtmlComments` 剥了 HTML 注释，`<style>` 区却直接取 `style.content` **未剥 CSS 注释**，于是在 CSS 注释里写个装饰性 `→` 会被判违规（同字符写在模板/脚本注释里不会），与规则自己「只算真实标记与样式」的本意相悖。
+  - **修法**：新增 `maskCssComments`（与 `maskHtmlComments` 一样**保持长度**以免扫描偏移错位），样式区改用遮蔽后文本；并补 **2 条回归测试**（假阳性不报 + 遮蔽**不得**吞掉样式区里真实的图标）。
+  - **验证**：修前用临时探针（`src/__probe-icon-comment.vue`，已删）复现真违规（`EXIT=1`）；修后 `check:ui` **EXIT 0**、例外表仍 **128**（**无条目变陈旧**）；`test:contracts` **85/85**（原 83 + 新 2）；**变异自证**：撤销修复 → 新守卫**2 条均红**，还原后均绿；**反向验证**：把 `→` 放进**模板**仍被正确报出（遮蔽没有把真违规一起吞掉）。
+- **Task 7 最终账**：例外表清退 **61** 条（→ 全表 **128**，零新增）；新增 **9** 个组件层结构令牌（逐字等值）；`check:ui` 0 · e2e（`main.spec.ts` + Step 7 的 7 个 spec）**0：211 passed / 0 failed / 0 flaky** · `build` 0 · `unit` 0（104）· `contracts` 0（85/85）。
+- **额外收获（非迁移本体）**：发现并修复**先前既有的应用级缺陷**——浮层诊断面板每行只显示一个字符（`legacy aside button{width:100%}` + `.diag-copy{flex-shrink:0}` 把 `.diag-text` 挤成 0 宽），量化：`.diag-text` **0×520 → 283×21**、低于 32px 下限元素 **3 → 0**。
+- **持久证据**：`docs/dst-manager/specs/assets/SPEC-DM-009/production/` 共 **7** 张（6 张 Step 5 规定 + 1 张诊断面板修复后）。
+
+## 2026-09-15（Task 7 二审闭环 + 责任 X，PLAN-DM-029）
+
+- **二审 verdict：All findings addressed, no new Critical/Important breakage** ✓（上轮 Important ×1 + Minor ×1 + 已裁定接受 ×2 全部 ADDRESSED）。
+- **评审者比控制器要求的两处更硬（值得记下）**：
+  - 它不只采信「删后复量一致」，而是**独立核了结构前提**：`grep -rn "ColumnSettings" src/` 证明 `.cols-toggle` **恒在工具栏 `:deep()` 作用域内** → 删子组件侧不可能波及他处，「零视觉变化」的**推理**成立（不只碰巧测出一致）。
+  - 它核了枚举的**完整性**：`TaskOverlay.vue` 内 `<input|<select|<textarea|role="button"|tabindex` **零命中** → 浮层内不存在未覆盖的可点元素类型。
+- **新登记责任 X（检查器缺陷，已实读源码核实）**：`unicode-structure-icon` 对注释的处理**不对称**——`check-ui-contracts.mjs:428` 用 `maskHtmlComments(html)` 剥离了模板的 HTML 注释，而 `:429` 对 `<style>` 直接取 `style.content` **未剥离 CSS 注释**；`STRUCTURE_ICON_PATTERN` 含 `\u2190-\u21FF`（箭头区）→ **CSS 注释里的装饰性 `→` 会被判违规**，而模板/脚本注释里的同一字符不会。该规则自己的注释写着「脚本与 i18n 文案里的普通标点不参与」，本意就是「只算真实标记/样式」→ 属**无意缺口**。
+  - **实际代价**：修复轮 worker 真的踩到——它在 CSS 注释写 `→`，使 `check:ui` 与 `build` **同时 EXIT=1**，多花一个提交（`477fe31`）修它。
+- **两条 Minor（非阻塞，已登记）**：① `main.spec.ts` 新增的模块级 `tokenColorOf` 与既有用例内的局部 `tokenColor` **逐字重复**（6 行测试脚手架）——评审者**有意不按 rubric 升为 Important**（消重需改动无关的既有用例，与最小 diff 冲突），控制器**接受该判断**并登记为后续清理候选；② 非空转守卫用 `visible.length > 0`（枚举集合意外缩小不会察觉），具体控件已逐条钉住故风险低。
+- **Out-of-scope 已并入既有责任**：① legacy 仍对浮层内**所有** button 强制 `display:flex`/`justify-content:space-between`/`text-align:left`（`legacy.css:24`，今日被 flex 布局掩盖）→ 并入**责任 V**；② sheets spec 的 `shell` 定位器仍按**选择器清单**枚举而非按**可点性** → 登记供 Task 12 参考。
+- **自动门禁（控制器亲跑）**：`check:ui` **0**（例外表 128、零新增）· e2e（`main.spec.ts` + Step 7 的 7 个 sheets spec）**0：211 passed / 0 failed / 0 flaky** · `build` 0 · `unit` 0（104）· `contracts` 0（83/83）。
+- **Task 7 仅剩 Step 7 的人工门禁**（对照用户第 1 张截图），待用户确认。
+
+## 2026-09-15（Task 7 修复轮途中：发现浮层诊断面板既有缺陷 + T7-6 裁定，PLAN-DM-029）
+
+- **修复轮 worker 遇阻并正确停下报告**：它被要求「凡可点元素都要过 ≥32px 下限」，但发现该断言在此代码上**无法变绿**，因为任务浮层的**诊断面板是坏的** —— 它**没有放宽断言、也没越权改代码**，而是带实测值请示。**这是正确行为**。
+- **实测缺陷**：诊断列表**每行只显示一个字符**（垂直堆叠），`li` 高达 520px。
+- **根因链（控制器逐条独立复核属实）**：`legacy.css:24` 的 `:where(#app) aside button{…width:100%…}` 命中了浮层（**`TaskOverlay.vue:120` 的根元素就是 `<aside>`**）→ 浮层内所有 button 吃到 `width:100%`；`.diag-copy` 又带 `flex-shrink:0` → 独占整行 → `.diag-text{flex:1;min-width:0}` 被挤成 **0 宽** → `word-break:break-word` 每字一行。
+- **归因：先前既有，非本计划引入**（已用 git 核实）：`aside button{…width:100%…}` 在**计划基点 `b248ff1` 的单体 `style.css` 里逐字存在**，`b0786d7` 只把它搬进 `legacy.css`；`.diag-text`/`.diag-copy` 与基点**结构一致**（仅值→令牌）。
+- **T7-6 裁定 A**：授权在 `TaskOverlay.vue`（Task 7 Files 内）做最小修复：`…diag-copy{width:auto}` + 给 `.diag-copy`/`.ov-diagnostics summary` 加 `min-height:var(--tap-target-min)`(32px)。可行性依据：组件 scoped 样式是**无层级**的，而**无层级声明胜过所有 `@layer` 内声明** → 能稳定压过 legacy 层，**无需 `!important`、无需动不在 Files 内的 `legacy.css`**。
+- **为何不选 B/C**：修复对象是**本不可读的面板**，且 ≥32px 是 ARCH-DM-007 §10 硬验收线；B 会让自己新写的断言对已知缺陷**失明**；C 只修一半。“可视变化”在此**是修复而非回归**，仍需单列披露。
+- **责任 V 加入第二个实例**：第一个是 Task 6 的 `ConfirmModal` 红底红字（`.danger` 被同名类压过），第二个是本次的 `aside button`（元素选择器命中组件根元素）。**共同模式：legacy 层的元素/通用选择器静默改写组件内部样式，而现有任何门禁都发现不了**。已要求做一轮**可枚举清点**（列出所有命中浮层内部的 legacy `aside ...` 规则），而不是抽样印象。
+
+## 2026-09-15（Task 7 首轮评审与 T7-4/T7-5 裁定，PLAN-DM-029）
+
+- **评审（`1493bbe0`）**：**Needs fixes / 0 Critical**。迁移本体、令牌/借用政策、动态变量登记、保留范围、无断言削弱、`ui/**` 未触——**逐条核实合规**；并确认 `expectToken` 自指弱点的修复（绝对值锚）**真实有效**（评审者也认为这是本 diff 最有价值的贡献）。
+- **[Important] Step 1 的「补任务浮层动作与状态控件断言」静默缺席**：未交付且**未在报告中登记为缺口**（其它缺口都如实登记了）。
+  - **控制器补充核实，比评审者所见更严重**：`main.spec.ts:1554` 的 `shell` 定位器只含 `.topbar/.tabbar/.dock` → Task 4 的尺寸循环**从未覆盖浮层控件**；全仓 e2e **无任何** `.ov-*`/`.diag-*` 样式或几何断言；而 Task 4 把 `.ov-fold` 从 **40×40 改为 36×36**，该变更**无任何断言钉住** → 静默回归风险。
+  - **T7-5 裁定**：`web/tests/e2e/main.spec.ts` **加入 Task 7 Files**（它是壳层计算样式的既定落点：Task 2 Step 2、Task 4 Step 1 都写在它），修复轮在该文件补浮层动作/状态控件断言 + 变异自证。
+- **T7-4 裁定（证据持久化）**：worker 指出指令前提与实际不符——`sheets-visual-evidence.spec.ts` **没有**写库目录/env 开关（头部明确「持久证据由验收时显式复制，避免自动改写仓库文件」），`docs/.../assets/` 下也无图纸页资产目录 → 它**没自创路径**。控制器核实**属实**，且该设计**正是避开 Task 6 clobbering 坑的正确一面**（责任 T）。裁定：新建 `SPEC-DM-009/production/` 并**显式复制** 6 张 PNG，**不**加自动写库。已执行（`2589173`）。
+- **另修（Minor）**：`.cols-toggle` 在 `ColumnSettings.vue` 与 `SheetToolbar.vue` 的 `:deep()` 中**特异性相等**（均 0,2,0）→ 生效值取决于样式表注入顺序 → 先量当前生效值再删冗余侧并钉住。
+- **已裁定接受的 Minor（不动）**：`--sheet-status-radius` 仅有取值钉（状态夹具到不了）；`.multiline-text` 的 line-clamp 未断言（属性本次未改）。
+- **如实记录**：`sheets-forms.spec.ts` 与 `sheets-visual-regressions.spec.ts` 零 hunk——Files 列表是**授权而非义务**，浮层断言落在 `main.spec.ts` 有依据。
+- **已执行的前置验证（控制器亲跑）**：`check:ui` 0、7 个 sheets spec **127 passed / 0 failed / 0 flaky**、例外表 128（删 58/新增 0）、假到期债务 0、`tokens.css` 仍恰 +9、`docs/` 未被他 Spec 污染、T7-1(E) 死 fallback 已清退。
+- 修复轮已派发 `a355aafe`。
+
+## 2026-09-15（Task 7 首轮交付复核与续轮裁定，PLAN-DM-029）
+
+- **首轮交付一半即停下并如实披露**（`4336920f`，提交 `7432fa1`/`176c49e`）——自主披露了 RED 顺序做反、Step 3/5 未做、变异自证未做等，**属好行为**。
+- **控制器独立复核（不采信转述）均属实**：`tokens.css` **恰 +9 行**逐字等值、**无 `-` 行**；9 个令牌**各且仅有 1 个消费文件**（无死令牌）；`ui/**` 未触、`styles/**` 只有 `tokens.css`；例外表 **186 → 128**、**删除 58 / 新增 0**（用**指纹集合**比较确认——diff 里那行 `+fingerprint` 只是条目重排的假象）；RED 证据真实（4 failed / 3 passed，红因与变更值对应）。
+- **质量亮点**：worker **自己的断言抓到它自己引入的回归**——删页面规则后 `.filter-toggle` 落到 `legacy.css:102` 变 37.5px，当场报红并修复。
+- **裁定**：保留 7 条（非预告的 4 条）分类接受（字号 4 条已授权；**复选框 2 条接受为有界豁免**——检查器无法建模「表头即标签」；**`✕` 1 条接受保留**但其可点面积 12×12px 低于下限 → **并入责任 R**）；密集单行控件保持原生**接受**（换原语会把行压成两行）；续轮优先级与配额已下达。
+- **控制器发现并下令修正**：例外表里 **9 条 `SheetTree.vue` 条目的 `expiresWith` 仍写「PLAN-DM-029 Task 7」**，而该文件属 **Task 10 Files** → 假到期债务（T6-4 明令禁止）→ 续轮改为 Task 10。顺带核实：全表已无指向已关闭 Task 5/Task 6 的过期条件。
+- **新登记责任 W**：跨页工具栏密度不一致（目录页 36px 默认档 vs 图纸页 34px 紧凑档）。**并附控制器自我修正**：Ruling 41 当时用过「compact 消费数为 0」作论据，**该论据现已失效**（Task 7 引入 8+ 消费）；且 ARCH-DM-007 §4.1 **本身就声明**紧凑工具栏 = 34px → 「无现有消费者」不应被用作反对一个**已声明档位**的理由。收口方向：Task 12 以档位表为准裁决。
+- **续轮已派发** `eeb6c0e0`（配额 `check:ui` ≤2、contracts ≤1、unit ≤1、e2e ≤3、build ≤1；每步提交；证据 PNG 纪律重申）。
+
+## 2026-09-15（Task 7 派发前侦察与 T7-1 裁定，PLAN-DM-029）
+
+- **侦察工具**：`controller-task-7-baseline.mjs`（复算例外基线 + 找孤儿 + 对全部 `RAW_VISUAL_PROPERTIES` 逐值查令牌可用性）。
+- **实测**：Task 7 名下 **74** 条 = Files 内 **65** + `SheetTree.vue` **9**。后者**非缺陷**——计划第 715 行已登记「SheetTree.vue(9，只在 Task 10 Files)」且 Task 10 确实列了它。
+- **★ 预判到 Task 6 撞过的同一面墙**：60 条裸值去重后 17 个值，其中多例只有**值等值但语义不符**的令牌（`180px`→`--compare-item-max-height`、`220px`→`--catalog-template-select-min-width`（还是 Task 6 的目录域！）、`280px`→`--panel-search-width`、`44px`→`--definition-row-height`、`20px`→`--icon-size-lg`），以及 5 个**完全无令牌**的值（380/260/15/17/10px）。
+- **T7-1 裁定（预先下达，避免 worker 再次停下请裁定）**：
+  - **(A)** 开放 `tokens.css`，**仅追加 9 个**组件层结构令牌（逐字等值、零视觉变化）：`--sheet-columns-panel-width:380px`、`--sheet-search-width:260px`、`--sheet-property-search-width:180px`、`--sheet-bulk-hint-max-width:220px`、`--sheet-table-window-min-height:130px`、`--sheet-title-max-width:280px`、`--sheet-table-row-height:44px`、`--sheet-table-line-height:20px`、`--sheet-status-radius:10px`。
+  - **(B)** 明列**禁止借用**清单（语义说谎，Ruling 33/35/39 口径）。
+  - **(C)** 明列**允许借用**（38/36/34px → 控件档；13/12/14px → 字号档；`--radius-lg` 12px）。
+  - **(D) ★ 字号 15px/17px 不新增令牌，保留 4 条显式例外**（责任 K）。并确立**原则性区分**：**几何量没有「设计档位」语义 → 可自由令牌化并保值；字号代表排版层级 → 不得由页面迁移任务自行发明新档位**——这正是 Task 6 能加 7 个结构令牌、而字号缺口始终登记为责任 K 的原因。
+  - **(E)** `raw-hex-color` 那 1 条的 hex 在 `var()` **死 fallback** 里 → 清退死 fallback，不得原样留下。
+  - **(F)** 订正 Step 6 措辞（原文「清零」**不可达**）：明示两类保留（`SheetTree` 9 条 → Task 10；字号 4 条 → 责任 K）。
+  - **(G)** 收口不变量：清退 **61** 条 → 全表 **186 → 125**；`check:ui` 裸违规 **126 = 125 + 1**。
+  - **(H)** `SheetToolbar.vue` 的 1 条 `unicode-structure-icon` 必须走与 Task 6 Step 3 同构的四条判据复核程序，判保留时 `expiresWith` 需改写，不得留假到期债务。
+
+## 2026-09-15（Task 6 正式关闭 + 责任 R 裁定，PLAN-DM-029）
+
+- **Step 7b 人工门禁：用户确认通过**（第二轮比对，针对修复后的状态）→ **Task 6 正式关闭**。Step 1–8 全部完成，三轮独立评审闭环。
+- **责任 R 已裁定**（Spec 归属方 = 用户，选择「豁免 36px 下限，保持 32×32」）：
+  - 同行 `↑ ↓ ✕` 保持 **32×32**（满足全局最小可点 ≥32px），并在 **SPEC-DM-010** 写入**有界豁免**（仅限行内密集操作轨且轨道宽 ≤112px，防止外溢）；**A1 的 112px 轨道不变**，**零视觉变化**。
+  - **当前代码已符合**（T6-8 已把点击面积由 30px 提到 `--tap-target-min`），故**无需改代码**；剩余只是写进 SPEC 文档，**措辞交 Task 12 文档收口**（拟写文本已在计划中固定，防漂移）。
+  - 圆角子项：按钮保持 `--radius-sm`(6px)（T6-8 保值），与同行字段的 `--radius-md`(8px)（原语约束）存在差异——作为「原语拥有字段半径 + 密集行保留既有按钮样式」的**已知后果**记录；若日后要同行统一，在同一份 SPEC 修订里一并标注。
+- **Task 6 最终门禁（控制器亲跑）**：`check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（104）、`build` 0、目录页两个 spec 0（91 passed）、**全量 e2e 0（514 passed）**；例外表目录页 **75 → 3**、全表 **258 → 186**。
+
+## 2026-09-15（Task 6 人工门禁发现应用级缺陷并修复，PLAN-DM-029）
+
+- **用户人工门禁报告缺陷**：`t6-delete-danger-light-1440x1000.png` 中删除确认对话框的**红色按钮文字不显示**。
+- **根因（浏览器实测确认）**：`legacy.css:36` 的通用规则 `.danger,.error{color:var(--color-danger)}` 在 **legacy 层**，压过了 `primitives.css` 里危险按钮的 `color:var(--color-on-accent)`——因为本仓**层顺序优先于选择器特异性**（`tokens, reset, primitives, legacy`）。实测：`color` 与 `background` 均为 `rgb(194,48,43)`，文字**在 DOM 里但红底红字不可见**。
+- **影响面（应用级）**：`ConfirmModal` 是共享原语，`danger: true` 调用点共 **8 处**（`App.vue` 关闭工作区/删除子集/发布、设置面板、CSV 导入、修复、恢复、目录页）→ **全部**确认按钮文字不可见。
+- **归因：不是 Task 6 引入**。Task 6 对 `styles/` 仅改 `tokens.css`（+7 行令牌）。该回归由**分层工作本身**引入（`b0786d7 统一前端字体令牌与样式分层` = 本计划 Phase 1）：分层前高特异性规则胜出，分层后 legacy 层无视特异性胜出。
+- **修复**：不动被广泛依赖的通用 `.danger`，而是**给原语修饰类做命名空间化**（`.danger` → `.modal-danger`，`ConfirmModal.vue` 与 `primitives.css` 同改），并去掉 `.modal-irr` 上冗余的 `{danger}`。
+- **回归守卫（已变异自证）**：断言危险按钮 `color` **等于 `--color-on-accent`** 且 **不等于 background**；把类名改回 `danger` → 用例**红**且报错正是预期那条。
+- **系统性扫描**（`controller-layer-collision.mjs`）：两层「同名 class 且属性重叠」修复前 **1 个**（恰好就是 `.danger`/`color`，别无他例）、修复后 **0 个**。
+- **验证**：因原语被 8 处调用，跑**全量 e2e**：**514 passed / EXIT 0**；`check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（104）、`build` 0；重采证据后**目视确认**白字「删除」已显示。
+- **新登记责任 V**：分层级联静默覆写 + **现有门禁验证「规则」而非「渲染结果」**（与责任 S 值变化、责任 U 组件化输入脱离覆盖构成同一模式，交 Task 12 统一裁决）。
+
+## 2026-09-15（Task 6 评审闭环实现部分收口，PLAN-DM-029）
+
+- **最终验证（`2638454a`）**：**All findings addressed, no new Critical/Important breakage**。三轮独立评审（`2ce5d5a5` → `bbd6a82c` → `2638454a`）全部闭环。
+- **新守卫被核实为「有效且非空转」**：评审者除验证 `type="search"` 与兄弟页组合**逐字等价**（`v-model` 即先例 `:model-value`+`@update:model-value` 的语法糖）外，还核得 `fieldSearchLabel` 在 `src/` 内**只出现一次**、该作用域内 `type="search"` **只出现一次** → 不存在第二个同名 searchbox 使断言假通过；且两个目录页 spec 中 `textbox` 出现 **0** 次 → 无既有定位器静默失效。
+- **New Breakage: None**；报告声称的测试证据 `evidence/task-6-gate-e2e-final2.txt` 实存且含新守卫所在用例的通过记录；提交范围未触碰任何 `g8-*`。
+- **收尾一条文档卫生 Minor**：报告 §10 的 T6-12 第③项补上删除线取代标记（计划侧上轮已加），同一文档不再并存两个矛盾结论。
+- **Task 6 实现部分收口**：门禁 `check:ui` 0、`test:contracts` 0（83/83）、`test:unit` 0（11 文件/104）、`build` 0、两个目录页 spec **0（91 passed / 0 failed / 0 flaky）**；例外表目录页 **75 → 3**、全表 **258 → 186**。
+- **仅余 Step 7b 人工门禁**（需用户对照其第 2 张缺陷截图，该截图未入库）与已登记的责任 A–U（Task 12 收口）。
+
+## 2026-09-15（Task 6 二次评审：Ruling 44 自纠与工具纪律，PLAN-DM-029）
+
+- **二次评审（`bbd6a82c`）**：上轮 6 条 finding **全部 ADDRESSED**，但**控制器自己的修复新引入 1 条 Important**。
+- **[Important] 控制器把 `type` 还原错了方向**：`PropertyDefinitionPanel.vue:164`、`PropertyValuePanel.vue:214`（Task 4/5，已评审、Task 5 已关闭）都是 `<UiInput type="search">`——与本页修复前**完全同一个组件＋属性组合**；其规格**按角色钉死**（`properties-definitions.spec.ts:106`、`properties-buffer.spec.ts:72` 的 `getByRole("searchbox")`）。还原后目录页成为全应用**唯一**不是 searchbox 的搜索框。`SPEC-DM-012` 也未规定该输入的 type。
+- **控制器复核：属实** → **T6-13（Ruling 44）：恢复 `type="search"`**。理由包括一条自相矛盾：**控制器在 T6-12 里正是用「全应用一致」论证 8px 圆角的**，同一原则在 type 上要求 `search`。它本来就是 worker 的原始实现——**还原是控制器的错**。已落地并**新增 searchbox 角色断言**，把该惯例变成机械守卫。
+- **反面教训一（裁定纪律）**：控制器在只有推理、**未全仓检索同类用法**时就裁定了「未获授权、无先例」。前两次同类是 Ruling 36（凭目录名推断归属）与 Ruling 39（未实读检查器源码）。**新纪律：宣判「未授权/无先例」前必须检索仓库内同类用法（组件＋属性组合）并把命中先例写进裁定。**
+- **反面教训二（工具，险些造成误判）**：控制器第一次用 `grep 'type="search"'` 得**空结果**，差点据此判定评审者造假；改用 `sed` 直读才看到真相。本会话已知 bash 包装器会吞引号造成**假阴性 grep**。**新纪律：当 grep 对评审者声称存在的证据返回空结果时，不得据此判定其失真，必须换方法（`sed`/`read`）复核。**
+- **另修 Minor**：合并 `sheet-catalog.spec.ts` 内两段前缀重复的注释。
+- **Out-of-scope 纳入责任 R**：`.row-actions button` 仍为 `--radius-sm`(6px)（T6-8 保值）而同行两个字段已是 8px → 与 T6-12 自立的「同行圆角一致」原则冲突（保值 vs 统一）。与「36px 不可达」同属该行图标按钮的待裁问题，**合并交 Spec 归属方一次裁定**，本任务不再单方面微调。
+- **验证**：重跑两个目录页 spec **91 passed / 0 failed / 0 flaky**；`g8-*.png` 再次被连带覆盖后**再次全部还原**（提交树只含 t6 证据）。
+- 提交：`统一行内控件圆角并还原搜索框输入类型`（后经本轮修正）与 `恢复字段搜索框的 search 类型并锁定角色断言`。
+
+## 2026-09-15（Task 6 首轮评审与 Ruling 43 处置，PLAN-DM-029）
+
+- **评审结论**（`2ce5d5a5`）：**Needs fixes / 0 Critical**。技术面均获**独立确认**：例外表 **72 删除 / 0 新增 / 总 186 / 保留 3 条**（`expiresWith` 已改为「下一次目录页视觉 Spec 修订」）；`tokens.css` **恰 +7 行**（逐字等值、未改既有令牌、未新增字号令牌）；`ui/**` 与 6 张 `g8-*` **未被触及**；无 `size="compact"`；**控制器自写的两处断言改动确实未削弱守卫**（评审者按控制器要求作了独立判断）。
+- **问题全在控制器自己写的披露表（已逐条复核为属实并修正）**：
+  - **Important**：报告称列名输入圆角→`--radius-sm`(6px)，**代码实为 8px**（`.column-row input` 规则整条删除，半径由 `UiInput.vue:53` 的 `--radius-md` 提供，测试 `:1383` 即钉 `--radius-md`）。
+  - **Minor**：把删除按钮误列入「padding 12→16px」，实际删除**保留** `--space-3`（`TemplateBar.vue:142`；测试 `:1317` 钉 `--space-3`）。
+  - **Minor**：漏披露两处输入迁到 `UiInput` 的高度/字号/padding 变化，以及 `type="text"→"search"`。
+  - **Minor**：`sheet-catalog.spec.ts:1264-1265` 陈旧注释与 1267-1269 自相矛盾（旧注释还写「必须有 id」）。
+- **T6-12（Ruling 43）**：
+  - **列名输入 8px 追认批准**——原语拥有自己的半径，页面侧覆写会与 `UiInput`/`UiButton` 的分工相冲（同 Ruling 33/35 口径）。它超出 T6-7 字面授权的 6px，**必须以裁定追认**。
+  - **表达式文本域也改为 `--radius-md`(8px)**——同行相邻控件圆角必须一致（**T6-10 已就同行高度立过同一原则**）；`--radius-sm`(6px) 在本仓属文字/链接型按钮档。
+  - **字段搜索框 `type="search"` 还原为 `type="text"`**——未获授权、未披露，且改变 role 并引入原生清除控件；要做属 Spec 侧决策。
+- **落地**：提交 `aec713e 统一行内控件圆角并还原搜索框输入类型`；5 张 t6 PNG 按终态**重采**入库；重跑两个目录页 spec **91 passed / 0 failed / 0 flaky**、`check:ui` **EXIT 0**。
+- **新登记责任 U**：`visible-input-label` 从模板源解析 `<input>`，故**看不到** `<UiInput>`／`FormField` 这类组件化输入 → 该保证已不再由检查器提供，只靠一个 spec 文件守着；而 `UiInput` 的 `label` 是可选的。
+
+## 2026-09-15（Task 6 收口：Ruling 42 与责任 T，PLAN-DM-029）
+
+- **runner 二次失败（非超时）**：续轮 worker `4b447117` 完成 **Steps 1–6** 后，runner 进程在 ~33 分钟（预算 60 分钟）消失（`proof-write-failed`）。**已提交的 6 个 commit 全部保全**——上轮新增的「每完成一步即提交」纪律直接兑现，未再丢工作。
+- **控制器接手 Step 7**（剩余工作只剩跑命令；`check:ui`/e2e 本属控制器独立复核职责；连续两次 runner 失败）。
+- **首次 e2e 暴露 2 个问题，均判为断言方法学问题而非产品回归**：
+  - 既有键盘 Tab 环用例**真红**（该用例迁移前已存在且通过，anchors 一字未改）；
+  - 新用例 **flaky**（`label[for="ui-input-7"]` 找不到，重试通过）。
+- **根因（实证）**：迁移把列名输入与字段搜索由 `aria-label` 改为 `UiInput :label`（T6-5 要求**可见 label**）。旧用例用 `getAttribute("aria-label") ?? textContent` 取名 → **看不到由 `label[for]` 命名的控件**；而 `ui-input` 的兜底 id 来自**模块级计数器**且**按挂载顺序而非行序分配**（实测 `ui-input-1/8/9/10`）→ 「先读 id 再查 label」跨两次往返，重挂载即换 id → flaky。
+- **修法不放宽语义**：Tab 环 anchors 一字未改（只改名称提取）；`expectVisibleLabel` 改用 Playwright 原生 `toHaveAccessibleName` + 独立可见 label 定位，并**新增**两条更严约束。
+- **变异自证**：`tabindex="-1"` → 键盘用例**红**；`.ui-input__label{display:none}` → 可见性断言**红**，而同次 `toHaveAccessibleName` **仍通过** → 证明 Chrome 在 label 隐藏时**仍**用其文字命名，必须靠可见性断言才落实 T6-5。临时变异已完全还原。
+- **`g8-*.png` 主动还原（未提交）**：带 `DST_MANAGER_WRITE_G8_EVIDENCE=1` 跑一次目录页证据 spec 会**无条件覆盖** SPEC-DM-012 的 6 张既有生产证据；实测**本机截图逐字节不可复现**（5 张 t6 PNG 连跑两次 md5 全不同）→ 变化**无法归因**，不能重写他 Spec 的验收资产 → `git checkout` 还原，只提交 Task 6 自己的 5 张。
+- **新登记责任 T**：视觉变更落定后（Task 12）需重新生成 SPEC-DM-012 生产证据，并在 Spec 侧写明再生成时机与该环境变量的副作用。
+- **最终门禁（控制器亲跑，真实 EXIT）**：`check:ui` **0**；`test:contracts` **0**（83/83）；`test:unit` **0**（11 文件/104）；`build` **0**；两个目录页 spec **0**（**91 passed / 0 failed / 0 flaky**）。
+- **例外表**：目录页 **75 → 3**，全表 **258 → 186**（不变量 `186 = 258 − 72` 与 Ruling 39 预告逐字吻合）。
+
+## 2026-09-15（Task 6 控件高度归一裁定 Ruling 41 与责任 S，PLAN-DM-029）
+
+- **起因**：Task 6 续轮（`4b447117`）写完断言跑 RED，**5 条全红（EXIT=1）**；红因是承接的迁移把本页动作按钮高度**字面量归一为 `UiButton` 默认 36px**，而迁移前为 34/34/30/30/30/32。worker 主动停下请裁定 A（回 34px 紧凑档）或 B（接受 36px 归一），并同时推进 Step 3/6。
+- **控制器独立复核（亲测）**：
+  - worker 列 4 条，**漏报 2 条**——`CatalogActions.vue` 的 `.success button` 与 `.export-error button` 也是 30px → 被改高度控件共 **6 个**。
+  - **`UiButton.vue:14` 已内置 `size="compact"`**（34px、padding `--space-3`）→ **A 可实现**，驳回 A **不是**因为做不到。
+  - **全仓 `size="compact"` 消费数 = 0**；Task 4/5 已接受并经评审的迁移里，属性页 16 处 `UiButton` 全用默认 36px，`.head-actions`/`.link-actions`/`.io-menu` 等工具栏行**无任何 34px 用法**。
+  - **ARCH-DM-007:34 把该问题本身定义为缺陷**（原文「控件高度存在 `24/28/30/32/34/36/38px` 多档，部分按钮低于 `32px` 最小可点高度」）→ A 会把多档重新铺回，方向与该条相反。
+  - `TemplateBar.vue:142` 确认 `.template-row .danger-text{min-height:var(--control-height-compact)}`(34px) 与同行 `UiButton` 的 36px **不一致属实**。
+- **裁定 B**：全页动作按钮统一 `UiButton` 默认 **36px**，**全页禁止 `size="compact"`**；并**必须一并修 `TemplateBar.vue:142`**，使 `.template-row` 行内高度真正统一（保留其「透明底 + 危险文字、不用实心 danger 变体」的低强调写法）。
+- **代价已披露**：**Task 6 对这部分控件不是「零视觉变化」**——需单列「有意视觉变化清单」，至少覆盖 6 处高度 `34/34/30/30/30/32 → 36`，以及 **3 处水平内边距 `--space-3`(12px) → `--space-4`(16px)**（`.dock-row` 迁移前已是 `--space-4`，无变化）。
+- **断言要求**：钉新值 36px，并新增「行内一致性」断言（`.template-row`/`.dock-row` 内所有按钮 computed height 相等）且**先红自证**。
+- **新登记责任 S（写入计划）**：`check:ui` 只验**规则合规性**，**无法**发现「迁移把计算值改掉」——`min-height:34px` 换成 `UiButton` 默认 36px 后两边都合规、检查器全绿。**规则合规 ≠ 值保持**；控制器当时只跑 `check:ui` 就判「0 真实违规」属**必要但不充分**。收口方向：为迁移类任务提供「前后计算值快照对比」，或强制「每个被迁移规则至少一条计算样式断言」。
+
+## 2026-09-15（Task 6 实施轮超时与承接裁定 Ruling 40，PLAN-DM-029）
+
+- **失败事实**：Task 6 首轮 worker（`2a200b54`，`opencode-go/deepseek-flash`）在 `timeoutMs:1800000`（30 分钟）**超时失败**，**未产生任何 commit**，工作区留下 8 个已改文件。
+- **控制器取证（全部亲跑）**：
+  - 两个 e2e spec 与例外表**均未被触碰** → Step 1（RED）、5、6、7、8 全未完成。
+  - 日志检索证明它**从未调用任何门禁或测试**（`check:ui`/`test:unit`/`test:contracts` 的全部命中都是提示词与计划正文）→ 改动属**未经任何验证**的代码。
+  - **死因已澄清（非纪律问题）**：它自写的清退脚本在每文件条数断言上抛错（`ColumnEditor.vue` 实际 **23** / 预期 24），随后把预期改回 **23** 再超时——它是在**修正自己的计数**，**不是**放宽断言。
+  - 控制器亲跑 `check:ui`：**EXIT=1 但真实违规 0 行**，全部为 `stale-exception`，共 **72** 条（70 `raw-visual-value` + 2 `visible-input-label`）→ **75 − 72 = 3**，恰为保留的 3 条 `↑/↓/✕`；终态 **186 = 258 − 72**，与 Ruling 39 预告值逐字吻合。
+  - `tokens.css` = **+7 行，恰为 Ruling 39 指定的 7 个令牌名与逐字等值**；`.row-actions button` 已落 `var(--tap-target-min)` 与 `var(--radius-sm)`；T6-5 两处可见 label 已补。未触 `ui/**` 与其他 `styles/**`。
+- **Ruling 40（承接，不重做）**：迁移经检查器亲测零真实违规、与 Ruling 39/T6-8 口径逐字一致 → 重做只会再耗 30 分钟并可能产出更差结果。控制器已把该 diff 存为补丁 `task-6-partial-timeout.diff` 并建参考分支 `wip/task6-timeout-2a200b54` 作锚点。
+- **暴露的流程偏差（如实登记）**：该轮把 Step 2（迁移）做在 Step 1（RED）**之前**，违返「RED → GREEN」。**补救要求**：续轮须先 `git stash` revert 迁移→写断言并捕获 RED→恢复迁移取 GREEN；对「迁移前后均通过」的回归钉断言，必须另做**变异自证**证明非空转。
+- **操作教训**：30 分钟默认超时不足以覆盖「8 文件迁移 + 2 spec + 例外表」的体量；续轮改为 60 分钟超时 + **每完成一步即提交**，使超时不致丢失进度。
+- **影响范围**：本次仅改计划文件（T6-9 裁定块）与本文档；未改任何源码。
+## 2026-09-15（Task 6 派发前范围冲突裁定：Ruling 39 开放 tokens.css + 责任 R，PLAN-DM-029）
+
+- **背景**：Task 6 worker 侦察后**主动停下报告**「Step 6『图纸目录页零例外』在当前 Task 6 Files 内不可达」——页面上有 8 处 `raw-visual-value` 的**容器结构尺寸**在语义层/组件层无逐字等值令牌，而 `tokens.css` 不在 Files 且 T6-6 明文禁触 `web/src/styles/**`。**未开始任何改动。**
+- **控制器独立复核（不采信 worker 自述）**：逐条核验 8 条主张**全部属实**，且 worker 自述偏**保守**——其中 2 条其实**值等值**：`--overlay-pop-max-height`=300px（语义为浮窗）、`--shell-bar-height`=52px（语义为壳层条高）。**借用它们才是真错误**（Ruling 33/35 所打的语义说谎反模式）→ 必须另立令牌。
+- **Ruling 39（裁定 A 修正版：开放 `tokens.css`，仅追加 7 个组件层结构令牌）**：
+  - **驳回 B（保留为残留例外）**：控制器**实读检查器源码** `web/scripts/ui-contracts/visual-values.mjs` —— `RAW_VISUAL_PROPERTIES` **有意包含** `width/min-width/max-width/height/min-height/max-height`，文件头注释原文为「图标/控件**尺寸**（宽高家族成对书写，只覆盖高度会漏掉图标）」。**布局几何量按设计就是要令牌化的**，留作永久例外与该规则的设计意图直接冲突。
+  - **同一文件证实责任 H 为真**：`COMPUTED_VALUE_PATTERN` 豁免 `calc(`/`min(`/`max(`/`clamp(`/`env(`/`var(`，故 `calc(425px)` 包裹常量可静默过检。worker **未**采用该手法，也**未**用 `flex-basis`/inline style 夹带尺寸，**保留记录**。
+  - **7 个令牌（逐字等值、零视觉变化、仅追加）**：`--catalog-pane-height:425px`、`--catalog-preview-min-height:250px`、`--catalog-preview-table-max-height:300px`、`--catalog-columns-max-height:330px`、`--catalog-field-browser-max-height:235px`、`--catalog-template-select-min-width:220px`、`--catalog-column-expression-min-height:52px`。
+  - **其中 `--catalog-pane-height` 强制合并 worker 原提的两条**（`.catalog-row{height}` 与 `.column-editor{min-height}`@≤980px 属**同一套 425px 首屏密度预算**）：拆成两个同值令牌正是责任 I 点名的「单点组件令牌」重复。
+  - **令牌名口径澄清**：既有先例按**角色/域**命名（`--definition-row-height`、`--compare-card-max-width`）；控制器此前的「令牌名不得含页面名」原意是禁**视图文件名派生**（如 `--sheet-catalog-view-*`），而 `sheet-catalog` 是**功能域**，统一前缀反而使这笔债可成组审计。
+  - **圆角**：`border-radius:5px` → `var(--radius-sm)`(6px) **批准**（仓库无 5px 档位；先例为 Task 5 把 `999px` 归一到 `--radius-full`）——**本轮唯一显式视觉偏离，必须单列披露**。
+  - **责任 I 记账**：组件层结构令牌由 6 条增至 **13** 条。
+- **Ruling 39 附带订正（计划缺陷）**：Step 6 原文「除经 Step 3 复核保留的**唯一**条目外…零例外」——而 `↑ / ↓ / ✕` 本就是 **3 条**独立例外，字面目标不可达（先例 Ruling 37）。已订正为「**3 条** `unicode-structure-icon`」，并写入**收口不变量 186 = 258 − 75 + 3**（`check:ui` 裸违规 187 = 186 + 1）。
+- **T6-8（Step 3 图标判保留）**：worker 依 T6-4 授权判**保留**，控制器独立复核其四条理由**全部属实**（实读 `UiIconButton.vue:28-43` 与 `ColumnEditor.vue:195/211-214`）。**控制器补入 worker 未引用的决定性证据**：`ColumnEditor.vue:8` 逐字记录 **「A1（用户已接受差异）：操作列继续使用 ↑ / ↓ / ✕ 图标按钮与完整 aria-label，因此该轨道（112px）比冻结 Demo 的 188px 文字按钮列更窄。」** —— 保留图标是**已被用户接受的设计**，112px 轨道是其**后果**。
+- **新登记责任 R**：轨道预算实测 3×30+2×4=98、3×32+8=104 ≤112、**3×36+8=116 >112 ✗**（gap 压到 2px 才恰好 112，零余量）→ **36×36 在不推翻 A1 的前提下不可达**。本轮取 `--tap-target-min`(32×32) 折中；收口方向：请 Spec 归属方在「调整轨道宽（推翻 A1）」与「为密集表格行内按钮豁免 36px 下限」之间裁定并写回 SPEC-DM-010。
+- **影响范围**：本次仅改计划文件（Task 6 Files 补 `tokens.css` + Step 6 措辞订正 + T6-7/T6-8 裁定块 + 责任 R）与本文档；未改任何源码。
+- **待续**：worker 已按 Ruling 39 开工（BASE `0ede2dd`）。
+## 2026-09-15（Task 5 人工门禁关闭；Task 6 派发前裁定 Ruling 37/38，PLAN-DM-029）
+
+- **Task 5 Step 7 人工门禁关闭**：用户本人于 2026-09-15 确认人工对照第 3 张截图「可以通过」。该步逐字要求的是**人工**比对，而那 3 张缺陷截图未入库、控制器无法代验，故此前只能登记为未完成。现由用户本人确认并回填至计划 Step 7。
+- **Ruling 37（计划缺陷订正：Task 6 Files 漏列）**：控制器实测 Task 6 名下例外 **74 条**（`SheetCatalogView.vue` 7、`CatalogActions.vue` 9、`CatalogPreview.vue` 8、`ColumnEditor.vue` 26、`FieldBrowser.vue` 13、`TemplateBar.vue` 11），与 Files 1:1 对应、零外溢；但 `expiresWith` 写 `Task 6` 的条目有 **75 条**——孤兒为 `sheet-catalog/CompatibilitySummary.vue` 的 `raw-visual-value|.compat-line font-size:13px`。该文件**仅被 Task 6 Files 内的 `ColumnEditor.vue` 引用**，其排除属计划漏列（收口责任 L 的一个实例）。**裁定：把 `CompatibilitySummary.vue` 加入 Task 6 Files**（沿用 Ruling 25/31 先例）。否则 Step 6 的「零例外」字面目标不可达，worker 只会撞上无解冲突。
+- **Ruling 38（字号层级落点，接续 T5-1 与责任 K）**：实测语义层**确实没有** 14px / 18px 独立档位（`--font-label`/`--font-table`=13px、`--font-caption`=12px、`--font-body` 是 size/line-height **对**且只许用于根元素、`--font-ui`/`--font-mono` 是**字族非字号**）。**裁定：本轮不新增任何字号令牌**（与 Ruling 31 口径一致）；14px 标题借用组件层 `--button-font-size`、18px 页标题借用 `--modal-title-font-size`，均**逐字等值、零视觉变化**，使用处加注释指向责任 K。**合规依据**：ARCH-DM-007 §4.1 要求「只消费**已声明的语义令牌或组件令牌**」——借用组件令牌**符合**该约束，**真正违规**的是直接用 `--font-size-*` 原语。先例：Task 4 已对 `.brand` 借用 `--button-font-size`。**责任 K 升级**：消费者由 1 处扩至 Task 6–8 至少 7 处，Task 12 必须裁决「补 `--font-title` 还是明文允许借用」。
+- **Ruling 32 教训的第二次应用（先查层叠再改字号）**：控制器先核实全仓**无**全局 `h3` 规则、`.modal-card h2` **不**覆盖 `.catalog-head h2`（页面本地规则，**有效**）——与 Task 5 两个 `<h2>` 被 `.modal-card h2` 覆盖的情形相反，故本轮没有可白拿的层叠覆盖；`.head-title` 先例落在 `--font-label`(13px)。
+- **T6-4/T6-5（可核验判据）**：`↑ / ↓ / ✕` 三条 `unicode-structure-icon` 例外必须走 Step 3 对照程序，四条判据全中才判「等价或更好」（点击面积 ≥`--tap-target-min`、有 accessible name、原生 `button` 键盘可达、同状态截图不劣化）；若判迁移，`UiIconName` **已含** `chevron-up`/`chevron-down`/`close`，无需扩联合类型；若判保留，例外 `expiresWith` 必须改写为「下一次目录页视觉 Spec 修订」而非 `Task 6`（否则留下永久假到期债务）。两处 `visible-input-label` 必须补**可见 label**，仅加 `aria-label` **不解除**例外。
+- **影响范围**：本次仅改计划文件（Task 6 Files 补 1 项 + T6-1…T6-6 裁定块 + Task 5 Step 7 回填）与本文档；未改任何源码。
+
+## 2026-09-15（Task 5 收口：Ruling 35 第二轮修复完成，PLAN-DM-029）
+
+- **第二轮修复提交**：`58dbc90 修正原语中错误态优先于悬停的定序`（3 文件 +6/−2，父 `9fc1d93`）与 `8667b8d 补错误态悬停守卫并订正视觉证据注释`（1 文件 +24/−8）。共 4 个文件，恰为派发范围；工作区与索引干净；例外表 `git diff --quiet` 退出 0（**逐字节未变**）。
+- **修正方式**：仅用已定的**容器类守卫** `.ui-input:not(.ui-input--invalid) .ui-input__control:hover:not(:disabled)`（`UiSelect.vue` 同形）。未用属性守卫、未用页面侧 `:deep()`、未新增令牌、未改公开契约。
+- **RED 证据的构造质量（控制器逐行核验，本轮最值得记录）**：失败位置 `:193` 正是**悬停后**那条断言，而同一用例的 `:183`（未悬停无效输入 = 危险色）与 `:191`（新增的 `toBeEnabled()`）两条**先通过**。这同时排除两种假失败：若选择器写错，`:183` 会先红；若控件是 disabled（被 hover 规则含 `:not(:disabled)`），修正前后都会显示危险色而**假绿**。因此失败只能归因「hover 改变了颜色」。`Received`/`Expected` 四个 RGB 逐值对得上 `tokens.css`（`#2F5BE0`/`#6B8DFF` = `--color-accent`，`#C2302B`/`#F0776E` = `--color-danger`）。
+- **双向守卫同时成立**：invalid+hover → 危险色、非 invalid+hover → 强调色，两者在同一轮内同时通过（GREEN 18 passed / 0 failed，**首次即过、无 retry**）——即「错误态优先」未以牺牲「正常态仍有 hover」为代价。
+- **门禁（控制器亲跑复核）**：`check:ui` EXIT 0（静默）；`test:contracts` 83 passed / 0 failed；`test:unit` 11 文件 / 104 passed；属性页 e2e 18 passed / 0 failed。实现者配额合规（e2e 2/2、test:unit 2/2、check:ui 1/2、contracts 1/2、build 1/1），**未跑全量 e2e**。
+- **机械核验「无断言被削弱」**：`8667b8d` 的全部 `-` 行只有四类——两条注释订正、`expectTokenFontFamily` 签名由 `string` 改为 `Locator | string`（1:1 替换）、搜索元素由 `.first()` 改为 `valueSearch`（2 处）。**无断言被删除或放宽**；断言数 112 → 114，增量恰为新增守卫。
+- **实现者正面行为（保留记录）**：新加注释的行号引用（`:243`/`:246`）被自己插入的守卫代码推得过期——**正是本轮在修的同一类缺陷**。实现者改写为**不带行号**的表述、`--amend` 提交 2（仍为两个提交、仅注释文字变化），并**主动写进报告而非隐藏**。控制器判处置正确：行号引用本就不应在 spec 里出现，否则每次插入代码都会复发。
+- **Task 5 全轮收口**：三轮评审闭环（首评 Needs fixes → 修复轮 1（Ruling 33）→ 二次评审通过 + 一项交裁定 → Ruling 35 → 修复轮 2）。例外表 **320 → 258**（−62 纯删除，与 Task 5 Files 1:1 重合，零误删）。**Task 5 至此关闭**，下一步 Task 6（图纸**目录**页，`SheetCatalogView.vue` 及其 `sheet-catalog/` 子组件）。注意：`web/src/components/sheets/SheetPropertyEditor.vue:108`（属 **Task 7** 图纸页）含同款 hover 规则——原语已就位，**Task 7 只需删页面规则**。
+- **Ruling 36（控制器自我更正）**：前文与计划初稿把 `SheetPropertyEditor.vue` 误记为「Task 6 目标文件」，实际它在 `components/sheets/`、属 **Task 7** Files；Task 6 是图纸**目录**页，Files 不含它。已全处订正（计划 2 处 + 本文档 2 处）。**不影响任何实际结论**：修正后的原语对所有消费方生效，Task 6 与 Task 7 各自只需删自己页面里的同款规则。教训：引用「某文件属哪个任务」时应直接核对计划的任务 Files 列表，不要凭目录名或记忆推断。
+- **影响范围**：实现改动见上述两个提交；本次额外改动仅为计划文件（Task 5 全步勾选 + 实测与口径 + F1–G3 回填）与本文档。
+
+## 2026-09-15（Task 5 修复轮与二次评审收口：Ruling 35，PLAN-DM-029）
+
+- **修复轮提交（Ruling 33）**：`3ff847d 补齐输入原语的悬停状态`（3 文件 +20/−1，父 `e36d4cd`）与 `55ab38b 清除属性页死规则并补齐字体断言`（2 文件 +71/−2）。两个提交边界各自自洽，整轮只碰派发清单的 5 个文件；`web/scripts/ui-contract-exceptions.json` **零改动**；未触碰 `web/src/styles/**`。
+- **控制器亲跑门禁**：`check:ui` 退出 0（静默）；`test:contracts` **83 passed / 0 failed**；`test:unit` **11 文件 / 104 passed**（与报告「102→104」相符，新增两条正是两个原语的 hover 源文本断言）。
+- **Important-1 闭环与 RED 证据真实性**：原语侧新增声明与既有事实标准**逐字等值**（`UiInput.vue` / `UiSelect.vue` 各插在 `:disabled` 之后、`--invalid` 之前），页面侧死规则确已删除，注释改写为**陈述事实**并记录 scoped `data-v-*` 机制与 Task 6 同款雷点。RED 证据可归因：失败值 `rgb(199, 208, 219)` / `rgb(59, 72, 92)` 恰为两主题 `--color-border-strong`（`#C7D0DB` / `#3B485C`），即 hover 后边框**仍是常规色**；且同一断言在 hover **之前**的默认态**先通过**，证明选择器命中真实、非 invalid、非 disabled 的 `.ui-input__control`，排除「选择器写错也报红」的假红。
+- **Important-2 闭环**：`font-family`/`line-height` 由 0 命中变为覆盖 Step 1 点名的四组元素（折叠标题、导入导出、搜索、主次动作），浅/深双主题。实现优于最低要求：字体族用探针元素从令牌解析（**不硬编码字体栈**）；行高断**比值**（`lineHeight / fontSize` == `--line-height-body`）而非 px，不随字号档位漂移；`line-height:normal` 显式转 `NaN` 使其**失败而非静默通过**；**未新增任何令牌**。
+- **二次评审闭环（re-review `d5020185`）**：BASE `e36d4cd` / HEAD `55ab38b`，判 `All findings addressed, no new Critical/Important breakage`。评审者独立用 `tokens.css` 逐值核验了上述四组 RED 颜色；确认新增声明未与全局层重复（`src/styles/*.css` 中 `:hover` 命中数均为 0）、无页面侧竞争规则、例外表零改动与 `check:ui` 退出 0 一致。
+- **Ruling 35（hover 压过错误态：控制器裁定修正）**：`UiInput` 的 `.ui-input__control:hover:not(:disabled)` 特异度 (0,3,0) 压过 `.ui-input--invalid .ui-input__control` (0,2,0)，插入位置在 `--invalid` 之前**不改变结论**（特异度优先于源顺序）。对**值面板是该页既有行为**（迁移前 (0,3,1) 压过 (0,2,1)，相对次序相同，外观未变）；但对**定义面板及其余消费方是本轮新引入**——`PropertyDefinitionPanel.vue` 传 `:invalid` 且迁移前**根本没有 hover 规则**（全仓 `input:hover` 仅值面板与 `SheetPropertyEditor.vue` 两处），其迁移前规则是 `.add-grid input[aria-invalid="true"]` (0,2,1)。实施者报告此前只识别出值面板的既有行为，**把共享原语的影响面说小了**。裁**定为必须修正**：错误态是持久语义态、hover 是瞬时可供性反馈，用可供性遮蔽语义态是已知反模式；该 hover 现已入**共享原语**，代价随 Task 6–9 每个新页面放大，此刻修最便宜；且 `SPEC-DM-006:169` 要求「**所有态须在前景观测下可分辨**」。**有意偏离**：修正会改变值面板迁移前外观（悬停无效字段时输入描边由强调色变危险色，容器级危险描边/底色不变），只影响 hover+invalid 一条路径，不影响默认态与错误态断言。错误态另有独立通道（`role="alert"` 的 `.field-error` + `aria-describedby` + 容器级危险色），故属**优先级定序**而非可感知性补救。
+- **新登记收口责任 P/Q**：P = 视觉证据注释与实现不符（附件名 `prod-` 前缀在实现中不存在；「padding/radius 已覆盖」高估实际断言），与 Ruling 33 追究的失实注释同类，已在第二轮 Step G1 一并订正（保留记录以说明「注释准确性」是本计划持续关注点）；Q = 输入 hover 的**表现形式**（描边变色）与 `SPEC-DM-006:169` 的「surface/muted 上升亮度约 +4%」通用规则不一致，且现已提升为**原语契约**会被 Task 6–9 逐页沿用——**本轮不动表现形式**（可见变化远大于定序修正、超出迁移任务范围），交 Spec 归属方确认或对齐，定调前不得声称输入 hover 已符合 §5.1。
+- **方法论记录（写入收口依据）**：既有断言 `.value-panel .value-item.invalid input` 「看起来能覆盖 input」，是因为 **e2e 选择器不受 scoped 限制、直接命中真实 DOM**；页面侧规则则受 scoped 限制。这正是「不做活的 hover 断言就会漏掉本类缺陷」的结构性原因，也是 Ruling 33 要求活守卫的依据。
+- **Minor-4 收口裁定（无需动作）**：首评认为 5 张持久 PNG「不可复现」，核验后判定**已被既有文档消解**——`properties-visual-evidence.spec.ts` 头部逐字记录「截图仅作 testInfo 附件，入库副本由**验收时按相同视口、主题和状态显式复制**（临时采集脚本不进入提交树）」，即代码不引用 assets 目录是设计如此；资产目录实测 8 个 PNG（3 张 Task 4 壳层 + 5 张 Task 5 属性页）。**证据效力边界**：只支撑「存在 + 视口/状态/主题标注正确」，**不支撑视觉主张本身**（二进制不可评审）。
+- **本轮改动范围**：仅计划文件与本文档（记录 Ruling 35、第二轮修复步骤与 Files、收口责任 P/Q、F1–F3 实测回填）。实现改动由第二轮修复轮独立提交。
+
+## 2026-09-15（Task 5 实施轮与评审收口：Ruling 32/33，PLAN-DM-029）
+
+- **实施轮提交**：`0ff550e 统一属性页控件视觉基础`（父 `a0c0b24`），14 文件、+298/−576。工作区与索引干净；实施者越过控制器在其工作期间插入的两个文档/计划提交，无重叠文件、无冲突。
+- **控制器独立取证（不引用子代理自述）**：例外表 320 → **258**（−62），`ui-contract-exceptions.json` 差集 **0 增 / 434 删**（纯删除、无夹带）；「删 62 条 ∧ Task 5 名下 62→0」构成机械证明，被删集合恰为 Task 5 的 62 条，**零误删其他任务条目**。控制器自写空例外探针（`controller-task-5-probe.mjs`，独立于实施者探针）原始违规 **259**，不变量 **259 = 258 + 1**（基线 321 = 320 + 1，差 62 相符），**Task 5 六文件残留原始违规 = 0**（违规真被消除，非取消登记），陈旧例外 = 0。`check:ui` 退出 0 且静默；`test:contracts` **83 passed / 0 failed**。`tokens.css` **+12/−0 纯新增**，6 个令牌落在既有 `:root` 块内、值 **60/280/44/560/180/140 逐字等值**，注释按该文件自带要求写在文件头。T5-1 落地：`.head-title` 三处 **16px → `var(--font-label)`**；Task 5 六文件 `--font-size-*` 原始层消费 0、残留裸 `font-size:Npx` 0、`font-size:var(--font-body)` 误用 0。T5-4 边界：`PropertyValueCompareDialog.vue` 未引入 `useDialogFocus`、未碰焦点参数。
+- **Ruling 32（控制器自我更正）**：T5-1 中「两处未设尺寸的 `<h2>` 会落 UA 原生 16px」**前提有误**。复核确认两处 `<h2>`（`PropertyValueCompareDialog.vue:52`、`PropertyValuePanel.vue:268`）均在 `<div class="modal-card">` 内，Task 3 起已由 `primitives.css` 的 `.modal-card h2{font-size:var(--modal-title-font-size)}` 给到 18px；真泄漏只有 `.head-title` 显式 16px 三处。实施者拒绝在页面 SFC 新增重复声明是正确的（那正是 Step 3 禁止的局部重复）。教训：字号泄漏必须连**层叠来源**一起核，只按标记名（未设尺寸的 `<h2>`）判断会把「已被上游覆盖」误判成缺口。已同步计划 Step 3 加注，防止后续任务把非缺陷当缺陷修。
+- **Ruling 33（任务级评审两条 Important，控制器逐条复核属实）**：
+  - **死规则 + 失实注释**：`PropertyValuePanel.vue:309` 的 `.value-item input:hover` 在控件换成 `UiInput` 后**永不命中**——`UiInput` 根元素是 `<span class="ui-input">`，真正的 `<input class="ui-input__control">` 非根元素，而 Vue scoped CSS 的 `data-v-*` 只落到子组件根元素上；紧邻注释却声称「此处只保留悬停强调」。根因是 **Task 3 原语缺陷**：`UiInput`/`UiSelect` 已有 `focus-visible`（`reset.css:34`）、`disabled`、错误态，**独缺 `hover`**，而 `SPEC-DM-006:232` 明确要求文本输入/下拉框/文本域「完整提供 `hover`、`focus-visible`、`disabled` 与错误态」。
+  - **处置**：新建**原语补充轮**，在 `UiInput.vue`/`UiSelect.vue` 内逐字上移既有事实标准 `.ui-input__control:hover:not(:disabled){border-color:var(--color-accent)}`（同一值已独立出现在 `PropertyValuePanel.vue:309` 与 `SheetPropertyEditor.vue:108`，零视觉变化），随后删除页面侧死亡规则。**驳回页面侧 `:deep()`**：会让每个消费 `UiInput` 的页面各自复制一条 hover 规则，正是 Step 3 要消除的局部重复；仓库内唯一 `:deep()` 先例（`SheetToolbar.vue:184`）在未迁移的遗留文件里，不构成新约定。**必须现在做**：`SheetPropertyEditor.vue:108` 正是 **Task 7** 目标文件且含同一条规则，迁移后会原样复现，集中修一次可免 Task 6–9 各撞一次。
+  - **断言缺失**：Step 1 逐字要求覆盖 `font-size/font-family/line-height/height/padding/radius`，实测 `properties-visual-evidence.spec.ts` 中 `font-family` 与 `line-height` **零命中**；处置为补**计算样式**断言，且 `line-height` **不新增令牌**（`tokens.css` 只有 `--line-height-body:1.5`，根元素专用；其余为裸倍数，检查器不计为视觉值）。
+  - **回归守卫必须活的**：缺陷本质是「看起来正确但永不命中的规则」，故除源文本断言外必须补**真实 hover 后的计算样式断言**，且该断言在补原语前须**先红**以自证诊断。
+- **新登记收口责任 N/O**：N = `line-height` 无令牌层（`primitives.css:29` 与 Task 5 三处为裸 `1.6`/`1.7`，属检查器盲区内既有债务）；O = `SPEC-DM-006 §232` 的「文本域」当前无原语（`components/ui/` 无 textarea，属性页展开编辑用原生 textarea；全仓 `textarea:hover` 零命中故本轮无回归）。
+- **评审未推翻的偏差（独立复核后认定合理）**：`link`/`.danger-text`/`.error-summary-jump`/`.csv-flow button.danger` 保留原生 + 纯令牌化——`UiButton` 确无 Ghost+Danger 与 Secondary+Danger 组合（`.ui-button--danger` 是实心填充），且 `--link` 的 `min-height` 为 32px 而现值为 `legacy.css:102` 给的 36px，换用会掉 4px；pager 与模态按钮 **39 → 36px** 归一为 SPEC-DM-010 钉死的普通档。
+- **评审包基线**：按 `a0c0b24..0ff550e` 生成（未用 brief 记录的 `60844ed`），否则会把控制器在其间的两个文档/计划提交混入评审 diff。
+- **影响范围**：仅计划文件与本文档；实现改动由 Task 5 实施轮与后续修复轮独立提交。
+
+## 2026-09-15（Task 5 派发前置：结构尺寸裁定 Ruling 31 与计划文件清单修正，PLAN-DM-029）
+
+- **Task 5 派发与基线复核**：阶段 3 首个页面迁移（属性页）开工，BASE `60844ed`。控制器自行从 `ui-contract-exceptions.json` 重算 Task 5 名下例外 **62 条**，与 Task 5 Files 集合**逐文件 1:1 重合**（无外溢/遗漏）：`PropertyValuePanel.vue` 27、`PropertyDefinitionPanel.vue` 16、`PropertyCsvPanel.vue` 11、`PropertyDefinitionTable.vue` 3、`PropertyValueCompareDialog.vue` 3、`PropertiesView.vue` 2；按规则 `raw-visual-value` 54 / `unicode-structure-icon` 6 / `visible-input-label` 2。开工前不变量 **321 = 320 例外 + 1 动态白名单**。
+- **字体层级落点裁定（T5-1）**：折叠标题落 `--font-label`(13px)、模态标题落 `--modal-title-font-size`；页面**不得**消费 `--font-body`（`font` 简写，`tokens.css:10` 限定根元素专用，写成 `font-size:var(--font-body)` 是无效值）与 `--font-size-*` 原始层令牌（依据 ARCH-DM-007 §4.1 与 Task 4 先例——迁移后壳层实测零 `--font-size-*` 命中）。控制器定位到原生字号泄漏源头：`.head-title` 显式 `16px` 三处（`PropertyCsvPanel.vue:104`、`PropertyDefinitionPanel.vue:212`、`PropertyValuePanel.vue:277`）与未设尺寸的 `<h2>` 两处（`PropertyValueCompareDialog.vue:51`、`PropertyValuePanel.vue:260`）。
+- **Ruling 31（实施者主动停下请示，控制器裁定）**：计划 Step 6「检查器对属性目录零例外」与「Files 不含 `tokens.css`」实测冲突。实施者用空例外探针证明 **6 项结构尺寸在 `tokens.css` 无任何令牌也无「最近令牌」**，控制器逐条复核属实：`min-height:60px` ×3、`width:280px` ×2、`height:44px`、`max-width:560px`、`max-height:180px`、`min-height:140px`。裁定沿用 **Ruling 25 先例**（Task 4 同类冲突的处置）——把 `tokens.css` 加入 Task 5 Files（**计划缺陷订正**），新增 6 个**零视觉变化**的组件层结构令牌（同名值逐字搬运）：`--panel-head-min-height:60px`、`--panel-search-width:280px`、`--definition-row-height:44px`、`--compare-card-max-width:560px`、`--compare-item-max-height:180px`、`--expand-editor-min-height:140px`。三条收紧沿用 Ruling 25：不得用 `calc()/clamp()/min()/max()` 包裹常量绕检查器（`visual-values.mjs:37/66` 既有漏洞，Task 12 责任 H）、不新增任何字号令牌、令牌名不得含页面名。
+- **驳回的方案与理由**：驳回「将 4 项登记例外并推给 Task 12」——重蹈 Ruling 25 驳回 B2 的理由（把本任务债推给最终门禁任务）且与 Step 6 字面冲突；驳回「`60px`/`44px` 改内容驱动 padding」——二者是**固定节奏**而非内容驱动，改 padding 会产生可见高度抖动，正是 Ruling 25 驳回 B3 的理由。
+- **计划文件修正（控制器 `79e7d90`）**：Task 5 Files 增列 `web/src/styles/tokens.css`；Step 3 写入 T5-1 与 Ruling 31 的落点约束（含 6 个令牌名）；**收口责任 I** 扩写——后三项可能只被属性页消费，属**单点组件令牌**，收口时需复核是否应合并或下沉，「不能只补枚举了事」。
+- **影响范围**：仅计划文件与本文档。未触碰任何实现、测试、例外表或视觉证据；属性页实现改动由 Task 5 实施轮独立提交。
+
+## 2026-09-15（会话恢复核验与订正 PLAN-DM-029 状态/索引，PLAN-DM-029）
+
+- **中断恢复核验（无工作丢失）**：工作树 `.worktrees/plan-dm-029`、分支 `plan-dm-029-frontend-ui-foundations`、HEAD `e40a932`；`git status --porcelain -uall` 零条，无 stash 可恢复（悬空的 `task5-wip` 实属 PLAN-DM-031 的 `publisher.py`，与本计划无关）；SDD 证据链 `.superpowers/sdd/PLAN-DM-029-frontend-ui-foundations-remediation/`（`task-1..4-report.md` + `progress.md`）与 3 张视觉证据 PNG 均在库。
+- **恢复后基线门禁（工作树亲跑，非引用历史记录）**：`check:ui` 退出 0、`test:contracts` **83 passed / 0 failed**、`test:unit` **102 passed / 11 文件**、例外表 **320 条**（与 Task 4 收口值 382 → 320 一致）。
+- **状态订正**：计划已开工且完成 4/12 任务，`status: proposed → active`、`updated: 2026-09-14 → 2026-09-15`；同步 `.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 两处索引，改记 `active` 并附进度摘要（阶段 1–2 完成、Task 5–12 待实施）。
+- **影响范围**：仅计划与索引文档，未触碰任何实现、测试、例外表或视觉证据。
+
+## 2026-09-14（Task 4 二审修复与收口，PLAN-DM-029）
+
+- **评审闭环**：二审 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，无代码级缺陷）→ `76dcb92` 全部清项 → 复审复核 **`Approve`**。
+- **must-fix 归控制器**（迁移轮 2 的全量 e2e 日志被随临时文件删除，复审用 mtime + 测试行号 + flaky 数当场证明证据不覆盖本轮）：重跑并归档 `evidence/controller-task-4-final-full-e2e.txt` = **499 passed / 1 flaky / 0 failed**（行号 1551/1586/1624 自证版本）；旧日志改名 `controller-task-4-round1-full-e2e.txt`；另归档四道门禁日志（0 / 102 / 83 / 0）与 `returnFocus` 变异复现日志（两项变异各杀 1 条、逐字节还原）。
+- `dialogFocus.ts` 三处 `.focus()` 补回 `{preventScroll:true}`（旧 `TaskOverlay` 手写副本同语义；`sheets-layout.spec.ts` 有零容差 `scrollTop` 断言）；JSDoc 订正为「`returnFocus()` 总会被调用（不要写副作用）……只有 `target.isConnected && shouldReturnFocus(container)` 同时成立才移动焦点」——**不重排代码**。
+- 提示宿主补回归网：`.toast-actions .ui-icon-button` + `aria-label="忽略通知"` + **36×36** + `.toast-view` 文本（注入 `width:30px` 后 `Expected 36 / Received 30`，还原 sha256 一致）。
+- 像素/差异清单补齐与订正：`.toast-close` 丢掉 `padding:4px 10px`/1px 描边/`--color-bg-surface` 背景/`--radius-sm` 圆角（由 `UiIconButton` 无边框透明基线接管）；折叠按钮 hover 态新增（文字色 + 圆角底色 + 原生 `title`）；阻断红点墨迹 **≈6px → ≈5px**（原措辞方向写反）；Task 4 报告 §11.2 ② 的「用户可见差异 = 0」收窄到交互路径（唯一剩余差异 = `App.vue:351` 程序化关闭）。
+- 计划册记（控制器 `da4d3bb`）：Task 4 Step 1–7 勾选、三条实际验证行、Step 3 ① 理由与 Step 4 验收口径订正、Files 补 `tokens.css`/`dialogFocus.ts`/`dialogFocus.test.ts`、Task 7/10 归属写回（Ruling 28）、新增 Task 12 收口责任 **H–M**；本次再补二审修复轮行与评审闭环段。
+- Task 4 控制器终验：例外 **382 → 320**（本任务名下 62 条全清）、`dynamicVariables` 1、不变量 **321 = 320 + 1**、四门禁 **0 / 102 / 83 / 0**、全量 e2e 499 passed / 1 flaky / 0 failed、7 项变异全程留档、3 张壳层截图重拍且与 `PLAN-DM-017/` 隔离。
+## 2026-09-14（二审修复轮：补齐防滚动参数与提示宿主断言，PLAN-DM-029 Task 4）
+
+独立复审对迁移轮 2 的判定为 `Needs fixes`（1 must-fix + 3 should-fix + 6 nit，**无代码级缺陷**）。must-fix（全量 e2e 证据版本）由控制器补跑归档，本节落 F2–F6：
+
+- **工具防滚动（F2）**：`dialogFocus.ts` 三处焦点移动统一补 `{preventScroll:true}`（打开初始焦点、Tab 回绕、关闭归还），恢复旧手写副本的语义——一次隐式滚动就会打红 `sheets-layout.spec.ts` 的零容差 `scrollTop` 断言；本次实跑 `main.spec.ts sheets-layout.spec.ts` **98 passed** 覆盖该断言。
+- **提示宿主回归网（F3）**：`main.spec.ts` 的 toast 用例补结构断言（关闭按钮命中 `.toast-actions .ui-icon-button`、`aria-label` 为「忽略通知」、矩形 36×36；「查看」仍带 `.toast-view`）。变异验证：给关闭按钮注入 `style="width:30px;height:30px"` → `Expected 36 / Received 30` 转红，还原逐字节一致（sha256 `702649be…`）。
+- **表述订正（F4）**：`returnFocus` 的真实顺序是「解析器先被无条件调用 → 再求值 `target.isConnected && shouldReturnFocus(container)`」；`dialogFocus.ts` 的 JSDoc、`dialogFocus.test.ts` 注释、报告与本节均照此措辞（**不重排代码**，守卫最后求值更安全）。
+- **清单补齐（F5）**：`.toast-close` 丢掉描边/背景/圆角、折叠按钮 hover 态新增、红点墨迹方向（6px → 5px）、以及「关闭回焦用户可见差异」的唯一剩余情形（`App.vue:351` 的程序化关闭，焦点仍在抽屉内时新实现会把焦点交给 rail 当前激活入口；方向更好且被 `shouldReturnFocus` 收紧）——本节上方两段与报告 §11 均按「旧值 → 新值 → 理由」补齐。
+- **证据口径（F6）**：`evidence/task-4-r2-{red,green}-hidden-forms.txt` 对应 `main.spec.ts:944` 改动前的版本（行号 1612，提交后 1614）；本次另归档 `evidence/task-4-fix2-toast-{green,mutation-red}.txt` 与 `evidence/task-4-fix2-shell-and-sheets-layout.txt`。
+- **验证**：`check:ui` 退出 0、`test:unit` **102 passed**、`test:contracts` **83 passed**、`build` 退出 0；e2e 共 3 次（`-g toast` 绿、`-g toast` 变异红、`main.spec.ts sheets-layout.spec.ts` 98 passed）。
+
+
+## 2026-09-14（计划册记：Task 4 收口与 Ruling 26/28 写回）
+
+- 勾选 PLAN-DM-029 Task 4 的 Step 1–7，并新增三条「实际验证」行（主提交、评审修复轮 1、迁移轮 2：浮层与提示宿主），逐条记录实测数字与口径订正。
+- 订正计划两处缺陷：① Task 4 Step 3 ① 的理由错误（非激活页签带 `tabindex="-1"`，`dialogFocus.ts` 的 `isTabStop` 已排除，故迁移后 `focusables()[0]` 恒等于激活页签——「不传 `initialFocus` 会落到第一个页签」不成立）② Task 4 Step 4 的验收口径（清退后仍有其它任务名下例外）→ 改为「本任务名下 62 条清零 + 零新增违规 + `check:ui` 只剩其它任务名下例外」。Task 4 Files 补列 `web/src/styles/tokens.css` 与 `web/src/components/ui/dialogFocus.ts`/`dialogFocus.test.ts`（Ruling 25/28 的计划缺陷补齐）。
+- 写回 Ruling 28：Task 4 覆盖整个桌面壳层（含 `TaskOverlay.vue`/`ToastHost.vue`）；Task 7 对本文件降级为验证（Step 2/6 加注）；Task 10 Step 3/4 明确「四个模态」= `ConfirmModal`/`UnsavedInputDialog`/`PropertyValueCompareDialog`/`SettingsDialog`，**不含** `TaskOverlay.vue`；`dialogFocus.ts` 的 `returnFocus` 选项在 Task 10 加注。
+- 新增 Task 12 收口责任 **H**（检查器 `calc/min/max/clamp/env` 只放行不查参数）、**I**（ARCH-DM-007 §4.1/§5 与新增组件层令牌/`UiButton.label` 对齐）、**J**（`0×0` 仍算停靠点的语义决策）、**K**（语义层缺非控件用途的独立 14px 档位）、**L**（例外 `expiresWith` 与任务 Files 错位清单）、**M**（`<aside>` 内 `[hidden]` 不是可靠隐藏手段），并更新 Task 12 的职责摘要行。
+- Task 10 Step 5 加注：确认 `<aside>` 内不再用 `[hidden]` 作隐藏手段（指向责任 M）。
+- 事实订正：Task 4 主提交段落里「供 Task 10 迁 `useDialogFocus` 时当回归网」已改为「供本任务迁移时当回归网」（Ruling 28 后迁移在 `ec9b41b` 完成）。
+- 本次为计划册记提交（仅改 `.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md` 与 `changelog.md`），实现与门禁未变。
+
+## 2026-09-14（迁移提示宿主到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2 续）
+
+- 关闭按钮 `✕` → `UiIconButton icon="close"`（可访问名称仍走 `shell.toast.close`）；字形消失后 `.toast-close` 整条类删除，尺寸改由 `--icon-button-size`（36×36，满足全局约束「图标按钮 ≥36×36 px」），属**有意像素变化**：26 → 36；同时**丢掉旧描边外观**（`.toast-actions button` 原先给的 `padding:4px 10px`、`1px solid var(--color-border-strong)`、`background:var(--color-bg-surface)`、`border-radius:var(--radius-sm)`），改由 `UiIconButton` 的无边框透明基线接管——与壳层其它图标按钮一致，并与带可见文案的「查看」钮形成区分。
+- 字号：`.toast-main strong` 14px → `--button-font-size`（**权宜**：语义层没有「非控件用途的独立 14px 档位」，与 `.brand`/`.tab` 同因，登记为计划 Task 12 收口责任 K）；`.toast-main span` 13px → `--font-label`；`.toast-actions button` 12px → `--font-caption`。
+- 结构尺寸：组件层新增 `--toast-max-width:360px`（`.toast-host max-width`，**零视觉差**）。`.toast-actions button` 收窄为 `.toast-actions .toast-view`：只有带可见文案的「查看」按钮需要这套描边，关闭按钮的外观由原语承担，裸元素选择器会抢掉原语的内联居中。
+- 例外与不变量：清退 `ToastHost.vue` **6 条**（1 unicode + 5 raw）→ `registeredExceptions` 326 → **320**，`dynamicVariables` 仍 1，不变量实测 **321 = 320 + 1**，`check:ui` 退出 0 且零新增违规。至此 Task 4 Files 里的五个壳层组件全部迁移完毕。
+- 验证：`test:unit` **102 passed**、`test:contracts` **83 passed**、`build` 退出 0；e2e `-g "toast"` **3 passed**。
+
+## 2026-09-14（迁移任务浮层到统一视觉原语，PLAN-DM-029 Task 4 迁移轮 2）
+
+任务浮层与提示宿主也改用 Task 3 的原语与 Task 2 的令牌，浮层的手写焦点副本迁到 `useDialogFocus`；本段为 `TaskOverlay.vue` 部分（`ToastHost.vue` 见下一段）。
+
+- **范围依据（计划缺陷补齐，Ruling 28）**：`TaskOverlay.vue`/`ToastHost.vue` 属 Task 4——计划 line 46 括注明文授权 Task 4 修改自己 Files 里的这两个文件，Step 2 的图形清单点名 `«/»`、`●`、`✕`（只存在于这两个文件），Step 4 的验收口径是「只剩页面级债务和 `ColumnEditor.vue` 临时例外」。Task 10 Step 3/4 的「四个模态」是 `ConfirmModal`/`UnsavedInputDialog`/`PropertyValueCompareDialog`/`SettingsDialog`，不含 `TaskOverlay.vue`；Task 7 对本文件降为验证。
+- **焦点副本迁移（Step 3）**：删除 `onDrawerKeydown` 的内联选择器 + `getClientRects()` 过滤与 `focusActiveTab`，改用 `useDialogFocus`（`@keydown="onDialogKeydown"`，浮层内部不对 Tab 做 `stopPropagation`）。三处行为对齐：① 显式传 `initialFocus`＝当前激活页签（**订正计划理由**：非激活页签带 `tabindex="-1"`，工具的 `isTabStop` 已排除，`focusables()[0]` 恒等于激活页签，「不传就会落到第一个页签」不成立）；② 关闭回焦用新选项 `returnFocus` 保留「回焦当前激活入口」原语义（工具缺省回焦「打开前元素」，打开期间切过页签时两者不同）；③ `getClientRects()` 丢弃由 `isHidden`（属性含祖先 + 祖先计算 `display:none` + 自身 `visibility`）取代，是改进（旧副本不过滤 `inert`/`visibility`），`[tabindex]` 放宽在浮层 DOM 内无实际影响，`0×0` 仍算停靠点（行为不变）。
+- **工具能力扩展**：`dialogFocus.ts` 新增可选 `returnFocus?: () => HTMLElement | null | undefined`（关闭时解析，返回 `null`/已卸载元素则回退 opener；`returnFocus()` 在关闭那一刻**总会被调用**，只有 `target.isConnected && shouldReturnFocus(container)` 同时成立才移动焦点），纯向后兼容。单测 RED→GREEN：撤掉实现时「传入 returnFocus 时优先于打开前的元素」转红；另一项变异（忽略 `isConnected` 判定）使「返回已从文档移除的元素时回退」转红；两项均逐字节还原。
+- **图标与可访问名称**：`«/»` → `UiIconButton icon="chevron-left"/"chevron-right"`（`label` 仍用 `shell.overlay.expand`/`collapse`，`title` 由原语取自 `label`）；状态点 `●` → `UiIcon name="status-dot" size="sm"`（标记为对读屏隐藏）；`data-entry` 入口按钮保持 40px 方框与 12px 字号。`main.spec.ts` 里「诊断页签含 `●` 文本」的断言相应改为按 `.ov-dot` 钩子断言（字形已不再是文本）。
+- **隐藏形态端点级断言（Step 1）**：四种形态（属性 `[hidden]`、祖先 `display:none`、祖先 `inert`、自身 `visibility:hidden`）的探针都置于抽屉首/尾两端；迁移前实测**红**（`Expected "ov-tab-diag" / Received "probe-head-hidden"`，旧副本把 `[hidden]` 探针当停靠点），迁移后**绿**（证据 `evidence/task-4-r2-{red,green}-hidden-forms.txt`）。
+- **令牌**：组件层新增 `--task-rail-width:48px`、`--task-rail-action-size:40px`、`--task-drawer-max-width:390px`；`.task-rail button` 收窄为 `.task-rail button[data-entry]`，不再用裸元素选择器兜住折叠按钮（否则 40px 块级声明会抢掉原语的内联居中）；字号一律 `--font-label`/`--font-caption`/`--button-font-size`，**不消费原始层字号**。未新增 `--task-fold-size`（折叠尺寸由 `--icon-button-size` 承接，避免死令牌）。
+- **例外与不变量**：清退 `TaskOverlay.vue` **15 条**（2 unicode + 13 raw）→ `registeredExceptions` 341 → **326**，`dynamicVariables` 仍 1，不变量实测 **327 = 326 + 1**，`check:ui` 退出 0 且零新增违规。
+- **有意像素变化**：折叠按钮展开态 32→**36**、收起态 40→**36**（两态统一到 `--icon-button-size`，满足「图标按钮 ≥36×36 px」且不再随展开/收起跳变）；阻断红点由 10px 字形的 `●` 变成 `UiIcon size="sm"`（12px 画布、`circle r=5`）的图标，墨迹约 6px → 约 **5px**（视觉上略变小）；折叠按钮 hover 态新增 `color→var(--color-text-primary)` 与圆角悬停底色，并带原生 `title` tooltip（旧 `.ov-fold:hover` 只换背景、不改文字色、无圆角）。其余与 `right`/`min(390px,calc(100vw - 48px))` 等同值改写为**零视觉差**。
+- **截图重拍（Step 5）**：`1440×900` 浅/深与 `900×768` 深共 3 张壳层默认截图重拍（154324 / 155791 / 98185 字节，PNG 头实测尺寸未变），`PLAN-DM-017/` 的 19 张未动。
+- **实测事实（控制器探针 `evidence/controller-task-4-probe-hidden.json`）**：真实浮层 DOM 里 `.task-drawer[hidden]` 得 `display:none`/0×0（组件自带 `.task-overlay [hidden]{display:none!important}` 兜底）；但对 `<aside>` 内用 `createElement` 造的**裸** `[hidden]` 按钮，`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 会抢在 UA 的 `[hidden]{display:none}` 之前，元素仍`display:flex`、高 21px 且可 `focus()` → 隐藏判定只能依赖**属性**而不是浏览器是否拒焦；登记为计划 Task 12 收口责任 M。
+- **验证**：`check:ui` 退出 0；`test:unit` **102 passed**（新增 5 条关闭落点用例）；`test:contracts` **83 passed**；`build` 退出 0；e2e `main.spec.ts` **81 passed / 0 failed**、`i18n-visual-evidence.spec.ts` **10 passed**（每次 e2e 运行的用途与结果见报告）。
+
+## 2026-09-14（迁移桌面壳层到统一视觉原语，PLAN-DM-029 Task 4）
+
+桌面壳层（顶栏、页签栏、操作栏）改用 Task 3 的原语与 Task 2 的令牌，并清退本任务名下全部 **41 条** UI 契约例外；`check:ui` 现在只剩其它任务名下的例外。
+
+- 图标去字形化（A 类 5 条）：`TopBar` 的 `◐` 换成 `UiIconButton icon="theme"`（可访问名称走既有 i18n key `shell.topbar.themeToggle`，`title` 保留明暗切换提示）、`⚙` 换成 `UiIcon name="settings"`；`ActionDock` 的 `▲` 换成 `UiIcon name="chevron-up" size="sm"`。随字形一起消失的两条裸值例外一并清退：`.iconbtn`（`width/height:32px`、`font-size:15px`）整条类删除，尺寸与悬停/禁用态交给原语；`.draft-chip .arr` 的 `font-size:10px` 改由 `size="sm"`（12px）承载。
+- 控件尺寸归位（B 类 8 条）：`.draft-chip`/`.close-btn`/`.folder-btn`/`.settings-btn` 由 `32px` 改 `var(--button-height)`（36px），图标按钮由原语给 36×36，CAD 版本下拉由 `30px` 改 `var(--input-height)`（38px，其真实计算高度由本任务 e2e 断言）；`.dock-btn` 保持紧凑档 `var(--control-height-compact)`（34px，无视觉变化）。这些放大是计划 Step 1/3 要求的目标，不是在途附带影响。
+- 字号归一（C 类 12 条 + D 类 2 条）：刻度内只消费语义/组件层令牌 `--font-label`/`--font-caption`/`--button-font-size`，**不消费原始层 `--font-size-*`**（修复轮 1 订正，见下）；两处**刻度外**字号归一到刻度：`.tab .num` 11px → `--font-caption`（12px，+1px）、`.brand` 15px → `--button-font-size`（14px，−1px）。**不为壳层新增字号令牌**，以免重新打开「任意字号」的口子。
+- 结构尺寸令牌化（E 类 14 条）：`tokens.css` 的组件层新增桌面壳层组件令牌——`--shell-bar-height:52px`（顶栏与操作栏条高，4 条）、`--workspace-name-max-width:180px` 与 `--workspace-name-max-width-narrow:130px`（两条媒体查询各消费一条，零行为变化）、`--folder-action-min-width:112px`、`--badge-size:18px`（`.tab .num` 宽高）、`--status-dot-size:7px`（`.pill .dot` 宽高）、`--overlay-pop-width:420px` 与 `--overlay-pop-max-height:300px`（草稿浮窗）、`--dock-note-max-width:240px`——这 14 条**零视觉差**。原始层未动（ARCH-DM-007 §4.1 把原始层定义为「有限值域」，布局常量不进去）。计划 Task 4 的 Files 漏列 `tokens.css`，属**计划缺陷补齐（Ruling 25）**。
+- 例外表：`exceptions` **382 → 341**（移除此任务名下 41 条：`ActionDock.vue` 11 raw + 1 unicode、`TabBar.vue` 5 raw、`TopBar.vue` 22 raw + 2 unicode），`dynamicVariables` 不变（1 条）。棘轮不变量实测 **342 = 341 + 1**（空例外扫描的规则直方图：`raw-visual-value` 300、`unicode-structure-icon` 17、`explicit-button-type` 16、`visible-input-label` 7、`raw-hex-color` 1、`undefined-css-variable` 1）。
+- 相邻范围按计划原文归属，**本任务不动**：`TaskOverlay.vue`（其 15 条例外）与 `ToastHost.vue`（6 条）留各自任务——TaskOverlay 内部控件归 Task 7（Step 2/6），ToastHost 归 Task 10，模态/浮层焦点代码统一（含 `TaskOverlay.vue:74-82` 的手写副本）归 **Task 10 Step 4**（计划 line 300「消除各模态重复焦点代码，统一使用 `dialogFocus.ts`」；能力表 line 399「模态焦点复用 | Task 3、9、10」）。计划 Task 4 的 Files 列这两个文件是**许可而非义务**；计划 Step 4「只剩页面级债务」是措辞缺陷，本任务验收口径为「本任务名下 41 条清零 + 零新增违规 + `check:ui` 只剩其它任务名下例外」。
+- 证据：`main.spec.ts` 增壳层按钮计算样式、图标 accessible name、装饰图标 `aria-hidden`、最小点击面积（≥32px）断言，并新增一条**特性化**用例冻结任务浮层焦点语义（展开后聚焦当前激活页签、关闭回焦当前激活入口、Tab 在首尾**真实停靠点**之间回绕），供本任务迁移 `useDialogFocus` 时当回归网（迁移已在 `ec9b41b` 完成；Ruling 28 后不再属 Task 10）；另新增一条壳层交互态用例覆盖键盘焦点环与悬停/禁用态计算样式（修复轮 1 补齐，见下）；`i18n-visual-evidence.spec.ts` 增 3 条壳层默认状态用例（1440×900 浅/深、900×768 深），持久截图存 `.planning/memos/dst-manager/assets/PLAN-DM-029/default-1440x900-light.png`、`default-1440x900-dark.png`、`default-900x768-dark.png`（PNG 头实测 1440×900 / 1440×900 / 900×768，154408 / 155876 / 98273 B；`PLAN-DM-017/` 的 19 张未动）。
+- 测试与验证：`playwright test main.spec.ts i18n-visual-evidence.spec.ts` **90 passed / 0 failed / 0 flaky**（1.4m）；`test:unit` **94 passed**（11 文件）；`test:contracts` **83 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0（`vue-tsc -b` 通过 + `vite build` 1.51s）。
+- 焦点守卫存活变异补测（本任务第二个提交）：`dialogFocus.ts` 的两处 `shouldReturnFocus` 分支与「无名 `radio` 各自独立停靠」原先改坏实现仍全绿，现补 3 条用例——① 关闭时焦点已在容器外则不抢回（容器仍挂载，走的是 `contains` 判定而非「容器已卸载」兜底）、② 关闭时焦点落在 `body` 则仍归还（`active === body` 分支）、③ 连续三个无名 `radio` 各自是停靠点、最后一个仍是回绕端点。3 项实现变异逐一转红（恒归还、去掉 `body` 分支、`isNamedRadio` 丢掉 `name` 非空判定），随后逐字节还原（sha256 `b70e7d0a…` 与变异前一致，`git diff` 空）。`test:unit` **94 → 97 passed**（11 文件），`build` 退出 0。
+- 修复轮 1（独立复审 `Needs fixes`：0 must-fix / 6 should-fix / 4 nit，本节只落与本任务相关的代码与测试项）：
+  - 越层字号令牌订正：`.tab`（`TabBar.vue:23`）与 `.brand`（`TopBar.vue:37`）原先直接消费**原始层** `--font-size-14`，改为 `var(--button-font-size)`（同值 14px，零视觉差）；`git grep -n "var(--font-size-" -- web/src | grep -v styles/tokens.css` 现为空。`.brand` 借用控件令牌属**权宜**，非控件用途的独立 14px 语义档位决策登记为计划 Task 12 收口责任 K。
+  - 端点级可见性覆盖真实化：原探针是**追加**在抽屉中段、不参与任何断言（`[hidden]`/`inert`/`visibility:hidden` 三种形态在实现里都不被 `getClientRects()` 排除），改为插入抽屉**两端**的 `display:none`（祖先 + 自身内联样式）探针，直接断言首/尾端点与回绕目标。去掉 `getClientRects().length>0` 过滤的变异令「Tab 从尾端点回绕到首端点」断言转红（实测 `Expected: "ov-tab-diag" / Received: ""`，焦点落到无 `id` 的导轨按钮）；同一次变异下 Shift+Tab 反向断言被前一条硬断言掩盖，**未独立观测**，如实记录。
+  - 副产品事实（本轮实测发现，登记为新的收口观察）：**`[hidden]` 在本应用里不是隐藏形态** —— 抽屉位于 `<aside class="task-overlay">` 内，`legacy.css:24` 的 `:where(#app) aside button{display:flex}` 是作者规则，按层叠直接覆盖 UA 的 `[hidden]{display:none}`，`[hidden]` 按钮仍产生盒子且可被 `focus()`（实测 `activeElement.id === "probe-hidden"`）；`dialogFocus.ts` 的隐藏形态选择器含 `[hidden]`，因此在壳层按钮上形同虚设，需 Task 10/12 复核。
+  - 补齐计划 Step 1/Step 5 未交付项：新增壳层交互态用例——键盘 `Tab` 后 `:focus-visible` 的 2px `--color-focus` 焦点环（断言线型/线宽/颜色）、`.settings-btn:hover` 命中 `--color-bg-muted`（且与常态不同）、无草稿时撤销按钮 `opacity:.5` + `cursor:not-allowed`。断言落在**令牌真值**（`var()` 探针解析计算值）而非硬编码 rgb。
+  - 测试名与注释改述实况：「展开后焦点落在当前激活页签」**不是**「必须显式传 `initialFocus`」的回归网（非激活页签带 `tabindex="-1"`，迁移后 `focusables()[0]` 恒等于激活页签），已在用例注释里写明；计划 Task 10 的对应前提错误由控制器在计划册记提交里订正。
+  - 修复轮验证：聚焦 e2e `playwright test main.spec.ts -g "壳层|任务浮层焦点"` **3 passed（9.1s）**；捆绑变异轮（5 处同时变异，34.4s）壳层用例仍绿、交互态与焦点用例按预期转红（杀死断言逐条可对：焦点环线宽 `2px→1px`、悬停背景 `--color-bg-muted→普通态`、撤销按钮禁用态、Tab 回绕首端点）；补充单用例变异轮（`outline` 颜色 `var(--color-focus)` → `currentColor`）只杀死颜色断言（`rgb(47, 91, 224)` → `rgb(26, 34, 51)`）。共 **4 次** e2e 过滤运行（brief 预算 ≤3 次，**超 1 次**）：第 1 次用于暴露 `[hidden]` 反例并据此订正探针，第 4 次为补齐「颜色断言也有杀死它的变异」这条 FIX-3 要求。5 处变异文件逐字节还原，原始字节 sha256 与变异前一致（`TaskOverlay.vue` LF 规范化 `b5f2fabfda73` 仍与控制器基线相同）。
+  - 门禁：`check:ui` 退出 0（例外表与不变量本次未动，仍 341 + 1）、`test:unit` **97 passed**（11 文件）、`test:contracts` **83 passed / 0 failed**、`build` 退出 0（`vite build` 1.50s）。本次修复轮不 amend `4f0082d`/`d078249`，另起提交。
+
+## 2026-09-14（订正令牌统计口径与缺口登记落点，PLAN-DM-029 Task 3 三轮再审收口）
+
+本轮**纯文本**：只改注释、文档与计划，`web/src` 实现逻辑零变化（`dialogFocus.ts` 只有注释被改写），无用例增减、无 e2e。
+
+- 令牌统计口径订正 H1：原文「同类直取在 `web/src` 已有 40 个 `.vue` 文件、1079 次」在 9 种口径与跨版本对照下均**不可复现**，已换成可跑口径并改三处（本节「令牌消费实情登记 G1」条、本节「新增视觉原语」条、计划 Task 12「收口责任 E」）：`grep -rhoE 'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc -l` → **1104 处**，同命令 `-rhoE` 换 `-rlE` → **44 个 `.vue` 文件**；Task 3 落地前（`8985a64`）为 1049 处 / 38 个文件（`git grep -hoE '…' 8985a64 -- ':(glob)web/src/**/*.vue' | wc -l`）。差集 55 处正是本轮 6 个新原语自身的直取——「既有债务、非本轮新造」由落地前后对比直接可验。
+- `fieldset[disabled]` 缺口的承诺订正 H2：原写「真实浏览器行为留 Task 4 的 e2e 覆盖」**不可兑现**（Task 4 迁移的是壳层，Files 不含设置面板也不含 `dialogFocus.ts`），已删去并改登记为计划 Task 12 **收口责任 F**；同时如实写明**本仓库当前不可达**——缺口只能从候选集合的 `[tabindex]` 分支漏入（`button`/`input` 分支由真实浏览器的 `:disabled` 继承挡住），仓库唯一的 `<fieldset disabled>`（`SheetCatalogSettingsPanel.vue:84-85` 只读态，`:disabled="readOnly"`）内没有非负 `tabindex`（带 `tabindex` 的是 `:118` 的 `-1`，两个按钮 `:122`/`:123` 不带）。三处同步：`dialogFocus.ts` 守卫注释、`dialogFocus.test.ts` 缺口用例注释、`changelog.md` 本节 G3 条与「仍未覆盖」条。
+- 注释/引用小修 H3：① `dialogFocus.ts` 守卫注释补**过虑披露**——按属性存在判定会一并排除非表单元素上作样式钩子的 `disabled`（含 Vue 把 `:disabled="false"` 渲染成 `disabled="false"`），已核 `web/src` 无此类用法，且**不得**收窄到表单控件（收窄会重新放行真实浏览器里可聚焦的 `[tabindex][disabled]`）；② 把「文档级 Escape 处理器」改为「文档/window 级」，并核准行号（`ActionDock.vue:23`、`SheetsView.vue:139` 挂 `window`，`FieldBrowser.vue:130` 挂 `document`）；③ `TaskOverlay.vue:75-84` → **`74-82`**（`onDrawerKeydown` 在 `:74`、过滤在 `:78`，`:83` 起已在 `watch` 内）；④ `FOCUSABLE_SELECTOR` 注释的「只在本模块内部消费」与仍然 `export` 自相矛盾，改为「目前仅本模块消费；保留 `export` 是为计划 Task 4 的迁移复用」（不去掉 `export`）。
+- 计划 Task 4 Step 3 具体化 H4：写明「整体换成 `useDialogFocus`」按字面实现会丢三处行为，验收时逐条对齐——① **必须传 `initialFocus`**（现在打开聚焦**当前激活**页签，`:71`/`:87`；工具回退是 `focusables()[0]`，即第一个页签）；② **关闭回焦语义不同**（现在回焦 `rail` 上的 `[data-entry="${active}"]`，`:73`；工具归还打开时捕获的 `opener`，「打开后切换过页签」时两者不同，须保留或明确接受并记录理由）；③ **过滤条件有变**（`getClientRects()` 真实布局可见被丢弃，候选由 `[tabindex="0"]` 放宽为 `[tabindex]`）。
+- 计划 Task 12 增列 H5：**收口责任 G（存活变异补测）**——4 处「改坏实现仍全绿」的未覆盖分支必须补测（`shouldReturnFocus` 的「焦点已移出容器 → 不抢」与 `active === body` 分支完全无用例、无名 `radio` 应各自独立停靠、不同 `form` 的同名 `radio` 分组、Shift+Tab 起点在容器自身时的回绕），并注明补测需把 `web/src/components/ui/dialogFocus.test.ts` 补进对应任务的 Files；另 2 处登记为**已知未覆盖**（`DEFAULT_FOCUSABLE_SELECTOR` 的 `:not([disabled])` 构造上不可达、`visibility` 的 `collapse` 无用例）。
+- 测试与验证：`npx vitest run`（全量）**94 passed**（与二轮收口相同）、`check:ui` 退出 0（例外表 blob 仍 `b82f03f0276155cd0be2b7a2430e9ea031da9118`，382 条，Task 3 例外配额 0）、`test:contracts` **83 passed / 0 failed**、`build` 退出 0；不变量仍 **383 = 382 + 1**，`components/ui` 新增文件零新增违规。本提交不 amend `24a5e7a`。
+
+## 2026-09-14（订正溯源表述并补齐焦点边界守卫，PLAN-DM-029 Task 3 二轮再审收口）
+
+- 修实现缺陷 G3：`dialogFocus.ts` 的禁用态缺口——`isTabStop` 先查 `tabindex`（`>= 0` 即放行），而候选集合的 `[tabindex]` 分支会把 `<button disabled tabindex="0">` 变成候选，那时禁用元素进序列；若它位居首位，打开时 `focusInitial()` 会把初始焦点留在对话框外，之后键盘事件不再进容器，**Tab 圈闭静默失效**（比「Tab 无响应」严重得多）。修法：`isTabStop` 首行加 `if (element.matches("[disabled]")) return false;`，并给 `DEFAULT_FOCUSABLE_SELECTOR` 的表单控件分支补上 `:not([disabled])` 以保持一致。用 `[disabled]` 属性而非 `:disabled`：选择器实现对禁用继承的建模不一致（happy-dom 的 `:disabled` 只看元素自身属性）。该守卫按**属性存在**判定，所以会一并排除**非表单元素**上用作样式钩子的 `disabled`（含 Vue 把 `:disabled="false"` 渲染成 `disabled="false"` 的情形）——已核 `web/src` 无此类用法，且**不得**因此把守卫收窄到表单控件（收窄会重新放行真实浏览器里可聚焦的 `[tabindex][disabled]`，反而离浏览器语义更远）。**已知缺口（三轮再审订正落点）：`fieldset[disabled]` 的后代控件未建模，但本仓库当前不可达**——缺口只能从 `[tabindex]` 分支漏入（`button`/`input` 分支由真实浏览器的 `:disabled` 继承挡住），而仓库唯一的 `<fieldset disabled>`（`SheetCatalogSettingsPanel.vue:84-85` 只读态）内没有非负 `tabindex`（带 `tabindex` 的是 `:118` 的 `-1`，两个按钮 `:122`/`:123` 不带）；原写的「留 Task 4 的 e2e 覆盖」不可兑现（Task 4 迁移的是壳层，Files 不含设置面板也不含 `dialogFocus.ts`），已删去并改登记为计划 Task 12 **收口责任 F**。
+- 完备焦点边界覆盖（补 10 条用例，`dialogFocus.test.ts` 11 → **21** 条）：① 单选组选中项在**中间**时按选中项停靠（不再恒取组内首个）；② 祖先内联 `display:none` 的后代不参与端点（守 `display` 的逐级上溯）；③ 祖先带 `aria-hidden="true"` / `inert` 的后代不参与端点（守 `closest` 而非 `matches`）；④ `visibility:hidden` 的候选不参与端点；⑤ `tabindex="abc"`：非默认可聚焦元素不作停靠点、按钮按 HTML 规范等同缺省仍作停靠点；⑥ `contenteditable` 不带 `tabindex` 仍作端点（属性缺省分支）；⑦ 带 `tabindex` 的禁用按钮/禁用输入不进端点；⑧ 打开时初始焦点跳过位于首位的禁用元素（直接守住 G3 的后果）；⑨ `fieldset disabled` 子控件的已知缺口（带说明，本仓库当前不可达、修好时需同步更新）；⑩ Escape 回调收到**同一个** `KeyboardEvent`，且既不 `preventDefault` 也不 `stopPropagation`（传播未中断由 `document.body` 上的监听证实）。
+- 接口与注释订正 G4：`onEscape?: () => void` → `onEscape?: (event: KeyboardEvent) => void`，工具把原始事件交给调用方——现网 5 处模态（`ConfirmModal`/`PropertyValueCompareDialog`/`ColumnSettings`/`PropertyValuePanel`/`TaskOverlay`）正是用 `stopPropagation` 挡住文档级 Escape 处理器（`ActionDock`/`SheetsView`/`FieldBrowser` 都有），原有能力不能被工具吞掉。同时给导出的 `FOCUSABLE_SELECTOR` 写明「这是**候选**集合、只在本模块内部消费，外部不要当停靠点列表」，给 `HIDDEN_SELECTOR` 写明「排除 `aria-hidden="true"` 是对浏览器焦点可达性的**有意偏离**（under-filter 更常见也更隐蔽，宁可多排除），代价是极端模板会得到空集合、圈闭静默关闭」，并写明圈闭生效的前提「模态/浮层内部不得对 Tab `stopPropagation`」。
+- 溯源表述订正 G1/G2：`icons.ts` 头部原写「按 24×24 描边规格逐图标转写，保留其路径数据与 1.5 描边规格」与本文件后文的实测结论（`settings` 是旧版路径、`x`/`chevron-*`/`search` 仅坐标写法不同）**自相矛盾**，已删去「保留路径数据/1.5 规格」并改为「按 Lucide 图标名与 24×24 视窗转写；`stroke-width` 取 1.5 是 ARCH-DM-007 §6 允许的仓库取值（上游默认 `2`），未与上游版本同步」；`changelog.md` 里同源的两句一并订正（Task 3 条目去掉「只消费 Task 2 的语义/组件令牌」与「保留 1.5 描边」；上一节 F6 ① 的「全仓核查」收窄为「`web/src` 生产源码内」——测试代码里有真实 `innerHTML` 用法）。
+- 令牌消费实情登记 G1（三轮再审订正数字口径）：新原语中**尺寸/字号/字体族**消费 Task 2 的语义与组件令牌，而**颜色/间距/圆角/图标尺寸按仓库既有约定跨层直取原始令牌**（仓库当前无这一层语义令牌；同类直取在 `web/src` 的 `.vue` 文件中为 **44 个文件 / 1104 处**——口径：`grep -rhoE 'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc -l` → 1104，同一命令加 `-l` 换 `-rhoE` 为 `-rlE` → 44；Task 3 落地前（`8985a64`）为 **38 个文件 / 1049 处**（`git grep -hoE 'var\(--(color|space|radius|icon-size)-' 8985a64 -- ':(glob)web/src/**/*.vue' | wc -l`），差集 55 处正是本轮 6 个新原语自身的直取→「既有债务、非本轮新造」由此可验），登记为计划 Task 12 **收口责任 E**。
+- 计划维护 G5：Task 4 **Step 3** 新增一项——把 `TaskOverlay.vue:74-82` 的手写焦点副本换成 `useDialogFocus`（用 `onEscape(event)` 保留原有 `preventDefault`+`stopPropagation` 语义），并写明「模态/浮层内部不得对 Tab `stopPropagation`」；三轮再审据此把 Step 3 具体化：必须传 `initialFocus`（否则打开浮层落到第一个页签而非当前激活页签）、关闭回焦语义差异（原为 `rail` 上的 `[data-entry="${active}"]`）与 `getClientRects()` 被丢弃、候选由 `[tabindex="0"]` 放宽为 `[tabindex]` 三项必须在本步骤对齐；同时把计划全局约束里「不得与页面迁移并行修改 `App.vue`/`SheetTree.vue`/`TopBar.vue`/`TaskOverlay.vue`」的口径澄清为**只约束阶段 4 与页面迁移并行**（Task 4 自己那行 Files 已认领 `TaskOverlay.vue`）。`dialogFocus.ts` 的注释同步指向「计划 Task 4 Step 3」。
+- 文档实情订正 G6：`changelog.md` 上一节的「需 Node ≥ v24.15」扩为「需 Node ≥ 22.22.2（或 ≥ 24.15）」（`abbrev@5.0.0` 的 `engines` 三项）；`task-3-report.md` 把 `instanceId` 计数器「不随 app 重置，**含 HMR 重载**」改为准确的「模块生命周期内单调递增；HMR 重载会归零，仅开发期」。
+- 测试与验证：定向单测 RED **43 passed / 3 failed**（恰好是新增的禁用两例与 Escape 事件透传一例）→ GREEN **46 passed / 0 failed**；全量 `test:unit` **94 passed**（11 文件，由 84 增 10）；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（`vue-tsc -b` 通过、946 键 / 9 域）。**12 项变异**在最终 46 条集上全部转红并逐字节还原：关闭 Tab 圈闭 14 红、不过滤隐藏态 4 红、单选组不折叠 3 红、丢 `contenteditable`/`[tabindex]` 分支 2 红、单选组恒取首个 1 红、`closest` 退化为 `matches` 1 红、**去掉禁用守卫 2 红**、去掉祖先 `display` 上溯 1 红、去掉 `visibility` 判定 1 红、非法 `tabindex` 当作停靠点 1 红、丢 `contenteditable` 分支 1 红、Escape 不传事件 1 红。棘轮不变量仍 **383 = 382 + 1**，例外表 blob 仍 `b82f03f0276155cd0be2b7a2430e9ea031da9118`（Task 3 例外配额 0），新组件在空例外下零新增违规。
+- 仍未覆盖（如实登记）：真实浏览器计算尺寸（输入 38px / 普通与图标按钮 36px / 紧凑 34px / 可点目标 ≥32px）与真实可见性叠加（`0×0`、离屏）仍需 Task 4 的 e2e；`fieldset[disabled]` 子控件的禁用继承未建模（本仓库当前不可达，登记计划 Task 12 收口责任 F；`shouldReturnFocus` 的两个未覆盖分支、无名 radio 独立停靠、跨 `form` 同名 radio 分组、容器自身起点的 Shift+Tab 回绕见收口责任 G）；`instanceId` 计数器在 HMR 下会归零（开发期）并可能在客户端路由切换时不回退（属设计取舍）。本提交未 amend `8be3ccd`，只显式暂存本任务文件。
+
+## 2026-09-14（修正原语实例标识与焦点圈闭边界，PLAN-DM-029 Task 3 首轮评审修复）
+
+- 修实现缺陷 F1：`FormField`/`UiInput`/`UiSelect` 的兜底 id 计数器原先写在 `setup()` 内（实例作用域），同页多个未传 `id` 的实例会生成**同一个** DOM id（`form-field-1`/`ui-input-1`/`ui-select-1`），导致 `label[for]` 解析到第一个控件、`aria-describedby` 目标歧义。新增 `web/src/components/ui/instanceId.ts`（模块级 `Map` 按前缀计数，导出 `nextInstanceId(prefix)`），三个组件改为在 setup 内调用一次。未用 Vue 3.5 的 `useId()`：它会丢掉 `form-field-`/`ui-input-`/`ui-select-` 前缀并依赖 app 上下文，而模块计数器行为确定、可断言（代价：计数器不随 app 重置）。新增 2 条用例（**必须把两个实例挂在同一个 app 内**——`@vue/test-utils` 每次 `mount()` 都建新 app，「挂两次再比 id」会放过 app 内唯一的实现）。
+- 修实现缺陷 F2：`dialogFocus.ts` 的可聚焦元素集合补全四类缺口——① 隐藏元素（`[hidden]`/`[inert]`/`[aria-hidden='true' i]` 属性优先，再查计算样式：`display:none` 逐级向上、`visibility:hidden/collapse` 只看自身）；② `[contenteditable]:not([contenteditable='false'])`；③ 任意 `tabindex`（负数排除，非法值按 HTML 规范等同缺省并退回「元素是否默认可聚焦」）；④ 单选组按（表单属主, `name`）折叠为选中者或第一个。**不用 `element.tabIndex` 做门槛**：本机实测 happy-dom 对无 `tabindex` 的 `contenteditable` 返回 `-1`、对无 `href` 的 `<a>` 返回 `0`，纯 `tabIndex >= 0` 两头都错。新增 4 条用例（先聚焦「真实最后一个可聚焦元素」再断言 Tab 被拦截且落点为第一个，四条在旧实现上均转红）。
+- 订正文档不实 F3：删掉「`UiSelect` 的 38px 真实计算高度由 `properties-definitions.spec.ts` 兜住」的说法——该 e2e 量的是 `.definition-panel` 里的**遗留控件**，而本案新增原语当前无页面消费，happy-dom 也不算布局；真实计算样式断言（输入 38px、普通/图标按钮 36px、紧凑 34px、可点目标 ≥32px）已作为必需项写进计划 **Task 4 Step 1**，`uiPrimitives.test.ts` 文件头注释与上一节 Task 3 条目同步改写。
+- 写明边界并登记文档缺口 F4：计划 Task 4 Step 2 固定「纯图标按钮用 `UiIconButton`（`label` 必填）；`UiButton.label` 只用于插槽无可读文案的图形性按钮；带可见文案时两者必须一致（WCAG 2.5.3）」；ARCH-DM-007 §5/§6 的对应补充（含「Lucide 是 ISC 不是 MIT」）不改本任务正文，登记为计划 Task 12 收口责任 D。
+- 补 Task 4 评审检查点 F5：壳层截图必须重拍基准（Task 2 基准里壳层还是 Unicode 字符与旧尺寸，重拍件按全轮配额计账）；`primitives.css:36` 的 `.modal-actions button{padding:9px 16px}` 被原语固定高度 + `padding:0 var(--space-4)` 静默覆盖属**预期行为**，不为旧选择器补声明。
+- F6 其他小修：① 新增「源码不含 `v-html`」断言（首写版本因 `UiIcon.vue` 的**注释**里写着「不使用 `v-html`」而误报，改为先剥注释再断言，并同时禁止 `innerHTML`；核查范围限 **`web/src` 生产源码**——`UiIcon.vue` 与 `icons.ts` 只在注释里出现这两个词，而测试代码里有真实用法（`dialogFocus.test.ts` 用 `h("div",{innerHTML:markup})` 构造真实属性），订正本段原文「全仓核查二者只出现在注释里」）；② 删掉循环内的同义反复断言 `expect(name).not.toBe("")`；③ `vitest.config.ts` 注释补插件代价（核验自插件发行代码：非 SSR 时 `resolve.dedupe:["vue"]` + 三个 `__VUE_*` define，默认值与 `vite.config.ts` 生产构建一致）；④ EBADENGINE 归因订正（实际来源是本轮新增的 `@vue/test-utils@2.5.0 → js-beautify@2.0.3 → nopt@10.0.1 → abbrev@5.0.0`，`npm view` 与基线 lock 逐一核验：二者在 `8985a64` 的 lock 中出现 0 次；警告只影响安装期，需 Node ≥ 22.22.2（或 ≥ 24.15）才能消除）。
+- 图标溯源订正：`lucide-static@1.46.0`（当日 `npm view` 返回的 latest）逐名称比对——`contrast`/`folder`/`copy` 逐字节一致，`x`/`chevron-*`/`search` 为同一几何的绝对坐标写法，`settings` **不同**（本仓是旧版齿轮路径）。因此不再声称「取自 1.46.0」，改为「按 Lucide 名称与 24×24 规格转写、未与上游同步」；许可由 MIT 改为 **ISC**，许可原文（3208 字节，sha256 `b495047b…`，git blob `718bb3f0…`）按「许可证随资产入库」先例存为 `web/src/components/ui/ISC-Lucide.txt`。
+- 测试与验证：新增 6 条用例（F1 2 + F2 4），`uiPrimitives.test.ts` 25 条 + `dialogFocus.test.ts` 11 条 = **36 条**；定向 RED **29 passed / 7 failed** → GREEN **36 passed / 0 failed**；全量 `test:unit` **84 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（946 键 / 9 域）。七项变异在**最终** 36 条集上重跑均转红并逐字节还原（1/1/6/2/1/2/1 条）：不变量仍 **383 = 382 + 1**，例外表 blob 仍 `b82f03f0276155cd0be2b7a2430e9ea031da9118`（例外配额 0）。
+- 本轮未跑 e2e（新增原语仍无页面消费，并发工作线占用端口）；重点修复项属**纯单测可验证**的逻辑边界，已由新增用例与变异自证覆盖。本提交未 amend `5aff6d9`，只显式暂存本任务文件。
+
+## 2026-09-14（前端公共视觉与焦点原语落地，PLAN-DM-029 Task 3）
+
+- 新增视觉原语（均用组件 `<style scoped>`，不导入任何业务 composable 或 API 类型）：`UiButton.vue`（`primary/secondary/danger/link` + `default` 36px / `compact` 34px，默认 `type="button"`，disabled 与 loading 都落到原生 `disabled`，loading 额外 `aria-busy` 并保留文案，禁用态不换色）、`UiIconButton.vue`（固定 `--icon-button-size` 36×36px，必填 `label` → `aria-label`，空/缺失时抛错而非渲染不可访问控件）、`UiIcon.vue` + `icons.ts`（封闭 `UiIconName`，首批 11 名 `theme/settings/close/chevron-left/right/up/down/status-dot/search/folder/copy`，几何按 Lucide 图标名与 24×24 视窗转写、`stroke-width` 取 ARCH-DM-007 §6 允许的 1.5，`currentColor` 继承颜色，`sm/md/lg` 映射 `--icon-size-*`，不使用 `v-html`、不接受任意字符串）、`UiInput.vue`/`UiSelect.vue`（`inheritAttrs:false` + `v-bind="$attrs"` 把属性透传到真正的控件，自带 `label` 时渲染 `label[for]` 关联自身 `id`，省略时由 `FormField` 提供；`UiSelect` 默认高度消费 `--input-height`）、`FormField.vue`（可见 label + hint/error 元素及其 `-hint/-error` id + `aria-describedby` 聚合，`invalid` 由 `error` 派生，插槽属性 `{id, describedBy, invalid}`）。**令牌消费分两层（订正本段原文「只消费 Task 2 的语义/组件令牌」的不实表述）**：尺寸、字号、字体族消费 Task 2 新增的语义/组件令牌（`--button-height`/`--input-height`/`--control-height-compact`/`--min-tap-height`/`--button-font-size`/`--input-font-size`/`--font-ui`/`--font-label`）；颜色、间距、圆角、图标尺寸**按仓库既有约定跨层直取原始令牌**（`--color-*`/`--space-*`/`--radius-*`/`--icon-size-*`，仓库当前没有这一层的语义令牌；同类直取在本轮落地前已遍布 38 个 `.vue` 文件、1049 处，落地后为 **44 个文件 / 1104 处**（可跑口径见本节「令牌消费实情登记 G1」），属既有债务），待语义层补齐后收口，登记为计划 Task 12 **收口责任 E**。
+- 新增焦点工具 `dialogFocus.ts`：`useDialogFocus({open, container, initialFocus, onEscape})` 返回 `{onDialogKeydown}`；打开时保存打开前焦点并聚焦 `initialFocus` → 首个可聚焦元素 → 容器，Tab/Shift+Tab 在首尾回绕并 `preventDefault`，Escape 把原始 `KeyboardEvent` 交给 `onEscape(event)`、工具自己不 `preventDefault` 也不 `stopPropagation`（是否可关闭、是否挡住文档级 Escape 处理器均由调用方表达），关闭时按「焦点仍在对话框内或已落到 `body`/容器已卸载」交还焦点，容器内无可聚焦元素时不拦截。`FOCUSABLE_SELECTOR` 沿用 `TaskOverlay.vue` 既有拼写并扩写；它是**候选**集合（外部不得当停靠点列表用，本次已在注释中写明），真实停靠点还要过 `isTabStop`/`isHidden` 两道过滤（见下一节）。
+- 测试环境：`vitest.config.ts` 只加 `plugins: [vue()]`（`environment: "node"` 与 `include` 不变），组件测试逐文件声明 `// @vitest-environment happy-dom`；devDependencies 新增 `@vue/test-utils@2.5.0`、`happy-dom@20.14.5`（`package.json` + `package-lock.json` 同步）。
+- 新增 30 条契约用例（`uiPrimitives.test.ts` 23 条 + `dialogFocus.test.ts` 7 条），全量单测 48 → **78 passed**。
+- 两处置信度取舍（均已在测试与报告中留痕）：① `tokens.css` 组件令牌层新增 `--input-font-size:var(--font-size-14)`（组件层本就是「输入框默认值」的定义处，控件不直接消费原始令牌；14px 与 SPEC-DM-006 正文字号及 Task 2 「控件继承 14px」的 e2e 断言同档）；② `UiButton` 增加可选 `label` → `aria-label`，因为静态门禁 `icon-button-name` 看不到插槽里的可见文案（插槽文案仍可作可访问名称，`label` 仅给「插槽无文字」的用法）。颜色只复用既有令牌，未新造色板值；`primitives.css`、`style.css` 与例外表均未改动，Task 3 例外配额保持 0。
+- 实际验证：定向单测 **30 passed / 0 failed**；全量 `test:unit` **78 passed**；`check:ui` 退出 0；`test:contracts` **83 passed / 0 failed**；`build` 退出 0（`vue-tsc -b` 类型检查通过、`check:i18n` 946 键、`check:api` 与 `vite build` 均通过）。棘轮不变量未被扰动：原始违规（不含动态白名单）仍 **383 = 382 条例外 + 1 条动态变量登记项**，例外表 blob 仍为 `b82f03f0276155cd0be2b7a2430e9ea031da9118`（382 条），新增的 `components/ui` 文件零新增违规。三项变异自证均转红并逐字节还原：`UiSelect` 高度令牌改写 1 红、删除 `UiIconButton` 空 label 守卫 1 红、关闭 Tab 圈闭 2 红。
+- 未跑 e2e：本轮改动不被任何页面消费（Task 4 起才接入），且并发工作线占用 e2e 端口，故按派发约束只跑单测与静态门禁。**订正（见上一节）**：`UiSelect` 的 38px 真实计算高度**没有**被任何 e2e 兜住——`properties-definitions.spec.ts:344-346` 量的是 `.definition-panel` 里的遗留控件，与本案新增原语无关；happy-dom 不算布局，本地只断言「消费 `--input-height` + 令牌链解出 38px」，真实计算高度已作为必需项写进计划 Task 4 Step 1。
+- 修复轮（见上一节）：新增 `web/src/components/ui/instanceId.ts` 与 `ISC-Lucide.txt`，测试由 **30 条增至 36 条**。
+- 同时修改了计划文件：Task 3 的 Files 补登 `web/vitest.config.ts` 与 `web/src/styles/tokens.css`，Step 1/5 标注两处补充，Step 7 记实测命令与结果，并在「实际验证」表新增 Task 3 行。
+
+## 2026-09-14（校正字体溯源文档与契约注释措辞，PLAN-DM-029 Task 2 三轮再审修复）
+
+- 本轮只改文档与注释，不碰任何代码、`.vue`/`.ts`、入口样式表与例外表；三条 e2e 断言、四条硬门禁规则行为均不变。
+- 字体字符集事实订正（上一节把差集说成只涉及 Plex，不准确）：声明集合 200 个码位，两套字体各提供 199 个，并用 fontTools 复算双向差集——**Inter 缺 `U+00AD`（软连字符）、Plex 缺 `U+201B`（‛）**，两套字体**均无声明范围外码位**（越界 0），缺失码位也都不落在 Basic Latin 区间内。`web/src/assets/fonts/README.md` 与 Task 2 报告 §4.3 同步改为实测值，并给出逐条命令与实测输出。
+- 删除 `document.fonts` 误述并把缺口标清：`main.spec.ts` 内 `document.fonts` **零命中**，三条 Task 2 用例（`:1448/1478/1493`）只读 CSSOM 的 `@font-face` 规则与 `getComputedStyle().fontFamily`，**不验证 WOFF2 是否被真实请求/加载**。已按首选方案（不增加本任务成本）把「运行时确认两套 WOFF2 被真实请求且无远程字体访问」登记为计划 Task 12 的验收证据（收口责任 A，含若采断言则把 `main.spec.ts` 加入 Task 12 Files 的要求）。
+- 补齐可复制复核命令并逐条实际执行：Plex 的码位/极值命令、两套字体的声明范围与实取差集命令、两套字体的 CJK 区段扫描命令；README 附上真实输出（`199 0x20 0x2026` ×2；`declared 200 actual 199 font-missing ['0xad']/['0x201b'] out-of-declared []`；`cjk-hits 0` ×2）。
+- 引用与数量修正：删除指向不入库路径 `.superpowers/` 的 `（Ruling 9）`，改为指向计划文件 Task 2 Step 1 与 Task 12；硬门禁描述由「三条」改为**四条**并点名 `entry-stylesheet-not-import-only`（前面三条针对字体资产，入口那条针对入口结构）。
+- `legacy.css` 层说明收窄：`:where()` 改写只保证「这 13 条**选择器自身**的特异性和匹配范围不变」，不再宣称优先级与迁移前一致——它们同时从无层迁入 `@layer legacy`，相对未分层的组件 `scoped` 样式优先级是**下降**的。
+- 同时修改了计划文件：**Task 3 Step 2** 追加「`UiSelect` 默认高度 = 38px（消费 `--input-height`）」的 RED 项、**Task 9 Step 4** 把「删死规则时同一次更新例外表」的义务从 `.summary` 一个族推广到全部 23 条注释–指纹耦合项，**Task 12** 新增收口责任 A/B/C（字体真实加载、子集化命令、例外表跟踪项）；上一节未写明这些计划修改的来源，本节补齐。
+- 实际验证：`npm --prefix web run check:ui` 退出 0（382 条例外仍全通过，基线未被扰动）；`npm --prefix web run test:contracts` **83 passed / 0 failed**；`legacy.css` 去注释后与上一提交逐字节一致（仅注释变化）。本轮未跑 e2e 与 build。
+- 已知残留（已记入计划 Task 12 收口责任 C）：例外条目的 `rule` 字段已是冗余的临时防御（安全语义由指纹首段承载），下次重新生成例外表时删除；例外表理论上可自掩蔽自身的配置错误（当前 0 条）；全表 **23 条**指纹内嵌了前置注释（9 个文件、18 段注释文本），改注释即改指纹。
+
+## 2026-09-14（收紧 UI 契约例外一致性与字体溯源记录，PLAN-DM-029 Task 2 评审修复）
+
+- 修复唯一一处实现级缺陷：例外条目原先只按自报的 `rule` 字段判定是否属硬门禁，而登记表索引与棘轮掩盖都按 `fingerprint` 建立，导致把 `rule` 改写成可豁免规则名（或写成大小写别名）即可用真实指纹静默吃掉一条 `missing-font-asset`/`remote-font-url`/`font-budget-exceeded`/`entry-stylesheet-not-import-only` 违规（评审复现：违规数 2 → 1，且 `invalid-exception-entry` 与 `stale-exception` 均为 0）。现改为先取指纹首段（`buildFingerprint` 首段即规则 id），要求 `rule` 与逐字一致，不一致即 `invalid-exception-entry`；一致性通过后再按指纹首段判定不可豁免。
+- 存量例外审计：`ui-contract-exceptions.json` 现有 382 条逐条比对，`rule` 与指纹首段不一致 0 条、指纹空/格式异常 0 条、指纹重复 0 条，按指纹修正数据 0 条、**指纹零改动**；条目数与按规则/按 `expiresWith` 分布均与收口时实测一致（`raw-visual-value` 338 / `unicode-structure-icon` 20 / `explicit-button-type` 16 / `visible-input-label` 7 / `raw-hex-color` 1；4:41、5:62、6:75、7:89、8:66、9:13、10:34、11:2）。
+- 修复第二处门禁空转：`collectEntryStylesheetViolations` 原先只按扫描到的文件逐一循环找 `src/style.css`，入口文件缺失（或未被扫描）时循环一条都不走，「入口只能是入口」这条约束等于被删除；现先断言入口在扫描结果内，缺失即报 `entry-stylesheet-not-import-only`（语义 `missing-entry-stylesheet`；存在却未扫到时语义 `unscanned-entry-stylesheet`）。
+- 新增 3 条回归用例（例外 `rule`/指纹不一致被拒且底层违规不被掩盖、大小写别名同样被拒、样式入口缺失被拒）；测试夹具助手 `fixture()` 默认补上一个合法的 `src/style.css` 入口（缺入口的夹具在 Task 2 之后就是违规工作区），既有 80 条用例断言全部不受影响。变异自证：停用一致性校验使 2 条新用例转红，停用入口缺失判定使 1 条转红，逐字节还原后复绿。
+- 新增字体溯源文档 `web/src/assets/fonts/README.md`：上游发行物与用 `name`/`fvar` 表实测的版本（Inter 4.1 `InterVariable.woff2` / `Version 4.001;git-9221beed3`；npm `@ibm/plex-mono@2.5.0` `IBMPlexMono-Regular` / `Version 2.005`）、声明字符集与 `unicode-range`（各 199 码位、`U+0020–U+2026`，Plex 少 `U+201B`；此处差集描述经三轮再审订正，见上一节）、可复制执行的复核命令，以及「子集化命令行未经证实」的显式保留项（复原物 11220 字节 ≠ 已入库 12488 字节，不得用它替换已入库资产）；该保留项同时登记到计划 Task 12 的收口责任。
+- 措辞与账目修正：23 条裸全局选择器的实际去向为 **`reset.css` 10 条（保持裸元素选择器）+ `legacy.css` 13 条（加 `:where(#app)`）**，原「统一加 `:where(#app)`」的说法不准确；`legacy.css` 尾部层说明重写，区分这两处结构调整并按 ARCH-DM-007 §7 说明级联方向（命名层顺序只决定层间顺序，无层 `<style scoped>` 优先于全部命名层；重写后该文件 125 → 141 行，仅注释变化、无规则增删）；两份许可证 git blob 字节数修正为 4366 / 4363（Plex 工作区落盘 4456 字节来自 CRLF）；`.summary strong{font-size:22px}` 的理由改为与 Task 9 Step 4 对齐（该族在 `src/` 内已无 `class="summary"` 渲染点，属待删死规则，应随 legacy 清理整体删除而非令牌化）。
+- 实际验证：`npm --prefix web run test:contracts` **83 passed / 0 failed**（8 suites，+3 条）；`npm --prefix web run check:ui` 退出 0；聚焦变异运行（`node --test --test-name-pattern`）基线绿 / 变异 A、B 各自红 / 还原后绿。本轮未跑 `build`、`test:unit` 与全量 e2e：改动仅涉及 `web/scripts/**`、样式注释文本与一份 `.md`，不触碰 `.vue`/`.ts`/入口样式表。
+
+## 2026-09-14（前端字体令牌与样式分层落地，PLAN-DM-029 Task 2）
+
+- 样式分层：`web/src/style.css` 瘦身为分层入口（`@layer tokens, reset, primitives, legacy;` + 四个 `@import`，原 86 行旧内容全部迁出），新增 `web/src/styles/tokens.css`（84 行，primitive→semantic→component 三层变量，浅/深主题只在此映射）、`reset.css`（42 行）、`primitives.css`（39 行）、`legacy.css`（125 行，旧全局业务规则按原值迁入；13 条元素/伪类选择器加 `:where(#app)` 根限定，10 条元素级重置另迁 `reset.css` 保持裸元素选择器）。
+- 字体本地化：入库 `web/src/assets/fonts/InterLatin.woff2`（56928 字节）与 `IBMPlexMonoLatin.woff2`（12488 字节），合计 69416 字节，预算 256000 字节；两条 `@font-face` 均声明 `font-display: swap` 与 `unicode-range: U+0020-007E, U+00A0-00FF, U+2013-2014, U+2018-201D, U+2026`，不引用任何远程 URL，OFL 许可证文本随字体入库。字符集用 fontTools 直读 `cmap` 复核：各 199 个码位、最大 U+2026、CJK 各区块命中 0；上游身份由 `name` 表实测（Inter Variable 4.001 git-9221beed3、IBM Plex Mono 2.005），构建产物中的 `url()` 为 `/assets/*.woff2` 本地路径。
+- 门禁收紧：新增 `missing-font-asset`、`remote-font-url`、`font-budget-exceeded`、`entry-stylesheet-not-import-only` 四条资产事实规则（`web/scripts/ui-contracts/font-assets.mjs`），并由 `NON_EXEMPTIBLE_RULES` 固定为不可登记例外的硬门禁；`css-vars.mjs` 的 `parseRules` 增加可选 `includeAtRules`（默认行为与既有过滤条件不变）。
+- 修复收口期发现的两处门禁空转缺陷（否则四条新规则会以「永远通过」的姿态入库）：① `collectEntryStylesheetViolations` 的 `report` 只调用 `emit` 而未 push 返回值，入口结构规则永不产出违规；② `parseRules` 默认过滤 `@` 开头的 at-rule，`@font-face` 完全不进入字体检查，三条字体规则恒不放行。修复前新增用例 12 项失败（信息为「期望恰好 1 条 X，实际：[]」，其中 4 项为 CLI 级变异），修复后全绿。
+- 债务清退：`web/scripts/ui-contract-exceptions.json` 422 → 382 条，Task 2 名下 53 条全部结清——40 条清退（23 条裸全局选择器 + 17 条可精确令牌化的裸视觉值），13 条按原值迁入分层样式表后重定向到 Task 9（`legacy.css` 11 条 + `primitives.css` 2 条，全是离刻度圆角、内容驱动高度与旧度量宽度）。棘轮不变量实测 383 = 382 + 1（动态白名单掩盖 1 条 `undefined-css-variable`）。
+- 等宽区域改消费 `--font-mono`：`SheetTable.vue`、`sheet-catalog/{CatalogActions,ColumnEditor,FieldBrowser}.vue` 各 1 行替换；中文继续回落 `Microsoft YaHei, system-ui`。
+- 实际验证：`npm --prefix web run test:contracts` **80 passed / 0 failed**（新增 14 条资产与入口规则用例、4 条 CLI 级变异，覆盖面守卫扩展为 15 类/16 条注入/14 条规则）；`npm --prefix web run check:ui` 退出 0；`npm --prefix web run build` 退出 0（`dist` 产出两个本地 WOFF2）；`npm --prefix web run test:unit` 48 passed；`npm --prefix web run test:e2e -- main.spec.ts` **78 passed / 0 failed**。另做三项针对性变异（预算 `>` 改 `>=`、相对路径解析忽略样式表目录、移除 `NON_EXEMPTIBLE_RULES` 判定）均使对应用例转红，还原后复跑全绿。
+- 偏离与限制：计划 Task 2 的 Files 列表漏列检查器侧文件，经裁定补齐；`main.spec.ts` 的 `select` 行高断言收窄（Chromium 把 `select` 行高钉为 `normal`，`font:inherit` 与显式 `line-height:inherit` 都改不动，其高度契约归 Task 3），`unicode-range` 断言由字面串改为码位区间语义判定（CSSOM 会归一化为 `U+20-7E`）；两套 WOFF2 的原始子集化命令行未被中断前的实现者记录且收口轮无法复原（上游 Inter 发行包在本机不可达，用 npm 包内 `woff` 原件重跑得 11220 字节 ≠ 已入库 12488 字节），故只声明实测可确认的上游身份、字符集、工具版本与字节数，不声称命令可复现。
+
+## 2026-09-14（前端 UI 静态契约门禁落地，PLAN-DM-029 Task 1）
+
+- 新增前端 UI 静态契约检查器：`web/scripts/check-ui-contracts.mjs` 与 `web/scripts/ui-contracts/{types,css-vars,vue-source,visual-values}.mjs`。CSS `var()` 走平衡括号解析（不用单层正则），递归校验 fallback 中的引用、检测同文件循环引用，并支持含 `producer`/`consumer`/`reason`/`expiresWith` 的动态变量白名单。
+- 规则清单：`undefined-css-variable`、`circular-css-variable`、`dynamic-variable-not-registered`、`explicit-button-type`、`visible-input-label`、`icon-button-name`、`unicode-structure-icon`、`global-selector-in-component`、`raw-hex-color`、`raw-visual-value`，另加棘轮两条 `invalid-exception-entry`、`stale-exception`。违规固定为 `{rule, file, line, column, message, fingerprint}`，CLI 按 `file:line:column [rule] message` 输出并返回 1。
+- 棘轮机制：`web/scripts/ui-contract-exceptions.json` 登记现存债务 386 条（按规则：裸视觉值 319、全局选择器 23、Unicode 图标 20、按钮缺 `type` 16、输入缺 label 7、裸十六进制色 1），每条带 `reason` 与 `expiresWith`（归属到 PLAN-DM-029 的具体任务）。新增未登记违规即失败，已不再命中的例外即失败，重复指纹与缺字段条目同样失败；动态变量白名单登记 `--sheet-tree-width`（生产者与消费方均为 `src/views/SheetsView.vue`）。
+- 修正 `web/src/layout/TaskOverlay.vue` 诊断复制按钮的两个未定义变量：`--color-bg-surface-2` 与 `--color-border` 分别替换为已声明的 `--color-border-subtle`、`--color-border-strong`（原 fallback 为死代码，hover 边框恢复为强边框）。
+- 接入方式：新增 `check:ui` 与 `test:contracts` scripts；`build` 顺序固定为 `check:api → check:i18n → check:ui → vue-tsc → vite build`。
+- 实际验证：`npm --prefix web run test:contracts` **49 passed / 0 failed**（含 9 类违规注入的变异套件与回滚断言）；注入临时违规后 `check:ui` 退出 1、移除后退出 0；`npm --prefix web run check:ui` 退出 0（仅因已登记债务通过）；`npm --prefix web run build` 退出 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全链通过）；`npm --prefix web run test:unit` 48 passed 无回归。
+- 范围口径：`raw-visual-value` 只覆盖字号、行高、高度、圆角四类原始值（不含间距与布局宽度）；`raw-hex-color` 与 `raw-visual-value` 跳过 `:root`/`html[...]` 令牌定义块；`global-selector-in-component` 只作用于组件里非 `scoped` 的 `<style>` 块与全局业务样式表（`style.css`、`styles/legacy.css`、`styles/primitives.css`）。（宽度家族已在评审修复中补齐；最终口径见下方修复记录与报告第 6 节。）
+- **评审修复（commit `修正 UI 契约检查器位置计算与令牌块豁免`）**：修正 5 项重要缺陷与 5 项次要缺陷。
+  - 位置计算：声明值下标相对 `<style>` 块内容文本（切分已以规则内容起点为基点，仅 `.css` 文件才与整份文件下标重合），原实现误按「已是文件绝对下标」又额外加了一层规则内容起点，导致行号正确但列号系统性偏后；修正后按「块在文件中的偏移 + 块内下标」定位，`raw-visual-value`/`raw-hex-color` 的 `line:column` 精确指向值起点，并新增手算行列的回归测试。
+  - 图标定位：原实现用变长替换剔除 HTML 注释，吞掉注释内换行后使注释之后的图标整体前移；改为逐字符等长遮罩（保留换行），新增含多行注释的模板回归测试。
+  - 令牌块豁免收窄：原实现在逗号列表里只要有一段命中 `:root`/`html` 前缀就整块豁免，使 `html body .panel`、`html[data-theme="dark"] .panel`、`:root,.panel` 静默通过；现要求**每一段**都恰为 `:root`/`html[...]` 且不含后代组合，三种逃逸用例均已被拒绝。
+  - 尺寸规则补全：`raw-visual-value` 增加 `width`/`min-width`/`max-width`，与高度家族对齐（图标成对书写宽高）；同时新增回归测试证明 `@media (max-width:…)`/`@container … (max-width:…)` 前奏不会被当成声明。
+  - 变异证据补全：Step 1 的 11 类判定全部改为真实 CLI 子进程注入（新增“嵌套 fallback 未定义”“动态变量缺生产者”“图标尺寸裸值”），并加测试锁定 11 类/12 条注入的覆盖面。
+  - 次要修复：`@keyframes` 内的 `from`/`to`/`0%` 不再当作选择器规则；动态白名单条目校验生产者文件真实存在（幽灵条目不再放行）；源码根目录不可读时退出 2 而不是静默零违规；测试文件注释改为贴近量级的耗时说明（精确值在复审修复中补齐）。
+- 评审修复后重新验证：`test:contracts` **62 passed / 0 failed**；`check:ui` 退出 0；`build` 退出 0；`test:unit` 48 passed 无回归。债务基线 386 → 422 条，**零删除、仅新增 36 条**（宽度家族 20 + `max-width` 12 + `min-width` 4），不变量重新实测为 **423 = 422 + 1**。
+- **复审修复（commit `补齐 UI 契约门禁文档与回归测试细节`）**：收尾文档与回归测试细节，不动规则判定范围。
+  - 报告第 5 节债务基线表改为直接用 `ui-contract-exceptions.json` 统计的真实数据（422 条；按规则与按 `expiresWith` 的逐项分布），与第 8 节同源同值；第 6 节范围口径同步为「宽度与高度家族均覆盖」。
+  - 注释修正：`check-ui-contracts.mjs` 说明 `offset` 是 `<style>` 块在文件中的起点、`declaration.valueStart` 相对块内容，两者相加才是文件绝对下标；`visual-values.mjs` 写明「裸 `html` 与 `:root` 等价、同为令牌定义处」这一有意保留的取舍。
+  - 回归测试加固：`@media`/`@container` 前奏测试改为在全局业务样式表里写裸值，并同时断言「三条内层裸值全部命中」（正向控制）与「没有任何违规提及 `900px`/`511px`/`600px`」；临时移除 `parseRules` 的 `@` 跳过可复现 3 条 `global-selector-in-component` 误报，该测试确实变红，已还原并复跑为绿（证据见报告 §9）。
+  - 耗时注释改为实测值：整套用例 5.7～9.7 秒，14 次 CLI 子进程启动各 0.52～0.62 秒。
+- 复审修复后重新验证：`test:contracts` **62 passed / 0 failed**（连续两次运行一致）；`check:ui` 退出 0；`build` 退出 0；`test:unit` 48 passed。债务基线仍为 **422 条**（本轮不改变判定范围），不变量仍为 423 = 422 + 1。
 
 ## 2026-09-15（整改：MEMO-DM-036 审查发现 F1–F3）
 
@@ -1732,3 +2422,4 @@
 - 新增 `docs/PYTHON_REFACTOR_ASSESSMENT.md`，记录 Python/pyautocad 重构可行性、功能映射、收益与风险、目标架构、迁移阶段、工作量和验收指标。
 - 在 `README.md` 增加 Python/pyautocad 重构评估文档入口。
 - 本次仅新增文档，未修改 PowerShell、配置、Excel、DWG 或 DLL。
+

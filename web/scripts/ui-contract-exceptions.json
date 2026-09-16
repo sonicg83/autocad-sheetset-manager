@@ -1,0 +1,62 @@
+{
+  "exceptions": [
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/sheet-catalog/ColumnEditor.vue",
+      "fingerprint": "unicode-structure-icon|src/components/sheet-catalog/ColumnEditor.vue|↑|1",
+      "reason": "迁移前既有 Unicode 结构图标；PLAN-DM-023 A1 已批准保留图纸目录的 ↑/↓/✕ 图标按钮（用户已接受与冻结 Demo 的差异，操作轨道因此为 112px 而非 188px）。PLAN-DM-029 Task 6 Step 3 复核：四条判据全部成立——① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除列 N，为既有 e2e 硬断言）；③ 点击面积 32px（--tap-target-min），行用量 3×32+2×4=104 ≤ 112 轨道；④ 同状态截图不劣化（迁移到 UiIconButton 会丢实边框、把字形降为 --color-text-secondary 并使 ✕ 失去危险色，36×36 需要 116px > 112）。到期条件不再是本计划任务，而是下一次目录页视觉 Spec 修订。",
+      "expiresWith": "下一次目录页视觉 Spec 修订"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/sheet-catalog/ColumnEditor.vue",
+      "fingerprint": "unicode-structure-icon|src/components/sheet-catalog/ColumnEditor.vue|↓|1",
+      "reason": "迁移前既有 Unicode 结构图标；PLAN-DM-023 A1 已批准保留图纸目录的 ↑/↓/✕ 图标按钮（用户已接受与冻结 Demo 的差异，操作轨道因此为 112px 而非 188px）。PLAN-DM-029 Task 6 Step 3 复核：四条判据全部成立——① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除列 N，为既有 e2e 硬断言）；③ 点击面积 32px（--tap-target-min），行用量 3×32+2×4=104 ≤ 112 轨道；④ 同状态截图不劣化（迁移到 UiIconButton 会丢实边框、把字形降为 --color-text-secondary 并使 ✕ 失去危险色，36×36 需要 116px > 112）。到期条件不再是本计划任务，而是下一次目录页视觉 Spec 修订。",
+      "expiresWith": "下一次目录页视觉 Spec 修订"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/sheet-catalog/ColumnEditor.vue",
+      "fingerprint": "unicode-structure-icon|src/components/sheet-catalog/ColumnEditor.vue|✕|1",
+      "reason": "迁移前既有 Unicode 结构图标；PLAN-DM-023 A1 已批准保留图纸目录的 ↑/↓/✕ 图标按钮（用户已接受与冻结 Demo 的差异，操作轨道因此为 112px 而非 188px）。PLAN-DM-029 Task 6 Step 3 复核：四条判据全部成立——① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除列 N，为既有 e2e 硬断言）；③ 点击面积 32px（--tap-target-min），行用量 3×32+2×4=104 ≤ 112 轨道；④ 同状态截图不劣化（迁移到 UiIconButton 会丢实边框、把字形降为 --color-text-secondary 并使 ✕ 失去危险色，36×36 需要 116px > 112）。到期条件不再是本计划任务，而是下一次目录页视觉 Spec 修订。",
+      "expiresWith": "下一次目录页视觉 Spec 修订"
+    },
+    {
+      "rule": "visible-input-label",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "visible-input-label|src/components/SheetTable.vue|input:checkbox:|1",
+      "reason": "表格行选择/全选复选框按数据表无障碍惯例由列头承担可见标签，检查器只识别 <label> 包裹或 label[for] 关联、看不到 <th> 表头模式；可访问名称已由 aria-label 提供（sheets.table.selectRowAria）。",
+      "expiresWith": "下一次表格无障碍 Spec 修订"
+    },
+    {
+      "rule": "visible-input-label",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "visible-input-label|src/components/SheetTable.vue|input:checkbox:|2",
+      "reason": "表格行选择/全选复选框按数据表无障碍惯例由列头承担可见标签，检查器只识别 <label> 包裹或 label[for] 关联、看不到 <th> 表头模式；可访问名称已由 aria-label 提供（sheets.table.selectRowAria）。",
+      "expiresWith": "下一次表格无障碍 Spec 修订"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/sheets/SheetToolbar.vue",
+      "fingerprint": "unicode-structure-icon|src/components/sheets/SheetToolbar.vue|✕|1",
+      "reason": "条件标签的清除按钮（chip-clear）保留 Unicode ✕。PLAN-DM-029 Task 7 Step 3 复核四条判据：① 可点面积不达标（padding:0 + 12px 字号，约 12×12px）——这是保留而非迁移的主因；② 可访问名称已具备（aria-label=sheets.toolbar.chips.*Clear）；③ 原生 button 且已显式 type=\"button\"，键盘可聚焦可激活；④ 迁移到 UiIconButton 会引入 36×36 图标按钮，撑破 12px 的标签胶囊布局（行内小控件），视觉劣化。故保留原字符，到期条件改为下一次图纸页视觉 Spec 修订，与责任 R（密集行内小控件 36px 不可达）同类。续轮补记：该可点面积低于全局最小可点下限 32px，与责任 R 同属「密集行内控件」待裁问题，并入其 SPEC 豁免申请。",
+      "expiresWith": "下一次图纸页视觉 Spec 修订"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/RevisionHistoryPanel.vue",
+      "fingerprint": "unicode-structure-icon|src/components/RevisionHistoryPanel.vue|→|1",
+      "reason": "该 `→` 是两个哈希（before/after）之间的**文本分隔符**，不是充当结构图标的字形：它不承载任何交互、无可点面积、无键盘语义，属于单元格正文的一部分。既有 e2e 以 `getByText('aaaaaaaa → bbbbbbbb')` 直断言这段文本（i18n-workflows.spec.ts:159），迁到 SVG 会改变断言的语言无关性并使单元格失去可读文本，故**保留原字符**。PLAN-DM-029 Task 9 复核结论：保留，到期条件改为下一次修订页视觉 Spec 修订。",
+      "expiresWith": "下一次修订页视觉 Spec 修订"
+    }
+  ],
+  "dynamicVariables": [
+    {
+      "variable": "--sheet-tree-width",
+      "producer": "src/views/SheetsView.vue",
+      "consumer": "src/views/SheetsView.vue",
+      "reason": "图纸树宽度是用户可拖拽/键盘调整的运行时状态（SheetsView.vue:91 的 treeWidth ref，260–420px 夹取，:147 经内联 :style 写入），静态样式表无法声明；PLAN-DM-029 Task 7 复核：不可改为静态令牌（宽度由用户交互决定）",
+      "expiresWith": "图纸树面板改为固定宽度、或撤销拖拽/键盘调整能力时"
+    }
+  ]
+}

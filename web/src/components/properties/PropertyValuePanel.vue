@@ -1,13 +1,17 @@
 <!-- 图纸集属性值面板（PLAN-DM-016 任务 3，SPEC-DM-010 §5.2/§5.3）。
      消费 usePropertiesWorkspace 的缓冲/状态/过滤/动作（不直接 emit API 命令，不修改 Workspace）：
-     33 项按服务端映射顺序平铺（最多两列、无分组无分页、全部 text input 38px），
+     33 项按服务端映射顺序平铺（两列/四列可切换并记忆偏好、无分组无分页、全部 text input 38px），
      图纸集名称独立标注且不参与搜索；三态标记（琥珀未加入草稿/蓝待写入/红错误冲突）文字与颜色并存，
      输入 aria-describedby 关联状态与错误；搜索三模式与仅看修改取交集，活动字段暂留并标注；
      值对照与展开编辑走独立对话框；单项撤回仅回到草稿投影。样式全部 scoped 且只用语义令牌。 -->
 <script setup lang="ts">
-import {computed, nextTick, ref, watch} from "vue";
+import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {PropertyBuffer, PropertySearchMode, ValueKey, ValueStatus} from "../../features/properties/types";
+import UiButton from "../ui/UiButton.vue";
+import UiIcon from "../ui/UiIcon.vue";
+import UiInput from "../ui/UiInput.vue";
+import UiSelect from "../ui/UiSelect.vue";
 import PropertyValueCompareDialog from "./PropertyValueCompareDialog.vue";
 
 const props = defineProps<{
@@ -68,9 +72,25 @@ function describedBy(key: ValueKey): string | undefined {
   if (errorOf(key)) parts.push(errorId(key));
   return parts.length ? parts.join(" ") : undefined;
 }
-// 长值整行展示（full-width），配合「展开编辑」保证长文本可完整读取
+// 长值固定跨两列（span 2）：两列模式下占整行、四列模式下占半行；名称行恒占满整行。
+// 配合「展开编辑」保证长文本可完整读取。
 function isLong(key: ValueKey): boolean {
   return (readOf(props.input, key) ?? "").length > 40;
+}
+
+// —— 展示列数偏好（Task 12 用户验收修复轮）——
+// 默认两列；用户可切 2/4 列，偏好记忆在 localStorage（纯展示偏好，不属于设置中心应用配置）。
+// 四列只在容器宽度足够时由 CSS 容器查询生效（.value-grid.cols-4），空间不足自动降为两列，
+// 窄屏继续降一列——选择值与实际渲染解耦，无需 JS 测量容器宽度。
+const COLUMN_PREF_KEY = "dst-manager.property-value-columns";
+const columnPref = ref<"2" | "4">("2");
+onMounted(() => {
+  const stored = window.localStorage.getItem(COLUMN_PREF_KEY);
+  if (stored === "2" || stored === "4") columnPref.value = stored;
+});
+function setColumnPref(value: string) {
+  columnPref.value = value === "4" ? "4" : "2";
+  window.localStorage.setItem(COLUMN_PREF_KEY, columnPref.value);
 }
 
 // —— 显示顺序：名称在最前，其后按匹配顺序（原顺序，不排序、不补造），活动字段暂留在末尾 ——
@@ -99,8 +119,9 @@ const pendingCount = computed(() => allKeys.value.filter((key) => props.statusOf
 const errorCount = computed(() => Object.keys(props.errors).length);
 
 // —— 编辑与动作 ——
-function onInput(key: ValueKey, event: Event) {
-  emit("setValue", key, (event.target as HTMLInputElement).value);
+// 字段编辑改用原语后由原语上报值（不再从事件目标读值）
+function onInput(key: ValueKey, value: string) {
+  emit("setValue", key, value);
   emit("update:activeKey", key);
 }
 function endEdit() {
@@ -110,6 +131,8 @@ function clearSearch() {
   emit("update:search", "");
   emit("update:changedOnly", false);
 }
+function setSearch(value: string) { emit("update:search", value); }
+function setSearchMode(value: string) { emit("update:searchMode", value as PropertySearchMode); }
 
 // —— 值对照：三阶段（原文件值/草稿值/当前输入），相邻相同阶段合并展示（合并标签走专用语义键，不拼接片段）——
 const compareKey = ref<ValueKey | null>(null);
@@ -179,7 +202,7 @@ function onExpandKeydown(event: KeyboardEvent) {
         :aria-label="collapsed ? $t('properties.values.openPanel') : $t('properties.values.collapsePanel')"
         @click="emit('update:collapsed', !collapsed)"
       >
-        <span class="chevron" aria-hidden="true">{{ collapsed ? "▸" : "▾" }}</span>
+        <UiIcon :name="collapsed ? 'chevron-right' : 'chevron-down'" size="sm" class="chevron" />
         <span class="head-title">{{ $t("properties.values.title") }} <small>{{ $t("properties.values.totalItems", {count: valueCount}) }}</small></span>
       </button>
       <div class="metrics" role="status" aria-live="polite">
@@ -190,8 +213,8 @@ function onExpandKeydown(event: KeyboardEvent) {
       </div>
       <div class="head-actions">
         <span v-if="dirtyCount" class="submit-hint">{{ $t("properties.values.submitHint", {count: dirtyCount, hidden: hiddenDirtyCount}) }}</span>
-        <button type="button" @click="emit('discard')">{{ $t("properties.values.discardInput") }}</button>
-        <button type="button" class="primary" @click="emit('submit')">{{ $t("properties.values.submit") }}</button>
+        <UiButton variant="secondary" @click="emit('discard')">{{ $t("properties.values.discardInput") }}</UiButton>
+        <UiButton variant="primary" @click="emit('submit')">{{ $t("properties.values.submit") }}</UiButton>
       </div>
     </header>
     <div v-if="!collapsed" id="value-body" class="panel-body">
@@ -202,37 +225,42 @@ function onExpandKeydown(event: KeyboardEvent) {
         <span class="hint">{{ $t("properties.values.legendHint") }}</span>
       </p>
       <div v-if="!hasNoValues" class="value-toolbar">
-        <input
-          type="search"
-          :aria-label="$t('properties.values.searchLabel')"
-          :placeholder="$t('properties.values.searchPlaceholder')"
-          :value="search"
-          @input="emit('update:search', ($event.target as HTMLInputElement).value)"
-        >
-        <select :aria-label="$t('properties.values.searchScopeLabel')" :value="searchMode" @change="emit('update:searchMode', ($event.target as HTMLSelectElement).value as PropertySearchMode)">
+        <div class="search-field">
+          <UiInput
+            type="search"
+            :label="$t('properties.values.searchLabel')"
+            :placeholder="$t('properties.values.searchPlaceholder')"
+            :model-value="search"
+            @update:model-value="setSearch"
+          />
+        </div>
+        <UiSelect :label="$t('properties.values.searchScopeLabel')" :model-value="searchMode" @update:model-value="setSearchMode">
           <option value="all">{{ $t("properties.values.searchAll") }}</option>
           <option value="name">{{ $t("properties.values.searchNameOnly") }}</option>
           <option value="value">{{ $t("properties.values.searchValueOnly") }}</option>
-        </select>
+        </UiSelect>
+        <UiSelect :label="$t('properties.values.columnDisplayLabel')" :model-value="columnPref" @update:model-value="setColumnPref">
+          <option value="2">{{ $t("properties.values.columnsTwo") }}</option>
+          <option value="4">{{ $t("properties.values.columnsFour") }}</option>
+        </UiSelect>
         <label class="only-changed"><input type="checkbox" :checked="changedOnly" @change="emit('update:changedOnly', ($event.target as HTMLInputElement).checked)">{{ $t("properties.values.changedOnly") }}</label>
         <button type="button" class="link" @click="clearSearch">{{ $t("properties.values.clearSearch") }}</button>
         <span class="match-count">{{ $t("properties.values.matchCount", {matched: matchedKeys.length, total: valueCount}) }}<template v-if="hiddenDirtyCount">{{ $t("properties.values.hiddenDirtySuffix", {count: hiddenDirtyCount}) }}</template></span>
       </div>
-      <div class="value-grid">
+      <div class="value-grid" :class="{'value-grid--cols-4': columnPref === '4'}">
         <div v-for="key in displayKeys" :key="key" class="value-item" :class="{name: key === NAME_KEY, full: isLong(key), invalid: Boolean(errorOf(key)), pinned: isPinned(key)}">
           <label :for="fieldId(key)">{{ labelOf(key) }}</label>
           <div class="input-line">
-            <input
+            <UiInput
               :id="fieldId(key)"
-              type="text"
+              :model-value="readOf(input, key) ?? ''"
               autocomplete="off"
-              :value="readOf(input, key) ?? ''"
               :aria-label="key === NAME_KEY ? undefined : $t('properties.values.fieldAria', {name: labelOf(key)})"
-              :aria-invalid="errorOf(key) ? 'true' : undefined"
-              :aria-describedby="describedBy(key)"
-              @input="onInput(key, $event)"
+              :invalid="Boolean(errorOf(key))"
+              :described-by="describedBy(key)"
+              @update:model-value="value => onInput(key, value)"
               @focus="emit('update:activeKey', key)"
-            >
+            />
             <button type="button" class="link" :aria-label="$t('properties.values.expandEditAria', {name: labelOf(key)})" @click="openExpand(key)">{{ $t("properties.values.expandEdit") }}</button>
           </div>
           <div class="field-foot">
@@ -250,7 +278,7 @@ function onExpandKeydown(event: KeyboardEvent) {
       </div>
       <div v-if="hasNoValues" class="empty empty-values">
         <p>{{ $t("properties.values.noValuesHint") }}</p>
-        <button type="button" @click="emit('addSheetsetField')">{{ $t("properties.values.addSheetsetField") }}</button>
+        <UiButton variant="secondary" @click="emit('addSheetsetField')">{{ $t("properties.values.addSheetsetField") }}</UiButton>
       </div>
       <p v-else-if="hasNoMatch" class="empty">{{ $t("properties.values.noMatch") }}</p>
     </div>
@@ -261,8 +289,8 @@ function onExpandKeydown(event: KeyboardEvent) {
         <p class="expand-hint">{{ $t("properties.values.expandHint") }}</p>
         <textarea ref="expandTextarea" v-model="expandedValue" rows="8" :aria-label="$t('properties.values.expandedTextareaAria')"></textarea>
         <div class="modal-actions">
-          <button type="button" @click="closeExpand">{{ $t("properties.values.cancel") }}</button>
-          <button type="button" class="primary" @click="applyExpand">{{ $t("properties.values.applyToInput") }}</button>
+          <UiButton variant="secondary" @click="closeExpand">{{ $t("properties.values.cancel") }}</UiButton>
+          <UiButton variant="primary" @click="applyExpand">{{ $t("properties.values.applyToInput") }}</UiButton>
         </div>
       </div>
     </div>
@@ -270,63 +298,65 @@ function onExpandKeydown(event: KeyboardEvent) {
 </template>
 <style scoped>
 .value-panel{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);overflow:hidden}
-.panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:60px;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
-/* 折叠开关沿用属性页受控按钮基线（≥36px、边框与不透明背景），仅排布为标题样式 */
-.head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:36px}
+.panel-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:var(--panel-head-min-height);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border-subtle)}
+/* 折叠开关是复合标题控件（字形 + 标题 + 计数），保留原生按钮；最小高度消费普通档结构令牌 */
+.head-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:var(--control-height-default)}
 /* 标题文字用 span（button 内不允许 h2）：面板名由 section aria-label 与按钮 aria-label 提供 */
-.head-title{margin:0;font-size:16px;font-weight:600}
-.head-title small{font-weight:400;color:var(--color-text-secondary);font-size:12px}
-.chevron{color:var(--color-text-secondary);font-size:12px}
+.head-title{margin:0;font-size:var(--font-label);font-weight:600}
+.head-title small{font-weight:400;color:var(--color-text-secondary);font-size:var(--font-caption)}
+.chevron{color:var(--color-text-secondary)}
 .metrics{display:flex;gap:var(--space-2);flex-wrap:wrap}
 .head-actions{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
-.submit-hint{color:var(--color-text-muted);font-size:12px}
-.head-actions button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
-.legend{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;font-size:12px;color:var(--color-text-secondary);margin:0 0 var(--space-3)}
-.flag{display:inline-block;font-size:12px;padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
+.submit-hint{color:var(--color-text-muted);font-size:var(--font-caption)}
+.legend{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;font-size:var(--font-caption);color:var(--color-text-secondary);margin:0 0 var(--space-3)}
+.flag{display:inline-block;font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .flag.dirty{color:var(--color-warning);background:var(--color-warning-bg)}
 .flag.pending{color:var(--color-info);background:var(--color-info-bg)}
 .flag.error{color:var(--color-danger);background:var(--color-danger-bg)}
-.hint{color:var(--color-text-muted);font-size:12px}
+.hint{color:var(--color-text-muted);font-size:var(--font-caption)}
 /* 面板体作为容器查询上下文：缩放/极窄容器下两列最小宽度放不下时兜底降一列 */
 .panel-body{padding:var(--space-4) var(--space-5);container:value-body / inline-size}
-/* 双列节奏（minmax(240px,360px)）；视口 ≤900px（与 Demo 断点对齐）或容器不足以容纳两个最小列时降一列。
-   长值与名称行整行展示。 */
-.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:start}
+/* 双列节奏（minmax(240px,360px)），网格在可用区域内居中；视口 ≤900px（与 Demo 断点对齐）
+   或容器不足以容纳两个最小列时降一列。用户可切 4 列（Task 12 用户验收修复轮）：四列只在
+   容器 ≥ 4×240px + 3×24px 列间距 = 1032px 时生效，否则自动回落两列，不产生横向滚动；
+   长值跨两列，名称行占满整行。 */
+.value-grid{display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:var(--space-3) var(--space-5);justify-content:center}
+/* 四列只在容器 ≥ 4×240px 最小列宽 + 3×24px 列间距 = 1032px 时生效；不足时回落两列，不横向滚动 */
+@container value-body (min-width:1032px){.value-grid--cols-4{grid-template-columns:repeat(4,minmax(240px,360px))}}
+
 .value-item{min-width:0;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-2);border:1px solid transparent;border-radius:var(--radius-md)}
 .value-item:focus-within{background:var(--color-bg-canvas)}
-.value-item.full,.value-item.name{grid-column:1 / -1}
+.value-item.full{grid-column:span 2}
+.value-item.name{grid-column:1 / -1}
 .value-item.name{border-bottom:1px solid var(--color-border-subtle);border-radius:0;padding-bottom:var(--space-3);margin-bottom:var(--space-2)}
 .value-item.invalid{border-color:var(--color-danger);background:var(--color-danger-bg)}
-.value-item label{font-size:13px;font-weight:500;color:var(--color-text-secondary)}
-.value-item input{height:38px;width:100%;min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
-.value-item input:hover:not(:disabled){border-color:var(--color-accent)}
-.value-item.invalid input{border-color:var(--color-danger)}
-.input-line{display:flex;align-items:center;gap:var(--space-1)}
-.input-line input{flex:1}
-.field-foot{min-height:36px;display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.value-item label{font-size:var(--font-label);font-weight:500;color:var(--color-text-secondary)}
+/* 字段控件的盒模型、错误态与悬停强调均由 UiInput 提供：原语根元素是 <span>、真正的控件是内部
+   <input class="ui-input__control">，scoped 的 data-v-* 只追加到子组件根元素，所以页面侧写
+   `.value-item input:hover` 永远不会命中（Task 5 修复轮 Ruling 33），此处不再自带悬停样式 */
+.input-line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-1)}
+.field-foot{min-height:var(--control-height-default);display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
 .field-foot .flags{display:flex;gap:var(--space-1);flex-wrap:wrap}
 .field-foot .spacer{flex:1;min-width:0}
-.field-error{margin:0;color:var(--color-danger);font-size:12px;line-height:1.7}
-.pinned-note{margin:0;color:var(--color-text-secondary);font-size:12px}
+.field-error{margin:0;color:var(--color-danger);font-size:var(--font-caption);line-height:1.7}
+.pinned-note{margin:0;color:var(--color-text-secondary);font-size:var(--font-caption)}
 /* 值面板行内文字操作按钮属 36px 普通档（34px 仅限工具栏紧凑按钮）：不透明语义背景 + 8px 横向留白 */
-button.link{min-height:36px;padding:2px var(--space-2);border:1px solid transparent;border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-accent);white-space:nowrap;font-size:12px}
+button.link{min-height:var(--control-height-default);padding:2px var(--space-2);border:1px solid transparent;border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-accent);white-space:nowrap;font-size:var(--font-caption)}
 button.link:hover:not(:disabled){background:var(--color-bg-muted)}
 button.link:disabled{color:var(--color-text-muted);cursor:not-allowed}
-button.link:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
-/* 搜索工具行与值网格共用 38px 输入密度 */
-.value-toolbar{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-3)}
-.value-toolbar input[type="search"]{height:38px;width:280px;min-width:0;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
-.value-toolbar select{height:38px;padding:6px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
-.value-toolbar .only-changed{display:inline-flex;align-items:center;gap:var(--space-1);font-size:13px;color:var(--color-text-secondary)}
-.match-count{margin-left:auto;color:var(--color-text-muted);font-size:12px}
+/* 搜索工具行与值网格共用 38px 输入密度；可见 label 位于控件上方，故按底边对齐 */
+.value-toolbar{display:flex;gap:var(--space-2);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--space-3)}
+.search-field{width:var(--panel-search-width)}
+.value-toolbar .only-changed{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--font-label);color:var(--color-text-secondary)}
+.match-count{margin-left:auto;color:var(--color-text-muted);font-size:var(--font-caption)}
 .empty{text-align:center;padding:var(--space-5);color:var(--color-text-secondary);margin:0}
 /* 无自定义值空态：与查询无结果区分，提供新增 sheetset 字段入口 */
 .empty-values{display:grid;justify-items:center;gap:var(--space-3);border:1px dashed var(--color-border-subtle);border-radius:var(--radius-md)}
 .empty-values p{margin:0}
-.empty-values button{min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface)}
 /* 展开编辑对话框（复用公共模态原语；textarea 长文本完整显示不截断） */
-.expand-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:13px;line-height:1.7}
-textarea{width:100%;min-height:140px;resize:vertical;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
-@media (max-width:900px){.value-grid{grid-template-columns:minmax(0,1fr)}}
-@container value-body (max-width:511px){.value-grid{grid-template-columns:minmax(0,1fr)}}
+.expand-hint{margin:0 0 var(--space-3);color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.7}
+textarea{width:100%;min-height:var(--expand-editor-min-height);resize:vertical;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+/* 单列降级时长值退回 auto：span 2 在单列网格会撑出隐式第二列，破坏降级断言与布局 */
+@media (max-width:900px){.value-grid{grid-template-columns:minmax(0,1fr)}.value-item.full{grid-column:auto}}
+@container value-body (max-width:511px){.value-grid{grid-template-columns:minmax(0,1fr)}.value-item.full{grid-column:auto}}
 </style>

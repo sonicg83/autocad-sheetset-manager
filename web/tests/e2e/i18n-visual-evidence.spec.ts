@@ -246,3 +246,45 @@ test("状态不只靠颜色：状态列 Pending/Blocking 为文本徽章", async
   await expect(firstRow.locator(".status.blocking")).toHaveText("Blocking");
   await expect(firstRow.locator(".status.pending")).toHaveText("Pending");
 });
+
+// —— PLAN-DM-029 Task 4 Step 5：桌面壳层默认状态截图（浅色基准、深色、最小视口）——
+// 断言沿用本文件口径（几何/滚动语义，不做像素比对）；持久副本由本轮收口提交到
+// `.planning/memos/dst-manager/assets/PLAN-DM-029/`，文件名 `default-{宽}x{高}-{主题}.png`。
+async function expectShellVisible(page: Page) {
+  await expect(page.locator(".topbar")).toBeVisible();
+  await expect(page.locator(".tabbar")).toBeVisible();
+  await expect(page.locator(".dock")).toBeVisible();
+}
+
+test("壳层默认状态 1440×900 浅色：三段可见、无整页横滚、主操作可达", async ({page}, info) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installEnglish(page, "light");
+  await openEnglishWorkspace(page);
+  await expectShellVisible(page);
+  await expectNoPageHScroll(page, "壳层默认 1440×900 浅色");
+  await expectActionsReachable(page, ["Preview Changes", "Confirm Write", "Settings", "Close"]);
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "shell-default", "light");
+});
+
+test("壳层默认状态 1440×900 深色：三段可见、无整页横滚", async ({page}, info) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installEnglish(page, "dark");
+  await openEnglishWorkspace(page);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expectShellVisible(page);
+  await expectNoPageHScroll(page, "壳层默认 1440×900 深色");
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "shell-default", "dark");
+});
+
+test("壳层默认状态 900×768 深色：三段可见、无整页横滚、设置入口可达", async ({page}, info) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installEnglish(page, "dark");
+  await openEnglishWorkspace(page);
+  await expectShellVisible(page);
+  await expectNoPageHScroll(page, "壳层默认 900×768 深色");
+  await expectActionsReachable(page, ["Settings"]);
+  await page.mouse.move(0, 0);
+  await attachScreenshot(page, info, "shell-default", "dark");
+});

@@ -54,7 +54,7 @@ function text(diagnostic: CatalogDiagnostic): string {
 </template>
 <style scoped>
 .compatibility{display:flex;min-width:0;border-bottom:1px solid var(--color-border-subtle)}
-.compat-line{display:flex;flex-wrap:wrap;gap:2px 12px;margin:0;padding:10px 14px;font-size:13px;line-height:1.6;min-width:0}
+.compat-line{display:flex;flex-wrap:wrap;gap:2px 12px;margin:0;padding:10px 14px;font-size:var(--font-label);line-height:1.6;min-width:0}
 .compat-title{flex:0 0 auto;font-weight:600}
 .compat-message{min-width:0;overflow-wrap:anywhere}
 .tone-ok{background:var(--color-success-bg);color:var(--color-success)}

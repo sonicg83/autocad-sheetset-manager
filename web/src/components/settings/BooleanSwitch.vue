@@ -20,13 +20,17 @@ const emit = defineEmits<{change: [boolean]}>();
     :id="inputId" type="button" class="switch" role="switch"
     :data-key="dataKey" :aria-checked="checked" :aria-label="label" :disabled="disabled === true"
     @click="emit('change', !checked)"
-  ><span class="switch-thumb" aria-hidden="true"></span></button>
+  ><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
 </template>
 <style scoped>
-.switch{position:relative;flex:none;width:44px;height:24px;padding:0;border:1px solid var(--color-border-strong);border-radius:var(--radius-full);background:var(--color-bg-muted);cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
-.switch[aria-checked="true"]{background:var(--color-accent);border-color:var(--color-accent)}
+/* 外层 button 承担可点盒（≥44×32，ARCH-DM-007 §10 / Step 3），**视觉轨道 44×24 移到内部
+   元素上**：直接把 44×24 当可点盒会低于 32px 下限，而把轨道本身改成 ≥32 高会改变开关观感。
+   两层拆分后「可点盒达标」与「轨道保持 44×24」同时成立。 */
+.switch{position:relative;flex:none;display:inline-flex;align-items:center;justify-content:center;width:var(--settings-switch-width);min-height:var(--tap-target-min);padding:0;border:0;background:none;cursor:pointer}
 .switch:disabled{cursor:not-allowed}
-.switch-thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:var(--radius-full);background:var(--color-bg-surface);box-shadow:var(--shadow-1);transition:transform .15s ease}
+.switch-track{position:relative;display:block;width:var(--settings-switch-width);height:var(--settings-switch-height);border:1px solid var(--color-border-strong);border-radius:var(--radius-full);background:var(--color-bg-muted);transition:background-color .15s ease,border-color .15s ease}
+.switch[aria-checked="true"] .switch-track{background:var(--color-accent);border-color:var(--color-accent)}
+.switch-thumb{position:absolute;top:2px;left:2px;width:var(--settings-switch-thumb-size);height:var(--settings-switch-thumb-size);border-radius:var(--radius-full);background:var(--color-bg-surface);box-shadow:var(--shadow-1);transition:transform .15s ease}
 .switch[aria-checked="true"] .switch-thumb{transform:translateX(20px)}
-@media (prefers-reduced-motion:reduce){.switch,.switch-thumb{transition:none}}
+@media (prefers-reduced-motion:reduce){.switch-track,.switch-thumb{transition:none}}
 </style>

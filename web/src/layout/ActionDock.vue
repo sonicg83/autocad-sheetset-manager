@@ -4,6 +4,7 @@
 import {nextTick,onBeforeUnmount,onMounted,ref} from "vue";
 import type {DraftAction} from "../api/contracts";
 import DraftActionsPanel from "../components/DraftActionsPanel.vue";
+import UiIcon from "../components/ui/UiIcon.vue";
 
 const props=defineProps<{
   commandCount:number;actions:DraftAction[];cursor:number;stale:boolean;staleReasons:string[];corrupted:boolean;
@@ -26,7 +27,7 @@ onBeforeUnmount(()=>window.removeEventListener("keydown",onGlobalKeydown));
 <template>
   <footer class="dock" role="contentinfo">
     <button type="button" class="draft-chip" ref="chipRef" :aria-expanded="popOpen" aria-controls="draft-pop" aria-haspopup="dialog" @click="togglePop">
-      {{ $t("shell.dock.draftChip",{cursor,total:actions.length}) }}<span class="arr">▲</span>
+      {{ $t("shell.dock.draftChip",{cursor,total:actions.length}) }}<UiIcon class="arr" name="chevron-up" size="sm" />
     </button>
     <button type="button" class="dock-btn ghost" :disabled="stale||cursor===0" @click="emit('undo')">{{ $t("shell.dock.undo") }}</button>
     <button type="button" class="dock-btn ghost" :disabled="stale||cursor>=actions.length" @click="emit('redo')">{{ $t("shell.dock.redo") }}</button>
@@ -41,12 +42,12 @@ onBeforeUnmount(()=>window.removeEventListener("keydown",onGlobalKeydown));
   </footer>
 </template>
 <style scoped>
-.dock{display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);height:52px;min-height:52px;background:var(--color-bg-surface);border-top:1px solid var(--color-border-subtle);flex-shrink:0;position:sticky;bottom:0;margin-top:auto;z-index:10}
-.draft-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 var(--space-3);border-radius:var(--radius-full);background:var(--color-bg-muted);border:none;color:var(--color-text-primary);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
-.draft-chip .arr{font-size:10px;color:var(--color-text-muted);transition:transform .15s}
+.dock{display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);height:var(--shell-bar-height);min-height:var(--shell-bar-height);background:var(--color-bg-surface);border-top:1px solid var(--color-border-subtle);flex-shrink:0;position:sticky;bottom:0;margin-top:auto;z-index:10}
+.draft-chip{display:inline-flex;align-items:center;gap:6px;height:var(--button-height);padding:0 var(--space-3);border-radius:var(--radius-full);background:var(--color-bg-muted);border:none;color:var(--color-text-primary);font-family:inherit;font-size:var(--font-label);font-weight:500;cursor:pointer;white-space:nowrap}
+.draft-chip .arr{color:var(--color-text-muted);transition:transform .15s}
 .draft-chip[aria-expanded="true"] .arr{transform:rotate(180deg)}
 .spacer{flex:1}
-.dock-btn{height:34px;padding:0 var(--space-4);border-radius:var(--radius-md);border:1px solid transparent;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap}
+.dock-btn{height:var(--control-height-compact);padding:0 var(--space-4);border-radius:var(--radius-md);border:1px solid transparent;font-family:inherit;font-size:var(--button-font-size);font-weight:500;cursor:pointer;white-space:nowrap}
 .dock-btn.ghost{background:transparent;color:var(--color-text-secondary)}
 .dock-btn.ghost:hover:not(:disabled){background:var(--color-bg-muted)}
 .dock-btn.primary{background:var(--color-accent);color:var(--color-on-accent)}
@@ -55,8 +56,8 @@ onBeforeUnmount(()=>window.removeEventListener("keydown",onGlobalKeydown));
 .dock-btn.danger:hover:not(:disabled){background:var(--color-danger)}
 .dock-btn:disabled{cursor:not-allowed;opacity:.5}
 .dock-btn.loading{opacity:.7}
-.dock-reason{font-size:12px;color:var(--color-text-muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pop{position:absolute;bottom:100%;left:var(--space-4);width:420px;max-width:calc(100vw - 32px);max-height:300px;overflow:auto;margin-bottom:var(--space-2);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3);padding:var(--space-3);z-index:100}
+.dock-reason{font-size:var(--font-caption);color:var(--color-text-muted);max-width:var(--dock-note-max-width);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pop{position:absolute;bottom:100%;left:var(--space-4);width:var(--overlay-pop-width);max-width:calc(100vw - 32px);max-height:var(--overlay-pop-max-height);overflow:auto;margin-bottom:var(--space-2);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3);padding:var(--space-3);z-index:100}
 @media(max-width:1120px){
   .dock{padding-right:calc(var(--space-4) + 44px)}
 }

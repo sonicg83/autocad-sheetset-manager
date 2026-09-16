@@ -127,8 +127,16 @@ function closeTreeDrawer() {
 function toggleTreeDrawer() {
   drawerOpen.value = !drawerOpen.value;
   void nextTick(() => {
-    if (drawerOpen.value) treeDrawerEl.value?.querySelector<HTMLElement>('[role="tree"]')?.focus();
-    else treeToggleEl.value?.focus();
+    if (drawerOpen.value) {
+      // 焦点所有者是 **treeitem**（roving tabindex：只有活动项 tabindex=0），不是 `role=tree` 容器
+      // （PLAN-DM-029 Task 10 Step 2；容器已刻意移除 tabindex，不再是 Tab 停靠点也不再是焦点落点）。
+      // 兵底：树恒有「全部图纸」一项，因此 `[tabindex="0"]` 理论上总存在；仍保留首次 treeitem 作
+      // 防御（树为空时不静默失败，而是把焦点交给唯一的候选，否则就留在切换按钮上）。
+      const tree = treeDrawerEl.value;
+      const target = tree?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+        ?? tree?.querySelector<HTMLElement>('[role="treeitem"]');
+      target?.focus();
+    } else treeToggleEl.value?.focus();
   });
 }
 // 全局 Esc 兜底：抽屉不设焦点困绕（可与任务浮层同时展开），焦点离开抽屉后仍能 Esc 关闭。
@@ -272,16 +280,16 @@ onBeforeUnmount(() => {
 <style scoped>
 .sheets-view{display:flex;flex-direction:column;flex:1;min-height:0}
 .sheets-workspace{display:flex;align-items:stretch;flex:1;min-height:0;background:var(--color-bg-canvas)}
-.sheet-tree-pane{flex:0 0 var(--sheet-tree-width,320px);min-width:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);overflow:auto;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
+.sheet-tree-pane{flex:0 0 var(--sheet-tree-width);min-width:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);overflow:auto;background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
 .tree-resizer{flex:0 0 9px;margin-right:var(--space-4);border-left:1px solid var(--color-border-subtle);cursor:col-resize;touch-action:none;outline:none}
 .tree-resizer:hover,.tree-resizer:focus-visible{border-left:3px solid var(--color-accent);background:var(--color-info-bg)}
 .tree-resizer:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}
-.tree-root{font-size:14px;font-weight:600;color:var(--color-text-primary);padding:0 var(--space-2);line-height:1.5;overflow-wrap:anywhere}
+.tree-root{font-size:var(--button-font-size);font-weight:600;color:var(--color-text-primary);padding:0 var(--space-2);line-height:1.5;overflow-wrap:anywhere}
 .sheets-main{flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)}
 .sheet-editor-card,.sheet-list-card{background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);min-width:0}
 .sheet-editor-card{flex:none;overflow:hidden}
 .sheet-list-card{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4)}
-.notice{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md,8px);font-size:13px;margin:0}
+.notice{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md,8px);font-size:var(--font-label);margin:0}
 .prune-notice{background:var(--color-info-bg)}
 .hidden-target-notice{background:var(--color-warning-bg);border:1px solid var(--color-warning)}
 .empty-state{padding:var(--space-5);text-align:center;color:var(--color-text-secondary);border:1px dashed var(--color-border-subtle);border-radius:var(--radius-md,8px)}
@@ -292,7 +300,7 @@ onBeforeUnmount(() => {
 @media (max-width:900px){
   .sheets-workspace{position:relative}
   .tree-resizer{display:none}
-  .tree-drawer-toggle{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+  .tree-drawer-toggle{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary);border-radius:var(--radius-sm,6px);padding:6px 12px;font-size:var(--font-label);cursor:pointer;font-family:inherit}
   .tree-drawer-toggle:hover{background:var(--color-bg-muted)}
   .sheet-tree-pane{position:absolute;top:0;bottom:-24px;left:0;width:min(360px,90vw);max-width:90vw;z-index:30;margin:0;padding:var(--space-3);border-right:1px solid var(--color-border-subtle);box-shadow:var(--shadow-3);background:var(--color-bg-surface);transform:translateX(-105%);visibility:hidden;transition:transform .2s ease}
   .sheet-tree-pane.drawer-open{transform:translateX(0);visibility:visible}

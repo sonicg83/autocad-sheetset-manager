@@ -440,8 +440,17 @@ test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、
   const visited: string[] = [];
   for (let step = 0; step < 140; step++) {
     await page.keyboard.press("Tab");
-    const name = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("aria-label")
-      ?? (document.activeElement as HTMLElement | null)?.textContent?.trim() ?? "");
+    // 可访问名称：显式 aria-label 优先；否则取关联的可见 label。T6-5 之后列名与字段搜索
+    // 改由 UiInput 的 label[for] 提供名称，只读 aria-label 会把这些控件从 Tab 环里漏掉，
+    // 使「Tab 顺序经过列编辑器」退化成空转断言。
+    const name = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active) return "";
+      const explicit = active.getAttribute("aria-label");
+      if (explicit) return explicit;
+      const labelled = (active as HTMLInputElement).labels?.[0]?.textContent;
+      return (labelled ?? active.textContent ?? "").trim();
+    });
     if (name) visited.push(name);
     if (visited.some(item => item.includes("导出 XLSX"))) break;
   }
@@ -638,4 +647,96 @@ test("G8 补充：900×700 深色全部过滤截图 + 空态与几何守卫", as
   await expectNoPageHScroll(page, "900×700 深色全部过滤（滚入可视区后）");
   await page.mouse.move(0, 0);
   await attachScreenshot(page, info, "g8-filter-all-dark-900x700.png");
+});
+
+// —— PLAN-DM-029 Task 6 Step 5：控件视觉基础正交证据 5 张 ——
+// 保存浅/深默认（成对，同状态同视口）、禁用保存、删除危险态、窄屏溢出。
+// 截图只作 testInfo 附件（t6-*.png）；每张都配计算样式或几何断言，避免“有图无证据”。
+// 控件高度与主次层级按 T6-10（Ruling 41）的全页 36px 归一：保存/另存为/删除、
+// 导出 XLSX、刷新预览与添加输出列必须同高，危险删除只靠 --color-danger 区分。
+test.describe("Task 6 控件视觉基础正交证据（PLAN-DM-029）", () => {
+  // 令牌探针：把令牌解析成当前主题下的计算色值（不能直接比 getPropertyValue 的原文）
+  async function resolveColorToken(page: Page, token: string): Promise<string> {
+    return page.evaluate(name => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    }, token);
+  }
+
+  // 脏草稿：保存入口可用（保存浅/深默认成对使用，保证两张图是同一状态）
+  async function openDirtySaveState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}) {
+    await openDemoState(page, theme, viewport);
+    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await expect(page.getByText("有未保存修改")).toBeVisible();
+    await expect(page.getByRole("button", {name: "保存修改"})).toBeEnabled();
+    await expectNoPageHScroll(page, `${theme} 脏草稿`);
+    await page.mouse.move(0, 0);
+  }
+
+  test("保存浅色默认：脏草稿下保存入口可用，与同行按钮同高", async ({page}, info) => {
+    await openDirtySaveState(page, "light", {width: 1440, height: 1000});
+    await expectActionsReachable(page, ["保存修改", "另存为", "删除模板"]);
+    // 同行等高（T6-10）：保存/另存为是 UiButton，删除是保留低强调写法的裸按钮
+    const heights = await page.locator(".template-row button").evaluateAll(buttons => buttons.map(button => getComputedStyle(button).height));
+    expect(heights).toHaveLength(3);
+    expect(new Set(heights).size, `模板栏同行按钮必须等高，实际 ${heights.join(" / ")}`).toBe(1);
+    await attachScreenshot(page, info, "t6-save-light-1440x1000.png");
+  });
+
+  test("保存深色默认：与浅色同状态同视口，成对比对", async ({page}, info) => {
+    await openDirtySaveState(page, "dark", {width: 1440, height: 1000});
+    await expectActionsReachable(page, ["保存修改", "另存为", "删除模板"]);
+    const heights = await page.locator(".template-row button").evaluateAll(buttons => buttons.map(button => getComputedStyle(button).height));
+    expect(new Set(heights).size).toBe(1);
+    await attachScreenshot(page, info, "t6-save-dark-1440x1000.png");
+  });
+
+  test("禁用保存：干净草稿下保存入口可见但停用（不是隐藏）", async ({page}, info) => {
+    await openDemoState(page, "light", {width: 1440, height: 1000});
+    await expect(page.getByText("有未保存修改")).toHaveCount(0);
+    const save = page.getByRole("button", {name: "保存修改"});
+    // 可见但停用：入口不消失，用户能看出“当前无需保存”
+    await expect(save).toBeVisible();
+    await expect(save).toBeDisabled();
+    await expect(page.getByRole("button", {name: "另存为"})).toBeEnabled();
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "t6-save-disabled-light-1440x1000.png");
+  });
+
+  test("删除危险态：危险文字按钮与确认模态，危险色只来自语义令牌", async ({page}, info) => {
+    await openDemoState(page, "light", {width: 1440, height: 1000});
+    const remove = page.getByRole("button", {name: "删除模板"});
+    expect(await remove.evaluate(element => getComputedStyle(element).color), "删除模板文字色应来自 --color-danger").toBe(await resolveColorToken(page, "--color-danger"));
+    await remove.click();
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", {name: "删除", exact: true})).toBeVisible();
+    // 危险按钮的文字必须可辨：legacy 层的通用 `.danger{color:--color-danger}` 曾静默压过
+    // primitives 的 `color:--color-on-accent`（层顺序优先于特异性）→ 红底红字不可见。
+    // 用户在第 2 张截图上发现该缺陷，此处钉死颜色并断言与底色不同，防止复发。
+    const confirmButton = dialog.getByRole("button", {name: "删除", exact: true});
+    const dangerColors = await confirmButton.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {color: style.color, background: style.backgroundColor};
+    });
+    expect(dangerColors.color, "危险按钮文字色应来自 --color-on-accent").toBe(await resolveColorToken(page, "--color-on-accent"));
+    expect(dangerColors.color, "文字色不得与底色相同，否则文字不可见").not.toBe(dangerColors.background);
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "t6-delete-danger-light-1440x1000.png");
+  });
+
+  test("窄屏溢出：900×700 无整页横滚，预览区仍为独立横滚容器", async ({page}, info) => {
+    await openDemoState(page, "light", {width: 900, height: 700});
+    await expectNoPageHScroll(page, "900×700 窄屏");
+    // SPEC-DM-012 §13：横向滚动只能发生在预览表容器内，不得外溢到整页
+    await expect(page.locator(".table-window")).toHaveCSS("overflow-x", "auto");
+    await expectActionReachableAfterScroll(page, "导出 XLSX");
+    await page.evaluate(() => { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; for (const element of document.querySelectorAll<HTMLElement>("*")) if (element.scrollTop > 0) element.scrollTop = 0; });
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "t6-narrow-900x700-light.png");
+  });
 });

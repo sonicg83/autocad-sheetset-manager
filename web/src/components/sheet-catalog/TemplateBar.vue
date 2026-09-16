@@ -5,6 +5,7 @@
 import {nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {SheetCatalogTemplateController} from "../../composables/useSheetCatalogSettings";
+import UiButton from "../ui/UiButton.vue";
 
 // PLAN-DM-025 Task 8：本组件只依赖模板编辑接口（模板选择/草稿/保存/另存/删除），
 // 不依赖预览或导出——同一份接口既服务业务页，也服务设置中心的 custom 面板。
@@ -91,8 +92,9 @@ async function confirmSaveAs() {
       <span class="template-state">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
       <span v-if="catalog.dirty.value && !catalog.canSaveInPlace.value" class="draft-name">{{ $t("extensions.sheetCatalog.unnamedDraft") }}</span>
       <span class="spacer"></span>
-      <button v-if="catalog.canSaveInPlace.value" type="button" :disabled="catalog.readOnly.value || !catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</button>
-      <button type="button" :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</button>
+      <UiButton v-if="catalog.canSaveInPlace.value" :disabled="catalog.readOnly.value || !catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</UiButton>
+      <UiButton :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</UiButton>
+      <!-- 危险删除保持低强调（透明底 + 危险文字，不使用 UiButton 的实心 danger 变体），确认流程不变 -->
       <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" :disabled="catalog.readOnly.value" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
     </div>
     <!-- 同一句失败正文不渲染两次：设置中心子视图（hideConflict）由宿主横幅统一呈现，
@@ -102,8 +104,8 @@ async function confirmSaveAs() {
       <h3>{{ $t("extensions.sheetCatalog.conflictTitle") }}</h3>
       <p>{{ $t("extensions.sheetCatalog.conflictMessage") }}</p>
       <div class="template-row">
-        <button type="button" @click="openSaveAs">{{ $t("extensions.sheetCatalog.conflictSaveAs") }}</button>
-        <button type="button" :disabled="catalog.saving.value" @click="catalog.retryAfterConflict()">{{ $t("extensions.sheetCatalog.conflictRetry") }}</button>
+        <UiButton @click="openSaveAs">{{ $t("extensions.sheetCatalog.conflictSaveAs") }}</UiButton>
+        <UiButton :disabled="catalog.saving.value" @click="catalog.retryAfterConflict()">{{ $t("extensions.sheetCatalog.conflictRetry") }}</UiButton>
       </div>
     </div>
     <div v-if="saveAsOpen" class="modal-mask" @keydown="onModalKeydown">
@@ -125,23 +127,24 @@ async function confirmSaveAs() {
 .template-bar{display:flex;flex-direction:column;gap:var(--space-2)}
 .template-bar.panel{padding:var(--space-2) var(--space-3)}
 .template-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-width:0}
-/* 标签与选择框同排，窄屏时整行换行（PLAN-DM-023 Task 2：模板选择与三项管理操作单行优先） */
-.template-select{display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-text-secondary);min-width:0}
-.template-select select{min-width:220px;padding:6px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md)}
-.template-badge{font-size:12px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+/* 标签与选择框同排，窄屏时整行换行（PLAN-DM-023 Task 2：模板选择与三项管理操作单行优先）。
+   选择框保留原生 <select>：UiSelect 的可见 label 在控件上方，会把这行从单行压成两行（冻结布局）。 */
+.template-select{display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-label);color:var(--color-text-secondary);min-width:0}
+.template-select select{min-width:var(--catalog-template-select-min-width);padding:6px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md)}
+.template-badge{font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .template-badge.builtin{color:var(--color-accent);background:var(--color-info-bg)}
 .template-badge.saved{color:var(--color-success);background:var(--color-success-bg)}
-.template-state{font-size:12px;color:var(--color-text-muted);white-space:nowrap}
-.draft-name{color:var(--color-text-muted);font-size:12px}
+.template-state{font-size:var(--font-caption);color:var(--color-text-muted);white-space:nowrap}
+.draft-name{color:var(--color-text-muted);font-size:var(--font-caption)}
 .spacer{flex:1}
-.template-row button{padding:0 var(--space-3);min-height:34px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface)}
-.template-row button:hover:not(:disabled){background:var(--color-bg-muted)}
-/* 危险删除保持低强调：透明底 + 危险文字，确认流程不变 */
-.template-row button.danger-text{color:var(--color-danger);border-color:transparent;background:transparent}
-.template-row button.danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
+/* 危险删除保持低强调：透明底 + 危险文字（属性页 .danger-text 同一写法）；
+   盒模型只用组件层令牌，不用 UiButton 的实心 danger 变体 */
+.template-row .danger-text{min-height:var(--button-height);padding:0 var(--space-3);border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-danger)}
+.template-row .danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
 .conflict{border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);background:var(--color-warning-bg)}
-.conflict h3{margin:0 0 var(--space-2);font-size:14px}
-.conflict p{margin:0 0 var(--space-3);color:var(--color-text-primary);font-size:14px}
-.save-as-name{display:grid;gap:5px;color:var(--color-text-secondary);font-size:13px}
-.save-as-name input{padding:8px;border:1px solid var(--color-border-strong);border-radius:5px}
+/* 14px 卡/区块标题：消费语义档位 --font-card-title（责任 K 已闭合，见 tokens.css 头注释） */
+.conflict h3{margin:0 0 var(--space-2);font-size:var(--font-card-title)}
+.conflict p{margin:0 0 var(--space-3);color:var(--color-text-primary);font-size:var(--button-font-size)}
+.save-as-name{display:grid;gap:5px;color:var(--color-text-secondary);font-size:var(--font-label)}
+.save-as-name input{padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm)}
 </style>

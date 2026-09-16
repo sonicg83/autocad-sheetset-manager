@@ -93,7 +93,7 @@ function displayFileName(value: string): string {
             </template>
             <template v-else-if="col.key === 'builtin:number'"><span class="ellipsis mono" tabindex="0" :title="row.sheet.number">{{ row.sheet.number }}</span></template>
             <template v-else-if="col.key === 'builtin:title'"><span class="title-text multiline-text" tabindex="0" :title="row.sheet.title">{{ row.sheet.title || "—" }}</span></template>
-            <template v-else-if="col.key === 'builtin:subset'"><button class="link-button multiline-text" tabindex="0" :title="row.subset.display_name" @click="$emit('openSubset', row.subset.id)">{{ row.subset.display_name }}</button></template>
+            <template v-else-if="col.key === 'builtin:subset'"><button type="button" class="link-button multiline-text" tabindex="0" :title="row.subset.display_name" @click="$emit('openSubset', row.subset.id)">{{ row.subset.display_name }}</button></template>
             <template v-else-if="col.key === 'builtin:file'"><span class="multiline-text mono" tabindex="0" :title="displayFileName(row.sheet.layout.file_name)">{{ displayFileName(row.sheet.layout.file_name) }}</span></template>
             <template v-else-if="col.key === 'builtin:layout'"><span class="multiline-text mono" tabindex="0" :title="row.sheet.layout.layout_name">{{ row.sheet.layout.layout_name || "—" }}</span></template>
             <template v-else-if="col.key === 'builtin:status'">
@@ -128,10 +128,10 @@ function displayFileName(value: string): string {
   </div>
 </template>
 <style scoped>
-.sheet-table-window{container-type:inline-size;flex:1;min-height:130px;max-height:none;overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);outline:none}
+.sheet-table-window{container-type:inline-size;flex:1;min-height:var(--sheet-table-window-min-height);max-height:none;overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);outline:none}
 .sheet-table-window:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
-table{table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:13px}
-th,td{box-sizing:border-box;text-align:left;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;vertical-align:middle;height:44px;line-height:20px}
+table{table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:var(--font-label)}
+th,td{box-sizing:border-box;text-align:left;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;vertical-align:middle;height:var(--sheet-table-row-height);line-height:var(--sheet-table-line-height)}
 th{overflow:hidden;text-overflow:ellipsis}
 th{position:sticky;top:0;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600;z-index:2}
 tbody tr{background:var(--color-bg-surface)}
@@ -147,18 +147,18 @@ th.col-select,th.col-number,th.col-actions{background:var(--color-bg-muted);z-in
 tbody tr td{background:inherit}
 /* 内容字段最多两行；完整值可通过 title 与键盘焦点读取。 */
 .multiline-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;max-width:100%;word-break:break-word;text-align:left}
-.title-text{max-width:280px}
+.title-text{max-width:var(--sheet-title-max-width)}
 .multiline-text:focus-visible,.ellipsis:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}
 .ellipsis{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.mono{font-family:var(--font-mono);font-size:var(--font-caption)}
 .col-status{white-space:normal}
-.status{padding:1px 5px;border-radius:10px;font-size:12px;display:inline-block;margin:1px 2px 1px 0;white-space:nowrap}
+.status{padding:1px 5px;border-radius:var(--sheet-status-radius);font-size:var(--font-caption);display:inline-block;margin:1px 2px 1px 0;white-space:nowrap}
 .status.pending{background:var(--color-warning-bg);color:var(--color-warning)}
 .status.blocking{background:var(--color-danger-bg);color:var(--color-danger)}
-.danger-link{color:var(--color-danger);background:none;border:none;cursor:pointer;font-size:13px;padding:0}
+.danger-link{color:var(--color-danger);background:none;border:none;cursor:pointer;font-size:var(--font-label);padding:0}
 .danger-link:hover{text-decoration:underline}
-.diag-link{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:12px;padding:0;margin-left:4px;text-decoration:underline}
-.link-button{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:13px;padding:0;text-decoration:underline}
+.diag-link{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:var(--font-caption);padding:0;margin-left:4px;text-decoration:underline}
+.link-button{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:var(--font-label);padding:0;text-decoration:underline}
 .sheet-editor-row,.sheet-editor-row:hover,.sheet-editor-row:focus-within{background:var(--color-info-bg)}
 .sheet-editor-row>td{position:static!important;height:auto;padding:0;border-bottom:1px solid var(--color-border-strong);white-space:normal;box-shadow:none!important;background:inherit}
 </style>

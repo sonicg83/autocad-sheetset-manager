@@ -6,7 +6,7 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-16
 related:
   - ARCH-DM-001
   - SPEC-DM-006
@@ -83,6 +83,8 @@ UiButton / UiIconButton / FormField / UiIcon / 对话框焦点工具
 
 公共视觉原语只统一外观、HTML 语义、可访问名称、焦点和交互状态，不复制后端校验，不读取业务 Store，也不改变现有 props/emits/API 数据流。
 
+令牌分层的**当前落实程度**与一条有界豁免（颜色、间距、圆角、图标尺寸四族尚无语义层，暂按 §4.1 的例外口径执行）记在 §4.1。
+
 ## 4. 设计令牌
 
 ### 4.1 三层令牌
@@ -102,6 +104,12 @@ UiButton / UiIconButton / FormField / UiIcon / 对话框焦点工具
 | 正文 | `--font-body` | `14px / 1.5` |
 | 标签、表格 | `--font-label`、`--font-table` | `13px` |
 | 辅助文字 | `--font-caption` | `12px` |
+| 卡片/区块标题 | `--font-card-title` | `14px` |
+| 面板/区块标题 | `--font-panel-title` | `15px` |
+| 通用标题 | `--font-title` | `16px` |
+| 工具栏标题 | `--font-toolbar-title` | `17px` |
+| 页面/视图标题 | `--font-view-title` | `18px` |
+| 页面主标题 | `--font-page-title` | `20px` |
 | 普通控件 | `--control-height-default` | `36px` |
 | 表单输入 | `--control-height-form` | `38px` |
 | 紧凑工具栏 | `--control-height-compact` | `34px` |
@@ -109,6 +117,20 @@ UiButton / UiIconButton / FormField / UiIcon / 对话框焦点工具
 | 最小可点高度 | 全局下限 | `32px` |
 
 组件只能消费已声明的语义令牌或组件令牌。断点、1px 边框、内容驱动高度和经 Spec 明确批准的例外可以使用常量；其余原始值必须由静态检查拒绝或进入有原因、有到期条件的白名单。
+
+**字号档位补齐（PLAN-DM-029 Task 12 责任 K，Spec 归属方 2026-09-15 裁定）**：原字数刻度为 `11/12/13/14/18`，`15/16/17/20px` 四处离刻度值此前以显式例外挂着（理由是本计划禁止为页面迁移新增字号令牌）。经裁定将它们**升为正式档位**（上表新增四行），值逐字等值、**零视觉变化**，对应的 7 条例外已清零 —— **离刻度值这一半**的责任 K 就此闭合。
+
+**责任 K 的另一半已闭合（T12-4，2026-09-15，同一裁定的自然延伸）**：此处曾记录「语义层仍无独立的 `14px` / `18px` 非控件档位，5 处卡标题/页标题因此跨层**借用组件层令牌**」——`SheetCatalogView.vue` 的页标题借 `--modal-title-font-size`，`CatalogPreview.vue`、`TemplateBar.vue`、`FieldBrowser.vue`、`ColumnEditor.vue` 的卡标题借 `--button-font-size`。**借用「值等值但语义不符」的令牌即语义说谎**，且静态检查对它**无感**（引用的是令牌而非裸值，不会触发 `raw-visual-value`）——该实例保留在此作为反面教材。同一裁定已补齐上表 `--font-card-title`（14px）与 `--font-view-title`（18px）两行，5 处声明改为消费新档位，**责任 K 全部闭合**。
+注意：档位仍**只**覆盖已裁定的这些值，其余字号不得由页面迁移自行新增档位，也不得借用「值等值但语义不符」的令牌（语义说谎）。
+
+**当前落实程度与一条有界豁免（颜色、间距、圆角、图标尺寸）**：仓库尚未建立颜色、间距、圆角、图标尺寸这一层的**语义令牌**，因此上述四族目前仍是跨层直取原始令牌。口径（可跑，实测于 2026-09-15）：
+
+```text
+grep -rhoE 'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc -l   # 1025 处
+grep -rlE  'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc -l   #   44 个 .vue 文件
+```
+
+（该数字随页面迁移而下降：组件层与语义层落地后，本文其余部分已统一消费语义/组件令牌。）处置口径：**先保持一致，不得为落实分层而临时新造色板或间距层**；待语义层补齐后统一收口，并同时更新本节数字。在该收口完成前，上述四族的跨层直取按本节「经 Spec 明确批准的例外」处理，属**有界且待收回**的豁免，不得据此新增其它原始值直取。依据：PLAN-DM-029 收口责任 E（Task 3 二轮评审 G1）。
 
 `38px` 表单输入档继续保留：SPEC-DM-006 允许 `36–40px`，而 SPEC-DM-010 与 PLAN-DM-016 已明确把属性页生产输入固定为 `38px` 并形成冻结证据。本文不以减少令牌档位为由改写已接受的页面规范；未来若统一为 `36px`，必须先修订页面 Spec、冻结件和对应回归证据。
 

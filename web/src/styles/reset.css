@@ -1,0 +1,42 @@
+/* 全局重置与基础排版（PLAN-DM-029 Task 2 Step 4）。
+ *
+ * 本层只放元素级默认值与可访问性基线，不含任何业务选择器：业务规则在 primitives /
+ * legacy 两层。这里出现的选择器天然是裸元素选择器，属于重置本身的要求，
+ * 检查器的 `global-selector-in-component` 只作用于业务样式表，不覆盖本文件。
+ *
+ * 所有视觉档位一律消费 tokens 层令牌，不在重置里重新写字面值。
+ */
+@layer reset {
+  *,*::before,*::after{box-sizing:border-box}
+
+  /* 正文基线（ARCH-DM-007 §4.1）：14px 字号、1.5 行高，中文回落到 Microsoft YaHei。
+     使用 `font` 简写一次性确定字号/行高/字体栈，避免三者被不同层拆分后互相覆盖。 */
+  html{
+    font:var(--font-body) var(--font-ui);
+    color:var(--color-text-primary);
+    background:var(--color-bg-canvas);
+  }
+
+  body{margin:0}
+
+  /* 文本输入类控件默认使用表面色；复选框/单选框保留 UA 外观（主题色由组件覆盖）。 */
+  input:not([type="checkbox"]):not([type="radio"]),select,textarea{
+    background:var(--color-bg-surface);
+    color:var(--color-text-primary);
+  }
+
+  /* 表单控件继承页面字体：控件不因 UA 默认字体在中文界面里跳出字体栈。 */
+  button,input,select,textarea{font:inherit}
+  button,a{color:inherit;cursor:pointer}
+  button{padding:0;border:0;background:none}
+  a{text-decoration:none}
+  /* 焦点可见性（SPEC-DM-006 §7.1 键盘可达）：统一焦点环，组件可局部覆盖。 */
+  :focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+  button:disabled{cursor:not-allowed;opacity:.5}
+
+  @media (prefers-reduced-motion:reduce) {
+    /* 减少动画（SPEC-DM-006 §7.4）：用户偏好 reduced-motion 时关闭非必要过渡/动画，
+       避免抽屉与浮层宽度过渡等瞬态横向溢出与动态效果 */
+    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  }
+}

@@ -1,0 +1,126 @@
+@layer legacy {
+  /* 旧顶栏规则：布局度量已被 `layout/TopBar.vue` 的 scoped 样式覆盖，仅旧页面残留。 */
+  .topbar{min-height:var(--topbar-min-height);padding:12px 32px;background:var(--color-bg-surface);color:var(--color-on-accent)}
+  .topbar div{max-width:var(--shell-content-max-width);margin:auto;display:flex;align-items:baseline;gap:14px}
+  .topbar h1{margin:0}
+
+  :where(#app) main{max-width:var(--shell-content-max-width);margin:auto;padding:24px}
+  .open,.toolbar,.form-row,.csv-flow,.link-actions,.section-title{display:flex;align-items:center;gap:12px}
+  .open input{flex:1;padding:13px}
+
+  /* PLAN-DM-029 Task 9：`.summary` 块（含 22px 离刻度字号）与 `.property-panel`、`.section-title`、
+     `.editor`、`.subset-editor` 已无任何 markup 渲染点，随本次清理整体删除；
+     `.panel` 仍活（多组件依赖），故从原 `.summary div,.panel` 组合中拆出单独保留。 */
+  .panel{background:var(--color-bg-surface);padding:18px;border-radius:var(--radius-md);box-shadow:var(--shadow-1)}
+
+  :where(#app) aside{border-right:1px solid var(--color-border-subtle);padding:10px}
+  :where(#app) aside button{display:flex;justify-content:space-between;width:100%;border:0;text-align:left}
+  :where(#app) aside .active{background:var(--color-info-bg);color:var(--color-accent)}
+  :where(#app) article{padding:18px;overflow:auto}
+  .toolbar{justify-content:flex-end;position:sticky;top:0;background:var(--color-bg-surface);padding-bottom:12px;z-index:1}
+  .subset-editor{border-top:1px solid var(--color-border-subtle);padding-top:14px}
+  .derived{color:var(--color-text-muted)}
+
+  :where(#app) table{width:100%;border-collapse:collapse}
+  :where(#app) th,:where(#app) td{padding:9px;border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
+  :where(#app) td input{width:100%;padding:7px}
+  .preview{margin-top:20px}
+  .primary{background:var(--color-accent);color:var(--color-on-accent)}
+  .danger,.error{color:var(--color-danger)}
+  .notice{background:var(--color-danger-bg);padding:10px 14px;border-radius:var(--radius-sm)}
+  .job{display:flex;gap:20px;background:var(--color-bg-surface);padding:12px;margin-top:12px;border-left:4px solid var(--color-accent)}
+  .job-detail>table{background:var(--color-bg-surface)}
+
+  /* PLAN-DM-029 Task 9：`.form-grid` / `.form-row` / `.property-values` 与 `.csv-flow`
+     均无 markup 渲染点，其 5px 离刻度圆角规则随之整体删除（**零视觉变化**）。 */
+  :where(#app) fieldset{margin-top:20px;padding:14px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
+  :where(#app) fieldset>button{margin-top:12px}
+  .csv-flow{margin-top:18px;padding-top:14px;border-top:1px solid var(--color-border-subtle);flex-wrap:wrap}
+  .csv-preview{margin-top:12px;background:var(--color-bg-muted);padding:12px}
+  .diagnostics{padding-left:20px}
+  .warning{color:var(--color-warning)}
+  .info{color:var(--color-accent)}
+  :where(#app) details{background:var(--color-bg-surface);padding:12px;margin-bottom:12px}
+  .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+  /* PLAN-DM-029 Task 9：`.execution-group` 仍活（PreviewPanel），7px 离刻度圆角归入 `--radius-md`(8px)，
+     1px 偏差已在报告披露（先例：Task 6 / Task 7 / Task 8 的圆角落点裁定）。 */
+  .execution-group{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted)}
+  .execution-group h4{margin:8px 0}
+  .execution-group p{overflow-wrap:anywhere}
+  .preview section+section{margin-top:18px}
+  .preview ul{margin:8px 0}
+  .link-actions{flex-wrap:wrap}
+
+  @media(max-width:800px) {
+    :where(#app) main{padding:14px}
+    :where(#app) aside{border-right:0;border-bottom:1px solid var(--color-border-subtle)}
+    .job{flex-wrap:wrap}
+  }
+
+  .repair{border-left:4px solid var(--color-warning)}
+  .repair-VALID{border-left-color:var(--color-success)}
+  .repair-REPAIRED{border-left-color:var(--color-warning)}
+  .repair-INVALID_REPAIR_REQUIRED,.repair-INVALID_UNRECOVERABLE{border-left-color:var(--color-danger)}
+  .repair-actions{list-style:none;margin:0;padding:0}
+  .repair-actions li{border-bottom:1px solid var(--color-border-subtle);padding:6px 0}
+  .attr-diff{overflow-wrap:anywhere;word-break:break-all;color:var(--color-text-secondary);font-size:var(--font-label);font-family:var(--font-mono)}
+
+  /* PLAN-DM-029 Task 9：`.sheet-browser` / `.filter-grid` / `.bulk-bar` 均无渲染点，整体删除
+     （含其 5px 离刻度圆角规则）；`.sheet-table-window` 的 520px 高度上限已被
+     `SheetTable.vue` 的**无层 scoped** 规则 `max-height:none` 覆盖（无层声明胜于 `@layer`），
+     故该声明一并删除、零视觉变化。 */
+  .sheet-table-window{overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-sm)}
+  .sheet-table-window thead{position:sticky;top:0;background:var(--color-bg-surface);z-index:1}
+  .sheet-table-window small{display:block;color:var(--color-text-muted);overflow-wrap:anywhere}
+  .link-button{padding:0;border:0;background:transparent;color:var(--color-accent)}
+  /* 草稿动作区高度上限归入组件层令牌（逐字等值）。 */
+  .draft-actions{max-height:var(--draft-actions-max-height);overflow:auto}
+  .recover-banner{background:var(--color-warning-bg);border:1px solid var(--color-warning);padding:10px 14px;border-radius:var(--radius-sm);margin:14px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .draft-save-status{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:var(--font-label);color:var(--color-text-muted)}
+  .draft-save-status .save-status.error{color:var(--color-danger)}
+  .drop-hint{color:var(--color-text-muted);font-size:var(--font-label)}
+
+  /* 旧功能入口的受控按钮基线；图标、页签和文字操作继续由各组件定义。 */
+  :where(.sheets-toolbar .operations button,.sheets-toolbar .selection-bar button,.sheets-toolbar .select-entry button,.sheets-toolbar .filter-toggle,.sheets-toolbar .chips-clear-all,.sheets-view .empty-state button,.sheets-view .hidden-target-notice button,.sheets-view .load-more,.properties-view button,.property-panel .link-actions a,.repair .link-actions button,.recover-banner button,#draft-pop button,.job-detail button,.revisions-view button,.sheet-property-editor .editor-footer button):is(button,a){min-height:var(--control-height-default);padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface)}
+
+  /* 任务浮层中的业务按钮不采用旧 aside 导航按钮的无边框规则。 */
+  .job-detail button,.repair .link-actions button{border:1px solid var(--color-border-strong)}
+
+  /* 标签栏在窄屏横向滚动；任务入口栏与覆盖抽屉在所有宽度采用同一布局。 */
+  @media (max-width:900px) {
+    .tabbar{overflow-x:auto}
+  }
+
+  /* PLAN-DM-021 Task 9（I18N-11/15）：未知错误诊断详情的原始文本按容器换行，不产生横向溢出 */
+  .error-raw{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:var(--font-caption)}
+
+  /* 本层说明：本文件是 `src/style.css` 里原有全局业务规则的**原样迁入**，顺序与迁移前
+     一致——同层内后写的规则仍然覆盖先写的规则，因此这些规则之间的相对优先级不变。
+     迁移时有两处结构调整，必须如实区分：
+
+     1. 元素/伪类开头的选择器（共 13 条：`main`、`aside`、`aside button`、`aside .active`、
+        `article`、`table`、`th,td`、`td input`、`fieldset`、`fieldset>button`、`details`，
+        其中 `main` 与 `aside` 各出现两次）加上 `:where(#app)` 根限定。`:where()` 自身
+        特异性为 0、`#app` 覆盖全部应用 DOM（含 `showModal()` 的 `<dialog>`），因此 `:where()`
+        改写**不改变这 13 条选择器自身的特异性和匹配范围**（都是全部应用 DOM），同时满足
+        「业务样式不得写裸全局选择器」的门禁要求。注意这里只谈选择器自身：这 13 条同时也从
+        无层样式迁进了 `@layer legacy`，相对未分层的组件 `scoped` 样式，它们的优先级反而
+        是**下降**的（见下方级联方向一段），不因 `:where()` 而保持不变。
+     2. 元素级重置没有留在这里，而是迁到 `reset.css`（共 10 条：`*`、`*,*::before,*::after`、
+        `body`、`button`、`button,a`、`button,input,select,textarea`、`a`、`button:disabled`、
+        `:focus-visible`、`input:not([type="checkbox"]):not([type="radio"]),select,textarea`）；
+        reset 层本就承载裸元素选择器，且 `src/styles/reset.css` 不参与
+        `global-selector-in-component` 扫描。
+
+     级联方向（ARCH-DM-007 §7）：`@layer tokens, reset, primitives, legacy` 只决定命名层之间
+     的顺序，而 Vue 单文件组件的无层 `<style scoped>` 优先于全部命名层——这是页面在迁移期
+     覆盖全局默认值的明确前提。因此上面第 2 类重置规则现在让位于未分层的组件 scoped 样式
+     （它们迁入 `reset` 层后优先级下降，这是分层设计的既定方向，不是意外），而本层的规则仍
+     高于 `reset`/`primitives` 两层。除这两处结构调整外，本文件不静默改写任何声明值。
+
+     尚未令牌化的裸视觉值（离刻度圆角 5/7px、内容驱动滚动区高度、旧度量字号 22px、
+     旧布局宽度 1440px）原样保留、不静默改写，它们登记在
+     `scripts/ui-contract-exceptions.json`，由 Task 9 在逐条证明消费方已迁移后删除或归并
+     （Task 9 Step 4/Step 6）。本文件仍是 `GLOBAL_BUSINESS_STYLESHEETS` 的成员，
+     照受门禁扫描，不是视觉债务的逃逸口。 */
+}

@@ -3,7 +3,7 @@
 // （内置不可改/保存/另存/删除/大小写冲突/上限/不兼容/偏好/三选一保护/冲突恢复）、
 // 导出状态（无壳/取消/旧预览/成功/漂移/授权失效/写失败）。全部为语义断言，
 // 工作区/设置/动作路由经 fixtures/sheetCatalog.ts 模拟。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {
   EXTENSION_ID, fakeUuid, installSheetCatalogFixture, openCatalogPage, planExtensionsReload, readBridgeCalls, setSaveDialog,
   type CatalogTemplate, type SheetCatalogState,
@@ -1230,4 +1230,248 @@ test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
     // 未落盘的保存不得发成功通知（此前只读拒绝会被误报为成功）
     await expect(page.locator(".toast-host .toast")).toHaveCount(0);
   });
+});
+
+// ---- PLAN-DM-029 Task 6：图纸目录页控件视觉基础由原语与令牌解析（追踪矩阵 T6） ----
+// 断言口径与 properties-visual-evidence.spec.ts（Task 5）同源：期望值不硬编码 px 或色值，
+// 而是在真实渲染文档里用探针元素从令牌解析后比对，令牌改名或改值都会连带失败。覆盖截图
+// 红框内的模板栏动作、输出列编辑、字段搜索与导出 XLSX 的计算样式、禁用边界与表头轨道
+// 对齐；结构尺寸断言锁定冻结 Demo 的首屏密度（T6-7 新增的 7 个 --catalog-* 令牌，值逐字
+// 等值、零视觉变化），这些数值一旦回退成裸字面量就会再次触发 raw-visual-value。
+test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
+  // 用探针元素解析令牌的当前计算值。宽度/尺寸类属性对 inline 元素不生效，探针必须是
+  // inline-block，否则 width 会读到 "auto"，断言将永远失败而不是核对令牌。
+  async function resolveToken(page: Page, token: string, property: string): Promise<string> {
+    return page.evaluate(({name, prop}) => {
+      const probe = document.createElement("span");
+      probe.style.display = "inline-block";
+      probe.style.setProperty(prop, `var(${name})`);
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).getPropertyValue(prop);
+      probe.remove();
+      return value;
+    }, {name: token, prop: property});
+  }
+
+  // 元素的计算样式必须等于指定令牌的解析值
+  async function expectToken(page: Page, target: Locator, property: string, token: string): Promise<void> {
+    const expected = await resolveToken(page, token, property);
+    expect(expected, `${token} 必须能解析成具体值`).not.toBe("");
+    const actual = await target.first().evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
+    expect(actual, `${property} 应来自 ${token}`).toBe(expected);
+  }
+
+  // 可见 label（T6-5）：仅 aria-label 不算——≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签。
+  // 实现上不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
+  // 来自模块级计数器（见 instanceId.ts），id 按挂载顺序分配而非行序，控件重挂载就会换 id，
+  // 两次往返之间发生重挂载即假失败（本用例曾因此 flaky）。这里改用 Playwright 自身的可访问
+  // 名称计算 + 独立定位可见 label 元素，两者都不依赖 id，也不依赖 getByLabel 命中的是哪个节点。
+  async function expectVisibleLabel(page: Page, control: Locator, text: string): Promise<void> {
+    await expect(control.first(), `「${text}」应命中控件本身而不是 label`).toHaveJSProperty("tagName", "INPUT");
+    await expect(control.first(), `「${text}」的可访问名称`).toHaveAccessibleName(text);
+    await expect(control.first(), `「${text}」的名称必须来自可见 label，而不是仅 aria-label`).not.toHaveAttribute("aria-label", /.+/);
+    await expect(page.locator("label.ui-input__label").filter({hasText: text}), `可见 label「${text}」`).toBeVisible();
+  }
+
+  // 同一工具区内所有动作按钮必须同高。这是迁移留下的真实缺陷的回归守卫：
+  // 迁移曾把 .template-row 留成「删除 34px（--control-height-compact）/ 保存 36px（UiButton）」，
+  // 而迁移前该行统一 34px；按收口裁定全页动作按钮归一为 UiButton 默认 36px。
+  async function expectUniformButtonHeights(page: Page, selector: string): Promise<void> {
+    const heights = await page.locator(selector).evaluateAll(buttons => buttons.map(button => getComputedStyle(button).height));
+    expect(heights.length, `${selector} 至少要匹配到一个动作按钮`).toBeGreaterThan(0);
+    expect(new Set(heights).size, `${selector} 内动作按钮高度必须一致，实际 ${heights.join(" / ")}`).toBe(1);
+  }
+
+  test("模板栏三级动作：次要、危险与脏位驱动的保存禁用边界", async ({page}) => {
+    const template = userTemplate("市政标准目录", [{header: "图纸编号", expression: "{sheet.number}"}]);
+    await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const save = page.getByRole("button", {name: "保存修改"});
+    const saveAs = page.getByRole("button", {name: "另存为"});
+    const remove = page.getByRole("button", {name: "删除模板"});
+    // 干净草稿：保存入口存在但停用，另存为与删除可用
+    await expect(save).toBeVisible();
+    await expect(save).toBeDisabled();
+    await expect(saveAs).toBeEnabled();
+    // 次要层级：表面底色、常规文字、36px 控件档与 --radius-md 圆角
+    await expectToken(page, saveAs, "height", "--button-height");
+    await expectToken(page, saveAs, "font-size", "--button-font-size");
+    await expectToken(page, saveAs, "background-color", "--color-bg-surface");
+    await expectToken(page, saveAs, "border-top-left-radius", "--radius-md");
+    // 危险层级：删除是文字型危险动作，颜色只能来自 --color-danger
+    await expectToken(page, remove, "color", "--color-danger");
+    // 脏位驱动：改一处列名后保存入口转为可用（禁用不是装饰）
+    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await expect(save).toBeEnabled();
+    await expectToken(page, save, "border-top-left-radius", "--radius-md");
+    await expectToken(page, save, "font-size", "--button-font-size");
+    // 同行一致（回归守卫）：保存/另存为是 UiButton，删除是保留低强调写法的裸按钮；
+    // 迁移曾把后者留在 34px（--control-height-compact）而前者是 36px，本用例正是
+    // 用户截图红框所在的行。等高断言排在单值断言之前，改回 34px 时由它先失败。
+    await expectUniformButtonHeights(page, ".template-row button, .dock-row button");
+    await expectToken(page, remove, "height", "--button-height");
+    // 横向内边距：UiButton 默认 --space-4（迁移前 .template-row button 是 --space-3）；
+    // 删除按钮有意保留 --space-3 的低强调写法（透明底 + 危险文字，不用实心 danger 变体），
+    // 因此本轮只统一高度、不统一内边距。
+    await expectToken(page, saveAs, "padding-left", "--space-4");
+    await expectToken(page, remove, "padding-left", "--space-3");
+    // 全页动作按钮同一档：任一按钮高度回退到 30/32/34px 都会在这里失败
+    await expectUniformButtonHeights(page, ".template-row button, .dock-row button, .preview-head button, .editor-foot button");
+  });
+
+  test("导出 XLSX：唯一高强调 primary 动作的层级与控件档", async ({page}) => {
+    await openCatalog(page);
+    const exportButton = page.getByRole("button", {name: "导出 XLSX"});
+    const dock = page.locator(".actions-dock");
+    await expect(exportButton).toBeEnabled();
+    // 高强调层级：accent 底 + on-accent 前景 + 36px 档
+    await expectToken(page, exportButton, "background-color", "--color-accent");
+    await expectToken(page, exportButton, "color", "--color-on-accent");
+    await expectToken(page, exportButton, "height", "--button-height");
+    await expectToken(page, exportButton, "border-top-left-radius", "--radius-md");
+    // 内边距迁移前后都是 --space-4，未变（.dock-row button 迁移前即 --space-4）
+    await expectToken(page, exportButton, "padding-left", "--space-4");
+    // 操作坞内只有一个高强调动作：导出是唯一 primary，其余入口是次要层级
+    await expect(dock.locator(".ui-button--primary")).toHaveCount(1);
+    await expectToken(page, dock.locator(".dock-summary"), "font-size", "--font-caption");
+    // 预览卡头的刷新动作用同一控件档
+    await expectToken(page, page.getByRole("button", {name: "刷新预览"}), "height", "--button-height");
+  });
+
+  test("添加输出列与行内动作：控件档、点击面积与危险色", async ({page}) => {
+    await openCatalog(page);
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    // 编辑器尾部动作是次要控件
+    const addColumn = editor.getByRole("button", {name: "添加输出列"});
+    await expectToken(page, addColumn, "height", "--button-height");
+    await expectToken(page, addColumn, "font-size", "--button-font-size");
+    // A1 保留 ↑/↓/✕ 字符图标（T6-8）：点击面积取 --tap-target-min(32px)，
+    // 圆角与字号按令牌给，不再裸写 30px/6px/13px
+    const moveUp = editor.getByRole("button", {name: "上移 2"});
+    await expectToken(page, moveUp, "width", "--tap-target-min");
+    await expectToken(page, moveUp, "min-height", "--tap-target-min");
+    await expectToken(page, moveUp, "border-top-left-radius", "--radius-sm");
+    await expectToken(page, moveUp, "font-size", "--font-label");
+    await expectToken(page, editor.getByRole("button", {name: "删除列 2"}), "color", "--color-danger");
+    // 行内动作仍收在右对齐的第 5 条轨道里且不溢出（3×32 + 2×4 = 104 ≤ 112）
+    const track = await editor.locator(".row-actions").first().evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const buttons = Array.from(element.querySelectorAll("button")).map(button => button.getBoundingClientRect());
+      return {
+        left: box.left, right: box.right,
+        buttons: buttons.map(item => ({left: item.left, right: item.right})),
+      };
+    });
+    expect(track.buttons).toHaveLength(3);
+    expect(Math.abs(track.buttons[2]!.right - track.right), "行内动作右对齐到轨道右边界").toBeLessThanOrEqual(1);
+    expect(track.buttons[0]!.left, "三枚按钮不溢出轨道左边界").toBeGreaterThanOrEqual(track.left - 1);
+    // 表达式文本域是等宽正文：最小高度、圆角与字号全部按令牌
+    const expression = page.getByLabel("表达式 1");
+    await expectToken(page, expression, "border-top-left-radius", "--radius-md");
+    await expectToken(page, expression, "min-height", "--catalog-column-expression-min-height");
+    await expectToken(page, expression, "font-size", "--font-label");
+    await expectToken(page, expression, "font-family", "--font-mono");
+  });
+
+  test("输出列名与字段搜索：可见 label 关联控件，输入档 38px", async ({page}) => {
+    await openCatalog(page);
+    const header1 = page.getByLabel("输出列名 1");
+    // 可见 label 而不是仅 aria-label（T6-5）：未迁移前这里没有 label，探针会找不到关联
+    await expectVisibleLabel(page, header1, "输出列名 1");
+    await expectToken(page, header1, "height", "--input-height");
+    await expectToken(page, header1, "font-size", "--input-font-size");
+    await expectToken(page, header1, "border-top-left-radius", "--radius-md");
+    const query = page.getByLabel("搜索可用字段");
+    // 字段搜索框与属性页同惯例：type="search" → role searchbox（属性页 spec 也按角色钉死，
+    // 如 properties-definitions.spec.ts:106 / properties-buffer.spec.ts:72）。
+    await expect(page.getByRole("searchbox", {name: "搜索可用字段"}), "字段搜索框应为 searchbox 角色").toBeVisible();
+    await expectVisibleLabel(page, query, "搜索可用字段");
+    await expectToken(page, query, "height", "--input-height");
+  });
+
+  // 责任 K 的另一半（T12-4，PLAN-DM-029）：14px/18px 此前无独立语义档位，5 处卡/页标题只能跨层
+  // 借用组件层令牌（--button-font-size / --modal-title-font-size）——“值等值但语义不符”即语义说谎。
+  // 本用例是这批声明的**真实性守卫**：
+  //   ① 两个档位必须真实存在于语义层（直接读根元素自定义属性；缺失时读回空字符串）；
+  //   ② 零视觉变化：5 处计算字号仍逐字等于 14px / 18px。
+  // ①必须直接读自定义属性，**不能**用 resolveToken 探针代替：探针在令牌缺失时会回落到继承来的
+  // 14px，恰好等于 14px 档位的期望值，在 14px 上会假通过（本任务已实测确认这一盲点）。
+  test("语义字号档位：5 处卡/页标题消费语义层 14px/18px 档位", async ({page}) => {
+    const template = userTemplate("语义字号档位核查", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const rootToken = (name: string) => page.evaluate(
+      (token) => getComputedStyle(document.documentElement).getPropertyValue(token).trim(), name);
+    expect(await rootToken("--font-card-title"), "--font-card-title 必须是已声明的语义档位").toBe("14px");
+    expect(await rootToken("--font-view-title"), "--font-view-title 必须是已声明的语义档位").toBe("18px");
+    await expectToken(page, page.locator(".preview-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".field-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".editor-head h3"), "font-size", "--font-card-title");
+    await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--font-view-title");
+    // 冲突面板的 h3 同样是 14px 卡标题档位（由夹具布防冲突后可见）
+    state.controls.putSettingsMode = "conflict";
+    await page.getByLabel("输出列名 1").fill("语义字号档位核查");
+    await page.getByRole("button", {name: "保存修改"}).click();
+    const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
+    await expect(conflict).toBeVisible();
+    await expectToken(page, conflict.locator("h3"), "font-size", "--font-card-title");
+    // 零视觉变化的**直接绝对值锚**（值逐字等值）：上组断言只钉住「元素值 == 令牌解析值」，
+    // 本组直接钉住像素值，二者合起来才能同时证明「已消费新档位」与「渲染没变」（只有前者时，
+    // 把档位改成 18px 会两边一起变而仍然全绿 —— 上一轮 15px 档位的变异自证就吃过这一课）。
+    await expect(page.locator(".preview-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".field-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".editor-head h3")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".catalog-head h2")).toHaveCSS("font-size", "18px");
+    await expect(conflict.locator("h3")).toHaveCSS("font-size", "14px");
+  });
+
+  test("结构尺寸来自组件层令牌且表头轨道与数据行对齐", async ({page}) => {
+    await openCatalog(page);
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    // 工作区栅格与卡标题：首屏密度预算仍取冻结 Demo 的确定值（T6-7）
+    await expectToken(page, page.locator(".catalog-row"), "height", "--catalog-pane-height");
+    // 18px 页标题已升为语义档位 --font-view-title（责任 K 另一半，T12-4），不再借用组件层令牌
+    await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--font-view-title");
+    await expectToken(page, page.locator(".catalog-preview"), "min-height", "--catalog-preview-min-height");
+    await expectToken(page, page.locator(".table-window"), "max-height", "--catalog-preview-table-max-height");
+    await expectToken(page, editor.locator(".columns"), "max-height", "--catalog-columns-max-height");
+    // 模板选择保留原生 select（UiSelect 的可见 label 会把这行从单行压成两行），宽度由令牌给
+    await expectToken(page, page.locator(".template-select select"), "min-width", "--catalog-template-select-min-width");
+    // 表头与数据行共用同一组轨道：第 5 条（操作）轨道的右边界必须重合
+    const alignment = await page.evaluate(() => ({
+      headRight: document.querySelector(".columns-head > *:last-child")!.getBoundingClientRect().right,
+      rowRight: document.querySelector(".columns .column-row")!.lastElementChild!.getBoundingClientRect().right,
+    }));
+    expect(Math.abs(alignment.headRight - alignment.rowRight), "操作轨道表头与数据行右边界对齐").toBeLessThanOrEqual(1);
+  });
+});
+
+// —— Task 12 用户验收修复轮：.modal-actions 公共悬停契约（原生按钮路径）——
+test("用户验收修复轮：另存为模板弹窗原生按钮悬停抬升、禁用无误导反馈且操作区有 16px 间距", async ({page}) => {
+  await openCatalog(page);
+  await page.getByRole("button", {name: "另存为"}).click();
+  const dialog = page.getByRole("dialog", {name: "另存为模板"});
+  await expect(dialog).toBeVisible();
+  const actions = dialog.locator(".modal-actions");
+  const cancel = actions.locator("button").first();
+  const confirm = actions.locator("button").last();
+
+  // 输入为空时确认按钮禁用：悬停不得出现抬升阴影等误导性可点反馈
+  await expect(confirm).toBeDisabled();
+  await confirm.hover();
+  expect(await confirm.evaluate((el) => getComputedStyle(el).boxShadow), "禁用按钮无悬停反馈").toBe("none");
+
+  // 可用的取消按钮（原生 button）：悬停出现抬升阴影
+  await cancel.hover();
+  expect(await cancel.evaluate((el) => getComputedStyle(el).boxShadow), "原生按钮悬停抬升阴影").not.toBe("none");
+
+  // 表单控件（模板名称输入）与按钮区不贴合：可见间隙 ≥16px 且来自 16px 语义档上间距
+  const gap = await dialog.evaluate((el) => {
+    const control = el.querySelector(".save-as-name")!;
+    const bar = el.querySelector(".modal-actions")!;
+    return {
+      marginTop: parseFloat(getComputedStyle(bar).marginTop),
+      visible: bar.getBoundingClientRect().top - control.getBoundingClientRect().bottom,
+    };
+  });
+  expect(gap.marginTop, "操作区上间距取 16px 语义档").toBe(16);
+  expect(gap.visible, "表单控件与按钮区可见间隙").toBeGreaterThanOrEqual(16);
 });

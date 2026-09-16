@@ -309,27 +309,27 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
 <style scoped>
 .operation-form{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);max-height:calc(100vh - 240px)}
 .form-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-height:0;padding:0;color:var(--color-text-primary)}
-.form-head h3{margin:0;font-size:15px}
-.form-head-hint{color:var(--color-text-secondary);font-size:12px}
+.form-head h3{margin:0;font-size:var(--font-panel-title)}
+.form-head-hint{color:var(--color-text-secondary);font-size:var(--font-caption)}
 /* 长表单内部滚动：保留标题与取消/加入草稿入口 */
 .form-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);overflow:auto;padding:4px var(--space-2) 4px 4px}
-.form-field{display:flex;flex-direction:column;gap:4px;font-size:13px}
-.operation-form :is(input:not([type="checkbox"]),select,textarea){height:38px;min-width:0;width:100%;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
+.form-field{display:flex;flex-direction:column;gap:4px;font-size:var(--font-label)}
+.operation-form :is(input:not([type="checkbox"]),select,textarea){height:var(--control-height-form);min-width:0;width:100%;padding:6px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font:inherit}
 .operation-form :is(input,select,textarea):focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .operation-form :is(input,select,textarea):hover:not(:disabled){border-color:var(--color-accent)}
 .operation-form :is(input,select,textarea):disabled{background:var(--color-bg-muted);color:var(--color-text-muted);cursor:not-allowed}
-.operation-form button{min-height:36px;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}
+.operation-form button{min-height:var(--control-height-default);padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .operation-form button.primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--color-on-accent)}
 .operation-form button.primary:hover:not(:disabled){background:var(--color-accent-hover)}
 .operation-form button.primary:active:not(:disabled){background:var(--color-accent-active)}
-.form-field .value{font-size:13px;color:var(--color-text-primary);word-break:break-all}
-.derived{color:var(--color-text-secondary);font-size:13px;margin:0}
-.notice{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md,8px);font-size:13px;margin:0;background:var(--color-warning-bg);border:1px solid var(--color-warning)}
-.error{color:var(--color-danger);font-size:12px}
-.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);border-radius:var(--radius-md,8px);padding:var(--space-3);font-size:13px;margin:0;color:var(--color-danger)}
+.form-field .value{font-size:var(--font-label);color:var(--color-text-primary);word-break:break-all}
+.derived{color:var(--color-text-secondary);font-size:var(--font-label);margin:0}
+.notice{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md,8px);font-size:var(--font-label);margin:0;background:var(--color-warning-bg);border:1px solid var(--color-warning)}
+.error{color:var(--color-danger);font-size:var(--font-caption)}
+.error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);border-radius:var(--radius-md,8px);padding:var(--space-3);font-size:var(--font-label);margin:0;color:var(--color-danger)}
 .form-danger{border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
 .form-danger .danger{color:var(--color-danger)}
-.form-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:13px;border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
+.form-footer{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:var(--font-label);border-top:1px solid var(--color-border-subtle);padding-top:var(--space-3)}
 .form-status{color:var(--color-text-secondary)}
 .form-spacer{flex:1}
 @media(max-width:900px){.form-body{grid-template-columns:minmax(0,1fr)}}
