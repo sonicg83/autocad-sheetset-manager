@@ -111,8 +111,6 @@ export default {
     all: "All Sheets",
     countSuffix: " ({count})",
     nodeAria: "{label} ({count} sheets)",
-    collapseSubset: "Collapse subset {label}",
-    expandSubset: "Expand subset {label}",
   },
   operation: {
     renameTitle: "Edit Subset",

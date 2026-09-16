@@ -27,8 +27,6 @@ const messages = {
         all: "全部图纸",
         countSuffix: "（{count} 张）",
         nodeAria: "{label}（{count} 张）",
-        collapseSubset: "收起子集 {label}",
-        expandSubset: "展开子集 {label}",
       },
     },
   },

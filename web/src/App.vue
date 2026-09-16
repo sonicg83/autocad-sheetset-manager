@@ -446,5 +446,3 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
   <UnsavedInputDialog v-bind="sharedGuardState" @save-and-continue="resolveSharedGuard('save')" @discard="resolveSharedGuard('discard')" @stay="resolveSharedGuard('stay')" />
   <ToastHost :toasts="toasts" @dismiss="dismiss" @jump="jumpOverlay" />
 </template>
-
-
