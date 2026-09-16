@@ -2387,3 +2387,7 @@
 - **审查 Minor 全部处理**：M1 957 行 `appComposition.test.ts` 按域拆为 4 文件 + `appCompositionTestSupport.ts` 共享夹具（断言零改动；mock 工厂动态 import 接线，消除被测模块初始化环死锁）；M2 五份正式文档 `updated` 日期同步；M3 孤儿键 `sheets.tree.collapseSubset/expandSubset` 删除；M4 `App.vue` 文末空行与 OFL 许可行尾空格清理。
 - **用户验收修复轮**：`.modal-actions` 可用按钮统一悬停抬升、禁用零反馈（`.modal-danger` 仅抬升不变色——无 danger-hover 令牌不新造色板）；表单弹窗控件与操作区 16px 语义间距（排除 `.modal-check` 防叠加）；属性值面板新增可访问 2/4 列切换（默认两列、localStorage 记忆、四列 ≥1032px 容器查询生效并逐级降级、网格居中、长值 span 2、名称整行、单列降级退 `auto` 防隐式第二列）；SPEC-DM-006 §6.2 与 SPEC-DM-010（§1/P-03/修订记录）同步，Playwright 补悬停/间距/跨列/降级/无溢出断言。
 - **门禁实绩**：`test:contracts` 96/96 · `test:unit` 16 文件 / 168 passed · `build` 0 · `check:i18n` 947 键 / 9 域 · 受影响 e2e（sheets-layout / properties-layout / sheet-catalog）全绿；全量 e2e、后端 pytest 与 Windows WebView2 100/125/150/200% 真实桌面复验仍待最终验证/用户执行，PLAN-DM-029 保持 `active`。
+
+## 2026-09-16（PLAN-DM-029 关闭归档与合并）
+
+- [PLAN-DM-029](.planning/plans/dst-manager/PLAN-DM-029-frontend-ui-foundations-remediation.md) 状态 `active` → **`completed`**：审查修复轮与用户验收修复轮全部落地、全量自动门禁全绿后，**计划归属方（用户）裁定以当前状态关闭**；真实 Windows WebView2 100/125/150/200% 复验未执行，证据缺口与裁定记录如实保留于计划 Step 8 节与责任 A–Y 收口表。两个索引（`docs/dst-manager/README.md`、`.planning/plans/dst-manager/README.md`）同步。分支经用户确认合并 main。
