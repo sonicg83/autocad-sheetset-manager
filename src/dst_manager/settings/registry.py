@@ -47,6 +47,12 @@ REGISTRY: tuple[SettingsItemMeta, ...] = (
         control="enum",
     ),
     SettingsItemMeta(
+        key="ui_theme",
+        label_key="settings.items.uiTheme",
+        category_key="settings.categories.interface",
+        control="enum",
+    ),
+    SettingsItemMeta(
         key="autocad_2016_console",
         label_key="settings.items.autocad2016Console",
         category_key="settings.categories.autocad2016",
@@ -81,6 +87,12 @@ REGISTRY: tuple[SettingsItemMeta, ...] = (
         nullable=True,
         file_filter_key="settings.fileFilters.dotnetAssembly",
         file_kind="dll",
+    ),
+    SettingsItemMeta(
+        key="cad_version",
+        label_key="settings.items.cadVersion",
+        category_key="settings.categories.execution",
+        control="enum",
     ),
     SettingsItemMeta(
         key="cad_timeout_seconds",
@@ -145,6 +157,14 @@ _ENUM_KEYS: dict[str, dict[object, str]] = {
         "system": "settings.locale.system",
         "zh-CN": "settings.locale.zhCN",
         "en-US": "settings.locale.enUS",
+    },
+    "ui_theme": {
+        "light": "settings.enumOptions.themeLight",
+        "dark": "settings.enumOptions.themeDark",
+    },
+    "cad_version": {
+        "2016": "settings.enumOptions.autocad2016",
+        "2020": "settings.enumOptions.autocad2020",
     },
     "number_suffix_type": {
         1: "settings.enumOptions.suffixChinese",

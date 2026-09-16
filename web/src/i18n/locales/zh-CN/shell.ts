@@ -14,7 +14,6 @@ export default {
     statusRepaired: "已修复",
     statusUnrecoverable: "不可恢复",
     statusNeedsRepair: "需修复",
-    cadVersion: "AutoCAD 版本",
     close: "关闭",
     closeAria: "关闭工作区",
     themeToggle: "切换主题",

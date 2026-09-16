@@ -77,6 +77,22 @@ def test_ui_locale_enum_options_are_string_values_with_keys() -> None:
     assert all("text" not in o for o in options)  # 兼容中文 text 已随阶段三删除
 
 
+def test_application_preference_enums_have_stable_options() -> None:
+    assert enum_options("ui_theme") == [
+        {"value": "light", "text_key": "settings.enumOptions.themeLight"},
+        {"value": "dark", "text_key": "settings.enumOptions.themeDark"},
+    ]
+    assert enum_options("cad_version") == [
+        {"value": "2016", "text_key": "settings.enumOptions.autocad2016"},
+        {"value": "2020", "text_key": "settings.enumOptions.autocad2020"},
+    ]
+
+    theme = next(item for item in REGISTRY if item.key == "ui_theme")
+    cad = next(item for item in REGISTRY if item.key == "cad_version")
+    assert (theme.category_key, theme.control) == ("settings.categories.interface", "enum")
+    assert (cad.category_key, cad.control) == ("settings.categories.execution", "enum")
+
+
 def test_numbering_category_declares_keyword_text_control() -> None:
     # 不编号子集关键字（SPEC-DM-014）：编号规则分组内的 text 控件，排在既有两项之后
     controls = [

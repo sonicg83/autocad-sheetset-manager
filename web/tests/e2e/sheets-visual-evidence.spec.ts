@@ -6,11 +6,12 @@
 // 会连带无条件覆盖既有验收资产，已登记为责任 T。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
 import {installSheetsFixture} from "./fixtures/sheets";
+import {installPreferenceSnapshot} from "./fixtures/settings";
 
 type Theme = "light" | "dark";
 
 async function openWorkspace(page: Page, theme: Theme) {
-  await page.addInitScript(t => localStorage.setItem("dst-manager-theme", t), theme);
+  await installPreferenceSnapshot(page,theme);
   await page.goto("/");
   await page.getByRole("button", {name: "选择 DST 文件"}).click();
   await expect(page.getByRole("table", {name: "图纸表格"})).toBeVisible();

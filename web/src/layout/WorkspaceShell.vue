@@ -32,7 +32,6 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "update:cadVersion": [value: string];
   close: [];
   "open-folder": [];
   "open-settings": [];
@@ -59,7 +58,6 @@ const emit = defineEmits<{
 <template>
   <TopBar
     v-bind="topBar"
-    @update:cad-version="emit('update:cadVersion', $event)"
     @close="emit('close')"
     @open-folder="emit('open-folder')"
     @open-settings="emit('open-settings')"

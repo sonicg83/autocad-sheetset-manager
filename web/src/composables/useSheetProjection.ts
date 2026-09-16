@@ -48,12 +48,13 @@ export function useSheetProjection(deps: {
     const workspaceId = current.id;
     const baseRevisionId = current.revision_id;
     const commandKey = JSON.stringify(commands);
+    const cadVersion = deps.cadVersion.value;
     const requestGeneration = ++generation;
     pending.value = true;
     try {
       const preview: Preview = await request(`/api/workspaces/${workspaceId}/changes/preview`, {
         method: "POST",
-        body: JSON.stringify({base_revision_id: baseRevisionId, commands, cad_version: deps.cadVersion.value}),
+        body: JSON.stringify({base_revision_id: baseRevisionId, commands, cad_version: cadVersion}),
       });
       // 乱序响应或快照已变化：只能应用最后一个请求代次
       if (
@@ -61,13 +62,14 @@ export function useSheetProjection(deps: {
         || deps.workspace.value?.id !== workspaceId
         || deps.workspace.value.revision_id !== baseRevisionId
         || JSON.stringify(deps.commands.value) !== commandKey
+        || deps.cadVersion.value !== cadVersion
       ) return {ok: true};
       if (!preview.execution_intent?.derived_document) { stamp.value = null; error.value = t("sheets.errors.projectionMissing"); return {ok: false, message: t("sheets.errors.projectionMissing")}; }
       if (preview.executable === false) { stamp.value = null; error.value = t("sheets.errors.projectionNotExecutable"); return {ok: false, message: t("sheets.errors.projectionNotExecutable")}; }
       // 混合批次（结构命令 + 属性值编辑）：derived_document 不含值编辑合成，
       // 以命令簿元数据命令叠加显示，避免既有图纸属性值被回退（不写回 base、不称已保存）
       projection.value = applyCommandOverlay(applyDerivedProjection(base, preview), commands);
-      stamp.value = {workspaceId, revisionId: baseRevisionId, generation: requestGeneration, commandKey};
+      stamp.value = {workspaceId, revisionId: baseRevisionId, generation: requestGeneration, commandKey, cadVersion};
       error.value = "";
       return {ok: true};
     } catch (e) {

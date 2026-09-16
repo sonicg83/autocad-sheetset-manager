@@ -16,7 +16,7 @@ export const MAX_UNNUMBERED_KEYWORDS = 50;
 export const MAX_UNNUMBERED_KEYWORD_CHARS = 100;
 
 export interface SettingsEnumOption {
-  // ui_locale 为字符串枚举（system/zh-CN/en-US），其余枚举为 int
+  // ui_locale/ui_theme/cad_version 为字符串枚举，其余枚举当前为 int；提交时必须保留 API option 的原始类型。
   value: number | string;
   textKey: string; // 稳定选项文本键（PLAN-DM-021 Task 1）；阶段三起兼容 text 已删除
 }

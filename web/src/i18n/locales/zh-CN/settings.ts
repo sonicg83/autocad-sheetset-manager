@@ -119,6 +119,7 @@ export default {
   },
   items: {
     uiLocale: "界面语言",
+    uiTheme: "界面主题",
     autocad2016Console: "Core Console",
     autocad2016Plugin: "Worker 插件",
     autocad2020Console: "Core Console",
@@ -126,6 +127,7 @@ export default {
     cadTimeout: "CAD 超时（秒）",
     cadMaxParallel: "最大并行任务数",
     workerLease: "Worker 租约（秒）",
+    cadVersion: "AutoCAD 版本",
     addNumberSuffix: "图纸编号追加后缀",
     numberSuffixType: "后缀类型",
     unnumberedSubsetKeywords: "不编号图纸关键字",
@@ -137,6 +139,10 @@ export default {
     enUS: "English",
   },
   enumOptions: {
+    themeLight: "浅色",
+    themeDark: "深色",
+    autocad2016: "AutoCAD 2016",
+    autocad2020: "AutoCAD 2020",
     suffixChinese: "中文序号（一、二、三…）",
     suffixArabic: "数字序号（1、2、3…）",
   },

@@ -4,15 +4,21 @@
 // 语言切换唯一入口是 i18n 的 applyLocale：以 spy 断言调用次数与目标语言。
 import {beforeEach, describe, expect, it, vi} from "vitest";
 
-const {fetchSettingsMock, putSettingsMock, applyLocaleMock} = vi.hoisted(() => ({
+const {fetchSettingsMock, putSettingsMock, applyLocaleMock, initializePreferencesMock, applySavedPreferencesMock} = vi.hoisted(() => ({
   fetchSettingsMock: vi.fn(),
   putSettingsMock: vi.fn(),
   applyLocaleMock: vi.fn(),
+  initializePreferencesMock: vi.fn(),
+  applySavedPreferencesMock: vi.fn(),
 }));
 
 vi.mock("../api/settings", () => ({fetchSettings: fetchSettingsMock, putSettings: putSettingsMock}));
 // 只 mock i18n 入口（applyLocale）；resolveLocale 来自纯逻辑模块 ../i18n/locale，不 mock
 vi.mock("../i18n", () => ({applyLocale: applyLocaleMock}));
+vi.mock("./useApplicationPreferences",()=>({
+  initializeApplicationPreferencesIfNeeded:initializePreferencesMock,
+  applySavedApplicationPreferences:applySavedPreferencesMock,
+}));
 
 import {ApiError} from "../api/client";
 import type {SettingsItem, SettingsSnapshot, SettingsValue} from "../api/settings";
@@ -47,9 +53,10 @@ beforeEach(() => {
 describe("useSettings 语言切换事务", () => {
   it("load 只刷新快照，不触发语言切换（选择未保存/409 刷新不切换）", async () => {
     fetchSettingsMock.mockResolvedValue(makeSnapshot("en-US"));
-    const {load} = await freshUseSettings();
+    const {load,snapshot} = await freshUseSettings();
     await load();
     expect(applyLocaleMock).not.toHaveBeenCalled();
+    expect(initializePreferencesMock).toHaveBeenCalledWith(snapshot.value);
   });
 
   it("PUT 成功且响应语言变化：恰好切换一次到响应快照语言，并整体替换快照", async () => {

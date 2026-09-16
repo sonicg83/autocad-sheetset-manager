@@ -6,6 +6,7 @@ import {createI18n} from "vue-i18n";
 import {fetchSettings, type SettingsSnapshot} from "../api/settings";
 import App from "../App.vue";
 import {resolveLocale, type EffectiveLocale, type UiLocaleSetting} from "./locale";
+import {initializeApplicationPreferences} from "../composables/useApplicationPreferences";
 import zhCNCommon from "./locales/zh-CN/common";
 import zhCNErrors from "./locales/zh-CN/errors";
 import zhCNExtensions from "./locales/zh-CN/extensions";
@@ -72,7 +73,9 @@ export async function applyLocale(locale: EffectiveLocale): Promise<void> {
 export async function bootstrap(): Promise<void> {
   let setting: UiLocaleSetting = "system";
   try {
-    setting = readUiLocaleSetting(await withTimeout(fetchSettings(), SETTINGS_TIMEOUT_MS));
+    const snapshot=await withTimeout(fetchSettings(), SETTINGS_TIMEOUT_MS);
+    setting = readUiLocaleSetting(snapshot);
+    initializeApplicationPreferences(snapshot);
   } catch {
     // 降级：设置不可用时按 system 规则解析（显式 try 使降级路径显式可见）
   }

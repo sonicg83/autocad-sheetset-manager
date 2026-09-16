@@ -2,6 +2,8 @@
 
 ## 定位与当前状态
 
+2026-09-16 设置中心现有 **13 个**应用配置项：新增 `cad_version`（AutoCAD 2016/2020）与 `ui_theme`（浅色/深色）持久偏好。Topbar 已移除 AutoCAD 版本选择；主题按钮保留为会话级临时切换，刷新/重启仍以配置中心保存值为准。本条取代下方 2026-09-08 历史交付段中的“现为 10 项”数量口径。
+
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
 
 2026-09-14 交付 [发布事务按 attempt 嵌套命名空间并拆分 publisher 模块实施计划（PLAN-DM-031，completed）](../../.planning/plans/dst-manager/PLAN-DM-031-publisher-attempt-namespace-and-split.md)：发布事务磁盘布局嵌套到 `jobs/<job_id>/attempt-NNN/` 与 `revisions/<job_id>/attempt-NNN/`（`publish()` 新增必填 `attempt` 参数，journal 新增 `"attempt"` 字段）；删除重试时的目录复用（reclaim）机制，重试永远写入新 attempt 目录且所有 attempt 的 journal/before/终态记录永久保留；同 job 跨 attempt 与旧布局 COMMITTED manifest 双层防重复提交守卫（`PUBLISH_OPERATION_CONFLICT`）；旧平铺布局只读兼容，不支持降级；1077 行 `publisher.py` 拆分为 `publish_errors`/`publish_primitives`/`publish_journal`/`publish_recovery` 四个同层模块（application 层 import 零改动）并同步拆分测试。详见 [ARCH-DM-001](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md) §8。

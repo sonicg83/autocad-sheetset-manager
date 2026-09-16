@@ -6,6 +6,7 @@
 import type {Page} from "@playwright/test";
 import type {Workspace} from "../../../src/api/contracts";
 import {installSheetsFixture} from "./sheets";
+import {installPreferenceSnapshot} from "./settings";
 
 export type DraftSaveFailure = {code: string; message: string; fields?: Record<string, string>};
 
@@ -24,7 +25,7 @@ export type PropertiesFixtureOptions = {
   onDraftPut?: (body: unknown) => void;
   // 跨工作区隔离（切工作区重置用例），复用图纸页夹具能力
   secondWorkspace?: {dstPath: string; id?: string};
-  // 主题（经 localStorage 预置，与既有属性页 spec 一致）
+  // 主题（模拟配置中心持久值）
   theme?: "light" | "dark";
 };
 
@@ -115,7 +116,7 @@ export async function openProperties(page: Page): Promise<void> {
 // 安装属性页共享夹具：假壳 + 打开/刷新路由返回带定义与图纸集值的工作区；返回捕获草稿 PUT 的数组
 export async function installPropertiesFixture(page: Page, options: PropertiesFixtureOptions = {}): Promise<{workspace: Workspace; draftBodies: unknown[]}> {
   const draftBodies: unknown[] = [];
-  if (options.theme) await page.addInitScript((t) => localStorage.setItem("dst-manager-theme", t), options.theme);
+  if (options.theme) await installPreferenceSnapshot(page,options.theme);
   const {workspace} = await installSheetsFixture(page, {
     initialDraft: options.initialDraft,
     secondWorkspace: options.secondWorkspace,

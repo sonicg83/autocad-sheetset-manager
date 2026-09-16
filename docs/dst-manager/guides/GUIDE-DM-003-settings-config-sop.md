@@ -6,7 +6,7 @@ document_kind: guide
 owners:
   - dst-manager
 created: 2026-09-08
-updated: 2026-09-13
+updated: 2026-09-16
 related:
   - ARCH-DM-004
   - SPEC-DM-011
@@ -39,7 +39,7 @@ related:
 
 ## 2. SOP-A：新增配置项
 
-按顺序执行，每步含验证点。全程参考既有样例：`cad_max_parallel`（int 带范围）、`enable_add_number_suffix`（bool 带 alias 容错）、`autocad_2016_console`（nullable path 带 file_filter）、`number_suffix_type`（enum）、`unnumbered_subset_keywords`（text，带保存事务上限校验，SPEC-DM-014）。
+按顺序执行，每步含验证点。全程参考既有样例：`cad_max_parallel`（int 带范围）、`enable_add_number_suffix`（bool 带 alias 容错）、`autocad_2016_console`（nullable path 带 file_filter）、`number_suffix_type`（数字 enum）、`cad_version`（数字字面的字符串 enum）、`unnumbered_subset_keywords`（text，带保存事务上限校验，SPEC-DM-014）。
 
 ### A-1 `config.py` 定义字段（语义权威）
 
@@ -64,14 +64,14 @@ SettingsItemMeta(key="template_dir", label="模板目录", category="路径", co
 ```
 
 - `label` 用最终用户可读的中文，不出现 key 名或占位词（教训：`number_suffix_type` 曾用"类型 1/2"占位，评审裁决改为领域真实语义——先查 `domain/` 里该配置的真实行为再定文案）。
-- enum 字段必须同步在 `_ENUM_TEXTS` 补表（`registry.py`），否则运行时 KeyError（刻意的 fail-fast，防占位文案上线）。
+- enum 字段必须同步在 `_ENUM_KEYS` 补表（`registry.py`），否则运行时 KeyError（刻意的 fail-fast，防占位文案上线）。前端必须按 API `options[].value` 的原始类型提交；不得把 `"2016"` 这类数字字面的字符串 enum 猜成 number。
 - `category` 优先复用既有分组（"AutoCAD 2016"/"AutoCAD 2020"/"任务执行"/"编号规则"）；新分组等于冻结设计新增分区，属视觉变更，按 GUIDE-DM-001 评估是否重开 G4。
 - 当前 `file_filter` 是 API 返回的展示元数据，并兼作前端选择过滤器类型的识别依据：包含 `exe` → `web/src/api/shell.ts` 的 `EXE_FILE_FILTERS`，包含 `dll` → `DLL_FILE_FILTERS`，`None` → 文件夹选择器。现阶段只支持这三类。
 - pywebview 的格式约束实际作用于 `shell.ts` 传给 `select_file` 的字符串：描述部分须匹配 `[\w ]+`（不允许 `.`、`/` 等符号）。`tests/unit/test_shell.py::test_frontend_file_filters_match_pywebview_parse_format` **只守护 `shell.ts` 常量，不检查 registry 文案**；新增过滤类型或改为直接透传 registry 时，必须同时修改前端映射并补增对应契约测试。
 
 ### A-3 更新受影响的既有测试
 
-- `tests/unit/test_settings_registry.py::test_registry_covers_exactly_the_nine_ui_fields`——字段集合是**硬断言**，加/删字段必须同步更新（这是防孤儿字段的守卫，不是障碍）。
+- `tests/unit/test_settings_registry.py::test_registry_covers_every_ui_field_of_settings`——字段集合从 `Settings.model_fields` 派生并作**精确断言**，加/删字段必须登记（这是防孤儿字段的守卫，不是障碍）。
 - `tests/integration/test_api_settings.py`——`items` 数量与硬锚（如 `items[4]["default"] == 600`，按 REGISTRY 第 5 项定位）需按新排序更新。
 - 派生约束用例（`min_max`/`enum_options`）按新字段补断言。
 
@@ -93,7 +93,7 @@ SettingsItemMeta(key="template_dir", label="模板目录", category="路径", co
 
 ### A-6 文档与验证收尾
 
-- `ARCH-DM-004` §2.1 的界面配置项清单更新（当前 10 项，数量与清单同步）。
+- `ARCH-DM-004` §2.1 的界面配置项清单更新（当前 13 项，数量与清单同步）。
 - 根 `changelog.md` 追加条目。
 - 全量验证：`uv run ruff check .`、`uv run pytest -q`、`uv lock --check`、`npm run build`、`npm run test:e2e`。
 - GUIDE-DM-001 分级：纯后端字段+登记通常 S 级（走快速通道，G0/G1/G5–G9）；若引入新分组/新控件类型，升 M 级。

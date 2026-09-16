@@ -11,6 +11,8 @@ from .runtime import is_frozen
 
 # 界面语言三值白名单（I18N-02）：system 表示跟随系统语言，解析在前端完成
 UiLocale = Literal["system", "zh-CN", "en-US"]
+CadVersion = Literal["2016", "2020"]
+UiTheme = Literal["light", "dark"]
 
 
 def _default_draft_dir() -> Path:
@@ -66,6 +68,10 @@ class Settings(BaseSettings):
     # 由前端负责，后端不按语言生成文本。env 通道 DST_MANAGER_UI_LOCALE 沿用
     # env_prefix 既有规则，优先级 默认 < env < settings.json 文件覆盖
     ui_locale: UiLocale = "system"
+    # 应用级偏好：只存显式覆盖值，启动时由前端快照初始化。AutoCAD 版本供全部
+    # 预览/执行请求消费；主题的持久值只由设置中心修改，顶栏切换不写回。
+    ui_theme: UiTheme = "light"
+    cad_version: CadVersion = "2020"
     # populate_by_name：设置中心以 registry 字段名（snake_case）构造覆盖项，而
     # enable_add_number_suffix/number_suffix_type 的 validation_alias 仅服务
     # .env/环境变量通道——两个入口必须同时可用。顺带使带 DST_MANAGER_ 前缀的

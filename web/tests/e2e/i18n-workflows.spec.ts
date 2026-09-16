@@ -64,7 +64,7 @@ const L = {
   "zh-CN": {
     welcomeHeading: "打开图纸集", selectDst: "选择 DST 文件",
     settings: "设置", settingsDialog: "设置", generalSection: "常规配置", localeLabel: "界面语言",
-    close: "关闭", cadVersion: "AutoCAD 版本",
+    close: "关闭",
     tabs: {sheets: "图纸", properties: "属性", revisions: "修订历史"},
     headers: ["图号", "标题", "状态", "操作"],
     sheetsetName: "图纸集名称", updateSheetSet: "更新图纸集", propertyLabel: /属性 项目号/,
@@ -77,7 +77,7 @@ const L = {
   "en-US": {
     welcomeHeading: "Open Sheet Set", selectDst: "Select DST File",
     settings: "Settings", settingsDialog: "Settings", generalSection: "General", localeLabel: "UI language",
-    close: "Close", cadVersion: "AutoCAD version",
+    close: "Close",
     tabs: {sheets: "Sheets", properties: "Properties", revisions: "Revision History"},
     headers: ["Sheet No.", "Title", "Status", "Actions"],
     sheetsetName: "Sheet set name", updateSheetSet: "Update Sheet Set", propertyLabel: /Property 项目号/,
@@ -121,7 +121,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.locator(".workspace-name")).toHaveText("虚构图纸集");
     await expect(page.locator(".workspace-name")).toHaveAttribute("title", "C:\\虚构工程\\图纸集.dst");
     await expect(page.getByRole("button", {name: s.close})).toBeVisible();
-    await expect(page.getByText(s.cadVersion)).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("combobox")).toHaveCount(0);
 
     // —— 图纸：单表工作区，内置列头语义键渲染；子集名（用户数据）原样 ——
     await expect(page.getByRole("tab", {name: s.tabs.sheets})).toHaveAttribute("aria-selected", "true");

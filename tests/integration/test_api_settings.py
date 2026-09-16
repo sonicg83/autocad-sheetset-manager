@@ -157,6 +157,24 @@ def test_put_ui_locale_persists_and_returns_snapshot(client_with_runtime) -> Non
     assert items["ui_locale"]["has_file_override"] is True
 
 
+def test_put_application_preferences_persists_and_returns_snapshot(client_with_runtime) -> None:
+    rev = client_with_runtime.get("/api/settings").json()["config_revision"]
+    resp = client_with_runtime.put(
+        "/api/settings",
+        json={
+            "expected_revision": rev,
+            "set": {"cad_version": "2016", "ui_theme": "dark"},
+            "unset": [],
+        },
+    )
+    assert resp.status_code == 200
+    items = {item["key"]: item for item in resp.json()["items"]}
+    assert items["cad_version"]["value"] == "2016"
+    assert items["ui_theme"]["value"] == "dark"
+    assert items["cad_version"]["has_file_override"] is True
+    assert items["ui_theme"]["has_file_override"] is True
+
+
 def test_put_partial_update_does_not_freeze_env_values(client_with_runtime, monkeypatch) -> None:
     monkeypatch.setenv("DST_MANAGER_CAD_TIMEOUT_SECONDS", "777")
     rev = client_with_runtime.get("/api/settings").json()["config_revision"]

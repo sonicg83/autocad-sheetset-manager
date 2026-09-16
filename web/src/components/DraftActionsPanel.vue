@@ -14,5 +14,14 @@ function actionLabel(action:DraftAction){return action.label_key?t(action.label_
   <div v-if="corrupted" class="notice">{{ $t("shell.draft.corrupted") }}</div>
   <div v-if="stale" class="notice error">{{ $t("shell.draft.staleMessage",{reasons:staleReasons.join(t("common.listSeparator"))}) }}<UiButton v-if="staleReasons.includes('DRAFT_VERSION_CONFLICT')" variant="secondary" @click="$emit('reloadConflict')">{{ $t("shell.draft.reloadConflict") }}</UiButton><UiButton v-else variant="secondary" @click="$emit('discard')">{{ $t("shell.draft.discardStale") }}</UiButton></div>
   <div class="toolbar"><span>{{ $t("shell.draft.pendingSummary",{count:commandCount,cursor,total:actions.length}) }}</span><UiButton variant="secondary" :disabled="stale||cursor===0" @click="$emit('undo')">{{ $t("shell.dock.undo") }}</UiButton><UiButton variant="secondary" :disabled="stale||cursor>=actions.length" @click="$emit('redo')">{{ $t("shell.dock.redo") }}</UiButton><UiButton variant="secondary" :disabled="stale||!actions.length" @click="$emit('clear')">{{ $t("shell.draft.clear") }}</UiButton><UiButton variant="secondary" :disabled="stale||!commandCount||writesDisabled||loading" @click="$emit('preview')">{{ $t("shell.dock.preview") }}</UiButton></div>
-  <ol v-if="actions.length" class="draft-actions"><li v-for="(action,index) in actions" :key="action.id" :class="{derived:index>=cursor}"><span>{{actionLabel(action)}} · {{ $t("shell.draft.commandCount",{count:action.commands.length},action.commands.length) }}</span><UiButton variant="secondary" :disabled="stale" @click="$emit('remove',index)">{{ $t("shell.draft.remove") }}</UiButton></li></ol>
+  <ol v-if="actions.length" class="draft-actions"><li v-for="(action,index) in actions" :key="action.id" :class="{derived:index>=cursor}"><div class="draft-action-row"><span>{{actionLabel(action)}} · {{ $t("shell.draft.commandCount",{count:action.commands.length},action.commands.length) }}</span><UiButton variant="secondary" :disabled="stale" @click="$emit('remove',index)">{{ $t("shell.draft.remove") }}</UiButton></div></li></ol>
 </template>
+<style scoped>
+.toolbar{align-items:center;flex-wrap:wrap}
+.toolbar>span:first-child{flex:1 1 auto;white-space:nowrap}
+.toolbar :deep(.ui-button){flex:none;white-space:nowrap}
+.draft-actions{padding-inline-start:var(--space-5)}
+.draft-actions li+li{margin-top:var(--space-2)}
+.draft-action-row{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:center;gap:var(--space-3)}
+.draft-action-row>span{min-width:0;overflow-wrap:anywhere}
+</style>

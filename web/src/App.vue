@@ -18,6 +18,7 @@ import {useCsvImport} from "./composables/useCsvImport";
 import {useRepair} from "./composables/useRepair";
 import {useRestore} from "./composables/useRestore";
 import {useSheetProjection} from "./composables/useSheetProjection";
+import {useApplicationPreferences} from "./composables/useApplicationPreferences";
 import {useSheetsWorkspace} from "./composables/useSheetsWorkspace";
 import type {SheetDiagFilter, SheetPathFilter, SheetPendingFilter} from "./composables/useSheetsWorkspace";
 import {useSheetColumns} from "./composables/useSheetColumns";
@@ -133,7 +134,7 @@ const {repairPreview,repairContext,isRepairPreviewing,isRepairExecuting,previewR
 const {revisions,restorePreview,restorePreviewContext,loadRevisions,loadRevisionsInternal,previewRestore,restoreRevision,invalidateRevisionState}=useRestore({
   workspace,isWorkspaceLoading,refreshWorkspace,setJob,invalidateJobMonitor,isCurrentJobGeneration,workspaceLoadGeneration,isRestoreExecuting,error,confirmAction,
 });
-const cadVersion=ref("2020");
+const {cadVersion}=useApplicationPreferences();
 // 结构投影域（Task 1）：内部 /changes/preview 获取权威结构显示，与显式发布预览分离。
 // 只读 projection 由 watch 应用到显示 workspace；pending/error 供后续任务消费。
 const {projection:sheetProjection,refresh:refreshSheetProjection}=useSheetProjection({workspace,baseWorkspace,commands,cadVersion});
@@ -225,7 +226,6 @@ const dstPath=computed(()=>workspace.value?.dst_path??"");
 const dstStatus=computed(()=>workspace.value?.dst_validation?.status??"");
 // 恢复预览成功（restorePreview 已写入）后展开任务浮层到修改预览页签，与 showPreview 共用 §9.1 统一预览门禁呈现
 async function previewRestoreAndOpen(revision:Revision){await previewRestore(revision);if(restorePreview.value)openOverlay("prev")}
-function onCadVersionChange(value:string){cadVersion.value=value;layoutReadGeneration+=1;invalidatePreview()}
 // 图纸页工作区状态（PLAN-DM-015 任务 3）：范围/搜索/低频筛选/勾选集合/首屏加载。
 // 在主标签之外实例化，切换主标签保留勾选集合与筛选；行 ID 取服务端 ID。
 const sheets=useSheetsWorkspace({workspace,commands});
@@ -336,6 +336,12 @@ watch(()=>`${workspace.value?.id??""}:${workspace.value?.revision_id??""}`,()=>{
 
 function cloneJson<T>(value:T):T{return JSON.parse(JSON.stringify(value))}
 function invalidatePreview(){previewGeneration+=1;preview.value=null;previewContext.value=null}
+// 配置中心保存 AutoCAD 版本后，后续布局读取与预览统一使用新版本；旧预览立即失效。
+watch(cadVersion,()=>{
+  layoutReadGeneration+=1;
+  invalidatePreview();
+  void refreshSheetProjection();
+});
 // 删除整个子集：目标取编辑子集表单的编辑对象；编辑未提交时先三选一决策（保存后再删除），
 // 再走整子集删除确认流程。目标 ID 在 guard 前捕获——保存标题会关闭表单，删除仍作用于原目标。
 // 批量加入草稿：与单行编辑共用一个活动编辑上下文，有未提交输入先三选一
@@ -356,7 +362,6 @@ const topBarProps=computed<TopBarProps>(()=>({
   sheetSetName:sheetSetName.value,
   dstPath:dstPath.value,
   dstStatus:dstStatus.value,
-  cadVersion:cadVersion.value,
   closeDisabled:isRestoreExecuting.value||isRepairExecuting.value,
   hasShell:hasShell.value,
   workspaceId:workspace.value?.id??"",
@@ -402,7 +407,6 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
     :tab-bar="tabBarProps"
     :task-overlay="taskOverlayProps"
     :dock="dock"
-    @update:cad-version="onCadVersionChange"
     @close="closeWorkspace"
     @open-folder="openFolder"
     @open-settings="openSettings"

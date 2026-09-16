@@ -22,8 +22,8 @@ const enSnapshot = {
 };
 
 async function installEnglish(page: Page, theme?: "light" | "dark") {
-  if (theme) await page.addInitScript((t) => localStorage.setItem("dst-manager-theme", t), theme);
-  await page.route("**/api/settings", (route) => route.fulfill({json: enSnapshot}));
+  const items=theme?[...enSnapshot.items,{key:"ui_theme",control:"enum",value:theme,default:"light",source:"file",has_file_override:true,label_key:"settings.items.uiTheme",category_key:"settings.categories.interface",options:[]}]:enSnapshot.items;
+  await page.route("**/api/settings", (route) => route.fulfill({json:{...enSnapshot,items}}));
 }
 
 async function openEnglishWorkspace(page: Page, options?: Parameters<typeof installSheetsFixture>[1]) {

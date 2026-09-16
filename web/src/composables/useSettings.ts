@@ -9,6 +9,7 @@ import {applyLocale} from "../i18n";
 import {resolveLocale, type UiLocaleSetting} from "../i18n/locale";
 import {fetchSettings,putSettings} from "../api/settings";
 import type {SettingsSnapshot} from "../api/settings";
+import {applySavedApplicationPreferences,initializeApplicationPreferencesIfNeeded} from "./useApplicationPreferences";
 
 const snapshot=ref<SettingsSnapshot|null>(null);
 const loading=ref(false);
@@ -29,7 +30,10 @@ export function useSettings():{
   async function load():Promise<void>{
     loading.value=true;
     try{
-      snapshot.value=await fetchSettings();
+      const next=await fetchSettings();
+      snapshot.value=next;
+      // 启动读取失败时，首次成功打开设置中心补齐应用偏好；正常启动后再次打开不会覆盖顶栏临时主题。
+      initializeApplicationPreferencesIfNeeded(next);
     }finally{
       loading.value=false;
     }
@@ -42,6 +46,7 @@ export function useSettings():{
     // 失败（422/409/网络/5xx）原样上抛：快照不替换、语言不切换。
     const next=await putSettings(current.configRevision,set,unset);
     snapshot.value=next;
+    applySavedApplicationPreferences(next,new Set([...Object.keys(set),...unset]));
     // 语言切换事务：成功后以响应快照 ui_locale 解析生效语言，变化时切换一次
     const before=resolveLocale(readUiLocale(current));
     const after=resolveLocale(readUiLocale(next));

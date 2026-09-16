@@ -30,7 +30,7 @@
 // 新增用例保存的是**夹具 mock 的**扩展设置端点（`installExtensionSettings`）：PUT 不会落到
 // 真实后端，因此仍然只打开设置对话框、不写核心设置，不影响 settings-dialog.spec.ts 的串行基线。
 import {expect, test, type Page, type TestInfo} from "@playwright/test";
-import {openSettingsDialog} from "./fixtures/settings";
+import {installPreferenceSnapshot,openSettingsDialog} from "./fixtures/settings";
 import {GENERATED_EXTENSION_ID, extensionSummary, installExtensionSettings, installExtensions} from "./fixtures/extensions";
 
 // 4 条多状态样本：可用 / 已停用 / 启动失败（且用户意图启用）/ 不兼容（含诊断码）。
@@ -109,7 +109,7 @@ test("g8-ext-03 扩展分区·八条分段边界（浅色·1280×720，对照 g4
 
 test("g8-ext-04 扩展分区·四条（深色·1280×720，对照 g4-11）", async ({page}, info) => {
   await page.setViewportSize({width: 1280, height: 720});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "dark"));
+  await installPreferenceSnapshot(page,"dark");
   await openExtensions(page, multiList());
   await expect(page.locator(".ext-card")).toHaveCount(4);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -229,7 +229,7 @@ test("g8-ext-07 扩展配置子视图·generated 通用表单（浅色·1280×72
 
 test("g8-ext-08 扩展配置子视图·custom 面板输出图纸过滤默认态（深色·1280×720，对照 g4-15）", async ({page}, info) => {
   await page.setViewportSize({width: 1280, height: 720});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "dark"));
+  await installPreferenceSnapshot(page,"dark");
   await installCatalogSettings(page);
   await openExtensions(page, [extensionSummary()]);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -320,8 +320,8 @@ test("g8-ext-10 custom 面板输出图纸过滤字段错误态（浅色·1280×7
 // ---------------------------------------------------------------------------
 test.describe("Task 8 控件视觉基础正交证据（PLAN-DM-029）", () => {
   async function openSettingsWithTheme(page: Page, theme: "light" | "dark"): Promise<void> {
-    await page.addInitScript(value => localStorage.setItem("dst-manager-theme", value), theme);
     await page.goto("/");
+    if(await page.locator("html").getAttribute("data-theme")!==theme)await page.getByRole("button",{name:"切换主题"}).click();
     await openSettingsDialog(page);
   }
 

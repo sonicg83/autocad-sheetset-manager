@@ -115,6 +115,43 @@ def test_ui_locale_rejects_values_outside_whitelist(monkeypatch, value: str):
         Settings(_env_file=None)
 
 
+# ---- 应用偏好：AutoCAD 版本与界面主题 ----
+
+
+def test_application_preferences_use_stable_defaults(monkeypatch):
+    monkeypatch.delenv("DST_MANAGER_CAD_VERSION", raising=False)
+    monkeypatch.delenv("DST_MANAGER_UI_THEME", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.cad_version == "2020"
+    assert settings.ui_theme == "light"
+
+
+@pytest.mark.parametrize("value", ["2016", "2020"])
+def test_cad_version_accepts_only_supported_versions(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_CAD_VERSION", value)
+    assert Settings(_env_file=None).cad_version == value
+
+
+@pytest.mark.parametrize("value", ["2018", "2025", ""])
+def test_cad_version_rejects_unsupported_versions(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_CAD_VERSION", value)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("value", ["light", "dark"])
+def test_ui_theme_accepts_only_light_and_dark(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_UI_THEME", value)
+    assert Settings(_env_file=None).ui_theme == value
+
+
+@pytest.mark.parametrize("value", ["system", "auto", ""])
+def test_ui_theme_rejects_values_outside_whitelist(monkeypatch, value: str):
+    monkeypatch.setenv("DST_MANAGER_UI_THEME", value)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
 # ---- 不编号子集关键字（SPEC-DM-014）----
 
 

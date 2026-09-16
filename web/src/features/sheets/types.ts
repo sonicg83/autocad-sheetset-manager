@@ -4,7 +4,7 @@
 import type {ChangeCommand, LayoutSourceType, Placement, Workspace} from '../../api/contracts';
 export type SheetScope = {kind:'all'} | {kind:'subset';id:string};
 export type ProjectionStamp = {
-  workspaceId:string; revisionId:string; generation:number; commandKey:string;
+  workspaceId:string; revisionId:string; generation:number; commandKey:string; cadVersion:string;
 };
 export type PropertyKey = `sheet:${string}`;
 export type ColumnPreferences = {

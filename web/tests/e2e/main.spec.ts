@@ -1,7 +1,7 @@
 import {expect,test,type Page,type TestInfo} from "@playwright/test";
 import {writeFileSync} from "node:fs";
 import {buildPreviewFromBase, installSheetsFixture} from "./fixtures/sheets";
-import {openSettingsDialog} from "./fixtures/settings";
+import {installPreferenceSnapshot,openSettingsDialog} from "./fixtures/settings";
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(() => {
@@ -158,6 +158,36 @@ test("草稿按动作持久化并支持 A→B→C 撤销恢复 B、重做和批�
   await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("C");
 });
 
+test("草稿浮层使用宽布局，工具栏文字不拆分且动作按钮右对齐",async({page})=>{
+  await page.setViewportSize({width:1280,height:720});
+  await openWorkspace(page);
+  await page.getByRole("tab",{name:"属性"}).click();
+  const name=page.getByLabel("图纸集名称",{exact:true});
+  for(const value of ["草稿名称 A","草稿名称 B"]){
+    await name.fill(value);
+    await page.getByRole("button",{name:"更新图纸集"}).click();
+  }
+  await page.getByRole("tab",{name:"图纸"}).click();
+  await openDraftPop(page);
+
+  const layout=await page.locator("#draft-pop").evaluate(pop=>{
+    const popRect=pop.getBoundingClientRect();
+    const toolbar=pop.querySelector<HTMLElement>(".toolbar")!;
+    const toolbarButtons=Array.from(toolbar.querySelectorAll<HTMLElement>("button"));
+    const firstRemove=pop.querySelector<HTMLElement>(".draft-actions li button")!;
+    return {
+      popWidth:popRect.width,
+      buttonTops:toolbarButtons.map(button=>Math.round(button.getBoundingClientRect().top)),
+      buttonWhiteSpaces:toolbarButtons.map(button=>getComputedStyle(button).whiteSpace),
+      removeRightGap:popRect.right-firstRemove.getBoundingClientRect().right,
+    };
+  });
+  expect(layout.popWidth,"桌面视口下应给摘要、四个操作和动作列表留出舒展宽度").toBeGreaterThanOrEqual(540);
+  expect(new Set(layout.buttonTops).size,"四个工具栏按钮应位于同一行").toBe(1);
+  expect(layout.buttonWhiteSpaces,"按钮标签不得拆字或换行").toEqual(["nowrap","nowrap","nowrap","nowrap"]);
+  expect(layout.removeRightGap,"动作移除按钮应贴近列表右侧对齐").toBeLessThanOrEqual(28);
+});
+
 test("移除 active 动作不会激活 redo 区命令",async({page})=>{
   const previewBodies:any[]=[];
   await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());return route.fulfill({json:{workspace_id:"workspace-1",base_revision_id:"revision-1",cad_version:"2020",preview_digest:"remove-digest",executable:true,requires_cad:false,changes:[],diagnostics:[],affected_files:[],semantic_diff:{sheet_set:[],structure:{before:[],after:[]},properties:[],dwgs:[]},execution_intent:null}})});
@@ -303,6 +333,7 @@ test("维护属性并按位置创建子集后预览派生变化",async({page})=>
 });
 
 test("冻结CAD版本并展示服务端语义差异与来源证据",async({page})=>{
+  await installPreferenceSnapshot(page,"light","2016");
   const previewBodies:any[]=[];let executeBody:any=null;
   const semantic={
     structure:{before:[{position:1,id:"subset-1",title:"第一册",number_range:"001-002",display_name:"001-002 第一册",dwg_file:"C:\\project\\A.dwg",sheets:[{position:1,id:"sheet-1",number:"001",title:"第一册 (一)",suffix:"一",dwg_file:"C:\\project\\A.dwg",layout_name:"001 第一册 (一)"}]}],after:[{position:1,id:"subset-1",title:"第一册",number_range:"001-003",display_name:"001-003 第一册",dwg_file:"C:\\project\\A.dwg",sheets:[{position:1,id:"sheet-1",number:"001",title:"第一册 (一)",suffix:"一",dwg_file:"C:\\project\\A.dwg",layout_name:"001 第一册 (一)"}]}]},
@@ -312,10 +343,10 @@ test("冻结CAD版本并展示服务端语义差异与来源证据",async({page}
   const inspection={path:"C:\\project\\template.dwt",sha256:"abc123",cad_version:"2016",layouts:["A1模板"],requested_layouts:["A1模板"]};
   await page.route("**/api/workspaces/workspace-1/changes/preview",async route=>{previewBodies.push(await route.request().postDataJSON());await route.fulfill({json:{executable:true,requires_cad:true,preview_digest:"digest-2016",changes:[{type:"add_custom_property",affected_sheet_count:2}],diagnostics:[],affected_files:["C:\\project\\test.dst"],semantic_diff:semantic,execution_intent:{cad_validation_deferred:true,source_baselines:[{path:inspection.path,sha256:inspection.sha256,identity:["source-id"],source_types:["template_layout"],requested_layouts:inspection.requested_layouts}],derived_document:{subsets:[]},groups:[]}}})});
   await page.route("**/api/workspaces/workspace-1/changes/execute",async route=>{executeBody=await route.request().postDataJSON();await route.fulfill({json:{id:"job-version",status:"FAILED",progress:0,attempt:1,files:[]}})});
-  await openWorkspace(page);await page.getByLabel("AutoCAD 版本").selectOption("2016");await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
   expect(previewBodies[0].cad_version).toBe("2016");await expect(page.getByText("前后有序结构")).toBeVisible();await expect(page.getByRole("columnheader",{name:"受影响图纸"})).toBeVisible();await expect(page.getByText("DWG 与布局差异")).toBeVisible();await expect(page.getByText("CAD 布局校验将在确认后执行")).toBeVisible();await expect(page.getByText("来源基准")).toBeVisible();await expect(page.getByText("abc123",{exact:true})).toBeVisible();await expect(page.getByText("A1模板",{exact:true}).first()).toBeVisible();await expect(page.getByText("[object Object]",{exact:true})).toHaveCount(0);
   await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);expect(executeBody.cad_version).toBe("2016");expect(executeBody.preview_digest).toBe("digest-2016");
-  await page.getByRole("button",{name:"预览变更"}).click();await expect(page.getByText("完整变更预览")).toBeVisible();await page.getByLabel("AutoCAD 版本").selectOption("2020");await expect(page.getByText("完整变更预览")).toHaveCount(0);
+  await page.getByRole("button",{name:"预览变更"}).click();await expect(page.getByText("完整变更预览")).toBeVisible();await expect(page.getByRole("banner").getByRole("combobox")).toHaveCount(0);
 });
 
 test("普通预览丢弃乱序响应并只执行冻结命令",async({page})=>{
@@ -537,6 +568,7 @@ test("已有布局来源隐藏模板输入并以空来源提交",async({page})=>
 });
 
 test("关闭工作区重置模板表单状态且布局读取跟随 CAD 版本",async({page})=>{
+  await installPreferenceSnapshot(page,"light","2016");
   const layoutBodies:any[]=[];
   await page.route("**/api/layout-names",async route=>{layoutBodies.push(await route.request().postDataJSON());await route.fulfill({json:{layouts:["A1"],cached:false,file_hash:"x"}})});
   await openWorkspace(page);
@@ -562,7 +594,6 @@ test("关闭工作区重置模板表单状态且布局读取跟随 CAD 版本",a
   await page.getByRole("button",{name:"新增图纸"}).click();
   await expect(insertForm.getByText("C:\\source.dwg")).toHaveCount(0);
   // M4：布局读取 cad_version 跟随所选 AutoCAD 版本而非硬编码 "2020"
-  await page.getByLabel("AutoCAD 版本").selectOption("2016");
   await page.evaluate(()=>{(window as any).__fakeSelectResult="C:\\source2.dwg"});await page.getByRole("button",{name:"选择模板文件"}).click();
   expect(layoutBodies.at(-1).cad_version).toBe("2016");
 });
@@ -766,19 +797,18 @@ test("壳桥延迟注入（pywebviewready）时初始界面切换为文件选择
   await expect(page.getByRole("button",{name:"打开项目"})).toHaveCount(0);
 });
 
-test("主题切换写 html data-theme 并持久化",async({page})=>{
-  // 仅首次导航播种浅色初始态；reload 时 addInitScript 会重跑，若无条件覆盖会把已持久化的 dark 冲回 light
-  await page.addInitScript(()=>{if(!localStorage.getItem("dst-manager-theme"))localStorage.setItem("dst-manager-theme","light")});
+test("顶栏主题切换只在当前会话生效，刷新恢复配置中心主题",async({page})=>{
+  await installPreferenceSnapshot(page,"light");
   await page.goto("/");
   await page.getByRole("button",{name:"切换主题"}).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme","light");
 });
 
 test("深色模式下中心视图区域随主题切换背景",async({page})=>{
   // 回归：旧单页样式块硬编码 background:white，中心区域不随 data-theme 切换
-  await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+  await installPreferenceSnapshot(page,"dark");
   await openWorkspace(page);
   for(const [selector,token] of [[".sheets-workspace","--color-bg-canvas"],[".sheet-list-card","--color-bg-surface"]]) {
     const colors=await page.locator(selector).evaluate((el,name)=>{
@@ -792,7 +822,7 @@ test("深色模式下中心视图区域随主题切换背景",async({page})=>{
 
 test("深色模式下文本输入框与下拉选单随主题切换背景",async({page})=>{
   // 回归：旧样式块只设 input/select 的 padding/border，背景落到 UA 默认白底且未声明 color-scheme
-  await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+  await installPreferenceSnapshot(page,"dark");
   await openWorkspace(page);
   // 任务 3 起低频筛选经「筛选」展开后才渲染下拉选单
   await page.getByRole("button",{name:"筛选"}).click();
@@ -1071,10 +1101,10 @@ test("英文界面：欢迎区、顶栏、标签栏与操作栏双语渲染",asy
   await expect(page.getByRole("button",{name:"Select DST File"})).toBeVisible();
   await expect(page.getByText("Or drag a .dst file into the window · drag and drop supported")).toBeVisible();
 await selectDst(page,"C:\\project\\test.dst","Select DST File");
-  // 顶栏：副标题、文件夹入口、CAD 版本、关闭与主题/设置入口
+  // 顶栏：副标题、文件夹入口、关闭与主题/设置入口；AutoCAD 版本只在配置中心选择
   await expect(page.getByText("v0.3 · Controlled daily editing with recoverable publishing")).toBeVisible();
   await expect(page.getByRole("button",{name:"Open the folder containing the sheet set"})).toBeVisible();
-  await expect(page.getByText("AutoCAD version")).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("combobox")).toHaveCount(0);
   await expect(page.getByRole("button",{name:"Close"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Toggle theme"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Settings"})).toBeVisible();
@@ -1688,7 +1718,7 @@ test("壳层已迁移控件：本地 SVG 图标、统一尺寸与可访问名称
   await expect(page.getByRole("button",{name:"打开图纸集所在文件夹"})).toBeVisible();
 
   // B/E：输入类 38px、普通按钮 36px、图标按钮 36×36、紧凑动作 34px
-  expect.soft(await topbar.locator("select").first().evaluate(el=>getComputedStyle(el).height),"CAD 版本选择框").toBe("38px");
+  await expect.soft(topbar.getByRole("combobox"),"Topbar 不再包含 AutoCAD 版本选择框").toHaveCount(0);
   for(const selector of [".topbar .folder-btn",".topbar .close-btn",".topbar .settings-btn",".dock .draft-chip"]){
     expect.soft(await heightOf(selector),selector).toBe(36);
   }
@@ -2141,7 +2171,7 @@ test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
 
   test("t9-04 深色任务状态：浮层实施进度同状态", async ({page}, info) => {
     await page.setViewportSize({width: 1280, height: 720});
-    await page.addInitScript(()=>{localStorage.setItem("dst-manager-theme","dark")});
+    await installPreferenceSnapshot(page,"dark");
     await installMockEventSource(page);
     await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
     await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-evidence",status:"QUEUED",progress:0,attempt:0,files:[]}}));

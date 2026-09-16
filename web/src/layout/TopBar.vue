@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import {computed} from "vue";
 import {useI18n} from "vue-i18n";
-import {useTheme} from "../composables/useTheme";
+import {useApplicationPreferences} from "../composables/useApplicationPreferences";
 import UiIcon from "../components/ui/UiIcon.vue";
 import UiIconButton from "../components/ui/UiIconButton.vue";
-// 主题按钮迁入顶栏：useTheme 为模块级单例，TopBar 与 App.vue 共享同一主题状态
-const {theme,toggleTheme}=useTheme();
+// 顶栏主题按钮只切换本次运行；持久主题只由配置中心保存。
+const {theme,toggleTheme}=useApplicationPreferences();
 const {t}=useI18n();
-const props=defineProps<{sheetSetName:string;dstPath:string;dstStatus:string;cadVersion:string;closeDisabled?:boolean;hasShell?:boolean;workspaceId?:string}>();
-defineEmits<{"update:cadVersion":[value:string];close:[];"open-folder":[];"open-settings":[]}>();
+const props=defineProps<{sheetSetName:string;dstPath:string;dstStatus:string;closeDisabled?:boolean;hasShell?:boolean;workspaceId?:string}>();
+defineEmits<{close:[];"open-folder":[];"open-settings":[]}>();
 function statusClass(status:string){return status==="VALID"?"valid":status==="REPAIRED"?"warn":"invalid"}
 // 状态胶囊三态映射（稳定枚举 → 语义键，I18N-07；枚举值不进用户文案）
 const STATUS_KEYS:Record<string,string>={VALID:"shell.topbar.statusValid",REPAIRED:"shell.topbar.statusRepaired",INVALID_UNRECOVERABLE:"shell.topbar.statusUnrecoverable"};
@@ -25,7 +25,6 @@ const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavai
     <button v-if="workspaceId" type="button" class="folder-btn" :disabled="folderDisabled" :title="folderTitle" :aria-label="$t('shell.topbar.openFolderAria')" @click="$emit('open-folder')">{{ $t("shell.topbar.openFolder") }}</button>
     <span class="spacer"></span>
     <span v-if="dstStatus" class="pill" :class="statusClass(dstStatus)"><span class="dot" aria-hidden="true"></span>DST {{statusLabel(dstStatus)}}</span>
-    <label class="cad-version">{{ $t("shell.topbar.cadVersion") }}<select :value="cadVersion" @change="$emit('update:cadVersion',($event.target as HTMLSelectElement).value)"><option value="2016">2016</option><option value="2020">2020</option></select></label>
     <button v-if="workspaceId" type="button" class="close-btn" :disabled="closeDisabled" @click="$emit('close')" :aria-label="$t('shell.topbar.closeAria')">{{ $t("shell.topbar.close") }}</button>
     <UiIconButton class="theme-btn" icon="theme" :label="$t('shell.topbar.themeToggle')" :title="theme==='dark'?$t('shell.topbar.themeToLight'):$t('shell.topbar.themeToDark')" @click="toggleTheme" />
     <!-- 设置中心入口（SPEC-DM-011 SC-01）：常驻，未加载工作区同样可用；焦点归还由对话框负责 -->
@@ -43,8 +42,6 @@ const folderTitle=computed(()=>folderDisabled.value?t("shell.topbar.folderUnavai
 .pill.valid{background:var(--color-success-bg);color:var(--color-success)}
 .pill.warn{background:var(--color-warning-bg);color:var(--color-warning)}
 .pill.invalid{background:var(--color-danger-bg);color:var(--color-danger)}
-.cad-version{display:inline-flex;align-items:center;gap:6px;font-size:var(--font-caption);color:var(--color-text-secondary);white-space:nowrap}
-.cad-version select{height:var(--input-height);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);padding:0 var(--space-2);font-family:inherit}
 .close-btn{height:var(--button-height);padding:0 var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-size:var(--font-label);white-space:nowrap}
 .close-btn:hover:not(:disabled){background:var(--color-bg-muted)}
 .close-btn:disabled{cursor:not-allowed;opacity:.5}

@@ -5,6 +5,7 @@
 // 夹具为本 spec 内联虚构数据（共享夹具由任务 6 建立），不含真实工程内容。
 import {expect, test, type Page} from "@playwright/test";
 import {installSheetsFixture} from "./fixtures/sheets";
+import {installPreferenceSnapshot} from "./fixtures/settings";
 import type {Workspace} from "../../src/api/contracts";
 
 type Theme = "light" | "dark";
@@ -76,7 +77,7 @@ const PENDING_DRAFT = {
 // 在公共图纸页夹具上写入 33 项 sheetset 值与定义，并覆写打开/刷新响应；返回草稿 PUT 捕获数组
 async function install(page: Page, options: InstallOptions = {}) {
   const draftBodies: unknown[] = [];
-  if (options.theme) await page.addInitScript((t) => localStorage.setItem("dst-manager-theme", t), options.theme);
+  if (options.theme) await installPreferenceSnapshot(page,options.theme);
   const {workspace} = await installSheetsFixture(page, {
     initialDraft: options.initialDraft,
     failDraftSave: options.failDraftSave,

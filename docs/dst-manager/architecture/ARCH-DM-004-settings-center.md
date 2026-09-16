@@ -5,7 +5,7 @@ status: draft
 owners:
   - dst-manager
 created: 2026-09-07
-updated: 2026-09-13
+updated: 2026-09-16
 related:
   - PRD-DM-001
   - ARCH-DM-001
@@ -65,7 +65,9 @@ document_kind: architecture
 - **依赖方向单向**：`registry.py` → `config.py`；`config.py` 不得反向导入注册表（避免循环依赖）。完整性测试保证：`Settings` 每个 UI 字段都有注册项、派生的默认值/约束与 Schema 一致。
 - **可空路径契约**：`null` 表示"未配置"；空字符串/纯空白在进入 Settings 之前统一按 `null` 处理（pydantic 会把 `Path("")` 解析为当前工作目录，绝不允许该值落盘或生效）。路径控件提供"清除"动作。
 
-现有 10 个界面配置项全部登记：`autocad_2016_console`、`autocad_2016_plugin`、`autocad_2020_console`、`autocad_2020_plugin`、`cad_timeout_seconds`、`cad_max_parallel`、`worker_lease_seconds`、`enable_add_number_suffix`、`number_suffix_type`、`unnumbered_subset_keywords`（`text` 控件，语义见 [SPEC-DM-014](../specs/SPEC-DM-014-unnumbered-subset-keywords.md)）。
+现有 13 个界面配置项全部登记：`ui_locale`、`ui_theme`、`autocad_2016_console`、`autocad_2016_plugin`、`autocad_2020_console`、`autocad_2020_plugin`、`cad_version`、`cad_timeout_seconds`、`cad_max_parallel`、`worker_lease_seconds`、`enable_add_number_suffix`、`number_suffix_type`、`unnumbered_subset_keywords`（`text` 控件，语义见 [SPEC-DM-014](../specs/SPEC-DM-014-unnumbered-subset-keywords.md)）。`cad_version` 与 `ui_theme` 均为字符串枚举；即使 CAD 版本字面值仅含数字，前端也必须按注册表 option 的原始类型提交，不得猜成整数。
+
+应用偏好的生效边界固定如下：`cad_version` 是预览、布局读取与正式执行使用的持久版本来源，顶栏不再提供第二个版本选择入口；`ui_theme` 是应用启动时的持久主题来源。顶栏主题按钮仍可随时切换，但只修改本次运行的内存主题，不写 `localStorage` 或 `settings.json`；刷新/重启后重新采用 `ui_theme`。配置中心明确保存或恢复 `ui_theme` 时立即应用响应快照中的主题，保存无关字段不得覆盖本次会话的临时主题。若启动阶段读取设置失败，首次成功打开配置中心时补做且只做一次偏好初始化；正常启动后再打开配置中心不得借加载动作覆盖临时主题。
 
 ### 2.2 用户配置文件：只存显式覆盖值
 
@@ -146,7 +148,7 @@ document_kind: architecture
 - 未保存修改时关闭（Esc、✕、遮罩）先确认，不静默丢弃输入。
 - Esc 关闭、焦点圈闭、关闭后焦点归还齿轮按钮、校验失败时焦点落到第一个错误字段。
 - 实现约束：现有全局拖拽桥监听在 document 上，对话框遮罩与焦点管理须与其兼容——对话框打开时拖放事件不得穿透遮罩产生误操作。
-- **配置变化 × 旧预览**：`enable_add_number_suffix`、`number_suffix_type`、`cad_max_parallel` 影响命名规划与执行估算；保存后相关旧预览按既有 preview digest 机制失效重算，并在界面明确提示，不以旧预览冒充新配置的结果。
+- **配置变化 × 旧预览**：`enable_add_number_suffix`、`number_suffix_type`、`cad_max_parallel`、`cad_version` 影响命名规划、执行估算或 CAD 执行目标；保存后相关旧预览按既有 preview digest 机制失效重算，并在界面明确提示，不以旧预览冒充新配置的结果。结构投影请求的 stamp 与响应门禁必须包含 `cad_version`；版本变化立即失效并重算投影，旧版本在途响应不得回填。
 
 ## 5. 校验与错误处理
 

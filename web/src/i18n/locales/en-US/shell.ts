@@ -12,7 +12,6 @@ export default {
     statusRepaired: "Repaired",
     statusUnrecoverable: "Unrecoverable",
     statusNeedsRepair: "Needs repair",
-    cadVersion: "AutoCAD version",
     close: "Close",
     closeAria: "Close workspace",
     themeToggle: "Toggle theme",

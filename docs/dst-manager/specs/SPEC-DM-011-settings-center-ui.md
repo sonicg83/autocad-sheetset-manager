@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-09-08
-updated: 2026-09-13
+updated: 2026-09-16
 related:
   - ARCH-DM-004
   - ARCH-DM-006
@@ -27,8 +27,10 @@ document_kind: spec
 - **变更等级**：L 级——触碰共享外壳（顶部栏）、后端契约（`/api/settings`、`/api/about`）、桌面壳（ShellBridge 新增原生选择器/外链）、发布链路（PyInstaller spec 数据文件）。已拆分为两个可独立验收的子项目：
   - **子项目 A（配置域后端）**：resolver / store / 快照 / Worker 传播 / API / 打包触点。纯后端，GUIDE-DM-001 不适用，按 ARCH-DM-004 §7 测试策略验收。
   - **子项目 B（本 Spec）**：设置中心 UI，走 G0～G9 全流程。
-- **范围**：顶部齿轮入口、设置模态对话框（常规配置 + 扩展 + 关于）、动态表单渲染、原生路径选择器桥接、来源/覆盖标记、外链、诊断横幅、内置扩展的启停与状态查看、声明设置的扩展在设置中心内的统一配置入口（`generated` / `custom`，SC-17）。
-- **非目标**：扩展的工作区偏好编辑（ARCH-DM-006 §8.3 只由宿主 best-effort 记录上次选中模板，用户不直接编辑）；完整扩展中心（安装/卸载/市场/依赖管理，PRD-DM-001 后续立项）；扩展卡片基线的推迟项（多列网格、搜索/筛选/排序、分页与虚拟滚动、卡片可展开详情、图标与品牌资源、批量启停、依赖关系可视化）——重启条件写在 §3.3；`data_dir`/`draft_dir` 界面化；模板目录；第三方组件声明页；主题或全局导航改动。
+- **范围**：顶部齿轮入口、设置模态对话框（常规配置 + 扩展 + 关于）、动态表单渲染、原生路径选择器桥接、来源/覆盖标记、外链、诊断横幅、内置扩展的启停与状态查看、声明设置的扩展在设置中心内的统一配置入口（`generated` / `custom`，SC-17），以及 AutoCAD 版本与持久主题的唯一配置入口（SC-18）。
+- **非目标**：扩展的工作区偏好编辑（ARCH-DM-006 §8.3 只由宿主 best-effort 记录上次选中模板，用户不直接编辑）；完整扩展中心（安装/卸载/市场/依赖管理，PRD-DM-001 后续立项）；扩展卡片基线的推迟项（多列网格、搜索/筛选/排序、分页与虚拟滚动、卡片可展开详情、图标与品牌资源、批量启停、依赖关系可视化）——重启条件写在 §3.3；`data_dir`/`draft_dir` 界面化；模板目录；第三方组件声明页；除 SC-18 外的主题或全局导航改动。
+
+> **修订（2026-09-16，应用偏好归一）**：用户确认把 AutoCAD 版本与浅/深主题纳入配置中心持久保存。Topbar 移除 AutoCAD 版本选择，避免同一持久偏好出现第二入口；主题按钮保留为会话级临时切换，不落 `localStorage`，刷新/重启后以配置中心 `ui_theme` 为准。配置中心明确保存主题时立即应用；保存无关配置不清除当前会话的临时主题。
 
 > **修订（2026-09-10，「停用不可逆」缺陷修复）**：原非目标整条排除「扩展中心」，导致启停入口的归属无人认领——启停控件只长在扩展自己的页面上（`SheetCatalogView` 的「停用扩展」），而 [ARCH-DM-006](../architecture/ARCH-DM-006-builtin-extension-platform.md) §7 要求停用后移除该页面入口，开关因此变成单向：用户点一次停用就再也找不到启用入口，且启停意图持久化在 `extension_states`（重启对账仍会重新停掉），被永久卡死。现将非目标收窄为：设置中心**只**承载内置扩展的启停与状态查看，扩展自身设置与偏好仍归扩展页面（ARCH-DM-006 §8），完整扩展中心仍属后续立项。启停入口唯一固定在设置中心，扩展页面不再提供停用（否则停用会移除该页入口本身）。**（注：本条里“扩展自身设置仍归扩展页面”已被 2026-09-12 修订取代——扩展设置改由设置中心的「配置」入口承载，见下一条修订）**
 
@@ -44,13 +46,14 @@ document_kind: spec
 
 - **主要用户**：使用 DST Manager 桌面软件的单机用户（非开发者，不应被要求编辑 `.env`）。
 - **核心用户任务**（按重要性）：
-  1. 配置 AutoCAD 版本路径（首次使用的前置任务）；
-  2. 调整任务执行参数（超时/并发/租约）；
-  3. 切换编号规则选项；
-  4. 查看版本号、开源协议与反馈入口。
+  1. 配置 AutoCAD 版本路径并选择任务使用的 AutoCAD 版本（首次使用的前置任务）；
+  2. 选择应用启动时使用的浅色/深色主题；
+  3. 调整任务执行参数（超时/并发/租约）；
+  4. 切换编号规则选项；
+  5. 查看版本号、开源协议与反馈入口。
 - **可观察成功标准**：不加载 DST 即可完成上述全部任务；每项修改保存后无需重启即对下一次操作生效；误输入在保存前得到行内提示；用户可把任一项恢复为继承值。
 - **不可变约束**：服务只监听 `127.0.0.1`；配置语义权威为 Pydantic Settings（ARCH-DM-004 §2.1）；凭据永不进入设置。
-- **数据描述**：典型 9 个配置项、4 个分组、2 个分区；极端为超长路径（>200 字符）、含中文与空格的路径、被网络盘断开的路径。
+- **数据描述**：当前 13 个配置项、5 个分组、3 个分区；极端为超长路径（>200 字符）、含中文与空格的路径、被网络盘断开的路径。
 
 ## 3. G2 用户流程与状态矩阵
 
@@ -84,6 +87,7 @@ document_kind: spec
 - **关于分区加载语义（SC-11）**：`GET /api/about` 返回的是按包元数据登记的静态值（应用名/版本/协议/链接，ARCH-DM-004 §8），不随配置、工作区或会话过程变化，因此 `fetchAbout()` 在**应用会话内只请求一次**：并发调用共享同一在途请求，成功后复用同一份元数据，分区来回切换与关闭重开对话框都不重放 GET（取数 memo 在 `web/src/api/settings.ts`，呈现归 `components/settings/AboutSection.vue`）。首次请求失败**不缓存**：memo 立即清除，重进关于分区即显式重试，避免一次网络抖动被固化成永久失败页；失败态就地显示「关于信息加载失败。」，不阻塞常规配置分区与保存路径。
 - 编辑期间后端值被外部改变（本设计下仅另一进程 `serve` 可能）→ 保存返回 409，对话框刷新快照并提示重新确认（输入保留）。
 - `enable_add_number_suffix`、`number_suffix_type`、`cad_max_parallel` 保存成功后显示"已保存，相关预览将按新配置重算"提示（SC-13）。
+- **应用偏好（SC-18）**：`cad_version` 只有配置中心一个选择入口，保存后立即让旧预览与结构投影失效并按新版本重算，旧版本在途响应不得回填，后续预览/布局读取/执行统一使用新值；`ui_theme` 保存成功后立即成为持久主题。Topbar 主题按钮只改内存主题，不写持久层；保存其他字段不覆盖该临时主题，刷新/重启重新采用持久主题。启动读取失败时，首次成功打开配置中心须补初始化一次，后续普通加载不得覆盖临时主题。
 - 扩展分区开关点击即落库（`PATCH /api/extensions/{id}/state`），**不**进入底部「保存/取消」缓冲；分区内固定说明该语义，避免用户误以为取消可回滚开关。
 - 启停控件是滑动开关（`role="switch"` + `aria-checked`），并在开关旁给出可见状态文字「已启用/已停用」：方向不得只靠颜色或滑块位置表达；状态文字对辅助技术隐藏，语义由 `aria-checked` 承担，避免重复播报。
 - 从设置中心停用扩展时**不**关闭设置对话框：宿主未提交输入三选一与目录页三选一都是原生 `<dialog showModal>`，由平台 top layer 叠在设置窗口之上，可见且可点击；Esc 归最上层模态处理，不会连带关闭设置窗口。停用既然不再关窗，也就不会丢弃本对话框的编辑缓冲，故不再需要「放弃修改并关闭」前置确认。
@@ -119,6 +123,7 @@ document_kind: spec
 | SC-15 | 扩展分区：列出全部已登记扩展（含已停用/失败/不兼容）与生命周期状态，提供滑动开关（`role="switch"` + 可见状态文字）启停；开关即时生效并在分区内说明；清单加载不依赖工作区已加载；停用经宿主三选一闸门（原生模态叠于设置窗口之上）且**不关闭**设置窗口，失败就地行内呈现 | ARCH-DM-006 §7、§8 |
 | SC-16 | 扩展卡片基线：单列卡片、固定四层信息（名称版本 / 描述 / 状态徽标与诊断码 / 动作行）、不可点击且不导航且不可聚焦、`ul/li` 列表语义；条目 ≥6 按 `enabled` 分「已启用/已停用」两段；搜索/筛选/分页/多列网格为非目标且写明重启条件；布尔状态控件统一为滑动开关（扩展开关与常规配置 bool 字段同形态） | ARCH-DM-006 §7、§8；本文 §3.3 |
 | SC-17 | 扩展全局设置入口（统一入口）：声明设置时卡片动作行出现文字按钮「配置」（可访问名「配置 {name}」，DOM 顺序固定「配置按钮 → 状态文字 → 开关」），无设置时不出现；点击进入**同一设置 `<dialog>`** 的子视图并显示可见「返回扩展列表」，不叠加第二个模态；`generated` 由宿主按 Provider 字段生成表单，`custom` 打开编译期白名单组件（不退化为 JSON 文本框）；未打开工作区也能进入、编辑和保存；每个扩展设置独立保存（不与核心设置共享一次提交或修订号）；子视图脏状态闸门「返回/Esc/遮罩/关闭确认」；返回子视图后焦点归还触发它的「配置」按钮、关闭对话框后归还齿轮入口（SC-09）；只读子视图的进入焦点落在只读诊断条（§3.3）；字段超限在行内定位 `excluded_title_keywords`、修订冲突保留输入、`EXTENSION_SETTINGS_SCHEMA_NEWER` 只读禁用保存 | ARCH-DM-006 §8.1、§8.2、§12；SPEC-DM-012 §6.4；本文 §3.3 |
+| SC-18 | 配置中心提供 `cad_version`（2016/2020）与 `ui_theme`（浅色/深色）持久枚举；Topbar 移除 AutoCAD 版本选择，保留主题临时切换按钮。启动和刷新按持久主题，按钮切换不写持久层；配置中心明确保存主题时立即应用，保存无关字段不覆盖临时主题 | ARCH-DM-004 §2.1、§4.2；本文 §3.3 |
 
 ## 5. G3 视觉方向裁决
 
@@ -154,6 +159,7 @@ document_kind: spec
 | SC-15 扩展分区 | `App.vue` 持有扩展清单（标签栏装配），`GET /api/extensions` 已返回含停用/失败条目 | 无启停入口；原入口在扩展页面内，停用即随页面消失 | `GET /api/extensions`、`PATCH /api/extensions/{id}/state` | 新建 `components/settings/ExtensionsSection.vue`、`composables/useExtensions.ts`；`SettingsDialog.vue` 加分区与编排；`App.vue` 接入闸门 | 闸门模态必须是原生 `<dialog showModal>`（top layer）才能叠在设置窗口之上，页面内联遮罩会被 inert 吞掉；停用不得关闭设置窗口（会丢本对话框编辑缓冲），启停失败一律就地行内呈现 | e2e（停用不关窗且可再启用、闸门叠于设置窗口之上且 Esc 只关闸门、启停失败行内呈现、无工作区可用） |
 | SC-16 卡片基线 | `ExtensionsSection.vue` 现为单行列表（名称 + 版本·状态 + 按钮），`SettingsFormRow.vue` 的 bool 控件为原生 checkbox | 无卡片、无描述、无诊断码、无增长机制；两种“开关”并存 | 无新增接口（`GET /api/extensions` 已含 `description_key`/`error_code`） | 新建 `components/settings/ExtensionCard.vue`（纯呈现）；`ExtensionsSection.vue` 改为可分组渲染；`SettingsFormRow.vue` 的 bool 控件改滑动开关 | `SettingsDialog.vue` 拆分前 535 行（越过 500 行软上限）：PLAN-DM-025 任务 6 抽出关于分区后已回落到上限内（实测行数见 `changelog.md`）；卡片不得再堆进对话框，只在分区内组合 | e2e（分组阈值、卡片不可点击、开关语义、统一形态）+ Demo 证据截图 |
 | SC-17 扩展配置入口 |（**现状列为实施前快照**）`GET /api/extensions` 已返回 `settings_contribution`（`presentation` + 受控 `route_key`，未声明时为 `null`）；`GET/PUT /api/extensions/{id}/settings` 已返回/接受 `schema_version`/`revision`/`value`/`effective_value`/`read_only`/`diagnostic_code`/`items`（PLAN-DM-025 任务 3）；卡片无配置入口 | 无配置按钮、无子视图、无独立保存、无脏状态闸门、无焦点归还 | `settings_contribution`、`GET/PUT /api/extensions/{extension_id}/settings` | 新建 `composables/useExtensionSettings.ts`、`components/settings/ExtensionSettingsHost.vue`、`GeneratedExtensionSettingsForm.vue`（`generated`）、`SheetCatalogSettingsPanel.vue`（`custom`）；`ExtensionCard.vue` 加「配置」；`SettingsDialog.vue` 只装配当前 ID 与 dirty（其容量回落由 PLAN-DM-025 任务 6/7 负责） | 未知 `route_key` 必须 fail-closed（不按字符串动态 import）；子视图 dirty 必须并入 `hasUnsaved`；`custom` 面板不得退化为 JSON 文本框 | e2e（入口条件与 DOM 顺序、无工作区、独立保存、返回/关闭确认、焦点归还、422 字段定位、409 保留输入、高版本只读）+ Demo 证据截图 g4-13～g4-15。**本行落点均已交付**：`composables/useExtensionSettings.ts`、`components/settings/ExtensionSettingsHost.vue`、`GeneratedExtensionSettingsForm.vue`、`SheetCatalogSettingsPanel.vue` 与 `ExtensionCard.vue` 的「配置」入口由 PLAN-DM-025 任务 7/8 落地（2026-09-13 收口），承接用例见 §9 的 SC-17 清单 |
+| SC-18 应用偏好 | Topbar 内存 AutoCAD 版本 + `localStorage` 主题 | 版本与主题没有配置中心持久值，且 Topbar 版本形成第二入口 | `GET/PUT /api/settings` 的 `cad_version` / `ui_theme` | `config.py`、设置注册表、`useApplicationPreferences.ts`、启动引导、Topbar/App 接线 | 数字字面版本必须保持字符串枚举；临时主题不得被无关保存覆盖 | 后端单元/API 集成 + 前端偏好单测 + 设置中心真实 E2E |
 
 - **预期 Demo 与生产差异**：Demo 不调用真实 API（模拟 `items` 快照）；"浏览…"用模拟原生选择器；外链点击仅提示；版本号为虚构值；"恢复继承"在 Demo 中即时改内存展示，生产语义为保存时经 `unset` 提交（ARCH-DM-004 §3）。差异表随设计冻结包归档。
 - **禁止修改**：全局样式、主题令牌、ActionDock、任务浮层、既有页面组件。

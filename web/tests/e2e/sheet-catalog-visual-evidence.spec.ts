@@ -12,6 +12,7 @@ import {expect, test, type Locator, type Page, type TestInfo} from "@playwright/
 import {copyFileSync, mkdirSync} from "node:fs";
 import path from "node:path";
 import {demoSixColumnTemplate, installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
+import {installPreferenceSnapshot} from "./fixtures/settings";
 
 async function expectNoPageHScroll(page: Page, label: string) {
   const metrics = await page.evaluate(() => ({
@@ -117,7 +118,7 @@ const DEMO_DATASET = {
 
 async function openDemoState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}, dataset: typeof DEMO_DATASET = DEMO_DATASET) {
   await page.setViewportSize(viewport);
-  await page.addInitScript(t => localStorage.setItem("dst-manager-theme", t), theme);
+  await installPreferenceSnapshot(page,theme);
   await installSheetCatalogFixture(page, {...dataset});
   await openCatalogPage(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -172,7 +173,7 @@ test("200% 缩放：无整页横滚、主操作可达、预览区独立横滚", 
 // —— 50 列极限：宽预览只在表容器内横滚，页面不随之溢出 ——
 test("50 列极限：无整页横滚且预览区独立横滚", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "light"));
+  await installPreferenceSnapshot(page,"light");
   const columns = Array.from({length: 50}, (_, index) => ({
     column_id: `col-50-${index + 1}`,
     header: `列 ${index + 1}`,
@@ -192,7 +193,7 @@ test("50 列极限：无整页横滚且预览区独立横滚", async ({page}) =>
 // —— 1 列极限：最窄模板布局不破版 ——
 test("1 列极限：无整页横滚且主操作可见", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "light"));
+  await installPreferenceSnapshot(page,"light");
   const template: CatalogTemplate = {
     template_id: "template-1-column", name: "单列模板", schema_version: 1,
     columns: [{column_id: "col-single", header: "图号", expression: "{sheet.number}"}],
@@ -207,7 +208,7 @@ test("1 列极限：无整页横滚且主操作可见", async ({page}) => {
 // —— 长字段名与长值：字段浏览器与预览不把页面撑宽 ——
 test("长字段名与长值：无整页横滚且预览区独立横滚", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "light"));
+  await installPreferenceSnapshot(page,"light");
   const longName = "超长图纸集自定义属性名称用于响应式边界验证壹贰叁肆伍陆柒捌玖拾";
   await installSheetCatalogFixture(page, {
     sheetsetProperties: {[longName]: "滨河市政工程"},
@@ -232,7 +233,7 @@ test("长字段名与长值：无整页横滚且预览区独立横滚", async ({
 // —— 大数据摘要：总数正确、预览仍为 20 行、页面不横滚 ——
 test("大数据摘要：500 张图纸显示总数与 20 行上限", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 1000});
-  await page.addInitScript(() => localStorage.setItem("dst-manager-theme", "light"));
+  await installPreferenceSnapshot(page,"light");
   await installSheetCatalogFixture(page, {sheetCount: 500});
   await openCatalogPage(page);
   const preview = page.getByRole("region", {name: "预览"});
@@ -606,7 +607,7 @@ test("G8 补充：200% 缩放下格式入口不被遮挡", async ({page}) => {
 // =====================================================================
 async function openFilteredDemo(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}, keywords: string[]) {
   await page.setViewportSize(viewport);
-  await page.addInitScript(t => localStorage.setItem("dst-manager-theme", t), theme);
+  await installPreferenceSnapshot(page,theme);
   await installSheetCatalogFixture(page, {...DEMO_DATASET, excludedTitleKeywords: keywords});
   await openCatalogPage(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);

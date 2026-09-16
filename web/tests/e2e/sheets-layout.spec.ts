@@ -5,6 +5,7 @@
 // 截图仅作为 S-07 视觉证据（testInfo 附件），不替代上述行为断言。
 import {expect, test, type Locator, type Page} from "@playwright/test";
 import {installSheetsFixture} from "./fixtures/sheets";
+import {installPreferenceSnapshot} from "./fixtures/settings";
 
 const VIEWPORTS = [
   {width: 1024, height: 768},
@@ -121,7 +122,7 @@ test("导航拖拽后表格列不重叠", async ({page}) => {
 });
 
 async function openWorkspace(page: Page, theme: "light" | "dark") {
-  await page.addInitScript((t) => localStorage.setItem("dst-manager-theme", t), theme);
+  await installPreferenceSnapshot(page,theme);
   await page.goto("/");
   await page.getByRole("button", {name: "选择 DST 文件"}).click();
   await expect(page.getByRole("button", {name: "关闭"})).toBeVisible();

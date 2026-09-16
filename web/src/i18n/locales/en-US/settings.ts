@@ -121,6 +121,7 @@ export default {
   },
   items: {
     uiLocale: "UI language",
+    uiTheme: "Theme",
     autocad2016Console: "Core Console",
     autocad2016Plugin: "Worker plugin",
     autocad2020Console: "Core Console",
@@ -128,6 +129,7 @@ export default {
     cadTimeout: "CAD timeout (seconds)",
     cadMaxParallel: "Maximum parallel jobs",
     workerLease: "Worker lease (seconds)",
+    cadVersion: "AutoCAD version",
     addNumberSuffix: "Append number suffix to sheet titles",
     numberSuffixType: "Suffix type",
     unnumberedSubsetKeywords: "Keywords for unnumbered sheets",
@@ -139,6 +141,10 @@ export default {
     enUS: "English",
   },
   enumOptions: {
+    themeLight: "Light",
+    themeDark: "Dark",
+    autocad2016: "AutoCAD 2016",
+    autocad2020: "AutoCAD 2020",
     suffixChinese: "Chinese numerals (一、二、三…)",
     suffixArabic: "Arabic numerals (1, 2, 3…)",
   },

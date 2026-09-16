@@ -272,13 +272,14 @@ async function onSave(){
   try{
     // 组合式函数内完成语言切换事务：PUT 成功 → 以响应快照 ui_locale 切换一次；
     // 失败（422/409/网络/5xx）语言与本地输入均保持不变（I18N-05）
-    await save(set,[...pendingUnset.value]);
+    const unset=[...pendingUnset.value];
+    await save(set,unset);
     edits.value={};pendingUnset.value=[];fieldErrors.value={};
     showSaved();
     // SC-13：编号规则/并发相关配置变更后，追加预览重算提示
     //（不编号图纸关键字参与编号派生，故与后缀两项、并行度同属重算键集）
-    const previewKeys=["enable_add_number_suffix","number_suffix_type","unnumbered_subset_keywords","cad_max_parallel"];
-    const recalc=Object.keys(set).some(key=>previewKeys.includes(key));
+    const previewKeys=["enable_add_number_suffix","number_suffix_type","unnumbered_subset_keywords","cad_max_parallel","cad_version"];
+    const recalc=[...Object.keys(set),...unset].some(key=>previewKeys.includes(key));
     props.pushToast({type:"ok",title:t("settings.toast.savedTitle"),body:recalc?t("settings.toast.savedRecalcBody"):t("settings.toast.savedBody")});
     savedOk=true;
   }catch(error){

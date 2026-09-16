@@ -732,4 +732,31 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
     expect(outline.style, "键盘聚焦必须可见轮廓").not.toBe("none");
     expect(parseFloat(outline.width), "轮廓宽度应 > 0").toBeGreaterThan(0);
   });
+
+});
+
+test("应用偏好：AutoCAD 版本只在配置中心选择，主题顶栏切换不覆盖持久值", async ({page}) => {
+  writeSettingsFile({ui_locale:"zh-CN"}, 0);
+  await page.goto("/");
+
+  await expect(page.getByRole("banner").getByRole("combobox"), "Topbar 不再提供 AutoCAD 版本选择").toHaveCount(0);
+  await openSettingsDialog(page);
+
+  const cadGroup=page.getByRole("radiogroup",{name:"AutoCAD 版本"});
+  const themeGroup=page.getByRole("radiogroup",{name:"界面主题"});
+  await cadGroup.getByLabel("AutoCAD 2016").check();
+  await themeGroup.getByLabel("深色").check();
+  await page.getByRole("button",{name:"保存"}).click();
+  await expect(page.getByText("相关预览将按新配置重算")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button",{name:"切换主题"}).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme","light");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme","dark");
+  await openSettingsDialog(page);
+  await expect(cadGroup.getByLabel("AutoCAD 2016")).toBeChecked();
+  await expect(themeGroup.getByLabel("深色")).toBeChecked();
 });

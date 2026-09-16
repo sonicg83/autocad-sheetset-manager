@@ -72,15 +72,16 @@ const badgeClass=computed(()=>props.item.source==="file"?"badge-file":props.item
 
 function commit(value:SettingsValue){emit("update",props.item.key,value)}
 
-// 控件归一化：int/enum 以 number 入缓冲，path/bool 原样；int 空串保留（触发"必须为整数"行内错误）。
-// ui_locale 为字符串枚举（system/zh-CN/en-US）：非数字原样入缓冲，数字枚举照旧转 number
+// 控件归一化：int 以 number 入缓冲，path/bool 原样；int 空串保留（触发"必须为整数"行内错误）。
+// enum 必须从 API options 找回原始值类型：number_suffix_type 是 number，而 cad_version
+// 虽长得像数字却是字符串；不得根据 DOM value 的字面外观猜类型。
 function onIntInput(event:Event){const raw=(event.target as HTMLInputElement).value;commit(raw===""?"":Number(raw))}
 // 滑动开关直接给出目标值（不再是 checkbox 的 change 事件）
 function onBoolChange(value:boolean){commit(value)}
 function onEnumInput(event:Event){
   const raw=(event.target as HTMLInputElement).value;
-  const num=Number(raw);
-  commit(raw!==""&&!Number.isNaN(num)?num:raw);
+  const option=props.item.options?.find(candidate=>String(candidate.value)===raw);
+  commit(option?.value??raw);
 }
 </script>
 <template>
