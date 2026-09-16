@@ -1069,12 +1069,34 @@ Files（本轮）：
 | **R** 密集行 36px 不可达 | ✅ **闭合** | 用户裁定 + 已写进 SPEC-DM-010（本轮）|
 | **S** 缺「值保持」机械检查 | ✅ **部分闭合** | Task 7 起改用**绝对值锚**（后续轮沿用）；系统化手段待定 |
 | **T** SPEC-DM-012 生产证据陈旧 | ⏸ 待办 | 需在视觉落定后重采；采集**不可逐字节复现**（已实证）|
-| **U** `visible-input-label` 看不到组件化输入 | ⏸ 待裁决 | 检查器覆盖缺口（`UiInput`/`FormField`）|
+| **U** `visible-input-label` 看不到组件化输入 | ✅ **闭合**（2026-09-16 审查修复轮） | 检查器已识别 `UiInput`/`UiSelect` 调用点（自带非空 label / `FormField` 默认插槽 / 外部可见 `label[for]` 关联三种合法形态），`FormField` 缺 label 单独报违规；9 组正反夹具 + 1 条 CLI 级变异证据，真实仓库 `check:ui` 0 新违规、0 新例外 |
 | **V** legacy 层静默覆写组件内部 | ⏸ 部分 | **类名碰撞已扫描为 0** ✓；**元素选择器维度**待加规则 |
 | **W** 跨页密度不一致 | ⏸ **交 Spec 归属方** | 工具栏 34 vs 36 · 表单输入 34 vs 38 · 主操作按钮 38 vs 36 |
 | **X** `unicode-structure-icon` 注释不对称 | ✅ **已修复** | `6bf4613`（+2 回归测试 + 变异自证）|
 | **Y** SSE 重订阅缺口 | ⏸ **真实缺口** | 需后端契约决定（回传进行中任务 id 或提供列表端点）|
-| Task 11 转入：混批判据两处比较 · `appComposition.test.ts` 957 行 · `loadLayoutOptions` 写 `editor.context` · e2e 引导期 flaky | ⏸ 均**登记** | 见 T11-2 与本表；本轮**未强动** |
+| Task 11 转入：混批判据两处比较 · `appComposition.test.ts` 957 行 · `loadLayoutOptions` 写 `editor.context` · e2e 引导期 flaky | ◐ **部分闭合**（2026-09-16 审查修复轮） | 957 行测试已按域拆为 4 个文件 + 共享夹具模块（断言零改动，168 项全绿）；混批判据重复、`loadLayoutOptions` 写 `editor.context` 与引导期 flaky 仍**登记**待后续 |
+
+#### 2026-09-16 审查修复轮 + 用户验收修复轮（T12-5）
+
+依据 [PLAN-DM-029 Task 1–11 执行审查报告](../memos/dst-manager/2026-09-16-plan-dm-029-execution-review.md)（结论 **With fixes**）与用户真实桌面验收发现，本计划追加一轮修复（用户裁定：合并范围取 `a923886` 并同步文档；新问题按 Task 12 用户验收修复轮全部实施；测试拆分本轮做；孤儿 i18n 键删除）。
+
+**审查 Important 修复（TDD，每项先红后绿）**：
+
+1. **I1 条件标签清除按钮 ~12×12px**：`.chip-clear` 可见 `✕` 与点击盒分离——内容盒保持 `--icon-size-sm`，透明 padding 扩到 `--tap-target-min`（32×32px），负 margin 抵消布局撑开，胶囊视觉尺寸不变；`sheets-layout` e2e 补真实几何断言。未走 Spec 豁免路线。
+2. **I2 图纸树 chevron 点击焦点衔接回归**：`toggleCollapseFromChevron` 同步 `focusIndex` 并把真实 DOM 焦点交给被点击子集树项；组件测试新增「点击非当前节点 chevron 后唯一 `tabindex=0` 与 `document.activeElement` 移交」「点击不激活节点」双向断言。
+3. **I3 `visible-input-label` 看不见组件化输入（责任 U）**：检查器识别 `<UiInput>`/`<UiSelect>` 调用点，三种合法形态（自带非空 `label`、`FormField` 默认插槽、外部可见 `label[for]` 关联）；`FormField` 缺非空 label 单独报违规；9 组正反夹具 + 1 条 CLI 级变异证据；真实仓库 `check:ui` 0 新违规、**0 新例外**。
+4. **I4 文档状态漂移**：合并边界经用户裁定取 `a923886`；SPEC-DM-006（修订记录 + §5.2 注）、`docs/dst-manager/README.md`、`.planning/plans/dst-manager/README.md` 已同步责任 K 闭合、例外 14 → 7。
+
+**审查 Minor 修复**：M1 `appComposition.test.ts`（957 行）按域拆为 4 个测试文件 + `appCompositionTestSupport.ts` 共享夹具（断言零改动，168 项全绿；mock 类与工厂上提辅助模块、工厂内动态 import 接线，避免被测模块初始化环死锁）；M2 ARCH-DM-007/GUIDE-DM-001/002/SPEC-DM-006/010 `updated` 日期同步；M3 孤儿键 `sheets.tree.collapseSubset/expandSubset` 删除（`check:i18n` 947 键对称）；M4 `App.vue` 文末空行与 OFL 许可行尾空格清理。
+
+**用户验收修复轮（新发现的问题 1–3）**：
+
+- **模态操作按钮悬停统一**：`.modal-actions` 可用按钮统一悬停抬升（`--shadow-1`），普通按钮加 `--color-bg-muted` 底色反馈，主色/危险底色保留原色仅抬升，禁用按钮零悬停反馈；`.modal-danger` 不新增悬停变色（无 `--color-danger-hover` 令牌，不为本轮新造色板——责任 E 口径），如需变色交 Spec 归属方补令牌。
+- **表单弹窗操作区间距**：`.modal-card` 内表单控件（textarea/label/`.ui-input`/`.ui-select`）直接后随 `.modal-actions` 时给 16px 语义上间距；`.modal-check` 排除以防确认弹窗间距叠加。
+- **属性值 2/4 列切换**：值面板工具区新增可访问「展示列数」选择（默认两列、localStorage 记忆偏好）；四列经容器查询（≥1032px = 4×240 + 3×24 列间距）生效，不足自动降两列、≤900px/≤511px 降一列，全程无横向滚动；网格居中；跨列规则改为普通 1 列、**长值 span 2**、名称整行——单列降级时长值退回 `auto`（`span 2` 在单列网格会撑出隐式第二列，实测发现并修正）。
+- **Spec 同步**：SPEC-DM-006 §6.2 记录模态操作区悬停与间距；SPEC-DM-010 §1/P-03/修订记录修订为可切换 2/4 列并定义跨列与降级规则。
+
+**门禁实绩（修复后）**：`test:contracts` 96/96 · `test:unit` 16 文件 / 168 passed · `build` 0（含 check:api/check:i18n/check:ui/vue-tsc/vite）· 受影响 e2e（sheets-layout 条件标签与两列降级、properties-layout、sheet-catalog 用户验收修复轮）全绿。全量 e2e、后端基线与 Step 5–6 真实桌面复验在最终验证轮执行/待用户。
 
 ### Step 8 状态判定：**保持 `active`**（不得改 `completed`）
 理由：**真实桌面复验未完成**（Steps 5–6 需用户执行）；且责任 **K/Q/W 需 Spec 归属方裁定**，而 B/C①/F/H/I/M/N/O/T/U/V/Y 等仍有待裁决项。**证据缺口已如实列于上表** ✓。

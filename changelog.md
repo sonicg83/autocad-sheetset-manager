@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-09-16（归档 PLAN-DM-029 Task 1–11 执行审查结论）
+
+- 新增并补充 `.planning/memos/dst-manager/2026-09-16-plan-dm-029-execution-review.md`，保存 `b248ff1..a923886` 的完整只读审查结论：校正提交范围为 135（其中 Task 1–11 为 116、Task 12 为 19），记录 3 项 Important 实现缺口、Task 12 文档状态漂移、Task 1–11 覆盖矩阵及实际验证结果；追加真实桌面验收发现的模态悬停反馈不一致、表单弹窗操作区贴合、属性值宽屏布局与既有长值跨列规则，并明确拟纳入 Task 12 用户验收修复轮但暂不执行；不修改应用源码、测试、Spec 或计划正文。
+
 ## 2026-09-15（责任 K 全闭合（T12-4）+ 纠正裸违规测量口径，PLAN-DM-029）
 
 - **T12-4 完成**（4 提交：`9f70368` RED → `e4bf4c7` 档位 + 5 处声明 → `480c977` ARCH-DM-007 写回 → `72f7760` 元素级锚；工作树干净、无探针残留）：新档位 **`--font-card-title`=14px**（卡片/区块标题）与 **`--font-view-title`=18px**（页面/视图标题）；**5 处跨层借用全部抹除**（只改字号声明，4 处失效注释同步改写）。
@@ -2376,3 +2380,10 @@
 - 新增 `docs/PYTHON_REFACTOR_ASSESSMENT.md`，记录 Python/pyautocad 重构可行性、功能映射、收益与风险、目标架构、迁移阶段、工作量和验收指标。
 - 在 `README.md` 增加 Python/pyautocad 重构评估文档入口。
 - 本次仅新增文档，未修改 PowerShell、配置、Excel、DWG 或 DLL。
+
+## 2026-09-16（审查修复轮 + 用户验收修复轮，PLAN-DM-029）
+
+- **审查 Important 全部修复**（TDD 先红后绿；依据 [PLAN-DM-029 执行审查](.planning/memos/dst-manager/2026-09-16-plan-dm-029-execution-review.md)）：I1 条件标签清除按钮点击区扩至 32×32px（字形与点击盒分离，胶囊视觉尺寸不变，e2e 补几何断言）；I2 图纸树 chevron 点击同步 roving tabindex 与真实焦点（补双向组件测试）；I3 `visible-input-label` 门禁覆盖 `UiInput`/`UiSelect` 调用点（三种合法形态 + `FormField` 缺 label 独立违规，9 组夹具 + 1 条 CLI 变异，0 新例外）；I4 文档同步（合并边界经用户裁定取 `a923886`，SPEC-DM-006 与两个 README 更新责任 K 闭合、例外 14 → 7）。
+- **审查 Minor 全部处理**：M1 957 行 `appComposition.test.ts` 按域拆为 4 文件 + `appCompositionTestSupport.ts` 共享夹具（断言零改动；mock 工厂动态 import 接线，消除被测模块初始化环死锁）；M2 五份正式文档 `updated` 日期同步；M3 孤儿键 `sheets.tree.collapseSubset/expandSubset` 删除；M4 `App.vue` 文末空行与 OFL 许可行尾空格清理。
+- **用户验收修复轮**：`.modal-actions` 可用按钮统一悬停抬升、禁用零反馈（`.modal-danger` 仅抬升不变色——无 danger-hover 令牌不新造色板）；表单弹窗控件与操作区 16px 语义间距（排除 `.modal-check` 防叠加）；属性值面板新增可访问 2/4 列切换（默认两列、localStorage 记忆、四列 ≥1032px 容器查询生效并逐级降级、网格居中、长值 span 2、名称整行、单列降级退 `auto` 防隐式第二列）；SPEC-DM-006 §6.2 与 SPEC-DM-010（§1/P-03/修订记录）同步，Playwright 补悬停/间距/跨列/降级/无溢出断言。
+- **门禁实绩**：`test:contracts` 96/96 · `test:unit` 16 文件 / 168 passed · `build` 0 · `check:i18n` 947 键 / 9 域 · 受影响 e2e（sheets-layout / properties-layout / sheet-catalog）全绿；全量 e2e、后端 pytest 与 Windows WebView2 100/125/150/200% 真实桌面复验仍待最终验证/用户执行，PLAN-DM-029 保持 `active`。

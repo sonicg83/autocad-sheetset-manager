@@ -6,7 +6,7 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-16
 related:
   - ARCH-DM-001
   - SPEC-DM-006
