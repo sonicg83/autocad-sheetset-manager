@@ -55,6 +55,9 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "REVISION_MANIFEST_MISSING": _E("errors.revision.manifestMissing"),
     "REVISION_RESTORE_CONFLICT": _E("errors.revision.restoreConflict"),
     "REVISION_RESTORE_SOURCE_CHANGED": _E("errors.revision.restoreSourceChanged"),
+    # ---- Builder 成果包交接（SPEC-DB-001 §10/§11） ----
+    "HANDOFF_INVALID": _E("errors.handoff.invalid"),
+    "HANDOFF_ID_CONFLICT": _E("errors.handoff.idConflict", {"package_id": str}, "package_id"),
     # ---- 草稿 ----
     "DRAFT_CONFLICT": _E("errors.draft.conflict"),
     # ---- 任务 ----

@@ -1,17 +1,21 @@
 <!-- 第 7 步 验收与交接（SPEC-DB-001 §2/§10）：查看验证结果与发布位置，
-     调用 Builder 本机 Manager 交接适配器。/api/builds/{id}/handoff 端点
-     Task 10 才进入 OpenAPI；本步骤先用真实 buildId（store 上收）发起调用。 -->
+     调用 Builder 的 POST /api/builds/{id}/handoff——显式适配器转发本机
+     Manager 的 POST /api/handoffs/open。Manager 不可用时已发布成果包原样
+     保留，错误负载携带可执行的恢复动作（Task 10 接线）。 -->
 <script setup lang="ts">
 import GuidancePanel from "../components/GuidancePanel.vue";
 import {computed, ref} from "vue";
-import {requestJson} from "../api/client";
+import {BuilderApiError, requestJson} from "../api/client";
 import {injectWizardStore} from "../composables/useWizardStore";
 
 const store = injectWizardStore();
 
 interface HandoffResponse {
   handoff_path: string;
-  workspace_id?: string;
+  workspace_id: string;
+  revision_id: string;
+  kind: string;
+  idempotent?: boolean;
 }
 
 const handingOff = ref(false);
@@ -41,7 +45,12 @@ async function handoffToManager(): Promise<void> {
     );
     store.handoffDone.value = true;
   } catch (error) {
-    handoffError.value = (error as Error).message;
+    // 交接失败不影响已发布成果包：按 §11 错误负载展示可执行恢复动作。
+    if (error instanceof BuilderApiError && error.recoveryAction) {
+      handoffError.value = `${error.message}${error.recoveryAction ? "。" + error.recoveryAction : ""}`;
+    } else {
+      handoffError.value = (error as Error).message;
+    }
   } finally {
     handingOff.value = false;
   }
@@ -72,7 +81,7 @@ async function handoffToManager(): Promise<void> {
     </div>
 
     <p v-if="result" data-testid="handoff-result" class="result" role="status">
-      交接完成：{{ result.handoff_path }}
+      交接完成：{{ result.handoff_path }}（工作区 {{ result.workspace_id }}）
     </p>
   </section>
 </template>

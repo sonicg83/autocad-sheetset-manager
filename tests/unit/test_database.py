@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy import inspect
 
 from dst_manager.infrastructure.persistence.database import (
     Database,
@@ -333,7 +334,7 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
     assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
     assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0006_dm020_extension_platform"
+    assert revision == "0007_db001_builder_handoff"
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):
@@ -554,3 +555,76 @@ def test_job_lease_seconds_migration_round_trip(tmp_path: Path):
 
     command.upgrade(alembic_config(), "head")
     assert "lease_seconds" in job_columns()
+
+
+def test_fresh_database_has_handoff_sources_and_revision_kind(tmp_path: Path):
+    """0007 全新库：handoff_sources 表与 document_revisions.kind/source_json 就位。"""
+    database = Database(f"sqlite:///{(tmp_path / 'fresh.sqlite').as_posix()}")
+    with database.engine.connect() as connection:
+        tables = set(inspect(connection).get_table_names())
+        columns = {
+            row[1]: row[4]
+            for row in connection.exec_driver_sql("PRAGMA table_info(document_revisions)")
+        }
+    assert "handoff_sources" in tables
+    assert columns["kind"] == "'operation'"
+    assert "source_json" in columns
+
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r1")
+    database.add_revision("rev-1", "w", "op-1", "h1", "h2", tmp_path)
+    revision = database.get_revision("rev-1")
+    assert revision["kind"] == "operation"
+    assert revision["source_json"] is None
+
+
+def test_upgrade_from_0006_adds_handoff_columns_and_keeps_rows(tmp_path: Path):
+    """0006 旧库升级：既有修订行 kind 默认 operation，handoff_sources 表补建。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from dst_manager.runtime import resource_dir
+
+    path = tmp_path / "upgrade.sqlite"
+    url = f"sqlite:///{path.as_posix()}"
+
+    def alembic_config() -> Config:
+        config = Config(str(resource_dir() / "alembic.ini"))
+        config.set_main_option("script_location", str(resource_dir() / "migrations"))
+        config.set_main_option("sqlalchemy.url", url)
+        return config
+
+    command.upgrade(alembic_config(), "0006_dm020_extension_platform")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO workspaces (id, root, dst_path, current_revision, default_cad_version, version) VALUES ('w', '.', 'a.dst', 'r0', '2020', 1)"
+        )
+        connection.execute(
+            "INSERT INTO document_revisions (id, workspace_id, operation_id, before_hash, result_hash, revision_dir, created_at)"
+            " VALUES ('legacy', 'w', 'op', 'h1', 'h2', '.', '2026-01-01 00:00:00.000000')"
+        )
+
+    command.upgrade(alembic_config(), "head")
+
+    with sqlite3.connect(path) as connection:
+        kind, source_json = connection.execute(
+            "SELECT kind, source_json FROM document_revisions WHERE id='legacy'"
+        ).fetchone()
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert kind == "operation"
+    assert source_json is None
+    assert "handoff_sources" in tables
+
+    # 升级后的库可被当前 Database 打开（schema 校验通过）且旧修订仍可读
+    database = Database(url)
+    revision = database.get_revision("legacy")
+    assert revision["kind"] == "operation"
+
+
+def test_handoff_source_round_trip(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'handoff.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "drawings" / "a.dst", "rev-1")
+    database.add_revision("rev-1", "w", "op-1", "h", "h", tmp_path, kind="handoff_initial", source_json='{"schema":"dst-manager.handoff-source/v1"}')
+
+    revision = database.get_revision("rev-1")
+    assert revision["kind"] == "handoff_initial"
+    assert revision["source_json"] == {"schema": "dst-manager.handoff-source/v1"}

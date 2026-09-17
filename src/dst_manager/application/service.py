@@ -11,6 +11,7 @@ from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.application.drafts import DraftOperations
 from dst_manager.application.editing import EditingOperations
 from dst_manager.application.errors import ApplicationError
+from dst_manager.application.handoff import HandoffOperations
 from dst_manager.application.property_import import PropertyImportOperations
 from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
@@ -48,6 +49,7 @@ from dst_manager.settings.store import SettingsSchemaOlder
 
 class DstManagerService(
     DraftOperations,
+    HandoffOperations,
     PropertyImportOperations,
     EditingOperations,
     RevisionRestoreOperations,
@@ -90,15 +92,28 @@ class DstManagerService(
                 self._recover_committed_job(root, journal)
         self.database.recover_stale_jobs(self._snapshot_settings().worker_lease_seconds)
 
-    def open_workspace(self, dst_path: Path, root_override: Path | None = None) -> Workspace:
+    def open_workspace(
+        self,
+        dst_path: Path,
+        root_override: Path | None = None,
+        *,
+        workspace_root: Path | None = None,
+    ) -> Workspace:
+        """打开 DST 为只读投影工作区。
+
+        ``workspace_root`` 仅由交接工作区（DST 位于成果包 ``drawings/`` 内）
+        与既有工作区重开（``get_workspace``）传入：工作区根不必等于 DST 所在
+        目录。普通 ``/api/workspaces/open`` 不传该参数，语义完全不变。
+        """
         dst_path = dst_path.expanduser().resolve()
         if dst_path.suffix.lower() != ".dst" or not dst_path.is_file():
             raise ApplicationError("DST_NOT_FOUND", f"DST文件不存在：{dst_path}", 404)
-        root = dst_path.parent
+        root = (workspace_root or dst_path.parent).resolve()
         revision = file_sha256(dst_path)
         workspace_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(dst_path).casefold()))
         acsm = load_acsm(self.codec.decode_file(dst_path))
-        document = acsm.project(root, root_override)
+        # 投影始终以 DST 所在目录解析相对引用（交接工作区的 DWG 与 DST 同在 drawings/）
+        document = acsm.project(dst_path.parent, root_override)
         referenced = {sheet.layout.resolved_path for sheet in document.sheets if sheet.layout.resolved_path}
         unreferenced = sorted((path.resolve() for path in root.glob("*.dwg") if path.resolve() not in referenced), key=str)
         if unreferenced:
@@ -111,7 +126,11 @@ class DstManagerService(
         row = self.database.get_workspace(workspace_id)
         if row is None:
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
-        return self.open_workspace(Path(row.dst_path), Path(row.root_override) if row.root_override else None)
+        return self.open_workspace(
+            Path(row.dst_path),
+            Path(row.root_override) if row.root_override else None,
+            workspace_root=Path(row.root),
+        )
 
     def _snapshot_settings(self) -> Settings:
         """运行期设置来源：注入 RuntimeSettings 时取其快照，否则退化为启动期配置。"""

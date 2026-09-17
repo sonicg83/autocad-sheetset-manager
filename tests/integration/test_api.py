@@ -717,6 +717,8 @@ def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_
     ).json()
     assert changed["status"] == "SUCCEEDED"
     revision = client.get("/api/revisions", params={"workspace_id": opened["id"]}).json()[0]
+    assert revision["kind"] == "operation"
+    assert revision["source_json"] is None
     current = client.get(f"/api/workspaces/{opened['id']}").json()
     preview = client.get(f"/api/workspaces/{opened['id']}/revisions/{revision['id']}/restore-preview").json()
     assert preview["executable"] is True
@@ -734,6 +736,7 @@ def test_revision_restore_creates_new_revision_and_keeps_history(tmp_path, tiny_
     revisions = client.get("/api/revisions", params={"workspace_id": opened["id"]}).json()
     assert len(revisions) == 2
     restore_revision = next(item for item in revisions if item["id"].startswith("restore-"))
+    assert restore_revision["kind"] == "operation"
     reverse_preview = client.get(f"/api/workspaces/{opened['id']}/revisions/{restore_revision['id']}/restore-preview").json()
     assert reverse_preview["executable"] is True
     reversed_job = client.post(
