@@ -1,0 +1,501 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DST Builder",
+    "description": "DST Builder 最小生成闭环 API（SPEC-DB-001 §11）",
+    "version": "0.3.5"
+  },
+  "paths": {
+    "/api/projects": {
+      "post": {
+        "summary": "Create Project",
+        "description": "创建项目库（project.dstb）、初始草稿与 assets/、builds/ 目录。",
+        "operationId": "create_project_api_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/current": {
+      "get": {
+        "summary": "Get Current Project",
+        "description": "读取项目、当前草稿、引导步骤、聚焦字段与诊断（只读，无副作用）。",
+        "operationId": "get_current_project_api_projects_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/current/draft": {
+      "patch": {
+        "summary": "Patch Current Draft",
+        "description": "带 base_updated_at 乐观并发保存草稿；返回字段级诊断。",
+        "operationId": "patch_current_draft_api_projects_current_draft_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DiagnosticModel": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "title": "DiagnosticModel"
+      },
+      "DraftFieldsModel": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectFieldsModel"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/NumberingFieldsModel"
+          },
+          "cad_version": {
+            "type": "string",
+            "title": "Cad Version"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/SheetFieldsModel"
+            },
+            "type": "array",
+            "title": "Sheets"
+          },
+          "template": {
+            "$ref": "#/components/schemas/TemplateFieldsModel"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "numbering",
+          "cad_version",
+          "sheets",
+          "template"
+        ],
+        "title": "DraftFieldsModel",
+        "description": "§4 DraftProjectV1 JSON 形态（PATCH 载荷的解析与校验目标）。"
+      },
+      "DraftPatchRequest": {
+        "properties": {
+          "base_updated_at": {
+            "type": "string",
+            "title": "Base Updated At"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/DraftFieldsModel"
+          },
+          "wizard_step": {
+            "type": "integer",
+            "maximum": 7.0,
+            "minimum": 1.0,
+            "title": "Wizard Step"
+          },
+          "focused_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focused Field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_updated_at",
+          "draft",
+          "wizard_step"
+        ],
+        "title": "DraftPatchRequest",
+        "description": "PATCH /api/projects/current/draft 请求：base_updated_at 乐观并发。"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "NumberingFieldsModel": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prefix",
+          "start",
+          "width"
+        ],
+        "title": "NumberingFieldsModel"
+      },
+      "ProjectCreateRequest": {
+        "properties": {
+          "project_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Root"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "discipline": {
+            "type": "string",
+            "title": "Discipline"
+          },
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "stage",
+          "discipline",
+          "output_path"
+        ],
+        "title": "ProjectCreateRequest",
+        "description": "POST /api/projects 请求。``project_root`` 仅在应用工厂未绑定根目录时必填。"
+      },
+      "ProjectFieldsModel": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "discipline": {
+            "type": "string",
+            "title": "Discipline"
+          },
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "stage",
+          "discipline",
+          "output_path"
+        ],
+        "title": "ProjectFieldsModel"
+      },
+      "ProjectModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "discipline": {
+            "type": "string",
+            "title": "Discipline"
+          },
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "stage",
+          "discipline",
+          "output_path",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectModel"
+      },
+      "ProjectStateResponse": {
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectModel"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/DraftFieldsModel"
+          },
+          "wizard_step": {
+            "type": "integer",
+            "title": "Wizard Step"
+          },
+          "focused_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focused Field"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticModel"
+            },
+            "type": "array",
+            "title": "Diagnostics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "draft",
+          "wizard_step",
+          "focused_field",
+          "updated_at",
+          "diagnostics"
+        ],
+        "title": "ProjectStateResponse",
+        "description": "GET /api/projects/current 与 PATCH /api/projects/current/draft 响应。"
+      },
+      "SheetFieldsModel": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "SheetFieldsModel"
+      },
+      "TemplateFieldsModel": {
+        "properties": {
+          "base_asset_id": {
+            "type": "string",
+            "title": "Base Asset Id"
+          },
+          "layout_asset_id": {
+            "type": "string",
+            "title": "Layout Asset Id"
+          },
+          "source_layout": {
+            "type": "string",
+            "title": "Source Layout"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_asset_id",
+          "layout_asset_id",
+          "source_layout"
+        ],
+        "title": "TemplateFieldsModel"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
