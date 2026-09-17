@@ -154,6 +154,13 @@ class CoreConsoleDrawingBuilder:
         if any(item.severity is DiagnosticSeverity.BLOCKING for item in result.diagnostics):
             raise self._execution_failed("结果携带阻断诊断")
 
+        # 插件在 Core Console 下无法覆盖文档自身已打开的原路径（eInvalidInput），
+        # 其保存落在固定派生名 ``working.saved.dwg``；进程退出、句柄释放后把它
+        # 收敛回标准工作副本路径，后续发布只认 ``working.dwg``。
+        saved_dwg = attempt.working_dwg.with_suffix(".saved.dwg")
+        if saved_dwg.is_file():
+            os.replace(saved_dwg, attempt.working_dwg)
+
         final = self._resolve_asset(task.target_dwg_path)
         final.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(attempt.working_dwg, final)

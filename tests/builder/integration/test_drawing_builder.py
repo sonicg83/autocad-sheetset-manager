@@ -142,6 +142,18 @@ def write_result(request: CoreConsoleRequest, attempt: AttemptPaths, payload: di
     attempt.working_dwg.write_bytes(BUILT_CONTENT)
 
 
+def write_saved_result(request: CoreConsoleRequest, attempt: AttemptPaths, payload: dict) -> None:
+    """模拟 Core Console 插件行为：文档原路径不可覆盖，保存落到固定派生名。
+
+    真实 AutoCAD Core Console 拒绝 ``Database.SaveAs`` 覆盖文档自身已打开的
+    ``working.dwg``（eInvalidInput），插件实际保存到 ``working.saved.dwg``；
+    进程退出后由 build() 收敛回标准工作副本路径。
+    """
+    write_result(request, attempt, payload)
+    attempt.working_dwg.with_suffix(".saved.dwg").write_bytes(BUILT_CONTENT)
+    attempt.working_dwg.write_bytes(BASE_CONTENT)
+
+
 # ---------------------------------------------------------------------------
 # build：happy path 与编排断言
 # ---------------------------------------------------------------------------
@@ -181,6 +193,23 @@ def test_build_happy_path_publishes_dwg_with_sha256(tmp_path: Path) -> None:
     assert result.layout_handle == "2F"
     assert result.layouts == (TARGET_LAYOUT,)
     assert result.dwg_size == len(BUILT_CONTENT)
+    assert result.dwg_sha256 == hashlib.sha256(BUILT_CONTENT).hexdigest()
+
+
+def test_build_converges_core_console_saved_file_back_to_working_dwg(tmp_path: Path) -> None:
+    executor = FakeExecutor(
+        lambda request, fake: write_saved_result(request, attempt, {}),
+    )
+    builder, root, attempt, _configuration = make_builder(tmp_path, executor)
+
+    result = builder.build(make_task(), attempt, cad_version="2020")
+
+    # 插件保存的 ``working.saved.dwg`` 被收敛回 ``working.dwg`` 后再发布；
+    # attempt 目录不残留派生保存文件。
+    final = root / "drawings" / f"{TARGET_LAYOUT}.dwg"
+    assert final.read_bytes() == BUILT_CONTENT
+    assert attempt.working_dwg.read_bytes() == BUILT_CONTENT
+    assert not attempt.working_dwg.with_suffix(".saved.dwg").exists()
     assert result.dwg_sha256 == hashlib.sha256(BUILT_CONTENT).hexdigest()
     # attempt 版本证据：结果留痕实际使用的 CAD 版本（Task 9 接线点）。
     assert result.cad_version == "2020"

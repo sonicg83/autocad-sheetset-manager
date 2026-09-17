@@ -142,6 +142,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/handoffs/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Handoff
+         * @description 显式交接 Builder 成果包（SPEC-DB-001 §10）：先验证后写库与文件证据。
+         *
+         *     交接成功后以与 /api/workspaces/open 相同的 ``on_workspace_opened``
+         *     回调登记新工作区（PLAN-DB-001 Task 11）：桌面壳由此感知经交接打开的
+         *     工作区（响应体是 dict，回调用服务端 Workspace 对象，经 get_workspace 取回）。
+         */
+        post: operations["open_handoff_api_handoffs_open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1264,6 +1288,41 @@ export interface components {
             /** Route Key */
             route_key: string;
         };
+        /**
+         * HandoffOpenResponse
+         * @description POST /api/handoffs/open 响应（SPEC-DB-001 §10 步骤 6）。
+         */
+        HandoffOpenResponse: {
+            /** Build Id */
+            build_id: string;
+            /** Dst Path */
+            dst_path: string;
+            /** Dst Sha256 */
+            dst_sha256: string;
+            /** Handoff Path */
+            handoff_path: string;
+            /**
+             * Idempotent
+             * @default false
+             */
+            idempotent: boolean;
+            /** Kind */
+            kind: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Package Id */
+            package_id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Revision Dir */
+            revision_dir: string;
+            /** Revision Id */
+            revision_id: string;
+            /** Root */
+            root: string;
+            /** Workspace Id */
+            workspace_id: string;
+        };
         /** HealthResponse */
         HealthResponse: {
             /** Run Id */
@@ -1504,6 +1563,17 @@ export interface components {
              * @constant
              */
             type: "update_subset";
+        };
+        /**
+         * OpenHandoffRequest
+         * @description POST /api/handoffs/open 请求：只包含绝对 handoff.json 路径（§10）。
+         */
+        OpenHandoffRequest: {
+            /**
+             * Handoff Path
+             * Format: path
+             */
+            handoff_path: string;
         };
         /** OpenRequest */
         OpenRequest: {
@@ -1757,12 +1827,18 @@ export interface components {
             created_at: string;
             /** Id */
             id: string;
+            /** Kind */
+            kind: string;
             /** Operation Id */
             operation_id: string;
             /** Result Hash */
             result_hash: string;
             /** Revision Dir */
             revision_dir: string;
+            /** Source Json */
+            source_json?: {
+                [key: string]: unknown;
+            } | null;
             /** Workspace Id */
             workspace_id: string;
         };
@@ -2679,6 +2755,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    open_handoff_api_handoffs_open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenHandoffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffOpenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

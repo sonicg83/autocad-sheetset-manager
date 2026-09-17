@@ -57,15 +57,9 @@ namespace DstBuilder.AutoCAD
             List<string> currentPaperLayouts = ReadPaperLayoutNames(database);
             CadDrawingContracts.ValidateTargetLayoutAvailable(currentPaperLayouts, request.TargetLayout);
 
-            // 同名冲突会让 WblockClone 的 Ignore 策略跳过克隆：先把占名者让开。
             LayoutManager manager = LayoutManager.Current;
-            foreach (string name in currentPaperLayouts)
-            {
-                if (string.Equals(name, request.SourceLayout, StringComparison.OrdinalIgnoreCase))
-                    manager.RenameLayout(name, "DSTB_TMP_" + Guid.NewGuid().ToString("N"));
-            }
-
             string importedName = ImportLayout(document, request);
+            editor.WriteMessage("\nDSTBUILDER_IMPORT={0}", importedName);
             if (!string.Equals(importedName, request.TargetLayout, StringComparison.Ordinal))
                 manager.RenameLayout(importedName, request.TargetLayout);
 
@@ -73,13 +67,15 @@ namespace DstBuilder.AutoCAD
             DeletePaperLayoutsExcept(document, new List<string> { request.TargetLayout });
 
             List<string> final = ReadPaperLayoutNames(database);
+            editor.WriteMessage("\nDSTBUILDER_FINAL={0}", string.Join(" | ", final));
             CadDrawingContracts.ValidateFinalPaperLayouts(final, request.TargetLayout);
-            manager.CurrentLayout = request.TargetLayout;
 
             // §7 步骤 4：插件负责保存 DWG（SCR 末尾的 QSAVE 是双保险）。
             SaveDrawing(document, database);
+            editor.WriteMessage("\nDSTBUILDER_SAVE=OK");
 
             string handle = GetLayoutHandle(database, request.TargetLayout);
+            editor.WriteMessage("\nDSTBUILDER_HANDLE={0}", handle);
             CadDrawingContracts.ValidateLayoutHandle(handle);
 
             var result = new CadDrawingResultV1
@@ -103,32 +99,66 @@ namespace DstBuilder.AutoCAD
                 throw new InvalidDataException(CadDrawingErrorCodes.SourceLayoutMissing);
 
             Database database = document.Database;
-            string importedName;
             using (Database source = new Database(false, true))
             {
                 source.ReadDwgFile(assetPath, FileOpenMode.OpenForReadAndAllShare, false, null);
-                var sourceLayoutIds = new Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection();
+                ObjectId sourceLayoutId;
+                ObjectId sourcePaperBtrId;
                 using (Transaction transaction = source.TransactionManager.StartTransaction())
                 {
                     var layouts = (DBDictionary)transaction.GetObject(source.LayoutDictionaryId, OpenMode.ForRead);
                     if (!layouts.Contains(request.SourceLayout))
                         throw new InvalidDataException(CadDrawingErrorCodes.SourceLayoutMissing);
-                    sourceLayoutIds.Add(layouts.GetAt(request.SourceLayout));
-                    transaction.Commit();
-                }
-
-                var mapping = new IdMapping();
-                mapping.DestinationDatabase = database;
-                source.WblockCloneObjects(sourceLayoutIds, database.LayoutDictionaryId, mapping, DuplicateRecordCloning.Ignore, false);
-
-                using (Transaction transaction = database.TransactionManager.StartTransaction())
-                {
-                    var cloned = (Layout)transaction.GetObject(mapping.Lookup(sourceLayoutIds[0]).Value, OpenMode.ForRead);
-                    importedName = cloned.LayoutName;
+                    sourceLayoutId = layouts.GetAt(request.SourceLayout);
+                    var sourceLayout = (Layout)transaction.GetObject(sourceLayoutId, OpenMode.ForRead);
+                    sourcePaperBtrId = sourceLayout.BlockTableRecordId;
                     transaction.Abort();
                 }
+
+                // 直接克隆 Layout 对象会让源 DWG 的匿名纸空间块（*Paper_Space0）
+                // 与工作副本同名冲突：Ignore 策略跳过克隆后两个布局共享同一块表记录，
+                // AutoCAD 会再自动补出一个默认布局（如"布局1"），最终布局集合不合法。
+                // 因此改为：先在目标库创建全新布局拿到独立纸空间块，再实体级克隆内容，
+                // 最后用 CopyFrom 复制源布局的打印设置。
+                LayoutManager manager = LayoutManager.Current;
+                ObjectId targetLayoutId = manager.CreateLayout(request.TargetLayout);
+                ObjectId targetPaperBtrId;
+                using (Transaction transaction = database.TransactionManager.StartTransaction())
+                {
+                    var targetLayout = (Layout)transaction.GetObject(targetLayoutId, OpenMode.ForWrite);
+                    targetPaperBtrId = targetLayout.BlockTableRecordId;
+                    transaction.Abort();
+                }
+
+                var entityIds = new Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection();
+                using (Transaction transaction = source.TransactionManager.StartTransaction())
+                {
+                    var paperBtr = (BlockTableRecord)transaction.GetObject(sourcePaperBtrId, OpenMode.ForRead);
+                    foreach (ObjectId entityId in paperBtr)
+                        entityIds.Add(entityId);
+                    transaction.Abort();
+                }
+
+                if (entityIds.Count > 0)
+                {
+                    var mapping = new IdMapping();
+                    mapping.DestinationDatabase = database;
+                    source.WblockCloneObjects(entityIds, targetPaperBtrId, mapping, DuplicateRecordCloning.Ignore, false);
+                }
+
+                using (Transaction sourceTransaction = source.TransactionManager.StartTransaction())
+                {
+                    var sourceLayout = (Layout)sourceTransaction.GetObject(sourceLayoutId, OpenMode.ForRead);
+                    using (Transaction transaction = database.TransactionManager.StartTransaction())
+                    {
+                        var targetLayout = (Layout)transaction.GetObject(targetLayoutId, OpenMode.ForWrite);
+                        targetLayout.CopyFrom(sourceLayout);
+                        transaction.Commit();
+                    }
+                    sourceTransaction.Abort();
+                }
             }
-            return importedName;
+            return request.TargetLayout;
         }
 
         // ------------------------------------------------------------------
@@ -217,7 +247,12 @@ namespace DstBuilder.AutoCAD
 
         private static void SaveDrawing(Document document, Database database)
         {
-            database.SaveAs(database.Filename, true, database.LastSavedAsVersion, database.SecurityParameters);
+            // Core Console 下 Database.SaveAs 不允许覆盖当前文档已打开的原路径
+            // （抛 eInvalidInput），因此保存到 attempt 目录内的固定派生名
+            // ``working.saved.dwg``；进程退出、句柄释放后由 Python 侧收敛回
+            // ``working.dwg``（见 CoreConsoleDrawingBuilder.build）。
+            string savedPath = Path.ChangeExtension(database.Filename, ".saved.dwg");
+            database.SaveAs(savedPath, false, DwgVersion.Current, database.SecurityParameters);
         }
     }
 }

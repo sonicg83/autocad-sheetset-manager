@@ -128,6 +128,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/builds/{build_id}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Handoff Build
+         * @description 调用本机 Manager 交接适配器（§10/§11）：已发布成果包原样保留。
+         */
+        post: operations["handoff_build_api_builds__build_id__handoff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cadabilities": {
         parameters: {
             query?: never;
@@ -441,6 +461,41 @@ export interface components {
             message: string;
             /** Recovery Action */
             recovery_action: string;
+        };
+        /**
+         * HandoffResponse
+         * @description POST /api/builds/{id}/handoff 响应：透传 Manager 交接结果（§10 步骤 6）。
+         */
+        HandoffResponse: {
+            /** Build Id */
+            build_id: string;
+            /** Dst Path */
+            dst_path: string;
+            /** Dst Sha256 */
+            dst_sha256: string;
+            /** Handoff Path */
+            handoff_path: string;
+            /**
+             * Idempotent
+             * @default false
+             */
+            idempotent: boolean;
+            /** Kind */
+            kind: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Package Id */
+            package_id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Revision Dir */
+            revision_dir: string;
+            /** Revision Id */
+            revision_id: string;
+            /** Root */
+            root: string;
+            /** Workspace Id */
+            workspace_id: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -856,6 +911,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    handoff_build_api_builds__build_id__handoff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffResponse"];
+                };
+            };
+            /** @description 构建不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description 构建未成功发布（HANDOFF_INVALID）或包冲突（HANDOFF_ID_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description Manager 验证拒绝（HANDOFF_INVALID） */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description 本机 Manager 不可用（HANDOFF_UNAVAILABLE） */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
                 };
             };
         };

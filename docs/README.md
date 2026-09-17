@@ -5,7 +5,7 @@
 ## 当前有效文档
 
 - [双产品与共享平台治理（ARCH-INT-002）](integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md)
-- [DST Builder 文档入口](dst-builder/README.md)
+- [DST Builder 文档入口](dst-builder/README.md)：首个最小生成闭环已实现开发闭环，SPEC-DB-001 维持 `review` 等待真实资格证据
 - [DST Manager 文档入口](dst-manager/README.md)
 - [Legacy Python 重构历史资料入口](legacy-refactor/README.md)
 - [共享技术资料入口](shared/README.md)

@@ -5,7 +5,7 @@ status: review
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - PRD-DB-001
   - ARCH-DB-001
@@ -126,7 +126,7 @@ artifact_path = "drawings/" + dwg_name
 dst_reference_path = dwg_name
 ```
 
-`layout_name` 和 `dwg_name` 不得包含 `<>:"/\\|?*` 或控制字符，不得以句点/空格结尾，也不得在去除扩展名并忽略大小写后等于 `CON`、`PRN`、`AUX`、`NUL`、`COM1`～`COM9`、`LPT1`～`LPT9`；规范化后的文件基名最长 180 个字符。若 Manager 已有等价规则成为第二个真实消费方，应将规则提取为共享纯函数；Builder 不得导入 `dst_manager.*`。
+`layout_name` 和 `dwg_name` 不得包含 `<>:"/\\|?*;=` 或控制字符（含 DEL `0x7F`），不得以句点/空格结尾，也不得在去除扩展名并忽略大小写后等于 `CON`、`PRN`、`AUX`、`NUL`、`COM1`～`COM9`、`LPT1`～`LPT9`；规范化后的文件基名最长 180 个字符。该规则已提取为共享纯函数 `dst_platform.contracts.naming.validate_windows_file_name`：禁止字符集取 Builder 与 Manager 既有规则的并集（Manager 原规则额外禁止 `;` 与 `=`），控制字符判定对 Manager 收紧一个码点（DEL `0x7F`），语义只紧不松；Manager 的危险名称校验入口已切换到同一共享实现。Builder 不得导入 `dst_manager.*`。
 
 ## 5. 不可变修订与确定性计划
 
@@ -267,6 +267,7 @@ Builder 首期 API：
 | `PATCH /api/projects/current/draft` | 带 `base_updated_at` 保存草稿并返回字段诊断 |
 | `POST /api/assets` | 纳入并哈希一个模板资产 |
 | `POST /api/assets/{id}/inspect` | 用匹配 CAD 读取可用布局 |
+| `GET /api/cadabilities` | 只读探测本机 2016/2020 Core Console 与 Builder 插件的显式配置可用性 |
 | `POST /api/plans` | 提交修订并产生预览计划 |
 | `POST /api/plans/{id}/confirm` | 明确确认计划 |
 | `POST /api/builds` | 基于已确认计划创建 build/attempt |

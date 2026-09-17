@@ -2305,6 +2305,80 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HandoffOpenResponse": {
+        "description": "POST /api/handoffs/open 响应（SPEC-DB-001 §10 步骤 6）。",
+        "properties": {
+          "build_id": {
+            "title": "Build Id",
+            "type": "string"
+          },
+          "dst_path": {
+            "title": "Dst Path",
+            "type": "string"
+          },
+          "dst_sha256": {
+            "title": "Dst Sha256",
+            "type": "string"
+          },
+          "handoff_path": {
+            "title": "Handoff Path",
+            "type": "string"
+          },
+          "idempotent": {
+            "default": false,
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "package_id": {
+            "title": "Package Id",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "revision_dir": {
+            "title": "Revision Dir",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handoff_path",
+          "workspace_id",
+          "root",
+          "dst_path",
+          "revision_id",
+          "revision_dir",
+          "kind",
+          "package_id",
+          "build_id",
+          "plan_id",
+          "manifest_sha256",
+          "dst_sha256"
+        ],
+        "title": "HandoffOpenResponse",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "run_id": {
@@ -3032,6 +3106,22 @@
           "title"
         ],
         "title": "NormalizedUpdateSubsetCommand",
+        "type": "object"
+      },
+      "OpenHandoffRequest": {
+        "additionalProperties": false,
+        "description": "POST /api/handoffs/open 请求：只包含绝对 handoff.json 路径（§10）。",
+        "properties": {
+          "handoff_path": {
+            "format": "path",
+            "title": "Handoff Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handoff_path"
+        ],
+        "title": "OpenHandoffRequest",
         "type": "object"
       },
       "OpenRequest": {
@@ -3769,6 +3859,10 @@
             "title": "Id",
             "type": "string"
           },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
           "operation_id": {
             "title": "Operation Id",
             "type": "string"
@@ -3780,6 +3874,18 @@
           "revision_dir": {
             "title": "Revision Dir",
             "type": "string"
+          },
+          "source_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Json"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -3793,6 +3899,7 @@
           "before_hash",
           "result_hash",
           "revision_dir",
+          "kind",
           "created_at"
         ],
         "title": "RevisionResponse",
@@ -5546,6 +5653,45 @@
         "tags": [
           "extensions"
         ]
+      }
+    },
+    "/api/handoffs/open": {
+      "post": {
+        "description": "显式交接 Builder 成果包（SPEC-DB-001 §10）：先验证后写库与文件证据。\n\n交接成功后以与 /api/workspaces/open 相同的 ``on_workspace_opened``\n回调登记新工作区（PLAN-DB-001 Task 11）：桌面壳由此感知经交接打开的\n工作区（响应体是 dict，回调用服务端 Workspace 对象，经 get_workspace 取回）。",
+        "operationId": "open_handoff_api_handoffs_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffOpenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Handoff"
       }
     },
     "/api/health": {

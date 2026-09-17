@@ -1,11 +1,11 @@
 ---
 id: PLAN-DB-001
 title: DST Builder 单张图纸最小生成闭环实施计划
-status: proposed
+status: active
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - SPEC-DB-001
   - PRD-DB-001
@@ -81,8 +81,8 @@ FORBIDDEN = {
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
 
-- [ ] RED：写 `test_product_boundaries.py`，AST 扫描并证明 `dst_builder` 不引用 `dst_manager`、`dst_platform` 不引用产品包、Builder domain 不引用框架；此时因包不存在而失败。
-- [ ] GREEN：创建五层 Builder 包和无产品依赖的 `dst_platform` 包；`pyproject.toml` 的 Hatch packages 改为三个包，并新增独立脚本：
+- [x] RED：写 `test_product_boundaries.py`，AST 扫描并证明 `dst_builder` 不引用 `dst_manager`、`dst_platform` 不引用产品包、Builder domain 不引用框架；此时因包不存在而失败。
+- [x] GREEN：创建五层 Builder 包和无产品依赖的 `dst_platform` 包；`pyproject.toml` 的 Hatch packages 改为三个包，并新增独立脚本：
 
 ```toml
 [project.scripts]
@@ -93,9 +93,9 @@ dst-builder = "dst_builder.interfaces.cli:app"
 packages = ["src/dst_manager", "src/dst_builder", "src/dst_platform"]
 ```
 
-- [ ] 新建最小 CLI `dst-builder --version`，不得启动 Manager 或复用 Manager 应用工厂。
-- [ ] Verify：`uv lock --check`、`uv run ruff check .`、`uv run pytest tests/architecture/test_product_boundaries.py -q`，并执行 `uv run dst-builder --version`。
-- [ ] Commit：`建立 DST Builder 独立产品骨架与依赖门禁`。
+- [x] 新建最小 CLI `dst-builder --version`，不得启动 Manager 或复用 Manager 应用工厂。
+- [x] Verify：`uv lock --check`、`uv run ruff check .`、`uv run pytest tests/architecture/test_product_boundaries.py -q`，并执行 `uv run dst-builder --version`。
+- [x] Commit：`建立 DST Builder 独立产品骨架与依赖门禁`。
 
 ### Task 2：实现领域模型、规范化哈希和构建状态机
 
@@ -113,11 +113,11 @@ packages = ["src/dst_manager", "src/dst_builder", "src/dst_platform"]
 - Create: `tests/builder/unit/test_build_state.py`
 - Create: `tests/builder/unit/test_contract_examples.py`
 
-- [ ] RED：把 SPEC-DB-001 的 `DraftProjectV1`、`ProjectRevisionV1`、`GenerationPlanV1`、`BuildEventV1`、manifest 和 handoff 示例固化为契约测试夹具，先因模型不存在失败。
-- [ ] RED：参数化测试字符串长度、非法字符、保留设备名、尾点/空格、图号溢出、恰好一张图纸和输出目录已存在；覆盖所有 SPEC 错误码，并用 Manager 既有危险名称样例证明共享纯函数语义一致。
-- [ ] RED：证明键顺序和机器路径变化不改变哈希，业务字段或资产字节变化必然改变修订/计划 ID。
-- [ ] RED：证明所有非法状态迁移和 `PUBLISHING` 取消被拒绝。
-- [ ] GREEN：以冻结 dataclass/StrEnum 实现模型，入口保持纯函数：
+- [x] RED：把 SPEC-DB-001 的 `DraftProjectV1`、`ProjectRevisionV1`、`GenerationPlanV1`、`BuildEventV1`、manifest 和 handoff 示例固化为契约测试夹具，先因模型不存在失败。
+- [x] RED：参数化测试字符串长度、非法字符、保留设备名、尾点/空格、图号溢出、恰好一张图纸和输出目录已存在；覆盖所有 SPEC 错误码，并用 Manager 既有危险名称样例证明共享纯函数语义一致。
+- [x] RED：证明键顺序和机器路径变化不改变哈希，业务字段或资产字节变化必然改变修订/计划 ID。
+- [x] RED：证明所有非法状态迁移和 `PUBLISHING` 取消被拒绝。
+- [x] GREEN：以冻结 dataclass/StrEnum 实现模型，入口保持纯函数：
 
 ```python
 def validate_draft(draft: DraftProjectV1, *, output_exists: bool) -> tuple[Diagnostic, ...]: ...
@@ -126,10 +126,10 @@ def create_plan(revision: ProjectRevisionV1) -> GenerationPlanV1: ...
 def transition(current: BuildStatus, target: BuildStatus) -> BuildStatus: ...
 ```
 
-- [ ] GREEN：计划中的 `expected_artifacts` 必须明确列出 DST、DWG、XLSX，以及 `project-revision.json`、`generation-plan.json`、`validation-report.json`、`handoff.json`；manifest/handoff 的最终字节在 Task 9 生成。
-- [ ] REFACTOR：模型只保存 POSIX 相对路径；Windows 绝对路径只存在于 application/infrastructure 边界。`output_path` 不进入修订/计划哈希，由 `BuildRun` 单独快照。
-- [ ] Verify：`uv run pytest tests/builder/unit/test_contract_examples.py tests/builder/unit/test_normalization.py tests/builder/unit/test_naming.py tests/builder/unit/test_planning.py tests/builder/unit/test_build_state.py -q`。
-- [ ] Commit：`实现 Builder 确定性修订计划与构建状态机`。
+- [x] GREEN：计划中的 `expected_artifacts` 必须明确列出 DST、DWG、XLSX，以及 `project-revision.json`、`generation-plan.json`、`validation-report.json`、`handoff.json`；manifest/handoff 的最终字节在 Task 9 生成。
+- [x] REFACTOR：模型只保存 POSIX 相对路径；Windows 绝对路径只存在于 application/infrastructure 边界。`output_path` 不进入修订/计划哈希，由 `BuildRun` 单独快照。
+- [x] Verify：`uv run pytest tests/builder/unit/test_contract_examples.py tests/builder/unit/test_normalization.py tests/builder/unit/test_naming.py tests/builder/unit/test_planning.py tests/builder/unit/test_build_state.py -q`。
+- [x] Commit：`实现 Builder 确定性修订计划与构建状态机`。
 
 ### Task 3：建立项目数据库、独立迁移和草稿 API
 
@@ -151,20 +151,20 @@ def transition(current: BuildStatus, target: BuildStatus) -> BuildStatus: ...
 - Create: `tests/builder/integration/test_project_api.py`
 - Create: `scripts/export_builder_openapi.py`
 
-- [ ] RED：从空目录升级后断言 SPEC-DB-001 的八张表、唯一约束与 Schema 版本；Manager 数据库表不得出现。
-- [ ] RED：API 测试创建项目、读取当前草稿、带 `base_updated_at` 保存、过期写入返回 `409 DRAFT_CONFLICT`、只读打开不改变资产/构建目录。
-- [ ] GREEN：实现 `ProjectRepository`、`RevisionRepository`、`BuildRepository` Protocol 及 SQLite adapter；事务边界由 application service 控制。
-- [ ] GREEN：实现独立应用工厂：
+- [x] RED：从空目录升级后断言 SPEC-DB-001 的八张表、唯一约束与 Schema 版本；Manager 数据库表不得出现。
+- [x] RED：API 测试创建项目、读取当前草稿、带 `base_updated_at` 保存、过期写入返回 `409 DRAFT_CONFLICT`、只读打开不改变资产/构建目录。
+- [x] GREEN：实现 `ProjectRepository`、`RevisionRepository`、`BuildRepository` Protocol 及 SQLite adapter；事务边界由 application service 控制。
+- [x] GREEN：实现独立应用工厂：
 
 ```python
 def create_builder_app(project_root: Path | None = None) -> FastAPI: ...
 ```
 
 并提供 `POST /api/projects`、`GET /api/projects/current`、`PATCH /api/projects/current/draft`。
-- [ ] GREEN：CLI `dst-builder serve --project <path>` 只监听 `127.0.0.1`；数据库不存在时只有创建项目接口可以写入。
-- [ ] 生成并提交 Builder OpenAPI；生成脚本导入 Builder app，不能改写 `web/src/api/openapi.json`。
-- [ ] Verify：`uv run alembic -c builder_alembic.ini upgrade head`（任务专用临时库）、`uv run pytest tests/builder/integration/test_builder_migrations.py tests/builder/integration/test_project_api.py -q`。
-- [ ] Commit：`建立 Builder 项目库迁移与草稿接口`。
+- [x] GREEN：CLI `dst-builder serve --project <path>` 只监听 `127.0.0.1`；数据库不存在时只有创建项目接口可以写入。
+- [x] 生成并提交 Builder OpenAPI；生成脚本导入 Builder app，不能改写 `web/src/api/openapi.json`。
+- [x] Verify：`uv run alembic -c builder_alembic.ini upgrade head`（任务专用临时库）、`uv run pytest tests/builder/integration/test_builder_migrations.py tests/builder/integration/test_project_api.py -q`。
+- [x] Commit：`建立 Builder 项目库迁移与草稿接口`。
 
 ### Task 4：实现资产纳入、路径边界和 CAD 能力探测
 
@@ -182,12 +182,12 @@ def create_builder_app(project_root: Path | None = None) -> FastAPI: ...
 - Create: `tests/builder/integration/test_asset_api.py`
 - Create: `tests/builder/integration/test_cad_capabilities.py`
 
-- [ ] RED：覆盖绝对/相对路径、`..`、junction/symlink、大小写碰撞、同内容去重、复制中源文件变化和 2 GiB 上限。
-- [ ] RED：CAD 探测只接受已配置且版本匹配的 2016/2020 Core Console 与插件，不允许“找到任意 acad.exe”视为可用。
-- [ ] GREEN：资产先复制到项目内临时文件，复制前后校验大小和 SHA-256，再以内容寻址名称原子改名；数据库与文件提交失败时都不留下假记录。
-- [ ] GREEN：实现 `POST /api/assets` 和只读 capability 响应；布局 inspection 先定义端口，Task 7 接真实执行器。
-- [ ] Verify：`uv run pytest tests/builder/unit/test_project_paths.py tests/builder/integration/test_asset_api.py tests/builder/integration/test_cad_capabilities.py -q`。
-- [ ] Commit：`实现 Builder 资产纳入与 CAD 能力探测`。
+- [x] RED：覆盖绝对/相对路径、`..`、junction/symlink、大小写碰撞、同内容去重、复制中源文件变化和 2 GiB 上限。
+- [x] RED：CAD 探测只接受已配置且版本匹配的 2016/2020 Core Console 与插件，不允许“找到任意 acad.exe”视为可用。
+- [x] GREEN：资产先复制到项目内临时文件，复制前后校验大小和 SHA-256，再以内容寻址名称原子改名；数据库与文件提交失败时都不留下假记录。
+- [x] GREEN：实现 `POST /api/assets` 和只读 capability 响应；布局 inspection 先定义端口，Task 7 接真实执行器。
+- [x] Verify：`uv run pytest tests/builder/unit/test_project_paths.py tests/builder/integration/test_asset_api.py tests/builder/integration/test_cad_capabilities.py -q`。
+- [x] Commit：`实现 Builder 资产纳入与 CAD 能力探测`。
 
 ### Task 5：实现独立七步引导前端
 
@@ -219,13 +219,13 @@ def create_builder_app(project_root: Path | None = None) -> FastAPI: ...
 - Create: `builder-web/tests/e2e/wizard-flow.spec.ts`
 - Create: `builder-web/tests/e2e/wizard-accessibility.spec.ts`
 
-- [ ] RED：Playwright 先覆盖七步顺序、前置门禁、已完成步骤回访、500 ms 自动保存、重启恢复、步骤 5 不自动确认、字段错误摘要聚焦和键盘主流程。
-- [ ] RED：覆盖 1280×720、最小支持视口、浅/深主题与浏览器 200% 缩放，无横向溢出和固定操作栏遮挡焦点。
-- [ ] GREEN：创建独立 Vue 应用；只复刻 ARCH-DB-001 已接受的语义令牌值，不从 Manager `web/` 做相对源码 import。形成两个真实消费方后，若令牌确需共享，另提共享资产任务。
-- [ ] GREEN：每一步只渲染本期字段；推迟能力不显示 disabled 占位。后端字段诊断映射到具体控件，Toast 只作补充。
-- [ ] GREEN：从 Builder OpenAPI 生成 `schema.d.ts`，API client 不手写重复枚举。
-- [ ] Verify：在 `builder-web/` 执行 `npm ci`、`npm run build`、`npm run test:unit`、`npm run test:e2e -- wizard-flow.spec.ts wizard-accessibility.spec.ts`。
-- [ ] Commit：`实现 DST Builder 七步引导界面`。
+- [x] RED：Playwright 先覆盖七步顺序、前置门禁、已完成步骤回访、500 ms 自动保存、重启恢复、步骤 5 不自动确认、字段错误摘要聚焦和键盘主流程。
+- [x] RED：覆盖 1280×720、最小支持视口、浅/深主题与浏览器 200% 缩放，无横向溢出和固定操作栏遮挡焦点。
+- [x] GREEN：创建独立 Vue 应用；只复刻 ARCH-DB-001 已接受的语义令牌值，不从 Manager `web/` 做相对源码 import。形成两个真实消费方后，若令牌确需共享，另提共享资产任务。
+- [x] GREEN：每一步只渲染本期字段；推迟能力不显示 disabled 占位。后端字段诊断映射到具体控件，Toast 只作补充。
+- [x] GREEN：从 Builder OpenAPI 生成 `schema.d.ts`，API client 不手写重复枚举。
+- [x] Verify：在 `builder-web/` 执行 `npm ci`、`npm run build`、`npm run test:unit`、`npm run test:e2e -- wizard-flow.spec.ts wizard-accessibility.spec.ts`。
+- [x] Commit：`实现 DST Builder 七步引导界面`。
 
 ### Task 6：把第二消费方需要的稳定能力提取到 `dst_platform`
 
@@ -250,9 +250,9 @@ def create_builder_app(project_root: Path | None = None) -> FastAPI: ...
 - Create: `tests/platform/test_core_console_process.py`
 - Modify: existing Manager codec/AcSm/worker tests only for import ownership assertions
 
-- [ ] RED：为共享 API 写产品无关测试，先证明当前实现只能从 Manager import。
-- [ ] RED：增加 AST 门禁，`dst_platform` 对 Builder/Manager 反向 import 立即失败。
-- [ ] GREEN：移动实现和 XSD，不复制第二份逻辑；共享稳定接口固定为：
+- [x] RED：为共享 API 写产品无关测试，先证明当前实现只能从 Manager import。
+- [x] RED：增加 AST 门禁，`dst_platform` 对 Builder/Manager 反向 import 立即失败。
+- [x] GREEN：移动实现和 XSD，不复制第二份逻辑；共享稳定接口固定为：
 
 ```python
 class DstCodec: ...
@@ -262,10 +262,10 @@ class CoreConsoleExecutor:
     def run(self, request: CoreConsoleRequest) -> CoreConsoleResult: ...
 ```
 
-- [ ] GREEN：Manager 原路径只做薄 re-export/adapter，既有公共导入、错误码、日志解码和 SCR 渲染行为不变；Builder 只引用 `dst_platform`。
-- [ ] REFACTOR：`Severity`、`ValidationIssue` 所有权迁至 `dst_platform.contracts`，Manager domain 兼容导出同一类型，避免两套诊断模型。
-- [ ] Verify：共享专项测试、全部既有 `tests/unit/test_acsm_contract.py tests/unit/test_autocad_worker.py`、`uv run ruff check .`。
-- [ ] Commit：`提取 Builder 与 Manager 共用的 DST 和 CAD 原语`。
+- [x] GREEN：Manager 原路径只做薄 re-export/adapter，既有公共导入、错误码、日志解码和 SCR 渲染行为不变；Builder 只引用 `dst_platform`。
+- [x] REFACTOR：`Severity`、`ValidationIssue` 所有权迁至 `dst_platform.contracts`，Manager domain 兼容导出同一类型，避免两套诊断模型。
+- [x] Verify：共享专项测试、全部既有 `tests/unit/test_acsm_contract.py tests/unit/test_autocad_worker.py`、`uv run ruff check .`。
+- [x] Commit：`提取 Builder 与 Manager 共用的 DST 和 CAD 原语`。
 
 ### Task 7：实现独立 Builder AutoCAD Worker 与单 DWG 生成
 
@@ -286,10 +286,10 @@ class CoreConsoleExecutor:
 - Create: `tests/builder/integration/test_drawing_builder.py`
 - Create: `tests/builder/system_autocad/test_minimal_drawing.py`
 
-- [ ] RED：测试结构化 request/result Schema、项目/attempt 路径约束、固定 SCR 命令、用户文本不出现在 SCR、参数数组执行、超时/取消/缺结果/版本不匹配。
-- [ ] RED：C# 纯契约测试覆盖未知 Schema、路径逃逸、`Model` 布局、源布局不存在、目标布局冲突和结果原子写入；测试项目只链接纯 `Contracts.cs`，不加载 AutoCAD 程序集。
-- [ ] GREEN：插件唯一命令为 `DSTBUILDER_CREATE_DRAWING`；从固定 request JSON 导入布局、保留 `Model` 加唯一目标布局、保存并输出 Handle/版本/诊断。
-- [ ] GREEN：Python adapter 实现：
+- [x] RED：测试结构化 request/result Schema、项目/attempt 路径约束、固定 SCR 命令、用户文本不出现在 SCR、参数数组执行、超时/取消/缺结果/版本不匹配。
+- [x] RED：C# 纯契约测试覆盖未知 Schema、路径逃逸、`Model` 布局、源布局不存在、目标布局冲突和结果原子写入；测试项目只链接纯 `Contracts.cs`，不加载 AutoCAD 程序集。
+- [x] GREEN：插件唯一命令为 `DSTBUILDER_CREATE_DRAWING`；从固定 request JSON 导入布局、保留 `Model` 加唯一目标布局、保存并输出 Handle/版本/诊断。
+- [x] GREEN：Python adapter 实现：
 
 ```python
 class DrawingBuilder(Protocol):
@@ -297,9 +297,9 @@ class DrawingBuilder(Protocol):
     def build(self, task: DrawingTask, attempt: AttemptPaths) -> CadDrawingResultV1: ...
 ```
 
-- [ ] 非 CAD 测试用 fake executor 验证编排；真实测试只操作私有样本副本并由 `DST_BUILDER_RUN_AUTOCAD=1` 显式启用。
-- [ ] Verify：`dotnet test plugins/tests/DstBuilder.AutoCAD.Tests/DstBuilder.AutoCAD.Tests.csproj`、`powershell -File scripts/build_builder_plugins.ps1`（环境具备时）及 Python 非 CAD 专项测试；分别记录 2016/2020 系统测试是否执行。
-- [ ] Commit：`实现 Builder 单图纸 AutoCAD Worker`。
+- [x] 非 CAD 测试用 fake executor 验证编排；真实测试只操作私有样本副本并由 `DST_BUILDER_RUN_AUTOCAD=1` 显式启用。
+- [x] Verify：`dotnet test plugins/tests/DstBuilder.AutoCAD.Tests/DstBuilder.AutoCAD.Tests.csproj`、`powershell -File scripts/build_builder_plugins.ps1`（环境具备时）及 Python 非 CAD 专项测试；分别记录 2016/2020 系统测试是否执行。
+- [x] Commit：`实现 Builder 单图纸 AutoCAD Worker`。
 
 ### Task 8：从零生成 DST、XLSX 与完整验证报告
 
@@ -316,13 +316,13 @@ class DrawingBuilder(Protocol):
 - Create: `tests/builder/unit/test_catalog_xlsx.py`
 - Create: `tests/builder/integration/test_dst_artifacts.py`
 
-- [ ] RED：同一计划与 CAD 结果两次构造 XML 字节一致、对象 UUIDv5 一致；不同计划改变对象 ID。
-- [ ] RED：测试 SheetSet/Subset/Sheet/LayoutReference 必需节点、相对 DWG 路径、布局 Handle、Codec 往返、Schema 和语义投影；任何不一致返回 `DST_VALIDATION_FAILED`。
-- [ ] RED：XLSX 固定工作表、表头、唯一数据行和字符串图号（保留前导零）。
-- [ ] GREEN：Builder AcSm factory 直接构造新 DOM；不读取模板 DST，不调用 Manager document/editing 层，不实现旧 DLL 回退。
-- [ ] GREEN：验证报告汇总输入、DWG、DST、XLSX、引用边界和校验器版本；报告诊断使用共享类型。
-- [ ] Verify：`uv run pytest tests/builder/unit/test_acsm_factory.py tests/builder/unit/test_acsm_projection.py tests/builder/unit/test_catalog_xlsx.py tests/builder/integration/test_dst_artifacts.py -q`。
-- [ ] Commit：`实现 Builder DST 与图纸目录确定性生成`。
+- [x] RED：同一计划与 CAD 结果两次构造 XML 字节一致、对象 UUIDv5 一致；不同计划改变对象 ID。
+- [x] RED：测试 SheetSet/Subset/Sheet/LayoutReference 必需节点、相对 DWG 路径、布局 Handle、Codec 往返、Schema 和语义投影；任何不一致返回 `DST_VALIDATION_FAILED`。
+- [x] RED：XLSX 固定工作表、表头、唯一数据行和字符串图号（保留前导零）。
+- [x] GREEN：Builder AcSm factory 直接构造新 DOM；不读取模板 DST，不调用 Manager document/editing 层，不实现旧 DLL 回退。
+- [x] GREEN：验证报告汇总输入、DWG、DST、XLSX、引用边界和校验器版本；报告诊断使用共享类型。
+- [x] Verify：`uv run pytest tests/builder/unit/test_acsm_factory.py tests/builder/unit/test_acsm_projection.py tests/builder/unit/test_catalog_xlsx.py tests/builder/integration/test_dst_artifacts.py -q`。
+- [x] Commit：`实现 Builder DST 与图纸目录确定性生成`。
 
 ### Task 9：实现 build/attempt 编排、SSE、恢复和原子发布
 
@@ -342,15 +342,15 @@ class DrawingBuilder(Protocol):
 - Create: `tests/builder/integration/test_build_recovery.py`
 - Create: `tests/builder/integration/test_minimal_loop_fake_cad.py`
 
-- [ ] RED：以 fake CAD 跑完整状态序列，验证事件序号、`Last-Event-ID` 重放、计划冻结、安全取消和新 attempt 递增。
-- [ ] RED：每个阶段故障注入；在最终改名前正式目标必须不存在。目标预存在返回 `PACKAGE_TARGET_EXISTS` 且不修改它。
-- [ ] RED：manifest 排序、路径/大小/哈希、根目录只有两项、handoff 不进 manifest、无空 assets 目录、成果内无绝对路径。
-- [ ] RED：启动恢复覆盖 PREPARING～VERIFYING 中断、PUBLISHING 未改名、已完整改名和歧义现场。
-- [ ] GREEN：实现 `BuildCoordinator`，每次状态变化和事件写入同一数据库事务；阻塞 CAD 调用在线程执行器中运行，不阻塞 SSE event loop。
-- [ ] GREEN：候选包在 attempt 内完成后复制到目标父目录的唯一暂存目录，重新验证，再执行同卷 `os.replace(staging, target)`；首期禁止替换现有目标。
-- [ ] GREEN：实现 `POST /api/plans`、confirm、build/cancel/status/events；UI 步骤 5～7 接真实 API，构建中字段只读。
-- [ ] Verify：Builder unit/integration 全量，`builder-web` build 与 wizard e2e。
-- [ ] Commit：`贯通 Builder 构建编排与原子成果发布`。
+- [x] RED：以 fake CAD 跑完整状态序列，验证事件序号、`Last-Event-ID` 重放、计划冻结、安全取消和新 attempt 递增。
+- [x] RED：每个阶段故障注入；在最终改名前正式目标必须不存在。目标预存在返回 `PACKAGE_TARGET_EXISTS` 且不修改它。
+- [x] RED：manifest 排序、路径/大小/哈希、根目录只有两项、handoff 不进 manifest、无空 assets 目录、成果内无绝对路径。
+- [x] RED：启动恢复覆盖 PREPARING～VERIFYING 中断、PUBLISHING 未改名、已完整改名和歧义现场。
+- [x] GREEN：实现 `BuildCoordinator`，每次状态变化和事件写入同一数据库事务；阻塞 CAD 调用在线程执行器中运行，不阻塞 SSE event loop。
+- [x] GREEN：候选包在 attempt 内完成后复制到目标父目录的唯一暂存目录，重新验证，再执行同卷 `os.replace(staging, target)`；首期禁止替换现有目标。
+- [x] GREEN：实现 `POST /api/plans`、confirm、build/cancel/status/events；UI 步骤 5～7 接真实 API，构建中字段只读。
+- [x] Verify：Builder unit/integration 全量，`builder-web` build 与 wizard e2e。
+- [x] Commit：`贯通 Builder 构建编排与原子成果发布`。
 
 ### Task 10：实现 Manager 显式交接和真实初始修订
 
@@ -370,15 +370,15 @@ class DrawingBuilder(Protocol):
 - Modify: `src/dst_builder/application/builds.py`
 - Modify: `builder-web/src/steps/HandoffStep.vue`
 
-- [ ] 先阅读 ARCH-DM-001 的只读打开、永久 before 快照、发布事务与启动恢复约束。
-- [ ] RED：交接成功、重复幂等、ID 冲突、未知 Schema、manifest 漂移、文件缺失、绝对/`..`/symlink 逃逸、大小写碰撞、DST 引用出界全部先失败。
-- [ ] RED：任何验证失败都断言 `workspaces`、`handoff_sources`、`document_revisions` 和修订目录零新增。
-- [ ] RED：成功后初始修订 `kind=handoff_initial`，before/result 都是 DST 哈希，revision directory 含可验证 manifest、完整 `drawings/` 基线和 Builder metadata 副本；现有修订列表/恢复逻辑仍工作。
-- [ ] GREEN：迁移新增 `handoff_sources` 表，并给 `document_revisions` 增加非空默认 `kind='operation'` 与可空 `source_json`；全新数据库和旧数据库升级都测试。
-- [ ] GREEN：新增 `POST /api/handoffs/open`；调用先验证再创建数据库与文件证据。普通 `/api/workspaces/open` 不推断 handoff，不改变只读语义。
-- [ ] GREEN：Builder 的“一键交接”通过显式 adapter 调用 Manager API；Manager 不可用时保留已发布包并显示可执行恢复动作。
-- [ ] Verify：迁移升级、handoff 专项、Manager revisions/publisher/recovery 回归和 `tests/integration/test_api.py`。
-- [ ] Commit：`实现 Builder 成果向 Manager 的显式交接`。
+- [x] 先阅读 ARCH-DM-001 的只读打开、永久 before 快照、发布事务与启动恢复约束。
+- [x] RED：交接成功、重复幂等、ID 冲突、未知 Schema、manifest 漂移、文件缺失、绝对/`..`/symlink 逃逸、大小写碰撞、DST 引用出界全部先失败。
+- [x] RED：任何验证失败都断言 `workspaces`、`handoff_sources`、`document_revisions` 和修订目录零新增。
+- [x] RED：成功后初始修订 `kind=handoff_initial`，before/result 都是 DST 哈希，revision directory 含可验证 manifest、完整 `drawings/` 基线和 Builder metadata 副本；现有修订列表/恢复逻辑仍工作。
+- [x] GREEN：迁移新增 `handoff_sources` 表，并给 `document_revisions` 增加非空默认 `kind='operation'` 与可空 `source_json`；全新数据库和旧数据库升级都测试。
+- [x] GREEN：新增 `POST /api/handoffs/open`；调用先验证再创建数据库与文件证据。普通 `/api/workspaces/open` 不推断 handoff，不改变只读语义。
+- [x] GREEN：Builder 的“一键交接”通过显式 adapter 调用 Manager API；Manager 不可用时保留已发布包并显示可执行恢复动作。
+- [x] Verify：迁移升级、handoff 专项、Manager revisions/publisher/recovery 回归和 `tests/integration/test_api.py`。
+- [x] Commit：`实现 Builder 成果向 Manager 的显式交接`。
 
 ### Task 11：桌面壳、独立打包与双产品共存
 
@@ -393,12 +393,12 @@ class DrawingBuilder(Protocol):
 - Create: `tests/builder/unit/test_builder_desktop.py`
 - Create: `tests/builder/integration/test_builder_packaging_contract.py`
 
-- [ ] RED：测试 Builder 使用独立应用 ID、进程标题、单实例锁、动态回环端口和 `%LOCALAPPDATA%/dst-builder`；与 Manager 同时运行互不抢占。
-- [ ] RED：打包契约必须包含 Builder web、Builder 迁移、共享 XSD、2016/2020 Builder 插件；不得捆入 Manager web 或私有样本。
-- [ ] GREEN：借鉴 Manager 已验证的 WebView2 壳模式，但独立实现产品入口和资源发现；不从 Manager shell import。
-- [ ] GREEN：发布压缩包与可执行文件明确命名 `dst-builder`，版本独立；Manager 发布脚本行为不变。
-- [ ] Verify：`npm --prefix builder-web run build`、PyInstaller 构建、解包敏感文件扫描、Builder/Manager 并行启动冒烟。
-- [ ] Commit：`完成 DST Builder 独立桌面打包与共存验证`。
+- [x] RED：测试 Builder 使用独立应用 ID、进程标题、单实例锁、动态回环端口和 `%LOCALAPPDATA%/dst-builder`；与 Manager 同时运行互不抢占。
+- [x] RED：打包契约必须包含 Builder web、Builder 迁移、共享 XSD、2016/2020 Builder 插件；不得捆入 Manager web 或私有样本。
+- [x] GREEN：借鉴 Manager 已验证的 WebView2 壳模式，但独立实现产品入口和资源发现；不从 Manager shell import。
+- [x] GREEN：发布压缩包与可执行文件明确命名 `dst-builder`，版本独立；Manager 发布脚本行为不变。
+- [x] Verify：`npm --prefix builder-web run build`、PyInstaller 构建、解包敏感文件扫描、Builder/Manager 并行启动冒烟。
+- [x] Commit：`完成 DST Builder 独立桌面打包与共存验证`。
 
 ### Task 12：全量门禁、真实 CAD 资格与文档收口
 
@@ -413,15 +413,17 @@ class DrawingBuilder(Protocol):
 - Modify: `changelog.md`
 - Create: `.planning/memos/dst-builder/PLAN-DB-001-release-evidence.md`
 
-- [ ] 运行 Python 全量：`uv run ruff check .`、`uv run pytest -q`、`uv lock --check`、Builder/Manager 两条 Alembic 全新升级。
-- [ ] 运行两个 Web：Manager `npm ci && npm run build && npm run test:e2e`；Builder 同等命令。
-- [ ] 构建两个 Builder 插件与 Builder EXE；确认公开提交树不含 `sample/`、插件 bin/obj、密钥、真实客户路径或生成物。
-- [ ] 用户/环境显式启用后，分别用 AutoCAD 2016、2020 完成：布局导入、DWG 保存、DST Codec/Schema/官方 Sheet Set Manager 打开、成果发布、Manager 接管和初始修订恢复。
-- [ ] 真实 CAD 任一版本未执行时，在 evidence memo 和最终报告明确标为“开发闭环完成，正式双版本资格未满足”，不得把跳过写成通过。
-- [ ] 对七步 UI 执行键盘、错误聚焦、浅深主题、最小视口、200% 缩放和真实 WebView2 验收。
-- [ ] 独立代码审查必须确认 0 Critical、0 Important；Minor 要么修复，要么在 memo 中逐项裁决。
-- [ ] 所有证据齐全后将 SPEC-DB-001 从 `review` 改为 `accepted`，PLAN-DB-001 从 `active` 改为 `completed`；若只完成开发门禁而缺真实资格，计划保持 `active` 并列出唯一剩余门禁。
-- [ ] Commit：`收口 DST Builder 最小生成闭环验证与文档`。
+- [x] 运行 Python 全量：`uv run ruff check .`、`uv run pytest -q`（2186 passed / 75 skipped / 0 failed）、`uv lock --check`、Builder/Manager 两条 Alembic 全新升级。
+- [x] 运行两个 Web：Manager `npm ci && npm run build && npm run test:e2e`；Builder 同等命令（builder-web e2e 20 passed）。
+- [x] 构建两个 Builder 插件与 Builder EXE；确认公开提交树不含 `sample/`、插件 bin/obj、密钥、真实客户路径或生成物。
+- [ ] 用户/环境显式启用后，分别用 AutoCAD 2016、2020 完成：布局导入、DWG 保存（两版本真实系统测试已通过）、DST Codec/Schema（无 CAD 自动化覆盖）、官方 Sheet Set Manager 打开、成果发布、Manager 接管和初始修订恢复（后四项的真实端到端执行待人工/后续任务完成）。
+- [x] 真实 CAD 任一版本未执行时，在 evidence memo 和最终报告明确标为“开发闭环完成，正式双版本资格未满足”，不得把跳过写成通过。
+- [ ] 对七步 UI 执行键盘、错误聚焦、浅深主题、最小视口、200% 缩放（builder-web e2e 自动化覆盖）和真实 WebView2 验收（人工未执行，见 evidence memo）。
+- [ ] 独立代码审查必须确认 0 Critical、0 Important；Minor 要么修复，要么在 memo 中逐项裁决（待 controller 终审）。
+- [x] 所有证据齐全后将 SPEC-DB-001 从 `review` 改为 `accepted`，PLAN-DB-001 从 `active` 改为 `completed`；若只完成开发门禁而缺真实资格，计划保持 `active` 并列出唯一剩余门禁（当前按后者执行：SPEC 保持 `review`，PLAN 保持 `active`）。
+- [x] Commit：`收口 DST Builder 最小生成闭环验证与文档`。
+
+> **剩余唯一门禁（2026-09-18）：** 真实双版本发布资格未满足——官方 Sheet Set Manager 打开生成 DST、真实端到端“成果发布 → Manager 接管 → 初始修订恢复”链路，以及真实 WebView2 七步 UI 人工验收尚未执行；证据与命令记录见 [PLAN-DB-001 发布证据备忘](../../memos/dst-builder/PLAN-DB-001-release-evidence.md)。
 
 ## 4. 检查点
 

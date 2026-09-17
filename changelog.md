@@ -1,3 +1,17 @@
+## 2026-09-18（PLAN-DB-001 DST Builder 最小生成闭环：Task 1–11 补记与收口）
+
+- **骨架与门禁**：`df03eba` 建立 DST Builder 独立产品骨架与依赖门禁（`dst-builder` CLI、三层包拆分、AST 禁止 import）；`9d716c7` 加固依赖门禁测试的框架黑名单与检测能力验证；`c45195a` 补全 `dst_platform` 门禁禁止集为产品包与框架。
+- **领域模型**：`924c1b6` 实现 Builder 确定性修订计划与构建状态机（`DraftProjectV1`/`ProjectRevisionV1`/`GenerationPlanV1` 规范化哈希、状态迁移与契约示例测试）。
+- **数据库与资产**：`562b477` 建立 Builder 项目库迁移与草稿接口（独立 `builder_alembic.ini` 迁移链、八张表、`POST /api/projects` 与草稿 `base_updated_at` 乐观并发）；`c825b8a` 实现 Builder 资产纳入与 CAD 能力探测（内容寻址复制、路径边界校验、`GET /api/cadabilities` 显式配置探测）。
+- **前端**：`14b7d35` 实现 DST Builder 七步引导界面（独立 `builder-web` Vue 应用、OpenAPI 生成的 `schema.d.ts`、自动保存/恢复与 e2e）；`fb11fbb` 修复草稿自动保存在途请求并发竞态。
+- **共享平台提取**：`50efacd` 提取 Builder 与 Manager 共用的 DST 和 CAD 原语（`dst_platform` 承接 DST Codec、AcSm 契约与 Core Console 进程原语；Manager 危险名称校验切换共享实现，禁止字符集取并集并对 Manager 收紧 DEL 0x7F）。
+- **CAD 生成**：`fc78c48` 实现 Builder 单图纸 AutoCAD Worker（`DstBuilder.AutoCAD` 插件唯一命令 `DSTBUILDER_CREATE_DRAWING`、版本化 JSON 请求、双版本构建脚本）；`b5d164d` 修复 Builder 生成忽略计划 CAD 版本的回退问题。
+- **DST 与目录**：`919bd55` 实现 Builder DST 与图纸目录确定性生成（AcSm DOM 工厂、Codec 往返与语义校验、固定表头图纸目录 XLSX）。
+- **发布编排**：`37173c0` 贯通 Builder 构建编排与原子成果发布（build/attempt 状态机、SSE 重放、同父目录暂存原子改名、manifest/handoff）；`4b5516a` 修复取消标志泄漏、重试运行状态复位与前端只读门禁。
+- **Manager 交接**：`8a27904` 实现 Builder 成果向 Manager 的显式交接（`POST /api/handoffs/open` 先验证后落库、`handoff_sources` 迁移、`handoff_initial` 初始修订与永久基线、重复交接幂等）。
+- **打包共存**：`9514564` 完成 DST Builder 独立桌面打包与共存验证（PyInstaller + WebView2 独立壳、`dst-builder` 命名发布物、与 Manager 并行冒烟）；`7891c14` 修复 frozen 构建版本号污染交接包元数据。
+- **收口（本次提交）**：执行全量门禁（pytest 2186 passed/0 failed、双 Web build+e2e 555/20 passed、双 Alembic 全新升级、双版本插件与 Builder EXE 构建）；显式启用真实 CAD 执行 2016/2020 Builder 系统测试均通过——期间修复 `DstBuilder.AutoCAD` 布局导入共享匿名纸空间块缺陷（改为 CreateLayout + 实体级克隆 + CopyFrom）与 Core Console 无法覆盖已打开原路径的保存缺陷（另存 `working.saved.dwg` 后由 Python 收敛回 `working.dwg`，含回归测试）；重生成 Manager 与 Builder 双侧 OpenAPI 契约（修复 Task 10 交接端点漂移）；修订 SPEC-DB-001 §4 共享命名规则与 §11 端点表、PLAN-DB-001 复选框与状态（保持 `active`，唯一剩余门禁为真实双版本发布资格）、四个 README 导航状态，并新增[发布证据备忘](.planning/memos/dst-builder/PLAN-DB-001-release-evidence.md)。
+
 ## 2026-09-16（README 重构与用户使用指南）
 
 - 重写根目录 `README.md`：补充品牌标志与中英文切换入口，按"核心特性 / 快速开始（普通用户与开发者分离）/ 排障 / 打包 / 验证命令 / 仓库结构 / 安全边界"重组；新增英文版 `README.en.md`（内容与中文版对应，文档导航标注中文文档链接）。
