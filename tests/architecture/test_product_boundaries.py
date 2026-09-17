@@ -29,9 +29,17 @@ FORBIDDEN_RELATIONS = [
         {"dst_builder", "dst_manager"},
     ),
     (
-        "dst_builder.domain 不得依赖框架",
+        "dst_builder.domain 不得依赖框架与 Manager",
         "dst_builder/domain",
-        {"fastapi", "sqlalchemy", "uvicorn", "pywebview", "typer"},
+        {
+            "dst_manager",
+            "lxml",
+            "fastapi",
+            "sqlalchemy",
+            "uvicorn",
+            "pywebview",
+            "typer",
+        },
     ),
 ]
 
@@ -76,5 +84,29 @@ def test_forbidden_dependencies(
 
 def test_gate_rules_cover_expected_relations() -> None:
     """门禁规则本身不得被静默清空。"""
-    assert len(FORBIDDEN_RELATIONS) == 3
+    assert len(FORBIDDEN_RELATIONS) >= 3
     assert all(item[2] for item in FORBIDDEN_RELATIONS)
+
+
+def test_imported_top_levels_detects_real_imports() -> None:
+    """检测器对真实 import 形态必须有产出，防止扫描器恒空导致门禁虚绿。"""
+    source = (
+        "import dst_manager\n"
+        "import fastapi.staticfiles\n"
+        "from lxml import etree\n"
+        "from . import sibling\n"
+        "from ..domain import models\n"
+    )
+    probe = SRC_DIR / "dst_builder" / "domain" / "_gate_probe.py"
+    probe.write_text(source, encoding="utf-8")
+    try:
+        imported = _imported_top_levels(probe)
+    finally:
+        probe.unlink()
+
+    assert imported == {
+        "dst_builder",  # 两条相对导入
+        "dst_manager",
+        "fastapi",
+        "lxml",
+    }
