@@ -3,7 +3,7 @@ id: <PLAN-SCOPE-NNN>
 title: <简体中文标题>
 status: proposed
 owners:
-  - <legacy-refactor|dst-manager|shared|integration>
+  - <dst-builder|dst-manager|shared|integration>
 created: <YYYY-MM-DD>
 updated: <YYYY-MM-DD>
 related: []

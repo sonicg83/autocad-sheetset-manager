@@ -1,17 +1,21 @@
 ---
 id: ROADMAP-LR-001
 title: Legacy Python 重构路线图
-status: proposed
+status: cancelled
 owners:
   - legacy-refactor
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-09-17
 related:
   - ARCH-LR-001
   - RES-LR-001
+  - ROADMAP-DB-001
+  - RFC-INT-001
 ---
 
 # Legacy Python 重构路线图
+
+> 本路线图因产品正式演进为 DST Builder 而取消。当前路线见 [ROADMAP-DB-001：DST Builder 路线图](dst-builder.md)；本文只保留历史迁移思路。
 
 本路线图提取自 [ARCH-LR-001](../../docs/legacy-refactor/architecture/ARCH-LR-001-modern-python-refactor-baseline.md) 的迁移方向；各阶段均为提案，不表示已完成或已经验证。
 

@@ -1,6 +1,6 @@
 # 共享技术资料
 
-本目录保存 DST Manager 与 Legacy Python 重构两条产品线共同使用的技术知识，不构成第三个产品线。
+本目录保存两个现役产品已经共同采用的稳定技术知识，不构成第三个产品线。目录中的现有资料形成于 DST Manager 与 Legacy 重构共同研究阶段，为保持历史链接暂留原位；DST Builder 尚未形成代码消费方，因此这些资料的存在不代表 Builder 已经采用对应实现。自 `ARCH-INT-002` 起，只有产生 Builder 与 Manager 两个真实消费方后，新的稳定契约或实现知识才能进入本目录；候选复用议题先进入 `integration`。
 
 ## DST/AcSm
 

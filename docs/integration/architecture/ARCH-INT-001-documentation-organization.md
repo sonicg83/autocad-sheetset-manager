@@ -1,17 +1,21 @@
 ---
 id: ARCH-INT-001
 title: 双项目文档组织与治理设计
-status: accepted
+status: superseded
 document_kind: architecture
 owners:
   - legacy-refactor
   - dst-manager
 created: 2026-08-17
-updated: 2026-08-17
-related: []
+updated: 2026-09-17
+related:
+  - RFC-INT-001
+  - ARCH-INT-002
 ---
 
 # 双项目文档组织与治理设计
+
+> 本文已由 [ARCH-INT-002：DST Builder、DST Manager 与共享平台治理](ARCH-INT-002-dst-builder-manager-platform-governance.md)取代现役产品名称、scope 和编号前缀定义；其余历史治理背景继续保留用于追溯。
 
 ## 1. 背景与目标
 

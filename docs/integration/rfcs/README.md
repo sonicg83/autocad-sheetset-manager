@@ -2,4 +2,6 @@
 
 当前没有处于 `review` 状态的 RFC。
 
-新提案从 `RFC-INT-001` 开始编号，并使用 [`docs/_templates/rfc.md`](../../_templates/rfc.md) 模板创建。
+- [RFC-INT-001：DST Builder 立项与共享平台边界（accepted）](RFC-INT-001-dst-builder-product-establishment.md)
+
+下一份新提案从 `RFC-INT-002` 开始编号，并使用 [`docs/_templates/rfc.md`](../../_templates/rfc.md) 模板创建。

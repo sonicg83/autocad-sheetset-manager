@@ -4,9 +4,10 @@
 
 ## 当前有效文档
 
-- [双项目文档组织与治理设计（ARCH-INT-001）](integration/architecture/ARCH-INT-001-documentation-organization.md)
+- [双产品与共享平台治理（ARCH-INT-002）](integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md)
+- [DST Builder 文档入口](dst-builder/README.md)
 - [DST Manager 文档入口](dst-manager/README.md)
-- [Legacy Python 重构文档入口](legacy-refactor/README.md)
+- [Legacy Python 重构历史资料入口](legacy-refactor/README.md)
 - [共享技术资料入口](shared/README.md)
 - [跨项目整合入口](integration/README.md)
 
@@ -14,7 +15,7 @@
 
 ## 规范与模板
 
-文档类型、状态、编号和归属规则以[双项目文档组织与治理设计（ARCH-INT-001）](integration/architecture/ARCH-INT-001-documentation-organization.md)为准。新增正式文档时从对应模板复制，并替换模板中的示例字段：
+文档类型、状态、编号和归属规则以[双产品与共享平台治理（ARCH-INT-002）](integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md)为唯一权威。已被取代的 [ARCH-INT-001](integration/architecture/ARCH-INT-001-documentation-organization.md)只保留历史背景。新增正式文档时从对应模板复制，并替换模板中的示例字段：
 
 - [ADR 模板](_templates/adr.md)
 - [Guide 模板](_templates/guide.md)

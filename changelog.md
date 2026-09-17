@@ -2443,4 +2443,10 @@
 - 新增 `docs/PYTHON_REFACTOR_ASSESSMENT.md`，记录 Python/pyautocad 重构可行性、功能映射、收益与风险、目标架构、迁移阶段、工作量和验收指标。
 - 在 `README.md` 增加 Python/pyautocad 重构评估文档入口。
 - 本次仅新增文档，未修改 PowerShell、配置、Excel、DWG 或 DLL。
+## 2026-09-17（DST Builder 正式立项与产品基线）
 
+- 将原 `legacy-refactor` 方向正式命名为独立产品 **DST Builder**，确立“共享平台、双产品壳”：Builder 负责首版 DWG/DST 生成与交接，Manager 负责交接后的检查、编辑、修订和安全发布。
+- 新增 `RFC-INT-001`、`ARCH-INT-002`、`VISION-DB-001`、`PRD-DB-001`、`ARCH-DB-001` 与 `ROADMAP-DB-001`，固化单人本地桌面优先、架构预留服务化、应用内项目模型为事实源、七步引导流程、绿地设计和最小纵向闭环路线。
+- 固化成果包只有 `drawings/` 与 `metadata/` 两个根目录，前者保存 DST、DWG 和附带资产并可独立交付，后者保存版本化 JSON 追溯与 Manager 交接信息。
+- `VISION-LR-001`、`ARCH-LR-001` 与 `ARCH-INT-001` 标记为 `superseded`，`ROADMAP-LR-001` 标记为 `cancelled`；历史文件保留用于规则考古和黄金样本，不构成 Builder 兼容承诺。
+- 更新文档索引、模板、协作规范和中英文 README 导航；`ARCH-INT-002` 完整承接文档类型、生命周期、索引和归档规则，成为唯一治理权威；新产品文档使用 `dst-builder` scope 与 `DB` 永久编号前缀，历史 `LR` 编号保留但不再新增。

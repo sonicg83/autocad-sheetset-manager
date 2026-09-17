@@ -17,16 +17,16 @@
 
 ## 文档归档约定
 
-- 文档治理的权威设计是 `docs/integration/architecture/ARCH-INT-001-documentation-organization.md`；本节只保留日常执行约束，出现歧义时以权威设计为准。
+- 文档治理的唯一权威设计是 `docs/integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md`；`ARCH-INT-001` 只保留历史背景。本节只保留日常执行约束，出现歧义时以现行权威设计为准。
 - 可长期复用的知识、技术分析、架构说明、开发指南和调研结论按范围保存到 `docs/<scope>/...`。
-- scope 只使用 `legacy-refactor`、`dst-manager`、`shared` 和 `integration`：前两者分别归属两条产品线；`shared` 只接收已被两边采用的稳定公共能力；尚在讨论的跨项目契约、提案和合并议题进入 `integration`，不得因“未来可能复用”提前归入 `shared`。
+- 现役 scope 只使用 `dst-builder`、`dst-manager`、`shared` 和 `integration`：前两者分别归属两条产品线；`shared` 只接收已被两边采用的稳定公共能力；尚在讨论的跨项目契约、提案和合并议题进入 `integration`，不得因“未来可能复用”提前归入 `shared`。`legacy-refactor` 只保留历史资料，不接收新的产品需求、架构或计划。
 - 长期文档按主要用途归档：Vision 与 PRD 放入 `<project>/product/`，Spec 放入 `<project>/specs/`，Architecture、ADR、Guide 和 Research 放入对应 scope 的同名目录；RFC 只放入 `docs/integration/rfcs/`，稳定 Reference 放入 `docs/shared/reference/`。
 - 已立项的实施计划、阶段计划和修复计划保存到 `.planning/plans/`；路线图保存到 `.planning/roadmaps/`。
 - 尚未形成正式 Plan 的事项仅保存到 `.planning/todos/`；不要将已归档 Plan 继续放入 Todo。
 - 备忘、对话记录、阶段沟通摘要和临时决策记录等记录类文档保存到 `.planning/memos/`。
-- `.planning/plans/`、`.planning/todos/` 和 `.planning/memos/` 下继续按四个 scope 分目录；Roadmap 使用 scope 对应的单文件入口。
+- `.planning/plans/`、`.planning/todos/` 和 `.planning/memos/` 下继续按四个现役 scope 分目录；Roadmap 使用 scope 对应的单文件入口。
 - 新建文档前先判断生命周期、scope 和文档类型，并搜索同主题权威文档；同一内容只保留一个权威位置，其他位置使用链接，不复制正文。不要将待办或备忘混入 `docs/`，也不要将长期知识文档放入 `.planning/`。
-- PRD、Spec、Architecture、ADR、RFC、Roadmap 和 Plan 必须使用 YAML 元数据；正式文档使用永久 ID（类型 + `LR`/`DM`/`SH`/`INT` + 三位序号），编号不得重用。`related` 使用文档 ID，正文仍提供可点击链接。
+- PRD、Spec、Architecture、ADR、RFC、Roadmap 和 Plan 必须使用 YAML 元数据；新正式文档使用永久 ID（类型 + `DB`/`DM`/`SH`/`INT` + 三位序号），编号不得重用。历史 `LR` 编号永久保留但不再新增。`related` 使用文档 ID，正文仍提供可点击链接。
 - 长期文档状态使用 `draft`、`review`、`accepted`、`superseded` 或 `archived`；计划类文档使用 `proposed`、`active`、`completed`、`cancelled` 或 `blocked`。ADR 结论变化时新增 ADR，不静默改写旧决策；Plan 标记 `completed` 前记录实际验证，标记 `blocked` 时记录原因和恢复条件。
 - 各级 `README.md` 只承担导航和当前状态摘要，不复制正文；新增、移动、作废或归档正式文档时同步维护相关索引和链接。根 `docs/` 不平铺业务文档，仓库根 `README.md` 不累积完整架构、调研或交接内容。
 

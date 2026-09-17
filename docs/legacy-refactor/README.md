@@ -1,20 +1,18 @@
-# Legacy Python 重构文档入口
+# Legacy Python 重构历史资料入口
 
-## 定位与当前状态
+## 状态
 
-本产品线面向旧图纸集生成工具的现代 Python 重构。当前架构基线已接受，实施路线仍为 `proposed`；尚未形成可声明的独立产品版本。
+原 `legacy-refactor` 已正式演进为独立产品 **DST Builder**。本目录不再是现役产品 scope，不再接收新的产品需求、架构或实施计划；当前产品入口见 [DST Builder 文档](../dst-builder/README.md)。
 
-## 当前规范与决策
+## 被取代的基线
 
-- [产品愿景](product/vision.md)
-- [实施路线图](../../.planning/roadmaps/legacy-refactor.md)
-- [现代 Python 重构架构基线（ARCH-LR-001）](architecture/ARCH-LR-001-modern-python-refactor-baseline.md)
+- [Legacy 产品愿景（VISION-LR-001，superseded）](product/vision.md)
+- [现代 Python 重构架构基线（ARCH-LR-001，superseded）](architecture/ARCH-LR-001-modern-python-refactor-baseline.md)
+- [Legacy Python 重构路线图（ROADMAP-LR-001，cancelled）](../../.planning/roadmaps/legacy-refactor.md)
+
+## 仍可复用的历史资料
+
 - [Python 与 pyautocad 重构可行性评估（RES-LR-001）](research/RES-LR-001-python-refactor-assessment.md)
-
-当前没有独立 PRD、Spec 或 ADR。后续需求和决策应按[仓库文档模板](../README.md#规范与模板)新增，不从现有基线批量复制。
-
-## 指南
-
 - [Legacy 开发与交接指南（GUIDE-LR-001）](guides/GUIDE-LR-001-legacy-development-handover.md)
 
-当前暂无独立部署指南或使用指南。
+这些资料可用于规则考古、黄金样本设计和旧链路理解，但不构成 DST Builder 的兼容承诺。新的稳定结论应写入 `dst-builder`、`shared` 或 `integration` 对应权威位置，并链接历史来源。

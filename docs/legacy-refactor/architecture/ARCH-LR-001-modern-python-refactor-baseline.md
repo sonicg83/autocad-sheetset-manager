@@ -1,18 +1,22 @@
 ---
 id: ARCH-LR-001
 title: 现代 Python 重构架构基线
-status: accepted
+status: superseded
 owners:
   - legacy-refactor
 created: 2026-08-10
-updated: 2026-08-17
+updated: 2026-09-17
 related:
   - RES-LR-001
   - GUIDE-LR-001
+  - ARCH-DB-001
+  - RFC-INT-001
 document_kind: architecture-baseline
 ---
 
 # 现代化 Python 重构架构设计（决策基线）
+
+> 本架构已由 [ARCH-DB-001：DST Builder 绿地桌面架构基线](../../dst-builder/architecture/ARCH-DB-001-greenfield-desktop-baseline.md)取代。本文保留旧重构方向和决策背景，不构成 DST Builder 的运行时兼容、部署或实施承诺。
 
 > 状态：最终定稿；ADR-001 至 ADR-020 已关闭
 >

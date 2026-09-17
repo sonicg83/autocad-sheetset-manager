@@ -145,6 +145,7 @@ uv run pytest tests/system_autocad -q
 
 - [使用指南（面向最终用户）](docs/dst-manager/guides/GUIDE-DM-006-user-guide.md)
 - [完整文档入口](docs/README.md)
+- [DST Builder 产品文档](docs/dst-builder/README.md)
 - [DST Manager 产品文档](docs/dst-manager/README.md)
 - [MVP 架构与验收基线（ARCH-DM-001）](docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md)
 - [公共 AutoCAD/DST 能力](docs/shared/README.md)

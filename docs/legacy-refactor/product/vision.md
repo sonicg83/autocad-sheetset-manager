@@ -1,17 +1,21 @@
 ---
 id: VISION-LR-001
 title: Legacy 图纸集生成工具现代 Python 重构愿景
-status: accepted
+status: superseded
 owners:
   - legacy-refactor
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-09-17
 related:
   - ARCH-LR-001
   - RES-LR-001
+  - VISION-DB-001
+  - RFC-INT-001
 ---
 
 # Legacy 图纸集生成工具现代 Python 重构愿景
+
+> 本愿景已由 [VISION-DB-001：DST Builder 产品愿景](../../dst-builder/product/vision.md)取代。本文保留为历史输入，不构成 DST Builder 的兼容或实施承诺。
 
 ## 产品愿景
 
