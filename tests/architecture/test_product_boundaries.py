@@ -24,9 +24,9 @@ FORBIDDEN_RELATIONS = [
         {"dst_manager"},
     ),
     (
-        "dst_platform 不得依赖任何产品包",
+        "dst_platform 不得依赖任何产品包或框架",
         "dst_platform",
-        {"dst_builder", "dst_manager"},
+        {"dst_builder", "dst_manager", "fastapi", "sqlalchemy"},
     ),
     (
         "dst_builder.domain 不得依赖框架与 Manager",
@@ -86,6 +86,10 @@ def test_gate_rules_cover_expected_relations() -> None:
     """门禁规则本身不得被静默清空。"""
     assert len(FORBIDDEN_RELATIONS) >= 3
     assert all(item[2] for item in FORBIDDEN_RELATIONS)
+    # 规则 2（dst_platform）的禁止集须与计划元组一致。
+    assert {"dst_builder", "dst_manager", "fastapi", "sqlalchemy"} <= (
+        FORBIDDEN_RELATIONS[1][2]
+    )
 
 
 def test_imported_top_levels_detects_real_imports() -> None:
