@@ -193,7 +193,12 @@ class CadDrawingRequestV1:
 
 @dataclass(frozen=True, slots=True)
 class CadDrawingResultV1:
-    """§7 单 DWG 生成结果：插件写出前七项，DWG 大小与 SHA-256 由 Python 计算。"""
+    """§7 单 DWG 生成结果：插件写出前七项，其余由 Python 计算补全。
+
+    ``cad_version`` 不在插件结果 payload 内：它是本次 attempt 实际使用的
+    CAD 版本证据，由 ``CoreConsoleDrawingBuilder.build`` 在发布后留痕
+    （Task 9 构建/事件层接线点）。
+    """
 
     schema: str
     request_id: str
@@ -204,6 +209,7 @@ class CadDrawingResultV1:
     diagnostics: tuple[Diagnostic, ...]
     dwg_size: int | None = None
     dwg_sha256: str | None = None
+    cad_version: str | None = None
 
     @classmethod
     def from_payload(cls, payload: object) -> CadDrawingResultV1:

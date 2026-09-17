@@ -81,7 +81,18 @@ def make_configuration(tmp_path: Path) -> CadConfiguration:
     console.write_bytes(b"MZ fake console")
     plugin = cad / "DstBuilder.AutoCAD.dll"
     plugin.write_bytes(b"MZ fake plugin")
-    return CadConfiguration(console_2020=console, plugin_2020=plugin)
+    cad_2016 = cad / "2016"
+    cad_2016.mkdir(exist_ok=True)
+    console_2016 = cad_2016 / "accoreconsole.exe"
+    console_2016.write_bytes(b"MZ fake console 2016")
+    plugin_2016 = cad_2016 / "DstBuilder.AutoCAD.dll"
+    plugin_2016.write_bytes(b"MZ fake plugin 2016")
+    return CadConfiguration(
+        console_2020=console,
+        plugin_2020=plugin,
+        console_2016=console_2016,
+        plugin_2016=plugin_2016,
+    )
 
 
 def make_task() -> DrawingTask:
@@ -142,7 +153,7 @@ def test_build_happy_path_publishes_dwg_with_sha256(tmp_path: Path) -> None:
     )
     builder, root, attempt, configuration = make_builder(tmp_path, executor)
 
-    result = builder.build(make_task(), attempt)
+    result = builder.build(make_task(), attempt, cad_version="2020")
 
     # 参数数组输入：console/drawing/script 来自显式配置与 attempt 契约路径。
     assert len(executor.requests) == 1
@@ -171,6 +182,8 @@ def test_build_happy_path_publishes_dwg_with_sha256(tmp_path: Path) -> None:
     assert result.layouts == (TARGET_LAYOUT,)
     assert result.dwg_size == len(BUILT_CONTENT)
     assert result.dwg_sha256 == hashlib.sha256(BUILT_CONTENT).hexdigest()
+    # attempt 版本证据：结果留痕实际使用的 CAD 版本（Task 9 接线点）。
+    assert result.cad_version == "2020"
 
 
 def test_build_script_file_matches_fixed_renderer(tmp_path: Path) -> None:
@@ -179,7 +192,7 @@ def test_build_script_file_matches_fixed_renderer(tmp_path: Path) -> None:
     executor = FakeExecutor(lambda request, fake: write_result(request, attempt, {}))
     builder, _, attempt, configuration = make_builder(tmp_path, executor)
 
-    builder.build(make_task(), attempt)
+    builder.build(make_task(), attempt, cad_version="2020")
 
     expected = render_worker_scr(
         str(configuration.plugin_2020), str(attempt.request_json)
@@ -208,7 +221,7 @@ def test_build_timeout_is_blocked_as_interrupted(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, FakeExecutor(timeout))
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == BUILD_INTERRUPTED
 
 
@@ -219,7 +232,7 @@ def test_build_process_failure_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, FakeExecutor(failure))
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -227,7 +240,7 @@ def test_build_missing_result_json_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, FakeExecutor())
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -240,7 +253,7 @@ def test_build_result_version_mismatch_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, executor)
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -253,7 +266,7 @@ def test_build_request_id_mismatch_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, executor)
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -266,7 +279,7 @@ def test_build_layout_set_mismatch_is_blocked(tmp_path: Path) -> None:
         )
 
         with pytest.raises(CadDrawingError) as excinfo:
-            builder.build(make_task(), attempt)
+            builder.build(make_task(), attempt, cad_version="2020")
         assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -277,7 +290,7 @@ def test_build_invalid_handle_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, executor)
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
 
 
@@ -292,8 +305,46 @@ def test_build_blocking_diagnostic_is_blocked(tmp_path: Path) -> None:
     builder, _, attempt, _ = make_builder(tmp_path, executor)
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
+
+
+def test_build_uses_requested_version_without_cross_version_fallback(tmp_path: Path) -> None:
+    """计划版本=2016 而 2020 也可用时，仍严格使用 2016（SPEC §2/§5/§7）。"""
+    executor = FakeExecutor(lambda request, fake: write_result(request, attempt, {}))
+    builder, _, attempt, configuration = make_builder(tmp_path, executor)
+
+    builder.build(make_task(), attempt, cad_version="2016")
+
+    assert executor.requests[0].console == configuration.console_2016
+
+
+def test_build_unavailable_requested_version_is_blocked_without_fallback(tmp_path: Path) -> None:
+    """请求的 2016 未配置而 2020 可用：以 CAD_VERSION_UNAVAILABLE 阻断，不回退。"""
+    root = make_project(tmp_path)
+    configuration = make_configuration(tmp_path)
+    configuration = CadConfiguration(
+        console_2020=configuration.console_2020, plugin_2020=configuration.plugin_2020
+    )
+    executor = FakeExecutor()
+    builder = CoreConsoleDrawingBuilder(root, configuration, executor=executor)
+    attempt = AttemptPaths.create(tmp_path / "attempt")
+    attempt.attempt_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(CadDrawingError) as excinfo:
+        builder.build(make_task(), attempt, cad_version="2016")
+    assert excinfo.value.code == CAD_VERSION_UNAVAILABLE
+    assert executor.requests == []
+
+
+def test_build_rejects_unsupported_version(tmp_path: Path) -> None:
+    executor = FakeExecutor()
+    builder, _, attempt, _ = make_builder(tmp_path, executor)
+
+    with pytest.raises(CadDrawingError) as excinfo:
+        builder.build(make_task(), attempt, cad_version="2024")
+    assert excinfo.value.code == CAD_VERSION_UNAVAILABLE
+    assert executor.requests == []
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +403,7 @@ def test_unavailable_capability_is_blocked(tmp_path: Path, cad_version: str) -> 
     attempt = AttemptPaths.create(tmp_path / "attempt")
     attempt.attempt_dir.mkdir(parents=True)
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_VERSION_UNAVAILABLE
 
 
@@ -379,6 +430,6 @@ def test_missing_base_asset_is_blocked_before_process_start(tmp_path: Path) -> N
     (root / f"assets/base/base-{BASE_SHA}.dwg").unlink()
 
     with pytest.raises(CadDrawingError) as excinfo:
-        builder.build(make_task(), attempt)
+        builder.build(make_task(), attempt, cad_version="2020")
     assert excinfo.value.code == CAD_EXECUTION_FAILED
     assert executor.requests == []

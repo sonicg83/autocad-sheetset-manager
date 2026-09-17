@@ -54,7 +54,7 @@ def _require_environment() -> tuple[str, Path, str]:
 
 
 def test_real_autocad_minimal_drawing(tmp_path: Path) -> None:
-    _, sample, source_layout = _require_environment()
+    cad_version, sample, source_layout = _require_environment()
 
     # 私有样本副本：样本原件绝不进入生成流程。
     root = tmp_path / "project"
@@ -85,7 +85,7 @@ def test_real_autocad_minimal_drawing(tmp_path: Path) -> None:
         target_dwg_path=f"drawings/{target_layout}.dwg",
     )
 
-    result = builder.build(task, attempt)
+    result = builder.build(task, attempt, cad_version=cad_version)
 
     final = root / "drawings" / f"{target_layout}.dwg"
     assert final.is_file()

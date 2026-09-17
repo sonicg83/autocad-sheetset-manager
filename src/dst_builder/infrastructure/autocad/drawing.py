@@ -65,11 +65,15 @@ class CadDrawingError(Exception):
 
 
 class DrawingBuilder(Protocol):
-    """§7 生成端口：真实实现为 :class:`CoreConsoleDrawingBuilder`。"""
+    """§7 生成端口：真实实现为 :class:`CoreConsoleDrawingBuilder`。
+
+    ``cad_version`` 必须由接线方从用户确认的计划（``GenerationPlanV1.cad_version``，
+    SPEC §2/§5）显式传入；Worker 只执行匹配版本，禁止跨版本回退。
+    """
 
     def inspect_layouts(self, asset: AssetSnapshot, cad_version: CadVersion) -> tuple[str, ...]: ...
 
-    def build(self, task: DrawingTask, attempt: AttemptPaths) -> CadDrawingResultV1: ...
+    def build(self, task: DrawingTask, attempt: AttemptPaths, *, cad_version: CadVersion) -> CadDrawingResultV1: ...
 
 
 class CoreConsoleDrawingBuilder:
@@ -111,8 +115,12 @@ class CoreConsoleDrawingBuilder:
                 raise self._execution_failed("inspection 结果 request ID 不匹配")
             return result.layouts
 
-    def build(self, task: DrawingTask, attempt: AttemptPaths) -> CadDrawingResultV1:
-        """执行单 DWG 生成：工作副本 → 插件导入布局 → 发布 → 计算大小与哈希。"""
+    def build(self, task: DrawingTask, attempt: AttemptPaths, *, cad_version: CadVersion) -> CadDrawingResultV1:
+        """执行单 DWG 生成：工作副本 → 插件导入布局 → 发布 → 计算大小与哈希。
+
+        ``cad_version`` 为用户在 SPEC §2 步骤 2 显式确认的计划版本；匹配版本
+        能力不可用时以 ``CAD_VERSION_UNAVAILABLE`` 阻断，绝不回退另一版本。
+        """
         try:
             request = CadDrawingRequestV1.create(
                 task=task, attempt=attempt, project_root=self._project_root
@@ -120,7 +128,7 @@ class CoreConsoleDrawingBuilder:
         except CadDrawingRequestError as error:
             raise CadDrawingError(CAD_EXECUTION_FAILED, str(error)) from error
 
-        console, plugin = self._capability_for_build()
+        console, plugin = self._capability(cad_version)
         source = self._resolve_asset(task.base_asset.relative_path)
         if not source.is_file():
             raise CadDrawingError(CAD_EXECUTION_FAILED, f"基础资产不存在：{source}")
@@ -149,7 +157,9 @@ class CoreConsoleDrawingBuilder:
         final = self._resolve_asset(task.target_dwg_path)
         final.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(attempt.working_dwg, final)
-        return replace(result, dwg_size=final.stat().st_size, dwg_sha256=_file_sha256(final))
+        # cad_version 为本次 attempt 实际使用的版本证据（Python 侧留痕，不属插件
+        # 结果 payload）；Task 9 构建/事件层接线时据此写入 attempt 证据。
+        return replace(result, cad_version=cad_version, dwg_size=final.stat().st_size, dwg_sha256=_file_sha256(final))
 
     # -- 内部 ----------------------------------------------------------------
 
@@ -177,20 +187,6 @@ class CoreConsoleDrawingBuilder:
             "2016": self._configuration.plugin_2016,
             "2020": self._configuration.plugin_2020,
         }.get(cad_version)
-
-    def _capability_for_build(self) -> tuple[Path, Path]:
-        """build 的版本选择：优先 2020，其次 2016（两个版本插件行为一致）。
-
-        2016/2020 双版本产物由插件构建脚本分别产出；全部不可用时以
-        ``CAD_VERSION_UNAVAILABLE`` 阻断。
-        """
-        errors: list[str] = []
-        for cad_version in ("2020", "2016"):
-            try:
-                return self._capability(cad_version)
-            except CadDrawingError as error:
-                errors.append(f"{cad_version}: {error.message}")
-        raise CadDrawingError(CAD_VERSION_UNAVAILABLE, "；".join(errors))
 
     def _resolve_asset(self, relative_path: str) -> Path:
         try:
