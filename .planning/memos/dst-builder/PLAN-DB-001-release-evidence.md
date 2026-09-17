@@ -40,6 +40,9 @@ related:
 
 两版本均使用各自匹配的 Core Console 与插件 DLL，未以一个版本结果推断另一个版本。
 
+**时序澄清（Task 12 终审评审补记）：** 2020 系统测试通过时使用的是**最终重建前**的 DLL；2016 首跑暴露插件缺陷后，经 `build_builder_plugins.ps1` 重建**双版本** DLL，2016 用重建后二进制通过。因两版本共享同一份 `Commands.cs` 源码（缺陷修复在源码层，重建仅重编译同一源码），最终重建后 2020 未复跑系统测试；此点如实登记，如需严格同二进制复验可在人工验证轮补跑 2020。
+**SaveDrawing 版本澄清（Task 12 终审评审补记）：** 插件 `SaveDrawing` 改用 `DwgVersion.Current`：产物 DWG 版本随宿主 Core Console（与 `cad_version` 匹配）的原生版本而定；DWG SHA-256 只作发布留痕（§9 provenance），不参与确定性比对（计划冻结比对在计划/修订 JSON 层），故不指定固定 DWG 版本号。
+
 **执行中发现并修复的真实缺陷（Task 7 插件潜伏缺陷，此前真实测试从未具备环境执行）：**
 
 1. **布局导入策略缺陷**：直接 `WblockCloneObjects` 克隆 Layout 对象到目标库布局字典时，源/目标 DWG 的匿名纸空间块（`*Paper_Space0`）同名，`DuplicateRecordCloning.Ignore` 跳过克隆导致两布局共享同一块表记录，AutoCAD 自动补出默认布局（如“布局1”），最终布局集合校验失败（`DSTBUILDER_FINAL_LAYOUT_SET_INVALID`）。修复（`plugins/src/DstBuilder.AutoCAD/Commands.cs`）：改为在目标库 `CreateLayout` 创建全新布局后**实体级克隆**纸空间内容，再 `CopyFrom` 复制打印设置。
@@ -66,7 +69,89 @@ Task 10 新增 Manager `POST /api/handoffs/open` 后，`web/src/api/openapi.json
 
 ## 3. 独立代码审查
 
-独立代码审查（0 Critical / 0 Important，Minor 逐项裁决）**待 controller 在本提交后做全分支终审**，结论将回填本备忘。当前不写“已通过”。
+### 3.1 终审结论（2026-09-18 回填）
+
+全分支终审已由 controller 执行（范围 `838c4da..3427171`，六遍遍历），结论：**0 Critical / 3 Important / 12 Minor（Ready to merge: With fixes）**。3 项 Important 已在本分支修复并复验：
+
+1. **`_STATUS_BY_ERROR` 精确类型匹配 → MRO 查找**（`src/dst_builder/interfaces/api.py`）：未逐字登记的异常子类经 `exc.__class__.__mro__` 继承最近命中基类的状态码，不再静默落 400；补子类回归测试。
+2. **`recover_pending_builds` 事务内文件 I/O 拆分**（`src/dst_builder/application/build_recovery.py`）：改为短事务只读待恢复项 → 事务关闭后执行文件现场裁决（读发布证据、verify 大包哈希、清理暂存）→ 每项独立短事务写回结果；四分支裁决语义不变，补"文件 I/O 不在事务内"回归测试。
+3. **资源清理**（`src/dst_builder/application/builds.py` + lifespan）：终态（CANCELLED/SUCCEEDED/FAILED）迁移即清除 `(build_id, attempt)` 取消标志；新增 `BuildCoordinator.close()` 关闭后台构建线程执行器，并接入 `create_builder_app` lifespan shutdown 钩子；补两项回归测试。
+
+**修复后终审结论：0 Critical / 0 Important。** 复验门禁：`uv run pytest tests/builder/ tests/architecture/`（686 passed / 3 skipped）、全量 `uv run pytest`（2267 tests，0 failures，75 skipped）、`uv run ruff check .`（0 违规）。
+
+### 3.2 Minor 逐项裁决（终审 + 各任务评审积压，均不阻塞合并）
+
+**Task 1（架构守卫）**
+- 覆盖守卫按位置索引 `FORBIDDEN_RELATIONS[1][2]` 有顺序耦合且用子集断言：接受——最小架构门禁可辩护，超集绕过不构成实际漏洞。
+- 动态 import 可绕过 AST 门禁：接受——已知限制，已记录于测试 docstring。
+- CLI 无参建议 `no_args_is_help`、守卫 `==3` 放宽 `>=3`、探针文件进程强杀残留（try/finally 已覆盖常规路径）、xdist 并行探针理论竞争（当前串行）：接受现状。
+- fix report"四成员均在探针覆盖内"表述略夸大：接受——实为 import 形态覆盖，扫描器与名称无关，实质成立。
+
+**Task 2（规范化/命名）**
+- `normalization.py` docstring 误写"计划哈希"（task_id 实派生自 revision sha256，循环自由、符合意图）：接受——Task 4/8 dispatch 已注明系有意为之。
+- 前缀尾空格与 0x7F 未参数化：接受——行为正确，仅测试参数化程度问题。
+- RED 证据省略 2/5 模块输出：接受——流程性改进，已向后续任务要求完整 RED 输出。
+
+**Task 3（项目/草稿 API）**
+- `create_project` 非原子（记录插入失败遗留空 .dstb）：推迟——仅全新目录创建时可能触发，概率极低，留下一轮。
+- `_STATUS_BY_ERROR` 精确类型匹配致子类静默落 400：**已修复**（终审 Important ①）。
+- 422 handler details 可能含不可 JSON 序列化 input：接受——FastAPI 校验错误结构受控，风险极低。
+- OpenAPI 422 记录与自定义 handler 实际形态不符：推迟——可用 `openapi_extra` 修，留下一轮。
+- `_validate_wizard_step` 裸 ValueError 死防御、测试名不副实、`_error_response` 恒输出 `details:null`：接受——无行为影响。
+
+**Task 5（前端七步 UI）**
+- WizardShell `--space-8` 未定义令牌靠 fallback：接受——视觉结果正确。
+- HandoffStep 硬编码 build-1、buildId 未上收 store：接受——Task 9/10 已接线实际数据，残留清理留后续。
+- ProjectStep 仅 output_path 有行内 aria 错误、hydrating 标志死代码：接受——无行为影响。
+- rulesOk 内联复制校验规则：接受——建议 SPEC 稳定后补权威来源注释。
+- blocking 诊断无 field 永不阻断：接受——行为符合契约，建议补注释。
+- TemplatesStep cad_version 强转（先纳入资产后选版本会发空值）：接受——UI 引导顺序已隐含约束。
+- `--font-ui` 字体栈与 Manager 不同：接受——本地选择，建议注释明示。
+- error Toast 宜 `role="alert"`：接受——可访问性改进留下一轮。
+- BuildStep 轮询失败静默无上限：接受——单用户桌面场景风险低。
+- openapi.json inspect 端点缺 501 声明：接受——Task 12 已整体重生成双侧 OpenAPI 契约，如仍缺 501 声明留下一轮补 `openapi_extra`。
+
+**Task 6（共享原语）**
+- `test_platform_acsm_contract.py` 函数内局部 import dst_manager：接受——brief 强制的同类型断言所需。
+- Manager codec.py `__all__` 导出私有名 `_DECODE/_ENCODE`：接受——既有 test_core.py 依赖，改名涉及 Manager 侧回归。
+- CoreConsoleRequest.locale 默认 zh-CN 为 brief 外微小新增：接受——与目标环境一致。
+
+**Task 7（CAD 管线）**
+- `_write_script` 的 mbcs 写入在 try 外：接受——生僻字符场景失败即构建失败（fail-closed）。
+- C# 侧不校验 layout_asset_path containment + 未 resolve 符号链接：接受——Python 侧第一道防御已校验，C# 侧为纵深弱化而非缺失。
+- drawing.py docstring 提及取消路径：接受——Task 8+ 已实现，注释不再超前。
+- 绿证据 log 缺 pytest 汇总行：接受——流程记录问题。
+- Contracts.cs 依赖 ExtensionDataObject 私有字段名 "members"：接受——fail-closed 可接受。
+- 提交体量 2573 行：接受——C#+Python 范围决定，可辩护。
+
+**Task 9（build/attempt 编排）**
+- 并发双 POST /api/builds 可同时过检：接受——单用户桌面应用；建议后续捕获完整性错误。
+- UI 用 500ms 轮询而非消费 SSE 端点：接受——SSE 服务端完整已测，轮询为前端简化。
+- `unique_staging_name` 忽略参数：接受——签名冗余，无行为影响。
+- `recover_pending_builds` 事务内 rmtree/verify：**已修复**（终审 Important ②）；`list_attempts[-1]` 可能 IndexError：接受——正常路径不产生无 attempt 的 run。
+- stream_events 每 100ms 全量重读 O(n²)：接受——单构建事件量小，桌面场景可接受。
+- ThreadPoolExecutor 从不关闭：**已修复**（终审 Important ③）。
+- builds.py 行数超软上限：接受——已拆分后仍超，进一步拆分收益低。
+
+**Task 10（交接）**
+- 崩溃残留复用路径无测试（"目录在 DB 无行"场景）：接受——防御逻辑存在，测试补齐留下一轮。
+- 集成零写入矩阵缺 symlink/绝对路径/DST 损坏 3 场景：接受——结构上不可能写入，字面偏差。
+- 幂等路径不补写 workspace.json：接受——重开走 DB 不受影响。
+- 并发异哈希窄窗错误码 HANDOFF_INVALID 替代 ID_CONFLICT：接受——瞬态，重试即正确。
+- builds.py 753 行既有债务：接受——同 Task 9。
+- HandoffStep.vue:85 冗余三元：接受——纯清理。
+
+**Task 11（桌面打包）**
+- +1150 行超软上限 2.3 倍：接受——brief 测试体量驱动。
+- 第二实例无前台唤起（与 Manager 行为差异）：接受——有意裁剪，建议 docstring 明示。
+- start_local_server 忙等无超时：接受——与 Manager 同病，本地环回场景风险低。
+- Path(__file__) 守护测试重复两份、test_non_windows_platform_allows_startup 全平台 monkeypatch 更优：接受——测试风格建议。
+
+**Task 12（收口）**
+- ① "最终重建后的 2020 DLL 未复跑系统测试"未明确：**已澄清**——补入本备忘 §1.1 时序澄清段。
+- ② 收敛逻辑宽进条件（saved 缺失时可能发布 base 副本）：接受——现状不可达，真实路径已要求 saved 存在；如后续放宽需先加防御。
+- ③ Commands.cs:62-64 改名分支近乎死代码：接受——保留作诊断/兼容分支，建议后续补触发条件注释。
+- ④ SaveDrawing 改 `DwgVersion.Current` 未说明理由：**已澄清**——补入本备忘 §1.1 版本澄清段。
 
 ## 4. 结论与剩余门禁
 

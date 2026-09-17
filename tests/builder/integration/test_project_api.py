@@ -138,6 +138,42 @@ def test_create_project_rejects_existing_database(client: TestClient) -> None:
     assert client.get("/api/projects/current").status_code == 200
 
 
+def test_error_status_inherits_via_mro_for_unregistered_subclass(
+    project_root: Path, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """终审 Important ① 回归：未逐字登记的异常子类经 MRO 继承基类状态码，而非落 400。"""
+    from dst_builder.application.assets import AssetHashMismatchError
+    from dst_builder.application.projects import (
+        BuilderProjectService,
+        ProjectExistsError,
+    )
+    from dst_builder.interfaces.api import _status_for_error
+
+    class UnregisteredExistsError(ProjectExistsError):
+        """未在 _STATUS_BY_ERROR 登记的子类（基类映射 409）。"""
+
+    class UnregisteredHashMismatchError(AssetHashMismatchError):
+        """未登记的资产子类（基类映射 409）。"""
+
+    # 纯函数路径：MRO 命中基类状态码。
+    assert _status_for_error(UnregisteredExistsError("x")) == 409
+    assert _status_for_error(UnregisteredHashMismatchError("x")) == 409
+    # 完全未登记的错误族仍落默认 400。
+    class UnregisteredError(Exception):
+        pass
+
+    assert _status_for_error(UnregisteredError("x")) == 400
+
+    # API 路径：handler 抛出的子类异常得到 409 而非 400。
+    def raise_subclass(self, creation):
+        raise UnregisteredExistsError("注入：子类异常")
+
+    monkeypatch.setattr(BuilderProjectService, "create_project", raise_subclass)
+    response = client.post("/api/projects", json=_create_body())
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "PROJECT_PATH_INVALID"
+
+
 def test_create_project_without_factory_root_uses_request_root(tmp_path: Path) -> None:
     """应用工厂未绑定根目录时，POST 请求体中的 project_root 生效。"""
     root = tmp_path / "from-request"

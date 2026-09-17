@@ -695,8 +695,16 @@ class BuildCoordinator:
                     ),
                     finished_at=utc_now_iso(),
                 )
+                # 终态迁移即清除该 (build_id, attempt) 的取消标志（终审
+                # Important ③）：CANCELLED/SUCCEEDED/FAILED 之后标志不可能
+                # 再被检查点消费，留驻只会累积陈旧 Event。
+                self._cancel_flags.pop((build_id, attempt), None)
 
     # -- 内部 ---------------------------------------------------------------
+
+    def close(self) -> None:
+        """关闭后台构建线程执行器（应用 lifespan shutdown 钩子调用，终审 Important ③）。"""
+        self._executor.shutdown(wait=False)
 
     def _require_database(self) -> Database:
         if self._database is None:

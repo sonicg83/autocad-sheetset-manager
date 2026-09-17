@@ -324,6 +324,63 @@ def test_publishing_without_evidence_requires_manual_recovery(recovery) -> None:
     assert attempts[-1].error_code == PUBLISH_RECOVERY_REQUIRED
 
 
+def test_publishing_file_io_runs_outside_database_transaction(
+    recovery, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """终审 Important ② 回归：verify_package 等文件 I/O 不得在数据库事务内执行。
+
+    用事务计数代理包裹 sessions.begin()，在 verify_package 被调用的瞬间
+    断言活跃事务数为 0（重构前恢复循环全程持有事务）。
+    """
+    from dst_builder.application import build_recovery as recovery_module
+
+    build_id = recovery.add_build("PUBLISHING", "PUBLISHING")
+    attempt_dir = _seed_attempt_dirs(recovery, build_id)
+    _write_valid_package(recovery.output_target)
+    _seed_publish_evidence(
+        attempt_dir, recovery.output_target, recovery.output_target.parent / ".gone-staging"
+    )
+
+    counter = {"live": 0}
+    real_sessions = recovery.database.sessions
+
+    class _TrackedTransaction:
+        def __init__(self, real) -> None:
+            self._real = real
+
+        def __enter__(self):
+            counter["live"] += 1
+            return self._real.__enter__()
+
+        def __exit__(self, *exc_info):
+            counter["live"] -= 1
+            return self._real.__exit__(*exc_info)
+
+    class _TrackedSessions:
+        def begin(self):
+            return _TrackedTransaction(real_sessions.begin())
+
+    monkeypatch.setattr(recovery.database, "sessions", _TrackedSessions())
+
+    observed: dict[str, int] = {}
+    original_verify = recovery_module.verify_package
+
+    def spy_verify(target):
+        observed["live_during_verify"] = counter["live"]
+        return original_verify(target)
+
+    monkeypatch.setattr(recovery_module, "verify_package", spy_verify)
+
+    outcomes = recovery_module.recover_pending_builds(
+        recovery.project_root, recovery.database
+    )
+
+    assert [outcome.error_code for outcome in outcomes] == [None]
+    assert observed["live_during_verify"] == 0, (
+        "verify_package 在数据库事务内执行（耗时哈希持锁）"
+    )
+
+
 def test_recovery_appends_event_to_attempt_history(recovery) -> None:
     build_id = recovery.add_build("BUILDING_DWG", "BUILDING_DWG")
     _seed_attempt_dirs(recovery, build_id)

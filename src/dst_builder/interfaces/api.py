@@ -98,9 +98,21 @@ _STATUS_BY_ERROR = {
 }
 
 
+def _status_for_error(exc: Exception) -> int:
+    """按异常 MRO 查找登记状态码（终审 Important ①）。
+
+    未逐字登记的子类异常继承最近命中基类的状态码，而非静默落默认 400；
+    全部未命中（理论上不可达，handler 只注册两个错误族）时保留默认 400。
+    """
+    for base in exc.__class__.__mro__:
+        if base in _STATUS_BY_ERROR:
+            return _STATUS_BY_ERROR[base]
+    return 400
+
+
 @asynccontextmanager
 async def _builder_lifespan(app: FastAPI):
-    """应用启动钩子：绑定项目根时执行 §6 启动恢复。"""
+    """应用启动钩子：绑定项目根时执行 §6 启动恢复；关闭时释放构建线程池。"""
     root = app.state.project_root
     if root is not None and (Path(root) / "project.dstb").is_file():
         database = Database(Path(root) / "project.dstb")
@@ -108,7 +120,14 @@ async def _builder_lifespan(app: FastAPI):
             recover_pending_builds(Path(root), database)
         finally:
             database.engine.dispose()
-    yield
+    try:
+        yield
+    finally:
+        # 终审 Important ③：lifespan shutdown 关闭惰性创建的构建执行器，
+        # 不遗留后台线程（尚未创建 coordinator 时为 None，无事可做）。
+        coordinator: BuildCoordinator | None = getattr(app.state, "build_coordinator", None)
+        if coordinator is not None:
+            coordinator.close()
 
 
 def _build_service_from_factory(request: Request) -> BuildCoordinator:
@@ -291,7 +310,7 @@ def create_builder_app(
     async def _handle_service_error(
         _: Request, exc: ProjectServiceError | AssetServiceError
     ) -> JSONResponse:
-        status = _STATUS_BY_ERROR.get(type(exc), 400)
+        status = _status_for_error(exc)
         return _error_response(
             status,
             error_payload(

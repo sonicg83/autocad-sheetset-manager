@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from pathlib import Path
 
 from dst_builder.infrastructure.filesystem.package import (
     HANDOFF_FILE,
@@ -399,6 +400,78 @@ def test_running_build_is_not_affected_by_draft_modification(env) -> None:
     paths = {entry["path"] for entry in manifest["files"]}
     assert "drawings/A-001 首层平面图.dwg" in paths
     assert not any("二层平面图" in path for path in paths)
+
+
+# ---------------------------------------------------------------------------
+# 终审 Important ③ 回归：取消标志终态清理 + 线程执行器关闭
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_flag_cleared_after_terminal_transition(env) -> None:
+    """终态迁移（此处 CANCELLED）后，(build_id, attempt) 取消标志必须被清除。"""
+    env.submit_plan()
+    env.confirm_plan()
+    entered, release = threading.Event(), threading.Event()
+
+    def gate(_cad_version: str, _attempt_dir) -> None:
+        entered.set()
+        assert release.wait(timeout=10)
+
+    env.fake_builder.behavior = gate
+    started = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    assert entered.wait(timeout=5)
+    coordinator = env.client.app.state.build_coordinator
+    flag_key = (started["build_id"], started["attempt"])
+
+    assert env.client.post(f"/api/builds/{started['build_id']}/cancel").status_code == 202
+    # 后台线程仍阻塞在 CAD 检查点内：取消标志由 cancel_build 创建且尚未被消费。
+    assert flag_key in coordinator._cancel_flags
+    release.set()
+    final = env.wait_terminal(started["build_id"])
+    assert final["status"] == "CANCELLED"
+    assert flag_key not in coordinator._cancel_flags, "终态迁移后取消标志未清除"
+
+
+class _StubExecutor:
+    """记录 shutdown 调用的线程执行器替身。"""
+
+    def __init__(self) -> None:
+        self.shutdown_calls: list[bool] = []
+
+    def shutdown(self, wait: bool = True) -> None:
+        self.shutdown_calls.append(wait)
+
+
+def test_coordinator_close_shuts_down_executor() -> None:
+    """BuildCoordinator.close() 必须关闭后台构建线程执行器。"""
+    from dst_builder.application.builds import BuildCoordinator
+
+    coordinator = BuildCoordinator(Path("."), drawing_builder=None)
+    stub = _StubExecutor()
+    coordinator._executor = stub
+    coordinator.close()
+    assert stub.shutdown_calls == [False]
+
+
+def test_lifespan_shutdown_closes_build_coordinator() -> None:
+    """应用 lifespan shutdown 钩子必须调用构建编排者的 close()。"""
+    from fastapi.testclient import TestClient
+
+    from dst_builder.interfaces.api import create_builder_app
+
+    class _StubCoordinator:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    app = create_builder_app()
+    stub = _StubCoordinator()
+    app.state.build_coordinator = stub
+    with TestClient(app):
+        pass  # 进入再退出：触发 startup/shutdown 钩子
+    assert stub.closed is True
 
 
 # ---------------------------------------------------------------------------

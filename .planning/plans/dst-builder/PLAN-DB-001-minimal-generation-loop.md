@@ -419,7 +419,7 @@ class DrawingBuilder(Protocol):
 - [ ] 用户/环境显式启用后，分别用 AutoCAD 2016、2020 完成：布局导入、DWG 保存（两版本真实系统测试已通过）、DST Codec/Schema（无 CAD 自动化覆盖）、官方 Sheet Set Manager 打开、成果发布、Manager 接管和初始修订恢复（后四项的真实端到端执行待人工/后续任务完成）。
 - [x] 真实 CAD 任一版本未执行时，在 evidence memo 和最终报告明确标为“开发闭环完成，正式双版本资格未满足”，不得把跳过写成通过。
 - [ ] 对七步 UI 执行键盘、错误聚焦、浅深主题、最小视口、200% 缩放（builder-web e2e 自动化覆盖）和真实 WebView2 验收（人工未执行，见 evidence memo）。
-- [ ] 独立代码审查必须确认 0 Critical、0 Important；Minor 要么修复，要么在 memo 中逐项裁决（待 controller 终审）。
+- [x] 独立代码审查必须确认 0 Critical、0 Important；Minor 要么修复，要么在 memo 中逐项裁决（终审 0 Critical/3 Important，3 项已修复并复验；Minor 逐项裁决见发布证据备忘）。
 - [x] 所有证据齐全后将 SPEC-DB-001 从 `review` 改为 `accepted`，PLAN-DB-001 从 `active` 改为 `completed`；若只完成开发门禁而缺真实资格，计划保持 `active` 并列出唯一剩余门禁（当前按后者执行：SPEC 保持 `review`，PLAN 保持 `active`）。
 - [x] Commit：`收口 DST Builder 最小生成闭环验证与文档`。
 

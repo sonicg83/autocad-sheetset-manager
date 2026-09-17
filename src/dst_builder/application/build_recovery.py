@@ -27,7 +27,6 @@ from dst_builder.infrastructure.persistence.database import Database, utc_now_is
 from dst_builder.infrastructure.persistence.repositories import (
     BuildAttemptRecord,
     BuildEventRecord,
-    BuildRunRecord,
     SqliteBuildRepository,
 )
 
@@ -65,63 +64,77 @@ class RecoveryOutcome:
     note: str
 
 
+@dataclass(frozen=True, slots=True)
+class _RecoveryDecision:
+    """事务外现场裁决结果：写回事务只消费该决定，绝不执行文件 I/O。"""
+
+    error_code: str | None  # None = 收敛 SUCCEEDED；否则 FAILED + 该码
+    error_detail: str  # 落库 error_detail（FAILED 分支）
+    note: str  # RecoveryOutcome.note
+    artifact_path: str | None = None  # 仅收敛 SUCCEEDED 时携带
+
+
 def recover_pending_builds(
     project_root: Path, database: Database
 ) -> list[RecoveryOutcome]:
-    """把所有非终止 build/attempt 恢复到确定终止状态；返回恢复结果。"""
+    """把所有非终止 build/attempt 恢复到确定终止状态；返回恢复结果。
+
+    事务边界（终审 Important ②）：先用单个短事务读出待恢复项，随后在
+    **事务外**执行文件现场裁决（读发布证据、verify 大包哈希、清理暂存），
+    最后每项用独立短事务写回结果——耗时文件 I/O 不再持有数据库写锁。
+    四分支裁决语义与逐项文件操作顺序保持不变。
+    """
     outcomes: list[RecoveryOutcome] = []
+    root = Path(project_root)
     with database.sessions.begin() as session:
         repository = SqliteBuildRepository(session)
-        pending: list[tuple[BuildRunRecord, BuildAttemptRecord]] = [
-            (run, repository.list_attempts(run.id)[-1])
+        pending: list[BuildAttemptRecord] = [
+            repository.list_attempts(run.id)[-1]
             for run in repository.list_non_terminal_runs()
         ]
-        for run, attempt in pending:
-            outcome = _recover_one(
-                repository, Path(project_root), run.id, run, attempt
+    for attempt in pending:
+        decision = _adjudicate_attempt(root, attempt)
+        if decision is None:
+            continue
+        with database.sessions.begin() as session:
+            outcome = _apply_decision(
+                SqliteBuildRepository(session), attempt.build_id, attempt, decision
             )
-            if outcome is not None:
-                outcomes.append(outcome)
+        outcomes.append(outcome)
     return outcomes
 
 
-def _recover_one(
-    repository: SqliteBuildRepository,
-    project_root: Path,
-    build_id: str,
-    run: BuildRunRecord,
-    attempt: BuildAttemptRecord,
-) -> RecoveryOutcome | None:
+def _adjudicate_attempt(
+    project_root: Path, attempt: BuildAttemptRecord
+) -> _RecoveryDecision | None:
+    """纯裁决：只读 attempt 记录与文件现场，不写库。"""
     status = BuildStatus(attempt.status)
     if status in _TERMINAL_STATUSES:
         return None
     if status in _INTERRUPTED_STATUSES:
         # PREPARING～VERIFYING 中断：保留现场，不续跑半完成 CAD 命令。
-        _fail_attempt(repository, build_id, attempt, BUILD_INTERRUPTED, "构建被中断（启动恢复）")
-        return RecoveryOutcome(
-            build_id=build_id,
-            attempt=attempt.attempt,
+        return _RecoveryDecision(
             error_code=BUILD_INTERRUPTED,
+            error_detail="构建被中断（启动恢复）",
             note=f"{status.value} 中断，现场已保留",
         )
     if status is BuildStatus.PUBLISHING:
-        return _recover_publishing(repository, project_root, build_id, attempt)
+        return _adjudicate_publishing(project_root, attempt)
     return None
 
 
-def _recover_publishing(
-    repository: SqliteBuildRepository,
-    project_root: Path,
-    build_id: str,
-    attempt: BuildAttemptRecord,
-) -> RecoveryOutcome:
-    attempt_dir = attempt_dir_for(project_root, build_id, attempt.attempt)
+def _adjudicate_publishing(
+    project_root: Path, attempt: BuildAttemptRecord
+) -> _RecoveryDecision:
+    attempt_dir = attempt_dir_for(project_root, attempt.build_id, attempt.attempt)
     try:
         evidence = read_publish_evidence(attempt_dir)
     except PublishEvidenceError as error:
         # 歧义现场：无法裁决目标/暂存状态，阻止自动删除。
-        return _require_manual_recovery(
-            repository, build_id, attempt, f"发布证据不可用：{error}"
+        return _RecoveryDecision(
+            error_code=PUBLISH_RECOVERY_REQUIRED,
+            error_detail=f"发布证据不可用：{error}",
+            note=f"发布证据不可用：{error}",
         )
 
     target = evidence.target
@@ -132,13 +145,9 @@ def _recover_publishing(
     if staging_exists and not target_exists:
         # 未改名：清理暂存并标记失败（attempt 现场保留）。
         shutil.rmtree(staging, ignore_errors=True)
-        _fail_attempt(
-            repository, build_id, attempt, BUILD_INTERRUPTED, "PUBLISHING 未改名：暂存已清理"
-        )
-        return RecoveryOutcome(
-            build_id=build_id,
-            attempt=attempt.attempt,
+        return _RecoveryDecision(
             error_code=BUILD_INTERRUPTED,
+            error_detail="PUBLISHING 未改名：暂存已清理",
             note="PUBLISHING 未改名：暂存已清理，目标未创建",
         )
 
@@ -146,35 +155,42 @@ def _recover_publishing(
         problems = verify_package(target)
         if not problems:
             # 已完整改名但状态未落库：收敛为成功。
-            _converge_succeeded(repository, build_id, attempt, str(target))
-            return RecoveryOutcome(
-                build_id=build_id,
-                attempt=attempt.attempt,
+            return _RecoveryDecision(
                 error_code=None,
+                error_detail="",
                 note="PUBLISHING 已改名且成果完整：收敛为 SUCCEEDED",
+                artifact_path=str(target),
             )
-        return _require_manual_recovery(
-            repository, build_id, attempt, f"目标存在但不完整：{'；'.join(problems)}"
+        return _RecoveryDecision(
+            error_code=PUBLISH_RECOVERY_REQUIRED,
+            error_detail=f"目标存在但不完整：{'；'.join(problems)}",
+            note=f"目标存在但不完整：{'；'.join(problems)}",
         )
 
     # 目标与暂存并存（成功改名后暂存不应存在）等无法裁决的状态：歧义现场。
-    return _require_manual_recovery(
-        repository, build_id, attempt, "PUBLISHING 现场歧义，不自动删除"
+    return _RecoveryDecision(
+        error_code=PUBLISH_RECOVERY_REQUIRED,
+        error_detail="PUBLISHING 现场歧义，不自动删除",
+        note="PUBLISHING 现场歧义，不自动删除",
     )
 
 
-def _require_manual_recovery(
+def _apply_decision(
     repository: SqliteBuildRepository,
     build_id: str,
     attempt: BuildAttemptRecord,
-    note: str,
+    decision: _RecoveryDecision,
 ) -> RecoveryOutcome:
-    _fail_attempt(repository, build_id, attempt, PUBLISH_RECOVERY_REQUIRED, note)
+    """把裁决结果写回（调用方独立短事务内）：仅数据库操作。"""
+    if decision.error_code is None:
+        _converge_succeeded(repository, build_id, attempt, decision.artifact_path or "")
+    else:
+        _fail_attempt(repository, build_id, attempt, decision.error_code, decision.error_detail)
     return RecoveryOutcome(
         build_id=build_id,
         attempt=attempt.attempt,
-        error_code=PUBLISH_RECOVERY_REQUIRED,
-        note=note,
+        error_code=decision.error_code,
+        note=decision.note,
     )
 
 
