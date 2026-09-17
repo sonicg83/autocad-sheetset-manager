@@ -164,6 +164,38 @@ def test_handoff_open_creates_workspace_and_handoff_initial_revision(manager, pa
     assert {item["path"].replace("\\", "/") for item in preview["files"]} == set(entries)
 
 
+def test_handoff_open_notifies_on_workspace_opened_callback(package) -> None:
+    """交接成功后以服务端 Workspace 调用与 workspaces/open 相同的回调（Task 11）。
+
+    桌面壳只经该回调登记可信上下文；交接路径此前不触发，壳感知不到交接打开
+    的工作区。响应体是 dict、回调接收 Workspace 对象，经 get_workspace 取回。
+    """
+    opened: list[object] = []
+    settings = Settings(data_dir=package.parent / "manager-data-callback")
+    client = TestClient(create_app(settings, on_workspace_opened=opened.append))
+
+    response = client.post(
+        "/api/handoffs/open",
+        json={"handoff_path": str(package / "metadata" / "handoff.json")},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert len(opened) == 1
+    workspace = opened[0]
+    assert workspace.id == payload["workspace_id"]
+    assert str(workspace.dst_path) == payload["dst_path"]
+    assert str(workspace.root) == payload["root"]
+
+    # 幂等重复交接同样触发登记（壳以最新登记为准）
+    second = client.post(
+        "/api/handoffs/open",
+        json={"handoff_path": str(package / "metadata" / "handoff.json")},
+    )
+    assert second.status_code == 200
+    assert len(opened) == 2
+    assert opened[1].id == payload["workspace_id"]
+
+
 def test_repeated_handoff_is_idempotent(manager, package) -> None:
     first = manager.open_handoff(package)
     assert first.status_code == 200

@@ -282,8 +282,16 @@ def create_app(
         response_model_exclude_unset=True,
     )
     def open_handoff(request: OpenHandoffRequest):
-        """显式交接 Builder 成果包（SPEC-DB-001 §10）：先验证后写库与文件证据。"""
-        return service.open_handoff(request.handoff_path)
+        """显式交接 Builder 成果包（SPEC-DB-001 §10）：先验证后写库与文件证据。
+
+        交接成功后以与 /api/workspaces/open 相同的 ``on_workspace_opened``
+        回调登记新工作区（PLAN-DB-001 Task 11）：桌面壳由此感知经交接打开的
+        工作区（响应体是 dict，回调用服务端 Workspace 对象，经 get_workspace 取回）。
+        """
+        result = service.open_handoff(request.handoff_path)
+        if on_workspace_opened is not None:
+            on_workspace_opened(service.get_workspace(result["workspace_id"]))
+        return result
 
     @app.get(
         "/api/workspaces/{workspace_id}",

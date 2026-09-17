@@ -26,6 +26,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
+# 资源基准目录（源码树仓库根 / frozen 态 sys._MEIPASS 双路径）：
+# builder_alembic.ini 与 builder_migrations/ 是打包资源，必须随 spec datas 打入
+# 并经 dst_builder.runtime.resource_dir 定位（PLAN-DB-001 Task 11）。
+from dst_builder.runtime import resource_dir
+
 __all__ = [
     "BUILDER_TABLES",
     "LATEST_SCHEMA_REVISION",
@@ -62,7 +67,9 @@ BUILDER_TABLES = frozenset(
     }
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# 资源基准目录（源码树仓库根 / frozen 态 sys._MEIPASS 双路径）：
+# builder_alembic.ini 与 builder_migrations/ 是打包资源，必须随 spec datas 打入
+# 并经 dst_builder.runtime.resource_dir 定位（PLAN-DB-001 Task 11）。
 
 
 def utc_now_iso() -> str:
@@ -194,8 +201,8 @@ class BuildEventRow(Base):
 
 
 def _alembic_config(db_path: Path) -> Config:
-    config = Config(str(_REPO_ROOT / "builder_alembic.ini"))
-    config.set_main_option("script_location", str(_REPO_ROOT / "builder_migrations"))
+    config = Config(str(resource_dir() / "builder_alembic.ini"))
+    config.set_main_option("script_location", str(resource_dir() / "builder_migrations"))
     config.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
     return config
 
