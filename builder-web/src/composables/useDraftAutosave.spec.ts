@@ -149,6 +149,99 @@ describe("createDraftAutosave", () => {
     autosave.dispose();
   });
 
+  it("防抖保存在途期间 flush 排队等待：不并发第二个请求，且第二次携带更新后的 base_updated_at", async () => {
+    const draft = reactive({name: "首次", count: 1});
+    let base = "t-1";
+    let resolveInFlight: ((result: AutosaveResult) => void) | null = null;
+    const save: Mock = vi.fn(async () => {
+      // 第一次调用挂起（模拟在途网络请求），后续调用立即成功
+      if (resolveInFlight === null) {
+        return new Promise<AutosaveResult>((resolve) => {
+          resolveInFlight = resolve;
+        });
+      }
+      return {updated_at: "t-3", diagnostics: []};
+    });
+    const onConflict = vi.fn();
+    const autosave = createDraftAutosave({
+      draft,
+      save: save as unknown as (patch: AutosavePatch<{name: string; count: number}>) => Promise<AutosaveResult>,
+      getBaseUpdatedAt: () => base,
+      getWizardStep: () => 1,
+      getFocusedField: () => null,
+      onSaved: (result) => {
+        // 与真实 store 一致：成功后以响应里的 updated_at 作为下一次 CAS 基准
+        base = result.updated_at;
+      },
+      onConflict,
+    });
+
+    // 1) 防抖保存发出并处于在途
+    draft.name = "第二次";
+    await vi.advanceTimersByTimeAsync(500);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect((save.mock.calls[0][0] as AutosavePatch<{name: string}>).base_updated_at).toBe("t-1");
+
+    // 2) 在途期间 flush(force)（即"下一步"persistStep 的路径）：不得并发发出第二个 PATCH
+    const flushPromise = autosave.flush(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(autosave.status.value).toBe("saving");
+
+    // 3) 在途请求完成后，排队的 flush 按序发出并携带更新后的 base_updated_at
+    resolveInFlight!({updated_at: "t-2", diagnostics: []});
+    await flushPromise;
+    expect(save).toHaveBeenCalledTimes(2);
+    const second = save.mock.calls[1][0] as AutosavePatch<{name: string}>;
+    expect(second.base_updated_at).toBe("t-2");
+    expect(second.draft.name).toBe("第二次");
+    expect(autosave.status.value).toBe("saved");
+    expect(onConflict).not.toHaveBeenCalled();
+    autosave.dispose();
+  });
+
+  it("防抖保存与 flush 同时挂起时也严格按序执行，无并发在途请求", async () => {
+    const draft = reactive({name: "a", count: 1});
+    let resolveFirst: ((result: AutosaveResult) => void) | null = null;
+    const save: Mock = vi.fn(async () => {
+      if (resolveFirst === null) {
+        return new Promise<AutosaveResult>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return {updated_at: "t-3", diagnostics: []};
+    });
+    let base = "t-1";
+    const autosave = createDraftAutosave({
+      draft,
+      save: save as unknown as (patch: AutosavePatch<{name: string; count: number}>) => Promise<AutosaveResult>,
+      getBaseUpdatedAt: () => base,
+      getWizardStep: () => 1,
+      getFocusedField: () => null,
+      onSaved: (result) => {
+        base = result.updated_at;
+      },
+    });
+
+    draft.name = "b";
+    await vi.advanceTimersByTimeAsync(500);
+    // 在途期间继续编辑并触发 flush：待保存变更排队，不并发
+    draft.name = "c";
+    const flushPromise = autosave.flush();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledTimes(1);
+    resolveFirst!({updated_at: "t-2", diagnostics: []});
+    await flushPromise;
+    expect(save).toHaveBeenCalledTimes(2);
+    expect((save.mock.calls[1][0] as AutosavePatch<{name: string}>).base_updated_at).toBe("t-2");
+    expect((save.mock.calls[1][0] as AutosavePatch<{name: string}>).draft.name).toBe("c");
+    // 排队执行已取消防抖计时器，不再有多余的第三次保存
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(autosave.status.value).toBe("saved");
+    autosave.dispose();
+  });
+
   it("暂停期间不调度保存，恢复后继续", async () => {
     const env = makeEnv();
     const autosave = attach(env);

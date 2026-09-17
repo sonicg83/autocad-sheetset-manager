@@ -1,6 +1,7 @@
 // 草稿自动保存（SPEC-DB-001 §2）：字段变更 500 ms 防抖 PATCH，
 // 携带 base_updated_at 做乐观并发；409 DRAFT_CONFLICT 显式提示冲突，
-// 不静默覆盖。与传输层解耦：save 由调用方注入，冲突以 error.status === 409 识别。
+// 不静默覆盖。保存请求经队列在途串行化（flush 与防抖触发不并发）。
+// 与传输层解耦：save 由调用方注入，冲突以 error.status === 409 识别。
 import {ref, watch, type Ref} from "vue";
 
 export type AutosaveStatus = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
@@ -60,27 +61,41 @@ export function createDraftAutosave<TDraft extends object>(options: {
     }
   };
 
-  const persist = async (): Promise<void> => {
-    clearTimer();
-    status.value = "saving";
-    try {
-      const result = await options.save({
-        base_updated_at: options.getBaseUpdatedAt(),
-        draft: options.draft,
-        wizard_step: options.getWizardStep(),
-        focused_field: options.getFocusedField(),
-      });
-      status.value = "saved";
-      options.onSaved?.(result);
-    } catch (error) {
-      if (isConflict(error)) {
-        status.value = "conflict";
-        options.onConflict?.(error);
-      } else {
-        status.value = "error";
-        options.onError?.(error);
+  // 在途串行化（评审 Important 修复）：防抖触发的 persist 尚未返回时，flush(force)
+  // 不得用同一 base_updated_at 并发发出第二个 PATCH——真实后端 CAS 会判 409 造成
+  // 虚假冲突。所有保存按 promise 链排队，任意时刻至多一个在途请求；排队中的保存
+  // 在执行时才读取 base_updated_at，因此自动携带上一次成功响应更新后的新值。
+  let queueTail: Promise<void> = Promise.resolve();
+
+  const persist = (): Promise<void> => {
+    const run = async (): Promise<void> => {
+      clearTimer();
+      status.value = "saving";
+      try {
+        const result = await options.save({
+          base_updated_at: options.getBaseUpdatedAt(),
+          draft: options.draft,
+          wizard_step: options.getWizardStep(),
+          focused_field: options.getFocusedField(),
+        });
+        status.value = "saved";
+        options.onSaved?.(result);
+      } catch (error) {
+        if (isConflict(error)) {
+          status.value = "conflict";
+          options.onConflict?.(error);
+        } else {
+          status.value = "error";
+          options.onError?.(error);
+        }
       }
-    }
+    };
+    const chained = queueTail.then(run, run);
+    queueTail = chained.then(
+      () => undefined,
+      () => undefined,
+    );
+    return chained;
   };
 
   const schedule = (): void => {
