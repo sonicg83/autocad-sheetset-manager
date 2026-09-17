@@ -26,8 +26,6 @@ import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as package_version
 from pathlib import Path
 
 from dst_builder.application.assets import AssetNotFoundError
@@ -105,6 +103,7 @@ from dst_builder.infrastructure.persistence.repositories import (
     SqliteProjectRepository,
     SqliteRevisionRepository,
 )
+from dst_builder.runtime import app_version
 
 __all__ = [
     "BUILD_FAILED",
@@ -188,10 +187,12 @@ class HandoffRejectedError(BuildServiceError):
 
 
 def _builder_version() -> str:
-    try:
-        return package_version("autocad-sheetset")
-    except PackageNotFoundError:  # pragma: no cover - 未安装环境
-        return "0.0.0.dev0"
+    """应用版本：委托 runtime.app_version（元数据优先，frozen 态读随包 pyproject.toml）。
+
+    该值写入成果包 metadata/handoff.json 的 ``builder_version``（§9 provenance），
+    frozen 态不回退会恒为占位版本，污染交接包元数据。
+    """
+    return app_version()
 
 
 def _report_json(report) -> str:

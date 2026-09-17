@@ -12,13 +12,23 @@ from __future__ import annotations
 
 import os
 import sys
+import tomllib
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 # 应用身份（Task 11）：与 DST Manager（dst-manager / "DST Manager"）互异的独立命名空间。
 APP_ID = "dst-builder"
 APP_TITLE = "DST Builder"
 APP_DATA_DIR_NAME = "dst-builder"
+
+# 发行名以 pyproject.toml [project].name 为准（autocad-sheetset），
+# 而非 CLI/包目录名 dst-builder——后者永远查不到，主路径才是活代码。
+_DISTRIBUTION_NAME = "autocad-sheetset"
+
+# 版本探测全部来源不可得时的兜底（机器可读的占位语义版本）。
+_VERSION_FALLBACK = "0.0.0.dev0"
 
 # src/dst_builder/runtime.py -> parents[2] = 仓库根（builder_alembic.ini 所在层）
 _DEV_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +50,26 @@ def resource_dir(base: Path | None = None) -> Path:
     if is_frozen():
         return Path(sys._MEIPASS)
     return _DEV_ROOT
+
+
+def app_version(resource_base: Path | None = None) -> str:
+    """应用版本：分发元数据优先，frozen 态回退读随包 pyproject.toml。
+
+    frozen 态 importlib.metadata 必 miss（exe 未安装进 site-packages），若不回退
+    会以 ``0.0.0.dev0`` 写入每个成果包 metadata/handoff.json 的 ``builder_version``
+    （交接 provenance 被污染，PLAN-DB-001 Task 11 评审修正）。因此 spec datas 必须随
+    包打入 pyproject.toml（对齐 dst-manager.spec 的版本兜底模式）。全部来源不可得时
+    容错返回占位版本，绝不让版本探测崩溃构建/交接流程；``resource_base`` 仅供测试注入。
+    """
+    try:
+        return package_version(_DISTRIBUTION_NAME)
+    except PackageNotFoundError:
+        pass
+    try:
+        with (resource_dir(resource_base) / "pyproject.toml").open("rb") as handle:
+            return str(tomllib.load(handle)["project"]["version"])
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return _VERSION_FALLBACK
 
 
 def app_data_dir(base: Path | None = None) -> Path:

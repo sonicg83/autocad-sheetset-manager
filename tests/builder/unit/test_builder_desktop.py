@@ -187,6 +187,64 @@ def test_builder_source_has_no_stray_file_resource_resolution():
 
 
 # ---------------------------------------------------------------------------
+# 版本解析：frozen 态回退随包 pyproject.toml（写成果包 builder_version provenance）
+# ---------------------------------------------------------------------------
+
+
+def _block_distribution_metadata(monkeypatch):
+    """模拟 frozen exe：importlib.metadata 查不到未安装进 site-packages 的发行版。"""
+    from importlib.metadata import PackageNotFoundError
+
+    def _raise(name):
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr("dst_builder.runtime.package_version", _raise)
+
+
+def test_app_version_frozen_reads_bundled_pyproject(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    _block_distribution_metadata(monkeypatch)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "autocad-sheetset"\nversion = "9.9.9"\n', encoding="utf-8"
+    )
+    from dst_builder.runtime import app_version
+
+    assert app_version() == "9.9.9"
+
+
+def test_app_version_frozen_without_pyproject_falls_back_to_placeholder(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    _block_distribution_metadata(monkeypatch)
+    from dst_builder.runtime import app_version
+
+    assert app_version() == "0.0.0.dev0"
+
+
+def test_app_version_never_returns_placeholder_when_metadata_available():
+    """开发态元数据可用：必须返回真实版本（模拟 frozen 的回退链不得误伤主路径）。"""
+    from dst_builder.runtime import app_version
+
+    assert app_version() != "0.0.0.dev0"
+
+
+def test_version_helpers_delegate_to_runtime():
+    """interfaces/api 与 application/builds 的版本入口必须共用同一运行时实现。"""
+    import inspect
+
+    from dst_builder.application import builds
+    from dst_builder.interfaces import api
+
+    for module in (api, builds):
+        source = inspect.getsource(module._builder_version)
+        assert "app_version()" in source, (
+            f"{module.__name__}._builder_version 未委托 runtime.app_version："
+            "重复实现会在 frozen 态退化回 0.0.0.dev0"
+        )
+
+
+# ---------------------------------------------------------------------------
 # 无窗 stdio 重定向（console=False 双击启动的日志通道）
 # ---------------------------------------------------------------------------
 

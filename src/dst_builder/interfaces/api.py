@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as package_version
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -80,6 +78,7 @@ from dst_builder.interfaces.schemas import (
     ProjectModel,
     ProjectStateResponse,
 )
+from dst_builder.runtime import app_version
 
 __all__ = ["create_builder_app"]
 
@@ -149,10 +148,8 @@ def _build_status_response(view) -> BuildStatusResponse:
 
 
 def _builder_version() -> str:
-    try:
-        return package_version("autocad-sheetset")
-    except PackageNotFoundError:  # pragma: no cover - 未安装环境
-        return "0.0.0.dev0"
+    """应用版本：委托 runtime.app_version（元数据优先，frozen 态读随包 pyproject.toml）。"""
+    return app_version()
 
 
 def _service_from_factory(request: Request) -> BuilderProjectService:

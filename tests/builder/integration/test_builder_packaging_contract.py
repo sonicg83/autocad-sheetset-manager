@@ -75,6 +75,20 @@ def test_spec_datas_include_builder_migrations_and_alembic_ini():
     )
 
 
+def test_spec_datas_include_pyproject_for_version_provenance():
+    """pyproject.toml 必须随包：frozen 态版本回退唯一来源（写成果包 builder_version）。"""
+    entries = _datas_entries()
+    match = [
+        (source, target)
+        for source, target in entries
+        if source.endswith("pyproject.toml")
+    ]
+    assert match, "spec datas 缺少 pyproject.toml：frozen 态版本探测会退化为 0.0.0.dev0 污染交接包"
+    assert all(target == "." for _, target in match), (
+        "pyproject.toml 的 datas 目标必须是资源根 .：runtime.app_version 按 resource_dir() 根读取"
+    )
+
+
 def test_spec_datas_include_shared_acsm_schema():
     entries = _datas_entries()
     assert any(
@@ -285,6 +299,8 @@ def test_pyinstaller_build_and_unpacked_scan(tmp_path: Path):
         internal / "builder_migrations" / "versions",
         internal / "builder-web" / "dist" / "index.html",
         internal / "dst_platform" / "acsm" / "schema" / "acsm-v1.xsd",
+        # 版本兜底来源：frozen 态 builder_version provenance 依赖它
+        internal / "pyproject.toml",
     ):
         assert required.exists(), f"打包产物缺少 {required}"
 

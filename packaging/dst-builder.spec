@@ -22,6 +22,10 @@ a = Analysis(
         ("..\\builder-web\\dist", "builder-web/dist"),
         ("..\\builder_alembic.ini", "."),
         ("..\\builder_migrations", "builder_migrations"),
+        # 版本兜底（Task 11 评审）：frozen 态 importlib.metadata 必 miss，
+        # runtime.app_version 回退读本文件 [project].version 写入成果包
+        # builder_version provenance（对齐 dst-manager.spec 的版本兜底模式）
+        ("..\\pyproject.toml", "."),
         # 共享 XSD（dst_platform.acsm.contract._load_schema 经 __file__ 定位）：
         # frozen 态必须随包打入，且目标目录与 contract.pyc 同级
         ("..\\src\\dst_platform\\acsm\\schema", "dst_platform/acsm/schema"),
