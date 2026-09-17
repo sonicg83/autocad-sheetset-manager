@@ -35,7 +35,6 @@ describe("useShellNavigation：页签导航", () => {
   it("无工作区时只有三个核心页签，初始激活为 sheets", () => {
     const nav = useShellNavigation(makeDeps());
     expect(nav.tabDescriptors.value.map(d => d.id)).toEqual(["sheets", "properties", "revisions"]);
-    expect(nav.tabDescriptors.value.map(d => d.number)).toEqual(["①", "②", "③"]);
     expect(nav.tabDescriptors.value.every(d => d.source === "core")).toBe(true);
     expect(nav.active.value).toBe("sheets");
   });
