@@ -80,6 +80,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [配置中心配置项增删改 SOP（GUIDE-DM-003，评审中）](guides/GUIDE-DM-003-settings-config-sop.md)
 - [多语言与本地化配置 SOP（GUIDE-DM-004，评审中）](guides/GUIDE-DM-004-multilingual-config-sop.md)
 - [Builtin 内置扩展开发指南（GUIDE-DM-005，评审中；以图纸目录为例）](guides/GUIDE-DM-005-builtin-extension-development.md)
+- [DST Manager 用户使用指南（GUIDE-DM-006，draft；面向最终用户的安装、日常受控编辑、发布与故障处理）](guides/GUIDE-DM-006-user-guide.md)
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
 - [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 已冻结：第三次重开于 2026-09-12 由用户确认）](mockups/SPEC-DM-011-settings-demo.html)
