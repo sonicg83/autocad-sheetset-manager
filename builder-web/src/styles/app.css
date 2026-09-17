@@ -1,0 +1,94 @@
+/* 全局基础样式：只消费语义令牌，不写主题分支。 */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* 底部固定操作栏遮挡滚动聚焦目标时，由 scroll-padding 兜底留出空间。 */
+  scroll-padding-bottom: calc(var(--dock-height) + var(--space-4));
+}
+
+body {
+  margin: 0;
+  font: var(--font-size-14) / var(--line-height-body) var(--font-ui);
+  color: var(--color-text-primary);
+  background: var(--color-bg-canvas);
+}
+
+h1, h2, h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+button {
+  font: inherit;
+  min-height: 36px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: var(--border-width-1) solid var(--color-border-strong);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex="-1"]:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+button.primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+input,
+select {
+  font: inherit;
+  min-height: 38px;
+  width: 100%;
+  max-width: 420px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-width-1) solid var(--color-border-strong);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.field {
+  margin: 0 0 var(--space-4);
+}
+
+.field-label {
+  display: block;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.field-error {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+}

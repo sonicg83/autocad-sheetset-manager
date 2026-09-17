@@ -1,0 +1,25 @@
+{
+  "name": "dst-builder-web",
+  "private": true,
+  "version": "0.3.5",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "generate:api": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --alphabetize",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.2",
+    "vitest": "^5.0.0",
+    "vue-tsc": "^3.0.5"
+  }
+}
