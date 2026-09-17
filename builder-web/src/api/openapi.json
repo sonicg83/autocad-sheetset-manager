@@ -102,10 +102,300 @@
           }
         }
       }
+    },
+    "/api/assets": {
+      "post": {
+        "summary": "Create Asset",
+        "description": "纳入并哈希一个模板资产（§11）：复制 → 校验 → 内容寻址落盘 → 入库。",
+        "operationId": "create_asset_api_assets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetIntakeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/inspect": {
+      "post": {
+        "summary": "Inspect Asset",
+        "description": "用匹配版本 CAD 读取可用布局（§11）；端口未接线时返回 501。\n\nPLAN-DB-001 Task 4 裁决：本任务只定义 LayoutInspection 端口，\n端口未接线固定 501 + CAD_VERSION_UNAVAILABLE；真实 CAD 布局读取\n由 Task 7 接线，本端点绝不伪造布局列表。",
+        "operationId": "inspect_asset_api_assets__asset_id__inspect_post",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetInspectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetInspectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cadabilities": {
+      "get": {
+        "summary": "Get Cadabilities",
+        "description": "只读 capability 响应：两个受支持版本的探测结果（不启动进程）。",
+        "operationId": "get_cadabilities_api_cadabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadCapabilitiesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AssetInspectRequest": {
+        "properties": {
+          "cad_version": {
+            "type": "string",
+            "enum": [
+              "2016",
+              "2020"
+            ],
+            "title": "Cad Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cad_version"
+        ],
+        "title": "AssetInspectRequest",
+        "description": "POST /api/assets/{id}/inspect 请求：指定匹配版本的 CAD。"
+      },
+      "AssetInspectionResponse": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "title": "Asset Id"
+          },
+          "cad_version": {
+            "type": "string",
+            "title": "Cad Version"
+          },
+          "layouts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Layouts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_id",
+          "cad_version",
+          "layouts"
+        ],
+        "title": "AssetInspectionResponse",
+        "description": "布局 inspection 结果；端口未接线时端点返回 501 错误负载。"
+      },
+      "AssetIntakeRequest": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "base",
+              "layout"
+            ],
+            "title": "Role"
+          },
+          "source_path": {
+            "type": "string",
+            "title": "Source Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role",
+          "source_path"
+        ],
+        "title": "AssetIntakeRequest",
+        "description": "POST /api/assets 请求：纳入一个本机源文件（ Builder 为本地应用，\n源文件经路径引用而非 HTTP 上传，避免 2 GiB 文件流经接口层）。"
+      },
+      "AssetModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "relative_path": {
+            "type": "string",
+            "title": "Relative Path"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "relative_path",
+          "sha256",
+          "size",
+          "source_name"
+        ],
+        "title": "AssetModel",
+        "description": "纳入结果：内容寻址相对路径与固定哈希（§3 assets 表投影）。"
+      },
+      "CadCapabilitiesResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CadCapabilityModel"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capabilities"
+        ],
+        "title": "CadCapabilitiesResponse",
+        "description": "GET /api/cadabilities 响应：两个受支持版本的探测结果。"
+      },
+      "CadCapabilityModel": {
+        "properties": {
+          "cad_version": {
+            "type": "string",
+            "title": "Cad Version"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "console_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Console Path"
+          },
+          "plugin_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Path"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cad_version",
+          "available"
+        ],
+        "title": "CadCapabilityModel",
+        "description": "单个 CAD 版本的只读能力探测结果。"
+      },
       "DiagnosticModel": {
         "properties": {
           "code": {
