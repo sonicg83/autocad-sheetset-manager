@@ -90,6 +90,12 @@ export interface WizardStore {
   planConfirmed: Ref<boolean>;
   buildSucceeded: Ref<boolean>;
   handoffDone: Ref<boolean>;
+  /** Task 9 接线：确认后的计划 ID 与构建 ID 上收，供步骤 6/7 使用。 */
+  planId: Ref<string | null>;
+  buildId: Ref<string | null>;
+  buildStatus: Ref<string | null>;
+  /** 构建进行中：字段只读（§6 运行中冻结计划不可编辑）。 */
+  buildRunning: ComputedRef<boolean>;
   createProject: (input: {projectRoot: string; name: string; stage: string; discipline: string; outputPath: string}) => Promise<void>;
   createProjectError: Ref<string | null>;
   intakeAsset: (role: "base" | "layout", sourcePath: string) => Promise<AssetModel | null>;
@@ -125,6 +131,9 @@ export function createWizardStore(): WizardStore {
   const planConfirmed = ref(false);
   const buildSucceeded = ref(false);
   const handoffDone = ref(false);
+  const planId = ref<string | null>(null);
+  const buildId = ref<string | null>(null);
+  const buildStatus = ref<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   /** 恢复/创建时水合草稿不应触发自动保存。 */
   let hydrating = false;
@@ -233,6 +242,9 @@ export function createWizardStore(): WizardStore {
       planConfirmed.value = false;
       buildSucceeded.value = false;
       handoffDone.value = false;
+      planId.value = null;
+      buildId.value = null;
+      buildStatus.value = null;
     } finally {
       hydrating = false;
       autosave.resume();
@@ -386,6 +398,14 @@ export function createWizardStore(): WizardStore {
     planConfirmed,
     buildSucceeded,
     handoffDone,
+    planId,
+    buildId,
+    buildStatus,
+    buildRunning: computed(
+      () =>
+        buildStatus.value !== null &&
+        !["SUCCEEDED", "FAILED", "CANCELLED"].includes(buildStatus.value),
+    ),
     createProject,
     createProjectError,
     intakeAsset,

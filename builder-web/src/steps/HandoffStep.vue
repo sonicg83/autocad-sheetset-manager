@@ -1,6 +1,6 @@
 <!-- 第 7 步 验收与交接（SPEC-DB-001 §2/§10）：查看验证结果与发布位置，
      调用 Builder 本机 Manager 交接适配器。/api/builds/{id}/handoff 端点
-     Task 10 才进入 OpenAPI，响应类型在此最小声明，接线后改为生成类型。 -->
+     Task 10 才进入 OpenAPI；本步骤先用真实 buildId（store 上收）发起调用。 -->
 <script setup lang="ts">
 import GuidancePanel from "../components/GuidancePanel.vue";
 import {computed, ref} from "vue";
@@ -28,10 +28,17 @@ const summary = computed(() => {
 });
 
 async function handoffToManager(): Promise<void> {
+  if (!store.buildId.value) {
+    handoffError.value = "尚无构建记录：请先在第 6 步完成构建";
+    return;
+  }
   handingOff.value = true;
   handoffError.value = "";
   try {
-    result.value = await requestJson<HandoffResponse>("/api/builds/build-1/handoff", {method: "POST"});
+    result.value = await requestJson<HandoffResponse>(
+      `/api/builds/${encodeURIComponent(store.buildId.value)}/handoff`,
+      {method: "POST"},
+    );
     store.handoffDone.value = true;
   } catch (error) {
     handoffError.value = (error as Error).message;

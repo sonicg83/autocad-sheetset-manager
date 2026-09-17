@@ -1,22 +1,14 @@
 <!-- 第 6 步 构建成果（SPEC-DB-001 §2/§6）：启动构建、观察状态与进度、请求取消。
-     状态轮询 GET /api/builds/{id}；/api/builds 端点 Task 9 才进入 OpenAPI，
-     响应类型在此最小声明，接线后改为生成类型。 -->
+     Task 9 起接真实 API：POST /api/builds → GET /api/builds/{id} 轮询 →
+     POST /api/builds/{id}/cancel（PUBLISHING 不响应取消）；
+     buildId 上收 useWizardStore，构建进行中全局字段只读。 -->
 <script setup lang="ts">
 import GuidancePanel from "../components/GuidancePanel.vue";
 import {computed, onBeforeUnmount, ref} from "vue";
-import {requestJson} from "../api/client";
+import {api, BuilderApiError, type BuildStatusResponse} from "../api/client";
 import {injectWizardStore} from "../composables/useWizardStore";
 
 const store = injectWizardStore();
-
-interface BuildStatusResponse {
-  build_id: string;
-  plan_id: string;
-  status: string;
-  progress: number;
-  error_code: string | null;
-  published_path: string | null;
-}
 
 const TERMINAL_STATUSES = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
@@ -40,36 +32,41 @@ function stopPolling(): void {
   }
 }
 
+function applyStatus(payload: BuildStatusResponse): void {
+  build.value = payload;
+  store.buildStatus.value = payload.status;
+  store.buildId.value = payload.build_id;
+  if (payload.status === "SUCCEEDED") {
+    store.buildSucceeded.value = true;
+    stopPolling();
+  } else if (TERMINAL_STATUSES.has(payload.status)) {
+    stopPolling();
+  }
+}
+
 async function refresh(): Promise<void> {
   if (!build.value) {
     return;
   }
   try {
-    build.value = await requestJson<BuildStatusResponse>(
-      `/api/builds/${encodeURIComponent(build.value.build_id)}`,
-    );
-    if (build.value.status === "SUCCEEDED") {
-      store.buildSucceeded.value = true;
-      stopPolling();
-    } else if (TERMINAL_STATUSES.has(build.value.status)) {
-      stopPolling();
-    }
+    applyStatus(await api.getBuild(build.value.build_id));
   } catch {
-    // 轮询失败保持当前状态，下次周期继续
+    // 轮询失败保持当前状态，下次周期继续（断线不影响构建）
   }
 }
 
 async function startBuild(): Promise<void> {
+  if (!store.planId.value) {
+    startError.value = "尚未确认计划：请先在第 5 步提交并确认计划";
+    return;
+  }
   starting.value = true;
   startError.value = "";
   try {
-    build.value = await requestJson<BuildStatusResponse>("/api/builds", {
-      method: "POST",
-      body: JSON.stringify({plan_id: "current"}),
-    });
+    applyStatus(await api.startBuild({plan_id: store.planId.value}));
     pollTimer = setInterval(() => void refresh(), 500);
   } catch (error) {
-    startError.value = (error as Error).message;
+    startError.value = (error as BuilderApiError).message;
   } finally {
     starting.value = false;
   }
@@ -80,12 +77,9 @@ async function cancelBuild(): Promise<void> {
     return;
   }
   try {
-    build.value = await requestJson<BuildStatusResponse>(
-      `/api/builds/${encodeURIComponent(build.value.build_id)}/cancel`,
-      {method: "POST"},
-    );
+    applyStatus(await api.cancelBuild(build.value.build_id));
   } catch (error) {
-    startError.value = (error as Error).message;
+    startError.value = (error as BuilderApiError).message;
   }
 }
 
@@ -101,9 +95,18 @@ onBeforeUnmount(stopPolling);
     />
 
     <div v-if="!build" class="actions">
-      <button type="button" class="primary" data-testid="start-build" :disabled="starting" @click="startBuild">
+      <button
+        type="button"
+        class="primary"
+        data-testid="start-build"
+        :disabled="starting || !store.planConfirmed.value"
+        @click="startBuild"
+      >
         启动构建
       </button>
+      <p v-if="!store.planConfirmed.value" data-testid="build-plan-pending" class="plan-state">
+        尚未确认计划。
+      </p>
       <p v-if="startError" class="field-error" role="alert">{{ startError }}</p>
     </div>
 
@@ -122,6 +125,9 @@ onBeforeUnmount(stopPolling);
       >
         <div class="progress-fill" :style="{width: `${build.progress}%`}"></div>
       </div>
+      <p v-if="build.error_code" class="field-error" role="alert" data-testid="build-error">
+        构建失败：{{ build.error_code }}{{ build.error_detail ? `（${build.error_detail}）` : "" }}
+      </p>
       <p class="actions">
         <button
           v-if="!isTerminal"
@@ -145,6 +151,10 @@ onBeforeUnmount(stopPolling);
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.plan-state {
+  color: var(--color-text-muted);
 }
 
 .progress {

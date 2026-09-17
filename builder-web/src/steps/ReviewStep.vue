@@ -1,20 +1,13 @@
-<!-- 第 5 步 构建前检查（SPEC-DB-001 §2）：完整预览 → 提交修订（POST /api/plans）
+<!-- 第 5 步 构建前检查（SPEC-DB-001 §2/§5）：完整预览 → 提交修订（POST /api/plans）
      → 用户显式确认计划（POST /api/plans/{id}/confirm）。绝不自动确认；
-     /api/plans 尚未进入 OpenAPI，响应类型在此最小声明，Task 9 接线后改为生成类型。 -->
+     Task 9 起接真实 API，类型来自生成的 schema.d.ts。 -->
 <script setup lang="ts">
 import GuidancePanel from "../components/GuidancePanel.vue";
 import {computed, ref} from "vue";
-import {requestJson} from "../api/client";
+import {api, BuilderApiError, type PlanSubmitResponse} from "../api/client";
 import {injectWizardStore, sheetNumber} from "../composables/useWizardStore";
 
 const store = injectWizardStore();
-
-interface PlanSubmitResponse {
-  plan_id: string;
-  revision_id: string;
-  diagnostics: {code: string; severity: string; message: string; field?: string | null}[];
-  preview: {sheet_number: string; layout_name: string; dwg_name: string; artifact_path: string};
-}
 
 const submitting = ref(false);
 const submitError = ref("");
@@ -49,12 +42,9 @@ async function submitRevision(): Promise<void> {
   submitting.value = true;
   submitError.value = "";
   try {
-    plan.value = await requestJson<PlanSubmitResponse>("/api/plans", {
-      method: "POST",
-      body: JSON.stringify({draft: store.draft}),
-    });
+    plan.value = await api.submitPlan();
   } catch (error) {
-    submitError.value = (error as Error).message;
+    submitError.value = (error as BuilderApiError).message;
   } finally {
     submitting.value = false;
   }
@@ -67,10 +57,11 @@ async function confirmPlan(): Promise<void> {
   confirming.value = true;
   confirmError.value = "";
   try {
-    await requestJson(`/api/plans/${encodeURIComponent(plan.value.plan_id)}/confirm`, {method: "POST"});
+    await api.confirmPlan(plan.value.plan_id);
+    store.planId.value = plan.value.plan_id;
     store.planConfirmed.value = true;
   } catch (error) {
-    confirmError.value = (error as Error).message;
+    confirmError.value = (error as BuilderApiError).message;
   } finally {
     confirming.value = false;
   }
@@ -103,7 +94,7 @@ async function confirmPlan(): Promise<void> {
         type="button"
         class="primary"
         data-testid="submit-revision"
-        :disabled="submitting || preview === null"
+        :disabled="submitting || preview === null || store.buildRunning.value"
         @click="submitRevision"
       >
         提交修订

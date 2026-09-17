@@ -22,7 +22,10 @@ from dst_platform.acsm.contract import (
     CLSID_SHEET_VIEWS,
     CLSID_SHEETSET,
     CLSID_SUBSET,
+    validate_contract,
+    validate_schema,
 )
+from dst_platform.contracts.diagnostics import Severity
 
 __all__ = [
     "DST_DATABASE_CLSID",
@@ -126,5 +129,20 @@ def build_dst_xml(plan: GenerationPlanV1, cad_result: CadDrawingResultV1) -> byt
 
 
 def build_dst_bytes(plan: GenerationPlanV1, cad_result: CadDrawingResultV1) -> bytes:
-    """构造 XML 并经共享 Codec 编码为 DST 二进制字节。"""
-    return DstCodec().encode_bytes(build_dst_xml(plan, cad_result))
+    """构造 XML，经共享结构校验后编码为 DST 二进制字节。
+
+    编码前补一次共享结构校验（``validate_contract`` + ``validate_schema``，
+    Task 8 遗留顺手补齐）：结构畸形不让它进入二进制编码路径。语义投影
+    （与计划/CAD 结果的一致性）仍由编码后的解码验证承担（Task 9 编排层调用
+    ``ensure_dst_valid``），本函数不做语义校验，避免重复投影开销。
+    """
+    xml = build_dst_xml(plan, cad_result)
+    root = etree.fromstring(xml)
+    issues = (*validate_contract(root), *validate_schema(root))
+    errors = [issue for issue in issues if issue.severity is Severity.ERROR]
+    if errors:
+        raise ValueError(
+            "DST 结构校验失败："
+            + "；".join(f"{issue.code}: {issue.message}" for issue in errors)
+        )
+    return DstCodec().encode_bytes(xml)

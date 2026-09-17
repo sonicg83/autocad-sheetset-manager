@@ -179,6 +179,16 @@
               }
             }
           },
+          "501": {
+            "description": "布局 inspection 端口未接线或匹配版本 CAD 不可用（CAD_VERSION_UNAVAILABLE）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -204,6 +214,302 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CadCapabilitiesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plans": {
+      "post": {
+        "summary": "Submit Plan",
+        "description": "提交修订并产生预览计划（§5）：确定性 ID，不自动确认。",
+        "operationId": "submit_plan_api_plans_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanSubmitResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plans/{plan_id}/confirm": {
+      "post": {
+        "summary": "Confirm Plan",
+        "description": "用户显式确认计划（绝不自动确认）；确认后构建输入冻结。",
+        "operationId": "confirm_plan_api_plans__plan_id__confirm_post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanConfirmationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "计划不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PLAN_STALE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "存在阻断诊断",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/builds": {
+      "post": {
+        "summary": "Start Build",
+        "description": "基于已确认计划创建 build/attempt 并在线程执行器中启动构建。",
+        "operationId": "start_build_api_builds_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "计划不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PLAN_STALE / PACKAGE_TARGET_EXISTS / BUILD_ALREADY_RUNNING",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "PLAN_NOT_CONFIRMED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/builds/{build_id}/cancel": {
+      "post": {
+        "summary": "Cancel Build",
+        "description": "请求安全取消（§6）：检查点处迁移 CANCELLED；PUBLISHING 拒绝。",
+        "operationId": "cancel_build_api_builds__build_id__cancel_post",
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "构建不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PUBLISHING 或终止状态不响应取消（CANCEL_NOT_ACCEPTED）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/builds/{build_id}": {
+      "get": {
+        "summary": "Get Build",
+        "description": "读取状态、诊断和成果（§11）。",
+        "operationId": "get_build_api_builds__build_id__get",
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "构建不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/builds/{build_id}/events": {
+      "get": {
+        "summary": "Stream Build Events",
+        "description": "SSE 事件流与重放（§6）：Last-Event-ID 之后的事件按序重放。",
+        "operationId": "stream_build_events_api_builds__build_id__events_get",
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE 事件流（id: attempt:sequence）",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "构建不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -324,6 +630,149 @@
         ],
         "title": "AssetModel",
         "description": "纳入结果：内容寻址相对路径与固定哈希（§3 assets 表投影）。"
+      },
+      "BuildAttemptModel": {
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "title": "Attempt"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attempt",
+          "status",
+          "progress"
+        ],
+        "title": "BuildAttemptModel",
+        "description": "单个 attempt 的状态投影（历史不覆盖）。"
+      },
+      "BuildStartRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id"
+        ],
+        "title": "BuildStartRequest",
+        "description": "POST /api/builds 请求：基于已确认计划创建 build/attempt。"
+      },
+      "BuildStatusResponse": {
+        "properties": {
+          "build_id": {
+            "type": "string",
+            "title": "Build Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "title": "Attempt"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "published_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Path"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/BuildAttemptModel"
+            },
+            "type": "array",
+            "title": "Attempts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "build_id",
+          "plan_id",
+          "attempt",
+          "status",
+          "progress",
+          "created_at",
+          "attempts"
+        ],
+        "title": "BuildStatusResponse",
+        "description": "GET /api/builds/{id}、POST /api/builds、POST .../cancel 响应。"
       },
       "CadCapabilitiesResponse": {
         "properties": {
@@ -509,6 +958,54 @@
         "title": "DraftPatchRequest",
         "description": "PATCH /api/projects/current/draft 请求：base_updated_at 乐观并发。"
       },
+      "ErrorPayloadModel": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "recovery_action": {
+            "type": "string",
+            "title": "Recovery Action"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "recovery_action"
+        ],
+        "title": "ErrorPayloadModel",
+        "description": "所有非 2xx 响应的统一负载；``code`` 只使用 §11 固定错误码。"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -545,6 +1042,123 @@
           "width"
         ],
         "title": "NumberingFieldsModel"
+      },
+      "PlanConfirmationResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "revision_id": {
+            "type": "string",
+            "title": "Revision Id"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "title": "Confirmed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "revision_id",
+          "confirmed_at"
+        ],
+        "title": "PlanConfirmationResponse",
+        "description": "POST /api/plans/{id}/confirm 响应。"
+      },
+      "PlanPreviewModel": {
+        "properties": {
+          "sheet_number": {
+            "type": "string",
+            "title": "Sheet Number"
+          },
+          "layout_name": {
+            "type": "string",
+            "title": "Layout Name"
+          },
+          "dwg_name": {
+            "type": "string",
+            "title": "Dwg Name"
+          },
+          "artifact_path": {
+            "type": "string",
+            "title": "Artifact Path"
+          },
+          "dst_path": {
+            "type": "string",
+            "title": "Dst Path"
+          },
+          "sheetset_name": {
+            "type": "string",
+            "title": "Sheetset Name"
+          },
+          "subset_name": {
+            "type": "string",
+            "title": "Subset Name"
+          },
+          "cad_version": {
+            "type": "string",
+            "title": "Cad Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sheet_number",
+          "layout_name",
+          "dwg_name",
+          "artifact_path",
+          "dst_path",
+          "sheetset_name",
+          "subset_name",
+          "cad_version"
+        ],
+        "title": "PlanPreviewModel",
+        "description": "计划预览派生值（§4/§5）。"
+      },
+      "PlanSubmitResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "revision_id": {
+            "type": "string",
+            "title": "Revision Id"
+          },
+          "revision_sha256": {
+            "type": "string",
+            "title": "Revision Sha256"
+          },
+          "plan_sha256": {
+            "type": "string",
+            "title": "Plan Sha256"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticModel"
+            },
+            "type": "array",
+            "title": "Diagnostics"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/PlanPreviewModel"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "revision_id",
+          "revision_sha256",
+          "plan_sha256",
+          "diagnostics",
+          "preview"
+        ],
+        "title": "PlanSubmitResponse",
+        "description": "POST /api/plans 响应：确定性计划 ID 与构建前诊断。"
       },
       "ProjectCreateRequest": {
         "properties": {

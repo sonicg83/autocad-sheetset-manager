@@ -15,12 +15,18 @@ __all__ = [
     "AssetInspectionResponse",
     "AssetIntakeRequest",
     "AssetModel",
+    "BuildAttemptModel",
+    "BuildStartRequest",
+    "BuildStatusResponse",
     "CadCapabilitiesResponse",
     "CadCapabilityModel",
     "DiagnosticModel",
     "DraftFieldsModel",
     "DraftPatchRequest",
     "NumberingFieldsModel",
+    "PlanConfirmationResponse",
+    "PlanPreviewModel",
+    "PlanSubmitResponse",
     "ProjectCreateRequest",
     "ProjectFieldsModel",
     "ProjectModel",
@@ -162,3 +168,71 @@ class CadCapabilitiesResponse(_ContractModel):
     """GET /api/cadabilities 响应：两个受支持版本的探测结果。"""
 
     capabilities: list[CadCapabilityModel]
+
+
+# ---------------------------------------------------------------------------
+# 计划与构建（§5/§6/§11，Task 9）
+# ---------------------------------------------------------------------------
+
+
+class PlanPreviewModel(_ContractModel):
+    """计划预览派生值（§4/§5）。"""
+
+    sheet_number: str
+    layout_name: str
+    dwg_name: str
+    artifact_path: str
+    dst_path: str
+    sheetset_name: str
+    subset_name: str
+    cad_version: str
+
+
+class PlanSubmitResponse(_ContractModel):
+    """POST /api/plans 响应：确定性计划 ID 与构建前诊断。"""
+
+    plan_id: str
+    revision_id: str
+    revision_sha256: str
+    plan_sha256: str
+    diagnostics: list[DiagnosticModel]
+    preview: PlanPreviewModel
+
+
+class PlanConfirmationResponse(_ContractModel):
+    """POST /api/plans/{id}/confirm 响应。"""
+
+    plan_id: str
+    revision_id: str
+    confirmed_at: str
+
+
+class BuildStartRequest(_ContractModel):
+    """POST /api/builds 请求：基于已确认计划创建 build/attempt。"""
+
+    plan_id: str
+
+
+class BuildAttemptModel(_ContractModel):
+    """单个 attempt 的状态投影（历史不覆盖）。"""
+
+    attempt: int
+    status: str
+    progress: int
+    error_code: str | None = None
+
+
+class BuildStatusResponse(_ContractModel):
+    """GET /api/builds/{id}、POST /api/builds、POST .../cancel 响应。"""
+
+    build_id: str
+    plan_id: str
+    attempt: int
+    status: str
+    progress: int
+    error_code: str | None = None
+    error_detail: str | None = None
+    published_path: str | None = None
+    created_at: str
+    finished_at: str | None = None
+    attempts: list[BuildAttemptModel]

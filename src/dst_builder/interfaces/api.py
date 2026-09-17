@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from dst_builder.application.assets import (
     AssetFileTooLargeError,
@@ -27,6 +28,8 @@ from dst_builder.application.assets import (
     BuilderAssetService,
     CadInspectionUnavailableError,
 )
+from dst_builder.application.build_recovery import recover_pending_builds
+from dst_builder.application.builds import BuildCoordinator, BuildServiceError
 from dst_builder.application.projects import (
     BuilderProjectService,
     DraftConflictError,
@@ -52,6 +55,8 @@ from dst_builder.infrastructure.autocad.capabilities import (
     evaluate_cad_capability,
     load_cad_configuration,
 )
+from dst_builder.infrastructure.autocad.drawing import CoreConsoleDrawingBuilder
+from dst_builder.infrastructure.persistence.database import Database
 from dst_builder.interfaces.responses import (
     REQUEST_INVALID,
     ErrorPayloadModel,
@@ -62,10 +67,14 @@ from dst_builder.interfaces.schemas import (
     AssetInspectRequest,
     AssetIntakeRequest,
     AssetModel,
+    BuildStartRequest,
+    BuildStatusResponse,
     CadCapabilitiesResponse,
     CadCapabilityModel,
     DraftFieldsModel,
     DraftPatchRequest,
+    PlanConfirmationResponse,
+    PlanSubmitResponse,
     ProjectCreateRequest,
     ProjectModel,
     ProjectStateResponse,
@@ -87,6 +96,55 @@ _STATUS_BY_ERROR = {
     AssetOutsideProjectError: 400,
     CadInspectionUnavailableError: 501,
 }
+
+
+@asynccontextmanager
+async def _builder_lifespan(app: FastAPI):
+    """应用启动钩子：绑定项目根时执行 §6 启动恢复。"""
+    root = app.state.project_root
+    if root is not None and (Path(root) / "project.dstb").is_file():
+        database = Database(Path(root) / "project.dstb")
+        try:
+            recover_pending_builds(Path(root), database)
+        finally:
+            database.engine.dispose()
+    yield
+
+
+def _build_service_from_factory(request: Request) -> BuildCoordinator:
+    """构建编排者：按需绑定项目库与 DrawingBuilder（工厂可注入 fake/真实执行器）。"""
+    root = request.app.state.project_root
+    if root is None:
+        raise ProjectNotInitializedError("未绑定项目根目录")
+    coordinator: BuildCoordinator | None = getattr(request.app.state, "build_coordinator", None)
+    if coordinator is None:
+        drawing_builder = request.app.state.drawing_builder
+        if drawing_builder is None:
+            drawing_builder = CoreConsoleDrawingBuilder(
+                root, request.app.state.cad_configuration
+            )
+        coordinator = BuildCoordinator(root, drawing_builder=drawing_builder)
+        request.app.state.build_coordinator = coordinator
+    return coordinator
+
+
+def _build_status_response(view) -> BuildStatusResponse:
+    return BuildStatusResponse(
+        build_id=view.build_id,
+        plan_id=view.plan_id,
+        attempt=view.attempt,
+        status=view.status,
+        progress=view.progress,
+        error_code=view.error_code,
+        error_detail=view.error_detail,
+        published_path=view.published_path,
+        created_at=view.created_at,
+        finished_at=view.finished_at,
+        attempts=[
+            {"attempt": item.attempt, "status": item.status, "progress": item.progress, "error_code": item.error_code}
+            for item in view.attempts
+        ],
+    )
 
 
 def _builder_version() -> str:
@@ -200,22 +258,27 @@ def create_builder_app(
     *,
     cad_configuration: CadConfiguration | None = None,
     layout_inspector: object | None = None,
+    drawing_builder: object | None = None,
 ) -> FastAPI:
     """Builder 独立应用工厂；``project_root`` 为项目根目录（可缺省）。
 
-    ``layout_inspector`` 是 §11 布局 inspection 端口（Task 7 注入真实执行器）；
+    ``layout_inspector`` / ``drawing_builder`` 是 §7 CAD 端口（测试注入 fake，
+    缺省时构建编排按需构造真实 :class:`CoreConsoleDrawingBuilder`）；
     ``cad_configuration`` 缺省时从显式环境变量加载（不猜测 AutoCAD）。
     """
     app = FastAPI(
         title="DST Builder",
         version=_builder_version(),
         description="DST Builder 最小生成闭环 API（SPEC-DB-001 §11）",
+        lifespan=_builder_lifespan,
     )
     app.state.project_root = project_root
     app.state.cad_configuration = (
         cad_configuration if cad_configuration is not None else load_cad_configuration()
     )
     app.state.layout_inspector = layout_inspector
+    app.state.drawing_builder = drawing_builder
+    app.state.build_coordinator = None
 
     @app.exception_handler(ProjectServiceError)
     @app.exception_handler(AssetServiceError)
@@ -225,6 +288,18 @@ def create_builder_app(
         status = _STATUS_BY_ERROR.get(type(exc), 400)
         return _error_response(
             status,
+            error_payload(
+                exc.code,
+                exc.message,
+                recovery_action=exc.recovery_action,
+                field=exc.field,
+            ),
+        )
+
+    @app.exception_handler(BuildServiceError)
+    async def _handle_build_error(_: Request, exc: BuildServiceError) -> JSONResponse:
+        return _error_response(
+            exc.status_code,
             error_payload(
                 exc.code,
                 exc.message,
@@ -299,7 +374,17 @@ def create_builder_app(
             source_name=record.source_name,
         )
 
-    @app.post("/api/assets/{asset_id}/inspect", response_model=AssetInspectionResponse)
+    @app.post(
+        "/api/assets/{asset_id}/inspect",
+        response_model=AssetInspectionResponse,
+        responses={
+            501: {
+                "description": "布局 inspection 端口未接线或匹配版本 CAD 不可用"
+                "（CAD_VERSION_UNAVAILABLE）",
+                "model": ErrorPayloadModel,
+            }
+        },
+    )
     def inspect_asset(
         asset_id: str, body: AssetInspectRequest, request: Request
     ) -> AssetInspectionResponse:
@@ -330,5 +415,109 @@ def create_builder_app(
                 )
             )
         return CadCapabilitiesResponse(capabilities=capabilities)
+
+    # -- 计划与构建（§5/§6/§11，Task 9）------------------------------------
+
+    @app.post("/api/plans", status_code=201, response_model=PlanSubmitResponse)
+    def submit_plan(request: Request) -> PlanSubmitResponse:
+        """提交修订并产生预览计划（§5）：确定性 ID，不自动确认。"""
+        preview = _build_service_from_factory(request).submit_plan()
+        return PlanSubmitResponse(
+            plan_id=preview.plan_id,
+            revision_id=preview.revision_id,
+            revision_sha256=preview.revision_sha256,
+            plan_sha256=preview.plan_sha256,
+            diagnostics=[
+                {
+                    "code": diagnostic.code,
+                    "severity": diagnostic.severity.value,
+                    "message": diagnostic.message,
+                    "field": diagnostic.field,
+                }
+                for diagnostic in preview.diagnostics
+            ],
+            preview=preview.preview,
+        )
+
+    @app.post(
+        "/api/plans/{plan_id}/confirm",
+        response_model=PlanConfirmationResponse,
+        responses={
+            404: {"model": ErrorPayloadModel, "description": "计划不存在"},
+            409: {"model": ErrorPayloadModel, "description": "PLAN_STALE"},
+            422: {"model": ErrorPayloadModel, "description": "存在阻断诊断"},
+        },
+    )
+    def confirm_plan(plan_id: str, request: Request) -> PlanConfirmationResponse:
+        """用户显式确认计划（绝不自动确认）；确认后构建输入冻结。"""
+        confirmation = _build_service_from_factory(request).confirm_plan(plan_id)
+        return PlanConfirmationResponse(
+            plan_id=confirmation.plan_id,
+            revision_id=confirmation.revision_id,
+            confirmed_at=confirmation.confirmed_at,
+        )
+
+    @app.post(
+        "/api/builds",
+        status_code=202,
+        response_model=BuildStatusResponse,
+        responses={
+            404: {"model": ErrorPayloadModel, "description": "计划不存在"},
+            409: {
+                "model": ErrorPayloadModel,
+                "description": "PLAN_STALE / PACKAGE_TARGET_EXISTS / BUILD_ALREADY_RUNNING",
+            },
+            422: {"model": ErrorPayloadModel, "description": "PLAN_NOT_CONFIRMED"},
+        },
+    )
+    def start_build(body: BuildStartRequest, request: Request) -> BuildStatusResponse:
+        """基于已确认计划创建 build/attempt 并在线程执行器中启动构建。"""
+        view = _build_service_from_factory(request).start_build(body.plan_id)
+        return _build_status_response(view)
+
+    @app.post(
+        "/api/builds/{build_id}/cancel",
+        status_code=202,
+        response_model=BuildStatusResponse,
+        responses={
+            404: {"model": ErrorPayloadModel, "description": "构建不存在"},
+            409: {
+                "model": ErrorPayloadModel,
+                "description": "PUBLISHING 或终止状态不响应取消（CANCEL_NOT_ACCEPTED）",
+            },
+        },
+    )
+    def cancel_build(build_id: str, request: Request) -> BuildStatusResponse:
+        """请求安全取消（§6）：检查点处迁移 CANCELLED；PUBLISHING 拒绝。"""
+        view = _build_service_from_factory(request).cancel_build(build_id)
+        return _build_status_response(view)
+
+    @app.get(
+        "/api/builds/{build_id}",
+        response_model=BuildStatusResponse,
+        responses={404: {"model": ErrorPayloadModel, "description": "构建不存在"}},
+    )
+    def get_build(build_id: str, request: Request) -> BuildStatusResponse:
+        """读取状态、诊断和成果（§11）。"""
+        view = _build_service_from_factory(request).get_build(build_id)
+        return _build_status_response(view)
+
+    @app.get(
+        "/api/builds/{build_id}/events",
+        responses={
+            404: {"model": ErrorPayloadModel, "description": "构建不存在"},
+            200: {"description": "SSE 事件流（id: attempt:sequence）"},
+        },
+    )
+    def stream_build_events(build_id: str, request: Request) -> StreamingResponse:
+        """SSE 事件流与重放（§6）：Last-Event-ID 之后的事件按序重放。"""
+        service = _build_service_from_factory(request)
+        service.ensure_build_exists(build_id)
+        last_event_id = request.headers.get("last-event-id")
+        return StreamingResponse(
+            service.stream_events(build_id, last_event_id),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     return app

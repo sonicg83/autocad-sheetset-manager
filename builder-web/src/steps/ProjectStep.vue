@@ -62,20 +62,20 @@ async function submitCreate(): Promise<void> {
         <label class="field-label" for="e-name">工程名称</label>
         <input
           id="e-name"
-          v-model="store.draft.project.name"
+          v-model="store.draft.project.name" :disabled="store.buildRunning.value"
           data-field="project.name"
           type="text"
         />
       </p>
       <p class="field">
         <label class="field-label" for="e-stage">阶段</label>
-        <input id="e-stage" v-model="store.draft.project.stage" data-field="project.stage" type="text" />
+        <input id="e-stage" v-model="store.draft.project.stage" data-field="project.stage" type="text" /> :disabled="store.buildRunning.value"
       </p>
       <p class="field">
         <label class="field-label" for="e-discipline">专业</label>
         <input
           id="e-discipline"
-          v-model="store.draft.project.discipline"
+          v-model="store.draft.project.discipline" :disabled="store.buildRunning.value"
           data-field="project.discipline"
           type="text"
         />
@@ -84,7 +84,7 @@ async function submitCreate(): Promise<void> {
         <label class="field-label" for="e-output">成果目录</label>
         <input
           id="e-output"
-          v-model="store.draft.project.output_path"
+          v-model="store.draft.project.output_path" :disabled="store.buildRunning.value"
           data-field="project.output_path"
           type="text"
           :aria-invalid="store.fieldErrors.value.some((e) => e.field === 'project.output_path') ? 'true' : undefined"

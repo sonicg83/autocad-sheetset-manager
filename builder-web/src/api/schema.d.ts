@@ -48,6 +48,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Build
+         * @description 基于已确认计划创建 build/attempt 并在线程执行器中启动构建。
+         */
+        post: operations["start_build_api_builds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/builds/{build_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Build
+         * @description 读取状态、诊断和成果（§11）。
+         */
+        get: operations["get_build_api_builds__build_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/builds/{build_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Build
+         * @description 请求安全取消（§6）：检查点处迁移 CANCELLED；PUBLISHING 拒绝。
+         */
+        post: operations["cancel_build_api_builds__build_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/builds/{build_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Build Events
+         * @description SSE 事件流与重放（§6）：Last-Event-ID 之后的事件按序重放。
+         */
+        get: operations["stream_build_events_api_builds__build_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cadabilities": {
         parameters: {
             query?: never;
@@ -62,6 +142,46 @@ export interface paths {
         get: operations["get_cadabilities_api_cadabilities_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Plan
+         * @description 提交修订并产生预览计划（§5）：确定性 ID，不自动确认。
+         */
+        post: operations["submit_plan_api_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans/{plan_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Plan
+         * @description 用户显式确认计划（绝不自动确认）；确认后构建输入冻结。
+         */
+        post: operations["confirm_plan_api_plans__plan_id__confirm_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -188,6 +308,56 @@ export interface components {
             source_name: string;
         };
         /**
+         * BuildAttemptModel
+         * @description 单个 attempt 的状态投影（历史不覆盖）。
+         */
+        BuildAttemptModel: {
+            /** Attempt */
+            attempt: number;
+            /** Error Code */
+            error_code?: string | null;
+            /** Progress */
+            progress: number;
+            /** Status */
+            status: string;
+        };
+        /**
+         * BuildStartRequest
+         * @description POST /api/builds 请求：基于已确认计划创建 build/attempt。
+         */
+        BuildStartRequest: {
+            /** Plan Id */
+            plan_id: string;
+        };
+        /**
+         * BuildStatusResponse
+         * @description GET /api/builds/{id}、POST /api/builds、POST .../cancel 响应。
+         */
+        BuildStatusResponse: {
+            /** Attempt */
+            attempt: number;
+            /** Attempts */
+            attempts: components["schemas"]["BuildAttemptModel"][];
+            /** Build Id */
+            build_id: string;
+            /** Created At */
+            created_at: string;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Detail */
+            error_detail?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Plan Id */
+            plan_id: string;
+            /** Progress */
+            progress: number;
+            /** Published Path */
+            published_path?: string | null;
+            /** Status */
+            status: string;
+        };
+        /**
          * CadCapabilitiesResponse
          * @description GET /api/cadabilities 响应：两个受支持版本的探测结果。
          */
@@ -254,6 +424,24 @@ export interface components {
             /** Wizard Step */
             wizard_step: number;
         };
+        /**
+         * ErrorPayloadModel
+         * @description 所有非 2xx 响应的统一负载；``code`` 只使用 §11 固定错误码。
+         */
+        ErrorPayloadModel: {
+            /** Code */
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /** Field */
+            field?: string | null;
+            /** Message */
+            message: string;
+            /** Recovery Action */
+            recovery_action: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -267,6 +455,57 @@ export interface components {
             start: number;
             /** Width */
             width: number;
+        };
+        /**
+         * PlanConfirmationResponse
+         * @description POST /api/plans/{id}/confirm 响应。
+         */
+        PlanConfirmationResponse: {
+            /** Confirmed At */
+            confirmed_at: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Revision Id */
+            revision_id: string;
+        };
+        /**
+         * PlanPreviewModel
+         * @description 计划预览派生值（§4/§5）。
+         */
+        PlanPreviewModel: {
+            /** Artifact Path */
+            artifact_path: string;
+            /** Cad Version */
+            cad_version: string;
+            /** Dst Path */
+            dst_path: string;
+            /** Dwg Name */
+            dwg_name: string;
+            /** Layout Name */
+            layout_name: string;
+            /** Sheet Number */
+            sheet_number: string;
+            /** Sheetset Name */
+            sheetset_name: string;
+            /** Subset Name */
+            subset_name: string;
+        };
+        /**
+         * PlanSubmitResponse
+         * @description POST /api/plans 响应：确定性计划 ID 与构建前诊断。
+         */
+        PlanSubmitResponse: {
+            /** Diagnostics */
+            diagnostics: components["schemas"]["DiagnosticModel"][];
+            /** Plan Id */
+            plan_id: string;
+            /** Plan Sha256 */
+            plan_sha256: string;
+            preview: components["schemas"]["PlanPreviewModel"];
+            /** Revision Id */
+            revision_id: string;
+            /** Revision Sha256 */
+            revision_sha256: string;
         };
         /**
          * ProjectCreateRequest
@@ -430,6 +669,195 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description 布局 inspection 端口未接线或匹配版本 CAD 不可用（CAD_VERSION_UNAVAILABLE） */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+        };
+    };
+    start_build_api_builds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildStatusResponse"];
+                };
+            };
+            /** @description 计划不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description PLAN_STALE / PACKAGE_TARGET_EXISTS / BUILD_ALREADY_RUNNING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description PLAN_NOT_CONFIRMED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+        };
+    };
+    get_build_api_builds__build_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildStatusResponse"];
+                };
+            };
+            /** @description 构建不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_build_api_builds__build_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildStatusResponse"];
+                };
+            };
+            /** @description 构建不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description PUBLISHING 或终止状态不响应取消（CANCEL_NOT_ACCEPTED） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_build_events_api_builds__build_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 事件流（id: attempt:sequence） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description 构建不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     get_cadabilities_api_cadabilities_get: {
@@ -448,6 +876,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CadCapabilitiesResponse"];
+                };
+            };
+        };
+    };
+    submit_plan_api_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSubmitResponse"];
+                };
+            };
+        };
+    };
+    confirm_plan_api_plans__plan_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanConfirmationResponse"];
+                };
+            };
+            /** @description 计划不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description PLAN_STALE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
+            /** @description 存在阻断诊断 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
                 };
             };
         };

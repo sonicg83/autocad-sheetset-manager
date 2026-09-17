@@ -128,7 +128,7 @@ function capabilityNotice(): string {
       <p v-else-if="inspectState === 'failed'" class="field-error" role="alert">{{ inspectMessage }}</p>
       <p v-else-if="availableLayouts.length > 0" class="field">
         <label class="field-label" for="t-source-layout">源布局</label>
-        <select id="t-source-layout" v-model="store.draft.template.source_layout" data-field="template.source_layout">
+        <select id="t-source-layout" v-model="store.draft.template.source_layout" data-field="template.source_layout"> :disabled="store.buildRunning.value"
           <option v-for="layout in availableLayouts" :key="layout" :value="layout">{{ layout }}</option>
         </select>
       </p>

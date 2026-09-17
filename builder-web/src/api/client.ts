@@ -14,6 +14,10 @@ export type AssetInspectRequest = components["schemas"]["AssetInspectRequest"];
 export type AssetInspectionResponse = components["schemas"]["AssetInspectionResponse"];
 export type CadCapabilitiesResponse = components["schemas"]["CadCapabilitiesResponse"];
 export type DiagnosticModel = components["schemas"]["DiagnosticModel"];
+export type PlanSubmitResponse = components["schemas"]["PlanSubmitResponse"];
+export type PlanConfirmationResponse = components["schemas"]["PlanConfirmationResponse"];
+export type BuildStartRequest = components["schemas"]["BuildStartRequest"];
+export type BuildStatusResponse = components["schemas"]["BuildStatusResponse"];
 
 /** 统一错误负载（§11）：code / message / field / recovery_action / details。 */
 export class BuilderApiError extends Error {
@@ -65,8 +69,6 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-// 步骤 5～7 端点（/api/plans、/api/builds…）Task 9/10 才进入 OpenAPI；在那之前
-// 相关组件经此泛型助手发起调用，接好后改为生成类型。
 export {requestJson};
 
 export const api = {
@@ -86,4 +88,14 @@ export const api = {
       {method: "POST", body: JSON.stringify(body)},
     ),
   getCadabilities: () => requestJson<CadCapabilitiesResponse>("/api/cadabilities"),
+  // 步骤 5～7（Task 9 接线，§5/§6/§11）
+  submitPlan: () => requestJson<PlanSubmitResponse>("/api/plans", {method: "POST"}),
+  confirmPlan: (planId: string) =>
+    requestJson<PlanConfirmationResponse>(`/api/plans/${encodeURIComponent(planId)}/confirm`, {method: "POST"}),
+  startBuild: (body: BuildStartRequest) =>
+    requestJson<BuildStatusResponse>("/api/builds", {method: "POST", body: JSON.stringify(body)}),
+  getBuild: (buildId: string) =>
+    requestJson<BuildStatusResponse>(`/api/builds/${encodeURIComponent(buildId)}`),
+  cancelBuild: (buildId: string) =>
+    requestJson<BuildStatusResponse>(`/api/builds/${encodeURIComponent(buildId)}/cancel`, {method: "POST"}),
 };

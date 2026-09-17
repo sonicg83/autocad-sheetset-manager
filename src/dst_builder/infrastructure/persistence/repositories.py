@@ -145,6 +145,8 @@ class RevisionRepository(Protocol):
 
     def load_plan(self, plan_id: str) -> PlanRecord | None: ...
 
+    def set_plan_confirmed(self, plan_id: str, confirmed_at: str) -> None: ...
+
 
 class BuildRepository(Protocol):
     """构建运行、attempt 与事件的持久化端口（历史不覆盖）。"""
@@ -153,13 +155,39 @@ class BuildRepository(Protocol):
 
     def load_build_run(self, build_id: str) -> BuildRunRecord | None: ...
 
+    def update_build_run(
+        self,
+        build_id: str,
+        *,
+        status: str | None = None,
+        published_path: str | None = None,
+        finished_at: str | None = None,
+    ) -> None: ...
+
+    def latest_build_for_plan(self, plan_id: str) -> BuildRunRecord | None: ...
+
+    def list_non_terminal_runs(self) -> tuple[BuildRunRecord, ...]: ...
+
     def insert_attempt(self, record: BuildAttemptRecord) -> None: ...
+
+    def update_attempt(
+        self,
+        build_id: str,
+        attempt: int,
+        *,
+        status: str,
+        progress: int,
+        error_code: str | None = None,
+        error_detail: str | None = None,
+    ) -> None: ...
 
     def list_attempts(self, build_id: str) -> tuple[BuildAttemptRecord, ...]: ...
 
     def append_event(self, record: BuildEventRecord) -> None: ...
 
     def list_events(self, build_id: str, attempt: int) -> tuple[BuildEventRecord, ...]: ...
+
+    def list_events_for_build(self, build_id: str) -> tuple[BuildEventRecord, ...]: ...
 
 
 class SqliteProjectRepository:
@@ -295,6 +323,35 @@ class SqliteRevisionRepository:
             confirmed_at=row.confirmed_at,
         )
 
+    def set_plan_confirmed(self, plan_id: str, confirmed_at: str) -> None:
+        """确认状态更新（计划内容不可更新；仅 confirmed_at 是状态字段）。"""
+        row = self._session.get(GenerationPlanRow, plan_id)
+        if row is None:
+            raise ValueError(f"计划不存在：{plan_id}")
+        row.confirmed_at = confirmed_at
+
+
+def _event_record(row: BuildEventRow) -> BuildEventRecord:
+    return BuildEventRecord(
+        id=row.id,
+        build_id=row.build_id,
+        attempt=row.attempt,
+        sequence=row.sequence,
+        event_json=row.event_json,
+        created_at=row.created_at,
+    )
+
+
+def _run_record(row: BuildRunRow) -> BuildRunRecord:
+    return BuildRunRecord(
+        id=row.id,
+        plan_id=row.plan_id,
+        status=row.status,
+        published_path=row.published_path,
+        created_at=row.created_at,
+        finished_at=row.finished_at,
+    )
+
 
 class SqliteBuildRepository:
     def __init__(self, session: Session) -> None:
@@ -326,6 +383,42 @@ class SqliteBuildRepository:
             finished_at=row.finished_at,
         )
 
+    def update_build_run(
+        self,
+        build_id: str,
+        *,
+        status: str | None = None,
+        published_path: str | None = None,
+        finished_at: str | None = None,
+    ) -> None:
+        """状态机推进字段更新（内容不可覆盖：不改 plan_id / created_at）。"""
+        row = self._session.get(BuildRunRow, build_id)
+        if row is None:
+            raise ValueError(f"构建运行不存在：{build_id}")
+        if status is not None:
+            row.status = status
+        if published_path is not None:
+            row.published_path = published_path
+        if finished_at is not None:
+            row.finished_at = finished_at
+
+    def latest_build_for_plan(self, plan_id: str) -> BuildRunRecord | None:
+        row = self._session.scalars(
+            select(BuildRunRow)
+            .where(BuildRunRow.plan_id == plan_id)
+            .order_by(BuildRunRow.created_at.desc(), BuildRunRow.id.desc())
+        ).first()
+        return _run_record(row) if row is not None else None
+
+    def list_non_terminal_runs(self) -> tuple[BuildRunRecord, ...]:
+        """启动恢复入口：全部未终止 build 运行（SUCCEEDED/CANCELLED/FAILED 之外）。"""
+        rows = self._session.scalars(
+            select(BuildRunRow).where(
+                BuildRunRow.status.notin_(["SUCCEEDED", "CANCELLED", "FAILED"])
+            )
+        ).all()
+        return tuple(_run_record(row) for row in rows)
+
     def insert_attempt(self, record: BuildAttemptRecord) -> None:
         self._session.add(
             BuildAttemptRow(
@@ -337,6 +430,25 @@ class SqliteBuildRepository:
                 error_detail=record.error_detail,
             )
         )
+
+    def update_attempt(
+        self,
+        build_id: str,
+        attempt: int,
+        *,
+        status: str,
+        progress: int,
+        error_code: str | None = None,
+        error_detail: str | None = None,
+    ) -> None:
+        """状态机推进字段更新（历史不覆盖：不改 (build_id, attempt) 标识）。"""
+        row = self._session.get(BuildAttemptRow, (build_id, attempt))
+        if row is None:
+            raise ValueError(f"构建 attempt 不存在：{build_id}#{attempt}")
+        row.status = status
+        row.progress = progress
+        row.error_code = error_code
+        row.error_detail = error_detail
 
     def list_attempts(self, build_id: str) -> tuple[BuildAttemptRecord, ...]:
         rows = self._session.scalars(
@@ -359,7 +471,8 @@ class SqliteBuildRepository:
     def append_event(self, record: BuildEventRecord) -> None:
         self._session.add(
             BuildEventRow(
-                id=record.id,
+                # id 仅在测试构造中作占位（0）；落库时交给 autoincrement。
+                id=record.id or None,
                 build_id=record.build_id,
                 attempt=record.attempt,
                 sequence=record.sequence,
@@ -374,14 +487,12 @@ class SqliteBuildRepository:
             .where(BuildEventRow.build_id == build_id, BuildEventRow.attempt == attempt)
             .order_by(BuildEventRow.sequence)
         ).all()
-        return tuple(
-            BuildEventRecord(
-                id=row.id,
-                build_id=row.build_id,
-                attempt=row.attempt,
-                sequence=row.sequence,
-                event_json=row.event_json,
-                created_at=row.created_at,
-            )
-            for row in rows
-        )
+        return tuple(_event_record(row) for row in rows)
+
+    def list_events_for_build(self, build_id: str) -> tuple[BuildEventRecord, ...]:
+        rows = self._session.scalars(
+            select(BuildEventRow)
+            .where(BuildEventRow.build_id == build_id)
+            .order_by(BuildEventRow.attempt, BuildEventRow.sequence)
+        ).all()
+        return tuple(_event_record(row) for row in rows)
