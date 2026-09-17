@@ -27,8 +27,11 @@ web/*.tsbuildinfo
 /dist/
 plugins/autocad2016/
 plugins/autocad2020/
+plugins/builder/
 plugins/src/**/obj/
 plugins/src/**/bin/
+plugins/tests/**/obj/
+plugins/tests/**/bin/
 coverage.xml
 .coverage
 

@@ -400,9 +400,9 @@ def test_intake_rejects_case_colliding_existing_file(
 
 
 class _StubInspector:
-    """端口签名验证桩：Task 7 以真实 CAD 执行器实现同一协议。"""
+    """端口签名验证桩：Task 7 起端口协议为 ``inspect_layouts(AssetSnapshot, ...)``。"""
 
-    def list_layouts(self, asset: object, cad_version: str) -> tuple[str, ...]:
+    def inspect_layouts(self, asset: object, cad_version: str) -> tuple[str, ...]:
         assert cad_version == "2020"
         return ("A1", "A2")
 

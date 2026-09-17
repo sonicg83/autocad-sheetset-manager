@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Protocol
 
 from dst_builder.application.projects import ProjectNotInitializedError
-from dst_builder.domain.models import AssetRole
+from dst_builder.domain.models import AssetRole, AssetSnapshot
 from dst_builder.domain.paths import ProjectPathError, resolve_within_project
 from dst_builder.infrastructure.assets.store import (
     MAX_ASSET_BYTES,
@@ -162,11 +162,13 @@ class AssetIntake:
 class LayoutInspection(Protocol):
     """§11 ``POST /api/assets/{id}/inspect`` 的端口：匹配版本 CAD 读取可用布局。
 
-    Task 7 以真实 CAD 执行器实现本协议并注入应用工厂；在此之前端口保持
-    未接线状态，端点固定返回 501（见 ``CadInspectionUnavailableError``）。
+    PLAN-DB-001 Task 7 起由
+    ``dst_builder.infrastructure.autocad.drawing.CoreConsoleDrawingBuilder``
+    实现本协议：接收项目内资产快照与受支持 CAD 版本（2016/2020），返回布局名
+    元组；端口未接线时端点固定返回 501（见 ``CadInspectionUnavailableError``）。
     """
 
-    def list_layouts(self, asset: AssetRecord, cad_version: str) -> tuple[str, ...]: ...
+    def inspect_layouts(self, asset: AssetSnapshot, cad_version: str) -> tuple[str, ...]: ...
 
 
 class BuilderAssetService:
@@ -233,12 +235,18 @@ class BuilderAssetService:
         self, asset_id: str, cad_version: str, inspector: LayoutInspection | None
     ) -> tuple[str, ...]:
         """通过 inspection 端口读取可用布局；端口未接线即固定 501 语义。"""
-        asset = self.load_asset(asset_id)
+        record = self.load_asset(asset_id)
         if inspector is None:
             raise CadInspectionUnavailableError(
                 "布局 inspection 端口尚未接线：需要匹配版本的 CAD 执行器"
             )
-        return inspector.list_layouts(asset, cad_version)
+        snapshot = AssetSnapshot(
+            role=record.role,
+            relative_path=record.relative_path,
+            sha256=record.sha256,
+            size=record.size,
+        )
+        return inspector.inspect_layouts(snapshot, cad_version)
 
     # -- 内部 ---------------------------------------------------------------
 
