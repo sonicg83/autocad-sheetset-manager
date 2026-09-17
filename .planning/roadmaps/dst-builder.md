@@ -9,8 +9,10 @@ updated: 2026-09-17
 related:
   - VISION-DB-001
   - PRD-DB-001
-  - ARCH-DB-001
-  - RFC-INT-001
+- ARCH-DB-001
+- RFC-INT-001
+- SPEC-DB-001
+- PLAN-DB-001
 ---
 
 # DST Builder 路线图
@@ -30,6 +32,8 @@ related:
 ### 阶段 1：最小生成闭环
 
 支持一个项目、一种规则、一个图纸组和一个输出 DWG，完整贯通向导录入、计划、DWG、Handle、DST、成果包和 Manager 打开。
+
+实施依据：[SPEC-DB-001](../../docs/dst-builder/specs/SPEC-DB-001-minimal-generation-loop.md) 与 [PLAN-DB-001](../plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md)。
 
 退出条件：AutoCAD 2016/2020 均通过真实结果验收，运行时不依赖 Legacy 代码。
 

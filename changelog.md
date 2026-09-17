@@ -2450,3 +2450,8 @@
 - 固化成果包只有 `drawings/` 与 `metadata/` 两个根目录，前者保存 DST、DWG 和附带资产并可独立交付，后者保存版本化 JSON 追溯与 Manager 交接信息。
 - `VISION-LR-001`、`ARCH-LR-001` 与 `ARCH-INT-001` 标记为 `superseded`，`ROADMAP-LR-001` 标记为 `cancelled`；历史文件保留用于规则考古和黄金样本，不构成 Builder 兼容承诺。
 - 更新文档索引、模板、协作规范和中英文 README 导航；`ARCH-INT-002` 完整承接文档类型、生命周期、索引和归档规则，成为唯一治理权威；新产品文档使用 `dst-builder` scope 与 `DB` 永久编号前缀，历史 `LR` 编号保留但不再新增。
+## 2026-09-17（DST Builder 最小生成闭环规范与计划）
+
+- 新增 [SPEC-DB-001](docs/dst-builder/specs/SPEC-DB-001-minimal-generation-loop.md)，把首个纵向切片固定为七步引导下的一项目、一分组、一张图纸闭环，明确项目库、确定性修订与计划、DWG/DST/XLSX 生成、仅含 `drawings/` 和 `metadata/` 的成果包、原子发布及 Manager 显式交接契约。
+- 新增 [PLAN-DB-001](.planning/plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md)，按契约、项目库、引导界面、共享能力提取、CAD/DST 生成、发布、Manager 接管、独立打包和真实双版本资格拆分十二个 TDD 任务与六个检查点；计划确认前不修改产品代码。
+- 新增 DST Builder Plan 索引，并更新产品、路线图与执行资料导航。

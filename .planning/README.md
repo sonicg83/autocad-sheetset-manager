@@ -7,6 +7,7 @@
 - [DST Manager 路线图](roadmaps/dst-manager.md)
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
+- [DST Builder Plan 索引](plans/dst-builder/README.md)
 - 当前没有尚未归档的 Todo。
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
 
