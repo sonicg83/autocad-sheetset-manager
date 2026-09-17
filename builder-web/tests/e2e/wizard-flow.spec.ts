@@ -178,6 +178,39 @@ test("步骤 5 不自动确认：提交修订后必须由用户显式确认", as
   expect(mock.calls.confirm).toBe(1);
 });
 
+test("构建运行中字段只读：输入禁用且无 :disabled 字面文本（Task 9 评审回归）", async ({page}) => {
+  // buildSequence 停留在 BUILDING_DWG：模拟构建进行中。
+  const mock = new BackendMock(page, {
+    initialized: true,
+    wizardStep: 5,
+    draft: {template: {base_asset_id: "asset-base-1", layout_asset_id: "asset-layout-1", source_layout: "A1"}},
+    buildSequence: [{status: "BUILDING_DWG", progress: 30}],
+  });
+  await gotoWizard(page, mock);
+
+  // 第 5 步：提交并确认计划（构建输入冻结）
+  await page.getByTestId("submit-revision").click();
+  await expect(page.getByTestId("plan-preview")).toBeVisible();
+  await page.getByTestId("confirm-plan").click();
+  await expect(page.getByTestId("plan-confirmed")).toBeVisible();
+
+  // 第 6 步：启动构建并停留在 BUILDING_DWG
+  await page.getByTestId("dock-next").click();
+  await expect(page.getByRole("heading", {name: "构建成果"})).toBeVisible();
+  await page.getByTestId("start-build").click();
+  await expect(page.getByTestId("build-status")).toHaveText("BUILDING_DWG", {timeout: 10_000});
+
+  // 构建运行中：草稿字段禁用（跨步骤抽查），且页面上不得出现 ":disabled" 字面文本
+  await page.getByTestId("rail-step-2").click();
+  await expect(page.getByLabel("图号前缀")).toBeDisabled();
+  await expect(page.getByLabel("起始序号")).toBeDisabled();
+  await expect(page.getByLabel("位数")).toBeDisabled();
+  await page.getByTestId("rail-step-3").click();
+  await expect(page.getByLabel("图名")).toBeDisabled();
+  const bodyText = await page.locator("body").textContent();
+  expect(bodyText).not.toContain(":disabled");
+});
+
 test("字段诊断映射到具体控件：错误摘要获得焦点，条目可跳转聚焦对应输入", async ({page}) => {
   const mock = new BackendMock(page, {
     initialized: true,

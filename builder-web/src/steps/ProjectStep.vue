@@ -69,7 +69,7 @@ async function submitCreate(): Promise<void> {
       </p>
       <p class="field">
         <label class="field-label" for="e-stage">阶段</label>
-        <input id="e-stage" v-model="store.draft.project.stage" data-field="project.stage" type="text" /> :disabled="store.buildRunning.value"
+        <input id="e-stage" v-model="store.draft.project.stage" data-field="project.stage" type="text" :disabled="store.buildRunning.value" />
       </p>
       <p class="field">
         <label class="field-label" for="e-discipline">专业</label>

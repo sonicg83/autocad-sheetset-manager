@@ -310,6 +310,98 @@ def test_concurrent_start_while_running_is_rejected(env) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 评审回归：取消标志按 attempt 键控 + run 状态重置 + 计划冻结
+# ---------------------------------------------------------------------------
+
+
+def test_cancelled_attempt_can_be_retried_and_cancel_again(env) -> None:
+    """Critical 回归：attempt 1 取消后重试，取消标志不得泄漏到 attempt 2。"""
+    from dst_builder.infrastructure.persistence.database import Database
+    from dst_builder.infrastructure.persistence.repositories import (
+        SqliteBuildRepository,
+    )
+
+    env.submit_plan()
+    env.confirm_plan()
+
+    # attempt 1：BUILDING_DWG 处取消
+    entered1, release1 = threading.Event(), threading.Event()
+
+    def gate1(_cad_version: str, _attempt_dir) -> None:
+        entered1.set()
+        assert release1.wait(timeout=10)
+
+    env.fake_builder.behavior = gate1
+    first = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    assert entered1.wait(timeout=5)
+    assert env.client.post(f"/api/builds/{first['build_id']}/cancel").status_code == 202
+    release1.set()
+    final1 = env.wait_terminal(first["build_id"])
+    assert final1["status"] == "CANCELLED"
+
+    # attempt 2：重试。若取消标志泄漏，新 attempt 会在 QUEUED 瞬间变 CANCELLED。
+    entered2, release2 = threading.Event(), threading.Event()
+
+    def gate2(_cad_version: str, _attempt_dir) -> None:
+        entered2.set()
+        assert release2.wait(timeout=10)
+
+    env.fake_builder.behavior = gate2
+    second = env.client.post("/api/builds", json={"plan_id": env.plan_id})
+    assert second.status_code == 202, second.text
+    payload = second.json()
+    assert payload["attempt"] == 2
+    assert payload["status"] != "CANCELLED", "取消标志泄漏到新 attempt"
+    assert entered2.wait(timeout=5)
+
+    # run 状态已从 CANCELLED 复位为 QUEUED（未终止），取消再次被受理。
+    database = Database(env.project_root / "project.dstb")
+    with database.sessions.begin() as session:
+        run = SqliteBuildRepository(session).load_build_run(payload["build_id"])
+    assert run.status == "QUEUED"
+    assert run.finished_at is None
+    assert env.client.post(f"/api/builds/{payload['build_id']}/cancel").status_code == 202
+    release2.set()
+
+    final2 = env.wait_terminal(payload["build_id"])
+    assert final2["status"] == "CANCELLED"
+    attempts = {item["attempt"]: item["status"] for item in final2["attempts"]}
+    assert attempts == {1: "CANCELLED", 2: "CANCELLED"}
+
+
+def test_running_build_is_not_affected_by_draft_modification(env) -> None:
+    """§5 计划冻结：构建运行中修改草稿，构建按创建时快照的计划完成。"""
+    env.submit_plan()
+    env.confirm_plan()
+    entered, release = threading.Event(), threading.Event()
+
+    def gate(_cad_version: str, _attempt_dir) -> None:
+        entered.set()
+        assert release.wait(timeout=10)
+
+    env.fake_builder.behavior = gate
+    started = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    assert entered.wait(timeout=5)
+
+    # 运行中修改图名（进入 candidate 之前，发布尚未开始）
+    env.patch_draft(**{"sheets.0.title": "二层平面图"})
+    state = env.client.get("/api/projects/current").json()
+    assert state["draft"]["sheets"][0]["title"] == "二层平面图"
+
+    release.set()
+    final = env.wait_terminal(started["build_id"])
+    assert final["status"] == "SUCCEEDED"
+
+    # 发布包反映冻结计划的内容，而非运行中修改后的草稿
+    dwg = next((env.target / "drawings").glob("*.dwg"))
+    assert dwg.name == "A-001 首层平面图.dwg"
+    manifest = json.loads((env.target / "metadata" / "manifest.json").read_text(encoding="utf-8"))
+    paths = {entry["path"] for entry in manifest["files"]}
+    assert "drawings/A-001 首层平面图.dwg" in paths
+    assert not any("二层平面图" in path for path in paths)
+
+
+# ---------------------------------------------------------------------------
 # 工具
 # ---------------------------------------------------------------------------
 

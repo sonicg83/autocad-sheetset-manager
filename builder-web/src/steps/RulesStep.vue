@@ -34,12 +34,12 @@ function onWidthInput(event: Event): void {
 
     <fieldset class="field">
       <legend class="field-label">AutoCAD 版本</legend>
-      <label class="radio"><input v-model="store.draft.cad_version" data-field="cad_version" type="radio" value="2016" name="cad_version" /> AutoCAD 2016</label> :disabled="store.buildRunning.value"
-      <label class="radio"><input v-model="store.draft.cad_version" data-field="cad_version" type="radio" value="2020" name="cad_version" /> AutoCAD 2020</label> :disabled="store.buildRunning.value"
+      <label class="radio"><input v-model="store.draft.cad_version" data-field="cad_version" type="radio" value="2016" name="cad_version" :disabled="store.buildRunning.value" /> AutoCAD 2016</label>
+      <label class="radio"><input v-model="store.draft.cad_version" data-field="cad_version" type="radio" value="2020" name="cad_version" :disabled="store.buildRunning.value" /> AutoCAD 2020</label>
     </fieldset>
     <p class="field">
       <label class="field-label" for="r-prefix">图号前缀</label>
-      <input id="r-prefix" v-model="store.draft.numbering.prefix" data-field="numbering.prefix" type="text" /> :disabled="store.buildRunning.value"
+      <input id="r-prefix" v-model="store.draft.numbering.prefix" data-field="numbering.prefix" type="text" :disabled="store.buildRunning.value" />
     </p>
     <p class="field">
       <label class="field-label" for="r-start">起始序号</label>
@@ -50,6 +50,7 @@ function onWidthInput(event: Event): void {
         type="number"
         min="0"
         max="999999"
+        :disabled="store.buildRunning.value"
         @input="onStartInput"
       />
     </p>
@@ -62,6 +63,7 @@ function onWidthInput(event: Event): void {
         type="number"
         min="1"
         max="6"
+        :disabled="store.buildRunning.value"
         @input="onWidthInput"
       />
     </p>

@@ -166,6 +166,8 @@ class BuildRepository(Protocol):
 
     def latest_build_for_plan(self, plan_id: str) -> BuildRunRecord | None: ...
 
+    def reset_run_for_new_attempt(self, build_id: str, *, status: str) -> None: ...
+
     def list_non_terminal_runs(self) -> tuple[BuildRunRecord, ...]: ...
 
     def insert_attempt(self, record: BuildAttemptRecord) -> None: ...
@@ -409,6 +411,18 @@ class SqliteBuildRepository:
             .order_by(BuildRunRow.created_at.desc(), BuildRunRow.id.desc())
         ).first()
         return _run_record(row) if row is not None else None
+
+    def reset_run_for_new_attempt(self, build_id: str, *, status: str) -> None:
+        """重试 attempt 创建时把 run 复位为未终止状态（finished_at 清空）。
+
+        run.status 若停留在上一 attempt 的终态，重试的取消会被误拒、SSE 会
+        按过期终态提前收流、崩溃恢复会漏掉非终态 attempt。
+        """
+        row = self._session.get(BuildRunRow, build_id)
+        if row is None:
+            raise ValueError(f"构建运行不存在：{build_id}")
+        row.status = status
+        row.finished_at = None
 
     def list_non_terminal_runs(self) -> tuple[BuildRunRecord, ...]:
         """启动恢复入口：全部未终止 build 运行（SUCCEEDED/CANCELLED/FAILED 之外）。"""

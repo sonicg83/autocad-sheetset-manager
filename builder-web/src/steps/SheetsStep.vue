@@ -30,7 +30,7 @@ const derived = computed(() => {
 
     <p class="field">
       <label class="field-label" for="s-title">图名</label>
-      <input id="s-title" v-model="store.draft.sheets[0]!.title" data-field="sheets.0.title" type="text" /> :disabled="store.buildRunning.value"
+      <input id="s-title" v-model="store.draft.sheets[0]!.title" data-field="sheets.0.title" type="text" :disabled="store.buildRunning.value" />
     </p>
     <dl v-if="derived" class="derived">
       <div>

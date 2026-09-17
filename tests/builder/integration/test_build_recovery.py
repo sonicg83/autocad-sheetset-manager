@@ -114,7 +114,7 @@ def recovery(tmp_path: Path):
     return Simple(
         tmp_path=tmp_path, project_root=project_root, database=database,
         output_target=tmp_path / "example-package", add_build=add_build,
-        build_dir=project_root / "builds",
+        build_dir=project_root / "builds", plan_id=plan_id,
     )
 
 
@@ -187,6 +187,51 @@ def test_interrupted_attempts_fail_with_build_interrupted(recovery, status: str)
     assert attempts[-1].error_code == BUILD_INTERRUPTED
     # 保留现场：attempt 目录与内容不被清理
     assert (attempt_dir / "work" / "working.dwg").is_file()
+
+
+def test_recovery_finds_retry_attempt_of_stale_run(recovery) -> None:
+    """Important 回归：重试 attempt 的 run 状态已复位，恢复不得漏掉 attempt 2。"""
+    build_id = str(uuid.uuid4())
+    with recovery.database.sessions.begin() as session:
+        repo = SqliteBuildRepository(session)
+        # run 复位为 QUEUED（start_build 创建 attempt 2 时的形态），
+        # attempt 1 已 FAILED，attempt 2 卡在 PUBLISHING 且残留暂存。
+        repo.insert_build_run(
+            BuildRunRecord(
+                id=build_id, plan_id=recovery.plan_id, status="QUEUED",
+                published_path=None, created_at=NOW, finished_at=None,
+            )
+        )
+        repo.insert_attempt(
+            BuildAttemptRecord(
+                build_id=build_id, attempt=1, status="FAILED",
+                progress=30, error_code="CAD_EXECUTION_FAILED", error_detail=None,
+            )
+        )
+        repo.insert_attempt(
+            BuildAttemptRecord(
+                build_id=build_id, attempt=2, status="PUBLISHING",
+                progress=92, error_code=None, error_detail=None,
+            )
+        )
+    attempt_dir = _seed_attempt_dirs(recovery, build_id, attempt=2)
+    staging = recovery.output_target.parent / f".dstb-staging-{uuid.uuid4().hex[:8]}"
+    staging.mkdir(parents=True)
+    (staging / "drawings").mkdir()
+    (staging / "drawings" / "sheetset.dst").write_bytes(b"partial")
+    _seed_publish_evidence(attempt_dir, recovery.output_target, staging)
+
+    outcomes = recover_pending_builds(recovery.project_root, recovery.database)
+
+    assert [outcome.attempt for outcome in outcomes] == [2]
+    assert outcomes[0].error_code == BUILD_INTERRUPTED
+    assert not staging.exists(), "attempt 2 的暂存目录必须被清理"
+    assert not recovery.output_target.exists()
+    with recovery.database.sessions.begin() as session:
+        repo = SqliteBuildRepository(session)
+        attempts = repo.list_attempts(build_id)
+    assert [item.status for item in attempts] == ["FAILED", "FAILED"]
+    assert attempts[-1].error_code == BUILD_INTERRUPTED
 
 
 # ---------------------------------------------------------------------------

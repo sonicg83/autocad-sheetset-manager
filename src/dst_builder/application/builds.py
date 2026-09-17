@@ -220,7 +220,9 @@ class BuildCoordinator:
         self._drawing_builder = drawing_builder
         self._database = database
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self._cancel_flags: dict[str, threading.Event] = {}
+        # 取消标志按 (build_id, attempt) 键控：标志只作用于发起取消时的那个
+        # attempt，绝不泄漏到同 build 的后续重试 attempt（§6 递增重试路径）。
+        self._cancel_flags: dict[tuple[str, int], threading.Event] = {}
 
     # -- 计划（§5）----------------------------------------------------------
 
@@ -318,6 +320,13 @@ class BuildCoordinator:
                         f"构建仍有未终止 attempt：{build_id}#{latest.attempt}"
                     )
                 attempt = latest.attempt + 1
+                # 重试 attempt：run 状态从未终止的 FAILED/CANCELLED 复位为
+                # QUEUED（finished_at 清空）。否则 (a) 重试的取消被终态 run
+                # 误拒、(b) SSE 按过期终态提前收流、(c) 崩溃恢复漏掉非终态
+                # attempt（含残留暂存）。
+                repository.reset_run_for_new_attempt(
+                    build_id, status=BuildStatus.QUEUED.value
+                )
             repository.insert_attempt(
                 BuildAttemptRecord(
                     build_id=build_id,
@@ -346,10 +355,13 @@ class BuildCoordinator:
             latest = repository.list_attempts(build_id)[-1]
         if (
             BuildStatus(run.status) in TERMINAL_STATUSES
+            or BuildStatus(latest.status) in TERMINAL_STATUSES
             or BuildStatus(latest.status) is BuildStatus.PUBLISHING
         ):
             raise CancelNotAcceptedError(f"构建状态 {latest.status} 不响应取消（§6）")
-        self._cancel_flags.setdefault(build_id, threading.Event()).set()
+        self._cancel_flags.setdefault(
+            (build_id, latest.attempt), threading.Event()
+        ).set()
         return self.get_build(build_id)
 
     def get_build(self, build_id: str) -> BuildStatusView:
@@ -426,11 +438,11 @@ class BuildCoordinator:
         target: Path,
     ) -> None:
         try:
-            self._checkpoint(build_id)
+            self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.PREPARING)
             dirs = create_attempt_dirs(self._project_root, build_id, attempt)
 
-            self._checkpoint(build_id)
+            self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.BUILDING_DWG)
             dwg_task = replace(
                 plan.drawing_task,
@@ -453,7 +465,7 @@ class BuildCoordinator:
                 },
             )
 
-            self._checkpoint(build_id)
+            self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.BUILDING_DST)
             dst_bytes = build_dst_bytes(plan, cad_result)
             catalog_bytes = build_sheet_catalog_xlsx(
@@ -463,7 +475,7 @@ class BuildCoordinator:
                 layout=plan.sheetset_task.layout_name,
             )
 
-            self._checkpoint(build_id)
+            self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.VERIFYING)
             ensure_dst_valid(dst_bytes, plan, cad_result)
             report = build_validation_report(
@@ -492,7 +504,7 @@ class BuildCoordinator:
                 destination.write_bytes(content)
 
             # PUBLISHING：最后取消检查点之后不再响应取消（§6）。
-            self._checkpoint(build_id)
+            self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.PUBLISHING)
             staging = target.parent / unique_staging_name(target)
             write_publish_evidence(dirs.metadata, target=target, staging=staging)
@@ -505,8 +517,9 @@ class BuildCoordinator:
         except BaseException as error:  # noqa: BLE001 - 任何异常都以 FAILED 终止 attempt
             self._fail(build_id, attempt, error)
 
-    def _checkpoint(self, build_id: str) -> None:
-        if self._cancel_flags.get(build_id, threading.Event()).is_set():
+    def _checkpoint(self, build_id: str, attempt: int) -> None:
+        flag = self._cancel_flags.get((build_id, attempt))
+        if flag is not None and flag.is_set():
             raise _BuildCancelled(build_id)
 
     def _fail(self, build_id: str, attempt: int, error: BaseException) -> None:
