@@ -1,7 +1,14 @@
-import re
+"""Manager 文本/XML 校验入口。
+
+``normalize_derived_name`` 的危险名称字符判定已切换到共享纯函数
+``dst_platform.contracts.naming.contains_unsafe_filename_char``
+（PLAN-DB-001 Task 6，字符集取并集，语义只紧不松：共享函数额外拒绝
+DEL 控制字符 ``\\x7f``）；错误码与 ``ValueError(f"{label}无效")`` 消息保持不变。
+"""
+
 from pathlib import Path
 
-_UNSAFE_DERIVED_NAME = re.compile(r"[<>/\\\":;?*|=\r\n\x00-\x1f]")
+from dst_platform.contracts.naming import contains_unsafe_filename_char
 
 
 def validate_xml_text(value: str) -> str:
@@ -26,7 +33,7 @@ def validate_absolute_source_file(value: str) -> str:
 
 def normalize_derived_name(value: str, label: str) -> str:
     normalized = validate_xml_text(value).strip()
-    if not normalized or _UNSAFE_DERIVED_NAME.search(normalized):
+    if not normalized or contains_unsafe_filename_char(normalized):
         raise ValueError(f"{label}无效")
     return normalized
 

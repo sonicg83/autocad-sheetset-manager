@@ -1,18 +1,13 @@
+"""运行日志文本协议（PLAN-DB-001 Task 6：``sanitize_log_text`` 实现所有权已迁至
+``dst_platform.autocad.process``，此处仅薄 re-export；``validate_log_bytes`` 为
+Manager 日志文件通道的本地协议校验，仍归 Manager 所有）。
+"""
+
+from dst_platform.autocad.process import sanitize_log_text
+
+__all__ = ["sanitize_log_text", "validate_log_bytes"]
+
 _ALLOWED_CONTROLS = {"\t", "\n", "\r"}
-
-
-def sanitize_log_text(value: str) -> str:
-    """把日志规范为可安全写入 UTF-8 文本文件的内容。"""
-    output: list[str] = []
-    for character in value:
-        codepoint = ord(character)
-        if codepoint < 32 and character not in _ALLOWED_CONTROLS:
-            output.append(f"\\x{codepoint:02x}")
-        elif codepoint == 127:
-            output.append("\\x7f")
-        else:
-            output.append(character)
-    return "".join(output)
 
 
 def validate_log_bytes(data: bytes) -> None:

@@ -1,24 +1,43 @@
+"""AutoCAD Core Console Worker：SCR 渲染、sidecar 协议与能力描述。
+
+进程执行原语（``CoreConsoleExecutor``/``CoreConsoleRequest``/``CoreConsoleResult``、
+日志解码 ``decode_console_output`` 与 ``sanitize_log_text``）所有权已迁至
+``dst_platform.autocad.process``（PLAN-DB-001 Task 6）；本模块的
+``CoreConsoleExecutor`` 是 Manager 兼容适配器，保留既有
+``run(capability, drawing, script, timeout)`` 签名并委托共享执行器。
+"""
+
 import json
 import re
-import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from dst_manager.infrastructure.logging_text import sanitize_log_text
+from dst_platform.autocad.process import (
+    CoreConsoleExecutor as _PlatformCoreConsoleExecutor,
+)
+from dst_platform.autocad.process import (
+    CoreConsoleRequest,
+    CoreConsoleResult,
+    decode_console_output,
+)
+
+__all__ = [
+    "CadCapability",
+    "CoreConsoleExecutor",
+    "CoreConsoleRequest",
+    "CoreConsoleResult",
+    "ScriptRenderer",
+    "decode_console_output",
+    "encode_scr_argument",
+    "parse_handles",
+    "parse_layout_names",
+    "parse_rename_result",
+    "rename_request_path",
+    "rename_result_path",
+    "write_rename_request",
+]
 
 _UNSAFE = re.compile(r"[\r\n\x00-\x1f\"]")
-
-
-def decode_console_output(data: bytes) -> str:
-    """按 Core Console 的实际输出编码解码，再转换为安全日志文本。"""
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        return sanitize_log_text(data.decode("utf-16", errors="replace"))
-    sample = data[:200]
-    odd_nuls = sample[1::2].count(0)
-    if odd_nuls >= 2 and odd_nuls >= len(sample[1::2]) // 4:
-        return sanitize_log_text(data.decode("utf-16-le", errors="replace"))
-    return sanitize_log_text(data.decode("mbcs", errors="replace"))
 
 
 def encode_scr_argument(value: str) -> str:
@@ -185,52 +204,15 @@ class CadCapability:
         return bool(self.console and self.console.is_file() and self.plugin and self.plugin.is_file())
 
 
-@dataclass(slots=True)
-class CoreConsoleResult:
-    args: list[str]
-    returncode: int
-    stdout: str
-    stderr: str
-    duration_ms: int
-    peak_memory_bytes: int | None
-
-
 class CoreConsoleExecutor:
+    """Manager 兼容适配器：能力检查与错误码保持原样，进程执行委托共享实现。"""
+
+    def __init__(self) -> None:
+        self._executor = _PlatformCoreConsoleExecutor()
+
     def run(self, capability: CadCapability, drawing: Path, script: Path, timeout: int) -> CoreConsoleResult:
         if not capability.available:
             raise RuntimeError(f"CAD_CAPABILITY_UNAVAILABLE: {capability.version}")
-        args = [str(capability.console), "/i", str(drawing), "/s", str(script), "/l", "zh-CN"]
-        started = time.perf_counter()
-        # accoreconsole 是控制台程序，从 GUI 进程启动会弹出终端窗口；
-        # CREATE_NO_WINDOW 抑制该窗口（stdout/stderr 仍照常经管道回收）。
-        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
-            raise subprocess.TimeoutExpired(args, timeout, stdout, stderr)
-        duration_ms = int((time.perf_counter() - started) * 1000)
-        peak_memory = self._peak_memory(process)
-
-        completed = CoreConsoleResult(args, process.returncode, decode_console_output(stdout), decode_console_output(stderr), duration_ms, peak_memory)
-        if completed.returncode:
-            raise subprocess.CalledProcessError(completed.returncode, args, completed.stdout, completed.stderr)
-        return completed
-
-    @staticmethod
-    def _peak_memory(process: subprocess.Popen) -> int | None:
-        """Windows 进程句柄保留的 PeakWorkingSetSize；查询失败不影响 CAD 结果。"""
-        try:
-            import ctypes
-
-            class Counters(ctypes.Structure):
-                _fields_ = [("cb", ctypes.c_ulong), ("PageFaultCount", ctypes.c_ulong), ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
-
-            counters = Counters()
-            counters.cb = ctypes.sizeof(counters)
-            if ctypes.windll.psapi.GetProcessMemoryInfo(int(process._handle), ctypes.byref(counters), counters.cb):
-                return int(counters.PeakWorkingSetSize)
-        except (AttributeError, OSError, ValueError):
-            pass
-        return None
+        return self._executor.run(
+            CoreConsoleRequest(console=capability.console, drawing=drawing, script=script, timeout=timeout)
+        )

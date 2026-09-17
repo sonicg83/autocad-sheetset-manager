@@ -4,10 +4,12 @@ SPEC-DB-001 §4：``layout_name`` 与 ``dwg_name`` 不得包含 ``<>:"/\\|?*`` �
 不得以句点/空格结尾，去除扩展名并忽略大小写后不得等于保留设备名，规范化后的
 文件基名最长 180 个字符；所有字符串保存前去除首尾空白。
 
-Manager 侧既有等价规则（``dst_manager.domain.text_validation`` 的
+Manager 侧既有等价规则（``dst_manager.domain.text_validation`` 原
 ``_UNSAFE_DERIVED_NAME``）额外禁止 ``;`` 与 ``=``。本模块取两者并集，保证
-「Manager 拒绝的名称本函数必拒绝」，Manager 成为第二个消费方（PLAN-DB-001
-Task 6）时切换到本实现语义只紧不松。Builder 不得 import ``dst_manager.*``。
+「Manager 拒绝的名称本函数必拒绝」；自 PLAN-DB-001 Task 6 起 Manager 的
+危险名称校验入口（``normalize_derived_name``）已切换到本模块共享实现，
+语义只紧不松（共享函数额外拒绝 DEL 控制字符 ``\\x7f``）。Builder 不得
+import ``dst_manager.*``。
 """
 
 from __future__ import annotations

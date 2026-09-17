@@ -128,7 +128,7 @@ def test_fail_samples_repair_in_memory(tmp_path):
             seen.add(key)
 
     # 修复后满足 contract 校验
-    assert validate_contract(repaired) == []
+    assert validate_contract(repaired) == ()
     # 每张图纸都补齐了 AcSmSheetViews
     for sheet in repaired.xpath("//*[local-name()='AcSmSheet']"):
         views = [c for c in sheet if etree.QName(c).localname == "AcSmSheetViews"]

@@ -3,11 +3,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
+# 诊断模型所有权已迁至 dst_platform.contracts.diagnostics（PLAN-DB-001 Task 6）；
+# 此处兼容导出同一类型对象，Manager 全库继续经本模块消费，避免第二套诊断模型。
+from dst_platform.contracts.diagnostics import Severity, ValidationIssue
 
-class Severity(StrEnum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
+__all__ = ["Severity", "ValidationIssue"]
 
 
 class JobStatus(StrEnum):
@@ -25,15 +25,6 @@ class JobStatus(StrEnum):
     ROLLING_BACK = "ROLLING_BACK"
     ROLLED_BACK = "ROLLED_BACK"
     NEEDS_REVIEW = "NEEDS_REVIEW"
-
-
-@dataclass(slots=True)
-class ValidationIssue:
-    code: str
-    severity: Severity
-    message: str
-    object_id: str | None = None
-    location: str | None = None
 
 
 RepairStatus = Literal[

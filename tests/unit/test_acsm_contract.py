@@ -67,8 +67,8 @@ def _codes(issues) -> set[str]:
 def test_golden_sheetset_passes_contract_and_schema():
     """Project1 黄金样本经 contract 与 XSD 校验无错误。"""
     root = _parse(GOLDEN.read_bytes())
-    assert validate_contract(root) == []
-    assert validate_schema(root) == []
+    assert validate_contract(root) == ()
+    assert validate_schema(root) == ()
 
 
 def test_golden_sheets_require_id_and_fixed_clsid_only():
@@ -159,8 +159,8 @@ def test_unknown_element_attribute_order_tail_are_ignored():
         1,
     )
     root = _parse(xml)
-    assert validate_contract(root) == []
-    assert validate_schema(root) == []
+    assert validate_contract(root) == ()
+    assert validate_schema(root) == ()
 
 
 def test_contract_reports_missing_id():
