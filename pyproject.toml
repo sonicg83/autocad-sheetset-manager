@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 dst-manager = "dst_manager.interfaces.cli:app"
+dst-builder = "dst_builder.interfaces.cli:app"
 
 [dependency-groups]
 dev = [
@@ -36,7 +37,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dst_manager"]
+packages = ["src/dst_manager", "src/dst_builder", "src/dst_platform"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
