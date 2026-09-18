@@ -997,6 +997,7 @@ git commit -m "新增 Builder 产出由 Manager 直接打开的集成测试"
 - Modify: `builder-web/src/components/StepRail.vue:7`
 - Modify: `builder-web/src/App.vue:6,52-53`
 - Modify: `builder-web/src/composables/useWizardStore.ts:92,133,213,244,404`
+- Modify: `builder-web/src/composables/useWizardGuard.spec.ts`（7 元素 `Completion` 常量与 `toBe(7)` 字面量）
 - Modify: `builder-web/src/steps/ReviewStep.vue:30`（第 5 步预览的 `artifactPath`）
 - Delete: `builder-web/src/steps/HandoffStep.vue`
 - Modify: `builder-web/tests/e2e/helpers/backend-mock.ts:69,262,298-301`
@@ -1061,6 +1062,7 @@ Run:
 
 ```powershell
 Set-Location builder-web
+npm run test:unit
 npm run build
 npm run test:e2e
 Set-Location ..
