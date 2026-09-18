@@ -361,6 +361,10 @@ def create_builder_app(
                 output_path=body.output_path,
             )
         )
+        if request.app.state.project_root is None:
+            # 桌面壳模式（工厂未绑定根目录）：应用内创建成功即回绑，后续
+            # 草稿/资产/构建请求才能定位项目根；否则全部请求报"未绑定项目根目录"。
+            request.app.state.project_root = Path(body.project_root)
         return _state_response(state)
 
     @app.get("/api/projects/current", response_model=ProjectStateResponse)

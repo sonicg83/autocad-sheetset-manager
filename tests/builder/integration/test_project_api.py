@@ -558,3 +558,30 @@ def test_project_file_hash_is_stable_across_read_only_opens(
     before = file_digest()
     assert client.get("/api/projects/current").status_code == 200
     assert file_digest() == before
+
+
+def test_unbound_factory_binds_project_root_after_creation(tmp_path: Path) -> None:
+    """桌面壳以未绑定工厂启动（project_root=None）时，应用内创建项目必须回绑根目录。
+
+    回归背景：壳模式（create_builder_app(project_root=None)）下 POST /api/projects
+    成功后 app.state.project_root 仍为 None，此后每次草稿自动保存都报
+    "未绑定项目根目录"，向导完全不可用。修复后：创建成功即回绑，读取与保存
+    走绑定后的服务。
+    """
+    project_root = tmp_path / "project"
+    client = TestClient(create_builder_app(None))
+    created = client.post("/api/projects", json=_create_body(project_root))
+    assert created.status_code == 201, created.text
+    updated_at = created.json()["updated_at"]
+
+    current = client.get("/api/projects/current")
+    assert current.status_code == 200, current.text
+
+    saved = client.patch(
+        "/api/projects/current/draft",
+        json=_patch_body(updated_at, **{"project.name": "改名工程"}),
+    )
+    assert saved.status_code == 200, saved.text
+    # project.name 是创建时写入 projects 表的行字段，草稿保存只更新 drafts。
+    assert saved.json()["draft"]["project"]["name"] == "改名工程"
+    assert saved.json()["updated_at"] != updated_at
