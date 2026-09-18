@@ -1,3 +1,10 @@
+## 2026-09-18（前端文本编辑状态对齐实施与验收完成）
+
+- 按 [PLAN-DM-034](.planning/plans/dst-manager/PLAN-DM-034-frontend-text-edit-state-alignment.md) 完成 [SPEC-DM-015](docs/dst-manager/specs/SPEC-DM-015-frontend-text-edit-state-contract.md) 五处文本编辑界面的对齐实施与验收：`UiButton` 新增可聚焦语义禁用（`ariaDisabled` + 显式 click emit 守卫）；图纸页属性编辑与属性页属性值新增字段级琥珀 dirty 提示（改回基准即清除，错误红色优先且修改文字保留），clean 态「加入草稿 / 更新图纸集」改语义禁用并加空提交守卫；常规设置移除「无修改也可保存」例外（clean 显示「已保存」、保存走语义禁用、保存成功后焦点归还）；扩展配置生成式表单与图纸目录自定义面板补齐字段级修改提示与保存语义（Host 暴露 `saveNativeDisabled`/`saveAriaDisabled`）；图纸目录模板栏新增中性「已保存」/警示「有未保存修改」徽标（`role="status"`），clean 态「保存修改」语义禁用。
+- 门禁实测：`check:i18n` 955 键不变、`check:ui`、`test:unit` 178 用例、生产构建、全量 e2e **579 passed / 0 failed**（首跑 27 failed / 3 flaky：24 例旧用例编码已删除的「clean 空保存」例外、2 例为 `95fe260` 顶栏改版遗留过期断言/选择器的既有缺陷、1 例高负载抖动，均已按新契约或现行 UI 修复）、`ruff check .` 通过、`pytest -q` 2280 项 / 2202 passed / 0 failed / 78 skipped、`uv lock --check` 通过。真实 CAD 系统测试按计划免跑（未触及 SCR/插件/布局重建）。
+- SPEC-DM-015 追加「2026-09-18 实施追记」（§9），登记两处已裁决偏差：图纸页属性编辑加载中未用原生 disabled（`PropertyEditContext` 无 saving 状态、`submitInFlight` 去重兜底）；图纸目录模板表达式错误不新增前端 invalid 派生、保存由 Provider 级 409 阻断。
+- G8 设计 QA：六张正交证据（浅/深主题、1440×1000 与 900×700、字段级/模板级 dirty、dirty+invalid、属性页三态、两类扩展配置）与 200% 浏览器缩放自动检查登记于 `.planning/memos/dst-manager/assets/PLAN-DM-034/`。G9 真实 Windows 桌面缩放检查待人工执行，计划状态保持 `proposed`，暂不关闭。
+
 ## 2026-09-18（协作规范补充本地 HTML 预览契约）
 
 - 在 `AGENTS.md` 新增「本地 HTML 与浏览器预览」一节，明确 Chrome/Edge 默认安全策略禁止页面读取 `file://`：查看本地 HTML 演示、报告或构建产物时，代理必须自行用 `uv run python -m http.server` 绑定 `127.0.0.1` 拉起本地 HTTP 服务并通过 `http://127.0.0.1:<端口>/...` 访问，用完立即结束进程，不得要求用户手动启动服务或反复重试 `file://`。本次仅补充协作规范，未修改源码、文档正文与测试。

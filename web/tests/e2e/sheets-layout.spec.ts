@@ -410,7 +410,18 @@ test("浅深主题正文对比度 ≥ 4.5:1、强调色 UI ≥ 3:1", async ({pag
       const bg = color(".sheets-workspace", "background-color");
       const primary = color(".tree-root", "color");
       const secondary = color(".count", "color");
-      const muted = color(".brand-sub", "color");
+      // 2026-09-18 全量回归修正：品牌副标题 .brand-sub 元素已在 95fe260 顶栏改版中移除
+      //（先于 PLAN-DM-034 的既有缺陷）。弱化文字探针改为在 .sheets-workspace 底色上
+      // 直接解析 --color-text-muted 令牌（与原 .brand-sub 使用的同一弱化文字令牌）。
+      const muted = (() => {
+        const host = document.querySelector(".sheets-workspace") ?? document.body;
+        const probe = document.createElement("span");
+        probe.style.color = "var(--color-text-muted)";
+        host.appendChild(probe);
+        const value = parse(getComputedStyle(probe).color);
+        probe.remove();
+        return value;
+      })();
       const accent = color(".tab[aria-selected='true']", "color");
       return {
         primary: contrast(primary, bg),
