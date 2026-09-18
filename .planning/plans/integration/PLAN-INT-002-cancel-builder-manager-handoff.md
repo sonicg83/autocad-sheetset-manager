@@ -1093,9 +1093,9 @@ git commit -m "移除 Builder 向导交接步并降为六步"
 
 **Files:**
 - Delete: `src/dst_builder/application/handoff_adapter.py`
-- Modify: `src/dst_builder/application/builds.py:100-130,136-186,461-500`（删异常类与 `handoff_to_manager`）
-- Modify: `src/dst_builder/interfaces/api.py:78,301,309,327,573-593`
-- Modify: `src/dst_builder/interfaces/schemas.py:247-...`（删 `HandoffResponse`）
+- Modify: `src/dst_builder/application/builds.py`（删四个交接异常类与 `handoff_to_manager`，以及仅为它们服务的 import 与 `__all__` 条目）
+- Modify: `src/dst_builder/interfaces/api.py`（删 `HandoffResponse` import、`create_builder_app` 的 `manager_base_url` 与 `handoff_transport` 形参、`app.state.manager_base_url` 与 `app.state.handoff_transport` 赋值、docstring 中的交接适配器说明，以及 `POST /api/builds/{build_id}/handoff` 端点整体）
+- Modify: `src/dst_builder/interfaces/schemas.py`（删 `HandoffResponse` 类及其 `__all__` 条目）
 - Modify: `builder-web/src/api/openapi.json` 与 `builder-web/src/api/schema.d.ts`（重新生成）
 - Modify: `changelog.md`
 
