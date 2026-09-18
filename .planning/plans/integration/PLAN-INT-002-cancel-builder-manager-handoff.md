@@ -43,6 +43,7 @@ related:
 - 只暂存本任务涉及的文件；Commit message 使用简体中文、动词开头。
 - 不得使用 ADR 新增以外的方式改写既有 ADR 结论；`ARCH-INT-002` §6 的结论变化记入新增的 `ADR-INT-001`。
 - `RFC-INT-001` 正文不改写；对其中交接相关表述的取代记入 `ADR-INT-001` 的「替代关系」。
+- 运行 pytest 时不要再加 `-q`：`pyproject.toml` 的 `addopts` 已含 `-q`，再加会变成 `-qq` 并吞掉通过计数行，使证据无法核对。用 `uv run python -m pytest <路径>`。
 
 ---
 
@@ -803,7 +804,7 @@ def write_publish_evidence(
 
 Run: `uv run pytest tests/builder/unit/test_package_layout.py -q`
 
-Expected: `10 passed`。
+Expected: `9 passed`（初稿写 10 有误，`test_package_layout.py` 共 9 个用例）。
 
 - [ ] **Step 8: 更新受影响的既有测试**
 
@@ -996,8 +997,9 @@ git commit -m "新增 Builder 产出由 Manager 直接打开的集成测试"
 - Modify: `builder-web/src/components/StepRail.vue:7`
 - Modify: `builder-web/src/App.vue:6,52-53`
 - Modify: `builder-web/src/composables/useWizardStore.ts:92,133,213,244,404`
+- Modify: `builder-web/src/steps/ReviewStep.vue:30`（第 5 步预览的 `artifactPath`）
 - Delete: `builder-web/src/steps/HandoffStep.vue`
-- Modify: `builder-web/tests/e2e/helpers/backend-mock.ts:69,298-301`
+- Modify: `builder-web/tests/e2e/helpers/backend-mock.ts:69,262,298-301`
 - Modify: `builder-web/tests/e2e/wizard-flow.spec.ts:72-74`
 - Modify: `builder-web/tests/e2e/wizard-real-backend.spec.ts:4,29-30`
 - Modify: `changelog.md`
@@ -1032,11 +1034,20 @@ const STEP_NAMES = ["创建项目", "配置规则", "编排图纸", "匹配模�
 
 `builder-web/src/composables/useWizardStore.ts`：删除接口中的 `handoffDone: Ref<boolean>;`（第 92 行）、`const handoffDone = ref(false);`（第 133 行）、completion 数组最后一项 `handoffDone.value,`（第 213 行）、`handoffDone.value = false;`（第 244 行）与返回对象中的 `handoffDone,`（第 404 行）。
 
-- [ ] **Step 3: 删除交接步组件**
+- [ ] **Step 3: 修正成果路径展示的前后端不一致（Task 3 审查 Important 发现，由本任务承接）**
+
+Task 3 已把服务端的产物路径改为目标目录内的裸文件名（`planning.py` 的 `SHEETSET_PATH` / `target_dwg_path`；`validation.py:190`），但前端仍在两处硬编码旧形状：
+
+- `builder-web/src/steps/ReviewStep.vue:30` 的第 5 步预览：`artifactPath: \`drawings/${layoutName}.dwg\`` → 改为裸文件名（与 `dwgName` 一致）。该页在提交前后分别显示前端派生值与服务端返回值，不改就会自相矛盾。
+- `builder-web/tests/e2e/helpers/backend-mock.ts:262`：`artifact_path: "drawings/A-001 首层平面图.dwg"` → 改为裸文件名。**不改则 e2e 永远发现不了这个漂移**。
+
+注意：`/api/plans` 的 `artifact_path` 是服务端字段，本步骤只改前端守卫与 mock 夹具，不改 `src/dst_builder`。
+
+- [ ] **Step 4: 删除交接步组件**
 
 删除 `builder-web/src/steps/HandoffStep.vue`。
 
-- [ ] **Step 4: 改 e2e**
+- [ ] **Step 5: 改 e2e**
 
 `builder-web/tests/e2e/helpers/backend-mock.ts`：删除第 69 行的 `handoff: 0,` 计数字段与第 298-301 行的 `POST /api/builds/build-1/handoff` 路由分支。
 
@@ -1044,7 +1055,7 @@ const STEP_NAMES = ["创建项目", "配置规则", "编排图纸", "匹配模�
 
 `builder-web/tests/e2e/wizard-real-backend.spec.ts`：删除第 4 行注释中的交接说明与第 29-30 行对 `/api/builds/[^/]+/handoff$` 的 route mock。
 
-- [ ] **Step 5: 验证**
+- [ ] **Step 6: 验证**
 
 Run:
 
@@ -1057,7 +1068,7 @@ Set-Location ..
 
 Expected: `vue-tsc` 无类型错误、Vite 构建成功、Playwright 全部通过。若 `wizard-flow.spec.ts` 的步骤序号断言（含 `rail-step-7`）失败，按 6 步改为最大 `rail-step-6`。
 
-- [ ] **Step 6: 更新 changelog 并提交**
+- [ ] **Step 7: 更新 changelog 并提交**
 
 在 `changelog.md` 顶部追加：
 
@@ -1065,6 +1076,7 @@ Expected: `vue-tsc` 无类型错误、Vite 构建成功、Playwright 全部通�
 ## 2026-09-18（Builder 向导移除交接步，七步降为六步）
 
 - 删除 `builder-web/src/steps/HandoffStep.vue` 与向导中的交接调用；`TOTAL_STEPS` 由 7 改为 6，`STEP_NAMES` 与 `App.vue` 路由收口到「构建成果」为末步，`useWizardStore` 移除 `handoffDone` 及其在 completion 与重置逻辑中的引用。
+- 修正第 5 步预览的成果路径展示：`ReviewStep.vue` 的 `artifactPath` 与 e2e 夹具 `backend-mock.ts` 不再硬编码 `drawings/` 前缀，与服务端已在 Task 3 改为裸文件名的 `artifact_path` 对齐；此前该页提交前后自相矛盾且 e2e 无法发现。
 - 同步清理 Playwright 夹具中的 handoff 路由与调用计数、`wizard-flow.spec.ts` 的交接断言与 `wizard-real-backend.spec.ts` 的交接端点 mock。本次未修改 Python 后端。
 ```
 

@@ -25,6 +25,8 @@
 - 在 [`.planning/README.md`](.planning/README.md) 接入该计划条目。本次仅新增与调整计划类文档，未修改源码、测试或迁移。
 - 实施前预检发现并修正一处计划缺陷：`tests/handoff_package_factory.py` 导入 `MANIFEST_FILE` 并使用旧签名的 `assemble_package_files`，若把交接测试面的删除留给 Task 6 / Task 7，Task 3（扁平化布局与重写完整性校验）之后测试收集会失败，「每个任务结束后工作树仍绿」不成立。现改为由 Task 3 连同 `test_builder_handoff_api.py` 与 `test_handoff_reader.py` 一并删除交接测试面，并在计划正文说明理由与可接受的中间态。
 - 实施 Task 1 时发现计划第二处内部矛盾并修正：计划给 `SPEC-DB-001` §10 的替换正文写着「历史正文不再保留」，与 RFC-INT-002「迁移路径」第 4 步「§10 整节标记 `superseded` 并保留正文供历史追溯」及 AGENTS.md 的「正文保持历史可追溯」相矛盾。现改为逐字保留原有六步契约正文，只在节标题下插入 `superseded` 说明与指向 RFC / ADR 的链接，并同步修正最终验收第 1 项。
+- 实施 Task 3 前扫描发现计划漏列发布门禁 `src/dst_builder/application/validation.py`：其 `_check_reference_boundary` 硬编码 `drawings/` 前缀，扁平化后会把每个预期产物判为越界并阻断所有构建。已作为修正案 A 并入 Task 3，同时把恢复测试夹具的三处耦合（`_minimal_package_files` 使用被删符号、`_seed_publish_evidence` 不写 `expected_paths`、篡改用例在新语义下失效）作为修正案 C 并入。
+- Task 3 审查的 Important 项已路由给 Task 5：`builder-web/src/steps/ReviewStep.vue` 的 `artifactPath` 与 e2e 夹具 `backend-mock.ts` 仍硬编码 `drawings/` 形状，与服务端已改为裸文件名的 `artifact_path` 不一致；Task 3 被明确禁止改前端且计划中无任务负责，故计划 Task 5 新增 Step 3 承接。另修正计划 Task 3 的「10 passed」勘误（实为 9 个用例），并在 Global Constraints 增补「运行 pytest 不要再加 `-q`」（`addopts` 已含，再加会吞掉计数行）。
 
 ## 2026-09-18（RFC-INT-002 接受：取消交接与成果包 metadata）
 
