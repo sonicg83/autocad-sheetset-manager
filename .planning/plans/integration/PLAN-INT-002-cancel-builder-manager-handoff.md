@@ -1397,7 +1397,7 @@ git commit -m "同步计划类文档并收口交接契约退场"
 
 1. `SPEC-DB-001` 的规范性内容不含交接与 `metadata/`（§10 保留原有历史正文并标记 `superseded`）；§9 固定三件套布局与 `verify_target` 判定。
 2. `ARCH-INT-002` §6 无 `HandoffBundle` 契约；`ADR-INT-001` 存在且记录取代关系；`RFC-INT-001` 正文未被改写。
-3. 代码库中不存在 `handoff_to_manager`、`read_handoff_package`、`HandoffOperations`、`HandoffPackage`、`HandoffResponse`、`HandoffOpenResponse`、`MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`、`HANDOFF_INITIAL_REVISION_KIND` 的任何引用；`manifest_sha256` 与 `package_id` 仅允许出现在 `migrations/versions/0007_db001_builder_handoff.py` 与 `migrations/versions/0008_drop_handoff_sources.py`（0008 的 `downgrade()` 必须逐列重建被删表，回避不了这两个列名）。
+3. 代码库中不存在 `handoff_to_manager`、`read_handoff_package`、`HandoffOperations`、`HandoffPackage`、`HandoffResponse`、`HandoffOpenResponse`、`MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`、`HANDOFF_INITIAL_REVISION_KIND` 的任何引用；`manifest_sha256` 与 `package_id` 在 `src/`、`tests/`、`web/`、`builder-web/` 中仅允许出现在 `migrations/versions/0007_db001_builder_handoff.py` 与 `migrations/versions/0008_drop_handoff_sources.py`（0008 的 `downgrade()` 必须逐列重建被删表，回避不了这两个列名）。`changelog.md` 的历史条目、已完成任务的计划正文与 `docs/` 正文中的提及不受此条约束——历史记录不回改。
 4. Builder 发布的目标目录直接包含 `sheetset.dst`、构建后的 DWG 与 `图纸目录.xlsx`，无 `metadata/`、无 `drawings/`。
 5. `verify_target` 在目标目录含额外文件时通过，在预期产物缺失或为空时失败，在预期集合为空时失败。
 6. `migrations/versions/0008_drop_handoff_sources.py` 存在，`uv run alembic upgrade head` 在全新库上成功，`handoff_sources` 不存在而 `document_revisions.kind` / `source_json` 存在。
