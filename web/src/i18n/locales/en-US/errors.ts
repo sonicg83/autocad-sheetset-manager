@@ -17,10 +17,6 @@ export default {
     restoreConflict: "The restore baseline has changed. Preview the restore again",
     restoreSourceChanged: "The restore source has drifted from the preview",
   },
-  handoff: {
-    invalid: "Package handoff validation failed. Verify the package integrity and retry",
-    idConflict: "This package ID is already bound to different content. Duplicate handoff rejected: {package_id}",
-  },
   draft: {
     conflict: "Draft version conflict. Refresh and try again",
   },

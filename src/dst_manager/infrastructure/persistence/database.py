@@ -54,24 +54,10 @@ class RevisionRow(Base):
     before_hash: Mapped[str] = mapped_column(String(64))
     result_hash: Mapped[str] = mapped_column(String(64))
     revision_dir: Mapped[str] = mapped_column(Text)
-    # kind：operation=常规编辑/恢复发布；handoff_initial=Builder 交接初始修订
+    # kind：修订类型（operation=常规编辑/恢复发布）
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="operation", server_default="operation")
-    # source_json：可空的版本化来源摘要（交接修订保存 package_id/manifest 哈希等）
+    # source_json：可空的版本化来源摘要
     source_json: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-
-
-class HandoffSourceRow(Base):
-    """Builder 成果包交接来源（SPEC-DB-001 §10）：package_id 全局唯一。"""
-
-    __tablename__ = "handoff_sources"
-    package_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"))
-    revision_id: Mapped[str] = mapped_column(String(64))
-    build_id: Mapped[str] = mapped_column(String(36))
-    plan_id: Mapped[str] = mapped_column(String(36))
-    manifest_sha256: Mapped[str] = mapped_column(String(64))
-    handoff_path: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
@@ -190,8 +176,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0007_db001_builder_handoff"
-HANDOFF_INITIAL_REVISION_KIND = "handoff_initial"
+LATEST_SCHEMA_REVISION = "0008_drop_handoff_sources"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -792,106 +777,6 @@ class Database:
     def list_workspace_roots(self) -> list[Path]:
         with self.sessions() as session:
             return [Path(value) for value in session.scalars(select(WorkspaceRow.root)).all()]
-
-    # -- Builder 成果包交接（SPEC-DB-001 §10，PLAN-DB-001 Task 10）------------
-
-    def get_handoff_source(self, package_id: str) -> dict[str, Any] | None:
-        with self.sessions() as session:
-            row = session.get(HandoffSourceRow, package_id)
-            if row is None:
-                return None
-            return {
-                "package_id": row.package_id,
-                "workspace_id": row.workspace_id,
-                "revision_id": row.revision_id,
-                "build_id": row.build_id,
-                "plan_id": row.plan_id,
-                "manifest_sha256": row.manifest_sha256,
-                "handoff_path": row.handoff_path,
-            }
-
-    def register_handoff(
-        self,
-        *,
-        package_id: str,
-        workspace_id: str,
-        root: Path,
-        dst_path: Path,
-        revision_id: str,
-        operation_id: str,
-        before_hash: str,
-        result_hash: str,
-        revision_dir: Path,
-        source_json: str,
-        manifest_sha256: str,
-        build_id: str,
-        plan_id: str,
-        handoff_path: str,
-        current_revision: str,
-    ) -> tuple[str, dict[str, Any] | None]:
-        """登记一次交接：工作区 + handoff_initial 修订 + 来源记录同事务写入。
-
-        返回 ``("created", None)`` 或 ``("exists", 既有来源摘要)``；既有来源
-        的 manifest 哈希比较（幂等 / HANDOFF_ID_CONFLICT）由应用层裁决。
-        ``BEGIN IMMEDIATE`` 串行化同 package_id 的并发交接。
-        """
-        with self.sessions() as session:
-            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
-            existing = session.get(HandoffSourceRow, package_id)
-            if existing is not None:
-                payload = {
-                    "package_id": existing.package_id,
-                    "workspace_id": existing.workspace_id,
-                    "revision_id": existing.revision_id,
-                    "build_id": existing.build_id,
-                    "plan_id": existing.plan_id,
-                    "manifest_sha256": existing.manifest_sha256,
-                    "handoff_path": existing.handoff_path,
-                }
-                session.commit()
-                return "exists", payload
-            workspace = session.get(WorkspaceRow, workspace_id)
-            if workspace is None:
-                session.add(
-                    WorkspaceRow(
-                        id=workspace_id,
-                        root=str(root),
-                        dst_path=str(dst_path),
-                        current_revision=current_revision,
-                    )
-                )
-                # UOW 只按 relationship() 排序插入：逐段 flush 保证 FK 先后。
-                session.flush()
-            else:
-                workspace.root = str(root)
-                workspace.dst_path = str(dst_path)
-                workspace.current_revision = current_revision
-            session.add(
-                RevisionRow(
-                    id=revision_id,
-                    workspace_id=workspace_id,
-                    operation_id=operation_id,
-                    before_hash=before_hash,
-                    result_hash=result_hash,
-                    revision_dir=str(revision_dir),
-                    kind=HANDOFF_INITIAL_REVISION_KIND,
-                    source_json=source_json,
-                )
-            )
-            session.flush()
-            session.add(
-                HandoffSourceRow(
-                    package_id=package_id,
-                    workspace_id=workspace_id,
-                    revision_id=revision_id,
-                    build_id=build_id,
-                    plan_id=plan_id,
-                    manifest_sha256=manifest_sha256,
-                    handoff_path=handoff_path,
-                )
-            )
-            session.commit()
-            return "created", None
 
     def get_layout_names(self, file_hash: str) -> list[str] | None:
         with self.sessions() as session:

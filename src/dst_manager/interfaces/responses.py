@@ -413,24 +413,6 @@ class RevisionResponse(ResponseModel):
     created_at: str
 
 
-class HandoffOpenResponse(ResponseModel):
-    """POST /api/handoffs/open 响应（SPEC-DB-001 §10 步骤 6）。"""
-
-    handoff_path: str
-    workspace_id: str
-    root: str
-    dst_path: str
-    revision_id: str
-    revision_dir: str
-    kind: str
-    package_id: str
-    build_id: str
-    plan_id: str
-    manifest_sha256: str
-    dst_sha256: str
-    idempotent: bool = False
-
-
 class RevisionListResponse(RootModel[list[RevisionResponse]]):
     pass
 

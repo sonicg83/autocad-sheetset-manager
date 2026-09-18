@@ -27,7 +27,7 @@ NEW_EXTENSION_TABLES = {
     "workspace_extension_preferences",
     "artifacts",
 }
-LATEST_REVISION = "0007_db001_builder_handoff"
+LATEST_REVISION = "0008_drop_handoff_sources"
 
 
 def make_database(tmp_path: Path) -> Database:

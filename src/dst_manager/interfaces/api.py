@@ -40,7 +40,6 @@ from dst_manager.interfaces.responses import (
     ChangePreviewResponse,
     DraftDeleteResponse,
     DraftEnvelopeResponse,
-    HandoffOpenResponse,
     HealthResponse,
     JobResponse,
     LayoutNamesResponse,
@@ -80,12 +79,6 @@ logger = logging.getLogger(__name__)
 class OpenRequest(ContractModel):
     dst_path: Path
     root_override: Path | None = None
-
-
-class OpenHandoffRequest(ContractModel):
-    """POST /api/handoffs/open 请求：只包含绝对 handoff.json 路径（§10）。"""
-
-    handoff_path: Path
 
 
 _APP_NAME = "DST Manager"
@@ -275,23 +268,6 @@ def create_app(
         if on_workspace_opened is not None:
             on_workspace_opened(workspace)
         return workspace_json(workspace)
-
-    @app.post(
-        "/api/handoffs/open",
-        response_model=HandoffOpenResponse,
-        response_model_exclude_unset=True,
-    )
-    def open_handoff(request: OpenHandoffRequest):
-        """显式交接 Builder 成果包（SPEC-DB-001 §10）：先验证后写库与文件证据。
-
-        交接成功后以与 /api/workspaces/open 相同的 ``on_workspace_opened``
-        回调登记新工作区（PLAN-DB-001 Task 11）：桌面壳由此感知经交接打开的
-        工作区（响应体是 dict，回调用服务端 Workspace 对象，经 get_workspace 取回）。
-        """
-        result = service.open_handoff(request.handoff_path)
-        if on_workspace_opened is not None:
-            on_workspace_opened(service.get_workspace(result["workspace_id"]))
-        return result
 
     @app.get(
         "/api/workspaces/{workspace_id}",

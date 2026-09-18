@@ -1,3 +1,10 @@
+## 2026-09-18（移除 Manager 交接实现与 handoff_sources 表）
+
+- 删除 `src/dst_manager/application/handoff.py` 与整个 `src/dst_manager/infrastructure/handoff/`（合计 616 行），以及 `HandoffOperations` 在 `DstManagerService` 中的组合；删除 `POST /api/handoffs/open` 端点、`OpenHandoffRequest`、`HandoffOpenResponse` 与 `HANDOFF_INVALID` / `HANDOFF_ID_CONFLICT` 两条错误文案及对应中英文 i18n 键。
+- 删除 `handoff_sources` 表模型、`get_handoff_source`、`register_handoff` 与 `HANDOFF_INITIAL_REVISION_KIND`；新增迁移 `0008_drop_handoff_sources`。`document_revisions.kind` 与 `source_json` 保留为通用修订元数据。
+- `LATEST_SCHEMA_REVISION` 由 `0007_db001_builder_handoff` 推进到 `0008_drop_handoff_sources`（该常量是 `Database` 的版本门禁，不同步推进会让全部 Manager 数据库打开失败）；`tests/unit/test_runtime.py` 与 `tests/unit/test_extension_persistence.py` 的硬编码 head 同步更新。
+- 更新 `tests/unit/test_database.py` 的迁移 head 与表存在性断言（head 后 `handoff_sources` 必须不存在），删除已无往返对象的 `test_handoff_source_round_trip`；`tests/unit/test_message_catalog.py` 移除 `HANDOFF_CODES` 枚举集。重新生成 `web/src/api/openapi.json` 与 `schema.d.ts`。交接读取测试面已在成果布局任务中移除。
+
 ## 2026-09-18（移除 Builder 交接适配器与端点）
 
 - 删除 `src/dst_builder/application/handoff_adapter.py`、`handoff_to_manager` 与四个交接异常类，以及 `POST /api/builds/{id}/handoff` 端点、`HandoffResponse` 响应模型和 `create_builder_app` 的 `handoff_transport` 与 `manager_base_url` 注入点；重新生成 `builder-web/src/api/openapi.json` 与 `schema.d.ts`（顺带带入 `POST /api/assets/{asset_id}/inspect` 说明文字的在先漂移修正）。本任务不删测试：交接测试面（`test_builder_handoff_api.py` / `test_handoff_reader.py` / `handoff_package_factory.py`）已在成果布局任务中随被删的 package 符号一并移除。

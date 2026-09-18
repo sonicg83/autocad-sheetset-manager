@@ -11,7 +11,6 @@ from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.application.drafts import DraftOperations
 from dst_manager.application.editing import EditingOperations
 from dst_manager.application.errors import ApplicationError
-from dst_manager.application.handoff import HandoffOperations
 from dst_manager.application.property_import import PropertyImportOperations
 from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
@@ -49,7 +48,6 @@ from dst_manager.settings.store import SettingsSchemaOlder
 
 class DstManagerService(
     DraftOperations,
-    HandoffOperations,
     PropertyImportOperations,
     EditingOperations,
     RevisionRestoreOperations,

@@ -17,10 +17,6 @@ export default {
     restoreConflict: "恢复基准已变化，请重新预览恢复",
     restoreSourceChanged: "恢复源文件已偏离预览",
   },
-  handoff: {
-    invalid: "成果包交接验证失败，请确认成果包完整后重试",
-    idConflict: "同一成果包标识已绑定不同内容，拒绝重复交接：{package_id}",
-  },
   draft: {
     conflict: "草稿版本冲突，请刷新后重试",
   },
