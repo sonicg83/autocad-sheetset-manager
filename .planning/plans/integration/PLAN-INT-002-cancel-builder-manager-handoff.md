@@ -324,16 +324,14 @@ DST 的布局引用使用相对文件名解析，与所在目录名无关；不�
 
 - [ ] **Step 3: 修订 SPEC-DB-001 §10、§11 与 §12**
 
-§10「Manager 交接」整节替换为：
+§10「Manager 交接」：**逐字保留原有六步契约正文**，只在节标题下插入 superseded 说明。不要在正文里删除原契约描述——RFC-INT-002「迁移路径」第 4 步要求「§10 整节标记 `superseded` 并保留正文供历史追溯」，AGENTS.md 也规定被取代文档「正文保持历史可追溯」：
 
 ```markdown
-## 10. Manager 交接（已取消）
+## 10. Manager 交接
 
-本节由 [RFC-INT-002](../../integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 与 [ADR-INT-001](../../integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md) 取代，状态为 `superseded`。
+> **状态：`superseded`。** 本节描述的 `HandoffBundle` 交接契约已由 [RFC-INT-002](../../integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 与 [ADR-INT-001](../../integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md) 取消：其准入条件要求成果包自发布起保持字节不变，与「Builder 生成框架 → 人工 AutoCAD 编辑 → Manager 承担中后期交付」的真实流程冲突。决策理由与替代关系见该 ADR。以下正文保留为历史记录，不再具有规范性。
 
-原契约要求 Manager 新增 `POST /api/handoffs/open`，按六步验证 `metadata/handoff.json` 与 `metadata/manifest.json` 的哈希链，并以 `package_id` 为幂等键创建 `handoff_initial` 初始修订。该契约的准入条件要求成果包自发布起保持字节不变，与「Builder 生成框架 → 人工 AutoCAD 编辑 → Manager 承担中后期交付」的真实流程冲突，因此整体取消。
-
-历史正文不再保留；被取代的决策与理由见 `ADR-INT-001`。
+（原有 §10 正文从「Manager 新增显式入口 `POST /api/handoffs/open`」到「不能伪造一个无法验证的历史项」逐字保留，不做任何改写。）
 ```
 
 §11 的端点表格删除 `| POST /api/builds/{id}/handoff | 调用本机 Manager 交接适配器 |` 一行；错误码清单从首期固定集合中删除 `HANDOFF_INVALID` 与 `HANDOFF_ID_CONFLICT`。
@@ -1381,7 +1379,7 @@ git commit -m "同步计划类文档并收口交接契约退场"
 
 以下条件全部满足才算完成：
 
-1. `SPEC-DB-001` 无交接与 `metadata/` 内容；§10 标记 `superseded`；§9 固定三件套布局与 `verify_target` 判定。
+1. `SPEC-DB-001` 的规范性内容不含交接与 `metadata/`（§10 保留原有历史正文并标记 `superseded`）；§9 固定三件套布局与 `verify_target` 判定。
 2. `ARCH-INT-002` §6 无 `HandoffBundle` 契约；`ADR-INT-001` 存在且记录取代关系；`RFC-INT-001` 正文未被改写。
 3. 代码库中不存在 `handoff_to_manager`、`read_handoff_package`、`HandoffOperations`、`HandoffPackage`、`HandoffResponse`、`HandoffOpenResponse`、`manifest_sha256`、`package_id`、`MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`、`HANDOFF_INITIAL_REVISION_KIND` 的任何引用。
 4. Builder 发布的目标目录直接包含 `sheetset.dst`、构建后的 DWG 与 `图纸目录.xlsx`，无 `metadata/`、无 `drawings/`。
