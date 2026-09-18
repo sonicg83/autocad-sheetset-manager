@@ -432,6 +432,9 @@ git commit -m "同步 dst-builder 规范与长期文档取消交接契约"
 - Modify: `src/dst_builder/application/build_recovery.py:25,155`
 - Create: `tests/builder/unit/test_package_layout.py`
 - Delete: `tests/builder/unit/test_package_manifest.py`
+- Delete: `tests/integration/test_builder_handoff_api.py`
+- Delete: `tests/unit/test_handoff_reader.py`
+- Delete: `tests/handoff_package_factory.py`
 - Modify: `tests/builder/unit/test_planning.py:416-431`
 - Modify: `tests/builder/unit/test_contract_examples.py:1-30,102-130`
 - Modify: `tests/builder/unit/test_normalization.py:20,74`
@@ -807,6 +810,11 @@ Expected: `10 passed`。
 - [ ] **Step 8: 更新受影响的既有测试**
 
 - 删除 `tests/builder/unit/test_package_manifest.py`（manifest / handoff 契约整体作废，其完整性用例已由 `test_package_layout.py` 覆盖）。
+- **同时删除交接测试面**：`tests/integration/test_builder_handoff_api.py`（497 行）、`tests/unit/test_handoff_reader.py`（305 行）与 `tests/handoff_package_factory.py`（196 行）。
+
+  **为什么必须在本任务删，而不是留给 Task 6 / Task 7**：`tests/handoff_package_factory.py` 第 40-43 行 `from dst_builder.infrastructure.filesystem.package import MANIFEST_FILE, assemble_package_files`，并调用旧签名的 `assemble_package_files(revision_json=..., plan_json=..., report_json=..., build_id=..., builder_version=..., created_at=...)` 来拼出 `drawings/` + `metadata/` 布局。本任务删 `MANIFEST_FILE`、删两个 Schema 常量并改签名后，该夹具会先 `ImportError` 再 `TypeError`，连带 `test_builder_handoff_api.py` 与 `test_handoff_reader.py` 一起收集失败——不删就不可能“本任务结束后工作树仍绿”。
+
+  它也无法低成本改造：夹具的生产用途是合成一份**真实 Builder 工厂产出的合规成果包**（见其 docstring），而本任务之后那种布局已不存在，改造后它只能手写一份与生产无关的假包。因此正确的投资是连同它要测的被删契约一起移除。Manager 的 `reader.py` 与 Builder 的 `handoff_adapter` 在本任务后到 Task 6 / Task 7 删除前处于无测试覆盖状态，这是可接受的中间态：它们只被删除、不被修改，Task 4 已为替代路径建立安全网。
 - `tests/builder/unit/test_planning.py::test_expected_artifacts_list_full_deliverable_set`：期望集合改为 `{"sheetset.dst", "A-001 首层平面图.dwg", "图纸目录.xlsx"}`，断言仍检查 `paths == sorted(paths)` 与 `all(artifact.required ...)`。
 - `tests/builder/unit/test_contract_examples.py`：删除 `HANDOFF_SCHEMA` / `MANIFEST_SCHEMA` / `package_id_from_manifest_sha256` 的 import；删除 `test_handoff_schema_contract`；把 `test_manifest_and_expected_artifacts_agree` 改名为 `test_expected_artifacts_match_assembled_files` 并断言 `{a.path for a in plan.expected_artifacts} == {"sheetset.dst", "A-001 首层平面图.dwg", "图纸目录.xlsx"}`。
 - `tests/builder/unit/test_normalization.py`：删除使用 `package_id_from_manifest_sha256` 的用例及其 import。
@@ -1076,7 +1084,6 @@ git commit -m "移除 Builder 向导交接步并降为六步"
 - Modify: `src/dst_builder/application/builds.py:100-130,136-186,461-500`（删异常类与 `handoff_to_manager`）
 - Modify: `src/dst_builder/interfaces/api.py:78,301,309,327,573-593`
 - Modify: `src/dst_builder/interfaces/schemas.py:247-...`（删 `HandoffResponse`）
-- Delete: `tests/integration/test_builder_handoff_api.py`
 - Modify: `builder-web/src/api/openapi.json` 与 `builder-web/src/api/schema.d.ts`（重新生成）
 - Modify: `changelog.md`
 
@@ -1096,9 +1103,15 @@ git commit -m "移除 Builder 向导交接步并降为六步"
 
 `src/dst_builder/interfaces/schemas.py`：删除 `HandoffResponse` 类及其 `__all__` 条目。
 
-- [ ] **Step 3: 删除交接集成测试**
+- [ ] **Step 3: 确认交接测试面已随 Task 3 移除**
 
-删除 `tests/integration/test_builder_handoff_api.py`（497 行，交接契约整体作废，替代路径已由 Task 4 覆盖）。
+`tests/integration/test_builder_handoff_api.py` 已在 Task 3 删除（它依赖被删的 package 符号）。本步骤只做确认，不重复删除：
+
+```powershell
+uv run python -c "import pathlib,sys; p=pathlib.Path('tests/integration/test_builder_handoff_api.py'); print('still present' if p.exists() else 'removed'); sys.exit(1 if p.exists() else 0)"
+```
+
+Expected: 输出 `removed`，退出码 0。
 
 - [ ] **Step 4: 重新生成 Builder OpenAPI 与前端类型**
 
@@ -1134,8 +1147,7 @@ Expected: Ruff 无告警、pytest 全部通过、前端类型与构建通过。
 ```markdown
 ## 2026-09-18（移除 Builder 交接适配器与端点）
 
-- 删除 `src/dst_builder/application/handoff_adapter.py`、`handoff_to_manager` 与四个交接异常类，以及 `POST /api/builds/{id}/handoff` 端点、`HandoffResponse` 响应模型和 `create_builder_app` 的 `handoff_transport` 注入点；重新生成 `builder-web/src/api/openapi.json` 与 `schema.d.ts`。
-- 删除 `tests/integration/test_builder_handoff_api.py`（497 行）；替代路径由 `tests/builder/integration/test_builder_output_opens_in_manager.py` 覆盖。
+- 删除 `src/dst_builder/application/handoff_adapter.py`、`handoff_to_manager` 与四个交接异常类，以及 `POST /api/builds/{id}/handoff` 端点、`HandoffResponse` 响应模型和 `create_builder_app` 的 `handoff_transport` 注入点；重新生成 `builder-web/src/api/openapi.json` 与 `schema.d.ts`。本任务不删测试：交接测试面（`test_builder_handoff_api.py` / `test_handoff_reader.py` / `handoff_package_factory.py`）已在成果布局任务中随被删的 package 符号一并移除。
 ```
 
 ```powershell
@@ -1156,7 +1168,6 @@ git commit -m "移除 Builder 交接适配器与交接端点"
 - Modify: `src/dst_manager/interfaces/responses.py:417-...`
 - Modify: `src/dst_manager/interfaces/message_catalog.py:59-60`
 - Modify: `src/dst_manager/infrastructure/persistence/database.py:57-67,194,798-830,832-890`
-- Delete: `tests/unit/test_handoff_reader.py`、`tests/handoff_package_factory.py`
 - Modify: `tests/unit/test_database.py:337,560-635`
 - Modify: `web/src/i18n/locales/zh-CN/errors.ts:20-22`、`en-US/errors.ts:20-22`
 - Modify: `web/src/api/openapi.json` 与 `web/src/api/schema.d.ts`（重新生成）
@@ -1239,7 +1250,7 @@ def downgrade() -> None:
 
 - [ ] **Step 6: 删除交接测试与更新库测试**
 
-删除 `tests/unit/test_handoff_reader.py`（305 行）与 `tests/handoff_package_factory.py`（196 行，唯一剩余使用者随前一个文件删除）。
+`tests/unit/test_handoff_reader.py` 与 `tests/handoff_package_factory.py` 已在 Task 3 删除（它们依赖被删的 package 符号），本步骤不重复删除。
 
 `tests/unit/test_database.py`：
 
@@ -1284,7 +1295,7 @@ Expected: Ruff 无告警；pytest 全部通过；`alembic upgrade head` 在全�
 
 - 删除 `src/dst_manager/application/handoff.py` 与整个 `src/dst_manager/infrastructure/handoff/`（合计 616 行），以及 `HandoffOperations` 在 `DstManagerService` 中的组合；删除 `POST /api/handoffs/open` 端点、`OpenHandoffRequest`、`HandoffOpenResponse` 与 `HANDOFF_INVALID` / `HANDOFF_ID_CONFLICT` 两条错误文案及对应中英文 i18n 键。
 - 删除 `handoff_sources` 表模型、`get_handoff_source`、`register_handoff` 与 `HANDOFF_INITIAL_REVISION_KIND`；新增迁移 `0008_drop_handoff_sources`。`document_revisions.kind` 与 `source_json` 保留为通用修订元数据。
-- 删除 `tests/unit/test_handoff_reader.py` 与 `tests/handoff_package_factory.py`（合计 501 行），更新 `tests/unit/test_database.py` 的迁移 head 与表存在性断言；重新生成 `web/src/api/openapi.json` 与 `schema.d.ts`。
+- 更新 `tests/unit/test_database.py` 的迁移 head 与表存在性断言；重新生成 `web/src/api/openapi.json` 与 `schema.d.ts`。交接读取测试面已在成果布局任务中移除。
 ```
 
 ```powershell

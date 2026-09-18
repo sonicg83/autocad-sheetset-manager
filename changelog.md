@@ -2,6 +2,7 @@
 
 - 新增 [PLAN-INT-002](.planning/plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)（`proposed`），把 [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 的「迁移路径」拆为 8 个可独立验证的任务：先完成文档治理传播（ADR-INT-001 与权威架构、规范），再改 Builder 成果布局与完整性校验（`verify_package` → `verify_target(root, expected_paths)`，发布证据新增 `expected_paths`），然后新增「Builder 产出可被 Manager 直接打开」集成测试作为安全网，最后依次移除 Builder 与 Manager 两侧交接实现并新增 `0008_drop_handoff_sources` 迁移。计划冻结五项决策、显式列出两项不在本计划范围内解决的 RFC 开放问题（向导末端动作、初始修订补偿）。
 - 在 [`.planning/README.md`](.planning/README.md) 接入该计划条目。本次仅新增与调整计划类文档，未修改源码、测试或迁移。
+- 实施前预检发现并修正一处计划缺陷：`tests/handoff_package_factory.py` 导入 `MANIFEST_FILE` 并使用旧签名的 `assemble_package_files`，若把交接测试面的删除留给 Task 6 / Task 7，Task 3（扁平化布局与重写完整性校验）之后测试收集会失败，「每个任务结束后工作树仍绿」不成立。现改为由 Task 3 连同 `test_builder_handoff_api.py` 与 `test_handoff_reader.py` 一并删除交接测试面，并在计划正文说明理由与可接受的中间态。
 
 ## 2026-09-18（RFC-INT-002 接受：取消交接与成果包 metadata）
 
