@@ -3,6 +3,7 @@
 - 同步 `.planning/roadmaps/integration.md`、`.planning/roadmaps/dst-builder.md`、`PLAN-DB-001` 与 `.planning/README.md`，记录交接契约退场后的路线图与任务取代关系；`PLAN-INT-002` 标记 `completed` 并记录实际验证。
 - 最终验收实测（分支 `refactor/cancel-builder-manager-handoff`，起点提交 `fe39d12`，日志存于 `.superpowers/sdd/PLAN-INT-002-cancel-builder-manager-handoff/task8-*.log`）：`uv sync --dev`、`ruff check .`、`uv run python -m pytest`（2173 passed / 75 skipped / 0 failed）、`uv lock --check` 均通过；`web` 的 `npm run build` 与 `npm run test:e2e`（579 passed）、`builder-web` 的 `npm run test:unit`（27 passed）、`npm run build` 与 `npm run test:e2e`（20 passed）均通过；`alembic upgrade head` 另在全新库上逐级升到 `0008_drop_handoff_sources`，`handoff_sources` 不存在而 `document_revisions.kind` / `source_json` 存在。十条最终验收逐条结论见 `PLAN-INT-002`「实际验证摘要」。
 - 两条 `npm ci` 未执行：本分支 `pyproject.toml`、`uv.lock` 与两个 `package-lock.json` 均无改动，改以各前端自身的构建与测试门禁替代，已在该计划中记录此偏差及理由。真实 AutoCAD 系统测试 69 项因本机未设置 `DST_MANAGER_RUN_AUTOCAD` / `DST_BUILDER_RUN_AUTOCAD` 记为未执行。`RFC-INT-002` 开放问题 1（`verify_target` 规范文字）与 4（既有成果包处置）标注为已落实并给出落点，2、3 明确仍开放。
+- 审查修复轮 1（仅文档）：补齐本计划造成的三处 `dst-builder` 路线图离场表述（阶段 4 的 `drawings/` + `metadata/` 成果契约、交付结果中的 `drawings/` 成果、依赖节的「初始修订入口」）与 `.planning/plans/dst-builder/README.md` 的「真实端到端发布与接管」门禁；并修正 `.planning/roadmaps/dst-builder.md` frontmatter 中 `related` 三行缺缩进的既有无效 YAML（同时补入 `RFC-INT-002` / `ADR-INT-001`），现可被 `yaml.safe_load` 解析。本轮验证：`ruff check .` 无告警；`pytest tests/unit` 1279 passed / 4 skipped / 0 failed。
 
 ## 2026-09-18（移除 Manager 交接实现与 handoff_sources 表）
 

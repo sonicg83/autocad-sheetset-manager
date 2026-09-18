@@ -9,10 +9,12 @@ updated: 2026-09-18
 related:
   - VISION-DB-001
   - PRD-DB-001
-- ARCH-DB-001
-- RFC-INT-001
-- SPEC-DB-001
-- PLAN-DB-001
+  - ARCH-DB-001
+  - RFC-INT-001
+  - SPEC-DB-001
+  - PLAN-DB-001
+  - RFC-INT-002
+  - ADR-INT-001
 ---
 
 # DST Builder 路线图
@@ -62,7 +64,7 @@ related:
 - 取消、超时、重试和启动恢复；
 - AcSm DOM 全新生成；
 - Artifact 校验和原子发布；
-- 固定 `drawings/`、`metadata/` 成果契约。
+- 固定 `sheetset.dst`、构建后的 DWG 与 `图纸目录.xlsx` 直接位于目标目录的扁平成果契约。
 
 退出条件：故障矩阵证明不会发布半成品，标准黄金项目能够重复生成。
 
@@ -77,14 +79,14 @@ related:
 
 - 独立 DST Builder 桌面产品；
 - 可复现的项目修订、计划、构建和成果记录；
-- 可脱离 Builder 使用的 `drawings/` 成果；
+- 可脱离 Builder 使用的成果目录（目标目录本身即交付边界）；
 - 经两个 AutoCAD 版本和真实桌面验证的发布证据。
 
 ## 依赖
 
 - 可合法用于测试的最小与标准黄金样本；
 - AutoCAD 2016/2020 Core Console 与对应 Worker 构建环境；
-- DST Manager 保持稳定的打开、校验和初始修订入口；
+- DST Manager 保持稳定的 DST 打开与校验入口（直接打开成果目录中的 DST，不依赖交接基线或初始修订）；
 - 每项共享能力有两个真实消费方后再提取。
 
 ## 退出条件
