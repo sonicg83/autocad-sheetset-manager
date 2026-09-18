@@ -33,6 +33,10 @@ const card = ref<HTMLElement | null>(null);
 let opener: HTMLElement | null = null;
 
 async function onSave() {
+  // PLAN-DM-034 Task 6（SPEC-DM-015 §5.1/§5.2）：clean 草稿没有可执行差异，任何激活途径
+  // （强点击/Enter/Space/程序化 click）都在这里与 ariaDisabled 双层守卫下被挡住；
+  // read-only、saving 等强阻断仍由原生 disabled 与控制器内部守卫承担。
+  if (!props.catalog.dirty.value) return;
   if (await props.catalog.saveInPlace()) emit("saved");
 }
 function openSaveAs() {
@@ -89,10 +93,15 @@ async function confirmSaveAs() {
       <!-- PLAN-DM-023 V6：恢复“内置模板/已保存模板”身份徽标与“已保存/有未保存修改”状态文字；
            两者都是可见正文，不只靠颜色区分 -->
       <span class="template-badge" :class="catalog.canSaveInPlace.value ? 'saved' : 'builtin'">{{ catalog.canSaveInPlace.value ? $t("extensions.sheetCatalog.templateBadgeUser") : $t("extensions.sheetCatalog.templateBadgeBuiltin") }}</span>
-      <span class="template-state">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
+      <!-- PLAN-DM-034 Task 6（SPEC-DM-015 §4.2/§4.3）：模板状态升级为中性/警示两种徽标。
+           dirty 琥珀只落在这一枚模板级徽标（不铺到列输入框），role="status" 温和播报，
+           不用频繁输入会反复打断的 alert。 -->
+      <span class="template-state" :class="{dirty: catalog.dirty.value}" role="status">{{ catalog.dirty.value ? $t("extensions.sheetCatalog.dirtyBadge") : $t("extensions.sheetCatalog.templateStateSaved") }}</span>
       <span v-if="catalog.dirty.value && !catalog.canSaveInPlace.value" class="draft-name">{{ $t("extensions.sheetCatalog.unnamedDraft") }}</span>
       <span class="spacer"></span>
-      <UiButton v-if="catalog.canSaveInPlace.value" :disabled="catalog.readOnly.value || !catalog.dirty.value || catalog.saving.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</UiButton>
+      <!-- clean 态是“没有可执行差异”而非不可操作：可聚焦语义禁用（aria-disabled），
+           强点击/键盘激活经 onSave 首行守卫挡下；read-only 与 saving 继续原生 disabled -->
+      <UiButton v-if="catalog.canSaveInPlace.value" :disabled="catalog.readOnly.value || catalog.saving.value" :aria-disabled="!catalog.dirty.value" @click="onSave">{{ catalog.saving.value ? $t("extensions.sheetCatalog.saving") : $t("extensions.sheetCatalog.save") }}</UiButton>
       <UiButton :disabled="catalog.readOnly.value" @click="openSaveAs">{{ $t("extensions.sheetCatalog.saveAs") }}</UiButton>
       <!-- 危险删除保持低强调（透明底 + 危险文字，不使用 UiButton 的实心 danger 变体），确认流程不变 -->
       <button v-if="catalog.canSaveInPlace.value" type="button" class="danger-text" :disabled="catalog.readOnly.value" @click="emit('confirmRemove')">{{ $t("extensions.sheetCatalog.remove") }}</button>
@@ -134,7 +143,10 @@ async function confirmSaveAs() {
 .template-badge{font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);white-space:nowrap}
 .template-badge.builtin{color:var(--color-accent);background:var(--color-info-bg)}
 .template-badge.saved{color:var(--color-success);background:var(--color-success-bg)}
-.template-state{font-size:var(--font-caption);color:var(--color-text-muted);white-space:nowrap}
+/* PLAN-DM-034 Task 6（SPEC-DM-015 §4.2）：模板状态从 muted 正文升级为中性/警示两种徽标；
+   dirty 前景/底色固定琥珀语义令牌，警示不只靠颜色（可见文字随状态切换） */
+.template-state{font-size:var(--font-caption);padding:3px 9px;border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary);white-space:nowrap}
+.template-state.dirty{background:var(--color-warning-bg);color:var(--color-warning)}
 .draft-name{color:var(--color-text-muted);font-size:var(--font-caption)}
 .spacer{flex:1}
 /* 危险删除保持低强调：透明底 + 危险文字（属性页 .danger-text 同一写法）；

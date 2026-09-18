@@ -1140,6 +1140,50 @@ test("custom 面板：输出过滤 dirty 提示随输入出现/改回快照后�
   await expect(save).toBeEnabled();
 });
 
+// PLAN-DM-034 Task 6（SPEC-DM-015 §4.1/§4.2）：同一设置子视图里两种修改层级并存——
+// TemplateBar 的模板级徽标（中性「已保存」/警示「有未保存修改」）只跟踪模板草稿，
+// 输出过滤文本框继续使用 Task 5 的字段级琥珀提示，两种层级不得互相替代。
+test("custom 面板：TemplateBar 仍用模板级徽标，输出过滤继续用字段级提示，两种层级并存不互相替代", async ({page}) => {
+  const mock = await installCatalogSettings(page, {revision: 3, value: {user_templates: [catalogTemplate("标准目录")]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const panel = dialog.locator(CATALOG_PANEL);
+  expect(mock.server.value.user_templates).toHaveLength(1);
+  const bar = panel.getByRole("region", {name: "模板栏"});
+  const stateBadge = bar.locator(".template-state");
+  const field = dialog.getByTestId("catalog-settings-filter-field");
+  const filterDirtyBadge = dialog.getByTestId("catalog-settings-filter-dirty");
+
+  // 模板级：编辑表达式 → TemplateBar 出现警示徽标；字段级过滤框保持 clean
+  await panel.getByLabel("表达式 1").fill("{sheet.number}号");
+  await expect(stateBadge).toHaveText("有未保存修改");
+  await expect(stateBadge).toHaveClass(/dirty/);
+  await expect(stateBadge).toHaveAttribute("role", "status");
+  await expect(field).not.toHaveClass(/is-dirty/);
+  await expect(filterDirtyBadge).toHaveCount(0);
+  // 改回模板快照：模板徽标恢复中性「已保存」
+  await panel.getByLabel("表达式 1").fill("{sheet.number}");
+  await expect(stateBadge).toHaveText("已保存");
+  await expect(stateBadge).not.toHaveClass(/dirty/);
+
+  // 字段级：编辑过滤文本 → 只有字段容器出现琥珀 dirty 与字段级徽标；模板徽标保持「已保存」
+  await dialog.locator(CATALOG_FILTER).fill("草图");
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(filterDirtyBadge).toBeVisible();
+  await expect(filterDirtyBadge).toHaveText("有未保存修改");
+  await expect(stateBadge).toHaveText("已保存");
+  await expect(stateBadge).not.toHaveClass(/dirty/);
+  // 改回服务端快照：字段级提示清除，模板徽标不受影响
+  await dialog.locator(CATALOG_FILTER).fill("");
+  await expect(field).not.toHaveClass(/is-dirty/);
+  await expect(filterDirtyBadge).toHaveCount(0);
+  await expect(stateBadge).toHaveText("已保存");
+});
+
 test("custom 面板：模板名重复是 Provider 级 409，按普通保存失败呈现且不冒充修订冲突", async ({page}) => {
   const mock = await installCatalogSettings(page, {value: {user_templates: [catalogTemplate("标准目录")]}});
   await installExtensions(page, [extensionSummary()]);

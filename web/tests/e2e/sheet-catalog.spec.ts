@@ -166,6 +166,113 @@ test.describe("字段搜索与可用态头部（PLAN-DM-023 Task 2）", () => {
   });
 });
 
+// PLAN-DM-034 Task 6（SPEC-DM-015 §4.2/§5.2）：模板栏状态从 muted 正文升级为中性/警示
+// 两种徽标（琥珀语义令牌 + 可见文字，role="status" 温和播报），保存修改按钮 clean 态从
+// 原生 disabled 改为可聚焦语义禁用（UiButton.ariaDisabled）；read-only、saving 等强阻断
+// 继续原生禁用。SPEC-DM-015 §4.2 裁决：琥珀只落在模板栏徽标，列输入框不得统一铺 dirty 底色。
+test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
+  test("clean：中性「已保存」徽标与语义禁用保存按钮，强激活不产生 PUT；dirty：警示徽标且保存可执行；改回快照恢复 clean", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const bar = page.getByRole("region", {name: "模板栏"});
+    const stateBadge = bar.locator(".template-state");
+    const save = page.getByRole("button", {name: "保存修改"});
+
+    // clean：中性「已保存」徽标；保存按钮 aria-disabled="true" 且无原生 disabled（可聚焦语义禁用）
+    await expect(stateBadge).toHaveText("已保存");
+    await expect(stateBadge).toHaveAttribute("role", "status");
+    await expect(stateBadge).not.toHaveClass(/dirty/);
+    await expect(save).toHaveAttribute("aria-disabled", "true");
+    await expect(save).not.toHaveAttribute("disabled");
+    // Playwright 1.55 把 aria-disabled 视为不可用：守卫断言必须用强制点击/键盘派发 + 请求计数
+    await save.click({force: true});
+    await save.focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Space");
+    expect(state.putExpectedRevisions).toEqual([]);
+
+    // 修改列名：模板栏出现警示徽标（可见文字 + dirty class），保存按钮转为可执行
+    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await expect(stateBadge).toHaveText("有未保存修改");
+    await expect(stateBadge).toHaveClass(/dirty/);
+    await expect(save).toBeEnabled();
+    await expect(save).not.toHaveAttribute("aria-disabled");
+
+    // 改回模板快照：恢复 clean 中性徽标，保存按钮重新语义禁用（且仍无原生 disabled）
+    await page.getByLabel("输出列名 1").fill("图号");
+    await expect(stateBadge).toHaveText("已保存");
+    await expect(stateBadge).not.toHaveClass(/dirty/);
+    await expect(save).toHaveAttribute("aria-disabled", "true");
+    await expect(save).not.toHaveAttribute("disabled");
+    expect(state.putExpectedRevisions).toEqual([]);
+  });
+
+  // “表达式错误时保存不可执行”的实现口径：前端不新增控制器并不存在的 invalid 派生状态
+  //（保存按钮在错误态仍由模板 dirty 单独驱动），保存被现有 Provider 级 409 阻断——后端
+  // validate_template 拒绝重名列（SHEET_CATALOG_COLUMN_DUPLICATE），而未定义字段引用
+  // “不要求兼容当前字段目录”、不阻断保存。夹具的 duplicate 模式是这一现有阻断的模拟。
+  test("列错误：保留「有未保存修改」徽标、错误就地呈现，保存被 Provider 拒绝不落盘", async ({page}) => {
+    const template = userTemplate("标准目录", [
+      {header: "图号", expression: "{sheet.number}"},
+      {header: "图名", expression: "{sheet.title}"},
+    ]);
+    const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const bar = page.getByRole("region", {name: "模板栏"});
+    const stateBadge = bar.locator(".template-state");
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    const save = page.getByRole("button", {name: "保存修改"});
+
+    // 表达式错误（未定义字段）：徽标保留警示态，错误正文就地在出错列行内呈现
+    await page.getByLabel("表达式 2").fill("{sheet.不存在属性}");
+    await expect(stateBadge).toHaveText("有未保存修改");
+    await expect(stateBadge).toHaveClass(/dirty/);
+    const badRow = editor.locator(".columns .column-row").nth(1);
+    await expect(badRow.locator(".status-cell")).toHaveText("需修正");
+    await expect(badRow.getByText("[sheet] 不存在属性")).toBeVisible();
+    // 不新增 invalid 派生：错误不改变保存按钮的模板级 dirty 语义（仍可执行）
+    await expect(save).toBeEnabled();
+
+    // 保存不可执行（现有阻断）：重名列触发 Provider 409，错误可见、修改保留、服务端值不变
+    await page.getByLabel("表达式 2").fill("{sheet.title}");
+    await page.getByLabel("输出列名 2").fill("图号");
+    await expect(badRow.getByText("名称重复：图号")).toBeVisible();
+    state.controls.putSettingsMode = "duplicate";
+    await save.click();
+    await expect(page.getByRole("alert").filter({hasText: "名称重复：标准目录"})).toBeVisible();
+    await expect(stateBadge).toHaveText("有未保存修改");
+    expect(state.settingsValue.user_templates[0]!.columns[1]!.header).toBe("图名");
+  });
+
+  // SPEC-DM-015 §4.2 裁决回归守卫（本任务实现不触碰 ColumnEditor，本用例从起即绿）：
+  // 脏态下列输入框的背景/边框与 clean 态逐值相同——琥珀只出现在模板栏徽标，不铺到单元格。
+  test("列输入框不随模板 dirty 变色：琥珀只出现在模板栏徽标", async ({page}) => {
+    const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+    await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+    const header = page.getByLabel("输出列名 1");
+    const expression = page.getByLabel("表达式 1");
+    const styleOf = (locator: Locator, property: string) => locator.evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
+    // 断言有效性：warning 底色令牌与输入框 clean 底色必须确实不同（防止断言恒真）
+    const warningBg = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--color-warning-bg)";
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return value;
+    });
+    const cleanHeaderBg = await styleOf(header, "background-color");
+    const cleanExpressionBg = await styleOf(expression, "background-color");
+    expect(cleanHeaderBg, "warning-bg 与输入框 clean 底色不同（断言有效前提）").not.toBe(warningBg);
+
+    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await page.getByLabel("表达式 1").fill("{sheet.number}#");
+    await expect(page.getByText("有未保存修改")).toBeVisible();
+    await expect(header).not.toHaveClass(/dirty/);
+    expect(await styleOf(header, "background-color")).toBe(cleanHeaderBg);
+    expect(await styleOf(expression, "background-color")).toBe(cleanExpressionBg);
+  });
+});
+
 // PLAN-DM-023 Task 3（追踪矩阵 V1/V5/V8/A1）：输出列恢复为冻结 Demo 的紧凑表格式——
 // `.columns-head` 与 `.column-row` 共用同一组 grid 轨道，每行同时显示顺序、列名、
 // 表达式、状态和操作；列区自身限高滚动，列数增长不得撑高页面。
