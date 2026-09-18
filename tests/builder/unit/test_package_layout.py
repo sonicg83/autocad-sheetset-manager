@@ -21,7 +21,7 @@ from dst_builder.domain.models import (
     SheetInput,
     TemplateInput,
 )
-from dst_builder.domain.planning import create_plan
+from dst_builder.domain.planning import SHEET_CATALOG_PATH, SHEETSET_PATH, create_plan
 from dst_builder.infrastructure.filesystem.package import (
     assemble_package_files,
     verify_target,
@@ -29,6 +29,9 @@ from dst_builder.infrastructure.filesystem.package import (
 
 REVISION_SHA = "a" * 64
 DWG_PATH = "A-001 首层平面图.dwg"
+DST_BYTES = b"dst-bytes"
+DWG_BYTES = b"dwg-bytes"
+CATALOG_BYTES = b"xlsx-bytes"
 
 
 def _make_plan() -> GenerationPlanV1:
@@ -57,9 +60,9 @@ def _make_plan() -> GenerationPlanV1:
 def _make_files(**overrides) -> dict[str, bytes]:
     kwargs = {
         "plan": _make_plan(),
-        "dst_bytes": b"dst-bytes",
-        "dwg_bytes": b"dwg-bytes",
-        "catalog_bytes": b"xlsx-bytes",
+        "dst_bytes": DST_BYTES,
+        "dwg_bytes": DWG_BYTES,
+        "catalog_bytes": CATALOG_BYTES,
     }
     kwargs.update(overrides)
     return assemble_package_files(**kwargs)
@@ -76,6 +79,14 @@ def test_assembled_files_sit_directly_in_target_root() -> None:
     files = _make_files()
     assert set(files) == {"sheetset.dst", DWG_PATH, "图纸目录.xlsx"}
     assert all("/" not in path for path in files)
+
+
+def test_assembled_bytes_are_bound_to_their_paths() -> None:
+    """键与值必须成对：把 catalog 装到 sheetset 键下这类错装必须被抓住。"""
+    files = _make_files()
+    assert files[SHEETSET_PATH] == DST_BYTES
+    assert files[DWG_PATH] == DWG_BYTES
+    assert files[SHEET_CATALOG_PATH] == CATALOG_BYTES
 
 
 def test_plan_expected_artifacts_match_assembled_files() -> None:

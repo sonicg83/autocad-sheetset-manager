@@ -6,6 +6,7 @@
 - 删除失去使用方的 `MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`，以及 `builds.py` 中仅为 metadata 服务的 `_report_json`、`_builder_version` 与 revision/plan JSON 传递。验证报告仍作为发布门禁，只是不再落盘。
 - `application/validation.py` 的引用边界检查同步改造：移除写死的 `_DRAWINGS_PREFIX`，预期成果路径必须是目标目录内的裸文件名，含 `/`、`\` 或 `..` 一律报 `ARTIFACT_PATH_ESCAPE`；不改则扁平布局下每次构建都会被误判为越界。
 - 删除已无对应契约的交接测试面：`tests/builder/unit/test_package_manifest.py`、`tests/integration/test_builder_handoff_api.py`、`tests/unit/test_handoff_reader.py` 与 `tests/handoff_package_factory.py`（后者依赖被删的 `MANIFEST_FILE` 与旧签名 `assemble_package_files`）。新增 `tests/builder/unit/test_package_layout.py` 固化三件套布局与 `verify_target` 语义；`test_build_recovery.py` 改为「内容变更仍收敛 SUCCEEDED、预期产物缺件判 `PUBLISH_RECOVERY_REQUIRED`」两项断言。
+- 审查修复轮 1（仅测试）：为 `read_publish_evidence` 的两条新行为补上集成用例——旧版发布证据缺少 `expected_paths` 时按空元组容忍并判 `PUBLISH_RECOVERY_REQUIRED`、`expected_paths` 非字符串列表时抛 `PublishEvidenceError` 且恢复判 `PUBLISH_RECOVERY_REQUIRED`（两者均不自动删除现场）；`test_package_layout.py` 新增键值配对断言，并把 `_seed_publish_evidence` 从未被传入的 `expected_paths` 死参数删除。
 
 ## 2026-09-18（SPEC-DB-001 与 dst-builder 长期文档同步取消交接）
 

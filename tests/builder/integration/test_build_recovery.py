@@ -3,7 +3,8 @@
 覆盖：PREPARING～VERIFYING 中断保留现场并标记 FAILED/BUILD_INTERRUPTED、
 QUEUED 遗留、PUBLISHING 未改名（清理暂存标记失败）、已完整改名（收敛
 SUCCEEDED，包括内容被用户改动但预期产物齐备的目标）、预期产物缺件
-（PUBLISH_RECOVERY_REQUIRED）、歧义现场（PUBLISH_RECOVERY_REQUIRED，
+（PUBLISH_RECOVERY_REQUIRED）、旧版证据缺少 `expected_paths` 或 `expected_paths`
+非法（PUBLISH_RECOVERY_REQUIRED，不自动删除）、歧义现场（PUBLISH_RECOVERY_REQUIRED，
 不自动删除），以及应用启动时的自动恢复。
 """
 
@@ -20,6 +21,10 @@ from dst_builder.application.build_recovery import (
     BUILD_INTERRUPTED,
     PUBLISH_RECOVERY_REQUIRED,
     recover_pending_builds,
+)
+from dst_builder.infrastructure.filesystem.attempts import (
+    PublishEvidenceError,
+    read_publish_evidence,
 )
 from dst_builder.infrastructure.persistence.database import Database
 from dst_builder.infrastructure.persistence.repositories import (
@@ -132,25 +137,23 @@ def _seed_attempt_dirs(recovery, build_id: str, attempt: int = 1) -> Path:
     return attempt_dir
 
 
-def _seed_publish_evidence(
-    attempt_dir: Path,
-    target: Path,
-    staging: Path,
-    *,
-    expected_paths: tuple[str, ...] | None = None,
-) -> None:
-    """写发布证据；默认登记与 ``_minimal_package_files`` 一致的三件套。"""
-    paths = tuple(_minimal_package_files()) if expected_paths is None else expected_paths
+def _seed_publish_evidence(attempt_dir: Path, target: Path, staging: Path) -> None:
+    """写发布证据：登记与 ``_minimal_package_files`` 一致的三件套。"""
+    _write_publish_evidence_payload(
+        attempt_dir,
+        {
+            "target": str(target),
+            "staging": str(staging),
+            "recorded_at": NOW,
+            "expected_paths": list(_minimal_package_files()),
+        },
+    )
+
+
+def _write_publish_evidence_payload(attempt_dir: Path, payload: dict) -> None:
+    """按原样落盘发布证据 JSON，用于构造旧版或非法证据。"""
     (attempt_dir / "metadata" / "publish-target.json").write_text(
-        json.dumps(
-            {
-                "target": str(target),
-                "staging": str(staging),
-                "recorded_at": NOW,
-                "expected_paths": list(paths),
-            }
-        ),
-        encoding="utf-8",
+        json.dumps(payload), encoding="utf-8"
     )
 
 
@@ -346,6 +349,62 @@ def test_publishing_without_evidence_requires_manual_recovery(recovery) -> None:
     with recovery.database.sessions.begin() as session:
         attempts = SqliteBuildRepository(session).list_attempts(build_id)
     assert attempts[-1].error_code == PUBLISH_RECOVERY_REQUIRED
+
+
+def test_publishing_with_legacy_evidence_without_expected_paths_requires_manual_recovery(
+    recovery,
+) -> None:
+    """旧版发布证据没有 expected_paths：按空元组容忍，空集合判为发布证据缺失。"""
+    build_id = recovery.add_build("PUBLISHING", "PUBLISHING")
+    attempt_dir = _seed_attempt_dirs(recovery, build_id)
+    _write_valid_package(recovery.output_target)
+    _write_publish_evidence_payload(
+        attempt_dir,
+        {
+            "target": str(recovery.output_target),
+            "staging": str(recovery.output_target.parent / ".gone-staging"),
+            "recorded_at": NOW,
+        },
+    )
+
+    recover_pending_builds(recovery.project_root, recovery.database)
+
+    with recovery.database.sessions.begin() as session:
+        run = SqliteBuildRepository(session).load_build_run(build_id)
+        attempts = SqliteBuildRepository(session).list_attempts(build_id)
+    assert run.status == "FAILED"
+    assert attempts[-1].error_code == PUBLISH_RECOVERY_REQUIRED
+    assert "发布证据缺少预期产物清单" in attempts[-1].error_detail
+    assert (recovery.output_target / "sheetset.dst").is_file(), "现场不得被自动删除"
+
+
+def test_publishing_with_malformed_expected_paths_requires_manual_recovery(recovery) -> None:
+    """expected_paths 不是字符串列表：读取即抛 PublishEvidenceError，恢复判为歧义现场。"""
+    build_id = recovery.add_build("PUBLISHING", "PUBLISHING")
+    attempt_dir = _seed_attempt_dirs(recovery, build_id)
+    _write_valid_package(recovery.output_target)
+    _write_publish_evidence_payload(
+        attempt_dir,
+        {
+            "target": str(recovery.output_target),
+            "staging": str(recovery.output_target.parent / ".gone-staging"),
+            "recorded_at": NOW,
+            "expected_paths": "sheetset.dst",
+        },
+    )
+
+    with pytest.raises(PublishEvidenceError):
+        read_publish_evidence(attempt_dir)
+
+    recover_pending_builds(recovery.project_root, recovery.database)
+
+    with recovery.database.sessions.begin() as session:
+        run = SqliteBuildRepository(session).load_build_run(build_id)
+        attempts = SqliteBuildRepository(session).list_attempts(build_id)
+    assert run.status == "FAILED"
+    assert attempts[-1].error_code == PUBLISH_RECOVERY_REQUIRED
+    assert "发布证据不可用" in attempts[-1].error_detail
+    assert (recovery.output_target / "sheetset.dst").is_file(), "现场不得被自动删除"
 
 
 def test_publishing_file_io_runs_outside_database_transaction(
