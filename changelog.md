@@ -3,6 +3,7 @@
 - 按 `RFC-INT-002` / `ADR-INT-001` 修订 `SPEC-DB-001`：§1 与 §2 改为六步引导且不再由 Manager 显式接管；§9 改为「正式成果目录」并固定三件套布局与 `verify_target` 判定；§10 标记 `superseded`；§11 删除交接端点与两个交接错误码；§12 替换交接与成果包结构相关门禁。
 - 同步修订 `ARCH-DB-001`（§1/§4/§7/§8/§10/§11/§12/§13）、`PRD-DB-001`（§3/§4/§6/§6.7/§9/§10/§11）与 `product/vision.md`。本次仅修改文档，未改动源码、测试或迁移。
 - 同一批文档中 brief 未枚举、但直接由 `RFC-INT-002` 推出的残留一并清理：`SPEC-DB-001` §2 步骤数、§4 `artifact_path`、§6 发布恢复对 manifest 的引用、§8 `drawings/` 目录与 manifest 表述、§12 发布资格与首条门禁、§13 附带资产目录；`ARCH-DB-001` §12 JSON Schema 契约测试范围与七步向导；`PRD-DB-001` §2、§7、§9 成果结构三条要点、§11 AC-001/AC-004/AC-005 与 AC 重编号；`vision.md` 首期成功方向；`README.md` 产品简介。
+- 清理 `ARCH-DB-001` §5 领域模型表与 §8 生成管线中残留的 `ArtifactManifest`：其定义（全文件哈希、来源和角色明确）即 `RFC-INT-002` 取消的哈希清单模型，全仓源码零命中；同时为 `SPEC-DB-001`、`ARCH-DB-001`、`PRD-DB-001`、`VISION-DB-001` 与 `ARCH-INT-002` 的 `related` 补齐 `RFC-INT-002` 与 `ADR-INT-001`。
 
 ## 2026-09-18（ARCH-INT-002 §6 交接边界取消）
 

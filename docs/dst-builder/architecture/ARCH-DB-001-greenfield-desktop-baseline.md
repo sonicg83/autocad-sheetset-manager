@@ -10,6 +10,8 @@ related:
   - VISION-DB-001
   - PRD-DB-001
   - RFC-INT-001
+  - RFC-INT-002
+  - ADR-INT-001
   - ARCH-INT-002
   - ARCH-DM-001
 document_kind: architecture
@@ -104,7 +106,6 @@ Builder 不导入 Manager 内部模块。共享提取采用渐进迁移，不以
 | `CadDocumentPlan` | 单个 DWG 的 CAD 意图 | 可序列化、无任意命令文本 |
 | `GenerationPlan` | 一次完整生成计划 | 引用固定修订与资产、不可变 |
 | `BuildRun` | 一次逻辑构建 | 包含多个独立 attempt |
-| `ArtifactManifest` | 成果与验证结果 | 全文件哈希、来源和角色明确 |
 
 ## 6. 项目存储
 
@@ -150,7 +151,6 @@ ProjectDraft
 → schema/contract validation
 → DstCodec
 → accompanying artifacts
-→ ArtifactManifest
 → atomic publish
 ```
 

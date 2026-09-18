@@ -10,6 +10,8 @@ related:
   - PRD-DB-001
   - ARCH-DB-001
   - RFC-INT-001
+  - RFC-INT-002
+  - ADR-INT-001
   - ARCH-INT-002
 ---
 

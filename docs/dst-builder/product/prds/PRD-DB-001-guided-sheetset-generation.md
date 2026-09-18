@@ -10,6 +10,8 @@ related:
   - VISION-DB-001
   - ARCH-DB-001
   - RFC-INT-001
+  - RFC-INT-002
+  - ADR-INT-001
 ---
 
 # 引导式图纸集生成产品需求

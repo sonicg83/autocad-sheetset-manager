@@ -8,6 +8,8 @@ created: 2026-09-17
 updated: 2026-09-18
 related:
   - RFC-INT-001
+  - RFC-INT-002
+  - ADR-INT-001
   - ARCH-INT-001
   - ARCH-DB-001
   - ARCH-DM-001
