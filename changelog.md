@@ -1,5 +1,11 @@
+## 2026-09-18（前端文本编辑状态统一规划）
+
+- 新增 [SPEC-DM-015](docs/dst-manager/specs/SPEC-DM-015-frontend-text-edit-state-contract.md)，统一图纸属性、属性值、图纸目录模板、常规设置与扩展配置的比较基准、修改/错误提示、状态术语和 clean 提交动作语义；同步更新四份页面 Spec、ARCH-DM-007 与 GUIDE-DM-001，避免后续页面继续形成例外。
+- 新增 [PLAN-DM-034](.planning/plans/dst-manager/PLAN-DM-034-frontend-text-edit-state-alignment.md)，按共享按钮原语与五处页面拆分 TDD 任务、回归矩阵、G8 设计 QA 和 G9 真实桌面关闭条件；本次仅形成规范与实施计划，尚未修改前端代码。
+
 ## 2026-09-18（Builder 桌面壳保存与项目打开修复）
 
+- **CAD 路径配置兼容 setup.bat（方案 C）**：`dst_builder.runtime` 新增 `.env` 加载（frozen 态=exe 同目录、开发态=仓库根，只补缺失键、进程环境优先、缺失/编码非法静默跳过）；`load_cad_configuration` 在合并视图上读取（**绝不回写真实进程环境**，防止共享 .env 的 `DST_MANAGER_*` 键跨产品泄漏）；`scripts/setup.bat` 同一次 AutoCAD 探测同时写入 `DST_BUILDER_AUTOCAD_2016/2020_CONSOLE` 键（模板与幂等补缺均覆盖），Manager 与 Builder 共享一份 .env 配置。
 - `deae499` 修复桌面壳（未绑定项目根目录启动）应用内创建项目后 `app.state.project_root` 未回绑，导致后续草稿自动保存全部报"未绑定项目根目录"的缺陷（含未绑定工厂回归测试）。
 - 创建语义改为**创建即打开**（幂等）：目录已是 Builder 项目时 `POST /api/projects` 打开既有项目（HTTP 200 + `opened_existing=true`，草稿与项目数据不重置），删除 `ProjectExistsError`/409 分支；前端在打开既有项目时提示"该目录已是 Builder 项目，已为你打开"。由此桌面壳重启后重新输入同一项目目录即可恢复会话；双侧 OpenAPI 契约同步重生成。
 

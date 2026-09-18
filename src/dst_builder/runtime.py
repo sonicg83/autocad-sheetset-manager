@@ -92,6 +92,47 @@ def log_dir(base: Path | None = None) -> Path:
     return app_data_dir(base) / "logs"
 
 
+def env_file_path(base: Path | None = None) -> Path:
+    """返回配置文件 .env 的定位。
+
+    frozen 态 = exe 同目录（沿用 setup.bat "与本程序 exe 放同一目录"的分发约定，
+    与 Manager 共享同一份探测配置）；开发态 = 仓库根（迁移/pyproject 资源基准层）。
+    ``base`` 仅供测试注入。
+    """
+    if base is not None:
+        return base / ".env"
+    if is_frozen():
+        return Path(sys.executable).resolve().parent / ".env"
+    return _DEV_ROOT / ".env"
+
+
+def apply_env_file(environ: dict[str, str] | None = None, base: Path | None = None) -> bool:
+    """把 .env 中缺失的键补进环境（进程已有变量优先，模拟 pydantic-settings 语义）。
+
+    消费方：`load_cad_configuration` 在读取真实进程环境前先应用一次，使 setup.bat
+    生成的 DST_BUILDER_* 键对桌面壳与 CLI 生效。文件缺失/不可读/编码非法一律静默
+    跳过，绝不阻断启动；空行与 ``#`` 注释跳过；值不做引号剥离（setup.bat 写出
+    未加引号的字面路径）。返回是否有键被补入。
+    """
+    target = os.environ if environ is None else environ
+    try:
+        text = env_file_path(base).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    changed = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key or key in target:
+            continue
+        target[key] = value.strip()
+        changed = True
+    return changed
+
+
 def _stdio_usable(stream: object) -> bool:
     """windowed 态 PyInstaller 注入 NullWriter（无 fileno）或 None；控制台与重定向句柄真实可用。"""
     if stream is None or type(stream).__name__ == "NullWriter":

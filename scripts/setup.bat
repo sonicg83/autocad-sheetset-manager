@@ -52,7 +52,7 @@ echo.
 echo === 完成 ===
 if defined CONSOLE_2016 echo 2016 桶 Core Console：%CONSOLE_2016%
 if defined CONSOLE_2020 echo 2020 桶 Core Console：%CONSOLE_2020%
-if not defined CONSOLE_2016 if not defined CONSOLE_2020 echo [提示] 未发现受支持的 AutoCAD（2013-2024），请手工编辑 .env 填写 DST_MANAGER_AUTOCAD_2016_CONSOLE / DST_MANAGER_AUTOCAD_2020_CONSOLE。
+if not defined CONSOLE_2016 if not defined CONSOLE_2020 echo [提示] 未发现受支持的 AutoCAD（2013-2024），请手工编辑 .env 填写 DST_MANAGER_ / DST_BUILDER_ AUTOCAD_2016_CONSOLE / AUTOCAD_2020_CONSOLE。
 echo 配置修改完成后重启 DST Manager 生效。
 echo.
 if not defined DST_SETUP_NO_PAUSE pause
@@ -100,7 +100,9 @@ if not exist "%ENV_FILE%" (
 rem 已有 .env：只补缺失键，绝不覆盖已有配置
 set "CHANGED=0"
 if defined CONSOLE_2016 call :ensure_key DST_MANAGER_AUTOCAD_2016_CONSOLE "!CONSOLE_2016!"
+if defined CONSOLE_2016 call :ensure_key DST_BUILDER_AUTOCAD_2016_CONSOLE "!CONSOLE_2016!"
 if defined CONSOLE_2020 call :ensure_key DST_MANAGER_AUTOCAD_2020_CONSOLE "!CONSOLE_2020!"
+if defined CONSOLE_2020 call :ensure_key DST_BUILDER_AUTOCAD_2020_CONSOLE "!CONSOLE_2020!"
 if "%CHANGED%"=="0" echo [跳过] .env 已存在且配置完整，未做修改。
 goto :eof
 
@@ -129,15 +131,19 @@ echo [生成] %ENV_FILE%
 >> "%ENV_FILE%" echo # Worker plugin DLLs are resolved automatically to autocad2016/ autocad2020/ next to the exe.
 if defined CONSOLE_2016 goto tpl_2016_set
 >> "%ENV_FILE%" echo # DST_MANAGER_AUTOCAD_2016_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2016\accoreconsole.exe
+>> "%ENV_FILE%" echo # DST_BUILDER_AUTOCAD_2016_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2016\accoreconsole.exe
 goto tpl_2020
 :tpl_2016_set
 >> "%ENV_FILE%" echo DST_MANAGER_AUTOCAD_2016_CONSOLE=!CONSOLE_2016!
+>> "%ENV_FILE%" echo DST_BUILDER_AUTOCAD_2016_CONSOLE=!CONSOLE_2016!
 :tpl_2020
 if defined CONSOLE_2020 goto tpl_2020_set
 >> "%ENV_FILE%" echo # DST_MANAGER_AUTOCAD_2020_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2020\accoreconsole.exe
+>> "%ENV_FILE%" echo # DST_BUILDER_AUTOCAD_2020_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2020\accoreconsole.exe
 goto tpl_done
 :tpl_2020_set
 >> "%ENV_FILE%" echo DST_MANAGER_AUTOCAD_2020_CONSOLE=!CONSOLE_2020!
+>> "%ENV_FILE%" echo DST_BUILDER_AUTOCAD_2020_CONSOLE=!CONSOLE_2020!
 :tpl_done
 >> "%ENV_FILE%" echo.
 >> "%ENV_FILE%" echo # --- Optional settings ---

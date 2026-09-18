@@ -18,6 +18,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from dst_builder.runtime import apply_env_file
+
 __all__ = [
     "CAD_CONSOLE_NOT_CONFIGURED",
     "CAD_CONSOLE_NOT_CORE_CONSOLE",
@@ -111,8 +113,20 @@ def evaluate_cad_capability(
 
 
 def load_cad_configuration(environ: Mapping[str, str] | None = None) -> CadConfiguration:
-    """读取显式环境变量配置；未配置的开发态全部为 None（不猜测 AutoCAD）。"""
-    env = os.environ if environ is None else environ
+    """读取显式环境变量配置；未配置的开发态全部为 None（不猜测 AutoCAD）。
+
+    真实进程路径（``environ=None``）在 os.environ 副本上应用一次 .env（frozen=exe
+    同目录、开发态=仓库根，见 runtime.apply_env_file）：setup.bat 写入的
+    DST_BUILDER_* 键由此对桌面壳与 CLI 生效，进程已有环境变量仍然优先。
+    **绝不回写真实进程环境**——.env 是 Manager/Builder 共享文件，键集合不归
+    本函数所有，回写会跨产品泄漏配置并污染测试。测试注入的 ``environ`` 不受
+    .env 影响。
+    """
+    if environ is None:
+        env: Mapping[str, str] = dict(os.environ)
+        apply_env_file(env)
+    else:
+        env = environ
 
     def configured(version: str, kind: str) -> Path | None:
         value = env.get(f"{_ENV_PREFIX}{version}_{kind}")
