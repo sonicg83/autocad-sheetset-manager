@@ -17,7 +17,7 @@ related:
 
 ## 1. 目的与范围
 
-本规范把 DST Builder 的第一条可实施纵向切片固定为：在七步引导界面中创建一个项目，定义一张图纸，冻结不可变项目修订与生成计划，通过匹配版本的 AutoCAD 生成一个 DWG，从零生成并验证一个 DST，发布正式成果包，再由 DST Manager 显式接管。
+本规范把 DST Builder 的第一条可实施纵向切片固定为：在六步引导界面中创建一个项目，定义一张图纸，冻结不可变项目修订与生成计划，通过匹配版本的 AutoCAD 生成一个 DWG，从零生成并验证一个 DST，发布正式成果包；DST Manager 直接打开成果目录中的 DST。
 
 首个闭环有意限制为“一项目、一分组、一张图纸、一个 DWG、一个布局”。限制的是首期输入规模，不是领域模型的容量；模型和 JSON 契约仍使用数组，以便后续扩展时不破坏版本 1 契约。
 
@@ -25,7 +25,7 @@ related:
 
 ## 2. 固定用户流程
 
-七个步骤及首期完成条件如下：
+六个步骤及首期完成条件如下：
 
 | 步骤 | 用户任务 | 完成条件 |
 | --- | --- | --- |
@@ -35,7 +35,6 @@ related:
 | 4 匹配模板 | 纳入基础 DWG、布局模板，选择源布局 | 两项资产已复制进项目并固定 SHA-256；源布局已由匹配版本 CAD 验证存在 |
 | 5 构建前检查 | 查看完整预览，提交修订并确认计划 | 阻断诊断为零；用户确认的 `ProjectRevision` 与 `GenerationPlan` 已持久化 |
 | 6 构建成果 | 启动并观察构建 | 唯一 build attempt 到达终止状态；运行中冻结计划不可编辑 |
-| 7 验收与交接 | 查看验证结果，发布并交接 Manager | 成果包发布成功；可调用 Manager 的交接入口 |
 
 草稿每次字段变更后 500 ms 防抖保存。应用恢复时返回最后一个可进入步骤和该步骤最后聚焦字段；恢复不能自动越过需用户确认的步骤 5。
 
@@ -122,7 +121,7 @@ sheetset_name = project.name
 subset_name   = project.discipline
 layout_name  = sheet_number + " " + title
 dwg_name     = layout_name + ".dwg"
-artifact_path = "drawings/" + dwg_name
+artifact_path = dwg_name
 dst_reference_path = dwg_name
 ```
 
@@ -169,7 +168,7 @@ QUEUED|PREPARING|BUILDING_DWG|BUILDING_DST|VERIFYING → CANCELLED
 
 `BuildEventV1` 包含 `schema_version`、单调递增 `sequence`、`status`、`progress`（0～100）、`message_key`、可选 `artifact_path`、`error_code` 和 `created_at`。HTTP API 使用 SSE 重放 `Last-Event-ID` 之后的持久化事件；断线不影响构建。
 
-应用启动时把遗留在 `PREPARING` 至 `VERIFYING` 的 attempt 标为 `FAILED/BUILD_INTERRUPTED`，保留现场，不续跑半完成 CAD 命令。用户只能基于同一计划创建递增的新 attempt。若发现 `PUBLISHING` 遗留暂存目录：目标不存在时清理暂存并标记失败；目标存在且完整匹配预期 manifest 时收敛为成功；其他情况标记 `PUBLISH_RECOVERY_REQUIRED` 并阻止自动删除现场。
+应用启动时把遗留在 `PREPARING` 至 `VERIFYING` 的 attempt 标为 `FAILED/BUILD_INTERRUPTED`，保留现场，不续跑半完成 CAD 命令。用户只能基于同一计划创建递增的新 attempt。若发现 `PUBLISHING` 遗留暂存目录：目标不存在时清理暂存并标记失败；目标存在且通过 `verify_target` 校验时收敛为成功；其他情况标记 `PUBLISH_RECOVERY_REQUIRED` 并阻止自动删除现场。
 
 ## 7. DWG 生成契约
 
@@ -191,55 +190,40 @@ Builder 使用独立最小插件 `DstBuilder.AutoCAD`，分别针对 AutoCAD 201
 
 DST 从新的 AcSm DOM 构造，不读取模板 DST。稳定共享包提供二进制 DST Codec、AcSm Schema 装载和 Core Console 进程执行原语；Builder 自己拥有从 `GenerationPlanV1` 到 AcSm DOM 的工厂。
 
-首期 DST 必须表达：一个 SheetSet、一个 Subset、一个 Sheet、一个 LayoutReference；SheetSet 名固定为工程名称，Subset 名固定为专业名称。Sheet 的编号、标题、DWG 相对路径、布局名和插件返回的布局 Handle 必须与计划及实际 DWG 一致。DST 与 DWG 位于同一 `drawings/` 目录，因此 DST 内的 DWG 引用只保存 `dwg_name`，manifest 才使用 `drawings/<dwg_name>`。对象 ID 由计划哈希和对象语义路径使用 UUIDv5 派生，不能使用随机值。
+首期 DST 必须表达：一个 SheetSet、一个 Subset、一个 Sheet、一个 LayoutReference；SheetSet 名固定为工程名称，Subset 名固定为专业名称。Sheet 的编号、标题、DWG 相对路径、布局名和插件返回的布局 Handle 必须与计划及实际 DWG 一致。DST 与 DWG 位于同一目标目录，因此 DST 内的 DWG 引用只保存 `dwg_name`。对象 ID 由计划哈希和对象语义路径使用 UUIDv5 派生，不能使用随机值。
 
 编码前后均执行 AcSm Schema 与 Builder 语义校验；编码后重新解码并投影，投影必须与计划一致。任何未知的编码、Schema 或语义错误都阻断发布。
 
-`drawings/图纸目录.xlsx` 使用固定工作表 `图纸目录`，第一行为 `图号`、`图名`、`DWG`、`布局`，第二行为唯一图纸数据。它是伴随成果，不是项目事实源。
+`图纸目录.xlsx` 使用固定工作表 `图纸目录`，第一行为 `图号`、`图名`、`DWG`、`布局`，第二行为唯一图纸数据。它是伴随成果，不是项目事实源。
 
-## 9. 正式成果包
+## 9. 正式成果目录
 
-正式根目录只能包含 `drawings/` 与 `metadata/`：
+正式成果目标目录直接包含三个文件，没有包装子目录：
 
 ```text
-<package>/
-├─ drawings/
-│  ├─ sheetset.dst
-│  ├─ <sheet-number> <title>.dwg
-│  └─ 图纸目录.xlsx
-└─ metadata/
-   ├─ manifest.json
-   ├─ project-revision.json
-   ├─ generation-plan.json
-   ├─ validation-report.json
-   └─ handoff.json
+<target>/
+├─ sheetset.dst
+├─ <sheet-number> <title>.dwg
+└─ 图纸目录.xlsx
 ```
 
-首期没有需要交付的附带资产时不创建空 `drawings/assets/`；未来资产必须位于该目录内。`drawings/` 内所有 DST/DWG 引用使用正斜杠相对路径，不得逃逸 `drawings/`。
+目标目录本身就是交付边界，也是用户在 AutoCAD 中继续工作、由 DST Manager 直接打开的工作目录。因此：
 
-`manifest.json` 使用 `dst-builder.manifest/v1`，列出除自身和 `handoff.json` 外的全部正式文件，每项含 `path`、`role`、`size`、`sha256`，按路径字典序排列。`validation-report.json` 使用 `dst-builder.validation-report/v1`，记录所有校验器版本、结果和诊断。
+- 不生成 `metadata/` 目录，不生成清单、来源元数据或校验报告文件；
+- 不约束目标目录内的其他文件；用户自行放入的 DWG、备份文件、说明文件都是合法的；
+- 未来需要交付的附带资产约定放在 `<target>/assets/`，首期不创建该目录。
 
-`handoff.json` 使用 `dst-builder.handoff/v1`：
-
-```json
-{
-  "schema": "dst-builder.handoff/v1",
-  "package_id": "<uuid>",
-  "build_id": "<uuid>",
-  "plan_id": "<uuid>",
-  "manifest_path": "metadata/manifest.json",
-  "manifest_sha256": "<sha256>",
-  "dst_path": "drawings/sheetset.dst",
-  "created_at": "<RFC3339 UTC>",
-  "builder_version": "<semver>"
-}
-```
-
-`package_id` 为 `uuid5(NAMESPACE_URL, "dst-builder:package:" + manifest_sha256)`。`handoff.json` 不进入 manifest，避免自引用；Manager 先验证 handoff 指定的 manifest 哈希，再验证 manifest 中每个文件。
+DST 的布局引用使用相对文件名解析，与所在目录名无关；不再存在 `drawings/` 包装层，也不再有「引用不得逃逸 `drawings/`」的包级约束。
 
 候选包全部验证后，在目标父目录创建唯一暂存目录并以一次原子改名发布。目标已存在、跨卷、父目录不可写或最终改名失败时不发布；首期不会删除或替换用户已有成果。
 
+发布事务的完整性判定使用 `verify_target(root, expected_paths)`：断言本次发布的全部预期产物存在、可读、非空，不比对内容哈希，也不检查目录内是否存在其他文件。预期路径集合由调用方显式给出——发布时来自候选文件映射，启动恢复时来自发布证据中的 `expected_paths`；集合为空判为发布证据缺失，不得静默放行。
+
+已发布的旧版成果包带有 `metadata/` 目录与 `drawings/` 包装层，Manager 打开这类目录时不读取该目录，也不因此拒绝打开。
+
 ## 10. Manager 交接
+
+> **状态：`superseded`。** 本节描述的 `HandoffBundle` 交接契约已由 [RFC-INT-002](../../integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 与 [ADR-INT-001](../../integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md) 取消：其准入条件要求成果包自发布起保持字节不变，与「Builder 生成框架 → 人工 AutoCAD 编辑 → Manager 承担中后期交付」的真实流程冲突。决策理由与替代关系见该 ADR。以下正文保留为历史记录，不再具有规范性。
 
 Manager 新增显式入口 `POST /api/handoffs/open`，请求只包含绝对 `handoff_path`。普通 `POST /api/workspaces/open` 语义保持不变。
 
@@ -274,32 +258,30 @@ Builder 首期 API：
 | `POST /api/builds/{id}/cancel` | 请求安全取消 |
 | `GET /api/builds/{id}` | 读取状态、诊断和成果 |
 | `GET /api/builds/{id}/events` | SSE 事件流与重放 |
-| `POST /api/builds/{id}/handoff` | 调用本机 Manager 交接适配器 |
 
-错误响应统一含 `code`、`message`、`field`、`recovery_action` 和可选 `details`。首期至少固定：`PROJECT_PATH_INVALID`、`DRAFT_CONFLICT`、`ASSET_OUTSIDE_PROJECT`、`ASSET_HASH_MISMATCH`、`CAD_VERSION_UNAVAILABLE`、`LAYOUT_NOT_FOUND`、`PLAN_STALE`、`BUILD_INTERRUPTED`、`CAD_EXECUTION_FAILED`、`DST_VALIDATION_FAILED`、`PACKAGE_TARGET_EXISTS`、`PUBLISH_RECOVERY_REQUIRED`、`HANDOFF_INVALID`、`HANDOFF_ID_CONFLICT`。
+错误响应统一含 `code`、`message`、`field`、`recovery_action` 和可选 `details`。首期至少固定：`PROJECT_PATH_INVALID`、`DRAFT_CONFLICT`、`ASSET_OUTSIDE_PROJECT`、`ASSET_HASH_MISMATCH`、`CAD_VERSION_UNAVAILABLE`、`LAYOUT_NOT_FOUND`、`PLAN_STALE`、`BUILD_INTERRUPTED`、`CAD_EXECUTION_FAILED`、`DST_VALIDATION_FAILED`、`PACKAGE_TARGET_EXISTS`、`PUBLISH_RECOVERY_REQUIRED`。
 
 ## 12. 验证门禁
 
 自动化验收至少覆盖：
 
-- 相同草稿与资产产生完全相同的修订、计划、DST 对象 ID 和 manifest 排序；
+- 相同草稿与资产产生完全相同的修订、计划和 DST 对象 ID；
 - 每个字段边界、危险名称、路径逃逸、符号链接、大小写碰撞和 stale plan 被拒绝；
 - 模拟 CAD 成功、失败、超时、取消、进程中断和不可信结果 JSON；
 - AcSm 构造、Codec 往返、Schema、语义投影、DWG 布局与 Handle 一致性；
 - 发布前各故障点不产生正式目录，原子改名后只存在完整成果；
-- 成果包根只有两个目录，manifest 与 handoff 无循环依赖；
-- Manager 交接成功、幂等、冲突、损坏 metadata、哈希漂移和路径逃逸；
-- 七步门禁、自动保存/恢复、错误聚焦、键盘流程、浅深主题和 200% 缩放；
+- 目标目录含额外文件时发布后校验与启动恢复均不得失败；
+- 六步门禁、自动保存/恢复、错误聚焦、键盘流程、浅深主题和 200% 缩放；
 - 打包 Builder 与 Manager 共存，互不覆盖设置、端口、进程名和发布物。
 
-真实发布资格必须在用户显式启用的环境中分别通过 AutoCAD 2016、2020：导入源布局、保存 DWG、官方 Sheet Set Manager 打开 DST、Manager 接管与初始修订验证。缺少任一真实版本证据时只能标记开发闭环完成，不能宣称双版本正式发布资格。
+真实发布资格必须在用户显式启用的环境中分别通过 AutoCAD 2016、2020：导入源布局、保存 DWG、官方 Sheet Set Manager 打开 DST、由 DST Manager 直接打开已发布 DST。缺少任一真实版本证据时只能标记开发闭环完成，不能宣称双版本正式发布资格。
 
 ## 13. 明确推迟项
 
 - Excel/CSV 导入与导出；
 - 多图纸、多分组、特殊图纸、人员字典和自定义属性；
 - 覆盖既有成果包与旧版本保留策略；
-- `drawings/assets/` 的字体、打印样式和外部参照收集；
+- `<target>/assets/` 的字体、打印样式和外部参照收集；
 - 远程数据库、对象存储、跨机器 Worker 和服务端认证；
 - Builder 与 Manager 的反向同步或共同编辑；
 - 旧 Builder、旧数据库、旧 API 和旧 DLL 的兼容层。

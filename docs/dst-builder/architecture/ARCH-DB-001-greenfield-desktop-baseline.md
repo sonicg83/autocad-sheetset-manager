@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - VISION-DB-001
   - PRD-DB-001
@@ -23,7 +23,7 @@ document_kind: architecture
 - 用全新的领域模型表达项目、图纸分组、展开结果、模板绑定和生成计划。
 - 复用 DST Manager 已验证的安全能力，但不继承其编辑型工作区模型和历史兼容负担。
 - 首版不部署服务器组件，同时通过端口隔离 SQLite、本地 Artifact Store 和 Core Console，为未来内网服务化保留替换空间。
-- 所有正式成果在完整验证后原子发布，并可通过稳定交接契约进入 DST Manager。
+- 所有正式成果在完整验证后原子发布，并发布到目标目录，由 DST Manager 直接打开其中的 DST。
 
 ## 2. 非目标
 
@@ -105,7 +105,6 @@ Builder 不导入 Manager 内部模块。共享提取采用渐进迁移，不以
 | `GenerationPlan` | 一次完整生成计划 | 引用固定修订与资产、不可变 |
 | `BuildRun` | 一次逻辑构建 | 包含多个独立 attempt |
 | `ArtifactManifest` | 成果与验证结果 | 全文件哈希、来源和角色明确 |
-| `HandoffBundle` | Manager 交接入口 | 版本化契约，不泄漏 Builder 数据库 |
 
 ## 6. 项目存储
 
@@ -128,7 +127,7 @@ Builder 不导入 Manager 内部模块。共享提取采用渐进迁移，不以
 向导是可持久化的应用状态机：
 
 ```text
-PROJECT → RULES → SHEETS → TEMPLATES → PREFLIGHT → BUILD → HANDOFF
+PROJECT → RULES → SHEETS → TEMPLATES → PREFLIGHT → BUILD
 ```
 
 - 步骤状态从领域完成条件和诊断推导，不由前端自行判定。
@@ -153,7 +152,6 @@ ProjectDraft
 → accompanying artifacts
 → ArtifactManifest
 → atomic publish
-→ HandoffBundle
 ```
 
 ### 8.1 CAD
@@ -192,28 +190,20 @@ DRAFT → REVISION_READY → PLANNED → QUEUED → PREPARING
 - 发布阶段必须完成或恢复到一致状态后才响应取消完成。
 - 错误包含稳定错误码、步骤、对象、摘要和恢复动作。
 
-## 10. 正式成果与交接
+## 10. 正式成果目录
 
-成果包根目录只能包含：
+目标目录直接包含三个文件，没有包装子目录：
 
 ```text
-成果包/
-├─ drawings/
-│  ├─ sheetset.dst
-│  ├─ *.dwg
-│  ├─ assets/
-│  └─ 图纸目录.xlsx
-└─ metadata/
-   ├─ manifest.json
-   ├─ project-revision.json
-   ├─ generation-plan.json
-   ├─ validation-report.json
-   └─ handoff.json
+<target>/
+├─ sheetset.dst
+├─ <sheet-number> <title>.dwg
+└─ 图纸目录.xlsx
 ```
 
-`drawings/` 是可独立交付边界，内部引用使用相对路径。`metadata/` 使用版本化 UTF-8 JSON，负责审计、复现和 Manager 自动交接，但不成为 AutoCAD 打开图纸集的必要条件。
+目标目录本身就是交付边界，其 DST 引用按相对文件名解析，与所在目录名无关。不生成清单、来源元数据或校验报告文件；发布完整性判定只断言预期产物存在、可读、非空，不检查目录内是否存在其他文件。
 
-Manager 只读取 `handoff.json` 及其引用的包内元数据，不访问 `project.dstb`。验证通过后，Manager 创建自己的初始修订并记录来源构建 ID。
+Manager 直接打开该 DST，从磁盘现状建立工作区，不访问 `project.dstb`，也不校验成果来源。
 
 ## 11. 未来服务化边界
 
@@ -226,17 +216,16 @@ Manager 只读取 `handoff.json` 及其引用的包内元数据，不访问 `pro
 - `BuildRunRepository`
 - `EventPublisher`
 
-未来内网服务化可以替换适配器和部署拓扑，不改变领域命令、计划或交接契约。首版不得为未实现的服务场景引入账号、租约、对象存储或分布式一致性代码。
+未来内网服务化可以替换适配器和部署拓扑，不改变领域命令或生成计划。首版不得为未实现的服务场景引入账号、租约、对象存储或分布式一致性代码。
 
 ## 12. 测试与发布门禁
 
 - 领域单元测试覆盖展开、编号、命名、字段回退和模板选择。
-- JSON Schema 契约测试覆盖计划、CAD 作业、Artifact 和 Handoff。
+- JSON Schema 契约测试覆盖计划、CAD 作业和 Artifact。
 - 黄金样本比较业务语义，不要求与 Legacy 文件二进制相同。
 - 无 CAD 集成测试覆盖 SQLite、项目复制、哈希、崩溃恢复和发布故障注入。
 - AutoCAD 2016/2020 系统测试覆盖 DWG、布局、Handle、DST 打开和引用解析。
-- Builder → Manager 契约测试覆盖正常交接、哈希漂移、缺失文件和不支持版本。
-- Vue/Playwright 覆盖七步向导、草稿恢复、错误聚焦、取消、重试和交接。
+- Vue/Playwright 覆盖六步向导、草稿恢复、错误聚焦、取消和重试。
 - 正式版本必须在打包后的 Windows WebView2 桌面壳使用真实项目验收。
 
 ## 13. 首个实施切片
@@ -245,7 +234,7 @@ Manager 只读取 `handoff.json` 及其引用的包内元数据，不访问 `pro
 
 ```text
 向导录入 → GenerationPlan → DWG → Handle → DST
-→ drawings/ + metadata/ → DST Manager 打开
+→ sheetset.dst + DWG + 图纸目录.xlsx → DST Manager 打开
 ```
 
 该切片通过 AutoCAD 2016/2020 后，再扩展项目编辑器、规则、模板和多 DWG 并行。禁止先搭建空的企业控制面或全量插件框架。

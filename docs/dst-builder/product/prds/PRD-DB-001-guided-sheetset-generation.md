@@ -5,7 +5,7 @@ status: accepted
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - VISION-DB-001
   - ARCH-DB-001
@@ -24,15 +24,14 @@ DST Manager 已验证本地 WebView2 桌面壳、受控 CAD Worker、DST/AcSm �
 
 - 需要从项目资料创建首版 AutoCAD 图纸集的工程设计人员；
 - 熟悉图号、图名、模板和图纸成果，但不应被要求理解 AcSm XML、Handle、SCR 或任务状态机；
-- 首版假设单人在一台 Windows 11 工作站上完成一个项目的建模、构建和交接。
+- 首版假设单人在一台 Windows 11 工作站上完成一个项目的建模、构建和交付。
 
 ## 3. 问题
 
 - 用户难以判断输入是否完整，错误经常在 AutoCAD 已运行后才暴露；
 - Excel 同时承担界面、数据、规则和交换格式，难以表达修订、审计和资产版本；
 - 构建过程缺少一份用户可审阅、机器可复现的完整计划；
-- 失败可能留下难以判断是否可用的半成品；
-- 生成链路与后续维护链路边界不清，缺少正式交接证据。
+- 失败可能留下难以判断是否可用的半成品。
 
 ## 4. 目标
 
@@ -40,7 +39,7 @@ DST Manager 已验证本地 WebView2 桌面壳、受控 CAD Worker、DST/AcSm �
 - 以应用内项目模型作为唯一事实源，以 Excel 作为兼容输入和交换格式；
 - 在启动 AutoCAD 前生成并确认不可变 `GenerationPlan`；
 - 生成经过真实验证的 DWG、DST 和伴随成果；
-- 以固定成果结构和版本化元数据交接给 DST Manager；
+- 把 `sheetset.dst`、DWG 与图纸目录 XLSX 发布到目标目录，由 DST Manager 直接打开；
 - 首版本地交付，但保持未来替换数据库、Artifact Store 和 CAD 执行器的端口。
 
 ## 5. 非目标
@@ -91,15 +90,15 @@ DST Manager 已验证本地 WebView2 桌面壳、受控 CAD Worker、DST/AcSm �
 - 支持安全取消；失败后保留诊断并提供可执行的恢复动作。
 - 构建期间当前修订只读；用户需要修改时终止当前流程并创建新修订。
 
-### 6.7 验收与交接
+### 6.7 验收
 
 - 校验布局、Handle、DST 引用、成果数量和文件哈希。
 - 原子发布正式成果包。
-- 生成 `handoff.json`，并可一键在 DST Manager 中打开。
+- 在目标目录中直接得到 `sheetset.dst`，并由 DST Manager 打开验证。
 
 ## 7. 引导界面要求
 
-- 左侧始终显示七个步骤及其未开始、进行中、已完成、警告或阻断状态。
+- 左侧始终显示六个步骤及其未开始、进行中、已完成、警告或阻断状态。
 - 中间区域只承载当前步骤的主要任务。
 - 右侧显示当前步骤说明、示例和问题摘要。
 - 底部固定提供“上一步”“保存退出”“继续”等上下文动作。
@@ -137,39 +136,30 @@ DRAFT → REVISION_READY → PLANNED → QUEUED → PREPARING
 - 进程崩溃后不续跑半完成 CAD 命令；启动恢复完成现场收敛后创建新 attempt。
 - 用户输入不得直接拼接为 SCR、Shell 命令或未验证路径。
 
-正式成果包根目录只能包含：
+正式成果目标目录直接包含三个文件，没有包装子目录：
 
 ```text
-成果包/
-├─ drawings/
-│  ├─ sheetset.dst
-│  ├─ *.dwg
-│  ├─ assets/
-│  └─ 图纸目录.xlsx
-└─ metadata/
-   ├─ manifest.json
-   ├─ project-revision.json
-   ├─ generation-plan.json
-   ├─ validation-report.json
-   └─ handoff.json
+<target>/
+├─ sheetset.dst
+├─ <sheet-number> <title>.dwg
+└─ 图纸目录.xlsx
 ```
 
-- `drawings/` 包含全部用户业务成果，整体复制后可脱离 Builder 使用。
-- DST 对 DWG 和资产的引用必须在 `drawings/` 内通过相对路径解析。
-- `metadata/` 只包含带 Schema 版本的 UTF-8 JSON；删除它不破坏图纸成果，但会失去复现、审计和自动交接能力。
+- 目标目录中的三件套即本次全部交付成果，整体复制后可脱离 Builder 使用。
+- DST 对 DWG 的引用在目标目录内按相对文件名解析，与目录名无关。
+- 不生成清单或校验报告文件；用户自行放入的其他文件不影响交付。
 
-## 10. 交接需求
+## 10. 交付与接管需求
 
-- Builder 在交接前重新验证完整成果清单和哈希。
-- Manager 通过 `handoff.json` 接收交接，不读取 Builder 的 SQLite 数据库。
-- Manager 验证 `drawings/` 全部登记文件后创建自己的初始工作区修订，并记录来源 Builder 构建 ID。
-- 普通 DST 仍可由 Manager 独立打开；只有交接入口携带完整来源追踪信息。
+- Builder 只在目标目录产出一套完整成果，构建成功即交付完成，不阻止用户在其中自行增加文件。
+- Manager 通过打开成果目录中的 DST 接管项目，从磁盘现状建立工作区，不校验成果来源，也不要求成果保持发布时的字节不变。
+- 两个产品之间不交换包级标识、清单或哈希，DST 文件是唯一接口。
 
 ## 11. 验收标准
 
 ### AC-001：完整引导流程
 
-用户能够创建或导入项目，依次完成七个步骤；退出并重启后恢复原步骤、草稿和问题状态。
+用户能够创建或导入项目，依次完成六个步骤；退出并重启后恢复原步骤、草稿和问题状态。
 
 ### AC-002：确定性计划
 
@@ -181,20 +171,16 @@ AutoCAD 2016 与 2020 均能完成最小和标准黄金项目；DWG 布局名、
 
 ### AC-004：DST 正确性
 
-生成的 DST 通过 Schema 与契约校验，可由对应版本 AutoCAD Sheet Set Manager 打开，且所有图纸引用解析到 `drawings/` 内实际 DWG 和布局。
+生成的 DST 通过 Schema 与契约校验，可由对应版本 AutoCAD Sheet Set Manager 打开，且所有图纸引用解析到成果目录内实际 DWG 和布局。
 
-### AC-005：成果完整性
+### AC-005：正式成果目录
 
-成果包根目录仅有 `drawings/` 和 `metadata/`；`drawings/` 可独立复制使用；所有登记文件哈希匹配。
+成果目标目录直接包含 `sheetset.dst`、构建后的 DWG 和 `图纸目录.xlsx`，整体复制后可脱离 Builder 使用；目标目录含用户自有文件时，重新构建的同名目标仍按目标已存在拒绝，不得覆盖。
 
 ### AC-006：失败安全
 
 输入错误在 AutoCAD 启动前报告；CAD、DST、校验或发布任一步失败均不产生半成品正式成果；故障注入后目标目录保持一致状态。
 
-### AC-007：交接
-
-Manager 能接收正常交接包；对缺失文件、哈希漂移、损坏 metadata 和不支持的契约版本给出阻断诊断，不创建虚假的成功初始修订。
-
-### AC-008：可访问性与桌面验收
+### AC-007：可访问性与桌面验收
 
 键盘操作、错误聚焦、浅深主题、最小支持视口和 200% 缩放通过自动检查；打包后的 Windows 桌面壳使用真实项目完成主流程验收。
