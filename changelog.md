@@ -1,3 +1,8 @@
+## 2026-09-18（ARCH-INT-002 §6 交接边界取消）
+
+- 新增 [ADR-INT-001](docs/integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md)，取代 `ARCH-INT-002` §6「交接边界」原结论与 `RFC-INT-001` 中冲突的产品生命周期表述：Builder 发布即结束，Manager 通过 `POST /api/workspaces/open` 直接打开成果目录中的 DST。
+- 修订 `ARCH-INT-002` §2 责任边界与 §6 交接边界，新增 `docs/integration/adr/README.md` 索引并接入整合入口。本次仅修改文档，未改动源码、测试或迁移。
+
 ## 2026-09-18（PLAN-INT-002：取消交接契约实施计划）
 
 - 新增 [PLAN-INT-002](.planning/plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)（`proposed`），把 [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 的「迁移路径」拆为 8 个可独立验证的任务：先完成文档治理传播（ADR-INT-001 与权威架构、规范），再改 Builder 成果布局与完整性校验（`verify_package` → `verify_target(root, expected_paths)`，发布证据新增 `expected_paths`），然后新增「Builder 产出可被 Manager 直接打开」集成测试作为安全网，最后依次移除 Builder 与 Manager 两侧交接实现并新增 `0008_drop_handoff_sources` 迁移。计划冻结五项决策、显式列出两项不在本计划范围内解决的 RFC 开放问题（向导末端动作、初始修订补偿）。

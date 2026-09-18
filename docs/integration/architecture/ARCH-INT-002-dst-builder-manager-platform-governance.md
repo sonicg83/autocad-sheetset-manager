@@ -5,7 +5,7 @@ status: accepted
 owners:
   - integration
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - RFC-INT-001
   - ARCH-INT-001
@@ -24,7 +24,7 @@ document_kind: architecture
 
 | 范围 | 责任 | 不负责 |
 | --- | --- | --- |
-| `dst-builder` | 从项目数据生成首版 DWG、DST、伴随成果并交接 | 交接后的日常编辑与修订 |
+| `dst-builder` | 从项目数据生成首版 DWG、DST、伴随成果并发布到目标目录 | 交接契约、发布后的日常编辑与修订 |
 | `dst-manager` | 检查、编辑、修订和安全发布既有 DST/DWG | 维护 Builder 的项目事实源 |
 | `shared` | 两个产品已经采用的稳定技术契约和知识 | 产品需求、产品 UI 和潜在公共抽象 |
 | `integration` | 跨产品 RFC、交接契约、依赖方向和共享提取决策 | 任一产品私有实现 |
@@ -178,7 +178,9 @@ dst_manager ─┘
 
 ## 6. 交接边界
 
-Builder 通过版本化 `HandoffBundle` 向 Manager 交接，不共享数据库，也不直接写入 Manager 的内部表。Manager 验证成果清单与哈希后创建自己的初始修订。交接完成后两边独立演进，首版不提供隐式同步。
+当前没有跨产品交接契约。Builder 发布正式成果后即结束，Manager 通过既有 `POST /api/workspaces/open` 打开成果目录中的 DST，从磁盘现状建立工作区与基线；两侧不共享数据库、不共享包级标识，也不存在交接基线。
+
+`RFC-INT-002` 与 `ADR-INT-001` 记录了该契约的取消决策。若未来重新需要跨产品来源追溯，必须先有被接受的 `RFC-INT-*`，不得直接恢复 `HandoffBundle`。
 
 ## 7. 演进规则
 
