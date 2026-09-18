@@ -53,7 +53,11 @@ from dst_builder.infrastructure.autocad.capabilities import (
     evaluate_cad_capability,
     load_cad_configuration,
 )
-from dst_builder.infrastructure.autocad.drawing import CoreConsoleDrawingBuilder
+from dst_builder.infrastructure.autocad.drawing import (
+    CAD_VERSION_UNAVAILABLE,
+    CadDrawingError,
+    CoreConsoleDrawingBuilder,
+)
 from dst_builder.infrastructure.persistence.database import Database
 from dst_builder.interfaces.responses import (
     REQUEST_INVALID,
@@ -182,6 +186,23 @@ def _asset_service_from_factory(request: Request) -> BuilderAssetService:
     if root is None:
         raise ProjectNotInitializedError("未绑定项目根目录")
     return BuilderAssetService(root)
+
+
+def _layout_inspector_from_factory(request: Request) -> object:
+    """布局探测执行器：未显式注入时惰性装配真实 Core Console 执行器并缓存。
+
+    与构建路径的 drawing_builder 惰性默认同构（测试注入 fake 优先）；装配
+    需要 project_root 与 cad_configuration，分别依赖创建/打开后的回绑与 .env
+    配置加载，因此在请求时而非工厂时刻构造。
+    """
+    inspector = request.app.state.layout_inspector
+    if inspector is None:
+        root = request.app.state.project_root
+        if root is None:
+            raise ProjectNotInitializedError("未绑定项目根目录")
+        inspector = CoreConsoleDrawingBuilder(root, request.app.state.cad_configuration)
+        request.app.state.layout_inspector = inspector
+    return inspector
 
 
 def _cad_tool_paths(
@@ -428,16 +449,22 @@ def create_builder_app(
     def inspect_asset(
         asset_id: str, body: AssetInspectRequest, request: Request
     ) -> AssetInspectionResponse:
-        """用匹配版本 CAD 读取可用布局（§11）；端口未接线时返回 501。
+        """用匹配版本 CAD 读取可用布局（§11）。
 
-        PLAN-DB-001 Task 4 裁决：本任务只定义 LayoutInspection 端口，
-        端口未接线固定 501 + CAD_VERSION_UNAVAILABLE；真实 CAD 布局读取
-        由 Task 7 接线，本端点绝不伪造布局列表。
+        生产默认惰性装配 CoreConsoleDrawingBuilder（Task 4"端口未接线固定
+        501"已由真实执行器接线取代）；CAD 版本未配置或不可用时仍以
+        CAD_VERSION_UNAVAILABLE（501）呈现，绝不伪造布局列表。
         """
         service = _asset_service_from_factory(request)
-        layouts = service.inspect_layouts(
-            asset_id, body.cad_version, request.app.state.layout_inspector
-        )
+        try:
+            layouts = service.inspect_layouts(
+                asset_id, body.cad_version, _layout_inspector_from_factory(request)
+            )
+        except CadDrawingError as error:
+            if error.code == CAD_VERSION_UNAVAILABLE:
+                # 探测执行器的版本能力不可用 → 保持 §11 CAD_VERSION_UNAVAILABLE/501 契约。
+                raise CadInspectionUnavailableError(error.message) from error
+            raise
         return AssetInspectionResponse(
             asset_id=asset_id, cad_version=body.cad_version, layouts=list(layouts)
         )

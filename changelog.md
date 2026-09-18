@@ -1,10 +1,17 @@
+## 2026-09-18（协作规范补充本地 HTML 预览契约）
+
+- 在 `AGENTS.md` 新增「本地 HTML 与浏览器预览」一节，明确 Chrome/Edge 默认安全策略禁止页面读取 `file://`：查看本地 HTML 演示、报告或构建产物时，代理必须自行用 `uv run python -m http.server` 绑定 `127.0.0.1` 拉起本地 HTTP 服务并通过 `http://127.0.0.1:<端口>/...` 访问，用完立即结束进程，不得要求用户手动启动服务或反复重试 `file://`。本次仅补充协作规范，未修改源码、文档正文与测试。
+
 ## 2026-09-18（前端文本编辑状态统一规划）
 
 - 新增 [SPEC-DM-015](docs/dst-manager/specs/SPEC-DM-015-frontend-text-edit-state-contract.md)，统一图纸属性、属性值、图纸目录模板、常规设置与扩展配置的比较基准、修改/错误提示、状态术语和 clean 提交动作语义；同步更新四份页面 Spec、ARCH-DM-007 与 GUIDE-DM-001，避免后续页面继续形成例外。
 - 新增 [PLAN-DM-034](.planning/plans/dst-manager/PLAN-DM-034-frontend-text-edit-state-alignment.md)，按共享按钮原语与五处页面拆分 TDD 任务、回归矩阵、G8 设计 QA 和 G9 真实桌面关闭条件；本次仅形成规范与实施计划，尚未修改前端代码。
+- 新增[实施计划审查备忘（MEMO-DM-037）](.planning/memos/dst-manager/2026-09-18-plan-dm-034-review.md)，只读核对 PLAN-DM-034 与 SPEC-DM-015、五个页面组件、i18n 域文件、e2e/契约脚本及 Playwright 1.55 实际语义：确认方向与文件清单基本正确，同时记录 4 项需先修的问题（`UiButton` 守卫方案与自述目标相反、`aria-disabled` 下 Playwright 指针动作会等待 enabled 超时、`SettingsDialog` 保存按钮改组件后 ref 焦点归还失效、`hasValidationErrors`/`saveDisabled` 标识符与现网不符）与 5 项范围、文档同步、令牌约束问题；本次未修改计划正文、源码或测试，也未执行任何验证命令。
+- 按 MEMO-DM-037 的 F1～F9 修订 [PLAN-DM-034](.planning/plans/dst-manager/PLAN-DM-034-frontend-text-edit-state-alignment.md)：改正 `UiButton` 显式 emit 守卫、Playwright `aria-disabled` 强制点击验证、设置按钮组件 ref/焦点归还和实际标识符；复用既有 `filterDirty`、ARIA 描述与 i18n 键，补齐共享 `TemplateBar` 的双入口回归、warning 令牌/`check:ui` 门禁，并把文档与证据收口范围改为明确清单。本次仍未实施前端代码。
 
 ## 2026-09-18（Builder 桌面壳保存与项目打开修复）
 
+- **布局探测接线生产默认**：`POST /api/assets/{id}/inspect` 未显式注入执行器时惰性装配真实 `CoreConsoleDrawingBuilder`（与构建路径同构、首次构造后缓存），修复向导第 4 步恒显"需要 CAD 探测，尚未接线"（Task 4 的 501 占位语义被 Task 7 实现遗漏接线）；CAD 版本能力不可用时保持 501 `CAD_VERSION_UNAVAILABLE` 契约与具体原因。
 - **CAD 路径配置兼容 setup.bat（方案 C）**：`dst_builder.runtime` 新增 `.env` 加载（frozen 态=exe 同目录、开发态=仓库根，只补缺失键、进程环境优先、缺失/编码非法静默跳过）；`load_cad_configuration` 在合并视图上读取（**绝不回写真实进程环境**，防止共享 .env 的 `DST_MANAGER_*` 键跨产品泄漏）；`scripts/setup.bat` 同一次 AutoCAD 探测同时写入 `DST_BUILDER_AUTOCAD_2016/2020_CONSOLE` 键（模板与幂等补缺均覆盖），Manager 与 Builder 共享一份 .env 配置。
 - `deae499` 修复桌面壳（未绑定项目根目录启动）应用内创建项目后 `app.state.project_root` 未回绑，导致后续草稿自动保存全部报"未绑定项目根目录"的缺陷（含未绑定工厂回归测试）。
 - 创建语义改为**创建即打开**（幂等）：目录已是 Builder 项目时 `POST /api/projects` 打开既有项目（HTTP 200 + `opened_existing=true`，草稿与项目数据不重置），删除 `ProjectExistsError`/409 分支；前端在打开既有项目时提示"该目录已是 Builder 项目，已为你打开"。由此桌面壳重启后重新输入同一项目目录即可恢复会话；双侧 OpenAPI 契约同步重生成。

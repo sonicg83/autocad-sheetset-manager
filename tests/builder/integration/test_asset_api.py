@@ -447,3 +447,73 @@ def test_inspect_with_wired_port_returns_layouts(
         "cad_version": "2020",
         "layouts": ["A1", "A2"],
     }
+
+
+def test_inspect_defaults_to_real_executor_when_not_injected(
+    client: TestClient,
+    initialized: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """生产默认（未显式注入 layout_inspector）惰性装配 CoreConsoleDrawingBuilder。
+
+    回归背景：Task 7 实现真实布局探测后只接了构建路径，inspect 端口在生产
+    启动下恒为 501"尚未接线"，向导第 4 步选源布局不可用。接线语义与构建
+    路径（drawing_builder 惰性默认）同构：首次调用构造并缓存，测试注入优先。
+    """
+    import dst_builder.interfaces.api as api_module
+
+    calls: list[tuple[Path, object]] = []
+
+    class FakeCoreConsoleBuilder:
+        def __init__(self, root: Path, configuration: object) -> None:
+            calls.append((root, configuration))
+
+        def inspect_layouts(self, asset: object, cad_version: str) -> tuple[str, ...]:
+            return ("Model", "A1")
+
+    monkeypatch.setattr(api_module, "CoreConsoleDrawingBuilder", FakeCoreConsoleBuilder)
+
+    source = _write_source(tmp_path, "base.dwg", CONTENT)
+    asset = _intake(client, source, role="base")
+
+    first = client.post(f"/api/assets/{asset['id']}/inspect", json={"cad_version": "2020"})
+    assert first.status_code == 200, first.text
+    assert first.json()["layouts"] == ["Model", "A1"]
+    # 惰性构造恰好一次并缓存：同一 app 实例的后续调用复用同一执行器。
+    second = client.post(f"/api/assets/{asset['id']}/inspect", json={"cad_version": "2020"})
+    assert second.status_code == 200, second.text
+    assert len(calls) == 1
+    assert calls[0][0] == tmp_path / "project"
+
+
+def test_inspect_unconfigured_cad_keeps_501_contract(
+    client: TestClient, initialized: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """默认接线后 CAD 版本能力不可用 → 仍为 501 CAD_VERSION_UNAVAILABLE（§11）。"""
+    import dst_builder.interfaces.api as api_module
+    from dst_builder.infrastructure.autocad.drawing import (
+        CAD_VERSION_UNAVAILABLE,
+        CadDrawingError,
+    )
+
+    class UnavailableBuilder:
+        def __init__(self, root: Path, configuration: object) -> None:
+            pass
+
+        def inspect_layouts(self, asset: object, cad_version: str) -> tuple[str, ...]:
+            raise CadDrawingError(
+                CAD_VERSION_UNAVAILABLE, "AutoCAD 2020 不可用：CAD_CONSOLE_NOT_CONFIGURED"
+            )
+
+    monkeypatch.setattr(api_module, "CoreConsoleDrawingBuilder", UnavailableBuilder)
+
+    source = _write_source(tmp_path, "base.dwg", CONTENT)
+    asset = _intake(client, source, role="base")
+
+    response = client.post(f"/api/assets/{asset['id']}/inspect", json={"cad_version": "2020"})
+
+    assert response.status_code == 501, response.text
+    payload = response.json()
+    assert payload["code"] == "CAD_VERSION_UNAVAILABLE"
+    assert "AutoCAD 2020 不可用" in payload["message"]
