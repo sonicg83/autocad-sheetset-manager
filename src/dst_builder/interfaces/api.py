@@ -75,7 +75,6 @@ from dst_builder.interfaces.schemas import (
     CadCapabilityModel,
     DraftFieldsModel,
     DraftPatchRequest,
-    HandoffResponse,
     PlanConfirmationResponse,
     PlanSubmitResponse,
     ProjectCreateRequest,
@@ -297,18 +296,12 @@ def create_builder_app(
     cad_configuration: CadConfiguration | None = None,
     layout_inspector: object | None = None,
     drawing_builder: object | None = None,
-    manager_base_url: str | None = None,
-    handoff_transport: object | None = None,
 ) -> FastAPI:
     """Builder 独立应用工厂；``project_root`` 为项目根目录（可缺省）。
 
     ``layout_inspector`` / ``drawing_builder`` 是 §7 CAD 端口（测试注入 fake，
     缺省时构建编排按需构造真实 :class:`CoreConsoleDrawingBuilder`）；
     ``cad_configuration`` 缺省时从显式环境变量加载（不猜测 AutoCAD）。
-
-    ``manager_base_url`` / ``handoff_transport`` 是 §10 交接适配器注入点：
-    缺省时分别回退环境变量 ``DST_BUILDER_MANAGER_URL`` / 默认传输与
-    ``http://127.0.0.1:8000``（Task 10）。
     """
     app = FastAPI(
         title="DST Builder",
@@ -323,8 +316,6 @@ def create_builder_app(
     app.state.layout_inspector = layout_inspector
     app.state.drawing_builder = drawing_builder
     app.state.build_coordinator = None
-    app.state.manager_base_url = manager_base_url
-    app.state.handoff_transport = handoff_transport
 
     @app.exception_handler(ProjectServiceError)
     @app.exception_handler(AssetServiceError)
@@ -568,29 +559,6 @@ def create_builder_app(
         """读取状态、诊断和成果（§11）。"""
         view = _build_service_from_factory(request).get_build(build_id)
         return _build_status_response(view)
-
-    @app.post(
-        "/api/builds/{build_id}/handoff",
-        response_model=HandoffResponse,
-        responses={
-            404: {"model": ErrorPayloadModel, "description": "构建不存在"},
-            409: {
-                "model": ErrorPayloadModel,
-                "description": "构建未成功发布（HANDOFF_INVALID）或包冲突（HANDOFF_ID_CONFLICT）",
-            },
-            422: {"model": ErrorPayloadModel, "description": "Manager 验证拒绝（HANDOFF_INVALID）"},
-            502: {"model": ErrorPayloadModel, "description": "本机 Manager 不可用（HANDOFF_UNAVAILABLE）"},
-        },
-    )
-    def handoff_build(build_id: str, request: Request) -> HandoffResponse:
-        """调用本机 Manager 交接适配器（§10/§11）：已发布成果包原样保留。"""
-        coordinator = _build_service_from_factory(request)
-        result = coordinator.handoff_to_manager(
-            build_id,
-            manager_base_url=request.app.state.manager_base_url,
-            transport=request.app.state.handoff_transport,
-        )
-        return HandoffResponse(**result)
 
     @app.get(
         "/api/builds/{build_id}/events",

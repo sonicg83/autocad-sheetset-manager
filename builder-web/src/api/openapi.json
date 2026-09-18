@@ -155,7 +155,7 @@
     "/api/assets/{asset_id}/inspect": {
       "post": {
         "summary": "Inspect Asset",
-        "description": "用匹配版本 CAD 读取可用布局（§11）；端口未接线时返回 501。\n\nPLAN-DB-001 Task 4 裁决：本任务只定义 LayoutInspection 端口，\n端口未接线固定 501 + CAD_VERSION_UNAVAILABLE；真实 CAD 布局读取\n由 Task 7 接线，本端点绝不伪造布局列表。",
+        "description": "用匹配版本 CAD 读取可用布局（§11）。\n\n生产默认惰性装配 CoreConsoleDrawingBuilder（Task 4\"端口未接线固定\n501\"已由真实执行器接线取代）；CAD 版本未配置或不可用时仍以\nCAD_VERSION_UNAVAILABLE（501）呈现，绝不伪造布局列表。",
         "operationId": "inspect_asset_api_assets__asset_id__inspect_post",
         "parameters": [
           {
@@ -472,76 +472,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/builds/{build_id}/handoff": {
-      "post": {
-        "summary": "Handoff Build",
-        "description": "调用本机 Manager 交接适配器（§10/§11）：已发布成果包原样保留。",
-        "operationId": "handoff_build_api_builds__build_id__handoff_post",
-        "parameters": [
-          {
-            "name": "build_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Build Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HandoffResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "构建不存在",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorPayloadModel"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "构建未成功发布（HANDOFF_INVALID）或包冲突（HANDOFF_ID_CONFLICT）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorPayloadModel"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Manager 验证拒绝（HANDOFF_INVALID）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorPayloadModel"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "本机 Manager 不可用（HANDOFF_UNAVAILABLE）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorPayloadModel"
                 }
               }
             }
@@ -1098,81 +1028,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "HandoffResponse": {
-        "properties": {
-          "handoff_path": {
-            "type": "string",
-            "title": "Handoff Path"
-          },
-          "workspace_id": {
-            "type": "string",
-            "title": "Workspace Id"
-          },
-          "root": {
-            "type": "string",
-            "title": "Root"
-          },
-          "dst_path": {
-            "type": "string",
-            "title": "Dst Path"
-          },
-          "revision_id": {
-            "type": "string",
-            "title": "Revision Id"
-          },
-          "revision_dir": {
-            "type": "string",
-            "title": "Revision Dir"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind"
-          },
-          "package_id": {
-            "type": "string",
-            "title": "Package Id"
-          },
-          "build_id": {
-            "type": "string",
-            "title": "Build Id"
-          },
-          "plan_id": {
-            "type": "string",
-            "title": "Plan Id"
-          },
-          "manifest_sha256": {
-            "type": "string",
-            "title": "Manifest Sha256"
-          },
-          "dst_sha256": {
-            "type": "string",
-            "title": "Dst Sha256"
-          },
-          "idempotent": {
-            "type": "boolean",
-            "title": "Idempotent",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "handoff_path",
-          "workspace_id",
-          "root",
-          "dst_path",
-          "revision_id",
-          "revision_dir",
-          "kind",
-          "package_id",
-          "build_id",
-          "plan_id",
-          "manifest_sha256",
-          "dst_sha256"
-        ],
-        "title": "HandoffResponse",
-        "description": "POST /api/builds/{id}/handoff 响应：透传 Manager 交接结果（§10 步骤 6）。"
       },
       "NumberingFieldsModel": {
         "properties": {

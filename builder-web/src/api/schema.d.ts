@@ -35,11 +35,11 @@ export interface paths {
         put?: never;
         /**
          * Inspect Asset
-         * @description 用匹配版本 CAD 读取可用布局（§11）；端口未接线时返回 501。
+         * @description 用匹配版本 CAD 读取可用布局（§11）。
          *
-         *     PLAN-DB-001 Task 4 裁决：本任务只定义 LayoutInspection 端口，
-         *     端口未接线固定 501 + CAD_VERSION_UNAVAILABLE；真实 CAD 布局读取
-         *     由 Task 7 接线，本端点绝不伪造布局列表。
+         *     生产默认惰性装配 CoreConsoleDrawingBuilder（Task 4"端口未接线固定
+         *     501"已由真实执行器接线取代）；CAD 版本未配置或不可用时仍以
+         *     CAD_VERSION_UNAVAILABLE（501）呈现，绝不伪造布局列表。
          */
         post: operations["inspect_asset_api_assets__asset_id__inspect_post"];
         delete?: never;
@@ -122,26 +122,6 @@ export interface paths {
         get: operations["stream_build_events_api_builds__build_id__events_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/builds/{build_id}/handoff": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Handoff Build
-         * @description 调用本机 Manager 交接适配器（§10/§11）：已发布成果包原样保留。
-         */
-        post: operations["handoff_build_api_builds__build_id__handoff_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -461,41 +441,6 @@ export interface components {
             message: string;
             /** Recovery Action */
             recovery_action: string;
-        };
-        /**
-         * HandoffResponse
-         * @description POST /api/builds/{id}/handoff 响应：透传 Manager 交接结果（§10 步骤 6）。
-         */
-        HandoffResponse: {
-            /** Build Id */
-            build_id: string;
-            /** Dst Path */
-            dst_path: string;
-            /** Dst Sha256 */
-            dst_sha256: string;
-            /** Handoff Path */
-            handoff_path: string;
-            /**
-             * Idempotent
-             * @default false
-             */
-            idempotent: boolean;
-            /** Kind */
-            kind: string;
-            /** Manifest Sha256 */
-            manifest_sha256: string;
-            /** Package Id */
-            package_id: string;
-            /** Plan Id */
-            plan_id: string;
-            /** Revision Dir */
-            revision_dir: string;
-            /** Revision Id */
-            revision_id: string;
-            /** Root */
-            root: string;
-            /** Workspace Id */
-            workspace_id: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -916,64 +861,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    handoff_build_api_builds__build_id__handoff_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                build_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HandoffResponse"];
-                };
-            };
-            /** @description 构建不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorPayloadModel"];
-                };
-            };
-            /** @description 构建未成功发布（HANDOFF_INVALID）或包冲突（HANDOFF_ID_CONFLICT） */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorPayloadModel"];
-                };
-            };
-            /** @description Manager 验证拒绝（HANDOFF_INVALID） */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorPayloadModel"];
-                };
-            };
-            /** @description 本机 Manager 不可用（HANDOFF_UNAVAILABLE） */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorPayloadModel"];
                 };
             };
         };

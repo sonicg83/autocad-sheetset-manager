@@ -55,10 +55,6 @@ from dst_builder.application.build_events import (
     next_sequence,
     parse_position,
 )
-from dst_builder.application.handoff_adapter import (
-    default_handoff_transport,
-    manager_base_url_from_environ,
-)
 from dst_builder.application.projects import (
     ProjectNotInitializedError,
     draft_from_payload,
@@ -115,10 +111,6 @@ __all__ = [
     "BuildTargetExistsError",
     "BuildTargetInvalidError",
     "CancelNotAcceptedError",
-    "HandoffNotPublishedError",
-    "HandoffPackageMissingError",
-    "HandoffRejectedError",
-    "HandoffUnavailableError",
     "PlanBlockedError",
     "PlanConfirmation",
     "PlanNotConfirmedError",
@@ -130,59 +122,6 @@ __all__ = [
 
 class _BuildCancelled(Exception):
     """取消检查点命中的内部信号（转换为 CANCELLED 迁移）。"""
-
-
-class HandoffNotPublishedError(BuildServiceError):
-    """构建尚未成功发布，成果包不存在（HANDOFF_INVALID）。"""
-
-    code = "HANDOFF_INVALID"
-    status_code = 409
-
-    @property
-    def recovery_action(self) -> str:
-        return "先完成构建并到达 SUCCEEDED 状态，再发起交接"
-
-
-class HandoffPackageMissingError(BuildServiceError):
-    """已发布成果包缺少 metadata/handoff.json（HANDOFF_INVALID）。"""
-
-    code = "HANDOFF_INVALID"
-    status_code = 409
-
-    @property
-    def recovery_action(self) -> str:
-        return "已发布成果包保留不变；确认 metadata/handoff.json 存在后重试"
-
-
-class HandoffUnavailableError(BuildServiceError):
-    """本机 Manager 不可达（HANDOFF_UNAVAILABLE）：已发布包保留并给出恢复动作。"""
-
-    code = "HANDOFF_UNAVAILABLE"
-    status_code = 502
-
-    @property
-    def recovery_action(self) -> str:
-        return (
-            "已发布成果包保留不变：启动 DST Manager 后重试，"
-            f"或直接在 Manager 中打开 {self.message}"
-        )
-
-
-class HandoffRejectedError(BuildServiceError):
-    """Manager 验证拒绝交接：透传 Manager 的稳定错误码。"""
-
-    status_code = 422
-
-    def __init__(
-        self, code: str, status_code: int, message: str, *, field: str | None = None
-    ) -> None:
-        super().__init__(message, field=field)
-        self.code = code
-        self.status_code = status_code
-
-    @property
-    def recovery_action(self) -> str:
-        return "已发布成果包保留不变；按错误信息修正后重试"
 
 
 def _built_dwg_relative(build_id: str, attempt: int) -> str:
@@ -411,50 +350,6 @@ class BuildCoordinator:
                 for item in attempts
             ),
         )
-
-    # -- 交接（§10/§11）-----------------------------------------------------
-
-    def handoff_to_manager(
-        self,
-        build_id: str,
-        *,
-        manager_base_url: str | None = None,
-        transport: object | None = None,
-    ) -> dict:
-        """“一键交接”：显式调用本机 Manager 的 POST /api/handoffs/open。
-
-        只对 SUCCEEDED 且已发布的构建发起；Manager 不可用时已发布成果包
-        原样保留并抛 HANDOFF_UNAVAILABLE（带可执行恢复动作）。
-        ``transport`` 是测试注入点（``(url, payload) -> (status, json)``）。
-        """
-        with self._require_database().sessions.begin() as session:
-            run = SqliteBuildRepository(session).load_build_run(build_id)
-        if run is None:
-            raise BuildNotFoundError(f"构建不存在：{build_id}")
-        if run.status != BuildStatus.SUCCEEDED.value or not run.published_path:
-            raise HandoffNotPublishedError(f"构建尚未成功发布，无法交接：{build_id}")
-        package = Path(run.published_path)
-        handoff_path = package / "metadata" / "handoff.json"
-        if not handoff_path.is_file():
-            raise HandoffPackageMissingError(f"成果包缺少 metadata/handoff.json：{package}")
-
-        base = (manager_base_url or manager_base_url_from_environ()).rstrip("/")
-        post = transport if transport is not None else default_handoff_transport
-        try:
-            status, payload = post(f"{base}/api/handoffs/open", {"handoff_path": str(handoff_path)})
-        except OSError as error:
-            raise HandoffUnavailableError(str(handoff_path)) from error
-        if status >= 400:
-            code = payload.get("code") if isinstance(payload, dict) else None
-            message = payload.get("message") if isinstance(payload, dict) else None
-            raise HandoffRejectedError(
-                code if isinstance(code, str) and code else "HANDOFF_INVALID",
-                status if 400 <= status < 600 else 502,
-                message if isinstance(message, str) and message else f"Manager 拒绝交接（HTTP {status}）",
-            )
-        if not isinstance(payload, dict):
-            raise HandoffRejectedError("HANDOFF_INVALID", 502, "Manager 交接响应不是 JSON 对象")
-        return payload
 
     # -- SSE（§6）-----------------------------------------------------------
 

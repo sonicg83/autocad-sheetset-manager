@@ -23,7 +23,6 @@ __all__ = [
     "DiagnosticModel",
     "DraftFieldsModel",
     "DraftPatchRequest",
-    "HandoffResponse",
     "NumberingFieldsModel",
     "PlanConfirmationResponse",
     "PlanPreviewModel",
@@ -242,21 +241,3 @@ class BuildStatusResponse(_ContractModel):
     created_at: str
     finished_at: str | None = None
     attempts: list[BuildAttemptModel]
-
-
-class HandoffResponse(_ContractModel):
-    """POST /api/builds/{id}/handoff 响应：透传 Manager 交接结果（§10 步骤 6）。"""
-
-    handoff_path: str
-    workspace_id: str
-    root: str
-    dst_path: str
-    revision_id: str
-    revision_dir: str
-    kind: str
-    package_id: str
-    build_id: str
-    plan_id: str
-    manifest_sha256: str
-    dst_sha256: str
-    idempotent: bool = False

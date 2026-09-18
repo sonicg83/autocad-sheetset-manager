@@ -1,3 +1,7 @@
+## 2026-09-18（移除 Builder 交接适配器与端点）
+
+- 删除 `src/dst_builder/application/handoff_adapter.py`、`handoff_to_manager` 与四个交接异常类，以及 `POST /api/builds/{id}/handoff` 端点、`HandoffResponse` 响应模型和 `create_builder_app` 的 `handoff_transport` 与 `manager_base_url` 注入点；重新生成 `builder-web/src/api/openapi.json` 与 `schema.d.ts`（顺带带入 `POST /api/assets/{asset_id}/inspect` 说明文字的在先漂移修正）。本任务不删测试：交接测试面（`test_builder_handoff_api.py` / `test_handoff_reader.py` / `handoff_package_factory.py`）已在成果布局任务中随被删的 package 符号一并移除。
+
 ## 2026-09-18（Builder 向导移除交接步，七步降为六步）
 
 - 删除 `builder-web/src/steps/HandoffStep.vue` 与向导中的交接调用；`TOTAL_STEPS` 由 7 改为 6，`STEP_NAMES` 与 `App.vue` 路由收口到「构建成果」为末步，`useWizardStore` 移除 `handoffDone` 及其在 completion 与重置逻辑中的引用。
