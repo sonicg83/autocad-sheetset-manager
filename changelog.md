@@ -1,3 +1,7 @@
+## 2026-09-18（新增 Builder 产出直接由 Manager 打开的集成测试）
+
+- 新增 `tests/builder/integration/test_builder_output_opens_in_manager.py`：用真实 Builder 发布链路产出扁平成果目录后，Manager 以既有 `POST /api/workspaces/open` 打开其中的 `sheetset.dst`，断言工作区根为目标目录且解析到 Builder 产出的 DWG；另覆盖目标目录含用户自有文件与子目录时打开仍成功。该测试是移除交接代码前的安全网。本次未修改源码。
+
 ## 2026-09-18（Builder 正式成果布局扁平化与 metadata 移除）
 
 - `SHEETSET_PATH` / `SHEET_CATALOG_PATH` 去掉 `drawings/` 前缀，`_expected_artifacts` 由 7 项降为 3 项；`assemble_package_files` 只装配 `sheetset.dst`、构建后的 DWG 与 `图纸目录.xlsx`，不再生成 `metadata/` 下的清单、来源元数据与校验报告文件；`plan.drawing_task.target_dwg_path` 与计划预览的 `artifact_path` 同步改为目标目录内的裸文件名。
