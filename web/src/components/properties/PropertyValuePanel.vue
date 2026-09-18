@@ -3,7 +3,9 @@
      33 项按服务端映射顺序平铺（两列/四列可切换并记忆偏好、无分组无分页、全部 text input 38px），
      图纸集名称独立标注且不参与搜索；三态标记（琥珀未加入草稿/蓝待写入/红错误冲突）文字与颜色并存，
      输入 aria-describedby 关联状态与错误；搜索三模式与仅看修改取交集，活动字段暂留并标注；
-     值对照与展开编辑走独立对话框；单项撤回仅回到草稿投影。样式全部 scoped 且只用语义令牌。 -->
+     值对照与展开编辑走独立对话框；单项撤回仅回到草稿投影。样式全部 scoped 且只用语义令牌。
+     PLAN-DM-034：dirty 字段容器补 is-dirty 琥珀视觉（invalid 红色优先）；无未加入草稿修改时
+     「更新图纸集」为可聚焦的语义禁用（UiButton ariaDisabled + onSubmit 守卫双保险）。 -->
 <script setup lang="ts">
 import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
@@ -133,6 +135,12 @@ function clearSearch() {
 }
 function setSearch(value: string) { emit("update:search", value); }
 function setSearchMode(value: string) { emit("update:searchMode", value as PropertySearchMode); }
+// 提交守卫（PLAN-DM-034）：无未加入草稿的修改时程序化触发也造不出空命令——直接返回。
+// 隐藏字段仍计入 dirtyCount（statusOf 与当前可见性无关），不因筛选不可见而误判 clean。
+function onSubmit() {
+  if (dirtyCount.value === 0) return;
+  emit("submit");
+}
 
 // —— 值对照：三阶段（原文件值/草稿值/当前输入），相邻相同阶段合并展示（合并标签走专用语义键，不拼接片段）——
 const compareKey = ref<ValueKey | null>(null);
@@ -214,7 +222,7 @@ function onExpandKeydown(event: KeyboardEvent) {
       <div class="head-actions">
         <span v-if="dirtyCount" class="submit-hint">{{ $t("properties.values.submitHint", {count: dirtyCount, hidden: hiddenDirtyCount}) }}</span>
         <UiButton variant="secondary" @click="emit('discard')">{{ $t("properties.values.discardInput") }}</UiButton>
-        <UiButton variant="primary" @click="emit('submit')">{{ $t("properties.values.submit") }}</UiButton>
+        <UiButton variant="primary" :aria-disabled="dirtyCount === 0" @click="onSubmit">{{ $t("properties.values.submit") }}</UiButton>
       </div>
     </header>
     <div v-if="!collapsed" id="value-body" class="panel-body">
@@ -248,7 +256,7 @@ function onExpandKeydown(event: KeyboardEvent) {
         <span class="match-count">{{ $t("properties.values.matchCount", {matched: matchedKeys.length, total: valueCount}) }}<template v-if="hiddenDirtyCount">{{ $t("properties.values.hiddenDirtySuffix", {count: hiddenDirtyCount}) }}</template></span>
       </div>
       <div class="value-grid" :class="{'value-grid--cols-4': columnPref === '4'}">
-        <div v-for="key in displayKeys" :key="key" class="value-item" :class="{name: key === NAME_KEY, full: isLong(key), invalid: Boolean(errorOf(key)), pinned: isPinned(key)}">
+        <div v-for="key in displayKeys" :key="key" class="value-item" :class="{name: key === NAME_KEY, full: isLong(key), invalid: Boolean(errorOf(key)), pinned: isPinned(key), 'is-dirty': statusOf(key).dirty && !errorOf(key)}">
           <label :for="fieldId(key)">{{ labelOf(key) }}</label>
           <div class="input-line">
             <UiInput
@@ -330,6 +338,9 @@ function onExpandKeydown(event: KeyboardEvent) {
 .value-item.name{grid-column:1 / -1}
 .value-item.name{border-bottom:1px solid var(--color-border-subtle);border-radius:0;padding-bottom:var(--space-3);margin-bottom:var(--space-2)}
 .value-item.invalid{border-color:var(--color-danger);background:var(--color-danger-bg)}
+/* PLAN-DM-034：dirty（未加入草稿）用现有琥珀令牌标出容器；与 invalid 不同现（class 条件排除），
+   错误红色始终优先；待写入（pending）不是 dirty，不涂琥珀 */
+.value-item.is-dirty{border-color:var(--color-warning);background:var(--color-warning-bg)}
 .value-item label{font-size:var(--font-label);font-weight:500;color:var(--color-text-secondary)}
 /* 字段控件的盒模型、错误态与悬停强调均由 UiInput 提供：原语根元素是 <span>、真正的控件是内部
    <input class="ui-input__control">，scoped 的 data-v-* 只追加到子组件根元素，所以页面侧写

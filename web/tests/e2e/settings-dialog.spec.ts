@@ -33,14 +33,19 @@ test("数字超范围显示行内错误且保存禁用", async ({page}) => {
   await page.goto("/");
   await openSettingsDialog(page);
   const lease = page.locator('input[data-key="worker_lease_seconds"]');
+  const baseline = await lease.inputValue(); // 快照值（注册表默认 120），修正后据此回到 clean
   await lease.fill("5000");
   await expect(page.getByText("必须在 30–3600 之间")).toBeVisible();
   await expect(page.getByRole("button", {name: "保存"})).toBeDisabled();
-  // 行内错误字段红边框（SC-06），修正后错误消失且保存恢复可用
+  // 行内错误字段红边框（SC-06），修正后错误消失且保存恢复可用（dirty 仍可执行）
   await expect(page.locator('[data-field="worker_lease_seconds"]')).toHaveClass(/error/);
   await lease.fill("600");
   await expect(page.getByText("必须在 30–3600 之间")).toBeHidden();
   await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+  // 改回快照值即 clean：保存按钮回到可聚焦语义禁用（PLAN-DM-034，无原生 disabled）
+  await lease.fill(baseline);
+  await expect(page.getByRole("button", {name: "保存"})).not.toHaveAttribute("disabled");
+  await expect(page.getByRole("button", {name: "保存"})).toHaveAttribute("aria-disabled", "true");
 });
 
 test("恢复继承：随下一次保存提交 unset 并回到默认", async ({page}) => {
@@ -276,12 +281,14 @@ test("重复打开不产生多实例且字段无状态残留", async ({page}) =>
   await expect(page.getByRole("dialog", {name: "设置"})).toHaveCount(1);
   await expect(page.getByRole("dialog", {name: "有未保存的修改"})).toBeHidden();
   // 字段与上次保存一致，无上一轮残留（无行内错误、无只读诊断、无脏字段高亮）；
-  // 保存按钮按设计保持可聚焦（空保存由 onSave no-op 守卫承担），无脏字段以 .dirty 计数为证
+  // 保存按钮 clean 态为可聚焦语义禁用（PLAN-DM-034：无原生 disabled，aria-disabled="true"），
+  // 无脏字段以 .dirty 计数为证
   await expect(page.locator(TIMEOUT_INPUT)).toHaveValue("600");
   await expect(page.locator(TIMEOUT_ROW)).toContainText("默认");
   await expect(page.locator(".diag.readonly")).toBeHidden();
   await expect(page.locator(".field.dirty")).toHaveCount(0);
-  await expect(page.getByRole("button", {name: "保存"})).toBeEnabled();
+  await expect(page.getByRole("button", {name: "保存"})).not.toHaveAttribute("disabled");
+  await expect(page.getByRole("button", {name: "保存"})).toHaveAttribute("aria-disabled", "true");
 });
 
 // ---- PLAN-DM-021 Task 3：语言切换事务与双语错误恢复（SPEC-DM-013 §3.2/§3.3）----
@@ -750,6 +757,102 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 8）", () => {
 
 });
 
+// ---- PLAN-DM-034 Task 4：常规设置保存动作与修改状态对齐（SPEC-DM-015 §5.2）----
+// 旧例外「clean 仍可执行空保存」被移除：clean 走可聚焦语义禁用（aria-disabled，
+// UiButton ariaDisabled），空保存由 onSave 首行守卫承担；校验失败/保存中/Schema 阻断
+// 保持原生 disabled 强阻断。操作区 clean 状态固定复用 settings.saved（“已保存”）。
+// 串行链末尾：每个用例先写入自己的 ui_locale 基线，收尾还原，避免污染共享配置文件。
+const SAVE_BUTTON = ".dlg-foot button.primary";
+
+test("clean 语义禁用：初始显示已保存，force click/Enter/Space 均不产生 PUT（SPEC-DM-015 §5.2）", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 8);
+  const putRequests: string[] = [];
+  await page.route("**/api/settings", route => {
+    if (route.request().method() === "PUT") putRequests.push(route.request().url());
+    return route.fallback(); // 只计数不 mock：PUT 仍走真实后端（本文件契约红线）
+  });
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const save = page.locator(SAVE_BUTTON);
+  // clean 状态：操作区固定显示“已保存”；按钮可聚焦、aria-disabled，无原生 disabled
+  //（Playwright 把 aria-disabled 视作不可用，故“无原生 disabled”用属性断言）
+  await expect(page.getByTestId("settings-saved-pill")).toHaveText("已保存");
+  await expect(save).not.toHaveAttribute("disabled");
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await save.focus();
+  await expect(save).toBeFocused();
+  // 语义禁用拦截所有激活途径（普通 locator.click 会等待 enabled 超时，故用 force/键盘）：
+  await save.click({force: true});
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
+  expect(putRequests, "clean 激活不得触发 PUT（不调 API、不递增修订）").toHaveLength(0);
+  await expect(page.getByText("设置已更新")).toHaveCount(0); // 不显示新的成功 toast
+  // 计数器自证：编辑后保存确实经过同一 route，证明上面的 0 是守卫生效而非探针失效
+  await page.locator(TIMEOUT_INPUT).fill("830");
+  await save.click();
+  await expect.poll(() => putRequests.length, "PUT 探针应观察到一次保存").toBe(1);
+  await expect(save).not.toHaveAttribute("disabled");
+  // 还原基线
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 9);
+});
+
+test("编辑后保存恢复可执行（琥珀脏标记保留），改回快照后再次语义禁用", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 10);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const save = page.locator(SAVE_BUTTON);
+  const timeout = page.locator(TIMEOUT_INPUT);
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await timeout.fill("840");
+  // dirty：语义禁用解除（可执行），字段行保持既有琥珀脏标记（SettingsFormRow 样式不变）
+  await expect(save).toBeEnabled();
+  await expect(save).not.toHaveAttribute("aria-disabled");
+  await expect(page.locator(TIMEOUT_ROW)).toHaveClass(/dirty/);
+  // 改回已保存快照值：回到 clean，再次语义禁用
+  await timeout.fill("600");
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator(TIMEOUT_ROW)).not.toHaveClass(/dirty/);
+});
+
+test("保存成功后焦点回到保存按钮且处于可聚焦 clean 态", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 11);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  const save = page.locator(SAVE_BUTTON);
+  await page.locator(TIMEOUT_INPUT).fill("850");
+  await save.click();
+  await expect(save).toBeFocused(); // nextTick 焦点归还（I18N-06）
+  // clean：操作区“已保存”，按钮可聚焦且语义禁用（无原生 disabled）
+  await expect(page.getByTestId("settings-saved-pill")).toHaveText("已保存");
+  await expect(save).not.toHaveAttribute("disabled");
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  // 还原基线
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 12);
+});
+
+test("保存中与校验失败保持原生 disabled 强阻断，不因 ariaDisabled 放宽", async ({page}) => {
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 13);
+  await page.goto("/");
+  await openSettingsDialog(page);
+  // 保存中：PUT 延迟放行（仍走真实后端），按钮原生 disabled（强阻断）
+  await page.route("**/api/settings", async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    await route.fallback();
+  });
+  const save = page.locator(SAVE_BUTTON);
+  await page.locator(TIMEOUT_INPUT).fill("860");
+  await save.click();
+  await expect(save).toBeDisabled(); // saving → 原生 disabled
+  await expect(save).not.toHaveAttribute("disabled"); // 保存结束后恢复（回到 clean 语义禁用）
+  // 校验失败（即时行内错误）：原生 disabled，错误样式优先级不变
+  await page.locator('input[data-key="worker_lease_seconds"]').fill("5000");
+  await expect(save).toBeDisabled();
+  await expect(page.locator('[data-field="worker_lease_seconds"]')).toHaveClass(/error/);
+  // 还原基线
+  writeSettingsFile({ui_locale: "zh-CN", cad_max_parallel: 6}, 14);
+});
+
 test("应用偏好：AutoCAD 版本只在配置中心选择，主题顶栏切换不覆盖持久值", async ({page}) => {
   writeSettingsFile({ui_locale:"zh-CN"}, 0);
   await page.goto("/");
@@ -774,4 +877,8 @@ test("应用偏好：AutoCAD 版本只在配置中心选择，主题顶栏切换
   await openSettingsDialog(page);
   await expect(cadGroup.getByLabel("AutoCAD 2016")).toBeChecked();
   await expect(themeGroup.getByLabel("深色")).toBeChecked();
+  // 还原基线：本用例持久化了 ui_theme=dark / cad_version=2016 到共享配置文件，且是本文件
+  // 最后一个落盘用例——不还原会把深色主题泄漏给并行 spec（图纸页属性编辑器按真实后端
+  // 启动），让按浅色令牌断言的 dirty/错误配色用例整轮稳定失败（PLAN-DM-034 收口回归）。
+  writeSettingsFile({ui_locale: "zh-CN"}, 0);
 });

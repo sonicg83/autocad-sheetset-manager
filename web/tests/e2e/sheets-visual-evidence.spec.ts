@@ -95,6 +95,34 @@ test("操作列仅在横向溢出时固定且宽视口恢复普通列", async ({
   }
 });
 
+// PLAN-DM-034 任务 2：属性编辑 dirty/invalid 状态双主题证据（琥珀 dirty、红色错误优先）。
+// 沿用本文件既有约定：截图只作 testInfo 附件，配计算样式断言避免「有图无证据」。
+for (const theme of ["light", "dark"] as const) {
+  test(`属性编辑 dirty/invalid 状态实现证据：${theme}`, async ({page}, info) => {
+    await page.setViewportSize({width: 1440, height: 900});
+    await installSheetsFixture(page, {
+      failDraftSave: () => ({code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效"}}),
+    });
+    await openWorkspace(page, theme);
+    await page.getByRole("button", {name: "编辑属性"}).first().click();
+    await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toBeVisible();
+    const input = page.getByRole("textbox", {name: "属性 图幅", exact: true});
+    const field = page.locator(".prop-field").filter({has: input});
+    await input.fill("A2");
+    // dirty：琥珀边框/底色（令牌随主题取值）
+    await expect(field).toHaveCSS("border-color", theme === "light" ? "rgb(148, 98, 0)" : "rgb(224, 177, 90)");
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task2-prop-dirty", theme);
+    // dirty + invalid：红色错误边框优先，「尚未加入草稿」文字保留
+    await page.locator(".sheet-property-editor").getByRole("button", {name: "加入草稿", exact: true}).click();
+    await expect(page.getByRole("alert", {name: "加入草稿错误摘要"})).toBeVisible();
+    await expect(field).toHaveCSS("border-color", theme === "light" ? "rgb(194, 48, 43)" : "rgb(240, 119, 110)");
+    await expect(field.locator(".field-status")).toContainText("尚未加入草稿");
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "task2-prop-dirty-invalid", theme);
+  });
+}
+
 // PLAN-DM-029 Task 7 Step 5：图纸页控件视觉基础正交证据（正交 6 张）。
 // 沿用本文件既有约定：截图只作 testInfo 附件（不自动改写仓库文件，持久化由验收时显式复制）。
 // 每张均配计算样式或几何断言，避免「有图无证据」。

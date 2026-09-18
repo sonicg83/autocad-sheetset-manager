@@ -14,7 +14,7 @@
 
 详细计划：
 
-- [前端文本编辑状态与提交动作对齐实施计划（PLAN-DM-034，proposed；依据 SPEC-DM-015，统一图纸属性、属性值、图纸目录模板、常规设置与扩展配置的 dirty/revert/invalid 状态、可见提示和 clean 写操作守卫；普通表单字段级提示，目录模板采用模板级徽标，并以可聚焦 `aria-disabled` 保留保存焦点锚点）](PLAN-DM-034-frontend-text-edit-state-alignment.md)
+- [前端文本编辑状态与提交动作对齐实施计划（PLAN-DM-034，proposed——实施与 G8 已完成，**仅剩 G9 真实 Windows 桌面检查待用户执行后关闭**；依据 SPEC-DM-015，统一图纸属性、属性值、图纸目录模板、常规设置与扩展配置的 dirty/revert/invalid 状态、可见提示和 clean 写操作守卫；普通表单字段级提示，目录模板采用模板级徽标，并以可聚焦 `aria-disabled` 保留保存焦点锚点。实际验证：Task 1–8 完成（`UiButton.ariaDisabled` + 五处页面对齐），check:i18n 955 键不变、check:ui、test:unit 178、build、全量 e2e **579 passed / 0 failed**（首跑 27 failed 均为旧用例编码已删除的「clean 空保存」例外与 95fe260 顶栏改版遗留过期断言，已按新契约修复）、ruff、pytest 2280 项 / 2202 passed / 78 skipped、uv lock 全过；两处已裁决偏差追记至 SPEC-DM-015 §9；G8 六张证据与 200% 浏览器缩放检查登记于 `.planning/memos/dst-manager/assets/PLAN-DM-034/`；实施记录见计划 §10）](PLAN-DM-034-frontend-text-edit-state-alignment.md)
 
 - [publisher 生产代码剩余拆分实施计划（PLAN-DM-033，proposed；承接 PLAN-DM-031 偏差与 MEMO-DM-036 F3：「两个叶模块 + 编排门面」——新增 `publish_apply.py`（正向应用与结果校验）与 `publish_rollback.py`（回滚、身份保护与清理），`publisher.py` 只留事务编排与公共门面并暂留极薄私有委托维持恢复鸭子调用与故障注入语义；纯移动重构、application 层 import 零改动、只拆生产代码不拆测试文件；完成门禁为 `publisher.py` ≤ 400 行、两个新模块各 ≤ 300 行、全量 `pytest -q` 通过）](PLAN-DM-033-publisher-remaining-split.md)
 

@@ -169,6 +169,9 @@ for (const theme of THEMES) {
     });
     await openProperties(page);
     await page.getByRole("textbox", {name: "属性 设计阶段"}).fill("初步设计");
+    // PLAN-DM-034：dirty 字段容器的琥珀视觉来自语义令牌（边框与底色，不只依赖徽标文字）
+    await expectToken(page, ".value-panel .value-item.is-dirty", "borderTopColor", "--color-warning");
+    await expectToken(page, ".value-panel .value-item.is-dirty", "backgroundColor", "--color-warning-bg");
     await page.getByRole("button", {name: "更新图纸集"}).click();
     // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示
     await expect(page.locator(".error-summary")).toContainText("操作失败，发生未知错误");

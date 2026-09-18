@@ -375,3 +375,52 @@ rtk uv lock --check
 - [ ] 相关单测、e2e、生产构建、全量前端回归及仓库规定门禁通过；
 - [ ] G8 证据与 G9 真实桌面结果已记录；
 - [ ] 所有实现偏差已经裁决并同步到唯一权威文档，没有只存在于代码注释的例外。
+
+## 10. 实施记录（2026-09-18，Task 8 验收与关闭记录）
+
+> 本节为实施回填，不修改上文裁决文本。**状态保持 `proposed`**：G9 真实 Windows 桌面检查待用户执行后再关闭（见 10.4）。
+
+### 10.1 任务实施与提交
+
+| 任务 | 提交 | 结果 |
+| --- | --- | --- |
+| Task 1 `UiButton` 语义禁用 | `496efb9` | `ariaDisabled` prop + 显式 click emit 守卫；单测/check:ui 绿 |
+| Task 2 图纸页属性编辑 | `992fa03` | 字段级 dirty/invalid、clean 语义禁用、`onSubmit` 空提交守卫 |
+| Task 3 属性页属性值 | `bad7a57` | `.value-item` is-dirty 琥珀、clean 语义禁用、revert 同步归零 |
+| Task 4 常规设置 | `c5a3f33` | 删除「clean 仍可保存」例外、`settings.saved` 常驻、保存焦点归还 |
+| Task 5 扩展配置 | `b212df6` + `6553666` | generated 行级 dirty 改值比较、custom 过滤字段级提示、Host 暴露 `saveNativeDisabled`/`saveAriaDisabled` |
+| Task 6 图纸目录模板栏 | `9543150` | 中性/警示徽标（`role="status"`）+ 语义禁用保存；页面与设置子视图双入口回归 |
+| Task 7 跨页收口 | `dbfbf46` | 静态契约、check:i18n 955 键不变、单测 178、五 spec e2e 184/0、build 全绿 |
+| Task 8 验收与文档 | 本提交 | 本节、G8 证据、SPEC-DM-015 追记、全量门禁与两处测试缺陷修复 |
+
+已裁决偏差（已追记 [SPEC-DM-015](../../../docs/dst-manager/specs/SPEC-DM-015-frontend-text-edit-state-contract.md) §9）：① Task 2「加载中原生 disabled 未实现」（`PropertyEditContext` 无 saving 状态，`useSheetEditor.ts` `submitInFlight` 去重兜底）；② Task 6「表达式错误保存按 Provider 409 阻断口径」。Task 4「已保存」徽标 clean 常驻、Task 5 行级 dirty 改值比较均为裁决内对齐，不构成规范偏差。
+
+### 10.2 G8 设计 QA（2026-09-18）
+
+- **六张正交证据 + 证据 README**：`.planning/memos/dst-manager/assets/PLAN-DM-034/`，覆盖浅/深主题、1440×1000 与 900×700 视口、字段级 dirty、模板级 dirty、dirty+invalid、属性页三态并存与两类扩展配置；README 逐张登记 fixture、主题、视口、状态、生成命令与对应 SPEC-DM-015 条款。全部截图来自真实 dev app 渲染（Vite dev server + 真实测试后端 + 既有 e2e 夹具），生成用临时 spec 验收后删除。
+- **浏览器 200% 缩放自动检查**（viewport 720×500 + deviceScaleFactor 2，仅 G8 响应式证据）：常规设置 dirty（浅色）与图纸目录模板警示徽标（深色）两项通过——无横向滚动、修改/警示文字可辨识、`Tab` 键盘焦点环可见（outline 非零）。
+- **键盘与焦点验证口径**：以 **Playwright 自动键盘验证**覆盖（clean 主动作 Enter/Space/force click 无写副作用、错误摘要聚焦、保存成功焦点归还、Esc 关闭归还焦点），代表用例清单见证据 README；真人手工键盘检查未以人手形式执行。
+- **SPEC-DM-015 §7 八场景**：五处页面均由 Task 2～6 e2e 自动化覆盖（clean 守卫 / dirty / revert / dirty+invalid / 提交中强阻断 / 成功建新基准 / 失败冲突保留输入 / 双主题与最小视口），以全量 e2e 通过为通过记录。
+- **差异登记**（裁决日期 2026-09-18，裁决人：用户，经 SDD 审查流水记录于 `.superpowers/sdd/PLAN-DM-034-frontend-text-edit-state-alignment/progress.md`）：
+  - 缺陷（本轮修复）：全量 e2e 首跑暴露的 27 例失败，其中 24 例为 main.spec 等旧用例仍编码「clean 空保存」已删例外（见 10.3），2 例为先于本计划的 95fe260 顶栏改版遗留过期断言/选择器，1 例为高负载抖动；
+  - 已接受差异：SPEC-DM-015 §9 追记的 2 项；
+  - 后续项（不阻断关闭）：`aria-describedby` 对含空格属性名的 id 安全编码、草稿基线还原 try/finally、`SHEET_CATALOG_EXPRESSION_INVALID` 端到端演练等 minor 项，详见 progress.md。
+
+### 10.3 全量门禁（Step 2 实测，含首跑失败与处理）
+
+| 命令 | 首跑 | 根因与处理 | 终态 |
+| --- | --- | --- | --- |
+| `rtk npm --prefix web run check:i18n` | 通过（955 键不变） | — | 通过 |
+| `rtk npm --prefix web run check:ui` | 通过 | — | 通过 |
+| `rtk npm --prefix web run test:unit` | 通过（18 文件 / 178 用例） | — | 通过 |
+| `rtk npm --prefix web run build` | 通过 | — | 通过 |
+| `rtk npm --prefix web run test:e2e`（全量） | 549 passed / **27 failed** / 3 flaky（29.6m） | ① main.spec.ts 24 例在 clean 态普通 `click()`「更新图纸集」，被 `aria-disabled` actionability 阻塞——旧用例编码的「clean 空保存」例外正是本计划删除的契约，按新契约新增 `saveSheetSetDraft` helper（先改图纸集名称制造真实差异再保存；EN 用例同构；修复门禁用例按强阻断语义改断言）；② sheets-layout 对比度探针 `.brand-sub` 元素与 main.spec 顶栏「v0.3 副标题」断言均已被先于本计划的 `95fe260` 顶栏改版移除（既有缺陷、非本轮引入，全量套件自该改版后未再全量跑过）——探针改为在 `.sheets-workspace` 底色上解析 `--color-text-muted` 令牌、删除过期断言；③ properties-layout 四视口用例与 2 例 flaky 为单 dev server 高负载抖动（config retries=1 消抖），复跑即过 | **579 passed / 0 failed / 0 flaky（3.6m）** |
+| `rtk uv run ruff check .` | 通过 | — | 通过 |
+| `rtk uv run pytest -q` | 通过（2280 项 / 2202 passed / 0 failed / 78 skipped） | — | 通过 |
+| `rtk uv lock --check` | 通过 | — | 通过 |
+
+真实 CAD 系统测试未运行：本计划未触及 AutoCAD SCR、插件命令或布局重建（纯前端展示层与测试），按 Step 2 裁决免跑并在此注明。
+
+### 10.4 G9 真实 Windows 桌面检查
+
+**待人工执行（未运行）**。真实 Windows 桌面壳下五处页面的 clean/dirty/revert、键盘焦点、浅深主题与 100/125/150/200% 缩放检查需用户在真实环境操作；10.2 的浏览器 200% 模拟只作 G8 响应式证据，不替代 G9（GUIDE-DM-001 口径）。G9 完成前本计划状态保持 `proposed`，不改为 `completed`。

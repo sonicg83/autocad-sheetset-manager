@@ -741,3 +741,59 @@ test.describe("Task 6 控件视觉基础正交证据（PLAN-DM-029）", () => {
     await attachScreenshot(page, info, "t6-narrow-900x700-light.png");
   });
 });
+
+// —— PLAN-DM-034 Task 6：模板栏状态徽标（中性「已保存」/警示「有未保存修改」）证据 ——
+// 浅色 1440 基准视口与深色 900 最小视口各一张 dirty 态截图（t6-template-state-*.png）。
+// 徽标前景/底色必须取自琥珀语义令牌（--color-warning / --color-warning-bg），clean 态为
+// 中性令牌；警示徽标不得挤压模板操作（三动作可达、无整页横滚、不新增行级 dirty 底色）。
+test.describe("模板状态徽标证据（PLAN-DM-034 Task 6）", () => {
+  async function resolveTokenColor(page: Page, token: string): Promise<string> {
+    return page.evaluate(name => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    }, token);
+  }
+
+  async function openDirtyBadgeState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}) {
+    await openDemoState(page, theme, viewport);
+    // clean 态：中性「已保存」徽标
+    const badge = page.locator(".template-state");
+    await expect(badge).toHaveText("已保存");
+    expect(await badge.evaluate(element => getComputedStyle(element).color), "clean 徽标前景取中性令牌")
+      .toBe(await resolveTokenColor(page, "--color-text-secondary"));
+    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await expect(badge).toHaveText("有未保存修改");
+    await expect(badge).toHaveAttribute("role", "status");
+  }
+
+  test("浅色 1440×1000：警示徽标取琥珀令牌且不挤压模板操作", async ({page}, info) => {
+    await openDirtyBadgeState(page, "light", {width: 1440, height: 1000});
+    const badge = page.locator(".template-state");
+    expect(await badge.evaluate(element => getComputedStyle(element).color), "dirty 徽标前景取 --color-warning")
+      .toBe(await resolveTokenColor(page, "--color-warning"));
+    expect(await badge.evaluate(element => getComputedStyle(element).backgroundColor), "dirty 徽标底色取 --color-warning-bg")
+      .toBe(await resolveTokenColor(page, "--color-warning-bg"));
+    // 警示徽标不挤压模板操作：三动作完整落在视口内、无整页横滚
+    await expectActionsReachable(page, ["保存修改", "另存为", "删除模板"]);
+    await expectNoPageHScroll(page, "1440×1000 警示徽标");
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "t6-template-state-dirty-light-1440x1000.png");
+  });
+
+  test("深色 900×700：警示徽标同样可辨识且不挤压模板操作", async ({page}, info) => {
+    await openDirtyBadgeState(page, "dark", {width: 900, height: 700});
+    const badge = page.locator(".template-state");
+    expect(await badge.evaluate(element => getComputedStyle(element).color), "深色 dirty 徽标前景取 --color-warning")
+      .toBe(await resolveTokenColor(page, "--color-warning"));
+    expect(await badge.evaluate(element => getComputedStyle(element).backgroundColor), "深色 dirty 徽标底色取 --color-warning-bg")
+      .toBe(await resolveTokenColor(page, "--color-warning-bg"));
+    await expectActionsReachable(page, ["保存修改", "另存为", "删除模板"]);
+    await expectNoPageHScroll(page, "900×700 警示徽标");
+    await page.mouse.move(0, 0);
+    await attachScreenshot(page, info, "t6-template-state-dirty-dark-900x700.png");
+  });
+});
