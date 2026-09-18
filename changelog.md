@@ -1,3 +1,8 @@
+## 2026-09-18（RFC-INT-002 提案：取消 Builder 与 Manager 的显式交接契约）
+
+- 新增 [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md)（`review`）：提案取消 `SPEC-DB-001` §10 的六步 `HandoffBundle` 交接，并一并取消正式成果包 `metadata/` 目录与 `drawings/` 包装层，两条产品线以 DST 文件为唯一接口。动机包括：交接的「成果包字节不变」准入条件与「Builder 建框架 → 人工 AutoCAD 编辑 → Manager 调整与交付」的真实时序错位（交接口可行窗口长度为 0）；交接成功后修订目录与发布目标都落在成果包根内，`交接即接管` 使完整性核对只在交接瞬间成立；`reader.py` 的引用边界与结构状态硬门禁比 `open_workspace` 通用路径更严格且与真实 DST 的绝对路径引用不兼容；`manifest.json`/`handoff.json` 的唯一消费方是交接，取消后 `metadata/` 下五个文件全部无程序消费方。
+- 同步更新 [RFC 索引](docs/integration/rfcs/README.md) 与 [跨项目整合入口](docs/integration/README.md)。本次仅新增与调整文档，未修改任何源码、测试、迁移或既有文档正文；RFC 处于 `review`，待用户复审后接受，接受前不得开始实现。
+
 ## 2026-09-18（协作规范补充本地 HTML 预览契约）
 
 - 在 `AGENTS.md` 新增「本地 HTML 与浏览器预览」一节，明确 Chrome/Edge 默认安全策略禁止页面读取 `file://`：查看本地 HTML 演示、报告或构建产物时，代理必须自行用 `uv run python -m http.server` 绑定 `127.0.0.1` 拉起本地 HTTP 服务并通过 `http://127.0.0.1:<端口>/...` 访问，用完立即结束进程，不得要求用户手动启动服务或反复重试 `file://`。本次仅补充协作规范，未修改源码、文档正文与测试。
