@@ -1179,8 +1179,10 @@ git commit -m "移除 Builder 交接适配器与交接端点"
 - Modify: `src/dst_manager/interfaces/api.py:86-88,280-293`
 - Modify: `src/dst_manager/interfaces/responses.py:417-...`
 - Modify: `src/dst_manager/interfaces/message_catalog.py:59-60`
-- Modify: `src/dst_manager/infrastructure/persistence/database.py:57-67,194,798-830,832-890`
-- Modify: `tests/unit/test_database.py:337,560-635`
+- Modify: `src/dst_manager/infrastructure/persistence/database.py`（删 `HandoffSourceRow` 模型与 `handoff_sources` 表定义、`HANDOFF_INITIAL_REVISION_KIND`、`get_handoff_source`、`register_handoff`；**并把 `LATEST_SCHEMA_REVISION` 由 `0007_db001_builder_handoff` 改为 `0008_drop_handoff_sources`**）
+- Modify: `tests/unit/test_database.py`（迁移 head 断言与 `handoff_sources` 存在性断言）
+- Modify: `tests/unit/test_runtime.py`（`:63` 硬编码的 `0007_db001_builder_handoff`）
+- Modify: `tests/unit/test_extension_persistence.py`（`:30` 硬编码的 `0007_db001_builder_handoff`）
 - Modify: `web/src/i18n/locales/zh-CN/errors.ts:20-22`、`en-US/errors.ts:20-22`
 - Modify: `web/src/api/openapi.json` 与 `web/src/api/schema.d.ts`（重新生成）
 - Modify: `changelog.md`
