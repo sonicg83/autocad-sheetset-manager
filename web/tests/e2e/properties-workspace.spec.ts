@@ -88,6 +88,9 @@ test("错误摘要展开目标面板并聚焦字段；重新提交成功后摘�
   // 输入保留；修正后重新提交成功，摘要与字段错误消失
   await expect(page.getByLabel("属性 工程名称")).toHaveValue("城东安置房二期");
   failNext = false;
+  // PLAN-DM-034：保存失败后命令已入栈、编辑转为待写入（dirtyCount === 0），提交按钮语义禁用；
+  // 重新提交前用户需再次编辑字段（重新成为 dirty）——仅重试保存走 retry-save，不重复入栈
+  await page.getByLabel("属性 工程名称").fill("城东安置房三期");
   await page.getByRole("button", {name: "更新图纸集"}).click();
   await expect(summary).toHaveCount(0);
   await expect(page.locator(".value-panel .field-error")).toHaveCount(0);

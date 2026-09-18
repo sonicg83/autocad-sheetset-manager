@@ -213,6 +213,12 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   const dirtyItem = valueItem(page, "项目编号");
   await dirtyItem.getByRole("textbox").fill("GC-2026-009");
   await expect(dirtyItem.getByText("未加入草稿")).toBeVisible();
+  // PLAN-DM-034：dirty 字段容器必须有琥珀视觉（is-dirty class + 琥珀边框/底色），不只依赖徽标文字
+  await expect(dirtyItem).toHaveClass(/is-dirty/);
+  await expect(dirtyItem).toHaveCSS("border-color", "rgb(148, 98, 0)");
+  await expect(dirtyItem).toHaveCSS("background-color", "rgb(251, 241, 219)");
+  // 待写入（蓝）字段容器不得被误涂成 dirty 琥珀
+  await expect(pendingItem).not.toHaveClass(/is-dirty/);
   // 提交失败：错误边框优先，但修改状态文字保留（保存失败重试语义：命令已在草稿栈，编辑转为待写入）
   await page.getByRole("button", {name: "更新图纸集"}).click();
   // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示；字段错误照常
@@ -221,6 +227,10 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   await expect(dirtyItem.getByText("演示校验错误")).toBeVisible();
   await expect(dirtyItem.getByText("待写入")).toBeVisible();
   await expect(dirtyItem).toHaveClass(/invalid/);
+  // PLAN-DM-034：错误优先于 dirty——错误字段容器为红色且不再带琥珀 is-dirty，状态文字保留
+  await expect(dirtyItem).not.toHaveClass(/is-dirty/);
+  await expect(dirtyItem).toHaveCSS("border-color", "rgb(194, 48, 43)");
+  await expect(dirtyItem).toHaveCSS("background-color", "rgb(251, 234, 232)");
   // 错误边框颜色与无错字段不同（不只依赖颜色：错误文字与 aria-invalid 并存）
   const errorBorder = await dirtyItem.getByRole("textbox").evaluate((el) => getComputedStyle(el).borderColor);
   const normalBorder = await pendingItem.getByRole("textbox").evaluate((el) => getComputedStyle(el).borderColor);
@@ -230,6 +240,60 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   const describedby = await dirtyItem.getByRole("textbox").getAttribute("aria-describedby");
   expect(describedby).toContain("prop-error-");
   expect(describedby).toContain("prop-status-");
+});
+
+// —— PLAN-DM-034 任务 3：clean 初始态「更新图纸集」为可聚焦的语义禁用，强制触发不产生空命令 ——
+test("clean 初始态加入草稿语义禁用且强制触发计数不增", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  const {draftBodies} = await install(page);
+  await openProperties(page);
+  const submit = page.locator(".value-panel .head-actions").getByRole("button", {name: "更新图纸集"});
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+  await expect(submit).not.toHaveAttribute("disabled");
+  // 语义禁用仍可聚焦（不退出 Tab 顺序）
+  await submit.focus();
+  await expect(submit).toBeFocused();
+  // 注意：aria-disabled 会被 Playwright 视为 disabled，普通 locator.click() 会一直等待；
+  // 守卫断言必须用 force click / 键盘 / dispatchEvent，断言副作用不发生。
+  await submit.click({force: true});
+  await submit.press("Enter");
+  await submit.press("Space");
+  await submit.dispatchEvent("click");
+  await expect.poll(() => draftBodies.length).toBe(0);
+  // 「放弃本区输入」是次要动作，保持既有原生可用行为，不在本计划扩大其规则
+  const discard = page.locator(".value-panel .head-actions").getByRole("button", {name: "放弃本区输入"});
+  await expect(discard).not.toHaveAttribute("aria-disabled");
+  await expect(discard).not.toHaveAttribute("disabled");
+});
+
+test("输入不同再改回草稿值：dirty 计数、隐藏修改数、字段标记与按钮状态同步归零", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await install(page);
+  await openProperties(page);
+  const metrics = page.locator(".value-panel .metrics");
+  const submit = page.locator(".value-panel .head-actions").getByRole("button", {name: "更新图纸集"});
+  const item = valueItem(page, "项目编号");
+  const input = page.getByRole("textbox", {name: "属性 项目编号"});
+  await input.fill("GC-2026-009");
+  await expect(item).toHaveClass(/is-dirty/);
+  await expect(metrics).toContainText("未加入草稿 1 项");
+  await expect(submit).not.toHaveAttribute("aria-disabled");
+  // 搜索其他字段并结束编辑：修改被隐藏但仍计入 dirty 计数（不因不可见而误判 clean）
+  await page.getByRole("searchbox", {name: "搜索属性值"}).fill("监理单位");
+  await expect(page.locator(".value-panel .submit-hint")).toContainText("共 1 项，其中 0 项当前未显示");
+  await item.getByRole("button", {name: "结束编辑"}).click();
+  await expect(page.locator(".value-panel .match-count")).toContainText("1 项修改被隐藏");
+  await expect(page.locator(".value-panel .submit-hint")).toContainText("共 1 项，其中 1 项当前未显示");
+  await expect(metrics).toContainText("未加入草稿 1 项");
+  // 改回草稿投影基准值：一律比较当前值与可信基准，所有状态同步归零
+  await page.getByRole("searchbox", {name: "搜索属性值"}).fill("项目编号");
+  await page.getByRole("textbox", {name: "属性 项目编号"}).fill("GC-2026-007");
+  await expect(item).not.toHaveClass(/is-dirty/);
+  await expect(item.getByText("未加入草稿")).toHaveCount(0);
+  await expect(metrics).toContainText("无属性值修改");
+  await expect(metrics).not.toContainText("未加入草稿");
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator(".value-panel .match-count")).not.toContainText("修改被隐藏");
 });
 
 test("值对照对话框：三阶段对照、相同阶段合并、Esc 关闭并归还焦点", async ({page}) => {
