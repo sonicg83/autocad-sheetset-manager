@@ -52,6 +52,10 @@ describe("canEnterStep", () => {
     expect(canEnterStep(6, ALL)).toBe(true);
   });
 
+  it("超出步骤总数时不开放（TOTAL_STEPS 变小时越界步骤收回）", () => {
+    expect(canEnterStep(7, ALL)).toBe(false);
+  });
+
   it("已完成步骤可回访", () => {
     expect(canEnterStep(1, STEP1234)).toBe(true);
     expect(canEnterStep(3, STEP1234)).toBe(true);

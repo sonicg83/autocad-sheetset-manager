@@ -4,6 +4,7 @@
 - 修正第 5 步预览的成果路径展示：`ReviewStep.vue` 的 `artifactPath` 与 e2e 夹具 `backend-mock.ts` 不再硬编码 `drawings/` 前缀，与服务端已在 Task 3 改为裸文件名的 `artifact_path` 对齐；此前该页提交前后自相矛盾且 e2e 无法发现。
 - 同步清理 Playwright 夹具中的 handoff 路由与调用计数、`wizard-flow.spec.ts` 的交接断言与 `wizard-real-backend.spec.ts` 的交接端点 mock。本次未修改 Python 后端。
 - 同批清理由本改动直接推出的残留：`ActionDock.vue` 的“下一步”可见性改用 `TOTAL_STEPS`（否则末步仍显示一个点击无效的按钮），`useWizardGuard.spec.ts` 的 `Completion` 常量与 `toBe(7)` 断言同步降为六步，并在 `wizard-flow.spec.ts` 主流程末步断言「无下一步按钮、无第 7 个导航项」。
+- 审查修复轮 1（仅测试）：`wizard-flow.spec.ts` 第 5 步原先只用子串断言 `A-001 首层平面图`，在裸文件名与 `drawings/` 前缀两种形状下都会通过，且服务端 `artifact_path` 单元格无断言；现改为对第 5 步预览表与服务端计划预览均断言 `A-001 首层平面图.dwg` 且不得包含 `drawings/`。`useWizardGuard.spec.ts` 新增 `canEnterStep(7, ALL) === false`，钉住 `TOTAL_STEPS` 越小后“7 由合法末步变越界”的边界。两项均做过反向验证：临时改回 `drawings/` 前缀 / 临时改回夹具旧形状都会让对应断言失败。
 
 ## 2026-09-18（新增 Builder 产出直接由 Manager 打开的集成测试）
 

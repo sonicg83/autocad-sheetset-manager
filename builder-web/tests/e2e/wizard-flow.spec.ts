@@ -50,8 +50,14 @@ test("六步按顺序贯通：创建项目 → 规则 → 图纸 → 模板 → 
   await page.getByTestId("dock-next").click();
   await expect(page.getByRole("heading", {name: "构建前检查"})).toBeVisible();
   await expect(page.getByTestId("review-preview")).toContainText("A-001 首层平面图");
+  // 成果路径必须是目标目录内的裸文件名（SPEC-DB-001 §5）：带 drawings/ 前缀即失败
+  await expect(page.getByTestId("review-preview")).toContainText("A-001 首层平面图.dwg");
+  await expect(page.getByTestId("review-preview")).not.toContainText("drawings/");
   await page.getByTestId("submit-revision").click();
   await expect(page.getByTestId("plan-preview")).toBeVisible();
+  // 服务端返回的 artifact_path 与前端派生值同形，同样不得带 drawings/ 前缀
+  await expect(page.getByTestId("plan-preview")).toContainText("A-001 首层平面图.dwg");
+  await expect(page.getByTestId("plan-preview")).not.toContainText("drawings/");
   await expect(page.getByTestId("confirm-plan")).toBeEnabled();
   expect(mock.calls.confirm).toBe(0);
   await page.getByTestId("confirm-plan").click();
