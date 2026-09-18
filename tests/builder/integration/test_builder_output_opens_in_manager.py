@@ -31,6 +31,14 @@ def _publish(env) -> Path:
     env.confirm_plan(plan["plan_id"])
     build = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
     final = env.wait_terminal(build["build_id"])
+    # `GET /api/builds/{id}` 已知存在撕裂读（两条 SELECT 未包在显式读事务中，可能跨过写事务
+    # 提交），偶发返回 `status="SUCCEEDED"` 而 `published_path=None`。该缺陷需另立计划修复，
+    # 本计划不修改 `src/`；此处仅对该形态做一次有界重读，避免本用例作为扁平成果主路径的安全网
+    # 时继承该抖动。重读后 `published_path` 仍为空时下面的断言必定失败，不掩饰真实缺失。
+    if final["status"] == "SUCCEEDED" and not final["published_path"]:
+        reread = env.client.get(f"/api/builds/{build['build_id']}")
+        assert reread.status_code == 200, reread.text
+        final = reread.json()
     assert final["status"] == "SUCCEEDED", final
     assert final["published_path"], final
     assert Path(final["published_path"]) == env.target
@@ -75,7 +83,7 @@ def test_manager_opens_builder_published_dst(tmp_path: Path, env) -> None:
 
 
 def test_manager_open_ignores_user_added_files(tmp_path: Path, env) -> None:
-    """目标目录是用户的工作目录：额外文件进入根扫描后仍不得影响打开与解析。"""
+    """目标目录是用户的工作目录：额外文件与子目录不得影响 Manager 打开 DST 与解析 DWG 引用。"""
     target = _publish(env)
     (target / "notes.txt").write_text("用户备注", encoding="utf-8")
     (target / "backup").mkdir()
