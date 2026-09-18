@@ -1,8 +1,9 @@
 """Builder 产出可被 Manager 直接打开（RFC-INT-002 / SPEC-DB-001 §9）。
 
-替代交接契约的新主路径：Builder 发布到目标目录后，Manager 用既有
+正常主路径：Builder 发布到目标目录后，Manager 用既有
 ``POST /api/workspaces/open`` 打开其中的 DST，从磁盘现状建立工作区与
-基线。该测试是移除交接代码前的安全网。
+基线。该测试原为移除交接代码前的安全网，交接实现已随 RFC-INT-002 删除，
+现作为该主路径的回归护栏。
 
 放在 ``tests/builder/integration/`` 是为了复用本目录 ``conftest.py`` 的 ``env``
 夹具（真实 Builder 发布链路 + fake CAD）；``tests/integration/`` 无法导入该夹具。

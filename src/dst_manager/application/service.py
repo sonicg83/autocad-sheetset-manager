@@ -99,9 +99,9 @@ class DstManagerService(
     ) -> Workspace:
         """打开 DST 为只读投影工作区。
 
-        ``workspace_root`` 仅由交接工作区（DST 位于成果包 ``drawings/`` 内）
-        与既有工作区重开（``get_workspace``）传入：工作区根不必等于 DST 所在
-        目录。普通 ``/api/workspaces/open`` 不传该参数，语义完全不变。
+        ``workspace_root`` 仅由既有工作区重开（``get_workspace``）传入：工作区
+        根不必等于 DST 所在目录。普通 ``/api/workspaces/open`` 不传该参数，
+        语义完全不变。
         """
         dst_path = dst_path.expanduser().resolve()
         if dst_path.suffix.lower() != ".dst" or not dst_path.is_file():
@@ -110,7 +110,7 @@ class DstManagerService(
         revision = file_sha256(dst_path)
         workspace_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(dst_path).casefold()))
         acsm = load_acsm(self.codec.decode_file(dst_path))
-        # 投影始终以 DST 所在目录解析相对引用（交接工作区的 DWG 与 DST 同在 drawings/）
+        # 投影始终以 DST 所在目录解析相对引用（DST 与 DWG 同目录时）
         document = acsm.project(dst_path.parent, root_override)
         referenced = {sheet.layout.resolved_path for sheet in document.sheets if sheet.layout.resolved_path}
         unreferenced = sorted((path.resolve() for path in root.glob("*.dwg") if path.resolve() not in referenced), key=str)

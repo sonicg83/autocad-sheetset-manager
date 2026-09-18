@@ -577,6 +577,26 @@ def test_fresh_database_has_revision_kind_columns(tmp_path: Path):
     assert revision["source_json"] is None
 
 
+def test_revision_kind_and_source_json_round_trip(tmp_path: Path):
+    """非默认 kind 与 source_json 原样往返：来源摘要必须被解析回 dict。"""
+    database = Database(f"sqlite:///{(tmp_path / 'revision-meta.sqlite').as_posix()}")
+    database.upsert_workspace("w", tmp_path, tmp_path / "a.dst", "r1")
+    database.add_revision(
+        "rev-1",
+        "w",
+        "op-1",
+        "h1",
+        "h2",
+        tmp_path,
+        kind="imported",
+        source_json='{"schema": "dst-manager.import-source/v1", "import_batch": "batch-1"}',
+    )
+
+    revision = database.get_revision("rev-1")
+    assert revision["kind"] == "imported"
+    assert revision["source_json"] == {"schema": "dst-manager.import-source/v1", "import_batch": "batch-1"}
+
+
 def test_upgrade_from_0006_adds_revision_kind_columns_and_keeps_rows(tmp_path: Path):
     """0006 旧库升级：既有修订行 kind 默认 operation，且 head 不保留 handoff_sources。"""
     from alembic import command

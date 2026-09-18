@@ -83,7 +83,7 @@ def test_spec_datas_include_pyproject_for_version_provenance():
         for source, target in entries
         if source.endswith("pyproject.toml")
     ]
-    assert match, "spec datas 缺少 pyproject.toml：frozen 态版本探测会退化为 0.0.0.dev0 污染交接包"
+    assert match, "spec datas 缺少 pyproject.toml：frozen 态版本探测会退化为 0.0.0.dev0 污染成果元数据"
     assert all(target == "." for _, target in match), (
         "pyproject.toml 的 datas 目标必须是资源根 .：runtime.app_version 按 resource_dir() 根读取"
     )

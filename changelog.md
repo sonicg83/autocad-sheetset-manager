@@ -4,6 +4,7 @@
 - 删除 `handoff_sources` 表模型、`get_handoff_source`、`register_handoff` 与 `HANDOFF_INITIAL_REVISION_KIND`；新增迁移 `0008_drop_handoff_sources`。`document_revisions.kind` 与 `source_json` 保留为通用修订元数据。
 - `LATEST_SCHEMA_REVISION` 由 `0007_db001_builder_handoff` 推进到 `0008_drop_handoff_sources`（该常量是 `Database` 的版本门禁，不同步推进会让全部 Manager 数据库打开失败）；`tests/unit/test_runtime.py` 与 `tests/unit/test_extension_persistence.py` 的硬编码 head 同步更新。
 - 更新 `tests/unit/test_database.py` 的迁移 head 与表存在性断言（head 后 `handoff_sources` 必须不存在），删除已无往返对象的 `test_handoff_source_round_trip`；`tests/unit/test_message_catalog.py` 移除 `HANDOFF_CODES` 枚举集。重新生成 `web/src/api/openapi.json` 与 `schema.d.ts`。交接读取测试面已在成果布局任务中移除。
+- 审查修复轮 1：原用例删除后，`add_revision(kind≠"operation", source_json≠None)` 与 `_revision_json` 的 `json.loads(row.source_json)` 分支再无测试（残余断言全为默认值 / `is None`），故新增 `test_revision_kind_and_source_json_round_trip` 补上非默认往返；已反向验证：临时把该分支改为返回 `None` 时新用例必红。同批清除本次删除造成的过期措辞：`DstManagerService.open_workspace` 的 `workspace_root` docstring 与投影注释不再提交接工作区，`test_builder_output_opens_in_manager.py` 的测试意图改为「已完成变更的回归护栏」，`test_builder_packaging_contract.py` 断言消息「污染交接包」改为「污染成果元数据」。本次未修改迁移文件，`package_id` / `manifest_sha256` 仍仅作为列名出现在 0007 与 0008 两个迁移中。
 
 ## 2026-09-18（移除 Builder 交接适配器与端点）
 
