@@ -77,8 +77,10 @@ export function isRevisionConflict(value: ExtensionSettingsConflict | null): boo
   return value.revisionParamsPresent;
 }
 
-// 编辑值与服务端持久值的比较：生成表单只产生 JSON 标量，比较按值不做字符串化
-function sameValue(left: unknown, right: unknown): boolean {
+// 编辑值与服务端持久值的比较：生成表单只产生 JSON 标量，比较按值不做字符串化。
+// 导出供呈现层（GeneratedExtensionSettingsForm 的行级 dirty 判定）复用同一口径：
+// 行级状态不得在这里之外重新发明第二套比较（SPEC-DM-015 §2.2，PLAN-DM-034 fix 1）。
+export function sameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 

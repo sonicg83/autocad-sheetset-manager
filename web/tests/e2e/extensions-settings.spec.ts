@@ -444,6 +444,37 @@ test("generated 设置：字段行 dirty 可见文字与稳定 ID 经 aria-descr
   await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
 });
 
+test("generated 设置：行输回快照基准值即回到 clean，琥珀边框与修改文字立即清除（不为曾编辑而显示）", async ({page}) => {
+  await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const row = dialog.locator('[data-field="batch_limit"]');
+  const input = dialog.locator('input[data-key="batch_limit"]');
+  const save = dialog.getByRole("button", {name: "保存", exact: true});
+  const dirtyBadge = row.locator('[data-testid="extension-settings-field-dirty"]');
+  // 编辑：琥珀 dirty class 与可见「有未保存修改」，describedby 关联 dirty 状态
+  await input.fill("70");
+  await expect(row).toHaveClass(/dirty/);
+  await expect(dirtyBadge).toBeVisible();
+  expect(await input.getAttribute("aria-describedby")).toContain("extension-settings-dirty-batch_limit");
+  // 输回快照基准值（50）：立即回到 clean——琥珀与修改文字清除、describedby 不再引用 dirty，
+  // 保存按钮回到可聚焦语义禁用（SPEC-DM-015 §2.2：修改状态按值比较，不为曾编辑而显示）
+  await input.fill("50");
+  await expect(row).not.toHaveClass(/dirty/);
+  await expect(dirtyBadge).toHaveCount(0);
+  expect(await input.getAttribute("aria-describedby") ?? "").not.toContain("extension-settings-dirty-");
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await expect(save).not.toHaveAttribute("disabled");
+  // 再次编辑即恢复 dirty：清除不是「锁死 clean」
+  await input.fill("70");
+  await expect(row).toHaveClass(/dirty/);
+  await expect(dirtyBadge).toBeVisible();
+});
+
 test("generated 设置：字段按服务端顺序呈现、默认值来自 Provider，保存只提交本扩展快照", async ({page}) => {
   const mock = await installExtensionSettings(page);
   await installExtensions(page, [generatedExtension()]);

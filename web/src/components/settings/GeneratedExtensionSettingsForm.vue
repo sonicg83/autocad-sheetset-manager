@@ -9,6 +9,7 @@
 // 契约外取值（如 object/array）一律 fail-closed 成不支持诊断，绝不退化为 JSON 文本框。
 import {useI18n} from "vue-i18n";
 import type {ExtensionSettingsFieldControl, ExtensionSettingsItem} from "../../api/contracts";
+import {sameValue} from "../../composables/useExtensionSettings";
 import type {ExtensionFieldError} from "../../composables/useExtensionSettings";
 import BooleanSwitch from "./BooleanSwitch.vue";
 
@@ -75,8 +76,7 @@ function errorOf(item: ExtensionSettingsItem): ExtensionFieldError | undefined {
   return props.errors[item.key];
 }
 // 行级稳定状态 ID 与 aria-describedby（PLAN-DM-034 Task 5）：hint / dirty（存在时）/
-// error（存在时）经 id 与控件显式关联，仅视觉相邻不会被读屏播报。dirty 条件与
-// .ef-row.dirty 的既有条件同源（键在编辑缓冲中），可见文字与琥珀边框不各自为政。
+// error（存在时）经 id 与控件显式关联，仅视觉相邻不会被读屏播报。
 function hintId(key: string): string {
   return `extension-settings-hint-${key}`;
 }
@@ -86,10 +86,17 @@ function dirtyId(key: string): string {
 function errorId(key: string): string {
   return `extension-settings-error-${key}`;
 }
+// 行级 dirty 判定（SPEC-DM-015 §2.2，PLAN-DM-034 fix 1）：与宿主 dirty 同一值比较口径
+//（复用 useExtensionSettings 导出的 sameValue，对服务端持久值比较）——输回快照基准值
+// 即立即 clean，不因「曾编辑」而继续显示；.ef-row.dirty 的琥珀边框、可见 dirty 文字与
+// aria-describedby 的 dirty 状态引用都由这一个判定派生，不各自为政。
+function isDirty(item: ExtensionSettingsItem): boolean {
+  return item.key in props.edits && !sameValue(props.edits[item.key], props.value[item.key]);
+}
 function describedBy(item: ExtensionSettingsItem): string | undefined {
   const ids: string[] = [];
   if (item.description_key) ids.push(hintId(item.key));
-  if (item.key in props.edits) ids.push(dirtyId(item.key));
+  if (isDirty(item)) ids.push(dirtyId(item.key));
   if (errorOf(item) !== undefined) ids.push(errorId(item.key));
   return ids.length === 0 ? undefined : ids.join(" ");
 }
@@ -98,7 +105,7 @@ function describedBy(item: ExtensionSettingsItem): string | undefined {
   <div class="ef-form">
     <div
       v-for="item in items" :key="item.key" class="ef-row"
-      :class="{dirty: item.key in edits, error: errorOf(item) !== undefined}" :data-field="item.key"
+      :class="{dirty: isDirty(item), error: errorOf(item) !== undefined}" :data-field="item.key"
     >
       <label v-if="hasOwnControl(item)" class="ef-label" :for="inputId(item.key)">{{ t(item.label_key) }}</label>
       <span v-else class="ef-label" :id="labelId(item.key)">{{ t(item.label_key) }}</span>
@@ -140,10 +147,10 @@ function describedBy(item: ExtensionSettingsItem): string | undefined {
         </span>
         <!-- 契约外控件：稳定诊断，不猜测语义、不提供任意 JSON 文本框（SC-17） -->
         <p v-else class="ef-hint" role="note">{{ t("settings.extensionSettings.unsupportedControl", {control: item.control}) }}</p>
-        <!-- 行级 dirty 可见文字（PLAN-DM-034 Task 5）：条件与 .ef-row.dirty 同源，role="status"
-             温和播报（输入频繁变化不用 alert 打断）；键在缓冲中即显示，与琥珀边框一致 -->
+        <!-- 行级 dirty 可见文字（PLAN-DM-034 Task 5 / fix 1）：与琥珀边框同一 isDirty 判定，
+             role="status" 温和播报（输入频繁变化不用 alert 打断） -->
         <span
-          v-if="item.key in edits" :id="dirtyId(item.key)" class="ef-dirty" role="status"
+          v-if="isDirty(item)" :id="dirtyId(item.key)" class="ef-dirty" role="status"
           data-testid="extension-settings-field-dirty"
         >{{ t("extensions.sheetCatalog.dirtyBadge") }}</span>
         <div v-if="item.description_key || item.min_value !== null" class="ef-foot">
