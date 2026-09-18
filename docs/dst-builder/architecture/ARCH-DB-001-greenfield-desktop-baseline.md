@@ -234,7 +234,7 @@ Manager 直接打开该 DST，从磁盘现状建立工作区，不访问 `projec
 
 ```text
 向导录入 → GenerationPlan → DWG → Handle → DST
-→ sheetset.dst + DWG + 图纸目录.xlsx → DST Manager 打开
+→ 发布三件套 → DST Manager 打开
 ```
 
 该切片通过 AutoCAD 2016/2020 后，再扩展项目编辑器、规则、模板和多 DWG 并行。禁止先搭建空的企业控制面或全量插件框架。
