@@ -6,14 +6,15 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-16
+updated: 2026-09-18
 related:
   - ARCH-DM-001
   - SPEC-DM-006
   - SPEC-DM-009
   - SPEC-DM-010
   - SPEC-DM-011
-  - SPEC-DM-012
+- SPEC-DM-012
+- SPEC-DM-015
   - GUIDE-DM-001
   - GUIDE-DM-002
 ---
@@ -325,7 +326,7 @@ npm --prefix web run test:e2e
 
 - 本文是前端视觉基础和渐进整改实现边界的权威架构；用户可见视觉与交互规则仍以 SPEC-DM-006 及页面级 Spec 为准。
 - 后续实施计划保存到 `.planning/plans/dst-manager/`，引用本文而不复制完整架构正文。
-- 页面级差异只进入对应 SPEC-DM-009～012；全局规则不得在多个 Spec 重复维护。
+- 文本编辑状态与提交动作的跨页面规则由 SPEC-DM-015 统一维护；页面级差异只进入对应 SPEC-DM-009～012，全局规则不得在多个 Spec 重复维护。
 - 既有“用户真实桌面复验通过”历史记录保持不变；新增后续回归发现、修复证据和验收时间，不能回写历史结论。
 - 新增、移动、接受或作废本文时同步更新 `docs/dst-manager/README.md` 与根 `changelog.md`。
 - GUIDE-DM-001 保存可执行的技术门禁；GUIDE-DM-002 同步面向验收者的通俗解释，明确抽样矩阵、自动化证据与真实 Windows 缩放证据的边界。

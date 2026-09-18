@@ -14,6 +14,8 @@
 
 详细计划：
 
+- [前端文本编辑状态与提交动作对齐实施计划（PLAN-DM-034，proposed；依据 SPEC-DM-015，统一图纸属性、属性值、图纸目录模板、常规设置与扩展配置的 dirty/revert/invalid 状态、可见提示和 clean 写操作守卫；普通表单字段级提示，目录模板采用模板级徽标，并以可聚焦 `aria-disabled` 保留保存焦点锚点）](PLAN-DM-034-frontend-text-edit-state-alignment.md)
+
 - [publisher 生产代码剩余拆分实施计划（PLAN-DM-033，proposed；承接 PLAN-DM-031 偏差与 MEMO-DM-036 F3：「两个叶模块 + 编排门面」——新增 `publish_apply.py`（正向应用与结果校验）与 `publish_rollback.py`（回滚、身份保护与清理），`publisher.py` 只留事务编排与公共门面并暂留极薄私有委托维持恢复鸭子调用与故障注入语义；纯移动重构、application 层 import 零改动、只拆生产代码不拆测试文件；完成门禁为 `publisher.py` ≤ 400 行、两个新模块各 ≤ 300 行、全量 `pytest -q` 通过）](PLAN-DM-033-publisher-remaining-split.md)
 
 - [删除不编号子集导致后续子集重编号修复计划（PLAN-DM-032，completed；PLAN-DM-030 验证中发现的第二个缺陷：删除已应用的不编号封面后，紧随其后的 `01 图纸目录` 被重编为 `00 图纸目录` 并按改名进入 CAD。根因：`_number_seed` 读的是**命令前**文档的既有图号，而「不编号子集」排除集合按**命令后**子集列表判定，被删除的封面不在集合里，其 `00`/`000` 就当了编号种子；关键字刚开启（封面仍为 `001`）时删除则使后续子集整体前移。修复：命令前快照判定与命令后判定取并集。TDD：新增 5 例、修复前 `[['00']] != [['01']]` 等 5 项失败。实际验证：`ruff` 通过、`pytest -q` **1481 项 / 1409 passed / 0 failed / 72 skipped**；规范表述见 SPEC-DM-014 §行为 3/§行为 5 与「2026-09-14 追记」）](PLAN-DM-032-delete-unnumbered-subset-number-seed.md)

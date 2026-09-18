@@ -67,6 +67,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸目录 XLSX 内置扩展设计规范（SPEC-DM-012，已接受；含数字格式码与输出图纸过滤设计，G0～G8 既有基线已通过——格式入口的门禁证据已由 PLAN-DM-026 补足，输出图纸过滤由 PLAN-DM-025 交付且过滤证据（部分/全部）已入 production 目录，未重开 G3/G4，G9 已于 2026-09-13 由用户真实桌面/Excel 验收通过）](specs/SPEC-DM-012-sheet-catalog-extension.md)
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 - [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭；同场景的编号种子缺陷（删除不编号子集使后续子集重编为 0 起）已由 PLAN-DM-032 修复，§行为 3/§行为 5 表述已按实现校正）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
+- [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
 
 ## 研究与分析
 
