@@ -71,9 +71,9 @@ __all__ = [
     "validate_draft",
 ]
 
-# 正式成果固定相对路径（§9；manifest/handoff 最终字节在 Task 9 生成）。
-SHEETSET_PATH = "drawings/sheetset.dst"
-SHEET_CATALOG_PATH = "drawings/图纸目录.xlsx"
+# 正式成果固定路径（§9）：目标目录内直接包含三件套，无包装子目录。
+SHEETSET_PATH = "sheetset.dst"
+SHEET_CATALOG_PATH = "图纸目录.xlsx"
 
 _MAX_TEXT_CHARS = 100
 _MAX_PREFIX_CHARS = 20
@@ -352,21 +352,11 @@ def _derived_sheet_values(revision: ProjectRevisionV1) -> tuple[str, str, str]:
 
 
 def _expected_artifacts(dwg: str) -> tuple[ExpectedArtifact, ...]:
-    """正式成果全部预期文件（§9）：含 Task 9 才生成最终字节的 metadata 文件。"""
+    """正式成果全部预期文件（§9）：目标目录直接包含 DST、DWG 与图纸目录。"""
     entries = (
         ExpectedArtifact(path=SHEETSET_PATH, role="dst", required=True),
-        ExpectedArtifact(path=f"drawings/{dwg}", role="dwg", required=True),
+        ExpectedArtifact(path=dwg, role="dwg", required=True),
         ExpectedArtifact(path=SHEET_CATALOG_PATH, role="sheet-catalog", required=True),
-        ExpectedArtifact(
-            path="metadata/project-revision.json", role="project-revision", required=True
-        ),
-        ExpectedArtifact(
-            path="metadata/generation-plan.json", role="generation-plan", required=True
-        ),
-        ExpectedArtifact(
-            path="metadata/validation-report.json", role="validation-report", required=True
-        ),
-        ExpectedArtifact(path="metadata/handoff.json", role="handoff", required=True),
     )
     return tuple(sorted(entries, key=lambda item: item.path))
 
@@ -398,7 +388,7 @@ def plan_payload(revision: ProjectRevisionV1) -> dict:
             "layout_asset": asset_payload(layout_asset),
             "source_layout": revision.template.source_layout,
             "target_layout": name,
-            "target_dwg_path": f"drawings/{drawing}",
+            "target_dwg_path": drawing,
         },
         "sheetset_task": {
             "dst_path": SHEETSET_PATH,
@@ -435,7 +425,7 @@ def create_plan(revision: ProjectRevisionV1) -> GenerationPlanV1:
             layout_asset=_revision_asset(revision, AssetRole.LAYOUT),
             source_layout=revision.template.source_layout,
             target_layout=name,
-            target_dwg_path=f"drawings/{drawing}",
+            target_dwg_path=drawing,
         ),
         sheetset_task=SheetsetTask(
             dst_path=SHEETSET_PATH,

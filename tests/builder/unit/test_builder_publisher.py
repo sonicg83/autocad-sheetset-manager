@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 
 import pytest
@@ -21,29 +19,10 @@ from dst_builder.infrastructure.filesystem.publisher import (
 
 _DST = b"dst"
 _FILES = {
-    "drawings/sheetset.dst": _DST,
-    "drawings/A-001 平面.dwg": b"dwg",
-    "drawings/图纸目录.xlsx": b"xlsx",
-    "metadata/handoff.json": b"handoff",
-    "metadata/project-revision.json": b"rev",
-    "metadata/generation-plan.json": b"plan",
-    "metadata/validation-report.json": b"report",
+    "sheetset.dst": _DST,
+    "A-001 平面.dwg": b"dwg",
+    "图纸目录.xlsx": b"xlsx",
 }
-_FILES["metadata/manifest.json"] = json.dumps(
-    {
-        "schema": "dst-builder.manifest/v1",
-        "files": [
-            {
-                "path": "drawings/sheetset.dst",
-                "role": "dst",
-                "size": len(_DST),
-                "sha256": hashlib.sha256(_DST).hexdigest(),
-            }
-        ],
-    },
-    ensure_ascii=False,
-    separators=(",", ":"),
-).encode("utf-8")
 FILES = _FILES
 
 
@@ -58,10 +37,13 @@ def test_publish_places_complete_package_at_target(tmp_path: Path) -> None:
     published = _publish(tmp_path, target)
 
     assert published == target
-    for path, content in FILES.items():
-        assert (target / path).read_bytes() == content
-    # 正式根只有 drawings/ 与 metadata/ 两项，无空 assets 目录。
-    assert sorted(item.name for item in target.iterdir()) == ["drawings", "metadata"]
+    assert {path.read_bytes() for path in target.iterdir()} == set(_FILES.values())
+    # 正式成果直接落在目标目录，无包装子目录、无空 assets 目录。
+    assert sorted(item.name for item in target.iterdir()) == [
+        "A-001 平面.dwg",
+        "sheetset.dst",
+        "图纸目录.xlsx",
+    ]
     # 唯一暂存目录已消失。
     assert not (tmp_path / ".staging").exists()
     assert [item.name for item in target.parent.iterdir()] == [target.name]

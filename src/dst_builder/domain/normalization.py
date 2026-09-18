@@ -14,7 +14,6 @@ __all__ = [
     "canonical_json",
     "dwg_name",
     "layout_name",
-    "package_id_from_manifest_sha256",
     "plan_id_from_sha256",
     "revision_id_from_sha256",
     "sha256_hex",
@@ -24,7 +23,6 @@ __all__ = [
 
 _REVISION_NAMESPACE_PREFIX = "dst-builder:revision:"
 _PLAN_NAMESPACE_PREFIX = "dst-builder:plan:"
-_PACKAGE_NAMESPACE_PREFIX = "dst-builder:package:"
 _TASK_NAMESPACE_PREFIX = "dst-builder:task:"
 
 MAX_NUMBERING_START = 999999
@@ -46,12 +44,6 @@ def revision_id_from_sha256(sha256: str) -> str:
 
 def plan_id_from_sha256(sha256: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{_PLAN_NAMESPACE_PREFIX}{sha256}"))
-
-
-def package_id_from_manifest_sha256(manifest_sha256: str) -> str:
-    return str(
-        uuid.uuid5(uuid.NAMESPACE_URL, f"{_PACKAGE_NAMESPACE_PREFIX}{manifest_sha256}")
-    )
 
 
 def task_id_from_revision_sha256(revision_sha256: str, task_kind: str) -> str:

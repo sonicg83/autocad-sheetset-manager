@@ -419,13 +419,9 @@ def test_expected_artifacts_list_full_deliverable_set() -> None:
     paths = [artifact.path for artifact in plan.expected_artifacts]
     assert paths == sorted(paths)
     assert set(paths) == {
-        "drawings/sheetset.dst",
-        "drawings/A-001 首层平面图.dwg",
-        "drawings/图纸目录.xlsx",
-        "metadata/project-revision.json",
-        "metadata/generation-plan.json",
-        "metadata/validation-report.json",
-        "metadata/handoff.json",
+        "sheetset.dst",
+        "A-001 首层平面图.dwg",
+        "图纸目录.xlsx",
     }
     assert all(artifact.required for artifact in plan.expected_artifacts)
 
@@ -445,9 +441,9 @@ def test_plan_tasks_follow_spec_derived_values() -> None:
     assert plan.drawing_task.layout_asset.role is AssetRole.LAYOUT
     assert plan.drawing_task.source_layout == "A1"
     assert plan.drawing_task.target_layout == expected_layout
-    assert plan.drawing_task.target_dwg_path == f"drawings/{expected_dwg}"
+    assert plan.drawing_task.target_dwg_path == expected_dwg
 
-    assert plan.sheetset_task.dst_path == "drawings/sheetset.dst"
+    assert plan.sheetset_task.dst_path == "sheetset.dst"
     assert plan.sheetset_task.sheetset_name == "示例工程"
     assert plan.sheetset_task.subset_name == "建筑"
     assert plan.sheetset_task.sheet_number == number

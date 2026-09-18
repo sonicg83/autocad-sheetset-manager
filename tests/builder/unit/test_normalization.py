@@ -4,7 +4,7 @@
 
 * 规范化 JSON：UTF-8、键名排序、无多余空白、数组保序、``ensure_ascii=False``；
   SHA-256 与 UUIDv5 命名空间（``dst-builder:revision:`` / ``dst-builder:plan:`` /
-  ``dst-builder:package:``）按 §5/§9 公式逐字转录；
+  ``dst-builder:task:``）按 §5 公式逐字转录；
 * 派生值：``sheet_number`` / ``layout_name`` / ``dwg_name`` 按 §4 公式派生，
   起始序号位数超过 ``width`` 即图号溢出。
 """
@@ -17,7 +17,6 @@ from dst_builder.domain.normalization import (
     canonical_json,
     dwg_name,
     layout_name,
-    package_id_from_manifest_sha256,
     plan_id_from_sha256,
     revision_id_from_sha256,
     sha256_hex,
@@ -63,16 +62,13 @@ def test_sha256_hex_matches_spec_formula() -> None:
 
 
 def test_uuid_ids_use_spec_namespaces() -> None:
-    """§5/§9 命名空间公式直录：revision/plan/package 三类确定性 ID。"""
+    """§5 命名空间公式直录：revision/plan 两类确定性 ID。"""
     sha256 = "a" * 64
     assert revision_id_from_sha256(sha256) == str(
         uuid.uuid5(uuid.NAMESPACE_URL, f"dst-builder:revision:{sha256}")
     )
     assert plan_id_from_sha256(sha256) == str(
         uuid.uuid5(uuid.NAMESPACE_URL, f"dst-builder:plan:{sha256}")
-    )
-    assert package_id_from_manifest_sha256(sha256) == str(
-        uuid.uuid5(uuid.NAMESPACE_URL, f"dst-builder:package:{sha256}")
     )
 
 

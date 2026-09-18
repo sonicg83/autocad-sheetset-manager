@@ -1,3 +1,12 @@
+## 2026-09-18（Builder 正式成果布局扁平化与 metadata 移除）
+
+- `SHEETSET_PATH` / `SHEET_CATALOG_PATH` 去掉 `drawings/` 前缀，`_expected_artifacts` 由 7 项降为 3 项；`assemble_package_files` 只装配 `sheetset.dst`、构建后的 DWG 与 `图纸目录.xlsx`，不再生成 `metadata/` 下的清单、来源元数据与校验报告文件；`plan.drawing_task.target_dwg_path` 与计划预览的 `artifact_path` 同步改为目标目录内的裸文件名。
+- `verify_package` 重写为 `verify_target(root, expected_paths)`：只断言预期产物存在、可读、非空，不比对内容哈希、不约束目录内其他文件；空预期集合判为发布证据缺失。`publish_candidate` 与 `build_recovery` 共用同一判定，发布证据新增 `expected_paths` 字段。
+- 该改动同时修正既有缺陷：原判定要求成果根只有 `drawings/` 与 `metadata/` 两个目录，用户往成果根放入文件会让启动恢复误报 `PUBLISH_RECOVERY_REQUIRED`。
+- 删除失去使用方的 `MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`，以及 `builds.py` 中仅为 metadata 服务的 `_report_json`、`_builder_version` 与 revision/plan JSON 传递。验证报告仍作为发布门禁，只是不再落盘。
+- `application/validation.py` 的引用边界检查同步改造：移除写死的 `_DRAWINGS_PREFIX`，预期成果路径必须是目标目录内的裸文件名，含 `/`、`\` 或 `..` 一律报 `ARTIFACT_PATH_ESCAPE`；不改则扁平布局下每次构建都会被误判为越界。
+- 删除已无对应契约的交接测试面：`tests/builder/unit/test_package_manifest.py`、`tests/integration/test_builder_handoff_api.py`、`tests/unit/test_handoff_reader.py` 与 `tests/handoff_package_factory.py`（后者依赖被删的 `MANIFEST_FILE` 与旧签名 `assemble_package_files`）。新增 `tests/builder/unit/test_package_layout.py` 固化三件套布局与 `verify_target` 语义；`test_build_recovery.py` 改为「内容变更仍收敛 SUCCEEDED、预期产物缺件判 `PUBLISH_RECOVERY_REQUIRED`」两项断言。
+
 ## 2026-09-18（SPEC-DB-001 与 dst-builder 长期文档同步取消交接）
 
 - 按 `RFC-INT-002` / `ADR-INT-001` 修订 `SPEC-DB-001`：§1 与 §2 改为六步引导且不再由 Manager 显式接管；§9 改为「正式成果目录」并固定三件套布局与 `verify_target` 判定；§10 标记 `superseded`；§11 删除交接端点与两个交接错误码；§12 替换交接与成果包结构相关门禁。

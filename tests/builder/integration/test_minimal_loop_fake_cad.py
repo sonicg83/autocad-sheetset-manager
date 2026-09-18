@@ -172,13 +172,14 @@ def test_minimal_loop_publishes_complete_package_with_fake_cad(loop_env) -> None
     assert final["status"] == "SUCCEEDED"
     assert final["published_path"] == str(env.target)
 
-    from dst_builder.infrastructure.filesystem.package import verify_package
+    from dst_builder.infrastructure.filesystem.package import verify_target
 
-    assert verify_package(env.target) == ()
-    built_dwg = next((env.target / "drawings").glob("*.dwg"))
+    dwg = next(env.target.glob("*.dwg")).name
+    assert verify_target(env.target, ("sheetset.dst", dwg, "图纸目录.xlsx")) == ()
+    built_dwg = env.target / dwg
     assert built_dwg.read_bytes() == BUILT_CONTENT
-    # 项目根不残留正式 drawings/（成果只进成果包）
-    assert not (env.project_root / "drawings").exists()
+    # 项目根不残留正式成果副本（成果只进成果包）
+    assert not any((env.project_root / name).exists() for name in ("sheetset.dst", dwg, "图纸目录.xlsx"))
     # attempt 证据保留：请求 JSON 与 CAD 版本证据
     attempt_dirs = list((env.project_root / "builds" / build_id).iterdir())
     assert len(attempt_dirs) == 1

@@ -1,9 +1,11 @@
 """验证报告聚合（SPEC-DB-001 §8/§9）：``dst-builder.validation-report/v1`` 装配。
 
-汇总五类检查：输入计划、DWG 结果、DST、图纸目录 XLSX 与引用边界，并记录
-校验器版本；诊断统一使用 ``dst_platform.contracts`` 共享类型（ValidationIssue/
-Severity），绝不复制第二套诊断模型。本模块只聚合报告结构；manifest.json 与
-handoff.json 的最终字节由发布层（Task 9）生成。
+汇总五类检查：输入计划、DWG 结果、DST、图纸目录 XLSX 与引用边界（DST 内
+DWG 引用与预期成果路径都必须是目标目录内的裸文件名），并记录校验器版本；
+诊断统一使用 ``dst_platform.contracts`` 共享类型（ValidationIssue/
+Severity），绝不复制第二套诊断模型。本模块只聚合报告结构；正式成果写盘与
+完整性判定由发布层（``infrastructure.filesystem.package``）负责，不再生成
+manifest.json 与 handoff.json。
 """
 
 from __future__ import annotations
@@ -32,8 +34,6 @@ __all__ = [
     "build_validation_report",
 ]
 
-# 输出目录内 DWG 成果相对路径前缀（§9：引用不逃逸 drawings/）
-_DRAWINGS_PREFIX = "drawings/"
 _HANDLE_PATTERN = re.compile(r"^[0-9A-Fa-f]+$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -187,7 +187,7 @@ def _check_reference_boundary(plan: GenerationPlanV1) -> ValidationCheck:
     task = plan.sheetset_task
     if not task.dwg_path or "/" in task.dwg_path or "\\" in task.dwg_path or ".." in task.dwg_path:
         issues.append(_issue("DWG_REFERENCE_ESCAPE", f"DST 内 DWG 引用必须是裸文件名：{task.dwg_path!r}"))
-    expected_dwg_artifact = f"{_DRAWINGS_PREFIX}{task.dwg_path}"
+    expected_dwg_artifact = task.dwg_path
     if plan.drawing_task.target_dwg_path != expected_dwg_artifact:
         issues.append(
             _issue(
@@ -203,6 +203,7 @@ def _check_reference_boundary(plan: GenerationPlanV1) -> ValidationCheck:
         if not actual[path].required:
             issues.append(_issue("EXPECTED_ARTIFACT_OPTIONAL", f"核心成果不得标记为可选：{path}"))
     for path in actual:
-        if not path.startswith(_DRAWINGS_PREFIX) and not path.startswith("metadata/"):
-            issues.append(_issue("ARTIFACT_PATH_ESCAPE", f"预期成果路径越出成果包目录约定：{path}"))
+        # 扁平布局：每个预期产物都必须是目标目录内的裸文件名。
+        if "/" in path or "\\" in path or ".." in path:
+            issues.append(_issue("ARTIFACT_PATH_ESCAPE", f"预期成果路径必须是目标目录内的裸文件名：{path}"))
     return ValidationCheck("reference-boundary", tuple(issues))

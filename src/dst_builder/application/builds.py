@@ -103,7 +103,6 @@ from dst_builder.infrastructure.persistence.repositories import (
     SqliteProjectRepository,
     SqliteRevisionRepository,
 )
-from dst_builder.runtime import app_version
 
 __all__ = [
     "BUILD_FAILED",
@@ -186,47 +185,8 @@ class HandoffRejectedError(BuildServiceError):
         return "已发布成果包保留不变；按错误信息修正后重试"
 
 
-def _builder_version() -> str:
-    """应用版本：委托 runtime.app_version（元数据优先，frozen 态读随包 pyproject.toml）。
-
-    该值写入成果包 metadata/handoff.json 的 ``builder_version``（§9 provenance），
-    frozen 态不回退会恒为占位版本，污染交接包元数据。
-    """
-    return app_version()
-
-
-def _report_json(report) -> str:
-    """验证报告 → 规范化 JSON（§9 metadata/validation-report.json）。"""
-    return canonical_json(
-        {
-            "schema": report.schema,
-            "plan_id": report.plan_id,
-            "revision_id": report.revision_id,
-            "validator_versions": [
-                [name, version] for name, version in report.validator_versions
-            ],
-            "checks": [
-                {
-                    "name": check.name,
-                    "passed": check.passed,
-                    "issues": [
-                        {
-                            "code": issue.code,
-                            "severity": issue.severity.value,
-                            "message": issue.message,
-                            **({"object_id": issue.object_id} if issue.object_id else {}),
-                        }
-                        for issue in check.issues
-                    ],
-                }
-                for check in report.checks
-            ],
-        }
-    )
-
-
 def _built_dwg_relative(build_id: str, attempt: int) -> str:
-    """DWG 工作成果落在 attempt 内（项目根不残留正式 drawings/）。"""
+    """DWG 工作成果落在 attempt 内（项目根不残留正式成果副本）。"""
     return f"builds/{build_id}/attempt-{attempt:03d}/work/built.dwg"
 
 
@@ -349,8 +309,6 @@ class BuildCoordinator:
             revision_record = revision_repository.load_revision(plan.revision_id)
             if revision_record is None:
                 raise PlanNotFoundError(f"计划修订缺失：{plan.revision_id}")
-            plan_json = plan_record.canonical_json
-            revision_json = revision_record.canonical_json
 
         if target.exists():
             raise BuildTargetExistsError(f"成果目标已存在：{target}")
@@ -403,9 +361,7 @@ class BuildCoordinator:
                 event_record(build_id, attempt, BuildStatus.QUEUED, sequence=1, created_at=now)
             )
         # 快照计划与发布目标传入后台线程（§5：构建使用创建时快照）。
-        self._executor.submit(
-            self._run_build, build_id, attempt, plan, revision_json, plan_json, target
-        )
+        self._executor.submit(self._run_build, build_id, attempt, plan, target)
         return self.get_build(build_id)
 
     def cancel_build(self, build_id: str) -> BuildStatusView:
@@ -539,8 +495,6 @@ class BuildCoordinator:
         build_id: str,
         attempt: int,
         plan: GenerationPlanV1,
-        revision_json: str,
-        plan_json: str,
         target: Path,
     ) -> None:
         try:
@@ -594,15 +548,9 @@ class BuildCoordinator:
                 raise DstValidationError(report.issues)
             candidate = assemble_package_files(
                 plan=plan,
-                revision_json=revision_json,
-                plan_json=plan_json,
-                report_json=_report_json(report),
                 dst_bytes=dst_bytes,
                 dwg_bytes=(self._project_root / _built_dwg_relative(build_id, attempt)).read_bytes(),
                 catalog_bytes=catalog_bytes,
-                build_id=build_id,
-                builder_version=_builder_version(),
-                created_at=utc_now_iso(),
             )
             for relative, content in candidate.items():
                 destination = dirs.candidate / relative
@@ -613,7 +561,9 @@ class BuildCoordinator:
             self._checkpoint(build_id, attempt)
             self._commit_transition(build_id, attempt, BuildStatus.PUBLISHING)
             staging = target.parent / unique_staging_name(target)
-            write_publish_evidence(dirs.metadata, target=target, staging=staging)
+            write_publish_evidence(
+                dirs.metadata, target=target, staging=staging, expected_paths=tuple(candidate)
+            )
             published = publish_candidate(candidate, target, staging=staging)
             self._commit_transition(
                 build_id, attempt, BuildStatus.SUCCEEDED, artifact_path=str(published)

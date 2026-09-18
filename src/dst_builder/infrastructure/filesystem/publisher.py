@@ -12,7 +12,7 @@ import shutil
 from collections.abc import Mapping
 from pathlib import Path
 
-from dst_builder.infrastructure.filesystem.package import verify_package
+from dst_builder.infrastructure.filesystem.package import verify_target
 
 __all__ = [
     "PACKAGE_TARGET_EXISTS",
@@ -67,7 +67,7 @@ def publish_candidate(
 
     try:
         _copy_tree(files, staging)
-        problems = verify_package(staging)
+        problems = verify_target(staging, tuple(files))
         if problems:
             raise PackagePublishError(
                 f"暂存包校验失败：{'；'.join(problems)}"
@@ -82,9 +82,9 @@ def publish_candidate(
         shutil.rmtree(staging, ignore_errors=True)
         raise PackagePublishError(f"发布改名失败：{error}") from error
 
-    problems = verify_package(target)
+    problems = verify_target(target, tuple(files))
     if problems:
-        # 改名成功但事后校验失败：不回滚（目标已是完整可见状态由 manifest
-        # 之外因素破坏），交由启动恢复按 PUBLISH_RECOVERY_REQUIRED 裁决。
+        # 改名成功但事后校验失败：不回滚（目标已是完整可见状态，失败由校验
+        # 之外的因素导致），交由启动恢复按 PUBLISH_RECOVERY_REQUIRED 裁决。
         raise PackagePublishError(f"发布后校验失败：{'；'.join(problems)}")
     return target

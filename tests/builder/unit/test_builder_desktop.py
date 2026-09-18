@@ -187,7 +187,7 @@ def test_builder_source_has_no_stray_file_resource_resolution():
 
 
 # ---------------------------------------------------------------------------
-# 版本解析：frozen 态回退随包 pyproject.toml（写成果包 builder_version provenance）
+# 版本解析：frozen 态回退随包 pyproject.toml（应用版本，不再写成果包 provenance）
 # ---------------------------------------------------------------------------
 
 
@@ -229,19 +229,17 @@ def test_app_version_never_returns_placeholder_when_metadata_available():
     assert app_version() != "0.0.0.dev0"
 
 
-def test_version_helpers_delegate_to_runtime():
-    """interfaces/api 与 application/builds 的版本入口必须共用同一运行时实现。"""
+def test_version_helper_delegates_to_runtime():
+    """interfaces/api 的版本入口必须委托 runtime.app_version，不重复实现。"""
     import inspect
 
-    from dst_builder.application import builds
     from dst_builder.interfaces import api
 
-    for module in (api, builds):
-        source = inspect.getsource(module._builder_version)
-        assert "app_version()" in source, (
-            f"{module.__name__}._builder_version 未委托 runtime.app_version："
-            "重复实现会在 frozen 态退化回 0.0.0.dev0"
-        )
+    source = inspect.getsource(api._builder_version)
+    assert "app_version()" in source, (
+        f"{api.__name__}._builder_version 未委托 runtime.app_version："
+        "重复实现会在 frozen 态退化回 0.0.0.dev0"
+    )
 
 
 # ---------------------------------------------------------------------------

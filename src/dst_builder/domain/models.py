@@ -15,8 +15,6 @@ from dst_builder.domain.build_state import BuildStatus
 
 __all__ = [
     "DRAFT_SCHEMA_VERSION",
-    "HANDOFF_SCHEMA",
-    "MANIFEST_SCHEMA",
     "RULESET_VERSION",
     "VALIDATION_REPORT_SCHEMA",
     "WORKER_COMMAND_NAME",
@@ -42,10 +40,8 @@ DRAFT_SCHEMA_VERSION = 1
 RULESET_VERSION = 1
 WORKER_COMMAND_NAME = "DSTBUILDER_CREATE_DRAWING"
 
-# SPEC-DB-001 §9 固定 Schema 名与固定引用路径（manifest/handoff 最终字节在 Task 9 生成）。
-MANIFEST_SCHEMA = "dst-builder.manifest/v1"
+# SPEC-DB-001 §9 固定 Schema 名（扁平布局无清单与来源元数据，故无 manifest/handoff Schema）。
 VALIDATION_REPORT_SCHEMA = "dst-builder.validation-report/v1"
-HANDOFF_SCHEMA = "dst-builder.handoff/v1"
 
 # 诊断码只使用 §11 固定错误码；§4 字段级违规统一归入 DRAFT_FIELD_INVALID，
 # 由 ``field`` 属性区分具体字段（PATCH 草稿返回字段诊断时按字段聚焦）。
@@ -148,7 +144,7 @@ class ProjectRevisionV1:
 
 @dataclass(frozen=True, slots=True)
 class ExpectedArtifact:
-    """正式成果中的预期文件（成果包内 POSIX 相对路径）。"""
+    """正式成果中的预期文件（目标目录内 POSIX 相对路径，扁平布局下即裸文件名）。"""
 
     path: str
     role: str

@@ -5,7 +5,7 @@
 遗留按 attempt 内发布证据裁决：
 
 * 暂存存在且目标不存在 → 清理暂存并标记失败；
-* 目标存在且完整匹配 manifest → 收敛为 SUCCEEDED；
+* 目标存在且通过 ``verify_target`` 校验 → 收敛为 SUCCEEDED；
 * 其余歧义现场 → ``PUBLISH_RECOVERY_REQUIRED``，阻止自动删除。
 """
 
@@ -22,7 +22,7 @@ from dst_builder.infrastructure.filesystem.attempts import (
     attempt_dir_for,
     read_publish_evidence,
 )
-from dst_builder.infrastructure.filesystem.package import verify_package
+from dst_builder.infrastructure.filesystem.package import verify_target
 from dst_builder.infrastructure.persistence.database import Database, utc_now_iso
 from dst_builder.infrastructure.persistence.repositories import (
     BuildAttemptRecord,
@@ -80,8 +80,8 @@ def recover_pending_builds(
     """把所有非终止 build/attempt 恢复到确定终止状态；返回恢复结果。
 
     事务边界（终审 Important ②）：先用单个短事务读出待恢复项，随后在
-    **事务外**执行文件现场裁决（读发布证据、verify 大包哈希、清理暂存），
-    最后每项用独立短事务写回结果——耗时文件 I/O 不再持有数据库写锁。
+    **事务外**执行文件现场裁决（读发布证据、verify_target 校验现场、
+    清理暂存），最后每项用独立短事务写回结果——耗时文件 I/O 不再持有数据库写锁。
     四分支裁决语义与逐项文件操作顺序保持不变。
     """
     outcomes: list[RecoveryOutcome] = []
@@ -152,7 +152,7 @@ def _adjudicate_publishing(
         )
 
     if target_exists and not staging_exists:
-        problems = verify_package(target)
+        problems = verify_target(target, evidence.expected_paths)
         if not problems:
             # 已完整改名但状态未落库：收敛为成功。
             return _RecoveryDecision(

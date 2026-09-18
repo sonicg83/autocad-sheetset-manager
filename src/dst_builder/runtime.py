@@ -56,10 +56,10 @@ def app_version(resource_base: Path | None = None) -> str:
     """应用版本：分发元数据优先，frozen 态回退读随包 pyproject.toml。
 
     frozen 态 importlib.metadata 必 miss（exe 未安装进 site-packages），若不回退
-    会以 ``0.0.0.dev0`` 写入每个成果包 metadata/handoff.json 的 ``builder_version``
-    （交接 provenance 被污染，PLAN-DB-001 Task 11 评审修正）。因此 spec datas 必须随
-    包打入 pyproject.toml（对齐 dst-manager.spec 的版本兜底模式）。全部来源不可得时
-    容错返回占位版本，绝不让版本探测崩溃构建/交接流程；``resource_base`` 仅供测试注入。
+    会以 ``0.0.0.dev0`` 暴露为应用版本（FastAPI ``info.version``，PLAN-DB-001
+    Task 11 评审修正）。因此 spec datas 必须随包打入 pyproject.toml（对齐
+    dst-manager.spec 的版本兜底模式）。全部来源不可得时容错返回占位版本，绝不
+    让版本探测崩溃启动流程；``resource_base`` 仅供测试注入。
     """
     try:
         return package_version(_DISTRIBUTION_NAME)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,11 +50,12 @@ class AttemptDirectory:
 
 @dataclass(frozen=True, slots=True)
 class PublishEvidence:
-    """发布证据：PUBLISHING 阶段的目标与暂存绝对路径（仅存 attempt 内）。"""
+    """发布证据：PUBLISHING 阶段的目标、暂存绝对路径与预期产物清单。"""
 
     target: Path
     staging: Path
     recorded_at: str
+    expected_paths: tuple[str, ...]
 
 
 def attempt_dir_for(project_root: Path, build_id: str, attempt: int) -> Path:
@@ -77,13 +79,18 @@ def create_attempt_dirs(project_root: Path, build_id: str, attempt: int) -> Atte
 
 
 def write_publish_evidence(
-    attempt_metadata_dir: Path, *, target: Path, staging: Path
+    attempt_metadata_dir: Path,
+    *,
+    target: Path,
+    staging: Path,
+    expected_paths: Sequence[str],
 ) -> None:
     """在 PUBLISHING 进入点写发布证据（改名前落盘，供启动恢复裁决）。"""
     payload = {
         "target": str(target),
         "staging": str(staging),
         "recorded_at": utc_now_iso(),
+        "expected_paths": sorted(expected_paths),
     }
     attempt_metadata_dir.mkdir(parents=True, exist_ok=True)
     (attempt_metadata_dir / PUBLISH_EVIDENCE_FILE).write_text(
@@ -104,8 +111,14 @@ def read_publish_evidence(attempt_dir: Path) -> PublishEvidence:
         raise PublishEvidenceError(f"发布证据不可解析：{error}") from error
     if not payload.get("recorded_at"):
         raise PublishEvidenceError("发布证据缺少 recorded_at")
+    expected = payload.get("expected_paths", [])
+    if not isinstance(expected, list) or not all(isinstance(item, str) for item in expected):
+        raise PublishEvidenceError("发布证据的 expected_paths 非法")
     return PublishEvidence(
-        target=target, staging=staging, recorded_at=payload["recorded_at"]
+        target=target,
+        staging=staging,
+        recorded_at=payload["recorded_at"],
+        expected_paths=tuple(expected),
     )
 
 

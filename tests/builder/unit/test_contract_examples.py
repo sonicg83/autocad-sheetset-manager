@@ -1,13 +1,11 @@
 """SPEC-DB-001 契约示例固化为测试夹具（PLAN-DB-001 Task 2）。
 
-把 §4 草稿示例、§9 正式成果包/manifest/handoff 结构、§6 BuildEventV1 字段固化为
-契约夹具：实现漂移破坏示例形状时先在这里变红。示例中的 ``<uuid>`` 占位替换为
-固定 UUID 字面量，其余字段与规范逐字一致。
+把 §4 草稿示例、§9 正式成果目录结构、§6 BuildEventV1 字段固化为契约夹具：
+实现漂移破坏示例形状时先在这里变红。示例中的 ``<uuid>`` 占位替换为固定 UUID
+字面量，其余字段与规范逐字一致。
 """
 
 from dst_builder.domain.models import (
-    HANDOFF_SCHEMA,
-    MANIFEST_SCHEMA,
     AssetRole,
     AssetSnapshot,
     BuildStatus,
@@ -20,7 +18,6 @@ from dst_builder.domain.models import (
 from dst_builder.domain.normalization import (
     dwg_name,
     layout_name,
-    package_id_from_manifest_sha256,
     sheet_number,
 )
 from dst_builder.domain.planning import commit_revision, create_plan, validate_draft
@@ -99,42 +96,15 @@ def test_spec_draft_example_derived_values() -> None:
     assert dwg_name("A-001 首层平面图") == "A-001 首层平面图.dwg"
 
 
-def test_manifest_and_expected_artifacts_agree() -> None:
-    """§9：manifest 列出除自身与 handoff.json 外的全部正式文件；
-    expected_artifacts 覆盖 manifest 全集并额外包含 handoff.json。"""
+def test_expected_artifacts_match_assembled_files() -> None:
+    """§9：正式成果目标目录直接包含三件套，预期产物与装配键集逐项一致。"""
     revision = commit_revision(draft_from_spec_example(), SPEC_ASSETS_EXAMPLE)
     plan = create_plan(revision)
 
-    manifest_files = {
-        "drawings/sheetset.dst",
-        "drawings/A-001 首层平面图.dwg",
-        "drawings/图纸目录.xlsx",
-        "metadata/project-revision.json",
-        "metadata/generation-plan.json",
-        "metadata/validation-report.json",
-    }
-    expected = {artifact.path for artifact in plan.expected_artifacts}
-    assert manifest_files <= expected
-    assert expected - manifest_files == {"metadata/handoff.json"}
-
-
-def test_handoff_schema_contract() -> None:
-    """§9 handoff.json：schema 固定、package_id 由 manifest 哈希 UUIDv5 派生。"""
-    assert MANIFEST_SCHEMA == "dst-builder.manifest/v1"
-    assert HANDOFF_SCHEMA == "dst-builder.handoff/v1"
-
-    manifest_sha256 = "3" * 64
-    assert package_id_from_manifest_sha256(manifest_sha256) == package_id_from_manifest_sha256(
-        manifest_sha256
-    )
-
-    # handoff 引用的固定路径在计划中冻结：DST 位于 drawings/sheetset.dst，
-    # manifest 位于 metadata/manifest.json（manifest/handoff 最终字节由 Task 9 生成）。
-    revision = commit_revision(draft_from_spec_example(), SPEC_ASSETS_EXAMPLE)
-    plan = create_plan(revision)
-    assert plan.sheetset_task.dst_path == "drawings/sheetset.dst"
-    assert "metadata/manifest.json" not in {
-        artifact.path for artifact in plan.expected_artifacts
+    assert {artifact.path for artifact in plan.expected_artifacts} == {
+        "sheetset.dst",
+        "A-001 首层平面图.dwg",
+        "图纸目录.xlsx",
     }
 
 

@@ -12,11 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from dst_builder.infrastructure.filesystem.package import (
-    HANDOFF_FILE,
-    MANIFEST_FILE,
-    verify_package,
-)
+from dst_builder.infrastructure.filesystem.package import verify_target
 
 # ---------------------------------------------------------------------------
 # 计划提交与确认
@@ -32,7 +28,7 @@ def test_submit_plan_returns_deterministic_preview(env) -> None:
     preview = first["preview"]
     assert preview["sheet_number"] == "A-001"
     assert preview["layout_name"] == "A-001 首层平面图"
-    assert preview["artifact_path"] == "drawings/A-001 首层平面图.dwg"
+    assert preview["artifact_path"] == "A-001 首层平面图.dwg"
     assert first["diagnostics"] == []
 
 
@@ -107,11 +103,12 @@ def test_full_build_reaches_succeeded_and_publishes_package(env) -> None:
     assert final["published_path"] == str(env.target)
 
     assert env.target.is_dir()
-    assert verify_package(env.target) == ()
-    assert (env.target / MANIFEST_FILE).is_file()
-    assert (env.target / HANDOFF_FILE).is_file()
-    # 正式根只有两项
-    assert sorted(item.name for item in env.target.iterdir()) == ["drawings", "metadata"]
+    dwg_path = next(env.target.glob("*.dwg")).name
+    assert verify_target(env.target, ("sheetset.dst", dwg_path, "图纸目录.xlsx")) == ()
+    # 正式成果直接落在目标目录，无包装子目录
+    assert sorted(item.name for item in env.target.iterdir()) == sorted(
+        ["sheetset.dst", dwg_path, "图纸目录.xlsx"]
+    )
 
 
 def test_event_sequences_are_monotonic_and_replayable(env) -> None:
@@ -394,12 +391,9 @@ def test_running_build_is_not_affected_by_draft_modification(env) -> None:
     assert final["status"] == "SUCCEEDED"
 
     # 发布包反映冻结计划的内容，而非运行中修改后的草稿
-    dwg = next((env.target / "drawings").glob("*.dwg"))
+    dwg = next(env.target.glob("*.dwg"))
     assert dwg.name == "A-001 首层平面图.dwg"
-    manifest = json.loads((env.target / "metadata" / "manifest.json").read_text(encoding="utf-8"))
-    paths = {entry["path"] for entry in manifest["files"]}
-    assert "drawings/A-001 首层平面图.dwg" in paths
-    assert not any("二层平面图" in path for path in paths)
+    assert not any("二层平面图" in item.name for item in env.target.iterdir())
 
 
 # ---------------------------------------------------------------------------

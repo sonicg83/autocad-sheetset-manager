@@ -2,8 +2,9 @@
 
 覆盖：PREPARING～VERIFYING 中断保留现场并标记 FAILED/BUILD_INTERRUPTED、
 QUEUED 遗留、PUBLISHING 未改名（清理暂存标记失败）、已完整改名（收敛
-SUCCEEDED）、歧义现场（PUBLISH_RECOVERY_REQUIRED，不自动删除），以及
-应用启动时的自动恢复。
+SUCCEEDED，包括内容被用户改动但预期产物齐备的目标）、预期产物缺件
+（PUBLISH_RECOVERY_REQUIRED）、歧义现场（PUBLISH_RECOVERY_REQUIRED，
+不自动删除），以及应用启动时的自动恢复。
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from dst_builder.application.build_recovery import (
     PUBLISH_RECOVERY_REQUIRED,
     recover_pending_builds,
 )
-from dst_builder.infrastructure.filesystem import package as package_module
 from dst_builder.infrastructure.persistence.database import Database
 from dst_builder.infrastructure.persistence.repositories import (
     BuildAttemptRecord,
@@ -132,17 +132,30 @@ def _seed_attempt_dirs(recovery, build_id: str, attempt: int = 1) -> Path:
     return attempt_dir
 
 
-def _seed_publish_evidence(attempt_dir: Path, target: Path, staging: Path) -> None:
+def _seed_publish_evidence(
+    attempt_dir: Path,
+    target: Path,
+    staging: Path,
+    *,
+    expected_paths: tuple[str, ...] | None = None,
+) -> None:
+    """写发布证据；默认登记与 ``_minimal_package_files`` 一致的三件套。"""
+    paths = tuple(_minimal_package_files()) if expected_paths is None else expected_paths
     (attempt_dir / "metadata" / "publish-target.json").write_text(
         json.dumps(
-            {"target": str(target), "staging": str(staging), "recorded_at": NOW}
+            {
+                "target": str(target),
+                "staging": str(staging),
+                "recorded_at": NOW,
+                "expected_paths": list(paths),
+            }
         ),
         encoding="utf-8",
     )
 
 
 def _write_valid_package(target: Path) -> None:
-    """在 target 写一个可通过 manifest 校验的完整成果包。"""
+    """在 target 写一个通过 ``verify_target`` 校验的完整成果目录。"""
     from dst_builder.infrastructure.filesystem.publisher import publish_candidate
 
     plan = _minimal_package_files()
@@ -150,19 +163,12 @@ def _write_valid_package(target: Path) -> None:
 
 
 def _minimal_package_files() -> dict[str, bytes]:
-    files = {
-        "drawings/sheetset.dst": b"dst",
-        "drawings/A-001 平面.dwg": b"dwg",
-        "drawings/图纸目录.xlsx": b"xlsx",
-        "metadata/project-revision.json": b"rev",
-        "metadata/generation-plan.json": b"plan",
-        "metadata/validation-report.json": b"report",
+    """§9 扁平成果三件套，键与计划预期产物路径一致。"""
+    return {
+        "sheetset.dst": b"dst",
+        "A-001 平面.dwg": b"dwg",
+        "图纸目录.xlsx": b"xlsx",
     }
-    manifest_bytes = package_module.build_manifest_bytes(
-        files, {path: "role" for path in files}
-    )
-    files[package_module.MANIFEST_FILE] = manifest_bytes
-    return files
 
 
 # ---------------------------------------------------------------------------
@@ -217,8 +223,7 @@ def test_recovery_finds_retry_attempt_of_stale_run(recovery) -> None:
     attempt_dir = _seed_attempt_dirs(recovery, build_id, attempt=2)
     staging = recovery.output_target.parent / f".dstb-staging-{uuid.uuid4().hex[:8]}"
     staging.mkdir(parents=True)
-    (staging / "drawings").mkdir()
-    (staging / "drawings" / "sheetset.dst").write_bytes(b"partial")
+    (staging / "sheetset.dst").write_bytes(b"partial")
     _seed_publish_evidence(attempt_dir, recovery.output_target, staging)
 
     outcomes = recover_pending_builds(recovery.project_root, recovery.database)
@@ -244,8 +249,7 @@ def test_publishing_with_staging_and_no_target_cleans_staging_and_fails(recovery
     attempt_dir = _seed_attempt_dirs(recovery, build_id)
     staging = recovery.output_target.parent / f".dstb-staging-{uuid.uuid4().hex[:8]}"
     staging.mkdir(parents=True)
-    (staging / "drawings").mkdir()
-    (staging / "drawings" / "sheetset.dst").write_bytes(b"partial")
+    (staging / "sheetset.dst").write_bytes(b"partial")
     _seed_publish_evidence(attempt_dir, recovery.output_target, staging)
 
     recover_pending_builds(recovery.project_root, recovery.database)
@@ -276,11 +280,32 @@ def test_publishing_with_complete_target_converges_to_succeeded(recovery) -> Non
     assert recovery.output_target.is_dir(), "成果不得被删除"
 
 
-def test_publishing_with_tampered_target_requires_manual_recovery(recovery) -> None:
+def test_publishing_with_content_changed_target_still_converges(recovery) -> None:
+    """目标内预期产物齐备即收敛为 SUCCEEDED：内容哈希不再参与发布判定。"""
     build_id = recovery.add_build("PUBLISHING", "PUBLISHING")
     attempt_dir = _seed_attempt_dirs(recovery, build_id)
     _write_valid_package(recovery.output_target)
-    (recovery.output_target / "drawings" / "sheetset.dst").write_bytes(b"tampered")
+    (recovery.output_target / "sheetset.dst").write_bytes(b"edited-by-user")
+    _seed_publish_evidence(attempt_dir, recovery.output_target, recovery.output_target.parent / ".gone-staging")
+
+    recover_pending_builds(recovery.project_root, recovery.database)
+
+    with recovery.database.sessions.begin() as session:
+        run = SqliteBuildRepository(session).load_build_run(build_id)
+        attempts = SqliteBuildRepository(session).list_attempts(build_id)
+    assert run.status == "SUCCEEDED"
+    assert run.published_path == str(recovery.output_target)
+    assert attempts[-1].status == "SUCCEEDED"
+    # 用户改动的内容不被回滚，也不导致误判失败
+    assert (recovery.output_target / "sheetset.dst").read_bytes() == b"edited-by-user"
+
+
+def test_publishing_with_missing_expected_artifact_requires_manual_recovery(recovery) -> None:
+    """预期产物缺件：不收敛为成功，交人工处理且不自动删除现场。"""
+    build_id = recovery.add_build("PUBLISHING", "PUBLISHING")
+    attempt_dir = _seed_attempt_dirs(recovery, build_id)
+    _write_valid_package(recovery.output_target)
+    (recovery.output_target / "图纸目录.xlsx").unlink()
     _seed_publish_evidence(attempt_dir, recovery.output_target, recovery.output_target.parent / ".gone-staging")
 
     recover_pending_builds(recovery.project_root, recovery.database)
@@ -290,8 +315,7 @@ def test_publishing_with_tampered_target_requires_manual_recovery(recovery) -> N
         attempts = SqliteBuildRepository(session).list_attempts(build_id)
     assert run.status == "FAILED"
     assert attempts[-1].error_code == PUBLISH_RECOVERY_REQUIRED
-    # 歧义现场不被自动删除
-    assert recovery.output_target.is_dir()
+    assert (recovery.output_target / "sheetset.dst").is_file(), "现场不得被自动删除"
 
 
 def test_publishing_with_both_staging_and_target_requires_manual_recovery(recovery) -> None:
@@ -327,9 +351,9 @@ def test_publishing_without_evidence_requires_manual_recovery(recovery) -> None:
 def test_publishing_file_io_runs_outside_database_transaction(
     recovery, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """终审 Important ② 回归：verify_package 等文件 I/O 不得在数据库事务内执行。
+    """终审 Important ② 回归：verify_target 等文件 I/O 不得在数据库事务内执行。
 
-    用事务计数代理包裹 sessions.begin()，在 verify_package 被调用的瞬间
+    用事务计数代理包裹 sessions.begin()，在 verify_target 被调用的瞬间
     断言活跃事务数为 0（重构前恢复循环全程持有事务）。
     """
     from dst_builder.application import build_recovery as recovery_module
@@ -363,13 +387,13 @@ def test_publishing_file_io_runs_outside_database_transaction(
     monkeypatch.setattr(recovery.database, "sessions", _TrackedSessions())
 
     observed: dict[str, int] = {}
-    original_verify = recovery_module.verify_package
+    original_verify = recovery_module.verify_target
 
-    def spy_verify(target):
+    def spy_verify(target, expected_paths):
         observed["live_during_verify"] = counter["live"]
-        return original_verify(target)
+        return original_verify(target, expected_paths)
 
-    monkeypatch.setattr(recovery_module, "verify_package", spy_verify)
+    monkeypatch.setattr(recovery_module, "verify_target", spy_verify)
 
     outcomes = recovery_module.recover_pending_builds(
         recovery.project_root, recovery.database
@@ -377,7 +401,7 @@ def test_publishing_file_io_runs_outside_database_transaction(
 
     assert [outcome.error_code for outcome in outcomes] == [None]
     assert observed["live_during_verify"] == 0, (
-        "verify_package 在数据库事务内执行（耗时哈希持锁）"
+        "verify_target 在数据库事务内执行（文件 I/O 持锁）"
     )
 
 
