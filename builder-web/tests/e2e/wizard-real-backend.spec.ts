@@ -1,7 +1,6 @@
 // 真实后端 e2e（PLAN-DB-001 Task 9 controller 裁决）：vite 代理指向
 // tests/e2e/helpers/real_backend.py 拉起的真实 Builder FastAPI（真实项目库与
-// 编排/发布链路，CAD 执行器为进程内 fake）。唯一 mock 的端点是
-// POST /api/builds/{id}/handoff（Manager 交接适配器归 Task 10 实现）。
+// 编排/发布链路，CAD 执行器为进程内 fake）。全部 /api/** 端点均走真实后端。
 import {mkdtempSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
@@ -25,19 +24,7 @@ test.beforeAll(() => {
   writeFileSync(layoutDwt, "fake layout template bytes for e2e");
 });
 
-test("真实后端全流程：创建项目 → 资产 → 计划确认 → 构建 → 交接（mock）", async ({page}) => {
-  // Task 10 之前 handoff 端点不存在：仅 mock 此端点。
-  await page.route(/\/api\/builds\/[^/]+\/handoff$/, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        handoff_path: `${outputPath.replaceAll("\\", "/")}/metadata/handoff.json`,
-        workspace_id: "ws-e2e",
-      }),
-    }),
-  );
-
+test("真实后端全流程：创建项目 → 资产 → 计划确认 → 构建", async ({page}) => {
   await page.goto("/");
   await expect(page.getByTestId("wizard-shell")).toBeVisible();
 
@@ -81,16 +68,10 @@ test("真实后端全流程：创建项目 → 资产 → 计划确认 → 构�
   await page.getByTestId("confirm-plan").click();
   await expect(page.getByTestId("plan-confirmed")).toBeVisible({timeout: 10_000});
 
-  // 第 6 步：启动构建（真实编排：fake CAD → DST → 验证 → 原子发布）
+  // 第 6 步：启动构建（真实编排：fake CAD → DST → 验证 → 原子发布）——向导末步
   await page.getByTestId("dock-next").click();
   await expect(page.getByRole("heading", {name: "构建成果"})).toBeVisible();
   await page.getByTestId("start-build").click();
   await expect(page.getByTestId("build-status")).toHaveText(/SUCCEEDED/, {timeout: 30_000});
   await expect(page.getByTestId("published-path")).toContainText("example-package");
-
-  // 第 7 步：交接（Task 10 前为 mock 端点）
-  await page.getByTestId("dock-next").click();
-  await expect(page.getByRole("heading", {name: "验收与交接"})).toBeVisible();
-  await page.getByTestId("handoff-button").click();
-  await expect(page.getByTestId("handoff-result")).toContainText("handoff.json", {timeout: 10_000});
 });

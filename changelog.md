@@ -1,3 +1,10 @@
+## 2026-09-18（Builder 向导移除交接步，七步降为六步）
+
+- 删除 `builder-web/src/steps/HandoffStep.vue` 与向导中的交接调用；`TOTAL_STEPS` 由 7 改为 6，`STEP_NAMES` 与 `App.vue` 路由收口到「构建成果」为末步，`useWizardStore` 移除 `handoffDone` 及其在 completion 与重置逻辑中的引用。
+- 修正第 5 步预览的成果路径展示：`ReviewStep.vue` 的 `artifactPath` 与 e2e 夹具 `backend-mock.ts` 不再硬编码 `drawings/` 前缀，与服务端已在 Task 3 改为裸文件名的 `artifact_path` 对齐；此前该页提交前后自相矛盾且 e2e 无法发现。
+- 同步清理 Playwright 夹具中的 handoff 路由与调用计数、`wizard-flow.spec.ts` 的交接断言与 `wizard-real-backend.spec.ts` 的交接端点 mock。本次未修改 Python 后端。
+- 同批清理由本改动直接推出的残留：`ActionDock.vue` 的“下一步”可见性改用 `TOTAL_STEPS`（否则末步仍显示一个点击无效的按钮），`useWizardGuard.spec.ts` 的 `Completion` 常量与 `toBe(7)` 断言同步降为六步，并在 `wizard-flow.spec.ts` 主流程末步断言「无下一步按钮、无第 7 个导航项」。
+
 ## 2026-09-18（新增 Builder 产出直接由 Manager 打开的集成测试）
 
 - 新增 `tests/builder/integration/test_builder_output_opens_in_manager.py`：用真实 Builder 发布链路产出扁平成果目录后，Manager 以既有 `POST /api/workspaces/open` 打开其中的 `sheetset.dst`，断言工作区根为目标目录且解析到 Builder 产出的 DWG；另覆盖目标目录含用户自有文件与子目录时打开仍成功。该测试是移除交接代码前的安全网。本次未修改源码。

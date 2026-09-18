@@ -3,7 +3,6 @@
 import {nextTick, onBeforeUnmount, onMounted, provide} from "vue";
 import WizardShell from "./components/WizardShell.vue";
 import BuildStep from "./steps/BuildStep.vue";
-import HandoffStep from "./steps/HandoffStep.vue";
 import ProjectStep from "./steps/ProjectStep.vue";
 import ReviewStep from "./steps/ReviewStep.vue";
 import RulesStep from "./steps/RulesStep.vue";
@@ -49,7 +48,6 @@ onBeforeUnmount(() => {
     <SheetsStep v-else-if="store.step.value === 3" />
     <TemplatesStep v-else-if="store.step.value === 4" />
     <ReviewStep v-else-if="store.step.value === 5" />
-    <BuildStep v-else-if="store.step.value === 6" />
-    <HandoffStep v-else />
+    <BuildStep v-else />
   </WizardShell>
 </template>

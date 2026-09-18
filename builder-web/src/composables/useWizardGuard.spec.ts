@@ -11,20 +11,20 @@ import {
 
 type Completion = boolean[];
 
-const NONE: Completion = [false, false, false, false, false, false, false];
-const STEP1: Completion = [true, false, false, false, false, false, false];
-const STEP1234: Completion = [true, true, true, true, false, false, false];
-const ALL: Completion = [true, true, true, true, true, true, true];
+const NONE: Completion = [false, false, false, false, false, false];
+const STEP1: Completion = [true, false, false, false, false, false];
+const STEP1234: Completion = [true, true, true, true, false, false];
+const ALL: Completion = [true, true, true, true, true, true];
 // 第 1、3、4 步完成但第 2 步有缺口：
-const GAP2: Completion = [true, false, true, true, false, false, false];
+const GAP2: Completion = [true, false, true, true, false, false];
 
 describe("maxEnterableStep", () => {
   it("无完成步骤时最大可进入步骤为 1", () => {
     expect(maxEnterableStep(NONE)).toBe(1);
   });
 
-  it("前置全部完成时最大可进入步骤为 7", () => {
-    expect(maxEnterableStep(ALL)).toBe(7);
+  it("前置全部完成时最大可进入步骤为 6", () => {
+    expect(maxEnterableStep(ALL)).toBe(6);
   });
 
   it("完成到第 4 步时最大可进入步骤为 5", () => {
@@ -49,7 +49,7 @@ describe("canEnterStep", () => {
 
   it("前置全部完成后开放后续步骤", () => {
     expect(canEnterStep(5, STEP1234)).toBe(true);
-    expect(canEnterStep(7, ALL)).toBe(true);
+    expect(canEnterStep(6, ALL)).toBe(true);
   });
 
   it("已完成步骤可回访", () => {

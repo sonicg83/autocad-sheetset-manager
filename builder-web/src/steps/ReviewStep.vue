@@ -22,12 +22,14 @@ const preview = computed(() => {
     return null;
   }
   const layoutName = `${number} ${title}`;
+  // 服务端计划预览的 artifact_path 与 dwg_name 同为目标目录内的裸文件名（SPEC-DB-001 §5）
+  const dwgName = `${layoutName}.dwg`;
   return {
     number,
     title,
     layoutName,
-    dwgName: `${layoutName}.dwg`,
-    artifactPath: `drawings/${layoutName}.dwg`,
+    dwgName,
+    artifactPath: dwgName,
     cadVersion: store.draft.cad_version,
     projectName: store.draft.project.name,
     discipline: store.draft.project.discipline,

@@ -89,8 +89,7 @@ export interface WizardStore {
   fieldErrors: ComputedRef<{field: string; message: string; code: string}[]>;
   planConfirmed: Ref<boolean>;
   buildSucceeded: Ref<boolean>;
-  handoffDone: Ref<boolean>;
-  /** Task 9 接线：确认后的计划 ID 与构建 ID 上收，供步骤 6/7 使用。 */
+  /** Task 9 接线：确认后的计划 ID 与构建 ID 上收，供步骤 5/6 使用。 */
   planId: Ref<string | null>;
   buildId: Ref<string | null>;
   buildStatus: Ref<string | null>;
@@ -130,7 +129,6 @@ export function createWizardStore(): WizardStore {
   const cadabilities = ref<{cad_version: string; available: boolean}[]>([]);
   const planConfirmed = ref(false);
   const buildSucceeded = ref(false);
-  const handoffDone = ref(false);
   const planId = ref<string | null>(null);
   const buildId = ref<string | null>(null);
   const buildStatus = ref<string | null>(null);
@@ -210,7 +208,6 @@ export function createWizardStore(): WizardStore {
       templatesOk && !blockingByStep.has(4),
       planConfirmed.value,
       buildSucceeded.value,
-      handoffDone.value,
     ];
   });
 
@@ -241,7 +238,6 @@ export function createWizardStore(): WizardStore {
       focusedField.value = response.focused_field;
       planConfirmed.value = false;
       buildSucceeded.value = false;
-      handoffDone.value = false;
       planId.value = null;
       buildId.value = null;
       buildStatus.value = null;
@@ -401,7 +397,6 @@ export function createWizardStore(): WizardStore {
     }),
     planConfirmed,
     buildSucceeded,
-    handoffDone,
     planId,
     buildId,
     buildStatus,

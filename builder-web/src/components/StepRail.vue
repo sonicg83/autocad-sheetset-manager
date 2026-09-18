@@ -4,7 +4,7 @@ import {injectWizardStore} from "../composables/useWizardStore";
 
 const store = injectWizardStore();
 
-const STEP_NAMES = ["创建项目", "配置规则", "编排图纸", "匹配模板", "构建前检查", "构建成果", "验收与交接"] as const;
+const STEP_NAMES = ["创建项目", "配置规则", "编排图纸", "匹配模板", "构建前检查", "构建成果"] as const;
 
 function stepLabel(index: number): string {
   const ordinal = index + 1;

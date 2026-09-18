@@ -4,11 +4,13 @@
 <script setup lang="ts">
 import {computed} from "vue";
 import {injectWizardStore} from "../composables/useWizardStore";
+import {TOTAL_STEPS} from "../composables/useWizardGuard";
 
 const store = injectWizardStore();
 
 const nextEnabled = computed(() => store.completion.value[store.step.value - 1]);
-const nextVisible = computed(() => store.step.value < 7);
+// 末步不提供“下一步”（步骤总数以门禁状态机为唯一来源）
+const nextVisible = computed(() => store.step.value < TOTAL_STEPS);
 const currentComplete = computed(() => store.completion.value[store.step.value - 1]);
 
 const statusText = computed(() => {

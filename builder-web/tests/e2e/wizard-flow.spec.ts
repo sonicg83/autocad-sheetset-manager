@@ -1,5 +1,5 @@
-// 七步引导主流程 e2e（PLAN-DB-001 Task 5；SPEC-DB-001 §2）。
-// 后端全部由 backend-mock 拦截（controller 裁决）；步骤 5～7 的真实接线归 Task 9/10。
+// 六步引导主流程 e2e（PLAN-DB-001 Task 5；SPEC-DB-001 §2）。
+// 后端全部由 backend-mock 拦截（controller 裁决）；步骤 5～6 的真实接线归 Task 9。
 import {expect, test, type Page} from "@playwright/test";
 import {BackendMock} from "./helpers/backend-mock";
 
@@ -9,7 +9,7 @@ async function gotoWizard(page: Page, mock: BackendMock): Promise<void> {
   await expect(page.getByTestId("wizard-shell")).toBeVisible();
 }
 
-test("七步按顺序贯通：创建项目 → 规则 → 图纸 → 模板 → 提交并确认计划 → 构建 → 交接", async ({page}) => {
+test("六步按顺序贯通：创建项目 → 规则 → 图纸 → 模板 → 提交并确认计划 → 构建", async ({page}) => {
   const mock = new BackendMock(page, {inspect: {mode: "ok", layouts: ["Model", "A1", "A2"]}});
   await gotoWizard(page, mock);
 
@@ -59,26 +59,23 @@ test("七步按顺序贯通：创建项目 → 规则 → 图纸 → 模板 → 
   expect(mock.calls.plans).toBe(1);
   expect(mock.calls.confirm).toBe(1);
 
-  // 第 6 步：构建（mock 状态序列推进到 SUCCEEDED）
+  // 第 6 步：构建（mock 状态序列推进到 SUCCEEDED）——向导末步，构建成功即闭环
   await page.getByTestId("dock-next").click();
   await expect(page.getByRole("heading", {name: "构建成果"})).toBeVisible();
   await page.getByTestId("start-build").click();
   await expect(page.getByTestId("build-status")).toHaveText(/SUCCEEDED/, {timeout: 10_000});
   expect(mock.calls.startBuild).toBe(1);
-
-  // 第 7 步：交接 Manager（mock）
-  await page.getByTestId("dock-next").click();
-  await expect(page.getByRole("heading", {name: "验收与交接"})).toBeVisible();
-  await page.getByTestId("handoff-button").click();
-  await expect(page.getByTestId("handoff-result")).toContainText("handoff.json");
-  expect(mock.calls.handoff).toBe(1);
+  await expect(page.getByTestId("published-path")).toContainText("example-package");
+  // 末步不再有交接步：既无“下一步”，也无第 7 个导航项
+  await expect(page.getByTestId("dock-next")).toBeHidden();
+  await expect(page.getByTestId("rail-step-7")).toHaveCount(0);
 });
 
 test("前置门禁：未完成前置步骤时后续步骤不可进入，完成后逐步开放", async ({page}) => {
   const mock = new BackendMock(page);
   await gotoWizard(page, mock);
 
-  for (let step = 2; step <= 7; step += 1) {
+  for (let step = 2; step <= 6; step += 1) {
     await expect(page.getByTestId(`rail-step-${step}`)).toBeDisabled();
   }
   await expect(page.getByTestId("dock-next")).toBeDisabled();

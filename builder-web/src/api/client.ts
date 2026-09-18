@@ -88,7 +88,7 @@ export const api = {
       {method: "POST", body: JSON.stringify(body)},
     ),
   getCadabilities: () => requestJson<CadCapabilitiesResponse>("/api/cadabilities"),
-  // 步骤 5～7（Task 9 接线，§5/§6/§11）
+  // 步骤 5～6（Task 9 接线，§5/§6/§11）
   submitPlan: () => requestJson<PlanSubmitResponse>("/api/plans", {method: "POST"}),
   confirmPlan: (planId: string) =>
     requestJson<PlanConfirmationResponse>(`/api/plans/${encodeURIComponent(planId)}/confirm`, {method: "POST"}),

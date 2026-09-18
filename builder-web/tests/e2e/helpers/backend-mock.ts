@@ -1,8 +1,8 @@
 // Builder 后端全量 mock（PLAN-DB-001 Task 5 controller 裁决）：
 // e2e 用 page.route 拦截全部 /api/** 端点，不依赖真实后端进程。
 // 形状与 builder-web/src/api/openapi.json（SPEC-DB-001 §11）一致；
-// 步骤 5～7 端点（/api/plans、/api/builds…）由 Task 9/10 才实现，
-// 这里 mock 的响应形状只服务本任务前端状态机，真实接线时以 Task 9/10 契约为准。
+// 步骤 5～6 端点（/api/plans、/api/builds…）由 Task 9 才实现，
+// 这里 mock 的响应形状只服务本任务前端状态机，真实接线时以 Task 9 契约为准。
 import type {Page} from "@playwright/test";
 
 export interface MockDiagnostic {
@@ -66,7 +66,6 @@ export class BackendMock {
     confirm: 0,
     startBuild: 0,
     cancelBuild: 0,
-    handoff: 0,
   };
 
   state: {
@@ -259,7 +258,7 @@ export class BackendMock {
           sheet_number: "A-001",
           layout_name: "A-001 首层平面图",
           dwg_name: "A-001 首层平面图.dwg",
-          artifact_path: "drawings/A-001 首层平面图.dwg",
+          artifact_path: "A-001 首层平面图.dwg",
         },
       });
     }
@@ -292,14 +291,6 @@ export class BackendMock {
         progress: current.progress,
         error_code: null,
         published_path: current.status === "SUCCEEDED" ? "D:/deliveries/example-package" : null,
-      });
-    }
-
-    if (method === "POST" && path === "/api/builds/build-1/handoff") {
-      this.calls.handoff += 1;
-      return reply(200, {
-        handoff_path: "D:/deliveries/example-package/metadata/handoff.json",
-        workspace_id: "ws-1",
       });
     }
 
