@@ -15,6 +15,16 @@
 - 内置搜索不可用或报错时，再检查 `tvly` 安装与认证状态（`tvly --status`），并使用已注册的 `tavily-cli` 技能（`tvly search`、`tvly extract` 等，详见 `tavily-search` 等技能说明）。
 - 内置搜索与 Tavily 均不可用时，向用户说明并等待指示，不要静默改用其他搜索工具。
 
+## 本地 HTML 与浏览器预览
+
+- Chrome/Edge 默认安全策略禁止页面读取 `file://` 路径，直接用浏览器工具打开本地 HTML 会失败；查看本地 HTML 演示、报告或构建产物时，先用 Python 拉起本地 HTTP 服务，再通过 `http://127.0.0.1:<端口>/<页面>.html` 访问，不要要求用户手动启动服务，也不要反复重试 `file://`。
+- 服务只绑定 `127.0.0.1`，目录限定在待查看产物所在目录，用完立即结束该进程，避免长期占用端口或暴露工作区。
+
+```powershell
+uv run python -m http.server 8765 --bind 127.0.0.1 --directory <产物目录>
+# 访问 http://127.0.0.1:8765/<页面>.html，检查结束后关闭该进程
+```
+
 ## 文档归档约定
 
 - 文档治理的唯一权威设计是 `docs/integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md`；`ARCH-INT-001` 只保留历史背景。本节只保留日常执行约束，出现歧义时以现行权威设计为准。
