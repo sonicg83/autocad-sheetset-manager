@@ -19,6 +19,7 @@ import {useDialogFocus} from "../ui/dialogFocus";
 import type {ExtensionsPanel} from "../../composables/useExtensions";
 import AboutSection from "./AboutSection.vue";
 import ConfirmModal from "../ui/ConfirmModal.vue";
+import UiButton from "../ui/UiButton.vue";
 import UiIcon from "../ui/UiIcon.vue";
 import ExtensionSettingsHost from "./ExtensionSettingsHost.vue";
 import ExtensionsSection from "./ExtensionsSection.vue";
@@ -40,7 +41,8 @@ const {snapshot,loading,load,save}=useSettings();
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 
 const dialogEl=ref<HTMLDialogElement|null>(null);
-const saveButtonEl=ref<HTMLButtonElement|null>(null); // 保存成功语言切换后归还焦点的锚点
+// 保存成功语言切换后归还焦点的锚点（UiButton 组件实例，焦点落在其根 <button> $el 上）
+const saveButtonEl=ref<InstanceType<typeof UiButton>|null>(null);
 const errorSummaryEl=ref<HTMLDivElement|null>(null); // 422 错误摘要（tabindex=-1，可聚焦）
 const section=ref<"general"|"about"|"extensions">("general");
 // SC-17：当前进入的扩展配置子视图（同一 <dialog> 内的平级视图）与其宿主引用；
@@ -52,12 +54,10 @@ const edits=ref<Record<string,SettingsValue>>({}); // key → 编辑缓冲；删
 const pendingUnset=ref<string[]>([]); // 恢复继承标记：点击不落盘，随下次保存经 unset 提交
 const fieldErrors=ref<Record<string,ApiFieldError>>({}); // 422 逐字段结构化错误（message_key+params）
 const saving=ref(false);
-const savedVisible=ref(false);
 const conflictNotice=ref(""); // 409：配置已被其他窗口修改（输入保留，快照已刷新）
 const saveFailedNotice=ref(""); // 其他保存失败（网络/5xx）：内存值不替换，文案按当前语言
 const saveFailedDetail=ref(""); // 原始错误消息：仅作诊断详情（tooltip），不作界面翻译
 const loadFailed=ref(false);
-let savedTimer:ReturnType<typeof setTimeout>|null=null;
 let opener:HTMLElement|null=null; // 触发按钮（齿轮），关闭时归还焦点
 
 // ---- 打开/关闭生命周期 ----
@@ -220,9 +220,12 @@ function rowError(item:SettingsItem):string|undefined{
 const hasFieldErrors=computed(()=>Object.keys(fieldErrors.value).length>0);
 const hasValidationError=computed(()=>items.value.some(item=>rowError(item)!==undefined));
 const hasUnsaved=computed(()=>configHost.value?.dirty===true||items.value.some(item=>item.key in edits.value&&String(edits.value[item.key])!==String(item.value??""))||pendingUnset.value.length>0);
-// 无未保存修改时保存按钮保持可聚焦（与冻结 Demo 一致：成功保存后焦点回到保存按钮，
-// SPEC-DM-013 G6.3）：空保存由 onSave 的 no-op 守卫承担，不经 disabled 表达
-const saveDisabled=computed(()=>saving.value||schemaBlocked.value||hasValidationError.value);
+// 保存按钮双通道禁用（SPEC-DM-015 §5.2，PLAN-DM-034 Task 4）：
+// · saveNativeDisabled——强阻断（校验失败/保存中/Schema 只读）：原生 disabled，不可聚焦；
+// · saveAriaDisabled——clean（无未保存修改）：可聚焦的语义禁用（UiButton ariaDisabled），
+//   空保存由 onSave 首行守卫承担；成功保存后焦点仍回到本按钮。
+const saveNativeDisabled=computed(()=>saving.value||schemaBlocked.value||hasValidationError.value);
+const saveAriaDisabled=computed(()=>!hasUnsaved.value);
 
 function onUpdate(key:string,value:SettingsValue){
   edits.value[key]=value;
@@ -255,7 +258,10 @@ async function onBrowse(key:string){
 
 // ---- 保存状态机（SC-07；PLAN-DM-021 Task 3 语言事务）----
 async function onSave(){
-  if(saving.value)return; // 忙碌期防重复提交（按钮同时 disabled）
+  // 首行守卫（SPEC-DM-015 §5.2）：clean（无未保存修改）或强阻断期的任何激活途径
+  // （force 点击/Enter/Space/程序化触发）都不产生空提交——不调 API、不递增修订、
+  // 不显示新的成功 toast（与按钮 ariaDisabled/native disabled 双保险）
+  if(!(hasUnsaved.value&&!saveNativeDisabled.value))return;
   const firstError=items.value.find(item=>rowError(item)!==undefined);
   if(firstError){jumpToError(firstError.key);return}
   const set:Record<string,unknown>={};
@@ -266,6 +272,7 @@ async function onSave(){
     // 空串/纯空白路径=清空覆盖，写 null（与后端规整规则一致）
     set[item.key]=item.control==="path"&&typeof value==="string"&&!value.trim()?null:value;
   }
+  // 双保险 no-op 守卫：UI 守卫已拦下 clean 激活，这里兜底防御性触发路径
   if(!Object.keys(set).length&&!pendingUnset.value.length)return;
   saving.value=true;conflictNotice.value="";saveFailedNotice.value="";saveFailedDetail.value="";
   let savedOk=false;
@@ -275,7 +282,6 @@ async function onSave(){
     const unset=[...pendingUnset.value];
     await save(set,unset);
     edits.value={};pendingUnset.value=[];fieldErrors.value={};
-    showSaved();
     // SC-13：编号规则/并发相关配置变更后，追加预览重算提示
     //（不编号图纸关键字参与编号派生，故与后缀两项、并行度同属重算键集）
     const previewKeys=["enable_add_number_suffix","number_suffix_type","unnumbered_subset_keywords","cad_max_parallel","cad_version"];
@@ -308,9 +314,9 @@ async function onSave(){
   }
   if(savedOk){
     // 语言切换（含忙碌态结束）会整体重渲染：nextTick 后把焦点归还保存按钮
-    //（与冻结 Demo 一致：保存成功后焦点回到保存按钮，SPEC-DM-013 G6.3 / I18N-06）
+    //（与冻结 Demo 一致：保存成功后焦点回到保存按钮，SPEC-DM-015 §5.2 / I18N-06）
     await nextTick();
-    saveButtonEl.value?.focus();
+    saveButtonEl.value?.$el?.focus();
   }
 }
 
@@ -318,12 +324,6 @@ function jumpToError(key:string){
   const input=dialogEl.value?.querySelector<HTMLElement>(`[data-key="${key}"]`);
   input?.scrollIntoView({block:"center"});
   input?.focus();
-}
-
-function showSaved(){
-  savedVisible.value=true;
-  if(savedTimer)clearTimeout(savedTimer);
-  savedTimer=setTimeout(()=>{savedVisible.value=false},2500);
 }
 
 // ---- 诊断横幅（SC-12）----
@@ -438,7 +438,9 @@ const browseDisabled=computed(()=>{
         <div class="dlg-foot">
           <span v-if="configExtension===null&&conflictNotice" class="foot-notice warn" role="alert">{{conflictNotice}}</span>
           <span v-else-if="configExtension===null&&saveFailedNotice" class="foot-notice error" role="alert" :title="saveFailedDetail||undefined">{{saveFailedNotice}}</span>
-          <span v-if="configExtension===null&&savedVisible" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
+          <!-- 常规设置操作区状态：clean 固定复用 settings.saved（“已保存”，SPEC-DM-015 §5.2）；
+               dirty/saving 由按钮文案与字段行既有状态表达，不新增键 -->
+          <span v-if="configExtension===null&&!hasUnsaved" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
           <span v-if="configExtension&&configHost?.saved" class="saved-pill" role="status" data-testid="extension-settings-saved-pill">{{t("settings.extensionSettings.saved")}}</span>
           <span class="spacer"></span>
           <!-- SC-17 子视图页脚：本扩展独立保存（不与核心配置共享一次提交或修订号） -->
@@ -448,7 +450,9 @@ const browseDisabled=computed(()=>{
           </template>
           <template v-else>
             <button type="button" :disabled="saving" @click="tryClose">{{t("settings.cancel")}}</button>
-            <button ref="saveButtonEl" type="button" class="primary" :disabled="saveDisabled" @click="onSave">{{saving?t("settings.saving"):t("settings.save")}}</button>
+            <!-- PLAN-DM-034：常规设置主保存按钮迁至 UiButton（仅此一颗，其余裸按钮不动）；
+                 强阻断走原生 disabled，clean 走可聚焦语义禁用（aria-disabled） -->
+            <UiButton ref="saveButtonEl" class="primary" variant="primary" :disabled="saveNativeDisabled" :aria-disabled="saveAriaDisabled" @click="onSave">{{saving?t("settings.saving"):t("settings.save")}}</UiButton>
           </template>
         </div>
       </template>
