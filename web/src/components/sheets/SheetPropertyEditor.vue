@@ -115,7 +115,7 @@ watch(() => hasError.value, (now) => {
       <button type="button" :disabled="page >= totalPages - 1" @click="onPage(1)">{{ $t("sheets.editor.nextPage") }}</button>
       <span class="editor-status" role="status">{{ statusText }}</span>
       <span class="editor-spacer"></span>
-      <UiButton variant="secondary" @click="emit('cancel')">{{ $t("sheets.editor.cancel") }}</UiButton>
+      <UiButton variant="secondary" class="danger-text" @click="emit('cancel')">{{ $t("sheets.editor.cancel") }}</UiButton>
       <UiButton
         variant="primary"
         :disabled="context.invalid"
@@ -157,6 +157,9 @@ watch(() => hasError.value, (now) => {
 .editor-counts{color:var(--color-text-secondary)}
 .editor-status{color:var(--color-text-secondary)}
 .editor-spacer{flex:1}
+/* 取消=丢弃编辑缓冲（破坏性），恢复迁移前 .danger 的低强调红色文字提示；
+   不改 UiButton variant 语义，仅覆盖文字颜色（TemplateBar .danger-text 同一写法） */
+.editor-footer .danger-text{color:var(--color-danger)}
 @container (max-width:900px){.editor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:620px){.editor-grid{grid-template-columns:minmax(0,1fr)}}
 </style>

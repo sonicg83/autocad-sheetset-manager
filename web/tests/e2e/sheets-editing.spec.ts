@@ -57,6 +57,8 @@ test("取消不污染 base 且退出编辑", async ({page}) => {
   await openWorkspace(page);
   await openEditor(page);
   await page.getByRole("textbox", {name: "属性 图幅", exact: true}).fill("A2");
+  // 取消=丢弃编辑缓冲（破坏性），按钮保持迁移前 .danger 的低强调红色文字提示
+  await expect(page.getByRole("button", {name: "取消"})).toHaveCSS("color", "rgb(194, 48, 43)");
   await page.getByRole("button", {name: "取消"}).click();
   await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toHaveCount(0);
   // base 未被污染：图幅列仍为 A1，草稿无新增命令

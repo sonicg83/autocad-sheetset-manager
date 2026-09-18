@@ -1121,9 +1121,12 @@ test("custom 面板：输出过滤 dirty 提示随输入出现/改回快照后�
   await expect(filter).toHaveAttribute("aria-describedby", "catalog-settings-filter-hint");
 
   // dirty + 数量错误：红色优先（边框不是琥珀色），修改文字保留，保存原生禁用
-  const dirtyBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
   const fiftyOne = Array.from({length: 51}, (_, index) => `k${index}`).join(", ");
   await filter.fill(fiftyOne);
+  // dirty 态实拍琥珀边框，保证下方「错误红 ≠ dirty 琥珀」是比较两个真实状态
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(filter).toHaveCSS("border-color", "rgb(148, 98, 0)");
+  const dirtyBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
   await save.click();
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toBeVisible();
   await expect(field).toHaveClass(/is-dirty/);

@@ -262,6 +262,8 @@ async function onSave(){
   // （force 点击/Enter/Space/程序化触发）都不产生空提交——不调 API、不递增修订、
   // 不显示新的成功 toast（与按钮 ariaDisabled/native disabled 双保险）
   if(!(hasUnsaved.value&&!saveNativeDisabled.value))return;
+  // 防御性兜底：上方首行守卫已拦截无效保存，故此块对校验错误实际不可达
+  //（rowError 非空时 saveNativeDisabled 恒为 true）——保留仅为程序化触发路径兜底
   const firstError=items.value.find(item=>rowError(item)!==undefined);
   if(firstError){jumpToError(firstError.key);return}
   const set:Record<string,unknown>={};

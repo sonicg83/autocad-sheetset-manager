@@ -107,7 +107,14 @@ async function cancelModal(page:Page){
 // 空保存由提交守卫阻断（旧「clean 仍可执行空保存」例外已删除）。需要产生草稿动作的用例
 // 先修改图纸集名称制造真实差异再保存；同会话多次保存必须传不同 value（保存后基准随之更新）。
 async function saveSheetSetDraft(page:Page,value:string){
-  await page.getByLabel("图纸集名称", {exact: true}).fill(value);
+  // fill 前等名称字段可见且非 dirty（无未加入草稿的本地编辑；待写入 pending 不算，保存后仍合法）：
+  // 既保证基准投影已加载（fill 不会被随后的投影刷新覆盖），也保证 fill 产生与草稿缓冲的真实
+  // 差异——无差异时「更新图纸集」为语义禁用，空保存被提交守卫拦下。不假设具体基准名称
+  //（各用例 fixture 基准不同，且保存后输入框回显基准而非草稿值）。
+  const name = page.getByLabel("图纸集名称", {exact: true});
+  await expect(name).toBeVisible();
+  await expect(page.locator('[id="prop-status-@name"] .flag.dirty')).toHaveCount(0);
+  await name.fill(value);
   await page.getByRole("button",{name:"更新图纸集"}).click();
 }
 // 草稿栈浮窗（Task 5）：点计数芯片展开 / Esc 关闭（§7.2 抽屉模型，焦点归还芯片）
@@ -668,7 +675,6 @@ test("修复状态展示、写入门禁与确认发布流程",async({page})=>{
   // PLAN-DM-034：等草稿投影基准加载完成后再制造真实差异并保存（clean 空保存已由守卫阻断）；
   // 修复门禁下草稿缓冲保存仍允许，但「预览变更」保持禁用——这是修复门禁语义，不是 clean 语义禁用
   await page.getByRole("button",{name:"收起任务浮层"}).click();await page.getByRole("tab",{name:"属性"}).click();
-  await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("测试图纸集");
   await saveSheetSetDraft(page,"草稿名");
   await page.getByRole("tab",{name:"图纸"}).click();
   await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
