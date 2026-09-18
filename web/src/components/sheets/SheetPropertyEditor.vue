@@ -4,8 +4,13 @@
 // 编辑缓冲副本由 useSheetEditor 持有（本组件只呈现与转发，不直接改工作区对象）；
 // 「加入草稿」提交该图纸全部属性页，失败保留输入并呈现行内错误与可聚焦摘要；
 // 未给字段路径的错误只进摘要，不编造字段归因；「取消」明确丢弃当前缓冲。
+// PLAN-DM-034：无跨页修改时「加入草稿」为可聚焦的语义禁用（UiButton ariaDisabled +
+// onSubmit 守卫双保险）；dirty 字段比较当前值与草稿投影基准，琥珀提示在输入附近并经
+// aria-describedby 关联，错误状态优先于 dirty。页脚「取消/加入草稿」迁移到 UiButton，
+// 分页与错误跳转按钮不在本任务迁移。
 import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
+import UiButton from "../ui/UiButton.vue";
 import type {PropertyEditContext} from "../../features/sheets/types";
 import {PROPERTY_PAGE_SIZE} from "../../composables/useSheetEditor";
 
@@ -44,8 +49,22 @@ const statusText = computed(() => {
 });
 
 function fieldId(name: string) { return `prop-${props.context.objectId}-${name}`; }
+// dirty 一律比较当前值与可信基准（草稿投影），不用「曾编辑」标志：改回基准即清除。
+function isDirty(name: string) { return (props.context.values[name] ?? "") !== (props.context.original[name] ?? ""); }
+function fieldErrorId(name: string) { return `${fieldId(name)}-error`; }
+function fieldStatusId(name: string) { return `${fieldId(name)}-status`; }
+// 字段状态文字（dirty 提示 / 行内错误）经 aria-describedby 与输入关联。
+function describedBy(name: string) {
+  const ids = [isDirty(name) ? fieldStatusId(name) : "", props.context.errors[name] ? fieldErrorId(name) : ""].filter(Boolean);
+  return ids.length > 0 ? ids.join(" ") : undefined;
+}
 function onInput(name: string, event: Event) { emit("setValue", name, (event.target as HTMLInputElement).value); }
 function onPage(delta: number) { emit("setPage", page.value + delta); }
+// 提交守卫（PLAN-DM-034）：编程调用也造不出空草稿——跨页无修改或上下文失效时直接返回。
+function onSubmit() {
+  if (modifiedCount.value === 0 || props.context.invalid) return;
+  emit("submit");
+}
 // 错误摘要跳转到对应页和字段：清搜索并定位后聚焦
 async function onJumpError(name: string) {
   emit("jumpError", name);
@@ -76,15 +95,17 @@ watch(() => hasError.value, (now) => {
     </div>
 
     <div class="editor-grid">
-      <div v-for="name in pageNames" :key="name" class="prop-field" :class="{invalid: context.errors[name]}">
+      <div v-for="name in pageNames" :key="name" class="prop-field" :class="{invalid: context.errors[name], 'is-dirty': isDirty(name)}">
         <label :for="fieldId(name)">{{ $t("sheets.editor.propLabel", {name}) }}</label>
         <input
           :id="fieldId(name)"
           :value="context.values[name] ?? ''"
           :aria-invalid="context.errors[name] ? 'true' : undefined"
+          :aria-describedby="describedBy(name)"
           @input="(e) => onInput(name, e)"
         >
-        <span v-if="context.errors[name]" class="field-error">{{ context.errors[name] }}</span>
+        <span v-if="isDirty(name)" :id="fieldStatusId(name)" class="field-status">{{ $t("sheets.editor.statusDraft") }}</span>
+        <span v-if="context.errors[name]" :id="fieldErrorId(name)" class="field-error">{{ context.errors[name] }}</span>
       </div>
     </div>
 
@@ -94,8 +115,14 @@ watch(() => hasError.value, (now) => {
       <button type="button" :disabled="page >= totalPages - 1" @click="onPage(1)">{{ $t("sheets.editor.nextPage") }}</button>
       <span class="editor-status" role="status">{{ statusText }}</span>
       <span class="editor-spacer"></span>
-      <button type="button" class="danger" @click="emit('cancel')">{{ $t("sheets.editor.cancel") }}</button>
-      <button type="button" :disabled="context.invalid" :title="context.invalid ? $t('sheets.editor.invalidTooltip') : ''" @click="emit('submit')">{{ $t("sheets.editor.addToDraft") }}</button>
+      <UiButton variant="secondary" @click="emit('cancel')">{{ $t("sheets.editor.cancel") }}</UiButton>
+      <UiButton
+        variant="primary"
+        :disabled="context.invalid"
+        :aria-disabled="modifiedCount === 0"
+        :title="context.invalid ? $t('sheets.editor.invalidTooltip') : undefined"
+        @click="onSubmit"
+      >{{ $t("sheets.editor.addToDraft") }}</UiButton>
     </footer>
   </section>
 </template>
@@ -111,10 +138,15 @@ watch(() => hasError.value, (now) => {
 .editor-search input{width:var(--sheet-property-search-width)}
 /* 桌面端三列；窄视口逐级收为两列和一列。 */
 .editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
-.prop-field{display:flex;flex-direction:column;gap:4px}
+.prop-field{display:flex;flex-direction:column;gap:4px;border:1px solid transparent;border-radius:var(--radius-md)}
 .prop-field label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .prop-field input{width:100%;box-sizing:border-box}
+/* dirty 用现有琥珀令牌标出「未加入草稿」；invalid 必须写在 dirty 之后，红色错误优先。 */
+.prop-field.is-dirty{border-color:var(--color-warning);background:var(--color-warning-bg)}
+.prop-field.is-dirty input{border-color:var(--color-warning)}
+.prop-field.invalid{border-color:var(--color-danger);background:var(--color-danger-bg)}
 .prop-field.invalid input{border-color:var(--color-danger)}
+.field-status{color:var(--color-warning);font-size:var(--font-caption)}
 .field-error{color:var(--color-danger);font-size:var(--font-caption)}
 .error-summary{border:1px solid var(--color-danger);background:var(--color-danger-bg);border-radius:var(--radius-md,8px);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);outline:none}
 .error-summary:focus-visible{outline:2px solid var(--color-focus)}

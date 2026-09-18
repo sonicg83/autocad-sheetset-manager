@@ -434,6 +434,77 @@ test("混合批次显示不回退既有图纸属性值", async ({page}) => {
   await expect(firstRowPropCell(page, 0)).toHaveText("A2");
 });
 
+// —— PLAN-DM-034 任务 2：属性编辑状态与草稿动作对齐 ——
+// 初始「加入草稿」语义禁用：aria-disabled="true"、无原生 disabled、仍可聚焦；
+// 强制点击 / 键盘 / 程序化 click 都不能创建空草稿（请求计数不增、编辑不退出）。
+test("初始加入草稿语义禁用且强制触发不产生空草稿", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await openWorkspace(page);
+  await openEditor(page);
+  const editor = page.locator(".sheet-property-editor");
+  const submit = editor.getByRole("button", {name: "加入草稿", exact: true});
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+  await expect(submit).not.toHaveAttribute("disabled");
+  await submit.focus();
+  await expect(submit).toBeFocused();
+  // 注意：aria-disabled 会被 Playwright 视为 disabled，普通 locator.click() 会一直等待；
+  // 守卫断言必须用 force click / 键盘 / dispatchEvent，断言副作用不发生。
+  await submit.click({force: true});
+  await submit.press("Enter");
+  await submit.press("Space");
+  await submit.dispatchEvent("click");
+  await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toBeVisible();
+  await expect.poll(() => draftBodies.length).toBe(0);
+});
+
+test("dirty 字段琥珀状态与未加入草稿文字随基准值恢复清除", async ({page}) => {
+  const draftBodies: unknown[] = [];
+  await installSheetsFixture(page, {onDraftPut: (body) => draftBodies.push(body)});
+  await openWorkspace(page);
+  await openEditor(page);
+  const editor = page.locator(".sheet-property-editor");
+  const submit = editor.getByRole("button", {name: "加入草稿", exact: true});
+  const input = page.getByRole("textbox", {name: "属性 图幅", exact: true});
+  const field = editor.locator(".prop-field").filter({has: input});
+  await input.fill("A2");
+  // dirty：容器 is-dirty class、琥珀边框/底色（浅色令牌）、输入附近「尚未加入草稿」文字经 aria-describedby 关联
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(field).toHaveCSS("border-color", "rgb(148, 98, 0)");
+  await expect(field).toHaveCSS("background-color", "rgb(251, 241, 219)");
+  await expect(field.locator(".field-status")).toContainText("尚未加入草稿");
+  await expect(input).toHaveAttribute("aria-describedby", /-status/);
+  await expect(submit).not.toHaveAttribute("aria-disabled");
+  // 改回草稿投影基准值：dirty 提示与跨页修改数清除，按钮恢复语义禁用
+  await input.fill("A1");
+  await expect(field).not.toHaveClass(/is-dirty/);
+  await expect(field.locator(".field-status")).toHaveCount(0);
+  await expect(page.getByText("已修改 0 项", {exact: true})).toBeVisible();
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+});
+
+test("dirty 与字段错误组合：红色错误边框优先且未加入草稿文字保留", async ({page}) => {
+  await installSheetsFixture(page, {
+    failDraftSave: () => ({code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效"}}),
+  });
+  await openWorkspace(page);
+  await openEditor(page);
+  const editor = page.locator(".sheet-property-editor");
+  const input = page.getByRole("textbox", {name: "属性 图幅", exact: true});
+  const field = editor.locator(".prop-field").filter({has: input});
+  await input.fill("A2");
+  await editor.getByRole("button", {name: "加入草稿", exact: true}).click();
+  await expect(page.getByRole("alert", {name: "加入草稿错误摘要"})).toBeVisible();
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(field).toHaveClass(/invalid/);
+  // 红色错误边框优先于琥珀 dirty 边框（容器与输入一致）
+  await expect(field).toHaveCSS("border-color", "rgb(194, 48, 43)");
+  await expect(field.locator("input")).toHaveCSS("border-color", "rgb(194, 48, 43)");
+  // 「尚未加入草稿」文字保留且仍与输入关联
+  await expect(field.locator(".field-status")).toContainText("尚未加入草稿");
+  await expect(input).toHaveAttribute("aria-describedby", /-status/);
+});
+
 // —— PLAN-DM-021 Task 6：英文关键矩阵（SPEC-DM-013 I18N-07/08/16）——
 // 语言来源用 page 级路由（响应快照 ui_locale=en-US），不写共享 settings.json；
 // 断言属性名、属性值、字段错误（后端原消息）与图纸编号不被翻译。
