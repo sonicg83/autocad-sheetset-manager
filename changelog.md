@@ -1,6 +1,7 @@
 ## 2026-09-18（新增 Builder 产出直接由 Manager 打开的集成测试）
 
 - 新增 `tests/builder/integration/test_builder_output_opens_in_manager.py`：用真实 Builder 发布链路产出扁平成果目录后，Manager 以既有 `POST /api/workspaces/open` 打开其中的 `sheetset.dst`，断言工作区根为目标目录且解析到 Builder 产出的 DWG；另覆盖目标目录含用户自有文件与子目录时打开仍成功。该测试是移除交接代码前的安全网。本次未修改源码。
+- 审查修复轮 1（仅测试）：断言 `layout["resolution_source"] == "relative"` 钉住解析机制——Manager 的候选顺序为相对 → 绝对 → 同目录 basename → `root_override`，只断言 `resolved_path` 落在目标目录内时 basename 兜底会掩盖「DST 引用写成 `drawings/` 前缀、磁盘仍是扁平布局」的回归；对 `published_path` 与 `resolved_path` 先做非空断言，避免 `None` 触发 `TypeError` 而读不出是哪个字段；`.dwg` 后缀断言改为断言解析到具体文件；用例 2 在加入用户文件与子目录后重跑与用例 1 同强度的根目录与解析断言。
 
 ## 2026-09-18（Builder 正式成果布局扁平化与 metadata 移除）
 
