@@ -80,8 +80,13 @@ const hasFieldErrors = computed(() => Object.keys(fieldErrors.value).length > 0)
 const unavailableText = computed(() => customRouteKey.value === ""
   ? t("settings.extensionSettings.customUnavailableMissingRouteKey")
   : t("settings.extensionSettings.customUnavailable", {route_key: customRouteKey.value}));
-// 保存可用性：加载中/只读/无改动/无快照都不可提交（空保存是 no-op，不由按钮之外表达）
-const saveDisabled = computed(() => saving.value || readOnly.value || !dirty.value || snapshot.value === null);
+// 保存按钮双通道禁用（SPEC-DM-015 §5.2，PLAN-DM-034 Task 5）：与常规设置同一口径。
+// · saveNativeDisabled——强阻断（保存中/只读/无快照/字段错误）：原生 disabled，不可聚焦；
+// · saveAriaDisabled——clean（无未保存修改）：可聚焦的语义禁用，空保存由 save 入口守卫承担；
+// · saveDisabled——兼容读取项（两者之或），旧消费方按单一布尔判断仍成立。
+const saveNativeDisabled = computed(() => saving.value || readOnly.value || snapshot.value === null || hasFieldErrors.value);
+const saveAriaDisabled = computed(() => !dirty.value);
+const saveDisabled = computed(() => saveNativeDisabled.value || saveAriaDisabled.value);
 
 // 进入焦点（§3.3）：优先子视图首个可用控件；只读或 fail-closed 状态下没有可用控件，
 // 落到带 tabindex="-1" 的诊断条，任何状态下都不退回 <body>
@@ -162,8 +167,12 @@ function jumpToError(key: string): void {
     return;
   }
 }
-// 保存后焦点归还错误摘要（422）或保持原位：摘要由 save() 的失败路径决定是否出现
+// 保存入口业务守卫（SPEC-DM-015 §5.2）：与按钮双通道同口径——clean 与强阻断期
+// （保存中/只读/无快照/字段错误）的任何激活途径（force 点击/Enter/Space/外部 ref 调用）
+// 都不进入 save()：不产生空提交，也不重放必然 422 的字段错误。协议层 save() 内部的
+// dirty/saving/readOnly/snapshot 守卫保留为双保险。
 async function saveAndFocus(): Promise<void> {
+  if (saveNativeDisabled.value || saveAriaDisabled.value) return;
   await save();
   if (hasFieldErrors.value) {
     await nextTick();
@@ -171,8 +180,8 @@ async function saveAndFocus(): Promise<void> {
   }
 }
 
-// 对话框的底部按钮与关闭闸门只读这三项；其余呈现状态留在本组件内部
-defineExpose({dirty, saving, saved, saveDisabled, save: saveAndFocus, back});
+// 对话框的底部按钮与关闭闸门只读这几项；其余呈现状态留在本组件内部
+defineExpose({dirty, saving, saved, saveNativeDisabled, saveAriaDisabled, saveDisabled, save: saveAndFocus, back});
 </script>
 <template>
   <section ref="hostEl" class="cfg" data-view="extension-config" aria-labelledby="extension-settings-title">

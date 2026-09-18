@@ -301,13 +301,19 @@ test("g8-ext-10 custom 面板输出图纸过滤字段错误态（浅色·1280×7
   // 输入保留（不截断、不静默丢弃首尾）且未落盘：服务端值仍是默认空配置
   await expect(filter).toHaveValue(overLimit);
   expect(mock.server.value[FILTER_FIELD]).toBeUndefined();
-  // 失败后仍可修正：保存按钮保持可点，子视图不关闭
-  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
+  // 字段错误走强阻断（PLAN-DM-034 Task 5）：保存按钮原生禁用，修正输入即清除错误并恢复可保存
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toHaveAttribute("disabled", "");
 
   await filter.scrollIntoViewIfNeeded();
   await expect(filter).toBeInViewport();
   await expect(error).toBeInViewport();
   await shoot(page, info, "g8-ext-10-custom-filter-error-light.png");
+
+  // 失败后仍可修正：继续输入即清除字段错误，保存恢复可点，子视图不关闭
+  await filter.fill("作废");
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
 });
 
 // ---------------------------------------------------------------------------

@@ -367,6 +367,83 @@ test("扩展配置入口：白名单外与空 route_key 仍 fail-closed，不动
   await expect(missing).not.toContainText("不在本程序的编译期白名单内");
 });
 
+test("generated 设置：clean 保存可聚焦语义禁用，强激活与 Enter/Space 不产生空提交；dirty 保存成功后重建快照显示已保存", async ({page}) => {
+  const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const save = dialog.getByRole("button", {name: "保存", exact: true});
+  // clean：可聚焦的语义禁用（aria-disabled），不挂原生 disabled（与常规设置同一双通道口径）
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await expect(save).not.toHaveAttribute("disabled");
+  await save.focus();
+  await expect(save).toBeFocused();
+  // 强激活与键盘激活都不产生空提交：不调 PUT、不显示成功
+  await save.click({force: true});
+  await save.press("Enter");
+  await save.press("Space");
+  await page.waitForTimeout(300); // 给「守卫失效时」的假 PUT 留出发送窗口
+  expect(mock.puts).toHaveLength(0);
+  await expect(dialog.getByTestId("extension-settings-saved-pill")).toHaveCount(0);
+
+  // dirty：语义禁用解除，保存可执行；成功后以服务端规范化值重建快照并显示「已保存」
+  await dialog.locator('input[data-key="batch_limit"]').fill("70");
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect.poll(() => mock.puts).toHaveLength(1);
+  await expect(dialog.getByTestId("extension-settings-saved-pill")).toBeVisible();
+  await expect(dialog.locator('input[data-key="batch_limit"]')).toHaveValue("70");
+  // 保存成功后回到 clean：重新语义禁用且仍可聚焦
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await expect(save).not.toHaveAttribute("disabled");
+  await save.focus();
+  await expect(save).toBeFocused();
+  // 保存成功清空编辑缓冲：字段行 dirty 提示一并清除
+  await expect(dialog.locator('[data-field="batch_limit"]').locator('[data-testid="extension-settings-field-dirty"]')).toHaveCount(0);
+});
+
+test("generated 设置：字段行 dirty 可见文字与稳定 ID 经 aria-describedby 关联；dirty+错误时红色优先、修改文字保留、保存不可执行", async ({page}) => {
+  const mock = await installExtensionSettings(page);
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const row = dialog.locator('[data-field="batch_limit"]');
+  const input = dialog.locator('input[data-key="batch_limit"]');
+  const save = dialog.getByRole("button", {name: "保存", exact: true});
+  const dirtyBadge = row.locator('[data-testid="extension-settings-field-dirty"]');
+  // clean：无 dirty 文字，describedby 不含 dirty 状态
+  await expect(dirtyBadge).toHaveCount(0);
+  expect(await input.getAttribute("aria-describedby") ?? "").not.toContain("extension-settings-dirty-");
+  // 编辑：行出现琥珀 dirty class 与可见「有未保存修改」，并经稳定 ID 关联到输入
+  await input.fill("999");
+  await expect(row).toHaveClass(/dirty/);
+  await expect(dirtyBadge).toBeVisible();
+  await expect(dirtyBadge).toHaveText("有未保存修改");
+  await expect(dirtyBadge).toHaveAttribute("id", "extension-settings-dirty-batch_limit");
+  expect(await input.getAttribute("aria-describedby")).toContain("extension-settings-dirty-batch_limit");
+  // dirty + 字段错误（保存 422）：错误 class 后置覆盖 dirty，但修改文字保留；保存原生禁用
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect(dialog.getByTestId("extension-settings-error-summary")).toBeFocused();
+  await expect(row).toHaveClass(/dirty/);
+  await expect(row).toHaveClass(/error/);
+  await expect(dirtyBadge).toBeVisible();
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+  await expect(save).toHaveAttribute("disabled", "");
+  expect(await input.getAttribute("aria-describedby")).toContain("extension-settings-error-batch_limit");
+  expect(mock.puts).toHaveLength(1);
+  // 修正输入即清除字段错误：保存恢复可执行
+  await input.fill("80");
+  await expect(row).toHaveClass(/dirty/);
+  await expect(row).not.toHaveClass(/error/);
+  await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeEnabled();
+});
+
 test("generated 设置：字段按服务端顺序呈现、默认值来自 Provider，保存只提交本扩展快照", async ({page}) => {
   const mock = await installExtensionSettings(page);
   await installExtensions(page, [generatedExtension()]);
@@ -625,7 +702,9 @@ test("扩展设置 高版本只读：EXTENSION_SETTINGS_SCHEMA_NEWER 禁用输�
   await expect(readonly).toBeFocused();
   await expect(dialog.locator('input[data-key="batch_limit"]')).toBeDisabled();
   await expect(dialog.getByRole("switch", {name: "回写标题栏"})).toBeDisabled();
+  // 只读走强阻断（原生 disabled，不可聚焦），不是 clean 的语义禁用
   await expect(dialog.getByRole("button", {name: "保存"})).toBeDisabled();
+  await expect(dialog.getByRole("button", {name: "保存"})).toHaveAttribute("disabled", "");
   // 只读不可脏：返回不弹确认，直接回列表且焦点归还「配置」按钮
   await dialog.getByRole("button", {name: "返回扩展列表"}).click();
   await expect(dialog.locator(CONFIG_VIEW)).toHaveCount(0);
@@ -978,6 +1057,56 @@ test("custom 面板：过滤关键词 50/51 项与 100/101 字符的字段级错
   // 同样等保存返回：下面的服务端值断言不再是可重试断言，不能靠已提前满足的错误清除来同步
   await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
   expect(mock.server.value[FILTER_FIELD]).toEqual(["作废"]);
+});
+
+test("custom 面板：输出过滤 dirty 提示随输入出现/改回快照后清除；dirty+错误红色优先且保存不可执行", async ({page}) => {
+  const mock = await installCatalogSettings(page);
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const filter = dialog.locator(CATALOG_FILTER);
+  const field = dialog.getByTestId("catalog-settings-filter-field");
+  const dirtyBadge = dialog.getByTestId("catalog-settings-filter-dirty");
+  const save = dialog.getByRole("button", {name: "保存", exact: true});
+  // clean：无 dirty 提示，aria-describedby 只有既有 hint
+  await expect(dirtyBadge).toHaveCount(0);
+  await expect(filter).toHaveAttribute("aria-describedby", "catalog-settings-filter-hint");
+  // 编辑：字段容器出现琥珀 dirty class 与可见「有未保存修改」，describedby 关联 hint + dirty
+  await filter.fill("草图");
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(dirtyBadge).toBeVisible();
+  await expect(dirtyBadge).toHaveText("有未保存修改");
+  await expect(dirtyBadge).toHaveAttribute("id", "catalog-settings-filter-dirty");
+  const dirtyDescribedBy = await filter.getAttribute("aria-describedby");
+  expect(dirtyDescribedBy).toContain("catalog-settings-filter-hint");
+  expect(dirtyDescribedBy).toContain("catalog-settings-filter-dirty");
+  // 改回服务端快照（未配置=空）：提示清除，describedby 回到只有 hint
+  await filter.fill("");
+  await expect(field).not.toHaveClass(/is-dirty/);
+  await expect(dirtyBadge).toHaveCount(0);
+  await expect(filter).toHaveAttribute("aria-describedby", "catalog-settings-filter-hint");
+
+  // dirty + 数量错误：红色优先（边框不是琥珀色），修改文字保留，保存原生禁用
+  const dirtyBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
+  const fiftyOne = Array.from({length: 51}, (_, index) => `k${index}`).join(", ");
+  await filter.fill(fiftyOne);
+  await save.click();
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toBeVisible();
+  await expect(field).toHaveClass(/is-dirty/);
+  await expect(field).toHaveClass(/is-error/);
+  await expect(dirtyBadge).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("disabled", "");
+  expect(mock.puts).toHaveLength(1);
+  const errorBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
+  expect(errorBorderColor).not.toBe(dirtyBorderColor); // 错误红色覆盖 dirty 琥珀
+  // 修正输入即清除字段错误：保存恢复可执行
+  await filter.fill("作废");
+  await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);
+  await expect(save).toBeEnabled();
 });
 
 test("custom 面板：模板名重复是 Provider 级 409，按普通保存失败呈现且不冒充修订冲突", async ({page}) => {

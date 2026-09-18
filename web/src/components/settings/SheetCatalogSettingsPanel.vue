@@ -10,7 +10,7 @@
      没有工作区快照：不渲染字段浏览器、不伪造预览与兼容性诊断（ColumnEditor 不传校验
      反馈即隐藏徽标与摘要），但表达式文本仍可编辑，光标协议也保持可用（不降级为 no-op）。 -->
 <script setup lang="ts">
-import {nextTick, onMounted, ref, watch} from "vue";
+import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {ExtensionSettingsState} from "../../composables/useExtensionSettings";
 import {useSheetCatalogSettings} from "../../composables/useSheetCatalogSettings";
@@ -27,6 +27,16 @@ const {state: confirmState, confirmAction, resolve: resolveConfirm} = useConfirm
 const catalog = useSheetCatalogSettings(props.state);
 const readOnly = ref(false);
 watch(() => props.state.readOnly.value, value => { readOnly.value = value; }, {immediate: true});
+
+// 输出过滤字段级 dirty 提示（PLAN-DM-034 Task 5）：直接复用控制器已导出的 filterDirty
+//（控制器对「服务端规范化数组重建的文本」比较，不在这里重新比较快照），与 hint/error
+// 一起经稳定 ID 关联到输入的 aria-describedby。
+const filterDescribedBy = computed(() => {
+  const ids = ["catalog-settings-filter-hint"];
+  if (catalog.filterDirty.value) ids.push("catalog-settings-filter-dirty");
+  if (catalog.filterError.value !== "") ids.push("catalog-settings-filter-error");
+  return ids.join(" ");
+});
 
 onMounted(() => {
   // 宿主已完成 GET（子视图只在快照存在时渲染）：以服务端值初始化编辑缓冲。
@@ -93,7 +103,10 @@ async function confirmRemove(): Promise<void> {
 
     <section class="cs-group" aria-labelledby="catalog-settings-output-title">
       <h4 id="catalog-settings-output-title">{{ $t("extensions.sheetCatalog.settingsGroupOutput") }}</h4>
-      <div class="cs-field" :class="{'is-error': catalog.filterError.value !== ''}">
+      <div
+        class="cs-field" data-testid="catalog-settings-filter-field"
+        :class="{'is-dirty': catalog.filterDirty.value, 'is-error': catalog.filterError.value !== ''}"
+      >
         <label for="catalog-settings-filter">{{ $t("extensions.sheetCatalog.settingsFilterLabel") }}</label>
         <!-- 单行文本框：GET 的服务端数组以 ", " 连接回显，PUT 提交原始文本由 Provider 规范化
              （服务端最终校验语法、结构与关键词数量/长度，前端不截断也不预判） -->
@@ -101,12 +114,18 @@ async function confirmRemove(): Promise<void> {
           id="catalog-settings-filter" data-testid="catalog-settings-filter"
           type="text" :value="catalog.filterText.value"
           :placeholder="$t('extensions.sheetCatalog.settingsFilterPlaceholder')"
-          :aria-describedby="'catalog-settings-filter-hint'"
+          :aria-describedby="filterDescribedBy"
           :aria-invalid="catalog.filterError.value !== '' ? 'true' : 'false'"
           @input="catalog.setFilterText(($event.target as HTMLInputElement).value)"
         >
         <p id="catalog-settings-filter-hint" class="cs-hint">{{ $t("extensions.sheetCatalog.settingsFilterHint") }}</p>
-        <p v-if="catalog.filterError.value" class="cs-error" role="alert" data-testid="catalog-settings-filter-error">{{ catalog.filterError.value }}</p>
+        <!-- 字段级 dirty 可见文字（PLAN-DM-034 Task 5）：role="status" 温和播报，
+             与字段级 422 错误（下方的 role="alert"）是两种层级——错误存在时红色优先 -->
+        <p
+          v-if="catalog.filterDirty.value" id="catalog-settings-filter-dirty" class="cs-dirty"
+          role="status" data-testid="catalog-settings-filter-dirty"
+        >{{ $t("extensions.sheetCatalog.dirtyBadge") }}</p>
+        <p v-if="catalog.filterError.value" id="catalog-settings-filter-error" class="cs-error" role="alert" data-testid="catalog-settings-filter-error">{{ catalog.filterError.value }}</p>
       </div>
     </section>
 
@@ -134,7 +153,10 @@ async function confirmRemove(): Promise<void> {
 .cs-field{display:grid;gap:5px;min-width:0}
 .cs-field label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .cs-field input{padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;font-size:var(--font-label);background:var(--color-bg-surface);color:var(--color-text-primary)}
+/* dirty 琥珀在 error 红色之前声明：字段级 422 错误存在时红色覆盖琥珀（错误优先） */
+.cs-field.is-dirty input{border-color:var(--color-warning)}
 .cs-field.is-error input{border-color:var(--color-danger)}
 .cs-hint{margin:0;font-size:var(--font-caption);color:var(--color-text-secondary);line-height:1.8}
+.cs-dirty{margin:0;font-size:var(--font-caption);line-height:1.8;color:var(--color-warning)}
 .cs-error{margin:0;font-size:var(--font-caption);line-height:1.8;color:var(--color-danger)}
 </style>

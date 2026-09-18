@@ -443,10 +443,13 @@ const browseDisabled=computed(()=>{
           <span v-if="configExtension===null&&!hasUnsaved" class="saved-pill" role="status" data-testid="settings-saved-pill">{{t("settings.saved")}}</span>
           <span v-if="configExtension&&configHost?.saved" class="saved-pill" role="status" data-testid="extension-settings-saved-pill">{{t("settings.extensionSettings.saved")}}</span>
           <span class="spacer"></span>
-          <!-- SC-17 子视图页脚：本扩展独立保存（不与核心配置共享一次提交或修订号） -->
+          <!-- SC-17 子视图页脚：本扩展独立保存（不与核心配置共享一次提交或修订号）。
+               PLAN-DM-034 Task 5：保存按钮迁至 UiButton（与常规设置同一双通道口径）——
+               clean 绑 saveAriaDisabled（可聚焦语义禁用），saving/只读/无快照/字段错误
+               绑 saveNativeDisabled（原生禁用）；空保存与字段错误重放由宿主 save 入口守卫承担 -->
           <template v-if="configExtension">
             <button type="button" @click="configHost?.back()">{{t("settings.extensionSettings.back")}}</button>
-            <button type="button" class="primary" :disabled="configHost===null||configHost.saveDisabled" @click="configHost?.save()">{{configHost?.saving?t("settings.extensionSettings.saving"):t("settings.extensionSettings.save")}}</button>
+            <UiButton class="primary" variant="primary" :disabled="configHost===null||configHost.saveNativeDisabled" :aria-disabled="configHost!==null&&configHost.saveAriaDisabled" @click="configHost?.save()">{{configHost?.saving?t("settings.extensionSettings.saving"):t("settings.extensionSettings.save")}}</UiButton>
           </template>
           <template v-else>
             <button type="button" :disabled="saving" @click="tryClose">{{t("settings.cancel")}}</button>
