@@ -18,6 +18,8 @@ related:
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development`（当前会话逐任务实施）或 `superpowers:executing-plans`（独立会话按检查点实施）。每个任务严格按 TDD 的 RED → GREEN → REFACTOR 执行，复选框是唯一进度记录。
 
+> **交接契约取代说明（2026-09-18）：** 本计划的「Manager 显式接管」部分已被 [RFC-INT-002](../../../docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 与 [ADR-INT-001](../../../docs/integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md) 取消，并由 [PLAN-INT-002](../../integration/PLAN-INT-002-cancel-builder-manager-handoff.md) 实施完成：Builder 发布即结束，Manager 通过既有 `POST /api/workspaces/open` 直接打开成果目录中的 DST，不再存在 `HandoffBundle` 交接、成果包 `metadata/` 与 `drawings/` 包装层、`handoff_sources` 表与 `kind=handoff_initial` 显式初始修订。据此失效的验收项为：Task 10 的交接与初始修订条目、Task 12 中「成果发布 → Manager 接管 → 初始修订恢复」的真实端到端门禁、§4 检查点 G4「显式接管」、§5 中「正式成果根目录恰好只有 `drawings/`、`metadata/`」与「Manager 只通过版本化 handoff 接管」两条、§6 风险表中的「Manager 初始修订不可恢复」。仍然有效的是 Task 1–9 的生成与发布链路与 Task 11 的桌面打包与共存，但成果布局按 [SPEC-DB-001](../../../docs/dst-builder/specs/SPEC-DB-001-minimal-generation-loop.md) §9 的三件套执行。以下任务正文与完成标准按「历史记录不回改」逐字保留，交接相关条目不再作为验收依据。
+
 **Goal:** 交付第一条真实纵向闭环：七步向导创建“一项目、一张图纸”，生成不可变计划，通过 AutoCAD 2016/2020 Worker 生成 DWG，从零生成 DST 和图纸目录，原子发布只有 `drawings/`、`metadata/` 两个根目录的成果包，并由 DST Manager 显式接管为初始修订。
 
 **Architecture:** 新增独立 `dst_builder` 后端、独立 `builder-web` 前端、独立桌面入口和项目数据库；当 Builder 成为第二个真实消费方时，把 DST Codec、AcSm 契约诊断和 Core Console 进程原语提取到 `dst_platform`，Manager 继续通过薄兼容导出使用这些实现。Builder 不导入 `dst_manager.*`。Manager 只通过版本化 `handoff.json` 接管，不读取 Builder 数据库。
@@ -353,6 +355,8 @@ class DrawingBuilder(Protocol):
 - [x] Commit：`贯通 Builder 构建编排与原子成果发布`。
 
 ### Task 10：实现 Manager 显式交接和真实初始修订
+
+> **本节交接条目已由 [RFC-INT-002](../../../docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 取消（2026-09-18）：** 显式交接链路已全部删除——`HandoffBundle` 六步验证、`POST /api/handoffs/open`、一键交接 adapter 与 `kind=handoff_initial` 真实初始修订均不再存在，`handoff_sources` 表由 Task 7 的迁移 `0008_drop_handoff_sources` 删除。仍然有效的是 `document_revisions.kind` 与 `source_json` 两列（保留为通用修订元数据）。以下条目逐字保留为历史记录，交接相关验收项不再具有约束力。
 
 **Files:**
 

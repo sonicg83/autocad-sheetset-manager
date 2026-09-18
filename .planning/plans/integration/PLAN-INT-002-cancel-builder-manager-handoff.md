@@ -1,7 +1,7 @@
 ---
 id: PLAN-INT-002
 title: 取消 Builder 与 Manager 显式交接契约实施计划
-status: proposed
+status: completed
 owners:
   - integration
 created: 2026-09-18
@@ -1422,3 +1422,39 @@ git commit -m "同步计划类文档并收口交接契约退场"
 ## 实际验证摘要
 
 本节是执行产物，不是计划内容。Task 8 Step 4 执行完毕后，在此逐条记录实际命令与结论（通过 / 失败 / 跳过及原因）；未执行的检查必须写明缺失的环境条件。"真实 AutoCAD 双版本系统测试"因不属于本计划范围，默认记录为未执行。
+
+### Task 8 实际执行记录
+
+执行环境：Windows 11；分支 `refactor/cancel-builder-manager-handoff`；起点提交 `fe39d12`；本机执行时间 2026-09-19 00:44～00:53（+0800，UTC 2026-09-18）。计划周期与 `changelog.md` 章节沿用 `2026-09-18` 标签，故 frontmatter 的 `updated` 保持 `2026-09-18`。原始日志保存于 `.superpowers/sdd/PLAN-INT-002-cancel-builder-manager-handoff/` 下的 `task8-*.log`。
+
+| # | 命令 | 实际结果 |
+| --- | --- | --- |
+| 1 | `$env:UV_LINK_MODE="copy"` + `uv sync --dev` | **通过**（退出码 0）：`Resolved 70 packages in 1ms` / `Audited 63 packages in 8ms`。 |
+| 2 | `uv run ruff check .` | **通过**（退出码 0）：`All checks passed!`。 |
+| 3 | `uv run python -m pytest` | **通过**（退出码 0）：`2173 passed, 75 skipped, 347 warnings in 129.24s`，0 failed / 0 error。 |
+| 4 | `uv lock --check` | **通过**（退出码 0）：`Resolved 70 packages in 1ms`。 |
+| 5 | `uv run alembic upgrade head` | **通过**（退出码 0）。默认库 `.dst-manager-data/dst-manager.db` 已在 head，无待执行迁移。另以 `DST_MANAGER_DATABASE_URL` 指向全新库复验：`0001_initial → … → 0007_db001_builder_handoff → 0008_drop_handoff_sources` 逐级成功，`alembic_version = 0008_drop_handoff_sources`，`handoff_sources` 不存在，`document_revisions` 含 `kind` 与 `source_json`。 |
+| 6 | `web`：`npm run build` | **通过**（退出码 0）：`check:api`（含全新临时库上的完整迁移链）、`check:i18n`（953 键 / 9 域）、`check:ui`、`vue-tsc -b`、`vite build` 依次成功。 |
+| 7 | `web`：`npm run test:e2e` | **通过**（退出码 0）：**579 passed / 0 failed**（3.5m），无 flaky 报告。 |
+| 8 | `builder-web`：`npm run test:unit` | **通过**（退出码 0）：2 个文件 / **27 passed**。 |
+| 9 | `builder-web`：`npm run build` | **通过**（退出码 0）：`vue-tsc -b` 与 `vite build` 成功。 |
+| 10 | `builder-web`：`npm run test:e2e` | **通过**（退出码 0）：**20 passed / 0 failed**（22.5s）。 |
+
+**偏差（两条 `npm ci` 未执行）：** 本分支未改动任何依赖文件（`git diff --name-only <base> HEAD -- pyproject.toml uv.lock package.json package-lock.json web/package*.json builder-web/package*.json` 输出为空），而 `npm ci` 在 OneDrive 路径上会重建约 250 MB `node_modules` 且不提供本计划所需的额外验证信息。改按 AGENTS.md「根据改动风险运行最小充分测试」，实际执行其子集门禁：`web` 的 `npm run build` 与 `npm run test:e2e`、`builder-web` 的 `npm run test:unit`、`npm run build` 与 `npm run test:e2e`，全部通过（第 6–10 项）。
+
+### 十项最终验收逐条结论
+
+| 验收项 | 结论 | 实际证据 |
+| --- | --- | --- |
+| 1. `SPEC-DB-001` 规范性内容不含交接与 `metadata/`；§9 固定三件套与 `verify_target`；§10 标记 `superseded` 并保留历史正文 | 满足 | §9「正式成果目录」固定三件套布局与 `verify_target(root, expected_paths)` 判定、旧成果包处置；§10 标题下 `superseded` 说明，其六步契约正文逐字保留（§3 attempt 目录的 `metadata/` 按 RFC 保持不动）。 |
+| 2. `ARCH-INT-002` §6 无 `HandoffBundle` 契约；`ADR-INT-001` 记录取代关系；`RFC-INT-001` 正文未被改写 | 满足 | §6 现为「当前没有跨产品交接契约」；`docs/integration/adr/ADR-INT-001-cancel-builder-manager-handoff.md` 存在且含「替代关系」节；`git diff <base> HEAD -- docs/integration/rfcs/RFC-INT-001-….md` 为空。 |
+| 3. 交接符号零引用；`manifest_sha256` / `package_id` 仅存于两迁移文件 | 满足 | 对 `handoff_to_manager`、`read_handoff_package`、`HandoffOperations`、`HandoffPackage`、`HandoffResponse`、`HandoffOpenResponse`、`MANIFEST_SCHEMA`、`HANDOFF_SCHEMA`、`package_id_from_manifest_sha256`、`HANDOFF_INITIAL_REVISION_KIND` 在 `src/ tests/ migrations/ web/src builder-web/src builder-web/tests plugins/` 全量 grep **零命中**；`manifest_sha256` 与 `package_id` 仅命中 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`。 |
+| 4. 发布目标目录直接含三件套，无 `metadata/`、无 `drawings/` | 满足 | `tests/builder/unit/test_package_layout.py::test_assembled_files_sit_directly_in_target_root` 断言键集合恰为 `{sheetset.dst, A-001 首层平面图.dwg, 图纸目录.xlsx}` 且不含 `/`；`tests/builder/integration/test_builder_output_opens_in_manager.py::test_manager_opens_builder_published_dst` 对真实发布目录断言其条目恰为这三项；两项均实测通过。 |
+| 5. `verify_target` 在目标目录含额外文件时通过，预期产物缺失或为空时失败，预期集合为空时失败 | 满足 | `test_package_layout.py` 相应 6 项用例实测通过（含额外文件 / 内容变更 / 缺件 / 空文件 / 空预期集合 / 完整集合）；调用点只有 `publisher.py` 的暂存与事后校验、`build_recovery.py` 的恢复裁决。 |
+| 6. `0008_drop_handoff_sources.py` 存在；全新库 `alembic upgrade head` 成功；`handoff_sources` 不存在而 `kind` / `source_json` 存在 | 满足 | 第 5 项命令与全新库 schema 查询（见上表）。 |
+| 7. Builder 向导 6 步；两侧 Playwright 全通过 | 满足 | `builder-web/src/composables/useWizardGuard.ts` 为 `TOTAL_STEPS = 6`，`StepRail.vue` 的 `STEP_NAMES` 为 6 项；`web` e2e 579 passed、`builder-web` e2e 20 passed。 |
+| 8. `ruff` / `pytest` / `uv lock --check` 通过 | 满足 | 第 2–4 项命令。 |
+| 9. `changelog.md` 每个任务后有可核验记录 | 满足 | 顶部 7 条 `2026-09-18` 章节依次对应 Task 7、6、5、4、3、2、1 的实际产出，均含可核验的文件与行为变化；本次新增第 8 条。 |
+| 10. 真实 AutoCAD 系统测试报告为未执行 | 满足（记为未执行） | 本机未设置 `DST_MANAGER_RUN_AUTOCAD` / `DST_BUILDER_RUN_AUTOCAD`；`tests/system_autocad` 68 项与 `tests/builder/system_autocad` 1 项（合计 69）全部 `skipped`；缺失条件为本机 Core Console、匹配版本插件与私有样本。全量 pytest 的 75 项 skipped 中 69 项即此。 |
+
+**未出现的已知缺陷：** 控制方在任务说明中告知的既有 Builder 缺陷（`GET /api/builds/{id}` 返回 `status="SUCCEEDED"` 且 `published_path=None`）在本次全量 pytest 首跑即 0 failed，无需复跑判定；后续若在 `tests/builder/integration/test_builder_output_opens_in_manager.py` 或 `test_build_api.py` 出现该签名，应记为既有缺陷而非本计划的回归。

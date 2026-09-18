@@ -172,10 +172,12 @@ DST 的布局引用是相对文件名，与所在目录名无关，因此扁平�
 
 ## 开放问题
 
-1. **`verify_package` 新语义的最终形态**：本文档给出「至少包含预期产物集合」的判定，需在修订 `SPEC-DB-001` §9 时固定为规范文字，并确保 `publisher.py` 与 `build_recovery.py` 两处调用共享同一判定。
-2. **Builder 向导的末端动作**：删除 `HandoffStep` 后，向导最后一个动作只剩 `BuildStep` 的「已发布：`<path>`」文本，用户没有跳转到成果目录的手段。是否需要提供「在资源管理器中打开成果目录」或「复制路径」由产品决定。注意 Builder 的 shell 目前未暴露 JS 桥（`src/dst_builder/interfaces/shell.py` 的 `create_window` 未传 `js_api`），Manager 的 `ShellBridge` 是现成参考，但引入桥属于新增工作。
-3. **Manager 失去初始修订的补偿**：取消交接后不再有 `kind=handoff_initial` 的永久初始修订。功能上无损失——首次编辑的基线仍由 `editing.py` 的操作前快照保留——但修订历史中不再有「接管时的原始状态」。若将来需要，正确做法是在 Manager 侧提供显式的「建立初始修订」操作，而不是复活交接。
-4. **既有成果包的处置**：已发布的成果包带有 `metadata/` 目录。Manager 打开这类目录时是否需要提示或忽略该目录，需在修订 §9 时一并确定。
+> **落地状态（2026-09-18，`PLAN-INT-002` 完成后）：** 第 1 项与第 4 项已随本 RFC 的实施落地（落点见各条目标注）；第 2 项与第 3 项**仍然开放**，`PLAN-INT-002` 刻意不解决，不得在实施过程中自行发挥。
+
+1. **`verify_package` 新语义的最终形态（已落实）**：本文档给出「至少包含预期产物集合」的判定，需在修订 `SPEC-DB-001` §9 时固定为规范文字，并确保 `publisher.py` 与 `build_recovery.py` 两处调用共享同一判定。**落点：**`SPEC-DB-001` §9 已把该判定固定为规范文字；`verify_target(root, expected_paths)` 定义于 `src/dst_builder/infrastructure/filesystem/package.py`，被 `publisher.py` 的暂存校验与事后校验、`build_recovery.py` 的启动恢复裁决共用（`PLAN-INT-002` Task 2 / Task 3）。
+2. **Builder 向导的末端动作（仍然开放）**：删除 `HandoffStep` 后，向导最后一个动作只剩 `BuildStep` 的「已发布：`<path>`」文本，用户没有跳转到成果目录的手段。是否需要提供「在资源管理器中打开成果目录」或「复制路径」由产品决定。注意 Builder 的 shell 目前未暴露 JS 桥（`src/dst_builder/interfaces/shell.py` 的 `create_window` 未传 `js_api`），Manager 的 `ShellBridge` 是现成参考，但引入桥属于新增工作。
+3. **Manager 失去初始修订的补偿（仍然开放）**：取消交接后不再有 `kind=handoff_initial` 的永久初始修订。功能上无损失——首次编辑的基线仍由 `editing.py` 的操作前快照保留——但修订历史中不再有「接管时的原始状态」。若将来需要，正确做法是在 Manager 侧提供显式的「建立初始修订」操作，而不是复活交接。
+4. **既有成果包的处置（已落实）**：已发布的成果包带有 `metadata/` 目录。Manager 打开这类目录时是否需要提示或忽略该目录，需在修订 §9 时一并确定。**落点：**`SPEC-DB-001` §9 已明确 Manager 打开这类旧成果目录时「不读取该目录，也不因此拒绝打开」（`PLAN-INT-002` Task 2）。
 
 ## 评审结论
 

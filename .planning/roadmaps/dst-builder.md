@@ -5,7 +5,7 @@ status: proposed
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 related:
   - VISION-DB-001
   - PRD-DB-001
@@ -66,21 +66,18 @@ related:
 
 退出条件：故障矩阵证明不会发布半成品，标准黄金项目能够重复生成。
 
-### 阶段 5：Manager 交接与产品化
+### 阶段 5：产品化与交付
 
-- `handoff.json` 契约与 Manager 初始修订；
-- 一键交接和完整来源追踪；
 - 绿色包、诊断工具和真实桌面验收；
 - 首个可正式使用版本。
 
-退出条件：打包后的 Builder 使用真实工程完成创建、构建、验收和 Manager 交接闭环。
+退出条件：打包后的 Builder 使用真实工程完成创建、构建、验收，并在 DST Manager 中打开已发布 DST。
 
 ## 交付结果
 
 - 独立 DST Builder 桌面产品；
 - 可复现的项目修订、计划、构建和成果记录；
 - 可脱离 Builder 使用的 `drawings/` 成果；
-- 版本化 `metadata/` 与 Builder → Manager 交接契约；
 - 经两个 AutoCAD 版本和真实桌面验证的发布证据。
 
 ## 依赖
