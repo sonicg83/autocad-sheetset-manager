@@ -9,7 +9,7 @@
     "/api/projects": {
       "post": {
         "summary": "Create Project",
-        "description": "创建项目库（project.dstb）、初始草稿与 assets/、builds/ 目录。",
+        "description": "创建项目库；目录已是 Builder 项目时幂等打开（opened_existing=True，200）。",
         "operationId": "create_project_api_projects_post",
         "requestBody": {
           "content": {
@@ -24,6 +24,16 @@
         "responses": {
           "201": {
             "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStateResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1421,6 +1431,11 @@
       },
       "ProjectStateResponse": {
         "properties": {
+          "opened_existing": {
+            "type": "boolean",
+            "title": "Opened Existing",
+            "default": false
+          },
           "project": {
             "$ref": "#/components/schemas/ProjectModel"
           },

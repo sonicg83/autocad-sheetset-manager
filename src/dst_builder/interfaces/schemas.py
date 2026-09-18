@@ -114,6 +114,11 @@ class DiagnosticModel(_ContractModel):
 class ProjectStateResponse(_ContractModel):
     """GET /api/projects/current 与 PATCH /api/projects/current/draft 响应。"""
 
+    opened_existing: bool = False
+    """仅 POST /api/projects 携带语义：True=目录已是 Builder 项目，本次为幂等打开。
+
+    GET/PATCH 响应恒为 False（默认值，无语义）。"""
+
     project: ProjectModel
     draft: DraftFieldsModel
     wizard_step: int

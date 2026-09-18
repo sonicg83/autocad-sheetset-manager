@@ -219,7 +219,7 @@ export interface paths {
         put?: never;
         /**
          * Create Project
-         * @description 创建项目库（project.dstb）、初始草稿与 assets/、builds/ 目录。
+         * @description 创建项目库；目录已是 Builder 项目时幂等打开（opened_existing=True，200）。
          */
         post: operations["create_project_api_projects_post"];
         delete?: never;
@@ -616,6 +616,11 @@ export interface components {
             draft: components["schemas"]["DraftFieldsModel"];
             /** Focused Field */
             focused_field: string | null;
+            /**
+             * Opened Existing
+             * @default false
+             */
+            opened_existing: boolean;
             project: components["schemas"]["ProjectModel"];
             /** Updated At */
             updated_at: string;
@@ -1075,6 +1080,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStateResponse"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {

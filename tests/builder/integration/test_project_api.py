@@ -124,17 +124,30 @@ def test_create_project_writes_database_and_directories(
     assert (project_root / "builds").is_dir()
 
 
-def test_create_project_rejects_existing_database(client: TestClient) -> None:
-    """目标 project.dstb 已存在时拒绝再创建（PROJECT_PATH_INVALID）。"""
-    _create_project(client)
+def test_duplicate_create_opens_existing_project(client: TestClient) -> None:
+    """目录已是 Builder 项目时重复提交创建 → 幂等打开既有项目而非 409。
 
-    response = client.post("/api/projects", json=_create_body())
-    assert response.status_code == 409
-    payload = response.json()
-    assert payload["code"] == "PROJECT_PATH_INVALID"
-    assert payload["message"]
-    assert payload["recovery_action"]
-    # 拒绝后原项目库仍可正常读取。
+    桌面壳重启后无法重开既有项目的回归修复：POST /api/projects 语义改为
+    "创建或打开"，opened_existing=True 告知前端提示"已为你打开既有项目"。
+    """
+    created = _create_project(client)
+    assert created["opened_existing"] is False
+    original_id = created["project"]["id"]
+    # 先编辑草稿，证明打开不会重置既有会话数据。
+    patched = client.patch(
+        "/api/projects/current/draft",
+        json=_patch_body(created["updated_at"], **{"project.name": "改名工程"}),
+    )
+    assert patched.status_code == 200, patched.text
+
+    reopened = client.post("/api/projects", json=_create_body())
+
+    assert reopened.status_code == 200, reopened.text
+    payload = reopened.json()
+    assert payload["opened_existing"] is True
+    assert payload["project"]["id"] == original_id
+    assert payload["draft"]["project"]["name"] == "改名工程"
+    # 打开后项目库仍可正常读取与保存。
     assert client.get("/api/projects/current").status_code == 200
 
 
@@ -145,18 +158,18 @@ def test_error_status_inherits_via_mro_for_unregistered_subclass(
     from dst_builder.application.assets import AssetHashMismatchError
     from dst_builder.application.projects import (
         BuilderProjectService,
-        ProjectExistsError,
+        DraftConflictError,
     )
     from dst_builder.interfaces.api import _status_for_error
 
-    class UnregisteredExistsError(ProjectExistsError):
+    class UnregisteredConflictError(DraftConflictError):
         """未在 _STATUS_BY_ERROR 登记的子类（基类映射 409）。"""
 
     class UnregisteredHashMismatchError(AssetHashMismatchError):
         """未登记的资产子类（基类映射 409）。"""
 
     # 纯函数路径：MRO 命中基类状态码。
-    assert _status_for_error(UnregisteredExistsError("x")) == 409
+    assert _status_for_error(UnregisteredConflictError("x")) == 409
     assert _status_for_error(UnregisteredHashMismatchError("x")) == 409
     # 完全未登记的错误族仍落默认 400。
     class UnregisteredError(Exception):
@@ -166,12 +179,12 @@ def test_error_status_inherits_via_mro_for_unregistered_subclass(
 
     # API 路径：handler 抛出的子类异常得到 409 而非 400。
     def raise_subclass(self, creation):
-        raise UnregisteredExistsError("注入：子类异常")
+        raise UnregisteredConflictError("注入：子类异常")
 
     monkeypatch.setattr(BuilderProjectService, "create_project", raise_subclass)
     response = client.post("/api/projects", json=_create_body())
     assert response.status_code == 409, response.text
-    assert response.json()["code"] == "PROJECT_PATH_INVALID"
+    assert response.json()["code"] == "DRAFT_CONFLICT"
 
 
 def test_create_project_without_factory_root_uses_request_root(tmp_path: Path) -> None:
@@ -585,3 +598,30 @@ def test_unbound_factory_binds_project_root_after_creation(tmp_path: Path) -> No
     # project.name 是创建时写入 projects 表的行字段，草稿保存只更新 drafts。
     assert saved.json()["draft"]["project"]["name"] == "改名工程"
     assert saved.json()["updated_at"] != updated_at
+
+
+def test_unbound_factory_reopens_existing_project_after_restart(tmp_path: Path) -> None:
+    """壳重启（未绑定工厂）后重复提交同一目录 → 打开既有项目而非 409。
+
+    桌面壳每次启动都以 project_root=None 创建应用；重启后用户在第 1 步
+    重新输入同一项目目录，幂等打开让会话得以恢复。
+    """
+    project_root = tmp_path / "project"
+    first = TestClient(create_builder_app(None))
+    created = first.post("/api/projects", json=_create_body(project_root))
+    assert created.status_code == 201, created.text
+    original_id = created.json()["project"]["id"]
+
+    # 模拟壳重启：全新应用实例 + 全新客户端（仍未绑定根目录）。
+    second = TestClient(create_builder_app(None))
+    reopened = second.post("/api/projects", json=_create_body(project_root))
+
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["opened_existing"] is True
+    assert reopened.json()["project"]["id"] == original_id
+    # 重开后草稿可保存（创建路径回绑同样适用于打开路径）。
+    saved = second.patch(
+        "/api/projects/current/draft",
+        json=_patch_body(reopened.json()["updated_at"]),
+    )
+    assert saved.status_code == 200, saved.text

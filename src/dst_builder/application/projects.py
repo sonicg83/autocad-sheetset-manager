@@ -44,7 +44,6 @@ __all__ = [
     "DraftConflictError",
     "DraftPatch",
     "ProjectCreation",
-    "ProjectExistsError",
     "ProjectNotInitializedError",
     "ProjectServiceError",
     "ProjectState",
@@ -72,15 +71,6 @@ class ProjectServiceError(Exception):
 
     def _recovery_action(self) -> str:  # pragma: no cover - 子类覆盖
         return ""
-
-
-class ProjectExistsError(ProjectServiceError):
-    """目标 project.dstb 已存在，拒绝再次创建。"""
-
-    code = PROJECT_PATH_INVALID
-
-    def _recovery_action(self) -> str:
-        return "该目录已是 Builder 项目；直接打开现有项目即可"
 
 
 class ProjectNotInitializedError(ProjectServiceError):
@@ -236,7 +226,9 @@ class BuilderProjectService:
         root = self._require_root()
         db_path = project_database_path(root)
         if db_path.exists():
-            raise ProjectExistsError("目标位置已存在 project.dstb", field="project_root")
+            # 幂等语义（创建即打开）：目录已是 Builder 项目时打开既有项目，
+            # 不重置草稿、不补建目录；是否为既有项目由响应的 opened_existing 区分。
+            return self.load_current()
 
         create_project_database(db_path)
         (root / "assets").mkdir(exist_ok=True)

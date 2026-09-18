@@ -324,6 +324,10 @@ export function createWizardStore(): WizardStore {
         output_path: input.outputPath.trim(),
       });
       hydrateFromResponse(response);
+      if (response.opened_existing) {
+        // 幂等创建：目录已是 Builder 项目，本次为打开而非新建（壳重启恢复场景）。
+        showToast({kind: "success", message: "该目录已是 Builder 项目，已为你打开既有项目"});
+      }
     } catch (error) {
       const apiError = error as BuilderApiError;
       createProjectError.value = apiError.message;

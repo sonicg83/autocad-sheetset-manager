@@ -125,6 +125,7 @@ export class BackendMock {
   private nextState() {
     this.updatedAtCounter += 1;
     return {
+      opened_existing: false,
       project: {
         id: "0b0e-uuid",
         name: this.state.draft.project.name,

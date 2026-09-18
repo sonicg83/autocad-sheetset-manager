@@ -10,7 +10,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -33,10 +33,10 @@ from dst_builder.application.projects import (
     DraftConflictError,
     DraftPatch,
     ProjectCreation,
-    ProjectExistsError,
     ProjectNotInitializedError,
     ProjectServiceError,
     ProjectState,
+    project_database_path,
 )
 from dst_builder.domain.models import (
     AssetRole,
@@ -83,7 +83,6 @@ from dst_builder.runtime import app_version
 __all__ = ["create_builder_app"]
 
 _STATUS_BY_ERROR = {
-    ProjectExistsError: 409,
     ProjectNotInitializedError: 404,
     DraftConflictError: 409,
     # 资产纳入（§11）：422 = 请求可修正（类型/大小门禁），404 = 引用不存在，
@@ -239,8 +238,9 @@ def _to_domain_draft(model: DraftFieldsModel) -> DraftProjectV1:
     )
 
 
-def _state_response(state: ProjectState) -> ProjectStateResponse:
+def _state_response(state: ProjectState, *, opened_existing: bool = False) -> ProjectStateResponse:
     return ProjectStateResponse(
+        opened_existing=opened_existing,
         project=ProjectModel(
             id=state.project.id,
             name=state.project.name,
@@ -349,10 +349,21 @@ def create_builder_app(
             ),
         )
 
-    @app.post("/api/projects", status_code=201, response_model=ProjectStateResponse)
-    def create_project(body: ProjectCreateRequest, request: Request) -> ProjectStateResponse:
-        """创建项目库（project.dstb）、初始草稿与 assets/、builds/ 目录。"""
+    @app.post(
+        "/api/projects",
+        status_code=201,
+        response_model=ProjectStateResponse,
+        responses={200: {"model": ProjectStateResponse}},
+    )
+    def create_project(
+        body: ProjectCreateRequest, request: Request, response: Response
+    ) -> ProjectStateResponse:
+        """创建项目库；目录已是 Builder 项目时幂等打开（opened_existing=True，200）。"""
         service = _service_for_create(request, body)
+        root = service.project_root
+        assert root is not None  # _service_for_create 已保证
+        opened_existing = project_database_path(root).exists()
+        response.status_code = 200 if opened_existing else 201
         state = service.create_project(
             ProjectCreation(
                 name=body.name,
@@ -362,10 +373,10 @@ def create_builder_app(
             )
         )
         if request.app.state.project_root is None:
-            # 桌面壳模式（工厂未绑定根目录）：应用内创建成功即回绑，后续
+            # 桌面壳模式（工厂未绑定根目录）：创建/打开成功即回绑，后续
             # 草稿/资产/构建请求才能定位项目根；否则全部请求报"未绑定项目根目录"。
-            request.app.state.project_root = Path(body.project_root)
-        return _state_response(state)
+            request.app.state.project_root = root
+        return _state_response(state, opened_existing=opened_existing)
 
     @app.get("/api/projects/current", response_model=ProjectStateResponse)
     def get_current_project(request: Request) -> ProjectStateResponse:

@@ -1,3 +1,8 @@
+## 2026-09-18（Builder 桌面壳保存与项目打开修复）
+
+- `deae499` 修复桌面壳（未绑定项目根目录启动）应用内创建项目后 `app.state.project_root` 未回绑，导致后续草稿自动保存全部报"未绑定项目根目录"的缺陷（含未绑定工厂回归测试）。
+- 创建语义改为**创建即打开**（幂等）：目录已是 Builder 项目时 `POST /api/projects` 打开既有项目（HTTP 200 + `opened_existing=true`，草稿与项目数据不重置），删除 `ProjectExistsError`/409 分支；前端在打开既有项目时提示"该目录已是 Builder 项目，已为你打开"。由此桌面壳重启后重新输入同一项目目录即可恢复会话；双侧 OpenAPI 契约同步重生成。
+
 ## 2026-09-18（PLAN-DB-001 DST Builder 最小生成闭环：Task 1–11 补记与收口）
 
 - **骨架与门禁**：`df03eba` 建立 DST Builder 独立产品骨架与依赖门禁（`dst-builder` CLI、三层包拆分、AST 禁止 import）；`9d716c7` 加固依赖门禁测试的框架黑名单与检测能力验证；`c45195a` 补全 `dst_platform` 门禁禁止集为产品包与框架。
