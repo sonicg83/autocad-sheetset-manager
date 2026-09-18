@@ -877,4 +877,8 @@ test("应用偏好：AutoCAD 版本只在配置中心选择，主题顶栏切换
   await openSettingsDialog(page);
   await expect(cadGroup.getByLabel("AutoCAD 2016")).toBeChecked();
   await expect(themeGroup.getByLabel("深色")).toBeChecked();
+  // 还原基线：本用例持久化了 ui_theme=dark / cad_version=2016 到共享配置文件，且是本文件
+  // 最后一个落盘用例——不还原会把深色主题泄漏给并行 spec（图纸页属性编辑器按真实后端
+  // 启动），让按浅色令牌断言的 dirty/错误配色用例整轮稳定失败（PLAN-DM-034 收口回归）。
+  writeSettingsFile({ui_locale: "zh-CN"}, 0);
 });
