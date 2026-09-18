@@ -100,6 +100,59 @@ describe("UiButton", () => {
     expect(mount(UiButton, {props: {label: "关闭"}}).attributes("aria-label")).toBe("关闭");
     expect(mount(UiButton, {slots: {default: () => "确定"}}).attributes("aria-label")).toBeUndefined();
   });
+
+  it("ariaDisabled 保持可聚焦：不写原生 disabled，输出 aria-disabled 与统一禁用类", () => {
+    // 可聚焦语义禁用（PLAN-DM-034）：按钮必须仍能进入 Tab 顺序并被读屏播报「禁用」，
+    // 所以只落 `aria-disabled` 与统一类，绝不写原生 `disabled`（原生 disabled 不可聚焦）。
+    const wrapper = mount(UiButton, {props: {ariaDisabled: true}, slots: {default: () => "保存"}});
+    expect(wrapper.element.tagName).toBe("BUTTON");
+    expect((wrapper.element as HTMLButtonElement).disabled).toBe(false);
+    expect(wrapper.attributes("disabled")).toBeUndefined();
+    expect(wrapper.attributes("aria-disabled")).toBe("true");
+    expect(wrapper.classes()).toContain("ui-button--aria-disabled");
+  });
+
+  it("ariaDisabled 拦截原生 click：父监听器与组件 click emit 计数均为 0，且事件被 preventDefault", async () => {
+    // 原生 button 的 Enter/Space/程序化 .click() 最终都汇聚到根按钮的 click 事件，
+    // 故只需在根按钮上派发一次原生 click 即覆盖全部触发路径。
+    const onClick = vi.fn();
+    const wrapper = mount(UiButton, {props: {ariaDisabled: true}, attrs: {onClick}, slots: {default: () => "保存"}});
+    const event = new MouseEvent("click", {bubbles: true, cancelable: true});
+    wrapper.element.dispatchEvent(event);
+    await wrapper.vm.$nextTick();
+    expect(event.defaultPrevented).toBe(true);
+    expect(onClick).toHaveBeenCalledTimes(0);
+    expect(wrapper.emitted("click")).toBeUndefined();
+  });
+
+  it("loading 与 disabled 仍走原生 disabled，不受 ariaDisabled 途径影响", () => {
+    const loading = mount(UiButton, {props: {loading: true, ariaDisabled: true}, slots: {default: () => "保存"}});
+    const disabled = mount(UiButton, {props: {disabled: true}, slots: {default: () => "保存"}});
+    expect((loading.element as HTMLButtonElement).disabled).toBe(true);
+    expect((disabled.element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("ariaDisabled=false 不输出多余属性，点击仍正常 emit", async () => {
+    const onClick = vi.fn();
+    const wrapper = mount(UiButton, {attrs: {onClick}, slots: {default: () => "保存"}});
+    expect(wrapper.attributes("aria-disabled")).toBeUndefined();
+    expect(wrapper.classes()).not.toContain("ui-button--aria-disabled");
+    await wrapper.trigger("click");
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted("click")).toHaveLength(1);
+  });
+
+  it("hover/active 外观排除两种禁用态，禁用光标同时命中 :disabled 与统一禁用类，且不设 pointer-events:none", () => {
+    // 源文本断言（与 UiInput/UiSelect 的 hover 契约同一写法）：aria-disabled 按钮没有原生
+    // `:disabled` 伪类可依赖，hover/active 必须显式排除统一禁用类，否则会盖过禁用外观；
+    // 禁用光标则要同时命中两种禁用态。`pointer-events:none` 是硬约束：设了它鼠标反馈和
+    // 事件守卫测试都会失效。
+    const style = scopedStyle(readSource("./UiButton.vue"));
+    expect(style).toContain(":hover:not(:disabled):not(.ui-button--aria-disabled)");
+    expect(style).toContain(":active:not(:disabled):not(.ui-button--aria-disabled)");
+    expect(style).toContain(".ui-button:disabled,.ui-button--aria-disabled{cursor:not-allowed}");
+    expect(style).not.toContain("pointer-events:none");
+  });
 });
 
 describe("UiIconButton", () => {
