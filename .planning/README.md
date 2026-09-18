@@ -10,6 +10,7 @@
 - [DST Builder Plan 索引](plans/dst-builder/README.md)
 - 当前没有尚未归档的 Todo。
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
+- [取消 Builder 与 Manager 显式交接契约实施计划](plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)
 
 ## 模板
 

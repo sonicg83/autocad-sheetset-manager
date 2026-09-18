@@ -1,3 +1,13 @@
+## 2026-09-18（PLAN-INT-002：取消交接契约实施计划）
+
+- 新增 [PLAN-INT-002](.planning/plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)（`proposed`），把 [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 的「迁移路径」拆为 8 个可独立验证的任务：先完成文档治理传播（ADR-INT-001 与权威架构、规范），再改 Builder 成果布局与完整性校验（`verify_package` → `verify_target(root, expected_paths)`，发布证据新增 `expected_paths`），然后新增「Builder 产出可被 Manager 直接打开」集成测试作为安全网，最后依次移除 Builder 与 Manager 两侧交接实现并新增 `0008_drop_handoff_sources` 迁移。计划冻结五项决策、显式列出两项不在本计划范围内解决的 RFC 开放问题（向导末端动作、初始修订补偿）。
+- 在 [`.planning/README.md`](.planning/README.md) 接入该计划条目。本次仅新增与调整计划类文档，未修改源码、测试或迁移。
+
+## 2026-09-18（RFC-INT-002 接受：取消交接与成果包 metadata）
+
+- [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md) 经用户复审后由 `review` 转为 `accepted`，成为取消 Builder → Manager 交接契约的权威依据；评审中保留 4 项不阻断接受的开放问题（`verify_package` 新语义的规范文字、Builder 向导末端动作、Manager 初始修订的补偿方式、既有成果包处置）。
+- 同步更新 [RFC 索引](docs/integration/rfcs/README.md) 与 [跨项目整合入口](docs/integration/README.md)。本次仅更新文档状态与索引，未修改源码、测试、迁移或架构与规范正文；`ADR-INT-001`、`ARCH-INT-002` §2/§6、`SPEC-DB-001` §9/§10 与四份 dst-builder 长期文档的修订按 RFC「迁移路径」在第 2–6 步执行。
+
 ## 2026-09-18（RFC-INT-002 提案：取消 Builder 与 Manager 的显式交接契约）
 
 - 新增 [RFC-INT-002](docs/integration/rfcs/RFC-INT-002-cancel-builder-manager-handoff.md)（`review`）：提案取消 `SPEC-DB-001` §10 的六步 `HandoffBundle` 交接，并一并取消正式成果包 `metadata/` 目录与 `drawings/` 包装层，两条产品线以 DST 文件为唯一接口。动机包括：交接的「成果包字节不变」准入条件与「Builder 建框架 → 人工 AutoCAD 编辑 → Manager 调整与交付」的真实时序错位（交接口可行窗口长度为 0）；交接成功后修订目录与发布目标都落在成果包根内，`交接即接管` 使完整性核对只在交接瞬间成立；`reader.py` 的引用边界与结构状态硬门禁比 `open_workspace` 通用路径更严格且与真实 DST 的绝对路径引用不兼容；`manifest.json`/`handoff.json` 的唯一消费方是交接，取消后 `metadata/` 下五个文件全部无程序消费方。

@@ -1,7 +1,7 @@
 ---
 id: RFC-INT-002
 title: 取消 Builder 与 Manager 的显式交接契约
-status: review
+status: accepted
 owners:
   - integration
 created: 2026-09-18
@@ -159,8 +159,14 @@ DST 的布局引用是相对文件名，与所在目录名无关，因此扁平�
 1. 本 RFC 接受。
 2. 新增 `ADR-INT-001`，记录「取消交接、以 DST 文件为唯一接口」的决策。`ARCH-INT-002` §6 的结论发生变化，按治理规则新增 ADR 而非静默改写。
 3. 修订 `ARCH-INT-002` §2 责任边界与 §6 交接边界。`RFC-INT-001` 正文不改写——它是 2026-09-17 的决策记录；对其中交接相关表述（产品生命周期链、「Builder 在正式交接前拥有唯一项目事实源」）的取代记入 `ADR-INT-001` 的「替代关系」。
-4. 修订 `SPEC-DB-001` §9（布局与附带资产位置），§10 标记 `superseded` 并保留正文供历史追溯。
-5. 修订受影响的 dst-builder 长期文档：`docs/dst-builder/README.md`（产品简介与当前状态摘要）、`ARCH-DB-001`（§4「产品与共享包」组件表的 `HandoffBundle` 行、§10「正式成果与交接」）、`PRD-DB-001`（§6.7「验收与交接」、§10「交接需求」整节、§11 验收标准中相关条目）、`product/vision.md`（产品定位与两条产品线边界）。其中 vision 与 PRD 属产品级表述，需同步更新对应验收条目而不是只改叙述文字。
+4. 修订 `SPEC-DB-001`：§1（范围中的七步引导与「由 DST Manager 显式接管」）、§2（固定用户流程第 7 步「验收与交接」）、§9（布局、`manifest.json`、`handoff.json`、`package_id` 派生）、§11（`POST /api/builds/{id}/handoff` 端点行与 `HANDOFF_INVALID` / `HANDOFF_ID_CONFLICT` 错误码）、§12（验证门禁中「成果包根只有两个目录」「manifest 与 handoff 无循环依赖」与「七步门禁」条目）；§10 整节标记 `superseded` 并保留正文供历史追溯。§3 项目目录中的 `metadata/` 属于 attempt 目录，**不变**。
+5. 修订受影响的 dst-builder 长期文档：
+   - `docs/dst-builder/README.md`：产品简介与当前状态摘要；
+   - `ARCH-DB-001`：§1 目标中「可通过稳定交接契约进入 DST Manager」、§4 组件表的 `HandoffBundle` 行、§7 状态机 `… → BUILD → HANDOFF`、§8 生成管线中的 `→ HandoffBundle`、§10「正式成果与交接」整节、§11 中「不改变……交接契约」、§12 测试门禁中的交接契约测试与七步向导、§13 首个实施切片的输出链；
+   - `PRD-DB-001`：§3 问题、§4 目标、§6 核心用户流程、§6.7「验收与交接」、§9 构建与成果需求中的成果结构、§10「交接需求」整节、§11 验收标准；
+   - `product/vision.md`：产品定位、两条产品线边界、「正式交接后两边历史独立」表述与引导流程条目。
+
+   vision 与 PRD 属产品级表述，需同步更新对应验收条目而不是只改叙述文字。
 6. 同步计划类文档：`.planning/roadmaps/integration.md`、`.planning/roadmaps/dst-builder.md`（阶段 5「Manager 交接与产品化」及其退出条件）与 `.planning/plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md` 中 Task 10 / 11 的状态。
 7. 实现。建议顺序：先落 Manager 侧新主路径的集成测试（`open_workspace` 打开 Builder 产出），再删 Builder 包装配与 metadata，最后删交接代码与执行迁移——保证每一步都有安全网。本 RFC 的实现跨两个产品、前端与一次数据库迁移，实施计划可按产品拆分为两份，但契约取舍必须作为一个整体一次落地，不得出现只删一侧的中间态。
 
@@ -179,4 +185,6 @@ DST 的布局引用是相对文件名，与所在目录名无关，因此扁平�
 - 取消正式成果包的整个 `metadata/` 目录；
 - 一并扁平化 `drawings/` 包装层，目标目录直接包含三件套。
 
-本文档状态为 `review`，尚待用户复审后正式接受；接受前不得开始实现。
+2026-09-18 用户复审本文档并确认接受。本 RFC 据此转为 `accepted`，成为取消交接契约的权威依据；后续按「迁移路径」逐项落地。
+
+评审中保留为未决、不阻断接受的开放问题共 4 项（见上一节）：`verify_package` 新语义的规范文字、Builder 向导末端动作、Manager 初始修订的补偿方式、既有成果包的处置。前三项需在修订 `SPEC-DB-001` §9 或实施计划中确定，第四项在修订 §9 时确定。
