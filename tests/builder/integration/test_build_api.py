@@ -111,6 +111,149 @@ def test_full_build_reaches_succeeded_and_publishes_package(env) -> None:
     )
 
 
+def test_build_status_snapshot_uses_one_select(env) -> None:
+    """状态响应的 run 与 attempts 必须来自同一条 SQLite 查询。"""
+    from sqlalchemy import event
+
+    from dst_builder.infrastructure.persistence.database import Database
+    from dst_builder.infrastructure.persistence.repositories import (
+        SqliteBuildRepository,
+    )
+
+    env.submit_plan()
+    env.confirm_plan()
+    started = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    final = env.wait_terminal(started["build_id"])
+    assert final["status"] == "SUCCEEDED"
+
+    database = Database(env.project_root / "project.dstb")
+    statements: list[str] = []
+
+    def record_statement(_conn, _cursor, statement, _parameters, _context, _many) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(database.engine, "before_cursor_execute", record_statement)
+    try:
+        with database.sessions.begin() as session:
+            snapshot = SqliteBuildRepository(session).load_build_status_snapshot(
+                started["build_id"]
+            )
+    finally:
+        event.remove(database.engine, "before_cursor_execute", record_statement)
+        database.engine.dispose()
+
+    assert snapshot is not None
+    run, attempts = snapshot
+    assert run.status == attempts[-1].status == "SUCCEEDED"
+    assert run.published_path == str(env.target)
+    assert len(statements) == 1
+
+
+def test_get_unknown_build_returns_404(env) -> None:
+    response = env.client.get("/api/builds/00000000-0000-4000-8000-000000000000")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "BUILD_NOT_FOUND"
+
+
+def test_get_orphan_build_run_reports_data_integrity_failure(env) -> None:
+    """run 存在但 attempt 缺失时不得伪装成 BUILD_NOT_FOUND。"""
+    from sqlalchemy import text
+
+    from dst_builder.infrastructure.persistence.database import Database
+
+    env.submit_plan()
+    env.confirm_plan()
+    started = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    final = env.wait_terminal(started["build_id"])
+    assert final["status"] == "SUCCEEDED"
+
+    database = Database(env.project_root / "project.dstb")
+    try:
+        with database.engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM build_events WHERE build_id=:build_id"),
+                {"build_id": started["build_id"]},
+            )
+            connection.execute(
+                text("DELETE FROM build_attempts WHERE build_id=:build_id"),
+                {"build_id": started["build_id"]},
+            )
+        response = env.client.get(f"/api/builds/{started['build_id']}")
+    finally:
+        database.engine.dispose()
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "BUILD_FAILED"
+    assert "attempt" in response.json()["message"]
+
+
+def test_legacy_two_read_probe_reproduces_torn_terminal_view(env) -> None:
+    """机制探针：旧两次读取跨过终态提交时会稳定产生撕裂组合。"""
+    from sqlalchemy import text
+
+    from dst_builder.infrastructure.persistence.database import Database
+    from dst_builder.infrastructure.persistence.repositories import (
+        SqliteBuildRepository,
+    )
+
+    env.submit_plan()
+    env.confirm_plan()
+    started = env.client.post("/api/builds", json={"plan_id": env.plan_id}).json()
+    final = env.wait_terminal(started["build_id"])
+    assert final["status"] == "SUCCEEDED"
+
+    database = Database(env.project_root / "project.dstb")
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE build_runs SET status='PUBLISHING', "
+                "published_path=NULL, finished_at=NULL WHERE id=:build_id"
+            ),
+            {"build_id": started["build_id"]},
+        )
+        connection.execute(
+            text(
+                "UPDATE build_attempts SET status='PUBLISHING', progress=90 "
+                "WHERE build_id=:build_id"
+            ),
+            {"build_id": started["build_id"]},
+        )
+
+    try:
+        with database.sessions.begin() as session:
+            repository = SqliteBuildRepository(session)
+            run = repository.load_build_run(started["build_id"])
+            with database.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE build_attempts SET status='SUCCEEDED', progress=100 "
+                        "WHERE build_id=:build_id"
+                    ),
+                    {"build_id": started["build_id"]},
+                )
+                connection.execute(
+                    text(
+                        "UPDATE build_runs SET status='SUCCEEDED', "
+                        "published_path=:path, finished_at=:finished_at "
+                        "WHERE id=:build_id"
+                    ),
+                    {
+                        "build_id": started["build_id"],
+                        "path": str(env.target),
+                        "finished_at": "2026-09-19T00:00:00+00:00",
+                    },
+                )
+            attempts = repository.list_attempts(started["build_id"])
+    finally:
+        database.engine.dispose()
+
+    assert run is not None
+    assert run.published_path is None
+    assert attempts[-1].status == "SUCCEEDED"
+
+
 def test_event_sequences_are_monotonic_and_replayable(env) -> None:
     env.submit_plan()
     env.confirm_plan()

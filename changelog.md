@@ -1,3 +1,9 @@
+## 2026-09-19（修复 Builder 状态撕裂读并增加 OpenAPI 门禁）
+
+- `GET /api/builds/{id}` 改用单条 LEFT JOIN 查询一次读取 build run 与全部 attempts，避免两个 autocommit `SELECT` 跨过终态提交后拼出 `SUCCEEDED + published_path=None`；新增旧路径确定性交错机制探针与单 SELECT 约束测试，孤立 run 返回结构化 `BUILD_FAILED` 500，不改变全局 SQLite 隔离或数据库 Schema。
+- `scripts/export_builder_openapi.py` 新增 `--check` / `--output`，漂移时以非零退出；`builder-web` 新增 `check:api`，在生产构建前同时校验 OpenAPI JSON 和生成的 TypeScript 类型，并补齐脚本行为及 Manager 契约规范路径/NTFS 硬链接防覆盖测试。
+- 更新撕裂读待办与 `MEMO-INT-001` 后续处理状态；Ruff、`uv lock --check`、Builder pytest、27 项前端单测、OpenAPI 门禁与生产构建通过；最终 CP936 子进程中的全量 pytest 为 2181 passed / 75 skipped / 0 failed。
+
 ## 2026-09-19（PLAN-DM-034 最终代码审查修复）
 
 - 修正生成式扩展配置的可信基准：显示与 dirty 统一比较服务端 `effective_value`，持久化仍以 `value + edits` 提交；保留 `null` 与字段缺失的语义区别，覆盖部分持久值、改回有效默认值和 nullable 清空边界。

@@ -14,6 +14,7 @@ __all__ = [
     "BUILD_FAILED",
     "AttemptView",
     "BuildAlreadyRunningError",
+    "BuildDataIntegrityError",
     "BuildNotFoundError",
     "BuildServiceError",
     "BuildStatusView",
@@ -96,6 +97,15 @@ class BuildNotFoundError(BuildServiceError):
     @property
     def recovery_action(self) -> str:
         return "确认构建 ID 后重试"
+
+
+class BuildDataIntegrityError(BuildServiceError):
+    code = BUILD_FAILED
+    status_code = 500
+
+    @property
+    def recovery_action(self) -> str:
+        return "项目库构建记录不完整；请保留 project.dstb 并联系维护人员"
 
 
 class BuildAlreadyRunningError(BuildServiceError):

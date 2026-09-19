@@ -33,6 +33,7 @@ from dst_builder.application.build_contracts import (
     BUILD_FAILED,
     AttemptView,
     BuildAlreadyRunningError,
+    BuildDataIntegrityError,
     BuildNotFoundError,
     BuildServiceError,
     BuildStatusView,
@@ -105,6 +106,7 @@ __all__ = [
     "AttemptView",
     "BuildAlreadyRunningError",
     "BuildCoordinator",
+    "BuildDataIntegrityError",
     "BuildNotFoundError",
     "BuildServiceError",
     "BuildStatusView",
@@ -324,10 +326,14 @@ class BuildCoordinator:
     def get_build(self, build_id: str) -> BuildStatusView:
         with self._require_database().sessions.begin() as session:
             repository = SqliteBuildRepository(session)
-            run = repository.load_build_run(build_id)
-            if run is None:
+            snapshot = repository.load_build_status_snapshot(build_id)
+            if snapshot is None:
                 raise BuildNotFoundError(f"构建不存在：{build_id}")
-            attempts = repository.list_attempts(build_id)
+            run, attempts = snapshot
+            if not attempts:
+                raise BuildDataIntegrityError(
+                    f"构建记录缺少 attempt：{build_id}"
+                )
         latest = attempts[-1]
         return BuildStatusView(
             build_id=run.id,

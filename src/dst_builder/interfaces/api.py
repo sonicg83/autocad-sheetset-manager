@@ -553,7 +553,10 @@ def create_builder_app(
     @app.get(
         "/api/builds/{build_id}",
         response_model=BuildStatusResponse,
-        responses={404: {"model": ErrorPayloadModel, "description": "构建不存在"}},
+        responses={
+            404: {"model": ErrorPayloadModel, "description": "构建不存在"},
+            500: {"model": ErrorPayloadModel, "description": "构建状态记录不完整"},
+        },
     )
     def get_build(build_id: str, request: Request) -> BuildStatusResponse:
         """读取状态、诊断和成果（§11）。"""

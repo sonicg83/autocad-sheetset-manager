@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "generate:api": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --alphabetize",
+    "build": "npm run check:api && vue-tsc -b && vite build",
+    "generate:api": "uv run python ../scripts/export_builder_openapi.py && openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --alphabetize",
+    "check:api": "uv run python ../scripts/export_builder_openapi.py --check && openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --alphabetize --check",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"
   },

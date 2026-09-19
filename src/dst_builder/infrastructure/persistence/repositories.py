@@ -155,6 +155,10 @@ class BuildRepository(Protocol):
 
     def load_build_run(self, build_id: str) -> BuildRunRecord | None: ...
 
+    def load_build_status_snapshot(
+        self, build_id: str
+    ) -> tuple[BuildRunRecord, tuple[BuildAttemptRecord, ...]] | None: ...
+
     def update_build_run(
         self,
         build_id: str,
@@ -355,6 +359,17 @@ def _run_record(row: BuildRunRow) -> BuildRunRecord:
     )
 
 
+def _attempt_record(row: BuildAttemptRow) -> BuildAttemptRecord:
+    return BuildAttemptRecord(
+        build_id=row.build_id,
+        attempt=row.attempt,
+        status=row.status,
+        progress=row.progress,
+        error_code=row.error_code,
+        error_detail=row.error_detail,
+    )
+
+
 class SqliteBuildRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -383,6 +398,24 @@ class SqliteBuildRepository:
             published_path=row.published_path,
             created_at=row.created_at,
             finished_at=row.finished_at,
+        )
+
+    def load_build_status_snapshot(
+        self, build_id: str
+    ) -> tuple[BuildRunRecord, tuple[BuildAttemptRecord, ...]] | None:
+        """用单条查询读取 run 与 attempts，避免跨提交拼出撕裂状态。"""
+        rows = self._session.execute(
+            select(BuildRunRow, BuildAttemptRow)
+            .outerjoin(BuildAttemptRow, BuildAttemptRow.build_id == BuildRunRow.id)
+            .where(BuildRunRow.id == build_id)
+            .order_by(BuildAttemptRow.attempt)
+        ).all()
+        if not rows:
+            return None
+        return _run_record(rows[0][0]), tuple(
+            _attempt_record(attempt_row)
+            for _, attempt_row in rows
+            if attempt_row is not None
         )
 
     def update_build_run(
@@ -470,17 +503,7 @@ class SqliteBuildRepository:
             .where(BuildAttemptRow.build_id == build_id)
             .order_by(BuildAttemptRow.attempt)
         ).all()
-        return tuple(
-            BuildAttemptRecord(
-                build_id=row.build_id,
-                attempt=row.attempt,
-                status=row.status,
-                progress=row.progress,
-                error_code=row.error_code,
-                error_detail=row.error_detail,
-            )
-            for row in rows
-        )
+        return tuple(_attempt_record(row) for row in rows)
 
     def append_event(self, record: BuildEventRecord) -> None:
         self._session.add(

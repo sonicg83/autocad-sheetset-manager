@@ -466,6 +466,16 @@
               }
             }
           },
+          "500": {
+            "description": "构建状态记录不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorPayloadModel"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {

@@ -121,6 +121,12 @@ related:
 | 4 | 69 项真实 CAD 测试的夹具仍传 `drawings/` 形状路径，已不代表生产计划；本环境全部跳过 | 真实双版本验收前更新，否则那批测试覆盖的输入形状已过时 |
 | 5 | RFC 开放问题 2（Builder 向导末端动作）与 3（Manager 初始修订补偿）按 RFC 保持开放 | 决定是否立项 |
 
+### 2026-09-19 后续处理
+
+- 待决事项 1 已修复：Builder 状态读取改为单条 JOIN 快照；旧路径机制探针确定性复现撕裂，单 SELECT 回归约束生产路径；未改变全局 SQLite 隔离语义。
+- 待决事项 3 已修复：`export_builder_openapi.py` 支持 `--check`，`builder-web` 新增 `check:api` 并接入 `build`，同时校验 OpenAPI JSON 与 TypeScript 生成类型。
+- 待决事项 2、4、5 保持原状态。
+
 ## 7. 已知残留（判定为可接受，留档备查）
 
 - `ARCH-INT-002` §2 的 `integration` 行仍列「交接契约」为职责——该列表达的是 scope 归属（谁有权决定跨产品契约），§6 已明确当前无此契约并规定恢复须先有 RFC。

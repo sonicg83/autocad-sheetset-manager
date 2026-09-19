@@ -774,6 +774,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description 构建状态记录不完整 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorPayloadModel"];
+                };
+            };
         };
     };
     cancel_build_api_builds__build_id__cancel_post: {

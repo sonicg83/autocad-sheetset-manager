@@ -2,9 +2,16 @@
 
 日期：2026-09-18
 
-状态：未立项；待建立独立修复计划（该缺陷会以约 1/8 的概率让相关测试偶发失败）
+状态：已于 2026-09-19 修复；为保持历史链接稳定，原路径仅保留为缺陷分析与验证记录，不再代表未办事项
 
 关联：`PLAN-INT-002`、`MEMO-INT-001`
+
+## 修复结果（2026-09-19）
+
+- 用确定性交错机制探针直接复现：旧两次读取会得到 `status="SUCCEEDED"` 且 `published_path=None`，确认根因是两条独立 `SELECT` 跨过终态写事务提交。
+- `SqliteBuildRepository.load_build_status_snapshot` 改用单条 JOIN 查询读取 `build_runs` 与全部 `build_attempts`；`BuildCoordinator.get_build` 只从该快照组装响应，不修改全局 SQLite 隔离配置。
+- 回归测试同时钉住两项证据：旧路径的确定性交错确会撕裂，生产状态快照必须只执行一条 `SELECT`。
+- 删除 `test_builder_output_opens_in_manager.py` 中原有的一次有界重读；生产 API 与测试安全网均不再依赖重试。
 
 ## 目的
 
@@ -22,7 +29,7 @@
 for ($i=1; $i -le 8; $i++) { uv run python -m pytest tests/builder/integration/test_build_api.py::test_full_build_reaches_succeeded_and_publishes_package -p no:cacheprovider }
 ```
 
-## 根因（证据等级：推断，尚未逐语句插桩直接观测）
+## 根因（证据等级：已由确定性交错测试直接验证）
 
 写侧是原子的，撕裂发生在读侧。
 
@@ -31,24 +38,24 @@ for ($i=1; $i -le 8; $i++) { uv run python -m pytest tests/builder/integration/t
 - **为什么两条 SELECT 不在同一快照**：`src/dst_builder/infrastructure/persistence/database.py` 用 `create_engine(f"sqlite:///{db_path}", poolclass=NullPool)`，**没有** `isolation_level`、**没有** `connect_args`、**没有** `BEGIN` 事件钩子。Python 的 `sqlite3` 驱动在默认 legacy 模式下**只为 DML 隐式开启事务，不为 SELECT 开启**；SQLAlchemy 的 `Session.begin()` 只是它自己的逻辑事务记账。于是每条 SELECT 各自在 autocommit 读中取一次当时已提交的状态。
 - **排除的替代假设**：曾怀疑 SQLAlchemy 默认 `expire_on_commit=True` 导致 `with` 块之外访问 `run.published_path` 时惰性重读；该仓库显式设了 `expire_on_commit=False`，属性不过期，故不成立。
 
-证据等级说明：上述是唯一能同时解释「症状签名 + 两条独立 SELECT + 无隔离配置 + 写侧原子 + 复现率」的解释，`PLAN-INT-002` 的最终审查者也独立追查写侧并表示同意；但**未做逐语句插桩直接观测那次交错**。修复计划的第一步应是加一条可复现的插桩测试把机制钉死，再动手改隔离语义。
+证据等级说明：修复时加入旧路径机制探针，在第一次读取返回旧 run 后提交 attempt/run 的原子终态写入，稳定得到 `SUCCEEDED + published_path=None`；另以查询计数回归保证生产状态快照只执行一条 JOIN `SELECT`，不给该交错留下语句间窗口。
 
 ## 影响
 
 - **用户可见且非自愈**：`builder-web/src/steps/BuildStep.vue` 在收到 `SUCCEEDED` 时置 `buildSucceeded` 并**停止轮询**，而「已发布：<路径>」仅在 `published_path` 非空时渲染。若撕裂恰好落在作为终态的那次轮询上，轮询停止，用户会看到「构建成功」却看不到成果位置，直到手动重新触发一次加载。
 - **不是发布安全问题，也不是数据损坏**：磁盘上的成果完整正确，构建确实成功。本缺陷纯属读一致性——接口报告了一个不存在的状态组合。
-- **测试噪声源**：任何断言终态 `published_path` 的测试都会继承该抖动（见下）。
+- **历史测试噪声源**：修复前，任何断言终态 `published_path` 的测试都会继承该抖动（见下）。
 
-## 仍暴露的测试
+## 原暴露测试与修复后状态
 
 - `tests/builder/integration/test_build_api.py:103`（`assert final["published_path"] == str(env.target)`）
 - `tests/builder/integration/test_minimal_loop_fake_cad.py:173`（同上）
 
-两者都经 `tests/builder/integration/conftest.py` 的 `wait_terminal` 取得终态响应——该辅助函数见到终态立即返回，因此可能返回撕裂读的结果。
+两者都经 `tests/builder/integration/conftest.py` 的 `wait_terminal` 取得终态响应；修复前该辅助函数见到终态立即返回，因此可能取得撕裂结果。生产查询改为单语句快照后，两项测试无需重试即可稳定取得完整终态。
 
-`tests/builder/integration/test_builder_output_opens_in_manager.py::_publish` 已在 `PLAN-INT-002` 的最终修复波中加入一次**有界重读**（只在 `status == "SUCCEEDED" and not published_path` 这一精确签名上重读一次，重读后仍为空则断言照旧失败），因此不再继承该抖动。该守卫是可复用的参考写法。
+`tests/builder/integration/test_builder_output_opens_in_manager.py::_publish` 曾在 `PLAN-INT-002` 的最终修复波中加入一次有界重读；本次生产修复完成后已删除该临时守卫，使集成测试重新直接约束首次终态响应。
 
-## 候选修法（均非机械改动，需在修复计划中评估）
+## 已评估的候选修法
 
 | 方案 | 代价 |
 | --- | --- |
@@ -62,7 +69,7 @@ for ($i=1; $i -le 8; $i++) { uv run python -m pytest tests/builder/integration/t
 
 ## 完成条件
 
-- 有独立修复计划，并在其中**先用插桩测试复现并钉死机制**，再改隔离语义；
-- 上述两处测试不再偶发失败，且不靠「失败重跑」掩盖；
-- `NullPool` 与只读打开不遗留 `-wal`/`-shm` 的既有约束仍满足；
-- 若采纳「同源字段」方案，提供迁移并验证全新库与既有库双向可用。
+- [x] 先用确定性交错测试复现并钉死机制，再修改生产读取路径；
+- [x] 状态响应改为单条查询快照，不靠失败重跑掩盖；
+- [x] 未修改 `Database`、`NullPool`、journal 模式或全局事务语义；
+- [x] 未采用字段迁移方案，不需要数据库迁移。

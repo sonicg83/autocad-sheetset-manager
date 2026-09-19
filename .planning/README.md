@@ -8,7 +8,7 @@
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
 - [DST Builder Plan 索引](plans/dst-builder/README.md)
-- 待办：[Builder 构建状态接口撕裂读缺陷](todos/integration/2026-09-18-builder-status-torn-read.md)；其余待办见 [`todos/dst-manager/`](todos/dst-manager/)。
+- 修复记录：[Builder 构建状态接口撕裂读缺陷（2026-09-19 已修复）](todos/integration/2026-09-18-builder-status-torn-read.md)；其余待办见 [`todos/dst-manager/`](todos/dst-manager/)。
 - 备忘：[PLAN-INT-002 交付记录（MEMO-INT-001）](memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：执行方式、26 项控制器裁定、计划缺陷与待决事项。
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
 - [取消 Builder 与 Manager 显式交接契约实施计划（PLAN-INT-002，completed）](plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)：已按 RFC-INT-002 / ADR-INT-001 移除两侧交接实现与 `handoff_sources` 表，Builder 成果改为扁平三件套。
