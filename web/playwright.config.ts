@@ -8,6 +8,19 @@ export default defineConfig({
   // 默认 workers=核数/2（本机 10）时单一 vite dev server 过载，goto 偶发
   // net::ERR_ABORTED；压到 4 换取全量结果稳定（实测全量时长可接受）
   workers:4,
+  // settings-dialog.spec.ts 会直接改写唯一真实后端使用的共享 settings.json；
+  // 先单独跑完该文件，再启动其余并行用例，避免 schema 异常窗口污染其它 spec。
+  projects:[
+    {
+      name:"settings-file-mutating",
+      testMatch:"settings-dialog.spec.ts",
+    },
+    {
+      name:"parallel",
+      testIgnore:"settings-dialog.spec.ts",
+      dependencies:["settings-file-mutating"],
+    },
+  ],
   use:{baseURL:"http://127.0.0.1:4173"},
   webServer:{
     command:"npm run dev -- --host 127.0.0.1 --port 4173",

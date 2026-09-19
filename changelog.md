@@ -1,3 +1,8 @@
+## 2026-09-19（修复设置中心 E2E 并行状态污染）
+
+- 将会直接改写共享 `settings.json` 的 `settings-dialog.spec.ts` 放入独立 Playwright project，并让其余用例所属的并行 project 显式依赖该隔离组；共享文件异常状态不再与其它 spec 的设置对话框操作重叠，其余 E2E 继续使用 4 workers 并行。
+- 验证：目标 `settings-extensions-production-evidence.spec.ts` 在 `--retries=0` 下 15/15 通过；全量 Playwright 连跑 3 轮均为 582 passed / 0 failed / 0 flaky；`uv run ruff check .` 通过。
+
 ## 2026-09-19（修复 Builder 状态撕裂读并增加 OpenAPI 门禁）
 
 - `GET /api/builds/{id}` 改用单条 LEFT JOIN 查询一次读取 build run 与全部 attempts，避免两个 autocommit `SELECT` 跨过终态提交后拼出 `SUCCEEDED + published_path=None`；新增旧路径确定性交错机制探针与单 SELECT 约束测试，孤立 run 返回结构化 `BUILD_FAILED` 500，不改变全局 SQLite 隔离或数据库 Schema。
