@@ -129,3 +129,4 @@ related:
 - `verify_target` 接受任意相对路径字符串；生产路径由发布门禁约束，仅用户篡改自己的 `publish-target.json` 才可达。
 - 保留列 `document_revisions.kind`/`source_json` 目前无非默认值的生产者（`register_handoff` 已删），读路径仍有往返测试钉住；按 RFC 决定 5 保留。
 - 计划类文档与 `changelog.md` 的历史条目按「不重写历史记录」保持原样。
+- SDD 执行工作区 `.superpowers/sdd/PLAN-INT-002-cancel-builder-manager-handoff/`（约 1.8 MB、102 个文件：ledger、各任务 brief/report、review package、验证与复现日志）按该执行流程本应在交付后删除。**控制器有意保留**，理由：删除不可逆，而其中「各任务的详细报告、审查包与撕裂读缺陷的原始证据日志」在本备忘与待办中只是摘要与可复现命令，并非逐字记录；保留一个 gitignored 目录的代价为零。若确认无需审计，可随时删除该目录。

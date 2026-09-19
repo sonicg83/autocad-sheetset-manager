@@ -97,6 +97,7 @@
 - 新增 [MEMO-INT-001](.planning/memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：记录 PLAN-INT-002 的交付内容、最终验证结果、执行方式（8 个任务各自的独立审查与 6 轮修复、1 次 lane 故障的恢复处置）、控制器做出的 26 项裁定及其代价、13 处计划缺陷与经验、以及移交给人类的 5 项待决事项与 7 项已知残留。新增该记录的目的是：裁定与延迟项原本只存在于会话与该执行流程的临时工作区中，需落入可长期追溯的位置。
 - 新增[待办](.planning/todos/integration/2026-09-18-builder-status-torn-read.md)：记录 `GET /api/builds/{id}` 的读一致性缺陷（可能返回 `status="SUCCEEDED"` 而 `published_path=None`），含症状签名、根因与证据等级、复现率与复现命令、三个候选修法及代价、两处仍暴露的测试。该缺陷与本计划无关但由本计划新增的替代主路径集成测试暴露，刻意未在本计划修复（修法涉及共享持久层的读事务与隔离语义）。
 - 在 [`.planning/README.md`](.planning/README.md) 接入上述两份记录，并修正「当前没有尚未归档的 Todo」这一与实际不符的表述。
+- PLAN-INT-002 已快进合并到 `main`（`0591d65`），合并后分别在 Python（`ruff` / `uv lock --check` / pytest 2173 passed / 75 skipped / 0 failed）与两个前端（`web` build 与 e2e **581 passed**、另报 1 项 flaky；`builder-web` unit / build / e2e 20 passed）上重跑门禁并全部通过。控制器有意保留 SDD 执行工作区（`.superpowers/sdd/PLAN-INT-002-.../`，gitignored）：其内容在上述备忘中仅为摘要而非逐字记录，删除不可逆，保留代价为零。
 
 ## 2026-09-18（协作规范补充本地 HTML 预览契约）
 
