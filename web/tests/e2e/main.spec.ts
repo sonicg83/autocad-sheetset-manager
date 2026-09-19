@@ -113,7 +113,7 @@ async function saveSheetSetDraft(page:Page,value:string){
   //（各用例 fixture 基准不同，且保存后输入框回显基准而非草稿值）。
   const name = page.getByLabel("图纸集名称", {exact: true});
   await expect(name).toBeVisible();
-  await expect(page.locator('[id="prop-status-@name"] .flag.dirty')).toHaveCount(0);
+  await expect(page.locator('[id="prop-status-%40name"] .flag.dirty')).toHaveCount(0);
   await name.fill(value);
   await page.getByRole("button",{name:"更新图纸集"}).click();
 }

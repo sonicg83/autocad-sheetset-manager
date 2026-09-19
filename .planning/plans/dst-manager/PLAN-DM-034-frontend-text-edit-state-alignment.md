@@ -404,7 +404,7 @@ rtk uv lock --check
 - **差异登记**（裁决日期 2026-09-18，裁决人：用户，经 SDD 审查流水记录于 `.superpowers/sdd/PLAN-DM-034-frontend-text-edit-state-alignment/progress.md`）：
   - 缺陷（本轮修复）：全量 e2e 首跑暴露的 27 例失败，其中 24 例为 main.spec 等旧用例仍编码「clean 空保存」已删例外（见 10.3），2 例为先于本计划的 95fe260 顶栏改版遗留过期断言/选择器，1 例为高负载抖动；
   - 已接受差异：SPEC-DM-015 §9 追记的 2 项；
-  - 后续项（不阻断关闭）：`aria-describedby` 对含空格属性名的 id 安全编码、草稿基线还原 try/finally、`SHEET_CATALOG_EXPRESSION_INVALID` 端到端演练等 minor 项，详见 progress.md。
+  - 后续项（不阻断关闭）：草稿基线还原 try/finally、`SHEET_CATALOG_EXPRESSION_INVALID` 端到端演练等 minor 项，详见 progress.md；`aria-describedby` 对含空格属性名的 id 安全编码已在 2026-09-19 审查修复轮关闭（见 10.5）。
 
 ### 10.3 全量门禁（Step 2 实测，含首跑失败与处理）
 
@@ -424,3 +424,12 @@ rtk uv lock --check
 ### 10.4 G9 真实 Windows 桌面检查
 
 **待人工执行（未运行）**。真实 Windows 桌面壳下五处页面的 clean/dirty/revert、键盘焦点、浅深主题与 100/125/150/200% 缩放检查需用户在真实环境操作；10.2 的浏览器 200% 模拟只作 G8 响应式证据，不替代 G9（GUIDE-DM-001 口径）。G9 完成前本计划状态保持 `proposed`，不改为 `completed`。
+
+### 10.5 最终代码审查修复（2026-09-19）
+
+- 生成式扩展配置以响应 `effective_value` 统一建立显示值和 dirty 可信基准，保存仍在持久 `value` 上叠加用户编辑；`sameValue` 不再把 `null` 与字段缺失合并，避免改回有效默认值仍 dirty 或 nullable 清空被误判 clean。
+- 图纸目录自定义输出过滤字段补齐 dirty 的 `--color-warning-bg` 与 error 的 `--color-danger-bg`，错误状态继续后置覆盖 dirty。
+- 图纸页与属性页的用户属性名先经稳定 URI 编码再进入 DOM id；`label for`、`aria-describedby`、错误跳转和焦点归还使用同一编码，含空格属性名不再形成无效 IDREF。
+- 回归测试补齐部分持久 `value` / 完整 `effective_value`、`null` 与缺失值、dirty/error 计算背景色，以及两处含空格属性名的 ARIA 关联。G9 状态不变，仍按 10.4 待人工执行。
+- **本轮门禁实测**：`check:i18n`、`check:ui`、生产构建、Ruff 与 `uv lock --check` 均通过；Vitest 18 文件 / 179 用例通过；全量 Playwright 580 passed / 2 flaky / 0 failed（两项入口等待超时重试通过，随后目标用例独立复跑 2/2 一次通过）；全量 pytest 在与 `setup.bat` GBK 契约一致的显式代码页 936 下运行至 100% 且 exit 0。
+- **pytest 首跑失败与处理**：直接从当前系统 UTF-8 ANSI 环境调用 GBK `setup.bat` 时，`tests/unit/test_setup_bat.py` 两项中文 stdout 断言因 `cmd` 解析阶段产生 U+FFFD 而失败；产品文件与本轮 diff 均未涉及该脚本。最小实验在同一 `cmd` 会话显式 `chcp 936` 后目标文件 9/9 通过，完整 pytest 同口径复跑通过，因此未为环境代码页差异修改产品或测试。

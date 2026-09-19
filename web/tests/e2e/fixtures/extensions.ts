@@ -109,6 +109,7 @@ export interface ExtensionSettingsMock {
     schema_version: number;
     revision: number;
     value: Record<string, unknown>;
+    effective_value: Record<string, unknown>;
     read_only: boolean;
     diagnostic_code: string | null;
     items: GeneratedSettingsItem[];
@@ -160,11 +161,13 @@ export async function installExtensionSettings(page: Page, options: {
   schemaVersion?: number;
   revision?: number;
   value?: Record<string, unknown>;
+  effectiveValue?: Record<string, unknown>;
   readOnly?: boolean;
   items?: GeneratedSettingsItem[];
   conflictCode?: string;
 } = {}): Promise<ExtensionSettingsMock> {
   const items = options.items ?? generatedSettingsItems();
+  const value = options.value ?? defaultZeroValue(items);
   const state: ExtensionSettingsMock = {
     gets: 0,
     puts: [],
@@ -174,7 +177,8 @@ export async function installExtensionSettings(page: Page, options: {
     server: {
       schema_version: options.schemaVersion ?? 1,
       revision: options.revision ?? 0,
-      value: options.value ?? defaultZeroValue(items),
+      value,
+      effective_value: options.effectiveValue ?? value,
       read_only: options.readOnly ?? false,
       diagnostic_code: options.readOnly === true ? "EXTENSION_SETTINGS_SCHEMA_NEWER" : null,
       items,
@@ -184,7 +188,7 @@ export async function installExtensionSettings(page: Page, options: {
     schema_version: state.server.schema_version,
     revision: state.server.revision,
     value: state.server.value,
-    effective_value: state.server.value,
+    effective_value: state.server.effective_value,
     read_only: state.server.read_only,
     diagnostic_code: state.server.diagnostic_code,
     items: state.server.items,
@@ -258,7 +262,12 @@ export async function installExtensionSettings(page: Page, options: {
         json: {code: state.conflictCode, message_key: "errors.extension.settingsInvalid", params: {expected_revision: body.expected_revision, current_revision: state.server.revision}, message: "设置已被其他保存更新"},
       });
     }
-    state.server = {...state.server, revision: state.server.revision + 1, value: body.value};
+    state.server = {
+      ...state.server,
+      revision: state.server.revision + 1,
+      value: body.value,
+      effective_value: {...state.server.effective_value, ...body.value},
+    };
     return route.fulfill({json: view()});
   });
   return state;

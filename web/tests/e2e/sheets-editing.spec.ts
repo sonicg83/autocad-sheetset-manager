@@ -485,6 +485,19 @@ test("dirty 字段琥珀状态与未加入草稿文字随基准值恢复清除",
   await expect(submit).toHaveAttribute("aria-disabled", "true");
 });
 
+test("含空格属性名的 dirty 状态使用有效 aria-describedby IDREF", async ({page}) => {
+  await installSheetsFixture(page, {propertyNames: ["项目 编号"]});
+  await openWorkspace(page);
+  await page.getByRole("button", {name: "编辑属性"}).first().click();
+  const input = page.getByRole("textbox", {name: "属性 项目 编号", exact: true});
+  await input.fill("新值");
+
+  const describedBy = await input.getAttribute("aria-describedby");
+  expect(describedBy).not.toBeNull();
+  expect(describedBy!.split(/\s+/)).toHaveLength(1);
+  await expect(page.locator(`[id="${describedBy}"]`)).toContainText("尚未加入草稿");
+});
+
 test("dirty 与字段错误组合：红色错误边框优先且未加入草稿文字保留", async ({page}) => {
   await installSheetsFixture(page, {
     failDraftSave: () => ({code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效"}}),

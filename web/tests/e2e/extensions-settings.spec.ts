@@ -475,6 +475,37 @@ test("generated 设置：行输回快照基准值即回到 clean，琥珀边框�
   await expect(dirtyBadge).toBeVisible();
 });
 
+test("generated 设置：部分持久值以 effective_value 为显示与 dirty 基准", async ({page}) => {
+  const items = generatedSettingsItems();
+  await installExtensionSettings(page, {
+    value: {batch_limit: 50, write_back_titleblock: true},
+    effectiveValue: {
+      frame_block_prefix: "SV-",
+      batch_limit: 50,
+      write_back_titleblock: true,
+      ratio_threshold: 0.5,
+      conflict_strategy: "ask",
+    },
+    items,
+  });
+  await installExtensions(page, [generatedExtension()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  await openConfigView(page, GENERATED_NAME);
+  const input = dialog.locator('input[data-key="frame_block_prefix"]');
+  const row = dialog.locator('[data-field="frame_block_prefix"]');
+  const save = dialog.getByRole("button", {name: "保存", exact: true});
+  await expect(input).toHaveValue("SV-");
+
+  await input.fill("TMP-");
+  await expect(row).toHaveClass(/dirty/);
+  await input.fill("SV-");
+  await expect(row).not.toHaveClass(/dirty/);
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+});
+
 test("generated 设置：字段按服务端顺序呈现、默认值来自 Provider，保存只提交本扩展快照", async ({page}) => {
   const mock = await installExtensionSettings(page);
   await installExtensions(page, [generatedExtension()]);
@@ -1126,6 +1157,7 @@ test("custom 面板：输出过滤 dirty 提示随输入出现/改回快照后�
   // dirty 态实拍琥珀边框，保证下方「错误红 ≠ dirty 琥珀」是比较两个真实状态
   await expect(field).toHaveClass(/is-dirty/);
   await expect(filter).toHaveCSS("border-color", "rgb(148, 98, 0)");
+  await expect(filter).toHaveCSS("background-color", "rgb(251, 241, 219)");
   const dirtyBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
   await save.click();
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toBeVisible();
@@ -1137,6 +1169,7 @@ test("custom 面板：输出过滤 dirty 提示随输入出现/改回快照后�
   expect(mock.puts).toHaveLength(1);
   const errorBorderColor = await filter.evaluate(el => getComputedStyle(el).borderColor);
   expect(errorBorderColor).not.toBe(dirtyBorderColor); // 错误红色覆盖 dirty 琥珀
+  await expect(filter).toHaveCSS("background-color", "rgb(251, 234, 232)");
   // 修正输入即清除字段错误：保存恢复可执行
   await filter.fill("作废");
   await expect(dialog.locator(CATALOG_FILTER_ERROR)).toHaveCount(0);

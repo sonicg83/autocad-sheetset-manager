@@ -154,8 +154,8 @@ async function confirmRemove(): Promise<void> {
 .cs-field label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .cs-field input{padding:8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;font-size:var(--font-label);background:var(--color-bg-surface);color:var(--color-text-primary)}
 /* dirty 琥珀在 error 红色之前声明：字段级 422 错误存在时红色覆盖琥珀（错误优先） */
-.cs-field.is-dirty input{border-color:var(--color-warning)}
-.cs-field.is-error input{border-color:var(--color-danger)}
+.cs-field.is-dirty input{border-color:var(--color-warning);background:var(--color-warning-bg)}
+.cs-field.is-error input{border-color:var(--color-danger);background:var(--color-danger-bg)}
 .cs-hint{margin:0;font-size:var(--font-caption);color:var(--color-text-secondary);line-height:1.8}
 .cs-dirty{margin:0;font-size:var(--font-caption);line-height:1.8;color:var(--color-warning)}
 .cs-error{margin:0;font-size:var(--font-caption);line-height:1.8;color:var(--color-danger)}

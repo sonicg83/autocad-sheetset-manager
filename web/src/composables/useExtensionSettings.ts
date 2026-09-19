@@ -81,7 +81,7 @@ export function isRevisionConflict(value: ExtensionSettingsConflict | null): boo
 // 导出供呈现层（GeneratedExtensionSettingsForm 的行级 dirty 判定）复用同一口径：
 // 行级状态不得在这里之外重新发明第二套比较（SPEC-DM-015 §2.2，PLAN-DM-034 fix 1）。
 export function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function errorText(error: unknown): string {
@@ -110,8 +110,9 @@ export function useExtensionSettings(extensionId: string): ExtensionSettingsStat
   const readOnly = computed(() => schemaNewerCode.value !== "" || snapshot.value?.read_only === true);
   // 诊断条回显的码优先取粘性码：否则刷新失败时只读横幅会显示空码（快照是陈旧的）
   const readOnlyCode = computed(() => schemaNewerCode.value || snapshot.value?.diagnostic_code || "");
-  // 脏 = 至少一个字段的编辑值不同于服务端持久值（输回原值即回到干净）
-  const dirty = computed(() => Object.keys(edits.value).some(key => !sameValue(edits.value[key], snapshot.value?.value?.[key])));
+  // 脏 = 至少一个字段的编辑值不同于服务端有效值（含 Provider 默认值）。界面展示与
+  // 比较必须共用这一可信基准；保存仍在持久 value 上叠加 edits，避免把未编辑默认值写实。
+  const dirty = computed(() => Object.keys(edits.value).some(key => !sameValue(edits.value[key], snapshot.value?.effective_value?.[key])));
 
   function showSaved(): void {
     saved.value = true;

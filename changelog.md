@@ -1,3 +1,10 @@
+## 2026-09-19（PLAN-DM-034 最终代码审查修复）
+
+- 修正生成式扩展配置的可信基准：显示与 dirty 统一比较服务端 `effective_value`，持久化仍以 `value + edits` 提交；保留 `null` 与字段缺失的语义区别，覆盖部分持久值、改回有效默认值和 nullable 清空边界。
+- 补齐图纸目录输出过滤字段的琥珀 dirty 底色与红色 error 底色；图纸页和属性页的用户属性名统一编码为无空白 DOM ID token，保证含空格名称的 `label for`、`aria-describedby`、错误跳转和焦点归还有效。
+- 新增对应 Vitest/Playwright 回归，并修正扩展设置 e2e 夹具，不再把 `effective_value` 简化为 `value`。
+- 本轮验证：UI/i18n 静态检查、179 个 Vitest、生产构建、Ruff 与锁文件校验通过；全量 Playwright 580 passed / 2 flaky / 0 failed，两个 flaky 独立复跑 2/2 一次通过；全量 pytest 在显式代码页 936 下运行至 100% 且 exit 0（直接首跑的 2 个 `setup.bat` 中文断言失败已确认是当前系统 UTF-8 ANSI 与脚本 GBK 契约的环境差异）。
+
 ## 2026-09-19（PLAN-INT-002 最终审查修复轮）
 
 - 修正 `docs/dst-builder/README.md` 状态句自相矛盾：向导六步化与正式成果布局扁平化已由 `PLAN-INT-002`（`completed`）落地，不再保留「实施中，此时尚未落地」的旧措辞（该文件是 dst-builder 的状态入口，陈旧状态会导致重复规划）。

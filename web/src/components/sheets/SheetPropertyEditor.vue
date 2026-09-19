@@ -11,6 +11,7 @@
 import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import {domIdToken} from "../ui/domId";
 import type {PropertyEditContext} from "../../features/sheets/types";
 import {PROPERTY_PAGE_SIZE} from "../../composables/useSheetEditor";
 
@@ -48,7 +49,7 @@ const statusText = computed(() => {
   return t("sheets.editor.statusClean");
 });
 
-function fieldId(name: string) { return `prop-${props.context.objectId}-${name}`; }
+function fieldId(name: string) { return `prop-${domIdToken(props.context.objectId)}-${domIdToken(name)}`; }
 // dirty 一律比较当前值与可信基准（草稿投影），不用「曾编辑」标志：改回基准即清除。
 function isDirty(name: string) { return (props.context.values[name] ?? "") !== (props.context.original[name] ?? ""); }
 function fieldErrorId(name: string) { return `${fieldId(name)}-error`; }

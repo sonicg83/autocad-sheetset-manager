@@ -30,7 +30,7 @@ function controlKind(control: string): FormControlKind | typeof UNSUPPORTED {
 
 const props = defineProps<{
   items: ExtensionSettingsItem[];
-  value: Record<string, unknown>; // 服务端持久值（字段缺失时回退 Provider 默认值）
+  effectiveValue: Record<string, unknown>; // Provider 解析后的可信显示/比较基准（含默认值）
   edits: Record<string, unknown>; // 本地编辑缓冲（父级唯一所有者）
   errors: Record<string, ExtensionFieldError>;
   readOnly: boolean;
@@ -51,10 +51,11 @@ function hasOwnControl(item: ExtensionSettingsItem): boolean {
   const kind = controlKind(item.control);
   return kind === "boolean" || kind === "integer" || kind === "number" || kind === "string";
 }
-// 生效显示值：编辑缓冲优先 → 服务端持久值 → Provider 默认值
+// 生效显示值：编辑缓冲优先 → 服务端有效值 → 字段声明默认值（防御性兜底）。
+// 持久 value 可能只含显式配置，不能作为界面基准，否则改回初显默认值仍会被判 dirty。
 function current(item: ExtensionSettingsItem): unknown {
   if (item.key in props.edits) return props.edits[item.key];
-  if (item.key in props.value) return props.value[item.key];
+  if (item.key in props.effectiveValue) return props.effectiveValue[item.key];
   return item.default;
 }
 function scalarText(item: ExtensionSettingsItem): string {
@@ -87,11 +88,11 @@ function errorId(key: string): string {
   return `extension-settings-error-${key}`;
 }
 // 行级 dirty 判定（SPEC-DM-015 §2.2，PLAN-DM-034 fix 1）：与宿主 dirty 同一值比较口径
-//（复用 useExtensionSettings 导出的 sameValue，对服务端持久值比较）——输回快照基准值
+//（复用 useExtensionSettings 导出的 sameValue，对服务端有效值比较）——输回快照基准值
 // 即立即 clean，不因「曾编辑」而继续显示；.ef-row.dirty 的琥珀边框、可见 dirty 文字与
 // aria-describedby 的 dirty 状态引用都由这一个判定派生，不各自为政。
 function isDirty(item: ExtensionSettingsItem): boolean {
-  return item.key in props.edits && !sameValue(props.edits[item.key], props.value[item.key]);
+  return item.key in props.edits && !sameValue(props.edits[item.key], props.effectiveValue[item.key]);
 }
 function describedBy(item: ExtensionSettingsItem): string | undefined {
   const ids: string[] = [];

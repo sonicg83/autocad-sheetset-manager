@@ -14,6 +14,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiIcon from "../ui/UiIcon.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
+import {domIdToken} from "../ui/domId";
 import PropertyValueCompareDialog from "./PropertyValueCompareDialog.vue";
 
 const props = defineProps<{
@@ -58,13 +59,13 @@ function errorOf(key: ValueKey): string | undefined {
   return props.errors[key];
 }
 function fieldId(key: ValueKey): string {
-  return `prop-value-${key}`;
+  return `prop-value-${domIdToken(key)}`;
 }
 function statusId(key: ValueKey): string {
-  return `prop-status-${key}`;
+  return `prop-status-${domIdToken(key)}`;
 }
 function errorId(key: ValueKey): string {
-  return `prop-error-${key}`;
+  return `prop-error-${domIdToken(key)}`;
 }
 // aria-describedby 只指向实际有内容的状态/错误说明（不只依赖颜色）
 function describedBy(key: ValueKey): string | undefined {

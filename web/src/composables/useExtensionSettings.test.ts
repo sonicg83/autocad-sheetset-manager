@@ -22,7 +22,7 @@ vi.mock("../i18n", () => ({i18n: {global: {t: (key: string) => key, te: () => fa
 
 import {ApiError} from "../api/client";
 import type {ExtensionSettingsView} from "../api/contracts";
-import {useExtensionSettings, isRevisionConflict} from "./useExtensionSettings";
+import {useExtensionSettings, isRevisionConflict, sameValue} from "./useExtensionSettings";
 
 function view(overrides: Partial<ExtensionSettingsView> = {}): ExtensionSettingsView {
   return {
@@ -39,6 +39,26 @@ function view(overrides: Partial<ExtensionSettingsView> = {}): ExtensionSettings
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("useExtensionSettings 可信有效值基准", () => {
+  it("部分持久值改回 effective_value 后 clean，null 与缺失值保持不同", async () => {
+    fetchMock.mockResolvedValue(view({
+      value: {batch_limit: 50},
+      effective_value: {batch_limit: 50, ratio_threshold: 0.5},
+    }));
+    const state = useExtensionSettings("demo.frame-update");
+    await state.load();
+
+    state.setField("ratio_threshold", 0.75);
+    expect(state.dirty.value).toBe(true);
+    state.setField("ratio_threshold", 0.5);
+    expect(state.dirty.value).toBe(false);
+
+    state.setField("ratio_threshold", null);
+    expect(state.dirty.value).toBe(true);
+    expect(sameValue(null, undefined)).toBe(false);
+  });
 });
 
 describe("useExtensionSettings 服务端 409 收口", () => {

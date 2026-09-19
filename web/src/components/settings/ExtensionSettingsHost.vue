@@ -239,7 +239,8 @@ defineExpose({dirty, saving, saved, saveNativeDisabled, saveAriaDisabled, saveDi
 
       <GeneratedExtensionSettingsForm
         v-if="subView === 'generated'"
-        :items="items" :value="snapshot.value" :edits="edits" :errors="fieldErrors"
+        :items="items" :effective-value="snapshot.effective_value"
+        :edits="edits" :errors="fieldErrors"
         :read-only="readOnly" @update="setField"
       />
       <component

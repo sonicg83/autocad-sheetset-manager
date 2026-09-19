@@ -48,7 +48,7 @@ const VALUE_ENTRIES: Array<[string, string]> = [
   ["UnitCode", "unit-a"],
   ["RevMark", "rev007"],
   ["SheetScale", "1:150"],
-  ["DummyField", "占位"],
+  ["Dummy Field", "占位"],
   ["LongNote", "本工程为虚构数据，仅用于属性值面板的长值展示与展开编辑测试覆盖，全部文字依次罗列以验证长文本不被截断也不丢失内容。"],
 ];
 
@@ -294,6 +294,18 @@ test("输入不同再改回草稿值：dirty 计数、隐藏修改数、字段�
   await expect(metrics).not.toContainText("未加入草稿");
   await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(page.locator(".value-panel .match-count")).not.toContainText("修改被隐藏");
+});
+
+test("含空格属性名的状态说明使用有效 aria-describedby IDREF", async ({page}) => {
+  await install(page);
+  await openProperties(page);
+  const input = page.getByRole("textbox", {name: "属性 Dummy Field", exact: true});
+  await input.fill("新占位值");
+
+  const describedBy = await input.getAttribute("aria-describedby");
+  expect(describedBy).not.toBeNull();
+  expect(describedBy!.split(/\s+/)).toHaveLength(1);
+  await expect(page.locator(`[id="${describedBy}"]`)).toContainText("未加入草稿");
 });
 
 test("值对照对话框：三阶段对照、相同阶段合并、Esc 关闭并归还焦点", async ({page}) => {

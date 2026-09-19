@@ -15,6 +15,7 @@ import type {PropertyBuffer,PropertySearchMode,ValueKey,ValueStatus} from "../fe
 import PropertyDefinitionPanel from "../components/properties/PropertyDefinitionPanel.vue";
 import PropertyCsvPanel from "../components/properties/PropertyCsvPanel.vue";
 import PropertyValuePanel from "../components/properties/PropertyValuePanel.vue";
+import {domIdToken} from "../components/ui/domId";
 const props=defineProps<{
   workspace:Workspace;
   propertyInput:PropertyBuffer|null;
@@ -60,7 +61,7 @@ const fieldErrorEntries=computed<[ValueKey,string][]>(()=>Object.entries(props.p
 async function jumpToError(key:ValueKey){
   if(props.propertyValuesCollapsed)emit("update:propertyValuesCollapsed",false);
   await nextTick();
-  document.getElementById(`prop-value-${key}`)?.focus();
+  document.getElementById(`prop-value-${domIdToken(key)}`)?.focus();
 }
 
 // —— 「新增 sheetset 字段」入口：展开定义面板并打开新增区（作用域预置为图纸集）——
