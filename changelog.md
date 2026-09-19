@@ -92,6 +92,12 @@
 - SPEC-DM-015 追加「2026-09-18 实施追记」（§9），登记两处已裁决偏差：图纸页属性编辑加载中未用原生 disabled（`PropertyEditContext` 无 saving 状态、`submitInFlight` 去重兜底）；图纸目录模板表达式错误不新增前端 invalid 派生、保存由 Provider 级 409 阻断。
 - G8 设计 QA：六张正交证据（浅/深主题、1440×1000 与 900×700、字段级/模板级 dirty、dirty+invalid、属性页三态、两类扩展配置）与 200% 浏览器缩放自动检查登记于 `.planning/memos/dst-manager/assets/PLAN-DM-034/`。G9 真实 Windows 桌面缩放检查待人工执行，计划状态保持 `proposed`，暂不关闭。
 
+## 2026-09-18（PLAN-INT-002 交付记录与撕裂读缺陷待办）
+
+- 新增 [MEMO-INT-001](.planning/memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：记录 PLAN-INT-002 的交付内容、最终验证结果、执行方式（8 个任务各自的独立审查与 6 轮修复、1 次 lane 故障的恢复处置）、控制器做出的 26 项裁定及其代价、13 处计划缺陷与经验、以及移交给人类的 5 项待决事项与 7 项已知残留。新增该记录的目的是：裁定与延迟项原本只存在于会话与该执行流程的临时工作区中，需落入可长期追溯的位置。
+- 新增[待办](.planning/todos/integration/2026-09-18-builder-status-torn-read.md)：记录 `GET /api/builds/{id}` 的读一致性缺陷（可能返回 `status="SUCCEEDED"` 而 `published_path=None`），含症状签名、根因与证据等级、复现率与复现命令、三个候选修法及代价、两处仍暴露的测试。该缺陷与本计划无关但由本计划新增的替代主路径集成测试暴露，刻意未在本计划修复（修法涉及共享持久层的读事务与隔离语义）。
+- 在 [`.planning/README.md`](.planning/README.md) 接入上述两份记录，并修正「当前没有尚未归档的 Todo」这一与实际不符的表述。
+
 ## 2026-09-18（协作规范补充本地 HTML 预览契约）
 
 - 在 `AGENTS.md` 新增「本地 HTML 与浏览器预览」一节，明确 Chrome/Edge 默认安全策略禁止页面读取 `file://`：查看本地 HTML 演示、报告或构建产物时，代理必须自行用 `uv run python -m http.server` 绑定 `127.0.0.1` 拉起本地 HTTP 服务并通过 `http://127.0.0.1:<端口>/...` 访问，用完立即结束进程，不得要求用户手动启动服务或反复重试 `file://`。本次仅补充协作规范，未修改源码、文档正文与测试。
