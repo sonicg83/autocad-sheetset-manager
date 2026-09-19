@@ -98,6 +98,10 @@
 - SPEC-DM-015 追加「2026-09-18 实施追记」（§9），登记两处已裁决偏差：图纸页属性编辑加载中未用原生 disabled（`PropertyEditContext` 无 saving 状态、`submitInFlight` 去重兜底）；图纸目录模板表达式错误不新增前端 invalid 派生、保存由 Provider 级 409 阻断。
 - G8 设计 QA：六张正交证据（浅/深主题、1440×1000 与 900×700、字段级/模板级 dirty、dirty+invalid、属性页三态、两类扩展配置）与 200% 浏览器缩放自动检查登记于 `.planning/memos/dst-manager/assets/PLAN-DM-034/`。G9 真实 Windows 桌面缩放检查待人工执行，计划状态保持 `proposed`，暂不关闭。
 
+## 2026-09-19（设置中心 e2e 并行 flake 排查备忘）
+
+- 新增 [MEMO-DM-038](.planning/memos/dst-manager/2026-09-19-settings-e2e-parallel-flake.md)：排查 `settings-extensions-production-evidence.spec.ts` task8-03（PLAN-DM-029 Task 8）在全量并行运行下偶发失败的原因。结论为**测试隔离缺陷而非产品缺陷**：`settings-dialog.spec.ts` 为测试「Schema 过新只读降级」把共享设置文件写成 `schema_version: 99`，而 `test.describe.configure({mode: "serial"})` 只约束该文件内部；该窗口内并行运行的其它文件看到整个设置对话框只读、输入全部 `disabled`，Playwright 的 `fill` 等待元素可用直至 30 秒超时。证据：隔离运行 `--retries=0` 连跑 5 轮 15 passed 全绿（0 失败），全量并行则偶发一次。备忘含完整机制（带文件行号）、唯一污染源的定位（`:189` 的损坏 JSON 不会导致禁用，只有 `:212` 的 `schema_version: 99` 会）、与[Builder 撕裂读待办](.planning/todos/integration/2026-09-18-builder-status-torn-read.md)的区别、四个修法选项与推荐（把改写共享设置文件的 spec 单独串行执行）、以及修复后的验证方法。本次仅新增备忘，未修改源码、测试、`playwright.config.ts` 或 `package.json`。
+
 ## 2026-09-18（PLAN-INT-002 交付记录与撕裂读缺陷待办）
 
 - 新增 [MEMO-INT-001](.planning/memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：记录 PLAN-INT-002 的交付内容、最终验证结果、执行方式（8 个任务各自的独立审查与 6 轮修复、1 次 lane 故障的恢复处置）、控制器做出的 26 项裁定及其代价、13 处计划缺陷与经验、以及移交给人类的 5 项待决事项与 7 项已知残留。新增该记录的目的是：裁定与延迟项原本只存在于会话与该执行流程的临时工作区中，需落入可长期追溯的位置。
