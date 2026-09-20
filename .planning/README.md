@@ -12,6 +12,7 @@
 - 备忘：[PLAN-INT-002 交付记录（MEMO-INT-001）](memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：执行方式、26 项控制器裁定、计划缺陷与待决事项。
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
 - [取消 Builder 与 Manager 显式交接契约实施计划（PLAN-INT-002，completed）](plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)：已按 RFC-INT-002 / ADR-INT-001 移除两侧交接实现与 `handoff_sources` 表，Builder 成果改为扁平三件套。
+- [双产品测试体系收敛与过时内容清理实施计划（PLAN-INT-003，proposed）](plans/integration/PLAN-INT-003-test-system-consolidation.md)：恢复稳定基线，统一双产品验证与发布门禁，并分阶段清理休眠、重复、历史命名和超大测试文件。
 
 ## 模板
 
