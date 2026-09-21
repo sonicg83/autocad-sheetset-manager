@@ -128,7 +128,7 @@ PRD、Spec、Architecture、ADR、RFC、Roadmap 和 Plan 必须使用 YAML 元�
 
 索引最低要求：
 
-- `docs/README.md` 链接两个现役产品、`shared`、`integration`、当前治理架构、模板和实际存在的归档入口。
+- `docs/README.md` 链接 `dst-manager` 现役产品文档、`shared`、`integration`、当前治理架构、模板和实际存在的归档入口。
 - 产品 `README.md` 说明定位与当前状态，并链接 Vision、Roadmap、有效 PRD、Spec、Architecture、ADR 和适用指南；尚不存在的类型不创建空入口。
 - `shared/README.md` 按能力域组织链接，并明确真实消费方门禁。
 - `integration/README.md` 列出评审中的 RFC、已接受的跨产品决策和整合路线图。

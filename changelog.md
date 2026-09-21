@@ -1,3 +1,8 @@
+## 2026-09-21（修复最终评审发现：重写过期升级测试与文档措辞）
+
+- 重写 `tests/unit/test_database.py` 过期升级测试为 `test_existing_0006_database_without_revision_kind_columns_is_rejected`：原测试在迁移压平后实际走「全新 0006 基线 + head 空升级」路径，插入行的 `kind='operation'` 来自建表默认值而非任何升级 `add_column`，属于意外通过并与 `test_existing_mvp_database_is_rejected_after_migration_flattening` 的不兼容立场矛盾。新测试构造标记在 `0006_dm020_extension_platform` 但缺少 `document_revisions.kind`/`source_json` 的旧式数据库，断言 `Database()` 抛出 `DATABASE_SCHEMA_DRIFT` 且数据库文件不被删除。
+- 文档与计划同步：`ARCH-INT-002` 索引最低要求改为单产品措辞（`docs/README.md` 链接 `dst-manager` 现役产品文档、`shared`、`integration`）；`PLAN-INT-004` 全部 13 个步骤复选框按实际完成情况勾选；`docs/dst-manager/README.md` 在 0007/0008 不兼容说明后补充一句事实性提示——此类数据库在结构上与新 0006 基线一致，理论上可由用户自行改回 `alembic_version`（风险自负，程序不执行），退役验证期间本地数据库曾以 `*.pre-0006-retirement.bak` 留档；并收敛封口条目与归档条目之间的多余空行。本次未修改产品代码。
+
 ## 2026-09-21（清理 setup.bat 测试中的 Builder 残留断言）
 
 - 收口评审发现 `tests/unit/test_setup_bat.py` 仍断言 Task 1 已按计划移除的 `DST_BUILDER_*` 配置键：删除 `BUILDER_KEYS` 字典、「方案 C」注释及 `test_generates_env_with_version_mapping` / `test_existing_env_keys_never_overwritten` 中的 3 处 Builder 键断言，断言面与现仅含 `DST_MANAGER_*` 键的 `setup.bat` 对齐；未做其它重构。`rg` 复核活动代码树（tests/src/scripts/pyproject.toml）已无任何 `DST_BUILDER` 引用。
@@ -11,8 +16,6 @@
 - 导航同步：根 README（Task 1 已收敛）、`docs/README.md`、`docs/integration/README.md`、`docs/dst-manager/README.md`、`.planning/README.md`、`.planning/roadmaps/integration.md`、`docs/legacy-refactor/README.md`、`docs/shared/README.md` 与两个计划目录 README 均只在历史语境提及 Builder；Manager 现役文档明确迁移历史已压平（head `0006_dm020_extension_platform`），标记在 0007/0008 的旧本地数据库不兼容、需手工重建，程序不自动删除用户数据。
 - Builder 专用脚本清理清单（随 PLAN-INT-004 Task 1 归档至本地 `legacy/dst-builder/scripts/`，公开仓库已删除）：`scripts/build_builder_plugins.ps1`、`scripts/build_builder_release.ps1`、`scripts/export_builder_openapi.py`。
 - 验证：`git diff --check` 通过；治理扫描（`现役.*Builder|Builder.*现役|双产品|第二条产品线`）命中仅存在于历史决策正文、封口说明或取消/否定语境，无现役 Builder 声明；`uv run ruff check .` 通过（0 告警）；`uv run alembic upgrade head` 通过，`alembic current` 为 `0006_dm020_extension_platform (head)`；`web` 的 `npm run build` 通过。`uv run pytest -q` 除 `tests/unit/test_setup_bat.py` 6 项外全部通过；该 6 项失败为本机环境问题——cmd 无法在本会话的进程环境中按 GBK 解析 LF 行尾的 `setup.bat`（用 Task 1 之前的 setup.bat 旧版本复测，失败完全相同，证明与本次及 Task 1 的脚本改动无关，属环境与脚本编码契约的既有冲突，2026-09-19 changelog 已有同类记录），且该测试文件仍断言 Task 1 已按计划移除的 `DST_BUILDER_*` 配置键，需要后续计划一并修正。真实 AutoCAD 系统测试按计划不属于本次文档与归档变更的必需门禁，未执行。
-
-
 
 ## 2026-09-21（归档 DST Builder 并清理专用脚本）
 

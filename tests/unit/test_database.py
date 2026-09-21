@@ -594,44 +594,26 @@ def test_revision_kind_and_source_json_round_trip(tmp_path: Path):
     assert revision["source_json"] == {"schema": "dst-manager.import-source/v1", "import_batch": "batch-1"}
 
 
-def test_upgrade_from_0006_adds_revision_kind_columns_and_keeps_rows(tmp_path: Path):
-    """0006 旧库升级：既有修订行 kind 默认 operation，且 head 不保留 handoff_sources。"""
+def test_existing_0006_database_without_revision_kind_columns_is_rejected(tmp_path: Path):
+    """迁移压平后 0006 即基线：标记 0006 但缺 kind/source_json 的旧式数据库属 schema 漂移，拒绝打开且不删除文件。"""
     from alembic import command
     from alembic.config import Config
 
     from dst_manager.runtime import resource_dir
 
-    path = tmp_path / "upgrade.sqlite"
+    path = tmp_path / "old-0006.sqlite"
     url = f"sqlite:///{path.as_posix()}"
 
-    def alembic_config() -> Config:
-        config = Config(str(resource_dir() / "alembic.ini"))
-        config.set_main_option("script_location", str(resource_dir() / "migrations"))
-        config.set_main_option("sqlalchemy.url", url)
-        return config
-
-    command.upgrade(alembic_config(), "0006_dm020_extension_platform")
+    config = Config(str(resource_dir() / "alembic.ini"))
+    config.set_main_option("script_location", str(resource_dir() / "migrations"))
+    config.set_main_option("sqlalchemy.url", url)
+    # 构造旧式 0006 数据库：alembic_version=0006，但物理 schema 没有 kind/source_json 两列
+    command.upgrade(config, "0006_dm020_extension_platform")
     with sqlite3.connect(path) as connection:
-        connection.execute(
-            "INSERT INTO workspaces (id, root, dst_path, current_revision, default_cad_version, version) VALUES ('w', '.', 'a.dst', 'r0', '2020', 1)"
-        )
-        connection.execute(
-            "INSERT INTO document_revisions (id, workspace_id, operation_id, before_hash, result_hash, revision_dir, created_at)"
-            " VALUES ('legacy', 'w', 'op', 'h1', 'h2', '.', '2026-01-01 00:00:00.000000')"
-        )
+        connection.execute("ALTER TABLE document_revisions DROP COLUMN kind")
+        connection.execute("ALTER TABLE document_revisions DROP COLUMN source_json")
 
-    command.upgrade(alembic_config(), "head")
-
-    with sqlite3.connect(path) as connection:
-        kind, source_json = connection.execute(
-            "SELECT kind, source_json FROM document_revisions WHERE id='legacy'"
-        ).fetchone()
-        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert kind == "operation"
-    assert source_json is None
-    assert "handoff_sources" not in tables
-
-    # 升级后的库可被当前 Database 打开（schema 校验通过）且旧修订仍可读
-    database = Database(url)
-    revision = database.get_revision("legacy")
-    assert revision["kind"] == "operation"
+    with pytest.raises(RuntimeError, match="DATABASE_SCHEMA_DRIFT.*document_revisions.kind"):
+        Database(url)
+    # 旧库文件不被程序自动删除
+    assert path.exists()

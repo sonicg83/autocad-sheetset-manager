@@ -82,7 +82,7 @@ related:
 - Consumes: RFC-INT-003 的 Builder 直接退场结论，以及 `.gitignore` 中 `/legacy/` 的本地私有目录约定。
 - Produces: 仅暴露 `dst-manager` console script、`dst_manager` 与 `dst_platform` Python 包的公开仓库；本机保留完整 `legacy/dst-builder/` 归档。
 
-- [ ] **Step 1: 检查工作区和归档目标**
+- [x] **Step 1: 检查工作区和归档目标**
 
 运行：
 
@@ -101,7 +101,7 @@ if (Test-Path -LiteralPath $archiveRoot) {
 
 Expected: 工作区现有改动被记录；`legacy` 解析到当前仓库内；`legacy/dst-builder/` 不存在。若目标存在，停止并由用户决定新目录名或处理旧归档。
 
-- [ ] **Step 2: 建立清单并核对全部源路径**
+- [x] **Step 2: 建立清单并核对全部源路径**
 
 使用以下唯一归档清单：
 
@@ -126,7 +126,7 @@ if ($missing.Count -gt 0) { throw "归档源缺失：$($missing -join ', ')" }
 
 Expected: 所有源路径存在；清单包含 Builder Python、Web、数据库迁移、测试、插件、打包入口以及三个专用脚本。
 
-- [ ] **Step 3: 按清单移动到本地归档并核验**
+- [x] **Step 3: 按清单移动到本地归档并核验**
 
 ```powershell
 New-Item -ItemType Directory -Path $archiveRoot | Out-Null
@@ -143,7 +143,7 @@ if ($notArchived.Count -gt 0) { throw "归档不完整：$($notArchived -join ',
 
 Expected: 清单中的源路径全部从仓库工作树消失，目标路径全部存在于 `legacy/dst-builder/`；Git 将其识别为删除，因为 `legacy/` 不被跟踪。
 
-- [ ] **Step 4: 清除包、安装和根文档中的 Builder 入口**
+- [x] **Step 4: 清除包、安装和根文档中的 Builder 入口**
 
 将 `pyproject.toml` 收缩为：
 
@@ -166,7 +166,7 @@ sa.Column("source_json", sa.Text(), nullable=True),
 
 把 `database.py` 的 `LATEST_SCHEMA_REVISION` 改为 `0006_dm020_extension_platform`，同步更新 `test_database.py`、`test_runtime.py` 和 `test_extension_persistence.py` 的 head、迁移哈希与全新库断言。不得为 0007/0008 数据库增加兼容分支；README 和 changelog 明确说明现有本地 Manager 数据库需要手工重建，程序不自动删除用户数据。
 
-- [ ] **Step 5: 扫描所有 Builder 运行入口和专用脚本残留**
+- [x] **Step 5: 扫描所有 Builder 运行入口和专用脚本残留**
 
 ```powershell
 git grep -n -E "dst-builder|dst_builder|builder-web|builder_migrations|DstBuilder|build_builder|export_builder" -- pyproject.toml scripts packaging plugins src tests
@@ -177,7 +177,7 @@ if (Test-Path -LiteralPath "migrations/versions/0008_drop_handoff_sources.py") {
 
 Expected: 两次扫描均无命中；活动源码、测试、插件、打包、脚本、包元数据和根 README 不再包含 Builder 运行入口。历史文档链接允许继续使用产品名称；Manager 的迁移目录也不再包含 0007/0008。
 
-- [ ] **Step 6: 验证 Manager 的最小独立运行面**
+- [x] **Step 6: 验证 Manager 的最小独立运行面**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
@@ -191,7 +191,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
 
 Expected: UV 同步和锁文件检查成功；Manager CLI 与两个包导入成功；数据库测试证明全新库 head 为 0006 且通用修订字段存在；AutoCAD 2016/2020 Manager 插件构建不再查找 Builder 项目。
 
-- [ ] **Step 7: 记录并提交整体归档**
+- [x] **Step 7: 记录并提交整体归档**
 
 在 `changelog.md` 记录本地归档位置、公开仓库删除范围、Builder 专用脚本清理结果、迁移基线压平方式，以及现有 Manager 数据库必须手工重建。只暂存本任务涉及的删除和修改，不暂存 `legacy/`：
 
@@ -226,23 +226,23 @@ git commit -m "归档 DST Builder 并清理专用脚本"
 - Consumes: Task 1 形成的 Manager 单产品仓库，以及 RFC-INT-003 的取代关系。
 - Produces: 现役 scope 仅为 `dst-manager`、`shared`、`integration`；Builder 文档和备忘保留为只读历史入口，不再产生新需求、计划或发布工作。
 
-- [ ] **Step 1: 更新权威治理和仓库规则**
+- [x] **Step 1: 更新权威治理和仓库规则**
 
 把 `ARCH-INT-002` 更新为当前单产品事实：`dst-builder` 已按 RFC-INT-003 退场，公开实现由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`，新建图纸集能力归入 Manager。同步 `AGENTS.md`：现役 scope 仅保留 `dst-manager`、`shared`、`integration`；`dst-builder` 与 `legacy-refactor` 都是历史 scope，不接收新需求、架构、计划或待办。
 
-- [ ] **Step 2: 将 Builder 正式文档封口为历史资料**
+- [x] **Step 2: 将 Builder 正式文档封口为历史资料**
 
 将 `VISION-DB-001`、`PRD-DB-001`、`ARCH-DB-001`、`SPEC-DB-001` 的 `status` 改为 `archived`，`updated` 改为 `2026-09-21`，并在标题后增加统一说明：文档描述退场前的产品，不再作为现役实现依据；替代方向见 RFC-INT-003、PLAN-DM-035 与 PLAN-DM-036。`docs/dst-builder/README.md` 只保留历史导航和上述封口说明，不复制实现细节。
 
-- [ ] **Step 3: 关闭 Builder 路线图、计划和待办**
+- [x] **Step 3: 关闭 Builder 路线图、计划和待办**
 
 将 `ROADMAP-DB-001` 与 `PLAN-DB-001` 标记为 `cancelled`，原因明确写为“产品方向终止，不代表实施失败”；把 `PLAN-INT-003` 标记为 `cancelled`，说明双产品测试治理已失去前提，未来 Manager 测试治理另行立项。删除尚未形成正式计划且已失效的 Builder 状态撕裂 Todo；保留 `.planning/memos/dst-builder/` 作为历史证据。
 
-- [ ] **Step 4: 同步所有现役导航**
+- [x] **Step 4: 同步所有现役导航**
 
 更新根、`docs/`、`docs/integration/`、`docs/dst-manager/`、`.planning/` 与两个计划目录的 README：Builder 只出现在“历史资料”语境中；Manager 标准驱动创建由 RFC-INT-003、PLAN-DM-035 和 PLAN-DM-036 承接。历史 RFC、ADR 和 changelog 保留原始事实；现役文档明确迁移历史已压平且旧本地数据库不兼容。
 
-- [ ] **Step 5: 执行文档封口和 Manager 回归验证**
+- [x] **Step 5: 执行文档封口和 Manager 回归验证**
 
 ```powershell
 git diff --check
@@ -257,7 +257,7 @@ Set-Location ..
 
 Expected: 差异格式检查通过；扫描命中只存在于明确标记为历史的原始决策正文，不存在现役声明；Ruff、pytest、全新数据库升级和 Manager Web 构建通过。真实 AutoCAD 系统测试不是本次文档与归档变更的必需门禁。
 
-- [ ] **Step 6: 记录验证并提交文档封口**
+- [x] **Step 6: 记录验证并提交文档封口**
 
 把实际命令结果、跳过项和 Builder 专用脚本清理清单写入 `changelog.md`，满足后将本计划状态改为 `completed`：
 
