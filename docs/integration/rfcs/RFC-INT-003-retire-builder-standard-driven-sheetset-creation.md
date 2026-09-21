@@ -241,7 +241,7 @@ HTML 与 JSON 必须由同一份验证结果模型生成。报告记录工程、
 
 ## 实施阶段
 
-1. **[Builder 退场与治理调整（PLAN-INT-004）](../../../.planning/plans/integration/PLAN-INT-004-retire-dst-builder.md)**：移除产品实现，归档 scope，更新治理架构和索引。
+1. **[Builder 整体归档与文档封口（PLAN-INT-004）](../../../.planning/plans/integration/PLAN-INT-004-retire-dst-builder.md)**：把产品面和专用脚本整体移入本地 `legacy/`，清除公开运行入口并封口历史 scope；不实施数据库迁移。
 2. **[标准库与标准编辑器（PLAN-DM-035）](../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)**：标准 Schema、官方/用户库、属性与规则、模板资产和版本发布。
 3. **[标准驱动创建（PLAN-DM-036）](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md)**：可恢复创建草稿、XLSX 结构导入、完整预览、CAD 生成与原子发布。
 4. **[标准校验报告（PLAN-DM-037）](../../../.planning/plans/dst-manager/PLAN-DM-037-standard-validation-reports.md)**：宿主与标准规则统一校验，生成同源 HTML 与 JSON。

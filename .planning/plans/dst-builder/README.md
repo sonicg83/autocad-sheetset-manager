@@ -1,6 +1,6 @@
 # DST Builder Plan 索引
 
-[RFC-INT-003](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 已接受 Builder 直接退场；实施范围见 [PLAN-INT-004](../integration/PLAN-INT-004-retire-dst-builder.md)。本目录不再新增 Builder 计划。
+[RFC-INT-003](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 已接受 Builder 直接退场；[PLAN-INT-004](../integration/PLAN-INT-004-retire-dst-builder.md) 将其整体移入本地 `legacy/`，清理专用脚本并封口历史文档，不实施数据库迁移。本目录不再新增 Builder 计划。
 
 DST Builder 的计划只承载有时效性的实施步骤；稳定产品、规范和架构事实见 [`docs/dst-builder/`](../../../docs/dst-builder/README.md)。
 

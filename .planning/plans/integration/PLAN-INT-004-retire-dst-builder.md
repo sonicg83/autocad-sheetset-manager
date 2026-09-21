@@ -1,123 +1,68 @@
 ---
 id: PLAN-INT-004
-title: DST Builder 直接退场实施计划
+title: DST Builder 整体归档与文档封口实施计划
 status: proposed
 owners:
-- integration
+  - integration
 created: 2026-09-21
 updated: 2026-09-21
 related:
-- RFC-INT-003
-- ARCH-INT-002
-- PRD-DB-001
-- ARCH-DB-001
-- SPEC-DB-001
-- PLAN-INT-003
+  - RFC-INT-003
+  - ARCH-INT-002
+  - PRD-DB-001
+  - ARCH-DB-001
+  - SPEC-DB-001
+  - PLAN-INT-003
 ---
 
-# DST Builder 直接退场实施计划
+# DST Builder 整体归档与文档封口实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 删除 DST Builder 的全部可运行产品面，同时保留历史决策、Manager 迁移链和普通 DST/DWG 兼容性。
+**Goal:** 将已停止使用且与 DST Manager 无运行关系的 DST Builder 整体移入本地 `legacy/dst-builder/`，清除全部 Builder 专用入口与脚本，并把现役治理和文档封口为 Manager 单产品状态。
 
-**Architecture:** 先以仓库契约测试固定“Builder 不再可运行、历史资料仍可追溯”的边界，再依次移除 Python/前端/插件/发布入口，最后更新单产品治理与验证编排。不得把 Builder 实现搬入 Manager；后续新建能力由 PLAN-DM-035 与 PLAN-DM-036 重新实现。
+**Architecture:** 本次不迁移数据、不拆解或复用 Builder 实现，也不为退场新增永久测试。先把 Builder 的完整产品目录、测试、插件、打包文件和专用脚本原样移动到被 Git 忽略的本地归档目录，再删除公开仓库中的 Builder 包入口和引用；最后仅更新权威治理、历史文档状态和索引。Git 历史继续承担公开源码追溯，`legacy/dst-builder/` 只作为当前工作机上的便捷留档。
 
-**Tech Stack:** Python 3.12、UV、pytest、Ruff、Vue 3/TypeScript/Vite、PowerShell、.NET Framework 4.8、Markdown。
+**Tech Stack:** Windows 11、PowerShell、Git、UV、Python 3.12、Markdown。
 
 **Spec:** [`docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md`](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)
 
 ## Global Constraints
 
-- 保留 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`，保证 Manager 全新数据库迁移链可重放。
-- 保留 `docs/dst-builder/`、既有 RFC/ADR/Plan/Memo 和 changelog 作为历史记录；只更新状态、索引和取代关系。
-- 不兼容 `project.dstb`，不提供 Builder 草稿迁移器。
-- 已发布 DST/DWG 必须继续通过既有 `/api/workspaces/open` 打开。
-- 删除文件使用明确清单；不得触碰 `legacy/`、`lagacy/`、`sample/` 或用户未提交改动。
-- 每个任务更新 `changelog.md`，提交信息使用简体中文。
+- 不设计或执行任何数据库迁移；`builder_migrations/` 随 Builder 归档。
+- 必须保留 Manager 的 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`，不得改写既有升级链。
+- 不兼容 `project.dstb`，不导入 Builder 草稿，也不把 Builder 实现搬入 Manager。
+- `src/dst_platform/` 由 Manager 继续使用，不属于 Builder 归档范围。
+- `docs/dst-builder/` 和 `.planning/memos/dst-builder/` 保留在公开仓库中作为历史资料；只更新状态、封口说明和索引。
+- `legacy/` 已被 `.gitignore` 忽略；归档移动前必须解析并核对源、目标绝对路径，目标已存在时停止，不得合并或覆盖。
+- Builder 专用脚本必须全部归档；共享脚本只移除 Builder 分支或 Builder 配置，不得影响 Manager 构建、发布或插件流程。
+- 每个任务只暂存明确列出的文件，更新 `changelog.md`，并使用简体中文提交信息。
 
 ## Review Focus
 
-- 全新数据库仍能经过 0007/0008 升级到 head；Task 4 的迁移测试必须覆盖。
-- 打包、CLI、setup 和文档中不能残留可启动 Builder 的入口；Task 2/3 的退场契约测试必须覆盖。
-- Manager 发布脚本与 AutoCAD 插件工程不能因删除 Builder 项目而失效；Task 3 必须执行双版本非 CAD 构建门禁。
-- `PLAN-INT-003` 的双产品测试计划会被本计划部分取代；Task 4 必须明确取代关系，不能留下错误执行入口。
-- 历史文档可检索 Builder，但现役 README、脚本和包元数据不得把它描述为可用产品；Task 4 必须分别断言允许和禁止范围。
+- `legacy/dst-builder/` 已存在或包含同名目标时必须停止，不能覆盖用户已有归档；Task 1 的预检负责保证。
+- Builder 专用 PowerShell/Python 脚本、PyInstaller 入口和 console script 必须同时消失，不能留下半可用入口；Task 1 的残留扫描负责保证。
+- Manager 仍依赖 `dst_platform`，归档不得移动或删改该包；Task 1 的导入检查负责保证。
+- Manager 的 0007/0008 迁移必须继续存在且可升级到 head；Task 2 的收口验证负责保证。
+- 历史文档仍应可检索，但不得继续把 Builder 描述为现役产品或开放计划；Task 2 的文档扫描负责保证。
 
 ---
 
-### Task 1: 固定 Builder 退场仓库契约
+### Task 1: 整体归档 Builder 并清除全部运行入口
 
 **Files:**
-- Create: `tests/unit/test_builder_retirement.py`
-- Modify: `changelog.md`
-
-**Interfaces:**
-- Consumes: RFC-INT-003 的退场清单。
-- Produces: `test_builder_runtime_surfaces_are_absent()` 与 `test_builder_history_is_preserved()`，供后续删除任务作为安全网。
-
-- [ ] **Step 1: 写入会因现有 Builder 产品面而失败的契约测试**
-
-```python
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def test_builder_runtime_surfaces_are_absent() -> None:
-    forbidden = [
-        "src/dst_builder",
-        "builder-web",
-        "builder_migrations",
-        "builder_alembic.ini",
-        "packaging/dst-builder.spec",
-        "packaging/builder_entry.py",
-        "plugins/src/DstBuilder.AutoCAD",
-        "plugins/tests/DstBuilder.AutoCAD.Tests",
-        "scripts/build_builder_plugins.ps1",
-        "scripts/build_builder_release.ps1",
-        "scripts/export_builder_openapi.py",
-        "tests/builder",
-    ]
-    assert [path for path in forbidden if (ROOT / path).exists()] == []
-
-
-def test_builder_history_is_preserved() -> None:
-    required = [
-        "docs/dst-builder/README.md",
-        "docs/integration/rfcs/RFC-INT-001-dst-builder-product-establishment.md",
-        "migrations/versions/0007_db001_builder_handoff.py",
-        "migrations/versions/0008_drop_handoff_sources.py",
-    ]
-    assert [path for path in required if not (ROOT / path).is_file()] == []
-```
-
-- [ ] **Step 2: 运行目标测试并确认第一条失败、历史保留测试通过**
-
-Run: `uv run pytest tests/unit/test_builder_retirement.py -q`
-
-Expected: `test_builder_runtime_surfaces_are_absent` 列出当前 Builder 路径并失败；`test_builder_history_is_preserved` 通过。
-
-- [ ] **Step 3: 在 changelog 记录退场契约安全网**
-
-写明新增测试固定删除范围与历史保留范围，尚未删除实现。
-
-- [ ] **Step 4: 提交契约测试**
-
-```powershell
-git add tests/unit/test_builder_retirement.py changelog.md
-git commit -m "固定 Builder 退场仓库契约"
-```
-
-### Task 2: 删除 Python、迁移项目与产品入口
-
-**Files:**
-- Delete: `src/dst_builder/`
-- Delete: `tests/builder/`
-- Delete: `builder_migrations/`
-- Delete: `builder_alembic.ini`
-- Delete: `packaging/dst-builder.spec`
-- Delete: `packaging/builder_entry.py`
+- Move locally: `src/dst_builder/` → `legacy/dst-builder/src/dst_builder/`
+- Move locally: `builder-web/` → `legacy/dst-builder/builder-web/`
+- Move locally: `builder_migrations/` → `legacy/dst-builder/builder_migrations/`
+- Move locally: `builder_alembic.ini` → `legacy/dst-builder/builder_alembic.ini`
+- Move locally: `tests/builder/` → `legacy/dst-builder/tests/builder/`
+- Move locally: `plugins/src/DstBuilder.AutoCAD/` → `legacy/dst-builder/plugins/src/DstBuilder.AutoCAD/`
+- Move locally: `plugins/tests/DstBuilder.AutoCAD.Tests/` → `legacy/dst-builder/plugins/tests/DstBuilder.AutoCAD.Tests/`
+- Move locally: `packaging/dst-builder.spec` → `legacy/dst-builder/packaging/dst-builder.spec`
+- Move locally: `packaging/builder_entry.py` → `legacy/dst-builder/packaging/builder_entry.py`
+- Move locally: `scripts/build_builder_plugins.ps1` → `legacy/dst-builder/scripts/build_builder_plugins.ps1`
+- Move locally: `scripts/build_builder_release.ps1` → `legacy/dst-builder/scripts/build_builder_release.ps1`
+- Move locally: `scripts/export_builder_openapi.py` → `legacy/dst-builder/scripts/export_builder_openapi.py`
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
 - Modify: `scripts/setup.bat`
@@ -126,12 +71,73 @@ git commit -m "固定 Builder 退场仓库契约"
 - Modify: `changelog.md`
 
 **Interfaces:**
-- Consumes: Task 1 的禁止路径契约。
-- Produces: 仅含 `dst-manager` 的 Python 包和 CLI；Manager 依赖集合保持不变。
+- Consumes: RFC-INT-003 的 Builder 直接退场结论，以及 `.gitignore` 中 `/legacy/` 的本地私有目录约定。
+- Produces: 仅暴露 `dst-manager` console script、`dst_manager` 与 `dst_platform` Python 包的公开仓库；本机保留完整 `legacy/dst-builder/` 归档。
 
-- [ ] **Step 1: 从包元数据移除 Builder CLI 与包**
+- [ ] **Step 1: 检查工作区和归档目标**
 
-将 `pyproject.toml` 调整为：
+运行：
+
+```powershell
+git status --short
+$repoRoot = (Resolve-Path -LiteralPath ".").Path
+$legacyRoot = (Resolve-Path -LiteralPath "legacy").Path
+$archiveRoot = Join-Path $legacyRoot "dst-builder"
+if (-not $legacyRoot.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "legacy 目录不在仓库内：$legacyRoot"
+}
+if (Test-Path -LiteralPath $archiveRoot) {
+    throw "归档目标已存在，停止以避免覆盖：$archiveRoot"
+}
+```
+
+Expected: 工作区现有改动被记录；`legacy` 解析到当前仓库内；`legacy/dst-builder/` 不存在。若目标存在，停止并由用户决定新目录名或处理旧归档。
+
+- [ ] **Step 2: 建立清单并核对全部源路径**
+
+使用以下唯一归档清单：
+
+```powershell
+$moves = [ordered]@{
+    "src\dst_builder" = "src\dst_builder"
+    "builder-web" = "builder-web"
+    "builder_migrations" = "builder_migrations"
+    "builder_alembic.ini" = "builder_alembic.ini"
+    "tests\builder" = "tests\builder"
+    "plugins\src\DstBuilder.AutoCAD" = "plugins\src\DstBuilder.AutoCAD"
+    "plugins\tests\DstBuilder.AutoCAD.Tests" = "plugins\tests\DstBuilder.AutoCAD.Tests"
+    "packaging\dst-builder.spec" = "packaging\dst-builder.spec"
+    "packaging\builder_entry.py" = "packaging\builder_entry.py"
+    "scripts\build_builder_plugins.ps1" = "scripts\build_builder_plugins.ps1"
+    "scripts\build_builder_release.ps1" = "scripts\build_builder_release.ps1"
+    "scripts\export_builder_openapi.py" = "scripts\export_builder_openapi.py"
+}
+$missing = @($moves.Keys | Where-Object { -not (Test-Path -LiteralPath (Join-Path $repoRoot $_)) })
+if ($missing.Count -gt 0) { throw "归档源缺失：$($missing -join ', ')" }
+```
+
+Expected: 所有源路径存在；清单包含 Builder Python、Web、数据库迁移、测试、插件、打包入口以及三个专用脚本。
+
+- [ ] **Step 3: 按清单移动到本地归档并核验**
+
+```powershell
+New-Item -ItemType Directory -Path $archiveRoot | Out-Null
+foreach ($entry in $moves.GetEnumerator()) {
+    $source = Join-Path $repoRoot $entry.Key
+    $destination = Join-Path $archiveRoot $entry.Value
+    $destinationParent = Split-Path -Parent $destination
+    New-Item -ItemType Directory -Force -Path $destinationParent | Out-Null
+    Move-Item -LiteralPath $source -Destination $destination
+}
+$notArchived = @($moves.Values | Where-Object { -not (Test-Path -LiteralPath (Join-Path $archiveRoot $_)) })
+if ($notArchived.Count -gt 0) { throw "归档不完整：$($notArchived -join ', ')" }
+```
+
+Expected: 清单中的源路径全部从仓库工作树消失，目标路径全部存在于 `legacy/dst-builder/`；Git 将其识别为删除，因为 `legacy/` 不被跟踪。
+
+- [ ] **Step 4: 清除包、安装和根文档中的 Builder 入口**
+
+将 `pyproject.toml` 收缩为：
 
 ```toml
 [project.scripts]
@@ -141,139 +147,101 @@ dst-manager = "dst_manager.interfaces.cli:app"
 packages = ["src/dst_manager", "src/dst_platform"]
 ```
 
-- [ ] **Step 2: 删除明确列出的 Builder Python、独立迁移与打包文件**
+从 `scripts/setup.bat` 移除所有 `DST_BUILDER_*` 设置以及 Builder 启动提示。从中英文根 README 删除 Builder 启动、构建、发布和现役产品描述，只保留指向历史文档入口的说明。执行 `uv lock` 同步锁文件；仅移除经 `uv lock` 判定不再被 Manager 使用的依赖。
 
-删除本任务 `Files` 中的目录和文件；不得删除 Manager 的 `migrations/versions/0007_*` 与 `0008_*`。
-
-- [ ] **Step 3: 移除 setup 与 README 的运行入口**
-
-从 `scripts/setup.bat` 删除所有 `DST_BUILDER_*` 环境变量写入，从根 README 中删除 Builder 启动、发布和现役产品描述，保留历史文档链接并标注 retired。
-
-- [ ] **Step 4: 同步锁文件并运行目标契约**
-
-Run: `uv lock && uv run pytest tests/unit/test_builder_retirement.py -q`
-
-Expected: 锁文件成功更新；两个退场契约测试通过。
-
-- [ ] **Step 5: 验证 Manager CLI 与导入面**
-
-Run: `uv run dst-manager --help; uv run python -c "import dst_manager; import dst_platform"`
-
-Expected: 两条命令退出码均为 0；不再存在 `dst-builder` console script。
-
-- [ ] **Step 6: 提交 Python 产品面退场**
+- [ ] **Step 5: 扫描所有 Builder 运行入口和专用脚本残留**
 
 ```powershell
-git add pyproject.toml uv.lock scripts/setup.bat README.md README.en.md changelog.md src tests builder_migrations builder_alembic.ini packaging
-git commit -m "移除 Builder Python 产品面"
+git grep -n -E "dst-builder|dst_builder|builder-web|builder_migrations|DstBuilder|build_builder|export_builder" -- pyproject.toml scripts packaging plugins src tests
+git grep -n -E "dst-builder (serve|build)|build_builder|export_builder|第二条产品线" -- README.md README.en.md scripts/setup.bat
 ```
 
-### Task 3: 删除 Builder Web、插件与发布工具
+Expected: 两次扫描均无命中；活动源码、测试、插件、打包、脚本、包元数据和根 README 不再包含 Builder 运行入口。历史文档链接允许继续使用产品名称；Manager 的 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py` 不在清理扫描范围内，必须保留且不得改名。
 
-**Files:**
-- Delete: `builder-web/`
-- Delete: `plugins/src/DstBuilder.AutoCAD/`
-- Delete: `plugins/tests/DstBuilder.AutoCAD.Tests/`
-- Delete: `scripts/build_builder_plugins.ps1`
-- Delete: `scripts/build_builder_release.ps1`
-- Delete: `scripts/export_builder_openapi.py`
-- Modify: `changelog.md`
-
-**Interfaces:**
-- Consumes: Task 1 的禁止路径契约与 Task 2 的单 CLI 包。
-- Produces: 只构建 Manager Web、Manager 插件和 Manager Windows 发布包的工具链。
-
-- [ ] **Step 1: 运行退场契约并确认剩余产品面仍使测试失败**
-
-Run: `uv run pytest tests/unit/test_builder_retirement.py::test_builder_runtime_surfaces_are_absent -q`
-
-Expected: FAIL，并列出 `builder-web`、Builder 插件和 Builder 发布脚本。
-
-- [ ] **Step 2: 删除独立前端、插件工程和发布脚本**
-
-删除本任务列出的 Builder 目录与脚本；Manager 的 `DstManager.AutoCAD` 工程及 `scripts/build_plugins.ps1`、`scripts/build_release.ps1` 保持原有输出路径。
-
-- [ ] **Step 3: 运行退场契约和 Manager Web 构建**
-
-Run: `uv run pytest tests/unit/test_builder_retirement.py -q; Set-Location web; npm run build; Set-Location ..`
-
-Expected: 契约测试全过；Manager Web 的 API、i18n、UI、TypeScript 和 Vite 门禁全过。
-
-- [ ] **Step 4: 运行 Manager 插件双版本构建**
-
-Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1`
-
-Expected: 2016/2020 Manager 插件均成功；无 Builder 项目查找错误。
-
-- [ ] **Step 5: 提交前端、插件与发布面退场**
-
-```powershell
-git add builder-web plugins/src/DstBuilder.AutoCAD plugins/tests/DstBuilder.AutoCAD.Tests scripts/build_builder_plugins.ps1 scripts/build_builder_release.ps1 scripts/export_builder_openapi.py changelog.md
-git commit -m "移除 Builder 前端插件与发布工具"
-```
-
-### Task 4: 收口单产品治理、计划状态与全量验证
-
-**Files:**
-- Modify: `AGENTS.md`
-- Modify: `docs/integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md`
-- Create: `docs/integration/adr/ADR-INT-002-retire-dst-builder.md`
-- Modify: `docs/integration/adr/README.md`
-- Modify: `docs/dst-builder/README.md`
-- Modify: `docs/dst-manager/README.md`
-- Modify: `docs/README.md`
-- Modify: `.planning/roadmaps/integration.md`
-- Modify: `.planning/roadmaps/dst-builder.md`
-- Modify: `.planning/plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md`
-- Modify: `.planning/plans/dst-builder/README.md`
-- Modify: `.planning/plans/integration/PLAN-INT-003-test-system-consolidation.md`
-- Modify: `.planning/README.md`
-- Modify: `changelog.md`
-
-**Interfaces:**
-- Consumes: Tasks 1–3 的单产品仓库状态。
-- Produces: 接受的单产品治理架构、Builder 历史索引和完整验证证据。
-
-- [ ] **Step 1: 新增 ADR 并更新权威治理**
-
-`ADR-INT-002` 记录 RFC-INT-003 的落地决定、删除范围、无 `.dstb` 迁移承诺和历史迁移保留；`ARCH-INT-002` 改为 Manager 单产品治理并声明取代原双产品章节。
-
-- [ ] **Step 2: 归档 Builder 计划和路线图**
-
-将 `PLAN-DB-001` 标记 `cancelled`，原因写明产品退场而非实现失败；Builder 路线图和计划入口改为历史只读。更新 `PLAN-INT-003`，删除将要维护 Builder 测试入口的任务，并记录由本计划取代的具体范围。
-
-- [ ] **Step 3: 更新仓库级 scope 规则和索引**
-
-`AGENTS.md` 的现役 scope 改为 `dst-manager`、`shared`、`integration`；`dst-builder` 与 `legacy-refactor` 均为历史 scope，不接收新需求。同步所有 README 和 changelog。
-
-- [ ] **Step 4: 执行完整验证**
-
-Run:
+- [ ] **Step 6: 验证 Manager 的最小独立运行面**
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
 uv sync --dev
-uv run ruff check .
-uv run pytest -q
 uv lock --check
-uv run alembic upgrade head
-Set-Location web
-npm ci
-npm run build
-npm run test:e2e
-Set-Location ..
+uv run dst-manager --help
+uv run python -c "import dst_manager; import dst_platform"
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
 ```
 
-Expected: Ruff、pytest、锁文件、迁移、Manager Web build/e2e 和双版本插件构建全部通过；pytest 收集结果不再包含 `tests/builder`。
+Expected: UV 同步和锁文件检查成功；Manager CLI 与两个包导入成功；AutoCAD 2016/2020 Manager 插件构建不再查找 Builder 项目。
 
-- [ ] **Step 5: 记录实际验证并关闭计划**
+- [ ] **Step 7: 记录并提交整体归档**
 
-把每条命令的退出码、通过/跳过数量和环境缺口写入本计划末尾；确认真实 AutoCAD 系统测试未启用时明确记录未执行。全部满足后把本计划状态改为 `completed`。
+在 `changelog.md` 记录本地归档位置、公开仓库删除范围、Builder 专用脚本清理结果，以及没有执行数据库迁移。只暂存本任务涉及的删除和修改，不暂存 `legacy/`：
 
-- [ ] **Step 6: 提交治理收口**
+```powershell
+git add pyproject.toml uv.lock scripts/setup.bat README.md README.en.md changelog.md
+git add -u -- src/dst_builder builder-web builder_migrations builder_alembic.ini tests/builder plugins/src/DstBuilder.AutoCAD plugins/tests/DstBuilder.AutoCAD.Tests packaging/dst-builder.spec packaging/builder_entry.py scripts/build_builder_plugins.ps1 scripts/build_builder_release.ps1 scripts/export_builder_openapi.py
+git commit -m "归档 DST Builder 并清理专用脚本"
+```
+
+### Task 2: 封口历史文档并收敛为 Manager 单产品治理
+
+**Files:**
+- Modify: `AGENTS.md`
+- Modify: `docs/integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md`
+- Modify: `docs/dst-builder/README.md`
+- Modify: `docs/dst-builder/product/vision.md`
+- Modify: `docs/dst-builder/product/prds/PRD-DB-001-guided-sheetset-generation.md`
+- Modify: `docs/dst-builder/architecture/ARCH-DB-001-greenfield-desktop-baseline.md`
+- Modify: `docs/dst-builder/specs/SPEC-DB-001-minimal-generation-loop.md`
+- Modify: `docs/dst-manager/README.md`
+- Modify: `docs/integration/README.md`
+- Modify: `docs/README.md`
+- Modify: `.planning/roadmaps/dst-builder.md`
+- Modify: `.planning/plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md`
+- Modify: `.planning/plans/dst-builder/README.md`
+- Modify: `.planning/plans/integration/PLAN-INT-003-test-system-consolidation.md`
+- Delete: `.planning/todos/integration/2026-09-18-builder-status-torn-read.md`
+- Modify: `.planning/README.md`
+- Modify: `changelog.md`
+
+**Interfaces:**
+- Consumes: Task 1 形成的 Manager 单产品仓库，以及 RFC-INT-003 的取代关系。
+- Produces: 现役 scope 仅为 `dst-manager`、`shared`、`integration`；Builder 文档和备忘保留为只读历史入口，不再产生新需求、计划或发布工作。
+
+- [ ] **Step 1: 更新权威治理和仓库规则**
+
+把 `ARCH-INT-002` 更新为当前单产品事实：`dst-builder` 已按 RFC-INT-003 退场，公开实现由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`，新建图纸集能力归入 Manager。同步 `AGENTS.md`：现役 scope 仅保留 `dst-manager`、`shared`、`integration`；`dst-builder` 与 `legacy-refactor` 都是历史 scope，不接收新需求、架构、计划或待办。
+
+- [ ] **Step 2: 将 Builder 正式文档封口为历史资料**
+
+将 `VISION-DB-001`、`PRD-DB-001`、`ARCH-DB-001`、`SPEC-DB-001` 的 `status` 改为 `archived`，`updated` 改为 `2026-09-21`，并在标题后增加统一说明：文档描述退场前的产品，不再作为现役实现依据；替代方向见 RFC-INT-003、PLAN-DM-035 与 PLAN-DM-036。`docs/dst-builder/README.md` 只保留历史导航和上述封口说明，不复制实现细节。
+
+- [ ] **Step 3: 关闭 Builder 路线图、计划和待办**
+
+将 `ROADMAP-DB-001` 与 `PLAN-DB-001` 标记为 `cancelled`，原因明确写为“产品方向终止，不代表实施失败”；把 `PLAN-INT-003` 标记为 `cancelled`，说明双产品测试治理已失去前提，未来 Manager 测试治理另行立项。删除尚未形成正式计划且已失效的 Builder 状态撕裂 Todo；保留 `.planning/memos/dst-builder/` 作为历史证据。
+
+- [ ] **Step 4: 同步所有现役导航**
+
+更新根、`docs/`、`docs/integration/`、`docs/dst-manager/`、`.planning/` 与两个计划目录的 README：Builder 只出现在“历史资料”语境中；Manager 标准驱动创建由 RFC-INT-003、PLAN-DM-035 和 PLAN-DM-036 承接。不得把历史 RFC、ADR、changelog 或 Manager 的 0007/0008 迁移改写成不存在过 Builder。
+
+- [ ] **Step 5: 执行文档封口和 Manager 回归验证**
+
+```powershell
+git diff --check
+git grep -n -E "现役.*Builder|Builder.*现役|双产品|第二条产品线" -- README.md README.en.md AGENTS.md docs .planning
+uv run ruff check .
+uv run pytest -q
+uv run alembic upgrade head
+Set-Location web
+npm run build
+Set-Location ..
+```
+
+Expected: 差异格式检查通过；扫描命中只存在于明确标记为历史的原始决策正文，不存在现役声明；Ruff、pytest、全新数据库升级和 Manager Web 构建通过。真实 AutoCAD 系统测试不是本次文档与归档变更的必需门禁。
+
+- [ ] **Step 6: 记录验证并提交文档封口**
+
+把实际命令结果、跳过项和 Builder 专用脚本清理清单写入 `changelog.md`，满足后将本计划状态改为 `completed`：
 
 ```powershell
 git add AGENTS.md docs .planning changelog.md
-git commit -m "收口 Builder 退场与单产品治理"
+git commit -m "封口 Builder 历史文档与单产品治理"
 ```

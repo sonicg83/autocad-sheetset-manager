@@ -13,7 +13,7 @@
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
 - [取消 Builder 与 Manager 显式交接契约实施计划（PLAN-INT-002，completed）](plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)：已按 RFC-INT-002 / ADR-INT-001 移除两侧交接实现与 `handoff_sources` 表，Builder 成果改为扁平三件套。
 - [双产品测试体系收敛与过时内容清理实施计划（PLAN-INT-003，proposed）](plans/integration/PLAN-INT-003-test-system-consolidation.md)：恢复稳定基线，统一双产品验证与发布门禁，并分阶段清理休眠、重复、历史命名和超大测试文件。
-- [DST Builder 直接退场实施计划（PLAN-INT-004，proposed）](plans/integration/PLAN-INT-004-retire-dst-builder.md)：删除 Builder 可运行产品面，保留历史迁移与文档，并收口 Manager 单产品治理。
+- [DST Builder 整体归档与文档封口实施计划（PLAN-INT-004，proposed）](plans/integration/PLAN-INT-004-retire-dst-builder.md)：将 Builder 产品面和专用脚本整体移入本地 `legacy/`，保留历史文档并收口 Manager 单产品治理，不实施数据库迁移。
 - [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，proposed）](plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)
 - [标准驱动的新图纸集创建实施计划（PLAN-DM-036，proposed）](plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md)
 - [图纸标准校验与 HTML JSON 报告实施计划（PLAN-DM-037，proposed）](plans/dst-manager/PLAN-DM-037-standard-validation-reports.md)
