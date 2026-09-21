@@ -127,6 +127,10 @@ related:
 - 待决事项 3 已修复：`export_builder_openapi.py` 支持 `--check`，`builder-web` 新增 `check:api` 并接入 `build`，同时校验 OpenAPI JSON 与 TypeScript 生成类型。
 - 待决事项 2、4、5 保持原状态。
 
+### 2026-09-21 追记
+
+DST Builder 已按 [RFC-INT-003](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 整体退场（[PLAN-INT-004](../../plans/integration/PLAN-INT-004-retire-dst-builder.md)，completed）：上述待办文件 `.planning/todos/integration/2026-09-18-builder-status-torn-read.md` 已随之删除，第 1 条中的链接不再可点；缺陷分析与修复结论以本节及 2026-09-19 changelog 记录为准。
+
 ## 7. 已知残留（判定为可接受，留档备查）
 
 - `ARCH-INT-002` §2 的 `integration` 行仍列「交接契约」为职责——该列表达的是 scope 归属（谁有权决定跨产品契约），§6 已明确当前无此契约并规定恢复须先有 RFC。

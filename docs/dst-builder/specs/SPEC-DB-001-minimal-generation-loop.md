@@ -1,21 +1,24 @@
 ---
 id: SPEC-DB-001
 title: 单张图纸最小生成闭环规范
-status: review
+status: archived
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-21
 related:
   - PRD-DB-001
   - ARCH-DB-001
   - RFC-INT-001
   - RFC-INT-002
+  - RFC-INT-003
   - ADR-INT-001
   - ARCH-INT-002
 ---
 
 # 单张图纸最小生成闭环规范
+
+> **封口说明（2026-09-21）：** 本文档描述已退场的 DST Builder 产品能力，仅作为历史资料保留，不再作为现役实现依据；替代方向见 [RFC-INT-003](../../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)、[PLAN-DM-035](../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md) 与 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md)。
 
 ## 1. 目的与范围
 

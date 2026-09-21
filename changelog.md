@@ -1,3 +1,14 @@
+## 2026-09-21（封口 Builder 历史文档与单产品治理）
+
+- 治理收敛（PLAN-INT-004 Task 2）：`ARCH-INT-002` 更新为「DST Manager 单产品治理与共享平台」，记录 Builder 已按 RFC-INT-003 退场、公开实现由 Git 历史追溯、本地副本在被忽略的 `legacy/dst-builder/`、新建图纸集能力归入 Manager；`AGENTS.md` 现役 scope 收敛为 `dst-manager`、`shared`、`integration`，`dst-builder` 与 `legacy-refactor` 均为历史 scope，不接收新需求、架构、Spec、计划或待办，历史 `DB` 编号冻结不再新增。
+- 文档封口：`VISION-DB-001`、`PRD-DB-001`、`ARCH-DB-001`、`SPEC-DB-001` 状态改为 `archived`（`updated: 2026-09-21`），标题后增加统一封口说明（替代方向见 RFC-INT-003、PLAN-DM-035、PLAN-DM-036）；`docs/dst-builder/README.md` 收敛为只读历史导航，不复制实现细节；`RFC-INT-001` 状态改为 `superseded` 并追加历史说明（正文原始决策保留），RFC 索引同步。
+- 计划与待办关闭：`ROADMAP-DB-001`、`PLAN-DB-001` 标记 `cancelled`（产品方向终止，不代表实施失败；阶段 1 自动化门禁已全绿，仅真实双版本发布资格未执行）；`PLAN-INT-003` 标记 `cancelled`（双产品测试治理已失去前提，未来 Manager 测试治理另行立项）；删除已失效的 `.planning/todos/integration/2026-09-18-builder-status-torn-read.md` 并在 `MEMO-INT-001` 追记链接去向；`.planning/memos/dst-builder/` 保留为历史证据。`PLAN-INT-004` 状态改为 `completed`。
+- 导航同步：根 README（Task 1 已收敛）、`docs/README.md`、`docs/integration/README.md`、`docs/dst-manager/README.md`、`.planning/README.md`、`.planning/roadmaps/integration.md`、`docs/legacy-refactor/README.md`、`docs/shared/README.md` 与两个计划目录 README 均只在历史语境提及 Builder；Manager 现役文档明确迁移历史已压平（head `0006_dm020_extension_platform`），标记在 0007/0008 的旧本地数据库不兼容、需手工重建，程序不自动删除用户数据。
+- Builder 专用脚本清理清单（随 PLAN-INT-004 Task 1 归档至本地 `legacy/dst-builder/scripts/`，公开仓库已删除）：`scripts/build_builder_plugins.ps1`、`scripts/build_builder_release.ps1`、`scripts/export_builder_openapi.py`。
+- 验证：`git diff --check` 通过；治理扫描（`现役.*Builder|Builder.*现役|双产品|第二条产品线`）命中仅存在于历史决策正文、封口说明或取消/否定语境，无现役 Builder 声明；`uv run ruff check .` 通过（0 告警）；`uv run alembic upgrade head` 通过，`alembic current` 为 `0006_dm020_extension_platform (head)`；`web` 的 `npm run build` 通过。`uv run pytest -q` 除 `tests/unit/test_setup_bat.py` 6 项外全部通过；该 6 项失败为本机环境问题——cmd 无法在本会话的进程环境中按 GBK 解析 LF 行尾的 `setup.bat`（用 Task 1 之前的 setup.bat 旧版本复测，失败完全相同，证明与本次及 Task 1 的脚本改动无关，属环境与脚本编码契约的既有冲突，2026-09-19 changelog 已有同类记录），且该测试文件仍断言 Task 1 已按计划移除的 `DST_BUILDER_*` 配置键，需要后续计划一并修正。真实 AutoCAD 系统测试按计划不属于本次文档与归档变更的必需门禁，未执行。
+
+
+
 ## 2026-09-21（归档 DST Builder 并清理专用脚本）
 
 - 将 Builder 全部源码与运行入口整体移入本地归档 `legacy/dst-builder/`：`src/dst_builder/`、`builder-web/`、`builder_migrations/`、`builder_alembic.ini`、`tests/builder/`、`plugins/src/DstBuilder.AutoCAD/`、`plugins/tests/DstBuilder.AutoCAD.Tests/`、`packaging/dst-builder.spec`、`packaging/builder_entry.py`、`scripts/build_builder_plugins.ps1`、`scripts/build_builder_release.ps1`、`scripts/export_builder_openapi.py`。`legacy/` 保持在本地，不进入公开仓库。

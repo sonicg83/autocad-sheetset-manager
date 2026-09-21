@@ -2,7 +2,9 @@
 
 ## 定位与当前状态
 
-2026-09-21 接受 [Builder 退场与标准驱动创建（RFC-INT-003）](../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)：后续由 DST Manager 原生承担从已发布图纸标准创建新图纸集、标准管理与首版 HTML/JSON 合规报告；当前仅完成方向设计，尚未进入实施。
+2026-09-21 接受 [Builder 退场与标准驱动创建（RFC-INT-003）](../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)：DST Builder 作为独立产品整体退场，其实施已由 [PLAN-INT-004](../../.planning/plans/integration/PLAN-INT-004-retire-dst-builder.md)（completed）完成——公开仓库只保留 `dst_manager` 与 `dst_platform`，Builder 实现由 Git 历史追溯，本地副本在被忽略的 `legacy/dst-builder/`，历史文档封口为只读资料。后续由 DST Manager 原生承担从已发布图纸标准创建新图纸集、标准管理与首版 HTML/JSON 合规报告，分别由 [PLAN-DM-035](../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)、[PLAN-DM-036](../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 与 [PLAN-DM-037](../../.planning/plans/dst-manager/PLAN-DM-037-standard-validation-reports.md) 承接，尚未进入实施。
+
+Manager 迁移历史已压平：`0007`/`0008` 已删除，仍使用的 `document_revisions.kind`/`source_json` 已并入 `0001_initial.py`，迁移 head 为 `0006_dm020_extension_platform`。标记在 `0007`/`0008` 的现有本地 Manager 数据库与压平后的基线不兼容，需要手工删除应用数据库并重新创建；程序不会自动删除用户数据。
 
 2026-09-16 设置中心现有 **13 个**应用配置项：新增 `cad_version`（AutoCAD 2016/2020）与 `ui_theme`（浅色/深色）持久偏好。Topbar 已移除 AutoCAD 版本选择；主题按钮保留为会话级临时切换，刷新/重启仍以配置中心保存值为准。本条取代下方 2026-09-08 历史交付段中的“现为 10 项”数量口径。
 

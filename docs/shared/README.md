@@ -1,6 +1,6 @@
 # 共享技术资料
 
-本目录保存两个现役产品已经共同采用的稳定技术知识，不构成第三个产品线。目录中的现有资料形成于 DST Manager 与 Legacy 重构共同研究阶段，为保持历史链接暂留原位；DST Builder 尚未形成代码消费方，因此这些资料的存在不代表 Builder 已经采用对应实现。自 `ARCH-INT-002` 起，只有产生 Builder 与 Manager 两个真实消费方后，新的稳定契约或实现知识才能进入本目录；候选复用议题先进入 `integration`。
+本目录保存 DST Manager 已采用的稳定技术知识，不构成第二个产品线。目录中的现有资料形成于 DST Manager 与 Legacy 重构共同研究阶段，为保持历史链接暂留原位；已退场的 DST Builder 不再是消费方，这些资料的存在不代表 Builder 处于任何现役边界。自 DST Builder 退场（[RFC-INT-003](../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)）起，新的稳定契约或实现知识必须经 DST Manager 真实使用并在 `integration` 评审后才能进入本目录；候选复用议题先进入 `integration`，若未来出现第二个真实消费方再按 [ARCH-INT-002](../integration/architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md) 重新评审公共边界。
 
 ## DST/AcSm
 

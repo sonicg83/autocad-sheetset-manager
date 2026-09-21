@@ -15,7 +15,7 @@ related:
 
 # 双项目文档组织与治理设计
 
-> 本文已由 [ARCH-INT-002：DST Builder、DST Manager 与共享平台治理](ARCH-INT-002-dst-builder-manager-platform-governance.md)取代现役产品名称、scope 和编号前缀定义；其余历史治理背景继续保留用于追溯。
+> 本文已由 [ARCH-INT-002：DST Manager 单产品治理与共享平台](ARCH-INT-002-dst-builder-manager-platform-governance.md)取代产品名称、scope 和编号前缀定义（该权威架构先描述双产品治理，后于 2026-09-21 随 [RFC-INT-003](../rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 收敛为 Manager 单产品治理）；其余历史治理背景继续保留用于追溯。
 
 ## 1. 背景与目标
 

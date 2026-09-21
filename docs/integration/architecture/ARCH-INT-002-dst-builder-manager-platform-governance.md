@@ -1,14 +1,15 @@
 ---
 id: ARCH-INT-002
-title: DST Builder、DST Manager 与共享平台治理
+title: DST Manager 单产品治理与共享平台
 status: accepted
 owners:
   - integration
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-21
 related:
   - RFC-INT-001
   - RFC-INT-002
+  - RFC-INT-003
   - ADR-INT-001
   - ARCH-INT-001
   - ARCH-DB-001
@@ -16,52 +17,52 @@ related:
 document_kind: architecture
 ---
 
-# DST Builder、DST Manager 与共享平台治理
+# DST Manager 单产品治理与共享平台
 
 ## 1. 取代关系
 
 本文完整取代 `ARCH-INT-001`，是当前文档组织、产品 scope、编号、生命周期、索引和归档的唯一权威架构。`ARCH-INT-001` 只保留文档治理迁移的历史背景，不再承载现行规范。
 
+2026-09-21 接受 [RFC-INT-003](../rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)，DST Builder 作为独立产品直接退场；本文同步收敛为 DST Manager 单产品治理。`dst-builder` 的公开实现由 Git 历史追溯，本地副本位于被 Git 忽略的 `legacy/dst-builder/`；新建图纸集能力归入 DST Manager，由 [PLAN-DM-035](../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md) 与 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 承接。`dst-builder` 既有编号、文档和备忘保留为只读历史资料。
+
 ## 2. 现役产品边界
 
 | 范围 | 责任 | 不负责 |
 | --- | --- | --- |
-| `dst-builder` | 从项目数据生成首版 DWG、DST、伴随成果并发布到目标目录 | 交接契约、发布后的日常编辑与修订 |
-| `dst-manager` | 检查、编辑、修订和安全发布既有 DST/DWG | 维护 Builder 的项目事实源 |
-| `shared` | 两个产品已经采用的稳定技术契约和知识 | 产品需求、产品 UI 和潜在公共抽象 |
-| `integration` | 跨产品 RFC、交接契约、依赖方向和共享提取决策 | 任一产品私有实现 |
+| `dst-manager` | 检查、编辑、修订和安全发布既有 DST/DWG；按已发布图纸标准创建新图纸集（承接 Builder 退场后的能力） | 维护任何已退场产品的项目事实源 |
+| `shared` | Manager 已采用的稳定技术契约和知识 | 产品需求、产品 UI 和潜在公共抽象 |
+| `integration` | 跨 scope RFC、提案、依赖方向和治理决策 | Manager 私有实现 |
 
-`legacy-refactor` 不再是现役 scope，只保留历史文档和研究资料。`legacy/`、`lagacy/` 与 `sample/` 仍属于本地私有输入，不得发布。
+`dst-builder` 已退场，不再是现役 scope：其文档和备忘保留为只读历史资料，公开实现由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`，不接收新的需求、架构、计划或待办。`legacy-refactor` 同样只保留历史文档和研究资料。`legacy/`、`lagacy/` 与 `sample/` 仍属于本地私有输入，不得发布。
 
-`shared/` 中形成于旧双项目阶段的现有资料为保持历史链接暂留原位，不自动视为 DST Builder 已采用；新的共享内容和后续重分类必须满足两个现役产品真实使用的门禁。
+`shared/` 中形成于旧双项目阶段的现有资料为保持历史链接暂留原位，不自动视为仍被采用；新的共享内容和后续重分类必须经 Manager 真实使用，并在 `integration` 评审后归入。
 
 ## 3. 文档目录与编号
 
 ```text
 docs/
-├─ dst-builder/
+├─ dst-builder/       # 历史只读入口（产品已退场）
 ├─ dst-manager/
 ├─ shared/
 ├─ integration/
 └─ legacy-refactor/   # 历史只读入口
 
 .planning/
-├─ roadmaps/dst-builder.md
-├─ plans/dst-builder/
-├─ todos/dst-builder/
-└─ memos/dst-builder/
+├─ roadmaps/dst-builder.md   # 历史只读
+├─ plans/dst-builder/        # 历史只读
+├─ memos/dst-builder/        # 历史证据
 ```
 
 新正式文档使用以下永久前缀：
 
 | scope | 前缀 |
 | --- | --- |
-| DST Builder | `DB` |
+| DST Builder（历史，冻结） | `DB` |
 | DST Manager | `DM` |
 | Shared | `SH` |
 | Integration | `INT` |
 
-已存在的 `LR` 编号永久保留，不得重用或批量改号。历史文档可标记为 `superseded` 或 `archived`，并通过 `related` 和正文链接指向取代文档。
+已存在的 `DB` 与 `LR` 编号永久保留，不得重用或批量改号，但均只对应历史 scope，不再新增。历史文档可标记为 `superseded` 或 `archived`，并通过 `related` 和正文链接指向取代文档。
 
 除每个产品固定入口 `product/vision.md` 外，正式文档文件名使用“永久 ID + 英文短名称”，例如 `PRD-DB-001-guided-sheetset-generation.md`。Vision 的永久 ID 保存在 YAML 元数据中。正文标题、内容、注释和提交信息继续使用简体中文。Memo 使用 `YYYY-MM-DD-topic.md`，不分配永久编号；Guide、Reference 和 Research 仅在需要稳定交叉引用时分配永久编号。
 
@@ -77,7 +78,7 @@ docs/
 | RFC | 跨产品或高影响提案及其评审结论 | `docs/integration/rfcs/` | 评审期及结论追溯 |
 | Guide | 稳定操作或开发方法 | `docs/<scope>/guides/` | 长期 |
 | Research | 调研事实、实验和分析 | `docs/<scope>/research/` | 长期 |
-| Reference | 两个产品均采用的稳定参考契约 | `docs/shared/reference/` | 长期 |
+| Reference | 跨 scope 稳定参考契约 | `docs/shared/reference/` | 长期 |
 | Roadmap | 产品或整合方向的阶段顺序 | `.planning/roadmaps/` | 有时效性 |
 | Plan | 已立项工作的可执行计划 | `.planning/plans/<scope>/` | 有时效性 |
 | Todo | 尚未形成正式 Plan 的事项 | `.planning/todos/<scope>/` | 临时 |
@@ -91,11 +92,11 @@ docs/
 Vision → PRD → Spec → ADR → Plan → 代码、测试和发布
 ```
 
-跨产品能力遵循：
+跨 scope 能力遵循：
 
 ```text
 RFC → 评审通过 → 产品 Spec/Architecture、共享 Reference
-或 Integration Architecture/ADR → 两个产品各自的实施 Plan
+或 Integration Architecture/ADR → 对应 scope 的实施 Plan
 ```
 
 类型边界如下：
@@ -133,9 +134,9 @@ PRD、Spec、Architecture、ADR、RFC、Roadmap 和 Plan 必须使用 YAML 元�
 - `integration/README.md` 列出评审中的 RFC、已接受的跨产品决策和整合路线图。
 - 仓库根 `README.md` 只承担仓库简介、快速启动和文档入口。
 
-### 3.4 历史 `legacy-refactor`
+### 3.4 历史 scope：`dst-builder` 与 `legacy-refactor`
 
-`docs/legacy-refactor/` 只作为历史资料入口保留。既有 `LR` 文档可以继续更正链接或补充取代说明，但不得在该 scope 新建当前产品需求、架构、Spec、Roadmap 或 Plan。需要长期复用的历史结论必须经核验后写入 `dst-builder`、`shared` 或 `integration` 的唯一权威位置，并链接原始资料。
+`docs/dst-builder/` 与 `docs/legacy-refactor/` 只作为历史资料入口保留。`dst-builder` 的产品实现已按 RFC-INT-003 整体退场：公开实现由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`；`.planning/memos/dst-builder/` 保留为历史证据。既有 `DB` 与 `LR` 文档可以继续更正链接或补充封口说明，但不得在历史 scope 新建当前产品需求、架构、Spec、Roadmap 或 Plan。需要长期复用的历史结论必须经核验后写入 `dst-manager`、`shared` 或 `integration` 的唯一权威位置，并链接原始资料。
 
 ### 3.5 模板的最小内容
 
@@ -151,20 +152,17 @@ PRD、Spec、Architecture、ADR、RFC、Roadmap 和 Plan 必须使用 YAML 元�
 ## 4. 代码依赖方向
 
 ```text
-dst_builder ─┐
-             ├─→ dst_platform
-dst_manager ─┘
+dst_manager ─→ dst_platform
 ```
 
-- `dst_builder` 与 `dst_manager` 不得互相导入产品内部模块。
-- 跨产品调用只能经过版本化契约，例如 Handoff JSON Schema 或稳定应用端口。
-- `dst_platform` 不拥有产品用例、产品路由或产品页面。
-- 候选能力必须先在原产品保持稳定，再由第二个真实消费方证明公共边界；不得以“未来可能复用”为理由提前抽取。
-- 提取共享代码时保持原产品公共接口和测试门禁，采用渐进迁移，不做一次性仓库重排。
+- 公开仓库只有 `dst_manager` 与 `dst_platform` 两个产品/平台包；已退场的 `dst_builder` 不再存在于公开仓库，其实现由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`。
+- `dst_platform` 不拥有产品用例、产品路由或产品页面，也不依赖任一产品包。
+- 候选共享能力必须先在 Manager 内保持稳定；若未来出现第二个真实消费方，必须先经 `integration` RFC 评审证明公共边界，不得以“未来可能复用”为理由提前抽取。
+- 提取共享代码时保持 Manager 公共接口和测试门禁，采用渐进迁移，不做一次性仓库重排。
 
 ## 5. 共享能力候选
 
-首批候选包括：
+已由 Manager 采用的共享能力包括：
 
 - AutoCAD 版本发现、能力描述和 Core Console 安全执行；
 - 固定 CAD 作业协议、超时、日志净化和结果收集；
@@ -174,19 +172,19 @@ dst_manager ─┘
 
 以下内容保持产品私有：
 
-- Builder 的项目、图纸分组、生成计划和向导状态；
 - Manager 的现有工作区、受控编辑命令、草稿、修订恢复和扩展平台；
-- 两个产品各自的 API、页面状态机、导航和版本路线图。
+- Manager 的 API、页面状态机、导航和版本路线图；
+- 已退场 Builder 的项目、图纸分组、生成计划和向导状态仅作为历史实现存在于 Git 历史与 `legacy/dst-builder/`，不再进入任何共享或私有现役边界。
 
-## 6. 交接边界
+## 6. 交接与退场边界
 
-当前没有跨产品交接契约。Builder 发布正式成果后即结束，Manager 通过既有 `POST /api/workspaces/open` 打开成果目录中的 DST，从磁盘现状建立工作区与基线；两侧不共享数据库、不共享包级标识，也不存在交接基线。
+当前没有跨产品交接契约，也不存在第二条产品线。DST Builder 已退场，不存在与 Manager 的运行时关系；Manager 通过既有 `POST /api/workspaces/open` 打开任意 DST，从磁盘现状建立工作区与基线。新建图纸集能力归入 Manager，由 RFC-INT-003、PLAN-DM-035 与 PLAN-DM-036 承接。
 
-`RFC-INT-002` 与 `ADR-INT-001` 记录了该契约的取消决策。若未来重新需要跨产品来源追溯，必须先有被接受的 `RFC-INT-*`，不得直接恢复 `HandoffBundle`。
+`RFC-INT-002` 与 `ADR-INT-001` 记录了历史上取消交接契约的决策。若未来重新需要跨产品来源追溯，必须先有被接受的 `RFC-INT-*`，不得直接恢复 `HandoffBundle`。
 
 ## 7. 演进规则
 
-- 新的跨产品契约先进入 `integration` RFC；接受后再写入产品 Spec、Architecture 或共享 Reference。
+- 新的跨 scope 契约先进入 `integration` RFC；接受后再写入产品 Spec、Architecture 或共享 Reference。
 - 共享能力的实现归属、版本和兼容范围必须可独立测试。
-- Builder 的绿地自由不能削弱正式成果的文件安全；Manager 的历史兼容要求也不得反向污染 Builder 领域模型。
+- Manager 的历史兼容要求不阻碍新能力采用更简洁的领域模型；两者冲突时新建 ADR 裁决。
 - 产品合并、共同数据库或统一宿主不在当前目标内；如未来提出，必须新建 RFC。

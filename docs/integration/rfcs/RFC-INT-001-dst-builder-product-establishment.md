@@ -1,11 +1,11 @@
 ---
 id: RFC-INT-001
 title: DST Builder 立项与共享平台边界
-status: accepted
+status: superseded
 owners:
   - integration
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-21
 related:
   - VISION-DB-001
   - PRD-DB-001
@@ -18,6 +18,8 @@ related:
 ---
 
 # DST Builder 立项与共享平台边界
+
+> **历史说明（2026-09-21）：** 本 RFC 记录 DST Builder 的原始立项决策；该产品已按 [RFC-INT-003](RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 整体退场，“双产品壳”边界随之终止，本文仅作为历史决策正文保留，不再代表现行治理。现行治理以 [ARCH-INT-002](../architecture/ARCH-INT-002-dst-builder-manager-platform-governance.md) 为唯一权威。
 
 ## 提案
 

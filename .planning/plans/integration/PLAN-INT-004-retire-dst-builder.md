@@ -1,7 +1,7 @@
 ---
 id: PLAN-INT-004
 title: DST Builder 整体归档与文档封口实施计划
-status: proposed
+status: completed
 owners:
   - integration
 created: 2026-09-21

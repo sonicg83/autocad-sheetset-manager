@@ -1,20 +1,23 @@
 ---
 id: PLAN-DB-001
 title: DST Builder 单张图纸最小生成闭环实施计划
-status: active
+status: cancelled
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-21
 related:
   - SPEC-DB-001
   - PRD-DB-001
   - ARCH-DB-001
   - RFC-INT-001
+  - RFC-INT-003
   - ARCH-INT-002
 ---
 
 # DST Builder 单张图纸最小生成闭环实施计划
+
+> **取消说明（2026-09-21）：** 本计划因产品方向终止而取消——[RFC-INT-003](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 接受 DST Builder 退场，**不代表实施失败**：Task 1–12 的生成与发布链路已实施且自动化开发门禁全绿，仅真实双版本发布资格与桌面打包人工验收未执行（证据见[发布证据备忘](../../memos/dst-builder/PLAN-DB-001-release-evidence.md)）。公开实现已整体归档，由 Git 历史追溯，本地副本位于被忽略的 `legacy/dst-builder/`；替代方向见 RFC-INT-003、PLAN-DM-035 与 PLAN-DM-036。正文按历史记录保留。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development`（当前会话逐任务实施）或 `superpowers:executing-plans`（独立会话按检查点实施）。每个任务严格按 TDD 的 RED → GREEN → REFACTOR 执行，复选框是唯一进度记录。
 

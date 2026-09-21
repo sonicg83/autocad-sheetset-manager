@@ -1,11 +1,11 @@
 ---
 id: ROADMAP-DB-001
 title: DST Builder 路线图
-status: proposed
+status: cancelled
 owners:
   - dst-builder
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-21
 related:
   - VISION-DB-001
   - PRD-DB-001
@@ -14,10 +14,13 @@ related:
   - SPEC-DB-001
   - PLAN-DB-001
   - RFC-INT-002
+  - RFC-INT-003
   - ADR-INT-001
 ---
 
 # DST Builder 路线图
+
+> **取消说明（2026-09-21）：** 本路线图因产品方向终止而取消——[RFC-INT-003](../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 接受 DST Builder 退场，不代表实施失败；阶段 1 的实施与自动化开发门禁已全部通过，仅真实双版本发布资格未执行。替代方向见 RFC-INT-003、PLAN-DM-035 与 PLAN-DM-036。正文按历史记录保留。
 
 本路线图描述已批准的产品阶段，不代表代码已经实施。每个阶段必须先建立对应 Spec 和 Plan，并以前一阶段的真实验证证据为输入。
 

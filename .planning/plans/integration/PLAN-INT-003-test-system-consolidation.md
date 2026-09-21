@@ -1,11 +1,11 @@
 ---
 id: PLAN-INT-003
 title: 双产品测试体系收敛与过时内容清理实施计划
-status: proposed
+status: cancelled
 owners:
   - integration
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-21
 related:
   - ARCH-INT-002
   - ARCH-DB-001
@@ -16,6 +16,8 @@ related:
 ---
 
 # 双产品测试体系收敛与过时内容清理实施计划
+
+> **取消说明（2026-09-21）：** 本计划以双产品并存为前提，而 DST Builder 已按 [RFC-INT-003](../../../docs/integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 整体退场，双产品测试治理已失去前提，计划不再执行；未来 Manager 测试治理（验证矩阵、发布门禁与测试清理）另行立项。正文按历史记录保留，其中的审计基线仍可作为后续立项的输入。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 每个代码任务必须先使用 `superpowers:test-driven-development`；每项提交前及最终收口前必须使用 `superpowers:verification-before-completion`。测试迁移只允许保持或增强既有行为证据，不得借“去冗余”删除尚无替代证据的断言。
 
