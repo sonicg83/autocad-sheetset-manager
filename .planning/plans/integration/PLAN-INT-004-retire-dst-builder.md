@@ -29,8 +29,9 @@ related:
 
 ## Global Constraints
 
-- 不设计或执行任何数据库迁移；`builder_migrations/` 随 Builder 归档。
-- 必须保留 Manager 的 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`，不得改写既有升级链。
+- 不新增数据库迁移；`builder_migrations/` 随 Builder 归档，Manager 的 `0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py` 直接删除。
+- `document_revisions.kind` 与 `source_json` 仍由 Manager 使用，必须直接并入 `0001_initial.py`；迁移 head 回到 `0006_dm020_extension_platform`。
+- 不兼容已标记为 0007/0008 的现有 Manager 数据库，也不得自动删除它们；用户需要自行删除应用数据数据库并重新创建。
 - 不兼容 `project.dstb`，不导入 Builder 草稿，也不把 Builder 实现搬入 Manager。
 - `src/dst_platform/` 由 Manager 继续使用，不属于 Builder 归档范围。
 - `docs/dst-builder/` 和 `.planning/memos/dst-builder/` 保留在公开仓库中作为历史资料；只更新状态、封口说明和索引。
@@ -43,7 +44,7 @@ related:
 - `legacy/dst-builder/` 已存在或包含同名目标时必须停止，不能覆盖用户已有归档；Task 1 的预检负责保证。
 - Builder 专用 PowerShell/Python 脚本、PyInstaller 入口和 console script 必须同时消失，不能留下半可用入口；Task 1 的残留扫描负责保证。
 - Manager 仍依赖 `dst_platform`，归档不得移动或删改该包；Task 1 的导入检查负责保证。
-- Manager 的 0007/0008 迁移必须继续存在且可升级到 head；Task 2 的收口验证负责保证。
+- 全新 Manager 数据库必须从压平后的 0001 升到 0006，并包含 `document_revisions.kind/source_json`；Task 1 的迁移测试负责保证。
 - 历史文档仍应可检索，但不得继续把 Builder 描述为现役产品或开放计划；Task 2 的文档扫描负责保证。
 
 ---
@@ -68,6 +69,13 @@ related:
 - Modify: `scripts/setup.bat`
 - Modify: `README.md`
 - Modify: `README.en.md`
+- Modify: `migrations/versions/0001_initial.py`
+- Delete: `migrations/versions/0007_db001_builder_handoff.py`
+- Delete: `migrations/versions/0008_drop_handoff_sources.py`
+- Modify: `src/dst_manager/infrastructure/persistence/database.py`
+- Modify: `tests/unit/test_database.py`
+- Modify: `tests/unit/test_runtime.py`
+- Modify: `tests/unit/test_extension_persistence.py`
 - Modify: `changelog.md`
 
 **Interfaces:**
@@ -149,14 +157,25 @@ packages = ["src/dst_manager", "src/dst_platform"]
 
 从 `scripts/setup.bat` 移除所有 `DST_BUILDER_*` 设置以及 Builder 启动提示。从中英文根 README 删除 Builder 启动、构建、发布和现役产品描述，只保留指向历史文档入口的说明。执行 `uv lock` 同步锁文件；仅移除经 `uv lock` 判定不再被 Manager 使用的依赖。
 
+同时删除 Manager 的 `0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`，并把 0007 中仍被 Manager 使用的两列直接写入 `0001_initial.py` 的 `document_revisions` 定义：
+
+```python
+sa.Column("kind", sa.String(20), nullable=False, server_default="operation"),
+sa.Column("source_json", sa.Text(), nullable=True),
+```
+
+把 `database.py` 的 `LATEST_SCHEMA_REVISION` 改为 `0006_dm020_extension_platform`，同步更新 `test_database.py`、`test_runtime.py` 和 `test_extension_persistence.py` 的 head、迁移哈希与全新库断言。不得为 0007/0008 数据库增加兼容分支；README 和 changelog 明确说明现有本地 Manager 数据库需要手工重建，程序不自动删除用户数据。
+
 - [ ] **Step 5: 扫描所有 Builder 运行入口和专用脚本残留**
 
 ```powershell
 git grep -n -E "dst-builder|dst_builder|builder-web|builder_migrations|DstBuilder|build_builder|export_builder" -- pyproject.toml scripts packaging plugins src tests
 git grep -n -E "dst-builder (serve|build)|build_builder|export_builder|第二条产品线" -- README.md README.en.md scripts/setup.bat
+if (Test-Path -LiteralPath "migrations/versions/0007_db001_builder_handoff.py") { throw "0007 仍存在" }
+if (Test-Path -LiteralPath "migrations/versions/0008_drop_handoff_sources.py") { throw "0008 仍存在" }
 ```
 
-Expected: 两次扫描均无命中；活动源码、测试、插件、打包、脚本、包元数据和根 README 不再包含 Builder 运行入口。历史文档链接允许继续使用产品名称；Manager 的 `migrations/versions/0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py` 不在清理扫描范围内，必须保留且不得改名。
+Expected: 两次扫描均无命中；活动源码、测试、插件、打包、脚本、包元数据和根 README 不再包含 Builder 运行入口。历史文档链接允许继续使用产品名称；Manager 的迁移目录也不再包含 0007/0008。
 
 - [ ] **Step 6: 验证 Manager 的最小独立运行面**
 
@@ -166,18 +185,19 @@ uv sync --dev
 uv lock --check
 uv run dst-manager --help
 uv run python -c "import dst_manager; import dst_platform"
+uv run pytest tests/unit/test_database.py tests/unit/test_runtime.py tests/unit/test_extension_persistence.py -q
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1
 ```
 
-Expected: UV 同步和锁文件检查成功；Manager CLI 与两个包导入成功；AutoCAD 2016/2020 Manager 插件构建不再查找 Builder 项目。
+Expected: UV 同步和锁文件检查成功；Manager CLI 与两个包导入成功；数据库测试证明全新库 head 为 0006 且通用修订字段存在；AutoCAD 2016/2020 Manager 插件构建不再查找 Builder 项目。
 
 - [ ] **Step 7: 记录并提交整体归档**
 
-在 `changelog.md` 记录本地归档位置、公开仓库删除范围、Builder 专用脚本清理结果，以及没有执行数据库迁移。只暂存本任务涉及的删除和修改，不暂存 `legacy/`：
+在 `changelog.md` 记录本地归档位置、公开仓库删除范围、Builder 专用脚本清理结果、迁移基线压平方式，以及现有 Manager 数据库必须手工重建。只暂存本任务涉及的删除和修改，不暂存 `legacy/`：
 
 ```powershell
-git add pyproject.toml uv.lock scripts/setup.bat README.md README.en.md changelog.md
-git add -u -- src/dst_builder builder-web builder_migrations builder_alembic.ini tests/builder plugins/src/DstBuilder.AutoCAD plugins/tests/DstBuilder.AutoCAD.Tests packaging/dst-builder.spec packaging/builder_entry.py scripts/build_builder_plugins.ps1 scripts/build_builder_release.ps1 scripts/export_builder_openapi.py
+git add pyproject.toml uv.lock scripts/setup.bat README.md README.en.md migrations/versions/0001_initial.py src/dst_manager/infrastructure/persistence/database.py tests/unit/test_database.py tests/unit/test_runtime.py tests/unit/test_extension_persistence.py changelog.md
+git add -u -- src/dst_builder builder-web builder_migrations builder_alembic.ini tests/builder plugins/src/DstBuilder.AutoCAD plugins/tests/DstBuilder.AutoCAD.Tests packaging/dst-builder.spec packaging/builder_entry.py scripts/build_builder_plugins.ps1 scripts/build_builder_release.ps1 scripts/export_builder_openapi.py migrations/versions/0007_db001_builder_handoff.py migrations/versions/0008_drop_handoff_sources.py
 git commit -m "归档 DST Builder 并清理专用脚本"
 ```
 
@@ -220,7 +240,7 @@ git commit -m "归档 DST Builder 并清理专用脚本"
 
 - [ ] **Step 4: 同步所有现役导航**
 
-更新根、`docs/`、`docs/integration/`、`docs/dst-manager/`、`.planning/` 与两个计划目录的 README：Builder 只出现在“历史资料”语境中；Manager 标准驱动创建由 RFC-INT-003、PLAN-DM-035 和 PLAN-DM-036 承接。不得把历史 RFC、ADR、changelog 或 Manager 的 0007/0008 迁移改写成不存在过 Builder。
+更新根、`docs/`、`docs/integration/`、`docs/dst-manager/`、`.planning/` 与两个计划目录的 README：Builder 只出现在“历史资料”语境中；Manager 标准驱动创建由 RFC-INT-003、PLAN-DM-035 和 PLAN-DM-036 承接。历史 RFC、ADR 和 changelog 保留原始事实；现役文档明确迁移历史已压平且旧本地数据库不兼容。
 
 - [ ] **Step 5: 执行文档封口和 Manager 回归验证**
 
