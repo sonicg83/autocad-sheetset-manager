@@ -16,7 +16,7 @@ from dst_manager.infrastructure.persistence.database import (
 
 def test_published_migrations_are_immutable():
     expected = {
-        "0001_initial.py": "d19d09f9984eaa7bfe93932fb9971583f5c08bc28bed0c26a79b8f54af9df4f1",
+        "0001_initial.py": "e0bf157321ef4d0e573df453c6aeb7ecba9286514c5b78f09a4ce02322a4da15",
         "0002_v02_job_reliability.py": "f318c1c9c0de34f23d6d41fe3677ebb38a51f2d528a3449ada4f6ff81f7a122c",
         "0006_dm020_extension_platform.py": "6940e7f28a2c7695bd6519731fa8201a36619f2c092dc1413d9caafc231af8a3",
     }
@@ -313,7 +313,8 @@ def test_claim_next_job_rejects_queued_non_cad_change_set_even_without_startup_r
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
 
 
-def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
+def test_existing_mvp_database_is_rejected_after_migration_flattening(tmp_path: Path):
+    """迁移基线压平（Builder 归档）后，旧版数据库不再支持自动升级，必须手工重建。"""
     path = tmp_path / "legacy.sqlite"
     with sqlite3.connect(path) as connection:
         connection.executescript("""
@@ -327,14 +328,10 @@ def test_existing_mvp_database_is_upgraded_by_alembic(tmp_path: Path):
         CREATE TABLE application_settings (key VARCHAR(100) PRIMARY KEY, value_json TEXT NOT NULL);
         CREATE TABLE workspace_write_locks (workspace_id VARCHAR(36) PRIMARY KEY, job_id VARCHAR(36) UNIQUE NOT NULL);
         """)
-    database = Database(f"sqlite:///{path.as_posix()}")
-    with database.engine.connect() as connection:
-        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(jobs)")}
-        job_file_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(job_files)")}
-        revision = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-    assert {"worker_id", "attempt", "heartbeat_at", "finished_at"} <= columns
-    assert {"cad_operation", "started_at", "finished_at"} <= job_file_columns
-    assert revision == "0008_drop_handoff_sources"
+    with pytest.raises(RuntimeError, match="DATABASE_SCHEMA_DRIFT.*document_revisions"):
+        Database(f"sqlite:///{path.as_posix()}")
+    # 旧库文件不被程序自动删除
+    assert path.exists()
 
 
 def test_job_file_cad_operation_and_timing_are_returned_without_transformation(tmp_path: Path):

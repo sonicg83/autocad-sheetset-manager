@@ -176,7 +176,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0008_drop_handoff_sources"
+LATEST_SCHEMA_REVISION = "0006_dm020_extension_platform"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},

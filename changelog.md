@@ -1,3 +1,10 @@
+## 2026-09-21（归档 DST Builder 并清理专用脚本）
+
+- 将 Builder 全部源码与运行入口整体移入本地归档 `legacy/dst-builder/`：`src/dst_builder/`、`builder-web/`、`builder_migrations/`、`builder_alembic.ini`、`tests/builder/`、`plugins/src/DstBuilder.AutoCAD/`、`plugins/tests/DstBuilder.AutoCAD.Tests/`、`packaging/dst-builder.spec`、`packaging/builder_entry.py`、`scripts/build_builder_plugins.ps1`、`scripts/build_builder_release.ps1`、`scripts/export_builder_openapi.py`。`legacy/` 保持在本地，不进入公开仓库。
+- 公开仓库删除上述全部 Builder 路径；`pyproject.toml` 只保留 `dst-manager` console script，wheel 仅打包 `dst_manager` 与 `dst_platform`；`scripts/setup.bat` 移除全部 `DST_BUILDER_*` 设置与 Builder 提示；中英文根 README 删除 Builder 现役产品描述，仅保留指向历史文档的入口。
+- 迁移基线压平：删除 `0007_db001_builder_handoff.py` 与 `0008_drop_handoff_sources.py`，把仍被 Manager 使用的 `document_revisions.kind/source_json` 两列直接写入 `0001_initial.py`，`LATEST_SCHEMA_REVISION` 回到 `0006_dm020_extension_platform`。
+- 现有本地 Manager 数据库不会自动迁移到压平后的基线，需要手工重建；程序不自动删除用户数据。
+
 ## 2026-09-21（收缩 Builder 退场实施范围）
 
 - 根据评审重写 `PLAN-INT-004`：不再设计契约测试、分层拆除或新的退场迁移，改为把 Builder 源码、前端、测试、独立迁移、插件、打包入口和全部专用脚本整体移入本地 `legacy/dst-builder/`。

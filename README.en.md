@@ -146,7 +146,7 @@ uv run pytest tests/system_autocad -q
 
 - [User guide (for end users, Chinese)](docs/dst-manager/guides/GUIDE-DM-006-user-guide.md)
 - [Full documentation index](docs/README.md) (Chinese)
-- [DST Builder product docs](docs/dst-builder/README.md) (Chinese)
+- [DST Builder historical docs](docs/dst-builder/README.md) (Chinese): this product line has been retired; its source and build entry points are archived locally under `legacy/dst-builder/` (never published), and the docs are kept for historical reference only.
 - [DST Manager product docs](docs/dst-manager/README.md) (Chinese)
 - [MVP architecture & acceptance baseline (ARCH-DM-001)](docs/dst-manager/architecture/ARCH-DM-001-dst-manager-mvp-baseline.md) (Chinese)
 - [Shared AutoCAD/DST capabilities](docs/shared/README.md) (Chinese)

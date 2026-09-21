@@ -1,9 +1,7 @@
 """跨产品依赖门禁：AST 静态扫描 src 下产品包的 import 语句。
 
-冻结三条禁止关系（PLAN-DB-001 Task 1）：
-1. dst_builder 不得依赖 dst_manager；
-2. dst_platform 不得依赖任何产品包（dst_builder / dst_manager）；
-3. dst_builder.domain 不得依赖框架（领域层纯净）。
+冻结禁止关系（PLAN-DB-001 Task 1 引入；Builder 归档后仅保留平台规则）：
+1. dst_platform 不得依赖任何产品包（dst_manager）或框架。
 """
 
 import ast
@@ -11,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-import dst_builder  # noqa: F401
 import dst_platform  # noqa: F401
 
 SRC_DIR = Path(__file__).resolve().parents[2] / "src"
@@ -19,27 +16,9 @@ SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 # (说明, 相对 src 的包目录, 禁止的顶层依赖名)
 FORBIDDEN_RELATIONS = [
     (
-        "dst_builder 不得依赖 dst_manager",
-        "dst_builder",
-        {"dst_manager"},
-    ),
-    (
         "dst_platform 不得依赖任何产品包或框架",
         "dst_platform",
-        {"dst_builder", "dst_manager", "fastapi", "sqlalchemy"},
-    ),
-    (
-        "dst_builder.domain 不得依赖框架与 Manager",
-        "dst_builder/domain",
-        {
-            "dst_manager",
-            "lxml",
-            "fastapi",
-            "sqlalchemy",
-            "uvicorn",
-            "pywebview",
-            "typer",
-        },
+        {"dst_manager", "fastapi", "sqlalchemy"},
     ),
 ]
 
@@ -84,11 +63,11 @@ def test_forbidden_dependencies(
 
 def test_gate_rules_cover_expected_relations() -> None:
     """门禁规则本身不得被静默清空。"""
-    assert len(FORBIDDEN_RELATIONS) >= 3
+    assert len(FORBIDDEN_RELATIONS) >= 1
     assert all(item[2] for item in FORBIDDEN_RELATIONS)
-    # 规则 2（dst_platform）的禁止集须与计划元组一致。
-    assert {"dst_builder", "dst_manager", "fastapi", "sqlalchemy"} <= (
-        FORBIDDEN_RELATIONS[1][2]
+    # dst_platform 的禁止集须与计划元组一致。
+    assert {"dst_manager", "fastapi", "sqlalchemy"} <= (
+        FORBIDDEN_RELATIONS[0][2]
     )
 
 
@@ -101,7 +80,7 @@ def test_imported_top_levels_detects_real_imports() -> None:
         "from . import sibling\n"
         "from ..domain import models\n"
     )
-    probe = SRC_DIR / "dst_builder" / "domain" / "_gate_probe.py"
+    probe = SRC_DIR / "dst_platform" / "_gate_probe.py"
     probe.write_text(source, encoding="utf-8")
     try:
         imported = _imported_top_levels(probe)
@@ -109,7 +88,7 @@ def test_imported_top_levels_detects_real_imports() -> None:
         probe.unlink()
 
     assert imported == {
-        "dst_builder",  # 两条相对导入
+        "dst_platform",  # 两条相对导入
         "dst_manager",
         "fastapi",
         "lxml",
