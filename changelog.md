@@ -1,3 +1,8 @@
+## 2026-09-21（清理 setup.bat 测试中的 Builder 残留断言）
+
+- 收口评审发现 `tests/unit/test_setup_bat.py` 仍断言 Task 1 已按计划移除的 `DST_BUILDER_*` 配置键：删除 `BUILDER_KEYS` 字典、「方案 C」注释及 `test_generates_env_with_version_mapping` / `test_existing_env_keys_never_overwritten` 中的 3 处 Builder 键断言，断言面与现仅含 `DST_MANAGER_*` 键的 `setup.bat` 对齐；未做其它重构。`rg` 复核活动代码树（tests/src/scripts/pyproject.toml）已无任何 `DST_BUILDER` 引用。
+- 运行验证受既有环境问题阻塞：`uv run pytest tests/unit/test_setup_bat.py -q` 仍为 6 项失败（本会话进程环境无法按 GBK 解析 LF 行尾的 `setup.bat`，`.env` 不生成；旧版 setup.bat 复测失败相同，与本次修改无关）。不依赖 cmd 执行的 3 项静态契约测试（GBK 无 BOM、关键标记、打包复制）在修复后全部通过；以 GBK 解码字节复核 `setup.bat` 无 `DST_BUILDER` 字样且两个 Manager 键存在。环境与脚本编码契约的冲突留待后续 Manager 测试治理立项处理。
+
 ## 2026-09-21（封口 Builder 历史文档与单产品治理）
 
 - 治理收敛（PLAN-INT-004 Task 2）：`ARCH-INT-002` 更新为「DST Manager 单产品治理与共享平台」，记录 Builder 已按 RFC-INT-003 退场、公开实现由 Git 历史追溯、本地副本在被忽略的 `legacy/dst-builder/`、新建图纸集能力归入 Manager；`AGENTS.md` 现役 scope 收敛为 `dst-manager`、`shared`、`integration`，`dst-builder` 与 `legacy-refactor` 均为历史 scope，不接收新需求、架构、Spec、计划或待办，历史 `DB` 编号冻结不再新增。

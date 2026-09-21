@@ -27,13 +27,6 @@ CONSOLE_KEYS = {
     "2020": "DST_MANAGER_AUTOCAD_2020_CONSOLE=",
 }
 
-# 方案 C（setup.bat 兼供 Builder）：同一次扫描写入 DST_BUILDER_ 前缀键，
-# Builder（exe 同目录 .env / 开发态仓库根 .env）与 Manager 共享一份配置。
-BUILDER_KEYS = {
-    "2016": "DST_BUILDER_AUTOCAD_2016_CONSOLE=",
-    "2020": "DST_BUILDER_AUTOCAD_2020_CONSOLE=",
-}
-
 
 def _run_setup(app_dir: Path, autodesk_root: Path) -> subprocess.CompletedProcess[str]:
     """在临时程序目录内运行 setup.bat（跳过注册表与结尾暂停）。
@@ -121,13 +114,6 @@ def test_generates_env_with_version_mapping(tmp_path: Path):
     assert values["DST_MANAGER_AUTOCAD_2020_CONSOLE"] == str(
         autodesk_root / "AutoCAD 2021" / "accoreconsole.exe"
     )
-    # 方案 C：同一探测结果同时写入 DST_BUILDER_ 前缀键。
-    assert values["DST_BUILDER_AUTOCAD_2016_CONSOLE"] == str(
-        autodesk_root / "AutoCAD 2016" / "accoreconsole.exe"
-    )
-    assert values["DST_BUILDER_AUTOCAD_2020_CONSOLE"] == str(
-        autodesk_root / "AutoCAD 2021" / "accoreconsole.exe"
-    )
     assert values["EnableAddNumberSuffix"] == "true"
     assert values["NumberSuffixType"] == "1"
 
@@ -203,10 +189,6 @@ def test_existing_env_keys_never_overwritten(tmp_path: Path):
         autodesk_root / "AutoCAD 2021" / "accoreconsole.exe"
     )
     assert values["EnableAddNumberSuffix"] == "false", "已有配置不得被模板默认值覆盖"
-    # 只补缺失：BUILDER 2016 键在旧 .env 中缺失 → 补写；既有语义不受影响。
-    assert values["DST_BUILDER_AUTOCAD_2016_CONSOLE"] == str(
-        autodesk_root / "AutoCAD 2016" / "accoreconsole.exe"
-    )
 
 
 def test_no_autocad_detected_leaves_keys_commented(tmp_path: Path):
