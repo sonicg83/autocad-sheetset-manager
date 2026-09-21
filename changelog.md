@@ -1,3 +1,9 @@
+## 2026-09-21（补齐图纸标准管理与欢迎页 UI 设计）
+
+- 新增已接受的 `SPEC-DM-016`，固化“打开现有 DST 优先”的欢迎页双栏、主从分栏标准库、用户草稿分区编辑器、普通规则列表与侧边编辑器、字段映射表、字段组合令牌、基础/布局模板资产检查和独立发布检查页；明确官方标准与已发布版本只读、用户草稿可维护，以及 PLAN-DM-035 与 PLAN-DM-036 的界面边界。
+- 重构 `PLAN-DM-035` 前端阶段：原单一 Task 7 拆为前端契约与欢迎页、标准库、标准编辑器、模板资产与发布、设计证据与全量验证五个可独立测试任务；补充映射批量粘贴、只读边界、错误聚焦、900×768、200% 缩放、键盘操作和 G8/G9 证据门禁。
+- 同步 DST Manager 文档与计划索引。本次只修改规范、计划和导航，未修改产品代码。
+
 ## 2026-09-21（修复最终评审发现：重写过期升级测试与文档措辞）
 
 - 重写 `tests/unit/test_database.py` 过期升级测试为 `test_existing_0006_database_without_revision_kind_columns_is_rejected`：原测试在迁移压平后实际走「全新 0006 基线 + head 空升级」路径，插入行的 `kind='operation'` 来自建表默认值而非任何升级 `add_column`，属于意外通过并与 `test_existing_mvp_database_is_rejected_after_migration_flattening` 的不兼容立场矛盾。新测试构造标记在 `0006_dm020_extension_platform` 但缺少 `document_revisions.kind`/`source_json` 的旧式数据库，断言 `Database()` 抛出 `DATABASE_SCHEMA_DRIFT` 且数据库文件不被删除。

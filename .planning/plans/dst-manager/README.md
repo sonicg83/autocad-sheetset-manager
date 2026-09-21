@@ -5,7 +5,7 @@
 
 - [图纸标准校验与 HTML JSON 报告实施计划（PLAN-DM-037，proposed）](PLAN-DM-037-standard-validation-reports.md)：从统一验证结果模型生成同源 HTML/JSON 报告，不创建归档包。
 - [标准驱动的新图纸集创建实施计划（PLAN-DM-036，proposed）](PLAN-DM-036-standard-driven-sheetset-creation.md)：从已发布标准生成 DST/DWG，经预览和原子发布后直接进入普通工作区。
-- [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，proposed）](PLAN-DM-035-drawing-standard-platform.md)：建立官方/用户标准库、封闭规则、模板资产和普通用户标准编辑器。
+- [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，proposed）](PLAN-DM-035-drawing-standard-platform.md)：建立官方/用户标准库、封闭规则、模板资产和普通用户标准编辑器；前端按已接受的 [SPEC-DM-016](../../../docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) 实现打开优先欢迎页、主从分栏标准库、映射表和独立发布检查页。
 
 ## 阶段顺序
 
