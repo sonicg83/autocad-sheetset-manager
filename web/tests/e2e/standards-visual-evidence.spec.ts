@@ -1,7 +1,7 @@
 // 图纸标准平台视觉证据（PLAN-DM-035 Task 11 / SPEC-DM-016 §12.2）。
-// G4 冻结状态集：欢迎页、标准库、属性定义、字段映射、字段组合、模板资产、发布错误页、
+// G4 冻结状态集：欢迎页、标准库、普通属性、派生属性、DWG 命名、模板资产、发布错误页、
 // 发布成功详情（八态，1440×900 浅色），另加四态补充（欢迎页深色、标准库深色、
-// 字段映射 900×768 窄视口、发布错误页深色）。
+// DWG 命名 900×768 窄视口、发布错误页深色）。
 //
 // 与冻结设计逐对比对：本 spec 的同一状态集既可写 G4 冻结件，也可写 G8 生产证据
 // （`DST_MANAGER_STANDARDS_EVIDENCE=g4|production`），两次运行使用完全相同的夹具数据、
@@ -25,38 +25,67 @@ const EVIDENCE_DIR = EVIDENCE_TARGET === "production"
 function visualDraft(): Record<string, unknown> {
   return draftDocument({
     properties: [
-      {name: "专业名称", scope: "sheetset", required: true, default_value: "燃气", enum_values: ["燃气", "建筑", "结构"], description: ""},
-      {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
-      {name: "图幅", scope: "sheetset", required: false, default_value: "A3", enum_values: ["A2", "A3"], description: ""},
-    ],
-    assets: [{asset_id: "layouts", kind: "layout-template", files: [{path: "assets/layout-a2.dwg", role: "A2"}, {path: "assets/layout-a3.dwg", role: "A3"}]}],
-    rules: [
       {
-        rule_id: "specialty-code",
-        kind: "mapping",
-        target: "sheetset.专业代码",
-        source: "sheetset.专业名称",
-        allowed: [],
-        table: [["燃气", "RQ"], ["建筑", "JZ"], ["结构", "JG"]],
-        segments: [],
+        property_id: "prop-major",
+        name: "专业",
+        scope: "sheetset",
+        kind: "enum",
+        required: true,
+        default_value: "燃气",
+        enum_items: [
+          {item_id: "enum-gas", value: "燃气"},
+          {item_id: "enum-jz", value: "建筑"},
+          {item_id: "enum-jg", value: "结构"},
+        ],
       },
       {
-        rule_id: "dwg-name",
-        kind: "naming",
-        target: "derived.dwg_name",
-        allowed: [],
-        table: [],
-        segments: [{field: "sheetset.专业代码"}, {field: "subset.sequence", format: "3"}, {literal: " "}, {literal: "总平面图"}],
+        property_id: "prop-code",
+        name: "专业代码",
+        scope: "sheetset",
+        kind: "mapping",
+        source_property_id: "prop-major",
+        mapping: [
+          {item_id: "enum-gas", value: "RQ"},
+          {item_id: "enum-jz", value: "JZ"},
+          {item_id: "enum-jg", value: "JG"},
+        ],
+        confirmed_source_items: [["enum-gas", "燃气"], ["enum-jz", "建筑"], ["enum-jg", "结构"]],
+      },
+      {
+        property_id: "prop-frame",
+        name: "图幅",
+        scope: "sheetset",
+        kind: "enum",
+        default_value: "A3",
+        enum_items: [{item_id: "enum-a2", value: "A2"}, {item_id: "enum-a3", value: "A3"}],
+      },
+      {
+        property_id: "prop-label",
+        name: "图签",
+        scope: "sheet",
+        kind: "composition",
+        segments: [{property_id: "prop-code"}, {literal: " "}, {system_field: "sheet.number"}],
+      },
+    ],
+    assets: [
+      {
+        asset_id: "layouts",
+        kind: "layout-template",
+        files: [
+          {path: "assets/layout-a2.dwg", role: "A2"},
+          {path: "assets/layout-a3.dwg", role: "A3"},
+        ],
       },
     ],
   });
 }
 
-/** 与视觉草案同数据但映射表未覆盖「结构」：用于发布错误页状态。 */
+/** 与视觉草案同数据但「结构」没有映射目标：用于发布错误页状态。 */
 function visualDraftWithMappingGap(): Record<string, unknown> {
   const document = visualDraft();
-  const rules = document.rules as Array<{rule_id: string; table: string[][]}>;
-  rules[0].table = [["燃气", "RQ"], ["建筑", "JZ"]];
+  const properties = document.properties as Array<{property_id: string; mapping?: Array<{item_id: string; value: string}>}>;
+  const code = properties.find(item => item.property_id === "prop-code")!;
+  code.mapping = code.mapping!.map(row => (row.item_id === "enum-jg" ? {...row, value: ""} : row));
   return document;
 }
 
@@ -117,35 +146,38 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
 
   await openDraftEditor(page);
   await expect(page.getByTestId("editor-save-state")).toHaveText("已保存");
-  await shot(page, info, "g4-03-properties-light-1440x900");
+  await openEditorSection(page, "ordinary");
+  await expect(page.getByTestId("ordinary-table")).toBeVisible();
+  await shot(page, info, "g4-03-ordinary-light-1440x900");
 
-  await openEditorSection(page, "mapping");
-  await expect(page.getByText("1 条字段映射规则")).toBeVisible();
-  await shot(page, info, "g4-04-mapping-light-1440x900");
+  await openEditorSection(page, "derived");
+  await expect(page.getByTestId("derived-table")).toBeVisible();
+  await shot(page, info, "g4-04-derived-light-1440x900");
 
-  await openEditorSection(page, "composition");
-  await expect(page.getByTestId("composition-preview")).not.toHaveText("—");
-  await shot(page, info, "g4-05-composition-light-1440x900");
+  await openEditorSection(page, "dwgNaming");
+  await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003 示例子集.dwg");
+  await shot(page, info, "g4-05-dwg-naming-light-1440x900");
 
   await openEditorSection(page, "assets");
   await expect(page.getByTestId("asset-layout-A3")).toContainText("匹配");
   await shot(page, info, "g4-06-assets-light-1440x900");
 
-  // 发布错误页：删掉「结构 → JG」一行，使映射表未覆盖源值 → 错误阻断发布
-  await openEditorSection(page, "mapping");
-  await page.getByRole("button", {name: "删除第 3 行"}).click();
-  await expect(page.getByTestId("mapping-uncovered-summary")).toBeVisible();
+  // 发布错误页：清空「结构」的映射目标，映射未完成 → 错误阻断发布
+  await openEditorSection(page, "derived");
+  await page.getByTestId("edit-derived-prop-code").click();
+  await page.getByTestId("mapping-target-enum-jg").fill("");
+  await page.getByTestId("confirm-mapping").click();
   await page.getByRole("button", {name: "发布检查"}).click();
-  await expect(page.getByText(/映射表未覆盖源值/)).toBeVisible();
+  await expect(page.getByTestId("publish-review")).toContainText("存在没有目标值的枚举项");
   await expect(page.getByRole("button", {name: "发布标准"})).toBeDisabled();
   await shot(page, info, "g4-07-publish-error-light-1440x900");
 
-  // 发布成功详情：补齐映射行后发布，进入新版本只读详情
+  // 发布成功详情：补齐映射目标后发布，进入新版本只读详情
   await page.getByRole("button", {name: "返回编辑"}).click();
-  await openEditorSection(page, "mapping");
-  await page.getByRole("button", {name: "新增一行"}).click();
-  await page.getByTestId("mapping-source-0-2").fill("结构");
-  await page.getByTestId("mapping-target-0-2").fill("JG");
+  await openEditorSection(page, "derived");
+  await page.getByTestId("edit-derived-prop-code").click();
+  await page.getByTestId("mapping-target-enum-jg").fill("JG");
+  await page.getByTestId("confirm-mapping").click();
   await page.getByRole("button", {name: "发布检查"}).click();
   await expect(page.getByRole("button", {name: "发布标准"})).toBeEnabled();
   await page.getByRole("button", {name: "发布标准"}).click();
@@ -172,10 +204,10 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
 
   await openDraftEditor(page);
   await page.getByRole("button", {name: "发布检查"}).click();
-  await expect(page.getByText(/映射表未覆盖源值/)).toBeVisible();
+  await expect(page.getByTestId("publish-review")).toContainText("存在没有目标值的枚举项");
   await shot(page, info, "g4-11-publish-error-dark-1440x900");
 
-  // 补充 3：字段映射 900×768 窄视口（分级视图）
+  // 补充 3：DWG 命名 900×768 窄视口（字段浏览器 + 令牌编辑 + 预览）
   await page.setViewportSize({width: 900, height: 768});
   await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": visualDraft()},
@@ -184,10 +216,10 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
   await installPreferenceSnapshot(page, "light");
   await openStandards(page);
   await openDraftEditor(page);
-  await openEditorSection(page, "mapping");
-  await expect(page.getByText("1 条字段映射规则")).toBeVisible();
+  await openEditorSection(page, "dwgNaming");
+  await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003 示例子集.dwg");
   await stable(page, "light");
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(900);
-  await shot(page, info, "g4-12-mapping-narrow-light-900x768");
+  await shot(page, info, "g4-12-dwg-naming-narrow-light-900x768");
 });

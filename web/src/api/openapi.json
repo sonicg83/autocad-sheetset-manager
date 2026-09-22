@@ -4466,6 +4466,28 @@
             "title": "Message",
             "type": "string"
           },
+          "property_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Id"
+          },
+          "segment_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Index"
+          },
           "severity": {
             "title": "Severity",
             "type": "string"
@@ -4556,6 +4578,13 @@
       "StandardPublishResponse": {
         "additionalProperties": false,
         "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/StandardDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"

@@ -39,10 +39,35 @@ export function detailBody(summary: StandardSummary) {
       version: summary.version,
       name: summary.name,
       supported_cad_versions: ["2016", "2020"],
-      properties: [{key: "sheet.title"}, {key: "sheet.number"}, {key: "subset.sequence"}],
-      rules: [{kind: "required", field: "sheet.title"}],
-      assets: [{asset_id: "layouts", kind: "layout"}],
-      numbering: {sequence_field: "subset.sequence", digits: 2},
+      properties: [
+        {
+          property_id: "prop-major",
+          name: "专业",
+          scope: "sheetset",
+          kind: "enum",
+          enum_items: [{item_id: "enum-gas", value: "燃气"}],
+        },
+        {
+          property_id: "prop-code",
+          name: "专业代码",
+          scope: "sheetset",
+          kind: "mapping",
+          source_property_id: "prop-major",
+          mapping: [{item_id: "enum-gas", value: "RQ"}],
+          confirmed_source_items: [["enum-gas", "燃气"]],
+        },
+      ],
+      dwg_naming: {
+        segments: [
+          {property_id: "prop-code"},
+          {literal: "-"},
+          {system_field: "subset.scope"},
+          {literal: " "},
+          {system_field: "subset.name"},
+        ],
+      },
+      assets: [{asset_id: "layouts", kind: "layout-template"}],
+      numbering: {sequence_field: "subset.sequence", digits: 3},
     },
   };
 }
@@ -97,7 +122,7 @@ export type StandardsFixtureOptions = {
   assetInspectFailures?: Record<string, {status: number; code: string; message: string}>;
 };
 
-/** 最小合法标准文档（草稿）：两个属性 + 一条空表映射规则 + 一条命名规则。 */
+/** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
 export function draftDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     schema_version: 1,
@@ -106,33 +131,89 @@ export function draftDocument(overrides: Record<string, unknown> = {}): Record<s
     name: "市政燃气施工图",
     supported_cad_versions: ["2020"],
     properties: [
-      {name: "专业名称", scope: "sheetset", required: true, default_value: "", enum_values: ["燃气", "建筑", "结构"], description: ""},
-      {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
+      {
+        property_id: "prop-major",
+        name: "专业",
+        scope: "sheetset",
+        kind: "enum",
+        required: true,
+        enum_items: [
+          {item_id: "enum-gas", value: "燃气"},
+          {item_id: "enum-jz", value: "建筑"},
+          {item_id: "enum-jg", value: "结构"},
+        ],
+      },
+      {
+        property_id: "prop-code",
+        name: "专业代码",
+        scope: "sheetset",
+        kind: "mapping",
+        source_property_id: "prop-major",
+        mapping: [
+          {item_id: "enum-gas", value: "RQ"},
+          {item_id: "enum-jz", value: "JZ"},
+          {item_id: "enum-jg", value: "JG"},
+        ],
+        confirmed_source_items: [["enum-gas", "燃气"], ["enum-jz", "建筑"], ["enum-jg", "结构"]],
+      },
+      {
+        property_id: "prop-label",
+        name: "图签",
+        scope: "sheet",
+        kind: "composition",
+        segments: [{property_id: "prop-code"}, {literal: " "}, {system_field: "sheet.number"}],
+      },
     ],
-    rules: [
-      // 映射表覆盖源域全部枚举值：夹具草稿必须自洽可保存（空表会被结构诊断阻断）
-      {rule_id: "specialty-code", kind: "mapping", target: "sheetset.专业代码", source: "sheetset.专业名称", allowed: [], table: [["燃气", "RQ"], ["建筑", "JZ"], ["结构", "JG"]], segments: []},
-      {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: []},
-    ],
+    dwg_naming: {
+      segments: [
+        {property_id: "prop-code"},
+        {literal: "-"},
+        {system_field: "subset.scope"},
+        {literal: " "},
+        {system_field: "subset.name"},
+      ],
+    },
     assets: [],
-    numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},
+    numbering: {sequence_field: "subset.sequence", digits: 3, start: 1},
     ...overrides,
   };
 }
 
 /**
- * 部分映射草稿：源域有四个枚举值，映射表仅覆盖一个（`给排水` 未覆盖）。
- * 用于驱动「批量粘贴补齐映射表后才能保存」的边界。
+ * 部分映射草稿：源枚举新增了「给排水」，但映射行还没有目标值。
+ * 草稿可以保存（结构合法），发布被 `STANDARD_MAPPING_TARGET_EMPTY` 阻断。
  */
 export function partialMappingDraft(): Record<string, unknown> {
   return draftDocument({
     properties: [
-      {name: "专业名称", scope: "sheetset", required: true, default_value: "", enum_values: ["燃气", "建筑", "结构", "给排水"], description: ""},
-      {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
-    ],
-    rules: [
-      {rule_id: "specialty-code", kind: "mapping", target: "sheetset.专业代码", source: "sheetset.专业名称", allowed: [], table: [["燃气", "RQ"]], segments: []},
-      {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: []},
+      {
+        property_id: "prop-major",
+        name: "专业",
+        scope: "sheetset",
+        kind: "enum",
+        required: true,
+        enum_items: [
+          {item_id: "enum-gas", value: "燃气"},
+          {item_id: "enum-jz", value: "建筑"},
+          {item_id: "enum-jg", value: "结构"},
+          {item_id: "enum-ps", value: "给排水"},
+        ],
+      },
+      {
+        property_id: "prop-code",
+        name: "专业代码",
+        scope: "sheetset",
+        kind: "mapping",
+        source_property_id: "prop-major",
+        mapping: [
+          {item_id: "enum-gas", value: "RQ"},
+          {item_id: "enum-jz", value: "JZ"},
+          {item_id: "enum-jg", value: "JG"},
+          {item_id: "enum-ps", value: ""},
+        ],
+        // 确认快照只到「结构」：新增「给排水」后映射进入待确认（warning）
+        confirmed_source_items: [["enum-gas", "燃气"], ["enum-jz", "建筑"], ["enum-jg", "结构"]],
+      },
     ],
   });
 }

@@ -11,7 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{select: [id: EditorSectionId]}>();
 </script>
 <template>
-  <nav class="section-nav" :aria-label="$t('standards.editor.sectionsRegion')">
+  <nav class="section-nav" :aria-label="$t('standards.editor.sectionsRegion')" data-testid="standard-section-nav">
     <ul class="section-list">
       <li v-for="(section, index) in props.sections" :key="section.id">
         <button

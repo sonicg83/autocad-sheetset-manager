@@ -2163,6 +2163,10 @@ export interface components {
             code: string;
             /** Message */
             message: string;
+            /** Property Id */
+            property_id?: string | null;
+            /** Segment Index */
+            segment_index?: number | null;
             /** Severity */
             severity: string;
         };
@@ -2196,6 +2200,8 @@ export interface components {
         };
         /** StandardPublishResponse */
         StandardPublishResponse: {
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["StandardDiagnosticModel"][];
             /** Name */
             name: string;
             /** Standard Id */

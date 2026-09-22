@@ -12,7 +12,6 @@ import {
   PUBLISH_SECTIONS,
   type PublishIssue,
   type PublishTarget,
-  type PublishReport,
   type InspectionFailure,
 } from "../../features/standards/publishModel";
 import type {DraftDocument, EditorSectionId} from "../../features/standards/draftModel";
@@ -20,7 +19,6 @@ import type {AssetInspection} from "../../features/standards/types";
 
 const props = defineProps<{
   document: DraftDocument;
-  structure: PublishReport["structure"];
   assets: AssetInspection[];
   inspectionFailures: InspectionFailure[];
   inspectionPending: boolean;
@@ -38,17 +36,15 @@ const emit = defineEmits<{
 
 const sectionLabelKeys: Record<EditorSectionId, string> = {
   basic: "standards.sections.basic",
-  properties: "standards.sections.properties",
-  rules: "standards.sections.rules",
-  mapping: "standards.sections.mapping",
-  composition: "standards.sections.composition",
+  ordinary: "standards.sections.ordinary",
+  derived: "standards.sections.derived",
+  dwgNaming: "standards.sections.dwgNaming",
   assets: "standards.sections.assets",
   publish: "standards.sections.publish",
 };
 
 const gate = computed(() => buildPublishGate({
   document: props.document,
-  structure: props.structure,
   assets: props.assets,
   inspectionFailures: props.inspectionFailures,
 }));
@@ -67,12 +63,28 @@ function warningsOf(section: EditorSectionId): number {
   return issuesOf(section).filter(issue => issue.severity === "warning").length;
 }
 
+/** 问题定位文本：只显示用户可读的名称（属性名、源枚举显示值、令牌序号），不显示内部 ID。 */
 function locationOf(issue: PublishIssue): string {
   if (issue.target.layout !== undefined) return issue.target.layout;
-  if (issue.target.row !== undefined) {
-    return issue.target.row === null ? "" : String(issue.target.row);
+  if (issue.target.assetId !== undefined) return issue.target.assetId;
+  if (issue.target.segmentIndex !== undefined) {
+    return String(issue.target.segmentIndex + 1);
   }
-  return issue.target.field ?? issue.target.assetId ?? "";
+  if (issue.target.propertyId !== undefined) {
+    const property = props.document.properties.find(item => item.property_id === issue.target.propertyId);
+    if (property === undefined) return "";
+    if (issue.target.itemId === undefined) return property.name || property.property_id;
+    const source = props.document.properties.find(
+      item => item.property_id === (property.kind === "mapping" ? property.source_property_id : ""),
+    );
+    const item = source !== undefined && source.kind === "enum"
+      ? source.enum_items.find(candidate => candidate.item_id === issue.target.itemId)
+      : undefined;
+    return item === undefined
+      ? property.name || property.property_id
+      : `${property.name || property.property_id} · ${item.value}`;
+  }
+  return "";
 }
 
 function addNote(value: unknown): void {

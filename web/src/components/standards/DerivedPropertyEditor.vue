@@ -35,8 +35,8 @@ import {
 const props = defineProps<{
   document: DraftDocument;
   diagnostics?: DraftDiagnostic[];
-  /** 发布检查跳转请求：聚焦属性行；`openEditor` 为真时同时打开编辑模态框。 */
-  focusRequest?: {propertyId?: string; openEditor?: boolean} | null;
+  /** 发布检查跳转请求：聚焦属性行；`openEditor` 为真时同时打开编辑模态框并定位映射行。 */
+  focusRequest?: {propertyId?: string; itemId?: string; openEditor?: boolean} | null;
 }>();
 const emit = defineEmits<{
   deleteBlocked: [{propertyId: string; references: PropertyReference[]}];
@@ -72,6 +72,7 @@ watch(
       ?.querySelector<HTMLElement>(`[data-testid="edit-derived-${request.propertyId}"]`)
       ?.focus();
   },
+  {immediate: true},
 );
 
 function issuesOf(property: DraftProperty): DraftDiagnostic[] {
@@ -282,6 +283,7 @@ function removeProperty(property: DraftProperty): void {
       :open="dialogProperty !== null"
       :property="dialogProperty"
       :document="document"
+      :focus-item-id="focusRequest?.itemId"
       @save="saveMapping"
       @cancel="dialogPropertyId = null"
     />

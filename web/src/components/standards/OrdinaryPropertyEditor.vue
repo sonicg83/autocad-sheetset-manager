@@ -70,6 +70,7 @@ watch(
       ?.querySelector<HTMLInputElement>(`[data-testid="ordinary-name-${request.propertyId}"]`)
       ?.focus();
   },
+  {immediate: true},
 );
 
 function issuesOf(property: DraftProperty): DraftDiagnostic[] {

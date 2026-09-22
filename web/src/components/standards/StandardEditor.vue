@@ -1,9 +1,12 @@
 <script setup lang="ts">
-// 标准草稿编辑器壳层（PLAN-DM-035 Task 9 / SPEC-DM-016 §6）：顶部固定显示标准名称、
-// 草稿标识、最近保存状态、“保存草稿”和“发布检查”；左侧分区导航，右侧只渲染当前分区。
-// 草稿采用直接保存模型（SPEC-DM-015 §5）：clean 用可聚焦的语义禁用（aria-disabled），
-// dirty-valid 可保存，dirty-invalid 优先显示具体错误并禁止保存；保存成功后以服务端响应
-// 建立新的可信基准。有未保存修改时离开编辑器走共享三选一门禁。
+// 标准草稿编辑器壳层（PLAN-DM-038 Task 9 / SPEC-DM-017 §2、§7）。
+// 顶部固定显示标准名称、草稿标识、最近保存状态、「保存草稿」和「发布检查」；左侧六分区导航，
+// 右侧只渲染当前分区。草稿采用直接保存模型：clean 用可聚焦的语义禁用（aria-disabled），
+// dirty-valid 可保存，dirty-invalid 优先显示具体错误并禁止保存；保存成功后以服务端响应建立
+// 新的可信基准。有未保存修改时离开编辑器走共享三选一门禁。
+//
+// 两段门禁：结构致命错误进保存门禁（`draftDiagnostics`），全部 error 进发布门禁
+// （`publishIssues`）。草稿允许保存语义未完成的内容，发布前必须补齐。
 //
 // 缓冲所有权：本组件持有唯一可编辑缓冲（buffer），各分区组件共享同一对象就地修改，
 // 因此分区切换不丢输入；未知顶层字段原样保留，保存时不丢数据。
@@ -12,31 +15,37 @@ import {ApiError} from "../../api/client";
 import {i18n} from "../../i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
-import UiIconButton from "../ui/UiIconButton.vue";
 import UnsavedInputDialog from "../ui/UnsavedInputDialog.vue";
 import StandardSectionNav from "./StandardSectionNav.vue";
-import StandardPropertyEditor from "./StandardPropertyEditor.vue";
-import StandardRulesEditor from "./StandardRulesEditor.vue";
-import MappingTableEditor from "./MappingTableEditor.vue";
-import CompositionEditor from "./CompositionEditor.vue";
+import OrdinaryPropertyEditor from "./OrdinaryPropertyEditor.vue";
+import DerivedPropertyEditor from "./DerivedPropertyEditor.vue";
+import DwgNamingEditor from "./DwgNamingEditor.vue";
 import TemplateAssetsEditor from "./TemplateAssetsEditor.vue";
 import StandardPublishReview from "./StandardPublishReview.vue";
 import {
   cloneDocument,
+  draftDiagnostics,
   EDITOR_SECTIONS,
-  ORDINARY_RULE_KINDS,
-  COMPOSITION_RULE_KINDS,
+  isDerivedProperty,
+  publishIssues,
   toDraftDocument,
-  validateDraftStructure,
   type DraftAsset,
+  type DraftDiagnostic,
   type DraftDocument,
   type EditorSectionId,
-  type StructureDiagnostic,
+  type PropertyReference,
 } from "../../features/standards/draftModel";
 import type {InspectionFailure, PublishTarget} from "../../features/standards/publishModel";
 import type {AssetInspection, StandardDraft} from "../../features/standards/types";
 
 type GuardChoice = "save" | "discard" | "stay";
+
+/** 只在模态框里可修复的发布问题：跳转时直接打开对应模态框。 */
+const MODAL_CODES = new Set([
+  "STANDARD_MAPPING_TARGET_EMPTY",
+  "STANDARD_MAPPING_SOURCE_DUPLICATE",
+  "STANDARD_MAPPING_CONFIRMATION_REQUIRED",
+]);
 
 const props = defineProps<{
   draft: StandardDraft;
@@ -52,7 +61,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{close: []}>();
 
-// 基线必须与缓冲经过同一规范化：否则刚加载就会因补齐 `dependencies` 等默认键而被误判为
+// 基线必须与缓冲经过同一规范化：否则刚加载就会因补齐 `dwg_naming` 等默认键而被误判为
 // 有未保存修改（假 dirty 会让保存按钮在白名单文档上提前可点）。
 const baselineDocument = toDraftDocument(cloneDocument(props.draft.document));
 const buffer = ref<DraftDocument>(toDraftDocument(cloneDocument(baselineDocument)));
@@ -61,7 +70,7 @@ const active = ref<EditorSectionId>("basic");
 const saving = ref(false);
 const saveError = ref("");
 const guardOpen = ref(false);
-/** 编辑分区视图与发布检查页（SPEC-DM-016 §9.1 的独立检查页）。 */
+/** 编辑分区视图与发布检查页（SPEC-DM-017 §7 的独立检查页）。 */
 const view = ref<"sections" | "review">("sections");
 const inspections = ref<AssetInspection[]>([]);
 const inspectionFailures = ref<InspectionFailure[]>([]);
@@ -69,7 +78,14 @@ const inspectionPending = ref(false);
 const inspectedAt = ref("");
 const publishPending = ref(false);
 const publishError = ref("");
-const focusRequest = ref<{section: EditorSectionId; ruleId?: string; row?: number | null} | null>(null);
+const deleteBlocked = ref("");
+const focusRequest = ref<{
+  section: EditorSectionId;
+  propertyId?: string;
+  itemId?: string;
+  segmentIndex?: number;
+  openEditor?: boolean;
+} | null>(null);
 let guardResolver: ((choice: GuardChoice) => void) | null = null;
 
 // 同一草稿重新加载（相同 draft_id）不重置缓冲，避免覆盖用户正在进行的输入
@@ -79,18 +95,21 @@ watch(
     buffer.value = toDraftDocument(cloneDocument(props.draft.document));
     baseline.value = JSON.stringify(buffer.value);
     saveError.value = "";
+    deleteBlocked.value = "";
   },
 );
 
 const snapshot = computed(() => JSON.stringify(buffer.value));
 const dirty = computed(() => snapshot.value !== baseline.value);
-const diagnostics = computed<StructureDiagnostic[]>(() => validateDraftStructure(buffer.value));
+const diagnostics = computed<DraftDiagnostic[]>(() => draftDiagnostics(buffer.value));
+const reviewIssues = computed<DraftDiagnostic[]>(() => publishIssues(buffer.value));
 const invalid = computed(() => diagnostics.value.length > 0);
 const sectionCounts = computed<Record<string, number>>(() => ({
-  properties: buffer.value.properties.length,
-  rules: buffer.value.rules.filter(rule => ORDINARY_RULE_KINDS.includes(rule.kind)).length,
-  mapping: buffer.value.rules.filter(rule => rule.kind === "mapping").length,
-  composition: buffer.value.rules.filter(rule => COMPOSITION_RULE_KINDS.includes(rule.kind)).length,
+  ordinary: buffer.value.properties.filter(
+    property => property.kind === "text" || property.kind === "enum",
+  ).length,
+  derived: buffer.value.properties.filter(isDerivedProperty).length,
+  dwgNaming: buffer.value.dwg_naming.segments.length > 0 ? 1 : 0,
   assets: buffer.value.assets.length,
 }));
 const sections = computed(() =>
@@ -123,32 +142,58 @@ watch([active, view], () => {
   void runInspections();
 });
 
-/** 诊断 → 分区定位：按规则种类决定跳转分区，行级诊断带上行号。 */
-function sectionOfDiagnostic(item: StructureDiagnostic): EditorSectionId {
-  const rule = buffer.value.rules.find(candidate => candidate.rule_id === item.ruleId);
-  if (rule === undefined) return "rules";
-  if (rule.kind === "mapping") return "mapping";
-  if (COMPOSITION_RULE_KINDS.includes(rule.kind)) return "composition";
-  return "rules";
+/** 诊断 → 分区定位：按诊断归属决定分区（属性按普通/派生再分）。 */
+function sectionOfDiagnostic(item: DraftDiagnostic): EditorSectionId {
+  if (item.owner === "asset") return "assets";
+  if (item.owner === "dwgNaming") return "dwgNaming";
+  if (item.owner === "document") return "basic";
+  const property = buffer.value.properties.find(
+    candidate => candidate.property_id === item.propertyId,
+  );
+  return property !== undefined && isDerivedProperty(property) ? "derived" : "ordinary";
 }
 
-async function jumpToDiagnostic(item: StructureDiagnostic): Promise<void> {
+async function jumpToDiagnostic(item: DraftDiagnostic): Promise<void> {
+  view.value = "sections";
   const section = sectionOfDiagnostic(item);
   active.value = section;
-  focusRequest.value = {section, ruleId: item.ruleId, row: item.row ?? null};
+  deleteBlocked.value = "";
+  focusRequest.value = {
+    section,
+    propertyId: item.propertyId,
+    itemId: item.itemId,
+    segmentIndex: item.segmentIndex,
+    openEditor: MODAL_CODES.has(item.code),
+  };
   await nextTick();
-  if (section === "mapping") return; // 行内组件自行聚焦（行号或未覆盖摘要）
-  focusRequest.value = null;
 }
 
-/** 发布检查页的问题跳转：回到对应分区并聚焦到映射行/未覆盖摘要。 */
+/** 发布检查页的问题跳转：回到对应分区并聚焦属性行、派生模态框或命名令牌。 */
 async function jumpFromReview(target: PublishTarget): Promise<void> {
   view.value = "sections";
   active.value = target.section;
-  focusRequest.value = target.section === "mapping"
-    ? {section: "mapping", ruleId: target.ruleId, row: target.row ?? null}
-    : null;
+  deleteBlocked.value = "";
+  focusRequest.value = {
+    section: target.section,
+    propertyId: target.propertyId,
+    itemId: target.itemId,
+    segmentIndex: target.segmentIndex,
+    openEditor: target.itemId !== undefined,
+  };
   await nextTick();
+}
+
+/** 删除保护：分区组件已经就地提示，壳层再汇总一次引用方名称（滚动后仍可见）。 */
+function onDeleteBlocked(payload: {propertyId: string; references: PropertyReference[]}): void {
+  const owners = payload.references.map(reference => {
+    if (reference.kind === "dwgNaming") return targetText("standards.ordinary.namingOwner");
+    const owner = buffer.value.properties.find(item => item.property_id === reference.ownerId);
+    return owner === undefined ? reference.ownerId : owner.name || reference.ownerId;
+  });
+  deleteBlocked.value = targetText("standards.ordinary.deleteBlocked", {
+    count: owners.length,
+    owners: [...new Set(owners)].join(targetText("standards.enumDialog.nameSeparator")),
+  });
 }
 
 /** 资产检查：逐个声明资产调用后端固定读取协议；检查失败与标准错误分开记录。 */
@@ -229,7 +274,7 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-/** 三选一离开门禁（SPEC-DM-015 §5 / SPEC-DM-016 §6.1）：有未保存修改才拦截。 */
+/** 三选一离开门禁（SPEC-DM-015 §5）：有未保存修改才拦截。 */
 async function guard(next: () => void | Promise<void>): Promise<void> {
   if (guardOpen.value) return;
   if (!dirty.value) {
@@ -256,8 +301,8 @@ function resolveGuard(choice: GuardChoice): void {
   guardResolver?.(choice);
 }
 
-function targetText(key: string): string {
-  return i18n.global.t(key);
+function targetText(key: string, params?: Record<string, string | number>): string {
+  return i18n.global.t(key, params ?? {});
 }
 
 defineExpose({guard, isDirty: () => dirty.value});
@@ -285,10 +330,12 @@ defineExpose({guard, isDirty: () => dirty.value});
       </div>
     </header>
     <p v-if="saveError" class="editor-error" role="alert" data-testid="editor-save-error">{{ $t("standards.editor.saveFailed", {message: saveError}) }}</p>
+    <p v-if="deleteBlocked && view === 'sections'" class="editor-error" role="alert" data-testid="editor-delete-blocked">
+      {{ deleteBlocked }}
+    </p>
     <template v-if="view === 'review'">
       <StandardPublishReview
         :document="buffer"
-        :structure="diagnostics"
         :assets="inspections"
         :inspection-failures="inspectionFailures"
         :inspection-pending="inspectionPending"
@@ -313,14 +360,14 @@ defineExpose({guard, isDirty: () => dirty.value});
             :data-testid="`structure-diagnostic-${index}`"
             @click="jumpToDiagnostic(item)"
           >
-            {{ $t(`standards.diagnostic.${item.code}`, {field: item.field ?? "", row: item.row ?? ""}) }}
+            {{ $t(`standards.diagnostic.${item.code}`, {segment: item.segmentIndex === undefined ? "" : item.segmentIndex + 1}) }}
           </button>
         </li>
       </ul>
     </div>
     <p v-else class="structure-ok" role="status">{{ $t("standards.editor.structureOk") }}</p>
     <div class="editor-split">
-      <StandardSectionNav :active="active" :sections="sections" @select="active = $event" />
+      <StandardSectionNav :active="active" :sections="sections" @select="active = $event; deleteBlocked = ''" />
       <div class="editor-body">
         <section v-if="active === 'basic'" class="basic-section" role="region" :aria-label="$t('standards.sections.basic')">
           <h3 class="section-title">{{ $t("standards.sections.basic") }}</h3>
@@ -328,14 +375,26 @@ defineExpose({guard, isDirty: () => dirty.value});
           <UiInput v-model="buffer.version" :label="$t('standards.editor.versionLabel')" />
           <UiInput v-model="cadVersionsText" :label="$t('standards.editor.cadVersionsLabel')" />
         </section>
-        <StandardPropertyEditor v-else-if="active === 'properties'" :document="buffer" />
-        <StandardRulesEditor v-else-if="active === 'rules'" :document="buffer" :diagnostics="diagnostics" />
-        <MappingTableEditor
-          v-else-if="active === 'mapping'"
+        <OrdinaryPropertyEditor
+          v-else-if="active === 'ordinary'"
           :document="buffer"
+          :diagnostics="reviewIssues"
+          :focus-request="focusRequest"
+          @delete-blocked="onDeleteBlocked"
+        />
+        <DerivedPropertyEditor
+          v-else-if="active === 'derived'"
+          :document="buffer"
+          :diagnostics="reviewIssues"
+          :focus-request="focusRequest"
+          @delete-blocked="onDeleteBlocked"
+        />
+        <DwgNamingEditor
+          v-else-if="active === 'dwgNaming'"
+          :document="buffer"
+          :diagnostics="reviewIssues"
           :focus-request="focusRequest"
         />
-        <CompositionEditor v-else-if="active === 'composition'" :document="buffer" :diagnostics="diagnostics" />
         <TemplateAssetsEditor
           v-else-if="active === 'assets'"
           :document="buffer"

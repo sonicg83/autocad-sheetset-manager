@@ -184,6 +184,7 @@ function clearAll(): void {
             <span
               class="token"
               :class="{'token--literal': segment.literal !== undefined}"
+              tabindex="-1"
               :data-testid="`token-${index}`"
               :title="$t('standards.token.removeHint')"
               @click.stop="caret = index + 1"

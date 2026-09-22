@@ -44,7 +44,8 @@ test("官方标准只读并保留派生与导出动作", async ({page}) => {
   await expect(page.getByRole("button", {name: "派生新草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导出标准包"})).toBeVisible();
   // 能力摘要与版本历史来自 detail.document 与同一标准 ID 的已发布版本集合
-  await expect(page.getByText("属性定义 3 项")).toBeVisible();
+  await expect(page.getByText("普通属性 1 项")).toBeVisible();
+  await expect(page.getByText("派生属性 1 项")).toBeVisible();
   await expect(page.getByRole("button", {name: "v2.0.0 · 用户"})).toBeVisible();
 });
 

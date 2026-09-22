@@ -9,7 +9,7 @@
 // - 确认动作把当前有序 (enum_item_id, 显示值) 写入确认快照，清除「待确认」状态；
 // - 界面不展示 `enum_item_id`：行以源枚举显示值标识，目标输入的 testid 携带稳定 ID 仅供定位；
 // - 宽度与最大高度施加在外层对话框，正文独立滚动，底部操作栏不参与滚动。
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
@@ -28,6 +28,8 @@ const props = defineProps<{
   open: boolean;
   property: DraftMappingProperty | null;
   document: DraftDocument;
+  /** 发布检查跳转定位的映射行（源枚举项 ID）：打开后聚焦该行目标输入框。 */
+  focusItemId?: string;
 }>();
 const emit = defineEmits<{
   save: [{sourcePropertyId: string; rows: DraftMappingRow[]; confirmed: Array<[string, string]>}];
@@ -47,6 +49,22 @@ watch(
     targets.value = Object.fromEntries(
       props.property.mapping.map(row => [row.item_id, row.value]),
     );
+  },
+  {immediate: true},
+);
+
+// 打开后把焦点交给目标输入框（发布检查跳转定位的行优先，否则第一行），
+// 让「跳转到真实可编辑控件」在模态框里成立。
+watch(
+  () => props.open,
+  async open => {
+    if (!open) return;
+    await nextTick();
+    const target = props.focusItemId ?? rows.value[0]?.item_id;
+    const selector = target === undefined
+      ? "[data-testid=mapping-source]"
+      : `[data-testid="mapping-target-${target}"]`;
+    card.value?.querySelector<HTMLElement>(selector)?.focus();
   },
   {immediate: true},
 );

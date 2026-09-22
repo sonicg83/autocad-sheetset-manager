@@ -155,34 +155,21 @@ test("发布失败保留检查页并显示稳定错误", async ({page}) => {
   expect(state.publishCalls).toBe(1);
 });
 
-test("发布检查的问题可跳回映射表并聚焦未覆盖摘要", async ({page}) => {
+test("发布检查的问题可跳回 DWG 命名分区并聚焦令牌", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {
-      "draft-1": draftDocument({
-        properties: [
-          {name: "专业名称", scope: "sheetset", required: true, default_value: "", enum_values: ["燃气", "建筑"], description: ""},
-          {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
-        ],
-        rules: [{
-          rule_id: "specialty-code",
-          kind: "mapping",
-          target: "sheetset.专业代码",
-          source: "sheetset.专业名称",
-          allowed: [],
-          table: [["燃气", "RQ"]],
-          segments: [],
-        }],
-      }),
+      "draft-1": draftDocument({dwg_naming: {segments: [{literal: "图签.dwg"}]}}),
     },
   });
   await openStandards(page);
   await openDraftEditor(page);
   await page.getByRole("button", {name: "发布检查"}).click();
 
-  await expect(page.getByText(/映射表未覆盖源值：建筑/)).toBeVisible();
+  await expect(page.getByText(/模板不得自行包含 .dwg 扩展名/)).toBeVisible();
   await page.getByTestId("publish-issue-0").click();
-  await expect(page.getByRole("region", {name: "字段映射"})).toBeVisible();
-  await expect(page.getByTestId("mapping-uncovered-summary")).toBeFocused();
+  await expect(page.getByRole("region", {name: "DWG 命名"})).toBeVisible();
+  await expect(page.getByTestId("token-literal")).toBeFocused();
+  await expect(page.getByRole("button", {name: "发布标准"})).toHaveCount(0);
 });
 
 test("资产声明编辑：新增布局资产后未检查，重新检查后给出结果", async ({page}) => {

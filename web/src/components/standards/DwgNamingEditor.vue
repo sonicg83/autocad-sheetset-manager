@@ -8,7 +8,7 @@
 // - 示例预览明确标注为「示例」，并列出取样值；模板缺少 `subset.scope` 与 `subset.sequence`
 //   时给出重名风险 warning（前端只提示，发布仍以后端码为准）；
 // - 缓冲由 `StandardEditor` 持有：本组件直接就地修改 `props.document.dwg_naming`。
-import {computed} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import TokenExpressionEditor from "./TokenExpressionEditor.vue";
@@ -26,8 +26,24 @@ const props = defineProps<{
   document: DraftDocument;
   /** 发布诊断（只读）：命名相关的 error/warning 在分区内就地提示。 */
   diagnostics?: Array<{code: string; severity: string; segmentIndex?: number}>;
+  /** 发布检查跳转请求：聚焦对应令牌（无片段定位时聚焦固定文字输入框）。 */
+  focusRequest?: {segmentIndex?: number} | null;
 }>();
 const {t} = useI18n();
+const root = ref<HTMLElement | null>(null);
+
+watch(
+  () => props.focusRequest,
+  async request => {
+    if (request === null || request === undefined) return;
+    await nextTick();
+    const selector = request.segmentIndex === undefined
+      ? "[data-testid=token-literal]"
+      : `[data-testid="token-${request.segmentIndex}"]`;
+    root.value?.querySelector<HTMLElement>(selector)?.focus();
+  },
+  {immediate: true},
+);
 
 const texts = computed<TokenFieldTexts>(() => ({
   systemLabels: {
@@ -78,7 +94,7 @@ function resetTemplate(): void {
 }
 </script>
 <template>
-  <section class="naming-editor" role="region" :aria-label="$t('standards.naming.title')">
+  <section ref="root" class="naming-editor" role="region" :aria-label="$t('standards.naming.title')">
     <header class="section-header">
       <div>
         <h3 class="section-title">{{ $t("standards.naming.title") }}</h3>

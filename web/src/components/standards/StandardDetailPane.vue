@@ -30,9 +30,14 @@ const documentCounts = computed(() => {
   const document = props.detail?.document;
   if (!document) return null;
   const count = (value: unknown): number => (Array.isArray(value) ? value.length : 0);
+  const properties = Array.isArray(document["properties"]) ? document["properties"] : [];
+  const ordinary = properties.filter(item => {
+    const kind = (item as {kind?: string}).kind;
+    return kind === "text" || kind === "enum";
+  }).length;
   return {
-    properties: count(document["properties"]),
-    rules: count(document["rules"]),
+    ordinary,
+    derived: properties.length - ordinary,
     assets: count(document["assets"]),
   };
 });
@@ -63,8 +68,8 @@ const documentCounts = computed(() => {
       <p v-else-if="detailError" class="detail-note error" role="alert">{{ detailError }}</p>
       <template v-else-if="detail">
         <div v-if="documentCounts" class="detail-counts">
-          <span>{{ $t("standards.detail.propertiesCount", {count: documentCounts.properties}) }}</span>
-          <span>{{ $t("standards.detail.rulesCount", {count: documentCounts.rules}) }}</span>
+          <span>{{ $t("standards.detail.ordinaryCount", {count: documentCounts.ordinary}) }}</span>
+          <span>{{ $t("standards.detail.derivedCount", {count: documentCounts.derived}) }}</span>
           <span>{{ $t("standards.detail.assetsCount", {count: documentCounts.assets}) }}</span>
         </div>
         <div v-if="detail.dependencies.length > 0" class="detail-dependencies">
