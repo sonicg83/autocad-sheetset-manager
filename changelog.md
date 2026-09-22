@@ -1,3 +1,7 @@
+## 2026-09-22（建立图纸标准领域模型）
+
+- 新增 `src/dst_manager/domain/standards.py`（PLAN-DM-035 Task 1）：定义冻结的 `DrawingStandard`、`StandardProperty`、`StandardRule`、`StandardSegment`、`StandardAsset`、`NumberingPolicy`、`StandardDependency` 领域对象与 `parse_standard_document`/`loads_standard_document` 严格解析器。解析拒绝未知 Schema 版本、重复 JSON 字段、非法/大小写不合规标准 ID、非三段版本、未知作用域与规则种类、重复规则/资产 ID 和非法字段引用，全部返回 `STANDARD_*` 稳定错误码；不解析任何可执行内容。新增 `tests/unit/test_drawing_standards.py` 17 项解析、往返与边界测试。
+
 ## 2026-09-21（补齐图纸标准管理与欢迎页 UI 设计）
 
 - 新增已接受的 `SPEC-DM-016`，固化“打开现有 DST 优先”的欢迎页双栏、主从分栏标准库、用户草稿分区编辑器、普通规则列表与侧边编辑器、字段映射表、字段组合令牌、基础/布局模板资产检查和独立发布检查页；明确官方标准与已发布版本只读、用户草稿可维护，以及 PLAN-DM-035 与 PLAN-DM-036 的界面边界。
