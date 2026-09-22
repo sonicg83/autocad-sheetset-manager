@@ -5,10 +5,12 @@ status: proposed
 owners:
 - dst-manager
 created: 2026-09-21
-updated: 2026-09-21
+updated: 2026-09-22
 related:
 - RFC-INT-003
 - PLAN-DM-035
+- PLAN-DM-038
+- SPEC-DM-017
 - ADR-DM-001
 - ADR-DM-003
 - ADR-DM-005
@@ -30,7 +32,9 @@ related:
 
 ## Global Constraints
 
-- 必须先完成 PLAN-DM-035；正式创建只能选择已发布且依赖可用的标准。
+- 必须先完成 PLAN-DM-035 **与 PLAN-DM-038**：本计划消费 SPEC-DM-017 的 Schema v1（普通属性/派生属性/全局 DWG 命名模板），
+  通用规则模型与旧顶层 `rules` 已删除；未完成 PLAN-DM-038 时不得开始本计划实现。
+- 正式创建只能选择已发布且依赖可用的标准。
 - 一个子集创建一个主 DWG，每张图纸对应其中一个布局。
 - 创建阶段同一子集统一基础模板、布局模板和图幅；该约束不进入后续归档校验。
 - 编号复用现有 `derive_document_structure` 语义，包括连续流水号、补零、后缀样式和不编号关键字。
@@ -59,7 +63,9 @@ related:
 - Modify: `changelog.md`
 
 **Interfaces:**
-- Consumes: PLAN-DM-035 的 `DrawingStandard` 与 `StandardStore`。
+- Consumes: PLAN-DM-035 的 `StandardStore`；PLAN-DM-038 的 `DrawingStandard`（Schema v1）、
+  `compile_standard_properties`/`evaluate_standard_properties`（派生属性求值）与
+  `render_dwg_filename`/`validate_dwg_filenames`（全局 DWG 命名与碰撞预检）。
 - Produces: `CreationDraft`、`CreationSubsetInput`、`CreationSheetInput`；`CreationDraftOperations.create/get/save/delete`。
 
 - [ ] **Step 1: 写入标准固定与崩溃恢复测试**

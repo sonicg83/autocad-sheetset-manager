@@ -73,7 +73,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭；同场景的编号种子缺陷（删除不编号子集使后续子集重编为 0 起）已由 PLAN-DM-032 修复，§行为 3/§行为 5 表述已按实现校正）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
-- [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
+- [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
 
 ## 研究与分析
 
