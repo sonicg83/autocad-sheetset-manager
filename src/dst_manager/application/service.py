@@ -15,6 +15,7 @@ from dst_manager.application.property_import import PropertyImportOperations
 from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
 from dst_manager.application.revisions import RevisionRestoreOperations
+from dst_manager.application.standard_assets import StandardAssetOperations
 from dst_manager.application.standards import StandardOperations
 from dst_manager.application.xml_io import XmlExportOperations
 from dst_manager.config import Settings
@@ -57,6 +58,7 @@ class DstManagerService(
     RepairOperations,
     TransactionRecoveryOperations,
     StandardOperations,
+    StandardAssetOperations,
 ):
     # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
     _runtime: RuntimeSettings | None = None

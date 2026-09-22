@@ -1,3 +1,8 @@
+## 2026-09-22（实现标准模板资产检查与 DST 草稿导入）
+
+- 新增 `src/dst_manager/application/standard_assets.py`（PLAN-DM-035 Task 5）：`StandardAssetOperations` 以 mixin 组合进 `DstManagerService`，提供 `inspect_standard_asset(draft_id, asset_id, cad_version) -> AssetInspection` 与 `create_draft_from_dst(path) -> ImportedStandardDraft`。资产检查复用 `get_layout_names` 的固定 CAD 只读读取协议；布局模板声明的图幅与该文件实际非 `Model` 布局严格比较（`"A2 "` ≠ `"A2"`，大小写敏感），不一致返回 `STANDARD_LAYOUT_NAME_MISMATCH` 诊断；CAD 能力缺失/读取失败/资产文件缺失一律转换为 `STANDARD_CAD_CAPABILITY_MISSING`/`STANDARD_LAYOUT_READ_FAILED`/`STANDARD_ASSET_FILE_MISSING` 稳定诊断而不抛出；资产路径逃逸（`..`/绝对路径/盘符）以 422 `STANDARD_ASSET_PATH_INVALID` 拒绝，草稿/资产不存在返回 404。
+- DST 导入只提取图纸集/图纸两级自定义属性定义与图纸集名称，构成最小安全草稿（新增 `src/dst_manager/infrastructure/standards/dst_import.py` 的 `extract_standard_document`）；不复制子集、图纸、布局引用、工程路径或引用——`ImportedStandardDraft.subsets`/`external_paths` 以恒空元组固化该边界。非法 DST（含解码失败、修复阻断、缺图纸集）返回 422 `STANDARD_DST_IMPORT_INVALID` 且不留任何草稿半成品；非 `.dst` 来源与缺失文件分别以 `STANDARD_DST_IMPORT_SOURCE_INVALID`/`STANDARD_DST_IMPORT_SOURCE_NOT_FOUND` 拒绝。`cad_job.py` 经探索确认无直接可复用函数，未修改（留待 Task 11 文档说明）。新增 17 项测试，标准服务/属性编辑/v021 编辑基线 93 项全部通过。
+
 ## 2026-09-22（编排标准发布绑定与快照恢复）
 
 - 新增 `src/dst_manager/application/standards.py`（PLAN-DM-035 Task 4）：`StandardOperations` 以 mixin 组合进 `DstManagerService`（入口只负责组合与注入 `standard_store`），提供 `list_standards`、`resolve_workspace_standard`、`peek_workspace_standard` 与 `bind_workspace_standard`。绑定身份为 `standard_id@version`（`STANDARD_IDENTITY_INVALID` 422）；快照缺失时按 ID/版本从用户/官方标准库恢复到工作区 `.dst-manager/standards/<id>/<version>/`，普通工作区打开只做只读解析——标准缺失仅附加 `STANDARD_MISSING` 诊断降级标准能力，不阻止打开也不创建快照。
