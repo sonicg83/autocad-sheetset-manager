@@ -16,6 +16,11 @@
 
 - 新增 `src/dst_manager/domain/standards.py`（PLAN-DM-035 Task 1）：定义冻结的 `DrawingStandard`、`StandardProperty`、`StandardRule`、`StandardSegment`、`StandardAsset`、`NumberingPolicy`、`StandardDependency` 领域对象与 `parse_standard_document`/`loads_standard_document` 严格解析器。解析拒绝未知 Schema 版本、重复 JSON 字段、非法/大小写不合规标准 ID、非三段版本、未知作用域与规则种类、重复规则/资产 ID 和非法字段引用，全部返回 `STANDARD_*` 稳定错误码；不解析任何可执行内容。新增 `tests/unit/test_drawing_standards.py` 17 项解析、往返与边界测试。
 
+## 2026-09-22（补充官方图纸标准包发布指南）
+
+- 新增 `GUIDE-DM-007`，详细说明用户标准发布与官方晋升的区别、官方身份的受信目录边界、标准 ID/版本治理、候选包编制与导出、包安全门禁、业务/技术双重审核、模板与双版本 CAD 检查、只读官方源晋升、随 Manager 绿色包分发、frozen 验收、旧版本保留及错误版本纠正流程。
+- 指南明确当前 PLAN-DM-035 正在实施，官方晋升工具和 PyInstaller 资源接线完成前不得以手工解压复制宣称官方发布；普通 `import_package` 只写用户库，不能赋予官方身份。同步 DST Manager 指南索引，未修改实施计划或产品代码。
+
 ## 2026-09-21（补齐图纸标准管理与欢迎页 UI 设计）
 
 - 新增已接受的 `SPEC-DM-016`，固化“打开现有 DST 优先”的欢迎页双栏、主从分栏标准库、用户草稿分区编辑器、普通规则列表与侧边编辑器、字段映射表、字段组合令牌、基础/布局模板资产检查和独立发布检查页；明确官方标准与已发布版本只读、用户草稿可维护，以及 PLAN-DM-035 与 PLAN-DM-036 的界面边界。
