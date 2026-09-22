@@ -1,3 +1,7 @@
+## 2026-09-22（建立图纸标准包与标准库）
+
+- 新增 `src/dst_manager/infrastructure/standards/`（PLAN-DM-035 Task 3）：`package.py` 的 `StandardPackageReader.read()` 读取 `.dststandard` zip 包，读取阶段即拒绝 `..`/绝对路径/重复规范化路径（`STANDARD_PACKAGE_PATH_INVALID`）、可执行扩展名 `.py/.dll/.scr/.lsp/.exe` 等（`STANDARD_PACKAGE_EXTENSION_FORBIDDEN`）、超大条目与包体（`STANDARD_PACKAGE_TOO_LARGE`）、缺 manifest 与非法 Schema（`STANDARD_PACKAGE_MANIFEST_*`）；`store.py` 的 `StandardStore` 组合只读官方根与用户库（`published/<id>/<version>/` 与 `drafts/<draft_id>/`），提供 `list/get/create_draft/save_draft/delete_draft/publish/import_package/export_package`。发布与导入对重复身份、导入碰撞和官方身份冲突稳定拒绝 `STANDARD_VERSION_EXISTS`，目录迁移走同盘原子 rename，已发布版本不可原地修改。新增 24 项包安全与仓储测试（路径逃逸、非法扩展、重复规范化路径、重启往返、导入碰撞与导出再导入）。
+
 ## 2026-09-22（实现图纸标准封闭规则求值）
 
 - 新增 `src/dst_manager/domain/standard_rules.py`（PLAN-DM-035 Task 2）：`compile_standard_rules` 把标准规则编译为拓扑有序计划，未知字段引用、重复目标、非法格式码与间接循环在编译期以 `STANDARD_RULE_FIELD_UNKNOWN`/`STANDARD_RULE_TARGET_DUPLICATE`/`STANDARD_RULE_FORMAT_INVALID`/`STANDARD_RULE_CYCLE` 确定失败；`evaluate_fields` 按依赖顺序求值映射、组合、固定值、必填与枚举，缺失来源、映射未覆盖与非法补零值返回稳定诊断而不中断其余规则。不执行 `eval`、模板脚本或动态导入；格式码仅允许宿主登记的数字补零形式。

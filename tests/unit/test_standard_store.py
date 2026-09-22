@@ -1,0 +1,139 @@
+"""官方/用户标准库仓储测试（PLAN-DM-035 Task 3）。"""
+
+import json
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from dst_manager.infrastructure.standards.package import StandardPackageReader
+from dst_manager.infrastructure.standards.store import (
+    StandardStore,
+    StandardStoreError,
+)
+
+OFFICIAL_DOCUMENT = {
+    "schema_version": 1,
+    "standard_id": "official.gas",
+    "version": "1.0.0",
+    "name": "官方燃气标准",
+    "supported_cad_versions": ["2016", "2020"],
+    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
+    "rules": [],
+    "assets": [],
+    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+}
+
+USER_DOCUMENT = {
+    "schema_version": 1,
+    "standard_id": "user.water",
+    "version": "3.0.0",
+    "name": "用户给排水标准",
+    "supported_cad_versions": ["2020"],
+    "properties": [{"name": "备注", "scope": "sheetset"}],
+    "rules": [],
+    "assets": [],
+    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+}
+
+
+def write_official(root: Path, document: dict) -> None:
+    target = root / document["standard_id"] / document["version"]
+    target.mkdir(parents=True)
+    (target / "document.json").write_text(
+        json.dumps(document, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> StandardStore:
+    official_root = tmp_path / "official"
+    official_root.mkdir()
+    write_official(official_root, OFFICIAL_DOCUMENT)
+    return StandardStore(official_root=official_root, user_root=tmp_path / "user")
+
+
+def create_draft(store: StandardStore, document: dict, draft_id: str | None = None):
+    return store.create_draft(document, draft_id=draft_id)
+
+
+def test_publish_rejects_existing_identity(store: StandardStore) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    create_draft(store, USER_DOCUMENT, draft_id="draft-2")
+    store.publish("draft-1")
+    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_EXISTS"):
+        store.publish("draft-2")
+
+
+def test_publish_rejects_official_identity_collision(store: StandardStore) -> None:
+    create_draft(store, OFFICIAL_DOCUMENT, draft_id="draft-1")
+    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_EXISTS"):
+        store.publish("draft-1")
+
+
+def test_publish_writes_immutable_version_directory(store: StandardStore) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    published = store.publish("draft-1")
+    assert (published.root / "document.json").is_file()
+    assert published.standard_id == "user.water"
+    assert published.version == "3.0.0"
+
+
+def test_store_round_trips_after_reopen(store: StandardStore, tmp_path: Path) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    store.publish("draft-1")
+    reopened = StandardStore(
+        official_root=tmp_path / "official", user_root=tmp_path / "user"
+    )
+    standard = reopened.get("user.water", "3.0.0")
+    assert standard is not None
+    assert standard.name == "用户给排水标准"
+
+
+def test_list_covers_official_and_user(store: StandardStore) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    store.publish("draft-1")
+    entries = {(entry.source, entry.status, entry.standard_id, entry.version) for entry in store.list()}
+    assert ("official", "published", "official.gas", "1.0.0") in entries
+    assert ("user", "published", "user.water", "3.0.0") in entries
+
+
+def test_get_missing_identity_returns_none(store: StandardStore) -> None:
+    assert store.get("missing.standard", "9.9.9") is None
+
+
+def test_import_package_collides_with_existing(store: StandardStore, tmp_path: Path) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    store.publish("draft-1")
+    package = tmp_path / "user-water.dststandard"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(USER_DOCUMENT, ensure_ascii=False))
+    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_EXISTS"):
+        store.import_package(package)
+
+
+def test_import_export_round_trip(store: StandardStore, tmp_path: Path) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    store.publish("draft-1")
+    exported = store.export_package("user.water", "3.0.0", tmp_path / "out")
+    assert exported.suffix == ".dststandard"
+    loaded = StandardPackageReader().read(exported)
+    assert loaded.standard.standard_id == "user.water"
+    assert loaded.standard.name == "用户给排水标准"
+    # 已发布版本不可变，同库重复导入必须拒绝；导入到全新用户库验证往返。
+    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
+    fresh.import_package(exported)
+    assert fresh.get("user.water", "3.0.0") is not None
+
+
+def test_draft_save_and_get(store: StandardStore) -> None:
+    draft = create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    assert draft.draft_id == "draft-1"
+    loaded = store.get_draft("draft-1")
+    assert loaded is not None
+    assert loaded.document["standard_id"] == "user.water"
+
+
+def test_publish_missing_draft_fails(store: StandardStore) -> None:
+    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_NOT_FOUND"):
+        store.publish("nope")
