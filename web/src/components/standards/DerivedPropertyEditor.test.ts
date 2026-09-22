@@ -230,6 +230,31 @@ describe("DerivedPropertyEditor", () => {
     expect(draft.properties.some(item => item.property_id === "prop-claimed")).toBe(false);
   });
 
+  it("opens the composition dialog from the derived table", async () => {
+    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+    await wrapper.get("[data-testid=edit-derived-prop-label]").trigger("click");
+    expect(wrapper.find("[data-testid=composition-dialog]").exists()).toBe(true);
+  });
+
+  it("saves composition segments from the dialog and discards them on cancel", async () => {
+    const draft = documentWithClaimedSource();
+    const wrapper = mountDerivedEditor(draft);
+    await wrapper.get("[data-testid=edit-derived-prop-label]").trigger("click");
+    await wrapper.get("[data-testid=token-field-prop-code]").trigger("click");
+    await wrapper.get("[data-testid=cancel-composition]").trigger("click");
+    const label = draft.properties.find(item => item.property_id === "prop-label");
+    expect(label?.kind === "composition" && label.segments).toEqual([
+      {property_id: "prop-code"},
+      {literal: "-"},
+      {system_field: "subset.scope"},
+    ]);
+
+    await wrapper.get("[data-testid=edit-derived-prop-label]").trigger("click");
+    await wrapper.get("[data-testid=token-clear]").trigger("click");
+    await wrapper.get("[data-testid=save-composition]").trigger("click");
+    expect(label?.kind === "composition" && label.segments).toEqual([]);
+  });
+
   it("opens the editor for the requested publish issue", async () => {
     const wrapper = mountDerivedEditor(documentWithClaimedSource());
     await wrapper.setProps({focusRequest: {propertyId: "prop-code", openEditor: true}});

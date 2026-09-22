@@ -13,6 +13,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiIconButton from "../ui/UiIconButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import MappingPropertyDialog from "./MappingPropertyDialog.vue";
+import CompositionPropertyDialog from "./CompositionPropertyDialog.vue";
 import {
   DERIVED_PROPERTY_KINDS,
   blankDerivedProperty,
@@ -20,9 +21,11 @@ import {
   propertyIndexById,
   referencesTo,
   type DerivedPropertyKind,
+  type DraftCompositionProperty,
   type DraftDiagnostic,
   type DraftDocument,
   type DraftMappingProperty,
+  type DraftSegment,
   type DraftMappingRow,
   type DraftProperty,
   type DraftPropertyScope,
@@ -37,12 +40,12 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   deleteBlocked: [{propertyId: string; references: PropertyReference[]}];
-  editComposition: [propertyId: string];
 }>();
 const {t} = useI18n();
 
 const root = ref<HTMLElement | null>(null);
 const dialogPropertyId = ref<string | null>(null);
+const compositionDialogId = ref<string | null>(null);
 const blocked = ref<{propertyId: string; owners: string[]} | null>(null);
 
 const derivedProperties = computed(() =>
@@ -53,6 +56,10 @@ const derivedProperties = computed(() =>
 const dialogProperty = computed<DraftMappingProperty | null>(() => {
   const property = props.document.properties.find(item => item.property_id === dialogPropertyId.value);
   return property !== undefined && property.kind === "mapping" ? property : null;
+});
+const compositionDialogProperty = computed<DraftCompositionProperty | null>(() => {
+  const property = props.document.properties.find(item => item.property_id === compositionDialogId.value);
+  return property !== undefined && property.kind === "composition" ? property : null;
 });
 
 watch(
@@ -149,7 +156,7 @@ function openEditor(propertyId: string): void {
     dialogPropertyId.value = propertyId;
     return;
   }
-  if (property.kind === "composition") emit("editComposition", propertyId);
+  if (property.kind === "composition") compositionDialogId.value = propertyId;
 }
 
 function saveMapping(payload: {
@@ -164,6 +171,12 @@ function saveMapping(payload: {
     property.confirmed_source_items = payload.confirmed;
   }
   dialogPropertyId.value = null;
+}
+
+function saveComposition(segments: DraftSegment[]): void {
+  const property = compositionDialogProperty.value;
+  if (property !== null) property.segments = segments;
+  compositionDialogId.value = null;
 }
 
 function referenceOwner(reference: PropertyReference): string {
@@ -271,6 +284,13 @@ function removeProperty(property: DraftProperty): void {
       :document="document"
       @save="saveMapping"
       @cancel="dialogPropertyId = null"
+    />
+    <CompositionPropertyDialog
+      :open="compositionDialogProperty !== null"
+      :property="compositionDialogProperty"
+      :document="document"
+      @save="saveComposition"
+      @cancel="compositionDialogId = null"
     />
   </section>
 </template>
