@@ -16,6 +16,7 @@ import zhCNRevisions from "./locales/zh-CN/revisions";
 import zhCNSettings from "./locales/zh-CN/settings";
 import zhCNShell from "./locales/zh-CN/shell";
 import zhCNSheets from "./locales/zh-CN/sheets";
+import zhCNStandards from "./locales/zh-CN/standards";
 import enUSCommon from "./locales/en-US/common";
 import enUSErrors from "./locales/en-US/errors";
 import enUSExtensions from "./locales/en-US/extensions";
@@ -25,11 +26,12 @@ import enUSRevisions from "./locales/en-US/revisions";
 import enUSSettings from "./locales/en-US/settings";
 import enUSShell from "./locales/en-US/shell";
 import enUSSheets from "./locales/en-US/sheets";
+import enUSStandards from "./locales/en-US/standards";
 
 // 语言资源按功能域装两套同构文件，构建期合并（ARCH-DM-005 §5.1）
 const messages = {
-  "zh-CN": {common: zhCNCommon, errors: zhCNErrors, extensions: zhCNExtensions, jobs: zhCNJobs, properties: zhCNProperties, revisions: zhCNRevisions, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets},
-  "en-US": {common: enUSCommon, errors: enUSErrors, extensions: enUSExtensions, jobs: enUSJobs, properties: enUSProperties, revisions: enUSRevisions, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets},
+  "zh-CN": {common: zhCNCommon, errors: zhCNErrors, extensions: zhCNExtensions, jobs: zhCNJobs, properties: zhCNProperties, revisions: zhCNRevisions, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets, standards: zhCNStandards},
+  "en-US": {common: enUSCommon, errors: enUSErrors, extensions: enUSExtensions, jobs: enUSJobs, properties: enUSProperties, revisions: enUSRevisions, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets, standards: enUSStandards},
 };
 
 // 唯一实例：语言状态全部经此实例流转；缺键运行时回退 zh-CN（键对称由 check:i18n 保证）

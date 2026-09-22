@@ -2,7 +2,7 @@
 import {ref} from "vue";
 import UiButton from "../components/ui/UiButton.vue";
 defineProps<{hasShell:boolean}>();
-const emit=defineEmits<{select:[];submitPath:[path:string]}>();
+const emit=defineEmits<{select:[];submitPath:[path:string];manageStandards:[]}>();
 const path=ref("");
 // PLAN-DM-029 Task 9：路径输入必须有可见 label 关联（仅 placeholder/aria-label 不解除
 // `visible-input-label` 例外）。该 label 文本复用现有键，不新增 i18n key；
@@ -24,6 +24,8 @@ const pathInputId="welcome-path-input";
       <button type="button" class="primary" @click="$emit('select')">{{ $t("shell.welcome.selectDst") }}</button>
       <p class="drop-hint">{{ $t("shell.welcome.dropHint") }}</p>
     </template>
+    <!-- PLAN-DM-035 Task 7：欢迎页"打开优先"不动摇——标准管理入口为次要动作 -->
+    <UiButton variant="secondary" class="standards-entry" @click="$emit('manageStandards')">{{ $t("standards.entry") }}</UiButton>
   </section>
 </template>
 <style scoped>
@@ -38,4 +40,5 @@ const pathInputId="welcome-path-input";
    故此处保留原生按钮并逐字借用表单档令牌，不把 38 降为 36（T9-1(C) 允许该借用）。 */
 .welcome-card .primary{background:var(--color-accent);color:var(--color-on-accent);border:1px solid transparent;border-radius:var(--radius-md);height:var(--control-height-form);padding:0 var(--space-5);font-weight:500;cursor:pointer;font-size:var(--button-font-size)}
 .welcome-card .primary:hover{background:var(--color-accent-hover)}
+.standards-entry{margin-top:var(--space-4)}
 </style>

@@ -1,3 +1,9 @@
+## 2026-09-22（建立标准前端契约、状态控制器与欢迎页入口）
+
+- 新增 `web/src/features/standards/`（PLAN-DM-035 Task 7）：`types.ts` 只为生成契约建立窄别名与 UI 判别联合（`StartSurface`、身份、摘要/详情/草稿/资产检查负载），不复制后端最终校验；`store.ts` 的 `createStandardStore(api)` 暴露 `list/open/createDraft/saveDraft/inspectAsset/publish/importPackage`，open/refresh 走代次保护——乱序详情响应按代次丢弃，不覆盖当前标准，pending/error 显式分离；`api/standards.ts` 是 `/api/standards` 系列的窄包装，以 `standardsApi` 组合默认实现供注入替身。
+- 应用级起始面导航：`useStartNavigation()` 维护 `welcome`/`standards`/`create-sheetset` 三表面；`App.vue` 无工作区时按表面装配（标准管理不进工作区标签栏），工作区关闭自动回欢迎页；`WelcomeView` 增加次要动作"管理图纸标准"，"打开 DST 为唯一主任务"不动摇；`create-sheetset` 仅保留 PLAN-DM-036 编译期入口占位并明确显示不可用说明，不回退为无标准创建。新增 `views/StandardsView.vue` 骨架（Task 8 落地主从分栏）。
+- i18n 新增 `standards` 域中英同构文件（入口/标题/返回/占位/创建说明）；E2E 新增 `standards-welcome.spec.ts` 5 项：欢迎页主任务唯一性、创建入口不回退、无壳路径输入与普通 DST 打开不回归、900×768 单列无横向滚动。标准包导入失败留在标准上下文的用例待导入 UI（Task 8/10）落地后补齐。修复本轮引入的 App 装配 TDZ 缺陷（watch 先于 `workspace` 声明求值导致应用白屏，settings-dialog E2E 因此一过性失败）。单元 6 项、`check:i18n` 960 键对称、`npm run build` 与全量 E2E 38 项全部通过。
+
 ## 2026-09-22（开放图纸标准管理 API 与受信扩展依赖）
 
 - 新增 `src/dst_manager/interfaces/standard_api.py` + `standard_contracts.py`（PLAN-DM-035 Task 6）：`register_standard_routes` 把 `/api/standards` 系列端点注册进宿主应用（与 extension_api 同形态），覆盖列表、草稿创建/查询/删除、按身份保存、发布、包导入/导出、从 DST 建草稿与资产检查；路由只做请求/响应转换与错误码映射，Schema 校验/发布门禁/包安全全部在应用与基础设施层。已发布身份 PUT 以 409 `STANDARD_VERSION_IMMUTABLE` 稳定拒绝；草稿/身份缺失 404；文档 Schema 非法 422（码取自 `STANDARD_*` 前缀）；包身份冲突 409 `STANDARD_VERSION_EXISTS`。`responses.py` 本任务未改动——标准响应契约独立成 `standard_contracts.py`，避免既有工作区响应模型耦合。
