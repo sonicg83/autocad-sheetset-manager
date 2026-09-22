@@ -1,3 +1,8 @@
+## 2026-09-22（整改标准属性与 DWG 命名：Schema v1 直接替换）
+
+- 重构图纸标准 Schema v1 属性模型（PLAN-DM-038 Task 1）：删除旧通用规则模型（`StandardRule`、顶层 `rules`、`RULE_KINDS`、自由规则目标），改为「普通属性（文本/枚举）+ 派生属性（映射/组合）」内嵌结构，新增稳定 `property_id`/`enum_item_id`、历史名称、映射确认快照与标准级唯一 `dwg_naming` 模板。新增 `domain/standard_models.py`（冻结数据类型、名称规范化、`references_to` 反向引用枚举）、`domain/standard_schema.py`（结构解析）、`domain/standard_semantics.py`（发布语义门禁），`domain/standards.py` 改为公共导入门面并组合两阶段入口：草稿只过结构门禁（允许空属性名、空枚举值、空映射目标、空命名片段），发布追加全局名称唯一（含历史名称、忽略大小写与首尾空格）、保留名称、枚举默认值、映射源类型与作用域、组合/DWG 命名字段越权、补零格式与模板存在性校验。单元测试 38 项通过，Ruff 通过。
+- 过渡状态（本任务已知且由后续任务收口）：`standard_rules.py`、`application/standards.py`、`application/standard_assets.py`、`infrastructure/standards/{store,package,dst_import}.py` 仍引用旧接口，标准域测试在 Task 4 接线与夹具重建前保持红色。
+
 ## 2026-09-22（交付图纸标准平台与编辑器：证据、全量验证与文档收口）
 
 - 修正 `SPEC-DM-017-standard-properties-and-dwg-naming-demo.html` 的三处实施对照缺陷：阻止表格通用输入框尺寸把“必填”复选框拉满单元格；枚举编辑改为仅显示序号与上移/下移操作，隐藏内部稳定 ID，并使“取消”真正丢弃本轮增删改排序；组合属性弹窗把宽度约束移到外层 `dialog`，正文独立滚动、底部“取消/保存组合”持续可见。SPEC-DM-017 与 PLAN-DM-038 已增加 Demo 直接链接、权威边界和 Task 6/8 必读对照要求，同步收紧显式验收描述，并新增 Demo 静态回归测试。
