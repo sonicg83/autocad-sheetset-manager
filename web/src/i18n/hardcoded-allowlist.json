@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "file": "features/standards/draftModel.ts",
+    "match": "CSV_TRUE_VALUES",
+    "reason": "标准属性 CSV 批量导入的布尔单元格取值别名集：\"是\" 是用户在 CSV 里填写的输入值（用户数据），不是界面文案；界面提示与列名均来自语言包。"
+  }
+]

@@ -21,6 +21,7 @@ import type {
 export interface StandardApi {
   list(): Promise<StandardSummary[]>;
   fetchDetail(identity: StandardIdentity): Promise<StandardDetail>;
+  fetchDraft(draftId: string): Promise<StandardDraft>;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
   saveDraftByIdentity(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
@@ -37,12 +38,20 @@ export interface StandardStore {
   detail: Ref<StandardDetail | null>;
   detailPending: Ref<boolean>;
   detailError: Ref<string>;
+  /** 编辑器加载的草稿（含原始文档）；未进入编辑器时为 null。 */
+  draft: Ref<StandardDraft | null>;
+  draftPending: Ref<boolean>;
+  draftError: Ref<string>;
   actionPending: Ref<boolean>;
   actionError: Ref<string>;
   refresh(): Promise<void>;
   open(identity: StandardIdentity): Promise<void>;
   /** 清空详情并使在途详情响应失效（切到草稿等无发布详情的选中项）。 */
   clearDetail(): void;
+  /** 加载草稿原始文档；代次保护同 open（乱序响应不覆盖当前草稿）。 */
+  loadDraft(draftId: string): Promise<StandardDraft | null>;
+  /** 直接采用刚创建的草稿（省去一次冗余 GET）。 */
+  adoptDraft(draft: StandardDraft): void;  closeDraft(): void;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
   saveDraft(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
@@ -64,11 +73,15 @@ export function createStandardStore(api: StandardApi): StandardStore {
   const detail: Ref<StandardDetail | null> = ref(null);
   const detailPending = ref(false);
   const detailError = ref("");
+  const draft: Ref<StandardDraft | null> = ref(null);
+  const draftPending = ref(false);
+  const draftError = ref("");
   const actionPending = ref(false);
   const actionError = ref("");
   // 代次：open 与 refresh 各自独立编号，只有最新一代允许提交状态
   let listGeneration = 0;
   let detailGeneration = 0;
+  let draftGeneration = 0;
 
   async function refresh(): Promise<void> {
     const generation = ++listGeneration;
@@ -109,6 +122,38 @@ export function createStandardStore(api: StandardApi): StandardStore {
     detailError.value = "";
   }
 
+  async function loadDraft(draftId: string): Promise<StandardDraft | null> {
+    const generation = ++draftGeneration;
+    draftPending.value = true;
+    draftError.value = "";
+    try {
+      const loaded = await api.fetchDraft(draftId);
+      if (generation !== draftGeneration) return null;
+      draft.value = loaded;
+      return loaded;
+    } catch (error) {
+      if (generation !== draftGeneration) return null;
+      draftError.value = errorMessage(error);
+      return null;
+    } finally {
+      if (generation === draftGeneration) draftPending.value = false;
+    }
+  }
+
+  function adoptDraft(created: StandardDraft): void {
+    draftGeneration += 1;
+    draft.value = created;
+    draftPending.value = false;
+    draftError.value = "";
+  }
+
+  function closeDraft(): void {
+    draftGeneration += 1;
+    draft.value = null;
+    draftPending.value = false;
+    draftError.value = "";
+  }
+
   async function runAction<T>(action: () => Promise<T>): Promise<T> {
     actionPending.value = true;
     actionError.value = "";
@@ -129,11 +174,17 @@ export function createStandardStore(api: StandardApi): StandardStore {
     detail,
     detailPending,
     detailError,
+    draft,
+    draftPending,
+    draftError,
     actionPending,
     actionError,
     refresh,
     open,
     clearDetail,
+    loadDraft,
+    adoptDraft,
+    closeDraft,
     createDraft: (input) => runAction(() => api.createDraft(input)),
     saveDraft: (input) => runAction(() => api.saveDraftByIdentity(input)),
     createDraftFromDst: (input) => runAction(() => api.createDraftFromDst(input)),

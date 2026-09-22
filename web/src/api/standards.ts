@@ -90,6 +90,7 @@ export function standardExportUrl(identity: StandardIdentity): string {
 export const standardsApi: StandardApi = {
   list: fetchStandards,
   fetchDetail: fetchStandardDetail,
+  fetchDraft: fetchStandardDraft,
   createDraft: createStandardDraft,
   saveDraftByIdentity: saveStandardDraftByIdentity,
   createDraftFromDst: createStandardDraftFromDst,

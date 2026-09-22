@@ -52,6 +52,12 @@ export interface StandardsFixtureState {
   deleted: string[];
   /** 导入端点被调用次数（碰撞场景断言用）。 */
   importAttempts: number;
+  /** 草稿按身份的保存请求体（PUT /api/standards/{id}/{ver}）。 */
+  saveBodies: Record<string, unknown>[];
+  /** 内存草稿文档：draft_id → document。 */
+  drafts: Map<string, Record<string, unknown>>;
+  /** 注入保存失败（模拟服务端 5xx/冲突），默认不失败。 */
+  saveFailure: {status: number; code: string; message: string} | null;
 }
 
 export type StandardsFixtureOptions = {
@@ -59,18 +65,69 @@ export type StandardsFixtureOptions = {
   listFails?: boolean;
   /** 导入端点固定返回的冲突响应（默认 409 STANDARD_VERSION_EXISTS）。 */
   importConflict?: {status: number; code: string; message: string};
+  /** 预置草稿文档：draft_id → document（编辑器加载与保存目标）。 */
+  drafts?: Record<string, Record<string, unknown>>;
 };
 
+/** 最小合法标准文档（草稿）：两个属性 + 一条空表映射规则 + 一条命名规则。 */
+export function draftDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    standard_id: "szmedi.gas",
+    version: "3.0.0",
+    name: "市政燃气施工图",
+    supported_cad_versions: ["2020"],
+    properties: [
+      {name: "专业名称", scope: "sheetset", required: true, default_value: "", enum_values: ["燃气", "建筑", "结构"], description: ""},
+      {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
+    ],
+    rules: [
+      // 映射表覆盖源域全部枚举值：夹具草稿必须自洽可保存（空表会被结构诊断阻断）
+      {rule_id: "specialty-code", kind: "mapping", target: "sheetset.专业代码", source: "sheetset.专业名称", allowed: [], table: [["燃气", "RQ"], ["建筑", "JZ"], ["结构", "JG"]], segments: []},
+      {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: []},
+    ],
+    assets: [],
+    numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},
+    ...overrides,
+  };
+}
+
 /**
- * 安装标准端点 mock：GET list、GET detail、POST drafts、DELETE drafts/{id}、POST import。
- * 列表可变（创建/删除后同步），detail 由列表中的已发布项派生，保证两端身份一致。
+ * 部分映射草稿：源域有四个枚举值，映射表仅覆盖一个（`给排水` 未覆盖）。
+ * 用于驱动「批量粘贴补齐映射表后才能保存」的边界。
+ */
+export function partialMappingDraft(): Record<string, unknown> {
+  return draftDocument({
+    properties: [
+      {name: "专业名称", scope: "sheetset", required: true, default_value: "", enum_values: ["燃气", "建筑", "结构", "给排水"], description: ""},
+      {name: "专业代码", scope: "sheetset", required: false, default_value: "", enum_values: [], description: ""},
+    ],
+    rules: [
+      {rule_id: "specialty-code", kind: "mapping", target: "sheetset.专业代码", source: "sheetset.专业名称", allowed: [], table: [["燃气", "RQ"]], segments: []},
+      {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: []},
+    ],
+  });
+}
+
+/**
+ * 安装标准端点 mock：列表、详情、草稿读取、草稿创建/删除、按身份保存、发布、导入。
+ * 列表可变（创建/删除后同步），detail 由列表中的已发布项派生，草稿文档保存在内存中，
+ * 保证“读取 → 编辑 → 保存 → 重新读取”在夹具内自洽。
  */
 export async function installStandards(
   page: Page,
   initial: StandardSummary[],
   options: StandardsFixtureOptions = {},
 ): Promise<StandardsFixtureState> {
-  const state: StandardsFixtureState = {list: [...initial], createBodies: [], deleted: [], importAttempts: 0};
+  const state: StandardsFixtureState = {
+    list: [...initial],
+    createBodies: [],
+    deleted: [],
+    importAttempts: 0,
+    saveBodies: [],
+    drafts: new Map(Object.entries(options.drafts ?? {})),
+    saveFailure: null,
+  };
   await page.route(
     url => url.pathname === "/api/standards" || url.pathname.startsWith("/api/standards/"),
     async route => {
@@ -86,18 +143,41 @@ export async function installStandards(
         state.createBodies.push(body);
         const created = draft(String(body.document["name"] ?? "草稿"), `draft-new-${state.createBodies.length}`);
         state.list.push(created);
+        state.drafts.set(created.draft_id!, body.document);
         return route.fulfill({json: {draft_id: created.draft_id, document: body.document}});
+      }
+      if (path.startsWith("/api/standards/drafts/") && method === "GET") {
+        const draftId = decodeURIComponent(path.split("/").at(-1)!);
+        const document = state.drafts.get(draftId);
+        if (document === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: draftId}});
+        return route.fulfill({json: {draft_id: draftId, document}});
       }
       if (path.startsWith("/api/standards/drafts/") && method === "DELETE") {
         const draftId = decodeURIComponent(path.split("/").at(-1)!);
         state.deleted.push(draftId);
         state.list = state.list.filter(item => item.draft_id !== draftId);
+        state.drafts.delete(draftId);
         return route.fulfill({json: {status: "deleted"}});
       }
       if (path === "/api/standards/import" && method === "POST") {
         state.importAttempts += 1;
         const conflict = options.importConflict ?? {status: 409, code: "STANDARD_VERSION_EXISTS", message: "同一标准 ID 与版本已存在"};
         return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
+      }
+      if (method === "PUT") {
+        const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
+        if (match === null) return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
+        const body = (await request.postDataJSON()) as Record<string, unknown>;
+        state.saveBodies.push(body);
+        if (state.saveFailure !== null) {
+          return route.fulfill({status: state.saveFailure.status, json: {code: state.saveFailure.code, message: state.saveFailure.message}});
+        }
+        // 按身份找草稿（草稿推荐摘要的 version 恒为空串，身份在文档内）
+        const draftId = [...state.drafts.entries()].find(([, document]) =>
+          document["standard_id"] === body["standard_id"] && document["version"] === body["version"])?.[0];
+        if (draftId === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: String(body["standard_id"])}});
+        state.drafts.set(draftId, body);
+        return route.fulfill({json: {draft_id: draftId, document: body}});
       }
       const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
       if (match && method === "GET" && match[1] !== "drafts") {
@@ -124,4 +204,20 @@ export async function openStandards(page: Page): Promise<void> {
 /** 左栏标准条目按钮（限定在「标准库」区域内，避免与详情里的版本链接混淆）。 */
 export function libraryItems(page: Page): Locator {
   return page.getByRole("region", {name: "标准库"}).getByRole("list").getByRole("button");
+}
+
+/** 选中草稿并进入分区编辑器（详情面板的「编辑」入口）。 */
+export async function openDraftEditor(page: Page, draftName = "草稿 1"): Promise<void> {
+  await libraryItems(page).filter({hasText: draftName}).click();
+  await page.getByRole("button", {name: "编辑"}).click();
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
+}
+
+/** 切换到指定编辑分区（分区导航是原生按钮，回车/空格同样生效）。 */
+export async function openEditorSection(page: Page, sectionId: string): Promise<void> {
+  await page.getByTestId(`editor-section-${sectionId}`).click();
+}
+
+export function editorSaveState(page: Page): Locator {
+  return page.getByTestId("editor-save-state");
 }

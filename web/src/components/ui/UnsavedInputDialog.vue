@@ -18,6 +18,10 @@ const props = defineProps<{
   open: boolean;
   summary: string;   // 当前未提交内容描述（如「图纸 001 属性编辑」）
   canSave: boolean;  // 失效上下文禁止加入草稿
+  // 直接保存页面（如标准草稿编辑器）可覆盖正文与主操作文案：默认文案是草稿流语义
+  // （“加入草稿后继续”），直接保存流需要“保存并离开”，但三选一结构与门禁语义同一。
+  message?: string;
+  saveLabel?: string;
 }>();
 const emit = defineEmits<{saveAndContinue: []; discard: []; stay: []}>();
 const dialogEl = ref<HTMLDialogElement | null>(null);
@@ -61,11 +65,11 @@ const {onDialogKeydown} = useDialogFocus({
   >
     <div class="modal-card" tabindex="-1" ref="card">
       <h2>{{ $t("shell.unsaved.title") }}</h2>
-      <p class="modal-message">{{ $t("shell.unsaved.message", { summary }) }}</p>
+      <p class="modal-message">{{ message ?? $t("shell.unsaved.message", { summary }) }}</p>
       <div class="modal-actions">
         <button type="button" @click="emit('stay')">{{ $t("shell.unsaved.stay") }}</button>
         <button type="button" @click="emit('discard')">{{ $t("shell.unsaved.discard") }}</button>
-        <button type="button" class="primary" :disabled="!canSave" @click="emit('saveAndContinue')">{{ $t("shell.unsaved.saveAndContinue") }}</button>
+        <button type="button" class="primary" :disabled="!canSave" @click="emit('saveAndContinue')">{{ saveLabel ?? $t("shell.unsaved.saveAndContinue") }}</button>
       </div>
     </div>
   </dialog>

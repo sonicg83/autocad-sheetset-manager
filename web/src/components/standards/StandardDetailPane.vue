@@ -12,7 +12,6 @@ const props = defineProps<{
   detailPending: boolean;
   detailError: string;
   items: StandardSummary[];
-  editorAvailable: boolean;
 }>();
 const emit = defineEmits<{
   derive: [];
@@ -91,8 +90,6 @@ const documentCounts = computed(() => {
         <UiButton
           v-if="actions?.canEdit"
           variant="secondary"
-          :disabled="!editorAvailable"
-          :title="!editorAvailable ? $t('standards.detail.editorPending') : undefined"
           @click="emit('edit')"
         >{{ $t("standards.detail.edit") }}</UiButton>
         <UiButton v-if="actions?.canDerive" variant="secondary" @click="emit('derive')">{{ $t("standards.detail.derive") }}</UiButton>

@@ -3,7 +3,7 @@
 // 无结果的区分、官方/已发布只读边界、草稿可维护、派生新草稿、加载失败与导入碰撞
 // 不改变选中、900×768 分级视图无横向溢出。
 import {expect, test} from "@playwright/test";
-import {draft, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
+import {draft, draftDocument, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
@@ -77,8 +77,10 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   expect(created.document["version"]).toBe("2.0.1");
 });
 
-test("草稿可维护：编辑入口因编辑器未交付而禁用并给出可见原因", async ({page}) => {
-  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")]);
+test("草稿可维护：编辑入口直接进入分区编辑器", async ({page}) => {
+  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+  });
   await openStandards(page);
   await libraryItems(page).filter({hasText: "草稿 1"}).click();
 
@@ -86,10 +88,14 @@ test("草稿可维护：编辑入口因编辑器未交付而禁用并给出可�
   await expect(page.getByText("已发布版本不可直接修改")).toHaveCount(0);
   const edit = page.getByRole("button", {name: "编辑"});
   await expect(edit).toBeVisible();
-  await expect(edit).toBeDisabled();
-  await expect(edit).toHaveAttribute("title", "分区编辑器将在后续版本提供，当前草稿不可编辑。");
+  await expect(edit).toBeEnabled();
   await expect(page.getByRole("button", {name: "删除草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "派生新草稿"})).toHaveCount(0);
+
+  // Task 9：编辑入口直接进入分区编辑器，草稿按 draft_id 读取并建立可信基准
+  await edit.click();
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
+  await expect(page.getByTestId("editor-save-state")).toHaveText("已保存");
 });
 
 test("删除草稿走共享确认模态，确认后才调用删除并刷新列表", async ({page}) => {

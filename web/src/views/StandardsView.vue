@@ -10,9 +10,10 @@ import UiButton from "../components/ui/UiButton.vue";
 import StandardLibraryPane from "../components/standards/StandardLibraryPane.vue";
 import StandardDetailPane from "../components/standards/StandardDetailPane.vue";
 import StandardCreateDialog from "../components/standards/StandardCreateDialog.vue";
+import StandardEditor from "../components/standards/StandardEditor.vue";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
+import {draftKey} from "../features/standards/draftModel";
 import type {CreateMode, StandardSummary} from "../features/standards/types";
-
 defineEmits<{back: []; openCreateSheetset: []}>();
 const props = defineProps<{confirmAction: (options: {title: string; message: string; confirmText: string; cancelText?: string; danger?: boolean}) => Promise<boolean>}>();
 
@@ -30,21 +31,55 @@ window.matchMedia("(max-width: 959px)").addEventListener("change", event => {nar
 onMounted(() => {void store.refresh();});
 
 function keyOf(summary: StandardSummary): string {
-  return `${summary.source}/${summary.draft_id ?? summary.version}`;
+  return draftKey(summary);
 }
 
 const selected = computed<StandardSummary | null>(() =>
   store.summaries.value.find(item => keyOf(item) === selectedKey.value) ?? null,
 );
 
+// —— 草稿编辑器接线（Task 9）：仅用户草稿可编辑，且离开编辑器要过未保存修改三选一门禁 ——
+const editorOpen = ref(false);
+const editorRef = ref<{guard: (next: () => void | Promise<void>) => Promise<void>} | null>(null);
+
+async function openEditor(): Promise<void> {
+  const summary = selected.value;
+  if (summary?.draft_id === null || summary?.draft_id === undefined) return;
+  const loaded = await store.loadDraft(summary.draft_id);
+  if (loaded === null) return; // 加载失败：错误留到草稿错误区，不进入空编辑器
+  editorOpen.value = true;
+}
+
+async function leaveEditor(): Promise<void> {
+  editorOpen.value = false;
+  store.closeDraft();
+  await store.refresh();
+}
+
+/** 编辑器内保存：走草稿身份 PUT（`POST /api/standards/drafts` 对已存在草稿会 409）。 */
+async function saveEditorDocument(document: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const saved = await store.saveDraft({
+    standardId: String(document["standard_id"] ?? ""),
+    version: String(document["version"] ?? ""),
+    document,
+  });
+  return saved.document;
+}
+
 async function select(summary: StandardSummary): Promise<void> {
-  selectedKey.value = keyOf(summary);
-  if (summary.status === "published") {
-    await store.open({standardId: summary.standard_id, version: summary.version});
-  } else {
-    // 草稿无发布详情：清空详情并让在途发布详情响应失效，避免只读边界漂移
-    store.clearDetail();
-  }
+  const apply = async () => {
+    selectedKey.value = keyOf(summary);
+    if (editorOpen.value) await leaveEditor();
+    if (summary.status === "published") {
+      await store.open({standardId: summary.standard_id, version: summary.version});
+    } else {
+      // 草稿无发布详情：清空详情并让在途发布详情响应失效，避免只读边界漂移
+      store.clearDetail();
+    }
+  };
+  // 编辑器在场且有未保存修改时，切换选中项必须先过三选一门禁
+  if (editorOpen.value) await editorRef.value?.guard(apply);
+  else await apply();
 }
 
 function openVersion(version: string): void {
@@ -66,6 +101,7 @@ function openCreateDialog(): void {
 
 async function submitCreate(payload: {name: string; version: string; dstPath: string}): Promise<void> {
   const origin = createMode.value === "derive" ? selected.value : null;
+  let created: {draft_id: string; document: Record<string, unknown>};
   try {
     if (origin !== null) {
       const base = store.detail.value?.document;
@@ -74,13 +110,13 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
         store.actionError.value = t("standards.create.deriveNeedsDetail");
         return;
       }
-      await store.createDraft({
+      created = await store.createDraft({
         document: {...base, standard_id: origin.standard_id, version: payload.version, name: payload.name},
       });
     } else if (createMode.value === "from-dst") {
-      await store.createDraftFromDst({dstPath: payload.dstPath});
+      created = await store.createDraftFromDst({dstPath: payload.dstPath});
     } else {
-      await store.createDraft({
+      created = await store.createDraft({
         document: {
           schema_version: 1,
           standard_id: defaultStandardId(payload.name),
@@ -98,6 +134,9 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
     // 创建失败（重复身份/非法 DST 等）保留对话框与当前选择，错误经 actionError 呈现
     return;
   }
+  // 创建后直接进入编辑器：草稿身份已经由创建响应给出，不再多发一次 GET
+  store.adoptDraft(created);
+  editorOpen.value = true;
   createDialogOpen.value = false;
   await store.refresh();
 }
@@ -154,10 +193,6 @@ function exportSelectedStandard(): void {
 }
 
 const selectedActions = computed(() => selected.value === null ? null : detailActions(selected.value));
-
-// 编辑动作由 Task 9 的 StandardEditor 承接：本任务中 editorAvailable 恒为 false，
-// 草稿的"编辑"按钮不可用并附可见原因（standards.detail.editorPending）。
-const editorAvailable = false;
 </script>
 <template>
   <section class="standards-page" role="region" :aria-label="$t('standards.title')">
@@ -165,8 +200,8 @@ const editorAvailable = false;
       <h2 class="standards-title">{{ $t("standards.title") }}</h2>
       <UiButton variant="secondary" @click="$emit('back')">{{ $t("standards.back") }}</UiButton>
     </div>
-    <p v-if="store.actionError.value" class="standards-error" role="alert">{{ store.actionError.value }}</p>
-    <div class="library-split" :class="{'detail-open': narrow && selected !== null}">
+    <p v-if="store.actionError.value && !editorOpen" class="standards-error" role="alert">{{ store.actionError.value }}</p>
+    <div class="library-split" :class="{'detail-open': narrow && (selected !== null || editorOpen)}">
       <StandardLibraryPane
         class="library-col"
         :items="store.summaries.value"
@@ -179,14 +214,23 @@ const editorAvailable = false;
         @import-package="importDialogOpen = true"
         @create-new="openCreateDialog"
       />
+      <StandardEditor
+        v-if="editorOpen && store.draft.value"
+        ref="editorRef"
+        class="detail-col"
+        :draft="store.draft.value"
+        :save-draft="saveEditorDocument"
+        @close="leaveEditor"
+      />
       <StandardDetailPane
+        v-else
         class="detail-col"
         :summary="selected"
         :detail="store.detail.value"
         :detail-pending="store.detailPending.value"
-        :detail-error="store.detailError.value"
+        :detail-error="store.detailError.value || store.draftError.value"
         :items="store.summaries.value"
-        :editor-available="editorAvailable"
+        @edit="openEditor"
         @derive="startCreate('derive')"
         @export-standard="exportSelectedStandard"
         @delete-draft="deleteSelectedDraft"

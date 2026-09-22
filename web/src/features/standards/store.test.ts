@@ -30,6 +30,7 @@ function deferredStandardApi(): StandardApi & {resolveDetail: (standardId: strin
       waiters.set(identity.standardId, {resolve, promise});
       return promise;
     }),
+    fetchDraft: vi.fn(),
     createDraft: vi.fn(),
     saveDraft: vi.fn(),
     publish: vi.fn(),
