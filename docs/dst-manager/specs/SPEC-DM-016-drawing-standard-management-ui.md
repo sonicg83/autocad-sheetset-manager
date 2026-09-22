@@ -5,7 +5,7 @@ status: accepted
 owners:
 - dst-manager
 created: 2026-09-21
-updated: 2026-09-21
+updated: 2026-09-22
 related:
 - RFC-INT-003
 - ARCH-DM-007
@@ -13,6 +13,7 @@ related:
 - PLAN-DM-035
 - PLAN-DM-036
 - PLAN-DM-037
+- SPEC-DM-017
 ---
 
 # 图纸标准管理与欢迎页入口 UI 规范
@@ -29,6 +30,8 @@ related:
 - 标准发布检查页。
 
 本文不重复定义标准包 Schema、规则求值、存储和发布 API；这些能力由 [RFC-INT-003](../../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 与 [PLAN-DM-035](../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md) 的领域和接口任务承担。本文也不定义“从标准创建图纸集”的表单步骤；欢迎页只提供入口，完整创建向导由 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 承担。已绑定标准的项目合规校验与 HTML/JSON 归档报告由 [PLAN-DM-037](../../../.planning/plans/dst-manager/PLAN-DM-037-standard-validation-reports.md) 承担，不与本文的“标准草稿发布检查”混用。
+
+> **修订说明（2026-09-22）：** 本文 §6.3、§7.1～§7.3 的属性、映射、组合与 DWG 命名设计已由 [SPEC-DM-017](SPEC-DM-017-standard-properties-and-dwg-naming.md) 取代；相关段落与 §12.3 证据保留为 PLAN-DM-035 首次交付记录，不再作为后续整改的行为依据。欢迎页、标准库、模板资产、发布检查及通用 UI 约束仍以本文为准。
 
 ## 2. 设计目标
 
