@@ -1,14 +1,17 @@
-"""图纸标准应用编排（PLAN-DM-035 Task 4）。
+"""图纸标准应用编排（PLAN-DM-035 Task 4/6）。
 
 `StandardOperations` 以 mixin 组合进 `DstManagerService`：承载标准库访问、
-工作区标准绑定的解析与项目快照恢复。`DstManagerService` 只负责组合，
+工作区标准绑定的解析与项目快照恢复，以及面向 API 的草稿/发布/导入/导出
+事务转译（标准库错误码 → HTTP 稳定错误）。`DstManagerService` 只负责组合，
 本模块不触碰规则求值（领域层）与包/库持久化（基础设施层）。
 """
+
+from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from dst_manager.application.errors import ApplicationError
 from dst_manager.domain.models import Severity, ValidationIssue, Workspace
@@ -16,7 +19,22 @@ from dst_manager.domain.standards import (
     STANDARD_ID_PATTERN,
     STANDARD_VERSION_PATTERN,
     DrawingStandard,
+    parse_standard_document,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+from dst_manager.domain.standards import StandardSchemaError
+from dst_manager.infrastructure.standards.store import StandardStoreError
+
+#: 标准库稳定错误码 → HTTP 状态；未登记码一律 422。
+_STORE_STATUS = {
+    "STANDARD_VERSION_EXISTS": 409,
+    "STANDARD_DRAFT_EXISTS": 409,
+    "STANDARD_VERSION_NOT_FOUND": 404,
+    "STANDARD_DRAFT_NOT_FOUND": 404,
+}
 
 RESERVED_BINDING_PROPERTY = "DSTManager.Standard"
 RESERVED_OPTIONS_PROPERTY = "DSTManager.StandardOptions"
@@ -226,3 +244,149 @@ class StandardOperations:
             "version": version,
             "job_id": job.get("id"),
         }
+
+    # ---- 草稿/发布/导入导出 API 编排（Task 6） ----------------------------
+
+    def create_standard_draft(
+        self, document: Mapping[str, object], draft_id: str | None = None
+    ) -> dict[str, object]:
+        try:
+            draft = self.standard_store.create_draft(document, draft_id)
+        except (StandardStoreError, StandardSchemaError) as exc:
+            raise _store_error(exc) from exc
+        return {"draft_id": draft.draft_id, "document": draft.document}
+
+    def get_standard_draft(self, draft_id: str) -> dict[str, object]:
+        draft = self.standard_store.get_draft(draft_id)
+        if draft is None:
+            raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
+        return {"draft_id": draft.draft_id, "document": draft.document}
+
+    def delete_standard_draft(self, draft_id: str) -> None:
+        try:
+            self.standard_store.delete_draft(draft_id)
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+
+    def save_standard_draft(self, draft_id: str, document: Mapping[str, object]) -> dict[str, object]:
+        try:
+            draft = self.standard_store.save_draft(draft_id, document)
+        except (StandardStoreError, StandardSchemaError) as exc:
+            raise _store_error(exc) from exc
+        return {"draft_id": draft.draft_id, "document": draft.document}
+
+    def save_standard_by_identity(
+        self, standard_id: str, version: str, document: Mapping[str, object]
+    ) -> dict[str, object]:
+        """按身份保存用户草稿；已发布身份一律不可原地修改。"""
+        if self.standard_store.get(standard_id, version) is not None:
+            raise ApplicationError(
+                "STANDARD_VERSION_IMMUTABLE",
+                f"标准 {standard_id}@{version} 已发布，不可修改",
+                409,
+            )
+        if document.get("standard_id") != standard_id or document.get("version") != version:
+            raise ApplicationError(
+                "STANDARD_IDENTITY_MISMATCH",
+                f"文档身份 {document.get('standard_id')!r}@{document.get('version')!r} 与路径 {standard_id!r}@{version!r} 不一致",
+                422,
+            )
+        draft_id = self._draft_id_with_identity(standard_id, version)
+        if draft_id is None:
+            raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"身份 {standard_id}@{version} 无对应草稿", 404)
+        return self.save_standard_draft(draft_id, document)
+
+    def get_standard(self, standard_id: str, version: str) -> dict[str, object]:
+        standard = self.standard_store.get(standard_id, version)
+        if standard is None:
+            raise ApplicationError(
+                "STANDARD_VERSION_NOT_FOUND", f"标准 {standard_id}@{version} 不存在", 404
+            )
+        return {
+            "standard_id": standard.standard_id,
+            "version": standard.version,
+            "name": standard.name,
+            "supported_cad_versions": list(standard.supported_cad_versions),
+            "dependencies": [
+                {
+                    "extension_id": item.extension_id,
+                    "capability_id": item.capability_id,
+                    "min_version": item.min_version,
+                }
+                for item in standard.dependencies
+            ],
+        }
+
+    def publish_standard(
+        self, draft_id: str, manifests: Mapping[str, object] | None = None
+    ) -> dict[str, object]:
+        """发布草稿；声明的受信扩展依赖缺失时以 409 稳定拒绝。"""
+        draft = self.standard_store.get_draft(draft_id)
+        if draft is None:
+            raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
+        standard = parse_standard_document(draft.document)
+        if manifests is not None:
+            self._require_dependencies(standard.dependencies, manifests)
+        try:
+            published = self.standard_store.publish(draft_id)
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+        return {
+            "standard_id": published.standard_id,
+            "version": published.version,
+            "name": published.name,
+        }
+
+    def import_standard_package(self, path: Path) -> dict[str, object]:
+        try:
+            published = self.standard_store.import_package(Path(path))
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+        return {
+            "standard_id": published.standard_id,
+            "version": published.version,
+            "name": published.name,
+        }
+
+    def export_standard_package(self, standard_id: str, version: str, dest_dir: Path) -> Path:
+        try:
+            return self.standard_store.export_package(standard_id, version, Path(dest_dir))
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+
+    def _require_dependencies(
+        self, dependencies: tuple, manifests: Mapping[str, object]
+    ) -> None:
+        from dst_manager.extensions.capabilities import standard_dependency_gaps
+
+        gaps = standard_dependency_gaps(dependencies, manifests)
+        if not gaps:
+            return
+        detail = "；".join(
+            f"{gap.extension_id}/{gap.capability_id}（{gap.reason}）" for gap in gaps
+        )
+        raise ApplicationError(
+            "STANDARD_DEPENDENCY_MISSING",
+            f"标准声明的受信扩展能力缺失：{detail}",
+            409,
+        )
+
+    def _draft_id_with_identity(self, standard_id: str, version: str) -> str | None:
+        # 草稿摘要的 version 恒为空串（身份在草稿文档内），必须逐份解析匹配。
+        for summary in self.standard_store.list():
+            if summary.status != "draft":
+                continue
+            draft = self.standard_store.get_draft(summary.draft_id or "")
+            if (
+                draft is not None
+                and draft.document.get("standard_id") == standard_id
+                and draft.document.get("version") == version
+            ):
+                return draft.draft_id
+        return None
+
+
+def _store_error(exc: Exception) -> ApplicationError:
+    """标准库/Schema 错误码（消息前缀）转 HTTP 稳定错误；未登记码一律 422。"""
+    code = str(exc).split(":", 1)[0]
+    return ApplicationError(code, str(exc), _STORE_STATUS.get(code, 422))

@@ -1,3 +1,8 @@
+## 2026-09-22（开放图纸标准管理 API 与受信扩展依赖）
+
+- 新增 `src/dst_manager/interfaces/standard_api.py` + `standard_contracts.py`（PLAN-DM-035 Task 6）：`register_standard_routes` 把 `/api/standards` 系列端点注册进宿主应用（与 extension_api 同形态），覆盖列表、草稿创建/查询/删除、按身份保存、发布、包导入/导出、从 DST 建草稿与资产检查；路由只做请求/响应转换与错误码映射，Schema 校验/发布门禁/包安全全部在应用与基础设施层。已发布身份 PUT 以 409 `STANDARD_VERSION_IMMUTABLE` 稳定拒绝；草稿/身份缺失 404；文档 Schema 非法 422（码取自 `STANDARD_*` 前缀）；包身份冲突 409 `STANDARD_VERSION_EXISTS`。`responses.py` 本任务未改动——标准响应契约独立成 `standard_contracts.py`，避免既有工作区响应模型耦合。
+- 受信扩展依赖：`ExtensionManifest`/清单新增 `provided_capabilities`（能力 ID + SemVer，`extra="forbid"` 不影响既有清单）；`capabilities.py` 新增 `standard_dependency_gaps` 按"扩展存在 → 声明供给该能力 → 版本 ≥ 下限"求缺口。草稿可声明任意依赖，发布时按当前注册表清单校验，缺失以 409 `STANDARD_DEPENDENCY_MISSING` 阻断（应用层 `publish_standard`）。应用层 `StandardOperations` 同步补齐草稿/发布/导入/导出的事务转译（标准库错误码 → HTTP 稳定错误）。`web/src/api/openapi.json`/`schema.d.ts` 重新生成，`npm run check:api` 通过。新增 12 项 API 契约测试，标准域与扩展清单回归 80 项全过。
+
 ## 2026-09-22（实现标准模板资产检查与 DST 草稿导入）
 
 - 新增 `src/dst_manager/application/standard_assets.py`（PLAN-DM-035 Task 5）：`StandardAssetOperations` 以 mixin 组合进 `DstManagerService`，提供 `inspect_standard_asset(draft_id, asset_id, cad_version) -> AssetInspection` 与 `create_draft_from_dst(path) -> ImportedStandardDraft`。资产检查复用 `get_layout_names` 的固定 CAD 只读读取协议；布局模板声明的图幅与该文件实际非 `Model` 布局严格比较（`"A2 "` ≠ `"A2"`，大小写敏感），不一致返回 `STANDARD_LAYOUT_NAME_MISMATCH` 诊断；CAD 能力缺失/读取失败/资产文件缺失一律转换为 `STANDARD_CAD_CAPABILITY_MISSING`/`STANDARD_LAYOUT_READ_FAILED`/`STANDARD_ASSET_FILE_MISSING` 稳定诊断而不抛出；资产路径逃逸（`..`/绝对路径/盘符）以 422 `STANDARD_ASSET_PATH_INVALID` 拒绝，草稿/资产不存在返回 404。

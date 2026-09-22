@@ -21,8 +21,10 @@ ARCH-DM-006 §12 平台码），不新增诊断码。
 
 from __future__ import annotations
 
+import re
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 from dst_manager.extensions import registry as registry_module
 from dst_manager.extensions.snapshots import (
@@ -45,10 +47,83 @@ __all__ = [
     "CapabilityBroker",
     "CapabilityError",
     "ExtensionContext",
+    "StandardDependencyGap",
+    "standard_dependency_gaps",
 ]
 
 #: 首期唯一可发放的读取能力（真实清单 required_capabilities 之一）。
 WORKSPACE_SNAPSHOT_CAPABILITY = "workspace.snapshot.read.v1"
+
+_VERSION_HEAD = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
+
+
+@dataclass(frozen=True, slots=True)
+class StandardDependencyGap:
+    """标准声明的一条未满足受信依赖。"""
+
+    extension_id: str
+    capability_id: str
+    min_version: str
+    reason: Literal["extension-missing", "capability-missing", "version-too-old"]
+
+
+def standard_dependency_gaps(
+    dependencies, manifests: Mapping[str, object]
+) -> tuple[StandardDependencyGap, ...]:
+    """按"扩展存在 → 声明供给该能力 → 版本 ≥ 下限"校验标准依赖。
+
+    ``manifests`` 是 ``extension_id -> ExtensionManifest`` 映射；返回未满足
+    依赖（空元组 = 全部满足）。标准可以声明任意依赖草稿，缺口只在发布门禁
+    阻断。
+    """
+    gaps: list[StandardDependencyGap] = []
+    for dependency in dependencies:
+        manifest = manifests.get(dependency.extension_id)
+        if manifest is None:
+            gaps.append(
+                StandardDependencyGap(
+                    extension_id=dependency.extension_id,
+                    capability_id=dependency.capability_id,
+                    min_version=dependency.min_version,
+                    reason="extension-missing",
+                ),
+            )
+            continue
+        provided = [
+            capability
+            for capability in manifest.provided_capabilities
+            if capability.capability_id == dependency.capability_id
+        ]
+        if not provided:
+            gaps.append(
+                StandardDependencyGap(
+                    extension_id=dependency.extension_id,
+                    capability_id=dependency.capability_id,
+                    min_version=dependency.min_version,
+                    reason="capability-missing",
+                ),
+            )
+            continue
+        required = _version_head(dependency.min_version)
+        if max(_version_head(capability.version) for capability in provided) < required:
+            gaps.append(
+                StandardDependencyGap(
+                    extension_id=dependency.extension_id,
+                    capability_id=dependency.capability_id,
+                    min_version=dependency.min_version,
+                    reason="version-too-old",
+                ),
+            )
+    return tuple(gaps)
+
+
+def _version_head(version: str) -> tuple[int, int, int]:
+    match = _VERSION_HEAD.match(version)
+    if match is None:
+        # 领域解析已保证 min_version 为三段数字；清单 SemVer 校验同理，
+        # 此处兜底仅在绕过解析器构造时触发。
+        return (0, 0, 0)
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
 
 class CapabilityError(RuntimeError):

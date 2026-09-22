@@ -45,6 +45,14 @@ class ExtensionActionManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtensionProvidedCapability:
+    """扩展对外供给的受信能力声明（标准依赖校验用，PLAN-DM-035 Task 6）。"""
+
+    capability_id: str
+    version: str
+
+
+@dataclass(frozen=True, slots=True)
 class ExtensionManifest:
     extension_id: str
     version: str
@@ -59,6 +67,8 @@ class ExtensionManifest:
     settings_schema: int
     #: 清单只声明呈现；未声明设置时为空（默认值、校验与迁移由 Provider 定义）。
     settings_contribution: SettingsContribution | None = None
+    #: 受信能力供给声明；标准依赖按"扩展身份 ∩ 能力 ∩ 版本下限"校验。
+    provided_capabilities: tuple[ExtensionProvidedCapability, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

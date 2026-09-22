@@ -244,6 +244,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/standards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Standards */
+        get: operations["list_standards_api_standards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/{standard_id}/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Standard */
+        get: operations["get_standard_api_standards__standard_id___version__get"];
+        /** Put Standard */
+        put: operations["put_standard_api_standards__standard_id___version__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/{standard_id}/{version}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Standard */
+        get: operations["export_standard_api_standards__standard_id___version__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Standard Draft */
+        post: operations["create_standard_draft_api_standards_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Standard Draft */
+        get: operations["get_standard_draft_api_standards_drafts__draft_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Standard Draft */
+        delete: operations["delete_standard_draft_api_standards_drafts__draft_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/drafts/{draft_id}/assets/{asset_id}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Standard Asset */
+        post: operations["inspect_standard_asset_api_standards_drafts__draft_id__assets__asset_id__inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/drafts/{draft_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Standard */
+        post: operations["publish_standard_api_standards_drafts__draft_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/drafts/from-dst": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Draft From Dst */
+        post: operations["create_draft_from_dst_api_standards_drafts_from_dst_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Standard */
+        post: operations["import_standard_api_standards_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/cad-capabilities": {
         parameters: {
             query?: never;
@@ -564,6 +719,17 @@ export interface components {
             source_revision_id: string;
             /** Workspace Id */
             workspace_id: string;
+        };
+        /** AssetInspectionResponse */
+        AssetInspectionResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Diagnostics */
+            diagnostics: components["schemas"]["StandardDiagnosticModel"][];
+            /** Kind */
+            kind: string;
+            /** Layouts */
+            layouts: string[];
         };
         /** CadCapabilitiesResponse */
         CadCapabilitiesResponse: {
@@ -1279,6 +1445,22 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * ImportedStandardDraftResponse
+         * @description DST 导入草稿；两个恒空列表证明不复制子集/图纸/外部引用。
+         */
+        ImportedStandardDraftResponse: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Draft Id */
+            draft_id: string;
+            /** External Paths */
+            external_paths?: string[];
+            /** Subsets */
+            subsets?: string[];
+        };
         /** InsertSheetCommand */
         InsertSheetCommand: {
             /**
@@ -1943,6 +2125,94 @@ export interface components {
             sha256: string;
             /** Source Types */
             source_types: ("existing_snapshot" | "template_layout")[];
+        };
+        /** StandardAssetInspectRequest */
+        StandardAssetInspectRequest: {
+            /** Cad Version */
+            cad_version: string;
+        };
+        /** StandardDependencyModel */
+        StandardDependencyModel: {
+            /** Capability Id */
+            capability_id: string;
+            /** Extension Id */
+            extension_id: string;
+            /** Min Version */
+            min_version: string;
+        };
+        /** StandardDetailResponse */
+        StandardDetailResponse: {
+            /** Dependencies */
+            dependencies: components["schemas"]["StandardDependencyModel"][];
+            /** Name */
+            name: string;
+            /** Standard Id */
+            standard_id: string;
+            /** Supported Cad Versions */
+            supported_cad_versions: string[];
+            /** Version */
+            version: string;
+        };
+        /** StandardDiagnosticModel */
+        StandardDiagnosticModel: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Severity */
+            severity: string;
+        };
+        /** StandardDraftRequest */
+        StandardDraftRequest: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Draft Id */
+            draft_id?: string | null;
+        };
+        /** StandardDraftResponse */
+        StandardDraftResponse: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Draft Id */
+            draft_id: string;
+        };
+        /** StandardDstImportRequest */
+        StandardDstImportRequest: {
+            /** Dst Path */
+            dst_path: string;
+        };
+        /** StandardPathRequest */
+        StandardPathRequest: {
+            /** Path */
+            path: string;
+        };
+        /** StandardPublishResponse */
+        StandardPublishResponse: {
+            /** Name */
+            name: string;
+            /** Standard Id */
+            standard_id: string;
+            /** Version */
+            version: string;
+        };
+        /** StandardSummaryModel */
+        StandardSummaryModel: {
+            /** Draft Id */
+            draft_id?: string | null;
+            /** Name */
+            name: string;
+            /** Source */
+            source: string;
+            /** Standard Id */
+            standard_id: string;
+            /** Status */
+            status: string;
+            /** Version */
+            version: string;
         };
         /** StructureDiffResponse */
         StructureDiffResponse: {
@@ -2853,6 +3123,356 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevisionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_standards_api_standards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardSummaryModel"][];
+                };
+            };
+        };
+    };
+    get_standard_api_standards__standard_id___version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                standard_id: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_standard_api_standards__standard_id___version__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                standard_id: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_standard_api_standards__standard_id___version__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                standard_id: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_standard_draft_api_standards_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_standard_draft_api_standards_drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_standard_draft_api_standards_drafts__draft_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_standard_asset_api_standards_drafts__draft_id__assets__asset_id__inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardAssetInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetInspectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_standard_api_standards_drafts__draft_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardPublishResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_draft_from_dst_api_standards_drafts_from_dst_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardDstImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedStandardDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_standard_api_standards_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardPathRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardPublishResponse"];
                 };
             };
             /** @description Validation Error */

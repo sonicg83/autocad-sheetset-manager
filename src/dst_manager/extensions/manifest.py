@@ -29,6 +29,7 @@ from dst_manager.extensions.contracts import (
     XLSX_MEDIA_TYPE,
     ExtensionActionManifest,
     ExtensionManifest,
+    ExtensionProvidedCapability,
     UiContribution,
 )
 from dst_manager.extensions.settings import (
@@ -118,6 +119,22 @@ class _SettingsContributionModel(BaseModel):
         return self
 
 
+class _ProvidedCapabilityModel(BaseModel):
+    """受信能力供给声明：能力 ID 与三段数字版本（PLAN-DM-035 Task 6）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    capability_id: str = Field(min_length=1)
+    version: str
+
+    @field_validator("version")
+    @classmethod
+    def _check_semver(cls, value: str) -> str:
+        if _SEMVER_PATTERN.match(value) is None:
+            raise ValueError(f"供给能力版本 {value!r} 不是合法 SemVer（MAJOR.MINOR.PATCH）")
+        return value
+
+
 class _ManifestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,6 +151,7 @@ class _ManifestModel(BaseModel):
     actions: tuple[_ActionModel, ...] = ()
     settings_schema: int
     settings_contribution: _SettingsContributionModel | None = None
+    provided_capabilities: tuple[_ProvidedCapabilityModel, ...] = ()
 
     @field_validator("version")
     @classmethod
@@ -203,6 +221,13 @@ def parse_manifest(data: Mapping[str, object]) -> ExtensionManifest:
         ),
         settings_schema=model.settings_schema,
         settings_contribution=_to_settings_contribution(model.settings_contribution),
+        provided_capabilities=tuple(
+            ExtensionProvidedCapability(
+                capability_id=capability.capability_id,
+                version=capability.version,
+            )
+            for capability in model.provided_capabilities
+        ),
     )
 
 

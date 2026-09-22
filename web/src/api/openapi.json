@@ -122,6 +122,41 @@
         "title": "ArtifactResponseModel",
         "type": "object"
       },
+      "AssetInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/StandardDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "layouts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Layouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asset_id",
+          "kind",
+          "layouts",
+          "diagnostics"
+        ],
+        "title": "AssetInspectionResponse",
+        "type": "object"
+      },
       "CadCapabilitiesResponse": {
         "additionalProperties": {
           "$ref": "#/components/schemas/CadCapabilityResponse"
@@ -2330,6 +2365,41 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "ImportedStandardDraftResponse": {
+        "additionalProperties": false,
+        "description": "DST 导入草稿；两个恒空列表证明不复制子集/图纸/外部引用。",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "external_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Paths",
+            "type": "array"
+          },
+          "subsets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Subsets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_id",
+          "document"
+        ],
+        "title": "ImportedStandardDraftResponse",
+        "type": "object"
+      },
       "InsertSheetCommand": {
         "additionalProperties": false,
         "properties": {
@@ -4301,6 +4371,251 @@
         "title": "SourceBaselineResponse",
         "type": "object"
       },
+      "StandardAssetInspectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cad_version": {
+            "title": "Cad Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cad_version"
+        ],
+        "title": "StandardAssetInspectRequest",
+        "type": "object"
+      },
+      "StandardDependencyModel": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "extension_id": {
+            "title": "Extension Id",
+            "type": "string"
+          },
+          "min_version": {
+            "title": "Min Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extension_id",
+          "capability_id",
+          "min_version"
+        ],
+        "title": "StandardDependencyModel",
+        "type": "object"
+      },
+      "StandardDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/StandardDependencyModel"
+            },
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "supported_cad_versions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Cad Versions",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "version",
+          "name",
+          "supported_cad_versions",
+          "dependencies"
+        ],
+        "title": "StandardDetailResponse",
+        "type": "object"
+      },
+      "StandardDiagnosticModel": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "title": "StandardDiagnosticModel",
+        "type": "object"
+      },
+      "StandardDraftRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "StandardDraftRequest",
+        "type": "object"
+      },
+      "StandardDraftResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "document"
+        ],
+        "title": "StandardDraftResponse",
+        "type": "object"
+      },
+      "StandardDstImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dst_path": {
+            "title": "Dst Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dst_path"
+        ],
+        "title": "StandardDstImportRequest",
+        "type": "object"
+      },
+      "StandardPathRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "StandardPathRequest",
+        "type": "object"
+      },
+      "StandardPublishResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "version",
+          "name"
+        ],
+        "title": "StandardPublishResponse",
+        "type": "object"
+      },
+      "StandardSummaryModel": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "status",
+          "standard_id",
+          "version",
+          "name"
+        ],
+        "title": "StandardSummaryModel",
+        "type": "object"
+      },
       "StructureDiffResponse": {
         "properties": {
           "after": {
@@ -5784,6 +6099,465 @@
           }
         },
         "summary": "Revisions"
+      }
+    },
+    "/api/standards": {
+      "get": {
+        "operationId": "list_standards_api_standards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StandardSummaryModel"
+                  },
+                  "title": "Response List Standards Api Standards Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Standards"
+      }
+    },
+    "/api/standards/drafts": {
+      "post": {
+        "operationId": "create_standard_draft_api_standards_drafts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Standard Draft"
+      }
+    },
+    "/api/standards/drafts/from-dst": {
+      "post": {
+        "operationId": "create_draft_from_dst_api_standards_drafts_from_dst_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardDstImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedStandardDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Draft From Dst"
+      }
+    },
+    "/api/standards/drafts/{draft_id}": {
+      "delete": {
+        "operationId": "delete_standard_draft_api_standards_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Standard Draft"
+      },
+      "get": {
+        "operationId": "get_standard_draft_api_standards_drafts__draft_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Standard Draft"
+      }
+    },
+    "/api/standards/drafts/{draft_id}/assets/{asset_id}/inspect": {
+      "post": {
+        "operationId": "inspect_standard_asset_api_standards_drafts__draft_id__assets__asset_id__inspect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardAssetInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetInspectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Standard Asset"
+      }
+    },
+    "/api/standards/drafts/{draft_id}/publish": {
+      "post": {
+        "operationId": "publish_standard_api_standards_drafts__draft_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardPublishResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Standard"
+      }
+    },
+    "/api/standards/import": {
+      "post": {
+        "operationId": "import_standard_api_standards_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardPublishResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Standard"
+      }
+    },
+    "/api/standards/{standard_id}/{version}": {
+      "get": {
+        "operationId": "get_standard_api_standards__standard_id___version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "standard_id",
+            "required": true,
+            "schema": {
+              "title": "Standard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Standard"
+      },
+      "put": {
+        "operationId": "put_standard_api_standards__standard_id___version__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "standard_id",
+            "required": true,
+            "schema": {
+              "title": "Standard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Standard"
+      }
+    },
+    "/api/standards/{standard_id}/{version}/export": {
+      "get": {
+        "operationId": "export_standard_api_standards__standard_id___version__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "standard_id",
+            "required": true,
+            "schema": {
+              "title": "Standard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Standard"
       }
     },
     "/api/system/cad-capabilities": {
