@@ -94,6 +94,8 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 已冻结：第三次重开于 2026-09-12 由用户确认）](mockups/SPEC-DM-011-settings-demo.html)
 - [图纸目录交互 Demo（模拟数据，SPEC-DM-012 G4 已冻结）](mockups/SPEC-DM-012-sheet-catalog-demo.html)
 - [多语言界面交互 Demo（模拟数据，SPEC-DM-013 G4 已冻结）](mockups/SPEC-DM-013-multilingual-demo.html)
+- [图纸标准欢迎页交互 Demo（模拟数据，SPEC-DM-016 / PLAN-DM-038 实施对照）](mockups/SPEC-DM-016-welcome-demo.html)
+- [图纸标准属性与 DWG 命名交互 Demo（模拟数据，SPEC-DM-017 / PLAN-DM-038 实施对照）](mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)
 
 - [启动、使用和开发说明](../../README.md#一键启动)
 - [测试策略](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md#12-测试策略)

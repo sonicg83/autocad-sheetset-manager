@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>DST Manager · 欢迎页交互 Demo</title>
+<style>
+:root{color-scheme:light;--canvas:#f4f6f9;--surface:#fff;--surface-2:#f7f9fc;--surface-3:#edf1f6;--text:#172033;--muted:#5f6c80;--faint:#8792a4;--border:#dde3eb;--strong:#bdc8d7;--blue:#315fdf;--blue-hover:#2852c7;--blue-bg:#edf2ff;--green:#18724a;--green-bg:#e6f4ec;--amber:#8a6100;--amber-bg:#fff4d9;--red:#b22d28;--red-bg:#fce9e7;--shadow:0 12px 34px #1b294018;font-family:Inter,"Microsoft YaHei",system-ui,sans-serif;font-size:14px;background:var(--canvas);color:var(--text)}
+html[data-theme=dark]{color-scheme:dark;--canvas:#0d121a;--surface:#151d29;--surface-2:#192331;--surface-3:#212c3c;--text:#e9edf5;--muted:#a6b1c1;--faint:#748196;--border:#293548;--strong:#40506a;--blue:#7697ff;--blue-hover:#8ba7ff;--blue-bg:#1d2d52;--green:#69d49d;--green-bg:#103222;--amber:#e9c26e;--amber-bg:#352910;--red:#ff9189;--red-bg:#3a1a18;--shadow:0 18px 52px #0008}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{background:var(--canvas)}button,input{font:inherit;color:inherit}button{min-height:38px;padding:8px 14px;border:1px solid var(--strong);border-radius:8px;background:var(--surface);cursor:pointer}button:hover:not(:disabled){background:var(--surface-3);border-color:#6b7890}button:disabled{opacity:.48;cursor:not-allowed}.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:650}.primary:hover:not(:disabled){background:var(--blue-hover)}html[data-theme=dark] .primary{color:#0d121a}.quiet{border-color:transparent;background:transparent;color:var(--muted)}.small-button{min-height:30px;padding:5px 9px;font-size:12px}.link{border:0;background:transparent;color:var(--blue);padding:4px 3px;min-height:28px}.link:hover:not(:disabled){background:transparent;text-decoration:underline}button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}input{height:40px;min-width:0;border:1px solid var(--strong);border-radius:8px;background:var(--surface);padding:8px 11px}h1,h2,h3,p{margin:0}h1{font-size:30px;letter-spacing:-.02em}h2{font-size:20px}h3{font-size:15px}.muted{color:var(--muted)}.small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;align-items:center;gap:8px}.spacer{flex:1}.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:12px}.badge.good{color:var(--green);background:var(--green-bg)}.badge.warn{color:var(--amber);background:var(--amber-bg)}.badge.bad{color:var(--red);background:var(--red-bg)}[hidden]{display:none!important}
+#app{height:100%;display:flex;flex-direction:column}.topbar{height:52px;flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border)}.brand-logo{width:22px;height:22px;border-radius:5px}.brand{font-size:15px;font-weight:700}.theme-switch{display:flex;padding:3px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)}.theme-switch button{border:0;min-height:28px;padding:4px 9px;background:transparent}.theme-switch button.active{background:var(--surface);box-shadow:0 1px 4px #0002;color:var(--text)}.content{flex:1;min-height:0;overflow:auto;padding:54px 28px 42px}.welcome{width:min(1080px,100%);margin:0 auto}.intro{text-align:center;margin-bottom:28px}.intro p{margin:10px auto 0;max-width:660px;line-height:1.7}.task-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px;align-items:stretch}.card{border:1px solid var(--border);border-radius:13px;background:var(--surface);box-shadow:0 2px 7px #1a29400b}.card-head{padding:20px 22px 0}.card-head p{margin-top:7px;line-height:1.65}.open-card{display:flex;flex-direction:column}.open-card .card-body{padding:18px 22px 22px;display:flex;flex-direction:column;flex:1}.drop-zone{min-height:218px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;border:1px dashed var(--strong);border-radius:11px;background:var(--surface-2);transition:border-color .15s,background .15s}.drop-zone.is-dragging{border:2px solid var(--blue);background:var(--blue-bg)}.drop-title{font-size:17px;font-weight:650}.drop-zone p{max-width:430px;margin:8px 0 18px;line-height:1.65}.drop-hint{margin-top:12px;color:var(--muted);font-size:12px}.path-fallback{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}.path-fallback summary{cursor:pointer;color:var(--muted);font-size:12px}.path-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px}.path-row input{width:100%}.inline-status{min-height:22px;margin-top:10px;font-size:12px;line-height:1.55}.inline-status.good{color:var(--green)}.inline-status.bad{color:var(--red)}.inline-status.loading{color:var(--blue)}
+.side-card{padding:20px 18px}.side-card>p{margin-top:7px;line-height:1.6}.task-list{display:grid;gap:10px;margin-top:17px}.task-item{width:100%;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;text-align:left;padding:15px 14px;border-color:var(--border);background:var(--surface-2)}.task-item:hover{background:var(--surface-3)}.task-copy strong{display:block;margin-bottom:4px}.task-copy span{display:block;color:var(--muted);font-size:12px;line-height:1.5;white-space:normal}.task-action{color:var(--blue);font-size:12px}.boundary-note{margin-top:14px;padding:11px 12px;border-radius:8px;background:var(--blue-bg);color:var(--muted);font-size:12px;line-height:1.55}.footer-note{text-align:center;margin-top:18px;color:var(--faint);font-size:12px}
+dialog{padding:0;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 40px)}dialog::backdrop{background:#05080ca8}.dialog-head{padding:20px 21px 15px;border-bottom:1px solid var(--border)}.dialog-head p{margin-top:6px;line-height:1.6}.dialog-body{padding:18px 21px}.choice-list{display:grid;gap:8px}.file-choice{width:100%;text-align:left;padding:12px 13px}.file-choice strong{display:block;margin-bottom:4px}.file-choice span{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.dialog-callout{padding:12px;border-radius:8px;background:var(--blue-bg);color:var(--muted);line-height:1.6}.dialog-callout.warn{background:var(--amber-bg);color:var(--amber)}.dialog-callout.bad{background:var(--red-bg);color:var(--red)}.dialog-label{display:grid;gap:6px;margin-top:14px;color:var(--muted);font-size:12px}.dialog-label input{width:100%}.dialog-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 21px;border-top:1px solid var(--border);background:var(--surface-2)}.toast{position:fixed;z-index:30;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(560px,calc(100vw - 32px));padding:11px 16px;border-radius:8px;background:var(--text);color:var(--surface);box-shadow:var(--shadow)}.toast:empty{display:none}
+@media(max-width:900px){.content{padding:34px 18px}.welcome{max-width:650px}.task-grid{grid-template-columns:1fr}.open-card{order:1}.side-card{order:2}.drop-zone{min-height:200px}.intro{margin-bottom:22px}.intro h1{font-size:26px}}
+@media(max-width:560px){.topbar{padding:0 12px}.topbar .desktop-label{display:none}.content{padding:24px 12px}.card-head,.open-card .card-body{padding-left:16px;padding-right:16px}.path-row{grid-template-columns:1fr}.task-item{grid-template-columns:1fr}.task-action{margin-top:2px}.theme-switch button{padding-inline:7px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script id="welcome-model">
+const WelcomeDemoModel=(()=>{
+  const tasks=[
+    {id:'open-dst',label:'打开图纸集',kind:'primary'},
+    {id:'create-sheetset',label:'创建新图纸集',kind:'secondary'},
+    {id:'manage-standards',label:'管理图纸标准',kind:'secondary'},
+    {id:'import-standard',label:'导入标准包',kind:'secondary'},
+  ];
+  function primary(){return tasks.find(item=>item.kind==='primary')}
+  function secondary(){return tasks.filter(item=>item.kind==='secondary')}
+  function validate(action,path){
+    const value=String(path||'').trim();
+    const extension=action==='import-standard'?'.dststandard':'.dst';
+    if(!value)return {ok:false,message:'请选择文件或输入路径'};
+    if(!value.toLowerCase().endsWith(extension))return {ok:false,message:`文件必须使用 ${extension} 扩展名`};
+    return {ok:true,message:'文件类型有效'};
+  }
+  function activate(action){
+    if(action==='create-sheetset')return {next:'standard-selection',fallback:null,available:false};
+    if(action==='manage-standards')return {next:'standards-library',fallback:null,available:true};
+    if(action==='import-standard')return {next:'standard-import-preflight',fallback:null,available:true};
+    return {next:'workspace',fallback:null,available:true};
+  }
+  function recent(records){return Array.isArray(records)?records.filter(item=>item&&item.path):[]}
+  return {primary,secondary,validate,activate,recent};
+})();
+</script>
+
+<script>
+// 本文件仅用于 SPEC-DM-016 / PLAN-DM-038 界面对照；全部路径和结果均为去敏模拟数据。
+const Demo=(()=>{
+  const M=WelcomeDemoModel;
+  const $=id=>document.getElementById(id);
+  let status={tone:'',text:''};
+  let closeFocus=null;
+  function esc(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
+  function toast(message){$('toast').textContent=message;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').textContent='',2600)}
+  function setStatus(tone,text){status={tone,text};const node=$('open-status');if(node){node.className=`inline-status ${tone}`;node.textContent=text}}
+  function render(){
+    const theme=document.documentElement.dataset.theme;
+    $('app').innerHTML=`
+      <header class="topbar">
+        <img class="brand-logo" src="../../../web/src/assets/brand/dst-manager-logo-64.png" alt="">
+        <span class="brand">DST Manager</span>
+        <span class="spacer"></span>
+        <div class="theme-switch" aria-label="主题">
+          <button class="small-button ${theme==='light'?'active':''}" data-action="theme" data-theme="light">浅色</button>
+          <button class="small-button ${theme==='dark'?'active':''}" data-action="theme" data-theme="dark">深色</button>
+        </div>
+        <button class="small-button desktop-label" data-action="settings">设置</button>
+      </header>
+      <main class="content">
+        <section class="welcome">
+          <div class="intro">
+            <h1>开始使用 DST Manager</h1>
+            <p class="muted">打开已有图纸集继续工作，或从已发布的图纸标准创建新项目。</p>
+          </div>
+          <div class="task-grid">
+            <article class="card open-card">
+              <div class="card-head"><h2>打开图纸集</h2><p class="muted">选择现有 <span class="mono">.dst</span> 文件，进入受控编辑、预览和发布流程。</p></div>
+              <div class="card-body">
+                <div id="drop-zone" class="drop-zone" role="group" aria-label="选择或拖放 DST 文件">
+                  <div class="drop-title">选择一个 DST 文件</div>
+                  <p class="muted">可点击选择，也可把 <span class="mono">.dst</span> 文件拖到这里。</p>
+                  <button class="primary" data-action="choose-dst">选择 DST 文件</button>
+                  <span class="drop-hint">打开工作区前不会创建 <span class="mono">.dst-manager/</span> 或修改工程文件</span>
+                </div>
+                <details class="path-fallback">
+                  <summary>无法使用系统文件选择器？输入完整路径</summary>
+                  <div class="path-row"><input id="dst-path" value="" placeholder="D:\\项目\\示例图纸集.dst" aria-label="DST 文件完整路径"><button data-action="open-path">打开路径</button></div>
+                </details>
+                <div id="open-status" class="inline-status ${status.tone}" aria-live="polite">${esc(status.text)}</div>
+              </div>
+            </article>
+            <aside class="card side-card">
+              <h2>其他任务</h2>
+              <p class="muted">不打开工作区也可以管理标准或准备新项目。</p>
+              <div class="task-list">
+                <button class="task-item" data-action="create-sheetset"><span class="task-copy"><strong>创建新图纸集</strong><span>从已发布标准开始，先选择标准和版本。</span></span><span class="task-action">开始</span></button>
+                <button class="task-item" data-action="manage-standards"><span class="task-copy"><strong>管理图纸标准</strong><span>查看官方标准、用户标准和草稿。</span></span><span class="task-action">进入</span></button>
+                <button class="task-item" data-action="import-standard"><span class="task-copy"><strong>导入标准包</strong><span>选择 <span class="mono">.dststandard</span> 文件并执行导入预检。</span></span><span class="task-action">选择文件</span></button>
+              </div>
+              <div class="boundary-note">创建必须绑定图纸标准；不提供空白无标准创建，也不会恢复独立 Builder。</div>
+            </aside>
+          </div>
+          <p class="footer-note">最近打开记录为空，因此本页不生成占位项目。</p>
+        </section>
+      </main>`;
+  }
+  function openDialog(trigger,title,description,body,actions){
+    closeFocus=trigger;
+    $('dialog-content').innerHTML=`<div class="dialog-head"><h2 id="dialog-title">${esc(title)}</h2><p class="muted">${esc(description)}</p></div><div class="dialog-body">${body}</div><div class="dialog-foot">${actions.map(action=>`<button class="${action.primary?'primary':''}" data-action="${action.action}">${esc(action.label)}</button>`).join('')}</div>`;
+    $('dialog').showModal();
+  }
+  function closeDialog(){if($('dialog').open)$('dialog').close();const target=closeFocus;closeFocus=null;target?.focus()}
+  function chooseDst(trigger){
+    openDialog(trigger,'选择 DST 文件','真实桌面应用将在这里打开系统文件选择器。本 Demo 不读取本机文件。',`<div class="choice-list"><button class="file-choice" data-action="pick-dst" data-path="D:\\项目交付\\滨河市政工程.dst"><strong>滨河市政工程.dst</strong><span class="mono">D:\\项目交付\\滨河市政工程.dst</span></button><button class="file-choice" data-action="pick-dst-invalid" data-path="D:\\项目交付\\设计资料.zip"><strong>设计资料.zip</strong><span class="mono">用于演示文件类型错误</span></button></div>`,[{label:'取消',action:'close-dialog'}]);
+  }
+  function createSheetset(trigger){
+    const result=M.activate('create-sheetset');
+    openDialog(trigger,'创建新图纸集','创建流程必须从图纸标准开始。',`<div class="dialog-callout warn"><strong>创建向导尚未实施</strong><br>PLAN-DM-036 将从“选择已发布标准与版本”开始实现此流程，不会回退到无标准创建。</div><p class="small muted" style="margin-top:12px">目标步骤：${esc(result.next)} · 无标准回退：${result.fallback===null?'无':'有'}</p>`,[{label:'知道了',action:'close-dialog',primary:true}]);
+  }
+  function manageStandards(){toast('将进入标准库（Demo 不创建新页面）')}
+  function importStandard(trigger){
+    openDialog(trigger,'导入标准包','选择一个 .dststandard 文件后执行导入预检。',`<div class="dialog-callout">导入成功前不会把候选内容写入用户标准库。</div><label class="dialog-label">标准包完整路径<input id="standard-path" value="D:\\标准包\\市政工程标准.dststandard"></label><div id="import-status" class="inline-status" aria-live="polite"></div>`,[{label:'取消',action:'close-dialog'},{label:'执行预检',action:'preflight-standard',primary:true}]);
+  }
+  function simulateOpen(path){
+    const result=M.validate('open-dst',path);
+    closeDialog();
+    if(!result.ok){setStatus('bad',result.message);return}
+    setStatus('loading','正在读取图纸集元数据（模拟）…');
+    setTimeout(()=>setStatus('good',`已验证 ${path}，将进入图纸工作区（模拟）`),650);
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('[data-action]');if(!button||button.disabled)return;
+    const action=button.dataset.action;
+    if(action==='theme'){document.documentElement.dataset.theme=button.dataset.theme;render();return}
+    if(action==='settings'){toast('设置中心保持既有入口（模拟）');return}
+    if(action==='choose-dst'){event.stopPropagation();chooseDst(button);return}
+    if(action==='open-path'){simulateOpen($('dst-path').value);return}
+    if(action==='pick-dst'){simulateOpen(button.dataset.path);return}
+    if(action==='pick-dst-invalid'){simulateOpen(button.dataset.path);return}
+    if(action==='create-sheetset'){createSheetset(button);return}
+    if(action==='manage-standards'){manageStandards();return}
+    if(action==='import-standard'){importStandard(button);return}
+    if(action==='preflight-standard'){
+      const result=M.validate('import-standard',$('standard-path').value),node=$('import-status');
+      node.className=`inline-status ${result.ok?'good':'bad'}`;
+      node.textContent=result.ok?'预检通过：包结构与扩展名有效（模拟）':result.message;
+      return;
+    }
+    if(action==='close-dialog'){closeDialog();return}
+  });
+  for(const name of ['dragenter','dragover'])document.addEventListener(name,event=>{const zone=event.target.closest?.('#drop-zone');if(!zone)return;event.preventDefault();zone.classList.add('is-dragging')});
+  for(const name of ['dragleave','drop'])document.addEventListener(name,event=>{const zone=event.target.closest?.('#drop-zone');if(!zone)return;event.preventDefault();zone.classList.remove('is-dragging');if(name==='drop'){const file=event.dataTransfer?.files?.[0];simulateOpen(file?.name||'')}});
+  $('dialog').addEventListener('cancel',event=>{event.preventDefault();closeDialog()});
+  render();
+  return {render};
+})();
+</script>
+</body>
+</html>

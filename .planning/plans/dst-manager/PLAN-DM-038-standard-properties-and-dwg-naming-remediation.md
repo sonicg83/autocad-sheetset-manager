@@ -26,6 +26,8 @@ related:
 
 **Spec:** [`docs/dst-manager/specs/SPEC-DM-017-standard-properties-and-dwg-naming.md`](../../../docs/dst-manager/specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
 
+**Required UI Demo:** [`docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html`](../../../docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。执行 Task 6～9 前必须打开该 Demo，逐项对照普通属性、枚举排序、映射/组合模态框、DWG 命名和六分区壳；业务规则、错误码和数据约束仍以 SPEC-DM-017 为准，Demo 只负责布局、文案层级和交互状态，不得把模拟数据写入实现。
+
 ## Global Constraints
 
 - 标准 Schema 版本继续为 `1`；不得新增 v2 或旧规则迁移器。
@@ -386,6 +388,8 @@ git commit -m "重建标准前端草稿模型"
 
 ### Task 6: 实现普通属性表与枚举编辑模态框
 
+**Interaction Reference:** [Demo 的“普通属性”分区与枚举编辑模态框](../../../docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。实现前实际操作新增、排序、取消和保存，并按本任务测试锁定语义。
+
 **Files:**
 - Create: `web/src/components/standards/OrdinaryPropertyEditor.vue`
 - Create: `web/src/components/standards/EnumValuesDialog.vue`
@@ -420,7 +424,9 @@ Expected: FAIL with missing component。
 
 - [ ] **Step 3: 实现八列表格和模态焦点行为**
 
-表格严格为“属性名/作用域/类型/必填/默认值/枚举值/说明/删除”。文本类型枚举摘要灰显且不可聚焦；枚举模态支持增删改排序，新增项生成稳定 ID，关闭归还触发按钮焦点。删除被引用属性时不修改数组，向上抛出引用列表供可见错误显示。
+表格严格为“属性名/作用域/类型/必填/默认值/枚举值/说明/删除”。“必填”复选框本体固定为紧凑尺寸（目标 16×16 CSS px），以标签或单元格提供至少 32×32 CSS px 的点击区域，不继承表格文本输入框的 `width: 100%`/统一高度。文本类型枚举摘要灰显且不可聚焦。
+
+枚举模态支持增删改排序：列表自上而下就是枚举顺序，顺序列只显示序号和键盘可操作的上移/下移控件，不显示 `enum_item_id`；新增项生成稳定 ID，但该 ID 只存在于模型。底部“取消/保存枚举值”始终可见，取消不修改草稿，保存才一次性提交新增、删除、改名和排序；关闭归还触发按钮焦点。删除被引用属性时不修改数组，向上抛出引用列表供可见错误显示。
 
 - [ ] **Step 4: 覆盖默认值、全局名称和 CSV 回归**
 
@@ -440,6 +446,8 @@ git commit -m "重构标准普通属性编辑器"
 ---
 
 ### Task 7: 实现派生属性表与映射编辑模态框
+
+**Interaction Reference:** [Demo 的“派生属性”分区与映射编辑模态框](../../../docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。实现前核对源属性唯一占用、只读源枚举行、待确认状态以及内部 ID 不可见。
 
 **Files:**
 - Create: `web/src/components/standards/DerivedPropertyEditor.vue`
@@ -494,6 +502,8 @@ git commit -m "实现标准派生属性与映射编辑"
 
 ### Task 8: 共用令牌编辑器并实现组合属性与 DWG 命名
 
+**Interaction Reference:** [Demo 的组合属性编辑模态框与“DWG 命名”分区](../../../docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。实现前检查字段浏览器、单行令牌编辑、预览和固定底部操作栏在 900×768/200% 下的状态。
+
 **Files:**
 - Create: `web/src/components/standards/TokenExpressionEditor.vue`
 - Create: `web/src/components/standards/CompositionPropertyDialog.vue`
@@ -528,6 +538,8 @@ Expected: FAIL with missing helpers/components。
 
 组合根据作用域只显示普通/映射字段及 Sheet 的两个系统字段；DWG 命名显示三个 subset 字段和全部 sheetset 属性。标准预览固定使用 sequence=1、按编号位数构造 scope、名称“示例子集”、属性默认值/枚举首项/占位值，并明确标注“示例”；扩展名在编辑框外固定显示 `.dwg`。
 
+组合属性模态框固定提供“取消/保存组合”。宽度和最大高度必须施加于外层 `dialog`；正文使用独立滚动区，底部操作栏不参与滚动且不得被裁切。取消丢弃当前令牌缓冲，保存才写回草稿；在 900×768 与 200% 缩放下，两项操作始终可见并可由键盘到达。
+
 - [ ] **Step 5: 覆盖非法文件名与 warning 定位**
 
 测试 `.dwg` 重复输入、路径字符、设备名、尾随句点、240 字符和缺少 scope/sequence warning；前端只提示，发布仍以后端码为准。
@@ -546,6 +558,8 @@ git commit -m "统一组合属性与 DWG 命名编辑"
 ---
 
 ### Task 9: 重接标准编辑器、发布检查、语言包与 E2E
+
+**Interaction Reference:** [完整标准编辑器 Demo](../../../docs/dst-manager/mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。以六分区信息架构、各弹窗完成动作和受限视口状态作为端到端视觉与交互对照。
 
 **Files:**
 - Modify: `web/src/components/standards/StandardEditor.vue`
@@ -600,7 +614,7 @@ Expected: FAIL，页面仍为旧七分区和通用规则编辑器。
 
 - [ ] **Step 5: 覆盖关键 E2E 场景**
 
-至少覆盖：全局跨作用域重名、引用删除阻断、枚举改名保留映射、源唯一性、组合字段范围、未完成草稿保存、发布 error/warning 区分、DWG 非法名和碰撞预检、900×768 无横向溢出、纯键盘插入令牌与模态焦点归还。
+至少覆盖：全局跨作用域重名、引用删除阻断、枚举改名保留映射、枚举排序及取消不落盘、界面不暴露稳定内部 ID、源唯一性、组合字段范围、未完成草稿保存、发布 error/warning 区分、DWG 非法名和碰撞预检、紧凑复选框、900×768 与 200% 下模态操作栏持续可见且无横向溢出、纯键盘插入令牌与模态焦点归还。
 
 - [ ] **Step 6: 运行前端门禁并提交**
 
