@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-017
 title: 图纸标准属性与 DWG 命名规范
-status: review
+status: accepted
 owners:
 - dst-manager
 created: 2026-09-22
