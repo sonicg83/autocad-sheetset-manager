@@ -1,5 +1,5 @@
-// 发布门禁模型单测（PLAN-DM-035 Task 10 / SPEC-DM-016 §8–§9）：
-// 布局严格匹配、资产引用与未引用警告、结构诊断到分区/行目标的映射、
+// 发布门禁模型单测（PLAN-DM-038 Task 5 / SPEC-DM-017 §7–§8）：
+// 布局严格匹配、资产引用与未引用警告、发布诊断到六分区/定位目标的映射、
 // 检查失败与标准错误分离、门禁判定。全部纯函数。
 import {describe, expect, it} from "vitest";
 import {
@@ -29,10 +29,19 @@ function documentWith(assets: DraftAsset[], overrides: Record<string, unknown> =
     name: "市政燃气施工图",
     supported_cad_versions: ["2020"],
     properties: [
-      {name: "图幅", scope: "sheetset", enum_values: ["A2", "A3"]},
-      {name: "专业代码", scope: "sheetset"},
+      {
+        property_id: "prop-frame",
+        name: "图幅",
+        scope: "sheetset",
+        kind: "enum",
+        default_value: "A3",
+        enum_items: [{item_id: "enum-a2", value: "A2"}, {item_id: "enum-a3", value: "A3"}],
+      },
+      {property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "text", default_value: "RQ"},
     ],
-    rules: [],
+    dwg_naming: {
+      segments: [{property_id: "prop-code"}, {literal: "-"}, {system_field: "subset.scope"}],
+    },
     assets,
     numbering: {sequence_field: "subset.sequence", digits: 2},
     ...overrides,
@@ -47,7 +56,6 @@ function inspection(assetId: string, layouts: string[], diagnostics: AssetInspec
 function reportWithLayouts({declared, actual}: {declared: string[]; actual: string[]}): PublishReport {
   return {
     document: documentWith([layoutAsset("layouts", declared)]),
-    structure: [],
     assets: [inspection("layouts", actual)],
   };
 }
@@ -56,7 +64,6 @@ function reportWithLayouts({declared, actual}: {declared: string[]; actual: stri
 function reportWithUnusedAssetWarning(): PublishReport {
   return {
     document: documentWith([layoutAsset("unused-layouts", ["A5"])]),
-    structure: [],
     assets: [inspection("unused-layouts", ["A5"])],
   };
 }
@@ -96,7 +103,6 @@ describe("buildPublishGate", () => {
   it("accepts a clean report", () => {
     const gate = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A2", "A3"])]),
-      structure: [],
       assets: [inspection("layouts", ["Model", "A2", "A3"])],
     });
     expect(gate.canPublish).toBe(true);
@@ -104,32 +110,68 @@ describe("buildPublishGate", () => {
     expect(gate.warnings).toEqual([]);
   });
 
-  it("maps structure diagnostics to the owning section and row", () => {
+  it("maps publish diagnostics to the owning section and target", () => {
     const document = documentWith([], {
-      rules: [
-        {rule_id: "specialty-code", kind: "mapping", target: "sheetset.专业代码", source: "sheetset.图幅", allowed: [], table: [["A2", "RQ"], ["A2", "JZ"]], segments: []},
-        {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: [{field: "derived.不存在"}]},
+      properties: [
+        {
+          property_id: "prop-frame",
+          name: "图幅",
+          scope: "sheetset",
+          kind: "enum",
+          enum_items: [{item_id: "enum-a2", value: "A2"}, {item_id: "enum-a3", value: "A3"}],
+        },
+        {
+          property_id: "prop-code",
+          name: "专业代码",
+          scope: "sheetset",
+          kind: "mapping",
+          source_property_id: "prop-frame",
+          mapping: [{item_id: "enum-a2", value: "RQ"}],
+          confirmed_source_items: [["enum-a2", "A2"], ["enum-a3", "A3"]],
+        },
+        {
+          property_id: "prop-label",
+          name: "图签",
+          scope: "sheetset",
+          kind: "composition",
+          segments: [{property_id: "prop-code"}, {literal: " 平面图"}],
+        },
       ],
+      dwg_naming: {segments: [{property_id: "prop-code"}, {literal: "-"}, {system_field: "subset.scope"}]},
     });
-    const gate = buildPublishGate({document, structure: [
-      {code: "STANDARD_MAPPING_SOURCE_DUPLICATE", ruleId: "specialty-code", field: "A2", row: 2},
-      {code: "STANDARD_MAPPING_SOURCE_UNCOVERED", ruleId: "specialty-code", field: "A3", row: undefined},
-      {code: "STANDARD_RULE_FIELD_UNKNOWN", ruleId: "dwg-name", field: "derived.不存在"},
-    ], assets: []});
+    const gate = buildPublishGate({document, assets: []});
     expect(gate.canPublish).toBe(false);
-    expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section, issue.target.row])).toEqual([
-      ["STANDARD_MAPPING_SOURCE_DUPLICATE", "mapping", 2],
-      ["STANDARD_MAPPING_SOURCE_UNCOVERED", "mapping", null],
-      ["STANDARD_RULE_FIELD_UNKNOWN", "composition", undefined],
+    expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section, issue.target.itemId ?? null])).toEqual([
+      ["STANDARD_MAPPING_TARGET_EMPTY", "derived", "enum-a3"],
     ]);
-    // 未覆盖源值把源值作为插值参数（视图按语言包渲染）
-    expect(gate.blockingErrors[1].params).toEqual({source: "A3"});
+    // 插值参数按稳定键给出（视图经语言包渲染），属性名与枚举项 ID 都可定位
+    expect(gate.blockingErrors[0].params).toEqual({
+      propertyId: "prop-code",
+      propertyName: "专业代码",
+      itemId: "enum-a3",
+    });
+  });
+
+  it("routes reserved names to the ordinary section and naming tokens to the naming section", () => {
+    const document = documentWith([], {
+      properties: [
+        {property_id: "prop-reserved", name: "sheet.number", scope: "sheetset", kind: "text"},
+      ],
+      dwg_naming: {segments: [{literal: "图签.dwg"}]},
+    });
+    const gate = buildPublishGate({document, assets: []});
+    expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section])).toEqual([
+      ["STANDARD_PROPERTY_NAME_RESERVED", "ordinary"],
+      ["DWG_NAME_EXTENSION_FORBIDDEN", "dwgNaming"],
+    ]);
+    expect(gate.warnings.map(issue => [issue.code, issue.target.section])).toEqual([
+      ["DWG_NAMING_UNIQUENESS_UNPROVEN", "dwgNaming"],
+    ]);
   });
 
   it("keeps a failed inspection separate from standard errors", () => {
     const gate = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A3"])]),
-      structure: [],
       assets: [],
       inspectionFailures: [{assetId: "layouts", message: "AUTO_CAD_NOT_READY"}],
     });
@@ -142,7 +184,6 @@ describe("buildPublishGate", () => {
   it("keeps backend diagnostics but does not duplicate a derived layout diff", () => {
     const mismatch = {
       document: documentWith([layoutAsset("layouts", ["A3"])]),
-      structure: [],
       assets: [inspection("layouts", ["A3 "], [{code: "STANDARD_LAYOUT_NAME_MISMATCH", severity: "error" as const, message: "声明图幅 'A3' 与实际布局不一致"}])],
     };
     expect(buildPublishGate(mismatch).blockingErrors.map(issue => issue.code)).toEqual([
@@ -153,9 +194,7 @@ describe("buildPublishGate", () => {
     // 前端无法从聚合布局推出差异（同一资产多文件、某文件读取为空）时保留后端诊断
     const opaque = {
       document: documentWith([layoutAsset("layouts", ["A3"])]),
-      structure: [],
-      assets: [inspection("layouts", ["A3"], [{code: "STANDARD_LAYOUT_NAME_MISMATCH", severity: "error" as const, message: "读取结果为空"}]),
-      ],
+      assets: [inspection("layouts", ["A3"], [{code: "STANDARD_LAYOUT_NAME_MISMATCH", severity: "error" as const, message: "读取结果为空"}])],
     };
     const gate = buildPublishGate(opaque);
     expect(gate.blockingErrors).toHaveLength(1);
@@ -165,7 +204,6 @@ describe("buildPublishGate", () => {
   it("reports asset file missing and CAD capability missing as blocking asset errors", () => {
     const gate = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A3"])]),
-      structure: [],
       assets: [inspection("layouts", [], [
         {code: "STANDARD_ASSET_FILE_MISSING", severity: "error", message: "文件不在草稿中"},
         {code: "STANDARD_CAD_CAPABILITY_MISSING", severity: "error", message: "AutoCAD 未配置"},
@@ -183,18 +221,37 @@ describe("assetReferences", () => {
   it("finds every place a declared paper layout is used by the standard", () => {
     const asset = layoutAsset("layouts", ["A3"]);
     const document = documentWith([asset], {
-      rules: [
-        {rule_id: "fixed-frame", kind: "fixed", target: "sheetset.图幅", value: "A3", allowed: [], table: [], segments: []},
-        {rule_id: "allowed-frame", kind: "enum", target: "sheetset.备选图幅", allowed: ["A3", "A4"], table: [], segments: []},
-        {rule_id: "frame-map", kind: "mapping", target: "sheetset.映射图幅", source: "sheetset.图幅", allowed: [], table: [["A3", "A3"]], segments: []},
-        {rule_id: "dwg-name", kind: "naming", target: "derived.dwg_name", allowed: [], table: [], segments: [{literal: "A3"}]},
+      properties: [
+        {
+          property_id: "prop-frame",
+          name: "图幅",
+          scope: "sheetset",
+          kind: "enum",
+          enum_items: [{item_id: "enum-a3", value: "A3"}, {item_id: "enum-a4", value: "A4"}],
+        },
+        {
+          property_id: "prop-code",
+          name: "专业代码",
+          scope: "sheetset",
+          kind: "mapping",
+          source_property_id: "prop-frame",
+          mapping: [{item_id: "enum-a3", value: "A3"}, {item_id: "enum-a4", value: "RQ"}],
+          confirmed_source_items: [["enum-a3", "A3"], ["enum-a4", "A4"]],
+        },
+        {
+          property_id: "prop-label",
+          name: "图签",
+          scope: "sheetset",
+          kind: "composition",
+          segments: [{literal: "A3"}, {property_id: "prop-code"}],
+        },
       ],
+      dwg_naming: {segments: [{literal: "A3"}, {system_field: "subset.scope"}]},
     });
     expect(assetReferences(document, asset).map(reference => reference.kind)).toEqual([
       "property-enum",
-      "rule-fixed",
-      "rule-allowed",
       "mapping-target",
+      "segment-literal",
       "segment-literal",
     ]);
     expect(assetReferences(document, layoutAsset("other", ["A9"]))).toEqual([]);
@@ -203,9 +260,9 @@ describe("assetReferences", () => {
   it("keeps the unreferenced warning off when the standard has nothing to reference from", () => {
     const gate = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A5"])], {
-        properties: [{name: "专业代码", scope: "sheetset"}],
+        properties: [{property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "text", default_value: "RQ"}],
+        dwg_naming: {segments: [{property_id: "prop-code"}, {system_field: "subset.scope"}]},
       }),
-      structure: [],
       assets: [inspection("layouts", ["A5"])],
     });
     expect(gate.canPublish).toBe(true);

@@ -1,17 +1,18 @@
-// 发布检查模型（PLAN-DM-035 Task 10 / SPEC-DM-016 §8–§9）：纯函数门禁，无 Vue 与网络依赖。
+// 发布检查模型（PLAN-DM-038 Task 5 / SPEC-DM-017 §7–§8）：纯函数门禁，无 Vue 与网络依赖。
 // 职责边界：
-// - 把壳层结构诊断（`validateDraftStructure`）映射到检查域与跳转目标（规则/映射行）；
+// - 把草稿发布诊断（`publishIssues`）映射到六个编辑分区与可聚焦目标；
 // - 把后端资产检查结果与前端可推导的布局严格差异、未引用资产警告归一为发布问题；
-// - 判定 `canPublish`：错误与「检查本身失败」都阻断，警告不阻断。
-// 后端仍是发布门禁的权威：这里只做保存/发布前的就地提示，同一问题在后端返回时使用同一稳定码。
+// - 判定 `canPublish`：错误与「检查本身失败」都阻断，warning 不阻断。
+// 后端仍是发布门禁的权威：这里只做发布前的就地提示，同一问题在后端返回时使用同一稳定码。
 // 模型不持有用户可见文案：只返回稳定码与结构化插值参数，由视图经语言包渲染。
 import {
-  COMPOSITION_RULE_KINDS,
   type DraftAsset,
+  type DraftDiagnostic,
   type DraftDocument,
   type EditorSectionId,
-  type DraftRule,
-  type StructureDiagnostic,
+  isDerivedProperty,
+  propertyById,
+  publishIssues,
 } from "./draftModel";
 import type {AssetInspection} from "./types";
 
@@ -21,19 +22,21 @@ export const MODEL_LAYOUT_NAME = "Model";
 /** 布局严格不一致的稳定码（与后端 `standard_assets._layout_mismatch` 同码）。 */
 export const LAYOUT_MISMATCH_CODE = "STANDARD_LAYOUT_NAME_MISMATCH";
 
-/** 未被标准取值引用的有效资产：警告，不阻断发布（SPEC-DM-016 §8.2）。 */
+/** 未被标准取值引用的有效资产：警告，不阻断发布。 */
 export const UNREFERENCED_ASSET_CODE = "STANDARD_ASSET_UNREFERENCED";
 
 export type PublishSeverity = "error" | "warning";
 
 export interface PublishTarget {
   section: EditorSectionId;
-  ruleId?: string;
-  /** 映射表行号（1 起始）；null 表示映射表整体（未覆盖源值）。 */
-  row?: number | null;
+  /** 普通/派生属性行定位（属性稳定 ID）。 */
+  propertyId?: string;
+  /** 命名或组合令牌片段序号。 */
+  segmentIndex?: number;
+  /** 映射行定位（源枚举项 ID）。 */
+  itemId?: string;
   assetId?: string;
   layout?: string;
-  field?: string;
 }
 
 export interface PublishIssue {
@@ -60,7 +63,6 @@ export interface PublishGate {
 
 export interface PublishReport {
   document: DraftDocument;
-  structure: StructureDiagnostic[];
   assets: AssetInspection[];
   inspectionFailures?: InspectionFailure[];
 }
@@ -94,124 +96,97 @@ export function compareLayouts(declared: string[], actual: string[]): {missing: 
 
 // ------------------------------------------------------------ 资产引用关系
 
-export type ReferenceKind =
-  | "property-enum"
-  | "rule-fixed"
-  | "rule-allowed"
-  | "mapping-target"
-  | "segment-literal";
+export type ReferenceKind = "property-enum" | "mapping-target" | "segment-literal";
 
 export interface AssetReference {
   role: string;
   kind: ReferenceKind;
-  /** 引用位置标识（字段引用或规则 ID）。 */
+  /** 引用位置标识（属性 ID 或 DWG 命名模板）。 */
   ref: string;
   value: string;
 }
 
 /** 标准里可能引用图幅取值的所有位置；为空表示本草案无法判定引用关系。 */
 export function hasReferenceSources(document: DraftDocument): boolean {
-  if (document.properties.some(property => property.enum_values.length > 0)) return true;
-  return document.rules.some(rule =>
-    rule.value !== undefined
-    || rule.allowed.length > 0
-    || rule.table.length > 0
-    || rule.segments.some(segment => segment.literal !== undefined));
+  if (document.properties.some(property => property.kind === "enum" && property.enum_items.length > 0)) {
+    return true;
+  }
+  if (document.properties.some(property => property.kind === "mapping" && property.mapping.length > 0)) {
+    return true;
+  }
+  return document.dwg_naming.segments.some(segment => segment.literal !== undefined);
 }
 
-function ruleLabel(rule: {rule_id: string; target: string}): string {
-  return rule.target || rule.rule_id;
-}
-
-/** 资产声明的图幅在标准中被引用的位置（属性枚举、规则取值、映射目标、固定文本片段）。 */
+/** 资产声明的图幅在标准中被引用的位置（枚举项、映射目标、组合与命名固定文本）。 */
 export function assetReferences(document: DraftDocument, asset: DraftAsset): AssetReference[] {
   const roles = declaredRoles(asset);
   if (roles.length === 0) return [];
   const references: AssetReference[] = [];
-  const collect = (role: string, kind: ReferenceKind, ref: string, value: string): void => {
-    references.push({role, kind, ref, value});
-  };
   for (const role of roles) {
     for (const property of document.properties) {
-      if (property.enum_values.includes(role)) {
-        collect(role, "property-enum", `${property.scope}.${property.name}`, role);
+      if (property.kind === "enum" && property.enum_items.some(item => item.value === role)) {
+        references.push({role, kind: "property-enum", ref: property.property_id, value: role});
+      }
+      if (property.kind === "mapping" && property.mapping.some(row => row.value === role)) {
+        references.push({role, kind: "mapping-target", ref: property.property_id, value: role});
+      }
+      if (property.kind === "composition" && property.segments.some(segment => segment.literal === role)) {
+        references.push({role, kind: "segment-literal", ref: property.property_id, value: role});
       }
     }
-    for (const rule of document.rules) {
-      const ref = ruleLabel(rule);
-      if (rule.value === role) collect(role, "rule-fixed", ref, role);
-      if (rule.allowed.includes(role)) collect(role, "rule-allowed", ref, role);
-      for (const [, target] of rule.table) {
-        if (target === role) collect(role, "mapping-target", ref, role);
-      }
-      for (const segment of rule.segments) {
-        if (segment.literal === role) collect(role, "segment-literal", ref, role);
-      }
+    if (document.dwg_naming.segments.some(segment => segment.literal === role)) {
+      references.push({role, kind: "segment-literal", ref: "dwgNaming", value: role});
     }
   }
   return references;
 }
 
-// ------------------------------------------------------------ 结构诊断映射
+// ------------------------------------------------------------ 诊断映射
 
-function sectionOfRule(rule: DraftRule | undefined): EditorSectionId {
-  if (rule === undefined) return "rules";
-  if (rule.kind === "mapping") return "mapping";
-  if (COMPOSITION_RULE_KINDS.includes(rule.kind)) return "composition";
-  return "rules";
+function sectionOfDiagnostic(document: DraftDocument, diagnostic: DraftDiagnostic): EditorSectionId {
+  switch (diagnostic.owner) {
+    case "asset":
+      return "assets";
+    case "dwgNaming":
+      return "dwgNaming";
+    case "document":
+      return "basic";
+    default: {
+      const property = propertyById(document, diagnostic.propertyId ?? "");
+      return property !== undefined && isDerivedProperty(property) ? "derived" : "ordinary";
+    }
+  }
 }
 
-/** 非规则类结构码的检查域归属（基本信息/属性定义/模板资产）。 */
-const CODE_SECTIONS: Array<[prefix: string, section: EditorSectionId]> = [
-  ["STANDARD_ASSET_", "assets"],
-  ["STANDARD_PROPERTY_", "properties"],
-  ["STANDARD_SCOPE_", "properties"],
-  ["STANDARD_NUMBERING_", "basic"],
-  ["STANDARD_CAD_VERSIONS_", "basic"],
-  ["STANDARD_ID_", "basic"],
-  ["STANDARD_VERSION_", "basic"],
-  ["STANDARD_NAME_", "basic"],
-];
-
-function sectionOfCode(code: string): EditorSectionId | null {
-  for (const [prefix, section] of CODE_SECTIONS) {
-    if (code.startsWith(prefix)) return section;
-  }
-  return null;
-}
-
-/** 结构诊断 → 发布问题：按规则种类决定检查域，行级诊断保留行号。 */
-export function structureIssue(document: DraftDocument, item: StructureDiagnostic): PublishIssue {
-  const rule = document.rules.find(candidate => candidate.rule_id === item.ruleId);
-  const section = sectionOfCode(item.code) ?? sectionOfRule(rule);
-  if (section !== "rules" && section !== "mapping" && section !== "composition") {
-    // 基本信息/属性定义/模板资产类：没有行概念，只带字段标识便于视图定位
-    const target: PublishTarget = {section};
-    if (section === "assets" && item.field) target.assetId = item.field;
-    const params: Record<string, string | number> = {};
-    if (item.field !== undefined && item.field !== "") params.field = item.field;
-    return {code: item.code, severity: "error", target, params};
-  }
-  if (item.code === "STANDARD_MAPPING_SOURCE_UNCOVERED") {
-    // 未覆盖源值不指向具体行：定位到映射表整体，插值参数只有源值
-    return {
-      code: item.code,
-      severity: "error",
-      target: {section, ruleId: item.ruleId, row: null},
-      params: {source: item.field ?? ""},
-    };
-  }
-  const target: PublishTarget = {section, ruleId: item.ruleId};
+/** 发布诊断 → 发布问题：按诊断归属决定检查域，令牌/枚举项级诊断保留定位。 */
+export function issueOf(document: DraftDocument, diagnostic: DraftDiagnostic): PublishIssue {
+  const section = sectionOfDiagnostic(document, diagnostic);
+  const target: PublishTarget = {section};
   const params: Record<string, string | number> = {};
-  if (item.field !== undefined && item.field !== "") params.field = item.field;
-  if (item.code === "STANDARD_RULE_INVALID" && rule?.kind === "mapping") {
-    // 空映射表：定位到映射表整体，交由映射分区聚焦未覆盖/表体摘要
-    target.row = null;
-  } else if (item.row !== undefined) {
-    target.row = item.row;
-    params.source = item.field ?? "";
+  if (diagnostic.propertyId !== undefined) {
+    target.propertyId = diagnostic.propertyId;
+    params.propertyId = diagnostic.propertyId;
+    const property = propertyById(document, diagnostic.propertyId);
+    if (property !== undefined) params.propertyName = property.name || diagnostic.propertyId;
   }
-  return {code: item.code, severity: "error", target, params};
+  if (diagnostic.segmentIndex !== undefined) {
+    target.segmentIndex = diagnostic.segmentIndex;
+    params.segmentIndex = diagnostic.segmentIndex + 1;
+  }
+  if (diagnostic.itemId !== undefined) {
+    target.itemId = diagnostic.itemId;
+    params.itemId = diagnostic.itemId;
+  }
+  if (diagnostic.assetId !== undefined) {
+    target.assetId = diagnostic.assetId;
+    params.assetId = diagnostic.assetId;
+  }
+  return {
+    code: diagnostic.code,
+    severity: diagnostic.severity,
+    target,
+    params,
+  };
 }
 
 // ------------------------------------------------------------ 资产问题映射
@@ -236,24 +211,16 @@ function assetIssues(
       code: diagnostic.code,
       severity: diagnostic.severity === "warning" ? "warning" : "error",
       target: {section: "assets", assetId: asset.asset_id},
-      params: {},
+      params: {assetId: asset.asset_id},
     });
   }
 
-  for (const layout of diff.missing) {
+  for (const layout of [...diff.missing, ...diff.extra]) {
     issues.push({
       code: LAYOUT_MISMATCH_CODE,
       severity: "error",
       target: {section: "assets", assetId: asset.asset_id, layout},
-      params: {layout},
-    });
-  }
-  for (const layout of diff.extra) {
-    issues.push({
-      code: LAYOUT_MISMATCH_CODE,
-      severity: "error",
-      target: {section: "assets", assetId: asset.asset_id, layout},
-      params: {layout},
+      params: {assetId: asset.asset_id, layout},
     });
   }
 
@@ -278,11 +245,11 @@ function assetIssues(
 
 // ------------------------------------------------------------ 门禁
 
-/** 汇总检查报告为发布门禁：错误阻断、警告放行、检查失败单列并阻断。 */
+/** 汇总发布诊断与资产检查为发布门禁：错误阻断、警告放行、检查失败单列并阻断。 */
 export function buildPublishGate(report: PublishReport): PublishGate {
-  const issues: PublishIssue[] = [
-    ...report.structure.map(item => structureIssue(report.document, item)),
-  ];
+  const issues: PublishIssue[] = publishIssues(report.document).map(diagnostic =>
+    issueOf(report.document, diagnostic),
+  );
   const inspections = new Map(report.assets.map(item => [item.asset_id, item]));
   const failedAssets = new Set((report.inspectionFailures ?? []).map(item => item.assetId));
   for (const asset of report.document.assets) {
@@ -300,7 +267,7 @@ export function buildPublishGate(report: PublishReport): PublishGate {
   };
 }
 
-/** 检查域顺序（SPEC-DM-016 §9.1 的检查域）：左侧计数与右侧分组的共同顺序。 */
+/** 检查域顺序（SPEC-DM-017 §2 的六分区）：左侧计数与右侧分组的共同顺序。 */
 export const PUBLISH_SECTIONS: EditorSectionId[] = [
-  "basic", "properties", "rules", "mapping", "composition", "assets", "publish",
+  "basic", "ordinary", "derived", "dwgNaming", "assets", "publish",
 ];
