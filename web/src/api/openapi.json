@@ -4419,6 +4419,11 @@
             "title": "Dependencies",
             "type": "array"
           },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4444,7 +4449,8 @@
           "version",
           "name",
           "supported_cad_versions",
-          "dependencies"
+          "dependencies",
+          "document"
         ],
         "title": "StandardDetailResponse",
         "type": "object"

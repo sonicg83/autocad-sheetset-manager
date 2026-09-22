@@ -302,6 +302,7 @@ class StandardOperations:
             raise ApplicationError(
                 "STANDARD_VERSION_NOT_FOUND", f"标准 {standard_id}@{version} 不存在", 404
             )
+        document = self.standard_store.get_document(standard_id, version)
         return {
             "standard_id": standard.standard_id,
             "version": standard.version,
@@ -315,6 +316,7 @@ class StandardOperations:
                 }
                 for item in standard.dependencies
             ],
+            "document": document or {},
         }
 
     def publish_standard(

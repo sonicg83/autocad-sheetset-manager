@@ -80,6 +80,11 @@ export function inspectStandardAsset(input: InspectAssetInput): Promise<AssetIns
   );
 }
 
+/** 标准包导出下载地址（GET /api/standards/{id}/{ver}/export，zip 下载）。 */
+export function standardExportUrl(identity: StandardIdentity): string {
+  return `/api/standards/${encodeURIComponent(identity.standardId)}/${encodeURIComponent(identity.version)}/export`;
+}
+
 // 组合默认实现：store 注入点（createStandardStore）按此契约消费，
 // 测试以同形替身替换（见 store.test.ts 的 deferredStandardApi）。
 export const standardsApi: StandardApi = {
@@ -90,5 +95,6 @@ export const standardsApi: StandardApi = {
   createDraftFromDst: createStandardDraftFromDst,
   publish: publishStandardDraft,
   importPackage: importStandardPackage,
+  deleteDraft: deleteStandardDraft,
   inspectAsset: inspectStandardAsset,
 };

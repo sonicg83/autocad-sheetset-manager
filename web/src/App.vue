@@ -440,7 +440,7 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
       <template v-if="!workspace">
         <!-- PLAN-DM-035 Task 7：无工作区时按起始面装配；标准管理不进工作区标签栏 -->
         <WelcomeView v-if="startNavigation.surface.value==='welcome'" :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" @manage-standards="startNavigation.openStandards()" />
-        <StandardsView v-else-if="startNavigation.surface.value==='standards'" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset()" />
+        <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset()" />
         <section v-else class="create-sheetset-placeholder" role="region" :aria-label="$t('standards.createPlaceholder.title')">
           <h2>{{ $t("standards.createPlaceholder.title") }}</h2>
           <p>{{ $t("standards.createPlaceholder.desc") }}</p>

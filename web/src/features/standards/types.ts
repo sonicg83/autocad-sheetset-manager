@@ -2,6 +2,9 @@
 // 不复制后端最终校验规则（标准 Schema 校验在应用/领域层，错误以稳定码返回）。
 export type StartSurface = "welcome" | "standards" | "create-sheetset";
 
+/** 新建草稿起点（Task 8 创建对话框）：空白 / 复制发布版本 / 从 DST 提取。 */
+export type CreateMode = "blank" | "derive" | "from-dst";
+
 export interface StandardIdentity {
   standardId: string;
   version: string;
@@ -28,6 +31,8 @@ export interface StandardDetail {
   name: string;
   supported_cad_versions: string[];
   dependencies: StandardDependency[];
+  /** 完整标准文档（派生草稿等场景需要）。 */
+  document: Record<string, unknown>;
 }
 
 export interface StandardDraft {

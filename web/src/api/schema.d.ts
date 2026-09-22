@@ -2144,6 +2144,10 @@ export interface components {
         StandardDetailResponse: {
             /** Dependencies */
             dependencies: components["schemas"]["StandardDependencyModel"][];
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
             /** Name */
             name: string;
             /** Standard Id */

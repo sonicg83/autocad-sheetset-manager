@@ -11,6 +11,7 @@ function publishedDetail(standardId: string, version: string): StandardDetail {
     name: `标准 ${standardId}`,
     supported_cad_versions: ["2016", "2020"],
     dependencies: [],
+    document: {},
   };
 }
 
@@ -33,6 +34,7 @@ function deferredStandardApi(): StandardApi & {resolveDetail: (standardId: strin
     saveDraft: vi.fn(),
     publish: vi.fn(),
     importPackage: vi.fn(),
+    deleteDraft: vi.fn(),
     inspectAsset: vi.fn(),
   } as unknown as StandardApi;
   return Object.assign(api, {
@@ -50,6 +52,17 @@ describe("createStandardStore", () => {
     api.resolveDetail("official.a", publishedDetail("official.a", "1.0.0"));
     await Promise.all([first, second]);
     expect(store.detail.value?.standard_id).toBe("user.b");
+  });
+
+  it("drops a stale detail response when the selection moves to a draft", async () => {
+    const api = deferredStandardApi();
+    const store = createStandardStore(api);
+    const pending = store.open({standardId: "official.a", version: "1.0.0"});
+    store.clearDetail();
+    api.resolveDetail("official.a", publishedDetail("official.a", "1.0.0"));
+    await pending;
+    expect(store.detail.value).toBeNull();
+    expect(store.detailPending.value).toBe(false);
   });
 
   it("refreshes the library list and keeps pending/error explicit", async () => {

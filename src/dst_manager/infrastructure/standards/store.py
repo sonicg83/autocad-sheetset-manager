@@ -153,6 +153,15 @@ class StandardStore:
                 )
         return None
 
+    def get_document(self, standard_id: str, version: str) -> dict[str, object] | None:
+        """读取已发布标准的原始文档字典（派生草稿等场景需要完整内容）。"""
+        for root in (self._published_root, self._official_root):
+            document = root / standard_id / version / DOCUMENT_NAME
+            if document.is_file():
+                data = json.loads(document.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else None
+        return None
+
     def get_draft(self, draft_id: str) -> StandardDraft | None:
         document = self._drafts_root / draft_id / DOCUMENT_NAME
         if not document.is_file():

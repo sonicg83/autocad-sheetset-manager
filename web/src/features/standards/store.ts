@@ -26,6 +26,7 @@ export interface StandardApi {
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
   importPackage(input: {path: string}): Promise<PublishedStandard>;
+  deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
 }
 
@@ -40,11 +41,14 @@ export interface StandardStore {
   actionError: Ref<string>;
   refresh(): Promise<void>;
   open(identity: StandardIdentity): Promise<void>;
+  /** 清空详情并使在途详情响应失效（切到草稿等无发布详情的选中项）。 */
+  clearDetail(): void;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
   saveDraft(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
   importPackage(input: {path: string}): Promise<PublishedStandard>;
+  deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
 }
 
@@ -98,6 +102,13 @@ export function createStandardStore(api: StandardApi): StandardStore {
     }
   }
 
+  function clearDetail(): void {
+    detailGeneration += 1;
+    detail.value = null;
+    detailPending.value = false;
+    detailError.value = "";
+  }
+
   async function runAction<T>(action: () => Promise<T>): Promise<T> {
     actionPending.value = true;
     actionError.value = "";
@@ -122,11 +133,13 @@ export function createStandardStore(api: StandardApi): StandardStore {
     actionError,
     refresh,
     open,
+    clearDetail,
     createDraft: (input) => runAction(() => api.createDraft(input)),
     saveDraft: (input) => runAction(() => api.saveDraftByIdentity(input)),
     createDraftFromDst: (input) => runAction(() => api.createDraftFromDst(input)),
     publish: (input) => runAction(() => api.publish(input)),
     importPackage: (input) => runAction(() => api.importPackage(input)),
+    deleteDraft: (draftId) => runAction(() => api.deleteDraft(draftId)),
     inspectAsset: (input) => runAction(() => api.inspectAsset(input)),
   };
 }

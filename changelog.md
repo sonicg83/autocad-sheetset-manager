@@ -1,3 +1,12 @@
+## 2026-09-22（实现主从分栏图纸标准库）
+
+- 新增 `web/src/components/standards/`（PLAN-DM-035 Task 8）：`standardLibraryModel.ts` 是纯函数视图模型——`filterStandardList`/`buildLibraryState` 区分「空库」与「筛选无结果」，`detailActions` 固化只读边界（官方标准与已发布版本 `canEdit=false` 且附稳定原因码 `official`/`published`，用户草稿可编辑可删除），`versionHistory` 按同一标准 ID 汇总已发布版本。`StandardLibraryPane.vue` 左栏提供名称/ID 搜索与来源、状态筛选（`UiSelect` 走默认插槽选项）；`StandardDetailPane.vue` 右栏显示身份、只读原因、`document` 能力摘要、受信依赖、版本历史与动作，编辑按钮仅在草稿出现且分区编辑器未交付时禁用并给出可见原因；`StandardCreateDialog.vue` 只负责三种草稿起点（空白/复制发布版本/从 DST 提取），派生版本取源版本补丁位 +1。
+- `views/StandardsView.vue` 重写为主从分栏：装配 `createStandardStore`，959px 断点收窄为「列表 → 详情」分级视图，删除草稿经 App 共享 `ConfirmModal`（新增 `confirm-action` 属性），导出经 `GET /api/standards/{id}/{ver}/export` 下载，导入保持独立动作且碰撞/校验失败不改变当前选择。状态控制器补 `deleteDraft()` 与 `clearDetail()`——后者递增代次使在途详情响应失效，切到草稿不再残留上一个发布版本的只读边界。
+- 后端同步扩展已发布详情：`StandardStore.get_document()` 读取原始标准文档，应用层 `get_standard` 与 `StandardDetailResponse.document` 返回完整文档（派生草稿与能力摘要需要），`openapi.json`/`schema.d.ts` 已重生成。
+- 前端文案去硬编码：`readOnlyReason` 改稳定原因码，由语言包渲染；`standards` 域补齐标准库/详情/新建/导入/删除文案（中英同构，键数 960 → 1016）。
+- E2E：新增 `tests/e2e/standards-library.spec.ts` 8 项（空库与筛选无结果、官方只读、发布版本只读并派生新草稿、草稿可维护边界、删除草稿共享确认模态、加载失败、导入碰撞不改变选中、900×768 分级视图无横向溢出），标准端点 mock 提取为 `tests/e2e/fixtures/standards.ts`（必须用 URL 判定注册路由，`**/api/standards**` glob 会拦截 vite 的 `src/api/standards.ts` 模块请求导致应用启动失败）；`standards-welcome.spec.ts` 的「从标准创建图纸集」用例改由已发布版本的「用于创建图纸集」详情动作驱动（SPEC-DM-016 §5 的逐标准动作边界）。
+- 验证：`vue-tsc -b`、`check:api`、`check:i18n`、`check:ui`、`npm run build` 与标准域单测（14 项）全过；E2E 标准系 13 项加 settings-dialog 33 项共 46 项通过。任务 9 将把 `editorAvailable` 翻转为真并接线「编辑」入口。
+
 ## 2026-09-22（建立标准前端契约、状态控制器与欢迎页入口）
 
 - 新增 `web/src/features/standards/`（PLAN-DM-035 Task 7）：`types.ts` 只为生成契约建立窄别名与 UI 判别联合（`StartSurface`、身份、摘要/详情/草稿/资产检查负载），不复制后端最终校验；`store.ts` 的 `createStandardStore(api)` 暴露 `list/open/createDraft/saveDraft/inspectAsset/publish/importPackage`，open/refresh 走代次保护——乱序详情响应按代次丢弃，不覆盖当前标准，pending/error 显式分离；`api/standards.ts` 是 `/api/standards` 系列的窄包装，以 `standardsApi` 组合默认实现供注入替身。

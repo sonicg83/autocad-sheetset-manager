@@ -2,6 +2,7 @@
 // 断言全部语义化：欢迎页主任务唯一性、标准管理是应用级表面（不进工作区标签栏）、
 // 无壳降级路径输入不回归、900×768 无横向滚动、普通 DST 打开不回归。
 import {expect, test, type Page} from "@playwright/test";
+import {installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
 
 const workspace = {
   id: "workspace-1", revision_id: "revision-1", dst_path: "C:\\project\\test.dst",
@@ -40,9 +41,12 @@ test("欢迎页保持打开 DST 为唯一主任务", async ({page}) => {
 });
 
 test("从标准创建图纸集入口当前明确不可用且不回退", async ({page}) => {
-  await page.goto("/");
-  await page.getByRole("button", {name: "管理图纸标准"}).click();
-  await page.getByRole("button", {name: "从标准创建图纸集"}).click();
+  // Task 8 起“用于创建图纸集”位于已发布版本的详情动作（SPEC-DM-016 §5）：
+  // 入口不再挂在标准管理页头部，而是逐标准提供（官方/已发布版本可选，草稿不可）。
+  await installStandards(page, [published("official", "2.1.0"), published("user", "2.0.0")]);
+  await openStandards(page);
+  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await page.getByRole("button", {name: "用于创建图纸集"}).click();
   await expect(page.getByRole("heading", {name: "从标准创建图纸集"})).toBeVisible();
   await expect(page.getByText("该入口将在后续版本提供", {exact: false})).toBeVisible();
   await page.getByRole("button", {name: "返回欢迎页"}).click();
