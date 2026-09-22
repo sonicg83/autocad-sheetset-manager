@@ -1,3 +1,8 @@
+## 2026-09-22（实现图纸标准封闭规则求值）
+
+- 新增 `src/dst_manager/domain/standard_rules.py`（PLAN-DM-035 Task 2）：`compile_standard_rules` 把标准规则编译为拓扑有序计划，未知字段引用、重复目标、非法格式码与间接循环在编译期以 `STANDARD_RULE_FIELD_UNKNOWN`/`STANDARD_RULE_TARGET_DUPLICATE`/`STANDARD_RULE_FORMAT_INVALID`/`STANDARD_RULE_CYCLE` 确定失败；`evaluate_fields` 按依赖顺序求值映射、组合、固定值、必填与枚举，缺失来源、映射未覆盖与非法补零值返回稳定诊断而不中断其余规则。不执行 `eval`、模板脚本或动态导入；格式码仅允许宿主登记的数字补零形式。
+- `domain/standards.py` 同步扩展：`StandardRule` 增加 `table`（一对一映射表，解析期拒绝空值与重复源值），字段片段允许携带补零格式码。新增 `tests/unit/test_standard_rules.py` 26 项测试（含映射→组合派生链、间接循环、未知引用、非法格式码、缺失值与未覆盖枚举）。
+
 ## 2026-09-22（建立图纸标准领域模型）
 
 - 新增 `src/dst_manager/domain/standards.py`（PLAN-DM-035 Task 1）：定义冻结的 `DrawingStandard`、`StandardProperty`、`StandardRule`、`StandardSegment`、`StandardAsset`、`NumberingPolicy`、`StandardDependency` 领域对象与 `parse_standard_document`/`loads_standard_document` 严格解析器。解析拒绝未知 Schema 版本、重复 JSON 字段、非法/大小写不合规标准 ID、非三段版本、未知作用域与规则种类、重复规则/资产 ID 和非法字段引用，全部返回 `STANDARD_*` 稳定错误码；不解析任何可执行内容。新增 `tests/unit/test_drawing_standards.py` 17 项解析、往返与边界测试。

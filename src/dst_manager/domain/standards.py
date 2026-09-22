@@ -66,6 +66,7 @@ class StandardRule:
     source: str | None = None
     value: str | None = None
     allowed: tuple[str, ...] = ()
+    table: tuple[tuple[str, str], ...] = ()
     segments: tuple[StandardSegment, ...] = ()
 
 
@@ -178,13 +179,16 @@ def _parse_segment(raw: Any, rule_id: str) -> StandardSegment:
     literal = raw.get("literal")
     if field is not None and literal is not None:
         raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 片段不能同时含字段与固定文本")
+    format_code = raw.get("format")
+    if format_code is not None and not isinstance(format_code, str):
+        raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 片段格式码非法")
     if field is not None:
         if not isinstance(field, str) or not field:
             raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 片段字段非法")
-        return StandardSegment(field=field)
+        return StandardSegment(field=field, format=format_code)
     if not isinstance(literal, str):
         raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 片段固定文本非法")
-    return StandardSegment(literal=literal, format=raw.get("format"))
+    return StandardSegment(literal=literal, format=format_code)
 
 
 def _parse_rule(raw: Any, index: int) -> StandardRule:
@@ -204,6 +208,9 @@ def _parse_rule(raw: Any, index: int) -> StandardRule:
     allowed = raw.get("allowed", ())
     if not isinstance(allowed, (list, tuple)) or any(not isinstance(item, str) for item in allowed):
         raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} allowed 必须是字符串列表")
+    table = _parse_table(raw.get("table", ()), rule_id)
+    if kind == "mapping" and not table:
+        raise _error("STANDARD_RULE_INVALID", f"映射规则 {rule_id!r} 缺少映射表")
     segments = tuple(_parse_segment(item, rule_id) for item in raw.get("segments", ()))
     return StandardRule(
         rule_id=rule_id,
@@ -212,8 +219,31 @@ def _parse_rule(raw: Any, index: int) -> StandardRule:
         source=source if isinstance(source, str) else None,
         value=raw.get("value") if isinstance(raw.get("value"), str) else None,
         allowed=tuple(allowed),
+        table=table,
         segments=segments,
     )
+
+
+def _parse_table(raw: Any, rule_id: str) -> tuple[tuple[str, str], ...]:
+    if not isinstance(raw, (list, tuple)):
+        raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} table 必须是列表")
+    table: list[tuple[str, str]] = []
+    sources: list[str] = []
+    for row in raw:
+        if (
+            not isinstance(row, (list, tuple))
+            or len(row) != 2
+            or not isinstance(row[0], str)
+            or not isinstance(row[1], str)
+        ):
+            raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 表行必须是两个字符串")
+        if not row[0] or not row[1]:
+            raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 表行存在空值")
+        sources.append(row[0])
+        table.append((row[0], row[1]))
+    if len(sources) != len(set(sources)):
+        raise _error("STANDARD_RULE_INVALID", f"规则 {rule_id!r} 映射表存在重复源值")
+    return tuple(table)
 
 
 def _validate_field_reference(field: str, rule_id: str) -> None:

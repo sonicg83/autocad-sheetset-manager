@@ -42,6 +42,7 @@ def valid_standard_document() -> dict[str, object]:
                 "kind": "mapping",
                 "target": "sheetset.专业代码",
                 "source": "sheetset.专业名称",
+                "table": [["燃气", "RQ"]],
             },
         ],
         "assets": [
