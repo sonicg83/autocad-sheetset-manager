@@ -81,6 +81,18 @@ class StandardStore:
         self._drafts_root = self._user_root / "drafts"
         self._reader = StandardPackageReader()
 
+    @property
+    def official_root(self) -> Path:
+        return self._official_root
+
+    @property
+    def published_root(self) -> Path:
+        return self._published_root
+
+    @property
+    def drafts_root(self) -> Path:
+        return self._drafts_root
+
     # ---- 查询 ------------------------------------------------------------
 
     def list(self) -> list[StandardSummary]:

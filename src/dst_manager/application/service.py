@@ -15,6 +15,7 @@ from dst_manager.application.property_import import PropertyImportOperations
 from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
 from dst_manager.application.revisions import RevisionRestoreOperations
+from dst_manager.application.standards import StandardOperations
 from dst_manager.application.xml_io import XmlExportOperations
 from dst_manager.config import Settings
 from dst_manager.domain.models import (
@@ -42,6 +43,7 @@ from dst_manager.infrastructure.filesystem.publisher import (
 from dst_manager.infrastructure.filesystem.workspace import write_workspace_metadata
 from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
+from dst_manager.infrastructure.standards import StandardStore
 from dst_manager.settings.runtime import RuntimeSettings
 from dst_manager.settings.store import SettingsSchemaOlder
 
@@ -54,6 +56,7 @@ class DstManagerService(
     XmlExportOperations,
     RepairOperations,
     TransactionRecoveryOperations,
+    StandardOperations,
 ):
     # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
     _runtime: RuntimeSettings | None = None
@@ -72,6 +75,10 @@ class DstManagerService(
         self.codec = DstCodec()
         self.publisher = RecoverablePublisher()
         self.drafts = DraftStore(self.settings.draft_dir)
+        self.standard_store = StandardStore(
+            official_root=self.settings.data_dir / "standards" / "official",
+            user_root=self.settings.data_dir / "standards" / "user",
+        )
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)
@@ -117,6 +124,11 @@ class DstManagerService(
         if unreferenced:
             document.diagnostics.append(self._issue("UNREFERENCED_DWG", "info", f"发现{len(unreferenced)}个未引用DWG"))
         workspace = Workspace(workspace_id, root, dst_path, revision, document, unreferenced)
+        # 标准绑定只读解析：missing 只降级标准能力并附加诊断，不阻止打开，
+        # 也不创建项目快照（恢复快照由 resolve_workspace_standard 显式触发）。
+        workspace.standard = self.peek_workspace_standard(workspace)
+        if workspace.standard.status == "missing":
+            document.diagnostics.extend(workspace.standard.diagnostics)
         self.database.upsert_workspace(workspace_id, root, dst_path, revision, root_override)
         return workspace
 

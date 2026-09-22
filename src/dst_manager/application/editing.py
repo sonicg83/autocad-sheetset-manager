@@ -454,6 +454,8 @@ class EditingOperations:
 
     @staticmethod
     def _normalize_commands(commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from dst_manager.application.standards import RESERVED_PROPERTIES
+
         allowed = {
             "update_sheet_set",
             "update_subset_title",
@@ -464,10 +466,30 @@ class EditingOperations:
             "delete_subset",
             "add_custom_property",
             "delete_custom_property",
+            "bind_standard",
         }
         invalid = [command.get("type") for command in commands if command.get("type") not in allowed]
         if invalid:
             raise ApplicationError("COMMAND_UNSUPPORTED", f"不支持的命令：{invalid}")
+        for command in commands:
+            if command.get("type") == "update_sheet_set":
+                reserved = [
+                    name
+                    for name in (command.get("custom_properties") or {})
+                    if name in RESERVED_PROPERTIES
+                ]
+                if reserved:
+                    raise ApplicationError(
+                        "STANDARD_PROPERTY_RESERVED",
+                        f"标准保留属性只能由标准绑定命令修改：{reserved}",
+                        409,
+                    )
+            if command.get("type") == "delete_custom_property" and command.get("name") in RESERVED_PROPERTIES:
+                raise ApplicationError(
+                    "STANDARD_PROPERTY_RESERVED",
+                    f"标准保留属性定义不可删除：{command.get('name')}",
+                    409,
+                )
         normalized: list[dict[str, Any]] = []
         for command in commands:
             item = dict(command)

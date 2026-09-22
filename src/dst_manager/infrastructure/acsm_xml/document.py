@@ -139,6 +139,11 @@ def repair_digest(root: etree._Element, base_revision_id: str) -> str:
     return hashlib.sha256(masked + base_revision_id.encode("utf-8")).hexdigest()
 
 
+# 标准保留属性：只有标准应用服务的 bind_standard 专用命令可写，
+# 普通属性更新与属性定义增删一律以 STANDARD_PROPERTY_RESERVED 拒绝。
+RESERVED_STANDARD_PROPERTIES = ("DSTManager.Standard", "DSTManager.StandardOptions")
+
+
 class AcsmDocument:
     """保留未知内容、可修复加载的 AcSm DOM 载体。
 
@@ -207,6 +212,21 @@ class AcsmDocument:
                 if "name" in command:
                     _set_prop(matches[0], "Name", str(command["name"]))
                 self._set_custom_properties(matches[0], command.get("custom_properties", {}), expected_scope="1")
+            elif command_type == "bind_standard":
+                # 标准应用服务专用命令：唯一允许写入标准保留属性的入口。
+                matches = self.root.xpath("//*[local-name()='AcSmSheetSet']")
+                if len(matches) != 1:
+                    raise AcsmValidationError("SHEET_SET_INVALID")
+                standard = command.get("standard")
+                if not isinstance(standard, str):
+                    raise AcsmValidationError("STANDARD_IDENTITY_INVALID: bind_standard 缺少 standard")
+                self._ensure_reserved_property_definitions()
+                self._set_custom_properties(
+                    matches[0],
+                    {RESERVED_STANDARD_PROPERTIES[0]: standard},
+                    expected_scope="1",
+                    allow_reserved=True,
+                )
             elif command_type == "update_subset":
                 subset_id = str(command.get("subset_id", ""))
                 matches = self.root.xpath("//*[@ID=$subset_id and local-name()='AcSmSubset']", subset_id=subset_id)
@@ -339,6 +359,8 @@ class AcsmDocument:
             property_type = str(command.get("property_type", ""))
             scope = _scope_for_property_type(property_type)
             name = self._normalize_property_name(command.get("name", ""))
+            if name in RESERVED_STANDARD_PROPERTIES:
+                raise AcsmValidationError(f"STANDARD_PROPERTY_RESERVED: {name}")
             if kind == "add_custom_property":
                 definition = CustomPropertyDefinition(property_type, name, str(command.get("default_value", "")))
                 self._add_property_definition(definition, duplicate_ok=False)
@@ -601,6 +623,14 @@ class AcsmDocument:
             return [self._sheet_set()]
         return [self._sheet_set(), *self.root.xpath("//*[local-name()='AcSmSheet']")]
 
+    def _ensure_reserved_property_definitions(self) -> None:
+        """为 bind_standard 命令确保两个标准保留属性定义存在。"""
+        for name in RESERVED_STANDARD_PROPERTIES:
+            if not self._existing_property_types(name):
+                self._add_property_definition(
+                    CustomPropertyDefinition("sheetset", name, ""), duplicate_ok=True
+                )
+
     def _add_property_definition(self, definition: CustomPropertyDefinition, *, duplicate_ok: bool) -> None:
         try:
             validate_property_value(definition.default_value)
@@ -782,8 +812,18 @@ class AcsmDocument:
                 raise AcsmValidationError(f"SUBSET_NOT_FOUND: {subset_id}")
             _set_prop(matches[0], "Name", name)
 
-    def _set_custom_properties(self, owner: etree._Element, values: dict, *, expected_scope: str, clear_others: bool = False) -> None:
-        """按 AutoCAD 的 Value/Flags 语义更新已有自定义属性定义。"""
+    def _set_custom_properties(self, owner: etree._Element, values: dict, *, expected_scope: str, clear_others: bool = False, allow_reserved: bool = False) -> None:
+        """按 AutoCAD 的 Value/Flags 语义更新已有自定义属性定义。
+
+        标准保留属性（``DSTManager.Standard*``）只有 ``bind_standard`` 专用
+        命令路径（``allow_reserved=True``）可写；普通更新一律拒绝。
+        """
+        if not allow_reserved:
+            for raw_name in values:
+                if _acsm_xml_text(raw_name) in RESERVED_STANDARD_PROPERTIES:
+                    raise AcsmValidationError(
+                        f"STANDARD_PROPERTY_RESERVED: {_acsm_xml_text(raw_name)}"
+                    )
         custom_nodes = owner.xpath("./*[local-name()='AcSmCustomPropertyBag']/*[local-name()='AcSmCustomPropertyValue']")
         by_key: dict[tuple[str, str], etree._Element] = {}
         scopes_by_name: dict[str, set[str]] = {}

@@ -1,7 +1,10 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from dst_manager.application.standards import StandardResolution
 
 # 诊断模型所有权已迁至 dst_platform.contracts.diagnostics（PLAN-DB-001 Task 6）；
 # 此处兼容导出同一类型对象，Manager 全库继续经本模块消费，避免第二套诊断模型。
@@ -170,3 +173,7 @@ class Workspace:
     revision_id: str
     document: SheetSetDocument
     unreferenced_dwgs: list[Path] = field(default_factory=list)
+    # 标准绑定解析结果（PLAN-DM-035 Task 4）；类型为
+    # ``dst_manager.application.standards.StandardResolution``，应用层挂载，
+    # 领域层不 import 应用模块。
+    standard: "StandardResolution | None" = None

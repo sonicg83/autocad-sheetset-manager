@@ -1,3 +1,8 @@
+## 2026-09-22（编排标准发布绑定与快照恢复）
+
+- 新增 `src/dst_manager/application/standards.py`（PLAN-DM-035 Task 4）：`StandardOperations` 以 mixin 组合进 `DstManagerService`（入口只负责组合与注入 `standard_store`），提供 `list_standards`、`resolve_workspace_standard`、`peek_workspace_standard` 与 `bind_workspace_standard`。绑定身份为 `standard_id@version`（`STANDARD_IDENTITY_INVALID` 422）；快照缺失时按 ID/版本从用户/官方标准库恢复到工作区 `.dst-manager/standards/<id>/<version>/`，普通工作区打开只做只读解析——标准缺失仅附加 `STANDARD_MISSING` 诊断降级标准能力，不阻止打开也不创建快照。
+- 保留属性读写保护：`DSTManager.Standard`/`DSTManager.StandardOptions` 只有 `bind_standard` 专用命令（经 `execute_changes` 事务与预览摘要）可写；普通 `update_sheet_set` 与属性定义删除在应用层（409 `STANDARD_PROPERTY_RESERVED`）与 AcSm DOM 层双重拒绝。`Workspace` 新增只读挂载的 `standard` 解析结果字段。新增 `tests/unit/test_standard_service.py` 9 项测试，既有属性编辑与 v021 编辑回归全部通过。
+
 ## 2026-09-22（建立图纸标准包与标准库）
 
 - 新增 `src/dst_manager/infrastructure/standards/`（PLAN-DM-035 Task 3）：`package.py` 的 `StandardPackageReader.read()` 读取 `.dststandard` zip 包，读取阶段即拒绝 `..`/绝对路径/重复规范化路径（`STANDARD_PACKAGE_PATH_INVALID`）、可执行扩展名 `.py/.dll/.scr/.lsp/.exe` 等（`STANDARD_PACKAGE_EXTENSION_FORBIDDEN`）、超大条目与包体（`STANDARD_PACKAGE_TOO_LARGE`）、缺 manifest 与非法 Schema（`STANDARD_PACKAGE_MANIFEST_*`）；`store.py` 的 `StandardStore` 组合只读官方根与用户库（`published/<id>/<version>/` 与 `drafts/<draft_id>/`），提供 `list/get/create_draft/save_draft/delete_draft/publish/import_package/export_package`。发布与导入对重复身份、导入碰撞和官方身份冲突稳定拒绝 `STANDARD_VERSION_EXISTS`，目录迁移走同盘原子 rename，已发布版本不可原地修改。新增 24 项包安全与仓储测试（路径逃逸、非法扩展、重复规范化路径、重启往返、导入碰撞与导出再导入）。
