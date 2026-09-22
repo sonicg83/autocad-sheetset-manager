@@ -122,6 +122,7 @@ export default {
     empty: "尚未定义属性，可从 CSV 批量导入或逐条新增。",
     flow: "普通属性 → 映射属性 → 组合属性 → DWG 命名",
     identityNote: "属性改名保留历史名称；作用域与普通/派生类型创建后不可直接转换。删除被引用的属性会阻断并列出引用方。",
+        scopeLocked: "作用域创建后不可直接修改；需要改变时删除后重建（引用删除保护仍然生效）。",
     deleteBlocked: "无法删除：该属性被 {count} 处引用（{owners}）。",
     namingOwner: "DWG 命名模板",
     csv: {
@@ -163,6 +164,7 @@ export default {
     sourceMissing: "未选择",
     sourceUnset: "尚未配置",
     pendingSuffix: " · 待确认",
+    scopeLocked: "作用域创建后不可直接修改；需要改变时删除后重建。",
     description: "说明",
     edit: "编辑",
     remove: "删除",
@@ -196,7 +198,6 @@ export default {
       sheetNumber: "图号",
       sheetTitle: "图名",
     },
-    literal: "固定文字",
     literalPlaceholder: "输入固定文字后回车",
     hint: "字段点击插入；双击令牌或按退格删除，方向键与退格按令牌整体移动。",
     removeHint: "双击删除令牌",

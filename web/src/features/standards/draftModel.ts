@@ -161,6 +161,29 @@ export function defaultDwgNamingSegments(): DraftSegment[] {
   ];
 }
 
+/**
+ * 新建空白标准文档（SPEC-DM-017 §6.3）：不写任何旧顶层 `rules`，并预填默认 DWG 命名模板
+ * `{subset.scope} {subset.name}`，使用户进入编辑器即可保存。
+ */
+export function blankStandardDocument(input: {
+  standardId: string;
+  name: string;
+  version: string;
+  supportedCadVersions?: string[];
+}): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    standard_id: input.standardId,
+    version: input.version,
+    name: input.name,
+    supported_cad_versions: input.supportedCadVersions ?? ["2020"],
+    properties: [],
+    dwg_naming: {segments: defaultDwgNamingSegments()},
+    assets: [],
+    numbering: {...DEFAULT_NUMBERING},
+  };
+}
+
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -479,7 +502,7 @@ function filenameDiagnostics(body: string, owner: DiagnosticOwner): GatedDiagnos
   const device = body.split(".", 1)[0]?.toLocaleLowerCase() ?? "";
   const devices = ["con", "prn", "aux", "nul", "clock$", ...Array.from({length: 9}, (_item, index) => `com${index + 1}`), ...Array.from({length: 9}, (_item, index) => `lpt${index + 1}`)];
   if (devices.includes(device)) return [{...base, code: "DWG_NAME_RESERVED_DEVICE"}];
-  if (body.length + DWG_EXTENSION.length > MAX_FILENAME_LENGTH) {
+  if ([...body].length + DWG_EXTENSION.length > MAX_FILENAME_LENGTH) {
     return [{...base, code: "DWG_NAME_TOO_LONG"}];
   }
   return [];
@@ -552,7 +575,8 @@ function propertyStructureDiagnostics(document: DraftDocument): GatedDiagnostic[
     }
     if (property.kind === "mapping") {
       const source = propertyById(document, property.source_property_id);
-      if (source === undefined) {
+      // 缺源（空串）允许保存草稿，发布门禁阻断；悬空 ID 是结构断裂，保存即拒绝
+      if (source === undefined && property.source_property_id !== "") {
         diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_INVALID", gate: "structure"});
       }
     }
@@ -612,9 +636,13 @@ function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] 
     }
     if (property.kind === "mapping") {
       const source = propertyById(document, property.source_property_id);
-      if (source !== undefined && source.kind !== "enum") {
+      if (source === undefined) {
+        if (property.source_property_id === "") {
+          diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_INVALID", gate: "publish"});
+        }
+      } else if (source.kind !== "enum") {
         diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_INVALID", gate: "publish"});
-      } else if (source !== undefined) {
+      } else {
         if (property.scope === "sheetset" && source.scope !== "sheetset") {
           diagnostics.push({...base, code: "STANDARD_MAPPING_SCOPE_INVALID", gate: "publish"});
         }

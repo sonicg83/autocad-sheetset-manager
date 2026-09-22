@@ -206,6 +206,18 @@ def test_incomplete_mapping_draft_saves_but_does_not_publish(service) -> None:
     assert service.get_standard_draft(saved["draft_id"])
 
 
+def test_publish_rejects_draft_with_semantic_schema_error(tmp_path: Path) -> None:
+    """草稿门禁放行、发布门禁拒绝的语义错误必须以稳定 422 返回，而不是 500。"""
+    client = TestClient(create_app(Settings(data_dir=tmp_path / "data")), raise_server_exceptions=False)
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["properties"][0]["name"] = ""
+    make_draft(client, document, "draft-noname")
+    response = client.post("/api/standards/drafts/draft-noname/publish")
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_PROPERTY_NAME_INVALID"
+    assert client.get("/api/standards/drafts/draft-noname").status_code == 200
+
+
 def test_incomplete_mapping_draft_http_publish_returns_422(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     make_draft(client, incomplete_mapping_document(), "draft-incomplete")

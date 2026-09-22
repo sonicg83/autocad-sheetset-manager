@@ -33,25 +33,29 @@ Remove-Item Env:\DST_MANAGER_STANDARDS_EVIDENCE     # 常规回归不再改写�
 | --- | --- |
 | `g4-01-welcome-light-1440x900.png` | 欢迎页（打开 DST 为主任务，标准管理为次级入口） |
 | `g4-02-library-light-1440x900.png` | 标准库主从分栏（官方 2.1.0 / 用户 2.0.0 / 草稿 1 三条） |
-| `g4-03-ordinary-light-1440x900.png` | 编辑器·普通属性（枚举 + 映射 + 图幅，八列表格） |
-| `g4-04-derived-light-1440x900.png` | 派生属性（映射与组合，七列表格） |
-| `g4-05-dwg-naming-light-1440x900.png` | DWG 命名（字段浏览器 + 令牌模板 + 示例文件名） |
+| `g4-03-properties-light-1440x900.png` | 编辑器·属性定义（三条属性，含枚举与图幅）——旧状态，见下方状态变更说明 |
+| `g4-04-mapping-light-1440x900.png` | 字段映射（一条映射规则 + 三行专业映射）——旧状态 |
+| `g4-05-composition-light-1440x900.png` | 字段组合派生与 DWG 命名（片段 + 示例结果）——旧状态 |
 | `g4-06-assets-light-1440x900.png` | 模板资产（检查通过：声明 A2/A3 与实际一致） |
 | `g4-07-publish-error-light-1440x900.png` | 发布检查页·含错误（映射表未覆盖源值，发布禁用） |
 | `g4-08-publish-success-light-1440x900.png` | 发布成功后的新版本只读详情 |
 | `g4-09-welcome-dark-1440x900.png` | 补充：欢迎页深色 |
 | `g4-10-library-dark-1440x900.png` | 补充：标准库深色 |
 | `g4-11-publish-error-dark-1440x900.png` | 补充：发布错误页深色 |
-| `g4-12-dwg-naming-narrow-light-900x768.png` | 补充：DWG 命名 900×768 窄视口（无横向溢出） |
+| `g4-12-mapping-narrow-light-900x768.png` | 补充：字段映射 900×768 窄视口（无横向溢出）——旧状态 |
 
 SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至少各有浅色标准视口、深色或窄视口
-补充状态」：对应 `g4-09`（欢迎页深色）、`g4-10`（标准库深色）、`g4-12`（DWG 命名窄视口）、
+补充状态」：对应 `g4-09`（欢迎页深色）、`g4-10`（标准库深色）、`g4-12`（字段映射窄视口）、
 `g4-11`（发布页深色）。
 
 > **状态变更（PLAN-DM-038，2026-09-22）**：属性定义、字段映射与字段组合三个状态已由
 > [SPEC-DM-017](../../SPEC-DM-017-standard-properties-and-dwg-naming.md) 的六分区取代
-> （普通属性 / 派生属性 / DWG 命名），对应截图已按新状态重新生成并更名；本目录的
-> `g4-01`/`g4-02`/`g4-06`～`g4-11` 状态不变。旧状态在产品中已不存在，无法再复现冻结件。
+> （普通属性 / 派生属性 / DWG 命名）。**目录中现有的 `g4-03`/`g4-04`/`g4-05`/`g4-12`
+> 仍是旧状态的冻结件，尚未按新状态重新生成**：`standards-visual-evidence.spec.ts` 已改为
+> 输出 `g4-03-ordinary-…`/`g4-04-derived-…`/`g4-05-dwg-naming-…`/`g4-12-dwg-naming-narrow-…`，
+> 需要设置 `DST_MANAGER_STANDARDS_EVIDENCE=g4`（G8 为 `production`）重跑该 spec 才会落盘，
+> 重跑前上述四个旧文件与 README 表格保持一一对应。`g4-01`/`g4-02`/`g4-06`～`g4-11`
+> 的状态不变；旧的三分区状态在产品中已不存在，重跑后即可删除旧文件并把表格换为新名。
 
 ## 三、G8 逐对裁决
 

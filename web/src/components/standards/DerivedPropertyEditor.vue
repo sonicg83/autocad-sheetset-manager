@@ -47,6 +47,8 @@ const root = ref<HTMLElement | null>(null);
 const dialogPropertyId = ref<string | null>(null);
 const compositionDialogId = ref<string | null>(null);
 const blocked = ref<{propertyId: string; owners: string[]} | null>(null);
+/** 本次会话新建的属性：只有它们允许在创建时选择作用域（SPEC-DM-017 §3.2）。 */
+const createdIds = ref<string[]>([]);
 
 const derivedProperties = computed(() =>
   props.document.properties.filter(
@@ -121,10 +123,18 @@ function sourceSummary(property: DraftProperty): string {
 }
 
 function addProperty(): void {
-  props.document.properties.push(blankDerivedProperty(props.document, "composition"));
+  const property = blankDerivedProperty(props.document, "composition");
+  props.document.properties.push(property);
+  createdIds.value = [...createdIds.value, property.property_id];
 }
 
+function isCreated(property: DraftProperty): boolean {
+  return createdIds.value.includes(property.property_id);
+}
+
+/** 作用域只在创建时可选；既有属性改作用域必须删除后重建。 */
 function setScope(property: DraftProperty, scope: string): void {
+  if (!isCreated(property)) return;
   property.scope = scope as DraftPropertyScope;
 }
 
@@ -234,6 +244,7 @@ function removeProperty(property: DraftProperty): void {
           :data-testid="`derived-name-${property.property_id}`"
         />
         <select
+          v-if="isCreated(property)"
           class="cell-select"
           :value="property.scope"
           :aria-label="$t('standards.derived.scope')"
@@ -243,6 +254,12 @@ function removeProperty(property: DraftProperty): void {
           <option value="sheetset">{{ $t("standards.derived.scopeValue.sheetset") }}</option>
           <option value="sheet">{{ $t("standards.derived.scopeValue.sheet") }}</option>
         </select>
+        <span
+          v-else
+          class="scope-locked"
+          :title="$t('standards.derived.scopeLocked')"
+          :data-testid="`derived-scope-badge-${property.property_id}`"
+        >{{ property.scope }}</span>
         <span class="source-summary" :data-testid="`derived-source-${property.property_id}`">
           {{ sourceSummary(property) }}
         </span>
@@ -307,6 +324,7 @@ function removeProperty(property: DraftProperty): void {
 .derived-list{display:grid;gap:var(--space-2)}
 .derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2);align-items:start}
 .derived-head{font-size:var(--font-label);color:var(--color-text-secondary)}
+.scope-locked{display:inline-block;padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label)}
 .cell-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .source-summary{padding-top:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary);overflow-wrap:anywhere}
 .row-issue{grid-column:1/-1;margin:0;font-size:var(--font-label);color:var(--color-danger)}

@@ -266,6 +266,28 @@ def test_sheetset_composition_rejects_sheet_property_and_sheet_system_field() ->
         parse_published_standard_document(other)
 
 
+def test_published_parse_rejects_mapping_without_source() -> None:
+    """映射属性必须有源：草稿可保存，发布必须阻断（不能静默变成一个永不求值的属性）。"""
+    document = valid_standard_document()
+    properties = document["properties"]
+    assert isinstance(properties, list)
+    del properties[1]["source_property_id"]
+    with pytest.raises(StandardSchemaError, match="STANDARD_MAPPING_SOURCE_INVALID"):
+        parse_published_standard_document(document)
+    # 草稿门禁仍然放行：用户可以保存还没选源的映射属性
+    assert parse_standard_draft_document(document).property_by_id("prop-code").source_property_id is None
+
+
+def test_published_parse_rejects_whitespace_only_property_name() -> None:
+    """只有空白字符的属性名按空名处理：否则两个 `" "` 属性可以同时发布。"""
+    document = valid_standard_document()
+    properties = document["properties"]
+    assert isinstance(properties, list)
+    properties[0]["name"] = "   "
+    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_NAME_INVALID"):
+        parse_published_standard_document(document)
+
+
 def test_mapping_source_must_be_ordinary_enum() -> None:
     document = valid_standard_document()
     properties = document["properties"]

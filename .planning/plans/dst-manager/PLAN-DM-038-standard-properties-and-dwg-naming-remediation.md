@@ -706,19 +706,19 @@ git commit -m "收口标准属性与命名整改"
 - **接线**：仓储与包读写拆分两阶段门禁（草稿只过结构、发布/导入过完整门禁并保留仓储防线）；应用层发布与导入在目录移动前汇总诊断，首个 error 转 422、warning 随响应返回；DST 提取生成稳定 `property_id`、`kind="text"` 与默认 `dwg_naming`。
 - **前端**：草稿模型改为判别联合（普通/派生）与两段门禁；标准编辑器六分区；普通属性表 + 枚举模态、派生属性表 + 映射模态、共享令牌编辑器 + 组合模态 + DWG 命名分区；发布检查页六检查域并可按属性名/源枚举值/令牌定位。
 
-**自动化门禁（全部通过）**：
+**自动化门禁（全部通过；数字为整分支复核修复轮后的最终值）**：
 
 | 门禁 | 结果 |
 | --- | --- |
 | `uv run ruff check .` | All checks passed |
-| `uv run pytest -q` | **1697 passed / 72 skipped / 0 failed** |
+| `uv run pytest -q` | **1700 passed / 72 skipped / 0 failed** |
 | `uv lock --check` | Resolved 70 packages |
 | `npm run check:api` | 通过（`openapi.json`/`schema.d.ts` 已重新生成） |
-| `npm run check:i18n` | 1292 键 / 10 域，无硬编码中文 |
+| `npm run check:i18n` | 1293 键 / 10 域，无硬编码中文 |
 | `npm run check:ui` | 通过（新增 `--checkbox-size` 令牌，无新增例外） |
-| `npm run test:unit` | 260 passed |
+| `npm run test:unit` | 266 passed |
 | `npm run build` | 通过 |
-| `npx playwright test` | **619 passed / 0 failed**（4.8 分钟） |
+| `npx playwright test` | **620 passed / 0 failed**（4.7 分钟） |
 
 **环境依赖跳过项**：72 项 skip 为既有环境依赖（真实 AutoCAD / Core Console / 私有样本缺失），本计划未新增跳过项；未运行 `DST_MANAGER_RUN_AUTOCAD=1 tests/system_autocad`（本机无对应环境）。
 
@@ -727,4 +727,3 @@ git commit -m "收口标准属性与命名整改"
 1. 必填属性缺值的发布门禁未实现（Ruling R10），归属 PLAN-DM-036 的创建流程；发布阶段暂不强制必填。
 2. 前端文件名安全提示基于「模板骨架」而非真实取值（Ruling R19/R32），取值层面的非法文件名只在后端逐项目校验时报出。
 3. `docs/dst-manager/specs/assets/SPEC-DM-016/README.md` 的 G4/G8 旧状态截图无法再复现（属性定义/字段映射/字段组合已被六分区取代），README 已就地记录状态变更；历史 PNG 未删除。
-4. 组合属性模态框的字段浏览器未提供 Demo 中的搜索框（Demo 有、SPEC-DM-017 §5.3 未要求）；字段较多时需滚动浏览。

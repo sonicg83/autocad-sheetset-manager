@@ -337,7 +337,11 @@ class StandardOperations:
         draft = self.standard_store.get_draft(draft_id)
         if draft is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
-        standard = parse_published_standard_document(draft.document)
+        try:
+            standard = parse_published_standard_document(draft.document)
+        except StandardSchemaError as exc:
+            # 草稿门禁允许的语义未完成内容在发布时必须以稳定 422 返回（不能冒泡成 500）
+            raise _store_error(exc) from exc
         diagnostics = self._publish_gate(standard)
         if manifests is not None:
             self._require_dependencies(standard.dependencies, manifests)

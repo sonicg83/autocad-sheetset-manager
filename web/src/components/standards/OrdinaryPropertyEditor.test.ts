@@ -154,6 +154,19 @@ describe("OrdinaryPropertyEditor", () => {
     expect(wrapper.get("[data-testid=enum-impact]").text()).toContain("专业代码");
   });
 
+  it("keeps the scope of an existing property read-only and only selects it on creation", async () => {
+    const draft = documentWithEnum();
+    const wrapper = mountEditor(draft);
+    // 既有属性的作用域不可直接修改（SPEC-DM-017 §3.2）
+    expect(wrapper.find("[data-testid=ordinary-scope-prop-major]").exists()).toBe(false);
+    expect(wrapper.get("[data-testid=ordinary-scope-badge-prop-major]").text()).toBe("sheetset");
+    // 新增属性在创建时可以选择作用域
+    await wrapper.get("[data-testid=add-ordinary]").trigger("click");
+    const created = draft.properties.at(-1)!;
+    await wrapper.get(`[data-testid=ordinary-scope-${created.property_id}]`).setValue("sheet");
+    expect(draft.properties.at(-1)?.scope).toBe("sheet");
+  });
+
   it("switches kind inside the ordinary table without keeping orphan enum items", async () => {
     const draft = documentWithEnum();
     const wrapper = mountEditor(draft);

@@ -3,6 +3,8 @@ import {describe, expect, it} from "vitest";
 
 import {
   EDITOR_SECTIONS,
+  blankStandardDocument,
+  defaultDwgNamingSegments,
   type DraftDocument,
   type PreviewSamples,
   compositionFields,
@@ -195,6 +197,59 @@ describe("draft model", () => {
     const driftedIssues = publishIssues(drifted);
     expect(codes(driftedIssues)).toEqual(["STANDARD_MAPPING_CONFIRMATION_REQUIRED"]);
     expect(driftedIssues[0]?.severity).toBe("warning");
+  });
+
+  it("creates a blank standard that satisfies the save gate and carries the default naming template", () => {
+    const document = blankStandardDocument({standardId: "user.draft", name: "新标准", version: "1.0.0"});
+    // 旧顶层 rules 不得再被写入（Schema v1 直接替换）
+    expect(Object.keys(document)).not.toContain("rules");
+    expect(document.dwg_naming).toEqual({segments: defaultDwgNamingSegments()});
+    const draft = toDraftDocument(document);
+    // 新建空白标准必须能直接保存，并能直接通过发布门禁
+    expect(draftDiagnostics(draft)).toEqual([]);
+    expect(publishIssues(draft)).toEqual([]);
+  });
+
+  it("keeps a missing mapping source out of the save gate but blocks publishing", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-new-mapping",
+      name: "新映射",
+      scope: "sheetset",
+      kind: "mapping",
+      source_property_id: "",
+      mapping: [],
+      confirmed_source_items: [],
+    });
+    expect(codes(draftDiagnostics(document))).toEqual([]);
+    expect(codes(publishIssues(document))).toContain("STANDARD_MAPPING_SOURCE_INVALID");
+  });
+
+  it("keeps a dangling mapping source in the save gate", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-new-mapping",
+      name: "新映射",
+      scope: "sheetset",
+      kind: "mapping",
+      source_property_id: "prop-missing",
+      mapping: [],
+      confirmed_source_items: [],
+    });
+    expect(codes(draftDiagnostics(document))).toEqual(["STANDARD_MAPPING_SOURCE_INVALID"]);
+  });
+
+  it("measures the file name length in code points like the backend", () => {
+    const overlong = draftDocument();
+    overlong.dwg_naming.segments = [{literal: "图".repeat(237)}];
+    expect(codes(publishIssues(overlong))).toContain("DWG_NAME_TOO_LONG");
+
+    const fits = draftDocument();
+    fits.dwg_naming.segments = [{literal: "图".repeat(236)}];
+    expect(codes(publishIssues(fits))).not.toContain("DWG_NAME_TOO_LONG");
+
+    // 星平面字符（emoji）按码点计数：与后端 len() 同口径，前端不得多算一倍
+    const astral = draftDocument();
+    astral.dwg_naming.segments = [{literal: "😀".repeat(120)}];
+    expect(codes(publishIssues(astral))).not.toContain("DWG_NAME_TOO_LONG");
   });
 
   it("reports enum value and default violations", () => {

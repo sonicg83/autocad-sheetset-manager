@@ -214,6 +214,17 @@ describe("DerivedPropertyEditor", () => {
     expect(property !== undefined && "mapping" in property).toBe(false);
   });
 
+  it("keeps the scope of an existing derived property read-only", async () => {
+    const draft = documentWithClaimedSource();
+    const wrapper = mountDerivedEditor(draft);
+    expect(wrapper.find("[data-testid=derived-scope-prop-code]").exists()).toBe(false);
+    expect(wrapper.get("[data-testid=derived-scope-badge-prop-code]").text()).toBe("sheetset");
+    await wrapper.get("[data-testid=add-derived]").trigger("click");
+    const created = draft.properties.at(-1)!;
+    await wrapper.get(`[data-testid=derived-scope-${created.property_id}]`).setValue("sheet");
+    expect(draft.properties.at(-1)?.scope).toBe("sheet");
+  });
+
   it("blocks deleting a derived property that the dwg naming template uses", async () => {
     const draft = documentWithClaimedSource();
     const wrapper = mountDerivedEditor(draft);

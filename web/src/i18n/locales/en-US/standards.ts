@@ -123,6 +123,7 @@ export default {
     empty: "No properties yet; import them from CSV or add them one by one.",
     flow: "Ordinary property → Mapping → Composition → DWG naming",
     identityNote: "Renaming keeps historical names; scope and ordinary/derived kind cannot be converted in place. Deleting a referenced property is blocked and lists the referencing side.",
+        scopeLocked: "The scope cannot be changed after creation; delete and recreate the property instead (reference protection still applies).",
     deleteBlocked: "Cannot delete: referenced by {count} place(s) ({owners}).",
     namingOwner: "DWG naming template",
     csv: {
@@ -164,6 +165,7 @@ export default {
     sourceMissing: "Not selected",
     sourceUnset: "Not configured",
     pendingSuffix: " - pending",
+    scopeLocked: "The scope cannot be changed after creation; delete and recreate the property instead.",
     description: "Description",
     edit: "Edit",
     remove: "Delete",
@@ -197,7 +199,6 @@ export default {
       sheetNumber: "Sheet number",
       sheetTitle: "Sheet title",
     },
-    literal: "Literal text",
     literalPlaceholder: "Type literal text and press Enter",
     hint: "Click a field to insert it; double-click a token or press Backspace to delete it, and the arrow keys move by whole tokens.",
     removeHint: "Double-click to remove the token",

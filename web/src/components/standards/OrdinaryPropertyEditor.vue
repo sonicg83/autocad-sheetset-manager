@@ -45,6 +45,8 @@ const dialogPropertyId = ref<string | null>(null);
 const blocked = ref<{propertyId: string; owners: string[]} | null>(null);
 const csvOpen = ref(false);
 const csvText = ref("");
+/** 本次会话新建的属性：只有它们允许在创建时选择作用域（SPEC-DM-017 §3.2 禁止改既有作用域）。 */
+const createdIds = ref<string[]>([]);
 
 /** 普通属性表只列普通属性；派生属性在派生分区维护。 */
 const ordinaryProperties = computed(() =>
@@ -96,10 +98,18 @@ function diagnosticParams(diagnostic: DraftDiagnostic): Record<string, string | 
 }
 
 function addProperty(): void {
-  props.document.properties.push(blankOrdinaryProperty(props.document, "text"));
+  const property = blankOrdinaryProperty(props.document, "text");
+  props.document.properties.push(property);
+  createdIds.value = [...createdIds.value, property.property_id];
 }
 
+function isCreated(property: DraftProperty): boolean {
+  return createdIds.value.includes(property.property_id);
+}
+
+/** 作用域只在创建时可选；既有属性改作用域必须删除后重建（保留引用删除保护）。 */
 function setScope(property: DraftProperty, scope: string): void {
+  if (!isCreated(property)) return;
   property.scope = scope as DraftPropertyScope;
 }
 
@@ -171,6 +181,7 @@ function applyCsv(): void {
   const created = parsePropertyCsv(csvText.value, props.document);
   if (created.length === 0) return;
   props.document.properties.push(...created);
+  createdIds.value = [...createdIds.value, ...created.map(property => property.property_id)];
   csvText.value = "";
   csvOpen.value = false;
 }
@@ -225,6 +236,7 @@ function applyCsv(): void {
           </td>
           <td class="col-scope">
             <select
+              v-if="isCreated(property)"
               class="cell-select"
               :value="property.scope"
               :aria-label="$t('standards.ordinary.scope')"
@@ -233,6 +245,12 @@ function applyCsv(): void {
             >
               <option v-for="scope in PROPERTY_SCOPES" :key="scope" :value="scope">{{ scope }}</option>
             </select>
+            <span
+              v-else
+              class="scope-locked"
+              :title="$t('standards.ordinary.scopeLocked')"
+              :data-testid="`ordinary-scope-badge-${property.property_id}`"
+            >{{ property.scope }}</span>
           </td>
           <td class="col-kind">
             <select
@@ -348,6 +366,7 @@ function applyCsv(): void {
 .col-kind{width:11%}
 .col-required{width:8%;text-align:center}
 .col-actions{width:7%;text-align:center}
+.scope-locked{display:inline-block;padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label)}
 .cell-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
 /* 必填复选框：本体固定 16×16，点击区域由标签扩展到 32×32，不继承输入框的统一高度与宽度。 */
 .required-hit{display:inline-grid;place-items:center;width:var(--tap-target-min);height:var(--tap-target-min);border-radius:var(--radius-md);cursor:pointer}

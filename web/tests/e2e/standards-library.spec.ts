@@ -78,6 +78,35 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   expect(created.document["version"]).toBe("2.0.1");
 });
 
+test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => {
+  const state = await installStandards(page, []);
+  await openStandards(page);
+  await expect(page.getByText("标准库为空，可新建草稿或导入标准包。")).toBeVisible();
+  await page.getByRole("button", {name: "新建草稿"}).click();
+  const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
+  await dialog.getByLabel("标准名称").fill("空白标准");
+  await dialog.getByLabel("版本号").fill("1.0.0");
+  await dialog.getByRole("button", {name: "创建草稿"}).click();
+
+  // 创建体必须是 Schema v1：不含旧顶层 rules，且带默认 DWG 命名模板
+  expect(state.createBodies).toHaveLength(1);
+  const created = state.createBodies[0] as {document: Record<string, unknown>};
+  expect(created.document["rules"]).toBeUndefined();
+  expect(created.document["dwg_naming"]).toEqual({
+    segments: [
+      {system_field: "subset.scope"},
+      {literal: " "},
+      {system_field: "subset.name"},
+    ],
+  });
+
+  // 进入编辑器：结构门禁放行（可保存）、DWG 命名分区已有 1 条模板
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
+  await expect(page.getByTestId("editor-save-state")).toHaveText("已保存");
+  await expect(page.getByTestId("editor-section-dwgNaming")).toContainText("DWG 命名1");
+  await expect(page.getByTestId("token-preview")).toHaveCount(0);
+});
+
 test("草稿可维护：编辑入口直接进入分区编辑器", async ({page}) => {
   await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": draftDocument()},

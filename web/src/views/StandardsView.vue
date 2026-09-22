@@ -12,7 +12,7 @@ import StandardDetailPane from "../components/standards/StandardDetailPane.vue";
 import StandardCreateDialog from "../components/standards/StandardCreateDialog.vue";
 import StandardEditor from "../components/standards/StandardEditor.vue";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
-import {draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
+import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
 import type {AssetInspection} from "../features/standards/types";
 import type {CreateMode, StandardSummary} from "../features/standards/types";
 defineEmits<{back: []; openCreateSheetset: []}>();
@@ -166,17 +166,11 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
       created = await store.createDraftFromDst({dstPath: payload.dstPath});
     } else {
       created = await store.createDraft({
-        document: {
-          schema_version: 1,
-          standard_id: defaultStandardId(payload.name),
+        document: blankStandardDocument({
+          standardId: defaultStandardId(payload.name),
           version: payload.version,
           name: payload.name,
-          supported_cad_versions: ["2020"],
-          properties: [],
-          rules: [],
-          assets: [],
-          numbering: {sequence_field: "subset.sequence", digits: 2},
-        },
+        }),
       });
     }
   } catch {

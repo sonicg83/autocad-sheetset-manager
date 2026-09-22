@@ -73,7 +73,7 @@ def validate_property_names(standard: DrawingStandard) -> None:
     """当前名称与历史名称共同参与全局唯一与保留名称检查。"""
     claimed: dict[str, str] = {}
     for prop in standard.properties:
-        if not prop.name:
+        if not normalize_property_name(prop.name):
             raise _error("STANDARD_PROPERTY_NAME_INVALID", f"属性 {prop.property_id!r} 名称不能为空")
         for value in (prop.name, *prop.previous_names):
             normalized = normalize_property_name(value)
@@ -121,6 +121,12 @@ def validate_enum_properties(standard: DrawingStandard) -> None:
 def validate_mapping_sources(standard: DrawingStandard) -> None:
     """映射源必须是普通枚举属性，且作用域不得越权。"""
     for prop in standard.properties:
+        if prop.kind == "mapping" and prop.source_property_id is None:
+            # 草稿允许还没选源；发布时必须阻断，否则会留下一个永不求值的映射属性。
+            raise _error(
+                "STANDARD_MAPPING_SOURCE_INVALID",
+                f"映射属性 {prop.property_id!r} 未选择源属性",
+            )
         if prop.source_property_id is None:
             continue
         source = standard.find_property(prop.source_property_id)
