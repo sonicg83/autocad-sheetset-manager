@@ -6,7 +6,7 @@
 // 组件直接就地修改 `props.document`（缓冲由 StandardEditor 持有），因此断言一律读
 // `wrapper.props("document")`，不使用模块级共享状态。
 import {afterEach, describe, expect, it} from "vitest";
-import {mount, type VueWrapper} from "@vue/test-utils";
+import {mount} from "@vue/test-utils";
 import {readFileSync} from "node:fs";
 import {nextTick} from "vue";
 import {createI18n} from "vue-i18n";
@@ -64,7 +64,7 @@ function documentWithEnum(): DraftDocument {
   });
 }
 
-function mountEditor(draft: DraftDocument, diagnostics?: DraftDiagnostic[]): VueWrapper {
+function mountEditor(draft: DraftDocument, diagnostics?: DraftDiagnostic[]) {
   const host = window.document.createElement("div");
   window.document.body.appendChild(host);
   return mount(OrdinaryPropertyEditor, {

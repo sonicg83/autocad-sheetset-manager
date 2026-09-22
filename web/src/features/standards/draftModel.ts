@@ -313,6 +313,58 @@ export function enumItemByValue(property: DraftProperty | undefined, value: stri
   return property.enum_items.find(item => item.value === value);
 }
 
+// ------------------------------------------------------------ 映射规则
+
+/** 映射的固定行集合：跟随源枚举列表的顺序与身份，缺行视为空目标。 */
+export function mappingRows(
+  property: DraftMappingProperty,
+  source: DraftEnumProperty | undefined,
+): DraftMappingRow[] {
+  if (source === undefined) return [];
+  return source.enum_items.map(item => ({
+    item_id: item.item_id,
+    value: property.mapping.find(row => row.item_id === item.item_id)?.value ?? "",
+  }));
+}
+
+/** 源枚举列表与用户确认时的快照是否一致（不一致 → 待确认，发布检查给 warning）。 */
+export function mappingConfirmationRequired(
+  property: DraftMappingProperty,
+  source: DraftEnumProperty | undefined,
+): boolean {
+  const current = (source?.enum_items ?? []).map(item => `${item.item_id}\u0000${item.value}`).join("\u0001");
+  const confirmed = property.confirmed_source_items
+    .map(([itemId, value]) => `${itemId}\u0000${value}`)
+    .join("\u0001");
+  return current !== confirmed;
+}
+
+/**
+ * 可作为映射源的普通枚举属性：作用域匹配，且未被**其它**映射属性占用。
+ * 当前已选源即使被占用也要保留在列表里（以禁用项展示），否则控件会显示错误的值。
+ */
+export function selectableMappingSources(
+  document: DraftDocument,
+  property: DraftMappingProperty,
+): DraftEnumProperty[] {
+  const claimed = new Set(
+    document.properties
+      .filter(
+        candidate =>
+          candidate.kind === "mapping" && candidate.property_id !== property.property_id,
+      )
+      .map(candidate => (candidate.kind === "mapping" ? candidate.source_property_id : "")),
+  );
+  return document.properties.filter((candidate): candidate is DraftEnumProperty => {
+    if (candidate.kind !== "enum") return false;
+    if (claimed.has(candidate.property_id)) return false;
+    if (property.scope === "sheetset" && candidate.scope !== "sheetset") return false;
+    return true;
+  });
+}
+
+// -------------------------------------------------------------- 引用
+
 // -------------------------------------------------------------- 反向引用
 
 export type ReferenceKind = "mapping" | "composition" | "dwgNaming";
@@ -572,15 +624,12 @@ function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] 
         } else {
           mappingSources.set(source.property_id, property.property_id);
         }
-        const targets = new Map(property.mapping.map(row => [row.item_id, row.value]));
-        const snapshot = property.confirmed_source_items.map(([itemId, value]) => `${itemId}\u0000${value}`).join("\u0001");
-        const current = source.enum_items.map(item => `${item.item_id}\u0000${item.value}`).join("\u0001");
-        for (const item of source.enum_items) {
-          if ((targets.get(item.item_id) ?? "") === "") {
-            diagnostics.push({...base, code: "STANDARD_MAPPING_TARGET_EMPTY", itemId: item.item_id, gate: "publish"});
+        for (const row of mappingRows(property, source)) {
+          if (row.value === "") {
+            diagnostics.push({...base, code: "STANDARD_MAPPING_TARGET_EMPTY", itemId: row.item_id, gate: "publish"});
           }
         }
-        if (snapshot !== current) {
+        if (mappingConfirmationRequired(property, source)) {
           diagnostics.push({...base, code: "STANDARD_MAPPING_CONFIRMATION_REQUIRED", severity: "warning", gate: "publish"});
         }
       }
