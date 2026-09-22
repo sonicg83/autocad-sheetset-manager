@@ -683,10 +683,19 @@ function collectDiagnostics(document: DraftDocument): GatedDiagnostic[] {
   ];
 }
 
-/** 示例预览渲染后才能判定的文件名安全提示（前端只提示，发布以后端码为准）。 */
+/** 模板骨架：固定文本原样保留，令牌用占位符替换——与取值无关的文件名安全检查。 */
+export const TOKEN_PLACEHOLDER = "X";
+
+export function dwgNamingSkeleton(document: DraftDocument): string {
+  return document.dwg_naming.segments
+    .map(segment => (segment.literal !== undefined ? segment.literal : TOKEN_PLACEHOLDER))
+    .join("");
+}
+
+/** 模板级文件名安全提示（前端只提示，发布以后端逐项目校验为准）。 */
 function filenameIssues(document: DraftDocument): GatedDiagnostic[] {
   if (document.dwg_naming.segments.length === 0) return [];
-  return filenameDiagnostics(renderDwgNamingPreview(document).body, "dwgNaming");
+  return filenameDiagnostics(dwgNamingSkeleton(document), "dwgNaming");
 }
 
 export const STANDARD_ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/;
@@ -702,7 +711,7 @@ function validAssetPath(path: string): boolean {
 // -------------------------------------------------------------- 示例预览
 
 /** 取样顺序：默认值 → 枚举首项 → 首个非空映射目标 → 示例占位值。 */
-export function samplePropertyValue(property: DraftProperty): string {
+export function samplePropertyValue(property: DraftProperty, placeholder: string): string {
   if (property.default_value !== "") return property.default_value;
   if (property.kind === "enum") {
     const first = property.enum_items.find(item => item.value !== "");
@@ -712,7 +721,18 @@ export function samplePropertyValue(property: DraftProperty): string {
     const first = property.mapping.find(row => row.value !== "");
     if (first !== undefined) return first.value;
   }
-  return "";
+  return placeholder;
+}
+
+/** 示例取样文本：由视图经语言包提供，模型不持有用户可见文案。 */
+export interface PreviewSamples {
+  /** 子集名称示例。 */
+  subsetName: string;
+  /** Sheet 系统字段示例值。 */
+  sheetNumber: string;
+  sheetTitle: string;
+  /** 属性无默认值/枚举首项/映射目标时的占位示例值。 */
+  placeholder: string;
 }
 
 export interface PreviewResult {
@@ -762,39 +782,41 @@ function renderSegments(
 
 /**
  * 标准编辑器中的 DWG 命名示例预览：固定 `subset.sequence = 1`、按编号位数构造
- * `subset.scope`、名称「示例子集」，并明确标注为示例（不得冒充工程结果）。
+ * `subset.scope`，示例名称由视图经语言包提供（界面必须明确标注为示例，不得冒充工程结果）。
  */
-export function renderDwgNamingPreview(document: DraftDocument): DwgNamingPreview {
+export function renderDwgNamingPreview(document: DraftDocument, samples: PreviewSamples): DwgNamingPreview {
   const sampleValues: Record<string, string> = {};
-  for (const property of document.properties) sampleValues[property.property_id] = samplePropertyValue(property);
+  for (const property of document.properties) {
+    sampleValues[property.property_id] = samplePropertyValue(property, samples.placeholder);
+  }
   const width = Math.max(document.numbering.digits, 1);
   const scope = `${String(1).padStart(width, "0")}-${String(3).padStart(width, "0")}`;
   const result = renderSegments(document, document.dwg_naming.segments, sampleValues, {
     "subset.scope": scope,
-    "subset.name": SAMPLE_SUBSET_NAME,
+    "subset.name": samples.subsetName,
     "subset.sequence": "1",
   });
   const body = result.text;
   const diagnostics = [
     ...result.diagnostics,
-    ...filenameDiagnostics(body, "dwgNaming").map(({gate: _gate, ...item}) => item),
+    ...filenameDiagnostics(dwgNamingSkeleton(document), "dwgNaming").map(({gate: _gate, ...item}) => item),
   ];
   return {parts: result.parts, text: body, body, filename: `${body}${DWG_EXTENSION}`, diagnostics};
 }
 
-export const SAMPLE_SUBSET_NAME = "示例子集";
-export const SAMPLE_SHEET_NUMBER = "001";
-export const SAMPLE_SHEET_TITLE = "示例图名";
-
 /** 组合属性的实时示例预览（字段缺失按空字符串拼接）。 */
-export function renderCompositionPreview(document: DraftDocument, property: DraftCompositionProperty): PreviewResult {
+export function renderCompositionPreview(
+  document: DraftDocument,
+  property: DraftCompositionProperty,
+  samples: PreviewSamples,
+): PreviewResult {
   const sampleValues: Record<string, string> = {};
   for (const candidate of document.properties) {
-    sampleValues[candidate.property_id] = samplePropertyValue(candidate);
+    sampleValues[candidate.property_id] = samplePropertyValue(candidate, samples.placeholder);
   }
   return renderSegments(document, property.segments, sampleValues, {
-    "sheet.number": SAMPLE_SHEET_NUMBER,
-    "sheet.title": SAMPLE_SHEET_TITLE,
+    "sheet.number": samples.sheetNumber,
+    "sheet.title": samples.sheetTitle,
   });
 }
 

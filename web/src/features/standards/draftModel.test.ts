@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {
   EDITOR_SECTIONS,
   type DraftDocument,
+  type PreviewSamples,
   compositionFields,
   draftDiagnostics,
   dwgNamingFields,
@@ -66,6 +67,14 @@ function newSchemaDocument(): Record<string, unknown> {
 function draftDocument(): DraftDocument {
   return toDraftDocument(newSchemaDocument());
 }
+
+/** 示例取样文本由视图经语言包提供；测试直接给出固定文案。 */
+const SAMPLES: PreviewSamples = {
+  subsetName: "示例子集",
+  sheetNumber: "001",
+  sheetTitle: "示例图名",
+  placeholder: "示例",
+};
 
 function codes(items: Array<{code: string}>): string[] {
   return items.map(item => item.code);
@@ -258,7 +267,7 @@ describe("draft model", () => {
   });
 
   it("renders an explicit sample preview that never pretends to be engineering output", () => {
-    const preview = renderDwgNamingPreview(draftDocument());
+    const preview = renderDwgNamingPreview(draftDocument(), SAMPLES);
     expect(preview.text).toBe("RQ-01-03 示例子集");
     expect(preview.filename).toBe("RQ-01-03 示例子集.dwg");
     expect(preview.diagnostics).toEqual([]);

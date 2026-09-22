@@ -62,7 +62,7 @@
     --font-size-15:15px; --font-size-16:16px; --font-size-17:17px; --font-size-20:20px;
     --line-height-body:1.5;
     --height-34:34px; --height-36:36px; --height-38:38px;
-    --tap-target-min:32px;
+    --tap-target-min:32px; --checkbox-size:16px;
     --icon-size-sm:12px; --icon-size-md:16px; --icon-size-lg:20px;
     --border-width-1:1px;
   }
