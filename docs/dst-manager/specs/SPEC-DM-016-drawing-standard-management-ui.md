@@ -303,6 +303,31 @@ G4 冻结证据至少包含：欢迎页、标准库、编辑器属性页、字�
 
 G8 生产证据必须使用与 G4 相同的数据、状态、主题和视口逐对比较并记录裁决。G9 在真实 pywebview/WebView2 桌面验证文件选择、键盘焦点、最小窗口、200% 系统缩放、DWG 资产检查启动与返回、标准包导入导出；浏览器 E2E 不替代真实桌面验证。
 
+### 12.3 场景追踪矩阵（PLAN-DM-035 Task 11 收口）
+
+每条场景的自动化承接、生产截图、执行者/日期与未关闭差异如下。G4 冻结件与 G8 生产证据均在
+[`assets/SPEC-DM-016/`](assets/SPEC-DM-016/README.md)（生产证据在其 `production/` 子目录），
+抓图可复现步骤、逐对裁决与 G9 清单见该 README。
+
+| ID | 自动化承接 | 生产截图 | 执行者 / 日期 | 未关闭差异 |
+| --- | --- | --- | --- | --- |
+| ST-UI-01 | `standards-welcome.spec.ts` | `g4-01-welcome-light-1440x900`、`g4-09-welcome-dark-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-02 | `standards-welcome.spec.ts` | `g4-09`、`g4-12-mapping-narrow-light-900x768` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-03 | `standards-library.spec.ts` | `g4-02-library-light-1440x900`、`g4-10-library-dark-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-04 | `standards-library.spec.ts` | `g4-02`、`g4-08-publish-success-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-05 | `standards-editor.spec.ts` | `g4-03-properties-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-06 | `standards-editor.spec.ts` | `g4-04-mapping-light-1440x900`、`g4-12` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-07 | `standards-editor.spec.ts`、`draftModel.test.ts` | `g4-05-composition-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-08 | `standards-assets-publish.spec.ts` | `g4-06-assets-light-1440x900` | E2E 自动化 / 2026-09-22 | 资产文件本体无法经 API 写入草稿（见 README §六-1） |
+| ST-UI-09 | `standards-assets-publish.spec.ts` | `g4-07-publish-error-light-1440x900`、`g4-11-publish-error-dark-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-10 | `standards-assets-publish.spec.ts` | `g4-08-publish-success-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-11 | `standards-editor.spec.ts` | 无独立截图（行为类场景，附件留档） | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-12 | `standards-library.spec.ts`、`standards-assets-publish.spec.ts` | `g4-11` | E2E 自动化 / 2026-09-22 | 无 |
+
+G9 各项目前状态：**待真实桌面环境执行**（需 AutoCAD 2016/2020 Core Console、双版本插件与私有
+样本）；执行方式与通过判据见 [`assets/SPEC-DM-016/README.md`](assets/SPEC-DM-016/README.md) §五。
+未执行前不得声明 G9 通过。
+
 ## 13. 非目标与变更控制
 
 首版不实现：

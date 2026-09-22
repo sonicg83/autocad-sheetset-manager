@@ -1,3 +1,13 @@
+## 2026-09-22（交付图纸标准平台与编辑器：证据、全量验证与文档收口）
+
+- 视觉证据：新增 `web/tests/e2e/standards-visual-evidence.spec.ts`，输出 G4 冻结状态集 12 张（欢迎页/标准库/属性定义/字段映射/字段组合/模板资产/发布错误页/发布成功详情各 1440×900 浅色，加欢迎页深色、标准库深色、发布错误页深色、字段映射 900×768 窄视口）；抓图参数固定（固定时钟、禁用动画、等待字体、blur 活动焦点、鼠标归位），默认只留测试附件，`DST_MANAGER_STANDARDS_EVIDENCE=g4|production` 才写入仓库。证据存于 [`docs/dst-manager/specs/assets/SPEC-DM-016/`](docs/dst-manager/specs/assets/SPEC-DM-016/README.md)（生产证据在 `production/`），12 对逐张 **SHA-256 相同**（首轮发现的 1 处焦点/光标类 19 像素差已在抓图前 blur 活动焦点后消失）。
+- 可访问性/交互小修（证据阶段发现）：发布检查页打开时隐藏顶部的同名入口，避免两个「返回编辑」按钮重名；映射表目标单元格补 `data-testid`；未覆盖源值摘要补 `data-testid="mapping-uncovered-summary"`，供错误跳转聚焦。
+- SPEC-DM-016：§12.2 后补 §12.3 场景追踪矩阵（ST-UI-01～12 → 自动化用例、生产截图、执行者/日期、未关闭差异）、证据目录链接与 G9 状态。
+- 计划收口：PLAN-DM-035 全部复选框勾选、`status: completed`，追加「实际验证摘要」（交付范围、自动化门禁、G8/G9、全量门禁执行记录、环境修复记录、残余风险）：check:api/check:i18n（1253 键）/check:ui/build 全过；`test:unit` 221；全量 `test:e2e` **612 passed / 0 failed**（4.8 分钟）；`ruff` 通过；`pytest` **1561 passed / 72 skipped / 0 failed**；`alembic upgrade head` 在全新临时库上 0001→0006 全部通过；`uv lock --check` 通过；`DST_MANAGER_RUN_AUTOCAD=1 tests/system_autocad -k layout` 30 passed / 2 failed（失败为 PLAN-DM-031 attempt 命名空间后的过期快照路径断言，与标准平台无关）；双版本 CAD 标准资产检查实测通过（2016/2020 均只读枚举布局 `['0000 封面']`、图幅不一致返回 `STANDARD_LAYOUT_NAME_MISMATCH`、DWG sha256 与 mtime 未变）；完整 68 项 CAD 套件未运行（子集已 17 分钟，与标准平台无关）。
+- 环境修复（无仓库内容变化）：`scripts/setup.bat` 工作区行尾为 LF 导致 `cmd` 无法执行、`tests/unit/test_setup_bat.py` 6 项失败；按 `core.autocrlf=true` 约定恢复 CRLF 后全部通过（索引无差异）。
+- 文档索引：`docs/dst-manager/README.md` 与 `.planning/plans/dst-manager/README.md` 更新 SPEC-DM-016 / PLAN-DM-035 状态与证据链接；删除已被计划与实际验证摘要取代的临时接手文档 `PLAN-DM-035-handoff-2026-09-22-task10.md`（其内容已进入计划与 SPEC 追踪矩阵）。
+- 残余风险（已在计划与证据 README 登记）：草稿资产文件本体无写入端点（只编辑声明，缺失由 `STANDARD_ASSET_FILE_MISSING` 阻断发布）；版本说明以顶层 `release_notes` 随文档保存而不进入领域校验；`STANDARD_*` 错误码未登记进 message catalog；G9 真实桌面验收待用户执行。
+
 ## 2026-09-22（实现标准模板资产与发布检查界面）
 
 - 新增 `web/src/features/standards/publishModel.ts`（纯函数，11 项单测）：`buildPublishGate` 把结构诊断、资产检查结果、检查失败归一为 `{blockingErrors, warnings, inspectionFailures, counts, canPublish}`；`compareLayouts`/`declaredRoles`/`nonModelLayouts` 做严格的图幅比较（`"A3 "` ≠ `"A3"`，去声明与多未声明都阻断）；`assetReferences`/`hasReferenceSources` 推导资产在标准中的引用位置（属性枚举、规则固定值/允许值/映射目标/固定文本片段），未被引用的有效布局资产只给警告；`structureIssue` 把诊断映射到检查域与跳转目标（映射行号 / 未覆盖摘要 / 资产）。检查本身失败与标准错误分开呈现：两者都阻断发布，但前者不当成「标准存在错误」。后端仍是权威，同一问题在后端返回时使用同一稳定码。

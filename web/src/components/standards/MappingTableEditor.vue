@@ -205,7 +205,7 @@ watch(
               <td>
                 <label class="cell-label">
                   <span class="cell-label-text">{{ $t("standards.mapping.targetColumn") }}</span>
-                  <input v-model="row[1]" class="cell-input">
+                  <input v-model="row[1]" class="cell-input" :data-testid="`mapping-target-${ruleIndex}-${rowIndex}`">
                 </label>
               </td>
               <td>

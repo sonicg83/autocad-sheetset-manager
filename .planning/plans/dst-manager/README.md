@@ -5,7 +5,7 @@
 
 - [图纸标准校验与 HTML JSON 报告实施计划（PLAN-DM-037，proposed）](PLAN-DM-037-standard-validation-reports.md)：从统一验证结果模型生成同源 HTML/JSON 报告，不创建归档包。
 - [标准驱动的新图纸集创建实施计划（PLAN-DM-036，proposed）](PLAN-DM-036-standard-driven-sheetset-creation.md)：从已发布标准生成 DST/DWG，经预览和原子发布后直接进入普通工作区。
-- [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，proposed）](PLAN-DM-035-drawing-standard-platform.md)：建立官方/用户标准库、封闭规则、模板资产和普通用户标准编辑器；前端按已接受的 [SPEC-DM-016](../../../docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) 实现打开优先欢迎页、主从分栏标准库、映射表和独立发布检查页。
+- [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，completed——Task 1–11 已完成，**仅剩 G9 真实桌面验收待用户执行**；建立官方/用户标准库、封闭规则、模板资产和普通用户标准编辑器；前端按已接受的 [SPEC-DM-016](../../../docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) 实现打开优先欢迎页、主从分栏标准库、映射表和独立发布检查页。实际验证：check:api/check:i18n（1253 键）/check:ui/build 全过、test:unit 221、全量 e2e **612 passed / 0 failed**（4.8 分钟）、ruff、pytest **1561 passed / 72 skipped / 0 failed**、alembic 全新库升级到 head、uv lock 全过；双版本 CAD 标准资产检查实测通过（2016/2020 均只读枚举布局且 DWG sha256/mtime 未变），`-k layout` 的 CAD 套件 2 项失败为 PLAN-DM-031 attempt 命名空间后的过期断言（与标准平台无关）；G4/G8 证据各 12 张逐张像素一致，G9 清单见 [assets/SPEC-DM-016](../../../docs/dst-manager/specs/assets/SPEC-DM-016/README.md)；残余风险见计划 §实际验证摘要）](PLAN-DM-035-drawing-standard-platform.md)：建立官方/用户标准库、封闭规则、模板资产和普通用户标准编辑器；前端按已接受的 [SPEC-DM-016](../../../docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) 实现打开优先欢迎页、主从分栏标准库、映射表和独立发布检查页。
 
 ## 阶段顺序
 

@@ -72,7 +72,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 - [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭；同场景的编号种子缺陷（删除不编号子集使后续子集重编为 0 起）已由 PLAN-DM-032 修复，§行为 3/§行为 5 表述已按实现校正）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
-- [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、分区草稿编辑器、表格式字段映射、模板资产检查与独立发布检查页，实施计划 PLAN-DM-035）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
+- [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、分区草稿编辑器、表格式字段映射、模板资产检查与独立发布检查页，实施计划 PLAN-DM-035 已完成；ST-UI-01～12 追踪矩阵见该规范 §12.3，G4 冻结件与 G8 生产证据各 12 张（逐张像素一致）存于 [assets/SPEC-DM-016](specs/assets/SPEC-DM-016/README.md)，G9 待真实桌面验收）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 
 ## 研究与分析
 

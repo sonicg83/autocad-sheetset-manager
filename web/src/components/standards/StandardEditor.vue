@@ -278,10 +278,9 @@ defineExpose({guard, isDirty: () => dirty.value});
           :aria-disabled="!dirty && !saving"
           @click="save"
         >{{ $t("standards.editor.saveDraft") }}</UiButton>
-        <UiButton
-          variant="secondary"
-          @click="view === 'review' ? (view = 'sections') : openReview()"
-        >{{ $t(view === "review" ? "standards.publish.back" : "standards.editor.publishCheck") }}</UiButton>
+        <UiButton v-if="view === 'sections'" variant="secondary" @click="openReview">
+          {{ $t("standards.editor.publishCheck") }}
+        </UiButton>
         <UiButton variant="secondary" @click="guard(() => emit('close'))">{{ $t("standards.editor.back") }}</UiButton>
       </div>
     </header>
