@@ -11,7 +11,7 @@ from pathlib import Path
 
 from dst_manager.application.errors import ApplicationError
 from dst_manager.domain.models import Severity, ValidationIssue
-from dst_manager.domain.standards import parse_standard_document
+from dst_manager.domain.standards import parse_standard_draft_document
 from dst_manager.infrastructure.acsm_xml import AcsmValidationError
 from dst_manager.infrastructure.dst_codec import CodecError
 from dst_manager.infrastructure.standards.dst_import import (
@@ -50,7 +50,7 @@ class StandardAssetOperations:
         draft = self.standard_store.get_draft(draft_id)
         if draft is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
-        standard = parse_standard_document(draft.document)
+        standard = parse_standard_draft_document(draft.document)
         asset = next(
             (item for item in standard.assets if item.asset_id == asset_id), None
         )

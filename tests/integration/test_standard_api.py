@@ -1,16 +1,20 @@
-"""标准管理 API 契约（PLAN-DM-035 Task 6）：列表/草稿/发布/导入/导出/资产检查。
+"""标准管理 API 契约（PLAN-DM-035 Task 6 / PLAN-DM-038 Task 4）。
 
 覆盖：已发布版本 PUT 稳定 409 ``STANDARD_VERSION_IMMUTABLE``、草稿全生命周期、
-受信扩展依赖缺失时发布以 409 ``STANDARD_DEPENDENCY_MISSING`` 拒绝、包导入与
-导出、资产检查诊断透传。路由只做请求/响应转换，业务在应用层。
+草稿可保存语义未完成内容但发布被门禁拒绝、发布 warning 随响应返回、受信扩展
+依赖缺失时发布以 409 ``STANDARD_DEPENDENCY_MISSING`` 拒绝、包导入与导出、
+资产检查诊断透传。路由只做请求/响应转换，业务在应用层。
 """
 
+import copy
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from yaml import safe_dump
 
+from dst_manager.application.errors import ApplicationError
+from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import BuiltinExtensionEntry
 from dst_manager.interfaces.api import create_app
@@ -21,8 +25,32 @@ DRAFT_DOCUMENT = {
     "version": "0.1.0",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
-    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
-    "rules": [],
+    "properties": [
+        {
+            "property_id": "prop-major",
+            "name": "专业",
+            "scope": "sheetset",
+            "kind": "enum",
+            "required": True,
+            "enum_items": [{"item_id": "enum-gas", "value": "燃气"}],
+        },
+        {
+            "property_id": "prop-code",
+            "name": "专业代码",
+            "scope": "sheetset",
+            "kind": "mapping",
+            "source_property_id": "prop-major",
+            "mapping": [{"item_id": "enum-gas", "value": "RQ"}],
+            "confirmed_source_items": [["enum-gas", "燃气"]],
+        },
+    ],
+    "dwg_naming": {
+        "segments": [
+            {"system_field": "subset.scope"},
+            {"literal": " "},
+            {"system_field": "subset.name"},
+        ]
+    },
     "assets": [],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
 }
@@ -37,6 +65,18 @@ DEPENDENT_DOCUMENT = {
         },
     ],
 }
+
+
+def incomplete_mapping_document() -> dict:
+    """有效夹具的派生副本：映射目标留空，草稿可保存但不可发布。"""
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["properties"][1]["mapping"][0]["value"] = ""
+    return document
+
+
+@pytest.fixture
+def service(tmp_path: Path) -> DstManagerService:
+    return DstManagerService(Settings(data_dir=tmp_path / "data"))
 
 
 class _NoopExtension:
@@ -154,7 +194,62 @@ def test_publish_satisfied_trusted_dependency(tmp_path: Path) -> None:
         "standard_id": "szmedi.gas",
         "version": "0.1.0",
         "name": "市政燃气施工图",
+        "diagnostics": [],
     }
+
+
+def test_incomplete_mapping_draft_saves_but_does_not_publish(service) -> None:
+    saved = service.create_standard_draft(incomplete_mapping_document())
+    with pytest.raises(ApplicationError) as exc:
+        service.publish_standard(saved["draft_id"])
+    assert exc.value.code == "STANDARD_MAPPING_TARGET_EMPTY"
+    assert service.get_standard_draft(saved["draft_id"])
+
+
+def test_incomplete_mapping_draft_http_publish_returns_422(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, incomplete_mapping_document(), "draft-incomplete")
+    response = client.post("/api/standards/drafts/draft-incomplete/publish")
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_MAPPING_TARGET_EMPTY"
+    # 草稿目录未被移动，也没有产生已发布标准。
+    assert client.get("/api/standards/drafts/draft-incomplete").status_code == 200
+    assert [
+        item for item in client.get("/api/standards").json() if item["status"] == "published"
+    ] == []
+
+
+def test_publish_returns_mapping_confirmation_warning(tmp_path: Path) -> None:
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    # 枚举改名：enum_item_id 不变，映射目标保留，但进入待确认 warning。
+    document["properties"][0]["enum_items"][0]["value"] = "城镇燃气"
+    client = make_client(tmp_path)
+    make_draft(client, document, "draft-renamed")
+    response = client.post("/api/standards/drafts/draft-renamed/publish")
+    assert response.status_code == 200, response.text
+    assert response.json()["diagnostics"] == [
+        {
+            "code": "STANDARD_MAPPING_CONFIRMATION_REQUIRED",
+            "severity": "warning",
+            "message": "映射属性 'prop-code' 的源枚举列表已变化，请确认映射",
+            "property_id": "prop-code",
+            "segment_index": None,
+        }
+    ]
+
+
+def test_publish_rejects_legacy_rules_document(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    legacy = copy.deepcopy(DRAFT_DOCUMENT)
+    legacy["properties"] = [{"name": "专业名称", "scope": "sheetset"}]
+    legacy["rules"] = [
+        {"rule_id": "r1", "kind": "required", "target": "sheetset.专业名称"}
+    ]
+    response = client.post(
+        "/api/standards/drafts", json={"draft_id": "legacy", "document": legacy}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_PROPERTY_ID_INVALID"
 
 
 def test_invalid_draft_document_rejected(tmp_path: Path) -> None:
@@ -235,9 +330,21 @@ def test_dst_import_endpoint(tmp_path: Path, tiny_workspace) -> None:
     body = response.json()
     assert body["subsets"] == []
     assert body["external_paths"] == []
+    assert body["document"]["dwg_naming"] == {
+        "segments": [
+            {"system_field": "subset.scope"},
+            {"literal": " "},
+            {"system_field": "subset.name"},
+        ]
+    }
     assert body["document"]["properties"] and {
         (item["name"], item["scope"]) for item in body["document"]["properties"]
     } == {("比例", "sheet"), ("项目号", "sheetset")}
+    assert all(item["kind"] == "text" for item in body["document"]["properties"])
+    assert all(
+        item["property_id"] and item["previous_names"] == []
+        for item in body["document"]["properties"]
+    )
 
 
 def test_dst_import_endpoint_rejects_invalid_source(tmp_path: Path) -> None:

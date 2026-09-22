@@ -9,6 +9,10 @@
 发布与导入只允许向用户根写入；同一 ``standard_id + version`` 的重复发布、
 导入碰撞与官方身份冲突一律以 ``STANDARD_VERSION_EXISTS`` 稳定拒绝。
 目录迁移使用同盘原子 rename，已发布内容不被原地修改。
+
+草稿写入只过**结构**门禁（``parse_standard_draft_document``），允许保存语义
+未完成内容；读取已发布内容与发布草稿时过**完整发布**门禁
+（``parse_published_standard_document``）。
 """
 
 from __future__ import annotations
@@ -22,10 +26,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from dst_manager.domain.standards import DrawingStandard, parse_standard_document
+from dst_manager.domain.standard_naming import publish_naming_diagnostics
+from dst_manager.domain.standard_rules import publish_diagnostics
+from dst_manager.domain.standards import (
+    DrawingStandard,
+    StandardSchemaError,
+    parse_published_standard_document,
+    parse_standard_draft_document,
+)
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
 from dst_manager.infrastructure.standards.package import (
     MANIFEST_NAME,
+    LoadedStandardPackage,
     StandardPackageError,
     StandardPackageReader,
 )
@@ -148,7 +160,7 @@ class StandardStore:
         for root in (self._published_root, self._official_root):
             document = root / standard_id / version / DOCUMENT_NAME
             if document.is_file():
-                return parse_standard_document(
+                return parse_published_standard_document(
                     json.loads(document.read_text(encoding="utf-8"))
                 )
         return None
@@ -188,8 +200,8 @@ class StandardStore:
     def create_draft(
         self, document: Mapping[str, object], draft_id: str | None = None
     ) -> StandardDraft:
-        """保存一份草稿文档；文档必须能通过 Schema 校验。"""
-        parse_standard_document(document)  # 提前拒绝非法草稿
+        """保存一份草稿文档；只要求结构合法，允许语义未完成内容。"""
+        parse_standard_draft_document(document)  # 提前拒绝结构非法的草稿
         draft_id = draft_id or f"draft-{uuid.uuid4().hex[:12]}"
         target = self._drafts_root / draft_id
         if target.exists():
@@ -203,7 +215,7 @@ class StandardStore:
         return StandardDraft(draft_id=draft_id, document=dict(document))
 
     def save_draft(self, draft_id: str, document: Mapping[str, object]) -> StandardDraft:
-        parse_standard_document(document)
+        parse_standard_draft_document(document)
         target = self._drafts_root / draft_id
         if not (target / DOCUMENT_NAME).is_file():
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
@@ -228,7 +240,7 @@ class StandardStore:
         draft = self.get_draft(draft_id)
         if draft is None:
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
-        standard = parse_standard_document(draft.document)
+        standard = _published_or_store_error(draft.document)
         target = self._assert_identity_free(standard.standard_id, standard.version)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -242,12 +254,22 @@ class StandardStore:
             root=target,
         )
 
-    def import_package(self, path: Path) -> PublishedStandard:
+    def read_package(self, path: Path) -> LoadedStandardPackage:
+        """读取并校验标准包（不落库），供应用层发布门禁先行判定。"""
         try:
-            loaded = self._reader.read(path)
+            return self._reader.read(Path(path))
         except StandardPackageError as exc:
             raise _error("STANDARD_PACKAGE_INVALID", str(exc)) from exc
+
+    def import_package(
+        self, path: Path, loaded: LoadedStandardPackage | None = None
+    ) -> PublishedStandard:
+        """导入标准包；包内文档必须通过完整发布门禁，失败不落库。"""
+        loaded = loaded if loaded is not None else self.read_package(path)
         standard = loaded.standard
+        gate = _publish_gate_error(standard)
+        if gate is not None:
+            raise gate
         target = self._assert_identity_free(standard.standard_id, standard.version)
         target.parent.mkdir(parents=True, exist_ok=True)
         staging = self._published_root / f".import-{uuid.uuid4().hex}"
@@ -319,6 +341,29 @@ class StandardStore:
                     if file.is_file():
                         archive.write(file, arcname=file.relative_to(source).as_posix())
         return package
+
+
+def _published_or_store_error(document: Mapping[str, object]) -> DrawingStandard:
+    """发布路径的完整门禁：Schema 解析 + 派生/命名发布诊断。"""
+    try:
+        standard = parse_published_standard_document(document)
+    except StandardSchemaError as exc:
+        raise StandardStoreError(str(exc)) from exc
+    gate = _publish_gate_error(standard)
+    if gate is not None:
+        raise gate
+    return standard
+
+
+def _publish_gate_error(standard: DrawingStandard) -> StandardStoreError | None:
+    """首个发布阻断错误；warning 不阻断。仓储层保留一份防线，不得绕过。"""
+    for diagnostic in (
+        *publish_diagnostics(standard),
+        *publish_naming_diagnostics(standard),
+    ):
+        if diagnostic.is_error:
+            return StandardStoreError(f"{diagnostic.code}: {diagnostic.message}")
+    return None
 
 
 def _norm(name: str) -> str:

@@ -1,4 +1,4 @@
-"""官方/用户标准库仓储测试（PLAN-DM-035 Task 3）。"""
+"""官方/用户标准库仓储测试（PLAN-DM-035 Task 3 / PLAN-DM-038 Task 4）。"""
 
 import json
 import zipfile
@@ -6,32 +6,71 @@ from pathlib import Path
 
 import pytest
 
+from dst_manager.domain.standards import StandardSchemaError
 from dst_manager.infrastructure.standards.package import StandardPackageReader
 from dst_manager.infrastructure.standards.store import (
     StandardStore,
     StandardStoreError,
 )
 
-OFFICIAL_DOCUMENT = {
-    "schema_version": 1,
-    "standard_id": "official.gas",
-    "version": "1.0.0",
-    "name": "官方燃气标准",
-    "supported_cad_versions": ["2016", "2020"],
-    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
-    "rules": [],
-    "assets": [],
-    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
-}
 
-USER_DOCUMENT = {
+def standard_document(
+    *,
+    standard_id: str = "user.water",
+    version: str = "3.0.0",
+    name: str = "用户给排水标准",
+    mapping_target: str = "GS",
+) -> dict[str, object]:
+    """Schema v1 最小文档：枚举源 + 映射 + 默认 DWG 命名。"""
+    return {
+        "schema_version": 1,
+        "standard_id": standard_id,
+        "version": version,
+        "name": name,
+        "supported_cad_versions": ["2020"],
+        "properties": [
+            {
+                "property_id": "prop-major",
+                "name": "专业",
+                "scope": "sheetset",
+                "kind": "enum",
+                "enum_items": [{"item_id": "enum-water", "value": "给水"}],
+            },
+            {
+                "property_id": "prop-code",
+                "name": "专业代码",
+                "scope": "sheetset",
+                "kind": "mapping",
+                "source_property_id": "prop-major",
+                "mapping": [{"item_id": "enum-water", "value": mapping_target}],
+                "confirmed_source_items": [["enum-water", "给水"]],
+            },
+        ],
+        "dwg_naming": {
+            "segments": [
+                {"system_field": "subset.scope"},
+                {"literal": " "},
+                {"system_field": "subset.name"},
+            ]
+        },
+        "assets": [],
+        "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+    }
+
+
+OFFICIAL_DOCUMENT = standard_document(
+    standard_id="official.gas", version="1.0.0", name="官方燃气标准"
+)
+USER_DOCUMENT = standard_document()
+
+LEGACY_DOCUMENT = {
     "schema_version": 1,
-    "standard_id": "user.water",
-    "version": "3.0.0",
-    "name": "用户给排水标准",
+    "standard_id": "legacy.rules",
+    "version": "1.0.0",
+    "name": "旧通用规则标准",
     "supported_cad_versions": ["2020"],
-    "properties": [{"name": "备注", "scope": "sheetset"}],
-    "rules": [],
+    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
+    "rules": [{"rule_id": "r1", "kind": "required", "target": "sheetset.专业名称"}],
     "assets": [],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
 }
@@ -102,6 +141,38 @@ def test_get_missing_identity_returns_none(store: StandardStore) -> None:
     assert store.get("missing.standard", "9.9.9") is None
 
 
+def test_legacy_document_rejected_by_draft_gate(store: StandardStore) -> None:
+    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
+        create_draft(store, LEGACY_DOCUMENT, draft_id="draft-legacy")
+
+
+def test_legacy_draft_document_is_rejected_not_guessed(store: StandardStore) -> None:
+    legacy_dir = store.drafts_root / "draft-legacy"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "document.json").write_text(
+        json.dumps(LEGACY_DOCUMENT, ensure_ascii=False), encoding="utf-8"
+    )
+    with pytest.raises(StandardStoreError, match="STANDARD_PROPERTY_ID_INVALID"):
+        store.publish("draft-legacy")
+    assert (legacy_dir / "document.json").is_file()
+
+
+def test_draft_saves_semantically_incomplete_mapping(store: StandardStore) -> None:
+    draft = create_draft(store, standard_document(mapping_target=""), draft_id="draft-1")
+    assert draft.document["standard_id"] == "user.water"
+    assert store.get_draft("draft-1") is not None
+
+
+def test_publish_rejects_incomplete_draft_without_moving_directory(
+    store: StandardStore,
+) -> None:
+    create_draft(store, standard_document(mapping_target=""), draft_id="draft-1")
+    with pytest.raises(StandardStoreError, match="STANDARD_MAPPING_TARGET_EMPTY"):
+        store.publish("draft-1")
+    assert (store.drafts_root / "draft-1" / "document.json").is_file()
+    assert store.get("user.water", "3.0.0") is None
+
+
 def test_import_package_collides_with_existing(store: StandardStore, tmp_path: Path) -> None:
     create_draft(store, USER_DOCUMENT, draft_id="draft-1")
     store.publish("draft-1")
@@ -110,6 +181,20 @@ def test_import_package_collides_with_existing(store: StandardStore, tmp_path: P
         archive.writestr("manifest.json", json.dumps(USER_DOCUMENT, ensure_ascii=False))
     with pytest.raises(StandardStoreError, match="STANDARD_VERSION_EXISTS"):
         store.import_package(package)
+
+
+def test_import_package_rejects_incomplete_document(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    package = tmp_path / "incomplete.dststandard"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps(standard_document(mapping_target=""), ensure_ascii=False),
+        )
+    with pytest.raises(StandardStoreError, match="STANDARD_MAPPING_TARGET_EMPTY"):
+        store.import_package(package)
+    assert store.get("user.water", "3.0.0") is None
 
 
 def test_import_export_round_trip(store: StandardStore, tmp_path: Path) -> None:
@@ -126,6 +211,17 @@ def test_import_export_round_trip(store: StandardStore, tmp_path: Path) -> None:
     assert fresh.get("user.water", "3.0.0") is not None
 
 
+def test_round_trip_preserves_stable_ids_and_tokens(store: StandardStore, tmp_path: Path) -> None:
+    document = standard_document()
+    create_draft(store, document, draft_id="draft-1")
+    store.publish("draft-1")
+    exported = store.export_package("user.water", "3.0.0", tmp_path / "out")
+    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
+    fresh.import_package(exported)
+    restored = fresh.get_document("user.water", "3.0.0")
+    assert restored == document
+
+
 def test_draft_save_and_get(store: StandardStore) -> None:
     draft = create_draft(store, USER_DOCUMENT, draft_id="draft-1")
     assert draft.draft_id == "draft-1"
@@ -137,3 +233,10 @@ def test_draft_save_and_get(store: StandardStore) -> None:
 def test_publish_missing_draft_fails(store: StandardStore) -> None:
     with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_NOT_FOUND"):
         store.publish("nope")
+
+
+def test_get_rejects_legacy_rules_document(store: StandardStore, tmp_path: Path) -> None:
+    official_root = tmp_path / "official"
+    write_official(official_root, LEGACY_DOCUMENT)
+    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
+        store.get("legacy.rules", "1.0.0")

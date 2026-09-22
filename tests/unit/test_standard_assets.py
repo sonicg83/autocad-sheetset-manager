@@ -21,7 +21,13 @@ DRAFT_DOCUMENT = {
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [],
-    "rules": [],
+    "dwg_naming": {
+        "segments": [
+            {"system_field": "subset.scope"},
+            {"literal": " "},
+            {"system_field": "subset.name"},
+        ]
+    },
     "assets": [
         {
             "asset_id": "layouts",

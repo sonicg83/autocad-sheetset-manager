@@ -16,8 +16,23 @@ GAS_DOCUMENT = {
     "version": "2.1.0",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
-    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
-    "rules": [],
+    "properties": [
+        {
+            "property_id": "prop-major",
+            "name": "专业",
+            "scope": "sheetset",
+            "kind": "enum",
+            "required": True,
+            "enum_items": [{"item_id": "enum-gas", "value": "燃气"}],
+        }
+    ],
+    "dwg_naming": {
+        "segments": [
+            {"system_field": "subset.scope"},
+            {"literal": " "},
+            {"system_field": "subset.name"},
+        ]
+    },
     "assets": [],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
 }

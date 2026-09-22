@@ -9,6 +9,15 @@ from pydantic import Field
 from dst_manager.interfaces.contracts import ContractModel
 
 
+class StandardDiagnosticModel(ContractModel):
+    code: str
+    severity: str
+    message: str
+    #: 诊断定位：属性 ID 与令牌片段序号，供发布检查跳转并聚焦。
+    property_id: str | None = None
+    segment_index: int | None = None
+
+
 class StandardSummaryModel(ContractModel):
     source: str
     status: str
@@ -43,6 +52,8 @@ class StandardPublishResponse(ContractModel):
     standard_id: str
     version: str
     name: str
+    #: 发布检查诊断：成功发布时只可能包含 warning（error 已转 422）。
+    diagnostics: list[StandardDiagnosticModel] = Field(default_factory=list)
 
 
 class StandardPathRequest(ContractModel):
@@ -71,12 +82,6 @@ class StandardDetailResponse(ContractModel):
 
 class StandardAssetInspectRequest(ContractModel):
     cad_version: str
-
-
-class StandardDiagnosticModel(ContractModel):
-    code: str
-    severity: str
-    message: str
 
 
 class AssetInspectionResponse(ContractModel):

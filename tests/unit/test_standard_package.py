@@ -1,4 +1,4 @@
-"""标准包（.dststandard）安全读取测试（PLAN-DM-035 Task 3）。"""
+"""标准包（.dststandard）安全读取测试（PLAN-DM-035 Task 3 / PLAN-DM-038 Task 4）。"""
 
 import json
 import zipfile
@@ -18,8 +18,31 @@ VALID_MANIFEST = json.dumps(
         "version": "2.1.0",
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
-        "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
-        "rules": [],
+        "properties": [
+            {
+                "property_id": "prop-major",
+                "name": "专业",
+                "scope": "sheetset",
+                "kind": "enum",
+                "enum_items": [{"item_id": "enum-gas", "value": "燃气"}],
+            },
+            {
+                "property_id": "prop-code",
+                "name": "专业代码",
+                "scope": "sheetset",
+                "kind": "mapping",
+                "source_property_id": "prop-major",
+                "mapping": [{"item_id": "enum-gas", "value": "RQ"}],
+                "confirmed_source_items": [["enum-gas", "燃气"]],
+            },
+        ],
+        "dwg_naming": {
+            "segments": [
+                {"system_field": "subset.scope"},
+                {"literal": " "},
+                {"system_field": "subset.name"},
+            ]
+        },
         "assets": [
             {
                 "asset_id": "layouts",
@@ -27,6 +50,21 @@ VALID_MANIFEST = json.dumps(
                 "files": [{"path": "assets/A2.dwg", "role": "A2"}],
             }
         ],
+        "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+    },
+    ensure_ascii=False,
+)
+
+LEGACY_MANIFEST = json.dumps(
+    {
+        "schema_version": 1,
+        "standard_id": "legacy.rules",
+        "version": "1.0.0",
+        "name": "旧通用规则标准",
+        "supported_cad_versions": ["2020"],
+        "properties": [{"name": "专业名称", "scope": "sheetset"}],
+        "rules": [{"rule_id": "r1", "kind": "required", "target": "sheetset.专业名称"}],
+        "assets": [],
         "numbering": {"sequence_field": "subset.sequence", "digits": 2},
     },
     ensure_ascii=False,
@@ -99,6 +137,20 @@ def test_package_rejects_oversized_entry(tmp_path: Path) -> None:
         {"manifest.json": VALID_MANIFEST, "assets/huge.dwg": b"x" * (65 * 1024 * 1024)},
     )
     with pytest.raises(StandardPackageError, match="STANDARD_PACKAGE_TOO_LARGE"):
+        StandardPackageReader().read(package)
+
+
+def test_package_rejects_legacy_rules_manifest(tmp_path: Path) -> None:
+    package = write_zip(tmp_path, {"manifest.json": LEGACY_MANIFEST})
+    with pytest.raises(StandardPackageError, match="STANDARD_PACKAGE_MANIFEST_INVALID"):
+        StandardPackageReader().read(package)
+
+
+def test_package_rejects_missing_dwg_naming(tmp_path: Path) -> None:
+    manifest = json.loads(VALID_MANIFEST)
+    del manifest["dwg_naming"]
+    package = write_zip(tmp_path, {"manifest.json": json.dumps(manifest, ensure_ascii=False)})
+    with pytest.raises(StandardPackageError, match="STANDARD_DWG_NAMING_MISSING"):
         StandardPackageReader().read(package)
 
 
