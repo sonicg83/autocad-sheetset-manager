@@ -1,14 +1,9 @@
----
-id: ASSETS-DM-016
-title: SPEC-DM-016 图纸标准管理 UI 视觉证据与验收记录
-status: accepted
-created: 2026-09-22
-related:
-- SPEC-DM-016
-- PLAN-DM-035
----
-
 # SPEC-DM-016 视觉证据与验收记录（PLAN-DM-035 Task 11）
+
+> 本文件是 SPEC-DM-016 的证据目录索引（证据清单、逐对裁决、G9 清单），随
+> [SPEC-DM-016](../../SPEC-DM-016-drawing-standard-management-ui.md)（status: accepted）与
+> [PLAN-DM-035](../../../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)
+> （status: completed）一同维护；无独立文档 ID，不进入正式文档编号序列。
 
 本目录保存图纸标准管理 UI 的冻结状态证据（G4）与生产证据（G8），以及逐对裁决、自动化验收
 承接关系和真实桌面检查清单（G9）。证据由 `web/tests/e2e/standards-visual-evidence.spec.ts`
