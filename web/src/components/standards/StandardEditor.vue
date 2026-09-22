@@ -19,6 +19,8 @@ import StandardPropertyEditor from "./StandardPropertyEditor.vue";
 import StandardRulesEditor from "./StandardRulesEditor.vue";
 import MappingTableEditor from "./MappingTableEditor.vue";
 import CompositionEditor from "./CompositionEditor.vue";
+import TemplateAssetsEditor from "./TemplateAssetsEditor.vue";
+import StandardPublishReview from "./StandardPublishReview.vue";
 import {
   cloneDocument,
   EDITOR_SECTIONS,
@@ -26,11 +28,13 @@ import {
   COMPOSITION_RULE_KINDS,
   toDraftDocument,
   validateDraftStructure,
+  type DraftAsset,
   type DraftDocument,
   type EditorSectionId,
   type StructureDiagnostic,
 } from "../../features/standards/draftModel";
-import type {StandardDraft} from "../../features/standards/types";
+import type {InspectionFailure, PublishTarget} from "../../features/standards/publishModel";
+import type {AssetInspection, StandardDraft} from "../../features/standards/types";
 
 type GuardChoice = "save" | "discard" | "stay";
 
@@ -38,10 +42,15 @@ const props = defineProps<{
   draft: StandardDraft;
   /** 保存回写：成功时返回服务端文档（作为新的可信基准），失败时抛出。 */
   saveDraft: (document: Record<string, unknown>) => Promise<Record<string, unknown>>;
-  /** 发布检查页由 Task 10 提供；未交付时按钮禁用并显示原因。 */
-  publishAvailable?: boolean;
+  /** 资产检查：按草稿与资产标识调用后端固定读取协议。 */
+  inspectAsset: (assetId: string, cadVersion: string) => Promise<AssetInspection>;
+  /** 发布：成功时后端已把草稿移入已发布目录（草稿不复存在）。 */
+  publishDraft: () => Promise<void>;
+  /** 官方标准的资产声明（只读参考）；无可对照官方标准时为空数组。 */
+  officialAssets?: DraftAsset[];
+  officialStandardId?: string;
 }>();
-const emit = defineEmits<{close: []; publishCheck: []}>();
+const emit = defineEmits<{close: []}>();
 
 // 基线必须与缓冲经过同一规范化：否则刚加载就会因补齐 `dependencies` 等默认键而被误判为
 // 有未保存修改（假 dirty 会让保存按钮在白名单文档上提前可点）。
@@ -52,7 +61,15 @@ const active = ref<EditorSectionId>("basic");
 const saving = ref(false);
 const saveError = ref("");
 const guardOpen = ref(false);
-const focusRequest = ref<{section: EditorSectionId; ruleId?: string; row?: number} | null>(null);
+/** 编辑分区视图与发布检查页（SPEC-DM-016 §9.1 的独立检查页）。 */
+const view = ref<"sections" | "review">("sections");
+const inspections = ref<AssetInspection[]>([]);
+const inspectionFailures = ref<InspectionFailure[]>([]);
+const inspectionPending = ref(false);
+const inspectedAt = ref("");
+const publishPending = ref(false);
+const publishError = ref("");
+const focusRequest = ref<{section: EditorSectionId; ruleId?: string; row?: number | null} | null>(null);
 let guardResolver: ((choice: GuardChoice) => void) | null = null;
 
 // 同一草稿重新加载（相同 draft_id）不重置缓冲，避免覆盖用户正在进行的输入
@@ -91,6 +108,20 @@ const cadVersionsText = computed({
     buffer.value.supported_cad_versions = String(value).split(",").map(item => item.trim()).filter(Boolean);
   },
 });
+/** 版本说明：草稿文档的自由文本字段（不进入领域 Schema，随草稿本体保存与导出）。 */
+const releaseNotes = computed({
+  get: () => typeof buffer.value.release_notes === "string" ? buffer.value.release_notes : "",
+  set: (value: string) => { buffer.value.release_notes = value; },
+});
+const cadVersion = computed(() => buffer.value.supported_cad_versions[0] ?? "");
+
+// 进入资产分区或发布检查页时自动做一次检查（尚未检查过才跑），避免面板停在「尚未检查」
+watch([active, view], () => {
+  if (view.value === "review") return; // 检查页自行触发并等待结果
+  if (active.value !== "assets") return;
+  if (inspectedAt.value !== "" || inspectionPending.value) return;
+  void runInspections();
+});
 
 /** 诊断 → 分区定位：按规则种类决定跳转分区，行级诊断带上行号。 */
 function sectionOfDiagnostic(item: StructureDiagnostic): EditorSectionId {
@@ -104,10 +135,67 @@ function sectionOfDiagnostic(item: StructureDiagnostic): EditorSectionId {
 async function jumpToDiagnostic(item: StructureDiagnostic): Promise<void> {
   const section = sectionOfDiagnostic(item);
   active.value = section;
-  focusRequest.value = {section, ruleId: item.ruleId, row: item.row};
+  focusRequest.value = {section, ruleId: item.ruleId, row: item.row ?? null};
   await nextTick();
-  if (section === "mapping" && item.row !== undefined) return; // 行内组件自行聚焦
+  if (section === "mapping") return; // 行内组件自行聚焦（行号或未覆盖摘要）
   focusRequest.value = null;
+}
+
+/** 发布检查页的问题跳转：回到对应分区并聚焦到映射行/未覆盖摘要。 */
+async function jumpFromReview(target: PublishTarget): Promise<void> {
+  view.value = "sections";
+  active.value = target.section;
+  focusRequest.value = target.section === "mapping"
+    ? {section: "mapping", ruleId: target.ruleId, row: target.row ?? null}
+    : null;
+  await nextTick();
+}
+
+/** 资产检查：逐个声明资产调用后端固定读取协议；检查失败与标准错误分开记录。 */
+async function runInspections(): Promise<void> {
+  if (inspectionPending.value) return;
+  inspectionPending.value = true;
+  inspections.value = [];
+  const failures: InspectionFailure[] = [];
+  for (const asset of buffer.value.assets) {
+    if (cadVersion.value === "") {
+      failures.push({assetId: asset.asset_id, message: targetText("standards.assets.cadVersionMissing")});
+      continue;
+    }
+    try {
+      inspections.value = [...inspections.value, await props.inspectAsset(asset.asset_id, cadVersion.value)];
+    } catch (error) {
+      failures.push({assetId: asset.asset_id, message: errorMessage(error)});
+    }
+  }
+  inspectionFailures.value = failures;
+  inspectedAt.value = new Date().toLocaleString();
+  inspectionPending.value = false;
+}
+
+async function openReview(): Promise<void> {
+  publishError.value = "";
+  view.value = "review";
+  await runInspections();
+}
+
+/** 发布：未保存修改先落盘（发布的是服务端草稿），失败保留在检查页。 */
+async function publish(): Promise<void> {
+  if (publishPending.value) return;
+  publishError.value = "";
+  if (dirty.value) {
+    const saved = await save();
+    if (!saved) return;
+  }
+  publishPending.value = true;
+  try {
+    // 发布成功后由父层完成导航（退出编辑器 + 定位新版本只读详情），此处不自行切视图
+    await props.publishDraft();
+  } catch (error) {
+    publishError.value = errorMessage(error);
+  } finally {
+    publishPending.value = false;
+  }
 }
 
 async function save(): Promise<boolean> {
@@ -121,10 +209,10 @@ async function save(): Promise<boolean> {
     return true;
   } catch (error) {
     // 保存失败/修订冲突保留输入与 dirty 状态，只呈现错误（不静默覆盖）
-    const code = error instanceof ApiError ? error.code : undefined;
-    saveError.value = code === "STANDARD_VERSION_IMMUTABLE"
-      ? `${errorMessage(error)}｜${targetText("standards.editor.conflictHint")}`
-      : errorMessage(error);
+    const conflict = error instanceof ApiError && error.code === "STANDARD_VERSION_IMMUTABLE"
+      ? `｜${targetText("standards.editor.conflictHint")}`
+      : "";
+    saveError.value = `${errorMessage(error)}${conflict}`;
     return false;
   } finally {
     saving.value = false;
@@ -132,6 +220,11 @@ async function save(): Promise<boolean> {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    // 未知错误只给本地化摘要：把稳定码与后端原始文本一并展示，否则无法定位被拒绝的具体原因
+    const detail = error.rawMessage || error.message;
+    return error.code ? `${error.code}｜${detail}` : detail;
+  }
   if (error instanceof Error && error.message) return error.message;
   return String(error);
 }
@@ -187,14 +280,30 @@ defineExpose({guard, isDirty: () => dirty.value});
         >{{ $t("standards.editor.saveDraft") }}</UiButton>
         <UiButton
           variant="secondary"
-          :disabled="!publishAvailable"
-          :title="!publishAvailable ? $t('standards.editor.publishPending') : undefined"
-          @click="emit('publishCheck')"
-        >{{ $t("standards.editor.publishCheck") }}</UiButton>
+          @click="view === 'review' ? (view = 'sections') : openReview()"
+        >{{ $t(view === "review" ? "standards.publish.back" : "standards.editor.publishCheck") }}</UiButton>
         <UiButton variant="secondary" @click="guard(() => emit('close'))">{{ $t("standards.editor.back") }}</UiButton>
       </div>
     </header>
     <p v-if="saveError" class="editor-error" role="alert" data-testid="editor-save-error">{{ $t("standards.editor.saveFailed", {message: saveError}) }}</p>
+    <template v-if="view === 'review'">
+      <StandardPublishReview
+        :document="buffer"
+        :structure="diagnostics"
+        :assets="inspections"
+        :inspection-failures="inspectionFailures"
+        :inspection-pending="inspectionPending"
+        :publish-pending="publishPending"
+        :publish-error="publishError"
+        :release-notes="releaseNotes"
+        @publish="publish"
+        @close="view = 'sections'"
+        @recheck="runInspections"
+        @jump="jumpFromReview"
+        @update:release-notes="releaseNotes = $event"
+      />
+    </template>
+    <template v-else>
     <div v-if="diagnostics.length > 0" class="structure-summary">
       <p class="summary-title" role="status">{{ $t("standards.editor.structureSummary", {count: diagnostics.length}) }}</p>
       <ul class="summary-list">
@@ -228,13 +337,27 @@ defineExpose({guard, isDirty: () => dirty.value});
           :focus-request="focusRequest"
         />
         <CompositionEditor v-else-if="active === 'composition'" :document="buffer" :diagnostics="diagnostics" />
-        <p v-else-if="active === 'assets'" class="pending-note" role="note">
-          <UiIconButton icon="chevron-right" :label="$t('standards.sections.assets')" disabled />
-          {{ $t("standards.pendingSection.assets") }}
-        </p>
-        <p v-else class="pending-note" role="note">{{ $t("standards.pendingSection.publish") }}</p>
+        <TemplateAssetsEditor
+          v-else-if="active === 'assets'"
+          :document="buffer"
+          :official-assets="officialAssets ?? []"
+          :official-standard-id="officialStandardId ?? ''"
+          :inspections="inspections"
+          :inspection-failures="inspectionFailures"
+          :inspected-at="inspectedAt"
+          :pending="inspectionPending"
+          :cad-version="cadVersion"
+          @recheck="runInspections"
+        />
+        <section v-else class="publish-section" role="region" :aria-label="$t('standards.sections.publish')">
+          <h3 class="section-title">{{ $t("standards.sections.publish") }}</h3>
+          <UiInput :model-value="buffer.version" :label="$t('standards.publish.versionLabel')" disabled />
+          <p class="pending-note" role="note">{{ $t("standards.publish.versionHint") }}</p>
+          <UiButton variant="secondary" @click="openReview">{{ $t("standards.editor.publishCheck") }}</UiButton>
+        </section>
       </div>
     </div>
+    </template>
     <UnsavedInputDialog
       :open="guardOpen"
       :summary="$t('standards.editor.unsavedSummary')"
@@ -263,6 +386,7 @@ defineExpose({guard, isDirty: () => dirty.value});
 .editor-split{display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);gap:var(--space-4);align-items:start}
 .editor-body{display:grid;gap:var(--space-3);min-width:0}
 .basic-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
+.publish-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
 .section-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .pending-note{display:flex;align-items:center;gap:var(--space-2);margin:0;padding:var(--space-3);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md);font-size:var(--font-label);color:var(--color-text-secondary)}
 @media (max-width: 959px){

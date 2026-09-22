@@ -5,6 +5,7 @@
 // 注意：注册路由必须用 URL 判定而非 `**/api/standards**` glob——后者会把 vite 的
 // `/src/api/standards.ts` 模块请求一并拦下（MIME 错误导致应用启动失败）。
 import {expect, type Locator, type Page} from "@playwright/test";
+import type {AssetInspection} from "../../../src/features/standards/types";
 
 export type StandardSummary = {
   source: "official" | "user";
@@ -46,6 +47,18 @@ export function detailBody(summary: StandardSummary) {
   };
 }
 
+/** 已发布文档直接生成详情（发布后的详情必须来自真实保存过的文档）。 */
+export function detailFromDocument(document: Record<string, unknown>) {
+  return {
+    standard_id: String(document["standard_id"] ?? ""),
+    version: String(document["version"] ?? ""),
+    name: String(document["name"] ?? ""),
+    supported_cad_versions: (document["supported_cad_versions"] as string[] | undefined) ?? [],
+    dependencies: (document["dependencies"] as unknown[] | undefined) ?? [],
+    document,
+  };
+}
+
 export interface StandardsFixtureState {
   list: StandardSummary[];
   createBodies: unknown[];
@@ -56,6 +69,17 @@ export interface StandardsFixtureState {
   saveBodies: Record<string, unknown>[];
   /** 内存草稿文档：draft_id → document。 */
   drafts: Map<string, Record<string, unknown>>;
+  /** 已发布文档（发布后详情端点直接返回它）：`"id@ver"` → document。 */
+  published: Map<string, Record<string, unknown>>;
+  /** 资产检查结果：asset_id → 响应。 */
+  assetResults: Record<string, AssetInspection>;
+  /** 可变的资产检查失败注入：asset_id → 错误响应（测试可中途清空重试）。 */
+  assetInspectFailures: Record<string, {status: number; code: string; message: string}>;
+  /** 资产检查调用次数（重试断言用）。 */
+  inspectCalls: string[];
+  /** 可变的发布失败注入。 */
+  publishFailure: {status: number; code: string; message: string} | null;
+  publishCalls: number;
   /** 注入保存失败（模拟服务端 5xx/冲突），默认不失败。 */
   saveFailure: {status: number; code: string; message: string} | null;
 }
@@ -67,6 +91,10 @@ export type StandardsFixtureOptions = {
   importConflict?: {status: number; code: string; message: string};
   /** 预置草稿文档：draft_id → document（编辑器加载与保存目标）。 */
   drafts?: Record<string, Record<string, unknown>>;
+  /** 预置资产检查结果：asset_id → 响应。 */
+  assetResults?: Record<string, AssetInspection>;
+  /** 预置资产检查失败（可中途清空）：asset_id → 错误响应。 */
+  assetInspectFailures?: Record<string, {status: number; code: string; message: string}>;
 };
 
 /** 最小合法标准文档（草稿）：两个属性 + 一条空表映射规则 + 一条命名规则。 */
@@ -126,6 +154,12 @@ export async function installStandards(
     importAttempts: 0,
     saveBodies: [],
     drafts: new Map(Object.entries(options.drafts ?? {})),
+    published: new Map(),
+    assetResults: options.assetResults ?? {},
+    assetInspectFailures: {...(options.assetInspectFailures ?? {})},
+    inspectCalls: [],
+    publishFailure: null,
+    publishCalls: 0,
     saveFailure: null,
   };
   await page.route(
@@ -164,6 +198,34 @@ export async function installStandards(
         const conflict = options.importConflict ?? {status: 409, code: "STANDARD_VERSION_EXISTS", message: "同一标准 ID 与版本已存在"};
         return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
       }
+      const inspectMatch = /^\/api\/standards\/drafts\/([^/]+)\/assets\/([^/]+)\/inspect$/.exec(path);
+      if (inspectMatch && method === "POST") {
+        const assetId = decodeURIComponent(inspectMatch[2]);
+        state.inspectCalls.push(assetId);
+        const failure = state.assetInspectFailures[assetId];
+        if (failure !== undefined) {
+          return route.fulfill({status: failure.status, json: {code: failure.code, message: failure.message}});
+        }
+        const result = state.assetResults[assetId];
+        return route.fulfill({json: result ?? {asset_id: assetId, kind: "layout-template", layouts: [], diagnostics: []}});
+      }
+      const publishMatch = /^\/api\/standards\/drafts\/([^/]+)\/publish$/.exec(path);
+      if (publishMatch && method === "POST") {
+        state.publishCalls += 1;
+        if (state.publishFailure !== null) {
+          return route.fulfill({status: state.publishFailure.status, json: {code: state.publishFailure.code, message: state.publishFailure.message}});
+        }
+        const draftId = decodeURIComponent(publishMatch[1]);
+        const document = state.drafts.get(draftId) ?? {};
+        const standardId = String(document["standard_id"] ?? "");
+        const version = String(document["version"] ?? "");
+        // 后端发布把草稿目录移入已发布目录：草稿不再存在，列表出现同名用户已发布版本
+        state.drafts.delete(draftId);
+        state.list = state.list.filter(item => item.draft_id !== draftId);
+        state.list.push({source: "user", status: "published", standard_id: standardId, version, name: String(document["name"] ?? ""), draft_id: null});
+        state.published.set(`${standardId}@${version}`, document);
+        return route.fulfill({json: {standard_id: standardId, version, name: document["name"] ?? ""}});
+      }
       if (method === "PUT") {
         const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
         if (match === null) return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
@@ -181,11 +243,15 @@ export async function installStandards(
       }
       const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
       if (match && method === "GET" && match[1] !== "drafts") {
+        const standardId = decodeURIComponent(match[1]);
+        const version = decodeURIComponent(match[2]);
+        const publishedDocument = state.published.get(`${standardId}@${version}`);
         const summary = state.list.find(item =>
           item.status === "published"
-          && item.standard_id === decodeURIComponent(match[1])
-          && item.version === decodeURIComponent(match[2]));
+          && item.standard_id === standardId
+          && item.version === version);
         if (summary === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_NOT_FOUND", message: "未找到"}});
+        if (publishedDocument !== undefined) return route.fulfill({json: detailFromDocument(publishedDocument)});
         return route.fulfill({json: detailBody(summary)});
       }
       return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});

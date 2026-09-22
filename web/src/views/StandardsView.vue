@@ -12,7 +12,8 @@ import StandardDetailPane from "../components/standards/StandardDetailPane.vue";
 import StandardCreateDialog from "../components/standards/StandardCreateDialog.vue";
 import StandardEditor from "../components/standards/StandardEditor.vue";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
-import {draftKey} from "../features/standards/draftModel";
+import {draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
+import type {AssetInspection} from "../features/standards/types";
 import type {CreateMode, StandardSummary} from "../features/standards/types";
 defineEmits<{back: []; openCreateSheetset: []}>();
 const props = defineProps<{confirmAction: (options: {title: string; message: string; confirmText: string; cancelText?: string; danger?: boolean}) => Promise<boolean>}>();
@@ -41,19 +42,45 @@ const selected = computed<StandardSummary | null>(() =>
 // —— 草稿编辑器接线（Task 9）：仅用户草稿可编辑，且离开编辑器要过未保存修改三选一门禁 ——
 const editorOpen = ref(false);
 const editorRef = ref<{guard: (next: () => void | Promise<void>) => Promise<void>} | null>(null);
+/** 同名官方标准声明的资产（只读参考）；无可对照官方标准时为空。 */
+const officialAssets = ref<DraftAsset[]>([]);
+const officialStandardId = ref("");
 
 async function openEditor(): Promise<void> {
   const summary = selected.value;
   if (summary?.draft_id === null || summary?.draft_id === undefined) return;
   const loaded = await store.loadDraft(summary.draft_id);
   if (loaded === null) return; // 加载失败：错误留到草稿错误区，不进入空编辑器
+  officialAssets.value = [];
+  officialStandardId.value = "";
   editorOpen.value = true;
+  await loadOfficialReference(String(loaded.document["standard_id"] ?? ""));
+}
+
+/** 标准库中存在同名官方已发布版本时，取其资产声明作为只读对照（不修改草稿）。 */
+async function loadOfficialReference(standardId: string): Promise<void> {
+  const reference = store.summaries.value.find(item =>
+    item.source === "official" && item.status === "published" && item.standard_id === standardId);
+  if (reference === undefined || standardId === "") return;
+  try {
+    await store.open({standardId: reference.standard_id, version: reference.version});
+    const document = store.detail.value?.document;
+    officialAssets.value = document === undefined ? [] : toDraftDocument(document).assets;
+    officialStandardId.value = reference.standard_id;
+  } catch {
+    // 官方对照加载失败不影响编辑：来源筛选退化为仅本草稿资产
+    officialAssets.value = [];
+  }
 }
 
 async function leaveEditor(): Promise<void> {
   editorOpen.value = false;
   store.closeDraft();
+  officialAssets.value = [];
+  officialStandardId.value = "";
   await store.refresh();
+  // 退出编辑器后回到列表选中项的详情：草稿没有发布详情，清掉对照官方详情避免越权展示
+  if (selected.value?.status === "draft") store.clearDetail();
 }
 
 /** 编辑器内保存：走草稿身份 PUT（`POST /api/standards/drafts` 对已存在草稿会 409）。 */
@@ -64,6 +91,28 @@ async function saveEditorDocument(document: Record<string, unknown>): Promise<Re
     document,
   });
   return saved.document;
+}
+
+/** 资产检查：后端固定读取协议，失败抛出交由编辑器归为「检查本身失败」。 */
+async function inspectEditorAsset(assetId: string, cadVersion: string): Promise<AssetInspection> {
+  const summary = selected.value;
+  if (summary?.draft_id === null || summary?.draft_id === undefined) {
+    throw new Error("STANDARD_DRAFT_NOT_FOUND");
+  }
+  return store.inspectAsset({draftId: summary.draft_id, assetId, cadVersion});
+}
+
+/** 发布：成功时后端把草稿移入已发布目录，需退出编辑器并定位到新版本只读详情。 */
+async function publishEditorDraft(): Promise<void> {
+  const summary = selected.value;
+  if (summary?.draft_id === null || summary?.draft_id === undefined) {
+    throw new Error("STANDARD_DRAFT_NOT_FOUND");
+  }
+  const published = await store.publish({draftId: summary.draft_id});
+  await leaveEditor();
+  // 发布总是写入用户已发布根：选中键必须与列表项的键派生一致（`draftKey`）
+  selectedKey.value = draftKey({source: "user", draft_id: null, version: published.version});
+  await store.open({standardId: published.standard_id, version: published.version});
 }
 
 async function select(summary: StandardSummary): Promise<void> {
@@ -220,6 +269,10 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
         class="detail-col"
         :draft="store.draft.value"
         :save-draft="saveEditorDocument"
+        :inspect-asset="inspectEditorAsset"
+        :publish-draft="publishEditorDraft"
+        :official-assets="officialAssets"
+        :official-standard-id="officialStandardId"
         @close="leaveEditor"
       />
       <StandardDetailPane

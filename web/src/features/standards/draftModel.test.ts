@@ -197,6 +197,29 @@ describe("validateDraftStructure", () => {
     expect(codes).toContain("STANDARD_RULE_CYCLE");
   });
 
+  it("flags basic identity, property and asset problems before saving", () => {
+    const document = toDraftDocument(propertyDocument({
+      standard_id: "Bad Id",
+      version: "3.0",
+      supported_cad_versions: [],
+      properties: [{name: "  ", scope: "unknown"}],
+      assets: [
+        {asset_id: "layouts", kind: "layout-template", files: [{path: "../escape.dwg", role: "A3"}]},
+        {asset_id: "layouts", kind: "wrong-kind", files: []},
+      ],
+    }));
+    expect(validateDraftStructure(document).map(item => [item.code, item.field])).toEqual([
+      ["STANDARD_ID_INVALID", "Bad Id"],
+      ["STANDARD_VERSION_INVALID", "3.0"],
+      ["STANDARD_CAD_VERSIONS_INVALID", undefined],
+      ["STANDARD_PROPERTY_INVALID", "unknown.  "],
+      ["STANDARD_SCOPE_INVALID", "unknown.  "],
+      ["STANDARD_ASSET_PATH_INVALID", "layouts"],
+      ["STANDARD_ASSET_DUPLICATE", "layouts"],
+      ["STANDARD_ASSET_KIND_INVALID", "layouts"],
+    ]);
+  });
+
   it("flags illegal format codes and empty mapping tables", () => {
     const document = toDraftDocument(propertyDocument({
       rules: [mappingRule({table: []}), composeRule({segments: [{field: "subset.sequence", format: "003"}]})],

@@ -206,6 +206,18 @@ export function isReservedScope(scope: string): boolean {
   return RESERVED_FIELD_SCOPES.includes(scope as DraftScope);
 }
 
+/** 标准 ID：小写域式标识（与后端 `STANDARD_ID_PATTERN` 同一口径）。 */
+export const STANDARD_ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/;
+/** 标准版本：三段数字版本。 */
+export const STANDARD_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+function validAssetPath(path: string): boolean {
+  if (path === "") return false;
+  if (path.startsWith("/") || path.startsWith("\\")) return false;
+  if (/^[A-Za-z]:/.test(path)) return false;
+  return !path.split(/[/\\]/).includes("..");
+}
+
 /** 属性/派生字段的完整引用（`scope.name`）。 */
 export function fieldReference(property: Pick<DraftProperty, "name" | "scope">): string {
   return `${property.scope}.${property.name}`;
@@ -440,6 +452,46 @@ function hasCycle(rules: DraftRule[]): boolean {
  */
 export function validateDraftStructure(document: DraftDocument): StructureDiagnostic[] {
   const diagnostics: StructureDiagnostic[] = [];
+  // 基本信息（与后端解析器同一组稳定码：保存/发布会被 422 拒绝的输入在本地先提示）
+  if (!STANDARD_ID_PATTERN.test(document.standard_id)) {
+    diagnostics.push({code: "STANDARD_ID_INVALID", field: document.standard_id});
+  }
+  if (!STANDARD_VERSION_PATTERN.test(document.version)) {
+    diagnostics.push({code: "STANDARD_VERSION_INVALID", field: document.version});
+  }
+  if (document.name.trim() === "") diagnostics.push({code: "STANDARD_NAME_INVALID"});
+  if (document.supported_cad_versions.length === 0) {
+    diagnostics.push({code: "STANDARD_CAD_VERSIONS_INVALID"});
+  }
+  if (!Number.isInteger(document.numbering.digits) || document.numbering.digits <= 0) {
+    diagnostics.push({code: "STANDARD_NUMBERING_INVALID", field: document.numbering.sequence_field});
+  }
+  // 属性定义
+  for (const property of document.properties) {
+    const reference = fieldReference(property);
+    if (property.name.trim() === "") diagnostics.push({code: "STANDARD_PROPERTY_INVALID", field: reference});
+    if (!FIELD_SCOPES.includes(property.scope as DraftScope)) {
+      diagnostics.push({code: "STANDARD_SCOPE_INVALID", field: reference});
+    }
+  }
+  // 模板资产：身份唯一且路径受控（文件本体由包提供，路径逃逸一律拒绝）
+  const assetIds = new Set<string>();
+  for (const asset of document.assets) {
+    if (asset.asset_id.trim() === "") {
+      diagnostics.push({code: "STANDARD_ASSET_INVALID", field: asset.asset_id});
+    } else if (assetIds.has(asset.asset_id)) {
+      diagnostics.push({code: "STANDARD_ASSET_DUPLICATE", field: asset.asset_id});
+    }
+    assetIds.add(asset.asset_id);
+    if (!ASSET_KINDS.includes(asset.kind as DraftAssetKind)) {
+      diagnostics.push({code: "STANDARD_ASSET_KIND_INVALID", field: asset.asset_id});
+    }
+    for (const file of asset.files) {
+      if (!validAssetPath(file.path)) {
+        diagnostics.push({code: "STANDARD_ASSET_PATH_INVALID", field: asset.asset_id});
+      }
+    }
+  }
   const known = knownFieldReferences(document);
   const targets = new Set<string>();
   const ruleIds = new Set<string>();

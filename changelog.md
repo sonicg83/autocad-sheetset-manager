@@ -1,3 +1,15 @@
+## 2026-09-22（实现标准模板资产与发布检查界面）
+
+- 新增 `web/src/features/standards/publishModel.ts`（纯函数，11 项单测）：`buildPublishGate` 把结构诊断、资产检查结果、检查失败归一为 `{blockingErrors, warnings, inspectionFailures, counts, canPublish}`；`compareLayouts`/`declaredRoles`/`nonModelLayouts` 做严格的图幅比较（`"A3 "` ≠ `"A3"`，去声明与多未声明都阻断）；`assetReferences`/`hasReferenceSources` 推导资产在标准中的引用位置（属性枚举、规则固定值/允许值/映射目标/固定文本片段），未被引用的有效布局资产只给警告；`structureIssue` 把诊断映射到检查域与跳转目标（映射行号 / 未覆盖摘要 / 资产）。检查本身失败与标准错误分开呈现：两者都阻断发布，但前者不当成「标准存在错误」。后端仍是权威，同一问题在后端返回时使用同一稳定码。
+- `draftModel.validateDraftStructure` 补齐基本信息（标准 ID/版本/名称/CAD 版本/编号策略）、属性定义（字段键/作用域）与模板资产（标识重复、种类、路径逃逸）体检，错误码与后端解析器一致；发布检查的「基本信息/属性定义/模板资产」检查域因此有真实内容，而不是空面板。
+- 新增 3 个界面组件：`TemplateAssetsEditor.vue`（基础/布局主分类 + 官方/用户筛选器 + 名称/来源/状态/引用数列表 + 资产声明增删改：标识、种类、受控路径与图幅；官方资产只读）、`AssetInspectionPanel.vue`（受控路径、资产身份、引用关系、最近检查时间、诊断与重新检查；布局资产逐项列出声明图幅与实际布局的严格差异，`Model` 不参与匹配）、`StandardPublishReview.vue`（独立检查页：左侧检查域与错误/警告计数，右侧问题清单（可返回对应分区并聚焦）、版本号（只读）、版本说明、受信依赖、发布动作与检查失败重试）。
+- 接线：`StandardEditor` 增加「编辑分区 ↔ 发布检查页」视图切换，进入资产分区或检查页时自动跑一次资产检查（已检查过不重复），发布前先落盘未保存修改再调用发布；保存/发布错误同时展示稳定错误码与后端原始文本（未知错误只给本地化摘要时否则无法定位）；资产分区与「版本与发布」分区换成实际面板。`StandardsView` 接线资产检查、发布与官方对照资产（标准库存在同名官方已发布版本时取其资产声明作只读参考），发布成功后退出编辑器并按 `draftKey` 定位到新版本只读详情（导出/派生/用于创建三项动作沿用 Task 8 的详情面板）。
+- 版本说明：SPEC-DM-016 §9.1 要求检查页提供版本说明输入；标准领域 Schema 没有该字段，因此以顶层 `release_notes`（自由文本，不在领域校验范围内）随草稿文档保存并随标准包导出，编辑器/检查页共用同一缓冲，不另造持久化。版本号只读：草稿身份在创建时确定（`PUT /api/standards/{id}/{ver}` 按文档内身份查找草稿），需要新版本应从已发布版本派生。
+- i18n 补 `standards.assets.*` / `standards.publish.*` 与资产/基本信息类诊断文案（中英同构 1253 键），删除占位键 `standards.pendingSection.*`、`standards.editor.publishPending`、`standards.editor.cleanHint`。
+- E2E：新增 `standards-assets-publish.spec.ts` 7 项（布局严格不匹配阻挡并可跳转、资产文件缺失阻挡、检查本身失败与重试、仅警告可发布并进入新版本只读详情、发布失败保留检查页、问题跳回映射表并聚焦未覆盖摘要、资产声明新增后检查）；夹具补资产检查与发布端点（含可变失败注入、发布后详情返回真实发布文档）。
+- **遗留边界（已记录，不静默略过）**：后端没有把资产文件本体写进草稿受控目录的端点（Task 3/5/6 范围），因此本任务只能编辑资产**声明**；声明了但文件不在草稿目录内的资产会被检查报告 `STANDARD_ASSET_FILE_MISSING` 并阻断发布（不伪造「已替换文件」）。补齐上传/替换能力需要后续计划与新端点（含路径、扩展名、大小与事务安全校验）。
+- 验证：`vue-tsc -b`、`check:api`、`check:i18n`、`check:ui`、`npm run build` 全过；全量前端单测 221 项通过；标准系 E2E 28 项加 settings-dialog 33 项共 61 项通过。
+
 ## 2026-09-22（实现图纸标准分区编辑器）
 
 - 新增 `web/src/features/standards/draftModel.ts`（PLAN-DM-035 Task 9）：纯函数草稿模型——`toDraftDocument` 把后端文档规范化为可编辑数组（未知顶层字段原样保留，不丢数据）、`cloneDocument`、`parsePropertyCsv`（属性定义 CSV）、`buildMappingRows`（制表符/CSV 批量粘贴，保留半填行）、`validateMapping`（行级：空单元格 → 重复源值 → 非法目标值，再列未覆盖源值，每行最多一条）、`renderCompositionPreview`（字段令牌/固定文本/受控序号令牌的**纯展示**预览，不复制后端最终求值）、`validateDraftStructure`（未知引用/重复规则与目标/非法格式码/空映射表/循环，与后端 `compile_standard_rules` 使用同一组稳定错误码）、`ruleSummary`（自然语言摘要，只返回语言包键与参数）、`EDITOR_SECTIONS`。模型不持有用户可见文案，新增 15 项单测。

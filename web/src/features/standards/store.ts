@@ -51,7 +51,9 @@ export interface StandardStore {
   /** 加载草稿原始文档；代次保护同 open（乱序响应不覆盖当前草稿）。 */
   loadDraft(draftId: string): Promise<StandardDraft | null>;
   /** 直接采用刚创建的草稿（省去一次冗余 GET）。 */
-  adoptDraft(draft: StandardDraft): void;  closeDraft(): void;
+  adoptDraft(draft: StandardDraft): void;
+  /** 卸载当前草稿并使在途加载失效。 */
+  closeDraft(): void;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
   saveDraft(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;

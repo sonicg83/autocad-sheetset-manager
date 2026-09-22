@@ -22,8 +22,8 @@ import {
 
 const props = defineProps<{
   document: DraftDocument;
-  /** 来自壳层错误摘要的跳转请求：切到本分区后聚焦指定映射行。 */
-  focusRequest?: {section: EditorSectionId; ruleId?: string; row?: number} | null;
+  /** 来自壳层错误摘要/发布检查的跳转请求：切到本分区后聚焦指定映射行（`row: null` = 未覆盖摘要）。 */
+  focusRequest?: {section: EditorSectionId; ruleId?: string; row?: number | null} | null;
 }>();
 const pasteRule = ref<DraftRule | null>(null);
 const pasteText = ref("");
@@ -109,18 +109,35 @@ function applyPaste(): void {
   pasteText.value = "";
 }
 
+/** 未覆盖源值摘要的 DOM 引用（`row: null` 的跳转目标）。 */
+const uncoveredButtons = new Map<string, HTMLButtonElement>();
+
+function bindUncovered(ruleIndex: number) {
+  return (element: unknown): void => {
+    if (element instanceof HTMLButtonElement) uncoveredButtons.set(String(ruleIndex), element);
+    else uncoveredButtons.delete(String(ruleIndex));
+  };
+}
+
 function jumpToDiagnostic(ruleIndex: number, item: MappingDiagnostic): void {
-  if (item.row === null) return;
+  if (item.row === null) {
+    uncoveredButtons.get(String(ruleIndex))?.focus();
+    return;
+  }
   focusRow(ruleIndex, item.row - 1);
 }
 
 watch(
   () => props.focusRequest,
   async (request) => {
-    if (!request || request.section !== "mapping" || request.row === undefined) return;
+    if (!request || request.section !== "mapping") return;
     const index = mappingRules.value.findIndex(rule => rule.rule_id === request.ruleId);
     if (index < 0) return;
     await nextTick();
+    if (request.row === null || request.row === undefined) {
+      uncoveredButtons.get(String(index))?.focus();
+      return;
+    }
     focusRow(index, request.row - 1);
   },
   {immediate: true},
@@ -206,7 +223,8 @@ watch(
             <button
               type="button"
               class="diagnostic-button"
-              :data-testid="`mapping-diagnostic-${index}`"
+              :data-testid="item.row === null ? 'mapping-uncovered-summary' : `mapping-diagnostic-${index}`"
+              :ref="item.row === null ? bindUncovered(ruleIndex) : undefined"
               @click="jumpToDiagnostic(ruleIndex, item)"
             >
               <span>{{ $t(`standards.diagnostic.${item.code}`, {source: item.source, value: item.value ?? "", row: item.row ?? ""}) }}</span>
