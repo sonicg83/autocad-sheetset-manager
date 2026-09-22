@@ -135,13 +135,10 @@ function setKind(property: DraftProperty, kind: string): void {
     default_value: property.default_value,
     description: property.description,
   };
-  props.document.properties.splice(index, 1, {
-    ...base,
-    kind: kind as DerivedPropertyKind,
-    ...(kind === "mapping"
-      ? {source_property_id: "", mapping: [], confirmed_source_items: []}
-      : {segments: []}),
-  });
+  const next: DraftProperty = kind === "mapping"
+    ? {...base, kind, source_property_id: "", mapping: [], confirmed_source_items: []}
+    : {...base, kind, segments: []};
+  props.document.properties.splice(index, 1, next);
 }
 
 function openEditor(propertyId: string): void {
