@@ -157,6 +157,20 @@
         "title": "AssetInspectionResponse",
         "type": "object"
       },
+      "Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post",
+        "type": "object"
+      },
       "CadCapabilitiesResponse": {
         "additionalProperties": {
           "$ref": "#/components/schemas/CadCapabilityResponse"
@@ -705,6 +719,704 @@
           "after"
         ],
         "title": "CommandChangeResponse",
+        "type": "object"
+      },
+      "CreationAssetOptionModel": {
+        "additionalProperties": false,
+        "description": "标准包内的一个受控模板资产候选（``label`` 同类内唯一）。",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "layouts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Layouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asset_id",
+          "kind",
+          "label"
+        ],
+        "title": "CreationAssetOptionModel",
+        "type": "object"
+      },
+      "CreationDraftCreateRequest": {
+        "additionalProperties": false,
+        "description": "按已发布标准身份建草稿；版本在这里固定，此后不可改写。",
+        "properties": {
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "version"
+        ],
+        "title": "CreationDraftCreateRequest",
+        "type": "object"
+      },
+      "CreationDraftResponse": {
+        "additionalProperties": false,
+        "description": "草稿当前状态；``revision`` 每次保存递增并使旧预览失效。",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CreationGroupModel"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sheetset_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sheetset Values",
+            "type": "object"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "standard_version": {
+            "title": "Standard Version",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "standard_id",
+          "standard_version",
+          "revision",
+          "step",
+          "target_path"
+        ],
+        "title": "CreationDraftResponse",
+        "type": "object"
+      },
+      "CreationDraftSaveRequest": {
+        "additionalProperties": false,
+        "description": "草稿输入全量保存；``expected_revision`` 为乐观修订门禁。",
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CreationGroupModel"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "sheetset_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sheetset Values",
+            "type": "object"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "step",
+          "target_path"
+        ],
+        "title": "CreationDraftSaveRequest",
+        "type": "object"
+      },
+      "CreationGroupModel": {
+        "additionalProperties": false,
+        "description": "一个图纸组的输入/存储形状；``sheet_values`` 只含可输入普通 sheet 属性。",
+        "properties": {
+          "base_asset_id": {
+            "title": "Base Asset Id",
+            "type": "string"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "created_order": {
+            "minimum": 0.0,
+            "title": "Created Order",
+            "type": "integer"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "layout_asset_id": {
+            "title": "Layout Asset Id",
+            "type": "string"
+          },
+          "paper_layout": {
+            "title": "Paper Layout",
+            "type": "string"
+          },
+          "sheet_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sheet Values",
+            "type": "object"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "created_order",
+          "title",
+          "count",
+          "base_asset_id",
+          "layout_asset_id",
+          "paper_layout"
+        ],
+        "title": "CreationGroupModel",
+        "type": "object"
+      },
+      "CreationImportDiagnosticModel": {
+        "additionalProperties": false,
+        "description": "一条导入诊断：稳定错误码 + 工作表/行/列定位。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row"
+          },
+          "sheet": {
+            "default": "",
+            "title": "Sheet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "CreationImportDiagnosticModel",
+        "type": "object"
+      },
+      "CreationImportRejectedResponse": {
+        "additionalProperties": false,
+        "description": "导入被拒（422）响应体：统一错误负载 + 可定位的逐条诊断。\n\n草稿 JSON 与修订号在拒绝时零变化，调用方可直接修正工作簿后重试。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/CreationImportDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "message_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Key"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "CreationImportRejectedResponse",
+        "type": "object"
+      },
+      "CreationNumberingModel": {
+        "additionalProperties": false,
+        "description": "当前标准的编号策略摘要。",
+        "properties": {
+          "digits": {
+            "title": "Digits",
+            "type": "integer"
+          },
+          "sequence_field": {
+            "title": "Sequence Field",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence_field",
+          "digits",
+          "start"
+        ],
+        "title": "CreationNumberingModel",
+        "type": "object"
+      },
+      "CreationPreviewDiagnosticModel": {
+        "additionalProperties": false,
+        "description": "一条创建预览诊断：稳定错误码 + 可定位的图纸组/属性。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "group_id": {
+            "default": "",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "property_id": {
+            "default": "",
+            "title": "Property Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "CreationPreviewDiagnosticModel",
+        "type": "object"
+      },
+      "CreationPreviewGroupModel": {
+        "additionalProperties": false,
+        "description": "预览主表一行（一个图纸组一个主 DWG）。",
+        "properties": {
+          "base_template": {
+            "title": "Base Template",
+            "type": "string"
+          },
+          "created_order": {
+            "title": "Created Order",
+            "type": "integer"
+          },
+          "dwg_name": {
+            "title": "Dwg Name",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "layout_template": {
+            "title": "Layout Template",
+            "type": "string"
+          },
+          "number_range": {
+            "title": "Number Range",
+            "type": "string"
+          },
+          "paper_layout": {
+            "title": "Paper Layout",
+            "type": "string"
+          },
+          "property_cells": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CreationPreviewPropertyCellModel"
+            },
+            "title": "Property Cells",
+            "type": "object"
+          },
+          "sheet_count": {
+            "title": "Sheet Count",
+            "type": "integer"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/CreationPreviewSheetModel"
+            },
+            "title": "Sheets",
+            "type": "array"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "title_range": {
+            "title": "Title Range",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "created_order",
+          "title",
+          "number_range",
+          "title_range",
+          "base_template",
+          "layout_template",
+          "paper_layout",
+          "dwg_name",
+          "target_path",
+          "sheet_count"
+        ],
+        "title": "CreationPreviewGroupModel",
+        "type": "object"
+      },
+      "CreationPreviewPropertyCellModel": {
+        "additionalProperties": false,
+        "description": "一个属性的按组投影：首张实际值 + 完整逐张明细（供「…」模态）。",
+        "properties": {
+          "first_value": {
+            "title": "First Value",
+            "type": "string"
+          },
+          "property_id": {
+            "title": "Property Id",
+            "type": "string"
+          },
+          "sheets": {
+            "items": {
+              "$ref": "#/components/schemas/CreationPreviewPropertyRowModel"
+            },
+            "title": "Sheets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "property_id",
+          "first_value"
+        ],
+        "title": "CreationPreviewPropertyCellModel",
+        "type": "object"
+      },
+      "CreationPreviewPropertyRowModel": {
+        "additionalProperties": false,
+        "description": "逐张属性明细的一行：图号 + 该张实际值。",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "value"
+        ],
+        "title": "CreationPreviewPropertyRowModel",
+        "type": "object"
+      },
+      "CreationPreviewResponse": {
+        "additionalProperties": false,
+        "description": "权威预览：按组表格数据、逐张属性明细、定位诊断与 ``preview_digest``。",
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/CreationPreviewDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "dwg_count": {
+            "title": "Dwg Count",
+            "type": "integer"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "group_count": {
+            "title": "Group Count",
+            "type": "integer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CreationPreviewGroupModel"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "numbering": {
+            "$ref": "#/components/schemas/CreationNumberingModel"
+          },
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sheet_count": {
+            "title": "Sheet Count",
+            "type": "integer"
+          },
+          "sheetset_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sheetset Values",
+            "type": "object"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "standard_name": {
+            "title": "Standard Name",
+            "type": "string"
+          },
+          "standard_version": {
+            "title": "Standard Version",
+            "type": "string"
+          },
+          "suffix": {
+            "$ref": "#/components/schemas/CreationSuffixModel"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "revision",
+          "standard_id",
+          "standard_version",
+          "standard_name",
+          "target_path",
+          "group_count",
+          "sheet_count",
+          "dwg_count",
+          "numbering",
+          "suffix",
+          "executable",
+          "preview_digest"
+        ],
+        "title": "CreationPreviewResponse",
+        "type": "object"
+      },
+      "CreationPreviewSheetModel": {
+        "additionalProperties": false,
+        "description": "一张展开后的图纸：最终图号/标题/布局名与该张全部属性值。",
+        "properties": {
+          "layout_name": {
+            "title": "Layout Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "layout_name"
+        ],
+        "title": "CreationPreviewSheetModel",
+        "type": "object"
+      },
+      "CreationStandardCandidateModel": {
+        "additionalProperties": false,
+        "description": "创建标准候选；不可用时 ``reasons`` 说明为什么不能选。",
+        "properties": {
+          "asset_options": {
+            "items": {
+              "$ref": "#/components/schemas/CreationAssetOptionModel"
+            },
+            "title": "Asset Options",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "supported_cad_versions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Cad Versions",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "version",
+          "name",
+          "available"
+        ],
+        "title": "CreationStandardCandidateModel",
+        "type": "object"
+      },
+      "CreationSuffixModel": {
+        "additionalProperties": false,
+        "description": "当前有效设置里的标题后缀与不编号关键字。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "suffix_type": {
+            "title": "Suffix Type",
+            "type": "integer"
+          },
+          "unnumbered_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unnumbered Keywords",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "suffix_type"
+        ],
+        "title": "CreationSuffixModel",
         "type": "object"
       },
       "DeleteCustomPropertyCommand": {
@@ -5286,6 +5998,328 @@
         "tags": [
           "extensions"
         ]
+      }
+    },
+    "/api/creation-drafts": {
+      "post": {
+        "operationId": "create_creation_draft_api_creation_drafts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreationDraftCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Creation Draft"
+      }
+    },
+    "/api/creation-drafts/standards": {
+      "get": {
+        "operationId": "list_creation_standards_api_creation_drafts_standards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CreationStandardCandidateModel"
+                  },
+                  "title": "Response List Creation Standards Api Creation Drafts Standards Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Creation Standards"
+      }
+    },
+    "/api/creation-drafts/{draft_id}": {
+      "delete": {
+        "operationId": "delete_creation_draft_api_creation_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Creation Draft"
+      },
+      "get": {
+        "operationId": "get_creation_draft_api_creation_drafts__draft_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Creation Draft"
+      },
+      "put": {
+        "operationId": "save_creation_draft_api_creation_drafts__draft_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreationDraftSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Creation Draft"
+      }
+    },
+    "/api/creation-drafts/{draft_id}/preview": {
+      "post": {
+        "operationId": "preview_creation_draft_api_creation_drafts__draft_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Creation Draft"
+      }
+    },
+    "/api/creation-drafts/{draft_id}/xlsx-import": {
+      "post": {
+        "operationId": "import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Revision"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationImportRejectedResponse"
+                }
+              }
+            },
+            "description": "导入被整批拒绝：草稿 JSON 与修订号保持不变"
+          }
+        },
+        "summary": "Import Creation Xlsx"
+      }
+    },
+    "/api/creation-drafts/{draft_id}/xlsx-template": {
+      "get": {
+        "operationId": "export_creation_xlsx_template_api_creation_drafts__draft_id__xlsx_template_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Creation Xlsx Template"
       }
     },
     "/api/custom-properties/template": {

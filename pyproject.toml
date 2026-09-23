@@ -11,6 +11,7 @@ dependencies = [
     "lxml>=6,<7",
     "openpyxl>=3.1,<4",
     "pydantic-settings>=2.10,<3",
+    "python-multipart>=0.0.32",
     "pywebview>=5,<6",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0,<3",

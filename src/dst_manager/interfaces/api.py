@@ -18,7 +18,7 @@ from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
 from dst_manager.extensions.save_grants import SaveGrantStore
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
-from dst_manager.interfaces import extension_api, standard_api
+from dst_manager.interfaces import creation_api, extension_api, standard_api
 from dst_manager.interfaces.contracts import (
     ChangeExecuteRequest,
     ChangePreviewRequest,
@@ -236,6 +236,7 @@ def create_app(
         logger.warning("EXTENSION_BOOTSTRAP_FAILED", exc_info=True)
     extension_api.register_extension_routes(app)
     standard_api.register_standard_routes(app)
+    creation_api.register_creation_routes(app)
 
     @app.exception_handler(ApplicationError)
     async def application_error(_, exc: ApplicationError):

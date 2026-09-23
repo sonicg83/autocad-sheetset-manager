@@ -21,6 +21,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/creation-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Creation Draft */
+        post: operations["create_creation_draft_api_creation_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creation-drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Creation Draft */
+        get: operations["get_creation_draft_api_creation_drafts__draft_id__get"];
+        /** Save Creation Draft */
+        put: operations["save_creation_draft_api_creation_drafts__draft_id__put"];
+        post?: never;
+        /** Delete Creation Draft */
+        delete: operations["delete_creation_draft_api_creation_drafts__draft_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creation-drafts/{draft_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Creation Draft */
+        post: operations["preview_creation_draft_api_creation_drafts__draft_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creation-drafts/{draft_id}/xlsx-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Creation Xlsx */
+        post: operations["import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creation-drafts/{draft_id}/xlsx-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Creation Xlsx Template */
+        get: operations["export_creation_xlsx_template_api_creation_drafts__draft_id__xlsx_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creation-drafts/standards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Creation Standards */
+        get: operations["list_creation_standards_api_creation_drafts_standards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/custom-properties/template": {
         parameters: {
             query?: never;
@@ -731,6 +835,11 @@ export interface components {
             /** Layouts */
             layouts: string[];
         };
+        /** Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post */
+        Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post: {
+            /** File */
+            file: string;
+        };
         /** CadCapabilitiesResponse */
         CadCapabilitiesResponse: {
             [key: string]: components["schemas"]["CadCapabilityResponse"];
@@ -853,6 +962,311 @@ export interface components {
              * @enum {string}
              */
             type: "update_sheet_set" | "update_subset" | "update_sheet" | "delete_sheet" | "insert_sheet" | "insert_subset" | "add_custom_property" | "delete_custom_property" | "delete_subset";
+        };
+        /**
+         * CreationAssetOptionModel
+         * @description 标准包内的一个受控模板资产候选（``label`` 同类内唯一）。
+         */
+        CreationAssetOptionModel: {
+            /** Asset Id */
+            asset_id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Layouts */
+            layouts?: string[];
+        };
+        /**
+         * CreationDraftCreateRequest
+         * @description 按已发布标准身份建草稿；版本在这里固定，此后不可改写。
+         */
+        CreationDraftCreateRequest: {
+            /** Standard Id */
+            standard_id: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * CreationDraftResponse
+         * @description 草稿当前状态；``revision`` 每次保存递增并使旧预览失效。
+         */
+        CreationDraftResponse: {
+            /** Groups */
+            groups?: components["schemas"]["CreationGroupModel"][];
+            /** Id */
+            id: string;
+            /** Revision */
+            revision: number;
+            /** Sheetset Values */
+            sheetset_values?: {
+                [key: string]: string;
+            };
+            /** Standard Id */
+            standard_id: string;
+            /** Standard Version */
+            standard_version: string;
+            /** Step */
+            step: string;
+            /** Target Path */
+            target_path: string;
+        };
+        /**
+         * CreationDraftSaveRequest
+         * @description 草稿输入全量保存；``expected_revision`` 为乐观修订门禁。
+         */
+        CreationDraftSaveRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Groups */
+            groups?: components["schemas"]["CreationGroupModel"][];
+            /** Sheetset Values */
+            sheetset_values?: {
+                [key: string]: string;
+            };
+            /** Step */
+            step: string;
+            /** Target Path */
+            target_path: string;
+        };
+        /**
+         * CreationGroupModel
+         * @description 一个图纸组的输入/存储形状；``sheet_values`` 只含可输入普通 sheet 属性。
+         */
+        CreationGroupModel: {
+            /** Base Asset Id */
+            base_asset_id: string;
+            /** Count */
+            count: number;
+            /** Created Order */
+            created_order: number;
+            /** Group Id */
+            group_id: string;
+            /** Layout Asset Id */
+            layout_asset_id: string;
+            /** Paper Layout */
+            paper_layout: string;
+            /** Sheet Values */
+            sheet_values?: {
+                [key: string]: string;
+            };
+            /** Title */
+            title: string;
+        };
+        /**
+         * CreationImportDiagnosticModel
+         * @description 一条导入诊断：稳定错误码 + 工作表/行/列定位。
+         */
+        CreationImportDiagnosticModel: {
+            /** Code */
+            code: string;
+            /** Column */
+            column?: string | null;
+            /** Message */
+            message: string;
+            /** Row */
+            row?: number | null;
+            /**
+             * Sheet
+             * @default
+             */
+            sheet: string;
+        };
+        /**
+         * CreationImportRejectedResponse
+         * @description 导入被拒（422）响应体：统一错误负载 + 可定位的逐条诊断。
+         *
+         *     草稿 JSON 与修订号在拒绝时零变化，调用方可直接修正工作簿后重试。
+         */
+        CreationImportRejectedResponse: {
+            /** Code */
+            code: string;
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["CreationImportDiagnosticModel"][];
+            /** Message */
+            message: string;
+            /** Message Key */
+            message_key?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: string | number | boolean | string[];
+            };
+        };
+        /**
+         * CreationNumberingModel
+         * @description 当前标准的编号策略摘要。
+         */
+        CreationNumberingModel: {
+            /** Digits */
+            digits: number;
+            /** Sequence Field */
+            sequence_field: string;
+            /** Start */
+            start: number;
+        };
+        /**
+         * CreationPreviewDiagnosticModel
+         * @description 一条创建预览诊断：稳定错误码 + 可定位的图纸组/属性。
+         */
+        CreationPreviewDiagnosticModel: {
+            /** Code */
+            code: string;
+            /**
+             * Group Id
+             * @default
+             */
+            group_id: string;
+            /** Message */
+            message: string;
+            /**
+             * Property Id
+             * @default
+             */
+            property_id: string;
+            /** Severity */
+            severity: string;
+        };
+        /**
+         * CreationPreviewGroupModel
+         * @description 预览主表一行（一个图纸组一个主 DWG）。
+         */
+        CreationPreviewGroupModel: {
+            /** Base Template */
+            base_template: string;
+            /** Created Order */
+            created_order: number;
+            /** Dwg Name */
+            dwg_name: string;
+            /** Group Id */
+            group_id: string;
+            /** Layout Template */
+            layout_template: string;
+            /** Number Range */
+            number_range: string;
+            /** Paper Layout */
+            paper_layout: string;
+            /** Property Cells */
+            property_cells?: {
+                [key: string]: components["schemas"]["CreationPreviewPropertyCellModel"];
+            };
+            /** Sheet Count */
+            sheet_count: number;
+            /** Sheets */
+            sheets?: components["schemas"]["CreationPreviewSheetModel"][];
+            /** Target Path */
+            target_path: string;
+            /** Title */
+            title: string;
+            /** Title Range */
+            title_range: string;
+        };
+        /**
+         * CreationPreviewPropertyCellModel
+         * @description 一个属性的按组投影：首张实际值 + 完整逐张明细（供「…」模态）。
+         */
+        CreationPreviewPropertyCellModel: {
+            /** First Value */
+            first_value: string;
+            /** Property Id */
+            property_id: string;
+            /** Sheets */
+            sheets?: components["schemas"]["CreationPreviewPropertyRowModel"][];
+        };
+        /**
+         * CreationPreviewPropertyRowModel
+         * @description 逐张属性明细的一行：图号 + 该张实际值。
+         */
+        CreationPreviewPropertyRowModel: {
+            /** Number */
+            number: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * CreationPreviewResponse
+         * @description 权威预览：按组表格数据、逐张属性明细、定位诊断与 ``preview_digest``。
+         */
+        CreationPreviewResponse: {
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["CreationPreviewDiagnosticModel"][];
+            /** Draft Id */
+            draft_id: string;
+            /** Dwg Count */
+            dwg_count: number;
+            /** Executable */
+            executable: boolean;
+            /** Group Count */
+            group_count: number;
+            /** Groups */
+            groups?: components["schemas"]["CreationPreviewGroupModel"][];
+            numbering: components["schemas"]["CreationNumberingModel"];
+            /** Preview Digest */
+            preview_digest: string;
+            /** Revision */
+            revision: number;
+            /** Sheet Count */
+            sheet_count: number;
+            /** Sheetset Values */
+            sheetset_values?: {
+                [key: string]: string;
+            };
+            /** Standard Id */
+            standard_id: string;
+            /** Standard Name */
+            standard_name: string;
+            /** Standard Version */
+            standard_version: string;
+            suffix: components["schemas"]["CreationSuffixModel"];
+            /** Target Path */
+            target_path: string;
+        };
+        /**
+         * CreationPreviewSheetModel
+         * @description 一张展开后的图纸：最终图号/标题/布局名与该张全部属性值。
+         */
+        CreationPreviewSheetModel: {
+            /** Layout Name */
+            layout_name: string;
+            /** Number */
+            number: string;
+            /** Title */
+            title: string;
+            /** Values */
+            values?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * CreationStandardCandidateModel
+         * @description 创建标准候选；不可用时 ``reasons`` 说明为什么不能选。
+         */
+        CreationStandardCandidateModel: {
+            /** Asset Options */
+            asset_options?: components["schemas"]["CreationAssetOptionModel"][];
+            /** Available */
+            available: boolean;
+            /** Name */
+            name: string;
+            /** Reasons */
+            reasons?: string[];
+            /** Standard Id */
+            standard_id: string;
+            /** Supported Cad Versions */
+            supported_cad_versions?: string[];
+            /** Version */
+            version: string;
+        };
+        /**
+         * CreationSuffixModel
+         * @description 当前有效设置里的标题后缀与不编号关键字。
+         */
+        CreationSuffixModel: {
+            /** Enabled */
+            enabled: boolean;
+            /** Suffix Type */
+            suffix_type: number;
+            /** Unnumbered Keywords */
+            unnumbered_keywords?: string[];
         };
         /** DeleteCustomPropertyCommand */
         DeleteCustomPropertyCommand: {
@@ -2495,6 +2909,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionErrorResponse"];
+                };
+            };
+        };
+    };
+    create_creation_draft_api_creation_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreationDraftCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_creation_draft_api_creation_drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_creation_draft_api_creation_drafts__draft_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreationDraftSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_creation_draft_api_creation_drafts__draft_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_creation_draft_api_creation_drafts__draft_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post: {
+        parameters: {
+            query?: {
+                expected_revision?: number | null;
+            };
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_creation_xlsx_api_creation_drafts__draft_id__xlsx_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationDraftResponse"];
+                };
+            };
+            /** @description 导入被整批拒绝：草稿 JSON 与修订号保持不变 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationImportRejectedResponse"];
+                };
+            };
+        };
+    };
+    export_creation_xlsx_template_api_creation_drafts__draft_id__xlsx_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_creation_standards_api_creation_drafts_standards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationStandardCandidateModel"][];
                 };
             };
         };

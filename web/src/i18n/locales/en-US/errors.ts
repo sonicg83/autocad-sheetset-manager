@@ -20,6 +20,16 @@ export default {
   draft: {
     conflict: "Draft version conflict. Refresh and try again",
   },
+  // Standard-driven creation (PLAN-DM-036 Task 4); keys mirror the CREATION_* codes
+  creation: {
+    draftNotFound: "The creation draft does not exist; start the creation again",
+    draftInvalid: "The creation draft content is invalid; check the input and retry",
+    draftConflict: "The creation draft was changed elsewhere; refresh and retry",
+    draftCorrupt: "The creation draft file is corrupted and was quarantined; start the creation again",
+    standardMissing: "The selected standard is unpublished or no longer available; choose a standard again",
+    targetNotEmpty: "The target folder already exists and is not empty, or a file with that name exists; change the project folder name or the parent folder",
+    importInvalid: "The import was rejected as a whole with {count} issue(s); fix them by sheet, row and column and retry",
+  },
   job: {
     notFound: "Job not found",
     notRetryable: "This job cannot be retried in its current state",

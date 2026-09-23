@@ -20,6 +20,17 @@ export default {
   draft: {
     conflict: "草稿版本冲突，请刷新后重试",
   },
+  // ---- 标准驱动创建（PLAN-DM-036 Task 4；键名与 message_catalog.py 的
+  // CREATION_* 稳定码一一对应） ----
+  creation: {
+    draftNotFound: "创建草稿不存在，请重新开始创建",
+    draftInvalid: "创建草稿内容无效，请检查输入后重试",
+    draftConflict: "创建草稿已被其他操作修改，请刷新后重试",
+    draftCorrupt: "创建草稿文件损坏，已隔离保存，请重新开始创建",
+    standardMissing: "所选标准未发布或已不可用，请重新选择标准",
+    targetNotEmpty: "目标目录已存在且非空或存在同名文件，请修改项目目录名或上级目录",
+    importInvalid: "导入被整组拒绝，共 {count} 条问题，请按工作表、行、列定位修正后重试",
+  },
   job: {
     notFound: "任务不存在",
     notRetryable: "当前任务状态不允许重试",

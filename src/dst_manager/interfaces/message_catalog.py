@@ -57,6 +57,16 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "REVISION_RESTORE_SOURCE_CHANGED": _E("errors.revision.restoreSourceChanged"),
     # ---- 草稿 ----
     "DRAFT_CONFLICT": _E("errors.draft.conflict"),
+    # ---- 标准驱动创建（PLAN-DM-036 Task 4；草稿/标准/目标/导入四个入口的稳定码） ----
+    # 参数只携带可数诊断条数，导入的逐条定位（工作表/行/列）随 422 响应体的
+    # ``diagnostics`` 返回，不进 params。
+    "CREATION_DRAFT_NOT_FOUND": _E("errors.creation.draftNotFound"),
+    "CREATION_DRAFT_INVALID": _E("errors.creation.draftInvalid"),
+    "CREATION_DRAFT_CONFLICT": _E("errors.creation.draftConflict"),
+    "CREATION_DRAFT_CORRUPT": _E("errors.creation.draftCorrupt"),
+    "CREATION_STANDARD_MISSING": _E("errors.creation.standardMissing"),
+    "CREATION_TARGET_NOT_EMPTY": _E("errors.creation.targetNotEmpty"),
+    "CREATION_IMPORT_INVALID": _E("errors.creation.importInvalid", {"count": int}),
     # ---- 任务 ----
     "JOB_NOT_FOUND": _E("errors.job.notFound"),
     "JOB_NOT_RETRYABLE": _E("errors.job.notRetryable"),

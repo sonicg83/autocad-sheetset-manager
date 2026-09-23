@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
+from dst_manager.application.creation import CreationOperations
 from dst_manager.application.creation_drafts import CreationDraftOperations
 from dst_manager.application.drafts import DraftOperations
 from dst_manager.application.editing import EditingOperations
@@ -62,6 +63,7 @@ class DstManagerService(
     StandardOperations,
     StandardAssetOperations,
     CreationDraftOperations,
+    CreationOperations,
 ):
     # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
     _runtime: RuntimeSettings | None = None
