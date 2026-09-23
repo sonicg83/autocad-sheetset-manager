@@ -254,7 +254,7 @@ function clearAll(): void {
 .sample-row{display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-label);color:var(--color-text-secondary)}
 .sample-label{width:20%}
 .sample-value{font-family:var(--font-mono);color:var(--color-text-primary)}
-@media (max-width: 959px){
+@media (max-width: 780px){
   .token-editor{grid-template-columns:minmax(0,1fr)}
 }
 </style>

@@ -348,9 +348,11 @@ export async function openStandards(page: Page): Promise<void> {
   await expect(page.getByRole("heading", {name: "标准管理"})).toBeVisible();
 }
 
-/** 左栏标准条目按钮（限定在「标准库」区域内，避免与详情里的版本链接混淆）。 */
+/** 左栏标准条目按钮（限定在标准库列表内，避免与详情里的版本链接混淆）。
+ *  用 `data-testid="library-list"` 而不是区域可访问名：区域名随语言变化，
+ *  英文场景下按中文区域名定位会永远解析不到（定位器静默等待直到超时）。 */
 export function libraryItems(page: Page): Locator {
-  return page.getByRole("region", {name: "标准库"}).getByRole("list").getByRole("button");
+  return page.getByTestId("library-list").getByRole("button");
 }
 
 /** 选中草稿并进入分区编辑器（详情面板的「编辑」入口）。 */

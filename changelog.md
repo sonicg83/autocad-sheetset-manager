@@ -1,3 +1,12 @@
+## 2026-09-23（收敛标准编辑器响应式布局，PLAN-DM-039 Task 3）
+
+- 分级响应式（对照 SPEC-DM-017 编辑器 Demo）：`StandardEditor` 工作区标准视口 `238px + 1fr`、1050px 以下收窄到 210px、780px 以下才堆叠单列；`StandardSectionNav` 在 780px 以下改为单行水平滚动（按钮保留完整可访问名称与最小点击高度，不截短成序号）；`TokenExpressionEditor` 的字段浏览器/编辑器双列断点由 959px 改为 780px。
+- `OrdinaryPropertyEditor` 新增 `ordinary-table-scroll` 局部滚动容器：表格保持 `--standards-table-min-width`（930px，SPEC-DM-017 Demo 结构基线），页面本身不横向滚动；`DerivedPropertyEditor` 在 1050px 以下隐藏纯说明列、780px 以下隐藏源摘要列，属性名/作用域/类型/编辑/删除动作任何档位都不隐藏。
+- `tokens.css` 新增 `--standards-table-min-width:930px` 令牌（满足 `check:ui` 裸视觉值门禁）。
+- 新增回归用例：“900×768 编辑工作台保留侧栏且宽表只在自身滚动”（先 RED：`ordinary-table-scroll` 不存在）、“900×768 下英文与深色主题主要动作仍可见且无溢出”、“200% 缩放下欢迎页、编辑器正文与发布检查页无页面级横向溢出”。
+- `tests/e2e/fixtures/standards.ts` 的 `libraryItems` 改用 `data-testid="library-list"` 定位（原按中文区域名「标准库」定位，英文场景下永远解析不到，导致英文用例静默超时）；英文用例在 finally 中恢复默认设置文件，避免污染后续用例。
+- 验证：`npm run test:unit` **275 passed**、`check:i18n` 1302 键 / 10 域、`check:ui` 退出码 0、`standards-editor` + `standards-library` + `standards-welcome` **70 passed / 0 failed**、`standards-assets-publish` + `standards-visual-evidence` **42 passed / 0 failed**、`npm run build` 退出码 0。
+
 ## 2026-09-23（拆分标准库与全宽编辑工作台，PLAN-DM-039 Task 2）
 
 - `StandardsView` 改为互斥页面状态：`editorOpen` 时用 Vue 分支**卸载**标准库与标准详情（不靠 CSS 隐藏），编辑器直接占用标准页内容宽度；返回时 `store`、`selectedKey`、筛选与已加载详情仍由视图持有，选择不重建。

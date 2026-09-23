@@ -60,7 +60,7 @@ function update(partial: Partial<StandardFilters>): void {
     <p v-else-if="listError" class="library-status error" role="alert">{{ $t("standards.library.loadFailed", {message: listError}) }}</p>
     <p v-else-if="state.kind==='empty-library'" class="library-status">{{ $t("standards.library.empty") }}</p>
     <p v-else-if="state.kind==='empty-filter'" class="library-status">{{ $t("standards.library.noMatch") }}</p>
-    <ul v-else class="library-list">
+    <ul v-else class="library-list" data-testid="library-list">
       <li v-for="item in state.items" :key="item.source + '/' + (item.draft_id ?? item.version)">
         <button
           type="button"

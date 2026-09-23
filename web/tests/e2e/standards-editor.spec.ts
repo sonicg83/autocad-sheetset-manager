@@ -5,11 +5,13 @@
 // 发布 error 与 warning 区分、DWG 非法文件名、紧凑复选框、
 // 900×768 与 200% 缩放下的模态操作栏可达，以及纯键盘令牌插入与模态焦点归还。
 import {expect, test, type Page} from "@playwright/test";
+import {writeSettingsFile} from "./fixtures/settings";
 import {
   draft,
   draftDocument,
   editorSaveState,
   installStandards,
+  libraryItems,
   openDraftEditor,
   openEditorSection,
   openStandards,
@@ -55,6 +57,15 @@ async function expectActionsReachable(page: Page, names: string[]): Promise<void
 async function saveDraftDocument(page: Page): Promise<void> {
   await page.getByRole("button", {name: "保存草稿"}).click();
   await expect(editorSaveState(page)).toHaveText("已保存");
+}
+
+/** 把界面语言与主题切到指定值：直接写 e2e 隔离设置文件（与 i18n 证据同一口径），
+ * 不 mock /api/settings——避免与标准端点 route 叠加后影响其他请求。 */
+async function installLocale(page: Page, locale: "zh-CN" | "en-US", theme: "light" | "dark" = "light"): Promise<void> {
+  writeSettingsFile({ui_locale: locale, ui_theme: theme}, 1);
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("lang", locale);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }
 
 test("普通属性到映射、组合和 DWG 命名形成单向流程", async ({page}) => {
@@ -332,6 +343,67 @@ test("必填复选框保持紧凑尺寸与更大点击区域", async ({page}) =>
   const hit = await page.locator("label.required-hit").first().boundingBox();
   expect(hit?.width).toBeGreaterThanOrEqual(32);
   expect(hit?.height).toBeGreaterThanOrEqual(32);
+});
+
+test("900×768 编辑工作台保留侧栏且宽表只在自身滚动", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+  // 900px 仍保留侧栏 + 内容双列（SPEC-DM-017 Demo 的 1050px 档）；780px 以下才堆叠
+  const columns = await page.getByTestId("standards-editor-workspace").evaluate(
+    element => getComputedStyle(element).gridTemplateColumns.split(" "),
+  );
+  expect(columns).toHaveLength(2);
+  await expectNoPageHScroll(page, "900×768 普通属性");
+  // 页面不横向滚动 ≠ 表格不滚动：宽表在自身容器内滚动，保持可读的最小宽度
+  const table = page.getByTestId("ordinary-table-scroll");
+  await expect(table).toBeVisible();
+  const overflow = await table.evaluate(element => element.scrollWidth > element.clientWidth);
+  expect(overflow).toBe(true);
+});
+
+test("900×768 下英文与深色主题主要动作仍可见且无溢出", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  try {
+    // 语言与主题在挂载前由设置文件决定：先写入再 goto
+    await installLocale(page, "en-US", "dark");
+    await page.getByRole("button", {name: "Manage drawing standards"}).click();
+    await libraryItems(page).first().click();
+    await page.getByRole("button", {name: "Edit"}).click();
+    await expect(page.getByRole("region", {name: "Standard draft editor"})).toBeVisible();
+
+    // 只断言可见性、可达性与无溢出，不以固定文本像素宽度制造平台脆弱测试
+    await expectActionsReachable(page, ["Save draft", "Publish check", "Back to standard library"]);
+    await expectNoPageHScroll(page, "900×768 英文深色编辑器");
+    await page.getByTestId("editor-section-dwgNaming").click();
+    await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003");
+    await expectNoPageHScroll(page, "900×768 英文深色 DWG 命名");
+  } finally {
+    // 设置文件是全局共享的：必须恢复默认，否则后续用例会继承英文与深色主题
+    writeSettingsFile({ui_locale: "zh-CN", ui_theme: "light"}, 1);
+  }
+});
+
+test("200% 缩放下欢迎页、编辑器正文与发布检查页无页面级横向溢出", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await page.goto("/");
+  // 1440×900 下浏览器 200% 缩放 = CSS 视口 720×450 + 2x 渲染（与 i18n 证据同一口径）
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setDeviceMetricsOverride", {width: 720, height: 450, deviceScaleFactor: 2, mobile: false});
+  await expect(page.getByTestId("welcome-layout")).toBeVisible();
+  await expectNoPageHScroll(page, "200% 欢迎页");
+
+  await page.getByRole("button", {name: "管理图纸标准"}).click();
+  await libraryItems(page).first().click();
+  await page.getByRole("button", {name: "编辑"}).click();
+  await expect(page.getByTestId("standards-editor-workspace")).toBeVisible();
+  await expectNoPageHScroll(page, "200% 编辑器正文");
+  await page.getByRole("button", {name: "发布检查"}).click();
+  await expect(page.getByTestId("publish-review")).toBeVisible();
+  await expectNoPageHScroll(page, "200% 发布检查页");
 });
 
 test("900×768 下模态操作栏可见且无横向溢出", async ({page}) => {

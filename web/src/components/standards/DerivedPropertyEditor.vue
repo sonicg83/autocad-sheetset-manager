@@ -327,6 +327,17 @@ function removeProperty(property: DraftProperty): void {
 .derived-list{display:grid;gap:var(--space-2)}
 .derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2);align-items:start}
 .derived-head{font-size:var(--font-label);color:var(--color-text-secondary)}
+/* 分级响应式（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：
+   1050px 以下隐藏纯说明列，780px 以下再隐藏可由编辑模态框读取的源摘要列；
+   属性名、作用域、类型、编辑与删除动作任何档位都不得隐藏。 */
+@media (max-width: 1050px){
+  .derived-row{grid-template-columns:minmax(0,1.2fr) 9% minmax(0,1.1fr) 12% auto auto}
+  .derived-row :deep([data-testid^="derived-description-"]),.derived-row.derived-head :nth-child(5){display:none}
+}
+@media (max-width: 780px){
+  .derived-row{grid-template-columns:minmax(0,1.2fr) 9% 12% auto auto}
+  .derived-row :deep([data-testid^="derived-source-"]),.derived-row.derived-head :nth-child(3){display:none}
+}
 .scope-locked{display:inline-block;padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label)}
 .cell-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .source-summary{padding-top:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary);overflow-wrap:anywhere}

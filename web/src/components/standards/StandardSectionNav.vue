@@ -38,4 +38,11 @@ const emit = defineEmits<{select: [id: EditorSectionId]}>();
 .section-button.active{border-color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent)}
 .section-order{color:var(--color-text-muted);font-size:var(--font-label)}
 .section-count{font-size:var(--font-label);color:var(--color-text-secondary);border:1px solid var(--color-border-subtle);border-radius:var(--radius-full);padding:0 var(--space-2)}
+/* 窄视口（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：分区导航改为单行水平滚动，
+   按钮保持完整可访问名称与最小点击高度，不截短成只剩序号。 */
+@media (max-width: 780px){
+  .section-nav{overflow-x:auto}
+  .section-list{grid-auto-flow:column;grid-auto-columns:max-content;gap:var(--space-2)}
+  .section-button{width:auto;white-space:nowrap}
+}
 </style>

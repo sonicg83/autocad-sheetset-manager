@@ -211,7 +211,10 @@ function applyCsv(): void {
       {{ $t("standards.ordinary.deleteBlocked", {count: blocked.owners.length, owners: blocked.owners.join(t("standards.enumDialog.nameSeparator"))}) }}
     </p>
     <p v-if="ordinaryProperties.length === 0" class="section-empty">{{ $t("standards.ordinary.empty") }}</p>
-    <table v-else class="ordinary-table" data-testid="ordinary-table">
+    <!-- 宽表局部滚动（PLAN-DM-039 Task 3）：页面本身不横向滚动，表格保持可读的结构基线宽度
+         （SPEC-DM-017 编辑器 Demo 的 930px），只在自身容器内滚动。 -->
+    <div v-else class="ordinary-scroll" data-testid="ordinary-table-scroll">
+      <table class="ordinary-table" data-testid="ordinary-table">
       <thead>
         <tr>
           <th scope="col" class="col-name">{{ $t("standards.ordinary.name") }}</th>
@@ -326,7 +329,8 @@ function applyCsv(): void {
           </td>
         </tr>
       </tbody>
-    </table>
+      </table>
+    </div>
     <EnumValuesDialog
       :open="dialogProperty !== null"
       :property="dialogProperty"
@@ -362,7 +366,8 @@ function applyCsv(): void {
 .identity-note{color:var(--color-text-muted)}
 .delete-error{margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-danger);border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);font-size:var(--font-label)}
 .section-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
-.ordinary-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.ordinary-scroll{overflow-x:auto;min-width:0}
+.ordinary-table{width:100%;min-width:var(--standards-table-min-width);border-collapse:collapse;table-layout:fixed}
 .ordinary-table th,.ordinary-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
 .ordinary-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500}
 .col-scope{width:12%}

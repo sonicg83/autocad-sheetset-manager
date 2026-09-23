@@ -457,6 +457,15 @@ defineExpose({guard, isDirty: () => dirty.value});
 /* 独立全宽工作台：238px 分区导航 + 自适应内容面板（SPEC-DM-017 编辑器 Demo） */
 .editor-workspace{display:grid;grid-template-columns:238px minmax(0,1fr);gap:var(--space-4);align-items:start}
 .editor-nav{position:sticky;top:0}
+/* 分级响应式（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：
+   标准视口 238px 导航；1050px 以下收窄到 210px；780px 以下才堆叠为单列。 */
+@media (max-width: 1050px){
+  .editor-workspace{grid-template-columns:210px minmax(0,1fr)}
+}
+@media (max-width: 780px){
+  .editor-workspace{grid-template-columns:minmax(0,1fr)}
+  .editor-nav{position:static}
+}
 .editor-panel{min-width:0;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
 .editor-panel-body{padding:var(--space-4)}
 .basic-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
