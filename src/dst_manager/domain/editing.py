@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dst_manager.domain.keywords import title_matches_keywords
 from dst_manager.domain.models import (
     CustomPropertyDefinition,
     DerivedDocument,
@@ -19,6 +18,13 @@ from dst_manager.domain.models import (
     SheetSetDocument,
     Subset,
     SuffixOptions,
+)
+from dst_manager.domain.sheet_numbering import (
+    SheetNumberingError,
+    compress_group_title,
+    format_number_range,
+    is_unnumbered_title,
+    number_seed,
 )
 
 
@@ -290,27 +296,6 @@ def derive_group_titles(
     return result
 
 
-def _compressed_group_title(base_title: str, sheet_titles: list[str]) -> str:
-    """把组内多张带后缀图纸的标题压缩为单个带区间后缀的标题。
-
-    例如三张 `图纸目录 (一)`/`图纸目录 (二)`/`图纸目录 (三)` 压缩为
-    `图纸目录 (一)-(三)`，供派生 DWG 文件名使用。组内仅一张时沿用基础
-    标题（向后兼容）；任一张标题结构不符合 `基础标题 (后缀)` 时防御性
-    回退为基础标题，保持与旧行为一致。
-    """
-    if len(sheet_titles) < 2:
-        return base_title  # 组内仅一张时沿用基础标题（SPEC-DM-008 §3.2 向后兼容）
-    prefix = f"{base_title} ("
-    suffixes: list[str] = []
-    for title in sheet_titles:
-        if title.startswith(prefix) and title.endswith(")"):
-            suffixes.append(title[len(prefix):-1])
-        else:
-            return base_title  # 结构异常时防御性回退为基础标题
-    # 区间压缩：文件名后缀只保留首末两张图纸的序号（如 (一)-(六)），与图纸标题后缀语义对齐
-    return f"{prefix}{suffixes[0]})-({suffixes[-1]})"
-
-
 def derive_document_structure(
     document: SheetSetDocument,
     commands: list[dict[str, Any]],
@@ -326,7 +311,7 @@ def derive_document_structure(
     original_unnumbered_subset_ids = {
         subset_id
         for subset_id, title in titles.items()
-        if title_matches_keywords(title, suffix_options.unnumbered_keywords)
+        if is_unnumbered_title(title, suffix_options.unnumbered_keywords)
     }
     affected: set[str] = set()
     layout_sources = _existing_layout_sources(document)
@@ -413,7 +398,7 @@ def derive_document_structure(
     unnumbered_subset_ids = {
         subset.acsm_id
         for subset in subsets
-        if title_matches_keywords(titles[subset.acsm_id], suffix_options.unnumbered_keywords)
+        if is_unnumbered_title(titles[subset.acsm_id], suffix_options.unnumbered_keywords)
     }
 
     start, width = _number_seed(document, unnumbered_subset_ids | original_unnumbered_subset_ids)
@@ -446,7 +431,7 @@ def derive_document_structure(
             sheet.layout.layout_name = _layout_name(sheet.number, sheet.title)
         number_range = _number_range(subset.sheets)
         source_target = _source_target_file(document, subset, layout_sources)
-        target_file = _target_file_name(source_target, number_range, _compressed_group_title(title, titles_for_subset), project_prefix)
+        target_file = _target_file_name(source_target, number_range, compress_group_title(title, titles_for_subset), project_prefix)
         derived_subsets.append(
             DerivedSubset(subset.acsm_id, title, number_range, f"{number_range} {title}", subset.sheets, source_target, target_file),
         )
@@ -612,30 +597,25 @@ def _number_seed(document: SheetSetDocument, unnumbered_subset_ids: set[str]) ->
     """编号起点与位数取自首个「有编号子集」的首张纯数字图号。
 
     不编号子集的 0 填充图号（如 000）必须排除，否则会把起点拉成 0，
-    使全部子集都从 000 开始编号（SPEC-DM-014 §3.2）。
+    使全部子集都从 000 开始编号（SPEC-DM-014 §3.2）。种子语义见
+    :func:`dst_manager.domain.sheet_numbering.number_seed`。
     """
-    for subset in document.subsets:
-        if subset.acsm_id in unnumbered_subset_ids:
-            continue
-        for sheet in subset.sheets:
-            if sheet.number.isdigit():
-                return int(sheet.number), len(sheet.number)
-    # 全部子集都不编号时无编号种子：仅借用文档既有数字图号的位数（图号仍全为 0 填充），
-    # 使「符合项目编号位数」不因关键字命中而丢失；确实无数字图号时回退 1 位
-    for subset in document.subsets:
-        for sheet in subset.sheets:
-            if sheet.number.isdigit():
-                return 1, len(sheet.number)
-    return 1, 1
+    return number_seed(
+        (
+            sheet.number
+            for subset in document.subsets
+            if subset.acsm_id not in unnumbered_subset_ids
+            for sheet in subset.sheets
+        ),
+        (sheet.number for subset in document.subsets for sheet in subset.sheets),
+    )
 
 
 def _number_range(sheets: list[Sheet]) -> str:
-    if not sheets:
-        raise EditingError("EMPTY_SUBSET", "子集必须至少包含一张图纸")
-    # 不编号子集内所有图纸图号相同 → 图号范围退化为单值（如 000），不写成 000-000
-    if sheets[0].number == sheets[-1].number:
-        return sheets[0].number
-    return f"{sheets[0].number}-{sheets[-1].number}"
+    try:
+        return format_number_range([sheet.number for sheet in sheets])
+    except SheetNumberingError as exc:
+        raise EditingError(exc.code, exc.message) from exc
 
 
 def _range_start(number_range: str) -> int:

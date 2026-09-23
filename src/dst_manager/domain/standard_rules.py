@@ -11,6 +11,8 @@
 关键语义：
 
 - 可选源为空时映射结果为空字符串，不报错；
+- 调用方**漏传**普通属性键与显式空串不同义：漏传即上游无法计算，该派生属性进入
+  阻断集合且不写入派生键（显式空串仍按「可选源为空」处理）；
 - 非空源值不属于枚举、映射行缺目标或上游失败时，下游组合标记为无法计算，
   不读取调用方传入的旧派生值，也不写入部分结果；
 - 枚举列表增删改后映射进入待确认状态，发布检查给出 warning；
@@ -152,6 +154,10 @@ def evaluate_standard_properties(
     ``values`` 以 ``property_id`` 为键提供普通属性值，``system_values`` 提供
     ``sheet.number``/``sheet.title`` 等系统字段。调用方传入的派生属性旧值
     一律丢弃，只使用本次计算出的结果。
+
+    普通属性必须提供键（可以为空串）：**漏传键**代表「宿主没有提供该输入」，
+    与「合法的空值」不同义——映射源或组合令牌缺键时该派生属性报
+    ``STANDARD_DERIVED_UPSTREAM_INVALID``、进入阻断集合，并且不写入派生键。
     """
     derived_ids = {mapping.property_id for mapping in compiled.mappings} | {
         prop.property_id for prop in compiled.compositions
@@ -186,7 +192,16 @@ def evaluate_standard_properties(
                 )
             )
             continue
-        source_value = result.get(mapping.source_property_id, "")
+        if mapping.source_property_id not in result:
+            blocked.add(mapping.property_id)
+            diagnostics.append(
+                _upstream_diagnostic(
+                    mapping.property_id,
+                    f"映射源 {mapping.source_property_id!r} 未提供值",
+                )
+            )
+            continue
+        source_value = result[mapping.source_property_id]
         if source_value == "":
             result[mapping.property_id] = ""
             continue
@@ -224,7 +239,10 @@ def _evaluate_composition(
     blocked: set[str],
     diagnostics: list[StandardDiagnostic],
 ) -> None:
-    """组合令牌：字段可选（空按空字符串），系统字段必需，上游失败即整条失败。"""
+    """组合令牌：字段可选（显式空串按空字符串拼接），系统字段必需，上游失败即整条失败。
+
+    字段令牌引用的普通属性**缺键**时同样属于上游失败：不按空串拼接，也不写结果。
+    """
     parts: list[str] = []
     for index, segment in enumerate(prop.segments):
         if segment.literal is not None:
@@ -253,7 +271,13 @@ def _evaluate_composition(
             )
             blocked.add(prop.property_id)
             return
-        parts.append(result.get(referenced, ""))
+        if referenced not in result:
+            diagnostics.append(
+                _upstream_diagnostic(prop.property_id, f"上游属性 {referenced!r} 未提供值")
+            )
+            blocked.add(prop.property_id)
+            return
+        parts.append(result[referenced])
     result[prop.property_id] = "".join(parts)
 
 

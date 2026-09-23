@@ -286,6 +286,63 @@ def test_stale_derived_values_are_never_reused_on_failure() -> None:
     assert "prop-label" not in result.values
 
 
+def test_missing_ordinary_key_is_not_treated_as_empty_value() -> None:
+    """漏传普通属性键不得按空值求值：缺键即上游无法计算，且不写派生结果。"""
+    compiled = compile_standard_properties(parse_published_standard_document(standard_document()))
+    complete = evaluate_standard_properties(compiled, {"prop-major": "燃气"}, {})
+    assert complete.values["prop-label"] == "RQ-燃气"
+
+    incomplete = evaluate_standard_properties(compiled, {}, {})
+    assert "prop-code" not in incomplete.values
+    assert "prop-label" not in incomplete.values
+    assert [
+        diagnostic.property_id
+        for diagnostic in incomplete.diagnostics
+        if diagnostic.code == "STANDARD_DERIVED_UPSTREAM_INVALID"
+    ] == ["prop-code", "prop-label"]
+
+
+def test_missing_composition_token_key_blocks_the_composition() -> None:
+    """组合令牌引用的普通属性缺键时整条组合无法计算，不按空串拼接。"""
+    document = standard_document()
+    _properties(document).append(
+        {
+            "property_id": "prop-note",
+            "name": "备注",
+            "previous_names": [],
+            "scope": "sheetset",
+            "kind": "text",
+            "default_value": "",
+        }
+    )
+    _properties(document).append(
+        {
+            "property_id": "prop-extra-label",
+            "name": "附加图签",
+            "previous_names": [],
+            "scope": "sheetset",
+            "kind": "composition",
+            "segments": [
+                {"property_id": "prop-major"},
+                {"literal": "/"},
+                {"property_id": "prop-note"},
+            ],
+        }
+    )
+    compiled = compile_standard_properties(parse_published_standard_document(document))
+    assert evaluate_standard_properties(
+        compiled, {"prop-major": "燃气", "prop-note": "A"}, {}
+    ).values["prop-extra-label"] == "燃气/A"
+
+    incomplete = evaluate_standard_properties(compiled, {"prop-major": "燃气"}, {})
+    assert "prop-extra-label" not in incomplete.values
+    assert [
+        diagnostic.property_id
+        for diagnostic in incomplete.diagnostics
+        if diagnostic.code == "STANDARD_DERIVED_UPSTREAM_INVALID"
+    ] == ["prop-extra-label"]
+
+
 def test_unrelated_ordinary_values_pass_through_unchanged() -> None:
     compiled = compile_standard_properties(parse_published_standard_document(standard_document()))
     result = evaluate_standard_properties(
