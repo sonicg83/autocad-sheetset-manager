@@ -86,6 +86,9 @@ function issueText(property: DraftProperty): string {
     .map(diagnostic =>
       t(`standards.diagnostic.${diagnostic.code}`, {
         segment: diagnostic.segmentIndex === undefined ? "" : diagnostic.segmentIndex + 1,
+        // `{field}`/`{source}` 占位符共用一个出错值；多余参数对无占位符的文案无副作用
+        field: diagnostic.detail ?? "",
+        source: diagnostic.detail ?? "",
       }),
     )
     .join(t("standards.enumDialog.nameSeparator"));

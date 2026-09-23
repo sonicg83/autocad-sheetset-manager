@@ -2,6 +2,12 @@
 
 - 新增 SPEC-DM-018，记录用户确认的四阶段创建向导、项目目录输入、按组编辑与批量修改、双工作表 XLSX 全量导入、按图纸组预览和属性值模态查看规则；同步文档索引。PLAN-DM-036 尚待规范复核后修订，未修改产品代码。
 
+## 2026-09-23（PLAN-DM-038 审查小修：system_field 门禁分级与诊断插值）
+
+- 修复 PLAN-DM-038 审查发现 F3（未知 `system_field` 前后端门禁分级不一致）：`draftModel.ts` 新增 `SYSTEM_FIELDS` 常量，`segmentDiagnostics` 对不在系统字段表内的片段系统引用报结构级 `STANDARD_SEGMENT_REFERENCE_UNKNOWN`——与后端草稿解析同口径（保存即被拒），不再降级为发布期作用域提示；已知但不在允许列表的仍报 `STANDARD_SEGMENT_SCOPE_INVALID`（DWG 命名下仍重命名为 `STANDARD_NAMING_FIELD_SCOPE_INVALID`）。
+- 修复审查发现 F4（诊断文案 `{field}`/`{source}` 插值渲染为空）：`DraftDiagnostic` 新增可选 `detail`（出错的原始值），标准 ID/版本号、属性作用域、映射源重复、资产标识重复/种类/路径七类诊断在生成点补齐 detail；StandardEditor 结构摘要、普通/派生属性表行内诊断与发布检查页四个渲染点统一传入 `field`/`source` 参数，用户可见出错的具体值。`STANDARD_PROPERTY_INVALID` 前端不生成（仅后端报并原文展示），不在范围。
+- 新增 6 项测试锁定上述行为（模型级 4 项 + 组件渲染级 2 项，含「未知命名/组合系统字段进保存门禁」「detail 携带出错值」「行内/发布检查渲染含出错值」）。全量单测 274 项、`vue-tsc`、`check:i18n`（1293 键）、`check:ui`、构建与标准系 E2E 66 项全部通过；审查备忘 F3/F4 标记已修复。
+
 ## 2026-09-23（登记 PLAN-DM-038 审查遗留发现备忘）
 
 - 新增 `.planning/memos/dst-manager/2026-09-23-plan-dm-038-code-review-findings.md`：登记 PLAN-DM-038 整分支代码审查的 4 项遗留发现（求值输入缺键当空值的契约缺口、未知 system_field 前后端门禁分级不一致、诊断文案 `{field}`/`{source}` 插值未传、名称规范化 `toLocaleLowerCase` vs `casefold` 口径分歧），含独立验证证据与逐项处理建议；已修复的前端文件名阻断问题与已登记的 R10/R13 事项一并记录备查。

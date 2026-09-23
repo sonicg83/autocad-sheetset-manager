@@ -8,7 +8,9 @@ import {createI18n} from "vue-i18n";
 import DerivedPropertyEditor from "./DerivedPropertyEditor.vue";
 import zhCNStandards from "../../i18n/locales/zh-CN/standards";
 import {
+  publishIssues,
   toDraftDocument,
+  type DraftDiagnostic,
   type DraftDocument,
   type DraftMappingProperty,
 } from "../../features/standards/draftModel";
@@ -87,11 +89,11 @@ function documentWithClaimedSource(): DraftDocument {
   });
 }
 
-function mountDerivedEditor(draft: DraftDocument) {
+function mountDerivedEditor(draft: DraftDocument, diagnostics?: DraftDiagnostic[]) {
   const host = window.document.createElement("div");
   window.document.body.appendChild(host);
   return mount(DerivedPropertyEditor, {
-    props: {document: draft},
+    props: {document: draft, diagnostics},
     global: {plugins: [i18n]},
     attachTo: host,
   });
@@ -125,6 +127,12 @@ afterEach(() => {
 });
 
 describe("DerivedPropertyEditor", () => {
+  it("renders the duplicated source name in the row issue text", () => {
+    const draft = documentWithClaimedSource();
+    const wrapper = mountDerivedEditor(draft, publishIssues(draft));
+    expect(wrapper.get("[data-testid=derived-issue-prop-code]").text()).toContain("（专业）");
+  });
+
   it("offers only unclaimed ordinary enum sources and fixes rows to enum ids", async () => {
     const wrapper = mountDerivedEditor(documentWithClaimedSource());
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");

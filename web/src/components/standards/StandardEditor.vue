@@ -360,7 +360,7 @@ defineExpose({guard, isDirty: () => dirty.value});
             :data-testid="`structure-diagnostic-${index}`"
             @click="jumpToDiagnostic(item)"
           >
-            {{ $t(`standards.diagnostic.${item.code}`, {segment: item.segmentIndex === undefined ? "" : item.segmentIndex + 1}) }}
+            {{ $t(`standards.diagnostic.${item.code}`, {segment: item.segmentIndex === undefined ? "" : item.segmentIndex + 1, field: item.detail ?? "", source: item.detail ?? ""}) }}
           </button>
         </li>
       </ul>

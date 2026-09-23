@@ -198,6 +198,14 @@ describe("OrdinaryPropertyEditor", () => {
     expect(wrapper.get("[data-testid=ordinary-name-prop-major]").attributes("aria-invalid")).toBe("true");
   });
 
+  it("renders the offending scope value in the issue text", () => {
+    const draft = documentWithEnum();
+    const major = propertyOf(draft, "prop-major");
+    if (major !== undefined) major.scope = "bogus" as typeof major.scope;
+    const wrapper = mountEditor(draft, publishIssues(draft));
+    expect(wrapper.get("[data-testid=ordinary-issue-prop-major]").text()).toContain("bogus");
+  });
+
   it("marks a cross scope name conflict on the offending row", () => {
     const draft = documentWithEnum();
     const appended = toDraftDocument({

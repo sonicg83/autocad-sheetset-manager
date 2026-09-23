@@ -1,5 +1,7 @@
 # PLAN-DM-038 代码审查遗留发现（2026-09-23）
 
+> **2026-09-23 更新**：F3、F4 已按小修处理（同一提交，随本次修复合入分支）；F2、F5 仍遗留，处理建议见文末汇总表。
+
 来源：分支 `feature/plan-dm-038-standard-properties-and-dwg-naming`（main..HEAD，12 提交，约 1.46 万行）全量 diff 审查；7 项发现已逐条对照代码独立验证（含运行期实测）。执行记录见 `.superpowers/sdd/PLAN-DM-038-standard-properties-and-dwg-naming-remediation`。
 
 ## 已修复（不在遗留范围）
@@ -18,14 +20,18 @@
 - 排除项：标准层面不存在「映射缺目标」——发布门禁已保证枚举值非空不重复（`STANDARD_ENUM_ITEM_INVALID`/`STANDARD_ENUM_ITEM_DUPLICATE`）、映射行固定全覆盖且目标非空（`STANDARD_MAPPING_TARGET_EMPTY`）、映射必须有源（`STANDARD_MAPPING_SOURCE_INVALID`）；非法非空运行值的失败传播链路（`STANDARD_ENUM_VALUE_INVALID` → blocked → 命名 `SOURCE_MISSING`）已验证正确。
 - 建议修法：映射求值对「源键缺失」报一条诊断（可复用 `STANDARD_DERIVED_UPSTREAM_INVALID` 或新增码）且不写字典键；组合引用同理。显式 `""` 的合法行为不动。可在 PLAN-DM-036 实施时随宿主接线一起修（届时才有真实调用方）。
 
-### F3 未知 `system_field` 前后端门禁分级不一致（轻微）
+### F3 未知 `system_field` 前后端门禁分级不一致（轻微）—— ✅ 已修复
+
+修复：`draftModel.ts` 新增 `SYSTEM_FIELDS` 常量，`segmentDiagnostics` 对未知系统字段报结构级 `STANDARD_SEGMENT_REFERENCE_UNKNOWN`（保存门禁同后端口径），已知但不在允许列表的仍报发布级 `STANDARD_SEGMENT_SCOPE_INVALID`（DWG 命名下仍重命名为 `STANDARD_NAMING_FIELD_SCOPE_INVALID`）。
 
 - 位置：`web/src/features/standards/draftModel.ts:538-540` vs `src/dst_manager/domain/standard_schema.py:285-291`。
 - 问题：文档命名模板含**未知**系统字段（如 `foo.bar`，不在 `SYSTEM_FIELDS`）时，后端草稿解析即抛结构级 `STANDARD_SEGMENT_REFERENCE_UNKNOWN`（保存即 422），前端却归类为发布级 `STANDARD_SEGMENT_SCOPE_INVALID`——前端「结构 OK、可保存」，保存才吃到一个本地诊断列表里不存在的码。
 - 影响：窄（文档需带未知系统字段，正常 UI 流程不会产生）；但前后端同一约束的分级口径应一致。
 - 建议修法：前端 `segmentDiagnostics` 对不在全局系统字段表内的 `system_field` 先报结构级 `STANDARD_SEGMENT_REFERENCE_UNKNOWN`，再在允许列表校验失败时报 `STANDARD_SEGMENT_SCOPE_INVALID`。
 
-### F4 诊断文案插值参数 `{field}`/`{source}` 未传递（轻微，信息丢失）
+### F4 诊断文案插值参数 `{field}`/`{source}` 未传递（轻微，信息丢失）—— ✅ 已修复
+
+修复：`DraftDiagnostic` 新增可选 `detail`（出错的原始值），生成点为 `STANDARD_ID_INVALID`/`STANDARD_VERSION_INVALID`/`STANDARD_SCOPE_INVALID`/`STANDARD_MAPPING_SOURCE_DUPLICATE`/`STANDARD_ASSET_DUPLICATE`/`STANDARD_ASSET_KIND_INVALID`/`STANDARD_ASSET_PATH_INVALID` 补齐 detail；四个渲染点（StandardEditor 结构摘要、Ordinary/Derived 行内诊断、发布检查页 `issue.params`）统一传 `field`/`source`。`STANDARD_PROPERTY_INVALID` 前端不生成（仅后端报并以原文展示），不在本次范围。
 
 - 位置：`web/src/components/standards/StandardEditor.vue:363`（结构摘要只传 `{segment}`）；`publishModel.issueOf` 只传 `propertyName`/`itemId`/`segmentIndex`。
 - 问题：zh-CN/en-US 语言包中约 10 条诊断文案含 `{field}`/`{source}` 占位符（如 `STANDARD_ID_INVALID`「标准 ID 非法：{field}」、`STANDARD_MAPPING_SOURCE_DUPLICATE`「源值重复（{source}）」），渲染为空——用户看不到出错的具体值。
@@ -44,9 +50,9 @@
 
 ## 处理建议汇总
 
-| 发现 | 建议归属 |
-| --- | --- |
-| F2 | PLAN-DM-036 实施时随 `evaluate_standard_properties` 宿主接线一起修（最自然）；如提前修需补「缺键→诊断且不写键」用例 |
-| F3 | 小修，可并入 PLAN-DM-036 或独立一次提交 |
-| F4 | 小修（传参或精简文案二选一），注意双语键对称 |
-| F5 | 登记待办即可；建议接受「后端为最终口径」并在前端注释写明近似性 |
+| 发现 | 状态 | 建议归属 |
+| --- | --- | --- |
+| F2 | 遗留 | PLAN-DM-036 实施时随 `evaluate_standard_properties` 宿主接线一起修（最自然）；如提前修需补「缺键→诊断且不写键」用例 |
+| F3 | ✅ 已修复（2026-09-23） | — |
+| F4 | ✅ 已修复（2026-09-23） | — |
+| F5 | 遗留 | 登记待办即可；建议接受「后端为最终口径」并在前端注释写明近似性 |

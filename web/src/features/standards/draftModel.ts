@@ -29,6 +29,9 @@ export const SUBSET_SYSTEM_FIELDS = ["subset.scope", "subset.name", "subset.sequ
 /** Sheet 系统字段：只对 sheet 组合属性开放；不含 `sheet.name` 与布局名。 */
 export const SHEET_SYSTEM_FIELDS = ["sheet.number", "sheet.title"] as const;
 
+/** 全部系统字段：不在这个集合内的片段系统引用按结构错误处理（与后端 standard_schema 同口径）。 */
+export const SYSTEM_FIELDS: readonly string[] = [...SUBSET_SYSTEM_FIELDS, ...SHEET_SYSTEM_FIELDS];
+
 /** 保留属性名（比较忽略大小写）；`DSTManager.*` 前缀整体保留。 */
 export const RESERVED_PROPERTY_NAMES = [
   ...SUBSET_SYSTEM_FIELDS,
@@ -463,6 +466,8 @@ export interface DraftDiagnostic {
   assetId?: string;
   /** 删除保护专用：阻止删除的引用方列表。 */
   references?: PropertyReference[];
+  /** 出错的原始值，供 `{field}`/`{source}` 插值的消息文案使用。 */
+  detail?: string;
 }
 
 interface GatedDiagnostic extends DraftDiagnostic {
@@ -537,8 +542,13 @@ function segmentDiagnostics(
         diagnostics.push({...base, code: "STANDARD_SEGMENT_SCOPE_INVALID", segmentIndex});
       }
     }
-    if (segment.system_field !== undefined && !allowedSystemFields.includes(segment.system_field)) {
-      diagnostics.push({...base, code: "STANDARD_SEGMENT_SCOPE_INVALID", segmentIndex});
+    if (segment.system_field !== undefined) {
+      if (!SYSTEM_FIELDS.includes(segment.system_field)) {
+        // 与后端结构解析同口径：未知系统字段是结构致命错误（保存即被后端拒绝）
+        diagnostics.push({...base, code: "STANDARD_SEGMENT_REFERENCE_UNKNOWN", segmentIndex, gate: "structure"});
+      } else if (!allowedSystemFields.includes(segment.system_field)) {
+        diagnostics.push({...base, code: "STANDARD_SEGMENT_SCOPE_INVALID", segmentIndex});
+      }
     }
     if (segment.format !== undefined && !isValidPadFormat(segment.format)) {
       diagnostics.push({...base, code: "STANDARD_SEGMENT_FORMAT_INVALID", segmentIndex});
@@ -559,7 +569,7 @@ function propertyStructureDiagnostics(document: DraftDocument): GatedDiagnostic[
     }
     seenIds.add(property.property_id);
     if (!PROPERTY_SCOPES.includes(property.scope)) {
-      diagnostics.push({...base, code: "STANDARD_SCOPE_INVALID", gate: "structure"});
+      diagnostics.push({...base, code: "STANDARD_SCOPE_INVALID", gate: "structure", detail: property.scope});
     }
     if (!PROPERTY_KINDS.includes(property.kind)) {
       diagnostics.push({...base, code: "STANDARD_PROPERTY_KIND_INVALID", gate: "structure"});
@@ -650,7 +660,7 @@ function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] 
         }
         const owner = mappingSources.get(source.property_id);
         if (owner !== undefined && owner !== property.property_id) {
-          diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_DUPLICATE", gate: "publish"});
+          diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_DUPLICATE", gate: "publish", detail: source.name});
         } else {
           mappingSources.set(source.property_id, property.property_id);
         }
@@ -705,15 +715,15 @@ function assetDiagnostics(document: DraftDocument): GatedDiagnostic[] {
     if (asset.asset_id.trim() === "") {
       diagnostics.push({...base, code: "STANDARD_ASSET_INVALID", gate: "structure"});
     } else if (seen.has(asset.asset_id)) {
-      diagnostics.push({...base, code: "STANDARD_ASSET_DUPLICATE", gate: "structure"});
+      diagnostics.push({...base, code: "STANDARD_ASSET_DUPLICATE", gate: "structure", detail: asset.asset_id});
     }
     seen.add(asset.asset_id);
     if (!ASSET_KINDS.includes(asset.kind as DraftAssetKind)) {
-      diagnostics.push({...base, code: "STANDARD_ASSET_KIND_INVALID", gate: "structure"});
+      diagnostics.push({...base, code: "STANDARD_ASSET_KIND_INVALID", gate: "structure", detail: asset.kind});
     }
     for (const file of asset.files) {
       if (!validAssetPath(file.path)) {
-        diagnostics.push({...base, code: "STANDARD_ASSET_PATH_INVALID", gate: "structure"});
+        diagnostics.push({...base, code: "STANDARD_ASSET_PATH_INVALID", gate: "structure", detail: file.path});
       }
     }
   }
@@ -724,10 +734,10 @@ function documentDiagnostics(document: DraftDocument): GatedDiagnostic[] {
   const diagnostics: GatedDiagnostic[] = [];
   const base = {owner: "document" as const, severity: "error" as const, gate: "structure" as const};
   if (!STANDARD_ID_PATTERN.test(document.standard_id)) {
-    diagnostics.push({...base, code: "STANDARD_ID_INVALID"});
+    diagnostics.push({...base, code: "STANDARD_ID_INVALID", detail: document.standard_id});
   }
   if (!STANDARD_VERSION_PATTERN.test(document.version)) {
-    diagnostics.push({...base, code: "STANDARD_VERSION_INVALID"});
+    diagnostics.push({...base, code: "STANDARD_VERSION_INVALID", detail: document.version});
   }
   if (document.name.trim() === "") diagnostics.push({...base, code: "STANDARD_NAME_INVALID"});
   if (document.supported_cad_versions.length === 0) {

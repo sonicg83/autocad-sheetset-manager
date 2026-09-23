@@ -5,6 +5,7 @@ import {
   EDITOR_SECTIONS,
   blankStandardDocument,
   defaultDwgNamingSegments,
+  type DraftAsset,
   type DraftDocument,
   type PreviewSamples,
   compositionFields,
@@ -235,6 +236,65 @@ describe("draft model", () => {
       confirmed_source_items: [],
     });
     expect(codes(draftDiagnostics(document))).toEqual(["STANDARD_MAPPING_SOURCE_INVALID"]);
+  });
+
+  it("classifies an unknown naming system field as a structure error like the backend", () => {
+    const document = draftDocument();
+    document.dwg_naming.segments = [{system_field: "foo.bar"}];
+    // 后端草稿解析对未知系统字段抛结构级 STANDARD_SEGMENT_REFERENCE_UNKNOWN：
+    // 前端保存门禁必须同口径，不能降级为发布期的作用域提示
+    expect(codes(draftDiagnostics(document))).toContain("STANDARD_SEGMENT_REFERENCE_UNKNOWN");
+    expect(codes(draftDiagnostics(document))).not.toContain("STANDARD_NAMING_FIELD_SCOPE_INVALID");
+  });
+
+  it("classifies an unknown composition system field as a structure error", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-composed",
+      name: "集图签",
+      scope: "sheetset",
+      kind: "composition",
+      segments: [{system_field: "foo.bar"}],
+    });
+    expect(codes(draftDiagnostics(document))).toContain("STANDARD_SEGMENT_REFERENCE_UNKNOWN");
+    expect(codes(draftDiagnostics(document))).not.toContain("STANDARD_SEGMENT_SCOPE_INVALID");
+  });
+
+  it("attaches the offending value for messages that interpolate {field} or {source}", () => {
+    const asset = (asset_id: string, kind: string, path: string | null): DraftAsset => ({
+      asset_id,
+      kind: kind as DraftAsset["kind"],
+      files: path === null ? [] : [{path, role: ""}],
+    });
+    const document = draftDocument();
+    document.standard_id = "Illegal ID";
+    document.version = "1.0";
+    document.properties[0]!.scope = "bogus" as DraftDocument["properties"][number]["scope"];
+    document.assets = [
+      asset("a-kind", "bogus", null),
+      asset("a-path", "layout-template", "../escape.dwg"),
+      asset("a-dup", "layout-template", null),
+      asset("a-dup", "layout-template", null),
+    ];
+    const detail = (code: string) => publishIssues(document).find(issue => issue.code === code)?.detail;
+    expect(detail("STANDARD_ID_INVALID")).toBe("Illegal ID");
+    expect(detail("STANDARD_VERSION_INVALID")).toBe("1.0");
+    expect(detail("STANDARD_SCOPE_INVALID")).toBe("bogus");
+    expect(detail("STANDARD_ASSET_KIND_INVALID")).toBe("bogus");
+    expect(detail("STANDARD_ASSET_PATH_INVALID")).toBe("../escape.dwg");
+    expect(detail("STANDARD_ASSET_DUPLICATE")).toBe("a-dup");
+
+    const duplicated = withProperty(draftDocument(), {
+      property_id: "prop-dup",
+      name: "重复映射",
+      scope: "sheetset",
+      kind: "mapping",
+      source_property_id: "prop-major",
+      mapping: [{item_id: "enum-gas", value: "RQ2"}],
+      confirmed_source_items: [],
+    });
+    expect(
+      publishIssues(duplicated).find(issue => issue.code === "STANDARD_MAPPING_SOURCE_DUPLICATE")?.detail,
+    ).toBe("专业");
   });
 
   it("measures the file name length in code points like the backend", () => {

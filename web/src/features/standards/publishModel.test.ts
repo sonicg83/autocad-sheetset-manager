@@ -184,6 +184,20 @@ describe("buildPublishGate", () => {
     ]);
   });
 
+  it("passes the duplicated source name to the {source} message placeholder", () => {
+    const document = documentWith([], {
+      properties: [
+        {property_id: "prop-major", name: "专业", scope: "sheetset", kind: "enum", default_value: "燃气", enum_items: [{item_id: "enum-gas", value: "燃气"}]},
+        {property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ"}]},
+        {property_id: "prop-dup", name: "重复映射", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ2"}]},
+      ],
+    });
+    const gate = buildPublishGate({document, assets: []});
+    const issue = gate.blockingErrors.find(item => item.code === "STANDARD_MAPPING_SOURCE_DUPLICATE");
+    expect(issue?.params.source).toBe("专业");
+    expect(issue?.params.field).toBe("专业");
+  });
+
   it("keeps a failed inspection separate from standard errors", () => {
     const gate = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A3"])]),
