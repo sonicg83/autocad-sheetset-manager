@@ -1,3 +1,12 @@
+## 2026-09-23（建立可恢复图纸集创建草稿，PLAN-DM-036 Task 1）
+
+- 新增 `domain/creation.py`：`CreationDraft`/`CreationGroupInput`/`CreationAssetOption` 冻结值类型与两个纯函数（`ordinary_property_defaults`、`unknown_value_property_ids`）。草稿只保存用户输入与稳定身份，`sheetset_values`/`sheet_values` 只含可输入普通属性的 `property_id → str`；`created_order` 是创建序，重排只改数组顺序。
+- 新增 `infrastructure/creation_drafts.py`：草稿落 `<settings.data_dir>/creation-drafts/<uuid>/draft.json`（不写工作区与目标项目目录），写入走既有 `atomic_write_text`（临时文件 + `os.replace`）。文档字段集固定，因此请求无法夹带派生结果、任意模板路径、逐张 Sheet 输入或预览状态；白名单外字段或非法结构一律隔离为 `<uuid>.corrupt-<时间戳>.json` 并报 `CREATION_DRAFT_CORRUPT`。
+- 新增 `application/creation_drafts.py`：`CreationDraftOperations.create/get/save/delete`，并在 `DstManagerService` 装配 `CreationDraftStore`。标准身份只读已发布内容（标准草稿不可用于创建），草稿固定的版本消失时报 `CREATION_STANDARD_MISSING`；保存按 `expected_revision` 乐观校验（`CREATION_DRAFT_CONFLICT`），且草稿 ID 与固定标准不可改写。
+- 关键契约：初建时对每个普通 sheetset 属性仅应用一次标准默认值，恢复与保存都不回填用户主动清空的值（显式空串与遗漏键分别保存）；每次组新增、删除、排序或字段修改都递增修订，从而失效旧预览；派生字段、跨作用域字段、未知字段与重复组身份以 `CREATION_DRAFT_INVALID` 拒绝且磁盘内容与修订号不变。
+- 新增 `tests/unit/test_creation_drafts.py` **17 例**（先 RED：`dst_manager.domain.creation` 不存在），覆盖标准固定、修订冲突、默认值只应用一次、空串与遗漏键、组变更递增修订、损坏隔离、标准缺失、草稿无预览状态、跨进程重启恢复与删除。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` **1645 passed / 72 skipped / 0 failed**（新增 17 例，基线 1628 例全通过）。
+
 ## 2026-09-23（收敛标准编辑器响应式布局，PLAN-DM-039 Task 3）
 
 - 分级响应式（对照 SPEC-DM-017 编辑器 Demo）：`StandardEditor` 工作区标准视口 `238px + 1fr`、1050px 以下收窄到 210px、780px 以下才堆叠单列；`StandardSectionNav` 在 780px 以下改为单行水平滚动（按钮保留完整可访问名称与最小点击高度，不截短成序号）；`TokenExpressionEditor` 的字段浏览器/编辑器双列断点由 959px 改为 780px。

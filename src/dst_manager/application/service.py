@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from dst_manager.application.cad_job import CadJobRunner
+from dst_manager.application.creation_drafts import CreationDraftOperations
 from dst_manager.application.drafts import DraftOperations
 from dst_manager.application.editing import EditingOperations
 from dst_manager.application.errors import ApplicationError
@@ -32,6 +33,7 @@ from dst_manager.infrastructure.autocad.worker import (
     ScriptRenderer,
     parse_layout_names,
 )
+from dst_manager.infrastructure.creation_drafts import CreationDraftStore
 from dst_manager.infrastructure.drafts import DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionBusyError
@@ -59,6 +61,7 @@ class DstManagerService(
     TransactionRecoveryOperations,
     StandardOperations,
     StandardAssetOperations,
+    CreationDraftOperations,
 ):
     # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
     _runtime: RuntimeSettings | None = None
@@ -81,6 +84,8 @@ class DstManagerService(
             official_root=self.settings.data_dir / "standards" / "official",
             user_root=self.settings.data_dir / "standards" / "user",
         )
+        # 创建草稿只落 Manager 应用数据目录，不进工作区、不进目标项目目录。
+        self.creation_drafts = CreationDraftStore(self.settings.data_dir / "creation-drafts")
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)
