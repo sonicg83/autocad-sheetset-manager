@@ -11,9 +11,9 @@
   出现不属于本次清单的外部内容时停止自动清理并标记 `NEEDS_REVIEW`；
 - 发布日志先落在 Manager 应用数据目录（attempt 命名空间），记录目标原状态、目标
   身份、候选清单/哈希、`job_id`/`attempt` 与每个已提交文件；
-- 一条**损坏日志**（截断/非 JSON/不是 JSON 对象/缺键或类型错误）绝不阻断启动恢复，
-  也不阻断其它任务的恢复：跳过该日志、保留现场与日志，或走既有隔离分支落
-  `NEEDS_REVIEW`。
+- 一条**损坏日志**（截断/非 JSON/不是 JSON 对象/非法 UTF-8 字节/非字符串 `status`/
+  缺键或类型错误）绝不阻断启动恢复，也不阻断其它任务的恢复：跳过该日志、保留现场
+  与日志，或走既有隔离分支落 `NEEDS_REVIEW`。
 
 测试只用 `tmp_path`，不依赖用户本地数据库、真实工程目录或上次运行残留。
 """
@@ -695,3 +695,140 @@ def test_recovery_isolates_a_rollback_journal_without_a_trusted_manifest(
     assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-1", "NEEDS_REVIEW")]
     assert read_journal(candidate)["status"] == "ROLLBACK_FAILED"
     assert published_names(target) == []
+
+
+#: 日志的**字节级**损坏形态：手工按 ANSI/GBK 保存含中文的日志、二进制垃圾覆写。
+#: 这两种输入在 ``read_text(encoding="utf-8")`` 上抛 ``UnicodeDecodeError``（它是
+#: ``ValueError`` 子类，不是 ``JSONDecodeError`` 子类）。
+CORRUPT_JOURNAL_BYTES = {
+    "gbk-saved-journal": (
+        '{"identity_version": 1, "kind": "creation", "operation_id": "job-1", '
+        '"attempt": 1, "status": "PUBLISHING", "detail": "手工用 ANSI 保存的日志"}'
+    ).encode("gbk"),
+    "binary-garbage": b"\x00\xff\xfe\x00\x01binary garbage",
+}
+
+
+@pytest.mark.parametrize("corruption", sorted(CORRUPT_JOURNAL_BYTES))
+def test_recovery_skips_a_journal_with_undecodable_bytes(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, corruption: str
+) -> None:
+    """日志字节不是合法 UTF-8：与其它损坏日志一样只跳过，绝不阻断启动恢复。"""
+    broken = make_candidate(tmp_path, job_id="job-1")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    for item, target in (
+        (broken, tmp_path / "new-project"),
+        (healthy, tmp_path / "other-project"),
+    ):
+        with pytest.raises(ProcessInterrupted):
+            publisher.publish_new_project(item, target, item.job_id, item.attempt)
+    corrupt_bytes = CORRUPT_JOURNAL_BYTES[corruption]
+    journal_path(broken).write_bytes(corrupt_bytes)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    assert journal_path(broken).read_bytes() == corrupt_bytes
+    assert published_names(tmp_path / "new-project") == []
+    assert not (tmp_path / "other-project").exists()
+
+
+#: ``status`` 不是字符串（JSON 数组/对象）：直接入 ``frozenset`` 会抛 ``TypeError``。
+NON_STRING_STATUSES: dict[str, object] = {
+    "status-array": ["PUBLISHING"],
+    "status-object": {"state": "PUBLISHING"},
+}
+
+
+@pytest.mark.parametrize("corruption", sorted(NON_STRING_STATUSES))
+def test_recovery_skips_a_journal_with_a_non_string_status(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, corruption: str
+) -> None:
+    """``status`` 不可哈希：按不可信日志跳过，绝不逃出启动恢复。"""
+    broken = make_candidate(tmp_path, job_id="job-1")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    for item, target in (
+        (broken, tmp_path / "new-project"),
+        (healthy, tmp_path / "other-project"),
+    ):
+        with pytest.raises(ProcessInterrupted):
+            publisher.publish_new_project(item, target, item.job_id, item.attempt)
+    status = NON_STRING_STATUSES[corruption]
+    journal = read_journal(broken)
+    journal["status"] = status
+    _write_journal(journal_path(broken), journal)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    # 不可信日志原样保留（只跳过，不做猜测性清理）
+    assert read_journal(broken)["status"] == status
+    assert published_names(tmp_path / "new-project") == []
+    assert not (tmp_path / "other-project").exists()
+
+
+@pytest.mark.parametrize(
+    "target_value",
+    ["目标路径被改写", [], 7, {"state": "missing"}],
+    ids=["target-string", "target-array", "target-number", "target-without-path"],
+)
+def test_recovery_isolates_a_rollback_journal_with_an_untrusted_target(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, target_value: object
+) -> None:
+    """回滚阶段的 ``target`` 非对象或缺 ``path``：既有隔离分支接管，不逃出启动路径。"""
+    candidate = make_candidate(tmp_path, job_id="job-1")
+    target = tmp_path / "new-project"
+    fault_injector.fail_at_stage("PUBLISHING")
+    with pytest.raises(ProcessInterrupted):
+        publisher.publish_new_project(candidate, target, "job-1", 1)
+    journal = read_journal(candidate)
+    journal["target"] = target_value
+    _write_journal(journal_path(candidate), journal)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-1", "NEEDS_REVIEW")]
+    assert read_journal(candidate)["status"] == "ROLLBACK_FAILED"
+    assert published_names(target) == []
+
+
+#: 已提交日志的锁路径不可用形态：恢复无法与进行中的发布互斥。
+COMMITTED_JOURNAL_UNTRUSTED_LOCKS: dict[str, Callable[[dict], None]] = {
+    "lock-path-missing": lambda journal: journal.pop("lock_path"),
+    "lock-path-not-a-string": lambda journal: journal.update(lock_path=["锁路径被改写"]),
+    "lock-path-empty": lambda journal: journal.update(lock_path=""),
+}
+
+
+@pytest.mark.parametrize("corruption", sorted(COMMITTED_JOURNAL_UNTRUSTED_LOCKS))
+def test_recovery_skips_a_committed_journal_without_a_usable_recovery_lock(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, corruption: str
+) -> None:
+    """已提交日志缺锁路径：只跳过这一条，绝不因此隔离同批其它任务。"""
+    committed = make_candidate(tmp_path, job_id="job-1")
+    committed_target = tmp_path / "new-project"
+    ProjectPublisher().publish_new_project(committed, committed_target, "job-1", 1)
+    published = published_names(committed_target)
+    journal = read_journal(committed)
+    COMMITTED_JOURNAL_UNTRUSTED_LOCKS[corruption](journal)
+    _write_journal(journal_path(committed), journal)
+    corrupted = journal_path(committed).read_text(encoding="utf-8")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    with pytest.raises(ProcessInterrupted):
+        publisher.publish_new_project(healthy, tmp_path / "other-project", "job-2", 1)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    assert journal_path(committed).read_text(encoding="utf-8") == corrupted
+    assert published_names(committed_target) == published
+    assert not (tmp_path / "other-project").exists()

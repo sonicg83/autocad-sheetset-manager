@@ -1,3 +1,13 @@
+## 2026-09-24（补全创建发布日志的启动路径守卫，PLAN-DM-036 Task 6 审查修复轮 2）
+
+- 修复复核发现（Important，同一缺陷类的两处可达残留，损坏日志仍能让 `DstManagerService` 起不来）：
+  - `publish_recovery._read_creation_journal` 的 `except (OSError, json.JSONDecodeError)` 不覆盖 `UnicodeDecodeError`（它是 `ValueError` 子类，不是 `JSONDecodeError` 子类）：日志含**非法 UTF-8 字节**（手工按 ANSI/GBK 保存含中文的日志、二进制垃圾覆写）时 `read_text(encoding="utf-8")` 抛出并逃出 `recover_creation_publishes` → `creation_execution.recover_interrupted_creation_jobs`（只捕 `PublishRecoveryError`）→ `DstManagerService.__init__`。已把 `UnicodeDecodeError` 加入该元组。
+  - `recover_creation_publishes` 的 `status in CREATION_PUBLISH_SETTLED_STATUSES`（`frozenset`）在 `status` 是 JSON 数组/对象时抛 `TypeError: unhashable type`，同样逃出启动路径。已改为先 `isinstance(status, str)` 判定：非字符串状态按不可信日志跳过（避免把 `["COMMITTED"]` 之类的改写误判为未终结而猜测性回滚已发布成果）。
+- 自查同一循环的其它输入面（同一缺陷类）：已提交分支的 `_creation_recovery_lock` 在锁路径缺失/非字符串时抛 `PublishRecoveryError`，逃出后由 `_quarantine_unproven_creation_jobs` **隔离同批全部任务**——已改为窄捕获该异常并只跳过这一条日志（回滚分支行为不变，仍落单条 `NEEDS_REVIEW`）。回滚阶段的 `target` 非对象/缺 `path`、`files` 缺键/类型错误本来就走既有隔离分支，本轮补上回归守护测试。
+- 语义未放宽：`journal.get("operation_id") != job_id or journal.get("attempt") != attempt` 仍走既有 `PUBLISH_MANIFEST_IMMUTABLE_MISMATCH` 隔离分支；未新增宽泛 `except Exception`；函数名、错误码与日志格式一律不变。
+- 测试：`tests/unit/test_project_publisher.py` 追加 **11 例**（GBK 保存日志/二进制垃圾两种非法 UTF-8 字节、`status` 为数组/对象、回滚阶段 `target` 为字符串/数组/数字/缺 `path`、已提交日志锁路径缺失/非字符串/为空），`tests/integration/test_creation_job.py` 追加 **2 例**（服务级参数化：非法 UTF-8 与不可哈希 `status`，断言服务仍能启动、损坏任务落 `NEEDS_REVIEW` + `PUBLISH_JOURNAL_REVIEW_REQUIRED`、同批健康任务照常 `ROLLED_BACK`、损坏日志与现场原样保留）。先 RED（`UnicodeDecodeError`/`TypeError` 从 `DstManagerService.__init__` 逃出）后 GREEN。
+- 验证：`uv run ruff check .` 通过；`uv run pytest tests/unit/test_project_publisher.py tests/integration/test_creation_job.py -q` **99 passed / 0 failed**；`uv run pytest` **1856 passed / 72 skipped / 0 failed**（净新增 13 例）。
+
 ## 2026-09-24（容错损坏的创建发布日志，PLAN-DM-036 Task 6 审查修复）
 
 - 修复审查发现（Important）：`publish_recovery.recover_creation_publishes` 原先直接 `json.loads(journal_path.read_text(...))` 并直接取 `journal["revision_dir"]`/`journal["target"]`/`journal["files"]`，`JSONDecodeError`/`OSError`/`KeyError`/`TypeError` 不是 `PublishRecoveryError`，会从 `DstManagerService.__init__` 逃出——`<data_dir>/creation-jobs/*/attempt-*/publish-journal.json` 一旦被截断/损坏/手工改写（代码本身已把「日志被改写」当作预期输入处理），整个服务起不来。

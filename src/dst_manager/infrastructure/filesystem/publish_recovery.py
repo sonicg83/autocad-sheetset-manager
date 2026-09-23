@@ -307,7 +307,11 @@ def creation_published_payload(journal: dict[str, Any]) -> dict[str, Any]:
 
 
 def _creation_recovery_lock(journal: dict[str, Any]) -> WorkspaceTransactionLock:
-    """创建发布的目标级事务锁：与发布路径同一把锁，恢复绝不与进行中的发布并发。"""
+    """创建发布的目标级事务锁：与发布路径同一把锁，恢复绝不与进行中的发布并发。
+
+    锁路径不可用（缺失/非字符串）时抛 ``PublishRecoveryError``：两个调用方都只处置
+    这一条日志（回滚分支落 ``NEEDS_REVIEW``，已提交分支跳过），绝不因此终止整批恢复。
+    """
     lock_path = journal.get("lock_path")
     if not isinstance(lock_path, str) or not lock_path:
         raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
@@ -320,10 +324,14 @@ def _read_creation_journal(journal_path: Path) -> dict[str, Any] | None:
     日志被截断或手工改写是既有代码明确预期的输入（``_list_committed_operations_locked``
     对不可解析的清单同样只 ``continue``）：返回 ``None`` 表示跳过该日志、现场与日志
     原样保留。一条损坏日志既不阻断服务启动，也不阻断其它任务的恢复。
+
+    ``UnicodeDecodeError`` 必须显式列出：它是 ``ValueError`` 子类，不是
+    ``JSONDecodeError`` 子类，而「手工按 ANSI/GBK 保存含中文的日志」或二进制垃圾
+    覆写都会让 ``read_text(encoding="utf-8")`` 直接抛出它。
     """
     try:
         journal = json.loads(journal_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return journal if isinstance(journal, dict) else None
 
@@ -352,9 +360,10 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
       同一目标上仍有进行中的发布或恢复，此时不介入现场；
     - 日志身份与路径不一致（作业 ID / attempt 被改写）属于不可信现场，直接以
       ``PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`` 终止恢复，不做任何猜测性清理；
-    - **损坏日志**（截断/非 JSON/不是 JSON 对象）与结构不可信的已提交日志一律跳过，
-      不阻断启动，也不阻断其它任务的恢复；这类任务由既有 ``recover_stale_jobs``
-      落 ``PUBLISH_JOURNAL_REVIEW_REQUIRED``，等待人工核对。
+    - **损坏日志**（截断/非 JSON/不是 JSON 对象/非法 UTF-8 字节/``status`` 不是字符串）
+      与结构不可信的已提交日志一律跳过，不阻断启动，也不阻断其它任务的恢复；这类
+      任务由既有 ``recover_stale_jobs`` 落 ``PUBLISH_JOURNAL_REVIEW_REQUIRED``，
+      等待人工核对。
     """
     root = Path(creation_jobs_root)
     if not root.exists():
@@ -369,6 +378,10 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
         if journal.get("operation_id") != job_id or journal.get("attempt") != attempt:
             raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
         status = journal.get("status")
+        if not isinstance(status, str):
+            # ``status`` 是 JSON 数组/对象/缺失：不可信日志，跳过（入 ``frozenset`` 或
+            # 比对状态字面量都无意义），绝不因此终止整批恢复。
+            continue
         if status in CREATION_PUBLISH_SETTLED_STATUSES:
             continue
         if status == "COMMITTED":
@@ -376,7 +389,13 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
             if published is None:
                 # 已提交日志结构不可信：既不闭环成功，也不清理或覆盖任何成果文件。
                 continue
-            with _creation_recovery_lock(journal):
+            try:
+                lock = _creation_recovery_lock(journal)
+            except PublishRecoveryError:
+                # 锁路径不可用（缺失/非字符串）同样是结构不可信：只跳过这一条，
+                # 不按身份不可证明处置，绝不因此隔离同批其它任务。
+                continue
+            with lock:
                 publisher._finish_committed_cleanup(
                     journal_path, journal, Path(journal["revision_dir"])
                 )

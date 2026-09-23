@@ -1044,3 +1044,50 @@ def test_startup_recovery_skips_a_committed_creation_journal_without_files(
     assert job["error_code"] == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
     assert _published_names(target) == published
     assert journal_path.is_file()
+
+
+def _gbk_saved_creation_journal(journal_path: Path) -> bytes:
+    """把日志按 ANSI/GBK 重新保存（含中文）：字节序列不再是合法 UTF-8。"""
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["note"] = "手工用 ANSI 保存的日志"
+    raw = json.dumps(journal, ensure_ascii=False).encode("gbk")
+    journal_path.write_bytes(raw)
+    return raw
+
+
+def _creation_journal_with_a_non_string_status(journal_path: Path) -> bytes:
+    """把 ``status`` 改写成 JSON 数组：``status in frozenset(...)`` 会抛 ``TypeError``。"""
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["status"] = [journal["status"]]
+    raw = json.dumps(journal, ensure_ascii=False).encode("utf-8")
+    journal_path.write_bytes(raw)
+    return raw
+
+
+@pytest.mark.parametrize(
+    "corrupt",
+    [_gbk_saved_creation_journal, _creation_journal_with_a_non_string_status],
+    ids=["gbk-saved-journal", "non-string-status"],
+)
+def test_startup_recovery_skips_undecodable_creation_journals(
+    tmp_path, runner, tmp_plan, corrupt: Callable[[Path], bytes]
+) -> None:
+    """非法 UTF-8 字节 / 非字符串 status 的日志：服务仍能启动，同批健康任务照常恢复。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_jobs(tmp_path, runner, tmp_plan, ("job-1", "job-2"))
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    corrupt_bytes = corrupt(journal_path)
+
+    restarted = DstManagerService(settings)
+
+    broken = restarted.database.get_job("job-1")
+    assert broken["status"] == "NEEDS_REVIEW"
+    assert broken["error_code"] == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+    # 损坏日志既不阻断启动，也不阻断其它任务的恢复
+    healthy = restarted.database.get_job("job-2")
+    assert healthy["status"] == "ROLLED_BACK"
+    assert healthy["error_code"] == "STARTUP_RECOVERY"
+    # 损坏日志与它对应的现场原样保留，供人工核对
+    assert journal_path.read_bytes() == corrupt_bytes
+    assert target.is_dir() and list(target.iterdir()) == []
