@@ -126,7 +126,7 @@ git commit -m "建立可恢复图纸集创建草稿"
 **Files:**
 - Create: `src/dst_manager/infrastructure/creation_xlsx.py`
 - Create: `src/dst_manager/application/creation_import.py`
-- Create: `tests/unit/test_creation_xlsx.py`
+- Create: `tests/unit/test_creation_xlsx_template.py`、`tests/unit/test_creation_xlsx_import.py`、`tests/unit/test_creation_xlsx_rows.py`、`tests/unit/creation_xlsx_fixtures.py`（实施时按容量契约拆分，原单文件 762 行超 AGENTS.md 软上限）
 - Modify: `src/dst_manager/domain/creation.py`
 - Modify: `changelog.md`
 
@@ -171,7 +171,7 @@ def test_xlsx_final_path_and_group_count_round_trip(standard, options) -> None:
 
 - [ ] **Step 2: 运行测试并确认失败**
 
-Run: `uv run pytest tests/unit/test_creation_xlsx.py -q`
+Run: `uv run pytest tests/unit/test_creation_xlsx_template.py tests/unit/test_creation_xlsx_import.py tests/unit/test_creation_xlsx_rows.py -q`
 
 Expected: FAIL，XLSX 模块不存在。
 
@@ -181,14 +181,14 @@ Expected: FAIL，XLSX 模块不存在。
 
 - [ ] **Step 4: 运行 XLSX 安全与往返测试**
 
-Run: `uv run pytest tests/unit/test_creation_xlsx.py -q`
+Run: `uv run pytest tests/unit/test_creation_xlsx_template.py tests/unit/test_creation_xlsx_import.py tests/unit/test_creation_xlsx_rows.py -q`
 
 Expected: 合法工作簿往返且仅有两张可见表；公式单元格、隐藏元数据篡改、非法枚举、失效资产、模板/图幅不匹配和超限行数均返回稳定工作表/行/列诊断，不产生部分结果。与 UI 输入相同的最终路径和图纸组得到同一草稿形态。
 
 - [ ] **Step 5: 提交结构导入**
 
 ```powershell
-git add src/dst_manager/infrastructure/creation_xlsx.py src/dst_manager/application/creation_import.py src/dst_manager/domain/creation.py tests/unit/test_creation_xlsx.py changelog.md
+git add src/dst_manager/infrastructure/creation_xlsx*.py src/dst_manager/application/creation_import*.py src/dst_manager/domain/creation.py tests/unit/test_creation_xlsx_*.py tests/unit/creation_xlsx_fixtures.py tests/unit/conftest.py changelog.md
 git commit -m "实现标准化 XLSX 结构导入"
 ```
 
