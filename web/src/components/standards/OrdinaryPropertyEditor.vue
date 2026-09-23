@@ -395,7 +395,8 @@ function applyCsv(): void {
 .enum-trigger{box-sizing:border-box;width:100%;min-width:0;min-height:var(--input-height);padding:0 var(--space-2);text-align:left;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);cursor:pointer}
 .enum-trigger:hover{border-color:var(--color-accent)}
 .enum-summary{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-label);color:var(--color-accent)}
-.enum-summary--disabled{padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-muted)}.sr-only-label{font-size:var(--font-label)}
+.enum-summary--disabled{padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-muted)}
+.sr-only-label{font-size:var(--font-label)}
 .csv-dialog{display:grid;gap:var(--space-2);width:min(560px,calc(100vw - 32px));padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3)}
 .csv-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .csv-hint{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
