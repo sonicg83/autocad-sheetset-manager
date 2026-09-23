@@ -1,3 +1,13 @@
+## 2026-09-23（实现双工作表 XLSX 模板与全量结构导入，PLAN-DM-036 Task 2）
+
+- 新增 `infrastructure/creation_xlsx.py`：`build_creation_template(standard, asset_options)` 生成 legacy 风格模板——仅 `SheetSet`（A 列属性名、B 列输入值，第 2 行固定「项目保存路径」）与 `Sheet`（固定表头 `图名｜张数｜基础模板｜布局模板｜图幅` + 按标准文档顺序的其他普通 `sheet` 属性列）两个**可见**表。隐藏技术表 `_CreationMeta` 记录模板版本（`1`）、精确标准身份（`standard_id`/`standard_version`）、各列的协议键或 `property_id` 与资产 `asset_id`；隐藏表 `_CreationLists` 只放 Data Validation 候选值（候选含逗号也不必转义）。动态列表头与固定表头同名时追加可读限定语（如 `张数（标准属性）`）使可见表头唯一；可见表不出现派生属性列、内部 ID 或任何公式，也不预生成逐张 Sheet 行。`read_creation_workbook(data)` 只把工作簿读成只读快照（逐工作表文本网格、公式单元格、无法解释的单元格、宏/外部链接部件），超限网格不展开。
+- 新增 `application/creation_import.py`：`parse_creation_workbook(data, standard, asset_options)` 是全量导入唯一入口，按「工作表结构 → 隐藏元数据 → 可见表头 → `SheetSet` 输入 → `Sheet` 组行」五阶段推进，任一诊断即整批拒绝（`value` 为 `None`），不产生部分结果也不接触草稿文件；模板生成入口在此再导出，调用方一次导入即可拿到「导出模板 + 导入模板」这一对接口。
+- 拒绝项（稳定错误码 + 工作表/行/列字母定位）：公式单元格、宏与外部链接、不可解释单元格、未知/重复/缺失表头、超出计划的内容、隐藏映射篡改（标准身份、列映射、`SheetSet` 行映射、资产映射）、模板版本不支持、无效枚举、失效资产、图幅与布局模板不匹配、空或重复图名、非法张数、危险路径与超限行列数。资产一律按技术表的 `asset_id` 定位再核对当前候选标签，不做标签→ID 猜测；`Sheet` 行序即组序，一行一组，「张数」绝不展开为逐张属性输入。
+- 修改 `domain/creation.py`：新增 `CreationDiagnostic`（`sheet`/`row`/`column` + 稳定码）、`CreationImportValue`（`target_path` + `sheetset_values` + `groups`，不含草稿身份/修订/阶段）与 `CreationImportResult`；新增可复用纯函数 `validate_creation_target_path`（空值、非盘符绝对路径、盘符相对写法、空片段/`.`/`..`、非法 Windows 字符、保留设备名、尾随空格或句点、超长路径），非法字符/保留设备名/长度上限复用 `standard_naming` 既有常量；`ordinary_properties` 抽出为唯一「可输入普通属性」口径，`ordinary_property_defaults`/`unknown_value_property_ids` 改为复用它。
+- 新增 `tests/unit/test_creation_xlsx.py` **23 例**（先 RED：`dst_manager.application.creation_import` 不存在），覆盖两张可见表与固定表头、Data Validation ≥3 条、表头碰撞消歧、合法工作簿按行序往返（含跳过空行、一行一组、显式空串保留）、导入值与界面输入同形、公式/宏/外部链接/不可读包、隐藏元数据篡改（标准版本、派生或未知 `property_id`）、失效资产、图幅不匹配与基础/布局模板互换、重复图名、非法张数（`0`/`-1`/`3.5`/`三`/空）、危险路径八类、重复/缺失/未知表头、计划外内容、行列数超限与可见表集合强制，以及 `validate_creation_target_path` 领域校验。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` **1668 passed / 72 skipped / 0 failed**（新增 23 例，基线 1645 例全通过）。
+- 容量观察：两个新模块分别 **591 行**（`infrastructure/creation_xlsx.py`）与 **724 行**（`application/creation_import.py`），超过 AGENTS.md 约 500 行软上限；本任务按计划给定文件结构实现，未自行拆分，留待后续计划按职责拆同层模块。
+
 ## 2026-09-23（建立可恢复图纸集创建草稿，PLAN-DM-036 Task 1）
 
 - 新增 `domain/creation.py`：`CreationDraft`/`CreationGroupInput`/`CreationAssetOption` 冻结值类型与两个纯函数（`ordinary_property_defaults`、`unknown_value_property_ids`）。草稿只保存用户输入与稳定身份，`sheetset_values`/`sheet_values` 只含可输入普通属性的 `property_id → str`；`created_order` 是创建序，重排只改数组顺序。
