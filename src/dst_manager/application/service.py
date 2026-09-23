@@ -10,6 +10,7 @@ from typing import Any
 from dst_manager.application.cad_job import CadJobRunner
 from dst_manager.application.creation import CreationOperations
 from dst_manager.application.creation_drafts import CreationDraftOperations
+from dst_manager.application.creation_execution import CreationExecutionOperations
 from dst_manager.application.drafts import DraftOperations
 from dst_manager.application.editing import EditingOperations
 from dst_manager.application.errors import ApplicationError
@@ -38,6 +39,7 @@ from dst_manager.infrastructure.creation_drafts import CreationDraftStore
 from dst_manager.infrastructure.drafts import DraftStore
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionBusyError
+from dst_manager.infrastructure.filesystem.project_publisher import ProjectPublisher
 from dst_manager.infrastructure.filesystem.publisher import (
     PublishRecoveryError,
     RecoverablePublisher,
@@ -64,6 +66,7 @@ class DstManagerService(
     StandardAssetOperations,
     CreationDraftOperations,
     CreationOperations,
+    CreationExecutionOperations,
 ):
     # 类级默认：未注入 RuntimeSettings 时退化为启动期一次性配置（serve/既有测试零变化）
     _runtime: RuntimeSettings | None = None
@@ -81,6 +84,8 @@ class DstManagerService(
         self.database = Database(self.settings.database_url)
         self.codec = DstCodec()
         self.publisher = RecoverablePublisher()
+        # 新项目创建发布事务与工作区发布事务相互独立：创建事务没有工作区命名空间。
+        self.project_publisher = ProjectPublisher()
         self.drafts = DraftStore(self.settings.draft_dir)
         self.standard_store = StandardStore(
             official_root=self.settings.data_dir / "standards" / "official",
@@ -104,6 +109,9 @@ class DstManagerService(
                     pass
             for journal in committed:
                 self._recover_committed_job(root, journal)
+        # 创建任务的发布事务没有工作区命名空间：按 Manager 应用数据目录的持久日志
+        # 恢复中断现场，只闭环任务状态，绝不重发或覆盖已发布成果。
+        self.recover_interrupted_creation_jobs()
         self.database.recover_stale_jobs(self._snapshot_settings().worker_lease_seconds)
 
     def open_workspace(
@@ -202,6 +210,9 @@ class DstManagerService(
         )
         if job is None:
             return None
+        if job["type"] == "creation":
+            # 创建任务没有普通工作区：预览复核、隔离暂存与可恢复发布都在创建功能域内。
+            return self.run_creation_job(job)
         workspace = self.get_workspace(job["workspace_id"])
         capability = self._capability(job["cad_version"] or "2020", snapshot)
         runner = CadJobRunner(

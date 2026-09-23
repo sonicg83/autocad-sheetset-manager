@@ -17,6 +17,7 @@ __all__ = [
     "CreationDraftCreateRequest",
     "CreationDraftResponse",
     "CreationDraftSaveRequest",
+    "CreationExecuteRequest",
     "CreationGroupModel",
     "CreationImportDiagnosticModel",
     "CreationImportRejectedResponse",
@@ -90,6 +91,17 @@ class CreationDraftSaveRequest(ContractModel):
                 f"CREATION_DRAFT_INVALID: 草稿阶段 {value!r} 不在 {list(CREATION_STEPS)} 内"
             )
         return value
+
+
+class CreationExecuteRequest(ContractModel):
+    """执行创建：只接受权威预览摘要，不接受任何派生输出。
+
+    目标路径、图纸组表、编号与 DWG 命名结果全部由服务端在入队前重新加载标准、
+    草稿、目标与设置/资产快照后重算；摘要不符以 409 ``CREATION_PREVIEW_STALE``
+    拒绝。契约不允许额外字段，客户端夹带 ``target_path`` 等派生值直接 422。
+    """
+
+    preview_digest: str
 
 
 class CreationDraftResponse(ContractModel):

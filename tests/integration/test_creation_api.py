@@ -4,7 +4,11 @@
 （缺依赖/缺模板文件的候选不可选且带原因）；XLSX 模板导出与全量原子导入
 （非法导入零变更、陈旧修订 409、成功导入整批替换）；按组预览表与逐张属性
 明细；`preview_digest` 对标准文档、草稿、有效设置、资产与目标状态的敏感性；
-非空目标与空图纸组阻断；预览全程不启动 CAD；`/{id}/execute` 不在本任务暴露。
+非空目标与空图纸组阻断；预览全程不启动 CAD。
+
+Task 6 追加：`/{id}/execute` 只接受草稿 ID 与 `preview_digest`，执行前重新加载
+标准、草稿、目标与设置/资产快照并重算摘要（漂移 409 `CREATION_PREVIEW_STALE`），
+入队创建任务且不写目标目录。
 
 测试只用 `tmp_path` 夹具，不依赖用户本地数据库或上次运行残留。
 """
@@ -215,6 +219,13 @@ class DraftFixture:
     id: str
 
 
+@dataclass(frozen=True, slots=True)
+class PreviewFixture:
+    """权威预览夹具：只暴露执行入口需要的摘要。"""
+
+    digest: str
+
+
 def make_client(tmp_path: Path, manifest: dict | None = None) -> TestClient:
     """测试客户端；``manifest`` 用于注册受信扩展（校验标准依赖）。"""
     kwargs: dict[str, object] = {}
@@ -326,7 +337,7 @@ def update_creation_draft(client: TestClient, draft_id: str) -> dict:
     )
 
 
-def preview(client: TestClient, draft_id: str):
+def preview_draft(client: TestClient, draft_id: str):
     return client.post(f"/api/creation-drafts/{draft_id}/preview")
 
 
@@ -418,6 +429,14 @@ def creation_draft(client: TestClient, root: Path, tmp_path: Path) -> DraftFixtu
 
 
 @pytest.fixture
+def preview(client: TestClient, creation_draft: DraftFixture) -> PreviewFixture:
+    """权威预览夹具：执行入口只接受这里算出的 ``preview_digest``。"""
+    return PreviewFixture(
+        digest=preview_draft(client, creation_draft.id).json()["preview_digest"]
+    )
+
+
+@pytest.fixture
 def nonempty_target(client: TestClient, creation_draft: DraftFixture, tmp_path: Path) -> Path:
     """把草稿目标改成一个已存在且非空的目录（模拟预览前被其他程序占用）。"""
     target = tmp_path / "occupied" / "新建项目"
@@ -477,6 +496,87 @@ def test_nonempty_target_blocks_preview(
     assert response.json()["code"] == "CREATION_TARGET_NOT_EMPTY"
 
 
+def test_execute_rejects_stale_preview(
+    client: TestClient, creation_draft: DraftFixture, preview: PreviewFixture
+) -> None:
+    update_creation_draft(client, creation_draft.id)
+    response = client.post(
+        f"/api/creation-drafts/{creation_draft.id}/execute",
+        json={"preview_digest": preview.digest},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "CREATION_PREVIEW_STALE"
+
+
+def test_execute_rejects_non_executable_draft(
+    client: TestClient, root: Path, tmp_path: Path
+) -> None:
+    """阻断诊断（空图纸组）不得入队：执行入口以稳定码拒绝。"""
+    publish_standard(client, root)
+    draft = create_creation_draft(client)
+    save_creation_draft(
+        client,
+        draft["id"],
+        expected_revision=draft["revision"],
+        target_path=str(tmp_path / "projects" / "新建项目"),
+        groups=[],
+    )
+    body = preview_draft(client, draft["id"]).json()
+    assert body["executable"] is False
+
+    response = client.post(
+        f"/api/creation-drafts/{draft['id']}/execute",
+        json={"preview_digest": body["preview_digest"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "CREATION_PLAN_INVALID"
+
+
+def test_execute_enqueues_creation_job_without_workspace(
+    client: TestClient, creation_draft: DraftFixture, preview: PreviewFixture
+) -> None:
+    """执行只入队：任务没有普通工作区，也不写目标目录（成果只能由 Worker 发布）。"""
+    body = preview_draft(client, creation_draft.id).json()
+    target = Path(body["target_path"])
+
+    response = client.post(
+        f"/api/creation-drafts/{creation_draft.id}/execute",
+        json={"preview_digest": preview.digest},
+    )
+
+    assert response.status_code == 200, response.text
+    job = response.json()
+    assert job["type"] == "creation"
+    assert job["status"] == "QUEUED"
+    assert job["workspace_id"] is None
+    assert job["creation_draft_id"] == creation_draft.id
+    assert job["payload"]["creation_draft_id"] == creation_draft.id
+    assert job["payload"]["preview_digest"] == preview.digest
+    assert job["payload"]["target_path"] == body["target_path"]
+    assert job["payload"]["standard"] == {"standard_id": "szmedi.gas", "version": "2.1.0"}
+    assert not target.exists()
+    # 无工作区时仍能记录状态与时间线（SSE 事件同源）
+    detail = client.get(f"/api/jobs/{job['id']}").json()
+    assert detail["workspace_id"] is None
+    assert [item["status"] for item in detail["timeline"]] == ["QUEUED"]
+    assert detail["files"] == []
+
+
+def test_execute_keeps_draft_unchanged_and_does_not_start_cad(
+    client: TestClient, creation_draft: DraftFixture, preview: PreviewFixture, monkeypatch
+) -> None:
+    forbid_cad(monkeypatch)
+    before = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
+
+    assert client.post(
+        f"/api/creation-drafts/{creation_draft.id}/execute",
+        json={"preview_digest": preview.digest},
+    ).status_code == 200
+
+    assert client.get(f"/api/creation-drafts/{creation_draft.id}").json() == before
+
+
 # ---- 草稿 CRUD ------------------------------------------------------------
 
 
@@ -509,7 +609,7 @@ def test_draft_crud_roundtrip(client: TestClient, creation_draft: DraftFixture) 
 
 def test_unknown_draft_is_stable_not_found(client: TestClient) -> None:
     assert client.get("/api/creation-drafts/absent").status_code == 404
-    assert preview(client, "absent").status_code == 404
+    assert preview_draft(client, "absent").status_code == 404
 
 
 def test_draft_creation_requires_published_standard(client: TestClient) -> None:
@@ -520,11 +620,19 @@ def test_draft_creation_requires_published_standard(client: TestClient) -> None:
     assert response.json()["code"] == "CREATION_STANDARD_MISSING"
 
 
-def test_execute_endpoint_is_not_exposed(client: TestClient, creation_draft: DraftFixture) -> None:
-    """执行端点由 Task 6 接入；本任务不得暴露半成品执行入口。"""
+def test_execute_endpoint_requires_preview_digest(
+    client: TestClient, creation_draft: DraftFixture
+) -> None:
+    """执行端点只接受草稿 ID 与 preview_digest：缺失/多余派生输出都被契约拒绝。"""
     paths = [getattr(route, "path", "") for route in client.app.routes]
-    assert "/api/creation-drafts/{draft_id}/execute" not in paths
-    assert client.post(f"/api/creation-drafts/{creation_draft.id}/execute").status_code >= 400
+    assert "/api/creation-drafts/{draft_id}/execute" in paths
+    missing = client.post(f"/api/creation-drafts/{creation_draft.id}/execute", json={})
+    assert missing.status_code == 422
+    derived = client.post(
+        f"/api/creation-drafts/{creation_draft.id}/execute",
+        json={"preview_digest": "x", "target_path": "C:\\other"},
+    )
+    assert derived.status_code == 422
 
 
 # ---- 标准候选 -------------------------------------------------------------
@@ -728,7 +836,7 @@ def test_import_rejects_unreadable_workbook(
 def test_preview_returns_group_table_and_sheet_details(
     client: TestClient, creation_draft: DraftFixture, tmp_path: Path
 ) -> None:
-    body = preview(client, creation_draft.id).json()
+    body = preview_draft(client, creation_draft.id).json()
     assert body["executable"] is True
     assert body["diagnostics"] == []
     assert body["standard_id"] == "szmedi.gas"
@@ -770,42 +878,42 @@ def test_preview_returns_group_table_and_sheet_details(
 def test_preview_digest_is_stable_without_changes(
     client: TestClient, creation_draft: DraftFixture
 ) -> None:
-    first = preview(client, creation_draft.id).json()
-    second = preview(client, creation_draft.id).json()
+    first = preview_draft(client, creation_draft.id).json()
+    second = preview_draft(client, creation_draft.id).json()
     assert first["preview_digest"] == second["preview_digest"]
 
 
 def test_preview_digest_binds_standard_settings_and_assets(
     client: TestClient, creation_draft: DraftFixture, root: Path
 ) -> None:
-    original = preview(client, creation_draft.id).json()["preview_digest"]
+    original = preview_draft(client, creation_draft.id).json()["preview_digest"]
 
     document_path = published_root(root) / "document.json"
     document_path.write_text(
         document_path.read_text(encoding="utf-8").replace("市政燃气施工图", "市政燃气施工图（改）"),
         encoding="utf-8",
     )
-    assert preview(client, creation_draft.id).json()["preview_digest"] != original
-    assert preview(client, creation_draft.id).json()["standard_name"] == "市政燃气施工图（改）"
+    assert preview_draft(client, creation_draft.id).json()["preview_digest"] != original
+    assert preview_draft(client, creation_draft.id).json()["standard_name"] == "市政燃气施工图（改）"
 
     asset_path = published_root(root) / "templates" / "a1.dwt"
     asset_path.write_bytes(b"base-template-bytes-changed")
-    assert preview(client, creation_draft.id).json()["preview_digest"] != original
+    assert preview_draft(client, creation_draft.id).json()["preview_digest"] != original
 
     service = client.app.state.service
     service.settings.number_suffix_type = 2
-    assert preview(client, creation_draft.id).json()["preview_digest"] != original
+    assert preview_draft(client, creation_draft.id).json()["preview_digest"] != original
 
 
 def test_preview_accepts_existing_empty_target(
     client: TestClient, creation_draft: DraftFixture, tmp_path: Path
 ) -> None:
     """已存在的空目录是合法目标，但目标状态不同必须得到不同摘要。"""
-    missing = preview(client, creation_draft.id).json()
+    missing = preview_draft(client, creation_draft.id).json()
     current = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
     target = Path(current["target_path"])
     target.mkdir(parents=True)
-    empty = preview(client, creation_draft.id).json()
+    empty = preview_draft(client, creation_draft.id).json()
     assert empty["executable"] is True
     assert empty["preview_digest"] != missing["preview_digest"]
 
@@ -826,7 +934,7 @@ def test_preview_blocks_target_path_occupied_by_file(
         groups=current["groups"],
         sheetset_values=current["sheetset_values"],
     )
-    response = preview(client, creation_draft.id)
+    response = preview_draft(client, creation_draft.id)
     assert response.status_code == 422
     assert response.json()["code"] == "CREATION_TARGET_NOT_EMPTY"
 
@@ -834,7 +942,7 @@ def test_preview_blocks_target_path_occupied_by_file(
 def test_preview_digest_binds_target_path(
     client: TestClient, creation_draft: DraftFixture, tmp_path: Path
 ) -> None:
-    original = preview(client, creation_draft.id).json()["preview_digest"]
+    original = preview_draft(client, creation_draft.id).json()["preview_digest"]
     current = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
     save_creation_draft(
         client,
@@ -844,7 +952,7 @@ def test_preview_digest_binds_target_path(
         groups=current["groups"],
         sheetset_values=current["sheetset_values"],
     )
-    assert preview(client, creation_draft.id).json()["preview_digest"] != original
+    assert preview_draft(client, creation_draft.id).json()["preview_digest"] != original
 
 
 def test_preview_blocks_empty_group_draft(
@@ -860,7 +968,7 @@ def test_preview_blocks_empty_group_draft(
         groups=[],
     )
     assert saved["groups"] == []
-    body = preview(client, draft["id"]).json()
+    body = preview_draft(client, draft["id"]).json()
     assert body["executable"] is False
     assert body["group_count"] == 0
     assert body["diagnostics"][0]["code"] == "CREATION_GROUPS_EMPTY"
@@ -880,7 +988,7 @@ def test_preview_blocks_missing_template_files(
         target_path=str(tmp_path / "projects" / "新建项目"),
     )
     (published_root(root) / "templates" / "a1.dwt").unlink()
-    body = preview(client, draft["id"]).json()
+    body = preview_draft(client, draft["id"]).json()
     assert body["executable"] is False
     assert [item["code"] for item in body["diagnostics"]] == ["CREATION_ASSET_FILE_MISSING"]
 
@@ -898,7 +1006,7 @@ def test_preview_reports_invalid_path_shape_as_diagnostic(
         groups=current["groups"],
         sheetset_values=current["sheetset_values"],
     )
-    body = preview(client, creation_draft.id).json()
+    body = preview_draft(client, creation_draft.id).json()
     assert body["executable"] is False
     assert [item["code"] for item in body["diagnostics"]] == [
         "CREATION_TARGET_PATH_NOT_ABSOLUTE"
@@ -909,7 +1017,7 @@ def test_preview_reports_missing_published_standard(
     client: TestClient, creation_draft: DraftFixture, root: Path
 ) -> None:
     shutil.rmtree(published_root(root))
-    response = preview(client, creation_draft.id)
+    response = preview_draft(client, creation_draft.id)
     assert response.status_code == 404
     assert response.json()["code"] == "CREATION_STANDARD_MISSING"
 
@@ -918,7 +1026,7 @@ def test_preview_never_starts_cad(
     client: TestClient, creation_draft: DraftFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     forbid_cad(monkeypatch)
-    body = preview(client, creation_draft.id).json()
+    body = preview_draft(client, creation_draft.id).json()
     assert body["executable"] is True
 
 
@@ -963,7 +1071,7 @@ def test_draft_document_shape_is_unchanged_by_preview(
 ) -> None:
     """预览不得写文件、不得改动草稿（含修订号）。"""
     before = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
-    assert preview(client, creation_draft.id).status_code == 200
+    assert preview_draft(client, creation_draft.id).status_code == 200
     assert client.get(f"/api/creation-drafts/{creation_draft.id}").json() == before
 
 

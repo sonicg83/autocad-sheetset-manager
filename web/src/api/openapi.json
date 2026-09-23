@@ -867,6 +867,21 @@
         "title": "CreationDraftSaveRequest",
         "type": "object"
       },
+      "CreationExecuteRequest": {
+        "additionalProperties": false,
+        "description": "执行创建：只接受权威预览摘要，不接受任何派生输出。\n\n目标路径、图纸组表、编号与 DWG 命名结果全部由服务端在入队前重新加载标准、\n草稿、目标与设置/资产快照后重算；摘要不符以 409 ``CREATION_PREVIEW_STALE``\n拒绝。契约不允许额外字段，客户端夹带 ``target_path`` 等派生值直接 422。",
+        "properties": {
+          "preview_digest": {
+            "title": "Preview Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_digest"
+        ],
+        "title": "CreationExecuteRequest",
+        "type": "object"
+      },
       "CreationGroupModel": {
         "additionalProperties": false,
         "description": "一个图纸组的输入/存储形状；``sheet_values`` 只含可输入普通 sheet 属性。",
@@ -3423,6 +3438,17 @@
             ],
             "title": "Cad Version"
           },
+          "creation_draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Draft Id"
+          },
           "error_code": {
             "anyOf": [
               {
@@ -3597,8 +3623,15 @@
             "title": "Worker Id"
           },
           "workspace_id": {
-            "title": "Workspace Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
           }
         },
         "required": [
@@ -6179,6 +6212,55 @@
           }
         },
         "summary": "Save Creation Draft"
+      }
+    },
+    "/api/creation-drafts/{draft_id}/execute": {
+      "post": {
+        "operationId": "execute_creation_draft_api_creation_drafts__draft_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreationExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Creation Draft"
       }
     },
     "/api/creation-drafts/{draft_id}/preview": {

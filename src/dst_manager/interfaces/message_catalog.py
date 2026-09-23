@@ -67,6 +67,35 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "CREATION_STANDARD_MISSING": _E("errors.creation.standardMissing"),
     "CREATION_TARGET_NOT_EMPTY": _E("errors.creation.targetNotEmpty"),
     "CREATION_IMPORT_INVALID": _E("errors.creation.importInvalid", {"count": int}),
+    # 执行入口（`POST /{id}/execute`）的预览漂移：摘要不符即 409，必须重新预览。
+    "CREATION_PREVIEW_STALE": _E("errors.creation.previewStale"),
+    # 创建暂存与发布事务码（PLAN-DM-036 Task 5/6；逐条核对 raise 点：创建计划门禁、
+    # 作业身份、资产定位、布局/Handle 回填、DST 往返、CAD 能力与发布事务）。这些码
+    # 既可能是 HTTP 错误，也可能是创建任务的 error_code，界面用同一套 errors.creation
+    # 文案呈现，因此同批登记。
+    "CREATION_PLAN_INVALID": _E("errors.creation.planInvalid"),
+    "CREATION_JOB_ID_INVALID": _E("errors.creation.jobIdInvalid"),
+    "CREATION_ATTEMPT_INVALID": _E("errors.creation.attemptInvalid"),
+    "CREATION_ASSET_PATH_INVALID": _E("errors.creation.assetPathInvalid"),
+    "CREATION_ASSET_FILE_MISSING": _E("errors.creation.assetFileMissing"),
+    "CREATION_LAYOUT_TEMPLATE_MISMATCH": _E("errors.creation.layoutTemplateMismatch"),
+    "CREATION_LAYOUT_SET_MISMATCH": _E("errors.creation.layoutSetMismatch"),
+    "CREATION_LAYOUT_READ_FAILED": _E("errors.creation.layoutReadFailed"),
+    "CREATION_LAYOUT_REFERENCE_INVALID": _E("errors.creation.layoutReferenceInvalid"),
+    "CREATION_HANDLE_INVALID": _E("errors.creation.handleInvalid"),
+    "CREATION_HANDLE_PLACEHOLDER": _E("errors.creation.handlePlaceholder"),
+    "CREATION_HANDLE_DUPLICATE": _E("errors.creation.handleDuplicate"),
+    "CREATION_HANDLE_SET_MISMATCH": _E("errors.creation.handleSetMismatch"),
+    "CREATION_ROUNDTRIP_MISMATCH": _E("errors.creation.roundtripMismatch"),
+    "CREATION_DST_INVALID": _E("errors.creation.dstInvalid"),
+    "CREATION_SKELETON_INVALID": _E("errors.creation.skeletonInvalid"),
+    "CREATION_SKELETON_UNREADABLE": _E("errors.creation.skeletonUnreadable"),
+    "CREATION_CAD_UNAVAILABLE": _E("errors.creation.cadUnavailable"),
+    "CREATION_CAD_FAILED": _E("errors.creation.cadFailed"),
+    "CREATION_PUBLISH_INVALID": _E("errors.creation.publishInvalid"),
+    "CREATION_PUBLISH_FAILED": _E("errors.creation.publishFailed"),
+    "CREATION_PUBLISH_CONFLICT": _E("errors.creation.publishConflict"),
+    "CREATION_PUBLISH_REVIEW_REQUIRED": _E("errors.creation.publishReviewRequired"),
     # ---- 任务 ----
     "JOB_NOT_FOUND": _E("errors.job.notFound"),
     "JOB_NOT_RETRYABLE": _E("errors.job.notRetryable"),

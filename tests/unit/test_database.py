@@ -617,3 +617,167 @@ def test_existing_0006_database_without_revision_kind_columns_is_rejected(tmp_pa
         Database(url)
     # 旧库文件不被程序自动删除
     assert path.exists()
+
+
+# ---- PLAN-DM-036 Task 6：创建任务的持久化与迁移 ----------------------------
+
+
+def _alembic_config(path: Path):
+    """指向临时库的 Alembic 配置（绝不触碰用户本地数据库）。"""
+    from alembic.config import Config
+
+    from dst_manager.runtime import resource_dir
+
+    config = Config(str(resource_dir() / "alembic.ini"))
+    config.set_main_option("script_location", str(resource_dir() / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{path.as_posix()}")
+    return config
+
+
+def test_creation_jobs_migration_round_trip(tmp_path: Path):
+    """0007 升级→降级→再升级往返：jobs 的创建关联列随迁移出现/消失。"""
+    from alembic import command
+
+    path = tmp_path / "creation-jobs.sqlite"
+
+    def job_columns() -> dict[str, int]:
+        with sqlite3.connect(path) as connection:
+            return {row[1]: row[3] for row in connection.execute("PRAGMA table_info(jobs)")}
+
+    command.upgrade(_alembic_config(path), "head")
+    columns = job_columns()
+    assert "creation_draft_id" in columns
+    assert columns["workspace_id"] == 0, "创建任务没有普通工作区，workspace_id 必须可空"
+
+    command.downgrade(_alembic_config(path), "0006_dm020_extension_platform")
+    columns = job_columns()
+    assert "creation_draft_id" not in columns
+    assert columns["workspace_id"] == 1
+
+    command.upgrade(_alembic_config(path), "head")
+    assert "creation_draft_id" in job_columns()
+
+
+def test_existing_0006_database_upgrades_and_keeps_existing_jobs(tmp_path: Path):
+    """既有库升级路径：0006 上的既有工作区与任务在升级后原样保留。"""
+    from alembic import command
+
+    path = tmp_path / "existing.sqlite"
+    url = f"sqlite:///{path.as_posix()}"
+    command.upgrade(_alembic_config(path), "0006_dm020_extension_platform")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO workspaces (id, root, dst_path, current_revision, default_cad_version, version)"
+            " VALUES ('w', 'C:/p', 'C:/p/a.dst', 'r', '2020', 1)"
+        )
+        connection.execute(
+            "INSERT INTO jobs (id, workspace_id, job_type, status, progress, payload_json, attempt, created_at)"
+            " VALUES ('job', 'w', 'change_set', 'QUEUED', 0, '{}', 0, '2026-01-01 00:00:00')"
+        )
+
+    database = Database(url)
+    job = database.get_job("job")
+    assert job is not None
+    assert job["workspace_id"] == "w"
+    assert job["creation_draft_id"] is None
+    assert database.get_workspace("w") is not None
+
+
+def test_creation_job_records_status_progress_and_timeline_without_workspace(tmp_path: Path):
+    """创建任务在普通工作区尚不存在时仍能记录状态、进度、事件与成果投影。"""
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.create_job(
+        "job",
+        None,
+        "creation",
+        "QUEUED",
+        {"creation_draft_id": "draft-1", "preview_digest": "digest-1"},
+        cad_version="2020",
+        creation_draft_id="draft-1",
+    )
+
+    claimed = database.claim_next_job("worker")
+    assert claimed is not None
+    assert claimed["workspace_id"] is None
+    assert claimed["creation_draft_id"] == "draft-1"
+    assert claimed["attempt"] == 1
+    assert database.update_job("job", "CAD_RUNNING", 20, worker_id="worker", attempt=1) is True
+    assert database.update_job("job", "VERIFYING", 70, worker_id="worker", attempt=1) is True
+    assert database.update_job("job", "PREPARED", 80, worker_id="worker", attempt=1) is True
+    assert database.update_job("job", "PUBLISHING", 90, worker_id="worker", attempt=1) is True
+
+    assert database.finalize_creation_job(
+        "job", {"target_dir": "C:/projects/新建项目"}, worker_id="worker", attempt=1
+    ) is True
+
+    job = database.get_job("job")
+    assert job["status"] == "SUCCEEDED"
+    assert job["progress"] == 100
+    assert job["workspace_id"] is None
+    assert job["error_code"] is None
+    assert job["payload"]["published"] == {"target_dir": "C:/projects/新建项目"}
+    assert [item["status"] for item in job["timeline"]] == [
+        "QUEUED",
+        "STAGING",
+        "CAD_RUNNING",
+        "VERIFYING",
+        "PREPARED",
+        "PUBLISHING",
+        "SUCCEEDED",
+    ]
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT COUNT(*) FROM workspace_write_locks").scalar_one() == 0
+    # 幂等：重复闭环不再新增成功事件
+    assert database.finalize_creation_job("job", {"target_dir": "other"}) is True
+    assert sum(item["status"] == "SUCCEEDED" for item in database.get_job("job")["timeline"]) == 1
+
+
+def test_creation_job_failure_is_terminal_without_workspace(tmp_path: Path):
+    """创建任务失败诊断在无工作区时同样可记录并隔离为终态。"""
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.create_job(
+        "job", None, "creation", "QUEUED", {"creation_draft_id": "draft-1"}
+    )
+    assert database.claim_next_job("worker") is not None
+
+    assert database.finalize_job_terminal(
+        "job",
+        "NEEDS_REVIEW",
+        "CREATION_PUBLISH_REVIEW_REQUIRED",
+        "目标出现外部内容",
+        worker_id="worker",
+        attempt=1,
+    ) is True
+
+    job = database.get_job("job")
+    assert job["status"] == "NEEDS_REVIEW"
+    assert job["error_code"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+    assert job["error_detail"] == "目标出现外部内容"
+    assert job["workspace_id"] is None
+    assert job["timeline"][-1]["detail"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+
+
+def test_stale_creation_job_is_requeued_and_retry_uses_new_attempt(tmp_path: Path):
+    """创建任务沿用既有租约恢复：安全阶段重排、重试递增 attempt。"""
+    database = Database(f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}")
+    database.create_job("job", None, "creation", "QUEUED", {"creation_draft_id": "draft-1"})
+    assert database.claim_next_job("worker") is not None
+    stale_at = datetime.now(UTC) - timedelta(minutes=10)
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET heartbeat_at=? WHERE id='job'",
+            (stale_at.replace(tzinfo=None),),
+        )
+
+    assert database.recover_stale_jobs(30) == [
+        {"id": "job", "conclusion": "REQUEUED_SAFE_STAGE"}
+    ]
+    second = database.claim_next_job("worker-2")
+    assert second is not None and second["attempt"] == 2
+    assert database.update_job(
+        "job", "FAILED", 0, "CREATION_CAD_FAILED", worker_id="worker-2", attempt=2
+    ) is True
+
+    assert database.retry_job("job")["status"] == "QUEUED"
+    third = database.claim_next_job("worker-3")
+    assert third is not None and third["attempt"] == 3

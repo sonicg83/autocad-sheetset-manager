@@ -5,9 +5,10 @@
 路由只做请求/响应转换、状态码与错误映射：草稿结构门禁、XLSX 解析、资产解析与
 编号/命名派生全部在应用层与领域层完成。
 
-``/{draft_id}/execute`` 由 Task 6 在创建任务持久化后接入，本任务不暴露半成品
-执行端点；标准候选路由必须先于 ``/{draft_id}`` 注册，避免 ``standards`` 段被
-身份路由吞掉。
+``/{draft_id}/execute`` 只接受草稿 ID 与 `preview_digest`：执行前重新加载标准、
+草稿、目标与设置/资产快照并重算摘要（漂移 409 `CREATION_PREVIEW_STALE`），入队
+创建任务；目标目录不写任何文件（成果只能由 Worker 发布）。标准候选路由必须先于
+``/{draft_id}`` 注册，避免 ``standards`` 段被身份路由吞掉。
 """
 
 from __future__ import annotations
@@ -26,12 +27,14 @@ from dst_manager.interfaces.creation_contracts import (
     CreationDraftCreateRequest,
     CreationDraftResponse,
     CreationDraftSaveRequest,
+    CreationExecuteRequest,
     CreationGroupModel,
     CreationImportRejectedResponse,
     CreationPreviewResponse,
     CreationStandardCandidateModel,
 )
 from dst_manager.interfaces.message_catalog import error_payload
+from dst_manager.interfaces.responses import JobResponse
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -139,6 +142,14 @@ def register_creation_routes(app: FastAPI) -> None:
     )
     def preview_creation_draft(request: Request, draft_id: str):
         return service(request).preview(draft_id)
+
+    @app.post(
+        "/api/creation-drafts/{draft_id}/execute",
+        response_model=JobResponse,
+        response_model_exclude_unset=True,
+    )
+    def execute_creation_draft(request: Request, draft_id: str, body: CreationExecuteRequest):
+        return service(request).execute_creation(draft_id, body.preview_digest)
 
 
 def _manifests(app: FastAPI) -> Mapping[str, object]:

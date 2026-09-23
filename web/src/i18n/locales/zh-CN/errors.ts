@@ -20,8 +20,8 @@ export default {
   draft: {
     conflict: "草稿版本冲突，请刷新后重试",
   },
-  // ---- 标准驱动创建（PLAN-DM-036 Task 4；键名与 message_catalog.py 的
-  // CREATION_* 稳定码一一对应） ----
+  // ---- 标准驱动创建（PLAN-DM-036 Task 4/6；键名与 message_catalog.py 的
+  // CREATION_* 稳定码一一对应；`diagnostic` 子域与创建诊断码一一对应） ----
   creation: {
     draftNotFound: "创建草稿不存在，请重新开始创建",
     draftInvalid: "创建草稿内容无效，请检查输入后重试",
@@ -30,6 +30,30 @@ export default {
     standardMissing: "所选标准未发布或已不可用，请重新选择标准",
     targetNotEmpty: "目标目录已存在且非空或存在同名文件，请修改项目目录名或上级目录",
     importInvalid: "导入被整组拒绝，共 {count} 条问题，请按工作表、行、列定位修正后重试",
+    previewStale: "创建预览已变化或尚未确认，请重新预览后再执行",
+    planInvalid: "创建计划存在阻断问题，无法执行，请按诊断修正后重新预览",
+    jobIdInvalid: "创建任务标识非法，无法执行",
+    attemptInvalid: "创建任务尝试号非法，无法执行",
+    assetPathInvalid: "标准资产路径非法，请检查标准包的资产声明",
+    assetFileMissing: "标准声明的模板文件不存在，请重新发布标准或修正资产路径",
+    layoutTemplateMismatch: "布局模板的真实布局不含标准声明的图幅，请修正布局模板或图幅声明",
+    layoutSetMismatch: "生成的主 DWG 布局与计划不一致，本次创建未产出成果",
+    layoutReadFailed: "读取布局失败，DWG 可能正被占用或 CAD 环境不可用",
+    layoutReferenceInvalid: "图纸的布局引用非法，本次创建未产出成果",
+    handleInvalid: "布局 Handle 非法，本次创建未产出成果",
+    handlePlaceholder: "仍有图纸未回填真实布局 Handle，本次创建未产出成果",
+    handleDuplicate: "同一 DWG 内出现重复 Handle，本次创建未产出成果",
+    handleSetMismatch: "Handle 回读结果与计划不一致，本次创建未产出成果",
+    roundtripMismatch: "生成 DST 的编码往返内容与计划不一致，本次创建未产出成果",
+    dstInvalid: "生成的 DST 未通过契约/语义校验，本次创建未产出成果",
+    skeletonInvalid: "内置 DST 骨架实例化失败，请升级 Manager 后重试",
+    skeletonUnreadable: "内置 DST 骨架不可读，请重新安装或修复 Manager",
+    cadUnavailable: "AutoCAD 未配置 Core Console 或 Worker 插件，请运行 dst-manager doctor 检查",
+    cadFailed: "CAD 执行失败，请查看逐 DWG 日志后决定是否重试",
+    publishInvalid: "候选成果与任务身份不一致或文件非法，本次创建未写目标目录",
+    publishFailed: "发布新项目失败，已回滚到发布前状态",
+    publishConflict: "本次尝试的发布命名空间已存在，请以新尝试重试",
+    publishReviewRequired: "发布现场需要人工核对（目标出现外部内容或文件身份变化），已停止自动清理",
   },
   job: {
     notFound: "任务不存在",

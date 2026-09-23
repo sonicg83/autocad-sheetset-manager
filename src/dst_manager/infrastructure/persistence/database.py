@@ -74,7 +74,10 @@ class ChangeSetRow(Base):
 class JobRow(Base):
     __tablename__ = "jobs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"))
+    # 创建任务在普通工作区尚不存在时就要记录状态/进度/事件，因此工作区关联可空。
+    workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True)
+    # 创建任务的稳定草稿关联（普通任务为 None）；不用 payload 承载身份。
+    creation_draft_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     job_type: Mapped[str] = mapped_column(String(40))
     cad_version: Mapped[str | None] = mapped_column(String(4))
     status: Mapped[str] = mapped_column(String(32))
@@ -176,7 +179,7 @@ class InvalidJobTransitionError(RuntimeError):
     pass
 
 
-LATEST_SCHEMA_REVISION = "0006_dm020_extension_platform"
+LATEST_SCHEMA_REVISION = "0007_creation_jobs"
 TERMINAL_JOB_STATUSES = {"SUCCEEDED", "FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK", "NEEDS_REVIEW"}
 ALLOWED_JOB_TRANSITIONS = {
     "DRAFT": {"VALIDATED", "FAILED"},
@@ -269,15 +272,19 @@ class Database:
         with self.sessions() as session:
             return session.get(WorkspaceRow, workspace_id)
 
-    def create_job(self, job_id: str, workspace_id: str, job_type: str, status: str, payload: dict[str, Any], cad_version: str | None = None) -> None:
+    def create_job(self, job_id: str, workspace_id: str | None, job_type: str, status: str, payload: dict[str, Any], cad_version: str | None = None, *, creation_draft_id: str | None = None) -> None:
         with self.sessions.begin() as session:
-            lock = session.get(WorkspaceWriteLockRow, workspace_id)
-            if lock is not None:
-                raise WorkspaceBusyError(f"工作区已有写任务：{lock.job_id}")
-            session.add(JobRow(id=job_id, workspace_id=workspace_id, job_type=job_type, status=status, payload_json=json.dumps(payload, ensure_ascii=False), cad_version=cad_version))
+            if workspace_id is not None:
+                # 普通任务沿用「一个工作区同时只能有一个写任务」的既有门禁；创建任务
+                # 没有工作区（草稿与暂存都在工作区之外），不占普通写锁。
+                lock = session.get(WorkspaceWriteLockRow, workspace_id)
+                if lock is not None:
+                    raise WorkspaceBusyError(f"工作区已有写任务：{lock.job_id}")
+            session.add(JobRow(id=job_id, workspace_id=workspace_id, creation_draft_id=creation_draft_id, job_type=job_type, status=status, payload_json=json.dumps(payload, ensure_ascii=False), cad_version=cad_version))
             session.flush()
             session.add(JobEventRow(job_id=job_id, status=status, progress=0))
-            session.add(WorkspaceWriteLockRow(workspace_id=workspace_id, job_id=job_id))
+            if workspace_id is not None:
+                session.add(WorkspaceWriteLockRow(workspace_id=workspace_id, job_id=job_id))
 
     def update_job(
         self,
@@ -330,7 +337,7 @@ class Database:
                 if status in TERMINAL_JOB_STATUSES:
                     row.finished_at = now
             session.add(JobEventRow(job_id=job_id, status=status, progress=progress, detail=error_code))
-            if status in TERMINAL_JOB_STATUSES:
+            if status in TERMINAL_JOB_STATUSES and row.workspace_id is not None:
                 lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
                 if lock and lock.job_id == job_id:
                     session.delete(lock)
@@ -383,12 +390,12 @@ class Database:
             session.connection().exec_driver_sql("BEGIN IMMEDIATE")
             active_rows = session.scalars(
                 select(JobRow).where(
-                    JobRow.job_type == "change_set",
+                    JobRow.job_type.in_(("change_set", "creation")),
                     JobRow.status.not_in(TERMINAL_JOB_STATUSES),
                     JobRow.status != "QUEUED",
                 ),
             ).all()
-            if any(self._is_cad_change_set(row) for row in active_rows):
+            if any(self._requires_cad(row) for row in active_rows):
                 session.commit()
                 return None
             while True:
@@ -399,7 +406,7 @@ class Database:
                 row = session.get(JobRow, job_id)
                 if row is None:
                     continue
-                if not self._is_cad_change_set(row):
+                if not self._requires_cad(row):
                     self._quarantine_queued_job(session, row)
                     continue
                 now = datetime.now(UTC)
@@ -446,7 +453,7 @@ class Database:
         with self.sessions.begin() as session:
             queued_rows = session.scalars(select(JobRow).where(JobRow.status == "QUEUED")).all()
             for row in queued_rows:
-                if self._is_cad_change_set(row):
+                if self._requires_cad(row):
                     continue
                 self._quarantine_queued_job(session, row)
                 conclusions.append({"id": row.id, "conclusion": "NON_CAD_QUEUE_QUARANTINED"})
@@ -458,12 +465,8 @@ class Database:
                 cutoff = now - timedelta(seconds=row.lease_seconds or lease_seconds)
                 if heartbeat is not None and heartbeat >= cutoff:
                     continue
-                payload = json.loads(row.payload_json)
-                cad_change_set = (
-                    row.job_type == "change_set"
-                    and payload.get("plan", {}).get("requires_cad") is True
-                )
-                if row.status in {"STAGING", "CAD_RUNNING", "VERIFYING", "PREPARED"} and cad_change_set:
+                cad_job = self._requires_cad(row)
+                if row.status in {"STAGING", "CAD_RUNNING", "VERIFYING", "PREPARED"} and cad_job:
                     row.status, conclusion = "QUEUED", "REQUEUED_SAFE_STAGE"
                     row.worker_id = None
                 elif row.status in {"PUBLISHING", "ROLLING_BACK"}:
@@ -474,7 +477,7 @@ class Database:
                     row.finished_at = datetime.now(UTC)
                 row.error_code = conclusion
                 session.add(JobEventRow(job_id=row.id, status=row.status, progress=row.progress, detail=conclusion))
-                if row.status == "NEEDS_REVIEW":
+                if row.status == "NEEDS_REVIEW" and row.workspace_id is not None:
                     lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
                     if lock is not None and lock.job_id == row.id:
                         session.delete(lock)
@@ -488,8 +491,16 @@ class Database:
                 raise KeyError(job_id)
             if row.status not in {"FAILED", "BLOCKED_FILE_LOCK", "ROLLED_BACK"}:
                 raise ValueError("JOB_NOT_RETRYABLE")
-            if not self._is_cad_change_set(row):
+            if not self._requires_cad(row):
                 raise ValueError("JOB_NOT_RETRYABLE")
+            if row.workspace_id is None:
+                # 创建任务没有普通写锁：重排后由 Worker 以新 attempt 重新暂存与发布。
+                row.status, row.progress, row.worker_id = "QUEUED", 0, None
+                row.started_at = row.heartbeat_at = row.finished_at = None
+                row.error_code = row.error_detail = None
+                session.add(JobEventRow(job_id=row.id, status="QUEUED", progress=0, detail="SAFE_RETRY"))
+                session.flush()
+                return self._job_json(session, row)
             lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
             if lock is not None and lock.job_id != job_id:
                 raise WorkspaceBusyError(f"工作区已有写任务：{lock.job_id}")
@@ -529,6 +540,13 @@ class Database:
         return row.job_type == "change_set" and payload.get("plan", {}).get("requires_cad") is True
 
     @staticmethod
+    def _requires_cad(row: JobRow) -> bool:
+        """任务是否需要 CAD Worker：创建任务恒需要（隔离暂存就要布局创建）。"""
+        if row.job_type == "creation":
+            return True
+        return Database._is_cad_change_set(row)
+
+    @staticmethod
     def _quarantine_queued_job(session, row: JobRow) -> None:
         row.status = "NEEDS_REVIEW"
         row.error_code = "NON_CAD_QUEUE_QUARANTINED"
@@ -542,6 +560,8 @@ class Database:
                 detail="NON_CAD_QUEUE_QUARANTINED",
             ),
         )
+        if row.workspace_id is None:
+            return
         lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
         if lock is not None and lock.job_id == row.id:
             session.delete(lock)
@@ -581,6 +601,7 @@ class Database:
         events = session.scalars(select(JobEventRow).where(JobEventRow.job_id == row.id).order_by(JobEventRow.id)).all()
         return {
             "id": row.id, "workspace_id": row.workspace_id, "type": row.job_type,
+            "creation_draft_id": row.creation_draft_id,
             "status": row.status, "progress": row.progress, "cad_version": row.cad_version,
             "error_code": row.error_code, "error_detail": row.error_detail,
             "worker_id": row.worker_id, "attempt": row.attempt,
@@ -687,6 +708,58 @@ class Database:
                 session.delete(lock)
             return True
 
+    def finalize_creation_job(
+        self,
+        job_id: str,
+        published: dict[str, Any],
+        *,
+        worker_id: str | None = None,
+        attempt: int | None = None,
+    ) -> bool:
+        """幂等地把已发布的新项目闭环到任务行：写入成果投影并落 ``SUCCEEDED``。
+
+        创建任务没有普通工作区，因此不建修订、不碰工作区当前修订；工作区登记
+        （``workspace_id`` 关联）由发布成功后的后续步骤承担，本方法不写入该列。
+        """
+        with self.sessions.begin() as session:
+            job = session.get(JobRow, job_id)
+            if job is None:
+                raise KeyError(job_id)
+            owned_update = worker_id is not None or attempt is not None
+            if owned_update:
+                if worker_id is None or attempt is None:
+                    raise ValueError("JOB_OWNER_INCOMPLETE")
+                if (
+                    job.status != "PUBLISHING"
+                    or job.worker_id != worker_id
+                    or job.attempt != attempt
+                ):
+                    return False
+                fenced = session.execute(
+                    update(JobRow)
+                    .where(
+                        JobRow.id == job_id,
+                        JobRow.status == "PUBLISHING",
+                        JobRow.worker_id == worker_id,
+                        JobRow.attempt == attempt,
+                    )
+                    .values(heartbeat_at=datetime.now(UTC)),
+                )
+                if fenced.rowcount != 1:
+                    return False
+            payload = json.loads(job.payload_json)
+            payload["published"] = published
+            job.payload_json = json.dumps(payload, ensure_ascii=False)
+            if job.status != "SUCCEEDED" or job.progress != 100:
+                job.status = "SUCCEEDED"
+                job.progress = 100
+                job.error_code = None
+                job.error_detail = None
+                job.finished_at = datetime.now(UTC)
+                job.heartbeat_at = datetime.now(UTC)
+                session.add(JobEventRow(job_id=job_id, status="SUCCEEDED", progress=100))
+            return True
+
     def finalize_job_terminal(
         self,
         job_id: str,
@@ -730,9 +803,10 @@ class Database:
                 if fenced.rowcount != 1:
                     return False
                 session.add(JobEventRow(job_id=job_id, status=status, progress=0, detail=error_code))
-                lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
-                if lock is not None and lock.job_id == job_id:
-                    session.delete(lock)
+                if row.workspace_id is not None:
+                    lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+                    if lock is not None and lock.job_id == job_id:
+                        session.delete(lock)
                 return True
             if row.status != status or row.error_code != error_code or row.error_detail != error_detail:
                 row.status = status
@@ -742,9 +816,10 @@ class Database:
                 row.finished_at = datetime.now(UTC)
                 row.heartbeat_at = datetime.now(UTC)
                 session.add(JobEventRow(job_id=job_id, status=status, progress=0, detail=error_code))
-            lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
-            if lock is not None and lock.job_id == job_id:
-                session.delete(lock)
+            if row.workspace_id is not None:
+                lock = session.get(WorkspaceWriteLockRow, row.workspace_id)
+                if lock is not None and lock.job_id == job_id:
+                    session.delete(lock)
             return True
 
     def list_revisions(self, workspace_id: str | None = None) -> list[dict[str, Any]]:

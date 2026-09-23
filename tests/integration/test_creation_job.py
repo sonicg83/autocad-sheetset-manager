@@ -10,6 +10,10 @@
 - 非法/占位/重复 Handle 一律拒绝；
 - 任何一步失败只留隔离 attempt 日志，不产出半成品候选。
 
+Task 6 追加：`CreationJobRunner.run` 把候选**可恢复地发布**到新项目目录，并在普通
+工作区尚不存在时仍能记录任务状态/进度/时间线与失败诊断；发布失败按现场结论回滚为
+`ROLLED_BACK` 或隔离为 `NEEDS_REVIEW`；重试严格使用新 attempt 目录。
+
 测试不启动 AutoCAD：`LayoutCreationWorker` 注入模拟 Core Console 的替身执行器，
 真实跑通「渲染固定 SCR → 写脚本 → 解析 sidecar → 回读布局与 Handle」的代码路径。
 """
@@ -45,7 +49,12 @@ from dst_manager.infrastructure.autocad.worker import (
     LayoutCreationWorker,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.filesystem.project_publish_types import (
+    ProjectPublishError,
+)
+from dst_manager.infrastructure.filesystem.project_publisher import ProjectPublisher
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
+from dst_manager.infrastructure.persistence.database import Database
 from dst_platform.autocad.process import CoreConsoleResult
 
 #: 夹具标准与 Task 2/4 同一份：两个 sheetset 普通属性、一个 sheetset 派生映射、
@@ -203,6 +212,40 @@ def _layouts_for(drawing: Path) -> Sequence[str]:
     return GROUP_LAYOUTS[drawing.name]
 
 
+class FailingCadExecutor:
+    """模拟 CAD 能力不可用：任何执行都失败，用于验证失败路径与重试。"""
+
+    def run(self, capability, drawing, script, timeout):
+        raise RuntimeError("CAD_CAPABILITY_UNAVAILABLE: 2020")
+
+
+class FailAfterFirstCommit:
+    """发布事务故障注入：第 1 个文件提交后失败（触发按身份回滚）。"""
+
+    def at_stage(self, stage: str) -> None:
+        return None
+
+    def after_commit(self, target: Path) -> None:
+        raise ProjectPublishError("CREATION_PUBLISH_FAILED", "注入提交失败")
+
+
+class ExternalContentAfterFirstCommit:
+    """发布事务故障注入：提交第 1 个文件后写入外部内容并失败（回滚必须停手）。"""
+
+    def __init__(self) -> None:
+        self._fired = False
+
+    def at_stage(self, stage: str) -> None:
+        return None
+
+    def after_commit(self, target: Path) -> None:
+        if self._fired:
+            return
+        self._fired = True
+        (target.parent / "外部.dwg").write_bytes(b"external")
+        raise ProjectPublishError("CREATION_PUBLISH_FAILED", "注入提交失败")
+
+
 def _draft() -> CreationDraft:
     return CreationDraft(
         id="draft-1",
@@ -245,6 +288,28 @@ def plan() -> CreationPlan:
 
 
 @pytest.fixture
+def tmp_plan(tmp_path: Path) -> CreationPlan:
+    """目标落在 tmp_path 内的计划：Task 6 的发布测试必须真实写盘且不依赖本机路径。"""
+    draft = replace(_draft(), target_path=str(tmp_path / "projects" / "新建项目"))
+    result = create_creation_plan(draft, STANDARD, SuffixOptions(False, 1, ()))
+    assert result.diagnostics == ()
+    return result
+
+
+@pytest.fixture
+def database(tmp_path: Path) -> Database:
+    # 库文件落在 Manager 应用数据目录内：测试同时断言「暂存区之外零文件」。
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return Database(f"sqlite:///{(data_dir / 'dst-manager.db').as_posix()}")
+
+
+@pytest.fixture
+def publisher() -> ProjectPublisher:
+    return ProjectPublisher()
+
+
+@pytest.fixture
 def capability(tmp_path: Path) -> CadCapability:
     """能力可用（Core Console 与插件文件存在）：进程执行由替身接管。"""
     directory = tmp_path / "cad"
@@ -278,12 +343,16 @@ def runner(
     package_root: Path,
     capability: CadCapability,
     executor: FakeCadExecutor,
+    database: Database,
+    publisher: ProjectPublisher,
 ) -> CreationJobRunner:
     return CreationJobRunner(
         data_dir=tmp_path / "data",
         asset_root=package_root,
         worker=LayoutCreationWorker(capability, executor=executor),
         timeout=60,
+        database=database,
+        publisher=publisher,
     )
 
 
@@ -473,14 +542,10 @@ def test_illegal_handles_are_rejected(
 def test_cad_failure_leaves_only_the_isolated_attempt_log(
     tmp_path, package_root, capability, plan
 ) -> None:
-    class FailingExecutor:
-        def run(self, capability, drawing, script, timeout):
-            raise RuntimeError("CAD_CAPABILITY_UNAVAILABLE: 2020")
-
     runner = CreationJobRunner(
         data_dir=tmp_path / "data",
         asset_root=package_root,
-        worker=LayoutCreationWorker(capability, executor=FailingExecutor()),
+        worker=LayoutCreationWorker(capability, executor=FailingCadExecutor()),
         timeout=60,
     )
     with pytest.raises(CreationJobError) as excinfo:
@@ -524,7 +589,7 @@ def test_plan_with_diagnostics_is_rejected_without_touching_disk(
     with pytest.raises(CreationJobError) as excinfo:
         runner.stage("job-1", 1, broken)
     assert excinfo.value.code == "CREATION_PLAN_INVALID"
-    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "data" / CREATION_JOBS_DIR_NAME).exists()
 
 
 @pytest.mark.parametrize("job_id", ["../escape", "", "a/b", "a" * 65, "作业"])
@@ -534,7 +599,7 @@ def test_unsafe_job_id_is_rejected_without_touching_disk(
     with pytest.raises(CreationJobError) as excinfo:
         runner.stage(job_id, 1, plan)
     assert excinfo.value.code == "CREATION_JOB_ID_INVALID"
-    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "data" / CREATION_JOBS_DIR_NAME).exists()
 
 
 @pytest.mark.parametrize("attempt", [0, -1])
@@ -544,4 +609,349 @@ def test_illegal_attempt_is_rejected_without_touching_disk(
     with pytest.raises(CreationJobError) as excinfo:
         runner.stage("job-1", attempt, plan)
     assert excinfo.value.code == "CREATION_ATTEMPT_INVALID"
-    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "data" / CREATION_JOBS_DIR_NAME).exists()
+
+
+# ---- Task 6：创建任务状态、可恢复发布与重试 ---------------------------------
+
+
+CREATION_DRAFT_ID = "draft-1"
+PREVIEW_DIGEST = "digest-1"
+
+
+def _create_creation_job(
+    database: Database,
+    plan: CreationPlan,
+    *,
+    job_id: str = "job-1",
+    draft_id: str = CREATION_DRAFT_ID,
+    digest: str = PREVIEW_DIGEST,
+) -> None:
+    """建一个创建任务：没有普通工作区，只有草稿身份与预览摘要。"""
+    database.create_job(
+        job_id,
+        None,
+        "creation",
+        "QUEUED",
+        {
+            "creation_draft_id": draft_id,
+            "preview_digest": digest,
+            "target_path": plan.target_path,
+        },
+        cad_version="2020",
+        creation_draft_id=draft_id,
+    )
+
+
+def _claim(database: Database, *, job_id: str = "job-1", worker: str = "worker-1") -> dict:
+    job = database.claim_next_job(worker)
+    assert job is not None and job["id"] == job_id
+    return job
+
+
+def _published_names(target: Path) -> list[str]:
+    return sorted(item.name for item in target.iterdir())
+
+
+def test_run_publishes_the_candidate_and_closes_the_job_without_workspace(
+    tmp_path, runner, database, tmp_plan
+) -> None:
+    _create_creation_job(database, tmp_plan)
+    job = _claim(database)
+
+    result = runner.run(job["id"], job["attempt"], tmp_plan)
+
+    target = Path(tmp_plan.target_path)
+    assert result["status"] == "SUCCEEDED"
+    assert result["progress"] == 100
+    assert result["workspace_id"] is None
+    assert result["creation_draft_id"] == CREATION_DRAFT_ID
+    assert result["error_code"] is None
+    assert [item["status"] for item in result["timeline"]] == [
+        "QUEUED",
+        "STAGING",
+        "CAD_RUNNING",
+        "VERIFYING",
+        "PREPARED",
+        "PUBLISHING",
+        "SUCCEEDED",
+    ]
+    assert _published_names(target) == sorted(
+        [CREATION_DST_NAME, *(group.dwg_name for group in tmp_plan.groups)]
+    )
+    published = result["payload"]["published"]
+    assert published["target_dir"] == str(target)
+    assert published["dst_path"] == str(target / CREATION_DST_NAME)
+    assert published["target_state"] == "missing"
+    assert [item["role"] for item in published["files"]] == ["dst", "dwg", "dwg"]
+    assert all(len(item["sha256"]) == 64 for item in published["files"])
+    # 发布日志与修订证据落在 Manager 应用数据目录的 attempt 命名空间
+    assert Path(published["journal_path"]) == _attempt_dir(tmp_path) / "publish-journal.json"
+    assert Path(published["revision_dir"]) == _attempt_dir(tmp_path) / "revision"
+
+
+def test_run_records_failure_diagnostics_without_workspace(
+    tmp_path, database, package_root, capability, tmp_plan
+) -> None:
+    runner = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=FailingCadExecutor()),
+        timeout=60,
+        database=database,
+        publisher=ProjectPublisher(),
+    )
+    _create_creation_job(database, tmp_plan)
+    job = _claim(database)
+
+    result = runner.run(job["id"], job["attempt"], tmp_plan)
+
+    assert result["status"] == "FAILED"
+    assert result["workspace_id"] is None
+    assert result["error_code"] == "CREATION_CAD_UNAVAILABLE"
+    assert "CAD_CAPABILITY_UNAVAILABLE" in result["error_detail"]
+    assert not Path(tmp_plan.target_path).exists()
+    assert "CREATION_CAD_UNAVAILABLE" in (
+        _attempt_dir(tmp_path) / "logs" / "creation.log"
+    ).read_text(encoding="utf-8")
+
+
+def test_retry_after_failure_uses_a_new_attempt_directory(
+    tmp_path, database, package_root, capability, executor, tmp_plan
+) -> None:
+    failing = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=FailingCadExecutor()),
+        timeout=60,
+        database=database,
+        publisher=ProjectPublisher(),
+    )
+    _create_creation_job(database, tmp_plan)
+    first = _claim(database)
+    failed = failing.run(first["id"], first["attempt"], tmp_plan)
+    assert failed["status"] == "FAILED" and failed["attempt"] == 1
+
+    assert database.retry_job("job-1")["status"] == "QUEUED"
+    retried = _claim(database, worker="worker-2")
+    assert retried["attempt"] == 2
+
+    working = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=executor),
+        timeout=60,
+        database=database,
+        publisher=ProjectPublisher(),
+    )
+    result = working.run(retried["id"], retried["attempt"], tmp_plan)
+
+    assert result["status"] == "SUCCEEDED" and result["attempt"] == 2
+    assert (_attempt_dir(tmp_path, attempt=1) / "logs" / "creation.log").is_file()
+    assert (_attempt_dir(tmp_path, attempt=2) / "revision" / "manifest.json").is_file()
+
+
+def test_publish_failure_rolls_back_and_marks_the_job_rolled_back(
+    tmp_path, database, package_root, capability, executor, tmp_plan
+) -> None:
+    runner = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=executor),
+        timeout=60,
+        database=database,
+        publisher=ProjectPublisher(fault_injector=FailAfterFirstCommit()),
+    )
+    _create_creation_job(database, tmp_plan)
+    job = _claim(database)
+
+    result = runner.run(job["id"], job["attempt"], tmp_plan)
+
+    assert result["status"] == "ROLLED_BACK"
+    assert result["error_code"] == "CREATION_PUBLISH_FAILED"
+    assert not Path(tmp_plan.target_path).exists()
+    assert [item["status"] for item in result["timeline"]][-1] == "ROLLED_BACK"
+
+
+def test_external_content_during_rollback_marks_the_job_needs_review(
+    tmp_path, database, package_root, capability, executor, tmp_plan
+) -> None:
+    runner = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=executor),
+        timeout=60,
+        database=database,
+        publisher=ProjectPublisher(
+            fault_injector=ExternalContentAfterFirstCommit()
+        ),
+    )
+    _create_creation_job(database, tmp_plan)
+    job = _claim(database)
+
+    result = runner.run(job["id"], job["attempt"], tmp_plan)
+
+    target = Path(tmp_plan.target_path)
+    assert result["status"] == "NEEDS_REVIEW"
+    assert result["error_code"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+    assert _published_names(target) == ["外部.dwg"]
+    assert (target / "外部.dwg").read_bytes() == b"external"
+    # 现场与日志保留：人工核对依据不被自动清理
+    assert (_attempt_dir(tmp_path) / "publish-journal.json").is_file()
+
+
+def test_run_requires_a_task_database_and_publisher(tmp_path, package_root, capability, executor, tmp_plan) -> None:
+    runner = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=executor),
+        timeout=60,
+    )
+
+    with pytest.raises(CreationJobError) as excinfo:
+        runner.run("job-1", 1, tmp_plan)
+
+    assert excinfo.value.code == "CREATION_JOB_NOT_RUNNABLE"
+    assert not Path(tmp_plan.target_path).exists()
+
+
+class ProcessInterrupted(BaseException):
+    """模拟进程在发布中途被终止（不触发回滚，只留持久日志现场）。"""
+
+
+class InterruptAtPublishing:
+    """在写入 PUBLISHING 日志后终止进程。"""
+
+    def at_stage(self, stage: str) -> None:
+        if stage == "PUBLISHING":
+            raise ProcessInterrupted("注入进程中断：PUBLISHING")
+
+    def after_commit(self, target: Path) -> None:
+        return None
+
+
+def _interrupted_creation_job(tmp_path, runner, tmp_plan, job_id: str = "job-1"):
+    """在 PUBLISHING 中断一次创建发布，并返回服务重启前的持久化身份。"""
+    from dst_manager.application.service import DstManagerService
+    from dst_manager.config import Settings
+
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    candidate = runner.stage(job_id, 1, tmp_plan)
+    target = Path(tmp_plan.target_path)
+    interrupted = ProjectPublisher(fault_injector=InterruptAtPublishing())
+    with pytest.raises(ProcessInterrupted):
+        interrupted.publish_new_project(candidate, target, job_id, 1)
+    service.database.create_job(
+        job_id,
+        None,
+        "creation",
+        "PUBLISHING",
+        {"creation_draft_id": CREATION_DRAFT_ID, "preview_digest": PREVIEW_DIGEST},
+        cad_version="2020",
+        creation_draft_id=CREATION_DRAFT_ID,
+    )
+    with service.database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET worker_id='worker-1', attempt=1 WHERE id=?", (job_id,)
+        )
+    return settings, target
+
+
+def test_startup_recovery_rolls_back_interrupted_creation_publish(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """进程中断（PUBLISHING）后重启：目标恢复原状态，任务落可核对终态。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_job(tmp_path, runner, tmp_plan)
+    assert target.is_dir() and list(target.iterdir()) == []
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "ROLLED_BACK"
+    assert job["error_code"] == "STARTUP_RECOVERY"
+    assert job["workspace_id"] is None
+    assert not target.exists()
+    # 日志与现场保留，供人工核对
+    assert (_attempt_dir(tmp_path) / "publish-journal.json").is_file()
+
+
+def test_startup_recovery_marks_needs_review_when_external_content_appeared(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """中断后目标出现外部内容：停止自动清理、保留日志并标记 NEEDS_REVIEW。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_job(tmp_path, runner, tmp_plan)
+    external = target / "外部.dwg"
+    external.write_bytes(b"external")
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "NEEDS_REVIEW"
+    assert job["error_code"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+    assert external.read_bytes() == b"external"
+    assert _published_names(target) == ["外部.dwg"]
+
+
+def test_startup_recovery_closes_committed_creation_publish(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """已提交但未闭环的创建发布：启动恢复幂等补齐成功状态，绝不重发成果。"""
+    from dst_manager.application.service import DstManagerService
+    from dst_manager.config import Settings
+
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    candidate = runner.stage("job-1", 1, tmp_plan)
+    target = Path(tmp_plan.target_path)
+    published = ProjectPublisher().publish_new_project(candidate, target, "job-1", 1)
+    service.database.create_job(
+        "job-1",
+        None,
+        "creation",
+        "PUBLISHING",
+        {"creation_draft_id": CREATION_DRAFT_ID},
+        cad_version="2020",
+        creation_draft_id=CREATION_DRAFT_ID,
+    )
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "SUCCEEDED"
+    assert job["progress"] == 100
+    assert job["workspace_id"] is None
+    assert job["payload"]["published"]["target_dir"] == str(target)
+    assert _published_names(target) == sorted(
+        [CREATION_DST_NAME, *(group.dwg_name for group in tmp_plan.groups)]
+    )
+    assert published.revision_dir.is_dir()
+
+
+def test_startup_recovery_quarantines_unprovable_creation_journal(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """日志身份被改写：只按受控目录层级隔离任务，不做任何猜测性清理。"""
+    import json as json_module
+
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_job(tmp_path, runner, tmp_plan)
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    journal = json_module.loads(journal_path.read_text(encoding="utf-8"))
+    journal["attempt"] = 9
+    journal_path.write_text(
+        json_module.dumps(journal, ensure_ascii=False), encoding="utf-8"
+    )
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "NEEDS_REVIEW"
+    assert job["error_code"] == "PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"
+    assert target.is_dir() and list(target.iterdir()) == []
+    assert journal_path.is_file()

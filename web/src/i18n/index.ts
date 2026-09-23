@@ -8,6 +8,7 @@ import App from "../App.vue";
 import {resolveLocale, type EffectiveLocale, type UiLocaleSetting} from "./locale";
 import {initializeApplicationPreferences} from "../composables/useApplicationPreferences";
 import zhCNCommon from "./locales/zh-CN/common";
+import zhCNCreation from "./locales/zh-CN/creation";
 import zhCNErrors from "./locales/zh-CN/errors";
 import zhCNExtensions from "./locales/zh-CN/extensions";
 import zhCNJobs from "./locales/zh-CN/jobs";
@@ -18,6 +19,7 @@ import zhCNShell from "./locales/zh-CN/shell";
 import zhCNSheets from "./locales/zh-CN/sheets";
 import zhCNStandards from "./locales/zh-CN/standards";
 import enUSCommon from "./locales/en-US/common";
+import enUSCreation from "./locales/en-US/creation";
 import enUSErrors from "./locales/en-US/errors";
 import enUSExtensions from "./locales/en-US/extensions";
 import enUSJobs from "./locales/en-US/jobs";
@@ -30,8 +32,8 @@ import enUSStandards from "./locales/en-US/standards";
 
 // 语言资源按功能域装两套同构文件，构建期合并（ARCH-DM-005 §5.1）
 const messages = {
-  "zh-CN": {common: zhCNCommon, errors: zhCNErrors, extensions: zhCNExtensions, jobs: zhCNJobs, properties: zhCNProperties, revisions: zhCNRevisions, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets, standards: zhCNStandards},
-  "en-US": {common: enUSCommon, errors: enUSErrors, extensions: enUSExtensions, jobs: enUSJobs, properties: enUSProperties, revisions: enUSRevisions, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets, standards: enUSStandards},
+  "zh-CN": {common: zhCNCommon, creation: zhCNCreation, errors: zhCNErrors, extensions: zhCNExtensions, jobs: zhCNJobs, properties: zhCNProperties, revisions: zhCNRevisions, settings: zhCNSettings, shell: zhCNShell, sheets: zhCNSheets, standards: zhCNStandards},
+  "en-US": {common: enUSCommon, creation: enUSCreation, errors: enUSErrors, extensions: enUSExtensions, jobs: enUSJobs, properties: enUSProperties, revisions: enUSRevisions, settings: enUSSettings, shell: enUSShell, sheets: enUSSheets, standards: enUSStandards},
 };
 
 // 唯一实例：语言状态全部经此实例流转；缺键运行时回退 zh-CN（键对称由 check:i18n 保证）

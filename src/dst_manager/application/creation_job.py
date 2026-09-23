@@ -1,10 +1,16 @@
-"""创建暂存工作单元：在隔离 attempt 中生成候选成果（PLAN-DM-036 Task 5）。
+"""创建暂存工作单元：在隔离 attempt 中生成候选成果，并发布到新项目目录（PLAN-DM-036 Task 5/6）。
 
 `CreationJobRunner.stage(job_id, attempt, plan)` 只做**暂存**，不写目标项目目录、
-不调用发布器（发布是新项目发布事务的职责）：它把计划实例化成 Manager 内置的
-最小 DST 骨架，对每个图纸组从标准包内受控基础模板复制一个主 DWG，用固定
-Worker 请求导入选中图幅并为组内每张 Sheet 创建计划布局，回填真实 Handle，然后
-完成契约/XSD/语义校验、DST 编码→解码往返与 DWG 实际布局集合的逐项比对。
+不调用发布器：它把计划实例化成 Manager 内置的最小 DST 骨架，对每个图纸组从标准
+包内受控基础模板复制一个主 DWG，用固定 Worker 请求导入选中图幅并为组内每张 Sheet
+创建计划布局，回填真实 Handle，然后完成契约/XSD/语义校验、DST 编码→解码往返与
+DWG 实际布局集合的逐项比对。
+
+`CreationJobRunner.run(job_id, attempt, plan)` 在暂存成功后调用
+`ProjectPublisher.publish_new_project` 把候选清单可恢复地发布到新项目目录，并把
+状态/进度/时间线与失败诊断写进 ``jobs`` 表；创建任务没有普通工作区
+（``workspace_id`` 为 NULL）也能完整记录。工作区登记（``workspace_id`` 关联、标准
+快照与初始修订）属于发布成功之后的步骤（PLAN-DM-036 Task 7），本模块不写该列。
 
 隔离与失败语义：
 
@@ -13,7 +19,8 @@ Worker 请求导入选中图幅并为组内每张 Sheet 创建计划布局，回
   重试使用新 attempt，不覆盖旧 attempt；
 - 布局模板的真实布局集合必须包含标准声明的图幅，主 DWG 的实际布局集合必须与
   计划逐项一致，任何非法/占位/重复 Handle 都拒绝：任一项不符即整个任务失败；
-- 任何一步失败只留隔离 attempt 日志，不产出半成品候选，也不在目标目录留下文件。
+- 发布失败按现场结论回滚（``ROLLED_BACK``）或隔离为 ``NEEDS_REVIEW``，绝不留下
+  可被误报成功的半成品。
 
 本模块不启动 CAD：CAD 能力与固定命令由 :mod:`dst_manager.infrastructure.autocad.worker`
 承担，可在测试中注入替身。候选物的对外值类型与稳定错误见
@@ -29,6 +36,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from dst_manager.application.creation_candidate import (
     CreationCandidate,
@@ -40,7 +48,7 @@ from dst_manager.application.errors import ApplicationError
 from dst_manager.application.standard_assets import StandardAssetOperations
 from dst_manager.domain.creation import SHEET_SCOPE, SHEETSET_SCOPE
 from dst_manager.domain.creation_plan_models import CreationPlan, SheetPlan
-from dst_manager.domain.models import Severity
+from dst_manager.domain.models import JobStatus, Severity
 from dst_manager.infrastructure.acsm_xml import (
     AcsmDocument,
     AcsmValidationError,
@@ -63,8 +71,13 @@ from dst_manager.infrastructure.autocad.worker import (
     LayoutCreationWorker,
 )
 from dst_manager.infrastructure.dst_codec import DstCodec
+from dst_manager.infrastructure.filesystem.project_publish_types import (
+    ProjectPublishError,
+)
+from dst_manager.infrastructure.filesystem.project_publisher import ProjectPublisher
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
 from dst_manager.infrastructure.logging_text import sanitize_log_text
+from dst_manager.infrastructure.persistence import Database
 
 __all__ = [
     "CREATION_JOBS_DIR_NAME",
@@ -131,6 +144,8 @@ class CreationJobRunner:
         worker: LayoutCreationWorker,
         timeout: int,
         codec: DstCodec | None = None,
+        database: Database | None = None,
+        publisher: ProjectPublisher | None = None,
     ) -> None:
         if timeout <= 0:
             raise ValueError("CREATION_TIMEOUT_INVALID")
@@ -140,6 +155,89 @@ class CreationJobRunner:
         self.worker = worker
         self.timeout = timeout
         self.codec = codec if codec is not None else DstCodec()
+        #: ``stage`` 不需要任务持久化；``run`` 需要（缺失时以稳定码拒绝）。
+        self.database = database
+        self.publisher = publisher
+
+    def run(self, job_id: str, attempt: int, plan: CreationPlan) -> dict[str, Any]:
+        """执行已领取的创建任务：隔离暂存 → 可恢复发布 → 任务闭环。
+
+        失败按现场结论落终态：暂存/计划故障落 ``FAILED``，发布回滚落
+        ``ROLLED_BACK``，需要人工核对的现场（外部内容、命名空间冲突、身份不匹配）
+        落 ``NEEDS_REVIEW``；任何路径都不在目标目录留半成品。
+        """
+        if self.database is None or self.publisher is None:
+            raise CreationJobError(
+                "CREATION_JOB_NOT_RUNNABLE", "创建运行器缺少任务数据库或发布器，无法执行创建任务"
+            )
+        job = self.database.get_job(job_id)
+        if job is None:
+            raise CreationJobError("CREATION_JOB_NOT_RUNNABLE", f"创建任务不存在：{job_id}")
+        worker_id = job.get("worker_id") or "local-worker"
+        target = Path(plan.target_path)
+        try:
+            self._require_owned_status(job_id, worker_id, attempt, JobStatus.CAD_RUNNING, 20)
+            candidate = self.stage(job_id, attempt, plan)
+            self._require_owned_status(job_id, worker_id, attempt, JobStatus.VERIFYING, 70)
+            self._require_owned_status(job_id, worker_id, attempt, JobStatus.PREPARED, 80)
+            self._require_owned_status(job_id, worker_id, attempt, JobStatus.PUBLISHING, 90)
+            published = self.publisher.publish_new_project(candidate, target, job_id, attempt)
+            # 工作区登记（Task 7 的 finish_creation）只能在发布成功之后进行：
+            # 这里只闭环任务本身，jobs.workspace_id 在发布前恒为 NULL。
+            self.database.finalize_creation_job(
+                job_id,
+                published.to_payload(),
+                worker_id=worker_id,
+                attempt=attempt,
+            )
+        except ProjectPublishError as exc:
+            self._record_publish_failure(job_id, worker_id, attempt, exc)
+        except CreationJobError as exc:
+            self._update_owned(job_id, worker_id, attempt, JobStatus.FAILED, 0, exc.code, str(exc))
+        except Exception as exc:  # noqa: BLE001 - Worker 边界必须把任意故障持久化为终态
+            self.database.finalize_job_terminal(
+                job_id,
+                JobStatus.NEEDS_REVIEW,
+                getattr(exc, "code", type(exc).__name__.upper()),
+                str(exc),
+                worker_id=worker_id,
+                attempt=attempt,
+            )
+        return self.database.get_job(job_id) or {}
+
+    # ---- 任务状态与发布失败映射 ------------------------------------------
+
+    def _update_owned(self, job_id: str, worker_id: str, attempt: int, status: JobStatus, progress: int, error_code: str | None = None, error_detail: str | None = None) -> bool:
+        """按任务租约更新状态；丢失租约时返回 False（绝不覆盖新主人的现场）。"""
+        return bool(
+            self.database.update_job(
+                job_id,
+                status,
+                progress,
+                error_code,
+                error_detail,
+                worker_id=worker_id,
+                attempt=attempt,
+            )
+        )
+
+    def _require_owned_status(self, job_id: str, worker_id: str, attempt: int, status: JobStatus, progress: int) -> None:
+        if not self._update_owned(job_id, worker_id, attempt, status, progress):
+            raise CreationJobError("CREATION_JOB_LEASE_LOST", "创建任务租约已丢失，本次运行不再写入任何状态")
+
+    def _record_publish_failure(
+        self, job_id: str, worker_id: str, attempt: int, exc: ProjectPublishError
+    ) -> None:
+        """把发布失败按现场结论映射到任务终态。"""
+        if exc.outcome == "ABORTED":
+            self._update_owned(job_id, worker_id, attempt, JobStatus.FAILED, 0, exc.code, str(exc))
+            return
+        if exc.outcome == "ROLLED_BACK":
+            self._update_owned(job_id, worker_id, attempt, JobStatus.ROLLED_BACK, 0, exc.code, str(exc))
+            return
+        self.database.finalize_job_terminal(
+            job_id, JobStatus.NEEDS_REVIEW, exc.code, str(exc), worker_id=worker_id, attempt=attempt
+        )
 
     def stage(self, job_id: str, attempt: int, plan: CreationPlan) -> CreationCandidate:
         """在独立 attempt 暂存目录生成候选成果；不写目标项目目录、不调用发布器。"""

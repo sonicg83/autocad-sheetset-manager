@@ -2,21 +2,36 @@
 
 以 publisher 为首参的鸭子类型调用 publisher 实例方法（``publisher._rollback`` 等），
 本模块不得反向 import publisher，保持依赖单向 publisher → publish_recovery。
+PLAN-DM-036 Task 6 的创建发布恢复同属本模块：创建事务没有工作区 ``.dst-manager/``
+命名空间，日志落在 Manager 应用数据目录的隔离 attempt 里，因此按
+``creation-jobs/<job_id>/attempt-NNN/publish-journal.json`` 独立枚举，回滚同样走
+鸭子类型调用 ``publisher._rollback_creation``，不复制回滚实现。
 """
 
 import json
 import os
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionLock
+from dst_manager.infrastructure.filesystem.locking import (
+    WorkspaceTransactionBusyError,
+    WorkspaceTransactionLock,
+)
 from dst_manager.infrastructure.filesystem.publish_errors import PublishRecoveryError
 from dst_manager.infrastructure.filesystem.publish_journal import (
     archive_journal,
     immutable_transaction_projection,
     write_journal,
+    write_journal_best_effort,
 )
 from dst_manager.infrastructure.filesystem.publish_primitives import file_sha256
+
+#: 创建发布日志文件名（与 project_publisher 写入侧同一字面量；本模块只读枚举）。
+CREATION_PUBLISH_JOURNAL_NAME = "publish-journal.json"
+#: 创建发布日志中不表示「仍需处理」的终态。
+CREATION_PUBLISH_SETTLED_STATUSES = frozenset({"ROLLED_BACK", "ABORTED_BASELINE_CHANGED"})
 
 
 def _parse_attempt_dir_name(name: str) -> int:
@@ -246,3 +261,117 @@ def read_committed_operation(publisher, workspace_root: Path, operation_id: str)
         ),
         None,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CreationPublishOutcome:
+    """一次创建发布启动恢复的结论：任务身份、现场结论与（提交时的）成果投影。"""
+
+    job_id: str
+    attempt: int
+    conclusion: str
+    detail: str = ""
+    published: dict[str, Any] | None = None
+
+
+def creation_published_payload(journal: dict[str, Any]) -> dict[str, Any]:
+    """已提交创建发布的成果投影。
+
+    任务闭环（``jobs.payload.published``）与 Task 7 的工作区登记消费同一形状；
+    发布路径与启动恢复都从这里取，避免两处各写一份字段集合。
+    """
+    target = Path(journal["target"]["path"])
+    files = []
+    for entry in journal["files"]:
+        path = Path(entry["target"])
+        files.append(
+            {
+                "name": entry["name"],
+                "role": entry["role"],
+                "group_id": entry["group_id"],
+                "sha256": entry["result_hash"],
+                "size": path.stat().st_size if path.is_file() else 0,
+            }
+        )
+    dst_name = next(entry["name"] for entry in journal["files"] if entry["role"] == "dst")
+    return {
+        "target_dir": str(target),
+        "dst_path": str(target / dst_name),
+        "dst_name": dst_name,
+        "target_state": journal["target"]["state"],
+        "attempt": journal["attempt"],
+        "journal_path": journal["journal_path"],
+        "revision_dir": journal["revision_dir"],
+        "files": files,
+    }
+
+
+def _creation_recovery_lock(journal: dict[str, Any]) -> WorkspaceTransactionLock:
+    """创建发布的目标级事务锁：与发布路径同一把锁，恢复绝不与进行中的发布并发。"""
+    lock_path = journal.get("lock_path")
+    if not isinstance(lock_path, str) or not lock_path:
+        raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+    return WorkspaceTransactionLock(Path(lock_path))
+
+
+def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[CreationPublishOutcome]:
+    """按持久日志幂等处理中断的创建发布（``PREPARED``/``PUBLISHING``/回滚中断）。
+
+    - 已提交（``COMMITTED``）：只补齐证据归档，绝不再次生成或覆盖成果文件；
+    - 未提交：调用 ``publisher._rollback_creation`` 按身份回滚，结论为 ``ROLLED_BACK``
+      或（出现外部内容/身份不匹配时）``NEEDS_REVIEW``；
+    - 每份日志都在**目标级发布事务锁**下处理（与发布路径同一把锁）：锁被占用说明
+      同一目标上仍有进行中的发布或恢复，此时不介入现场；
+    - 日志身份与路径不一致（作业 ID / attempt 被改写）属于不可信现场，直接以
+      ``PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`` 终止恢复，不做任何猜测性清理。
+    """
+    root = Path(creation_jobs_root)
+    if not root.exists():
+        return []
+    outcomes: list[CreationPublishOutcome] = []
+    for journal_path in sorted(root.glob(f"*/attempt-*/{CREATION_PUBLISH_JOURNAL_NAME}")):
+        job_id = journal_path.parent.parent.name
+        attempt = _parse_attempt_dir_name(journal_path.parent.name)
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        if journal.get("operation_id") != job_id or journal.get("attempt") != attempt:
+            raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
+        status = journal.get("status")
+        if status in CREATION_PUBLISH_SETTLED_STATUSES:
+            continue
+        if status == "COMMITTED":
+            with _creation_recovery_lock(journal):
+                publisher._finish_committed_cleanup(
+                    journal_path, journal, Path(journal["revision_dir"])
+                )
+            outcomes.append(
+                CreationPublishOutcome(
+                    job_id,
+                    attempt,
+                    "COMMITTED",
+                    published=creation_published_payload(journal),
+                )
+            )
+            continue
+        try:
+            with _creation_recovery_lock(journal):
+                publisher._rollback_creation(journal_path, journal)
+        except WorkspaceTransactionBusyError:
+            # 同一目标上仍有进程持有发布事务锁（正在发布或正在恢复）：不介入现场，
+            # 让任务按租约恢复规则处理，绝不同时操作同一目标。
+            continue
+        except Exception as recovery_error:  # noqa: BLE001 - 恢复故障必须显式隔离为人工核对
+            journal["status"] = "ROLLBACK_FAILED"
+            write_journal_best_effort(journal_path, journal)
+            outcomes.append(
+                CreationPublishOutcome(job_id, attempt, "NEEDS_REVIEW", str(recovery_error))
+            )
+            continue
+        if journal["status"] == "ROLLED_BACK":
+            outcomes.append(CreationPublishOutcome(job_id, attempt, "ROLLED_BACK"))
+        else:
+            outcomes.append(
+                CreationPublishOutcome(
+                    job_id, attempt, "NEEDS_REVIEW", journal.get("review_detail", "")
+                )
+            )
+    return outcomes

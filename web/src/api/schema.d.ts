@@ -57,6 +57,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/creation-drafts/{draft_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Creation Draft */
+        post: operations["execute_creation_draft_api_creation_drafts__draft_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/creation-drafts/{draft_id}/preview": {
         parameters: {
             query?: never;
@@ -1030,6 +1047,18 @@ export interface components {
             target_path: string;
         };
         /**
+         * CreationExecuteRequest
+         * @description 执行创建：只接受权威预览摘要，不接受任何派生输出。
+         *
+         *     目标路径、图纸组表、编号与 DWG 命名结果全部由服务端在入队前重新加载标准、
+         *     草稿、目标与设置/资产快照后重算；摘要不符以 409 ``CREATION_PREVIEW_STALE``
+         *     拒绝。契约不允许额外字段，客户端夹带 ``target_path`` 等派生值直接 422。
+         */
+        CreationExecuteRequest: {
+            /** Preview Digest */
+            preview_digest: string;
+        };
+        /**
          * CreationGroupModel
          * @description 一个图纸组的输入/存储形状；``sheet_values`` 只含可输入普通 sheet 属性。
          */
@@ -1968,6 +1997,8 @@ export interface components {
             attempt?: number | null;
             /** Cad Version */
             cad_version?: string | null;
+            /** Creation Draft Id */
+            creation_draft_id?: string | null;
             /** Error Code */
             error_code?: string | null;
             /** Error Detail */
@@ -2006,7 +2037,7 @@ export interface components {
             /** Worker Id */
             worker_id?: string | null;
             /** Workspace Id */
-            workspace_id: string;
+            workspace_id: string | null;
         };
         /** JobSummaryResponse */
         JobSummaryResponse: {
@@ -3030,6 +3061,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_creation_draft_api_creation_drafts__draft_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreationExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
                 };
             };
             /** @description Validation Error */

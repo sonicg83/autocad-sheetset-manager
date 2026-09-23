@@ -59,8 +59,8 @@ def test_migrate_database_uses_resource_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(database_module, "resource_dir", lambda: tmp_path)
     url = f"sqlite:///{(tmp_path / 'migrate.db').as_posix()}"
     database_module.migrate_database(url)
-    # head 回到 0006_dm020_extension_platform（Builder 归档后 0007/0008 一并移除）
-    assert database_module.LATEST_SCHEMA_REVISION == "0006_dm020_extension_platform"
+    # head 为当前最新修订（Builder 归档后 0007/0008 一并移除，创建任务迁移重新占用 0007）
+    assert database_module.LATEST_SCHEMA_REVISION == "0007_creation_jobs"
     # 迁移真实发生：alembic_version 表存在且为最新修订
     from sqlalchemy import create_engine, text
 

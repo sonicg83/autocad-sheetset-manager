@@ -179,6 +179,16 @@ class CreationOperations:
 
         只读：不启动 CAD、不写文件、不改变草稿修订。
         """
+        return self._creation_preview(draft_id)[2]
+
+    def _creation_preview(
+        self, draft_id: str
+    ) -> tuple[CreationDraft, CreationPlan, dict[str, object]]:
+        """重算一次权威预览，同时返回草稿与计划：预览、执行与 Worker 侧复核共用。
+
+        三者必须来自同一次重算（标准文档、设置、资产、目标状态都在同一次快照里），
+        否则摘要与计划可能对应不同现场。
+        """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
             (draft.standard_id, draft.standard_version)
@@ -193,7 +203,7 @@ class CreationOperations:
         assets = resolve_creation_assets(self.standard_store, standard)
         plan = create_creation_plan(draft, standard, suffix_options)
         diagnostics = _preview_diagnostics(draft, assets, plan)
-        return {
+        payload: dict[str, object] = {
             "draft_id": draft.id,
             "revision": draft.revision,
             "standard_id": standard.standard_id,
@@ -228,6 +238,7 @@ class CreationOperations:
                 diagnostics=diagnostics,
             ),
         }
+        return draft, plan, payload
 
     # ---- 草稿输入保存 ----------------------------------------------------
 

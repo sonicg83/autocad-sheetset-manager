@@ -3091,6 +3091,7 @@ def test_service_derives_heartbeat_interval_from_worker_lease(tmp_path: Path, mo
     service.database = Mock()
     service.database.claim_next_job.return_value = {
         "id": "job",
+        "type": "change_set",
         "workspace_id": "workspace",
         "cad_version": "2020",
     }

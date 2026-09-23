@@ -380,7 +380,9 @@ class JobSummaryResponse(ResponseModel):
 
 class JobResponse(ResponseModel):
     id: str | None
-    workspace_id: str
+    # 创建任务在普通工作区尚不存在时就要可读（PLAN-DM-036 Task 6），因此可空。
+    workspace_id: str | None
+    creation_draft_id: str | None = None
     status: str
     progress: int | None = None
     type: str | None = None
