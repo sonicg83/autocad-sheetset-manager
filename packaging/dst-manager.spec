@@ -23,6 +23,9 @@ a = Analysis(
         # 严格后置校验 XSD（dst_platform.acsm.contract._load_schema 经 __file__ 定位）：frozen 态必须随包打入
         # （PLAN-DB-001 Task 6：XSD 所有权随 contract 实现迁至 dst_platform/acsm/schema）
         ("..\\src\\dst_platform\\acsm\\schema", "dst_platform/acsm/schema"),
+        # Manager 内置最小 DST 骨架（acsm_xml/creation.py 经 __file__ 定位）：frozen 态新建图纸集必须能读它
+        # （PLAN-DM-036 Task 5；目标目录须与 creation.pyc 同级，tests/unit/test_packaging_spec.py 静态守护）
+        ("..\\src\\dst_manager\\infrastructure\\acsm_xml\\assets", "dst_manager/infrastructure/acsm_xml/assets"),
         # 内置扩展随包清单（EP-01）：manifest.py 经 importlib.resources 按包内路径加载，
         # datas 的目标是「目标目录」——文件复制进该目录并保留 basename，必须落在
         # dst_manager/extensions/builtin/sheet_catalog/ 下；固定索引在 index.py 显式列出

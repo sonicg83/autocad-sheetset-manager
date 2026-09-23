@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Manager 内置最小 AcSm 骨架（PLAN-DM-036 Task 5，RFC-INT-003 2026-09-23 实施收敛）。
+
+  这是唯一受版本控制的权威骨架：静态结构、无示例业务值、无 AcSm ID、无项目路径。
+  全部动态值（数据库指纹、根/子对象 ID、图纸集名称、项目路径、属性定义与值、
+  子集/Sheet/布局引用）由 infrastructure/acsm_xml/creation.py 用 DOM 写入，
+  禁止字符串替换本文件。
+
+  节点名、clsid、vt 与节点顺序按实测的真实 AcSm 数据库核定
+  （sample/project1/图纸集数据文件.dst、sample/project2/图纸集数据文件.dst，
+  两者都是 AutoCAD/图纸集管理器真实产物）；此处只保留协议所需的类别标识与
+  固定标记，不复制任何示例名称、路径或实例 GUID。
+
+  文件末尾的单个 AcSmSubset/AcSmSheet 是节点原型（节点名、clsid、子节点顺序的
+  权威来源）：实例化时按计划克隆，原型本身不进入最终 DST。
+-->
+<AcSmDatabase clsid="g2162C6B6-0CE4-40E8-912B-46F59DFDF826">
+	<AcSmProp propname="DbFingerPrint" vt="8"></AcSmProp>
+	<AcSmProp propname="DbVersion" vt="8">1.1</AcSmProp>
+	<AcSmProp propname="FileRevision" vt="3">1</AcSmProp>
+	<AcSmSheetSet clsid="gB20534F2-0978-418C-8D14-2E6928A077ED" propname="SheetSet" vt="13">
+		<AcSmCalloutBlocks clsid="g203EAB46-483B-4E6B-A10B-15E9A4B210FF" propname="CalloutBlocks" vt="13" />
+		<AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" propname="CustomPropertyBag" vt="13" />
+		<AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" propname="DefDwtLayout" vt="13" />
+		<AcSmAcDbBlockRecordReference clsid="g11782523-474B-4C83-9646-57C052847FBB" propname="DefLabelBlk" vt="13" />
+		<AcSmProp propname="Desc" vt="8"></AcSmProp>
+		<AcSmProp propname="Name" vt="8"></AcSmProp>
+		<AcSmFileReference clsid="g6BF87AE7-1BEC-4BDB-98BB-5B91F7772793" propname="NewSheetLocation" vt="13">
+			<AcSmProp propname="FileName" vt="8"></AcSmProp>
+			<AcSmProp propname="Relative_FileName" vt="8">.</AcSmProp>
+		</AcSmFileReference>
+		<AcSmProjectPointLocations clsid="gE40EA246-BAB4-4907-81A5-511EA30C16FD" propname="ProjectPointLocations" vt="13" />
+		<AcSmProp propname="PromptForDwt" vt="2">-1</AcSmProp>
+		<AcSmPublishOptions clsid="gF57F96E7-0F16-4DC9-8F09-52F7BB389AB6" propname="PublishOptions" vt="13">
+			<AcSmProp propname="DwfType" vt="2">-1</AcSmProp>
+			<AcSmProp propname="PromptForName" vt="2">-1</AcSmProp>
+		</AcSmPublishOptions>
+		<AcSmResources clsid="g3F0FAF10-09DE-4EBA-AED1-C4E4D6FECF5D" propname="Resources" vt="13" />
+		<AcSmSheetSelSets clsid="g444780B8-6527-43A8-8DC4-FAB41B7E48BB" propname="SheetSelSets" vt="13" />
+		<AcSmViewCategories clsid="g021730DF-5BEA-48E9-BC7A-35087A674FD0" propname="ViewCategories" vt="13">
+			<AcSmViewCategory clsid="g4AEA81ED-C24F-477B-A534-EA69220A276A">
+				<AcSmCalloutBlockReferences clsid="g67C52FE4-0A6B-4C82-A4CC-5E68537747B0" propname="CalloutBlocks" vt="13" />
+			</AcSmViewCategory>
+		</AcSmViewCategories>
+		<AcSmSubset clsid="g076D548F-B0F5-4FE1-B35D-7F7B73B8D322">
+			<AcSmProp propname="Name" vt="8"></AcSmProp>
+			<AcSmSheet clsid="g16A07941-BC15-4D48-A880-9D5A211D5065">
+				<AcSmCustomPropertyBag clsid="g4D103908-8C86-4D95-BBF4-68B9A7B00731" propname="CustomPropertyBag" vt="13" />
+				<AcSmAcDbLayoutReference clsid="g94910E94-4FCA-427C-B6ED-2EC9E1C900C7" propname="Layout" vt="13">
+					<AcSmProp propname="AcDbHandle" vt="8"></AcSmProp>
+					<AcSmProp propname="FileName" vt="8"></AcSmProp>
+					<AcSmProp propname="Name" vt="8"></AcSmProp>
+					<AcSmProp propname="Relative_FileName" vt="8"></AcSmProp>
+				</AcSmAcDbLayoutReference>
+				<AcSmProp propname="Number" vt="8"></AcSmProp>
+				<AcSmSheetViews clsid="gF40F931B-64BC-4B90-9FC8-A11A77D6815B" propname="SheetViews" vt="13" />
+				<AcSmProp propname="Title" vt="8"></AcSmProp>
+			</AcSmSheet>
+		</AcSmSubset>
+	</AcSmSheetSet>
+</AcSmDatabase>

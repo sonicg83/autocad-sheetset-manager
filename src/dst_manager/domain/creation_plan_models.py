@@ -7,6 +7,10 @@
 
 摘要 ``digest`` 必须确定性覆盖标准身份、草稿身份与修订、有效编号配置（位数/起点/
 标题后缀/不编号关键字）与全部派生输出（含逐张属性与文件名）：同样输入必得同样摘要。
+
+``CreationPlan.settings`` 冻结执行链所需的、不能从逐张输出反推的输入：标准身份
+（``DSTManager.Standard``）、属性定义（``property_id``/AcSm 属性名/作用域，DST 按
+属性名匹配）与有效编号/后缀选项（``DSTManager.StandardOptions``）。
 """
 
 from __future__ import annotations
@@ -19,11 +23,13 @@ from pathlib import PureWindowsPath
 
 from dst_manager.domain.creation import CreationDraft
 from dst_manager.domain.models import SuffixOptions
-from dst_manager.domain.standard_models import DrawingStandard
+from dst_manager.domain.standard_models import DrawingStandard, NumberingPolicy
 
 __all__ = [
     "CreationPlan",
     "CreationPlanDiagnostic",
+    "CreationProperty",
+    "CreationSettings",
     "GroupPlan",
     "PropertyCell",
     "PropertyCellRow",
@@ -108,10 +114,44 @@ class GroupPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class CreationProperty:
+    """一个标准属性在 DST 中的写入形态：内部 ``property_id``、AcSm 属性名与作用域。
+
+    DST 按**属性名**匹配（SPEC-DM-017 §3.2），作用域决定自定义属性的 Flags
+    （1=图纸集、2=图纸）；值分别取 ``CreationPlan.sheetset_values`` 与逐张
+    ``SheetPlan.values``，键都是 ``property_id``。
+    """
+
+    property_id: str
+    name: str
+    scope: str
+
+
+@dataclass(frozen=True, slots=True)
+class CreationSettings:
+    """创建执行所需的冻结配置：标准身份、属性定义与有效编号/后缀选项。
+
+    执行链（DST 骨架实例化、保留属性写入）只拿到 ``CreationPlan``，因此这些值
+    随计划冻结：``standard_identity`` 写 ``DSTManager.Standard``，``numbering``
+    与 ``suffix_options`` 写 ``DSTManager.StandardOptions``（SPEC-DM-018 §3.2、
+    RFC-INT-003「标准身份、存储与恢复」）。
+    """
+
+    #: ``<standard_id>@<version>``：与工作区标准绑定属性同一形态。
+    standard_identity: str
+    #: 按标准文档顺序的全部属性定义（普通 + 派生、两个作用域）。
+    properties: tuple[CreationProperty, ...]
+    numbering: NumberingPolicy
+    suffix_options: SuffixOptions
+
+
+@dataclass(frozen=True, slots=True)
 class CreationPlan:
     """创建计划的确定性编译结果；``has_errors`` 为真时计划不可执行。"""
 
     target_path: str
+    #: 创建时有效的标准身份、属性定义与编号/后缀选项（执行链唯一输入载体）。
+    settings: CreationSettings
     sheetset_values: dict[str, str]
     groups: tuple[GroupPlan, ...]
     diagnostics: tuple[CreationPlanDiagnostic, ...]

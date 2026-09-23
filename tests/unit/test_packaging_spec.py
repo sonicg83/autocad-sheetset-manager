@@ -23,19 +23,32 @@ ROOT = Path(__file__).parents[2]
 SPEC = ROOT / "packaging" / "dst-manager.spec"
 # PLAN-DB-001 Task 6：XSD 所有权随 contract 实现迁至 dst_platform/acsm/schema。
 SCHEMA_FILE = ROOT / "src" / "dst_platform" / "acsm" / "schema" / "acsm-v1.xsd"
+# PLAN-DM-036 Task 5：Manager 内置最小 DST 骨架（acsm_xml/creation.py 经 __file__ 定位）。
+SKELETON_FILE = (
+    ROOT
+    / "src"
+    / "dst_manager"
+    / "infrastructure"
+    / "acsm_xml"
+    / "assets"
+    / "minimal_sheetset.xml"
+)
 
 # 允许使用 `Path(__file__)` 的文件（相对各包根的 posix 相对路径，
 # 按 basename 匹配会误放行任意子包下的同名文件）。
 # - dst_platform/acsm/contract.py 的 schema 资源已由 spec datas 覆盖（下方断言）；
-# - dst_manager interfaces/api.py / infrastructure/persistence/database.py 走
+# - dst_manager/interfaces/api.py / infrastructure/persistence/database.py 走
 #   runtime.resource_dir（源码树 / sys._MEIPASS 两态）；
-# - dst_manager/runtime.py 自身 `_DEV_ROOT` 只用于源码树路径、无打包资源。
+# - dst_manager/runtime.py 自身 `_DEV_ROOT` 只用于源码树路径、无打包资源；
+# - dst_manager/infrastructure/acsm_xml/creation.py 的内置 DST 骨架同样由
+#   spec datas 覆盖（下方 test_spec_datas_include_creation_skeleton）。
 # 新增 `Path(__file__)` 资源定位必须：登记在此 + 保证 spec datas / resource_dir 覆盖。
 # 覆盖边界：扫描正则只识别 `Path(__file__)` 字面写法；`os.path.dirname(__file__)`
 # 等等价写法不在守护范围内，新增资源定位请统一用 `Path(__file__)` 或 resource_dir。
 ALLOWED_FILES = {
     "dst_manager": {
         "interfaces/api.py",
+        "infrastructure/acsm_xml/creation.py",
         "infrastructure/persistence/database.py",
         "runtime.py",
     },
@@ -65,6 +78,25 @@ def test_spec_datas_include_acsm_xml_schema():
     # Manager 侧历史路径不得回潮：实现已迁 dst_platform，Manager 只剩薄 re-export
     assert not re.search(r"acsm_xml\\+schema", text), (
         "spec datas 仍引用已迁移的 dst_manager acsm_xml\\schema：XSD 所有权在 dst_platform/acsm/schema"
+    )
+
+
+def test_spec_datas_include_creation_skeleton():
+    """spec datas 必须包含内置 DST 骨架目录：frozen 态新建图纸集依赖它。
+
+    骨架由 `infrastructure/acsm_xml/creation.py` 经 `Path(__file__)` 定位（与
+    XSD 同一形态），frozen 态 `__file__` 指向 `_internal`，因此 datas 目标必须
+    落在 `dst_manager/infrastructure/acsm_xml/assets`。
+    """
+    assert SKELETON_FILE.is_file(), "内置最小 DST 骨架缺失：请确认 assets 目录仍在源码树"
+    normalized = _spec_text().replace("\\\\", "/")
+    assert "src/dst_manager/infrastructure/acsm_xml/assets" in normalized, (
+        "packaging/dst-manager.spec 的 datas 缺少内置 DST 骨架目录条目："
+        "frozen 态新建图纸集将因找不到骨架崩溃"
+    )
+    assert "dst_manager/infrastructure/acsm_xml/assets" in normalized, (
+        "spec datas 的目标路径须为 dst_manager/infrastructure/acsm_xml/assets："
+        "frozen 态 assets/ 目录必须落在 creation.pyc 同级才能被 Path(__file__) 找到"
     )
 
 

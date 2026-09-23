@@ -12,6 +12,10 @@
 - :mod:`dst_manager.domain.creation_plan_inputs`：输入门禁与标准资产解析；
 - 本模块：入口 ``create_creation_plan``、编号/标题/布局派生、逐张求值与诊断去重。
 
+计划同时冻结执行链（内置 DST 骨架实例化）所需的 ``settings``：标准身份、属性定义
+（``property_id`` 与 AcSm 属性名/作用域）与有效编号/后缀选项——执行链只拿到计划，
+无法从逐张输出反推这三项。
+
 关键语义：
 
 - ``draft.sheetset_values`` 与每组 ``sheet_values`` 必须是完整 ``property_id``
@@ -47,6 +51,8 @@ from dst_manager.domain.creation_plan_inputs import (
 from dst_manager.domain.creation_plan_models import (
     CreationPlan,
     CreationPlanDiagnostic,
+    CreationProperty,
+    CreationSettings,
     GroupPlan,
     PropertyCell,
     PropertyCellRow,
@@ -76,6 +82,8 @@ from dst_manager.domain.standard_rules import (
 __all__ = [
     "CreationPlan",
     "CreationPlanDiagnostic",
+    "CreationProperty",
+    "CreationSettings",
     "GroupPlan",
     "PropertyCell",
     "PropertyCellRow",
@@ -207,12 +215,34 @@ def create_creation_plan(
     )
     return CreationPlan(
         target_path=draft.target_path,
+        settings=_creation_settings(standard, suffix_options),
         sheetset_values=sheetset_values,
         groups=groups,
         diagnostics=tuple(diagnostics),
         digest=plan_digest(
             draft, standard, suffix_options, sheetset_values, groups, diagnostics
         ),
+    )
+
+
+def _creation_settings(
+    standard: DrawingStandard, suffix_options: SuffixOptions
+) -> CreationSettings:
+    """冻结执行链需要的标准身份、属性定义与有效编号/后缀选项。
+
+    执行链（Task 5 的内置骨架实例化）只能拿到计划，因此标准身份（写
+    ``DSTManager.Standard``）、AcSm 属性名与作用域（SPEC-DM-017 §3.2：DST 按
+    属性名匹配，不按 ``property_id``）与有效编号配置（写
+    ``DSTManager.StandardOptions``）必须随计划冻结。
+    """
+    return CreationSettings(
+        standard_identity=f"{standard.standard_id}@{standard.version}",
+        properties=tuple(
+            CreationProperty(prop.property_id, prop.name, prop.scope)
+            for prop in standard.properties
+        ),
+        numbering=standard.numbering,
+        suffix_options=suffix_options,
     )
 
 

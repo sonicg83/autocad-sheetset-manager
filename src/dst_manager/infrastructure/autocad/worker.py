@@ -26,6 +26,10 @@ __all__ = [
     "CoreConsoleExecutor",
     "CoreConsoleRequest",
     "CoreConsoleResult",
+    "LayoutCreationError",
+    "LayoutCreationOutcome",
+    "LayoutCreationRequest",
+    "LayoutCreationWorker",
     "ScriptRenderer",
     "decode_console_output",
     "encode_scr_argument",
@@ -109,6 +113,52 @@ def parse_rename_result(text: str, expected_layouts: set[str]) -> int:
     return renamed_count
 
 
+@dataclass(frozen=True, slots=True)
+class LayoutCreationRequest:
+    """一个图纸组的固定布局创建请求：模板图幅 → 组内每张 Sheet 的计划布局。
+
+    只由受控创建流程构造；字段在构造时按 ``encode_scr_argument`` 同一套不安全
+    字符判定校验，脚本内容由 :meth:`ScriptRenderer.render_create_layouts` 固定
+    渲染——调用方无法拼接自由 SCR，也无法把用户文本直接拼进命令行。
+    """
+
+    layout_template: Path
+    paper_layout: str
+    target_layouts: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.paper_layout or not self.target_layouts:
+            raise ValueError("LAYOUT_CREATION_REQUEST_INVALID")
+        keys = [name.casefold() for name in self.target_layouts]
+        if len(keys) != len(set(keys)):
+            raise ValueError("LAYOUT_CREATION_REQUEST_INVALID")
+        try:
+            for value in (
+                str(self.layout_template),
+                self.paper_layout,
+                *self.target_layouts,
+            ):
+                encode_scr_argument(value)
+        except ValueError:
+            raise ValueError("LAYOUT_CREATION_REQUEST_INVALID") from None
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutCreationOutcome:
+    """一次固定布局创建的回读结果：完整布局名与非零唯一 Handle。"""
+
+    layouts: tuple[str, ...]
+    handles: dict[str, str]
+
+
+class LayoutCreationError(ValueError):
+    """固定布局创建的请求/回读失败；``code`` 为稳定错误码。"""
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        self.code = code
+        super().__init__(f"{code}: {detail}" if detail else code)
+
+
 class ScriptRenderer:
     def render_rename(self, plugin: Path) -> str:
         lines = [
@@ -163,6 +213,69 @@ class ScriptRenderer:
         script.write_text("\n".join(lines) + "\n", encoding="mbcs")
         return script
 
+    def render_create_layouts(
+        self, capability: "CadCapability", request: LayoutCreationRequest
+    ) -> str:
+        """固定布局创建脚本：删旧布局 → 逐张导入模板图幅并改名 → 回读 Handle。
+
+        与 ``render_rebuild`` 同一套已验证的 ``-LAYOUT`` 步骤（导入后立即改名，
+        避免同一模板布局名重复），但不接受调用方提供的自由参数：模板路径、图幅
+        与目标布局名都来自已校验的 :class:`LayoutCreationRequest`。
+        """
+        lines = [
+            "FILEDIA",
+            "0",
+            "SECURELOAD",
+            "0",
+            "CMDECHO",
+            "0",
+            "_.NETLOAD",
+            encode_scr_argument(str(capability.plugin)),
+            "DstDeleteLayouts",
+        ]
+        temporary_names: list[str] = []
+        for index in range(len(request.target_layouts)):
+            temporary_name = f"DST_CREATE_{index:04d}"
+            temporary_names.append(temporary_name)
+            lines.extend(
+                [
+                    "_.-LAYOUT",
+                    "_Template",
+                    encode_scr_argument(str(request.layout_template)),
+                    encode_scr_argument(request.paper_layout),
+                ]
+            )
+            lines.extend(
+                [
+                    "_.-LAYOUT",
+                    "_Rename",
+                    encode_scr_argument(request.paper_layout),
+                    temporary_name,
+                ]
+            )
+        for temporary_name, target_layout in zip(
+            temporary_names, request.target_layouts, strict=True
+        ):
+            lines.extend(
+                ["_.-LAYOUT", "_Rename", temporary_name, encode_scr_argument(target_layout)]
+            )
+        lines.extend(
+            [
+                "_.-LAYOUT",
+                "_Set",
+                encode_scr_argument(request.target_layouts[0]),
+                "DstDeleteDefaultLayout",
+                "DstGetLayoutHandles",
+                "CMDECHO",
+                "1",
+                "FILEDIA",
+                "1",
+                "_.QSAVE",
+                "_.QUIT",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
 
 def parse_handles(text: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -216,3 +329,57 @@ class CoreConsoleExecutor:
         return self._executor.run(
             CoreConsoleRequest(console=capability.console, drawing=drawing, script=script, timeout=timeout)
         )
+
+
+class LayoutCreationWorker:
+    """固定请求的布局创建工作单元：脚本渲染、Core Console 执行与结果回读。
+
+    只接受 :class:`LayoutCreationRequest`（无自由 SCR 拼接），只读写调用方给定的
+    图纸副本与 sidecar；renderer/executor 可注入替身，因此非 CAD 环境下的测试
+    不会启动 AutoCAD。
+    """
+
+    def __init__(
+        self,
+        capability: CadCapability,
+        *,
+        renderer: ScriptRenderer | None = None,
+        executor: CoreConsoleExecutor | None = None,
+    ) -> None:
+        self.capability = capability
+        self.renderer = renderer if renderer is not None else ScriptRenderer()
+        self.executor = executor if executor is not None else CoreConsoleExecutor()
+
+    def layout_names(self, drawing: Path, work_dir: Path, timeout: int) -> tuple[str, ...]:
+        """固定只读枚举：在给定副本上读取完整布局名（不含 ``Model``）。"""
+        script = self.renderer.render_layout_names(self.capability, work_dir)
+        self.executor.run(self.capability, drawing, script, timeout)
+        try:
+            return tuple(parse_layout_names(drawing.with_suffix(".dst-layout-names.json")))
+        except RuntimeError as exc:
+            raise LayoutCreationError(getattr(exc, "code", "LAYOUT_READ_FAILED"), str(exc)) from exc
+
+    def create_layouts(
+        self,
+        drawing: Path,
+        request: LayoutCreationRequest,
+        script_path: Path,
+        timeout: int,
+    ) -> LayoutCreationOutcome:
+        """固定请求：导入模板图幅、为组内每张 Sheet 建计划布局并回读 Handle。"""
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        script_path.write_text(
+            self.renderer.render_create_layouts(self.capability, request), encoding="mbcs"
+        )
+        self.executor.run(self.capability, drawing, script_path, timeout)
+        try:
+            text = drawing.with_suffix(".dst-handles.txt").read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise LayoutCreationError("LAYOUT_READ_FAILED", str(exc)) from exc
+        try:
+            handles = parse_handles(text)
+        except ValueError as exc:
+            raise LayoutCreationError("HANDLE_OUTPUT_INVALID", str(exc)) from exc
+        if any(int(handle, 16) == 0 for handle in handles.values()):
+            raise LayoutCreationError("HANDLE_OUTPUT_INVALID", "布局 Handle 不得为 0")
+        return LayoutCreationOutcome(tuple(handles), handles)
