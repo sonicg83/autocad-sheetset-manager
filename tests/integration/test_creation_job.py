@@ -1091,3 +1091,109 @@ def test_startup_recovery_skips_undecodable_creation_journals(
     # 损坏日志与它对应的现场原样保留，供人工核对
     assert journal_path.read_bytes() == corrupt_bytes
     assert target.is_dir() and list(target.iterdir()) == []
+
+
+def _creation_publish_sites(tmp_path, runner, tmp_plan, *, commit_first: bool):
+    """job-1 与 job-2 各自独立目标的创建发布现场，返回 ``(settings, targets)``。
+
+    两个任务落在**不同目标目录**（目标级锁因此互不影响），``commit_first`` 决定
+    job-1 是「已提交但未闭环」还是「PUBLISHING 中断」；job-2 恒为 PUBLISHING 中断，
+    用于断言「被跳过的任务不阻断同批其它任务的恢复」。
+    """
+    from dst_manager.application.service import DstManagerService
+    from dst_manager.config import Settings
+
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    interrupted = ProjectPublisher(fault_injector=InterruptAtPublishing())
+    targets: dict[str, Path] = {}
+    for job_id in ("job-1", "job-2"):
+        target = tmp_path / "projects" / job_id
+        candidate = runner.stage(job_id, 1, tmp_plan)
+        if job_id == "job-1" and commit_first:
+            ProjectPublisher().publish_new_project(candidate, target, job_id, 1)
+        else:
+            with pytest.raises(ProcessInterrupted):
+                interrupted.publish_new_project(candidate, target, job_id, 1)
+        service.database.create_job(
+            job_id,
+            None,
+            "creation",
+            "PUBLISHING",
+            {"creation_draft_id": CREATION_DRAFT_ID, "preview_digest": PREVIEW_DIGEST},
+            cad_version="2020",
+            creation_draft_id=CREATION_DRAFT_ID,
+        )
+        with service.database.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "UPDATE jobs SET worker_id='worker-1', attempt=1 WHERE id=?", (job_id,)
+            )
+        targets[job_id] = target
+    return settings, targets
+
+
+@pytest.mark.parametrize(
+    "commit_first", [False, True], ids=["publishing-journal", "committed-journal"]
+)
+def test_startup_recovery_skips_a_creation_publish_while_its_target_lock_is_held(
+    tmp_path, runner, tmp_plan, commit_first: bool
+) -> None:
+    """目标锁被占用（另一进程正在发布/恢复）：服务仍能启动，不介入现场，同批任务照常恢复。"""
+    from dst_manager.application.service import DstManagerService
+    from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionLock
+
+    settings, targets = _creation_publish_sites(
+        tmp_path, runner, tmp_plan, commit_first=commit_first
+    )
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    lock_path = Path(json.loads(journal_path.read_text(encoding="utf-8"))["lock_path"])
+    preserved = _published_names(targets["job-1"])
+
+    with WorkspaceTransactionLock(lock_path):
+        restarted = DstManagerService(settings)
+
+    skipped = restarted.database.get_job("job-1")
+    assert skipped["status"] == "NEEDS_REVIEW"
+    assert skipped["error_code"] == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+    healthy = restarted.database.get_job("job-2")
+    assert healthy["status"] == "ROLLED_BACK"
+    assert healthy["error_code"] == "STARTUP_RECOVERY"
+    # 被跳过的任务：日志与现场原样保留；同批健康任务的目标已精确恢复
+    assert journal_path.is_file()
+    assert _published_names(targets["job-1"]) == preserved
+    assert not targets["job-2"].exists()
+
+
+@pytest.mark.parametrize(
+    ("commit_first", "expected_error_code"),
+    [(False, "CREATION_PUBLISH_REVIEW_REQUIRED"), (True, "PUBLISH_JOURNAL_REVIEW_REQUIRED")],
+    ids=["publishing-journal", "committed-journal"],
+)
+def test_startup_recovery_skips_a_creation_publish_with_an_unusable_lock_path(
+    tmp_path, runner, tmp_plan, commit_first: bool, expected_error_code: str
+) -> None:
+    """日志锁路径不可用（被改写成已存在目录）：服务仍能启动，同批任务照常恢复。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, targets = _creation_publish_sites(
+        tmp_path, runner, tmp_plan, commit_first=commit_first
+    )
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    locks_dir = tmp_path / "data" / CREATION_JOBS_DIR_NAME / "locks"
+    assert locks_dir.is_dir()
+    journal["lock_path"] = str(locks_dir)
+    journal_path.write_text(json.dumps(journal, ensure_ascii=False), encoding="utf-8")
+    preserved = _published_names(targets["job-1"])
+
+    restarted = DstManagerService(settings)
+
+    skipped = restarted.database.get_job("job-1")
+    assert skipped["status"] == "NEEDS_REVIEW"
+    assert skipped["error_code"] == expected_error_code
+    healthy = restarted.database.get_job("job-2")
+    assert healthy["status"] == "ROLLED_BACK"
+    assert healthy["error_code"] == "STARTUP_RECOVERY"
+    assert journal_path.is_file()
+    assert _published_names(targets["job-1"]) == preserved
+    assert not targets["job-2"].exists()

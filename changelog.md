@@ -1,3 +1,13 @@
+## 2026-09-24（收口创建发布恢复的启动路径异常面，PLAN-DM-036 Task 6 审查修复轮 3）
+
+- 按类收口（不再逐形态打补丁）：先穷举 `recover_creation_publishes` 及其全部辅助函数（`_creation_recovery_lock`、`_finish_committed_cleanup`、回滚分支）的逃逸异常来源，逐条归入「日志内容驱动 / 环境驱动 / 既有身份隔离」，再对前两类逐条给出处置（跳过并保留现场 / 落 `NEEDS_REVIEW` / 转既有隔离分支）。
+- 修复复核发现（Important）：已提交分支的 `with lock:` 原先位于任何 `try` 之外——`WorkspaceTransactionLock.__enter__` 会抛 `WorkspaceTransactionBusyError`（同一次调用在**回滚分支**已显式容忍）与 `FileLockError`/普通 `OSError`（锁路径被日志改写成已存在目录，或父级是普通文件），两者都不是 `PublishRecoveryError`，因此逃出 `recover_creation_publishes` → `creation_execution.recover_interrupted_creation_jobs`（只捕 `PublishRecoveryError`）→ `DstManagerService.__init__`，服务起不来。现把该分支的取锁与提交后归档一并包进 `try`，按 `PublishRecoveryError`（锁路径结构不可信）/`WorkspaceTransactionBusyError`（不介入现场）/`OSError`（锁路径不可用或归档环境故障）三条**窄**分支只跳过该条日志并保留现场，不引入宽泛 `except Exception`。
+  - 为什么按 `OSError` 而不是只按 `FileLockError`：锁路径父级是普通文件时失败发生在 `__enter__` 的 `mkdir`（`FileExistsError`），它不是 `FileLockError` 子类（实测），只捕 `FileLockError` 会留下同一类的可达残留。
+- 同一类残留（一并收口）：`_read_creation_journal` 的 `except (OSError, UnicodeDecodeError, json.JSONDecodeError)` 仍不含 `RecursionError`（`RuntimeError` 子类）——`json.loads` 对病态深嵌套 JSON（深度超过解释器递归上限）抛它并逃出启动路径，已加入同一元组。
+- 语义未放宽：`operation_id`/`attempt` 与路径不一致仍走既有 `PUBLISH_MANIFEST_IMMUTABLE_MISMATCH` 隔离分支；已提交日志仍只补归档、绝不重发或回滚成果；锁竞争与锁路径不可用只跳过该条日志（绝不猜测性回滚），被跳过的任务由既有 `recover_stale_jobs` 落 `NEEDS_REVIEW` + `PUBLISH_JOURNAL_REVIEW_REQUIRED`。函数名、错误码、日志格式一律不变；未改动工作区侧发布恢复（`_recover_locked`/`_list_committed_operations_locked`）。
+- 测试：`tests/unit/test_project_publisher.py` 追加 **7 例**（病态深嵌套 JSON 跳过且同批健康日志照常恢复；已提交日志锁路径指向已存在目录、父级是普通文件两种形态只跳过该条；已提交日志目标锁被持有时跳过且日志与成果零改动；提交后归档 `OSError` 只跳过该条；回滚阶段锁路径不可用走既有隔离分支的 2 例回归守护），`tests/integration/test_creation_job.py` 追加 **4 例**（服务级参数化：目标锁被持有、锁路径不可用，各覆盖 `PUBLISHING` 与已提交两种日志，断言服务仍能启动、被跳过任务落 `NEEDS_REVIEW`、同批健康任务照常 `ROLLED_BACK`、现场与日志原样保留）。先 RED（`RecursionError`/`FileLockError`/`FileExistsError`/`WorkspaceTransactionBusyError` 从 `DstManagerService.__init__` 逃出）后 GREEN；另用一次性穷举脚本把 **272 种**不可信日志形态（逐字段类型改写/缺失、已提交分支的锁路径与证据路径与成果投影变形、字节级损坏）喂进 `recover_creation_publishes`，修复前逃逸 **6 例**、修复后 **0 例**。
+- 验证：`uv run ruff check .` 通过；`uv run pytest tests/unit/test_project_publisher.py tests/integration/test_creation_job.py` **110 passed / 0 failed**；`uv run pytest` **1867 passed / 72 skipped / 0 failed**（净新增 11 例）。
+
 ## 2026-09-24（补全创建发布日志的启动路径守卫，PLAN-DM-036 Task 6 审查修复轮 2）
 
 - 修复复核发现（Important，同一缺陷类的两处可达残留，损坏日志仍能让 `DstManagerService` 起不来）：

@@ -832,3 +832,160 @@ def test_recovery_skips_a_committed_journal_without_a_usable_recovery_lock(
     assert journal_path(committed).read_text(encoding="utf-8") == corrupted
     assert published_names(committed_target) == published
     assert not (tmp_path / "other-project").exists()
+
+
+#: 日志内容驱动的**递归**损坏形态：``json.loads`` 对病态深嵌套 JSON 抛 ``RecursionError``
+#: （``RuntimeError`` 子类，既不是 ``JSONDecodeError`` 也不是 ``ValueError``）。
+def _journal_with_pathologically_nested_json(journal_path: Path) -> bytes:
+    depth = 100_000
+    raw = (
+        '{"identity_version": 1, "kind": "creation", "operation_id": "job-1", '
+        '"attempt": 1, "status": "PUBLISHING", "files": '
+        + "[" * depth
+        + "]" * depth
+        + "}"
+    ).encode("utf-8")
+    journal_path.write_bytes(raw)
+    return raw
+
+
+def test_recovery_skips_a_journal_with_pathologically_nested_json(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher
+) -> None:
+    """病态深嵌套 JSON：与其它损坏日志一样只跳过，绝不阻断启动恢复。"""
+    broken = make_candidate(tmp_path, job_id="job-1")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    for item, target in (
+        (broken, tmp_path / "new-project"),
+        (healthy, tmp_path / "other-project"),
+    ):
+        with pytest.raises(ProcessInterrupted):
+            publisher.publish_new_project(item, target, item.job_id, item.attempt)
+    corrupt_bytes = _journal_with_pathologically_nested_json(journal_path(broken))
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    assert journal_path(broken).read_bytes() == corrupt_bytes
+    assert published_names(tmp_path / "new-project") == []
+    assert not (tmp_path / "other-project").exists()
+
+
+#: 锁路径**可用性**故障形态（环境驱动，与日志字段是否齐全无关）：锁路径指向已存在目录
+#: （``GENERIC_READ|GENERIC_WRITE`` 打不开 → ``FileLockError``）、锁路径父级是普通文件
+#: （``mkdir`` 抛 ``FileExistsError``，不是 ``FileLockError``，只有 ``OSError`` 才覆盖）。
+UNUSABLE_LOCK_PATHS: dict[str, Callable[[dict, Path], None]] = {
+    "lock-path-at-a-directory": lambda journal, attempt_dir: journal.update(
+        lock_path=str(attempt_dir)
+    ),
+    "lock-path-below-a-file": lambda journal, attempt_dir: _lock_path_below_a_file(
+        journal, attempt_dir
+    ),
+}
+
+
+def _lock_path_below_a_file(journal: dict, attempt_dir: Path) -> None:
+    blocker = attempt_dir / "blocker.txt"
+    blocker.write_text("占位普通文件", encoding="utf-8")
+    journal["lock_path"] = str(blocker / "target.lock")
+
+
+@pytest.mark.parametrize("corruption", sorted(UNUSABLE_LOCK_PATHS))
+def test_recovery_skips_a_committed_journal_with_an_unusable_lock_path(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, corruption: str
+) -> None:
+    """已提交日志的锁路径不可用：只跳过这一条，绝不终止整批恢复。"""
+    committed = make_candidate(tmp_path, job_id="job-1")
+    committed_target = tmp_path / "new-project"
+    ProjectPublisher().publish_new_project(committed, committed_target, "job-1", 1)
+    published = published_names(committed_target)
+    journal = read_journal(committed)
+    UNUSABLE_LOCK_PATHS[corruption](journal, committed.attempt_dir)
+    _write_journal(journal_path(committed), journal)
+    corrupted = journal_path(committed).read_text(encoding="utf-8")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    with pytest.raises(ProcessInterrupted):
+        publisher.publish_new_project(healthy, tmp_path / "other-project", "job-2", 1)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    assert journal_path(committed).read_text(encoding="utf-8") == corrupted
+    assert published_names(committed_target) == published
+    assert not (tmp_path / "other-project").exists()
+
+
+def test_recovery_skips_a_committed_journal_while_the_target_lock_is_held(
+    tmp_path: Path, candidate, publisher: ProjectPublisher
+) -> None:
+    """已提交日志的目标锁被占用（另一进程正在发布/恢复）：不介入现场，不终止整批恢复。"""
+    target = tmp_path / "new-project"
+    publisher.publish_new_project(candidate, target, "job-1", 1)
+    journal = read_journal(candidate)
+    published = published_names(target)
+
+    with WorkspaceTransactionLock(Path(journal["lock_path"])):
+        outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert outcomes == []
+    assert read_journal(candidate) == journal
+    assert published_names(target) == published
+
+
+def test_recovery_skips_a_committed_journal_when_post_commit_cleanup_fails(
+    tmp_path: Path,
+    candidate,
+    fault_injector: FaultInjector,
+    publisher: ProjectPublisher,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """提交后归档的环境故障（权限/占用/磁盘）：只跳过这一条，绝不终止整批恢复。"""
+    target = tmp_path / "new-project"
+    publisher.publish_new_project(candidate, target, "job-1", 1)
+    published = published_names(target)
+    journal = read_journal(candidate)
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    with pytest.raises(ProcessInterrupted):
+        publisher.publish_new_project(healthy, tmp_path / "other-project", "job-2", 1)
+
+    def fail_cleanup(*_args: object, **_kwargs: object) -> bool:
+        raise OSError("注入提交后归档故障：磁盘不可写")
+
+    monkeypatch.setattr(publisher, "_finish_committed_cleanup", fail_cleanup)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-2", "ROLLED_BACK")]
+    assert read_journal(candidate) == journal
+    assert published_names(target) == published
+    assert not (tmp_path / "other-project").exists()
+
+
+@pytest.mark.parametrize("corruption", sorted(UNUSABLE_LOCK_PATHS))
+def test_recovery_isolates_a_rollback_journal_with_an_unusable_lock_path(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, corruption: str
+) -> None:
+    """回滚阶段锁路径不可用：既有隔离分支接管，现场零改动，不逃出启动路径。"""
+    candidate = make_candidate(tmp_path, job_id="job-1")
+    target = tmp_path / "new-project"
+    fault_injector.fail_at_stage("PUBLISHING")
+    with pytest.raises(ProcessInterrupted):
+        publisher.publish_new_project(candidate, target, "job-1", 1)
+    journal = read_journal(candidate)
+    UNUSABLE_LOCK_PATHS[corruption](journal, candidate.attempt_dir)
+    _write_journal(journal_path(candidate), journal)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-1", "NEEDS_REVIEW")]
+    assert read_journal(candidate)["status"] == "ROLLBACK_FAILED"
+    assert published_names(target) == []

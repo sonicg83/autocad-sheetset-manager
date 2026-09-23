@@ -311,6 +311,11 @@ def _creation_recovery_lock(journal: dict[str, Any]) -> WorkspaceTransactionLock
 
     锁路径不可用（缺失/非字符串）时抛 ``PublishRecoveryError``：两个调用方都只处置
     这一条日志（回滚分支落 ``NEEDS_REVIEW``，已提交分支跳过），绝不因此终止整批恢复。
+    取锁本身的环境故障不在本函数内处置，由调用方按 ``OSError`` 收口：锁被占用是
+    ``WorkspaceTransactionBusyError``；锁路径指向已存在目录是无权限打开（``FileLockError``）；
+    锁路径父级是普通文件是 ``mkdir`` 的 ``FileExistsError``（普通 ``OSError``，不是
+    ``FileLockError``，所以调用方按 ``OSError`` 收口才完整）。构造本身只做
+    ``Path.resolve()``，对含 NUL/非法字符/超长/父级回溯的路径均不抛（实测）。
     """
     lock_path = journal.get("lock_path")
     if not isinstance(lock_path, str) or not lock_path:
@@ -327,11 +332,13 @@ def _read_creation_journal(journal_path: Path) -> dict[str, Any] | None:
 
     ``UnicodeDecodeError`` 必须显式列出：它是 ``ValueError`` 子类，不是
     ``JSONDecodeError`` 子类，而「手工按 ANSI/GBK 保存含中文的日志」或二进制垃圾
-    覆写都会让 ``read_text(encoding="utf-8")`` 直接抛出它。
+    覆写都会让 ``read_text(encoding="utf-8")`` 直接抛出它。``RecursionError`` 同样
+    必须显式列出：``json.loads`` 对病态深嵌套 JSON（深度超过解释器递归上限）抛它，
+    它是 ``RuntimeError`` 子类，不在上面任何一个类型里。
     """
     try:
         journal = json.loads(journal_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return None
     return journal if isinstance(journal, dict) else None
 
@@ -357,10 +364,13 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
     - 未提交：调用 ``publisher._rollback_creation`` 按身份回滚，结论为 ``ROLLED_BACK``
       或（出现外部内容/身份不匹配时）``NEEDS_REVIEW``；
     - 每份日志都在**目标级发布事务锁**下处理（与发布路径同一把锁）：锁被占用说明
-      同一目标上仍有进行中的发布或恢复，此时不介入现场；
+      同一目标上仍有进行中的发布或恢复，此时不介入现场（回滚分支与已提交分支都
+      跳过该条日志）；锁路径不可用（内容被改写成目录/非法路径，或权限不足）在已提交
+      分支同样只跳过该条日志，在回滚分支落单条 ``NEEDS_REVIEW``；
     - 日志身份与路径不一致（作业 ID / attempt 被改写）属于不可信现场，直接以
       ``PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`` 终止恢复，不做任何猜测性清理；
-    - **损坏日志**（截断/非 JSON/不是 JSON 对象/非法 UTF-8 字节/``status`` 不是字符串）
+    - **损坏日志**（截断/非 JSON/不是 JSON 对象/非法 UTF-8 字节/病态深嵌套 JSON/
+      ``status`` 不是字符串）
       与结构不可信的已提交日志一律跳过，不阻断启动，也不阻断其它任务的恢复；这类
       任务由既有 ``recover_stale_jobs`` 落 ``PUBLISH_JOURNAL_REVIEW_REQUIRED``，
       等待人工核对。
@@ -390,15 +400,24 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
                 # 已提交日志结构不可信：既不闭环成功，也不清理或覆盖任何成果文件。
                 continue
             try:
-                lock = _creation_recovery_lock(journal)
+                with _creation_recovery_lock(journal):
+                    publisher._finish_committed_cleanup(
+                        journal_path, journal, Path(journal["revision_dir"])
+                    )
             except PublishRecoveryError:
                 # 锁路径不可用（缺失/非字符串）同样是结构不可信：只跳过这一条，
                 # 不按身份不可证明处置，绝不因此隔离同批其它任务。
                 continue
-            with lock:
-                publisher._finish_committed_cleanup(
-                    journal_path, journal, Path(journal["revision_dir"])
-                )
+            except WorkspaceTransactionBusyError:
+                # 同一目标上仍有进程持有发布事务锁（正在发布或正在恢复）：不介入现场，
+                # 与回滚分支同一处置，让任务按租约恢复规则处理。
+                continue
+            except OSError:
+                # 取锁或提交后归档的环境故障：锁路径指向已存在目录/父级是普通文件/
+                # 无权限（``FileLockError`` 与 ``mkdir`` 的 ``FileExistsError`` 都是
+                # ``OSError``），或归档时被占用/磁盘不可写。只跳过这一条日志并保留
+                # 现场，绝不终止整批恢复，也绝不据此改动已提交成果。
+                continue
             outcomes.append(
                 CreationPublishOutcome(job_id, attempt, "COMMITTED", published=published)
             )
