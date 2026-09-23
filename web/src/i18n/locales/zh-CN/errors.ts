@@ -54,6 +54,7 @@ export default {
     publishFailed: "发布新项目失败，已回滚到发布前状态",
     publishConflict: "本次尝试的发布命名空间已存在，请以新尝试重试",
     publishReviewRequired: "发布现场需要人工核对（目标出现外部内容或文件身份变化），已停止自动清理",
+    registrationFailed: "已发布成果已保留，但工作区登记未完成，需要人工核对后由启动恢复补登记",
   },
   job: {
     notFound: "任务不存在",

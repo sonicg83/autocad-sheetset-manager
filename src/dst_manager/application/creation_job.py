@@ -7,10 +7,12 @@
 DWG 实际布局集合的逐项比对。
 
 `CreationJobRunner.run(job_id, attempt, plan)` 在暂存成功后调用
-`ProjectPublisher.publish_new_project` 把候选清单可恢复地发布到新项目目录，并把
-状态/进度/时间线与失败诊断写进 ``jobs`` 表；创建任务没有普通工作区
-（``workspace_id`` 为 NULL）也能完整记录。工作区登记（``workspace_id`` 关联、标准
-快照与初始修订）属于发布成功之后的步骤（PLAN-DM-036 Task 7），本模块不写该列。
+`ProjectPublisher.publish_new_project` 把候选清单可恢复地发布到新项目目录，随后
+调用注入的登记回调（``registration``）把已发布项目接管为普通工作区与初始修订，
+并把状态/进度/时间线与失败诊断写进 ``jobs`` 表；创建任务没有普通工作区
+（``workspace_id`` 为 NULL）也能完整记录，``workspace_id`` 只在登记成功后写入
+（PLAN-DM-036 Task 7）。登记回调缺省为 ``None``（隔离的暂存/发布单测路径），
+此时只闭环任务本身、不登记工作区。
 
 隔离与失败语义：
 
@@ -36,7 +38,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dst_manager.application.creation_candidate import (
     CreationCandidate,
@@ -78,6 +80,9 @@ from dst_manager.infrastructure.filesystem.project_publisher import ProjectPubli
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
 from dst_manager.infrastructure.logging_text import sanitize_log_text
 from dst_manager.infrastructure.persistence import Database
+
+if TYPE_CHECKING:
+    from dst_manager.application.creation_registration import CreationRegistrar
 
 __all__ = [
     "CREATION_JOBS_DIR_NAME",
@@ -146,6 +151,7 @@ class CreationJobRunner:
         codec: DstCodec | None = None,
         database: Database | None = None,
         publisher: ProjectPublisher | None = None,
+        registration: CreationRegistrar | None = None,
     ) -> None:
         if timeout <= 0:
             raise ValueError("CREATION_TIMEOUT_INVALID")
@@ -158,6 +164,8 @@ class CreationJobRunner:
         #: ``stage`` 不需要任务持久化；``run`` 需要（缺失时以稳定码拒绝）。
         self.database = database
         self.publisher = publisher
+        #: 发布成功后的登记回调（生产路径恒注入：见 ``run``）。
+        self.registration = registration
 
     def run(self, job_id: str, attempt: int, plan: CreationPlan) -> dict[str, Any]:
         """执行已领取的创建任务：隔离暂存 → 可恢复发布 → 任务闭环。
@@ -182,14 +190,20 @@ class CreationJobRunner:
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.PREPARED, 80)
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.PUBLISHING, 90)
             published = self.publisher.publish_new_project(candidate, target, job_id, attempt)
-            # 工作区登记（Task 7 的 finish_creation）只能在发布成功之后进行：
-            # 这里只闭环任务本身，jobs.workspace_id 在发布前恒为 NULL。
-            self.database.finalize_creation_job(
-                job_id,
-                published.to_payload(),
-                worker_id=worker_id,
-                attempt=attempt,
-            )
+            # 工作区登记只能在发布成功之后进行：生产路径恒注入登记回调（由应用层
+            # 登记功能域闭环任务），登记失败会落 NEEDS_REVIEW 而不是普通成功。
+            if self.registration is None:
+                # 隔离的暂存/发布单测路径：只闭环任务本身，不登记普通工作区。
+                self.database.finalize_creation_job(
+                    job_id,
+                    published.to_payload(),
+                    worker_id=worker_id,
+                    attempt=attempt,
+                )
+            else:
+                self.registration.finish_creation(
+                    published, worker_id=worker_id, attempt=attempt
+                )
         except ProjectPublishError as exc:
             self._record_publish_failure(job_id, worker_id, attempt, exc)
         except CreationJobError as exc:

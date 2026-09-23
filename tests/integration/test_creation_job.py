@@ -14,6 +14,10 @@ Task 6 追加：`CreationJobRunner.run` 把候选**可恢复地发布**到新项
 工作区尚不存在时仍能记录任务状态/进度/时间线与失败诊断；发布失败按现场结论回滚为
 `ROLLED_BACK` 或隔离为 `NEEDS_REVIEW`；重试严格使用新 attempt 目录。
 
+Task 7 追加：启动恢复对「已提交但未登记」的创建发布幂等补登记（工作区与初始修订），
+任务因此可能从 `PUBLISHING` 直接落到带 `workspace_id` 的 `SUCCEEDED`；成果文件
+一字不改，补登记失败仍落 `NEEDS_REVIEW`。
+
 测试不启动 AutoCAD：`LayoutCreationWorker` 注入模拟 Core Console 的替身执行器，
 真实跑通「渲染固定 SCR → 写脚本 → 解析 sidecar → 回读布局与 Handle」的代码路径。
 """
@@ -656,6 +660,12 @@ def _published_names(target: Path) -> list[str]:
 def test_run_publishes_the_candidate_and_closes_the_job_without_workspace(
     tmp_path, runner, database, tmp_plan
 ) -> None:
+    """未注入登记回调的运行器（隔离暂存/发布单测）：只闭环任务，不登记工作区。
+
+    生产路径恒由应用层注入登记回调（``creation_execution.run_creation_job``），
+    完整接管链（发布 → 登记 → 重新打开）见
+    ``tests/integration/test_created_project_opens.py``。
+    """
     _create_creation_job(database, tmp_plan)
     job = _claim(database)
 
@@ -908,7 +918,7 @@ def test_startup_recovery_marks_needs_review_when_external_content_appeared(
 def test_startup_recovery_closes_committed_creation_publish(
     tmp_path, runner, tmp_plan
 ) -> None:
-    """已提交但未闭环的创建发布：启动恢复幂等补齐成功状态，绝不重发成果。"""
+    """已提交但未闭环的创建发布：启动恢复幂等补齐成功状态并补登记，绝不重发成果。"""
     from dst_manager.application.service import DstManagerService
     from dst_manager.config import Settings
 
@@ -932,12 +942,21 @@ def test_startup_recovery_closes_committed_creation_publish(
     job = restarted.database.get_job("job-1")
     assert job["status"] == "SUCCEEDED"
     assert job["progress"] == 100
-    assert job["workspace_id"] is None
+    # PLAN-DM-036 Task 7：补登记把已发布项目接管为普通工作区（成果文件一字不改）
+    assert job["workspace_id"] == job["payload"]["workspace"]["id"]
+    assert job["payload"]["workspace"]["revision_id"] == file_sha256(published.dst_path)
     assert job["payload"]["published"]["target_dir"] == str(target)
     assert _published_names(target) == sorted(
-        [CREATION_DST_NAME, *(group.dwg_name for group in tmp_plan.groups)]
+        [
+            ".dst-manager",
+            CREATION_DST_NAME,
+            *(group.dwg_name for group in tmp_plan.groups),
+        ]
     )
     assert published.revision_dir.is_dir()
+    # 重新打开：登记的修订与已发布 DST 的内容哈希一致
+    workspace = restarted.get_workspace(job["workspace_id"])
+    assert workspace.revision_id == job["payload"]["workspace"]["revision_id"]
 
 
 def test_startup_recovery_quarantines_unprovable_creation_journal(

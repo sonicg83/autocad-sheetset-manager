@@ -11,7 +11,8 @@
   ``creation_draft_id`` 指向草稿），状态、进度、时间线与失败诊断因此照常记录；
 - Worker 侧执行前再次重算摘要并重建计划，再交给
   :class:`~dst_manager.application.creation_job.CreationJobRunner` 隔离暂存与
-  可恢复发布；工作区登记属于发布成功之后的步骤（Task 7），本模块不写该列；
+  可恢复发布；发布成功后由登记功能域（:mod:`dst_manager.application.creation_registration`）
+  接管为普通工作区与初始修订，本模块只装配登记回调；
 - 启动恢复按持久日志幂等处理中断的创建发布，只闭环任务状态，不重发成果。
 """
 
@@ -36,6 +37,9 @@ from dst_manager.domain.models import JobStatus
 from dst_manager.infrastructure.autocad.worker import LayoutCreationWorker
 from dst_manager.infrastructure.filesystem.project_publisher import ProjectPublisher
 from dst_manager.infrastructure.filesystem.publish_errors import PublishRecoveryError
+from dst_manager.infrastructure.filesystem.publish_recovery import (
+    CreationPublishOutcome,
+)
 from dst_manager.infrastructure.persistence.database import TERMINAL_JOB_STATUSES
 
 __all__ = ["CreationExecutionOperations"]
@@ -126,6 +130,8 @@ class CreationExecutionOperations:
             timeout=snapshot.cad_timeout_seconds,
             database=self.database,
             publisher=self.project_publisher,
+            # 发布成功后的登记回调：任务只在登记完成（或登记失败被隔离）后落终态。
+            registration=self,
         )
         return runner.run(job["id"], attempt, plan)
 
@@ -146,7 +152,7 @@ class CreationExecutionOperations:
     def recover_interrupted_creation_jobs(self) -> list[dict[str, Any]]:
         """启动恢复：按持久日志幂等处理中断的创建发布，并闭环对应任务。
 
-        已提交：只补齐成功闭环（绝不重发或覆盖成果）；已回滚：任务落
+        已提交：幂等补登记（工作区/初始修订），绝不重发或覆盖成果；已回滚：任务落
         ``ROLLED_BACK``；出现外部内容/身份不匹配：任务落 ``NEEDS_REVIEW``，
         日志与现场原样保留。日志身份不可信时只按受控目录层级隔离任务，
         不读取日志内容决定数据库主键。
@@ -163,10 +169,7 @@ class CreationExecutionOperations:
             if job is None:
                 continue
             if outcome.conclusion == "COMMITTED":
-                if job["status"] != JobStatus.SUCCEEDED:
-                    self.database.finalize_creation_job(
-                        outcome.job_id, outcome.published or {}
-                    )
+                self._resume_committed_creation(outcome)
                 conclusions.append({"id": outcome.job_id, "conclusion": "COMMITTED"})
                 continue
             if job["status"] in TERMINAL_JOB_STATUSES:
@@ -185,6 +188,15 @@ class CreationExecutionOperations:
             )
             conclusions.append({"id": outcome.job_id, "conclusion": "NEEDS_REVIEW"})
         return conclusions
+
+    def _resume_committed_creation(self, outcome: CreationPublishOutcome) -> None:
+        """已提交发布的补登记：已登记完成则跳过，否则按持久投影幂等补登记。"""
+        job = self.database.get_job(outcome.job_id) or {}
+        if job.get("status") == JobStatus.SUCCEEDED and job.get("workspace_id"):
+            return
+        if outcome.published is None:
+            return
+        self.resume_creation_registration(outcome.job_id, outcome.published)
 
     def _quarantine_unproven_creation_jobs(self, root: Path, error: PublishRecoveryError) -> None:
         """创建发布日志不可证明时，只按受控目录层级隔离任务，不猜测性清理任何文件。"""

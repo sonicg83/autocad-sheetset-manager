@@ -131,8 +131,8 @@ EXTENSION_CODES = {
     "EXTENSION_SETTINGS_CHANGED",
 }
 
-# 标准驱动创建（PLAN-DM-036 Task 1/4/6；草稿仓储码 + 目标状态与导入拒绝码 +
-# 执行入口的预览漂移与创建暂存/发布事务码，逐一核对 raise 点后登记）
+# 标准驱动创建（PLAN-DM-036 Task 1/4/6/7；草稿仓储码 + 目标状态与导入拒绝码 +
+# 执行入口的预览漂移与创建暂存/发布事务码 + 成果登记码，逐一核对 raise 点后登记）
 CREATION_CODES = {
     "CREATION_ATTEMPT_INVALID",
     "CREATION_ASSET_FILE_MISSING",
@@ -160,6 +160,7 @@ CREATION_CODES = {
     "CREATION_PUBLISH_FAILED",
     "CREATION_PUBLISH_INVALID",
     "CREATION_PUBLISH_REVIEW_REQUIRED",
+    "CREATION_REGISTRATION_FAILED",
     "CREATION_ROUNDTRIP_MISMATCH",
     "CREATION_SKELETON_INVALID",
     "CREATION_SKELETON_UNREADABLE",

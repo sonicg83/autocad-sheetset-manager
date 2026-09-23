@@ -96,6 +96,10 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "CREATION_PUBLISH_FAILED": _E("errors.creation.publishFailed"),
     "CREATION_PUBLISH_CONFLICT": _E("errors.creation.publishConflict"),
     "CREATION_PUBLISH_REVIEW_REQUIRED": _E("errors.creation.publishReviewRequired"),
+    # 登记码（PLAN-DM-036 Task 7；逐条核对 raise 点：发布成果/修订清单不完整、
+    # 成果投影不可信、重新打开不一致、修订身份冲突）。登记失败一律落
+    # ``NEEDS_REVIEW`` 并可被启动恢复幂等补登记，绝不报普通成功。
+    "CREATION_REGISTRATION_FAILED": _E("errors.creation.registrationFailed"),
     # ---- 任务 ----
     "JOB_NOT_FOUND": _E("errors.job.notFound"),
     "JOB_NOT_RETRYABLE": _E("errors.job.notRetryable"),

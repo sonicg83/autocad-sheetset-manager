@@ -54,6 +54,7 @@ export default {
     publishFailed: "Publishing the new project failed and was rolled back to the pre-publish state",
     publishConflict: "The publish namespace of this attempt already exists; retry with a new attempt",
     publishReviewRequired: "The publish site needs manual review (external content or changed file identity); automatic cleanup stopped",
+    registrationFailed: "The published result was kept, but workspace registration did not finish; it needs manual review and is resumed at startup",
   },
   job: {
     notFound: "Job not found",

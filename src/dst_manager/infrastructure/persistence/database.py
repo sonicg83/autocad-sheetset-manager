@@ -713,14 +713,20 @@ class Database:
         job_id: str,
         published: dict[str, Any],
         *,
+        workspace_id: str | None = None,
+        revision_id: str | None = None,
         worker_id: str | None = None,
         attempt: int | None = None,
     ) -> bool:
         """幂等地把已发布的新项目闭环到任务行：写入成果投影并落 ``SUCCEEDED``。
 
-        创建任务没有普通工作区，因此不建修订、不碰工作区当前修订；工作区登记
-        （``workspace_id`` 关联）由发布成功后的后续步骤承担，本方法不写入该列。
+        ``workspace_id``/``revision_id`` 给出时同时登记普通工作区关联
+        （``jobs.workspace_id``）与登记产物（``payload.workspace``：工作区 ID、初始
+        修订 ID、已发布 DST 路径）——调用方必须先证明文件、SQLite、修订清单一致且
+        工作区能重新打开（PLAN-DM-036 Task 7）；两者都不给时只闭环任务本身。
         """
+        if (workspace_id is None) != (revision_id is None):
+            raise ValueError("CREATION_REGISTRATION_INCOMPLETE")
         with self.sessions.begin() as session:
             job = session.get(JobRow, job_id)
             if job is None:
@@ -749,6 +755,13 @@ class Database:
                     return False
             payload = json.loads(job.payload_json)
             payload["published"] = published
+            if workspace_id is not None:
+                job.workspace_id = workspace_id
+                payload["workspace"] = {
+                    "id": workspace_id,
+                    "revision_id": revision_id,
+                    "dst_path": published.get("dst_path"),
+                }
             job.payload_json = json.dumps(payload, ensure_ascii=False)
             if job.status != "SUCCEEDED" or job.progress != 100:
                 job.status = "SUCCEEDED"
