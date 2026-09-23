@@ -32,6 +32,7 @@ __all__ = [
     "SubsetNamingContext",
     "publish_naming_diagnostics",
     "render_dwg_filename",
+    "segment_safety_violations",
     "validate_dwg_filenames",
 ]
 
@@ -48,6 +49,26 @@ RESERVED_DEVICE_NAMES = frozenset(
 )
 #: Windows 文件名非法字符（含路径分隔符与盘符冒号）。
 ILLEGAL_CHARACTERS = frozenset('<>:"/\\|?*')
+
+
+def segment_safety_violations(text: str) -> tuple[str, ...]:
+    """文本命中的 Windows 片段安全违规种类（按固定顺序，可同时命中多个）。
+
+    只做判定不做替换：``character`` 是控制字符或 Windows 非法字符，``trailing``
+    是尾随空格或句点，``reserved`` 是保留设备名（忽略首个句点之前的部分比较）。
+    DWG 命名主体与项目路径片段共用这份规则，各自映射成本层错误码与文案；由调用
+    方决定取首个违规还是收集全部。空文本视为无违规。
+    """
+    if not text:
+        return ()
+    violations: list[str] = []
+    if any(character in ILLEGAL_CHARACTERS or ord(character) < 32 for character in text):
+        violations.append("character")
+    if text[-1] in " .":
+        violations.append("trailing")
+    if text.split(".", 1)[0].casefold() in RESERVED_DEVICE_NAMES:
+        violations.append("reserved")
+    return tuple(violations)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +119,11 @@ def _pad_width(code: str) -> int | None:
 
 
 def _body_diagnostics(body: str) -> list[StandardDiagnostic]:
-    """文件名主体安全校验；不做任何字符替换，只返回定位性错误。"""
+    """文件名主体安全校验；不做任何字符替换，只返回定位性错误。
+
+    片段安全规则来自 :func:`segment_safety_violations`（与项目路径片段校验共用）；
+    命名契约只报首个违规，因此按规则顺序取第一个命中的种类。
+    """
     if not body:
         return [_diagnostic("DWG_NAME_EMPTY", "DWG 命名结果主体为空")]
     if EXTENSION in body.lower():
@@ -107,25 +132,11 @@ def _body_diagnostics(body: str) -> list[StandardDiagnostic]:
                 "DWG_NAME_EXTENSION_FORBIDDEN", f"命名主体 {body!r} 不得自行包含 .dwg 扩展名"
             )
         ]
-    if body in (".", "..") or any(
-        character in ILLEGAL_CHARACTERS or ord(character) < 32 for character in body
-    ):
-        return [
-            _diagnostic(
-                "DWG_NAME_CHARACTER_INVALID",
-                f"命名主体 {body!r} 含路径片段、控制字符或 Windows 非法字符",
-            )
-        ]
-    if body[-1] in " .":
-        return [
-            _diagnostic(
-                "DWG_NAME_TRAILING_CHARACTER", f"命名主体 {body!r} 不得以空格或句点结尾"
-            )
-        ]
-    if body.split(".", 1)[0].casefold() in RESERVED_DEVICE_NAMES:
-        return [
-            _diagnostic("DWG_NAME_RESERVED_DEVICE", f"命名主体 {body!r} 是 Windows 保留设备名")
-        ]
+    if body in (".", ".."):
+        return [_diagnostic(*_body_violation_diagnostic("character", body))]
+    violations = segment_safety_violations(body)
+    if violations:
+        return [_diagnostic(*_body_violation_diagnostic(violations[0], body))]
     if len(body) + len(EXTENSION) > MAX_FILENAME_LENGTH:
         return [
             _diagnostic(
@@ -134,6 +145,21 @@ def _body_diagnostics(body: str) -> list[StandardDiagnostic]:
             )
         ]
     return []
+
+
+def _body_violation_diagnostic(kind: str, body: str) -> tuple[str, str]:
+    """片段安全违规种类 → DWG 命名错误码与文案。"""
+    codes = {
+        "character": "DWG_NAME_CHARACTER_INVALID",
+        "trailing": "DWG_NAME_TRAILING_CHARACTER",
+        "reserved": "DWG_NAME_RESERVED_DEVICE",
+    }
+    messages = {
+        "character": f"命名主体 {body!r} 含路径片段、控制字符或 Windows 非法字符",
+        "trailing": f"命名主体 {body!r} 不得以空格或句点结尾",
+        "reserved": f"命名主体 {body!r} 是 Windows 保留设备名",
+    }
+    return (codes[kind], messages[kind])
 
 
 def _system_value(

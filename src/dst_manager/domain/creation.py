@@ -23,9 +23,8 @@ from dataclasses import dataclass, field
 
 from dst_manager.domain.standard_models import DrawingStandard, StandardProperty
 from dst_manager.domain.standard_naming import (
-    ILLEGAL_CHARACTERS,
     MAX_FILENAME_LENGTH,
-    RESERVED_DEVICE_NAMES,
+    segment_safety_violations,
 )
 
 #: 创建向导四阶段（SPEC-DM-018 §2）：选择标准 → 项目信息 → 图纸组 → 检查并创建。
@@ -39,7 +38,7 @@ SHEETSET_SCOPE = "sheetset"
 SHEET_SCOPE = "sheet"
 
 #: 完整最终项目路径的长度上限：与 DWG 文件名同口径，为目录名与后续文件名预留空间。
-MAX_TARGET_PATH_LENGTH = 240
+MAX_TARGET_PATH_LENGTH = MAX_FILENAME_LENGTH
 #: 路径分隔符（Windows 两种写法都接受，但不允许出现空片段）。
 _TARGET_PATH_SEPARATORS = re.compile(r"[\\/]")
 #: 盘符绝对路径前缀：如 ``C:\`` 或 ``C:/``。
@@ -212,7 +211,11 @@ def validate_creation_target_path(value: str) -> tuple[CreationDiagnostic, ...]:
 
 
 def _path_segment_diagnostics(segment: str) -> list[CreationDiagnostic]:
-    """单个路径片段的安全判定；空片段、``.``/``..`` 与尾随字符都要阻断。"""
+    """单个路径片段的安全判定；空片段、``.``/``..`` 与尾随字符都要阻断。
+
+    非法字符、尾随空格或句点、保留设备名复用 :func:`segment_safety_violations`
+    （与 DWG 命名主体同一份规则），与命名侧的区别是这里收集全部违规。
+    """
     if not segment.strip() or segment in (".", ".."):
         return [
             _path_diagnostic(
@@ -220,28 +223,25 @@ def _path_segment_diagnostics(segment: str) -> list[CreationDiagnostic]:
                 f"路径片段 {segment!r} 为空、是相对片段或目录分隔符重复",
             )
         ]
-    diagnostics: list[CreationDiagnostic] = []
-    if any(character in ILLEGAL_CHARACTERS or ord(character) < 32 for character in segment):
-        diagnostics.append(
-            _path_diagnostic(
-                "CREATION_TARGET_PATH_CHARACTER_INVALID",
-                f"路径片段 {segment!r} 含控制字符或 Windows 非法字符",
-            )
-        )
-    if segment[-1] in " .":
-        diagnostics.append(
-            _path_diagnostic(
-                "CREATION_TARGET_PATH_TRAILING_CHARACTER",
-                f"路径片段 {segment!r} 不得以空格或句点结尾",
-            )
-        )
-    if segment.split(".", 1)[0].casefold() in RESERVED_DEVICE_NAMES:
-        diagnostics.append(
-            _path_diagnostic(
-                "CREATION_TARGET_PATH_RESERVED_DEVICE", f"路径片段 {segment!r} 是 Windows 保留设备名"
-            )
-        )
-    return diagnostics
+    return [
+        _path_segment_diagnostic(kind, segment)
+        for kind in segment_safety_violations(segment)
+    ]
+
+
+def _path_segment_diagnostic(kind: str, segment: str) -> CreationDiagnostic:
+    """片段安全违规种类 → 项目路径错误码与文案。"""
+    codes = {
+        "character": "CREATION_TARGET_PATH_CHARACTER_INVALID",
+        "trailing": "CREATION_TARGET_PATH_TRAILING_CHARACTER",
+        "reserved": "CREATION_TARGET_PATH_RESERVED_DEVICE",
+    }
+    messages = {
+        "character": f"路径片段 {segment!r} 含控制字符或 Windows 非法字符",
+        "trailing": f"路径片段 {segment!r} 不得以空格或句点结尾",
+        "reserved": f"路径片段 {segment!r} 是 Windows 保留设备名",
+    }
+    return _path_diagnostic(codes[kind], messages[kind])
 
 
 def _path_diagnostic(code: str, message: str) -> CreationDiagnostic:

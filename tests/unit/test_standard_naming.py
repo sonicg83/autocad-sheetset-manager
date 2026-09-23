@@ -4,10 +4,12 @@ from dataclasses import replace
 
 import pytest
 
+from dst_manager.domain.creation import validate_creation_target_path
 from dst_manager.domain.standard_naming import (
     SubsetNamingContext,
     publish_naming_diagnostics,
     render_dwg_filename,
+    segment_safety_violations,
     validate_dwg_filenames,
 )
 from dst_manager.domain.standards import (
@@ -101,6 +103,40 @@ def test_unsafe_names_report_distinct_codes(name: str) -> None:
     assert result.ok is False
     assert len(result.diagnostics) == 1
     assert result.diagnostics[0].severity == "error"
+
+
+@pytest.mark.parametrize(
+    ("text", "violations"),
+    [
+        ("平面图", ()),
+        ("", ()),
+        ("a/b", ("character",)),
+        ("bad.", ("trailing",)),
+        ("CON", ("reserved",)),
+        # 保留设备名只看首个句点之前的部分；尾随句点另行判定。
+        ("con.", ("trailing", "reserved")),
+        ("a|b ", ("character", "trailing")),
+    ],
+)
+def test_segment_safety_violations_report_kinds_in_fixed_order(
+    text: str, violations: tuple[str, ...]
+) -> None:
+    assert segment_safety_violations(text) == violations
+
+
+def test_naming_and_target_path_share_the_segment_safety_rule() -> None:
+    """同一份片段安全规则分别映射到 DWG 命名与项目路径错误码。"""
+    body = "平面图."
+    assert segment_safety_violations(body) == ("trailing",)
+    assert [
+        item.code
+        for item in render_dwg_filename(
+            literal_standard(body), {}, SubsetNamingContext("001", "示例", 1)
+        ).diagnostics
+    ] == ["DWG_NAME_TRAILING_CHARACTER"]
+    assert [
+        item.code for item in validate_creation_target_path(f"C:\\Projects\\{body}")
+    ] == ["CREATION_TARGET_PATH_TRAILING_CHARACTER"]
 
 
 def test_default_template_renders_scope_and_name_without_prefix() -> None:

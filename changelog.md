@@ -1,3 +1,12 @@
+## 2026-09-24（拆分 XLSX 导入模块并复用文件名安全规则，PLAN-DM-036 Task 2 修复）
+
+- 修复审查发现：`infrastructure/creation_xlsx.py`（591 行）与 `application/creation_import.py`（724 行）超出 AGENTS.md 约 500 行软上限。按职责拆同层模块，只做搬迁与再导出，公共契约不变：
+  - 基础设施层：`creation_xlsx_protocol.py`（314 行，协议常量、值类型、规范计划与隐藏技术表记录）、`creation_xlsx_template.py`（217 行，`build_creation_template` 与写表/Data Validation）、`creation_xlsx_read.py`（117 行，`read_creation_workbook` 回读快照）；`creation_xlsx.py`（79 行）保留为公共入口，再导出全部既有名称，`build_creation_template` 仍可从 `dst_manager.infrastructure.creation_xlsx` 导入。子模块只依赖协议模块，不反向导入入口，避免循环导入。
+  - 应用层：`creation_import.py`（132 行，`parse_creation_workbook` + 阶段编排与共享状态访问）、`creation_import_metadata.py`（308 行，阶段一工作表结构与包级危险特征、阶段二隐藏技术元数据）、`creation_import_rows.py`（365 行，阶段三可见表头、阶段四 `SheetSet` 输入、阶段五 `Sheet` 组行）；阶段实现以 mixin 组合进 `_WorkbookParser`（沿用 `CreationDraftOperations` 的既有装配口径）。
+- 修复审查发现：`domain/creation.py` 的目标路径片段安全判定与 `domain/standard_naming.py` 的 `_body_diagnostics` 逐字重复。在 `standard_naming` 抽出 `segment_safety_violations(text) -> tuple[str, ...]`（返回 `character`/`trailing`/`reserved`，空文本无违规），两处各自映射成本层错误码与文案：命名侧保留「首个违规即返回」单一诊断语义，路径侧保留「收集全部」；错误码与诊断文案逐字不变。`MAX_TARGET_PATH_LENGTH` 改为引用 `MAX_FILENAME_LENGTH`（同为 240），避免上限漂移。
+- 测试：`tests/unit/test_creation_xlsx.py`（762 行）按职责拆为 `test_creation_xlsx_template.py`（模板生成 3 例）、`test_creation_xlsx_import.py`（元数据与安全 12 例）、`test_creation_xlsx_rows.py`（行解析 8 例），共享夹具数据与辅助函数移入 `tests/unit/creation_xlsx_fixtures.py`，pytest 夹具移入 `tests/unit/conftest.py`；全部 23 例断言逐字保留。`tests/unit/test_standard_naming.py` 新增共享规则用例（7 个参数化片段 + 命名/路径同源映射 1 例）。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` **1676 passed / 72 skipped / 0 failed**（新增 8 例，基线 1668 例全通过）。
+
 ## 2026-09-23（实现双工作表 XLSX 模板与全量结构导入，PLAN-DM-036 Task 2）
 
 - 新增 `infrastructure/creation_xlsx.py`：`build_creation_template(standard, asset_options)` 生成 legacy 风格模板——仅 `SheetSet`（A 列属性名、B 列输入值，第 2 行固定「项目保存路径」）与 `Sheet`（固定表头 `图名｜张数｜基础模板｜布局模板｜图幅` + 按标准文档顺序的其他普通 `sheet` 属性列）两个**可见**表。隐藏技术表 `_CreationMeta` 记录模板版本（`1`）、精确标准身份（`standard_id`/`standard_version`）、各列的协议键或 `property_id` 与资产 `asset_id`；隐藏表 `_CreationLists` 只放 Data Validation 候选值（候选含逗号也不必转义）。动态列表头与固定表头同名时追加可读限定语（如 `张数（标准属性）`）使可见表头唯一；可见表不出现派生属性列、内部 ID 或任何公式，也不预生成逐张 Sheet 行。`read_creation_workbook(data)` 只把工作簿读成只读快照（逐工作表文本网格、公式单元格、无法解释的单元格、宏/外部链接部件），超限网格不展开。
