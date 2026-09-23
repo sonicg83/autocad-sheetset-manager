@@ -119,7 +119,6 @@ export default {
     defaultPlaceholder: "无默认值",
     enumValues: "枚举值",
     enumDisabled: "仅枚举类型可用",
-    editEnum: "编辑枚举值",
     description: "说明",
     remove: "删除",
     empty: "尚未定义属性，可从 CSV 批量导入或逐条新增。",

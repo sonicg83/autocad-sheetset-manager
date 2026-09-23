@@ -120,7 +120,6 @@ export default {
     defaultPlaceholder: "No default",
     enumValues: "Enum values",
     enumDisabled: "Available for enum only",
-    editEnum: "Edit enum values",
     description: "Description",
     remove: "Delete",
     empty: "No properties yet; import them from CSV or add them one by one.",

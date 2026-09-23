@@ -294,24 +294,25 @@ function applyCsv(): void {
           </td>
           <td class="col-enum">
             <div class="enum-cell">
-              <span
+              <!-- 摘要即触发器（SPEC-DM-017 编辑器 Demo）：枚举值文本本身可点进入编辑对话框，
+                   不再另设一个与摘要平级的动作按钮——那样会与摘要争宽并把行撑高。 -->
+              <button
                 v-if="property.kind === 'enum'"
-                class="enum-summary"
-                :data-testid="`enum-summary-${property.property_id}`"
-              >{{ enumSummary(property) }}</span>
+                type="button"
+                class="enum-trigger"
+                :title="$t('standards.enumDialog.title', {name: property.name})"
+                :aria-label="$t('standards.enumDialog.title', {name: property.name})"
+                :data-testid="`edit-enum-${property.property_id}`"
+                @click="openEnumDialog(property)"
+              >
+                <span class="enum-summary" :data-testid="`enum-summary-${property.property_id}`">{{ enumSummary(property) }}</span>
+              </button>
               <span
                 v-else
                 class="enum-summary enum-summary--disabled"
                 aria-disabled="true"
                 :data-testid="`enum-summary-${property.property_id}`"
               >{{ $t("standards.ordinary.enumDisabled") }}</span>
-              <UiButton
-                v-if="property.kind === 'enum'"
-                variant="secondary"
-                size="compact"
-                :data-testid="`edit-enum-${property.property_id}`"
-                @click="openEnumDialog(property)"
-              >{{ $t("standards.ordinary.editEnum") }}</UiButton>
             </div>
           </td>
           <td class="col-description">
@@ -388,10 +389,13 @@ function applyCsv(): void {
 .required-hit:hover{background:var(--color-bg-muted)}
 .required-check{box-sizing:border-box;width:var(--checkbox-size);height:var(--checkbox-size);margin:0;padding:0;flex:none}
 .row-issue{margin:var(--space-1) 0 0;font-size:var(--font-label);color:var(--color-danger)}
-.enum-cell{display:flex;align-items:center;gap:var(--space-2);min-width:0}
-.enum-summary{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-label);color:var(--color-text-secondary)}
-.enum-summary--disabled{padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-muted)}
-.sr-only-label{font-size:var(--font-label)}
+.enum-cell{display:flex;align-items:center;min-width:0}
+/* 枚举摘要即触发器（SPEC-DM-017 编辑器 Demo）：按钮只包住摘要文本，
+   尺寸随单元格而不是被长摘要拉伸或折行。 */
+.enum-trigger{box-sizing:border-box;width:100%;min-width:0;min-height:var(--input-height);padding:0 var(--space-2);text-align:left;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);cursor:pointer}
+.enum-trigger:hover{border-color:var(--color-accent)}
+.enum-summary{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-label);color:var(--color-accent)}
+.enum-summary--disabled{padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-muted)}.sr-only-label{font-size:var(--font-label)}
 .csv-dialog{display:grid;gap:var(--space-2);width:min(560px,calc(100vw - 32px));padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3)}
 .csv-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .csv-hint{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}

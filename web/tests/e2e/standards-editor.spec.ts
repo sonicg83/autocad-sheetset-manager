@@ -169,6 +169,26 @@ test("属性表单元格不再重复列标题标签", async ({page}) => {
   await expect(derivedLabel).toBeHidden();
 });
 
+test("枚举单元格是摘要即触发器而不是独立按钮", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+
+  // SPEC-DM-017 编辑器 Demo：枚举值摘要本身可点即进入编辑对话框，没有额外的「编辑枚举值」按钮
+  const trigger = page.getByTestId("edit-enum-prop-major");
+  await expect(trigger).toHaveRole("button");
+  await expect(trigger).toContainText("燃气");
+  // 摘要仍在同一按钮内（不能从触发器里拆出去变成兄弟节点）
+  await expect(trigger.getByTestId("enum-summary-prop-major")).toHaveCount(1);
+
+  // 文本属性的禁用占位与「不出现触发器」由单元测试 `OrdinaryPropertyEditor.test.ts` 覆盖（本夹具无文本属性）
+
+  // 点击摘要即打开枚举编辑对话框
+  await trigger.click();
+  await expect(page.getByTestId("enum-dialog")).toBeVisible();
+});
+
 test("枚举排序与取消不落盘", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
   await openStandards(page);
