@@ -1,6 +1,7 @@
 @layer primitives {
   /* PLAN-DM-035 Task 7：从标准创建图纸集占位（PLAN-DM-036 入口，当前明确不可用）。
-     视觉对齐欢迎页卡片（WelcomeView.welcome-card 同源令牌），应用级全局类。 */
+     自 PLAN-DM-039 起欢迎页已改为“打开优先”双栏（`WelcomeView.welcome-page`），本占位仍是
+     居中单卡片、只借用 `--card-max-width` 与卡片令牌，不再与欢迎页共享布局结构。 */
   .create-sheetset-placeholder{max-width:var(--card-max-width);margin:12vh auto;padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);text-align:center}
   .create-sheetset-placeholder h2{font-size:var(--font-page-title);margin:0 0 var(--space-2);color:var(--color-text-primary)}
   .create-sheetset-placeholder p{color:var(--color-text-secondary);font-size:var(--font-label);margin:0 0 var(--space-5);line-height:1.6}

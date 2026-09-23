@@ -323,8 +323,10 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
 .standards-page{width:100%;max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-5);display:grid;gap:var(--space-4)}
 /* 编辑器模式：标准页只渲染独立工作台，不再被主从分栏的固定左栏挤压（PLAN-DM-039 Task 2）。
    `width:100%` 是必要的：壳层 `main` 是列向 flex 容器，配合 `margin:0 auto` 时子项
-   会按内容宽度收缩（实测标准库模式仅 666px），显式宽度才让 `max-width` 真正成为唯一上限。 */
-.standards-page.is-editor{max-width:none}.standards-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+   会按内容宽度收缩（实测标准库模式仅 666px），显式宽度才让 `max-width` 真正成为唯一上限。
+   编辑器**不**放开 `max-width`：宽屏（2560 实测）下必须仍受 `--shell-content-max-width` 约束，
+   否则八列表格被拉散（对照 SPEC-DM-017 Demo 的 `min(1400px,100%)`）。 */
+.standards-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .standards-title{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .standards-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 .library-split{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:var(--space-4);align-items:start}

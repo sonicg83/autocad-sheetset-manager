@@ -5,7 +5,7 @@
 // 发布 error 与 warning 区分、DWG 非法文件名、紧凑复选框、
 // 900×768 与 200% 缩放下的模态操作栏可达，以及纯键盘令牌插入与模态焦点归还。
 import {expect, test, type Page} from "@playwright/test";
-import {writeSettingsFile} from "./fixtures/settings";
+import {installPreferenceSnapshot} from "./fixtures/settings";
 import {
   draft,
   draftDocument,
@@ -59,10 +59,11 @@ async function saveDraftDocument(page: Page): Promise<void> {
   await expect(editorSaveState(page)).toHaveText("已保存");
 }
 
-/** 把界面语言与主题切到指定值：直接写 e2e 隔离设置文件（与 i18n 证据同一口径），
- * 不 mock /api/settings——避免与标准端点 route 叠加后影响其他请求。 */
-async function installLocale(page: Page, locale: "zh-CN" | "en-US", theme: "light" | "dark" = "light"): Promise<void> {
-  writeSettingsFile({ui_locale: locale, ui_theme: theme}, 1);
+/** 把界面语言与主题切到指定值：**不写全局共享的 settings.json**，改用 page 级请求拦截
+ * （与 `main.spec.ts` 英文节、`standards-visual-evidence.spec.ts` 同型）——本 spec 在并行 project
+ * 中运行，写共享配置会让并发 worker 拉到错误的语言/主题。 */
+async function installLocale(page: Page, theme: "light" | "dark" = "light", locale: "zh-CN" | "en-US" = "zh-CN"): Promise<void> {
+  await installPreferenceSnapshot(page, theme, "2020", locale);
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", locale);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -156,17 +157,58 @@ test("属性表单元格不再重复列标题标签", async ({page}) => {
   await openDraftEditor(page);
   // 列标题已由表头表达；单元格内再渲染可见字段标签会与表头重复、把行撑高并错位（对照 SPEC-DM-017 Demo）
   await openEditorSection(page, "ordinary");
-  const ordinaryLabel = page.getByTestId("ordinary-table").locator("label").first();
-  await expect(ordinaryLabel).toHaveCount(1);
-  // 标签从布局中移除（不再占据行内高度），可访问名改由输入框自身的 aria-label 承担
-  await expect(ordinaryLabel).toBeHidden();
+  const ordinaryLabel = page.getByTestId("ordinary-table").locator("label");
+  // 每个单元格输入框保留标签（可访问名与表头一致），但标签视觉隐藏、不再占据行内高度
+  expect(await ordinaryLabel.count()).toBeGreaterThan(0);
+  await expect(ordinaryLabel.first()).toBeHidden();
   // 可访问名仍必须存在（不能因为隐藏可见标签而丢失字段名）
   await expect(page.getByTestId("ordinary-name-prop-major")).toHaveAttribute("aria-label", "属性名");
 
   await openEditorSection(page, "derived");
-  const derivedLabel = page.getByTestId("derived-table").locator("label").first();
-  await expect(derivedLabel).toHaveCount(1);
-  await expect(derivedLabel).toBeHidden();
+  const derivedLabel = page.getByTestId("derived-table").locator("label");
+  expect(await derivedLabel.count()).toBeGreaterThan(0);
+  await expect(derivedLabel.first()).toBeHidden();
+});
+
+test("900×768 派生属性行不因隐藏说明列而换行", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "derived");
+
+  // 隐藏说明列必须隐藏整个网格项：UiInput 把 data-testid 透传到内层 input，
+  // 只隐藏 input 会让外层 .ui-input 仍占一列，把最后的删除动作挤到第二行。
+  const row = page.getByTestId("derived-table").locator(".derived-row:not(.derived-head)").first();
+  const nameBox = (await row.getByTestId("derived-name-prop-code").boundingBox())!;
+  const removeBox = (await row.getByTestId("derived-remove-prop-code").boundingBox())!;
+  expect(Math.abs(removeBox.y - nameBox.y), "删除动作必须与属性名在同一行").toBeLessThan(nameBox.height);
+  // 行内实际参与布局的子项数必须与声明的列数一致（否则网格自动放置会换行）
+  const inFlow = await row.evaluate(element => {
+    const columns = getComputedStyle(element).gridTemplateColumns.split(" ").length;
+    const items = [...element.children].filter(child => getComputedStyle(child).display !== "none").length;
+    return {columns, items};
+  });
+  expect(inFlow.items, "行内子项数与网格列数一致").toBe(inFlow.columns);
+});
+
+test("宽视口下编辑工作台宽度受内容上限约束", async ({page}) => {
+  await page.setViewportSize({width: 2560, height: 1440});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  // 编辑器不得因宽屏被无限拉宽：宽度上限与标准库模式一致（取壳层内容宽令牌）
+  const cap = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.maxWidth = "var(--shell-content-max-width)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).maxWidth;
+    probe.remove();
+    return Number.parseFloat(value);
+  });
+  const width = await page.locator(".standards-page").evaluate(element => element.getBoundingClientRect().width);
+  expect(width).toBeLessThanOrEqual(cap + 1);
+  await expectNoPageHScroll(page, "2560×1440 编辑器");
 });
 
 test("枚举单元格是摘要即触发器而不是独立按钮", async ({page}) => {
@@ -179,6 +221,8 @@ test("枚举单元格是摘要即触发器而不是独立按钮", async ({page})
   const trigger = page.getByTestId("edit-enum-prop-major");
   await expect(trigger).toHaveRole("button");
   await expect(trigger).toContainText("燃气");
+  // WCAG 2.5.3：可访问名必须包含可见摘要文本（不能用动作名覆盖它）
+  await expect(trigger).toHaveAccessibleName(/燃气/);
   // 摘要仍在同一按钮内（不能从触发器里拆出去变成兄弟节点）
   await expect(trigger.getByTestId("enum-summary-prop-major")).toHaveCount(1);
 
@@ -406,24 +450,19 @@ test("900×768 编辑工作台保留侧栏且宽表只在自身滚动", async ({
 test("900×768 下英文与深色主题主要动作仍可见且无溢出", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
   await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
-  try {
-    // 语言与主题在挂载前由设置文件决定：先写入再 goto
-    await installLocale(page, "en-US", "dark");
-    await page.getByRole("button", {name: "Manage drawing standards"}).click();
-    await libraryItems(page).first().click();
-    await page.getByRole("button", {name: "Edit"}).click();
-    await expect(page.getByRole("region", {name: "Standard draft editor"})).toBeVisible();
+  // 语言与主题在挂载前由快照决定：先装 page 级 /api/settings 拦截再 goto
+  await installLocale(page, "dark", "en-US");
+  await page.getByRole("button", {name: "Manage drawing standards"}).click();
+  await libraryItems(page).first().click();
+  await page.getByRole("button", {name: "Edit"}).click();
+  await expect(page.getByRole("region", {name: "Standard draft editor"})).toBeVisible();
 
-    // 只断言可见性、可达性与无溢出，不以固定文本像素宽度制造平台脆弱测试
-    await expectActionsReachable(page, ["Save draft", "Publish check", "Back to standard library"]);
-    await expectNoPageHScroll(page, "900×768 英文深色编辑器");
-    await page.getByTestId("editor-section-dwgNaming").click();
-    await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003");
-    await expectNoPageHScroll(page, "900×768 英文深色 DWG 命名");
-  } finally {
-    // 设置文件是全局共享的：必须恢复默认，否则后续用例会继承英文与深色主题
-    writeSettingsFile({ui_locale: "zh-CN", ui_theme: "light"}, 1);
-  }
+  // 只断言可见性、可达性与无溢出，不以固定文本像素宽度制造平台脆弱测试
+  await expectActionsReachable(page, ["Save draft", "Publish check", "Back to standard library"]);
+  await expectNoPageHScroll(page, "900×768 英文深色编辑器");
+  await page.getByTestId("editor-section-dwgNaming").click();
+  await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003");
+  await expectNoPageHScroll(page, "900×768 英文深色 DWG 命名");
 });
 
 test("200% 缩放下欢迎页、编辑器正文与发布检查页无页面级横向溢出", async ({page}) => {

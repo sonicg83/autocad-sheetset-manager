@@ -15,6 +15,21 @@
 - 新增中英文文案键 3 个（编辑标准标题、说明、工作区区域名），`check:i18n` 1302 键 / 10 域通过。
 - 验证：新增“草稿编辑器替换标准库主从分栏并在返回后恢复选择”（先 RED：`standards-editor-mode` 不存在）、“未保存修改时返回标准库走三选一门禁且留在此处不丢输入”、“编辑器工作台独立占满标准页内容宽度”（先 RED：实测 687.8px ≤ 1100）三例；`standards-editor` + `standards-library` + `standards-assets-publish` + `standards-welcome` **74 passed / 0 failed**；`check:i18n`、`check:ui`、`npm run build` 退出码 0。
 
+## 2026-09-23（评审修复轮：派生表换行、并行配置串扰与证据比对工具）
+
+- 对整个分支 `b2a55c1..d611742` 做了独立评审（fresh-context reviewer），结论 Request changes（3 Important / 6 Minor），按 executing-plans 规则完成**一次**修复轮，每条先写失败测试再修：
+  1. **派生属性表 ≤1050px 隐藏落在内层 `input` 而非网格项**（900×768 与 200% 实测删除动作换行到第二行）：说明列改用自有包裹元素作网格项（`UiInput` 为 `inheritAttrs:false`，`class` 与 `data-testid` 均不落到根元素）。
+  2. **英文/深色用例直接改写全局共享 `settings.json`**（在 `parallel` project 中与并发 worker 串扰，与仓库既有红线冲突）：`installPreferenceSnapshot` 新增 locale 参数，用例改用 page 级 `/api/settings` 快照拦截。
+  3. **候选 README 仍写“待第三轮裁决/不得晋升”**，与已晋升 G4/G8 和 `completed` 计划矛盾：更新生成口径与逐轮裁决表。
+  4. **`.standards-page.is-editor{max-width:none}` 取消编辑器宽度上限**（2560 实测拉至 2512px）：删除该覆盖，两种模式统一受 `--shell-content-max-width` 约束，并新增 2560×1440 回归。
+  5. **枚举触发器 `aria-label` 覆盖可见摘要**（WCAG 2.5.3 Label in Name）：删除 `aria-label`、动作说明放到 `title`，断言改为可访问名包含摘要。
+  6. **`.welcome-page` 无 `width:100%`**（与标准页同一根因，靠 max-content 恰好填满）：补 `width:100%`。
+  7. 隐藏单元格标签绕过 `check:ui` 的 `visible-input-label` 契约：在两处 CSS 加注释并在计划摘要登记“标签保留在 DOM 与调用点 `label`、可访问名由 `aria-label` 承担”；不新增例外条目。
+  8. 两处小项：`primitives.css` 注释不再引用已删除的 `welcome-card`；去掉属性表标签断言中对 `.first()` 定位器用 `toHaveCount(1)` 的但求断言。
+- **新增证据比对工具** `docs/dst-manager/specs/assets/SPEC-DM-016/compare-evidence.py`（只依赖 Python 标准库，内置最小 PNG 解码器）：字节 + 像素双轴比对并输出差异像素数/包围盒/最大通道差，已裁定阈值（≤ 20 像素且单通道差 ≤ 1 为字体栅格化伪影）；本轮实测登记了 `g4-02-library` 的 19 像素 / 单通道差 1 / 12×12 包围盒实例，避免再以“抓两遍一致”代替可复现比对。
+- 验证：`test:unit` **275 passed**、`check:api`/`check:i18n`（1305 键）/`check:ui`/`build` 退出码 0、全量 e2e **632 passed / 0 failed / 0 flaky**（新增 2 例回归）、G4/G8 重抓后逐对字节一致 12/12、候选与 G4 12/12 逐字节一致。
+- 已裁定推迟（非本轮修复）：欢迎页导入任务说明仍写“选择 .dststandard 文件”而对话框是路径输入——根因是既有实现缺少受控文件选择器（SPEC-DM-016 §4.2 的既有缺口），改文案会掩盖该缺口，与选择器补齐计划同批修正。
+
 ## 2026-09-23（按用户 Demo 裁决修正并重建 G4/G8，PLAN-DM-039 Task 4）
 
 - 用户三轮对照两份 Demo 的视觉裁决：第一轮否决（要求以 Demo 为准，普通/派生属性表“排列拥挤错位”）、第二轮指出“编辑枚举值按钮大小不固定”并澄清“demo 中枚举值编辑按钮不是独立的，是通过点击展示枚举值的文本框来进入编辑”、第三轮**通过**。

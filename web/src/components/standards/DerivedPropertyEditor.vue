@@ -278,12 +278,16 @@ function removeProperty(property: DraftProperty): void {
             {{ kind === "mapping" ? $t("standards.derived.kindMapping") : $t("standards.derived.kindComposition") }}
           </option>
         </select>
-        <UiInput
-          v-model="property.description"
-          :label="$t('standards.derived.description')"
-          :aria-label="$t('standards.derived.description')"
-          :data-testid="`derived-description-${property.property_id}`"
-        />
+        <!-- 说明列用自有包裹元素当网格项：UiInput 为 `inheritAttrs:false`，
+             `class` 与 `data-testid` 都不会落到它的根元素，无法在父组件侧按类隐藏。 -->
+        <div class="cell-description">
+          <UiInput
+            v-model="property.description"
+            :label="$t('standards.derived.description')"
+            :aria-label="$t('standards.derived.description')"
+            :data-testid="`derived-description-${property.property_id}`"
+          />
+        </div>
         <UiButton
           variant="secondary"
           size="compact"
@@ -330,15 +334,21 @@ function removeProperty(property: DraftProperty): void {
 /* 列标题已由 derived-head 表达（SPEC-DM-017 编辑器 Demo）：单元格内可见字段标签
    会与列标题重复并撑高行高；标签保留在 DOM 中作为可访问名，仅视觉隐藏。 */
 .derived-row :deep(.ui-input){gap:0}
+/* 隐藏单元格内的可见字段标签：列标题已由 derived-head 表达，单元格内再渲染可见字段标签会与
+   列标题重复并撑高行高（对照 SPEC-DM-017 Demo）。标签保留在 DOM 与调用点 `label` 属性中
+   （`check:ui` 的 visible-input-label 契约），可访问名由输入框自身的 `aria-label` 承担。 */
 .derived-row :deep(.ui-input__label){display:none}
 .derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2);align-items:start}
 .derived-head{font-size:var(--font-label);color:var(--color-text-secondary)}
 /* 分级响应式（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：
    1050px 以下隐藏纯说明列，780px 以下再隐藏可由编辑模态框读取的源摘要列；
-   属性名、作用域、类型、编辑与删除动作任何档位都不得隐藏。 */
+   属性名、作用域、类型、编辑与删除动作任何档位都不得隐藏。
+   注意：隐藏说明列必须作用于整个网格项（`.cell-description` 包裹元素），
+   不能只隐藏 UiInput 内部元素——`UiInput` 为 `inheritAttrs:false`，`data-testid` 经
+   `v-bind="$attrs"` 只落到内层 `input`，外层仍占一列，会把最后的删除动作挤到第二行（F1）。 */
 @media (max-width: 1050px){
   .derived-row{grid-template-columns:minmax(0,1.2fr) 9% minmax(0,1.1fr) 12% auto auto}
-  .derived-row :deep([data-testid^="derived-description-"]),.derived-row.derived-head :nth-child(5){display:none}
+  .derived-row > .cell-description,.derived-row.derived-head :nth-child(5){display:none}
 }
 @media (max-width: 780px){
   .derived-row{grid-template-columns:minmax(0,1.2fr) 9% 12% auto auto}

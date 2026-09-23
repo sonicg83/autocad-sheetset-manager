@@ -73,7 +73,7 @@ const pathInputId = "welcome-path-input";
   </section>
 </template>
 <style scoped>
-.welcome-page{max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-6) var(--space-5);display:grid;gap:var(--space-5)}
+.welcome-page{width:100%;max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-6) var(--space-5);display:grid;gap:var(--space-5)}
 .welcome-intro{text-align:center}
 .welcome-intro h1{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .welcome-intro p{margin:var(--space-2) auto 0;max-width:var(--welcome-path-max-width);color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.7}

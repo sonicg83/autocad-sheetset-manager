@@ -301,7 +301,6 @@ function applyCsv(): void {
                 type="button"
                 class="enum-trigger"
                 :title="$t('standards.enumDialog.title', {name: property.name})"
-                :aria-label="$t('standards.enumDialog.title', {name: property.name})"
                 :data-testid="`edit-enum-${property.property_id}`"
                 @click="openEnumDialog(property)"
               >
@@ -372,7 +371,9 @@ function applyCsv(): void {
 .section-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .ordinary-scroll{overflow-x:auto;min-width:0}
 /* 列标题已由表头表达（SPEC-DM-017 编辑器 Demo）：单元格内的 UiInput 可见字段标签
-   会与表头重复、把行撑高并造成错位。标签保留在 DOM 中作为可访问名，仅视觉隐藏。 */
+   会与表头重复、把行撑高并造成错位。标签保留在 DOM 与调用点 `label` 属性中
+   （`check:ui` 的 visible-input-label 契约），可访问名由输入框自身的 `aria-label` 承担；
+   仅视觉隐藏（`display:none`），不删除标签节点。 */
 .ordinary-table :deep(.ui-input){gap:0}
 .ordinary-table :deep(.ui-input__label){display:none}
 .ordinary-table{width:100%;min-width:var(--standards-table-min-width);border-collapse:collapse;table-layout:fixed}
@@ -391,7 +392,9 @@ function applyCsv(): void {
 .row-issue{margin:var(--space-1) 0 0;font-size:var(--font-label);color:var(--color-danger)}
 .enum-cell{display:flex;align-items:center;min-width:0}
 /* 枚举摘要即触发器（SPEC-DM-017 编辑器 Demo）：按钮只包住摘要文本，
-   尺寸随单元格而不是被长摘要拉伸或折行。 */
+   尺寸随单元格而不是被长摘要拉伸或折行。
+   可访问名就是可见摘要文本（WCAG 2.5.3 Label in Name）；动作说明放在 `title` 上，
+   它会在可访问名已由内容提供时作为可访问描述被读屏播报（不能改用 `aria-label` 覆盖可见文本）。 */
 .enum-trigger{box-sizing:border-box;width:100%;min-width:0;min-height:var(--input-height);padding:0 var(--space-2);text-align:left;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);cursor:pointer}
 .enum-trigger:hover{border-color:var(--color-accent)}
 .enum-summary{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-label);color:var(--color-accent)}

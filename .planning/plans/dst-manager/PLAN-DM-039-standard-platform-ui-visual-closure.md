@@ -551,8 +551,8 @@ git commit -m "重建标准平台视觉证据并收口验收"
 | 发布与资产 | `standards-assets-publish.spec.ts` | 发布检查、资产检查、成功后只读不回归 |
 | 静态门禁 | `check:api`、`check:i18n`、`check:ui`、`build` | 退出码 0，无新例外掩盖 |
 | 视觉候选 | `DST_MANAGER_STANDARDS_EVIDENCE=plan-dm-039` | 每张有效并完成 Demo 对照，用户明确裁决 |
-| G4/G8 | 同状态双次生成 + SHA-256/像素 diff | 同名状态一致，且 G4 已由用户认可 |
-| 桌面缩放 | WebView2 100/125/150/200% | 无裁切、页面级横向滚动或不可达操作 |
+| G4/G8 | 同名逐张字节一致（12/12），工具 `compare-evidence.py` 可复现 | 12/12 字节相同；已登记字体栅格化伪影实例（19 像素 / 单通道差 1）及阈值口径 |
+| 桌面缩放 | WebView2 100/125/150/200% | 用户已执行确认：五个界面 × 浅/深均无裁切、无页面级横向滚动、操作栏可见、键盘可达 |
 
 ## 风险与控制
 
@@ -570,6 +570,29 @@ git commit -m "重建标准平台视觉证据并收口验收"
 - 新 G4/G8 清单使用六分区文件名，旧四张状态删除，README 不再包含“尚未生成却无视觉差异”的矛盾结论。
 - 用户完成两个 Demo 的候选视觉裁决；真实 WebView2 100/125/150/200% 检查有记录。
 - 前端全量门禁与仓库 Ruff 基线通过，实际数字写入计划和 changelog；没有未说明的跳过项。
+
+### 分支评审与修复轮（2026-09-23）
+
+按 executing-plans 要求对 `b2a55c1..` 做了整个分支的独立评审（fresh-context reviewer，varying
+模型受本会话 modelScope 限制），结论 Request changes：3 项 Important、6 项 Minor。已按规则完成
+**一次**修复轮（每条先写失败测试再修，随后重跑全套）：
+
+| 发现 | 级别 | 处置 |
+| --- | --- | --- |
+| F1 派生属性表 ≤1050px 隐藏落在内层 `input` 而非网格项，删除动作被挤到第二行（900×768 与 200% 实测） | Important | **已修**：说明列改用自有包裹元素作网格项（`UiInput` 为 `inheritAttrs:false`，`class` 与 `data-testid` 均不落到根元素）；新增“900×768 派生属性行不因隐藏说明列而换行”（先 RED：删除动作 y 差 46px） |
+| F2 英文/深色用例直接改写全局共享 `settings.json`，在 `parallel` project 中与并发 worker 串扰（与仓库既有红线冲突） | Important | **已修**：`installPreferenceSnapshot` 新增 locale 参数，用例改用 page 级 `/api/settings` 快照拦截，删除 `writeSettingsFile` 与 `try/finally`；全量并行 e2e **0 failed / 0 flaky** 验证无串扰 |
+| F3 PLAN-DM-039 候选 README 仍写“待第三轮裁决/不得晋升”，与已晋升的 G4/G8 和 `completed` 计划矛盾 | Important | **已修**：更新生成口径与逐轮裁决表为“第三轮通过”，并补登评审修复轮记录 |
+| F4 `.standards-page.is-editor{max-width:none}` 取消编辑器宽度上限（2560 实测拉至 2512px） | Minor→**已修** | 删除该覆盖，两种模式统一受 `--shell-content-max-width` 约束；新增“宽视口下编辑工作台宽度受内容上限约束”（先 RED：2512 > 1441） |
+| F5 枚举触发器 `aria-label` 覆盖可见摘要（WCAG 2.5.3 Label in Name） | Minor→**已修** | 删除 `aria-label`，动作说明放在 `title`（可访问名由内容提供时 `title` 作为描述被读屏播报）；断言改为 `toHaveAccessibleName(/燃气/)`（先 RED） |
+| F6 隐藏单元格标签绕过 `check:ui` 的 `visible-input-label` 契约且未登记 | Minor→**已记录** | 在该 CSS 处加注释说明“标签保留在 DOM 与调用点 `label` 中、可访问名由 `aria-label` 承担”，并登记于本摘要；不新增例外条目（保留 `:label` 让契约仍可静态校验） |
+| F7 导入任务说明称“选择 .dststandard 文件”而对话框是路径输入 | Minor→**deferred** | 根因是既有实现缺少受控文件选择器（SPEC-DM-016 §4.2 的既有缺口，不在本计划范围）；改文案会掩盖该缺口，裁定与选择器补齐计划同批修正 |
+| F8 `.welcome-page` 无 `width:100%`，靠内容 max-content 恰好填满 | Minor→**已修** | 补 `width:100%`（与标准页同一根因） |
+| F9 `primitives.css` 注释引用已删除的 `welcome-card`；`.first()` 上断言 `toHaveCount(1)` 但求 | Minor→**已修** | 注释改写；断言改为“标签数 > 0 且首个隐藏” |
+
+修复轮新增回归：`900×768 派生属性行不因隐藏说明列而换行`、`宽视口下编辑工作台宽度受内容上限约束`；
+强化：`属性表单元格不再重复列标题标签`（去除但求断言）、`枚举单元格是摘要即触发器而不是独立按钮`
+（新增 Label in Name 断言）。证据比对工具入仓：`docs/dst-manager/specs/assets/SPEC-DM-016/compare-evidence.py`
+（字节 + 像素双轴，已裁定的字体栅格化伪影阈值 ≤ 20 像素且单通道差 ≤ 1）。
 
 ## 实际验证摘要（2026-09-23）
 
@@ -598,7 +621,7 @@ git commit -m "重建标准平台视觉证据并收口验收"
 | `npm run check:i18n` | **1305 键 / 10 域**，无未登记硬编码中文 |
 | `npm run check:ui` | 退出码 0（无新增例外；新增 `--standards-table-min-width`、`--standards-hint-min-width` 两个令牌） |
 | `npm run build` | 退出码 0（仅既有 chunk 体积警告） |
-| `npm run test:e2e` | **630 passed / 0 failed / 0 flaky**（4.3 分钟，workers=4） |
+| `npm run test:e2e` | **632 passed / 0 failed / 0 flaky**（4.4 分钟，workers=4；评审修复轮后重跑） |
 | `uv run ruff check .` | 退出码 0 |
 | `uv lock --check` | 通过（70 包） |
 | `uv run pytest -q` | collected **1700** / **1628 passed** / **72 skipped** / 0 failed / 0 errors（与 PLAN-DM-038 基线逐值一致；本计划未改 Python） |
