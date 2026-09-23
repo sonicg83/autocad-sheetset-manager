@@ -2014,16 +2014,19 @@ async function expectLegacyControlContract(page: Page, selector: string): Promis
 }
 
 test.describe("旧页面控件视觉基础（PLAN-DM-029 Task 9）", () => {
-  test("欢迎页：主操作为 38px 表单档，宽度上限 520px 逐字等值", async ({page}) => {
+  test("欢迎页：主操作为 38px 表单档，宽度上限取令牌逐字等值", async ({page}) => {
     await page.goto("/");
-    const primary = page.locator(".welcome-card .primary");
+    // PLAN-DM-039：欢迎页改为“打开优先”双栏，主操作仍在主卡内（旧单卡片 `.welcome-card` 已不存在）
+    const primary = page.locator(".welcome-open-card .primary");
     await expect(primary).toBeVisible();
-    await expectLegacyControlContract(page, ".welcome-card .primary");
+    await expectLegacyControlContract(page, ".welcome-open-card .primary");
     expect(await primary.evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
-    expect(await page.locator(".welcome-card").evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    // 页宽上限与可读文本宽上限各自逐字取自令牌（不再有 520px 单卡片）
+    expect(await page.locator(".welcome-page").evaluate(el => getComputedStyle(el).maxWidth), "欢迎页宽度上限").toBe(await resolveLengthToken(page, "--shell-content-max-width"));
+    expect(await page.locator(".welcome-intro p").evaluate(el => getComputedStyle(el).maxWidth), "欢迎页说明文字宽度上限").toBe(await resolveLengthToken(page, "--welcome-path-max-width"));
     // 责任 K（已裁定）：20px 已升为语义档位 --font-page-title，值逐字等值
     expect(await tokenFontSizeOf(page, "--font-page-title"), "--font-page-title 必须解析为 20px").toBe("20px");
-    await expect(page.locator(".welcome-title")).toHaveCSS("font-size", "20px");
+    await expect(page.locator(".welcome-intro h1")).toHaveCSS("font-size", "20px");
   });
 
   test("修订页空态：标题字号取语义档位 --font-title（16px）", async ({page}) => {
@@ -2137,17 +2140,32 @@ async function resolveDangerToken(page: Page): Promise<string> {
     return value;
   });
 }
+/** 把长度类令牌解析为计算值（与逐字等值断言同口径）。 */
+async function resolveLengthToken(page: Page, token: string): Promise<string> {
+  return page.evaluate(name => {
+    const probe = document.createElement("span");
+    probe.style.maxWidth = `var(${name})`;
+    document.body.append(probe);
+    const value = getComputedStyle(probe).maxWidth;
+    probe.remove();
+    return value;
+  }, token);
+}
 
 test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
-  test("t9-01 欢迎默认：未打开态浅色（welcome-card）", async ({page}, info) => {
+  test("t9-01 欢迎默认：未打开态浅色（welcome-page）", async ({page}, info) => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto("/");
-    const card = page.locator(".welcome-card");
-    await expect(card).toBeVisible();
-    await expect(card).toBeInViewport();
-    // 与断言轮同一口径：主操作 38px 表单档、卡片宽度上限 520px 逐字等值
-    expect(await page.locator(".welcome-card .primary").evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
-    expect(await card.evaluate(el => getComputedStyle(el).maxWidth), "欢迎卡宽度上限").toBe("520px");
+    // PLAN-DM-039：单卡片换为“打开优先”双栏页，主卡仍是最显眼的打开入口
+    const pageRoot = page.locator(".welcome-page");
+    await expect(pageRoot).toBeVisible();
+    await expect(pageRoot).toBeInViewport();
+    const openCard = page.locator(".welcome-open-card");
+    await expect(openCard).toBeVisible();
+    await expect(openCard).toBeInViewport();
+    // 与断言轮同一口径：主操作 38px 表单档，宽度上限取令牌
+    expect(await page.locator(".welcome-open-card .primary").evaluate(el => Math.round(el.getBoundingClientRect().height)), "欢迎页主操作高度").toBe(38);
+    expect(await pageRoot.evaluate(el => getComputedStyle(el).maxWidth), "欢迎页宽度上限").toBe(await resolveLengthToken(page, "--shell-content-max-width"));
     await shootLegacyEvidence(page, info, "t9-01-welcome-default-1280x720-light.png");
   });
 

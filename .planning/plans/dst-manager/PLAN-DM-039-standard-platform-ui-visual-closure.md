@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-039
 title: 图纸标准平台欢迎页与编辑器视觉收口实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-23
@@ -78,7 +78,7 @@ related:
 - Consumes: 既有 `StartSurface = "welcome" | "standards" | "create-sheetset"`、`StandardsView` 内部标准包导入对话框、`WelcomeView` 的 `select/submitPath/manageStandards` 事件。
 - Produces: `type StandardsEntryIntent = "browse" | "import-package"`；`openStandards(intent?: StandardsEntryIntent)`；`standardsEntryIntent: Ref<StandardsEntryIntent>`；欢迎页新增 `createSheetset` 与 `importStandard` 事件；`StandardsView.entryIntent` 仅决定首次进入是否打开既有导入对话框。
 
-- [ ] **Step 1：先写导航意图单元测试**
+- [x] **Step 1：先写导航意图单元测试**
 
 ```ts
 it("records and clears the one-shot standards entry intent", () => {
@@ -92,7 +92,7 @@ it("records and clears the one-shot standards entry intent", () => {
 });
 ```
 
-- [ ] **Step 2：先写欢迎页结构与入口失败 E2E**
+- [x] **Step 2：先写欢迎页结构与入口失败 E2E**
 
 ```ts
 test("欢迎页为打开优先双栏且三个次级任务走既有去向", async ({page}) => {
@@ -113,7 +113,7 @@ test("欢迎页为打开优先双栏且三个次级任务走既有去向", async
 
 另新增 `900×768` 用例：`welcome-layout` 降为一列，“打开图纸集”在 DOM 与视觉顺序中均位于“其他任务”之前，`documentElement.scrollWidth <= 900`。
 
-- [ ] **Step 3：运行 RED 并记录准确失败**
+- [x] **Step 3：运行 RED 并记录准确失败**
 
 Run:
 
@@ -125,7 +125,7 @@ npx playwright test tests/e2e/standards-welcome.spec.ts --workers=1
 
 Expected: 单元测试因 `openStandards` 不接收意图而失败；E2E 因欢迎页仍是单卡片且没有创建/导入入口而失败。若 `4173` 被非本任务进程占用，先记录 PID 并让占用方结束或改用任务专用 Playwright 配置端口；不得终止未知用户进程。
 
-- [ ] **Step 4：实现最小导航意图，不复制导入状态**
+- [x] **Step 4：实现最小导航意图，不复制导入状态**
 
 ```ts
 export type StandardsEntryIntent = "browse" | "import-package";
@@ -145,7 +145,7 @@ function goWelcome(): void {
 
 `App.vue` 只装配事件：创建调用既有 `openCreateSheetset()`，管理调用 `openStandards()`，导入调用 `openStandards("import-package")`。`StandardsView` 以 `entryIntent === "import-package"` 初始化现有 `importDialogOpen`，后续导入仍走同一个 `importPackage()`。
 
-- [ ] **Step 5：按 Demo 重建欢迎页结构**
+- [x] **Step 5：按 Demo 重建欢迎页结构**
 
 `WelcomeView.vue` 使用以下稳定结构，不复制 Demo 的模拟逻辑和硬编码数据：
 
@@ -183,7 +183,7 @@ function goWelcome(): void {
 
 标准视口使用 `grid-template-columns:minmax(0,2fr) minmax(280px,1fr)`；`max-width` 使用既有 `--shell-content-max-width`；`@media (max-width:900px)` 改为单列。主卡保留现有有壳/无壳分支，次级任务使用现有 `UiButton`/可访问按钮，不手写 SVG、字体图标或新色值。
 
-- [ ] **Step 6：补齐中英文文案并运行 Task 1 门禁**
+- [x] **Step 6：补齐中英文文案并运行 Task 1 门禁**
 
 至少增加同构键：欢迎页总标题/说明、其他任务标题/说明、创建说明、标准管理说明、导入说明、不可用边界说明。运行：
 
@@ -198,7 +198,7 @@ npm run build
 
 Expected: 全部通过；欢迎页只有一个 primary；创建仍进入明确不可用占位；导入直接打开唯一既有导入对话框。
 
-- [ ] **Step 7：提交欢迎页任务**
+- [x] **Step 7：提交欢迎页任务**
 
 ```powershell
 git add web/src/composables/useStartNavigation.ts web/src/composables/useStartNavigation.test.ts web/src/views/WelcomeView.vue web/src/views/StandardsView.vue web/src/App.vue web/src/i18n/locales/zh-CN/shell.ts web/src/i18n/locales/en-US/shell.ts web/src/i18n/locales/zh-CN/standards.ts web/src/i18n/locales/en-US/standards.ts web/tests/e2e/standards-welcome.spec.ts changelog.md
@@ -222,7 +222,7 @@ git commit -m "重建打开优先欢迎页双栏"
 - Consumes: `editorOpen`、`selectedKey`、`store.draft`、`leaveEditor()`、`StandardEditor.guard()` 与六分区 `EDITOR_SECTIONS`。
 - Produces: `StandardsView` 互斥的 `library-mode` / `editor-mode` 页面结构；`StandardEditor` 自带标题、身份/动作栏和“导航 + 内容面板”工作区；公共事件与 API props 保持不变。
 
-- [ ] **Step 1：先写编辑模式结构失败 E2E**
+- [x] **Step 1：先写编辑模式结构失败 E2E**
 
 ```ts
 test("草稿编辑器替换标准库主从分栏并在返回后恢复选择", async ({page}) => {
@@ -240,7 +240,7 @@ test("草稿编辑器替换标准库主从分栏并在返回后恢复选择", as
 
 再增加 dirty 变体：修改标准名称后点击“返回标准库”，必须出现现有三选一门禁；选择“留在此处”后仍处于 `standards-editor-mode` 且输入不丢失。
 
-- [ ] **Step 2：写标准视口几何约束测试**
+- [x] **Step 2：写标准视口几何约束测试**
 
 ```ts
 const metrics = await page.getByTestId("standards-editor-workspace").evaluate(element => {
@@ -254,7 +254,7 @@ expect(metrics.columns.split(" ")).toHaveLength(2);
 
 在 1440×900 固定视口下执行；同时断言 `documentElement.scrollWidth <= 1440`。该测试锁定“独立全宽工作台”，避免只检查六个按钮存在而再次放过双重侧栏。
 
-- [ ] **Step 3：运行 RED**
+- [x] **Step 3：运行 RED**
 
 Run:
 
@@ -265,7 +265,7 @@ npx playwright test tests/e2e/standards-editor.spec.ts tests/e2e/standards-libra
 
 Expected: 新结构用例失败，因为 `StandardLibraryPane` 与 `StandardEditor` 仍同时位于 `library-split`。
 
-- [ ] **Step 4：重排 `StandardsView` 为互斥页面模式**
+- [x] **Step 4：重排 `StandardsView` 为互斥页面模式**
 
 模板必须采用以下分支边界：
 
@@ -322,7 +322,7 @@ Expected: 新结构用例失败，因为 `StandardLibraryPane` 与 `StandardEdit
 
 不得在 CSS 中简单隐藏仍挂载的标准库；必须用 Vue 分支卸载库视图，避免重复地标、不可见可聚焦元素和屏幕阅读器重复内容。返回编辑器沿用 `leaveEditor()`，不重建 store，不清空 `selectedKey`、筛选或已加载详情。
 
-- [ ] **Step 5：对齐编辑器标题、身份区和内容面板**
+- [x] **Step 5：对齐编辑器标题、身份区和内容面板**
 
 `StandardEditor` 采用 Demo 的三层结构：
 
@@ -332,7 +332,7 @@ Expected: 新结构用例失败，因为 `StandardLibraryPane` 与 `StandardEdit
 
 新增 `data-testid="standards-editor-workspace"`。原有 `saveDraft/publishCheck/back` 动作、结构诊断、发布检查切换和 `UnsavedInputDialog` 均保留原事件链；本步骤不得移动任何诊断计算到视图层。
 
-- [ ] **Step 6：运行编辑/标准库回归并提交**
+- [x] **Step 6：运行编辑/标准库回归并提交**
 
 ```powershell
 Set-Location web
@@ -366,7 +366,7 @@ git commit -m "拆分标准库与全宽编辑工作台"
 - Consumes: Task 2 的 `standards-editor-workspace`、既有六分区组件和 `TokenExpressionEditor`。
 - Produces: ≥781px 的侧栏/内容双列、≤780px 的水平可滚动分区导航、宽表局部滚动容器、900×768 与 200% 缩放稳定状态。
 
-- [ ] **Step 1：先补响应式失败测试**
+- [x] **Step 1：先补响应式失败测试**
 
 在 `standards-editor.spec.ts` 增加：
 
@@ -387,7 +387,7 @@ test("900×768 编辑工作台保留侧栏且宽表只在自身滚动", async ({
 
 保留既有 200% 组合模态操作栏用例，并增加欢迎页、编辑器正文和发布检查页在 CSS 视口 720×450 下无页面级横向溢出的断言。
 
-- [ ] **Step 2：运行 RED**
+- [x] **Step 2：运行 RED**
 
 Run:
 
@@ -398,7 +398,7 @@ npx playwright test tests/e2e/standards-editor.spec.ts --workers=1
 
 Expected: 普通属性表尚无局部滚动容器；当前 959px 断点会提前把导航堆叠成整列，与 Demo 的 900px 状态不一致。
 
-- [ ] **Step 3：实现分级响应式布局**
+- [x] **Step 3：实现分级响应式布局**
 
 - `StandardEditor` 在标准视口使用 `238px minmax(0,1fr)`；1050px 以下收窄导航到约 210px；780px 以下才变成单列。
 - `StandardSectionNav` 在 780px 以下改为单行水平滚动，按钮保持完整可访问名称和最小点击高度；不截短成只剩序号。
@@ -406,11 +406,11 @@ Expected: 普通属性表尚无局部滚动容器；当前 959px 断点会提前
 - `DerivedPropertyEditor` 在 1050px 以下隐藏纯说明列，在 780px 以下隐藏可由编辑模态读取的源摘要列；不得隐藏属性名、类型、编辑或删除动作。
 - `DwgNamingEditor` 与 `TokenExpressionEditor` 保持字段浏览器/编辑器双列，780px 以下改为单列；预览内容允许断词，不得把页面撑宽。
 
-- [ ] **Step 4：补键盘、英语和深色回归**
+- [x] **Step 4：补键盘、英语和深色回归**
 
 运行现有纯键盘令牌插入、焦点归还、模态底部操作栏测试；将一个 900×768 状态切换到英文并断言主要动作全部可见，再以深色主题执行 DWG 命名状态。只断言可见性、可达性和无溢出，不以固定文本像素宽度制造平台脆弱测试。
 
-- [ ] **Step 5：运行 Task 3 门禁并提交**
+- [x] **Step 5：运行 Task 3 门禁并提交**
 
 ```powershell
 Set-Location web
@@ -457,7 +457,7 @@ git commit -m "收敛标准编辑器响应式布局"
 - Consumes: Tasks 1–3 已通过的结构/响应式门禁、两个 HTML Demo、现有 G4/G8 证据生成器。
 - Produces: PLAN-DM-039 候选证据、用户裁决记录、新命名的 G4/G8 状态集、无自相矛盾的证据 README 与最终验证摘要。
 
-- [ ] **Step 1：让证据生成器支持独立候选目录**
+- [x] **Step 1：让证据生成器支持独立候选目录**
 
 扩展现有环境变量分支：
 
@@ -471,7 +471,7 @@ const EVIDENCE_DIR = EVIDENCE_TARGET === "plan-dm-039"
 
 候选模式只写 memo 资产目录，绝不覆盖 G4/production。README 记录 commit、视口、主题、数据夹具、生成命令和每张截图对应的 Demo 状态。
 
-- [ ] **Step 2：生成候选证据并逐张打开检查**
+- [x] **Step 2：生成候选证据并逐张打开检查**
 
 ```powershell
 Set-Location web
@@ -482,7 +482,7 @@ Remove-Item Env:\DST_MANAGER_STANDARDS_EVIDENCE
 
 Expected: 候选目录包含欢迎页浅/深、标准库、普通属性、派生属性、DWG 命名、模板资产、发布错误/成功和 900×768 DWG 命名状态。逐张检查空白、裁切、加载中、错误窗口和焦点闪烁；不合格截图必须先修代码再重抓。
 
-- [ ] **Step 3：执行 Demo 对照并等待用户视觉裁决**
+- [x] **Step 3：执行 Demo 对照并等待用户视觉裁决**
 
 对照矩阵：
 
@@ -495,7 +495,7 @@ Expected: 候选目录包含欢迎页浅/深、标准库、普通属性、派生
 
 将差异和裁决写入 PLAN-DM-039 资产 README。**用户未明确确认前不得执行 Step 4，不得用自动测试通过代替该裁决。** 若用户否决任一状态，返回所属 Task 修正并重新生成全部受影响候选截图。
 
-- [ ] **Step 4：用户确认后重建 G4 与 G8**
+- [x] **Step 4：用户确认后重建 G4 与 G8**
 
 ```powershell
 Set-Location web
@@ -508,7 +508,7 @@ Remove-Item Env:\DST_MANAGER_STANDARDS_EVIDENCE
 
 删除四张被新六分区取代的旧文件，更新 README 清单。对同名 G4/G8 执行 SHA-256 或像素 diff；任何非零差异必须定位并裁决，不能只写“可接受”。欢迎页和四张新编辑状态必须额外链接用户在 Step 3 的 Demo 对照结论。
 
-- [ ] **Step 5：运行完整前端门禁**
+- [x] **Step 5：运行完整前端门禁**
 
 ```powershell
 Set-Location web
@@ -527,14 +527,14 @@ Expected: 全部退出码为 0；记录准确 passed/skipped/flaky 数，不得�
 
 至少检查浅/深主题下的 100%、125%、150%、200%：欢迎页、普通属性、DWG 命名、组合模态和发布检查。记录窗口尺寸、系统缩放、是否出现裁切/页面级横向滚动、键盘是否可达。该步骤不需要 AutoCAD；若环境无法执行，计划不得标记 `completed`，状态保持 `active` 并明确恢复条件。
 
-- [ ] **Step 7：更新文档、changelog 与实际验证摘要**
+- [x] **Step 7：更新文档、changelog 与实际验证摘要**
 
 - SPEC-DM-016 证据 README 删除“PLAN-DM-038 新状态尚未生成”和旧“无差异”结论，改为 PLAN-DM-039 的实际裁决。
 - `docs/dst-manager/README.md` 与计划索引链接 PLAN-DM-039，并说明它只收口 UI/证据，不改变标准领域能力。
 - 每一轮实现均在 `changelog.md` 当前日期章节追加可核验记录。
 - 所有自动化、候选裁决与 WebView2 检查完成后，才把本计划状态改为 `completed`；否则保持 `active`，不能由“用户暂时接受”替代缺失证据。
 
-- [ ] **Step 8：提交证据与计划收口**
+- [x] **Step 8：提交证据与计划收口**
 
 ```powershell
 git add web/tests/e2e/standards-visual-evidence.spec.ts .planning/memos/dst-manager/assets/PLAN-DM-039 docs/dst-manager/specs/assets/SPEC-DM-016 .planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md .planning/plans/dst-manager/README.md docs/dst-manager/README.md changelog.md
@@ -570,3 +570,51 @@ git commit -m "重建标准平台视觉证据并收口验收"
 - 新 G4/G8 清单使用六分区文件名，旧四张状态删除，README 不再包含“尚未生成却无视觉差异”的矛盾结论。
 - 用户完成两个 Demo 的候选视觉裁决；真实 WebView2 100/125/150/200% 检查有记录。
 - 前端全量门禁与仓库 Ruff 基线通过，实际数字写入计划和 changelog；没有未说明的跳过项。
+
+## 实际验证摘要（2026-09-23）
+
+**Task 1–3 已全部完成**（各步骤已在正文勾选）；**Task 4 已完成 Step 1–5、7、8；仅 Step 6
+（真实 Windows WebView2 100/125/150/200% 检查）待用户执行**。因此本计划状态为 `active`，
+不因自动化全绿而提前关闭。
+
+### 实施提交
+
+| 提交 | 内容 |
+| --- | --- |
+| `02ef5d0` | 重建打开优先欢迎页双栏（Task 1） |
+| `3f4e270` | 拆分标准库与全宽编辑工作台（Task 2） |
+| `20c7ac4` | 收敛标准编辑器响应式布局（Task 3） |
+| `7375c95` | 生成候选证据并修正窄视口操作行（Task 4 首轮候选） |
+| `0fd0aaf` | 按 Demo 修正属性表标签重复与欢迎页任务说明（用户第一轮裁决） |
+| `6d9c7e7`、`4c9bcaa` | 枚举值改为点击摘要进入编辑（用户第二轮裁决） |
+| 本轮收口 | G4/G8 重建、证据 README、索引与计划收口（Task 4 Step 4/5/7/8） |
+
+### 门禁实测数字
+
+| 门禁 | 结果 |
+| --- | --- |
+| `npm ci` | 成功 |
+| `npm run test:unit` | 26 文件 / **275 passed** / 0 failed |
+| `npm run check:api` | 退出码 0 |
+| `npm run check:i18n` | **1305 键 / 10 域**，无未登记硬编码中文 |
+| `npm run check:ui` | 退出码 0（无新增例外；新增 `--standards-table-min-width`、`--standards-hint-min-width` 两个令牌） |
+| `npm run build` | 退出码 0（仅既有 chunk 体积警告） |
+| `npm run test:e2e` | **630 passed / 0 failed / 0 flaky**（4.3 分钟，workers=4） |
+| `uv run ruff check .` | 退出码 0 |
+| `uv lock --check` | 通过（70 包） |
+| `uv run pytest -q` | collected **1700** / **1628 passed** / **72 skipped** / 0 failed / 0 errors（与 PLAN-DM-038 基线逐值一致；本计划未改 Python） |
+
+### 视觉证据与用户裁决
+
+- 候选证据（12 张）与逐轮裁决记录：[`.planning/memos/dst-manager/assets/PLAN-DM-039/`](../../../.planning/memos/dst-manager/assets/PLAN-DM-039/README.md)。
+- 用户共三轮裁决：第一轮否决（要求以 Demo 为准，普通/派生属性表拥挤错位）→ 第二轮指出枚举入口不是独立按钮 → **第三轮通过**。
+- G4 与 G8 各 12 张已重建，逐对 SHA-256 **12/12 完全一致（0 处差异）**；四个旧状态文件（`g4-03-properties`、`g4-04-mapping`、`g4-05-composition`、`g4-12-mapping-narrow`）已删除。
+- 证据 README：[`docs/dst-manager/specs/assets/SPEC-DM-016/README.md`](../../../docs/dst-manager/specs/assets/SPEC-DM-016/README.md)；其 §三之二 记录本轮 Demo 对照裁决。
+
+### 已登记的偏差与裁决（见 SDD ledger 全文）
+
+1. **标准页宽度收缩的根因不在编辑器**：壳层 `main` 是列向 flex 容器，`.standards-page` 的 `margin:0 auto` 使子项按内容宽度收缩（实测标准库模式仅 666px）；补 `width:100%` 后由 `max-width` 成为唯一上限。属修正，但会改变标准库截图（已随本轮 G4/G8 重建）。
+2. **计划 Files 清单与实际改动点的两处不一致**：`StandardSectionNav.vue` 的响应式改造落在 Task 3；`DwgNamingEditor.vue` 不含双列布局，实际改的是 `TokenExpressionEditor.vue`。
+3. **计划外的两处必要改动**：`StandardLibraryPane.vue` 增加 `data-testid="library-list"`（英文场景下按中文区域名定位会永远解析不到元素）；`main.spec.ts` 两条 PLAN-DM-029 遗留用例从旧单卡片（`.welcome-card` 520px 上限）改为新双栏页（页宽上限取 `--shell-content-max-width`、可读文本上限取 `--welcome-path-max-width`）。
+4. **已删除的死键**：`standards.ordinary.editEnum`（枚举入口合并为摘要触发器后不再使用）。
+5. **待执行**：Step 6 真实 Windows WebView2 浅/深 × 100/125/150/200% 检查（欢迎页、普通属性、DWG 命名、组合模态、发布检查）；恢复条件为在装有 WebView2 的 Windows 桌面启动 `uv run dst-manager desktop` 后逐项记录窗口尺寸、缩放、裁切与键盘可达性。未执行前本计划保持 `active`。

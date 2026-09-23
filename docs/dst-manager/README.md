@@ -6,6 +6,8 @@
 
 Manager 迁移历史已压平：`0007`/`0008` 已删除，仍使用的 `document_revisions.kind`/`source_json` 已并入 `0001_initial.py`，迁移 head 为 `0006_dm020_extension_platform`。标记在 `0007`/`0008` 的现有本地 Manager 数据库与压平后的基线不兼容，需要手工删除应用数据库并重新创建；程序不会自动删除用户数据。其中标记在 `0007`/`0008` 的数据库在物理结构上与新 0006 基线一致，理论上可由用户自行把 `alembic_version` 改回 `0006_dm020_extension_platform` 来保留数据（风险自负，程序本身不会执行此操作，也不提供任何自动路径）；退役验证期间，本地数据库曾以 `*.pre-0006-retirement.bak` 文件留档。
 
+2026-09-23 依据 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 完成欢迎页与标准编辑器的**页面级视觉收口**：欢迎页恢复“打开图纸集优先”的约 2:1 双栏（打开为唯一主动作，创建/管理/导入为三个带说明的次级入口），标准草稿从标准库右栏改为**独立全宽六分区工作台**（互斥页面状态，返回保留选择与筛选），属性表回归 Demo 的单行密度（列标题只由表头承担、枚举值“摘要即触发器”），并重建全部 12 张 G4/G8 证据且删除被六分区取代的四个旧状态文件。该计划**只收口 UI 与视觉证据，不改变标准领域能力**：Schema、后端 API、发布门禁与 PLAN-DM-036 创建流程均未改动。证据目录见 [SPEC-DM-016 assets](specs/assets/SPEC-DM-016/README.md)，用户 Demo 对照裁决记录见 [PLAN-DM-039 资产登记](../../.planning/memos/dst-manager/assets/PLAN-DM-039/README.md)。
+
 2026-09-16 设置中心现有 **13 个**应用配置项：新增 `cad_version`（AutoCAD 2016/2020）与 `ui_theme`（浅色/深色）持久偏好。Topbar 已移除 AutoCAD 版本选择；主题按钮保留为会话级临时切换，刷新/重启仍以配置中心保存值为准。本条取代下方 2026-09-08 历史交付段中的“现为 10 项”数量口径。
 
 DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、受控编辑和安全发布能力。当前版本为 `v0.3.3`。既有 `v0.3` 基线已包含受控图纸集编辑、快速预览/确认阶段 CAD 分流、DST XML 契约校验与可修复加载，以及 `PLAN-DM-002` 的持久草稿、大项目导航、统一写入摘要门禁和子集整体删除；图号、范围、标题、后缀和文件/布局命名均由受控规则统一派生。
@@ -72,7 +74,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [多语言界面与本地化契约规范（SPEC-DM-013，已接受；G0～G7 自动验证部分已闭合，G8 待 D3 裁决、G9 待真实桌面验收，实施计划 PLAN-DM-021 为 `active`）](specs/SPEC-DM-013-multilingual-ui.md)
 - [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭；同场景的编号种子缺陷（删除不编号子集使后续子集重编为 0 起）已由 PLAN-DM-032 修复，§行为 3/§行为 5 表述已按实现校正）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
-- [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
+- [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 - [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
 - [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
 

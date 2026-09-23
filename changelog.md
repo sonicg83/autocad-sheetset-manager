@@ -15,6 +15,16 @@
 - 新增中英文文案键 3 个（编辑标准标题、说明、工作区区域名），`check:i18n` 1302 键 / 10 域通过。
 - 验证：新增“草稿编辑器替换标准库主从分栏并在返回后恢复选择”（先 RED：`standards-editor-mode` 不存在）、“未保存修改时返回标准库走三选一门禁且留在此处不丢输入”、“编辑器工作台独立占满标准页内容宽度”（先 RED：实测 687.8px ≤ 1100）三例；`standards-editor` + `standards-library` + `standards-assets-publish` + `standards-welcome` **74 passed / 0 failed**；`check:i18n`、`check:ui`、`npm run build` 退出码 0。
 
+## 2026-09-23（按用户 Demo 裁决修正并重建 G4/G8，PLAN-DM-039 Task 4）
+
+- 用户三轮对照两份 Demo 的视觉裁决：第一轮否决（要求以 Demo 为准，普通/派生属性表“排列拥挤错位”）、第二轮指出“编辑枚举值按钮大小不固定”并澄清“demo 中枚举值编辑按钮不是独立的，是通过点击展示枚举值的文本框来进入编辑”、第三轮**通过**。
+- 按裁决修正三处：① 普通/派生属性表隐藏单元格内与表头重复的字段标签（`display:none`，输入框补 `aria-label` 保留可访问名，单元格内 `gap` 归零），恢复 Demo 的单行密度与八列/七列对齐；② 欢迎页补三个次级任务行的说明文字与底部“最近打开记录为空”说明（新增 4 个中英键）；③ 枚举单元格合并为单一 `enum-trigger` 按钮——文本即枚举值摘要、点击进入编辑对话框，`title`/`aria-label` 复用 `standards.enumDialog.title`（含属性名），删除只在一处使用的 `standards.ordinary.editEnum` 键。
+- 新增回归：`属性表单元格不再重复列标题标签`、`枚举单元格是摘要即触发器而不是独立按钮`（均先 RED 后 GREEN）；两处 PLAN-DM-029 遗留用例（`main.spec.ts` 的欢迎页控件契约与 `t9-01` 持久证据）从旧单卡片（`.welcome-card` 520px 上限）改为新双栏页（页宽上限取 `--shell-content-max-width`、可读文本上限取 `--welcome-path-max-width`）。
+- 证据重建：G4 与 `production/` 各 12 张重抓，逐对 SHA-256 **12/12 完全一致（0 处差异）**；删除被六分区取代的四个旧状态文件（`g4-03-properties`、`g4-04-mapping`、`g4-05-composition`、`g4-12-mapping-narrow`）；[SPEC-DM-016 证据 README](../../docs/dst-manager/specs/assets/SPEC-DM-016/README.md) 删除“新状态尚未生成却无差异”的矛盾结论并新增 §三之二 用户裁决记录。
+- 仓库文档同步：`docs/dst-manager/README.md` 与计划索引链接 PLAN-DM-039 并说明其只收口 UI/证据、不改变标准领域能力；SPEC-DM-016 §12.3 场景矩阵的四个截图名更新为六分区名。
+- 完整门禁实测：`npm ci` 成功、`test:unit` **275 passed**、`check:api`/`check:i18n`（1305 键 / 10 域）/`check:ui`/`build` 退出码 0、全量 e2e **630 passed / 0 failed / 0 flaky**（4.3 分钟）、`uv run ruff check .` 退出码 0、`uv lock --check` 通过、`uv run pytest -q` **1700 项 collected / 1628 passed / 72 skipped / 0 failed / 0 errors**（与 PLAN-DM-038 基线逐值一致）。
+- 计划状态：`proposed` → `active`。Task 1–4 自动环节全部完成，**仅剩 Step 6 真实 Windows WebView2 浅/深 × 100/125/150/200% 检查待用户执行**；未执行前不标记 `completed`。
+
 ## 2026-09-23（重建打开优先欢迎页双栏，PLAN-DM-039 Task 1）
 
 - 欢迎页按 SPEC-DM-016 §4.1 恢复“打开项目优先”约 2:1 双栏：主栏保留有壳/无壳两条既有打开路径且「选择 DST 文件」仍是唯一主强调动作，辅栏“其他任务”按顺序提供“创建新图纸集”“管理图纸标准”“导入标准包”三个次级入口，并明示“创建必须绑定标准、不提供空白无标准创建”的边界。900px 及以下降为单列，主任务仍在最前。

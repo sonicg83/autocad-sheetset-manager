@@ -1,9 +1,11 @@
-# SPEC-DM-016 视觉证据与验收记录（PLAN-DM-035 Task 11）
+# SPEC-DM-016 视觉证据与验收记录（PLAN-DM-035 Task 11；PLAN-DM-039 重建）
 
 > 本文件是 SPEC-DM-016 的证据目录索引（证据清单、逐对裁决、G9 清单），随
-> [SPEC-DM-016](../../SPEC-DM-016-drawing-standard-management-ui.md)（status: accepted）与
+> [SPEC-DM-016](../../SPEC-DM-016-drawing-standard-management-ui.md)（status: accepted）、
 > [PLAN-DM-035](../../../../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)
-> （status: completed）一同维护；无独立文档 ID，不进入正式文档编号序列。
+> （status: completed）与
+> [PLAN-DM-039](../../../../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md)
+> 一同维护；无独立文档 ID，不进入正式文档编号序列。
 
 本目录保存图纸标准管理 UI 的冻结状态证据（G4）与生产证据（G8），以及逐对裁决、自动化验收
 承接关系和真实桌面检查清单（G9）。证据由 `web/tests/e2e/standards-visual-evidence.spec.ts`
@@ -20,7 +22,13 @@ npm run test:e2e -- standards-visual-evidence.spec.ts
 Remove-Item Env:\DST_MANAGER_STANDARDS_EVIDENCE     # 常规回归不再改写仓库资产
 ```
 
-未设置该环境变量时只产出测试附件，不改写本目录（避免常规回归覆盖验收资产）。
+未设置该环境变量时只产出测试附件，不改写本目录（避免常规回归覆盖验收资产）。三个目标目录
+互斥：候选模式（`plan-dm-039`）**绝不覆盖** G4 与 `production`。
+
+> **重建记录（PLAN-DM-039 Task 4，2026-09-23）**：欢迎页恢复“打开优先”约 2:1 双栏、标准草稿
+> 编辑改为独立全宽工作台后，**全部 12 张 G4/G8 已重抓**，并删除被 SPEC-DM-017 六分区取代的
+> 四个旧状态文件（`g4-03-properties`、`g4-04-mapping`、`g4-05-composition`、
+> `g4-12-mapping-narrow`）。本目录文件名已全部对齐六分区语义。
 
 抓图稳定性措施：固定时钟（`page.clock.setFixedTime("2026-09-22T10:00:00")`，使资产检查时间
 戳可复现）、`animations: "disabled"`、等待 `document.fonts.ready`、抓图前 blur 掉活动焦点
@@ -31,31 +39,26 @@ Remove-Item Env:\DST_MANAGER_STANDARDS_EVIDENCE     # 常规回归不再改写�
 
 | 文件 | 状态 |
 | --- | --- |
-| `g4-01-welcome-light-1440x900.png` | 欢迎页（打开 DST 为主任务，标准管理为次级入口） |
+| `g4-01-welcome-light-1440x900.png` | 欢迎页：打开图纸集为唯一主动作，“其他任务”含“创建新图纸集 / 管理图纸标准 / 导入标准包”三个带说明的次级入口 |
 | `g4-02-library-light-1440x900.png` | 标准库主从分栏（官方 2.1.0 / 用户 2.0.0 / 草稿 1 三条） |
-| `g4-03-properties-light-1440x900.png` | 编辑器·属性定义（三条属性，含枚举与图幅）——旧状态，见下方状态变更说明 |
-| `g4-04-mapping-light-1440x900.png` | 字段映射（一条映射规则 + 三行专业映射）——旧状态 |
-| `g4-05-composition-light-1440x900.png` | 字段组合派生与 DWG 命名（片段 + 示例结果）——旧状态 |
+| `g4-03-ordinary-light-1440x900.png` | 独立全宽编辑器·普通属性（八列表格；枚举值以“摘要即触发器”呈现） |
+| `g4-04-derived-light-1440x900.png` | 派生属性（映射 + 组合两行的七列层级与编辑/删除动作） |
+| `g4-05-dwg-naming-light-1440x900.png` | DWG 命名（字段浏览器 + 令牌编辑器 + 示例预览） |
 | `g4-06-assets-light-1440x900.png` | 模板资产（检查通过：声明 A2/A3 与实际一致） |
 | `g4-07-publish-error-light-1440x900.png` | 发布检查页·含错误（映射表未覆盖源值，发布禁用） |
 | `g4-08-publish-success-light-1440x900.png` | 发布成功后的新版本只读详情 |
 | `g4-09-welcome-dark-1440x900.png` | 补充：欢迎页深色 |
 | `g4-10-library-dark-1440x900.png` | 补充：标准库深色 |
 | `g4-11-publish-error-dark-1440x900.png` | 补充：发布错误页深色 |
-| `g4-12-mapping-narrow-light-900x768.png` | 补充：字段映射 900×768 窄视口（无横向溢出）——旧状态 |
+| `g4-12-dwg-naming-narrow-light-900x768.png` | 补充：DWG 命名 900×768 窄视口（保留侧栏双列，无横向溢出） |
 
 SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至少各有浅色标准视口、深色或窄视口
-补充状态」：对应 `g4-09`（欢迎页深色）、`g4-10`（标准库深色）、`g4-12`（字段映射窄视口）、
-`g4-11`（发布页深色）。
+补充状态」：对应 `g4-09`（欢迎页深色）、`g4-10`（标准库深色）、`g4-12`（DWG 命名窄视口，承接原
+字段映射窄视口状态）、`g4-11`（发布页深色）。
 
-> **状态变更（PLAN-DM-038，2026-09-22）**：属性定义、字段映射与字段组合三个状态已由
-> [SPEC-DM-017](../../SPEC-DM-017-standard-properties-and-dwg-naming.md) 的六分区取代
-> （普通属性 / 派生属性 / DWG 命名）。**目录中现有的 `g4-03`/`g4-04`/`g4-05`/`g4-12`
-> 仍是旧状态的冻结件，尚未按新状态重新生成**：`standards-visual-evidence.spec.ts` 已改为
-> 输出 `g4-03-ordinary-…`/`g4-04-derived-…`/`g4-05-dwg-naming-…`/`g4-12-dwg-naming-narrow-…`，
-> 需要设置 `DST_MANAGER_STANDARDS_EVIDENCE=g4`（G8 为 `production`）重跑该 spec 才会落盘，
-> 重跑前上述四个旧文件与 README 表格保持一一对应。`g4-01`/`g4-02`/`g4-06`～`g4-11`
-> 的状态不变；旧的三分区状态在产品中已不存在，重跑后即可删除旧文件并把表格换为新名。
+> **状态变更（PLAN-DM-038→PLAN-DM-039，2026-09-23 完成）**：属性定义、字段映射与字段组合三个旧状态
+> 已由 [SPEC-DM-017](../../SPEC-DM-017-standard-properties-and-dwg-naming.md) 的六分区取代；
+> 四个旧冻结件已删除，上表与 `production/` 均为新状态。
 
 ## 三、G8 逐对裁决
 
@@ -64,13 +67,26 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 
 | 比对 | 结果 |
 | --- | --- |
-| 12 对（同名逐张） | 12/12 **像素完全一致**（SHA-256 相同） |
+| 12 对（同名逐张，PLAN-DM-039 重建后） | 12/12 **像素完全一致**（SHA-256 相同，0 处差异） |
 
 比对方法：`sha256` 逐对比较；若出现差异，用本目录留档的裁剪工具（解码 PNG 并输出差异包围盒）
 定位差异区域后再裁决。首轮 G4 抓图曾出现 `g4-02-library` 的 19 像素差（12×12 包围盒，位于左栏
-搜索标签文字处）；定位为活动焦点/光标类渲染层差异，按上文在抓图前 blur 活动焦点后差异消失，
-两组证据重抓后 12/12 完全一致。**结论：G8 与 G4 在数据、状态、主题、视口四个维度无差异，
-无未关闭视觉差异。**
+搜索标签文字处）；定位为活动焦点/光标类渲染层差异，按上文在抓图前 blur 活动焦点后差异消失。
+**结论：G8 与 G4 在数据、状态、主题、视口四个维度无差异，无未关闭视觉差异。**
+
+## 三之二、用户 Demo 对照裁决（PLAN-DM-039 Task 4 Step 3）
+
+本目录 12 张 G4 冻结件在晋升前经过**用户对照两份 Demo 的三轮人工视觉裁决**（候选证据与逐轮
+差异记录见 [PLAN-DM-039 资产登记](../../../../../.planning/memos/dst-manager/assets/PLAN-DM-039/README.md)）。
+
+| 裁决轮次 | 用户意见 | 处置 |
+| --- | --- | --- |
+| 第一轮 | 「与设计有偏差」，要求以 Demo 为准，尤其普通/派生属性表「排列拥挤错位」 | 隐藏属性表单元格内与表头重复的字段标签；欢迎页补三个次级任务的说明文字与“最近打开记录为空”说明 |
+| 第二轮 | 「普通属性页里的编辑枚举值按钮大小不固定」，并澄清「demo 中枚举值编辑按钮不是独立的，是通过点击展示枚举值的文本框来进入编辑」 | 枚举单元格合并为单一 `enum-trigger` 按钮（文本即枚举值摘要，点击进入编辑） |
+| 第三轮 | **通过，同意晋升 G4/G8** | 生成 G4 与 G8，12 对 SHA-256 全部一致 |
+
+对照基准：欢迎页 [SPEC-DM-016 Welcome Demo](../../../mockups/SPEC-DM-016-welcome-demo.html)、
+标准编辑器 [SPEC-DM-017 Editor Demo](../../../mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。
 
 ## 四、自动化验收承接（ST-UI-01～12）
 
