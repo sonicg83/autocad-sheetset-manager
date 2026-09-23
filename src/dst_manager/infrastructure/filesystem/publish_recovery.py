@@ -314,6 +314,34 @@ def _creation_recovery_lock(journal: dict[str, Any]) -> WorkspaceTransactionLock
     return WorkspaceTransactionLock(Path(lock_path))
 
 
+def _read_creation_journal(journal_path: Path) -> dict[str, Any] | None:
+    """读取创建发布日志；不可读取、非 JSON 或不是 JSON 对象时返回 ``None``。
+
+    日志被截断或手工改写是既有代码明确预期的输入（``_list_committed_operations_locked``
+    对不可解析的清单同样只 ``continue``）：返回 ``None`` 表示跳过该日志、现场与日志
+    原样保留。一条损坏日志既不阻断服务启动，也不阻断其它任务的恢复。
+    """
+    try:
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return journal if isinstance(journal, dict) else None
+
+
+def _committed_creation_payload(journal: dict[str, Any]) -> dict[str, Any] | None:
+    """已提交日志的成果投影；结构不可信（缺键/类型错误）时返回 ``None``。
+
+    只有 ``revision_dir`` 与成果投影所需的键（``target.path``/``files`` 及逐条目字段）
+    都齐全，才允许按这份日志闭环任务并补齐证据归档。
+    """
+    if not isinstance(journal.get("revision_dir"), str):
+        return None
+    try:
+        return creation_published_payload(journal)
+    except (KeyError, TypeError, StopIteration, OSError):
+        return None
+
+
 def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[CreationPublishOutcome]:
     """按持久日志幂等处理中断的创建发布（``PREPARED``/``PUBLISHING``/回滚中断）。
 
@@ -323,7 +351,10 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
     - 每份日志都在**目标级发布事务锁**下处理（与发布路径同一把锁）：锁被占用说明
       同一目标上仍有进行中的发布或恢复，此时不介入现场；
     - 日志身份与路径不一致（作业 ID / attempt 被改写）属于不可信现场，直接以
-      ``PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`` 终止恢复，不做任何猜测性清理。
+      ``PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`` 终止恢复，不做任何猜测性清理；
+    - **损坏日志**（截断/非 JSON/不是 JSON 对象）与结构不可信的已提交日志一律跳过，
+      不阻断启动，也不阻断其它任务的恢复；这类任务由既有 ``recover_stale_jobs``
+      落 ``PUBLISH_JOURNAL_REVIEW_REQUIRED``，等待人工核对。
     """
     root = Path(creation_jobs_root)
     if not root.exists():
@@ -332,24 +363,25 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
     for journal_path in sorted(root.glob(f"*/attempt-*/{CREATION_PUBLISH_JOURNAL_NAME}")):
         job_id = journal_path.parent.parent.name
         attempt = _parse_attempt_dir_name(journal_path.parent.name)
-        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        journal = _read_creation_journal(journal_path)
+        if journal is None:
+            continue
         if journal.get("operation_id") != job_id or journal.get("attempt") != attempt:
             raise PublishRecoveryError("PUBLISH_MANIFEST_IMMUTABLE_MISMATCH")
         status = journal.get("status")
         if status in CREATION_PUBLISH_SETTLED_STATUSES:
             continue
         if status == "COMMITTED":
+            published = _committed_creation_payload(journal)
+            if published is None:
+                # 已提交日志结构不可信：既不闭环成功，也不清理或覆盖任何成果文件。
+                continue
             with _creation_recovery_lock(journal):
                 publisher._finish_committed_cleanup(
                     journal_path, journal, Path(journal["revision_dir"])
                 )
             outcomes.append(
-                CreationPublishOutcome(
-                    job_id,
-                    attempt,
-                    "COMMITTED",
-                    published=creation_published_payload(journal),
-                )
+                CreationPublishOutcome(job_id, attempt, "COMMITTED", published=published)
             )
             continue
         try:

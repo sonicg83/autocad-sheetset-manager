@@ -830,32 +830,40 @@ class InterruptAtPublishing:
         return None
 
 
-def _interrupted_creation_job(tmp_path, runner, tmp_plan, job_id: str = "job-1"):
-    """在 PUBLISHING 中断一次创建发布，并返回服务重启前的持久化身份。"""
+def _interrupted_creation_jobs(
+    tmp_path, runner, tmp_plan, job_ids: Sequence[str]
+):
+    """在同一数据目录里中断多个创建发布（服务重启前），返回设置与目标路径。"""
     from dst_manager.application.service import DstManagerService
     from dst_manager.config import Settings
 
     settings = Settings(data_dir=tmp_path / "data")
     service = DstManagerService(settings)
-    candidate = runner.stage(job_id, 1, tmp_plan)
     target = Path(tmp_plan.target_path)
     interrupted = ProjectPublisher(fault_injector=InterruptAtPublishing())
-    with pytest.raises(ProcessInterrupted):
-        interrupted.publish_new_project(candidate, target, job_id, 1)
-    service.database.create_job(
-        job_id,
-        None,
-        "creation",
-        "PUBLISHING",
-        {"creation_draft_id": CREATION_DRAFT_ID, "preview_digest": PREVIEW_DIGEST},
-        cad_version="2020",
-        creation_draft_id=CREATION_DRAFT_ID,
-    )
-    with service.database.engine.begin() as connection:
-        connection.exec_driver_sql(
-            "UPDATE jobs SET worker_id='worker-1', attempt=1 WHERE id=?", (job_id,)
+    for job_id in job_ids:
+        candidate = runner.stage(job_id, 1, tmp_plan)
+        with pytest.raises(ProcessInterrupted):
+            interrupted.publish_new_project(candidate, target, job_id, 1)
+        service.database.create_job(
+            job_id,
+            None,
+            "creation",
+            "PUBLISHING",
+            {"creation_draft_id": CREATION_DRAFT_ID, "preview_digest": PREVIEW_DIGEST},
+            cad_version="2020",
+            creation_draft_id=CREATION_DRAFT_ID,
         )
+        with service.database.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "UPDATE jobs SET worker_id='worker-1', attempt=1 WHERE id=?", (job_id,)
+            )
     return settings, target
+
+
+def _interrupted_creation_job(tmp_path, runner, tmp_plan, job_id: str = "job-1"):
+    """在 PUBLISHING 中断一次创建发布，并返回服务重启前的持久化身份。"""
+    return _interrupted_creation_jobs(tmp_path, runner, tmp_plan, (job_id,))
 
 
 def test_startup_recovery_rolls_back_interrupted_creation_publish(
@@ -954,4 +962,85 @@ def test_startup_recovery_quarantines_unprovable_creation_journal(
     assert job["status"] == "NEEDS_REVIEW"
     assert job["error_code"] == "PUBLISH_MANIFEST_IMMUTABLE_MISMATCH"
     assert target.is_dir() and list(target.iterdir()) == []
+    assert journal_path.is_file()
+
+
+def test_startup_recovery_skips_a_truncated_creation_journal(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """截断的发布日志：服务仍能启动，其它任务的恢复照常进行。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_jobs(tmp_path, runner, tmp_plan, ("job-1", "job-2"))
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    journal_path.write_text('{"identity_version": 1, "status": "PUBLISH', encoding="utf-8")
+
+    restarted = DstManagerService(settings)
+
+    broken = restarted.database.get_job("job-1")
+    assert broken["status"] == "NEEDS_REVIEW"
+    assert broken["error_code"] == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+    # 损坏日志既不阻断启动，也不阻断其它任务的恢复
+    healthy = restarted.database.get_job("job-2")
+    assert healthy["status"] == "ROLLED_BACK"
+    assert healthy["error_code"] == "STARTUP_RECOVERY"
+    # 损坏日志与它对应的现场原样保留，供人工核对
+    assert journal_path.read_text(encoding="utf-8") == '{"identity_version": 1, "status": "PUBLISH'
+    assert target.is_dir() and list(target.iterdir()) == []
+
+
+def test_startup_recovery_isolates_a_creation_journal_without_files(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """合法 JSON 但缺 files 键：走既有隔离分支，任务落人工核对终态。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_job(tmp_path, runner, tmp_plan)
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    del journal["files"]
+    journal_path.write_text(json.dumps(journal, ensure_ascii=False), encoding="utf-8")
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "NEEDS_REVIEW"
+    assert job["error_code"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+    assert target.is_dir() and list(target.iterdir()) == []
+    assert journal_path.is_file()
+
+
+def test_startup_recovery_skips_a_committed_creation_journal_without_files(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """已提交但结构不可信的日志：不闭环成功、不删成果，任务落人工核对终态。"""
+    from dst_manager.application.service import DstManagerService
+    from dst_manager.config import Settings
+
+    settings = Settings(data_dir=tmp_path / "data")
+    service = DstManagerService(settings)
+    candidate = runner.stage("job-1", 1, tmp_plan)
+    target = Path(tmp_plan.target_path)
+    ProjectPublisher().publish_new_project(candidate, target, "job-1", 1)
+    published = _published_names(target)
+    service.database.create_job(
+        "job-1",
+        None,
+        "creation",
+        "PUBLISHING",
+        {"creation_draft_id": CREATION_DRAFT_ID, "preview_digest": PREVIEW_DIGEST},
+        cad_version="2020",
+        creation_draft_id=CREATION_DRAFT_ID,
+    )
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    del journal["files"]
+    journal_path.write_text(json.dumps(journal, ensure_ascii=False), encoding="utf-8")
+
+    restarted = DstManagerService(settings)
+
+    job = restarted.database.get_job("job-1")
+    assert job["status"] == "NEEDS_REVIEW"
+    assert job["error_code"] == "PUBLISH_JOURNAL_REVIEW_REQUIRED"
+    assert _published_names(target) == published
     assert journal_path.is_file()
