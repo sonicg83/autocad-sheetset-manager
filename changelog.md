@@ -23,7 +23,8 @@
 - 证据重建：G4 与 `production/` 各 12 张重抓，逐对 SHA-256 **12/12 完全一致（0 处差异）**；删除被六分区取代的四个旧状态文件（`g4-03-properties`、`g4-04-mapping`、`g4-05-composition`、`g4-12-mapping-narrow`）；[SPEC-DM-016 证据 README](../../docs/dst-manager/specs/assets/SPEC-DM-016/README.md) 删除“新状态尚未生成却无差异”的矛盾结论并新增 §三之二 用户裁决记录。
 - 仓库文档同步：`docs/dst-manager/README.md` 与计划索引链接 PLAN-DM-039 并说明其只收口 UI/证据、不改变标准领域能力；SPEC-DM-016 §12.3 场景矩阵的四个截图名更新为六分区名。
 - 完整门禁实测：`npm ci` 成功、`test:unit` **275 passed**、`check:api`/`check:i18n`（1305 键 / 10 域）/`check:ui`/`build` 退出码 0、全量 e2e **630 passed / 0 failed / 0 flaky**（4.3 分钟）、`uv run ruff check .` 退出码 0、`uv lock --check` 通过、`uv run pytest -q` **1700 项 collected / 1628 passed / 72 skipped / 0 failed / 0 errors**（与 PLAN-DM-038 基线逐值一致）。
-- 计划状态：`proposed` → `active`。Task 1–4 自动环节全部完成，**仅剩 Step 6 真实 Windows WebView2 浅/深 × 100/125/150/200% 检查待用户执行**；未执行前不标记 `completed`。
+- 计划状态：`proposed` → `active` → **`completed`**（Task 1–4 全部完成，包含 Step 6 真实 Windows WebView2 检查）。
+- 真实 Windows WebView2 检查（Step 6，用户执行并确认）：`uv run dst-manager desktop` 桌面壳下，欢迎页 / 普通属性 / DWG 命名 / 组合模态 / 发布检查 × 100%/125%/150%/200% × 浅色/深色 **全部通过**——无裁切、无页面级横向滚动、模态底部操作栏可见可点、键盘可达。本项不需要 AutoCAD；需真实 CAD 的 G9 清单仍待执行。
 
 ## 2026-09-23（重建打开优先欢迎页双栏，PLAN-DM-039 Task 1）
 

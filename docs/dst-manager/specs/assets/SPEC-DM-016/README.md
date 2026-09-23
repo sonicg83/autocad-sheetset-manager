@@ -88,6 +88,15 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 对照基准：欢迎页 [SPEC-DM-016 Welcome Demo](../../../mockups/SPEC-DM-016-welcome-demo.html)、
 标准编辑器 [SPEC-DM-017 Editor Demo](../../../mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。
 
+## 三之三、真实 Windows WebView2 缩放检查（PLAN-DM-039 Task 4 Step 6）
+
+浏览器 E2E 不替代真实桌面渲染，本项在真实 WebView2 壳下执行（用户执行并确认）：
+
+- 入口：`uv run dst-manager desktop`（pywebview/WebView2，窗口标题「DST Manager」）；缩放用 Windows 系统显示缩放，主题用顶栏按钮。
+- 覆盖：欢迎页、普通属性、DWG 命名、组合模态、发布检查 × 100%/125%/150%/200% × 浅色/深色。
+- 结果：**全部通过**——无裁切、无页面级横向滚动（宽表只在自身容器内滚动）、模态底部操作栏持续可见且可点、Tab/Shift+Tab 可达主要动作且 Enter/Space 生效。
+- 本项不需要 AutoCAD，与需真实 CAD 的 G9 清单（本目录 §五）无关：**G9 仍待执行**。
+
 ## 四、自动化验收承接（ST-UI-01～12）
 
 | ID | 承接用例 |

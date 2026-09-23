@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-039
 title: 图纸标准平台欢迎页与编辑器视觉收口实施计划
-status: active
+status: completed
 owners:
   - dst-manager
 created: 2026-09-23
@@ -523,7 +523,7 @@ npm run test:e2e
 
 Expected: 全部退出码为 0；记录准确 passed/skipped/flaky 数，不得只写“通过”。本计划未修改 Python；仍运行 `uv run ruff check .` 作为仓库基线，`pytest` 可按根计划收口策略执行全量或说明为何仅运行前端。
 
-- [ ] **Step 6：执行真实 Windows WebView2 视觉检查**
+- [x] **Step 6：执行真实 Windows WebView2 视觉检查**
 
 至少检查浅/深主题下的 100%、125%、150%、200%：欢迎页、普通属性、DWG 命名、组合模态和发布检查。记录窗口尺寸、系统缩放、是否出现裁切/页面级横向滚动、键盘是否可达。该步骤不需要 AutoCAD；若环境无法执行，计划不得标记 `completed`，状态保持 `active` 并明确恢复条件。
 
@@ -573,9 +573,8 @@ git commit -m "重建标准平台视觉证据并收口验收"
 
 ## 实际验证摘要（2026-09-23）
 
-**Task 1–3 已全部完成**（各步骤已在正文勾选）；**Task 4 已完成 Step 1–5、7、8；仅 Step 6
-（真实 Windows WebView2 100/125/150/200% 检查）待用户执行**。因此本计划状态为 `active`，
-不因自动化全绿而提前关闭。
+**Task 1–4 全部完成**（各步骤已在正文勾选），包含真实 Windows WebView2 缩放与主题检查。
+计划状态 `completed`。
 
 ### 实施提交
 
@@ -617,4 +616,9 @@ git commit -m "重建标准平台视觉证据并收口验收"
 2. **计划 Files 清单与实际改动点的两处不一致**：`StandardSectionNav.vue` 的响应式改造落在 Task 3；`DwgNamingEditor.vue` 不含双列布局，实际改的是 `TokenExpressionEditor.vue`。
 3. **计划外的两处必要改动**：`StandardLibraryPane.vue` 增加 `data-testid="library-list"`（英文场景下按中文区域名定位会永远解析不到元素）；`main.spec.ts` 两条 PLAN-DM-029 遗留用例从旧单卡片（`.welcome-card` 520px 上限）改为新双栏页（页宽上限取 `--shell-content-max-width`、可读文本上限取 `--welcome-path-max-width`）。
 4. **已删除的死键**：`standards.ordinary.editEnum`（枚举入口合并为摘要触发器后不再使用）。
-5. **待执行**：Step 6 真实 Windows WebView2 浅/深 × 100/125/150/200% 检查（欢迎页、普通属性、DWG 命名、组合模态、发布检查）；恢复条件为在装有 WebView2 的 Windows 桌面启动 `uv run dst-manager desktop` 后逐项记录窗口尺寸、缩放、裁切与键盘可达性。未执行前本计划保持 `active`。
+### Step 6 真实 Windows WebView2 检查（已执行）
+
+- 入口：`uv run dst-manager desktop`（pywebview/WebView2 桌面壳，窗口标题「DST Manager」）；缩放通过 Windows「设置 → 系统 → 显示 → 缩放」切换，主题通过顶栏主题按钮切换。
+- 覆盖：欢迎页、普通属性、DWG 命名、组合模态、发布检查 × 100%/125%/150%/200% × 浅色/深色。
+- 结果（用户执行并确认）：**全部通过**——无裁切、无页面级横向滚动（宽表只在自身容器内滚动）、模态底部操作栏持续可见且可点、Tab/Shift+Tab 可达主要动作且 Enter/Space 生效。
+- 本项不需要 AutoCAD；与需要真实 CAD 的 G9 清单（[SPEC-DM-016 证据 README](../../../docs/dst-manager/specs/assets/SPEC-DM-016/README.md) §五）无关，后者仍待执行。
