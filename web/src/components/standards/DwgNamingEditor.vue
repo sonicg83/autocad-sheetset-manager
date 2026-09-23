@@ -83,6 +83,10 @@ const sampleRows = computed(() => {
 const issues = computed(() => props.diagnostics ?? []);
 const namingError = computed(() => issues.value.some(item => item.severity === "error"));
 const uniquenessWarning = computed(() => issues.value.some(item => item.code === "DWG_NAMING_UNIQUENESS_UNPROVEN"));
+// 文件名模板风险只提示不阻断（取值层面的非法文件名由后端在发布/渲染阶段逐项目校验）
+const namingRiskWarning = computed(() =>
+  issues.value.some(item => item.code.startsWith("DWG_NAME_") && item.severity === "warning"),
+);
 const skeleton = computed(() => dwgNamingSkeleton(props.document));
 
 function setSegments(segments: DraftSegment[]): void {
@@ -106,6 +110,9 @@ function resetTemplate(): void {
     </header>
     <p v-if="uniquenessWarning" class="warning-note" role="note" data-testid="naming-uniqueness-warning">
       {{ $t("standards.naming.uniquenessWarning") }}
+    </p>
+    <p v-if="namingRiskWarning" class="warning-note" role="note" data-testid="naming-risk-warning">
+      {{ $t("standards.naming.invalidHint") }}
     </p>
     <p v-if="namingError" class="error-note" role="alert" data-testid="naming-error">
       {{ $t("standards.naming.invalidHint") }}

@@ -162,10 +162,25 @@ describe("buildPublishGate", () => {
     const gate = buildPublishGate({document, assets: []});
     expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section])).toEqual([
       ["STANDARD_PROPERTY_NAME_RESERVED", "ordinary"],
-      ["DWG_NAME_EXTENSION_FORBIDDEN", "dwgNaming"],
     ]);
+    // 文件名模板风险只提示不阻断（计划 Task 8 Step 5：前端只提示，发布以后端逐项目校验为准）
     expect(gate.warnings.map(issue => [issue.code, issue.target.section])).toEqual([
       ["DWG_NAMING_UNIQUENESS_UNPROVEN", "dwgNaming"],
+      ["DWG_NAME_EXTENSION_FORBIDDEN", "dwgNaming"],
+    ]);
+  });
+
+  it("treats template-level file name risks as warnings that do not block publishing", () => {
+    const document = documentWith([], {
+      dwg_naming: {
+        segments: [{property_id: "prop-code"}, {literal: "-图签.dwg-"}, {system_field: "subset.scope"}],
+      },
+    });
+    const gate = buildPublishGate({document, assets: []});
+    expect(gate.canPublish).toBe(true);
+    expect(gate.blockingErrors).toEqual([]);
+    expect(gate.warnings.map(issue => [issue.code, issue.target.section])).toEqual([
+      ["DWG_NAME_EXTENSION_FORBIDDEN", "dwgNaming"],
     ]);
   });
 

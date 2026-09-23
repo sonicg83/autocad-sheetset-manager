@@ -231,6 +231,14 @@ describe("DwgNamingEditor", () => {
     expect(draftDiagnostics(draft)).toEqual([]);
   });
 
+  it("shows file name risks as a warning note instead of a blocking error", () => {
+    const draft = newSchemaDocument();
+    draft.dwg_naming.segments = [{literal: "图签.dwg"}];
+    const wrapper = mountNamingEditor(draft, publishIssues(draft));
+    expect(wrapper.find("[data-testid=naming-risk-warning]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=naming-error]").exists()).toBe(false);
+  });
+
   it("restores the default template without an implicit prefix", async () => {
     const draft = newSchemaDocument();
     const wrapper = mountNamingEditor(draft);
@@ -242,7 +250,7 @@ describe("DwgNamingEditor", () => {
     ]);
   });
 
-  it("flags template level file name risks as publish errors", () => {
+  it("flags template level file name risks as publish warnings that never block", () => {
     const cases: Array<[DraftSegment[], string]> = [
       [[{literal: "图签.dwg"}], "DWG_NAME_EXTENSION_FORBIDDEN"],
       [[{literal: "a/b"}], "DWG_NAME_CHARACTER_INVALID"],
@@ -253,7 +261,8 @@ describe("DwgNamingEditor", () => {
     for (const [segments, code] of cases) {
       const draft = newSchemaDocument();
       draft.dwg_naming.segments = segments;
-      expect(publishIssues(draft).map(issue => issue.code)).toContain(code);
+      const issue = publishIssues(draft).find(item => item.code === code);
+      expect(issue?.severity).toBe("warning");
     }
     // 令牌会补上后续字符：`CON` 后面还有令牌时不再是保留设备名，也不再缺少唯一性字段
     const safe = newSchemaDocument();

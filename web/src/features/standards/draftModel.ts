@@ -486,9 +486,11 @@ export function isValidPadFormat(format: string | undefined): boolean {
   return width >= 1 && width <= MAX_PAD_WIDTH;
 }
 
-/** 文件名主体安全校验（与后端同码；不做字符替换，只返回定位性错误）。 */
+/** 文件名主体安全校验（与后端同码；不做字符替换，只返回定位性提示）。 */
 function filenameDiagnostics(body: string, owner: DiagnosticOwner): GatedDiagnostic[] {
-  const base = {severity: "error" as const, owner, gate: "publish" as const};
+  // 只提示不阻断：取值层面的非法文件名由后端在 DWG 渲染/发布阶段逐项目校验
+  // （计划 Task 8 Step 5「前端只提示，发布仍以后端码为准」）。
+  const base = {severity: "warning" as const, owner, gate: "publish" as const};
   if (body === "") return [{...base, code: "DWG_NAME_EMPTY"}];
   if (body.toLocaleLowerCase().includes(DWG_EXTENSION)) {
     return [{...base, code: "DWG_NAME_EXTENSION_FORBIDDEN"}];

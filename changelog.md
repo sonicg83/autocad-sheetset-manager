@@ -1,3 +1,7 @@
+## 2026-09-23（PLAN-DM-038 审查修复：DWG 文件名前端提示不再阻断发布）
+
+- 修正 PLAN-DM-038 代码审查发现：前端 `filenameDiagnostics` 把模板级文件名风险（`DWG_NAME_*`）定为 error 并经发布门禁阻断，与计划 Task 8 Step 5「前端只提示，发布仍以后端码为准」、代码注释及 i18n 文案矛盾（后端发布门禁本就不做文件名安全检查，导致后端可发布的标准被前端卡死）。现改为 warning 级：发布检查页照常列出提示但「发布标准」不再禁用；DWG 命名分区用 warning 提示条（复用 `standards.naming.invalidHint` 文案，新增 `naming-risk-warning` 测试钩子）替代原 error 警报。同步修正 `publishModel.test.ts`、`TokenExpressionEditor.test.ts` 中断言旧行为的用例，新增「文件名风险不阻断发布」模型与组件用例，E2E「DWG 非法文件名在前端只提示不阻断发布」改为断言提示可见且发布可用。全量单测 268 项、`vue-tsc`、`check:i18n`（1293 键）、`check:ui`、构建与标准系 E2E 66 项全部通过。
+
 ## 2026-09-22（整改标准属性与 DWG 命名：Schema v1 直接替换）
 
 - 重构图纸标准 Schema v1 属性模型（PLAN-DM-038 Task 1）：删除旧通用规则模型（`StandardRule`、顶层 `rules`、`RULE_KINDS`、自由规则目标），改为「普通属性（文本/枚举）+ 派生属性（映射/组合）」内嵌结构，新增稳定 `property_id`/`enum_item_id`、历史名称、映射确认快照与标准级唯一 `dwg_naming` 模板。新增 `domain/standard_models.py`（冻结数据类型、名称规范化、`references_to` 反向引用枚举）、`domain/standard_schema.py`（结构解析）、`domain/standard_semantics.py`（发布语义门禁），`domain/standards.py` 改为公共导入门面并组合两阶段入口：草稿只过结构门禁（允许空属性名、空枚举值、空映射目标、空命名片段），发布追加全局名称唯一（含历史名称、忽略大小写与首尾空格）、保留名称、枚举默认值、映射源类型与作用域、组合/DWG 命名字段越权、补零格式与模板存在性校验。单元测试 38 项通过，Ruff 通过。

@@ -243,7 +243,7 @@ test("发布 error 与 warning 区分并跳回模态框", async ({page}) => {
   expect(state.publishCalls).toBe(0);
 });
 
-test("DWG 非法文件名在前端提示并阻断发布", async ({page}) => {
+test("DWG 非法文件名在前端只提示不阻断发布", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
   await openStandards(page);
   await openDraftEditor(page);
@@ -252,18 +252,21 @@ test("DWG 非法文件名在前端提示并阻断发布", async ({page}) => {
   await page.getByTestId("token-clear").click();
   await page.getByTestId("token-literal").fill("图签.dwg");
   await page.getByTestId("token-literal").press("Enter");
-  await expect(page.getByTestId("naming-error")).toBeVisible();
+  // 文件名风险是 warning 提示（取值层面的校验以后端发布/渲染为准），不是阻断性 error
+  await expect(page.getByTestId("naming-risk-warning")).toBeVisible();
   await expect(page.getByTestId("naming-uniqueness-warning")).toBeVisible();
+  await expect(page.getByTestId("naming-error")).toHaveCount(0);
 
   await page.getByRole("button", {name: "发布检查"}).click();
   await expect(page.getByTestId("publish-review")).toContainText("模板不得自行包含 .dwg 扩展名");
-  await expect(page.getByRole("button", {name: "发布标准"})).toBeDisabled();
+  await expect(page.getByRole("button", {name: "发布标准"})).toBeEnabled();
 
   // 恢复默认模板后风险消失
   await page.getByRole("button", {name: "返回编辑"}).click();
   await openEditorSection(page, "dwgNaming");
   // 恢复默认模板：不带隐式前缀，风险消失
   await page.getByTestId("reset-naming").click();
+  await expect(page.getByTestId("naming-risk-warning")).toHaveCount(0);
   await expect(page.getByTestId("naming-error")).toHaveCount(0);
   await expect(page.getByTestId("token-preview")).toHaveText("001-003 示例子集.dwg");
 });
