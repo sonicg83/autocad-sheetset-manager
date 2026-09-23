@@ -31,6 +31,12 @@ export default {
   },
   welcome: {
     region: "打开图纸集",
+    startTitle: "开始使用 DST Manager",
+    startDesc: "打开已有图纸集继续工作，或从已发布的图纸标准准备新项目。",
+    otherTasksTitle: "其他任务",
+    otherTasksDesc: "不打开工作区也可以管理标准或准备新项目。",
+    createTask: "创建新图纸集",
+    standardBoundary: "创建必须绑定图纸标准；不提供空白无标准创建，也不会恢复独立 Builder。",
     title: "打开图纸集",
     desc: "选择一个 .dst 文件打开工作区，进行受控日常编辑与可恢复发布。修改先进入草稿，正式发布前不改动工程文件。",
     pathPlaceholder: "输入 .dst 绝对路径",

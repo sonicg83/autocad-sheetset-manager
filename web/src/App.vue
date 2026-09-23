@@ -44,6 +44,7 @@ import PropertiesView from "./views/PropertiesView.vue";
 import RevisionsView from "./views/RevisionsView.vue";
 
 import {useStartNavigation} from "./composables/useStartNavigation";
+import type {StandardsEntryIntent} from "./composables/useStartNavigation";
 import UiButton from "./components/ui/UiButton.vue";
 
 const {t}=useI18n();
@@ -51,6 +52,7 @@ const {t}=useI18n();
 // 标准管理是应用级页面，不进工作区标签栏；工作区关闭后回到欢迎页
 //（回欢迎页的 watch 在 workspace 声明之后注册，见下方同名注释块）。
 const startNavigation=useStartNavigation();
+const standardsEntryIntent=computed<StandardsEntryIntent>(()=>startNavigation.standardsEntryIntent.value);
 const {state:confirmState,confirmAction,resolve:resolveConfirm}=useConfirm();
 const workspace=ref<Workspace|null>(null);
 watch(()=>workspace.value,(value)=>{if(value===null)startNavigation.goWelcome();});
@@ -438,9 +440,11 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
     @retry-save="scheduleDraftSave"
   >
       <template v-if="!workspace">
-        <!-- PLAN-DM-035 Task 7：无工作区时按起始面装配；标准管理不进工作区标签栏 -->
-        <WelcomeView v-if="startNavigation.surface.value==='welcome'" :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" @manage-standards="startNavigation.openStandards()" />
-        <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset()" />
+        <!-- PLAN-DM-035 Task 7：无工作区时按起始面装配；标准管理不进工作区标签栏。
+             PLAN-DM-039 Task 1：欢迎页三个次级入口各走唯一既有去向——创建进既有占位，
+             管理进标准库，导入把一次性意图交给标准页以打开同一个导入对话框。 -->
+        <WelcomeView v-if="startNavigation.surface.value==='welcome'" :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" @create-sheetset="startNavigation.openCreateSheetset()" @manage-standards="startNavigation.openStandards()" @import-standard="startNavigation.openStandards('import-package')" />
+        <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" :entry-intent="standardsEntryIntent" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset()" />
         <section v-else class="create-sheetset-placeholder" role="region" :aria-label="$t('standards.createPlaceholder.title')">
           <h2>{{ $t("standards.createPlaceholder.title") }}</h2>
           <p>{{ $t("standards.createPlaceholder.desc") }}</p>

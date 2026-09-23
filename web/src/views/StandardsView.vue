@@ -15,8 +15,13 @@ import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../component
 import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
 import type {AssetInspection} from "../features/standards/types";
 import type {CreateMode, StandardSummary} from "../features/standards/types";
+import type {StandardsEntryIntent} from "../composables/useStartNavigation";
 defineEmits<{back: []; openCreateSheetset: []}>();
-const props = defineProps<{confirmAction: (options: {title: string; message: string; confirmText: string; cancelText?: string; danger?: boolean}) => Promise<boolean>}>();
+const props = defineProps<{
+  confirmAction: (options: {title: string; message: string; confirmText: string; cancelText?: string; danger?: boolean}) => Promise<boolean>;
+  /** 欢迎页「导入标准包」的一次性意图（PLAN-DM-039 Task 1）：只决定是否直接打开既有导入对话框。 */
+  entryIntent?: StandardsEntryIntent;
+}>();
 
 const {t} = useI18n();
 const store = createStandardStore(standardsApi);
@@ -26,6 +31,10 @@ const createDialogOpen = ref(false);
 const createMode = ref<CreateMode>("blank");
 const importDialogOpen = ref(false);
 const importPath = ref("");
+// 欢迎页「导入标准包」直接落到同一个导入对话框（不新增第二套导入表单或导入状态）。
+// 只在组件创建时读一次意图：App 在 `v-if` 分支上重新挂载本页，因此每次进入都是新实例；
+// 意图是“一次性”的，用户关掉对话框后不得再被重新打开。
+if (props.entryIntent === "import-package") importDialogOpen.value = true;
 const narrow = ref(window.matchMedia("(max-width: 959px)").matches);
 window.matchMedia("(max-width: 959px)").addEventListener("change", event => {narrow.value = event.matches;});
 

@@ -29,6 +29,12 @@ export default {
   },
   welcome: {
     region: "Open Sheet Set",
+    startTitle: "Get started with DST Manager",
+    startDesc: "Open an existing sheet set to keep working, or prepare a new project from a published drawing standard.",
+    otherTasksTitle: "Other tasks",
+    otherTasksDesc: "Manage standards or prepare a new project without opening a workspace.",
+    createTask: "Create new sheet set",
+    standardBoundary: "Creation must bind a drawing standard; there is no blank standard-less creation and the standalone Builder does not come back.",
     title: "Open Sheet Set",
     desc: "Select a .dst file to open a workspace for controlled daily editing and recoverable publishing. Changes go to the draft first; project files are not touched until you publish.",
     pathPlaceholder: "Enter an absolute .dst path",

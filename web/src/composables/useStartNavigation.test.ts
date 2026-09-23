@@ -13,6 +13,18 @@ describe("useStartNavigation", () => {
     expect(navigation.surface.value).toBe("welcome");
   });
 
+  // PLAN-DM-039 Task 1：标准管理入口携带一次性意图——欢迎页「导入标准包」要直接打开既有
+  // 导入对话框，而「管理图纸标准」只进入标准库。意图随回到欢迎页清除，避免下次进入误开对话框。
+  it("records and clears the one-shot standards entry intent", () => {
+    const navigation = useStartNavigation();
+    navigation.openStandards("import-package");
+    expect(navigation.surface.value).toBe("standards");
+    expect(navigation.standardsEntryIntent.value).toBe("import-package");
+    navigation.goWelcome();
+    expect(navigation.surface.value).toBe("welcome");
+    expect(navigation.standardsEntryIntent.value).toBe("browse");
+  });
+
   it("keeps the create-sheetset entry as an explicit not-yet-available surface", () => {
     const navigation = useStartNavigation();
     navigation.openCreateSheetset();

@@ -40,6 +40,50 @@ test("欢迎页保持打开 DST 为唯一主任务", async ({page}) => {
   await expect(page.getByRole("heading", {name: "打开图纸集"})).toBeVisible();
 });
 
+test("欢迎页为打开优先双栏且三个次级任务走既有去向", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installStandards(page, []);
+  await page.goto("/");
+  const layout = page.getByTestId("welcome-layout");
+  await expect(layout).toBeVisible();
+  await expect(layout.getByTestId("welcome-open-card")).toBeVisible();
+  await expect(layout.getByTestId("welcome-task-card")).toBeVisible();
+  // 打开 DST 是唯一主强调动作：三个次级入口不得与它争夺视觉层级。
+  // 限定在欢迎页布局内——常驻 DOM 的共享三选一对话框（关窗 display:none）也带 .primary，
+  // 那是工作区门禁的按钮，不属于本页的视觉层级。
+  await expect(layout.locator("button.primary")).toHaveCount(1);
+  await expect(page.getByRole("button", {name: "创建新图纸集"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "管理图纸标准"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "导入标准包"})).toBeVisible();
+
+  // 创建：进入既有明确不可用占位，不回退到无标准创建
+  await page.getByRole("button", {name: "创建新图纸集"}).click();
+  await expect(page.getByRole("heading", {name: "从标准创建图纸集"})).toBeVisible();
+  await expect(page.getByText("该入口将在后续版本提供", {exact: false})).toBeVisible();
+  await page.getByRole("button", {name: "返回欢迎页"}).click();
+
+  // 导入标准包：进入标准库并直接打开唯一既有导入对话框
+  await page.getByRole("button", {name: "导入标准包"}).click();
+  await expect(page.getByRole("heading", {name: "标准管理"})).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "导入标准包"})).toBeVisible();
+});
+
+test("900×768 欢迎页单列且打开任务仍排在最前", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, []);
+  await page.goto("/");
+  const layout = page.getByTestId("welcome-layout");
+  await expect(layout).toBeVisible();
+  // 单列：主卡与任务卡在同一列的上下相邻位置，且主卡在上
+  const columns = await layout.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" "));
+  expect(columns).toHaveLength(1);
+  const openBox = (await layout.getByTestId("welcome-open-card").boundingBox())!;
+  const taskBox = (await layout.getByTestId("welcome-task-card").boundingBox())!;
+  expect(openBox.y).toBeLessThan(taskBox.y);
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(900);
+});
+
 test("从标准创建图纸集入口当前明确不可用且不回退", async ({page}) => {
   // Task 8 起“用于创建图纸集”位于已发布版本的详情动作（SPEC-DM-016 §5）：
   // 入口不再挂在标准管理页头部，而是逐标准提供（官方/已发布版本可选，草稿不可）。
