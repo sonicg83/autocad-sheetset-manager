@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-018
 title: 标准驱动新建图纸集 UI 规范
-status: draft
+status: accepted
 owners:
 - dst-manager
 created: 2026-09-23
@@ -24,7 +24,8 @@ related:
 - 欢迎页和标准库入口沿用 [SPEC-DM-016](SPEC-DM-016-drawing-standard-management-ui.md)。
 - 普通/派生属性与唯一 DWG 命名模板沿用 [SPEC-DM-017](SPEC-DM-017-standard-properties-and-dwg-naming.md)。
 - 「不编号图纸」关键字的判定、补零和不占号语义沿用 [SPEC-DM-014](SPEC-DM-014-unnumbered-subset-keywords.md)。
-- 后端创建链路和实施任务由 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 承接；本规范获接受后，该计划须依此修订。
+- 后端创建链路和实施任务由 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 承接；创建所需最小 DST 骨架由 Manager 内置，见 [RFC-INT-003](../../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 的 2026-09-23 实施收敛。
+- [四阶段交互 Demo](../mockups/SPEC-DM-018-creation-demo.html) 用模拟数据展示页面和关键状态，仅辅助评审；不生成真实 XLSX，也不调用创建 API。
 
 设计意图是让用户在创建前完成项目属性、目标目录和图纸组配置，并在一张按图纸组汇总的权威预览表中检查结果。不在创建阶段要求用户逐张编辑图纸；需要差异化属性时，创建后到普通工作区修改。
 
@@ -53,6 +54,8 @@ related:
 ### 3.2 项目目录
 
 界面让用户选择一个**已存在的上一级目录**，并在同一选择流程中提供可编辑的项目目录名，初值为「新建项目」，行为类似 Windows 的新建文件夹命名。界面展示拼接后的完整最终路径，用户可在创建前修改目录名；不得从图纸集自定义属性推断或同步该名称，也不自动追加「(2)」等后缀。
+
+首版创建的 AutoCAD 图纸集名称（`AcSmSheetSet.Name`）取最终项目目录名，不增加第二个名称输入项；它与「项目名称」「工程名称」等自定义属性相互独立，创建成功后可在普通工作区修改。
 
 目标仅可为尚不存在的新目录或已经存在的空目录。非空目录、文件同名、越界路径或非法 Windows 名称必须阻断并定位到路径输入；不能覆盖、合并或清空现有工程。预览和执行时都须重新检查目标状态，以防预览后被其他程序占用。
 
@@ -132,7 +135,7 @@ related:
 ## 8. 验收场景
 
 1. 从欢迎页选已发布标准进入第一阶段；从标准详情「用于创建」直接进入项目信息；草稿恢复和切换标准均按提示处理，不误用标准草稿。
-2. UI 选择上级目录并修改默认「新建项目」目录名；XLSX 输入同一个完整最终路径；两种输入得到同一创建草稿字段，均不引用「工程名称」等自定义属性来组装路径。
+2. UI 选择上级目录并修改默认「新建项目」目录名；XLSX 输入同一个完整最终路径；两种输入得到同一创建草稿字段，`AcSmSheetSet.Name` 均取最终目录名，均不引用「工程名称」等自定义属性来组装路径或图纸集名称。
 3. 新建第二组复制上一组全部可输入值并聚焦图名；重复图名阻断且不自动改名。批量修改张数、模板、图幅或 sheet 属性只影响选中组，明确清空与混合值状态可区分。
 4. 标准枚举与模板候选在导出 XLSX 中有 Data Validation；可见表只有 `SheetSet`/`Sheet`；无派生列与业务公式；合法工作簿按组行展开，与界面输入得到同一预览。
 5. 导入前提醒全量覆盖；取消或任一错误保持原草稿；成功后旧项目属性、路径及全部组被替换，且旧预览失效。错误能定位工作表/行/列。
