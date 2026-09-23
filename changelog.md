@@ -1,3 +1,11 @@
+## 2026-09-24（守住创建发布恢复的日志写回路径，PLAN-DM-036 Task 6 审查修复轮 4）
+
+- 修复复核发现（P1）：`publish_recovery.recover_creation_publishes` 回滚分支的 `except` 处理器内写回日志时，异常处理器自身再抛出就没人接——日志文本含孤立代理对转义（字段被改写成 U+D800 转义，`json.loads` 仍能成功解析）时，`write_journal_best_effort` → `write_journal` 的 UTF-8 编码抛 `UnicodeEncodeError`（`ValueError` 子类，`write_journal_best_effort` 的 `except OSError` 捕不到），一路逃出 `recover_creation_publishes` → `creation_execution.recover_interrupted_creation_jobs`（只捕 `PublishRecoveryError`）→ `DstManagerService.__init__`，服务起不来。现改为显式包装的 `_write_journal_isolated`：**写回本身**被包住（窄类型 `UnicodeError`/`RecursionError`/`OSError`），写不回去只丢诊断，本次恢复结论仍是 `NEEDS_REVIEW`，任务仍落 `NEEDS_REVIEW` + `CREATION_PUBLISH_REVIEW_REQUIRED`，日志与现场原样保留。
+- 按类穷举写回面（不只被点名那一行）：逐个判断 `recover_creation_publishes` 及其全部辅助函数中的 7 处 `write_journal`/`write_journal_best_effort`/`archive_journal` 调用点「写回失败是否会让异常逃出」——唯一会逃出的是回滚隔离分支那一处（已修）；已提交分支的 4 处（`_finish_committed_cleanup` 的 try 内 2 处 + try 之后 2 处）不逃出（内容驱动失败在 try 内先被吞掉、环境类 `OSError` 由既有 `except OSError` 接管），回滚分支 try 内的 2 处由恢复侧 `except Exception` 接管，均按「不动」处置并在报告中给出依据。
+- 语义未放宽：未新增宽泛 `except Exception`；未改函数名、错误码、日志格式、回滚判据与身份隔离分支（`operation_id`/`attempt` 不一致仍走 `PUBLISH_MANIFEST_IMMUTABLE_MISMATCH`）；未改工作区侧发布恢复、`locking.py`、`publish_journal.py` 与发布器实现。
+- 测试：`tests/unit/test_project_publisher.py` 追加 **3 例**（回滚分支 + 含孤立代理对的日志 2 例：回滚正常、回滚先失败，断言该任务落 `NEEDS_REVIEW`、同批健康任务照常 `ROLLED_BACK`、日志字节与现场零改动；已提交分支含孤立代理对 1 例回归守护），`tests/integration/test_creation_job.py` 追加 **1 例**（服务级：服务仍能启动、该任务落 `NEEDS_REVIEW` + `CREATION_PUBLISH_REVIEW_REQUIRED`、同批 job-2 照常 `ROLLED_BACK` + `STARTUP_RECOVERY`）。先 RED（`UnicodeEncodeError` 从 `service.py:114` 逃出）后 GREEN；另用一次性穷举脚本把 **366 种**不可信日志形态（14 个顶层字段 × 9 种垃圾值 + 字段缺失 + `target` 子字段 × 9 种垃圾值 + `files` 两个条目的 7 个字段注入孤立代理对 + 条目级/日志级代理对键，各跑回滚与已提交两种现场）喂进 `recover_creation_publishes`：修复前逃逸 **58 例**（全部为回滚分支的 `UnicodeEncodeError`，已提交分支 183 例无一逃逸），修复后 **0 例**。
+- 验证：`uv run ruff check .` 通过；`uv run pytest tests/unit/test_project_publisher.py tests/integration/test_creation_job.py` **114 passed / 0 failed**；`uv run pytest` **1871 passed / 72 skipped / 0 failed**（净新增 4 例）。
+
 ## 2026-09-24（收口创建发布恢复的启动路径异常面，PLAN-DM-036 Task 6 审查修复轮 3）
 
 - 按类收口（不再逐形态打补丁）：先穷举 `recover_creation_publishes` 及其全部辅助函数（`_creation_recovery_lock`、`_finish_committed_cleanup`、回滚分支）的逃逸异常来源，逐条归入「日志内容驱动 / 环境驱动 / 既有身份隔离」，再对前两类逐条给出处置（跳过并保留现场 / 落 `NEEDS_REVIEW` / 转既有隔离分支）。

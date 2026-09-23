@@ -357,6 +357,35 @@ def _committed_creation_payload(journal: dict[str, Any]) -> dict[str, Any] | Non
         return None
 
 
+#: 隔离分支写回日志时**必须**吞掉的异常：这些故障全部由「日志内容 + 写盘」驱动，而
+#: 这次写回发生在异常处理器内部——它一旦抛出就没人接，会一路逃出
+#: ``recover_creation_publishes``（→ ``creation_execution.recover_interrupted_creation_jobs``
+#: → ``DstManagerService.__init__``），让服务起不来。
+#:
+#: ``UnicodeError`` 是 ``json.dumps(ensure_ascii=False)`` 与随后的 UTF-8 编码对孤立
+#: 代理对（日志字段被改写成 ``"\ud800"`` 转义，``json.loads`` 仍能成功解析）抛出的
+#: ``UnicodeEncodeError``；``RecursionError`` 是病态深嵌套值（实测同一形状下
+#: ``json.loads`` 与 ``json.dumps(indent=...)`` 的递归上限一致，因此当前不可达，保留
+#: 它只为让这次写回对「内容驱动」这一类故障闭合）；``OSError``（含
+#: ``PublishJournalWriteError``）是环境类写盘故障，``write_journal_best_effort`` 本已
+#: 吞掉，这里显式列出以保持「这次写回不会逃出」的契约完整。
+_ISOLATED_JOURNAL_WRITE_ERRORS = (UnicodeError, RecursionError, OSError)
+
+
+def _write_journal_isolated(journal_path: Path, journal: dict[str, Any]) -> None:
+    """隔离分支的日志写回：写不回去也必须隔离，绝不得阻断启动恢复。
+
+    日志只是诊断记录，磁盘上的成果文件与数据库终态优先级更高：``ROLLBACK_FAILED``
+    即使没能落盘，本次恢复结论仍按 ``NEEDS_REVIEW`` 返回，调用方据此落
+    ``NEEDS_REVIEW`` + ``CREATION_PUBLISH_REVIEW_REQUIRED`` 等人工核对，绝不猜测性
+    回滚或清理现场。
+    """
+    try:
+        write_journal_best_effort(journal_path, journal)
+    except _ISOLATED_JOURNAL_WRITE_ERRORS:
+        pass
+
+
 def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[CreationPublishOutcome]:
     """按持久日志幂等处理中断的创建发布（``PREPARED``/``PUBLISHING``/回滚中断）。
 
@@ -374,6 +403,9 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
       与结构不可信的已提交日志一律跳过，不阻断启动，也不阻断其它任务的恢复；这类
       任务由既有 ``recover_stale_jobs`` 落 ``PUBLISH_JOURNAL_REVIEW_REQUIRED``，
       等待人工核对。
+    - 隔离分支（回滚故障）登记 ``ROLLBACK_FAILED`` 的那次写回由
+      ``_write_journal_isolated`` 守住：日志内容含孤立代理对等「能解析但写不回去」
+      的形态也只丢诊断、不改结论，本次恢复仍返回 ``NEEDS_REVIEW``。
     """
     root = Path(creation_jobs_root)
     if not root.exists():
@@ -431,7 +463,7 @@ def recover_creation_publishes(publisher, creation_jobs_root: Path) -> list[Crea
             continue
         except Exception as recovery_error:  # noqa: BLE001 - 恢复故障必须显式隔离为人工核对
             journal["status"] = "ROLLBACK_FAILED"
-            write_journal_best_effort(journal_path, journal)
+            _write_journal_isolated(journal_path, journal)
             outcomes.append(
                 CreationPublishOutcome(job_id, attempt, "NEEDS_REVIEW", str(recovery_error))
             )

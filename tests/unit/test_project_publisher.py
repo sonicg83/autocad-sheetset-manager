@@ -989,3 +989,71 @@ def test_recovery_isolates_a_rollback_journal_with_an_unusable_lock_path(
     assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-1", "NEEDS_REVIEW")]
     assert read_journal(candidate)["status"] == "ROLLBACK_FAILED"
     assert published_names(target) == []
+
+
+#: 日志**内容**驱动、且 ``json.loads`` 仍能成功解析的写回失败形态：日志文本里的
+#: ``"\ud800"`` 转义会被解析成孤立代理对，而 ``json.dumps(..., ensure_ascii=False)``
+#: 与随后的 UTF-8 编码都对它抛 ``UnicodeEncodeError``（``ValueError`` 子类，既不是
+#: ``JSONDecodeError`` 也不是 ``OSError``，因此 ``write_journal_best_effort`` 的
+#: ``except OSError`` 捕不到）。
+def _journal_with_a_lone_surrogate(journal: dict) -> bytes:
+    """把日志文本写成含孤立代理对转义（``U+D800``）的 JSON：可解析，但写回必抛 ``UnicodeEncodeError``。"""
+    journal["note"] = "\ud800"
+    return json.dumps(journal, ensure_ascii=True).encode("utf-8")
+
+
+@pytest.mark.parametrize("drop_files", [False, True], ids=["files-intact", "files-missing"])
+def test_recovery_isolates_a_rollback_journal_with_a_lone_surrogate(
+    tmp_path: Path, fault_injector: FaultInjector, publisher: ProjectPublisher, drop_files: bool
+) -> None:
+    """回滚分支的日志含孤立代理对：写回抛 ``UnicodeEncodeError`` 也必须隔离为人工核对。
+
+    ``files-intact`` 走「回滚本身正常、处理器内的写回失败」；``files-missing`` 先让回滚
+    失败（缺 ``files``）再让写回失败——两条路径都必须被守住，且不得阻断同批健康任务。
+    """
+    broken = make_candidate(tmp_path, job_id="job-1")
+    healthy = replace(
+        make_candidate(tmp_path, job_id="job-2"), target_path=str(tmp_path / "other-project")
+    )
+    fault_injector.fail_at_stage("PUBLISHING")
+    for item, target in (
+        (broken, tmp_path / "new-project"),
+        (healthy, tmp_path / "other-project"),
+    ):
+        with pytest.raises(ProcessInterrupted):
+            publisher.publish_new_project(item, target, item.job_id, item.attempt)
+    journal = read_journal(broken)
+    if drop_files:
+        journal.pop("files")
+    raw = _journal_with_a_lone_surrogate(journal)
+    journal_path(broken).write_bytes(raw)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [
+        ("job-1", "NEEDS_REVIEW"),
+        ("job-2", "ROLLED_BACK"),
+    ]
+    # 写不回去的日志原样保留（不猜测性改写），现场保留供人工核对
+    assert journal_path(broken).read_bytes() == raw
+    assert published_names(tmp_path / "new-project") == []
+    assert not (tmp_path / "other-project").exists()
+
+
+def test_recovery_contains_a_committed_journal_with_a_lone_surrogate(
+    tmp_path: Path, candidate, publisher: ProjectPublisher
+) -> None:
+    """已提交日志含孤立代理对：提交后归档的写回本就在守护内，绝不逃出启动恢复。"""
+    target = tmp_path / "new-project"
+    publisher.publish_new_project(candidate, target, "job-1", 1)
+    published = published_names(target)
+    journal = read_journal(candidate)
+    raw = _journal_with_a_lone_surrogate(journal)
+    journal_path(candidate).write_bytes(raw)
+
+    outcomes = publisher.recover_creation_publishes(creation_jobs_root(tmp_path))
+
+    # 成果文件确已提交：归档只是证据补齐，写不回去既不改结论也不回滚成果
+    assert [(item.job_id, item.conclusion) for item in outcomes] == [("job-1", "COMMITTED")]
+    assert journal_path(candidate).read_bytes() == raw
+    assert published_names(target) == published

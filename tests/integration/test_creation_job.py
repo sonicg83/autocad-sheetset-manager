@@ -1010,6 +1010,39 @@ def test_startup_recovery_isolates_a_creation_journal_without_files(
     assert journal_path.is_file()
 
 
+def _creation_journal_with_a_lone_surrogate(journal_path: Path) -> bytes:
+    """把日志改写成含孤立代理对转义（``U+D800``）：可解析，但写回必抛 ``UnicodeEncodeError``。"""
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    journal["note"] = "\ud800"
+    raw = json.dumps(journal, ensure_ascii=True).encode("utf-8")
+    journal_path.write_bytes(raw)
+    return raw
+
+
+def test_startup_recovery_isolates_a_creation_journal_with_a_lone_surrogate(
+    tmp_path, runner, tmp_plan
+) -> None:
+    """日志含孤立代理对（写回必抛 ``UnicodeEncodeError``）：服务仍能启动，同批任务照常恢复。"""
+    from dst_manager.application.service import DstManagerService
+
+    settings, target = _interrupted_creation_jobs(tmp_path, runner, tmp_plan, ("job-1", "job-2"))
+    journal_path = _attempt_dir(tmp_path) / "publish-journal.json"
+    raw = _creation_journal_with_a_lone_surrogate(journal_path)
+
+    restarted = DstManagerService(settings)
+
+    broken = restarted.database.get_job("job-1")
+    assert broken["status"] == "NEEDS_REVIEW"
+    assert broken["error_code"] == "CREATION_PUBLISH_REVIEW_REQUIRED"
+    # 隔离分支既不阻断启动，也不阻断其它任务的恢复
+    healthy = restarted.database.get_job("job-2")
+    assert healthy["status"] == "ROLLED_BACK"
+    assert healthy["error_code"] == "STARTUP_RECOVERY"
+    # 写不回去的日志与现场原样保留，供人工核对
+    assert journal_path.read_bytes() == raw
+    assert target.is_dir() and list(target.iterdir()) == []
+
+
 def test_startup_recovery_skips_a_committed_creation_journal_without_files(
     tmp_path, runner, tmp_plan
 ) -> None:
