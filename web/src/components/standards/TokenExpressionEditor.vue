@@ -244,8 +244,8 @@ function clearAll(): void {
 .token--literal{border-color:var(--color-border-strong);color:var(--color-text-secondary)}
 .token-caret{display:inline-block;height:var(--space-4);border-left:1px solid var(--color-accent)}
 .literal-input{flex:1 1 20%;border:0;outline:none;background:transparent;color:var(--color-text-primary);font-family:var(--font-ui);font-size:var(--input-font-size);height:var(--input-height)}
-.editor-actions{display:flex;align-items:center;gap:var(--space-2)}
-.small-note{font-size:var(--font-label);color:var(--color-text-muted)}
+.editor-actions{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.small-note{flex:1 1 auto;min-width:var(--standards-hint-min-width);font-size:var(--font-label);color:var(--color-text-muted)}
 .preview-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
 .preview-badge{padding:0 var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-full);font-size:var(--font-label);color:var(--color-text-secondary)}
 .preview-badge--invalid{border-color:var(--color-danger);color:var(--color-danger)}

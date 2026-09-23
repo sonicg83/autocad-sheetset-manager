@@ -17,9 +17,13 @@ import {draft, draftDocument, installStandards, libraryItems, openDraftEditor, o
 
 const EVIDENCE_ROOT = path.resolve(process.cwd(), "..", "docs", "dst-manager", "specs", "assets", "SPEC-DM-016");
 const EVIDENCE_TARGET = process.env.DST_MANAGER_STANDARDS_EVIDENCE;
-const EVIDENCE_DIR = EVIDENCE_TARGET === "production"
-  ? path.join(EVIDENCE_ROOT, "production")
-  : EVIDENCE_TARGET === "g4" ? EVIDENCE_ROOT : null;
+// PLAN-DM-039：候选证据先写入计划资产目录（`.planning/memos/...`），经用户对照 Demo 裁决后才
+// 用 `g4` / `production` 晋升为冻结件与生产证据——候选模式绝不覆盖 G4/production。
+const EVIDENCE_DIR = EVIDENCE_TARGET === "plan-dm-039"
+  ? path.resolve(process.cwd(), "..", ".planning", "memos", "dst-manager", "assets", "PLAN-DM-039")
+  : EVIDENCE_TARGET === "production"
+    ? path.join(EVIDENCE_ROOT, "production")
+    : EVIDENCE_TARGET === "g4" ? EVIDENCE_ROOT : null;
 
 /** 视觉证据固定注入的资产检查结果与文档（与 `draftDocument` 声明一致）。 */
 function visualDraft(): Record<string, unknown> {
