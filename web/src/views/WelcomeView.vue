@@ -47,18 +47,29 @@ const pathInputId = "welcome-path-input";
         <p>{{ $t("shell.welcome.otherTasksDesc") }}</p>
         <div class="task-list">
           <UiButton class="task-item" variant="secondary" @click="emit('createSheetset')">
-            {{ $t("shell.welcome.createTask") }}
+            <span class="task-copy">
+              <strong>{{ $t("shell.welcome.createTask") }}</strong>
+              <span>{{ $t("shell.welcome.createTaskDesc") }}</span>
+            </span>
           </UiButton>
           <UiButton class="task-item" variant="secondary" @click="emit('manageStandards')">
-            {{ $t("standards.entry") }}
+            <span class="task-copy">
+              <strong>{{ $t("standards.entry") }}</strong>
+              <span>{{ $t("shell.welcome.manageTaskDesc") }}</span>
+            </span>
           </UiButton>
           <UiButton class="task-item" variant="secondary" @click="emit('importStandard')">
-            {{ $t("standards.library.import") }}
+            <span class="task-copy">
+              <strong>{{ $t("standards.library.import") }}</strong>
+              <span>{{ $t("shell.welcome.importTaskDesc") }}</span>
+            </span>
           </UiButton>
         </div>
         <p class="boundary-note" role="note">{{ $t("shell.welcome.standardBoundary") }}</p>
       </aside>
     </div>
+    <!-- 最近打开属于增强信息：没有可信记录时不伪造历史，只说明为空（SPEC-DM-016 §4.1） -->
+    <p class="recent-note">{{ $t("shell.welcome.recentEmptyNote") }}</p>
   </section>
 </template>
 <style scoped>
@@ -82,8 +93,12 @@ const pathInputId = "welcome-path-input";
 .welcome-open-card .primary:hover{background:var(--color-accent-hover)}
 .welcome-task-card{display:flex;flex-direction:column;gap:var(--space-2)}
 .task-list{display:grid;gap:var(--space-2);margin-top:var(--space-2)}
-.task-item{width:100%;justify-content:flex-start;text-align:left}
+.task-item{width:100%;height:auto;justify-content:flex-start;text-align:left;padding:var(--space-3)}
+.task-copy{display:grid;gap:var(--space-1);min-width:0}
+.task-copy strong{font-weight:500;color:var(--color-text-primary)}
+.task-copy span{color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.5;white-space:normal}
 .boundary-note{margin-top:var(--space-2)!important;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-muted)!important;font-size:var(--font-label);line-height:1.6}
+.recent-note{margin:0;text-align:center;color:var(--color-text-muted);font-size:var(--font-label)}
 /* 900×768 及以下单列：打开任务仍在最前，不产生页面横向滚动（SPEC-DM-016 §4.1） */
 @media (max-width: 900px){
   .welcome-page{padding:var(--space-5) var(--space-4)}

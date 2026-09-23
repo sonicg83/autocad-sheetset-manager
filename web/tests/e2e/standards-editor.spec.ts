@@ -150,6 +150,25 @@ test("编辑器工作台独立占满标准页内容宽度", async ({page}) => {
   expect(pageWidth).toBeLessThanOrEqual(1440);
 });
 
+test("属性表单元格不再重复列标题标签", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  // 列标题已由表头表达；单元格内再渲染可见字段标签会与表头重复、把行撑高并错位（对照 SPEC-DM-017 Demo）
+  await openEditorSection(page, "ordinary");
+  const ordinaryLabel = page.getByTestId("ordinary-table").locator("label").first();
+  await expect(ordinaryLabel).toHaveCount(1);
+  // 标签从布局中移除（不再占据行内高度），可访问名改由输入框自身的 aria-label 承担
+  await expect(ordinaryLabel).toBeHidden();
+  // 可访问名仍必须存在（不能因为隐藏可见标签而丢失字段名）
+  await expect(page.getByTestId("ordinary-name-prop-major")).toHaveAttribute("aria-label", "属性名");
+
+  await openEditorSection(page, "derived");
+  const derivedLabel = page.getByTestId("derived-table").locator("label").first();
+  await expect(derivedLabel).toHaveCount(1);
+  await expect(derivedLabel).toBeHidden();
+});
+
 test("枚举排序与取消不落盘", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
   await openStandards(page);

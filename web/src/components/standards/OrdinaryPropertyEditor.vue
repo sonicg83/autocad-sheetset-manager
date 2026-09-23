@@ -233,6 +233,7 @@ function applyCsv(): void {
             <UiInput
               v-model="property.name"
               :label="$t('standards.ordinary.name')"
+              :aria-label="$t('standards.ordinary.name')"
               :invalid="hasError(property)"
               :data-testid="`ordinary-name-${property.property_id}`"
             />
@@ -286,6 +287,7 @@ function applyCsv(): void {
             <UiInput
               v-model="property.default_value"
               :label="$t('standards.ordinary.defaultValue')"
+              :aria-label="$t('standards.ordinary.defaultValue')"
               :placeholder="$t('standards.ordinary.defaultPlaceholder')"
               :data-testid="`ordinary-default-${property.property_id}`"
             />
@@ -316,6 +318,7 @@ function applyCsv(): void {
             <UiInput
               v-model="property.description"
               :label="$t('standards.ordinary.description')"
+              :aria-label="$t('standards.ordinary.description')"
               :data-testid="`ordinary-description-${property.property_id}`"
             />
           </td>
@@ -367,6 +370,10 @@ function applyCsv(): void {
 .delete-error{margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-danger);border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);font-size:var(--font-label)}
 .section-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .ordinary-scroll{overflow-x:auto;min-width:0}
+/* 列标题已由表头表达（SPEC-DM-017 编辑器 Demo）：单元格内的 UiInput 可见字段标签
+   会与表头重复、把行撑高并造成错位。标签保留在 DOM 中作为可访问名，仅视觉隐藏。 */
+.ordinary-table :deep(.ui-input){gap:0}
+.ordinary-table :deep(.ui-input__label){display:none}
 .ordinary-table{width:100%;min-width:var(--standards-table-min-width);border-collapse:collapse;table-layout:fixed}
 .ordinary-table th,.ordinary-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
 .ordinary-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500}

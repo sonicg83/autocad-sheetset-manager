@@ -244,6 +244,7 @@ function removeProperty(property: DraftProperty): void {
         <UiInput
           v-model="property.name"
           :label="$t('standards.derived.name')"
+          :aria-label="$t('standards.derived.name')"
           :data-testid="`derived-name-${property.property_id}`"
         />
         <select
@@ -280,6 +281,7 @@ function removeProperty(property: DraftProperty): void {
         <UiInput
           v-model="property.description"
           :label="$t('standards.derived.description')"
+          :aria-label="$t('standards.derived.description')"
           :data-testid="`derived-description-${property.property_id}`"
         />
         <UiButton
@@ -325,6 +327,10 @@ function removeProperty(property: DraftProperty): void {
 .delete-error{margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-danger);border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);font-size:var(--font-label)}
 .section-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .derived-list{display:grid;gap:var(--space-2)}
+/* 列标题已由 derived-head 表达（SPEC-DM-017 编辑器 Demo）：单元格内可见字段标签
+   会与列标题重复并撑高行高；标签保留在 DOM 中作为可访问名，仅视觉隐藏。 */
+.derived-row :deep(.ui-input){gap:0}
+.derived-row :deep(.ui-input__label){display:none}
 .derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2);align-items:start}
 .derived-head{font-size:var(--font-label);color:var(--color-text-secondary)}
 /* 分级响应式（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：
