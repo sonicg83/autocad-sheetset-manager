@@ -73,6 +73,9 @@ export default {
   },
   editor: {
     region: "Standard draft editor",
+    titleLabel: "Edit standard",
+    subtitle: "Define the property semantics first, then configure derived relations and the global DWG naming template.",
+    workspaceRegion: "Editing workspace",
     back: "Back to standard library",
     draftId: "Draft ID",
     nameLabel: "Standard name",

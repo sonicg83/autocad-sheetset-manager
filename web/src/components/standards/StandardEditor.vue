@@ -309,13 +309,21 @@ defineExpose({guard, isDirty: () => dirty.value});
 </script>
 <template>
   <section class="standard-editor" role="region" :aria-label="$t('standards.editor.region')">
-    <header class="editor-header">
-      <div class="identity">
-        <p class="draft-id">{{ $t("standards.editor.draftId") }}：{{ draft.draft_id }}</p>
-        <UiInput v-model="buffer.name" :label="$t('standards.editor.nameLabel')" />
+    <!-- 三层结构（PLAN-DM-039 Task 2，对照 SPEC-DM-017 编辑器 Demo）：
+         ① 标题栏：编辑标准 · {name}、说明与保存状态；
+         ② 身份区：标准名称、草稿/版本标识与保存、发布检查、返回；
+         ③ 工作区：左分区导航 + 右侧独立边框的内容面板。 -->
+    <header class="editor-titlebar">
+      <div>
+        <h2 class="editor-heading">{{ $t("standards.editor.titleLabel") }} · {{ buffer.name }}</h2>
+        <p class="editor-subtitle">{{ $t("standards.editor.subtitle") }}</p>
       </div>
+      <p class="save-state" role="status" data-testid="editor-save-state">{{ $t(saveStateText) }}</p>
+    </header>
+    <div class="editor-identity">
+      <UiInput v-model="buffer.name" :label="$t('standards.editor.nameLabel')" />
+      <p class="draft-id">{{ $t("standards.editor.draftId") }}：{{ draft.draft_id }}</p>
       <div class="header-actions">
-        <p class="save-state" role="status" data-testid="editor-save-state">{{ $t(saveStateText) }}</p>
         <UiButton
           variant="secondary"
           :loading="saving"
@@ -328,7 +336,7 @@ defineExpose({guard, isDirty: () => dirty.value});
         </UiButton>
         <UiButton variant="secondary" @click="guard(() => emit('close'))">{{ $t("standards.editor.back") }}</UiButton>
       </div>
-    </header>
+    </div>
     <p v-if="saveError" class="editor-error" role="alert" data-testid="editor-save-error">{{ $t("standards.editor.saveFailed", {message: saveError}) }}</p>
     <p v-if="deleteBlocked && view === 'sections'" class="editor-error" role="alert" data-testid="editor-delete-blocked">
       {{ deleteBlocked }}
@@ -366,9 +374,10 @@ defineExpose({guard, isDirty: () => dirty.value});
       </ul>
     </div>
     <p v-else class="structure-ok" role="status">{{ $t("standards.editor.structureOk") }}</p>
-    <div class="editor-split">
-      <StandardSectionNav :active="active" :sections="sections" @select="active = $event; deleteBlocked = ''" />
-      <div class="editor-body">
+    <div class="editor-workspace" data-testid="standards-editor-workspace" role="region" :aria-label="$t('standards.editor.workspaceRegion')">
+      <StandardSectionNav class="editor-nav" :active="active" :sections="sections" @select="active = $event; deleteBlocked = ''" />
+      <div class="editor-panel">
+        <div class="editor-panel-body">
         <section v-if="active === 'basic'" class="basic-section" role="region" :aria-label="$t('standards.sections.basic')">
           <h3 class="section-title">{{ $t("standards.sections.basic") }}</h3>
           <UiInput v-model="buffer.standard_id" :label="$t('standards.detail.standardId')" />
@@ -413,6 +422,7 @@ defineExpose({guard, isDirty: () => dirty.value});
           <p class="pending-note" role="note">{{ $t("standards.publish.versionHint") }}</p>
           <UiButton variant="secondary" @click="openReview">{{ $t("standards.editor.publishCheck") }}</UiButton>
         </section>
+        </div>
       </div>
     </div>
     </template>
@@ -430,24 +440,27 @@ defineExpose({guard, isDirty: () => dirty.value});
 </template>
 <style scoped>
 .standard-editor{display:grid;gap:var(--space-3);min-width:0}
-.editor-header{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
-.identity{display:grid;gap:var(--space-1);flex:1}
-.draft-id{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
-.header-actions{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
-.save-state{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
+.editor-titlebar{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-4) var(--space-4) 0}
+.editor-heading{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
+.editor-subtitle{margin:var(--space-1) 0 0;font-size:var(--font-label);color:var(--color-text-secondary);line-height:1.6}
+.save-state{margin:0;font-size:var(--font-label);color:var(--color-text-secondary);padding:var(--space-1) var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-full);white-space:nowrap}
+.editor-identity{display:flex;align-items:flex-end;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-3) var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
+.editor-identity :deep(.ui-input){flex:1 1 280px;min-width:0}
+.draft-id{margin:0;font-size:var(--font-label);color:var(--color-text-secondary);white-space:nowrap}
+.header-actions{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-left:auto}
 .editor-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 .structure-summary{display:grid;gap:var(--space-1)}
 .summary-title{margin:0;font-size:var(--font-label);color:var(--color-danger)}
 .summary-list{list-style:none;margin:0;padding:0;display:flex;gap:var(--space-2);flex-wrap:wrap}
 .summary-button{min-height:var(--min-tap-height);padding:var(--space-1) var(--space-2);border:1px solid var(--color-danger);border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);cursor:pointer;font-size:var(--font-label)}
 .structure-ok{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
-.editor-split{display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);gap:var(--space-4);align-items:start}
-.editor-body{display:grid;gap:var(--space-3);min-width:0}
+/* 独立全宽工作台：238px 分区导航 + 自适应内容面板（SPEC-DM-017 编辑器 Demo） */
+.editor-workspace{display:grid;grid-template-columns:238px minmax(0,1fr);gap:var(--space-4);align-items:start}
+.editor-nav{position:sticky;top:0}
+.editor-panel{min-width:0;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
+.editor-panel-body{padding:var(--space-4)}
 .basic-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
 .publish-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
 .section-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .pending-note{display:flex;align-items:center;gap:var(--space-2);margin:0;padding:var(--space-3);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md);font-size:var(--font-label);color:var(--color-text-secondary)}
-@media (max-width: 959px){
-  .editor-split{grid-template-columns:minmax(0,1fr)}
-}
 </style>

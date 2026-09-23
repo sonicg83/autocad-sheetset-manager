@@ -1,3 +1,11 @@
+## 2026-09-23（拆分标准库与全宽编辑工作台，PLAN-DM-039 Task 2）
+
+- `StandardsView` 改为互斥页面状态：`editorOpen` 时用 Vue 分支**卸载**标准库与标准详情（不靠 CSS 隐藏），编辑器直接占用标准页内容宽度；返回时 `store`、`selectedKey`、筛选与已加载详情仍由视图持有，选择不重建。
+- `StandardEditor` 按 SPEC-DM-017 编辑器 Demo 重建为三层结构：标题栏（“编辑标准 · {name}” + 说明 + 保存状态）、身份区（标准名称、草稿标识、保存/发布检查/返回）、`standards-editor-workspace` 工作区（238px 分区导航 + 独立边框内容面板）。分区组件、`saveDraft`/`publishCheck`/`back` 动作、结构诊断、发布检查切换与三选一门禁均保留原事件链，诊断计算未移到视图层。
+- 修复标准页宽度：壳层 `main` 是列向 flex 容器，`.standards-page` 的 `margin:0 auto` 使其按内容收缩（实测标准库模式仅 666px、编辑器模式 736px）；补 `width:100%` 后由 `max-width` 成为唯一上限，编辑器工作区实测 **1400px 双列**。该修复同时使标准库模式真正占满内容宽度。
+- 新增中英文文案键 3 个（编辑标准标题、说明、工作区区域名），`check:i18n` 1302 键 / 10 域通过。
+- 验证：新增“草稿编辑器替换标准库主从分栏并在返回后恢复选择”（先 RED：`standards-editor-mode` 不存在）、“未保存修改时返回标准库走三选一门禁且留在此处不丢输入”、“编辑器工作台独立占满标准页内容宽度”（先 RED：实测 687.8px ≤ 1100）三例；`standards-editor` + `standards-library` + `standards-assets-publish` + `standards-welcome` **74 passed / 0 failed**；`check:i18n`、`check:ui`、`npm run build` 退出码 0。
+
 ## 2026-09-23（重建打开优先欢迎页双栏，PLAN-DM-039 Task 1）
 
 - 欢迎页按 SPEC-DM-016 §4.1 恢复“打开项目优先”约 2:1 双栏：主栏保留有壳/无壳两条既有打开路径且「选择 DST 文件」仍是唯一主强调动作，辅栏“其他任务”按顺序提供“创建新图纸集”“管理图纸标准”“导入标准包”三个次级入口，并明示“创建必须绑定标准、不提供空白无标准创建”的边界。900px 及以下降为单列，主任务仍在最前。

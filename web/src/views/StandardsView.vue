@@ -247,53 +247,57 @@ function exportSelectedStandard(): void {
 const selectedActions = computed(() => selected.value === null ? null : detailActions(selected.value));
 </script>
 <template>
-  <section class="standards-page" role="region" :aria-label="$t('standards.title')">
-    <div class="standards-header">
-      <h2 class="standards-title">{{ $t("standards.title") }}</h2>
-      <UiButton variant="secondary" @click="$emit('back')">{{ $t("standards.back") }}</UiButton>
-    </div>
-    <p v-if="store.actionError.value && !editorOpen" class="standards-error" role="alert">{{ store.actionError.value }}</p>
-    <div class="library-split" :class="{'detail-open': narrow && (selected !== null || editorOpen)}">
-      <StandardLibraryPane
-        class="library-col"
-        :items="store.summaries.value"
-        :filters="filters"
-        :selected-key="selectedKey"
-        :list-pending="store.listPending.value"
-        :list-error="store.listError.value"
-        @select="select"
-        @update-filters="filters = $event"
-        @import-package="importDialogOpen = true"
-        @create-new="openCreateDialog"
-      />
-      <StandardEditor
-        v-if="editorOpen && store.draft.value"
-        ref="editorRef"
-        class="detail-col"
-        :draft="store.draft.value"
-        :save-draft="saveEditorDocument"
-        :inspect-asset="inspectEditorAsset"
-        :publish-draft="publishEditorDraft"
-        :official-assets="officialAssets"
-        :official-standard-id="officialStandardId"
-        @close="leaveEditor"
-      />
-      <StandardDetailPane
-        v-else
-        class="detail-col"
-        :summary="selected"
-        :detail="store.detail.value"
-        :detail-pending="store.detailPending.value"
-        :detail-error="store.detailError.value || store.draftError.value"
-        :items="store.summaries.value"
-        @edit="openEditor"
-        @derive="startCreate('derive')"
-        @export-standard="exportSelectedStandard"
-        @delete-draft="deleteSelectedDraft"
-        @use-for-create="$emit('openCreateSheetset')"
-        @open-version="openVersion"
-      />
-    </div>
+  <section class="standards-page" :class="{'is-editor': editorOpen}" role="region" :aria-label="$t('standards.title')">
+    <!-- 互斥页面状态（PLAN-DM-039 Task 2）：编辑器打开时用 Vue 分支**卸载**标准库与详情，
+         不靠 CSS 隐藏——否则会残留重复地标、不可见可聚焦元素与屏幕阅读器重复内容。
+         返回时 store、selectedKey、filters 仍由本组件持有，选择/筛选/详情不重建。 -->
+    <StandardEditor
+      v-if="editorOpen && store.draft.value"
+      ref="editorRef"
+      data-testid="standards-editor-mode"
+      :draft="store.draft.value"
+      :save-draft="saveEditorDocument"
+      :inspect-asset="inspectEditorAsset"
+      :publish-draft="publishEditorDraft"
+      :official-assets="officialAssets"
+      :official-standard-id="officialStandardId"
+      @close="leaveEditor"
+    />
+    <template v-else>
+      <div class="standards-header">
+        <h2 class="standards-title">{{ $t("standards.title") }}</h2>
+        <UiButton variant="secondary" @click="$emit('back')">{{ $t("standards.back") }}</UiButton>
+      </div>
+      <p v-if="store.actionError.value" class="standards-error" role="alert">{{ store.actionError.value }}</p>
+      <div class="library-split" data-testid="standards-library-mode" :class="{'detail-open': narrow && selected !== null}">
+        <StandardLibraryPane
+          class="library-col"
+          :items="store.summaries.value"
+          :filters="filters"
+          :selected-key="selectedKey"
+          :list-pending="store.listPending.value"
+          :list-error="store.listError.value"
+          @select="select"
+          @update-filters="filters = $event"
+          @import-package="importDialogOpen = true"
+          @create-new="openCreateDialog"
+        />
+        <StandardDetailPane
+          class="detail-col"
+          :summary="selected"
+          :detail="store.detail.value"
+          :detail-pending="store.detailPending.value"
+          :detail-error="store.detailError.value || store.draftError.value"
+          :items="store.summaries.value"
+          @edit="openEditor"
+          @derive="startCreate('derive')"
+          @export-standard="exportSelectedStandard"
+          @delete-draft="deleteSelectedDraft"
+          @use-for-create="$emit('openCreateSheetset')"
+          @open-version="openVersion"
+        />
+      </div>
+    </template>
     <StandardCreateDialog
       :open="createDialogOpen"
       :mode="createMode"
@@ -316,8 +320,11 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
   </section>
 </template>
 <style scoped>
-.standards-page{max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-5);display:grid;gap:var(--space-4)}
-.standards-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.standards-page{width:100%;max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-5);display:grid;gap:var(--space-4)}
+/* 编辑器模式：标准页只渲染独立工作台，不再被主从分栏的固定左栏挤压（PLAN-DM-039 Task 2）。
+   `width:100%` 是必要的：壳层 `main` 是列向 flex 容器，配合 `margin:0 auto` 时子项
+   会按内容宽度收缩（实测标准库模式仅 666px），显式宽度才让 `max-width` 真正成为唯一上限。 */
+.standards-page.is-editor{max-width:none}.standards-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .standards-title{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .standards-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 .library-split{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:var(--space-4);align-items:start}

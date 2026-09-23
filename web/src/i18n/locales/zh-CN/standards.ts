@@ -72,6 +72,9 @@ export default {
   },
   editor: {
     region: "标准草稿编辑器",
+    titleLabel: "编辑标准",
+    subtitle: "先定义属性语义，再配置派生关系和全局 DWG 命名。",
+    workspaceRegion: "编辑工作区",
     back: "返回标准库",
     draftId: "草稿标识",
     nameLabel: "标准名称",

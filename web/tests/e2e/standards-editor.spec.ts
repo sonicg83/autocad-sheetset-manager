@@ -90,6 +90,55 @@ test("普通属性到映射、组合和 DWG 命名形成单向流程", async ({p
   await expect(page.getByTestId("naming-uniqueness-warning")).toHaveCount(0);
 });
 
+test("草稿编辑器替换标准库主从分栏并在返回后恢复选择", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  // 互斥页面状态：编辑器在场时标准库与标准详情都不在 DOM 中（不只是 CSS 隐藏）
+  await expect(page.getByTestId("standards-editor-mode")).toBeVisible();
+  await expect(page.getByRole("region", {name: "标准库"})).toHaveCount(0);
+  await expect(page.getByRole("region", {name: "标准详情"})).toHaveCount(0);
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
+
+  await page.getByRole("button", {name: "返回标准库"}).click();
+  await expect(page.getByRole("region", {name: "标准库"})).toBeVisible();
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toHaveCount(0);
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("草稿 1");
+});
+
+test("未保存修改时返回标准库走三选一门禁且留在此处不丢输入", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await page.getByLabel("标准名称").fill("待确认名称");
+
+  await page.getByRole("button", {name: "返回标准库"}).click();
+  const gate = page.locator("dialog[open]");
+  await expect(gate).toContainText("有未保存的修改");
+  await gate.getByRole("button", {name: "留在此处"}).click();
+  // 留在编辑器：仍是互斥编辑模式，输入不丢
+  await expect(page.getByTestId("standards-editor-mode")).toBeVisible();
+  await expect(page.getByLabel("标准名称")).toHaveValue("待确认名称");
+});
+
+test("编辑器工作台独立占满标准页内容宽度", async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  const metrics = await page.getByTestId("standards-editor-workspace").evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return {width: box.width, columns: getComputedStyle(element).gridTemplateColumns};
+  });
+  // 独立全宽工作台：不再被旧 library-split 的右栏压窄（旧右栏约 800px）
+  expect(metrics.width).toBeGreaterThan(1100);
+  expect(metrics.columns.split(" ")).toHaveLength(2);
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(pageWidth).toBeLessThanOrEqual(1440);
+});
+
 test("枚举排序与取消不落盘", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
   await openStandards(page);
