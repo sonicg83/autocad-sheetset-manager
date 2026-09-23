@@ -16,6 +16,7 @@ export default {
     manifestMissing: "修订清单缺失",
     restoreConflict: "恢复基准已变化，请重新预览恢复",
     restoreSourceChanged: "恢复源文件已偏离预览",
+    notRestorable: "该修订没有可回退的前序状态，不能作为恢复来源",
   },
   draft: {
     conflict: "草稿版本冲突，请刷新后重试",

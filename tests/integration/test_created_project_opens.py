@@ -25,8 +25,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 from dst_manager.application.creation_job import CreationJobRunner
+from dst_manager.application.errors import ApplicationError
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
 from dst_manager.domain.creation import CreationDraft, CreationGroupInput
@@ -40,6 +42,7 @@ from dst_manager.infrastructure.autocad.worker import (
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.filesystem.project_publish_types import PublishedProject
 from dst_manager.infrastructure.filesystem.publisher import file_sha256
+from dst_manager.interfaces.api import create_app
 from dst_platform.autocad.process import CoreConsoleResult
 
 #: 夹具标准：一个 sheetset 文本、一个 sheetset 枚举、一个 sheet 文本，一个基础模板
@@ -352,6 +355,71 @@ def test_initial_revision_matches_published_dst_and_records_effective_numbering(
     }
 
 
+def test_initial_creation_revision_is_not_a_restore_point(
+    service: DstManagerService, completed_creation: CompletedCreation
+) -> None:
+    """创建初始修订不是恢复点：预览与执行都以稳定码 409 拒绝，成果零改动。
+
+    创建修订的 ``revision_dir`` 是发布事务归档目录，其 manifest 条目没有永久
+    before 快照（``project_publisher`` 只写 ``result_hash``）；若把它当恢复来源，
+    既有恢复流程会按「无 backup 即删除」把它解释成删除全部已发布成果，并让项目
+    DST 与主 DWG 被移出项目目录。因此预览与执行两条路径都必须拒绝。
+    """
+    workspace = service.get_workspace(completed_creation.workspace_id)
+    dst_path = Path(completed_creation.dst_path)
+    before_dst = file_sha256(dst_path)
+    before_drawings = _drawing_hashes(workspace.root)
+    assert before_drawings, "夹具必须真的产出主 DWG，否则零改动断言没有意义"
+
+    with pytest.raises(ApplicationError) as preview_error:
+        service.preview_revision_restore(
+            completed_creation.workspace_id, completed_creation.revision_id
+        )
+    assert (preview_error.value.code, preview_error.value.status_code) == (
+        "REVISION_NOT_RESTORABLE",
+        409,
+    )
+
+    # 执行入口（可被直接调用，不经过界面）同样拒绝，不得进入删除分支
+    with pytest.raises(ApplicationError) as restore_error:
+        service.restore_revision(
+            completed_creation.workspace_id,
+            completed_creation.revision_id,
+            base_revision_id=before_dst,
+        )
+    assert (restore_error.value.code, restore_error.value.status_code) == (
+        "REVISION_NOT_RESTORABLE",
+        409,
+    )
+
+    # 界面可达面（`/api/revisions` 逐条渲染恢复按钮）返回 409 + 稳定码
+    client = TestClient(create_app(service.settings))
+    response = client.get(
+        f"/api/workspaces/{completed_creation.workspace_id}"
+        f"/revisions/{completed_creation.revision_id}/restore-preview"
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "REVISION_NOT_RESTORABLE"
+
+    # 项目 DST 与全部主 DWG 零改动，且没有恢复任务、没有残留写锁、修订历史不增长
+    assert file_sha256(dst_path) == before_dst and dst_path.is_file()
+    assert _drawing_hashes(workspace.root) == before_drawings
+    assert len(service.database.list_revisions(completed_creation.workspace_id)) == 1
+    with service.database.engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM jobs WHERE job_type = 'revision_restore'"
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM workspace_write_locks"
+            ).scalar_one()
+            == 0
+        )
+
+
 def test_created_project_references_the_published_drawings_and_handles(
     service: DstManagerService, completed_creation: CompletedCreation, site: CreationSite
 ) -> None:
@@ -411,6 +479,14 @@ def test_registration_succeeds_when_the_library_version_is_already_gone(
 
 
 # ---- 登记失败与幂等补登记 ---------------------------------------------------
+
+
+def _drawing_hashes(root: Path) -> dict[str, str]:
+    """项目目录里主 DWG 的（名字 → 内容哈希）。"""
+    return {
+        path.name: file_sha256(path)
+        for path in sorted(root.glob("*.dwg"))
+    }
 
 
 def _published_files(target: Path) -> dict[str, str]:

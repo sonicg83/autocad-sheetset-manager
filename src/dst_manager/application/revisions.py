@@ -4,6 +4,11 @@
 恢复清单（`preview_revision_restore`）与沿受控发布事务写回
 （`restore_revision`）。基准捕获经入口共享门禁 `self._capture_baseline`
 转发，保持测试对 service 模块 monkeypatch 契约不变。
+
+恢复来源只允许受控发布修订（`kind == "operation"`）：创建初始修订的
+`revision_dir` 是发布事务归档目录，其 manifest 条目没有永久 before 快照，
+把它当恢复来源会被解释成「删除全部已发布成果」，因此预览与执行两条路径都
+以 `REVISION_NOT_RESTORABLE`（409）拒绝（PLAN-DM-036 Task 7）。
 """
 
 import json
@@ -25,19 +30,38 @@ from dst_manager.infrastructure.filesystem.publisher import (
     PublishRolledBackError,
     file_sha256,
 )
-from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
+from dst_manager.infrastructure.persistence.database import (
+    WorkspaceBusyError,
+    WorkspaceRow,
+)
+
+#: 可作为恢复来源的修订类型：只有受控发布（编辑/恢复）的修订在发布事务里留了
+#: 永久 before 快照，能沿 `publisher` 的事务写回；其他类型（创建初始修订）没有
+#: 前序状态可回退，把它们当恢复来源会被降级成删除全部已发布成果。
+_RESTORABLE_REVISION_KINDS = frozenset({"operation"})
 
 
 class RevisionRestoreOperations:
-    def preview_revision_restore(self, workspace_id: str, revision_id: str) -> dict[str, Any]:
+    def _require_restorable_revision(self, workspace_id: str, revision_id: str) -> tuple[WorkspaceRow, dict[str, Any]]:
+        """加载工作区与修订，并施加「可恢复来源」门禁（预览与执行共用）。"""
         workspace_row = self.database.get_workspace(workspace_id)
         if workspace_row is None:
             raise ApplicationError("WORKSPACE_NOT_FOUND", "工作区不存在", 404)
-        workspace_root = Path(workspace_row.root)
-        dst_path = Path(workspace_row.dst_path)
         revision = self.database.get_revision(revision_id)
         if revision is None or revision["workspace_id"] != workspace_id:
             raise ApplicationError("REVISION_NOT_FOUND", "修订不存在", 404)
+        if revision.get("kind") not in _RESTORABLE_REVISION_KINDS:
+            raise ApplicationError(
+                "REVISION_NOT_RESTORABLE",
+                "该修订不是可恢复的发布修订（无前序状态可回退）",
+                409,
+            )
+        return workspace_row, revision
+
+    def preview_revision_restore(self, workspace_id: str, revision_id: str) -> dict[str, Any]:
+        workspace_row, revision = self._require_restorable_revision(workspace_id, revision_id)
+        workspace_root = Path(workspace_row.root)
+        dst_path = Path(workspace_row.dst_path)
         manifest_path = Path(revision["revision_dir"]) / "manifest.json"
         if not manifest_path.is_file():
             raise ApplicationError("REVISION_MANIFEST_MISSING", "修订清单缺失", 409)
@@ -105,6 +129,9 @@ class RevisionRestoreOperations:
         base_revision_id: str,
         preview_digest: str | None = None,
     ) -> dict[str, Any]:
+        # 与预览同一门禁：直接调用执行入口（不经界面预览）也不得把非发布修订当恢复
+        # 来源而进入删除分支。
+        self._require_restorable_revision(workspace_id, revision_id)
         preview = self.preview_revision_restore(workspace_id, revision_id)
         if preview_digest != preview["preview_digest"]:
             raise ApplicationError("REPREVIEW_REQUIRED", "修订恢复预览已变化或尚未确认，请重新预览并确认", 409)

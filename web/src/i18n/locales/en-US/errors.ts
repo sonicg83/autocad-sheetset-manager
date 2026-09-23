@@ -16,6 +16,7 @@ export default {
     manifestMissing: "Revision manifest is missing",
     restoreConflict: "The restore baseline has changed. Preview the restore again",
     restoreSourceChanged: "The restore source has drifted from the preview",
+    notRestorable: "This revision has no prior state to roll back to and cannot be used as a restore source",
   },
   draft: {
     conflict: "Draft version conflict. Refresh and try again",

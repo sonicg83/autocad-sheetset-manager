@@ -52,6 +52,8 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     # ---- 修订 ----
     "REVISION_CONFLICT": _E("errors.revision.conflict"),
     "REVISION_NOT_FOUND": _E("errors.revision.notFound"),
+    # 恢复来源门禁：创建初始修订没有前序状态可回退（PLAN-DM-036 Task 7）。
+    "REVISION_NOT_RESTORABLE": _E("errors.revision.notRestorable"),
     "REVISION_MANIFEST_MISSING": _E("errors.revision.manifestMissing"),
     "REVISION_RESTORE_CONFLICT": _E("errors.revision.restoreConflict"),
     "REVISION_RESTORE_SOURCE_CHANGED": _E("errors.revision.restoreSourceChanged"),
