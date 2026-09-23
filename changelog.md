@@ -1,3 +1,7 @@
+## 2026-09-23（登记 PLAN-DM-038 审查遗留发现备忘）
+
+- 新增 `.planning/memos/dst-manager/2026-09-23-plan-dm-038-code-review-findings.md`：登记 PLAN-DM-038 整分支代码审查的 4 项遗留发现（求值输入缺键当空值的契约缺口、未知 system_field 前后端门禁分级不一致、诊断文案 `{field}`/`{source}` 插值未传、名称规范化 `toLocaleLowerCase` vs `casefold` 口径分歧），含独立验证证据与逐项处理建议；已修复的前端文件名阻断问题与已登记的 R10/R13 事项一并记录备查。
+
 ## 2026-09-23（PLAN-DM-038 审查修复：DWG 文件名前端提示不再阻断发布）
 
 - 修正 PLAN-DM-038 代码审查发现：前端 `filenameDiagnostics` 把模板级文件名风险（`DWG_NAME_*`）定为 error 并经发布门禁阻断，与计划 Task 8 Step 5「前端只提示，发布仍以后端码为准」、代码注释及 i18n 文案矛盾（后端发布门禁本就不做文件名安全检查，导致后端可发布的标准被前端卡死）。现改为 warning 级：发布检查页照常列出提示但「发布标准」不再禁用；DWG 命名分区用 warning 提示条（复用 `standards.naming.invalidHint` 文案，新增 `naming-risk-warning` 测试钩子）替代原 error 警报。同步修正 `publishModel.test.ts`、`TokenExpressionEditor.test.ts` 中断言旧行为的用例，新增「文件名风险不阻断发布」模型与组件用例，E2E「DWG 非法文件名在前端只提示不阻断发布」改为断言提示可见且发布可用。全量单测 268 项、`vue-tsc`、`check:i18n`（1293 键）、`check:ui`、构建与标准系 E2E 66 项全部通过。
