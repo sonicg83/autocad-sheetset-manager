@@ -1,3 +1,8 @@
+## 2026-09-25（PLAN-DM-041 Task 1：整数版本与标准包预检导入长期规范）
+
+- 新增 [SPEC-DM-019](docs/dst-manager/specs/SPEC-DM-019-standard-version-and-package-import.md)：标准发布 `version` 固定为 `1..2147483647` 的 JSON 整数、文档格式升为 `schema_version: 2`、草稿不携带版本、依赖 `min_version` 仍为三段字符串；本机发布在官方/用户库同 ID 上取 `max+1` 且失败不消耗版本；不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入固定为“限时快照（`settings.data_dir/tmp/standard-import-previews`、15 分钟、256 MiB、重启失效）+ 凭证确认”两步，并固定非法包/路径 422、同身份/同名 409、过期凭证 410、未知凭证 404、预检冲突 200 且 `can_import=false`。
+- 增量修订 [SPEC-DM-016](docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) §4.2/§5（两步导入页面行为、按 `standard_id` 归集与整数降序、`v<n>` 展示）与 [SPEC-DM-018](docs/dst-manager/specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)（向导中的版本展示）；按新契约更新 [GUIDE-DM-007](docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md) 的 `schema_version: 2`、整数版本、名称唯一与导出文件名示例。本次仅修改规范与文档索引，未修改产品代码。
+
 ## 2026-09-24（PLAN-DM-040 独立复核修复）
 
 - 独立复核（全分支 diff 6231d19..HEAD，含 Review Focus 逐条核对）发现并修复三项高优先级问题：
