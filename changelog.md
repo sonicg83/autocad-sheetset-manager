@@ -1,3 +1,10 @@
+## 2026-09-25（PLAN-DM-041 Task 2：正整数领域契约与无版本草稿）
+
+- 领域层：`schema_version` 升为 `2`；标准发布版本改为 `1..2147483647` 的 JSON 整数，显式拒绝 `0`、负数、布尔、小数、字符串与旧三段形式；草稿拆为 `DraftDrawingStandard`，**不携带 `version`**，携带即拒绝；新增 `materialize_published_document` / `materialize_published_standard` 在草稿文档副本上写入整数版本并过完整发布门禁。依赖能力版本 `dependencies[*].min_version` 保留三段字符串，与标准版本、文档格式版本三者使用互不共用的解析器（`parse_standard_version` / `parse_standard_version_segment` / `parse_dependency_version`）。
+- 仓储与包：发布目录段改为规范十进制正整数，`StandardSummary.version` 为 `int | None`（草稿为 `None`），`PublishedStandard.version` 为整数；残留 `schema_version: 1` 目录在 `list()` 中跳过，`get`/`get_document`/`read_package` 返回稳定 `STANDARD_SCHEMA_VERSION_UNSUPPORTED`（422）；导出包文件名改为 `<standard_id>-v<n>.dststandard`，包内 `manifest.json` 的 `version` 仍为裸整数；读取器与仓储保留 Schema 侧精确错误码。
+- **阶段性范围（Task 2 → 3 衔接）**：`StandardStore.publish()` 进入显式过渡态，草稿无版本可分配时以稳定 422 `STANDARD_VERSION_UNASSIGNED` 拒绝且**不写任何目录**；该码仅存在于 Task 2→3 之间，由 Task 3 移除并改为在仓储锁内分配 `max(官方, 用户)+1`。因此本提交后仓储发布/导入/导出用例与依赖发布的标准 API、创建链路用例暂时为红，由 Task 3（版本分配）与 Task 4（创建与公开契约整数化）依次转绿；本任务实际验证：`ruff check .` 通过，标准领域、标准包、DST 导入与资产用例 **119 passed**，新增的仓储读用例全绿。
+- 本次未改动前端、创建契约与路由整数化；前端消费方的阶段性类型红灯记录到 Task 6。
+
 ## 2026-09-25（PLAN-DM-041 Task 1：整数版本与标准包预检导入长期规范）
 
 - 新增 [SPEC-DM-019](docs/dst-manager/specs/SPEC-DM-019-standard-version-and-package-import.md)：标准发布 `version` 固定为 `1..2147483647` 的 JSON 整数、文档格式升为 `schema_version: 2`、草稿不携带版本、依赖 `min_version` 仍为三段字符串；本机发布在官方/用户库同 ID 上取 `max+1` 且失败不消耗版本；不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入固定为“限时快照（`settings.data_dir/tmp/standard-import-previews`、15 分钟、256 MiB、重启失效）+ 凭证确认”两步，并固定非法包/路径 422、同身份/同名 409、过期凭证 410、未知凭证 404、预检冲突 200 且 `can_import=false`。

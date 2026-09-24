@@ -1,17 +1,18 @@
-"""图纸标准 Schema v1 结构解析（PLAN-DM-038 Task 1）。
+"""图纸标准 Schema v2 结构解析（PLAN-DM-038 Task 1；PLAN-DM-041 Task 2）。
 
-本模块只负责**结构**：Schema 版本、稳定 ID、JSON 类型、片段形状与引用对象
-存在性。草稿与发布共用同一结构解析，区别仅在 ``dwg_naming`` 是否存在。
+本模块只负责**结构**：文档格式版本、稳定 ID、JSON 类型、片段形状与引用对象
+存在性。草稿与发布共用同一结构解析，区别在版本字段与 ``dwg_naming``：
+
+- 草稿（:func:`parse_standard_draft_structure`）不得携带 ``version``；
+- 发布（:func:`parse_published_standard_structure`）要求 ``version`` 是
+  ``1..MAX_STANDARD_VERSION`` 的 JSON 整数。
+
+两个版本概念必须分开：标准发布版本用 :func:`parse_standard_version`（JSON 整数）
+或 :func:`parse_standard_version_segment`（路径段/绑定身份文本），依赖能力版本用
+:func:`parse_dependency_version`（保留三段语义化字符串）；三者不得共用 pattern。
 
 语义门禁见 :mod:`dst_manager.domain.standard_semantics`；两阶段入口在
-:mod:`dst_manager.domain.standards` 门面组合：
-
-- 草稿解析允许空属性名、空枚举值、空映射目标与空命名片段，让用户保存
-  语义未完成的内容；
-- 发布解析在结构合法之上追加完整语义校验。
-
-映射目标是否为空、映射源是否被重复占用、枚举变化后的待确认状态属于发布
-诊断（``standard_rules.publish_diagnostics``），不在本模块判定。
+:mod:`dst_manager.domain.standards` 门面组合。
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from dst_manager.domain.standard_models import (
     PROPERTY_KINDS,
     PROPERTY_SCOPES,
     SYSTEM_FIELDS,
+    DraftDrawingStandard,
     DrawingStandard,
     DwgNamingTemplate,
     NumberingPolicy,
@@ -38,12 +40,18 @@ from dst_manager.domain.standard_models import (
     StandardSegment,
 )
 
-SUPPORTED_SCHEMA_VERSIONS = (1,)
+#: 支持的**文档格式**版本（与标准发布版本无关）。
+SUPPORTED_SCHEMA_VERSIONS = (2,)
+
+#: 标准发布版本上限（32 位有符号整数上界）。
+MAX_STANDARD_VERSION = 2147483647
 
 # 标准 ID：小写域式标识（如 ``szmedi.gas``），大小写差异一律视为非法输入。
 STANDARD_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$")
-# 标准版本：三段数字版本（如 ``2.1.0``）。
-STANDARD_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+# 标准发布版本的**路径段/绑定身份文本**形式：规范十进制正整数（无前导零）。
+STANDARD_VERSION_SEGMENT_PATTERN = re.compile(r"^[1-9]\d*$")
+# 依赖能力版本：保留三段语义化字符串（如 ``1.2.0``），与标准发布版本无关。
+DEPENDENCY_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class StandardSchemaError(Exception):
@@ -83,9 +91,36 @@ def _str_tuple(raw: Mapping[str, Any], key: str, code: str) -> tuple[str, ...]:
     return tuple(items)
 
 
-def _parse_version(value: str) -> str:
-    if not STANDARD_VERSION_PATTERN.fullmatch(value):
-        raise _error("STANDARD_VERSION_INVALID", f"版本 {value!r} 不是三段数字版本")
+def parse_standard_version(value: object) -> int:
+    """标准发布版本的 **JSON 字段**口径：``1..MAX_STANDARD_VERSION`` 的整数。
+
+    布尔值是 ``int`` 子类，必须显式排除；字符串、小数、``0``、负数与超上限
+    一律以 ``STANDARD_VERSION_INVALID`` 拒绝，不做隐式转换。
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _error("STANDARD_VERSION_INVALID", f"标准版本 {value!r} 必须是 JSON 整数")
+    if not 1 <= value <= MAX_STANDARD_VERSION:
+        raise _error(
+            "STANDARD_VERSION_INVALID",
+            f"标准版本 {value!r} 超出 1..{MAX_STANDARD_VERSION} 范围",
+        )
+    return value
+
+
+def parse_standard_version_segment(value: object) -> int:
+    """标准发布版本的**路径段/绑定身份文本**口径：规范十进制正整数。"""
+    if not isinstance(value, str) or not STANDARD_VERSION_SEGMENT_PATTERN.fullmatch(value):
+        raise _error(
+            "STANDARD_VERSION_INVALID",
+            f"标准版本段 {value!r} 必须是规范十进制正整数（无前导零）",
+        )
+    return parse_standard_version(int(value))
+
+
+def parse_dependency_version(value: object) -> str:
+    """依赖能力版本：保留三段语义化字符串，与标准发布版本互不影响。"""
+    if not isinstance(value, str) or not DEPENDENCY_VERSION_PATTERN.fullmatch(value):
+        raise _error("STANDARD_VERSION_INVALID", f"依赖版本 {value!r} 不是三段数字版本")
     return value
 
 
@@ -268,7 +303,9 @@ def _parse_dependency(raw: Any, index: int) -> StandardDependency:
     return StandardDependency(
         extension_id=_require_str(raw, "extension_id", "STANDARD_DEPENDENCY_INVALID"),
         capability_id=_require_str(raw, "capability_id", "STANDARD_DEPENDENCY_INVALID"),
-        min_version=_parse_version(_require_str(raw, "min_version", "STANDARD_VERSION_INVALID")),
+        min_version=parse_dependency_version(
+            _require_str(raw, "min_version", "STANDARD_VERSION_INVALID")
+        ),
     )
 
 
@@ -318,14 +355,10 @@ def _validate_references(standard: DrawingStandard) -> None:
 # ---- 入口 ----------------------------------------------------------------
 
 
-def parse_standard_structure(
-    data: Mapping[str, object], *, published: bool
-) -> DrawingStandard:
-    """把标准文档映射解析为冻结的 :class:`DrawingStandard`（仅结构校验）。
+def _parse_common_structure(data: Mapping[str, object], *, published: bool) -> dict[str, object]:
+    """解析草稿与发布共有的结构字段；返回构造实体所需的 kwargs。
 
-    拒绝未知 Schema 版本、重复字段、非法 ID/版本、未知作用域/类型、
-    重复属性 ID、重复枚举项 ID、重复资产 ID 与未知引用；任何失败都抛出
-    以稳定错误码开头的 :class:`StandardSchemaError`。
+    不含 ``version``：草稿不得携带它，发布的整数版本由调用方单独解析。
     """
     if not isinstance(data, Mapping):
         raise _error("STANDARD_JSON_INVALID", "标准文档根必须是对象")
@@ -335,10 +368,14 @@ def parse_standard_structure(
             "STANDARD_SCHEMA_VERSION_UNSUPPORTED",
             f"schema_version {schema_version!r} 不受支持",
         )
+    if not published and "version" in data:
+        raise _error(
+            "STANDARD_VERSION_INVALID",
+            "草稿文档不得携带 version 字段（正式版本由发布时分配）",
+        )
     standard_id = _require_str(data, "standard_id", "STANDARD_ID_INVALID")
     if not STANDARD_ID_PATTERN.fullmatch(standard_id):
         raise _error("STANDARD_ID_INVALID", f"标准 ID {standard_id!r} 非法（须为小写域式标识）")
-    version = _parse_version(_require_str(data, "version", "STANDARD_VERSION_INVALID"))
     name = _require_str(data, "name", "STANDARD_NAME_INVALID")
     cad_versions = _sequence(data, "supported_cad_versions", "STANDARD_CAD_VERSIONS_INVALID")
     if not cad_versions or any(not isinstance(item, str) or not item for item in cad_versions):
@@ -369,23 +406,41 @@ def parse_standard_structure(
     if len(asset_ids) != len(set(asset_ids)):
         raise _error("STANDARD_ASSET_DUPLICATE", f"重复资产 ID：{asset_ids}")
 
-    standard = DrawingStandard(
-        schema_version=int(schema_version),
-        standard_id=standard_id,
-        version=version,
-        name=name,
-        supported_cad_versions=tuple(str(item) for item in cad_versions),
-        properties=properties,
-        dwg_naming=_parse_dwg_naming(data.get("dwg_naming"), published=published),
-        assets=assets,
-        numbering=_parse_numbering(data.get("numbering", {})),
-        dependencies=tuple(
+    return {
+        "schema_version": int(schema_version),
+        "standard_id": standard_id,
+        "name": name,
+        "supported_cad_versions": tuple(str(item) for item in cad_versions),
+        "properties": properties,
+        "dwg_naming": _parse_dwg_naming(data.get("dwg_naming"), published=published),
+        "assets": assets,
+        "numbering": _parse_numbering(data.get("numbering", {})),
+        "dependencies": tuple(
             _parse_dependency(item, index)
             for index, item in enumerate(
                 _sequence(data, "dependencies", "STANDARD_DEPENDENCY_INVALID")
             )
         ),
-    )
+    }
+
+
+def parse_standard_draft_structure(data: Mapping[str, object]) -> DraftDrawingStandard:
+    """把草稿文档映射解析为 :class:`DraftDrawingStandard`（仅结构校验）。"""
+    draft = DraftDrawingStandard(**_parse_common_structure(data, published=False))
+    _validate_references(draft)
+    return draft
+
+
+def parse_published_standard_structure(data: Mapping[str, object]) -> DrawingStandard:
+    """把发布文档映射解析为 :class:`DrawingStandard`（仅结构校验）。
+
+    拒绝未知文档格式版本、重复字段、非法 ID/版本、未知作用域/类型、
+    重复属性 ID、重复枚举项 ID、重复资产 ID 与未知引用；任何失败都抛出
+    以稳定错误码开头的 :class:`StandardSchemaError`。
+    """
+    common = _parse_common_structure(data, published=True)
+    version = parse_standard_version(data.get("version"))
+    standard = DrawingStandard(version=version, **common)
     _validate_references(standard)
     return standard
 

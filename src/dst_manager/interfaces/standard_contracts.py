@@ -22,7 +22,8 @@ class StandardSummaryModel(ContractModel):
     source: str
     status: str
     standard_id: str
-    version: str
+    #: 草稿为 ``None``，已发布为服务端分配的整数版本（PLAN-DM-041 Task 2）。
+    version: int | None = None
     name: str
     draft_id: str | None = None
 
@@ -50,7 +51,7 @@ class ImportedStandardDraftResponse(StandardDraftResponse):
 
 class StandardPublishResponse(ContractModel):
     standard_id: str
-    version: str
+    version: int
     name: str
     #: 发布检查诊断：成功发布时只可能包含 warning（error 已转 422）。
     diagnostics: list[StandardDiagnosticModel] = Field(default_factory=list)
@@ -72,7 +73,7 @@ class StandardDependencyModel(ContractModel):
 
 class StandardDetailResponse(ContractModel):
     standard_id: str
-    version: str
+    version: int
     name: str
     supported_cad_versions: list[str]
     dependencies: list[StandardDependencyModel]

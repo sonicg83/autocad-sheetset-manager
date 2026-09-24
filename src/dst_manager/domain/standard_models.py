@@ -1,8 +1,9 @@
-"""图纸标准 Schema v1 领域模型（PLAN-DM-038 Task 1）。
+"""图纸标准 Schema v2 领域模型（PLAN-DM-038 Task 1；PLAN-DM-041 Task 2）。
 
 本模块只放冻结数据类型：枚举项、映射行、令牌片段、属性、DWG 命名模板、
-资产、编号、依赖、诊断与标准文档本体。解析与校验见 ``standard_schema``，
-派生求值见 ``standard_rules``，DWG 命名见 ``standard_naming``。
+资产、编号、依赖、诊断，以及草稿（``DraftDrawingStandard``）与已发布文档
+（``DrawingStandard``）两个实体。解析与校验见 ``standard_schema``，派生求值见
+``standard_rules``，DWG 命名见 ``standard_naming``。
 
 领域层不依赖 FastAPI、Vue、文件系统或 AutoCAD；标准是纯数据文档，
 内部 ID（``property_id``/``enum_item_id``）不写入或替代 AcSm GUID。
@@ -185,20 +186,18 @@ class StandardDependency:
     min_version: str
 
 
-@dataclass(frozen=True, slots=True)
-class DrawingStandard:
-    """不可变的图纸标准文档（Schema v1）。"""
+class _StandardDocumentMixin:
+    """草稿与发布文档共用的只读访问接口（属性、引用与命名模板）。
 
-    schema_version: int
-    standard_id: str
-    version: str
-    name: str
-    supported_cad_versions: tuple[str, ...]
+    两个子类各自声明自己的 dataclass 字段；本 mixin 只提供方法，字段注解仅为
+    类型检查服务，不参与 dataclass 字段收集（``__slots__`` 保持为空）。
+    """
+
+    __slots__ = ()
+
     properties: tuple[StandardProperty, ...]
     dwg_naming: DwgNamingTemplate
     assets: tuple[StandardAsset, ...]
-    numbering: NumberingPolicy
-    dependencies: tuple[StandardDependency, ...] = ()
 
     def find_property(self, property_id: str) -> StandardProperty | None:
         for prop in self.properties:
@@ -248,3 +247,41 @@ class DrawingStandard:
                     StandardReference(kind="dwg-naming", owner_id="", segment_index=index)
                 )
         return tuple(references)
+
+
+@dataclass(frozen=True, slots=True)
+class DraftDrawingStandard(_StandardDocumentMixin):
+    """不可变的用户标准草稿文档（Schema v2）。
+
+    草稿**不持有正式版本**：不预占版本号，也不得携带 ``version`` 字段。
+    """
+
+    schema_version: int
+    standard_id: str
+    name: str
+    supported_cad_versions: tuple[str, ...]
+    properties: tuple[StandardProperty, ...]
+    dwg_naming: DwgNamingTemplate
+    assets: tuple[StandardAsset, ...]
+    numbering: NumberingPolicy
+    dependencies: tuple[StandardDependency, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DrawingStandard(_StandardDocumentMixin):
+    """不可变的已发布图纸标准文档（Schema v2）
+
+    ``version`` 是服务端分配的整数发布版本（``1..MAX_STANDARD_VERSION``），
+    与文档格式版本 ``schema_version`` 无关。
+    """
+
+    schema_version: int
+    standard_id: str
+    version: int
+    name: str
+    supported_cad_versions: tuple[str, ...]
+    properties: tuple[StandardProperty, ...]
+    dwg_naming: DwgNamingTemplate
+    assets: tuple[StandardAsset, ...]
+    numbering: NumberingPolicy
+    dependencies: tuple[StandardDependency, ...] = ()

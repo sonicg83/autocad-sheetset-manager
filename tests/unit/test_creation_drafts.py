@@ -19,9 +19,9 @@ from dst_manager.domain.creation import CreationGroupInput
 # 最小可发布标准：两个普通 sheetset 属性（文本带默认值、枚举无默认值）、一个派生
 # 映射属性（不得进入草稿输入）与一个普通 sheet 属性。
 STANDARD_DOCUMENT = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -108,7 +108,11 @@ def service(tmp_path: Path) -> DstManagerService:
 @pytest.fixture
 def published_standard(service: DstManagerService) -> PublishedStandardFixture:
     store = service.standard_store
-    store.create_draft(STANDARD_DOCUMENT, draft_id="draft-gas")
+    # 草稿不携带版本（PLAN-DM-041 Task 2）。
+    store.create_draft(
+        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
+        draft_id="draft-gas",
+    )
     published = store.publish("draft-gas")
     return PublishedStandardFixture(
         identity=(published.standard_id, published.version),
@@ -285,7 +289,10 @@ def test_missing_published_standard_version_reports_standard_missing(
 
 
 def test_standard_draft_is_not_usable_for_creation(service) -> None:
-    service.standard_store.create_draft(STANDARD_DOCUMENT, draft_id="draft-gas")
+    service.standard_store.create_draft(
+        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
+        draft_id="draft-gas",
+    )
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
         service.create_creation_draft(("szmedi.gas", "2.1.0"))
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):

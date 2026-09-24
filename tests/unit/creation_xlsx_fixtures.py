@@ -31,9 +31,9 @@ from dst_manager.infrastructure.creation_xlsx import (
 # 最小可发布标准：两个普通 sheetset 属性（文本带默认值、枚举带默认值）、一个派生
 # 映射属性、一个普通 sheet 文本属性、一个普通 sheet 枚举属性与一个派生组合属性。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

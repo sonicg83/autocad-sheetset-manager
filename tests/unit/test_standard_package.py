@@ -13,9 +13,9 @@ from dst_manager.infrastructure.standards.package import (
 
 VALID_MANIFEST = json.dumps(
     {
-        "schema_version": 1,
+        "schema_version": 2,
         "standard_id": "szmedi.gas",
-        "version": "2.1.0",
+        "version": 1,
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [
@@ -64,6 +64,21 @@ LEGACY_MANIFEST = json.dumps(
         "supported_cad_versions": ["2020"],
         "properties": [{"name": "专业名称", "scope": "sheetset"}],
         "rules": [{"rule_id": "r1", "kind": "required", "target": "sheetset.专业名称"}],
+        "assets": [],
+        "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+    },
+    ensure_ascii=False,
+)
+
+#: Schema v2 但结构不合法的 manifest：错误码保留 Schema 侧的精确稳定码。
+MALFORMED_MANIFEST = json.dumps(
+    {
+        "schema_version": 2,
+        "standard_id": "szmedi.gas",
+        "version": 1,
+        "supported_cad_versions": ["2020"],
+        "properties": [],
+        "dwg_naming": {"segments": [{"literal": "x"}]},
         "assets": [],
         "numbering": {"sequence_field": "subset.sequence", "digits": 2},
     },
@@ -159,9 +174,16 @@ def test_package_rejects_oversized_entry(tmp_path: Path) -> None:
         StandardPackageReader().read(package)
 
 
-def test_package_rejects_legacy_rules_manifest(tmp_path: Path) -> None:
+def test_package_rejects_residual_schema_version_one_manifest(tmp_path: Path) -> None:
+    """残留 schema_version:1 包不再进入新导入路径（不自动迁移）。"""
     package = write_zip(tmp_path, {"manifest.json": LEGACY_MANIFEST})
-    with pytest.raises(StandardPackageError, match="STANDARD_PACKAGE_MANIFEST_INVALID"):
+    with pytest.raises(StandardPackageError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        StandardPackageReader().read(package)
+
+
+def test_package_rejects_malformed_v2_manifest_with_schema_code(tmp_path: Path) -> None:
+    package = write_zip(tmp_path, {"manifest.json": MALFORMED_MANIFEST})
+    with pytest.raises(StandardPackageError, match="STANDARD_NAME_INVALID"):
         StandardPackageReader().read(package)
 
 
@@ -180,6 +202,7 @@ def test_package_lists_declared_entries(tmp_path: Path) -> None:
     )
     loaded = StandardPackageReader().read(package)
     assert loaded.standard.standard_id == "szmedi.gas"
-    assert loaded.standard.version == "2.1.0"
+    assert loaded.standard.version == 1
+    assert isinstance(loaded.standard.version, int)
     entries = {entry.path: entry.size for entry in loaded.entries}
     assert entries == {"assets/A2.dwg": len(b"dwg-bytes")}

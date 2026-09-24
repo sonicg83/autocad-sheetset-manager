@@ -128,7 +128,9 @@ class StandardPackageReader:
         try:
             standard = loads_standard_document(manifest_text)
         except StandardSchemaError as exc:
-            raise _error("STANDARD_PACKAGE_MANIFEST_INVALID", str(exc)) from exc
+            # 保留 Schema 侧的稳定错误码（尤其 STANDARD_SCHEMA_VERSION_UNSUPPORTED），
+            # 使包读取的错误码与库内读取一致，不被统一改写为 MANIFEST_INVALID。
+            raise _error(str(exc).split(":", 1)[0], str(exc)) from exc
         return LoadedStandardPackage(
             standard=standard, entries=tuple(entries), source_path=source
         )

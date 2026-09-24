@@ -18,13 +18,13 @@ from dst_manager.infrastructure.standards.store import (
 def standard_document(
     *,
     standard_id: str = "user.water",
-    version: str = "3.0.0",
+    version: int = 3,
     name: str = "用户给排水标准",
     mapping_target: str = "GS",
 ) -> dict[str, object]:
-    """Schema v1 最小文档：枚举源 + 映射 + 默认 DWG 命名。"""
+    """Schema v2 最小发布文档：枚举源 + 映射 + 默认 DWG 命名 + 整数版本。"""
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "standard_id": standard_id,
         "version": version,
         "name": name,
@@ -60,14 +60,27 @@ def standard_document(
 
 
 OFFICIAL_DOCUMENT = standard_document(
-    standard_id="official.gas", version="1.0.0", name="官方燃气标准"
+    standard_id="official.gas", version=1, name="官方燃气标准"
 )
 USER_DOCUMENT = standard_document()
 
-LEGACY_DOCUMENT = {
+#: 残留 schema_version:1 文档：目录名合法（``1``），但不再进入新版读取与列表。
+RESIDUAL_V1_DOCUMENT = {
     "schema_version": 1,
-    "standard_id": "legacy.rules",
+    "standard_id": "legacy.gas",
     "version": "1.0.0",
+    "name": "旧版本文档",
+    "supported_cad_versions": ["2020"],
+    "properties": [],
+    "dwg_naming": {"segments": [{"literal": "x"}]},
+    "assets": [],
+    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
+}
+
+LEGACY_DOCUMENT = {
+    "schema_version": 2,
+    "standard_id": "legacy.rules",
+    "version": 1,
     "name": "旧通用规则标准",
     "supported_cad_versions": ["2020"],
     "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
@@ -77,9 +90,9 @@ LEGACY_DOCUMENT = {
 }
 
 
-def write_official(root: Path, document: dict) -> None:
-    target = root / document["standard_id"] / document["version"]
-    target.mkdir(parents=True)
+def write_official(root: Path, document: dict, *, segment: str | None = None) -> None:
+    target = root / document["standard_id"] / (segment or str(document["version"]))
+    target.mkdir(parents=True, exist_ok=True)
     (target / "document.json").write_text(
         json.dumps(document, ensure_ascii=False), encoding="utf-8"
     )
@@ -94,7 +107,71 @@ def store(tmp_path: Path) -> StandardStore:
 
 
 def create_draft(store: StandardStore, document: dict, draft_id: str | None = None):
-    return store.create_draft(document, draft_id=draft_id)
+    """保存草稿；**草稿不携带版本**（PLAN-DM-041 Task 2），辅助统一去掉 version。"""
+    draft = dict(document)
+    draft.pop("version", None)
+    return store.create_draft(draft, draft_id=draft_id)
+
+
+# ---- 整数版本与残留 v1 目录（PLAN-DM-041 Task 2） --------------------------
+
+
+def draft_document(store_document: dict) -> dict:
+    """去掉版本字段的草稿文档。"""
+    draft = dict(store_document)
+    draft.pop("version")
+    return draft
+
+
+def test_list_reports_integer_versions_and_null_for_drafts(
+    store: StandardStore,
+) -> None:
+    create_draft(store, draft_document(USER_DOCUMENT), draft_id="draft-1")
+    items = store.list()
+    published = [item for item in items if item.status == "published"]
+    drafts = [item for item in items if item.status == "draft"]
+    assert {item.version for item in published} == {1}
+    assert all(isinstance(item.version, int) for item in published)
+    assert [item.version for item in drafts] == [None]
+
+
+def test_list_skips_residual_schema_version_one_directories(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    """残留 schema_version:1 目录只跳过，不阻断其余条目（不自动迁移）。"""
+    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
+    versions = {
+        (item.standard_id, item.version)
+        for item in store.list()
+        if item.status == "published"
+    }
+    assert ("legacy.gas", 1) not in versions
+    assert ("official.gas", 1) in versions
+
+
+def test_get_document_rejects_residual_schema_version_one(store: StandardStore) -> None:
+    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
+    with pytest.raises(StandardStoreError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        store.get_document("legacy.gas", 1)
+
+
+def test_get_rejects_residual_schema_version_one(store: StandardStore) -> None:
+    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
+    with pytest.raises(StandardStoreError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        store.get("legacy.gas", 1)
+
+
+def test_get_accepts_integer_and_segment_version(store: StandardStore) -> None:
+    assert store.get("official.gas", 1) is not None
+    assert store.get("official.gas", "1") is not None
+
+
+@pytest.mark.parametrize("version", [0, -1, "01", "1.0.0", "", "x"])
+def test_get_rejects_non_canonical_version_segment(
+    store: StandardStore, version: object
+) -> None:
+    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_INVALID"):
+        store.get("official.gas", version)  # type: ignore[arg-type]
 
 
 def test_publish_rejects_existing_identity(store: StandardStore) -> None:
@@ -139,7 +216,7 @@ def test_list_covers_official_and_user(store: StandardStore) -> None:
 
 
 def test_get_missing_identity_returns_none(store: StandardStore) -> None:
-    assert store.get("missing.standard", "9.9.9") is None
+    assert store.get("missing.standard", 9) is None
 
 
 def test_legacy_document_rejected_by_draft_gate(store: StandardStore) -> None:
@@ -240,7 +317,7 @@ def test_get_rejects_legacy_rules_document(store: StandardStore, tmp_path: Path)
     official_root = tmp_path / "official"
     write_official(official_root, LEGACY_DOCUMENT)
     with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
-        store.get("legacy.rules", "1.0.0")
+        store.get("legacy.rules", 1)
 
 
 # ---- 草稿段边界（PLAN-DM-040 Task 1，F04） -------------------------------
@@ -266,11 +343,11 @@ DRAFT_OPERATIONS = ("create_draft", "get_draft", "save_draft", "delete_draft", "
 
 def _call_draft_operation(store: StandardStore, operation: str, draft_id: str) -> None:
     if operation == "create_draft":
-        store.create_draft(USER_DOCUMENT, draft_id=draft_id)
+        store.create_draft(draft_document(USER_DOCUMENT), draft_id=draft_id)
     elif operation == "get_draft":
         store.get_draft(draft_id)
     elif operation == "save_draft":
-        store.save_draft(draft_id, USER_DOCUMENT)
+        store.save_draft(draft_id, draft_document(USER_DOCUMENT))
     elif operation == "delete_draft":
         store.delete_draft(draft_id)
     else:
@@ -309,7 +386,7 @@ def test_illegal_draft_id_leaves_files_outside_root_untouched(
 def test_legal_draft_ids_still_round_trip(store: StandardStore, draft_id: str) -> None:
     create_draft(store, USER_DOCUMENT, draft_id=draft_id)
     assert store.get_draft(draft_id) is not None
-    assert store.save_draft(draft_id, USER_DOCUMENT).draft_id == draft_id
+    assert store.save_draft(draft_id, draft_document(USER_DOCUMENT)).draft_id == draft_id
     published = store.publish(draft_id)
     assert (published.standard_id, published.version) == ("user.water", "3.0.0")
     assert not (store.drafts_root / draft_id).exists()
@@ -492,7 +569,7 @@ def test_save_draft_prunes_only_unreferenced_managed_copies(store: StandardStore
     write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
     write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"hand-placed")
 
-    store.save_draft("draft-asset", document)
+    store.save_draft("draft-asset", draft_document(document))
 
     assets = store.drafts_root / "draft-asset" / "assets"
     assert (assets / "managed-keep.dwg").is_file()
@@ -533,7 +610,7 @@ def test_list_skips_illegal_published_directory_names(store: StandardStore) -> N
         for entry in store.list()
         if entry.status == "published"
     ]
-    assert published == [("official.gas", "1.0.0"), ("user.water", "3.0.0")]
+    assert published == [("official.gas", 1), ("user.water", 3)]
 
 
 def test_orphan_managed_copy_survives_until_next_save(store: StandardStore) -> None:
@@ -545,7 +622,7 @@ def test_orphan_managed_copy_survives_until_next_save(store: StandardStore) -> N
 
     # 复制后未保存：副本不被清理
     assert (assets / "managed-orphan.dwg").is_file()
-    store.save_draft("draft-asset", document)
+    store.save_draft("draft-asset", draft_document(document))
     assert not (assets / "managed-orphan.dwg").exists()
 
 

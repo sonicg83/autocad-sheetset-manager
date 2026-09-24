@@ -65,9 +65,9 @@ pytestmark = [
 ]
 
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

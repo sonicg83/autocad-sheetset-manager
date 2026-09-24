@@ -23,9 +23,8 @@ from dst_manager.config import Settings
 MAX_TEMPLATE_BYTES = 64 * 1024 * 1024
 
 DRAFT_DOCUMENT = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "0.1.0",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [],

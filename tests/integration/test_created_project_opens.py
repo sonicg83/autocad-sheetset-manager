@@ -48,9 +48,9 @@ from dst_platform.autocad.process import CoreConsoleResult
 #: 夹具标准：一个 sheetset 文本、一个 sheetset 枚举、一个 sheet 文本，一个基础模板
 #: 与一个布局模板（声明图幅 A1），DWG 命名只用受控片段与系统字段。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

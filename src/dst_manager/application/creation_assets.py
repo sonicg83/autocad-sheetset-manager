@@ -165,11 +165,12 @@ def creation_standard_candidates(
 
 
 def standard_package_root(
-    store: StandardStore, standard_id: str, version: str
+    store: StandardStore, standard_id: str, version: int | str
 ) -> Path | None:
     """已发布标准的包目录；读取顺序与 :meth:`StandardStore.get` 一致。"""
+    segment = str(version)
     for root in (store.published_root, store.official_root):
-        candidate = Path(root) / standard_id / version
+        candidate = Path(root) / standard_id / segment
         if (candidate / "document.json").is_file():
             return candidate
     return None
@@ -181,20 +182,24 @@ def standard_document_digest(document: Mapping[str, object]) -> str:
 
 
 def _candidate(
-    store: StandardStore, standard_id: str, version: str, manifests: Mapping[str, object]
+    store: StandardStore, standard_id: str, version: int | str, manifests: Mapping[str, object]
 ) -> CreationStandardCandidate:
     """单个候选：文档不可解析时也要给出稳定原因，不冒泡成 500。
 
     已发布文件是不可信输入：截断/非 UTF-8 的 ``document.json`` 在 ``StandardStore.get``
     内部抛出 ``OSError``/``ValueError``（含 ``UnicodeDecodeError``），与 Schema 解析失败
     同一口径处理——该标准不可用并附原因，其它候选不受影响。
+
+    候选身份在本层仍以文本形式对外（整数契约由 PLAN-DM-041 Task 4 收敛），
+    仓储读取接受整数或目录段文本。
     """
+    version_text = str(version)
     try:
         standard = store.get(standard_id, version)
     except (StandardSchemaError, OSError, ValueError) as exc:
         return CreationStandardCandidate(
             standard_id=standard_id,
-            version=version,
+            version=version_text,
             name="",
             available=False,
             reasons=(f"标准文档无法解析：{exc}",),
@@ -202,7 +207,7 @@ def _candidate(
     if standard is None:
         return CreationStandardCandidate(
             standard_id=standard_id,
-            version=version,
+            version=version_text,
             name="",
             available=False,
             reasons=("标准已发布内容不可读取",),
@@ -214,7 +219,7 @@ def _candidate(
     )
     return CreationStandardCandidate(
         standard_id=standard.standard_id,
-        version=standard.version,
+        version=str(standard.version),
         name=standard.name,
         supported_cad_versions=standard.supported_cad_versions,
         available=not reasons,

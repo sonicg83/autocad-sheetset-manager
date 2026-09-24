@@ -25,7 +25,6 @@ from dst_manager.infrastructure.acsm_xml.document import (
 from dst_manager.infrastructure.standards.store import StandardDraft
 
 DEFAULT_IMPORTED_ID = "imported.draft"
-DEFAULT_IMPORTED_VERSION = "0.1.0"
 DEFAULT_CAD_VERSIONS = ["2020"]
 DEFAULT_NUMBERING = {"sequence_field": "subset.sequence", "digits": 2}
 #: 默认 DWG 命名模板：只使用子集范围与名称，不携带隐式前缀。
@@ -62,9 +61,8 @@ def extract_standard_document(xml: bytes) -> dict[str, object]:
     if len(sheet_sets) != 1:
         raise ValueError("DST_SHEET_SET_MISSING")
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "standard_id": DEFAULT_IMPORTED_ID,
-        "version": DEFAULT_IMPORTED_VERSION,
         "name": _require_sheet_set_name(sheet_sets[0]),
         "supported_cad_versions": list(DEFAULT_CAD_VERSIONS),
         "properties": _extract_property_definitions(root),

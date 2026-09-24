@@ -42,9 +42,9 @@ from dst_manager.interfaces.api import create_app
 #: 最小可发布标准：两个普通 sheetset 属性、一个派生映射、一个普通 sheet 文本、
 #: 一个普通 sheet 枚举、一个派生组合，外加基础模板与布局模板各一个受控资产。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

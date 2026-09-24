@@ -11,9 +11,9 @@ from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationErro
 from dst_manager.infrastructure.dst_codec import DstCodec
 
 GAS_DOCUMENT = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "2.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -52,7 +52,11 @@ def workspace(service: DstManagerService, tiny_workspace):
 @pytest.fixture
 def standard_store(service: DstManagerService):
     store = service.standard_store
-    store.create_draft(GAS_DOCUMENT, draft_id="draft-gas")
+    # 草稿不携带版本（PLAN-DM-041 Task 2）：发布版本文档去掉 version 后入库为草稿。
+    store.create_draft(
+        {key: value for key, value in GAS_DOCUMENT.items() if key != "version"},
+        draft_id="draft-gas",
+    )
     store.publish("draft-gas")
     return store
 

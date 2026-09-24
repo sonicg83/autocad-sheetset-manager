@@ -1,23 +1,25 @@
-"""图纸标准 Schema v1 领域模型与解析测试（PLAN-DM-038 Task 1）。"""
+"""图纸标准 Schema v2 领域模型与解析测试（PLAN-DM-038 Task 1；PLAN-DM-041 Task 2）。"""
 
 import pytest
 
 from dst_manager.domain.standards import (
+    DraftDrawingStandard,
     DrawingStandard,
     StandardReference,
     StandardSchemaError,
     loads_standard_document,
+    materialize_published_standard,
     parse_published_standard_document,
     parse_standard_draft_document,
 )
 
 
 def valid_standard_document() -> dict[str, object]:
-    """一份最小合法标准文档，供各测试裁剪复用。"""
+    """一份最小合法发布文档（Schema v2、整数版本），供各测试裁剪复用。"""
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "standard_id": "szmedi.gas",
-        "version": "2.1.0",
+        "version": 1,
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [
@@ -104,6 +106,13 @@ def valid_standard_document() -> dict[str, object]:
     }
 
 
+def valid_draft_document() -> dict[str, object]:
+    """同一内容的最小合法**草稿**文档：不携带 version。"""
+    document = valid_standard_document()
+    document.pop("version")
+    return document
+
+
 def _append(document: dict[str, object], prop: dict[str, object]) -> None:
     properties = document["properties"]
     assert isinstance(properties, list)
@@ -150,6 +159,95 @@ def _mapping_property(
     }
 
 
+@pytest.mark.parametrize("version", [1, 10])
+def test_published_document_accepts_positive_integer_version(version: int) -> None:
+    document = valid_standard_document()
+    document["version"] = version
+    standard = parse_published_standard_document(document)
+    assert standard.version == version
+    assert isinstance(standard.version, int)
+
+
+@pytest.mark.parametrize("version", [0, -1, True, False, 1.5, "1", "1.0.0", 2147483648])
+def test_published_document_rejects_non_integer_or_out_of_range_version(
+    version: object,
+) -> None:
+    document = valid_standard_document()
+    document["version"] = version
+    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+        parse_published_standard_document(document)
+
+
+def test_published_document_requires_version() -> None:
+    document = valid_standard_document()
+    del document["version"]
+    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+        parse_published_standard_document(document)
+
+
+@pytest.mark.parametrize("schema_version", [1, 3, None])
+def test_document_rejects_unsupported_schema_version(schema_version: object) -> None:
+    document = valid_standard_document()
+    document["schema_version"] = schema_version
+    with pytest.raises(StandardSchemaError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        parse_published_standard_document(document)
+    with pytest.raises(StandardSchemaError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        parse_standard_draft_document(document)
+
+
+def test_draft_document_has_no_version() -> None:
+    draft = parse_standard_draft_document(valid_draft_document())
+    assert isinstance(draft, DraftDrawingStandard)
+    assert not hasattr(draft, "version")
+
+
+def test_draft_document_rejects_carried_version() -> None:
+    """草稿不得预占正式版本；携带 version 一律拒绝。"""
+    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+        parse_standard_draft_document(valid_standard_document())
+
+
+@pytest.mark.parametrize("version", [1, 10])
+def test_materialize_published_standard_injects_integer_version(version: int) -> None:
+    draft = valid_draft_document()
+    standard = materialize_published_standard(draft, version)
+    assert isinstance(standard, DrawingStandard)
+    assert standard.version == version
+    assert standard.standard_id == draft["standard_id"]
+    # 原始草稿文档不被改写
+    assert "version" not in draft
+
+
+@pytest.mark.parametrize("version", [0, -1, True, 1.5, "1"])
+def test_materialize_published_standard_rejects_invalid_version(version: object) -> None:
+    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+        materialize_published_standard(valid_draft_document(), version)  # type: ignore[arg-type]
+
+
+def test_dependency_min_version_keeps_three_segment_string() -> None:
+    """依赖能力版本与标准发布版本用两个解析器：三段字符串保留，整数与单位字符串拒绝。"""
+    document = valid_draft_document()
+    document["dependencies"] = [
+        {
+            "extension_id": "builtin.sheet-catalog",
+            "capability_id": "numbering",
+            "min_version": "1.2.0",
+        }
+    ]
+    standard = parse_standard_draft_document(document)
+    assert standard.dependencies[0].min_version == "1.2.0"
+    for invalid in (1, "1"):
+        document["dependencies"] = [
+            {
+                "extension_id": "builtin.sheet-catalog",
+                "capability_id": "numbering",
+                "min_version": invalid,
+            }
+        ]
+        with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+            parse_standard_draft_document(document)
+
+
 def test_schema_v1_uses_stable_property_and_enum_ids() -> None:
     standard = parse_published_standard_document(valid_standard_document())
     major = standard.property_by_id("prop-major")
@@ -169,7 +267,7 @@ def test_parse_standard_round_trip_is_stable() -> None:
     standard = parse_published_standard_document(valid_standard_document())
     assert isinstance(standard, DrawingStandard)
     assert standard.standard_id == "szmedi.gas"
-    assert standard.version == "2.1.0"
+    assert standard.version == 1
     assert standard.supported_cad_versions == ("2016", "2020")
     assert [prop.property_id for prop in standard.properties] == [
         "prop-major",
@@ -275,7 +373,14 @@ def test_published_parse_rejects_mapping_without_source() -> None:
     with pytest.raises(StandardSchemaError, match="STANDARD_MAPPING_SOURCE_INVALID"):
         parse_published_standard_document(document)
     # 草稿门禁仍然放行：用户可以保存还没选源的映射属性
-    assert parse_standard_draft_document(document).property_by_id("prop-code").source_property_id is None
+    draft = valid_draft_document()
+    draft_properties = draft["properties"]
+    assert isinstance(draft_properties, list)
+    del draft_properties[1]["source_property_id"]
+    assert (
+        parse_standard_draft_document(draft).property_by_id("prop-code").source_property_id
+        is None
+    )
 
 
 def test_published_parse_rejects_whitespace_only_property_name() -> None:
@@ -388,7 +493,7 @@ def test_published_parse_rejects_duplicate_enum_item_ids() -> None:
 
 
 def test_draft_parse_tolerates_incomplete_names_targets_and_segments() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     properties = document["properties"]
     assert isinstance(properties, list)
     properties[0]["name"] = ""
@@ -401,12 +506,12 @@ def test_draft_parse_tolerates_incomplete_names_targets_and_segments() -> None:
 
 
 def test_draft_parse_still_requires_stable_ids_and_references() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     document["dwg_naming"] = {"segments": [{"property_id": "prop-missing"}]}
     with pytest.raises(StandardSchemaError, match="STANDARD_SEGMENT_REFERENCE_UNKNOWN"):
         parse_standard_draft_document(document)
 
-    other = valid_standard_document()
+    other = valid_draft_document()
     properties = other["properties"]
     assert isinstance(properties, list)
     properties[1]["source_property_id"] = "prop-missing"
@@ -429,14 +534,14 @@ def test_published_parse_rejects_empty_property_name_and_missing_naming() -> Non
 
 
 def test_parse_standard_rejects_unknown_scope_and_kind() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     properties = document["properties"]
     assert isinstance(properties, list)
     properties[0]["scope"] = "project"
     with pytest.raises(StandardSchemaError, match="STANDARD_SCOPE_INVALID"):
         parse_standard_draft_document(document)
 
-    other = valid_standard_document()
+    other = valid_draft_document()
     properties = other["properties"]
     assert isinstance(properties, list)
     properties[0]["kind"] = "formula"
@@ -445,14 +550,14 @@ def test_parse_standard_rejects_unknown_scope_and_kind() -> None:
 
 
 def test_parse_standard_rejects_segment_without_content() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     document["dwg_naming"] = {"segments": [{"format": "02"}]}
     with pytest.raises(StandardSchemaError, match="STANDARD_SEGMENT_INVALID"):
         parse_standard_draft_document(document)
 
 
 def test_parse_standard_rejects_unknown_system_field() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     document["dwg_naming"] = {"segments": [{"system_field": "subset.unknown"}]}
     with pytest.raises(StandardSchemaError, match="STANDARD_SEGMENT_REFERENCE_UNKNOWN"):
         parse_standard_draft_document(document)
@@ -461,24 +566,14 @@ def test_parse_standard_rejects_unknown_system_field() -> None:
 @pytest.mark.parametrize(
     ("document", "code"),
     [
-        ({"standard_id": "a.b", "version": "1.0.0"}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
-        (
-            {"schema_version": 2, "standard_id": "a.b", "version": "1.0.0"},
-            "STANDARD_SCHEMA_VERSION_UNSUPPORTED",
-        ),
-        ({"schema_version": 1, "version": "1.0.0"}, "STANDARD_ID_INVALID"),
-        (
-            {"schema_version": 1, "standard_id": "a.b", "version": "1.0"},
-            "STANDARD_VERSION_INVALID",
-        ),
-        ({"schema_version": 1, "standard_id": "a.b"}, "STANDARD_VERSION_INVALID"),
-        (
-            {"schema_version": 1, "standard_id": "a.b", "version": "1.0.0"},
-            "STANDARD_NAME_INVALID",
-        ),
+        ({"standard_id": "a.b"}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
+        ({"schema_version": 1, "standard_id": "a.b"}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
+        ({"schema_version": 2}, "STANDARD_ID_INVALID"),
+        ({"schema_version": 2, "standard_id": "a.b"}, "STANDARD_NAME_INVALID"),
+        ({"schema_version": 2, "standard_id": "a.b", "version": 1}, "STANDARD_VERSION_INVALID"),
     ],
 )
-def test_parse_standard_rejects_invalid_top_level(
+def test_parse_standard_draft_rejects_invalid_top_level(
     document: dict[str, object], code: str
 ) -> None:
     with pytest.raises(StandardSchemaError, match=code):
@@ -486,7 +581,7 @@ def test_parse_standard_rejects_invalid_top_level(
 
 
 def test_parse_standard_rejects_duplicate_asset_ids() -> None:
-    document = valid_standard_document()
+    document = valid_draft_document()
     document["assets"] = [
         {"asset_id": "base", "kind": "base-template"},
         {"asset_id": "base", "kind": "layout-template"},
@@ -497,8 +592,8 @@ def test_parse_standard_rejects_duplicate_asset_ids() -> None:
 
 def test_loads_standard_document_rejects_duplicate_json_keys() -> None:
     text = (
-        '{"schema_version": 1, "standard_id": "a.b", "standard_id": "a.c", '
-        '"version": "1.0.0", "name": "n", "supported_cad_versions": ["2016"], '
+        '{"schema_version": 2, "standard_id": "a.b", "standard_id": "a.c", '
+        '"version": 1, "name": "n", "supported_cad_versions": ["2016"], '
         '"dwg_naming": {"segments": [{"literal": "x"}]}, '
         '"numbering": {"sequence_field": "subset.sequence", "digits": 2}}'
     )

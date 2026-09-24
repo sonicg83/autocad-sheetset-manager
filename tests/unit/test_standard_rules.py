@@ -23,9 +23,9 @@ def standard_document(
 ) -> dict[str, object]:
     """Task 1 新 Schema 的完整最小文档：枚举源 + 映射 + 组合 + DWG 命名。"""
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "standard_id": "szmedi.gas",
-        "version": "2.1.0",
+        "version": 1,
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [

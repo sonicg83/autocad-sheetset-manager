@@ -1,18 +1,19 @@
-"""官方/用户图纸标准库（PLAN-DM-035 Task 3）。
+"""官方/用户图纸标准库（PLAN-DM-035 Task 3；PLAN-DM-041 Task 2）。
 
 布局::
 
-    official_root/<standard_id>/<version>/document.json   # 只读
-    user_root/published/<standard_id>/<version>/          # 已发布用户标准
-    user_root/drafts/<draft_id>/document.json             # 用户草稿
+    official_root/<standard_id>/<n>/document.json      # 只读
+    user_root/published/<standard_id>/<n>/             # 已发布用户标准
+    user_root/drafts/<draft_id>/document.json          # 用户草稿
 
-发布与导入只允许向用户根写入；同一 ``standard_id + version`` 的重复发布、
+``<n>`` 是规范十进制正整数版本目录名；同一 ``standard_id + <n>`` 的重复发布、
 导入碰撞与官方身份冲突一律以 ``STANDARD_VERSION_EXISTS`` 稳定拒绝。
 目录迁移使用同盘原子 rename，已发布内容不被原地修改。
 
-草稿写入只过**结构**门禁（``parse_standard_draft_document``），允许保存语义
-未完成内容；读取已发布内容与发布草稿时过**完整发布**门禁
-（``parse_published_standard_document``）。
+草稿写入只过**结构**门禁（``parse_standard_draft_document``），草稿不携带版本；
+读取已发布内容与发布草稿时过**完整发布**门禁
+（``parse_published_standard_document``）。残留 ``schema_version: 1`` 目录在
+``list()`` 中跳过，读取时以 ``STANDARD_SCHEMA_VERSION_UNSUPPORTED`` 拒绝。
 """
 
 from __future__ import annotations
@@ -30,18 +31,20 @@ from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
     STANDARD_ID_PATTERN,
-    STANDARD_VERSION_PATTERN,
+    STANDARD_VERSION_SEGMENT_PATTERN,
+    SUPPORTED_SCHEMA_VERSIONS,
     DrawingStandard,
     StandardSchemaError,
     parse_published_standard_document,
     parse_standard_draft_document,
+    parse_standard_version,
+    parse_standard_version_segment,
 )
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
 from dst_manager.infrastructure.standards.asset_paths import (
     StandardAssetError,
     resolve_asset_file,
     resolve_asset_files,
-    validate_asset_files,
     validate_package_asset_files,
 )
 from dst_manager.infrastructure.standards.package import (
@@ -90,12 +93,12 @@ class StandardStoreError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class StandardSummary:
-    """标准库列表条目；草稿用 ``draft_id`` 标识，``version`` 为空串。"""
+    """标准库列表条目；草稿的 ``version`` 为 ``None``，已发布为整数。"""
 
     source: Literal["official", "user"]
     status: Literal["published", "draft"]
     standard_id: str
-    version: str
+    version: int | None
     name: str
     draft_id: str | None = None
 
@@ -109,7 +112,7 @@ class StandardDraft:
 @dataclass(frozen=True, slots=True)
 class PublishedStandard:
     standard_id: str
-    version: str
+    version: int
     name: str
     root: Path
 
@@ -118,8 +121,21 @@ def _error(code: str, detail: str) -> StandardStoreError:
     return StandardStoreError(f"{code}: {detail}")
 
 
-def _identity_collision(standard_id: str, version: str) -> StandardStoreError:
+def _identity_collision(standard_id: str, version: int | str) -> StandardStoreError:
     return _error("STANDARD_VERSION_EXISTS", f"标准 {standard_id}@{version} 已存在")
+
+
+def _version_segment(version: int | str) -> str:
+    """把版本解释为目录段文本：整数与规范十进制字符串都接受，其他一律拒绝。"""
+    try:
+        if isinstance(version, bool):
+            raise _error("STANDARD_VERSION_INVALID", f"标准版本 {version!r} 必须是正整数")
+        if isinstance(version, int):
+            return str(parse_standard_version(version))
+        return str(parse_standard_version_segment(version))
+    except StandardSchemaError as exc:
+        # 仓储层错误码保持与领域层一致，便于接口层统一映射到 422。
+        raise StandardStoreError(str(exc)) from exc
 
 
 def _asset_gate_error(exc: StandardAssetError) -> StandardStoreError:
@@ -153,8 +169,11 @@ def _safe_segment(value: str, kind: str) -> str:
         raise _error(code, f"{label} {value!r} 是 Windows 保留设备名")
     if kind == "id" and not STANDARD_ID_PATTERN.fullmatch(value):
         raise _error(code, f"标准 ID {value!r} 不符合 {STANDARD_ID_PATTERN.pattern}")
-    if kind == "version" and not STANDARD_VERSION_PATTERN.fullmatch(value):
-        raise _error(code, f"标准版本 {value!r} 不符合 {STANDARD_VERSION_PATTERN.pattern}")
+    if kind == "version" and not STANDARD_VERSION_SEGMENT_PATTERN.fullmatch(value):
+        raise _error(
+            code,
+            f"标准版本段 {value!r} 不符合 {STANDARD_VERSION_SEGMENT_PATTERN.pattern}",
+        )
     return value
 
 
@@ -193,10 +212,14 @@ class StandardStore:
             )
         return target
 
-    def _published_dir(self, root: Path, standard_id: str, version: str) -> Path:
-        """某个发布根下的 ``standard_id/version`` 目录；身份段非法即稳定拒绝。"""
+    def _published_dir(self, root: Path, standard_id: str, version: int | str) -> Path:
+        """某个发布根下的 ``standard_id/<n>`` 目录；身份段非法即稳定拒绝。"""
         base = Path(root).resolve()
-        target = base / _safe_segment(standard_id, "id") / _safe_segment(version, "version")
+        target = (
+            base
+            / _safe_segment(standard_id, "id")
+            / _safe_segment(_version_segment(version), "version")
+        )
         if target.resolve().parent.parent != base:
             raise _error(
                 "STANDARD_VERSION_NOT_FOUND",
@@ -217,7 +240,7 @@ class StandardStore:
                     source="user",
                     status="draft",
                     standard_id=str(document.get("standard_id", "")),
-                    version="",
+                    version=None,
                     name=str(document.get("name", "")),
                     draft_id=draft.draft_id,
                 )
@@ -244,12 +267,15 @@ class StandardStore:
                 except StandardStoreError:
                     continue
                 document = self._read_document(version_dir)
+                if document.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
+                    # 残留 schema_version:1（或损坏）目录只跳过，不阻断列表，也不自动迁移。
+                    continue
                 summaries.append(
                     StandardSummary(
                         source=source,  # type: ignore[arg-type]
                         status="published",
                         standard_id=standard_dir.name,
-                        version=version_dir.name,
+                        version=int(version_dir.name),
                         name=str(document.get("name", "")),
                     )
                 )
@@ -266,21 +292,33 @@ class StandardStore:
             return {}
         return data if isinstance(data, dict) else {}
 
-    def get(self, standard_id: str, version: str) -> DrawingStandard | None:
+    @staticmethod
+    def _read_supported(document: Path) -> dict[str, object]:
+        """读取已发布文档并核对文档格式版本；残留 v1 以稳定码拒绝。"""
+        data = json.loads(document.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise _error("STANDARD_JSON_INVALID", f"{document} 根不是对象")
+        if data.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
+            raise _error(
+                "STANDARD_SCHEMA_VERSION_UNSUPPORTED",
+                f"schema_version {data.get('schema_version')!r} 不受支持（需要 "
+                f"{'/'.join(str(item) for item in SUPPORTED_SCHEMA_VERSIONS)}）",
+            )
+        return data
+
+    def get(self, standard_id: str, version: int | str) -> DrawingStandard | None:
         for root in (self._published_root, self._official_root):
             document = self._published_dir(root, standard_id, version) / DOCUMENT_NAME
             if document.is_file():
-                return parse_published_standard_document(
-                    json.loads(document.read_text(encoding="utf-8"))
-                )
+                return parse_published_standard_document(self._read_supported(document))
         return None
 
-    def get_document(self, standard_id: str, version: str) -> dict[str, object] | None:
+    def get_document(self, standard_id: str, version: int | str) -> dict[str, object] | None:
         """读取已发布标准的原始文档字典（派生草稿等场景需要完整内容）。"""
         for root in (self._published_root, self._official_root):
             document = self._published_dir(root, standard_id, version) / DOCUMENT_NAME
             if document.is_file():
-                data = json.loads(document.read_text(encoding="utf-8"))
+                data = self._read_supported(document)
                 return data if isinstance(data, dict) else None
         return None
 
@@ -448,37 +486,31 @@ class StandardStore:
     # ---- 发布与导入导出 --------------------------------------------------
 
     def publish(self, draft_id: str) -> PublishedStandard:
+        """发布草稿（PLAN-DM-041 Task 2 → Task 3 显式过渡态）。
+
+        草稿不再携带版本，服务端版本分配（官方/用户库同 ID 取 ``max+1``）由
+        Task 3 在仓储锁内实现。在它落地前，本入口以稳定 422
+        ``STANDARD_VERSION_UNASSIGNED`` 拒绝，**不写任何目录**，避免任何调用方
+        在未分配版本的情况下移动草稿目录。
+        """
         draft = self.get_draft(draft_id)
         if draft is None:
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
-        standard = _published_or_store_error(draft.document)
-        draft_dir = self._draft_dir(draft_id)
-        try:
-            # 发布前最终门禁：声明的模板资产必须真实落在草稿受控目录内。
-            validate_asset_files(standard, draft_dir)
-        except StandardAssetError as exc:
-            raise _asset_gate_error(exc) from exc
-        target = self._assert_identity_free(standard.standard_id, standard.version)
-        # 发布成功后草稿目录整体移动：先清理本次编辑未引用的受控副本。
-        self._prune_managed_assets(draft_dir, standard)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.replace(draft_dir, target)
-        except OSError as exc:
-            raise _identity_collision(standard.standard_id, standard.version) from exc
-        return PublishedStandard(
-            standard_id=standard.standard_id,
-            version=standard.version,
-            name=standard.name,
-            root=target,
+        raise _error(
+            "STANDARD_VERSION_UNASSIGNED",
+            f"草稿 {draft_id!r} 尚未分配发布版本：服务端版本分配尚未接线",
         )
 
     def read_package(self, path: Path) -> LoadedStandardPackage:
-        """读取并校验标准包（不落库），供应用层发布门禁先行判定。"""
+        """读取并校验标准包（不落库），供应用层发布门禁先行判定。
+
+        保留读取器的稳定错误码前缀（如 ``STANDARD_SCHEMA_VERSION_UNSUPPORTED``
+        与 ``STANDARD_PACKAGE_PATH_INVALID``），不统一改写为 ``STANDARD_PACKAGE_INVALID``。
+        """
         try:
             return self._reader.read(Path(path))
         except StandardPackageError as exc:
-            raise _error("STANDARD_PACKAGE_INVALID", str(exc)) from exc
+            raise _error(str(exc).split(":", 1)[0], str(exc)) from exc
 
     def import_package(
         self, path: Path, loaded: LoadedStandardPackage | None = None
@@ -535,7 +567,7 @@ class StandardStore:
                     shutil.copyfileobj(source, handle)
         os.replace(staging / MANIFEST_NAME, staging / DOCUMENT_NAME)
 
-    def _assert_identity_free(self, standard_id: str, version: str) -> Path:
+    def _assert_identity_free(self, standard_id: str, version: int | str) -> Path:
         target = self._published_dir(self._published_root, standard_id, version)
         if target.exists() or self._published_dir(
             self._official_root, standard_id, version
@@ -545,7 +577,7 @@ class StandardStore:
             )
         return target
 
-    def export_package(self, standard_id: str, version: str, dest_dir: Path) -> Path:
+    def export_package(self, standard_id: str, version: int | str, dest_dir: Path) -> Path:
         import zipfile
 
         candidates = [
@@ -559,7 +591,7 @@ class StandardStore:
             raise _error(
                 "STANDARD_VERSION_NOT_FOUND", f"标准 {standard_id}@{version} 不存在"
             )
-        standard = _published_or_store_error(self._read_document(source))
+        standard = _published_or_store_error(self._read_supported(source / DOCUMENT_NAME))
         try:
             # 只导出文档声明且校验通过的资产；草稿临时文件一律不进口袋。
             assets = resolve_asset_files(standard, source)
@@ -567,7 +599,8 @@ class StandardStore:
             raise _asset_gate_error(exc) from exc
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
-        package = dest / f"{standard_id}-{version}.dststandard"
+        # 文件名带 ``v`` 前缀，包内 manifest 的 version 仍是裸整数。
+        package = dest / f"{standard_id}-v{standard.version}.dststandard"
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(source / DOCUMENT_NAME, arcname=MANIFEST_NAME)
             # 两个资产可以声明同一路径：包内条目必须去重，否则阅读器以重复路径拒绝自家导出包。

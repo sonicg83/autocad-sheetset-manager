@@ -24,9 +24,9 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 from dst_manager.interfaces.api import create_app
 
 DRAFT_DOCUMENT = {
-    "schema_version": 1,
+    "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": "0.1.0",
+    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

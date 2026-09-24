@@ -23,7 +23,7 @@ from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
     STANDARD_ID_PATTERN,
-    STANDARD_VERSION_PATTERN,
+    STANDARD_VERSION_SEGMENT_PATTERN,
     DrawingStandard,
     StandardDiagnostic,
     parse_published_standard_document,
@@ -70,15 +70,21 @@ class StandardResolution:
 
 
 def parse_standard_identity(identity: str) -> tuple[str, str]:
-    """解析 ``standard_id@version`` 身份；非法输入抛 422。"""
+    """解析 ``standard_id@version`` 身份；非法输入抛 422。
+
+    ``version`` 在本层仍以目录段文本返回（整数化契约由 PLAN-DM-041 Task 4 收敛）；
+    校验口径为规范十进制正整数，不再接受旧三段版本。
+    """
     standard_id, separator, version = identity.partition(IDENTITY_SEPARATOR)
     if (
         not separator
         or not STANDARD_ID_PATTERN.fullmatch(standard_id)
-        or not STANDARD_VERSION_PATTERN.fullmatch(version)
+        or not STANDARD_VERSION_SEGMENT_PATTERN.fullmatch(version)
     ):
         raise ApplicationError(
-            "STANDARD_IDENTITY_INVALID", f"标准身份 {identity!r} 非法，应为 standard_id@version", 422
+            "STANDARD_IDENTITY_INVALID",
+            f"标准身份 {identity!r} 非法，应为 standard_id@<正整数版本>",
+            422,
         )
     return standard_id, version
 
