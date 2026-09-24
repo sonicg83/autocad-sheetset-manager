@@ -2,7 +2,7 @@
 
 ## 定位与当前状态
 
-2026-09-24 新增 [标准包导入受控文件选择修复计划（PLAN-DM-041，proposed）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)：独立承接原 F16／PLAN-DM-039 F7，补齐 `.dststandard` 原生选择与导入弹窗契约。
+2026-09-24 重写 [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，proposed）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)：保留原 F16／PLAN-DM-039 F7 的原生选择，扩展为服务端整数版本、按 ID 归集、限时快照预检与确认导入；与正在执行的 PLAN-DM-040 串行衔接。
 
 2026-09-24 修订 [图纸标准平台审查问题修复计划（PLAN-DM-040，active）](../../.planning/plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：把草稿编辑器无法纳入本机 DWG、资产发布/导入硬门禁、编辑状态与 UI 契约，以及实测复现的身份路由越界（F17），共 F01–F15 与 F17 的 16 项问题拆成按 Step 执行的 10 个任务；原 F16 已拆为 PLAN-DM-041。任务 1–9 与任务 10 的闭环验证、全量门禁已实施（含真实 AutoCAD 2016 布局检查闭环），真实桌面 G9 仍待人工执行，因此计划保持 `active`。
 

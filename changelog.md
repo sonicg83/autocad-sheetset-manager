@@ -21,6 +21,10 @@
 - 标准包导入弹窗的同类问题由 PLAN-DM-041 同批处理，本任务不重复实现。
 - 验证：RED 2 例（两个弹窗打开后焦点仍在页面上、无圈闭与 Escape 响应）；GREEN `npm --prefix web run test:e2e -- standards-library standards-editor` 80 例、`npm --prefix web run test:unit` 314 例、`npm --prefix web run build`（check:api/check:i18n/check:ui/vue-tsc）均通过。
 
+## 2026-09-24（重写 PLAN-DM-041：整数版本与标准包预检导入）
+
+- 将 PLAN-DM-041 从单一文件选择修复重写为八任务实施计划：服务端分配整数版本、标准库按 ID 归集、不同 ID 同名门禁，以及 `.dststandard` 限时快照预检和凭证确认；明确与正在执行的 PLAN-DM-040 串行衔接。同步更新计划与文档索引。本次只修改规划文档，未修改产品代码。
+
 ## 2026-09-24（PLAN-DM-040 Task 8：窄屏两级视图与失败重试）
 
 - 修复 F12：≤959px 改为真正的「列表 ↔ 详情」互斥视图（新增 `narrowPane` 状态，宽窄切换保留选择与筛选），详情页提供可见的「返回列表」按钮；原先只隐藏未选中时的详情、列表始终可见。
@@ -77,6 +81,7 @@
 
 ## 2026-09-24（PLAN-DM-040 按审查意见修订）
 
+- 归档测试体系备忘 `.planning/memos/dst-manager/2026-09-24-test-suite-performance-and-audit.md`：全量测试提速实测（pytest 串行 3m16s → 并行 39s；e2e dev server 4 workers → 产物服务 8 workers 5.4m；vitest `fsModuleCache`）与套件静态审计结论（确认/疑似/健康三档：`test_core.py` 巨型聚合、`test_v021_*` 版本锁名、ACSM contract 重复、e2e evidence 文件混写与死夹具等）及分档处置建议。
 - 按独立审查结论修订 `PLAN-DM-040`：新增并实测复现 F17（身份路由 `standard_id`/`version` 未校验，`GET /api/standards/%2E%2E/%2E%2E` 可读标准库根外 `document.json`，`/export` 可把该目录打成 zip）并入 Task 1，边界从草稿段扩展到身份段；Task 7 定案为新增草稿级保存路由 `PUT /api/standards/drafts/{draft_id}`（保留既有身份路由，请求体身份与草稿不符返回 `STANDARD_IDENTITY_MISMATCH`），编辑器身份字段只读；10 个任务全部按 Step 展开（RED 断言、运行命令、期望失败、GREEN、changelog、提交），批次改为串行以避免 `StandardEditor.vue`/`store.ts` 合并冲突；明确 Task 3 受控副本命名 `assets/managed-*` 与只清理未引用受控副本的规则；补“残余风险与回退”和 Task 4/7/9 的 i18n 文件；修复 front matter 的 YAML 缩进。
 - 新增核实记录 `.planning/memos/dst-manager/2026-09-24-plan-dm-040-findings-verification.md`：逐项记录源码位置，并附 F02（缺失/绝对路径资产仍可发布或导入）、F15、F17 在临时目录的 TestClient 实测输出。
 - 同步 `.planning/README.md`、`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 的“F01–F15 与 F17 共 16 项”措辞。本次仅修改计划与记录文档，未修改产品代码。
