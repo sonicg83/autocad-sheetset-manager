@@ -111,7 +111,10 @@ test("品牌标志：顶栏使用小图标，关于分区使用带可访问名�
   await page.goto("/");
   const compactLogo = page.locator(".brand-logo-small");
   await expect(compactLogo).toBeVisible();
-  await expect(compactLogo).toHaveAttribute("src", /dst-manager-logo-64\.png$/);
+  // 用图片实际像素尺寸（64/512）断言「小图标 vs 大图标」：dev server 下 src 是
+  // 原始文件路径，生产构建下 Vite 会给资源加内容哈希、小于 4KB 的还会内联成
+  // data URI，按 URL 断言会随构建方式漂移。
+  await expect(compactLogo).toHaveJSProperty("naturalWidth", 64);
   await expect(compactLogo).toHaveAttribute("alt", "");
   await expect(compactLogo).toHaveAttribute("aria-hidden", "true");
 
@@ -119,7 +122,7 @@ test("品牌标志：顶栏使用小图标，关于分区使用带可访问名�
   await page.getByRole("tab", {name: "关于"}).click();
   const aboutLogo = page.getByRole("img", {name: "DST Manager 标志"});
   await expect(aboutLogo).toBeVisible();
-  await expect(aboutLogo).toHaveAttribute("src", /dst-manager-logo-512\.png$/);
+  await expect(aboutLogo).toHaveJSProperty("naturalWidth", 512);
 });
 
 // ---- PLAN-DM-025 任务 6：关于分区抽为 AboutSection 后仍只请求一次 ----

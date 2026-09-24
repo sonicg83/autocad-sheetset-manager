@@ -30,6 +30,13 @@
 - 顺带修正本任务条目的可核验数字：`review` 子域中英各新增 **51** 键（原记「46 键」，逐键清点见 `web/src/i18n/locales/*/creation.ts`）；`web/src/features/creation/store.ts` 实为 **509 行**（`wc -l`／`git show HEAD:…`／PowerShell `Get-Content .Count` 三处一致；原 changelog 记「478 → 507」、报告记 509，审查者所记 508 与实测不符，此处以实测为准）。
 - 验证（web/ 下）：`npm run test:unit` **302 passed / 28 files**（基线 300，+2 例）；`npx playwright test create-sheetset-review.spec.ts` **43 passed**（本 spec 10 例 + 依赖工程 settings-dialog 33 例）；`npx playwright test create-sheetset-input.spec.ts` **48 passed**（回归）；`npm run check:i18n` **1571 键 / 11 域**对称；`npm run check:ui` 通过（0 违规、无 stale 例外）；`npm run build` 通过（`check:api` + `check:i18n` + `check:ui` + `vue-tsc -b` + `vite build`）。未改后端，故未重跑 pytest。
 
+## 2026-09-24（web 测试提速：e2e 改用构建产物 + workers 提到 8，全量 5.4m）
+
+- `web/playwright.config.ts`：webServer 由「单一 vite dev server」改为「`vite build` + `vite preview`」——dev server 的按需转译是当年把 workers 压到 4 的根因（过载时 goto 偶发 `net::ERR_ABORTED`），静态产物服务消除了该热点，workers 提到 8。preview 服务器继承 `vite.config.ts` 的 `server.proxy`（`/api` → `DST_MANAGER_API_TARGET`），真实后端契约红线不变；`vite preview` 默认端口即 4173，`--strictPort` 防漂移。
+- `web/tests/e2e/settings-dialog.spec.ts`：品牌标志用例原先断言 logo `src` 的文件名——dev server 下成立，但生产构建会给资源 URL 加内容哈希、小于 4KB 的 64px logo 还会被内联成 base64 data URI，按 URL 断言随构建方式漂移。改为断言图片实际像素尺寸（`toHaveJSProperty("naturalWidth", 64/512)`），dev 与构建都成立且更贴合「小图标 vs 大图标」用例意图。
+- `web/vitest.config.ts`：开启 `fsModuleCache: true`（transform 结果持久化到 `node_modules/.vite/vitest/`）。实测收益有限（约 1–2s，transform 占比 76%→68%）：套件仅 28 个文件，规模不足以体现持久缓存优势，保留配置主要利于 watch 模式重跑。
+- 验证（web/ 下逐行执行）：`npm run test:unit` **303 passed**（约 24s）；`npx playwright test settings-dialog.spec.ts` **33 passed**（对照组：dev server 下亦 33/33，确认其余用例不受构建方式影响）；全量 `npx playwright test` **653 passed / 2 flaky / 1 failed**（**5.4m**，8 workers；失败项为 `properties-layout.spec.ts:152` 视口/缩放视觉用例，属满负载抖动——单文件重跑 **45 passed**，且 Task 9 记录的 dev server 基线全量亦有 2 failed / 1–2 flaky 同类抖动，8 workers 不劣于原 4 workers 基线）；`npm run build` 通过（chunk 大小警告为既有问题）。
+
 ## 2026-09-24（pytest 默认并行执行，全量时长 3m16s → 39s）
 
 - `pyproject.toml` 的 pytest `addopts` 由 `-q` 改为 `-q -n auto`（pytest-xdist，已进入 dev 依赖与 `uv.lock`）：默认按 CPU 核数分进程并行。套件本就约定不依赖执行顺序与本地遗留状态（AGENTS.md「测试要求」），全量并行实测 **1888 passed / 74 skipped / 0 failed，39.4s**（串行 3m16s）。需要串行调试时用 `uv run pytest -p no:xdist`；个别确需独占资源的用例可加 `xdist_group` 标记保证同进程执行。

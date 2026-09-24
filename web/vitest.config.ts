@@ -16,5 +16,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // transform 结果持久化到磁盘，跨次运行复用（此前 transform 占单次运行约 60% 耗时且每次重算）。
+    fsModuleCache: true,
   },
 });
