@@ -528,7 +528,8 @@ def test_import_preview_rejects_bad_sources(tmp_path: Path, monkeypatch) -> None
     client = make_client(tmp_path)
     missing = tmp_path / "absent.dststandard"
     response = client.post("/api/standards/import-previews", json={"path": str(missing)})
-    assert response.status_code == 404
+    # SPEC-DM-019 §4.3：源不存在属于"包或路径问题"，返回 422（不是 404）
+    assert response.status_code == 422
     assert response.json()["code"] == "STANDARD_IMPORT_SOURCE_NOT_FOUND"
 
     wrong_suffix = tmp_path / "package.zip"
@@ -557,6 +558,36 @@ def test_import_preview_rejects_bad_sources(tmp_path: Path, monkeypatch) -> None
     assert response.status_code == 422
     assert response.json()["code"] == "STANDARD_IMPORT_SOURCE_TOO_LARGE"
     assert not list((tmp_path / "data" / "tmp").glob("**/*.dststandard"))
+
+
+def test_version_route_rejects_overlong_segment_with_422(tmp_path: Path) -> None:
+    """超长数字版本段必须在 int() 前拒绝：否则撞 int_max_str_digits 会返回 500。"""
+    client = make_client(tmp_path)
+    overlong = "9" * 4301
+    assert client.get(f"/api/standards/szmedi.gas/{overlong}").status_code == 422
+    assert client.get(f"/api/standards/szmedi.gas/{overlong}/export").status_code == 422
+    assert client.get(f"/api/standards/szmedi.gas/{overlong}").json()["code"] == (
+        "STANDARD_VERSION_INVALID"
+    )
+
+
+def test_import_preview_tolerates_unreadable_existing_entry(tmp_path: Path) -> None:
+    """同身份已有条目不可读（残留 v1 或损坏）：预检仍 200，按身份冲突阻断而不是 500。"""
+    client = make_client(tmp_path)
+    official = tmp_path / "data" / "standards" / "official" / "szmedi.gas" / "1"
+    official.mkdir(parents=True)
+    (official / "document.json").write_text("{not json", encoding="utf-8")
+    package = write_api_package(
+        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 1}
+    )
+
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is False
+    assert [item["code"] for item in preview.json()["diagnostics"]] == [
+        "STANDARD_VERSION_EXISTS"
+    ]
 
 
 def test_import_preview_reports_asset_gate_without_writing(tmp_path: Path) -> None:

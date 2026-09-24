@@ -1,3 +1,16 @@
+## 2026-09-25（PLAN-DM-041 固定复核修复轮）
+
+独立评审（整分支 diff 61156fc..85456f5，逐条核对计划 Review Focus）后修复六项，每项先写失败用例再修：
+
+- **超长版本路径段导致 500**：`parse_standard_version_segment` 在 `int()` 前先做位数有界校验（超过 `2147483647` 的 10 位直接拒绝），`GET /api/standards/{id}/{4301 位数字}` 与 `/export` 现在返回 422 `STANDARD_VERSION_INVALID`，不再撞 CPython `int_max_str_digits` 抛 `ValueError`。
+- **导入弹窗在欢迎页直达时无初始焦点**：以 `open=true` 直接挂载时 `useDialogFocus` 的 immediate 初始聚焦执行点容器尚未渲染，焦点留在弹窗外使 Tab 圈闭与 Escape 同时静默失效；容器就绪后补一次聚焦。
+- **快照根无回收路径**：凭证只存内存、重启即失效，残留快照按定义不可达却会跨运行累积（单次可达 256 MiB）；`ImportPreviewStore` 构造时清空快照根。
+- **预检「源不存在」返回 404 与 SPEC-DM-019 §4.3 冲突**：按已接受规范改为 422，并把 `STANDARD_IMPORT_SOURCE_INVALID/SOURCE_NOT_FOUND/SOURCE_TOO_LARGE/COPY_FAILED`、`STANDARD_LIBRARY_BUSY`、`STANDARD_PUBLISH_FAILED`、`STANDARD_JSON_INVALID`、`STANDARD_VERSION_INVALID` 全部登记进 SPEC-DM-019 §6。
+- **发布硬崩溃窗口使草稿不可恢复**：发布在写回携带 `version` 的文档后、目录原子移动前被强杀会留下不可保存也不可发布的草稿；`get_draft` 读取时就地剥离该残留 `version` 使草稿自愈（域层门禁仍拒绝新提交的携带版本草稿）。
+- **同类“未捕获异常→500”缺陷一并修复**：取锁超时转稳定码 409 `STANDARD_LIBRARY_BUSY`；导出损坏的已发布文档转 422 `STANDARD_JSON_INVALID`；预检遇到同身份不可读条目按身份冲突呈现 200 + 诊断；创建候选列表把 `StandardStoreError` 归入「不可用候选」而不是 500。
+- **文案**：修正 `STANDARD_VERSION_INVALID` 仍写「三段数字版本」的误导文案，并把它与 `STANDARD_LIBRARY_BUSY` 登记进错误目录与中英文文案。
+- 验证：`uv run ruff check .`、`uv run pytest -q`（**2193 项 / 0 failed / 0 error / 74 skipped**）、`npm --prefix web run test:unit`（337 例）、`check:api`/`check:i18n`（1621 键）/`check:ui`/`build` 与全量 Playwright（**682 passed**）全部通过；`main.spec.ts` 的性能预算用例在并行满载时偶发超预算（单跑通过，与本轮改动无关）。
+
 ## 2026-09-25（PLAN-DM-041 Task 8：端到端联验与归档）
 
 - 新增端到端闭环用例：受控草稿资产 → 自动发布 `v1` → 导出 `<standard_id>-v1.dststandard` → 预检 → 另一数据根确认导入 → 按 ID 归集定位 → 较早空缺版本 `2`/`3` 可导入 → 同名不同 ID 阻断 → 派生重新引入受控资产后发布得到 `v4`；同批覆盖发布失败回滚（422 `STANDARD_PUBLISH_FAILED`，草稿与受控资产保留、无空版本目录）。

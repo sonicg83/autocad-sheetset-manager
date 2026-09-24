@@ -108,7 +108,7 @@ related:
 | --- | --- | --- |
 | 发布目录 | `<standard_id>/<n>/` | 官方根与用户发布根同构；`<n>` 是十进制正整数目录名 |
 | 正式版本身份 | `<standard_id>@<n>` | 用于工程绑定、日志与审核记录 |
-| HTTP 版本路径段 | 规范十进制正整数 | 只接受 `1`、`10` 这类规范形式；`01`、`1.0`、`0`、`-1`、含分隔符或前缀的输入一律拒绝 |
+| HTTP 版本路径段 | 规范十进制正整数 | 只接受 `1`、`10` 这类规范形式；`01`、`1.0`、`0`、`-1`、含分隔符或前缀的输入一律拒绝。位数先于整数转换校验（超过 `2147483647` 的位数直接拒绝），不得让超长数字串导致 500 |
 | 工程保留属性 | `DSTManager.Standard = <standard_id>@<n>` | 沿用既有保留属性，仅值形态改变 |
 | UI 展示 | `v<n>` | 界面加 `v` 前缀，文档与 API 字段保持裸整数 |
 | 导出包文件名 | `<standard_id>-v<n>.dststandard` | 见 §5.4 |
@@ -183,7 +183,7 @@ Task 1 的越界与非法名拒绝（分隔符、相对分量、盘符、控制�
 - 复制采用流式写入随机文件名，完成后原子定稿；复制中断不留半成品；
 - 临时文件不得进入任何工程目录、标准库目录或包内；
 - 凭证有效期为 **15 分钟**；
-- 过期、取消与服务重启后，快照与凭证一并失效；重启后一律要求重新预检；
+- 过期、取消与服务重启后，快照与凭证一并失效；重启后一律要求重新预检；服务启动时**清空快照根**（残留快照已无凭证指向，按定义不可达）；
 - 过期与取消的快照必须被清理，不在快照根无限累积。
 
 ### 4.3 预检结果
@@ -267,8 +267,16 @@ DELETE /api/standards/import-previews/{preview_id}
 | `STANDARD_NAME_CONFLICT` | 409 | 不同 ID 的已发布标准归一化同名 |
 | `STANDARD_VERSION_LIMIT_REACHED` | 409 | 该 ID 已占用 `2147483647`，无法再分配 |
 | `STANDARD_PACKAGE_INVALID` / `STANDARD_ASSET_*` | 422 | 包结构、路径、资产或路径逃逸问题 |
+| `STANDARD_IMPORT_SOURCE_INVALID` | 422 | 预检来源不是 `.dststandard` 文件 |
+| `STANDARD_IMPORT_SOURCE_NOT_FOUND` | 422 | 预检来源不存在、不是文件或不可读（属§4.3 的“包或路径问题”） |
+| `STANDARD_IMPORT_SOURCE_TOO_LARGE` | 422 | 压缩源文件超过 256 MiB |
+| `STANDARD_IMPORT_COPY_FAILED` | 422 | 复制到限时快照失败（中断不留半成品） |
 | `STANDARD_IMPORT_PREVIEW_NOT_FOUND` | 404 | 未知、伪造或重启后失效的凭证 |
 | `STANDARD_IMPORT_PREVIEW_EXPIRED` | 410 | 凭证已超过 15 分钟有效期 |
+| `STANDARD_LIBRARY_BUSY` | 409 | 标准库写入互斥锁等待超时（可重试；不得冒泡成 500） |
+| `STANDARD_PUBLISH_FAILED` | 422 | 发布写入失败（身份目录非冲突类 IO 错误），草稿与资产已回滚 |
+| `STANDARD_JSON_INVALID` | 422 | 已发布文档损坏（截断/非 UTF-8）而无法解析 |
+| `STANDARD_VERSION_INVALID` | 422 | 同时用于：版本路径段/绑定身份非法（含位数超限）与草稿携带 `version` |
 
 预检的冲突（`STANDARD_VERSION_EXISTS`、`STANDARD_NAME_CONFLICT`）在预检响应中以
 `can_import=false` 与 `diagnostics` 呈现，状态为 200；同码在**确认**阶段以 409 返回。
@@ -340,6 +348,7 @@ DELETE /api/standards/import-previews/{preview_id}
 | --- | --- |
 | 2026-09-25 | 首次建立：整数版本身份、无版本草稿、按 ID 名称唯一门禁、服务端版本分配、`.dststandard` 限时快照预检与凭证确认导入，以及预检信任模型与缓解措施。 |
 | 2026-09-25 | 随 PLAN-DM-041 Task 1–8 落地并转为 `accepted`：补充 §12 实施验证证据映射；真实桌面 G9 仍待执行。 |
+| 2026-09-25 | 固定复核后修订：§2.5 明确版本路径段位数先于整数转换校验（超长数字串不得导致 500）；§4.2 明确服务启动时清空快照根；§6 登记导入来源/复制/凭证过期之外的 `STANDARD_LIBRARY_BUSY`、`STANDARD_PUBLISH_FAILED`、`STANDARD_JSON_INVALID` 与 `STANDARD_VERSION_INVALID`，并确认“源不存在”按 §4.3 返回 422。 |
 
 ## 12. 实施验证（PLAN-DM-041 Task 1–8）
 

@@ -4,6 +4,7 @@
 // 换文件清除旧预检、过期凭证要求重新预检，以及无壳降级与桥迟到注入。
 import {afterEach, describe, expect, it, vi, type Mock} from "vitest";
 import {flushPromises, mount} from "@vue/test-utils";
+import {nextTick} from "vue";
 import {createI18n} from "vue-i18n";
 import StandardImportDialog from "./StandardImportDialog.vue";
 import zhCNStandards from "../../i18n/locales/zh-CN/standards";
@@ -49,6 +50,7 @@ function mountDialog(
     confirmResult?: PublishedStandard;
     confirmError?: Error;
     selectResult?: string | null | undefined;
+    attachToBody?: boolean;
   } = {},
 ) {
   const harness: Harness = {
@@ -61,6 +63,7 @@ function mountDialog(
     selectPath: vi.fn(async (_localizedDescription: string) => options.selectResult ?? null),
   };
   const wrapper = mount(StandardImportDialog, {
+    ...(options.attachToBody ? {attachTo: document.body} : {}),
     props: {
       open: true,
       shellAvailable: options.shellAvailable ?? true,
@@ -206,6 +209,22 @@ describe("StandardImportDialog", () => {
     await wrapper.setProps({shellAvailable: true});
     expect(wrapper.find('[data-testid="import-dev-fallback"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="import-choose-file"]').exists()).toBe(true);
+  });
+
+  it("以 open=true 直接挂载时焦点进入弹窗，Tab 圈闭与 Escape 生效", async () => {
+    // 欢迎页「导入标准包」以 open=true 直接挂载本组件：此时 useDialogFocus 的
+    // immediate 初始聚焦会落空，必须在容器就绪后补一次（否则 modal 可见却不可键盘操作）。
+    const {wrapper, harness} = mountDialog({selectResult: "C:\标准包\a.dststandard", attachToBody: true});
+    await flushPromises();
+    await nextTick();
+    const card = wrapper.get<HTMLElement>('[data-testid="standard-import-dialog"]').element;
+    expect(card.contains(document.activeElement)).toBe(true);
+
+    // Escape 经弹窗容器回调关闭：焦点在弹窗内时键盘事件才会经过该容器
+    await wrapper.get('[data-testid="standard-import-dialog"]').trigger("keydown", {key: "Escape"});
+    await flushPromises();
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    expect(harness.cancelImport).not.toHaveBeenCalled();
   });
 
   it("取消按钮清理在途预检凭证并请求关闭", async () => {

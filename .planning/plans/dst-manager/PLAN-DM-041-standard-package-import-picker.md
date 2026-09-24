@@ -167,12 +167,12 @@ PLAN-DM-040 尚在修改 `StandardsView.vue`、`StandardLibraryPane.vue`、`Stan
 | 项 | 命令 | 结果 |
 | --- | --- | --- |
 | Ruff | `uv run ruff check .` | All checks passed |
-| 全量 Python | `uv run pytest -q`（xdist 并行） | **2186 项 / 0 failed / 0 error / 74 skipped** |
+| 全量 Python | `uv run pytest -q`（xdist 并行） | **2193 项 / 0 failed / 0 error / 74 skipped**（含固定复核修复轮新增用例） |
 | 依赖锁 | `uv lock --check` | 通过 |
 | 标准库与包（点名） | `tests/unit/test_standard_store.py`、`test_standard_package.py`、`test_drawing_standards.py`、`test_standard_import_previews.py`、`test_message_catalog.py` | 全绿（含新增的版本分配、名称归一、快照与凭证用例） |
 | 标准与创建 API（点名） | `tests/integration/test_standard_api.py`、`test_creation_api.py`、`test_standard_dst_import.py`、`tests/unit/test_creation_drafts.py`、`test_creation_xlsx_*` | 全绿（含新增的端到端闭环与发布失败回滚） |
-| 前端单测 | `npm --prefix web run test:unit` | **336 例** 全绿（含导入弹窗状态机 10 例、`selectStandardPackagePath` 4 例、分组模型 16 例） |
-| 前端门禁 | `npm --prefix web run check:api` / `check:i18n` / `check:ui` | 通过（i18n 1619 键 / 11 域） |
+| 前端单测 | `npm --prefix web run test:unit` | **337 例** 全绿（含导入弹窗状态机 10 例、`selectStandardPackagePath` 4 例、分组模型 16 例） |
+| 前端门禁 | `npm --prefix web run check:api` / `check:i18n` / `check:ui` | 通过（i18n 1621 键 / 11 域） |
 | 生产构建 | `npm --prefix web run build`（含 `vue-tsc -b`） | 通过 |
 | Playwright 全量 | `npm --prefix web run test:e2e` | **682 passed**（0 failed；`main.spec.ts` 的性能预算用例曾标 1 次 flaky，重跑通过） |
 | 端到端闭环 | `test_standard_package_full_loop_from_draft_asset_to_next_version` | 通过：受控草稿资产 → 自动 `v1` → 导出 → 预检 → 另一数据根确认导入 → 按 ID 定位 → 较早空缺版本 2/3 → 同名不同 ID 阻断 → 再发布 `v4` |
@@ -181,6 +181,21 @@ PLAN-DM-040 尚在修改 `StandardsView.vue`、`StandardLibraryPane.vue`、`Stan
 与 PLAN-DM-040 的衔接：其共享的后端路径/资产门禁与标准库 UI 修复未回退
 （`test_standard_store.py`、`test_standard_api.py`、`test_standard_assets.py`、标准 E2E 全绿）；
 PLAN-DM-040 的真实桌面 G9 仍未执行，与本计划的 G9 一并待验。
+
+## 固定复核修复轮（2026-09-25）
+
+整分支独立评审后按严重度逐项修复并各留失败用例（详见 `changelog.md` 同日条目）：
+
+| 发现 | 处置 |
+| --- | --- |
+| 版本路径段超长（>4300 位）触发 `ValueError` → 500 | 位数先于 `int()` 校验；补域层与 API 用例 |
+| 欢迎页直达导入弹窗无初始焦点（Tab 圈闭与 Escape 失效） | 容器就绪后补聚焦；补组件用例（`attachTo` 下断言 `document.activeElement`） |
+| 快照根无回收路径，跨运行累积 | 构造时清空快照根；补用例 |
+| 预检“源不存在”返回 404，与 §4.3 的 422 冲突 | 改为 422；登记全部导入与新增稳定码进 §6 |
+| 发布硬崩溃窗口留下不可恢复草稿 | `get_draft` 自愈残留 `version`；补用例 |
+| 取锁超时 / 导出损坏文档 / 预检遇不可读条目 / 创建候选遇 `StandardStoreError` 会 500 | 分别转稳定码 409/422/200+诊断/不可用候选；补用例 |
+
+未修并登记为延后项：导出/发布并发跨进程证据缺口、确认阶段“同名冲突”与过期凭证 410 的 HTTP 用例缺口、`import_package` 把非冲突 IO 失败报成 409、导入弹窗诊断未渲染后端文案键、`StandardEditor` 中已无产生者的 `STANDARD_VERSION_IMMUTABLE` 死分支。
 
 ## 修订记录（续）
 

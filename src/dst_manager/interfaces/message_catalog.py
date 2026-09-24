@@ -214,6 +214,9 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "STANDARD_IMPORT_COPY_FAILED": _E("errors.standards.importCopyFailed"),
     "STANDARD_IMPORT_PREVIEW_NOT_FOUND": _E("errors.standards.previewNotFound"),
     "STANDARD_IMPORT_PREVIEW_EXPIRED": _E("errors.standards.previewExpired"),
+    # 固定复核（PLAN-DM-041 Task 8）补充：标准库写入门禁超时与版本字段非法
+    "STANDARD_LIBRARY_BUSY": _E("errors.standards.libraryBusy"),
+    "STANDARD_VERSION_INVALID": _E("errors.standards.versionInvalid"),
 }
 
 

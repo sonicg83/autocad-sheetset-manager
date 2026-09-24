@@ -108,11 +108,20 @@ def parse_standard_version(value: object) -> int:
 
 
 def parse_standard_version_segment(value: object) -> int:
-    """标准发布版本的**路径段/绑定身份文本**口径：规范十进制正整数。"""
+    """标准发布版本的**路径段/绑定身份文本**口径：规范十进制正整数。
+
+    长度先于 ``int()`` 有界校验：超过 10 位必然超出版本上限，同时避开 CPython
+    ``int_max_str_digits`` 限制（否则超长数字串会让 ``int()`` 抛 ``ValueError`` 并穿透到接口层的 500）。
+    """
     if not isinstance(value, str) or not STANDARD_VERSION_SEGMENT_PATTERN.fullmatch(value):
         raise _error(
             "STANDARD_VERSION_INVALID",
             f"标准版本段 {value!r} 必须是规范十进制正整数（无前导零）",
+        )
+    if len(value) > len(str(MAX_STANDARD_VERSION)):
+        raise _error(
+            "STANDARD_VERSION_INVALID",
+            f"标准版本段超过 {MAX_STANDARD_VERSION} 的位数上限",
         )
     return parse_standard_version(int(value))
 

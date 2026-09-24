@@ -85,6 +85,19 @@ class ImportPreviewStore:
         self._clock = clock
         self._records: dict[str, ImportPreviewRecord] = {}
         self._lock = threading.Lock()
+        # 凭证只存内存，重启后所有凭证失效，快照根里剩下的文件按定义已不可达：
+        # 启动时清空，避免单个 256 MiB 的快照跨多次运行无限累积（SPEC-DM-019 §4.2）。
+        self._clear_snapshot_root()
+
+    def _clear_snapshot_root(self) -> None:
+        """清空快照根（不创建目录）：重启后残留的快照已无凭证指向，一律不可达。"""
+        if not self.root.is_dir():
+            return
+        for item in self.root.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                _remove_quietly(item)
 
     # ---- 快照 ------------------------------------------------------------
 

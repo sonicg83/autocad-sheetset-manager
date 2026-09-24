@@ -47,7 +47,10 @@ from dst_manager.domain.standards import (
     parse_standard_version_segment,
 )
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
-from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionLock
+from dst_manager.infrastructure.filesystem.locking import (
+    FileLockError,
+    WorkspaceTransactionLock,
+)
 from dst_manager.infrastructure.standards.asset_paths import (
     StandardAssetError,
     resolve_asset_file,
@@ -233,12 +236,21 @@ class StandardStore:
 
         锁覆盖「读取官方/用户最高版本 → 写暂存文档 → 原子提交目录」全程，
         使并发发布不可能得到同一版本。只读入口不取锁，也不创建目录。
+
+        取锁超时以稳定码 ``STANDARD_LIBRARY_BUSY`` 拒绝（可重试的冲突），
+        不让 ``FileLockError`` 冒泡成 500。
         """
-        with _process_lock(self._user_root), WorkspaceTransactionLock(
-            self._user_root / LIBRARY_LOCK_NAME,
-            timeout_seconds=LIBRARY_LOCK_TIMEOUT_SECONDS,
-        ):
-            yield
+        try:
+            with _process_lock(self._user_root), WorkspaceTransactionLock(
+                self._user_root / LIBRARY_LOCK_NAME,
+                timeout_seconds=LIBRARY_LOCK_TIMEOUT_SECONDS,
+            ):
+                yield
+        except FileLockError as exc:
+            raise _error(
+                "STANDARD_LIBRARY_BUSY",
+                f"标准库正在被其他操作占用，请稍后重试：{exc}",
+            ) from exc
 
     # ---- 路径段边界 ------------------------------------------------------
 
@@ -390,8 +402,16 @@ class StandardStore:
 
     @staticmethod
     def _read_supported(document: Path) -> dict[str, object]:
-        """读取已发布文档并核对文档格式版本；残留 v1 以稳定码拒绝。"""
-        data = json.loads(document.read_text(encoding="utf-8"))
+        """读取已发布文档并核对文档格式版本；残留 v1 与损坏文件均以稳定码拒绝。
+
+        损坏（截断/非 UTF-8）也归为 ``STANDARD_JSON_INVALID``：列表用容错读取把它
+        当空文档上报为不可用候选，详情与导出不得因此冒泡成 500。
+        """
+        try:
+            data = json.loads(document.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            # ValueError 同时覆盖 JSONDecodeError 与 UnicodeDecodeError
+            raise _error("STANDARD_JSON_INVALID", f"{document} 无法读取：{exc}") from exc
         if not isinstance(data, dict):
             raise _error("STANDARD_JSON_INVALID", f"{document} 根不是对象")
         if data.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
@@ -425,6 +445,12 @@ class StandardStore:
         data = json.loads(document.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return None
+        # 自愈被中断的发布（PLAN-DM-041 固定复核 I5）：发布在把携带整数版本的文档
+        # 写回草稿目录后、目录原子移动前进程被强杀时，草稿目录会残留一个不承载语义的
+        # ``version``——它是草稿形态唯一的偏离，读取时就地剥离使草稿可继续保存与发布，
+        # 无需人工介入；域层门禁仍拒绝**新提交**的携带版本草稿（parse_standard_draft_document）。
+        if "version" in data:
+            data = {key: value for key, value in data.items() if key != "version"}
         return StandardDraft(draft_id=draft_id, document=data)
 
     def _iter_drafts(self) -> list[StandardDraft]:

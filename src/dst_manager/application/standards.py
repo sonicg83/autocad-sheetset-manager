@@ -476,10 +476,13 @@ class StandardOperations:
             diagnostics.append(
                 StandardDiagnostic(code=str(exc).split(":", 1)[0], message=str(exc))
             )
-        if (
-            self.standard_store.get(standard.standard_id, standard.version)
-            is not None
-        ):
+        try:
+            existing = self.standard_store.get(standard.standard_id, standard.version)
+        except (StandardStoreError, StandardSchemaError) as exc:
+            # 同身份的既有条目存在但不可读（残留 v1 或语义非法）：按身份已占用处理，
+            # 不冒泡成 500（SPEC-DM-019 §4.3：身份冲突一律 200 + 诊断）。
+            existing = exc
+        if existing is not None:
             diagnostics.append(
                 StandardDiagnostic(
                     code="STANDARD_VERSION_EXISTS",
@@ -540,9 +543,10 @@ def _store_error(exc: Exception) -> ApplicationError:
     return ApplicationError(code, str(exc), _STORE_STATUS.get(code, 422))
 
 
-#: 预检错误码 → HTTP 状态；其余（包/资产/路径问题）一律 422。
+#: 预检错误码 → HTTP 状态；其余（含包、资产、路径与源不可读）一律 422。
+#: SPEC-DM-019 §4.3：“包损坏、路径非法、**源不存在**、扩展名不符、超限等包或路径
+#: 问题返回 HTTP 422”；只有凭证类错误才用 404/410。
 _IMPORT_PREVIEW_STATUS = {
-    "STANDARD_IMPORT_SOURCE_NOT_FOUND": 404,
     "STANDARD_IMPORT_PREVIEW_NOT_FOUND": 404,
     "STANDARD_IMPORT_PREVIEW_EXPIRED": 410,
 }

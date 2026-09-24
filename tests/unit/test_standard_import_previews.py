@@ -91,6 +91,19 @@ def test_unknown_credential_is_not_found(tmp_path: Path) -> None:
         store.require("forged")
 
 
+def test_restart_clears_unreachable_snapshots(tmp_path: Path) -> None:
+    """重启后凭证全部失效，快照根里剩下的文件按定义已不可达：新实例必须清空它们。"""
+    store = make_store(tmp_path)
+    snapshot = store.snapshot_source(write_source(tmp_path))
+    store.register(snapshot, {"standard_id": "a.b"})
+    assert store.snapshot_files() == (snapshot,)
+
+    restarted = make_store(tmp_path)
+
+    assert restarted.snapshot_files() == ()
+    assert not snapshot.exists()
+
+
 def test_fresh_process_loses_credentials(tmp_path: Path) -> None:
     """凭证只存在于内存：新建 Store 实例（模拟重启）后同一凭证必须失效。"""
     store = make_store(tmp_path)

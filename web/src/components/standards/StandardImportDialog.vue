@@ -3,11 +3,11 @@
 // 确认导入」三步与全部可见状态。桌面壳用固定种类 `dststandard` 的原生选择器并只读
 // 显示已选路径；无桌面壳的本地开发态改用明确标注的本机路径输入（同一预检端点）。
 // 渲染层不复制任何后端规则：可否导入、诊断与候选身份全部来自预检响应。
-import {computed, onBeforeUnmount, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
-import {useDialogFocus} from "../ui/dialogFocus";
+import {FOCUSABLE_SELECTOR, useDialogFocus} from "../ui/dialogFocus";
 import {formatStandardVersion} from "./standardLibraryModel";
 import type {
   ImportPreviewResult,
@@ -49,6 +49,17 @@ const {onDialogKeydown} = useDialogFocus({
     event.stopPropagation();
     void close();
   },
+});
+
+// 欢迎页「导入标准包」会以 open=true 直接挂载本组件；此时 useDialogFocus 的
+// immediate 初始聚焦执行时刻容器尚未渲染，焦点会留在弹窗外，导致 Tab 圈闭与
+// Escape 同时静默失效（modal 可见却不可键盘操作）。容器就绪后补一次聚焦。
+onMounted(async () => {
+  await nextTick();
+  if (!props.open) return;
+  if (card.value === null) return;
+  if (card.value.contains(document.activeElement)) return;
+  card.value.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus({preventScroll: true});
 });
 
 function stopExpiryTimer(): void {

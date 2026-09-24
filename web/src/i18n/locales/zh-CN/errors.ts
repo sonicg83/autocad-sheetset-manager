@@ -194,6 +194,8 @@ export default {
     importCopyFailed: "标准包复制到临时快照失败，请重试",
     previewNotFound: "导入预检已失效，请重新选择文件预检",
     previewExpired: "导入预检已过期，请重新选择文件预检",
+    libraryBusy: "标准库正在被其他操作占用，请稍后重试",
+    versionInvalid: "标准版本必须是 1..2147483647 的整数；草稿不得携带版本",
   },
   ui: {
     unknownSummary: "操作失败，发生未知错误",

@@ -33,7 +33,7 @@ from dst_manager.domain.standard_models import (
 )
 from dst_manager.domain.standards import StandardSchemaError
 from dst_manager.extensions.capabilities import standard_dependency_gaps
-from dst_manager.infrastructure.standards.store import StandardStore
+from dst_manager.infrastructure.standards.store import StandardStore, StandardStoreError
 
 __all__ = [
     "CREATION_ASSET_KINDS",
@@ -193,7 +193,7 @@ def _candidate(
     """
     try:
         standard = store.get(standard_id, version)
-    except (StandardSchemaError, OSError, ValueError) as exc:
+    except (StandardSchemaError, StandardStoreError, OSError, ValueError) as exc:
         return CreationStandardCandidate(
             standard_id=standard_id,
             version=version,

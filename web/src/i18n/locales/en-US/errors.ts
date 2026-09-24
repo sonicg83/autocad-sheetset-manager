@@ -193,6 +193,8 @@ export default {
     importCopyFailed: "Copying the standard package to the temporary snapshot failed; retry",
     previewNotFound: "The import preview has expired or is unknown; preview the file again",
     previewExpired: "The import preview has expired; preview the file again",
+    libraryBusy: "The standard library is busy with another operation; retry in a moment",
+    versionInvalid: "The standard version must be an integer in 1..2147483647; drafts must not carry a version",
   },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",

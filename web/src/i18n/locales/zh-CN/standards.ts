@@ -257,7 +257,7 @@ export default {
     STANDARD_ASSET_SOURCE_INVALID: "本机模板来源非法（必须是 .dwg/.dwt 且不超过 64 MiB）",
     STANDARD_ASSET_COPY_FAILED: "复制本机模板到草稿受控目录失败",
     STANDARD_ID_INVALID: "标准 ID 非法：{field}",
-    STANDARD_VERSION_INVALID: "版本号必须是三段数字版本：{field}",
+    STANDARD_VERSION_INVALID: "标准版本必须是 1..2147483647 的整数：{field}",
     STANDARD_NAME_INVALID: "标准名称不能为空",
     STANDARD_CAD_VERSIONS_INVALID: "必须声明至少一个支持的 CAD 版本",
     STANDARD_NUMBERING_INVALID: "编号策略非法：补零位数必须是正整数",

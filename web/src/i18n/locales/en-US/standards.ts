@@ -258,7 +258,7 @@ export default {
     STANDARD_ASSET_SOURCE_INVALID: "Illegal local template source (must be .dwg/.dwt and at most 64 MiB)",
     STANDARD_ASSET_COPY_FAILED: "Copying the local template into the draft failed",
     STANDARD_ID_INVALID: "Illegal standard ID: {field}",
-    STANDARD_VERSION_INVALID: "Version must be a three-part numeric version: {field}",
+    STANDARD_VERSION_INVALID: "The standard version must be an integer in 1..2147483647: {field}",
     STANDARD_NAME_INVALID: "The standard name must not be empty",
     STANDARD_CAD_VERSIONS_INVALID: "At least one supported CAD version must be declared",
     STANDARD_NUMBERING_INVALID: "Illegal numbering policy: zero padding must be a positive integer",

@@ -163,6 +163,59 @@ def test_get_rejects_residual_schema_version_one(store: StandardStore) -> None:
         store.get("legacy.gas", 1)
 
 
+def test_get_draft_self_heals_version_left_by_interrupted_publish(
+    store: StandardStore,
+) -> None:
+    """发布在写回携带 version 的文档后、目录移动前被强杀：读取时就地剥离，草稿可继续保存与发布。"""
+    draft_dir = store.drafts_root / "draft-interrupted"
+    draft_dir.mkdir(parents=True)
+    document = {"schema_version": 2, "standard_id": "user.water", "version": 3, "name": "用户给排水标准",
+                "supported_cad_versions": ["2020"], "properties": [], "dwg_naming": {"segments": [{"literal": "x"}]},
+                "assets": [], "numbering": {"sequence_field": "subset.sequence", "digits": 2}}
+    (draft_dir / "document.json").write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+
+    loaded = store.get_draft("draft-interrupted")
+
+    assert loaded is not None
+    assert "version" not in loaded.document
+    # 自愈后可继续保存与发布（旧实现下两者都会 422）
+    assert store.save_draft("draft-interrupted", loaded.document).draft_id == "draft-interrupted"
+    assert store.publish("draft-interrupted").version == 1
+
+
+def test_export_rejects_corrupt_published_document_with_stable_code(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    """列表把损坏文档当不可用候选上报，导出必须给稳定码而不是冒泡成 500。"""
+    write_official(store.official_root, standard_document(standard_id="broken.one", version=1))
+    (store.official_root / "broken.one" / "1" / "document.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(StandardStoreError, match="STANDARD_JSON_INVALID"):
+        store.export_package("broken.one", 1, tmp_path / "out")
+
+
+def test_library_lock_timeout_reports_stable_code(store: StandardStore, monkeypatch) -> None:
+    """取锁超时必须以稳定码拒绝，不得让 FileLockError 冒泡成 500。"""
+    import dst_manager.infrastructure.standards.store as store_module
+    from dst_manager.infrastructure.filesystem.locking import (
+        WorkspaceTransactionBusyError,
+    )
+
+    class BusyLock:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            raise WorkspaceTransactionBusyError(32, "busy")
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    monkeypatch.setattr(store_module, "WorkspaceTransactionLock", BusyLock)
+    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
+    with pytest.raises(StandardStoreError, match="STANDARD_LIBRARY_BUSY"):
+        store.publish("draft-1")
+
+
 def test_get_accepts_integer_and_segment_version(store: StandardStore) -> None:
     assert store.get("official.gas", 1) is not None
     assert store.get("official.gas", "1") is not None
