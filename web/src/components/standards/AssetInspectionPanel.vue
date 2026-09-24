@@ -4,7 +4,7 @@
 // 严格比较（不去空格、不转换大小写）；缺失与未声明都逐项显示。
 import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
-import {declaredRoles, nonModelLayouts, compareLayouts, MODEL_LAYOUT_NAME, type AssetReference} from "../../features/standards/publishModel";
+import {declaredRoles, nonModelLayouts, compareLayouts, MODEL_LAYOUT_NAME, type AssetReference, type InspectionState} from "../../features/standards/publishModel";
 import type {DraftAsset} from "../../features/standards/draftModel";
 import type {AssetInspection} from "../../features/standards/types";
 import type {InspectionFailure} from "../../features/standards/publishModel";
@@ -13,6 +13,8 @@ const props = defineProps<{
   asset: DraftAsset;
   /** 官方参考资产只读：面板不提供声明编辑，只呈现检查与引用。 */
   source: "user" | "official";
+  /** 当前检查状态：未检查/检查失败/检查有问题/检查通过（F07：无结果不得当作“未发现问题”）。 */
+  state: InspectionState;
   inspection?: AssetInspection;
   failure?: InspectionFailure;
   inspectedAt: string;
@@ -72,6 +74,9 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       <h5 class="block-title">{{ $t("standards.assets.layoutsTitle") }}</h5>
       <p class="panel-note">{{ $t("standards.assets.modelExcluded", {model: MODEL_LAYOUT_NAME}) }}</p>
       <p v-if="pending" class="panel-note">{{ $t("standards.assets.inspectPending") }}</p>
+      <p v-else-if="state === 'unchecked'" class="panel-note" data-testid="asset-layout-unchecked">
+        {{ $t("standards.assets.uncheckedDiagnostics") }}
+      </p>
       <template v-else>
         <table class="layout-table">
           <thead>
@@ -107,6 +112,9 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       <h5 class="block-title">{{ $t("standards.assets.diagnostics") }}</h5>
       <p v-if="failure" class="panel-error" role="alert" data-testid="asset-failure">
         {{ $t("standards.assets.failure", {message: failure.message}) }}
+      </p>
+      <p v-else-if="state === 'unchecked'" class="panel-note" data-testid="asset-unchecked">
+        {{ $t("standards.assets.uncheckedDiagnostics") }}
       </p>
       <ul v-else-if="(inspection?.diagnostics ?? []).length > 0" class="diagnostic-list" role="alert">
         <li v-for="(diagnostic, index) in inspection?.diagnostics ?? []" :key="index" :data-testid="`asset-diagnostic-${index}`">

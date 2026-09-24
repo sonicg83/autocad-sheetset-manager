@@ -16,7 +16,17 @@ import {ApiError} from "../../api/client";
 import {i18n} from "../../i18n";
 import {selectTemplatePath, shellReady} from "../../api/shell";
 import {ASSET_KINDS, type DraftAsset, type DraftDocument} from "../../features/standards/draftModel";
-import {assetReferences, type AssetReference, type InspectionFailure} from "../../features/standards/publishModel";
+import {
+  assetReferences,
+  recordFailure,
+  recordInspection,
+  recordInspectionState,
+  recordInspectedAt,
+  type AssetReference,
+  type InspectionFailure,
+  type InspectionRecord,
+  type InspectionState,
+} from "../../features/standards/publishModel";
 import type {AssetInspection} from "../../features/standards/types";
 
 const props = defineProps<{
@@ -24,9 +34,8 @@ const props = defineProps<{
   /** 官方标准的资产声明（只读参考）；无可对照官方标准时为空数组。 */
   officialAssets: DraftAsset[];
   officialStandardId: string;
-  inspections: AssetInspection[];
-  inspectionFailures: InspectionFailure[];
-  inspectedAt: string;
+  /** 当前有效的检查记录（已绑定草稿身份与已保存快照）；无有效记录时为 null。 */
+  record: InspectionRecord | null;
   pending: boolean;
   cadVersion: string;
   /** 受控复制：把本机来源复制进草稿，返回包内相对路径（失败抛出）。 */
@@ -66,18 +75,21 @@ function rowKey(row: AssetRow): string {
 }
 
 function stateOf(row: AssetRow): string {
-  if (props.inspectionFailures.some(item => item.assetId === row.asset.asset_id)) return "standards.assets.stateError";
-  const inspection = props.inspections.find(item => item.asset_id === row.asset.asset_id);
-  if (inspection === undefined) return "standards.assets.stateUnchecked";
-  return inspection.diagnostics.length > 0 ? "standards.assets.stateFailed" : "standards.assets.statePassed";
+  const key: Record<InspectionState, string> = {
+    unchecked: "standards.assets.stateUnchecked",
+    failed: "standards.assets.stateFailed",
+    error: "standards.assets.stateError",
+    passed: "standards.assets.statePassed",
+  };
+  return key[recordInspectionState(props.record, row.asset.asset_id)];
 }
 
 function inspectionOf(assetId: string): AssetInspection | undefined {
-  return props.inspections.find(item => item.asset_id === assetId);
+  return recordInspection(props.record, assetId);
 }
 
 function failureOf(assetId: string): InspectionFailure | undefined {
-  return props.inspectionFailures.find(item => item.assetId === assetId);
+  return recordFailure(props.record, assetId);
 }
 
 function nextAssetId(kind: string): string {
@@ -189,7 +201,7 @@ async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): 
         <option value="official">{{ $t("standards.assets.sourceOfficial") }}</option>
       </UiSelect>
       <p class="section-note" role="status">
-        {{ inspectedAt === "" ? $t("standards.assets.notInspected") : $t("standards.assets.inspectedAt", {time: inspectedAt}) }}
+        {{ recordInspectedAt(record) === "" ? $t("standards.assets.notInspected") : $t("standards.assets.inspectedAt", {time: recordInspectedAt(record)}) }}
       </p>
     </div>
     <p v-if="document.assets.length === 0 && officialAssets.length === 0" class="section-empty">{{ $t("standards.assets.empty") }}</p>
@@ -223,9 +235,10 @@ async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): 
         <AssetInspectionPanel
           :asset="selected.asset"
           :source="selected.source"
+          :state="recordInspectionState(record, selected.asset.asset_id)"
           :inspection="inspectionOf(selected.asset.asset_id)"
           :failure="failureOf(selected.asset.asset_id)"
-          :inspected-at="inspectedAt"
+          :inspected-at="recordInspectedAt(record)"
           :pending="pending"
           :references="selected.references"
           @recheck="emit('recheck')"

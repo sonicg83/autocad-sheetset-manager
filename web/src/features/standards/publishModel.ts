@@ -53,6 +53,77 @@ export interface InspectionFailure {
   message: string;
 }
 
+/**
+ * 一次资产检查的结果记录（PLAN-DM-040 Task 4，F06）。
+ *
+ * 结果必须绑定产生它的草稿身份与**被检查文档的快照**（检查前草稿已落盘，因此快照
+ * 等于当时的已保存文档）。草稿身份变化（切换草稿）或缓冲再变化（编辑/保存失败）
+ * 都会使记录过期，过期记录一律按“未检查”处理，绝不把旧结果显示为当前结果。
+ */
+export interface InspectionRecord {
+  draftId: string;
+  /** 被检查文档的快照（与编辑器缓冲同一序列化）。 */
+  documentSnapshot: string;
+  inspectedAt: string;
+  inspections: AssetInspection[];
+  failures: InspectionFailure[];
+}
+
+/** 结果是否仍然对应当前草稿与当前文档快照。 */
+export function inspectionRecordMatches(
+  record: InspectionRecord | null,
+  draftId: string,
+  documentSnapshot: string,
+): boolean {
+  return record !== null
+    && record.draftId === draftId
+    && record.documentSnapshot === documentSnapshot;
+}
+
+/** 资产检查状态（面板、资产列表与门禁共用）。 */
+export type InspectionState = "unchecked" | "failed" | "error" | "passed";
+
+/** 单个资产的检查结果；``record`` 必须是已判定为当前的记录（过期时传 null）。 */
+export function recordInspection(record: InspectionRecord | null, assetId: string): AssetInspection | undefined {
+  return record?.inspections.find(item => item.asset_id === assetId);
+}
+
+/** 单个资产的检查失败；``record`` 必须是已判定为当前的记录。 */
+export function recordFailure(record: InspectionRecord | null, assetId: string): InspectionFailure | undefined {
+  return record?.failures.find(item => item.assetId === assetId);
+}
+
+/** 最近一次有效检查时间；无当前记录时为空串（面板显示“尚未检查”）。 */
+export function recordInspectedAt(record: InspectionRecord | null): string {
+  return record?.inspectedAt ?? "";
+}
+
+/** 未收到结果就是“未检查”：不得渲染为“未发现问题”。 */
+export function recordInspectionState(record: InspectionRecord | null, assetId: string): InspectionState {
+  if (record === null) return "unchecked";
+  if (recordFailure(record, assetId) !== undefined) return "error";
+  const result = recordInspection(record, assetId);
+  if (result === undefined) return "unchecked";
+  return result.diagnostics.length > 0 ? "failed" : "passed";
+}
+
+/** 检查运行身份：代次 + 草稿身份 + 已保存快照。 */
+export interface InspectionRunIdentity {
+  generation: number;
+  draftId: string;
+  documentSnapshot: string;
+}
+
+/**
+ * 检查运行结果提交门禁：代次、草稿身份与文档快照三者都必须匹配当前值。
+ * 乱序返回（旧代次）或检查期间继续编辑（快照已变）的结果一律不提交。
+ */
+export function inspectionRunIsCurrent(run: InspectionRunIdentity, current: InspectionRunIdentity): boolean {
+  return run.generation === current.generation
+    && run.draftId === current.draftId
+    && run.documentSnapshot === current.documentSnapshot;
+}
+
 export interface PublishGate {
   blockingErrors: PublishIssue[];
   warnings: PublishIssue[];

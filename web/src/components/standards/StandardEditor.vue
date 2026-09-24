@@ -35,7 +35,14 @@ import {
   type EditorSectionId,
   type PropertyReference,
 } from "../../features/standards/draftModel";
-import type {InspectionFailure, PublishTarget} from "../../features/standards/publishModel";
+import type {InspectionFailure, InspectionRecord, PublishTarget} from "../../features/standards/publishModel";
+import {
+  inspectionRecordMatches,
+  inspectionRunIsCurrent,
+  recordFailure,
+  recordInspection,
+  recordInspectedAt,
+} from "../../features/standards/publishModel";
 import type {AssetInspection, StandardDraft} from "../../features/standards/types";
 
 type GuardChoice = "save" | "discard" | "stay";
@@ -74,13 +81,14 @@ const saveError = ref("");
 const guardOpen = ref(false);
 /** 编辑分区视图与发布检查页（SPEC-DM-017 §7 的独立检查页）。 */
 const view = ref<"sections" | "review">("sections");
-const inspections = ref<AssetInspection[]>([]);
-const inspectionFailures = ref<InspectionFailure[]>([]);
+/** 最近一次资产检查记录：绑定草稿身份与已保存快照，过期一律按“未检查”处理。 */
+const inspectionRecord = ref<InspectionRecord | null>(null);
 const inspectionPending = ref(false);
-const inspectedAt = ref("");
 const publishPending = ref(false);
 const publishError = ref("");
 const deleteBlocked = ref("");
+/** 检查运行代次：乱序返回时只接受最新一次运行的结果。 */
+let inspectionGeneration = 0;
 const focusRequest = ref<{
   section: EditorSectionId;
   propertyId?: string;
@@ -98,6 +106,9 @@ watch(
     baseline.value = JSON.stringify(buffer.value);
     saveError.value = "";
     deleteBlocked.value = "";
+    // 切换草稿：在途检查作废（结果本来也会因身份不符而被判为过期）
+    inspectionGeneration += 1;
+    inspectionPending.value = false;
   },
 );
 
@@ -136,11 +147,22 @@ const releaseNotes = computed({
 });
 const cadVersion = computed(() => buffer.value.supported_cad_versions[0] ?? "");
 
-// 进入资产分区或发布检查页时自动做一次检查（尚未检查过才跑），避免面板停在「尚未检查」
+/** 当前有效的检查记录：草稿身份或当前文档快照不匹配时按“未检查”处理。
+ *  用缓冲快照（而非已保存基准）比对：编辑缓冲后发布将先落盘，旧结果不再对应将要发布的文档。 */
+const currentRecord = computed<InspectionRecord | null>(() =>
+  inspectionRecordMatches(inspectionRecord.value, props.draft.draft_id, snapshot.value)
+    ? inspectionRecord.value
+    : null,
+);
+const inspections = computed<AssetInspection[]>(() => currentRecord.value?.inspections ?? []);
+const inspectionFailures = computed<InspectionFailure[]>(() => currentRecord.value?.failures ?? []);
+const inspectedAt = computed(() => recordInspectedAt(currentRecord.value));
+
+// 进入资产分区或发布检查页时自动做一次检查（尚未取得当前结果才跑）
 watch([active, view], () => {
   if (view.value === "review") return; // 检查页自行触发并等待结果
   if (active.value !== "assets") return;
-  if (inspectedAt.value !== "" || inspectionPending.value) return;
+  if (currentRecord.value !== null || inspectionPending.value) return;
   void runInspections();
 });
 
@@ -198,26 +220,58 @@ function onDeleteBlocked(payload: {propertyId: string; references: PropertyRefer
   });
 }
 
-/** 资产检查：逐个声明资产调用后端固定读取协议；检查失败与标准错误分开记录。 */
+/**
+ * 资产检查（PLAN-DM-040 Task 4）：先保证检查对象是**已保存**文档，再用代次与快照
+ * 身份提交结果。结构无效或保存失败一律不发起检查并显示原因（不把旧结果显示为当前结果）。
+ */
 async function runInspections(): Promise<void> {
   if (inspectionPending.value) return;
-  inspectionPending.value = true;
-  inspections.value = [];
-  const failures: InspectionFailure[] = [];
-  for (const asset of buffer.value.assets) {
-    if (cadVersion.value === "") {
-      failures.push({assetId: asset.asset_id, message: targetText("standards.assets.cadVersionMissing")});
-      continue;
-    }
-    try {
-      inspections.value = [...inspections.value, await props.inspectAsset(asset.asset_id, cadVersion.value)];
-    } catch (error) {
-      failures.push({assetId: asset.asset_id, message: errorMessage(error)});
-    }
+  publishError.value = "";
+  if (invalid.value) {
+    publishError.value = targetText("standards.assets.inspectBlockedInvalid");
+    return;
   }
-  inspectionFailures.value = failures;
-  inspectedAt.value = new Date().toLocaleString();
-  inspectionPending.value = false;
+  if (dirty.value && !(await save())) {
+    // 保存失败：保留输入与 dirty 状态，检查停在旧快照上（结果会被判为过期）
+    publishError.value = saveError.value || targetText("standards.assets.inspectBlockedSaveFailed");
+    return;
+  }
+  const run = {
+    generation: ++inspectionGeneration,
+    draftId: props.draft.draft_id,
+    documentSnapshot: snapshot.value,
+  };
+  inspectionPending.value = true;
+  const results: AssetInspection[] = [];
+  const failures: InspectionFailure[] = [];
+  try {
+    for (const asset of buffer.value.assets) {
+      if (cadVersion.value === "") {
+        failures.push({assetId: asset.asset_id, message: targetText("standards.assets.cadVersionMissing")});
+        continue;
+      }
+      try {
+        results.push(await props.inspectAsset(asset.asset_id, cadVersion.value));
+      } catch (error) {
+        failures.push({assetId: asset.asset_id, message: errorMessage(error)});
+      }
+    }
+  } finally {
+    inspectionPending.value = false;
+  }
+  const stillCurrent = inspectionRunIsCurrent(run, {
+    generation: inspectionGeneration,
+    draftId: props.draft.draft_id,
+    documentSnapshot: snapshot.value,
+  });
+  if (!stillCurrent) return; // 乱序返回或检查期间继续编辑：丢弃本次结果
+  inspectionRecord.value = {
+    draftId: run.draftId,
+    documentSnapshot: run.documentSnapshot,
+    inspectedAt: new Date().toLocaleString(),
+    inspections: results,
+    failures,
+  };
 }
 
 async function openReview(): Promise<void> {
@@ -226,13 +280,20 @@ async function openReview(): Promise<void> {
   await runInspections();
 }
 
-/** 发布：未保存修改先落盘（发布的是服务端草稿），失败保留在检查页。 */
+/** 发布：未保存修改先落盘；检查结果不对应当前快照时先重新检查，仍不一致则阻断。 */
 async function publish(): Promise<void> {
   if (publishPending.value) return;
   publishError.value = "";
   if (dirty.value) {
     const saved = await save();
     if (!saved) return;
+  }
+  if (currentRecord.value === null) {
+    await runInspections();
+    if (currentRecord.value === null) {
+      publishError.value = targetText("standards.assets.inspectBlockedStale");
+      return;
+    }
   }
   publishPending.value = true;
   try {
@@ -411,9 +472,7 @@ defineExpose({guard, isDirty: () => dirty.value});
           :document="buffer"
           :official-assets="officialAssets ?? []"
           :official-standard-id="officialStandardId ?? ''"
-          :inspections="inspections"
-          :inspection-failures="inspectionFailures"
-          :inspected-at="inspectedAt"
+          :record="currentRecord"
           :pending="inspectionPending"
           :cad-version="cadVersion"
           :copy-asset-file="copyAssetFile"

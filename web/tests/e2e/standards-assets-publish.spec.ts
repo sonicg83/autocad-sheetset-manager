@@ -203,6 +203,40 @@ test("资产声明编辑：新增布局资产后未检查，重新检查后给�
   await page.getByRole("button", {name: "重新检查"}).click();
   await expect(page.getByTestId("asset-row-user-layout-template-1")).toContainText("检查通过");
   expect(state.inspectCalls).toEqual(["layout-template-1"]);
+  // 「保存并检查」：检查前先落盘，检查对象就是服务端已保存文档
+  expect(state.saveBodies.length).toBe(1);
+});
+
+test("结构未完成时「保存并检查」不提交结果：显示未检查而不是未发现问题", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": templateDraft("")},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "assets");
+
+  await expect(page.getByTestId("asset-unchecked")).toContainText("未检查");
+  await expect(page.getByText("本次检查未发现问题")).toHaveCount(0);
+  await expect(page.getByTestId("asset-row-user-base")).toContainText("未检查");
+  // 结构无效：不发起检查（也不会把旧结果当作当前结果）
+  expect(state.inspectCalls).toEqual([]);
+});
+
+test("发布检查页继续编辑后检查结果失效并阻断发布", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": layoutDraft(["A2"])},
+    assetResults: {layouts: inspection("layouts", ["Model", "A2"])},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await page.getByRole("button", {name: "发布检查"}).click();
+
+  const publish = page.getByRole("button", {name: "发布标准"});
+  await expect(publish).toBeEnabled();
+  // 版本说明也属于草稿缓冲：改动后检查结果不再对应当前快照
+  await page.getByLabel("版本说明").fill("修订说明");
+  await expect(publish).toBeDisabled();
+  await expect(page.getByText(/图幅 A2 与实际布局严格不一致/)).toBeVisible();
 });
 
 // ---- 本机模板受控复制（PLAN-DM-040 Task 3，F01） ------------------------

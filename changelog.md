@@ -1,3 +1,10 @@
+## 2026-09-24（PLAN-DM-040 Task 4：检查结果绑定已保存草稿）
+
+- 修复 F06/F07：`publishModel` 新增 `InspectionRecord` 与 `inspectionRecordMatches`/`recordInspectionState`/`inspectionRunIsCurrent` 等纯函数，检查结果绑定草稿身份与被检查文档快照；草稿身份或缓冲一变即过期，过期记录一律按「未检查」处理，不再把旧结果当作当前结果。
+- `StandardEditor` 改为「保存并检查」：结构无效或保存失败不发起检查并显示原因；检查前先落盘，发布前核对当前快照，不一致时重新检查，仍不一致则阻断发布；在途检查用代次 + 身份 + 快照三重校验提交，乱序返回与检查期间继续编辑都不会覆盖新状态。
+- `AssetInspectionPanel`/`TemplateAssetsEditor` 在无当前检查记录时显示「未检查」，不再渲染「本次检查未发现问题」或“缺少同名布局”的假结论；新增中英对称文案 4 个（`uncheckedDiagnostics` 与 3 条检查阻断原因）。
+- 验证：RED 3 例（新模型函数不存在）；GREEN `npm --prefix web run test:unit` 307 例、`npm --prefix web run test:e2e -- tests/e2e/standards-assets-publish.spec.ts` 46 例、`npm --prefix web run build`（含 check:api/check:i18n/check:ui/vue-tsc）均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 3：本机模板受控复制进草稿）
 
 - 修复 F01（阻断）：新增 `POST /api/standards/drafts/{draft_id}/asset-files`（请求 `{source_path}`，响应 `{path}`）。桌面壳经固定 `template` 文件种类（`*.dwg;*.dwt`）选择本机模板，后端复制到草稿受控目录并返回形如 `assets/managed-<uuid4hex>.dwg|.dwt` 的受控副本名；无壳本地开发态提供单独标明的「来源绝对路径」输入并调用同一端点。草稿只保存包内相对路径，本机绝对路径不写入文档/发布目录/包清单。

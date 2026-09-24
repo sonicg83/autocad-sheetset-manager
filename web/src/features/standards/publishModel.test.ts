@@ -7,7 +7,13 @@ import {
   buildPublishGate,
   compareLayouts,
   declaredRoles,
+  inspectionRecordMatches,
+  inspectionRunIsCurrent,
   nonModelLayouts,
+  recordInspection,
+  recordInspectionState,
+  recordInspectedAt,
+  type InspectionRecord,
   type PublishReport,
 } from "./publishModel";
 import {toDraftDocument, type DraftAsset} from "./draftModel";
@@ -243,6 +249,77 @@ describe("buildPublishGate", () => {
       ["STANDARD_CAD_CAPABILITY_MISSING", "assets", "layouts"],
       ["STANDARD_LAYOUT_NAME_MISMATCH", "assets", "layouts"],
     ]);
+  });
+});
+
+describe("检查结果绑定已保存草稿（PLAN-DM-040 Task 4，F06/F07）", () => {
+  const SNAPSHOT = '{"standard_id":"szmedi.gas","assets":[]}';
+
+  function record(overrides: Partial<InspectionRecord> = {}): InspectionRecord {
+    return {
+      draftId: "draft-1",
+      documentSnapshot: SNAPSHOT,
+      inspectedAt: "2026-09-24 10:00",
+      inspections: [inspection("layouts", ["Model", "A2"])],
+      failures: [{assetId: "broken", message: "CAD 未就绪"}],
+      ...overrides,
+    };
+  }
+
+  it("只在草稿身份与已保存快照都匹配时把结果当作当前结果", () => {
+    expect(inspectionRecordMatches(record(), "draft-1", SNAPSHOT)).toBe(true);
+    // 切换草稿：旧草稿的结果不得当作新草稿的结果
+    expect(inspectionRecordMatches(record(), "draft-2", SNAPSHOT)).toBe(false);
+    // 编辑后过期：缓冲变化后的结果不再对应当前文档
+    expect(inspectionRecordMatches(record(), "draft-1", `${SNAPSHOT} `)).toBe(false);
+    expect(inspectionRecordMatches(null, "draft-1", SNAPSHOT)).toBe(false);
+  });
+
+  it("未收到检查结果时是「未检查」，不是「未发现问题」", () => {
+    expect(recordInspectionState(null, "layouts")).toBe("unchecked");
+    expect(recordInspectionState(record({inspections: []}), "layouts")).toBe("unchecked");
+    expect(recordInspectionState(record(), "layouts")).toBe("passed");
+    expect(recordInspectionState(record(), "broken")).toBe("error");
+    expect(
+      recordInspectionState(
+        record({
+          inspections: [
+            inspection("layouts", [], [
+              {code: "STANDARD_ASSET_FILE_MISSING", severity: "error", message: "文件不在草稿中"},
+            ]),
+          ],
+        }),
+        "layouts",
+      ),
+    ).toBe("failed");
+    expect(recordInspection(record(), "missing-asset")).toBeUndefined();
+    expect(recordInspectedAt(null)).toBe("");
+  });
+
+  it("检查运行只有代次、草稿身份与快照都匹配才允许提交", () => {
+    const current = {generation: 2, draftId: "draft-1", documentSnapshot: SNAPSHOT};
+    expect(inspectionRunIsCurrent({...current}, current)).toBe(true);
+    // 乱序返回：旧代次的结果不覆盖新状态
+    expect(inspectionRunIsCurrent({...current, generation: 1}, current)).toBe(false);
+    // 检查期间继续编辑：快照已变，结果不得提交
+    expect(inspectionRunIsCurrent({...current, documentSnapshot: `${SNAPSHOT} `}, current)).toBe(false);
+    // 检查期间切换草稿：身份已变，结果不得提交
+    expect(inspectionRunIsCurrent({...current, draftId: "draft-2"}, current)).toBe(false);
+  });
+
+  it("过期记录不得作为当前结果参与发布门禁", () => {
+    // 组件把过期记录折算为 null 后再建门禁：声明图幅的资产回到“未检查 → 布局不一致”阻断
+    const stale = buildPublishGate({
+      document: documentWith([layoutAsset("layouts", ["A2"])]),
+      assets: [],
+    });
+    expect(stale.blockingErrors.map(issue => issue.code)).toEqual(["STANDARD_LAYOUT_NAME_MISMATCH"]);
+    // 同一份文档带当前结果时不再阻断
+    const fresh = buildPublishGate({
+      document: documentWith([layoutAsset("layouts", ["A2"])]),
+      assets: [inspection("layouts", ["Model", "A2"])],
+    });
+    expect(fresh.canPublish).toBe(true);
   });
 });
 
