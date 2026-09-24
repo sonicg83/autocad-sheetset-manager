@@ -29,6 +29,7 @@ dev = [
     "pyinstaller>=6,<7",
     "pytest>=8.4,<9",
     "pytest-cov>=6.2,<7",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.12,<1",
 ]
 
@@ -41,4 +42,7 @@ packages = ["src/dst_manager", "src/dst_platform"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# -n auto：默认按 CPU 核数并行（pytest-xdist）。套件约定不依赖执行顺序与共享
+# 本地状态（见 AGENTS.md「测试要求」），个别需要独占资源的用例可用
+# xdist_group 标记或 -p no:xdist 临时退回串行。
+addopts = "-q -n auto"

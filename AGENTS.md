@@ -96,6 +96,8 @@ uv run pytest -q
 uv lock --check
 ```
 
+pytest 默认经 pytest-xdist 按 CPU 核数并行（`-n auto`）；需要串行调试单条用例时加 `-p no:xdist`。
+
 数据库迁移：
 
 ```powershell
