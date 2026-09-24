@@ -87,7 +87,8 @@ class CreationDraft:
 
     id: str
     standard_id: str
-    standard_version: str
+    #: 固定标准发布版本（服务端分配的整数；创建链全链使用裸整数）。
+    standard_version: int
     revision: int
     step: str
     target_path: str

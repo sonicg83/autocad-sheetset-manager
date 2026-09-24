@@ -298,7 +298,7 @@ def creation_metadata_records(
     records: list[tuple[str, str, str, str]] = [
         ("version", "template_version", str(CREATION_TEMPLATE_VERSION), ""),
         ("standard", "standard_id", standard.standard_id, ""),
-        ("standard", "standard_version", standard.version, ""),
+        ("standard", "standard_version", str(standard.version), ""),
     ]
     for spec in plan.columns:
         record = "fixed_column" if spec.is_fixed else "property_column"

@@ -762,8 +762,9 @@
             "type": "string"
           },
           "version": {
+            "minimum": 1.0,
             "title": "Version",
-            "type": "string"
+            "type": "integer"
           }
         },
         "required": [
@@ -805,7 +806,7 @@
           },
           "standard_version": {
             "title": "Standard Version",
-            "type": "string"
+            "type": "integer"
           },
           "step": {
             "title": "Step",
@@ -1296,7 +1297,7 @@
           },
           "standard_version": {
             "title": "Standard Version",
-            "type": "string"
+            "type": "integer"
           },
           "suffix": {
             "$ref": "#/components/schemas/CreationSuffixModel"
@@ -1395,7 +1396,7 @@
           },
           "version": {
             "title": "Version",
-            "type": "string"
+            "type": "integer"
           }
         },
         "required": [
@@ -5216,7 +5217,7 @@
           },
           "version": {
             "title": "Version",
-            "type": "string"
+            "type": "integer"
           }
         },
         "required": [
@@ -5385,7 +5386,7 @@
           },
           "version": {
             "title": "Version",
-            "type": "string"
+            "type": "integer"
           }
         },
         "required": [
@@ -5427,15 +5428,21 @@
             "type": "string"
           },
           "version": {
-            "title": "Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
           "source",
           "status",
           "standard_id",
-          "version",
           "name"
         ],
         "title": "StandardSummaryModel",
@@ -7746,64 +7753,6 @@
           }
         },
         "summary": "Get Standard"
-      },
-      "put": {
-        "operationId": "put_standard_api_standards__standard_id___version__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "standard_id",
-            "required": true,
-            "schema": {
-              "title": "Standard Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "title": "Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandardDraftResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Put Standard"
       }
     },
     "/api/standards/{standard_id}/{version}/export": {

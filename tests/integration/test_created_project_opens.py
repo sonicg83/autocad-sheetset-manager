@@ -113,10 +113,10 @@ ASSET_FILES: dict[str, bytes] = {
 #: 布局模板的真实布局集合：包含标准声明的图幅 A1。
 TEMPLATE_LAYOUTS = ("A1", "A2", "A3", "Model")
 
-STANDARD_IDENTITY = "szmedi.gas@2.1.0"
+STANDARD_IDENTITY = "szmedi.gas@1"
 CREATION_JOB_ID = "job-1"
 #: 项目内标准快照目录（brief Step 1 断言的精确位置）。
-STANDARD_SNAPSHOT = ".dst-manager/standards/szmedi.gas/2.1.0"
+STANDARD_SNAPSHOT = ".dst-manager/standards/szmedi.gas/1"
 
 
 class FakeCadExecutor:
@@ -283,9 +283,9 @@ def fault_injector(monkeypatch: pytest.MonkeyPatch) -> RegistrationFaultInjector
 
 def test_created_project_opens_as_normal_workspace(service, completed_creation) -> None:
     workspace = service.get_workspace(completed_creation.workspace_id)
-    assert workspace.document.custom_properties["DSTManager.Standard"] == "szmedi.gas@2.1.0"
+    assert workspace.document.custom_properties["DSTManager.Standard"] == "szmedi.gas@1"
     assert workspace.revision_id == completed_creation.revision_id
-    assert (workspace.root / ".dst-manager/standards/szmedi.gas/2.1.0").is_dir()
+    assert (workspace.root / ".dst-manager/standards/szmedi.gas/1").is_dir()
 
 
 def test_registration_failure_is_recoverable_not_successful(service, published_candidate, fault_injector) -> None:
@@ -457,7 +457,7 @@ def test_created_project_keeps_standard_semantics_after_library_version_is_delet
 
     assert resolution.status == "resolved"
     assert resolution.source == "project-snapshot"
-    assert resolution.standard_id == "szmedi.gas" and resolution.version == "2.1.0"
+    assert resolution.standard_id == "szmedi.gas" and resolution.version == 1
     reopened = service.get_workspace(completed_creation.workspace_id)
     assert reopened.revision_id == completed_creation.revision_id
     assert not [item for item in reopened.document.diagnostics if item.severity.value == "error"]
@@ -613,7 +613,11 @@ def test_registration_refuses_to_report_success_without_the_revision_manifest(
 
 def _publish_standard(service: DstManagerService) -> None:
     """发布夹具标准：资产文件先写入草稿目录，发布后随目录一起落到 published 下。"""
-    draft = service.create_standard_draft(STANDARD_DOCUMENT, "draft-gas")
+    # 草稿不携带版本（PLAN-DM-041 Task 2）：本地夹具去 version 后再入库。
+    draft = service.create_standard_draft(
+        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
+        "draft-gas",
+    )
     draft_root = (
         service.settings.data_dir
         / "standards"
@@ -626,11 +630,11 @@ def _publish_standard(service: DstManagerService) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
     published = service.publish_standard(str(draft["draft_id"]))
-    assert published["standard_id"] == "szmedi.gas" and published["version"] == "2.1.0"
+    assert published["standard_id"] == "szmedi.gas" and published["version"] == 1
 
 
 def _package_root(service: DstManagerService) -> Path:
-    return service.standard_store.published_root / "szmedi.gas" / "2.1.0"
+    return service.standard_store.published_root / "szmedi.gas" / "1"
 
 
 def _fake_capability(tmp_path: Path) -> CadCapability:
@@ -677,7 +681,7 @@ def _draft_value(draft: CreationDraft, target: Path) -> CreationDraft:
 
 def _creation_site(service: DstManagerService, tmp_path: Path, *, target: Path) -> CreationSite:
     """建一份可执行草稿并算出权威预览摘要与计划（与执行入口同一份重算口径）。"""
-    draft = service.create_creation_draft(("szmedi.gas", "2.1.0"))
+    draft = service.create_creation_draft(("szmedi.gas", 1))
     saved = service.save_creation_draft(
         draft.id,
         expected_revision=draft.revision,

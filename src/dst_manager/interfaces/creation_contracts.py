@@ -46,7 +46,7 @@ class CreationStandardCandidateModel(ContractModel):
     """创建标准候选；不可用时 ``reasons`` 说明为什么不能选。"""
 
     standard_id: str
-    version: str
+    version: int
     name: str
     supported_cad_versions: list[str] = Field(default_factory=list)
     available: bool
@@ -71,7 +71,7 @@ class CreationDraftCreateRequest(ContractModel):
     """按已发布标准身份建草稿；版本在这里固定，此后不可改写。"""
 
     standard_id: str
-    version: str
+    version: int = Field(ge=1)
 
 
 class CreationDraftSaveRequest(ContractModel):
@@ -109,7 +109,7 @@ class CreationDraftResponse(ContractModel):
 
     id: str
     standard_id: str
-    standard_version: str
+    standard_version: int
     revision: int
     step: str
     target_path: str
@@ -191,7 +191,7 @@ class CreationPreviewResponse(ContractModel):
     draft_id: str
     revision: int
     standard_id: str
-    standard_version: str
+    standard_version: int
     standard_name: str
     target_path: str
     sheetset_values: dict[str, str] = Field(default_factory=dict)

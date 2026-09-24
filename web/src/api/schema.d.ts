@@ -391,8 +391,7 @@ export interface paths {
         };
         /** Get Standard */
         get: operations["get_standard_api_standards__standard_id___version__get"];
-        /** Put Standard */
-        put: operations["put_standard_api_standards__standard_id___version__put"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1020,7 +1019,7 @@ export interface components {
             /** Standard Id */
             standard_id: string;
             /** Version */
-            version: string;
+            version: number;
         };
         /**
          * CreationDraftResponse
@@ -1040,7 +1039,7 @@ export interface components {
             /** Standard Id */
             standard_id: string;
             /** Standard Version */
-            standard_version: string;
+            standard_version: number;
             /** Step */
             step: string;
             /** Target Path */
@@ -1262,7 +1261,7 @@ export interface components {
             /** Standard Name */
             standard_name: string;
             /** Standard Version */
-            standard_version: string;
+            standard_version: number;
             suffix: components["schemas"]["CreationSuffixModel"];
             /** Target Path */
             target_path: string;
@@ -1301,7 +1300,7 @@ export interface components {
             /** Supported Cad Versions */
             supported_cad_versions?: string[];
             /** Version */
-            version: string;
+            version: number;
         };
         /**
          * CreationSuffixModel
@@ -2634,7 +2633,7 @@ export interface components {
             /** Supported Cad Versions */
             supported_cad_versions: string[];
             /** Version */
-            version: string;
+            version: number;
         };
         /** StandardDiagnosticModel */
         StandardDiagnosticModel: {
@@ -2693,7 +2692,7 @@ export interface components {
             /** Standard Id */
             standard_id: string;
             /** Version */
-            version: string;
+            version: number;
         };
         /** StandardSummaryModel */
         StandardSummaryModel: {
@@ -2708,7 +2707,7 @@ export interface components {
             /** Status */
             status: string;
             /** Version */
-            version: string;
+            version?: number | null;
         };
         /** StructureDiffResponse */
         StructureDiffResponse: {
@@ -3955,44 +3954,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StandardDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_standard_api_standards__standard_id___version__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                standard_id: string;
-                version: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StandardDraftResponse"];
                 };
             };
             /** @description Validation Error */

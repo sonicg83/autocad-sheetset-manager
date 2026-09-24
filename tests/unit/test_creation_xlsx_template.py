@@ -68,7 +68,7 @@ def test_template_hidden_metadata_maps_labels_to_stable_ids(standard, options) -
     }
     assert records[("version", "template_version")] == ("1", None)
     assert records[("standard", "standard_id")] == (standard.standard_id, None)
-    assert records[("standard", "standard_version")] == (standard.version, None)
+    assert records[("standard", "standard_version")] == (str(standard.version), None)
     assert records[("fixed_column", "A")] == ("title", "图名")
     assert records[("property_column", "G")] == ("prop-part", "分部")
     assert records[("asset", "base-template")] == ("base-a1", "a1.dwt")

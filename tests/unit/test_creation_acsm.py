@@ -42,7 +42,7 @@ from dst_manager.infrastructure.acsm_xml.creation import (
 from dst_manager.infrastructure.dst_codec import DstCodec
 
 TARGET_PATH = r"C:\Projects\新建项目"
-STANDARD_IDENTITY = "szmedi.gas@2.1.0"
+STANDARD_IDENTITY = "szmedi.gas@1"
 #: 逐张 sheet 属性期望值：`prop-stage`/`prop-part` 是普通输入，`prop-label`
 #: 是「专业代码-图号」派生组合。
 EXPECTED_SHEET_PROPERTIES = [
@@ -57,7 +57,7 @@ def _draft() -> CreationDraft:
     return CreationDraft(
         id="draft-1",
         standard_id="szmedi.gas",
-        standard_version="2.1.0",
+        standard_version=1,
         revision=1,
         step="review",
         target_path=TARGET_PATH,

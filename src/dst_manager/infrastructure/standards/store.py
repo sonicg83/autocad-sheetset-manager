@@ -356,8 +356,11 @@ class StandardStore:
                 except StandardStoreError:
                     continue
                 document = self._read_document(version_dir)
-                if document.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
-                    # 残留 schema_version:1（或损坏）目录只跳过，不阻断列表，也不自动迁移。
+                if (
+                    "schema_version" in document
+                    and document.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS
+                ):
+                    # 残留 schema_version:1（或未来版本）目录只跳过，不阻断列表，也不自动迁移。
                     continue
                 summaries.append(
                     StandardSummary(
@@ -371,7 +374,11 @@ class StandardStore:
         return summaries
 
     def _read_document(self, directory: Path) -> dict[str, object]:
-        """读取已发布文档：不可信文件（截断/非 UTF-8）一律当作空文档，不参与列表。"""
+        """读取已发布文档；不可信文件（截断/非 UTF-8）当作空文档。
+
+        空文档仍会进入列表（名称为空）以便上层把它报为不可用候选，而不是让
+        一个损坏的标准静默消失；明确写有不受支持 ``schema_version`` 的目录才跳过。
+        """
         try:
             data = json.loads(
                 (directory / DOCUMENT_NAME).read_text(encoding="utf-8")

@@ -208,7 +208,7 @@ class CreationMetadataStages:
                 "CREATION_XLSX_TEMPLATE_VERSION_UNSUPPORTED",
             ),
             ("standard", "standard_id", self.standard.standard_id, "CREATION_XLSX_STANDARD_MISMATCH"),
-            ("standard", "standard_version", self.standard.version, "CREATION_XLSX_STANDARD_MISMATCH"),
+            ("standard", "standard_version", str(self.standard.version), "CREATION_XLSX_STANDARD_MISMATCH"),
         )
         for record_type, key, expected, code in checks:
             found = [

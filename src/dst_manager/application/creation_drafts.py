@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 from dst_manager.application.errors import ApplicationError
-from dst_manager.application.standards import parse_standard_identity
 from dst_manager.domain.creation import (
     SHEET_SCOPE,
     SHEETSET_SCOPE,
@@ -53,13 +52,13 @@ class CreationDraftOperations:
 
     # ---- 草稿生命周期 ----------------------------------------------------
 
-    def create_creation_draft(self, identity: tuple[str, str]) -> CreationDraft:
+    def create_creation_draft(self, identity: tuple[str, int]) -> CreationDraft:
         """固定一个已发布标准版本并建立修订 1 的空草稿。
 
         初建时对每个普通 sheetset 属性应用一次标准默认值；``target_path`` 与
         图纸组留空，由后续保存逐步补全。
         """
-        standard = self._require_published_standard(identity)
+        standard = self._require_published_standard(identity[0], identity[1])
         try:
             return self.creation_drafts.create(
                 standard.standard_id,
@@ -72,7 +71,7 @@ class CreationDraftOperations:
     def get_creation_draft(self, draft_id: str) -> CreationDraft:
         """恢复草稿；固定标准版本不可解析时稳定拒绝。"""
         draft = self._load_creation_draft(draft_id)
-        self._require_published_standard((draft.standard_id, draft.standard_version))
+        self._require_published_standard(draft.standard_id, draft.standard_version)
         return draft
 
     def save_creation_draft(
@@ -86,7 +85,7 @@ class CreationDraftOperations:
         """
         stored = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            (stored.standard_id, stored.standard_version)
+            stored.standard_id, stored.standard_version
         )
         self._reject_non_input_values(standard, value)
         try:
@@ -111,8 +110,7 @@ class CreationDraftOperations:
         except CreationDraftStoreError as exc:
             raise _store_error(exc) from exc
 
-    def _require_published_standard(self, identity: tuple[str, str]) -> DrawingStandard:
-        standard_id, version = parse_standard_identity(f"{identity[0]}@{identity[1]}")
+    def _require_published_standard(self, standard_id: str, version: int) -> DrawingStandard:
         standard = self.standard_store.get(standard_id, version)
         if standard is None:
             raise _creation_error(

@@ -123,7 +123,7 @@ class CreationOperations:
         """按草稿固定的标准版本导出模板；标签与导入校验共用同一份资产候选。"""
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            (draft.standard_id, draft.standard_version)
+            draft.standard_id, draft.standard_version
         )
         return CreationTemplateFile(
             filename=f"creation-template-{standard.standard_id}-{standard.version}.xlsx",
@@ -141,7 +141,7 @@ class CreationOperations:
         """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            (draft.standard_id, draft.standard_version)
+            draft.standard_id, draft.standard_version
         )
         if len(data) > MAX_CREATION_XLSX_BYTES:
             return CreationImportOutcome(
@@ -191,7 +191,7 @@ class CreationOperations:
         """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            (draft.standard_id, draft.standard_version)
+            draft.standard_id, draft.standard_version
         )
         settings = self._live_settings()
         suffix_options = SuffixOptions(

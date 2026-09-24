@@ -14,6 +14,11 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+from dst_manager.application.errors import ApplicationError
+from dst_manager.domain.standards import (
+    StandardSchemaError,
+    parse_standard_version_segment,
+)
 from dst_manager.infrastructure.standards.store import StandardStoreError
 from dst_manager.interfaces.message_catalog import error_payload
 from dst_manager.interfaces.standard_contracts import (
@@ -56,6 +61,15 @@ def register_standard_routes(app: FastAPI) -> None:
 
     def service(request: Request):
         return request.app.state.service
+
+    def version_segment(value: str) -> int:
+        """路由版本段只接受规范十进制正整数（与目录段/绑定身份同口径）。"""
+        try:
+            return parse_standard_version_segment(value)
+        except StandardSchemaError as exc:
+            raise ApplicationError(
+                str(exc).split(":", 1)[0], str(exc), 422
+            ) from exc
 
     @app.get(
         "/api/standards",
@@ -157,7 +171,7 @@ def register_standard_routes(app: FastAPI) -> None:
     def export_standard(request: Request, standard_id: str, version: str):
         package = service(request).export_standard_package(
             standard_id,
-            version,
+            version_segment(version),
             service(request).settings.data_dir / "tmp" / "standard-exports",
         )
         return FileResponse(package, media_type="application/zip", filename=package.name)
@@ -170,7 +184,7 @@ def register_standard_routes(app: FastAPI) -> None:
         response_model_exclude_unset=True,
     )
     def get_standard(request: Request, standard_id: str, version: str):
-        return service(request).get_standard(standard_id, version)
+        return service(request).get_standard(standard_id, version_segment(version))
 
 
 

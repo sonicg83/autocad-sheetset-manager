@@ -96,7 +96,7 @@ GROUP_DOCUMENT_KEYS = {
 class PublishedStandardFixture:
     """已发布标准夹具：稳定身份 + 原始文档。"""
 
-    identity: tuple[str, str]
+    identity: tuple[str, int]
     document: dict[str, object]
 
 
@@ -229,7 +229,7 @@ def test_restored_draft_carries_no_preview_state(service, draft) -> None:
     saved = service.save_creation_draft(draft.id, expected_revision=1, value=value)
     document = json.loads(draft_document_path(service, draft.id).read_text(encoding="utf-8"))
     assert set(document) == DRAFT_DOCUMENT_KEYS
-    assert document["schema_version"] == 1
+    assert document["schema_version"] == 2
     assert document["revision"] == 2
     assert document["step"] == "groups"
     assert document["target_path"] == "C:/projects/新建项目"
@@ -281,7 +281,7 @@ def test_missing_published_standard_version_reports_standard_missing(
 ) -> None:
     draft = service.create_creation_draft(published_standard.identity)
     standard_id, version = published_standard.identity
-    shutil.rmtree(service.standard_store.published_root / standard_id / version)
+    shutil.rmtree(service.standard_store.published_root / standard_id / str(version))
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
         service.get_creation_draft(draft.id)
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
@@ -294,9 +294,9 @@ def test_standard_draft_is_not_usable_for_creation(service) -> None:
         draft_id="draft-gas",
     )
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
-        service.create_creation_draft(("szmedi.gas", "2.1.0"))
+        service.create_creation_draft(("szmedi.gas", 1))
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
-        service.create_creation_draft(("szmedi.gas", "9.9.9"))
+        service.create_creation_draft(("szmedi.gas", 9))
 
 
 def test_save_rejects_derived_and_out_of_scope_values(service, draft) -> None:
@@ -323,7 +323,7 @@ def test_save_rejects_duplicate_group_identity(service, draft) -> None:
 
 
 def test_save_rejects_pinned_standard_change(service, draft) -> None:
-    changed = replace(draft, standard_version="9.9.9")
+    changed = replace(draft, standard_version=9)
     with pytest.raises(ApplicationError, match="CREATION_DRAFT_INVALID"):
         service.save_creation_draft(draft.id, expected_revision=1, value=changed)
     renamed = replace(draft, id="other-draft")

@@ -1,3 +1,11 @@
+## 2026-09-25（PLAN-DM-041 Task 4：整数身份贯通创建、绑定与公开契约）
+
+- 创建链全量改用服务端分配的整数版本：`CreationDraft.standard_version`、创建草稿/预览/执行与 XLSX 元数据的 `standard_version`、创建标准候选的 `version` 以及 API 契约（`CreationDraftCreateRequest.version`、`CreationDraftResponse.standard_version`、`CreationStandardCandidateModel.version`、`CreationPreviewResponse.standard_version`）均为整数。
+- 工程绑定身份 `standard_id@<n>` 改为解析为整数版本（`parse_standard_identity` → `tuple[str, int]`），版本路径段只接受规范十进制正整数并由统一的 `parse_standard_version_segment` 拒绝 `@0`、`@01`、`@1.0.0`、`@../`；快照目录与已发布目录读取统一按目录段文本拼接。
+- 创建草稿持久化 schema 升为 `2`（`standard_version` 必须为 `>=1` 的整数）；本地旧文本版本创建草稿不再被静默接受，按损坏隔离处理。XLSX 隐藏技术表的身份记录仍以规范十进制文本写单元格，与当前标准比较时同样取规范文本。
+- 保持 PLAN-DM-036 的版本固定、资产可用性与 `preview_digest` 门禁不变：版本或标准内容变化仍使旧预览失效；草稿级保存只核对不可变 `standard_id` 与草稿 ID。
+- 验证：`uv run ruff check .` 通过；全量 `uv run pytest -q`（2155 项 / 0 failed / 0 error / 74 skipped）与点名用例均绿；`npm --prefix web run generate:api` 后 `check:api` 通过；`test:unit` 314 例与 `build`（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`）仍绿，本轮无前端类型红灯。前端版本输入移除与按 ID 归集仍归 Task 6。
+
 ## 2026-09-25（PLAN-DM-041 Task 3：服务端自动分配版本与名称唯一门禁）
 
 - 新增 `domain/standard_identity.py`：`normalize_standard_name` 为无文件系统依赖的纯函数，按 Unicode NFKC → 去首尾空白 → 连续空白归一 → `str.casefold()` 计算名称比较口径（不用 `lower()`，避免 `ẞ`/`İ` 归一不一致）。

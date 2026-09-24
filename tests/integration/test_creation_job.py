@@ -158,7 +158,7 @@ STANDARD_DOCUMENT: dict[str, object] = {
 
 STANDARD = parse_published_standard_document(STANDARD_DOCUMENT)
 TARGET_PATH = r"C:\Projects\新建项目"
-STANDARD_IDENTITY = "szmedi.gas@2.1.0"
+STANDARD_IDENTITY = "szmedi.gas@1"
 #: 布局模板真实布局集合：包含标准声明的图幅 A1（另有 A0 与 Model）。
 TEMPLATE_LAYOUTS = ("A1", "A0", "Model")
 #: 每个主 DWG 的布局集合：与计划逐项一致。
@@ -255,7 +255,7 @@ def _draft() -> CreationDraft:
     return CreationDraft(
         id="draft-1",
         standard_id="szmedi.gas",
-        standard_version="2.1.0",
+        standard_version=1,
         revision=1,
         step="review",
         target_path=TARGET_PATH,

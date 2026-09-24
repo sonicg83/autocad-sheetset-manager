@@ -23,11 +23,11 @@ from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
     STANDARD_ID_PATTERN,
-    STANDARD_VERSION_SEGMENT_PATTERN,
     DrawingStandard,
     StandardDiagnostic,
     parse_published_standard_document,
     parse_standard_draft_document,
+    parse_standard_version_segment,
 )
 
 if TYPE_CHECKING:
@@ -65,34 +65,34 @@ class StandardResolution:
 
     status: Literal["unbound", "resolved", "missing"]
     standard_id: str = ""
-    version: str = ""
+    version: int = 0
     standard: DrawingStandard | None = None
     source: str = ""
     diagnostics: tuple[ValidationIssue, ...] = ()
 
 
-def parse_standard_identity(identity: str) -> tuple[str, str]:
-    """解析 ``standard_id@version`` 身份；非法输入抛 422。
+def parse_standard_identity(identity: str) -> tuple[str, int]:
+    """解析 ``standard_id@<n>`` 绑定身份；非法输入抛 422。
 
-    ``version`` 在本层仍以目录段文本返回（整数化契约由 PLAN-DM-041 Task 4 收敛）；
-    校验口径为规范十进制正整数，不再接受旧三段版本。
+    版本必须是规范十进制正整数（与目录段、路由段同一口径）：``@0``、``@01``、
+    ``@1.0.0``、``@../`` 一律拒绝。
     """
     standard_id, separator, version = identity.partition(IDENTITY_SEPARATOR)
-    if (
-        not separator
-        or not STANDARD_ID_PATTERN.fullmatch(standard_id)
-        or not STANDARD_VERSION_SEGMENT_PATTERN.fullmatch(version)
-    ):
+    if not separator or not STANDARD_ID_PATTERN.fullmatch(standard_id):
         raise ApplicationError(
             "STANDARD_IDENTITY_INVALID",
             f"标准身份 {identity!r} 非法，应为 standard_id@<正整数版本>",
             422,
         )
-    return standard_id, version
+    try:
+        parsed = parse_standard_version_segment(version)
+    except Exception as exc:  # StandardSchemaError：稳定码已在消息前缀
+        raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
+    return standard_id, parsed
 
 
-def snapshot_directory(root: Path, standard_id: str, version: str) -> Path:
-    return Path(root) / ".dst-manager" / "standards" / standard_id / version
+def snapshot_directory(root: Path, standard_id: str, version: int | str) -> Path:
+    return Path(root) / ".dst-manager" / "standards" / standard_id / str(version)
 
 
 class StandardOperations:
@@ -198,27 +198,27 @@ class StandardOperations:
         )
 
     def _locate_in_library(
-        self, standard_id: str, version: str
+        self, standard_id: str, version: int
     ) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
             (store.published_root, "user-library"),
             (store.official_root, "official-library"),
         ):
-            document = Path(root) / standard_id / version / "document.json"
+            document = Path(root) / standard_id / str(version) / "document.json"
             if document.is_file():
                 return self._load_snapshot(document.parent), source
         return None
 
     def _restore_snapshot(
-        self, workspace: Workspace, standard_id: str, version: str
+        self, workspace: Workspace, standard_id: str, version: int
     ) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
             (store.published_root, "user-library"),
             (store.official_root, "official-library"),
         ):
-            source_dir = Path(root) / standard_id / version
+            source_dir = Path(root) / standard_id / str(version)
             if not (source_dir / "document.json").is_file():
                 continue
             snapshot = snapshot_directory(workspace.root, standard_id, version)
@@ -309,7 +309,7 @@ class StandardOperations:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}
 
-    def get_standard(self, standard_id: str, version: str) -> dict[str, object]:
+    def get_standard(self, standard_id: str, version: int | str) -> dict[str, object]:
         standard = self.standard_store.get(standard_id, version)
         if standard is None:
             raise ApplicationError(
@@ -404,7 +404,9 @@ class StandardOperations:
             raise ApplicationError(first_error.code, first_error.message, 422)
         return diagnostics
 
-    def export_standard_package(self, standard_id: str, version: str, dest_dir: Path) -> Path:
+    def export_standard_package(
+        self, standard_id: str, version: int | str, dest_dir: Path
+    ) -> Path:
         try:
             return self.standard_store.export_package(standard_id, version, Path(dest_dir))
         except StandardStoreError as exc:

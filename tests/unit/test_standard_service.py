@@ -10,6 +10,7 @@ from dst_manager.config import Settings
 from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationError
 from dst_manager.infrastructure.dst_codec import DstCodec
 
+
 def draft_document(document: dict) -> dict:
     """草稿不携带正式版本（PLAN-DM-041）：去 version 的文档副本。"""
     return {key: value for key, value in document.items() if key != "version"}
@@ -115,14 +116,28 @@ def test_bind_workspace_standard_writes_reserved_property(
     reopened = service.open_workspace(workspace.dst_path)
     assert reopened.document.custom_properties["DSTManager.Standard"] == "szmedi.gas@1"
     assert reopened.standard.standard_id == "szmedi.gas"
-    assert reopened.standard.version == "1"
+    assert reopened.standard.version == 1
 
 
+@pytest.mark.parametrize(
+    "identity",
+    [
+        "not-an-identity",
+        "szmedi.gas@0",
+        "szmedi.gas@01",
+        "szmedi.gas@1.0.0",
+        "szmedi.gas@../..",
+        "szmedi.gas@-1",
+        "szmedi.gas@",
+        "szmedi.gas@1 ",
+        "../@1",
+    ],
+)
 def test_bind_workspace_standard_rejects_invalid_identity(
-    service: DstManagerService, workspace
+    service: DstManagerService, workspace, identity: str
 ) -> None:
     with pytest.raises(ApplicationError) as exc_info:
-        service.bind_workspace_standard(workspace.id, "not-an-identity", workspace.revision_id)
+        service.bind_workspace_standard(workspace.id, identity, workspace.revision_id)
     assert exc_info.value.code == "STANDARD_IDENTITY_INVALID"
 
 

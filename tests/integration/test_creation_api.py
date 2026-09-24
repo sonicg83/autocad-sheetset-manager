@@ -137,14 +137,15 @@ STANDARD_DOCUMENT: dict[str, object] = {
 MISSING_ASSET_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
     "standard_id": "szmedi.missing",
-    "version": "1.0.0",
+    # 不同 ID 的已发布标准名称必须唯一（SPEC-DM-019 §3.2）。
+    "name": "市政缺失资产标准",
 }
 
 #: 同类内文件名冲突的标准：两个基础模板同名不同目录，标签必须退回包内相对路径。
 DUPLICATE_LABEL_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
     "standard_id": "szmedi.dupe",
-    "version": "1.0.0",
+    "name": "市政重名标签标准",
     "assets": [
         {"asset_id": "base-a", "kind": "base-template", "files": [{"path": "a1/a1.dwt"}]},
         {"asset_id": "base-b", "kind": "base-template", "files": [{"path": "b1/a1.dwt"}]},
@@ -166,7 +167,7 @@ DUPLICATE_LABEL_FILES: dict[str, bytes] = {
 DEPENDENT_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
     "standard_id": "szmedi.dependent",
-    "version": "1.0.0",
+    "name": "市政依赖标准",
     "dependencies": [
         {
             "extension_id": "test.trusted",
@@ -276,7 +277,7 @@ def publish_standard(
     """发布标准：资产文件先写入草稿目录，发布后随目录一起落到 published 下。"""
     response = client.post(
         "/api/standards/drafts",
-        json={"draft_id": draft_id, "document": document or STANDARD_DOCUMENT},
+        json={"draft_id": draft_id, "document": draft_document(document or STANDARD_DOCUMENT)},
     )
     assert response.status_code == 200, response.text
     for relative, content in (asset_files or {}).items():
@@ -287,13 +288,18 @@ def publish_standard(
     assert published.status_code == 200, published.text
 
 
-def published_root(root: Path, standard_id: str = "szmedi.gas", version: str = "2.1.0") -> Path:
-    return root / "standards" / "user" / "published" / standard_id / version
+def draft_document(document: dict) -> dict:
+    """草稿不携带正式版本（PLAN-DM-041）：去 version 的文档副本。"""
+    return {key: value for key, value in document.items() if key != "version"}
+
+
+def published_root(root: Path, standard_id: str = "szmedi.gas", version: int = 1) -> Path:
+    return root / "standards" / "user" / "published" / standard_id / str(version)
 
 
 def create_creation_draft(client: TestClient) -> dict:
     response = client.post(
-        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": "2.1.0"}
+        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": 1}
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -554,7 +560,7 @@ def test_execute_enqueues_creation_job_without_workspace(
     assert job["payload"]["creation_draft_id"] == creation_draft.id
     assert job["payload"]["preview_digest"] == preview.digest
     assert job["payload"]["target_path"] == body["target_path"]
-    assert job["payload"]["standard"] == {"standard_id": "szmedi.gas", "version": "2.1.0"}
+    assert job["payload"]["standard"] == {"standard_id": "szmedi.gas", "version": 1}
     assert not target.exists()
     # 无工作区时仍能记录状态与时间线（SSE 事件同源）
     detail = client.get(f"/api/jobs/{job['id']}").json()
@@ -608,7 +614,7 @@ def test_job_events_stream_stops_at_needs_review(
 def test_draft_crud_roundtrip(client: TestClient, creation_draft: DraftFixture) -> None:
     draft = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
     assert draft["standard_id"] == "szmedi.gas"
-    assert draft["standard_version"] == "2.1.0"
+    assert draft["standard_version"] == 1
     assert draft["revision"] == 2
 
     saved = update_creation_draft(client, creation_draft.id)
@@ -639,7 +645,7 @@ def test_unknown_draft_is_stable_not_found(client: TestClient) -> None:
 
 def test_draft_creation_requires_published_standard(client: TestClient) -> None:
     response = client.post(
-        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": "2.1.0"}
+        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": 1}
     )
     assert response.status_code == 404
     assert response.json()["code"] == "CREATION_STANDARD_MISSING"
@@ -671,7 +677,7 @@ def test_candidates_list_available_standard_with_asset_options(
     assert candidates == [
         {
             "standard_id": "szmedi.gas",
-            "version": "2.1.0",
+            "version": 1,
             "name": "市政燃气施工图",
             "supported_cad_versions": ["2016", "2020"],
             "available": True,
@@ -699,7 +705,7 @@ def test_candidate_without_template_files_is_unavailable(
     # 发布门禁保证资产在发布时必须存在；这里模拟发布后模板文件被外部删除/移动，
     # 候选列表仍必须给出稳定原因而不是把坏标准当成可选。
     shutil.rmtree(
-        published_root(root, standard_id="szmedi.missing", version="1.0.0") / "templates"
+        published_root(root, standard_id="szmedi.missing", version=1) / "templates"
     )
     candidates = {
         item["standard_id"]: item
@@ -804,7 +810,7 @@ def test_xlsx_template_exports_current_standard(
     assert response.headers["content-type"].startswith(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    assert "creation-template-szmedi.gas-2.1.0.xlsx" in response.headers["content-disposition"]
+    assert "creation-template-szmedi.gas-1.xlsx" in response.headers["content-disposition"]
     workbook = load_workbook(BytesIO(response.content))
     assert workbook.sheetnames == [SHEETSET_SHEET, SHEET_SHEET, META_SHEET, LIST_SHEET]
 
