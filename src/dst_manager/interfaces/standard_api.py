@@ -46,9 +46,12 @@ def register_standard_routes(app: FastAPI) -> None:
     async def standard_store_error(_: Request, exc: StandardStoreError):
         # 标准库错误消息以稳定码为前缀；未登记码按 422 处理
         code = str(exc).split(":", 1)[0]
-        status = {"STANDARD_VERSION_EXISTS": 409, "STANDARD_DRAFT_EXISTS": 409}.get(
-            code, 404 if code.endswith("_NOT_FOUND") else 422
-        )
+        status = {
+            "STANDARD_VERSION_EXISTS": 409,
+            "STANDARD_NAME_CONFLICT": 409,
+            "STANDARD_VERSION_LIMIT_REACHED": 409,
+            "STANDARD_DRAFT_EXISTS": 409,
+        }.get(code, 404 if code.endswith("_NOT_FOUND") else 422)
         return JSONResponse(status_code=status, content=error_payload(code, str(exc)))
 
     def service(request: Request):
@@ -169,16 +172,6 @@ def register_standard_routes(app: FastAPI) -> None:
     def get_standard(request: Request, standard_id: str, version: str):
         return service(request).get_standard(standard_id, version)
 
-    @app.put(
-        "/api/standards/{standard_id}/{version}",
-        response_model=StandardDraftResponse,
-        response_model_exclude_unset=True,
-    )
-    def put_standard(
-        request: Request, standard_id: str, version: str, body: dict[str, object]
-    ):
-        # 请求体即标准文档本身；已发布身份在应用层最先以 409 拒绝。
-        return service(request).save_standard_by_identity(standard_id, version, body)
 
 
 def _manifests(app: FastAPI) -> Mapping[str, object]:

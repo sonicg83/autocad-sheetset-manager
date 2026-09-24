@@ -181,6 +181,13 @@ export default {
     templateConflict: "The template was updated by another save (server r{current_revision}, local r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
     xlsxInvalid: "Candidate file validation failed: {check}",
   },
+  // ---- Standard library publish and import (PLAN-DM-041 Task 3) ----
+  standards: {
+    nameConflict: "That standard name is already used by another published standard; rename it and retry",
+    versionExists: "A standard with the same ID and version already exists; published versions cannot be overwritten",
+    versionLimitReached: "This standard has reached the highest publishable version",
+    publishFailed: "Writing the published standard failed; the draft and its assets are unchanged and a retry is safe",
+  },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",
     diagnosticsDetails: "Raw error details",

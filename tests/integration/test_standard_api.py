@@ -26,7 +26,6 @@ from dst_manager.interfaces.api import create_app
 DRAFT_DOCUMENT = {
     "schema_version": 2,
     "standard_id": "szmedi.gas",
-    "version": 1,
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -125,7 +124,7 @@ def test_standards_list_returns_published(published_standard: TestClient) -> Non
             "source": "user",
             "status": "published",
             "standard_id": "szmedi.gas",
-            "version": "0.1.0",
+            "version": 1,
             "name": "市政燃气施工图",
             "draft_id": None,
         },
@@ -133,11 +132,18 @@ def test_standards_list_returns_published(published_standard: TestClient) -> Non
 
 
 def test_published_standard_cannot_be_updated(published_standard: TestClient) -> None:
-    response = published_standard.put(
-        "/api/standards/szmedi.gas/0.1.0", json={"name": "changed"}
+    """已发布标准不可原地修改：身份路由不再提供写入入口，文档零变更。"""
+    before = published_standard.get("/api/standards/szmedi.gas/1").json()["document"]
+    identity_write = published_standard.put(
+        "/api/standards/szmedi.gas/1", json={"name": "changed"}
     )
-    assert response.status_code == 409
-    assert response.json()["code"] == "STANDARD_VERSION_IMMUTABLE"
+    assert identity_write.status_code == 405
+    missing_draft = published_standard.put(
+        "/api/standards/drafts/absent", json={"document": {"name": "changed"}}
+    )
+    assert missing_draft.status_code == 404
+    after = published_standard.get("/api/standards/szmedi.gas/1").json()["document"]
+    assert after == before
 
 
 def test_draft_lifecycle_roundtrip(tmp_path: Path) -> None:
@@ -148,22 +154,30 @@ def test_draft_lifecycle_roundtrip(tmp_path: Path) -> None:
     assert detail.status_code == 200
     assert detail.json()["document"]["standard_id"] == "szmedi.gas"
 
-    saved = client.put("/api/standards/szmedi.gas/0.1.0", json=dict(DRAFT_DOCUMENT, name="修订名"))
-    assert saved.status_code == 200
+    saved = client.put(
+        "/api/standards/drafts/draft-gas",
+        json={"document": dict(DRAFT_DOCUMENT, name="修订名")},
+    )
+    assert saved.status_code == 200, saved.text
     assert client.get("/api/standards/drafts/draft-gas").json()["document"]["name"] == "修订名"
 
     assert client.delete("/api/standards/drafts/draft-gas").status_code == 200
     assert client.get("/api/standards/drafts/draft-gas").status_code == 404
-    assert client.put("/api/standards/szmedi.gas/0.1.0", json=DRAFT_DOCUMENT).status_code == 404
+    assert (
+        client.put(
+            "/api/standards/drafts/draft-gas", json={"document": DRAFT_DOCUMENT}
+        ).status_code
+        == 404
+    )
 
 
 def test_published_detail_includes_dependencies(published_standard: TestClient) -> None:
-    detail = published_standard.get("/api/standards/szmedi.gas/0.1.0")
+    detail = published_standard.get("/api/standards/szmedi.gas/1")
     assert detail.status_code == 200
     body = detail.json()
     assert body["standard_id"] == "szmedi.gas"
     assert body["dependencies"] == []
-    assert published_standard.get("/api/standards/absent/1.0.0").status_code == 404
+    assert published_standard.get("/api/standards/absent/1").status_code == 404
 
 
 def test_publish_missing_trusted_dependency_rejected(tmp_path: Path) -> None:
@@ -196,7 +210,7 @@ def test_publish_satisfied_trusted_dependency(tmp_path: Path) -> None:
     assert response.status_code == 200, response.text
     assert response.json() == {
         "standard_id": "szmedi.gas",
-        "version": "0.1.0",
+        "version": 1,
         "name": "市政燃气施工图",
         "diagnostics": [],
     }
@@ -279,7 +293,7 @@ def test_invalid_draft_document_rejected(tmp_path: Path) -> None:
 
 
 def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp_path) -> None:
-    exported = published_standard.get("/api/standards/szmedi.gas/0.1.0/export")
+    exported = published_standard.get("/api/standards/szmedi.gas/1/export")
     assert exported.status_code == 200
     assert exported.headers["content-type"] == "application/zip"
     package = tmp_path / "copy.dststandard"
@@ -297,7 +311,7 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
 
 def test_missing_export_target_rejected(tmp_path: Path) -> None:
     client = make_client(tmp_path)
-    assert client.get("/api/standards/absent/1.0.0/export").status_code == 404
+    assert client.get("/api/standards/absent/1/export").status_code == 404
 
 
 # ---- 草稿级保存路由（PLAN-DM-040 Task 7，F11） ---------------------------
@@ -328,19 +342,19 @@ def test_draft_save_route_missing_draft_returns_404(tmp_path: Path) -> None:
     assert response.json()["code"] == "STANDARD_DRAFT_NOT_FOUND"
 
 
-def test_draft_save_route_rejects_identity_mismatch(tmp_path: Path) -> None:
+def test_draft_save_route_rejects_carried_version(tmp_path: Path) -> None:
+    """草稿不得携带正式版本：携带时以稳定 422 拒绝，且不静默改写已存草稿。"""
     client = make_client(tmp_path)
     make_draft(client, DRAFT_DOCUMENT, "draft-gas")
 
     response = client.put(
         "/api/standards/drafts/draft-gas",
-        json={"document": dict(DRAFT_DOCUMENT, version="9.9.9")},
+        json={"document": dict(DRAFT_DOCUMENT, version=9)},
     )
 
     assert response.status_code == 422, response.text
-    assert response.json()["code"] == "STANDARD_IDENTITY_MISMATCH"
-    # 不静默改写：草稿保持原身份
-    assert client.get("/api/standards/drafts/draft-gas").json()["document"]["version"] == "0.1.0"
+    assert response.json()["code"] == "STANDARD_VERSION_INVALID"
+    assert "version" not in client.get("/api/standards/drafts/draft-gas").json()["document"]
 
 
 def test_draft_save_route_rejects_invalid_structure(tmp_path: Path) -> None:
@@ -360,20 +374,6 @@ def test_draft_save_route_rejects_illegal_draft_id(tmp_path: Path) -> None:
     )
     assert response.status_code == 422
     assert response.json()["code"] == "STANDARD_DRAFT_ID_INVALID"
-
-
-def test_identity_save_route_keeps_working(tmp_path: Path) -> None:
-    """既有身份路由保留：行为不变（兼容保留，前端不再使用）。"""
-    client = make_client(tmp_path)
-    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
-    saved = client.put(
-        "/api/standards/szmedi.gas/0.1.0", json=dict(DRAFT_DOCUMENT, name="按身份保存")
-    )
-    assert saved.status_code == 200
-    assert saved.json()["draft_id"] == "draft-gas"
-    mismatch = client.put("/api/standards/szmedi.gas/0.1.0", json=dict(DRAFT_DOCUMENT, version="9.9.9"))
-    assert mismatch.status_code == 422
-    assert mismatch.json()["code"] == "STANDARD_IDENTITY_MISMATCH"
 
 
 def test_asset_inspection_endpoint(tmp_path: Path, monkeypatch) -> None:
@@ -576,9 +576,9 @@ def test_publish_rejects_draft_with_absolute_asset_path(tmp_path: Path) -> None:
 
 def test_import_rejects_package_with_missing_asset(tmp_path: Path) -> None:
     client = make_client(tmp_path)
-    package = write_api_package(
-        tmp_path / "missing.dststandard", asset_document("assets/A2.dwg")
-    )
+    # 包内文档必须携带正式版本（导入不重编号）。
+    document = {**asset_document("assets/A2.dwg"), "version": 1}
+    package = write_api_package(tmp_path / "missing.dststandard", document)
     response = client.post("/api/standards/import", json={"path": str(package)})
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "STANDARD_ASSET_FILE_MISSING"
@@ -594,7 +594,7 @@ def test_export_includes_only_declared_assets(tmp_path: Path) -> None:
     (assets / "tmp-unreferenced.dwg").write_bytes(b"tmp")
     assert client.post("/api/standards/drafts/draft-asset/publish").status_code == 200
 
-    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    exported = client.get("/api/standards/szmedi.gas/1/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
@@ -678,7 +678,12 @@ def test_copied_asset_closes_loop_through_publish_and_export(    tmp_path: Path,
             "files": [{"path": copied, "role": "A2"}],
         }
     ]
-    assert client.put("/api/standards/szmedi.gas/0.1.0", json=document).status_code == 200
+    assert (
+        client.put(
+            "/api/standards/drafts/draft-gas", json={"document": document}
+        ).status_code
+        == 200
+    )
     inspected = client.post(
         "/api/standards/drafts/draft-gas/assets/layouts/inspect", json={"cad_version": "2020"}
     )
@@ -686,7 +691,7 @@ def test_copied_asset_closes_loop_through_publish_and_export(    tmp_path: Path,
     assert inspected.json()["diagnostics"] == []
     assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
 
-    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    exported = client.get("/api/standards/szmedi.gas/1/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert sorted(archive.namelist()) == sorted(["manifest.json", copied])
@@ -697,10 +702,10 @@ def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     make_draft(client, DRAFT_DOCUMENT, "draft-gas")
     assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
-    detail = client.get("/api/standards/szmedi.gas/0.1.0")
+    detail = client.get("/api/standards/szmedi.gas/1")
     assert detail.status_code == 200
     assert detail.json()["document"]["name"] == "市政燃气施工图"
-    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    exported = client.get("/api/standards/szmedi.gas/1/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert "manifest.json" in archive.namelist()

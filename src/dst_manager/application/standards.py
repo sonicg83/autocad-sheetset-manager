@@ -39,6 +39,8 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 #: 标准库稳定错误码 → HTTP 状态；未登记码一律 422。
 _STORE_STATUS = {
     "STANDARD_VERSION_EXISTS": 409,
+    "STANDARD_NAME_CONFLICT": 409,
+    "STANDARD_VERSION_LIMIT_REACHED": 409,
     "STANDARD_DRAFT_EXISTS": 409,
     "STANDARD_VERSION_NOT_FOUND": 404,
     "STANDARD_DRAFT_NOT_FOUND": 404,
@@ -283,10 +285,10 @@ class StandardOperations:
             raise _store_error(exc) from exc
 
     def save_standard_draft(self, draft_id: str, document: Mapping[str, object]) -> dict[str, object]:
-        """保存草稿：文档身份必须等于草稿已存身份（F11）。
+        """保存草稿：文档身份（标准 ID）必须等于草稿已存身份（F11）。
 
         身份不一致时以稳定 422 ``STANDARD_IDENTITY_MISMATCH`` 拒绝，不静默改写文档；
-        结构与语义未完成内容仍按草稿门禁处理。
+        结构与语义未完成内容仍按草稿门禁处理；草稿不携带正式版本（携带即 422）。
         """
         try:
             existing = self.standard_store.get_draft(draft_id)
@@ -306,24 +308,6 @@ class StandardOperations:
         except (StandardStoreError, StandardSchemaError) as exc:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}
-
-    def save_standard_by_identity(
-        self, standard_id: str, version: str, document: Mapping[str, object]
-    ) -> dict[str, object]:
-        """按身份保存用户草稿；已发布身份一律不可原地修改。"""
-        if self.standard_store.get(standard_id, version) is not None:
-            raise ApplicationError(
-                "STANDARD_VERSION_IMMUTABLE",
-                f"标准 {standard_id}@{version} 已发布，不可修改",
-                409,
-            )
-        _require_identity_match(
-            {"standard_id": standard_id, "version": version}, document
-        )
-        draft_id = self._draft_id_with_identity(standard_id, version)
-        if draft_id is None:
-            raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"身份 {standard_id}@{version} 无对应草稿", 404)
-        return self.save_standard_draft(draft_id, document)
 
     def get_standard(self, standard_id: str, version: str) -> dict[str, object]:
         standard = self.standard_store.get(standard_id, version)
@@ -351,32 +335,46 @@ class StandardOperations:
     def publish_standard(
         self, draft_id: str, manifests: Mapping[str, object] | None = None
     ) -> dict[str, object]:
-        """发布草稿；完整发布门禁在目录移动前生效。
+        """发布草稿：服务端分配整数版本，仓储锁内完整校验后原子提交。
 
-        声明的受信扩展依赖缺失时以 409 稳定拒绝；warning 随成功响应返回，
-        不阻断发布。
+        先过草稿结构门禁与受信扩展依赖门禁（缺失时 409），再由仓储分配
+        ``max(官方, 用户) + 1`` 并跑完整发布门禁与名称唯一门禁；warning 随成功
+        响应返回，不阻断发布。
         """
         draft = self.standard_store.get_draft(draft_id)
         if draft is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
         try:
-            standard = parse_published_standard_document(draft.document)
+            draft_standard = parse_standard_draft_document(draft.document)
         except StandardSchemaError as exc:
             # 草稿门禁允许的语义未完成内容在发布时必须以稳定 422 返回（不能冒泡成 500）
             raise _store_error(exc) from exc
-        diagnostics = self._publish_gate(standard)
         if manifests is not None:
-            self._require_dependencies(standard.dependencies, manifests)
+            self._require_dependencies(draft_standard.dependencies, manifests)
         try:
             published = self.standard_store.publish(draft_id)
         except StandardStoreError as exc:
             raise _store_error(exc) from exc
+        diagnostics = self._published_diagnostics(published)
         return {
             "standard_id": published.standard_id,
             "version": published.version,
             "name": published.name,
             "diagnostics": [_publish_diagnostic(item) for item in diagnostics],
         }
+
+    def _published_diagnostics(self, published) -> tuple[StandardDiagnostic, ...]:
+        """发布成功后的诊断：由仓储已校验的发布文档确定性重算。"""
+        document = self.standard_store.get_document(
+            published.standard_id, published.version
+        )
+        if document is None:
+            return ()
+        try:
+            standard = parse_published_standard_document(document)
+        except StandardSchemaError:
+            return ()
+        return publish_diagnostics(standard) + publish_naming_diagnostics(standard)
 
     def import_standard_package(self, path: Path) -> dict[str, object]:
         """导入标准包；包内文档同样要过完整发布门禁，失败不落库。"""
@@ -428,20 +426,6 @@ class StandardOperations:
             f"标准声明的受信扩展能力缺失：{detail}",
             409,
         )
-
-    def _draft_id_with_identity(self, standard_id: str, version: str) -> str | None:
-        # 草稿摘要的 version 恒为空串（身份在草稿文档内），必须逐份解析匹配。
-        for summary in self.standard_store.list():
-            if summary.status != "draft":
-                continue
-            draft = self.standard_store.get_draft(summary.draft_id or "")
-            if (
-                draft is not None
-                and draft.document.get("standard_id") == standard_id
-                and draft.document.get("version") == version
-            ):
-                return draft.draft_id
-        return None
 
 
 def _require_identity_match(

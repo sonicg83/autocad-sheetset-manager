@@ -182,6 +182,13 @@ export default {
     templateConflict: "模板已被其他保存更新（服务端 r{current_revision}，本地 r{expected_revision}），本地编辑已保留，可另存为新模板或按新修订重试",
     xlsxInvalid: "候选文件校验未通过：{check}",
   },
+  // ---- 标准库发布与导入（PLAN-DM-041 Task 3；服务端分配版本与名称唯一门禁） ----
+  standards: {
+    nameConflict: "该标准名称已被其他已发布标准占用，请修改名称后重试",
+    versionExists: "同一标准 ID 与版本已存在，已发布版本不可覆盖",
+    versionLimitReached: "该标准已达到最高发布版本，无法再发布新版本",
+    publishFailed: "标准发布写入失败，草稿与资产保持不变，可直接重试",
+  },
   ui: {
     unknownSummary: "操作失败，发生未知错误",
     diagnosticsDetails: "原始错误详情",

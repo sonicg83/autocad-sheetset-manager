@@ -1,3 +1,11 @@
+## 2026-09-25（PLAN-DM-041 Task 3：服务端自动分配版本与名称唯一门禁）
+
+- 新增 `domain/standard_identity.py`：`normalize_standard_name` 为无文件系统依赖的纯函数，按 Unicode NFKC → 去首尾空白 → 连续空白归一 → `str.casefold()` 计算名称比较口径（不用 `lower()`，避免 `ẞ`/`İ` 归一不一致）。
+- 仓储新增标准库写入门禁（进程内 + 跨进程按用户库根互斥，锁文件 `user_root/.standards.lock`），锁覆盖「读官方/用户最高版 → 写暂存文档 → 原子提交目录」全程：`publish()` 在锁内分配 `max(官方库, 用户库) + 1`（无历史为 `1`，达上限以 `STANDARD_VERSION_LIMIT_REACHED` 拒绝），发布文档在草稿目录内写入整数版本并过完整发布解析、资产门禁与名称唯一门禁；任何失败不消耗版本、不留空身份目录，并把草稿文档恢复为无版本形态。`import_package()` 在同一锁内复核身份与名称，与本机发布共用 `check_published_name`。
+- 移除 Task 2 的过渡码 `STANDARD_VERSION_UNASSIGNED`；把 `STANDARD_NAME_CONFLICT`、`STANDARD_VERSION_EXISTS`、`STANDARD_VERSION_LIMIT_REACHED`、`STANDARD_PUBLISH_FAILED` 登记进 `message_catalog` 并补齐中英文 `errors.standards` 文案。
+- 按新契约移除不再成立的草稿按身份保存入口（`save_standard_by_identity` 与 `PUT /api/standards/{standard_id}/{version}`）：草稿不携带版本后该路由无法成立，草稿级 `PUT /api/standards/drafts/{draft_id}` 保留；发布编排改为先过草稿门禁与依赖门禁、再由仓储分配版本，warning 诊断由已校验的发布文档确定性重算。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q -p no:xdist tests/unit/test_standard_store.py tests/integration/test_standard_api.py tests/unit/test_message_catalog.py` **190 passed**（含新增的递增版本、官方更高版延续、名称归一冲突、草稿不占名称、上限拒绝、并发两发布得到不同版本、注入移动失败后草稿与资产不丢）。创建链路（PLAN-DM-041 Task 4）与前端（Task 6）仍为阶段性红。
+
 ## 2026-09-25（PLAN-DM-041 Task 2：正整数领域契约与无版本草稿）
 
 - 领域层：`schema_version` 升为 `2`；标准发布版本改为 `1..2147483647` 的 JSON 整数，显式拒绝 `0`、负数、布尔、小数、字符串与旧三段形式；草稿拆为 `DraftDrawingStandard`，**不携带 `version`**，携带即拒绝；新增 `materialize_published_document` / `materialize_published_standard` 在草稿文档副本上写入整数版本并过完整发布门禁。依赖能力版本 `dependencies[*].min_version` 保留三段字符串，与标准版本、文档格式版本三者使用互不共用的解析器（`parse_standard_version` / `parse_standard_version_segment` / `parse_dependency_version`）。

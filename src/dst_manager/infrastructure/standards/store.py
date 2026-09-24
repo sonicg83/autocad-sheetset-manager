@@ -5,6 +5,7 @@
     official_root/<standard_id>/<n>/document.json      # 只读
     user_root/published/<standard_id>/<n>/             # 已发布用户标准
     user_root/drafts/<draft_id>/document.json          # 用户草稿
+    user_root/.standards.lock                          # 发布/导入互斥锁文件
 
 ``<n>`` 是规范十进制正整数版本目录名；同一 ``standard_id + <n>`` 的重复发布、
 导入碰撞与官方身份冲突一律以 ``STANDARD_VERSION_EXISTS`` 稳定拒绝。
@@ -21,30 +22,37 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import uuid
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from dst_manager.domain.standard_identity import normalize_standard_name
 from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
+    MAX_STANDARD_VERSION,
     STANDARD_ID_PATTERN,
     STANDARD_VERSION_SEGMENT_PATTERN,
     SUPPORTED_SCHEMA_VERSIONS,
     DrawingStandard,
     StandardSchemaError,
+    materialize_published_document,
     parse_published_standard_document,
     parse_standard_draft_document,
     parse_standard_version,
     parse_standard_version_segment,
 )
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
+from dst_manager.infrastructure.filesystem.locking import WorkspaceTransactionLock
 from dst_manager.infrastructure.standards.asset_paths import (
     StandardAssetError,
     resolve_asset_file,
     resolve_asset_files,
+    validate_asset_files,
     validate_package_asset_files,
 )
 from dst_manager.infrastructure.standards.package import (
@@ -55,6 +63,25 @@ from dst_manager.infrastructure.standards.package import (
 )
 
 DOCUMENT_NAME = "document.json"
+
+#: 标准库写入门禁文件名（位于用户库根）：发布与导入共用同一互斥。
+LIBRARY_LOCK_NAME = ".standards.lock"
+#: 取得互斥锁的等待上限（秒）；持锁窗口只覆盖读最高版到原子提交。
+LIBRARY_LOCK_TIMEOUT_SECONDS = 30.0
+
+#: 进程内按用户库根注册的互斥：确保同进程内多个 Store 实例也互斥。
+_process_locks_guard = threading.Lock()
+_process_locks: dict[str, threading.Lock] = {}
+
+
+def _process_lock(root: Path) -> threading.Lock:
+    key = str(root)
+    with _process_locks_guard:
+        lock = _process_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _process_locks[key] = lock
+        return lock
 
 #: 单段路径名长度上限：标准库目录名来自客户端输入，超长一律拒绝。
 MAX_SEGMENT_LENGTH = 128
@@ -200,6 +227,19 @@ class StandardStore:
     def drafts_root(self) -> Path:
         return self._drafts_root
 
+    @contextmanager
+    def _exclusive(self):
+        """标准库写入门禁：进程内互斥 + 跨进程按用户库根互斥。
+
+        锁覆盖「读取官方/用户最高版本 → 写暂存文档 → 原子提交目录」全程，
+        使并发发布不可能得到同一版本。只读入口不取锁，也不创建目录。
+        """
+        with _process_lock(self._user_root), WorkspaceTransactionLock(
+            self._user_root / LIBRARY_LOCK_NAME,
+            timeout_seconds=LIBRARY_LOCK_TIMEOUT_SECONDS,
+        ):
+            yield
+
     # ---- 路径段边界 ------------------------------------------------------
 
     def _draft_dir(self, draft_id: str) -> Path:
@@ -226,6 +266,55 @@ class StandardStore:
                 f"标准 {standard_id}@{version} 不在发布根的单层目录中",
             )
         return target
+
+    # ---- 版本分配与名称唯一 --------------------------------------------
+
+    def published_name_owners(self) -> dict[str, str]:
+        """规范化名称 → 占用它的 ``standard_id``（仅官方与用户库的**已发布**版本）。
+
+        草稿不占名称；同一 ``standard_id`` 的多个版本可沿用同一名称。
+        """
+        owners: dict[str, str] = {}
+        for summary in self.list():
+            if summary.status != "published":
+                continue
+            normalized = normalize_standard_name(summary.name)
+            if normalized:
+                owners.setdefault(normalized, summary.standard_id)
+        return owners
+
+    def check_published_name(self, standard_id: str, name: str) -> None:
+        """本机发布与标准包导入共用的名称唯一门禁。
+
+        不同 ``standard_id`` 的已发布标准归一化同名时以 ``STANDARD_NAME_CONFLICT``
+        拒绝；同 ID 跨版本同名或改名均允许。
+        """
+        owner = self.published_name_owners().get(normalize_standard_name(name))
+        if owner is not None and owner != standard_id:
+            raise _error(
+                "STANDARD_NAME_CONFLICT",
+                f"标准名称 {name!r} 已由已发布标准 {owner!r} 占用",
+            )
+
+    def next_publish_version(self, standard_id: str) -> int:
+        """官方库与用户库中该 ID 的最高已发布整数版本 + 1；无历史为 ``1``。
+
+        最高版已达上限时以 ``STANDARD_VERSION_LIMIT_REACHED`` 稳定拒绝，
+        不回绕、不复用。调用方必须在 :meth:`_exclusive` 锁内使用。
+        """
+        highest = 0
+        for summary in self.list():
+            if summary.status != "published" or summary.standard_id != standard_id:
+                continue
+            version = summary.version
+            if isinstance(version, int) and version > highest:
+                highest = version
+        if highest >= MAX_STANDARD_VERSION:
+            raise _error(
+                "STANDARD_VERSION_LIMIT_REACHED",
+                f"标准 {standard_id} 已占用最高版本 {MAX_STANDARD_VERSION}，无法再分配",
+            )
+        return highest + 1
 
     # ---- 查询 ------------------------------------------------------------
 
@@ -486,20 +575,76 @@ class StandardStore:
     # ---- 发布与导入导出 --------------------------------------------------
 
     def publish(self, draft_id: str) -> PublishedStandard:
-        """发布草稿（PLAN-DM-041 Task 2 → Task 3 显式过渡态）。
+        """发布草稿：在标准库锁内分配整数版本、写暂存文档并原子提交目录。
 
-        草稿不再携带版本，服务端版本分配（官方/用户库同 ID 取 ``max+1``）由
-        Task 3 在仓储锁内实现。在它落地前，本入口以稳定 422
-        ``STANDARD_VERSION_UNASSIGNED`` 拒绝，**不写任何目录**，避免任何调用方
-        在未分配版本的情况下移动草稿目录。
+        版本取官方库与用户库同 ID 的已发布版本 ``max + 1``（无历史为 ``1``）：
+        读取最高版与原子提交在同一互斥区内完成，并发发布不可能得到同一版本。
+        发布前汇总草稿结构门禁、完整发布解析、资产门禁与名称唯一门禁；任何
+        失败都不消耗版本、不留空目录，并把草稿文档恢复为无版本形态。
         """
-        draft = self.get_draft(draft_id)
-        if draft is None:
-            raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
-        raise _error(
-            "STANDARD_VERSION_UNASSIGNED",
-            f"草稿 {draft_id!r} 尚未分配发布版本：服务端版本分配尚未接线",
-        )
+        with self._exclusive():
+            draft = self.get_draft(draft_id)
+            if draft is None:
+                raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
+            draft_dir = self._draft_dir(draft_id)
+            try:
+                parse_standard_draft_document(draft.document)  # 草稿不得携带版本
+            except StandardSchemaError as exc:
+                raise StandardStoreError(str(exc)) from exc
+            standard_id = str(draft.document.get("standard_id", ""))
+            version = self.next_publish_version(standard_id)
+            document = materialize_published_document(draft.document, version)
+            standard = _published_or_store_error(document)
+            try:
+                # 发布前最终门禁：声明的模板资产必须真实落在草稿受控目录内。
+                validate_asset_files(standard, draft_dir)
+            except StandardAssetError as exc:
+                raise _asset_gate_error(exc) from exc
+            self.check_published_name(standard_id, standard.name)
+            target = self._assert_identity_free(standard_id, version)
+            # 发布成功后草稿目录整体移动：先清理本次编辑未引用的受控副本。
+            self._prune_managed_assets(draft_dir, standard)
+            self._published_root.mkdir(parents=True, exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            original = (draft_dir / DOCUMENT_NAME).read_bytes()
+            try:
+                self._write_document(draft_dir, document)
+                os.replace(draft_dir, target)
+            except OSError as exc:
+                self._restore_draft_document(draft_dir, original)
+                self._prune_empty_identity_dir(target)
+                if isinstance(exc, FileExistsError):
+                    raise _identity_collision(standard_id, version) from exc
+                raise _error(
+                    "STANDARD_PUBLISH_FAILED",
+                    f"发布标准 {standard_id}@{version} 失败：{exc}",
+                ) from exc
+            return PublishedStandard(
+                standard_id=standard_id,
+                version=version,
+                name=standard.name,
+                root=target,
+            )
+
+    @staticmethod
+    def _restore_draft_document(draft_dir: Path, original: bytes) -> None:
+        """把草稿文档恢复为发布前的无版本形态。
+
+        尽力而为：恢复失败时草稿目录可能保留已写入的 ``version`` 字段，
+        需人工介入；绝不能因此删除草稿内容。
+        """
+        try:
+            (draft_dir / DOCUMENT_NAME).write_bytes(original)
+        except OSError:
+            return
+
+    @staticmethod
+    def _prune_empty_identity_dir(target: Path) -> None:
+        """失败回滚：只在身份目录仍为空时移除它，不触碰任何既有内容。"""
+        try:
+            target.parent.rmdir()
+        except OSError:
+            return
 
     def read_package(self, path: Path) -> LoadedStandardPackage:
         """读取并校验标准包（不落库），供应用层发布门禁先行判定。
@@ -515,37 +660,48 @@ class StandardStore:
     def import_package(
         self, path: Path, loaded: LoadedStandardPackage | None = None
     ) -> PublishedStandard:
-        """导入标准包；包内文档必须通过完整发布门禁，失败不落库。"""
-        loaded = loaded if loaded is not None else self.read_package(path)
-        standard = loaded.standard
-        gate = _publish_gate_error(standard)
-        if gate is not None:
-            raise gate
-        try:
-            # 导入门禁在建任何目录之前：清单与包内条目必须双向一致。
-            validate_package_asset_files(
-                standard, [entry.path for entry in loaded.entries]
-            )
-        except StandardAssetError as exc:
-            raise _asset_gate_error(exc) from exc
-        target = self._assert_identity_free(standard.standard_id, standard.version)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        staging = self._published_root / f".import-{uuid.uuid4().hex}"
-        staging.mkdir(parents=True)
-        try:
-            self._extract_package(loaded, staging)
+        """导入标准包；包内文档必须通过完整发布门禁与名称唯一门禁，失败不落库。
+
+        读包与建目录都在标准库锁内完成，并在锁内重新核对身份与名称，
+        使预检后的库状态变化不会造成静默覆盖。
+        """
+        with self._exclusive():
+            loaded = loaded if loaded is not None else self.read_package(path)
+            standard = loaded.standard
+            gate = _publish_gate_error(standard)
+            if gate is not None:
+                raise gate
             try:
-                os.replace(staging, target)
-            except OSError as exc:
-                raise _identity_collision(standard.standard_id, standard.version) from exc
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-        return PublishedStandard(
-            standard_id=standard.standard_id,
-            version=standard.version,
-            name=standard.name,
-            root=target,
-        )
+                # 导入门禁在建任何目录之前：清单与包内条目必须双向一致。
+                validate_package_asset_files(
+                    standard, [entry.path for entry in loaded.entries]
+                )
+            except StandardAssetError as exc:
+                raise _asset_gate_error(exc) from exc
+            self.check_published_name(standard.standard_id, standard.name)
+            target = self._assert_identity_free(standard.standard_id, standard.version)
+            # 只建到发布根与身份目录：失败时 `_prune_empty_identity_dir` 会移除空身份目录。
+            self._published_root.mkdir(parents=True, exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            staging = self._published_root / f".import-{uuid.uuid4().hex}"
+            staging.mkdir(parents=True)
+            try:
+                self._extract_package(loaded, staging)
+                try:
+                    os.replace(staging, target)
+                except OSError as exc:
+                    self._prune_empty_identity_dir(target)
+                    raise _identity_collision(
+                        standard.standard_id, standard.version
+                    ) from exc
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+            return PublishedStandard(
+                standard_id=standard.standard_id,
+                version=standard.version,
+                name=standard.name,
+                root=target,
+            )
 
     def _extract_package(self, loaded, staging: Path) -> None:
         """把已校验条目逐个复制到暂存目录；路径在读取阶段已验证。"""
