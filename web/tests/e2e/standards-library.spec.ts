@@ -3,7 +3,7 @@
 // 无结果的区分、官方/已发布只读边界、草稿可维护、派生新草稿、加载失败与导入碰撞
 // 不改变选中、900×768 分级视图无横向溢出。
 import {expect, test, type Page} from "@playwright/test";
-import {draft, draftDocument, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
+import {draft, draftDocument, groupHeaders, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
@@ -24,7 +24,7 @@ test("空标准库与筛选无结果区分呈现", async ({page}) => {
   await expect(page.getByText("标准库为空，可新建草稿或导入标准包。")).toBeVisible();
 
   // 库里有了标准之后，同样的界面必须能区分「筛没了」与「没有标准」
-  state.list = [published("official", "2.1.0")];
+  state.list = [published("official", 2)];
   await page.getByRole("button", {name: "返回欢迎页"}).click();
   await page.getByRole("button", {name: "管理图纸标准"}).click();
   await expect(libraryItems(page).filter({hasText: "市政燃气施工图"})).toHaveCount(1);
@@ -34,9 +34,9 @@ test("空标准库与筛选无结果区分呈现", async ({page}) => {
 });
 
 test("官方标准只读并保留派生与导出动作", async ({page}) => {
-  await installStandards(page, [published("official", "2.1.0"), published("user", "2.0.0")]);
+  await installStandards(page, [published("official", 2), published("user", 1)]);
   await openStandards(page);
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await libraryItems(page).filter({hasText: "v2"}).click();
 
   await expect(page.getByText("官方标准只读")).toBeVisible();
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
@@ -46,18 +46,18 @@ test("官方标准只读并保留派生与导出动作", async ({page}) => {
   // 能力摘要与版本历史来自 detail.document 与同一标准 ID 的已发布版本集合
   await expect(page.getByText("普通属性 1 项")).toBeVisible();
   await expect(page.getByText("派生属性 1 项")).toBeVisible();
-  await expect(page.getByRole("button", {name: "v2.0.0 · 用户"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "v1 · 市政燃气施工图 · 用户"})).toBeVisible();
 });
 
 test("发布版本只读并可派生新草稿", async ({page}) => {
   const state = await installStandards(page, [
-    published("official", "2.1.0"),
-    published("user", "2.0.0"),
+    published("official", 2),
+    published("user", 1),
     draft("草稿 1", "draft-1"),
     draft("草稿 2", "draft-2"),
   ]);
   await openStandards(page);
-  await libraryItems(page).filter({hasText: "2.0.0"}).click();
+  await libraryItems(page).filter({hasText: "v1"}).click();
 
   await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
@@ -65,17 +65,19 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   await page.getByRole("button", {name: "派生新草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("基于 szmedi.gas 2.0.0 派生")).toBeVisible();
-  // 名称取当前草稿数 +1，版本取源版本补丁位 +1（仅补丁位递增，不产生新标准 ID）
+  await expect(dialog.getByText("基于 szmedi.gas 1 派生")).toBeVisible();
+  // 名称取当前草稿数 +1；派生草稿不携带版本（发布时由服务端分配）
   await expect(dialog.getByLabel("标准名称")).toHaveValue("草稿 3");
-  await expect(dialog.getByLabel("版本号")).toHaveValue("2.0.1");
+  await expect(dialog.getByLabel("版本号")).toHaveCount(0);
+  await expect(dialog.getByText(/由服务端分配 v1、v2/)).toBeVisible();
   await dialog.getByRole("button", {name: "创建草稿"}).click();
 
   await expect(page.getByText("草稿 3")).toBeVisible();
   expect(state.createBodies).toHaveLength(1);
   const created = state.createBodies[0] as {document: Record<string, unknown>};
   expect(created.document["standard_id"]).toBe("szmedi.gas");
-  expect(created.document["version"]).toBe("2.0.1");
+  expect(created.document["version"]).toBeUndefined();
+  expect(created.document["schema_version"]).toBe(2);
 });
 
 test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => {
@@ -85,10 +87,9 @@ test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => 
   await page.getByRole("button", {name: "新建草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
   await dialog.getByLabel("标准名称").fill("空白标准");
-  await dialog.getByLabel("版本号").fill("1.0.0");
   await dialog.getByRole("button", {name: "创建草稿"}).click();
 
-  // 创建体必须是 Schema v1：不含旧顶层 rules，且带默认 DWG 命名模板
+  // 创建体必须是 Schema v2（无版本字段）：不含旧顶层 rules，且带默认 DWG 命名模板
   expect(state.createBodies).toHaveLength(1);
   const created = state.createBodies[0] as {document: Record<string, unknown>};
   expect(created.document["rules"]).toBeUndefined();
@@ -108,7 +109,7 @@ test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => 
 });
 
 test("草稿可维护：编辑入口直接进入分区编辑器", async ({page}) => {
-  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")], {
+  await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": draftDocument()},
   });
   await openStandards(page);
@@ -156,9 +157,9 @@ test("标准库加载失败给出稳定错误且不伪造空库", async ({page})
 });
 
 test("导入碰撞不改变当前选择且不关闭导入对话框", async ({page}) => {
-  const state = await installStandards(page, [published("official", "2.1.0"), published("user", "2.0.0")]);
+  const state = await installStandards(page, [published("official", 2), published("user", 1)]);
   await openStandards(page);
-  const selected = libraryItems(page).filter({hasText: "2.1.0"});
+  const selected = libraryItems(page).filter({hasText: "v2"});
   await selected.click();
   await expect(page.getByText("官方标准只读")).toBeVisible();
 
@@ -178,8 +179,8 @@ test("导入碰撞不改变当前选择且不关闭导入对话框", async ({pag
 
 test("同来源同版本的不同标准互不串键", async ({page}) => {
   await installStandards(page, [
-    published("official", "1.0.0", {standard_id: "official.gas", name: "官方燃气标准"}),
-    published("official", "1.0.0", {standard_id: "official.water", name: "官方给水标准"}),
+    published("official", 1, {standard_id: "official.gas", name: "官方燃气标准"}),
+    published("official", 1, {standard_id: "official.water", name: "官方给水标准"}),
   ]);
   await openStandards(page);
   await expect(libraryItems(page)).toHaveCount(2);
@@ -201,8 +202,7 @@ test("空库新建草稿后保存与发布只作用于新草稿", async ({page})
   await page.getByRole("button", {name: "新建草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
   await dialog.getByLabel("标准名称").fill("空白标准");
-  await dialog.getByLabel("版本号").fill("1.0.0");
-  await dialog.getByRole("button", {name: "创建草稿"}).click();
+    await dialog.getByRole("button", {name: "创建草稿"}).click();
 
   const editor = page.getByRole("region", {name: "标准草稿编辑器"});
   await expect(editor).toBeVisible();
@@ -233,7 +233,6 @@ test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({pag
   await page.getByRole("button", {name: "新建草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
   await dialog.getByLabel("标准名称").fill("空白标准");
-  await dialog.getByLabel("版本号").fill("1.0.0");
   await dialog.getByRole("button", {name: "创建草稿"}).click();
 
   await page.getByTestId("editor-section-assets").click();
@@ -253,8 +252,8 @@ test("切换选择后派生只消费已加载且身份匹配的详情", async ({
   const state = await installStandards(
     page,
     [
-      published("official", "1.0.0", {standard_id: "official.gas", name: "官方燃气标准"}),
-      published("official", "2.0.0", {standard_id: "official.water", name: "官方给水标准"}),
+      published("official", 1, {standard_id: "official.gas", name: "官方燃气标准"}),
+      published("official", 1, {standard_id: "official.water", name: "官方给水标准"}),
     ],
     {
       detailFailures: {
@@ -262,8 +261,8 @@ test("切换选择后派生只消费已加载且身份匹配的详情", async ({
       },
       detailDocuments: {
         // 两份详情内容可区分：派生来源必须是当前标准的文档
-        "official.gas@1.0.0": draftDocument({standard_id: "official.gas", version: "1.0.0", name: "官方燃气标准", numbering: {sequence_field: "subset.sequence", digits: 2}}),
-        "official.water@2.0.0": draftDocument({standard_id: "official.water", version: "2.0.0", name: "官方给水标准", numbering: {sequence_field: "subset.sequence", digits: 3}}),
+        "official.gas@1": draftDocument({standard_id: "official.gas", name: "官方燃气标准", numbering: {sequence_field: "subset.sequence", digits: 2}}),
+        "official.water@1": draftDocument({standard_id: "official.water", name: "官方给水标准", numbering: {sequence_field: "subset.sequence", digits: 3}}),
       },
     },
   );
@@ -301,15 +300,15 @@ test("切换选择后派生只消费已加载且身份匹配的详情", async ({
 
 test("版本历史跨官方与用户来源时选中正确标准", async ({page}) => {
   await installStandards(page, [
-    published("official", "2.1.0", {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
-    published("user", "2.0.0", {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
+    published("official", 2, {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
+    published("user", 1, {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
   ]);
   await openStandards(page);
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await libraryItems(page).filter({hasText: "v2"}).click();
   await expect(page.getByText("官方标准只读")).toBeVisible();
 
   // 版本历史条目自带来源：点击用户版本必须切换到用户来源，而不是沿用官方
-  await page.getByRole("button", {name: "v2.0.0 · 用户"}).click();
+  await page.getByRole("button", {name: "v1 · 市政燃气施工图 · 用户"}).click();
   await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
   await expect(page.getByText("官方标准只读")).toHaveCount(0);
   await expect(page.getByRole("region", {name: "标准详情"})).toContainText("szmedi.gas");
@@ -317,7 +316,7 @@ test("版本历史跨官方与用户来源时选中正确标准", async ({page})
 
 test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
-  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")]);
+  await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")]);
   await openStandards(page);
 
   const libraryRegion = page.getByRole("region", {name: "标准库"});
@@ -326,7 +325,7 @@ test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", 
   await expect(detailRegion).toBeHidden();
 
   await page.getByLabel("搜索标准").fill("市政");
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await libraryItems(page).filter({hasText: "v2"}).click();
   // 两级视图互斥：选中后列表隐藏、详情显示、返回列表可见
   await expect(detailRegion).toBeVisible();
   await expect(page.getByText("官方标准只读")).toBeVisible();
@@ -339,14 +338,14 @@ test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", 
   await expect(libraryRegion).toBeVisible();
   await expect(detailRegion).toBeHidden();
   await expect(page.getByLabel("搜索标准")).toHaveValue("市政");
-  await expect(libraryItems(page).filter({hasText: "2.1.0"})).toHaveClass(/selected/);
+  await expect(libraryItems(page).filter({hasText: "v2"})).toHaveClass(/selected/);
 
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(900);
 });
 
 test("列表与详情失败可就地重试，筛选无结果可清除", async ({page}) => {
-  const state = await installStandards(page, [published("official", "2.1.0")], {listFails: true});
+  const state = await installStandards(page, [published("official", 2)], {listFails: true});
   await openStandards(page);
 
   // 列表失败：就地重试只重发列表请求
@@ -357,7 +356,7 @@ test("列表与详情失败可就地重试，筛选无结果可清除", async ({
 
   // 详情失败：保留列表与选择，右栏就地错误与重试
   state.detailFailures["szmedi.gas"] = {status: 500, code: "INTERNAL_ERROR", message: "详情不可用"};
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await libraryItems(page).filter({hasText: "v2"}).click();
   await expect(page.getByTestId("detail-error")).toBeVisible();
   // 详情失败不渲染文档摘要（不把旧详情当作当前详情）
   await expect(page.getByRole("region", {name: "标准详情"})).not.toContainText("普通属性 1 项");
@@ -383,7 +382,7 @@ async function expectNoPageHScroll(page: Page, label: string): Promise<void> {
 }
 
 test("200% 缩放下两级视图互斥且返回列表可达", async ({page}) => {
-  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")]);
+  await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")]);
   await page.goto("/");
   // 1440×900 下浏览器 200% 缩放 = CSS 视口 720×450 + 2x 渲染（与既有证据同一口径）
   const cdp = await page.context().newCDPSession(page);
@@ -396,7 +395,7 @@ test("200% 缩放下两级视图互斥且返回列表可达", async ({page}) => 
   await expect(detailRegion).toBeHidden();
   await expectNoPageHScroll(page, "200% 标准库列表");
 
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await libraryItems(page).filter({hasText: "v2"}).click();
   await expect(detailRegion).toBeVisible();
   await expect(libraryRegion).toBeHidden();
   const back = page.getByRole("button", {name: "返回列表"});
@@ -411,7 +410,7 @@ test("200% 缩放下两级视图互斥且返回列表可达", async ({page}) => 
 
 test("窄屏两级视图可用键盘进入与返回", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
-  await installStandards(page, [published("official", "2.1.0")]);
+  await installStandards(page, [published("official", 2)]);
   await openStandards(page);
 
   const item = libraryItems(page).first();
@@ -434,7 +433,7 @@ test("超长中英文标准名在窄屏两级视图下不溢出", async ({page})
   await page.setViewportSize({width: 900, height: 768});
   const longName = "市政燃气管网施工图设计说明书（第一分册）VeryLongStandardNameForOverflowCheck2026";
   await installStandards(page, [
-    published("official", "2.1.0", {name: longName}),
+    published("official", 2, {name: longName}),
     draft("草稿 1", "draft-1"),
   ]);
   await openStandards(page);
@@ -503,4 +502,60 @@ test("草稿加载失败时不显示无动作的详情重试按钮", async ({pag
   await expect(page.getByTestId("detail-error")).toBeVisible();
   // 草稿没有可重发的详情请求：不得给出点了没反应的「重试加载详情」
   await expect(page.getByRole("button", {name: "重试加载详情"})).toHaveCount(0);
+});
+
+// ---- 按 ID 归集与整数版本（PLAN-DM-041 Task 6） ---------------------------
+
+test("标准库按 ID 归集并按整数版本降序，草稿归入同组", async ({page}) => {
+  await installStandards(page, [
+    published("official", 9, {standard_id: "szmedi.gas"}),
+    published("user", 10, {standard_id: "szmedi.gas"}),
+    draft("草稿 1", "draft-1"),
+    published("user", 1, {standard_id: "other.std", name: "其他标准"}),
+  ]);
+  await openStandards(page);
+
+  // 两个 ID → 两个归集组；组标题取当前可见最高版本（v10）的名称
+  await expect(groupHeaders(page)).toHaveCount(2);
+  await expect(groupHeaders(page).first()).toContainText("szmedi.gas");
+  await expect(groupHeaders(page).first()).toContainText("v10");
+  await expect(groupHeaders(page).last()).toContainText("other.std");
+
+  // 组内整数降序：v10 在 v9 之前，草稿排在版本之后
+  const entries = await libraryItems(page).allInnerTexts();
+  expect(entries[0]).toContain("v10");
+  expect(entries[1]).toContain("v9");
+  expect(entries[2]).toContain("草稿 1");
+  expect(entries[3]).toContain("v1");
+
+  // 键盘可收起/展开：组头是带 aria-expanded 的按钮
+  const header = groupHeaders(page).first();
+  await header.focus();
+  await page.keyboard.press("Enter");
+  await expect(header).toHaveAttribute("aria-expanded", "false");
+  // 收起用 v-show 隐藏（元素仍在 DOM），所以断言可见性而不是元素计数
+  await expect(libraryItems(page).first()).toBeHidden();
+  await page.keyboard.press("Enter");
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+  await expect(libraryItems(page).first()).toBeVisible();
+  await expect(libraryItems(page)).toHaveCount(4);
+});
+
+test("来源筛选只保留匹配版本与组，清除后复原", async ({page}) => {
+  await installStandards(page, [
+    published("official", 9, {standard_id: "szmedi.gas"}),
+    published("user", 10, {standard_id: "szmedi.gas"}),
+    published("user", 1, {standard_id: "other.std", name: "其他标准"}),
+  ]);
+  await openStandards(page);
+  await expect(groupHeaders(page)).toHaveCount(2);
+
+  await page.getByLabel("来源").selectOption("official");
+  await expect(groupHeaders(page)).toHaveCount(1);
+  await expect(libraryItems(page)).toHaveCount(1);
+  await expect(libraryItems(page).first()).toContainText("v9");
+
+  await page.getByLabel("来源").selectOption("all");
+  await expect(groupHeaders(page)).toHaveCount(2);
+  await expect(libraryItems(page)).toHaveCount(3);
 });

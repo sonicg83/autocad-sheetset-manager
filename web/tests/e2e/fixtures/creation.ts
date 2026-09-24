@@ -13,7 +13,7 @@ import type {Page} from "@playwright/test";
 
 export type CreationCandidateBody = {
   standard_id: string;
-  version: string;
+  version: number;
   name: string;
   supported_cad_versions: string[];
   available: boolean;
@@ -35,7 +35,7 @@ export type CreationGroupBody = {
 export type CreationDraftBody = {
   id: string;
   standard_id: string;
-  standard_version: string;
+  standard_version: number;
   revision: number;
   step: string;
   target_path: string;
@@ -53,7 +53,7 @@ export type CreationImportDiagnosticBody = {
 
 export interface CreationFixtureState {
   drafts: Map<string, CreationDraftBody>;
-  createBodies: Array<{standard_id: string; version: string}>;
+  createBodies: Array<{standard_id: string; version: number}>;
   saveBodies: Array<Record<string, unknown>>;
   deleted: string[];
   importAttempts: number;
@@ -101,9 +101,8 @@ export interface CreationFixtureOptions {
 /** 标准文档：图纸集文本/枚举 + 派生映射 + 图纸组枚举/文本 + 两种模板资产。 */
 export function creationStandardDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: 2,
     standard_id: "szmedi.gas",
-    version: "2.1.0",
     name: "市政燃气施工图",
     supported_cad_versions: ["2016", "2020"],
     properties: [
@@ -154,7 +153,7 @@ export function creationStandardDocument(overrides: Record<string, unknown> = {}
 export function creationCandidate(overrides: Partial<CreationCandidateBody> = {}): CreationCandidateBody {
   return {
     standard_id: "szmedi.gas",
-    version: "2.1.0",
+    version: 1,
     name: "市政燃气施工图",
     supported_cad_versions: ["2016", "2020"],
     available: true,
@@ -171,7 +170,7 @@ export function creationCandidate(overrides: Partial<CreationCandidateBody> = {}
 export function unavailableCreationCandidate(): CreationCandidateBody {
   return creationCandidate({
     standard_id: "user.old",
-    version: "0.9.0",
+    version: 7,
     name: "旧版市政模板",
     available: false,
     reasons: ["标准资产 'layout-a' 声明的文件 '市政图框.dwt' 不存在或路径非法"],
@@ -185,7 +184,7 @@ export function publishedStandardSummary(overrides: Record<string, unknown> = {}
     source: "user",
     status: "published",
     standard_id: "szmedi.gas",
-    version: "2.1.0",
+    version: 1,
     name: "市政燃气施工图",
     draft_id: null,
     ...overrides,
@@ -280,7 +279,7 @@ export function creationPreview(overrides: Record<string, unknown> = {}): Record
     draft_id: "draft-1",
     revision: 2,
     standard_id: "szmedi.gas",
-    standard_version: "2.1.0",
+    standard_version: 1,
     standard_name: "市政燃气施工图",
     target_path: "D:\\项目\\新建项目",
     sheetset_values: {"prop-name": "滨河路改造工程", "prop-major": "燃气"},
@@ -508,7 +507,7 @@ export async function installCreation(
         return route.fulfill({json: candidates});
       }
       if (path === "/api/creation-drafts" && method === "POST") {
-        const body = (await request.postDataJSON()) as {standard_id: string; version: string};
+        const body = (await request.postDataJSON()) as {standard_id: string; version: number};
         state.createBodies.push(body);
         const draft: CreationDraftBody = {
           id: `draft-${state.createBodies.length}`,
@@ -640,11 +639,11 @@ export async function installCreation(
       return route.fulfill({
         json: {
           standard_id: decodeURIComponent(segments[3] ?? ""),
-          version: decodeURIComponent(segments[4] ?? ""),
+          version: Number(segments[4]),
           name: document["name"],
           supported_cad_versions: document["supported_cad_versions"],
           dependencies: [],
-          document: {...document, standard_id: decodeURIComponent(segments[3] ?? ""), version: decodeURIComponent(segments[4] ?? "")},
+          document: {...document, standard_id: decodeURIComponent(segments[3] ?? ""), version: Number(segments[4])},
         },
       });
     },

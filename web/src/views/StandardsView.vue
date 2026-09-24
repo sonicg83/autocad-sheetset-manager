@@ -82,8 +82,11 @@ function editorDraft(): string {
 /** 标准库中存在同名官方已发布版本时，取其资产声明作为只读对照（不修改草稿）。 */
 async function loadOfficialReference(standardId: string): Promise<void> {
   const reference = store.summaries.value.find(item =>
-    item.source === "official" && item.status === "published" && item.standard_id === standardId);
-  if (reference === undefined || standardId === "") return;
+    item.source === "official"
+    && item.status === "published"
+    && item.standard_id === standardId
+    && item.version !== null);
+  if (reference === undefined || reference.version === null || standardId === "") return;
   try {
     await store.open({standardId: reference.standard_id, version: reference.version});
     const document = store.detail.value?.document;
@@ -141,7 +144,7 @@ async function select(summary: StandardSummary): Promise<void> {
   const apply = async () => {
     selectedKey.value = keyOf(summary);
     if (editorOpen.value) await leaveEditor();
-    if (summary.status === "published") {
+    if (summary.status === "published" && summary.version !== null) {
       await store.open({standardId: summary.standard_id, version: summary.version});
     } else {
       // 草稿无发布详情：清空详情并让在途发布详情响应失效，避免只读边界漂移
@@ -157,7 +160,7 @@ async function select(summary: StandardSummary): Promise<void> {
 /** 详情重试：只重发当前选择的详情请求（列表与选择保持不变）。 */
 async function retryDetail(): Promise<void> {
   const summary = selected.value;
-  if (summary === null || summary.status !== "published") return;
+  if (summary === null || summary.status !== "published" || summary.version === null) return;
   await store.open({standardId: summary.standard_id, version: summary.version});
 }
 
@@ -166,7 +169,7 @@ function clearFilters(): void {
   filters.value = {...DEFAULT_FILTERS};
 }
 
-function openVersion(entry: {source: "official" | "user"; standard_id: string; version: string; name: string}): void {
+function openVersion(entry: {source: "official" | "user"; standard_id: string; version: number; name: string}): void {
   // 版本历史跳转：按条目自身身份选中（跨官方/用户来源时不得沿用当前来源）
   const known = store.summaries.value.find(item =>
     item.status === "published"
@@ -197,29 +200,29 @@ function openCreateDialog(): void {
   startCreate("blank");
 }
 
-async function submitCreate(payload: {name: string; version: string; dstPath: string}): Promise<void> {
+async function submitCreate(payload: {name: string; dstPath: string}): Promise<void> {
   const origin = createMode.value === "derive" ? selected.value : null;
   let created: {draft_id: string; document: Record<string, unknown>};
   try {
-    if (origin !== null) {
+    if (origin !== null && origin.version !== null) {
       // 派生只消费身份匹配且已完成加载的详情：B 在途/加载失败时绝不复制 A（F08）
-      const identity = {standardId: origin.standard_id, version: origin.version};
+      const identity: StandardIdentity = {standardId: origin.standard_id, version: origin.version};
       const base = store.detailMatches(identity) ? store.detail.value?.document : undefined;
       if (base === undefined) {
         // 派生必须基于已加载的发布版本文档：缺详情不提交，保留对话框与可见原因
         store.actionError.value = t("standards.create.deriveNeedsDetail");
         return;
       }
-      created = await store.createDraft({
-        document: {...base, standard_id: origin.standard_id, version: payload.version, name: payload.name},
-      });
+      // 草稿不携带版本：派生时也要去掉源版本的 version（SPEC-DM-019 §2.3）。
+      const derived: Record<string, unknown> = {...base, standard_id: origin.standard_id, name: payload.name};
+      delete derived.version;
+      created = await store.createDraft({document: derived});
     } else if (createMode.value === "from-dst") {
       created = await store.createDraftFromDst({dstPath: payload.dstPath});
     } else {
       created = await store.createDraft({
         document: blankStandardDocument({
           standardId: defaultStandardId(payload.name),
-          version: payload.version,
           name: payload.name,
         }),
       });
@@ -238,7 +241,7 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
     source: "user",
     standard_id: String(created.document["standard_id"] ?? ""),
     draft_id: created.draft_id,
-    version: "",
+    version: null,
   });
   await store.refresh();
 }
@@ -287,10 +290,10 @@ async function importPackage(): Promise<void> {
 // 已发布标准包导出：拼后端下载地址并以带 download 的临时链接触发下载（不把 zip 读进内存）。
 function exportSelectedStandard(): void {
   const summary = selected.value;
-  if (summary === null || summary.status !== "published") return;
+  if (summary === null || summary.status !== "published" || summary.version === null) return;
   const anchor = document.createElement("a");
   anchor.href = standardExportUrl({standardId: summary.standard_id, version: summary.version});
-  anchor.download = `${summary.standard_id}-${summary.version}.dststandard`;
+  anchor.download = `${summary.standard_id}-v${summary.version}.dststandard`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();

@@ -152,8 +152,7 @@ function addNote(value: unknown): void {
           </div>
         </template>
         <div class="release-block">
-          <p class="review-note" data-testid="publish-version">{{ $t("standards.publish.versionLabel") }}：{{ document.version }}</p>
-          <p class="review-note">{{ $t("standards.publish.versionHint") }}</p>
+          <p class="review-note" data-testid="publish-version">{{ $t("standards.publish.versionAssignedByServer") }}</p>
           <label class="field-label" for="publish-release-notes">{{ $t("standards.publish.releaseNotes") }}</label>
           <textarea
             id="publish-release-notes"

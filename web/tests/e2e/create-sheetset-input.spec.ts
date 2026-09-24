@@ -86,13 +86,13 @@ test("标准详情「用于创建」固定发布版本并直接进入第二阶�
   const state = await installCreation(page, {standardsList: [publishedStandardSummary()]});
   await page.goto("/");
   await page.getByRole("button", {name: "管理图纸标准"}).click();
-  await page.getByTestId("library-list").getByRole("button").filter({hasText: "市政燃气施工图"}).click();
+  await page.getByTestId("library-item").filter({hasText: "市政燃气施工图"}).click();
   await page.getByRole("button", {name: "用于创建图纸集"}).click();
 
   // 直接落到第二阶段，且草稿固定的标准身份来自详情（不要求重复选择）
   await expect(page.getByRole("region", {name: "项目信息"})).toBeVisible();
   await expect(page.getByTestId("creation-fixed-standard")).toContainText("szmedi.gas");
-  expect(state.createBodies).toEqual([{standard_id: "szmedi.gas", version: "2.1.0"}]);
+  expect(state.createBodies).toEqual([{standard_id: "szmedi.gas", version: 1}]);
   await expect(page.getByTestId("creation-stepper").locator('[aria-current="step"]')).toHaveText(/2\s*项目信息/);
 });
 
@@ -301,7 +301,7 @@ test("草稿恢复提示继续或重新开始，重新开始须确认并放弃�
 });
 
 test("切换标准先提示再清除不兼容输入，不静默迁移", async ({page}) => {
-  const second = creationCandidate({standard_id: "user.b", version: "2.0.0", name: "建筑设计图纸标准"});
+  const second = creationCandidate({standard_id: "user.b", version: 2, name: "建筑设计图纸标准"});
   await installCreation(page, {candidates: [creationCandidate(), second]});
   await openCreation(page);
   await chooseStandard(page);

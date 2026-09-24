@@ -19,7 +19,7 @@ function seedDraft(): CreationDraftState {
   return {
     id: "draft-1",
     standard_id: "szmedi.gas",
-    standard_version: "2.1.0",
+    standard_version: 1,
     revision: 2,
     step: "review",
     target_path: "D:\\项目\\新建项目",
@@ -41,7 +41,7 @@ function seedDraft(): CreationDraftState {
 
 function seedStandard(): CreationStandardInputs {
   return {
-    identity: {standardId: "szmedi.gas", version: "2.1.0"},
+    identity: {standardId: "szmedi.gas", version: 1},
     name: "市政燃气施工图",
     sheetset_properties: [
       {
@@ -81,7 +81,7 @@ function seedPreview(overrides: Partial<CreationPreview> = {}): CreationPreview 
     draft_id: "draft-1",
     revision: 2,
     standard_id: "szmedi.gas",
-    standard_version: "2.1.0",
+    standard_version: 1,
     standard_name: "市政燃气施工图",
     target_path: "D:\\项目\\新建项目",
     sheetset_values: {"prop-name": "滨河路改造工程"},

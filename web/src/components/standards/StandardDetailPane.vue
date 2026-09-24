@@ -3,7 +3,7 @@
 // 只读边界不隐藏动作——禁用并显示可见原因（detailActions.readOnlyReason）。
 import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
-import {detailActions, versionHistory} from "./standardLibraryModel";
+import {detailActions, formatStandardVersion, versionHistory} from "./standardLibraryModel";
 import type {StandardDetail, StandardIdentity, StandardSummary} from "../../features/standards/types";
 
 const props = defineProps<{
@@ -23,7 +23,7 @@ const emit = defineEmits<{
   /** 用于创建：把固定标准身份交给创建向导（PLAN-DM-036 Task 8）。 */
   useForCreate: [identity: StandardIdentity];
   /** 版本历史跳转：条目自带完整身份（来源 + 标准 ID + 版本），跨来源跳转不得沿用当前来源。 */
-  openVersion: [entry: {source: "official" | "user"; standard_id: string; version: string; name: string}];
+  openVersion: [entry: {source: "official" | "user"; standard_id: string; version: number; name: string}];
   /** 详情加载失败就地重试：只重发详情请求。 */
   retry: [];
   /** 窄视口返回列表（保留当前选择与筛选）。 */
@@ -31,8 +31,14 @@ const emit = defineEmits<{
 }>();
 
 const actions = computed(() => (props.summary === null ? null : detailActions(props.summary)));
+/** 「用于创建」的固定身份：只有已发布版本才有整数版本。 */
+const createIdentity = computed<StandardIdentity | null>(() => {
+  const summary = props.summary;
+  if (summary === null || summary.status !== "published" || summary.version === null) return null;
+  return {standardId: summary.standard_id, version: summary.version};
+});
 const versions = computed(() =>
-  props.summary === null ? [] : versionHistory(props.summary, props.items),
+  props.summary === null ? [] : versionHistory(props.summary.standard_id, props.items),
 );
 const documentCounts = computed(() => {
   const document = props.detail?.document;
@@ -67,7 +73,7 @@ const documentCounts = computed(() => {
       <dl class="detail-identity">
         <div><dt>{{ $t("standards.detail.standardId") }}</dt><dd>{{ summary.standard_id }}</dd></div>
         <div v-if="summary.status === 'published'">
-          <dt>{{ $t("standards.detail.version") }}</dt><dd>{{ summary.version }}</dd>
+          <dt>{{ $t("standards.detail.version") }}</dt><dd>{{ summary.version === null ? "—" : formatStandardVersion(summary.version) }}</dd>
         </div>
         <div>
           <dt>{{ $t("standards.detail.status") }}</dt>
@@ -113,9 +119,9 @@ const documentCounts = computed(() => {
             <button
               type="button"
               class="version-link"
-              @click="emit('openVersion', {source: entry.source, standard_id: summary.standard_id, version: entry.version, name: summary.name})"
+              @click="emit('openVersion', {source: entry.source, standard_id: summary.standard_id, version: entry.version, name: entry.name})"
             >
-              v{{ entry.version }} · {{ $t(entry.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}
+              {{ formatStandardVersion(entry.version) }} · {{ entry.name }} · {{ $t(entry.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}
             </button>
           </li>
         </ul>
@@ -128,7 +134,7 @@ const documentCounts = computed(() => {
         >{{ $t("standards.detail.edit") }}</UiButton>
         <UiButton v-if="actions?.canDerive" variant="secondary" @click="emit('derive')">{{ $t("standards.detail.derive") }}</UiButton>
         <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('exportStandard')">{{ $t("standards.detail.export") }}</UiButton>
-        <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('useForCreate', {standardId: summary.standard_id, version: summary.version})">{{ $t("standards.detail.useForCreate") }}</UiButton>
+        <UiButton v-if="createIdentity !== null" variant="secondary" @click="emit('useForCreate', createIdentity)">{{ $t("standards.detail.useForCreate") }}</UiButton>
         <UiButton v-if="actions?.canDelete" variant="secondary" @click="emit('deleteDraft')">{{ $t("standards.detail.delete") }}</UiButton>
       </div>
     </template>

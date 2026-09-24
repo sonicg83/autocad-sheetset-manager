@@ -27,7 +27,7 @@ function newSchemaDocument(): Record<string, unknown> {
   return {
     schema_version: 1,
     standard_id: "szmedi.gas",
-    version: "0.1.0",
+    version: 1,
     name: "市政燃气施工图",
     supported_cad_versions: ["2016", "2020"],
     release_notes: "初版说明",
@@ -206,7 +206,7 @@ describe("draft model", () => {
   });
 
   it("creates a blank standard that satisfies the save gate and carries the default naming template", () => {
-    const document = blankStandardDocument({standardId: "user.draft", name: "新标准", version: "1.0.0"});
+    const document = blankStandardDocument({standardId: "user.draft", name: "新标准"});
     // 旧顶层 rules 不得再被写入（Schema v1 直接替换）
     expect(Object.keys(document)).not.toContain("rules");
     expect(document.dwg_naming).toEqual({segments: defaultDwgNamingSegments()});
@@ -272,7 +272,7 @@ describe("draft model", () => {
     });
     const document = draftDocument();
     document.standard_id = "Illegal ID";
-    document.version = "1.0";
+    document.version = 2;
     document.properties[0]!.scope = "bogus" as DraftDocument["properties"][number]["scope"];
     document.assets = [
       asset("a-kind", "bogus", null),
@@ -282,7 +282,6 @@ describe("draft model", () => {
     ];
     const detail = (code: string) => publishIssues(document).find(issue => issue.code === code)?.detail;
     expect(detail("STANDARD_ID_INVALID")).toBe("Illegal ID");
-    expect(detail("STANDARD_VERSION_INVALID")).toBe("1.0");
     expect(detail("STANDARD_SCOPE_INVALID")).toBe("bogus");
     expect(detail("STANDARD_ASSET_KIND_INVALID")).toBe("bogus");
     expect(detail("STANDARD_ASSET_PATH_INVALID")).toBe("../escape.dwg");
@@ -450,19 +449,19 @@ describe("映射目标缓冲隔离（PLAN-DM-040 Task 7，F10）", () => {
 
 describe("draftKey（PLAN-DM-040 Task 5）", () => {
   it("同来源同版本的不同标准不重复", () => {
-    const gas = {source: "official" as const, standard_id: "official.gas", version: "1.0.0", draft_id: null};
-    const water = {source: "official" as const, standard_id: "official.water", version: "1.0.0", draft_id: null};
+    const gas = {source: "official" as const, standard_id: "official.gas", version: 1, draft_id: null};
+    const water = {source: "official" as const, standard_id: "official.water", version: 1, draft_id: null};
     expect(draftKey(gas)).not.toBe(draftKey(water));
   });
 
   it("草稿用稳定 draft_id，已发布版本用 source/standard_id/version", () => {
-    expect(draftKey({source: "user", standard_id: "user.gas", version: "", draft_id: "draft-1"})).toBe("user/draft-1");
-    expect(draftKey({source: "user", standard_id: "user.gas", version: "3.0.0", draft_id: null})).toBe(
-      "user/user.gas/3.0.0",
+    expect(draftKey({source: "user", standard_id: "user.gas", version: null, draft_id: "draft-1"})).toBe("user/draft-1");
+    expect(draftKey({source: "user", standard_id: "user.gas", version: 3, draft_id: null})).toBe(
+      "user/user.gas/3",
     );
     // 同身份的用户已发布版本与官方版本仍必须可区分
-    expect(draftKey({source: "official", standard_id: "user.gas", version: "3.0.0", draft_id: null})).not.toBe(
-      draftKey({source: "user", standard_id: "user.gas", version: "3.0.0", draft_id: null}),
+    expect(draftKey({source: "official", standard_id: "user.gas", version: 3, draft_id: null})).not.toBe(
+      draftKey({source: "user", standard_id: "user.gas", version: 3, draft_id: null}),
     );
   });
 });

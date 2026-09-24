@@ -17,7 +17,7 @@ function seedDraft(): CreationDraftState {
   return {
     id: "draft-1",
     standard_id: "szmedi.gas",
-    standard_version: "2.1.0",
+    standard_version: 1,
     revision: 1,
     step: "groups",
     target_path: "D:\\项目\\新建项目",
@@ -35,7 +35,7 @@ function seedDraft(): CreationDraftState {
   };
 }
 
-function seedStandard(standardId = "szmedi.gas", version = "2.1.0"): CreationStandardInputs {
+function seedStandard(standardId = "szmedi.gas", version = 1): CreationStandardInputs {
   return {
     identity: {standardId, version},
     name: "市政燃气施工图",
@@ -75,7 +75,7 @@ function seedStandard(standardId = "szmedi.gas", version = "2.1.0"): CreationSta
   };
 }
 
-function candidate(standardId: string, version: string): CreationStandardCandidate {
+function candidate(standardId: string, version: number): CreationStandardCandidate {
   return {
     standard_id: standardId,
     version,
@@ -102,7 +102,7 @@ function fakeCreationApi(): CreationApi {
       draft_id: "draft-1",
       revision: 1,
       standard_id: "szmedi.gas",
-      standard_version: "2.1.0",
+      standard_version: 1,
       standard_name: "市政燃气施工图",
       target_path: "D:\\项目\\新建项目",
       sheetset_values: {},
@@ -155,7 +155,7 @@ describe("createCreationStore", () => {
     api.createDraft = vi.fn(async (): Promise<CreationDraftState> => ({
       id: "draft-2",
       standard_id: "user.b",
-      standard_version: "2.0.0",
+      standard_version: 2,
       revision: 1,
       step: "project",
       target_path: "",
@@ -164,7 +164,7 @@ describe("createCreationStore", () => {
     }));
     api.fetchStandardDocument = vi.fn(async () => ({}));
 
-    await store.chooseStandard(candidate("user.b", "2.0.0"), {replace: true});
+    await store.chooseStandard(candidate("user.b", 2), {replace: true});
 
     expect(api.deleteDraft).toHaveBeenCalledWith("draft-1");
     expect(store.groups).toHaveLength(0);

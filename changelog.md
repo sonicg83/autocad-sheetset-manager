@@ -1,3 +1,9 @@
+## 2026-09-25（PLAN-DM-041 Task 6：移除版本输入并按 ID 归集标准库）
+
+- 标准库视图模型改为**按 `standard_id` 归集**：组内已发布版本按整数**降序**（`v10` 排在 `v9` 前）、草稿按稳定 `draft_id` 排序；组标题取当前筛选结果中最高整数版本的名称（仅有草稿时用标准 ID），历史版本保留自己的原名；来源/状态/搜索筛选只保留匹配版本与组。左栏改为带 `aria-expanded` 的组头（键盘可收起/展开，展开用 `v-show`），每个版本行显示 `v<n>`、来源与状态，选择仍用完整身份键。
+- 前端不再填写或预分配版本：新建/派生草稿弹窗移除版本输入并显示「发布时由服务端分配」说明；编辑器基本信息与发布页移除版本字段；`blankStandardDocument`、`DraftDocument`、`deriveVersion` 与 `deriveVersion` 校验及 `STANDARD_VERSION_PATTERN` 均已删除，派生时显式丢弃源文档的 `version`。导出文件名改为 `<standard_id>-v<n>.dststandard`；详情版本历史改按整数降序并显示 `v<n>`、原名与来源；创建链路的版本类型改为整数。
+- 验证：`npm --prefix web run test:unit` 322 例、`check:api`、`check:i18n`（1601 键）、`check:ui`、`build`（含 `vue-tsc`）均绿；全量 Playwright **679 passed**（含新增的「按 ID 归集与整数降序、键盘收起/展开」与「来源筛选只保留匹配版本与组」两例；另有 1 例与标准无关的性能预算用例标为 flaky）。分组模型的 RED 已实证：新模型用例在旧模型上 9 例失败。
+
 ## 2026-09-25（PLAN-DM-041 Task 5：限时快照预检与凭证确认导入）
 
 - 新增 `infrastructure/standards/import_previews.py`：把选定的 `.dststandard` 流式复制到 `settings.data_dir/tmp/standard-import-previews` 的随机快照（来源扩展名白名单、压缩源文件 256 MiB 上限、完成后原子定稿、失败不留半成品），并维护**仅存内存**的随机凭证表（默认 15 分钟、过期/取消立即清快照、重启后自动失效）。

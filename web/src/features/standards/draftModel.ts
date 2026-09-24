@@ -142,7 +142,6 @@ export interface DraftDependency {
 export interface DraftDocument {
   schema_version: number;
   standard_id: string;
-  version: string;
   name: string;
   supported_cad_versions: string[];
   properties: DraftProperty[];
@@ -171,13 +170,12 @@ export function defaultDwgNamingSegments(): DraftSegment[] {
 export function blankStandardDocument(input: {
   standardId: string;
   name: string;
-  version: string;
   supportedCadVersions?: string[];
 }): Record<string, unknown> {
+  // 草稿不携带正式版本：服务端在发布时分配 `max(官方, 用户) + 1`（SPEC-DM-019 §2.3、§3.1）。
   return {
-    schema_version: 1,
+    schema_version: 2,
     standard_id: input.standardId,
-    version: input.version,
     name: input.name,
     supported_cad_versions: input.supportedCadVersions ?? ["2020"],
     properties: [],
@@ -281,11 +279,13 @@ function normalizeAsset(raw: unknown): DraftAsset {
 export function toDraftDocument(document: Record<string, unknown>): DraftDocument {
   const numbering = asRecord(document.numbering);
   const naming = asRecord(document.dwg_naming);
+  // 草稿不携带 version：从已发布文档派生时显式丢弃，避免草稿被草稿门禁拒绝。
+  const rest = {...document};
+  delete rest.version;
   return {
-    ...document,
+    ...rest,
     schema_version: asInt(document.schema_version, 1),
     standard_id: asString(document.standard_id),
-    version: asString(document.version),
     name: asString(document.name),
     supported_cad_versions: asStringArray(document.supported_cad_versions),
     properties: (Array.isArray(document.properties) ? document.properties : []).map(normalizeProperty),
@@ -776,9 +776,6 @@ function documentDiagnostics(document: DraftDocument): GatedDiagnostic[] {
   if (!STANDARD_ID_PATTERN.test(document.standard_id)) {
     diagnostics.push({...base, code: "STANDARD_ID_INVALID", detail: document.standard_id});
   }
-  if (!STANDARD_VERSION_PATTERN.test(document.version)) {
-    diagnostics.push({...base, code: "STANDARD_VERSION_INVALID", detail: document.version});
-  }
   if (document.name.trim() === "") diagnostics.push({...base, code: "STANDARD_NAME_INVALID"});
   if (document.supported_cad_versions.length === 0) {
     diagnostics.push({...base, code: "STANDARD_CAD_VERSIONS_INVALID"});
@@ -828,7 +825,6 @@ function filenameIssues(document: DraftDocument): GatedDiagnostic[] {
 }
 
 export const STANDARD_ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/;
-export const STANDARD_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
 function validAssetPath(path: string): boolean {
   if (path === "") return false;

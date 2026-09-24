@@ -1,11 +1,18 @@
 <script setup lang="ts">
-// 标准库左栏（PLAN-DM-035 Task 8）：搜索、来源/状态筛选与列表。
-// 空库与筛选无结果必须区分呈现（用户不知道是"没有标准"还是"筛没了"）。
-import {computed} from "vue";
+// 标准库左栏（PLAN-DM-035 Task 8；PLAN-DM-041 Task 6）：搜索、来源/状态筛选与
+// 按 `standard_id` 归集的版本列表。空库与筛选无结果必须区分呈现（用户不知道是
+// "没有标准"还是"筛没了"）；组内版本整数降序，展示为 `v<n>`。
+import {computed, ref} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
-import {buildLibraryState, type StandardFilters} from "./standardLibraryModel";
+import UiIcon from "../ui/UiIcon.vue";
+import {
+  buildLibraryState,
+  formatStandardVersion,
+  type StandardFilters,
+  type StandardGroup,
+} from "./standardLibraryModel";
 import {draftKey} from "../../features/standards/draftModel";
 import type {StandardSummary} from "../../features/standards/types";
 
@@ -28,6 +35,23 @@ const emit = defineEmits<{
 }>();
 
 const state = computed(() => buildLibraryState(props.items, props.filters));
+// 组默认展开；收起状态由标准 ID 记录，键盘可达（组头是带 aria-expanded 的按钮）。
+const collapsed = ref<Set<string>>(new Set());
+
+function isCollapsed(standardId: string): boolean {
+  return collapsed.value.has(standardId);
+}
+
+function toggle(standardId: string): void {
+  const next = new Set(collapsed.value);
+  if (next.has(standardId)) next.delete(standardId);
+  else next.add(standardId);
+  collapsed.value = next;
+}
+
+function entries(group: StandardGroup): StandardSummary[] {
+  return [...group.versions, ...group.drafts];
+}
 
 function update(partial: Partial<StandardFilters>): void {
   emit("updateFilters", {...props.filters, ...partial});
@@ -75,21 +99,44 @@ function update(partial: Partial<StandardFilters>): void {
         {{ $t("standards.library.clearFilters") }}
       </UiButton>
     </template>
-    <ul v-else class="library-list" data-testid="library-list">
-      <li v-for="item in state.items" :key="draftKey(item)">
+    <ul v-else class="library-groups" data-testid="library-list">
+      <li v-for="group in state.groups" :key="group.standard_id" class="library-group" data-testid="library-group">
         <button
           type="button"
-          class="library-item"
-          :class="{selected: selectedKey===draftKey(item)}"
-          @click="emit('select', item)"
+          class="group-header"
+          data-testid="library-group-header"
+          :aria-expanded="!isCollapsed(group.standard_id)"
+          :aria-controls="`library-group-${group.standard_id}`"
+          @click="toggle(group.standard_id)"
         >
-          <span class="library-name">{{ item.name }}</span>
-          <span class="library-meta">
-            <span class="badge" :class="item.source">{{ $t(item.source==='official' ? 'standards.library.sourceOfficialBadge' : 'standards.library.sourceUserBadge') }}</span>
-            <span class="badge" :class="item.status">{{ $t(item.status==='draft' ? 'standards.library.statusDraftBadge' : 'standards.library.statusPublishedBadge') }}</span>
-            <span v-if="item.status==='published'" class="library-version">{{ item.version }}</span>
-          </span>
+          <UiIcon class="group-chevron" :name="isCollapsed(group.standard_id) ? 'chevron-right' : 'chevron-down'" aria-hidden="true" />
+          <span class="group-title">{{ group.title }}</span>
+          <span class="group-id">{{ group.standard_id }}</span>
+          <span v-if="group.versions.length > 0" class="badge">{{ formatStandardVersion(group.versions[0].version ?? 0) }}</span>
+          <span v-if="group.drafts.length > 0" class="badge draft">{{ $t("standards.library.statusDraftBadge") }}</span>
         </button>
+        <ul
+          v-show="!isCollapsed(group.standard_id)"
+          :id="`library-group-${group.standard_id}`"
+          class="group-entries"
+        >
+          <li v-for="item in entries(group)" :key="draftKey(item)">
+            <button
+              type="button"
+              class="library-item"
+              data-testid="library-item"
+              :class="{selected: selectedKey===draftKey(item)}"
+              @click="emit('select', item)"
+            >
+              <span class="library-name">{{ item.name }}</span>
+              <span class="library-meta">
+                <span class="badge" :class="item.source">{{ $t(item.source==='official' ? 'standards.library.sourceOfficialBadge' : 'standards.library.sourceUserBadge') }}</span>
+                <span class="badge" :class="item.status">{{ $t(item.status==='draft' ? 'standards.library.statusDraftBadge' : 'standards.library.statusPublishedBadge') }}</span>
+                <span v-if="item.status==='published'" class="library-version">{{ formatStandardVersion(item.version ?? 0) }}</span>
+              </span>
+            </button>
+          </li>
+        </ul>
       </li>
     </ul>
     <div class="library-actions">
@@ -104,6 +151,15 @@ function update(partial: Partial<StandardFilters>): void {
 .library-status{color:var(--color-text-secondary);font-size:var(--font-label);margin:0}
 .library-status.error{color:var(--color-danger)}
 .library-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);overflow:auto}
+.library-groups{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);overflow:auto}
+.library-group{display:grid;gap:var(--space-1)}
+.group-header{width:100%;display:flex;gap:var(--space-2);align-items:center;text-align:left;padding:var(--space-2);background:transparent;border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer}
+.group-header:hover{border-color:var(--color-border-subtle)}
+.group-chevron{color:var(--color-text-secondary)}
+.group-title{font-weight:600;color:var(--color-text-primary)}
+.group-id{font-size:var(--font-label);color:var(--color-text-secondary)}
+.group-entries{list-style:none;margin:0;padding:0 0 0 var(--space-3);display:grid;gap:var(--space-1)}
+.badge.draft{border-color:var(--color-warning, var(--color-border-subtle))}
 .library-item{width:100%;display:grid;gap:var(--space-1);text-align:left;padding:var(--space-2) var(--space-3);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);cursor:pointer}
 .library-item:hover{border-color:var(--color-border-strong)}
 .library-item.selected{border-color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent)}

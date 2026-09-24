@@ -31,6 +31,11 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/** 契约里的版本字段是服务端分配的整数（PLAN-DM-041 Task 4）。 */
+function asNumber(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) ? value : 0;
+}
+
 function asStringRecord(value: unknown): Record<string, string> {
   if (typeof value !== "object" || value === null) return {};
   const record: Record<string, string> = {};
@@ -71,7 +76,7 @@ function toDraftState(body: unknown): CreationDraftState {
   return {
     id: asString(raw["id"]),
     standard_id: asString(raw["standard_id"]),
-    standard_version: asString(raw["standard_version"]),
+    standard_version: asNumber(raw["standard_version"]),
     revision: typeof raw["revision"] === "number" ? raw["revision"] : 0,
     step: asStep(raw["step"]),
     target_path: asString(raw["target_path"]),
@@ -143,7 +148,7 @@ function toPreview(body: unknown): CreationPreview {
     draft_id: asString(raw["draft_id"]),
     revision: typeof raw["revision"] === "number" ? raw["revision"] : 0,
     standard_id: asString(raw["standard_id"]),
-    standard_version: asString(raw["standard_version"]),
+    standard_version: asNumber(raw["standard_version"]),
     standard_name: asString(raw["standard_name"]),
     target_path: asString(raw["target_path"]),
     sheetset_values: asStringRecord(raw["sheetset_values"]),
@@ -177,7 +182,7 @@ function toCandidate(raw: Record<string, unknown>): CreationStandardCandidate {
   const options = Array.isArray(raw["asset_options"]) ? raw["asset_options"] : [];
   return {
     standard_id: asString(raw["standard_id"]),
-    version: asString(raw["version"]),
+    version: asNumber(raw["version"]),
     name: asString(raw["name"]),
     supported_cad_versions: Array.isArray(raw["supported_cad_versions"])
       ? raw["supported_cad_versions"].filter((item): item is string => typeof item === "string")

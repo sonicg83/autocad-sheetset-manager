@@ -143,7 +143,7 @@ test("仅警告时可发布并在发布后进入新版本只读详情", async ({
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
   await expect(page.getByRole("button", {name: "派生新草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导出标准包"})).toBeVisible();
-  await expect(libraryItems(page).filter({hasText: "3.0.0"})).toHaveCount(1);
+  await expect(libraryItems(page).filter({hasText: "v1"})).toHaveCount(1);
   await expect(libraryItems(page).filter({hasText: "草稿 1"})).toHaveCount(0);
   expect(state.publishCalls).toBe(1);
 });

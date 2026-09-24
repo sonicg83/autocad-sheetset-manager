@@ -7,14 +7,16 @@ export type CreateMode = "blank" | "derive" | "from-dst";
 
 export interface StandardIdentity {
   standardId: string;
-  version: string;
+  /** 服务端分配的整数发布版本；界面展示加 `v` 前缀。 */
+  version: number;
 }
 
 export interface StandardSummary {
   source: "official" | "user";
   status: "published" | "draft";
   standard_id: string;
-  version: string;
+  /** 已发布为服务端分配的整数版本；草稿为 `null`。 */
+  version: number | null;
   name: string;
   draft_id: string | null;
 }
@@ -27,7 +29,7 @@ export interface StandardDependency {
 
 export interface StandardDetail {
   standard_id: string;
-  version: string;
+  version: number;
   name: string;
   supported_cad_versions: string[];
   dependencies: StandardDependency[];
@@ -48,7 +50,7 @@ export interface ImportedStandardDraft extends StandardDraft {
 
 export interface PublishedStandard {
   standard_id: string;
-  version: string;
+  version: number;
   name: string;
 }
 
@@ -94,6 +96,33 @@ export interface PublishInput {
 
 export interface ImportPackageInput {
   path: string;
+}
+
+/** 导入预检（PLAN-DM-041 Task 5）：返回候选整数身份与可否导入。 */
+export interface ImportPreviewInput {
+  path: string;
+}
+
+export interface StandardExistingVersion {
+  source: "official" | "user";
+  version: number;
+}
+
+export interface ImportPreviewResult {
+  preview_id: string | null;
+  expires_at: string | null;
+  standard_id: string;
+  version: number;
+  name: string;
+  supported_cad_versions: string[];
+  existing_versions: StandardExistingVersion[];
+  diagnostics: StandardDiagnostic[];
+  can_import: boolean;
+}
+
+/** 确认导入：只接受预检凭证（服务端不接受绕过预检的路径）。 */
+export interface ConfirmImportInput {
+  previewId: string;
 }
 
 export interface CreateDraftFromDstInput {

@@ -447,8 +447,8 @@ defineExpose({guard, isDirty: () => dirty.value});
           <h3 class="section-title">{{ $t("standards.sections.basic") }}</h3>
           <!-- 身份由草稿本身决定：只读并在可见说明里给出原因（F11） -->
           <UiInput :model-value="buffer.standard_id" :label="$t('standards.detail.standardId')" readonly />
-          <UiInput :model-value="buffer.version" :label="$t('standards.editor.versionLabel')" readonly />
           <p class="identity-note" role="note" data-testid="identity-readonly-note">{{ $t("standards.editor.identityReadonlyHint") }}</p>
+          <p class="pending-note" role="note" data-testid="version-assigned-note">{{ $t("standards.publish.versionAssignedByServer") }}</p>
           <UiInput v-model="cadVersionsText" :label="$t('standards.editor.cadVersionsLabel')" />
         </section>
         <OrdinaryPropertyEditor
@@ -484,8 +484,7 @@ defineExpose({guard, isDirty: () => dirty.value});
         />
         <section v-else class="publish-section" role="region" :aria-label="$t('standards.sections.publish')">
           <h3 class="section-title">{{ $t("standards.sections.publish") }}</h3>
-          <UiInput :model-value="buffer.version" :label="$t('standards.publish.versionLabel')" disabled />
-          <p class="pending-note" role="note">{{ $t("standards.publish.versionHint") }}</p>
+          <p class="pending-note" role="note" data-testid="publish-version-note">{{ $t("standards.publish.versionAssignedByServer") }}</p>
           <UiButton variant="secondary" @click="openReview">{{ $t("standards.editor.publishCheck") }}</UiButton>
         </section>
         </div>

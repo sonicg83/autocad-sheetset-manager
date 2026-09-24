@@ -129,8 +129,8 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await page.setViewportSize({width: 1440, height: 900});
   await installPreferenceSnapshot(page, "light");
   const state = await installStandards(page, [
-    published("official", "2.1.0"),
-    published("user", "2.0.0"),
+    published("official", 2),
+    published("user", 1),
     draft("草稿 1", "draft-1"),
   ], {
     drafts: {"draft-1": visualDraft()},
@@ -194,7 +194,7 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
   // 补充 1/2/4：深色 1440×900
   await page.setViewportSize({width: 1440, height: 900});
   await installPreferenceSnapshot(page, "dark");
-  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")], {
+  await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": visualDraftWithMappingGap()},
     assetResults: {layouts: {asset_id: "layouts", kind: "layout-template", layouts: ["Model", "A2", "A3"], diagnostics: []}},
   });

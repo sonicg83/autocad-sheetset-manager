@@ -636,8 +636,10 @@ test("草稿身份在编辑器中只读，保存走草稿级路由", async ({pag
   await openEditorSection(page, "basic");
 
   await expect(page.getByLabel("标准 ID")).toHaveAttribute("readonly", "");
-  await expect(page.getByLabel("版本号")).toHaveAttribute("readonly", "");
+  // 草稿不填写版本：编辑器中不存在版本输入，只显示「发布时由服务端分配」说明
+  await expect(page.getByLabel("版本号")).toHaveCount(0);
   await expect(page.getByTestId("identity-readonly-note")).toContainText("创建后不可修改");
+  await expect(page.getByTestId("version-assigned-note")).toContainText("由服务端在官方与用户库");
 
   await page.getByLabel("标准名称").fill("改名后的标准");
   await saveDraftDocument(page);

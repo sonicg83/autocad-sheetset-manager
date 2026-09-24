@@ -11,18 +11,19 @@ export type StandardSummary = {
   source: "official" | "user";
   status: "published" | "draft";
   standard_id: string;
-  version: string;
+  /** 服务端分配的整数发布版本；草稿为 null。 */
+  version: number | null;
   name: string;
   draft_id: string | null;
 };
 
-export function published(source: "official" | "user", version: string, overrides: Partial<StandardSummary> = {}): StandardSummary {
+export function published(source: "official" | "user", version: number, overrides: Partial<StandardSummary> = {}): StandardSummary {
   return {source, status: "published", standard_id: "szmedi.gas", version, name: "市政燃气施工图", draft_id: null, ...overrides};
 }
 
-/** 草稿无版本号（版本由发布时确定），身份经 draft_id 承载。 */
+/** 草稿不携带版本（发布时由服务端分配），身份经 draft_id 承载，按 standard_id 归集。 */
 export function draft(name: string, draftId: string, overrides: Partial<StandardSummary> = {}): StandardSummary {
-  return {source: "user", status: "draft", standard_id: "", version: "", name, draft_id: draftId, ...overrides};
+  return {source: "user", status: "draft", standard_id: "szmedi.gas", version: null, name, draft_id: draftId, ...overrides};
 }
 
 /** 与 StandardDetailResponse 契约同构的详情；document 供派生草稿与能力摘要消费。 */
@@ -34,7 +35,7 @@ export function detailBody(summary: StandardSummary) {
     supported_cad_versions: ["2016", "2020"],
     dependencies: [{extension_id: "dst-manager.sheet-catalog", capability_id: "catalog.render", min_version: "0.1.0"}],
     document: {
-      schema_version: 1,
+      schema_version: 2,
       standard_id: summary.standard_id,
       version: summary.version,
       name: summary.name,
@@ -143,9 +144,8 @@ export type StandardsFixtureOptions = {
 /** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
 export function draftDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: 2,
     standard_id: "szmedi.gas",
-    version: "3.0.0",
     name: "市政燃气施工图",
     supported_cad_versions: ["2020"],
     properties: [
@@ -351,7 +351,11 @@ export async function installStandards(
         state.publishDraftIds.push(draftId);
         const document = state.drafts.get(draftId) ?? {};
         const standardId = String(document["standard_id"] ?? "");
-        const version = String(document["version"] ?? "");
+        // 与后端一致：服务端在官方/用户库同 ID 的现有版本上分配 max+1（草稿不携带版本）
+        const highest = state.list
+          .filter(item => item.status === "published" && item.standard_id === standardId)
+          .reduce((max, item) => Math.max(max, item.version ?? 0), 0);
+        const version = highest + 1;
         // 后端发布把草稿目录移入已发布目录：草稿不再存在，列表出现同名用户已发布版本
         state.drafts.delete(draftId);
         state.list = state.list.filter(item => item.draft_id !== draftId);
@@ -363,23 +367,13 @@ export async function installStandards(
         // 兼容保留：既有身份路由（前端不再使用，回归对照用）
         const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
         if (match === null) return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
-        const body = (await request.postDataJSON()) as Record<string, unknown>;
-        state.saveBodies.push(body);
-        if (state.saveFailure !== null) {
-          return route.fulfill({status: state.saveFailure.status, json: {code: state.saveFailure.code, message: state.saveFailure.message}});
-        }
-        // 按身份找草稿（草稿推荐摘要的 version 恒为空串，身份在文档内）
-        const draftId = [...state.drafts.entries()].find(([, document]) =>
-          document["standard_id"] === body["standard_id"] && document["version"] === body["version"])?.[0];
-        if (draftId === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: String(body["standard_id"])}});
-        state.savedDraftIds.push(draftId);
-        state.drafts.set(draftId, body);
-        return route.fulfill({json: {draft_id: draftId, document: body}});
+        // 身份路由已按 SPEC-DM-019 §4.1 移除：与后端一致返回 405。
+        return route.fulfill({status: 405, json: {code: "METHOD_NOT_ALLOWED", message: path}});
       }
       const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
       if (match && method === "GET" && match[1] !== "drafts") {
         const standardId = decodeURIComponent(match[1]);
-        const version = decodeURIComponent(match[2]);
+        const version = Number(decodeURIComponent(match[2]));
         const publishedDocument = state.published.get(`${standardId}@${version}`);
         const summary = state.list.find(item =>
           item.status === "published"
@@ -410,7 +404,12 @@ export async function openStandards(page: Page): Promise<void> {
  *  用 `data-testid="library-list"` 而不是区域可访问名：区域名随语言变化，
  *  英文场景下按中文区域名定位会永远解析不到（定位器静默等待直到超时）。 */
 export function libraryItems(page: Page): Locator {
-  return page.getByTestId("library-list").getByRole("button");
+  return page.getByTestId("library-item");
+}
+
+/** 归集组头按钮（按 standard_id 归集；键盘可展开/收起）。 */
+export function groupHeaders(page: Page): Locator {
+  return page.getByTestId("library-group-header");
 }
 
 /** 选中草稿并进入分区编辑器（详情面板的「编辑」入口）。 */
