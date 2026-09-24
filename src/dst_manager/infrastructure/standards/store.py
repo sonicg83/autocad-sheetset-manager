@@ -29,6 +29,8 @@ from typing import Literal
 from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
+    STANDARD_ID_PATTERN,
+    STANDARD_VERSION_PATTERN,
     DrawingStandard,
     StandardSchemaError,
     parse_published_standard_document,
@@ -43,6 +45,27 @@ from dst_manager.infrastructure.standards.package import (
 )
 
 DOCUMENT_NAME = "document.json"
+
+#: 单段路径名长度上限：标准库目录名来自客户端输入，超长一律拒绝。
+MAX_SEGMENT_LENGTH = 128
+#: Windows 保留设备名（带任意扩展名时同样保留）。
+WINDOWS_RESERVED_NAMES = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+)
+#: 路径段种类 → 稳定错误码；草稿段与身份段各有自己的码。
+_SEGMENT_ERROR_CODES = {
+    "draft": "STANDARD_DRAFT_ID_INVALID",
+    "id": "STANDARD_ID_INVALID",
+    "version": "STANDARD_VERSION_INVALID",
+}
+_SEGMENT_LABELS = {"draft": "草稿 ID", "id": "标准 ID", "version": "标准版本"}
 
 
 class StandardStoreError(Exception):
@@ -83,12 +106,44 @@ def _identity_collision(standard_id: str, version: str) -> StandardStoreError:
     return _error("STANDARD_VERSION_EXISTS", f"标准 {standard_id}@{version} 已存在")
 
 
+def _safe_segment(value: str, kind: str) -> str:
+    """校验单个路径段；``kind`` 为 ``draft``/``id``/``version``，决定稳定错误码。
+
+    标准库目录名只有一层，任何分隔符、相对分量、盘符、首尾空白、尾随点、
+    Windows 保留设备名、控制字符与超长输入都不允许进入文件系统。
+    """
+    code = _SEGMENT_ERROR_CODES[kind]
+    label = _SEGMENT_LABELS[kind]
+    if not isinstance(value, str) or not value:
+        raise _error(code, f"{label}不能为空")
+    if len(value) > MAX_SEGMENT_LENGTH:
+        raise _error(code, f"{label}超过 {MAX_SEGMENT_LENGTH} 个字符")
+    if value != value.strip():
+        raise _error(code, f"{label} {value!r} 含首尾空白")
+    if value in (".", ".."):
+        raise _error(code, f"{label} {value!r} 是相对路径分量")
+    if "/" in value or "\\" in value or ":" in value:
+        raise _error(code, f"{label} {value!r} 含路径分隔符或盘符")
+    if value.endswith("."):
+        raise _error(code, f"{label} {value!r} 以点结尾")
+    if any(ord(char) < 32 for char in value):
+        raise _error(code, f"{label} {value!r} 含控制字符")
+    if value.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES:
+        raise _error(code, f"{label} {value!r} 是 Windows 保留设备名")
+    if kind == "id" and not STANDARD_ID_PATTERN.fullmatch(value):
+        raise _error(code, f"标准 ID {value!r} 不符合 {STANDARD_ID_PATTERN.pattern}")
+    if kind == "version" and not STANDARD_VERSION_PATTERN.fullmatch(value):
+        raise _error(code, f"标准版本 {value!r} 不符合 {STANDARD_VERSION_PATTERN.pattern}")
+    return value
+
+
 class StandardStore:
     """官方（只读）与用户标准库的组合仓储。"""
 
     def __init__(self, *, official_root: Path, user_root: Path) -> None:
-        self._official_root = Path(official_root)
-        self._user_root = Path(user_root)
+        # 目录根统一解析为真实路径：路径段边界校验与文件操作共用同一基准。
+        self._official_root = Path(official_root).resolve()
+        self._user_root = Path(user_root).resolve()
         self._published_root = self._user_root / "published"
         self._drafts_root = self._user_root / "drafts"
         self._reader = StandardPackageReader()
@@ -104,6 +159,29 @@ class StandardStore:
     @property
     def drafts_root(self) -> Path:
         return self._drafts_root
+
+    # ---- 路径段边界 ------------------------------------------------------
+
+    def _draft_dir(self, draft_id: str) -> Path:
+        """草稿根下的单层草稿目录；非法段或越界符号链接一律拒绝。"""
+        segment = _safe_segment(draft_id, "draft")
+        target = self._drafts_root / segment
+        if target.resolve().parent != self._drafts_root:
+            raise _error(
+                "STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不是草稿根下的单层目录"
+            )
+        return target
+
+    def _published_dir(self, root: Path, standard_id: str, version: str) -> Path:
+        """某个发布根下的 ``standard_id/version`` 目录；身份段非法即稳定拒绝。"""
+        base = Path(root).resolve()
+        target = base / _safe_segment(standard_id, "id") / _safe_segment(version, "version")
+        if target.resolve().parent.parent != base:
+            raise _error(
+                "STANDARD_VERSION_NOT_FOUND",
+                f"标准 {standard_id}@{version} 不在发布根的单层目录中",
+            )
+        return target
 
     # ---- 查询 ------------------------------------------------------------
 
@@ -160,7 +238,7 @@ class StandardStore:
 
     def get(self, standard_id: str, version: str) -> DrawingStandard | None:
         for root in (self._published_root, self._official_root):
-            document = root / standard_id / version / DOCUMENT_NAME
+            document = self._published_dir(root, standard_id, version) / DOCUMENT_NAME
             if document.is_file():
                 return parse_published_standard_document(
                     json.loads(document.read_text(encoding="utf-8"))
@@ -170,14 +248,14 @@ class StandardStore:
     def get_document(self, standard_id: str, version: str) -> dict[str, object] | None:
         """读取已发布标准的原始文档字典（派生草稿等场景需要完整内容）。"""
         for root in (self._published_root, self._official_root):
-            document = root / standard_id / version / DOCUMENT_NAME
+            document = self._published_dir(root, standard_id, version) / DOCUMENT_NAME
             if document.is_file():
                 data = json.loads(document.read_text(encoding="utf-8"))
                 return data if isinstance(data, dict) else None
         return None
 
     def get_draft(self, draft_id: str) -> StandardDraft | None:
-        document = self._drafts_root / draft_id / DOCUMENT_NAME
+        document = self._draft_dir(draft_id) / DOCUMENT_NAME
         if not document.is_file():
             return None
         data = json.loads(document.read_text(encoding="utf-8"))
@@ -192,7 +270,11 @@ class StandardStore:
         for directory in sorted(self._drafts_root.iterdir()):
             if not directory.is_dir():
                 continue
-            draft = self.get_draft(directory.name)
+            try:
+                draft = self.get_draft(directory.name)
+            except StandardStoreError:
+                # 目录名非法的历史草稿只跳过，不删除也不阻断其余条目。
+                continue
             if draft is not None:
                 drafts.append(draft)
         return drafts
@@ -204,8 +286,10 @@ class StandardStore:
     ) -> StandardDraft:
         """保存一份草稿文档；只要求结构合法，允许语义未完成内容。"""
         parse_standard_draft_document(document)  # 提前拒绝结构非法的草稿
-        draft_id = draft_id or f"draft-{uuid.uuid4().hex[:12]}"
-        target = self._drafts_root / draft_id
+        # 显式空串不是「未指定」：仍按非法草稿段拒绝。
+        if draft_id is None:
+            draft_id = f"draft-{uuid.uuid4().hex[:12]}"
+        target = self._draft_dir(draft_id)
         if target.exists():
             raise _error("STANDARD_DRAFT_EXISTS", f"草稿 {draft_id!r} 已存在")
         target.mkdir(parents=True)
@@ -218,14 +302,14 @@ class StandardStore:
 
     def save_draft(self, draft_id: str, document: Mapping[str, object]) -> StandardDraft:
         parse_standard_draft_document(document)
-        target = self._drafts_root / draft_id
+        target = self._draft_dir(draft_id)
         if not (target / DOCUMENT_NAME).is_file():
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
         self._write_document(target, document)
         return StandardDraft(draft_id=draft_id, document=dict(document))
 
     def delete_draft(self, draft_id: str) -> None:
-        target = self._drafts_root / draft_id
+        target = self._draft_dir(draft_id)
         if not target.is_dir():
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
         shutil.rmtree(target)
@@ -246,7 +330,7 @@ class StandardStore:
         target = self._assert_identity_free(standard.standard_id, standard.version)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            os.replace(self._drafts_root / draft_id, target)
+            os.replace(self._draft_dir(draft_id), target)
         except OSError as exc:
             raise _identity_collision(standard.standard_id, standard.version) from exc
         return PublishedStandard(
@@ -312,8 +396,10 @@ class StandardStore:
         os.replace(staging / MANIFEST_NAME, staging / DOCUMENT_NAME)
 
     def _assert_identity_free(self, standard_id: str, version: str) -> Path:
-        target = self._published_root / standard_id / version
-        if target.exists() or (self._official_root / standard_id / version).exists():
+        target = self._published_dir(self._published_root, standard_id, version)
+        if target.exists() or self._published_dir(
+            self._official_root, standard_id, version
+        ).exists():
             raise _error(
                 "STANDARD_VERSION_EXISTS", f"标准 {standard_id}@{version} 已存在"
             )
@@ -322,8 +408,11 @@ class StandardStore:
     def export_package(self, standard_id: str, version: str, dest_dir: Path) -> Path:
         import zipfile
 
-        for root in (self._published_root, self._official_root):
-            source = root / standard_id / version
+        candidates = [
+            self._published_dir(root, standard_id, version)
+            for root in (self._published_root, self._official_root)
+        ]
+        for source in candidates:
             if source.is_dir():
                 break
         else:

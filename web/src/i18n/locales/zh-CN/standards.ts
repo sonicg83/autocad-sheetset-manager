@@ -230,6 +230,7 @@ export default {
     row: "第 {row} 行",
     noRow: "映射表",
     STANDARD_MAPPING_SOURCE_DUPLICATE: "源值重复（{source}）",
+    STANDARD_DRAFT_ID_INVALID: "草稿 ID 非法：{field}",
     STANDARD_ID_INVALID: "标准 ID 非法：{field}",
     STANDARD_VERSION_INVALID: "版本号必须是三段数字版本：{field}",
     STANDARD_NAME_INVALID: "标准名称不能为空",

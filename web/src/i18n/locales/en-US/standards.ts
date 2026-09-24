@@ -231,6 +231,7 @@ export default {
     row: "row {row}",
     noRow: "mapping table",
     STANDARD_MAPPING_SOURCE_DUPLICATE: "Duplicate source value ({source})",
+    STANDARD_DRAFT_ID_INVALID: "Illegal draft ID: {field}",
     STANDARD_ID_INVALID: "Illegal standard ID: {field}",
     STANDARD_VERSION_INVALID: "Version must be a three-part numeric version: {field}",
     STANDARD_NAME_INVALID: "The standard name must not be empty",

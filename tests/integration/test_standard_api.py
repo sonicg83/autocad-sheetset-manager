@@ -7,6 +7,9 @@
 """
 
 import copy
+import io
+import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -17,6 +20,7 @@ from dst_manager.application.errors import ApplicationError
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import BuiltinExtensionEntry
+from dst_manager.infrastructure.standards.store import StandardStoreError
 from dst_manager.interfaces.api import create_app
 
 DRAFT_DOCUMENT = {
@@ -366,3 +370,94 @@ def test_dst_import_endpoint_rejects_invalid_source(tmp_path: Path) -> None:
     response = client.post("/api/standards/drafts/from-dst", json={"dst_path": str(broken)})
     assert response.status_code == 422
     assert response.json()["code"] == "STANDARD_DST_IMPORT_INVALID"
+
+
+# ---- 身份段路径边界（PLAN-DM-040 Task 1，F17） ----------------------------
+
+SECRET_NAME = "根外秘密标准"
+
+
+def write_library_escape_fixture(tmp_path: Path) -> Path:
+    """在标准库根上两级预置合法 document.json 与 assets/secret.dwg。
+
+    ``<data>/standards/user/published/../..`` 正好落在 ``<data>/standards``。
+    """
+    standards_root = tmp_path / "data" / "standards"
+    (standards_root / "assets").mkdir(parents=True, exist_ok=True)
+    (standards_root / "document.json").write_text(
+        json.dumps(copy.deepcopy(DRAFT_DOCUMENT) | {"name": SECRET_NAME}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (standards_root / "assets" / "secret.dwg").write_bytes(b"secret-dwg")
+    return standards_root
+
+
+def test_identity_route_rejects_percent_encoded_parent_segments(tmp_path: Path) -> None:
+    write_library_escape_fixture(tmp_path)
+    client = make_client(tmp_path)
+
+    detail = client.get("/api/standards/%2E%2E/%2E%2E")
+    assert detail.status_code in (404, 422), detail.text
+    assert SECRET_NAME not in detail.text
+
+    exported = client.get("/api/standards/%2E%2E/%2E%2E/export")
+    assert exported.status_code in (404, 422), exported.text
+    assert exported.headers.get("content-type") != "application/zip"
+    assert b"secret-dwg" not in exported.content
+
+ILLEGAL_IDENTITIES = (
+    ("..", ".."),
+    ("..", "1.0.0"),
+    ("C:", "1.0.0"),
+    ("", "1.0.0"),
+    ("szmedi.gas", ".."),
+    ("szmedi.gas", ""),
+    ("szmedi.gas", "1.0"),
+    ("szmedi.gas", "1.0.0 "),
+    ("szmedi.gas", "1.0.0/../.."),
+)
+
+
+@pytest.mark.parametrize("standard_id,version", ILLEGAL_IDENTITIES)
+def test_store_identity_entries_reject_illegal_segments(
+    tmp_path: Path, standard_id: str, version: str
+) -> None:
+    write_library_escape_fixture(tmp_path)
+    store = DstManagerService(Settings(data_dir=tmp_path / "data")).standard_store
+    allowed_codes = ("STANDARD_ID_INVALID", "STANDARD_VERSION_INVALID")
+
+    with pytest.raises(StandardStoreError) as fetched:
+        store.get(standard_id, version)
+    assert str(fetched.value).split(":", 1)[0] in allowed_codes
+
+    with pytest.raises(StandardStoreError) as document_exc:
+        store.get_document(standard_id, version)
+    assert str(document_exc.value).split(":", 1)[0] in allowed_codes
+
+    with pytest.raises(StandardStoreError) as exported:
+        store.export_package(standard_id, version, tmp_path / "out")
+    assert str(exported.value).split(":", 1)[0] in allowed_codes
+    assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob("*.dststandard"))
+
+
+def test_identity_codes_name_the_offending_segment(tmp_path: Path) -> None:
+    write_library_escape_fixture(tmp_path)
+    store = DstManagerService(Settings(data_dir=tmp_path / "data")).standard_store
+    with pytest.raises(StandardStoreError, match="STANDARD_ID_INVALID"):
+        store.get("..", "1.0.0")
+    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_INVALID"):
+        store.get("szmedi.gas", "..")
+
+
+def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
+    detail = client.get("/api/standards/szmedi.gas/0.1.0")
+    assert detail.status_code == 200
+    assert detail.json()["document"]["name"] == "市政燃气施工图"
+    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    assert exported.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        assert "manifest.json" in archive.namelist()

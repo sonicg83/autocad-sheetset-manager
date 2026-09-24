@@ -1,5 +1,6 @@
 """官方/用户标准库仓储测试（PLAN-DM-035 Task 3 / PLAN-DM-038 Task 4）。"""
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -240,3 +241,91 @@ def test_get_rejects_legacy_rules_document(store: StandardStore, tmp_path: Path)
     write_official(official_root, LEGACY_DOCUMENT)
     with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
         store.get("legacy.rules", "1.0.0")
+
+
+# ---- 草稿段边界（PLAN-DM-040 Task 1，F04） -------------------------------
+
+ILLEGAL_DRAFT_IDS = (
+    "../outside",
+    "..\\outside",
+    "C:\\outside",
+    ".",
+    "..",
+    "a/b",
+    "a\\b",
+    "",
+    "CON",
+    "LPT1",
+    "CON.dwg",
+    "draft-1.",
+    "draft-1 ",
+)
+
+DRAFT_OPERATIONS = ("create_draft", "get_draft", "save_draft", "delete_draft", "publish")
+
+
+def _call_draft_operation(store: StandardStore, operation: str, draft_id: str) -> None:
+    if operation == "create_draft":
+        store.create_draft(USER_DOCUMENT, draft_id=draft_id)
+    elif operation == "get_draft":
+        store.get_draft(draft_id)
+    elif operation == "save_draft":
+        store.save_draft(draft_id, USER_DOCUMENT)
+    elif operation == "delete_draft":
+        store.delete_draft(draft_id)
+    else:
+        store.publish(draft_id)
+
+
+@pytest.mark.parametrize("draft_id", ILLEGAL_DRAFT_IDS)
+@pytest.mark.parametrize("operation", DRAFT_OPERATIONS)
+def test_illegal_draft_id_rejected_by_every_entry(
+    store: StandardStore, draft_id: str, operation: str
+) -> None:
+    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
+        _call_draft_operation(store, operation, draft_id)
+
+
+def test_illegal_draft_id_leaves_files_outside_root_untouched(
+    store: StandardStore,
+) -> None:
+    outside = store.drafts_root.parent / "outside"
+    outside.mkdir(parents=True)
+    secret = outside / "document.json"
+    secret.write_text("{\"secret\": true}", encoding="utf-8")
+    before_hash = hashlib.sha256(secret.read_bytes()).hexdigest()
+    before_listing = sorted(path.name for path in store.drafts_root.parent.iterdir())
+
+    for draft_id in ILLEGAL_DRAFT_IDS:
+        for operation in DRAFT_OPERATIONS:
+            with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
+                _call_draft_operation(store, operation, draft_id)
+
+    assert hashlib.sha256(secret.read_bytes()).hexdigest() == before_hash
+    assert sorted(path.name for path in store.drafts_root.parent.iterdir()) == before_listing
+
+
+@pytest.mark.parametrize("draft_id", ["draft-1", "legacy", "draft-gas"])
+def test_legal_draft_ids_still_round_trip(store: StandardStore, draft_id: str) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id=draft_id)
+    assert store.get_draft(draft_id) is not None
+    assert store.save_draft(draft_id, USER_DOCUMENT).draft_id == draft_id
+    published = store.publish(draft_id)
+    assert (published.standard_id, published.version) == ("user.water", "3.0.0")
+    assert not (store.drafts_root / draft_id).exists()
+
+
+def test_list_skips_illegal_historical_draft_directories(store: StandardStore) -> None:
+    create_draft(store, USER_DOCUMENT, draft_id="draft-ok")
+    for name in ("d" * 200, " draft-legacy"):
+        legacy = store.drafts_root / name
+        legacy.mkdir(parents=True)
+        (legacy / "document.json").write_text(
+            json.dumps(USER_DOCUMENT, ensure_ascii=False), encoding="utf-8"
+        )
+
+    draft_ids = [entry.draft_id for entry in store.list() if entry.status == "draft"]
+    assert draft_ids == ["draft-ok"]
+    # 非法历史目录只被跳过，不被删除
+    assert (store.drafts_root / ("d" * 200) / "document.json").is_file()
+    assert (store.drafts_root / " draft-legacy" / "document.json").is_file()

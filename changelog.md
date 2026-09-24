@@ -1,3 +1,9 @@
+## 2026-09-24（PLAN-DM-040 Task 1：封闭草稿与身份路径段）
+
+- 修复 F04/F17：`StandardStore` 新增 `_safe_segment`/`_draft_dir`/`_published_dir`，草稿段与 `standard_id`/`version` 身份段一律拒绝相对分量（`..`/`%2E%2E`）、路径分隔符、盘符、首尾空白、尾随点、Windows 保留设备名、控制字符与超长输入；`create_draft` 显式空串按非法拒绝。`GET /api/standards/%2E%2E/%2E%2E` 由 200（返回标准库根外 `document.json` 全文）改为 422，`/export` 不再把根外目录打成 zip；`get`/`get_document`/`export_package` 与身份保存入口共用同一边界。
+- `list()` 跳过目录名非法的历史草稿（不删除、不阻断其余条目）；`_iter_drafts`、发布、删除、保存均经同一目录入口。合法身份的响应格式与公共 API 不变。
+- 新增回归：`tests/unit/test_standard_store.py`（草稿段 5 个入口 × 13 类非法输入、根外文件哈希与目录列表不变、合法 ID 往返、非法历史目录跳过）、`tests/integration/test_standard_api.py`（`%2E%2E` 详情与导出、仓储三入口、合法身份回归）；`standards.ts` 中英同步登记 `STANDARD_DRAFT_ID_INVALID`。
+
 ## 2026-09-24（PLAN-DM-040 按审查意见修订）
 
 - 按独立审查结论修订 `PLAN-DM-040`：新增并实测复现 F17（身份路由 `standard_id`/`version` 未校验，`GET /api/standards/%2E%2E/%2E%2E` 可读标准库根外 `document.json`，`/export` 可把该目录打成 zip）并入 Task 1，边界从草稿段扩展到身份段；Task 7 定案为新增草稿级保存路由 `PUT /api/standards/drafts/{draft_id}`（保留既有身份路由，请求体身份与草稿不符返回 `STANDARD_IDENTITY_MISMATCH`），编辑器身份字段只读；10 个任务全部按 Step 展开（RED 断言、运行命令、期望失败、GREEN、changelog、提交），批次改为串行以避免 `StandardEditor.vue`/`store.ts` 合并冲突；明确 Task 3 受控副本命名 `assets/managed-*` 与只清理未引用受控副本的规则；补“残余风险与回退”和 Task 4/7/9 的 i18n 文件；修复 front matter 的 YAML 缩进。
