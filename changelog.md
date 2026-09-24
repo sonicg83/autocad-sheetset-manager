@@ -1,3 +1,10 @@
+## 2026-09-24（PLAN-DM-040 Task 10：闭环验证、全量门禁与文档回写）
+
+- 闭环验证（真实 CAD）：用本机 AutoCAD 2016 Core Console 与真实 DWG 临时副本完成「本机模板 → 受控副本 → 保存 → 真实布局检查（诊断为空）→ 发布 → 导出 → 新库导入 → 标准驱动创建候选（`available: true`，两个资产选项可用）」，来源副本与 `sample/` 原件的哈希/mtime 全程不变，包内只有相对路径；证据见 SPEC-DM-016 视觉证据 README §三之四。
+- 全量门禁：`uv run ruff check .`、`uv run pytest -q`、`uv lock --check`、`npm --prefix web run test:unit`（314 例）、`check:api`/`check:i18n`（1593 键对称）/`check:ui`/`build`、`npm --prefix web run test:e2e`（674 passed；1 例与本次改动无关的性能预算用例重跑通过）全部通过；本计划未改数据库模型，未额外运行 Alembic。
+- 文档回写：SPEC-DM-016 §12.3（ST-UI-08 缺口关闭、列明 PLAN-DM-040 追加的自动化承接与真实 CAD 验证口径）；视觉证据 README §六-1 关闭为已完成项、新增 §三之四真实 CAD 闭环记录；GUIDE-DM-007 §8.4（受控复制步骤与限制）、§9.3（导出口袋白名单）、§10.1（清单与条目双向一致）、§10.2（验证命令）同步。
+- 计划：Task 1–9 全部 Step 与 Task 10 Step 1/2 勾选，状态改为 `active`，新增「执行记录（2026-09-24）」逐项登记 F01–F15 与 F17 的 RED/GREEN 证据、全量门禁、真实 CAD 闭环与遗留（真实桌面 G9 待人工执行、提交 22a3637 的 changelog 历史需人工整理、并发会话改动未纳入）。真实桌面 G9 未执行，计划不标记 `completed`。
+
 ## 2026-09-24（PLAN-DM-040 Task 9：新建与 CSV 弹窗焦点）
 
 - 修复 F13（本任务部分）：新建草稿弹窗与普通属性 CSV 导入弹窗接入既有 `useDialogFocus`（与 `UnsavedInputDialog`/`ConfirmModal` 同源）：打开时初始焦点落在弹窗内首个停靠点，Tab/Shift+Tab 在弹窗内圈闭，Escape 关闭并把焦点归还给打开按钮；两者均为手写遮罩，不再各自养一套焦点逻辑，也不与编辑器三选一门禁叠成第二个焦点圈。

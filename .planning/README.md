@@ -15,7 +15,7 @@
 - [双产品测试体系收敛与过时内容清理实施计划（PLAN-INT-003，cancelled）](plans/integration/PLAN-INT-003-test-system-consolidation.md)：DST Builder 已退场，双产品测试治理失去前提；未来 Manager 测试治理另行立项。
 - [DST Builder 整体归档与文档封口实施计划（PLAN-INT-004，completed）](plans/integration/PLAN-INT-004-retire-dst-builder.md)：已将 Builder 产品面和专用脚本整体移入本地 `legacy/`，删除 0007/0008 并压平 Manager 迁移基线（head `0006_dm020_extension_platform`，旧本地数据库需手工重建），历史文档已封口为 Manager 单产品治理。
 - [标准包导入受控文件选择修复计划（PLAN-DM-041，proposed）](plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)：单独承接原 F16，补齐 `.dststandard` 原生选择与导入弹窗契约。
-- [图纸标准平台审查问题修复计划（PLAN-DM-040，proposed）](plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：F01–F15 与 F17 共 16 项问题按 Step 串行分批收口，模板资产文件无法加入草稿列为阻断级；原 F16 拆至 PLAN-DM-041。
+- [图纸标准平台审查问题修复计划（PLAN-DM-040，active）](plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：F01–F15 与 F17 共 16 项问题按 Step 串行分批收口，模板资产文件无法加入草稿列为阻断级；原 F16 拆至 PLAN-DM-041。任务 1–9 已实施并验证，任务 10 的闭环与全量门禁完成、真实桌面 G9 待人工执行。
 - [图纸标准平台与标准编辑器实施计划（PLAN-DM-035，completed）](plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)
 - [标准驱动的新图纸集创建实施计划（PLAN-DM-036，active）](plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md)
 - [图纸标准校验与 HTML JSON 报告实施计划（PLAN-DM-037，proposed）](plans/dst-manager/PLAN-DM-037-standard-validation-reports.md)

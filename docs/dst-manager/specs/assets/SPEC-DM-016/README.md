@@ -109,6 +109,26 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 - 结果：**全部通过**——无裁切、无页面级横向滚动（宽表只在自身容器内滚动）、模态底部操作栏持续可见且可点、Tab/Shift+Tab 可达主要动作且 Enter/Space 生效。
 - 本项不需要 AutoCAD，与需真实 CAD 的 G9 清单（本目录 §五）无关：**G9 仍待执行**。
 
+## 三之四、真实 AutoCAD 闭环验证（PLAN-DM-040 Task 10 Step 1）
+
+在装有 AutoCAD 2016/2020 Core Console 与双版本插件的本机执行一次性脚本
+`.superpowers/sdd/PLAN-DM-040-.../task-10-loop-verification.py`（逐段输出存于同目录
+`task-10-loop-evidence.md`），链路与结果：
+
+| 段 | 结果 |
+| --- | --- |
+| 来源 | `sample/project1` 真实 DWG 的临时副本（探测后布局为 `0000 封面`）；样本原件与来源副本的哈希/mtime 全程不变 |
+| 受控复制 | 两次复制得到不同的 `assets/managed-<uuid4hex>.dwg`，副本哈希与来源一致，文档不含本机绝对路径 |
+| 保存 | `save_standard_draft` 通过；文档只含包内相对路径 |
+| CAD 布局检查 | 真实 Core Console 枚举布局 `['0000 封面']`，布局模板与基础模板诊断均为空 |
+| 发布 | `loop.template@1.0.0` 发布成功，0 error / 0 warning |
+| 导出 | `.dststandard` 条目 = `manifest.json` + 两个声明副本，包内副本哈希与来源一致 |
+| 新库导入 | 导入后副本哈希不变，文档不含本机路径 |
+| 标准驱动创建 | `GET /api/creation-drafts/standards` 返回 `available: true`，基础模板与布局模板选项均可用 |
+
+本项证明「本机模板 → 受控副本 → 保存 → CAD 检查 → 发布 → 导出 → 导入 → 创建候选」在真实 CAD 下成立；
+**不**替代真实桌面 G9（原生文件选择对话框、WebView2 缩放与键盘行为仍需人工执行）。
+
 ## 四、自动化验收承接（ST-UI-01～12）
 
 | ID | 承接用例 |
@@ -124,7 +144,7 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 | ST-UI-09 | `standards-assets-publish.spec.ts`（错误禁用发布、警告可发布、问题跳回并聚焦） |
 | ST-UI-10 | `standards-assets-publish.spec.ts`（发布成功进入只读新版本详情） |
 | ST-UI-11 | `standards-editor.spec.ts`（离开 dirty 草稿三选一门禁） |
-| ST-UI-12 | `standards-library.spec.ts`（列表加载失败就地说明）+ `standards-assets-publish.spec.ts`（检查失败可重试） |
+| ST-UI-12 | `standards-library.spec.ts`（列表加载失败就地说明与重试）+ `standards-assets-publish.spec.ts`（检查失败可重试、未检查空态） |
 
 单元测试面（`npm run test:unit`）：`standardLibraryModel`（只读边界与筛选空态）、
 `draftModel`（映射行级诊断、组合预览、结构体检）、`publishModel`（发布门禁、布局严格比较、
@@ -148,10 +168,11 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 
 ## 六、未关闭差异与残余风险
 
-1. **草稿资产文件本体不可写入**：后端没有把资产文件写入草稿受控目录的端点（PLAN-DM-035
-   Task 3/5/6 范围），因此编辑器只能编辑资产**声明**；声明了但文件不在草稿目录内的资产由
-   `STANDARD_ASSET_FILE_MISSING` 阻断发布。补齐需要新端点（路径、扩展名、大小与事务安全校验）
-   与后续计划，当前不伪造「已替换文件」。
+1. **草稿资产文件本体写入（已关闭，PLAN-DM-040 Task 3）**：`POST /api/standards/drafts/{draft_id}/asset-files`
+   把用户显式选择的本机 DWG/DWT 复制进草稿受控目录，只返回 `assets/managed-<uuid4hex>.dwg|.dwt`
+   受控副本名；单文件 ≤ 64 MiB、扩展名只允许 `.dwg`/`.dwt`，先写随机临时文件再原子改名，失败不留半文件。
+   保存与发布成功后只清理未被文档引用且带 `managed-` 前缀的副本。原残余项（只能编辑资产**声明**、
+   文件不在草稿目录内时由 `STANDARD_ASSET_FILE_MISSING` 阻断）仍作为门禁保留，不再是能力缺口。
 2. **版本说明字段**：SPEC-DM-016 §9.1 要求的版本说明以顶层 `release_notes` 随草稿文档保存并
    随标准包导出，不进入领域校验；若后续需要强类型或必填，须修订标准 Schema。
 3. **`cad_job.py` 未修改**：Task 5 复用既有 CAD 读取协议，经探索确认 `cad_job.py` 无直接可复用

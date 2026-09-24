@@ -209,7 +209,20 @@ szmedi.gas@2.1.0
 
 ### 8.4 配置模板资产
 
-每个资产必须有稳定 `asset_id`、明确种类和包内相对路径。模板文件必须复制到草稿受控资产目录，不能引用编制人电脑上的外部绝对路径。
+每个资产必须有稳定 `asset_id`、明确种类和包内相对路径。模板文件一律经标准编辑器的
+「选择本机模板」受控复制进草稿受控资产目录，**不能**引用编制人电脑上的外部绝对路径：
+
+- 桌面壳下用固定 `template` 文件种类（`*.dwg;*.dwt`）选择本机文件；无桌面壳的本地开发态
+  用单独标明的「来源绝对路径」输入，调用同一个端点；
+- 后端把文件复制为 `assets/managed-<uuid4hex>.dwg|.dwt` 并只把受控副本名写回草稿；
+  本机绝对路径不入 `document.json`、不入发布目录、不入包内 `manifest.json`；
+- 单文件不得超过 64 MiB，扩展名只允许 `.dwg`/`.dwt`；来源不存在、扩展名不符、超限或复制中断
+  一律拒绝并保留原声明（错误码 `STANDARD_ASSET_SOURCE_NOT_FOUND`/`STANDARD_ASSET_SOURCE_INVALID`/
+  `STANDARD_ASSET_COPY_FAILED`）；
+- 保存与发布成功后只清理草稿 `assets/` 下**未被当前文档引用且带 `managed-` 前缀**的副本，
+  手工放置的既有资产不动；
+- 「受控路径」列只显示包内相对路径；已声明但文件不在草稿受控目录内、或声明的文件指向受控目录
+  之外（含符号链接）时，发布与导出被阻断。
 
 基础模板与布局模板分开登记：
 
@@ -254,6 +267,10 @@ szmedi.gas@2.1.0
 
 `manifest.json` 使用 UTF-8。包内路径一律使用相对 POSIX 路径；不得包含盘符、绝对路径、`..` 或两个规范化后相同的路径。
 
+导出只写入**文档声明且已通过存在性校验**的资产：草稿或发布目录里的其它文件（例如未引用的
+`assets/managed-*` 孤儿副本、临时文件）不会进入候选包；声明文件缺失时导出以
+`STANDARD_ASSET_FILE_MISSING` 拒绝并终止。
+
 导出后不要再用压缩软件手工替换包内文件。任何内容变化都应回到草稿、发布新版本并重新导出。
 
 ## 10. 候选包安全检查
@@ -265,7 +282,9 @@ szmedi.gas@2.1.0
 - 单个条目不超过 64 MiB；
 - 整包解压后总大小不超过 256 MiB；
 - 必须且只能使用根部 `manifest.json` 作为标准文档入口；
-- 拒绝绝对路径、盘符路径、路径逃逸和重复规范化路径；
+- 拒绝绝对路径、盘符路径、路径逃逸和重复规范化路径；`assets/../A2.dwg` 这类含 `..` 的条目在**归一化前**即拒绝；
+- 清单与包内条目必须**双向一致**：清单声明的每个文件必须存在于包内（`STANDARD_ASSET_FILE_MISSING`），
+  包内不得夹带未在清单中声明的条目（`STANDARD_PACKAGE_INVALID`）；导入在建任何目录之前完成校验；
 - 拒绝 Python、DLL、EXE、SCR、Shell、AutoLISP 和其他可执行内容；
 - Schema 版本、标准 ID、版本、属性、DWG 命名模板、资产和依赖必须能够被严格解析。
 
@@ -284,8 +303,8 @@ Task 3 合并后，至少运行：
 
 ```powershell
 $env:UV_LINK_MODE = "copy"
-uv run pytest tests/unit/test_standard_package.py tests/unit/test_standard_store.py -q
-uv run ruff check src/dst_manager/domain/standards.py src/dst_manager/domain/standard_rules.py src/dst_manager/infrastructure/standards tests/unit/test_drawing_standards.py tests/unit/test_standard_rules.py tests/unit/test_standard_package.py tests/unit/test_standard_store.py
+uv run pytest tests/unit/test_standard_package.py tests/unit/test_standard_store.py tests/unit/test_standard_assets.py -q
+uv run ruff check src/dst_manager/domain/standards.py src/dst_manager/infrastructure/standards src/dst_manager/application/standard_assets.py tests/unit/test_standard_package.py tests/unit/test_standard_store.py tests/unit/test_standard_assets.py
 ```
 
 这些测试证明读取器和标准库契约没有回归，但**不能证明某个具体候选包业务正确**。正式候选包必须再经过内容、DWG 和创建流程检查。

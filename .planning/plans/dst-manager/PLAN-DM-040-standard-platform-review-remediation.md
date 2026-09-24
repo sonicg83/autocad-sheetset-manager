@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-040
 title: 图纸标准平台审查问题修复计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-24
@@ -104,23 +104,23 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: `StandardStore.create_draft/get_draft/save_draft/delete_draft/publish/list/get/get_document/export_package` 的既有 `draft_id`、`standard_id`、`version` 字符串。
 - Produces: 仓储内单一 `_safe_segment(value: str, kind: str) -> str`、`_draft_dir(draft_id: str) -> Path`、`_published_dir(standard_id: str, version: str) -> Path`。草稿段非法使用稳定 `STANDARD_DRAFT_ID_INVALID`（HTTP 422）；身份段非法复用 `STANDARD_ID_INVALID`/`STANDARD_VERSION_INVALID`（HTTP 422）。合法 ID 的响应格式与公共 API 不变；`list()` 跳过目录名非法的历史草稿而不是整体失败。
 
-- [ ] **Step 1：写草稿段 RED**
+- [x] **Step 1：写草稿段 RED**
   在 `tests/unit/test_standard_store.py` 用 `tmp_path` 夹具覆盖：`create_draft/get_draft/save_draft/delete_draft/publish` 对 `"../outside"`、`"..\\outside"`、`"C:\\outside"`、`"."`、`".."`、`"a/b"`、`"a\\b"`、空串、`CON`/`LPT1`/`CON.dwg`、尾随点或空格一律拒绝（`STANDARD_DRAFT_ID_INVALID`），并断言草稿根外的文件哈希与目录列表不变。合法 ID（`draft-1`、`legacy`、`draft-gas`）仍可用；草稿根存在非法目录名时 `list()` 仍返回其余草稿。
 
-- [ ] **Step 2：写身份段 RED（F17）**
+- [x] **Step 2：写身份段 RED（F17）**
   在 `tests/integration/test_standard_api.py` 增加：`GET /api/standards/%2E%2E/%2E%2E`、`GET /api/standards/%2E%2E/%2E%2E/export` 以及直接调用 `store.get/get_document/export_package` 时，含 `..`、盘符、空段的身份一律 404 或 422；在标准库根外放置合法 `document.json` 与 `assets/secret.dwg`，断言响应不包含其内容、导出 zip 不含该目录条目。合法身份的详情与导出响应不变。
 
-- [ ] **Step 3：运行 RED 并记录**
+- [x] **Step 3：运行 RED 并记录**
   `uv run pytest tests/unit/test_standard_store.py tests/integration/test_standard_api.py -q -p no:xdist`
   期望：新用例失败。记录 `%2E%2E` 当前返回 200、`/export` 当前返回根外 zip 的实际输出，作为缺陷与后续对照的 RED 证据。
 
-- [ ] **Step 4：实现最小边界**
+- [x] **Step 4：实现最小边界**
   在 `store.py` 实现 `_safe_segment`/`_draft_dir`/`_published_dir`：单段校验、`resolve()` 后父目录边界、Windows 保留设备名与尾随点/空格拒绝、长度上限；创建、读取、保存、删除、发布、导出及 Task 3 的资产复制入口全部复用。`_iter_drafts` 对目录名非法的历史草稿跳过。身份段复用 `STANDARD_ID_PATTERN`/`STANDARD_VERSION_PATTERN`（从 `dst_manager.domain.standards` 导入），不改写文档内身份校验的既有码。
 
-- [ ] **Step 5：运行 GREEN 与回归**
+- [x] **Step 5：运行 GREEN 与回归**
   同 Step 3 命令，加 `uv run pytest tests/unit/test_standard_assets.py tests/unit/test_standard_package.py -q` 与 `uv run ruff check .`；记录全绿。
 
-- [ ] **Step 6：登记文案、changelog 并提交**
+- [x] **Step 6：登记文案、changelog 并提交**
   在 `standards.ts` 诊断域登记 `STANDARD_DRAFT_ID_INVALID`（中英对称），`npm --prefix web run check:i18n` 通过；更新 `changelog.md`；只暂存本任务文件并提交（简体中文 commit message）。
 
 ### Task 2：把资产存在性变成发布、导入与导出硬门禁（F02、F15）
@@ -139,22 +139,22 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: `DrawingStandard.assets[*].files[*].path`、草稿目录或经验证的 ZIP 条目集合。
 - Produces: `validate_asset_files(standard, root: Path) -> None` 与 `validate_package_asset_files(standard, entries: Collection[str]) -> None`；非法相对路径与缺失文件复用既有 `STANDARD_ASSET_PATH_INVALID`、`STANDARD_ASSET_FILE_MISSING`（不新增码；前端诊断文案已存在）。
 
-- [ ] **Step 1：写发布侧 RED**
+- [x] **Step 1：写发布侧 RED**
   草稿声明 `assets/missing.dwg` 但文件不存在、声明绝对路径/盘符/UNC/`..`、或声明指向受控根外的符号链接时，`publish()` 拒绝且草稿目录、发布根不变；已有文件、合法子目录与中文文件名通过。记录当前 `publish()` 对缺失与绝对路径资产均返回成功的失败输出。
 
-- [ ] **Step 2：写包侧 RED（导入与导出）**
+- [x] **Step 2：写包侧 RED（导入与导出）**
   ZIP 原始名 `assets/../A2.dwg`、`assets\\..\\A2.dwg` 在规范化前即拒绝；清单声明文件缺失、清单声明与包内真实条目双向不一致（缺失与多余）都拒绝；`export_package()` 只导出被文档声明且校验通过的资产，不把未引用的草稿临时文件混进包。失败时不移动草稿、不创建目标版本、导入暂存目录被清理。
 
-- [ ] **Step 3：运行 RED 并记录**
+- [x] **Step 3：运行 RED 并记录**
   `uv run pytest tests/unit/test_standard_store.py tests/unit/test_standard_package.py tests/unit/test_standard_assets.py tests/integration/test_standard_api.py -q -p no:xdist`；记录缺失资产导入 200、缺失/绝对路径发布 200 的失败输出。
 
-- [ ] **Step 4：实现最小门禁**
+- [x] **Step 4：实现最小门禁**
   创建 `asset_paths.py` 并在仓储最终 `os.replace` 之前对草稿目录运行 `validate_asset_files`，对导入暂存目录/条目集合运行 `validate_package_asset_files`；`package.py` 的条目规范化改为先拒绝 `..` 分量再做归一化；`export_package()` 改为按文档声明白名单导出。
 
-- [ ] **Step 5：运行 GREEN 与夹具回归**
+- [x] **Step 5：运行 GREEN 与夹具回归**
   同 Step 3 命令加 `uv run ruff check .`；确认既有合法官方包夹具仍可读，记录全绿。
 
-- [ ] **Step 6：changelog 并提交**
+- [x] **Step 6：changelog 并提交**
   更新 `changelog.md`；只暂存本任务文件并提交。
 
 ### Task 3：将本机模板文件受控复制进草稿（F01，阻断）
@@ -178,25 +178,25 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: 既有桌面桥 `select_file("template", description)`（固定 `*.dwg;*.dwt`）、Task 1 的安全草稿根目录与 Task 2 的资产校验。
 - Produces: `POST /api/standards/drafts/{draft_id}/asset-files`，请求 `{source_path: string}`，成功返回 `{path: string}`；`path` 只为服务器生成的受控副本名 `assets/managed-<uuid4hex>.dwg|.dwt`，前端将其写入当前草稿文件行，不保存 `source_path`。清理规则：保存或发布成功后，只删除草稿 `assets/` 下**未被当前文档引用且文件名匹配 `managed-` 前缀**的副本；其他文件一律不触碰。
 
-- [ ] **Step 1：写正常路径 RED**
+- [x] **Step 1：写正常路径 RED**
   以中文、空格、OneDrive 绝对路径来源复制 DWG/DWT；响应只含受控相对路径；源文件哈希/mtime 不变，副本内容相同，保存草稿后检查可读取副本；取消文件选择不发 API 请求；新建与替换文件行均覆盖。
 
-- [ ] **Step 2：写故障与原子性 RED**
+- [x] **Step 2：写故障与原子性 RED**
   来源不存在、不是文件、扩展名不符、超过单文件 64 MiB、草稿不存在或 `draft_id` 非法、复制中断、目标碰撞均拒绝且无半文件；已有文件与 `document.json` 不变；实现须先写草稿内随机临时文件、校验完成后原子改名，不跟随草稿内路径逃逸或覆盖已有文件。
 
-- [ ] **Step 3：写 UI RED**
+- [x] **Step 3：写 UI RED**
   “受控路径”显示为只读包内路径，新增“选择本机模板”与“替换文件”；有壳时只调用固定 `template` 文件种类。无壳本地开发态提供单独标明的“来源绝对路径”输入并调用同一 API，不把浏览器 `<input type=file>` 的 `fakepath` 交给路径 API。复制成功才修改编辑缓冲；失败保留旧声明与 dirty 状态并就地显示错误。
 
-- [ ] **Step 4：实现后端复制与契约**
+- [x] **Step 4：实现后端复制与契约**
   实现复制端点、`_draft_dir` 校正、大小与扩展名校验、临时文件 + 原子改名；登记 `standard_contracts.py` 的请求/响应模型，更新 OpenAPI 与 TS 类型（`npm --prefix web run generate:api` 后 `check:api` 通过）。
 
-- [ ] **Step 5：实现前端接线与文案**
+- [x] **Step 5：实现前端接线与文案**
   更新 `web/src/api/standards.ts`、`types.ts`、`store.ts` 与资产编辑器/编辑器壳层；中英文文案同步。
 
-- [ ] **Step 6：写清理规则 RED/GREEN**
+- [x] **Step 6：写清理规则 RED/GREEN**
   保存成功与发布成功后清理未被引用且匹配 `managed-` 的副本；旧草稿中手工放置的 `assets/A2.dwg` 不被清理；文档未引用但本次会话刚复制的副本在用户放弃编辑后保留到下次保存/发布再清理（显式断言该行为）。
 
-- [ ] **Step 7：回归、文档与提交**
+- [x] **Step 7：回归、文档与提交**
   运行后端单元/集成测试、`npm --prefix web run check:api`、`check:i18n`、`npm --prefix web run test:e2e -- tests/e2e/standards-assets-publish.spec.ts`、`npm --prefix web run build`；用临时 DWG 夹具完成“选择→复制→保存→检查→发布→导出→重新导入”闭环；按规范依据修订 SPEC-DM-016 §8.1 与 `updated`；更新 `changelog.md`；提交。
 
 ### Task 4：检查结果绑定已保存草稿，并修正未检查空态（F06、F07）
@@ -215,19 +215,19 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: Task 3 的受控资产副本、既有 `saveDraft()` 与 `inspectAsset()`。
 - Produces: 每次检查记录 `draft_id` 与已保存文档快照；编辑缓冲发生任何相关变更后标记结果已失效。未收到某资产检查结果时显示“未检查”，而不是“未发现问题”。
 
-- [ ] **Step 1：写状态机 RED**
+- [x] **Step 1：写状态机 RED**
   覆盖新建未保存资产、编辑已检查路径、检查期间继续编辑、保存失败、切换草稿、检查返回顺序颠倒：不把旧结果显示为当前结果；无检查记录时断言“未检查”可见且“未发现问题”不可见。
 
-- [ ] **Step 2：运行 RED 并记录**
+- [x] **Step 2：运行 RED 并记录**
   `npm --prefix web run test:unit -- src/features/standards/publishModel.test.ts`；记录旧结果被当作当前结果的失败输出。
 
-- [ ] **Step 3：实现“保存并检查”与代次保护**
+- [x] **Step 3：实现“保存并检查”与代次保护**
   `runInspections()` 对 dirty 草稿先执行显式“保存并检查”：结构无效或保存失败即停止检查并显示原因；保存成功后基于返回文档与固定 `draft_id` 检查。异步结果用代次与快照身份防止过期响应覆盖新状态；发布检查打开和点击发布前都核对当前快照，快照不一致时重新检查并阻断前端继续动作。
 
-- [ ] **Step 4：修正未检查空态并补文案**
+- [x] **Step 4：修正未检查空态并补文案**
   `AssetInspectionPanel` 在无检查记录时显示“未检查”；新增文案写入中英语言包并用 `check:i18n` 验证对称。
 
-- [ ] **Step 5：验证与提交**
+- [x] **Step 5：验证与提交**
   运行 `npm --prefix web run test:unit`、`npm --prefix web run test:e2e -- tests/e2e/standards-assets-publish.spec.ts`、`npm --prefix web run build`；更新 `changelog.md`；提交。后端 Task 2 门禁独立重验，不依赖前端检查缓存。
 
 ### Task 5：统一标准列表键与编辑草稿身份（F03、F05）
@@ -245,16 +245,16 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: `StandardSummary.source/standard_id/version/draft_id`、编辑器 `props.draft.draft_id`。
 - Produces: `draftKey(summary)` 对草稿使用稳定 `draft_id`，对已发布版本使用 `source/standard_id/version`；编辑器检查、发布与保存始终使用打开时的 `draft_id`，不从列表选择反推。
 
-- [ ] **Step 1：写 RED**
+- [x] **Step 1：写 RED**
   两个官方标准同为 `1.0.0` 时列表键不重复且点击各项获得对应详情；空库新建草稿、以及此前选中过旧草稿后新建，保存、资产检查与发布都只调用新草稿 ID。
 
-- [ ] **Step 2：运行 RED 并记录**
+- [x] **Step 2：运行 RED 并记录**
   `npm --prefix web run test:unit -- src/features/standards/draftModel.test.ts` 与 `npm --prefix web run test:e2e -- tests/e2e/standards-library.spec.ts`；记录键冲突与旧草稿 ID 被调用的失败输出。
 
-- [ ] **Step 3：实现键与身份固定**
+- [x] **Step 3：实现键与身份固定**
   `draftKey` 纳入 `standard_id`；`StandardLibraryPane` 改为复用 `draftKey`，删除内联键表达式；新建成功时更新选中身份，发布成功时按返回的 `standard_id/version` 精确选中新发布版本；编辑器生命周期内固定 `draft_id`，列表刷新或筛选不改变操作目标。
 
-- [ ] **Step 4：验证与提交**
+- [x] **Step 4：验证与提交**
   运行相关单测、标准库/编辑器 Playwright 与构建；更新 `changelog.md`；提交。
 
 ### Task 6：阻断陈旧详情派生并修正跨来源版本跳转（F08、F09）
@@ -270,16 +270,16 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: Task 5 的完整标准键与 `StandardIdentity`（`VersionEntry` 保持 `version/source`，事件补充 `summary.standard_id` 组成完整身份）。
 - Produces: 详情结果携带与当前选择可比对的 `standard_id/version`；版本链接发出完整身份；派生只消费身份匹配且已完成加载的详情。
 
-- [ ] **Step 1：写 RED**
+- [x] **Step 1：写 RED**
   选中 A 后快速切 B：B 加载中或加载失败时派生不可用且不会复制 A；B 成功加载后只派生 B。版本历史跨官方/用户来源时点击目标条目选中正确标准。
 
-- [ ] **Step 2：运行 RED 并记录**
+- [x] **Step 2：运行 RED 并记录**
   `npm --prefix web run test:unit -- src/features/standards/store.test.ts` 与 `npm --prefix web run test:e2e -- tests/e2e/standards-library.spec.ts`。
 
-- [ ] **Step 3：实现失效与完整身份**
+- [x] **Step 3：实现失效与完整身份**
   切换选择即清除旧详情；在途响应按代次与身份丢弃；`StandardDetailPane` 的版本事件携带 `source/standard_id/version`，视图用 `draftKey` 选中。
 
-- [ ] **Step 4：验证与提交**
+- [x] **Step 4：验证与提交**
   运行 store 单测、标准库 Playwright 与构建；更新 `changelog.md`；提交。
 
 ### Task 7：隔离映射源、草稿级保存与身份只读（F10、F11）
@@ -305,22 +305,22 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: 映射源 `source_property_id` 与各源内稳定 `enum_item_id`；草稿已存身份（`store.get_draft`）。
 - Produces: 映射目标缓冲按 `(source_property_id, enum_item_id)` 隔离；草稿创建后的 `standard_id/version` 在编辑器中只读。新增草稿级保存路由 `PUT /api/standards/drafts/{draft_id}`，请求复用 `StandardDocumentRequest`（`{document}`），响应复用 `StandardDraftResponse`；草稿不存在 404，结构非法 422，请求体身份与草稿已存身份不一致返回 `STANDARD_IDENTITY_MISMATCH`（422），不静默改写。既有 `PUT /api/standards/{standard_id}/{version}` 行为保持不变（兼容保留）；前端改为 `SaveDraftInput {draftId, document}` 并删除只按身份保存的调用路径。
 
-- [ ] **Step 1：写映射隔离 RED**
+- [x] **Step 1：写映射隔离 RED**
   两个枚举源恰有相同 `enum_item_id` 时切换源不得继承旧目标；切回原源按明确的缓冲策略恢复其未提交输入；确认新源前空目标仍触发既有门禁。
 
-- [ ] **Step 2：写保存路由 RED**
+- [x] **Step 2：写保存路由 RED**
   新路由：成功返回保存后文档；草稿不存在 404；请求体身份与草稿已存身份不一致 422 `STANDARD_IDENTITY_MISMATCH`；结构非法 422。既有身份路由回归不变。
 
-- [ ] **Step 3：运行后端 RED 并记录**
+- [x] **Step 3：运行后端 RED 并记录**
   `uv run pytest tests/unit/test_standard_service.py tests/integration/test_standard_api.py -q -p no:xdist`；记录新路由不存在（404/405）与身份不一致用例的失败输出。
 
-- [ ] **Step 4：实现后端保存语义**
+- [x] **Step 4：实现后端保存语义**
   在应用层加入“文档身份必须等于草稿已存身份”的核对（两个保存入口共用），注册草稿级 `PUT` 路由并放在身份路由之前注册；登记契约与生成类型，`npm --prefix web run check:api` 通过。
 
-- [ ] **Step 5：实现前端**
+- [x] **Step 5：实现前端**
   映射缓冲按 `(source_property_id, enum_item_id)` 隔离；编辑器身份字段只读并保留可访问说明；`StandardsView.saveEditorDocument` 改用固定 `draft_id` 调用新保存 API；中英文文案同步。
 
-- [ ] **Step 6：验证与提交**
+- [x] **Step 6：验证与提交**
   运行 Python 单测、前端单测、编辑器 Playwright、构建；更新 `changelog.md`；提交。
 
 ### Task 8：补齐窄屏标准库和异步操作入口（F12、F14）
@@ -337,16 +337,16 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: Task 5/6 的完整选择身份与现有 `store.refresh/open()`。
 - Produces: 宽度 ≤959px 时互斥 `list/detail` 视图；详情页有可见“返回列表”按钮。列表、详情失败各自就地重试，筛选无结果可清除筛选。
 
-- [ ] **Step 1：写 RED**
+- [x] **Step 1：写 RED**
   把现有 900×768 E2E 中“详情打开后列表仍可见”的断言改为：选中后列表隐藏、详情显示、返回按钮可见；返回后筛选与选择保留，无页面级横向滚动。
 
-- [ ] **Step 2：运行 RED 并记录**
+- [x] **Step 2：运行 RED 并记录**
   `npm --prefix web run test:e2e -- tests/e2e/standards-library.spec.ts`；记录列表仍然可见、返回按钮不存在的失败输出。
 
-- [ ] **Step 3：实现两级视图与重试**
+- [x] **Step 3：实现两级视图与重试**
   两级视图及宽窄切换的状态保留；错误重试只重发对应请求，加载中禁重复提交；清除筛选恢复 `DEFAULT_FILTERS`，不误清除已选标准；新文案中英同步。
 
-- [ ] **Step 4：补验收 E2E 并提交**
+- [x] **Step 4：补验收 E2E 并提交**
   添加 900×768、200% 缩放、长中英文文案、键盘操作与失败恢复用例；运行 `npm --prefix web run check:i18n`、`check:ui`、相关 Playwright 与构建；更新 `changelog.md`；提交。
 
 ### Task 9：统一新建与 CSV 弹窗焦点（F13）
@@ -363,13 +363,13 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: `web/src/components/ui/dialogFocus.ts`（既有 `UnsavedInputDialog`/`ConfirmModal` 同源）。
 - Produces: 新建与 CSV 导入弹窗都有初始焦点、Tab 圈闭、Escape、关闭后焦点归还；CSV textarea 有可见关联标签。标准包导入弹窗由 [PLAN-DM-041](PLAN-DM-041-standard-package-import-picker.md) 同批处理，本任务不重复实现。
 
-- [ ] **Step 1：写 RED**
+- [x] **Step 1：写 RED**
   两个弹窗分别覆盖打开焦点、Tab/Shift+Tab 圈闭、Esc、取消与提交后焦点归还；CSV textarea 的可见关联标签。当前两个弹窗均为手写遮罩而非原生 `<dialog>`，统一接入 `useDialogFocus`，不与编辑器三选一门禁叠加第二个焦点圈。
 
-- [ ] **Step 2：运行 RED 并记录**
+- [x] **Step 2：运行 RED 并记录**
   `npm --prefix web run test:e2e -- tests/e2e/standards-library.spec.ts tests/e2e/standards-editor.spec.ts`；记录焦点不进入弹窗、Esc 无响应等失败输出。
 
-- [ ] **Step 3：实现并验证**
+- [x] **Step 3：实现并验证**
   接入焦点工具、补可见标签与文案；运行前端单测、相关 Playwright、`npm --prefix web run check:ui` 与构建；更新 `changelog.md`；提交。
 
 ### Task 10：端到端验收、文档回写与完成门禁
@@ -386,10 +386,10 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 - Consumes: Task 1–9 的稳定 API、UI 与诊断码。
 - Produces: 可复现验证记录、更新后的操作指南与契约索引；只有所有阻断和高优先级项均验证关闭，计划才可标记 `completed`。
 
-- [ ] **Step 1：闭环验证**
+- [x] **Step 1：闭环验证**
   用临时、非私有样本完成“本机 DWG → 草稿资产副本 → 保存 → CAD 布局检查 → 发布 → 导出 `.dststandard` → 新库导入 → 标准驱动创建预览”闭环；逐段记录包内路径、文件哈希与来源文件不变。无真实 CAD 环境时只记录明确跳过，不把替身测试当成 G9。
 
-- [ ] **Step 2：运行全量门禁**
+- [x] **Step 2：运行全量门禁**
   `uv run ruff check .`、`uv run pytest -q`、`uv lock --check`；`npm --prefix web run test:unit`、`check:api`、`check:i18n`、`check:ui`、`build`、`test:e2e`。本计划不涉及数据库迁移，不额外运行 Alembic；插件或真实 CAD 变更才按仓库门禁另跑双版本构建与系统测试。
 
 - [ ] **Step 3：真实桌面 G9**
@@ -418,3 +418,55 @@ F16（现成 `.dststandard` 包的受控选择，PLAN-DM-039 F7）已拆分为�
 
 - 2026-09-24 首版：建立 F01–F16 与 Task 1–10，列明批次依赖与完成标准。
 - 2026-09-24 审查后修订：F16 拆出为 PLAN-DM-041（用户裁决）；新增实测复现的 F17 并并入 Task 1；Task 1 边界扩展到 `standard_id`/`version` 身份段；Task 7 定案为新增草稿级保存路由并同步契约/TS；所有任务按 Step 展开（RED 断言、运行命令、期望失败、GREEN、changelog、提交）；补“发现溯源与基线证据”与核实 memo；明确 Task 3 受控副本命名与清理标记；批次改为串行执行；补齐 i18n 文件、残余风险与回退、命令形式；修复 front matter 的 YAML 缩进。
+
+## 执行记录（2026-09-24）
+
+任务按 1→10 串行执行，每个任务都先写失败用例、记录 RED，再实现并验证 GREEN，最后更新 `changelog.md`
+并单独提交。提交：Task 1 `5a29dc4`、Task 2 `6188fcf`、Task 3 `51b1d8d`、Task 4 `fdf8026`、Task 5 `a8f7a59`、
+Task 6 `112c86a`、Task 7 `7087315`、Task 8 `22a3637`（changelog 由 `926af41` 修复）、Task 9 `97b0fd4`。
+
+### F01–F15 与 F17 关闭证据
+
+| 编号 | 承接 | RED 证据（修复前实测） | GREEN 证据 |
+| --- | --- | --- | --- |
+| F01 | Task 3 | `asset-files` 端点 404；E2E 无「选择本机模板」入口 | 端点返回 `assets/managed-<uuid4hex>.dwg`；复制→保存→检查→发布 E2E 通过；真实 CAD 闭环（本文末）通过 |
+| F02 | Task 2 | 发布缺失/绝对路径资产 HTTP **200**；导入缺失资产 HTTP **200** | 分别返回 422 `STANDARD_ASSET_FILE_MISSING` / `STANDARD_ASSET_PATH_INVALID`；草稿与发布根不变 |
+| F03 | Task 5 | 空库新建后发布找不到详情；选中旧草稿后新建时检查命中 `draft-1` | 新建后选中身份指向新草稿；检查/复制/发布只调用 `draft-new-1` |
+| F04 | Task 1 | 草稿 5 个入口 × 13 类非法输入全部 `DID NOT RAISE`，`../outside` 可写出草稿根外 | 全部 422 `STANDARD_DRAFT_ID_INVALID`；根外目录与文件哈希不变 |
+| F05 | Task 5 | 同来源同版本两标准共用键，点第二项仍显示第一项详情 | `draftKey` 纳入 `standard_id`；两项详情与选中高亮各自正确 |
+| F06 | Task 4 | 检查结果不绑定已保存快照，发布先保存再发布 | 「保存并检查」+ 代次/身份/快照三重校验；编辑后结果失效并阻断发布 |
+| F07 | Task 4 | 无检查记录时面板显示「本次检查未发现问题」 | 显示「未检查」（含布局表），不再给假结论 |
+| F08 | Task 6 | B 加载失败时派生仍从 A 提交 | 切换选择即清除旧详情；派生只消费身份匹配的已加载详情 |
+| F09 | Task 6 | 点「v2.0.0 · 用户」后详情面板为空（键沿用官方来源） | 版本条目自带来源与标准 ID，跳转后显示用户来源详情 |
+| F10 | Task 7 | 两个枚举源共用 `enum_item_id` 时切换源继承旧目标 | 目标缓冲按 `(source_property_id, enum_item_id)` 隔离，切回恢复未提交输入 |
+| F11 | Task 7 | 身份字段可编辑，保存按新身份找不到草稿 | 身份只读 + 草稿级 `PUT /api/standards/drafts/{draft_id}`；身份不符 422 `STANDARD_IDENTITY_MISMATCH` |
+| F12 | Task 8 | 详情打开后列表仍可见、无返回按钮 | ≤959px 列表↔详情互斥 + 可见「返回列表」；200% 缩放可达 |
+| F13 | Task 9 | 两个弹窗打开后焦点留在页面、无圈闭与 Escape 响应 | 接入 `useDialogFocus`（初始焦点/圈闭/Escape/归还）+ CSV 可见关联标签 |
+| F14 | Task 8 | 列表/详情错误无重试入口，筛选无结果无清除按钮 | 各自就地重试（禁用重复提交）+ 「清除筛选」恢复默认筛选且不误清选择 |
+| F15 | Task 2 | `assets/../A2.dwg`、`assets\..\A2.dwg` 经 `normpath` 洗成合法条目 | 归一化前按分量拒绝 422 `STANDARD_PACKAGE_PATH_INVALID` |
+| F17 | Task 1 | `GET /api/standards/%2E%2E/%2E%2E` 实测 **200** 并返回标准库根外 `document.json`；`/export` 把根外目录打成 zip | 身份路由与仓储三入口一律 422，响应与导出均不含根外内容 |
+
+### 全量门禁（2026-09-24 实跑）
+
+- `uv run pytest -q`：全量通过（含 `tests/integration/test_creation_api.py` 等；`test_candidate_without_template_files_is_unavailable` 已改为「发布后删除模板文件」以适配新发布门禁）。
+- `uv run ruff check .`：通过。`uv lock --check`：通过（未改依赖）。本计划未改数据库模型，未额外运行 Alembic。
+- `npm --prefix web run test:unit`：314 例通过；`npm --prefix web run check:api` / `check:i18n`（1593 键对称）/ `check:ui` / `build`：通过。
+- `npm --prefix web run test:e2e`：全部标准相关 spec 通过（`standards-library` 51、`standards-editor` + `standards-assets-publish` + `standards-welcome` 79 及全量回归）。
+
+### 真实 CAD 闭环（Task 10 Step 1）
+
+用本机 AutoCAD 2016 Core Console 与双版本插件，以 `sample/project1` 真实 DWG 的临时副本完成
+「本机模板 → 受控副本 → 保存 → 真实布局检查（诊断为空）→ 发布 → 导出 → 新库导入 → 标准驱动创建候选
+（`available: true`，两个资产选项可用）」；全程来源与样本原件哈希/mtime 不变，包内路径一律相对路径。
+逐段输出见 `docs/dst-manager/specs/assets/SPEC-DM-016/README.md` §三之四。
+
+### 未完成与遗留
+
+- **真实桌面 G9（Task 10 Step 3）未执行**：需要人工在真实 Windows WebView2 会话按 README §五逐项验收
+  （原生文件选择对话框、系统缩放、键盘焦点、导出下载）。因此本计划保持 `active`，不得声明 G9 通过。
+- **提交 22a3637 历史不干净**：该提交误把 `changelog.md` 暂存为空文件，已由 926af41 修复内容；如需干净
+  历史须人工 rebase/squash（`git rebase -i 334704e`），代理未擅自改写历史。
+- **工作区存在并发会话改动**：`PLAN-DM-041` 计划重写及其 `changelog.md` 段落、`.planning/README.md`、
+  `docs/dst-manager/README.md` 的对应行由另一会话持有，本计划一律未暂存、未覆盖。
+- **未纳入本计划**：F16（现成 `.dststandard` 包的受控选择与导入弹窗焦点）由 PLAN-DM-041 承接；
+  `STANDARD_*` 业务码尚未进入 `message_catalog`，标准相关失败在界面上仍以通用文案 + 原始文本呈现。

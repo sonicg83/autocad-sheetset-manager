@@ -325,20 +325,33 @@ G8 生产证据必须使用与 G4 相同的数据、状态、主题和视口逐�
 | --- | --- | --- | --- | --- |
 | ST-UI-01 | `standards-welcome.spec.ts` | `g4-01-welcome-light-1440x900`、`g4-09-welcome-dark-1440x900` | E2E 自动化 / 2026-09-23（PLAN-DM-039 重抓，已经用户 Demo 对照裁决） | 无 |
 | ST-UI-02 | `standards-welcome.spec.ts` | `g4-09`、`g4-12-dwg-naming-narrow-light-900x768` | E2E 自动化 / 2026-09-23（PLAN-DM-039 重抓） | 无 |
-| ST-UI-03 | `standards-library.spec.ts` | `g4-02-library-light-1440x900`、`g4-10-library-dark-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
+| ST-UI-03 | `standards-library.spec.ts` | `g4-02-library-light-1440x900`、`g4-10-library-dark-1440x900` | E2E 自动化 / 2026-09-22；2026-09-24 补窄屏两级视图、失败重试与长文案（PLAN-DM-040 Task 8） | 无 |
 | ST-UI-04 | `standards-library.spec.ts` | `g4-02`、`g4-08-publish-success-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
 | ST-UI-05 | `standards-editor.spec.ts` | `g4-03-ordinary-light-1440x900` | E2E 自动化 / 2026-09-23（PLAN-DM-039 重抓） | 无 |
 | ST-UI-06 | `standards-editor.spec.ts` | `g4-04-derived-light-1440x900`、`g4-12` | E2E 自动化 / 2026-09-23（PLAN-DM-039 重抓） | 无 |
 | ST-UI-07 | `standards-editor.spec.ts`、`draftModel.test.ts` | `g4-05-dwg-naming-light-1440x900` | E2E 自动化 / 2026-09-23（PLAN-DM-039 重抓） | 无 |
-| ST-UI-08 | `standards-assets-publish.spec.ts` | `g4-06-assets-light-1440x900` | E2E 自动化 / 2026-09-22 | 资产文件本体无法经 API 写入草稿（见 README §六-1） |
+| ST-UI-08 | `standards-assets-publish.spec.ts` | `g4-06-assets-light-1440x900` | E2E 自动化 / 2026-09-22；2026-09-24 补本机模板受控复制与真实 CAD 闭环（PLAN-DM-040 Task 3/10） | 无（原「资产文件本体无法经 API 写入草稿」已由 `POST /api/standards/drafts/{draft_id}/asset-files` 关闭，见 README §六-1） |
 | ST-UI-09 | `standards-assets-publish.spec.ts` | `g4-07-publish-error-light-1440x900`、`g4-11-publish-error-dark-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
 | ST-UI-10 | `standards-assets-publish.spec.ts` | `g4-08-publish-success-light-1440x900` | E2E 自动化 / 2026-09-22 | 无 |
 | ST-UI-11 | `standards-editor.spec.ts` | 无独立截图（行为类场景，附件留档） | E2E 自动化 / 2026-09-22 | 无 |
 | ST-UI-12 | `standards-library.spec.ts`、`standards-assets-publish.spec.ts` | `g4-11` | E2E 自动化 / 2026-09-22 | 无 |
 
+PLAN-DM-040 追加的自动化承接（不新增截图，矩阵按原有场景归入）：
+
+- ST-UI-03：窄视口两级互斥视图与返回按钮（含 200% 缩放可达性）、列表/详情失败就地重试、筛选无结果清除入口；
+- ST-UI-05：检查结果绑定已保存草稿、未检查空态、编辑后失效阻断发布；
+- ST-UI-06：映射源切换不继承旧目标、草稿身份只读与草稿级保存路由；
+- ST-UI-08：本机模板受控复制（取消/替换/失败/无壳回退）与发布后受控副本白名单导出；
+- ST-UI-11：新建草稿与 CSV 导入弹窗的焦点圈闭与归还（标准包导入弹窗由 PLAN-DM-041 承接）。
+
 G9 各项目前状态：**待真实桌面环境执行**（需 AutoCAD 2016/2020 Core Console、双版本插件与私有
 样本）；执行方式与通过判据见 [`assets/SPEC-DM-016/README.md`](assets/SPEC-DM-016/README.md) §五。
 未执行前不得声明 G9 通过。
+
+PLAN-DM-040（2026-09-24）已用本机真实 AutoCAD 2016 Core Console 完成同一条链路中**与 CAD 相关**的验证：
+本机模板受控复制 → 保存 → 真实布局枚举与图幅严格比对（诊断为空）→ 发布 → 导出 → 新库导入 →
+标准驱动创建候选可用。证据见 README §三之四；该验证**不**替代真实桌面 G9（文件选择对话框、
+WebView2 缩放与键盘行为仍需人工执行）。
 
 ## 13. 非目标与变更控制
 
