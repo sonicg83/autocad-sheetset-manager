@@ -537,6 +537,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/standards/import-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Standard Import */
+        post: operations["preview_standard_import_api_standards_import_previews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/import-previews/{preview_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel Standard Import */
+        delete: operations["cancel_standard_import_api_standards_import_previews__preview_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/cad-capabilities": {
         parameters: {
             query?: never;
@@ -2678,10 +2712,58 @@ export interface components {
             /** Dst Path */
             dst_path: string;
         };
-        /** StandardPathRequest */
-        StandardPathRequest: {
+        /**
+         * StandardExistingVersionModel
+         * @description 同 ID 在官方/用户库中已有的整数发布版本。
+         */
+        StandardExistingVersionModel: {
+            /** Source */
+            source: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * StandardImportConfirmRequest
+         * @description 确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。
+         */
+        StandardImportConfirmRequest: {
+            /** Preview Id */
+            preview_id: string;
+        };
+        /**
+         * StandardImportPreviewRequest
+         * @description 导入预检：只接受本机 ``.dststandard`` 路径；服务端复制到限时快照。
+         */
+        StandardImportPreviewRequest: {
             /** Path */
             path: string;
+        };
+        /**
+         * StandardImportPreviewResponse
+         * @description 预检结果：候选身份、已有版本、诊断与可否导入。
+         *
+         *     身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；
+         *     包或路径非法则直接 422。
+         */
+        StandardImportPreviewResponse: {
+            /** Can Import */
+            can_import: boolean;
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["StandardDiagnosticModel"][];
+            /** Existing Versions */
+            existing_versions?: components["schemas"]["StandardExistingVersionModel"][];
+            /** Expires At */
+            expires_at?: string | null;
+            /** Name */
+            name: string;
+            /** Preview Id */
+            preview_id?: string | null;
+            /** Standard Id */
+            standard_id: string;
+            /** Supported Cad Versions */
+            supported_cad_versions?: string[];
+            /** Version */
+            version: number;
         };
         /** StandardPublishResponse */
         StandardPublishResponse: {
@@ -4273,7 +4355,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StandardPathRequest"];
+                "application/json": components["schemas"]["StandardImportConfirmRequest"];
             };
         };
         responses: {
@@ -4284,6 +4366,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StandardPublishResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_standard_import_api_standards_import_previews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardImportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_standard_import_api_standards_import_previews__preview_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preview_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -53,6 +53,7 @@ from dst_manager.infrastructure.filesystem.workspace import write_workspace_meta
 from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
 from dst_manager.infrastructure.standards import StandardStore
+from dst_manager.infrastructure.standards.import_previews import ImportPreviewStore
 from dst_manager.settings.runtime import RuntimeSettings
 from dst_manager.settings.store import SettingsSchemaOlder
 
@@ -97,6 +98,10 @@ class DstManagerService(
         )
         # 创建草稿只落 Manager 应用数据目录，不进工作区、不进目标项目目录。
         self.creation_drafts = CreationDraftStore(self.settings.data_dir / "creation-drafts")
+        # 标准包导入的限时快照：凭证只存内存，重启即失效（PLAN-DM-041 Task 5）。
+        self.import_previews = ImportPreviewStore(
+            self.settings.data_dir / "tmp" / "standard-import-previews"
+        )
         for root in self.database.list_workspace_roots():
             try:
                 rolled_back = self.publisher.recover(root)

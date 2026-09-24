@@ -187,6 +187,12 @@ export default {
     versionExists: "A standard with the same ID and version already exists; published versions cannot be overwritten",
     versionLimitReached: "This standard has reached the highest publishable version",
     publishFailed: "Writing the published standard failed; the draft and its assets are unchanged and a retry is safe",
+    importSourceInvalid: "Choose a .dststandard package file",
+    importSourceNotFound: "The selected import file does not exist or is no longer readable",
+    importSourceTooLarge: "The standard package exceeds the size limit and cannot be imported",
+    importCopyFailed: "Copying the standard package to the temporary snapshot failed; retry",
+    previewNotFound: "The import preview has expired or is unknown; preview the file again",
+    previewExpired: "The import preview has expired; preview the file again",
   },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",

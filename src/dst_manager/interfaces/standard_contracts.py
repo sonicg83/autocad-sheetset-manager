@@ -58,7 +58,46 @@ class StandardPublishResponse(ContractModel):
 
 
 class StandardPathRequest(ContractModel):
+    """本机路径请求（标准包导入预检与 DST 导入共用）。"""
+
     path: str
+
+
+class StandardImportPreviewRequest(ContractModel):
+    """导入预检：只接受本机 ``.dststandard`` 路径；服务端复制到限时快照。"""
+
+    path: str
+
+
+class StandardImportConfirmRequest(ContractModel):
+    """确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。"""
+
+    preview_id: str
+
+
+class StandardExistingVersionModel(ContractModel):
+    """同 ID 在官方/用户库中已有的整数发布版本。"""
+
+    source: str
+    version: int
+
+
+class StandardImportPreviewResponse(ContractModel):
+    """预检结果：候选身份、已有版本、诊断与可否导入。
+
+    身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；
+    包或路径非法则直接 422。
+    """
+
+    preview_id: str | None = None
+    expires_at: str | None = None
+    standard_id: str
+    version: int
+    name: str
+    supported_cad_versions: list[str] = Field(default_factory=list)
+    existing_versions: list[StandardExistingVersionModel] = Field(default_factory=list)
+    diagnostics: list[StandardDiagnosticModel] = Field(default_factory=list)
+    can_import: bool
 
 
 class StandardDstImportRequest(ContractModel):

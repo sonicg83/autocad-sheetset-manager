@@ -300,13 +300,281 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
     package.write_bytes(exported.content)
 
     other = make_client(tmp_path / "second")
-    imported = other.post("/api/standards/import", json={"path": str(package)})
-    assert imported.status_code == 200
-    assert imported.json()["standard_id"] == "szmedi.gas"
+    preview = other.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_import"] is True
+    assert (body["standard_id"], body["version"]) == ("szmedi.gas", 1)
+    # 预检只复制快照与诊断，不写标准库。
+    assert other.get("/api/standards").json() == []
 
-    collision = other.post("/api/standards/import", json={"path": str(package)})
-    assert collision.status_code == 409
-    assert collision.json()["code"] == "STANDARD_VERSION_EXISTS"
+    imported = other.post(
+        "/api/standards/import", json={"preview_id": body["preview_id"]}
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["standard_id"] == "szmedi.gas"
+    assert imported.json()["version"] == 1
+
+    # 同一凭证重复确认返回原成功结果，不二次写入。
+    repeated = other.post(
+        "/api/standards/import", json={"preview_id": body["preview_id"]}
+    )
+    assert repeated.status_code == 200
+    assert repeated.json() == imported.json()
+    assert len(other.get("/api/standards").json()) == 1
+
+    # 再预检同一身份：预检以 can_import=false 阻断，确认阶段以 409 拒绝。
+    blocked = other.post("/api/standards/import-previews", json={"path": str(package)})
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["can_import"] is False
+    assert [item["code"] for item in blocked.json()["diagnostics"]] == [
+        "STANDARD_VERSION_EXISTS"
+    ]
+    assert blocked.json()["preview_id"] is None
+    refreshed = other.post("/api/standards/import-previews", json={"path": str(package)})
+    assert refreshed.status_code == 200
+    assert other.get("/api/standards").json()[0]["standard_id"] == "szmedi.gas"
+
+
+def test_import_http_rejects_path_body(tmp_path: Path) -> None:
+    """服务端不接受绕过预检的路径导入（SPEC-DM-019 §4.1）。"""
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "copy.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"a2"},
+    )
+    response = client.post("/api/standards/import", json={"path": str(package)})
+    assert response.status_code == 422
+
+
+def test_import_preview_lists_existing_versions_without_writing(
+    published_standard: TestClient, tmp_path
+) -> None:
+    """预检展示官方/用户已有整数版本，且标准库零新增。"""
+    # 官方库补一个同 ID 的 5（用户库已有 1）；候选包固定 v3，因此不构成身份冲突。
+    official = tmp_path / "data" / "standards" / "official" / "szmedi.gas" / "5"
+    official.mkdir(parents=True)
+    (official / "document.json").write_text(
+        json.dumps({**DRAFT_DOCUMENT, "version": 5}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    package = write_api_package(
+        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 3}
+    )
+    before = published_standard.get("/api/standards").json()
+
+    preview = published_standard.post(
+        "/api/standards/import-previews", json={"path": str(package)}
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_import"] is True, body["diagnostics"]
+    assert body["version"] == 3
+    assert sorted(
+        (item["source"], item["version"]) for item in body["existing_versions"]
+    ) == [("official", 5), ("user", 1)]
+    assert published_standard.get("/api/standards").json() == before
+    assert body["expires_at"]
+
+
+def test_import_preview_reports_name_conflict(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    other = write_api_package(
+        tmp_path / "other.dststandard",
+        {
+            **asset_document("assets/A2.dwg"),
+            "standard_id": "other.gas",
+            "version": 1,
+            "name": "市政燃气施工图",
+        },
+        {"assets/A2.dwg": b"a2"},
+    )
+    assert client.post("/api/standards/import", json={"path": str(other)}).status_code == 422
+    preview = client.post("/api/standards/import-previews", json={"path": str(other)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is True
+    confirmed = client.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    # 建立第二个同名但不同 ID 的包：预检必须阻断。
+    same_name = write_api_package(
+        tmp_path / "same-name.dststandard",
+        {
+            **asset_document("assets/A2.dwg"),
+            "standard_id": "dupe.gas",
+            "version": 1,
+            "name": "  市政燃气施工图  ",
+        },
+        {"assets/A2.dwg": b"a2"},
+    )
+    blocked = client.post("/api/standards/import-previews", json={"path": str(same_name)})
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["can_import"] is False
+    assert [item["code"] for item in blocked.json()["diagnostics"]] == [
+        "STANDARD_NAME_CONFLICT"
+    ]
+
+
+def test_import_preview_conflict_after_preview_returns_409(tmp_path: Path) -> None:
+    """确认前库状态变化（新增同身份）必须在锁内复核并以 409 拒绝。"""
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "copy.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"a2"},
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.json()["can_import"] is True
+
+    # 预检后同一个客户端先把该身份建出来（同库另一包），再确认：必须 409。
+    same_identity = write_api_package(
+        tmp_path / "same.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"a2"},
+    )
+    other_preview = client.post(
+        "/api/standards/import-previews", json={"path": str(same_identity)}
+    )
+    assert other_preview.json()["can_import"] is True
+    assert (
+        client.post(
+            "/api/standards/import",
+            json={"preview_id": other_preview.json()["preview_id"]},
+        ).status_code
+        == 200
+    )
+
+    confirmed = client.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 409, confirmed.text
+    assert confirmed.json()["code"] == "STANDARD_VERSION_EXISTS"
+
+
+def test_import_confirms_from_snapshot_after_source_changes(tmp_path: Path) -> None:
+    """预检后源文件被替换或删除：确认只消费快照字节。"""
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "copy.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"a2"},
+    )
+    original = package.read_bytes()
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.json()["can_import"] is True
+
+    package.write_bytes(b"replaced-after-preview")
+    confirmed = client.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["name"] == asset_document("assets/A2.dwg")["name"]
+    assert original != package.read_bytes()
+
+    # 另一种情况：预检后源被删，仍可从快照确认。
+    second = write_api_package(
+        tmp_path / "second.dststandard",
+        {
+            **asset_document("assets/A2.dwg"),
+            "standard_id": "second.gas",
+            "name": "第二标准",
+            "version": 1,
+        },
+        {"assets/A2.dwg": b"a2"},
+    )
+    second_preview = client.post(
+        "/api/standards/import-previews", json={"path": str(second)}
+    )
+    second.unlink()
+    assert (
+        client.post(
+            "/api/standards/import",
+            json={"preview_id": second_preview.json()["preview_id"]},
+        ).status_code
+        == 200
+    )
+
+
+def test_import_preview_unknown_forged_and_cancelled_credentials(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    assert (
+        client.post("/api/standards/import", json={"preview_id": "forged"}).status_code
+        == 404
+    )
+    assert (
+        client.delete("/api/standards/import-previews/forged").status_code == 200
+    )
+
+    package = write_api_package(
+        tmp_path / "copy.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"a2"},
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    preview_id = preview.json()["preview_id"]
+    assert client.delete(f"/api/standards/import-previews/{preview_id}").status_code == 200
+    cancelled = client.post("/api/standards/import", json={"preview_id": preview_id})
+    assert cancelled.status_code == 404
+    assert cancelled.json()["code"] == "STANDARD_IMPORT_PREVIEW_NOT_FOUND"
+    # 取消后快照已清理，标准库零新增。
+    assert client.get("/api/standards").json() == []
+
+
+def test_import_preview_rejects_bad_sources(tmp_path: Path, monkeypatch) -> None:
+    client = make_client(tmp_path)
+    missing = tmp_path / "absent.dststandard"
+    response = client.post("/api/standards/import-previews", json={"path": str(missing)})
+    assert response.status_code == 404
+    assert response.json()["code"] == "STANDARD_IMPORT_SOURCE_NOT_FOUND"
+
+    wrong_suffix = tmp_path / "package.zip"
+    wrong_suffix.write_bytes(b"zip")
+    response = client.post(
+        "/api/standards/import-previews", json={"path": str(wrong_suffix)}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_IMPORT_SOURCE_INVALID"
+
+    broken = tmp_path / "broken.dststandard"
+    broken.write_bytes(b"not-a-zip")
+    response = client.post("/api/standards/import-previews", json={"path": str(broken)})
+    assert response.status_code == 422
+    assert response.json()["code"].startswith("STANDARD_PACKAGE")
+
+    monkeypatch.setattr(
+        "dst_manager.infrastructure.standards.import_previews.MAX_PACKAGE_SOURCE_BYTES",
+        8,
+    )
+    oversized = tmp_path / "oversized.dststandard"
+    oversized.write_bytes(b"x" * 16)
+    response = client.post(
+        "/api/standards/import-previews", json={"path": str(oversized)}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_IMPORT_SOURCE_TOO_LARGE"
+    assert not list((tmp_path / "data" / "tmp").glob("**/*.dststandard"))
+
+
+def test_import_preview_reports_asset_gate_without_writing(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    # 包内文档必须携带正式版本（导入不重编号）。
+    document = {**asset_document("assets/A2.dwg"), "version": 1}
+    package = write_api_package(tmp_path / "missing.dststandard", document)
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is False
+    assert [item["code"] for item in preview.json()["diagnostics"]] == [
+        "STANDARD_ASSET_FILE_MISSING"
+    ]
+    assert client.get("/api/standards").json() == []
+
+    # 直接确认同一包（绕过前端）仍以 422 拒绝且不落库。
+    bypass = client.post("/api/standards/import", json={"preview_id": "forged"})
+    assert bypass.status_code == 404
+    assert client.get("/api/standards").json() == []
 
 
 def test_missing_export_target_rejected(tmp_path: Path) -> None:
@@ -572,17 +840,6 @@ def test_publish_rejects_draft_with_absolute_asset_path(tmp_path: Path) -> None:
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "STANDARD_ASSET_PATH_INVALID"
     assert client.get("/api/standards/drafts/draft-asset").status_code == 200
-
-
-def test_import_rejects_package_with_missing_asset(tmp_path: Path) -> None:
-    client = make_client(tmp_path)
-    # 包内文档必须携带正式版本（导入不重编号）。
-    document = {**asset_document("assets/A2.dwg"), "version": 1}
-    package = write_api_package(tmp_path / "missing.dststandard", document)
-    response = client.post("/api/standards/import", json={"path": str(package)})
-    assert response.status_code == 422, response.text
-    assert response.json()["code"] == "STANDARD_ASSET_FILE_MISSING"
-    assert client.get("/api/standards").json() == []
 
 
 def test_export_includes_only_declared_assets(tmp_path: Path) -> None:

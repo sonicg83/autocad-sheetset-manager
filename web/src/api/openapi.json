@@ -5352,8 +5352,44 @@
         "title": "StandardDstImportRequest",
         "type": "object"
       },
-      "StandardPathRequest": {
+      "StandardExistingVersionModel": {
         "additionalProperties": false,
+        "description": "同 ID 在官方/用户库中已有的整数发布版本。",
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "version"
+        ],
+        "title": "StandardExistingVersionModel",
+        "type": "object"
+      },
+      "StandardImportConfirmRequest": {
+        "additionalProperties": false,
+        "description": "确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。",
+        "properties": {
+          "preview_id": {
+            "title": "Preview Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_id"
+        ],
+        "title": "StandardImportConfirmRequest",
+        "type": "object"
+      },
+      "StandardImportPreviewRequest": {
+        "additionalProperties": false,
+        "description": "导入预检：只接受本机 ``.dststandard`` 路径；服务端复制到限时快照。",
         "properties": {
           "path": {
             "title": "Path",
@@ -5363,7 +5399,80 @@
         "required": [
           "path"
         ],
-        "title": "StandardPathRequest",
+        "title": "StandardImportPreviewRequest",
+        "type": "object"
+      },
+      "StandardImportPreviewResponse": {
+        "additionalProperties": false,
+        "description": "预检结果：候选身份、已有版本、诊断与可否导入。\n\n身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；\n包或路径非法则直接 422。",
+        "properties": {
+          "can_import": {
+            "title": "Can Import",
+            "type": "boolean"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/StandardDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "existing_versions": {
+            "items": {
+              "$ref": "#/components/schemas/StandardExistingVersionModel"
+            },
+            "title": "Existing Versions",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "preview_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Id"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          },
+          "supported_cad_versions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Cad Versions",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "standard_id",
+          "version",
+          "name",
+          "can_import"
+        ],
+        "title": "StandardImportPreviewResponse",
         "type": "object"
       },
       "StandardPublishResponse": {
@@ -7676,7 +7785,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StandardPathRequest"
+                "$ref": "#/components/schemas/StandardImportConfirmRequest"
               }
             }
           },
@@ -7705,6 +7814,81 @@
           }
         },
         "summary": "Import Standard"
+      }
+    },
+    "/api/standards/import-previews": {
+      "post": {
+        "operationId": "preview_standard_import_api_standards_import_previews_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardImportPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Standard Import"
+      }
+    },
+    "/api/standards/import-previews/{preview_id}": {
+      "delete": {
+        "operationId": "cancel_standard_import_api_standards_import_previews__preview_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preview_id",
+            "required": true,
+            "schema": {
+              "title": "Preview Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Standard Import"
       }
     },
     "/api/standards/{standard_id}/{version}": {

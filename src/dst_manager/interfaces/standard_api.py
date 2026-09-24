@@ -33,7 +33,9 @@ from dst_manager.interfaces.standard_contracts import (
     StandardDraftRequest,
     StandardDraftResponse,
     StandardDstImportRequest,
-    StandardPathRequest,
+    StandardImportConfirmRequest,
+    StandardImportPreviewRequest,
+    StandardImportPreviewResponse,
     StandardPublishResponse,
     StandardSummaryModel,
 )
@@ -160,12 +162,26 @@ def register_standard_routes(app: FastAPI) -> None:
     # ---- 导入导出 --------------------------------------------------------
 
     @app.post(
+        "/api/standards/import-previews",
+        response_model=StandardImportPreviewResponse,
+        response_model_exclude_unset=True,
+    )
+    def preview_standard_import(request: Request, body: StandardImportPreviewRequest):
+        return service(request).preview_standard_import(Path(body.path))
+
+    @app.delete("/api/standards/import-previews/{preview_id}")
+    def cancel_standard_import(request: Request, preview_id: str):
+        service(request).cancel_standard_import(preview_id)
+        return {"status": "cancelled"}
+
+    @app.post(
         "/api/standards/import",
         response_model=StandardPublishResponse,
         response_model_exclude_unset=True,
     )
-    def import_standard(request: Request, body: StandardPathRequest):
-        return service(request).import_standard_package(Path(body.path))
+    def import_standard(request: Request, body: StandardImportConfirmRequest):
+        # 只接受预检凭证：服务端不接受绕过预检的路径导入。
+        return service(request).confirm_standard_import(body.preview_id)
 
     @app.get("/api/standards/{standard_id}/{version}/export")
     def export_standard(request: Request, standard_id: str, version: str):

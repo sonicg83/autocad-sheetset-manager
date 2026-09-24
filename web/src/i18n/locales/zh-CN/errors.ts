@@ -188,6 +188,12 @@ export default {
     versionExists: "同一标准 ID 与版本已存在，已发布版本不可覆盖",
     versionLimitReached: "该标准已达到最高发布版本，无法再发布新版本",
     publishFailed: "标准发布写入失败，草稿与资产保持不变，可直接重试",
+    importSourceInvalid: "只能选择 .dststandard 标准包文件",
+    importSourceNotFound: "所选的导入文件不存在或已不可读",
+    importSourceTooLarge: "标准包超过受控大小上限，无法导入",
+    importCopyFailed: "标准包复制到临时快照失败，请重试",
+    previewNotFound: "导入预检已失效，请重新选择文件预检",
+    previewExpired: "导入预检已过期，请重新选择文件预检",
   },
   ui: {
     unknownSummary: "操作失败，发生未知错误",

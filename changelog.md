@@ -1,3 +1,12 @@
+## 2026-09-25（PLAN-DM-041 Task 5：限时快照预检与凭证确认导入）
+
+- 新增 `infrastructure/standards/import_previews.py`：把选定的 `.dststandard` 流式复制到 `settings.data_dir/tmp/standard-import-previews` 的随机快照（来源扩展名白名单、压缩源文件 256 MiB 上限、完成后原子定稿、失败不留半成品），并维护**仅存内存**的随机凭证表（默认 15 分钟、过期/取消立即清快照、重启后自动失效）。
+- 导入端点改为两步：`POST /api/standards/import-previews {path}` 返回候选整数身份、官方/用户已有版本、稳定诊断、`can_import`、可用时的不透明 `preview_id` 与到期时间；`POST /api/standards/import {preview_id}` 只消费快照字节，服务端不再接受 `{path}` 直接导入；`DELETE /api/standards/import-previews/{preview_id}` 取消。
+- 预检不写标准库；身份/名称冲突以 `can_import=false` + 诊断呈现（200），包或路径非法返回 422（源缺失 404），过期凭证 410、未知/伪造/重启后失效凭证 404。确认在仓储写入锁内复核身份、名称与包内容，预检后新增冲突返回 409；同一凭证重复确认返回原成功结果（短期幂等回执）。
+- 登记 `STANDARD_IMPORT_SOURCE_INVALID`/`STANDARD_IMPORT_SOURCE_NOT_FOUND`/`STANDARD_IMPORT_SOURCE_TOO_LARGE`/`STANDARD_IMPORT_COPY_FAILED`/`STANDARD_IMPORT_PREVIEW_NOT_FOUND`/`STANDARD_IMPORT_PREVIEW_EXPIRED` 并补齐中英文 `errors.standards` 文案。
+- 验证：`uv run ruff check .` 通过；全量 `uv run pytest -q` **2183 项 / 0 failed / 0 error / 74 skipped**（含新增 13 例快照与凭证单测和 9 例预检/确认集成用例）；`generate:api` 后 `check:api`、`check:i18n`（1603 键）、`test:unit`（314）与 `build` 均绿。
+- 预检信任模型与缓解措施已按 SPEC-DM-019 §7.1 实现：与既有 `asset-files`/`from-dst` 同级（仅监听 `127.0.0.1`、无鉴权），由扩展名白名单、256 MiB 上限、限时清理、重启失效与快照根隔离缓解。
+
 ## 2026-09-25（PLAN-DM-041 Task 4：整数身份贯通创建、绑定与公开契约）
 
 - 创建链全量改用服务端分配的整数版本：`CreationDraft.standard_version`、创建草稿/预览/执行与 XLSX 元数据的 `standard_version`、创建标准候选的 `version` 以及 API 契约（`CreationDraftCreateRequest.version`、`CreationDraftResponse.standard_version`、`CreationStandardCandidateModel.version`、`CreationPreviewResponse.standard_version`）均为整数。

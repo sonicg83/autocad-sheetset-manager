@@ -207,6 +207,13 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "STANDARD_VERSION_EXISTS": _E("errors.standards.versionExists"),
     "STANDARD_VERSION_LIMIT_REACHED": _E("errors.standards.versionLimitReached"),
     "STANDARD_PUBLISH_FAILED": _E("errors.standards.publishFailed"),
+    # ---- 标准包导入预检与凭证（PLAN-DM-041 Task 5） ----
+    "STANDARD_IMPORT_SOURCE_INVALID": _E("errors.standards.importSourceInvalid"),
+    "STANDARD_IMPORT_SOURCE_NOT_FOUND": _E("errors.standards.importSourceNotFound"),
+    "STANDARD_IMPORT_SOURCE_TOO_LARGE": _E("errors.standards.importSourceTooLarge"),
+    "STANDARD_IMPORT_COPY_FAILED": _E("errors.standards.importCopyFailed"),
+    "STANDARD_IMPORT_PREVIEW_NOT_FOUND": _E("errors.standards.previewNotFound"),
+    "STANDARD_IMPORT_PREVIEW_EXPIRED": _E("errors.standards.previewExpired"),
 }
 
 

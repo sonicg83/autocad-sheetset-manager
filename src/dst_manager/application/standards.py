@@ -34,6 +34,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from dst_manager.domain.standards import StandardSchemaError
+from dst_manager.infrastructure.standards.asset_paths import (
+    StandardAssetError,
+    validate_package_asset_files,
+)
+from dst_manager.infrastructure.standards.import_previews import ImportPreviewError
 from dst_manager.infrastructure.standards.store import StandardStoreError
 
 #: 标准库稳定错误码 → HTTP 状态；未登记码一律 422。
@@ -376,33 +381,118 @@ class StandardOperations:
             return ()
         return publish_diagnostics(standard) + publish_naming_diagnostics(standard)
 
-    def import_standard_package(self, path: Path) -> dict[str, object]:
-        """导入标准包；包内文档同样要过完整发布门禁，失败不落库。"""
+    def preview_standard_import(self, path: Path) -> dict[str, object]:
+        """两步导入第一节：复制到限时快照、校验并返回预检凭证；**不写标准库**。
+
+        身份/名称冲突以 ``can_import=False`` 与稳定诊断呈现（HTTP 200）；包或路径
+        非法以 422 拒绝。校验失败时删除刚建立的快照，不在快照根留垃圾。
+        """
+        previews = self.import_previews
         try:
-            loaded = self.standard_store.read_package(Path(path))
-        except StandardStoreError as exc:
-            raise _store_error(exc) from exc
-        diagnostics = self._publish_gate(loaded.standard)
+            snapshot = previews.snapshot_source(Path(path))
+        except ImportPreviewError as exc:
+            raise _import_preview_error(exc) from exc
         try:
-            published = self.standard_store.import_package(Path(path), loaded)
+            loaded = self.standard_store.read_package(snapshot)
         except StandardStoreError as exc:
+            previews.discard_snapshot(snapshot)
             raise _store_error(exc) from exc
+        standard = loaded.standard
+        diagnostics, can_import = self._import_preview_diagnostics(loaded)
+        try:
+            record = previews.register(
+                snapshot,
+                {
+                    "standard_id": standard.standard_id,
+                    "version": standard.version,
+                    "name": standard.name,
+                    "supported_cad_versions": list(standard.supported_cad_versions),
+                },
+            )
+        except BaseException:
+            previews.discard_snapshot(snapshot)
+            raise
         return {
+            "preview_id": record.preview_id if can_import else None,
+            "expires_at": previews.expires_at_iso(record) if can_import else None,
+            "standard_id": standard.standard_id,
+            "version": standard.version,
+            "name": standard.name,
+            "supported_cad_versions": list(standard.supported_cad_versions),
+            "existing_versions": [
+                {"source": item.source, "version": item.version}
+                for item in self.standard_store.list()
+                if item.status == "published" and item.standard_id == standard.standard_id
+            ],
+            "diagnostics": [_publish_diagnostic(item) for item in diagnostics],
+            "can_import": can_import,
+        }
+
+    def confirm_standard_import(self, preview_id: str) -> dict[str, object]:
+        """两步导入第二节：只消费预检快照，在仓储写入锁下复核后导入。
+
+        同一凭证重复确认返回原成功结果（不二次写入）；确认前库状态变化（新增
+        同身份或同名）由仓储锁内的复核以 409 拒绝。
+        """
+        previews = self.import_previews
+        try:
+            record = previews.require(preview_id)
+        except ImportPreviewError as exc:
+            raise _import_preview_error(exc) from exc
+        if record.consumed is not None:
+            return dict(record.consumed)
+        try:
+            published = self.standard_store.import_package(record.snapshot_path)
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+        result = {
             "standard_id": published.standard_id,
             "version": published.version,
             "name": published.name,
-            "diagnostics": [_publish_diagnostic(item) for item in diagnostics],
+            "diagnostics": [
+                _publish_diagnostic(item)
+                for item in self._published_diagnostics(published)
+            ],
         }
+        return previews.remember_result(preview_id, result)
 
-    def _publish_gate(
-        self, standard: DrawingStandard
-    ) -> tuple[StandardDiagnostic, ...]:
-        """派生属性与 DWG 命名的发布诊断；首个 error 转稳定 422。"""
-        diagnostics = publish_diagnostics(standard) + publish_naming_diagnostics(standard)
-        first_error = next((item for item in diagnostics if item.is_error), None)
-        if first_error is not None:
-            raise ApplicationError(first_error.code, first_error.message, 422)
-        return diagnostics
+    def cancel_standard_import(self, preview_id: str) -> None:
+        """取消预检：删除快照并废弃凭证；之后确认一律要求重新预检。"""
+        self.import_previews.cancel(preview_id)
+
+    def _import_preview_diagnostics(
+        self, loaded
+    ) -> tuple[tuple[StandardDiagnostic, ...], bool]:
+        """预检诊断与可否导入：错误阻断，warning 不阻断（与发布门禁同口径）。"""
+        standard = loaded.standard
+        diagnostics: list[StandardDiagnostic] = list(
+            publish_diagnostics(standard) + publish_naming_diagnostics(standard)
+        )
+        try:
+            validate_package_asset_files(
+                standard, [entry.path for entry in loaded.entries]
+            )
+        except StandardAssetError as exc:
+            diagnostics.append(
+                StandardDiagnostic(code=str(exc).split(":", 1)[0], message=str(exc))
+            )
+        if (
+            self.standard_store.get(standard.standard_id, standard.version)
+            is not None
+        ):
+            diagnostics.append(
+                StandardDiagnostic(
+                    code="STANDARD_VERSION_EXISTS",
+                    message=f"标准 {standard.standard_id}@{standard.version} 已存在",
+                )
+            )
+        try:
+            self.standard_store.check_published_name(standard.standard_id, standard.name)
+        except StandardStoreError as exc:
+            diagnostics.append(
+                StandardDiagnostic(code=str(exc).split(":", 1)[0], message=str(exc))
+            )
+        return tuple(diagnostics), not any(item.is_error for item in diagnostics)
 
     def export_standard_package(
         self, standard_id: str, version: int | str, dest_dir: Path
@@ -448,6 +538,19 @@ def _store_error(exc: Exception) -> ApplicationError:
     """标准库/Schema 错误码（消息前缀）转 HTTP 稳定错误；未登记码一律 422。"""
     code = str(exc).split(":", 1)[0]
     return ApplicationError(code, str(exc), _STORE_STATUS.get(code, 422))
+
+
+#: 预检错误码 → HTTP 状态；其余（包/资产/路径问题）一律 422。
+_IMPORT_PREVIEW_STATUS = {
+    "STANDARD_IMPORT_SOURCE_NOT_FOUND": 404,
+    "STANDARD_IMPORT_PREVIEW_NOT_FOUND": 404,
+    "STANDARD_IMPORT_PREVIEW_EXPIRED": 410,
+}
+
+
+def _import_preview_error(exc: ImportPreviewError) -> ApplicationError:
+    code = str(exc).split(":", 1)[0]
+    return ApplicationError(code, str(exc), _IMPORT_PREVIEW_STATUS.get(code, 422))
 
 
 def _publish_diagnostic(diagnostic: StandardDiagnostic) -> dict[str, object]:
