@@ -21,6 +21,10 @@ const emit = defineEmits<{
   updateFilters: [filters: StandardFilters];
   importPackage: [];
   createNew: [];
+  /** 列表加载失败就地重试：只重发列表请求。 */
+  retry: [];
+  /** 筛选无结果：恢复默认筛选，不改变当前选择。 */
+  clearFilters: [];
 }>();
 
 const state = computed(() => buildLibraryState(props.items, props.filters));
@@ -58,9 +62,19 @@ function update(partial: Partial<StandardFilters>): void {
       </UiSelect>
     </div>
     <p v-if="listPending" class="library-status" role="status">{{ $t("standards.library.loading") }}</p>
-    <p v-else-if="listError" class="library-status error" role="alert">{{ $t("standards.library.loadFailed", {message: listError}) }}</p>
+    <template v-else-if="listError">
+      <p class="library-status error" role="alert">{{ $t("standards.library.loadFailed", {message: listError}) }}</p>
+      <UiButton variant="secondary" :disabled="listPending" @click="emit('retry')">
+        {{ $t("standards.library.retry") }}
+      </UiButton>
+    </template>
     <p v-else-if="state.kind==='empty-library'" class="library-status">{{ $t("standards.library.empty") }}</p>
-    <p v-else-if="state.kind==='empty-filter'" class="library-status">{{ $t("standards.library.noMatch") }}</p>
+    <template v-else-if="state.kind==='empty-filter'">
+      <p class="library-status">{{ $t("standards.library.noMatch") }}</p>
+      <UiButton variant="secondary" @click="emit('clearFilters')">
+        {{ $t("standards.library.clearFilters") }}
+      </UiButton>
+    </template>
     <ul v-else class="library-list" data-testid="library-list">
       <li v-for="item in state.items" :key="draftKey(item)">
         <button

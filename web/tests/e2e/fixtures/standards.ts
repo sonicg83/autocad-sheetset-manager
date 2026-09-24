@@ -86,6 +86,8 @@ export function detailFromDocument(document: Record<string, unknown>) {
 
 export interface StandardsFixtureState {
   list: StandardSummary[];
+  /** 可变的列表加载失败开关（可就地恢复并重试）。 */
+  listFails: boolean;
   createBodies: unknown[];
   deleted: string[];
   /** 导入端点被调用次数（碰撞场景断言用）。 */
@@ -246,6 +248,7 @@ export async function installStandards(
 ): Promise<StandardsFixtureState> {
   const state: StandardsFixtureState = {
     list: [...initial],
+    listFails: options.listFails === true,
     createBodies: [],
     deleted: [],
     importAttempts: 0,
@@ -272,7 +275,7 @@ export async function installStandards(
       const path = new URL(request.url()).pathname;
       const method = request.method();
       if (path === "/api/standards" && method === "GET") {
-        if (options.listFails === true) return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "标准库不可用"}});
+        if (state.listFails) return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "标准库不可用"}});
         return route.fulfill({json: state.list});
       }
       if (path === "/api/standards/drafts" && method === "POST") {

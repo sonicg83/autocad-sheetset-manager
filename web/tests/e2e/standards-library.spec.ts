@@ -2,7 +2,7 @@
 // 标准端点经 fixtures/standards 的 route mock 驱动，断言停留在语义层：空库与筛选
 // 无结果的区分、官方/已发布只读边界、草稿可维护、派生新草稿、加载失败与导入碰撞
 // 不改变选中、900×768 分级视图无横向溢出。
-import {expect, test} from "@playwright/test";
+import {expect, test, type Page} from "@playwright/test";
 import {draft, draftDocument, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
 
 test.beforeEach(async ({page}) => {
@@ -317,16 +317,133 @@ test("版本历史跨官方与用户来源时选中正确标准", async ({page})
 
 test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")]);
+  await openStandards(page);
+
+  const libraryRegion = page.getByRole("region", {name: "标准库"});
+  const detailRegion = page.getByRole("region", {name: "标准详情"});
+  await expect(libraryRegion).toBeVisible();
+  await expect(detailRegion).toBeHidden();
+
+  await page.getByLabel("搜索标准").fill("市政");
+  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  // 两级视图互斥：选中后列表隐藏、详情显示、返回列表可见
+  await expect(detailRegion).toBeVisible();
+  await expect(page.getByText("官方标准只读")).toBeVisible();
+  await expect(libraryRegion).toBeHidden();
+  const back = page.getByRole("button", {name: "返回列表"});
+  await expect(back).toBeVisible();
+
+  // 返回后筛选与选择保留；两侧互斥保持
+  await back.click();
+  await expect(libraryRegion).toBeVisible();
+  await expect(detailRegion).toBeHidden();
+  await expect(page.getByLabel("搜索标准")).toHaveValue("市政");
+  await expect(libraryItems(page).filter({hasText: "2.1.0"})).toHaveClass(/selected/);
+
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(900);
+});
+
+test("列表与详情失败可就地重试，筛选无结果可清除", async ({page}) => {
+  const state = await installStandards(page, [published("official", "2.1.0")], {listFails: true});
+  await openStandards(page);
+
+  // 列表失败：就地重试只重发列表请求
+  await expect(page.getByText(/标准库加载失败/)).toBeVisible();
+  state.listFails = false;
+  await page.getByRole("button", {name: "重试加载标准库"}).click();
+  await expect(libraryItems(page)).toHaveCount(1);
+
+  // 详情失败：保留列表与选择，右栏就地错误与重试
+  state.detailFailures["szmedi.gas"] = {status: 500, code: "INTERNAL_ERROR", message: "详情不可用"};
+  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await expect(page.getByTestId("detail-error")).toBeVisible();
+  // 详情失败不渲染文档摘要（不把旧详情当作当前详情）
+  await expect(page.getByRole("region", {name: "标准详情"})).not.toContainText("普通属性 1 项");
+  delete state.detailFailures["szmedi.gas"];
+  await page.getByRole("button", {name: "重试加载详情"}).click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("官方标准只读");
+
+  // 筛选无结果：不伪装成空库，可一键清除筛选
+  await page.getByLabel("搜索标准").fill("不存在的标准");
+  await expect(page.getByText("当前筛选条件下没有匹配的标准。")).toBeVisible();
+  await page.getByRole("button", {name: "清除筛选"}).click();
+  await expect(page.getByLabel("搜索标准")).toHaveValue("");
+  await expect(libraryItems(page)).toHaveCount(1);
+});
+
+/** 页面无横向溢出（窄屏与 200% 缩放的共同判据）。 */
+async function expectNoPageHScroll(page: Page, label: string): Promise<void> {
+  const metrics = await page.evaluate(() => ({
+    doc: document.documentElement.scrollWidth,
+    win: window.innerWidth,
+  }));
+  expect(metrics.doc, `${label}：无页面级横向溢出`).toBeLessThanOrEqual(metrics.win);
+}
+
+test("200% 缩放下两级视图互斥且返回列表可达", async ({page}) => {
+  await installStandards(page, [published("official", "2.1.0"), draft("草稿 1", "draft-1")]);
+  await page.goto("/");
+  // 1440×900 下浏览器 200% 缩放 = CSS 视口 720×450 + 2x 渲染（与既有证据同一口径）
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setDeviceMetricsOverride", {width: 720, height: 450, deviceScaleFactor: 2, mobile: false});
+  await page.getByRole("button", {name: "管理图纸标准"}).click();
+
+  const libraryRegion = page.getByRole("region", {name: "标准库"});
+  const detailRegion = page.getByRole("region", {name: "标准详情"});
+  await expect(libraryRegion).toBeVisible();
+  await expect(detailRegion).toBeHidden();
+  await expectNoPageHScroll(page, "200% 标准库列表");
+
+  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await expect(detailRegion).toBeVisible();
+  await expect(libraryRegion).toBeHidden();
+  const back = page.getByRole("button", {name: "返回列表"});
+  await expect(back).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const box = await back.boundingBox();
+  expect(box, "返回列表应有布局盒").not.toBeNull();
+  expect(box!.y + box!.height, "返回列表底部在视口内").toBeLessThanOrEqual(viewport.height + 1);
+  await expectNoPageHScroll(page, "200% 标准详情");
+});
+
+test("窄屏两级视图可用键盘进入与返回", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
   await installStandards(page, [published("official", "2.1.0")]);
   await openStandards(page);
 
+  const item = libraryItems(page).first();
+  await item.focus();
+  await expect(item).toBeFocused();
+  await page.keyboard.press("Enter");
   const detailRegion = page.getByRole("region", {name: "标准详情"});
-  await expect(detailRegion).toBeHidden();
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
   await expect(detailRegion).toBeVisible();
   await expect(page.getByText("官方标准只读")).toBeVisible();
+
+  const back = page.getByRole("button", {name: "返回列表"});
+  await back.focus();
+  await expect(back).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("region", {name: "标准库"})).toBeVisible();
-  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-  expect(scrollWidth).toBeLessThanOrEqual(900);
+  await expect(detailRegion).toBeHidden();
+});
+
+test("超长中英文标准名在窄屏两级视图下不溢出", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  const longName = "市政燃气管网施工图设计说明书（第一分册）VeryLongStandardNameForOverflowCheck2026";
+  await installStandards(page, [
+    published("official", "2.1.0", {name: longName}),
+    draft("草稿 1", "draft-1"),
+  ]);
+  await openStandards(page);
+
+  await expect(libraryItems(page).filter({hasText: "第一分册"})).toBeVisible();
+  await expectNoPageHScroll(page, "长名称标准库列表");
+  await libraryItems(page).filter({hasText: "第一分册"}).click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("VeryLongStandardNameForOverflowCheck2026");
+  await expectNoPageHScroll(page, "长名称标准详情");
+  // 返回列表仍可用，且选择保留
+  await page.getByRole("button", {name: "返回列表"}).click();
+  await expect(libraryItems(page).filter({hasText: "第一分册"})).toHaveClass(/selected/);
 });

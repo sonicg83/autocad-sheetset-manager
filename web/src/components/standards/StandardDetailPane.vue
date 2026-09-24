@@ -12,6 +12,8 @@ const props = defineProps<{
   detailPending: boolean;
   detailError: string;
   items: StandardSummary[];
+  /** 窄视口两级视图：显示可见的“返回列表”入口。 */
+  narrow?: boolean;
 }>();
 const emit = defineEmits<{
   derive: [];
@@ -22,6 +24,10 @@ const emit = defineEmits<{
   useForCreate: [identity: StandardIdentity];
   /** 版本历史跳转：条目自带完整身份（来源 + 标准 ID + 版本），跨来源跳转不得沿用当前来源。 */
   openVersion: [entry: {source: "official" | "user"; standard_id: string; version: string; name: string}];
+  /** 详情加载失败就地重试：只重发详情请求。 */
+  retry: [];
+  /** 窄视口返回列表（保留当前选择与筛选）。 */
+  backToList: [];
 }>();
 
 const actions = computed(() => (props.summary === null ? null : detailActions(props.summary)));
@@ -48,6 +54,12 @@ const documentCounts = computed(() => {
   <section class="detail-pane" role="region" :aria-label="$t('standards.detail.region')">
     <p v-if="summary === null" class="detail-note">{{ $t("standards.detail.empty") }}</p>
     <template v-else>
+      <UiButton
+        v-if="narrow === true"
+        variant="secondary"
+        data-testid="back-to-list"
+        @click="emit('backToList')"
+      >{{ $t("standards.detail.backToList") }}</UiButton>
       <h3 class="detail-title">{{ summary.name }}</h3>
       <p v-if="actions?.readOnlyReason" class="detail-reason" role="note">
         {{ $t(actions.readOnlyReason === "official" ? "standards.detail.readOnlyOfficial" : "standards.detail.readOnlyPublished") }}
@@ -67,7 +79,12 @@ const documentCounts = computed(() => {
         </div>
       </dl>
       <p v-if="detailPending" class="detail-note" role="status">{{ $t("standards.detail.loading") }}</p>
-      <p v-else-if="detailError" class="detail-note error" role="alert">{{ detailError }}</p>
+      <template v-else-if="detailError">
+        <p class="detail-note error" role="alert" data-testid="detail-error">{{ detailError }}</p>
+        <UiButton variant="secondary" :disabled="detailPending" @click="emit('retry')">
+          {{ $t("standards.detail.retry") }}
+        </UiButton>
+      </template>
       <template v-else-if="detail">
         <div v-if="documentCounts" class="detail-counts">
           <span>{{ $t("standards.detail.ordinaryCount", {count: documentCounts.ordinary}) }}</span>

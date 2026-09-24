@@ -39,6 +39,8 @@ const importPath = ref("");
 if (props.entryIntent === "import-package") importDialogOpen.value = true;
 const narrow = ref(window.matchMedia("(max-width: 959px)").matches);
 window.matchMedia("(max-width: 959px)").addEventListener("change", event => {narrow.value = event.matches;});
+/** 窄视口两级视图状态（宽视口忽略）：选中即进详情，返回列表保留选择与筛选。 */
+const narrowPane = ref<"list" | "detail">("list");
 
 onMounted(() => {void store.refresh();});
 
@@ -145,10 +147,23 @@ async function select(summary: StandardSummary): Promise<void> {
       // 草稿无发布详情：清空详情并让在途发布详情响应失效，避免只读边界漂移
       store.clearDetail();
     }
+    narrowPane.value = "detail"; // 窄视口：选中即进入详情页
   };
   // 编辑器在场且有未保存修改时，切换选中项必须先过三选一门禁
   if (editorOpen.value) await editorRef.value?.guard(apply);
   else await apply();
+}
+
+/** 详情重试：只重发当前选择的详情请求（列表与选择保持不变）。 */
+async function retryDetail(): Promise<void> {
+  const summary = selected.value;
+  if (summary === null || summary.status !== "published") return;
+  await store.open({standardId: summary.standard_id, version: summary.version});
+}
+
+/** 清除筛选：恢复默认筛选，不改变当前选择。 */
+function clearFilters(): void {
+  filters.value = {...DEFAULT_FILTERS};
 }
 
 function openVersion(entry: {source: "official" | "user"; standard_id: string; version: string; name: string}): void {
@@ -305,7 +320,7 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
         <UiButton variant="secondary" @click="$emit('back')">{{ $t("standards.back") }}</UiButton>
       </div>
       <p v-if="store.actionError.value" class="standards-error" role="alert">{{ store.actionError.value }}</p>
-      <div class="library-split" data-testid="standards-library-mode" :class="{'detail-open': narrow && selected !== null}">
+      <div class="library-split" data-testid="standards-library-mode" :class="{'detail-open': narrow && narrowPane === 'detail'}">
         <StandardLibraryPane
           class="library-col"
           :items="store.summaries.value"
@@ -317,6 +332,8 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
           @update-filters="filters = $event"
           @import-package="importDialogOpen = true"
           @create-new="openCreateDialog"
+          @retry="store.refresh()"
+          @clear-filters="clearFilters"
         />
         <StandardDetailPane
           class="detail-col"
@@ -325,12 +342,15 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
           :detail-pending="store.detailPending.value"
           :detail-error="store.detailError.value || store.draftError.value"
           :items="store.summaries.value"
+          :narrow="narrow"
           @edit="openEditor"
           @derive="startCreate('derive')"
           @export-standard="exportSelectedStandard"
           @delete-draft="deleteSelectedDraft"
           @use-for-create="$emit('openCreateSheetset', $event)"
           @open-version="openVersion"
+          @retry="retryDetail"
+          @back-to-list="narrowPane = 'list'"
         />
       </div>
     </template>
@@ -373,9 +393,10 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
 .import-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .import-dialog input{height:var(--control-height-default,38px);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);padding:0 var(--space-3)}
 .import-actions{display:flex;gap:var(--space-2);justify-content:flex-end}
-/* 900×768（窄视口）：列表 → 详情分级视图；选中前只显示列表 */
+/* 900×768（窄视口）：列表 ↔ 详情两级互斥视图；详情页提供可见返回按钮 */
 @media (max-width: 959px){
   .library-split{grid-template-columns:minmax(0,1fr)}
   .library-split:not(.detail-open) .detail-col{display:none}
+  .library-split.detail-open .library-col{display:none}
 }
 </style>
