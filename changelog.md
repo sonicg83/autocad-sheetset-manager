@@ -7,6 +7,15 @@
 - 同批修正「检查本身失败时布局表仍给出缺少同名布局」的假结论（只对 `unchecked` 抑制表体的残留），以及草稿态详情错误时「重试加载详情」按钮无动作的问题；200% 缩放用例的返回按钮视口断言改为按页面内 `window.innerHeight` 判定（原断言用默认 `viewportSize()`，恒真）。
 - 验证：`uv run ruff check .`、`uv run pytest -q`（全量）、`npm --prefix web run test:unit`（314 例）、`npm --prefix web run build`、`npm --prefix web run test:e2e`（678 passed）全部通过。
 
+## 2026-09-24（PLAN-DM-040 独立复核修复）
+
+- 独立复核（全分支 diff 6231d19..HEAD，含 Review Focus 逐条核对）发现并修复三项高优先级问题：
+  - 窄屏在详情页删除当前草稿后停在「列表被隐藏且详情为空态」的死路（详情空态没有返回入口）—— 删除成功后复位两级视图状态，并补 E2E 断言。
+  - 两个资产声明同一路径时 `export_package()` 会写出重复 ZIP 条目，导致自家阅读器拒绝自家导出包（`STANDARD_PACKAGE_PATH_INVALID`）—— 导出按包内路径去重，补「导出后必须能再次导入」的回归。
+  - 标准库根下混入非法目录名（如版本段 `tmp`）时，`list()` 仍列出该条目，而后续 `get()` 抛错穿过创建候选只捕获 Schema/OSError 的兜底，使 `GET /api/creation-drafts/standards` 整表 422 —— 发布目录扫描改为与草稿扫描同口径跳过非法名，补候选列表回归。
+- 同批修正「检查本身失败时布局表仍给出缺少同名布局」的假结论（只对 `unchecked` 抑制表体的残留），以及草稿态详情错误时「重试加载详情」按钮无动作的问题；200% 缩放用例的返回按钮视口断言改为按页面内 `window.innerHeight` 判定（原断言用默认 `viewportSize()`，恒真）。
+- 验证：`uv run ruff check .`、`uv run pytest -q`（全量）、`npm --prefix web run test:unit`（314 例）、`npm --prefix web run build`、`npm --prefix web run test:e2e`（678 passed）全部通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 10：闭环验证、全量门禁与文档回写）
 
 - 闭环验证（真实 CAD）：用本机 AutoCAD 2016 Core Console 与真实 DWG 临时副本完成「本机模板 → 受控副本 → 保存 → 真实布局检查（诊断为空）→ 发布 → 导出 → 新库导入 → 标准驱动创建候选（`available: true`，两个资产选项可用）」，来源副本与 `sample/` 原件的哈希/mtime 全程不变，包内只有相对路径；证据见 SPEC-DM-016 视觉证据 README §三之四。

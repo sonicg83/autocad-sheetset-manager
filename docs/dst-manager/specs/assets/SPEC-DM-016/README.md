@@ -111,9 +111,8 @@ SPEC-DM-016 §12.2 要求「欢迎页、标准库、字段映射和发布页至�
 
 ## 三之四、真实 AutoCAD 闭环验证（PLAN-DM-040 Task 10 Step 1）
 
-在装有 AutoCAD 2016/2020 Core Console 与双版本插件的本机执行一次性脚本
-`.superpowers/sdd/PLAN-DM-040-.../task-10-loop-verification.py`（逐段输出存于同目录
-`task-10-loop-evidence.md`），链路与结果：
+在装有 AutoCAD 2016/2020 Core Console 与双版本插件的本机，用一次性脚本（以 `sample/` 真实 DWG 的
+临时副本为来源，逐段打印并断言）完成以下闭环；下表为实际运行结果的逐段记录：
 
 | 段 | 结果 |
 | --- | --- |
