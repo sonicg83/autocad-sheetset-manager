@@ -27,6 +27,7 @@ from dst_manager.domain.standards import (
     DrawingStandard,
     StandardDiagnostic,
     parse_published_standard_document,
+    parse_standard_draft_document,
 )
 
 if TYPE_CHECKING:
@@ -276,6 +277,24 @@ class StandardOperations:
             raise _store_error(exc) from exc
 
     def save_standard_draft(self, draft_id: str, document: Mapping[str, object]) -> dict[str, object]:
+        """保存草稿：文档身份必须等于草稿已存身份（F11）。
+
+        身份不一致时以稳定 422 ``STANDARD_IDENTITY_MISMATCH`` 拒绝，不静默改写文档；
+        结构与语义未完成内容仍按草稿门禁处理。
+        """
+        try:
+            existing = self.standard_store.get_draft(draft_id)
+        except StandardStoreError as exc:
+            raise _store_error(exc) from exc
+        if existing is None:
+            raise ApplicationError(
+                "STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404
+            )
+        try:
+            parse_standard_draft_document(document)  # 结构门禁先于身份核对
+        except StandardSchemaError as exc:
+            raise _store_error(exc) from exc
+        _require_identity_match(existing.document, document)
         try:
             draft = self.standard_store.save_draft(draft_id, document)
         except (StandardStoreError, StandardSchemaError) as exc:
@@ -292,12 +311,9 @@ class StandardOperations:
                 f"标准 {standard_id}@{version} 已发布，不可修改",
                 409,
             )
-        if document.get("standard_id") != standard_id or document.get("version") != version:
-            raise ApplicationError(
-                "STANDARD_IDENTITY_MISMATCH",
-                f"文档身份 {document.get('standard_id')!r}@{document.get('version')!r} 与路径 {standard_id!r}@{version!r} 不一致",
-                422,
-            )
+        _require_identity_match(
+            {"standard_id": standard_id, "version": version}, document
+        )
         draft_id = self._draft_id_with_identity(standard_id, version)
         if draft_id is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"身份 {standard_id}@{version} 无对应草稿", 404)
@@ -420,6 +436,20 @@ class StandardOperations:
             ):
                 return draft.draft_id
         return None
+
+
+def _require_identity_match(
+    expected: Mapping[str, object], document: Mapping[str, object]
+) -> None:
+    """文档身份必须等于预期身份（草稿已存身份或路径身份）；两个保存入口共用。"""
+    expected_id = expected.get("standard_id")
+    expected_version = expected.get("version")
+    if document.get("standard_id") != expected_id or document.get("version") != expected_version:
+        raise ApplicationError(
+            "STANDARD_IDENTITY_MISMATCH",
+            f"文档身份 {document.get('standard_id')!r}@{document.get('version')!r} 与预期身份 {expected_id!r}@{expected_version!r} 不一致",
+            422,
+        )
 
 
 def _store_error(exc: Exception) -> ApplicationError:

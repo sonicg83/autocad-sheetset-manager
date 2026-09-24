@@ -445,8 +445,10 @@ defineExpose({guard, isDirty: () => dirty.value});
         <div class="editor-panel-body">
         <section v-if="active === 'basic'" class="basic-section" role="region" :aria-label="$t('standards.sections.basic')">
           <h3 class="section-title">{{ $t("standards.sections.basic") }}</h3>
-          <UiInput v-model="buffer.standard_id" :label="$t('standards.detail.standardId')" />
-          <UiInput v-model="buffer.version" :label="$t('standards.editor.versionLabel')" />
+          <!-- 身份由草稿本身决定：只读并在可见说明里给出原因（F11） -->
+          <UiInput :model-value="buffer.standard_id" :label="$t('standards.detail.standardId')" readonly />
+          <UiInput :model-value="buffer.version" :label="$t('standards.editor.versionLabel')" readonly />
+          <p class="identity-note" role="note" data-testid="identity-readonly-note">{{ $t("standards.editor.identityReadonlyHint") }}</p>
           <UiInput v-model="cadVersionsText" :label="$t('standards.editor.cadVersionsLabel')" />
         </section>
         <OrdinaryPropertyEditor
@@ -533,6 +535,7 @@ defineExpose({guard, isDirty: () => dirty.value});
 .editor-panel{min-width:0;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
 .editor-panel-body{padding:var(--space-4)}
 .basic-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
+.identity-note{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .publish-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
 .section-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .pending-note{display:flex;align-items:center;gap:var(--space-2);margin:0;padding:var(--space-3);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md);font-size:var(--font-label);color:var(--color-text-secondary)}

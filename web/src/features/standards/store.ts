@@ -13,7 +13,7 @@ import type {
   InspectAssetInput,
   PublishInput,
   PublishedStandard,
-  SaveDraftByIdentityInput,
+  SaveDraftInput,
   StandardDetail,
   StandardDraft,
   StandardIdentity,
@@ -25,7 +25,7 @@ export interface StandardApi {
   fetchDetail(identity: StandardIdentity): Promise<StandardDetail>;
   fetchDraft(draftId: string): Promise<StandardDraft>;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
-  saveDraftByIdentity(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
+  saveDraft(input: SaveDraftInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
   importPackage(input: {path: string}): Promise<PublishedStandard>;
@@ -60,7 +60,7 @@ export interface StandardStore {
   /** 卸载当前草稿并使在途加载失效。 */
   closeDraft(): void;
   createDraft(input: CreateDraftInput): Promise<StandardDraft>;
-  saveDraft(input: SaveDraftByIdentityInput): Promise<StandardDraft>;
+  saveDraft(input: SaveDraftInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
   importPackage(input: {path: string}): Promise<PublishedStandard>;
@@ -206,7 +206,7 @@ export function createStandardStore(api: StandardApi): StandardStore {
     adoptDraft,
     closeDraft,
     createDraft: (input) => runAction(() => api.createDraft(input)),
-    saveDraft: (input) => runAction(() => api.saveDraftByIdentity(input)),
+    saveDraft: (input) => runAction(() => api.saveDraft(input)),
     createDraftFromDst: (input) => runAction(() => api.createDraftFromDst(input)),
     publish: (input) => runAction(() => api.publish(input)),
     importPackage: (input) => runAction(() => api.importPackage(input)),

@@ -74,6 +74,7 @@ export default {
     back: "返回标准库",
     draftId: "草稿标识",
     nameLabel: "标准名称",
+    identityReadonlyHint: "标准 ID 与版本由草稿身份决定，创建后不可修改；需要新身份请新建或派生草稿。",
     versionLabel: "版本号",
     cadVersionsLabel: "支持 CAD 版本（逗号分隔）",
     saveDraft: "保存草稿",

@@ -104,13 +104,9 @@ async function leaveEditor(): Promise<void> {
   if (selected.value?.status === "draft") store.clearDetail();
 }
 
-/** 编辑器内保存：走草稿身份 PUT（`POST /api/standards/drafts` 对已存在草稿会 409）。 */
+/** 编辑器内保存：走草稿级路由，身份固定为打开编辑器时的 draft_id（F11）。 */
 async function saveEditorDocument(document: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const saved = await store.saveDraft({
-    standardId: String(document["standard_id"] ?? ""),
-    version: String(document["version"] ?? ""),
-    document,
-  });
+  const saved = await store.saveDraft({draftId: editorDraft(), document});
   return saved.document;
 }
 

@@ -443,7 +443,8 @@ export interface paths {
         };
         /** Get Standard Draft */
         get: operations["get_standard_draft_api_standards_drafts__draft_id__get"];
-        put?: never;
+        /** Put Standard Draft */
+        put: operations["put_standard_draft_api_standards_drafts__draft_id__put"];
         post?: never;
         /** Delete Standard Draft */
         delete: operations["delete_standard_draft_api_standards_drafts__draft_id__delete"];
@@ -2648,6 +2649,13 @@ export interface components {
             /** Severity */
             severity: string;
         };
+        /** StandardDocumentRequest */
+        StandardDocumentRequest: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+        };
         /** StandardDraftRequest */
         StandardDraftRequest: {
             /** Document */
@@ -4073,6 +4081,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_standard_draft_api_standards_drafts__draft_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardDocumentRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

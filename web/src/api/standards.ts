@@ -12,7 +12,7 @@ import type {
   InspectAssetInput,
   PublishInput,
   PublishedStandard,
-  SaveDraftByIdentityInput,
+  SaveDraftInput,
   StandardDetail,
   StandardDraft,
   StandardIdentity,
@@ -41,10 +41,10 @@ export function createStandardDraft(input: CreateDraftInput): Promise<StandardDr
   });
 }
 
-export function saveStandardDraftByIdentity(input: SaveDraftByIdentityInput): Promise<StandardDraft> {
+export function saveStandardDraft(input: SaveDraftInput): Promise<StandardDraft> {
   return request<StandardDraft>(
-    `/api/standards/${encodeURIComponent(input.standardId)}/${encodeURIComponent(input.version)}`,
-    {method: "PUT", body: JSON.stringify(input.document)},
+    `/api/standards/drafts/${encodeURIComponent(input.draftId)}`,
+    {method: "PUT", body: JSON.stringify({document: input.document})},
   );
 }
 
@@ -102,7 +102,7 @@ export const standardsApi: StandardApi = {
   fetchDetail: fetchStandardDetail,
   fetchDraft: fetchStandardDraft,
   createDraft: createStandardDraft,
-  saveDraftByIdentity: saveStandardDraftByIdentity,
+  saveDraft: saveStandardDraft,
   createDraftFromDst: createStandardDraftFromDst,
   publish: publishStandardDraft,
   importPackage: importStandardPackage,

@@ -6,8 +6,12 @@ import {
   blankStandardDocument,
   defaultDwgNamingSegments,
   draftKey,
+  mappingTargetBuffer,
+  mappingTargetsFor,
+  withMappingTarget,
   type DraftAsset,
   type DraftDocument,
+  type DraftMappingProperty,
   type PreviewSamples,
   compositionFields,
   draftDiagnostics,
@@ -401,6 +405,46 @@ describe("draft model", () => {
       {item_id: "enum-csv-2", value: "A3"},
     ]);
     expect(created.every(item => item.kind === "text" || item.kind === "enum")).toBe(true);
+  });
+});
+
+describe("映射目标缓冲隔离（PLAN-DM-040 Task 7，F10）", () => {
+  function mappingProperty(): DraftMappingProperty {
+    return {
+      property_id: "prop-code",
+      name: "专业代码",
+      scope: "sheetset",
+      kind: "mapping",
+      source_property_id: "prop-major",
+      mapping: [{item_id: "enum-a", value: "RQ"}],
+      confirmed_source_items: [["enum-a", "燃气"]],
+      required: false,
+      default_value: "",
+      description: "",
+      previous_names: [],
+    };
+  }
+
+  it("两个源恰有相同 enum_item_id 时切换源不得继承旧目标", () => {
+    const buffer = mappingTargetBuffer(mappingProperty());
+    expect(mappingTargetsFor(buffer, "prop-major")).toEqual({"enum-a": "RQ"});
+    // 新源从未编辑过：必须为空（否则会把 A 的目标写进 B）
+    expect(mappingTargetsFor(buffer, "prop-stage")).toEqual({});
+  });
+
+  it("按 (source_property_id, enum_item_id) 写入与读取互不干扰", () => {
+    let buffer = mappingTargetBuffer(mappingProperty());
+    buffer = withMappingTarget(buffer, "prop-stage", "enum-a", "SG");
+    expect(mappingTargetsFor(buffer, "prop-major")).toEqual({"enum-a": "RQ"});
+    expect(mappingTargetsFor(buffer, "prop-stage")).toEqual({"enum-a": "SG"});
+  });
+
+  it("切回原源恢复其未提交输入", () => {
+    let buffer = mappingTargetBuffer(mappingProperty());
+    buffer = withMappingTarget(buffer, "prop-major", "enum-a", "RQ2");
+    buffer = withMappingTarget(buffer, "prop-stage", "enum-a", "SG");
+    expect(mappingTargetsFor(buffer, "prop-major")).toEqual({"enum-a": "RQ2"});
+    expect(mappingTargetsFor(buffer, "prop-stage")).toEqual({"enum-a": "SG"});
   });
 });
 

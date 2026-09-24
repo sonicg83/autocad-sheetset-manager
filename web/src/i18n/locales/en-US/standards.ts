@@ -75,6 +75,7 @@ export default {
     back: "Back to standard library",
     draftId: "Draft ID",
     nameLabel: "Standard name",
+    identityReadonlyHint: "The standard ID and version come from the draft identity and cannot be changed after creation; create or derive a new draft to change them.",
     versionLabel: "Version",
     cadVersionsLabel: "Supported CAD versions (comma separated)",
     saveDraft: "Save draft",

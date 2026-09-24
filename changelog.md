@@ -1,3 +1,9 @@
+## 2026-09-24（PLAN-DM-040 Task 7：映射源隔离、草稿级保存与身份只读）
+
+- 修复 F10：映射目标缓冲改为按 `(source_property_id, enum_item_id)` 隔离（新增 `MappingTargetBuffer`/`mappingTargetBuffer`/`mappingTargetsFor`/`withMappingTarget`），两个枚举源恰有相同 `enum_item_id` 时切换源不再继承旧目标，切回原源恢复其未提交输入。
+- 修复 F11：新增草稿级保存路由 `PUT /api/standards/drafts/{draft_id}`（请求 `{document}`、响应 `StandardDraftResponse`），应用层在两个保存入口共用身份核对：文档身份与草稿已存身份不一致返回 422 `STANDARD_IDENTITY_MISMATCH` 且不静默改写，草稿不存在 404、结构非法 422；既有身份路由保留且行为不变。前端改为 `SaveDraftInput {draftId, document}` 并删除按身份保存的调用路径，编辑器基本信息区的标准 ID/版本改为只读并给出可见说明。
+- 验证：RED 后端 6 例（身份不一致未拦截、新路由未注册）+ 前端 3 例（映射缓冲未隔离）；GREEN `uv run pytest`（全量）、`uv run ruff check .`、`npm --prefix web run test:unit` 314 例、三个标准 spec 87 例、`npm --prefix web run build`（含 check:api）均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 6：陈旧详情派生与版本跳转）
 
 - 修复 F08：`StandardStore.open()` 在开始加载时立即清除旧详情（在途响应仍按代次丢弃），新增 `detailMatches(identity)`；`StandardsView` 的派生只消费身份匹配的已加载详情，B 加载中或失败时不再复制 A 的文档，也不提交创建。

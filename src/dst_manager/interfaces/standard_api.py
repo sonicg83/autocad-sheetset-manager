@@ -24,6 +24,7 @@ from dst_manager.interfaces.standard_contracts import (
     StandardAssetInspectRequest,
     StandardDetailResponse,
     StandardDiagnosticModel,
+    StandardDocumentRequest,
     StandardDraftRequest,
     StandardDraftResponse,
     StandardDstImportRequest,
@@ -86,6 +87,15 @@ def register_standard_routes(app: FastAPI) -> None:
     )
     def get_standard_draft(request: Request, draft_id: str):
         return service(request).get_standard_draft(draft_id)
+
+    @app.put(
+        "/api/standards/drafts/{draft_id}",
+        response_model=StandardDraftResponse,
+        response_model_exclude_unset=True,
+    )
+    def put_standard_draft(request: Request, draft_id: str, body: StandardDocumentRequest):
+        # 草稿级保存：身份核对与结构门禁在应用层完成；必须早于身份路由注册。
+        return service(request).save_standard_draft(draft_id, body.document)
 
     @app.delete("/api/standards/drafts/{draft_id}")
     def delete_standard_draft(request: Request, draft_id: str):

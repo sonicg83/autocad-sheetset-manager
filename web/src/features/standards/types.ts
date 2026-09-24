@@ -82,9 +82,9 @@ export interface CopiedAssetFile {
   path: string;
 }
 
-export interface SaveDraftByIdentityInput {
-  standardId: string;
-  version: string;
+/** 草稿级保存：身份由草稿 ID 承载，文档身份必须等于草稿已存身份（F11）。 */
+export interface SaveDraftInput {
+  draftId: string;
   document: Record<string, unknown>;
 }
 

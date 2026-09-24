@@ -577,3 +577,70 @@ test("未保存修改离开编辑器走三选一门禁", async ({page}) => {
   await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toHaveCount(0);
   await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
 });
+
+// ---- 映射源隔离、草稿级保存与身份只读（PLAN-DM-040 Task 7，F10/F11） -------
+
+test("两个枚举源恰有相同 enum_item_id 时切换源不继承旧目标", async ({page}) => {
+  const document = draftDocument({
+    properties: [
+      {
+        property_id: "prop-major",
+        name: "专业",
+        scope: "sheetset",
+        kind: "enum",
+        enum_items: [{item_id: "enum-a", value: "燃气"}],
+      },
+      {
+        property_id: "prop-stage",
+        name: "阶段",
+        scope: "sheetset",
+        kind: "enum",
+        enum_items: [{item_id: "enum-a", value: "施工图"}],
+      },
+      {
+        property_id: "prop-code",
+        name: "专业代码",
+        scope: "sheetset",
+        kind: "mapping",
+        source_property_id: "prop-major",
+        mapping: [{item_id: "enum-a", value: "RQ"}],
+        confirmed_source_items: [["enum-a", "燃气"]],
+      },
+    ],
+  });
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": document}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "derived");
+  await page.getByTestId("edit-derived-prop-code").click();
+
+  await expect(page.getByTestId("mapping-target-enum-a")).toHaveValue("RQ");
+  // 切到同为 enum_item_id=enum-a 的另一个源：目标必须为空（不得继承 A 的目标）
+  await page.getByTestId("mapping-source").selectOption("prop-stage");
+  await expect(page.getByTestId("mapping-target-enum-a")).toHaveValue("");
+  await page.getByTestId("mapping-target-enum-a").fill("SG");
+  // 切回原源：恢复其未提交输入
+  await page.getByTestId("mapping-source").selectOption("prop-major");
+  await expect(page.getByTestId("mapping-target-enum-a")).toHaveValue("RQ");
+  await page.getByTestId("mapping-source").selectOption("prop-stage");
+  await expect(page.getByTestId("mapping-target-enum-a")).toHaveValue("SG");
+  await page.getByTestId("cancel-mapping").click();
+});
+
+test("草稿身份在编辑器中只读，保存走草稿级路由", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "basic");
+
+  await expect(page.getByLabel("标准 ID")).toHaveAttribute("readonly", "");
+  await expect(page.getByLabel("版本号")).toHaveAttribute("readonly", "");
+  await expect(page.getByTestId("identity-readonly-note")).toContainText("创建后不可修改");
+
+  await page.getByLabel("标准名称").fill("改名后的标准");
+  await saveDraftDocument(page);
+  expect(state.savedDraftIds).toEqual(["draft-1"]);
+  expect(state.drafts.get("draft-1")?.["name"]).toBe("改名后的标准");
+});

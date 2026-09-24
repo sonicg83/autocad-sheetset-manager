@@ -353,6 +353,46 @@ export function mappingRows(
   }));
 }
 
+/**
+ * 映射目标缓冲：按 ``(source_property_id, enum_item_id)`` 隔离（PLAN-DM-040 Task 7，F10）。
+ *
+ * 两个普通枚举属性可以恰好使用相同的 ``enum_item_id``；只用 ``enum_item_id`` 索引会让
+ * 切换源时继承上一个源的目标值。缓冲按源属性分桶后，未编辑过的新源一律为空，
+ * 切回原源则恢复其未提交输入。
+ */
+export type MappingTargetBuffer = Record<string, Record<string, string>>;
+
+/** 打开映射编辑器时用已存映射初始化缓冲。 */
+export function mappingTargetBuffer(property: DraftMappingProperty): MappingTargetBuffer {
+  if (property.source_property_id === "") return {};
+  return {
+    [property.source_property_id]: Object.fromEntries(
+      property.mapping.map(row => [row.item_id, row.value]),
+    ),
+  };
+}
+
+/** 读取某个源的目标值；未编辑过的源为空对象，绝不回退到其它源。 */
+export function mappingTargetsFor(
+  buffer: MappingTargetBuffer,
+  sourcePropertyId: string,
+): Record<string, string> {
+  return buffer[sourcePropertyId] ?? {};
+}
+
+/** 写入某个源的目标值；其它源的未提交输入保持不变。 */
+export function withMappingTarget(
+  buffer: MappingTargetBuffer,
+  sourcePropertyId: string,
+  itemId: string,
+  value: string,
+): MappingTargetBuffer {
+  return {
+    ...buffer,
+    [sourcePropertyId]: {...mappingTargetsFor(buffer, sourcePropertyId), [itemId]: value},
+  };
+}
+
 /** 源枚举列表与用户确认时的快照是否一致（不一致 → 待确认，发布检查给 warning）。 */
 export function mappingConfirmationRequired(
   property: DraftMappingProperty,

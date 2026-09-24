@@ -90,8 +90,10 @@ export interface StandardsFixtureState {
   deleted: string[];
   /** 导入端点被调用次数（碰撞场景断言用）。 */
   importAttempts: number;
-  /** 草稿按身份的保存请求体（PUT /api/standards/{id}/{ver}）。 */
+  /** 保存请求的文档体（草稿级与身份路由共用；按时间顺序）。 */
   saveBodies: Record<string, unknown>[];
+  /** 草稿级保存命中的草稿 ID（F11：保存必须用打开时的草稿身份）。 */
+  savedDraftIds: string[];
   /** 内存草稿文档：draft_id → document。 */
   drafts: Map<string, Record<string, unknown>>;
   /** 已发布文档（发布后详情端点直接返回它）：`"id@ver"` → document。 */
@@ -248,6 +250,7 @@ export async function installStandards(
     deleted: [],
     importAttempts: 0,
     saveBodies: [],
+    savedDraftIds: [],
     drafts: new Map(Object.entries(options.drafts ?? {})),
     published: new Map(),
     assetResults: options.assetResults ?? {},
@@ -303,6 +306,21 @@ export async function installStandards(
         // 与后端契约同构：只返回服务端生成的受控副本名（绝不回显来源路径）
         return route.fulfill({json: {path: `assets/managed-${state.assetCopyCalls.length}.dwg`}});
       }
+      const draftSaveMatch = /^\/api\/standards\/drafts\/([^/]+)$/.exec(path);
+      if (draftSaveMatch && method === "PUT") {
+        const draftId = decodeURIComponent(draftSaveMatch[1]);
+        const body = (await request.postDataJSON()) as {document: Record<string, unknown>};
+        state.saveBodies.push(body.document);
+        state.savedDraftIds.push(draftId);
+        if (state.saveFailure !== null) {
+          return route.fulfill({status: state.saveFailure.status, json: {code: state.saveFailure.code, message: state.saveFailure.message}});
+        }
+        if (!state.drafts.has(draftId)) {
+          return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: draftId}});
+        }
+        state.drafts.set(draftId, body.document);
+        return route.fulfill({json: {draft_id: draftId, document: body.document}});
+      }
       if (path === "/api/standards/import" && method === "POST") {
         state.importAttempts += 1;
         const conflict = options.importConflict ?? {status: 409, code: "STANDARD_VERSION_EXISTS", message: "同一标准 ID 与版本已存在"};
@@ -339,6 +357,7 @@ export async function installStandards(
         return route.fulfill({json: {standard_id: standardId, version, name: document["name"] ?? ""}});
       }
       if (method === "PUT") {
+        // 兼容保留：既有身份路由（前端不再使用，回归对照用）
         const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
         if (match === null) return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
         const body = (await request.postDataJSON()) as Record<string, unknown>;
@@ -350,6 +369,7 @@ export async function installStandards(
         const draftId = [...state.drafts.entries()].find(([, document]) =>
           document["standard_id"] === body["standard_id"] && document["version"] === body["version"])?.[0];
         if (draftId === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: String(body["standard_id"])}});
+        state.savedDraftIds.push(draftId);
         state.drafts.set(draftId, body);
         return route.fulfill({json: {draft_id: draftId, document: body}});
       }

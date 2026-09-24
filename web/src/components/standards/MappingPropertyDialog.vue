@@ -16,12 +16,15 @@ import UiInput from "../ui/UiInput.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
 import {
   mappingConfirmationRequired,
-  mappingRows,
+  mappingTargetBuffer,
+  mappingTargetsFor,
   selectableMappingSources,
+  withMappingTarget,
   type DraftDocument,
   type DraftEnumProperty,
   type DraftMappingProperty,
   type DraftMappingRow,
+  type MappingTargetBuffer,
 } from "../../features/standards/draftModel";
 
 const props = defineProps<{
@@ -39,16 +42,15 @@ const {t} = useI18n();
 
 const card = ref<HTMLElement | null>(null);
 const sourceId = ref("");
-const targets = ref<Record<string, string>>({});
+/** 目标值缓冲按 (source_property_id, enum_item_id) 隔离：切换源不得继承旧目标（F10）。 */
+const targets = ref<MappingTargetBuffer>({});
 
 watch(
   () => props.open,
   open => {
     if (!open || props.property === null) return;
     sourceId.value = props.property.source_property_id;
-    targets.value = Object.fromEntries(
-      props.property.mapping.map(row => [row.item_id, row.value]),
-    );
+    targets.value = mappingTargetBuffer(props.property);
   },
   {immediate: true},
 );
@@ -98,11 +100,12 @@ const source = computed<DraftEnumProperty | undefined>(() => {
   return current !== undefined && current.kind === "enum" ? current : undefined;
 });
 
-const rows = computed<DraftMappingRow[]>(() =>
-  source.value === undefined
+const rows = computed<DraftMappingRow[]>(() => {
+  const current = mappingTargetsFor(targets.value, sourceId.value);
+  return source.value === undefined
     ? []
-    : source.value.enum_items.map(item => ({item_id: item.item_id, value: targets.value[item.item_id] ?? ""})),
-);
+    : source.value.enum_items.map(item => ({item_id: item.item_id, value: current[item.item_id] ?? ""}));
+});
 
 const pending = computed(() =>
   props.property !== null && mappingConfirmationRequired(props.property, source.value),
@@ -124,7 +127,7 @@ function optionLabel(property: DraftEnumProperty): string {
 }
 
 function setTarget(itemId: string, value: string): void {
-  targets.value = {...targets.value, [itemId]: value};
+  targets.value = withMappingTarget(targets.value, sourceId.value, itemId, value);
 }
 
 function confirm(): void {

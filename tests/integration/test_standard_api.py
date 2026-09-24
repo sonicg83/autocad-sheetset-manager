@@ -300,6 +300,82 @@ def test_missing_export_target_rejected(tmp_path: Path) -> None:
     assert client.get("/api/standards/absent/1.0.0/export").status_code == 404
 
 
+# ---- 草稿级保存路由（PLAN-DM-040 Task 7，F11） ---------------------------
+
+
+def test_draft_save_route_roundtrip(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+
+    response = client.put(
+        "/api/standards/drafts/draft-gas",
+        json={"document": dict(DRAFT_DOCUMENT, name="修订名")},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["draft_id"] == "draft-gas"
+    assert response.json()["document"]["name"] == "修订名"
+    stored = client.get("/api/standards/drafts/draft-gas").json()
+    assert stored["document"]["name"] == "修订名"
+
+
+def test_draft_save_route_missing_draft_returns_404(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    response = client.put(
+        "/api/standards/drafts/absent", json={"document": DRAFT_DOCUMENT}
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "STANDARD_DRAFT_NOT_FOUND"
+
+
+def test_draft_save_route_rejects_identity_mismatch(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+
+    response = client.put(
+        "/api/standards/drafts/draft-gas",
+        json={"document": dict(DRAFT_DOCUMENT, version="9.9.9")},
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "STANDARD_IDENTITY_MISMATCH"
+    # 不静默改写：草稿保持原身份
+    assert client.get("/api/standards/drafts/draft-gas").json()["document"]["version"] == "0.1.0"
+
+
+def test_draft_save_route_rejects_invalid_structure(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    response = client.put(
+        "/api/standards/drafts/draft-gas", json={"document": {"schema_version": 99}}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"].startswith("STANDARD_")
+
+
+def test_draft_save_route_rejects_illegal_draft_id(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    response = client.put(
+        "/api/standards/drafts/%2E%2E", json={"document": DRAFT_DOCUMENT}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_DRAFT_ID_INVALID"
+
+
+def test_identity_save_route_keeps_working(tmp_path: Path) -> None:
+    """既有身份路由保留：行为不变（兼容保留，前端不再使用）。"""
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    saved = client.put(
+        "/api/standards/szmedi.gas/0.1.0", json=dict(DRAFT_DOCUMENT, name="按身份保存")
+    )
+    assert saved.status_code == 200
+    assert saved.json()["draft_id"] == "draft-gas"
+    mismatch = client.put("/api/standards/szmedi.gas/0.1.0", json=dict(DRAFT_DOCUMENT, version="9.9.9"))
+    assert mismatch.status_code == 422
+    assert mismatch.json()["code"] == "STANDARD_IDENTITY_MISMATCH"
+
+
 def test_asset_inspection_endpoint(tmp_path: Path, monkeypatch) -> None:
     from dst_manager.application.service import DstManagerService
 
@@ -574,8 +650,7 @@ def test_copy_asset_file_endpoint_rejects_illegal_draft_id(tmp_path: Path) -> No
     assert response.json()["code"] == "STANDARD_DRAFT_ID_INVALID"
 
 
-def test_copied_asset_closes_loop_through_publish_and_export(
-    tmp_path: Path, monkeypatch
+def test_copied_asset_closes_loop_through_publish_and_export(    tmp_path: Path, monkeypatch
 ) -> None:
     """复制 → 声明 → 保存 → 检查 → 发布 → 导出 的完整闭环。"""
     monkeypatch.setattr(

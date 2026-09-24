@@ -5276,6 +5276,21 @@
         "title": "StandardDiagnosticModel",
         "type": "object"
       },
+      "StandardDocumentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "StandardDocumentRequest",
+        "type": "object"
+      },
       "StandardDraftRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7452,6 +7467,53 @@
           }
         },
         "summary": "Get Standard Draft"
+      },
+      "put": {
+        "operationId": "put_standard_draft_api_standards_drafts__draft_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Standard Draft"
       }
     },
     "/api/standards/drafts/{draft_id}/asset-files": {

@@ -156,3 +156,31 @@ def test_dom_bind_standard_command_writes_reserved_property(tiny_workspace) -> N
     document.apply_metadata_commands([{"type": "bind_standard", "standard": "szmedi.gas@2.1.0"}])
     projected = document.project(dst.parent)
     assert projected.custom_properties["DSTManager.Standard"] == "szmedi.gas@2.1.0"
+
+
+# ---- 草稿级保存与身份核对（PLAN-DM-040 Task 7，F11） ----------------------
+
+
+def test_save_draft_accepts_matching_identity(service: DstManagerService) -> None:
+    service.create_standard_draft(GAS_DOCUMENT, draft_id="draft-gas")
+    saved = service.save_standard_draft("draft-gas", dict(GAS_DOCUMENT, name="修订名"))
+    assert saved["draft_id"] == "draft-gas"
+    assert saved["document"]["name"] == "修订名"
+    assert service.get_standard_draft("draft-gas")["document"]["name"] == "修订名"
+
+
+@pytest.mark.parametrize(
+    ("standard_id", "version"),
+    [("szmedi.water", "2.1.0"), ("szmedi.gas", "9.9.9")],
+)
+def test_save_draft_rejects_identity_mismatch(
+    service: DstManagerService, standard_id: str, version: str
+) -> None:
+    service.create_standard_draft(GAS_DOCUMENT, draft_id="draft-gas")
+    changed = dict(GAS_DOCUMENT, standard_id=standard_id, version=version)
+    with pytest.raises(ApplicationError) as exc_info:
+        service.save_standard_draft("draft-gas", changed)
+    assert exc_info.value.code == "STANDARD_IDENTITY_MISMATCH"
+    # 不静默改写：草稿保持原身份与原内容
+    stored = service.get_standard_draft("draft-gas")["document"]
+    assert (stored["standard_id"], stored["version"]) == ("szmedi.gas", "2.1.0")
