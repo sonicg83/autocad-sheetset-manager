@@ -197,6 +197,12 @@ PLAN-DM-040 的真实桌面 G9 仍未执行，与本计划的 G9 一并待验。
 
 未修并登记为延后项：导出/发布并发跨进程证据缺口、确认阶段“同名冲突”与过期凭证 410 的 HTTP 用例缺口、`import_package` 把非冲突 IO 失败报成 409、导入弹窗诊断未渲染后端文案键、`StandardEditor` 中已无产生者的 `STANDARD_VERSION_IMMUTABLE` 死分支。
 
+## 执行裁决与复核留档
+
+执行期的逐条裁决、任务完成线与独立复核结论已转存
+[PLAN-DM-041 实施裁决与独立复核记录（MEMO-DM-041）](../../memos/dst-manager/MEMO-DM-041-plan-041-execution-rulings.md)；
+执行期的 `.superpowers/sdd/` 工作区按流程在收口后删除，此后以该备忘与本计划的「实际验证」为准。
+
 ## 修订记录（续）
 
 - 2026-09-25 实施完成 Task 1–7 与 Task 8 的自动门禁部分：SPEC-DM-019 转为 `accepted`；
