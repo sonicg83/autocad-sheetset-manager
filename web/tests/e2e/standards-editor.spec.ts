@@ -644,3 +644,30 @@ test("草稿身份在编辑器中只读，保存走草稿级路由", async ({pag
   expect(state.savedDraftIds).toEqual(["draft-1"]);
   expect(state.drafts.get("draft-1")?.["name"]).toBe("改名后的标准");
 });
+
+// ---- CSV 弹窗焦点契约与可见标签（PLAN-DM-040 Task 9，F13） -----------------
+
+test("CSV 导入弹窗：可见关联标签、焦点圈闭与 Escape 归还焦点", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+
+  const opener = page.getByTestId("ordinary-csv");
+  await opener.click();
+  const dialog = page.getByRole("dialog", {name: "从 CSV 导入普通属性"});
+  await expect(dialog).toBeVisible();
+  // 可见关联标签：label[for] 指向 textarea，且标签文字可见
+  await expect(dialog.getByText("CSV 内容")).toBeVisible();
+  await expect(dialog.getByLabel("CSV 内容")).toBeFocused();
+
+  // 圈闭：textarea 是首个停靠点，Shift+Tab 到末个停靠点（无内容时应用按钮禁用）
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", {name: "取消"})).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByLabel("CSV 内容")).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});

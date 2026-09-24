@@ -1,3 +1,10 @@
+## 2026-09-24（PLAN-DM-040 Task 9：新建与 CSV 弹窗焦点）
+
+- 修复 F13（本任务部分）：新建草稿弹窗与普通属性 CSV 导入弹窗接入既有 `useDialogFocus`（与 `UnsavedInputDialog`/`ConfirmModal` 同源）：打开时初始焦点落在弹窗内首个停靠点，Tab/Shift+Tab 在弹窗内圈闭，Escape 关闭并把焦点归还给打开按钮；两者均为手写遮罩，不再各自养一套焦点逻辑，也不与编辑器三选一门禁叠成第二个焦点圈。
+- CSV 文本域改为可见关联标签（`label[for]` 指向 `textarea#csv-content-input`），不再用 `aria-label` 代替可见标签。
+- 标准包导入弹窗的同类问题由 PLAN-DM-041 同批处理，本任务不重复实现。
+- 验证：RED 2 例（两个弹窗打开后焦点仍在页面上、无圈闭与 Escape 响应）；GREEN `npm --prefix web run test:e2e -- standards-library standards-editor` 80 例、`npm --prefix web run test:unit` 314 例、`npm --prefix web run build`（check:api/check:i18n/check:ui/vue-tsc）均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 8：窄屏两级视图与失败重试）
 
 - 修复 F12：≤959px 改为真正的「列表 ↔ 详情」互斥视图（新增 `narrowPane` 状态，宽窄切换保留选择与筛选），详情页提供可见的「返回列表」按钮；原先只隐藏未选中时的详情、列表始终可见。

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // 新建草稿对话框（PLAN-DM-035 Task 8 Step 4）：只负责三个起点——
 // 空白草稿 / 复制发布版本 / 从 DST 提取；具体内容编辑由分区编辑器承接。
-import {computed, reactive, watch} from "vue";
+import {computed, reactive, ref, watch} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
+import {useDialogFocus} from "../ui/dialogFocus";
 import type {CreateMode, StandardSummary} from "../../features/standards/types";
 
 const props = defineProps<{
@@ -15,6 +16,19 @@ const props = defineProps<{
 const emit = defineEmits<{close: []; submit: [payload: {name: string; version: string; dstPath: string}]}>();
 
 const form = reactive({name: "", version: "0.1.0", dstPath: ""});
+
+// 焦点契约（PLAN-DM-040 Task 9，F13）：与 UnsavedInputDialog/ConfirmModal 同源。
+// 初始焦点是弹窗内首个停靠点（标准名称输入框），Tab/Shift+Tab 在弹窗内圈闭，
+// Escape 关闭并把焦点归还给打开按钮。
+const card = ref<HTMLElement | null>(null);
+const {onDialogKeydown} = useDialogFocus({
+  open: () => props.open,
+  container: card,
+  onEscape: event => {
+    event.stopPropagation();
+    emit("close");
+  },
+});
 
 watch(
   () => props.open,
@@ -47,8 +61,8 @@ function submit(): void {
 }
 </script>
 <template>
-  <div v-if="open" class="create-dialog-backdrop" @click.self="emit('close')">
-    <section class="create-dialog" role="dialog" aria-modal="true" :aria-label="$t('standards.create.title')">
+  <div v-if="open" class="create-dialog-backdrop" @click.self="emit('close')" @keydown="onDialogKeydown">
+    <section ref="card" class="create-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.create.title')">
       <h3>{{ $t("standards.create.title") }}</h3>
       <p v-if="mode === 'derive'" class="create-origin">
         {{ $t("standards.create.deriveFrom", {id: origin?.standard_id ?? "", version: origin?.version ?? ""}) }}

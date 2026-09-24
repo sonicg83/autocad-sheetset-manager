@@ -447,3 +447,28 @@ test("超长中英文标准名在窄屏两级视图下不溢出", async ({page})
   await page.getByRole("button", {name: "返回列表"}).click();
   await expect(libraryItems(page).filter({hasText: "第一分册"})).toHaveClass(/selected/);
 });
+
+// ---- 新建弹窗焦点契约（PLAN-DM-040 Task 9，F13） --------------------------
+
+test("新建草稿弹窗：初始焦点、Tab 圈闭、Escape 与焦点归还", async ({page}) => {
+  const state = await installStandards(page, []);
+  await openStandards(page);
+  const opener = page.getByRole("button", {name: "新建草稿"});
+  await opener.click();
+  const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
+  await expect(dialog).toBeVisible();
+
+  // 打开后焦点进入弹窗内的真实停靠点（不是留在遮罩或页面背景）
+  await expect(dialog.getByLabel("标准名称")).toBeFocused();
+  // Tab 圈闭：首元素上 Shift+Tab 回到末元素，再从末元素 Tab 回首元素
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", {name: "创建草稿"})).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByLabel("标准名称")).toBeFocused();
+
+  // Escape 关闭且不提交，焦点归还给打开按钮
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(state.createBodies).toEqual([]);
+});

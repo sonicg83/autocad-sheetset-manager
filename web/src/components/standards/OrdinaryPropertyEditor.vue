@@ -14,6 +14,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiIconButton from "../ui/UiIconButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import EnumValuesDialog from "./EnumValuesDialog.vue";
+import {useDialogFocus} from "../ui/dialogFocus";
 import {
   PROPERTY_SCOPES,
   blankOrdinaryProperty,
@@ -45,6 +46,18 @@ const dialogPropertyId = ref<string | null>(null);
 const blocked = ref<{propertyId: string; owners: string[]} | null>(null);
 const csvOpen = ref(false);
 const csvText = ref("");
+const csvCard = ref<HTMLElement | null>(null);
+
+// CSV 弹窗焦点契约（PLAN-DM-040 Task 9，F13）：与新建弹窗、UnsavedInputDialog 同源。
+// 初始焦点落在弹窗内首个停靠点（CSV 内容文本域），Tab 圈闭，Escape 关闭并归还焦点。
+const {onDialogKeydown: onCsvKeydown} = useDialogFocus({
+  open: csvOpen,
+  container: csvCard,
+  onEscape: event => {
+    event.stopPropagation();
+    csvOpen.value = false;
+  },
+});
 /** 本次会话新建的属性：只有它们允许在创建时选择作用域（SPEC-DM-017 §3.2 禁止改既有作用域）。 */
 const createdIds = ref<string[]>([]);
 
@@ -341,11 +354,13 @@ function applyCsv(): void {
       @save="saveEnum"
       @cancel="dialogPropertyId = null"
     />
-    <div v-if="csvOpen" class="modal-mask" @click.self="csvOpen = false">
-      <section class="csv-dialog" role="dialog" aria-modal="true" :aria-label="$t('standards.ordinary.csv.title')">
+    <div v-if="csvOpen" class="modal-mask" @click.self="csvOpen = false" @keydown="onCsvKeydown">
+      <section ref="csvCard" class="csv-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.ordinary.csv.title')">
         <h4 class="csv-title">{{ $t("standards.ordinary.csv.title") }}</h4>
         <p class="csv-hint">{{ $t("standards.ordinary.csv.hint") }}</p>
-        <textarea v-model="csvText" class="csv-input" rows="6" :aria-label="$t('standards.ordinary.csv.content')" />
+        <!-- 可见关联标签：label[for] 指向文本域，不依赖 aria-label 代替可见标签 -->
+        <label class="csv-label" for="csv-content-input">{{ $t("standards.ordinary.csv.content") }}</label>
+        <textarea id="csv-content-input" v-model="csvText" class="csv-input" rows="6" />
         <div class="csv-actions">
           <UiButton variant="secondary" @click="csvOpen = false">{{ $t("standards.enumDialog.cancel") }}</UiButton>
           <UiButton
@@ -403,6 +418,7 @@ function applyCsv(): void {
 .csv-dialog{display:grid;gap:var(--space-2);width:min(560px,calc(100vw - 32px));padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-3)}
 .csv-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .csv-hint{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
+.csv-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .csv-input{box-sizing:border-box;width:100%;padding:var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);font-family:var(--font-mono);font-size:var(--input-font-size)}
 .csv-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}
 </style>
