@@ -55,6 +55,8 @@ export interface CreationFixtureState {
   templateRequests: number;
   /** 可变的导入结果：`null` 表示成功（用 `importSuccess` 替换输入）。 */
   importFailure: {status: number; body: Record<string, unknown>} | null;
+  /** 可变的保存结果：`null` 表示按乐观修订正常落盘（驱动「离开向导前必须落盘」门禁）。 */
+  saveFailure: {status: number; body: Record<string, unknown>} | null;
   importSuccess: {
     target_path: string;
     sheetset_values: Record<string, string>;
@@ -244,6 +246,7 @@ export async function installCreation(
     importAttempts: 0,
     templateRequests: 0,
     importFailure: options.importFailure === undefined ? creationImportFailure() : options.importFailure,
+    saveFailure: null,
     importSuccess: options.importSuccess ?? creationImportSuccess(),
   };
   const candidates = options.candidates ?? [creationCandidate(), unavailableCreationCandidate()];
@@ -328,6 +331,10 @@ export async function installCreation(
         if (method === "PUT") {
           const body = (await request.postDataJSON()) as Record<string, unknown>;
           state.saveBodies.push(body);
+          if (state.saveFailure !== null) {
+            // 保存被拒：草稿 JSON 与修订号零变化
+            return route.fulfill({status: state.saveFailure.status, json: state.saveFailure.body});
+          }
           if (body["expected_revision"] !== current.revision) {
             return route.fulfill({
               status: 409,

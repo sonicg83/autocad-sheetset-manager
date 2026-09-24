@@ -4,6 +4,8 @@
 // + 末列操作。末列沿用图纸目录插件的 32×32 图标按钮视觉（↑/↓/✕，各自有完整可访问名称，
 // 首末行禁用正确）。新建组复制创建序最大的组并聚焦图名；重复图名只标错、不自动改名。
 // 图号、标题、DWG 文件名与派生属性由预览计算，本阶段不提供逐张输入。
+// 行内错误的可访问关联：图名/张数/模板/图幅四个控件经 `aria-describedby` 指向本行的
+// 错误列表（只用 `aria-invalid` 只能告知「有错」，读不到原因）。
 import {computed, nextTick, ref, type ComponentPublicInstance} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
@@ -47,6 +49,17 @@ function issueText(code: CreationGroupIssueCode): string {
 }
 function issuesOf(groupId: string): CreationGroupIssueCode[] {
   return props.store.groupIssues(groupId);
+}
+/** 行内错误列表的稳定 id（供 `aria-describedby` 引用）。 */
+function rowIssuesId(groupId: string): string {
+  return `creation-group-issues-${groupId}`;
+}
+/**
+ * 某行的 `aria-describedby`：仅在该行确有错误时给出，避免留下指向不存在元素的悬空引用。
+ * 行内错误列表覆盖该行所有列（图名/张数/模板/图幅），故同一份列表关联到这四个控件。
+ */
+function rowDescribedBy(groupId: string): string | undefined {
+  return issuesOf(groupId).length === 0 ? undefined : rowIssuesId(groupId);
 }
 /** 单元格可访问名：表头给出列名，这里补上组序号，避免整列同名控件无法区分。 */
 function cellLabel(index: number, column: string): string {
@@ -132,12 +145,13 @@ function toggleAll(event: Event): void {
                   :label="$t('creation.groups.columnTitle')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnTitle'))"
                   :invalid="issuesOf(group.group_id).includes('title_empty') || issuesOf(group.group_id).includes('title_duplicate')"
+                  :described-by="rowDescribedBy(group.group_id)"
                   :placeholder="$t('creation.groups.titlePlaceholder')"
                   :model-value="group.title"
                   @update:model-value="(value: string) => store.updateGroup(group.group_id, {title: value})"
                 />
-                <!-- 即时提示不加 role="alert"：逐键输入时会反复播报；错误态已由 aria-invalid 暴露 -->
-                <ul v-if="issuesOf(group.group_id).length > 0" class="row-issues">
+                <!-- 即时提示不加 role="alert"：逐键输入时会反复播报；错误原因由 `aria-describedby` 关联 -->
+                <ul v-if="issuesOf(group.group_id).length > 0" :id="rowIssuesId(group.group_id)" class="row-issues">
                   <li v-for="code in issuesOf(group.group_id)" :key="code">{{ issueText(code) }}</li>
                 </ul>
               </td>
@@ -146,6 +160,7 @@ function toggleAll(event: Event): void {
                   type="number" :label="$t('creation.groups.columnCount')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnCount'))"
                   :invalid="issuesOf(group.group_id).includes('count_invalid')"
+                  :described-by="rowDescribedBy(group.group_id)"
                   :model-value="String(group.count)" min="1" step="1"
                   @update:model-value="(value: string) => store.updateGroup(group.group_id, {count: Number(value)})"
                 />
@@ -155,6 +170,7 @@ function toggleAll(event: Event): void {
                   :label="$t('creation.groups.columnBase')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnBase'))"
                   :invalid="issuesOf(group.group_id).includes('base_asset_missing')"
+                  :described-by="rowDescribedBy(group.group_id)"
                   :model-value="group.base_asset_id"
                   @update:model-value="(value: string) => store.updateGroup(group.group_id, {base_asset_id: value})"
                 >
@@ -169,6 +185,7 @@ function toggleAll(event: Event): void {
                   :label="$t('creation.groups.columnLayout')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnLayout'))"
                   :invalid="issuesOf(group.group_id).includes('layout_asset_missing')"
+                  :described-by="rowDescribedBy(group.group_id)"
                   :model-value="group.layout_asset_id"
                   @update:model-value="(value: string) => store.updateGroup(group.group_id, {layout_asset_id: value})"
                 >
@@ -183,6 +200,7 @@ function toggleAll(event: Event): void {
                   :label="$t('creation.groups.columnPaper')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnPaper'))"
                   :invalid="issuesOf(group.group_id).includes('paper_layout_missing')"
+                  :described-by="rowDescribedBy(group.group_id)"
                   :model-value="group.paper_layout"
                   @update:model-value="(value: string) => store.updateGroup(group.group_id, {paper_layout: value})"
                 >

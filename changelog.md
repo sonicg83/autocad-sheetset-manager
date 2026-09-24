@@ -1,3 +1,10 @@
+## 2026-09-24（补齐创建向导的错误关联与保存失败门禁，PLAN-DM-036 Task 8 审查修复）
+
+- 修复审查发现（Important，plan-mandated）：图纸组表的行内错误与对应输入没有程序化关联——`GroupsStep.vue` 的错误列表 `<ul class="row-issues">` 没有 `id`、图名/张数/模板/图幅控件只传 `:invalid`，屏幕阅读器聚焦图名输入只能得到 `aria-invalid="true"`，拿不到「图名与其他图纸组重复」的原因（`SPEC-DM-018 §2` 要求表格有错误关联）。最小修复：新增 `rowIssuesId(groupId)`（`creation-group-issues-<group_id>`）与 `rowDescribedBy(groupId)`（仅在该行确有错误时给出，避免指向不存在元素的悬空引用），错误列表带稳定 `:id`，图名/张数/基础模板/布局模板/图幅五个控件传 `:described-by`。保留既有「不加 `role="alert"`、改用关联表达」的取舍，未改 `check:ui` 例外登记、视觉形式与公共契约（store 动作名、API 路径、i18n 键均未变，无新增语言键）。
+- 修复审查发现（Important）：`CreateSheetSetView.vue` 的 `backToWelcome()` 忽略 `store.save()` 结果并无条件 `emit("back")`——保存失败只写 `store.error`，而错误横幅随组件卸载消失、导航照常发生，未落盘的输入就此静默丢失（`SPEC-DM-018 §2` 要求向导离开不得静默丢失草稿）。改为 `if (!(await store.save())) return;`：保存失败留在向导内并显示 `store.error`，输入与草稿原样保留。
+- 测试：`web/tests/e2e/create-sheetset-input.spec.ts` 追加 **2 例**——① 两行同名时错误列表有稳定 id，图名输入在键盘聚焦下 `aria-describedby` 指向它、可访问描述即错误原因，张数/基础模板/布局模板/图幅同样关联，改名消除错误后不残留悬空引用；② 保存被拒（409 `CREATION_DRAFT_CONFLICT`）时点击「返回欢迎页」仍停留在向导内、显示本地化错误、输入与草稿 JSON 零改动（保存请求只发一次），保存恢复后照常离开且输入确实落盘。`web/tests/e2e/fixtures/creation.ts` 新增可变保存结果 `saveFailure`（默认 `null`，PUT 分支在任何写入前短路）。先 RED（`#creation-group-issues-group-1` 找不到元素 / 保存失败后仍跳回欢迎页）后 GREEN。
+- 验证（web/ 下）：`npm run test:unit` **279 passed / 27 files**；`npx playwright test create-sheetset-input.spec.ts` **48 passed**（新增 2 例 + 依赖工程 settings-dialog 33 例）；`npx playwright test standards-welcome.spec.ts` **39 passed**（夹具变更回归）；`npm run check:i18n` **1522 键 / 11 域**对称；`npm run check:ui` 通过（0 违规）；`npm run build` 通过。
+
 ## 2026-09-24（实现四阶段创建输入界面，PLAN-DM-036 Task 8）
 
 - 新增创建域前端（`web/src/features/creation/`，store + 纯模型 + 类型三文件，共 1058 行）：`types.ts`（创建草稿/标准候选/可输入字段模型与 store 注入端口 `CreationApi`）、`inputModel.ts`（345 行纯函数：标准文档 → 可输入普通属性与派生属性、路径合成与拆分、按组即时提示、批量变更、导入前「已有用户输入」判定）、`store.ts`（478 行，`reactive` 状态 + 显式类型动作）。状态与动作同处一个对象（组件读 `store.step`/`store.groups`，派生值 `targetPath()`/`groupIssues()`/`selectedGroups()` 是函数，避免 reactive 对象在自身初始化表达式里引用自己导致 TS 无法推断）；`canExecute`/`previewDigest` 已就位但恒为「无有效预览」（第四阶段 Task 9 接入），任何输入变更都经 `invalidatePreview()` 使旧摘要失效。

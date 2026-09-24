@@ -177,9 +177,10 @@ async function restart(): Promise<void> {
   xlsxOpen.value = false;
 }
 
-/** 离开向导前先落盘：未保存的输入不得因返回欢迎页而静默丢失。 */
+/** 离开向导前先落盘：未保存的输入不得因返回欢迎页而静默丢失。
+ * 保存失败时停留当前页：错误横幅随组件卸载会消失，若照常导航就是静默丢失草稿。 */
 async function backToWelcome(): Promise<void> {
-  await store.save();
+  if (!(await store.save())) return;
   emit("back");
 }
 </script>

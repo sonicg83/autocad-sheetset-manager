@@ -1,6 +1,7 @@
 // 四阶段创建向导输入 e2e（SPEC-DM-018 §2–§5；PLAN-DM-036 Task 8）。
 // 覆盖：四阶段壳与两入口、草稿恢复/重新开始、项目路径（含无壳降级）、按组复制与重排、
-// 批量修改（混合值与明确清空）、XLSX 导入的取消/失败/成功，以及浅深主题与键盘输入。
+// 行内错误的可访问关联、批量修改（混合值与明确清空）、XLSX 导入的取消/失败/成功、
+// 保存失败时返回欢迎页被拦下，以及浅深主题与键盘输入。
 // 全部端点由 fixtures/creation 的 route mock 驱动（不读真实数据目录）；第四阶段
 // 「检查并创建」在 Task 9 接入，这里只断言四阶段导航与占位说明。
 import {expect, test, type Page} from "@playwright/test";
@@ -176,6 +177,46 @@ test("新建图纸组复制最近创建的组，重排后仍按创建序复制�
   await expect(page.getByTestId("creation-group-summary")).toHaveText("2 组 · 6 张");
 });
 
+test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗读原因", async ({page}) => {
+  await installCreation(page);
+  await openCreation(page);
+  await chooseStandard(page);
+  await openGroupsStep(page);
+
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  await rowTitle(page, "group-1").fill("平面图");
+  // 新建组复制最近创建的组：未改名而同名 → 两行都标错，且各行的图名输入都有 describedby
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  expect(await rowOrder(page)).toEqual(["group-1", "group-2"]);
+  await expect(rowTitle(page, "group-2")).toHaveValue("平面图");
+
+  // 每行的错误列表有稳定 id；该行图名/张数/模板/图幅控件指向它（不是只给 aria-invalid）
+  const issues = page.locator("#creation-group-issues-group-1");
+  await expect(issues).toBeVisible();
+  await expect(issues).toContainText("图名与其他图纸组重复（去首尾空格、大小写不敏感）");
+
+  const title = rowTitle(page, "group-1");
+  await title.focus();
+  await expect(title).toBeFocused();
+  await expect(title).toHaveAttribute("aria-invalid", "true");
+  await expect(title).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
+  // 键盘聚焦即可获得原因（可访问描述来自该行的错误列表）
+  await expect(title).toHaveAccessibleDescription("图名与其他图纸组重复（去首尾空格、大小写不敏感）");
+  for (const control of [
+    rowCount(page, "group-1"),
+    groupRow(page, "group-1").getByLabel(/基础模板$/),
+    groupRow(page, "group-1").getByLabel(/布局模板$/),
+    groupRow(page, "group-1").getByLabel(/图幅$/),
+  ]) {
+    await expect(control).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
+  }
+
+  // 改名消除错误后不再指向空的错误列表（不留悬空 id 引用）
+  await title.fill("封面");
+  await expect(issues).toHaveCount(0);
+  await expect(title).not.toHaveAttribute("aria-describedby", /creation-group-issues/);
+});
+
 test("批量修改只作用选中组，混合值与明确清空可区分", async ({page}) => {
   await installCreation(page);
   await openCreation(page);
@@ -281,6 +322,37 @@ test("切换标准先提示再清除不兼容输入，不静默迁移", async ({
   await page.getByRole("dialog", {name: "切换图纸标准？"}).getByRole("button", {name: "切换标准"}).click();
   await expect(page.getByRole("region", {name: "项目信息"})).toBeVisible();
   await expect(page.getByTestId("creation-fixed-standard")).toContainText("user.b");
+});
+
+test("保存失败时返回欢迎页被拦下，草稿与输入都不丢", async ({page}) => {
+  const state = await installCreation(page);
+  await openCreation(page);
+  await chooseStandard(page);
+  await page.getByLabel("工程名称").fill("滨河路改造工程");
+
+  // 保存被拒（草稿修订冲突）：返回欢迎页必须先落盘，失败则留在当前页并显示错误
+  state.saveFailure = {
+    status: 409,
+    body: {
+      code: "CREATION_DRAFT_CONFLICT",
+      message_key: "errors.creation.draftConflict",
+      message: "修订冲突",
+    },
+  };
+  await page.getByRole("button", {name: "返回欢迎页"}).click();
+  await expect(page.getByTestId("creation-error")).toHaveText("创建草稿已被其他操作修改，请刷新后重试");
+  await expect(page.getByRole("region", {name: "创建新图纸集"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "打开图纸集"})).toHaveCount(0);
+  // 输入与草稿都没变：失败的保存不写草稿，界面也不清空
+  await expect(page.getByLabel("工程名称")).toHaveValue("滨河路改造工程");
+  expect(state.saveBodies).toHaveLength(1);
+  expect(state.drafts.get("draft-1")?.sheetset_values["prop-name"]).toBe("");
+
+  // 保存恢复后照常离开，且输入确实落盘
+  state.saveFailure = null;
+  await page.getByRole("button", {name: "返回欢迎页"}).click();
+  await expect(page.getByRole("heading", {name: "打开图纸集"})).toBeVisible();
+  await expect.poll(() => state.drafts.get("draft-1")?.sheetset_values["prop-name"]).toBe("滨河路改造工程");
 });
 
 test("XLSX 导入取消不发写请求，失败可定位且草稿零变更", async ({page}) => {
