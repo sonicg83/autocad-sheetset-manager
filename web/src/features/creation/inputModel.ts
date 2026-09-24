@@ -107,12 +107,17 @@ export function creationStandardInputs(
   };
 }
 
-/** 合成完整最终项目路径：上一级目录去掉尾部分隔符后拼接目录名。 */
+/** 合成完整最终项目路径：上一级目录去掉尾部分隔符后拼接目录名。
+ *
+ * 目录名为空时返回空串，**不退化为上一级目录**：否则「清空项目目录名」会把上级目录
+ * 本身当成项目目录（图纸集名称也随之取该目录名）。空路径的阻断归后端
+ * `CREATION_TARGET_PATH_EMPTY` 诊断，界面用 `finalPathEmpty` 提示承担。
+ */
 export function creationTargetPath(parentPath: string, folderName: string): string {
   const parent = parentPath.trim().replace(/[\\/]+$/, "");
   const folder = folderName.trim();
+  if (folder === "") return "";
   if (parent === "") return folder;
-  if (folder === "") return parent;
   return `${parent}${PATH_SEPARATOR}${folder}`;
 }
 

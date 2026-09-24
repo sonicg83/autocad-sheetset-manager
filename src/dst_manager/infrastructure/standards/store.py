@@ -148,11 +148,13 @@ class StandardStore:
         return summaries
 
     def _read_document(self, directory: Path) -> dict[str, object]:
+        """读取已发布文档：不可信文件（截断/非 UTF-8）一律当作空文档，不参与列表。"""
         try:
             data = json.loads(
                 (directory / DOCUMENT_NAME).read_text(encoding="utf-8")
             )
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):
+            # ValueError 同时覆盖 JSONDecodeError 与 UnicodeDecodeError
             return {}
         return data if isinstance(data, dict) else {}
 

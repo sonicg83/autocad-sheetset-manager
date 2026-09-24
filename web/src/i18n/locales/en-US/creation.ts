@@ -127,7 +127,7 @@ export default {
     folderDefault: "New Project",
     folderHint: "Defaults to “新建项目”; it is never derived from a property name and no “(2)”-style suffix is appended.",
     finalPath: "Final full path",
-    finalPathEmpty: "No parent folder selected yet",
+    finalPathEmpty: "Fill in both the parent folder and the project folder name (an empty name never falls back to the parent folder)",
     pathNote: "The target must be a new folder or an existing empty one; both preview and creation check it again.",
     nameBoundary: "The sheet set name is the final project folder name; properties such as “项目名称” or “工程名称” never drive the folder name or the sheet set name.",
   },

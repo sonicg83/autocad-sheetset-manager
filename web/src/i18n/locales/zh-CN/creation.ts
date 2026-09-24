@@ -126,7 +126,7 @@ export default {
     folderDefault: "新建项目",
     folderHint: "初值为“新建项目”；不会按属性名推断，也不会自动追加“(2)”等后缀。",
     finalPath: "最终完整路径",
-    finalPathEmpty: "尚未选择上一级目录",
+    finalPathEmpty: "请填写上一级目录与项目目录名（空目录名不会退化为上一级目录）",
     pathNote: "目标必须是尚不存在的新目录或已经存在的空目录；预览与执行时都会再次校验。",
     nameBoundary: "图纸集名称取最终项目目录名；“项目名称”“工程名称”等属性不参与目录名或图纸集名称。",
   },

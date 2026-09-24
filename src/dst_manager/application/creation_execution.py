@@ -121,6 +121,7 @@ class CreationExecutionOperations:
             )
             return self.database.get_job(job["id"]) or {}
         snapshot = self._live_settings()
+        lease_seconds = snapshot.worker_lease_seconds
         runner = CreationJobRunner(
             data_dir=self.settings.data_dir,
             asset_root=asset_root,
@@ -128,6 +129,8 @@ class CreationExecutionOperations:
                 self._capability(job["cad_version"] or snapshot.cad_version, snapshot)
             ),
             timeout=snapshot.cad_timeout_seconds,
+            # 与 CadJobRunner 同一心跳口径：租约的三分之一且不超过 30 秒。
+            heartbeat_interval=min(30.0, lease_seconds / 3),
             database=self.database,
             publisher=self.project_publisher,
             # 发布成功后的登记回调：任务只在登记完成（或登记失败被隔离）后落终态。

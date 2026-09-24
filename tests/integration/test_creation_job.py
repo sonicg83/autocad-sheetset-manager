@@ -25,6 +25,7 @@ Task 7 追加：启动恢复对「已提交但未登记」的创建发布幂等�
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -657,6 +658,78 @@ def _published_names(target: Path) -> list[str]:
     return sorted(item.name for item in target.iterdir())
 
 
+def _age_heartbeat(database: Database, job_id: str = "job-1", *, minutes: int = 10) -> None:
+    """把任务行的心跳改到过去：造出「另一实例眼中已超期」的在飞任务。"""
+    stale_at = datetime.now(UTC) - timedelta(minutes=minutes)
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE jobs SET heartbeat_at=? WHERE id=?",
+            (stale_at.replace(tzinfo=None), job_id),
+        )
+
+
+class LeaseObservingExecutor:
+    """替身执行器：记录每次 CAD 调用前任务的心跳，并模拟第二实例的超期回收。
+
+    只包一层 :class:`FakeCadExecutor`：CAD 行为不变，额外插入「心跳已超期」的现场
+    与「另一实例在任务在飞时调用 recover_stale_jobs」这一竞争。
+    """
+
+    def __init__(self, inner: FakeCadExecutor, database: Database) -> None:
+        self.inner = inner
+        self.database = database
+        self.heartbeats: dict[str, str | None] = {}
+        self.recoveries: list[list[dict[str, str]]] = []
+        self._aged = False
+
+    def run(self, capability, drawing: Path, script: Path, timeout: int):
+        if drawing.parent.name == "input" and not self._aged:
+            # 第一次 CAD 调用前把心跳改到过去：此时任务在另一实例眼里已超期
+            self._aged = True
+            _age_heartbeat(self.database)
+        self.heartbeats[drawing.parent.name] = self.database.get_job("job-1")[
+            "heartbeat_at"
+        ]
+        result = self.inner.run(capability, drawing, script, timeout)
+        if drawing.parent.name == "group-001":
+            # 跨组边界已过：由另一实例尝试超期回收（心跳已被续期则不回收）
+            self.recoveries.append(self.database.recover_stale_jobs(30))
+        return result
+
+
+class LeaseObservingPublisher:
+    """发布器替身：记录调用 publish_new_project 时刻的心跳与累计续租次数。"""
+
+    def __init__(
+        self, inner: ProjectPublisher, database: Database, renewals: list[str]
+    ) -> None:
+        self.inner = inner
+        self.database = database
+        self.renewals = renewals
+        self.heartbeats_at_publish: list[str | None] = []
+        self.renewals_at_publish: list[int] = []
+
+    def publish_new_project(self, candidate, target: Path, job_id: str, attempt: int):
+        self.heartbeats_at_publish.append(self.database.get_job(job_id)["heartbeat_at"])
+        self.renewals_at_publish.append(len(self.renewals))
+        return self.inner.publish_new_project(candidate, target, job_id, attempt)
+
+
+class HeartbeatRecordingDatabase:
+    """任务库代理：只记录续租调用，其余原样委托。"""
+
+    def __init__(self, inner: Database) -> None:
+        self.inner = inner
+        self.renewals: list[str] = []
+
+    def heartbeat(self, job_id: str, worker_id: str, *, attempt: int | None = None):
+        self.renewals.append(job_id)
+        return self.inner.heartbeat(job_id, worker_id, attempt=attempt)
+
+    def __getattr__(self, name: str):
+        return getattr(self.inner, name)
+
+
 def test_run_publishes_the_candidate_and_closes_the_job_without_workspace(
     tmp_path, runner, database, tmp_plan
 ) -> None:
@@ -724,6 +797,52 @@ def test_run_records_failure_diagnostics_without_workspace(
     assert "CREATION_CAD_UNAVAILABLE" in (
         _attempt_dir(tmp_path) / "logs" / "creation.log"
     ).read_text(encoding="utf-8")
+
+
+def test_run_renews_the_lease_while_staging(
+    tmp_path, database, package_root, capability, tmp_plan
+) -> None:
+    """在飞期间按心跳口径续租：跨组与发布前的空档都不得被第二实例回收。
+
+    第二实例（手动 `dst-manager worker`、`doctor`、`open`）会在任务在飞时调用
+    `recover_stale_jobs`：租约被续期后该调用不得把任务改回 `QUEUED`，否则围栏写入
+    失败会在目标目录已完整发布后把任务停在 `QUEUED`（下一次认领因目标非空而误报
+    `CREATION_TARGET_NOT_EMPTY`）。
+    """
+    executor = LeaseObservingExecutor(FakeCadExecutor(_layouts_for), database)
+    renewals = HeartbeatRecordingDatabase(database)
+    publisher = LeaseObservingPublisher(ProjectPublisher(), database, renewals.renewals)
+    runner = CreationJobRunner(
+        data_dir=tmp_path / "data",
+        asset_root=package_root,
+        worker=LayoutCreationWorker(capability, executor=executor),
+        timeout=60,
+        # 间隔趋近 0：两个续租边界必定到期，测试不依赖真实等待时长
+        heartbeat_interval=1e-6,
+        database=renewals,
+        publisher=publisher,
+    )
+    _create_creation_job(database, tmp_plan)
+    claimed = database.claim_next_job("worker-1")
+    assert claimed is not None
+
+    result = runner.run(claimed["id"], claimed["attempt"], tmp_plan)
+
+    # 并发超期回收看不到可回收任务（在飞期间租约被续期）
+    assert [
+        item for batch in executor.recoveries for item in batch if item["id"] == "job-1"
+    ] == []
+    assert result["status"] == "SUCCEEDED"
+    # 组间边界写入了心跳：第二组开始时的心跳已晚于第一组
+    assert executor.heartbeats["group-001"] != executor.heartbeats["group-000"]
+    # 发布前再续租一次（强制实测所有权）：发布时刻已发生「每组完成 + 发布前」共 N+1 次续租
+    assert publisher.renewals_at_publish == [len(renewals.renewals)]
+    assert publisher.renewals_at_publish[0] == len(tmp_plan.groups) + 1
+    # 发布前的空档同样在租期内：发布时刻的心跳不是认领/被改旧时的值
+    assert publisher.heartbeats_at_publish[0] != executor.heartbeats["group-000"]
+    assert sorted(item.name for item in Path(tmp_plan.target_path).iterdir()) == sorted(
+        [CREATION_DST_NAME, *(group.dwg_name for group in tmp_plan.groups)]
+    )
 
 
 def test_retry_after_failure_uses_a_new_attempt_directory(

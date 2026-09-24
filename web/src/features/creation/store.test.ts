@@ -7,6 +7,7 @@ import type {
   CreationApi,
   CreationDraftState,
   CreationImportOutcome,
+  CreationSaveInput,
   CreationStandardCandidate,
   CreationStandardInputs,
 } from "./types";
@@ -171,5 +172,36 @@ describe("createCreationStore", () => {
     expect(store.standard?.identity.standardId).toBe("user.b");
     expect(store.step).toBe("project");
     expect(store.previewDigest).toBeNull();
+  });
+
+  it("keeps an empty folder name empty instead of degrading to the parent directory", async () => {
+    const api = fakeCreationApi();
+    const base = await api.previewDraft("draft-1");
+    const savedPaths: string[] = [];
+    api.saveDraft = vi.fn(async (input: CreationSaveInput) => {
+      savedPaths.push(input.targetPath);
+      return {...seedDraft(), target_path: input.targetPath};
+    });
+    // 后端对空目标路径给 CREATION_TARGET_PATH_EMPTY 阻断诊断（前端不重算这条规则）
+    api.previewDraft = vi.fn(async () => ({
+      ...base,
+      target_path: "",
+      executable: false,
+      diagnostics: [
+        {code: "CREATION_TARGET_PATH_EMPTY", message: "项目目录不能为空", severity: "error", group_id: "", property_id: ""},
+      ],
+      preview_digest: "digest-empty",
+    }));
+    const store = createCreationStore(api);
+    store.setParentPath("D:\\项目");
+    store.setFolderName("");
+
+    // 清空目录名不得变成「用上级目录当项目」：最终路径为空
+    expect(store.targetPath()).toBe("");
+    expect(await store.preview()).toBe(true);
+    expect(savedPaths).toContain("");
+    expect(store.canExecute).toBe(false);
+    expect(await store.execute()).toBeNull();
+    expect(api.executeDraft).not.toHaveBeenCalled();
   });
 });

@@ -21,6 +21,11 @@ DWG 实际布局集合的逐项比对。
   重试使用新 attempt，不覆盖旧 attempt；
 - 布局模板的真实布局集合必须包含标准声明的图幅，主 DWG 的实际布局集合必须与
   计划逐项一致，任何非法/占位/重复 Handle 都拒绝：任一项不符即整个任务失败；
+- 创建链的 CAD 调用是同步阻塞调用，没有 CAD 作业那样的等待循环，因此按
+  ``heartbeat_interval``（生产取 ``min(30.0, lease_seconds / 3)``，与
+  :class:`~dst_manager.application.cad_job.CadJobRunner` 同一口径）在「每组完成后」
+  与「发布前」两个边界上续租；续租失败按 ``CREATION_JOB_LEASE_LOST`` 立即停手，
+  不把已发布成果围栏到已不属于本次运行的现场；
 - 发布失败按现场结论回滚（``ROLLED_BACK``）或隔离为 ``NEEDS_REVIEW``，绝不留下
   可被误报成功的半成品。
 
@@ -35,6 +40,8 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -138,6 +145,49 @@ class _AttemptLayout:
         return (self.input_dir, self.scripts_dir, self.staging_dir, self.logs_dir)
 
 
+class _LeaseRenewal:
+    """按固定间隔续租创建任务（与 ``CadJobRunner`` 同一心跳口径与失败语义）。
+
+    创建链的 CAD 调用是同步阻塞调用，没有等待循环可以穿插续租，因此续租点落在
+    「每组完成后」与「发布前」两个边界上：心跳最多旧一个 ``heartbeat_interval``
+    （生产为租约的三分之一），只要**单次** CAD 调用不超过租约，组间空档与发布前
+    空档就不会让租约过期。
+    """
+
+    def __init__(
+        self,
+        database: Database,
+        job_id: str,
+        worker_id: str,
+        attempt: int,
+        interval: float,
+    ) -> None:
+        self.database = database
+        self.job_id = job_id
+        self.worker_id = worker_id
+        self.attempt = attempt
+        self.interval = interval
+        #: 认领时已写过一次心跳，因此第一次续租在一个间隔之后才到期。
+        self._next = time.monotonic() + interval
+
+    def refresh(self, *, force: bool = False) -> None:
+        """到期时续租；租约已丢失即抛 ``CREATION_JOB_LEASE_LOST``（未到期不写库）。
+
+        ``force=True`` 用于发布前：发布是不可逆动作，不适用「未到期就不写」的节流，
+        此时必须实测一次租约所有权。
+        """
+        now = time.monotonic()
+        if not force and now < self._next:
+            return
+        if not self.database.heartbeat(
+            self.job_id, self.worker_id, attempt=self.attempt
+        ):
+            raise CreationJobError(
+                "CREATION_JOB_LEASE_LOST", "创建任务租约已丢失，本次运行不再写入任何状态"
+            )
+        self._next = now + self.interval
+
+
 class CreationJobRunner:
     """创建暂存运行器：把已校验的创建计划变成隔离 attempt 中的候选成果。"""
 
@@ -148,6 +198,7 @@ class CreationJobRunner:
         asset_root: Path,
         worker: LayoutCreationWorker,
         timeout: int,
+        heartbeat_interval: float = 30.0,
         codec: DstCodec | None = None,
         database: Database | None = None,
         publisher: ProjectPublisher | None = None,
@@ -155,11 +206,15 @@ class CreationJobRunner:
     ) -> None:
         if timeout <= 0:
             raise ValueError("CREATION_TIMEOUT_INVALID")
+        if heartbeat_interval <= 0:
+            raise ValueError("CREATION_HEARTBEAT_INTERVAL_INVALID")
         self.data_dir = Path(data_dir)
         #: 标准包根：计划里的模板路径是包内相对路径，这里解析成真实文件。
         self.asset_root = Path(asset_root)
         self.worker = worker
         self.timeout = timeout
+        #: 续租心跳间隔：生产装配与 ``CadJobRunner`` 同取 ``min(30.0, lease_seconds / 3)``。
+        self.heartbeat_interval = heartbeat_interval
         self.codec = codec if codec is not None else DstCodec()
         #: ``stage`` 不需要任务持久化；``run`` 需要（缺失时以稳定码拒绝）。
         self.database = database
@@ -183,12 +238,18 @@ class CreationJobRunner:
             raise CreationJobError("CREATION_JOB_NOT_RUNNABLE", f"创建任务不存在：{job_id}")
         worker_id = job.get("worker_id") or "local-worker"
         target = Path(plan.target_path)
+        lease = _LeaseRenewal(
+            self.database, job_id, worker_id, attempt, self.heartbeat_interval
+        )
         try:
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.CAD_RUNNING, 20)
-            candidate = self.stage(job_id, attempt, plan)
+            candidate = self._stage_guarded(job_id, attempt, plan, renew_lease=lease.refresh)
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.VERIFYING, 70)
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.PREPARED, 80)
             self._require_owned_status(job_id, worker_id, attempt, JobStatus.PUBLISHING, 90)
+            # 发布前的空档同样续租（并实测所有权）：发布与登记必须在同一次运行
+            # 持有的租约内完成，否则围栏写入会静默失败。
+            lease.refresh(force=True)
             published = self.publisher.publish_new_project(candidate, target, job_id, attempt)
             # 工作区登记只能在发布成功之后进行：生产路径恒注入登记回调（由应用层
             # 登记功能域闭环任务），登记失败会落 NEEDS_REVIEW 而不是普通成功。
@@ -254,7 +315,22 @@ class CreationJobRunner:
         )
 
     def stage(self, job_id: str, attempt: int, plan: CreationPlan) -> CreationCandidate:
-        """在独立 attempt 暂存目录生成候选成果；不写目标项目目录、不调用发布器。"""
+        """在独立 attempt 暂存目录生成候选成果；不写目标项目目录、不调用发布器。
+
+        本入口不持有任务租约（隔离单测路径）：需要续租的 ``run`` 走
+        :meth:`_stage_guarded` 并传入续租回调。
+        """
+        return self._stage_guarded(job_id, attempt, plan, renew_lease=None)
+
+    def _stage_guarded(
+        self,
+        job_id: str,
+        attempt: int,
+        plan: CreationPlan,
+        *,
+        renew_lease: Callable[[], None] | None,
+    ) -> CreationCandidate:
+        """暂存的统一入口：身份/计划门禁、隔离目录与失败日志的唯一实现。"""
         self._require_job_identity(job_id, attempt)
         self._require_plan(plan)
         layout = _AttemptLayout(
@@ -263,7 +339,7 @@ class CreationJobRunner:
         for directory in layout.directories:
             directory.mkdir(parents=True, exist_ok=True)
         try:
-            return self._stage(job_id, attempt, plan, layout)
+            return self._stage(job_id, attempt, plan, layout, renew_lease)
         except CreationAcsmError as exc:
             # 骨架实例化/回填的稳定码原样透出（统一成创建暂存错误类型）
             _append_attempt_log(layout.log_path, f"FAILED {exc.code}: {exc}")
@@ -278,12 +354,19 @@ class CreationJobRunner:
     # ---- 暂存主流程 ------------------------------------------------------
 
     def _stage(
-        self, job_id: str, attempt: int, plan: CreationPlan, layout: _AttemptLayout
+        self,
+        job_id: str,
+        attempt: int,
+        plan: CreationPlan,
+        layout: _AttemptLayout,
+        renew_lease: Callable[[], None] | None,
     ) -> CreationCandidate:
         document = build_minimal_acsm(plan)
         _append_attempt_log(layout.log_path, "SKELETON_INSTANTIATED")
         pairs = _planned_sheet_pairs(document, plan)
-        staged, references, handles, layouts = self._stage_groups(plan, pairs, layout)
+        staged, references, handles, layouts = self._stage_groups(
+            plan, pairs, layout, renew_lease
+        )
         try:
             document.apply_layout_references(references, Path(plan.target_path))
         except AcsmValidationError as exc:
@@ -317,10 +400,15 @@ class CreationJobRunner:
         plan: CreationPlan,
         pairs: tuple[tuple[tuple[str, SheetPlan], ...], ...],
         layout: _AttemptLayout,
+        renew_lease: Callable[[], None] | None,
     ) -> tuple[
         tuple[StagedDrawing, ...], dict[str, dict[str, str]], dict[str, str], dict[str, str]
     ]:
-        """逐组复制主 DWG 并运行固定布局创建请求；任一组失败即整个任务失败。"""
+        """逐组复制主 DWG 并运行固定布局创建请求；任一组失败即整个任务失败。
+
+        每处理完一组即续租（``renew_lease``）：组间空档与后续发布都必须落在同一次
+        运行持有的租约内，否则另一个 service 实例的超期恢复会把在飞任务改回 ``QUEUED``。
+        """
         staged: list[StagedDrawing] = []
         references: dict[str, dict[str, str]] = {}
         handles: dict[str, str] = {}
@@ -374,6 +462,8 @@ class CreationJobRunner:
                 }
                 handles[sheet_id] = outcome.handles[sheet_plan.layout_name]
                 layouts[sheet_id] = sheet_plan.layout_name
+            if renew_lease is not None:
+                renew_lease()
         return tuple(staged), references, handles, layouts
 
     def _prepare_layout_template(

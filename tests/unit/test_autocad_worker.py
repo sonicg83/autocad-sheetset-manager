@@ -6,6 +6,7 @@ import pytest
 from dst_manager.application.service import ApplicationError
 from dst_manager.infrastructure.autocad.worker import (
     CadCapability,
+    LayoutCreationRequest,
     ScriptRenderer,
     parse_layout_names,
     parse_rename_result,
@@ -190,6 +191,74 @@ def test_render_handles_remains_a_standalone_handle_script():
     assert "DstGetLayoutHandles" in script
     for structural_command in ("DstDeleteLayouts", "_.-LAYOUT", "_Rename", "DstDeleteDefaultLayout"):
         assert structural_command not in script
+
+
+# ---- 创建布局固定请求（PLAN-DM-036）：用户文本进 SCR 的唯一 seam -----------------
+
+def _creation_capability() -> CadCapability:
+    return CadCapability(
+        version="2020",
+        console=Path("C:/console.exe"),
+        plugin=Path("C:/plugins/AutoCAD Worker/DstManager.AutoCAD.dll"),
+    )
+
+
+def _creation_request(
+    paper_layout: str = "A1 横", target_layouts: tuple[str, ...] = ("01 平面图", "02 平面图")
+) -> LayoutCreationRequest:
+    return LayoutCreationRequest(
+        layout_template=Path("C:/work/template-000-a1 横.dwt"),
+        paper_layout=paper_layout,
+        target_layouts=target_layouts,
+    )
+
+
+def test_render_create_layouts_keeps_the_fixed_step_order():
+    request = _creation_request()
+    lines = ScriptRenderer().render_create_layouts(_creation_capability(), request).splitlines()
+
+    assert lines.count("_.NETLOAD") == 1
+    assert lines.count("DstGetLayoutHandles") == 1
+    assert lines.count("_.QSAVE") == 1
+    assert lines.count("_.QUIT") == 1
+    assert lines.index("DstDeleteDefaultLayout") < lines.index("DstGetLayoutHandles")
+    assert lines.index("DstGetLayoutHandles") < lines.index("_.QSAVE") < lines.index("_.QUIT")
+    rename_pairs = [
+        (lines[index + 2], lines[index + 3])
+        for index in range(len(lines) - 1)
+        if lines[index : index + 2] == ["_.-LAYOUT", "_Rename"]
+    ]
+    # 导入后立即改临时名（避开模板布局名重复），再统一改成计划布局名
+    assert rename_pairs == [
+        ('"A1 横"', "DST_CREATE_0000"),
+        ('"A1 横"', "DST_CREATE_0001"),
+        ("DST_CREATE_0000", '"01 平面图"'),
+        ("DST_CREATE_0001", '"02 平面图"'),
+    ]
+    # 用户文本只以引号包裹的参数出现，不拼成命令行的一部分
+    for value in (str(request.layout_template), request.paper_layout, *request.target_layouts):
+        assert f'"{value}"' in lines
+
+
+@pytest.mark.parametrize(
+    ("paper_layout", "target_layouts"),
+    [
+        ("A1", ('01 "平面图"',)),
+        ("A1", ("01\n平面图",)),
+        ("A1", ("01\x00平面图",)),
+        ('A1"横', ("01 平面图",)),
+        ("", ("01 平面图",)),
+        ("A1", ()),
+        ("A1", ("01 平面图", "01 平面图")),
+        ("A1", ("A1", "a1")),
+    ],
+)
+def test_layout_creation_request_rejects_unsafe_or_duplicate_input(
+    paper_layout: str, target_layouts: tuple[str, ...]
+) -> None:
+    """引号/换行/控制字符与重复目标布局名在**构造期**即被拒绝，无自由 SCR 拼接。"""
+    with pytest.raises(ValueError, match="LAYOUT_CREATION_REQUEST_INVALID"):
+        _creation_request(paper_layout, target_layouts)
 
 
 @pytest.fixture

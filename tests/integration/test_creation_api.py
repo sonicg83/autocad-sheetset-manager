@@ -709,6 +709,33 @@ def test_candidate_without_template_files_is_unavailable(
     ]
 
 
+@pytest.mark.parametrize(
+    ("case", "content"),
+    [
+        ("truncated", '{"schema_version": 1'),
+        ("not-utf8", None),
+    ],
+)
+def test_candidate_with_corrupt_standard_document_is_unavailable(
+    client: TestClient, root: Path, case: str, content: str | None
+) -> None:
+    """已发布但内容损坏的 document.json：候选列表必须仍返回 200 并给出稳定原因。"""
+    publish_standard(client, root)
+    document = published_root(root) / "document.json"
+    if content is None:
+        document.write_bytes(b"\xff\xfe\x00\x01")
+    else:
+        document.write_text(content, encoding="utf-8")
+
+    response = client.get("/api/creation-drafts/standards")
+
+    assert response.status_code == 200, case
+    candidates = {item["standard_id"]: item for item in response.json()}
+    broken = candidates["szmedi.gas"]
+    assert broken["available"] is False
+    assert len(broken["reasons"]) == 1 and "标准文档无法解析" in broken["reasons"][0]
+
+
 def test_candidate_labels_are_unique_within_kind(client: TestClient, root: Path) -> None:
     """同类内文件名冲突时标签退回包内相对路径：候选标签必须可唯一回指资产。"""
     publish_standard(

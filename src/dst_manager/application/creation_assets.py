@@ -183,10 +183,15 @@ def standard_document_digest(document: Mapping[str, object]) -> str:
 def _candidate(
     store: StandardStore, standard_id: str, version: str, manifests: Mapping[str, object]
 ) -> CreationStandardCandidate:
-    """单个候选：文档不可解析时也要给出稳定原因，不冒泡成 500。"""
+    """单个候选：文档不可解析时也要给出稳定原因，不冒泡成 500。
+
+    已发布文件是不可信输入：截断/非 UTF-8 的 ``document.json`` 在 ``StandardStore.get``
+    内部抛出 ``OSError``/``ValueError``（含 ``UnicodeDecodeError``），与 Schema 解析失败
+    同一口径处理——该标准不可用并附原因，其它候选不受影响。
+    """
     try:
         standard = store.get(standard_id, version)
-    except StandardSchemaError as exc:
+    except (StandardSchemaError, OSError, ValueError) as exc:
         return CreationStandardCandidate(
             standard_id=standard_id,
             version=version,
