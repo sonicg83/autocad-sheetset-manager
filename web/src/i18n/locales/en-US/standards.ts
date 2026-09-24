@@ -7,10 +7,6 @@ export default {
   back: "Back to welcome",
   placeholder: "The standard library, draft editor and publishing arrive in a later release.",
   createEntry: "Create sheet set from standard",
-  createPlaceholder: {
-    title: "Create sheet set from standard",
-    desc: "This entry arrives in a later release; for now open an existing sheet set for controlled editing.",
-  },
   library: {
     region: "Standard library",
     searchLabel: "Search standards",

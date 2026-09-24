@@ -39,13 +39,13 @@ import TaskOverlay from "./layout/TaskOverlay.vue";
 import WorkspaceShell from "./layout/WorkspaceShell.vue";
 import WelcomeView from "./views/WelcomeView.vue";
 import StandardsView from "./views/StandardsView.vue";
+import CreateSheetSetView from "./views/CreateSheetSetView.vue";
 import SheetsView from "./views/SheetsView.vue";
 import PropertiesView from "./views/PropertiesView.vue";
 import RevisionsView from "./views/RevisionsView.vue";
 
 import {useStartNavigation} from "./composables/useStartNavigation";
 import type {StandardsEntryIntent} from "./composables/useStartNavigation";
-import UiButton from "./components/ui/UiButton.vue";
 
 const {t}=useI18n();
 // 应用级起始面（PLAN-DM-035 Task 7）：无工作区时欢迎页/标准管理/创建图纸集切换。
@@ -441,15 +441,13 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
   >
       <template v-if="!workspace">
         <!-- PLAN-DM-035 Task 7：无工作区时按起始面装配；标准管理不进工作区标签栏。
-             PLAN-DM-039 Task 1：欢迎页三个次级入口各走唯一既有去向——创建进既有占位，
-             管理进标准库，导入把一次性意图交给标准页以打开同一个导入对话框。 -->
+             PLAN-DM-039 Task 1：欢迎页三个次级入口各走唯一既有去向——创建进创建向导，
+             管理进标准库，导入把一次性意图交给标准页以打开同一个导入对话框。
+             PLAN-DM-036 Task 8：创建向导取代原“后续版本提供”占位；标准详情「用于创建」
+             把固定发布版本作为一次性身份传入，向导据此直接进入第二阶段。 -->
         <WelcomeView v-if="startNavigation.surface.value==='welcome'" :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" @create-sheetset="startNavigation.openCreateSheetset()" @manage-standards="startNavigation.openStandards()" @import-standard="startNavigation.openStandards('import-package')" />
-        <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" :entry-intent="standardsEntryIntent" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset()" />
-        <section v-else class="create-sheetset-placeholder" role="region" :aria-label="$t('standards.createPlaceholder.title')">
-          <h2>{{ $t("standards.createPlaceholder.title") }}</h2>
-          <p>{{ $t("standards.createPlaceholder.desc") }}</p>
-          <UiButton variant="secondary" @click="startNavigation.goWelcome()">{{ $t("standards.back") }}</UiButton>
-        </section>
+        <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" :entry-intent="standardsEntryIntent" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset($event)" />
+        <CreateSheetSetView v-else :confirm-action="confirmAction" :entry-identity="startNavigation.createSheetsetIdentity.value" @back="startNavigation.goWelcome()" @standards="startNavigation.openStandards()" />
       </template>
       <template v-else>
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">{{ $t("shell.workspace.recoveredBanner",{count:draftRecovered},draftRecovered) }}<button type="button" @click="draftRecovered=null">{{ $t("shell.workspace.resume") }}</button><button type="button" @click="clearDraftRestart">{{ $t("shell.workspace.restart") }}</button></div>

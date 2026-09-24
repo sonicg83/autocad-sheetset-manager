@@ -48,6 +48,27 @@
       "fingerprint": "unicode-structure-icon|src/components/RevisionHistoryPanel.vue|→|1",
       "reason": "该 `→` 是两个哈希（before/after）之间的**文本分隔符**，不是充当结构图标的字形：它不承载任何交互、无可点面积、无键盘语义，属于单元格正文的一部分。既有 e2e 以 `getByText('aaaaaaaa → bbbbbbbb')` 直断言这段文本（i18n-workflows.spec.ts:159），迁到 SVG 会改变断言的语言无关性并使单元格失去可读文本，故**保留原字符**。PLAN-DM-029 Task 9 复核结论：保留，到期条件改为下一次修订页视觉 Spec 修订。",
       "expiresWith": "下一次修订页视觉 Spec 修订"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/creation/GroupsStep.vue",
+      "fingerprint": "unicode-structure-icon|src/components/creation/GroupsStep.vue|↑|1",
+      "reason": "SPEC-DM-018 §4.2 明确要求创建向导第三阶段「图纸组」末列沿用图纸目录插件的 32×32 图标按钮视觉，因此与 `ColumnEditor.vue` 保持同一用户可见形式（↑/↓/✕），而 ARCH-DM-007 §6 规定该形式在获批前不得静默改变。四条判据：① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除第 N 组，含组序号）；③ 点击面积 32px（--tap-target-min），与目录页同值；④ 首末行禁用正确、键盘可聚焦可激活。PLAN-DM-036 Task 8 不引入本地 SVG 原语的迁移（UiIcon 注册表无箭头/叉形图标），迁移与目录页同批在视觉 Spec 修订时裁决。",
+      "expiresWith": "下一次图纸集创建向导视觉 Spec 修订（SPEC-DM-018）"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/creation/GroupsStep.vue",
+      "fingerprint": "unicode-structure-icon|src/components/creation/GroupsStep.vue|↓|1",
+      "reason": "SPEC-DM-018 §4.2 明确要求创建向导第三阶段「图纸组」末列沿用图纸目录插件的 32×32 图标按钮视觉，因此与 `ColumnEditor.vue` 保持同一用户可见形式（↑/↓/✕），而 ARCH-DM-007 §6 规定该形式在获批前不得静默改变。四条判据：① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除第 N 组，含组序号）；③ 点击面积 32px（--tap-target-min），与目录页同值；④ 首末行禁用正确、键盘可聚焦可激活。PLAN-DM-036 Task 8 不引入本地 SVG 原语的迁移（UiIcon 注册表无箭头/叉形图标），迁移与目录页同批在视觉 Spec 修订时裁决。",
+      "expiresWith": "下一次图纸集创建向导视觉 Spec 修订（SPEC-DM-018）"
+    },
+    {
+      "rule": "unicode-structure-icon",
+      "file": "src/components/creation/GroupsStep.vue",
+      "fingerprint": "unicode-structure-icon|src/components/creation/GroupsStep.vue|✕|1",
+      "reason": "SPEC-DM-018 §4.2 明确要求创建向导第三阶段「图纸组」末列沿用图纸目录插件的 32×32 图标按钮视觉，因此与 `ColumnEditor.vue` 保持同一用户可见形式（↑/↓/✕），而 ARCH-DM-007 §6 规定该形式在获批前不得静默改变。四条判据：① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除第 N 组，含组序号）；③ 点击面积 32px（--tap-target-min），与目录页同值；④ 首末行禁用正确、键盘可聚焦可激活。PLAN-DM-036 Task 8 不引入本地 SVG 原语的迁移（UiIcon 注册表无箭头/叉形图标），迁移与目录页同批在视觉 Spec 修订时裁决。",
+      "expiresWith": "下一次图纸集创建向导视觉 Spec 修订（SPEC-DM-018）"
     }
   ],
   "dynamicVariables": [

@@ -2,7 +2,8 @@
 // 断言全部语义化：欢迎页主任务唯一性、标准管理是应用级表面（不进工作区标签栏）、
 // 无壳降级路径输入不回归、900×768 无横向滚动、普通 DST 打开不回归。
 import {expect, test, type Page} from "@playwright/test";
-import {installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
+import {installStandards} from "./fixtures/standards";
+import {creationCandidate, installCreation} from "./fixtures/creation";
 
 const workspace = {
   id: "workspace-1", revision_id: "revision-1", dst_path: "C:\\project\\test.dst",
@@ -43,6 +44,8 @@ test("欢迎页保持打开 DST 为唯一主任务", async ({page}) => {
 test("欢迎页为打开优先双栏且三个次级任务走既有去向", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 900});
   await installStandards(page, []);
+  // 创建入口已由 PLAN-DM-036 Task 8 接入真实向导：候选端点由创建夹具给出
+  await installCreation(page, {candidates: [creationCandidate()]});
   await page.goto("/");
   const layout = page.getByTestId("welcome-layout");
   await expect(layout).toBeVisible();
@@ -56,10 +59,10 @@ test("欢迎页为打开优先双栏且三个次级任务走既有去向", async
   await expect(page.getByRole("button", {name: "管理图纸标准"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导入标准包"})).toBeVisible();
 
-  // 创建：进入既有明确不可用占位，不回退到无标准创建
+  // 创建：进入创建向导第一阶段（标准候选由夹具给出，不再是无标准创建）
   await page.getByRole("button", {name: "创建新图纸集"}).click();
-  await expect(page.getByRole("heading", {name: "从标准创建图纸集"})).toBeVisible();
-  await expect(page.getByText("该入口将在后续版本提供", {exact: false})).toBeVisible();
+  await expect(page.getByRole("region", {name: "创建新图纸集"})).toBeVisible();
+  await expect(page.getByRole("region", {name: "选择标准"})).toBeVisible();
   await page.getByRole("button", {name: "返回欢迎页"}).click();
 
   // 导入标准包：进入标准库并直接打开唯一既有导入对话框
@@ -82,19 +85,6 @@ test("900×768 欢迎页单列且打开任务仍排在最前", async ({page}) =>
   expect(openBox.y).toBeLessThan(taskBox.y);
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(900);
-});
-
-test("从标准创建图纸集入口当前明确不可用且不回退", async ({page}) => {
-  // Task 8 起“用于创建图纸集”位于已发布版本的详情动作（SPEC-DM-016 §5）：
-  // 入口不再挂在标准管理页头部，而是逐标准提供（官方/已发布版本可选，草稿不可）。
-  await installStandards(page, [published("official", "2.1.0"), published("user", "2.0.0")]);
-  await openStandards(page);
-  await libraryItems(page).filter({hasText: "2.1.0"}).click();
-  await page.getByRole("button", {name: "用于创建图纸集"}).click();
-  await expect(page.getByRole("heading", {name: "从标准创建图纸集"})).toBeVisible();
-  await expect(page.getByText("该入口将在后续版本提供", {exact: false})).toBeVisible();
-  await page.getByRole("button", {name: "返回欢迎页"}).click();
-  await expect(page.getByRole("heading", {name: "打开图纸集"})).toBeVisible();
 });
 
 test("无桌面壳时路径输入与打开行为不回归", async ({page}) => {

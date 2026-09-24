@@ -4,7 +4,7 @@
 import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import {detailActions, versionHistory} from "./standardLibraryModel";
-import type {StandardDetail, StandardSummary} from "../../features/standards/types";
+import type {StandardDetail, StandardIdentity, StandardSummary} from "../../features/standards/types";
 
 const props = defineProps<{
   summary: StandardSummary | null;
@@ -18,7 +18,8 @@ const emit = defineEmits<{
   exportStandard: [];
   deleteDraft: [];
   edit: [];
-  useForCreate: [];
+  /** 用于创建：把固定标准身份交给创建向导（PLAN-DM-036 Task 8）。 */
+  useForCreate: [identity: StandardIdentity];
   openVersion: [version: string];
 }>();
 
@@ -99,7 +100,7 @@ const documentCounts = computed(() => {
         >{{ $t("standards.detail.edit") }}</UiButton>
         <UiButton v-if="actions?.canDerive" variant="secondary" @click="emit('derive')">{{ $t("standards.detail.derive") }}</UiButton>
         <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('exportStandard')">{{ $t("standards.detail.export") }}</UiButton>
-        <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('useForCreate')">{{ $t("standards.detail.useForCreate") }}</UiButton>
+        <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('useForCreate', {standardId: summary.standard_id, version: summary.version})">{{ $t("standards.detail.useForCreate") }}</UiButton>
         <UiButton v-if="actions?.canDelete" variant="secondary" @click="emit('deleteDraft')">{{ $t("standards.detail.delete") }}</UiButton>
       </div>
     </template>

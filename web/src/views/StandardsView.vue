@@ -14,9 +14,11 @@ import StandardEditor from "../components/standards/StandardEditor.vue";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
 import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
 import type {AssetInspection} from "../features/standards/types";
-import type {CreateMode, StandardSummary} from "../features/standards/types";
+import type {CreateMode, StandardIdentity, StandardSummary} from "../features/standards/types";
 import type {StandardsEntryIntent} from "../composables/useStartNavigation";
-defineEmits<{back: []; openCreateSheetset: []}>();
+// 「用于创建」把固定发布版本交给创建向导（PLAN-DM-036 Task 8）：本页只转发身份，
+// 不持有创建草稿状态。
+defineEmits<{back: []; openCreateSheetset: [identity: StandardIdentity]} >();
 const props = defineProps<{
   confirmAction: (options: {title: string; message: string; confirmText: string; cancelText?: string; danger?: boolean}) => Promise<boolean>;
   /** 欢迎页「导入标准包」的一次性意图（PLAN-DM-039 Task 1）：只决定是否直接打开既有导入对话框。 */
@@ -293,7 +295,7 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
           @derive="startCreate('derive')"
           @export-standard="exportSelectedStandard"
           @delete-draft="deleteSelectedDraft"
-          @use-for-create="$emit('openCreateSheetset')"
+          @use-for-create="$emit('openCreateSheetset', $event)"
           @open-version="openVersion"
         />
       </div>
