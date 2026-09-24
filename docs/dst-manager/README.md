@@ -2,6 +2,10 @@
 
 ## 定位与当前状态
 
+2026-09-24 新增 [标准包导入受控文件选择修复计划（PLAN-DM-041，proposed）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)：独立承接原 F16／PLAN-DM-039 F7，补齐 `.dststandard` 原生选择与导入弹窗契约。
+
+2026-09-24 修订 [图纸标准平台审查问题修复计划（PLAN-DM-040，proposed）](../../.planning/plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：把草稿编辑器无法纳入本机 DWG、资产发布/导入硬门禁、编辑状态与 UI 契约，以及实测复现的身份路由越界（F17），共 F01–F15 与 F17 的 16 项问题拆成按 Step 执行的 10 个任务；原 F16 已拆为 PLAN-DM-041。
+
 2026-09-24 交付 [标准驱动的新图纸集创建实施计划（PLAN-DM-036，active）](../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 的最后一个任务：第四阶段「检查并创建」接入**后端权威预览**——顶部显示固定标准及版本、最终项目路径、图纸组数/总张数/DWG 数与当前编号设置摘要；主表**每个图纸组一行**（图纸组｜图纸范围｜图纸｜张数｜文件名｜基础模板｜布局模板｜图幅｜标准动态 sheet 属性列），不提供「布局」列与单张 Sheet 行，不编号组只显示同位数单值（如 `00`），图纸标题与 DWG 文件名原样取后端紧凑结果；组内属性值不同时显示第一张实际值 + 可点击「…」（首张为空显示「（空）…」，绝不显示「多值」），「…」模态按组内顺序列出全部图纸的「图号｜图纸标题｜实际值」并支持键盘打开、Esc/关闭退出与焦点回归；诊断区分阻断错误与非阻断提示，可定位的错误能跳回项目字段/图纸组行/标准阶段；任何输入、固定标准或编号设置变化都使旧 `preview_digest` 失效，执行**只发送 `preview_digest`** 并在创建前展示最终路径与不可覆盖确认；失败保留草稿与可读诊断、重新检查后以新任务重试，成功后用返回的 `workspace_id` 接管普通工作区。**偏差说明（已由控制方裁决）**：创建任务的进度复用全局任务浮层的**同一任务面板组件（`JobStatusPanel.vue`）与同一终态集合**，但 `TaskOverlay` 受 `hasWorkspace` 门控、创建期尚无普通工作区，故创建进度在向导的「检查并创建」页内呈现，而不是复用一个当时不可见的容器。同批修复创建任务 SSE 终止集合漏掉 `NEEDS_REVIEW` 的缺陷（后端事件流改用共享 `TERMINAL_JOB_STATUSES`，并新增前后端终态集合逐项一致的钉住测试）。
 
 2026-09-21 接受 [Builder 退场与标准驱动创建（RFC-INT-003）](../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md)：DST Builder 作为独立产品整体退场，其实施已由 [PLAN-INT-004](../../.planning/plans/integration/PLAN-INT-004-retire-dst-builder.md)（completed）完成——公开仓库只保留 `dst_manager` 与 `dst_platform`，Builder 实现由 Git 历史追溯，本地副本在被忽略的 `legacy/dst-builder/`，历史文档封口为只读资料。后续由 DST Manager 原生承担从已发布图纸标准创建新图纸集、标准管理与首版 HTML/JSON 合规报告，分别由 [PLAN-DM-035](../../.planning/plans/dst-manager/PLAN-DM-035-drawing-standard-platform.md)、[PLAN-DM-036](../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 与 [PLAN-DM-037](../../.planning/plans/dst-manager/PLAN-DM-037-standard-validation-reports.md) 承接，尚未进入实施。

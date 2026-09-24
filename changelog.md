@@ -1,3 +1,17 @@
+## 2026-09-24（PLAN-DM-040 按审查意见修订）
+
+- 按独立审查结论修订 `PLAN-DM-040`：新增并实测复现 F17（身份路由 `standard_id`/`version` 未校验，`GET /api/standards/%2E%2E/%2E%2E` 可读标准库根外 `document.json`，`/export` 可把该目录打成 zip）并入 Task 1，边界从草稿段扩展到身份段；Task 7 定案为新增草稿级保存路由 `PUT /api/standards/drafts/{draft_id}`（保留既有身份路由，请求体身份与草稿不符返回 `STANDARD_IDENTITY_MISMATCH`），编辑器身份字段只读；10 个任务全部按 Step 展开（RED 断言、运行命令、期望失败、GREEN、changelog、提交），批次改为串行以避免 `StandardEditor.vue`/`store.ts` 合并冲突；明确 Task 3 受控副本命名 `assets/managed-*` 与只清理未引用受控副本的规则；补“残余风险与回退”和 Task 4/7/9 的 i18n 文件；修复 front matter 的 YAML 缩进。
+- 新增核实记录 `.planning/memos/dst-manager/2026-09-24-plan-dm-040-findings-verification.md`：逐项记录源码位置，并附 F02（缺失/绝对路径资产仍可发布或导入）、F15、F17 在临时目录的 TestClient 实测输出。
+- 同步 `.planning/README.md`、`.planning/plans/dst-manager/README.md` 与 `docs/dst-manager/README.md` 的“F01–F15 与 F17 共 16 项”措辞。本次仅修改计划与记录文档，未修改产品代码。
+
+## 2026-09-24（拆分标准包导入文件选择计划）
+
+- 将原 F16／PLAN-DM-039 F7 拆为 `PLAN-DM-041`，独立规划 `.dststandard` 原生选择、无壳回退、导入弹窗焦点与真实桌面验收；`PLAN-DM-040` 保留 F01–F15，更新两个计划的边界及导航索引。本次仅修改计划文档，未修改产品代码。
+
+## 2026-09-24（新增图纸标准平台审查修复计划）
+
+- 新建 `PLAN-DM-040`，把 PLAN-DM-035/038/039 审查与真实草稿编辑测试发现的 F01–F15 共 15 项问题映射到 10 个修复任务；将本机 DWG/DWT 无法通过界面纳入草稿受控模板资产列为阻断级，明确资产复制、发布与导入硬门禁、状态一致性、UI 契约和真实桌面验收顺序。同步更新 Plan 与 DST Manager 导航索引；本次仅编写计划，未修改产品代码。
+
 ## 2026-09-24（最终复核修复波）
 
 计划 `PLAN-DM-036` 最终整分支复核的 4 项修复，每项先 RED 后 GREEN（真实运行并记录失败输出）；公共契约（错误码、API 路径、函数名）不变，未放宽任何既有门禁。
