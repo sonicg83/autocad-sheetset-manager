@@ -39,6 +39,52 @@ export async function installPreferenceSnapshot(page:Page,theme:"light"|"dark"="
   });
 }
 
+/** 生效编号设置（创建向导的编号设置失效接线用例观察对象）。 */
+export interface NumberingSettings{
+  suffixEnabled:boolean;
+  suffixType:number;
+  keywords:string;
+}
+
+/**
+ * 含生效编号设置的快照：`enable_add_number_suffix`、`number_suffix_type`、
+ * `unnumbered_subset_keywords` 三个编号键，加最小界面偏好使启动引导照常解析。
+ */
+export function numberingSettingsSnapshot(values:NumberingSettings,configRevision=1){
+  return {
+    schema_version:1,config_revision:configRevision,diagnostics:[],schema_blocked:false,
+    items:[
+      {key:"ui_locale",control:"enum",value:"zh-CN",default:"system",source:"file",has_file_override:true,label_key:"settings.items.uiLocale",category_key:"settings.categories.interface",options:[{value:"system",text_key:"settings.locale.system"},{value:"zh-CN",text_key:"settings.locale.zhCN"},{value:"en-US",text_key:"settings.locale.enUS"}]},
+      {key:"ui_theme",control:"enum",value:"light",default:"light",source:"default",has_file_override:false,label_key:"settings.items.uiTheme",category_key:"settings.categories.interface",options:[{value:"light",text_key:"settings.enumOptions.themeLight"},{value:"dark",text_key:"settings.enumOptions.themeDark"}]},
+      {key:"enable_add_number_suffix",control:"bool",value:values.suffixEnabled,default:true,source:"file",has_file_override:true,label_key:"settings.items.addNumberSuffix",category_key:"settings.categories.numbering"},
+      {key:"number_suffix_type",control:"enum",value:values.suffixType,default:1,source:"file",has_file_override:true,label_key:"settings.items.numberSuffixType",category_key:"settings.categories.numbering",options:[{value:1,text_key:"settings.enumOptions.suffixChinese"},{value:2,text_key:"settings.enumOptions.suffixArabic"}]},
+      {key:"unnumbered_subset_keywords",control:"text",value:values.keywords,default:"",source:"default",has_file_override:false,label_key:"settings.items.unnumberedSubsetKeywords",category_key:"settings.categories.numbering"},
+    ],
+  };
+}
+
+/**
+ * 安装编号设置端点 mock：PUT 把提交的编号键写回后返回新快照（与真实后端同形：保存后的
+ * 快照就是新的生效值）。创建向导的失效接线用例据此观察“生效编号设置变化”。
+ */
+export async function installNumberingSettings(page:Page,initial:Partial<NumberingSettings>={}):Promise<void>{
+  let values:NumberingSettings={suffixEnabled:initial.suffixEnabled??true,suffixType:initial.suffixType??1,keywords:initial.keywords??""};
+  let revision=1;
+  await page.route("**/api/settings",async route=>{
+    if(route.request().method()==="PUT"){
+      const body=await route.request().postDataJSON() as {set?:Record<string,unknown>};
+      const set=body.set??{};
+      values={
+        suffixEnabled:typeof set.enable_add_number_suffix==="boolean"?set.enable_add_number_suffix:values.suffixEnabled,
+        suffixType:typeof set.number_suffix_type==="number"?set.number_suffix_type:values.suffixType,
+        keywords:typeof set.unnumbered_subset_keywords==="string"?set.unnumbered_subset_keywords:values.keywords,
+      };
+      revision+=1;
+    }
+    await route.fulfill({json:numberingSettingsSnapshot(values,revision)});
+  });
+}
+
 export function writeSettingsFile(
   values: Record<string, unknown>,
   configRevision = 0,

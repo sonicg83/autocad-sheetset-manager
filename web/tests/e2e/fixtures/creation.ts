@@ -328,6 +328,43 @@ export function creationPreviewWithDiagnostics(): Record<string, unknown> {
   return preview;
 }
 
+/**
+ * 带「模板/图幅」组内诊断的预览：三种定位分别落在基础模板、图幅与布局模板控件上。
+ * `CREATION_ASSET_INVALID` 同时覆盖两种模板资产，故组 1/组 3 用已解析的模板路径
+ * （空串表示该资产解析失败）区分到底缺的是基础模板还是布局模板。
+ */
+export function creationPreviewWithTemplateDiagnostics(): Record<string, unknown> {
+  const preview = creationPreview({executable: false});
+  const groups = preview["groups"] as Array<Record<string, unknown>>;
+  groups[0]!["base_template"] = ""; // 基础模板资产非法
+  groups[1]!["paper_layout"] = "A0"; // 图幅不在布局模板的实际布局内
+  groups[2]!["layout_template"] = ""; // 布局模板资产非法
+  preview["diagnostics"] = [
+    {
+      code: "CREATION_ASSET_INVALID",
+      message: "图纸组 'group-1' 的基础模板资产 'base-x' 不存在或不是基础模板",
+      severity: "error",
+      group_id: "group-1",
+      property_id: "",
+    },
+    {
+      code: "CREATION_PAPER_LAYOUT_INVALID",
+      message: "图纸组 'group-2' 的图幅 'A0' 不在布局模板资产 'layout-a' 声明的图幅内",
+      severity: "error",
+      group_id: "group-2",
+      property_id: "",
+    },
+    {
+      code: "CREATION_ASSET_INVALID",
+      message: "图纸组 'group-3' 的布局模板资产 'layout-x' 不存在或不是布局模板",
+      severity: "error",
+      group_id: "group-3",
+      property_id: "",
+    },
+  ];
+  return preview;
+}
+
 /** 执行入队响应：创建任务在登记前没有普通工作区。 */
 export function creationQueuedJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

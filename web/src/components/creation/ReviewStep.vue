@@ -70,9 +70,15 @@ function diagnosticRows(items: CreationPreviewDiagnostic[]) {
   return items.map((item, index) => ({
     key: `${item.code}-${index}`,
     text: diagnosticText(item.code, item.message),
-    target: previewDiagnosticTarget(item),
+    target: previewDiagnosticTarget(item, groupOf(item.group_id)),
     index: index + 1,
   }));
+}
+
+/** 诊断所属的预览组：仅用于区分两种模板资产（`CREATION_ASSET_INVALID` 共用一个码）。 */
+function groupOf(groupId: string): CreationPreviewGroup | null {
+  if (groupId === "") return null;
+  return preview.value?.groups.find(group => group.group_id === groupId) ?? null;
 }
 const errorRows = computed(() => diagnosticRows(diagnostics.value.errors));
 const noticeRows = computed(() => diagnosticRows(diagnostics.value.notices));

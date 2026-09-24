@@ -220,24 +220,40 @@ describe("previewPropertyColumns", () => {
 });
 
 describe("previewDiagnosticTarget", () => {
-  it("points a group diagnostic at its row", () => {
+  it("points a group diagnostic at its row and the title control", () => {
     expect(previewDiagnosticTarget(diagnostic({group_id: "group-2"}))).toEqual({
       step: "groups",
       groupId: "group-2",
       propertyId: "",
+      groupField: "title",
     });
   });
 
   it("points a sheet property diagnostic at the group row and property", () => {
     expect(
       previewDiagnosticTarget(diagnostic({code: "CREATION_ASSET_INVALID", group_id: "group-2", property_id: "prop-stage"})),
-    ).toEqual({step: "groups", groupId: "group-2", propertyId: "prop-stage"});
+    ).toEqual({step: "groups", groupId: "group-2", propertyId: "prop-stage", groupField: ""});
+  });
+
+  it("points count and paper layout diagnostics at their controls", () => {
+    expect(previewDiagnosticTarget(diagnostic({code: "CREATION_GROUP_COUNT_INVALID", group_id: "group-2"}))?.groupField).toBe("count");
+    expect(previewDiagnosticTarget(diagnostic({code: "CREATION_PAPER_LAYOUT_INVALID", group_id: "group-2"}))?.groupField).toBe("paper");
+  });
+
+  it("splits the shared asset code into base and layout template by the resolved template", () => {
+    const group = seedPreview().groups[0]!;
+    const assetInvalid = diagnostic({code: "CREATION_ASSET_INVALID", group_id: group.group_id});
+    // 基础模板已解析成功 ⇒ 缺的是布局模板
+    expect(previewDiagnosticTarget(assetInvalid, group)?.groupField).toBe("layout");
+    // 基础模板路径为空 ⇒ 缺的是基础模板；没有组信息时也回退到基础模板
+    expect(previewDiagnosticTarget(assetInvalid, {...group, base_template: ""})?.groupField).toBe("base");
+    expect(previewDiagnosticTarget(assetInvalid)?.groupField).toBe("base");
   });
 
   it("points a sheetset property diagnostic at the project field", () => {
     expect(
       previewDiagnosticTarget(diagnostic({code: "CREATION_REQUIRED_VALUE_MISSING", property_id: "prop-name"})),
-    ).toEqual({step: "project", groupId: "", propertyId: "prop-name"});
+    ).toEqual({step: "project", groupId: "", propertyId: "prop-name", groupField: ""});
   });
 
   it("points path and empty-group diagnostics at their stage", () => {
@@ -245,11 +261,13 @@ describe("previewDiagnosticTarget", () => {
       step: "project",
       groupId: "",
       propertyId: "",
+      groupField: "",
     });
     expect(previewDiagnosticTarget(diagnostic({code: "CREATION_GROUPS_EMPTY"}))).toEqual({
       step: "groups",
       groupId: "",
       propertyId: "",
+      groupField: "",
     });
   });
 
@@ -258,6 +276,7 @@ describe("previewDiagnosticTarget", () => {
       step: "standard",
       groupId: "",
       propertyId: "",
+      groupField: "",
     });
   });
 

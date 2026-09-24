@@ -12,11 +12,13 @@ import {
   creationFailedJob,
   creationPreview,
   creationPreviewWithDiagnostics,
+  creationPreviewWithTemplateDiagnostics,
+  groupRow,
   installCreation,
   openCreation,
   openGroupsStep,
 } from "./fixtures/creation";
-import {installPreferenceSnapshot} from "./fixtures/settings";
+import {installNumberingSettings, installPreferenceSnapshot} from "./fixtures/settings";
 
 test.beforeEach(async ({page}) => {
   // 与既有创建 spec 同型的假壳桥：目录选择与列配置经桥返回，不触发真实文件系统
@@ -42,6 +44,18 @@ async function openReviewStep(page: Page): Promise<void> {
   await chooseStandard(page);
   await openGroupsStep(page);
   await page.getByRole("button", {name: "新建图纸组"}).click();
+  await page.getByRole("button", {name: "下一步"}).click();
+  await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
+}
+
+/** 建立三组草稿并进入第四阶段（组 id 与预览夹具的 group-1/2/3 对齐）。 */
+async function openReviewStepWithThreeGroups(page: Page): Promise<void> {
+  await openCreation(page);
+  await chooseStandard(page);
+  await openGroupsStep(page);
+  for (let index = 0; index < 3; index += 1) {
+    await page.getByRole("button", {name: "新建图纸组"}).click();
+  }
   await page.getByRole("button", {name: "下一步"}).click();
   await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
 }
@@ -309,4 +323,72 @@ test("900×768、200% 缩放与浅深主题下页面整体不横溢，主表自�
     expect(scroll).toBe("auto");
     await page.evaluate(() => document.documentElement.style.removeProperty("zoom"));
   }
+});
+
+// 审查修复（Important 1）：编号设置来自向导之外的设置中心，生效值变化必须立即禁用旧预览。
+// 快照经 `useSettings` 的模块级单例读取（不新建全局状态、不轮询）；“仅打开设置中心”
+// 只是读取快照，不是设置变化，不得清掉仍然有效的预览。
+test("生效编号设置变化立即禁用旧预览，界面不再把过期摘要当作可执行", async ({page}) => {
+  const state = await installCreation(page);
+  await installNumberingSettings(page);
+  await openReviewStep(page);
+
+  const execute = page.getByTestId("creation-execute");
+  const numbering = page.getByTestId("creation-preview-numbering");
+  await expect(numbering).toBeVisible();
+  await expect(execute).toBeEnabled();
+
+  // 仅打开设置中心（快照首次加载）不改变生效编号设置：旧摘要仍有效，仍有可执行入口
+  await page.getByRole("button", {name: "设置"}).click();
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeVisible();
+  await expect(page.locator('input[data-key="unnumbered_subset_keywords"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+  await expect(numbering).toBeVisible();
+  await expect(execute).toBeEnabled();
+
+  // 改生效编号设置并保存：旧摘要与可执行入口立即失效，不再展示改前的编号摘要
+  await page.getByRole("button", {name: "设置"}).click();
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeVisible();
+  await page.locator('input[data-key="unnumbered_subset_keywords"]').fill("封面,总图");
+  await page.getByRole("button", {name: "保存"}).click();
+  await expect(page.getByText("已保存").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "设置"})).toBeHidden();
+
+  await expect(page.getByTestId("creation-preview-stale")).toBeVisible();
+  await expect(numbering).toHaveCount(0);
+  await expect(execute).toHaveCount(0);
+  // 失效后不自动重算：必须由用户重新检查，服务端摘要最终决定能否执行
+  expect(state.previewRequests).toBe(1);
+});
+
+// 审查修复（Important 2）：组内“模板/图幅”诊断必须定位到对应控件，不得落在行内第一个
+// 控件（图名）或行选择复选框上。`CREATION_ASSET_INVALID` 同时覆盖两种模板资产，按该组
+// 已解析的模板路径区分基础模板与布局模板。
+test("模板/图幅类组内诊断跳回后焦点落在对应的模板或图幅控件", async ({page}) => {
+  await installCreation(page, {preview: creationPreviewWithTemplateDiagnostics()});
+  await openReviewStepWithThreeGroups(page);
+
+  const errors = page.getByTestId("creation-preview-errors");
+  await expect(errors.getByRole("button", {name: /返回修改第 \d 项/})).toHaveCount(3);
+  await expect(errors).toContainText("图幅不在所选布局模板的实际布局内");
+
+  // 基础模板资产非法 → 基础模板选择，不是图名、不是行选择复选框
+  await errors.getByRole("button", {name: "返回修改第 1 项"}).click();
+  await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
+  await expect(groupRow(page, "group-1").getByLabel("第 1 组基础模板")).toBeFocused();
+  await expect(groupRow(page, "group-1").getByLabel("第 1 组图名")).not.toBeFocused();
+
+  // 图幅不在布局模板的实际布局内 → 图幅选择
+  await page.getByRole("button", {name: "下一步"}).click();
+  await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
+  await page.getByTestId("creation-preview-errors").getByRole("button", {name: "返回修改第 2 项"}).click();
+  await expect(groupRow(page, "group-2").getByLabel("第 2 组图幅")).toBeFocused();
+
+  // 布局模板资产非法 → 布局模板选择（与基础模板同码，靠该组解析结果区分）
+  await page.getByRole("button", {name: "下一步"}).click();
+  await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
+  await page.getByTestId("creation-preview-errors").getByRole("button", {name: "返回修改第 3 项"}).click();
+  await expect(groupRow(page, "group-3").getByLabel("第 3 组布局模板")).toBeFocused();
 });

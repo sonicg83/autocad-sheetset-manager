@@ -29,13 +29,21 @@ export interface CreationPreviewPropertyColumn {
   label: string;
 }
 
-/** 诊断的跳转位置：要回到哪个阶段，以及要定位到哪个组/属性。 */
+/** 组内固定控件的判别（行内顺序：图名｜张数｜基础模板｜布局模板｜图幅）。 */
+export type CreationGroupField = "title" | "count" | "base" | "layout" | "paper" | "";
+
+/** 诊断的跳转位置：要回到哪个阶段，以及要定位到哪个组/属性/组内控件。 */
 export interface CreationPreviewTarget {
   step: CreationStep;
   /** 空串表示不针对具体图纸组。 */
   groupId: string;
   /** 空串表示不针对具体属性（`project` 阶段此时定位项目路径字段）。 */
   propertyId: string;
+  /**
+   * 组内要聚焦的固定控件；空串表示没有更具体的控件目标（属性列或整行）。没有它时
+   * 定位只能落在行内第一个控件（图名），模板/图幅类诊断会指错控件。
+   */
+  groupField: CreationGroupField;
 }
 
 /**
@@ -100,31 +108,63 @@ export function groupSheetValues(
   return summarizeSheetValues(group.property_cells[propertyId]?.sheets ?? []);
 }
 
+/** 组内固定控件诊断码 → 控件（`CREATION_ASSET_INVALID` 同时覆盖两种模板资产，另判）。 */
+const GROUP_FIELD_BY_CODE: Readonly<Record<string, CreationGroupField>> = {
+  CREATION_GROUP_TITLE_EMPTY: "title",
+  CREATION_GROUP_TITLE_DUPLICATE: "title",
+  CREATION_GROUP_COUNT_INVALID: "count",
+  CREATION_PAPER_LAYOUT_INVALID: "paper",
+};
+
+/**
+ * 组内固定控件：属性诊断定位属性列（空串），其余按诊断码。基础模板与布局模板资产共用
+ * `CREATION_ASSET_INVALID`，因此用该组已解析的模板路径判别到底缺的是哪一个（路径为空串
+ * 即该资产未解析成功；两者都缺时先指向基础模板）。
+ */
+function groupFieldOf(
+  diagnostic: CreationPreviewDiagnostic,
+  group: CreationPreviewGroup | null,
+): CreationGroupField {
+  if (diagnostic.code === "CREATION_ASSET_INVALID") {
+    if (group === null || group.base_template === "") return "base";
+    return "layout";
+  }
+  return GROUP_FIELD_BY_CODE[diagnostic.code] ?? "";
+}
+
 /**
  * 诊断的跳转位置：
- * - 带图纸组 → 图纸组阶段的那一行（带属性时定位到该属性的控件）；
+ * - 带图纸组 → 图纸组阶段的那一行（带属性时定位到该属性的控件，否则按码定位固定控件）；
  * - 带属性（图纸集作用域）→ 项目信息阶段的该字段；
  * - 项目路径诊断 → 项目信息阶段的路径字段；
  * - 空图纸组 → 图纸组阶段；标准资产文件不可用 → 选择标准阶段；
  * - 其余（如布局名重复等没有可修改输入的诊断）返回 null：只呈现消息，不给误导性的跳转。
+ *
+ * `group` 是该诊断所属的预览组（调用方按 `group_id` 查找），仅用于区分两种模板资产。
  */
 export function previewDiagnosticTarget(
   diagnostic: CreationPreviewDiagnostic,
+  group: CreationPreviewGroup | null = null,
 ): CreationPreviewTarget | null {
   if (diagnostic.group_id !== "") {
-    return {step: "groups", groupId: diagnostic.group_id, propertyId: diagnostic.property_id};
+    return {
+      step: "groups",
+      groupId: diagnostic.group_id,
+      propertyId: diagnostic.property_id,
+      groupField: diagnostic.property_id === "" ? groupFieldOf(diagnostic, group) : "",
+    };
   }
   if (diagnostic.property_id !== "") {
-    return {step: "project", groupId: "", propertyId: diagnostic.property_id};
+    return {step: "project", groupId: "", propertyId: diagnostic.property_id, groupField: ""};
   }
   if (diagnostic.code.startsWith("CREATION_TARGET_PATH")) {
-    return {step: "project", groupId: "", propertyId: ""};
+    return {step: "project", groupId: "", propertyId: "", groupField: ""};
   }
   if (diagnostic.code === "CREATION_GROUPS_EMPTY") {
-    return {step: "groups", groupId: "", propertyId: ""};
+    return {step: "groups", groupId: "", propertyId: "", groupField: ""};
   }
   if (diagnostic.code === "CREATION_ASSET_FILE_MISSING") {
-    return {step: "standard", groupId: "", propertyId: ""};
+    return {step: "standard", groupId: "", propertyId: "", groupField: ""};
   }
   return null;
 }

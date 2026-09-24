@@ -16,8 +16,9 @@ import XlsxImportDialog from "../components/creation/XlsxImportDialog.vue";
 import {creationApi} from "../api/creation";
 import {createCreationStore} from "../features/creation/store";
 import {useCreationJob} from "../features/creation/useCreationJob";
+import {useSettings} from "../composables/useSettings";
 import type {ConfirmOptions} from "../composables/useConfirm";
-import type {CreationPreviewTarget} from "../features/creation/previewModel";
+import type {CreationGroupField, CreationPreviewTarget} from "../features/creation/previewModel";
 import type {CreationStandardCandidate, CreationStep} from "../features/creation/types";
 import type {StandardIdentity} from "../features/standards/types";
 
@@ -31,6 +32,29 @@ const {t} = useI18n();
 
 const store = createCreationStore(creationApi, {
   defaultFolderName: t("creation.project.folderDefault"),
+});
+
+// 生效编号设置来自向导之外的设置中心：与设置对话框共用 `useSettings` 的模块级单例快照
+// （不新建全局状态、不轮询）。快照里的三个编号键任一变化都必须使旧预览失效。
+const {snapshot: settingsSnapshot} = useSettings();
+
+/** 生效编号设置的身份串：标题尾序号开关/类型与不编号关键字；未加载快照时为 null。 */
+function numberingSettingsKey(): string | null {
+  const snapshot = settingsSnapshot.value;
+  if (snapshot === null) return null;
+  const valueOf = (key: string) => snapshot.items.find(item => item.key === key)?.value ?? null;
+  return JSON.stringify([
+    valueOf("enable_add_number_suffix"),
+    valueOf("number_suffix_type"),
+    valueOf("unnumbered_subset_keywords"),
+  ]);
+}
+
+// 编号设置变化（设置中心保存）立即禁用旧预览：旧摘要绑定的是改前的编号设置。
+// 快照首次加载（null → 值）只是读取，不是设置变化，不得清掉仍然有效的预览。
+watch(numberingSettingsKey, (next, previous) => {
+  if (next === null || previous === null || next === previous) return;
+  store.invalidateForSettingsChange();
 });
 
 // 创建任务监视：成功用返回的 `workspace_id` 切换普通工作区（由 App 完成）；失败使旧摘要
@@ -225,9 +249,19 @@ function focusByLabel(labelText: string): void {
   document.getElementById(label.htmlFor)?.focus();
 }
 
+/** 组内固定控件判别 → 该行控件的可访问名列名（与图纸组表 `cellLabel` 同一拼写）。 */
+const GROUP_FIELD_KEYS: Record<Exclude<CreationGroupField, "">, string> = {
+  title: "creation.groups.columnTitle",
+  count: "creation.groups.columnCount",
+  base: "creation.groups.columnBase",
+  layout: "creation.groups.columnLayout",
+  paper: "creation.groups.columnPaper",
+};
+
 /**
- * 图纸组行的定位：行身份是既有 `data-group-id`，属性列身份是单元格控件的可访问名
- * （`第 N 组<属性名>`，与图纸组表同一拼写）。没有具体属性时落在该行首个控件（图名）。
+ * 图纸组行的定位：行身份是既有 `data-group-id`，控件身份是单元格控件的可访问名
+ * （`第 N 组<列名或属性名>`，与图纸组表同一拼写）。目标控件名取属性名（属性诊断）或
+ * 列名（图名/张数/基础模板/布局模板/图幅）；两者都没有时落到该行首个控件（图名）。
  */
 function focusGroupTarget(target: CreationPreviewTarget): void {
   if (target.groupId === "") return;
@@ -237,7 +271,12 @@ function focusGroupTarget(target: CreationPreviewTarget): void {
   const controls = Array.from(
     row.querySelectorAll<HTMLElement>('input:not([type="checkbox"]), select'),
   );
-  const wanted = target.propertyId === "" ? "" : propertyLabel(target.propertyId);
+  const wanted =
+    target.propertyId !== ""
+      ? propertyLabel(target.propertyId)
+      : target.groupField !== ""
+        ? t(GROUP_FIELD_KEYS[target.groupField])
+        : "";
   const matched =
     wanted === "" ? undefined : controls.find(item => item.getAttribute("aria-label")?.endsWith(wanted));
   (matched ?? controls[0])?.focus();
