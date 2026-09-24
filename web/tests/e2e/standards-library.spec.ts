@@ -3,7 +3,7 @@
 // 无结果的区分、官方/已发布只读边界、草稿可维护、派生新草稿、加载失败与导入碰撞
 // 不改变选中、900×768 分级视图无横向溢出。
 import {expect, test, type Page} from "@playwright/test";
-import {draft, draftDocument, groupHeaders, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
+import {chooseStandardPackage, draft, draftDocument, groupHeaders, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
@@ -156,8 +156,10 @@ test("标准库加载失败给出稳定错误且不伪造空库", async ({page})
   await expect(page.getByText("从左侧列表选择一条标准查看详情。")).toBeVisible();
 });
 
-test("导入碰撞不改变当前选择且不关闭导入对话框", async ({page}) => {
-  const state = await installStandards(page, [published("official", 2), published("user", 1)]);
+test("导入预检冲突留在弹窗、保留路径且不改变当前选择", async ({page}) => {
+  const state = await installStandards(page, [published("official", 2), published("user", 1)], {
+    importConflict: {status: 200, code: "STANDARD_VERSION_EXISTS", message: "同一标准 ID 与版本已存在"},
+  });
   await openStandards(page);
   const selected = libraryItems(page).filter({hasText: "v2"});
   await selected.click();
@@ -165,14 +167,77 @@ test("导入碰撞不改变当前选择且不关闭导入对话框", async ({pag
 
   await page.getByRole("button", {name: "导入标准包"}).click();
   const dialog = page.getByRole("dialog", {name: "导入标准包"});
-  await dialog.getByLabel("标准包路径（.dststandard）").fill("C:\\standards\\duplicate.dststandard");
-  await dialog.getByRole("button", {name: "导入"}).click();
+  // 空路径时预检按钮禁用（未选择不得提交）
+  await expect(dialog.getByTestId("import-preview-button")).toBeDisabled();
+  await chooseStandardPackage(page, "C:\\标准包\\带 空格\\duplicate.dststandard");
+  await dialog.getByTestId("import-preview-button").click();
+  await expect(dialog.getByTestId("import-preview")).toBeVisible();
+  await expect(dialog.getByTestId("import-diagnostics")).toContainText("STANDARD_VERSION_EXISTS");
+  await expect(dialog.getByTestId("import-confirm-button")).toBeDisabled();
+  // 中文/空格路径原样交给预检端点并原样回显
+  expect(state.previewPaths).toEqual(["C:\\标准包\\带 空格\\duplicate.dststandard"]);
+  await expect(dialog.getByTestId("import-selected-path")).toHaveValue("C:\\标准包\\带 空格\\duplicate.dststandard");
 
-  await expect(page.getByText("操作失败，发生未知错误")).toBeVisible();
+  // 冲突不关闭弹窗、不改变当前选择，也不写标准库
   await expect(dialog).toBeVisible();
   await expect(selected).toHaveClass(/selected/);
   await expect(page.getByText("官方标准只读")).toBeVisible();
   expect(state.list).toHaveLength(2);
+  expect(state.confirmAttempts).toBe(0);
+
+  // 更换文件清除旧预检：预检面板消失，确认按钮回到禁用
+  await chooseStandardPackage(page, "C:\\标准包\\other.dststandard");
+  await expect(dialog.getByTestId("import-preview")).toHaveCount(0);
+  await expect(dialog.getByTestId("import-confirm-button")).toBeDisabled();
+});
+
+test("导入预检通过后可确认导入，并定位到新版本", async ({page}) => {
+  const state = await installStandards(page, [published("official", 2)]);
+  await openStandards(page);
+  await page.getByRole("button", {name: "导入标准包"}).click();
+  const dialog = page.getByRole("dialog", {name: "导入标准包"});
+  await chooseStandardPackage(page, "C:\\标准包\\szmedi.gas-v3.dststandard");
+  await dialog.getByTestId("import-preview-button").click();
+  await expect(dialog.getByTestId("import-preview")).toBeVisible();
+  await expect(dialog.getByText(/同 ID 已有版本/)).toBeVisible();
+  await expect(dialog.getByTestId("import-confirm-button")).toBeEnabled();
+
+  await dialog.getByTestId("import-confirm-button").click();
+  await expect(dialog.getByTestId("import-success")).toBeVisible();
+  expect(state.confirmAttempts).toBe(1);
+
+  // 关闭后列表刷新、目标 ID 组展开并定位到导入版本详情
+  await page.getByRole("button", {name: "关闭"}).click();
+  await expect(page.getByTestId("standard-import-dialog")).toHaveCount(0);
+  await expect(libraryItems(page)).toHaveCount(2);
+  await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("v3");
+});
+
+test("无桌面壳显示明确标注的本机路径开发态，桥迟到注入后离开该模式", async ({page}) => {
+  // 覆盖 beforeEach 注入的假桥：本次按无壳浏览器起始
+  await page.addInitScript(() => {
+    delete (window as unknown as {pywebview?: unknown}).pywebview;
+  });
+  await installStandards(page, []);
+  await openStandards(page);
+  await page.getByRole("button", {name: "导入标准包"}).click();
+  const dialog = page.getByRole("dialog", {name: "导入标准包"});
+  await expect(dialog.getByTestId("import-dev-fallback")).toBeVisible();
+  await expect(dialog.getByTestId("import-choose-file")).toHaveCount(0);
+
+  // 桥迟到注入（pywebviewready）：离开开发态回退，改走原生固定种类选择器
+  await page.evaluate(() => {
+    (window as unknown as {pywebview?: unknown}).pywebview = {
+      api: {
+        select_file: async () => null,
+        on_files_dropped: async () => {},
+      },
+    };
+    window.dispatchEvent(new Event("pywebviewready"));
+  });
+  await expect(dialog.getByTestId("import-dev-fallback")).toHaveCount(0);
+  await expect(dialog.getByTestId("import-choose-file")).toBeVisible();
 });
 
 // ---- 列表键与编辑身份（PLAN-DM-040 Task 5，F03/F05） ---------------------

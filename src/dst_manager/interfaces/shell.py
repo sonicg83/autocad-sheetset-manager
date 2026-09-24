@@ -48,12 +48,14 @@ _EXTERNAL_URL_PATH_PREFIX = "/sonicg83"
 # 扩展名白名单只由 file_kind 在此固定拼接：前端（含被伪造的本地化描述）无法传入
 # 任意 file_types 过滤器字符串，描述含 (*.bat) 也不能扩大白名单。未知 kind 拒绝；
 # 文件夹选择不经 file_kind，走独立的 select_folder（FOLDER_DIALOG 无过滤器概念）。
-FileKind = Literal["dst", "template", "exe", "dll"]
+FileKind = Literal["dst", "template", "exe", "dll", "dststandard"]
 _FILE_KIND_PATTERNS: dict[str, str] = {
     "dst": "*.dst",
     "template": "*.dwg;*.dwt",
     "exe": "*.exe",
     "dll": "*.dll",
+    # 标准包导入（PLAN-DM-041 Task 7）：固定种类，过滤器只由后端拼接。
+    "dststandard": "*.dststandard",
 }
 
 # ---- PLAN-DM-020 Task 8：扩展成果原生"另存为"（SAVE_DIALOG + 一次性授权） ----

@@ -2,7 +2,7 @@
 // 标准库左栏（PLAN-DM-035 Task 8；PLAN-DM-041 Task 6）：搜索、来源/状态筛选与
 // 按 `standard_id` 归集的版本列表。空库与筛选无结果必须区分呈现（用户不知道是
 // "没有标准"还是"筛没了"）；组内版本整数降序，展示为 `v<n>`。
-import {computed, ref} from "vue";
+import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
@@ -22,6 +22,8 @@ const props = defineProps<{
   selectedKey: string | null;
   listPending: boolean;
   listError: string;
+  /** 收起的归集组（标准 ID）；由页面持有，便于导入成功后展开目标组。 */
+  collapsedGroups: string[];
 }>();
 const emit = defineEmits<{
   select: [summary: StandardSummary];
@@ -32,21 +34,18 @@ const emit = defineEmits<{
   retry: [];
   /** 筛选无结果：恢复默认筛选，不改变当前选择。 */
   clearFilters: [];
+  /** 收起/展开一个归集组（键盘可达的组头按钮）。 */
+  toggleGroup: [standardId: string];
 }>();
 
 const state = computed(() => buildLibraryState(props.items, props.filters));
-// 组默认展开；收起状态由标准 ID 记录，键盘可达（组头是带 aria-expanded 的按钮）。
-const collapsed = ref<Set<string>>(new Set());
-
+// 组默认展开；收起状态由页面按标准 ID 持有，键盘可达（组头是带 aria-expanded 的按钮）。
 function isCollapsed(standardId: string): boolean {
-  return collapsed.value.has(standardId);
+  return props.collapsedGroups.includes(standardId);
 }
 
 function toggle(standardId: string): void {
-  const next = new Set(collapsed.value);
-  if (next.has(standardId)) next.delete(standardId);
-  else next.add(standardId);
-  collapsed.value = next;
+  emit("toggleGroup", standardId);
 }
 
 function entries(group: StandardGroup): StandardSummary[] {

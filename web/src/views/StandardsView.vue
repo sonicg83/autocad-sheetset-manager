@@ -11,10 +11,18 @@ import StandardLibraryPane from "../components/standards/StandardLibraryPane.vue
 import StandardDetailPane from "../components/standards/StandardDetailPane.vue";
 import StandardCreateDialog from "../components/standards/StandardCreateDialog.vue";
 import StandardEditor from "../components/standards/StandardEditor.vue";
+import StandardImportDialog from "../components/standards/StandardImportDialog.vue";
+import {selectStandardPackagePath, shellReady} from "../api/shell";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
 import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
 import type {AssetInspection} from "../features/standards/types";
-import type {CreateMode, StandardIdentity, StandardSummary} from "../features/standards/types";
+import type {
+  CreateMode,
+  ImportPreviewResult,
+  PublishedStandard,
+  StandardIdentity,
+  StandardSummary,
+} from "../features/standards/types";
 import type {StandardsEntryIntent} from "../composables/useStartNavigation";
 // 「用于创建」把固定发布版本交给创建向导（PLAN-DM-036 Task 8）：本页只转发身份，
 // 不持有创建草稿状态。
@@ -32,7 +40,8 @@ const selectedKey = ref<string | null>(null);
 const createDialogOpen = ref(false);
 const createMode = ref<CreateMode>("blank");
 const importDialogOpen = ref(false);
-const importPath = ref("");
+/** 收起的归集组（标准 ID）：导入成功后要展开目标组（PLAN-DM-041 Task 7）。 */
+const collapsedGroups = ref<string[]>([]);
 // 欢迎页「导入标准包」直接落到同一个导入对话框（不新增第二套导入表单或导入状态）。
 // 只在组件创建时读一次意图：App 在 `v-if` 分支上重新挂载本页，因此每次进入都是新实例；
 // 意图是“一次性”的，用户关掉对话框后不得再被重新打开。
@@ -275,16 +284,49 @@ async function deleteSelectedDraft(): Promise<void> {
   await store.refresh();
 }
 
-async function importPackage(): Promise<void> {
-  if (!importPath.value.trim()) return;
-  try {
-    await store.importPackage({path: importPath.value.trim()});
-    importDialogOpen.value = false;
-    importPath.value = "";
-    await store.refresh();
-  } catch {
-    // 导入碰撞/校验失败不改变列表选择：错误留在 actionError，当前选择保持
-  }
+// —— 标准包导入（PLAN-DM-041 Task 5/7）：预检 → 凭证确认 ——
+/** 预检：后端把选定的包复制到限时快照并返回候选身份、诊断与可否导入。 */
+async function previewImport(path: string): Promise<ImportPreviewResult> {
+  return store.previewImport({path});
+}
+
+/** 确认导入：只消费预检凭证（服务端不接受路径）。 */
+async function confirmImport(previewId: string): Promise<PublishedStandard> {
+  return store.confirmImport({previewId});
+}
+
+/** 取消预检：删除服务端快照；失败不影响用户继续操作（过期后服务端自行清理）。 */
+async function cancelImport(previewId: string): Promise<void> {
+  return store.cancelImport(previewId);
+}
+
+/** 原生选择：桥不可用时返回 undefined，弹窗切到明确标注的本机路径开发态。 */
+async function selectImportPath(localizedDescription: string): Promise<string | null | undefined> {
+  return selectStandardPackagePath(localizedDescription);
+}
+
+function toggleGroup(standardId: string): void {
+  const next = new Set(collapsedGroups.value);
+  if (next.has(standardId)) next.delete(standardId);
+  else next.add(standardId);
+  collapsedGroups.value = [...next];
+}
+
+/** 导入成功：刷新列表、展开目标 ID 组并定位到导入版本详情。
+ *
+ * 弹窗保持打开并显示成功状态（用户自行关闭），因此刷新与定位在成功响应时立即完成。
+ */
+async function onImported(published: PublishedStandard): Promise<void> {
+  collapsedGroups.value = collapsedGroups.value.filter(id => id !== published.standard_id);
+  await store.refresh();
+  selectedKey.value = draftKey({
+    source: "user",
+    standard_id: published.standard_id,
+    version: published.version,
+    draft_id: null,
+  });
+  await store.open({standardId: published.standard_id, version: published.version});
+  narrowPane.value = "detail";
 }
 
 // 已发布标准包导出：拼后端下载地址并以带 download 的临时链接触发下载（不把 zip 读进内存）。
@@ -333,12 +375,14 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
           :selected-key="selectedKey"
           :list-pending="store.listPending.value"
           :list-error="store.listError.value"
+          :collapsed-groups="collapsedGroups"
           @select="select"
           @update-filters="filters = $event"
           @import-package="importDialogOpen = true"
           @create-new="openCreateDialog"
           @retry="store.refresh()"
           @clear-filters="clearFilters"
+          @toggle-group="toggleGroup"
         />
         <StandardDetailPane
           class="detail-col"
@@ -367,17 +411,16 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
       @close="createDialogOpen = false"
       @submit="submitCreate"
     />
-    <div v-if="importDialogOpen" class="import-backdrop" @click.self="importDialogOpen = false">
-      <section class="import-dialog" role="dialog" aria-modal="true" :aria-label="$t('standards.import.title')">
-        <h3>{{ $t("standards.import.title") }}</h3>
-        <label class="import-label" for="import-path-input">{{ $t("standards.import.pathLabel") }}</label>
-        <input id="import-path-input" v-model="importPath" type="text">
-        <div class="import-actions">
-          <UiButton variant="secondary" @click="importDialogOpen = false">{{ $t("standards.create.cancel") }}</UiButton>
-          <UiButton variant="secondary" :disabled="!importPath.trim()" @click="importPackage">{{ $t("standards.import.confirm") }}</UiButton>
-        </div>
-      </section>
-    </div>
+    <StandardImportDialog
+      :open="importDialogOpen"
+      :shell-available="shellReady"
+      :select-path="selectImportPath"
+      :preview-import="previewImport"
+      :confirm-import="confirmImport"
+      :cancel-import="cancelImport"
+      @close="importDialogOpen = false"
+      @imported="onImported"
+    />
   </section>
 </template>
 <style scoped>
@@ -392,12 +435,6 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
 .standards-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 .library-split{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:var(--space-4);align-items:start}
 .library-col,.detail-col{border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);padding:var(--space-4);background:var(--color-bg-surface)}
-.import-backdrop{position:fixed;inset:0;background:rgb(0 0 0 / 0.4);display:grid;place-items:center;z-index:60}
-.import-dialog{width:min(420px,calc(100vw - 32px));display:grid;gap:var(--space-3);padding:var(--space-5);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg)}
-.import-dialog h3{margin:0;font-size:var(--font-page-title)}
-.import-label{font-size:var(--font-label);color:var(--color-text-secondary)}
-.import-dialog input{height:var(--control-height-default,38px);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);padding:0 var(--space-3)}
-.import-actions{display:flex;gap:var(--space-2);justify-content:flex-end}
 /* 900×768（窄视口）：列表 ↔ 详情两级互斥视图；详情页提供可见返回按钮 */
 @media (max-width: 959px){
   .library-split{grid-template-columns:minmax(0,1fr)}

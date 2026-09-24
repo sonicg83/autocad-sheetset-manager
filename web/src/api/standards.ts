@@ -8,7 +8,10 @@ import type {
   CopyAssetFileInput,
   CreateDraftFromDstInput,
   CreateDraftInput,
+  ConfirmImportInput,
   ImportedStandardDraft,
+  ImportPreviewInput,
+  ImportPreviewResult,
   InspectAssetInput,
   PublishInput,
   PublishedStandard,
@@ -61,11 +64,28 @@ export function publishStandardDraft(input: PublishInput): Promise<PublishedStan
   );
 }
 
-export function importStandardPackage(input: {path: string}): Promise<PublishedStandard> {
-  return request<PublishedStandard>("/api/standards/import", {
+/** 导入预检：把选定的 .dststandard 复制到服务端限时快照并返回凭证与诊断（不写标准库）。 */
+export function previewStandardImport(input: ImportPreviewInput): Promise<ImportPreviewResult> {
+  return request<ImportPreviewResult>("/api/standards/import-previews", {
     method: "POST",
     body: JSON.stringify({path: input.path}),
   });
+}
+
+/** 确认导入：只接受预检凭证（服务端不再接受路径）。 */
+export function confirmStandardImport(input: ConfirmImportInput): Promise<PublishedStandard> {
+  return request<PublishedStandard>("/api/standards/import", {
+    method: "POST",
+    body: JSON.stringify({preview_id: input.previewId}),
+  });
+}
+
+/** 取消预检：删除服务端快照并废弃凭证；未知凭证幂等成功。 */
+export function cancelStandardImport(previewId: string): Promise<void> {
+  return request<{status: string}>(
+    `/api/standards/import-previews/${encodeURIComponent(previewId)}`,
+    {method: "DELETE"},
+  ).then(() => undefined);
 }
 
 export function createStandardDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft> {
@@ -105,7 +125,9 @@ export const standardsApi: StandardApi = {
   saveDraft: saveStandardDraft,
   createDraftFromDst: createStandardDraftFromDst,
   publish: publishStandardDraft,
-  importPackage: importStandardPackage,
+  previewImport: previewStandardImport,
+  confirmImport: confirmStandardImport,
+  cancelImport: cancelStandardImport,
   deleteDraft: deleteStandardDraft,
   inspectAsset: inspectStandardAsset,
   copyAssetFile: copyStandardAssetFile,

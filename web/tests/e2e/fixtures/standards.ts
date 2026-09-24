@@ -91,8 +91,14 @@ export interface StandardsFixtureState {
   listFails: boolean;
   createBodies: unknown[];
   deleted: string[];
-  /** 导入端点被调用次数（碰撞场景断言用）。 */
+  /** 导入预检端点被调用次数（碰撞场景断言用）。 */
   importAttempts: number;
+  /** 确认导入端点被调用次数（幂等/防重复提交断言用）。 */
+  confirmAttempts: number;
+  /** 取消预检端点被调用次数（换文件/取消清凭证断言用）。 */
+  cancelAttempts: number;
+  /** 预检端点收到的来源路径（原样传递断言用：中文/空格/OneDrive 路径）。 */
+  previewPaths: string[];
   /** 保存请求的文档体（草稿级与身份路由共用；按时间顺序）。 */
   saveBodies: Record<string, unknown>[];
   /** 草稿级保存命中的草稿 ID（F11：保存必须用打开时的草稿身份）。 */
@@ -127,7 +133,7 @@ export interface StandardsFixtureState {
 export type StandardsFixtureOptions = {
   /** 列表端点返回 500，驱动加载失败边界。 */
   listFails?: boolean;
-  /** 导入端点固定返回的冲突响应（默认 409 STANDARD_VERSION_EXISTS）。 */
+  /** 预检固定返回的冲突诊断（默认与后端一致：can_import=false + STANDARD_VERSION_EXISTS）。 */
   importConflict?: {status: number; code: string; message: string};
   /** 预置草稿文档：draft_id → document（编辑器加载与保存目标）。 */
   drafts?: Record<string, Record<string, unknown>>;
@@ -252,6 +258,9 @@ export async function installStandards(
     createBodies: [],
     deleted: [],
     importAttempts: 0,
+    confirmAttempts: 0,
+    cancelAttempts: 0,
+    previewPaths: [],
     saveBodies: [],
     savedDraftIds: [],
     drafts: new Map(Object.entries(options.drafts ?? {})),
@@ -324,10 +333,64 @@ export async function installStandards(
         state.drafts.set(draftId, body.document);
         return route.fulfill({json: {draft_id: draftId, document: body.document}});
       }
-      if (path === "/api/standards/import" && method === "POST") {
+      if (path === "/api/standards/import-previews" && method === "POST") {
         state.importAttempts += 1;
-        const conflict = options.importConflict ?? {status: 409, code: "STANDARD_VERSION_EXISTS", message: "同一标准 ID 与版本已存在"};
-        return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
+        const body = (await request.postDataJSON()) as {path: string};
+        state.previewPaths.push(body.path);
+        // 与后端同构：冲突以 200 + can_import=false + 诊断呈现，不抛异常；
+        // 未配置 importConflict 时按可导入返回（成功路径）。
+        const conflict = options.importConflict;
+        if (conflict !== undefined && conflict.status !== 200) {
+          return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
+        }
+        const existing = state.list.filter(item => item.status === "published" && item.standard_id === "szmedi.gas");
+        const blocked = conflict !== undefined;
+        if (blocked) {
+          return route.fulfill({
+            json: {
+              preview_id: null,
+              expires_at: null,
+              standard_id: "szmedi.gas",
+              version: existing[0]?.version ?? 1,
+              name: "市政燃气施工图",
+              supported_cad_versions: ["2020"],
+              existing_versions: existing.map(item => ({source: item.source, version: item.version ?? 0})),
+              diagnostics: [{code: conflict.code, severity: "error", message: conflict.message, property_id: null, segment_index: null}],
+              can_import: false,
+            },
+          });
+        }
+        const version = existing.reduce((max, item) => Math.max(max, item.version ?? 0), 0) + 1;
+        return route.fulfill({
+          json: {
+            preview_id: `preview-${state.importAttempts}`,
+            expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+            standard_id: "szmedi.gas",
+            version,
+            name: "市政燃气施工图",
+            supported_cad_versions: ["2020"],
+            existing_versions: existing.map(item => ({source: item.source, version: item.version ?? 0})),
+            diagnostics: [],
+            can_import: true,
+          },
+        });
+      }
+      if (path === "/api/standards/import" && method === "POST") {
+        state.confirmAttempts += 1;
+        const body = (await request.postDataJSON()) as {preview_id: string};
+        const conflict = options.importConflict;
+        if (conflict !== undefined && conflict.status !== 200) {
+          return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
+        }
+        const existing = state.list.filter(item => item.status === "published" && item.standard_id === "szmedi.gas");
+        const version = existing.reduce((max, item) => Math.max(max, item.version ?? 0), 0) + 1;
+        state.list.push({source: "user", status: "published", standard_id: "szmedi.gas", version, name: "市政燃气施工图", draft_id: null});
+        return route.fulfill({json: {standard_id: "szmedi.gas", version, name: "市政燃气施工图", preview_id: body.preview_id}});
+      }
+      const importCancelMatch = /^\/api\/standards\/import-previews\/([^/]+)$/.exec(path);
+      if (importCancelMatch && method === "DELETE") {
+        state.cancelAttempts += 1;
+        return route.fulfill({json: {status: "cancelled"}});
       }
       const inspectMatch = /^\/api\/standards\/drafts\/([^/]+)\/assets\/([^/]+)\/inspect$/.exec(path);
       if (inspectMatch && method === "POST") {
@@ -426,4 +489,12 @@ export async function openEditorSection(page: Page, sectionId: string): Promise<
 
 export function editorSaveState(page: Page): Locator {
   return page.getByTestId("editor-save-state");
+}
+
+/** 经固定 `dststandard` 原生选择器选取标准包（设置假桥的一次性返回路径）。 */
+export async function chooseStandardPackage(page: Page, path: string): Promise<void> {
+  await page.evaluate(value => {
+    (window as unknown as {__fakeSelectResult?: string}).__fakeSelectResult = value;
+  }, path);
+  await page.getByTestId("import-choose-file").click();
 }

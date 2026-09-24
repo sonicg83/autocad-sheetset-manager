@@ -4,7 +4,7 @@ import type {ColumnPreferences} from "../features/sheets/types";
 // PLAN-DM-021 Task 4：原生文件对话框种类（白名单由壳侧按 kind 固定拼接）。
 // 前端只传种类与本地化描述，不再定义/传递任意 file_types 过滤器字符串；
 // 描述仅作对话框显示，含伪造模式也不能扩大白名单（壳侧净化 + 固定拼接）。
-export type ShellFileKind="dst"|"template"|"exe"|"dll";
+export type ShellFileKind="dst"|"template"|"exe"|"dll"|"dststandard";
 type ShellBridge={select_file(fileKind:ShellFileKind,localizedDescription:string):Promise<string|null>;select_folder():Promise<string|null>;on_files_dropped(callbackId:string):Promise<void>} & Partial<SheetShellBridge>;
 
 export function getShellBridge():ShellBridge|null{
@@ -93,6 +93,17 @@ export async function selectTemplatePath(localizedDescription:string):Promise<st
   const bridge=getShellBridge();
   if(!bridge||typeof bridge.select_file!=="function")return undefined;
   return bridge.select_file("template",localizedDescription);
+}
+
+// ---- PLAN-DM-041 Task 7：标准包（.dststandard）原生选择 ----
+// 与 selectTemplatePath 同三态语义：undefined = 桥或 select_file 缺失（无桌面壳，
+// 调用方向用户显示明确标注的本机路径开发态回退）；null = 用户取消（不发起预检）；
+// string = 选中的本机绝对路径，原样交给预检端点（服务端只复制该文件）。
+// 过滤器（*.dststandard）只由壳侧按 file_kind 固定拼接，前端不传过滤器字符串。
+export async function selectStandardPackagePath(localizedDescription:string):Promise<string|null|undefined>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.select_file!=="function")return undefined;
+  return bridge.select_file("dststandard",localizedDescription);
 }
 
 // ---- PLAN-DM-019 修复波：SC-11 外链经系统默认浏览器打开 ----

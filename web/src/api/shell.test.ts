@@ -66,3 +66,43 @@ describe("selectSettingsPath（file_kind + 本地化描述）",()=>{
     await expect(shell.selectSettingsPath("folder","")).resolves.toBeUndefined();
   });
 });
+
+describe("selectStandardPackagePath（PLAN-DM-041 Task 7：固定 dststandard 种类）",()=>{
+  let shell:ShellModule;
+  beforeAll(async()=>{
+    installWindow(null);
+    shell=await import("./shell");
+  });
+
+  it("按 file_kind='dststandard' 调 select_file，本地化描述不能扩大白名单",async()=>{
+    const bridge=fakeBridge();
+    installWindow(bridge);
+    await expect(shell.selectStandardPackagePath("标准包文件")).resolves.toBeNull();
+    expect(bridge.select_file).toHaveBeenCalledExactlyOnceWith("dststandard","标准包文件");
+    expect(bridge.select_folder).not.toHaveBeenCalled();
+  });
+
+  it("含伪造扩展名的描述仍只传固定种类（过滤器由壳侧拼接）",async()=>{
+    const bridge=fakeBridge();
+    installWindow(bridge);
+    await shell.selectStandardPackagePath("任意 (*.exe;*.zip)");
+    expect(bridge.select_file).toHaveBeenCalledExactlyOnceWith("dststandard","任意 (*.exe;*.zip)");
+  });
+
+  it("取消返回 null（调用方不发起预检）；选中路径原样返回",async()=>{
+    const cancelling=fakeBridge();
+    installWindow(cancelling);
+    await expect(shell.selectStandardPackagePath("标准包文件")).resolves.toBeNull();
+
+    const bridge=fakeBridge({select_file:vi.fn(async()=>"C:\标准 包\a.dststandard")});
+    installWindow(bridge);
+    await expect(shell.selectStandardPackagePath("标准包文件")).resolves.toBe("C:\标准 包\a.dststandard");
+  });
+
+  it("无桥或旧壳缺 select_file 时返回 undefined（调用方走显式路径开发态）",async()=>{
+    installWindow(null);
+    await expect(shell.selectStandardPackagePath("标准包文件")).resolves.toBeUndefined();
+    installWindow({on_files_dropped:vi.fn(async()=>{})});
+    await expect(shell.selectStandardPackagePath("标准包文件")).resolves.toBeUndefined();
+  });
+});

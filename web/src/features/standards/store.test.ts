@@ -34,7 +34,9 @@ function deferredStandardApi(): StandardApi & {resolveDetail: (standardId: strin
     createDraft: vi.fn(),
     saveDraft: vi.fn(),
     publish: vi.fn(),
-    importPackage: vi.fn(),
+    previewImport: vi.fn(),
+    confirmImport: vi.fn(),
+    cancelImport: vi.fn(),
     deleteDraft: vi.fn(),
     inspectAsset: vi.fn(),
   } as unknown as StandardApi;

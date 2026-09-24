@@ -1,3 +1,10 @@
+## 2026-09-25（PLAN-DM-041 Task 7：原生选择与唯一导入弹窗的预检/确认状态）
+
+- 壳固定种类新增 `dststandard -> *.dststandard`（`FileKind`/`ShellFileKind` 同步），本地化描述仍无法扩大白名单；前端新增 `selectStandardPackagePath`（三态：`undefined`=无壳、`null`=取消、`string`=选中路径，取消不发起预检）。
+- 抽出唯一导入弹窗 `StandardImportDialog.vue`，欢迎页「导入标准包」与标准库入口进入同一弹窗，覆盖未选择/预检中/可确认/受阻/导入中/成功六态：桌面壳用原生选择并只读展示已选路径，无壳本地开发态显示明确标注的本机路径输入，桥迟到注入后自动离开开发态；空路径禁用提交、预检与导入期间防重复提交；预先/确认冲突与失败留在弹窗并保留路径（取消失败只影响快照清理时机）；换文件、取消与凭证过期均清除旧预检并取消服务端凭证；成功后刷新列表、展开目标 ID 组并定位到导入版本。
+- 删除前端 `importPackage({path})` 路径（服务端已只接受 `preview_id`），改为 `previewImport` / `confirmImport` / `cancelImport`；弹窗复用 `dialogFocus` 的初始焦点、Tab/Shift+Tab 圈闭、Escape 与焦点归还，错误区用 `role=alert`，按钮与路径均有可访问名称。
+- 验证：`uv run pytest -q` 全量 **2184 项 / 0 failed / 0 error / 74 skipped**（含新增的壳 `dststandard` 过滤器与 pywebview `parse_file_type` 兼容性用例）；`npm --prefix web run test:unit` **336 例**（含新增导入弹窗状态机 10 例与 `selectStandardPackagePath` 4 例）、`check:api`/`check:i18n`（1619 键）/`check:ui`/`build` 均绿；全量 Playwright **682 passed**（含新增的「预检冲突留在弹窗」、「预检通过后确认并定位新版本」、「无壳开发态与桥迟到注入」三例）。
+
 ## 2026-09-25（PLAN-DM-041 Task 6：移除版本输入并按 ID 归集标准库）
 
 - 标准库视图模型改为**按 `standard_id` 归集**：组内已发布版本按整数**降序**（`v10` 排在 `v9` 前）、草稿按稳定 `draft_id` 排序；组标题取当前筛选结果中最高整数版本的名称（仅有草稿时用标准 ID），历史版本保留自己的原名；来源/状态/搜索筛选只保留匹配版本与组。左栏改为带 `aria-expanded` 的组头（键盘可收起/展开，展开用 `v-show`），每个版本行显示 `v<n>`、来源与状态，选择仍用完整身份键。

@@ -9,7 +9,10 @@ import type {
   CopyAssetFileInput,
   CreateDraftFromDstInput,
   CreateDraftInput,
+  ConfirmImportInput,
   ImportedStandardDraft,
+  ImportPreviewInput,
+  ImportPreviewResult,
   InspectAssetInput,
   PublishInput,
   PublishedStandard,
@@ -28,7 +31,9 @@ export interface StandardApi {
   saveDraft(input: SaveDraftInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
-  importPackage(input: {path: string}): Promise<PublishedStandard>;
+  previewImport(input: ImportPreviewInput): Promise<ImportPreviewResult>;
+  confirmImport(input: ConfirmImportInput): Promise<PublishedStandard>;
+  cancelImport(previewId: string): Promise<void>;
   deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
   copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
@@ -63,7 +68,9 @@ export interface StandardStore {
   saveDraft(input: SaveDraftInput): Promise<StandardDraft>;
   createDraftFromDst(input: CreateDraftFromDstInput): Promise<ImportedStandardDraft>;
   publish(input: PublishInput): Promise<PublishedStandard>;
-  importPackage(input: {path: string}): Promise<PublishedStandard>;
+  previewImport(input: ImportPreviewInput): Promise<ImportPreviewResult>;
+  confirmImport(input: ConfirmImportInput): Promise<PublishedStandard>;
+  cancelImport(previewId: string): Promise<void>;
   deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
   /** 本机模板受控复制：成功时返回包内相对路径（草稿文件行只保存它）。 */
@@ -209,7 +216,9 @@ export function createStandardStore(api: StandardApi): StandardStore {
     saveDraft: (input) => runAction(() => api.saveDraft(input)),
     createDraftFromDst: (input) => runAction(() => api.createDraftFromDst(input)),
     publish: (input) => runAction(() => api.publish(input)),
-    importPackage: (input) => runAction(() => api.importPackage(input)),
+    previewImport: (input) => runAction(() => api.previewImport(input)),
+    confirmImport: (input) => runAction(() => api.confirmImport(input)),
+    cancelImport: (previewId) => runAction(() => api.cancelImport(previewId)),
     deleteDraft: (draftId) => runAction(() => api.deleteDraft(draftId)),
     inspectAsset: (input) => runAction(() => api.inspectAsset(input)),
     copyAssetFile: (input) => runAction(() => api.copyAssetFile(input)),

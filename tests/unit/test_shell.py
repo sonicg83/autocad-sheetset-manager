@@ -88,6 +88,7 @@ def _bridge_with_recording_window(result=None):
         ("template", "DWG DWT 文件", "*.dwg;*.dwt"),
         ("exe", "可执行程序", "*.exe"),
         ("dll", "NET 程序集", "*.dll"),
+        ("dststandard", "标准包文件", "*.dststandard"),
     ],
 )
 def test_select_file_composes_fixed_whitelist_per_kind(file_kind, description, patterns):
@@ -102,7 +103,7 @@ def test_select_file_composes_fixed_whitelist_per_kind(file_kind, description, p
 
 
 def test_select_file_composed_filters_match_pywebview_parse_format():
-    """壳桥直通 create_file_dialog：四种 kind 的组合过滤器必须通过 pywebview
+    """壳桥直通 create_file_dialog：五种 kind 的组合过滤器必须通过 pywebview
     parse_file_type（描述仅允许字母/数字/下标/空格），否则真实壳在对话框弹出前
     抛 ValueError；假桥 e2e 不经过该校验，需本契约测试守护。"""
     from webview.util import parse_file_type
@@ -112,6 +113,7 @@ def test_select_file_composed_filters_match_pywebview_parse_format():
         "template": "*.dwg;*.dwt",
         "exe": "*.exe",
         "dll": "*.dll",
+        "dststandard": "*.dststandard",
     }
     for file_kind, patterns in kind_patterns.items():
         bridge, window = _bridge_with_recording_window(["C:\\work\\x"])
