@@ -5,7 +5,6 @@
 超大条目与非法 Schema，不解压任何未通过校验的条目。
 """
 
-import posixpath
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -56,18 +55,22 @@ def _error(code: str, detail: str) -> StandardPackageError:
 
 
 def _normalize_entry_name(name: str) -> str | None:
-    """规范化 zip 条目名；目录条目返回 None，非法路径抛错。"""
-    if name.endswith("/"):
-        return None
+    """规范化 zip 条目名；目录条目返回 None，非法路径抛错。
+
+    ``assets/../A2.dwg`` 这类逃逸条目必须在归一化**前**按分量拒绝：先
+    ``normpath`` 会把它洗成合法的 ``A2.dwg``（F15）。
+    """
     if not name or name.startswith(("/", "\\")):
         raise _error("STANDARD_PACKAGE_PATH_INVALID", f"条目 {name!r} 不是合法相对路径")
-    if ":" in name.split("/", 1)[0]:
+    parts = name.replace("\\", "/").split("/")
+    if ":" in parts[0]:
         raise _error("STANDARD_PACKAGE_PATH_INVALID", f"条目 {name!r} 疑似绝对路径")
-    normalized = posixpath.normpath(name.replace("\\", "/"))
-    parts = normalized.split("/")
-    if any(part in ("", ".", "..") for part in parts):
-        raise _error("STANDARD_PACKAGE_PATH_INVALID", f"条目 {name!r} 包含逃逸分量")
-    return normalized
+    is_directory = name.endswith("/")
+    if is_directory:
+        parts = parts[:-1]
+    if not parts or any(part in ("", ".", "..") for part in parts):
+        raise _error("STANDARD_PACKAGE_PATH_INVALID", f"条目 {name!r} 包含空段或逃逸分量")
+    return None if is_directory else "/".join(parts)
 
 
 class StandardPackageReader:

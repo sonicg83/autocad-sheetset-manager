@@ -37,6 +37,12 @@ from dst_manager.domain.standards import (
     parse_standard_draft_document,
 )
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
+from dst_manager.infrastructure.standards.asset_paths import (
+    StandardAssetError,
+    resolve_asset_files,
+    validate_asset_files,
+    validate_package_asset_files,
+)
 from dst_manager.infrastructure.standards.package import (
     MANIFEST_NAME,
     LoadedStandardPackage,
@@ -104,6 +110,11 @@ def _error(code: str, detail: str) -> StandardStoreError:
 
 def _identity_collision(standard_id: str, version: str) -> StandardStoreError:
     return _error("STANDARD_VERSION_EXISTS", f"标准 {standard_id}@{version} 已存在")
+
+
+def _asset_gate_error(exc: StandardAssetError) -> StandardStoreError:
+    """资产门禁错误保留稳定码前缀，统一以仓储错误类型向上传递。"""
+    return StandardStoreError(str(exc))
 
 
 def _safe_segment(value: str, kind: str) -> str:
@@ -327,6 +338,11 @@ class StandardStore:
         if draft is None:
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
         standard = _published_or_store_error(draft.document)
+        try:
+            # 发布前最终门禁：声明的模板资产必须真实落在草稿受控目录内。
+            validate_asset_files(standard, self._draft_dir(draft_id))
+        except StandardAssetError as exc:
+            raise _asset_gate_error(exc) from exc
         target = self._assert_identity_free(standard.standard_id, standard.version)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -356,6 +372,13 @@ class StandardStore:
         gate = _publish_gate_error(standard)
         if gate is not None:
             raise gate
+        try:
+            # 导入门禁在建任何目录之前：清单与包内条目必须双向一致。
+            validate_package_asset_files(
+                standard, [entry.path for entry in loaded.entries]
+            )
+        except StandardAssetError as exc:
+            raise _asset_gate_error(exc) from exc
         target = self._assert_identity_free(standard.standard_id, standard.version)
         target.parent.mkdir(parents=True, exist_ok=True)
         staging = self._published_root / f".import-{uuid.uuid4().hex}"
@@ -419,18 +442,19 @@ class StandardStore:
             raise _error(
                 "STANDARD_VERSION_NOT_FOUND", f"标准 {standard_id}@{version} 不存在"
             )
+        standard = _published_or_store_error(self._read_document(source))
+        try:
+            # 只导出文档声明且校验通过的资产；草稿临时文件一律不进口袋。
+            assets = resolve_asset_files(standard, source)
+        except StandardAssetError as exc:
+            raise _asset_gate_error(exc) from exc
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         package = dest / f"{standard_id}-{version}.dststandard"
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.write(
-                source / DOCUMENT_NAME, arcname=MANIFEST_NAME
-            )
-            assets = source / "assets"
-            if assets.is_dir():
-                for file in sorted(assets.rglob("*")):
-                    if file.is_file():
-                        archive.write(file, arcname=file.relative_to(source).as_posix())
+            archive.write(source / DOCUMENT_NAME, arcname=MANIFEST_NAME)
+            for arcname, file in assets:
+                archive.write(file, arcname=arcname)
         return package
 
 

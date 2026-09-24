@@ -329,3 +329,154 @@ def test_list_skips_illegal_historical_draft_directories(store: StandardStore) -
     # 非法历史目录只被跳过，不被删除
     assert (store.drafts_root / ("d" * 200) / "document.json").is_file()
     assert (store.drafts_root / " draft-legacy" / "document.json").is_file()
+
+
+# ---- 发布侧资产硬门禁（PLAN-DM-040 Task 2，F02） --------------------------
+
+ILLEGAL_ASSET_PATHS = (
+    "C:\\outside\\secret.dwg",
+    "\\\\server\\share\\secret.dwg",
+    "../outside.dwg",
+    "assets/../../outside.dwg",
+    "assets\\..\\outside.dwg",
+)
+
+
+def asset_document(*paths: str, asset_id: str = "templates") -> dict[str, object]:
+    document = standard_document()
+    document["assets"] = [
+        {
+            "asset_id": asset_id,
+            "kind": "base-template",
+            "files": [{"path": path} for path in paths],
+        }
+    ]
+    return document
+
+
+def write_draft_asset(store: StandardStore, draft_id: str, relative: str, data: bytes) -> Path:
+    target = store.drafts_root / draft_id / Path(relative)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return target
+
+
+@pytest.mark.parametrize("asset_path", ILLEGAL_ASSET_PATHS)
+def test_publish_rejects_illegal_asset_path(store: StandardStore, asset_path: str) -> None:
+    create_draft(store, asset_document(asset_path), draft_id="draft-asset")
+    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_PATH_INVALID"):
+        store.publish("draft-asset")
+    assert (store.drafts_root / "draft-asset" / "document.json").is_file()
+    assert not (store.published_root / "user.water").exists()
+
+
+def test_publish_rejects_missing_asset_file(store: StandardStore) -> None:
+    create_draft(store, asset_document("assets/missing.dwg"), draft_id="draft-asset")
+    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
+        store.publish("draft-asset")
+    assert (store.drafts_root / "draft-asset" / "document.json").is_file()
+    assert not (store.published_root / "user.water").exists()
+
+
+def test_publish_rejects_asset_symlink_outside_root(store: StandardStore) -> None:
+    create_draft(store, asset_document("assets/linked.dwg"), draft_id="draft-asset")
+    outside = store.drafts_root.parent / "outside.dwg"
+    outside.write_bytes(b"outside-dwg")
+    link = store.drafts_root / "draft-asset" / "assets" / "linked.dwg"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境不允许创建符号链接")
+    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_PATH_INVALID"):
+        store.publish("draft-asset")
+    assert outside.read_bytes() == b"outside-dwg"
+    assert not (store.published_root / "user.water").exists()
+
+
+def test_publish_accepts_existing_asset_files(store: StandardStore) -> None:
+    create_draft(
+        store,
+        asset_document("assets/A2.dwg", "assets/模板/标题栏.dwg"),
+        draft_id="draft-asset",
+    )
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
+    write_draft_asset(store, "draft-asset", "assets/模板/标题栏.dwg", b"title")
+
+    published = store.publish("draft-asset")
+    assert (published.root / "assets" / "A2.dwg").is_file()
+    assert (published.root / "assets" / "模板" / "标题栏.dwg").is_file()
+
+
+# ---- 导入/导出资产硬门禁（PLAN-DM-040 Task 2，F02/F15） --------------------
+
+
+def write_package(
+    path: Path, document: dict, entries: dict[str, bytes] | None = None
+) -> Path:
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(document, ensure_ascii=False))
+        for name, data in (entries or {}).items():
+            archive.writestr(name, data)
+    return path
+
+
+def test_import_rejects_missing_declared_asset(store: StandardStore, tmp_path: Path) -> None:
+    package = write_package(tmp_path / "missing.dststandard", asset_document("assets/A2.dwg"))
+    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
+        store.import_package(package)
+    assert store.get("user.water", "3.0.0") is None
+    assert not (store.published_root / "user.water" / "3.0.0").exists()
+    assert not list(store.published_root.glob(".import-*"))
+
+
+def test_import_rejects_undeclared_package_entry(store: StandardStore, tmp_path: Path) -> None:
+    package = write_package(
+        tmp_path / "extra.dststandard",
+        asset_document("assets/A2.dwg"),
+        {"assets/A2.dwg": b"a2", "assets/extra.dwg": b"extra"},
+    )
+    with pytest.raises(StandardStoreError, match="STANDARD_PACKAGE_INVALID"):
+        store.import_package(package)
+    assert store.get("user.water", "3.0.0") is None
+    assert not (store.published_root / "user.water" / "3.0.0").exists()
+
+
+def test_import_accepts_package_whose_entries_match_manifest(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    package = write_package(
+        tmp_path / "ok.dststandard",
+        asset_document("assets/A2.dwg", "assets/模板/标题栏.dwg"),
+        {"assets/A2.dwg": b"a2", "assets/模板/标题栏.dwg": b"title"},
+    )
+    published = store.import_package(package)
+    assert (published.root / "assets" / "A2.dwg").read_bytes() == b"a2"
+    assert (published.root / "assets" / "模板" / "标题栏.dwg").read_bytes() == b"title"
+    assert not list(store.published_root.glob(".import-*"))
+
+
+def test_export_package_only_writes_declared_assets(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    create_draft(store, asset_document("assets/A2.dwg"), draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
+    write_draft_asset(store, "draft-asset", "assets/tmp-unreferenced.dwg", b"tmp")
+    store.publish("draft-asset")
+
+    exported = store.export_package("user.water", "3.0.0", tmp_path / "out")
+    with zipfile.ZipFile(exported) as archive:
+        assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
+
+
+def test_export_package_rejects_missing_asset_on_disk(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    create_draft(store, asset_document("assets/A2.dwg"), draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
+    published = store.publish("draft-asset")
+    (published.root / "assets" / "A2.dwg").unlink()
+
+    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
+        store.export_package("user.water", "3.0.0", tmp_path / "out")
+    assert not list((tmp_path / "out").glob("*.dststandard"))

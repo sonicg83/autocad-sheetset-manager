@@ -694,7 +694,12 @@ def test_candidate_without_template_files_is_unavailable(
 ) -> None:
     publish_standard(client, root)
     publish_standard(
-        client, root, document=MISSING_ASSET_DOCUMENT, asset_files={}, draft_id="draft-missing"
+        client, root, document=MISSING_ASSET_DOCUMENT, draft_id="draft-missing"
+    )
+    # 发布门禁保证资产在发布时必须存在；这里模拟发布后模板文件被外部删除/移动，
+    # 候选列表仍必须给出稳定原因而不是把坏标准当成可选。
+    shutil.rmtree(
+        published_root(root, standard_id="szmedi.missing", version="1.0.0") / "templates"
     )
     candidates = {
         item["standard_id"]: item

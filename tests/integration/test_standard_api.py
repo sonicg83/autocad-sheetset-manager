@@ -450,6 +450,80 @@ def test_identity_codes_name_the_offending_segment(tmp_path: Path) -> None:
         store.get("szmedi.gas", "..")
 
 
+# ---- 资产硬门禁 HTTP 入口（PLAN-DM-040 Task 2，F02） ----------------------
+
+
+def asset_document(*paths: str) -> dict:
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["assets"] = [
+        {
+            "asset_id": "templates",
+            "kind": "base-template",
+            "files": [{"path": path} for path in paths],
+        }
+    ]
+    return document
+
+
+def write_api_package(path: Path, document: dict, entries: dict[str, bytes] | None = None) -> Path:
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(document, ensure_ascii=False))
+        for name, data in (entries or {}).items():
+            archive.writestr(name, data)
+    return path
+
+
+def test_publish_rejects_draft_with_missing_asset(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, asset_document("assets/missing.dwg"), "draft-asset")
+
+    response = client.post("/api/standards/drafts/draft-asset/publish")
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "STANDARD_ASSET_FILE_MISSING"
+    assert client.get("/api/standards/drafts/draft-asset").status_code == 200
+    assert [
+        item
+        for item in client.get("/api/standards").json()
+        if item["status"] == "published"
+    ] == []
+
+
+def test_publish_rejects_draft_with_absolute_asset_path(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, asset_document("C:\\outside\\secret.dwg"), "draft-asset")
+
+    response = client.post("/api/standards/drafts/draft-asset/publish")
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "STANDARD_ASSET_PATH_INVALID"
+    assert client.get("/api/standards/drafts/draft-asset").status_code == 200
+
+
+def test_import_rejects_package_with_missing_asset(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "missing.dststandard", asset_document("assets/A2.dwg")
+    )
+    response = client.post("/api/standards/import", json={"path": str(package)})
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "STANDARD_ASSET_FILE_MISSING"
+    assert client.get("/api/standards").json() == []
+
+
+def test_export_includes_only_declared_assets(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, asset_document("assets/A2.dwg"), "draft-asset")
+    assets = tmp_path / "data" / "standards" / "user" / "drafts" / "draft-asset" / "assets"
+    assets.mkdir(parents=True)
+    (assets / "A2.dwg").write_bytes(b"a2")
+    (assets / "tmp-unreferenced.dwg").write_bytes(b"tmp")
+    assert client.post("/api/standards/drafts/draft-asset/publish").status_code == 200
+
+    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    assert exported.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
+
+
 def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     make_draft(client, DRAFT_DOCUMENT, "draft-gas")

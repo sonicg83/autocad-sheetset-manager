@@ -14,6 +14,10 @@ from dst_manager.domain.models import Severity, ValidationIssue
 from dst_manager.domain.standards import parse_standard_draft_document
 from dst_manager.infrastructure.acsm_xml import AcsmValidationError
 from dst_manager.infrastructure.dst_codec import CodecError
+from dst_manager.infrastructure.standards.asset_paths import (
+    StandardAssetError,
+    resolve_asset_file,
+)
 from dst_manager.infrastructure.standards.dst_import import (
     ImportedStandardDraft,
     extract_standard_document,
@@ -92,17 +96,13 @@ class StandardAssetOperations:
 
     @staticmethod
     def _asset_file(draft_dir: Path, relative: str) -> Path | None:
-        candidate = Path(relative)
-        if (
-            not relative
-            or candidate.is_absolute()
-            or ".." in candidate.parts
-            or candidate.drive
-        ):
+        """复用仓储同源的资产路径边界；非法路径转 422，缺失文件返回 None。"""
+        try:
+            resolved = resolve_asset_file(draft_dir, relative)
+        except StandardAssetError as exc:
             raise ApplicationError(
-                "STANDARD_ASSET_PATH_INVALID", f"资产文件路径 {relative!r} 非法", 422
-            )
-        resolved = draft_dir / candidate
+                str(exc).split(":", 1)[0], str(exc), 422
+            ) from exc
         return resolved if resolved.is_file() else None
 
     def _read_layouts(self, source: Path, cad_version: str):

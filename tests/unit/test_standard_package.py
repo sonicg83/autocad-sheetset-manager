@@ -87,6 +87,25 @@ def test_package_rejects_parent_path(tmp_path: Path) -> None:
         StandardPackageReader().read(package)
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "assets/../A2.dwg",
+        "assets\\..\\A2.dwg",
+        "assets/./A2.dwg",
+        "./assets/A2.dwg",
+        "assets//A2.dwg",
+    ],
+)
+def test_package_rejects_escaping_component_before_normalization(
+    tmp_path: Path, entry: str
+) -> None:
+    """F15：`assets/../A2.dwg` 归一化为 `A2.dwg` 后不得被当成合法条目。"""
+    package = write_zip(tmp_path, {"manifest.json": VALID_MANIFEST, entry: b"x"})
+    with pytest.raises(StandardPackageError, match="STANDARD_PACKAGE_PATH_INVALID"):
+        StandardPackageReader().read(package)
+
+
 def test_package_rejects_absolute_path(tmp_path: Path) -> None:
     package = write_zip(tmp_path, {"manifest.json": VALID_MANIFEST, "/etc/passwd": b"x"})
     with pytest.raises(StandardPackageError, match="STANDARD_PACKAGE_PATH_INVALID"):

@@ -1,3 +1,10 @@
+## 2026-09-24（PLAN-DM-040 Task 2：资产存在性硬门禁）
+
+- 修复 F02/F15：新增 `infrastructure/standards/asset_paths.py`，发布、导入、导出共用「路径合法 + 文件存在 + 清单一致」三重门禁。草稿声明 `assets/missing.dwg`、绝对路径/UNC/`..` 或指向受控目录外的符号链接时，`publish()` 以 `STANDARD_ASSET_FILE_MISSING`/`STANDARD_ASSET_PATH_INVALID` 拒绝（原先 200 且草稿被移动）；包导入要求清单与包内条目双向一致，缺失以 `STANDARD_ASSET_FILE_MISSING`、夹带未声明条目以 `STANDARD_PACKAGE_INVALID` 拒绝，且在建目录前完成校验；`export_package()` 只导出文档声明且校验通过的资产，不再把草稿临时文件打进包。
+- `package.py` 条目规范化改为先按分量拒绝空段/`.`/`..` 再拼接，`assets/../A2.dwg`、`assets\..\A2.dwg` 不再被 `normpath` 洗成合法条目。资产检查（应用层 `_asset_file`）复用同一路径边界。
+- 既有创建侧用例 `test_candidate_without_template_files_is_unavailable` 改为「正常发布后删除模板文件」，保留“发布后文件丢失时候选仍给出稳定原因”的原意（发布时即缺失现由新门禁覆盖）。
+- 新增回归：`test_standard_store.py`（5 类非法资产路径、缺失文件、根外符号链接、合法中文子目录、导入缺失/夹带、导出白名单与缺文件）、`test_standard_package.py`（逃逸分量）、`test_standard_api.py`（发布/导入 HTTP 422、导出条目白名单）。
+
 ## 2026-09-24（PLAN-DM-040 Task 1：封闭草稿与身份路径段）
 
 - 修复 F04/F17：`StandardStore` 新增 `_safe_segment`/`_draft_dir`/`_published_dir`，草稿段与 `standard_id`/`version` 身份段一律拒绝相对分量（`..`/`%2E%2E`）、路径分隔符、盘符、首尾空白、尾随点、Windows 保留设备名、控制字符与超长输入；`create_draft` 显式空串按非法拒绝。`GET /api/standards/%2E%2E/%2E%2E` 由 200（返回标准库根外 `document.json` 全文）改为 422，`/export` 不再把根外目录打成 zip；`get`/`get_document`/`export_package` 与身份保存入口共用同一边界。
