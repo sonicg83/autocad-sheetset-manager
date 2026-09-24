@@ -744,3 +744,12 @@ git commit -m "交付标准驱动的新图纸集创建"
 UI 证据口径：浅深主题、900×768 与 200% 缩放（CSS `zoom: 2`，与既有视觉证据 spec 同口径）下的整页不横溢与主表自身横向滚动由 `web/tests/e2e/create-sheetset-review.spec.ts` 自动断言；键盘与模态焦点回归（打开、Tab 圈定、Esc/关闭退出、焦点归还）由同一 spec 断言；桌面壳文件夹选择由 Task 8 的 `create-sheetset-input.spec.ts` 覆盖（本任务保持通过）。
 
 Task 9 实施中的偏差（已由控制方裁决）：创建任务的进度复用全局任务浮层的**同一任务面板组件与同一终态集合**，但 `TaskOverlay` 受 `hasWorkspace` 门控、创建期尚无普通工作区，故创建进度在向导的「检查并创建」页内呈现；为此把 `web/src/App.vue`、`web/src/composables/useWorkspaceLifecycle.ts`（新增 `openWorkspaceById`）与 `web/src/composables/useJobMonitor.ts`（导出共享终态集合）纳入本次变更集。
+
+## 整分支最终复核与修复波（2026-09-24）
+
+- 范围：`c657ab5..556eb35`（19 提交，含用户自行提交的无关改动 `823f46e`「pytest 默认并行」，未纳入结论）。复核方式：全新上下文审查者按「领域 / 基础设施与事务与 API / 前端 / 证据自洽」四遍只读复核，并逐条 triage 各任务延后的 Minor。
+- 结论：**With fixes**，0 Critical / 1 Important。Important 为「创建任务全程不续租（无 heartbeat），并发恢复会误回收在飞任务，代价是成果已生成却报失败」；另将台账 T5「`render_create_layouts`/`LayoutCreationRequest` 零直接测试」（本计划唯一新增的「用户文本进 SCR」seam）升级为合并前必须修。
+- 修复波（提交 `8bc3daf`，四项，各自先 RED 后 GREEN）：① 新增 `_LeaseRenewal`，与 `CadJobRunner` 同 `min(30, lease/3)` 节奏、同 `CREATION_JOB_LEASE_LOST` 语义，覆盖「每组之间」与「发布前」两处空档；② 补 `test_autocad_worker.py` 9 例 SCR seam 单测（结构顺序、引号包裹、8 类非法/重复输入构造期拒绝）；③ `creation_assets._candidate` 与 `StandardStore._read_document` 的异常面收宽（损坏 `document.json` 时候选列表仍 200 且该标准不可用且有原因）；④ 空目录名不再退化为上级目录（由既有 `CREATION_TARGET_PATH_EMPTY` 诊断承担，不新增错误码）。
+- 再复核（范围收窄到 `556eb35..8bc3daf`）：四项全部 **ADDRESSED**，无新增 Critical/Important。
+- 控制方独立复跑最终门禁（修复波之后）：`uv run ruff check .` 通过；`uv run pytest` **1900 passed / 74 skipped / 0 failed**（1974 collected，120.8s）；`uv lock --check` 通过；`npm run test:unit` **303 passed / 28 files**；`check:i18n` **1571 键 / 11 域**；`check:ui` 0 违规；`npm run build` 通过；全量 `npx playwright test` **654 passed**（其中 `main.spec.ts:290` 性能预算用例在满载并行下记为 1 flaky，单独重跑 `main.spec.ts` **129 passed**，判定为既有负载抖动而非回归）。
+- 未修残差项（含各任务延后的 Minor 与本次复核新增项）已登记到 [PLAN-DM-036 最终复核残差项](../../../todos/dst-manager/2026-09-24-plan-dm-036-deferred-minors.md)，不阻塞本计划主体交付。
