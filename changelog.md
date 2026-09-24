@@ -1,3 +1,11 @@
+## 2026-09-25（PLAN-DM-041 Task 8：端到端联验与归档）
+
+- 新增端到端闭环用例：受控草稿资产 → 自动发布 `v1` → 导出 `<standard_id>-v1.dststandard` → 预检 → 另一数据根确认导入 → 按 ID 归集定位 → 较早空缺版本 `2`/`3` 可导入 → 同名不同 ID 阻断 → 派生重新引入受控资产后发布得到 `v4`；同批覆盖发布失败回滚（422 `STANDARD_PUBLISH_FAILED`，草稿与受控资产保留、无空版本目录）。
+- 归档：SPEC-DM-019 转为 `accepted` 并新增 §12「实施验证」映射表；PLAN-DM-041 Task 1–7 与 Task 8 的自动门禁部分勾选完成、状态改 `active` 并记录实际验证命令与结果；补充 `docs/dst-manager/specs/assets/SPEC-DM-016/README.md` §五的 G9-2 追加桌面步骤（同源弹窗、固定 `*.dststandard` 过滤器、中文/空格/OneDrive 路径、冲突重试、键盘焦点、900×768 与 200% 缩放）；同步 `.planning/README.md`、计划索引与 `docs/dst-manager/README.md` 的状态与链接。
+- 门禁实测：`uv run ruff check .`、`uv lock --check`、`uv run pytest -q`（**2186 项 / 0 failed / 0 error / 74 skipped**）、`npm --prefix web run test:unit`（336 例）、`check:api`、`check:i18n`（1619 键）、`check:ui`、`build`（含 `vue-tsc -b`）与全量 Playwright（**682 passed**）全部通过。
+- **真实 Windows WebView2 G9 未执行**（按用户裁决留待有桌面条件时执行）：恢复条件为装有 WebView2 的 Windows 桌面 + 任一 `.dststandard`（可用导出的用户标准包）；执行前 PLAN-DM-041 保持 `active`，不得声明 G9 通过。PLAN-DM-040 的真实桌面 G9 与之并行待验。
+- 本次仅新增/调整测试、规范与索引；未改动标准包发布事务、DST/DWG 发布器、CAD SCR 或插件。
+
 ## 2026-09-25（PLAN-DM-041 Task 7：原生选择与唯一导入弹窗的预检/确认状态）
 
 - 壳固定种类新增 `dststandard -> *.dststandard`（`FileKind`/`ShellFileKind` 同步），本地化描述仍无法扩大白名单；前端新增 `selectStandardPackagePath`（三态：`undefined`=无壳、`null`=取消、`string`=选中路径，取消不发起预检）。

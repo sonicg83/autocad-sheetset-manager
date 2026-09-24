@@ -2,9 +2,9 @@
 
 ## 定位与当前状态
 
-2026-09-25 新增 [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，draft）](specs/SPEC-DM-019-standard-version-and-package-import.md)：把标准发布版本固定为 `1..2147483647` 的正整数（文档升为 `schema_version: 2`，草稿不携带版本），本机发布由服务端在官方/用户库同 ID 的现有版本上分配 `max+1`，不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入改为“限时快照预检 + 凭证确认”两步。同步增量修订 [SPEC-DM-016](specs/SPEC-DM-016-drawing-standard-management-ui.md) §4.2/§5（两步导入与按 ID 归集）与 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)（`v<n>` 展示），并按新契约更新 [GUIDE-DM-007](guides/GUIDE-DM-007-official-standard-package-release.md)。实施计划为 [PLAN-DM-041](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)。
+2026-09-25 新增 [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，accepted）](specs/SPEC-DM-019-standard-version-and-package-import.md)：把标准发布版本固定为 `1..2147483647` 的正整数（文档升为 `schema_version: 2`，草稿不携带版本），本机发布由服务端在官方/用户库同 ID 的现有版本上分配 `max+1`，不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入改为“限时快照预检 + 凭证确认”两步。同步增量修订 [SPEC-DM-016](specs/SPEC-DM-016-drawing-standard-management-ui.md) §4.2/§5（两步导入与按 ID 归集）与 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)（`v<n>` 展示），并按新契约更新 [GUIDE-DM-007](guides/GUIDE-DM-007-official-standard-package-release.md)。实施计划为 [PLAN-DM-041](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)。
 
-2026-09-24 重写 [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，proposed）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)：保留原 F16／PLAN-DM-039 F7 的原生选择，扩展为服务端整数版本、按 ID 归集、限时快照预检与确认导入；与正在执行的 PLAN-DM-040 串行衔接。
+2026-09-25 实施 [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，active）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md) 的 Task 1–7 与 Task 8 自动门禁：标准发布版本改由服务端在官方/用户库上分配整数（草稿不携带版本）、不同 ID 名称按 NFKC + `casefold()` 唯一、标准库按 `standard_id` 归集并按整数降序、`.dststandard` 导入改为「限时快照预检 + 凭证确认」两步并由固定 `dststandard` 原生选择器驱动；长期契约见 [SPEC-DM-019](specs/SPEC-DM-019-standard-version-and-package-import.md)（已 `accepted`）。真实 Windows WebView2 G9 待用户执行，计划保持 `active`。
 
 2026-09-24 修订 [图纸标准平台审查问题修复计划（PLAN-DM-040，active）](../../.planning/plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：把草稿编辑器无法纳入本机 DWG、资产发布/导入硬门禁、编辑状态与 UI 契约，以及实测复现的身份路由越界（F17），共 F01–F15 与 F17 的 16 项问题拆成按 Step 执行的 10 个任务；原 F16 已拆为 PLAN-DM-041。任务 1–9 与任务 10 的闭环验证、全量门禁已实施（含真实 AutoCAD 2016 布局检查闭环），真实桌面 G9 仍待人工执行，因此计划保持 `active`。
 
@@ -85,7 +85,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 - [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
 - [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；版本展示已按 SPEC-DM-019 统一为 `v<n>`）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
-- [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，草稿；整数发布版本、无版本草稿、按 ID 名称唯一门禁、服务端版本分配与 `.dststandard` 两步预检导入，由 PLAN-DM-041 实施）](specs/SPEC-DM-019-standard-version-and-package-import.md)
+- [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已接受；整数发布版本、无版本草稿、按 ID 名称唯一门禁、服务端版本分配与 `.dststandard` 两步预检导入，由 PLAN-DM-041 Task 1–8 落地，§12 给出实施验证映射）](specs/SPEC-DM-019-standard-version-and-package-import.md)
 
 ## 研究与分析
 

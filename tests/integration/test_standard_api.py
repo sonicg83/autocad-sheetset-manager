@@ -9,6 +9,7 @@
 import copy
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -966,3 +967,183 @@ def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert "manifest.json" in archive.namelist()
+
+
+# ---- 整数版本与两步导入的端到端闭环（PLAN-DM-041 Task 8） -----------------
+
+
+def test_standard_package_full_loop_from_draft_asset_to_next_version(
+    tmp_path: Path,
+) -> None:
+    """受控草稿资产 → 自动发布 v1 → 导出 → 预检 → 另一数据根确认导入 → 按 ID 定位 → 再发布 v2。
+
+    同时覆盖：同名不同 ID 阻断、重复身份阻断、较早空缺版本允许、发布失败回滚。
+    """
+    publisher = make_client(tmp_path / "publisher")
+    template = tmp_path / "A2 模板.dwg"
+    template.write_bytes(b"dwg-bytes")
+    make_draft(publisher, DRAFT_DOCUMENT, "draft-gas")
+    copied = publisher.post(
+        "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(template)}
+    ).json()["path"]
+    document = {**DRAFT_DOCUMENT, "assets": [
+        {"asset_id": "templates", "kind": "base-template", "files": [{"path": copied}]}
+    ]}
+    assert (
+        publisher.put(
+            "/api/standards/drafts/draft-gas", json={"document": document}
+        ).status_code
+        == 200
+    )
+
+    # 自动发布 v1：服务端分配整数版本，草稿不携带版本
+    published = publisher.post("/api/standards/drafts/draft-gas/publish")
+    assert published.status_code == 200, published.text
+    assert published.json()["version"] == 1
+    assert publisher.get("/api/standards/szmedi.gas/1").status_code == 200
+
+    exported = publisher.get("/api/standards/szmedi.gas/1/export")
+    assert exported.status_code == 200
+    package = tmp_path / "szmedi.gas-v1.dststandard"
+    package.write_bytes(exported.content)
+    with zipfile.ZipFile(package) as archive:
+        assert sorted(archive.namelist()) == [copied, "manifest.json"]
+        manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+    assert (manifest["schema_version"], manifest["version"]) == (2, 1)
+
+    # 另一数据根：预检 → 确认导入
+    consumer = make_client(tmp_path / "consumer")
+    preview = consumer.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is True
+    assert preview.json()["existing_versions"] == []
+    confirmed = consumer.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["version"] == 1
+
+    # 按 ID 归集定位 v1：列表返回整数版本，导出文件名带 v 前缀
+    entries = consumer.get("/api/standards").json()
+    assert [(item["standard_id"], item["version"]) for item in entries] == [
+        ("szmedi.gas", 1)
+    ]
+    re_exported = consumer.get("/api/standards/szmedi.gas/1/export")
+    assert re_exported.status_code == 200
+
+    # 重复身份阻断：同一包再次预检以 can_import=false + 诊断呈现
+    duplicate = consumer.post(
+        "/api/standards/import-previews", json={"path": str(package)}
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["can_import"] is False
+    assert [item["code"] for item in duplicate.json()["diagnostics"]] == [
+        "STANDARD_VERSION_EXISTS"
+    ]
+
+    # 较早空缺版本允许：导入手工构造的 v3，再导入 v2 必须成功
+    for version in (3, 2):
+        package_at = write_api_package(
+            tmp_path / f"szmedi.gas-v{version}.dststandard",
+            {**document, "version": version},
+            {copied: b"dwg-bytes"},
+        )
+        preview_at = consumer.post(
+            "/api/standards/import-previews", json={"path": str(package_at)}
+        )
+        assert preview_at.json()["can_import"] is True, preview_at.text
+        assert (
+            consumer.post(
+                "/api/standards/import",
+                json={"preview_id": preview_at.json()["preview_id"]},
+            ).status_code
+            == 200
+        )
+    assert sorted(
+        item["version"] for item in consumer.get("/api/standards").json()
+    ) == [1, 2, 3]
+
+    # 同名不同 ID 阻断：预检以 STANDARD_NAME_CONFLICT 呈现，确认阶段以 409 拒绝
+    same_name = write_api_package(
+        tmp_path / "dupe.dststandard",
+        {**document, "standard_id": "other.gas", "version": 1},
+        {copied: b"dwg-bytes"},
+    )
+    blocked = consumer.post(
+        "/api/standards/import-previews", json={"path": str(same_name)}
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["can_import"] is False
+    assert [item["code"] for item in blocked.json()["diagnostics"]] == [
+        "STANDARD_NAME_CONFLICT"
+    ]
+    assert [item["standard_id"] for item in consumer.get("/api/standards").json()] == [
+        "szmedi.gas"
+    ] * 3
+
+    # 再发布：从已导入的 v1 派生新草稿。派生只复制文档，受控资产必须按编辑器同一
+    # 「选择本机模板」端点重新引入草稿目录，否则发布门禁会以 STANDARD_ASSET_FILE_MISSING 阻断。
+    detail = consumer.get("/api/standards/szmedi.gas/1").json()
+    derived = {key: value for key, value in detail["document"].items() if key != "version"}
+    assert consumer.post(
+        "/api/standards/drafts", json={"draft_id": "draft-v2", "document": derived}
+    ).status_code == 200
+    re_copied = consumer.post(
+        "/api/standards/drafts/draft-v2/asset-files", json={"source_path": str(template)}
+    ).json()["path"]
+    derived["assets"] = [
+        {"asset_id": "templates", "kind": "base-template", "files": [{"path": re_copied}]}
+    ]
+    assert (
+        consumer.put(
+            "/api/standards/drafts/draft-v2", json={"document": derived}
+        ).status_code
+        == 200
+    )
+    second_publish = consumer.post("/api/standards/drafts/draft-v2/publish")
+    assert second_publish.status_code == 200, second_publish.text
+    # 同 ID 在官方/用户库上取 max+1：已有 1、2、3，因此下一版为 4
+    assert second_publish.json()["version"] == 4
+    assert consumer.get("/api/standards/szmedi.gas/4").status_code == 200
+
+
+def test_publish_failure_keeps_draft_and_does_not_reserve_version(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """发布失败回滚：草稿与受控资产保留，不预留空版本目录。"""
+    client = make_client(tmp_path)
+    template = tmp_path / "A2 模板.dwg"
+    template.write_bytes(b"dwg-bytes")
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    copied = client.post(
+        "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(template)}
+    ).json()["path"]
+    document = {**DRAFT_DOCUMENT, "assets": [
+        {"asset_id": "templates", "kind": "base-template", "files": [{"path": copied}]}
+    ]}
+    client.put("/api/standards/drafts/draft-gas", json={"document": document})
+
+    real_replace = os.replace
+
+    def failing_replace(source, target):
+        raise OSError(13, "injected publish failure")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    try:
+        failed = client.post("/api/standards/drafts/draft-gas/publish")
+    finally:
+        monkeypatch.setattr(os, "replace", real_replace)
+
+    assert failed.status_code == 422, failed.text
+    assert failed.json()["code"] == "STANDARD_PUBLISH_FAILED"
+    # 草稿仍可按草稿门禁读回（无 version），受控资产仍在，标准库无条目
+    stored = client.get("/api/standards/drafts/draft-gas").json()["document"]
+    assert "version" not in stored
+    # 列表只剩这份未发布的草稿：失败不预留任何已发布版本
+    assert [
+        (item["status"], item["version"]) for item in client.get("/api/standards").json()
+    ] == [("draft", None)]
+    assert not (tmp_path / "data" / "standards" / "user" / "published" / "szmedi.gas").exists()
+    assert (
+        tmp_path / "data" / "standards" / "user" / "drafts" / "draft-gas" / copied
+    ).read_bytes() == b"dwg-bytes"

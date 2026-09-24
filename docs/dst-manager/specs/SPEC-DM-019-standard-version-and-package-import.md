@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-019
 title: 图纸标准版本身份与标准包预检导入规范
-status: draft
+status: accepted
 owners:
   - dst-manager
 created: 2026-09-25
@@ -339,3 +339,22 @@ DELETE /api/standards/import-previews/{preview_id}
 | 日期 | 说明 |
 | --- | --- |
 | 2026-09-25 | 首次建立：整数版本身份、无版本草稿、按 ID 名称唯一门禁、服务端版本分配、`.dststandard` 限时快照预检与凭证确认导入，以及预检信任模型与缓解措施。 |
+| 2026-09-25 | 随 PLAN-DM-041 Task 1–8 落地并转为 `accepted`：补充 §12 实施验证证据映射；真实桌面 G9 仍待执行。 |
+
+## 12. 实施验证（PLAN-DM-041 Task 1–8）
+
+| 契约点 | 承接与实测证据 |
+| --- | --- |
+| v2 文档格式与整数版本 | `tests/unit/test_drawing_standards.py`（接受 `1`/`10`；拒绝 `0`、`-1`、`True`、`1.5`、`"1"`、`"1.0.0"`、超上限、缺失与 `schema_version: 1`） |
+| 无版本草稿 | 同上（草稿携带 `version` 即 422）；`tests/unit/test_standard_service.py`、`tests/integration/test_standard_api.py` 的草稿级保存用例 |
+| 依赖三段版本与两个解析器 | `test_dependency_min_version_keeps_three_segment_string`（保留 `1.2.0`，拒绝 `1` 与 `"1"`） |
+| 版本分配 `max+1` 与上限 | `tests/unit/test_standard_store.py`：递增版本、官方更高版延续为 4、`STANDARD_VERSION_LIMIT_REACHED`、并发两发布得到 `[1, 2]`、注入移动失败后草稿与资产不丢 |
+| 名称唯一（NFKC + casefold） | 同文件：全角、首尾/连续空白、大小写与 `ẞ/ß` 四组归一冲突均 409；草稿不占名称；同 ID 跨版本改名允许 |
+| 两步导入与限时快照 | `tests/unit/test_standard_import_previews.py`（扩展名白名单、256 MiB、复制失败不留半成品、凭证随机、过期/取消/重启失效、快照清理、幂等回执） |
+| 预检与确认的 HTTP 契约 | `tests/integration/test_standard_api.py`：预检零新增、已有版本列表、`can_import=false` 冲突、源被替换/删除仍只消费快照、伪造凭证 404、取消后 404、确认前新增冲突 409、`{path}` 直接导入 422 |
+| 端到端闭环 | 同文件 `test_standard_package_full_loop_from_draft_asset_to_next_version`：受控草稿资产 → 自动 `v1` → 导出 → 预检 → 另一数据根确认导入 → 按 ID 定位 → 较早空缺版本 2/3 可导入 → 同名不同 ID 阻断 → 再发布得到 `v4` |
+| 发布失败回滚 | 同文件 `test_publish_failure_keeps_draft_and_does_not_reserve_version`：422 `STANDARD_PUBLISH_FAILED`，草稿与受控资产保留、无空版本目录 |
+
+真实桌面（WebView2）的 G9 检查项见
+[SPEC-DM-016 证据目录 §五](assets/SPEC-DM-016/README.md)；截至本规范接受时**尚未执行**，
+执行前不得声明 G9 通过。
