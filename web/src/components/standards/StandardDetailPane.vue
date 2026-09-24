@@ -20,7 +20,8 @@ const emit = defineEmits<{
   edit: [];
   /** 用于创建：把固定标准身份交给创建向导（PLAN-DM-036 Task 8）。 */
   useForCreate: [identity: StandardIdentity];
-  openVersion: [version: string];
+  /** 版本历史跳转：条目自带完整身份（来源 + 标准 ID + 版本），跨来源跳转不得沿用当前来源。 */
+  openVersion: [entry: {source: "official" | "user"; standard_id: string; version: string; name: string}];
 }>();
 
 const actions = computed(() => (props.summary === null ? null : detailActions(props.summary)));
@@ -85,8 +86,12 @@ const documentCounts = computed(() => {
       <div v-if="versions.length > 0" class="detail-versions">
         <h4>{{ $t("standards.detail.versionHistory") }}</h4>
         <ul>
-          <li v-for="entry in versions" :key="entry.version">
-            <button type="button" class="version-link" @click="emit('openVersion', entry.version)">
+          <li v-for="entry in versions" :key="`${entry.source}/${entry.version}`">
+            <button
+              type="button"
+              class="version-link"
+              @click="emit('openVersion', {source: entry.source, standard_id: summary.standard_id, version: entry.version, name: summary.name})"
+            >
               v{{ entry.version }} · {{ $t(entry.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}
             </button>
           </li>

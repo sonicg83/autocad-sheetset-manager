@@ -155,9 +155,23 @@ async function select(summary: StandardSummary): Promise<void> {
   else await apply();
 }
 
-function openVersion(version: string): void {
-  if (selected.value === null) return;
-  void select({...selected.value, status: "published", version, draft_id: null});
+function openVersion(entry: {source: "official" | "user"; standard_id: string; version: string; name: string}): void {
+  // 版本历史跳转：按条目自身身份选中（跨官方/用户来源时不得沿用当前来源）
+  const known = store.summaries.value.find(item =>
+    item.status === "published"
+    && item.source === entry.source
+    && item.standard_id === entry.standard_id
+    && item.version === entry.version,
+  );
+  const summary: StandardSummary = known ?? {
+    source: entry.source,
+    status: "published",
+    standard_id: entry.standard_id,
+    version: entry.version,
+    name: entry.name,
+    draft_id: null,
+  };
+  void select(summary);
 }
 
 const draftCount = computed(() => store.summaries.value.filter(item => item.status === "draft").length);
@@ -177,7 +191,9 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
   let created: {draft_id: string; document: Record<string, unknown>};
   try {
     if (origin !== null) {
-      const base = store.detail.value?.document;
+      // 派生只消费身份匹配且已完成加载的详情：B 在途/加载失败时绝不复制 A（F08）
+      const identity = {standardId: origin.standard_id, version: origin.version};
+      const base = store.detailMatches(identity) ? store.detail.value?.document : undefined;
       if (base === undefined) {
         // 派生必须基于已加载的发布版本文档：缺详情不提交，保留对话框与可见原因
         store.actionError.value = t("standards.create.deriveNeedsDetail");

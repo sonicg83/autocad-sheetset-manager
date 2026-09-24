@@ -247,6 +247,74 @@ test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({pag
   expect(new Set(state.inspectDraftIds)).toEqual(new Set(["draft-new-1"]));
 });
 
+// ---- 陈旧详情与版本跳转（PLAN-DM-040 Task 6，F08/F09） --------------------
+
+test("切换选择后派生只消费已加载且身份匹配的详情", async ({page}) => {
+  const state = await installStandards(
+    page,
+    [
+      published("official", "1.0.0", {standard_id: "official.gas", name: "官方燃气标准"}),
+      published("official", "2.0.0", {standard_id: "official.water", name: "官方给水标准"}),
+    ],
+    {
+      detailFailures: {
+        "official.water": {status: 404, code: "STANDARD_VERSION_NOT_FOUND", message: "标准不存在"},
+      },
+      detailDocuments: {
+        // 两份详情内容可区分：派生来源必须是当前标准的文档
+        "official.gas@1.0.0": draftDocument({standard_id: "official.gas", version: "1.0.0", name: "官方燃气标准", numbering: {sequence_field: "subset.sequence", digits: 2}}),
+        "official.water@2.0.0": draftDocument({standard_id: "official.water", version: "2.0.0", name: "官方给水标准", numbering: {sequence_field: "subset.sequence", digits: 3}}),
+      },
+    },
+  );
+  await openStandards(page);
+  const detail = page.getByRole("region", {name: "标准详情"});
+  await libraryItems(page).filter({hasText: "官方燃气标准"}).click();
+  await expect(detail).toContainText("official.gas");
+
+  // 切到加载失败的 B：旧详情不得继续可用，派生不得基于 A 提交
+  await libraryItems(page).filter({hasText: "官方给水标准"}).click();
+  await expect(detail).not.toContainText("official.gas");
+  await page.getByRole("button", {name: "派生新草稿"}).click();
+  const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
+  await dialog.getByLabel("标准名称").fill("派生草稿");
+  await dialog.getByRole("button", {name: "创建草稿"}).click();
+  await expect(page.getByText("请先加载要派生的已发布版本详情。")).toBeVisible();
+  expect(state.createBodies).toEqual([]);
+
+  // B 恢复加载后重新派生：来源必须是 B 的文档
+  delete state.detailFailures["official.water"];
+  await dialog.getByRole("button", {name: "取消"}).click();
+  await libraryItems(page).filter({hasText: "官方燃气标准"}).click();
+  await libraryItems(page).filter({hasText: "官方给水标准"}).click();
+  await expect(detail).toContainText("official.water");
+  await page.getByRole("button", {name: "派生新草稿"}).click();
+  await dialog.getByLabel("标准名称").fill("派生草稿");
+  await dialog.getByRole("button", {name: "创建草稿"}).click();
+
+  await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
+  expect(state.createBodies).toHaveLength(1);
+  const created = state.createBodies[0] as {document: Record<string, unknown>};
+  expect(created.document["standard_id"]).toBe("official.water");
+  expect((created.document["numbering"] as {digits: number}).digits).toBe(3);
+});
+
+test("版本历史跨官方与用户来源时选中正确标准", async ({page}) => {
+  await installStandards(page, [
+    published("official", "2.1.0", {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
+    published("user", "2.0.0", {standard_id: "szmedi.gas", name: "市政燃气施工图"}),
+  ]);
+  await openStandards(page);
+  await libraryItems(page).filter({hasText: "2.1.0"}).click();
+  await expect(page.getByText("官方标准只读")).toBeVisible();
+
+  // 版本历史条目自带来源：点击用户版本必须切换到用户来源，而不是沿用官方
+  await page.getByRole("button", {name: "v2.0.0 · 用户"}).click();
+  await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
+  await expect(page.getByText("官方标准只读")).toHaveCount(0);
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("szmedi.gas");
+});
+
 test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
   await page.setViewportSize({width: 900, height: 768});

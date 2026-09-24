@@ -110,6 +110,8 @@ export interface StandardsFixtureState {
   assetCopyCalls: {draftId: string; sourcePath: string}[];
   /** 可变的复制失败注入（模拟后端稳定拒绝）。 */
   assetCopyFailure: {status: number; code: string; message: string} | null;
+  /** 可变的详情加载失败注入（standard_id → 错误响应；可中途清空重试）。 */
+  detailFailures: Record<string, {status: number; code: string; message: string}>;
   /** 可变的发布失败注入。 */
   publishFailure: {status: number; code: string; message: string} | null;
   publishCalls: number;
@@ -128,6 +130,10 @@ export type StandardsFixtureOptions = {
   assetResults?: Record<string, AssetInspection>;
   /** 预置资产检查失败（可中途清空）：asset_id → 错误响应。 */
   assetInspectFailures?: Record<string, {status: number; code: string; message: string}>;
+  /** 按 standard_id 注入详情加载失败（驱动“切换后旧详情不得被消费”）。 */
+  detailFailures?: Record<string, {status: number; code: string; message: string}>;
+  /** 按 `standard_id@version` 覆盖详情文档：区分不同标准的派生来源内容。 */
+  detailDocuments?: Record<string, Record<string, unknown>>;
 };
 
 /** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
@@ -249,6 +255,7 @@ export async function installStandards(
     inspectCalls: [],
     inspectDraftIds: [],
     publishDraftIds: [],
+    detailFailures: {...(options.detailFailures ?? {})},
     assetCopyCalls: [],
     assetCopyFailure: null,
     publishFailure: null,
@@ -356,7 +363,11 @@ export async function installStandards(
           && item.standard_id === standardId
           && item.version === version);
         if (summary === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_NOT_FOUND", message: "未找到"}});
+        const failure = state.detailFailures[standardId];
+        if (failure !== undefined) return route.fulfill({status: failure.status, json: {code: failure.code, message: failure.message}});
         if (publishedDocument !== undefined) return route.fulfill({json: detailFromDocument(publishedDocument)});
+        const override = options.detailDocuments?.[`${standardId}@${version}`];
+        if (override !== undefined) return route.fulfill({json: {...detailBody(summary), document: override}});
         return route.fulfill({json: detailBody(summary)});
       }
       return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});

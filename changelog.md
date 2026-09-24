@@ -1,3 +1,9 @@
+## 2026-09-24（PLAN-DM-040 Task 6：陈旧详情派生与版本跳转）
+
+- 修复 F08：`StandardStore.open()` 在开始加载时立即清除旧详情（在途响应仍按代次丢弃），新增 `detailMatches(identity)`；`StandardsView` 的派生只消费身份匹配的已加载详情，B 加载中或失败时不再复制 A 的文档，也不提交创建。
+- 修复 F09：`StandardDetailPane` 的版本历史条目发出完整身份（`source/standard_id/version/name`，列表键也含来源），`StandardsView.openVersion` 按条目自身身份选中而不是沿用当前来源，跨官方/用户来源的版本跳转不再落到空选择。
+- 验证：RED 单测 2 例（无 `detailMatches`；在途仍保留旧详情）+ E2E 2 例（B 加载失败时派生仍基于 A；跨来源版本跳转后详情为空）；GREEN `npm --prefix web run test:unit` 311 例、标准库/编辑器/资产发布/欢迎页 Playwright 77 例 + 标准库 spec 47 例、`npm --prefix web run build` 均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 5：列表键与编辑草稿身份）
 
 - 修复 F05：`draftKey` 对已发布版本改用 `source/standard_id/version`（草稿仍用稳定 `draft_id`），`StandardLibraryPane` 删除内联键表达式并复用同一函数；同来源、同版本的不同标准不再共用列表键，选中高亮与详情不再串位。

@@ -49,6 +49,8 @@ export interface StandardStore {
   actionError: Ref<string>;
   refresh(): Promise<void>;
   open(identity: StandardIdentity): Promise<void>;
+  /** 详情是否与给定身份一致（身份不匹配或在途/失败时一律为 false）。 */
+  detailMatches(identity: StandardIdentity): boolean;
   /** 清空详情并使在途详情响应失效（切到草稿等无发布详情的选中项）。 */
   clearDetail(): void;
   /** 加载草稿原始文档；代次保护同 open（乱序响应不覆盖当前草稿）。 */
@@ -108,6 +110,8 @@ export function createStandardStore(api: StandardApi): StandardStore {
 
   async function open(identity: StandardIdentity): Promise<void> {
     const generation = ++detailGeneration;
+    // 切换选择即清除旧详情：在途响应由代次丢弃，派生等动作不得消费上一个标准的详情
+    detail.value = null;
     detailPending.value = true;
     detailError.value = "";
     try {
@@ -120,6 +124,14 @@ export function createStandardStore(api: StandardApi): StandardStore {
     } finally {
       if (generation === detailGeneration) detailPending.value = false;
     }
+  }
+
+  /** 详情是否与给定身份一致（已加载且身份匹配才允许被派生等动作消费）。 */
+  function detailMatches(identity: StandardIdentity): boolean {
+    const loaded = detail.value;
+    return loaded !== null
+      && loaded.standard_id === identity.standardId
+      && loaded.version === identity.version;
   }
 
   function clearDetail(): void {
@@ -188,6 +200,7 @@ export function createStandardStore(api: StandardApi): StandardStore {
     actionError,
     refresh,
     open,
+    detailMatches,
     clearDetail,
     loadDraft,
     adoptDraft,

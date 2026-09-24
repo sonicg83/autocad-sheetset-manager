@@ -66,6 +66,41 @@ describe("createStandardStore", () => {
     expect(store.detailPending.value).toBe(false);
   });
 
+  it("clears the previous detail as soon as a new selection starts loading", async () => {
+    const api = deferredStandardApi();
+    const store = createStandardStore(api);
+    const first = store.open({standardId: "official.a", version: "1.0.0"});
+    api.resolveDetail("official.a", publishedDetail("official.a", "1.0.0"));
+    await first;
+    expect(store.detail.value?.standard_id).toBe("official.a");
+
+    const second = store.open({standardId: "user.b", version: "2.0.0"});
+    // 在途期间旧详情不得继续可用：派生等动作只能消费身份匹配的已加载详情
+    expect(store.detail.value).toBeNull();
+    expect(store.detailMatches({standardId: "user.b", version: "2.0.0"})).toBe(false);
+    api.resolveDetail("user.b", publishedDetail("user.b", "2.0.0"));
+    await second;
+    expect(store.detail.value?.standard_id).toBe("user.b");
+    expect(store.detailMatches({standardId: "user.b", version: "2.0.0"})).toBe(true);
+    expect(store.detailMatches({standardId: "official.a", version: "1.0.0"})).toBe(false);
+  });
+
+  it("keeps no usable detail when the detail load fails", async () => {
+    const api = deferredStandardApi();
+    const store = createStandardStore(api);
+    const first = store.open({standardId: "official.a", version: "1.0.0"});
+    api.resolveDetail("official.a", publishedDetail("official.a", "1.0.0"));
+    await first;
+
+    api.fetchDetail = vi.fn(async () => {
+      throw new Error("STANDARD_VERSION_NOT_FOUND: 标准不存在");
+    });
+    await store.open({standardId: "user.b", version: "2.0.0"});
+    expect(store.detail.value).toBeNull();
+    expect(store.detailError.value).toContain("STANDARD_VERSION_NOT_FOUND");
+    expect(store.detailMatches({standardId: "official.a", version: "1.0.0"})).toBe(false);
+  });
+
   it("refreshes the library list and keeps pending/error explicit", async () => {
     const api = deferredStandardApi();
     api.list = vi.fn(async (): Promise<StandardSummary[]> => [
