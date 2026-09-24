@@ -110,3 +110,13 @@
 - Task 9: minor (deferred): `LAYOUT_NAME_INVALID`/`DUPLICATE_LAYOUT_NAME` 带 `group_id` 不带 `property_id`，评审页会为这类「派生名冲突、无直接可编辑输入」的诊断渲染「返回修改第 N 项」并聚焦图名输入，与注释及 changelog 表述不符（base 版同分支顺序，非本轮引入）。
 - Task 9: minor (deferred): `features/creation/store.ts` 509 行超 500 软上限、`CreationStore` 公共方法约 30 个超 15 软上限（预览逻辑已拆出 `previewSession.ts`）。
 - Task 9: minor (deferred): 新增 2 个 previewModel 单测只有 GREEN 记录、无单独 RED 输出（两条 finding 的 RED 由 e2e 提供）。
+
+## 三、交付后补充验证（2026-09-24）
+
+**`python-multipart` 在冻结构建中的收集情况——已从「未验证」转为「已验证通过」。**
+
+背景：Task 4 为 XLSX 导入端点新增运行时依赖 `python-multipart`（端点声明 `file: Annotated[UploadFile, File()]`，FastAPI 在**注册路由时**即要求该模块：`fastapi/dependencies/utils.py:104-105` 的 `from python_multipart import __version__`）。若冻结产物缺该模块，`create_app()` 会在注册该路由时抛 `RuntimeError`，桌面应用整体起不来，而开发态 `uv run` 完全正常——故列为残余风险。
+
+验证方法与结果：对 `dist/DSTManager/` 现有冻结构建执行 `uv run pyi-archive_viewer -r dist/DSTManager/dst-manager.exe`，归档清单含 `python_multipart`、`python_multipart.decoders`、`python_multipart.exceptions`、`python_multipart.multipart` 以及兼容垫片 `multipart`/`multipart.multipart`，共 6 项。该构建包含本计划 Task 5 新增的 `dst_manager/infrastructure/acsm_xml/assets/minimal_sheetset.xml` 及其 spec `datas` 条目，说明构建时点晚于 Task 4 的依赖引入，因此这 6 项确系 `python-multipart` 被 PyInstaller 静态分析自动收集的结果（该模块由 FastAPI 以普通 `from ... import` 静态导入，不需要登记进 `hiddenimports`——该列表只服务动态导入，如 uvicorn 的 `*.auto`、SQLAlchemy 方言、pywebview 后端）。
+
+结论：该项风险不成立，`packaging/dst-manager.spec` 无需修改；可选加固是把它显式写进 `hiddenimports` 以自文档化，但非必要。
