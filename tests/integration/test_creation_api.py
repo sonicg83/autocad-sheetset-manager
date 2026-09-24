@@ -577,6 +577,31 @@ def test_execute_keeps_draft_unchanged_and_does_not_start_cad(
     assert client.get(f"/api/creation-drafts/{creation_draft.id}").json() == before
 
 
+def test_job_events_stream_stops_at_needs_review(
+    client: TestClient, creation_draft: DraftFixture, preview: PreviewFixture
+) -> None:
+    """创建任务可终局于 NEEDS_REVIEW：SSE 必须在该状态收尾（不能继续轮询）。
+
+    创建发布日志身份不可证明时任务被隔离为 `NEEDS_REVIEW`（Task 6/7）。事件流的终止
+    集合曾漏掉该状态，任务已终局而流不结束，客户端只能靠断线回退才收到终态。
+    """
+    job = client.post(
+        f"/api/creation-drafts/{creation_draft.id}/execute",
+        json={"preview_digest": preview.digest},
+    ).json()
+    database = client.app.state.service.database
+    assert database.finalize_job_terminal(
+        job["id"], "NEEDS_REVIEW", "CREATION_PUBLISH_REVIEW_REQUIRED", "创建发布日志身份不可证明"
+    )
+
+    # 流必须自己结束（否则 iter_text 会一直等待），且推送的最后一帧就是终态
+    with client.stream("GET", f"/api/jobs/{job['id']}/events") as response:
+        body = "".join(response.iter_text())
+
+    assert "NEEDS_REVIEW" in body
+    assert client.get(f"/api/jobs/{job['id']}").json()["status"] == "NEEDS_REVIEW"
+
+
 # ---- 草稿 CRUD ------------------------------------------------------------
 
 

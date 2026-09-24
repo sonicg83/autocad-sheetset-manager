@@ -97,6 +97,25 @@ function fakeCreationApi(): CreationApi {
     deleteDraft: vi.fn(async () => undefined),
     templateUrl: vi.fn(() => "/api/creation-drafts/draft-1/xlsx-template"),
     importWorkbook: vi.fn(async (): Promise<CreationImportOutcome> => ({ok: true, draft: seedDraft()})),
+    previewDraft: vi.fn(async () => ({
+      draft_id: "draft-1",
+      revision: 1,
+      standard_id: "szmedi.gas",
+      standard_version: "2.1.0",
+      standard_name: "市政燃气施工图",
+      target_path: "D:\\项目\\新建项目",
+      sheetset_values: {},
+      group_count: 0,
+      sheet_count: 0,
+      dwg_count: 0,
+      numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},
+      suffix: {enabled: false, suffix_type: 0, unnumbered_keywords: []},
+      diagnostics: [],
+      groups: [],
+      executable: true,
+      preview_digest: "digest-1",
+    })),
+    executeDraft: vi.fn(async () => ({id: "job-1", status: "QUEUED", workspace_id: null})),
   };
 }
 

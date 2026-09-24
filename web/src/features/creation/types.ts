@@ -1,9 +1,11 @@
-// 创建域前端契约（PLAN-DM-036 Task 8）：创建草稿、标准候选与「可输入字段」输入模型的
-// 前端类型。只描述形状与判别，不复制后端的属性求值、编号、DWG 命名与文件名校验规则——
-// 预览与最终值一律以后端草稿/预览响应为准。
+// 创建域前端契约（PLAN-DM-036 Task 8，Task 9 追加权威预览与执行）：创建草稿、标准候选、
+// 「可输入字段」输入模型、按组预览响应与执行入口的前端类型。只描述形状与判别，不复制
+// 后端的属性求值、编号、DWG 命名与文件名校验规则——预览与最终值一律以后端预览响应为准。
 //
 // 阶段枚举与后端 `domain/creation.CREATION_STEPS` 同口径；`standard` 只在尚未建立草稿
 // （欢迎页入口的第一阶段）时出现，草稿建立后阶段由后端草稿保存（初值为 `project`）。
+import type {Job} from "../../api/contracts";
+
 export type CreationStep = "standard" | "project" | "groups" | "review";
 
 /** 固定的标准身份：`standard_id` 与发布版本在草稿初建时确定，此后不可改写。 */
@@ -145,6 +147,111 @@ export type CreationBatchFieldKind =
   | "text"
   | "enum";
 
+/** 一条创建预览诊断：稳定错误码 + 可定位的图纸组/属性（与后端预览响应同形）。 */
+export interface CreationPreviewDiagnostic {
+  code: string;
+  message: string;
+  /** `error` 为阻断错误，其余（如 `warning`）是非阻断提示。 */
+  severity: string;
+  /** 空串表示该诊断不针对具体图纸组。 */
+  group_id: string;
+  /** 空串表示该诊断不针对具体属性。 */
+  property_id: string;
+}
+
+/** 逐张属性明细的一行：图号 + 该张实际值。 */
+export interface CreationPreviewPropertyRow {
+  number: string;
+  value: string;
+}
+
+/** 一个属性的按组投影：首张实际值 + 完整逐张明细（供「…」模态）。 */
+export interface CreationPreviewPropertyCell {
+  property_id: string;
+  first_value: string;
+  sheets: CreationPreviewPropertyRow[];
+}
+
+/** 一张展开后的图纸：最终图号/标题/布局名与该张全部属性值。 */
+export interface CreationPreviewSheet {
+  number: string;
+  title: string;
+  layout_name: string;
+  values: Record<string, string>;
+}
+
+/** 预览主表一行（一个图纸组一个主 DWG）。 */
+export interface CreationPreviewGroup {
+  group_id: string;
+  created_order: number;
+  title: string;
+  /** 组内实际图号的首末值；不编号组是单个补零值（如 `00`）。 */
+  number_range: string;
+  /** 后端压缩后的图纸标题范围（如 `平面图 (一)-(三)`）。 */
+  title_range: string;
+  base_template: string;
+  layout_template: string;
+  paper_layout: string;
+  /** 标准 DWG 命名模板对该组真实数据求值后的文件名（带 `.dwg`）。 */
+  dwg_name: string;
+  target_path: string;
+  sheet_count: number;
+  sheets: CreationPreviewSheet[];
+  property_cells: Record<string, CreationPreviewPropertyCell>;
+}
+
+/** 当前标准的编号策略摘要（预览顶部展示，不在前端重算编号）。 */
+export interface CreationPreviewNumbering {
+  sequence_field: string;
+  digits: number;
+  start: number;
+}
+
+/** 当前有效设置里的标题后缀与不编号关键字。 */
+export interface CreationPreviewSuffix {
+  enabled: boolean;
+  suffix_type: number;
+  unnumbered_keywords: string[];
+}
+
+/** 权威预览响应：按组表格数据、逐张属性明细、定位诊断与 `preview_digest`。 */
+export interface CreationPreview {
+  draft_id: string;
+  revision: number;
+  standard_id: string;
+  standard_version: string;
+  standard_name: string;
+  target_path: string;
+  sheetset_values: Record<string, string>;
+  group_count: number;
+  sheet_count: number;
+  dwg_count: number;
+  numbering: CreationPreviewNumbering;
+  suffix: CreationPreviewSuffix;
+  diagnostics: CreationPreviewDiagnostic[];
+  groups: CreationPreviewGroup[];
+  /** 无阻断错误时为真；执行入口与按钮门禁都以它为准。 */
+  executable: boolean;
+  preview_digest: string;
+}
+
+/**
+ * 预览会话状态（`previewSession.ts` 唯一读写）：摘要与可执行标志都来自后端响应，
+ * 任何输入、标准身份或编号设置变化都必须使它们失效。
+ */
+export interface CreationPreviewSessionState {
+  /** 权威预览响应；无有效预览时为 null。 */
+  previewState: CreationPreview | null;
+  /** 权威预览摘要；任何输入变更后为 null。 */
+  previewDigest: string | null;
+  /** 是否允许执行创建；仅当后端预览无阻断错误时为真。 */
+  canExecute: boolean;
+  /** 权威预览请求进行中。 */
+  previewPending: boolean;
+  /** 创建执行请求进行中（门禁在途重复提交）。 */
+  executePending: boolean;
+}
+
 // ---- 状态控制器注入端口与负载契约（store 只消费，URL/字段映射留在 `api/creation.ts`）----
 
 /** 草稿保存负载；URL 与负载字段映射留在 `api/creation.ts`。 */
@@ -197,10 +304,14 @@ export interface CreationApi {
   deleteDraft(draftId: string): Promise<void>;
   templateUrl(draftId: string): string;
   importWorkbook(input: CreationImportInput): Promise<CreationImportOutcome>;
+  /** 权威预览：后端重新加载标准、设置、草稿与目标状态后返回按组表格与摘要。 */
+  previewDraft(draftId: string): Promise<CreationPreview>;
+  /** 执行创建：只发送权威摘要，入队创建任务并返回任务状态。 */
+  executeDraft(draftId: string, previewDigest: string): Promise<Job>;
 }
 
 /** 向导输入状态：全部是普通值，组件直接读 `store.step` / `store.groups` 等字段。 */
-export interface CreationState {
+export interface CreationState extends CreationPreviewSessionState {
   /** 当前阶段；尚未建立草稿时为 `standard`（欢迎页入口的第一阶段）。 */
   step: CreationStep;
   candidates: CreationStandardCandidate[];
@@ -217,10 +328,6 @@ export interface CreationState {
   sheetsetValues: Record<string, string>;
   groups: CreationGroupState[];
   selectedGroupIds: string[];
-  /** 权威预览摘要；任何输入变更后为 null（第四阶段在 Task 9 接入）。 */
-  previewDigest: string | null;
-  /** 是否允许执行创建；预览摘要有效时才为真（第四阶段在 Task 9 接入）。 */
-  canExecute: boolean;
   pending: boolean;
   importPending: boolean;
   importDiagnostics: CreationImportDiagnostic[];

@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-036
 title: 标准驱动的新图纸集创建实施计划
-status: proposed
+status: active
 owners:
 - dst-manager
 created: 2026-09-21
-updated: 2026-09-23
+updated: 2026-09-24
 related:
 - RFC-INT-003
 - PLAN-DM-035
@@ -713,3 +713,34 @@ Expected: 自动化全部通过；真实 AutoCAD 2016/2020 与官方 Sheet Set M
 git add web/src/views/CreateSheetSetView.vue web/src/components/creation/ReviewStep.vue web/src/components/creation/SheetValuesDialog.vue web/src/features/creation web/src/i18n/locales/zh-CN/creation.ts web/src/i18n/locales/en-US/creation.ts web/tests/e2e/create-sheetset-review.spec.ts docs/dst-manager/README.md changelog.md .planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md
 git commit -m "交付标准驱动的新图纸集创建"
 ```
+
+## 实际验证（2026-09-24，Task 9 收口）
+
+**全部 9 个任务已实施并通过自动化门禁；官方 SSM 界面人工验收待用户确认后即可置为 `completed`。**
+本节只记录实际执行结果，不改写上方任务的需求描述与步骤。
+
+逐行执行的门禁与实际结果：
+
+| 门禁 | 命令 | 实际结果 |
+| --- | --- | --- |
+| Python 静态检查 | `uv run ruff check .` | 通过（All checks passed!） |
+| Python 全量测试 | `uv run pytest -rs -p no:warnings` | **1888 passed / 74 skipped / 0 failed**（272.15s；含本次新增 3 例） |
+| 依赖锁定 | `uv lock --check` | 通过（Resolved 71 packages，无变更） |
+| API 契约 | `npm run check:api`（web/） | 通过（`web/src/api/schema.d.ts` 无漂移） |
+| 语言包 | `npm run check:i18n`（web/） | 通过（**1571 键 / 11 域**中英对称，无未登记硬编码中文） |
+| UI 静态契约 | `npm run check:ui`（web/） | 通过（0 违规、无 stale 例外） |
+| 前端单测 | `npm run test:unit`（web/） | **300 passed / 28 files** |
+| 前端构建 | `npm run build`（web/） | 通过（check:api + check:i18n + check:ui + vue-tsc + vite） |
+| 端到端 | `npm run test:e2e`（web/） | **654 passed / 0 failed / 0 flaky**（最终提交状态全量；此前两次全量分别为 651 passed / 2 failed / 1 flaky 与 652 passed / 2 flaky，全部失败/flaky 项均为 `page.goto` 被中断的既有 vite dev server 并行抖动，两个 spec 单独重跑 141 passed） |
+| 双版本插件 | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_plugins.ps1` | 通过（2016 与 2020 重建，0 警告 / 0 错误） |
+
+迁移说明：本任务未新增 Alembic 迁移；`npm run check:api` 触发的迁移只作用于 `tmp_path` 下的全新临时库夹具，未触碰用户本地数据库。
+
+真实 AutoCAD 与官方 SSM：
+
+- 真实 AutoCAD 2016/2020 系统测试由 Task 7 跑通（`tests/system_autocad/test_creation_workflow.py`，`DST_MANAGER_RUN_AUTOCAD=1` 下 **2 passed**：2020 16.45s / 2016 12.19s）；本任务未重跑（`uv run pytest -q` 按设计跳过需要该开关的系统测试）。
+- **人工残余验收项**：官方图纸集管理器（SSM）界面对生成成果的打开性无法在 Core Console 内自动化，**本任务未执行、不记为已通过**。用户以真实 AutoCAD 打开新建项目的 DST 并确认图纸集/子集/图纸/自定义属性/布局引用显示正常后，本计划方可置为 `completed`。
+
+UI 证据口径：浅深主题、900×768 与 200% 缩放（CSS `zoom: 2`，与既有视觉证据 spec 同口径）下的整页不横溢与主表自身横向滚动由 `web/tests/e2e/create-sheetset-review.spec.ts` 自动断言；键盘与模态焦点回归（打开、Tab 圈定、Esc/关闭退出、焦点归还）由同一 spec 断言；桌面壳文件夹选择由 Task 8 的 `create-sheetset-input.spec.ts` 覆盖（本任务保持通过）。
+
+Task 9 实施中的偏差（已由控制方裁决）：创建任务的进度复用全局任务浮层的**同一任务面板组件与同一终态集合**，但 `TaskOverlay` 受 `hasWorkspace` 门控、创建期尚无普通工作区，故创建进度在向导的「检查并创建」页内呈现；为此把 `web/src/App.vue`、`web/src/composables/useWorkspaceLifecycle.ts`（新增 `openWorkspaceById`）与 `web/src/composables/useJobMonitor.ts`（导出共享终态集合）纳入本次变更集。

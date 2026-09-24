@@ -18,6 +18,7 @@ from dst_manager.config import Settings
 from dst_manager.extensions.builtin.index import BUILTIN_EXTENSION_INDEX
 from dst_manager.extensions.save_grants import SaveGrantStore
 from dst_manager.infrastructure.acsm_xml.document import AcsmValidationError
+from dst_manager.infrastructure.persistence.database import TERMINAL_JOB_STATUSES
 from dst_manager.interfaces import creation_api, extension_api, standard_api
 from dst_manager.interfaces.contracts import (
     ChangeExecuteRequest,
@@ -418,7 +419,7 @@ def create_app(
                 if current != previous:
                     yield f"data: {current}\n\n"
                     previous = current
-                if result["status"] in {"SUCCEEDED", "FAILED", "ROLLED_BACK", "BLOCKED_FILE_LOCK"}:
+                if result["status"] in TERMINAL_JOB_STATUSES:
                     return
                 await asyncio.sleep(0.5)
         return StreamingResponse(events(), media_type="text/event-stream")

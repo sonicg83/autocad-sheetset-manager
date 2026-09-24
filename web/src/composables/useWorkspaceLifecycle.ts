@@ -59,6 +59,8 @@ export interface WorkspaceLifecycle {
   openByPath: (path: string) => Promise<void>;
   /** 未过闸门的刷新（供草稿域 `reloadWorkspace` 在冲突后重载）：调用方负责先过闸 —— 见 `refreshWorkspace`。 */
   doRefreshWorkspace: (expectedWorkspaceId?: string) => Promise<void>;
+  /** 按工作区 ID 打开（创建成功后的工作区接管）；已打开其它工作区时不静默切换。 */
+  openWorkspaceById: (workspaceId: string) => Promise<void>;
   closeWorkspace: () => Promise<void>;
   refreshWorkspace: (expectedWorkspaceId?: string) => Promise<void>;
   openFolder: () => Promise<void>;
@@ -92,6 +94,52 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleOptions): Workspac
   async function openByPath(path: string) {
     // 重新打开/切换工作区前先过全局输入保护（无未提交输入时直接通过）
     await draft.guardAllInputs(() => doOpenByPath(path));
+  }
+
+  /**
+   * 按工作区 ID 打开（PLAN-DM-036 Task 9 创建成功路径）。
+   *
+   * 创建任务成功后只知道新工作区的 ID（没有可用的 DST 打开上下文），而 `doRefreshWorkspace`
+   * 要求已经打开同一工作区、`doOpenByPath` 要的是路径，两者都不适用；因此本入口与 `doOpenByPath`
+   * 同源，但允许从「尚无工作区」开始，且**不静默替换**已打开的其它工作区。
+   */
+  async function openWorkspaceById(workspaceId: string) {
+    if (workspaceId === "" || isWorkspaceLoading.value) return;
+    const current = workspace.value;
+    if (current !== null) {
+      // 已打开同一工作区：按普通刷新语义重建；已打开其它工作区：交给用户先关闭，不隐式切换
+      if (current.id === workspaceId) await doRefreshWorkspace(workspaceId);
+      return;
+    }
+    await draft.guardAllInputs(() => doOpenWorkspaceById(workspaceId));
+  }
+
+  async function doOpenWorkspaceById(workspaceId: string) {
+    if (workspace.value !== null || isWorkspaceLoading.value) return;
+    isWorkspaceLoading.value = true;
+    await draft.pendingDraftSave();
+    if (draft.draftSaveFailed.value) {
+      isWorkspaceLoading.value = false;
+      return;
+    }
+    deps.invalidateJobMonitor(true);
+    const generation = beginWorkspaceLoad();
+    try {
+      const loaded: Workspace = await request(`/api/workspaces/${encodeURIComponent(workspaceId)}`);
+      if (generation !== workspaceLoadGeneration.value) return;
+      resetEditingState();
+      baseWorkspace.value = deps.cloneJson(loaded);
+      workspace.value = deps.cloneJson(loaded);
+      deps.resetSheetsWorkspace();
+      await loadDraft(loaded);
+      isWorkspaceLoading.value = false;
+      void deps.reloadExtensions();
+    } catch (e) {
+      if (generation === workspaceLoadGeneration.value) {
+        isWorkspaceLoading.value = false;
+        error.value = String(e);
+      }
+    }
   }
 
   async function doOpenByPath(path: string) {
@@ -285,6 +333,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleOptions): Workspac
     workspaceLoadGeneration,
     hasShell,
     openByPath,
+    openWorkspaceById,
     doRefreshWorkspace,
     closeWorkspace,
     refreshWorkspace,

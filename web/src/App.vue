@@ -118,7 +118,7 @@ lifecycle=useWorkspaceLifecycle({
   isSettingsOpen:()=>settingsOpen.value,
   getActive:()=>active.value,
 });
-const {workspaceLoadGeneration,hasShell,openByPath,closeWorkspace,refreshWorkspace,openFolder,selectAndOpenDst}=lifecycle;
+const {workspaceLoadGeneration,hasShell,openByPath,openWorkspaceById,closeWorkspace,refreshWorkspace,openFolder,selectAndOpenDst}=lifecycle;
 const {toasts,pushToast,dismiss}=useToast();
 // 设置中心（PLAN-DM-019 任务 10/11）：入口在 TopBar 齿轮；toast 复用宿主 useToast
 const settingsOpen=ref(false);
@@ -447,7 +447,9 @@ const taskOverlayProps=computed<TaskOverlayProps>(()=>({
              把固定发布版本作为一次性身份传入，向导据此直接进入第二阶段。 -->
         <WelcomeView v-if="startNavigation.surface.value==='welcome'" :has-shell="hasShell" @select="selectAndOpenDst" @submit-path="openByPath" @create-sheetset="startNavigation.openCreateSheetset()" @manage-standards="startNavigation.openStandards()" @import-standard="startNavigation.openStandards('import-package')" />
         <StandardsView v-else-if="startNavigation.surface.value==='standards'" :confirm-action="confirmAction" :entry-intent="standardsEntryIntent" @back="startNavigation.goWelcome()" @open-create-sheetset="startNavigation.openCreateSheetset($event)" />
-        <CreateSheetSetView v-else :confirm-action="confirmAction" :entry-identity="startNavigation.createSheetsetIdentity.value" @back="startNavigation.goWelcome()" @standards="startNavigation.openStandards()" />
+        <!-- PLAN-DM-036 Task 9：创建任务成功后只返回 `workspace_id`（创建期尚无工作区），
+             由壳层按 ID 接管普通工作区；打不开时错误横幅留在壳层，不伪造工作区。 -->
+        <CreateSheetSetView v-else :confirm-action="confirmAction" :entry-identity="startNavigation.createSheetsetIdentity.value" @back="startNavigation.goWelcome()" @standards="startNavigation.openStandards()" @created="openWorkspaceById" />
       </template>
       <template v-else>
         <div v-if="draftRecovered!==null&&draftRecovered>0&&!isWorkspaceLoading" class="recover-banner" role="status">{{ $t("shell.workspace.recoveredBanner",{count:draftRecovered},draftRecovered) }}<button type="button" @click="draftRecovered=null">{{ $t("shell.workspace.resume") }}</button><button type="button" @click="clearDraftRestart">{{ $t("shell.workspace.restart") }}</button></div>

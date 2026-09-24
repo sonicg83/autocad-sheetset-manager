@@ -1,9 +1,12 @@
-// 创建草稿、标准候选与 XLSX 端点包装（PLAN-DM-036 Task 8 的前端窄包装）。
+// 创建草稿、标准候选、XLSX、权威预览与执行端点包装（PLAN-DM-036 Task 8 的前端窄包装，
+// Task 9 追加预览/执行）。
 // 只做 URL/负载映射与类型断言：错误经 `request()` 统一转为 ApiError（`code` 为后端稳定
 // 错误码，`message` 已按 message_key 本地化）。工作簿导入走独立的 multipart 请求，因为
 // 整批被拒（422）时响应体还带 `diagnostics`（工作表/行/列定位），统一错误通道拿不到它。
+// 执行只发送 `preview_digest`：目标路径、组表、编号与命名结果一律由服务端重算。
 import {localizedError, request} from "./client";
 import {fetchStandardDetail} from "./standards";
+import type {Job} from "./contracts";
 import type {
   CreationApi,
   CreationDraftState,
@@ -12,6 +15,11 @@ import type {
   CreationImportDiagnostic,
   CreationImportInput,
   CreationImportOutcome,
+  CreationPreview,
+  CreationPreviewGroup,
+  CreationPreviewPropertyCell,
+  CreationPreviewPropertyRow,
+  CreationPreviewSheet,
   CreationSaveInput,
   CreationStandardCandidate,
   CreationStep,
@@ -30,6 +38,14 @@ function asStringRecord(value: unknown): Record<string, string> {
     if (typeof item === "string") record[key] = item;
   }
   return record;
+}
+
+/** 只保留对象元素：数组字段缺位或混入非对象项时按空处理，不让畸形响应打断渲染。 */
+function asRecords(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is Record<string, unknown> => typeof item === "object" && item !== null,
+  );
 }
 
 function asStep(value: unknown): CreationStep {
@@ -63,6 +79,97 @@ function toDraftState(body: unknown): CreationDraftState {
     groups: groups
       .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
       .map(toGroupState),
+  };
+}
+
+function toPropertyRows(value: unknown): CreationPreviewPropertyRow[] {
+  return asRecords(value).map(item => ({
+    number: asString(item["number"]),
+    value: asString(item["value"]),
+  }));
+}
+
+function toPropertyCells(value: unknown): Record<string, CreationPreviewPropertyCell> {
+  const cells: Record<string, CreationPreviewPropertyCell> = {};
+  if (typeof value !== "object" || value === null) return cells;
+  for (const [propertyId, item] of Object.entries(value as Record<string, unknown>)) {
+    const raw = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+    cells[propertyId] = {
+      property_id: asString(raw["property_id"]) || propertyId,
+      first_value: asString(raw["first_value"]),
+      sheets: toPropertyRows(raw["sheets"]),
+    };
+  }
+  return cells;
+}
+
+function toPreviewGroup(raw: Record<string, unknown>): CreationPreviewGroup {
+  return {
+    group_id: asString(raw["group_id"]),
+    created_order: typeof raw["created_order"] === "number" ? raw["created_order"] : 0,
+    title: asString(raw["title"]),
+    number_range: asString(raw["number_range"]),
+    title_range: asString(raw["title_range"]),
+    base_template: asString(raw["base_template"]),
+    layout_template: asString(raw["layout_template"]),
+    paper_layout: asString(raw["paper_layout"]),
+    dwg_name: asString(raw["dwg_name"]),
+    target_path: asString(raw["target_path"]),
+    sheet_count: typeof raw["sheet_count"] === "number" ? raw["sheet_count"] : 0,
+    sheets: asRecords(raw["sheets"]).map<CreationPreviewSheet>(item => ({
+      number: asString(item["number"]),
+      title: asString(item["title"]),
+      layout_name: asString(item["layout_name"]),
+      values: asStringRecord(item["values"]),
+    })),
+    property_cells: toPropertyCells(raw["property_cells"]),
+  };
+}
+
+function toPreview(body: unknown): CreationPreview {
+  const raw = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const numbering =
+    typeof raw["numbering"] === "object" && raw["numbering"] !== null
+      ? (raw["numbering"] as Record<string, unknown>)
+      : {};
+  const suffix =
+    typeof raw["suffix"] === "object" && raw["suffix"] !== null
+      ? (raw["suffix"] as Record<string, unknown>)
+      : {};
+  const keywords = Array.isArray(suffix["unnumbered_keywords"])
+    ? suffix["unnumbered_keywords"]
+    : [];
+  return {
+    draft_id: asString(raw["draft_id"]),
+    revision: typeof raw["revision"] === "number" ? raw["revision"] : 0,
+    standard_id: asString(raw["standard_id"]),
+    standard_version: asString(raw["standard_version"]),
+    standard_name: asString(raw["standard_name"]),
+    target_path: asString(raw["target_path"]),
+    sheetset_values: asStringRecord(raw["sheetset_values"]),
+    group_count: typeof raw["group_count"] === "number" ? raw["group_count"] : 0,
+    sheet_count: typeof raw["sheet_count"] === "number" ? raw["sheet_count"] : 0,
+    dwg_count: typeof raw["dwg_count"] === "number" ? raw["dwg_count"] : 0,
+    numbering: {
+      sequence_field: asString(numbering["sequence_field"]),
+      digits: typeof numbering["digits"] === "number" ? numbering["digits"] : 0,
+      start: typeof numbering["start"] === "number" ? numbering["start"] : 0,
+    },
+    suffix: {
+      enabled: suffix["enabled"] === true,
+      suffix_type: typeof suffix["suffix_type"] === "number" ? suffix["suffix_type"] : 0,
+      unnumbered_keywords: keywords.filter((item): item is string => typeof item === "string"),
+    },
+    diagnostics: asRecords(raw["diagnostics"]).map(item => ({
+      code: asString(item["code"]),
+      message: asString(item["message"]),
+      severity: asString(item["severity"]),
+      group_id: asString(item["group_id"]),
+      property_id: asString(item["property_id"]),
+    })),
+    groups: asRecords(raw["groups"]).map(toPreviewGroup),
+    executable: raw["executable"] === true,
+    preview_digest: asString(raw["preview_digest"]),
   };
 }
 
@@ -185,6 +292,21 @@ export function creationTemplateUrl(draftId: string): string {
   return `/api/creation-drafts/${encodeURIComponent(draftId)}/xlsx-template`;
 }
 
+/** 权威预览（POST）：后端重新加载标准、设置、草稿与目标状态后返回按组表格与摘要。 */
+export function fetchCreationPreview(draftId: string): Promise<CreationPreview> {
+  return request<unknown>(`/api/creation-drafts/${encodeURIComponent(draftId)}/preview`, {
+    method: "POST",
+  }).then(toPreview);
+}
+
+/** 执行创建（POST）：只发送权威摘要，返回入队的创建任务。 */
+export function executeCreationDraft(draftId: string, previewDigest: string): Promise<Job> {
+  return request<Job>(`/api/creation-drafts/${encodeURIComponent(draftId)}/execute`, {
+    method: "POST",
+    body: JSON.stringify({preview_digest: previewDigest}),
+  });
+}
+
 /**
  * 全量覆盖导入：multipart 上传工作簿。整批被拒时返回 `ok:false` 与可定位诊断，
  * 调用方据此保持草稿与预览原样；网络或响应体异常同样按失败处理，不抛给调用方。
@@ -225,4 +347,6 @@ export const creationApi: CreationApi = {
   deleteDraft: deleteCreationDraft,
   templateUrl: creationTemplateUrl,
   importWorkbook: importCreationWorkbook,
+  previewDraft: fetchCreationPreview,
+  executeDraft: executeCreationDraft,
 };

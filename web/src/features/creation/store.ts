@@ -1,8 +1,9 @@
-// 创建域状态控制器（PLAN-DM-036 Task 8）。
+// 创建域状态控制器（PLAN-DM-036 Task 8，Task 9 接入权威预览会话）。
 //
 // 职责：持有四阶段向导的输入状态（固定标准身份、项目路径、图纸集属性、按组输入、当前
 // 阶段与选中组），把输入变更映射为草稿保存请求，并在输入变化时使旧预览失效。属性求值、
-// 编号、DWG 命名、目标目录状态等最终判定一律不在前端重复——预览与执行以后端响应为准。
+// 编号、DWG 命名、目标目录状态等最终判定一律不在前端重复——预览与执行以后端响应为准
+// （预览会话的状态迁移在 `previewSession.ts`）。
 //
 // 结构：状态是 `reactive` 对象上的普通值（组件直接读 `store.step` / `store.groups`）；
 // 派生值（`targetPath`/`groupIssues`/`selectedGroups`）与动作是显式类型的函数，经
@@ -13,6 +14,8 @@
 // 「可恢复创建草稿」：草稿身份由后端给出，本模块只持有 `draftId`；把草稿 ID 记在哪里
 // （桌面壳 localStorage 等）由调用方决定，store 不直接读写浏览器存储。
 import {reactive} from "vue";
+import type {Job} from "../../api/contracts";
+import {createCreationPreviewSession} from "./previewSession";
 import type {
   CreationApi,
   CreationBatchChange,
@@ -76,6 +79,12 @@ export interface CreationStore extends CreationState {
   clearGroupSelection(): void;
   batchUpdate(groupIds: string[], fieldId: string, change: CreationBatchChange): void;
   invalidatePreview(): void;
+  /** 编号设置等向导外变化使旧摘要失效（与 `invalidatePreview` 同一实现，按原因区分入口）。 */
+  invalidateForSettingsChange(): void;
+  /** 保存草稿（按需）后请求权威预览，写入摘要与可执行标志。 */
+  preview(): Promise<boolean>;
+  /** 按当前有效摘要执行创建；无有效预览时不发请求并返回 null。 */
+  execute(): Promise<Job | null>;
   group(groupId: string): CreationGroupState;
   templateUrl(): string;
   importWorkbook(file: File): Promise<boolean>;
@@ -118,8 +127,11 @@ export function createCreationStore(
     sheetsetValues: seed === null ? {} : {...seed.draft.sheetset_values},
     groups: seed === null ? [] : seed.draft.groups.map(cloneGroup),
     selectedGroupIds: [],
+    previewState: null,
     previewDigest: null,
     canExecute: false,
+    previewPending: false,
+    executePending: false,
     pending: false,
     importPending: false,
     importDiagnostics: [],
@@ -145,10 +157,17 @@ export function createCreationStore(
     return left !== null && left.standardId === right.standardId && left.version === right.version;
   }
 
-  function invalidatePreview(): void {
-    state.previewDigest = null;
-    state.canExecute = false;
-  }
+  // 权威预览会话：状态迁移在 `previewSession.ts`，本模块只组合并在输入变化时失效
+  const previewSession = createCreationPreviewSession({
+    api,
+    state,
+    draftId: () => state.draftId,
+    save,
+    onError: message => { state.error = message; },
+  });
+
+  /** 使旧预览失效：唯一实现在预览会话里（本模块保留同一拼写供各输入动作调用）。 */
+  const invalidatePreview = previewSession.invalidate;
 
   /**
    * 采用草稿输入：路径拆成两段、属性按标准补齐（显式空串保留、缺键才用默认值）、
@@ -309,7 +328,16 @@ export function createCreationStore(
     return true;
   }
 
-  async function save(force = false): Promise<boolean> {
+  // 保存串行化：预览与阶段切换可能几乎同时触发保存，并发请求会拿同一个 expected_revision
+  // 撞上后端乐观修订门禁（409）；串行执行保证后一次读到前一次回灌的修订。
+  let saveQueue: Promise<boolean> = Promise.resolve(true);
+
+  function save(force = false): Promise<boolean> {
+    saveQueue = saveQueue.then(() => runSave(force), () => runSave(force));
+    return saveQueue;
+  }
+
+  async function runSave(force = false): Promise<boolean> {
     if (state.draftId === "") return true;
     const signature = saveSignature();
     if (!force && signature === savedSignature) return true;
@@ -465,6 +493,9 @@ export function createCreationStore(
     },
     batchUpdate,
     invalidatePreview,
+    invalidateForSettingsChange: previewSession.invalidateForSettingsChange,
+    preview: previewSession.preview,
+    execute: previewSession.execute,
     group,
     templateUrl: (): string => (state.draftId === "" ? "" : api.templateUrl(state.draftId)),
     importWorkbook,

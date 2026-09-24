@@ -3,7 +3,8 @@
 // 行内错误的可访问关联、批量修改（混合值与明确清空）、XLSX 导入的取消/失败/成功、
 // 保存失败时返回欢迎页被拦下，以及浅深主题与键盘输入。
 // 全部端点由 fixtures/creation 的 route mock 驱动（不读真实数据目录）；第四阶段
-// 「检查并创建」在 Task 9 接入，这里只断言四阶段导航与占位说明。
+// 「检查并创建」的权威预览、执行与任务闭环由 `create-sheetset-review.spec.ts` 覆盖，
+// 这里只断言四阶段导航与末阶段的接入点。
 import {expect, test, type Page} from "@playwright/test";
 import {
   chooseStandard,
@@ -415,7 +416,7 @@ test("XLSX 导入取消不发写请求，失败可定位且草稿零变更", asy
   await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\导入项目\\滨河路新建项目");
 });
 
-test("第四阶段壳就位并保留占位说明，键盘输入即时清除错误", async ({page}) => {
+test("第四阶段接入权威预览，键盘输入即时清除错误", async ({page}) => {
   await installCreation(page);
   await openCreation(page);
   await chooseStandard(page);
@@ -430,7 +431,8 @@ test("第四阶段壳就位并保留占位说明，键盘输入即时清除错�
 
   await page.getByRole("button", {name: "下一步"}).click();
   await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
-  await expect(page.getByText("本阶段当前只保留四阶段导航与输入", {exact: false})).toBeVisible();
+  // 第四阶段由 Task 9 接入后端权威预览：占位说明已被按组主表取代
+  await expect(page.getByTestId("creation-preview-table")).toBeVisible();
   await expect(page.getByTestId("creation-stepper").locator('[aria-current="step"]')).toHaveText(/4\s*检查并创建/);
   // 末阶段不再提供下一步；返回可回到上一阶段
   await expect(page.getByRole("button", {name: "下一步"})).toBeDisabled();

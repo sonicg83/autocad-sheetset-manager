@@ -9,6 +9,19 @@ import {request} from "../api/client";
 import type {Job,Workspace} from "../api/contracts";
 import type {Toast} from "./useToast";
 
+/**
+ * 任务终态集合：与后端 `interfaces/api.py` 的 SSE 终止集合（`TERMINAL_JOB_STATUSES`）
+ * 同口径。创建域的任务监视器（`features/creation/useCreationJob.ts`）复用这份判定，
+ * 不在别处另写第二份终态集合；跨语言一致性由 `tests/unit/test_job_terminal_statuses.py`
+ * 逐项钉住。
+ */
+export const TERMINAL_JOB_STATUSES = ["SUCCEEDED","FAILED","ROLLED_BACK","BLOCKED_FILE_LOCK","NEEDS_REVIEW"] as const;
+
+/** 任务是否已到终态（不再有后续进度）。 */
+export function isTerminalJobStatus(status:string):boolean{
+  return (TERMINAL_JOB_STATUSES as readonly string[]).includes(status);
+}
+
 export function useJobMonitor(deps:{
   isWorkspaceLoading:Ref<boolean>;
   workspace:Ref<Workspace|null>;
@@ -25,7 +38,7 @@ export function useJobMonitor(deps:{
   let pollTimer:number|null=null;
 
   function invalidateJobMonitor(clearJob=false){jobMonitorGeneration+=1;activeJobEvents?.close();activeJobEvents=null;if(pollTimer!==null){clearTimeout(pollTimer);pollTimer=null}if(clearJob)job.value=null;return jobMonitorGeneration}
-  function terminal(status:string){return ["SUCCEEDED","FAILED","ROLLED_BACK","BLOCKED_FILE_LOCK","NEEDS_REVIEW"].includes(status)}
+  function terminal(status:string){return isTerminalJobStatus(status)}
   function monitorMatches(generation:number,workspaceId:string){return generation===jobMonitorGeneration&&!deps.isWorkspaceLoading.value&&deps.workspace.value?.id===workspaceId}
   // Task 7 终态通知（SPEC-DM-006 §6.6）：SUCCEEDED→ok、FAILED/ROLLED_BACK/BLOCKED_FILE_LOCK→fail（含 error_code 与"整批未发布"语义）、NEEDS_REVIEW→fail（沿用既有禁止直接重试文案）；用户正停留在浮层实施进度页签（shouldSuppress）时不弹
   // 带 error_detail 时追加可读真因：ROLLED_BACK 等码只表示终态结论，根因由后端 error_detail 提供

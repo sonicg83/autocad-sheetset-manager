@@ -1,19 +1,23 @@
 <script setup lang="ts">
-// 四阶段创建向导（SPEC-DM-018 §2–§5；PLAN-DM-036 Task 8）。
-// 本任务实现前三阶段（选择标准 → 项目信息 → 图纸组）与全量 XLSX 导入；第四阶段
-// 「检查并创建」的权威预览与执行由 Task 9 接入，这里只把四阶段壳与导航补齐。
-// 页面只做编排：输入状态在 `features/creation/store.ts`，纯模型在 `inputModel.ts`，
-// 各阶段界面在 `components/creation/`。前端不复制属性求值、编号、DWG 命名规则。
-import {computed, onMounted, ref, watch} from "vue";
+// 四阶段创建向导（SPEC-DM-018 §2–§6；PLAN-DM-036 Task 8 前三阶段，Task 9 第四阶段）。
+// 页面只做编排：输入状态在 `features/creation/store.ts`，纯模型在 `inputModel.ts` /
+// `previewModel.ts`，预览与执行的状态迁移在 `previewSession.ts`，各阶段界面在
+// `components/creation/`。前端不复制属性求值、编号、DWG 命名规则。
+// 创建任务的进度监视在 `features/creation/useCreationJob.ts`（创建期尚无工作区，无法用
+// 按工作区匹配的全局任务监视器）；成功后把 `workspace_id` 交给 App 切换普通工作区。
+import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../components/ui/UiButton.vue";
 import StandardStep from "../components/creation/StandardStep.vue";
 import ProjectStep from "../components/creation/ProjectStep.vue";
 import GroupsStep from "../components/creation/GroupsStep.vue";
+import ReviewStep from "../components/creation/ReviewStep.vue";
 import XlsxImportDialog from "../components/creation/XlsxImportDialog.vue";
 import {creationApi} from "../api/creation";
 import {createCreationStore} from "../features/creation/store";
+import {useCreationJob} from "../features/creation/useCreationJob";
 import type {ConfirmOptions} from "../composables/useConfirm";
+import type {CreationPreviewTarget} from "../features/creation/previewModel";
 import type {CreationStandardCandidate, CreationStep} from "../features/creation/types";
 import type {StandardIdentity} from "../features/standards/types";
 
@@ -22,11 +26,27 @@ const props = defineProps<{
   /** 标准详情「用于创建」的一次性意图：固定该发布版本并直接进入第二阶段。 */
   entryIdentity?: StandardIdentity | null;
 }>();
-const emit = defineEmits<{back: []; standards: []}>();
+const emit = defineEmits<{back: []; standards: []; created: [workspaceId: string]}>();
 const {t} = useI18n();
 
 const store = createCreationStore(creationApi, {
   defaultFolderName: t("creation.project.folderDefault"),
+});
+
+// 创建任务监视：成功用返回的 `workspace_id` 切换普通工作区（由 App 完成）；失败使旧摘要
+// 失效并保留草稿与诊断，允许修正后重新检查并以新任务重试。
+const {
+  job: creationJob,
+  connectionMode: creationConnectionMode,
+  watch: watchCreationJob,
+  invalidate: invalidateCreationJob,
+} = useCreationJob({
+  onSucceeded: workspaceId => {
+    // 草稿已交付：本地身份不再指向「未完成的创建草稿」，下次进入向导从第一阶段开始
+    writeStoredDraftId("");
+    emit("created", workspaceId);
+  },
+  onFailed: () => store.invalidatePreview(),
 });
 
 // 四阶段固定顺序与后端 `CREATION_STEPS` 同口径；第一阶段只在尚未建立草稿时出现
@@ -120,6 +140,7 @@ async function useStandard(candidate: CreationStandardCandidate): Promise<void> 
     current.version === candidate.version;
   if (hasStandard.value && !same) {
     if (!(await confirmSwitchStandard())) return;
+    invalidateCreationJob(true);
     await store.chooseStandard(candidate, {replace: true});
     return;
   }
@@ -173,8 +194,66 @@ async function restart(): Promise<void> {
   });
   if (!confirmed) return;
   if (!(await store.restart())) return;
+  invalidateCreationJob(true);
   resumeVisible.value = false;
   xlsxOpen.value = false;
+}
+
+/** 执行创建：只发送权威摘要（store 保证）；入队后由本页监视任务进度。 */
+async function executeCreation(): Promise<void> {
+  const job = await store.execute();
+  if (job === null) return;
+  watchCreationJob(job);
+}
+
+/** 属性的用户可见名称（诊断定位用）；标准未声明时回退属性 ID。 */
+function propertyLabel(propertyId: string): string {
+  const standard = store.standard;
+  if (standard === null) return propertyId;
+  const found = [...standard.sheet_properties, ...standard.sheetset_properties].find(
+    property => property.property_id === propertyId,
+  );
+  return found === undefined || found.name === "" ? propertyId : found.name;
+}
+
+/** 按可见标签文本定位控件：FormField 以 `<label for>` 关联控件，id 由实例计数器生成。 */
+function focusByLabel(labelText: string): void {
+  const label = Array.from(document.querySelectorAll<HTMLLabelElement>("label")).find(
+    item => item.htmlFor !== "" && item.textContent?.trim() === labelText,
+  );
+  if (label === undefined) return;
+  document.getElementById(label.htmlFor)?.focus();
+}
+
+/**
+ * 图纸组行的定位：行身份是既有 `data-group-id`，属性列身份是单元格控件的可访问名
+ * （`第 N 组<属性名>`，与图纸组表同一拼写）。没有具体属性时落在该行首个控件（图名）。
+ */
+function focusGroupTarget(target: CreationPreviewTarget): void {
+  if (target.groupId === "") return;
+  const row = document.querySelector<HTMLElement>(`tr[data-group-id="${CSS.escape(target.groupId)}"]`);
+  if (row === null) return;
+  // 排除行选择复选框：定位目标是该行的输入控件（图名/张数/模板/图幅/属性）
+  const controls = Array.from(
+    row.querySelectorAll<HTMLElement>('input:not([type="checkbox"]), select'),
+  );
+  const wanted = target.propertyId === "" ? "" : propertyLabel(target.propertyId);
+  const matched =
+    wanted === "" ? undefined : controls.find(item => item.getAttribute("aria-label")?.endsWith(wanted));
+  (matched ?? controls[0])?.focus();
+}
+
+/** 诊断跳转：先切回目标阶段，再把焦点送到目标控件（不新建第二套 DOM 约定）。 */
+async function locateDiagnostic(target: CreationPreviewTarget): Promise<void> {
+  await store.goToStep(target.step);
+  await nextTick();
+  if (target.step === "groups") {
+    focusGroupTarget(target);
+    return;
+  }
+  if (target.step === "project") {
+    focusByLabel(target.propertyId === "" ? t("creation.project.parentLabel") : propertyLabel(target.propertyId));
+  }
 }
 
 /** 离开向导前先落盘：未保存的输入不得因返回欢迎页而静默丢失。
@@ -225,10 +304,11 @@ async function backToWelcome(): Promise<void> {
     />
     <ProjectStep v-else-if="store.step === 'project'" :store="store" />
     <GroupsStep v-else-if="store.step === 'groups'" :store="store" />
-    <section v-else class="card review-pending" role="region" :aria-label="$t('creation.wizard.stepPendingTitle')">
-      <h2>{{ $t("creation.wizard.stepPendingTitle") }}</h2>
-      <p>{{ $t("creation.wizard.stepPendingDesc") }}</p>
-    </section>
+    <ReviewStep
+      v-else :store="store" :confirm-action="confirmAction" :job="creationJob"
+      :connection-mode="creationConnectionMode"
+      @execute="executeCreation" @locate="locateDiagnostic"
+    />
     <footer class="wizard-foot">
       <UiButton variant="secondary" :disabled="!canGoBack" @click="store.goToStep(STEPS[stepIndex - 1] ?? 'standard')">
         {{ $t("creation.wizard.back") }}
@@ -259,8 +339,5 @@ async function backToWelcome(): Promise<void> {
 .banner{margin:0;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-primary);font-size:var(--font-label)}
 .banner.error{background:var(--color-danger-bg);color:var(--color-danger)}
 .banner button{font-size:var(--font-label);padding:var(--space-1) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer}
-.card{padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg)}
-.review-pending h2{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
-.review-pending p{margin:var(--space-2) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.7}
 .wizard-foot{display:flex;justify-content:flex-end;gap:var(--space-2)}
 </style>

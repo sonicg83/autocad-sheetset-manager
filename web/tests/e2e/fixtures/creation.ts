@@ -1,6 +1,11 @@
-// 创建向导 e2e 共享夹具（PLAN-DM-036 Task 8）：创建草稿、标准候选、XLSX 模板/导入与
-// 标准文档详情的 route mock。夹具自洽（内存草稿 + 乐观修订门禁），使「读取 → 编辑 →
-// 保存 → 重新读取」「导入 → 全量替换」在夹具内可验证，不依赖真实后端数据目录。
+// 创建向导 e2e 共享夹具（PLAN-DM-036 Task 8，Task 9 追加预览/执行/任务端点）：创建草稿、
+// 标准候选、XLSX 模板/导入、权威预览、执行入队、任务 SSE/轮询与标准文档详情的 route mock。
+// 夹具自洽（内存草稿 + 乐观修订门禁），使「读取 → 编辑 → 保存 → 重新读取」「导入 →
+// 全量替换」「预览 → 执行 → 任务终态」在夹具内可验证，不依赖真实后端数据目录。
+//
+// 预览响应是**后端权威结果**的替身：图号范围、紧凑标题、DWG 文件名与逐张属性值都由它
+// 给出，前端只投影不推算；用例可在进入第四阶段前替换 `preview`/`jobResult` 驱动失效、
+// 阻断与失败分支。
 //
 // 注意：注册路由必须用 URL 判定而非 glob（`**/api/creation-drafts**` 之类会把 vite 的
 // `/src/api/creation.ts` 模块请求一并拦下），与 `fixtures/standards.ts` 同一理由。
@@ -53,6 +58,17 @@ export interface CreationFixtureState {
   deleted: string[];
   importAttempts: number;
   templateRequests: number;
+  /** 权威预览请求次数与执行请求体（执行只允许携带 `preview_digest`）。 */
+  previewRequests: number;
+  executeBodies: Array<Record<string, unknown>>;
+  /** 创建任务 SSE 连接次数（含轮询回退共用的终态响应）。 */
+  jobStreams: number;
+  /** 可变的权威预览响应；用例可在进入第四阶段前替换。 */
+  preview: Record<string, unknown> | null;
+  /** 执行入队返回的任务（登记前 `workspace_id` 为空）。 */
+  executeJob: Record<string, unknown>;
+  /** 任务 SSE/轮询的终态响应（成功时带 `workspace_id`）。 */
+  jobResult: Record<string, unknown>;
   /** 可变的导入结果：`null` 表示成功（用 `importSuccess` 替换输入）。 */
   importFailure: {status: number; body: Record<string, unknown>} | null;
   /** 可变的保存结果：`null` 表示按乐观修订正常落盘（驱动「离开向导前必须落盘」门禁）。 */
@@ -66,6 +82,12 @@ export interface CreationFixtureState {
 
 export interface CreationFixtureOptions {
   candidates?: CreationCandidateBody[];
+  /** 权威预览响应；默认 `creationPreview()`（三组、含不编号组与多值属性）。 */
+  preview?: Record<string, unknown> | null;
+  /** 执行入队返回的任务；默认 `creationQueuedJob()`。 */
+  executeJob?: Record<string, unknown>;
+  /** 任务终态响应；默认 `creationSucceededJob()`（带新建工作区身份）。 */
+  jobResult?: Record<string, unknown>;
   /** 标准库列表（标准详情入口用例需要一条已发布版本）；默认空库。 */
   standardsList?: Array<Record<string, unknown>>;
   /** 创建候选端点固定失败，驱动第一阶段错误边界。 */
@@ -170,6 +192,184 @@ export function publishedStandardSummary(overrides: Record<string, unknown> = {}
   };
 }
 
+/**
+ * 权威预览响应（后端结果的替身）：三个图纸组、共 6 张图纸，覆盖不编号组的单值范围
+ * （`00`）、多值属性（首张值 + 明细）、首张为空的属性与紧凑标题范围。
+ */
+export function creationPreview(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const groups = [
+    {
+      group_id: "group-1",
+      created_order: 0,
+      title: "封面",
+      number_range: "00",
+      title_range: "封面",
+      base_template: "市政基础.dwt",
+      layout_template: "市政图框.dwt",
+      paper_layout: "A2",
+      dwg_name: "RQ-封面.dwg",
+      target_path: "D:\\项目\\新建项目\\RQ-封面.dwg",
+      sheet_count: 1,
+      sheets: [{number: "00", title: "封面", layout_name: "封面-00", values: {"prop-stage": "施工图", "prop-designer": ""}}],
+      property_cells: {
+        "prop-stage": {property_id: "prop-stage", first_value: "施工图", sheets: [{number: "00", value: "施工图"}]},
+        "prop-designer": {property_id: "prop-designer", first_value: "", sheets: [{number: "00", value: ""}]},
+      },
+    },
+    {
+      group_id: "group-2",
+      created_order: 1,
+      title: "平面图",
+      number_range: "01-03",
+      title_range: "平面图 (一)-(三)",
+      base_template: "市政基础.dwt",
+      layout_template: "市政图框.dwt",
+      paper_layout: "A1",
+      dwg_name: "RQ-平面图.dwg",
+      target_path: "D:\\项目\\新建项目\\RQ-平面图.dwg",
+      sheet_count: 3,
+      sheets: [
+        {number: "01", title: "平面图 (一)", layout_name: "平面图-01", values: {"prop-stage": "施工图", "prop-designer": "张工"}},
+        {number: "02", title: "平面图 (二)", layout_name: "平面图-02", values: {"prop-stage": "竣工图", "prop-designer": "张工"}},
+        {number: "03", title: "平面图 (三)", layout_name: "平面图-03", values: {"prop-stage": "施工图", "prop-designer": "张工"}},
+      ],
+      property_cells: {
+        "prop-stage": {
+          property_id: "prop-stage",
+          first_value: "施工图",
+          sheets: [
+            {number: "01", value: "施工图"},
+            {number: "02", value: "竣工图"},
+            {number: "03", value: "施工图"},
+          ],
+        },
+        "prop-designer": {
+          property_id: "prop-designer",
+          first_value: "张工",
+          sheets: [
+            {number: "01", value: "张工"},
+            {number: "02", value: "张工"},
+            {number: "03", value: "张工"},
+          ],
+        },
+      },
+    },
+    {
+      group_id: "group-3",
+      created_order: 2,
+      title: "纵断面图",
+      number_range: "04-05",
+      title_range: "纵断面图",
+      base_template: "市政基础.dwt",
+      layout_template: "市政图框.dwt",
+      paper_layout: "A1",
+      dwg_name: "RQ-纵断面图.dwg",
+      target_path: "D:\\项目\\新建项目\\RQ-纵断面图.dwg",
+      sheet_count: 2,
+      sheets: [
+        {number: "04", title: "纵断面图", layout_name: "纵断面图-04", values: {"prop-stage": "施工图", "prop-designer": ""}},
+        {number: "05", title: "纵断面图", layout_name: "纵断面图-05", values: {"prop-stage": "施工图", "prop-designer": "李工"}},
+      ],
+      property_cells: {
+        "prop-stage": {property_id: "prop-stage", first_value: "施工图", sheets: [{number: "04", value: "施工图"}, {number: "05", value: "施工图"}]},
+        "prop-designer": {property_id: "prop-designer", first_value: "", sheets: [{number: "04", value: ""}, {number: "05", value: "李工"}]},
+      },
+    },
+  ];
+  return {
+    draft_id: "draft-1",
+    revision: 2,
+    standard_id: "szmedi.gas",
+    standard_version: "2.1.0",
+    standard_name: "市政燃气施工图",
+    target_path: "D:\\项目\\新建项目",
+    sheetset_values: {"prop-name": "滨河路改造工程", "prop-major": "燃气"},
+    group_count: 3,
+    sheet_count: 6,
+    dwg_count: 3,
+    numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},
+    suffix: {enabled: false, suffix_type: 0, unnumbered_keywords: ["封面"]},
+    diagnostics: [],
+    groups,
+    executable: true,
+    preview_digest: "digest-1",
+    ...overrides,
+  };
+}
+
+/**
+ * 带阻断错误与非阻断提示的预览：错误可定位到图纸组行与项目字段，`executable` 为假。
+ */
+export function creationPreviewWithDiagnostics(): Record<string, unknown> {
+  const preview = creationPreview({executable: false});
+  preview["diagnostics"] = [
+    {
+      code: "CREATION_GROUP_TITLE_EMPTY",
+      message: "图纸组 'group-1' 的图名不能为空",
+      severity: "error",
+      group_id: "group-1",
+      property_id: "",
+    },
+    {
+      code: "CREATION_REQUIRED_VALUE_MISSING",
+      message: "必填属性 '工程名称' 不能为空",
+      severity: "error",
+      group_id: "",
+      property_id: "prop-name",
+    },
+    {
+      code: "DUPLICATE_LAYOUT_NAME",
+      message: "目标DWG内布局名重复：平面图-01",
+      severity: "warning",
+      group_id: "group-1",
+      property_id: "",
+    },
+  ];
+  return preview;
+}
+
+/** 执行入队响应：创建任务在登记前没有普通工作区。 */
+export function creationQueuedJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "job-1",
+    workspace_id: null,
+    creation_draft_id: "draft-1",
+    status: "QUEUED",
+    progress: 0,
+    type: "creation",
+    cad_version: "2020",
+    attempt: 1,
+    payload: {creation_draft_id: "draft-1", preview_digest: "digest-1", target_path: "D:\\项目\\新建项目"},
+    timeline: [{status: "QUEUED", progress: 0}],
+    files: [],
+    ...overrides,
+  };
+}
+
+/** 创建成功终态：登记完成后任务带新建工作区身份（前端据此切换普通工作区）。 */
+export function creationSucceededJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return creationQueuedJob({
+    status: "SUCCEEDED",
+    progress: 100,
+    workspace_id: "created-1",
+    revision_id: "revision-1",
+    finished_at: "2026-09-24T10:00:00Z",
+    payload: {creation_draft_id: "draft-1", workspace: {id: "created-1", revision_id: "revision-1", dst_path: "D:\\项目\\新建项目\\图纸集.dst"}},
+    ...overrides,
+  });
+}
+
+/** 创建失败终态：目标未留下半成品，草稿与诊断保留供修正后重试。 */
+export function creationFailedJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return creationQueuedJob({
+    status: "FAILED",
+    error_code: "CREATION_PUBLISH_FAILED",
+    error_detail: "模板资产不可读取",
+    finished_at: "2026-09-24T10:00:00Z",
+    ...overrides,
+  });
+}
+
 /** 默认导入拒绝：两条诊断覆盖「工作表 + 行 + 列」与「工作表 + 行」两种定位。 */
 export function creationImportFailure(): {status: number; body: Record<string, unknown>} {
   return {
@@ -245,6 +445,12 @@ export async function installCreation(
     deleted: [],
     importAttempts: 0,
     templateRequests: 0,
+    previewRequests: 0,
+    executeBodies: [],
+    jobStreams: 0,
+    preview: options.preview === undefined ? creationPreview() : options.preview,
+    executeJob: options.executeJob ?? creationQueuedJob(),
+    jobResult: options.jobResult ?? creationSucceededJob(),
     importFailure: options.importFailure === undefined ? creationImportFailure() : options.importFailure,
     saveFailure: null,
     importSuccess: options.importSuccess ?? creationImportSuccess(),
@@ -289,6 +495,17 @@ export async function installCreation(
           contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           body: "creation-template-stub",
         });
+      }
+      const previewMatch = /^\/api\/creation-drafts\/([^/]+)\/preview$/.exec(path);
+      if (previewMatch && method === "POST") {
+        state.previewRequests += 1;
+        // 权威预览只由后端给出：夹具返回固定替身，前端不得自行推算任何派生输出
+        return route.fulfill({json: state.preview ?? creationPreview()});
+      }
+      const executeMatch = /^\/api\/creation-drafts\/([^/]+)\/execute$/.exec(path);
+      if (executeMatch && method === "POST") {
+        state.executeBodies.push((await request.postDataJSON()) as Record<string, unknown>);
+        return route.fulfill({json: state.executeJob});
       }
       const importMatch = /^\/api\/creation-drafts\/([^/]+)\/xlsx-import$/.exec(path);
       if (importMatch && method === "POST") {
@@ -354,6 +571,23 @@ export async function installCreation(
         }
       }
       return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
+    },
+  );
+
+  // 创建任务进度：SSE 一次性给出终态（与后端 `/api/jobs/{id}/events` 同形态），
+  // 轮询端点返回同一份终态，供 EventSource 断线回退路径使用
+  await page.route(
+    url => url.pathname.startsWith("/api/jobs/"),
+    route => {
+      if (new URL(route.request().url()).pathname.endsWith("/events")) {
+        state.jobStreams += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `data: ${JSON.stringify(state.jobResult)}\n\n`,
+        });
+      }
+      return route.fulfill({json: state.jobResult});
     },
   );
 
