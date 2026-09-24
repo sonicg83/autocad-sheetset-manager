@@ -501,6 +501,41 @@ def test_save_draft_prunes_only_unreferenced_managed_copies(store: StandardStore
     assert (assets / "A2.dwg").read_bytes() == b"hand-placed"
 
 
+def test_export_deduplicates_shared_asset_paths(store: StandardStore, tmp_path: Path) -> None:
+    """两个资产声明同一路径（Schema 允许）时，导出不得写出重复 ZIP 条目。"""
+    document = standard_document()
+    document["assets"] = [
+        {"asset_id": "a", "kind": "base-template", "files": [{"path": "assets/A2.dwg"}]},
+        {"asset_id": "b", "kind": "layout-template", "files": [{"path": "assets/A2.dwg", "role": "A2"}]},
+    ]
+    create_draft(store, document, draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
+    store.publish("draft-asset")
+
+    exported = store.export_package("user.water", "3.0.0", tmp_path / "out")
+    with zipfile.ZipFile(exported) as archive:
+        assert archive.namelist().count("assets/A2.dwg") == 1
+        assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
+    # 导出包必须能再次导入（重复规范化路径会被阅读器拒绝）
+    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
+    fresh.import_package(exported)
+    assert fresh.get("user.water", "3.0.0") is not None
+
+
+def test_list_skips_illegal_published_directory_names(store: StandardStore) -> None:
+    """已发布根下的非法目录名（如版本段不合法）只跳过，不得让后续读取入口报错。"""
+    create_draft(store, USER_DOCUMENT, draft_id="draft-asset")
+    store.publish("draft-asset")
+    (store.published_root / "user.water" / "tmp").mkdir()
+
+    published = [
+        (entry.standard_id, entry.version)
+        for entry in store.list()
+        if entry.status == "published"
+    ]
+    assert published == [("official.gas", "1.0.0"), ("user.water", "3.0.0")]
+
+
 def test_orphan_managed_copy_survives_until_next_save(store: StandardStore) -> None:
     """放弃编辑产生的孤儿副本保留到下次保存/发布再清理。"""
     document = asset_document("assets/managed-keep.dwg")

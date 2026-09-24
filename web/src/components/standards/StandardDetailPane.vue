@@ -81,7 +81,13 @@ const documentCounts = computed(() => {
       <p v-if="detailPending" class="detail-note" role="status">{{ $t("standards.detail.loading") }}</p>
       <template v-else-if="detailError">
         <p class="detail-note error" role="alert" data-testid="detail-error">{{ detailError }}</p>
-        <UiButton variant="secondary" :disabled="detailPending" @click="emit('retry')">
+        <!-- 只有已发布版本有可重发的详情请求；草稿加载失败请重新点「编辑」 -->
+        <UiButton
+          v-if="summary.status === 'published'"
+          variant="secondary"
+          :disabled="detailPending"
+          @click="emit('retry')"
+        >
           {{ $t("standards.detail.retry") }}
         </UiButton>
       </template>

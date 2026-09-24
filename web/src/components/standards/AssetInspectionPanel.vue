@@ -74,7 +74,8 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       <h5 class="block-title">{{ $t("standards.assets.layoutsTitle") }}</h5>
       <p class="panel-note">{{ $t("standards.assets.modelExcluded", {model: MODEL_LAYOUT_NAME}) }}</p>
       <p v-if="pending" class="panel-note">{{ $t("standards.assets.inspectPending") }}</p>
-      <p v-else-if="state === 'unchecked'" class="panel-note" data-testid="asset-layout-unchecked">
+      <!-- 无可用结果（未检查或检查失败）时不得给出“缺少同名布局”这类结构性结论 -->
+      <p v-else-if="state === 'unchecked' || state === 'error'" class="panel-note" data-testid="asset-layout-unchecked">
         {{ $t("standards.assets.uncheckedDiagnostics") }}
       </p>
       <template v-else>
@@ -115,8 +116,7 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       </p>
       <p v-else-if="state === 'unchecked'" class="panel-note" data-testid="asset-unchecked">
         {{ $t("standards.assets.uncheckedDiagnostics") }}
-      </p>
-      <ul v-else-if="(inspection?.diagnostics ?? []).length > 0" class="diagnostic-list" role="alert">
+      </p>      <ul v-else-if="(inspection?.diagnostics ?? []).length > 0" class="diagnostic-list" role="alert">
         <li v-for="(diagnostic, index) in inspection?.diagnostics ?? []" :key="index" :data-testid="`asset-diagnostic-${index}`">
           {{ $t(`standards.diagnostic.${diagnostic.code}`, {layout: declared[0] ?? "", assetId: asset.asset_id}) }}
         </li>

@@ -231,8 +231,17 @@ class StandardStore:
         for standard_dir in sorted(root.iterdir()):
             if not standard_dir.is_dir():
                 continue
+            try:
+                _safe_segment(standard_dir.name, "id")
+            except StandardStoreError:
+                # 目录名非法的历史条目只跳过，不阻断其余标准（与草稿扫描同口径）
+                continue
             for version_dir in sorted(standard_dir.iterdir()):
                 if not version_dir.is_dir():
+                    continue
+                try:
+                    _safe_segment(version_dir.name, "version")
+                except StandardStoreError:
                     continue
                 document = self._read_document(version_dir)
                 summaries.append(
@@ -561,7 +570,12 @@ class StandardStore:
         package = dest / f"{standard_id}-{version}.dststandard"
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(source / DOCUMENT_NAME, arcname=MANIFEST_NAME)
+            # 两个资产可以声明同一路径：包内条目必须去重，否则阅读器以重复路径拒绝自家导出包。
+            written: set[str] = set()
             for arcname, file in assets:
+                if arcname in written:
+                    continue
+                written.add(arcname)
                 archive.write(file, arcname=arcname)
         return package
 

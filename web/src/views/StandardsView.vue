@@ -267,6 +267,8 @@ async function deleteSelectedDraft(): Promise<void> {
   }
   selectedKey.value = null;
   store.clearDetail();
+  // 选中项已删除：窄视口必须回到列表，否则停在无可返回入口的空白详情（详情面板的空态无返回按钮）
+  narrowPane.value = "list";
   await store.refresh();
 }
 

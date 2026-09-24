@@ -401,10 +401,11 @@ test("200% 缩放下两级视图互斥且返回列表可达", async ({page}) => 
   await expect(libraryRegion).toBeHidden();
   const back = page.getByRole("button", {name: "返回列表"});
   await expect(back).toBeVisible();
-  const viewport = page.viewportSize()!;
   const box = await back.boundingBox();
   expect(box, "返回列表应有布局盒").not.toBeNull();
-  expect(box!.y + box!.height, "返回列表底部在视口内").toBeLessThanOrEqual(viewport.height + 1);
+  // 用页面内真实视口高度判定：CDP 覆盖不会更新 page.viewportSize()
+  const innerHeight = await page.evaluate(() => window.innerHeight);
+  expect(box!.y + box!.height, "返回列表底部在视口内").toBeLessThanOrEqual(innerHeight + 1);
   await expectNoPageHScroll(page, "200% 标准详情");
 });
 
@@ -471,4 +472,35 @@ test("新建草稿弹窗：初始焦点、Tab 圈闭、Escape 与焦点归还", 
   await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();
   expect(state.createBodies).toEqual([]);
+});
+
+
+test("窄屏删除当前草稿后回到列表而不是空白详情", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installStandards(page, [draft("草稿 1", "draft-1"), draft("草稿 2", "draft-2")]);
+  await openStandards(page);
+  await libraryItems(page).filter({hasText: "草稿 1"}).click();
+  const libraryRegion = page.getByRole("region", {name: "标准库"});
+  const detailRegion = page.getByRole("region", {name: "标准详情"});
+  await expect(detailRegion).toBeVisible();
+  await expect(libraryRegion).toBeHidden();
+
+  await page.getByRole("button", {name: "删除草稿"}).click();
+  await page.locator('[role="dialog"][aria-modal="true"]').getByRole("button", {name: "删除"}).click();
+
+  // 选中项被删除：必须回到列表，不能停在无可返回入口的空白详情
+  await expect(libraryRegion).toBeVisible();
+  await expect(detailRegion).toBeHidden();
+  await expect(libraryItems(page).filter({hasText: "草稿 2"})).toBeVisible();
+});
+
+test("草稿加载失败时不显示无动作的详情重试按钮", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {}});
+  await openStandards(page);
+  await libraryItems(page).filter({hasText: "草稿 1"}).click();
+  await page.getByRole("button", {name: "编辑"}).click();
+
+  await expect(page.getByTestId("detail-error")).toBeVisible();
+  // 草稿没有可重发的详情请求：不得给出点了没反应的「重试加载详情」
+  await expect(page.getByRole("button", {name: "重试加载详情"})).toHaveCount(0);
 });

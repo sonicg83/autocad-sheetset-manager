@@ -345,3 +345,21 @@ test("复制 → 保存 → 检查 → 发布 闭环使用同一份受控副本"
   await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
   expect(state.publishCalls).toBe(1);
 });
+
+
+test("检查失败时布局表不给「缺声明」假结论", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": layoutDraft(["A2"])},
+    assetInspectFailures: {
+      layouts: {status: 500, code: "INTERNAL_ERROR", message: "CAD 未就绪"},
+    },
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "assets");
+
+  await expect(page.getByTestId("asset-failure")).toBeVisible();
+  // 读取失败不等于「缺少同名布局」：不得给出结构性结论
+  await expect(page.getByTestId("asset-layout-A2")).toHaveCount(0);
+  await expect(page.getByTestId("asset-layout-unchecked")).toContainText("未检查");
+});

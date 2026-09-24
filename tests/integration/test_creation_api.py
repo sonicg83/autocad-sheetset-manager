@@ -741,6 +741,19 @@ def test_candidate_with_corrupt_standard_document_is_unavailable(
     assert len(broken["reasons"]) == 1 and "标准文档无法解析" in broken["reasons"][0]
 
 
+def test_candidates_survive_illegal_published_directory_name(
+    client: TestClient, root: Path
+) -> None:
+    """标准库中混入非法版本目录名时，候选列表仍返回 200 并列出其余标准。"""
+    publish_standard(client, root)
+    (root / "standards" / "user" / "published" / "szmedi.gas" / "tmp").mkdir()
+
+    response = client.get("/api/creation-drafts/standards")
+
+    assert response.status_code == 200, response.text
+    assert [item["standard_id"] for item in response.json()] == ["szmedi.gas"]
+
+
 def test_candidate_labels_are_unique_within_kind(client: TestClient, root: Path) -> None:
     """同类内文件名冲突时标签退回包内相对路径：候选标签必须可唯一回指资产。"""
     publish_standard(
