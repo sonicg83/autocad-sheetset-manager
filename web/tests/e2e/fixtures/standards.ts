@@ -102,6 +102,10 @@ export interface StandardsFixtureState {
   assetInspectFailures: Record<string, {status: number; code: string; message: string}>;
   /** 资产检查调用次数（重试断言用）。 */
   inspectCalls: string[];
+  /** 资产检查命中的草稿 ID（F03：编辑器必须只操作打开时的草稿）。 */
+  inspectDraftIds: string[];
+  /** 发布命中的草稿 ID（F03）。 */
+  publishDraftIds: string[];
   /** 本机模板受控复制调用（入参：草稿 ID 与来源绝对路径）。 */
   assetCopyCalls: {draftId: string; sourcePath: string}[];
   /** 可变的复制失败注入（模拟后端稳定拒绝）。 */
@@ -243,6 +247,8 @@ export async function installStandards(
     assetResults: options.assetResults ?? {},
     assetInspectFailures: {...(options.assetInspectFailures ?? {})},
     inspectCalls: [],
+    inspectDraftIds: [],
+    publishDraftIds: [],
     assetCopyCalls: [],
     assetCopyFailure: null,
     publishFailure: null,
@@ -299,6 +305,7 @@ export async function installStandards(
       if (inspectMatch && method === "POST") {
         const assetId = decodeURIComponent(inspectMatch[2]);
         state.inspectCalls.push(assetId);
+        state.inspectDraftIds.push(decodeURIComponent(inspectMatch[1]));
         const failure = state.assetInspectFailures[assetId];
         if (failure !== undefined) {
           return route.fulfill({status: failure.status, json: {code: failure.code, message: failure.message}});
@@ -313,6 +320,7 @@ export async function installStandards(
           return route.fulfill({status: state.publishFailure.status, json: {code: state.publishFailure.code, message: state.publishFailure.message}});
         }
         const draftId = decodeURIComponent(publishMatch[1]);
+        state.publishDraftIds.push(draftId);
         const document = state.drafts.get(draftId) ?? {};
         const standardId = String(document["standard_id"] ?? "");
         const version = String(document["version"] ?? "");

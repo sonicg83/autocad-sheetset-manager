@@ -174,7 +174,81 @@ test("导入碰撞不改变当前选择且不关闭导入对话框", async ({pag
   expect(state.list).toHaveLength(2);
 });
 
+// ---- 列表键与编辑身份（PLAN-DM-040 Task 5，F03/F05） ---------------------
+
+test("同来源同版本的不同标准互不串键", async ({page}) => {
+  await installStandards(page, [
+    published("official", "1.0.0", {standard_id: "official.gas", name: "官方燃气标准"}),
+    published("official", "1.0.0", {standard_id: "official.water", name: "官方给水标准"}),
+  ]);
+  await openStandards(page);
+  await expect(libraryItems(page)).toHaveCount(2);
+
+  const detail = page.getByRole("region", {name: "标准详情"});
+  await libraryItems(page).filter({hasText: "官方燃气标准"}).click();
+  await expect(detail).toContainText("official.gas");
+  await libraryItems(page).filter({hasText: "官方给水标准"}).click();
+  await expect(detail).toContainText("official.water");
+  await expect(detail).not.toContainText("official.gas");
+  // 选中高亮必须落在当前条目上（键重复时两个条目会同时命中）
+  await expect(libraryItems(page).filter({hasText: "官方给水标准"})).toHaveClass(/selected/);
+  await expect(libraryItems(page).filter({hasText: "官方燃气标准"})).not.toHaveClass(/selected/);
+});
+
+test("空库新建草稿后保存与发布只作用于新草稿", async ({page}) => {
+  const state = await installStandards(page, []);
+  await openStandards(page);
+  await page.getByRole("button", {name: "新建草稿"}).click();
+  const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
+  await dialog.getByLabel("标准名称").fill("空白标准");
+  await dialog.getByLabel("版本号").fill("1.0.0");
+  await dialog.getByRole("button", {name: "创建草稿"}).click();
+
+  const editor = page.getByRole("region", {name: "标准草稿编辑器"});
+  await expect(editor).toBeVisible();
+  await expect(editor).toContainText("draft-new-1");
+  await editor.getByLabel("标准名称").fill("改名后的标准");
+  await page.getByRole("button", {name: "保存草稿"}).click();
+  await expect(page.getByTestId("editor-save-state")).toHaveText("已保存");
+  expect(state.drafts.get("draft-new-1")?.["name"]).toBe("改名后的标准");
+
+  await page.getByRole("button", {name: "发布检查"}).click();
+  await page.getByRole("button", {name: "发布标准"}).click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
+  expect(state.publishDraftIds).toEqual(["draft-new-1"]);
+});
+
+test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+  });
+  state.assetResults["layout-template-1"] = {
+    asset_id: "layout-template-1",
+    kind: "layout-template",
+    layouts: ["Model", "A4"],
+    diagnostics: [],
+  };
+  await openStandards(page);
+  await libraryItems(page).filter({hasText: "草稿 1"}).click();
+  await page.getByRole("button", {name: "新建草稿"}).click();
+  const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
+  await dialog.getByLabel("标准名称").fill("空白标准");
+  await dialog.getByLabel("版本号").fill("1.0.0");
+  await dialog.getByRole("button", {name: "创建草稿"}).click();
+
+  await page.getByTestId("editor-section-assets").click();
+  await page.getByRole("button", {name: "添加布局模板"}).click();
+  await page.evaluate(() => { (window as any).__fakeSelectResult = "C:\\tmp\\A4 模板.dwg"; });
+  await page.getByTestId("asset-file-pick-0").click();
+  await page.getByLabel("图幅（role）").fill("A4");
+  await page.getByRole("button", {name: "重新检查"}).click();
+  await expect(page.getByTestId("asset-row-user-layout-template-1")).toContainText("检查通过");
+
+  expect(new Set(state.inspectDraftIds)).toEqual(new Set(["draft-new-1"]));
+});
+
 test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
   await page.setViewportSize({width: 900, height: 768});
   await installStandards(page, [published("official", "2.1.0")]);
   await openStandards(page);

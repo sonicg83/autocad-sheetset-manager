@@ -1,3 +1,9 @@
+## 2026-09-24（PLAN-DM-040 Task 5：列表键与编辑草稿身份）
+
+- 修复 F05：`draftKey` 对已发布版本改用 `source/standard_id/version`（草稿仍用稳定 `draft_id`），`StandardLibraryPane` 删除内联键表达式并复用同一函数；同来源、同版本的不同标准不再共用列表键，选中高亮与详情不再串位。
+- 修复 F03：`StandardsView` 在打开编辑器时固定 `editorDraftId`（离开时清空），资产检查、本机模板复制与发布一律只用它，缺身份直接以 `STANDARD_DRAFT_NOT_FOUND` 拒绝而不回退到列表选中项；新建草稿成功后立即把选中身份指向新草稿，发布成功后按返回的 `standard_id/version` 精确选中新发布版本；`StandardEditor` 显式使用 `props.draft.draft_id` 作为检查身份。
+- 验证：RED 单测 2 例（同版本键重复、已发布键缺标准 ID）+ E2E 3 例（点击第二项仍显示第一项详情、新建后发布无详情、检查打到旧草稿 ID）；GREEN `npm --prefix web run test:unit` 309 例、相关 Playwright 3 个 spec 83 例、`npm --prefix web run build` 均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 4：检查结果绑定已保存草稿）
 
 - 修复 F06/F07：`publishModel` 新增 `InspectionRecord` 与 `inspectionRecordMatches`/`recordInspectionState`/`inspectionRunIsCurrent` 等纯函数，检查结果绑定草稿身份与被检查文档快照；草稿身份或缓冲一变即过期，过期记录一律按「未检查」处理，不再把旧结果当作当前结果。

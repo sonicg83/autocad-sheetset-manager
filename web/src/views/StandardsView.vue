@@ -53,6 +53,8 @@ const selected = computed<StandardSummary | null>(() =>
 // —— 草稿编辑器接线（Task 9）：仅用户草稿可编辑，且离开编辑器要过未保存修改三选一门禁 ——
 const editorOpen = ref(false);
 const editorRef = ref<{guard: (next: () => void | Promise<void>) => Promise<void>} | null>(null);
+/** 打开编辑器时固定的草稿身份：检查/发布/复制只用它，不从列表选择反推（F03）。 */
+const editorDraftId = ref("");
 /** 同名官方标准声明的资产（只读参考）；无可对照官方标准时为空。 */
 const officialAssets = ref<DraftAsset[]>([]);
 const officialStandardId = ref("");
@@ -64,8 +66,15 @@ async function openEditor(): Promise<void> {
   if (loaded === null) return; // 加载失败：错误留到草稿错误区，不进入空编辑器
   officialAssets.value = [];
   officialStandardId.value = "";
+  editorDraftId.value = loaded.draft_id;
   editorOpen.value = true;
   await loadOfficialReference(String(loaded.document["standard_id"] ?? ""));
+}
+
+/** 编辑器操作目标：未进入编辑器时一律拒绝，绝不回退到列表选中项。 */
+function editorDraft(): string {
+  if (editorDraftId.value === "") throw new Error("STANDARD_DRAFT_NOT_FOUND");
+  return editorDraftId.value;
 }
 
 /** 标准库中存在同名官方已发布版本时，取其资产声明作为只读对照（不修改草稿）。 */
@@ -86,6 +95,7 @@ async function loadOfficialReference(standardId: string): Promise<void> {
 
 async function leaveEditor(): Promise<void> {
   editorOpen.value = false;
+  editorDraftId.value = "";
   store.closeDraft();
   officialAssets.value = [];
   officialStandardId.value = "";
@@ -106,33 +116,26 @@ async function saveEditorDocument(document: Record<string, unknown>): Promise<Re
 
 /** 资产检查：后端固定读取协议，失败抛出交由编辑器归为「检查本身失败」。 */
 async function inspectEditorAsset(assetId: string, cadVersion: string): Promise<AssetInspection> {
-  const summary = selected.value;
-  if (summary?.draft_id === null || summary?.draft_id === undefined) {
-    throw new Error("STANDARD_DRAFT_NOT_FOUND");
-  }
-  return store.inspectAsset({draftId: summary.draft_id, assetId, cadVersion});
+  return store.inspectAsset({draftId: editorDraft(), assetId, cadVersion});
 }
 
 /** 本机模板受控复制：只把后端生成的包内相对路径交给编辑器缓冲。 */
 async function copyEditorAssetFile(sourcePath: string): Promise<string> {
-  const summary = selected.value;
-  if (summary?.draft_id === null || summary?.draft_id === undefined) {
-    throw new Error("STANDARD_DRAFT_NOT_FOUND");
-  }
-  const copied = await store.copyAssetFile({draftId: summary.draft_id, sourcePath});
+  const copied = await store.copyAssetFile({draftId: editorDraft(), sourcePath});
   return copied.path;
 }
 
 /** 发布：成功时后端把草稿移入已发布目录，需退出编辑器并定位到新版本只读详情。 */
 async function publishEditorDraft(): Promise<void> {
-  const summary = selected.value;
-  if (summary?.draft_id === null || summary?.draft_id === undefined) {
-    throw new Error("STANDARD_DRAFT_NOT_FOUND");
-  }
-  const published = await store.publish({draftId: summary.draft_id});
+  const published = await store.publish({draftId: editorDraft()});
   await leaveEditor();
-  // 发布总是写入用户已发布根：选中键必须与列表项的键派生一致（`draftKey`）
-  selectedKey.value = draftKey({source: "user", draft_id: null, version: published.version});
+  // 发布总是写入用户已发布根：按返回的 standard_id/version 精确选中新发布版本
+  selectedKey.value = draftKey({
+    source: "user",
+    standard_id: published.standard_id,
+    draft_id: null,
+    version: published.version,
+  });
   await store.open({standardId: published.standard_id, version: published.version});
 }
 
@@ -200,8 +203,16 @@ async function submitCreate(payload: {name: string; version: string; dstPath: st
   }
   // 创建后直接进入编辑器：草稿身份已经由创建响应给出，不再多发一次 GET
   store.adoptDraft(created);
+  editorDraftId.value = created.draft_id;
   editorOpen.value = true;
   createDialogOpen.value = false;
+  // 选中身份必须指向新草稿：否则标题栏/列表刷新后仍停留在旧草稿，检查与发布会打错目标
+  selectedKey.value = draftKey({
+    source: "user",
+    standard_id: String(created.document["standard_id"] ?? ""),
+    draft_id: created.draft_id,
+    version: "",
+  });
   await store.refresh();
 }
 

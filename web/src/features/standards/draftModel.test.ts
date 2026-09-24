@@ -5,6 +5,7 @@ import {
   EDITOR_SECTIONS,
   blankStandardDocument,
   defaultDwgNamingSegments,
+  draftKey,
   type DraftAsset,
   type DraftDocument,
   type PreviewSamples,
@@ -400,5 +401,24 @@ describe("draft model", () => {
       {item_id: "enum-csv-2", value: "A3"},
     ]);
     expect(created.every(item => item.kind === "text" || item.kind === "enum")).toBe(true);
+  });
+});
+
+describe("draftKey（PLAN-DM-040 Task 5）", () => {
+  it("同来源同版本的不同标准不重复", () => {
+    const gas = {source: "official" as const, standard_id: "official.gas", version: "1.0.0", draft_id: null};
+    const water = {source: "official" as const, standard_id: "official.water", version: "1.0.0", draft_id: null};
+    expect(draftKey(gas)).not.toBe(draftKey(water));
+  });
+
+  it("草稿用稳定 draft_id，已发布版本用 source/standard_id/version", () => {
+    expect(draftKey({source: "user", standard_id: "user.gas", version: "", draft_id: "draft-1"})).toBe("user/draft-1");
+    expect(draftKey({source: "user", standard_id: "user.gas", version: "3.0.0", draft_id: null})).toBe(
+      "user/user.gas/3.0.0",
+    );
+    // 同身份的用户已发布版本与官方版本仍必须可区分
+    expect(draftKey({source: "official", standard_id: "user.gas", version: "3.0.0", draft_id: null})).not.toBe(
+      draftKey({source: "user", standard_id: "user.gas", version: "3.0.0", draft_id: null}),
+    );
   });
 });

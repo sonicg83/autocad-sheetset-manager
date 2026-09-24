@@ -1016,7 +1016,16 @@ export const EDITOR_SECTIONS: Array<{id: EditorSectionId; labelKey: string}> = [
   {id: "publish", labelKey: "standards.sections.publish"},
 ];
 
-/** 草稿在标准库中的稳定键（列表选中与编辑器定位共用）。 */
-export function draftKey(summary: Pick<StandardSummary, "source" | "draft_id" | "version">): string {
-  return `${summary.source}/${summary.draft_id ?? summary.version}`;
+/** 标准库中的稳定键（列表选中与编辑器定位共用）。
+ *
+ * 草稿用稳定 ``draft_id``；已发布版本用 ``source/standard_id/version``——只用版本会
+ * 让同来源、同版本的不同标准共用同一个键（F05），导致选中与详情串位。
+ */
+export function draftKey(
+  summary: Pick<StandardSummary, "source" | "standard_id" | "draft_id" | "version">,
+): string {
+  if (summary.draft_id !== null && summary.draft_id !== undefined) {
+    return `${summary.source}/${summary.draft_id}`;
+  }
+  return `${summary.source}/${summary.standard_id}/${summary.version}`;
 }

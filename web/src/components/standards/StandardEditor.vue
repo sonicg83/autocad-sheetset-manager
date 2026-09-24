@@ -146,11 +146,13 @@ const releaseNotes = computed({
   set: (value: string) => { buffer.value.release_notes = value; },
 });
 const cadVersion = computed(() => buffer.value.supported_cad_versions[0] ?? "");
+/** 打开编辑器时固定的草稿身份（F03）：检查与发布只用它，不从列表选择反推。 */
+const draftId = computed(() => props.draft.draft_id);
 
 /** 当前有效的检查记录：草稿身份或当前文档快照不匹配时按“未检查”处理。
  *  用缓冲快照（而非已保存基准）比对：编辑缓冲后发布将先落盘，旧结果不再对应将要发布的文档。 */
 const currentRecord = computed<InspectionRecord | null>(() =>
-  inspectionRecordMatches(inspectionRecord.value, props.draft.draft_id, snapshot.value)
+  inspectionRecordMatches(inspectionRecord.value, draftId.value, snapshot.value)
     ? inspectionRecord.value
     : null,
 );
@@ -238,7 +240,7 @@ async function runInspections(): Promise<void> {
   }
   const run = {
     generation: ++inspectionGeneration,
-    draftId: props.draft.draft_id,
+    draftId: draftId.value,
     documentSnapshot: snapshot.value,
   };
   inspectionPending.value = true;
@@ -261,7 +263,7 @@ async function runInspections(): Promise<void> {
   }
   const stillCurrent = inspectionRunIsCurrent(run, {
     generation: inspectionGeneration,
-    draftId: props.draft.draft_id,
+    draftId: draftId.value,
     documentSnapshot: snapshot.value,
   });
   if (!stillCurrent) return; // 乱序返回或检查期间继续编辑：丢弃本次结果

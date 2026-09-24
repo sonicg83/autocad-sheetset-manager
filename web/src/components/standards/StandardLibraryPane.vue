@@ -6,6 +6,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import {buildLibraryState, type StandardFilters} from "./standardLibraryModel";
+import {draftKey} from "../../features/standards/draftModel";
 import type {StandardSummary} from "../../features/standards/types";
 
 const props = defineProps<{
@@ -61,11 +62,11 @@ function update(partial: Partial<StandardFilters>): void {
     <p v-else-if="state.kind==='empty-library'" class="library-status">{{ $t("standards.library.empty") }}</p>
     <p v-else-if="state.kind==='empty-filter'" class="library-status">{{ $t("standards.library.noMatch") }}</p>
     <ul v-else class="library-list" data-testid="library-list">
-      <li v-for="item in state.items" :key="item.source + '/' + (item.draft_id ?? item.version)">
+      <li v-for="item in state.items" :key="draftKey(item)">
         <button
           type="button"
           class="library-item"
-          :class="{selected: selectedKey===item.source + '/' + (item.draft_id ?? item.version)}"
+          :class="{selected: selectedKey===draftKey(item)}"
           @click="emit('select', item)"
         >
           <span class="library-name">{{ item.name }}</span>
