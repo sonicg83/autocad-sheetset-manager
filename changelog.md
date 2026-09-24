@@ -1,3 +1,12 @@
+## 2026-09-24（PLAN-DM-040 Task 3：本机模板受控复制进草稿）
+
+- 修复 F01（阻断）：新增 `POST /api/standards/drafts/{draft_id}/asset-files`（请求 `{source_path}`，响应 `{path}`）。桌面壳经固定 `template` 文件种类（`*.dwg;*.dwt`）选择本机模板，后端复制到草稿受控目录并返回形如 `assets/managed-<uuid4hex>.dwg|.dwt` 的受控副本名；无壳本地开发态提供单独标明的「来源绝对路径」输入并调用同一端点。草稿只保存包内相对路径，本机绝对路径不写入文档/发布目录/包清单。
+- 复制约束：来源必须是已存在的 `.dwg`/`.dwt` 文件且不超过 64 MiB；先写草稿内随机临时文件、校验大小后原子改名，失败不留半文件也不覆盖已有副本；稳定码 `STANDARD_ASSET_SOURCE_NOT_FOUND`（404）/`STANDARD_ASSET_SOURCE_INVALID`/`STANDARD_ASSET_COPY_FAILED`（422）。
+- 清理规则：保存与发布成功后只删除草稿 `assets/` 下未被当前文档引用且文件名匹配 `managed-` 前缀的副本；手工放置的资产不受影响，放弃编辑的孤儿副本保留到下次保存/发布。
+- 前端：`TemplateAssetsEditor` 的受控路径改为只读，新增「选择本机模板」/「替换文件」与无壳回退输入；只有复制成功才改编辑缓冲，失败就地显示稳定码并保留旧声明；`StandardEditor`/`StandardsView`/`store`/`api` 同步接线，OpenAPI 与 TS 类型重新生成，中英文案同步（新增 3 个诊断码与 8 个 UI 文案键）。
+- 文档：按 Task 3 修订 SPEC-DM-016 §8.1（来源路径、包内路径、复制失败与无壳回退契约）并同步 `updated`。
+- 验证：RED 19 例（端点 404、清理未实现、复制未实现）；GREEN `uv run pytest` 全绿、`uv run ruff check .`、`npm --prefix web run test:unit`（303 例）、`npm --prefix web run test:e2e -- tests/e2e/standards-assets-publish.spec.ts`（44 例）、`npm --prefix web run build`（含 check:api/check:i18n/check:ui/vue-tsc）均通过。
+
 ## 2026-09-24（PLAN-DM-040 Task 2：资产存在性硬门禁）
 
 - 修复 F02/F15：新增 `infrastructure/standards/asset_paths.py`，发布、导入、导出共用「路径合法 + 文件存在 + 清单一致」三重门禁。草稿声明 `assets/missing.dwg`、绝对路径/UNC/`..` 或指向受控目录外的符号链接时，`publish()` 以 `STANDARD_ASSET_FILE_MISSING`/`STANDARD_ASSET_PATH_INVALID` 拒绝（原先 200 且草稿被移动）；包导入要求清单与包内条目双向一致，缺失以 `STANDARD_ASSET_FILE_MISSING`、夹带未声明条目以 `STANDARD_PACKAGE_INVALID` 拒绝，且在建目录前完成校验；`export_package()` 只导出文档声明且校验通过的资产，不再把草稿临时文件打进包。

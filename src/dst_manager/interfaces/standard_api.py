@@ -19,6 +19,8 @@ from dst_manager.interfaces.message_catalog import error_payload
 from dst_manager.interfaces.standard_contracts import (
     AssetInspectionResponse,
     ImportedStandardDraftResponse,
+    StandardAssetCopyRequest,
+    StandardAssetCopyResponse,
     StandardAssetInspectRequest,
     StandardDetailResponse,
     StandardDiagnosticModel,
@@ -117,6 +119,16 @@ def register_standard_routes(app: FastAPI) -> None:
             "layouts": list(inspection.layouts),
             "diagnostics": [_diagnostic(issue) for issue in inspection.diagnostics],
         }
+
+    @app.post(
+        "/api/standards/drafts/{draft_id}/asset-files",
+        response_model=StandardAssetCopyResponse,
+        response_model_exclude_unset=True,
+    )
+    def copy_standard_draft_asset_file(
+        request: Request, draft_id: str, body: StandardAssetCopyRequest
+    ):
+        return service(request).copy_draft_asset_file(draft_id, Path(body.source_path))
 
     # ---- 导入导出 --------------------------------------------------------
 

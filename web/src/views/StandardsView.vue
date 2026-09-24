@@ -113,6 +113,16 @@ async function inspectEditorAsset(assetId: string, cadVersion: string): Promise<
   return store.inspectAsset({draftId: summary.draft_id, assetId, cadVersion});
 }
 
+/** 本机模板受控复制：只把后端生成的包内相对路径交给编辑器缓冲。 */
+async function copyEditorAssetFile(sourcePath: string): Promise<string> {
+  const summary = selected.value;
+  if (summary?.draft_id === null || summary?.draft_id === undefined) {
+    throw new Error("STANDARD_DRAFT_NOT_FOUND");
+  }
+  const copied = await store.copyAssetFile({draftId: summary.draft_id, sourcePath});
+  return copied.path;
+}
+
 /** 发布：成功时后端把草稿移入已发布目录，需退出编辑器并定位到新版本只读详情。 */
 async function publishEditorDraft(): Promise<void> {
   const summary = selected.value;
@@ -260,6 +270,7 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
       :draft="store.draft.value"
       :save-draft="saveEditorDocument"
       :inspect-asset="inspectEditorAsset"
+      :copy-asset-file="copyEditorAssetFile"
       :publish-draft="publishEditorDraft"
       :official-assets="officialAssets"
       :official-standard-id="officialStandardId"

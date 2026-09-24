@@ -3,9 +3,14 @@
 覆盖：声明图幅与非 Model 布局的严格比较（``"A2 " != "A2"``）、能力缺失
 转换为 ``STANDARD_CAD_CAPABILITY_MISSING`` 诊断而不抛出、草稿/资产/文件
 缺失与非法路径的稳定拒绝。CAD 读取入口经替换注入，不依赖真实 Core Console。
+PLAN-DM-040 Task 3 追加：本机模板文件受控复制进草稿（受控副本名、源文件
+哈希与 mtime 不变、故障不落半文件）。
 """
 
+import hashlib
+import shutil
 import typing
+import uuid
 from pathlib import Path
 
 import pytest
@@ -13,6 +18,9 @@ import pytest
 from dst_manager.application.errors import ApplicationError
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
+
+#: 单文件上限（与标准包单条目上限一致）：超过即拒绝复制。
+MAX_TEMPLATE_BYTES = 64 * 1024 * 1024
 
 DRAFT_DOCUMENT = {
     "schema_version": 1,
@@ -175,3 +183,134 @@ def test_escaping_asset_path_rejected(service, fake_reader, draft) -> None:
     with pytest.raises(ApplicationError) as exc_info:
         service.inspect_standard_asset("draft", "evil", "2020")
     assert exc_info.value.code == "STANDARD_ASSET_PATH_INVALID"
+
+
+# ---- 本机模板受控复制（PLAN-DM-040 Task 3，F01） --------------------------
+
+
+def source_file(tmp_path: Path, name: str = "A2 模板.dwg") -> Path:
+    """带中文、空格与多层目录的来源文件（模拟 OneDrive 路径）。"""
+    directory = tmp_path / "OneDrive - 项目 资料" / "模板 目录"
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / name
+    target.write_bytes(b"dwg-bytes")
+    return target
+
+
+def test_copy_asset_file_creates_managed_copy(service, tmp_path) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = source_file(tmp_path)
+    before_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    before_mtime = source.stat().st_mtime_ns
+
+    result = service.copy_draft_asset_file("draft", source)
+
+    assert result["path"].startswith("assets/managed-")
+    assert result["path"].endswith(".dwg")
+    copied = store.drafts_root / "draft" / result["path"]
+    assert copied.read_bytes() == b"dwg-bytes"
+    # 来源文件的哈希与 mtime 不得被改变，绝对路径也不进草稿
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == before_hash
+    assert source.stat().st_mtime_ns == before_mtime
+    assert str(source) not in result["path"]
+
+
+def test_copy_asset_file_supports_dwt(service, tmp_path) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = source_file(tmp_path, "基础模板.DWT")
+
+    result = service.copy_draft_asset_file("draft", source)
+
+    assert result["path"].endswith(".dwt")
+    assert (store.drafts_root / "draft" / result["path"]).is_file()
+
+
+def test_copy_asset_file_missing_source_rejected(service, tmp_path) -> None:
+    service.standard_store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", tmp_path / "nope.dwg")
+    assert exc_info.value.code == "STANDARD_ASSET_SOURCE_NOT_FOUND"
+
+
+def test_copy_asset_file_rejects_directory_source(service, tmp_path) -> None:
+    service.standard_store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    directory = tmp_path / "looks-like.dwg"
+    directory.mkdir()
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", directory)
+    assert exc_info.value.code == "STANDARD_ASSET_SOURCE_NOT_FOUND"
+
+
+@pytest.mark.parametrize("name", ["模板.txt", "模板.dwg.exe", "模板"])
+def test_copy_asset_file_rejects_other_extensions(service, tmp_path, name: str) -> None:
+    service.standard_store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = tmp_path / name
+    source.write_bytes(b"x")
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", source)
+    assert exc_info.value.code == "STANDARD_ASSET_SOURCE_INVALID"
+
+
+def test_copy_asset_file_rejects_oversized_source(service, tmp_path) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = tmp_path / "huge.dwg"
+    with source.open("wb") as handle:  # 稀疏文件：只声明大小，不写 64 MiB 字节
+        handle.truncate(MAX_TEMPLATE_BYTES + 1)
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", source)
+    assert exc_info.value.code == "STANDARD_ASSET_SOURCE_INVALID"
+    assert not (store.drafts_root / "draft" / "assets").exists()
+
+
+def test_copy_asset_file_requires_existing_draft(service, tmp_path) -> None:
+    source = source_file(tmp_path)
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("missing", source)
+    assert exc_info.value.code == "STANDARD_DRAFT_NOT_FOUND"
+
+
+def test_copy_asset_file_rejects_illegal_draft_id(service, tmp_path) -> None:
+    source = source_file(tmp_path)
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("../outside", source)
+    assert exc_info.value.code == "STANDARD_DRAFT_ID_INVALID"
+
+
+def test_copy_asset_file_aborts_without_partial_files(service, monkeypatch, tmp_path) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = source_file(tmp_path)
+    baseline = (store.drafts_root / "draft" / "document.json").read_bytes()
+
+    def interrupted(*args: object, **kwargs: object) -> None:
+        raise OSError("磁盘写入中断")
+
+    monkeypatch.setattr(shutil, "copyfileobj", interrupted)
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", source)
+    assert exc_info.value.code == "STANDARD_ASSET_COPY_FAILED"
+    assets = store.drafts_root / "draft" / "assets"
+    assert list(assets.iterdir()) == []
+    assert (store.drafts_root / "draft" / "document.json").read_bytes() == baseline
+
+
+def test_copy_asset_file_never_overwrites_existing_copy(
+    service, monkeypatch, tmp_path
+) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    assets = store.drafts_root / "draft" / "assets"
+    assets.mkdir(parents=True)
+    fixed = uuid.UUID(int=0).hex
+    occupied = assets / f"managed-{fixed}.dwg"
+    occupied.write_bytes(b"keep-me")
+    monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(int=0))
+
+    with pytest.raises(ApplicationError) as exc_info:
+        service.copy_draft_asset_file("draft", source_file(tmp_path))
+    assert exc_info.value.code == "STANDARD_ASSET_COPY_FAILED"
+    assert occupied.read_bytes() == b"keep-me"
+    assert sorted(item.name for item in assets.iterdir()) == [f"managed-{fixed}.dwg"]

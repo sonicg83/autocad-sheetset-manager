@@ -452,6 +452,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/standards/drafts/{draft_id}/asset-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Standard Draft Asset File */
+        post: operations["copy_standard_draft_asset_file_api_standards_drafts__draft_id__asset_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/standards/drafts/{draft_id}/assets/{asset_id}/inspect": {
         parameters: {
             query?: never;
@@ -2571,6 +2588,22 @@ export interface components {
             /** Source Types */
             source_types: ("existing_snapshot" | "template_layout")[];
         };
+        /**
+         * StandardAssetCopyRequest
+         * @description 本机模板来源：用户显式选择或本地开发态显式输入的绝对路径。
+         */
+        StandardAssetCopyRequest: {
+            /** Source Path */
+            source_path: string;
+        };
+        /**
+         * StandardAssetCopyResponse
+         * @description 受控副本的包内相对路径；服务端生成，前端不持有来源路径。
+         */
+        StandardAssetCopyResponse: {
+            /** Path */
+            path: string;
+        };
         /** StandardAssetInspectRequest */
         StandardAssetInspectRequest: {
             /** Cad Version */
@@ -4079,6 +4112,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_standard_draft_asset_file_api_standards_drafts__draft_id__asset_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardAssetCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardAssetCopyResponse"];
                 };
             };
             /** @description Validation Error */

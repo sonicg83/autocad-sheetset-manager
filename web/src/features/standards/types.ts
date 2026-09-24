@@ -72,6 +72,16 @@ export interface CreateDraftInput {
   document: Record<string, unknown>;
 }
 
+/** 本机模板受控复制：前端只传用户显式选择的来源路径，返回服务端生成的受控副本名。 */
+export interface CopyAssetFileInput {
+  draftId: string;
+  sourcePath: string;
+}
+
+export interface CopiedAssetFile {
+  path: string;
+}
+
 export interface SaveDraftByIdentityInput {
   standardId: string;
   version: string;

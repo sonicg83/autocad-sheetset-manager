@@ -84,6 +84,18 @@ class StandardAssetInspectRequest(ContractModel):
     cad_version: str
 
 
+class StandardAssetCopyRequest(ContractModel):
+    """本机模板来源：用户显式选择或本地开发态显式输入的绝对路径。"""
+
+    source_path: str
+
+
+class StandardAssetCopyResponse(ContractModel):
+    """受控副本的包内相对路径；服务端生成，前端不持有来源路径。"""
+
+    path: str
+
+
 class AssetInspectionResponse(ContractModel):
     asset_id: str
     kind: str

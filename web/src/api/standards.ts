@@ -4,6 +4,8 @@
 import {request} from "./client";
 import type {
   AssetInspection,
+  CopiedAssetFile,
+  CopyAssetFileInput,
   CreateDraftFromDstInput,
   CreateDraftInput,
   ImportedStandardDraft,
@@ -80,6 +82,14 @@ export function inspectStandardAsset(input: InspectAssetInput): Promise<AssetIns
   );
 }
 
+/** 本机模板受控复制：后端把文件复制进草稿目录，只返回包内相对路径。 */
+export function copyStandardAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile> {
+  return request<CopiedAssetFile>(
+    `/api/standards/drafts/${encodeURIComponent(input.draftId)}/asset-files`,
+    {method: "POST", body: JSON.stringify({source_path: input.sourcePath})},
+  );
+}
+
 /** 标准包导出下载地址（GET /api/standards/{id}/{ver}/export，zip 下载）。 */
 export function standardExportUrl(identity: StandardIdentity): string {
   return `/api/standards/${encodeURIComponent(identity.standardId)}/${encodeURIComponent(identity.version)}/export`;
@@ -98,4 +108,5 @@ export const standardsApi: StandardApi = {
   importPackage: importStandardPackage,
   deleteDraft: deleteStandardDraft,
   inspectAsset: inspectStandardAsset,
+  copyAssetFile: copyStandardAssetFile,
 };

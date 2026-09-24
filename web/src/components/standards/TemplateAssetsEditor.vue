@@ -1,17 +1,20 @@
 <script setup lang="ts">
-// 模板资产编辑器（PLAN-DM-035 Task 10 / SPEC-DM-016 §8.1）：基础/布局为主分类，
-// 官方/用户为筛选器（不是两个彼此隔离的页面），列表显示名称、来源、状态与引用数；
-// 右侧为检查面板。官方资产只读；用户资产允许添加、替换（改声明）与移除。
+// 模板资产编辑器（PLAN-DM-035 Task 10 / SPEC-DM-016 §8.1 / PLAN-DM-040 Task 3）：
+// 基础/布局为主分类，官方/用户为筛选器（不是两个彼此隔离的页面），列表显示名称、
+// 来源、状态与引用数；右侧为检查面板。官方资产只读；用户资产允许添加、替换与移除。
 //
-// 当前范围边界（后端无资产文件上传端点）：本分区编辑的是**资产声明**（受控路径 + 图幅 role）。
-// 文件本体随标准包提供，声明了但不在草稿受控目录内的文件由检查报告 STANDARD_ASSET_FILE_MISSING，
-// 并阻断发布；不伪造“已替换文件”的假象。
-import {computed, ref} from "vue";
+// 文件本体：草稿文件行只保存**包内受控副本名**。桌面壳可用时经固定 `template`
+// 文件种类选择本机 DWG/DWT，由后端复制进草稿受控目录；无壳本地开发态提供单独标明
+// 的「来源绝对路径」输入，调用同一端点。本机绝对路径不写入缓冲，也不进草稿文档。
+import {computed, ref, watch} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import UiIconButton from "../ui/UiIconButton.vue";
 import AssetInspectionPanel from "./AssetInspectionPanel.vue";
+import {ApiError} from "../../api/client";
+import {i18n} from "../../i18n";
+import {selectTemplatePath, shellReady} from "../../api/shell";
 import {ASSET_KINDS, type DraftAsset, type DraftDocument} from "../../features/standards/draftModel";
 import {assetReferences, type AssetReference, type InspectionFailure} from "../../features/standards/publishModel";
 import type {AssetInspection} from "../../features/standards/types";
@@ -26,11 +29,17 @@ const props = defineProps<{
   inspectedAt: string;
   pending: boolean;
   cadVersion: string;
+  /** 受控复制：把本机来源复制进草稿，返回包内相对路径（失败抛出）。 */
+  copyAssetFile: (sourcePath: string) => Promise<string>;
 }>();
 const emit = defineEmits<{recheck: []}>();
 
 const sourceFilter = ref<"all" | "official" | "user">("all");
 const selectedKey = ref<string | null>(null);
+/** 无桌面壳时的来源绝对路径输入与就地错误（按文件行下标隔离）。 */
+const sourcePaths = ref<Record<number, string>>({});
+const fileErrors = ref<Record<number, string>>({});
+const copyingIndex = ref<number | null>(null);
 
 interface AssetRow {
   asset: DraftAsset;
@@ -102,6 +111,62 @@ function removeFile(asset: DraftAsset, index: number): void {
 function renameAsset(asset: DraftAsset, value: unknown): void {
   asset.asset_id = String(value);
   selectedKey.value = `user/${asset.asset_id}`;
+}
+
+// 切换选中资产时丢弃按行下标的临时输入与错误（不把上一个资产的输入带到下一个）
+watch(
+  () => (selected.value === null ? "" : rowKey(selected.value)),
+  () => {
+    sourcePaths.value = {};
+    fileErrors.value = {};
+  },
+);
+
+function targetText(key: string, params?: Record<string, string | number>): string {
+  return i18n.global.t(key, params ?? {});
+}
+
+function errorText(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = error.rawMessage || error.message;
+    return error.code ? `${error.code}｜${detail}` : detail;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
+/** 有壳：固定 `template` 文件种类选择本机模板；取消不发请求。 */
+async function pickTemplate(asset: DraftAsset, index: number): Promise<void> {
+  const picked = await selectTemplatePath(targetText("standards.assets.templateDialogDescription"));
+  if (picked === undefined || picked === null) return;
+  await applyCopy(asset, index, picked);
+}
+
+/** 无壳：显式来源绝对路径，调用同一受控复制端点。 */
+async function copyFromPath(asset: DraftAsset, index: number): Promise<void> {
+  const source = (sourcePaths.value[index] ?? "").trim();
+  if (source === "") {
+    fileErrors.value = {...fileErrors.value, [index]: targetText("standards.assets.sourcePathRequired")};
+    return;
+  }
+  await applyCopy(asset, index, source);
+}
+
+/** 只有复制成功才修改编辑缓冲；失败保留旧声明与 dirty 状态并就地显示错误。 */
+async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): Promise<void> {
+  if (copyingIndex.value !== null) return;
+  copyingIndex.value = index;
+  const cleared = {...fileErrors.value};
+  delete cleared[index];
+  fileErrors.value = cleared;
+  try {
+    const controlled = await props.copyAssetFile(sourcePath);
+    asset.files[index].path = controlled;
+  } catch (error) {
+    fileErrors.value = {...fileErrors.value, [index]: errorText(error)};
+  } finally {
+    copyingIndex.value = null;
+  }
 }
 </script>
 <template>
@@ -181,10 +246,46 @@ function renameAsset(asset: DraftAsset, value: unknown): void {
             <h5 class="group-title">{{ $t("standards.assets.files") }}</h5>
             <UiButton variant="secondary" @click="addFile(selected.asset)">{{ $t("standards.assets.addFile") }}</UiButton>
           </div>
-          <div v-for="(file, index) in selected.asset.files" :key="index" class="file-row">
-            <UiInput v-model="file.path" :label="$t('standards.assets.filePath')" placeholder="assets/template.dwg" />
-            <UiInput v-model="file.role" :label="$t('standards.assets.fileRole')" placeholder="A3" />
-            <UiIconButton icon="close" :label="$t('standards.assets.removeFile', {row: index + 1})" @click="removeFile(selected.asset, index)" />
+          <div v-for="(file, index) in selected.asset.files" :key="index" class="file-block">
+            <div class="file-row">
+              <UiInput
+                :model-value="file.path"
+                :label="$t('standards.assets.filePath')"
+                :hint="$t('standards.assets.filePathHint')"
+                :placeholder="$t('standards.assets.filePathPlaceholder')"
+                readonly
+                :data-testid="`asset-file-path-${index}`"
+              />
+              <UiInput v-model="file.role" :label="$t('standards.assets.fileRole')" placeholder="A3" />
+              <div class="file-actions">
+                <UiButton
+                  v-if="shellReady"
+                  variant="secondary"
+                  :loading="copyingIndex === index"
+                  :data-testid="`asset-file-pick-${index}`"
+                  @click="pickTemplate(selected.asset, index)"
+                >{{ file.path === "" ? $t("standards.assets.chooseTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
+                <template v-else>
+                  <UiInput
+                    :model-value="sourcePaths[index] ?? ''"
+                    :label="$t('standards.assets.sourcePathLabel')"
+                    :hint="$t('standards.assets.sourcePathHint')"
+                    :data-testid="`asset-file-source-${index}`"
+                    @update:model-value="(value: string) => sourcePaths[index] = value"
+                  />
+                  <UiButton
+                    variant="secondary"
+                    :loading="copyingIndex === index"
+                    :data-testid="`asset-file-copy-${index}`"
+                    @click="copyFromPath(selected.asset, index)"
+                  >{{ file.path === "" ? $t("standards.assets.copyTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
+                </template>
+              </div>
+              <UiIconButton icon="close" :label="$t('standards.assets.removeFile', {row: index + 1})" @click="removeFile(selected.asset, index)" />
+            </div>
+            <p v-if="fileErrors[index]" class="file-error" role="alert" :data-testid="`asset-file-error-${index}`">
+              {{ fileErrors[index] }}
+            </p>
           </div>
           <UiButton variant="secondary" @click="removeAsset(selected.asset)">{{ $t("standards.assets.remove") }}</UiButton>
         </div>
@@ -216,7 +317,10 @@ function renameAsset(asset: DraftAsset, value: unknown): void {
 .field-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .field-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .file-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
-.file-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:var(--space-2);align-items:end}
+.file-block{display:grid;gap:var(--space-1)}
+.file-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto auto;gap:var(--space-2);align-items:end}
+.file-actions{display:grid;gap:var(--space-2);align-items:end;min-width:0}
+.file-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
 @media (max-width: 959px){
   .assets-split{grid-template-columns:minmax(0,1fr)}
 }

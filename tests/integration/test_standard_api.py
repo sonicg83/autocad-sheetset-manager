@@ -524,6 +524,100 @@ def test_export_includes_only_declared_assets(tmp_path: Path) -> None:
         assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
 
 
+# ---- 本机模板受控复制 HTTP 入口（PLAN-DM-040 Task 3，F01） -----------------
+
+
+def test_copy_asset_file_endpoint_returns_controlled_copy(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    source = tmp_path / "OneDrive - 项目" / "A2 模板.dwg"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dwg-bytes")
+    before = source.stat().st_mtime_ns
+
+    response = client.post(
+        "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(source)}
+    )
+
+    assert response.status_code == 200, response.text
+    copied = response.json()["path"]
+    assert copied.startswith("assets/managed-") and copied.endswith(".dwg")
+    target = (
+        tmp_path / "data" / "standards" / "user" / "drafts" / "draft-gas" / copied
+    )
+    assert target.read_bytes() == b"dwg-bytes"
+    assert source.stat().st_mtime_ns == before
+    # 本机绝对路径不得写进草稿文档
+    document = client.get("/api/standards/drafts/draft-gas").json()["document"]
+    assert str(source) not in json.dumps(document, ensure_ascii=False)
+
+
+def test_copy_asset_file_endpoint_rejects_missing_source(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    response = client.post(
+        "/api/standards/drafts/draft-gas/asset-files",
+        json={"source_path": str(tmp_path / "nope.dwg")},
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "STANDARD_ASSET_SOURCE_NOT_FOUND"
+
+
+def test_copy_asset_file_endpoint_rejects_illegal_draft_id(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    source = tmp_path / "A2.dwg"
+    source.write_bytes(b"dwg")
+    response = client.post(
+        "/api/standards/drafts/%2E%2E/asset-files", json={"source_path": str(source)}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_DRAFT_ID_INVALID"
+
+
+def test_copied_asset_closes_loop_through_publish_and_export(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """复制 → 声明 → 保存 → 检查 → 发布 → 导出 的完整闭环。"""
+    monkeypatch.setattr(
+        DstManagerService,
+        "get_layout_names",
+        lambda self, file_path, cad_version: {
+            "layouts": ["Model", "A2"],
+            "cached": False,
+            "file_hash": "0" * 64,
+        },
+    )
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-gas")
+    source = tmp_path / "A2 模板.dwg"
+    source.write_bytes(b"dwg-bytes")
+    copied = client.post(
+        "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(source)}
+    ).json()["path"]
+
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["assets"] = [
+        {
+            "asset_id": "layouts",
+            "kind": "layout-template",
+            "files": [{"path": copied, "role": "A2"}],
+        }
+    ]
+    assert client.put("/api/standards/szmedi.gas/0.1.0", json=document).status_code == 200
+    inspected = client.post(
+        "/api/standards/drafts/draft-gas/assets/layouts/inspect", json={"cad_version": "2020"}
+    )
+    assert inspected.status_code == 200, inspected.text
+    assert inspected.json()["diagnostics"] == []
+    assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
+
+    exported = client.get("/api/standards/szmedi.gas/0.1.0/export")
+    assert exported.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        assert sorted(archive.namelist()) == sorted(["manifest.json", copied])
+        assert archive.read(copied) == b"dwg-bytes"
+
+
 def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     make_draft(client, DRAFT_DOCUMENT, "draft-gas")

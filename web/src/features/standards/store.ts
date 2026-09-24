@@ -5,6 +5,8 @@
 import {ref, type Ref} from "vue";
 import type {
   AssetInspection,
+  CopiedAssetFile,
+  CopyAssetFileInput,
   CreateDraftFromDstInput,
   CreateDraftInput,
   ImportedStandardDraft,
@@ -29,6 +31,7 @@ export interface StandardApi {
   importPackage(input: {path: string}): Promise<PublishedStandard>;
   deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
+  copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
 }
 
 export interface StandardStore {
@@ -61,6 +64,8 @@ export interface StandardStore {
   importPackage(input: {path: string}): Promise<PublishedStandard>;
   deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
+  /** 本机模板受控复制：成功时返回包内相对路径（草稿文件行只保存它）。 */
+  copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
 }
 
 function errorMessage(error: unknown): string {
@@ -194,5 +199,6 @@ export function createStandardStore(api: StandardApi): StandardStore {
     importPackage: (input) => runAction(() => api.importPackage(input)),
     deleteDraft: (draftId) => runAction(() => api.deleteDraft(draftId)),
     inspectAsset: (input) => runAction(() => api.inspectAsset(input)),
+    copyAssetFile: (input) => runAction(() => api.copyAssetFile(input)),
   };
 }

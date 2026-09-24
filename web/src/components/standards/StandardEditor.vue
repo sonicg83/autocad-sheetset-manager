@@ -53,6 +53,8 @@ const props = defineProps<{
   saveDraft: (document: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** 资产检查：按草稿与资产标识调用后端固定读取协议。 */
   inspectAsset: (assetId: string, cadVersion: string) => Promise<AssetInspection>;
+  /** 本机模板受控复制：成功时返回草稿内受控副本的相对路径。 */
+  copyAssetFile: (sourcePath: string) => Promise<string>;
   /** 发布：成功时后端已把草稿移入已发布目录（草稿不复存在）。 */
   publishDraft: () => Promise<void>;
   /** 官方标准的资产声明（只读参考）；无可对照官方标准时为空数组。 */
@@ -414,6 +416,7 @@ defineExpose({guard, isDirty: () => dirty.value});
           :inspected-at="inspectedAt"
           :pending="inspectionPending"
           :cad-version="cadVersion"
+          :copy-asset-file="copyAssetFile"
           @recheck="runInspections"
         />
         <section v-else class="publish-section" role="region" :aria-label="$t('standards.sections.publish')">

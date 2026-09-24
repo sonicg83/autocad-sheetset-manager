@@ -68,8 +68,7 @@ export async function clearWorkspaceContext(workspaceId:string):Promise<ShellRes
   return bridge.clear_workspace_context(workspaceId);
 }
 
-// ---- PLAN-DM-019 任务 8：设置中心"浏览"按钮统一封装（PLAN-DM-021 Task 4 file_kind 化） ----
-// 三态语义（Task 10 消费方依赖，不得走样）：
+// ---- PLAN-DM-019 任务 8：设置中心"浏览"按钮统一封装（PLAN-DM-021 Task 4 file_kind 化） ----// 三态语义（Task 10 消费方依赖，不得走样）：
 // - undefined = 桥不可用或 select_file/select_folder 方法缺失（浏览器开发态/旧壳）→ 调用方禁用"浏览"按钮；
 // - null      = 用户取消对话框；
 // - string    = 用户选中的路径。
@@ -84,6 +83,16 @@ export async function selectSettingsPath(kind:"exe"|"dll"|"folder",localizedDesc
   }
   if(typeof bridge.select_file!=="function")return undefined;
   return bridge.select_file(kind,localizedDescription);
+}
+
+// ---- PLAN-DM-040 Task 3：标准草稿的本机模板选择（固定 file_kind="template"） ----
+// 三态语义与 selectSettingsPath 一致：undefined = 桥或 select_file 缺失（无桌面壳，
+// 调用方改用显式来源绝对路径输入）；null = 用户取消；string = 选中的本机绝对路径。
+// 扩展名白名单（*.dwg;*.dwt）只由壳侧按 file_kind 固定拼接，前端不传过滤器。
+export async function selectTemplatePath(localizedDescription:string):Promise<string|null|undefined>{
+  const bridge=getShellBridge();
+  if(!bridge||typeof bridge.select_file!=="function")return undefined;
+  return bridge.select_file("template",localizedDescription);
 }
 
 // ---- PLAN-DM-019 修复波：SC-11 外链经系统默认浏览器打开 ----

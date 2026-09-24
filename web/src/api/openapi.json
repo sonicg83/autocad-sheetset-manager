@@ -5116,6 +5116,36 @@
         "title": "SourceBaselineResponse",
         "type": "object"
       },
+      "StandardAssetCopyRequest": {
+        "additionalProperties": false,
+        "description": "本机模板来源：用户显式选择或本地开发态显式输入的绝对路径。",
+        "properties": {
+          "source_path": {
+            "title": "Source Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_path"
+        ],
+        "title": "StandardAssetCopyRequest",
+        "type": "object"
+      },
+      "StandardAssetCopyResponse": {
+        "additionalProperties": false,
+        "description": "受控副本的包内相对路径；服务端生成，前端不持有来源路径。",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "StandardAssetCopyResponse",
+        "type": "object"
+      },
       "StandardAssetInspectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7422,6 +7452,55 @@
           }
         },
         "summary": "Get Standard Draft"
+      }
+    },
+    "/api/standards/drafts/{draft_id}/asset-files": {
+      "post": {
+        "operationId": "copy_standard_draft_asset_file_api_standards_drafts__draft_id__asset_files_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardAssetCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardAssetCopyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy Standard Draft Asset File"
       }
     },
     "/api/standards/drafts/{draft_id}/assets/{asset_id}/inspect": {

@@ -39,6 +39,7 @@ from dst_manager.domain.standards import (
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
 from dst_manager.infrastructure.standards.asset_paths import (
     StandardAssetError,
+    resolve_asset_file,
     resolve_asset_files,
     validate_asset_files,
     validate_package_asset_files,
@@ -54,6 +55,15 @@ DOCUMENT_NAME = "document.json"
 
 #: 单段路径名长度上限：标准库目录名来自客户端输入，超长一律拒绝。
 MAX_SEGMENT_LENGTH = 128
+#: 受控资产副本文件名前缀；清理只针对带该前缀且未被文档引用的副本。
+MANAGED_ASSET_PREFIX = "managed-"
+#: 单个本机模板来源的大小上限（与标准包单条目上限一致）。
+MAX_ASSET_SOURCE_SIZE = 64 * 1024 * 1024
+#: 允许复制进草稿的模板扩展名。
+ALLOWED_ASSET_SUFFIXES = frozenset({".dwg", ".dwt"})
+#: 受控副本名分配重试次数；uuid4 碰撞概率可忽略，仅作确定性防护。
+_ASSET_NAME_ATTEMPTS = 5
+_COPY_CHUNK_SIZE = 1024 * 1024
 #: Windows 保留设备名（带任意扩展名时同样保留）。
 WINDOWS_RESERVED_NAMES = frozenset(
     {
@@ -312,11 +322,13 @@ class StandardStore:
         return StandardDraft(draft_id=draft_id, document=dict(document))
 
     def save_draft(self, draft_id: str, document: Mapping[str, object]) -> StandardDraft:
-        parse_standard_draft_document(document)
+        standard = parse_standard_draft_document(document)
         target = self._draft_dir(draft_id)
         if not (target / DOCUMENT_NAME).is_file():
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
         self._write_document(target, document)
+        # 保存成功后清理本次编辑未引用的受控副本（手工放置的资产不受影响）。
+        self._prune_managed_assets(target, standard)
         return StandardDraft(draft_id=draft_id, document=dict(document))
 
     def delete_draft(self, draft_id: str) -> None:
@@ -331,6 +343,99 @@ class StandardStore:
             json.dumps(document, ensure_ascii=False, indent=2),
         )
 
+    # ---- 受控资产副本 ----------------------------------------------------
+
+    def copy_draft_asset(self, draft_id: str, source_path: Path) -> str:
+        """把本机 DWG/DWT 受控复制进草稿，返回包内相对路径。
+
+        来源只作一次性读取：不写回来源、不把绝对路径写进草稿。副本先写草稿内
+        随机临时文件，校验完成后原子改名；任何失败都不留半文件、不覆盖已有副本。
+        """
+        draft_dir = self._draft_dir(draft_id)
+        if not (draft_dir / DOCUMENT_NAME).is_file():
+            raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
+        source = Path(source_path)
+        if not source.is_absolute() or not source.is_file():
+            raise _error(
+                "STANDARD_ASSET_SOURCE_NOT_FOUND",
+                f"本机模板来源 {str(source_path)!r} 不存在或不是文件",
+            )
+        suffix = source.suffix.casefold()
+        if suffix not in ALLOWED_ASSET_SUFFIXES:
+            raise _error(
+                "STANDARD_ASSET_SOURCE_INVALID",
+                f"本机模板来源 {source.name!r} 必须是 .dwg 或 .dwt 文件",
+            )
+        try:
+            size = source.stat().st_size
+        except OSError as exc:
+            raise _error(
+                "STANDARD_ASSET_SOURCE_NOT_FOUND", f"无法读取本机模板来源：{exc}"
+            ) from exc
+        if size > MAX_ASSET_SOURCE_SIZE:
+            raise _error(
+                "STANDARD_ASSET_SOURCE_INVALID",
+                f"本机模板来源 {source.name!r} 超过 {MAX_ASSET_SOURCE_SIZE} 字节上限",
+            )
+        assets_dir = draft_dir / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        final = self._free_asset_target(assets_dir, suffix)
+        temp = assets_dir / f".{uuid.uuid4().hex}.copying"
+        try:
+            with source.open("rb") as reader, temp.open("wb") as writer:
+                shutil.copyfileobj(reader, writer, length=_COPY_CHUNK_SIZE)
+                writer.flush()
+                os.fsync(writer.fileno())
+            if temp.stat().st_size != size:
+                raise _error(
+                    "STANDARD_ASSET_COPY_FAILED", "复制结果大小与来源不一致，已放弃"
+                )
+            os.replace(temp, final)
+        except OSError as exc:
+            raise _error("STANDARD_ASSET_COPY_FAILED", f"复制本机模板失败：{exc}") from exc
+        finally:
+            temp.unlink(missing_ok=True)
+        return f"assets/{final.name}"
+
+    @staticmethod
+    def _free_asset_target(assets_dir: Path, suffix: str) -> Path:
+        """分配一个尚未占用的受控副本名；碰撞一律重试，不覆盖已有文件。"""
+        for _ in range(_ASSET_NAME_ATTEMPTS):
+            candidate = assets_dir / f"{MANAGED_ASSET_PREFIX}{uuid.uuid4().hex}{suffix}"
+            if not candidate.exists():
+                return candidate
+        raise _error(
+            "STANDARD_ASSET_COPY_FAILED",
+            f"草稿资产目录 {assets_dir} 中无法分配唯一的受控副本名",
+        )
+
+    def _prune_managed_assets(
+        self, draft_dir: Path, standard: DrawingStandard
+    ) -> None:
+        """清理未被文档引用且带受控前缀的副本；其他文件一律不碰。"""
+        assets_dir = draft_dir / "assets"
+        if not assets_dir.is_dir():
+            return
+        referenced: set[Path] = set()
+        for asset in standard.assets:
+            for file in asset.files:
+                try:
+                    referenced.add(resolve_asset_file(draft_dir, file.path))
+                except StandardAssetError:
+                    continue  # 非法声明不参与引用集合，也不阻断清理
+        for candidate in sorted(assets_dir.iterdir()):
+            if not candidate.is_file() or not candidate.name.startswith(
+                MANAGED_ASSET_PREFIX
+            ):
+                continue
+            if candidate.resolve() in referenced:
+                continue
+            try:
+                candidate.unlink()
+            except OSError:
+                # 清理是尽力而为：删除失败只留下无害的孤儿副本（导出白名单已排除）。
+                continue
+
     # ---- 发布与导入导出 --------------------------------------------------
 
     def publish(self, draft_id: str) -> PublishedStandard:
@@ -338,15 +443,18 @@ class StandardStore:
         if draft is None:
             raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
         standard = _published_or_store_error(draft.document)
+        draft_dir = self._draft_dir(draft_id)
         try:
             # 发布前最终门禁：声明的模板资产必须真实落在草稿受控目录内。
-            validate_asset_files(standard, self._draft_dir(draft_id))
+            validate_asset_files(standard, draft_dir)
         except StandardAssetError as exc:
             raise _asset_gate_error(exc) from exc
         target = self._assert_identity_free(standard.standard_id, standard.version)
+        # 发布成功后草稿目录整体移动：先清理本次编辑未引用的受控副本。
+        self._prune_managed_assets(draft_dir, standard)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            os.replace(self._draft_dir(draft_id), target)
+            os.replace(draft_dir, target)
         except OSError as exc:
             raise _identity_collision(standard.standard_id, standard.version) from exc
         return PublishedStandard(

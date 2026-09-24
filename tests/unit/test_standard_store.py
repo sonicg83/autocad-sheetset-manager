@@ -480,3 +480,46 @@ def test_export_package_rejects_missing_asset_on_disk(
     with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
         store.export_package("user.water", "3.0.0", tmp_path / "out")
     assert not list((tmp_path / "out").glob("*.dststandard"))
+
+
+# ---- 受控副本清理（PLAN-DM-040 Task 3） ----------------------------------
+
+
+def test_save_draft_prunes_only_unreferenced_managed_copies(store: StandardStore) -> None:
+    document = asset_document("assets/managed-keep.dwg")
+    create_draft(store, document, draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/managed-keep.dwg", b"keep")
+    write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"hand-placed")
+
+    store.save_draft("draft-asset", document)
+
+    assets = store.drafts_root / "draft-asset" / "assets"
+    assert (assets / "managed-keep.dwg").is_file()
+    assert not (assets / "managed-orphan.dwg").exists()
+    # 手工放置的既有资产不受清理规则影响
+    assert (assets / "A2.dwg").read_bytes() == b"hand-placed"
+
+
+def test_orphan_managed_copy_survives_until_next_save(store: StandardStore) -> None:
+    """放弃编辑产生的孤儿副本保留到下次保存/发布再清理。"""
+    document = asset_document("assets/managed-keep.dwg")
+    create_draft(store, document, draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
+    assets = store.drafts_root / "draft-asset" / "assets"
+
+    # 复制后未保存：副本不被清理
+    assert (assets / "managed-orphan.dwg").is_file()
+    store.save_draft("draft-asset", document)
+    assert not (assets / "managed-orphan.dwg").exists()
+
+
+def test_publish_prunes_unreferenced_managed_copies(store: StandardStore) -> None:
+    create_draft(store, asset_document("assets/managed-keep.dwg"), draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/managed-keep.dwg", b"keep")
+    write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
+
+    published = store.publish("draft-asset")
+
+    assert (published.root / "assets" / "managed-keep.dwg").is_file()
+    assert not (published.root / "assets" / "managed-orphan.dwg").exists()

@@ -102,6 +102,10 @@ export interface StandardsFixtureState {
   assetInspectFailures: Record<string, {status: number; code: string; message: string}>;
   /** 资产检查调用次数（重试断言用）。 */
   inspectCalls: string[];
+  /** 本机模板受控复制调用（入参：草稿 ID 与来源绝对路径）。 */
+  assetCopyCalls: {draftId: string; sourcePath: string}[];
+  /** 可变的复制失败注入（模拟后端稳定拒绝）。 */
+  assetCopyFailure: {status: number; code: string; message: string} | null;
   /** 可变的发布失败注入。 */
   publishFailure: {status: number; code: string; message: string} | null;
   publishCalls: number;
@@ -239,6 +243,8 @@ export async function installStandards(
     assetResults: options.assetResults ?? {},
     assetInspectFailures: {...(options.assetInspectFailures ?? {})},
     inspectCalls: [],
+    assetCopyCalls: [],
+    assetCopyFailure: null,
     publishFailure: null,
     publishCalls: 0,
     saveFailure: null,
@@ -273,6 +279,16 @@ export async function installStandards(
         state.list = state.list.filter(item => item.draft_id !== draftId);
         state.drafts.delete(draftId);
         return route.fulfill({json: {status: "deleted"}});
+      }
+      const copyMatch = /^\/api\/standards\/drafts\/([^/]+)\/asset-files$/.exec(path);
+      if (copyMatch && method === "POST") {
+        const body = (await request.postDataJSON()) as {source_path: string};
+        state.assetCopyCalls.push({draftId: decodeURIComponent(copyMatch[1]), sourcePath: body.source_path});
+        if (state.assetCopyFailure !== null) {
+          return route.fulfill({status: state.assetCopyFailure.status, json: {code: state.assetCopyFailure.code, message: state.assetCopyFailure.message}});
+        }
+        // 与后端契约同构：只返回服务端生成的受控副本名（绝不回显来源路径）
+        return route.fulfill({json: {path: `assets/managed-${state.assetCopyCalls.length}.dwg`}});
       }
       if (path === "/api/standards/import" && method === "POST") {
         state.importAttempts += 1;

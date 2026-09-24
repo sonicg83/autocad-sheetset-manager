@@ -26,6 +26,14 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 
 MODEL_LAYOUT = "Model"
 
+#: 资产复制端点稳定错误码 → HTTP 状态；未登记码一律 422。
+_ASSET_STORE_STATUS = {"STANDARD_ASSET_SOURCE_NOT_FOUND": 404}
+
+
+def _asset_store_error(exc: StandardStoreError) -> ApplicationError:
+    code = str(exc).split(":", 1)[0]
+    return ApplicationError(code, str(exc), _ASSET_STORE_STATUS.get(code, 422))
+
 
 @dataclass(frozen=True, slots=True)
 class AssetInspection:
@@ -122,6 +130,19 @@ class StandardAssetOperations:
                 f"读取资产布局失败：{exc}",
             )
         return tuple(result.get("layouts", ()))
+
+    # ---- 本机模板受控复制 ------------------------------------------------
+
+    def copy_draft_asset_file(self, draft_id: str, source_path: Path) -> dict[str, str]:
+        """把用户显式选择的本机模板复制到草稿受控目录，只返回包内相对路径。
+
+        本机绝对路径只作一次性导入来源，不写入文档、不返回给前端。
+        """
+        try:
+            relative = self.standard_store.copy_draft_asset(draft_id, Path(source_path))
+        except StandardStoreError as exc:
+            raise _asset_store_error(exc) from exc
+        return {"path": relative}
 
     # ---- DST 导入 --------------------------------------------------------
 
