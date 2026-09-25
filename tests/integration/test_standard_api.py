@@ -1178,3 +1178,57 @@ def test_publish_failure_keeps_draft_and_does_not_reserve_version(
     assert (
         tmp_path / "data" / "standards" / "user" / "drafts" / "draft-gas" / copied
     ).read_bytes() == b"dwg-bytes"
+
+
+# ---- 确认阶段的门禁复核与凭证时效（PLAN-DM-041 固定复核延后项） -----------
+
+
+def test_import_confirm_rejects_name_conflict_added_after_preview(tmp_path: Path) -> None:
+    """预检后、确认前新增不同 ID 的同名标准：确认必须在仓储锁内复核并以 409 拒绝。
+
+    「单实例」只排除第二个进程，不排除第二个请求：预检返回可导入之后，同一进程内的
+    另一个发布请求完全可以先占用同一名称，因此这条复核不可省。
+    """
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 1}
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is True
+
+    # 预检之后用另一个 ID 占住同一名称（同 ID 同名允许，所以必须换 ID）
+    make_draft(client, {**DRAFT_DOCUMENT, "standard_id": "other.gas"}, "draft-other")
+    published = client.post("/api/standards/drafts/draft-other/publish")
+    assert published.status_code == 200, published.text
+
+    confirmed = client.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 409, confirmed.text
+    assert confirmed.json()["code"] == "STANDARD_NAME_CONFLICT"
+    # 被拒绝的导入不落库
+    assert [item["standard_id"] for item in client.get("/api/standards").json()] == [
+        "other.gas"
+    ]
+
+
+def test_import_confirm_rejects_expired_credential_with_410(tmp_path: Path) -> None:
+    """凭证过期后确认返回 410（不是 404/422），且过期即清理快照。"""
+    client = make_client(tmp_path)
+    service = client.app.state.service
+    service.import_previews.ttl_seconds = 0
+    package = write_api_package(
+        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 1}
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    preview_id = preview.json()["preview_id"]
+    assert preview_id is not None
+
+    confirmed = client.post("/api/standards/import", json={"preview_id": preview_id})
+
+    assert confirmed.status_code == 410, confirmed.text
+    assert confirmed.json()["code"] == "STANDARD_IMPORT_PREVIEW_EXPIRED"
+    assert client.get("/api/standards").json() == []
+    assert list(service.import_previews.snapshot_files()) == []

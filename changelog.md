@@ -1,3 +1,10 @@
+## 2026-09-25（PLAN-DM-041 延后项收口：并发定性、注释澄清与两个补测）
+
+- **跨进程并发证据重新定性**：核实 PLAN-DM-018 的裁决「仅限制桌面壳 `desktop` 入口，`serve`/`doctor`/`worker` 不受限」以及 `run_desktop()` 的命名互斥量后确认——桌面壳为唯一交付入口且同一 Windows 会话单实例，故跨进程并发**不属于承诺范围**，该项不再是待补证据；跨进程文件锁保留为低成本纵深防御，并写明升级条件（`serve` 升为受支持并行入口，或 `data_dir` 指向共享/漫游位置）。同时明确**进程内互斥是必需的**：标准端点都是同步 `def`，FastAPI 在线程池中真正并行执行，「预检→确认」之间与两次发布都能交错，单实例只排除第二个进程而不排除第二个请求。
+- `StandardStore._exclusive` 文档注释改写为两层职责（进程内必需 / 跨进程纵深防御），写明不得因「产品单实例」删掉 `_process_lock`；SPEC-DM-019 §3.1 增加「唯一性覆盖范围」小节并记入修订记录；MEMO-DM-041 延后项 #1 同步改写。
+- **补两个 HTTP 用例**：`test_import_confirm_rejects_name_conflict_added_after_preview`（预检后新增不同 ID 同名 → 确认 409 `STANDARD_NAME_CONFLICT`、不落库）与 `test_import_confirm_rejects_expired_credential_with_410`（凭证过期 → 410 `STANDARD_IMPORT_PREVIEW_EXPIRED`、过期即清快照）。两例均用变体实现验证有真牙：移除确认阶段名称复核 → `assert 200 == 409`；去掉 410 映射 → `assert 422 == 410`，恢复后转绿。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` **2195 项 / 0 failed / 0 error / 74 skipped**。本次未改动任何业务逻辑（仅注释、规范澄清与测试）。
+
 ## 2026-09-25（PLAN-DM-041 执行裁决留档）
 
 - 新增 [PLAN-DM-041 实施裁决与独立复核记录（MEMO-DM-041)](.planning/memos/dst-manager/MEMO-DM-041-plan-041-execution-rulings.md)：转存执行期 35 条裁决（结论/理由/代价）、10 条任务完成线、独立复核的 Important 处置对应表、7 项延后 Minor，以及仍需人工裁决或执行的事项（真实桌面 G9、跨进程并发证据、官方库人工策展）。计划正文加「执行裁决与复核留档」链接。本次仅文档归档，未修改产品代码。

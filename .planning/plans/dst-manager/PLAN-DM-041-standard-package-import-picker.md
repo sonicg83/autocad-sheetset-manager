@@ -167,7 +167,7 @@ PLAN-DM-040 尚在修改 `StandardsView.vue`、`StandardLibraryPane.vue`、`Stan
 | 项 | 命令 | 结果 |
 | --- | --- | --- |
 | Ruff | `uv run ruff check .` | All checks passed |
-| 全量 Python | `uv run pytest -q`（xdist 并行） | **2193 项 / 0 failed / 0 error / 74 skipped**（含固定复核修复轮新增用例） |
+| 全量 Python | `uv run pytest -q`（xdist 并行） | **2195 项 / 0 failed / 0 error / 74 skipped**（含固定复核修复轮与延后项补测新增用例） |
 | 依赖锁 | `uv lock --check` | 通过 |
 | 标准库与包（点名） | `tests/unit/test_standard_store.py`、`test_standard_package.py`、`test_drawing_standards.py`、`test_standard_import_previews.py`、`test_message_catalog.py` | 全绿（含新增的版本分配、名称归一、快照与凭证用例） |
 | 标准与创建 API（点名） | `tests/integration/test_standard_api.py`、`test_creation_api.py`、`test_standard_dst_import.py`、`tests/unit/test_creation_drafts.py`、`test_creation_xlsx_*` | 全绿（含新增的端到端闭环与发布失败回滚） |
@@ -195,7 +195,7 @@ PLAN-DM-040 的真实桌面 G9 仍未执行，与本计划的 G9 一并待验。
 | 发布硬崩溃窗口留下不可恢复草稿 | `get_draft` 自愈残留 `version`；补用例 |
 | 取锁超时 / 导出损坏文档 / 预检遇不可读条目 / 创建候选遇 `StandardStoreError` 会 500 | 分别转稳定码 409/422/200+诊断/不可用候选；补用例 |
 
-未修并登记为延后项：导出/发布并发跨进程证据缺口、确认阶段“同名冲突”与过期凭证 410 的 HTTP 用例缺口、`import_package` 把非冲突 IO 失败报成 409、导入弹窗诊断未渲染后端文案键、`StandardEditor` 中已无产生者的 `STANDARD_VERSION_IMMUTABLE` 死分支。
+延后项（全文与定性见 [MEMO-DM-041](../../memos/dst-manager/MEMO-DM-041-plan-041-execution-rulings.md)）：**跨进程并发证据**按 PLAN-DM-018 的单实例约束不属于承诺范围（保留文件锁作为纵深防御，并写明升级条件为 `serve` 升为受支持并行入口或共享 `data_dir`）；`import_package` 把非冲突 IO 失败报成 409、导入弹窗未渲染后端文案键、`StandardEditor` 中已无产生者的 `STANDARD_VERSION_IMMUTABLE` 死分支仍待处理。原先的「确认阶段同名冲突 409」与「过期凭证 410」两个 HTTP 用例缺口已在本轮补齐。
 
 ## 执行裁决与复核留档
 

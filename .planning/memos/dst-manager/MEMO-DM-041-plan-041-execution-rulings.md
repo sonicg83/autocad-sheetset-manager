@@ -89,8 +89,8 @@ Important 全部在本轮修复并各留失败用例（详见 `changelog.md` 同
 
 ## 四、延后项（Minor，本次不修）
 
-- 并发发布只覆盖同进程线程，跨进程 WorkspaceTransactionLock 路径无证据（评审 Review Focus 1a）。
-- 确认阶段「不同 ID 同名」→ 409 与过期凭证 410 缺少 HTTP 层用例。
+- **并发证据范围（已重新定性，不再是待补项）**：并发发布只覆盖同进程线程，跨进程 `WorkspaceTransactionLock` 路径无实测。按 [PLAN-DM-018](../../plans/dst-manager/PLAN-DM-018-desktop-single-instance.md) 的裁决「仅限制桌面壳 `desktop` 入口，`serve`/`doctor`/`worker` 不受限」，桌面壳为唯一交付入口且同一 Windows 会话单实例（`interfaces/shell.py` `run_desktop` 的命名互斥量），因此**跨进程并发不属于承诺范围**，该证据不作为待补项。进程内互斥相反是**必需**的：标准端点都是同步 `def`，FastAPI 在线程池中真正并行执行，两次发布或发布与导入确认可以交错。跨进程文件锁保留为低成本纵深防御；**升级条件**＝把 `serve` 升为受支持的并行入口，或允许共享/漫游 `data_dir`（此时 `Local\` 互斥量按用户与会话隔离，挡不住同目录双写），届时需补真实双进程证据。
+- ~~确认阶段「不同 ID 同名」→ 409 与过期凭证 410 缺少 HTTP 层用例~~ → **本轮已补**（`test_import_confirm_rejects_name_conflict_added_after_preview`、`test_import_confirm_rejects_expired_credential_with_410`，并用变体实现验证两例均会真失败）。
 - import_package 把所有 os.replace 失败都报成 409 STANDARD_VERSION_EXISTS，未像 publish 那样区分 IO 失败。
 - 导入弹窗错误区只显示 ApiError.message，未渲染后端诊断的 message_key；同 ID 已有版本直接拼 official/user 原始 token（中文界面里出现英文来源词）。
 - StandardEditor.vue 仍比较 STANDARD_VERSION_IMMUTABLE（src/ 已无产生者）与 test_standard_api.py 模块 docstring 仍声明该 409。
@@ -107,3 +107,4 @@ Important 全部在本轮修复并各留失败用例（详见 `changelog.md` 同
 ## 修订记录
 
 - 2026-09-25 首版：转存 PLAN-DM-041 执行期裁决台账、任务完成线、独立复核结论与延后项。
+- 2026-09-25 修订：按 PLAN-DM-018 的单实例约束重新定性跨进程并发证据（属于承诺范围之外、保留文件锁作为纵深防御并写明升级条件）；补记确认阶段同名冲突 409 与过期凭证 410 两个 HTTP 用例已在本轮补齐。
