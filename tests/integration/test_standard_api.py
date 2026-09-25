@@ -6,10 +6,13 @@
 资产检查诊断透传。路由只做请求/响应转换，业务在应用层。
 """
 
+import concurrent.futures
 import copy
 import io
 import json
 import os
+import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -497,6 +500,75 @@ def test_import_confirms_from_snapshot_after_source_changes(tmp_path: Path) -> N
         ).status_code
         == 200
     )
+
+
+def test_import_preview_rejects_corrupt_asset_crc(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "corrupt.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"ABCDE"},
+    )
+    package.write_bytes(package.read_bytes().replace(b"ABCDE", b"ABXDE", 1))
+
+    response = client.post("/api/standards/import-previews", json={"path": str(package)})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_PACKAGE_INVALID"
+    assert client.app.state.service.import_previews.snapshot_files() == ()
+
+
+def test_import_preview_conflict_does_not_keep_unusable_snapshot(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "duplicate.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"ABCDE"},
+    )
+    first = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert first.status_code == 200
+    confirmed = client.post(
+        "/api/standards/import", json={"preview_id": first.json()["preview_id"]}
+    )
+    assert confirmed.status_code == 200
+    before = client.app.state.service.import_previews.snapshot_files()
+
+    blocked = client.post("/api/standards/import-previews", json={"path": str(package)})
+
+    assert blocked.status_code == 200
+    assert blocked.json()["can_import"] is False
+    assert blocked.json()["preview_id"] is None
+    assert client.app.state.service.import_previews.snapshot_files() == before
+
+
+def test_concurrent_confirmation_of_same_preview_returns_same_result(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "concurrent.dststandard",
+        {**asset_document("assets/A2.dwg"), "version": 1},
+        {"assets/A2.dwg": b"ABCDE"},
+    )
+    service = client.app.state.service
+    preview = service.preview_standard_import(package)
+    original_import = service.standard_store.import_package
+    entered = threading.Event()
+    release = threading.Event()
+
+    def delayed_import(path):
+        entered.set()
+        assert release.wait(timeout=5)
+        return original_import(path)
+
+    service.standard_store.import_package = delayed_import
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.confirm_standard_import, preview["preview_id"])
+        assert entered.wait(timeout=5)
+        second = pool.submit(service.confirm_standard_import, preview["preview_id"])
+        time.sleep(0.1)
+        release.set()
+        results = [first.result(timeout=5), second.result(timeout=5)]
+
+    assert results[0] == results[1]
 
 
 def test_import_preview_unknown_forged_and_cancelled_credentials(tmp_path: Path) -> None:

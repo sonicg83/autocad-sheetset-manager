@@ -191,6 +191,22 @@ test("导入预检冲突留在弹窗、保留路径且不改变当前选择", as
   await expect(dialog.getByTestId("import-confirm-button")).toBeDisabled();
 });
 
+test("重新预检时取消上一凭证并保留当前可确认状态", async ({page}) => {
+  const state = await installStandards(page, []);
+  await openStandards(page);
+  await page.getByRole("button", {name: "导入标准包"}).click();
+  const dialog = page.getByRole("dialog", {name: "导入标准包"});
+  await chooseStandardPackage(page, "C:\\标准包\\a.dststandard");
+  await dialog.getByTestId("import-preview-button").click();
+  await expect(dialog.getByTestId("import-confirm-button")).toBeEnabled();
+
+  await dialog.getByTestId("import-preview-button").click();
+
+  await expect(dialog.getByTestId("import-confirm-button")).toBeEnabled();
+  expect(state.importAttempts).toBe(2);
+  expect(state.cancelAttempts).toBe(1);
+});
+
 test("导入预检通过后可确认导入，并定位到新版本", async ({page}) => {
   const state = await installStandards(page, [published("official", 2)]);
   await openStandards(page);

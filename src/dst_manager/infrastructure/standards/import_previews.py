@@ -85,6 +85,9 @@ class ImportPreviewStore:
         self._clock = clock
         self._records: dict[str, ImportPreviewRecord] = {}
         self._lock = threading.Lock()
+        # 确认、取消与过期清理共用此锁，防止重复写入或在确认中删掉快照。
+        self.confirmation_lock = threading.RLock()
+        self._expiry_timers: dict[str, threading.Timer] = {}
         # 凭证只存内存，重启后所有凭证失效，快照根里剩下的文件按定义已不可达：
         # 启动时清空，避免单个 256 MiB 的快照跨多次运行无限累积（SPEC-DM-019 §4.2）。
         self._clear_snapshot_root()
@@ -169,7 +172,20 @@ class ImportPreviewStore:
         )
         with self._lock:
             self._records[preview_id] = record
+            timer = threading.Timer(self.ttl_seconds, self._expire_snapshot, args=(preview_id,))
+            timer.daemon = True
+            self._expiry_timers[preview_id] = timer
+        timer.start()
         return record
+
+    def _expire_snapshot(self, preview_id: str) -> None:
+        """到期时主动删除快照；保留凭证记录以便后续请求得到 410。"""
+        with self.confirmation_lock:
+            with self._lock:
+                self._expiry_timers.pop(preview_id, None)
+                record = self._records.get(preview_id)
+            if record is not None:
+                _remove_quietly(record.snapshot_path)
 
     def require(self, preview_id: str) -> ImportPreviewRecord:
         """取凭证；未知/伪造/重启后失效与过期分别以稳定码拒绝。"""
@@ -208,10 +224,14 @@ class ImportPreviewStore:
 
     def cancel(self, preview_id: str) -> None:
         """取消凭证并删除快照；未知凭证不报错（幂等取消）。"""
-        with self._lock:
-            record = self._records.pop(preview_id, None)
-        if record is not None:
-            _remove_quietly(record.snapshot_path)
+        with self.confirmation_lock:
+            with self._lock:
+                record = self._records.pop(preview_id, None)
+                timer = self._expiry_timers.pop(preview_id, None)
+            if timer is not None:
+                timer.cancel()
+            if record is not None:
+                _remove_quietly(record.snapshot_path)
 
     def discard_snapshot(self, snapshot_path: Path) -> None:
         """删除尚未登记凭证的快照（校验失败回滚）：不猜测目录，只删传入路径。"""
@@ -220,15 +240,20 @@ class ImportPreviewStore:
     def cleanup(self) -> None:
         """清理过期凭证与它们的快照；返回不表示任何业务结果。"""
         now = self._clock()
-        with self._lock:
-            expired = [
-                preview_id
-                for preview_id, record in self._records.items()
-                if now >= record.expires_at
-            ]
-            records = [self._records.pop(preview_id) for preview_id in expired]
-        for record in records:
-            _remove_quietly(record.snapshot_path)
+        with self.confirmation_lock:
+            with self._lock:
+                expired = [
+                    preview_id
+                    for preview_id, record in self._records.items()
+                    if now >= record.expires_at
+                ]
+                records = [self._records.pop(preview_id) for preview_id in expired]
+                timers = [self._expiry_timers.pop(preview_id, None) for preview_id in expired]
+            for timer in timers:
+                if timer is not None:
+                    timer.cancel()
+            for record in records:
+                _remove_quietly(record.snapshot_path)
 
     def snapshot_files(self) -> tuple[Path, ...]:
         """当前快照根下的文件（测试与运维用；不含正在复制的临时文件前缀）。"""

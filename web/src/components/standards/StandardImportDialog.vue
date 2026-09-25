@@ -39,6 +39,7 @@ const errorText = ref("");
 const devFallback = ref(!props.shellAvailable);
 const now = ref(Date.now());
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
+let requestRevision = 0;
 
 // 焦点契约（PLAN-DM-040 Task 9 同源）：初始焦点是弹窗内首个停靠点，Tab/Shift+Tab
 // 圈闭，Escape 关闭并归还焦点。Escape 走关闭流程，确保在途预检凭证被清理。
@@ -88,6 +89,7 @@ function expired(): boolean {
 }
 
 function reset(): void {
+  requestRevision += 1;
   stopExpiryTimer();
   path.value = "";
   phase.value = "idle";
@@ -102,6 +104,7 @@ watch(
   open => {
     if (open) reset();
     else {
+      requestRevision += 1;
       stopExpiryTimer();
       void dropPreview();
     }
@@ -139,7 +142,9 @@ function startExpiryTimer(): void {
 }
 
 async function chooseFile(): Promise<void> {
+  const revision = requestRevision;
   const picked = await props.selectPath(t("standards.import.pickTitle"));
+  if (revision !== requestRevision || !props.open) return;
   if (picked === undefined) {
     // 桥不可用：切到明确标注的本机路径开发态
     devFallback.value = true;
@@ -150,8 +155,11 @@ async function chooseFile(): Promise<void> {
 }
 
 async function setPath(next: string): Promise<void> {
+  const revision = ++requestRevision;
+  stopExpiryTimer();
   // 换文件必须清除旧预检：否则会拿 A 的凭证确认 B 的快照。
   await dropPreview();
+  if (revision !== requestRevision || !props.open) return;
   phase.value = "idle";
   errorText.value = "";
   path.value = next;
@@ -159,14 +167,30 @@ async function setPath(next: string): Promise<void> {
 
 async function runPreview(): Promise<void> {
   if (!canPreview.value) return;
+  const revision = ++requestRevision;
+  const selectedPath = path.value.trim();
   errorText.value = "";
   phase.value = "previewing";
+  stopExpiryTimer();
+  await dropPreview();
+  if (revision !== requestRevision || !props.open) return;
   try {
-    const preview = await props.previewImport(path.value.trim());
+    const preview = await props.previewImport(selectedPath);
+    if (revision !== requestRevision || !props.open) {
+      if (preview.preview_id != null) {
+        try {
+          await props.cancelImport(preview.preview_id);
+        } catch {
+          // 服务端凭证会到期清理；旧请求不得再改变当前弹窗状态。
+        }
+      }
+      return;
+    }
     result.value = preview;
     phase.value = preview.can_import ? "confirmable" : "blocked";
     if (preview.can_import) startExpiryTimer();
   } catch (exc) {
+    if (revision !== requestRevision || !props.open) return;
     phase.value = "idle";
     errorText.value = messageOf(exc);
   }
@@ -175,14 +199,18 @@ async function runPreview(): Promise<void> {
 async function runConfirm(): Promise<void> {
   const previewId = result.value?.preview_id;
   if (!canConfirm.value || previewId == null) return;
+  const revision = requestRevision;
   errorText.value = "";
   phase.value = "importing";
   try {
     const published = await props.confirmImport(previewId);
-    stopExpiryTimer();
-    phase.value = "success";
+    if (revision === requestRevision && props.open) {
+      stopExpiryTimer();
+      phase.value = "success";
+    }
     emit("imported", published);
   } catch (exc) {
+    if (revision !== requestRevision || !props.open) return;
     // 确认失败（冲突/凭证失效/发布故障）留在弹窗内：保留路径，允许重新预检或重试。
     await dropPreview();
     phase.value = "idle";
@@ -191,6 +219,7 @@ async function runConfirm(): Promise<void> {
 }
 
 async function close(): Promise<void> {
+  requestRevision += 1;
   await dropPreview();
   reset();
   emit("close");
@@ -211,7 +240,9 @@ const existingText = computed(() => {
 });
 
 onBeforeUnmount(() => {
+  requestRevision += 1;
   stopExpiryTimer();
+  void dropPreview();
 });
 </script>
 <template>

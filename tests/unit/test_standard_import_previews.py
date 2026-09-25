@@ -1,6 +1,7 @@
 """标准包导入预检的限时快照与凭证单测（PLAN-DM-041 Task 5）。"""
 
 from pathlib import Path
+from time import monotonic, sleep
 
 import pytest
 
@@ -124,6 +125,20 @@ def test_expired_credential_is_rejected_and_snapshot_removed(tmp_path: Path) -> 
     with pytest.raises(ImportPreviewError, match="STANDARD_IMPORT_PREVIEW_EXPIRED"):
         store.require(record.preview_id)
     assert not snapshot.exists()
+
+
+def test_expired_snapshot_is_removed_without_another_request(tmp_path: Path) -> None:
+    store = make_store(tmp_path, ttl_seconds=0.05)
+    snapshot = store.snapshot_source(write_source(tmp_path))
+    record = store.register(snapshot, {"standard_id": "a.b"})
+
+    deadline = monotonic() + 2
+    while snapshot.exists() and monotonic() < deadline:
+        sleep(0.01)
+
+    assert not snapshot.exists()
+    with pytest.raises(ImportPreviewError, match="STANDARD_IMPORT_PREVIEW_EXPIRED"):
+        store.require(record.preview_id)
 
 
 def test_cancel_removes_credential_and_snapshot(tmp_path: Path) -> None:

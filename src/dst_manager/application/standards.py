@@ -399,22 +399,26 @@ class StandardOperations:
             raise _store_error(exc) from exc
         standard = loaded.standard
         diagnostics, can_import = self._import_preview_diagnostics(loaded)
-        try:
-            record = previews.register(
-                snapshot,
-                {
-                    "standard_id": standard.standard_id,
-                    "version": standard.version,
-                    "name": standard.name,
-                    "supported_cad_versions": list(standard.supported_cad_versions),
-                },
-            )
-        except BaseException:
+        record = None
+        if not can_import:
             previews.discard_snapshot(snapshot)
-            raise
+        else:
+            try:
+                record = previews.register(
+                    snapshot,
+                    {
+                        "standard_id": standard.standard_id,
+                        "version": standard.version,
+                        "name": standard.name,
+                        "supported_cad_versions": list(standard.supported_cad_versions),
+                    },
+                )
+            except BaseException:
+                previews.discard_snapshot(snapshot)
+                raise
         return {
-            "preview_id": record.preview_id if can_import else None,
-            "expires_at": previews.expires_at_iso(record) if can_import else None,
+            "preview_id": record.preview_id if record is not None else None,
+            "expires_at": previews.expires_at_iso(record) if record is not None else None,
             "standard_id": standard.standard_id,
             "version": standard.version,
             "name": standard.name,
@@ -435,26 +439,27 @@ class StandardOperations:
         同身份或同名）由仓储锁内的复核以 409 拒绝。
         """
         previews = self.import_previews
-        try:
-            record = previews.require(preview_id)
-        except ImportPreviewError as exc:
-            raise _import_preview_error(exc) from exc
-        if record.consumed is not None:
-            return dict(record.consumed)
-        try:
-            published = self.standard_store.import_package(record.snapshot_path)
-        except StandardStoreError as exc:
-            raise _store_error(exc) from exc
-        result = {
-            "standard_id": published.standard_id,
-            "version": published.version,
-            "name": published.name,
-            "diagnostics": [
-                _publish_diagnostic(item)
-                for item in self._published_diagnostics(published)
-            ],
-        }
-        return previews.remember_result(preview_id, result)
+        with previews.confirmation_lock:
+            try:
+                record = previews.require(preview_id)
+            except ImportPreviewError as exc:
+                raise _import_preview_error(exc) from exc
+            if record.consumed is not None:
+                return dict(record.consumed)
+            try:
+                published = self.standard_store.import_package(record.snapshot_path)
+            except StandardStoreError as exc:
+                raise _store_error(exc) from exc
+            result = {
+                "standard_id": published.standard_id,
+                "version": published.version,
+                "name": published.name,
+                "diagnostics": [
+                    _publish_diagnostic(item)
+                    for item in self._published_diagnostics(published)
+                ],
+            }
+            return previews.remember_result(preview_id, result)
 
     def cancel_standard_import(self, preview_id: str) -> None:
         """取消预检：删除快照并废弃凭证；之后确认一律要求重新预检。"""

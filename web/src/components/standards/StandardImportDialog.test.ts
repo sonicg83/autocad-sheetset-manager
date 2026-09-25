@@ -180,6 +180,54 @@ describe("StandardImportDialog", () => {
     expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false);
   });
 
+  it("重新预检时取消旧凭证", async () => {
+    const {wrapper, harness} = mountDialog({selectResult: "C:\\a.dststandard"});
+    harness.previewImport
+      .mockResolvedValueOnce(preview({preview_id: "preview-A"}))
+      .mockResolvedValueOnce(preview({preview_id: "preview-B", name: "B"}));
+    await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await flushPromises();
+
+    expect(harness.cancelImport).toHaveBeenCalledWith("preview-A");
+    expect(wrapper.get(".import-identity").text()).toContain("B");
+  });
+
+  it("关闭后旧预检不得覆盖重新打开时选择的包", async () => {
+    let releaseOld: (value: ImportPreviewResult) => void = () => undefined;
+    const pendingOld = new Promise<ImportPreviewResult>(resolve => {
+      releaseOld = resolve;
+    });
+    const {wrapper, harness} = mountDialog();
+    harness.selectPath
+      .mockResolvedValueOnce("C:\\a.dststandard")
+      .mockResolvedValueOnce("C:\\b.dststandard");
+    harness.previewImport
+      .mockReturnValueOnce(pendingOld)
+      .mockResolvedValueOnce(preview({preview_id: "preview-B", name: "B"}));
+
+    await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await wrapper.get(".import-backdrop").trigger("click");
+    await flushPromises();
+    await wrapper.setProps({open: false});
+    await wrapper.setProps({open: true});
+    await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await flushPromises();
+
+    releaseOld(preview({preview_id: "preview-A", name: "A"}));
+    await flushPromises();
+
+    expect(wrapper.get(".import-identity").text()).toContain("B");
+    expect(harness.cancelImport).toHaveBeenCalledWith("preview-A");
+  });
+
   it("凭证过期后清除旧预检并要求重新预检", async () => {
     vi.useFakeTimers();
     const {wrapper} = mountDialog({

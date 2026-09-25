@@ -6,6 +6,7 @@
 """
 
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -116,12 +117,22 @@ class StandardPackageReader:
                 if normalized == MANIFEST_NAME:
                     try:
                         manifest_text = archive.read(info).decode("utf-8")
-                    except (OSError, UnicodeDecodeError) as exc:
+                    except (OSError, UnicodeDecodeError, zipfile.BadZipFile, RuntimeError, EOFError, zlib.error) as exc:
                         raise _error(
                             "STANDARD_PACKAGE_MANIFEST_INVALID",
                             f"manifest 读取失败：{exc}",
                         ) from exc
                 else:
+                    # 预检必须读完每个资产条目，让 CRC/压缩流错误在发放凭证前暴露。
+                    try:
+                        with archive.open(info) as entry_stream:
+                            while entry_stream.read(1024 * 1024):
+                                pass
+                    except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, zlib.error) as exc:
+                        raise _error(
+                            "STANDARD_PACKAGE_INVALID",
+                            f"资产条目 {normalized!r} 读取失败：{exc}",
+                        ) from exc
                     entries.append(PackageEntry(path=normalized, size=info.file_size))
         if manifest_text is None:
             raise _error("STANDARD_PACKAGE_MANIFEST_MISSING", "包内缺少 manifest.json")
