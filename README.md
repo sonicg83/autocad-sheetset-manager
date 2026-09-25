@@ -8,7 +8,7 @@
   <a href="#readme">简体中文</a> · <a href="README.en.md">English</a>
 </p>
 
-DST Manager 面向单人单机的真实工程，为 AutoCAD 图纸集（DST/DWG）提供**可审计、可恢复**的检查、受控编辑和安全发布能力：每次结构性变更都有可理解的预览、明确的执行边界和可追溯的结果。修改先进入草稿并持久保存，正式发布前不改动任何工程文件；发布失败自动恢复整批发布前状态。
+DST Manager 面向单人单机的真实工程，为 AutoCAD 图纸集（DST/DWG）提供**可审计、可恢复**的检查、受控编辑和安全发布能力：每次结构性变更都有可理解的预览、明确的执行边界和可追溯的结果。修改先进入草稿并持久保存，正式发布前不改动任何工程文件；发布失败自动恢复整批发布前状态。图纸标准（属性语义、编号与 DWG 命名）集中沉淀为标准库，既约束既有图纸集的编辑与发布，也驱动新图纸集的创建。
 
 ## 核心特性
 
@@ -16,6 +16,9 @@ DST Manager 面向单人单机的真实工程，为 AutoCAD 图纸集（DST/DWG�
 - **草稿与发布事务**：修改持久化为草稿栈（支持撤销/重做）；正式写入保留永久 before 快照，多文件发布失败恢复整批发布前状态。
 - **CAD 安全执行**：需要 AutoCAD 的操作由匹配版本的 Core Console + Worker 插件按固定命令执行，用户输入不直接拼接为 SCR/Shell/路径命令。
 - **命名规则统一派生**：图号、范围、标题、后缀和文件/布局命名由受控规则统一生成，支持"不编号图纸关键字"。
+- **图纸标准平台**：图纸标准集中沉淀为官方库与用户库，分区编辑普通/派生/组合属性、派生求值规则与全局 DWG 命名模板，配套模板资产与发布检查；已发布标准由服务端分配正整数版本号，不同 ID 的标准名称全局唯一。
+- **标准包导入导出**：`.dststandard` 标准包支持导出，导入采用原生选择器驱动的"限时快照预检 + 凭证确认"两步流程，预检结果限时有效，确认前不落库。
+- **标准驱动新建图纸集**：四阶段创建向导从已发布标准生成新图纸集，创建草稿可暂停恢复，图纸结构支持标准化 XLSX 导入；创建走独立发布事务，成功后接管为普通工作区。
 - **图纸页单表工作区**：左树右表导航、显示列配置、分页缓冲编辑、批量操作。
 - **属性分区编辑**：图纸集/子集/图纸属性按分区查看与编辑。
 - **图纸目录 XLSX 导出**：内置扩展，支持字段引用、数字格式码与输出图纸过滤。
@@ -98,7 +101,7 @@ uv run dst-manager worker
 $env:UV_LINK_MODE = "copy"
 uv sync --dev
 uv run ruff check .
-uv run pytest -q
+uv run pytest -q               # 默认按 CPU 核数并行（pytest-xdist），加 -p no:xdist 串行调试
 uv lock --check
 uv run alembic upgrade head    # 数据库迁移
 
@@ -144,6 +147,7 @@ uv run pytest tests/system_autocad -q
 ## 文档导航
 
 - [使用指南（面向最终用户）](docs/dst-manager/guides/GUIDE-DM-006-user-guide.md)
+- [官方标准包发布指南](docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md)
 - [完整文档入口](docs/README.md)
 - [DST Builder 历史文档](docs/dst-builder/README.md)：该产品线已退役，源码与构建入口整体归档到本地 `legacy/dst-builder/`（不进入公开仓库），文档仅供历史查阅（[证据备忘](.planning/memos/dst-builder/PLAN-DB-001-release-evidence.md)）
 - [DST Manager 产品文档](docs/dst-manager/README.md)

@@ -8,7 +8,7 @@
   <a href="README.md">简体中文</a> · <a href="#readme">English</a>
 </p>
 
-DST Manager targets real-world engineering work on a single workstation. It provides **auditable, recoverable** inspection, controlled editing, and safe publishing for AutoCAD Sheet Sets (DST/DWG): every structural change comes with an understandable preview, an explicit execution boundary, and a traceable result. Edits first go into persisted drafts; no engineering files are touched until an explicit publish, and a failed publish is rolled back to the pre-publish state of the whole batch.
+DST Manager targets real-world engineering work on a single workstation. It provides **auditable, recoverable** inspection, controlled editing, and safe publishing for AutoCAD Sheet Sets (DST/DWG): every structural change comes with an understandable preview, an explicit execution boundary, and a traceable result. Edits first go into persisted drafts; no engineering files are touched until an explicit publish, and a failed publish is rolled back to the pre-publish state of the whole batch. Drawing standards (attribute semantics, numbering, and DWG naming) are consolidated into a standards library that both governs the editing and publishing of existing sheet sets and drives the creation of new ones.
 
 ## Key Features
 
@@ -16,6 +16,9 @@ DST Manager targets real-world engineering work on a single workstation. It prov
 - **Drafts & publish transactions**: edits are persisted as a draft stack with undo/redo; formal writes keep a permanent before-snapshot, and a multi-file publish failure restores the entire batch to its pre-publish state.
 - **Safe CAD execution**: AutoCAD work runs through a version-matched Core Console + Worker plugin with fixed commands only; user input is never concatenated into SCR/Shell/path commands.
 - **Unified naming rules**: sheet numbers, ranges, titles, suffixes, and file/layout names are all derived from controlled rules, with support for "unnumbered subset keywords".
+- **Drawing standards platform**: drawing standards are consolidated into an official library and a user library, with sectioned editors for regular / derived / composite attributes, derived evaluation rules, and a global DWG naming template, plus template assets and publish checks. Published standards get a positive-integer version assigned by the server, and names are globally unique across different standard IDs.
+- **Standard package import/export**: `.dststandard` packages can be exported, and import follows a two-step "time-limited snapshot preview + credential confirmation" flow driven by a native package picker; preview results expire after a time limit and nothing is persisted until confirmation.
+- **Standards-driven sheet set creation**: a four-stage creation wizard generates new sheet sets from published standards; creation drafts can be paused and resumed, sheet structure supports standardized XLSX import, and creation runs through its own publish transaction, taking over as a regular workspace on success.
 - **Sheet single-table workspace**: tree-plus-table navigation, column configuration, paged buffered editing, and batch operations.
 - **Sectioned property editing**: view and edit sheet set / subset / sheet properties by section.
 - **Sheet catalog XLSX export**: a built-in extension with field references, number format codes, and output-sheet filtering.
@@ -99,7 +102,7 @@ The artifact is `dist/releases/dst-manager-v<version>-win64.zip`. Tags are creat
 $env:UV_LINK_MODE = "copy"
 uv sync --dev
 uv run ruff check .
-uv run pytest -q
+uv run pytest -q               # Parallel by CPU count by default (pytest-xdist); add -p no:xdist for serial debugging
 uv lock --check
 uv run alembic upgrade head    # Database migrations
 
@@ -145,6 +148,7 @@ uv run pytest tests/system_autocad -q
 ## Documentation
 
 - [User guide (for end users, Chinese)](docs/dst-manager/guides/GUIDE-DM-006-user-guide.md)
+- [Official standard package release guide](docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md) (Chinese)
 - [Full documentation index](docs/README.md) (Chinese)
 - [DST Builder historical docs](docs/dst-builder/README.md) (Chinese): this product line has been retired; its source and build entry points are archived locally under `legacy/dst-builder/` (never published), and the docs are kept for historical reference only.
 - [DST Manager product docs](docs/dst-manager/README.md) (Chinese)
