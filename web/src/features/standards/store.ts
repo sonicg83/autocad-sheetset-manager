@@ -73,7 +73,7 @@ export interface StandardStore {
   cancelImport(previewId: string): Promise<void>;
   deleteDraft(draftId: string): Promise<void>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
-  /** 本机模板受控复制：成功时返回包内相对路径（草稿文件行只保存它）。 */
+  /** 本机模板受控复制：成功时返回包内相对路径与按需读取的非 Model 布局。 */
   copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
 }
 

@@ -764,7 +764,8 @@ def test_asset_inspection_endpoint(tmp_path: Path, monkeypatch) -> None:
                 {
                     "asset_id": "layouts",
                     "kind": "layout-template",
-                    "files": [{"path": "assets/A2.dwg", "role": "A2"}],
+                    "file": "assets/A2.dwg",
+                    "paper_layouts": ["A2"],
                 },
             ],
         },
@@ -782,7 +783,7 @@ def test_asset_inspection_endpoint(tmp_path: Path, monkeypatch) -> None:
     body = response.json()
     assert body["asset_id"] == "layouts"
     assert body["kind"] == "layout-template"
-    assert body["diagnostics"][0]["code"] == "STANDARD_LAYOUT_NAME_MISMATCH"
+    assert body["diagnostics"][0]["code"] == "STANDARD_PAPER_LAYOUT_MISSING"
     assert body["diagnostics"][0]["severity"] == "error"
 
 
@@ -907,7 +908,7 @@ def asset_document(*paths: str) -> dict:
         {
             "asset_id": "templates",
             "kind": "base-template",
-            "files": [{"path": path} for path in paths],
+            "file": paths[0],
         }
     ]
     return document
@@ -1036,7 +1037,8 @@ def test_copied_asset_closes_loop_through_publish_and_export(    tmp_path: Path,
         {
             "asset_id": "layouts",
             "kind": "layout-template",
-            "files": [{"path": copied, "role": "A2"}],
+            "file": copied,
+            "paper_layouts": ["A2"],
         }
     ]
     assert (
@@ -1090,7 +1092,7 @@ def test_standard_package_full_loop_from_draft_asset_to_next_version(
         "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(template)}
     ).json()["path"]
     document = {**DRAFT_DOCUMENT, "assets": [
-        {"asset_id": "templates", "kind": "base-template", "files": [{"path": copied}]}
+        {"asset_id": "templates", "kind": "base-template", "file": copied}
     ]}
     assert (
         publisher.put(
@@ -1195,7 +1197,7 @@ def test_standard_package_full_loop_from_draft_asset_to_next_version(
         "/api/standards/drafts/draft-v2/asset-files", json={"source_path": str(template)}
     ).json()["path"]
     derived["assets"] = [
-        {"asset_id": "templates", "kind": "base-template", "files": [{"path": re_copied}]}
+        {"asset_id": "templates", "kind": "base-template", "file": re_copied}
     ]
     assert (
         consumer.put(
@@ -1222,7 +1224,7 @@ def test_publish_failure_keeps_draft_and_does_not_reserve_version(
         "/api/standards/drafts/draft-gas/asset-files", json={"source_path": str(template)}
     ).json()["path"]
     document = {**DRAFT_DOCUMENT, "assets": [
-        {"asset_id": "templates", "kind": "base-template", "files": [{"path": copied}]}
+        {"asset_id": "templates", "kind": "base-template", "file": copied}
     ]}
     client.put("/api/standards/drafts/draft-gas", json={"document": document})
 

@@ -1,6 +1,6 @@
 // 模板资产检查与发布检查 e2e（PLAN-DM-035 Task 10 / SPEC-DM-016 §8–§9）。
-// 覆盖：资产文件缺失、布局严格不匹配（含 `A3 ` 多空格）、检查本身失败与标准错误分离、
-// 仅警告可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入新版本只读详情。
+// 覆盖：启用图幅与实际布局差异（含 `A3 ` 多空格）、资产文件缺失、检查本身失败与标准错误
+// 分离、仅警告可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入新版本只读详情。
 import {expect, test} from "@playwright/test";
 import {
   draft,
@@ -12,14 +12,15 @@ import {
   openStandards,
 } from "./fixtures/standards";
 
-/** 声明 A2/A3 两个图幅的布局资产草稿（图幅属性枚举引用它们，避免未引用警告）。 */
-function layoutDraft(layouts: string[] = ["A2", "A3"]): Record<string, unknown> {
+/** 勾选 A2/A3 启用图幅的布局资产草稿（图幅属性枚举引用它们，避免未引用警告）。 */
+function layoutDraft(paperLayouts: string[] = ["A2", "A3"]): Record<string, unknown> {
   return draftDocument({
     assets: [
       {
         asset_id: "layouts",
         kind: "layout-template",
-        files: layouts.map((role, index) => ({path: `assets/layout-${index}.dwg`, role})),
+        file: "assets/layouts.dwg",
+        paper_layouts: paperLayouts,
       },
     ],
   });
@@ -49,27 +50,27 @@ test.beforeEach(async ({page}) => {
 /** 声明一个基础模板资产的草稿（默认已有受控路径，可直接复制替换）。 */
 function templateDraft(path = "assets/A2.dwg"): Record<string, unknown> {
   return draftDocument({
-    assets: [{asset_id: "base", kind: "base-template", files: [{path, role: ""}]}],
+    assets: [{asset_id: "base", kind: "base-template", file: path, paper_layouts: []}],
   });
 }
 
-test("布局严格不匹配时显示精确差异并阻断发布", async ({page}) => {
+test("启用图幅缺失时显示精确差异并阻断发布", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": layoutDraft()},
-    // 实际布局中 A3 多了一个空格：严格比较必须判为不一致，且不静默去空格
+    // 实际布局中 A3 多了一个空格：勾选的 A3 不在文件实际布局中，且不静默去空格
     assetResults: {layouts: inspection("layouts", ["Model", "A2", "A3 "])},
   });
   await openStandards(page);
   await openDraftEditor(page);
   await openEditorSection(page, "assets");
 
-  await expect(page.getByTestId("asset-layout-A3")).toContainText("缺少同名布局");
-  await expect(page.getByTestId("asset-layout-extra-0")).toContainText("A3 ");
-  await expect(page.getByTestId("asset-layout-extra-0")).toContainText("未声明布局");
+  await expect(page.getByTestId("asset-layout-A2")).toContainText("已启用");
+  await expect(page.getByTestId("asset-layout-A3")).toContainText("启用但缺失");
+  await expect(page.getByTestId("asset-layout-A3 ")).toContainText("未启用");
 
   await page.getByRole("button", {name: "发布检查"}).click();
   await expect(page.getByTestId("publish-review")).toBeVisible();
-  await expect(page.getByText(/图幅 A3 与实际布局严格不一致/)).toBeVisible();
+  await expect(page.getByTestId("publish-review")).toContainText("启用图幅 A3 不在文件实际布局中");
   await expect(page.getByRole("button", {name: "发布标准"})).toBeDisabled();
   await expect(page.getByText("存在错误或检查失败，暂不能发布。")).toBeVisible();
 });
@@ -122,7 +123,7 @@ test("仅警告时可发布并在发布后进入新版本只读详情", async ({
     drafts: {
       "draft-1": draftDocument({
         // A5 未被任何取值引用：有效但未引用 → 警告，不阻断发布
-        assets: [{asset_id: "unused-layouts", kind: "layout-template", files: [{path: "assets/a5.dwg", role: "A5"}]}],
+        assets: [{asset_id: "unused-layouts", kind: "layout-template", file: "assets/a5.dwg", paper_layouts: ["A5"]}],
       }),
     },
     assetResults: {"unused-layouts": inspection("unused-layouts", ["Model", "A5"])},
@@ -186,6 +187,8 @@ test("发布检查的问题可跳回 DWG 命名分区并聚焦令牌", async ({p
 test("资产声明编辑：新增布局资产后未检查，重新检查后给出结果", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": draftDocument()},
+    // 复制响应模拟后端从 DWG 读到的布局：勾选 A4 需要它在列表中
+    assetCopyLayouts: ["Model", "A4"],
   });
   state.assetResults["layout-template-1"] = inspection("layout-template-1", ["Model", "A4"]);
   await openStandards(page);
@@ -195,9 +198,9 @@ test("资产声明编辑：新增布局资产后未检查，重新检查后给�
   await page.getByRole("button", {name: "添加布局模板"}).click();
   await expect(page.getByTestId("asset-row-user-layout-template-1")).toBeVisible();
   await page.evaluate(() => { (window as any).__fakeSelectResult = "C:\\tmp\\A4 模板.dwg"; });
-  await page.getByTestId("asset-file-pick-0").click();
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/managed-1.dwg");
-  await page.getByLabel("图幅（role）").fill("A4");
+  await page.getByTestId("asset-file-pick").click();
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/managed-1.dwg");
+  await page.getByTestId("asset-paper-layout-A4").check();
   await expect(page.getByText("有未保存修改")).toBeVisible();
 
   await page.getByRole("button", {name: "重新检查"}).click();
@@ -236,7 +239,7 @@ test("发布检查页继续编辑后检查结果失效并阻断发布", async ({
   // 版本说明也属于草稿缓冲：改动后检查结果不再对应当前快照
   await page.getByLabel("版本说明").fill("修订说明");
   await expect(publish).toBeDisabled();
-  await expect(page.getByText(/图幅 A2 与实际布局严格不一致/)).toBeVisible();
+  await expect(page.getByTestId("publish-review")).toContainText("启用图幅 A2 不在文件实际布局中");
 });
 
 // ---- 本机模板受控复制（PLAN-DM-040 Task 3，F01） ------------------------
@@ -251,18 +254,18 @@ test("选择本机模板复制为受控副本；取消不改缓冲", async ({pag
 
   // 取消：不发请求，受控路径与保存状态保持不变
   await page.evaluate(() => { (window as any).__fakeSelectResult = null; });
-  await page.getByTestId("asset-file-pick-0").click();
+  await page.getByTestId("asset-file-pick").click();
   expect(state.assetCopyCalls).toEqual([]);
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/A2.dwg");
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/A2.dwg");
   await expect(page.getByTestId("editor-save-state")).toContainText("已保存");
 
   // 中文 + 空格 + OneDrive 风格路径：只把受控副本名写入缓冲
   await page.evaluate(() => {
     (window as any).__fakeSelectResult = "C:\\Users\\me\\OneDrive - 项目 资料\\A2 模板.dwg";
   });
-  await page.getByTestId("asset-file-pick-0").click();
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/managed-1.dwg");
-  await expect(page.getByTestId("asset-file-path-0")).toHaveAttribute("readonly", "");
+  await page.getByTestId("asset-file-pick").click();
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/managed-1.dwg");
+  await expect(page.getByTestId("asset-file-path")).toHaveAttribute("readonly", "");
   expect(state.assetCopyCalls).toEqual([
     {draftId: "draft-1", sourcePath: "C:\\Users\\me\\OneDrive - 项目 资料\\A2 模板.dwg"},
   ]);
@@ -271,15 +274,15 @@ test("选择本机模板复制为受控副本；取消不改缓冲", async ({pag
 
   // 已有声明时入口变为「替换文件」，再次复制得到新的受控副本
   await expect(page.getByRole("button", {name: "替换文件"})).toBeVisible();
-  await page.getByTestId("asset-file-pick-0").click();
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/managed-2.dwg");
+  await page.getByTestId("asset-file-pick").click();
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/managed-2.dwg");
 });
 
 test("复制失败就地显示错误并保留旧声明", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {
       "draft-1": draftDocument({
-        assets: [{asset_id: "base", kind: "base-template", files: [{path: "assets/A2.dwg", role: ""}]}],
+        assets: [{asset_id: "base", kind: "base-template", file: "assets/A2.dwg", paper_layouts: []}],
       }),
     },
   });
@@ -293,10 +296,10 @@ test("复制失败就地显示错误并保留旧声明", async ({page}) => {
   await openEditorSection(page, "assets");
 
   await page.evaluate(() => { (window as any).__fakeSelectResult = "C:\\tmp\\模板.txt"; });
-  await page.getByTestId("asset-file-pick-0").click();
+  await page.getByTestId("asset-file-pick").click();
 
-  await expect(page.getByTestId("asset-file-error-0")).toContainText("STANDARD_ASSET_SOURCE_INVALID");
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/A2.dwg");
+  await expect(page.getByTestId("asset-file-error")).toContainText("STANDARD_ASSET_SOURCE_INVALID");
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/A2.dwg");
   await expect(page.getByTestId("editor-save-state")).toContainText("已保存");
 });
 
@@ -311,9 +314,9 @@ test("无桌面壳时用显式来源绝对路径调用同一端点", async ({pag
 
   // 无壳态单独标明来源绝对路径；不用浏览器 <input type=file> 的 fakepath
   await page.getByLabel("来源绝对路径").fill("C:\\tmp\\A2 模板.dwg");
-  await page.getByTestId("asset-file-copy-0").click();
+  await page.getByTestId("asset-file-copy").click();
 
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/managed-1.dwg");
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/managed-1.dwg");
   expect(state.assetCopyCalls).toEqual([{draftId: "draft-1", sourcePath: "C:\\tmp\\A2 模板.dwg"}]);
 });
 
@@ -321,7 +324,7 @@ test("复制 → 保存 → 检查 → 发布 闭环使用同一份受控副本"
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {
       "draft-1": draftDocument({
-        assets: [{asset_id: "layouts", kind: "layout-template", files: [{path: "", role: "A2"}]}],
+        assets: [{asset_id: "layouts", kind: "layout-template", file: "", paper_layouts: ["A2"]}],
       }),
     },
   });
@@ -331,13 +334,13 @@ test("复制 → 保存 → 检查 → 发布 闭环使用同一份受控副本"
   await openEditorSection(page, "assets");
 
   await page.evaluate(() => { (window as any).__fakeSelectResult = "C:\\tmp\\A2 模板.dwg"; });
-  await page.getByTestId("asset-file-pick-0").click();
-  await expect(page.getByTestId("asset-file-path-0")).toHaveValue("assets/managed-1.dwg");
+  await page.getByTestId("asset-file-pick").click();
+  await expect(page.getByTestId("asset-file-path")).toHaveValue("assets/managed-1.dwg");
 
   await page.getByRole("button", {name: "保存草稿"}).click();
   await expect(page.getByTestId("editor-save-state")).toContainText("已保存");
-  const savedAssets = (state.saveBodies.at(-1) as {assets: {files: {path: string}[]}[]}).assets;
-  expect(savedAssets[0].files[0].path).toBe("assets/managed-1.dwg");
+  const savedAssets = (state.saveBodies.at(-1) as {assets: {file: string}[]}).assets;
+  expect(savedAssets[0].file).toBe("assets/managed-1.dwg");
 
   await page.getByRole("button", {name: "发布检查"}).click();
   await expect(page.getByRole("button", {name: "发布标准"})).toBeEnabled();

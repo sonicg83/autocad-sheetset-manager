@@ -615,10 +615,11 @@ def asset_document(*paths: str, asset_id: str = "templates") -> dict[str, object
     document = standard_document()
     document["assets"] = [
         {
-            "asset_id": asset_id,
+            "asset_id": asset_id if len(paths) == 1 else f"{asset_id}-{index}",
             "kind": "base-template",
-            "files": [{"path": path} for path in paths],
+            "file": path,
         }
+        for index, path in enumerate(paths)
     ]
     return document
 
@@ -774,8 +775,13 @@ def test_export_deduplicates_shared_asset_paths(store: StandardStore, tmp_path: 
     """两个资产声明同一路径（Schema 允许）时，导出不得写出重复 ZIP 条目。"""
     document = standard_document()
     document["assets"] = [
-        {"asset_id": "a", "kind": "base-template", "files": [{"path": "assets/A2.dwg"}]},
-        {"asset_id": "b", "kind": "layout-template", "files": [{"path": "assets/A2.dwg", "role": "A2"}]},
+        {"asset_id": "a", "kind": "base-template", "file": "assets/A2.dwg"},
+        {
+            "asset_id": "b",
+            "kind": "layout-template",
+            "file": "assets/A2.dwg",
+            "paper_layouts": ["A2"],
+        },
     ]
     create_draft(store, document, draft_id="draft-asset")
     write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")

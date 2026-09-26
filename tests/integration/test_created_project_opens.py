@@ -94,12 +94,13 @@ STANDARD_DOCUMENT: dict[str, object] = {
         {
             "asset_id": "base-a1",
             "kind": "base-template",
-            "files": [{"path": "templates/base.dwt", "role": ""}],
+            "file": "templates/base.dwt",
         },
         {
             "asset_id": "layout-a1",
             "kind": "layout-template",
-            "files": [{"path": "templates/layout.dwt", "role": "A1"}],
+            "file": "templates/layout.dwt",
+            "paper_layouts": ["A1"],
         },
     ],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},

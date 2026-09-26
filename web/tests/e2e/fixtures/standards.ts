@@ -67,7 +67,7 @@ export function detailBody(summary: StandardSummary) {
           {system_field: "subset.name"},
         ],
       },
-      assets: [{asset_id: "layouts", kind: "layout-template"}],
+      assets: [{asset_id: "layouts", kind: "layout-template", file: "assets/layouts.dwg", paper_layouts: ["A1", "A2"]}],
       numbering: {sequence_field: "subset.sequence", digits: 3},
     },
   };
@@ -145,6 +145,8 @@ export type StandardsFixtureOptions = {
   detailFailures?: Record<string, {status: number; code: string; message: string}>;
   /** 按 `standard_id@version` 覆盖详情文档：区分不同标准的派生来源内容。 */
   detailDocuments?: Record<string, Record<string, unknown>>;
+  /** 资产复制端点返回的布局列表（模拟后端从 DWG 读到的布局；默认 Model+A1+A2）。 */
+  assetCopyLayouts?: string[];
 };
 
 /** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
@@ -315,8 +317,9 @@ export async function installStandards(
         if (state.assetCopyFailure !== null) {
           return route.fulfill({status: state.assetCopyFailure.status, json: {code: state.assetCopyFailure.code, message: state.assetCopyFailure.message}});
         }
-        // 与后端契约同构：只返回服务端生成的受控副本名（绝不回显来源路径）
-        return route.fulfill({json: {path: `assets/managed-${state.assetCopyCalls.length}.dwg`}});
+        // 与后端契约同构：受控副本名 + 复制时读取到的布局（绝不回显来源路径）
+        const layouts = options.assetCopyLayouts ?? ["Model", "A1", "A2"];
+        return route.fulfill({json: {path: `assets/managed-${state.assetCopyCalls.length}.dwg`, layouts, layouts_error: null}});
       }
       const draftSaveMatch = /^\/api\/standards\/drafts\/([^/]+)$/.exec(path);
       if (draftSaveMatch && method === "PUT") {

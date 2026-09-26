@@ -32,7 +32,6 @@ from dst_manager.domain.standard_models import (
     DwgNamingTemplate,
     NumberingPolicy,
     StandardAsset,
-    StandardAssetFile,
     StandardDependency,
     StandardEnumItem,
     StandardMappingRow,
@@ -279,18 +278,34 @@ def _parse_property(raw: Any, index: int) -> StandardProperty:
 
 
 def _parse_asset(raw: Any, index: int) -> StandardAsset:
+    """解析单文件资产（PLAN-DM-042）：``file`` 必填，``paper_layouts`` 去重保序。
+
+    旧多文件 ``files``/``role`` 形状没有 ``file`` 字段，在此以稳定码拒绝，
+    不做自动转换（旧标准包须重新导入）。
+    """
     if not isinstance(raw, Mapping):
         raise _error("STANDARD_ASSET_INVALID", f"资产 #{index} 不是对象")
     asset_id = _require_str(raw, "asset_id", "STANDARD_ASSET_INVALID")
     kind = raw.get("kind")
     if kind not in ASSET_KINDS:
         raise _error("STANDARD_ASSET_KIND_INVALID", f"资产 {asset_id!r} 种类 {kind!r} 未知")
-    files: list[StandardAssetFile] = []
-    for item in _sequence(raw, "files", "STANDARD_ASSET_INVALID"):
-        if not isinstance(item, Mapping) or not isinstance(item.get("path"), str) or not item["path"]:
-            raise _error("STANDARD_ASSET_INVALID", f"资产 {asset_id!r} 文件条目非法")
-        files.append(StandardAssetFile(path=item["path"], role=str(item.get("role", ""))))
-    return StandardAsset(asset_id=asset_id, kind=str(kind), files=tuple(files))
+    file_path = _require_str(raw, "file", "STANDARD_ASSET_INVALID")
+    paper_layouts: list[str] = []
+    for item in _sequence(raw, "paper_layouts", "STANDARD_ASSET_INVALID"):
+        if not isinstance(item, str):
+            raise _error(
+                "STANDARD_ASSET_INVALID",
+                f"资产 {asset_id!r} 的 paper_layouts 必须是字符串列表",
+            )
+        name = item.strip()
+        if name and name not in paper_layouts:
+            paper_layouts.append(name)
+    return StandardAsset(
+        asset_id=asset_id,
+        kind=str(kind),
+        file=file_path,
+        paper_layouts=tuple(paper_layouts),
+    )
 
 
 def _parse_numbering(raw: Any) -> NumberingPolicy:

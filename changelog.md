@@ -1,3 +1,12 @@
+## 2026-09-26（PLAN-DM-042：布局模板单文件资产与勾选启用图幅）
+
+- 模板资产统一为"一个资产对应一个 DWG 文件"：领域模型 `StandardAsset` 由 `files`/`role` 多文件结构改为单文件 `file` + `paper_layouts`，删除 `StandardAssetFile`；schema 解析勾选集合（去重保序、丢弃空白项），旧 `files`/`role` 形状在保存与导入时按稳定码拒绝，不做自动迁移（要求重新导入/重建）。
+- 启用图幅改为勾选声明：复制端点 `POST /api/standards/drafts/{draft_id}/asset-files` 请求新增可选 `cad_version`，响应扩展为 `{path, layouts, layouts_error}`（复制成功后读取受控副本实际布局，布局读取失败不影响复制）；编辑器据此渲染非 `Model` 布局勾选清单并提供全选/清空，替换 DWG 后自动保留仍存在的勾选、移除失效项并就地提示。
+- 检查与执行口径统一为"勾选 ⊆ 实际（非 `Model`）"：新增 `STANDARD_PAPER_LAYOUT_MISSING`（勾选图幅不在实际布局中，逐项）与 `STANDARD_PAPER_LAYOUTS_EMPTY`（未勾选任何图幅）阻断码，`STANDARD_LAYOUT_NAME_MISMATCH` 退役；未勾选的实际布局为中性状态不再阻断；执行期 `resolve_layout_template` 按 `paper_layout ∈ paper_layouts` 判定并直接使用 `asset.file`。
+- 前端 `DraftAsset` 改单文件形状，资产编辑器与检查面板改为"实际布局 × 启用状态"三态展示（已启用/未启用/启用但缺失），严格复用 Ui 原语与三层令牌并通过 `check:ui` 门禁；中英文及各语言文案同步，退役 `fileRole`/`addFile`/`removeFile`/`layoutExtra` 等键；相关 pytest、Vitest、Playwright 夹具与断言全部更新。
+- SPEC-DM-016 §8 修订为单文件 + 勾选模型；PLAN-DM-042 各任务复选框按实际完成勾选。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` 仅有 `tests/unit/test_setup_bat.py` 两条与本任务无关的既有环境失败（GBK 代码页中文乱码，经 `--lf` 复核确认）；`npm --prefix web run test:unit`（340 例）、`check:api`/`check:i18n`/`check:ui`/`build`（含 `vue-tsc -b`）全部通过；受影响的三个 Playwright spec（资产发布/标准库/视觉证据）75 例通过。真实桌面 G9 验证仍待用户环境。
+
 ## 2026-09-25（修复 PLAN-DM-041 导入复核问题）
 
 - 标准包预检逐条读取资产以验证 ZIP 内容与 CRC，损坏包在预检阶段返回 422；不可导入的冲突预检即时删除快照，到期快照无需新请求也会清理。

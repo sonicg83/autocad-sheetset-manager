@@ -1,12 +1,15 @@
-"""标准模板资产检查（PLAN-DM-035 Task 5）：布局严格比较与稳定诊断。
+"""标准模板资产检查（PLAN-DM-035 Task 5；PLAN-DM-042 Task 8）：勾选模型回归。
 
-覆盖：声明图幅与非 Model 布局的严格比较（``"A2 " != "A2"``）、能力缺失
-转换为 ``STANDARD_CAD_CAPABILITY_MISSING`` 诊断而不抛出、草稿/资产/文件
-缺失与非法路径的稳定拒绝。CAD 读取入口经替换注入，不依赖真实 Core Console。
+覆盖：布局模板 ``paper_layouts`` 为空报 ``STANDARD_PAPER_LAYOUTS_EMPTY``、
+勾选图幅缺失逐项报 ``STANDARD_PAPER_LAYOUT_MISSING``（大小写与空白敏感）、
+能力缺失转换为 ``STANDARD_CAD_CAPABILITY_MISSING`` 诊断而不抛出、草稿/资产/
+文件缺失与非法路径的稳定拒绝。CAD 读取入口经替换注入，不依赖真实 Core Console。
 PLAN-DM-040 Task 3 追加：本机模板文件受控复制进草稿（受控副本名、源文件
-哈希与 mtime 不变、故障不落半文件）。
+哈希与 mtime 不变、故障不落半文件）；PLAN-DM-042 追加：复制按需读取布局，
+读取失败不影响复制结果。
 """
 
+import copy
 import hashlib
 import shutil
 import typing
@@ -39,15 +42,13 @@ DRAFT_DOCUMENT = {
         {
             "asset_id": "layouts",
             "kind": "layout-template",
-            "files": [
-                {"path": "assets/A2.dwg", "role": "A2"},
-                {"path": "assets/A3.dwg", "role": "A3"},
-            ],
+            "file": "assets/A2.dwg",
+            "paper_layouts": ["A2", "A3"],
         },
         {
             "asset_id": "base",
             "kind": "base-template",
-            "files": [{"path": "assets/base.dwt", "role": ""}],
+            "file": "assets/base.dwt",
         },
     ],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
@@ -66,8 +67,7 @@ def fake_reader(service: DstManagerService, monkeypatch):
 
     class Reader:
         responses: typing.ClassVar[dict[str, list[str]]] = {
-            "A2": ["Model", "A2"],
-            "A3": ["Model", "A3"],
+            "A2": ["Model", "A2", "A3"],
             "base": ["Model"],
         }
         layouts: list[str] | None = None
@@ -94,19 +94,12 @@ def draft(service: DstManagerService) -> None:
     store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
     assets = store.drafts_root / "draft" / "assets"
     assets.mkdir(parents=True)
-    for name in ("A2.dwg", "A3.dwg", "base.dwt"):
+    for name in ("A2.dwg", "base.dwt"):
         (assets / name).write_bytes(b"fake dwg bytes")
 
 
 def codes(inspection) -> list[str]:
     return [item.code for item in inspection.diagnostics]
-
-
-def test_layout_asset_requires_exact_paper_layout(service, fake_reader, draft) -> None:
-    fake_reader.layouts = ["Model", "A2 ", "A3"]
-    result = service.inspect_standard_asset("draft", "layouts", "2020")
-    assert result.diagnostics[0].code == "STANDARD_LAYOUT_NAME_MISMATCH"
-    assert result.layouts == ("Model", "A2 ", "A3")
 
 
 def test_layout_asset_with_matching_layouts_passes(service, fake_reader, draft) -> None:
@@ -116,10 +109,33 @@ def test_layout_asset_with_matching_layouts_passes(service, fake_reader, draft) 
     assert result.layouts == ("Model", "A2", "A3")
 
 
-def test_layout_asset_case_difference_is_mismatch(service, fake_reader, draft) -> None:
+def test_layout_asset_reports_each_missing_paper_layout(
+    service, fake_reader, draft
+) -> None:
+    fake_reader.layouts = ["Model", "A2"]
+    result = service.inspect_standard_asset("draft", "layouts", "2020")
+    assert codes(result) == ["STANDARD_PAPER_LAYOUT_MISSING"]
+    assert result.diagnostics[0].message.count("A3") == 1
+    assert result.layouts == ("Model", "A2")
+
+
+def test_layout_asset_case_difference_is_missing(service, fake_reader, draft) -> None:
     fake_reader.layouts = ["Model", "a2", "A3"]
     result = service.inspect_standard_asset("draft", "layouts", "2020")
-    assert set(codes(result)) == {"STANDARD_LAYOUT_NAME_MISMATCH"}
+    assert codes(result) == ["STANDARD_PAPER_LAYOUT_MISSING"]
+
+
+def test_layout_template_without_paper_layouts_rejected(
+    service, fake_reader, draft
+) -> None:
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["assets"] = [
+        {"asset_id": "empty", "kind": "layout-template", "file": "assets/A2.dwg"}
+    ]
+    service.standard_store.save_draft("draft", document)
+    result = service.inspect_standard_asset("draft", "empty", "2020")
+    assert codes(result) == ["STANDARD_PAPER_LAYOUTS_EMPTY"]
+    assert result.layouts == ("Model", "A2", "A3")
 
 
 @pytest.mark.parametrize("cad_version", ["2016", "2020"])
@@ -144,14 +160,12 @@ def test_layout_read_failure_becomes_diagnostic(service, fake_reader, draft) -> 
 
 
 def test_missing_asset_file_becomes_diagnostic(service, fake_reader, draft) -> None:
-    (service.standard_store.drafts_root / "draft" / "assets" / "A3.dwg").unlink()
+    (service.standard_store.drafts_root / "draft" / "assets" / "A2.dwg").unlink()
     result = service.inspect_standard_asset("draft", "layouts", "2020")
     assert codes(result) == ["STANDARD_ASSET_FILE_MISSING"]
 
 
-def test_base_template_without_roles_skips_layout_comparison(
-    service, fake_reader, draft
-) -> None:
+def test_base_template_skips_paper_layout_rules(service, fake_reader, draft) -> None:
     fake_reader.layouts = ["Model", "任意布局"]
     result = service.inspect_standard_asset("draft", "base", "2020")
     assert codes(result) == []
@@ -170,12 +184,12 @@ def test_unknown_asset_rejected(service, fake_reader, draft) -> None:
 
 
 def test_escaping_asset_path_rejected(service, fake_reader, draft) -> None:
-    document = dict(DRAFT_DOCUMENT)
+    document = copy.deepcopy(DRAFT_DOCUMENT)
     document["assets"] = [
         {
             "asset_id": "evil",
             "kind": "base-template",
-            "files": [{"path": "../outside.dwg", "role": ""}],
+            "file": "../outside.dwg",
         }
     ]
     service.standard_store.save_draft("draft", document)
@@ -224,6 +238,51 @@ def test_copy_asset_file_supports_dwt(service, tmp_path) -> None:
 
     assert result["path"].endswith(".dwt")
     assert (store.drafts_root / "draft" / result["path"]).is_file()
+
+
+def test_copy_asset_file_reads_layouts_on_request(service, fake_reader, tmp_path) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    fake_reader.layouts = ["Model", "A2", "A3"]
+    source = source_file(tmp_path)
+
+    result = service.copy_draft_asset_file("draft", source, "2020")
+
+    assert result["path"].startswith("assets/managed-")
+    assert (store.drafts_root / "draft" / result["path"]).is_file()
+    assert result["layouts"] == ["Model", "A2", "A3"]
+    assert result["layouts_error"] is None
+
+
+def test_copy_asset_file_skips_layout_read_without_cad_version(
+    service, fake_reader, tmp_path
+) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    source = source_file(tmp_path)
+
+    result = service.copy_draft_asset_file("draft", source)
+
+    assert result["layouts"] == []
+    assert result["layouts_error"] is None
+
+
+def test_copy_asset_file_layout_read_failure_keeps_copy(
+    service, fake_reader, tmp_path
+) -> None:
+    store = service.standard_store
+    store.create_draft(DRAFT_DOCUMENT, draft_id="draft")
+    fake_reader.error = ApplicationError(
+        "LAYOUT_READ_FAILED", "读取布局失败：DWG 可能正被 AutoCAD 占用", 502
+    )
+    source = source_file(tmp_path)
+
+    result = service.copy_draft_asset_file("draft", source, "2020")
+
+    assert result["path"].startswith("assets/managed-")
+    assert (store.drafts_root / "draft" / result["path"]).is_file()
+    assert result["layouts"] == []
+    assert result["layouts_error"] == "STANDARD_LAYOUT_READ_FAILED"
 
 
 def test_copy_asset_file_missing_source_rejected(service, tmp_path) -> None:

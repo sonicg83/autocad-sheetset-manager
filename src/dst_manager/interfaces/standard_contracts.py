@@ -125,15 +125,25 @@ class StandardAssetInspectRequest(ContractModel):
 
 
 class StandardAssetCopyRequest(ContractModel):
-    """本机模板来源：用户显式选择或本地开发态显式输入的绝对路径。"""
+    """本机模板来源：用户显式选择或本地开发态显式输入的绝对路径。
+
+    ``cad_version`` 非空时，复制成功后服务端读取受控副本布局（PLAN-DM-042）。
+    """
 
     source_path: str
+    cad_version: str = ""
 
 
 class StandardAssetCopyResponse(ContractModel):
-    """受控副本的包内相对路径；服务端生成，前端不持有来源路径。"""
+    """受控副本的包内相对路径与（按需读取的）布局清单。
+
+    ``layouts_error`` 是布局读取失败的稳定码（如 ``STANDARD_LAYOUT_READ_FAILED``），
+    不影响复制结果；未请求读取时为 ``None``。
+    """
 
     path: str
+    layouts: list[str] = Field(default_factory=list)
+    layouts_error: str | None = None
 
 
 class AssetInspectionResponse(ContractModel):

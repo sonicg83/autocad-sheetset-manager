@@ -122,12 +122,13 @@ STANDARD_DOCUMENT: dict[str, object] = {
         {
             "asset_id": "base-a1",
             "kind": "base-template",
-            "files": [{"path": "templates/a1.dwt", "role": ""}],
+            "file": "templates/a1.dwt",
         },
         {
             "asset_id": "layout-a1",
             "kind": "layout-template",
-            "files": [{"path": "templates/a1-layout.dwt", "role": "A1"}],
+            "file": "templates/a1-layout.dwt",
+            "paper_layouts": ["A1"],
         },
     ],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
@@ -147,12 +148,13 @@ DUPLICATE_LABEL_DOCUMENT: dict[str, object] = {
     "standard_id": "szmedi.dupe",
     "name": "市政重名标签标准",
     "assets": [
-        {"asset_id": "base-a", "kind": "base-template", "files": [{"path": "a1/a1.dwt"}]},
-        {"asset_id": "base-b", "kind": "base-template", "files": [{"path": "b1/a1.dwt"}]},
+        {"asset_id": "base-a", "kind": "base-template", "file": "a1/a1.dwt"},
+        {"asset_id": "base-b", "kind": "base-template", "file": "b1/a1.dwt"},
         {
             "asset_id": "layout-a1",
             "kind": "layout-template",
-            "files": [{"path": "templates/a1-layout.dwt", "role": "A1"}],
+            "file": "templates/a1-layout.dwt",
+            "paper_layouts": ["A1"],
         },
     ],
 }

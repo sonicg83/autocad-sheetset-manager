@@ -138,10 +138,11 @@ export function creationStandardDocument(overrides: Record<string, unknown> = {}
       ],
     },
     assets: [
-      {asset_id: "base-a", kind: "base-template", files: [{path: "市政基础.dwt", role: ""}]},
+      {asset_id: "base-a", kind: "base-template", file: "市政基础.dwt", paper_layouts: []},
       {
         asset_id: "layout-a", kind: "layout-template",
-        files: [{path: "市政图框.dwt", role: "A2"}, {path: "市政图框.dwt", role: "A1"}],
+        file: "市政图框.dwt",
+        paper_layouts: ["A2", "A1"],
       },
     ],
     numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},

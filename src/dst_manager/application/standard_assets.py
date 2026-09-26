@@ -1,15 +1,16 @@
-"""标准模板资产检查与 DST 草稿导入（PLAN-DM-035 Task 5）。
+"""标准模板资产检查与 DST 草稿导入（PLAN-DM-035 Task 5；PLAN-DM-042 Task 4）。
 
 `StandardAssetOperations` 以 mixin 组合进 `DstManagerService`：资产检查复用
 `get_layout_names` 的固定 CAD 只读读取协议，把能力缺失/读取失败/文件缺失
-全部转换为稳定诊断而不抛出；布局模板声明的图幅与非 Model 布局严格比较
-（大小写与空白敏感）。DST 导入只提取属性定义，构成最小安全草稿。
+全部转换为稳定诊断而不抛出；布局模板按 PLAN-DM-042 勾选模型检查启用图幅。
+DST 导入只提取属性定义，构成最小安全草稿。
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 
 from dst_manager.application.errors import ApplicationError
+from dst_manager.domain.creation_plan_inputs import LAYOUT_TEMPLATE_KIND
 from dst_manager.domain.models import Severity, ValidationIssue
 from dst_manager.domain.standards import parse_standard_draft_document
 from dst_manager.infrastructure.acsm_xml import AcsmValidationError
@@ -58,7 +59,13 @@ class StandardAssetOperations:
     def inspect_standard_asset(
         self, draft_id: str, asset_id: str, cad_version: str
     ) -> AssetInspection:
-        """检查草稿中一个模板资产；问题以诊断返回，不抛出读取类错误。"""
+        """检查草稿中一个模板资产；问题以诊断返回，不抛出读取类错误。
+
+        PLAN-DM-042 勾选模型：布局模板 ``paper_layouts`` 为空报
+        ``STANDARD_PAPER_LAYOUTS_EMPTY``；成功读取布局后，勾选图幅不在该文件
+        非 ``Model`` 布局中的逐项报 ``STANDARD_PAPER_LAYOUT_MISSING``。基础模板
+        只验证文件可读；读取失败时不叠加勾选缺失诊断。
+        """
         draft = self.standard_store.get_draft(draft_id)
         if draft is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
@@ -70,35 +77,46 @@ class StandardAssetOperations:
             raise ApplicationError("STANDARD_ASSET_NOT_FOUND", f"资产 {asset_id!r} 不在草稿 {draft_id!r} 中", 404)
         draft_dir = Path(self.standard_store.drafts_root) / draft_id
         diagnostics: list[ValidationIssue] = []
-        layouts: list[str] = []
-        seen_layouts: set[str] = set()
-        for file in asset.files:
-            source = self._asset_file(draft_dir, file.path)
-            if source is None:
-                diagnostics.append(
-                    ValidationIssue(
-                        "STANDARD_ASSET_FILE_MISSING",
-                        Severity("error"),
-                        f"资产 {asset_id!r} 声明的文件 {file.path!r} 不在草稿中",
-                    ),
-                )
-                continue
+        layouts: tuple[str, ...] | None = None
+        source = self._asset_file(draft_dir, asset.file)
+        if source is None:
+            diagnostics.append(
+                ValidationIssue(
+                    "STANDARD_ASSET_FILE_MISSING",
+                    Severity("error"),
+                    f"资产 {asset_id!r} 声明的文件 {asset.file!r} 不在草稿中",
+                ),
+            )
+        else:
             read = self._read_layouts(source, cad_version)
             if isinstance(read, ValidationIssue):
                 diagnostics.append(read)
-                continue
-            for name in read:
-                if name not in seen_layouts:
-                    seen_layouts.add(name)
-                    layouts.append(name)
-            if file.role:
-                mismatch = _layout_mismatch(file.role, read)
-                if mismatch is not None:
-                    diagnostics.insert(0, mismatch)
+            else:
+                layouts = read
+        if asset.kind == LAYOUT_TEMPLATE_KIND:
+            if not asset.paper_layouts:
+                diagnostics.append(
+                    ValidationIssue(
+                        "STANDARD_PAPER_LAYOUTS_EMPTY",
+                        Severity("error"),
+                        f"资产 {asset_id!r} 未勾选任何启用图幅",
+                    ),
+                )
+            if layouts is not None:
+                actual = {name for name in layouts if name != MODEL_LAYOUT}
+                diagnostics.extend(
+                    ValidationIssue(
+                        "STANDARD_PAPER_LAYOUT_MISSING",
+                        Severity("error"),
+                        f"勾选图幅 {name!r} 不是资产 {asset_id!r} 的非 Model 布局",
+                    )
+                    for name in asset.paper_layouts
+                    if name not in actual
+                )
         return AssetInspection(
             asset_id=asset_id,
             kind=asset.kind,
-            layouts=tuple(layouts),
+            layouts=layouts if layouts is not None else (),
             diagnostics=tuple(diagnostics),
         )
 
@@ -133,16 +151,38 @@ class StandardAssetOperations:
 
     # ---- 本机模板受控复制 ------------------------------------------------
 
-    def copy_draft_asset_file(self, draft_id: str, source_path: Path) -> dict[str, str]:
-        """把用户显式选择的本机模板复制到草稿受控目录，只返回包内相对路径。
+    def copy_draft_asset_file(
+        self, draft_id: str, source_path: Path, cad_version: str = ""
+    ) -> dict[str, object]:
+        """把用户显式选择的本机模板复制到草稿受控目录，并按需读取其布局。
 
         本机绝对路径只作一次性导入来源，不写入文档、不返回给前端。
+        ``cad_version`` 非空时在复制成功后读取受控副本布局（PLAN-DM-042）：
+        读取失败只填充 ``layouts_error``（稳定码），不影响复制结果。
         """
         try:
             relative = self.standard_store.copy_draft_asset(draft_id, Path(source_path))
         except StandardStoreError as exc:
             raise _asset_store_error(exc) from exc
-        return {"path": relative}
+        layouts: list[str] = []
+        layouts_error: str | None = None
+        if cad_version:
+            draft_dir = Path(self.standard_store.drafts_root) / draft_id
+            controlled = self._asset_file(draft_dir, relative)
+            read = (
+                ValidationIssue(
+                    "STANDARD_ASSET_FILE_MISSING",
+                    Severity("error"),
+                    f"受控副本 {relative!r} 不在草稿中",
+                )
+                if controlled is None
+                else self._read_layouts(controlled, cad_version)
+            )
+            if isinstance(read, ValidationIssue):
+                layouts_error = read.code
+            else:
+                layouts = list(read)
+        return {"path": relative, "layouts": layouts, "layouts_error": layouts_error}
 
     # ---- DST 导入 --------------------------------------------------------
 
@@ -168,14 +208,3 @@ class StandardAssetOperations:
             raise ApplicationError(
                 "STANDARD_DST_IMPORT_INVALID", f"DST 无法导入：{exc}", 422
             ) from exc
-
-
-def _layout_mismatch(role: str, layouts: tuple[str, ...]) -> ValidationIssue | None:
-    actual = {name for name in layouts if name != MODEL_LAYOUT}
-    if actual == {role}:
-        return None
-    return ValidationIssue(
-        "STANDARD_LAYOUT_NAME_MISMATCH",
-        Severity("error"),
-        f"声明图幅 {role!r} 与实际布局 {sorted(actual)} 严格不一致",
-    )

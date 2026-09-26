@@ -1,14 +1,16 @@
-// 发布门禁模型单测（PLAN-DM-038 Task 5 / SPEC-DM-017 §7–§8）：
-// 布局严格匹配、资产引用与未引用警告、发布诊断到六分区/定位目标的映射、
+// 发布门禁模型单测（PLAN-DM-042 / SPEC-DM-017 §7–§8）：
+// 启用图幅与实际布局的包含比较、资产引用与未引用警告、发布诊断到六分区/定位目标的映射、
 // 检查失败与标准错误分离、门禁判定。全部纯函数。
 import {describe, expect, it} from "vitest";
 import {
+  PAPER_LAYOUT_MISSING_CODE,
+  PAPER_LAYOUTS_EMPTY_CODE,
   assetReferences,
   buildPublishGate,
-  compareLayouts,
-  declaredRoles,
+  declaredPaperLayouts,
   inspectionRecordMatches,
   inspectionRunIsCurrent,
+  missingPaperLayouts,
   nonModelLayouts,
   recordInspection,
   recordInspectionState,
@@ -19,11 +21,12 @@ import {
 import {toDraftDocument, type DraftAsset} from "./draftModel";
 import type {AssetInspection} from "./types";
 
-function layoutAsset(assetId: string, roles: string[], kind = "layout-template"): DraftAsset {
+function layoutAsset(assetId: string, paperLayouts: string[], kind = "layout-template"): DraftAsset {
   return {
     asset_id: assetId,
     kind,
-    files: roles.map((role, index) => ({path: `assets/${assetId}-${index}.dwg`, role})),
+    file: `assets/${assetId}.dwg`,
+    paper_layouts: paperLayouts,
   };
 }
 
@@ -58,10 +61,10 @@ function inspection(assetId: string, layouts: string[], diagnostics: AssetInspec
   return {asset_id: assetId, kind: "layout-template", layouts, diagnostics};
 }
 
-/** 声明 A2/A3，实际布局与声明严格不一致（`A3 ` 多了一个空格）。 */
-function reportWithLayouts({declared, actual}: {declared: string[]; actual: string[]}): PublishReport {
+/** 勾选 A2/A3，实际布局与勾选不一致（`A3 ` 多了一个空格）。 */
+function reportWithLayouts({checked, actual}: {checked: string[]; actual: string[]}): PublishReport {
   return {
-    document: documentWith([layoutAsset("layouts", declared)]),
+    document: documentWith([layoutAsset("layouts", checked)]),
     assets: [inspection("layouts", actual)],
   };
 }
@@ -74,27 +77,39 @@ function reportWithUnusedAssetWarning(): PublishReport {
   };
 }
 
-describe("compareLayouts", () => {
-  it("matches paper layouts strictly without trimming or case folding", () => {
-    expect(compareLayouts(["A2", "A3"], ["A2", "A3"])).toEqual({missing: [], extra: []});
-    expect(compareLayouts(["A3"], ["A3 "])).toEqual({missing: ["A3"], extra: ["A3 "]});
-    expect(compareLayouts(["A3"], ["a3"])).toEqual({missing: ["A3"], extra: ["a3"]});
+describe("启用图幅与实际布局", () => {
+  it("只报告勾选但文件中缺失的布局，不修剪空白也不归一大小写", () => {
+    expect(missingPaperLayouts(["A2", "A3"], ["A2", "A3"])).toEqual([]);
+    expect(missingPaperLayouts(["A3"], ["A3 "])).toEqual(["A3"]);
+    expect(missingPaperLayouts(["A3"], ["a3"])).toEqual(["A3"]);
+    // 实际布局多于勾选只是未启用，不再是问题（包含即可）
+    expect(missingPaperLayouts(["A2"], ["A2", "A4"])).toEqual([]);
   });
 
-  it("excludes the Model layout from paper matching", () => {
+  it("过滤空勾选并从实际布局中排除 Model（勾选不去重、保持勾选顺序）", () => {
     expect(nonModelLayouts(["Model", "A2", "A3"])).toEqual(["A2", "A3"]);
-    expect(declaredRoles(layoutAsset("layouts", ["A2", "A2", ""]))).toEqual(["A2"]);
+    expect(declaredPaperLayouts(layoutAsset("layouts", ["A2", "A2", ""]))).toEqual(["A2", "A2"]);
   });
 });
 
 describe("buildPublishGate", () => {
-  it("blocks publish for a missing exact paper layout", () => {
-    const gate = buildPublishGate(reportWithLayouts({declared: ["A2", "A3"], actual: ["A2", "A3 "]}));
+  it("blocks publish for a checked paper layout missing from the file", () => {
+    const gate = buildPublishGate(reportWithLayouts({checked: ["A2", "A3"], actual: ["Model", "A2", "A3 "]}));
     expect(gate.canPublish).toBe(false);
+    expect(gate.blockingErrors).toHaveLength(1);
+    expect(gate.blockingErrors[0].code).toBe(PAPER_LAYOUT_MISSING_CODE);
     expect(gate.blockingErrors[0].target).toEqual({section: "assets", assetId: "layouts", layout: "A3"});
-    expect(gate.blockingErrors[0].code).toBe("STANDARD_LAYOUT_NAME_MISMATCH");
-    // 未声明的实际布局同样阻断（歧义布局），并带精确名称
-    expect(gate.blockingErrors[1].target).toEqual({section: "assets", assetId: "layouts", layout: "A3 "});
+    expect(gate.blockingErrors[0].params).toEqual({assetId: "layouts", layout: "A3"});
+  });
+
+  it("blocks publish when a layout template enables no paper layout before inspection", () => {
+    const gate = buildPublishGate({
+      document: documentWith([layoutAsset("empty", [])]),
+      assets: [],
+    });
+    expect(gate.canPublish).toBe(false);
+    expect(gate.blockingErrors.map(issue => issue.code)).toEqual([PAPER_LAYOUTS_EMPTY_CODE]);
+    expect(gate.blockingErrors[0].target).toEqual({section: "assets", assetId: "empty"});
   });
 
   it("allows publish with warnings only", () => {
@@ -216,24 +231,17 @@ describe("buildPublishGate", () => {
     expect(gate.counts).toEqual({errors: 0, warnings: 0, failures: 1});
   });
 
-  it("keeps backend diagnostics but does not duplicate a derived layout diff", () => {
+  it("skips backend paper-layout diagnostics and derives the diff locally with layout targeting", () => {
+    // 后端聚合诊断不带 layout 定位：前端跳过它，按勾选与实际布局本地推导，避免重复
     const mismatch = {
       document: documentWith([layoutAsset("layouts", ["A3"])]),
-      assets: [inspection("layouts", ["A3 "], [{code: "STANDARD_LAYOUT_NAME_MISMATCH", severity: "error" as const, message: "声明图幅 'A3' 与实际布局不一致"}])],
+      assets: [inspection("layouts", ["Model"], [{code: PAPER_LAYOUT_MISSING_CODE, severity: "error" as const, message: "启用图幅 'A3' 不在文件实际布局中"}])],
     };
-    expect(buildPublishGate(mismatch).blockingErrors.map(issue => issue.code)).toEqual([
-      "STANDARD_LAYOUT_NAME_MISMATCH",
-      "STANDARD_LAYOUT_NAME_MISMATCH",
-    ]);
-
-    // 前端无法从聚合布局推出差异（同一资产多文件、某文件读取为空）时保留后端诊断
-    const opaque = {
-      document: documentWith([layoutAsset("layouts", ["A3"])]),
-      assets: [inspection("layouts", ["A3"], [{code: "STANDARD_LAYOUT_NAME_MISMATCH", severity: "error" as const, message: "读取结果为空"}])],
-    };
-    const gate = buildPublishGate(opaque);
+    const gate = buildPublishGate(mismatch);
     expect(gate.blockingErrors).toHaveLength(1);
-    expect(gate.blockingErrors[0].target).toEqual({section: "assets", assetId: "layouts"});
+    expect(gate.blockingErrors[0].code).toBe(PAPER_LAYOUT_MISSING_CODE);
+    expect(gate.blockingErrors[0].target).toEqual({section: "assets", assetId: "layouts", layout: "A3"});
+    expect(gate.blockingErrors[0].params).toEqual({assetId: "layouts", layout: "A3"});
   });
 
   it("reports asset file missing and CAD capability missing as blocking asset errors", () => {
@@ -247,7 +255,7 @@ describe("buildPublishGate", () => {
     expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section, issue.target.assetId])).toEqual([
       ["STANDARD_ASSET_FILE_MISSING", "assets", "layouts"],
       ["STANDARD_CAD_CAPABILITY_MISSING", "assets", "layouts"],
-      ["STANDARD_LAYOUT_NAME_MISMATCH", "assets", "layouts"],
+      [PAPER_LAYOUT_MISSING_CODE, "assets", "layouts"],
     ]);
   });
 });
@@ -308,12 +316,12 @@ describe("检查结果绑定已保存草稿（PLAN-DM-040 Task 4，F06/F07）", 
   });
 
   it("过期记录不得作为当前结果参与发布门禁", () => {
-    // 组件把过期记录折算为 null 后再建门禁：声明图幅的资产回到“未检查 → 布局不一致”阻断
+    // 组件把过期记录折算为 null 后再建门禁：勾选图幅的资产回到“未检查 → 勾选全部缺失”阻断
     const stale = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A2"])]),
       assets: [],
     });
-    expect(stale.blockingErrors.map(issue => issue.code)).toEqual(["STANDARD_LAYOUT_NAME_MISMATCH"]);
+    expect(stale.blockingErrors.map(issue => issue.code)).toEqual([PAPER_LAYOUT_MISSING_CODE]);
     // 同一份文档带当前结果时不再阻断
     const fresh = buildPublishGate({
       document: documentWith([layoutAsset("layouts", ["A2"])]),
@@ -324,7 +332,7 @@ describe("检查结果绑定已保存草稿（PLAN-DM-040 Task 4，F06/F07）", 
 });
 
 describe("assetReferences", () => {
-  it("finds every place a declared paper layout is used by the standard", () => {
+  it("finds every place an enabled paper layout is used by the standard", () => {
     const asset = layoutAsset("layouts", ["A3"]);
     const document = documentWith([asset], {
       properties: [

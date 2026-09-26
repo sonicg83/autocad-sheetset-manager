@@ -302,6 +302,8 @@ test("空库新建草稿后保存与发布只作用于新草稿", async ({page})
 test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": draftDocument()},
+    // 复制响应模拟后端从 DWG 读到的布局：勾选 A4 需要它在列表中
+    assetCopyLayouts: ["Model", "A4"],
   });
   state.assetResults["layout-template-1"] = {
     asset_id: "layout-template-1",
@@ -319,8 +321,8 @@ test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({pag
   await page.getByTestId("editor-section-assets").click();
   await page.getByRole("button", {name: "添加布局模板"}).click();
   await page.evaluate(() => { (window as any).__fakeSelectResult = "C:\\tmp\\A4 模板.dwg"; });
-  await page.getByTestId("asset-file-pick-0").click();
-  await page.getByLabel("图幅（role）").fill("A4");
+  await page.getByTestId("asset-file-pick").click();
+  await page.getByTestId("asset-paper-layout-A4").check();
   await page.getByRole("button", {name: "重新检查"}).click();
   await expect(page.getByTestId("asset-row-user-layout-template-1")).toContainText("检查通过");
 

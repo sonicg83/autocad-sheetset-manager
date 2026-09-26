@@ -1,23 +1,24 @@
 <script setup lang="ts">
-// 模板资产编辑器（PLAN-DM-035 Task 10 / SPEC-DM-016 §8.1 / PLAN-DM-040 Task 3）：
-// 基础/布局为主分类，官方/用户为筛选器（不是两个彼此隔离的页面），列表显示名称、
-// 来源、状态与引用数；右侧为检查面板。官方资产只读；用户资产允许添加、替换与移除。
+// 模板资产编辑器（PLAN-DM-042 / SPEC-DM-016 §8.1）：基础/布局为主分类，官方/用户为筛选器，
+// 列表显示名称、来源、状态与引用数；右侧为检查面板与编辑区。官方资产只读。
 //
-// 文件本体：草稿文件行只保存**包内受控副本名**。桌面壳可用时经固定 `template`
-// 文件种类选择本机 DWG/DWT，由后端复制进草稿受控目录；无壳本地开发态提供单独标明
-// 的「来源绝对路径」输入，调用同一端点。本机绝对路径不写入缓冲，也不进草稿文档。
+// 单文件结构：一个资产只对应一个 DWG/DWT 文件（包内受控副本名）。桌面壳可用时经固定
+// `template` 文件种类选择本机文件，由后端复制进草稿受控目录并顺带读取非 Model 布局；
+// 无壳本地开发态提供单独标明的「来源绝对路径」输入，调用同一端点。启用图幅不是手工输入，
+// 而是从复制或检查读取到的布局中勾选声明；切换种类会清空勾选。
 import {computed, ref, watch} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
-import UiIconButton from "../ui/UiIconButton.vue";
 import AssetInspectionPanel from "./AssetInspectionPanel.vue";
 import {ApiError} from "../../api/client";
 import {i18n} from "../../i18n";
 import {selectTemplatePath, shellReady} from "../../api/shell";
 import {ASSET_KINDS, type DraftAsset, type DraftDocument} from "../../features/standards/draftModel";
 import {
+  MODEL_LAYOUT_NAME,
   assetReferences,
+  nonModelLayouts,
   recordFailure,
   recordInspection,
   recordInspectionState,
@@ -27,7 +28,7 @@ import {
   type InspectionRecord,
   type InspectionState,
 } from "../../features/standards/publishModel";
-import type {AssetInspection} from "../../features/standards/types";
+import type {AssetInspection, CopiedAssetFile} from "../../features/standards/types";
 
 const props = defineProps<{
   document: DraftDocument;
@@ -38,17 +39,21 @@ const props = defineProps<{
   record: InspectionRecord | null;
   pending: boolean;
   cadVersion: string;
-  /** 受控复制：把本机来源复制进草稿，返回包内相对路径（失败抛出）。 */
-  copyAssetFile: (sourcePath: string) => Promise<string>;
+  /** 受控复制：把本机来源复制进草稿，返回包内相对路径与读取到的布局（失败抛出）。 */
+  copyAssetFile: (sourcePath: string) => Promise<CopiedAssetFile>;
 }>();
 const emit = defineEmits<{recheck: []}>();
 
 const sourceFilter = ref<"all" | "official" | "user">("all");
 const selectedKey = ref<string | null>(null);
-/** 无桌面壳时的来源绝对路径输入与就地错误（按文件行下标隔离）。 */
-const sourcePaths = ref<Record<number, string>>({});
-const fileErrors = ref<Record<number, string>>({});
-const copyingIndex = ref<number | null>(null);
+/** 无桌面壳时的来源绝对路径输入与就地错误（单值，切换资产时丢弃）。 */
+const sourcePath = ref("");
+const fileError = ref("");
+const copying = ref(false);
+/** 复制成功时按资产 ID 记录读取到的布局（跨选中切换保留，重新复制或删除资产时更新）。 */
+const copiedLayouts = ref<Record<string, string[]>>({});
+/** 复制成功但布局读取失败时按资产 ID 记录错误码。 */
+const layoutsErrors = ref<Record<string, string>>({});
 
 interface AssetRow {
   asset: DraftAsset;
@@ -92,6 +97,23 @@ function failureOf(assetId: string): InspectionFailure | undefined {
   return recordFailure(props.record, assetId);
 }
 
+/** 可勾选的布局：复制读取、检查读取与已勾选的并集（排除 Model 与空串，保序去重）。 */
+const availableLayouts = computed<string[]>(() => {
+  const asset = selected.value?.asset;
+  if (asset === undefined) return [];
+  const seen = new Set<string>();
+  const names: string[] = [];
+  const push = (name: string): void => {
+    if (name === "" || name === MODEL_LAYOUT_NAME || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+  for (const name of copiedLayouts.value[asset.asset_id] ?? []) push(name);
+  for (const name of nonModelLayouts(inspectionOf(asset.asset_id)?.layouts ?? [])) push(name);
+  for (const name of asset.paper_layouts) push(name);
+  return names;
+});
+
 function nextAssetId(kind: string): string {
   const used = new Set(props.document.assets.map(asset => asset.asset_id));
   const base = kind === "layout-template" ? "layout-template" : "base-template";
@@ -101,7 +123,7 @@ function nextAssetId(kind: string): string {
 }
 
 function addAsset(kind: string): void {
-  const asset: DraftAsset = {asset_id: nextAssetId(kind), kind, files: [{path: "", role: ""}]};
+  const asset: DraftAsset = {asset_id: nextAssetId(kind), kind, file: "", paper_layouts: []};
   props.document.assets.push(asset);
   selectedKey.value = `user/${asset.asset_id}`;
 }
@@ -109,28 +131,65 @@ function addAsset(kind: string): void {
 function removeAsset(asset: DraftAsset): void {
   const index = props.document.assets.indexOf(asset);
   if (index >= 0) props.document.assets.splice(index, 1);
+  const copied = {...copiedLayouts.value};
+  delete copied[asset.asset_id];
+  copiedLayouts.value = copied;
+  const errors = {...layoutsErrors.value};
+  delete errors[asset.asset_id];
+  layoutsErrors.value = errors;
   selectedKey.value = null;
 }
 
-function addFile(asset: DraftAsset): void {
-  asset.files.push({path: "", role: ""});
-}
-
-function removeFile(asset: DraftAsset, index: number): void {
-  asset.files.splice(index, 1);
-}
-
+/** 改名时迁移按资产 ID 键控的会话态，避免改名后丢失复制读取的布局。 */
 function renameAsset(asset: DraftAsset, value: unknown): void {
+  const previous = asset.asset_id;
   asset.asset_id = String(value);
+  if (asset.asset_id === previous) return;
+  if (copiedLayouts.value[previous] !== undefined) {
+    const moved = {...copiedLayouts.value};
+    moved[asset.asset_id] = moved[previous];
+    delete moved[previous];
+    copiedLayouts.value = moved;
+  }
+  if (layoutsErrors.value[previous] !== undefined) {
+    const moved = {...layoutsErrors.value};
+    moved[asset.asset_id] = moved[previous];
+    delete moved[previous];
+    layoutsErrors.value = moved;
+  }
   selectedKey.value = `user/${asset.asset_id}`;
 }
 
-// 切换选中资产时丢弃按行下标的临时输入与错误（不把上一个资产的输入带到下一个）
+/** 种类切换即清空勾选：启用图幅只对布局模板有意义，且必须来自当前文件的布局。 */
+function onKindChange(asset: DraftAsset, event: Event): void {
+  const kind = (event.target as HTMLSelectElement).value;
+  if (kind === asset.kind) return;
+  asset.kind = kind;
+  asset.paper_layouts = [];
+}
+
+function toggleLayout(asset: DraftAsset, name: string, checked: boolean): void {
+  if (checked) {
+    if (!asset.paper_layouts.includes(name)) asset.paper_layouts = [...asset.paper_layouts, name];
+  } else {
+    asset.paper_layouts = asset.paper_layouts.filter(item => item !== name);
+  }
+}
+
+function selectAllLayouts(asset: DraftAsset): void {
+  asset.paper_layouts = [...availableLayouts.value];
+}
+
+function clearAllLayouts(asset: DraftAsset): void {
+  asset.paper_layouts = [];
+}
+
+// 切换选中资产时丢弃单值的临时输入与错误（不把上一个资产的输入带到下一个）
 watch(
   () => (selected.value === null ? "" : rowKey(selected.value)),
   () => {
-    sourcePaths.value = {};
-    fileErrors.value = {};
+    sourcePath.value = "";
+    fileError.value = "";
   },
 );
 
@@ -147,37 +206,47 @@ function errorText(error: unknown): string {
   return String(error);
 }
 
-/** 有壳：固定 `template` 文件种类选择本机模板；取消不发请求。 */
-async function pickTemplate(asset: DraftAsset, index: number): Promise<void> {
+/** 有壳：固定 `template` 文件种类选择本机文件；取消不发请求。 */
+async function pickTemplate(asset: DraftAsset): Promise<void> {
   const picked = await selectTemplatePath(targetText("standards.assets.templateDialogDescription"));
   if (picked === undefined || picked === null) return;
-  await applyCopy(asset, index, picked);
+  await applyCopy(asset, picked);
 }
 
 /** 无壳：显式来源绝对路径，调用同一受控复制端点。 */
-async function copyFromPath(asset: DraftAsset, index: number): Promise<void> {
-  const source = (sourcePaths.value[index] ?? "").trim();
+async function copyFromPath(asset: DraftAsset): Promise<void> {
+  const source = sourcePath.value.trim();
   if (source === "") {
-    fileErrors.value = {...fileErrors.value, [index]: targetText("standards.assets.sourcePathRequired")};
+    fileError.value = targetText("standards.assets.sourcePathRequired");
     return;
   }
-  await applyCopy(asset, index, source);
+  await applyCopy(asset, source);
 }
 
 /** 只有复制成功才修改编辑缓冲；失败保留旧声明与 dirty 状态并就地显示错误。 */
-async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): Promise<void> {
-  if (copyingIndex.value !== null) return;
-  copyingIndex.value = index;
-  const cleared = {...fileErrors.value};
-  delete cleared[index];
-  fileErrors.value = cleared;
+async function applyCopy(asset: DraftAsset, source: string): Promise<void> {
+  if (copying.value) return;
+  copying.value = true;
+  fileError.value = "";
   try {
-    const controlled = await props.copyAssetFile(sourcePath);
-    asset.files[index].path = controlled;
+    const copied = await props.copyAssetFile(source);
+    asset.file = copied.path;
+    const id = asset.asset_id;
+    if (copied.layouts_error !== null && copied.layouts_error !== "") {
+      const cleared = {...copiedLayouts.value};
+      delete cleared[id];
+      copiedLayouts.value = cleared;
+      layoutsErrors.value = {...layoutsErrors.value, [id]: copied.layouts_error};
+    } else {
+      const cleared = {...layoutsErrors.value};
+      delete cleared[id];
+      layoutsErrors.value = cleared;
+      copiedLayouts.value = {...copiedLayouts.value, [id]: copied.layouts};
+    }
   } catch (error) {
-    fileErrors.value = {...fileErrors.value, [index]: errorText(error)};
+    fileError.value = errorText(error);
   } finally {
-    copyingIndex.value = null;
+    copying.value = false;
   }
 }
 </script>
@@ -250,55 +319,78 @@ async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): 
             @update:model-value="renameAsset(selected.asset, $event)"
           />
           <label class="field-label" :for="`asset-kind-${selected.asset.asset_id}`">{{ $t("standards.assets.kind") }}</label>
-          <select :id="`asset-kind-${selected.asset.asset_id}`" v-model="selected.asset.kind" class="field-select">
+          <select :id="`asset-kind-${selected.asset.asset_id}`" :value="selected.asset.kind" class="field-select" @change="onKindChange(selected.asset, $event)">
             <option v-for="kind in ASSET_KINDS" :key="kind" :value="kind">
               {{ $t(kind === "layout-template" ? "standards.assets.kindLayout" : "standards.assets.kindBase") }}
             </option>
           </select>
-          <div class="file-header">
-            <h5 class="group-title">{{ $t("standards.assets.files") }}</h5>
-            <UiButton variant="secondary" @click="addFile(selected.asset)">{{ $t("standards.assets.addFile") }}</UiButton>
-          </div>
-          <div v-for="(file, index) in selected.asset.files" :key="index" class="file-block">
+          <div class="file-block">
+            <h5 class="group-title">{{ $t("standards.assets.paths") }}</h5>
             <div class="file-row">
               <UiInput
-                :model-value="file.path"
+                :model-value="selected.asset.file"
                 :label="$t('standards.assets.filePath')"
                 :hint="$t('standards.assets.filePathHint')"
                 :placeholder="$t('standards.assets.filePathPlaceholder')"
                 readonly
-                :data-testid="`asset-file-path-${index}`"
+                data-testid="asset-file-path"
               />
-              <UiInput v-model="file.role" :label="$t('standards.assets.fileRole')" placeholder="A3" />
               <div class="file-actions">
                 <UiButton
                   v-if="shellReady"
                   variant="secondary"
-                  :loading="copyingIndex === index"
-                  :data-testid="`asset-file-pick-${index}`"
-                  @click="pickTemplate(selected.asset, index)"
-                >{{ file.path === "" ? $t("standards.assets.chooseTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
+                  :loading="copying"
+                  data-testid="asset-file-pick"
+                  @click="pickTemplate(selected.asset)"
+                >{{ selected.asset.file === "" ? $t("standards.assets.chooseTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
                 <template v-else>
                   <UiInput
-                    :model-value="sourcePaths[index] ?? ''"
+                    :model-value="sourcePath"
                     :label="$t('standards.assets.sourcePathLabel')"
                     :hint="$t('standards.assets.sourcePathHint')"
-                    :data-testid="`asset-file-source-${index}`"
-                    @update:model-value="(value: string) => sourcePaths[index] = value"
+                    data-testid="asset-file-source"
+                    @update:model-value="(value: string) => sourcePath = value"
                   />
                   <UiButton
                     variant="secondary"
-                    :loading="copyingIndex === index"
-                    :data-testid="`asset-file-copy-${index}`"
-                    @click="copyFromPath(selected.asset, index)"
-                  >{{ file.path === "" ? $t("standards.assets.copyTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
+                    :loading="copying"
+                    data-testid="asset-file-copy"
+                    @click="copyFromPath(selected.asset)"
+                  >{{ selected.asset.file === "" ? $t("standards.assets.copyTemplate") : $t("standards.assets.replaceFile") }}</UiButton>
                 </template>
               </div>
-              <UiIconButton icon="close" :label="$t('standards.assets.removeFile', {row: index + 1})" @click="removeFile(selected.asset, index)" />
             </div>
-            <p v-if="fileErrors[index]" class="file-error" role="alert" :data-testid="`asset-file-error-${index}`">
-              {{ fileErrors[index] }}
+            <p v-if="fileError" class="file-error" role="alert" data-testid="asset-file-error">{{ fileError }}</p>
+          </div>
+          <div v-if="selected.asset.kind === 'layout-template'" class="paper-block">
+            <div class="paper-header">
+              <h5 class="group-title">{{ $t("standards.assets.paperLayouts") }}</h5>
+              <div class="paper-actions">
+                <UiButton variant="secondary" data-testid="asset-layout-select-all" @click="selectAllLayouts(selected.asset)">
+                  {{ $t("standards.assets.selectAll") }}
+                </UiButton>
+                <UiButton variant="secondary" data-testid="asset-layout-clear-all" @click="clearAllLayouts(selected.asset)">
+                  {{ $t("standards.assets.clearAll") }}
+                </UiButton>
+              </div>
+            </div>
+            <p class="section-note">{{ $t("standards.assets.paperLayoutsHint") }}</p>
+            <p v-if="layoutsErrors[selected.asset.asset_id]" class="file-error" role="alert">
+              {{ $t("standards.assets.layoutsReadFailed", {code: layoutsErrors[selected.asset.asset_id]}) }}
             </p>
+            <div v-if="availableLayouts.length > 0" class="paper-list" data-testid="asset-paper-layouts">
+              <label v-for="name in availableLayouts" :key="name" class="layout-hit">
+                <input
+                  type="checkbox"
+                  class="layout-check"
+                  :checked="selected.asset.paper_layouts.includes(name)"
+                  :data-testid="`asset-paper-layout-${name}`"
+                  @change="toggleLayout(selected.asset, name, ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="layout-name">{{ name }}</span>
+              </label>
+            </div>
+            <p v-else class="section-note" data-testid="asset-paper-layouts-empty">{{ $t("standards.assets.paperLayoutsUnavailable") }}</p>
           </div>
           <UiButton variant="secondary" @click="removeAsset(selected.asset)">{{ $t("standards.assets.remove") }}</UiButton>
         </div>
@@ -329,11 +421,18 @@ async function applyCopy(asset: DraftAsset, index: number, sourcePath: string): 
 .asset-editor{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
 .field-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .field-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
-.file-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
 .file-block{display:grid;gap:var(--space-1)}
-.file-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto auto;gap:var(--space-2);align-items:end}
+.file-row{display:grid;grid-template-columns:minmax(0,2fr) auto;gap:var(--space-2);align-items:end}
 .file-actions{display:grid;gap:var(--space-2);align-items:end;min-width:0}
 .file-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
+.paper-block{display:grid;gap:var(--space-1);padding-top:var(--space-2);border-top:1px solid var(--color-border-subtle)}
+.paper-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap}
+.paper-actions{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.paper-list{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.layout-hit{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap-target-min);padding:0 var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface);cursor:pointer}
+.layout-hit:hover{background:var(--color-bg-muted)}
+.layout-check{box-sizing:border-box;width:var(--checkbox-size);height:var(--checkbox-size);margin:0;padding:0;flex:none}
+.layout-name{font-size:var(--font-label);color:var(--color-text-primary)}
 @media (max-width: 959px){
   .assets-split{grid-template-columns:minmax(0,1fr)}
 }

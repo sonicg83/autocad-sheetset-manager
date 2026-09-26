@@ -114,12 +114,13 @@ def creation_asset_options(standard: DrawingStandard) -> tuple[CreationAssetOpti
 
     标签取声明文件的**文件名**；同类内文件名冲突时该冲突项退回完整包内相对
     路径，保证标签同类内唯一且与文档顺序无关（不依赖字典/集合顺序）。
-    布局模板的可用图幅取声明文件的 ``role``（去重保序）；无文件的资产不产生
-    候选——声明了却无法使用的资产不能进入模板候选。
+    布局模板的可用图幅取该资产勾选的启用图幅 ``paper_layouts``（PLAN-DM-042，
+    去重保序）；无文件的资产不产生候选——声明了却无法使用的资产不能进入
+    模板候选。
     """
     options: list[CreationAssetOption] = []
     for kind in CREATION_ASSET_KINDS:
-        assets = [asset for asset in standard.assets if asset.kind == kind and asset.files]
+        assets = [asset for asset in standard.assets if asset.kind == kind and asset.file]
         labels = _asset_labels(assets)
         options.extend(
             CreationAssetOption(
@@ -141,11 +142,10 @@ def resolve_creation_assets(
     files = tuple(
         CreationAssetFile(
             asset_id=asset.asset_id,
-            path=file.path,
-            sha256=_file_digest(_controlled_file(root, file.path)),
+            path=asset.file,
+            sha256=_file_digest(_controlled_file(root, asset.file)),
         )
         for asset in _creation_assets(standard)
-        for file in asset.files
     )
     return CreationAssetSnapshot(
         options=creation_asset_options(standard),
@@ -236,31 +236,27 @@ def _dependency_reasons(
 
 
 def _creation_assets(standard: DrawingStandard) -> tuple[StandardAsset, ...]:
-    """参与创建的资产：只含两种模板种类且至少声明一个文件。"""
+    """参与创建的资产：只含两种模板种类且声明了包内文件。"""
     return tuple(
         asset
         for asset in standard.assets
-        if asset.kind in CREATION_ASSET_KINDS and asset.files
+        if asset.kind in CREATION_ASSET_KINDS and asset.file
     )
 
 
 def _asset_labels(assets: Sequence[StandardAsset]) -> dict[str, str]:
     """同类资产标签：文件名优先，文件名冲突项退回完整包内相对路径。"""
-    names = [_file_name(asset.files[0].path) for asset in assets]
+    names = [_file_name(asset.file) for asset in assets]
     duplicated = {name for name in names if names.count(name) > 1}
     labels: dict[str, str] = {}
     for asset, name in zip(assets, names, strict=True):
-        labels[asset.asset_id] = asset.files[0].path if name in duplicated else name
+        labels[asset.asset_id] = asset.file if name in duplicated else name
     return labels
 
 
 def _asset_layouts(asset: StandardAsset) -> tuple[str, ...]:
-    """布局模板声明的图幅角色（去重保序）；基础模板通常没有角色。"""
-    layouts: list[str] = []
-    for file in asset.files:
-        if file.role and file.role not in layouts:
-            layouts.append(file.role)
-    return tuple(layouts)
+    """布局模板勾选的启用图幅（PLAN-DM-042，schema 已去重保序）；基础模板恒空。"""
+    return asset.paper_layouts
 
 
 def _file_name(path: str) -> str:

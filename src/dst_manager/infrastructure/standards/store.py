@@ -599,11 +599,10 @@ class StandardStore:
             return
         referenced: set[Path] = set()
         for asset in standard.assets:
-            for file in asset.files:
-                try:
-                    referenced.add(resolve_asset_file(draft_dir, file.path))
-                except StandardAssetError:
-                    continue  # 非法声明不参与引用集合，也不阻断清理
+            try:
+                referenced.add(resolve_asset_file(draft_dir, asset.file))
+            except StandardAssetError:
+                continue  # 非法声明不参与引用集合，也不阻断清理
         for candidate in sorted(assets_dir.iterdir()):
             if not candidate.is_file() or not candidate.name.startswith(
                 MANAGED_ASSET_PREFIX

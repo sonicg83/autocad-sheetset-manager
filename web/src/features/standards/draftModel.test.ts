@@ -268,17 +268,19 @@ describe("draft model", () => {
     const asset = (asset_id: string, kind: string, path: string | null): DraftAsset => ({
       asset_id,
       kind: kind as DraftAsset["kind"],
-      files: path === null ? [] : [{path, role: ""}],
+      file: path ?? "",
+      paper_layouts: [],
     });
     const document = draftDocument();
     document.standard_id = "Illegal ID";
     document.version = 2;
     document.properties[0]!.scope = "bogus" as DraftDocument["properties"][number]["scope"];
+    // 单文件结构下空 file 也属无效路径；此用例聚焦 detail 插值，非路径项一律给有效路径
     document.assets = [
-      asset("a-kind", "bogus", null),
+      asset("a-kind", "bogus", "assets/kind.dwg"),
       asset("a-path", "layout-template", "../escape.dwg"),
-      asset("a-dup", "layout-template", null),
-      asset("a-dup", "layout-template", null),
+      asset("a-dup", "layout-template", "assets/dup.dwg"),
+      asset("a-dup", "layout-template", "assets/dup.dwg"),
     ];
     const detail = (code: string) => publishIssues(document).find(issue => issue.code === code)?.detail;
     expect(detail("STANDARD_ID_INVALID")).toBe("Illegal ID");

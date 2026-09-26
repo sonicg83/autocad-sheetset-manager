@@ -47,7 +47,8 @@ VALID_MANIFEST = json.dumps(
             {
                 "asset_id": "layouts",
                 "kind": "layout-template",
-                "files": [{"path": "assets/A2.dwg", "role": "A2"}],
+                "file": "assets/A2.dwg",
+                "paper_layouts": ["A2"],
             }
         ],
         "numbering": {"sequence_field": "subset.sequence", "digits": 2},

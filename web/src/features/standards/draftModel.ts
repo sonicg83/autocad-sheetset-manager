@@ -112,15 +112,13 @@ export interface DraftDwgNaming {
   segments: DraftSegment[];
 }
 
-export interface DraftAssetFile {
-  path: string;
-  role: string;
-}
-
 export interface DraftAsset {
   asset_id: string;
   kind: string;
-  files: DraftAssetFile[];
+  /** 包内相对路径（受控副本名）；一个资产只对应一个文件。 */
+  file: string;
+  /** 布局模板启用的图幅（从文件读取的非 Model 布局中勾选）；基础模板为空数组。 */
+  paper_layouts: string[];
 }
 
 export interface DraftNumbering {
@@ -268,10 +266,8 @@ function normalizeAsset(raw: unknown): DraftAsset {
   return {
     asset_id: asString(source.asset_id),
     kind: asString(source.kind, "base-template"),
-    files: (Array.isArray(source.files) ? source.files : []).map(item => {
-      const file = asRecord(item);
-      return {path: asString(file.path), role: asString(file.role)};
-    }),
+    file: asString(source.file),
+    paper_layouts: asStringArray(source.paper_layouts),
   };
 }
 
@@ -761,10 +757,8 @@ function assetDiagnostics(document: DraftDocument): GatedDiagnostic[] {
     if (!ASSET_KINDS.includes(asset.kind as DraftAssetKind)) {
       diagnostics.push({...base, code: "STANDARD_ASSET_KIND_INVALID", gate: "structure", detail: asset.kind});
     }
-    for (const file of asset.files) {
-      if (!validAssetPath(file.path)) {
-        diagnostics.push({...base, code: "STANDARD_ASSET_PATH_INVALID", gate: "structure", detail: file.path});
-      }
+    if (!validAssetPath(asset.file)) {
+      diagnostics.push({...base, code: "STANDARD_ASSET_PATH_INVALID", gate: "structure", detail: asset.file});
     }
   }
   return diagnostics;

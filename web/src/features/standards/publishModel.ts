@@ -1,7 +1,7 @@
 // 发布检查模型（PLAN-DM-038 Task 5 / SPEC-DM-017 §7–§8）：纯函数门禁，无 Vue 与网络依赖。
 // 职责边界：
 // - 把草稿发布诊断（`publishIssues`）映射到六个编辑分区与可聚焦目标；
-// - 把后端资产检查结果与前端可推导的布局严格差异、未引用资产警告归一为发布问题；
+// - 把后端资产检查结果与前端可推导的启用图幅缺失、未引用资产警告归一为发布问题；
 // - 判定 `canPublish`：错误与「检查本身失败」都阻断，warning 不阻断。
 // 后端仍是发布门禁的权威：这里只做发布前的就地提示，同一问题在后端返回时使用同一稳定码。
 // 模型不持有用户可见文案：只返回稳定码与结构化插值参数，由视图经语言包渲染。
@@ -19,8 +19,11 @@ import type {AssetInspection} from "./types";
 /** 图幅匹配必须排除的模型空间布局（多文件聚合结果里同样排除）。 */
 export const MODEL_LAYOUT_NAME = "Model";
 
-/** 布局严格不一致的稳定码（与后端 `standard_assets._layout_mismatch` 同码）。 */
-export const LAYOUT_MISMATCH_CODE = "STANDARD_LAYOUT_NAME_MISMATCH";
+/** 启用图幅在文件实际布局中缺失的稳定码（与后端检查规则同码）。 */
+export const PAPER_LAYOUT_MISSING_CODE = "STANDARD_PAPER_LAYOUT_MISSING";
+
+/** 布局模板未启用任何图幅的稳定码（与后端检查规则同码）。 */
+export const PAPER_LAYOUTS_EMPTY_CODE = "STANDARD_PAPER_LAYOUTS_EMPTY";
 
 /** 未被标准取值引用的有效资产：警告，不阻断发布。 */
 export const UNREFERENCED_ASSET_CODE = "STANDARD_ASSET_UNREFERENCED";
@@ -138,15 +141,11 @@ export interface PublishReport {
   inspectionFailures?: InspectionFailure[];
 }
 
-// ------------------------------------------------------------ 布局严格匹配
+// ------------------------------------------------------------ 启用图幅与实际布局
 
-/** 资产声明的图幅（文件 role，去重且丢弃空值）。 */
-export function declaredRoles(asset: DraftAsset): string[] {
-  const roles: string[] = [];
-  for (const file of asset.files) {
-    if (file.role && !roles.includes(file.role)) roles.push(file.role);
-  }
-  return roles;
+/** 资产启用的图幅（勾选声明；过滤空值，保持勾选顺序）。 */
+export function declaredPaperLayouts(asset: DraftAsset): string[] {
+  return asset.paper_layouts.filter(name => name !== "");
 }
 
 /** 检查到的非 Model 布局（不做去空白或大小写归一）。 */
@@ -155,14 +154,11 @@ export function nonModelLayouts(layouts: string[]): string[] {
 }
 
 /**
- * 声明图幅与实际布局的严格差异：只做精确字符串比较——`"A3 "` 与 `"A3"` 视为两个不同布局。
- * 缺声明与多未声明都阻断发布（歧义布局）。
+ * 启用图幅在文件实际布局中缺失的部分：只做精确字符串比较——`"A3 "` 与 `"A3"`
+ * 视为两个不同布局。布局模板"包含即可"：未勾选的布局只是不启用，不再视为问题。
  */
-export function compareLayouts(declared: string[], actual: string[]): {missing: string[]; extra: string[]} {
-  return {
-    missing: declared.filter(role => !actual.includes(role)),
-    extra: actual.filter(name => !declared.includes(name)),
-  };
+export function missingPaperLayouts(checked: string[], actual: string[]): string[] {
+  return checked.filter(name => !actual.includes(name));
 }
 
 // ------------------------------------------------------------ 资产引用关系
@@ -188,25 +184,25 @@ export function hasReferenceSources(document: DraftDocument): boolean {
   return document.dwg_naming.segments.some(segment => segment.literal !== undefined);
 }
 
-/** 资产声明的图幅在标准中被引用的位置（枚举项、映射目标、组合与命名固定文本）。 */
+/** 资产启用的图幅在标准中被引用的位置（枚举项、映射目标、组合与命名固定文本）。 */
 export function assetReferences(document: DraftDocument, asset: DraftAsset): AssetReference[] {
-  const roles = declaredRoles(asset);
-  if (roles.length === 0) return [];
+  const layouts = declaredPaperLayouts(asset);
+  if (layouts.length === 0) return [];
   const references: AssetReference[] = [];
-  for (const role of roles) {
+  for (const layout of layouts) {
     for (const property of document.properties) {
-      if (property.kind === "enum" && property.enum_items.some(item => item.value === role)) {
-        references.push({role, kind: "property-enum", ref: property.property_id, value: role});
+      if (property.kind === "enum" && property.enum_items.some(item => item.value === layout)) {
+        references.push({role: layout, kind: "property-enum", ref: property.property_id, value: layout});
       }
-      if (property.kind === "mapping" && property.mapping.some(row => row.value === role)) {
-        references.push({role, kind: "mapping-target", ref: property.property_id, value: role});
+      if (property.kind === "mapping" && property.mapping.some(row => row.value === layout)) {
+        references.push({role: layout, kind: "mapping-target", ref: property.property_id, value: layout});
       }
-      if (property.kind === "composition" && property.segments.some(segment => segment.literal === role)) {
-        references.push({role, kind: "segment-literal", ref: property.property_id, value: role});
+      if (property.kind === "composition" && property.segments.some(segment => segment.literal === layout)) {
+        references.push({role: layout, kind: "segment-literal", ref: property.property_id, value: layout});
       }
     }
-    if (document.dwg_naming.segments.some(segment => segment.literal === role)) {
-      references.push({role, kind: "segment-literal", ref: "dwgNaming", value: role});
+    if (document.dwg_naming.segments.some(segment => segment.literal === layout)) {
+      references.push({role: layout, kind: "segment-literal", ref: "dwgNaming", value: layout});
     }
   }
   return references;
@@ -274,15 +270,18 @@ function assetIssues(
   inspectionFailed: boolean,
 ): PublishIssue[] {
   const issues: PublishIssue[] = [];
-  const declared = declaredRoles(asset);
-  const actual = result === undefined ? [] : nonModelLayouts(result.layouts);
-  // 检查本身失败时不做结构推导：没有实际布局可比，避免把「检查失败」误报成「布局不匹配」
-  const diff = declared.length > 0 && !inspectionFailed ? compareLayouts(declared, actual) : {missing: [], extra: []};
-  const hasDiff = diff.missing.length > 0 || diff.extra.length > 0;
+  const checked = asset.kind === "layout-template" ? declaredPaperLayouts(asset) : [];
+  // 检查本身失败时不做结构推导：没有实际布局可比，避免把「检查失败」误报成「布局缺失」
+  // （失败已单列阻断发布）；完全未检查时勾选全部视为缺失——保留"未检查不得发布"的门禁性质。
+  const actual = result === undefined || inspectionFailed ? [] : nonModelLayouts(result.layouts);
+  const missing = inspectionFailed
+    ? []
+    : missingPaperLayouts(checked, result === undefined ? [] : actual);
 
-  // 后端诊断优先列出（文件缺失/能力缺失/读取失败等），已由结构化差异覆盖的布局不一致不再重复
+  // 后端诊断优先列出（文件缺失/能力缺失/读取失败/未启用图幅等）；
+  // 已由本地结构化差异呈现的启用图幅缺失不再重复（本地版本带 layout 定位参数）。
   for (const diagnostic of result?.diagnostics ?? []) {
-    if (diagnostic.code === LAYOUT_MISMATCH_CODE && hasDiff) continue;
+    if (diagnostic.code === PAPER_LAYOUT_MISSING_CODE) continue;
     issues.push({
       code: diagnostic.code,
       severity: diagnostic.severity === "warning" ? "warning" : "error",
@@ -291,20 +290,31 @@ function assetIssues(
     });
   }
 
-  for (const layout of [...diff.missing, ...diff.extra]) {
+  // 未检查的布局模板：勾选非空时逐项报缺失；勾选为空时后端不会给结果，本地补"未启用图幅"
+  // （否则空勾选 + 未检查不阻断，破坏发布门禁）。
+  if (result === undefined && !inspectionFailed && checked.length === 0 && asset.kind === "layout-template") {
     issues.push({
-      code: LAYOUT_MISMATCH_CODE,
+      code: PAPER_LAYOUTS_EMPTY_CODE,
+      severity: "error",
+      target: {section: "assets", assetId: asset.asset_id},
+      params: {assetId: asset.asset_id},
+    });
+  }
+  for (const layout of missing) {
+    issues.push({
+      code: PAPER_LAYOUT_MISSING_CODE,
       severity: "error",
       target: {section: "assets", assetId: asset.asset_id, layout},
       params: {assetId: asset.asset_id, layout},
     });
   }
 
-  // 未被引用的有效布局资产：仅当标准确实存在可引用位置时才判定（否则无从判断，不误报）
+  // 未被引用的有效布局资产：仅当检查成功且勾选全部可用、标准确实存在可引用位置时才判定
   if (
     asset.kind === "layout-template"
-    && declared.length > 0
-    && !hasDiff
+    && checked.length > 0
+    && missing.length === 0
+    && result !== undefined
     && !inspectionFailed
     && hasReferenceSources(document)
     && assetReferences(document, asset).length === 0

@@ -1,10 +1,19 @@
 <script setup lang="ts">
-// 资产检查面板（PLAN-DM-035 Task 10 / SPEC-DM-016 §8.1–§8.2）：受控路径、资产身份、
-// 引用关系、最近检查结果与重新检查动作。布局资产列出检查到的非 Model 布局，并与声明图幅
-// 严格比较（不去空格、不转换大小写）；缺失与未声明都逐项显示。
+// 资产检查面板（PLAN-DM-042 / SPEC-DM-016 §8.1–§8.2）：单文件受控路径、资产身份、
+// 引用关系、最近检查结果与重新检查动作。布局表按「已启用 / 未启用 / 启用但缺失」三态
+// 呈现勾选图幅与实际布局的包含关系（精确字符串比较；Model 永不参与）；未勾选的布局
+// 只是不启用，不再是问题。PAPER_LAYOUT_MISSING 诊断由三态表呈现，不在诊断列表重复。
 import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
-import {declaredRoles, nonModelLayouts, compareLayouts, MODEL_LAYOUT_NAME, type AssetReference, type InspectionState} from "../../features/standards/publishModel";
+import {
+  MODEL_LAYOUT_NAME,
+  PAPER_LAYOUT_MISSING_CODE,
+  declaredPaperLayouts,
+  missingPaperLayouts,
+  nonModelLayouts,
+  type AssetReference,
+  type InspectionState,
+} from "../../features/standards/publishModel";
 import type {DraftAsset} from "../../features/standards/draftModel";
 import type {AssetInspection} from "../../features/standards/types";
 import type {InspectionFailure} from "../../features/standards/publishModel";
@@ -23,15 +32,32 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{recheck: []}>();
 
-const declared = computed(() => declaredRoles(props.asset));
+const checked = computed(() => declaredPaperLayouts(props.asset));
 const actual = computed(() => nonModelLayouts(props.inspection?.layouts ?? []));
-const diff = computed(() => compareLayouts(declared.value, actual.value));
+const missing = computed(() => missingPaperLayouts(checked.value, actual.value));
 
-function layoutState(name: string): "matched" | "missing" | "extra" {
-  if (diff.value.missing.includes(name)) return "missing";
-  if (diff.value.extra.includes(name)) return "extra";
-  return "matched";
+type LayoutRowState = "enabled" | "not-enabled" | "missing";
+
+/** 布局表行：勾选在前、实际布局补充在后，每行给出三态之一。 */
+const layoutRows = computed<Array<{name: string; state: LayoutRowState}>>(() =>
+  [...checked.value, ...actual.value.filter(name => !checked.value.includes(name))].map(name => ({
+    name,
+    state: checked.value.includes(name)
+      ? (actual.value.includes(name) ? "enabled" : "missing")
+      : "not-enabled",
+  })),
+);
+
+function stateText(state: LayoutRowState): string {
+  if (state === "enabled") return "standards.assets.layoutEnabled";
+  if (state === "missing") return "standards.assets.layoutMissing";
+  return "standards.assets.layoutNotEnabled";
 }
+
+/** 勾选图幅在文件中缺失的问题已由三态表逐项呈现，诊断列表不再重复。 */
+const visibleDiagnostics = computed(() =>
+  (props.inspection?.diagnostics ?? []).filter(diagnostic => diagnostic.code !== PAPER_LAYOUT_MISSING_CODE),
+);
 </script>
 <template>
   <section class="inspection-panel" role="region" :aria-label="$t('standards.assets.panelTitle')" data-testid="asset-panel">
@@ -52,13 +78,8 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
     </p>
     <div class="panel-block">
       <h5 class="block-title">{{ $t("standards.assets.paths") }}</h5>
-      <ul class="path-list">
-        <li v-for="(file, index) in asset.files" :key="index" class="path-row">
-          <span class="path-value">{{ file.path || "—" }}</span>
-          <span class="path-role">{{ file.role || "—" }}</span>
-        </li>
-      </ul>
-      <p v-if="asset.files.length === 0" class="panel-note">{{ $t("standards.assets.noFiles") }}</p>
+      <p class="path-value">{{ asset.file || "—" }}</p>
+      <p v-if="asset.file === ''" class="panel-note">{{ $t("standards.assets.noFiles") }}</p>
     </div>
     <div class="panel-block">
       <h5 class="block-title">{{ $t("standards.assets.referenceTitle") }}</h5>
@@ -74,7 +95,7 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       <h5 class="block-title">{{ $t("standards.assets.layoutsTitle") }}</h5>
       <p class="panel-note">{{ $t("standards.assets.modelExcluded", {model: MODEL_LAYOUT_NAME}) }}</p>
       <p v-if="pending" class="panel-note">{{ $t("standards.assets.inspectPending") }}</p>
-      <!-- 无可用结果（未检查或检查失败）时不得给出“缺少同名布局”这类结构性结论 -->
+      <!-- 无可用结果（未检查或检查失败）时不得给出「启用但缺失」这类结构性结论 -->
       <p v-else-if="state === 'unchecked' || state === 'error'" class="panel-note" data-testid="asset-layout-unchecked">
         {{ $t("standards.assets.uncheckedDiagnostics") }}
       </p>
@@ -82,28 +103,17 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
         <table class="layout-table">
           <thead>
             <tr>
-              <th scope="col">{{ $t("standards.assets.layoutDeclared") }}</th>
-              <th scope="col">{{ $t("standards.assets.layoutActual") }}</th>
+              <th scope="col">{{ $t("standards.assets.paperLayouts") }}</th>
               <th scope="col">{{ $t("standards.assets.stateLabel") }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="role in declared" :key="`declared-${role}`" :data-testid="`asset-layout-${role}`">
-              <td>{{ role }}</td>
-              <td>{{ actual.join(", ") || "—" }}</td>
-              <td>
-                <span class="layout-state" :class="layoutState(role)">
-                  {{ $t(layoutState(role) === "matched" ? "standards.assets.layoutMatched" : "standards.assets.layoutMissing") }}
-                </span>
-              </td>
+            <tr v-for="row in layoutRows" :key="row.name" :data-testid="`asset-layout-${row.name}`">
+              <td>{{ row.name }}</td>
+              <td><span class="layout-state" :class="row.state">{{ $t(stateText(row.state)) }}</span></td>
             </tr>
-            <tr v-for="(name, index) in diff.extra" :key="`extra-${name}`" :data-testid="`asset-layout-extra-${index}`">
-              <td>—</td>
-              <td>{{ name }}</td>
-              <td><span class="layout-state extra">{{ $t("standards.assets.layoutExtra") }}</span></td>
-            </tr>
-            <tr v-if="declared.length === 0 && actual.length === 0">
-              <td colspan="3" class="panel-note">{{ $t("standards.assets.noLayouts") }}</td>
+            <tr v-if="layoutRows.length === 0">
+              <td colspan="2" class="panel-note">{{ $t("standards.assets.noLayouts") }}</td>
             </tr>
           </tbody>
         </table>
@@ -116,12 +126,19 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
       </p>
       <p v-else-if="state === 'unchecked'" class="panel-note" data-testid="asset-unchecked">
         {{ $t("standards.assets.uncheckedDiagnostics") }}
-      </p>      <ul v-else-if="(inspection?.diagnostics ?? []).length > 0" class="diagnostic-list" role="alert">
-        <li v-for="(diagnostic, index) in inspection?.diagnostics ?? []" :key="index" :data-testid="`asset-diagnostic-${index}`">
-          {{ $t(`standards.diagnostic.${diagnostic.code}`, {layout: declared[0] ?? "", assetId: asset.asset_id}) }}
+      </p>
+      <ul v-else-if="visibleDiagnostics.length > 0" class="diagnostic-list" role="alert">
+        <li v-for="(diagnostic, index) in visibleDiagnostics" :key="index" :data-testid="`asset-diagnostic-${index}`">
+          {{ $t(`standards.diagnostic.${diagnostic.code}`, {assetId: asset.asset_id}) }}
         </li>
       </ul>
+      <p v-else-if="(inspection?.diagnostics ?? []).length > 0" class="panel-note">
+        {{ $t("standards.assets.diagnosticsFiltered") }}
+      </p>
       <p v-else class="panel-note">{{ $t("standards.assets.noDiagnostics") }}</p>
+      <p v-if="!failure && state !== 'unchecked' && missing.length > 0" class="panel-error" role="alert">
+        {{ $t(`standards.diagnostic.${PAPER_LAYOUT_MISSING_CODE}`, {assetId: asset.asset_id, layout: missing.join("、")}) }}
+      </p>
     </div>
   </section>
 </template>
@@ -134,13 +151,14 @@ function layoutState(name: string): "matched" | "missing" | "extra" {
 .panel-error{margin:0;font-size:var(--font-label);color:var(--color-danger)}
 .panel-block{display:grid;gap:var(--space-1)}
 .block-title{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
-.path-list,.reference-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);font-size:var(--font-label);color:var(--color-text-primary)}
-.path-row{display:flex;gap:var(--space-2);justify-content:space-between;word-break:break-all}
-.path-role{color:var(--color-text-secondary)}
+.path-value,.reference-list{font-size:var(--font-label);color:var(--color-text-primary)}
+.path-value{margin:0;word-break:break-all}
+.reference-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
 .layout-table{width:100%;border-collapse:collapse;table-layout:fixed}
 .layout-table th,.layout-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;font-size:var(--font-label);word-break:break-all}
 .layout-table th{color:var(--color-text-secondary);font-weight:500}
 .layout-state{color:var(--color-text-primary)}
-.layout-state.missing,.layout-state.extra{color:var(--color-danger)}
+.layout-state.not-enabled{color:var(--color-text-secondary)}
+.layout-state.missing{color:var(--color-danger)}
 .diagnostic-list{margin:0;padding-left:var(--space-4);color:var(--color-danger);font-size:var(--font-label)}
 </style>

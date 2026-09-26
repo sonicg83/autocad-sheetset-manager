@@ -87,12 +87,13 @@ def valid_standard_document() -> dict[str, object]:
             {
                 "asset_id": "base",
                 "kind": "base-template",
-                "files": [{"path": "templates/base.dwt", "role": ""}],
+                "file": "templates/base.dwt",
             },
             {
                 "asset_id": "layouts",
                 "kind": "layout-template",
-                "files": [{"path": "templates/A2.dwg", "role": "A2"}],
+                "file": "templates/A2.dwg",
+                "paper_layouts": ["A2"],
             },
         ],
         "numbering": {"sequence_field": "subset.sequence", "digits": 2},
@@ -593,8 +594,8 @@ def test_parse_standard_draft_rejects_invalid_top_level(
 def test_parse_standard_rejects_duplicate_asset_ids() -> None:
     document = valid_draft_document()
     document["assets"] = [
-        {"asset_id": "base", "kind": "base-template"},
-        {"asset_id": "base", "kind": "layout-template"},
+        {"asset_id": "base", "kind": "base-template", "file": "assets/a.dwt"},
+        {"asset_id": "base", "kind": "layout-template", "file": "assets/b.dwg"},
     ]
     with pytest.raises(StandardSchemaError, match="STANDARD_ASSET_DUPLICATE"):
         parse_standard_draft_document(document)

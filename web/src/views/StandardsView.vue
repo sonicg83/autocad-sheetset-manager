@@ -15,7 +15,7 @@ import StandardImportDialog from "../components/standards/StandardImportDialog.v
 import {selectStandardPackagePath, shellReady} from "../api/shell";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
 import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
-import type {AssetInspection} from "../features/standards/types";
+import type {AssetInspection, CopiedAssetFile} from "../features/standards/types";
 import type {
   CreateMode,
   ImportPreviewResult,
@@ -129,10 +129,9 @@ async function inspectEditorAsset(assetId: string, cadVersion: string): Promise<
   return store.inspectAsset({draftId: editorDraft(), assetId, cadVersion});
 }
 
-/** 本机模板受控复制：只把后端生成的包内相对路径交给编辑器缓冲。 */
-async function copyEditorAssetFile(sourcePath: string): Promise<string> {
-  const copied = await store.copyAssetFile({draftId: editorDraft(), sourcePath});
-  return copied.path;
+/** 本机模板受控复制：返回包内相对路径与按需读取的非 Model 布局（供勾选启用图幅）。 */
+async function copyEditorAssetFile(sourcePath: string, cadVersion: string): Promise<CopiedAssetFile> {
+  return store.copyAssetFile({draftId: editorDraft(), sourcePath, cadVersion});
 }
 
 /** 发布：成功时后端把草稿移入已发布目录，需退出编辑器并定位到新版本只读详情。 */

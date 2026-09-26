@@ -65,10 +65,9 @@ def declared_asset_paths(standard: DrawingStandard) -> tuple[str, ...]:
     """清单声明的规范化资产相对路径；只校验路径合法性，不检查文件存在。"""
     paths: list[str] = []
     for asset in standard.assets:
-        for file in asset.files:
-            path = normalize_asset_path(file.path)
-            if path not in paths:
-                paths.append(path)
+        path = normalize_asset_path(asset.file)
+        if path not in paths:
+            paths.append(path)
     return tuple(paths)
 
 
@@ -78,14 +77,13 @@ def resolve_asset_files(
     """校验全部声明资产并返回 ``(包内相对路径, 实际文件路径)`` 对。"""
     resolved: list[tuple[str, Path]] = []
     for asset in standard.assets:
-        for file in asset.files:
-            target = resolve_asset_file(root, file.path)
-            if not target.is_file():
-                raise _error(
-                    FILE_MISSING,
-                    f"资产 {asset.asset_id!r} 声明的文件 {file.path!r} 不在受控目录中",
-                )
-            resolved.append((normalize_asset_path(file.path), target))
+        target = resolve_asset_file(root, asset.file)
+        if not target.is_file():
+            raise _error(
+                FILE_MISSING,
+                f"资产 {asset.asset_id!r} 声明的文件 {asset.file!r} 不在受控目录中",
+            )
+        resolved.append((normalize_asset_path(asset.file), target))
     return tuple(resolved)
 
 

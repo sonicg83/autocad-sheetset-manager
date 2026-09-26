@@ -152,20 +152,17 @@ class StandardDiagnostic:
 
 
 @dataclass(frozen=True, slots=True)
-class StandardAssetFile:
-    """包内相对路径及其角色（如图幅枚举值）。"""
-
-    path: str
-    role: str = ""
-
-
-@dataclass(frozen=True, slots=True)
 class StandardAsset:
-    """标准模板资产声明；文件本体由标准包层校验与复制。"""
+    """标准模板资产声明（PLAN-DM-042：一个资产对应一个文件）。
+
+    ``file`` 是包内相对路径（受控副本名）；``paper_layouts`` 是布局模板
+    从该 DWG 非 ``Model`` 布局中勾选的启用图幅，基础模板恒为空。
+    """
 
     asset_id: str
     kind: str
-    files: tuple[StandardAssetFile, ...] = ()
+    file: str
+    paper_layouts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

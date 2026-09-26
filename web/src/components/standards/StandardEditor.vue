@@ -43,7 +43,7 @@ import {
   recordInspection,
   recordInspectedAt,
 } from "../../features/standards/publishModel";
-import type {AssetInspection, StandardDraft} from "../../features/standards/types";
+import type {AssetInspection, CopiedAssetFile, StandardDraft} from "../../features/standards/types";
 
 type GuardChoice = "save" | "discard" | "stay";
 
@@ -60,8 +60,8 @@ const props = defineProps<{
   saveDraft: (document: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** 资产检查：按草稿与资产标识调用后端固定读取协议。 */
   inspectAsset: (assetId: string, cadVersion: string) => Promise<AssetInspection>;
-  /** 本机模板受控复制：成功时返回草稿内受控副本的相对路径。 */
-  copyAssetFile: (sourcePath: string) => Promise<string>;
+  /** 本机模板受控复制：成功时返回受控副本路径与按需读取的非 Model 布局。 */
+  copyAssetFile: (sourcePath: string, cadVersion: string) => Promise<CopiedAssetFile>;
   /** 发布：成功时后端已把草稿移入已发布目录（草稿不复存在）。 */
   publishDraft: () => Promise<void>;
   /** 官方标准的资产声明（只读参考）；无可对照官方标准时为空数组。 */
@@ -146,6 +146,10 @@ const releaseNotes = computed({
   set: (value: string) => { buffer.value.release_notes = value; },
 });
 const cadVersion = computed(() => buffer.value.supported_cad_versions[0] ?? "");
+/** 资产编辑器复制入口：附上当前 CAD 版本，复制后立即读取非 Model 布局供勾选。 */
+function copyAssetFileWithVersion(sourcePath: string): Promise<CopiedAssetFile> {
+  return props.copyAssetFile(sourcePath, cadVersion.value);
+}
 /** 打开编辑器时固定的草稿身份（F03）：检查与发布只用它，不从列表选择反推。 */
 const draftId = computed(() => props.draft.draft_id);
 
@@ -479,7 +483,7 @@ defineExpose({guard, isDirty: () => dirty.value});
           :record="currentRecord"
           :pending="inspectionPending"
           :cad-version="cadVersion"
-          :copy-asset-file="copyAssetFile"
+          :copy-asset-file="copyAssetFileWithVersion"
           @recheck="runInspections"
         />
         <section v-else class="publish-section" role="region" :aria-label="$t('standards.sections.publish')">

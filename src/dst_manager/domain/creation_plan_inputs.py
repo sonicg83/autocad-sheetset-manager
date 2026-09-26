@@ -11,7 +11,8 @@
   ``CREATION_SHEETSET_VALUE_MISSING``/``CREATION_GROUP_VALUE_MISSING``，
   与显式空串不可混同；
 - ``required`` 非空只在创建实际值门禁判断（标准可以没有必填属性默认值）；
-- 资产必须存在且种类相符，图幅必须是布局模板资产声明的角色，不是自由文本；
+- 资产必须存在且种类相符，图幅必须是布局模板资产勾选的启用图幅（PLAN-DM-042），
+  不是自由文本；
 - 组图名重复按「去首尾空格 + 大小写不敏感」判定。
 
 每个函数只返回诊断与解析结果，不抛出、不修改入参；去重与顺序由调用方
@@ -144,7 +145,7 @@ def resolve_base_template(
 ) -> tuple[str, list[CreationPlanDiagnostic]]:
     """基础模板资产的包内相对路径；资产缺失或种类不符时阻断该组。"""
     asset = _find_asset(standard, group.base_asset_id)
-    if asset is None or asset.kind != BASE_TEMPLATE_KIND or not asset.files:
+    if asset is None or asset.kind != BASE_TEMPLATE_KIND or not asset.file:
         return "", [
             CreationPlanDiagnostic(
                 code="CREATION_ASSET_INVALID",
@@ -155,15 +156,15 @@ def resolve_base_template(
                 group_id=group.group_id,
             )
         ]
-    return asset.files[0].path, []
+    return asset.file, []
 
 
 def resolve_layout_template(
     standard: DrawingStandard, group: CreationGroupInput
 ) -> tuple[str, list[CreationPlanDiagnostic]]:
-    """按图幅角色在布局模板资产内定位模板文件；图幅是所选布局名，不是自由文本。"""
+    """解析布局模板资产；图幅必须是该资产勾选的启用图幅，不是自由文本。"""
     asset = _find_asset(standard, group.layout_asset_id)
-    if asset is None or asset.kind != LAYOUT_TEMPLATE_KIND or not asset.files:
+    if asset is None or asset.kind != LAYOUT_TEMPLATE_KIND or not asset.file:
         return "", [
             CreationPlanDiagnostic(
                 code="CREATION_ASSET_INVALID",
@@ -175,10 +176,8 @@ def resolve_layout_template(
             )
         ]
     paper_layout = group.paper_layout.strip()
-    if paper_layout:
-        for file in asset.files:
-            if file.role == paper_layout:
-                return file.path, []
+    if paper_layout and paper_layout in asset.paper_layouts:
+        return asset.file, []
     return "", [
         CreationPlanDiagnostic(
             code="CREATION_PAPER_LAYOUT_INVALID",

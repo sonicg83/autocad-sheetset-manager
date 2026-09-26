@@ -157,7 +157,9 @@ def register_standard_routes(app: FastAPI) -> None:
     def copy_standard_draft_asset_file(
         request: Request, draft_id: str, body: StandardAssetCopyRequest
     ):
-        return service(request).copy_draft_asset_file(draft_id, Path(body.source_path))
+        return service(request).copy_draft_asset_file(
+            draft_id, Path(body.source_path), body.cad_version
+        )
 
     # ---- 导入导出 --------------------------------------------------------
 

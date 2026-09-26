@@ -78,10 +78,16 @@ export interface CreateDraftInput {
 export interface CopyAssetFileInput {
   draftId: string;
   sourcePath: string;
+  /** 提供时后端复制后立即读取非 Model 布局；缺省只复制不读取。 */
+  cadVersion?: string;
 }
 
 export interface CopiedAssetFile {
   path: string;
+  /** 非 Model 布局名（保持文件内顺序与原名）；`layouts_error` 非空时为空数组。 */
+  layouts: string[];
+  /** 布局读取失败的稳定错误码；复制成功但读取失败不影响 `path`。 */
+  layouts_error: string | null;
 }
 
 /** 草稿级保存：身份由草稿 ID 承载，文档身份必须等于草稿已存身份（F11）。 */

@@ -75,10 +75,8 @@ function visualDraft(): Record<string, unknown> {
       {
         asset_id: "layouts",
         kind: "layout-template",
-        files: [
-          {path: "assets/layout-a2.dwg", role: "A2"},
-          {path: "assets/layout-a3.dwg", role: "A3"},
-        ],
+        file: "assets/layouts.dwg",
+        paper_layouts: ["A2", "A3"],
       },
     ],
   });
@@ -163,7 +161,7 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await shot(page, info, "g4-05-dwg-naming-light-1440x900");
 
   await openEditorSection(page, "assets");
-  await expect(page.getByTestId("asset-layout-A3")).toContainText("匹配");
+  await expect(page.getByTestId("asset-layout-A3")).toContainText("已启用");
   await shot(page, info, "g4-06-assets-light-1440x900");
 
   // 发布错误页：清空「结构」的映射目标，映射未完成 → 错误阻断发布
