@@ -129,7 +129,7 @@ function toggleAll(event: Event): void {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(group, index) in store.groups" :key="group.group_id" :data-group-id="group.group_id">
+            <tr v-for="(group, index) in store.groups" :key="group.group_id" :data-group-id="group.group_id" :class="{'has-issue': issuesOf(group.group_id).length > 0}">
               <td class="select-col">
                 <label class="select-hit">
                   <input
@@ -267,8 +267,13 @@ function toggleAll(event: Event): void {
 /* 表宽随内容，容器自身横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .group-table{width:100%;min-width:max-content;border-collapse:collapse}
-.group-table th,.group-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
-.group-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap}
+.group-table th,.group-table td{height:var(--editable-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
+/* 出错行整行切顶部对齐（SPEC-DM-006 §6.4）：行内错误列表撑高该行时保持同行控件中心一致 */
+.group-table tr.has-issue>td{vertical-align:top}
+/* 出错行内 32px 命中区与行操作按钮补半高差，与 38px 输入控件共用同一条控制行（不拉伸控件本体） */
+.group-table tr.has-issue .select-hit,
+.group-table tr.has-issue .row-actions button{margin-top:calc((var(--input-height) - var(--tap-target-min)) / 2)}
+.group-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap;vertical-align:middle}
 /* 表头已给出列名（与图纸目录编辑器同一做法）：单元格内的可见字段标签会与表头重复并撑高行，
    故仅视觉隐藏标签节点，可访问名由 `aria-label`（含组序号）承担。 */
 .group-table :deep(.ui-input){gap:0}

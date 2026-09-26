@@ -4,7 +4,7 @@
 // 映射源唯一占用、组合/DWG 命名字段范围、未完成草稿可保存但不可发布、
 // 发布 error 与 warning 区分、DWG 非法文件名、紧凑复选框、
 // 900×768 与 200% 缩放下的模态操作栏可达，以及纯键盘令牌插入与模态焦点归还。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {installPreferenceSnapshot} from "./fixtures/settings";
 import {
   draft,
@@ -672,4 +672,77 @@ test("CSV 导入弹窗：可见关联标签、焦点圈闭与 Escape 归还焦�
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();
+});
+
+/** 同一行内所有可交互控件（含复选命中区与图标按钮）的垂直中点最大差值。 */
+async function controlCenterSpread(row: Locator): Promise<number> {
+  return row.evaluate((tr) => {
+    const centers = [...tr.querySelectorAll("input, select, button, .required-hit, .select-hit")]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.height > 0)
+      .map((rect) => rect.top + rect.height / 2);
+    return centers.length === 0 ? 0 : Math.max(...centers) - Math.min(...centers);
+  });
+}
+
+// PLAN-DM-043 Task 3：常驻 38px 输入框的编辑表取 48px 基础档（SPEC-DM-006 §5.3/§6.4）。
+test("常驻编辑表 48px 档：表头/普通行高度、38px 控件与同行中点对齐", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+  const table = page.getByTestId("ordinary-table");
+  expect(
+    Math.round(await table.locator("thead th").first().evaluate((element) => element.getBoundingClientRect().height)),
+    "表头与同表普通编辑行采用同一基础档",
+  ).toBe(48);
+  const row = table.locator("tbody tr").first();
+  expect(
+    Math.round(await row.locator("td").first().evaluate((element) => element.getBoundingClientRect().height)),
+    "常驻编辑行取 48px 基础档",
+  ).toBe(48);
+  expect(
+    Math.round(await row.locator("input").first().evaluate((element) => element.getBoundingClientRect().height)),
+    "编辑控件保持 38px 表单档",
+  ).toBe(38);
+  expect(await controlCenterSpread(row), "同行控件与复选命中区垂直中点差 ≤1px").toBeLessThanOrEqual(1);
+});
+
+test("编辑表出错行按内容增高且整行同档对齐", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+  await page.getByTestId("add-ordinary").click();
+  const row = page.locator("[data-testid=ordinary-table] tbody tr").last();
+  await row.getByLabel("属性名").fill(" 专业 ");
+  await row.getByLabel("作用域").selectOption("sheet");
+  await expect(row.getByTestId("ordinary-issue-prop-new"), "出错行必须出现行内错误文案").toContainText("命名空间");
+  expect(
+    Math.round(await row.evaluate((element) => element.getBoundingClientRect().height)),
+    "出错行按内容增高，不受 48px 下限裁切",
+  ).toBeGreaterThan(48);
+  expect(await controlCenterSpread(row), "整个出错行同档对齐后中点差仍 ≤1px").toBeLessThanOrEqual(1);
+  expect(
+    await row.evaluate((tr) => {
+      const issue = tr.querySelector(".row-issue");
+      return issue !== null && tr.getBoundingClientRect().bottom >= issue.getBoundingClientRect().bottom;
+    }),
+    "错误文案不得被行裁切",
+  ).toBe(true);
+});
+
+test("常驻编辑表在 900×768 与 200% 缩放代理（720×500）下不产生整页横溢", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "ordinary");
+  for (const viewport of [{width: 900, height: 768}, {width: 720, height: 500}]) {
+    await page.setViewportSize(viewport);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `${viewport.width} 宽下不得整页横滚`).toBeLessThanOrEqual(1);
+    const firstControl = page.getByTestId("ordinary-table").locator("input").first();
+    await firstControl.scrollIntoViewIfNeeded();
+    await expect(firstControl, `${viewport.width} 宽下编辑控件仍可达`).toBeInViewport();
+  }
 });

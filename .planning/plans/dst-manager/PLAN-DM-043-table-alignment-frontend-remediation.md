@@ -151,6 +151,7 @@ related:
 | --- | --- | --- | --- | --- |
 | 2026-09-26 | Task 1 建立表格静态契约与迁移基线 | 新增 13 条用例在规则未实现时 `pass 4 / fail 9`（exit 1） | `test:contracts` **114 passed / 0 failed**（含 5 条 CLI 级变异）；`check:ui` exit 0，27 条存量违规已登记 | Task 2–5 样式与计算样式断言；真实桌面缩放复验 |
 | 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `4 failed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
+| 2026-09-26 | Task 3 常驻编辑表 48px 档与出错行增高 | 两表表头实测 26px / 41px ≠ 48px，出错行控件中点差 3px > 1px（4 failed） | 新增 `--editable-table-row-height:48px` 并在两表声明；出错行 `tr.has-issue>td` 整行 `top` + 小于 38px 控件补半高差；两份 e2e **81 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 4/5；真实桌面缩放复验 |
 
 ### Task 1 执行记录（2026-09-26，分支 `feature/plan-dm-043-table-alignment`）
 
@@ -186,6 +187,13 @@ related:
 - **棘轮中间证据**：改样式后未清退例外时 `check:ui` 报 **16 条 `stale-exception`**（恰为 Task 2 登记的 16 条），清退后 exit 0；例外总数 37 → 21，PLAN-DM-043 剩余到期分布 Task 3/4/5 = 2/8/1。
 - **结构与间距**：`.sheet-editor-row>td` 保持 `height:auto;padding:0`（由 `STRUCTURAL_CELL_PAIRS` 放行，内层 `.sheet-property-editor` 消费 `--space-4`）；64px 列宽/粘性定位/固定列阴影行为未变。
 - **仍待验证**：Task 3–5 的样式与断言；真实 Windows WebView2 100/125/150/200% 复验。
+
+### Task 3 执行记录（2026-09-26）
+
+- **RED**：新增 4 条用例（标准普通属性编辑表 48px 档、编辑表出错行增高、分组编辑表 48px 档与出错行增高、两份 900×768/200% 代理横溢检查）。首次运行 2 failed / 35 passed：表头实测高度**标准表 26px、分组表 41px**（期望 48px）；随后加 `vertical-align:middle` 后出错行仍失败，实测**同行控件中点差 3px**（32px 命中区/36px 图标按钮 vs 38px 输入），超过 SPEC-DM-006 §6.4 的 ±1px。
+- **GREEN**：新增组件令牌 `--editable-table-row-height:48px`（`tokens.css` 头注释同步）；两表单元格声明 `height` + `padding:var(--space-1)` + `vertical-align:middle`；出错行加行级类 `tr.has-issue`，以 `tr.has-issue>td{vertical-align:top}` 整行切换；出错行内高度小于 38px 的控件（`.required-hit`、`.ui-icon-button`、`.select-hit`、`.row-actions button`）以 `margin-top:calc((var(--input-height) - …) / 2)` 补半高差——**用令牌派生的位移而非拉伸控件本体**，满足「保留 32px 命中区/行操作轨」约束。
+- **验证**：`npx playwright test tests/e2e/standards-editor.spec.ts tests/e2e/create-sheetset-input.spec.ts` → **81 passed / 0 failed**（1.2m）；`npm run build` exit 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全通过）；清退 Task 3 的 2 条例外后 `check:ui` exit 0（例外总数 21 → 19，剩 Task 4 8 条、Task 5 1 条）。
+- **仍待验证**：Task 4/5；真实 Windows WebView2 100/125/150/200% 复验。
 
 ## 修订记录
 

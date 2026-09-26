@@ -39,6 +39,10 @@
  * `--compare-item-max-height:180px`、`--expand-editor-min-height:140px`，均自属性页原地常量
  * **逐字搬运**（不取整、不改成内容驱动），只把字面值换成令牌；后三个目前只被属性页消费，
  * 属单点组件令牌，是否合并或下沉留给收口任务（Task 12 责任 I）复核。
+ *
+ * PLAN-DM-043 Task 3 新增 `--editable-table-row-height:48px`：常驻 38px 输入框且上下各 4px
+ * padding 的编辑表（标准普通属性编辑表、创建向导分组表）基础行高档位，表头匹配同表普通行
+ * （SPEC-DM-006 §5.3/§6.4、ARCH-DM-007 §4.3）。
  */
 @font-face{font-family:"Inter";src:url("../assets/fonts/InterLatin.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap;unicode-range:U+0020-007E,U+00A0-00FF,U+2013-2014,U+2018-201D,U+2026}
 @font-face{font-family:"IBM Plex Mono";src:url("../assets/fonts/IBMPlexMonoLatin.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0020-007E,U+00A0-00FF,U+2013-2014,U+2018-201D,U+2026}
@@ -96,6 +100,7 @@
     --panel-head-min-height:60px;
     --panel-search-width:280px;
     --definition-row-height:44px;
+    --editable-table-row-height:48px;
     --compare-card-max-width:560px;
     --compare-item-max-height:180px;
     --expand-editor-min-height:140px;

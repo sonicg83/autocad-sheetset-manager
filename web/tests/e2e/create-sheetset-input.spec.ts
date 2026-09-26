@@ -5,7 +5,7 @@
 // 全部端点由 fixtures/creation 的 route mock 驱动（不读真实数据目录）；第四阶段
 // 「检查并创建」的权威预览、执行与任务闭环由 `create-sheetset-review.spec.ts` 覆盖，
 // 这里只断言四阶段导航与末阶段的接入点。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {
   chooseStandard,
   creationCandidate,
@@ -469,4 +469,71 @@ test("标准候选加载失败给出稳定错误且不伪造空库", async ({pag
   await expect(page.getByText("标准候选加载失败", {exact: false})).toBeVisible();
   await expect(page.getByText("当前没有可用于创建的标准", {exact: false})).toHaveCount(0);
   await expect(page.getByTestId("creation-standard-list")).toHaveCount(0);
+});
+
+/** 同一行内所有可交互控件（含复选命中区与行操作按钮）的垂直中点最大差值。 */
+async function controlCenterSpread(row: Locator): Promise<number> {
+  return row.evaluate((tr) => {
+    const centers = [...tr.querySelectorAll("input, select, button, .select-hit")]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.height > 0)
+      .map((rect) => rect.top + rect.height / 2);
+    return centers.length === 0 ? 0 : Math.max(...centers) - Math.min(...centers);
+  });
+}
+
+// PLAN-DM-043 Task 3：分组编辑表同为常驻 38px 输入框的编辑表，取 48px 基础档。
+test("分组编辑表 48px 档与出错行增高（同行中点对齐 ≤1px）", async ({page}) => {
+  await installCreation(page);
+  await openCreation(page);
+  await chooseStandard(page);
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  await rowTitle(page, "group-1").fill("平面图");
+  const table = page.getByRole("table", {name: "图纸组编辑表"});
+  expect(
+    Math.round(await table.locator("thead th").first().evaluate((element) => element.getBoundingClientRect().height)),
+    "表头与同表普通编辑行采用同一基础档",
+  ).toBe(48);
+  const row = groupRow(page, "group-1");
+  expect(
+    Math.round(await row.locator("td").first().evaluate((element) => element.getBoundingClientRect().height)),
+    "常驻编辑行取 48px 基础档",
+  ).toBe(48);
+  expect(
+    Math.round(await rowTitle(page, "group-1").evaluate((element) => element.getBoundingClientRect().height)),
+    "编辑控件保持 38px 表单档",
+  ).toBe(38);
+  expect(await controlCenterSpread(row), "同行控件与复选命中区垂直中点差 ≤1px").toBeLessThanOrEqual(1);
+  // 同名第二组触发行内错误：该行按内容增高、整行同档对齐且错误列表不被裁切
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const errorRow = groupRow(page, "group-2");
+  const issues = errorRow.locator(".row-issues");
+  await expect(issues, "出错行必须出现行内错误列表").toBeVisible();
+  expect(
+    Math.round(await errorRow.evaluate((element) => element.getBoundingClientRect().height)),
+    "出错行按内容增高，不受 48px 下限裁切",
+  ).toBeGreaterThan(48);
+  expect(await controlCenterSpread(errorRow), "整个出错行同档对齐后中点差仍 ≤1px").toBeLessThanOrEqual(1);
+  expect(
+    await errorRow.evaluate((tr) => {
+      const list = tr.querySelector(".row-issues");
+      return list !== null && tr.getBoundingClientRect().bottom >= list.getBoundingClientRect().bottom;
+    }),
+    "错误列表不得被行裁切",
+  ).toBe(true);
+});
+
+test("分组编辑表在 900×768 下不产生整页横溢且行控件可达", async ({page}) => {
+  await page.setViewportSize({width: 900, height: 768});
+  await installCreation(page);
+  await openCreation(page);
+  await chooseStandard(page);
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, "900px 宽下不得整页横滚（表格自身横向滚动）").toBeLessThanOrEqual(1);
+  const title = rowTitle(page, "group-1");
+  await title.scrollIntoViewIfNeeded();
+  await expect(title).toBeInViewport();
 });

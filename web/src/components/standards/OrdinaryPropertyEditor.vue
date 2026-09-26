@@ -241,7 +241,7 @@ function applyCsv(): void {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="property in ordinaryProperties" :key="property.property_id">
+        <tr v-for="property in ordinaryProperties" :key="property.property_id" :class="{'has-issue': hasError(property)}">
           <td class="col-name">
             <UiInput
               v-model="property.name"
@@ -392,8 +392,13 @@ function applyCsv(): void {
 .ordinary-table :deep(.ui-input){gap:0}
 .ordinary-table :deep(.ui-input__label){display:none}
 .ordinary-table{width:100%;min-width:var(--standards-table-min-width);border-collapse:collapse;table-layout:fixed}
-.ordinary-table th,.ordinary-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
-.ordinary-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500}
+.ordinary-table th,.ordinary-table td{height:var(--editable-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
+/* 出错行整行切顶部对齐（SPEC-DM-006 §6.4）：只改出错格会让同行其余 38px 控件中心错位超过 ±1px */
+.ordinary-table tr.has-issue>td{vertical-align:top}
+/* 出错行内小于 38px 的控件补半高差，与输入控件共用同一条控制行（中点差 ≤1px，不拉伸控件本体） */
+.ordinary-table tr.has-issue .required-hit{margin-top:calc((var(--input-height) - var(--tap-target-min)) / 2)}
+.ordinary-table tr.has-issue .ui-icon-button{margin-top:calc((var(--input-height) - var(--icon-button-size)) / 2)}
+.ordinary-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;vertical-align:middle}
 .col-scope{width:12%}
 .col-kind{width:11%}
 .col-required{width:8%;text-align:center}
