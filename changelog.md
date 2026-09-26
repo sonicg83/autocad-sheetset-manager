@@ -1,3 +1,9 @@
+## 2026-09-26（PLAN-DM-043：表格对齐契约前端实施计划）
+
+- 新增 [PLAN-DM-043](.planning/plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md)，依据 SPEC-DM-006/ARCH-DM-007 修订后的 44px 普通行、48px 常驻编辑行与跨列详情零 padding 边界，规划静态门禁棘轮、主表与编辑表迁移、其余只读/旧表收口及计算样式和缩放验证；同步更新执行资料索引。计划状态为 `proposed`，本次未修改前端代码。
+- 按审查意见修订 [PLAN-DM-043](.planning/plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md)：把口径从“主表 + 编辑表有行高”改为“11 个含 `<table>` 组件 / 18 张表全部命中 44px 或 48px 档”，Task 4/5 因此补上 44px 行的实现与断言（原文只改 padding 会让 7 个组件的表格停在内容高度）；数据行断言统一为“消费 44px 档且 ≥44px”（属性定义表表体行被行内按钮撑高属既有事实）；Task 5 明确三个旧组件需新建 `<style scoped>` 并重声明 `legacy.css` 现状声明，并新增 legacy `th,td` 规则的删除/到期条件步骤；Task 1 把跨列结构放行落到 `table-cells.mjs` 的 `STRUCTURAL_CELL_PAIRS`（例外表字段固定，无法承载跨组件内层校验）；Task 3 出错行改为整行 `tr.has-issue>td` 切 `top` 并补 ±1px 中心对齐断言；Review Focus 与完成标准改为“静态门禁只管已声明规则”“桌面复验缺失时保持 `active`”的准确口径；补 SPEC-DM-012 引用、ARCH-DM-007 §7 顺序偏差说明与跨列结构单元格三处清单。仍未修改前端代码。
+- 固化 [PLAN-DM-043](.planning/plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md) 的行高令牌归属裁决（**方案 A**，经用户确认）：7 个组件的只读表与旧表消费既有 `--sheet-table-row-height`，不新增 44px 令牌，也不因此改动 SPEC-DM-006 §5.3 与 ARCH-DM-007 §4.3 正文（两个备选方案同批修订两份已接受规范 + 索引 + changelog，且分别会造出 3 份同值定义或扩大到两个已验收页面）；同时把该跨页语义借用的后果与处置写入计划：Task 4/5 的断言在钉令牌名的同时钉计算绝对值 44px（口径同 `sheets-layout.spec.ts:609`），使将来令牌取值变化能被测试发现，改动令牌语义或取值必须在独立任务中同步改 7 个组件与新增断言。仍未修改前端代码。
+
 ## 2026-09-26（表格行高与结构单元格规范修订）
 
 - 修订 [SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §5.3/§6.4 和 [ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) §4.3/§9：44px/32px 档用于可容纳内容的普通单行数据行，常驻 38px 输入框且上下各 4px padding 的编辑表采用 48px 基础档；表头与同表普通行匹配，多行、错误与跨列详情行可按内容增高。普通单元格保持单表单档令牌化 padding；跨列承载独立编辑/详情容器的结构性 `td` 可限定选择器使用 `padding:0`，内部容器负责令牌化间距，静态门禁与计算样式断言按此口径区分。仅文档修订，未改动前端样式或检查器。
