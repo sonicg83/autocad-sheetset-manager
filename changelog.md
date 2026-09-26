@@ -1,3 +1,7 @@
+## 2026-09-26（表格行高与结构单元格规范修订）
+
+- 修订 [SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §5.3/§6.4 和 [ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) §4.3/§9：44px/32px 档用于可容纳内容的普通单行数据行，常驻 38px 输入框且上下各 4px padding 的编辑表采用 48px 基础档；表头与同表普通行匹配，多行、错误与跨列详情行可按内容增高。普通单元格保持单表单档令牌化 padding；跨列承载独立编辑/详情容器的结构性 `td` 可限定选择器使用 `padding:0`，内部容器负责令牌化间距，静态门禁与计算样式断言按此口径区分。仅文档修订，未改动前端样式或检查器。
+
 ## 2026-09-26（表格对齐契约：设计文档增补）
 
 - 依据业界设计系统通用表格对齐准则调研（Adobe Spectrum、IBM Carbon、Google Material、Shopify Polaris：文本左对齐、可比较数值右对齐 + `tabular-nums`、表头跟随列数据、行内内容垂直居中、行高与 padding 显式档位、禁止随意居中），[SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.4 新增「单元格对齐契约」（水平/垂直对齐、行高、单元格 padding、行内控件中点 ±1px、数值列格式），§5.3 表格行高默认档由 40px 修正为 44px 以消除与已落地行高令牌的规范-实现漂移；[ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) 新增 §4.3 实现边界（`vertical-align` 显式声明、单表单档令牌化 padding、行高与控件高度令牌来源），并在 §9.1/§9.3 登记对应静态门禁与计算样式断言；两文 `related` 互引并补 SPEC-DM-017（ARCH-DM-007 的 `related` 序列缩进错误一并修正）。仅文档修订，未改动代码；存量表格样式（10px/9px/4px 多档并存）按 ARCH-DM-007 既有迁移顺序收口，不在本次处理。
