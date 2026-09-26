@@ -19,6 +19,8 @@ export const RULE = {
   globalSelectorInComponent: "global-selector-in-component",
   rawHexColor: "raw-hex-color",
   rawVisualValue: "raw-visual-value",
+  tableCellVerticalAlign: "table-cell-vertical-align",
+  tableCellPadding: "table-cell-padding",
   missingFontAsset: "missing-font-asset",
   remoteFontUrl: "remote-font-url",
   fontBudgetExceeded: "font-budget-exceeded",

@@ -149,7 +149,34 @@ related:
 
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
 | --- | --- | --- | --- | --- |
-| 待实施 | — | — | — | — |
+| 2026-09-26 | Task 1 建立表格静态契约与迁移基线 | 新增 13 条用例在规则未实现时 `pass 4 / fail 9`（exit 1） | `test:contracts` **114 passed / 0 failed**（含 5 条 CLI 级变异）；`check:ui` exit 0，27 条存量违规已登记 | Task 2–5 样式与计算样式断言；真实桌面缩放复验 |
+
+### Task 1 执行记录（2026-09-26，分支 `feature/plan-dm-043-table-alignment`）
+
+- **RED**：新增 `describe("表格单元格对齐与 padding 契约")` 13 条用例（`web/scripts/check-ui-contracts.test.mjs`），规则未实现时 `node --test --test-name-pattern="表格单元格对齐与 padding 契约"` → `tests 13 / pass 4 / fail 9`（exit 1），失败信息均为「期望恰好 1 条 table-cell-*，实际：[]」。
+- **GREEN**：新建 `web/scripts/ui-contracts/table-cells.mjs`（两条规则 + `STRUCTURAL_CELL_PAIRS`），并把 `tableCellVerticalAlign`/`tableCellPadding` 接入 `types.mjs` 与 `check-ui-contracts.mjs` 的第四遍扫描；同一筛选 → `pass 13 / fail 0`；`rtk npm --prefix web run test:contracts` → **114 passed / 0 failed**。
+- **CLI 级变异证据**：新增 5 条注入并入既有「每类判定都有 CLI 级变异证据」清单（分类数 15 → 20、注入数 17 → 22、规则集合 14 → 16）：表格单元格缺 vertical-align、表格单元格裸 padding、同表普通格两档 padding、普通单元格零 padding、伪造 colspan 零 padding——均实测真实子进程 exit 1 且输出含对应规则标签；恢复夹具后 exit 0。
+- **真实仓库变异探针**：临时新增 `src/components/__tmp_plan043_probe.vue`（普通表+ `padding:12px 6px`）后 `check:ui` exit 1 并报 `[table-cell-padding] … 禁止裸值`；删除探针后 exit 0（探针未进入提交树）。
+- **迁移基线（11 个含表格组件 + legacy 兜底，逐条量取声明值）**：
+
+| 组件 | th/td 规则 | padding 现状 | vertical-align 现状 | 行高现状 |
+| --- | --- | --- | --- | --- |
+| `SheetTable.vue` | 9 | 主规则 `10px 8px`（裸值）；结构行 `0` | 主规则 `middle`；7 条辅助规则缺声明 | `--sheet-table-row-height`（44px）；结构行 `auto` |
+| `PropertyDefinitionTable.vue` | 7 | 主规则 `10px 8px`（裸值） | 主规则 `middle`；6 条缺声明 | `--definition-row-height`（44px） |
+| `OrdinaryPropertyEditor.vue` | 2 | `var(--space-1)` | 主规则 `top`；表头规则缺声明 | 无声明（内容驱动） |
+| `GroupsStep.vue` | 2 | `var(--space-1)` | 主规则 `top`；表头规则缺声明 | 无声明 |
+| `AssetInspectionPanel.vue` | 2 | `var(--space-1)` | 2 条均缺声明 | 无声明 |
+| `ReviewStep.vue` | 3 | `var(--space-1)` | 主规则 `top`；2 条缺声明 | 无声明 |
+| `SheetValuesDialog.vue` | 3 | `var(--space-1)` | 3 条均缺声明 | 无声明 |
+| `CatalogPreview.vue` | 1 | 未声明（继承 legacy `9px`） | 缺声明 | 无声明 |
+| `PreviewPanel.vue` | 0 | 继承 legacy `9px` | 继承 legacy `top` | 无声明 |
+| `JobStatusPanel.vue` | 0 | 同上 | 同上 | 无声明 |
+| `RevisionHistoryPanel.vue` | 0 | 同上 | 同上 | 无声明 |
+| `legacy.css`（全局兜底） | 1 | `9px`（裸值） | `top`（取值为合规项） | 无声明 |
+
+  结论：命中 44px 档的只有图纸/属性两个主表；其余 9 个组件的 16 张表全部无 `height` 声明（Task 3 的 2 张按 48px 档、Task 4/5 的 14 张按 44px 档），与「18 张表全部命中一档」的待办一致。零 padding 结构配对实测通过：`SheetTable.vue` 的 `.sheet-editor-row>td` ↔ `src/components/sheets/SheetPropertyEditor.vue` 的 `.sheet-property-editor`（`padding:var(--space-4)`）。
+- **棘轮基线**：存量违规 **27 条**（`table-cell-vertical-align` 24 条、`table-cell-padding` 3 条）已按「文件 + 稳定语义」登记进 `ui-contract-exceptions.json`（总条目 10 → 37），到期任务分布：Task 2 **16 条**、Task 3 **2 条**、Task 4 **8 条**、Task 5 **1 条**；`rtk npm --prefix web run check:ui` → exit 0。指纹不含行号，各 Task 清退时以检查器输出重新生成该文件条目。
+- **仍待验证**：Task 2–5 的样式改动与 Playwright 计算样式断言；真实 Windows WebView2 100/125/150/200% 复验。
 
 ## 修订记录
 

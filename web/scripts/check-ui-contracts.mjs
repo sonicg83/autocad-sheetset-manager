@@ -31,6 +31,7 @@ import {
   parseRules,
 } from "./ui-contracts/css-vars.mjs";
 import {collectAssetViolations} from "./ui-contracts/font-assets.mjs";
+import {collectTableCellViolations} from "./ui-contracts/table-cells.mjs";
 import {NON_EXEMPTIBLE_RULES, RULE, compareViolations, formatViolation, violation} from "./ui-contracts/types.mjs";
 import {findHexColorsInValue, isBareGlobalSelector, isRawVisualValue, isTokenBlock} from "./ui-contracts/visual-values.mjs";
 import {
@@ -253,6 +254,10 @@ export function collectUiContractViolations(options = {}) {
 
   // 第三遍：资产事实类规则（Task 2 Step 7）：字体文件是否存在/是否远程/合计体积与样式入口结构。
   violations.push(...collectAssetViolations({root, files, emitFor: createEmitter}));
+
+  // 第四遍：表格单元格结构与令牌化规则（PLAN-DM-043 Task 1）：显式 vertical-align、
+  // 单档令牌化 padding，以及登记在 STRUCTURAL_CELL_PAIRS 里的跨列结构零 padding 配对。
+  violations.push(...collectTableCellViolations({files, emitFor: createEmitter}));
 
   return applyRatchet(violations, registered).sort(compareViolations);
 }

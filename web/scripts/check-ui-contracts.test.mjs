@@ -1127,6 +1127,188 @@ describe("CLI 契约", () => {
   });
 });
 
+describe("表格单元格对齐与 padding 契约", () => {
+  // 令牌夹具额外补齐单元格 padding 会消费的间距令牌；缺一个都会变成 undefined-css-variable 噪声。
+  const TABLE_TOKENS = `${TOKENS_CSS}:root{--space-1:4px;--space-4:16px}`;
+  /** 合法的普通单行表：单档令牌化 padding + 显式中部对齐。 */
+  const CLEAN_TABLE = `<template><table><thead><tr><th>名称</th></tr></thead><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>th,td{padding:var(--space-2);vertical-align:middle}</style>
+`;
+  /** 跨列结构行的外层：零 padding 由 STRUCTURAL_CELL_PAIRS 放行。 */
+  const EDIT_ROW_OUTER = `<template><table><tbody><tr class="sheet-editor-row"><td>面板</td></tr></tbody></table></template>
+<style scoped>.sheet-editor-row>td{height:auto;padding:0;vertical-align:middle}</style>
+`;
+  /** 跨列结构行的内层容器：零 padding 的前提是它自己消费间距令牌。 */
+  const EDIT_ROW_INNER = `<template><div class="sheet-property-editor">面板</div></template>
+<style scoped>.sheet-property-editor{padding:var(--space-4)}</style>
+`;
+  const tableViolations = (violations) => violations.filter((item) => item.rule.startsWith("table-cell-"));
+
+  test("普通单元格缺 vertical-align 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>.ordinary-table th,.ordinary-table td{padding:var(--space-1)}</style>
+`,
+      }),
+      "table-cell-vertical-align",
+    );
+    assert.match(violation.message, /vertical-align/);
+    assert.match(violation.message, /\.ordinary-table/);
+    assert.equal(typeof violation.line, "number");
+  });
+
+  test("vertical-align 取值超出 middle/top 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>th,td{padding:var(--space-2);vertical-align:baseline}</style>
+`,
+      }),
+      "table-cell-vertical-align",
+    );
+    assert.match(violation.message, /baseline/);
+  });
+
+  test("多行长文本单元格取 top 通过", () => {
+    const violations = tableViolations(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>说明</td></tr></tbody></table></template>
+<style scoped>td.col-default{padding:var(--space-2);vertical-align:top}</style>
+`,
+      }),
+    );
+    assert.deepEqual(violations, []);
+  });
+
+  test("裸非零 padding 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>th,td{padding:10px 8px;vertical-align:middle}</style>
+`,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.message, /10px 8px/);
+  });
+
+  test("令牌化单档 padding 通过", () => {
+    const violations = tableViolations(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": CLEAN_TABLE,
+      }),
+    );
+    assert.deepEqual(violations, []);
+  });
+
+  test("同一张表的普通格出现两档 padding 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>th,td{padding:var(--space-2);vertical-align:middle}
+th{padding:var(--space-1);vertical-align:middle}</style>
+`,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.message, /--space-2/);
+    assert.match(violation.message, /--space-1/);
+  });
+
+  test("普通数据格 padding:0 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>.values-table td{padding:0;vertical-align:middle}</style>
+`,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.message, /STRUCTURAL_CELL_PAIRS/);
+  });
+
+  test("伪造通用 colspan 零 padding 被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/Table.vue": `<template><table><tbody><tr><td colspan="2">说明</td></tr></tbody></table></template>
+<style scoped>td[colspan]{padding:0;vertical-align:middle}</style>
+`,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.message, /STRUCTURAL_CELL_PAIRS/);
+  });
+
+  test("结构配对：外层零 padding 且内层消费间距令牌时通过", () => {
+    const violations = tableViolations(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/SheetTable.vue": EDIT_ROW_OUTER,
+        "src/components/sheets/SheetPropertyEditor.vue": EDIT_ROW_INNER,
+      }),
+    );
+    assert.deepEqual(violations, []);
+  });
+
+  test("结构配对：内层丢失间距令牌后失败", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/SheetTable.vue": EDIT_ROW_OUTER,
+        "src/components/sheets/SheetPropertyEditor.vue": EDIT_ROW_INNER.replace("var(--space-4)", "16px"),
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.file, /SheetPropertyEditor\.vue$/);
+    assert.match(violation.message, /--space-4/);
+  });
+
+  test("结构配对：内层组件缺失时失败", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/SheetTable.vue": EDIT_ROW_OUTER,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.message, /SheetPropertyEditor\.vue/);
+  });
+
+  test("结构配对：同样的选择器出现在其它文件仍被拒绝", () => {
+    const violation = only(
+      rawViolations({
+        "src/styles/tokens.css": TABLE_TOKENS,
+        "src/components/SheetTable.vue": EDIT_ROW_OUTER,
+        "src/components/sheets/SheetPropertyEditor.vue": EDIT_ROW_INNER,
+        "src/components/OtherPanel.vue": EDIT_ROW_OUTER,
+      }),
+      "table-cell-padding",
+    );
+    assert.match(violation.file, /OtherPanel\.vue$/);
+  });
+
+  test("选择器出现在注释或字符串里不触发", () => {
+    const violations = tableViolations(
+      rawViolations({
+        "src/styles/tokens.css": `${TABLE_TOKENS}/* td{padding:0} */\n`,
+        "src/components/Text.vue": `<template><p>td{padding:0}</p></template>
+<style scoped>.hint{content:"td{padding:0}"}</style>
+`,
+      }),
+    );
+    assert.deepEqual(violations, []);
+  });
+});
+
 describe("变异证据：每类违规都使 CLI 退出 1", () => {
   const clean = {
     "src/styles/tokens.css": TOKENS_CSS,
@@ -1138,6 +1320,13 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
 <style scoped>.panel{font-size:var(--font-label);color:var(--color-text-primary);border:1px solid var(--color-border-subtle)}</style>
 `,
   };
+
+  /** 表格单元格变异夹具的令牌：补齐 `--space-1`/`--space-4`，避免夹杂未定义变量噪声。 */
+  const TABLE_TOKENS = `${TOKENS_CSS}:root{--space-1:4px;--space-4:16px}`;
+  /** 合法的表体组件：每条表格变异只改这一处选择器或声明。 */
+  const TABLE_COMPONENT = `<template><table><thead><tr><th>名称</th></tr></thead><tbody><tr><td>值</td></tr></tbody></table></template>
+<style scoped>th,td{padding:var(--space-2);vertical-align:middle}</style>
+`;
 
   const mutations = [
     {
@@ -1260,6 +1449,54 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       rule: "entry-stylesheet-not-import-only",
       files: {"src/style.css": `${ENTRY_CSS}\n.panel{color:red}\n`},
     },
+    {
+      step1Class: "表格单元格缺 vertical-align",
+      name: "表格单元格缺 vertical-align",
+      rule: "table-cell-vertical-align",
+      files: {"src/components/Clean.vue": TABLE_COMPONENT.replace(";vertical-align:middle", ""), "src/styles/tokens.css": TABLE_TOKENS},
+    },
+    {
+      step1Class: "表格单元格裸 padding",
+      name: "表格单元格裸 padding",
+      rule: "table-cell-padding",
+      files: {
+        "src/components/Clean.vue": TABLE_COMPONENT.replace("padding:var(--space-2)", "padding:10px 8px"),
+        "src/styles/tokens.css": TABLE_TOKENS,
+      },
+    },
+    {
+      step1Class: "同表普通格两档 padding",
+      name: "同表普通格两档 padding",
+      rule: "table-cell-padding",
+      files: {
+        "src/components/Clean.vue": TABLE_COMPONENT.replace(
+          "</style>",
+          "th{padding:var(--space-1);vertical-align:middle}</style>",
+        ),
+        "src/styles/tokens.css": TABLE_TOKENS,
+      },
+    },
+    {
+      step1Class: "普通单元格零 padding",
+      name: "普通单元格零 padding",
+      rule: "table-cell-padding",
+      files: {
+        "src/components/Clean.vue": TABLE_COMPONENT.replace("padding:var(--space-2)", "padding:0"),
+        "src/styles/tokens.css": TABLE_TOKENS,
+      },
+    },
+    {
+      step1Class: "伪造 colspan 零 padding",
+      name: "伪造 colspan 零 padding",
+      rule: "table-cell-padding",
+      files: {
+        "src/components/Clean.vue": TABLE_COMPONENT.replace(
+          "</style>",
+          "td[colspan]{padding:0;vertical-align:middle}</style>",
+        ),
+        "src/styles/tokens.css": TABLE_TOKENS,
+      },
+    },
   ];
 
   /** Task 1 Step 1 的十一类判定。 */
@@ -1278,6 +1515,14 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
   ];
   /** Task 2 Step 7 新增的四类资产事实与入口结构判定。 */
   const TASK2_CLASSES = ["字体资产缺失", "远程字体 URL", "字体体积超预算", "样式入口承载规则"];
+  /** PLAN-DM-043 Task 1 新增的五类表格单元格判定。 */
+  const TABLE_CLASSES = [
+    "表格单元格缺 vertical-align",
+    "表格单元格裸 padding",
+    "同表普通格两档 padding",
+    "普通单元格零 padding",
+    "伪造 colspan 零 padding",
+  ];
 
   function runFixture(files) {
     const root = fixture({
@@ -1288,17 +1533,18 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     return spawnSync(process.execPath, [CLI_PATH, `--root=${root}`], {encoding: "utf8"});
   }
 
-  test("每类判定都有 CLI 级变异证据（Step 1 十一类 + Task 2 四条）", () => {
+  test("每类判定都有 CLI 级变异证据（Step 1 十一类 + Task 2 四条 + PLAN-DM-043 五类）", () => {
     // 裸视觉值一类在 brief 里是一个分类，这里拆成字号与图标尺寸两条注入。
     const classes = new Set(mutations.map((mutation) => mutation.step1Class));
-    for (const name of [...STEP1_CLASSES, ...TASK2_CLASSES]) {
+    const knownClasses = [...STEP1_CLASSES, ...TASK2_CLASSES, ...TABLE_CLASSES];
+    for (const name of knownClasses) {
       assert.ok(classes.has(name), `缺少「${name}」的 CLI 级变异证据`);
     }
-    // 分类集合必须恰好是这两组，不允许默默少测或凭空多出未归类的注入。
-    assert.deepEqual([...classes].filter((name) => !STEP1_CLASSES.includes(name)).sort(), [...TASK2_CLASSES].sort());
-    assert.equal(classes.size, 15, [...classes].join("、"));
-    assert.equal(mutations.length, 17);
-    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 17);
+    // 分类集合必须恰好是这三组，不允许默默少测或凭空多出未归类的注入。
+    assert.deepEqual([...classes].filter((name) => !knownClasses.includes(name)).sort(), []);
+    assert.equal(classes.size, knownClasses.length, [...classes].join("、"));
+    assert.equal(mutations.length, 22);
+    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 22);
     assert.deepEqual([...new Set(mutations.map((mutation) => mutation.rule))].sort(), [
       "circular-css-variable",
       "dynamic-variable-not-registered",
@@ -1311,6 +1557,8 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       "raw-hex-color",
       "raw-visual-value",
       "remote-font-url",
+      "table-cell-padding",
+      "table-cell-vertical-align",
       "undefined-css-variable",
       "unicode-structure-icon",
       "visible-input-label",

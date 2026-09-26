@@ -69,6 +69,195 @@
       "fingerprint": "unicode-structure-icon|src/components/creation/GroupsStep.vue|✕|1",
       "reason": "SPEC-DM-018 §4.2 明确要求创建向导第三阶段「图纸组」末列沿用图纸目录插件的 32×32 图标按钮视觉，因此与 `ColumnEditor.vue` 保持同一用户可见形式（↑/↓/✕），而 ARCH-DM-007 §6 规定该形式在获批前不得静默改变。四条判据：① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除第 N 组，含组序号）；③ 点击面积 32px（--tap-target-min），与目录页同值；④ 首末行禁用正确、键盘可聚焦可激活。PLAN-DM-036 Task 8 不引入本地 SVG 原语的迁移（UiIcon 注册表无箭头/叉形图标），迁移与目录页同批在视觉 Spec 修订时裁决。",
       "expiresWith": "下一次图纸集创建向导视觉 Spec 修订（SPEC-DM-018）"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/GroupsStep.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/GroupsStep.vue|missing:.group-table th|1",
+      "reason": "迁移前既有存量：创建向导分组表（常驻 38px 输入框，48px 档） 的单元格规则「.group-table th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 3 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 3"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/ReviewStep.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/ReviewStep.vue|missing:.preview-table thead th|1",
+      "reason": "迁移前既有存量：创建复核预览表 的单元格规则「.preview-table thead th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/ReviewStep.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/ReviewStep.vue|missing:.preview-table tbody th,.preview-table tbody td|1",
+      "reason": "迁移前既有存量：创建复核预览表 的单元格规则「.preview-table tbody th,.preview-table tbody td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/SheetValuesDialog.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/SheetValuesDialog.vue|missing:.values-table th,.values-table td|1",
+      "reason": "迁移前既有存量：图纸值详情表 的单元格规则「.values-table th,.values-table td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/SheetValuesDialog.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/SheetValuesDialog.vue|missing:.values-table th|1",
+      "reason": "迁移前既有存量：图纸值详情表 的单元格规则「.values-table th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/creation/SheetValuesDialog.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/creation/SheetValuesDialog.vue|missing:.values-table td|1",
+      "reason": "迁移前既有存量：图纸值详情表 的单元格规则「.values-table td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-padding",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-padding|src/components/properties/PropertyDefinitionTable.vue|bare:th,td:padding:10px 8px|1",
+      "reason": "迁移前既有存量：属性定义表 的 padding 仍是裸值（th,td:padding:10px 8px），未落 4px 刻度的单档令牌。按 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3 收口，见 PLAN-DM-043 Task 2；清退条件是该规则改为消费间距令牌或随 legacy 规则删除。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:th|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:th:not(:first-child),td:not(:first-child)|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「th:not(:first-child),td:not(:first-child)」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:tbody tr td|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「tbody tr td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:td.col-default|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「td.col-default」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:.sticky-actions th.col-actions,.sticky-actions td.col-actions|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「.sticky-actions th.col-actions,.sticky-actions td.col-actions」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/properties/PropertyDefinitionTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/properties/PropertyDefinitionTable.vue|missing:.sticky-actions th.col-actions|1",
+      "reason": "迁移前既有存量：属性定义表 的单元格规则「.sticky-actions th.col-actions」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/sheet-catalog/CatalogPreview.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/sheet-catalog/CatalogPreview.vue|missing:.table-window td|1",
+      "reason": "迁移前既有存量：图纸目录预览表 的单元格规则「.table-window td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-padding",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-padding|src/components/SheetTable.vue|bare:th,td:padding:10px 8px|1",
+      "reason": "迁移前既有存量：图纸主表 的 padding 仍是裸值（th,td:padding:10px 8px），未落 4px 刻度的单档令牌。按 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3 收口，见 PLAN-DM-043 Task 2；清退条件是该规则改为消费间距令牌或随 legacy 规则删除。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:th|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:th|2",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:th.col-select,td.col-select|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「th.col-select,td.col-select」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:th.col-number,td.col-number|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「th.col-number,td.col-number」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:.sticky-actions th.col-actions,.sticky-actions td.col-actions|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「.sticky-actions th.col-actions,.sticky-actions td.col-actions」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:th.col-select,th.col-number,th.col-actions|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「th.col-select,th.col-number,th.col-actions」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:tbody tr td|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「tbody tr td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/SheetTable.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/SheetTable.vue|missing:.sheet-editor-row>td|1",
+      "reason": "迁移前既有存量：图纸主表 的单元格规则「.sheet-editor-row>td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 2 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 2"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/standards/AssetInspectionPanel.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/standards/AssetInspectionPanel.vue|missing:.layout-table th,.layout-table td|1",
+      "reason": "迁移前既有存量：标准资产布局检查表 的单元格规则「.layout-table th,.layout-table td」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/standards/AssetInspectionPanel.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/standards/AssetInspectionPanel.vue|missing:.layout-table th|1",
+      "reason": "迁移前既有存量：标准资产布局检查表 的单元格规则「.layout-table th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 4 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 4"
+    },
+    {
+      "rule": "table-cell-vertical-align",
+      "file": "src/components/standards/OrdinaryPropertyEditor.vue",
+      "fingerprint": "table-cell-vertical-align|src/components/standards/OrdinaryPropertyEditor.vue|missing:.ordinary-table th|1",
+      "reason": "迁移前既有存量：标准普通属性编辑表（常驻 38px 输入框，48px 档） 的单元格规则「.ordinary-table th」未显式声明 vertical-align，依赖浏览器默认基线对齐。ARCH-DM-007 §4.3 要求所有 th/td 规则显式声明（取值仅 middle/top），随 PLAN-DM-043 Task 3 补齐；多行长文本格取 top，其余取 middle。",
+      "expiresWith": "PLAN-DM-043 Task 3"
+    },
+    {
+      "rule": "table-cell-padding",
+      "file": "src/styles/legacy.css",
+      "fingerprint": "table-cell-padding|src/styles/legacy.css|bare::where(#app) th,:where(#app) td:padding:9px|1",
+      "reason": "迁移前既有存量：legacy 兜底的旧表单元格 的 padding 仍是裸值（:where(#app) th,:where(#app) td:padding:9px），未落 4px 刻度的单档令牌。按 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3 收口，见 PLAN-DM-043 Task 5；清退条件是该规则改为消费间距令牌或随 legacy 规则删除。",
+      "expiresWith": "PLAN-DM-043 Task 5"
     }
   ],
   "dynamicVariables": [
