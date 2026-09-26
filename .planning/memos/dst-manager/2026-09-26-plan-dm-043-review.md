@@ -29,11 +29,12 @@ related:
 
 | 编号 | 内容 | 处置 |
 | --- | --- | --- |
-| M1 | `table-cells.mjs` 判定边界空洞：`td` 挂类名后的 `.cell{padding:12px}`、`:deep(td)`/`:is(td)`、`tr>*.cell` 可绕过；"同表两档"只比较 `padding` 简写（长手 `padding-top` 与 `padding: var(--space-2) 0` 混合值静默通过）；`@media` 内的同选择器会被判成两档 | 记为已知边界，不在本计划扩规则；建议后续按需增补 |
-| M2 | 作业表与预览表只有"≥44px 下限"锚，未钉绝对值 44px | 已在计划 Task 5 证据与账本写明理由（8/6 列在 390px 浮层内必然换行）；44px 值仍由修订表与 Task 4 三张表钉住 |
-| M3 | Review Focus #2/#3 的"收起后回到 44px""内容与操作按钮不相交"只有间接断言 | 记为覆盖缺口，建议收尾轮补 2–3 条断言 |
+| M1 | `table-cells.mjs` 判定边界空洞：`td` 挂类名后的 `.cell{padding:12px}`、`:deep(td)`/`:is(td)`、`tr>*.cell` 可绕过；“同表两档”只比较 `padding` 简写（长手 `padding-top` 与 `padding: var(--space-2) 0` 混合值静默通过）；`@media` 内的同选择器会被判成两档 | 已登记为待办：[新表守卫与单元格门禁判定边界](../../todos/dst-manager/2026-09-26-new-table-guard-and-cell-gate-boundary.md)（含实测探针证据） |
+| M2 | 建议新增“含 `<table>` 但无任何 `th/td` 声明即违规”规则（可复用 `findTags`），补 legacy 删除后的默认渲染盲区 | 同上待办（与 M1 合并为同一项守卫规则） |
+| M3 | 作业表与预览表只有“≥44px 下限”锚，未钉绝对值 44px | 已在计划 Task 5 证据与账本写明理由（8/6 列在 390px 浮层内必然换行）；44px 值仍由修订表与 Task 4 三张表钉住 |
 | M4 | 计划 Task 2/Task 3 行登记的 RED 计数与归档日志不一致（应为每份 spec 2 failed） | 计划正文已按归档订正 |
 | M5 | `PreviewPanel` 未按 Task 5 Step 2 "8 张表按列给类名"全部落实（只加了数值列 `count-cell`） | 结果正确（其余列均为标识型文本，左对齐即符合 §6.4），已在计划 Task 5 证据中登记该偏差 |
+| M6 | Review Focus #2/#3 的“收起后回到 44px”“内容与操作列不相交”只有间接断言（现有覆盖：四视口批量区不出视口、表窗自身横滚、展开前 44px 与结构行零 padding） | 已并入同一待办的第 5 项：[新表守卫与单元格门禁判定边界](../../todos/dst-manager/2026-09-26-new-table-guard-and-cell-gate-boundary.md) |
 
 ## 三、评审"Declined to judge"各项的执行者裁决
 
