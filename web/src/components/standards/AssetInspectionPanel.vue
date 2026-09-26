@@ -100,7 +100,7 @@ const visibleDiagnostics = computed(() =>
         {{ $t("standards.assets.uncheckedDiagnostics") }}
       </p>
       <template v-else>
-        <table class="layout-table">
+        <table class="layout-table" data-testid="asset-layout-table">
           <thead>
             <tr>
               <th scope="col">{{ $t("standards.assets.paperLayouts") }}</th>
@@ -155,8 +155,8 @@ const visibleDiagnostics = computed(() =>
 .path-value{margin:0;word-break:break-all}
 .reference-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
 .layout-table{width:100%;border-collapse:collapse;table-layout:fixed}
-.layout-table th,.layout-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;font-size:var(--font-label);word-break:break-all}
-.layout-table th{color:var(--color-text-secondary);font-weight:500}
+.layout-table th,.layout-table td{height:var(--sheet-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;font-size:var(--font-label);word-break:break-all;vertical-align:middle}
+.layout-table th{color:var(--color-text-secondary);font-weight:500;vertical-align:middle}
 .layout-state{color:var(--color-text-primary)}
 .layout-state.not-enabled{color:var(--color-text-secondary)}
 .layout-state.missing{color:var(--color-danger)}

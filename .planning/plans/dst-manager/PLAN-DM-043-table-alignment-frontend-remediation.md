@@ -152,6 +152,7 @@ related:
 | 2026-09-26 | Task 1 建立表格静态契约与迁移基线 | 新增 13 条用例在规则未实现时 `pass 4 / fail 9`（exit 1） | `test:contracts` **114 passed / 0 failed**（含 5 条 CLI 级变异）；`check:ui` exit 0，27 条存量违规已登记 | Task 2–5 样式与计算样式断言；真实桌面缩放复验 |
 | 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `4 failed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
 | 2026-09-26 | Task 3 常驻编辑表 48px 档与出错行增高 | 两表表头实测 26px / 41px ≠ 48px，出错行控件中点差 3px > 1px（4 failed） | 新增 `--editable-table-row-height:48px` 并在两表声明；出错行 `tr.has-issue>td` 整行 `top` + 小于 38px 控件补半高差；两份 e2e **81 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 4/5；真实桌面缩放复验 |
+| 2026-09-26 | Task 4 其余标准/创建/目录只读表 | 5 条新用例全失败：表头实测 26px / 40px ≠ 44px，张数列未右对齐且无 tabular-nums | 四组件声明 44px 档 + `var(--space-1)` 单档令牌 + 显式 `middle`；`count-col` 右对齐 + tabular-nums；三份 e2e **132 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 5；真实桌面缩放复验 |
 
 ### Task 1 执行记录（2026-09-26，分支 `feature/plan-dm-043-table-alignment`）
 
@@ -194,6 +195,13 @@ related:
 - **GREEN**：新增组件令牌 `--editable-table-row-height:48px`（`tokens.css` 头注释同步）；两表单元格声明 `height` + `padding:var(--space-1)` + `vertical-align:middle`；出错行加行级类 `tr.has-issue`，以 `tr.has-issue>td{vertical-align:top}` 整行切换；出错行内高度小于 38px 的控件（`.required-hit`、`.ui-icon-button`、`.select-hit`、`.row-actions button`）以 `margin-top:calc((var(--input-height) - …) / 2)` 补半高差——**用令牌派生的位移而非拉伸控件本体**，满足「保留 32px 命中区/行操作轨」约束。
 - **验证**：`npx playwright test tests/e2e/standards-editor.spec.ts tests/e2e/create-sheetset-input.spec.ts` → **81 passed / 0 failed**（1.2m）；`npm run build` exit 0（`check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build` 全通过）；清退 Task 3 的 2 条例外后 `check:ui` exit 0（例外总数 21 → 19，剩 Task 4 8 条、Task 5 1 条）。
 - **仍待验证**：Task 4/5；真实 Windows WebView2 100/125/150/200% 复验。
+
+### Task 4 执行记录（2026-09-26）
+
+- **RED**：新增 5 条用例（布局表几何、布局表空态说明行、复核预览表数值列、图纸值详情表、目录预览表）。首轮 **5 failed**：表头实测高度 **26px**（布局表/复核预览表/图纸值详情表）与 **40px**（目录预览表），期望 44px；张数列既未右对齐也未启用 `tabular-nums`。空态说明行用例的首版夹具写错了——实际布局含 `A2` 时 `layoutRows` 非空、根本不渲染说明行（`AssetInspectionPanel.vue` 的 `layoutRows` = 勾选 ∪ 实际），改为实际布局仅 `Model` 后才命中 `td.panel-note[colspan=2]`。
+- **GREEN**：四组件 scoped 样式声明 `height:var(--sheet-table-row-height)`（44px）+ `padding:var(--space-1)` 单档令牌 + 显式 `vertical-align:middle`；`ReviewStep` 的张数列加 `count-col`（`text-align:right` + `font-variant-numeric:tabular-nums`，表头同步右对齐，图号/范围仍按文本左对齐）；新增稳定锚点 `asset-layout-table`／`sheet-values-table`／`catalog-preview-table`；`AssetInspectionPanel` 的空态说明行按普通格同档计数，未因 `colspan` 放行。目录预览表原先只继承 legacy 的 `9px` + `top`，本轮显式声明为 44px 档 + 4px 单档（与同组三张只读表同档）。
+- **验证**：`npx playwright test tests/e2e/standards-assets-publish.spec.ts tests/e2e/create-sheetset-review.spec.ts tests/e2e/sheet-catalog.spec.ts` → **132 passed / 0 failed**（1.9m）；`npm run build` exit 0；清退 Task 4 的 8 条例外后 `check:ui` exit 0（例外总数 19 → 11，仅剩 Task 5 的 1 条）。
+- **仍待验证**：Task 5（旧页面表与 legacy 收口）；真实 Windows WebView2 100/125/150/200% 复验。
 
 ## 修订记录
 

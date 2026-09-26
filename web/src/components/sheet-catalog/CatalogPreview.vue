@@ -31,7 +31,7 @@ const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?
     </div>
     <p v-if="catalog.previewStatus.value === 'ready' && catalog.preview.value?.totalRows === 0" class="empty" role="status">{{ $t("extensions.sheetCatalog.previewEmptySheets") }}</p>
     <div v-if="catalog.preview.value && catalog.preview.value.rows.length > 0" class="table-window">
-      <table>
+      <table data-testid="catalog-preview-table">
         <thead>
           <tr>
             <th v-for="column in catalog.draft.value.columns" :key="column.columnId" scope="col">{{ column.header }}</th>
@@ -63,5 +63,7 @@ const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?
 /* 横向滚动限制在受控表容器内；纵向吃掉卡片剩余高度并自身滚动 */
 .table-window{overflow:auto;flex:1;min-height:0;max-height:var(--catalog-preview-table-max-height);border-bottom:1px solid var(--color-border-subtle);max-width:100%}
 .table-window table{min-width:100%}
-.table-window td{white-space:nowrap}
+/* 普通单元格消费 44px 基础档与单档令牌化 padding；对齐显式声明，不依赖 legacy 兜底 */
+.table-window th,.table-window td{height:var(--sheet-table-row-height);padding:var(--space-1);vertical-align:middle}
+.table-window td{white-space:nowrap;vertical-align:middle}
 </style>

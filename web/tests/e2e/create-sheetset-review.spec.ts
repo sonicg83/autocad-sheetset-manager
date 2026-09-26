@@ -392,3 +392,49 @@ test("模板/图幅类组内诊断跳回后焦点落在对应的模板或图幅�
   await page.getByTestId("creation-preview-errors").getByRole("button", {name: "返回修改第 3 项"}).click();
   await expect(groupRow(page, "group-3").getByLabel("第 3 组布局模板")).toBeFocused();
 });
+
+// PLAN-DM-043 Task 4：复核预览表普通格 44px 档；张数属可比较数值列（右对齐 + tabular-nums）。
+test("复核预览表：44px 档、单档令牌化 padding 与数值列右对齐", async ({page}) => {
+  await installCreation(page);
+  await openReviewStep(page);
+  const table = page.getByTestId("creation-preview-table");
+  const head = table.getByRole("columnheader", {name: "张数", exact: true});
+  expect(Math.round(await head.evaluate((element) => element.getBoundingClientRect().height)), "表头与同表普通行同档").toBe(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(head, side).toHaveCSS(side, "4px");
+  }
+  await expect(head).toHaveCSS("vertical-align", "middle");
+  const count = table.locator("tbody td.count-col").first();
+  await expect(count, "按组一行主表渲染张数单元格").toBeVisible();
+  expect(
+    Math.round(await count.evaluate((element) => element.getBoundingClientRect().height)),
+    "普通行不得低于 44px 基础档",
+  ).toBeGreaterThanOrEqual(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(count, side).toHaveCSS(side, "4px");
+  }
+  await expect(count).toHaveCSS("vertical-align", "middle");
+  // 数值列：表头与数据同向右对齐，并使用 tabular-nums（SPEC-DM-006 §6.4）
+  await expect(head).toHaveCSS("text-align", "right");
+  await expect(count).toHaveCSS("text-align", "right");
+  expect(await count.evaluate((element) => getComputedStyle(element).fontVariantNumeric)).toContain("tabular-nums");
+  // 图号/范围仍是名义数字，按文本左对齐
+  await expect(table.getByRole("columnheader", {name: "图纸范围", exact: true})).toHaveCSS("text-align", "left");
+});
+
+test("图纸值详情表：44px 档、单档令牌化 padding 与显式中部对齐", async ({page}) => {
+  await installCreation(page);
+  await openReviewStep(page);
+  await page.getByRole("button", {name: /全部图纸值/}).first().click();
+  const table = page.getByTestId("sheet-values-table");
+  const head = table.locator("thead th").first();
+  const cell = table.locator("tbody td").first();
+  expect(Math.round(await head.evaluate((element) => element.getBoundingClientRect().height)), "表头与同表普通行同档").toBe(44);
+  expect(Math.round(await cell.evaluate((element) => element.getBoundingClientRect().height)), "普通行消费 44px 基础档").toBe(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(head, side).toHaveCSS(side, "4px");
+    await expect(cell, side).toHaveCSS(side, "4px");
+  }
+  await expect(head).toHaveCSS("vertical-align", "middle");
+  await expect(cell).toHaveCSS("vertical-align", "middle");
+});

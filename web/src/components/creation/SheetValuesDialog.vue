@@ -59,7 +59,7 @@ const {onDialogKeydown} = useDialogFocus({
         {{ $t("creation.review.valuesLead", {count: rows.length}) }}
       </p>
       <div class="table-scroll">
-        <table class="values-table">
+        <table class="values-table" data-testid="sheet-values-table">
           <thead>
             <tr>
               <th>{{ $t("creation.review.valuesSheetNumber") }}</th>
@@ -90,7 +90,7 @@ const {onDialogKeydown} = useDialogFocus({
 /* 主表与模态各自横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .values-table{width:100%;border-collapse:collapse}
-.values-table th,.values-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left}
-.values-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap}
-.values-table td{font-size:var(--font-label);color:var(--color-text-primary)}
+.values-table th,.values-table td{height:var(--sheet-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
+.values-table th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap;vertical-align:middle}
+.values-table td{font-size:var(--font-label);color:var(--color-text-primary);vertical-align:middle}
 </style>

@@ -237,7 +237,7 @@ async function recheckAndExecute(): Promise<void> {
                 <th class="group-col">{{ $t("creation.review.columnGroup") }}</th>
                 <th>{{ $t("creation.review.columnRange") }}</th>
                 <th>{{ $t("creation.review.columnDrawing") }}</th>
-                <th>{{ $t("creation.review.columnCount") }}</th>
+                <th class="count-col">{{ $t("creation.review.columnCount") }}</th>
                 <th>{{ $t("creation.review.columnFileName") }}</th>
                 <th>{{ $t("creation.review.columnBase") }}</th>
                 <th>{{ $t("creation.review.columnLayout") }}</th>
@@ -253,7 +253,7 @@ async function recheckAndExecute(): Promise<void> {
                 <th scope="row" class="group-col">{{ group.title }}</th>
                 <td class="mono">{{ group.number_range }}</td>
                 <td>{{ group.title_range }}</td>
-                <td>{{ group.sheet_count }}</td>
+                <td class="count-col">{{ group.sheet_count }}</td>
                 <td class="mono">{{ group.dwg_name }}</td>
                 <td>{{ group.base_template }}</td>
                 <td>{{ group.layout_template }}</td>
@@ -327,9 +327,11 @@ async function recheckAndExecute(): Promise<void> {
 /* 表宽随内容，容器自身横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .preview-table{width:100%;min-width:max-content;border-collapse:collapse}
-.preview-table th,.preview-table td{padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
-.preview-table thead th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap}
-.preview-table tbody th,.preview-table tbody td{font-size:var(--font-label);color:var(--color-text-primary)}
+.preview-table th,.preview-table td{height:var(--sheet-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
+.preview-table thead th{font-size:var(--font-label);color:var(--color-text-secondary);font-weight:500;white-space:nowrap;vertical-align:middle}
+.preview-table tbody th,.preview-table tbody td{font-size:var(--font-label);color:var(--color-text-primary);vertical-align:middle}
+/* 张数：可比较数值列右对齐并启用 tabular-nums，表头跟随列数据（SPEC-DM-006 §6.4） */
+.preview-table .count-col{text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle}
 /* 首列（图纸组）固定在最左：横向滚动时组名始终可见 */
 .group-col{position:sticky;left:0;z-index:1;background:var(--color-bg-surface);min-width:var(--sheet-title-max-width)}
 .empty{color:var(--color-text-muted)}

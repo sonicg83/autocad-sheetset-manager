@@ -1582,3 +1582,22 @@ test("用户验收修复轮：另存为模板弹窗原生按钮悬停抬升、�
   expect(gap.marginTop, "操作区上间距取 16px 语义档").toBe(16);
   expect(gap.visible, "表单控件与按钮区可见间隙").toBeGreaterThanOrEqual(16);
 });
+
+// PLAN-DM-043 Task 4：图纸目录预览表普通格 44px 档 + 单档令牌化 padding + 显式中部对齐。
+// 列值由用户模板决定、不做类型推断，因此这里只收口基础格规则，不计数值对齐。
+test("目录预览表：44px 档、单档令牌化 padding 与显式中部对齐", async ({page}) => {
+  await openCatalog(page);
+  const table = page.getByTestId("catalog-preview-table");
+  const head = table.locator("thead th").first();
+  const cell = table.locator("tbody td").first();
+  await expect(head, "预览表先有表头").toBeVisible();
+  await expect(cell, "预览表先有数据行").toBeVisible();
+  expect(Math.round(await head.evaluate((element) => element.getBoundingClientRect().height)), "表头与同表普通行同档").toBe(44);
+  expect(Math.round(await cell.evaluate((element) => element.getBoundingClientRect().height)), "普通行消费 44px 基础档").toBe(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(head, side).toHaveCSS(side, "4px");
+    await expect(cell, side).toHaveCSS(side, "4px");
+  }
+  await expect(head).toHaveCSS("vertical-align", "middle");
+  await expect(cell).toHaveCSS("vertical-align", "middle");
+});

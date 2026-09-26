@@ -366,3 +366,44 @@ test("检查失败时布局表不给「缺声明」假结论", async ({page}) =>
   await expect(page.getByTestId("asset-layout-A2")).toHaveCount(0);
   await expect(page.getByTestId("asset-layout-unchecked")).toContainText("未检查");
 });
+
+// PLAN-DM-043 Task 4：只读表（标准资产布局表）普通格 44px 档 + 单档令牌化 padding + 显式中部对齐。
+test("布局表普通格几何：44px 档、令牌化单档 padding 与显式中部对齐", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": layoutDraft(["A2", "A3"])},
+    assetResults: {layouts: inspection("layouts", ["Model", "A2", "A3"])},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "assets");
+
+  const table = page.getByTestId("asset-layout-table");
+  const head = table.locator("thead th").first();
+  const cell = table.getByTestId("asset-layout-A2").locator("td").first();
+  expect(Math.round(await head.evaluate((element) => element.getBoundingClientRect().height)), "表头与同表普通行同档").toBe(44);
+  expect(Math.round(await cell.evaluate((element) => element.getBoundingClientRect().height)), "普通行消费 44px 基础档").toBe(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(head, side).toHaveCSS(side, "4px");
+    await expect(cell, side).toHaveCSS(side, "4px");
+  }
+  await expect(head).toHaveCSS("vertical-align", "middle");
+  await expect(cell).toHaveCSS("vertical-align", "middle");
+});
+
+test("布局表空态说明行与普通格同档（不因 colspan 放行）", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": layoutDraft([])},
+    assetResults: {layouts: inspection("layouts", ["Model"])},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await openEditorSection(page, "assets");
+
+  const note = page.getByTestId("asset-layout-table").locator("td.panel-note");
+  await expect(note, "无布局时给出空态说明行").toBeVisible();
+  expect(Math.round(await note.evaluate((element) => element.getBoundingClientRect().height)), "说明行与普通格同档").toBe(44);
+  for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+    await expect(note, side).toHaveCSS(side, "4px");
+  }
+  await expect(note).toHaveCSS("vertical-align", "middle");
+});
