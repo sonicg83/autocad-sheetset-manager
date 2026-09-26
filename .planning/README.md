@@ -10,7 +10,7 @@
 - [DST Builder Plan 索引（历史资料）](plans/dst-builder/README.md)
 - 待办见 [`todos/dst-manager/`](todos/dst-manager/)；Builder 相关待办已随 Builder 退场清理（PLAN-INT-004）。
 - 备忘：[PLAN-INT-002 交付记录（MEMO-INT-001）](memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：执行方式、26 项控制器裁定、计划缺陷与待决事项。
-- [表格对齐契约前端收口实施计划（PLAN-DM-043，proposed）](plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md)：落实普通、常驻编辑与跨列详情三类表格行高和内边距边界，扩展 `check:ui` 与计算样式回归。
+- [表格对齐契约前端收口实施计划（PLAN-DM-043，active——Task 1–5 已完成，真实桌面缩放复验待用户执行）](plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md)：落实普通、常驻编辑与跨列详情三类表格行高和内边距边界，扩展 `check:ui` 与计算样式回归。
 - [双项目文档迁移实施计划](plans/integration/PLAN-INT-001-documentation-migration.md)
 - [取消 Builder 与 Manager 显式交接契约实施计划（PLAN-INT-002，completed）](plans/integration/PLAN-INT-002-cancel-builder-manager-handoff.md)：已按 RFC-INT-002 / ADR-INT-001 移除两侧交接实现与 `handoff_sources` 表，Builder 成果改为扁平三件套。
 - [双产品测试体系收敛与过时内容清理实施计划（PLAN-INT-003，cancelled）](plans/integration/PLAN-INT-003-test-system-consolidation.md)：DST Builder 已退场，双产品测试治理失去前提；未来 Manager 测试治理另行立项。

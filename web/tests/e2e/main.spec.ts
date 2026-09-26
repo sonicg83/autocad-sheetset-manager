@@ -61,7 +61,7 @@ test("CAD 操作分流",async({page})=>{
   await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   // 任务详情迁入任务浮层实施进度页签：预览已展开浮层，切到实施进度页签再断言逐文件行
   const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();
-  const jobDetail=overlay.locator(".job-detail");const renameRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\001-002.dwg"});const rebuildRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\003-004.dwg"});await expect(renameRow.getByText("批量改名布局",{exact:true})).toBeVisible();await expect(renameRow.getByText("2000 ms",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("清除并重建布局",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("5000 ms",{exact:true})).toBeVisible();
+  const jobDetail=overlay.locator(".job-detail");const renameRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\001-002.dwg"});const rebuildRow=jobDetail.locator("tbody tr").filter({hasText:"C:\\project\\003-004.dwg"});await expect(renameRow.getByText("批量改名布局",{exact:true})).toBeVisible();await expect(renameRow.getByText("2000",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("清除并重建布局",{exact:true})).toBeVisible();await expect(rebuildRow.getByText("5000",{exact:true})).toBeVisible();
   // PLAN-DM-021 Task 8：任务起止时间经 Intl 按生效语言（zh-CN 基线）格式化
   const zhFormatter=new Intl.DateTimeFormat("zh-CN",{dateStyle:"medium",timeStyle:"medium"});await expect(renameRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:00Z")),{exact:true})).toBeVisible();await expect(renameRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:02Z")),{exact:true})).toBeVisible();await expect(rebuildRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:03Z")),{exact:true})).toBeVisible();await expect(rebuildRow.getByText(zhFormatter.format(new Date("2026-08-26T10:00:08Z")),{exact:true})).toBeVisible();
 });
@@ -2244,4 +2244,79 @@ test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
     expect(drawerBg.actual, "深色下抽屉底色应取自 --color-bg-surface").toBe(drawerBg.expected);
     await shootLegacyEvidence(page, info, "t9-04-task-status-1280x720-dark.png");
   });
+});
+
+// PLAN-DM-043 Task 5：实施进度表 44px 档、数值列右对齐 + tabular-nums、单位入表头，跨列日志详情按内容增高。
+test("实施进度表几何与数值列格式：单位入表头、日志详情行按内容增高",async({page})=>{
+  await installMockEventSource(page);await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null}}));
+  const log="Core Console 第一行\nCore Console 第二行\nCore Console 第三行";
+  await page.route("**/api/workspaces/workspace-1/changes/execute",route=>route.fulfill({json:{id:"job-table",status:"FAILED",progress:40,attempt:1,files:[
+    {target_path:"A.dwg",status:"SUCCEEDED",cad_operation:"rename_only",progress:100,duration_ms:2000,log_summary:log},
+    {target_path:"B.dwg",status:"FAILED",cad_operation:"rebuild",progress:0,duration_ms:600000,error_code:"CAD_TIMEOUT"}
+  ]}}));
+  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await saveSheetSetDraft(page,"草稿名");await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});await overlay.getByRole("tab",{name:"实施进度"}).click();
+  const jobDetail=overlay.locator(".job-detail");
+  // 单位写入表头（SPEC-DM-006 §6.4），单元格只输出同列一致的数值
+  await expect(jobDetail.getByRole("columnheader",{name:"进度 (%)",exact:true})).toBeVisible();
+  await expect(jobDetail.getByRole("columnheader",{name:"耗时 (ms)",exact:true})).toBeVisible();
+  const head=jobDetail.locator("thead th").first();
+  const row=jobDetail.locator("tbody tr").filter({hasText:"A.dwg"});
+  await expect(row).toBeVisible();
+  expect(Math.round(await head.evaluate(element=>element.getBoundingClientRect().height)),"表头不低于 44px 基础档（窄浮层内换行可增高）").toBeGreaterThanOrEqual(44);
+  expect(Math.round(await row.locator("td").first().evaluate(element=>element.getBoundingClientRect().height)),"普通行不低于 44px 基础档").toBeGreaterThanOrEqual(44);
+  for(const side of ["padding-top","padding-right","padding-bottom","padding-left"]){await expect(head,side).toHaveCSS(side,"8px");}
+  await expect(head).toHaveCSS("vertical-align","middle");
+  const progress=row.locator("td").nth(3);const duration=row.locator("td").nth(6);
+  await expect(progress,"进度单元格只输出数值").toHaveText("100");
+  await expect(duration,"耗时单元格只输出数值").toHaveText("2000");
+  await expect(progress).toHaveCSS("text-align","right");await expect(duration).toHaveCSS("text-align","right");
+  expect(await progress.evaluate(element=>getComputedStyle(element).fontVariantNumeric)).toContain("tabular-nums");
+  expect(await duration.evaluate(element=>getComputedStyle(element).fontVariantNumeric)).toContain("tabular-nums");
+  // 文件路径仍是文本列（左对齐）
+  await expect(row.locator("td").first()).toHaveCSS("text-align","left");
+  // 跨列日志详情行：按内容增高、顶部对齐、展开后可读
+  const logRow=jobDetail.locator("tbody tr").filter({has:page.locator("details")});
+  const logCell=logRow.locator("td").first();
+  await expect(logRow.locator("details"),"日志详情行必须渲染 details").toBeVisible();
+  expect(Math.round(await logCell.evaluate(element=>element.getBoundingClientRect().height)),"日志详情行不低于 44px 基础档").toBeGreaterThanOrEqual(44);
+  await expect(logCell).toHaveCSS("vertical-align","top");
+  await logRow.locator("summary").click();
+  await expect(logRow.locator("pre")).toContainText("Core Console 第二行");expect(Math.round(await logCell.evaluate(element=>element.getBoundingClientRect().height)),"展开后按内容增高").toBeGreaterThan(44);
+});
+
+// PLAN-DM-043 Task 5：修订历史表 44px 档 + 单档令牌化 padding + 标识列左对齐。
+test("修订历史表：44px 档、令牌化单档 padding 与标识列左对齐",async({page})=>{
+  await page.route("**/api/revisions?workspace_id=workspace-1",route=>route.fulfill({json:[{id:"revision-1",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]}));
+  await openWorkspace(page);await page.getByRole("tab",{name:"修订历史"}).click();
+  const table=page.locator(".revisions-view table");
+  const head=table.locator("thead th").first();
+  const row=table.locator("tbody tr").first();
+  await expect(row).toBeVisible();
+  expect(Math.round(await head.evaluate(element=>element.getBoundingClientRect().height)),"表头与同表普通行同档").toBe(44);
+  expect(Math.round(await row.locator("td").first().evaluate(element=>element.getBoundingClientRect().height)),"含 36px 按钮的行不低于 44px 基础档").toBeGreaterThanOrEqual(44);
+  for(const side of ["padding-top","padding-right","padding-bottom","padding-left"]){await expect(head,side).toHaveCSS(side,"8px");}
+  await expect(head).toHaveCSS("vertical-align","middle");
+  await expect(row.locator("td").first()).toHaveCSS("vertical-align","middle");
+  // 修订 ID（第 2 列）与哈希摘要（第 3 列）是标识列，按文本左对齐
+  await expect(row.locator("td").nth(1)).toHaveCSS("text-align","left");
+  await expect(row.locator("td").nth(2)).toHaveCSS("text-align","left");
+});
+
+// PLAN-DM-043 Task 5：变更预览表 44px 档 + 影响张数属可比较数值列（右对齐 + tabular-nums）。
+test("变更预览表：44px 档、令牌化单档 padding 与影响张数右对齐",async({page})=>{
+  await installMockEventSource(page);
+  await page.route("**/api/workspaces/workspace-1/changes/preview",route=>route.fulfill({json:{executable:true,requires_cad:false,changes:[{}],diagnostics:[],affected_files:["test.dst"],execution_intent:null,semantic_diff:{sheet_set:[],structure:{before:[],after:[]},properties:[{action:"update",type:"sheetset",name:"项目号",before:"P-001",after:"P-002",affected_sheet_count:12}],dwgs:[]}}}));
+  await openWorkspace(page);await page.getByRole("tab",{name:"属性"}).click();await saveSheetSetDraft(page,"草稿名");await page.getByRole("tab",{name:"图纸"}).click();await page.getByRole("button",{name:"预览变更"}).click();
+  const countHead=page.getByRole("columnheader",{name:"受影响图纸"});const table=countHead.locator("xpath=ancestor::table");
+  const head=table.locator("thead th").first();
+  const countCell=table.locator("tbody td").last();
+  expect(Math.round(await head.evaluate(element=>element.getBoundingClientRect().height)),"表头不低于 44px 基础档（窄浮层内换行可增高）").toBeGreaterThanOrEqual(44);
+  for(const side of ["padding-top","padding-right","padding-bottom","padding-left"]){await expect(head,side).toHaveCSS(side,"8px");}
+  await expect(head).toHaveCSS("vertical-align","middle");
+  expect(Math.round(await countCell.evaluate(element=>element.getBoundingClientRect().height)),"普通行不低于 44px 基础档").toBeGreaterThanOrEqual(44);
+  await expect(countHead).toHaveCSS("text-align","right");
+  await expect(countCell).toHaveCSS("text-align","right");
+  expect(await countCell.evaluate(element=>getComputedStyle(element).fontVariantNumeric)).toContain("tabular-nums");
+  await expect(countCell).toHaveText("12");
 });

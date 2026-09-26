@@ -69,13 +69,6 @@
       "fingerprint": "unicode-structure-icon|src/components/creation/GroupsStep.vue|✕|1",
       "reason": "SPEC-DM-018 §4.2 明确要求创建向导第三阶段「图纸组」末列沿用图纸目录插件的 32×32 图标按钮视觉，因此与 `ColumnEditor.vue` 保持同一用户可见形式（↑/↓/✕），而 ARCH-DM-007 §6 规定该形式在获批前不得静默改变。四条判据：① 原生 button 且显式 type=\"button\"；② 完整 aria-label（上移/下移/删除第 N 组，含组序号）；③ 点击面积 32px（--tap-target-min），与目录页同值；④ 首末行禁用正确、键盘可聚焦可激活。PLAN-DM-036 Task 8 不引入本地 SVG 原语的迁移（UiIcon 注册表无箭头/叉形图标），迁移与目录页同批在视觉 Spec 修订时裁决。",
       "expiresWith": "下一次图纸集创建向导视觉 Spec 修订（SPEC-DM-018）"
-    },
-    {
-      "rule": "table-cell-padding",
-      "file": "src/styles/legacy.css",
-      "fingerprint": "table-cell-padding|src/styles/legacy.css|bare::where(#app) th,:where(#app) td:padding:9px|1",
-      "reason": "迁移前既有存量：legacy 兜底的旧表单元格 的 padding 仍是裸值（:where(#app) th,:where(#app) td:padding:9px），未落 4px 刻度的单档令牌。按 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3 收口，见 PLAN-DM-043 Task 5；清退条件是该规则改为消费间距令牌或随 legacy 规则删除。",
-      "expiresWith": "PLAN-DM-043 Task 5"
     }
   ],
   "dynamicVariables": [

@@ -64,6 +64,6 @@ const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?
 .table-window{overflow:auto;flex:1;min-height:0;max-height:var(--catalog-preview-table-max-height);border-bottom:1px solid var(--color-border-subtle);max-width:100%}
 .table-window table{min-width:100%}
 /* 普通单元格消费 44px 基础档与单档令牌化 padding；对齐显式声明，不依赖 legacy 兜底 */
-.table-window th,.table-window td{height:var(--sheet-table-row-height);padding:var(--space-1);vertical-align:middle}
+.table-window th,.table-window td{height:var(--sheet-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
 .table-window td{white-space:nowrap;vertical-align:middle}
 </style>

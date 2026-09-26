@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-043
 title: 表格对齐契约前端收口实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-26
@@ -83,10 +83,10 @@ related:
 
 **结构配对落地形式（本轮裁决，与全局约束“配对放行”同口径）：** 跨列结构单元格的放行**不进 `ui-contract-exceptions.json`**——该文件条目被 `REQUIRED_EXCEPTION_FIELDS`（`rule/file/fingerprint/reason/expiresWith`）固定，无法承载“内层容器必须消费间距令牌”这一条件。配对改由 `table-cells.mjs` 内的常量 `STRUCTURAL_CELL_PAIRS` 表达，形如 `{file, selector, innerFile, innerSelector, requiredToken}` 的**精确**条目：只有 `SheetTable.vue` 的 `.sheet-editor-row>td` 命中 `file+selector` 时才去 `SheetPropertyEditor.vue` 的 `.sheet-property-editor` 核对 `padding` 消费了间距令牌，否则仍判违规。例外表只登记“规则 + 文件 + 稳定语义 + 到期条件”的存量债务，不承担结构放行。不把“有 `colspan`”当豁免条件。
 
-- [ ] **Step 1（RED）**：在临时 Vue/CSS 夹具写用例：表格基础 `th/td` 缺 `vertical-align`、使用裸非零 padding、同表普通格两档 padding、普通 `td{padding:0}`、伪造通用 `td[colspan]{padding:0}` 均失败；`.sheet-editor-row>td{padding:0}` 且内层容器消费 `var(--space-4)` 通过，删内层间距令牌后失败；非表格的 `td` 字符串/注释不触发。运行 `rtk npm --prefix web run test:contracts`，确认目标用例 RED。
-- [ ] **Step 2（GREEN）**：复用 `css-vars.mjs` 的 `parseRules`/`parseDeclarations` 解析规则与声明，按表格基准选择器与具体结构选择器判定；`padding:0` 只对 `STRUCTURAL_CELL_PAIRS` 里的精确配对放行，不按任意 `colspan` 放行。静态层检查声明和令牌，不以源码猜测几何；同表最终计算值由浏览器测试覆盖。注意门禁只约束**已声明的 `th/td` 规则**：某张表完全没有规则时不产生违规（只是继承 `legacy.css`），这类表格由 Task 4/5 的浏览器断言兜底。
-- [ ] **Step 3（棘轮）**：Task 1 先量取并登记 11 个含表格组件的现状（行高、padding、`vertical-align`、是否落在 44px 档），再把存量违规按文件、规则、稳定语义登记到 `ui-contract-exceptions.json`，每条写明迁移任务与到期条件；新表格和新违规立即失败。注入每种规则的变异夹具，把新规则并入 `check-ui-contracts.test.mjs` 既有的“每类判定都有 CLI 级变异证据”清单，验证 CLI 退出 1；恢复夹具后退出 0，陈旧例外使检查失败。
-- [ ] **Step 4（验证/提交）**：运行 `rtk npm --prefix web run test:contracts` 与 `rtk npm --prefix web run check:ui`；只提交本任务文件及本次 `changelog.md` 记录，提交信息：`建立表格单元格静态门禁`。
+- [x] **Step 1（RED）**：在临时 Vue/CSS 夹具写用例：表格基础 `th/td` 缺 `vertical-align`、使用裸非零 padding、同表普通格两档 padding、普通 `td{padding:0}`、伪造通用 `td[colspan]{padding:0}` 均失败；`.sheet-editor-row>td{padding:0}` 且内层容器消费 `var(--space-4)` 通过，删内层间距令牌后失败；非表格的 `td` 字符串/注释不触发。运行 `rtk npm --prefix web run test:contracts`，确认目标用例 RED。
+- [x] **Step 2（GREEN）**：复用 `css-vars.mjs` 的 `parseRules`/`parseDeclarations` 解析规则与声明，按表格基准选择器与具体结构选择器判定；`padding:0` 只对 `STRUCTURAL_CELL_PAIRS` 里的精确配对放行，不按任意 `colspan` 放行。静态层检查声明和令牌，不以源码猜测几何；同表最终计算值由浏览器测试覆盖。注意门禁只约束**已声明的 `th/td` 规则**：某张表完全没有规则时不产生违规（只是继承 `legacy.css`），这类表格由 Task 4/5 的浏览器断言兜底。
+- [x] **Step 3（棘轮）**：Task 1 先量取并登记 11 个含表格组件的现状（行高、padding、`vertical-align`、是否落在 44px 档），再把存量违规按文件、规则、稳定语义登记到 `ui-contract-exceptions.json`，每条写明迁移任务与到期条件；新表格和新违规立即失败。注入每种规则的变异夹具，把新规则并入 `check-ui-contracts.test.mjs` 既有的“每类判定都有 CLI 级变异证据”清单，验证 CLI 退出 1；恢复夹具后退出 0，陈旧例外使检查失败。
+- [x] **Step 4（验证/提交）**：运行 `rtk npm --prefix web run test:contracts` 与 `rtk npm --prefix web run check:ui`；只提交本任务文件及本次 `changelog.md` 记录，提交信息：`建立表格单元格静态门禁`。
 
 ### Task 2：图纸与属性主表的普通行及跨列详情
 
@@ -94,9 +94,9 @@ related:
 
 **接口：** 保持既有 `--sheet-table-row-height` 与 `--definition-row-height` 均为 44px；普通 `th/td` 统一使用 `padding:var(--space-2)`（上下左右均 8px），`.sheet-editor-row>td` 仍显式为 `height:auto;padding:0`。
 
-- [ ] **Step 1（RED）**：在图纸表断言表头与单行普通数据行消费 44px 档（图纸表已有 `th` 44px 断言，属既有 GREEN，RED 只来自 padding）、普通格计算 padding 四边均为 `--space-2` 的 8px、展开行单元格计算 padding 为 0、编辑面板计算 padding 来自 `--space-4`；在属性定义表断言表头 44px（`--definition-row-height`）与同样的 8px padding、**数据行 ≥44px 且长默认值展开后完整可读**——不得断言数据行恰好 44px：`properties-visual-evidence.spec.ts` 已记录定义表表体行被单元格内的展开/删除按钮撑高，属既有事实，按字面断言会得到与本次改动无关、无法转绿的 RED。运行对应两份 e2e，确认现行 `10px 8px` 使新增 padding 断言 RED。
-- [ ] **Step 2（GREEN）**：将两表的 `10px 8px` 普通格 padding 收敛为 `var(--space-2)`，显式保留 `vertical-align:middle`；图纸表结构行按 Task 1 的 `STRUCTURAL_CELL_PAIRS` 配对放行（不新增例外表条目），保持编辑器内部间距与固定列阴影行为。若新 padding 导致布局回归，先查几何原因并按 SPEC 修订表格局部布局，不改全局 `legacy.css` 兜底或用裁切恢复旧截图。
-- [ ] **Step 3（验证/提交）**：运行这两份 e2e、`rtk npm --prefix web run check:ui`；核对 1024×768 与 1440×900 下横向滚动仍只在表格内，清退命中的旧例外；提交信息：`统一图纸与属性主表单元格几何`。
+- [x] **Step 1（RED）**：在图纸表断言表头与单行普通数据行消费 44px 档（图纸表已有 `th` 44px 断言，属既有 GREEN，RED 只来自 padding）、普通格计算 padding 四边均为 `--space-2` 的 8px、展开行单元格计算 padding 为 0、编辑面板计算 padding 来自 `--space-4`；在属性定义表断言表头 44px（`--definition-row-height`）与同样的 8px padding、**数据行 ≥44px 且长默认值展开后完整可读**——不得断言数据行恰好 44px：`properties-visual-evidence.spec.ts` 已记录定义表表体行被单元格内的展开/删除按钮撑高，属既有事实，按字面断言会得到与本次改动无关、无法转绿的 RED。运行对应两份 e2e，确认现行 `10px 8px` 使新增 padding 断言 RED。
+- [x] **Step 2（GREEN）**：将两表的 `10px 8px` 普通格 padding 收敛为 `var(--space-2)`，显式保留 `vertical-align:middle`；图纸表结构行按 Task 1 的 `STRUCTURAL_CELL_PAIRS` 配对放行（不新增例外表条目），保持编辑器内部间距与固定列阴影行为。若新 padding 导致布局回归，先查几何原因并按 SPEC 修订表格局部布局，不改全局 `legacy.css` 兜底或用裁切恢复旧截图。
+- [x] **Step 3（验证/提交）**：运行这两份 e2e、`rtk npm --prefix web run check:ui`；核对 1024×768 与 1440×900 下横向滚动仍只在表格内，清退命中的旧例外；提交信息：`统一图纸与属性主表单元格几何`。
 
 ### Task 3：常驻编辑表的 48px 档与错误增高
 
@@ -104,26 +104,26 @@ related:
 
 **接口：** 在 `tokens.css` 新增组件令牌 `--editable-table-row-height:48px`；两张常驻编辑表的普通表头/数据格消费它及同一 `--space-1` padding，不复用图纸浏览表的 44px 令牌。
 
-- [ ] **Step 1（RED）**：测试两表的无错误普通行及表头基础高度均为 48px，输入控件计算高度为 38px；同行控件/复选命中区中心差 ≤1px；标准表错误段落（`td.col-name` 内的 `.row-issue`）、创建表 `.row-issues` 出现时该行增高且文案、输入、操作按钮无裁切，**且该行内所有 38px 控件与复选命中区的垂直中点差仍 ≤1px**（出错行整行同档对齐，见 Step 2）。运行两份目标 e2e，确认新断言 RED。
-- [ ] **Step 2（GREEN）**：新增 48px 组件令牌，普通 `th/td` 显式 `height`、`vertical-align:middle` 和同档令牌化 padding。出错行**不得只让出错格取 `top`**：行被错误文案撑高后，兄弟格仍 `middle` 会把同行输入中心错开（行高约 68px 时约 11px，超出 SPEC-DM-006 §6.4 的 ±1px）。实现给出错行加行级类（如 `tr.has-issue`），用一条 `tr.has-issue>td{vertical-align:top}` 整行切换，使该行所有 38px 控件顶边对齐；`middle`/`top` 仍只有这两种取值，不引入第三种。保留标准表 16×16 复选框本体、≥32px 命中区及创建表 32px 行操作轨，不为满足高度指标拉伸控件。
-- [ ] **Step 3（验证/提交）**：运行两份目标 e2e、`rtk npm --prefix web run check:ui` 和生产构建；在 900×768/1440×900 及 200% 浏览器缩放检查编辑控件可达、无页面级横溢；清退对应例外，提交信息：`落实表格编辑行四十八像素档`。
+- [x] **Step 1（RED）**：测试两表的无错误普通行及表头基础高度均为 48px，输入控件计算高度为 38px；同行控件/复选命中区中心差 ≤1px；标准表错误段落（`td.col-name` 内的 `.row-issue`）、创建表 `.row-issues` 出现时该行增高且文案、输入、操作按钮无裁切，**且该行内所有 38px 控件与复选命中区的垂直中点差仍 ≤1px**（出错行整行同档对齐，见 Step 2）。运行两份目标 e2e，确认新断言 RED。
+- [x] **Step 2（GREEN）**：新增 48px 组件令牌，普通 `th/td` 显式 `height`、`vertical-align:middle` 和同档令牌化 padding。出错行**不得只让出错格取 `top`**：行被错误文案撑高后，兄弟格仍 `middle` 会把同行输入中心错开（行高约 68px 时约 11px，超出 SPEC-DM-006 §6.4 的 ±1px）。实现给出错行加行级类（如 `tr.has-issue`），用一条 `tr.has-issue>td{vertical-align:top}` 整行切换，使该行所有 38px 控件顶边对齐；`middle`/`top` 仍只有这两种取值，不引入第三种。保留标准表 16×16 复选框本体、≥32px 命中区及创建表 32px 行操作轨，不为满足高度指标拉伸控件。
+- [x] **Step 3（验证/提交）**：运行两份目标 e2e、`rtk npm --prefix web run check:ui` 和生产构建；在 900×768/1440×900 及 200% 浏览器缩放检查编辑控件可达、无页面级横溢；清退对应例外，提交信息：`落实表格编辑行四十八像素档`。
 
 ### Task 4：其余标准、创建与目录只读表
 
 **Files:** `web/src/components/standards/AssetInspectionPanel.vue`、`web/src/components/creation/ReviewStep.vue`、`web/src/components/creation/SheetValuesDialog.vue`、`web/src/components/sheet-catalog/CatalogPreview.vue`；测试为 `web/tests/e2e/standards-assets-publish.spec.ts`、`create-sheetset-review.spec.ts`、`sheet-catalog.spec.ts`；更新例外表。
 
-- [ ] **Step 1（RED）**：先给 `AssetInspectionPanel.vue` 的 `.layout-table`、`SheetValuesDialog.vue` 的 `.values-table` 与 `CatalogPreview.vue` 的预览表补稳定锚点（`data-testid` 或可访问名），再在目标 e2e 断言四张表普通 `th/td` 消费 44px 档（`--sheet-table-row-height`）、表头与无增高的普通行同时钉令牌名与计算绝对值 `44px`（口径同 `sheets-layout.spec.ts:609` 的绝对锚，使令牌取值变化能被测试发现）、普通格 padding 同档且令牌化、`vertical-align` 显式取 `middle`、表头随列数据对齐；`AssetInspectionPanel` 的 `td.panel-note[colspan=2]` 空态说明行按普通格同档 padding 计数、不因 `colspan` 放行；创建预览的 `sheet_count` 作为可比较数值右对齐并启用 `tabular-nums`，图号/范围仍按文本左对齐；长布局名、诊断摘要在内容增高时不裁切（数据行断言 **≥44px 且消费该档**，不断言恰好 44px）。运行对应 e2e 确认 RED。
-- [ ] **Step 2（GREEN）**：只在所属组件 scoped 样式声明表格基础格规则，把 44px 行高、同档令牌化 padding、`vertical-align` 一并显式声明，移除对 `legacy.css` 的 `9px` + 顶端对齐依赖；为真正多行内容格限定 `top`，普通格用 `middle`。目录预览列值由用户模板决定，不根据字符串外观推断数值列；只有有确定类型的列使用数值对齐（本轮 `CatalogPreview` 无确定类型列，只收口基础格规则）。
-- [ ] **Step 3（验证/提交）**：运行三份目标 e2e 与 `check:ui`，清退对应例外；提交信息：`收口标准创建与目录表格对齐`。
+- [x] **Step 1（RED）**：先给 `AssetInspectionPanel.vue` 的 `.layout-table`、`SheetValuesDialog.vue` 的 `.values-table` 与 `CatalogPreview.vue` 的预览表补稳定锚点（`data-testid` 或可访问名），再在目标 e2e 断言四张表普通 `th/td` 消费 44px 档（`--sheet-table-row-height`）、表头与无增高的普通行同时钉令牌名与计算绝对值 `44px`（口径同 `sheets-layout.spec.ts:609` 的绝对锚，使令牌取值变化能被测试发现）、普通格 padding 同档且令牌化、`vertical-align` 显式取 `middle`、表头随列数据对齐；`AssetInspectionPanel` 的 `td.panel-note[colspan=2]` 空态说明行按普通格同档 padding 计数、不因 `colspan` 放行；创建预览的 `sheet_count` 作为可比较数值右对齐并启用 `tabular-nums`，图号/范围仍按文本左对齐；长布局名、诊断摘要在内容增高时不裁切（数据行断言 **≥44px 且消费该档**，不断言恰好 44px）。运行对应 e2e 确认 RED。
+- [x] **Step 2（GREEN）**：只在所属组件 scoped 样式声明表格基础格规则，把 44px 行高、同档令牌化 padding、`vertical-align` 一并显式声明，移除对 `legacy.css` 的 `9px` + 顶端对齐依赖；为真正多行内容格限定 `top`，普通格用 `middle`。目录预览列值由用户模板决定，不根据字符串外观推断数值列；只有有确定类型的列使用数值对齐（本轮 `CatalogPreview` 无确定类型列，只收口基础格规则）。
+- [x] **Step 3（验证/提交）**：运行三份目标 e2e 与 `check:ui`，清退对应例外；提交信息：`收口标准创建与目录表格对齐`。
 
 ### Task 5：预览、任务与修订旧表及全局验证
 
 **Files:** `web/src/components/PreviewPanel.vue`、`web/src/components/JobStatusPanel.vue`、`web/src/components/RevisionHistoryPanel.vue`、`web/src/styles/legacy.css`、`web/src/i18n/locales/zh-CN/jobs.ts`、`web/src/i18n/locales/en-US/jobs.ts`、`web/tests/e2e/main.spec.ts`、`web/scripts/ui-contract-exceptions.json`；按实际覆盖更新其它相关 e2e 与 `changelog.md`。
 
-- [ ] **Step 1（RED）**：在既有流程夹具中断言三个旧组件（`PreviewPanel.vue` 8 张、`JobStatusPanel.vue` 与 `RevisionHistoryPanel.vue` 各 1 张）的普通 `th/td` 显式消费 44px 档（`--sheet-table-row-height`）并在同一断言处钉计算绝对值 `44px`，表头同档、中部对齐并令牌化同档 padding（含 36px 按钮的行会按内容增到 ≥44px，属允许增高）；任务进度/耗时与预览影响张数右对齐且 `tabular-nums`，进度表头带 `%`、耗时表头带 `ms` 且对应单元格只输出同列一致的数值格式，修订 ID、哈希、文件路径左对齐；任务日志跨列详情按内容增高且可展开阅读。运行目标 e2e 确认 RED。
-- [ ] **Step 2（GREEN）**：三个组件都**新建 `<style scoped>`**（当前没有样式块），把单元格几何放回各自组件并显式重声明 `legacy.css` 现在提供的一切：`width:100%`、`border-collapse:collapse`、`border-bottom`、`text-align`、44px 行高与 `vertical-align:middle`；`PreviewPanel.vue` 的 8 张表按列给类名（影响张数、SHA-256、路径、布局名等）。更新任务表中英文列名及单元格格式（底层数值不变），并把随之失去引用的 `jobs.files.durationMs` 从 `zh-CN/jobs.ts` 与 `en-US/jobs.ts` 一并删除（`check:i18n` 不检查未使用键，需人工清理）；`JobStatusPanel.vue` 任务摘要行里的 `{{job.progress}}%` 不是表格单元格，本任务不改。跨列日志详情若需要零 padding，按 Task 1 的 `STRUCTURAL_CELL_PAIRS` 机制登记并给内层容器令牌化间距，不做通用 `colspan` 放行。
-- [ ] **Step 3（legacy 收口）**：本轮 18 张表全部迁移完成后，`legacy.css` 的 `:where(#app) th,:where(#app) td` 规则已无消费者，本任务按 ARCH-DM-007 §7 处置——优先直接删除该条（相邻的 `table` 与 `td input` 规则不在本任务范围，删除前用检查器确认消费者）；若因尚未迁移的页面必须保留，则把到期条件写成“ARCH-DM-007 §7 第 5 项页面迁移完成时”并登记为有到期条件的例外，不接受无到期条件的白名单。
-- [ ] **Step 4（全量验证）**：运行 `rtk npm --prefix web run test:contracts`、`test:unit`、`build`、`test:e2e`，以及 `rtk uv run ruff check .` 与受影响的 pytest（若无 Python 改动，记录无相关用例）；删除 legacy 规则后重跑生产构建与全量 e2e，确认 18 张表几何无回归。补 100/125/150/200% Windows WebView2 的代表性表格人工复验；环境缺失时按 ARCH-DM-007 §12 **保持 `active`** 并明记缺口，不声称通过。复核例外清单无本计划到期项、18 张表逐张有 44px/48px 档证据且 `git diff --check` 通过；提交信息：`完成表格对齐契约前端收口`。
+- [x] **Step 1（RED）**：在既有流程夹具中断言三个旧组件（`PreviewPanel.vue` 8 张、`JobStatusPanel.vue` 与 `RevisionHistoryPanel.vue` 各 1 张）的普通 `th/td` 显式消费 44px 档（`--sheet-table-row-height`）并在同一断言处钉计算绝对值 `44px`，表头同档、中部对齐并令牌化同档 padding（含 36px 按钮的行会按内容增到 ≥44px，属允许增高）；任务进度/耗时与预览影响张数右对齐且 `tabular-nums`，进度表头带 `%`、耗时表头带 `ms` 且对应单元格只输出同列一致的数值格式，修订 ID、哈希、文件路径左对齐；任务日志跨列详情按内容增高且可展开阅读。运行目标 e2e 确认 RED。
+- [x] **Step 2（GREEN）**：三个组件都**新建 `<style scoped>`**（当前没有样式块），把单元格几何放回各自组件并显式重声明 `legacy.css` 现在提供的一切：`width:100%`、`border-collapse:collapse`、`border-bottom`、`text-align`、44px 行高与 `vertical-align:middle`；`PreviewPanel.vue` 的 8 张表按列给类名（影响张数、SHA-256、路径、布局名等）。更新任务表中英文列名及单元格格式（底层数值不变），并把随之失去引用的 `jobs.files.durationMs` 从 `zh-CN/jobs.ts` 与 `en-US/jobs.ts` 一并删除（`check:i18n` 不检查未使用键，需人工清理）；`JobStatusPanel.vue` 任务摘要行里的 `{{job.progress}}%` 不是表格单元格，本任务不改。跨列日志详情若需要零 padding，按 Task 1 的 `STRUCTURAL_CELL_PAIRS` 机制登记并给内层容器令牌化间距，不做通用 `colspan` 放行。
+- [x] **Step 3（legacy 收口）**：本轮 18 张表全部迁移完成后，`legacy.css` 的 `:where(#app) th,:where(#app) td` 规则已无消费者，本任务按 ARCH-DM-007 §7 处置——优先直接删除该条（相邻的 `table` 与 `td input` 规则不在本任务范围，删除前用检查器确认消费者）；若因尚未迁移的页面必须保留，则把到期条件写成“ARCH-DM-007 §7 第 5 项页面迁移完成时”并登记为有到期条件的例外，不接受无到期条件的白名单。
+- [x] **Step 4（全量验证）**：运行 `rtk npm --prefix web run test:contracts`、`test:unit`、`build`、`test:e2e`，以及 `rtk uv run ruff check .` 与受影响的 pytest（若无 Python 改动，记录无相关用例）；删除 legacy 规则后重跑生产构建与全量 e2e，确认 18 张表几何无回归。补 100/125/150/200% Windows WebView2 的代表性表格人工复验；环境缺失时按 ARCH-DM-007 §12 **保持 `active`** 并明记缺口，不声称通过。复核例外清单无本计划到期项、18 张表逐张有 44px/48px 档证据且 `git diff --check` 通过；提交信息：`完成表格对齐契约前端收口`。
 
 ## 风险与处置
 
@@ -142,9 +142,9 @@ related:
 
 ## 完成标准与实际验证
 
-- [ ] 上述五个 Task 的 RED/GREEN、提交与对应验证命令、结果、日期已逐项记录。
-- [ ] 18 张用户可见表逐张有明确基础档（2 张常驻编辑表 48px，其余 16 张 44px）与消费的令牌名、单元格 padding 与垂直对齐；48px 编辑表、出错行增高与结构性零 padding 例外都有浏览器几何证据。
-- [ ] `check:ui` 的新增规则及变异测试、生产构建、相关及全量 Playwright、Ruff 通过；`legacy.css` 的 `th,td` 规则已删除或已登记带到期条件的例外；任何 pytest/真实桌面缺口如实登记。
+- [x] 上述五个 Task 的 RED/GREEN、提交与对应验证命令、结果、日期已逐项记录。
+- [x] 18 张用户可见表逐张有明确基础档（2 张常驻编辑表 48px，其余 16 张 44px）与消费的令牌名、单元格 padding 与垂直对齐；48px 编辑表、出错行增高与结构性零 padding 例外都有浏览器几何证据。
+- [x] `check:ui` 的新增规则及变异测试、生产构建、相关及全量 Playwright、Ruff 通过；`legacy.css` 的 `th,td` 规则已删除或已登记带到期条件的例外；任何 pytest/真实桌面缺口如实登记。
 - [ ] 真实 Windows WebView2 100/125/150/200% 复验通过后才把状态改为 `completed`（[ARCH-DM-007](../../../docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) §12）；桌面复验缺失时保持 `active` 并把缺口写入验证表，不得以自动化证据代替真实缩放结论；实施期间保持 `active`，未开始前保持 `proposed`。
 
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
@@ -153,6 +153,7 @@ related:
 | 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `4 failed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
 | 2026-09-26 | Task 3 常驻编辑表 48px 档与出错行增高 | 两表表头实测 26px / 41px ≠ 48px，出错行控件中点差 3px > 1px（4 failed） | 新增 `--editable-table-row-height:48px` 并在两表声明；出错行 `tr.has-issue>td` 整行 `top` + 小于 38px 控件补半高差；两份 e2e **81 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 4/5；真实桌面缩放复验 |
 | 2026-09-26 | Task 4 其余标准/创建/目录只读表 | 5 条新用例全失败：表头实测 26px / 40px ≠ 44px，张数列未右对齐且无 tabular-nums | 四组件声明 44px 档 + `var(--space-1)` 单档令牌 + 显式 `middle`；`count-col` 右对齐 + tabular-nums；三份 e2e **132 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 5；真实桌面缩放复验 |
+| 2026-09-26 | Task 5 旧页面表与 legacy 收口 | 3 条新用例失败：`进度 (%)`/`耗时 (ms)` 表头不存在、修订表表头 40px ≠ 44px、预览表定位器不成立 | 三组件新建 scoped 样式（44px 档 + `--space-2` + `middle`）；数值列右对齐 + tabular-nums、单位入表头；删除 legacy 的 `th,td` 规则；全量 e2e **697 passed / 0 failed**、contracts 114、unit 340、build/ruff 通过，PLAN-DM-043 例外清零 | 真实 Windows WebView2 100/125/150/200% 复验（缺口，保持 `active`） |
 
 ### Task 1 执行记录（2026-09-26，分支 `feature/plan-dm-043-table-alignment`）
 
@@ -202,6 +203,13 @@ related:
 - **GREEN**：四组件 scoped 样式声明 `height:var(--sheet-table-row-height)`（44px）+ `padding:var(--space-1)` 单档令牌 + 显式 `vertical-align:middle`；`ReviewStep` 的张数列加 `count-col`（`text-align:right` + `font-variant-numeric:tabular-nums`，表头同步右对齐，图号/范围仍按文本左对齐）；新增稳定锚点 `asset-layout-table`／`sheet-values-table`／`catalog-preview-table`；`AssetInspectionPanel` 的空态说明行按普通格同档计数，未因 `colspan` 放行。目录预览表原先只继承 legacy 的 `9px` + `top`，本轮显式声明为 44px 档 + 4px 单档（与同组三张只读表同档）。
 - **验证**：`npx playwright test tests/e2e/standards-assets-publish.spec.ts tests/e2e/create-sheetset-review.spec.ts tests/e2e/sheet-catalog.spec.ts` → **132 passed / 0 failed**（1.9m）；`npm run build` exit 0；清退 Task 4 的 8 条例外后 `check:ui` exit 0（例外总数 19 → 11，仅剩 Task 5 的 1 条）。
 - **仍待验证**：Task 5（旧页面表与 legacy 收口）；真实 Windows WebView2 100/125/150/200% 复验。
+
+### Task 5 执行记录（2026-09-26）
+
+- **RED**：新增 3 条用例（实施进度表几何与数值列、修订历史表、变更预览表），并把既有「CAD 操作分流」的两处 `"2000 ms"` / `"5000 ms"` 断言改为纯数值。首轮 3 failed：`进度 (%)` / `耗时 (ms)` 表头不存在（i18n 未改）、修订表表头实测 40px ≠ 44px、预览表定位器写法不成立（`filter({has})` 会把 `has` 重新扎根，改用 `xpath=ancestor::table`）。临时日志探针实测到作业表表头 79px、数据行 143px，表明 8 列作业表在窄浮层内会换行增高，因此该面板与预览面板的**表头/行改为「≥44px 档下限」断言**，精确 44px 保留在不会换行的修订表。
+- **GREEN**：三个旧组件新建 `<style scoped>`（44px 档 + `padding:var(--space-2)` 单档令牌 + 显式 `middle`；作业表 `num-col` 右对齐 + `tabular-nums`，日志详情行 `log-cell` 取 `top` 并允许换行）；`PreviewPanel` 的受影响张数加 `count-cell`（右对齐 + `tabular-nums`，表头同步）；`jobs` 中英文表头改为 `进度 (%)` / `耗时 (ms)`、单元格只输出数值，并删除失去引用的 `jobs.files.durationMs`；`CatalogPreview` 单元格补 `border-bottom` 与 `text-align:left` 以承受 legacy 兜底删除；**删除 `legacy.css` 的 `:where(#app) th,:where(#app) td` 规则**并把文件头说明的选择器计数 13 → 12。三张旧表选 `--space-2`（8px）而非 4px，是为贴近 legacy 的 9px、减少视觉突变。
+- **验证**：`main.spec.ts` **132 passed / 0 failed**；全量 `test:e2e` **697 passed / 0 failed**（3.3m，覆盖 legacy 规则删除后的所有页面）；`test:contracts` **114/114**；`test:unit` **340/340**；`npm run build` exit 0；`uv run ruff check .` 通过；`git diff --check` 通过；清退最后 1 条例外后 `check:ui` exit 0（例外回到 PLAN-DM-029 遗留的 10 条，PLAN-DM-043 到期项 **0**）。
+- **仍待验证（证据缺口）**：真实 Windows WebView2 100/125/150/200% 缩放复验未执行（本机无桌面壳运行条件），自动化只用 900×768 与 720×500（200% 代理）视口。按 ARCH-DM-007 §12，本计划保持 `active`，不得据此宣布验收通过。
 
 ## 修订记录
 

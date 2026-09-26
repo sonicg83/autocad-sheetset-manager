@@ -22,7 +22,9 @@
   .derived{color:var(--color-text-muted)}
 
   :where(#app) table{width:100%;border-collapse:collapse}
-  :where(#app) th,:where(#app) td{padding:9px;border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:top}
+  /* PLAN-DM-043 Task 5：原 `:where(#app) th,:where(#app) td` 兜底规则（`padding:9px` +
+     `vertical-align:top`）已删除—— 11 个含表格组件（18 张表）现在都在自己的 scoped
+     样式里显式声明行高、单档令牌化 padding 与 `vertical-align`，不再依赖 legacy 兜底。 */
   :where(#app) td input{width:100%;padding:7px}
   .preview{margin-top:20px}
   .primary{background:var(--color-accent);color:var(--color-on-accent)}
@@ -98,12 +100,12 @@
      一致——同层内后写的规则仍然覆盖先写的规则，因此这些规则之间的相对优先级不变。
      迁移时有两处结构调整，必须如实区分：
 
-     1. 元素/伪类开头的选择器（共 13 条：`main`、`aside`、`aside button`、`aside .active`、
-        `article`、`table`、`th,td`、`td input`、`fieldset`、`fieldset>button`、`details`，
+     1. 元素/伪类开头的选择器（共 12 条：`main`、`aside`、`aside button`、`aside .active`、
+        `article`、`table`、`td input`、`fieldset`、`fieldset>button`、`details`，
         其中 `main` 与 `aside` 各出现两次）加上 `:where(#app)` 根限定。`:where()` 自身
         特异性为 0、`#app` 覆盖全部应用 DOM（含 `showModal()` 的 `<dialog>`），因此 `:where()`
-        改写**不改变这 13 条选择器自身的特异性和匹配范围**（都是全部应用 DOM），同时满足
-        「业务样式不得写裸全局选择器」的门禁要求。注意这里只谈选择器自身：这 13 条同时也从
+        改写**不改变这 12 条选择器自身的特异性和匹配范围**（都是全部应用 DOM），同时满足
+        「业务样式不得写裸全局选择器」的门禁要求。注意这里只谈选择器自身：这 12 条同时也从
         无层样式迁进了 `@layer legacy`，相对未分层的组件 `scoped` 样式，它们的优先级反而
         是**下降**的（见下方级联方向一段），不因 `:where()` 而保持不变。
      2. 元素级重置没有留在这里，而是迁到 `reset.css`（共 10 条：`*`、`*,*::before,*::after`、

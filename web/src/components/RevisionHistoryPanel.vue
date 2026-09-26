@@ -10,3 +10,8 @@ defineEmits<{preview:[revision:Revision];restore:[]}>();
 const {t}=useI18n();
 </script>
 <template><section class="panel preview"><h2>{{ $t("revisions.panel.title") }}</h2><table><thead><tr><th>{{ $t("revisions.panel.time") }}</th><th>{{ $t("revisions.panel.revision") }}</th><th>{{ $t("revisions.panel.resultSummary") }}</th><th></th></tr></thead><tbody><tr v-for="revision in revisions" :key="revision.id"><td>{{formatDateTime(revision.created_at)}}</td><td>{{revision.id.slice(0,16)}}</td><td>{{revision.before_hash.slice(0,8)}} → {{revision.result_hash.slice(0,8)}}</td><td><UiButton variant="secondary" :disabled="executing" @click="$emit('preview',revision)">{{ $t("revisions.panel.previewRestore") }}</UiButton></td></tr></tbody></table><div v-if="restorePreview"><h3>{{ $t("revisions.panel.confirmTitle") }}</h3><ul><li v-for="file in restorePreview.files" :key="file.path" :class="{error:file.conflict}">{{file.action}} {{file.path}} <span v-if="file.conflict">{{ $t("revisions.panel.fileConflict") }}</span></li></ul><UiButton variant="primary" class="primary" :disabled="executing||!restorePreview.executable" @click="$emit('restore')">{{ $t("revisions.panel.restoreAsNew") }}</UiButton></div></section></template>
+<style scoped>
+/* PLAN-DM-043 Task 5：修订历史表普通格 44px 档 + 令牌化单档 padding + 显式中部对齐 */
+.panel th,.panel td{height:var(--sheet-table-row-height);padding:var(--space-2);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
+.panel th{vertical-align:middle}
+</style>
