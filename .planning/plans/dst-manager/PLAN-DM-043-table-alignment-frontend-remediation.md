@@ -150,8 +150,8 @@ related:
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
 | --- | --- | --- | --- | --- |
 | 2026-09-26 | Task 1 建立表格静态契约与迁移基线 | 新增 13 条用例在规则未实现时 `pass 4 / fail 9`（exit 1） | `test:contracts` **114 passed / 0 failed**（含 5 条 CLI 级变异）；`check:ui` exit 0，27 条存量违规已登记 | Task 2–5 样式与计算样式断言；真实桌面缩放复验 |
-| 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `4 failed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
-| 2026-09-26 | Task 3 常驻编辑表 48px 档与出错行增高 | 两表表头实测 26px / 41px ≠ 48px，出错行控件中点差 3px > 1px（4 failed） | 新增 `--editable-table-row-height:48px` 并在两表声明；出错行 `tr.has-issue>td` 整行 `top` + 小于 38px 控件补半高差；两份 e2e **81 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 4/5；真实桌面缩放复验 |
+| 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `2 failed/33 passed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
+| 2026-09-26 | Task 3 常驻编辑表 48px 档与出错行增高 | 两表表头实测 26px / 41px ≠ 48px，出错行控件中点差 3px > 1px（2 failed/35 passed） | 新增 `--editable-table-row-height:48px` 并在两表声明；出错行 `tr.has-issue>td` 整行 `top` + 小于 38px 控件补半高差；两份 e2e **81 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 4/5；真实桌面缩放复验 |
 | 2026-09-26 | Task 4 其余标准/创建/目录只读表 | 5 条新用例全失败：表头实测 26px / 40px ≠ 44px，张数列未右对齐且无 tabular-nums | 四组件声明 44px 档 + `var(--space-1)` 单档令牌 + 显式 `middle`；`count-col` 右对齐 + tabular-nums；三份 e2e **132 passed / 0 failed**、`build` exit 0、`check:ui` exit 0 | Task 5；真实桌面缩放复验 |
 | 2026-09-26 | Task 5 旧页面表与 legacy 收口 | 3 条新用例失败：`进度 (%)`/`耗时 (ms)` 表头不存在、修订表表头 40px ≠ 44px、预览表定位器不成立 | 三组件新建 scoped 样式（44px 档 + `--space-2` + `middle`）；数值列右对齐 + tabular-nums、单位入表头；删除 legacy 的 `th,td` 规则；全量 e2e **697 passed / 0 failed**、contracts 114、unit 340、build/ruff 通过，PLAN-DM-043 例外清零 | 真实 Windows WebView2 100/125/150/200% 复验（缺口，保持 `active`） |
 
@@ -184,7 +184,7 @@ related:
 
 ### Task 2 执行记录（2026-09-26）
 
-- **RED**：`npx playwright test tests/e2e/sheets-layout.spec.ts --grep "表格单元格几何"` → 1 failed / 33 passed，失败原因 `padding-top 应来自 --space-2`（Expected 8px / Received 10px）；`properties-visual-evidence.spec.ts --grep "属性页控件视觉基础全部来自语义/组件令牌"` → 4 failed（light/dark × 表头/数据格），同一原因。两份均 exit 1。
+- **RED**：`npx playwright test tests/e2e/sheets-layout.spec.ts --grep "表格单元格几何"` → 1 failed / 33 passed，失败原因 `padding-top 应来自 --space-2`（Expected 8px / Received 10px）；`properties-visual-evidence.spec.ts --grep "属性页控件视觉基础全部来自语义/组件令牌"` → **2 failed/33 passed**（light/dark 各停在同一断言），同一原因。两份均 exit 1。
 - **GREEN**：两表 `padding:10px 8px` → `padding:var(--space-2)`；按 ARCH-DM-007 §4.3 字面口径给 14 条辅助 `th/td` 规则（SheetTable 8 条、PropertyDefinitionTable 6 条）补显式 `vertical-align:middle`（`td.col-default` 取 `middle`：该格当前由主规则继承 `middle`，legacy 的 `top` 被 scoped 样式覆盖，故为零视觉变化）。`npx playwright test tests/e2e/sheets-layout.spec.ts tests/e2e/properties-visual-evidence.spec.ts` → **81 passed / 0 failed**（1.3m），含四视口与 200% 缩放无整页横溢、横向滚动只在表内。
 - **棘轮中间证据**：改样式后未清退例外时 `check:ui` 报 **16 条 `stale-exception`**（恰为 Task 2 登记的 16 条），清退后 exit 0；例外总数 37 → 21，PLAN-DM-043 剩余到期分布 Task 3/4/5 = 2/8/1。
 - **结构与间距**：`.sheet-editor-row>td` 保持 `height:auto;padding:0`（由 `STRUCTURAL_CELL_PAIRS` 放行，内层 `.sheet-property-editor` 消费 `--space-4`）；64px 列宽/粘性定位/固定列阴影行为未变。
@@ -210,6 +210,7 @@ related:
 - **GREEN**：三个旧组件新建 `<style scoped>`（44px 档 + `padding:var(--space-2)` 单档令牌 + 显式 `middle`；作业表 `num-col` 右对齐 + `tabular-nums`，日志详情行 `log-cell` 取 `top` 并允许换行）；`PreviewPanel` 的受影响张数加 `count-cell`（右对齐 + `tabular-nums`，表头同步）；`jobs` 中英文表头改为 `进度 (%)` / `耗时 (ms)`、单元格只输出数值，并删除失去引用的 `jobs.files.durationMs`；`CatalogPreview` 单元格补 `border-bottom` 与 `text-align:left` 以承受 legacy 兜底删除；**删除 `legacy.css` 的 `:where(#app) th,:where(#app) td` 规则**并把文件头说明的选择器计数 13 → 12。三张旧表选 `--space-2`（8px）而非 4px，是为贴近 legacy 的 9px、减少视觉突变。
 - **验证**：`main.spec.ts` **132 passed / 0 failed**；全量 `test:e2e` **697 passed / 0 failed**（3.3m，覆盖 legacy 规则删除后的所有页面）；`test:contracts` **114/114**；`test:unit` **340/340**；`npm run build` exit 0；`uv run ruff check .` 通过；`git diff --check` 通过；清退最后 1 条例外后 `check:ui` exit 0（例外回到 PLAN-DM-029 遗留的 10 条，PLAN-DM-043 到期项 **0**）。
 - **仍待验证（证据缺口）**：真实 Windows WebView2 100/125/150/200% 缩放复验未执行（本机无桌面壳运行条件），自动化只用 900×768 与 720×500（200% 代理）视口。按 ARCH-DM-007 §12，本计划保持 `active`，不得据此宣布验收通过。
+- **独立复核（2026-09-26）**：整支复核结论 **0 Critical / 1 Important / 5 Minor**。Important 为规范正文仍描述已清退的 `10px 8px`/`9px` 档、与新门禁矛盾——已在同一修复轮同步 `ARCH-DM-007` §4.3 与 `SPEC-DM-006` §6.4/§1.1；Minor 与评审“Declined to judge”各项的裁决见 [MEMO-DM-042](../../memos/dst-manager/2026-09-26-plan-dm-043-review.md)。
 
 ## 修订记录
 
