@@ -612,6 +612,29 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 7）", () => {
     await expect(page.locator(".title-text").first()).toHaveCSS("max-width", "280px");
   });
 
+  test("表格单元格几何：单档令牌化 padding、结构行零 padding 与编辑面板间距", async ({page}) => {
+    await installSheetsFixture(page);
+    await openWorkspace(page, "light");
+    const sides = ["padding-top", "padding-right", "padding-bottom", "padding-left"];
+    // 表头与普通数据格同一基础档、同一 padding 档（PLAN-DM-043 Task 2）
+    const header = page.locator("th").first();
+    await expectToken(page, header, "height", "--sheet-table-row-height");
+    for (const side of sides) await expectToken(page, header, side, "--space-2");
+    const row = page.locator('tr[data-sheet-id="sheet-1"]');
+    await row.scrollIntoViewIfNeeded();
+    const cell = row.locator("td").first();
+    for (const side of sides) await expectToken(page, cell, side, "--space-2");
+    expect(Math.round(await row.evaluate((element) => element.getBoundingClientRect().height)), "普通单行数据行消费 44px 基础档").toBe(44);
+    // 展开编辑行：`td` 结构性零 padding，间距全部由内层容器消费 --space-4
+    await row.getByRole("button", {name: "编辑属性"}).click();
+    const editorCell = page.locator("tr.sheet-editor-row>td").first();
+    await expect(editorCell).toBeVisible();
+    for (const side of sides) await expect(editorCell).toHaveCSS(side, "0px");
+    const editorPanel = page.locator(".sheet-property-editor").first();
+    await expectToken(page, editorPanel, "padding-top", "--space-4");
+    await expectToken(page, editorPanel, "padding-left", "--space-4");
+  });
+
   test("列设置面板：宽度令牌与 15px 面板标题档位", async ({page}) => {
     await installSheetsFixture(page);
     await openWorkspace(page, "light");

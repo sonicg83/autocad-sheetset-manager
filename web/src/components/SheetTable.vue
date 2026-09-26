@@ -131,20 +131,20 @@ function displayFileName(value: string): string {
 .sheet-table-window{container-type:inline-size;flex:1;min-height:var(--sheet-table-window-min-height);max-height:none;overflow:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md,8px);outline:none}
 .sheet-table-window:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
 table{table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:var(--font-label)}
-th,td{box-sizing:border-box;text-align:left;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;vertical-align:middle;height:var(--sheet-table-row-height);line-height:var(--sheet-table-line-height)}
-th{overflow:hidden;text-overflow:ellipsis}
-th{position:sticky;top:0;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600;z-index:2}
+th,td{box-sizing:border-box;text-align:left;padding:var(--space-2);border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;vertical-align:middle;height:var(--sheet-table-row-height);line-height:var(--sheet-table-line-height)}
+th{overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+th{position:sticky;top:0;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600;z-index:2;vertical-align:middle}
 tbody tr{background:var(--color-bg-surface)}
 tbody tr:hover,tbody tr:focus-within{background:var(--color-bg-muted)}
 tbody tr.focused,tbody tr.selected{background:var(--color-info-bg)}
 /* 左侧识别列固定；出现横向滚动时，操作列固定在右侧。 */
-th.col-select,td.col-select{position:sticky;left:0;z-index:2}
-th.col-number,td.col-number{position:sticky;left:40px;z-index:2;box-shadow:2px 0 0 var(--color-border-subtle)}
-.sticky-actions th.col-actions,.sticky-actions td.col-actions{position:sticky;right:0;z-index:2;box-shadow:-2px 0 0 var(--color-border-subtle)}
+th.col-select,td.col-select{position:sticky;left:0;z-index:2;vertical-align:middle}
+th.col-number,td.col-number{position:sticky;left:40px;z-index:2;box-shadow:2px 0 0 var(--color-border-subtle);vertical-align:middle}
+.sticky-actions th.col-actions,.sticky-actions td.col-actions{position:sticky;right:0;z-index:2;box-shadow:-2px 0 0 var(--color-border-subtle);vertical-align:middle}
 td.col-actions .link-button{margin-right:10px}
-th.col-select,th.col-number,th.col-actions{background:var(--color-bg-muted);z-index:3}
+th.col-select,th.col-number,th.col-actions{background:var(--color-bg-muted);z-index:3;vertical-align:middle}
 /* 全部单元格继承不透明行背景，固定列在各交互状态下保持一致。 */
-tbody tr td{background:inherit}
+tbody tr td{background:inherit;vertical-align:middle}
 /* 内容字段最多两行；完整值可通过 title 与键盘焦点读取。 */
 .multiline-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;max-width:100%;word-break:break-word;text-align:left}
 .title-text{max-width:var(--sheet-title-max-width)}
@@ -160,5 +160,5 @@ tbody tr td{background:inherit}
 .diag-link{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:var(--font-caption);padding:0;margin-left:4px;text-decoration:underline}
 .link-button{color:var(--color-accent);background:none;border:none;cursor:pointer;font-size:var(--font-label);padding:0;text-decoration:underline}
 .sheet-editor-row,.sheet-editor-row:hover,.sheet-editor-row:focus-within{background:var(--color-info-bg)}
-.sheet-editor-row>td{position:static!important;height:auto;padding:0;border-bottom:1px solid var(--color-border-strong);white-space:normal;box-shadow:none!important;background:inherit}
+.sheet-editor-row>td{position:static!important;height:auto;padding:0;border-bottom:1px solid var(--color-border-strong);white-space:normal;vertical-align:middle;box-shadow:none!important;background:inherit}
 </style>

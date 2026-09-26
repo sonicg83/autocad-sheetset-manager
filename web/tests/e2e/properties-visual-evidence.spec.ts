@@ -279,6 +279,21 @@ for (const theme of THEMES) {
     // 展开/删除按钮撑高，属既有事实，故以表头行核对高度令牌）、页脚计数档、分页按钮普通档
     await expectTokenValue(page, page.locator(".definition-panel table"), "font-size", "--font-table");
     await expectTokenValue(page, page.locator(".definition-panel thead th").first(), "height", "--definition-row-height", "box");
+
+    // PLAN-DM-043 Task 2：表头与普通数据格改为同一档令牌化 padding（四边 --space-2，
+    // 取代 10px 8px 裸值）；数据行允许被行内展开/删除按钮撑高（既有事实），只钉
+    // 「不低于 44px 基础档」；长默认值展开可读性由 properties-definitions.spec.ts
+    // 既有用例（两行摘要 → 展开 webkitLineClamp 归 none 且保留全文）负责。
+    const definitionHead = page.locator(".definition-panel thead th").first();
+    const definitionCell = page.locator(".definition-panel tbody tr td").first();
+    for (const side of ["padding-top", "padding-right", "padding-bottom", "padding-left"]) {
+      await expectTokenValue(page, definitionHead, side, "--space-2");
+      await expectTokenValue(page, definitionCell, side, "--space-2");
+    }
+    expect(
+      Math.round(await page.locator(".definition-panel tbody tr").first().evaluate((element) => element.getBoundingClientRect().height)),
+      "普通数据行不得低于 44px 基础档",
+    ).toBeGreaterThanOrEqual(44);
     await expectTokenValue(page, page.locator(".definition-panel .foot-info"), "font-size", "--font-caption");
     await expectTokenValue(page, page.locator(".definition-panel .pager .ui-button").first(), "height", "--button-height", "box");
 

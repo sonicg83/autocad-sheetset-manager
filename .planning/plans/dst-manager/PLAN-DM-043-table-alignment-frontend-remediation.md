@@ -150,6 +150,7 @@ related:
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
 | --- | --- | --- | --- | --- |
 | 2026-09-26 | Task 1 建立表格静态契约与迁移基线 | 新增 13 条用例在规则未实现时 `pass 4 / fail 9`（exit 1） | `test:contracts` **114 passed / 0 failed**（含 5 条 CLI 级变异）；`check:ui` exit 0，27 条存量违规已登记 | Task 2–5 样式与计算样式断言；真实桌面缩放复验 |
+| 2026-09-26 | Task 2 图纸与属性主表单元格几何 | 两份 e2e 均因 `padding-top` 10px ≠ 8px 失败（`1 failed/33 passed` 与 `4 failed`） | 两表改 `var(--space-2)` 并补齐 14 条辅助规则 `vertical-align`；两份 e2e **81 passed / 0 failed**；`check:ui` 先报 16 条 stale、清退后 exit 0 | Task 3–5 样式与断言；真实桌面缩放复验 |
 
 ### Task 1 执行记录（2026-09-26，分支 `feature/plan-dm-043-table-alignment`）
 
@@ -177,6 +178,14 @@ related:
   结论：命中 44px 档的只有图纸/属性两个主表；其余 9 个组件的 16 张表全部无 `height` 声明（Task 3 的 2 张按 48px 档、Task 4/5 的 14 张按 44px 档），与「18 张表全部命中一档」的待办一致。零 padding 结构配对实测通过：`SheetTable.vue` 的 `.sheet-editor-row>td` ↔ `src/components/sheets/SheetPropertyEditor.vue` 的 `.sheet-property-editor`（`padding:var(--space-4)`）。
 - **棘轮基线**：存量违规 **27 条**（`table-cell-vertical-align` 24 条、`table-cell-padding` 3 条）已按「文件 + 稳定语义」登记进 `ui-contract-exceptions.json`（总条目 10 → 37），到期任务分布：Task 2 **16 条**、Task 3 **2 条**、Task 4 **8 条**、Task 5 **1 条**；`rtk npm --prefix web run check:ui` → exit 0。指纹不含行号，各 Task 清退时以检查器输出重新生成该文件条目。
 - **仍待验证**：Task 2–5 的样式改动与 Playwright 计算样式断言；真实 Windows WebView2 100/125/150/200% 复验。
+
+### Task 2 执行记录（2026-09-26）
+
+- **RED**：`npx playwright test tests/e2e/sheets-layout.spec.ts --grep "表格单元格几何"` → 1 failed / 33 passed，失败原因 `padding-top 应来自 --space-2`（Expected 8px / Received 10px）；`properties-visual-evidence.spec.ts --grep "属性页控件视觉基础全部来自语义/组件令牌"` → 4 failed（light/dark × 表头/数据格），同一原因。两份均 exit 1。
+- **GREEN**：两表 `padding:10px 8px` → `padding:var(--space-2)`；按 ARCH-DM-007 §4.3 字面口径给 14 条辅助 `th/td` 规则（SheetTable 8 条、PropertyDefinitionTable 6 条）补显式 `vertical-align:middle`（`td.col-default` 取 `middle`：该格当前由主规则继承 `middle`，legacy 的 `top` 被 scoped 样式覆盖，故为零视觉变化）。`npx playwright test tests/e2e/sheets-layout.spec.ts tests/e2e/properties-visual-evidence.spec.ts` → **81 passed / 0 failed**（1.3m），含四视口与 200% 缩放无整页横溢、横向滚动只在表内。
+- **棘轮中间证据**：改样式后未清退例外时 `check:ui` 报 **16 条 `stale-exception`**（恰为 Task 2 登记的 16 条），清退后 exit 0；例外总数 37 → 21，PLAN-DM-043 剩余到期分布 Task 3/4/5 = 2/8/1。
+- **结构与间距**：`.sheet-editor-row>td` 保持 `height:auto;padding:0`（由 `STRUCTURAL_CELL_PAIRS` 放行，内层 `.sheet-property-editor` 消费 `--space-4`）；64px 列宽/粘性定位/固定列阴影行为未变。
+- **仍待验证**：Task 3–5 的样式与断言；真实 Windows WebView2 100/125/150/200% 复验。
 
 ## 修订记录
 

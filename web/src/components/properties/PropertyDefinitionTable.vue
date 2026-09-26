@@ -127,15 +127,15 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 .table-window{overflow-x:auto;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);outline:none}
 .table-window:focus-visible{outline:2px solid var(--color-focus);outline-offset:-2px}
 table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:var(--font-table)}
-th,td{box-sizing:border-box;padding:10px 8px;border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;text-align:left;vertical-align:middle;height:var(--definition-row-height)}
+th,td{box-sizing:border-box;padding:var(--space-2);border-bottom:1px solid var(--color-border-subtle);white-space:nowrap;text-align:left;vertical-align:middle;height:var(--definition-row-height)}
 /* 弱化表头背景 + 语义分隔线 + sticky header */
-th{position:sticky;top:0;z-index:2;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600}
-th:not(:first-child),td:not(:first-child){border-left:1px solid var(--color-border-subtle)}
+th{position:sticky;top:0;z-index:2;background:var(--color-bg-muted);color:var(--color-text-secondary);font-weight:600;vertical-align:middle}
+th:not(:first-child),td:not(:first-child){border-left:1px solid var(--color-border-subtle);vertical-align:middle}
 tbody tr{background:var(--color-bg-surface)}
-tbody tr td{background:inherit}
+tbody tr td{background:inherit;vertical-align:middle}
 tbody tr:hover,tbody tr:focus-within{background:var(--color-bg-muted)}
 /* 默认值最多两行摘要；展开后完整读取，不截断提交值 */
-td.col-default{white-space:normal}
+td.col-default{white-space:normal;vertical-align:middle}
 .default-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;word-break:break-word;max-width:100%}
 .default-text.expanded{display:block;-webkit-line-clamp:unset;overflow:visible}
 .empty-value{color:var(--color-text-muted)}
@@ -144,8 +144,8 @@ td.col-default{white-space:normal}
 .danger-text:hover:not(:disabled){background:var(--color-danger-bg)}
 .text-action{color:var(--color-accent)}
 /* 横向溢出时冻结右侧操作列：行背景本身不透明，固定列在各交互状态下保持一致；无溢出时无阴影 */
-.sticky-actions th.col-actions,.sticky-actions td.col-actions{position:sticky;right:0;z-index:2;box-shadow:-2px 0 0 var(--color-border-subtle)}
-.sticky-actions th.col-actions{background:var(--color-bg-muted)}
+.sticky-actions th.col-actions,.sticky-actions td.col-actions{position:sticky;right:0;z-index:2;box-shadow:-2px 0 0 var(--color-border-subtle);vertical-align:middle}
+.sticky-actions th.col-actions{background:var(--color-bg-muted);vertical-align:middle}
 /* 空态与页脚 */
 .empty{margin:0;padding:var(--space-4);color:var(--color-text-secondary);text-align:center;border:1px dashed var(--color-border-subtle);border-top:0;border-radius:0 0 var(--radius-md) var(--radius-md)}
 .table-foot{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-3)}
