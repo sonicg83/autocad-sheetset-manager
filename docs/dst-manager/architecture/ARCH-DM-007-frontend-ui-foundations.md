@@ -6,15 +6,16 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-18
+updated: 2026-09-26
 related:
   - ARCH-DM-001
   - SPEC-DM-006
   - SPEC-DM-009
   - SPEC-DM-010
   - SPEC-DM-011
-- SPEC-DM-012
-- SPEC-DM-015
+  - SPEC-DM-012
+  - SPEC-DM-015
+  - SPEC-DM-017
   - GUIDE-DM-001
   - GUIDE-DM-002
 ---
@@ -144,6 +145,17 @@ grep -rlE  'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc
 - 字体加载失败不得改变控件盒模型；计算样式测试同时覆盖首选字体与回落栈声明。
 - 当前路径、哈希和错误码区域硬编码的 `ui-monospace, Consolas, monospace` 迁移到 `--font-mono` 后字形宽度会变化；必须对表格列宽、换行、复制区和长路径执行同态视觉复核，不得只校验字体变量已替换。
 
+### 4.3 表格对齐契约
+
+用户可见的表格对齐规则以 [SPEC-DM-006](../specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.4「单元格对齐契约」为唯一权威来源（2026-09-26 依据 Adobe Spectrum、IBM Carbon、Google Material、Shopify Polaris 的通用对齐准则调研增补：文本列左对齐、可比较数值列右对齐 + `tabular-nums`、表头跟随列数据、默认行内垂直居中、行高与 padding 取显式档位、行内控件垂直中点对齐）。实现与门禁边界：
+
+- 所有表格 `th,td` 规则必须显式声明 `vertical-align`，取值仅 `middle`（默认）与 `top`（多行长文本单元格），禁止依赖浏览器默认的基线对齐。
+- 同一表格内 `th/td` 的 padding 必须单表单档，且消费间距令牌或登记的组件令牌；现有 `10px 8px`（图纸/属性定义表）、`9px`（legacy 兜底）、`4px`（标准/创建向导表）三档为迁移期存量，按 §7 迁移顺序收口，不得新增第四种档位。
+- 行高消费既有行高令牌（`--sheet-table-row-height` / `--definition-row-height`，44px 舒适档）；内容驱动高度的表格必须声明最小行高。
+- 行内控件高度消费既有控件高度令牌（输入 38px 档、按钮默认 36px / 紧凑 34px、复选命中区 ≥32px）；同一行内控件以垂直中点对齐（±1px）。
+
+静态门禁规则见 §9.1，计算样式断言见 §9.3；本节不复制 SPEC-DM-006 正文，契约条目变更时同步复核本节边界是否仍然成立。
+
 ## 5. 公共视觉原语
 
 推荐目录：
@@ -241,6 +253,7 @@ web/src/
 - Vue `<button>` 必须显式声明 `type`；
 - 禁止业务组件新增裸全局选择器和未登记的十六进制颜色；
 - 字号、高度、圆角和图标尺寸必须使用令牌或有理由的白名单。
+- 表格 `th,td` 单元格规则必须显式声明 `vertical-align`（取值仅 `middle`/`top`，见 §4.3），并检查同一表格 padding 单表单档且消费令牌；存量偏差按例外棘轮登记后清退。
 
 检查器必须能通过变异测试证明可失败，不能只扫描已有文件并输出警告。变异套件在检查器首次引入及检查规则、解析算法或白名单格式变化时运行；普通 CI 每次只运行确定性的静态检查和检查器单元测试，不重复执行高成本变异轮。
 
@@ -256,6 +269,7 @@ Playwright 直接断言：
 
 - `html/body` 的 `font-size`、`font-family` 和 `line-height`；
 - 普通、表单、紧凑和图标按钮各自的字号、盒模型、高度、圆角及对齐；
+- 表格行内对齐：同一行内的控件、徽章与复选命中区垂直中点差 ≤1px，表头对齐方向与其列数据一致（口径同 SPEC-DM-006 §6.4）；
 - 浅深主题下 hover、active、focus、disabled、selected 的前景、背景和边框；
 - 字体或图标回落不改变控件布局。
 

@@ -1,3 +1,7 @@
+## 2026-09-26（表格对齐契约：设计文档增补）
+
+- 依据业界设计系统通用表格对齐准则调研（Adobe Spectrum、IBM Carbon、Google Material、Shopify Polaris：文本左对齐、可比较数值右对齐 + `tabular-nums`、表头跟随列数据、行内内容垂直居中、行高与 padding 显式档位、禁止随意居中），[SPEC-DM-006](docs/dst-manager/specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) §6.4 新增「单元格对齐契约」（水平/垂直对齐、行高、单元格 padding、行内控件中点 ±1px、数值列格式），§5.3 表格行高默认档由 40px 修正为 44px 以消除与已落地行高令牌的规范-实现漂移；[ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) 新增 §4.3 实现边界（`vertical-align` 显式声明、单表单档令牌化 padding、行高与控件高度令牌来源），并在 §9.1/§9.3 登记对应静态门禁与计算样式断言；两文 `related` 互引并补 SPEC-DM-017（ARCH-DM-007 的 `related` 序列缩进错误一并修正）。仅文档修订，未改动代码；存量表格样式（10px/9px/4px 多档并存）按 ARCH-DM-007 既有迁移顺序收口，不在本次处理。
+
 ## 2026-09-26（PLAN-DM-042：布局模板单文件资产与勾选启用图幅）
 
 - 模板资产统一为"一个资产对应一个 DWG 文件"：领域模型 `StandardAsset` 由 `files`/`role` 多文件结构改为单文件 `file` + `paper_layouts`，删除 `StandardAssetFile`；schema 解析勾选集合（去重保序、丢弃空白项），旧 `files`/`role` 形状在保存与导入时按稳定码拒绝，不做自动迁移（要求重新导入/重建）。
