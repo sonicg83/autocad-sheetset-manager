@@ -1410,11 +1410,16 @@ th{padding:var(--space-1);vertical-align:middle}</style>
 });
 
 describe("grid 表格几何与逐表守卫", () => {
-  test("登记清单逐表覆盖 18 张真实表，并预留 4 张 grid 表配对", () => {
-    assert.equal(TABLE_CONTRACTS.length, 18);
+  test("登记清单覆盖 18 张真实表、激活 3 张 grid 表并预留第 4 张", () => {
+    assert.equal(TABLE_CONTRACTS.length, 21);
     assert.equal(GRID_TABLE_CONTRACTS.length, 4);
-    assert.equal(new Set(TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 18);
+    assert.equal(new Set(TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 21);
     assert.equal(new Set(GRID_TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 4);
+    assert.deepEqual(
+      TABLE_CONTRACTS.filter(item => ["enum-values", "mapping-values", "derived-properties"].includes(item.marker))
+        .map(item => item.marker),
+      ["enum-values", "mapping-values", "derived-properties"],
+    );
   });
 
   test("grid 表行容器缺 align-items 被拒绝", () => {

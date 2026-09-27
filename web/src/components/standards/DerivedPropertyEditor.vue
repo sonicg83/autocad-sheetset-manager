@@ -12,6 +12,7 @@ import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiIconButton from "../ui/UiIconButton.vue";
 import UiInput from "../ui/UiInput.vue";
+import {nextInstanceId} from "../ui/instanceId";
 import MappingPropertyDialog from "./MappingPropertyDialog.vue";
 import CompositionPropertyDialog from "./CompositionPropertyDialog.vue";
 import {
@@ -42,6 +43,9 @@ const emit = defineEmits<{
   deleteBlocked: [{propertyId: string; references: PropertyReference[]}];
 }>();
 const {t} = useI18n();
+const derivedTableId = nextInstanceId("derived-properties");
+const derivedNameHeaderId = `${derivedTableId}-name`;
+const derivedDescriptionHeaderId = `${derivedTableId}-description`;
 
 const root = ref<HTMLElement | null>(null);
 const dialogPropertyId = ref<string | null>(null);
@@ -229,77 +233,86 @@ function removeProperty(property: DraftProperty): void {
       {{ $t("standards.ordinary.deleteBlocked", {count: blocked.owners.length, owners: blocked.owners.join(t("standards.enumDialog.nameSeparator"))}) }}
     </p>
     <p v-if="derivedProperties.length === 0" class="section-empty">{{ $t("standards.derived.empty") }}</p>
-    <div v-else class="derived-list" data-testid="derived-table">
-      <div class="derived-row derived-head" aria-hidden="true">
-        <span>{{ $t("standards.derived.name") }}</span>
-        <span>{{ $t("standards.derived.scope") }}</span>
-        <span>{{ $t("standards.derived.sourceSummary") }}</span>
-        <span>{{ $t("standards.derived.kind") }}</span>
-        <span>{{ $t("standards.derived.description") }}</span>
-        <span>{{ $t("standards.derived.edit") }}</span>
-        <span>{{ $t("standards.derived.remove") }}</span>
+    <div v-else class="derived-list" role="table" data-ui-table-contract="derived-properties" data-testid="derived-table">
+      <div class="derived-row derived-head" role="row">
+        <span :id="derivedNameHeaderId" role="columnheader">{{ $t("standards.derived.name") }}</span>
+        <span role="columnheader">{{ $t("standards.derived.scope") }}</span>
+        <span role="columnheader">{{ $t("standards.derived.sourceSummary") }}</span>
+        <span role="columnheader">{{ $t("standards.derived.kind") }}</span>
+        <span :id="derivedDescriptionHeaderId" role="columnheader">{{ $t("standards.derived.description") }}</span>
+        <span role="columnheader">{{ $t("standards.derived.edit") }}</span>
+        <span role="columnheader">{{ $t("standards.derived.remove") }}</span>
       </div>
-      <div v-for="property in derivedProperties" :key="property.property_id" class="derived-row">
-        <UiInput
-          v-model="property.name"
-          :label="$t('standards.derived.name')"
-          :aria-label="$t('standards.derived.name')"
-          :data-testid="`derived-name-${property.property_id}`"
-        />
-        <select
-          v-if="isCreated(property)"
-          class="cell-select"
-          :value="property.scope"
-          :aria-label="$t('standards.derived.scope')"
-          :data-testid="`derived-scope-${property.property_id}`"
-          @change="setScope(property, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="sheetset">{{ $t("standards.derived.scopeValue.sheetset") }}</option>
-          <option value="sheet">{{ $t("standards.derived.scopeValue.sheet") }}</option>
-        </select>
-        <span
-          v-else
-          class="scope-locked"
-          :title="$t('standards.derived.scopeLocked')"
-          :data-testid="`derived-scope-badge-${property.property_id}`"
-        >{{ property.scope }}</span>
-        <span class="source-summary" :data-testid="`derived-source-${property.property_id}`">
-          {{ sourceSummary(property) }}
-        </span>
-        <select
-          class="cell-select"
-          :value="property.kind"
-          :aria-label="$t('standards.derived.kind')"
-          :data-testid="`derived-kind-${property.property_id}`"
-          @change="setKind(property, ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="kind in DERIVED_PROPERTY_KINDS" :key="kind" :value="kind">
-            {{ kind === "mapping" ? $t("standards.derived.kindMapping") : $t("standards.derived.kindComposition") }}
-          </option>
-        </select>
-        <!-- 说明列用自有包裹元素当网格项：UiInput 为 `inheritAttrs:false`，
-             `class` 与 `data-testid` 都不会落到它的根元素，无法在父组件侧按类隐藏。 -->
-        <div class="cell-description">
+      <div v-for="property in derivedProperties" :key="property.property_id" class="derived-row" role="row">
+        <div class="derived-cell" role="cell">
+          <UiInput
+            v-model="property.name"
+            :aria-labelledby="derivedNameHeaderId"
+            :data-testid="`derived-name-${property.property_id}`"
+          />
+        </div>
+        <div class="derived-cell" role="cell">
+          <select
+            v-if="isCreated(property)"
+            class="cell-select"
+            :value="property.scope"
+            :aria-label="$t('standards.derived.scope')"
+            :data-testid="`derived-scope-${property.property_id}`"
+            @change="setScope(property, ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="sheetset">{{ $t("standards.derived.scopeValue.sheetset") }}</option>
+            <option value="sheet">{{ $t("standards.derived.scopeValue.sheet") }}</option>
+          </select>
+          <span
+            v-else
+            class="scope-locked"
+            :title="$t('standards.derived.scopeLocked')"
+            :data-testid="`derived-scope-badge-${property.property_id}`"
+          >{{ property.scope }}</span>
+        </div>
+        <div class="derived-cell cell-source-summary" role="cell">
+          <span class="source-summary" :data-testid="`derived-source-${property.property_id}`">
+            {{ sourceSummary(property) }}
+          </span>
+        </div>
+        <div class="derived-cell" role="cell">
+          <select
+            class="cell-select"
+            :value="property.kind"
+            :aria-label="$t('standards.derived.kind')"
+            :data-testid="`derived-kind-${property.property_id}`"
+            @change="setKind(property, ($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="kind in DERIVED_PROPERTY_KINDS" :key="kind" :value="kind">
+              {{ kind === "mapping" ? $t("standards.derived.kindMapping") : $t("standards.derived.kindComposition") }}
+            </option>
+          </select>
+        </div>
+        <!-- 说明列网格项必须可由父组件整体隐藏；UiInput 的 class/data-testid 只落在内部 input。 -->
+        <div class="derived-cell cell-description" role="cell">
           <UiInput
             v-model="property.description"
-            :label="$t('standards.derived.description')"
-            :aria-label="$t('standards.derived.description')"
+            :aria-labelledby="derivedDescriptionHeaderId"
             :data-testid="`derived-description-${property.property_id}`"
           />
         </div>
-        <UiButton
-          variant="secondary"
-          size="compact"
-          :data-testid="`edit-derived-${property.property_id}`"
-          @click="openEditor(property.property_id)"
-        >{{ $t("standards.derived.edit") }}</UiButton>
-        <UiIconButton
-          icon="close"
-          :label="$t('standards.derived.remove')"
-          :data-testid="`derived-remove-${property.property_id}`"
-          @click="removeProperty(property)"
-        />
-        <p v-if="issuesOf(property).length > 0" class="row-issue" :data-testid="`derived-issue-${property.property_id}`">
+        <div class="derived-cell" role="cell">
+          <UiButton
+            variant="secondary"
+            size="compact"
+            :data-testid="`edit-derived-${property.property_id}`"
+            @click="openEditor(property.property_id)"
+          >{{ $t("standards.derived.edit") }}</UiButton>
+        </div>
+        <div class="derived-cell" role="cell">
+          <UiIconButton
+            icon="close"
+            :label="$t('standards.derived.remove')"
+            :data-testid="`derived-remove-${property.property_id}`"
+            @click="removeProperty(property)"
+          />
+        </div>
+        <p v-if="issuesOf(property).length > 0" class="row-issue" role="cell" :data-testid="`derived-issue-${property.property_id}`">
           {{ issueText(property) }}
         </p>
       </div>
@@ -330,14 +343,9 @@ function removeProperty(property: DraftProperty): void {
 .delete-error{margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-danger);border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);font-size:var(--font-label)}
 .section-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .derived-list{display:grid;gap:var(--space-2)}
-/* 列标题已由 derived-head 表达（SPEC-DM-017 编辑器 Demo）：单元格内可见字段标签
-   会与列标题重复并撑高行高；标签保留在 DOM 中作为可访问名，仅视觉隐藏。 */
-.derived-row :deep(.ui-input){gap:0}
-/* 隐藏单元格内的可见字段标签：列标题已由 derived-head 表达，单元格内再渲染可见字段标签会与
-   列标题重复并撑高行高（对照 SPEC-DM-017 Demo）。标签保留在 DOM 与调用点 `label` 属性中
-   （`check:ui` 的 visible-input-label 契约），可访问名由输入框自身的 `aria-label` 承担。 */
-.derived-row :deep(.ui-input__label){display:none}
-.derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2);align-items:start}
+.derived-row{display:grid;grid-template-columns:minmax(0,1.1fr) 9% minmax(0,1.2fr) 12% minmax(0,1.2fr) auto auto;gap:var(--space-2)}
+.derived-row,.derived-head{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:start}
+.derived-cell{display:flex;align-items:center;min-width:0;min-height:var(--sheet-table-row-height)}
 .derived-head{font-size:var(--font-label);color:var(--color-text-secondary)}
 /* 分级响应式（PLAN-DM-039 Task 3，对照 SPEC-DM-017 编辑器 Demo）：
    1050px 以下隐藏纯说明列，780px 以下再隐藏可由编辑模态框读取的源摘要列；
@@ -351,7 +359,7 @@ function removeProperty(property: DraftProperty): void {
 }
 @media (max-width: 780px){
   .derived-row{grid-template-columns:minmax(0,1.2fr) 9% 12% auto auto}
-  .derived-row :deep([data-testid^="derived-source-"]),.derived-row.derived-head :nth-child(3){display:none}
+  .derived-row > .cell-source-summary,.derived-row.derived-head :nth-child(3){display:none}
 }
 .scope-locked{display:inline-block;padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label)}
 .cell-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}

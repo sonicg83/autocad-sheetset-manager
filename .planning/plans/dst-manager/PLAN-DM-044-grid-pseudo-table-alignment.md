@@ -118,11 +118,11 @@ related:
 
 **Files:** `web/src/components/standards/EnumValuesDialog.vue`、`web/src/components/standards/MappingPropertyDialog.vue`、`web/src/components/standards/DerivedPropertyEditor.vue`、`web/tests/e2e/standards-editor.spec.ts`、`web/tests/e2e/standards-visual-evidence.spec.ts`、`web/scripts/ui-contract-exceptions.json`。
 
-**Interfaces:** 枚举、映射表为表头与重复行增加最小 `role="table"` 包裹容器，派生表复用 `.derived-list` 作表根；三表根分别加同文件唯一的 `data-ui-table-contract` marker 并登记到 Task 2 的 `TABLE_CONTRACTS`。三表行容器补 `role="row"`、列头补 `role="columnheader"`、数据网格项补 `role="cell"`。`UiInput` 是 `inheritAttrs:false`，**不能**直接把 `role="cell"` 传给 `UiInput`（那会落在内部 `<input>`）；须在网格项外包元素上加 `role="cell"`，并复核列轨道和响应式 `:nth-child` 选择器。对每表实例用 `nextInstanceId()` 生成列头 ID，列头与输入共享同一绑定变量；三张表头均移除现有 `aria-hidden="true"`，纯操作列仍由按钮自身命名。scoped 样式显式声明 `height:var(--sheet-table-row-height)`、单档令牌化 `padding` 与行容器 `align-items`。行内 `UiInput` 移除 `label`（派生表同时移除重复 `aria-label`）并接 `aria-labelledby`；派生表删除 `.ui-input__label` 隐藏规则与专为该标签存在的 `gap:0`，1050px/780px 隐藏列及 `align-items:start` 必须先量取再改，错误说明格按实际列跨度标注。
+**Interfaces:** 枚举、映射表为表头与重复行增加最小 `role="table"` 包裹容器，派生表复用 `.derived-list` 作表根；三表根分别加同文件唯一的 `data-ui-table-contract` marker 并登记到 Task 2 的 `TABLE_CONTRACTS`。三表行容器补 `role="row"`、列头补 `role="columnheader"`、数据网格项补 `role="cell"`。`UiInput` 是 `inheritAttrs:false`，**不能**直接把 `role="cell"` 传给 `UiInput`（那会落在内部 `<input>`）；须在网格项外包元素上加 `role="cell"`，并复核列轨道和响应式 `:nth-child` 选择器。对每表实例用 `nextInstanceId()` 生成列头 ID，列头与输入共享同一绑定变量；三张表头均移除现有 `aria-hidden="true"`，纯操作列仍由按钮自身命名。scoped 样式显式声明 `height` 或可容纳内容增高的 `min-height:var(--sheet-table-row-height)`、单档令牌化 `padding` 与行容器 `align-items`。行内 `UiInput` 移除 `label`（派生表同时移除重复 `aria-label`）并接 `aria-labelledby`；派生表删除 `.ui-input__label` 隐藏规则与专为该标签存在的 `gap:0`，1050px/780px 隐藏列及 `align-items:start` 必须先量取再改，错误说明格按实际列跨度标注。
 
-- [ ] **Step 1（RED）**：在 `standards-editor.spec.ts` 对三张表逐一断言 `getByRole("table")` 内的表头/数据行/列头/单元格数量及父子关系、列头不在 `aria-hidden` 子树、Tab 顺序不变；同一断言量取普通行高度 ≥44px 且消费 44px 档、显式 `align-items`、单档令牌化 padding、行内控件中点差 ≤1px。新增 `.ui-input__label` 计数 0 与控件可访问名称等于对应列头文字的断言；把既有 `derived-table` 的「隐藏 label >0」断言改为 `label=0`，`ordinary-table` 同类断言保持不动。先记录现状命中数与目标 RED，再改组件。
-- [ ] **Step 2（GREEN）**：按 Interfaces 补表根、行/格角色、外包网格项、实例级列头 ID、`aria-labelledby` 与 scoped 样式；`.enum-head,.enum-row` 和 `.mapping-head,.mapping-row` 各自继续共用同一轨道声明。复跑 900×768 派生表用例，确认说明列隐藏的是整个网格项且行内项数匹配；删除 `gap:0` 后重测行高。复跑 `check:ui`，若第四形态误报则修配对或模板，不回退 `label`。
-- [ ] **Step 3（验证/提交）**：运行两份目标 e2e、`check:ui` 与生产构建；核对 900×768 与 1440×900 的滚动、隐藏列和无横溢；逐条复核受影响的 `getByLabel`；跑 axe 与读屏走查，确认三张表的完整角色树、列头可见于辅助技术且无无效父角色。读屏人工环境缺失时在执行记录列为未验证，不删角色作为替代；清退对应例外，提交信息：`收口标准平台网格表格对齐并取消双重表头`。
+- [x] **Step 1（RED）**：在 `standards-editor.spec.ts` 对三张表逐一断言 `getByRole("table")` 内的表头/数据行/列头/单元格数量及父子关系、列头不在 `aria-hidden` 子树、Tab 顺序不变；同一断言量取普通行高度 ≥44px 且消费 44px 档、显式 `align-items`、单档令牌化 padding、行内控件中点差 ≤1px。新增 `.ui-input__label` 计数 0 与控件可访问名称等于对应列头文字的断言；把既有 `derived-table` 的「隐藏 label >0」断言改为 `label=0`，`ordinary-table` 同类断言保持不动。RED 实测：派生表仍有 4 个 label，枚举弹窗尚无登记表根；两条新断言失败。
+- [x] **Step 2（GREEN）**：按 Interfaces 补表根、行/格角色、外包网格项、实例级列头 ID、`aria-labelledby` 与 scoped 样式；`.enum-head,.enum-row` 和 `.mapping-head,.mapping-row` 各自继续共用同一轨道声明。复跑 900×768 派生表用例，确认说明列隐藏的是整个网格项且行内项数匹配；删除 `gap:0` 后重测行高。新增 780×768 源摘要与说明列整格隐藏断言。`check:ui` 与几何验证通过，无需新增例外。
+- [x] **Step 3（验证/提交）**：两份目标 e2e、`check:ui`、`test:contracts` 与生产构建均通过；900×768、780×768、1440×900 检查无横溢且响应式列隐藏符合预期；既有 `getByLabel` 定位通过。检查器未安装 `axe-core`/`@axe-core/playwright`，当前会话未运行 Narrator/NVDA，故 axe 与人工读屏列为未验证；不删减语义角色。三表无计划到期例外，例外清单保持不变。提交信息：`收口标准平台网格表格对齐并取消双重表头`。
 
 ### Task 4：目录列编辑器的几何与轨道对齐收口
 
@@ -186,6 +186,7 @@ related:
 | --- | --- | --- | --- | --- |
 | 2026-09-27 | Task 1 规范正文本轮增量修订 | 文档规范任务，无运行时 RED 用例 | §6.4 / §4.3 / §9.1 / §9.3 增量已完成，PLAN-DM-043 规则与 18 张真实表口径保留；`rtk git diff --check` exit 0 | Tasks 3–6 实施；真实 Windows WebView2 缩放复验 |
 | 2026-09-27 | Task 2 静态规则与迁移基线 | 首次 `test:contracts` 127 项中 12 项新增用例失败；覆盖几何规则、逐表守卫、第四种标签形态 | `test:contracts` 133/133，27 条 CLI 变异；`check:ui` exit 0；18 张真实表 marker 配对完整，原 10 条例外 + 1 条动态变量未改 | 四张 grid 根将在 Tasks 3/4 落地；屏幕阅读器与真实 WebView2 缩放复验 |
+| 2026-09-27 | Task 3 标准平台三张 grid 表 | 派生表旧断言收到 4 个 label；枚举弹窗未找到登记表根；新增语义/几何断言按预期失败 | `test:contracts` 133/133；`check:ui` exit 0；生产 `build` exit 0（含 API/i18n/TypeScript 检查）；两目标 spec 67/67，最终聚焦复跑 34/34；900×768、780×768、1440×900 几何/响应式断言通过；截图人工检查 | `axe-core` 不在依赖树且 Narrator/NVDA 未运行，axe 与人工读屏未验证；真实 WebView2 缩放复验 |
 
 ## 修订记录
 
@@ -196,3 +197,4 @@ related:
 - 2026-09-27 审查后修订四（仍为 proposed）：修复六项计划缺口。四表统一完整 `role="table"` 语义树，撤销上条“`ColumnEditor` 不新增 ARIA 角色”口径；≤720px 表头隐藏时增加视觉互斥的可见行内列名；行号由 `aria-labelledby` 进入计算名称而非仅由 `aria-describedby` 提供描述；列头与行号 ID 改为实例级并测试双挂载；`ColumnEditor` 先补 `data-testid` 再迁移旧定位；守卫改为按每张表的 `data-ui-table-contract` marker 与 `TABLE_CONTRACTS` 精确配对，验证同组件第二张无规则表也会失败。Task 6 取消“整表例外”分支；上条相冲突的实施口径均以本次修订为准。未实施代码或规范正文。
 - 2026-09-27 执行 Task 1：增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3，固定三条 `grid-table-*` 规则、逐表守卫和第四种严格标签形态；旧 `th/td` 条目未改写。
 - 2026-09-27 执行 Task 2：接入三条 `grid-table-*` 规则、逐表 `table-without-cell-contract` 和严格 `aria-labelledby` 第四形态；18 张真实表逐根加 marker，4 张 grid 表的几何配对预登记。Playwright 记录四表初始行高、padding、`align-items` 与计算轨道；原生表 `table-cell-*`、逐表守卫的未豁免基线均为 0，例外清单 10/1 保持原样；计划进入 Tasks 3–6。
+- 2026-09-27 执行 Task 3：枚举、映射与派生表补齐语义树、实例级列头 ID 和 `aria-labelledby`，取消三表重复输入标签；三张表契约登记启用。统一使用 44px `min-height` 档、单档令牌 padding 和显式行轨道对齐，保留派生表 1050px/780px 响应式隐藏；axe/读屏工具不可用已记录，计划继续 active。

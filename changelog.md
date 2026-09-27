@@ -2,6 +2,7 @@
 
 - 按实施计划 Task 1 增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3：明确完整表格角色树、grid 行几何、列头命名与响应式标签边界，固定 `grid-table-*`、`table-without-cell-contract` 和 `visible-input-label` 第四形态；原有真实表 `th/td` 对齐条款保持不变。计划进入 `active`。
 - 完成 PLAN-DM-044 Task 2：检查器新增 `grid-table-row-height`、`grid-table-padding`、`grid-table-align` 与逐表 `table-without-cell-contract` 守卫，并严格验证列头 `aria-labelledby` 第四形态；18 张真实表增加唯一 marker 并登记，4 张 grid 表的几何配对待其语义根在 Task 3/4 落地后启用。Playwright 记录 4 表初始行高、padding、`align-items` 与轨道；`ui-contract-exceptions.json` 保持原有 10 条例外和 1 条动态变量。`test:contracts` 133/133 通过（27 条 CLI 变异），`check:ui` exit 0。后续组件实施、全量回归与真实 WebView2 缩放复验仍待执行，计划保持 `active`。
+- 完成 PLAN-DM-044 Task 3：枚举、映射、派生属性三张 grid 表加入完整语义角色树、实例级列头 ID 与 `aria-labelledby`，移除行内重复标签并统一 44px 行高下限、令牌 padding 和显式对齐；保留派生表 1050px/780px 隐藏列行为。`test:contracts` 133/133、`check:ui`、生产构建通过；两目标 E2E 67/67，含 900×768、780×768 与 1440×900 检查。当前缺少 axe 与运行中的屏幕阅读器，读屏检查登记未验证。
 
 ## 2026-09-27（PLAN-DM-045：映射源一对多复用）
 

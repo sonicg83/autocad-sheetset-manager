@@ -13,6 +13,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiIconButton from "../ui/UiIconButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
+import {nextInstanceId} from "../ui/instanceId";
 import {nextEnumItemId, type DraftEnumItem, type DraftEnumProperty} from "../../features/standards/draftModel";
 
 const props = defineProps<{
@@ -23,6 +24,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{save: [items: DraftEnumItem[]]; cancel: []}>();
 const {t} = useI18n();
+const enumTableId = nextInstanceId("enum-values");
+const enumValueHeaderId = `${enumTableId}-value`;
 
 const card = ref<HTMLElement | null>(null);
 const items = ref<DraftEnumItem[]>([]);
@@ -111,40 +114,46 @@ function save(): void {
       </header>
       <div class="dialog-body">
         <p class="impact-note" role="note" data-testid="enum-impact">{{ impactText }}</p>
-        <div class="enum-head" aria-hidden="true">
-          <span>{{ $t("standards.enumDialog.order") }}</span>
-          <span>{{ $t("standards.enumDialog.value") }}</span>
-          <span></span>
-        </div>
-        <div v-for="(item, index) in items" :key="item.item_id" class="enum-row">
-          <span class="enum-order">
-            <span class="enum-sequence">{{ String(index + 1).padStart(2, "0") }}</span>
-            <UiIconButton
-              icon="chevron-up"
-              :label="$t('standards.enumDialog.moveUp', {name: item.value || String(index + 1)})"
-              :disabled="index === 0"
-              :data-testid="`enum-up-${item.item_id}`"
-              @click="move(index, -1)"
-            />
-            <UiIconButton
-              icon="chevron-down"
-              :label="$t('standards.enumDialog.moveDown', {name: item.value || String(index + 1)})"
-              :disabled="index === items.length - 1"
-              :data-testid="`enum-down-${item.item_id}`"
-              @click="move(index, 1)"
-            />
-          </span>
-          <UiInput
-            v-model="item.value"
-            :label="$t('standards.enumDialog.value')"
-            :data-testid="`enum-value-${item.item_id}`"
-          />
-          <UiIconButton
-            icon="close"
-            :label="$t('standards.enumDialog.remove')"
-            :data-testid="`enum-delete-${item.item_id}`"
-            @click="remove(index)"
-          />
+        <div class="enum-table" role="table" data-ui-table-contract="enum-values">
+          <div class="enum-head" role="row">
+            <span role="columnheader">{{ $t("standards.enumDialog.order") }}</span>
+            <span :id="enumValueHeaderId" role="columnheader">{{ $t("standards.enumDialog.value") }}</span>
+            <span role="columnheader" :aria-label="$t('standards.enumDialog.remove')"></span>
+          </div>
+          <div v-for="(item, index) in items" :key="item.item_id" class="enum-row" role="row">
+            <span class="enum-order" role="cell">
+              <span class="enum-sequence">{{ String(index + 1).padStart(2, "0") }}</span>
+              <UiIconButton
+                icon="chevron-up"
+                :label="$t('standards.enumDialog.moveUp', {name: item.value || String(index + 1)})"
+                :disabled="index === 0"
+                :data-testid="`enum-up-${item.item_id}`"
+                @click="move(index, -1)"
+              />
+              <UiIconButton
+                icon="chevron-down"
+                :label="$t('standards.enumDialog.moveDown', {name: item.value || String(index + 1)})"
+                :disabled="index === items.length - 1"
+                :data-testid="`enum-down-${item.item_id}`"
+                @click="move(index, 1)"
+              />
+            </span>
+            <div class="enum-cell" role="cell">
+              <UiInput
+                v-model="item.value"
+                :aria-labelledby="enumValueHeaderId"
+                :data-testid="`enum-value-${item.item_id}`"
+              />
+            </div>
+            <div class="enum-cell" role="cell">
+              <UiIconButton
+                icon="close"
+                :label="$t('standards.enumDialog.remove')"
+                :data-testid="`enum-delete-${item.item_id}`"
+                @click="remove(index)"
+              />
+            </div>
+          </div>
         </div>
         <div class="body-actions">
           <UiButton variant="secondary" size="compact" data-testid="add-enum" @click="add">
@@ -179,9 +188,11 @@ function save(): void {
 .scope-badge{flex:0 0 auto;padding:0 var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-full);font-size:var(--font-label);color:var(--color-text-secondary)}
 .dialog-body{flex:1 1 auto;min-height:0;overflow:auto;display:grid;gap:var(--space-2);padding:var(--space-4)}
 .impact-note{margin:0;padding:var(--space-2) var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);font-size:var(--font-label);color:var(--color-text-secondary)}
-.enum-head,.enum-row{display:grid;grid-template-columns:minmax(120px,140px) minmax(0,1fr) 44px;gap:var(--space-2);align-items:center}
+.enum-table{display:grid;gap:var(--space-2)}
+.enum-head,.enum-row{display:grid;grid-template-columns:minmax(120px,140px) minmax(0,1fr) 44px;gap:var(--space-2);min-height:var(--sheet-table-row-height);padding:var(--space-1);align-items:center}
 .enum-head{font-size:var(--font-label);color:var(--color-text-secondary)}
-.enum-order{display:flex;align-items:center;gap:var(--space-1)}
+.enum-order,.enum-cell{display:flex;align-items:center;min-width:0;min-height:var(--sheet-table-row-height)}
+.enum-order{gap:var(--space-1)}
 .enum-sequence{text-align:center;color:var(--color-text-muted);font-variant-numeric:tabular-nums;font-size:var(--font-label)}
 .body-actions{display:flex}
 .dialog-foot{display:flex;flex:0 0 auto;justify-content:flex-end;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border-subtle);background:var(--color-bg-muted)}

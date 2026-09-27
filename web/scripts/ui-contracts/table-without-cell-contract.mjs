@@ -40,6 +40,9 @@ export const TABLE_CONTRACTS = Object.freeze([
   htmlTable("src/components/creation/ReviewStep.vue", "creation-review", ".preview-table th,.preview-table td"),
   htmlTable("src/components/sheet-catalog/CatalogPreview.vue", "catalog-preview", ".table-window th,.table-window td"),
   htmlTable("src/components/standards/OrdinaryPropertyEditor.vue", "ordinary-properties", ".ordinary-table th,.ordinary-table td"),
+  gridTable("src/components/standards/EnumValuesDialog.vue", "enum-values", ".enum-head", ".enum-row"),
+  gridTable("src/components/standards/MappingPropertyDialog.vue", "mapping-values", ".mapping-head", ".mapping-row"),
+  gridTable("src/components/standards/DerivedPropertyEditor.vue", "derived-properties", ".derived-head", ".derived-row"),
 ]);
 
 /** 几何配对在 Task 3/4 加入 TABLE_CONTRACTS 时启用逐表根守卫。 */

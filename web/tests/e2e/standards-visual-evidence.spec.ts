@@ -153,7 +153,12 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await shot(page, info, "g4-03-ordinary-light-1440x900");
 
   await openEditorSection(page, "derived");
-  await expect(page.getByTestId("derived-table")).toBeVisible();
+  const derivedTable = page.getByRole("table");
+  await expect(derivedTable).toBeVisible();
+  await expect(derivedTable).toHaveAttribute("data-testid", "derived-table");
+  await expect(derivedTable.locator(":scope > [role='row']").first().getByRole("columnheader")).toHaveCount(7);
+  await expect(derivedTable.getByTestId("derived-name-prop-code")).toHaveAccessibleName("属性名");
+  await expect(derivedTable.locator("label")).toHaveCount(0);
   await shot(page, info, "g4-04-derived-light-1440x900");
 
   await openEditorSection(page, "dwgNaming");

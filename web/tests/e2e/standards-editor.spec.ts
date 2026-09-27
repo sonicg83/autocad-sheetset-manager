@@ -54,6 +54,75 @@ async function expectActionsReachable(page: Page, names: string[]): Promise<void
   }
 }
 
+/** 核对 CSS grid 伪表格的角色树、行高档、单档 padding 与同行单元格几何。 */
+async function expectPseudoTable(
+  table: Locator,
+  dataRowCount: number,
+  columnCount: number,
+): Promise<void> {
+  await expect(table).toHaveAttribute("role", "table");
+  const rows = table.locator(":scope > [role='row']");
+  await expect(rows).toHaveCount(dataRowCount + 1);
+  const header = rows.first();
+  const headers = header.getByRole("columnheader");
+  await expect(headers).toHaveCount(columnCount);
+  const hiddenHeaders = await headers.evaluateAll(elements =>
+    elements.filter(element => element.closest('[aria-hidden="true"]') !== null).length,
+  );
+  expect(hiddenHeaders, "表头不得位于 aria-hidden 子树").toBe(0);
+
+  const allRows = await rows.all();
+  const headerCells = allRows[0];
+  expect(headerCells).toBeDefined();
+  for (const row of allRows.slice(1)) {
+    await expect(row.getByRole("cell")).toHaveCount(columnCount);
+  }
+
+  const metrics = await rows.evaluateAll(elements => {
+    const root = getComputedStyle(document.documentElement);
+    const rowHeight = Number.parseFloat(root.getPropertyValue("--sheet-table-row-height"));
+    const allowedPadding = [
+      root.getPropertyValue("--space-1").trim(),
+      root.getPropertyValue("--space-2").trim(),
+    ].map(value => Number.parseFloat(value));
+    return elements.map(element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const cells = [...element.querySelectorAll<HTMLElement>(":scope > [role='cell']")]
+        .filter(cell => getComputedStyle(cell).display !== "none");
+      const centers = cells.map(cell => {
+        const cellRect = cell.getBoundingClientRect();
+        return cellRect.top + cellRect.height / 2;
+      });
+      return {
+        height: rect.height,
+        rowHeight,
+        padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft]
+          .map(value => Number.parseFloat(value)),
+        allowedPadding,
+        alignItems: style.alignItems,
+        centers,
+      };
+    });
+  });
+  const headerMetric = metrics[0];
+  expect(headerMetric).toBeDefined();
+  for (const [index, metric] of metrics.entries()) {
+    expect(metric.height, `第 ${index} 行至少消费 44px 档`).toBeGreaterThanOrEqual(metric.rowHeight);
+    expect(metric.padding.every(value => value === metric.padding[0]), "每行四边使用单档 padding").toBe(true);
+    expect(metric.allowedPadding).toContain(metric.padding[0]);
+    expect(["center", "start"]).toContain(metric.alignItems);
+    if (index > 0) {
+      expect(metric.padding, "表头和数据行使用同档 padding").toEqual(headerMetric!.padding);
+      expect(metric.alignItems, "表头和数据行显式采用同种对齐").toBe(headerMetric!.alignItems);
+      expect(
+        Math.max(...metric.centers) - Math.min(...metric.centers),
+        "同行单元格中心差不超过 1px",
+      ).toBeLessThanOrEqual(1);
+    }
+  }
+}
+
 async function saveDraftDocument(page: Page): Promise<void> {
   await page.getByRole("button", {name: "保存草稿"}).click();
   await expect(editorSaveState(page)).toHaveText("已保存");
@@ -166,8 +235,58 @@ test("属性表单元格不再重复列标题标签", async ({page}) => {
 
   await openEditorSection(page, "derived");
   const derivedLabel = page.getByTestId("derived-table").locator("label");
-  expect(await derivedLabel.count()).toBeGreaterThan(0);
-  await expect(derivedLabel.first()).toBeHidden();
+  await expect(derivedLabel).toHaveCount(0);
+});
+
+test("枚举、映射与派生属性表具备语义角色、列头名称和对齐行", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+
+  await openEditorSection(page, "ordinary");
+  await page.getByTestId("edit-enum-prop-major").click();
+  const enumDialog = page.getByTestId("enum-dialog");
+  const enumTable = enumDialog.getByRole("table");
+  await expect(enumTable).toHaveAttribute("data-ui-table-contract", "enum-values");
+  await expectPseudoTable(enumTable, 3, 3);
+  const enumValue = page.getByTestId("enum-value-enum-gas");
+  await expect(enumValue).toHaveAccessibleName("枚举值");
+  await expect(enumTable.locator("label")).toHaveCount(0);
+  await page.getByTestId("enum-down-enum-gas").focus();
+  await page.keyboard.press("Tab");
+  await expect(enumValue).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("enum-delete-enum-gas")).toBeFocused();
+  await page.getByTestId("cancel-enum").click();
+
+  await openEditorSection(page, "derived");
+  const derivedTable = page.getByRole("table");
+  await expect(derivedTable).toHaveAttribute("data-testid", "derived-table");
+  await expectPseudoTable(derivedTable, 2, 7);
+  const derivedName = page.getByTestId("derived-name-prop-code");
+  await expect(derivedName).toHaveAccessibleName("属性名");
+  const derivedDescription = page.getByTestId("derived-description-prop-code");
+  const descriptionHeader = await derivedTable.getByRole("columnheader").nth(4).innerText();
+  await expect(derivedDescription).toHaveAccessibleName(descriptionHeader);
+  await expect(derivedTable.locator("label")).toHaveCount(0);
+
+  await page.setViewportSize({width: 780, height: 768});
+  const narrowDerivedRow = derivedTable.getByRole("row").nth(1);
+  await expect(narrowDerivedRow.locator(".cell-description")).toBeHidden();
+  await expect(narrowDerivedRow.locator(".cell-source-summary")).toBeHidden();
+  await expectPseudoTable(derivedTable, 2, 5);
+  await expectNoPageHScroll(page, "780×768 派生属性表");
+  await page.getByTestId("edit-derived-prop-code").click();
+
+  const mappingDialog = page.getByTestId("mapping-dialog");
+  const mappingTable = mappingDialog.getByRole("table");
+  await expect(mappingTable).toHaveAttribute("data-ui-table-contract", "mapping-values");
+  await expectPseudoTable(mappingTable, 3, 2);
+  const mappingTarget = page.getByTestId("mapping-target-enum-gas");
+  const mappingTargetHeader = await mappingTable.getByRole("columnheader").nth(1).innerText();
+  await expect(mappingTarget).toHaveAccessibleName(mappingTargetHeader);
+  await expect(mappingTable.locator("label")).toHaveCount(0);
+  await page.getByTestId("cancel-mapping").click();
 });
 
 test("900×768 派生属性行不因隐藏说明列而换行", async ({page}) => {

@@ -14,6 +14,7 @@ import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
+import {nextInstanceId} from "../ui/instanceId";
 import {
   mappingConfirmationRequired,
   mappingTargetBuffer,
@@ -39,6 +40,8 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 const {t} = useI18n();
+const mappingTableId = nextInstanceId("mapping-values");
+const mappingTargetHeaderId = `${mappingTableId}-target`;
 
 const card = ref<HTMLElement | null>(null);
 const sourceId = ref("");
@@ -169,25 +172,29 @@ function confirm(): void {
             >{{ optionLabel(option) }}</option>
           </select>
         </div>
-        <div class="mapping-head" aria-hidden="true">
-          <span>{{ $t("standards.mapping.sourceColumn") }}</span>
-          <span>{{ $t("standards.mapping.targetColumn") }}</span>
+        <div v-if="rows.length > 0" class="mapping-table" role="table" data-ui-table-contract="mapping-values">
+          <div class="mapping-head" role="row">
+            <span role="columnheader">{{ $t("standards.mapping.sourceColumn") }}</span>
+            <span :id="mappingTargetHeaderId" role="columnheader">{{ $t("standards.mapping.targetColumn") }}</span>
+          </div>
+          <div v-for="row in rows" :key="row.item_id" class="mapping-row" role="row">
+            <span class="mapping-cell source-value" role="cell" :data-testid="`mapping-source-value-${row.item_id}`">
+              {{ source?.enum_items.find(item => item.item_id === row.item_id)?.value ?? "" }}
+            </span>
+            <div class="mapping-cell" role="cell">
+              <UiInput
+                :model-value="row.value"
+                :aria-labelledby="mappingTargetHeaderId"
+                :placeholder="$t('standards.mapping.targetPlaceholder')"
+                :data-testid="`mapping-target-${row.item_id}`"
+                @update:model-value="setTarget(row.item_id, $event)"
+              />
+            </div>
+          </div>
         </div>
-        <p v-if="rows.length === 0" class="mapping-empty" data-testid="mapping-empty">
+        <p v-else class="mapping-empty" data-testid="mapping-empty">
           {{ $t("standards.mapping.empty") }}
         </p>
-        <div v-for="row in rows" :key="row.item_id" class="mapping-row">
-          <span class="source-value" :data-testid="`mapping-source-value-${row.item_id}`">
-            {{ source?.enum_items.find(item => item.item_id === row.item_id)?.value ?? "" }}
-          </span>
-          <UiInput
-            :model-value="row.value"
-            :label="$t('standards.mapping.targetColumn')"
-            :placeholder="$t('standards.mapping.targetPlaceholder')"
-            :data-testid="`mapping-target-${row.item_id}`"
-            @update:model-value="setTarget(row.item_id, $event)"
-          />
-        </div>
       </div>
       <footer class="dialog-foot">
         <UiButton variant="secondary" data-testid="cancel-mapping" @click="emit('cancel')">
@@ -218,9 +225,11 @@ function confirm(): void {
 .source-field{display:grid;gap:var(--space-1)}
 .field-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .cell-select{box-sizing:border-box;width:100%;height:var(--input-height);padding:0 var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary)}
-.mapping-head,.mapping-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-2);align-items:end}
+.mapping-table{display:grid;gap:var(--space-2)}
+.mapping-head,.mapping-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-2);min-height:var(--sheet-table-row-height);padding:var(--space-1);align-items:center}
 .mapping-head{font-size:var(--font-label);color:var(--color-text-secondary)}
 .mapping-empty{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
+.mapping-cell{display:flex;align-items:center;min-width:0;min-height:var(--sheet-table-row-height)}
 .source-value{padding:var(--space-2);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-label);overflow-wrap:anywhere}
 .dialog-foot{display:flex;flex:0 0 auto;justify-content:flex-end;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border-subtle);background:var(--color-bg-muted)}
 </style>
