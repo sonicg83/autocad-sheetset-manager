@@ -205,18 +205,17 @@ describe("buildPublishGate", () => {
     ]);
   });
 
-  it("passes the duplicated source name to the {source} message placeholder", () => {
+  it("does not block two mappings that share one source", () => {
     const document = documentWith([], {
       properties: [
         {property_id: "prop-major", name: "专业", scope: "sheetset", kind: "enum", default_value: "燃气", enum_items: [{item_id: "enum-gas", value: "燃气"}]},
-        {property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ"}]},
-        {property_id: "prop-dup", name: "重复映射", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ2"}]},
+        {property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ"}], confirmed_source_items: [["enum-gas", "燃气"]]},
+        {property_id: "prop-label", name: "图册代码", scope: "sheetset", kind: "mapping", source_property_id: "prop-major", mapping: [{item_id: "enum-gas", value: "RQ2"}], confirmed_source_items: [["enum-gas", "燃气"]]},
       ],
     });
     const gate = buildPublishGate({document, assets: []});
-    const issue = gate.blockingErrors.find(item => item.code === "STANDARD_MAPPING_SOURCE_DUPLICATE");
-    expect(issue?.params.source).toBe("专业");
-    expect(issue?.params.field).toBe("专业");
+    expect(gate.blockingErrors).toEqual([]);
+    expect(gate.canPublish).toBe(true);
   });
 
   it("keeps a failed inspection separate from standard errors", () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // 派生属性表与映射模态框（PLAN-DM-038 Task 7 / SPEC-DM-017 §5.1–§5.2）：
-// 源属性唯一占用过滤、固定映射行（跟随源枚举身份）、只读源值、无行增删、
+// 源属性作用域过滤与同源复用、固定映射行（跟随源枚举身份）、只读源值、无行增删、
 // 内部 ID 不外显、待确认状态、删除引用保护与类型切换。
 import {afterEach, describe, expect, it} from "vitest";
 import {mount} from "@vue/test-utils";
@@ -8,7 +8,6 @@ import {createI18n} from "vue-i18n";
 import DerivedPropertyEditor from "./DerivedPropertyEditor.vue";
 import zhCNStandards from "../../i18n/locales/zh-CN/standards";
 import {
-  publishIssues,
   toDraftDocument,
   type DraftDiagnostic,
   type DraftDocument,
@@ -23,10 +22,10 @@ const i18n = createI18n({
 });
 
 /**
- * `prop-major` 已被 `prop-claimed` 占用，`prop-code` 当前也指向它（重复占用），
- * 因此编辑 `prop-code` 时唯一可选的源是未被占用的 `prop-other-enum`。
+ * `prop-major` 被 `prop-alias` 与 `prop-code` 共同用作源（同源复用，PLAN-DM-045 后合法），
+ * 因此编辑 `prop-code` 时可选的源包含 `prop-major` 与 `prop-other-enum`。
  */
-function documentWithClaimedSource(): DraftDocument {
+function documentWithSharedSource(): DraftDocument {
   return toDraftDocument({
     schema_version: 1,
     standard_id: "szmedi.gas",
@@ -52,8 +51,8 @@ function documentWithClaimedSource(): DraftDocument {
         enum_items: [{item_id: "enum-x", value: "施工图"}],
       },
       {
-        property_id: "prop-claimed",
-        name: "已占用代码",
+        property_id: "prop-alias",
+        name: "专业代码别名",
         scope: "sheetset",
         kind: "mapping",
         source_property_id: "prop-major",
@@ -99,7 +98,7 @@ function mountDerivedEditor(draft: DraftDocument, diagnostics?: DraftDiagnostic[
   });
 }
 
-/** 源属性选择器中**可选**（未被占用）的源属性 ID 列表。 */
+/** 源属性选择器中可选的源属性 ID 列表。 */
 function sourceOptions(wrapper: ReturnType<typeof mountDerivedEditor>): string[] {
   return wrapper
     .get("[data-testid=mapping-source]")
@@ -127,22 +126,17 @@ afterEach(() => {
 });
 
 describe("DerivedPropertyEditor", () => {
-  it("renders the duplicated source name in the row issue text", () => {
-    const draft = documentWithClaimedSource();
-    const wrapper = mountDerivedEditor(draft, publishIssues(draft));
-    expect(wrapper.get("[data-testid=derived-issue-prop-code]").text()).toContain("（专业）");
-  });
-
-  it("offers only unclaimed ordinary enum sources and fixes rows to enum ids", async () => {
-    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+  it("offers all scope-matching ordinary enum sources and fixes rows to enum ids", async () => {
+    const wrapper = mountDerivedEditor(documentWithSharedSource());
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");
-    expect(sourceOptions(wrapper)).toEqual(["prop-other-enum"]);
+    // 同源复用：已被 prop-alias 使用的 prop-major 仍可作为 prop-code 的源
+    expect(sourceOptions(wrapper)).toEqual(["prop-major", "prop-other-enum"]);
     expect(mappingRows(wrapper)).toEqual(["enum-a", "enum-b"]);
     expect(wrapper.find("[data-testid=add-mapping-row]").exists()).toBe(false);
   });
 
   it("keeps the derived table columns and hides ordinary properties", () => {
-    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+    const wrapper = mountDerivedEditor(documentWithSharedSource());
     const headers = wrapper
       .get("[data-testid=derived-table]")
       .findAll(".derived-head span")
@@ -152,20 +146,14 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("shows read only source values without exposing internal ids", async () => {
-    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+    const wrapper = mountDerivedEditor(documentWithSharedSource());
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");
     expect(wrapper.get("[data-testid=mapping-source-value-enum-a]").text()).toBe("燃气");
     expect(wrapper.get("[data-testid=mapping-dialog]").text()).not.toContain("enum-a");
-    // 当前被占用的源仍以禁用项保留，避免控件显示错误的源
-    const occupiedOption = wrapper
-      .get("[data-testid=mapping-source]")
-      .findAll("option")
-      .find(option => option.attributes("value") === "prop-major");
-    expect(occupiedOption?.attributes("disabled")).toBeDefined();
   });
 
   it("confirms the mapping snapshot and clears the pending state", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");
     expect(wrapper.get("[data-testid=mapping-status]").text()).toContain("映射完整");
@@ -180,7 +168,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("discards edits on cancel", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");
     await wrapper.get("[data-testid=mapping-target-enum-b]").setValue("GS");
@@ -193,7 +181,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("rebuilds rows when the source changes and keeps enum identity on rename", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=edit-derived-prop-code]").trigger("click");
     await wrapper.get("[data-testid=mapping-source]").setValue("prop-other-enum");
@@ -204,7 +192,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("marks a pending mapping after the enum list changed", () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const major = draft.properties.find(item => item.property_id === "prop-major");
     if (major !== undefined && major.kind === "enum") {
       major.enum_items = [...major.enum_items, {item_id: "enum-c", value: "热力"}];
@@ -214,7 +202,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("switches derived kind and clears the payload", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=derived-kind-prop-code]").setValue("composition");
     const property = draft.properties.find(item => item.property_id === "prop-code");
@@ -223,7 +211,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("keeps the scope of an existing derived property read-only", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     expect(wrapper.find("[data-testid=derived-scope-prop-code]").exists()).toBe(false);
     expect(wrapper.get("[data-testid=derived-scope-badge-prop-code]").text()).toBe("sheetset");
@@ -234,7 +222,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("blocks deleting a derived property that the dwg naming template uses", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=derived-remove-prop-code]").trigger("click");
     expect(mappingProperty(draft)).toBeDefined();
@@ -243,20 +231,20 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("removes an unreferenced derived property", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
-    await wrapper.get("[data-testid=derived-remove-prop-claimed]").trigger("click");
-    expect(draft.properties.some(item => item.property_id === "prop-claimed")).toBe(false);
+    await wrapper.get("[data-testid=derived-remove-prop-alias]").trigger("click");
+    expect(draft.properties.some(item => item.property_id === "prop-alias")).toBe(false);
   });
 
   it("opens the composition dialog from the derived table", async () => {
-    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+    const wrapper = mountDerivedEditor(documentWithSharedSource());
     await wrapper.get("[data-testid=edit-derived-prop-label]").trigger("click");
     expect(wrapper.find("[data-testid=composition-dialog]").exists()).toBe(true);
   });
 
   it("saves composition segments from the dialog and discards them on cancel", async () => {
-    const draft = documentWithClaimedSource();
+    const draft = documentWithSharedSource();
     const wrapper = mountDerivedEditor(draft);
     await wrapper.get("[data-testid=edit-derived-prop-label]").trigger("click");
     await wrapper.get("[data-testid=token-field-prop-code]").trigger("click");
@@ -275,7 +263,7 @@ describe("DerivedPropertyEditor", () => {
   });
 
   it("opens the editor for the requested publish issue", async () => {
-    const wrapper = mountDerivedEditor(documentWithClaimedSource());
+    const wrapper = mountDerivedEditor(documentWithSharedSource());
     await wrapper.setProps({focusRequest: {propertyId: "prop-code", openEditor: true}});
     expect(wrapper.find("[data-testid=mapping-dialog]").exists()).toBe(true);
   });

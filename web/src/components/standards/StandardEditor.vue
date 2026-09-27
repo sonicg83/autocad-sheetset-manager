@@ -50,7 +50,6 @@ type GuardChoice = "save" | "discard" | "stay";
 /** 只在模态框里可修复的发布问题：跳转时直接打开对应模态框。 */
 const MODAL_CODES = new Set([
   "STANDARD_MAPPING_TARGET_EMPTY",
-  "STANDARD_MAPPING_SOURCE_DUPLICATE",
   "STANDARD_MAPPING_CONFIRMATION_REQUIRED",
 ]);
 
@@ -437,7 +436,7 @@ defineExpose({guard, isDirty: () => dirty.value});
             :data-testid="`structure-diagnostic-${index}`"
             @click="jumpToDiagnostic(item)"
           >
-            {{ $t(`standards.diagnostic.${item.code}`, {segment: item.segmentIndex === undefined ? "" : item.segmentIndex + 1, field: item.detail ?? "", source: item.detail ?? ""}) }}
+            {{ $t(`standards.diagnostic.${item.code}`, {segment: item.segmentIndex === undefined ? "" : item.segmentIndex + 1, field: item.detail ?? ""}) }}
           </button>
         </li>
       </ul>

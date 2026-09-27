@@ -1,3 +1,13 @@
+## 2026-09-27（PLAN-DM-045：映射源一对多复用）
+
+- 新增 [PLAN-DM-045](.planning/plans/dst-manager/PLAN-DM-045-mapping-source-multi-target-reuse.md) 并按方案 A 落地：解除 SPEC-DM-017 §5.2「一个普通枚举属性最多被一个映射属性用作源」的限制，同一枚举源可被多个映射属性独立复用（专业名称 → 专业代码 / 图册名称 / 图册代码）；该约束仅是产品规则，领域层按 `property_id` 逐个独立迭代映射、属性名全局唯一、物化各写各的 DST 文本属性，因此为纯放宽，无数据结构变更与迁移，已发布标准不受影响。
+- 后端 `standard_rules.publish_diagnostics` 删除源唯一占用判定与 `claimed` 字典，仅保留目标非空阻断与待确认 warning，同步改写模块与函数 docstring；源类型（`STANDARD_MAPPING_SOURCE_INVALID`）与作用域（`STANDARD_MAPPING_SCOPE_INVALID`）校验不变。
+- 前端 `draftModel.selectableMappingSources` 删除 `claimed` 过滤，只保留作用域过滤；`propertyPublishDiagnostics` 删除重复源分支；`MappingPropertyDialog.vue` 删除 `occupied` 计算与选项 `:disabled`；`StandardEditor.vue` 从 `MODAL_CODES` 移除该码。随该码作废的 `{source}` 占位符链路一并清理（`publishModel`、`DerivedPropertyEditor`、`OrdinaryPropertyEditor`、`StandardEditor` 与 `DraftDiagnostic.detail` 注释），仅保留 `{field}`。
+- 中英文语言包删除 `mapping.sourceOccupied` 与 `diagnostic.STANDARD_MAPPING_SOURCE_DUPLICATE`，`mapping.source` 提示改为「源属性（仅普通枚举）」；不保留任何非阻断 warning。
+- 修订 [SPEC-DM-017](docs/dst-manager/specs/SPEC-DM-017-standard-properties-and-dwg-naming.md) §5.2（放宽源复用）、§7.1（删除「源被重复占用」）、§9（验收第 3 条改为源类型与作用域门禁 + 同源复用），元数据 `updated` 与 `related` 同步，末尾新增 §11 修订记录；`PLAN-DM-038` 的对应口径由本计划取代。
+- 回归用例按新语义改写：Python `test_two_mappings_may_share_one_source_and_evaluate_independently`（断言无阻断且两映射各自求值）、前端 `draftModel`/`publishModel`/`DerivedPropertyEditor` 单测（同源多映射不再产生错误、可选源包含已复用源）、e2e「映射源可复用与组合字段范围」。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` 仅 `tests/unit/test_setup_bat.py` 两条与本任务无关的既有环境失败（GBK 代码页中文乱码，与 PLAN-DM-042 记录的同一环境问题一致）；`npm run test:unit` **339 passed**、`test:contracts` **114 passed**、`check:i18n`（1620 键对称）/`check:ui`/`build`（含 `check:api`、`vue-tsc`、`vite build`）退出码 0；`npx playwright test tests/e2e/standards-editor.spec.ts` **64 passed**。
+
 ## 2026-09-27（PLAN-DM-044：语义化 grid 伪表格对齐契约收口计划）
 
 - 按审查意见修订 [PLAN-DM-044](.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md)：四张伪表统一完整 `role="table"` 语义树，`ColumnEditor` 纳入静态门禁；窄屏表头隐藏时补可见字段名，行号经 `aria-labelledby` 进入可访问名称，列头 ID 改为实例级并要求双挂载验证；先新增目录行/控件 `data-testid` 再迁移旧测试；新表守卫改按 22 张表的根 marker 与 CSS 规则逐表配对，并加入“已有合规表的组件内新增无规则表”变异。修订仍为 `proposed`，本次只改计划，未实施前端代码或规范正文；下方早期裁决记录保留为历史，冲突处以计划最新修订为准。

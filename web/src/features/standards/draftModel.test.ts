@@ -187,17 +187,17 @@ describe("draft model", () => {
     expect(referencesTo(document, "prop-major")).toEqual([{kind: "mapping", ownerId: "prop-code"}]);
   });
 
-  it("reports mapping source duplication, target emptiness and snapshot drift", () => {
+  it("allows two mappings to share one source without a duplicate-source error", () => {
     const document = withProperty(draftDocument(), {
       property_id: "prop-code-2",
-      name: "专业代码二",
+      name: "图册代码",
       scope: "sheet",
       kind: "mapping",
       source_property_id: "prop-major",
       mapping: [{item_id: "enum-gas", value: "RQ2"}],
       confirmed_source_items: [["enum-gas", "燃气"]],
     });
-    expect(codes(publishIssues(document))).toContain("STANDARD_MAPPING_SOURCE_DUPLICATE");
+    expect(codes(publishIssues(document))).toEqual([]);
 
     const drifted = withEnumValues(draftDocument(), [{item_id: "enum-gas", value: "城镇燃气"}], [["enum-gas", "燃气"]]);
     const driftedIssues = publishIssues(drifted);
@@ -264,7 +264,7 @@ describe("draft model", () => {
     expect(codes(draftDiagnostics(document))).not.toContain("STANDARD_SEGMENT_SCOPE_INVALID");
   });
 
-  it("attaches the offending value for messages that interpolate {field} or {source}", () => {
+  it("attaches the offending value for messages that interpolate {field}", () => {
     const asset = (asset_id: string, kind: string, path: string | null): DraftAsset => ({
       asset_id,
       kind: kind as DraftAsset["kind"],
@@ -288,19 +288,6 @@ describe("draft model", () => {
     expect(detail("STANDARD_ASSET_KIND_INVALID")).toBe("bogus");
     expect(detail("STANDARD_ASSET_PATH_INVALID")).toBe("../escape.dwg");
     expect(detail("STANDARD_ASSET_DUPLICATE")).toBe("a-dup");
-
-    const duplicated = withProperty(draftDocument(), {
-      property_id: "prop-dup",
-      name: "重复映射",
-      scope: "sheetset",
-      kind: "mapping",
-      source_property_id: "prop-major",
-      mapping: [{item_id: "enum-gas", value: "RQ2"}],
-      confirmed_source_items: [],
-    });
-    expect(
-      publishIssues(duplicated).find(issue => issue.code === "STANDARD_MAPPING_SOURCE_DUPLICATE")?.detail,
-    ).toBe("专业");
   });
 
   it("measures the file name length in code points like the backend", () => {

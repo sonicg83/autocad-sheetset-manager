@@ -1,7 +1,7 @@
 // 标准分区编辑器 e2e（PLAN-DM-038 Task 9 / SPEC-DM-017 §2–§7）。
 // 覆盖：六分区单向流程（普通属性 → 映射 → 组合 → DWG 命名）、枚举改名保留映射、
 // 枚举排序与取消不落盘、界面不暴露稳定内部 ID、全局跨作用域重名、引用删除阻断、
-// 映射源唯一占用、组合/DWG 命名字段范围、未完成草稿可保存但不可发布、
+// 映射源复用、组合/DWG 命名字段范围、未完成草稿可保存但不可发布、
 // 发布 error 与 warning 区分、DWG 非法文件名、紧凑复选框、
 // 900×768 与 200% 缩放下的模态操作栏可达，以及纯键盘令牌插入与模态焦点归还。
 import {expect, test, type Locator, type Page} from "@playwright/test";
@@ -312,17 +312,19 @@ test("删除被引用的属性被阻断并列出引用方", async ({page}) => {
   await expect(editorSaveState(page)).toHaveText("已保存");
 });
 
-test("映射源唯一占用与组合字段范围", async ({page}) => {
+test("映射源可复用与组合字段范围", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
   await openStandards(page);
   await openDraftEditor(page);
   await openEditorSection(page, "derived");
 
-  // 源唯一性：`prop-major` 已被 `prop-code` 占用，新增映射不得再选它
+  // 源复用：`prop-major` 已被 `prop-code` 使用，新增映射仍可再次选择它（PLAN-DM-045）
   await page.getByTestId("add-derived").click();
   await page.getByTestId("derived-kind-prop-new").selectOption("mapping");
   await page.getByTestId("edit-derived-prop-new").click();
-  await expect(page.getByTestId("mapping-source").locator("option[value=prop-major]")).toHaveCount(0);
+  await expect(page.getByTestId("mapping-source").locator("option[value=prop-major]")).toHaveCount(1);
+  await page.getByTestId("mapping-source").selectOption("prop-major");
+  await expect(page.getByTestId("mapping-source")).toHaveValue("prop-major");
   await page.getByTestId("cancel-mapping").click();
 
   // 组合字段范围：sheetset 组合不能引用系统字段与其它组合属性

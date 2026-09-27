@@ -135,21 +135,27 @@ def test_confirmed_snapshot_matches_current_enum_list_is_silent() -> None:
     assert codes(publish_diagnostics(standard)) == []
 
 
-def test_two_mappings_sharing_a_source_are_rejected() -> None:
+def test_two_mappings_may_share_one_source_and_evaluate_independently() -> None:
     document = standard_document()
     _properties(document).append(
         {
             "property_id": "prop-code-2",
-            "name": "专业代码二",
+            "name": "图册代码",
             "previous_names": [],
             "scope": "sheet",
             "kind": "mapping",
             "source_property_id": "prop-major",
             "mapping": [{"item_id": "enum-gas", "value": "RQ2"}],
+            "confirmed_source_items": [["enum-gas", "燃气"]],
         }
     )
     standard = parse_published_standard_document(document)
-    assert "STANDARD_MAPPING_SOURCE_DUPLICATE" in codes(publish_diagnostics(standard))
+    assert codes(publish_diagnostics(standard)) == []
+    result = evaluate_standard_properties(
+        compile_standard_properties(standard), {"prop-major": "燃气"}, {}
+    )
+    assert result.values["prop-code"] == "RQ"
+    assert result.values["prop-code-2"] == "RQ2"
 
 
 def test_empty_mapping_target_blocks_publish_but_repeated_targets_are_legal() -> None:

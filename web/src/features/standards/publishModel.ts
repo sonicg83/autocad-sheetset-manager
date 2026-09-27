@@ -245,9 +245,8 @@ export function issueOf(document: DraftDocument, diagnostic: DraftDiagnostic): P
     params.itemId = diagnostic.itemId;
   }
   if (diagnostic.detail !== undefined) {
-    // `{field}`/`{source}` 占位符共用一个出错值；多余参数对无占位符的文案无副作用
+    // `{field}` 占位符使用出错值；多余参数对无占位符的文案无副作用
     params.field = diagnostic.detail;
-    params.source = diagnostic.detail;
   }
   if (diagnostic.assetId !== undefined) {
     target.assetId = diagnostic.assetId;

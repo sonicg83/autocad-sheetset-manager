@@ -2,8 +2,8 @@
 // 映射属性编辑模态框（PLAN-DM-038 Task 7 / SPEC-DM-017 §5.2）。
 //
 // 契约：
-// - 源属性选择器只列出作用域匹配、且未被其它映射占用的普通枚举属性；
-//   当前已选源若被占用仍以禁用项保留，避免控件显示错误的值；
+// - 源属性选择器列出作用域匹配的普通枚举属性；同一枚举源可被多个映射属性复用（PLAN-DM-045），
+//   不再排除其它映射已选的源；
 // - 映射行由源枚举列表固定生成：源值只读，不提供行增删与排序；
 // - 目标值允许多个源值相同，但不得为空（空目标阻断发布，草稿仍可保存）；
 // - 确认动作把当前有序 (enum_item_id, 显示值) 写入确认快照，清除「待确认」状态；
@@ -84,7 +84,7 @@ const {onDialogKeydown} = useDialogFocus({
 const options = computed(() => {
   const selectable = selectableMappingSources(props.document, props.property as DraftMappingProperty);
   const current = props.document.properties.find(item => item.property_id === sourceId.value);
-  // 当前已选源即使被占用也要保留在列表里（禁用项），否则选择器会显示错误的源。
+  // 当前已选源若不在可选范围内（如作用域不匹配）仍保留在列表里，否则选择器会显示错误的值。
   if (
     current !== undefined
     && current.kind === "enum"
@@ -111,19 +111,9 @@ const pending = computed(() =>
   props.property !== null && mappingConfirmationRequired(props.property, source.value),
 );
 
-const occupied = computed(() => {
-  const others = props.document.properties.filter(
-    item => item.kind === "mapping" && item.property_id !== props.property?.property_id,
-  );
-  return new Set(others.map(item => (item.kind === "mapping" ? item.source_property_id : "")));
-});
-
 function optionLabel(property: DraftEnumProperty): string {
   const scope = t(`standards.derived.scopeValue.${property.scope}`);
-  const suffix = occupied.value.has(property.property_id)
-    ? t("standards.mapping.sourceOccupied")
-    : "";
-  return `${property.name || property.property_id} · ${scope}${suffix}`;
+  return `${property.name || property.property_id} · ${scope}`;
 }
 
 function setTarget(itemId: string, value: string): void {
@@ -176,7 +166,6 @@ function confirm(): void {
               v-for="option in options"
               :key="option.property_id"
               :value="option.property_id"
-              :disabled="occupied.has(option.property_id)"
             >{{ optionLabel(option) }}</option>
           </select>
         </div>

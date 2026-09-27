@@ -16,7 +16,7 @@
 - 非空源值不属于枚举、映射行缺目标或上游失败时，下游组合标记为无法计算，
   不读取调用方传入的旧派生值，也不写入部分结果；
 - 枚举列表增删改后映射进入待确认状态，发布检查给出 warning；
-- 映射源被两个映射共用、映射目标为空是发布阻断错误。
+- 映射目标为空是发布阻断错误；同一枚举源可被多个映射属性复用，各自独立求值。
 """
 
 from __future__ import annotations
@@ -282,29 +282,15 @@ def _evaluate_composition(
 
 
 def publish_diagnostics(standard: DrawingStandard) -> tuple[StandardDiagnostic, ...]:
-    """发布前的派生属性静态门禁：源唯一、目标非空、确认状态。
+    """发布前的派生属性静态门禁：目标非空、确认状态。
 
-    不依赖运行期值，因此不需要具体项目数据即可判定。组合字段越权与引用
-    未知字段已在 Schema 发布解析中阻断，不在这里重复。
+    不依赖运行期值，因此不需要具体项目数据即可判定。映射源类型与作用域由
+    ``standard_semantics`` 阻断，同一枚举源允许被多个映射属性复用，二者都
+    不在本函数判定；组合字段越权与引用未知字段已在 Schema 发布解析中阻断。
     """
     compiled = compile_standard_properties(standard)
     diagnostics: list[StandardDiagnostic] = []
-    claimed: dict[str, str] = {}
     for mapping in compiled.mappings:
-        owner = claimed.get(mapping.source_property_id)
-        if owner is not None and owner != mapping.property_id:
-            diagnostics.append(
-                StandardDiagnostic(
-                    code="STANDARD_MAPPING_SOURCE_DUPLICATE",
-                    message=(
-                        f"映射属性 {mapping.property_id!r} 与 {owner!r} "
-                        f"共用源属性 {mapping.source_property_id!r}"
-                    ),
-                    property_id=mapping.property_id,
-                )
-            )
-        else:
-            claimed[mapping.source_property_id] = mapping.property_id
         for row in mapping.rows:
             if not row.value:
                 diagnostics.append(

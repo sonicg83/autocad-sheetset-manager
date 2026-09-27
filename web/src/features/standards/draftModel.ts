@@ -402,24 +402,15 @@ export function mappingConfirmationRequired(
 }
 
 /**
- * 可作为映射源的普通枚举属性：作用域匹配，且未被**其它**映射属性占用。
- * 当前已选源即使被占用也要保留在列表里（以禁用项展示），否则控件会显示错误的值。
+ * 可作为映射源的普通枚举属性：只按作用域匹配。
+ * 同一枚举源允许被多个映射属性复用（PLAN-DM-045），因此不再排除其它映射已选的源。
  */
 export function selectableMappingSources(
   document: DraftDocument,
   property: DraftMappingProperty,
 ): DraftEnumProperty[] {
-  const claimed = new Set(
-    document.properties
-      .filter(
-        candidate =>
-          candidate.kind === "mapping" && candidate.property_id !== property.property_id,
-      )
-      .map(candidate => (candidate.kind === "mapping" ? candidate.source_property_id : "")),
-  );
   return document.properties.filter((candidate): candidate is DraftEnumProperty => {
     if (candidate.kind !== "enum") return false;
-    if (claimed.has(candidate.property_id)) return false;
     if (property.scope === "sheetset" && candidate.scope !== "sheetset") return false;
     return true;
   });
@@ -502,7 +493,7 @@ export interface DraftDiagnostic {
   assetId?: string;
   /** 删除保护专用：阻止删除的引用方列表。 */
   references?: PropertyReference[];
-  /** 出错的原始值，供 `{field}`/`{source}` 插值的消息文案使用。 */
+  /** 出错的原始值，供 `{field}` 插值的消息文案使用。 */
   detail?: string;
 }
 
@@ -645,7 +636,6 @@ function propertyStructureDiagnostics(document: DraftDocument): GatedDiagnostic[
 function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] {
   const diagnostics: GatedDiagnostic[] = [];
   const claimed = new Map<string, string>();
-  const mappingSources = new Map<string, string>();
   for (const property of document.properties) {
     const base = {owner: "property" as const, propertyId: property.property_id, severity: "error" as const};
     if (property.name.trim() === "") {
@@ -693,12 +683,6 @@ function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] 
       } else {
         if (property.scope === "sheetset" && source.scope !== "sheetset") {
           diagnostics.push({...base, code: "STANDARD_MAPPING_SCOPE_INVALID", gate: "publish"});
-        }
-        const owner = mappingSources.get(source.property_id);
-        if (owner !== undefined && owner !== property.property_id) {
-          diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_DUPLICATE", gate: "publish", detail: source.name});
-        } else {
-          mappingSources.set(source.property_id, property.property_id);
         }
         for (const row of mappingRows(property, source)) {
           if (row.value === "") {
