@@ -4,6 +4,7 @@
 - 完成 PLAN-DM-044 Task 2：检查器新增 `grid-table-row-height`、`grid-table-padding`、`grid-table-align` 与逐表 `table-without-cell-contract` 守卫，并严格验证列头 `aria-labelledby` 第四形态；18 张真实表增加唯一 marker 并登记，4 张 grid 表的几何配对待其语义根在 Task 3/4 落地后启用。Playwright 记录 4 表初始行高、padding、`align-items` 与轨道；`ui-contract-exceptions.json` 保持原有 10 条例外和 1 条动态变量。`test:contracts` 133/133 通过（27 条 CLI 变异），`check:ui` exit 0。后续组件实施、全量回归与真实 WebView2 缩放复验仍待执行，计划保持 `active`。
 - 完成 PLAN-DM-044 Task 3：枚举、映射、派生属性三张 grid 表加入完整语义角色树、实例级列头 ID 与 `aria-labelledby`，移除行内重复标签并统一 44px 行高下限、令牌 padding 和显式对齐；保留派生表 1050px/780px 隐藏列行为。`test:contracts` 133/133、`check:ui`、生产构建通过；两目标 E2E 67/67，含 900×768、780×768 与 1440×900 检查。当前缺少 axe 与运行中的屏幕阅读器，读屏检查登记未验证。
 - 完成 PLAN-DM-044 Task 4：目录列编辑器补齐表格角色树、实例级列头与同行序号命名、窄屏可见列名和稳定测试锚点，并纳入 22 张表的逐表契约；保留五列轨道与 112px 操作轨。迁移两个目标 spec 的 79 处编号字段定位（旧定位残留 0）；`test:contracts` 133/133、`check:ui`、`check:i18n`、生产构建通过，聚焦用例 36/36、两目标 E2E 135/135。真实 Windows WebView2 缩放与读屏复验待做。
+- 完成 PLAN-DM-044 Task 5：通过实际 CLI 临时工作区重跑 class-only 单元格样式、无单元格样式新表、同组件第二张未登记表的红测；第二张表补唯一 marker、根/CSS 配对后转绿。确认无表格语义的纯 class-only 视觉伪表属于静态边界。`TABLE_CONTRACTS` 22 项唯一，18 张原生表与 4 张 grid 表覆盖完整；`check:ui` exit 0。关闭相关待办第 1 项，第 2–5 项仍未承接。
 
 ## 2026-09-27（PLAN-DM-045：映射源一对多复用）
 

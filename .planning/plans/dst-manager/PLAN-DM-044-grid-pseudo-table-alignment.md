@@ -140,9 +140,9 @@ related:
 
 **Files:** `web/scripts/ui-contracts/table-without-cell-contract.mjs`、`web/scripts/check-ui-contracts.mjs`、`web/scripts/check-ui-contracts.test.mjs`、`web/scripts/ui-contract-exceptions.json`、[`.planning/todos/dst-manager/2026-09-26-new-table-guard-and-cell-gate-boundary.md`](../../todos/dst-manager/2026-09-26-new-table-guard-and-cell-gate-boundary.md)。
 
-- [ ] **Step 1（复核变异）**：复用 Task 2 已实现的守卫，重跑独立新表与同组件第二张无规则表两类 CLI 探针：均须退出 1；为第二张表补专属根锚点、精确配对和 CSS 规则后才退出 0。复用待办的探针 A/B，登记实际结果；若 class-only 伪表不带任何表格语义而无法被发现，应明确该静态边界，不宣称守卫能识别所有视觉伪表。
-- [ ] **Step 2（覆盖盘点）**：核对 `TABLE_CONTRACTS` 中 18 张真实表 + 4 张 grid 表各有唯一根锚点、表头/数据行选择器及已声明的几何规则；任一缺失使 `check:ui` 退出 1。守卫逐表命中数为 0，四张 grid 表的 `grid-table-*` 也全部命中；此处复核 Task 2 守卫实现，不再重复实现或重复接入扫描链。
-- [ ] **Step 3（待办交接）**：在待办的「待处理」第 1 项标注「由 PLAN-DM-044 承接（守卫已实现），本项关闭」，其余第 2–5 项保持待办状态并注明仍未被任何计划承接；提交信息：`补齐语义化表格规则守卫`。
+- [x] **Step 1（复核变异）**：复跑待办探针 A（`<table>` 含 class-only 单元格 padding）与 B（有 `<table>`、无 `th/td` 样式）均由 CLI 以 `table-without-cell-contract` 退出 1；同组件第二张无 marker 表 CLI 退出 1，补唯一 marker、向 `TABLE_CONTRACTS`/`GRID_TABLE_CONTRACTS` 登记专属根与行配对、添加对应 CSS 规则后退出 0。无表格语义的 class-only 伪表退出 0，记录为静态边界，不宣称守卫覆盖所有视觉伪表。
+- [x] **Step 2（覆盖盘点）**：`TABLE_CONTRACTS` 为 22 项且键唯一，其中 18 张真实表、4 张 grid 表；四张 grid 与 `GRID_TABLE_CONTRACTS` 配对完整。`test:contracts` 覆盖精确根、CSS 选择器、重复/未登记 marker 与同组件第二张表；`check:ui` exit 0，逐表守卫与四表几何规则无未豁免命中。复用 Task 2 守卫，不重复实现或接入扫描链。
+- [x] **Step 3（待办交接）**：待办第 1 项标注「由 PLAN-DM-044 承接（守卫已实现），本项关闭」；第 2–5 项保留待办并注明尚未被任何计划承接。提交信息：`补齐语义化表格规则守卫`。
 
 ### Task 6：目录列编辑器门禁复核与全量验证
 
@@ -188,6 +188,7 @@ related:
 | 2026-09-27 | Task 2 静态规则与迁移基线 | 首次 `test:contracts` 127 项中 12 项新增用例失败；覆盖几何规则、逐表守卫、第四种标签形态 | `test:contracts` 133/133，27 条 CLI 变异；`check:ui` exit 0；18 张真实表 marker 配对完整，原 10 条例外 + 1 条动态变量未改 | 四张 grid 根将在 Tasks 3/4 落地；屏幕阅读器与真实 WebView2 缩放复验 |
 | 2026-09-27 | Task 3 标准平台三张 grid 表 | 派生表旧断言收到 4 个 label；枚举弹窗未找到登记表根；新增语义/几何断言按预期失败 | `test:contracts` 133/133；`check:ui` exit 0；生产 `build` exit 0（含 API/i18n/TypeScript 检查）；两目标 spec 67/67，最终聚焦复跑 34/34；900×768、780×768、1440×900 几何/响应式断言通过；截图人工检查 | `axe-core` 不在依赖树且 Narrator/NVDA 未运行，axe 与人工读屏未验证；真实 WebView2 缩放复验 |
 | 2026-09-27 | Task 4 目录列编辑器 | 三项语义/几何/双挂载用例在实现前失败；旧定位盘点 79 处 | `test:contracts` 133/133；`check:ui`、`check:i18n`、生产 `build` exit 0；聚焦用例 36/36，两个目标 spec 135/135；79 处旧定位已改写且残留 0；检查列头名称、720px 标签、双实例引用、Tab 顺序、五列轨道和 112px 操作轨 | 真实 Windows WebView2 100/125/150/200% 缩放复验；axe 与人工读屏仍未验证 |
+| 2026-09-27 | Task 5 逐表守卫复核 | 待办探针 A/B 与独立新表、同组件第二表未登记配置均由 CLI 退出 1；无语义 class-only 伪表探针为 0 | 同组件第二表补 marker/根配对/CSS 后 CLI exit 0；登记 22 张表（18 原生 + 4 grid）唯一完整；`check:ui` exit 0；待办第 1 项关闭、第 2–5 项仍未承接 | 全量验证与真实 Windows WebView2 缩放复验 |
 
 ## 修订记录
 
@@ -200,3 +201,4 @@ related:
 - 2026-09-27 执行 Task 2：接入三条 `grid-table-*` 规则、逐表 `table-without-cell-contract` 和严格 `aria-labelledby` 第四形态；18 张真实表逐根加 marker，4 张 grid 表的几何配对预登记。Playwright 记录四表初始行高、padding、`align-items` 与计算轨道；原生表 `table-cell-*`、逐表守卫的未豁免基线均为 0，例外清单 10/1 保持原样；计划进入 Tasks 3–6。
 - 2026-09-27 执行 Task 3：枚举、映射与派生表补齐语义树、实例级列头 ID 和 `aria-labelledby`，取消三表重复输入标签；三张表契约登记启用。统一使用 44px `min-height` 档、单档令牌 padding 和显式行轨道对齐，保留派生表 1050px/780px 响应式隐藏；axe/读屏工具不可用已记录，计划继续 active。
 - 2026-09-27 执行 Task 4：目录列编辑器补齐语义表格角色、实例级列头与行号命名、720px 可见字段名及测试锚点；启用第 4 张 grid 表契约，迁移两个目标 spec 中 79 处编号字段定位。静态契约、i18n、构建与两目标 E2E 135/135 通过；读屏与真实 WebView2 缩放仍待复验。
+- 2026-09-27 执行 Task 5：重跑待办探针 A/B、独立新表和同组件第二张表 CLI 正反探针；确认无语义 class-only 伪表是静态边界。22 张根契约唯一且完整、`check:ui` 为 0；关闭待办第 1 项，保留第 2–5 项。
