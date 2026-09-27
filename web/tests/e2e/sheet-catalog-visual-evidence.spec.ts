@@ -14,6 +14,14 @@ import path from "node:path";
 import {demoSixColumnTemplate, installSheetCatalogFixture, openCatalogPage, type CatalogTemplate} from "./fixtures/sheetCatalog";
 import {installPreferenceSnapshot} from "./fixtures/settings";
 
+function catalogHeader(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-header-/);
+}
+
+function catalogExpression(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-expression-/);
+}
+
 async function expectNoPageHScroll(page: Page, label: string) {
   const metrics = await page.evaluate(() => ({
     doc: document.documentElement.scrollWidth,
@@ -164,7 +172,7 @@ test("200% 缩放：无整页横滚、主操作可达、预览区独立横滚", 
   await expectNoPageHScroll(page, "200% 缩放主视图");
   await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeVisible();
   // 最小 CSS 视口下长表达式使预览横向溢出：只允许在表容器内滚动
-  await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}-{sheet.title}-" + "超长组合表达式列内容".repeat(24));
+  await catalogExpression(page, 1).fill("{sheet.专业代码}-{sheet.number}-{sheet.title}-" + "超长组合表达式列内容".repeat(24));
   await expect(page.getByRole("region", {name: "预览"}).getByRole("cell").first()).toContainText("超长组合表达式列内容");
   await expectPreviewScrollsInternally(page, "200% 缩放");
   await expectNoPageHScroll(page, "200% 缩放宽预览");
@@ -332,9 +340,9 @@ test("PLAN-DM-023 V4：字段搜索可见且规范引用与用户名称同为可
   await expect(browser.getByText("sheet.number", {exact: true})).toBeVisible();
   await expect(browser.getByText("图号", {exact: true})).toBeVisible();
   // 搜索框不改变插入语义：点击条目仍按规范引用插入
-  await page.getByLabel("表达式 1").fill("");
+  await catalogExpression(page, 1).fill("");
   await browser.getByRole("button", {name: /sheet\.number/}).click();
-  await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+  await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
 });
 
 // —— V7/V8：列数从 4 增到 6 不得继续撑高页面，编辑区自身滚动 ——
@@ -367,7 +375,7 @@ test("PLAN-DM-023 V7/V8：六列模板不撑高页面且列编辑区自身可滚
 // 再滚动到导出按钮，验证不被 ActionDock 遮住且无横向裁剪。
 async function expectTierGuards(page: Page, label: string) {
   await expectNoPageHScroll(page, label);
-  await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}-" + "超长组合表达式列内容".repeat(24));
+  await catalogExpression(page, 1).fill("{sheet.专业代码}-{sheet.number}-" + "超长组合表达式列内容".repeat(24));
   await expect(page.getByRole("region", {name: "预览"}).getByRole("cell").first()).toContainText("超长组合表达式列内容");
   await expectPreviewScrollsInternally(page, label);
   await expectNoPageHScroll(page, `${label}（宽预览）`);
@@ -437,16 +445,18 @@ test.describe("PLAN-DM-023 Task 5：四档视口几何与响应式", () => {
 test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、状态文字化", async ({page}) => {
   await openDemoState(page, "light", {width: 1440, height: 1000});
   // 有序子序列断言：Tab 环按 DOM 顺序经过模板栏 → 字段浏览器 → 列编辑器 → 预览/操作区
-  const anchors = ["选择模板", "另存为", "sheet.number", "输出列名 1", "表达式 1", "下移 1", "刷新预览", "导出 XLSX"];
+  const anchors = ["选择模板", "另存为", "sheet.number", "列名 1", "表达式 1", "下移 1", "刷新预览", "导出 XLSX"];
   const visited: string[] = [];
   for (let step = 0; step < 140; step++) {
     await page.keyboard.press("Tab");
-    // 可访问名称：显式 aria-label 优先；否则取关联的可见 label。T6-5 之后列名与字段搜索
-    // 改由 UiInput 的 label[for] 提供名称，只读 aria-label 会把这些控件从 Tab 环里漏掉，
-    // 使「Tab 顺序经过列编辑器」退化成空转断言。
+    // 按可访问名称来源读取焦点控件：列编辑器使用 aria-labelledby，搜索框/选择器使用 label。
     const name = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
       if (!active) return "";
+      const labelledBy = active.getAttribute("aria-labelledby");
+      if (labelledBy) {
+        return labelledBy.split(/\s+/).map(id => document.getElementById(id)?.textContent ?? "").join(" ").trim();
+      }
       const explicit = active.getAttribute("aria-label");
       if (explicit) return explicit;
       const labelled = (active as HTMLInputElement).labels?.[0]?.textContent;
@@ -462,7 +472,7 @@ test("键盘：Tab 顺序经过主操作、字段浏览器 Enter/Space 插入、
     cursor += next + 1;
   }
   // 字段浏览器按钮键盘激活：Enter 与 Space 都在光标位置插入语法
-  const expression = page.getByLabel("表达式 1");
+  const expression = catalogExpression(page, 1);
   await expression.fill("RQ-");
   await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: /sheet\.number/}).focus();
   await page.keyboard.press("Enter");
@@ -671,7 +681,7 @@ test.describe("Task 6 控件视觉基础正交证据（PLAN-DM-029）", () => {
   // 脏草稿：保存入口可用（保存浅/深默认成对使用，保证两张图是同一状态）
   async function openDirtySaveState(page: Page, theme: "light" | "dark", viewport: {width: number; height: number}) {
     await openDemoState(page, theme, viewport);
-    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await catalogHeader(page, 1).fill("图纸编号A");
     await expect(page.getByText("有未保存修改")).toBeVisible();
     await expect(page.getByRole("button", {name: "保存修改"})).toBeEnabled();
     await expectNoPageHScroll(page, `${theme} 脏草稿`);
@@ -765,7 +775,7 @@ test.describe("模板状态徽标证据（PLAN-DM-034 Task 6）", () => {
     await expect(badge).toHaveText("已保存");
     expect(await badge.evaluate(element => getComputedStyle(element).color), "clean 徽标前景取中性令牌")
       .toBe(await resolveTokenColor(page, "--color-text-secondary"));
-    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await catalogHeader(page, 1).fill("图纸编号A");
     await expect(badge).toHaveText("有未保存修改");
     await expect(badge).toHaveAttribute("role", "status");
   }

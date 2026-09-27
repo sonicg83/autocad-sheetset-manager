@@ -26,9 +26,135 @@ async function openCatalog(page: Page, options?: Parameters<typeof installSheetC
   return state;
 }
 
+function catalogHeader(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-header-/);
+}
+
+function catalogExpression(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-expression-/);
+}
+
 async function expectPreviewRows(page: Page, count: number): Promise<void> {
   await expect(page.getByRole("region", {name: "预览"}).getByRole("row")).toHaveCount(count + 1); // 表头一行
 }
+
+test.describe("输出列语义网格表格（PLAN-DM-044 Task 4）", () => {
+  test("角色树、列头名称、Tab 顺序与几何档完整", async ({page}) => {
+    await openCatalog(page);
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    const table = editor.getByRole("table");
+    await expect(table).toHaveAttribute("data-ui-table-contract", "catalog-columns");
+    const header = table.locator(".columns-head");
+    await expect(header).toHaveAttribute("role", "row");
+    await expect(header.getByRole("columnheader")).toHaveCount(5);
+    const rows = table.getByRole("rowgroup").getByRole("row");
+    expect(await rows.count()).toBeGreaterThan(0);
+    for (const row of await rows.all()) await expect(row.getByRole("cell")).toHaveCount(5);
+    await expect(table.locator("label")).toHaveCount(0);
+
+    const headerInput = catalogHeader(editor, 1);
+    const expressionInput = catalogExpression(editor, 1);
+    await expect(headerInput).toHaveAccessibleName("列名 1");
+    await expect(expressionInput).toHaveAccessibleName("表达式 1");
+
+    const geometry = await table.evaluate(element => {
+      const headerElement = element.querySelector<HTMLElement>(".columns-head")!;
+      const rowElement = element.querySelector<HTMLElement>(".column-row")!;
+      const headStyle = getComputedStyle(headerElement);
+      const rowStyle = getComputedStyle(rowElement);
+      const rootStyle = getComputedStyle(document.documentElement);
+      const padding = (style: CSSStyleDeclaration) => [
+        style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft,
+      ].map(value => Number.parseFloat(value));
+      return {
+        headHeight: headerElement.getBoundingClientRect().height,
+        rowHeight: rowElement.getBoundingClientRect().height,
+        minHeight: Number.parseFloat(rootStyle.getPropertyValue("--sheet-table-row-height")),
+        space2: Number.parseFloat(rootStyle.getPropertyValue("--space-2")),
+        headPadding: padding(headStyle),
+        rowPadding: padding(rowStyle),
+        headAlign: headStyle.alignItems,
+        rowAlign: rowStyle.alignItems,
+        headTracks: headStyle.gridTemplateColumns,
+        rowTracks: rowStyle.gridTemplateColumns,
+      };
+    });
+    expect(geometry.headHeight).toBeGreaterThanOrEqual(geometry.minHeight);
+    expect(geometry.rowHeight).toBeGreaterThanOrEqual(geometry.minHeight);
+    expect(geometry.headPadding).toEqual([geometry.space2, geometry.space2, geometry.space2, geometry.space2]);
+    expect(geometry.rowPadding).toEqual(geometry.headPadding);
+    expect(geometry.headAlign).toBe("start");
+    expect(geometry.rowAlign).toBe(geometry.headAlign);
+    expect(geometry.rowTracks).toBe(geometry.headTracks);
+
+    await headerInput.focus();
+    await page.keyboard.press("Tab");
+    await expect(expressionInput).toBeFocused();
+  });
+
+  test("720px 档隐藏表头并显示互斥列名，列头引用仍有效", async ({page}) => {
+    await openCatalog(page);
+    const editor = page.getByRole("region", {name: "输出列编辑器"});
+    const table = editor.getByRole("table");
+    const header = table.locator(".columns-head");
+    const firstRow = table.getByRole("rowgroup").getByRole("row").first();
+    await expect(header).toBeVisible();
+    await expect(firstRow.locator(".column-mobile-label")).toHaveCount(2);
+    for (const label of await firstRow.locator(".column-mobile-label").all()) await expect(label).toBeHidden();
+
+    await page.setViewportSize({width: 720, height: 900});
+    await expect(header).toBeHidden();
+    await expect(header.locator("[role='columnheader']")).toHaveCount(5);
+    await expect(firstRow.locator(".column-mobile-label")).toHaveText(["列名", "表达式"]);
+    for (const label of await firstRow.locator(".column-mobile-label").all()) {
+      await expect(label).toHaveAttribute("aria-hidden", "true");
+      await expect(label).toBeVisible();
+    }
+    await expect(catalogHeader(editor, 1)).toHaveAccessibleName("列名 1");
+    await expect(catalogExpression(editor, 1)).toHaveAccessibleName("表达式 1");
+    await expect(table.locator("label")).toHaveCount(0);
+    const pageWidth = await page.evaluate(() => ({scroll: document.documentElement.scrollWidth, width: window.innerWidth}));
+    expect(pageWidth.scroll).toBeLessThanOrEqual(pageWidth.width);
+  });
+
+  test("目录页与设置中心并挂时列头 ID 唯一且引用留在本表", async ({page}) => {
+    await openCatalog(page);
+    await page.getByRole("button", {name: "设置"}).click();
+    await page.getByRole("tab", {name: "扩展"}).click();
+    await page.getByRole("button", {name: "配置 图纸目录"}).click();
+    const tables = page.locator(".column-editor .columns");
+    await expect(tables).toHaveCount(2);
+    const links = await tables.evaluateAll(elements => elements.map(table => {
+      const headerId = table.querySelector<HTMLElement>(".columns-head [role='columnheader']:nth-child(2)")?.id ?? "";
+      const expressionId = table.querySelector<HTMLElement>(".columns-head [role='columnheader']:nth-child(3)")?.id ?? "";
+      const row = table.querySelector<HTMLElement>(".column-row")!;
+      const rowOrderId = row.querySelector<HTMLElement>(".order-cell")?.id ?? "";
+      const headerControl = row.querySelector<HTMLInputElement>("[data-testid^='catalog-header-']")!;
+      const expressionControl = row.querySelector<HTMLTextAreaElement>("[data-testid^='catalog-expression-']")!;
+      const headerRefs = headerControl.getAttribute("aria-labelledby")?.split(" ") ?? [];
+      const expressionRefs = expressionControl.getAttribute("aria-labelledby")?.split(" ") ?? [];
+      const belongsToTable = (id: string) => document.getElementById(id)?.closest(".columns") === table;
+      return {
+        headerId,
+        expressionId,
+        rowOrderId,
+        headerRefs,
+        expressionRefs,
+        headerTargetsLocal: headerRefs.every(belongsToTable),
+        expressionTargetsLocal: expressionRefs.every(belongsToTable),
+      };
+    }));
+    const allIds = links.flatMap(link => [link.headerId, link.expressionId, link.rowOrderId]);
+    expect(allIds.every(Boolean)).toBe(true);
+    expect(new Set(allIds).size).toBe(allIds.length);
+    for (const link of links) {
+      expect(link.headerRefs).toEqual([link.headerId, link.rowOrderId]);
+      expect(link.expressionRefs).toEqual([link.expressionId, link.rowOrderId]);
+      expect(link.headerTargetsLocal).toBe(true);
+      expect(link.expressionTargetsLocal).toBe(true);
+    }
+  });
+});
 
 test.describe("核心流程（SPEC §3.1）", () => {
   test("默认内置模板三列真实预览：前 20 行 + 总图纸数", async ({page}) => {
@@ -55,7 +181,7 @@ test.describe("核心流程（SPEC §3.1）", () => {
 
   test("特殊属性在当前光标位置插入 JSON 方括号语法，普通字段插入点号语法", async ({page}) => {
     await openCatalog(page);
-    const expression = page.getByRole("region", {name: "输出列编辑器"}).getByLabel("表达式 1");
+    const expression = catalogExpression(page, 1);
     await expression.fill("RQ-{sheet.title}");
     await expression.evaluate(element => {
       (element as HTMLTextAreaElement).setSelectionRange(3, 3);
@@ -66,14 +192,14 @@ test.describe("核心流程（SPEC §3.1）", () => {
     await expect(expression).toHaveValue("RQ-{sheet.number}{sheet.title}");
     // 特殊名称（含空格）必须插入方括号 JSON 字符串形式：先添加一个空列再插入
     await page.getByRole("button", {name: "添加输出列"}).click();
-    await page.getByLabel("表达式 4").click();
+    await catalogExpression(page, 4).click();
     await browser.getByRole("button", {name: /sheetset\["项目 名称"\]/}).click();
-    await expect(page.getByLabel("表达式 4")).toHaveValue('{sheetset["项目 名称"]}');
+    await expect(catalogExpression(page, 4)).toHaveValue('{sheetset["项目 名称"]}');
   });
 
   test("组合表达式生成 RQ-001 形态的求值结果", async ({page}) => {
     await openCatalog(page);
-    const expression = page.getByLabel("表达式 1");
+    const expression = catalogExpression(page, 1);
     await expression.fill("RQ-");
     await page.getByRole("region", {name: "字段浏览器"}).getByRole("button", {name: /sheet\.number/}).click();
     await expect(expression).toHaveValue("RQ-{sheet.number}");
@@ -83,7 +209,7 @@ test.describe("核心流程（SPEC §3.1）", () => {
 
   test("缺定义可见且阻断导出：显示缺少的作用域与属性名", async ({page}) => {
     await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheetset.不存在属性}");
+    await catalogExpression(page, 1).fill("{sheetset.不存在属性}");
     const summary = page.getByRole("region", {name: "兼容性摘要"});
     await expect(summary.getByText("[sheetset] 不存在属性")).toBeVisible();
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeDisabled();
@@ -91,7 +217,7 @@ test.describe("核心流程（SPEC §3.1）", () => {
 
   test("缺值带数量警告但允许导出", async ({page}) => {
     await openCatalog(page, {sheetPropertyValueOverrides: [{name: "专业代码", fromIndex: 20}]});
-    await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}");
+    await catalogExpression(page, 1).fill("{sheet.专业代码}-{sheet.number}");
     const summary = page.getByRole("region", {name: "兼容性摘要"});
     await expect(summary.getByText("[sheet] 专业代码（涉及 5 张图纸）")).toBeVisible();
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
@@ -136,9 +262,9 @@ test.describe("字段搜索与可用态头部（PLAN-DM-023 Task 2）", () => {
     await expect(browser.getByRole("button", {name: /sheet\.number/})).toBeVisible();
     await expect(browser.getByRole("button", {name: /sheetset\.设计院/})).toBeVisible();
     // 搜索不改变插入语义
-    await page.getByLabel("表达式 1").fill("");
+    await catalogExpression(page, 1).fill("");
     await browser.getByRole("button", {name: /sheet\.number/}).click();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
   });
 
   test("可用态头部：无独立状态大卡、版本可见且模板栏状态文字完整", async ({page}) => {
@@ -160,7 +286,7 @@ test.describe("字段搜索与可用态头部（PLAN-DM-023 Task 2）", () => {
     await page.getByLabel("选择模板").selectOption("");
     await expect(bar.getByText("内置模板")).toBeVisible();
     await expect(bar.getByText("已保存", {exact: true})).toBeVisible();
-    await page.getByLabel("输出列名 1").fill("图号（改）");
+    await catalogHeader(page, 1).fill("图号（改）");
     await expect(bar.getByText("有未保存修改")).toBeVisible();
     await expect(bar.getByText("已保存", {exact: true})).toHaveCount(0);
   });
@@ -192,14 +318,14 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
     expect(state.putExpectedRevisions).toEqual([]);
 
     // 修改列名：模板栏出现警示徽标（可见文字 + dirty class），保存按钮转为可执行
-    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await catalogHeader(page, 1).fill("图纸编号A");
     await expect(stateBadge).toHaveText("有未保存修改");
     await expect(stateBadge).toHaveClass(/dirty/);
     await expect(save).toBeEnabled();
     await expect(save).not.toHaveAttribute("aria-disabled");
 
     // 改回模板快照：恢复 clean 中性徽标，保存按钮重新语义禁用（且仍无原生 disabled）
-    await page.getByLabel("输出列名 1").fill("图号");
+    await catalogHeader(page, 1).fill("图号");
     await expect(stateBadge).toHaveText("已保存");
     await expect(stateBadge).not.toHaveClass(/dirty/);
     await expect(save).toHaveAttribute("aria-disabled", "true");
@@ -223,7 +349,7 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
     const save = page.getByRole("button", {name: "保存修改"});
 
     // 表达式错误（未定义字段）：徽标保留警示态，错误正文就地在出错列行内呈现
-    await page.getByLabel("表达式 2").fill("{sheet.不存在属性}");
+    await catalogExpression(page, 2).fill("{sheet.不存在属性}");
     await expect(stateBadge).toHaveText("有未保存修改");
     await expect(stateBadge).toHaveClass(/dirty/);
     const badRow = editor.locator(".columns .column-row").nth(1);
@@ -233,8 +359,8 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
     await expect(save).toBeEnabled();
 
     // 保存不可执行（现有阻断）：重名列触发 Provider 409，错误可见、修改保留、服务端值不变
-    await page.getByLabel("表达式 2").fill("{sheet.title}");
-    await page.getByLabel("输出列名 2").fill("图号");
+    await catalogExpression(page, 2).fill("{sheet.title}");
+    await catalogHeader(page, 2).fill("图号");
     await expect(badRow.getByText("名称重复：图号")).toBeVisible();
     state.controls.putSettingsMode = "duplicate";
     await save.click();
@@ -248,8 +374,8 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
   test("列输入框不随模板 dirty 变色：琥珀只出现在模板栏徽标", async ({page}) => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
-    const header = page.getByLabel("输出列名 1");
-    const expression = page.getByLabel("表达式 1");
+    const header = catalogHeader(page, 1);
+    const expression = catalogExpression(page, 1);
     const styleOf = (locator: Locator, property: string) => locator.evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
     // 断言有效性：warning 底色令牌与输入框 clean 底色必须确实不同（防止断言恒真）
     const warningBg = await page.evaluate(() => {
@@ -264,8 +390,8 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
     const cleanExpressionBg = await styleOf(expression, "background-color");
     expect(cleanHeaderBg, "warning-bg 与输入框 clean 底色不同（断言有效前提）").not.toBe(warningBg);
 
-    await page.getByLabel("输出列名 1").fill("图纸编号A");
-    await page.getByLabel("表达式 1").fill("{sheet.number}#");
+    await catalogHeader(page, 1).fill("图纸编号A");
+    await catalogExpression(page, 1).fill("{sheet.number}#");
     await expect(page.getByText("有未保存修改")).toBeVisible();
     await expect(header).not.toHaveClass(/dirty/);
     expect(await styleOf(header, "background-color")).toBe(cleanHeaderBg);
@@ -317,7 +443,7 @@ test.describe("表格式输出列（PLAN-DM-023 Task 3）", () => {
       }
     }
     // 未知字段：该行变“需修正”，错误正文就在表达式单元格内
-    await page.getByLabel("表达式 1").fill("{sheet.不存在属性}");
+    await catalogExpression(page, 1).fill("{sheet.不存在属性}");
     const firstRow = editor.locator(".columns .column-row").first();
     await expect(firstRow.locator(".status-cell")).toHaveText("需修正");
     await expect(firstRow.getByText("[sheet] 不存在属性")).toBeVisible();
@@ -336,17 +462,17 @@ test.describe("表格式输出列（PLAN-DM-023 Task 3）", () => {
     await expect(up).toHaveText("↑");
     await expect(editor.getByRole("button", {name: "上移 1"})).toBeDisabled();
     await expect(editor.getByRole("button", {name: "下移 3"})).toBeDisabled();
-    const headers = editor.getByLabel(/^输出列名 \d+$/);
+    const headers = editor.getByTestId(/^catalog-header-/);
     await expect(headers).toHaveCount(3);
     await expect(headers.nth(0)).toHaveValue("图号");
     await expect(headers.nth(1)).toHaveValue("图名");
     await up.click();
-    await expect(editor.getByLabel("输出列名 1")).toHaveValue("图名");
-    await expect(editor.getByLabel("输出列名 2")).toHaveValue("图号");
+    await expect(catalogHeader(editor, 1)).toHaveValue("图名");
+    await expect(catalogHeader(editor, 2)).toHaveValue("图号");
     // 删除仍走现有规则（直接移除该列，无额外确认）
     await editor.getByRole("button", {name: "删除列 1"}).click();
     await expect(headers).toHaveCount(2);
-    await expect(editor.getByLabel("输出列名 1")).toHaveValue("图号");
+    await expect(catalogHeader(editor, 1)).toHaveValue("图号");
   });
 });
 
@@ -357,14 +483,14 @@ test.describe("兼容性与预览操作坞（PLAN-DM-023 Task 4）", () => {
   test("兼容性归属：摘要嵌入输出列卡，警告可导出、错误禁用导出且正文不回退", async ({page}) => {
     await openCatalog(page, {sheetPropertyValueOverrides: [{name: "专业代码", fromIndex: 20}]});
     const editor = page.getByRole("region", {name: "输出列编辑器"});
-    await page.getByLabel("表达式 1").fill("{sheet.专业代码}-{sheet.number}");
+    await catalogExpression(page, 1).fill("{sheet.专业代码}-{sheet.number}");
     const summary = editor.getByRole("region", {name: "兼容性摘要"});
     await expect(summary).toHaveCount(1);
     await expect(summary).toContainText("[sheet] 专业代码（涉及 5 张图纸）");
     await expect(editor.locator(".compat-badge")).toHaveText("可以导出，有 1 项提示");
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
     // 未知字段：徽标转为“不能导出”，详细正文与禁用状态不回退
-    await page.getByLabel("表达式 1").fill("{sheet.不存在属性}");
+    await catalogExpression(page, 1).fill("{sheet.不存在属性}");
     await expect(summary).toContainText("[sheet] 不存在属性");
     await expect(editor.locator(".compat-badge")).toHaveText("不能导出");
     await expect(summary.locator(".compat-title")).toHaveText("阻断问题");
@@ -395,7 +521,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
   test("内置模板编辑即变为未命名草稿，只能另存不能原位保存", async ({page}) => {
     await openCatalog(page);
     await expect(page.getByLabel("选择模板")).toHaveValue("");
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await expect(page.getByText("有未保存修改")).toBeVisible();
     await expect(page.getByText("未命名草稿")).toBeVisible();
     await expect(page.getByRole("button", {name: "保存修改"})).toHaveCount(0);
@@ -405,7 +531,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
   test("用户模板可原位保存：PUT 设置携带更新后的模板且脏标记消失", async ({page}) => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await page.getByRole("button", {name: "保存修改"}).click();
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
     const put = state.settingsValue.user_templates[0];
@@ -421,7 +547,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const state = await openCatalog(page, {userTemplates: [template]});
     await page.getByLabel("选择模板").selectOption({label: "标准目录"});
     await expect.poll(() => state.preferencePutBodies.length).toBe(1);
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await page.getByRole("button", {name: "保存修改"}).click();
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
     expect(state.settingsPutBodies).toHaveLength(1);
@@ -431,7 +557,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
 
   test("另存为新模板：输入名称保存后进入模板列表并记录工作区偏好", async ({page}) => {
     const state = await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "另存为"}).click();
     const dialog = page.getByRole("dialog", {name: "另存为模板"});
     await dialog.getByLabel("模板名称").fill("标准目录");
@@ -469,21 +595,21 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const template = userTemplate("Catalog", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template]});
     state.controls.putSettingsMode = "duplicate";
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "另存为"}).click();
     const dialog = page.getByRole("dialog", {name: "另存为模板"});
     await dialog.getByLabel("模板名称").fill("catalog");
     await dialog.getByRole("button", {name: "保存", exact: true}).click();
     await expect(page.getByText("名称重复：catalog")).toBeVisible();
     // 本地编辑保留：草稿表达式与另存为对话框输入不被清空
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
     expect(state.settingsValue.user_templates).toHaveLength(1);
   });
 
   test("用户模板 100 上限：显示具体限制且不截断数据", async ({page}) => {
     const state = await openCatalog(page);
     state.controls.putSettingsMode = "limit";
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "另存为"}).click();
     const dialog = page.getByRole("dialog", {name: "另存为模板"});
     await dialog.getByLabel("模板名称").fill("模板 101");
@@ -504,7 +630,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     await expect(summary.getByText("[sheet] 审定人")).toBeVisible();
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeDisabled();
     // 模板保留可编辑：表达式内容仍在编辑器中
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheetset.地区}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheetset.地区}");
   });
 
   test("工作区偏好只记已保存模板：未命名草稿与内置模板不写入偏好", async ({page}) => {
@@ -516,7 +642,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     await page.getByLabel("选择模板").selectOption({label: "默认图纸目录（内置）"});
     expect(state.preferencePuts).toEqual([]);
     // 编辑成未命名草稿：同样不写偏好
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await expect(page.getByText("有未保存修改")).toBeVisible();
     expect(state.preferencePuts).toEqual([]);
     // 带未保存草稿切回已保存模板：先三选一（放弃修改），随后只记录已保存模板
@@ -524,37 +650,37 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", {name: "放弃修改"}).click();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     expect(state.preferencePuts).toEqual([{template_id: template.template_id}]);
   });
 
   test("有未保存草稿时切换页签出现三选一保护，留在此处不离开", async ({page}) => {
     await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     // 核心首标签（图纸）的可访问名带序号前缀，按位置定位
     await page.getByRole("tablist").getByRole("tab").first().click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", {name: "留在此处"}).click();
     await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
   });
 
   test("三选一保护放弃修改后允许切换，返回时草稿已复位", async ({page}) => {
     await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("tablist").getByRole("tab").first().click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await dialog.getByRole("button", {name: "放弃修改"}).click();
     await expect(page.getByRole("button", {name: "预览变更"})).toBeVisible();
     await page.getByRole("tab", {name: "图纸目录"}).click();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
   });
 
   test("关闭工作区同样经过三选一保护", async ({page}) => {
     await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "关闭工作区"}).click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
     await expect(dialog).toBeVisible();
@@ -571,7 +697,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
   // 可见可点”这一回归点（旧实现下内联遮罩会被 top layer 的设置窗口 inert 吞掉）。
   test("停用扩展（离开页面）先经过三选一保护，且设置窗口不关闭", async ({page}) => {
     const state = await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "设置"}).click();
     await page.getByRole("tab", {name: "扩展"}).click();
     await page.getByRole("switch", {name: "停用 图纸目录"}).click();
@@ -589,12 +715,12 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
     state.controls.putSettingsMode = "conflict";
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
     // 本地编辑保留；服务端已被其他保存推进（r3→r4，并出现其他窗口的模板）
-    await expect(page.getByLabel("输出列名 1")).toHaveValue("图纸编号");
+    await expect(catalogHeader(page, 1)).toHaveValue("图纸编号");
     expect(state.revision).toBe(4);
     expect(state.settingsValue.user_templates.map(item => item.name)).toContain("其他窗口的模板 4");
     // 按新修订重试：刷新服务端修订（r4）后携带新 expected_revision 原样重放
@@ -610,7 +736,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
     state.controls.putSettingsMode = "conflict";
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
@@ -629,7 +755,7 @@ test.describe("模板状态（SPEC §3.2/§6）", () => {
     const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
     const state = await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
     state.controls.putSettingsMode = "conflict";
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();
@@ -659,19 +785,19 @@ test.describe("导出状态（SPEC §10/§11）", () => {
 
   test("用户取消另存为：草稿与预览保持不变且不发出执行请求", async ({page}) => {
     const state = await openCatalog(page, {saveDialog: "cancel"});
-    await page.getByLabel("表达式 1").fill("{sheet.title}-图");
+    await catalogExpression(page, 1).fill("{sheet.title}-图");
     await expect(page.getByRole("region", {name: "预览"}).getByRole("cell", {name: "图纸 001-图", exact: true})).toBeVisible();
     await page.getByRole("button", {name: "导出 XLSX"}).click();
     expect((await readBridgeCalls(page)).saveRequests).toHaveLength(1);
     expect(state.executeRequests).toHaveLength(0);
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.title}-图");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.title}-图");
     await expectPreviewRows(page, 20);
   });
 
   test("草稿修改后旧预览禁止导出，预览刷新后恢复", async ({page}) => {
     await openCatalog(page);
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeEnabled();
-    await page.getByLabel("表达式 1").fill("{sheet.title}+");
+    await catalogExpression(page, 1).fill("{sheet.title}+");
     await expect(page.getByRole("button", {name: "导出 XLSX"})).toBeDisabled();
     await expect(page.getByText("草稿已修改，预览更新后才能导出")).toBeVisible();
     const preview = page.getByRole("region", {name: "预览"});
@@ -714,7 +840,7 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     await page.getByRole("button", {name: "导出 XLSX"}).click();
     const alert = page.getByRole("alert").filter({hasText: "预览已过期"});
     await expect(alert).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     await expect(page.getByRole("button", {name: "重试导出"})).toBeEnabled();
     state.controls.executeMode = "ok";
     await page.getByRole("button", {name: "刷新预览"}).click();
@@ -731,7 +857,7 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     const exportButton = page.getByRole("button", {name: "导出 XLSX"});
     await expect(exportButton).toBeEnabled();
     // 草稿改动触发的重新预览仍绑定保存前的设置修订（夹具记录每次预览绑定的修订）
-    await page.getByLabel("输出列名 1").fill("图纸编号");
+    await catalogHeader(page, 1).fill("图纸编号");
     await expect.poll(() => state.previewSettingsRevisions.length).toBeGreaterThan(1);
     await expect(exportButton).toBeEnabled();
     // 保存修改推进服务端设置修订：预览不再与当前设置一致
@@ -767,7 +893,7 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     const state = await openCatalog(page, {executeMode: "saveGrantInvalid"});
     await page.getByRole("button", {name: "导出 XLSX"}).click();
     await expect(page.getByRole("alert").filter({hasText: "保存授权"})).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     state.controls.executeMode = "ok";
     await page.getByRole("button", {name: "重试导出"}).click();
     await expect(page.getByText("图纸目录已保存到")).toBeVisible();
@@ -777,7 +903,7 @@ test.describe("导出状态（SPEC §10/§11）", () => {
     const state = await openCatalog(page, {executeMode: "writeFailed"});
     await page.getByRole("button", {name: "导出 XLSX"}).click();
     await expect(page.getByRole("alert").filter({hasText: "成果文件写入失败"})).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     state.controls.executeMode = "ok";
     await page.getByRole("button", {name: "重试导出"}).click();
     await expect(page.getByText("图纸目录已保存到")).toBeVisible();
@@ -806,7 +932,7 @@ test.describe("导出状态（SPEC §10/§11）", () => {
 test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
   test("三选一守卫模态移入焦点、Tab 圈闭、Esc 留在此处并归还焦点", async ({page}) => {
     await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     // 记录打开前焦点（触发元素）：守卫关闭后必须归还
     await page.getByRole("tablist").getByRole("tab").first().click();
     const dialog = page.getByRole("dialog", {name: "未保存的模板修改"});
@@ -823,27 +949,27 @@ test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
     // Esc = 留在此处：模态关闭、草稿保留、焦点归还触发元素
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
     await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("tab-sheets");
   });
 
   test("表达式错误把焦点移到具体列的表达式输入框", async ({page}) => {
     await openCatalog(page);
-    const expression = page.getByLabel("表达式 2");
+    const expression = catalogExpression(page, 2);
     await expression.fill("{sheet.不存在}");
     // 模拟用户已离开编辑器（错误在防抖预览响应后到达）：焦点应移到出错列的表达式框
     await expression.evaluate(element => (element as HTMLTextAreaElement).blur());
-    await expect(page.getByLabel("表达式 2")).toBeFocused();
+    await expect(catalogExpression(page, 2)).toBeFocused();
     await expect(page.getByRole("alert").filter({hasText: "未定义的字段"}).first()).toBeVisible();
   });
 
   test("重名列阻断错误（无列 ID）把焦点移到匹配的列名输入框", async ({page}) => {
     await openCatalog(page);
-    const header = page.getByLabel("输出列名 2");
+    const header = catalogHeader(page, 2);
     await header.fill("图号"); // 与内置默认第 1 列重名（服务端/预览诊断无 column_id）
     await header.evaluate(element => (element as HTMLInputElement).blur());
     // Task 11 遗留缺口修复：无 column_id 的错误此前无法聚焦任何输入
-    await expect(page.getByLabel("输出列名 2")).toBeFocused();
+    await expect(catalogHeader(page, 2)).toBeFocused();
     await expect(page.getByRole("alert").filter({hasText: "名称重复：图号"}).first()).toBeVisible();
   });
 
@@ -872,7 +998,7 @@ test.describe("可访问性（SPEC-DM-012 §13，Task 12）", () => {
 test.describe("扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 F1）", () => {
   test("打开设置触发刷新失败保留目录草稿：标签、激活态与表达式原样保留", async ({page}) => {
     const state = await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     // 打开设置与进入扩展分区各触发一次刷新（openSettings + showExtensions），两次都失败
     planExtensionsReload(state, ["fail", "fail"]);
     await page.getByRole("button", {name: "设置"}).click();
@@ -886,13 +1012,13 @@ test.describe("扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 F1）
     // 关闭设置后回到目录页：草稿原样保留
     await page.keyboard.press("Escape");
     await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
     await expect(page.getByText("有未保存修改")).toBeVisible();
   });
 
   test("活动扩展失效先过守卫：留在此处保留标签草稿与旧列表，放弃修改后才移除", async ({page}) => {
     const state = await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     planExtensionsReload(state, ["failedStatus"]);
     await page.getByRole("button", {name: "设置"}).click();
     // 先出现现有三选一守卫（打开设置的刷新先于分区切换返回），此时候选（FAILED）
@@ -908,7 +1034,7 @@ test.describe("扩展列表刷新的草稿生命周期闸门（PLAN-DM-024 F1）
     await expect(page.locator('[data-extension-id="dst-manager.sheet-catalog"] .ext-meta')).toContainText("可用");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("heading", {name: "图纸目录"})).toBeVisible();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
     // 再次刷新并选择放弃修改：列表替换放行，标签移除并回到图纸页签
     planExtensionsReload(state, ["failedStatus"]);
     await page.getByRole("button", {name: "设置"}).click();
@@ -964,7 +1090,7 @@ test.describe("Shell 扩展错误使用当前语言（PLAN-DM-024 F3）", () => 
 test.describe("模板显示名与身份不变量（PLAN-DM-024 F4）", () => {
   test("zh-CN 内置模板显示名冲突：另存为被本地拦截，不发送 PUT 且对话框保留输入", async ({page}) => {
     const state = await openCatalog(page);
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await page.getByRole("button", {name: "另存为"}).click();
     const dialog = page.getByRole("dialog", {name: "另存为模板"});
     await dialog.getByLabel("模板名称").fill("默认图纸目录（内置）");
@@ -984,7 +1110,7 @@ test.describe("模板显示名与身份不变量（PLAN-DM-024 F4）", () => {
     await page.goto("/");
     await page.getByRole("button", {name: "Select DST File"}).click();
     await page.getByRole("tab", {name: "Sheet Catalog"}).click();
-    await page.getByLabel("Expression 1").fill("{sheet.number}#");
+    await catalogExpression(page, 1).fill("{sheet.number}#");
     await page.getByRole("button", {name: "Save as"}).click();
     const dialog = page.getByRole("dialog", {name: "Save as template"});
     await dialog.getByLabel("Template name").fill("Default catalog (built-in)");
@@ -1012,7 +1138,7 @@ test.describe("模板显示名与身份不变量（PLAN-DM-024 F4）", () => {
     await select.selectOption({label: "Default catalog (built-in) (user template)"});
     await expect(page.getByLabel("Select template")).toHaveValue(template.template_id);
     // 原位保存：PUT 负载按 UUID 更新该模板，持久化名称不带消歧后缀
-    await page.getByLabel("Column header 1").fill("Drawing No.");
+    await catalogHeader(page, 1).fill("Drawing No.");
     await page.getByRole("button", {name: "Save changes"}).click();
     // en 的 guardMessage 常驻隐藏 dialog 且含 "unsaved changes" 子串，不能用
     // getByText 宽松匹配；按脏标记元素精确断言。
@@ -1041,7 +1167,7 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
 
   test("数字格式码入口把图号补零到 4 位", async ({page}) => {
     await openCatalog(page);
-    const expression = page.getByLabel("表达式 1");
+    const expression = catalogExpression(page, 1);
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
     const trigger = entry.getByRole("button", {name: "格式"});
@@ -1059,7 +1185,7 @@ test.describe("数字格式码入口（PLAN-DM-026）", () => {
 
   test("数字格式码入口可去掉前导零", async ({page}) => {
     await openCatalog(page);
-    const expression = page.getByLabel("表达式 1");
+    const expression = catalogExpression(page, 1);
     await expression.fill("");
     const entry = fieldEntry(page, /sheet\.number/);
     const trigger = entry.getByRole("button", {name: "格式"});
@@ -1185,7 +1311,7 @@ test.describe("输出图纸过滤与预览契约（PLAN-DM-025 Task 8）", () =>
     // 业务页草稿仍是未修改状态（面板实例的编辑不进入页面实例）
     await expect(page.getByText("有未保存修改")).toHaveCount(0);
     // 两处「表达式 1」同时存在（业务页 + 面板）正说明是两个实例：断言页面那一份未被改动
-    await expect(page.getByRole("region", {name: "图纸目录", exact: true}).getByLabel("表达式 1")).toHaveValue("{sheet.number}");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}");
     // 返回扩展列表并关闭设置后刷新预览：服务端按新过滤词重算，业务页显示过滤结果
     await dialog.getByRole("button", {name: "返回扩展列表"}).click();
     await dialog.getByRole("button", {name: "关闭设置"}).click();
@@ -1263,7 +1389,7 @@ test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
 
     // 有未保存修改（本地草稿仍然可编辑）时保存入口也必须停用：控制器只读短路不落盘，
     // 按钮可点就是"点了没反应"的静默出口
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await expect(page.getByText("有未保存修改")).toBeVisible();
     await expect(page.getByRole("button", {name: "保存修改"})).toBeDisabled();
     await expect(page.getByRole("button", {name: "另存为"})).toBeDisabled();
@@ -1277,7 +1403,7 @@ test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
     await expect(guard.getByRole("button", {name: "保存为模板"})).toBeDisabled();
     await guard.getByRole("button", {name: "留在此处"}).click();
     await expect(guard).toBeHidden();
-    await expect(page.getByLabel("表达式 1")).toHaveValue("{sheet.number}号");
+    await expect(catalogExpression(page, 1)).toHaveValue("{sheet.number}号");
   });
 
   // M6：进行中状态不得让文案与数字自相矛盾。过滤提示与总数文案必须来自同一份预览：
@@ -1296,7 +1422,7 @@ test.describe("修复轮 1（B 部分）（PLAN-DM-025 Task 8）", () => {
       await held;
       await route.fallback(); // 交给夹具的预览处理器（fallback 保持既有路由生效）
     });
-    await page.getByLabel("表达式 1").fill("{sheet.number}号");
+    await catalogExpression(page, 1).fill("{sheet.number}号");
     await expect(preview.getByText("正在更新预览…")).toBeVisible();
     await expect(preview.getByText("输出 24 张图纸")).toBeVisible();
     await expect(preview.getByTestId("catalog-preview-filtered")).toHaveText("已过滤 1 张图纸");
@@ -1368,11 +1494,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     expect(actual, `${property} 应来自 ${token}`).toBe(expected);
   }
 
-  // 可见 label（T6-5）：仅 aria-label 不算——≤720px 表头隐藏后，这个可见 label 是唯一的可见列标签。
-  // 实现上不得用「先读 id 再查 label[for]」的两次往返——UiInput 的兜底 id
-  // 来自模块级计数器（见 instanceId.ts），id 按挂载顺序分配而非行序，控件重挂载就会换 id，
-  // 两次往返之间发生重挂载即假失败（本用例曾因此 flaky）。这里改用 Playwright 自身的可访问
-  // 名称计算 + 独立定位可见 label 元素，两者都不依赖 id，也不依赖 getByLabel 命中的是哪个节点。
+  // 搜索框仍使用可见 label；这个辅助断言同时核对输入的可访问名称与可见 label 元素。
   async function expectVisibleLabel(page: Page, control: Locator, text: string): Promise<void> {
     await expect(control.first(), `「${text}」应命中控件本身而不是 label`).toHaveJSProperty("tagName", "INPUT");
     await expect(control.first(), `「${text}」的可访问名称`).toHaveAccessibleName(text);
@@ -1407,7 +1529,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     // 危险层级：删除是文字型危险动作，颜色只能来自 --color-danger
     await expectToken(page, remove, "color", "--color-danger");
     // 脏位驱动：改一处列名后保存入口转为可用（禁用不是装饰）
-    await page.getByLabel("输出列名 1").fill("图纸编号A");
+    await catalogHeader(page, 1).fill("图纸编号A");
     await expect(save).toBeEnabled();
     await expectToken(page, save, "border-top-left-radius", "--radius-md");
     await expectToken(page, save, "font-size", "--button-font-size");
@@ -1472,18 +1594,19 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     expect(Math.abs(track.buttons[2]!.right - track.right), "行内动作右对齐到轨道右边界").toBeLessThanOrEqual(1);
     expect(track.buttons[0]!.left, "三枚按钮不溢出轨道左边界").toBeGreaterThanOrEqual(track.left - 1);
     // 表达式文本域是等宽正文：最小高度、圆角与字号全部按令牌
-    const expression = page.getByLabel("表达式 1");
+    const expression = catalogExpression(page, 1);
     await expectToken(page, expression, "border-top-left-radius", "--radius-md");
     await expectToken(page, expression, "min-height", "--catalog-column-expression-min-height");
     await expectToken(page, expression, "font-size", "--font-label");
     await expectToken(page, expression, "font-family", "--font-mono");
   });
 
-  test("输出列名与字段搜索：可见 label 关联控件，输入档 38px", async ({page}) => {
+  test("列名取同列表头与行号命名、字段搜索保留可见 label，输入档 38px", async ({page}) => {
     await openCatalog(page);
-    const header1 = page.getByLabel("输出列名 1");
-    // 可见 label 而不是仅 aria-label（T6-5）：未迁移前这里没有 label，探针会找不到关联
-    await expectVisibleLabel(page, header1, "输出列名 1");
+    const header1 = catalogHeader(page, 1);
+    await expect(header1, "列名控件的计算名称包含列头和行号").toHaveAccessibleName("列名 1");
+    await expect(header1).not.toHaveAttribute("aria-label", /.+/);
+    await expect(page.locator(".column-header-cell .ui-input__label")).toHaveCount(0);
     await expectToken(page, header1, "height", "--input-height");
     await expectToken(page, header1, "font-size", "--input-font-size");
     await expectToken(page, header1, "border-top-left-radius", "--radius-md");
@@ -1515,7 +1638,7 @@ test.describe("控件视觉基础（PLAN-DM-029 Task 6）", () => {
     await expectToken(page, page.locator(".catalog-head h2"), "font-size", "--font-view-title");
     // 冲突面板的 h3 同样是 14px 卡标题档位（由夹具布防冲突后可见）
     state.controls.putSettingsMode = "conflict";
-    await page.getByLabel("输出列名 1").fill("语义字号档位核查");
+    await catalogHeader(page, 1).fill("语义字号档位核查");
     await page.getByRole("button", {name: "保存修改"}).click();
     const conflict = page.getByRole("alert").filter({hasText: "模板已被其他保存更新"});
     await expect(conflict).toBeVisible();

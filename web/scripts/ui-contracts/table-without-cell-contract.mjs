@@ -43,6 +43,7 @@ export const TABLE_CONTRACTS = Object.freeze([
   gridTable("src/components/standards/EnumValuesDialog.vue", "enum-values", ".enum-head", ".enum-row"),
   gridTable("src/components/standards/MappingPropertyDialog.vue", "mapping-values", ".mapping-head", ".mapping-row"),
   gridTable("src/components/standards/DerivedPropertyEditor.vue", "derived-properties", ".derived-head", ".derived-row"),
+  gridTable("src/components/sheet-catalog/ColumnEditor.vue", "catalog-columns", ".columns-head", ".column-row"),
 ]);
 
 /** 几何配对在 Task 3/4 加入 TABLE_CONTRACTS 时启用逐表根守卫。 */

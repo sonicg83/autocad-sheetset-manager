@@ -23,11 +23,19 @@ import CompatibilitySummary from "./CompatibilitySummary.vue";
 import {catalogCompatibility} from "./catalogCompatibility";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
+import {nextInstanceId} from "../ui/instanceId";
 
 // PLAN-DM-025 Task 8：本组件只依赖模板编辑接口 + 可选校验反馈。设置中心的 custom 面板
 // 没有工作区快照，因此不传反馈——兼容性徽标与摘要整体隐藏，列编辑仍可用。
 const props = defineProps<{catalog: SheetCatalogTemplateController; feedback?: SheetCatalogValidationFeedback}>();
 const {t} = useI18n();
+const catalogTableId = nextInstanceId("catalog-table");
+const headerColumnId = `${catalogTableId}-header`;
+const expressionColumnId = `${catalogTableId}-expression`;
+
+function rowOrderId(columnId: string): string {
+  return `${catalogTableId}-row-${columnId}`;
+}
 
 // 兼容徒标与摘要正文同源（PLAN-DM-023 Task 4）：判定只在 catalogCompatibility 一处
 const compat = computed(() => (props.feedback ? catalogCompatibility(props.feedback) : null));
@@ -132,37 +140,42 @@ watch(() => props.catalog.caretRequest.value, async request => {
     <!-- 兼容性摘要嵌在输出列卡内（V2）：详细正文紧随卡头，不再作为独立全宽卡片。
          无校验反馈（设置中心 custom 面板）时不渲染：不伪造一份空诊断 -->
     <CompatibilitySummary v-if="feedback" :feedback="feedback" />
-    <div class="columns">
-      <div class="columns-head">
-        <span>{{ $t("extensions.sheetCatalog.columnsHeadOrder") }}</span>
-        <span>{{ $t("extensions.sheetCatalog.columnsHeadHeader") }}</span>
-        <span>{{ $t("extensions.sheetCatalog.columnsHeadExpression") }}</span>
-        <span>{{ $t("extensions.sheetCatalog.columnsHeadStatus") }}</span>
-        <span>{{ $t("extensions.sheetCatalog.columnsHeadActions") }}</span>
+    <div class="columns" role="table" data-ui-table-contract="catalog-columns">
+      <div class="columns-head" role="row">
+        <span role="columnheader">{{ $t("extensions.sheetCatalog.columnsHeadOrder") }}</span>
+        <span :id="headerColumnId" role="columnheader">{{ $t("extensions.sheetCatalog.columnsHeadHeader") }}</span>
+        <span :id="expressionColumnId" role="columnheader">{{ $t("extensions.sheetCatalog.columnsHeadExpression") }}</span>
+        <span role="columnheader">{{ $t("extensions.sheetCatalog.columnsHeadStatus") }}</span>
+        <span role="columnheader">{{ $t("extensions.sheetCatalog.columnsHeadActions") }}</span>
       </div>
-      <ol class="column-list">
+      <ol class="column-list" role="rowgroup">
         <li
-          v-for="row in rows" :key="row.column.columnId" class="column-row"
+          v-for="row in rows" :key="row.column.columnId" class="column-row" role="row"
           :class="{'is-error': row.error !== null}"
+          :data-testid="`catalog-row-${row.column.columnId}`"
         >
-          <span class="order-cell">{{ row.index + 1 }}</span>
-          <!-- T6-5：可见 label 由 UiInput 渲染为 label[for]（仅 aria-label 不解除该例外）。
-               可见文字与 sticky 表头同义，在 ≤720px 表头隐藏时它正是唯一的可见列标签。 -->
-          <UiInput
-            :ref="instance => registerHeaderInput(row.column.columnId, instance as ComponentPublicInstance | null)"
-            :label="$t('extensions.sheetCatalog.columnHeader', {index: row.index + 1})"
-            :model-value="row.column.header"
-            @update:model-value="catalog.updateColumn(row.column.columnId, {header: $event})"
-          />
-          <div class="expression-cell">
+          <span class="order-cell" role="cell" :id="rowOrderId(row.column.columnId)">{{ row.index + 1 }}</span>
+          <div class="column-header-cell" role="cell">
+            <span class="column-mobile-label" aria-hidden="true">{{ $t("extensions.sheetCatalog.columnsHeadHeader") }}</span>
+            <UiInput
+              :ref="instance => registerHeaderInput(row.column.columnId, instance as ComponentPublicInstance | null)"
+              :data-testid="`catalog-header-${row.column.columnId}`"
+              :aria-labelledby="[headerColumnId, rowOrderId(row.column.columnId)].join(' ')"
+              :model-value="row.column.header"
+              @update:model-value="catalog.updateColumn(row.column.columnId, {header: $event})"
+            />
+          </div>
+          <div class="expression-cell" role="cell">
+            <span class="column-mobile-label" aria-hidden="true">{{ $t("extensions.sheetCatalog.columnsHeadExpression") }}</span>
             <textarea
               spellcheck="false"
               autocorrect="off"
               autocapitalize="off"
               autocomplete="off"
+              :data-testid="`catalog-expression-${row.column.columnId}`"
               :ref="element => { expressionInputs[row.column.columnId] = element as HTMLTextAreaElement | null }"
               rows="2"
-              :aria-label="$t('extensions.sheetCatalog.columnExpression', {index: row.index + 1})"
+              :aria-labelledby="[expressionColumnId, rowOrderId(row.column.columnId)].join(' ')"
               :value="row.column.expression"
               @input="catalog.updateColumn(row.column.columnId, {expression: ($event.target as HTMLTextAreaElement).value}); trackCaret(row.column.columnId, $event.target as HTMLTextAreaElement)"
               @click="trackCaret(row.column.columnId, $event.target as HTMLTextAreaElement)"
@@ -171,14 +184,14 @@ watch(() => props.catalog.caretRequest.value, async request => {
             ></textarea>
             <p v-if="row.error" class="error column-error" role="alert">{{ errorText(row.error) }}</p>
           </div>
-          <span class="status-cell">
+          <span class="status-cell" role="cell">
             <!-- 列状态只能来自服务端诊断：同一服务端下，无诊断（含"不传校验反馈"的设置中心
                  面板）不等于"已校验通过"。此前无反馈时每列都顶着绿色"有效"，而那次校验
                  根本没发生过（M2）。有反馈时行为完全不变。 -->
             <span v-if="feedback" class="status-badge" :class="row.error ? 'bad' : 'good'">{{ row.error ? $t("extensions.sheetCatalog.columnStatusInvalid") : $t("extensions.sheetCatalog.columnStatusValid") }}</span>
             <span v-else class="status-badge neutral">{{ $t("extensions.sheetCatalog.columnStatusUnchecked") }}</span>
           </span>
-          <div class="row-actions">
+          <div class="row-actions" role="cell">
             <button type="button" :disabled="row.index === 0" :aria-label="$t('extensions.sheetCatalog.moveUp', {index: row.index + 1})" @click="catalog.moveColumn(row.column.columnId, -1)">↑</button>
             <button type="button" :disabled="row.index === catalog.draft.value.columns.length - 1" :aria-label="$t('extensions.sheetCatalog.moveDown', {index: row.index + 1})" @click="catalog.moveColumn(row.column.columnId, 1)">↓</button>
             <button type="button" class="danger-text" :aria-label="$t('extensions.sheetCatalog.removeColumn', {index: row.index + 1})" @click="catalog.removeColumn(row.column.columnId)">✕</button>
@@ -208,22 +221,24 @@ watch(() => props.catalog.caretRequest.value, async request => {
 .column-count{color:var(--color-text-muted);font-size:var(--font-caption);white-space:nowrap}
 .columns{overflow:auto;min-height:0;flex:1;max-height:var(--catalog-columns-max-height)}
 /* 表头与数据行共用同一组 grid 轨道：任何一处的列宽改动都必须同步两处 */
-.columns-head,.column-row{display:grid;grid-template-columns:34px minmax(110px,.62fr) minmax(250px,1.8fr) 92px 112px;gap:8px}
-.columns-head{position:sticky;top:0;z-index:1;padding:8px 12px;background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-caption)}
+.columns-head,.column-row{display:grid;grid-template-columns:34px minmax(110px,.62fr) minmax(250px,1.8fr) 92px 112px;gap:var(--space-2);min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:start}
+.columns-head{position:sticky;top:0;z-index:1;background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-caption)}
 .column-list{list-style:none;margin:0;padding:0}
-.column-row{padding:9px 12px;border-bottom:1px solid var(--color-border-subtle);align-items:start}
+.column-row{border-bottom:1px solid var(--color-border-subtle)}
 .column-row.is-error{background:var(--color-danger-bg)}
-.order-cell{padding-top:9px;color:var(--color-text-secondary);font-size:var(--font-caption);text-align:center}
+.order-cell{color:var(--color-text-secondary);font-size:var(--font-caption);text-align:center}
+.column-header-cell{display:flex;flex-direction:column;min-width:0}
+.column-mobile-label{display:none}
 .expression-cell{display:grid;gap:4px;min-width:0}
 .column-row textarea{width:100%;min-width:0;min-height:var(--catalog-column-expression-min-height);padding:7px 8px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-label);line-height:1.5;resize:vertical;background:var(--color-bg-surface);color:var(--color-text-primary)}
 .column-error{margin:0;font-size:var(--font-caption);line-height:1.5;color:var(--color-danger)}
-.status-cell{padding-top:8px}
+.status-cell{min-width:0}
 .status-badge{font-size:var(--font-caption);padding:3px 8px;border-radius:var(--radius-full);white-space:nowrap}
 .status-badge.good{color:var(--color-success);background:var(--color-success-bg)}
 .status-badge.bad{color:var(--color-danger);background:var(--color-danger-bg)}
 /* 无校验反馈：中性色，不得冒充"有效" */
 .status-badge.neutral{color:var(--color-text-muted);background:var(--color-bg-muted)}
-.row-actions{display:flex;gap:4px;justify-content:flex-end;padding-top:2px}
+.row-actions{display:flex;gap:4px;justify-content:flex-end}
 .row-actions button{width:var(--tap-target-min);min-height:var(--tap-target-min);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-bg-surface);font-size:var(--font-label);line-height:1}
 .row-actions button:hover:not(:disabled){background:var(--color-bg-muted)}
 .row-actions button.danger-text{color:var(--color-danger)}
@@ -237,8 +252,7 @@ watch(() => props.catalog.caretRequest.value, async request => {
   .columns-head{display:none}
   .column-row{grid-template-columns:28px minmax(0,1fr);gap:7px}
   .column-row > *:not(.order-cell){grid-column:2}
-  .order-cell{padding-top:2px}
+  .column-mobile-label{display:block;font-size:var(--font-caption);color:var(--color-text-secondary)}
   .row-actions{justify-content:flex-start}
-  .status-cell{padding-top:0}
 }
 </style>

@@ -132,9 +132,9 @@ related:
 
 **双重表头改造（方案 C 扩围，2026-09-27 用户裁决）：** 桌面态移除 `UiInput` 的 `label`，输入和 textarea 的可访问名由同表实例的列头文字与行号组成。使用 `nextInstanceId("catalog-table")` 生成表实例前缀，列头 `:id="headerColumnId"`/`:id="expressionColumnId"`，行序号项以实例前缀 + `columnId` 生成唯一 `:id="rowOrderId(row.column.columnId)"`；两个控件分别以 `:aria-labelledby="[headerColumnId, rowOrderId(row.column.columnId)].join(' ')"` 和表达式列头对应表达式引用同实例列头与行序号，名称例如「列名 1」「表达式 1」，而非只有列名。Task 2 静态门禁只识别该明确的组合形态并核对两端绑定，实际值由双实例 Playwright 断言。可用 `aria-describedby` 关联错误信息，但不能靠它提供名称中的行号。≤720px 仍隐藏 `.columns-head`，但列头 `id` 保持在 DOM；在每行列名输入和表达式框旁新增仅该断点显示的可见列名，复用现有 `columnsHeadHeader`/`columnsHeadExpression` 中英文文案并始终 `aria-hidden="true"`，桌面态隐藏。不得重新传 `label`，`.ui-input__label` 保持为 0。
 
-- [ ] **Step 1（RED）**：在 `sheet-catalog.spec.ts` 断言完整 `table → row/rowgroup → columnheader/cell` 语义树、同一轨道及计算行高/`align-items`/padding；断言 `.ui-input__label` 为 0、每行两控件的计算可访问名称分别包含列头和当前行号。增加 720px 两侧用例：桌面态仅列头可见，≤720px 表头不可见而每行两个字段的列名均可见；隐藏列头仍在 DOM。增加目录页与设置面板同时挂载的用例，断言两实例列头 ID 唯一且每个控件只引用本表。先盘点 20+ 处旧 `getByLabel` 定位并记录实际 RED；当前组件没有 `data-testid`，测试必须在实现新增锚点后迁移。
-- [ ] **Step 2（GREEN）**：按 Interfaces 增加角色、必要的单元格外包元素、测试锚点、实例级 ID、列头 + 行号双引用与 720px 可见列名；补 scoped 行高档、单档令牌化 padding 和 `align-items`。保持五列轨道、textarea 两行、112px 操作轨；调整包装元素后重测全部轨道与滚动。`columnHeader` 原 i18n key 与文案保持原义，可见窄屏标签直接复用现有列头 key。
-- [ ] **Step 3（验证/提交）**：逐一迁移 Step 1 记录的旧定位，优先在区域内使用本任务新增的 `data-testid`；需要验证可访问名时使用新名称断言。运行两份目标 e2e、`check:ui`、`check:i18n` 与生产构建；确认 ≤720px 可见字段名、单列化、112px 操作轨、双实例 ID 和 Tab 顺序；清退对应例外，提交信息：`收口目录列编辑器网格表格对齐并取消双重表头`。
+- [x] **Step 1（RED）**：先在 `sheet-catalog.spec.ts` 增加完整 `table → row/rowgroup → columnheader/cell` 语义树、同一轨道及计算行高/`align-items`/padding、无重复 label、名称含列头和行号、720px 两侧与双挂载引用断言；组件尚未修改时三项新语义用例失败。盘点到两个目标 spec 合计 79 处编号字段 `getByLabel`，`ColumnEditor.vue` 原本没有行/控件锚点。
+- [x] **Step 2（GREEN）**：按 Interfaces 增加角色、单元格包装元素、三个 `data-testid`、实例级 ID、列头 + 行号双引用与 720px 可见列名；补 44px 行高档、单档令牌 padding 和 `align-items`。保持五列轨道、两行 textarea 与 112px 操作轨，保留 `columnHeader` 原 i18n 键和文案。
+- [x] **Step 3（验证/提交）**：79 处旧编号标签定位全部迁移，残留 0；`test:contracts` 133/133、`check:ui`、`check:i18n`、生产构建通过；三个语义用例聚焦运行 36/36，两个目标 spec 全量 135/135。核对窄屏字段名、隐藏表头引用、双实例 ID、本表引用、Tab 顺序、轨道与 112px 操作区；无新增例外。提交信息：`收口目录列编辑器网格表格对齐并取消双重表头`。
 
 ### Task 5：逐表守卫与存量覆盖确认
 
@@ -187,6 +187,7 @@ related:
 | 2026-09-27 | Task 1 规范正文本轮增量修订 | 文档规范任务，无运行时 RED 用例 | §6.4 / §4.3 / §9.1 / §9.3 增量已完成，PLAN-DM-043 规则与 18 张真实表口径保留；`rtk git diff --check` exit 0 | Tasks 3–6 实施；真实 Windows WebView2 缩放复验 |
 | 2026-09-27 | Task 2 静态规则与迁移基线 | 首次 `test:contracts` 127 项中 12 项新增用例失败；覆盖几何规则、逐表守卫、第四种标签形态 | `test:contracts` 133/133，27 条 CLI 变异；`check:ui` exit 0；18 张真实表 marker 配对完整，原 10 条例外 + 1 条动态变量未改 | 四张 grid 根将在 Tasks 3/4 落地；屏幕阅读器与真实 WebView2 缩放复验 |
 | 2026-09-27 | Task 3 标准平台三张 grid 表 | 派生表旧断言收到 4 个 label；枚举弹窗未找到登记表根；新增语义/几何断言按预期失败 | `test:contracts` 133/133；`check:ui` exit 0；生产 `build` exit 0（含 API/i18n/TypeScript 检查）；两目标 spec 67/67，最终聚焦复跑 34/34；900×768、780×768、1440×900 几何/响应式断言通过；截图人工检查 | `axe-core` 不在依赖树且 Narrator/NVDA 未运行，axe 与人工读屏未验证；真实 WebView2 缩放复验 |
+| 2026-09-27 | Task 4 目录列编辑器 | 三项语义/几何/双挂载用例在实现前失败；旧定位盘点 79 处 | `test:contracts` 133/133；`check:ui`、`check:i18n`、生产 `build` exit 0；聚焦用例 36/36，两个目标 spec 135/135；79 处旧定位已改写且残留 0；检查列头名称、720px 标签、双实例引用、Tab 顺序、五列轨道和 112px 操作轨 | 真实 Windows WebView2 100/125/150/200% 缩放复验；axe 与人工读屏仍未验证 |
 
 ## 修订记录
 
@@ -198,3 +199,4 @@ related:
 - 2026-09-27 执行 Task 1：增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3，固定三条 `grid-table-*` 规则、逐表守卫和第四种严格标签形态；旧 `th/td` 条目未改写。
 - 2026-09-27 执行 Task 2：接入三条 `grid-table-*` 规则、逐表 `table-without-cell-contract` 和严格 `aria-labelledby` 第四形态；18 张真实表逐根加 marker，4 张 grid 表的几何配对预登记。Playwright 记录四表初始行高、padding、`align-items` 与计算轨道；原生表 `table-cell-*`、逐表守卫的未豁免基线均为 0，例外清单 10/1 保持原样；计划进入 Tasks 3–6。
 - 2026-09-27 执行 Task 3：枚举、映射与派生表补齐语义树、实例级列头 ID 和 `aria-labelledby`，取消三表重复输入标签；三张表契约登记启用。统一使用 44px `min-height` 档、单档令牌 padding 和显式行轨道对齐，保留派生表 1050px/780px 响应式隐藏；axe/读屏工具不可用已记录，计划继续 active。
+- 2026-09-27 执行 Task 4：目录列编辑器补齐语义表格角色、实例级列头与行号命名、720px 可见字段名及测试锚点；启用第 4 张 grid 表契约，迁移两个目标 spec 中 79 处编号字段定位。静态契约、i18n、构建与两目标 E2E 135/135 通过；读屏与真实 WebView2 缩放仍待复验。
