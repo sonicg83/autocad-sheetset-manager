@@ -98,9 +98,41 @@ test.describe("输出列语义网格表格（PLAN-DM-044 Task 4）", () => {
     const table = editor.getByRole("table");
     const header = table.locator(".columns-head");
     const firstRow = table.getByRole("rowgroup").getByRole("row").first();
+    await page.setViewportSize({width: 721, height: 900});
     await expect(header).toBeVisible();
     await expect(firstRow.locator(".column-mobile-label")).toHaveCount(2);
     for (const label of await firstRow.locator(".column-mobile-label").all()) await expect(label).toBeHidden();
+    const desktopGeometry = await table.evaluate(element => {
+      const head = element.querySelector<HTMLElement>(".columns-head")!;
+      const row = element.querySelector<HTMLElement>(".column-row")!;
+      const headStyle = getComputedStyle(head);
+      const rowStyle = getComputedStyle(row);
+      const rootStyle = getComputedStyle(document.documentElement);
+      const padding = (style: CSSStyleDeclaration) => [
+        style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft,
+      ].map(value => Number.parseFloat(value));
+      return {
+        minHeight: Number.parseFloat(rootStyle.getPropertyValue("--sheet-table-row-height")),
+        space2: Number.parseFloat(rootStyle.getPropertyValue("--space-2")),
+        headHeight: head.getBoundingClientRect().height,
+        rowHeight: row.getBoundingClientRect().height,
+        headPadding: padding(headStyle),
+        rowPadding: padding(rowStyle),
+        headAlign: headStyle.alignItems,
+        rowAlign: rowStyle.alignItems,
+        headTracks: headStyle.gridTemplateColumns.split(/\s+/),
+        rowTracks: rowStyle.gridTemplateColumns.split(/\s+/),
+      };
+    });
+    expect(desktopGeometry.headHeight).toBeGreaterThanOrEqual(desktopGeometry.minHeight);
+    expect(desktopGeometry.rowHeight).toBeGreaterThanOrEqual(desktopGeometry.minHeight);
+    expect(desktopGeometry.headPadding).toEqual([desktopGeometry.space2, desktopGeometry.space2, desktopGeometry.space2, desktopGeometry.space2]);
+    expect(desktopGeometry.rowPadding).toEqual(desktopGeometry.headPadding);
+    expect(desktopGeometry.headAlign).toBe("start");
+    expect(desktopGeometry.rowAlign).toBe(desktopGeometry.headAlign);
+    expect(desktopGeometry.headTracks).toHaveLength(5);
+    expect(desktopGeometry.rowTracks).toEqual(desktopGeometry.headTracks);
+    expect(Number.parseFloat(desktopGeometry.rowTracks[4]!), "桌面模式操作轨保留 112px").toBe(112);
 
     await page.setViewportSize({width: 720, height: 900});
     await expect(header).toBeHidden();
@@ -110,6 +142,22 @@ test.describe("输出列语义网格表格（PLAN-DM-044 Task 4）", () => {
       await expect(label).toHaveAttribute("aria-hidden", "true");
       await expect(label).toBeVisible();
     }
+    const mobileGeometry = await firstRow.evaluate(row => {
+      const style = getComputedStyle(row);
+      const rootStyle = getComputedStyle(document.documentElement);
+      return {
+        height: row.getBoundingClientRect().height,
+        minHeight: Number.parseFloat(rootStyle.getPropertyValue("--sheet-table-row-height")),
+        space2: Number.parseFloat(rootStyle.getPropertyValue("--space-2")),
+        padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(value => Number.parseFloat(value)),
+        align: style.alignItems,
+        tracks: style.gridTemplateColumns.split(/\s+/),
+      };
+    });
+    expect(mobileGeometry.height).toBeGreaterThanOrEqual(mobileGeometry.minHeight);
+    expect(mobileGeometry.padding).toEqual([mobileGeometry.space2, mobileGeometry.space2, mobileGeometry.space2, mobileGeometry.space2]);
+    expect(mobileGeometry.align).toBe("start");
+    expect(mobileGeometry.tracks).toHaveLength(2);
     await expect(catalogHeader(editor, 1)).toHaveAccessibleName("列名 1");
     await expect(catalogExpression(editor, 1)).toHaveAccessibleName("表达式 1");
     await expect(table.locator("label")).toHaveCount(0);
@@ -377,15 +425,21 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
     const header = catalogHeader(page, 1);
     const expression = catalogExpression(page, 1);
     const styleOf = (locator: Locator, property: string) => locator.evaluate((element, prop) => getComputedStyle(element).getPropertyValue(prop), property);
-    // 断言有效性：warning 底色令牌与输入框 clean 底色必须确实不同（防止断言恒真）
-    const warningBg = await page.evaluate(() => {
+    const tokenBackground = (token: string) => page.evaluate(name => {
       const probe = document.createElement("span");
-      probe.style.backgroundColor = "var(--color-warning-bg)";
+      probe.style.backgroundColor = `var(${name})`;
       document.body.appendChild(probe);
       const value = getComputedStyle(probe).backgroundColor;
       probe.remove();
       return value;
-    });
+    }, token);
+    // 首屏组件样式/全局令牌可能尚在注入：等输入框底色确实解析到令牌后再采集 clean 基线。
+    await expect.poll(async () => {
+      const [inputBg, surfaceBg] = await Promise.all([styleOf(header, "background-color"), tokenBackground("--color-bg-surface")]);
+      return surfaceBg !== "" && inputBg === surfaceBg;
+    }, {message: "列名输入框 clean 底色解析为 surface 令牌"}).toBe(true);
+    // 断言有效性：warning 底色令牌与输入框 clean 底色必须确实不同（防止断言恒真）
+    const warningBg = await tokenBackground("--color-warning-bg");
     const cleanHeaderBg = await styleOf(header, "background-color");
     const cleanExpressionBg = await styleOf(expression, "background-color");
     expect(cleanHeaderBg, "warning-bg 与输入框 clean 底色不同（断言有效前提）").not.toBe(warningBg);

@@ -15,7 +15,7 @@
 // .dst-manager-data/dst-manager.db 的 extension_states，禁止）；/api/settings 与 /api/about
 // 走真实后端（global-setup 已隔离配置目录）。本文件不保存核心设置，以免干扰
 // settings-dialog.spec.ts 的串行基线——扩展设置保存只打本扩展的端点（SC-17 独立保存）。
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Locator, type Page} from "@playwright/test";
 import {expectDialog} from "./fixtures/settings";
 import {extensionSummary, generatedSettingsItems, installExtensionSettings, installExtensions} from "./fixtures/extensions";
 
@@ -986,6 +986,14 @@ const CATALOG_FILTER = '[data-testid="catalog-settings-filter"]';
 const CATALOG_FILTER_ERROR = '[data-testid="catalog-settings-filter-error"]';
 const FILTER_FIELD = "excluded_title_keywords";
 
+function catalogHeader(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-header-/);
+}
+
+function catalogExpression(editor: Locator, index: number): Locator {
+  return editor.getByTestId(/^catalog-row-/).nth(index - 1).getByTestId(/^catalog-expression-/);
+}
+
 function catalogTemplate(name: string, columns: {header: string; expression: string}[] = [{header: "图号", expression: "{sheet.number}"}]) {
   return {
     template_id: `tpl-${name}`,
@@ -1017,11 +1025,11 @@ test("custom 面板：无工作区可进入、可编辑表达式与另存模板�
   await expect(dialog.locator(".compatibility")).toHaveCount(0);
   await expect(dialog.locator(".compat-badge")).toHaveCount(0);
   // 表达式文本仍可编辑（不因无工作区降级为只读），列增删可用
-  const expression = dialog.getByLabel("表达式 1");
+  const expression = catalogExpression(panel, 1);
   await expect(expression).toBeEnabled();
   await expression.fill("{sheet.number}号");
   await dialog.getByRole("button", {name: "添加输出列"}).click();
-  await expect(dialog.getByLabel("输出列名 4")).toBeVisible();
+  await expect(catalogHeader(panel, 4)).toBeVisible();
 
   // 另存为：内置模板不可原地保存，草稿只能另存为新模板（新模板带 4 列）
   await dialog.getByRole("button", {name: "另存为"}).click();
@@ -1058,7 +1066,7 @@ test("custom 面板：无工作区可进入、可编辑表达式与另存模板�
   // 重开后回到内置默认模板，但用户模板仍在列表中可选
   await expect(dialog.getByLabel("选择模板").locator("option")).toHaveCount(2);
   await expect(dialog.getByLabel("选择模板")).toContainText("无工作区模板");
-  await expect(dialog.getByLabel("输出列名 1")).toHaveValue("图号");
+  await expect(catalogHeader(panel, 1)).toHaveValue("图号");
   await expect(dialog.getByRole("button", {name: "保存", exact: true})).toBeDisabled();
 });
 
@@ -1195,14 +1203,14 @@ test("custom 面板：TemplateBar 仍用模板级徽标，输出过滤继续用�
   const filterDirtyBadge = dialog.getByTestId("catalog-settings-filter-dirty");
 
   // 模板级：编辑表达式 → TemplateBar 出现警示徽标；字段级过滤框保持 clean
-  await panel.getByLabel("表达式 1").fill("{sheet.number}号");
+  await catalogExpression(panel, 1).fill("{sheet.number}号");
   await expect(stateBadge).toHaveText("有未保存修改");
   await expect(stateBadge).toHaveClass(/dirty/);
   await expect(stateBadge).toHaveAttribute("role", "status");
   await expect(field).not.toHaveClass(/is-dirty/);
   await expect(filterDirtyBadge).toHaveCount(0);
   // 改回模板快照：模板徽标恢复中性「已保存」
-  await panel.getByLabel("表达式 1").fill("{sheet.number}");
+  await catalogExpression(panel, 1).fill("{sheet.number}");
   await expect(stateBadge).toHaveText("已保存");
   await expect(stateBadge).not.toHaveClass(/dirty/);
 
@@ -1386,7 +1394,7 @@ test("custom 面板：高版本只读进入配置子视图，面板整体 disabl
   // <fieldset disabled> 覆盖全部后代控件：模板选择、过滤输入、表达式与列操作都不可操作
   await expect(panel.getByLabel("选择模板")).toBeDisabled();
   await expect(panel.locator(CATALOG_FILTER)).toBeDisabled();
-  await expect(panel.getByLabel("表达式 1")).toBeDisabled();
+  await expect(catalogExpression(panel, 1)).toBeDisabled();
   await expect(panel.getByRole("button", {name: "添加输出列"})).toBeDisabled();
   await expect(panel.getByRole("button", {name: "另存为"})).toBeDisabled();
   // 宿主页脚"保存"同样停用：只读态不产生静默无效保存

@@ -5,6 +5,7 @@
 - 完成 PLAN-DM-044 Task 3：枚举、映射、派生属性三张 grid 表加入完整语义角色树、实例级列头 ID 与 `aria-labelledby`，移除行内重复标签并统一 44px 行高下限、令牌 padding 和显式对齐；保留派生表 1050px/780px 隐藏列行为。`test:contracts` 133/133、`check:ui`、生产构建通过；两目标 E2E 67/67，含 900×768、780×768 与 1440×900 检查。当前缺少 axe 与运行中的屏幕阅读器，读屏检查登记未验证。
 - 完成 PLAN-DM-044 Task 4：目录列编辑器补齐表格角色树、实例级列头与同行序号命名、窄屏可见列名和稳定测试锚点，并纳入 22 张表的逐表契约；保留五列轨道与 112px 操作轨。迁移两个目标 spec 的 79 处编号字段定位（旧定位残留 0）；`test:contracts` 133/133、`check:ui`、`check:i18n`、生产构建通过，聚焦用例 36/36、两目标 E2E 135/135。真实 Windows WebView2 缩放与读屏复验待做。
 - 完成 PLAN-DM-044 Task 5：通过实际 CLI 临时工作区重跑 class-only 单元格样式、无单元格样式新表、同组件第二张未登记表的红测；第二张表补唯一 marker、根/CSS 配对后转绿。确认无表格语义的纯 class-only 视觉伪表属于静态边界。`TABLE_CONTRACTS` 22 项唯一，18 张原生表与 4 张 grid 表覆盖完整；`check:ui` exit 0。关闭相关待办第 1 项，第 2–5 项仍未承接。
+- 完成 PLAN-DM-044 Task 6：复核目录列编辑器在 721px/720px 两侧的 44px 行高、单档 padding、起始对齐、五轨/112px 操作轨及窄屏两轨；扩展设置 E2E 迁移剩余旧标签定位，样式守卫等待 surface 令牌解析后采集 clean 基线。`test:contracts` 133/133、`check:ui`、`check:i18n`、`test:unit` 339/339、`build`、`ruff check .` 均通过；全量 Playwright E2E 701/701，通过样式用例重复运行 10/10。22 张表逐表覆盖、10 条既有例外指纹未变且无 PLAN-DM-044 例外；无 Python 改动，未运行 pytest。100/125/150/200% Windows WebView2 人工缩放验收未完成，故计划继续为 `active`。
 
 ## 2026-09-27（PLAN-DM-045：映射源一对多复用）
 

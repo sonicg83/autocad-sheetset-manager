@@ -148,9 +148,9 @@ related:
 
 **Files:** `web/scripts/ui-contracts/grid-table-cells.mjs`、`web/scripts/ui-contracts/table-without-cell-contract.mjs` 的精确配对表、`web/tests/e2e/sheet-catalog*.spec.ts`、`changelog.md`；仅修复复核发现的本计划缺口。
 
-- [ ] **Step 1（复核）**：确认 `ColumnEditor.vue` 已纳入 `grid-table-*` 与逐表守卫，按 Task 2 的实测基线复核 720px 两侧行几何、列轨道和 112px 操作轨；若失败则回到 Task 4 修复并重测，**不得**把整张表登记为例外，也不得以“下一次视觉 Spec 修订”作为到期条件。
-- [ ] **Step 2（全量验证）**：运行 `rtk npm --prefix web run test:contracts`、`check:ui`、`check:i18n`、`test:unit`、`build`、`test:e2e`，以及 `rtk uv run ruff check .` 与受影响的 pytest（若无 Python 改动，记录无相关用例）；确认 22 张表逐表覆盖、`check:ui` 退出 0、例外清单无本计划到期项且既有 10 条例外指纹未变。
-- [ ] **Step 3（缺口登记）**：补 100/125/150/200% Windows WebView2 的代表性模态/编辑页人工复验；环境缺失时按 ARCH-DM-007 §12 **保持 `active`** 并明记缺口，不声称通过；提交信息：`完成网格伪表格对齐契约收口`。
+- [x] **Step 1（复核）**：确认 `ColumnEditor.vue` 已纳入 `grid-table-*` 与逐表守卫；扩展 E2E 几何断言实测 721px 桌面布局与 720px 窄屏布局，表头/数据行均满足行高下限、单档 token padding、`align-items: start`；桌面五轨一致且操作轨为 112px，窄屏两轨一致。未新增例外。
+- [x] **Step 2（全量验证）**：`test:contracts` 133/133、`check:ui`、`check:i18n`（1620 keys / 11 domains）、`test:unit` 339/339、`build`、`ruff check .` 全部通过；最终全量 Playwright E2E 701/701 通过。`TABLE_CONTRACTS` 22 张逐表覆盖，例外清单仍为既有 10 条、1 条动态变量且无 PLAN-DM-044 项；目标 E2E 旧标签定位已迁移，样式基线等待 surface token 与输入框样式就绪后连续复跑 10/10。无 Python 改动，因此无相关 pytest。构建仅有既有单 chunk 超过 500KB 的非阻断提示。
+- [x] **Step 3（缺口登记）**：本轮未完成 DST Manager 产品 Windows WebView2 窗口的人工缩放复验；Playwright viewport 断点与 Codex 自身 WebView 均不作为产品验收替代。100/125/150/200% 缩放下代表性模态/编辑页仍未验证，按 ARCH-DM-007 §12 保持计划 `active`，不声称通过。实施提交信息：`完成网格伪表格对齐契约收口`。
 
 ## 风险与处置
 
