@@ -70,7 +70,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
       tabindex="0"
       :aria-label="$t('properties.definitions.tableAria')"
     >
-      <table :style="{minWidth: `${tableMinWidth}px`}">
+      <table data-ui-table-contract="property-definitions" :style="{minWidth: `${tableMinWidth}px`}">
         <colgroup>
           <col v-for="column in COLUMNS" :key="column.key" :style="{width: `${column.width}px`}">
         </colgroup>

@@ -98,10 +98,21 @@ related:
 
 **结构配对的落地形式（与 PLAN-DM-043 同口径）：** `TABLE_CONTRACTS` 的 `headerSelector`/`rowSelector` 指向实际承载几何声明的规则：真实表可为 `th/td`，grid 表为表头/数据行；允许多张表有意共用同一规则，但每张根仍单独登记 marker。grid 表的「结构性零 padding」等跨组件条件不进 `ui-contract-exceptions.json`（该文件条目被 `REQUIRED_EXCEPTION_FIELDS` 固定），仍在模块内以 `{file, rowSelector, tableSelector, requiredToken}` 精确配对。
 
-- [ ] **Step 1（RED）**：用临时 Vue/CSS 夹具写几何规则反例（缺 `align-items`、裸 padding、表头/数据行两档、缺行高）；守卫反例覆盖独立新表、**已含合规表的组件内第二张无规则表**、缺 `role="table"` 父级的孤立 `row`、有表根但无对应 CSS 选择器、对应选择器只有空规则；仅有 class 而无任何表格语义的伪表作为边界探针单独记录，不预设静态守卫能发现。第四形态反例覆盖不存在/无文字/非 `columnheader`/被 `aria-hidden` 的列头、控件同时传 `label`、纯图标列头及缺行号引用；正例覆盖字面量 `id`、同一绑定表达式的实例级 `id` 以及列头 + 行号双引用。跨实例引用由 Task 4 Playwright 验证。运行 `rtk npm --prefix web run test:contracts` 并记录目标 RED。
-- [ ] **Step 2（GREEN）**：实现 `grid-table-cells.mjs`（三条规则 + 模块内精确配对）与逐表守卫，在 `types.mjs` 和 `check-ui-contracts.mjs` 接入；第四形态严格校验列头存在、文本、角色树及字面量/同绑定表达式配对，并确认“列头 + 行号”两目标均属于同一表实例。规则只看**已声明的**选择器；真实几何与动态实例唯一性由 Playwright 覆盖。逐表登记无法从 DOM 静态判定的 CSS 配对，不把整个组件当成一张表。
-- [ ] **Step 3（棘轮与基线）**：先量取并登记 4 个组件的现状几何；逐一盘点 18 张真实表，为各表根加同文件唯一的 `data-ui-table-contract` 字面量 marker，登记表头/数据行选择器与 CSS 文件到 `TABLE_CONTRACTS`；记录 4 张 grid 表将在 Task 3/4 使用的 marker 与配对，待表根落地时入表。存量几何违规按稳定指纹登记到 `ui-contract-exceptions.json`，每条写迁移任务与到期条件；**逐表守卫不得登记例外**，若真实表基线不为 0 就在本计划增列清退任务。把各反例并入 CLI 级变异清单，按实测同步三处计数。
-- [ ] **Step 4（验证/提交）**：运行 `rtk npm --prefix web run test:contracts` 与 `rtk npm --prefix web run check:ui`；只提交本任务文件及本次 `changelog.md` 记录，提交信息：`建立网格伪表格静态门禁`。
+- [x] **Step 1（RED）**：用临时 Vue/CSS 夹具覆盖缺 `align-items`、裸/多档 padding、表头/数据行 padding 不同与缺行高；守卫覆盖缺/重复/动态/未登记 marker、无实际根、CSS 选择器缺失/空规则、已合规组件内第二张无规则表、孤立 `role="row"`，并记录 class-only 边界；第四形态覆盖列头不存在/无文字/非 `columnheader`/`aria-hidden`/图标无文字、重复 `label`、缺同行序号引用与三种正例。首次运行 `test:contracts` 127 项中 12 项预期失败，证明新增路径为 RED。
+- [x] **Step 2（GREEN）**：新增 `grid-table-cells.mjs` 三条规则与 `table-without-cell-contract.mjs` 逐表守卫，在 `types.mjs` 和 `check-ui-contracts.mjs` 接入；第四形态检查同一 `role="table"` 内可见列头、完整 `row` 关系、字面量/同绑定表达式，以及 `ColumnEditor` 明确列头 + 同行序号组合。扫描器只看**已声明**的选择器，不推算浏览器几何；class-only 伪表边界由探针记录。
+- [x] **Step 3（棘轮与基线）**：Playwright 先量取 4 个 grid 组件；18 张真实表逐表加唯一字面量 marker 并写入 `TABLE_CONTRACTS`。四张 grid marker/配对预登记到 `GRID_TABLE_CONTRACTS`，待 Task 3/4 真实语义表根落地时加入 `TABLE_CONTRACTS` 并启用逐根守卫。真实表几何和守卫基线均为 0，无需改动 `ui-contract-exceptions.json`；原有例外/动态变量仍是 10/1，保持指纹不变。将三条 `grid-table-*`、逐表守卫和第四形态负例并入 CLI 变异组，变异数由 22 调整为 27，分类数由 20 调整为 25。
+- [x] **Step 4（验证/提交）**：`rtk npm run test:contracts` 133/133 通过，含 27 条 CLI 变异；`rtk npm run check:ui` exit 0。只提交 Task 2 文件与本次 `changelog.md` 记录，提交信息：`建立网格伪表格静态门禁`。
+
+##### Task 2 几何迁移基线
+
+以下数据由未修改样式的 Playwright Chromium 夹具实测，视口 1280×720；列轨道为 `getComputedStyle().gridTemplateColumns`，padding 顺序为上/右/下/左。
+
+| 组件 | 表头：行高 / padding / `align-items` / 轨道 | 数据行：行高 / padding / `align-items` / 轨道 |
+| --- | --- | --- |
+| `EnumValuesDialog.vue` | 19.5px / `0 0 0 0` / `center` / `140px 646px 44px` | 61.5px / `0 0 0 0` / `center` / `140px 646px 44px` |
+| `MappingPropertyDialog.vue` | 19.5px / `0 0 0 0` / `end` / `339px 339px` | 61.5px / `0 0 0 0` / `end` / `339px 339px` |
+| `DerivedPropertyEditor.vue` | 19.5px / `0 0 0 0` / `start` / `191.031px 80.625px 208.406px 107.516px 208.422px 26px 26px` | 38px / `0 0 0 0` / `start` / `179.094px 80.625px 195.375px 107.516px 195.375px 54px 36.0156px` |
+| `ColumnEditor.vue` | 34px / `8px 12px 8px 12px` / `normal` / `34px 158.828px 461.156px 92px 112px` | 80.5px / `9px 12px 9px 12px` / `start` / `34px 158.828px 461.156px 92px 112px` |
 
 ### Task 3：标准平台三张伪表格的语义标记与几何收口
 
@@ -173,7 +184,8 @@ related:
 
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
 | --- | --- | --- | --- | --- |
-| 2026-09-27 | Task 1 规范正文本轮增量修订 | 文档规范任务，无运行时 RED 用例 | §6.4 / §4.3 / §9.1 / §9.3 增量已完成，PLAN-DM-043 规则与 18 张真实表口径保留；`rtk git diff --check` exit 0 | Tasks 2–6 实施；真实 Windows WebView2 缩放复验 |
+| 2026-09-27 | Task 1 规范正文本轮增量修订 | 文档规范任务，无运行时 RED 用例 | §6.4 / §4.3 / §9.1 / §9.3 增量已完成，PLAN-DM-043 规则与 18 张真实表口径保留；`rtk git diff --check` exit 0 | Tasks 3–6 实施；真实 Windows WebView2 缩放复验 |
+| 2026-09-27 | Task 2 静态规则与迁移基线 | 首次 `test:contracts` 127 项中 12 项新增用例失败；覆盖几何规则、逐表守卫、第四种标签形态 | `test:contracts` 133/133，27 条 CLI 变异；`check:ui` exit 0；18 张真实表 marker 配对完整，原 10 条例外 + 1 条动态变量未改 | 四张 grid 根将在 Tasks 3/4 落地；屏幕阅读器与真实 WebView2 缩放复验 |
 
 ## 修订记录
 
@@ -183,3 +195,4 @@ related:
 - 2026-09-27 修订三（方案 C 二次扩围，用户追加裁决）：把 `ColumnEditor.vue`（图纸目录插件的输出列编辑器）**纳入**双重表头改造——截图确认其列头「列名」/「表达式」与行内「输出列名 N」/「表达式 N」构成双重表头，而 Task 4 原稿只安排了几何与轨道对齐，属计划缺口。按用户裁决取「**列头文字 + 行号补足**」（`aria-labelledby` 指向列头，另以 `aria-describedby` 补行号，避免 N 行同报「列名」），并把改造落到 Task 4 的 Interfaces 与三个 Step（含记录并核对 `sheet-catalog.spec.ts` 20+ 处 `getByLabel("输出列名 N")` 定位、≤720px 表头隐藏时列头 `id` 仍留在 DOM）。同时修正门禁第四形态的判定条件：由「必须 `role="columnheader"`」放宽为「`role="columnheader"` 或位于 `role="row"`/`.columns-head` 列头行内」两条路径之一，以适配 `ColumnEditor` 不新增 ARIA 角色的既有裁决，并把反向用例从三条扩到五条。范围由三张表扩为**四张**，相应更新范围裁决、Review Focus、完成标准与两条新增风险。
 - 2026-09-27 审查后修订四（仍为 proposed）：修复六项计划缺口。四表统一完整 `role="table"` 语义树，撤销上条“`ColumnEditor` 不新增 ARIA 角色”口径；≤720px 表头隐藏时增加视觉互斥的可见行内列名；行号由 `aria-labelledby` 进入计算名称而非仅由 `aria-describedby` 提供描述；列头与行号 ID 改为实例级并测试双挂载；`ColumnEditor` 先补 `data-testid` 再迁移旧定位；守卫改为按每张表的 `data-ui-table-contract` marker 与 `TABLE_CONTRACTS` 精确配对，验证同组件第二张无规则表也会失败。Task 6 取消“整表例外”分支；上条相冲突的实施口径均以本次修订为准。未实施代码或规范正文。
 - 2026-09-27 执行 Task 1：增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3，固定三条 `grid-table-*` 规则、逐表守卫和第四种严格标签形态；旧 `th/td` 条目未改写。
+- 2026-09-27 执行 Task 2：接入三条 `grid-table-*` 规则、逐表 `table-without-cell-contract` 和严格 `aria-labelledby` 第四形态；18 张真实表逐根加 marker，4 张 grid 表的几何配对预登记。Playwright 记录四表初始行高、padding、`align-items` 与计算轨道；原生表 `table-cell-*`、逐表守卫的未豁免基线均为 0，例外清单 10/1 保持原样；计划进入 Tasks 3–6。

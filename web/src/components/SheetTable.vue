@@ -70,7 +70,7 @@ function displayFileName(value: string): string {
 </script>
 <template>
   <div ref="windowEl" class="sheet-table-window" :class="{'sticky-actions': stickyActions}" tabindex="0" :aria-label="$t('sheets.table.windowAria')">
-    <table :aria-label="$t('sheets.table.tableAria')" :style="{width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`}">
+    <table data-ui-table-contract="sheet-browser" :aria-label="$t('sheets.table.tableAria')" :style="{width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`}">
       <colgroup><col v-for="col in columns" :key="col.key" :style="{width: `${columnWidth(col)}px`}"></colgroup>
       <thead><tr><th v-for="col in columns" :key="col.key" :class="cellClass(col)" :title="col.label || undefined">
         <input

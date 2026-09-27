@@ -31,7 +31,9 @@ import {
   parseRules,
 } from "./ui-contracts/css-vars.mjs";
 import {collectAssetViolations} from "./ui-contracts/font-assets.mjs";
+import {collectGridTableCellViolations} from "./ui-contracts/grid-table-cells.mjs";
 import {collectTableCellViolations} from "./ui-contracts/table-cells.mjs";
+import {collectTableWithoutCellContractViolations, GRID_TABLE_CONTRACTS, scanTemplateElements, TABLE_CONTRACTS} from "./ui-contracts/table-without-cell-contract.mjs";
 import {NON_EXEMPTIBLE_RULES, RULE, compareViolations, formatViolation, violation} from "./ui-contracts/types.mjs";
 import {findHexColorsInValue, isBareGlobalSelector, isRawVisualValue, isTokenBlock} from "./ui-contracts/visual-values.mjs";
 import {
@@ -259,6 +261,19 @@ export function collectUiContractViolations(options = {}) {
   // 单档令牌化 padding，以及登记在 STRUCTURAL_CELL_PAIRS 里的跨列结构零 padding 配对。
   violations.push(...collectTableCellViolations({files, emitFor: createEmitter}));
 
+  // 第五遍：grid 表行几何规则与按每个 table 根逐项核对的契约守卫（PLAN-DM-044 Task 2）。
+  violations.push(...collectGridTableCellViolations({
+    files,
+    emitFor: createEmitter,
+    contracts: options.gridTableContracts ?? GRID_TABLE_CONTRACTS,
+  }));
+  violations.push(...collectTableWithoutCellContractViolations({
+    files,
+    emitFor: createEmitter,
+    contracts: options.tableContracts ?? TABLE_CONTRACTS,
+    gridContracts: options.gridTableContracts ?? GRID_TABLE_CONTRACTS,
+  }));
+
   return applyRatchet(violations, registered).sort(compareViolations);
 }
 
@@ -288,6 +303,87 @@ function createEmitter(relativePath) {
     counters.set(key, occurrence);
     return violation({...spec, file: relativePath, occurrence});
   };
+}
+
+function hasLiteralAttribute(tagText, name) {
+  return new RegExp(`\\s${name}\\s*=`).test(tagText);
+}
+
+function hasBoundAttribute(tagText, name) {
+  return new RegExp(`\\s(?::|v-bind:)${name}\\s*=`).test(tagText);
+}
+
+function roleTableAncestor(element) {
+  return [...element.ancestors].reverse().find(ancestor => getAttribute(ancestor.text, "role") === "table") ?? null;
+}
+
+function rowAncestor(element, table) {
+  return [...element.ancestors].reverse().find(ancestor =>
+    ancestor.ancestors.includes(table) && getAttribute(ancestor.text, "role") === "row",
+  ) ?? null;
+}
+
+function hasVisibleAccessibleColumnHeader(html, header, table) {
+  if (header === undefined || getAttribute(header.text, "role") !== "columnheader") return false;
+  if (!header.ancestors.includes(table) || rowAncestor(header, table) === null) return false;
+  const tableIndex = header.ancestors.indexOf(table);
+  if (header.ancestors.slice(tableIndex).some(ancestor => hasAttribute(ancestor.text, "aria-hidden"))) return false;
+  if (hasAttribute(header.text, "aria-hidden")) return false;
+  const contentEnd = header.closeStart ?? header.end;
+  return hasVisibleText(html.slice(header.openEnd, contentEnd));
+}
+
+function literalIdMatches(elements, id) {
+  return elements.filter(element => hasLiteralAttribute(element.text, "id") && getAttribute(element.text, "id") === id);
+}
+
+function belongsToSameRow(element, row, table) {
+  return row !== null && element.ancestors.includes(row) && element.ancestors.includes(table);
+}
+
+/** 严格校验 grid 表行内控件指向本实例列头；ColumnEditor 还必须引用同行序号。 */
+function hasGridColumnHeaderAssociation({html, elements, control, file}) {
+  const table = roleTableAncestor(control);
+  if (table === null) return false;
+  const ariaValue = getAttribute(control.text, "aria-labelledby");
+  if (ariaValue === null) return false;
+  const controlRow = rowAncestor(control, table);
+  if (controlRow === null) return false;
+
+  const isColumnEditor = file.relative === "src/components/sheet-catalog/ColumnEditor.vue";
+  const composite = /^\[\s*headerColumnId\s*,\s*rowOrderId\(row\.column\.columnId\)\s*\]\.join\(\s*(['"]) \1\s*\)$/.test(ariaValue.trim());
+  if (isColumnEditor && composite) {
+    const headers = elements.filter(element =>
+      hasBoundAttribute(element.text, "id") && getAttribute(element.text, "id") === "headerColumnId" &&
+      hasVisibleAccessibleColumnHeader(html, element, table),
+    );
+    const rowOrder = elements.filter(element =>
+      hasBoundAttribute(element.text, "id") && getAttribute(element.text, "id") === "rowOrderId(row.column.columnId)" &&
+      belongsToSameRow(element, controlRow, table) && hasVisibleText(html.slice(element.openEnd, element.closeStart ?? element.end)),
+    );
+    return headers.length === 1 && rowOrder.length === 1;
+  }
+
+  if (hasLiteralAttribute(control.text, "aria-labelledby")) {
+    const ids = ariaValue.trim().split(/\s+/).filter(value => value !== "");
+    if (ids.length === 0 || (ids.length > 1 && (!isColumnEditor || ids.length !== 2))) return false;
+    const headers = literalIdMatches(elements, ids[0]);
+    if (headers.length !== 1 || !hasVisibleAccessibleColumnHeader(html, headers[0], table)) return false;
+    if (ids.length === 1) return true;
+    const orderTargets = literalIdMatches(elements, ids[1]);
+    return orderTargets.length === 1 && belongsToSameRow(orderTargets[0], controlRow, table) &&
+      hasVisibleText(html.slice(orderTargets[0].openEnd, orderTargets[0].closeStart ?? orderTargets[0].end));
+  }
+
+  if (hasBoundAttribute(control.text, "aria-labelledby")) {
+    const expression = ariaValue.trim();
+    const headers = elements.filter(element =>
+      hasBoundAttribute(element.text, "id") && getAttribute(element.text, "id") === expression &&
+      hasVisibleAccessibleColumnHeader(html, element, table),
+    );
+    return headers.length === 1;
+  }
+  return false;
 }
 
 /** 检查一段 CSS 文本（整份 `.css` 文件或一个 `<style>` 块）。 */
@@ -409,6 +505,7 @@ function analyzeVueFile(file, emit, isDefined, violations) {
   if (template === null) return;
   const at = (index) => toPosition(file.text, template.offset + index);
   const html = template.content;
+  const templateElements = scanTemplateElements(html);
 
   const labelRanges = findRanges(html, "label");
   const labelTargets = new Set(
@@ -506,6 +603,22 @@ function analyzeVueFile(file, emit, isDefined, violations) {
 
     for (const tag of componentInputTags) {
       const labelAttr = getAttribute(tag.text, "label");
+      const element = templateElements.find(candidate => candidate.start === tag.start);
+      const inSemanticTable = element !== undefined && roleTableAncestor(element) !== null;
+      if (inSemanticTable && hasAttribute(tag.text, "aria-labelledby")) {
+        const validAssociation = hasGridColumnHeaderAssociation({html, elements: templateElements, control: element, file});
+        if (validAssociation && labelAttr === null) continue;
+        const signature = getAttribute(tag.text, "id") ?? getAttribute(tag.text, "v-model") ?? getAttribute(tag.text, "placeholder") ?? "";
+        violations.push(
+          emit({
+            rule: RULE.visibleInputLabel,
+            ...at(tag.start),
+            message: "grid 表格输入必须以同表可见 columnheader 命名，不得重复传 label；ColumnEditor 还须引用同行序号",
+            semantic: `${/^<([a-z-]+)/i.exec(tag.text)?.[1] ?? "component-input"}:${signature}:grid-columnheader`,
+          }),
+        );
+        continue;
+      }
       if (labelAttr !== null && labelAttr.trim() !== "") continue;
       const component = /^<([a-z-]+)/i.exec(tag.text)[1] ?? "component-input";
       const inDefaultFormFieldSlot = formFieldRanges.some(

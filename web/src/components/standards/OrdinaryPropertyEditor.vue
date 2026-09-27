@@ -226,7 +226,7 @@ function applyCsv(): void {
     <!-- 宽表局部滚动（PLAN-DM-039 Task 3）：页面本身不横向滚动，表格保持可读的结构基线宽度
          （SPEC-DM-017 编辑器 Demo 的 930px），只在自身容器内滚动。 -->
     <div v-else class="ordinary-scroll" data-testid="ordinary-table-scroll">
-      <table class="ordinary-table" data-testid="ordinary-table">
+      <table data-ui-table-contract="ordinary-properties" class="ordinary-table" data-testid="ordinary-table">
       <thead>
         <tr>
           <th scope="col" class="col-name">{{ $t("standards.ordinary.name") }}</th>

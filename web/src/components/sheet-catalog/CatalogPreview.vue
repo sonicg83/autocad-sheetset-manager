@@ -31,7 +31,7 @@ const filteredCount = computed(() => props.catalog.preview.value?.filteredRows ?
     </div>
     <p v-if="catalog.previewStatus.value === 'ready' && catalog.preview.value?.totalRows === 0" class="empty" role="status">{{ $t("extensions.sheetCatalog.previewEmptySheets") }}</p>
     <div v-if="catalog.preview.value && catalog.preview.value.rows.length > 0" class="table-window">
-      <table data-testid="catalog-preview-table">
+      <table data-ui-table-contract="catalog-preview" data-testid="catalog-preview-table">
         <thead>
           <tr>
             <th v-for="column in catalog.draft.value.columns" :key="column.columnId" scope="col">{{ column.header }}</th>

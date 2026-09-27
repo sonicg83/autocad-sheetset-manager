@@ -231,7 +231,7 @@ async function recheckAndExecute(): Promise<void> {
         </section>
         <!-- 主表：一组一行；表宽随内容，容器自身横向滚动，首列保持可见 -->
         <div class="table-scroll">
-          <table class="preview-table" data-testid="creation-preview-table" :aria-label="$t('creation.review.tableLabel')">
+          <table data-ui-table-contract="creation-review" class="preview-table" data-testid="creation-preview-table" :aria-label="$t('creation.review.tableLabel')">
             <thead>
               <tr>
                 <th class="group-col">{{ $t("creation.review.columnGroup") }}</th>

@@ -100,7 +100,7 @@ const visibleDiagnostics = computed(() =>
         {{ $t("standards.assets.uncheckedDiagnostics") }}
       </p>
       <template v-else>
-        <table class="layout-table" data-testid="asset-layout-table">
+        <table data-ui-table-contract="asset-layouts" class="layout-table" data-testid="asset-layout-table">
           <thead>
             <tr>
               <th scope="col">{{ $t("standards.assets.paperLayouts") }}</th>

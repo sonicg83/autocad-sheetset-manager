@@ -17,6 +17,7 @@ import {fileURLToPath} from "node:url";
 import {after, describe, test} from "node:test";
 
 import {collectUiContractViolations, DEFAULT_EXCEPTIONS_FILE, formatViolation, runCli} from "./check-ui-contracts.mjs";
+import {GRID_TABLE_CONTRACTS, TABLE_CONTRACTS} from "./ui-contracts/table-without-cell-contract.mjs";
 import {NON_EXEMPTIBLE_RULES} from "./ui-contracts/types.mjs";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -70,12 +71,44 @@ function fixture(files) {
 }
 
 /** 只跑检查器，不施加例外棘轮。 */
-function rawViolations(files) {
-  return collectUiContractViolations({root: fixture(files), exceptions: emptyExceptions()});
+function rawViolations(files, options = {}) {
+  return collectUiContractViolations({root: fixture(files), exceptions: emptyExceptions(), ...options});
 }
 
 function emptyExceptions() {
   return {exceptions: [], dynamicVariables: []};
+}
+
+const TABLE_FIXTURE_FILE = "src/components/TableFixture.vue";
+const TABLE_FIXTURE_CONTRACT = {
+  file: TABLE_FIXTURE_FILE,
+  marker: "fixture-table",
+  headerSelector: ".fixture-head",
+  rowSelector: ".fixture-row",
+  cssFile: TABLE_FIXTURE_FILE,
+};
+const GRID_FIXTURE_CONTRACT = {...TABLE_FIXTURE_CONTRACT};
+const TABLE_FIXTURE_TOKENS = `${TOKENS_CSS}:root{--sheet-table-row-height:44px;--space-1:4px}`;
+
+function fixtureTableMarkup({marker = TABLE_FIXTURE_CONTRACT.marker, extra = ""} = {}) {
+  return `<div role="table" data-ui-table-contract="${marker}">
+  <div class="fixture-head" role="row"><span role="columnheader">名称</span></div>
+  <div class="fixture-row" role="row"><span role="cell">值</span></div>${extra}
+</div>`;
+}
+
+function tableContractViolations({
+  template = fixtureTableMarkup(),
+  style = ".fixture-head,.fixture-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}",
+  file = TABLE_FIXTURE_FILE,
+  contracts = [TABLE_FIXTURE_CONTRACT],
+  gridContracts = [GRID_FIXTURE_CONTRACT],
+} = {}) {
+  const source = `<template>${template}</template><style scoped>${style}</style>`;
+  return rawViolations(
+    {"src/styles/tokens.css": TABLE_FIXTURE_TOKENS, [file]: source},
+    {tableContracts: contracts, gridTableContracts: gridContracts},
+  );
 }
 
 function rulesOf(violations) {
@@ -428,6 +461,73 @@ describe("Vue 语义规则", () => {
       "visible-input-label",
     );
     assert.match(violation.message, /组件化输入/);
+  });
+
+  test("组件化输入：语义表格的可见列头可通过字面量 aria-labelledby 命名", () => {
+    const violations = tableContractViolations({
+      template: `<div role="table" data-ui-table-contract="fixture-table">
+  <div class="fixture-head" role="row"><span id="name-header" role="columnheader">名称</span></div>
+  <div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div>
+</div>`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：同一绑定表达式的列头 id 与 aria-labelledby 通过", () => {
+    const violations = tableContractViolations({
+      template: `<div role="table" data-ui-table-contract="fixture-table">
+  <div class="fixture-head" role="row"><span :id="nameHeaderId" role="columnheader">名称</span></div>
+  <div class="fixture-row" role="row"><UiInput :aria-labelledby="nameHeaderId" /></div>
+</div>`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：列头 + 同行序号的 ColumnEditor 组合引用通过", () => {
+    const file = "src/components/sheet-catalog/ColumnEditor.vue";
+    const contract = {...TABLE_FIXTURE_CONTRACT, file, cssFile: file};
+    const violations = tableContractViolations({
+      file,
+      contracts: [contract],
+      gridContracts: [contract],
+      template: `<div role="table" data-ui-table-contract="fixture-table">
+  <div class="fixture-head" role="row"><span :id="headerColumnId" role="columnheader">列名</span></div>
+  <div class="fixture-row" role="row"><span :id="rowOrderId(row.column.columnId)">1</span><UiInput :aria-labelledby="[headerColumnId, rowOrderId(row.column.columnId)].join(' ')" /></div>
+</div>`,
+    });
+    assert.deepEqual(rulesOf(violations), []);
+  });
+
+  test("组件化输入：列头不存在、无文字、角色错误或 aria-hidden 时拒绝", () => {
+    const templates = [
+      `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span role="columnheader">名称</span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="missing" /></div></div>`,
+      `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span id="name-header" role="columnheader"></span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span id="name-header" role="cell">名称</span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span id="name-header" role="columnheader" aria-hidden="true">名称</span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<div role="table" aria-hidden="true" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span id="name-header" role="columnheader">名称</span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span id="name-header" role="columnheader"><svg aria-hidden="true"></svg></span></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<span id="name-header" role="columnheader">名称</span><div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"></div><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+      `<div role="table" data-ui-table-contract="fixture-table"><span id="name-header" role="columnheader">名称</span><div class="fixture-row" role="row"><UiInput aria-labelledby="name-header" /></div></div>`,
+    ];
+    for (const template of templates) {
+      assert.equal(rulesOf(tableContractViolations({template})).filter(rule => rule === "visible-input-label").length, 1);
+    }
+  });
+
+  test("组件化输入：表格第四形态仍拒绝重复 label，ColumnEditor 必须引用同行序号", () => {
+    const duplicateLabel = `<div role="table" data-ui-table-contract="fixture-table">
+  <div class="fixture-head" role="row"><span id="name-header" role="columnheader">名称</span></div>
+  <div class="fixture-row" role="row"><UiInput label="名称" aria-labelledby="name-header" /></div>
+</div>`;
+    assert.equal(rulesOf(tableContractViolations({template: duplicateLabel})).filter(rule => rule === "visible-input-label").length, 1);
+
+    const file = "src/components/sheet-catalog/ColumnEditor.vue";
+    const contract = {...TABLE_FIXTURE_CONTRACT, file, cssFile: file};
+    const missingOrder = `<div role="table" data-ui-table-contract="fixture-table">
+  <div class="fixture-head" role="row"><span :id="headerColumnId" role="columnheader">列名</span></div>
+  <div class="fixture-row" role="row"><UiInput :aria-labelledby="[headerColumnId, rowOrderId(row.column.columnId)].join(' ')" /></div>
+</div>`;
+    assert.equal(rulesOf(tableContractViolations({file, contracts: [contract], gridContracts: [contract], template: missingOrder})).filter(rule => rule === "visible-input-label").length, 1);
   });
 
   test("Unicode 结构图标被拒绝", () => {
@@ -1309,6 +1409,104 @@ th{padding:var(--space-1);vertical-align:middle}</style>
   });
 });
 
+describe("grid 表格几何与逐表守卫", () => {
+  test("登记清单逐表覆盖 18 张真实表，并预留 4 张 grid 表配对", () => {
+    assert.equal(TABLE_CONTRACTS.length, 18);
+    assert.equal(GRID_TABLE_CONTRACTS.length, 4);
+    assert.equal(new Set(TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 18);
+    assert.equal(new Set(GRID_TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 4);
+  });
+
+  test("grid 表行容器缺 align-items 被拒绝", () => {
+    const violations = tableContractViolations({
+      style: ".fixture-head,.fixture-row{min-height:var(--sheet-table-row-height);padding:var(--space-2)}",
+    });
+    assert.equal(rulesOf(violations).filter(rule => rule === "grid-table-align").length, 2);
+  });
+
+  test("grid 表拒绝裸值与多档 padding", () => {
+    for (const padding of ["8px", "var(--space-2) var(--space-1)"]) {
+      const violations = tableContractViolations({
+        style: `.fixture-head,.fixture-row{min-height:var(--sheet-table-row-height);padding:${padding};align-items:center}`,
+      });
+      assert.equal(rulesOf(violations).filter(rule => rule === "grid-table-padding").length, 2);
+    }
+  });
+
+  test("grid 表头与数据行 padding 不一致被拒绝", () => {
+    const violations = tableContractViolations({
+      style: `.fixture-head{min-height:var(--sheet-table-row-height);padding:var(--space-1);align-items:center}.fixture-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}`,
+    });
+    assert.equal(rulesOf(violations).filter(rule => rule === "grid-table-padding").length, 1);
+  });
+
+  test("grid 表头或数据行缺少行高档被拒绝", () => {
+    const violations = tableContractViolations({
+      style: ".fixture-head{padding:var(--space-2);align-items:center}.fixture-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}",
+    });
+    assert.equal(rulesOf(violations).filter(rule => rule === "grid-table-row-height").length, 1);
+  });
+
+  test("表格根缺 marker、marker 重复或 marker 未登记均失败", () => {
+    const noMarker = fixtureTableMarkup().replace(' data-ui-table-contract="fixture-table"', "");
+    const boundMarker = fixtureTableMarkup().replace('data-ui-table-contract="fixture-table"', ':data-ui-table-contract="marker"');
+    const duplicate = fixtureTableMarkup({extra: `<div role="table" data-ui-table-contract="fixture-table"><div class="fixture-head" role="row"><span role="columnheader">其他</span></div><div class="fixture-row" role="row"><span role="cell">值</span></div></div>`});
+    const unknown = fixtureTableMarkup({marker: "unknown-table"});
+    for (const template of [noMarker, boundMarker, duplicate, unknown]) {
+      assert.ok(rulesOf(tableContractViolations({template})).filter(rule => rule === "table-without-cell-contract").length > 0);
+    }
+  });
+
+  test("登记表根在文件内不存在、CSS 选择器缺失或为空均失败", () => {
+    const missingRoot = tableContractViolations({template: "<p>没有表格</p>"});
+    assert.equal(rulesOf(missingRoot).filter(rule => rule === "table-without-cell-contract").length, 1);
+
+    const missingSelectors = tableContractViolations({style: ".other{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}"});
+    assert.ok(rulesOf(missingSelectors).filter(rule => rule === "table-without-cell-contract").length > 0);
+
+    const emptyRule = tableContractViolations({style: ".fixture-head{}.fixture-row{}"});
+    assert.ok(rulesOf(emptyRule).filter(rule => rule === "table-without-cell-contract").length > 0);
+  });
+
+  test("同组件第二张无规则表失败，补 marker 与专属 CSS 配对后通过", () => {
+    const secondTable = `<div role="table"><div class="second-head" role="row"><span role="columnheader">第二表</span></div><div class="second-row" role="row"><span role="cell">值</span></div></div>`;
+    const template = fixtureTableMarkup({extra: secondTable});
+    const unregistered = tableContractViolations({template});
+    assert.equal(rulesOf(unregistered).filter(rule => rule === "table-without-cell-contract").length, 1);
+
+    const secondContract = {
+      file: TABLE_FIXTURE_FILE,
+      marker: "second-table",
+      headerSelector: ".second-head",
+      rowSelector: ".second-row",
+      cssFile: TABLE_FIXTURE_FILE,
+    };
+    const completedTemplate = template.replace('<div role="table"><div class="second-head"', '<div role="table" data-ui-table-contract="second-table"><div class="second-head"');
+    const completedStyle = ".fixture-head,.fixture-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}.second-head,.second-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}";
+    assert.deepEqual(
+      rulesOf(tableContractViolations({
+        template: completedTemplate,
+        style: completedStyle,
+        contracts: [TABLE_FIXTURE_CONTRACT, secondContract],
+        gridContracts: [GRID_FIXTURE_CONTRACT, secondContract],
+      })),
+      [],
+    );
+  });
+
+  test("孤立 role=row 被拒绝；无语义角色的 class-only 伪表属于静态边界", () => {
+    const orphan = tableContractViolations({template: `${fixtureTableMarkup()}<div role="row"><span>孤立</span></div>`});
+    assert.equal(rulesOf(orphan).filter(rule => rule === "table-without-cell-contract").length, 1);
+
+    const classOnly = tableContractViolations({
+      template: `<div class="fixture-table"><div class="fixture-head">表头</div><div class="fixture-row">数据</div></div>`,
+      contracts: [],
+      gridContracts: [],
+    });
+    assert.deepEqual(rulesOf(classOnly), []);
+  });
+});
+
 describe("变异证据：每类违规都使 CLI 退出 1", () => {
   const clean = {
     "src/styles/tokens.css": TOKENS_CSS,
@@ -1327,6 +1525,13 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
   const TABLE_COMPONENT = `<template><table><thead><tr><th>名称</th></tr></thead><tbody><tr><td>值</td></tr></tbody></table></template>
 <style scoped>th,td{padding:var(--space-2);vertical-align:middle}</style>
 `;
+  const GRID_COMPONENT = `<template><div role="table" data-ui-table-contract="enum-values">
+  <div class="enum-head" role="row"><span id="header" role="columnheader">名称</span></div>
+  <div class="enum-row" role="row"><span role="cell">值</span></div>
+</div></template>
+<style scoped>.enum-head,.enum-row{min-height:var(--sheet-table-row-height);padding:var(--space-2);align-items:center}</style>
+`;
+  const GRID_TOKENS = `${TOKENS_CSS}:root{--sheet-table-row-height:44px;--space-1:4px}`;
 
   const mutations = [
     {
@@ -1497,6 +1702,51 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
         "src/styles/tokens.css": TABLE_TOKENS,
       },
     },
+    {
+      step1Class: "网格表缺行高档",
+      name: "网格表缺 sheet-table 行高档",
+      rule: "grid-table-row-height",
+      files: {
+        "src/components/standards/EnumValuesDialog.vue": GRID_COMPONENT.replaceAll("min-height:var(--sheet-table-row-height)", "min-height:auto"),
+        "src/styles/tokens.css": GRID_TOKENS,
+      },
+    },
+    {
+      step1Class: "网格表 padding 不合规",
+      name: "网格表使用多值裸 padding",
+      rule: "grid-table-padding",
+      files: {
+        "src/components/standards/EnumValuesDialog.vue": GRID_COMPONENT.replace("padding:var(--space-2)", "padding:8px 8px"),
+        "src/styles/tokens.css": GRID_TOKENS,
+      },
+    },
+    {
+      step1Class: "网格表缺 align-items",
+      name: "网格表使用不允许的 align-items",
+      rule: "grid-table-align",
+      files: {
+        "src/components/standards/EnumValuesDialog.vue": GRID_COMPONENT.replaceAll("align-items:center", "align-items:end"),
+        "src/styles/tokens.css": GRID_TOKENS,
+      },
+    },
+    {
+      step1Class: "表格根缺逐表契约",
+      name: "原生表格缺 data-ui-table-contract",
+      rule: "table-without-cell-contract",
+      files: {"src/components/Clean.vue": TABLE_COMPONENT, "src/styles/tokens.css": TABLE_TOKENS},
+    },
+    {
+      step1Class: "语义表格列头引用无效",
+      name: "语义表格引用不存在的列头 id",
+      rule: "visible-input-label",
+      files: {
+        "src/components/standards/EnumValuesDialog.vue": GRID_COMPONENT.replace(
+          '<div class="enum-row" role="row"><span role="cell">值</span></div>',
+          '<div class="enum-row" role="row"><UiInput aria-labelledby="missing-header" /></div>',
+        ),
+        "src/styles/tokens.css": GRID_TOKENS,
+      },
+    },
   ];
 
   /** Task 1 Step 1 的十一类判定。 */
@@ -1515,13 +1765,18 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
   ];
   /** Task 2 Step 7 新增的四类资产事实与入口结构判定。 */
   const TASK2_CLASSES = ["字体资产缺失", "远程字体 URL", "字体体积超预算", "样式入口承载规则"];
-  /** PLAN-DM-043 Task 1 新增的五类表格单元格判定。 */
+  /** PLAN-DM-043 / PLAN-DM-044 新增的表格几何与逐表守卫判定。 */
   const TABLE_CLASSES = [
     "表格单元格缺 vertical-align",
     "表格单元格裸 padding",
     "同表普通格两档 padding",
     "普通单元格零 padding",
     "伪造 colspan 零 padding",
+    "网格表缺行高档",
+    "网格表 padding 不合规",
+    "网格表缺 align-items",
+    "表格根缺逐表契约",
+    "语义表格列头引用无效",
   ];
 
   function runFixture(files) {
@@ -1533,7 +1788,7 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     return spawnSync(process.execPath, [CLI_PATH, `--root=${root}`], {encoding: "utf8"});
   }
 
-  test("每类判定都有 CLI 级变异证据（Step 1 十一类 + Task 2 四条 + PLAN-DM-043 五类）", () => {
+  test("每类判定都有 CLI 级变异证据（Step 1 十一类 + Task 2 四条 + 表格契约十类）", () => {
     // 裸视觉值一类在 brief 里是一个分类，这里拆成字号与图标尺寸两条注入。
     const classes = new Set(mutations.map((mutation) => mutation.step1Class));
     const knownClasses = [...STEP1_CLASSES, ...TASK2_CLASSES, ...TABLE_CLASSES];
@@ -1543,8 +1798,8 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
     // 分类集合必须恰好是这三组，不允许默默少测或凭空多出未归类的注入。
     assert.deepEqual([...classes].filter((name) => !knownClasses.includes(name)).sort(), []);
     assert.equal(classes.size, knownClasses.length, [...classes].join("、"));
-    assert.equal(mutations.length, 22);
-    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 22);
+    assert.equal(mutations.length, 27);
+    assert.equal(new Set(mutations.map((mutation) => mutation.name)).size, 27);
     assert.deepEqual([...new Set(mutations.map((mutation) => mutation.rule))].sort(), [
       "circular-css-variable",
       "dynamic-variable-not-registered",
@@ -1552,6 +1807,9 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       "explicit-button-type",
       "font-budget-exceeded",
       "global-selector-in-component",
+      "grid-table-align",
+      "grid-table-padding",
+      "grid-table-row-height",
       "icon-button-name",
       "missing-font-asset",
       "raw-hex-color",
@@ -1559,6 +1817,7 @@ describe("变异证据：每类违规都使 CLI 退出 1", () => {
       "remote-font-url",
       "table-cell-padding",
       "table-cell-vertical-align",
+      "table-without-cell-contract",
       "undefined-css-variable",
       "unicode-structure-icon",
       "visible-input-label",

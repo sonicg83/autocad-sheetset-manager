@@ -108,7 +108,7 @@ function toggleAll(event: Event): void {
         {{ $t("creation.groups.empty") }}
       </p>
       <div v-else class="table-scroll">
-        <table class="group-table" :aria-label="$t('creation.groups.tableLabel')">
+        <table data-ui-table-contract="groups" class="group-table" :aria-label="$t('creation.groups.tableLabel')">
           <thead>
             <tr>
               <th class="select-col">

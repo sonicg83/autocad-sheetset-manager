@@ -59,7 +59,7 @@ const {onDialogKeydown} = useDialogFocus({
         {{ $t("creation.review.valuesLead", {count: rows.length}) }}
       </p>
       <div class="table-scroll">
-        <table class="values-table" data-testid="sheet-values-table">
+        <table data-ui-table-contract="sheet-values" class="values-table" data-testid="sheet-values-table">
           <thead>
             <tr>
               <th>{{ $t("creation.review.valuesSheetNumber") }}</th>
