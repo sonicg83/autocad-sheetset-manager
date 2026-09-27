@@ -2,9 +2,9 @@
 
 日期：2026-09-26
 
-状态：待办（未立项；来源 PLAN-DM-043 整支复核 M1 + M2）
+状态：待办（第 1 项由 [PLAN-DM-044](../../plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) Task 5 承接；第 2–5 项仍未立项；来源 PLAN-DM-043 整支复核 M1 + M2）
 
-关联：`PLAN-DM-043`、`MEMO-DM-042`、`SPEC-DM-006`、`ARCH-DM-007`
+关联：`PLAN-DM-043`、`PLAN-DM-044`、`MEMO-DM-042`、`SPEC-DM-006`、`ARCH-DM-007`
 
 ## 背景
 
@@ -21,6 +21,7 @@ PLAN-DM-043 已为 `check:ui` 新增 `table-cell-vertical-align` 与 `table-cell
 ## 待处理（按建议顺序）
 
 1. **新增"含 `<table>` 的组件必须声明 `th/td` 规则"的守卫规则**（规则名待定，如 `table-without-cell-contract`）。复用 `web/scripts/ui-contracts/vue-source.mjs` 的 `findTags` 检测模板里的 `<table>`；命中组件再检查其样式区是否存在单元格规则。先写 RED 夹具（有表格无规则 → 失败；有 `th,td` 规则 → 通过），再实现，并把新规则并入 `check-ui-contracts.test.mjs` 的 CLI 级变异清单（分类数、注入数、规则集合三处计数同步）。
+   **（由 [PLAN-DM-044](../../plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) Task 5 承接；本轮口径扩展为「含 `<table>` 或声明表格语义的组件都必须有契约规则」，规则名与语义判定以 PLAN-DM-044 Task 1 的规范增补为准。实施完成前本项保持待办状态。）**
 2. **把"同表两档"的档位键从 `padding` 简写扩展到 padding 家族**：以该作用域下 padding 家族的规范化值签名为键，覆盖 `padding-top` 等长手与 `var(--space-2) 0` 混合值；同时把 `parseRules` 的 `atRules` 纳入作用域键，避免合法的响应式覆盖被误判成两档。
 3. **在 `table-cells.mjs` 头注释登记"不覆盖的写法清单"**：class-only（`.cell` 作用在 `td`）、`:is`/`:where`/`:deep(td)`、padding 长手与混合值、`@media` 内同选择器。让边界成为文档而不是口口相传。
 4. **（可选，成本较高需先评估）** 让判定从"选择器文本"升级为"选择器 + 模板结构"的最小关联：模板里存在 `<td class="cell">` 时，把 `.cell` 规则也纳入单元格判定。风险是同一类名可能同时用于非单元格元素而误报，建议先做 1–3，再按真实需求决定是否做此项。

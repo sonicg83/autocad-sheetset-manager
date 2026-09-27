@@ -3,6 +3,7 @@
 状态：持续规划中；当前能力基线为 v0.2.1（含 PLAN-DM-005、PLAN-DM-006、PLAN-DM-008 与 PLAN-DM-009）。
 目标：把当前技术验证型 MVP 完善为可长期、可靠地处理真实工程的单人单机图纸集编辑管理工具。
 
+- [语义化 grid 伪表格对齐契约收口实施计划（PLAN-DM-044，proposed）](PLAN-DM-044-grid-pseudo-table-alignment.md)：把 4 个用 CSS grid 模拟表格的组件（枚举值弹窗、映射属性弹窗、派生属性表、目录列编辑器）纳入 SPEC-DM-006 §6.4 对齐契约——补显式表格语义与稳定锚点，新增 `grid-table-*` 静态规则与「语义化表格必须有契约规则」守卫，并以计算样式断言收口；同时**取消枚举值、映射属性、派生属性与目录列编辑器四张表行的双重表头**（列头经 `aria-labelledby` 承担行内控件可访问名，`ColumnEditor` 另补行号以区分多行，扩展 `visible-input-label` 第四形态），与 PLAN-DM-043 的真实 `<table>` 范围互不重叠。
 - [表格对齐契约前端收口实施计划（PLAN-DM-043，active——Task 1–5 已完成，真实桌面缩放复验待用户执行）](PLAN-DM-043-table-alignment-frontend-remediation.md)：依据 SPEC-DM-006 与 ARCH-DM-007 的修订，将普通表 44px、可容纳时紧凑 32px、常驻编辑表 48px 和跨列详情的内容高度分开实现；按静态门禁、主表、编辑表、其余只读表与旧表顺序迁移，并以计算样式及真实桌面复验收口。
 - [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，active——Task 1–7 与 Task 8 自动门禁已完成，真实桌面 G9 待用户执行）](PLAN-DM-041-standard-package-import-picker.md)：已落地 [SPEC-DM-019](../../../docs/dst-manager/specs/SPEC-DM-019-standard-version-and-package-import.md)（整数版本、无版本草稿、名称唯一、两步预检导入）、按 ID 归集的版本列表、`dststandard` 原生选择与导入弹窗；证据与实际验证见计划正文，G9 待有桌面条件时执行。
 - [图纸标准平台审查问题修复计划（PLAN-DM-040，active）](PLAN-DM-040-standard-platform-review-remediation.md)：承接 PLAN-DM-035/038/039 审查和草稿编辑实测的 F01–F15 与 F17（身份路由越界）共 16 项问题；本机模板文件无法纳入草稿列为阻断级，先修资产与路径安全，再修编辑状态和 UI 契约；10 个任务按 Step 展开并要求记录 RED/GREEN，原 F16 拆至 PLAN-DM-041。任务 1–9 与任务 10 的闭环验证/全量门禁已完成并逐项登记裁决，真实桌面 G9 待人工执行前保持 `active`。
