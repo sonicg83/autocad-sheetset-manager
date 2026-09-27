@@ -1,3 +1,7 @@
+## 2026-09-27（PLAN-DM-044：语义化 grid 伪表格对齐契约收口）
+
+- 按实施计划 Task 1 增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3：明确完整表格角色树、grid 行几何、列头命名与响应式标签边界，固定 `grid-table-*`、`table-without-cell-contract` 和 `visible-input-label` 第四形态；原有真实表 `th/td` 对齐条款保持不变。计划进入 `active`，前端实施与自动化验证仍待执行。
+
 ## 2026-09-27（PLAN-DM-045：映射源一对多复用）
 
 - 新增 [PLAN-DM-045](.planning/plans/dst-manager/PLAN-DM-045-mapping-source-multi-target-reuse.md) 并按方案 A 落地：解除 SPEC-DM-017 §5.2「一个普通枚举属性最多被一个映射属性用作源」的限制，同一枚举源可被多个映射属性独立复用（专业名称 → 专业代码 / 图册名称 / 图册代码）；该约束仅是产品规则，领域层按 `property_id` 逐个独立迭代映射、属性名全局唯一、物化各写各的 DST 文本属性，因此为纯放宽，无数据结构变更与迁移，已发布标准不受影响。

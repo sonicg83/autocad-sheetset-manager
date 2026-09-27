@@ -6,7 +6,7 @@ document_kind: spec
 owners:
   - dst-manager
 created: 2026-09-02
-updated: 2026-09-26
+updated: 2026-09-27
 related:
   - VISION-DM-001
   - ARCH-DM-001
@@ -24,6 +24,7 @@ related:
   - PLAN-DM-017
   - ARCH-DM-007
   - SPEC-DM-017
+  - PLAN-DM-044
 ---
 
 # DST Manager 单人桌面界面人性化与易用性设计规范
@@ -264,6 +265,8 @@ DST Manager 是面向单人单机真实工程的本地桌面工具，用于既�
   - 单元格内边距：同一张表的普通表头与数据单元格使用同一 padding 档，且必须消费间距令牌或登记组件令牌，禁止裸值与普通数据格一表多档；存量 10px/9px/4px 档按 ARCH-DM-007 §7 迁移顺序收口（[PLAN-DM-043](../../../.planning/plans/dst-manager/PLAN-DM-043-table-alignment-frontend-remediation.md) 已收口：`10px 8px` 与 legacy `9px` 档连同 legacy 的 `:where(#app) th,td` 兜底规则已删除，现役只保留 `--space-2`（8px）与 `--space-1`（4px）两档，本句的三档存量描述自此只作历史记录）。仅跨列承载独立编辑/详情容器的结构性 `td` 可显式取 `padding:0`，由内部容器消费间距令牌；该例外必须以具体结构选择器限定，不得扩展到普通数据单元格。
   - 行内控件：高度消费既有控件高度令牌（输入 38px 档、按钮默认 36px / 紧凑 34px、复选命中区 ≥32px）；同一行内控件、徽章与复选命中区按垂直中点对齐（±1px）；复选框本体不随表格输入框拉伸（[SPEC-DM-017](SPEC-DM-017-standard-properties-and-dwg-naming.md) 既有规则）。
   - 数值与代码：数值列同列小数位、千分位与单位格式一致，单位写入表头；路径/handle 沿用 `--font-mono`。
+- **语义化 grid 表格对齐契约**（2026-09-27 增补，来源 [PLAN-DM-044](../../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md)）：CSS grid 模拟表格必须组成完整的 `role="table" → role="row" → role="columnheader"/"cell"` 语义树，并与 `<table>` 适用同一水平对齐、基础行高、padding 和行内控件中点契约；保持现有 Tab 遍历，不使用需要方向键模型的 `role="grid"`。grid 行没有 `vertical-align` 属性，其垂直对齐由行容器显式声明的 `align-items` 承载（默认 `center`；仅多行长文本格可用 `start`）；表头与同表普通行采用同档行高和单档令牌化 padding，普通行消费既有 44px 行高令牌，内容驱动行可增高但不得低于该档。
+- **grid 表格列头与输入标签**（2026-09-27 增补，来源 [PLAN-DM-044](../../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md)）：桌面态的行内输入由同列可见列头提供可访问名称，不在单元格中重复显示同义标签；列头与引用它的控件使用同一表实例的唯一 `id`/`aria-labelledby` 配对。同列存在多行同名输入时，行号也须进入可访问名称，不能只放在 `aria-describedby` 中。响应式布局隐藏表头但仍显示、仍可编辑对应字段时，在该视口显示与列头文案一致的行内字段名，并与列头视觉互斥；关联用列头 `id` 即使列头视觉隐藏仍须保留在 DOM。既有仅视觉隐藏的单元格内标签路径不因此回退。
 
 行高与详情区口径参考 [CSS 2.1 表格高度算法](https://www.w3.org/TR/CSS2/tables.html#height-layout)、[Carbon Data table](https://carbondesignsystem.com/components/data-table/usage/) 及 [MUI Data Grid 行高](https://mui.com/x/react-data-grid/row-height/)、[详情面板](https://mui.com/x/react-data-grid/master-detail/)；具体 `44px`/`48px` 档位是本产品按现有控件尺寸作出的选择。
 

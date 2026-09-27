@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-044
 title: 语义化 grid 伪表格对齐契约收口实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-27
@@ -85,10 +85,10 @@ related:
 
 **Interfaces:** 在 SPEC-DM-006 §6.4「单元格对齐契约」下新增一条**独立子条目**（例如「语义化 grid 表格」），不修改既有 `th/td` 条目文字；在 ARCH-DM-007 §4.3 补对应实现边界、§9.1 补静态门禁条目、§9.3 补计算样式断言要求。新规则名与字段名在本文档确定后不得在实施中改写。
 
-- [ ] 在 SPEC-DM-006 §6.4 增补：CSS grid 模拟的语义化表格须组成 `role="table" → role="row" → role="columnheader"/"cell"` 完整树，与 `<table>` 适用同一对齐契约；保持现有 Tab 模型，故不取交互式 `role="grid"`。垂直对齐由行轨道 `align-items` 承载；行高、padding 与行内控件中点沿用本节档位。注明 2026-09-27 增补及 PLAN-DM-044 来源。
-- [ ] 在 SPEC-DM-006 §6.4 增补方案 C：桌面态行内输入以同列列头命名，不重复显示字段标签；列头隐藏的响应式档位须就地显示字段名，且与列头视觉互斥；同名多行输入的行号须进入**可访问名称**，`aria-describedby` 仅补描述；实例级列头 `id` 不得重复。既有以视觉隐藏单元格内标签的表格不因此回退。
-- [ ] 在 ARCH-DM-007 §4.3 增补完整角色树、实例级 `id`、响应式可见标签及行容器 `align-items`/行高/padding 边界；§9.1 规定 `grid-table-*`、**逐表** `table-without-cell-contract` 和严格的 `visible-input-label` 第四形态；§9.3 增补列轨道、几何、可见标签互斥、计算可访问名、两个同时挂载的实例及 axe 扫描断言。
-- [ ] 复核修订后与 PLAN-DM-043 的既有条款不冲突，并在计划「修订记录」登记本次规范修订；提交信息：`增补语义化 grid 表格对齐规范`。
+- [x] 在 SPEC-DM-006 §6.4 增补：CSS grid 模拟的语义化表格须组成 `role="table" → role="row" → role="columnheader"/"cell"` 完整树，与 `<table>` 适用同一对齐契约；保持现有 Tab 模型，故不取交互式 `role="grid"`。垂直对齐由行轨道 `align-items` 承载；行高、padding 与行内控件中点沿用本节档位。注明 2026-09-27 增补及 PLAN-DM-044 来源。
+- [x] 在 SPEC-DM-006 §6.4 增补方案 C：桌面态行内输入以同列列头命名，不重复显示字段标签；列头隐藏的响应式档位须就地显示字段名，且与列头视觉互斥；同名多行输入的行号须进入**可访问名称**，`aria-describedby` 仅补描述；实例级列头 `id` 不得重复。既有以视觉隐藏单元格内标签的表格不因此回退。
+- [x] 在 ARCH-DM-007 §4.3 增补完整角色树、实例级 `id`、响应式可见标签及行容器 `align-items`/行高/padding 边界；§9.1 规定 `grid-table-*`、**逐表** `table-without-cell-contract` 和严格的 `visible-input-label` 第四形态；§9.3 增补列轨道、几何、可见标签互斥、计算可访问名、两个同时挂载的实例及 axe 扫描断言。
+- [x] 复核修订后与 PLAN-DM-043 的既有条款不冲突，并在计划「修订记录」登记本次规范修订；提交信息：`增补语义化 grid 表格对齐规范`。
 
 ### Task 2：建立 grid 表格静态规则与迁移基线
 
@@ -164,7 +164,7 @@ related:
 
 ## 完成标准与实际验证
 
-- [ ] Task 1 的规范增量修订已落地（含「列头即可访问名 / 禁止双重表头」条款），规则名与 ARCH-DM-007 §9.1 门禁条目一致。
+- [x] Task 1 的规范增量修订已落地（含「列头即可访问名 / 禁止双重表头」条款），规则名与 ARCH-DM-007 §9.1 门禁条目一致。
 - [ ] 4 张 grid 表均有完整 `role="table" → row → columnheader/cell` 语义树，逐个有行高档、单档令牌化 padding 与行轨道对齐的 Playwright 证据；`ColumnEditor.vue` 纳入静态门禁，不存在整表例外。
 - [ ] **双重表头已取消且窄屏可用**：四张表行内 `.ui-input__label` 均为 0；`ColumnEditor` 在桌面态只显示列头，≤720px 每行列名/表达式框均有可见字段名，且各控件计算可访问名称包含列头文字与行号。目录页、设置面板双实例 ID 不冲突；`OrdinaryPropertyEditor` 与 `GroupsStep` 的既有路径未回退；派生表旧 label 断言及目录页 20+ 处旧 `getByLabel` 定位已逐条改写并通过。
 - [ ] `TABLE_CONTRACTS` 精确覆盖 18 张真实表与 4 张 grid 表；同组件新增第二张无规则表的 CLI 变异为红，补 marker/配对/规则后为绿。`grid-table-*`、逐表守卫与 `visible-input-label` 第四形态的正反例均通过；全量 `test:contracts`、`test:unit`、`build`、`test:e2e`、`check:i18n` 与 `check:ui` 通过。例外清单仅保留既有未到期条目，无本计划新增到期项。
@@ -173,7 +173,7 @@ related:
 
 | 日期 | Task | RED 证据 | GREEN 与回归命令/结果 | 仍待验证 |
 | --- | --- | --- | --- | --- |
-| 待填 | | | | |
+| 2026-09-27 | Task 1 规范正文本轮增量修订 | 文档规范任务，无运行时 RED 用例 | §6.4 / §4.3 / §9.1 / §9.3 增量已完成，PLAN-DM-043 规则与 18 张真实表口径保留；`rtk git diff --check` exit 0 | Tasks 2–6 实施；真实 Windows WebView2 缩放复验 |
 
 ## 修订记录
 
@@ -182,3 +182,4 @@ related:
 - 2026-09-27 修订二（方案 C 扩围，用户追加裁决）：把 `DerivedPropertyEditor.vue` **纳入**方案 C 改造范围，三张 grid 表口径统一。相应新增「列头 `aria-hidden` 与 `aria-labelledby` 共存规则」（移除列头 `aria-hidden`、保留 `id`/`role`、删除两条"隐藏标签"规则、被隐藏列的 `id` 仍在 DOM、空操作列可不参与可访问名），Task 3 的 Interfaces/Step 1/Step 2/Step 3 全部改写（含把 `standards-editor.spec.ts` 第 168–170 行「`label` 计数 > 0 且隐藏」的既有断言按新口径改写、复跑 900×768 网格项隐藏用例、axe 与读屏走查），风险条替换为「既有断言冲突」「`aria-hidden` 移除」「删 `gap:0` 后重新量取行高」三项。原「派生表不改造」的说明与对应完成标准条目已删除。
 - 2026-09-27 修订三（方案 C 二次扩围，用户追加裁决）：把 `ColumnEditor.vue`（图纸目录插件的输出列编辑器）**纳入**双重表头改造——截图确认其列头「列名」/「表达式」与行内「输出列名 N」/「表达式 N」构成双重表头，而 Task 4 原稿只安排了几何与轨道对齐，属计划缺口。按用户裁决取「**列头文字 + 行号补足**」（`aria-labelledby` 指向列头，另以 `aria-describedby` 补行号，避免 N 行同报「列名」），并把改造落到 Task 4 的 Interfaces 与三个 Step（含记录并核对 `sheet-catalog.spec.ts` 20+ 处 `getByLabel("输出列名 N")` 定位、≤720px 表头隐藏时列头 `id` 仍留在 DOM）。同时修正门禁第四形态的判定条件：由「必须 `role="columnheader"`」放宽为「`role="columnheader"` 或位于 `role="row"`/`.columns-head` 列头行内」两条路径之一，以适配 `ColumnEditor` 不新增 ARIA 角色的既有裁决，并把反向用例从三条扩到五条。范围由三张表扩为**四张**，相应更新范围裁决、Review Focus、完成标准与两条新增风险。
 - 2026-09-27 审查后修订四（仍为 proposed）：修复六项计划缺口。四表统一完整 `role="table"` 语义树，撤销上条“`ColumnEditor` 不新增 ARIA 角色”口径；≤720px 表头隐藏时增加视觉互斥的可见行内列名；行号由 `aria-labelledby` 进入计算名称而非仅由 `aria-describedby` 提供描述；列头与行号 ID 改为实例级并测试双挂载；`ColumnEditor` 先补 `data-testid` 再迁移旧定位；守卫改为按每张表的 `data-ui-table-contract` marker 与 `TABLE_CONTRACTS` 精确配对，验证同组件第二张无规则表也会失败。Task 6 取消“整表例外”分支；上条相冲突的实施口径均以本次修订为准。未实施代码或规范正文。
+- 2026-09-27 执行 Task 1：增量修订 SPEC-DM-006 §6.4 与 ARCH-DM-007 §4.3/§9.1/§9.3，固定三条 `grid-table-*` 规则、逐表守卫和第四种严格标签形态；旧 `th/td` 条目未改写。

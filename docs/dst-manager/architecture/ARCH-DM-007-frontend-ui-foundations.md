@@ -6,7 +6,7 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-26
+updated: 2026-09-27
 related:
   - ARCH-DM-001
   - SPEC-DM-006
@@ -18,6 +18,7 @@ related:
   - SPEC-DM-017
   - GUIDE-DM-001
   - GUIDE-DM-002
+  - PLAN-DM-044
 ---
 
 # DST Manager 前端视觉基础与渐进整改架构
@@ -153,6 +154,9 @@ grep -rlE  'var\(--(color|space|radius|icon-size)-' web/src --include=*.vue | wc
 - 同一表格的普通 `th/td` padding 必须单表单档，且消费间距令牌或登记的组件令牌；现有 `10px 8px`（图纸/属性定义表）、`9px`（legacy 兜底）、`4px`（标准/创建向导表）三档为迁移期存量，按 §7 迁移顺序收口，不得新增第四种普通数据格档位。跨列承载独立编辑/详情容器的结构性 `td` 可显式取 `padding:0`，内部容器负责令牌化间距；仅对具体结构选择器放行（如 `.sheet-editor-row>td`），不得作为普通数据格的通用豁免。**PLAN-DM-043 已完成这轮收口（2026-09-26）**：图纸/属性主表与三张旧面板统一 `--space-2`（8px），标准/创建/目录/资产表统一 `--space-1`（4px），`10px 8px` 与 legacy `9px` 档连同 legacy 的 `:where(#app) th,td` 兜底规则一并删除；上文“三档存量”自此只作迁移期历史记录，静态门禁不再接受这两档裸值。
 - 普通单行数据行消费既有行高令牌（`--sheet-table-row-height` / `--definition-row-height`，44px 舒适档）；紧凑 32px 仅用于内容与控件可容纳的表格。常驻 38px 输入框、上下各 4px padding 的编辑表采用 48px 基础档并使用对应组件令牌，表头匹配同表普通行档位；多行内容、错误信息和跨列详情行允许按内容增高，不能因设定 `height` 而裁切。
 - 行内控件高度消费既有控件高度令牌（输入 38px 档、按钮默认 36px / 紧凑 34px、复选命中区 ≥32px）；同一行内控件以垂直中点对齐（±1px）。
+- CSS grid 模拟的表格使用完整 `role="table"`、`role="row"`、`role="columnheader"` 与 `role="cell"` 结构；保留现有 Tab 键模型，不使用 `role="grid"`。若数据行位于列表容器中，可用 `role="rowgroup"` 连接表根和数据行。
+- grid 表格以行容器显式 `align-items` 承载垂直对齐，表头和普通行共用行高与 padding 档；普通行消费既有 `--sheet-table-row-height`（44px），内容驱动行可增高但不得低于该档。网格项目的 `padding` 使用同表单一间距令牌；特殊的 4px 档须整表统一。
+- 行内输入由同实例、唯一 `id` 的可见列头经 `aria-labelledby` 命名，不再重复渲染行内字段标签；多行同名控件还须通过 `aria-labelledby` 引用该行序号。若响应式布局隐藏表头但字段仍显示可编辑，在该断点显示互斥的行内字段名，表头 `id` 保留在 DOM；不改变既有 Tab 顺序、公开 props/emits、i18n 文案或断点行为。
 
 静态门禁规则见 §9.1，计算样式断言见 §9.3；本节不复制 SPEC-DM-006 正文，契约条目变更时同步复核本节边界是否仍然成立。
 
@@ -254,6 +258,7 @@ web/src/
 - 禁止业务组件新增裸全局选择器和未登记的十六进制颜色；
 - 字号、高度、圆角和图标尺寸必须使用令牌或有理由的白名单。
 - 表格 `th,td` 单元格规则必须显式声明 `vertical-align`（取值仅 `middle`/`top`，见 §4.3），并检查普通表头/数据单元格 padding 单表单档且消费令牌；仅按具体结构选择器识别跨列详情 `td` 的 `padding:0`，检查其内部容器消费间距令牌，禁止以通用 `colspan` 选择器放行。存量偏差按例外棘轮登记后清退。
+- 语义化 grid 表格另外执行 `grid-table-row-height`、`grid-table-padding`、`grid-table-align` 三条声明式规则；每个 `<table>` 或 `role="table"` 根按稳定 marker 逐表登记并由 `table-without-cell-contract` 核对其表头/数据行选择器确有对应行高、padding 和垂直对齐声明。同组件中的另一张表不能借用已登记表的规则。`visible-input-label` 只接受经严格配对的第四种 `aria-labelledby` 形态：引用同一 `role="table"` 语义树内有可见文字的 `role="columnheader"`，不得引用 `aria-hidden` 列头；目录列编辑器可按明确登记的组合表达式再引用同一行序号。新增规则不放宽既有 `th/td` 规则。
 
 检查器必须能通过变异测试证明可失败，不能只扫描已有文件并输出警告。变异套件在检查器首次引入及检查规则、解析算法或白名单格式变化时运行；普通 CI 每次只运行确定性的静态检查和检查器单元测试，不重复执行高成本变异轮。
 
@@ -270,6 +275,7 @@ Playwright 直接断言：
 - `html/body` 的 `font-size`、`font-family` 和 `line-height`；
 - 普通、表单、紧凑和图标按钮各自的字号、盒模型、高度、圆角及对齐；
 - 表格行内对齐：同一普通行内的控件、徽章与复选命中区垂直中点差 ≤1px，表头对齐方向与其列数据一致；断言表头与普通单行数据/编辑行采用同一基础行高档位，含 38px 输入框与 4px 上下 padding 的编辑表按 48px 档验证，内容增高行及跨列详情行单独验证不裁切与内部间距（口径同 SPEC-DM-006 §6.4）；
+- 四张 grid 伪表格逐表断言完整角色树、行轨道模板、行高令牌及计算高度、单档令牌化 padding、显式 `align-items` 与行内控件中点；同时断言表头与普通行同档、同义可见标签互斥、输入的计算可访问名称来自同实例列头（目录列编辑器还包含行号）、双挂载实例的 ID 与引用不串联、响应式隐藏后列头 ID 仍在 DOM，且 axe 无新增语义错误。
 - 浅深主题下 hover、active、focus、disabled、selected 的前景、背景和边框；
 - 字体或图标回落不改变控件布局。
 

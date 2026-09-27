@@ -1,5 +1,7 @@
 # DST Manager 文档入口
 
+2026-09-27 按 [PLAN-DM-044](../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) 增量修订 [SPEC-DM-006 §6.4](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 与 [ARCH-DM-007 §4.3/§9](architecture/ARCH-DM-007-frontend-ui-foundations.md)：为语义化 grid 伪表格补充对齐与列头命名契约，并固定静态规则名称及逐表守卫；实施计划已进入 `active`，前端改造与自动化验证仍待执行。
+
 ## 定位与当前状态
 
 2026-09-25 新增 [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，accepted）](specs/SPEC-DM-019-standard-version-and-package-import.md)：把标准发布版本固定为 `1..2147483647` 的正整数（文档升为 `schema_version: 2`，草稿不携带版本），本机发布由服务端在官方/用户库同 ID 的现有版本上分配 `max+1`，不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入改为“限时快照预检 + 凭证确认”两步。同步增量修订 [SPEC-DM-016](specs/SPEC-DM-016-drawing-standard-management-ui.md) §4.2/§5（两步导入与按 ID 归集）与 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)（`v<n>` 展示），并按新契约更新 [GUIDE-DM-007](guides/GUIDE-DM-007-official-standard-package-release.md)。实施计划为 [PLAN-DM-041](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)。
