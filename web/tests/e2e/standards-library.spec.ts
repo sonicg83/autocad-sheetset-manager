@@ -397,6 +397,35 @@ test("版本历史跨官方与用户来源时选中正确标准", async ({page})
   await expect(page.getByRole("region", {name: "标准详情"})).toContainText("szmedi.gas");
 });
 
+test("宽视口下标准库铺满工作区高度与宽度", async ({page}) => {
+  await page.setViewportSize({width: 2560, height: 1440});
+  await installStandards(page, [published("official", 2)]);
+  await openStandards(page);
+
+  const layout = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(".shell-main")!;
+    const view = document.querySelector<HTMLElement>(".standards-page")!;
+    const split = document.querySelector<HTMLElement>(".library-split")!;
+    const shellStyle = getComputedStyle(shell);
+    const viewStyle = getComputedStyle(view);
+    const shellRect = shell.getBoundingClientRect();
+    const viewRect = view.getBoundingClientRect();
+    const splitRect = split.getBoundingClientRect();
+    return {
+      viewWidth: viewRect.width,
+      shellContentWidth: shell.clientWidth - Number.parseFloat(shellStyle.paddingLeft) - Number.parseFloat(shellStyle.paddingRight),
+      viewBottom: viewRect.bottom,
+      shellContentBottom: shellRect.top + shell.clientTop + shell.clientHeight - Number.parseFloat(shellStyle.paddingBottom),
+      splitBottom: splitRect.bottom,
+      viewContentBottom: viewRect.bottom - Number.parseFloat(viewStyle.paddingBottom),
+    };
+  });
+
+  expect(Math.abs(layout.viewWidth - layout.shellContentWidth), "标准管理横向铺满壳层内容区").toBeLessThanOrEqual(1);
+  expect(Math.abs(layout.viewBottom - layout.shellContentBottom), "标准管理纵向铺满壳层内容区").toBeLessThanOrEqual(1);
+  expect(Math.abs(layout.splitBottom - layout.viewContentBottom), "列表与详情面板占据标题下方的剩余空间").toBeLessThanOrEqual(1);
+});
+
 test("900×768 下标准库为列表 → 详情分级视图且无横向溢出", async ({page}) => {
   await page.setViewportSize({width: 900, height: 768});
   await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")]);

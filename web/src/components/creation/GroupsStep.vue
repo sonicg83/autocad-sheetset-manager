@@ -266,7 +266,7 @@ function toggleAll(event: Event): void {
 .note{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 /* 表宽随内容，容器自身横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
-.group-table{width:100%;min-width:max-content;border-collapse:collapse}
+.group-table{width:max-content;min-width:max-content;border-collapse:collapse}
 .group-table th,.group-table td{height:var(--editable-table-row-height);padding:var(--space-1);border-bottom:1px solid var(--color-border-subtle);text-align:left;vertical-align:middle}
 /* 出错行整行切顶部对齐（SPEC-DM-006 §6.4）：行内错误列表撑高该行时保持同行控件中心一致 */
 .group-table tr.has-issue>td{vertical-align:top}
@@ -280,7 +280,9 @@ function toggleAll(event: Event): void {
 .group-table :deep(.ui-input__label){display:none}
 .group-table :deep(.ui-select){gap:0}
 .group-table :deep(.ui-select__label){display:none}
-.group-table :deep(.ui-select__control){min-width:var(--sheet-property-search-width)}
+/* 表格保持内容宽度，控件沿用既有上限，避免宽屏把输入列拉散。 */
+.group-table :deep(.ui-input__control){max-width:var(--sheet-title-max-width)}
+.group-table :deep(.ui-select__control){min-width:var(--sheet-property-search-width);max-width:var(--sheet-title-max-width)}
 .select-col{width:var(--tap-target-min)}
 .select-hit{display:inline-grid;place-items:center;width:var(--tap-target-min);height:var(--tap-target-min);cursor:pointer}
 .title-cell{min-width:var(--sheet-title-max-width)}

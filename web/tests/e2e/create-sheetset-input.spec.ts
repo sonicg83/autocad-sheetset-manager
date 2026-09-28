@@ -448,6 +448,43 @@ test("第四阶段接入权威预览，键盘输入即时清除错误", async ({
   await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
 });
 
+test("宽视口下创建向导与当前步骤铺满工作区", async ({page}) => {
+  await page.setViewportSize({width: 2560, height: 1440});
+  await installCreation(page);
+  await openCreation(page);
+  await chooseStandard(page);
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+
+  const layout = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(".shell-main")!;
+    const view = document.querySelector<HTMLElement>(".create-wizard")!;
+    const stage = document.querySelector<HTMLElement>(".groups-step")!;
+    const footer = document.querySelector<HTMLElement>(".wizard-foot")!;
+    const shellStyle = getComputedStyle(shell);
+    const shellRect = shell.getBoundingClientRect();
+    const viewRect = view.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    return {
+      viewWidth: viewRect.width,
+      shellContentWidth: shell.clientWidth - Number.parseFloat(shellStyle.paddingLeft) - Number.parseFloat(shellStyle.paddingRight),
+      viewBottom: viewRect.bottom,
+      shellContentBottom: shellRect.top + shell.clientTop + shell.clientHeight - Number.parseFloat(shellStyle.paddingBottom),
+      stageFooterGap: footerRect.top - stageRect.bottom,
+      expectedGap: Number.parseFloat(getComputedStyle(view).rowGap),
+    };
+  });
+
+  expect(Math.abs(layout.viewWidth - layout.shellContentWidth), "向导横向铺满壳层内容区").toBeLessThanOrEqual(1);
+  expect(Math.abs(layout.viewBottom - layout.shellContentBottom), "向导纵向铺满壳层内容区").toBeLessThanOrEqual(1);
+  expect(Math.abs(layout.stageFooterGap - layout.expectedGap), "当前步骤占据页脚上方的剩余空间").toBeLessThanOrEqual(1);
+  const widestControl = await page.locator(".group-table .ui-input__control, .group-table .ui-select__control")
+    .evaluateAll(elements => Math.max(...elements.map(element => element.getBoundingClientRect().width)));
+  expect(widestControl, "宽屏下图纸组输入控件仍受既有列宽令牌约束").toBeLessThanOrEqual(281);
+  await noPageOverflow(page, "创建向导 2560×1440");
+});
+
 test("浅深主题与 900×768 下向导无整页横向溢出", async ({page}) => {
   for (const theme of ["light", "dark"] as const) {
     await installPreferenceSnapshot(page, theme);

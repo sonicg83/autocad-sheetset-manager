@@ -338,17 +338,19 @@ async function backToWelcome(): Promise<void> {
     </p>
     <p v-if="store.error !== ''" class="banner error" role="alert" data-testid="creation-error">{{ store.error }}</p>
     <p v-if="store.pending" class="banner" role="status">{{ $t("creation.wizard.saving") }}</p>
-    <StandardStep
-      v-if="store.step === 'standard'"
-      :store="store" @use="useStandard" @open-standards="emit('standards')"
-    />
-    <ProjectStep v-else-if="store.step === 'project'" :store="store" />
-    <GroupsStep v-else-if="store.step === 'groups'" :store="store" />
-    <ReviewStep
-      v-else :store="store" :confirm-action="confirmAction" :job="creationJob"
-      :connection-mode="creationConnectionMode"
-      @execute="executeCreation" @locate="locateDiagnostic"
-    />
+    <div class="wizard-stage">
+      <StandardStep
+        v-if="store.step === 'standard'"
+        :store="store" @use="useStandard" @open-standards="emit('standards')"
+      />
+      <ProjectStep v-else-if="store.step === 'project'" :store="store" />
+      <GroupsStep v-else-if="store.step === 'groups'" :store="store" />
+      <ReviewStep
+        v-else :store="store" :confirm-action="confirmAction" :job="creationJob"
+        :connection-mode="creationConnectionMode"
+        @execute="executeCreation" @locate="locateDiagnostic"
+      />
+    </div>
     <footer class="wizard-foot">
       <UiButton variant="secondary" :disabled="!canGoBack" @click="store.goToStep(STEPS[stepIndex - 1] ?? 'standard')">
         {{ $t("creation.wizard.back") }}
@@ -364,7 +366,11 @@ async function backToWelcome(): Promise<void> {
   </section>
 </template>
 <style scoped>
-.create-wizard{width:100%;max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-5);display:grid;gap:var(--space-4)}
+.create-wizard{width:100%;max-width:none;flex:1;min-width:0;min-height:0;margin:0;padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4)}
+.wizard-stage{display:flex;flex-direction:column;flex:1}
+.wizard-stage > :deep(.standard-step),.wizard-stage > :deep(.project-step),.wizard-stage > :deep(.groups-step),.wizard-stage > :deep(.review-step){flex:1}
+/* 页面与当前步骤可伸展；卡片内容仍从顶部排列，避免高视口下网格行被均匀拉开。 */
+.wizard-stage :deep(.card){align-content:start}
 .wizard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap}
 .wizard-head h1{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .wizard-head p{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}

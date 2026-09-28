@@ -1,3 +1,9 @@
+## 2026-09-28（创建向导与标准管理页面铺满工作区）
+
+- 创建向导及其当前步骤、标准库列表/详情区扩展到工作区内容区的可用宽高；标准编辑器继续保留既有宽度上限。图纸组表格按内容宽布局，行内控件遵循现有宽度令牌；未修改全局 `WorkspaceShell`。
+- 修复创建向导在图纸组较多时步骤区被压缩、页脚覆盖表格的问题；新增 900×768 下 12 个图纸组的布局回归用例。
+- 验证：创建向导长内容、宽屏铺满、900×768 无横向溢出及标准库相关 Playwright 用例 46/46 通过；`npm run build`、`uv run ruff check .` 与创建 API 集成测试 45/45 通过。
+
 ## 2026-09-28（创建项目信息页：隐藏属性小字、必填星号与派生属性实时求值）
 
 - 创建向导「项目信息」阶段按用户反馈调整三处：① 属性字段下不再展示「文本/枚举 · 必填 · 标准默认值」说明小字（默认值仍在草稿初建时应用，行为不变）；② 必填属性在属性名称旁渲染醒目红色星号——`FormField` 新增 `required` prop（星号 `aria-hidden`，控件另绑 `aria-required`，`CreateSheetSetView` 的诊断跳转 `focusByLabel` 比较前剥离星号后缀）；③ 图纸集作用域派生属性在本页实时求值：新增只读端点 `POST /api/creation-drafts/{draft_id}/derived-values`（应用层 `evaluate_creation_sheetset_derived` 复用 `standard_rules` 既有求值语义，未知键以 `CREATION_DRAFT_INVALID` 拒绝，只返回 sheetset 作用域派生值与诊断，不保存草稿、不改变修订），前端 store 新增 `derivedValues`/`derivedPending` 与 `refreshDerived`（序号防竞态、失败静默回退「待计算」），`ProjectStep` 挂载与输入防抖（300ms）后刷新，空结果按「（空）」呈现；图纸作用域派生属性仍标注「预览时计算」（依赖逐张编号与标题）。i18n 同步改写中英文 `creation.project` 文案并删除随小字作废的 6 个键。

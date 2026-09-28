@@ -424,6 +424,7 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
 </template>
 <style scoped>
 .standards-page{width:100%;max-width:var(--shell-content-max-width,1200px);margin:0 auto;padding:var(--space-5);display:grid;gap:var(--space-4)}
+.standards-page:not(.is-editor){max-width:none;flex:1;min-height:0;margin:0;display:flex;flex-direction:column}
 /* 编辑器模式：标准页只渲染独立工作台，不再被主从分栏的固定左栏挤压（PLAN-DM-039 Task 2）。
    `width:100%` 是必要的：壳层 `main` 是列向 flex 容器，配合 `margin:0 auto` 时子项
    会按内容宽度收缩（实测标准库模式仅 666px），显式宽度才让 `max-width` 真正成为唯一上限。
@@ -432,7 +433,7 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
 .standards-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .standards-title{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .standards-error{margin:0;color:var(--color-danger);font-size:var(--font-label)}
-.library-split{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:var(--space-4);align-items:start}
+.library-split{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:var(--space-4);align-items:stretch;flex:1;min-height:0}
 .library-col,.detail-col{border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);padding:var(--space-4);background:var(--color-bg-surface)}
 /* 900×768（窄视口）：列表 ↔ 详情两级互斥视图；详情页提供可见返回按钮 */
 @media (max-width: 959px){
