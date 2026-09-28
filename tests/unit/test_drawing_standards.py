@@ -296,6 +296,17 @@ def test_draft_document_requires_null_published_at() -> None:
             parse_standard_draft_document(document)
 
 
+def test_draft_can_have_empty_name_but_published_standard_cannot() -> None:
+    draft_document = valid_draft_document()
+    draft_document["name"] = ""
+    assert parse_standard_draft_document(draft_document).name == ""
+
+    published_document = valid_standard_document()
+    published_document["name"] = ""
+    with pytest.raises(StandardSchemaError, match="STANDARD_NAME_INVALID"):
+        parse_published_standard_document(published_document)
+
+
 def test_draft_document_rejects_carried_version() -> None:
     document = valid_draft_document()
     document["version"] = 1
@@ -693,7 +704,10 @@ def test_parse_standard_rejects_unknown_system_field() -> None:
         ({"schema_version": 2, "standard_id": STANDARD_ID}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
         ({"schema_version": 3, "published_at": None}, "STANDARD_ID_INVALID"),
         ({"schema_version": 3, "standard_id": "a.b", "published_at": None}, "STANDARD_ID_INVALID"),
-        ({"schema_version": 3, "standard_id": STANDARD_ID, "published_at": None}, "STANDARD_NAME_INVALID"),
+        (
+            {"schema_version": 3, "standard_id": STANDARD_ID, "published_at": None},
+            "STANDARD_NAME_INVALID",
+        ),
         (
             {"schema_version": 3, "standard_id": STANDARD_ID, "published_at": None, "version": 1},
             "STANDARD_VERSION_INVALID",

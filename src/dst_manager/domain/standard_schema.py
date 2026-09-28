@@ -381,7 +381,12 @@ def _parse_common_structure(data: Mapping[str, object], *, published: bool) -> d
         standard_id = parse_standard_id(raw_standard_id)
     except ValueError as exc:
         raise _error("STANDARD_ID_INVALID", f"标准 ID {raw_standard_id!r} 必须是带连字符的 UUID") from exc
-    name = _require_str(data, "name", "STANDARD_NAME_INVALID")
+    if published:
+        name = _require_str(data, "name", "STANDARD_NAME_INVALID")
+    else:
+        if "name" not in data:
+            raise _error("STANDARD_NAME_INVALID", "字段 'name' 必须是字符串")
+        name = _text(data, "name", "STANDARD_NAME_INVALID")
     description = _text(data, "description", "STANDARD_DESCRIPTION_INVALID")
     cad_versions = _sequence(data, "supported_cad_versions", "STANDARD_CAD_VERSIONS_INVALID")
     if not cad_versions or any(not isinstance(item, str) or not item for item in cad_versions):

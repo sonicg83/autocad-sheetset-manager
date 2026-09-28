@@ -43,8 +43,10 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 
 #: 标准库稳定错误码 → HTTP 状态；未登记码一律 422。
 _STORE_STATUS = {
-    "STANDARD_VERSION_EXISTS": 409,
+    "STANDARD_ID_EXISTS": 409,
     "STANDARD_NAME_CONFLICT": 409,
+    "STANDARD_ID_NOT_FOUND": 404,
+    "STANDARD_VERSION_EXISTS": 409,
     "STANDARD_VERSION_LIMIT_REACHED": 409,
     "STANDARD_DRAFT_EXISTS": 409,
     "STANDARD_VERSION_NOT_FOUND": 404,
@@ -113,8 +115,9 @@ class StandardOperations:
                 "source": item.source,
                 "status": item.status,
                 "standard_id": item.standard_id,
-                "version": item.version,
                 "name": item.name,
+                "description": item.description,
+                "published_at": item.published_at,
                 "draft_id": item.draft_id,
             }
             for item in self.standard_store.list()
@@ -314,17 +317,20 @@ class StandardOperations:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}
 
-    def get_standard(self, standard_id: str, version: int | str) -> dict[str, object]:
-        standard = self.standard_store.get(standard_id, version)
+    def get_standard(
+        self, standard_id: str, version: int | str | None = None
+    ) -> dict[str, object]:
+        standard = self.standard_store.get(standard_id)
         if standard is None:
             raise ApplicationError(
-                "STANDARD_VERSION_NOT_FOUND", f"标准 {standard_id}@{version} 不存在", 404
+                "STANDARD_ID_NOT_FOUND", f"标准 {standard_id!r} 不存在", 404
             )
-        document = self.standard_store.get_document(standard_id, version)
+        document = self.standard_store.get_document(standard_id)
         return {
             "standard_id": standard.standard_id,
-            "version": standard.version,
             "name": standard.name,
+            "description": standard.description,
+            "published_at": standard.published_at,
             "supported_cad_versions": list(standard.supported_cad_versions),
             "dependencies": [
                 {
@@ -340,12 +346,7 @@ class StandardOperations:
     def publish_standard(
         self, draft_id: str, manifests: Mapping[str, object] | None = None
     ) -> dict[str, object]:
-        """发布草稿：服务端分配整数版本，仓储锁内完整校验后原子提交。
-
-        先过草稿结构门禁与受信扩展依赖门禁（缺失时 409），再由仓储分配
-        ``max(官方, 用户) + 1`` 并跑完整发布门禁与名称唯一门禁；warning 随成功
-        响应返回，不阻断发布。
-        """
+        """发布草稿：仓储锁内注入服务端时间戳并原子提交 UUID 包。"""
         draft = self.standard_store.get_draft(draft_id)
         if draft is None:
             raise ApplicationError("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在", 404)
@@ -363,16 +364,15 @@ class StandardOperations:
         diagnostics = self._published_diagnostics(published)
         return {
             "standard_id": published.standard_id,
-            "version": published.version,
+            "published_at": published.published_at,
             "name": published.name,
+            "description": published.description,
             "diagnostics": [_publish_diagnostic(item) for item in diagnostics],
         }
 
     def _published_diagnostics(self, published) -> tuple[StandardDiagnostic, ...]:
         """发布成功后的诊断：由仓储已校验的发布文档确定性重算。"""
-        document = self.standard_store.get_document(
-            published.standard_id, published.version
-        )
+        document = self.standard_store.get_document(published.standard_id)
         if document is None:
             return ()
         try:

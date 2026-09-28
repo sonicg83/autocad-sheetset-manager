@@ -26,6 +26,18 @@ related:
 
 **Spec:** [SPEC-DM-020](../../../docs/dst-manager/specs/SPEC-DM-020-versionless-standard-identity-and-management.md)；页面约束见 [SPEC-DM-016](../../../docs/dst-manager/specs/SPEC-DM-016-drawing-standard-management-ui.md) 和 [SPEC-DM-018](../../../docs/dst-manager/specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)。
 
+## 实施前迁移补充（2026-09-28）
+
+计划执行前只读清点发现：默认本地数据根有 1 份用户标准草稿，格式为 `schema_version: 1`，使用非 UUID 身份且含旧 `version` 字段；草稿无 `description`、无 `release_notes` 且无资产。官方与用户已发布标准包、图纸集创建草稿均为 0。登记工作区有 302 条，其中 300 条目标 DST 已不存在；其余 2 个 DST 只读解析成功，均无 `DSTManager.Standard` 绑定或项目标准快照，读取前后时间戳一致。备用 `%LOCALAPPDATA%\dst-manager` 数据根没有标准库数据。清点未读取或记录标准名称、描述正文或私有路径。
+
+为保留这份旧草稿，实施增加以下专用迁移路径：
+
+1. 在第一次迁移前将整个本地 `standards/` 数据树复制到忽略目录下的 PLAN-DM-046 备份目录；校验源与副本文件数及 SHA-256 清单相同后才允许迁移。备份保留旧文件原始字节，不进入 Git。
+2. 标准库初始化时，在既有进程互斥与跨进程文件锁内扫描用户草稿；只迁移草稿目录中的 schema v1/v2 文档，不迁移已发布包、不迁移工程 DST。每份草稿保留内部 `draft_id`、资产和其他受控字段，分配一次 UUIDv4 `standard_id`，改写为 schema v3、`published_at: null`，移除标准 `version`。
+3. `description` 已存在时原样保留；否则从字符串 `release_notes` 原样迁移；没有可信文本时为空字符串；迁移后的新文档移除 `release_notes`。双字段冲突以 `description` 为准，并在不含原文、名称、ID 或路径的本地迁移报告中记录冲突数量。
+4. 迁移前验证目标 UUID 与规范化名称可用；通过同目录临时文件及原子替换写入。失败时保留原草稿和备份；重试不得重复分配身份或丢失文本。迁移报告只记格式类别、数量、冲突数和结果，不记私有内容。
+5. 在标准库与迁移模块回归测试中覆盖 UUID 稳定性、发布时间为空、旧版本字段移除、`release_notes` 原文迁移、双字段冲突计数、原子写入失败回滚与重入。若以后在目标数据根发现旧发布包或含标准绑定的旧项目，当前迁移不自动处理，必须先增加相应映射与备份设计。
+
 ## Global Constraints
 
 - `standard_id`：新草稿使用 UUIDv4；输入允许 UUID 文本大小写差异并规范化为小写带连字符形式，拒绝缺连字符或非法值；没有标准发布 `version` 或来源关系。
@@ -53,27 +65,27 @@ related:
 
 ### Task 1：领域身份与文档格式
 
-**Files:** 修改 `src/dst_manager/domain/standard_models.py`、`standard_schema.py`、`standards.py`、`standard_identity.py`；修改 `tests/unit/test_drawing_standards.py`；更新 `changelog.md`。
+**Files:** 修改 `src/dst_manager/domain/standard_models.py`、`standard_schema.py`、`standards.py`、`standard_identity.py`；新建 `standard_errors.py`、`standard_versioning.py` 以守住文件容量边界；修改 `tests/unit/test_drawing_standards.py`、`tests/unit/creation_xlsx_fixtures.py`；更新 `changelog.md`。
 
 **Interfaces:** `new_standard_id() -> str` 返回小写 UUIDv4；`parse_standard_id(value: object) -> str` 接受大小写差异并返回规范小写 UUID，拒绝缺连字符或非法值；`materialize_published_document(document: Mapping[str, object], published_at: int) -> dict[str, object]` 仅注入发布时间；`parse_standard_draft_document` 接受 `published_at: null`，`parse_published_standard_document` 接受有效 UTC 毫秒值，均拒绝标准发布 `version`。两种 v3 文档接受可为空的顶层 `description: str`，新写入不含 `release_notes`。
 
-- [ ] **Step 1: Write failing tests.** 新空白／复制／DST 草稿都各有 UUID、`published_at=null`；已发布文档有有效毫秒整数；布尔、小数、字符串、无效 UUID、遗留 `version` 均稳定拒绝；扩展 `min_version="1.2.0"` 仍接受。描述在草稿与发布物化后保持一致，空描述合法，非字符串描述拒绝，v3 新写入不含 `release_notes`。
-- [ ] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_drawing_standards.py`；新断言失败于尚未实现的新字段或签名。
-- [ ] **Step 3: Implement domain signatures above.** 保留属性、资产与规则解析；仅替换标准身份字段和发布物化。发布时间由调用者注入，不读取文件时间推断发布时间。
-- [ ] **Step 4: Verify GREEN.** 重跑上述测试并运行 `rtk uv run ruff check src/dst_manager/domain tests/unit/test_drawing_standards.py`；均通过。
-- [ ] **Step 5: Commit this task.** 仅暂存本任务文件与 `changelog.md`，提交中文动词开头的说明。
+- [x] **Step 1: Write failing tests.** 新空白／复制／DST 草稿都各有 UUID、`published_at=null`；已发布文档有有效毫秒整数；布尔、小数、字符串、无效 UUID、遗留 `version` 均稳定拒绝；扩展 `min_version="1.2.0"` 仍接受。描述在草稿与发布物化后保持一致，空描述合法，非字符串描述拒绝，v3 新写入不含 `release_notes`。
+- [x] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist -o addopts='' tests/unit/test_drawing_standards.py`；新断言失败于尚未实现的新字段或签名。
+- [x] **Step 3: Implement domain signatures above.** 保留属性、资产与规则解析；仅替换标准身份字段和发布物化。发布时间由调用者注入，不读取文件时间推断发布时间。
+- [x] **Step 4: Verify GREEN.** 重跑上述测试并运行领域 Ruff 检查；均通过。
+- [x] **Step 5: Commit this task.** 仅暂存本任务文件与 `changelog.md`，提交中文动词开头的说明（`9a96eab`）。
 
 ### Task 2：标准库 UUID 存储、发布与平铺摘要
 
-**Files:** 修改 `src/dst_manager/infrastructure/standards/store.py`、`src/dst_manager/application/standards.py`；新建 `src/dst_manager/infrastructure/standards/identity_index.py`（名称和 ID 占用判断，避免继续扩张大型 store）；修改 `tests/unit/test_standard_store.py`；更新 `changelog.md`。
+**Files:** 修改 `src/dst_manager/infrastructure/standards/store.py`、`src/dst_manager/application/standards.py`、`src/dst_manager/domain/standard_schema.py`（允许草稿名称为空但仍要求名称字段）；新建 `src/dst_manager/infrastructure/standards/identity_index.py`（名称和 ID 占用判断，避免继续扩张大型 store）、`migration.py`（v1/v2 草稿备份与原子迁移）；修改 `tests/unit/test_standard_store.py`、`tests/unit/test_drawing_standards.py`，新增 `tests/unit/test_standard_store_identity.py`、`tests/unit/test_standard_migration.py`；更新 `changelog.md`。
 
 **Interfaces:** `StandardStore.get(standard_id: str) -> DrawingStandard | None`；`StandardStore.publish(draft_id: str, *, published_at: int) -> PublishedStandard`；`StandardStore.check_available_identity(standard_id: str, name: str) -> None`；摘要含 `description: str`、`published_at: int | None`，不含 `version`，列表无需逐项加载详情。新目录为 `official/<uuid>/document.json`、`user/published/<uuid>/document.json`，草稿沿用独立 `draft_id` 目录。
 
-- [ ] **Step 1: Write failing tests.** 两个从同一源复制的草稿发布后成为两个独立 UUID；名称冲突对官方、用户和非空草稿一致；并发发布不会产生同 ID；发布故障后草稿和资产仍在；列表每包一项且摘要携带草稿／已发布描述，不归集版本。
-- [ ] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_standard_store.py`；新断言失败。
-- [ ] **Step 3: Implement the interfaces.** 在既有库锁内校验 ID／名称并发布；`draft_id` 仍只定位存储目录。使用 `time.time_ns() // 1_000_000` 获取发布时间，并在测试中注入固定时钟。移除下一发布版本分配和 `standard_id/<n>` 新写入，保持路径越界、资产和原子发布门禁。
-- [ ] **Step 4: Verify GREEN.** 重跑本任务测试与 `rtk uv run ruff check src/dst_manager/infrastructure/standards src/dst_manager/application/standards.py`。
-- [ ] **Step 5: Commit this task.** 只提交本任务改动。
+- [x] **Step 1: Write failing tests.** 两个从同一源复制的草稿发布后成为两个独立 UUID；名称冲突对官方、用户和非空草稿一致；并发发布不会产生同 ID；发布故障后草稿和资产仍在；列表每包一项且摘要携带草稿／已发布描述，不归集版本。迁移用例覆盖 v1/v2、UUID 稳定、描述／旧说明保留与冲突计数、完整备份哈希校验、原子写入失败保留原稿及部分完成后可重入。
+- [x] **Step 2: Verify RED.** 已运行 `tests/unit/test_standard_store_identity.py` 与 `tests/unit/test_standard_migration.py`，新断言失败。
+- [x] **Step 3: Implement the interfaces.** 在既有库锁内校验 ID／名称并发布；`draft_id` 仍只定位存储目录。使用 `time.time_ns() // 1_000_000` 获取发布时间，并在测试中注入固定时钟。移除下一发布版本分配和 `standard_id/<n>` 新写入，保持路径越界、资产和原子发布门禁。发现用户 v1/v2 草稿时，先验证整棵标准库备份及 SHA-256 清单，再仅迁移草稿目录中的文档；不迁移旧发布包或工程 DST。
+- [x] **Step 4: Verify GREEN.** 重跑本任务测试并执行计划范围的 Ruff 检查。
+- [x] **Step 5: Commit this task.** 只提交本任务改动。
 
 ### Task 3：标准包预检、改名导入与导出
 

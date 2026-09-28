@@ -1,621 +1,97 @@
-"""官方/用户标准库仓储测试（PLAN-DM-035 Task 3 / PLAN-DM-038 Task 4）。"""
+"""UUID 标准库、发布事务与资产边界测试（PLAN-DM-046 Task 2）。"""
 
+from __future__ import annotations
+
+import copy
 import hashlib
 import json
 import os
-import zipfile
+import threading
 from pathlib import Path
 
 import pytest
+from creation_xlsx_fixtures import STANDARD_DOCUMENT
 
-from dst_manager.domain.standards import StandardSchemaError
-from dst_manager.infrastructure.standards.package import StandardPackageReader
+from dst_manager.domain.standards import parse_published_standard_document
 from dst_manager.infrastructure.standards.store import (
-    LIBRARY_LOCK_NAME,
     StandardStore,
     StandardStoreError,
 )
 
+OFFICIAL_ID = "123e4567-e89b-42d3-a456-426614174100"
+FIRST_ID = "123e4567-e89b-42d3-a456-426614174101"
+SECOND_ID = "123e4567-e89b-42d3-a456-426614174102"
+THIRD_ID = "123e4567-e89b-42d3-a456-426614174103"
+PUBLISHED_AT = 1_800_000_000_123
+
 
 def standard_document(
+    standard_id: str = FIRST_ID,
     *,
-    standard_id: str = "user.water",
-    version: int = 3,
     name: str = "用户给排水标准",
+    description: str = "测试标准说明",
     mapping_target: str = "GS",
+    published: bool = False,
 ) -> dict[str, object]:
-    """Schema v2 最小发布文档：枚举源 + 映射 + 默认 DWG 命名 + 整数版本。"""
-    return {
-        "schema_version": 2,
-        "standard_id": standard_id,
-        "version": version,
-        "name": name,
-        "supported_cad_versions": ["2020"],
-        "properties": [
-            {
-                "property_id": "prop-major",
-                "name": "专业",
-                "scope": "sheetset",
-                "kind": "enum",
-                "enum_items": [{"item_id": "enum-water", "value": "给水"}],
-            },
-            {
-                "property_id": "prop-code",
-                "name": "专业代码",
-                "scope": "sheetset",
-                "kind": "mapping",
-                "source_property_id": "prop-major",
-                "mapping": [{"item_id": "enum-water", "value": mapping_target}],
-                "confirmed_source_items": [["enum-water", "给水"]],
-            },
-        ],
-        "dwg_naming": {
-            "segments": [
-                {"system_field": "subset.scope"},
-                {"literal": " "},
-                {"system_field": "subset.name"},
-            ]
-        },
-        "assets": [],
-        "numbering": {"sequence_field": "subset.sequence", "digits": 2},
-    }
+    document = copy.deepcopy(STANDARD_DOCUMENT)
+    document.update(
+        standard_id=standard_id,
+        published_at=PUBLISHED_AT if published else None,
+        description=description,
+        name=name,
+        assets=[],
+    )
+    for prop in document["properties"]:
+        if isinstance(prop, dict) and prop.get("kind") == "mapping":
+            for row in prop.get("mapping", []):
+                if isinstance(row, dict):
+                    row["value"] = mapping_target
+    return document
 
 
-OFFICIAL_DOCUMENT = standard_document(
-    standard_id="official.gas", version=1, name="官方燃气标准"
-)
-USER_DOCUMENT = standard_document()
-
-#: 残留 schema_version:1 文档：目录名合法（``1``），但不再进入新版读取与列表。
-RESIDUAL_V1_DOCUMENT = {
-    "schema_version": 1,
-    "standard_id": "legacy.gas",
-    "version": "1.0.0",
-    "name": "旧版本文档",
-    "supported_cad_versions": ["2020"],
-    "properties": [],
-    "dwg_naming": {"segments": [{"literal": "x"}]},
-    "assets": [],
-    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
-}
-
-LEGACY_DOCUMENT = {
-    "schema_version": 2,
-    "standard_id": "legacy.rules",
-    "version": 1,
-    "name": "旧通用规则标准",
-    "supported_cad_versions": ["2020"],
-    "properties": [{"name": "专业名称", "scope": "sheetset", "required": True}],
-    "rules": [{"rule_id": "r1", "kind": "required", "target": "sheetset.专业名称"}],
-    "assets": [],
-    "numbering": {"sequence_field": "subset.sequence", "digits": 2},
-}
-
-
-def write_official(root: Path, document: dict, *, segment: str | None = None) -> None:
-    target = root / document["standard_id"] / (segment or str(document["version"]))
+def write_published(root: Path, document: dict[str, object]) -> Path:
+    standard = parse_published_standard_document(document)
+    target = root / standard.standard_id
     target.mkdir(parents=True, exist_ok=True)
     (target / "document.json").write_text(
         json.dumps(document, ensure_ascii=False), encoding="utf-8"
     )
+    return target
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> StandardStore:
-    official_root = tmp_path / "official"
-    official_root.mkdir()
-    write_official(official_root, OFFICIAL_DOCUMENT)
-    return StandardStore(official_root=official_root, user_root=tmp_path / "user")
+    standards_root = tmp_path / "standards"
+    official_root = standards_root / "official"
+    user_root = standards_root / "user"
+    write_published(
+        official_root,
+        standard_document(
+            OFFICIAL_ID,
+            name="官方燃气标准",
+            description="官方标准说明",
+            published=True,
+        ),
+    )
+    return StandardStore(official_root=official_root, user_root=user_root)
 
 
-def create_draft(store: StandardStore, document: dict, draft_id: str | None = None):
-    """保存草稿；**草稿不携带版本**（PLAN-DM-041 Task 2），辅助统一去掉 version。"""
-    draft = dict(document)
-    draft.pop("version", None)
-    return store.create_draft(draft, draft_id=draft_id)
-
-
-# ---- 整数版本与残留 v1 目录（PLAN-DM-041 Task 2） --------------------------
-
-
-def draft_document(store_document: dict) -> dict:
-    """去掉版本字段的草稿文档。"""
-    draft = dict(store_document)
-    draft.pop("version")
-    return draft
-
-
-def test_list_reports_integer_versions_and_null_for_drafts(
+def create_draft(
     store: StandardStore,
+    document: dict[str, object],
+    *,
+    draft_id: str,
 ) -> None:
-    create_draft(store, draft_document(USER_DOCUMENT), draft_id="draft-1")
-    items = store.list()
-    published = [item for item in items if item.status == "published"]
-    drafts = [item for item in items if item.status == "draft"]
-    assert {item.version for item in published} == {1}
-    assert all(isinstance(item.version, int) for item in published)
-    assert [item.version for item in drafts] == [None]
+    draft = copy.deepcopy(document)
+    draft["published_at"] = None
+    store.create_draft(draft, draft_id=draft_id)
 
 
-def test_list_skips_residual_schema_version_one_directories(
-    store: StandardStore, tmp_path: Path
-) -> None:
-    """残留 schema_version:1 目录只跳过，不阻断其余条目（不自动迁移）。"""
-    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
-    versions = {
-        (item.standard_id, item.version)
-        for item in store.list()
-        if item.status == "published"
-    }
-    assert ("legacy.gas", 1) not in versions
-    assert ("official.gas", 1) in versions
-
-
-def test_get_document_rejects_residual_schema_version_one(store: StandardStore) -> None:
-    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
-    with pytest.raises(StandardStoreError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
-        store.get_document("legacy.gas", 1)
-
-
-def test_get_rejects_residual_schema_version_one(store: StandardStore) -> None:
-    write_official(store.official_root, RESIDUAL_V1_DOCUMENT, segment="1")
-    with pytest.raises(StandardStoreError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
-        store.get("legacy.gas", 1)
-
-
-def test_get_draft_self_heals_version_left_by_interrupted_publish(
-    store: StandardStore,
-) -> None:
-    """发布在写回携带 version 的文档后、目录移动前被强杀：读取时就地剥离，草稿可继续保存与发布。"""
-    draft_dir = store.drafts_root / "draft-interrupted"
-    draft_dir.mkdir(parents=True)
-    document = {"schema_version": 2, "standard_id": "user.water", "version": 3, "name": "用户给排水标准",
-                "supported_cad_versions": ["2020"], "properties": [], "dwg_naming": {"segments": [{"literal": "x"}]},
-                "assets": [], "numbering": {"sequence_field": "subset.sequence", "digits": 2}}
-    (draft_dir / "document.json").write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
-
-    loaded = store.get_draft("draft-interrupted")
-
-    assert loaded is not None
-    assert "version" not in loaded.document
-    # 自愈后可继续保存与发布（旧实现下两者都会 422）
-    assert store.save_draft("draft-interrupted", loaded.document).draft_id == "draft-interrupted"
-    assert store.publish("draft-interrupted").version == 1
-
-
-def test_export_rejects_corrupt_published_document_with_stable_code(
-    store: StandardStore, tmp_path: Path
-) -> None:
-    """列表把损坏文档当不可用候选上报，导出必须给稳定码而不是冒泡成 500。"""
-    write_official(store.official_root, standard_document(standard_id="broken.one", version=1))
-    (store.official_root / "broken.one" / "1" / "document.json").write_text("{not json", encoding="utf-8")
-    with pytest.raises(StandardStoreError, match="STANDARD_JSON_INVALID"):
-        store.export_package("broken.one", 1, tmp_path / "out")
-
-
-def test_library_lock_timeout_reports_stable_code(store: StandardStore, monkeypatch) -> None:
-    """取锁超时必须以稳定码拒绝，不得让 FileLockError 冒泡成 500。"""
-    import dst_manager.infrastructure.standards.store as store_module
-    from dst_manager.infrastructure.filesystem.locking import (
-        WorkspaceTransactionBusyError,
-    )
-
-    class BusyLock:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        def __enter__(self):
-            raise WorkspaceTransactionBusyError(32, "busy")
-
-        def __exit__(self, *args) -> bool:
-            return False
-
-    monkeypatch.setattr(store_module, "WorkspaceTransactionLock", BusyLock)
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    with pytest.raises(StandardStoreError, match="STANDARD_LIBRARY_BUSY"):
-        store.publish("draft-1")
-
-
-def test_get_accepts_integer_and_segment_version(store: StandardStore) -> None:
-    assert store.get("official.gas", 1) is not None
-    assert store.get("official.gas", "1") is not None
-
-
-@pytest.mark.parametrize("version", [0, -1, "01", "1.0.0", "", "x"])
-def test_get_rejects_non_canonical_version_segment(
-    store: StandardStore, version: object
-) -> None:
-    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_INVALID"):
-        store.get("official.gas", version)  # type: ignore[arg-type]
-
-
-def test_publish_assigns_sequential_versions(store: StandardStore) -> None:
-    """同一 ID 连续发布依次得到 1、2、3；版本由服务端分配，草稿不预占。"""
-    for index in range(1, 4):
-        create_draft(store, USER_DOCUMENT, draft_id=f"draft-{index}")
-        assert store.publish(f"draft-{index}").version == index
-    assert store.get("user.water", 3) is not None
-
-
-def test_publish_continues_after_official_highest_version(store: StandardStore) -> None:
-    """官方库已有同 ID 的 3 时，本机下一个版本为 4（两库合并计算）。"""
-    write_official(store.official_root, standard_document(standard_id="user.water", version=3))
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    assert store.publish("draft-1").version == 4
-
-
-def test_publish_rejects_when_version_limit_reached(store: StandardStore) -> None:
-    write_official(
-        store.official_root,
-        standard_document(standard_id="user.water", version=2147483647),
-    )
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_LIMIT_REACHED"):
-        store.publish("draft-1")
-    assert not (store.published_root / "user.water" / "1").exists()
-
-
-def test_publish_allows_rename_and_same_name_across_own_versions(
-    store: StandardStore,
-) -> None:
-    """同 ID 的多个版本可沿用同一名称，也允许改名。"""
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    store.publish("draft-1")
-    same_name = standard_document(standard_id="user.water", version=9)
-    create_draft(store, same_name, draft_id="draft-2")
-    assert store.publish("draft-2").version == 2
-    renamed = standard_document(standard_id="user.water", name="用户给排水标准（新）")
-    create_draft(store, renamed, draft_id="draft-3")
-    assert store.publish("draft-3").version == 3
-
-
-@pytest.mark.parametrize(
-    ("published_name", "conflicting_name"),
-    [
-        ("用户给排水标准A", "用户给排水标准Ａ"),  # 全角字符 NFKC 归一
-        ("用户给排水标准 A", "  用户给排水标准  A  "),  # 首尾与连续空白
-        ("用户给排水标准ABC", "用户给排水标准abc"),  # casefold 大小写折叠
-        ("给排水ẞ标准", "给排水ß标准"),  # casefold 而非 lower
-    ],
-)
-def test_publish_rejects_normalized_name_conflict(
-    store: StandardStore, published_name: str, conflicting_name: str
-) -> None:
-    """不同 ID 的已发布标准名称经 NFKC/空白/casefold 归一后相同即冲突（409）。"""
-    create_draft(
-        store, standard_document(name=published_name), draft_id="draft-1"
-    )
-    store.publish("draft-1")
-    conflicting = standard_document(standard_id="user.gas", name=conflicting_name)
-    create_draft(store, conflicting, draft_id="draft-2")
-    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
-        store.publish("draft-2")
-    # 冲突不写目录、不消耗版本
-    assert not (store.published_root / "user.gas").exists()
-
-
-def test_publish_rejects_name_conflict_with_official_library(store: StandardStore) -> None:
-    conflicting = standard_document(
-        standard_id="user.gas", name=OFFICIAL_DOCUMENT["name"]
-    )
-    create_draft(store, conflicting, draft_id="draft-2")
-    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
-        store.publish("draft-2")
-
-
-def test_publish_ignores_draft_names(store: StandardStore) -> None:
-    """草稿不占名称：另一 ID 的草稿同名不阻断发布。"""
-    create_draft(store, standard_document(standard_id="draft.other"), draft_id="draft-a")
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    assert store.publish("draft-1").version == 1
-
-
-def test_check_published_name_allows_own_standard_id(store: StandardStore) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    store.publish("draft-1")
-    store.check_published_name("user.water", "用户给排水标准")
-    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
-        store.check_published_name("user.gas", "用户给排水标准")
-
-
-def test_publish_failure_restores_draft_and_assets(store: StandardStore, monkeypatch) -> None:
-    """注入目录移动失败：草稿文档回到无版本形态，资产保留，无已发布目录。"""
-    create_draft(
-        store, asset_document("assets/A2.dwg"), draft_id="draft-asset"
-    )
-    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
-    before = (store.drafts_root / "draft-asset" / "document.json").read_bytes()
-
-    real_replace = os.replace
-
-    def failing_replace(source, target):
-        raise OSError(13, "injected publish failure")
-
-    monkeypatch.setattr(os, "replace", failing_replace)
-    try:
-        with pytest.raises(StandardStoreError, match="STANDARD_PUBLISH_FAILED"):
-            store.publish("draft-asset")
-    finally:
-        monkeypatch.setattr(os, "replace", real_replace)
-
-    assert (store.drafts_root / "draft-asset" / "document.json").read_bytes() == before
-    assert (store.drafts_root / "draft-asset" / "assets" / "A2.dwg").read_bytes() == b"a2"
-    assert not (store.published_root / "user.water").exists()
-    # 草稿仍可按草稿门禁读回（无 version 字段）
-    assert store.get_draft("draft-asset") is not None
-
-
-def test_concurrent_publish_allocates_distinct_versions(store: StandardStore) -> None:
-    """两个并发发布得到不同整数版本，且都已原子落地。"""
-    import threading
-
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    create_draft(store, USER_DOCUMENT, draft_id="draft-2")
-    results: list[int] = []
-    errors: list[BaseException] = []
-    barrier = threading.Barrier(2)
-
-    def run(draft_id: str) -> None:
-        try:
-            barrier.wait(timeout=10)
-            results.append(store.publish(draft_id).version)
-        except BaseException as exc:  # noqa: BLE001 - 测试汇总后再断言
-            errors.append(exc)
-
-    threads = [threading.Thread(target=run, args=(f"draft-{index}",)) for index in (1, 2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=30)
-
-    assert errors == []
-    assert sorted(results) == [1, 2]
-    assert store.get("user.water", 1) is not None
-    assert store.get("user.water", 2) is not None
-
-
-def test_publish_writes_immutable_version_directory(store: StandardStore) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    published = store.publish("draft-1")
-    assert (published.root / "document.json").is_file()
-    assert published.standard_id == "user.water"
-    assert published.version == 1
-
-
-def test_store_round_trips_after_reopen(store: StandardStore, tmp_path: Path) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    store.publish("draft-1")
-    reopened = StandardStore(
-        official_root=tmp_path / "official", user_root=tmp_path / "user"
-    )
-    standard = reopened.get("user.water", 1)
-    assert standard is not None
-    assert standard.name == "用户给排水标准"
-
-
-def test_list_covers_official_and_user(store: StandardStore) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    store.publish("draft-1")
-    entries = {(entry.source, entry.status, entry.standard_id, entry.version) for entry in store.list()}
-    assert ("official", "published", "official.gas", 1) in entries
-    assert ("user", "published", "user.water", 1) in entries
-
-
-def test_get_missing_identity_returns_none(store: StandardStore) -> None:
-    assert store.get("missing.standard", 9) is None
-
-
-def test_legacy_document_rejected_by_draft_gate(store: StandardStore) -> None:
-    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
-        create_draft(store, LEGACY_DOCUMENT, draft_id="draft-legacy")
-
-
-def test_legacy_draft_document_is_rejected_not_guessed(store: StandardStore) -> None:
-    legacy_dir = store.drafts_root / "draft-legacy"
-    legacy_dir.mkdir(parents=True)
-    (legacy_dir / "document.json").write_text(
-        json.dumps(draft_document(LEGACY_DOCUMENT), ensure_ascii=False), encoding="utf-8"
-    )
-    with pytest.raises(StandardStoreError, match="STANDARD_PROPERTY_ID_INVALID"):
-        store.publish("draft-legacy")
-    assert (legacy_dir / "document.json").is_file()
-
-
-def test_draft_saves_semantically_incomplete_mapping(store: StandardStore) -> None:
-    draft = create_draft(store, standard_document(mapping_target=""), draft_id="draft-1")
-    assert draft.document["standard_id"] == "user.water"
-    assert store.get_draft("draft-1") is not None
-
-
-def test_publish_rejects_incomplete_draft_without_moving_directory(
-    store: StandardStore,
-) -> None:
-    create_draft(store, standard_document(mapping_target=""), draft_id="draft-1")
-    with pytest.raises(StandardStoreError, match="STANDARD_MAPPING_TARGET_EMPTY"):
-        store.publish("draft-1")
-    assert (store.drafts_root / "draft-1" / "document.json").is_file()
-    assert store.get("user.water", 1) is None
-
-
-def test_import_package_collides_with_existing(store: StandardStore, tmp_path: Path) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    assert store.publish("draft-1").version == 1
-    package = write_package(
-        tmp_path / "user-water.dststandard", standard_document(version=1)
-    )
-    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_EXISTS"):
-        store.import_package(package)
-
-
-def test_import_package_rejects_incomplete_document(
-    store: StandardStore, tmp_path: Path
-) -> None:
-    package = tmp_path / "incomplete.dststandard"
-    with zipfile.ZipFile(package, "w") as archive:
-        archive.writestr(
-            "manifest.json",
-            json.dumps(standard_document(mapping_target=""), ensure_ascii=False),
-        )
-    with pytest.raises(StandardStoreError, match="STANDARD_MAPPING_TARGET_EMPTY"):
-        store.import_package(package)
-    assert store.get("user.water", 1) is None
-
-
-def test_import_export_round_trip(store: StandardStore, tmp_path: Path) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    store.publish("draft-1")
-    exported = store.export_package("user.water", 1, tmp_path / "out")
-    assert exported.suffix == ".dststandard"
-    loaded = StandardPackageReader().read(exported)
-    assert loaded.standard.standard_id == "user.water"
-    assert loaded.standard.name == "用户给排水标准"
-    # 已发布版本不可变，同库重复导入必须拒绝；导入到全新用户库验证往返。
-    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
-    fresh.import_package(exported)
-    assert fresh.get("user.water", 1) is not None
-
-
-def test_round_trip_preserves_stable_ids_and_tokens(store: StandardStore, tmp_path: Path) -> None:
-    document = standard_document()
-    create_draft(store, document, draft_id="draft-1")
-    store.publish("draft-1")
-    exported = store.export_package("user.water", 1, tmp_path / "out")
-    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
-    fresh.import_package(exported)
-    restored = fresh.get_document("user.water", 1)
-    assert restored == dict(document, version=1)
-
-
-def test_draft_save_and_get(store: StandardStore) -> None:
-    draft = create_draft(store, USER_DOCUMENT, draft_id="draft-1")
-    assert draft.draft_id == "draft-1"
-    loaded = store.get_draft("draft-1")
-    assert loaded is not None
-    assert loaded.document["standard_id"] == "user.water"
-
-
-def test_publish_missing_draft_fails(store: StandardStore) -> None:
-    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_NOT_FOUND"):
-        store.publish("nope")
-
-
-def test_get_rejects_legacy_rules_document(store: StandardStore, tmp_path: Path) -> None:
-    official_root = tmp_path / "official"
-    write_official(official_root, LEGACY_DOCUMENT)
-    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_ID_INVALID"):
-        store.get("legacy.rules", 1)
-
-
-# ---- 草稿段边界（PLAN-DM-040 Task 1，F04） -------------------------------
-
-ILLEGAL_DRAFT_IDS = (
-    "../outside",
-    "..\\outside",
-    "C:\\outside",
-    ".",
-    "..",
-    "a/b",
-    "a\\b",
-    "",
-    "CON",
-    "LPT1",
-    "CON.dwg",
-    "draft-1.",
-    "draft-1 ",
-)
-
-DRAFT_OPERATIONS = ("create_draft", "get_draft", "save_draft", "delete_draft", "publish")
-
-
-def _call_draft_operation(store: StandardStore, operation: str, draft_id: str) -> None:
-    if operation == "create_draft":
-        store.create_draft(draft_document(USER_DOCUMENT), draft_id=draft_id)
-    elif operation == "get_draft":
-        store.get_draft(draft_id)
-    elif operation == "save_draft":
-        store.save_draft(draft_id, draft_document(USER_DOCUMENT))
-    elif operation == "delete_draft":
-        store.delete_draft(draft_id)
-    else:
-        store.publish(draft_id)
-
-
-@pytest.mark.parametrize("draft_id", ILLEGAL_DRAFT_IDS)
-@pytest.mark.parametrize("operation", DRAFT_OPERATIONS)
-def test_illegal_draft_id_rejected_by_every_entry(
-    store: StandardStore, draft_id: str, operation: str
-) -> None:
-    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
-        _call_draft_operation(store, operation, draft_id)
-
-
-def test_illegal_draft_id_leaves_files_outside_root_untouched(
-    store: StandardStore,
-) -> None:
-    outside = store.drafts_root.parent / "outside"
-    outside.mkdir(parents=True)
-    secret = outside / "document.json"
-    secret.write_text("{\"secret\": true}", encoding="utf-8")
-    before_hash = hashlib.sha256(secret.read_bytes()).hexdigest()
-    before_listing = sorted(path.name for path in store.drafts_root.parent.iterdir())
-
-    for draft_id in ILLEGAL_DRAFT_IDS:
-        for operation in DRAFT_OPERATIONS:
-            with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
-                _call_draft_operation(store, operation, draft_id)
-
-    assert hashlib.sha256(secret.read_bytes()).hexdigest() == before_hash
-    # `.standards.lock` 是发布/导入互斥的合法制品；其余条目必须逐字节不变。
-    listing = sorted(
-        path.name
-        for path in store.drafts_root.parent.iterdir()
-        if path.name != LIBRARY_LOCK_NAME
-    )
-    assert listing == before_listing
-
-
-@pytest.mark.parametrize("draft_id", ["draft-1", "legacy", "draft-gas"])
-def test_legal_draft_ids_still_round_trip(store: StandardStore, draft_id: str) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id=draft_id)
-    assert store.get_draft(draft_id) is not None
-    assert store.save_draft(draft_id, draft_document(USER_DOCUMENT)).draft_id == draft_id
-    published = store.publish(draft_id)
-    assert (published.standard_id, published.version) == ("user.water", 1)
-    assert not (store.drafts_root / draft_id).exists()
-
-
-def test_list_skips_illegal_historical_draft_directories(store: StandardStore) -> None:
-    create_draft(store, USER_DOCUMENT, draft_id="draft-ok")
-    for name in ("d" * 200, " draft-legacy"):
-        legacy = store.drafts_root / name
-        legacy.mkdir(parents=True)
-        (legacy / "document.json").write_text(
-            json.dumps(USER_DOCUMENT, ensure_ascii=False), encoding="utf-8"
-        )
-
-    draft_ids = [entry.draft_id for entry in store.list() if entry.status == "draft"]
-    assert draft_ids == ["draft-ok"]
-    # 非法历史目录只被跳过，不被删除
-    assert (store.drafts_root / ("d" * 200) / "document.json").is_file()
-    assert (store.drafts_root / " draft-legacy" / "document.json").is_file()
-
-
-# ---- 发布侧资产硬门禁（PLAN-DM-040 Task 2，F02） --------------------------
-
-ILLEGAL_ASSET_PATHS = (
-    "C:\\outside\\secret.dwg",
-    "\\\\server\\share\\secret.dwg",
-    "../outside.dwg",
-    "assets/../../outside.dwg",
-    "assets\\..\\outside.dwg",
-)
-
-
-def asset_document(*paths: str, asset_id: str = "templates") -> dict[str, object]:
+def asset_document(*paths: str) -> dict[str, object]:
     document = standard_document()
     document["assets"] = [
         {
-            "asset_id": asset_id if len(paths) == 1 else f"{asset_id}-{index}",
+            "asset_id": f"template-{index}",
             "kind": "base-template",
             "file": path,
         }
@@ -631,25 +107,307 @@ def write_draft_asset(store: StandardStore, draft_id: str, relative: str, data: 
     return target
 
 
-@pytest.mark.parametrize("asset_path", ILLEGAL_ASSET_PATHS)
-def test_publish_rejects_illegal_asset_path(store: StandardStore, asset_path: str) -> None:
+def test_list_is_flat_and_summaries_include_description_and_published_at(
+    store: StandardStore,
+) -> None:
+    create_draft(
+        store,
+        standard_document(FIRST_ID, description="草稿说明"),
+        draft_id="draft-one",
+    )
+
+    entries = store.list()
+    official = next(item for item in entries if item.standard_id == OFFICIAL_ID)
+    draft = next(item for item in entries if item.draft_id == "draft-one")
+
+    assert len([item for item in entries if item.status == "published"]) == 1
+    assert official.description == "官方标准说明"
+    assert official.published_at == PUBLISHED_AT
+    assert draft.description == "草稿说明"
+    assert draft.published_at is None
+    assert not hasattr(official, "version")
+
+
+def test_get_and_create_normalize_uuid_case(store: StandardStore) -> None:
+    upper_id = FIRST_ID.upper()
+    create_draft(
+        store,
+        standard_document(upper_id),
+        draft_id="draft-upper",
+    )
+    draft = store.get_draft("draft-upper")
+
+    assert draft is not None
+    assert draft.document["standard_id"] == FIRST_ID
+    assert store.get(OFFICIAL_ID.upper()).standard_id == OFFICIAL_ID
+
+
+def test_identity_gate_checks_ids_and_nonempty_names_in_all_libraries(
+    store: StandardStore,
+) -> None:
+    with pytest.raises(StandardStoreError, match="STANDARD_ID_EXISTS"):
+        store.check_available_identity(OFFICIAL_ID, "另一个名称")
+    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
+        store.check_available_identity(SECOND_ID, "官方燃气标准")
+
+    create_draft(
+        store,
+        standard_document(FIRST_ID, name="给排水标准 A"),
+        draft_id="draft-a",
+    )
+    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
+        store.check_available_identity(SECOND_ID, "  给排水标准  A ")
+
+
+@pytest.mark.parametrize(
+    ("published_name", "conflicting_name"),
+    [
+        ("标准A", "标准Ａ"),
+        ("标准 A", " 标准  A "),
+        ("标准ABC", "标准abc"),
+        ("ẞ标准", "ß标准"),
+    ],
+)
+def test_publish_rejects_normalized_name_conflict(
+    store: StandardStore,
+    published_name: str,
+    conflicting_name: str,
+) -> None:
+    create_draft(
+        store,
+        standard_document(FIRST_ID, name=published_name),
+        draft_id="draft-a",
+    )
+    store.publish("draft-a", published_at=PUBLISHED_AT)
+    conflicting_draft = store.drafts_root / "draft-b"
+    conflicting_draft.mkdir(parents=True)
+    (conflicting_draft / "document.json").write_text(
+        json.dumps(
+            standard_document(SECOND_ID, name=conflicting_name), ensure_ascii=False
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(StandardStoreError, match="STANDARD_NAME_CONFLICT"):
+        store.publish("draft-b", published_at=PUBLISHED_AT + 1)
+    assert not (store.published_root / SECOND_ID).exists()
+
+
+def test_empty_name_draft_is_allowed_and_does_not_reserve_identity(
+    store: StandardStore,
+) -> None:
+    create_draft(
+        store,
+        standard_document(FIRST_ID, name=""),
+        draft_id="draft-empty",
+    )
+    store.check_available_identity(SECOND_ID, "可用名称")
+    with pytest.raises(StandardStoreError, match="STANDARD_ID_EXISTS"):
+        store.check_available_identity(FIRST_ID, "另一个名称")
+
+
+def test_publish_uses_timestamp_and_uuid_directory(
+    store: StandardStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dst_manager.infrastructure.standards.store as store_module
+
+    monkeypatch.setattr(store_module.time, "time_ns", lambda: PUBLISHED_AT * 1_000_000)
+    create_draft(
+        store,
+        standard_document(FIRST_ID, description="发布后保留"),
+        draft_id="draft-one",
+    )
+
+    published = store.publish("draft-one")
+
+    assert published.root == store.published_root / FIRST_ID
+    assert published.published_at == PUBLISHED_AT
+    assert published.description == "发布后保留"
+    assert not hasattr(published, "version")
+    assert (published.root / "document.json").is_file()
+    assert store.get(FIRST_ID).published_at == PUBLISHED_AT
+
+
+def test_same_source_copies_publish_as_independent_standards(
+    store: StandardStore,
+) -> None:
+    create_draft(
+        store,
+        standard_document(FIRST_ID, name="给排水 A"),
+        draft_id="draft-a",
+    )
+    create_draft(
+        store,
+        standard_document(SECOND_ID, name="给排水 B"),
+        draft_id="draft-b",
+    )
+
+    first = store.publish("draft-a", published_at=PUBLISHED_AT)
+    second = store.publish("draft-b", published_at=PUBLISHED_AT + 1)
+
+    assert first.standard_id != second.standard_id
+    assert first.root != second.root
+    assert store.get(FIRST_ID) is not None
+    assert store.get(SECOND_ID) is not None
+
+
+def test_concurrent_publication_keeps_distinct_uuids(store: StandardStore) -> None:
+    create_draft(
+        store,
+        standard_document(FIRST_ID, name="并发标准 A"),
+        draft_id="draft-a",
+    )
+    create_draft(
+        store,
+        standard_document(SECOND_ID, name="并发标准 B"),
+        draft_id="draft-b",
+    )
+    barrier = threading.Barrier(2)
+    results: list[str] = []
+    errors: list[BaseException] = []
+
+    def publish(draft_id: str, timestamp: int) -> None:
+        try:
+            barrier.wait(timeout=10)
+            results.append(store.publish(draft_id, published_at=timestamp).standard_id)
+        except BaseException as exc:  # noqa: BLE001 - 汇总线程异常后统一断言
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=publish, args=("draft-a", PUBLISHED_AT)),
+        threading.Thread(target=publish, args=("draft-b", PUBLISHED_AT + 1)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert errors == []
+    assert sorted(results) == sorted((FIRST_ID, SECOND_ID))
+
+
+def test_publish_failure_restores_draft_and_assets(
+    store: StandardStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = asset_document("assets/A2.dwg")
+    create_draft(store, document, draft_id="draft-asset")
+    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
+    source_dir = store.drafts_root / "draft-asset"
+    before = (source_dir / "document.json").read_bytes()
+    real_replace = os.replace
+
+    def fail_final_move(source, target):
+        if Path(source) == source_dir:
+            raise OSError(13, "injected publish failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", fail_final_move)
+    with pytest.raises(StandardStoreError, match="STANDARD_PUBLISH_FAILED"):
+        store.publish("draft-asset", published_at=PUBLISHED_AT)
+
+    assert (source_dir / "document.json").read_bytes() == before
+    assert (source_dir / "assets" / "A2.dwg").read_bytes() == b"a2"
+    assert not (store.published_root / FIRST_ID).exists()
+
+
+def test_publish_rejects_incomplete_document_without_moving_draft(
+    store: StandardStore,
+) -> None:
+    create_draft(
+        store,
+        standard_document(mapping_target=""),
+        draft_id="draft-incomplete",
+    )
+
+    with pytest.raises(StandardStoreError, match="STANDARD_MAPPING_TARGET_EMPTY"):
+        store.publish("draft-incomplete", published_at=PUBLISHED_AT)
+    assert (store.drafts_root / "draft-incomplete" / "document.json").is_file()
+
+
+def test_library_lock_timeout_reports_stable_code(
+    store: StandardStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dst_manager.infrastructure.standards.store as store_module
+    from dst_manager.infrastructure.filesystem.locking import (
+        WorkspaceTransactionBusyError,
+    )
+
+    class BusyLock:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            raise WorkspaceTransactionBusyError(32, "busy")
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    create_draft(
+        store,
+        standard_document(FIRST_ID),
+        draft_id="draft-one",
+    )
+    monkeypatch.setattr(store_module, "WorkspaceTransactionLock", BusyLock)
+    with pytest.raises(StandardStoreError, match="STANDARD_LIBRARY_BUSY"):
+        store.publish("draft-one", published_at=PUBLISHED_AT)
+
+
+@pytest.mark.parametrize(
+    "draft_id",
+    ["../outside", "..\\outside", "C:\\outside", ".", "..", "a/b", "a\\b", "", "CON", "draft-1."],
+)
+def test_illegal_draft_id_cannot_escape_storage_root(
+    store: StandardStore, draft_id: str
+) -> None:
+    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
+        store.create_draft(standard_document(FIRST_ID), draft_id=draft_id)
+
+
+@pytest.mark.parametrize(
+    "asset_path",
+    [
+        "C:\\outside\\secret.dwg",
+        "\\\\server\\share\\secret.dwg",
+        "../outside.dwg",
+        "assets/../../outside.dwg",
+        "assets\\..\\outside.dwg",
+    ],
+)
+def test_publish_rejects_illegal_asset_path(
+    store: StandardStore, asset_path: str
+) -> None:
     create_draft(store, asset_document(asset_path), draft_id="draft-asset")
     with pytest.raises(StandardStoreError, match="STANDARD_ASSET_PATH_INVALID"):
-        store.publish("draft-asset")
-    assert (store.drafts_root / "draft-asset" / "document.json").is_file()
-    assert not (store.published_root / "user.water").exists()
+        store.publish("draft-asset", published_at=PUBLISHED_AT)
 
 
-def test_publish_rejects_missing_asset_file(store: StandardStore) -> None:
-    create_draft(store, asset_document("assets/missing.dwg"), draft_id="draft-asset")
+def test_publish_rejects_missing_asset_and_accepts_files(store: StandardStore) -> None:
+    create_draft(
+        store,
+        asset_document("assets/missing.dwg"),
+        draft_id="draft-missing",
+    )
     with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
-        store.publish("draft-asset")
-    assert (store.drafts_root / "draft-asset" / "document.json").is_file()
-    assert not (store.published_root / "user.water").exists()
+        store.publish("draft-missing", published_at=PUBLISHED_AT)
+
+    document = asset_document("assets/A2.dwg", "assets/模板/标题栏.dwg")
+    document["standard_id"] = SECOND_ID
+    document["name"] = "标题栏标准"
+    create_draft(store, document, draft_id="draft-valid")
+    write_draft_asset(store, "draft-valid", "assets/A2.dwg", b"a2")
+    write_draft_asset(store, "draft-valid", "assets/模板/标题栏.dwg", b"title")
+    published = store.publish("draft-valid", published_at=PUBLISHED_AT + 1)
+
+    assert (published.root / "assets" / "A2.dwg").is_file()
+    assert (published.root / "assets" / "模板" / "标题栏.dwg").is_file()
 
 
 def test_publish_rejects_asset_symlink_outside_root(store: StandardStore) -> None:
-    create_draft(store, asset_document("assets/linked.dwg"), draft_id="draft-asset")
+    create_draft(
+        store,
+        asset_document("assets/linked.dwg"),
+        draft_id="draft-asset",
+    )
     outside = store.drafts_root.parent / "outside.dwg"
     outside.write_bytes(b"outside-dwg")
     link = store.drafts_root / "draft-asset" / "assets" / "linked.dwg"
@@ -658,178 +416,69 @@ def test_publish_rejects_asset_symlink_outside_root(store: StandardStore) -> Non
         link.symlink_to(outside)
     except (OSError, NotImplementedError):
         pytest.skip("当前环境不允许创建符号链接")
+
     with pytest.raises(StandardStoreError, match="STANDARD_ASSET_PATH_INVALID"):
-        store.publish("draft-asset")
+        store.publish("draft-asset", published_at=PUBLISHED_AT)
     assert outside.read_bytes() == b"outside-dwg"
-    assert not (store.published_root / "user.water").exists()
 
 
-def test_publish_accepts_existing_asset_files(store: StandardStore) -> None:
-    create_draft(
-        store,
-        asset_document("assets/A2.dwg", "assets/模板/标题栏.dwg"),
-        draft_id="draft-asset",
-    )
-    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
-    write_draft_asset(store, "draft-asset", "assets/模板/标题栏.dwg", b"title")
-
-    published = store.publish("draft-asset")
-    assert (published.root / "assets" / "A2.dwg").is_file()
-    assert (published.root / "assets" / "模板" / "标题栏.dwg").is_file()
-
-
-# ---- 导入/导出资产硬门禁（PLAN-DM-040 Task 2，F02/F15） --------------------
-
-
-def write_package(
-    path: Path, document: dict, entries: dict[str, bytes] | None = None
-) -> Path:
-    with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("manifest.json", json.dumps(document, ensure_ascii=False))
-        for name, data in (entries or {}).items():
-            archive.writestr(name, data)
-    return path
-
-
-def test_import_rejects_missing_declared_asset(store: StandardStore, tmp_path: Path) -> None:
-    package = write_package(tmp_path / "missing.dststandard", asset_document("assets/A2.dwg"))
-    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
-        store.import_package(package)
-    assert store.get("user.water", 1) is None
-    assert not (store.published_root / "user.water" / "3").exists()
-    assert not list(store.published_root.glob(".import-*"))
-
-
-def test_import_rejects_undeclared_package_entry(store: StandardStore, tmp_path: Path) -> None:
-    package = write_package(
-        tmp_path / "extra.dststandard",
-        asset_document("assets/A2.dwg"),
-        {"assets/A2.dwg": b"a2", "assets/extra.dwg": b"extra"},
-    )
-    with pytest.raises(StandardStoreError, match="STANDARD_PACKAGE_INVALID"):
-        store.import_package(package)
-    assert store.get("user.water", 1) is None
-    assert not (store.published_root / "user.water" / "3").exists()
-
-
-def test_import_accepts_package_whose_entries_match_manifest(
-    store: StandardStore, tmp_path: Path
+def test_save_prunes_only_unreferenced_managed_asset_copies(
+    store: StandardStore,
 ) -> None:
-    package = write_package(
-        tmp_path / "ok.dststandard",
-        asset_document("assets/A2.dwg", "assets/模板/标题栏.dwg"),
-        {"assets/A2.dwg": b"a2", "assets/模板/标题栏.dwg": b"title"},
-    )
-    published = store.import_package(package)
-    assert (published.root / "assets" / "A2.dwg").read_bytes() == b"a2"
-    assert (published.root / "assets" / "模板" / "标题栏.dwg").read_bytes() == b"title"
-    assert not list(store.published_root.glob(".import-*"))
-
-
-def test_export_package_only_writes_declared_assets(
-    store: StandardStore, tmp_path: Path
-) -> None:
-    create_draft(store, asset_document("assets/A2.dwg"), draft_id="draft-asset")
-    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
-    write_draft_asset(store, "draft-asset", "assets/tmp-unreferenced.dwg", b"tmp")
-    store.publish("draft-asset")
-
-    exported = store.export_package("user.water", 1, tmp_path / "out")
-    with zipfile.ZipFile(exported) as archive:
-        assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
-
-
-def test_export_package_rejects_missing_asset_on_disk(
-    store: StandardStore, tmp_path: Path
-) -> None:
-    create_draft(store, asset_document("assets/A2.dwg"), draft_id="draft-asset")
-    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
-    published = store.publish("draft-asset")
-    (published.root / "assets" / "A2.dwg").unlink()
-
-    with pytest.raises(StandardStoreError, match="STANDARD_ASSET_FILE_MISSING"):
-        store.export_package("user.water", 1, tmp_path / "out")
-    assert not list((tmp_path / "out").glob("*.dststandard"))
-
-
-# ---- 受控副本清理（PLAN-DM-040 Task 3） ----------------------------------
-
-
-def test_save_draft_prunes_only_unreferenced_managed_copies(store: StandardStore) -> None:
     document = asset_document("assets/managed-keep.dwg")
     create_draft(store, document, draft_id="draft-asset")
     write_draft_asset(store, "draft-asset", "assets/managed-keep.dwg", b"keep")
     write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
     write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"hand-placed")
 
-    store.save_draft("draft-asset", draft_document(document))
+    store.save_draft("draft-asset", document)
 
     assets = store.drafts_root / "draft-asset" / "assets"
     assert (assets / "managed-keep.dwg").is_file()
     assert not (assets / "managed-orphan.dwg").exists()
-    # 手工放置的既有资产不受清理规则影响
     assert (assets / "A2.dwg").read_bytes() == b"hand-placed"
 
 
-def test_export_deduplicates_shared_asset_paths(store: StandardStore, tmp_path: Path) -> None:
-    """两个资产声明同一路径（Schema 允许）时，导出不得写出重复 ZIP 条目。"""
-    document = standard_document()
-    document["assets"] = [
-        {"asset_id": "a", "kind": "base-template", "file": "assets/A2.dwg"},
-        {
-            "asset_id": "b",
-            "kind": "layout-template",
-            "file": "assets/A2.dwg",
-            "paper_layouts": ["A2"],
-        },
+def test_corrupt_published_document_is_reported_on_get(store: StandardStore) -> None:
+    path = write_published(
+        store.official_root,
+        standard_document(THIRD_ID, name="损坏样例", published=True),
+    )
+    (path / "document.json").write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(StandardStoreError, match="STANDARD_JSON_INVALID"):
+        store.get(THIRD_ID)
+
+
+def test_unsupported_published_schema_is_skipped_in_list_and_rejected_by_get(
+    store: StandardStore,
+) -> None:
+    document = standard_document(THIRD_ID, name="旧格式")
+    document["schema_version"] = 2
+    path = store.official_root / THIRD_ID
+    path.mkdir(parents=True)
+    (path / "document.json").write_text(
+        json.dumps(document, ensure_ascii=False), encoding="utf-8"
+    )
+
+    assert THIRD_ID not in {item.standard_id for item in store.list()}
+    with pytest.raises(StandardStoreError, match="STANDARD_SCHEMA_VERSION_UNSUPPORTED"):
+        store.get(THIRD_ID)
+
+
+def test_outside_files_remain_untouched_when_draft_id_is_invalid(
+    store: StandardStore,
+) -> None:
+    outside = store.drafts_root.parent / "outside"
+    outside.mkdir(parents=True)
+    secret = outside / "document.json"
+    secret.write_text('{"private": true}', encoding="utf-8")
+    before = hashlib.sha256(secret.read_bytes()).hexdigest()
+
+    with pytest.raises(StandardStoreError, match="STANDARD_DRAFT_ID_INVALID"):
+        store.create_draft(standard_document(FIRST_ID), draft_id="../outside")
+
+    assert hashlib.sha256(secret.read_bytes()).hexdigest() == before
+    assert sorted(path.name for path in store.drafts_root.parent.iterdir()) == [
+        "outside"
     ]
-    create_draft(store, document, draft_id="draft-asset")
-    write_draft_asset(store, "draft-asset", "assets/A2.dwg", b"a2")
-    store.publish("draft-asset")
-
-    exported = store.export_package("user.water", 1, tmp_path / "out")
-    with zipfile.ZipFile(exported) as archive:
-        assert archive.namelist().count("assets/A2.dwg") == 1
-        assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
-    # 导出包必须能再次导入（重复规范化路径会被阅读器拒绝）
-    fresh = StandardStore(official_root=tmp_path / "official-2", user_root=tmp_path / "user-2")
-    fresh.import_package(exported)
-    assert fresh.get("user.water", 1) is not None
-
-
-def test_list_skips_illegal_published_directory_names(store: StandardStore) -> None:
-    """已发布根下的非法目录名（如版本段不合法）只跳过，不得让后续读取入口报错。"""
-    create_draft(store, USER_DOCUMENT, draft_id="draft-asset")
-    store.publish("draft-asset")
-    (store.published_root / "user.water" / "tmp").mkdir()
-
-    published = [
-        (entry.standard_id, entry.version)
-        for entry in store.list()
-        if entry.status == "published"
-    ]
-    assert published == [("official.gas", 1), ("user.water", 1)]
-
-
-def test_orphan_managed_copy_survives_until_next_save(store: StandardStore) -> None:
-    """放弃编辑产生的孤儿副本保留到下次保存/发布再清理。"""
-    document = asset_document("assets/managed-keep.dwg")
-    create_draft(store, document, draft_id="draft-asset")
-    write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
-    assets = store.drafts_root / "draft-asset" / "assets"
-
-    # 复制后未保存：副本不被清理
-    assert (assets / "managed-orphan.dwg").is_file()
-    store.save_draft("draft-asset", draft_document(document))
-    assert not (assets / "managed-orphan.dwg").exists()
-
-
-def test_publish_prunes_unreferenced_managed_copies(store: StandardStore) -> None:
-    create_draft(store, asset_document("assets/managed-keep.dwg"), draft_id="draft-asset")
-    write_draft_asset(store, "draft-asset", "assets/managed-keep.dwg", b"keep")
-    write_draft_asset(store, "draft-asset", "assets/managed-orphan.dwg", b"orphan")
-
-    published = store.publish("draft-asset")
-
-    assert (published.root / "assets" / "managed-keep.dwg").is_file()
-    assert not (published.root / "assets" / "managed-orphan.dwg").exists()
