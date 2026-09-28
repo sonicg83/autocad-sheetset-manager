@@ -1,20 +1,25 @@
 @echo off
 setlocal enabledelayedexpansion
-rem DST Manager ×îÖÕÓÃ»§»·¾³³õÊ¼»¯½Å±¾£¨´ò°ü·Ö·¢°æ£¬¼û ARCH-DM-002£©¡£
-rem ÓÃ·¨£ºÓë±¾³ÌÐò DSTManager.exe ·ÅÔÚÍ¬Ò»Ä¿Â¼£¬Ë«»÷ÔËÐÐ£»ÔÚ±¾Ä¿Â¼Éú³É/²¹È« .env¡£
-rem ÃÝµÈ£º²»¸²¸ÇÒÑÓÐ .env ÓëÒÑÓÐÅäÖÃÏî£¬Ö»²¹È±Ê§Ïî¡£
-rem ±àÂëËµÃ÷£º±¾½Å±¾±ØÐë±£´æÎª GBK£¨ANSI£¬zh-CN ÏµÍ³Ä¬ÈÏ´úÂëÒ³£©¡£
-rem UTF-8 Åú´¦ÀíÔÚ cmd ÏÂ¶à×Ö½Ú½âÎö²»¿É¿¿£¨Êµ²â»áÍÌ×Ö·û£©£¬¹ÊÑØÓÃ SCR ÏÈÀý
-rem ×÷Îª²Ö¿â UTF-8 ¹æÔòµÄÀýÍâ£».env Ä£°å×¢ÊÍ¿ÌÒâÈ«²¿Ê¹ÓÃ ASCII£¬
-rem ±£Ö¤Ð´³öµÄ .env ºãÎªºÏ·¨ UTF-8£¨pydantic-settings °´ utf-8 ¶ÁÈ¡£©¡£
-rem °æ±¾¼æÈÝ×é£¨.NET ²å¼þÏòÇ°¼æÈÝ¿Ú¾¶£¬¼û ARCH-DM-002£©£º
-rem   2015-2019 -> 2016 Í°£¨DST_MANAGER_AUTOCAD_2016_CONSOLE£©
-rem   2020-2024 -> 2020 Í°£¨DST_MANAGER_AUTOCAD_2020_CONSOLE£©
-rem   2013/2014 -> ¾¯¸æºóÈÔÐ´Èë 2016 Í°£¨2016 ¹¹½¨µÄ²å¼þÔÚ¾É°æ¼ÓÔØÎÞ¹Ù·½±£Ö¤£©
-rem   2025 ¼°ÒÔÉÏ²»ÊÜÖ§³Ö£¨¸ÄÓÃ .NET 8£¬ÓëËæ°ü²å¼þ²»¼æÈÝ£©£»accoreconsole ×Ô 2013 Æð²ÅÓÐ¡£
-rem ²âÊÔ¹³×Ó£ºDST_SETUP_AUTODESK_ROOT£¨¸²¸ÇÉ¨Ãè¸ùÄ¿Â¼£©¡¢
-rem DST_SETUP_SKIP_REGISTRY=1£¨Ìø¹ý×¢²á±íÌ½²â£©¡¢
-rem DST_SETUP_NO_PAUSE=1£¨½áÊø²»ÔÝÍ££¬¹©×Ô¶¯»¯²âÊÔ£©¡£
+rem ASCII-only until "chcp 65001" switches the console code page to UTF-8.
+chcp 65001 >nul
+rem DST Manager æœ€ç»ˆç”¨æˆ·çŽ¯å¢ƒåˆå§‹åŒ–è„šæœ¬ï¼ˆæ‰“åŒ…åˆ†å‘ç‰ˆï¼Œè§ ARCH-DM-002ï¼‰ã€‚
+rem ç”¨æ³•ï¼šä¸Žæœ¬ç¨‹åº DSTManager.exe æ”¾åœ¨åŒä¸€ç›®å½•ï¼ŒåŒå‡»è¿è¡Œï¼›åœ¨æœ¬ç›®å½•ç”Ÿæˆ/è¡¥å…¨ .envã€‚
+rem å¹‚ç­‰ï¼šä¸è¦†ç›–å·²æœ‰ .env ä¸Žå·²æœ‰é…ç½®é¡¹ï¼Œåªè¡¥ç¼ºå¤±é¡¹ã€‚
+rem ç¼–ç è¯´æ˜Žï¼šæœ¬è„šæœ¬ä¿å­˜ä¸º UTF-8ï¼ˆæ—  BOMï¼‰ï¼Œå¯åŠ¨å³ chcp 65001 æŠŠæŽ§åˆ¶å°ä»£ç é¡µå›ºå®š
+rem ä¸º UTF-8ï¼Œä½¿ cmd è§£é‡Šæ–‡ä»¶ä¸Ž echo è¾“å‡ºçš„ç¼–ç ä¸€è‡´ï¼Œä¸ä¾èµ–ç³»ç»ŸåŒºåŸŸè®¾ç½®ï¼›
+rem chcp ä¹‹å‰çš„è¡Œå¿…é¡»ä¿æŒçº¯ ASCIIï¼ˆBOM ä¼šç ´åé¦–è¡Œ @echo offï¼ŒåŒæ ·ç¦æ­¢ï¼‰ã€‚
+rem ä¸æ¢å¤åŽŸä»£ç é¡µï¼šåŒå‡»è¿è¡Œçª—å£éšå³å…³é—­æ— å½±å“ï¼›æ¢å¤ä¼šåœ¨å¹¶è¡Œ/å¤šå¼€å®žä¾‹ä¹‹é—´äº’ç›¸
+rem é‡ç½®å¯¹æ–¹æ­£åœ¨ä½¿ç”¨çš„ä»£ç é¡µå¯¼è‡´è¾“å‡ºä¹±ç ï¼ˆå«å¹¶è¡Œæµ‹è¯•ï¼‰ï¼Œæ•…ä¿æŒ 65001 ä¸å›žåˆ‡ã€‚
+rem .env æ¨¡æ¿æ³¨é‡Šä¿æŒå…¨ ASCIIï¼šå³ä½¿ chcp æœªç”Ÿæ•ˆï¼ˆæ— æŽ§åˆ¶å°çŽ¯å¢ƒï¼‰ï¼Œ
+rem å†™å‡ºçš„ .env ä¹Ÿæ’ä¸ºåˆæ³• UTF-8ï¼ˆpydantic-settings æŒ‰ utf-8 è¯»å–ï¼‰ã€‚
+rem ç‰ˆæœ¬å…¼å®¹ç»„ï¼ˆ.NET æ’ä»¶å‘å‰å…¼å®¹å£å¾„ï¼Œè§ ARCH-DM-002ï¼‰ï¼š
+rem   2015-2019 -> 2016 æ¡¶ï¼ˆDST_MANAGER_AUTOCAD_2016_CONSOLEï¼‰
+rem   2020-2024 -> 2020 æ¡¶ï¼ˆDST_MANAGER_AUTOCAD_2020_CONSOLEï¼‰
+rem   2013/2014 -> è­¦å‘ŠåŽä»å†™å…¥ 2016 æ¡¶ï¼ˆ2016 æž„å»ºçš„æ’ä»¶åœ¨æ—§ç‰ˆåŠ è½½æ— å®˜æ–¹ä¿è¯ï¼‰
+rem   2025 åŠä»¥ä¸Šä¸å—æ”¯æŒï¼ˆæ”¹ç”¨ .NET 8ï¼Œä¸ŽéšåŒ…æ’ä»¶ä¸å…¼å®¹ï¼‰ï¼›accoreconsole è‡ª 2013 èµ·æ‰æœ‰ã€‚
+rem æµ‹è¯•é’©å­ï¼šDST_SETUP_AUTODESK_ROOTï¼ˆè¦†ç›–æ‰«ææ ¹ç›®å½•ï¼‰ã€
+rem DST_SETUP_SKIP_REGISTRY=1ï¼ˆè·³è¿‡æ³¨å†Œè¡¨æŽ¢æµ‹ï¼‰ã€
+rem DST_SETUP_NO_PAUSE=1ï¼ˆç»“æŸä¸æš‚åœï¼Œä¾›è‡ªåŠ¨åŒ–æµ‹è¯•ï¼‰ã€‚
 
 set "APP_DIR=%~dp0"
 set "ENV_FILE=%APP_DIR%.env"
@@ -24,12 +29,12 @@ if defined DST_SETUP_AUTODESK_ROOT set "AUTODESK_ROOT=%DST_SETUP_AUTODESK_ROOT%"
 set "CONSOLE_2016="
 set "CONSOLE_2020="
 
-echo === DST Manager »·¾³³õÊ¼»¯ ===
-echo ³ÌÐòÄ¿Â¼£º%APP_DIR%
-echo É¨Ãè¸ùÄ¿Â¼£º%AUTODESK_ROOT%
+echo === DST Manager çŽ¯å¢ƒåˆå§‹åŒ– ===
+echo ç¨‹åºç›®å½•ï¼š%APP_DIR%
+echo æ‰«ææ ¹ç›®å½•ï¼š%AUTODESK_ROOT%
 echo.
 
-rem --- °´ 2013-2024 ÉýÐòÌ½²â£ºÍ¬Ò»¼æÈÝ×éÄÚºó·¢ÏÖµÄ°æ±¾¸²¸ÇÇ°Õß£¬¼´×éÄÚÈ¡×îÐÂ ---
+rem --- æŒ‰ 2013-2024 å‡åºæŽ¢æµ‹ï¼šåŒä¸€å…¼å®¹ç»„å†…åŽå‘çŽ°çš„ç‰ˆæœ¬è¦†ç›–å‰è€…ï¼Œå³ç»„å†…å–æœ€æ–° ---
 call :detect 2013 R19.0
 call :detect 2014 R19.1
 call :detect 2015 R20.0
@@ -43,23 +48,23 @@ call :detect 2022 R24.1
 call :detect 2023 R24.2
 call :detect 2024 R24.3
 
-rem --- 2025 ¼°ÒÔÉÏ£ºÃ÷È·ÌáÊ¾²»Ö§³Ö ---
-for %%y in (2025 2026 2027 2028 2029) do if exist "%AUTODESK_ROOT%\AutoCAD %%y\accoreconsole.exe" echo [¾¯¸æ] ¼ì²âµ½ AutoCAD %%y£º2025 ¼°ÒÔÉÏ°æ±¾¸ÄÓÃ .NET 8 ÔËÐÐÊ±£¬ÓëËæ°ü²å¼þ²»¼æÈÝ£¬²»ÊÜÖ§³Ö¡£
+rem --- 2025 åŠä»¥ä¸Šï¼šæ˜Žç¡®æç¤ºä¸æ”¯æŒ ---
+for %%y in (2025 2026 2027 2028 2029) do if exist "%AUTODESK_ROOT%\AutoCAD %%y\accoreconsole.exe" echo [è­¦å‘Š] æ£€æµ‹åˆ° AutoCAD %%yï¼š2025 åŠä»¥ä¸Šç‰ˆæœ¬æ”¹ç”¨ .NET 8 è¿è¡Œæ—¶ï¼Œä¸ŽéšåŒ…æ’ä»¶ä¸å…¼å®¹ï¼Œä¸å—æ”¯æŒã€‚
 
 call :write_env
 
 echo.
-echo === Íê³É ===
-if defined CONSOLE_2016 echo 2016 Í° Core Console£º%CONSOLE_2016%
-if defined CONSOLE_2020 echo 2020 Í° Core Console£º%CONSOLE_2020%
-if not defined CONSOLE_2016 if not defined CONSOLE_2020 echo [ÌáÊ¾] Î´·¢ÏÖÊÜÖ§³ÖµÄ AutoCAD£¨2013-2024£©£¬ÇëÊÖ¹¤±à¼­ .env ÌîÐ´ DST_MANAGER_AUTOCAD_2016_CONSOLE / AUTOCAD_2020_CONSOLE¡£
-echo ÅäÖÃÐÞ¸ÄÍê³ÉºóÖØÆô DST Manager ÉúÐ§¡£
+echo === å®Œæˆ ===
+if defined CONSOLE_2016 echo 2016 æ¡¶ Core Consoleï¼š%CONSOLE_2016%
+if defined CONSOLE_2020 echo 2020 æ¡¶ Core Consoleï¼š%CONSOLE_2020%
+if not defined CONSOLE_2016 if not defined CONSOLE_2020 echo [æç¤º] æœªå‘çŽ°å—æ”¯æŒçš„ AutoCADï¼ˆ2013-2024ï¼‰ï¼Œè¯·æ‰‹å·¥ç¼–è¾‘ .env å¡«å†™ DST_MANAGER_AUTOCAD_2016_CONSOLE / AUTOCAD_2020_CONSOLEã€‚
+echo é…ç½®ä¿®æ”¹å®ŒæˆåŽé‡å¯ DST Manager ç”Ÿæ•ˆã€‚
 echo.
 if not defined DST_SETUP_NO_PAUSE pause
 exit /b 0
 
 :detect
-rem %1=Äê·Ý %2=×¢²á±íÖ÷¼ü Rxx.x£»ÏÈ²é×¢²á±í AcadLocation£¬ÔÙ»ØÍËÄ¬ÈÏ°²×°Ä¿Â¼É¨Ãè
+rem %1=å¹´ä»½ %2=æ³¨å†Œè¡¨ä¸»é”® Rxx.xï¼›å…ˆæŸ¥æ³¨å†Œè¡¨ AcadLocationï¼Œå†å›žé€€é»˜è®¤å®‰è£…ç›®å½•æ‰«æ
 set "year=%~1"
 set "regkey=%~2"
 set "acaddir="
@@ -76,12 +81,12 @@ if exist "!acaddir!\accoreconsole.exe" call :record "!year!" "!acaddir!"
 goto :eof
 
 :record
-rem %1=Äê·Ý %2=°²×°Ä¿Â¼£»°´¼æÈÝ×éÐ´Èë¶ÔÓ¦Í°µÄºòÑ¡Â·¾¶
+rem %1=å¹´ä»½ %2=å®‰è£…ç›®å½•ï¼›æŒ‰å…¼å®¹ç»„å†™å…¥å¯¹åº”æ¡¶çš„å€™é€‰è·¯å¾„
 set "year=%~1"
 set "console=%~2\accoreconsole.exe"
-echo [·¢ÏÖ] AutoCAD %year%£º%console%
+echo [å‘çŽ°] AutoCAD %year%ï¼š%console%
 if %year% LSS 2015 (
-    echo [¾¯¸æ] AutoCAD %year% Óë°´ 2016 ³ÌÐò¼¯¹¹½¨µÄËæ°ü²å¼þ¼æÈÝÐÔÎ´¾­¹Ù·½±£Ö¤£¬¿ÉÄÜ¼ÓÔØÊ§°Ü£»ÒÑ°´ 2016 Í°Ð´Èë£¬ÇëÓÃ doctor ×Ô¼ì»òÊµ¼ÊÔËÐÐÑéÖ¤¡£
+    echo [è­¦å‘Š] AutoCAD %year% ä¸ŽæŒ‰ 2016 ç¨‹åºé›†æž„å»ºçš„éšåŒ…æ’ä»¶å…¼å®¹æ€§æœªç»å®˜æ–¹ä¿è¯ï¼Œå¯èƒ½åŠ è½½å¤±è´¥ï¼›å·²æŒ‰ 2016 æ¡¶å†™å…¥ï¼Œè¯·ç”¨ doctor è‡ªæ£€æˆ–å®žé™…è¿è¡ŒéªŒè¯ã€‚
     set "CONSOLE_2016=!console!"
     goto :eof
 )
@@ -97,26 +102,26 @@ if not exist "%ENV_FILE%" (
     call :write_template
     goto :eof
 )
-rem ÒÑÓÐ .env£ºÖ»²¹È±Ê§¼ü£¬¾ø²»¸²¸ÇÒÑÓÐÅäÖÃ
+rem å·²æœ‰ .envï¼šåªè¡¥ç¼ºå¤±é”®ï¼Œç»ä¸è¦†ç›–å·²æœ‰é…ç½®
 set "CHANGED=0"
 if defined CONSOLE_2016 call :ensure_key DST_MANAGER_AUTOCAD_2016_CONSOLE "!CONSOLE_2016!"
 if defined CONSOLE_2020 call :ensure_key DST_MANAGER_AUTOCAD_2020_CONSOLE "!CONSOLE_2020!"
-if "%CHANGED%"=="0" echo [Ìø¹ý] .env ÒÑ´æÔÚÇÒÅäÖÃÍêÕû£¬Î´×öÐÞ¸Ä¡£
+if "%CHANGED%"=="0" echo [è·³è¿‡] .env å·²å­˜åœ¨ä¸”é…ç½®å®Œæ•´ï¼Œæœªåšä¿®æ”¹ã€‚
 goto :eof
 
 :ensure_key
-rem %1=¼üÃû %2=Öµ£»½öµ± .env ÖÐ²»´æÔÚ¸Ã¼ü£¨ÐÐÊ×¾«È·Æ¥Åä£©Ê±×·¼Ó
+rem %1=é”®å %2=å€¼ï¼›ä»…å½“ .env ä¸­ä¸å­˜åœ¨è¯¥é”®ï¼ˆè¡Œé¦–ç²¾ç¡®åŒ¹é…ï¼‰æ—¶è¿½åŠ 
 findstr /b /c:"%1=" "%ENV_FILE%" >nul 2>&1
 if not errorlevel 1 goto :eof
 >>"%ENV_FILE%" echo %1=%~2
-echo [Ð´Èë] %1=%2
+echo [å†™å…¥] %1=%2
 set "CHANGED=1"
 goto :eof
 
 :write_template
-rem .env ²»´æÔÚ£º°´ .env.example Í¬¹¹Éú³ÉÍêÕûÄ£°å£¬Î´Ì½²âµ½µÄ¼ü±£Áô×¢ÊÍÕ¼Î»
-rem ×¢Òâ£ºÄ£°å×¢ÊÍ±ØÐëÈ«²¿Ê¹ÓÃ ASCII£¨Ð´³öÎÄ¼þºãÎªºÏ·¨ UTF-8£¬¼ûÎÄ¼þÍ·ËµÃ÷£©
-echo [Éú³É] %ENV_FILE%
+rem .env ä¸å­˜åœ¨ï¼šæŒ‰ .env.example åŒæž„ç”Ÿæˆå®Œæ•´æ¨¡æ¿ï¼ŒæœªæŽ¢æµ‹åˆ°çš„é”®ä¿ç•™æ³¨é‡Šå ä½
+rem æ³¨æ„ï¼šæ¨¡æ¿æ³¨é‡Šå¿…é¡»å…¨éƒ¨ä½¿ç”¨ ASCIIï¼ˆå†™å‡ºæ–‡ä»¶æ’ä¸ºåˆæ³• UTF-8ï¼Œè§æ–‡ä»¶å¤´è¯´æ˜Žï¼‰
+echo [ç”Ÿæˆ] %ENV_FILE%
 > "%ENV_FILE%" echo # DST Manager configuration generated by setup.bat. Edit freely; restart the app to apply.
 >> "%ENV_FILE%" echo.
 >> "%ENV_FILE%" echo # Add number suffix to sheet titles automatically. Default: true

@@ -7,6 +7,8 @@
 - 版本映射契约：2015-2019 → 2016 桶；2020-2024 → 2020 桶；2013/2014 警告后仍入
   2016 桶；2025+ 不受支持（.NET 8）；accoreconsole 自 2013 起才有，2013 以前不探测。
 - 幂等契约：已有 .env 的既有键绝不覆盖，只补缺失项。
+- 编码契约：bat 保存为 UTF-8（无 BOM），启动即 chcp 65001 固定控制台代码页，
+  使文件编码与 echo 输出编码一致，不依赖执行环境的系统区域设置。
 
 bat 无法用 PowerShell 语法解析器静态校验，静态断言只覆盖关键标记。
 """
@@ -31,8 +33,8 @@ CONSOLE_KEYS = {
 def _run_setup(app_dir: Path, autodesk_root: Path) -> subprocess.CompletedProcess[str]:
     """在临时程序目录内运行 setup.bat（跳过注册表与结尾暂停）。
 
-    stdout/stderr 按 GBK 解码：bat 为 ANSI（zh-CN 默认代码页）编码，
-    见 setup.bat 文件头的编码说明。
+    stdout/stderr 按 UTF-8 解码：setup.bat 开头 chcp 65001 把控制台代码页固定为
+    UTF-8，echo 输出与文件编码一致，见 setup.bat 文件头的编码说明。
     """
     shutil.copyfile(SCRIPT, app_dir / "setup.bat")
     env = os.environ.copy()
@@ -50,8 +52,8 @@ def _run_setup(app_dir: Path, autodesk_root: Path) -> subprocess.CompletedProces
     return subprocess.CompletedProcess(
         completed.args,
         completed.returncode,
-        completed.stdout.decode("gbk", errors="replace"),
-        completed.stderr.decode("gbk", errors="replace"),
+        completed.stdout.decode("utf-8", errors="replace"),
+        completed.stderr.decode("utf-8", errors="replace"),
     )
 
 
@@ -72,18 +74,30 @@ def _make_fake_autocad(autodesk_root: Path, *years: str) -> None:
         console.write_bytes(b"")
 
 
-def test_setup_bat_exists_and_gbk_no_bom():
-    """bat 必须存为 GBK（ANSI）且无 BOM：cmd 对 UTF-8 批处理多字节解析不可靠，
-    BOM 会破坏首行 @echo off（编码例外依据见 setup.bat 文件头与 ARCH-DM-002）。"""
+def test_setup_bat_exists_and_utf8_no_bom():
+    """bat 必须存为 UTF-8（无 BOM），且在任何非 ASCII 行之前执行 chcp 65001：
+    cmd 按控制台当前代码页解释批处理，chcp 65001 使文件编码与 echo 输出编码
+    一致，不依赖系统区域设置；BOM 会破坏首行 @echo off。"""
     assert SCRIPT.is_file(), "缺少 scripts/setup.bat"
     raw = SCRIPT.read_bytes()
     assert not raw.startswith(b"\xef\xbb\xbf"), "setup.bat 不能带 BOM"
-    raw.decode("gbk")
+    lines = raw.decode("utf-8").splitlines()
+    chcp_lines = [
+        number for number, line in enumerate(lines) if line.strip() == "chcp 65001 >nul"
+    ]
+    assert chcp_lines, "setup.bat 必须执行 chcp 65001 固定控制台代码页"
+    first_non_ascii = next(
+        (number for number, line in enumerate(lines) if not line.isascii()), None
+    )
+    assert first_non_ascii is None or first_non_ascii > chcp_lines[0], (
+        "chcp 65001 之前的行必须保持纯 ASCII"
+    )
 
 
 def test_setup_bat_contains_required_markers():
-    source = SCRIPT.read_text(encoding="gbk")
-    # .env 模板注释必须全 ASCII（保证写出的 .env 恒为合法 UTF-8），故无 chcp 依赖
+    source = SCRIPT.read_text(encoding="utf-8")
+    # .env 模板注释保持全 ASCII：即使 chcp 65001 未生效（无控制台环境），
+    # 写出的 .env 也恒为合法 UTF-8
     for marker in CONSOLE_KEYS.values():
         assert marker in source, f"setup.bat 缺少配置键：{marker}"
     assert "accoreconsole.exe" in source

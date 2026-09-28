@@ -1,3 +1,10 @@
+## 2026-09-28（setup.bat 编码契约改为 UTF-8 + chcp 65001，修复长期乱码测试失败）
+
+- 修复 `tests/unit/test_setup_bat.py` 长期环境失败（即 2026-09-25 起多条记录的「GBK 代码页乱码」）：cmd 按控制台输出代码页而非系统 ANSI 代码页解释批处理，在 65001（UTF-8）终端下 GBK 保存的 `scripts/setup.bat` 中文行被误读损毁，`[警告]`/`[提示]` 等输出乱码致中文断言必败。将 setup.bat 转存为 UTF-8（无 BOM）并在开头 `chcp 65001 >nul` 固定控制台代码页，使文件编码与 echo 输出编码一致，不再依赖系统区域设置；不回切原代码页，避免并行/多开实例互相重置对方正在使用的代码页（双击运行窗口随即关闭，无影响）。顺带收益：探测到的含中文安装路径写入 .env 时恒为合法 UTF-8。
+- 测试契约同步：`test_setup_bat_exists_and_gbk_no_bom` 改为 `test_setup_bat_exists_and_utf8_no_bom`（守护无 BOM + `chcp 65001` 存在且位于任何非 ASCII 行之前），`_run_setup` 与标记静态测试改按 UTF-8 解码/读取，模块 docstring 新增编码契约条目。
+- 同步 [ARCH-DM-002](docs/dst-manager/architecture/ARCH-DM-002-windows-release-packaging.md) §3.4 编码描述与元数据 `updated`。
+- 验证：`uv run pytest tests/unit/test_setup_bat.py -q` 9/9 通过；`uv run ruff check tests/unit/test_setup_bat.py` 通过。
+
 ## 2026-09-28（创建向导与标准管理页面铺满工作区）
 
 - 创建向导及其当前步骤、标准库列表/详情区扩展到工作区内容区的可用宽高；标准编辑器继续保留既有宽度上限。图纸组表格按内容宽布局，行内控件遵循现有宽度令牌；未修改全局 `WorkspaceShell`。
