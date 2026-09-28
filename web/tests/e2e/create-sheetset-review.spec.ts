@@ -93,7 +93,7 @@ test("顶部摘要与按组一行主表只呈现后端权威结果", async ({pag
 
   // 主表：固定列 + 标准动态 sheet 属性列；没有「布局」列，也没有单张 Sheet 行
   const table = page.getByTestId("creation-preview-table");
-  for (const column of ["图纸组", "图纸范围", "图纸", "张数", "文件名", "基础模板", "布局模板", "图幅", "图纸阶段", "设计人"]) {
+  for (const column of ["图纸组", "图纸范围", "图纸", "张数", "文件名", "基础模板", "布局模板", "布局名称", "图纸阶段", "设计人"]) {
     await expect(table.getByRole("columnheader", {name: column, exact: true})).toBeVisible();
   }
   await expect(table.getByRole("columnheader", {name: "布局", exact: true})).toHaveCount(0);
@@ -384,7 +384,7 @@ test("模板/图幅类组内诊断跳回后焦点落在对应的模板或图幅�
   await page.getByRole("button", {name: "下一步"}).click();
   await expect(page.getByRole("region", {name: "检查并创建"})).toBeVisible();
   await page.getByTestId("creation-preview-errors").getByRole("button", {name: "返回修改第 2 项"}).click();
-  await expect(groupRow(page, "group-2").getByLabel("第 2 组图幅")).toBeFocused();
+  await expect(groupRow(page, "group-2").getByLabel("第 2 组布局名称")).toBeFocused();
 
   // 布局模板资产非法 → 布局模板选择（与基础模板同码，靠该组解析结果区分）
   await page.getByRole("button", {name: "下一步"}).click();

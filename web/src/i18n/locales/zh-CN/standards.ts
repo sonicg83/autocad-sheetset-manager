@@ -270,7 +270,6 @@ export default {
     STANDARD_LAYOUT_READ_FAILED: "读取资产 {assetId} 的布局失败",
     STANDARD_PAPER_LAYOUT_MISSING: "启用图幅 {layout} 不在文件实际布局中",
     STANDARD_PAPER_LAYOUTS_EMPTY: "资产 {assetId} 未勾选任何启用图幅",
-    STANDARD_ASSET_UNREFERENCED: "资产 {assetId} 未被标准取值引用",
     STANDARD_PROPERTY_ID_INVALID: "属性 ID 不能为空",
     STANDARD_PROPERTY_ID_DUPLICATE: "属性 ID 重复",
     STANDARD_PROPERTY_KIND_INVALID: "属性类型非法（只允许文本/枚举/映射/组合）",
@@ -358,7 +357,8 @@ export default {
     paths: "受控路径",
     referenceTitle: "引用关系",
     referenceCount: "{count} 处引用",
-    noReference: "未被标准取值引用",
+    noReference: "暂无标准值引用",
+    dwgNamingReference: "DWG 命名模板",
     reference: {
       "property-enum": "属性 {ref} 的枚举值 {value}",
       "rule-fixed": "规则 {ref} 的固定值 {value}",

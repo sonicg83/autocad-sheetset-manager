@@ -54,6 +54,14 @@ const copying = ref(false);
 const copiedLayouts = ref<Record<string, string[]>>({});
 /** 复制成功但布局读取失败时按资产 ID 记录错误码。 */
 const layoutsErrors = ref<Record<string, string>>({});
+const propertyNames = computed<Record<string, string>>(() =>
+  Object.fromEntries(
+    props.document.properties.map(property => [
+      property.property_id,
+      property.name || property.property_id,
+    ]),
+  ),
+);
 
 interface AssetRow {
   asset: DraftAsset;
@@ -310,6 +318,7 @@ async function applyCopy(asset: DraftAsset, source: string): Promise<void> {
           :inspected-at="recordInspectedAt(record)"
           :pending="pending"
           :references="selected.references"
+          :property-names="propertyNames"
           @recheck="emit('recheck')"
         />
         <div v-if="selected.source === 'user'" class="asset-editor">

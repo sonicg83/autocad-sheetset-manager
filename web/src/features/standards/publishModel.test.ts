@@ -1,5 +1,5 @@
 // 发布门禁模型单测（PLAN-DM-042 / SPEC-DM-017 §7–§8）：
-// 启用图幅与实际布局的包含比较、资产引用与未引用警告、发布诊断到六分区/定位目标的映射、
+// 启用图幅与实际布局的包含比较、资产引用关系、发布诊断到六分区/定位目标的映射、
 // 检查失败与标准错误分离、门禁判定。全部纯函数。
 import {describe, expect, it} from "vitest";
 import {
@@ -70,8 +70,8 @@ function reportWithLayouts({checked, actual}: {checked: string[]; actual: string
   };
 }
 
-/** 有效但未被标准任何取值引用的布局资产：只应产生警告。 */
-function reportWithUnusedAssetWarning(): PublishReport {
+/** 有效但未被标准任何取值引用的布局资产仍可发布，且不产生引用警告。 */
+function reportWithUnreferencedAsset(): PublishReport {
   return {
     document: documentWith([layoutAsset("unused-layouts", ["A5"])]),
     assets: [inspection("unused-layouts", ["A5"])],
@@ -128,13 +128,11 @@ describe("buildPublishGate", () => {
     expect(gate.blockingErrors[0].target).toEqual({section: "assets", assetId: "empty"});
   });
 
-  it("allows publish with warnings only", () => {
-    const gate = buildPublishGate(reportWithUnusedAssetWarning());
+  it("does not warn when a valid layout asset is not referenced by standard values", () => {
+    const gate = buildPublishGate(reportWithUnreferencedAsset());
     expect(gate.canPublish).toBe(true);
-    expect(gate.warnings).toHaveLength(1);
-    expect(gate.warnings[0].code).toBe("STANDARD_ASSET_UNREFERENCED");
-    expect(gate.warnings[0].target).toEqual({section: "assets", assetId: "unused-layouts"});
-    expect(gate.counts).toEqual({errors: 0, warnings: 1, failures: 0});
+    expect(gate.warnings).toEqual([]);
+    expect(gate.counts).toEqual({errors: 0, warnings: 0, failures: 0});
   });
 
   it("accepts a clean report", () => {
@@ -386,15 +384,4 @@ describe("assetReferences", () => {
     expect(assetReferences(document, layoutAsset("other", ["A9"]))).toEqual([]);
   });
 
-  it("keeps the unreferenced warning off when the standard has nothing to reference from", () => {
-    const gate = buildPublishGate({
-      document: documentWith([layoutAsset("layouts", ["A5"])], {
-        properties: [{property_id: "prop-code", name: "专业代码", scope: "sheetset", kind: "text", default_value: "RQ"}],
-        dwg_naming: {segments: [{property_id: "prop-code"}, {system_field: "subset.scope"}]},
-      }),
-      assets: [inspection("layouts", ["A5"])],
-    });
-    expect(gate.canPublish).toBe(true);
-    expect(gate.warnings).toEqual([]);
-  });
 });

@@ -2,7 +2,7 @@
 // 批量修改对话框（SPEC-DM-018 §4.2；PLAN-DM-036 Task 8）。
 // 先选多个图纸组，再选字段与新值，一次应用到选中组：只作用选中组，当前值不一致时显示
 // 「值不相同」；清空必须是明确操作——未填写的输入框不会被当作清空。字段列表只含张数、
-// 基础模板、布局模板、图幅与标准的可输入 sheet 属性，不含图名或任何派生字段。
+// 基础模板、布局模板、布局名称与标准的可输入 sheet 属性，不含图名或任何派生字段。
 import {computed, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import FormField from "../ui/FormField.vue";

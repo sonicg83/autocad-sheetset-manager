@@ -4,6 +4,7 @@
 // 呈现勾选图幅与实际布局的包含关系（精确字符串比较；Model 永不参与）；未勾选的布局
 // 只是不启用，不再是问题。PAPER_LAYOUT_MISSING 诊断由三态表呈现，不在诊断列表重复。
 import {computed} from "vue";
+import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import {
   MODEL_LAYOUT_NAME,
@@ -29,12 +30,19 @@ const props = defineProps<{
   inspectedAt: string;
   pending: boolean;
   references: AssetReference[];
+  propertyNames: Record<string, string>;
 }>();
 const emit = defineEmits<{recheck: []}>();
+const {t} = useI18n();
 
 const checked = computed(() => declaredPaperLayouts(props.asset));
 const actual = computed(() => nonModelLayouts(props.inspection?.layouts ?? []));
 const missing = computed(() => missingPaperLayouts(checked.value, actual.value));
+
+function referenceLabel(reference: AssetReference): string {
+  if (reference.ref === "dwgNaming") return t("standards.assets.dwgNamingReference");
+  return props.propertyNames[reference.ref] ?? reference.ref;
+}
 
 type LayoutRowState = "enabled" | "not-enabled" | "missing";
 
@@ -86,7 +94,7 @@ const visibleDiagnostics = computed(() =>
       <p class="panel-note">{{ $t("standards.assets.referenceCount", {count: references.length}) }}</p>
       <ul v-if="references.length > 0" class="reference-list">
         <li v-for="(reference, index) in references" :key="index">
-          {{ $t(`standards.assets.reference.${reference.kind}`, {ref: reference.ref, value: reference.value}) }}
+          {{ $t(`standards.assets.reference.${reference.kind}`, {ref: referenceLabel(reference), value: reference.value}) }}
         </li>
       </ul>
       <p v-else class="panel-note">{{ $t("standards.assets.noReference") }}</p>

@@ -152,7 +152,7 @@ test("新建图纸组复制最近创建的组，重排后仍按创建序复制�
   await expect(groupRow(page, "group-1")).toBeVisible();
   await expect(rowCount(page, "group-1")).toHaveValue("1");
   await expect(groupRow(page, "group-1").getByLabel(/基础模板$/)).toHaveValue("base-a");
-  await expect(groupRow(page, "group-1").getByLabel(/图幅$/)).toHaveValue("A2");
+  await expect(groupRow(page, "group-1").getByLabel(/布局名称$/)).toHaveValue("A2");
   // 新建后焦点落在图名输入（可直接改名）
   await expect(rowTitle(page, "group-1")).toBeFocused();
 
@@ -215,7 +215,7 @@ test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗�
     rowCount(page, "group-1"),
     groupRow(page, "group-1").getByLabel(/基础模板$/),
     groupRow(page, "group-1").getByLabel(/布局模板$/),
-    groupRow(page, "group-1").getByLabel(/图幅$/),
+    groupRow(page, "group-1").getByLabel(/布局名称$/),
   ]) {
     await expect(control).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
   }

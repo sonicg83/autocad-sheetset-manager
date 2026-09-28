@@ -25,9 +25,6 @@ export const PAPER_LAYOUT_MISSING_CODE = "STANDARD_PAPER_LAYOUT_MISSING";
 /** 布局模板未启用任何图幅的稳定码（与后端检查规则同码）。 */
 export const PAPER_LAYOUTS_EMPTY_CODE = "STANDARD_PAPER_LAYOUTS_EMPTY";
 
-/** 未被标准取值引用的有效资产：警告，不阻断发布。 */
-export const UNREFERENCED_ASSET_CODE = "STANDARD_ASSET_UNREFERENCED";
-
 export type PublishSeverity = "error" | "warning";
 
 export interface PublishTarget {
@@ -180,17 +177,6 @@ export interface AssetReference {
   value: string;
 }
 
-/** 标准里可能引用图幅取值的所有位置；为空表示本草案无法判定引用关系。 */
-export function hasReferenceSources(document: DraftDocument): boolean {
-  if (document.properties.some(property => property.kind === "enum" && property.enum_items.length > 0)) {
-    return true;
-  }
-  if (document.properties.some(property => property.kind === "mapping" && property.mapping.length > 0)) {
-    return true;
-  }
-  return document.dwg_naming.segments.some(segment => segment.literal !== undefined);
-}
-
 /** 资产启用的图幅在标准中被引用的位置（枚举项、映射目标、组合与命名固定文本）。 */
 export function assetReferences(document: DraftDocument, asset: DraftAsset): AssetReference[] {
   const layouts = declaredPaperLayouts(asset);
@@ -270,7 +256,6 @@ export function issueOf(document: DraftDocument, diagnostic: DraftDiagnostic): P
 // ------------------------------------------------------------ 资产问题映射
 
 function assetIssues(
-  document: DraftDocument,
   asset: DraftAsset,
   result: AssetInspection | undefined,
   inspectionFailed: boolean,
@@ -315,23 +300,6 @@ function assetIssues(
     });
   }
 
-  // 未被引用的有效布局资产：仅当检查成功且勾选全部可用、标准确实存在可引用位置时才判定
-  if (
-    asset.kind === "layout-template"
-    && checked.length > 0
-    && missing.length === 0
-    && result !== undefined
-    && !inspectionFailed
-    && hasReferenceSources(document)
-    && assetReferences(document, asset).length === 0
-  ) {
-    issues.push({
-      code: UNREFERENCED_ASSET_CODE,
-      severity: "warning",
-      target: {section: "assets", assetId: asset.asset_id},
-      params: {assetId: asset.asset_id},
-    });
-  }
   return issues;
 }
 
@@ -345,7 +313,7 @@ export function buildPublishGate(report: PublishReport): PublishGate {
   const inspections = new Map(report.assets.map(item => [item.asset_id, item]));
   const failedAssets = new Set((report.inspectionFailures ?? []).map(item => item.assetId));
   for (const asset of report.document.assets) {
-    issues.push(...assetIssues(report.document, asset, inspections.get(asset.asset_id), failedAssets.has(asset.asset_id)));
+    issues.push(...assetIssues(asset, inspections.get(asset.asset_id), failedAssets.has(asset.asset_id)));
   }
   const blockingErrors = issues.filter(issue => issue.severity === "error");
   const warnings = issues.filter(issue => issue.severity === "warning");

@@ -1,6 +1,6 @@
 // 模板资产检查与发布检查 e2e（PLAN-DM-035 Task 10 / SPEC-DM-016 §8–§9）。
 // 覆盖：启用图幅与实际布局差异（含 `A3 ` 多空格）、资产文件缺失、检查本身失败与标准错误
-// 分离、仅警告可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入新版本只读详情。
+// 分离、未引用资产仍可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入新版本只读详情。
 import {expect, test} from "@playwright/test";
 import {
   draft,
@@ -12,7 +12,7 @@ import {
   openStandards,
 } from "./fixtures/standards";
 
-/** 勾选 A2/A3 启用图幅的布局资产草稿（图幅属性枚举引用它们，避免未引用警告）。 */
+/** 勾选 A2/A3 启用图幅的布局资产草稿；其属性引用在资产面板中按属性名称展示。 */
 function layoutDraft(paperLayouts: string[] = ["A2", "A3"]): Record<string, unknown> {
   return draftDocument({
     assets: [
@@ -118,11 +118,11 @@ test("检查本身失败与标准错误分开呈现并可重试", async ({page})
   expect(state.inspectCalls).toEqual(["layouts", "layouts"]);
 });
 
-test("仅警告时可发布并在发布后进入新版本只读详情", async ({page}) => {
+test("未被标准值引用的有效布局资产不产生发布警告且仍可发布", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {
       "draft-1": draftDocument({
-        // A5 未被任何取值引用：有效但未引用 → 警告，不阻断发布
+        // A5 未被任何取值引用，但仍是有效布局资产；引用缺失不作为发布警告
         assets: [{asset_id: "unused-layouts", kind: "layout-template", file: "assets/a5.dwg", paper_layouts: ["A5"]}],
       }),
     },
@@ -132,8 +132,8 @@ test("仅警告时可发布并在发布后进入新版本只读详情", async ({
   await openDraftEditor(page);
   await page.getByRole("button", {name: "发布检查"}).click();
 
-  await expect(page.getByText(/资产 unused-layouts 未被标准取值引用/)).toBeVisible();
-  await expect(page.getByText("1 条警告不阻断发布。")).toBeVisible();
+  await expect(page.getByText(/资产 unused-layouts 未被标准取值引用/)).toHaveCount(0);
+  await expect(page.getByText(/警告不阻断发布/)).toHaveCount(0);
   const publish = page.getByRole("button", {name: "发布标准"});
   await expect(publish).toBeEnabled();
   await publish.click();

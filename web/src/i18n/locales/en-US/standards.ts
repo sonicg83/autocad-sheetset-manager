@@ -271,7 +271,6 @@ export default {
     STANDARD_LAYOUT_READ_FAILED: "Failed to read the layouts of asset {assetId}",
     STANDARD_PAPER_LAYOUT_MISSING: "Enabled paper layout {layout} is not among the file's actual layouts",
     STANDARD_PAPER_LAYOUTS_EMPTY: "Asset {assetId} has no enabled paper layouts",
-    STANDARD_ASSET_UNREFERENCED: "Asset {assetId} is not referenced by any standard value",
     STANDARD_PROPERTY_ID_INVALID: "Property id cannot be empty",
     STANDARD_PROPERTY_ID_DUPLICATE: "Duplicate property id",
     STANDARD_PROPERTY_KIND_INVALID: "Invalid property kind (text/enum/mapping/composition only)",
@@ -359,7 +358,8 @@ export default {
     paths: "Controlled paths",
     referenceTitle: "References",
     referenceCount: "{count} references",
-    noReference: "Not referenced by any standard value",
+    noReference: "No standard value currently references this asset",
+    dwgNamingReference: "DWG naming template",
     reference: {
       "property-enum": "Enum value of property {ref}: {value}",
       "rule-fixed": "Fixed value of rule {ref}: {value}",
