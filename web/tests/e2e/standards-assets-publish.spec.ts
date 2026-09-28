@@ -225,8 +225,8 @@ test("结构未完成时「保存并检查」不提交结果：显示未检查�
   expect(state.inspectCalls).toEqual([]);
 });
 
-test("发布检查页继续编辑后检查结果失效并阻断发布", async ({page}) => {
-  await installStandards(page, [draft("草稿 1", "draft-1")], {
+test("修改版本说明后保留有效资产检查并可发布", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": layoutDraft(["A2"])},
     assetResults: {layouts: inspection("layouts", ["Model", "A2"])},
   });
@@ -236,10 +236,35 @@ test("发布检查页继续编辑后检查结果失效并阻断发布", async ({
 
   const publish = page.getByRole("button", {name: "发布标准"});
   await expect(publish).toBeEnabled();
-  // 版本说明也属于草稿缓冲：改动后检查结果不再对应当前快照
+  // 版本说明写入草稿缓冲，但不改变资产文件、启用图幅或 CAD 版本。
   await page.getByLabel("版本说明").fill("修订说明");
-  await expect(publish).toBeDisabled();
-  await expect(page.getByTestId("publish-review")).toContainText("启用图幅 A2 不在文件实际布局中");
+  await expect(page.getByTestId("publish-review")).not.toContainText("启用图幅 A2 不在文件实际布局中");
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
+  expect(state.inspectCalls).toEqual(["layouts"]);
+  expect(state.saveBodies.at(-1)?.release_notes).toBe("修订说明");
+  expect(state.publishCalls).toBe(1);
+});
+
+test("修改标准名称后保留有效资产检查并可发布", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": layoutDraft(["A2"])},
+    assetResults: {layouts: inspection("layouts", ["Model", "A2"])},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await page.getByRole("button", {name: "发布检查"}).click();
+
+  await page.getByLabel("标准名称").fill("修改后的标准名称");
+  await expect(page.getByTestId("publish-review")).not.toContainText("启用图幅 A2 不在文件实际布局中");
+  const publish = page.getByRole("button", {name: "发布标准"});
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
+  expect(state.inspectCalls).toEqual(["layouts"]);
+  expect(state.saveBodies.at(-1)?.name).toBe("修改后的标准名称");
+  expect(state.publishCalls).toBe(1);
 });
 
 // ---- 本机模板受控复制（PLAN-DM-040 Task 3，F01） ------------------------

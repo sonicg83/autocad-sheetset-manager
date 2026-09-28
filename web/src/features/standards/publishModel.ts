@@ -59,17 +59,24 @@ export interface InspectionFailure {
 /**
  * 一次资产检查的结果记录（PLAN-DM-040 Task 4，F06）。
  *
- * 结果必须绑定产生它的草稿身份与**被检查文档的快照**（检查前草稿已落盘，因此快照
- * 等于当时的已保存文档）。草稿身份变化（切换草稿）或缓冲再变化（编辑/保存失败）
- * 都会使记录过期，过期记录一律按“未检查”处理，绝不把旧结果显示为当前结果。
+ * 结果绑定草稿身份与资产检查输入快照。名称、版本说明等无关字段变化不使资产检查
+ * 失效；资产声明或 CAD 版本变化时，旧结果一律按“未检查”处理。
  */
 export interface InspectionRecord {
   draftId: string;
-  /** 被检查文档的快照（与编辑器缓冲同一序列化）。 */
+  /** 被检查资产声明与 CAD 版本的快照。 */
   documentSnapshot: string;
   inspectedAt: string;
   inspections: AssetInspection[];
   failures: InspectionFailure[];
+}
+
+/** 资产检查端点读取的草稿字段：资产声明与首个 CAD 版本。 */
+export function assetInspectionSnapshot(document: DraftDocument): string {
+  return JSON.stringify({
+    assets: document.assets,
+    cadVersion: document.supported_cad_versions[0] ?? "",
+  });
 }
 
 /** 结果是否仍然对应当前草稿与当前文档快照。 */
@@ -110,7 +117,7 @@ export function recordInspectionState(record: InspectionRecord | null, assetId: 
   return result.diagnostics.length > 0 ? "failed" : "passed";
 }
 
-/** 检查运行身份：代次 + 草稿身份 + 已保存快照。 */
+/** 检查运行身份：代次 + 草稿身份 + 资产检查输入快照。 */
 export interface InspectionRunIdentity {
   generation: number;
   draftId: string;
@@ -118,8 +125,8 @@ export interface InspectionRunIdentity {
 }
 
 /**
- * 检查运行结果提交门禁：代次、草稿身份与文档快照三者都必须匹配当前值。
- * 乱序返回（旧代次）或检查期间继续编辑（快照已变）的结果一律不提交。
+ * 检查运行结果提交门禁：代次、草稿身份与资产检查输入快照三者都必须匹配当前值。
+ * 乱序返回或检查期间修改资产/CAD 版本的结果一律不提交。
  */
 export function inspectionRunIsCurrent(run: InspectionRunIdentity, current: InspectionRunIdentity): boolean {
   return run.generation === current.generation

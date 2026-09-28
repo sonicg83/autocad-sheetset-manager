@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest";
 import {
   PAPER_LAYOUT_MISSING_CODE,
   PAPER_LAYOUTS_EMPTY_CODE,
+  assetInspectionSnapshot,
   assetReferences,
   buildPublishGate,
   declaredPaperLayouts,
@@ -89,6 +90,21 @@ describe("启用图幅与实际布局", () => {
   it("过滤空勾选并从实际布局中排除 Model（勾选不去重、保持勾选顺序）", () => {
     expect(nonModelLayouts(["Model", "A2", "A3"])).toEqual(["A2", "A3"]);
     expect(declaredPaperLayouts(layoutAsset("layouts", ["A2", "A2", ""]))).toEqual(["A2", "A2"]);
+  });
+});
+
+describe("资产检查快照", () => {
+  it("名称和版本说明不使已检查的资产失效", () => {
+    const original = documentWith([layoutAsset("layouts", ["A2"])]);
+    const changed = {...original, name: "新名称", release_notes: "本版说明"};
+    expect(assetInspectionSnapshot(changed)).toBe(assetInspectionSnapshot(original));
+  });
+
+  it("资产声明和 CAD 版本变化使检查结果失效", () => {
+    const original = documentWith([layoutAsset("layouts", ["A2"])]);
+    const snapshot = assetInspectionSnapshot(original);
+    expect(assetInspectionSnapshot({...original, assets: [layoutAsset("layouts", ["A3"])]})).not.toBe(snapshot);
+    expect(assetInspectionSnapshot({...original, supported_cad_versions: ["2016"]})).not.toBe(snapshot);
   });
 });
 
