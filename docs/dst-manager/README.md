@@ -1,5 +1,7 @@
 # DST Manager 文档入口
 
+2026-09-28 新增 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md)：以独立 UUID、标准名称和 UTC 发布时间替换整数发布版本及按 ID 归集；导入同 ID 阻止、同名改名；用户已发布标准可删除并一并清理确认时关联的未完成图纸集创建草稿；已实现的搜索与来源／状态过滤保留。实施见 [PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（proposed）；当前代码仍是 SPEC-DM-019 的版本模型。
+
 2026-09-27 按 [PLAN-DM-044](../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) 增量修订 [SPEC-DM-006 §6.4](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 与 [ARCH-DM-007 §4.3/§9](architecture/ARCH-DM-007-frontend-ui-foundations.md)：为语义化 grid 伪表格补充对齐与列头命名契约，并固定静态规则名称及逐表守卫；实施计划已进入 `active`，前端改造与自动化验证仍待执行。
 
 ## 定位与当前状态
@@ -87,7 +89,8 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 - [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
 - [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；版本展示已按 SPEC-DM-019 统一为 `v<n>`；2026-09-28 §3.1 收敛为必填星号标记、取消说明小字，图纸集派生属性在项目信息页实时求值）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
-- [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已接受；整数发布版本、无版本草稿、按 ID 名称唯一门禁、服务端版本分配与 `.dststandard` 两步预检导入，由 PLAN-DM-041 Task 1–8 落地，§12 给出实施验证映射）](specs/SPEC-DM-019-standard-version-and-package-import.md)
+- [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，已接受；UUID、UTC 发布时间、平铺列表、改名导入与已发布标准删除）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md)
+- [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已被取代；记录整数版本实现与 PLAN-DM-041 验证）](specs/SPEC-DM-019-standard-version-and-package-import.md)
 
 ## 研究与分析
 

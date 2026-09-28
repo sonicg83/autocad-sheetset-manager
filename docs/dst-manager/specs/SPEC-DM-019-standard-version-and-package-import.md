@@ -1,11 +1,11 @@
 ---
 id: SPEC-DM-019
 title: 图纸标准版本身份与标准包预检导入规范
-status: accepted
+status: superseded
 owners:
   - dst-manager
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-28
 related:
   - RFC-INT-003
   - ARCH-DM-001
@@ -17,9 +17,12 @@ related:
   - PLAN-DM-038
   - PLAN-DM-040
   - PLAN-DM-041
+  - SPEC-DM-020
 ---
 
 # 图纸标准版本身份与标准包预检导入规范
+
+> **历史规范（2026-09-28 起由 [SPEC-DM-020](SPEC-DM-020-versionless-standard-identity-and-management.md) 取代）：** 本文记录当前整数发布版本实现与 PLAN-DM-041 的验证依据，不再指导无版本标准包改造。两步导入的安全边界仍由新规范引用保留。
 
 ## 1. 目的与权威范围
 
