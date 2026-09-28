@@ -142,7 +142,7 @@ MISSING_ASSET_DOCUMENT: dict[str, object] = {
     "name": "市政缺失资产标准",
 }
 
-#: 同类内文件名冲突的标准：两个基础模板同名不同目录，标签必须退回包内相对路径。
+#: 同类内文件名冲突的标准：两个基础模板同名不同目录，标签仍取资产标识文字。
 DUPLICATE_LABEL_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
     "standard_id": "szmedi.dupe",
@@ -185,11 +185,11 @@ ASSET_FILES: dict[str, bytes] = {
     "templates/a1-layout.dwt": b"layout-template-bytes",
 }
 
-#: 与发布标准一致（标签取包内受控文件名）的资产候选，供本地构造模板使用。
+#: 与发布标准一致（标签即资产标识文字）的资产候选，供本地构造模板使用。
 ASSET_OPTIONS: tuple[CreationAssetOption, ...] = (
-    CreationAssetOption(asset_id="base-a1", kind="base-template", label="a1.dwt"),
+    CreationAssetOption(asset_id="base-a1", kind="base-template", label="base-a1"),
     CreationAssetOption(
-        asset_id="layout-a1", kind="layout-template", label="a1-layout.dwt", layouts=("A1",)
+        asset_id="layout-a1", kind="layout-template", label="layout-a1", layouts=("A1",)
     ),
 )
 
@@ -389,8 +389,8 @@ def valid_xlsx(target_path: str) -> bytes:
             {
                 "图名": "平面图",
                 "张数": "2",
-                "基础模板": "a1.dwt",
-                "布局模板": "a1-layout.dwt",
+                "基础模板": "base-a1",
+                "布局模板": "layout-a1",
                 "图幅": "A1",
                 "设计阶段": "施工图",
                 "分部": "B 段",
@@ -685,11 +685,16 @@ def test_candidates_list_available_standard_with_asset_options(
             "available": True,
             "reasons": [],
             "asset_options": [
-                {"asset_id": "base-a1", "kind": "base-template", "label": "a1.dwt", "layouts": []},
+                {
+                    "asset_id": "base-a1",
+                    "kind": "base-template",
+                    "label": "base-a1",
+                    "layouts": [],
+                },
                 {
                     "asset_id": "layout-a1",
                     "kind": "layout-template",
-                    "label": "a1-layout.dwt",
+                    "label": "layout-a1",
                     "layouts": ["A1"],
                 },
             ],
@@ -762,8 +767,10 @@ def test_candidates_survive_illegal_published_directory_name(
     assert [item["standard_id"] for item in response.json()] == ["szmedi.gas"]
 
 
-def test_candidate_labels_are_unique_within_kind(client: TestClient, root: Path) -> None:
-    """同类内文件名冲突时标签退回包内相对路径：候选标签必须可唯一回指资产。"""
+def test_candidate_labels_use_asset_id_even_with_duplicate_filenames(
+    client: TestClient, root: Path
+) -> None:
+    """文件名冲突不影响标签：候选标签始终是资产标识文字且同类内唯一。"""
     publish_standard(
         client,
         root,
@@ -777,9 +784,9 @@ def test_candidate_labels_are_unique_within_kind(client: TestClient, root: Path)
     }
     assert candidates["szmedi.dupe"]["available"] is True
     assert [item["label"] for item in candidates["szmedi.dupe"]["asset_options"]] == [
-        "a1/a1.dwt",
-        "b1/a1.dwt",
-        "a1-layout.dwt",
+        "base-a",
+        "base-b",
+        "layout-a1",
     ]
 
 

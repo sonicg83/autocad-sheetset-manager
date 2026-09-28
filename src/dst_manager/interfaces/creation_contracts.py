@@ -34,7 +34,7 @@ __all__ = [
 
 
 class CreationAssetOptionModel(ContractModel):
-    """标准包内的一个受控模板资产候选（``label`` 同类内唯一）。"""
+    """标准包内的一个受控模板资产候选（``label`` 即资产标识文字）。"""
 
     asset_id: str
     kind: str

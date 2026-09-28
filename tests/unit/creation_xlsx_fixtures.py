@@ -140,11 +140,11 @@ _COUNT_PROPERTY_PROPERTIES.append(
 )
 STANDARD_WITH_COUNT_PROPERTY = parse_published_standard_document(_COUNT_PROPERTY_DOCUMENT)
 
-#: 资产候选标签按受控包内文件名生成（同类内唯一由构造方保证）。
+#: 资产候选标签即资产标识文字（``asset_id``；同类内唯一由 schema 保证）。
 ASSET_OPTIONS: tuple[CreationAssetOption, ...] = (
-    CreationAssetOption(asset_id="base-a1", kind="base-template", label="a1.dwt"),
+    CreationAssetOption(asset_id="base-a1", kind="base-template", label="base-a1"),
     CreationAssetOption(
-        asset_id="layout-a1", kind="layout-template", label="a1-layout.dwt", layouts=("A1",)
+        asset_id="layout-a1", kind="layout-template", label="layout-a1", layouts=("A1",)
     ),
 )
 
@@ -156,8 +156,8 @@ def group_row(**overrides: object) -> dict[str, object]:
     row: dict[str, object] = {
         "图名": "平面图",
         "张数": 1,
-        "基础模板": "a1.dwt",
-        "布局模板": "a1-layout.dwt",
+        "基础模板": "base-a1",
+        "布局模板": "layout-a1",
         "图幅": "A1",
         "设计阶段": "施工图",
         "分部": "A 段",

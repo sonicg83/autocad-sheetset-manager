@@ -156,7 +156,7 @@ class CreationSheetSetRow:
 
 @dataclass(frozen=True, slots=True)
 class CreationAssetEntry:
-    """隐藏技术表里的一个资产标签映射：同类内唯一的用户标签 → 稳定 ``asset_id``。"""
+    """隐藏技术表里的一个资产标签映射：资产标识文字（``label`` 即 ``asset_id``）。"""
 
     kind: str
     label: str

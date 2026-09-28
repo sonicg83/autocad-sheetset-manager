@@ -4,8 +4,8 @@
 模板文件必须是标准包内声明路径下真实存在的文件；不可用的候选同样返回（带
 原因），由界面说明为什么不能选，不静默隐藏。
 
-资产候选标签取包内受控文件名（同类内唯一），模板生成、导入校验与草稿保存
-共用同一份身份，因此不存在「标签 → ``asset_id``」猜测。预览用快照额外计算
+资产候选标签即资产标识文字（``asset_id``，schema 保证全标准唯一，同类内必然
+唯一），模板生成、导入校验与草稿保存共用同一份身份。预览用快照额外计算
 声明文件的内容哈希，作为 `preview_digest` 的资产绑定项。
 
 本模块不启动 CAD、不写任何文件、不修改标准库；包内目录定位只读。
@@ -17,7 +17,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from dst_manager.application.errors import ApplicationError
 from dst_manager.application.standard_assets import StandardAssetOperations
@@ -112,24 +112,22 @@ class CreationStandardCandidate:
 def creation_asset_options(standard: DrawingStandard) -> tuple[CreationAssetOption, ...]:
     """标准声明的创建资产候选（按资产种类分组、组内保持文档顺序）。
 
-    标签取声明文件的**文件名**；同类内文件名冲突时该冲突项退回完整包内相对
-    路径，保证标签同类内唯一且与文档顺序无关（不依赖字典/集合顺序）。
+    标签即资产标识文字 ``asset_id``（schema 保证全标准唯一，同类内必然唯一）。
     布局模板的可用图幅取该资产勾选的启用图幅 ``paper_layouts``（PLAN-DM-042，
     去重保序）；无文件的资产不产生候选——声明了却无法使用的资产不能进入
     模板候选。
     """
     options: list[CreationAssetOption] = []
     for kind in CREATION_ASSET_KINDS:
-        assets = [asset for asset in standard.assets if asset.kind == kind and asset.file]
-        labels = _asset_labels(assets)
         options.extend(
             CreationAssetOption(
                 asset_id=asset.asset_id,
                 kind=kind,
-                label=labels[asset.asset_id],
+                label=asset.asset_id,
                 layouts=_asset_layouts(asset),
             )
-            for asset in assets
+            for asset in standard.assets
+            if asset.kind == kind and asset.file
         )
     return tuple(options)
 
@@ -244,23 +242,9 @@ def _creation_assets(standard: DrawingStandard) -> tuple[StandardAsset, ...]:
     )
 
 
-def _asset_labels(assets: Sequence[StandardAsset]) -> dict[str, str]:
-    """同类资产标签：文件名优先，文件名冲突项退回完整包内相对路径。"""
-    names = [_file_name(asset.file) for asset in assets]
-    duplicated = {name for name in names if names.count(name) > 1}
-    labels: dict[str, str] = {}
-    for asset, name in zip(assets, names, strict=True):
-        labels[asset.asset_id] = asset.file if name in duplicated else name
-    return labels
-
-
 def _asset_layouts(asset: StandardAsset) -> tuple[str, ...]:
     """布局模板勾选的启用图幅（PLAN-DM-042，schema 已去重保序）；基础模板恒空。"""
     return asset.paper_layouts
-
-
-def _file_name(path: str) -> str:
-    return PurePosixPath(path.replace("\\", "/")).name
 
 
 def _controlled_file(root: Path | None, relative: str) -> Path | None:

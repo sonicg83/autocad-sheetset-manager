@@ -102,7 +102,7 @@ def test_layout_template_and_paper_layout_mismatch_is_rejected(standard, options
         standard,
         options,
         sheetset={"项目保存路径": DEFAULT_SHEETSET_PATH},
-        rows=(group_row(基础模板="a1-layout.dwt"),),
+        rows=(group_row(基础模板="layout-a1"),),
     )
     result = parse_creation_workbook(swapped, standard, options)
     assert result.value is None

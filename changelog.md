@@ -1,3 +1,9 @@
+## 2026-09-28（创建资产候选标签改用资产标识文字）
+
+- 创建新图纸集的图纸组步骤中，基础模板与布局模板下拉选项改为显示资产标识文字（`asset_id`），不再显示模板文件名：`creation_asset_options` 的 `label` 直接取 `asset.asset_id`（标准 Schema 已保证全标准唯一，删除原「文件名优先、冲突退回包内相对路径」的 `_asset_labels` 回退逻辑），XLSX 创建模板的候选列表、隐藏资产映射与导入校验随之统一使用资产标识文字；预览表中 `base_template`/`layout_template` 仍显示包内相对路径，不受影响。行为变化：此前导出的旧 XLSX 模板（隐藏表资产标签为文件名）导入时会以 `CREATION_XLSX_METADATA_INVALID` 明确报错，需重新导出模板填写。
+- 同步更新 `domain/creation.py`、`interfaces/creation_contracts.py`、`infrastructure/creation_xlsx_protocol.py` 的 `label` 语义 docstring；前端 `GroupsStep.vue`/`GroupBatchDialog.vue` 选项渲染 `option.label` 无需改动。
+- 回归测试按新语义改写：候选列表断言（label 即 asset_id）、文件名冲突标准改验证「标签仍取资产标识且同类内唯一」、集成与单元 XLSX 夹具标签改为 `base-a1`/`layout-a1`。验证：`uv run ruff check .` 通过；`uv run pytest -q` 仅 `tests/unit/test_setup_bat.py` 两条与本任务无关的既有环境失败（GBK 代码页中文乱码，同 2026-09-27 记录），其余全部通过；创建相关 6 个测试文件单独运行 121/121 通过。
+
 ## 2026-09-27（修复标准名称与版本说明修改后的发布误报）
 
 - 资产检查记录改按草稿身份、资产声明和 CAD 版本匹配；修改标准名称或版本说明后继续使用有效检查结果，不再把未取得新结果误报为启用图幅缺失。资产声明或 CAD 版本变化仍使旧结果失效。验证：前端单测 341/341、资产发布 E2E 17/17、生产构建、Ruff 及相关 Python 测试均通过。
