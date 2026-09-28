@@ -400,5 +400,3 @@ def _require_identity_match(
             f"文档身份 {document.get('standard_id')!r}@{document.get('version')!r} 与预期身份 {expected_id!r}@{expected_version!r} 不一致",
             422,
         )
-
-\n
