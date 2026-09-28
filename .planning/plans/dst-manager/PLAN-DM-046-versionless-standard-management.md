@@ -113,15 +113,15 @@ related:
 
 ### Task 5：删除影响预览与关联草稿事务
 
-**Files:** 新建 `src/dst_manager/infrastructure/standards/delete_transaction.py`；修改 `src/dst_manager/infrastructure/creation_drafts.py`、`src/dst_manager/application/standards.py`、`src/dst_manager/interfaces/standard_contracts.py`、`standard_api.py`、`message_catalog.py`；新建 `tests/integration/test_standard_delete.py`，修改 `tests/unit/test_standard_store.py`；更新 `changelog.md`。
+**Files:** 新建 `src/dst_manager/infrastructure/standards/delete_transaction.py`、`src/dst_manager/application/standard_deletion.py`、`tests/integration/test_standard_delete.py`；修改 `src/dst_manager/infrastructure/creation_drafts.py`、`src/dst_manager/application/creation_drafts.py`、`src/dst_manager/application/service.py`、`src/dst_manager/infrastructure/persistence/creation_jobs.py`、`src/dst_manager/interfaces/standard_contracts.py`、`standard_api.py`、`message_catalog.py`、`web/src/i18n/locales/en-US/errors.ts`、`web/src/i18n/locales/zh-CN/errors.ts`、`web/src/api/openapi.json`、`web/src/api/schema.d.ts`、`src/dst_manager/infrastructure/standards/dst_import.py`；修改 `tests/unit/test_standard_store.py`、`tests/unit/test_message_catalog.py`、`tests/integration/test_standard_dst_import.py`；更新 `changelog.md`。
 
 **Interfaces:** `GET /api/standards/{standard_id}/delete-impact` 返回 `{standard_id, affected_count, impact_token}`；`POST /api/standards/{standard_id}/delete` 接收 `{impact_token}`。服务端确认时重算关联集合，变化返回 `STANDARD_DELETE_IMPACT_CHANGED`（409）；非终态创建任务返回 `STANDARD_DELETE_JOB_ACTIVE`（409）；成功返回删除数量。`CreationDraftStore.list_by_standard(standard_id: str) -> tuple[str, ...]` 只枚举有效草稿；`impact_token` 是关联 ID 集合和目标身份的摘要，仅用于检测预览变化，不是授权凭证。
 
-- [ ] **Step 1: Write failing tests.** 零／多个关联草稿的预览与确认；取消不改变；确认后只删除目标用户标准和匹配草稿；官方标准即使被直接调用预览或删除 API 也稳定拒绝且不清除草稿；预览后新增草稿使旧 token 失效；运行中任务拒绝；注入每次目录移动失败和重启恢复，验证无部分删除；已建工程快照仍可读。
-- [ ] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/integration/test_standard_delete.py tests/unit/test_standard_store.py`。
-- [ ] **Step 3: Implement the transaction.** 在库锁内完成最终关联扫描与任务状态检查；把目标包和关联草稿移动到同一数据根的事务暂存区，持久化清单与提交标记，失败回滚，启动时按标记恢复或完成清理。路径严格由校验后的 UUID／草稿 ID 构造；不碰项目快照或 DST/DWG。
-- [ ] **Step 4: Verify GREEN.** 重跑本任务测试与 `rtk uv run ruff check .`；重复确认、缺失对象和重启恢复具有稳定响应。
-- [ ] **Step 5: Commit this task.** 只提交本任务改动。
+- [x] **Step 1: Write failing tests.** 零／多个关联草稿的预览与确认；取消不改变；确认后只删除目标用户标准和匹配草稿；官方标准即使被直接调用预览或删除 API 也稳定拒绝且不清除草稿；预览后新增草稿使旧 token 失效；运行中任务拒绝；注入每次目录移动失败和重启恢复，验证无部分删除；已建工程快照仍可读。
+- [x] **Step 2: Verify RED.** Run `rtk uv run pytest -q -o addopts= -p no:xdist tests/integration/test_standard_delete.py tests/unit/test_standard_store.py`。
+- [x] **Step 3: Implement the transaction.** 在库锁内完成最终关联扫描与任务状态检查；把目标包和关联草稿移动到同一数据根的事务暂存区，持久化清单与提交标记，失败回滚，启动时按标记恢复或完成清理。路径严格由校验后的 UUID／草稿 ID 构造；不碰项目快照或 DST/DWG。
+- [x] **Step 4: Verify GREEN.** 重跑本任务测试与 `rtk uv run ruff check .`；重复确认、缺失对象和重启恢复具有稳定响应。 已验证：删除与标准存储/错误目录定向回归 71 项通过；相关 Python 回归 217 项通过；DST 导入回归 12 项通过；Ruff 全库、Web OpenAPI/i18n 检查与生产构建通过。
+- [x] **Step 5: Commit this task.** 只提交本任务改动。
 
 ### Task 6：标准管理与创建向导界面
 

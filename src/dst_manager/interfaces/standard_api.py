@@ -22,6 +22,9 @@ from dst_manager.interfaces.standard_contracts import (
     StandardAssetCopyRequest,
     StandardAssetCopyResponse,
     StandardAssetInspectRequest,
+    StandardDeleteImpactResponse,
+    StandardDeleteRequest,
+    StandardDeleteResponse,
     StandardDetailResponse,
     StandardDiagnosticModel,
     StandardDocumentRequest,
@@ -59,6 +62,20 @@ def register_standard_routes(app: FastAPI) -> None:
 
     def service(request: Request):
         return request.app.state.service
+
+    @app.get(
+        "/api/standards/{standard_id}/delete-impact",
+        response_model=StandardDeleteImpactResponse,
+    )
+    def standard_delete_impact(request: Request, standard_id: str):
+        return service(request).standard_delete_impact(standard_id)
+
+    @app.post(
+        "/api/standards/{standard_id}/delete",
+        response_model=StandardDeleteResponse,
+    )
+    def delete_standard(request: Request, standard_id: str, body: StandardDeleteRequest):
+        return service(request).delete_standard(standard_id, body.impact_token)
 
     @app.get(
         "/api/standards",

@@ -13,6 +13,10 @@ import pytest
 from creation_xlsx_fixtures import STANDARD_DOCUMENT
 
 from dst_manager.domain.standards import parse_published_standard_document
+from dst_manager.infrastructure.creation_drafts import CreationDraftStore
+from dst_manager.infrastructure.standards.delete_transaction import (
+    StandardDeleteTransaction,
+)
 from dst_manager.infrastructure.standards.store import (
     StandardStore,
     StandardStoreError,
@@ -126,6 +130,43 @@ def test_list_is_flat_and_summaries_include_description_and_published_at(
     assert draft.description == "草稿说明"
     assert draft.published_at is None
     assert not hasattr(official, "version")
+
+
+def test_creation_draft_lookup_skips_corrupt_data_without_quarantining_it(
+    tmp_path: Path,
+) -> None:
+    drafts = CreationDraftStore(tmp_path / "creation-drafts")
+    matching = drafts.create(FIRST_ID, {})
+    other = drafts.create(SECOND_ID, {})
+    corrupt = drafts.root / "broken-draft"
+    corrupt.mkdir(parents=True)
+    corrupt_document = corrupt / "draft.json"
+    corrupt_document.write_text("{broken", encoding="utf-8")
+
+    assert drafts.list_by_standard(FIRST_ID) == (matching.id,)
+    assert corrupt_document.read_text(encoding="utf-8") == "{broken"
+    assert {path.name for path in drafts.root.iterdir()} == {
+        matching.id,
+        other.id,
+        "broken-draft",
+    }
+
+
+def test_delete_transaction_targets_user_root_and_preserves_official_package(
+    store: StandardStore, tmp_path: Path
+) -> None:
+    official_document = store.official_root / OFFICIAL_ID / "document.json"
+    before = official_document.read_bytes()
+    transaction = StandardDeleteTransaction(
+        root=tmp_path / "tmp" / "standard-delete-transactions",
+        published_root=store.published_root,
+        creation_draft_root=tmp_path / "creation-drafts",
+    )
+
+    with pytest.raises(FileNotFoundError):
+        transaction.delete(OFFICIAL_ID, ())
+
+    assert official_document.read_bytes() == before
 
 
 def test_get_and_create_normalize_uuid_case(store: StandardStore) -> None:

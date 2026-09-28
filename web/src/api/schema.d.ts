@@ -416,6 +416,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/standards/{standard_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Standard */
+        post: operations["delete_standard_api_standards__standard_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/standards/{standard_id}/delete-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Delete Impact */
+        get: operations["standard_delete_impact_api_standards__standard_id__delete_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/standards/{standard_id}/export": {
         parameters: {
             query?: never;
@@ -2690,6 +2724,27 @@ export interface components {
             /** Cad Version */
             cad_version: string;
         };
+        /** StandardDeleteImpactResponse */
+        StandardDeleteImpactResponse: {
+            /** Affected Count */
+            affected_count: number;
+            /** Impact Token */
+            impact_token: string;
+            /** Standard Id */
+            standard_id: string;
+        };
+        /** StandardDeleteRequest */
+        StandardDeleteRequest: {
+            /** Impact Token */
+            impact_token: string;
+        };
+        /** StandardDeleteResponse */
+        StandardDeleteResponse: {
+            /** Deleted Count */
+            deleted_count: number;
+            /** Standard Id */
+            standard_id: string;
+        };
         /** StandardDependencyModel */
         StandardDependencyModel: {
             /** Capability Id */
@@ -4116,6 +4171,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StandardDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_standard_api_standards__standard_id__delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                standard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    standard_delete_impact_api_standards__standard_id__delete_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                standard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDeleteImpactResponse"];
                 };
             };
             /** @description Validation Error */

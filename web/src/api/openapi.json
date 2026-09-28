@@ -5207,6 +5207,63 @@
         "title": "StandardAssetInspectRequest",
         "type": "object"
       },
+      "StandardDeleteImpactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_count": {
+            "title": "Affected Count",
+            "type": "integer"
+          },
+          "impact_token": {
+            "title": "Impact Token",
+            "type": "string"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "affected_count",
+          "impact_token"
+        ],
+        "title": "StandardDeleteImpactResponse",
+        "type": "object"
+      },
+      "StandardDeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "impact_token": {
+            "title": "Impact Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "impact_token"
+        ],
+        "title": "StandardDeleteRequest",
+        "type": "object"
+      },
+      "StandardDeleteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "standard_id": {
+            "title": "Standard Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "standard_id",
+          "deleted_count"
+        ],
+        "title": "StandardDeleteResponse",
+        "type": "object"
+      },
       "StandardDependencyModel": {
         "additionalProperties": false,
         "properties": {
@@ -8043,6 +8100,94 @@
           }
         },
         "summary": "Get Standard"
+      }
+    },
+    "/api/standards/{standard_id}/delete": {
+      "post": {
+        "operationId": "delete_standard_api_standards__standard_id__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "standard_id",
+            "required": true,
+            "schema": {
+              "title": "Standard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Standard"
+      }
+    },
+    "/api/standards/{standard_id}/delete-impact": {
+      "get": {
+        "operationId": "standard_delete_impact_api_standards__standard_id__delete_impact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "standard_id",
+            "required": true,
+            "schema": {
+              "title": "Standard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDeleteImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Standard Delete Impact"
       }
     },
     "/api/standards/{standard_id}/export": {

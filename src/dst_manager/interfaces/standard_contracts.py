@@ -115,6 +115,21 @@ class StandardDetailResponse(ContractModel):
     document: dict[str, object]
 
 
+class StandardDeleteImpactResponse(ContractModel):
+    standard_id: str
+    affected_count: int
+    impact_token: str
+
+
+class StandardDeleteRequest(ContractModel):
+    impact_token: str
+
+
+class StandardDeleteResponse(ContractModel):
+    standard_id: str
+    deleted_count: int
+
+
 class StandardAssetInspectRequest(ContractModel):
     cad_version: str
 

@@ -22,6 +22,7 @@ from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
 from dst_manager.application.revisions import RevisionRestoreOperations
 from dst_manager.application.standard_assets import StandardAssetOperations
+from dst_manager.application.standard_deletion import StandardDeletionOperations
 from dst_manager.application.standard_packages import StandardPackageOperations
 from dst_manager.application.standards import StandardOperations
 from dst_manager.application.xml_io import XmlExportOperations
@@ -54,6 +55,9 @@ from dst_manager.infrastructure.filesystem.workspace import write_workspace_meta
 from dst_manager.infrastructure.persistence import Database
 from dst_manager.infrastructure.persistence.database import WorkspaceBusyError
 from dst_manager.infrastructure.standards import StandardStore
+from dst_manager.infrastructure.standards.delete_transaction import (
+    StandardDeleteTransaction,
+)
 from dst_manager.infrastructure.standards.import_previews import ImportPreviewStore
 from dst_manager.settings.runtime import RuntimeSettings
 from dst_manager.settings.store import SettingsSchemaOlder
@@ -68,6 +72,7 @@ class DstManagerService(
     RepairOperations,
     TransactionRecoveryOperations,
     StandardOperations,
+    StandardDeletionOperations,
     StandardPackageOperations,
     StandardAssetOperations,
     CreationDraftOperations,
@@ -100,6 +105,12 @@ class DstManagerService(
         )
         # 创建草稿只落 Manager 应用数据目录，不进工作区、不进目标项目目录。
         self.creation_drafts = CreationDraftStore(self.settings.data_dir / "creation-drafts")
+        self.standard_delete_transaction = StandardDeleteTransaction(
+            root=self.settings.data_dir / "tmp" / "standard-delete-transactions",
+            published_root=self.standard_store.published_root,
+            creation_draft_root=self.creation_drafts.root,
+        )
+        self.standard_delete_transaction.recover()
         # 标准包导入的限时快照：凭证只存内存，重启即失效（PLAN-DM-041 Task 5）。
         self.import_previews = ImportPreviewStore(
             self.settings.data_dir / "tmp" / "standard-import-previews"

@@ -84,22 +84,24 @@ class CreationDraftOperations:
         身份、改写固定标准或草稿 ID 的请求一律以 `CREATION_DRAFT_INVALID` 拒绝，
         且不改变磁盘内容与修订号。
         """
-        stored = self._load_creation_draft(draft_id)
-        standard = self._require_published_standard(stored.standard_id)
-        self._reject_non_input_values(standard, value)
-        try:
-            return self.creation_drafts.save(
-                draft_id, value, expected_revision=expected_revision
-            )
-        except CreationDraftStoreError as exc:
-            raise _store_error(exc) from exc
+        with self.standard_store.lifecycle_lock():
+            stored = self._load_creation_draft(draft_id)
+            standard = self._require_published_standard(stored.standard_id)
+            self._reject_non_input_values(standard, value)
+            try:
+                return self.creation_drafts.save(
+                    draft_id, value, expected_revision=expected_revision
+                )
+            except CreationDraftStoreError as exc:
+                raise _store_error(exc) from exc
 
     def delete_creation_draft(self, draft_id: str) -> None:
         """放弃草稿（「重新开始」）；草稿不存在时稳定报缺失。"""
-        try:
-            self.creation_drafts.delete(draft_id)
-        except CreationDraftStoreError as exc:
-            raise _store_error(exc) from exc
+        with self.standard_store.lifecycle_lock():
+            try:
+                self.creation_drafts.delete(draft_id)
+            except CreationDraftStoreError as exc:
+                raise _store_error(exc) from exc
 
     # ---- 内部辅助 --------------------------------------------------------
 

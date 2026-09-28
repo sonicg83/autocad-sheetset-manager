@@ -14,11 +14,13 @@ from lxml import etree
 from dst_manager.application.errors import ApplicationError
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.domain.standards import parse_standard_draft_document
 from dst_manager.infrastructure.acsm_xml import AcsmDocument, AcsmValidationError
 from dst_manager.infrastructure.dst_codec import DstCodec
 from dst_manager.infrastructure.standards.dst_import import (
     _extract_property_definitions,
+    extract_standard_document,
 )
 
 DEFAULT_NAMING_SEGMENTS = [
@@ -63,14 +65,24 @@ def test_dst_import_writes_default_dwg_naming(imported_draft) -> None:
     assert imported_draft.document["dwg_naming"] == {"segments": DEFAULT_NAMING_SEGMENTS}
 
 
-def test_dst_import_ids_are_stable_across_imports(service, tiny_workspace) -> None:
+def test_dst_import_emits_a_versionless_uuid_draft(imported_draft) -> None:
+    document = imported_draft.document
+    assert document["schema_version"] == 3
+    assert parse_standard_id(document["standard_id"]) == document["standard_id"]
+    assert document["published_at"] is None
+    assert "version" not in document
+    assert "release_notes" not in document
+
+
+def test_dst_import_property_ids_are_stable_across_extraction(tiny_workspace) -> None:
     dst, _sheet_id = tiny_workspace
-    first = service.create_draft_from_dst(dst)
-    second = service.create_draft_from_dst(dst)
+    xml = DstCodec().decode_file(dst)
+    first = extract_standard_document(xml)
+    second = extract_standard_document(xml)
     ids = lambda document: {
         item["name"]: item["property_id"] for item in document["properties"]
     }
-    assert ids(first.document) == ids(second.document)
+    assert ids(first) == ids(second)
 
 
 def test_dst_import_persists_valid_draft(service, imported_draft) -> None:

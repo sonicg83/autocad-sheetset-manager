@@ -218,6 +218,10 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     # 固定复核（PLAN-DM-041 Task 8）补充：标准库写入门禁超时与版本字段非法
     "STANDARD_LIBRARY_BUSY": _E("errors.standards.libraryBusy"),
     "STANDARD_VERSION_INVALID": _E("errors.standards.versionInvalid"),
+    "STANDARD_DELETE_IMPACT_CHANGED": _E("errors.standards.deleteImpactChanged"),
+    "STANDARD_DELETE_JOB_ACTIVE": _E("errors.standards.deleteJobActive"),
+    "STANDARD_DELETE_FORBIDDEN": _E("errors.standards.deleteForbidden"),
+    "STANDARD_DELETE_FAILED": _E("errors.standards.deleteFailed"),
 }
 
 

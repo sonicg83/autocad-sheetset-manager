@@ -197,6 +197,10 @@ export default {
     previewExpired: "导入预检已过期，请重新选择文件预检",
     libraryBusy: "标准库正在被其他操作占用，请稍后重试",
     versionInvalid: "标准版本必须是 1..2147483647 的整数；草稿不得携带版本",
+    deleteImpactChanged: "标准删除影响已变化，请重新预览后确认",
+    deleteJobActive: "仍有创建任务正在使用此标准",
+    deleteForbidden: "官方标准不可删除",
+    deleteFailed: "标准删除失败；事务已尽可能回滚",
   },
   ui: {
     unknownSummary: "操作失败，发生未知错误",

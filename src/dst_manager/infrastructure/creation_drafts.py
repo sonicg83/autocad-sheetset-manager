@@ -144,6 +144,34 @@ class CreationDraftStore:
                 CreationDraftCorruptError, f"创建草稿 {draft_id!r} 内容损坏，已隔离：{exc}"
             ) from exc
 
+    def list_by_standard(self, standard_id: str) -> tuple[str, ...]:
+        """只读枚举属于标准的有效创建草稿；损坏目录留待显式读取时隔离。"""
+        try:
+            canonical_id = parse_standard_id(standard_id)
+        except (TypeError, ValueError) as exc:
+            raise _error(
+                CreationDraftInvalidError, f"标准 ID {standard_id!r} 非法"
+            ) from exc
+        if not self.root.is_dir():
+            return ()
+        matches: list[str] = []
+        for directory in self.root.iterdir():
+            if (
+                not _DRAFT_ID.fullmatch(directory.name)
+                or directory.is_symlink()
+                or not directory.is_dir()
+            ):
+                continue
+            path = directory / DRAFT_NAME
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+                draft = _draft_from_document(document, directory.name)
+            except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+                continue
+            if draft.standard_id == canonical_id:
+                matches.append(draft.id)
+        return tuple(sorted(matches))
+
     def save(
         self, draft_id: str, value: CreationDraft, *, expected_revision: int
     ) -> CreationDraft:

@@ -196,6 +196,10 @@ export default {
     previewExpired: "The import preview has expired; preview the file again",
     libraryBusy: "The standard library is busy with another operation; retry in a moment",
     versionInvalid: "The standard version must be an integer in 1..2147483647; drafts must not carry a version",
+    deleteImpactChanged: "The standards deletion impact changed; preview again before confirming",
+    deleteJobActive: "A creation task is still using this standard",
+    deleteForbidden: "Official standards cannot be deleted",
+    deleteFailed: "Deleting the standard failed; the transaction was rolled back when possible",
   },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",
