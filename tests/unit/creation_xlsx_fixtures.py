@@ -28,12 +28,13 @@ from dst_manager.infrastructure.creation_xlsx import (
     SHEETSET_SHEET,
 )
 
-# 最小可发布标准：两个普通 sheetset 属性（文本带默认值、枚举带默认值）、一个派生
+# 最小 v3 发布标准：两个普通 sheetset 属性（文本带默认值、枚举带默认值）、一个派生
 # 映射属性、一个普通 sheet 文本属性、一个普通 sheet 枚举属性与一个派生组合属性。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
-    "version": 1,
+    "schema_version": 3,
+    "standard_id": "123e4567-e89b-42d3-a456-426614174000",
+    "published_at": 1_700_000_000_000,
+    "description": "创建 XLSX 测试标准",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [

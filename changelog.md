@@ -3330,3 +3330,9 @@
 - 新增 [SPEC-DB-001](docs/dst-builder/specs/SPEC-DB-001-minimal-generation-loop.md)，把首个纵向切片固定为七步引导下的一项目、一分组、一张图纸闭环，明确项目库、确定性修订与计划、DWG/DST/XLSX 生成、仅含 `drawings/` 和 `metadata/` 的成果包、原子发布及 Manager 显式交接契约。
 - 新增 [PLAN-DB-001](.planning/plans/dst-builder/PLAN-DB-001-minimal-generation-loop.md)，按契约、项目库、引导界面、共享能力提取、CAD/DST 生成、发布、Manager 接管、独立打包和真实双版本资格拆分十二个 TDD 任务与六个检查点；计划确认前不修改产品代码。
 - 新增 DST Builder Plan 索引，并更新产品、路线图与执行资料导航。
+
+## 2026-09-28（PLAN-DM-046 Task 1：标准身份与文档格式）
+
+- 将标准身份切换为规范化 UUIDv4，领域文档采用 schema v3、`published_at` 与 `description`，移除旧发布版本和 `release_notes` 字段。
+- 保留旧工程绑定与依赖版本解析入口供后续兼容流程使用，并拆分标准结构错误及版本解析模块。
+- 更新标准领域测试与创建 XLSX 共用夹具，验证 UUID、时间戳、描述字段及旧字段拒绝行为。

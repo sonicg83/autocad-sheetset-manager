@@ -1,7 +1,9 @@
-"""图纸标准 Schema v2 领域模型与解析测试（PLAN-DM-038 Task 1；PLAN-DM-041 Task 2）。"""
+"""图纸标准 Schema v3 领域模型与解析测试（PLAN-DM-046 Task 1）。"""
 
 import pytest
 
+from dst_manager.domain import standard_identity
+from dst_manager.domain import standards as standard_domain
 from dst_manager.domain.standards import (
     DraftDrawingStandard,
     DrawingStandard,
@@ -13,13 +15,17 @@ from dst_manager.domain.standards import (
     parse_standard_draft_document,
 )
 
+STANDARD_ID = "123e4567-e89b-42d3-a456-426614174000"
+PUBLISHED_AT = 1_700_000_000_000
+
 
 def valid_standard_document() -> dict[str, object]:
-    """一份最小合法发布文档（Schema v2、整数版本），供各测试裁剪复用。"""
+    """一份最小合法发布文档（Schema v3、UUID 与发布时间），供各测试裁剪复用。"""
     return {
-        "schema_version": 2,
-        "standard_id": "szmedi.gas",
-        "version": 1,
+        "schema_version": 3,
+        "standard_id": STANDARD_ID,
+        "published_at": PUBLISHED_AT,
+        "description": "标准描述",
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [
@@ -108,9 +114,9 @@ def valid_standard_document() -> dict[str, object]:
 
 
 def valid_draft_document() -> dict[str, object]:
-    """同一内容的最小合法**草稿**文档：不携带 version。"""
+    """同一内容的最小合法草稿文档：发布时间为空且不携带标准发布版本。"""
     document = valid_standard_document()
-    document.pop("version")
+    document["published_at"] = None
     return document
 
 
@@ -160,33 +166,106 @@ def _mapping_property(
     }
 
 
-@pytest.mark.parametrize("version", [1, 10])
-def test_published_document_accepts_positive_integer_version(version: int) -> None:
+@pytest.mark.parametrize("published_at", [0, 1, PUBLISHED_AT])
+def test_published_document_accepts_integer_utc_millisecond_timestamp(published_at: int) -> None:
     document = valid_standard_document()
-    document["version"] = version
+    document["published_at"] = published_at
     standard = parse_published_standard_document(document)
-    assert standard.version == version
-    assert isinstance(standard.version, int)
+    assert standard.published_at == published_at
+    assert isinstance(standard.published_at, int)
+
+
+@pytest.mark.parametrize("published_at", [None, True, False, -1, 1.5, "1700000000000"])
+def test_published_document_rejects_invalid_published_at(published_at: object) -> None:
+    document = valid_standard_document()
+    document["published_at"] = published_at
+    with pytest.raises(StandardSchemaError, match="STANDARD_PUBLISHED_AT_INVALID"):
+        parse_published_standard_document(document)
+
+
+def test_published_document_requires_published_at_and_rejects_legacy_version() -> None:
+    missing_time = valid_standard_document()
+    del missing_time["published_at"]
+    with pytest.raises(StandardSchemaError, match="STANDARD_PUBLISHED_AT_INVALID"):
+        parse_published_standard_document(missing_time)
+
+    with_version = valid_standard_document()
+    with_version["version"] = 1
+    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
+        parse_published_standard_document(with_version)
+
+
+def test_both_document_kinds_reject_release_notes_and_description_must_be_text() -> None:
+    for document, parser in (
+        (valid_draft_document(), parse_standard_draft_document),
+        (valid_standard_document(), parse_published_standard_document),
+    ):
+        document["release_notes"] = "legacy"
+        with pytest.raises(StandardSchemaError, match="STANDARD_RELEASE_NOTES_DEPRECATED"):
+            parser(document)
+
+    for document, parser in (
+        (valid_draft_document(), parse_standard_draft_document),
+        (valid_standard_document(), parse_published_standard_document),
+    ):
+        document["description"] = 42
+        with pytest.raises(StandardSchemaError, match="STANDARD_DESCRIPTION_INVALID"):
+            parser(document)
+
+
+def test_empty_description_is_valid_and_published_description_is_preserved() -> None:
+    draft_document = valid_draft_document()
+    draft_document["description"] = ""
+    draft = parse_standard_draft_document(draft_document)
+    assert draft.description == ""
+
+    draft_document["description"] = "  留存原文  "
+    materialize = getattr(standard_domain, "materialize_published_document", None)
+    assert callable(materialize), "缺少 materialize_published_document"
+    published_document = materialize(draft_document, PUBLISHED_AT)
+    assert published_document["description"] == "  留存原文  "
+    assert "release_notes" not in published_document
+    assert "version" not in published_document
+
+
+def test_new_standard_id_is_canonical_uuid_v4() -> None:
+    generate = getattr(standard_identity, "new_standard_id", None)
+    assert callable(generate), "缺少 new_standard_id"
+    generated = generate()
+    assert generated == generated.lower()
+    parse_id = getattr(standard_identity, "parse_standard_id", None)
+    assert callable(parse_id), "缺少 parse_standard_id"
+    assert parse_id(generated) == generated
+    assert generated[14] == "4"
+
+
+def test_parse_standard_id_normalizes_uuid_hex_case() -> None:
+    parse_id = getattr(standard_identity, "parse_standard_id", None)
+    assert callable(parse_id), "缺少 parse_standard_id"
+    assert parse_id(STANDARD_ID.upper()) == STANDARD_ID
+
+    document = valid_draft_document()
+    document["standard_id"] = STANDARD_ID.upper()
+    assert parse_standard_draft_document(document).standard_id == STANDARD_ID
+
+
+@pytest.mark.parametrize("value", ["123e4567e89b42d3a456426614174000", "not-a-uuid", "", None])
+def test_parse_standard_id_rejects_noncanonical_or_invalid_values(value: object) -> None:
+    parse_id = getattr(standard_identity, "parse_standard_id", None)
+    assert callable(parse_id), "缺少 parse_standard_id"
+    with pytest.raises(ValueError):
+        parse_id(value)
 
 
 @pytest.mark.parametrize("version", [0, -1, True, False, 1.5, "1", "1.0.0", 2147483648])
-def test_published_document_rejects_non_integer_or_out_of_range_version(
-    version: object,
-) -> None:
+def test_published_document_rejects_legacy_version_values(version: object) -> None:
     document = valid_standard_document()
     document["version"] = version
     with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
         parse_published_standard_document(document)
 
 
-def test_published_document_requires_version() -> None:
-    document = valid_standard_document()
-    del document["version"]
-    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
-        parse_published_standard_document(document)
-
-
-@pytest.mark.parametrize("schema_version", [1, 3, None])
+@pytest.mark.parametrize("schema_version", [1, 2, 4, None])
 def test_document_rejects_unsupported_schema_version(schema_version: object) -> None:
     document = valid_standard_document()
     document["schema_version"] = schema_version
@@ -196,33 +275,65 @@ def test_document_rejects_unsupported_schema_version(schema_version: object) -> 
         parse_standard_draft_document(document)
 
 
-def test_draft_document_has_no_version() -> None:
+def test_draft_document_has_uuid_and_null_published_at_without_version() -> None:
     draft = parse_standard_draft_document(valid_draft_document())
     assert isinstance(draft, DraftDrawingStandard)
+    assert draft.standard_id == STANDARD_ID
+    assert draft.published_at is None
     assert not hasattr(draft, "version")
 
 
+def test_draft_document_requires_null_published_at() -> None:
+    missing_time = valid_draft_document()
+    del missing_time["published_at"]
+    with pytest.raises(StandardSchemaError, match="STANDARD_PUBLISHED_AT_INVALID"):
+        parse_standard_draft_document(missing_time)
+
+    for value in (True, 0, -1, 1.5, "null"):
+        document = valid_draft_document()
+        document["published_at"] = value
+        with pytest.raises(StandardSchemaError, match="STANDARD_PUBLISHED_AT_INVALID"):
+            parse_standard_draft_document(document)
+
+
 def test_draft_document_rejects_carried_version() -> None:
-    """草稿不得预占正式版本；携带 version 一律拒绝。"""
+    document = valid_draft_document()
+    document["version"] = 1
     with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
-        parse_standard_draft_document(valid_standard_document())
+        parse_standard_draft_document(document)
 
 
-@pytest.mark.parametrize("version", [1, 10])
-def test_materialize_published_standard_injects_integer_version(version: int) -> None:
+@pytest.mark.parametrize("published_at", [0, 1, PUBLISHED_AT])
+def test_materialize_published_standard_injects_only_published_at(published_at: int) -> None:
     draft = valid_draft_document()
-    standard = materialize_published_standard(draft, version)
+    standard = materialize_published_standard(draft, published_at)
     assert isinstance(standard, DrawingStandard)
-    assert standard.version == version
+    assert standard.published_at == published_at
     assert standard.standard_id == draft["standard_id"]
-    # 原始草稿文档不被改写
+    assert standard.description == draft["description"]
+    assert "published_at" not in draft or draft["published_at"] is None
     assert "version" not in draft
 
 
-@pytest.mark.parametrize("version", [0, -1, True, 1.5, "1"])
-def test_materialize_published_standard_rejects_invalid_version(version: object) -> None:
-    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
-        materialize_published_standard(valid_draft_document(), version)  # type: ignore[arg-type]
+@pytest.mark.parametrize("published_at", [None, True, -1, 1.5, "1700000000000"])
+def test_materialize_published_standard_rejects_invalid_timestamp(published_at: object) -> None:
+    materialize = getattr(standard_domain, "materialize_published_document", None)
+    assert callable(materialize), "缺少 materialize_published_document"
+    with pytest.raises(StandardSchemaError, match="STANDARD_PUBLISHED_AT_INVALID"):
+        materialize(
+            valid_draft_document(), published_at  # type: ignore[arg-type]
+        )
+
+
+def test_materialize_published_document_does_not_mutate_draft() -> None:
+    draft = valid_draft_document()
+    materialize = getattr(standard_domain, "materialize_published_document", None)
+    assert callable(materialize), "缺少 materialize_published_document"
+    published = materialize(draft, PUBLISHED_AT)
+    assert draft["published_at"] is None
+    assert "version" not in draft
+    assert published["published_at"] == PUBLISHED_AT
+    assert published["description"] == draft["description"]
 
 
 def test_version_segment_is_bounded_before_int_conversion() -> None:
@@ -277,8 +388,9 @@ def test_property_names_are_globally_unique_across_scopes_and_history() -> None:
 def test_parse_standard_round_trip_is_stable() -> None:
     standard = parse_published_standard_document(valid_standard_document())
     assert isinstance(standard, DrawingStandard)
-    assert standard.standard_id == "szmedi.gas"
-    assert standard.version == 1
+    assert standard.standard_id == STANDARD_ID
+    assert standard.published_at == PUBLISHED_AT
+    assert standard.description == "标准描述"
     assert standard.supported_cad_versions == ("2016", "2020")
     assert [prop.property_id for prop in standard.properties] == [
         "prop-major",
@@ -578,10 +690,14 @@ def test_parse_standard_rejects_unknown_system_field() -> None:
     ("document", "code"),
     [
         ({"standard_id": "a.b"}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
-        ({"schema_version": 1, "standard_id": "a.b"}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
-        ({"schema_version": 2}, "STANDARD_ID_INVALID"),
-        ({"schema_version": 2, "standard_id": "a.b"}, "STANDARD_NAME_INVALID"),
-        ({"schema_version": 2, "standard_id": "a.b", "version": 1}, "STANDARD_VERSION_INVALID"),
+        ({"schema_version": 2, "standard_id": STANDARD_ID}, "STANDARD_SCHEMA_VERSION_UNSUPPORTED"),
+        ({"schema_version": 3, "published_at": None}, "STANDARD_ID_INVALID"),
+        ({"schema_version": 3, "standard_id": "a.b", "published_at": None}, "STANDARD_ID_INVALID"),
+        ({"schema_version": 3, "standard_id": STANDARD_ID, "published_at": None}, "STANDARD_NAME_INVALID"),
+        (
+            {"schema_version": 3, "standard_id": STANDARD_ID, "published_at": None, "version": 1},
+            "STANDARD_VERSION_INVALID",
+        ),
     ],
 )
 def test_parse_standard_draft_rejects_invalid_top_level(
@@ -603,8 +719,9 @@ def test_parse_standard_rejects_duplicate_asset_ids() -> None:
 
 def test_loads_standard_document_rejects_duplicate_json_keys() -> None:
     text = (
-        '{"schema_version": 2, "standard_id": "a.b", "standard_id": "a.c", '
-        '"version": 1, "name": "n", "supported_cad_versions": ["2016"], '
+        '{"schema_version": 3, "standard_id": "123e4567-e89b-42d3-a456-426614174000", '
+        '"standard_id": "123e4567-e89b-42d3-a456-426614174001", '
+        '"published_at": 1700000000000, "name": "n", "supported_cad_versions": ["2016"], '
         '"dwg_naming": {"segments": [{"literal": "x"}]}, '
         '"numbering": {"sequence_field": "subset.sequence", "digits": 2}}'
     )

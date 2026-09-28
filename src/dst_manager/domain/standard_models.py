@@ -195,6 +195,8 @@ class _StandardDocumentMixin:
     properties: tuple[StandardProperty, ...]
     dwg_naming: DwgNamingTemplate
     assets: tuple[StandardAsset, ...]
+    description: str
+    published_at: int | None
 
     def find_property(self, property_id: str) -> StandardProperty | None:
         for prop in self.properties:
@@ -248,14 +250,16 @@ class _StandardDocumentMixin:
 
 @dataclass(frozen=True, slots=True)
 class DraftDrawingStandard(_StandardDocumentMixin):
-    """不可变的用户标准草稿文档（Schema v2）。
+    """不可变的用户标准草稿文档（Schema v3）。
 
-    草稿**不持有正式版本**：不预占版本号，也不得携带 ``version`` 字段。
+    草稿不持有发布时间；正式时间仅在发布时写入。
     """
 
     schema_version: int
     standard_id: str
+    published_at: int | None
     name: str
+    description: str
     supported_cad_versions: tuple[str, ...]
     properties: tuple[StandardProperty, ...]
     dwg_naming: DwgNamingTemplate
@@ -266,16 +270,13 @@ class DraftDrawingStandard(_StandardDocumentMixin):
 
 @dataclass(frozen=True, slots=True)
 class DrawingStandard(_StandardDocumentMixin):
-    """不可变的已发布图纸标准文档（Schema v2）
-
-    ``version`` 是服务端分配的整数发布版本（``1..MAX_STANDARD_VERSION``），
-    与文档格式版本 ``schema_version`` 无关。
-    """
+    """不可变的已发布图纸标准文档（Schema v3）。"""
 
     schema_version: int
     standard_id: str
-    version: int
+    published_at: int
     name: str
+    description: str
     supported_cad_versions: tuple[str, ...]
     properties: tuple[StandardProperty, ...]
     dwg_naming: DwgNamingTemplate
