@@ -28,8 +28,10 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 from dst_manager.interfaces.api import create_app
 
 DRAFT_DOCUMENT = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
+    "schema_version": 3,
+    "standard_id": "123e4567-e89b-42d3-a456-426614174101",
+    "published_at": None,
+    "description": "标准描述原文",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -61,6 +63,27 @@ DRAFT_DOCUMENT = {
     "assets": [],
     "numbering": {"sequence_field": "subset.sequence", "digits": 2},
 }
+
+STANDARD_ID = "123e4567-e89b-42d3-a456-426614174101"
+SECOND_STANDARD_ID = "123e4567-e89b-42d3-a456-426614174102"
+THIRD_STANDARD_ID = "123e4567-e89b-42d3-a456-426614174103"
+
+
+def published_document(
+    standard_id: str,
+    *,
+    name: str = "市政燃气施工图",
+    description: str = "标准描述原文",
+    published_at: int = 1_800_000_000_123,
+) -> dict:
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document.update(
+        standard_id=standard_id,
+        name=name,
+        description=description,
+        published_at=published_at,
+    )
+    return document
 
 DEPENDENT_DOCUMENT = {
     **DRAFT_DOCUMENT,
@@ -123,30 +146,29 @@ def published_standard(tmp_path: Path) -> TestClient:
 
 def test_standards_list_returns_published(published_standard: TestClient) -> None:
     entries = published_standard.get("/api/standards").json()
-    assert entries == [
-        {
-            "source": "user",
-            "status": "published",
-            "standard_id": "szmedi.gas",
-            "version": 1,
-            "name": "市政燃气施工图",
-            "draft_id": None,
-        },
-    ]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["source"] == "user"
+    assert entry["status"] == "published"
+    assert entry["standard_id"] == STANDARD_ID
+    assert entry["name"] == "市政燃气施工图"
+    assert entry["description"] == "标准描述原文"
+    assert isinstance(entry["published_at"], int)
+    assert "version" not in entry
 
 
 def test_published_standard_cannot_be_updated(published_standard: TestClient) -> None:
     """已发布标准不可原地修改：身份路由不再提供写入入口，文档零变更。"""
-    before = published_standard.get("/api/standards/szmedi.gas/1").json()["document"]
+    before = published_standard.get(f"/api/standards/{STANDARD_ID}").json()["document"]
     identity_write = published_standard.put(
-        "/api/standards/szmedi.gas/1", json={"name": "changed"}
+        f"/api/standards/{STANDARD_ID}", json={"name": "changed"}
     )
     assert identity_write.status_code == 405
     missing_draft = published_standard.put(
         "/api/standards/drafts/absent", json={"document": {"name": "changed"}}
     )
     assert missing_draft.status_code == 404
-    after = published_standard.get("/api/standards/szmedi.gas/1").json()["document"]
+    after = published_standard.get(f"/api/standards/{STANDARD_ID}").json()["document"]
     assert after == before
 
 
@@ -156,7 +178,7 @@ def test_draft_lifecycle_roundtrip(tmp_path: Path) -> None:
 
     detail = client.get("/api/standards/drafts/draft-gas")
     assert detail.status_code == 200
-    assert detail.json()["document"]["standard_id"] == "szmedi.gas"
+    assert detail.json()["document"]["standard_id"] == STANDARD_ID
 
     saved = client.put(
         "/api/standards/drafts/draft-gas",
@@ -176,10 +198,13 @@ def test_draft_lifecycle_roundtrip(tmp_path: Path) -> None:
 
 
 def test_published_detail_includes_dependencies(published_standard: TestClient) -> None:
-    detail = published_standard.get("/api/standards/szmedi.gas/1")
+    detail = published_standard.get(f"/api/standards/{STANDARD_ID}")
     assert detail.status_code == 200
     body = detail.json()
-    assert body["standard_id"] == "szmedi.gas"
+    assert body["standard_id"] == STANDARD_ID
+    assert body["description"] == "标准描述原文"
+    assert isinstance(body["published_at"], int)
+    assert "version" not in body
     assert body["dependencies"] == []
     assert published_standard.get("/api/standards/absent/1").status_code == 404
 
@@ -212,12 +237,12 @@ def test_publish_satisfied_trusted_dependency(tmp_path: Path) -> None:
     make_draft(client, DEPENDENT_DOCUMENT, "draft-dep")
     response = client.post("/api/standards/drafts/draft-dep/publish")
     assert response.status_code == 200, response.text
-    assert response.json() == {
-        "standard_id": "szmedi.gas",
-        "version": 1,
-        "name": "市政燃气施工图",
-        "diagnostics": [],
-    }
+    body = response.json()
+    assert body["standard_id"] == STANDARD_ID
+    assert body["name"] == "市政燃气施工图"
+    assert body["description"] == "标准描述原文"
+    assert isinstance(body["published_at"], int)
+    assert body["diagnostics"] == []
 
 
 def test_incomplete_mapping_draft_saves_but_does_not_publish(service) -> None:
@@ -297,7 +322,7 @@ def test_invalid_draft_document_rejected(tmp_path: Path) -> None:
 
 
 def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp_path) -> None:
-    exported = published_standard.get("/api/standards/szmedi.gas/1/export")
+    exported = published_standard.get(f"/api/standards/{STANDARD_ID}/export")
     assert exported.status_code == 200
     assert exported.headers["content-type"] == "application/zip"
     package = tmp_path / "copy.dststandard"
@@ -308,7 +333,9 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
     assert preview.status_code == 200, preview.text
     body = preview.json()
     assert body["can_import"] is True
-    assert (body["standard_id"], body["version"]) == ("szmedi.gas", 1)
+    assert body["standard_id"] == STANDARD_ID
+    assert body["description"] == "标准描述原文"
+    assert "version" not in body
     # 预检只复制快照与诊断，不写标准库。
     assert other.get("/api/standards").json() == []
 
@@ -316,8 +343,9 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
         "/api/standards/import", json={"preview_id": body["preview_id"]}
     )
     assert imported.status_code == 200, imported.text
-    assert imported.json()["standard_id"] == "szmedi.gas"
-    assert imported.json()["version"] == 1
+    assert imported.json()["standard_id"] == STANDARD_ID
+    assert imported.json()["published_at"] == body["published_at"]
+    assert "version" not in imported.json()
 
     # 同一凭证重复确认返回原成功结果，不二次写入。
     repeated = other.post(
@@ -332,12 +360,12 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
     assert blocked.status_code == 200, blocked.text
     assert blocked.json()["can_import"] is False
     assert [item["code"] for item in blocked.json()["diagnostics"]] == [
-        "STANDARD_VERSION_EXISTS"
+        "STANDARD_ID_EXISTS"
     ]
     assert blocked.json()["preview_id"] is None
     refreshed = other.post("/api/standards/import-previews", json={"path": str(package)})
     assert refreshed.status_code == 200
-    assert other.get("/api/standards").json()[0]["standard_id"] == "szmedi.gas"
+    assert other.get("/api/standards").json()[0]["standard_id"] == STANDARD_ID
 
 
 def test_import_http_rejects_path_body(tmp_path: Path) -> None:
@@ -352,19 +380,12 @@ def test_import_http_rejects_path_body(tmp_path: Path) -> None:
     assert response.status_code == 422
 
 
-def test_import_preview_lists_existing_versions_without_writing(
+def test_import_preview_rejects_existing_uuid_without_writing(
     published_standard: TestClient, tmp_path
 ) -> None:
-    """预检展示官方/用户已有整数版本，且标准库零新增。"""
-    # 官方库补一个同 ID 的 5（用户库已有 1）；候选包固定 v3，因此不构成身份冲突。
-    official = tmp_path / "data" / "standards" / "official" / "szmedi.gas" / "5"
-    official.mkdir(parents=True)
-    (official / "document.json").write_text(
-        json.dumps({**DRAFT_DOCUMENT, "version": 5}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    """ID 唯一，不再把同一 UUID 的多个整数版本归集为一个标准。"""
     package = write_api_package(
-        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 3}
+        tmp_path / "copy.dststandard", published_document(STANDARD_ID)
     )
     before = published_standard.get("/api/standards").json()
 
@@ -373,13 +394,11 @@ def test_import_preview_lists_existing_versions_without_writing(
     )
     assert preview.status_code == 200, preview.text
     body = preview.json()
-    assert body["can_import"] is True, body["diagnostics"]
-    assert body["version"] == 3
-    assert sorted(
-        (item["source"], item["version"]) for item in body["existing_versions"]
-    ) == [("official", 5), ("user", 1)]
+    assert body["can_import"] is False
+    assert body["preview_id"] is None
+    assert body["existing_name"] == "市政燃气施工图"
+    assert [item["code"] for item in body["diagnostics"]] == ["STANDARD_ID_EXISTS"]
     assert published_standard.get("/api/standards").json() == before
-    assert body["expires_at"]
 
 
 def test_import_preview_reports_name_conflict(tmp_path: Path) -> None:
@@ -388,7 +407,7 @@ def test_import_preview_reports_name_conflict(tmp_path: Path) -> None:
         tmp_path / "other.dststandard",
         {
             **asset_document("assets/A2.dwg"),
-            "standard_id": "other.gas",
+            "standard_id": SECOND_STANDARD_ID,
             "version": 1,
             "name": "市政燃气施工图",
         },
@@ -408,7 +427,7 @@ def test_import_preview_reports_name_conflict(tmp_path: Path) -> None:
         tmp_path / "same-name.dststandard",
         {
             **asset_document("assets/A2.dwg"),
-            "standard_id": "dupe.gas",
+            "standard_id": THIRD_STANDARD_ID,
             "version": 1,
             "name": "  市政燃气施工图  ",
         },
@@ -417,13 +436,16 @@ def test_import_preview_reports_name_conflict(tmp_path: Path) -> None:
     blocked = client.post("/api/standards/import-previews", json={"path": str(same_name)})
     assert blocked.status_code == 200, blocked.text
     assert blocked.json()["can_import"] is False
+    assert blocked.json()["preview_id"]
+    assert blocked.json()["name_conflict"] is True
+    assert blocked.json()["existing_name"] == "市政燃气施工图"
     assert [item["code"] for item in blocked.json()["diagnostics"]] == [
         "STANDARD_NAME_CONFLICT"
     ]
 
 
 def test_import_preview_conflict_after_preview_returns_409(tmp_path: Path) -> None:
-    """确认前库状态变化（新增同身份）必须在锁内复核并以 409 拒绝。"""
+    """确认前库状态变化（新增同 UUID）必须在库锁内复核并以 409 拒绝。"""
     client = make_client(tmp_path)
     package = write_api_package(
         tmp_path / "copy.dststandard",
@@ -433,29 +455,19 @@ def test_import_preview_conflict_after_preview_returns_409(tmp_path: Path) -> No
     preview = client.post("/api/standards/import-previews", json={"path": str(package)})
     assert preview.json()["can_import"] is True
 
-    # 预检后同一个客户端先把该身份建出来（同库另一包），再确认：必须 409。
+    # 预检后由并发写入先占用同一 UUID，再确认：必须 409。
     same_identity = write_api_package(
         tmp_path / "same.dststandard",
         {**asset_document("assets/A2.dwg"), "version": 1},
         {"assets/A2.dwg": b"a2"},
     )
-    other_preview = client.post(
-        "/api/standards/import-previews", json={"path": str(same_identity)}
-    )
-    assert other_preview.json()["can_import"] is True
-    assert (
-        client.post(
-            "/api/standards/import",
-            json={"preview_id": other_preview.json()["preview_id"]},
-        ).status_code
-        == 200
-    )
+    client.app.state.service.standard_store.import_package(same_identity)
 
     confirmed = client.post(
         "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
     )
     assert confirmed.status_code == 409, confirmed.text
-    assert confirmed.json()["code"] == "STANDARD_VERSION_EXISTS"
+    assert confirmed.json()["code"] == "STANDARD_ID_EXISTS"
 
 
 def test_import_confirms_from_snapshot_after_source_changes(tmp_path: Path) -> None:
@@ -483,7 +495,7 @@ def test_import_confirms_from_snapshot_after_source_changes(tmp_path: Path) -> N
         tmp_path / "second.dststandard",
         {
             **asset_document("assets/A2.dwg"),
-            "standard_id": "second.gas",
+            "standard_id": THIRD_STANDARD_ID,
             "name": "第二标准",
             "version": 1,
         },
@@ -538,6 +550,7 @@ def test_import_preview_conflict_does_not_keep_unusable_snapshot(tmp_path: Path)
     assert blocked.status_code == 200
     assert blocked.json()["can_import"] is False
     assert blocked.json()["preview_id"] is None
+    assert blocked.json()["diagnostics"][0]["code"] == "STANDARD_ID_EXISTS"
     assert client.app.state.service.import_previews.snapshot_files() == before
 
 
@@ -632,21 +645,17 @@ def test_import_preview_rejects_bad_sources(tmp_path: Path, monkeypatch) -> None
     assert not list((tmp_path / "data" / "tmp").glob("**/*.dststandard"))
 
 
-def test_version_route_rejects_overlong_segment_with_422(tmp_path: Path) -> None:
-    """超长数字版本段必须在 int() 前拒绝：否则撞 int_max_str_digits 会返回 500。"""
+def test_versioned_standard_routes_are_removed(tmp_path: Path) -> None:
+    """已发布标准通过 UUID 定位，不再接受 ID/整数版本二级路由。"""
     client = make_client(tmp_path)
-    overlong = "9" * 4301
-    assert client.get(f"/api/standards/szmedi.gas/{overlong}").status_code == 422
-    assert client.get(f"/api/standards/szmedi.gas/{overlong}/export").status_code == 422
-    assert client.get(f"/api/standards/szmedi.gas/{overlong}").json()["code"] == (
-        "STANDARD_VERSION_INVALID"
-    )
+    assert client.get(f"/api/standards/{STANDARD_ID}/1").status_code == 404
+    assert client.get(f"/api/standards/{STANDARD_ID}/1/export").status_code == 404
 
 
 def test_import_preview_tolerates_unreadable_existing_entry(tmp_path: Path) -> None:
     """同身份已有条目不可读（残留 v1 或损坏）：预检仍 200，按身份冲突阻断而不是 500。"""
     client = make_client(tmp_path)
-    official = tmp_path / "data" / "standards" / "official" / "szmedi.gas" / "1"
+    official = tmp_path / "data" / "standards" / "official" / STANDARD_ID
     official.mkdir(parents=True)
     (official / "document.json").write_text("{not json", encoding="utf-8")
     package = write_api_package(
@@ -658,13 +667,13 @@ def test_import_preview_tolerates_unreadable_existing_entry(tmp_path: Path) -> N
     assert preview.status_code == 200, preview.text
     assert preview.json()["can_import"] is False
     assert [item["code"] for item in preview.json()["diagnostics"]] == [
-        "STANDARD_VERSION_EXISTS"
+        "STANDARD_ID_EXISTS"
     ]
 
 
 def test_import_preview_reports_asset_gate_without_writing(tmp_path: Path) -> None:
     client = make_client(tmp_path)
-    # 包内文档必须携带正式版本（导入不重编号）。
+    # 包内文档必须携带合法发布时间与完整资产。
     document = {**asset_document("assets/A2.dwg"), "version": 1}
     package = write_api_package(tmp_path / "missing.dststandard", document)
     preview = client.post("/api/standards/import-previews", json={"path": str(package)})
@@ -683,7 +692,8 @@ def test_import_preview_reports_asset_gate_without_writing(tmp_path: Path) -> No
 
 def test_missing_export_target_rejected(tmp_path: Path) -> None:
     client = make_client(tmp_path)
-    assert client.get("/api/standards/absent/1/export").status_code == 404
+    absent_id = "123e4567-e89b-42d3-a456-426614174199"
+    assert client.get(f"/api/standards/{absent_id}/export").status_code == 404
 
 
 # ---- 草稿级保存路由（PLAN-DM-040 Task 7，F11） ---------------------------
@@ -845,47 +855,36 @@ def test_identity_route_rejects_percent_encoded_parent_segments(tmp_path: Path) 
     write_library_escape_fixture(tmp_path)
     client = make_client(tmp_path)
 
-    detail = client.get("/api/standards/%2E%2E/%2E%2E")
+    detail = client.get("/api/standards/%2E%2E")
     assert detail.status_code in (404, 422), detail.text
     assert SECRET_NAME not in detail.text
 
-    exported = client.get("/api/standards/%2E%2E/%2E%2E/export")
+    exported = client.get("/api/standards/%2E%2E/export")
     assert exported.status_code in (404, 422), exported.text
     assert exported.headers.get("content-type") != "application/zip"
     assert b"secret-dwg" not in exported.content
 
-ILLEGAL_IDENTITIES = (
-    ("..", ".."),
-    ("..", "1.0.0"),
-    ("C:", "1.0.0"),
-    ("", "1.0.0"),
-    ("szmedi.gas", ".."),
-    ("szmedi.gas", ""),
-    ("szmedi.gas", "1.0"),
-    ("szmedi.gas", "1.0.0 "),
-    ("szmedi.gas", "1.0.0/../.."),
-)
+ILLEGAL_IDENTITIES = ("..", "C:", "", "not-a-uuid", "123e4567e89b42d3a456426614174101")
 
 
-@pytest.mark.parametrize("standard_id,version", ILLEGAL_IDENTITIES)
+@pytest.mark.parametrize("standard_id", ILLEGAL_IDENTITIES)
 def test_store_identity_entries_reject_illegal_segments(
-    tmp_path: Path, standard_id: str, version: str
+    tmp_path: Path, standard_id: str
 ) -> None:
     write_library_escape_fixture(tmp_path)
     store = DstManagerService(Settings(data_dir=tmp_path / "data")).standard_store
-    allowed_codes = ("STANDARD_ID_INVALID", "STANDARD_VERSION_INVALID")
 
     with pytest.raises(StandardStoreError) as fetched:
-        store.get(standard_id, version)
-    assert str(fetched.value).split(":", 1)[0] in allowed_codes
+        store.get(standard_id)
+    assert str(fetched.value).split(":", 1)[0] == "STANDARD_ID_INVALID"
 
     with pytest.raises(StandardStoreError) as document_exc:
-        store.get_document(standard_id, version)
-    assert str(document_exc.value).split(":", 1)[0] in allowed_codes
+        store.get_document(standard_id)
+    assert str(document_exc.value).split(":", 1)[0] == "STANDARD_ID_INVALID"
 
     with pytest.raises(StandardStoreError) as exported:
-        store.export_package(standard_id, version, tmp_path / "out")
-    assert str(exported.value).split(":", 1)[0] in allowed_codes
+        store.export_package(standard_id, tmp_path / "out")
+    assert str(exported.value).split(":", 1)[0] == "STANDARD_ID_INVALID"
     assert not (tmp_path / "out").exists()
     assert not list(tmp_path.glob("*.dststandard"))
 
@@ -894,9 +893,9 @@ def test_identity_codes_name_the_offending_segment(tmp_path: Path) -> None:
     write_library_escape_fixture(tmp_path)
     store = DstManagerService(Settings(data_dir=tmp_path / "data")).standard_store
     with pytest.raises(StandardStoreError, match="STANDARD_ID_INVALID"):
-        store.get("..", "1.0.0")
-    with pytest.raises(StandardStoreError, match="STANDARD_VERSION_INVALID"):
-        store.get("szmedi.gas", "..")
+        store.get("..")
+    with pytest.raises(StandardStoreError, match="STANDARD_ID_INVALID"):
+        store.get("szmedi.gas")
 
 
 # ---- 资产硬门禁 HTTP 入口（PLAN-DM-040 Task 2，F02） ----------------------
@@ -915,8 +914,14 @@ def asset_document(*paths: str) -> dict:
 
 
 def write_api_package(path: Path, document: dict, entries: dict[str, bytes] | None = None) -> Path:
+    package_document = copy.deepcopy(document)
+    if package_document.get("schema_version") == 3:
+        package_document.pop("version", None)
+        if package_document.get("published_at") is None:
+            package_document["published_at"] = 1_800_000_000_123
+        package_document.setdefault("description", "标准描述原文")
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("manifest.json", json.dumps(document, ensure_ascii=False))
+        archive.writestr("manifest.json", json.dumps(package_document, ensure_ascii=False))
         for name, data in (entries or {}).items():
             archive.writestr(name, data)
     return path
@@ -956,7 +961,7 @@ def test_export_includes_only_declared_assets(tmp_path: Path) -> None:
     (assets / "tmp-unreferenced.dwg").write_bytes(b"tmp")
     assert client.post("/api/standards/drafts/draft-asset/publish").status_code == 200
 
-    exported = client.get("/api/standards/szmedi.gas/1/export")
+    exported = client.get(f"/api/standards/{STANDARD_ID}/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert sorted(archive.namelist()) == ["assets/A2.dwg", "manifest.json"]
@@ -1054,7 +1059,7 @@ def test_copied_asset_closes_loop_through_publish_and_export(    tmp_path: Path,
     assert inspected.json()["diagnostics"] == []
     assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
 
-    exported = client.get("/api/standards/szmedi.gas/1/export")
+    exported = client.get(f"/api/standards/{STANDARD_ID}/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert sorted(archive.namelist()) == sorted(["manifest.json", copied])
@@ -1065,25 +1070,22 @@ def test_legal_identity_entries_keep_working(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     make_draft(client, DRAFT_DOCUMENT, "draft-gas")
     assert client.post("/api/standards/drafts/draft-gas/publish").status_code == 200
-    detail = client.get("/api/standards/szmedi.gas/1")
+    detail = client.get(f"/api/standards/{STANDARD_ID}")
     assert detail.status_code == 200
     assert detail.json()["document"]["name"] == "市政燃气施工图"
-    exported = client.get("/api/standards/szmedi.gas/1/export")
+    exported = client.get(f"/api/standards/{STANDARD_ID}/export")
     assert exported.status_code == 200
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
         assert "manifest.json" in archive.namelist()
 
 
-# ---- 整数版本与两步导入的端到端闭环（PLAN-DM-041 Task 8） -----------------
+# ---- UUID 标准包两步导入的端到端闭环（PLAN-DM-046 Task 3） ---------------
 
 
-def test_standard_package_full_loop_from_draft_asset_to_next_version(
+def test_standard_package_full_loop_from_draft_asset_to_import_roundtrip(
     tmp_path: Path,
 ) -> None:
-    """受控草稿资产 → 自动发布 v1 → 导出 → 预检 → 另一数据根确认导入 → 按 ID 定位 → 再发布 v2。
-
-    同时覆盖：同名不同 ID 阻断、重复身份阻断、较早空缺版本允许、发布失败回滚。
-    """
+    """发布、导出、预检、确认与再次导出沿用 UUID、发布时间和标准描述。"""
     publisher = make_client(tmp_path / "publisher")
     template = tmp_path / "A2 模板.dwg"
     template.write_bytes(b"dwg-bytes")
@@ -1101,118 +1103,59 @@ def test_standard_package_full_loop_from_draft_asset_to_next_version(
         == 200
     )
 
-    # 自动发布 v1：服务端分配整数版本，草稿不携带版本
     published = publisher.post("/api/standards/drafts/draft-gas/publish")
     assert published.status_code == 200, published.text
-    assert published.json()["version"] == 1
-    assert publisher.get("/api/standards/szmedi.gas/1").status_code == 200
+    published_at = published.json()["published_at"]
+    assert published.json()["standard_id"] == STANDARD_ID
+    assert publisher.get(f"/api/standards/{STANDARD_ID}").status_code == 200
 
-    exported = publisher.get("/api/standards/szmedi.gas/1/export")
+    exported = publisher.get(f"/api/standards/{STANDARD_ID}/export")
     assert exported.status_code == 200
-    package = tmp_path / "szmedi.gas-v1.dststandard"
+    package = tmp_path / f"{STANDARD_ID}.dststandard"
     package.write_bytes(exported.content)
     with zipfile.ZipFile(package) as archive:
         assert sorted(archive.namelist()) == [copied, "manifest.json"]
         manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
-    assert (manifest["schema_version"], manifest["version"]) == (2, 1)
+    assert manifest["schema_version"] == 3
+    assert manifest["standard_id"] == STANDARD_ID
+    assert manifest["published_at"] == published_at
+    assert manifest["description"] == "标准描述原文"
+    assert "version" not in manifest
+    assert "release_notes" not in manifest
 
     # 另一数据根：预检 → 确认导入
     consumer = make_client(tmp_path / "consumer")
     preview = consumer.post("/api/standards/import-previews", json={"path": str(package)})
     assert preview.status_code == 200, preview.text
     assert preview.json()["can_import"] is True
-    assert preview.json()["existing_versions"] == []
+    assert preview.json()["name_conflict"] is False
+    assert preview.json()["existing_name"] is None
     confirmed = consumer.post(
         "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
     )
     assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["version"] == 1
+    assert confirmed.json()["published_at"] == published_at
+    assert confirmed.json()["description"] == "标准描述原文"
 
-    # 按 ID 归集定位 v1：列表返回整数版本，导出文件名带 v 前缀
     entries = consumer.get("/api/standards").json()
-    assert [(item["standard_id"], item["version"]) for item in entries] == [
-        ("szmedi.gas", 1)
-    ]
-    re_exported = consumer.get("/api/standards/szmedi.gas/1/export")
+    assert len(entries) == 1
+    assert entries[0]["standard_id"] == STANDARD_ID
+    assert entries[0]["published_at"] == published_at
+    assert "version" not in entries[0]
+    re_exported = consumer.get(f"/api/standards/{STANDARD_ID}/export")
     assert re_exported.status_code == 200
 
-    # 重复身份阻断：同一包再次预检以 can_import=false + 诊断呈现
     duplicate = consumer.post(
         "/api/standards/import-previews", json={"path": str(package)}
     )
     assert duplicate.status_code == 200
     assert duplicate.json()["can_import"] is False
     assert [item["code"] for item in duplicate.json()["diagnostics"]] == [
-        "STANDARD_VERSION_EXISTS"
+        "STANDARD_ID_EXISTS"
     ]
 
-    # 较早空缺版本允许：导入手工构造的 v3，再导入 v2 必须成功
-    for version in (3, 2):
-        package_at = write_api_package(
-            tmp_path / f"szmedi.gas-v{version}.dststandard",
-            {**document, "version": version},
-            {copied: b"dwg-bytes"},
-        )
-        preview_at = consumer.post(
-            "/api/standards/import-previews", json={"path": str(package_at)}
-        )
-        assert preview_at.json()["can_import"] is True, preview_at.text
-        assert (
-            consumer.post(
-                "/api/standards/import",
-                json={"preview_id": preview_at.json()["preview_id"]},
-            ).status_code
-            == 200
-        )
-    assert sorted(
-        item["version"] for item in consumer.get("/api/standards").json()
-    ) == [1, 2, 3]
 
-    # 同名不同 ID 阻断：预检以 STANDARD_NAME_CONFLICT 呈现，确认阶段以 409 拒绝
-    same_name = write_api_package(
-        tmp_path / "dupe.dststandard",
-        {**document, "standard_id": "other.gas", "version": 1},
-        {copied: b"dwg-bytes"},
-    )
-    blocked = consumer.post(
-        "/api/standards/import-previews", json={"path": str(same_name)}
-    )
-    assert blocked.status_code == 200
-    assert blocked.json()["can_import"] is False
-    assert [item["code"] for item in blocked.json()["diagnostics"]] == [
-        "STANDARD_NAME_CONFLICT"
-    ]
-    assert [item["standard_id"] for item in consumer.get("/api/standards").json()] == [
-        "szmedi.gas"
-    ] * 3
-
-    # 再发布：从已导入的 v1 派生新草稿。派生只复制文档，受控资产必须按编辑器同一
-    # 「选择本机模板」端点重新引入草稿目录，否则发布门禁会以 STANDARD_ASSET_FILE_MISSING 阻断。
-    detail = consumer.get("/api/standards/szmedi.gas/1").json()
-    derived = {key: value for key, value in detail["document"].items() if key != "version"}
-    assert consumer.post(
-        "/api/standards/drafts", json={"draft_id": "draft-v2", "document": derived}
-    ).status_code == 200
-    re_copied = consumer.post(
-        "/api/standards/drafts/draft-v2/asset-files", json={"source_path": str(template)}
-    ).json()["path"]
-    derived["assets"] = [
-        {"asset_id": "templates", "kind": "base-template", "file": re_copied}
-    ]
-    assert (
-        consumer.put(
-            "/api/standards/drafts/draft-v2", json={"document": derived}
-        ).status_code
-        == 200
-    )
-    second_publish = consumer.post("/api/standards/drafts/draft-v2/publish")
-    assert second_publish.status_code == 200, second_publish.text
-    # 同 ID 在官方/用户库上取 max+1：已有 1、2、3，因此下一版为 4
-    assert second_publish.json()["version"] == 4
-    assert consumer.get("/api/standards/szmedi.gas/4").status_code == 200
-
-
-def test_publish_failure_keeps_draft_and_does_not_reserve_version(
+def test_publish_failure_keeps_draft_and_does_not_reserve_identity(
     tmp_path: Path, monkeypatch
 ) -> None:
     """发布失败回滚：草稿与受控资产保留，不预留空版本目录。"""
@@ -1244,11 +1187,20 @@ def test_publish_failure_keeps_draft_and_does_not_reserve_version(
     # 草稿仍可按草稿门禁读回（无 version），受控资产仍在，标准库无条目
     stored = client.get("/api/standards/drafts/draft-gas").json()["document"]
     assert "version" not in stored
-    # 列表只剩这份未发布的草稿：失败不预留任何已发布版本
-    assert [
-        (item["status"], item["version"]) for item in client.get("/api/standards").json()
-    ] == [("draft", None)]
-    assert not (tmp_path / "data" / "standards" / "user" / "published" / "szmedi.gas").exists()
+    # 列表只剩这份草稿：失败不创建已发布 UUID 目录。
+    entries = client.get("/api/standards").json()
+    assert [(item["status"], item["published_at"]) for item in entries] == [
+        ("draft", None)
+    ]
+    assert "version" not in entries[0]
+    assert not (
+        tmp_path
+        / "data"
+        / "standards"
+        / "user"
+        / "published"
+        / STANDARD_ID
+    ).exists()
     assert (
         tmp_path / "data" / "standards" / "user" / "drafts" / "draft-gas" / copied
     ).read_bytes() == b"dwg-bytes"
@@ -1265,14 +1217,16 @@ def test_import_confirm_rejects_name_conflict_added_after_preview(tmp_path: Path
     """
     client = make_client(tmp_path)
     package = write_api_package(
-        tmp_path / "copy.dststandard", {**DRAFT_DOCUMENT, "version": 1}
+        tmp_path / "copy.dststandard", published_document(SECOND_STANDARD_ID)
     )
     preview = client.post("/api/standards/import-previews", json={"path": str(package)})
     assert preview.status_code == 200, preview.text
     assert preview.json()["can_import"] is True
 
-    # 预检之后用另一个 ID 占住同一名称（同 ID 同名允许，所以必须换 ID）
-    make_draft(client, {**DRAFT_DOCUMENT, "standard_id": "other.gas"}, "draft-other")
+    # 预检之后用另一个 ID 占住同一名称。
+    other_draft = copy.deepcopy(DRAFT_DOCUMENT)
+    other_draft["standard_id"] = THIRD_STANDARD_ID
+    make_draft(client, other_draft, "draft-other")
     published = client.post("/api/standards/drafts/draft-other/publish")
     assert published.status_code == 200, published.text
 
@@ -1283,7 +1237,7 @@ def test_import_confirm_rejects_name_conflict_added_after_preview(tmp_path: Path
     assert confirmed.json()["code"] == "STANDARD_NAME_CONFLICT"
     # 被拒绝的导入不落库
     assert [item["standard_id"] for item in client.get("/api/standards").json()] == [
-        "other.gas"
+        THIRD_STANDARD_ID
     ]
 
 
@@ -1306,3 +1260,132 @@ def test_import_confirm_rejects_expired_credential_with_410(tmp_path: Path) -> N
     assert confirmed.json()["code"] == "STANDARD_IMPORT_PREVIEW_EXPIRED"
     assert client.get("/api/standards").json() == []
     assert list(service.import_previews.snapshot_files()) == []
+
+
+def test_task3_import_preview_blocks_same_uuid_before_name_conflict(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-existing")
+    published = client.post("/api/standards/drafts/draft-existing/publish")
+    assert published.status_code == 200, published.text
+
+    package = write_api_package(
+        tmp_path / "same-id.dststandard",
+        published_document(
+            STANDARD_ID,
+            name="包内改名",
+            description="另一份描述",
+            published_at=1_800_000_000_999,
+        ),
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_import"] is False
+    assert body["preview_id"] is None
+    assert body["name_conflict"] is False
+    assert body["existing_name"] == "市政燃气施工图"
+    assert [item["code"] for item in body["diagnostics"]] == ["STANDARD_ID_EXISTS"]
+
+
+def test_task3_name_conflict_keeps_preview_and_imports_a_renamed_copy(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-existing")
+    assert client.post("/api/standards/drafts/draft-existing/publish").status_code == 200
+    package = write_api_package(
+        tmp_path / "same-name.dststandard",
+        published_document(
+            SECOND_STANDARD_ID,
+            description="从原包保留的描述",
+            published_at=1_800_000_000_555,
+        ),
+    )
+    original_bytes = package.read_bytes()
+
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_import"] is False
+    assert body["preview_id"]
+    assert body["name_conflict"] is True
+    assert body["existing_name"] == "市政燃气施工图"
+    assert body["description"] == "从原包保留的描述"
+    assert body["published_at"] == 1_800_000_000_555
+
+    blocked = client.post(
+        "/api/standards/import", json={"preview_id": body["preview_id"]}
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "STANDARD_NAME_CONFLICT"
+
+    imported = client.post(
+        "/api/standards/import",
+        json={"preview_id": body["preview_id"], "name": "燃气施工图（改名）"},
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["standard_id"] == SECOND_STANDARD_ID
+    assert imported.json()["name"] == "燃气施工图（改名）"
+    assert imported.json()["published_at"] == 1_800_000_000_555
+    detail = client.get(f"/api/standards/{SECOND_STANDARD_ID}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["description"] == "从原包保留的描述"
+    assert package.read_bytes() == original_bytes
+
+
+def test_task3_export_import_roundtrip_preserves_description_without_release_notes(
+    tmp_path: Path,
+) -> None:
+    publisher = make_client(tmp_path / "publisher")
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["description"] = "可导出的标准描述"
+    make_draft(publisher, document, "draft-export")
+    published = publisher.post("/api/standards/drafts/draft-export/publish")
+    assert published.status_code == 200, published.text
+    published_at = published.json()["published_at"]
+
+    exported = publisher.get(f"/api/standards/{STANDARD_ID}/export")
+    assert exported.status_code == 200, exported.text
+    assert f"{STANDARD_ID}.dststandard" in exported.headers["content-disposition"]
+    package = tmp_path / "roundtrip.dststandard"
+    package.write_bytes(exported.content)
+
+    consumer = make_client(tmp_path / "consumer")
+    preview = consumer.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["description"] == "可导出的标准描述"
+    imported = consumer.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["published_at"] == published_at
+    detail = consumer.get(f"/api/standards/{STANDARD_ID}")
+    assert detail.json()["description"] == "可导出的标准描述"
+
+    re_exported = consumer.get(f"/api/standards/{STANDARD_ID}/export")
+    with zipfile.ZipFile(io.BytesIO(re_exported.content)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["description"] == "可导出的标准描述"
+    assert "release_notes" not in manifest
+    assert manifest["published_at"] == published_at
+
+
+def test_task3_import_confirm_rechecks_name_occupied_after_preview(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    package = write_api_package(
+        tmp_path / "import.dststandard",
+        published_document(SECOND_STANDARD_ID, name="预检时可用"),
+    )
+    preview = client.post("/api/standards/import-previews", json={"path": str(package)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is True
+
+    make_draft(client, published_document(STANDARD_ID, name="预检时可用", published_at=None), "draft-race")
+    assert client.post("/api/standards/drafts/draft-race/publish").status_code == 200
+    confirmed = client.post(
+        "/api/standards/import",
+        json={"preview_id": preview.json()["preview_id"]},
+    )
+    assert confirmed.status_code == 409
+    assert confirmed.json()["code"] == "STANDARD_NAME_CONFLICT"

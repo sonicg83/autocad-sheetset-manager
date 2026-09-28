@@ -22,6 +22,7 @@ from dst_manager.application.recovery import TransactionRecoveryOperations
 from dst_manager.application.repair import RepairOperations
 from dst_manager.application.revisions import RevisionRestoreOperations
 from dst_manager.application.standard_assets import StandardAssetOperations
+from dst_manager.application.standard_packages import StandardPackageOperations
 from dst_manager.application.standards import StandardOperations
 from dst_manager.application.xml_io import XmlExportOperations
 from dst_manager.config import Settings
@@ -67,6 +68,7 @@ class DstManagerService(
     RepairOperations,
     TransactionRecoveryOperations,
     StandardOperations,
+    StandardPackageOperations,
     StandardAssetOperations,
     CreationDraftOperations,
     CreationOperations,

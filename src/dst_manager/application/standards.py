@@ -1,9 +1,9 @@
 """图纸标准应用编排（PLAN-DM-035 Task 4/6，PLAN-DM-038 Task 4）。
 
 `StandardOperations` 以 mixin 组合进 `DstManagerService`：承载标准库访问、
-工作区标准绑定的解析与项目快照恢复，以及面向 API 的草稿/发布/导入/导出
-事务转译（标准库错误码 → HTTP 稳定错误）。`DstManagerService` 只负责组合，
-本模块不触碰派生求值（领域层）与包/库持久化（基础设施层）。
+工作区标准绑定解析、项目快照恢复以及草稿与发布编排。标准包预检、确认和导出
+由 `StandardPackageOperations` 独立组合；本模块不触碰派生求值（领域层）与包/库
+持久化（基础设施层）。
 
 草稿保存只过结构门禁；**发布与导入**在目录移动前汇总完整发布门禁：
 Schema 发布解析 + 派生属性发布诊断 + DWG 命名发布诊断，首个 error 转 422，
@@ -18,6 +18,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from dst_manager.application.errors import ApplicationError
+from dst_manager.application.standard_common import (
+    publish_diagnostic_payload as _publish_diagnostic,
+)
+from dst_manager.application.standard_common import (
+    store_error as _store_error,
+)
 from dst_manager.domain.models import Severity, ValidationIssue, Workspace
 from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
@@ -34,24 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from dst_manager.domain.standards import StandardSchemaError
-from dst_manager.infrastructure.standards.asset_paths import (
-    StandardAssetError,
-    validate_package_asset_files,
-)
-from dst_manager.infrastructure.standards.import_previews import ImportPreviewError
 from dst_manager.infrastructure.standards.store import StandardStoreError
-
-#: 标准库稳定错误码 → HTTP 状态；未登记码一律 422。
-_STORE_STATUS = {
-    "STANDARD_ID_EXISTS": 409,
-    "STANDARD_NAME_CONFLICT": 409,
-    "STANDARD_ID_NOT_FOUND": 404,
-    "STANDARD_VERSION_EXISTS": 409,
-    "STANDARD_VERSION_LIMIT_REACHED": 409,
-    "STANDARD_DRAFT_EXISTS": 409,
-    "STANDARD_VERSION_NOT_FOUND": 404,
-    "STANDARD_DRAFT_NOT_FOUND": 404,
-}
 
 RESERVED_BINDING_PROPERTY = "DSTManager.Standard"
 RESERVED_OPTIONS_PROPERTY = "DSTManager.StandardOptions"
@@ -381,135 +370,6 @@ class StandardOperations:
             return ()
         return publish_diagnostics(standard) + publish_naming_diagnostics(standard)
 
-    def preview_standard_import(self, path: Path) -> dict[str, object]:
-        """两步导入第一节：复制到限时快照、校验并返回预检凭证；**不写标准库**。
-
-        身份/名称冲突以 ``can_import=False`` 与稳定诊断呈现（HTTP 200）；包或路径
-        非法以 422 拒绝。校验失败时删除刚建立的快照，不在快照根留垃圾。
-        """
-        previews = self.import_previews
-        try:
-            snapshot = previews.snapshot_source(Path(path))
-        except ImportPreviewError as exc:
-            raise _import_preview_error(exc) from exc
-        try:
-            loaded = self.standard_store.read_package(snapshot)
-        except StandardStoreError as exc:
-            previews.discard_snapshot(snapshot)
-            raise _store_error(exc) from exc
-        standard = loaded.standard
-        diagnostics, can_import = self._import_preview_diagnostics(loaded)
-        record = None
-        if not can_import:
-            previews.discard_snapshot(snapshot)
-        else:
-            try:
-                record = previews.register(
-                    snapshot,
-                    {
-                        "standard_id": standard.standard_id,
-                        "version": standard.version,
-                        "name": standard.name,
-                        "supported_cad_versions": list(standard.supported_cad_versions),
-                    },
-                )
-            except BaseException:
-                previews.discard_snapshot(snapshot)
-                raise
-        return {
-            "preview_id": record.preview_id if record is not None else None,
-            "expires_at": previews.expires_at_iso(record) if record is not None else None,
-            "standard_id": standard.standard_id,
-            "version": standard.version,
-            "name": standard.name,
-            "supported_cad_versions": list(standard.supported_cad_versions),
-            "existing_versions": [
-                {"source": item.source, "version": item.version}
-                for item in self.standard_store.list()
-                if item.status == "published" and item.standard_id == standard.standard_id
-            ],
-            "diagnostics": [_publish_diagnostic(item) for item in diagnostics],
-            "can_import": can_import,
-        }
-
-    def confirm_standard_import(self, preview_id: str) -> dict[str, object]:
-        """两步导入第二节：只消费预检快照，在仓储写入锁下复核后导入。
-
-        同一凭证重复确认返回原成功结果（不二次写入）；确认前库状态变化（新增
-        同身份或同名）由仓储锁内的复核以 409 拒绝。
-        """
-        previews = self.import_previews
-        with previews.confirmation_lock:
-            try:
-                record = previews.require(preview_id)
-            except ImportPreviewError as exc:
-                raise _import_preview_error(exc) from exc
-            if record.consumed is not None:
-                return dict(record.consumed)
-            try:
-                published = self.standard_store.import_package(record.snapshot_path)
-            except StandardStoreError as exc:
-                raise _store_error(exc) from exc
-            result = {
-                "standard_id": published.standard_id,
-                "version": published.version,
-                "name": published.name,
-                "diagnostics": [
-                    _publish_diagnostic(item)
-                    for item in self._published_diagnostics(published)
-                ],
-            }
-            return previews.remember_result(preview_id, result)
-
-    def cancel_standard_import(self, preview_id: str) -> None:
-        """取消预检：删除快照并废弃凭证；之后确认一律要求重新预检。"""
-        self.import_previews.cancel(preview_id)
-
-    def _import_preview_diagnostics(
-        self, loaded
-    ) -> tuple[tuple[StandardDiagnostic, ...], bool]:
-        """预检诊断与可否导入：错误阻断，warning 不阻断（与发布门禁同口径）。"""
-        standard = loaded.standard
-        diagnostics: list[StandardDiagnostic] = list(
-            publish_diagnostics(standard) + publish_naming_diagnostics(standard)
-        )
-        try:
-            validate_package_asset_files(
-                standard, [entry.path for entry in loaded.entries]
-            )
-        except StandardAssetError as exc:
-            diagnostics.append(
-                StandardDiagnostic(code=str(exc).split(":", 1)[0], message=str(exc))
-            )
-        try:
-            existing = self.standard_store.get(standard.standard_id, standard.version)
-        except (StandardStoreError, StandardSchemaError) as exc:
-            # 同身份的既有条目存在但不可读（残留 v1 或语义非法）：按身份已占用处理，
-            # 不冒泡成 500（SPEC-DM-019 §4.3：身份冲突一律 200 + 诊断）。
-            existing = exc
-        if existing is not None:
-            diagnostics.append(
-                StandardDiagnostic(
-                    code="STANDARD_VERSION_EXISTS",
-                    message=f"标准 {standard.standard_id}@{standard.version} 已存在",
-                )
-            )
-        try:
-            self.standard_store.check_published_name(standard.standard_id, standard.name)
-        except StandardStoreError as exc:
-            diagnostics.append(
-                StandardDiagnostic(code=str(exc).split(":", 1)[0], message=str(exc))
-            )
-        return tuple(diagnostics), not any(item.is_error for item in diagnostics)
-
-    def export_standard_package(
-        self, standard_id: str, version: int | str, dest_dir: Path
-    ) -> Path:
-        try:
-            return self.standard_store.export_package(standard_id, version, Path(dest_dir))
-        except StandardStoreError as exc:
-            raise _store_error(exc) from exc
-
     def _require_dependencies(
         self, dependencies: tuple, manifests: Mapping[str, object]
     ) -> None:
@@ -541,33 +401,4 @@ def _require_identity_match(
             422,
         )
 
-
-def _store_error(exc: Exception) -> ApplicationError:
-    """标准库/Schema 错误码（消息前缀）转 HTTP 稳定错误；未登记码一律 422。"""
-    code = str(exc).split(":", 1)[0]
-    return ApplicationError(code, str(exc), _STORE_STATUS.get(code, 422))
-
-
-#: 预检错误码 → HTTP 状态；其余（含包、资产、路径与源不可读）一律 422。
-#: SPEC-DM-019 §4.3：“包损坏、路径非法、**源不存在**、扩展名不符、超限等包或路径
-#: 问题返回 HTTP 422”；只有凭证类错误才用 404/410。
-_IMPORT_PREVIEW_STATUS = {
-    "STANDARD_IMPORT_PREVIEW_NOT_FOUND": 404,
-    "STANDARD_IMPORT_PREVIEW_EXPIRED": 410,
-}
-
-
-def _import_preview_error(exc: ImportPreviewError) -> ApplicationError:
-    code = str(exc).split(":", 1)[0]
-    return ApplicationError(code, str(exc), _IMPORT_PREVIEW_STATUS.get(code, 422))
-
-
-def _publish_diagnostic(diagnostic: StandardDiagnostic) -> dict[str, object]:
-    """发布检查诊断模型：错误码 + 严重级 + 可定位信息。"""
-    return {
-        "code": diagnostic.code,
-        "severity": diagnostic.severity,
-        "message": diagnostic.message,
-        "property_id": diagnostic.property_id,
-        "segment_index": diagnostic.segment_index,
-    }
+\n

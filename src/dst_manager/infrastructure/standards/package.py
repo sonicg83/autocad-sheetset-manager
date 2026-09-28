@@ -5,6 +5,9 @@
 超大条目与非法 Schema，不解压任何未通过校验的条目。
 """
 
+import json
+import os
+import shutil
 import zipfile
 import zlib
 from dataclasses import dataclass
@@ -145,3 +148,58 @@ class StandardPackageReader:
         return LoadedStandardPackage(
             standard=standard, entries=tuple(entries), source_path=source
         )
+
+
+def copy_package_with_name(source: Path, destination: Path, name: str) -> Path:
+    """将包复制到新文件，只改写副本 manifest 的标准名称。
+
+    不解压到文件系统，也不改写 ``source``。确认导入时调用者随后必须重新运行
+    :class:`StandardPackageReader`，以完整复核改名后的 manifest 和所有资产。
+    """
+    source_path = Path(source)
+    destination_path = Path(destination)
+    temporary_path = destination_path.with_name(f".{destination_path.name}.tmp")
+    try:
+        with zipfile.ZipFile(source_path, "r") as original, zipfile.ZipFile(
+            temporary_path, "w", zipfile.ZIP_DEFLATED
+        ) as copied:
+            manifest_count = 0
+            for info in original.infolist():
+                normalized = _normalize_entry_name(info.filename)
+                if normalized is None:
+                    copied.writestr(info, b"")
+                elif normalized == MANIFEST_NAME:
+                    manifest_count += 1
+                    try:
+                        manifest = json.loads(original.read(info).decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError, OSError, zipfile.BadZipFile) as exc:
+                        raise _error(
+                            "STANDARD_PACKAGE_MANIFEST_INVALID",
+                            f"manifest 读取失败：{exc}",
+                        ) from exc
+                    if not isinstance(manifest, dict):
+                        raise _error(
+                            "STANDARD_PACKAGE_MANIFEST_INVALID",
+                            "manifest 顶层必须是对象",
+                        )
+                    manifest["name"] = name
+                    copied.writestr(
+                        info,
+                        json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"),
+                    )
+                else:
+                    with original.open(info, "r") as source_entry, copied.open(
+                        info, "w"
+                    ) as destination_entry:
+                        shutil.copyfileobj(source_entry, destination_entry, length=1024 * 1024)
+            if manifest_count != 1:
+                raise _error(
+                    "STANDARD_PACKAGE_MANIFEST_INVALID",
+                    "包内必须且只能包含一个 manifest.json",
+                )
+        os.replace(temporary_path, destination_path)
+    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+        raise _error("STANDARD_PACKAGE_INVALID", f"无法创建改名副本：{exc}") from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return destination_path

@@ -399,7 +399,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/standards/{standard_id}/{version}": {
+    "/api/standards/{standard_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -407,7 +407,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Standard */
-        get: operations["get_standard_api_standards__standard_id___version__get"];
+        get: operations["get_standard_api_standards__standard_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -416,7 +416,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/standards/{standard_id}/{version}/export": {
+    "/api/standards/{standard_id}/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -424,7 +424,7 @@ export interface paths {
             cookie?: never;
         };
         /** Export Standard */
-        get: operations["export_standard_api_standards__standard_id___version__export_get"];
+        get: operations["export_standard_api_standards__standard_id__export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2711,18 +2711,20 @@ export interface components {
         StandardDetailResponse: {
             /** Dependencies */
             dependencies: components["schemas"]["StandardDependencyModel"][];
+            /** Description */
+            description: string;
             /** Document */
             document: {
                 [key: string]: unknown;
             };
             /** Name */
             name: string;
+            /** Published At */
+            published_at: number;
             /** Standard Id */
             standard_id: string;
             /** Supported Cad Versions */
             supported_cad_versions: string[];
-            /** Version */
-            version: number;
         };
         /** StandardDiagnosticModel */
         StandardDiagnosticModel: {
@@ -2768,20 +2770,12 @@ export interface components {
             dst_path: string;
         };
         /**
-         * StandardExistingVersionModel
-         * @description 同 ID 在官方/用户库中已有的整数发布版本。
-         */
-        StandardExistingVersionModel: {
-            /** Source */
-            source: string;
-            /** Version */
-            version: number;
-        };
-        /**
          * StandardImportConfirmRequest
          * @description 确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。
          */
         StandardImportConfirmRequest: {
+            /** Name */
+            name?: string | null;
             /** Preview Id */
             preview_id: string;
         };
@@ -2795,56 +2789,61 @@ export interface components {
         };
         /**
          * StandardImportPreviewResponse
-         * @description 预检结果：候选身份、已有版本、诊断与可否导入。
-         *
-         *     身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；
-         *     包或路径非法则直接 422。
+         * @description 预检结果：身份冲突可阻断，名称冲突仍保留确认改名所需凭证。
          */
         StandardImportPreviewResponse: {
             /** Can Import */
             can_import: boolean;
+            /** Description */
+            description: string;
             /** Diagnostics */
             diagnostics?: components["schemas"]["StandardDiagnosticModel"][];
-            /** Existing Versions */
-            existing_versions?: components["schemas"]["StandardExistingVersionModel"][];
+            /** Existing Name */
+            existing_name?: string | null;
             /** Expires At */
             expires_at?: string | null;
             /** Name */
             name: string;
+            /** Name Conflict */
+            name_conflict: boolean;
             /** Preview Id */
             preview_id?: string | null;
+            /** Published At */
+            published_at: number;
             /** Standard Id */
             standard_id: string;
             /** Supported Cad Versions */
             supported_cad_versions?: string[];
-            /** Version */
-            version: number;
         };
         /** StandardPublishResponse */
         StandardPublishResponse: {
+            /** Description */
+            description: string;
             /** Diagnostics */
             diagnostics?: components["schemas"]["StandardDiagnosticModel"][];
             /** Name */
             name: string;
+            /** Published At */
+            published_at: number;
             /** Standard Id */
             standard_id: string;
-            /** Version */
-            version: number;
         };
         /** StandardSummaryModel */
         StandardSummaryModel: {
+            /** Description */
+            description: string;
             /** Draft Id */
             draft_id?: string | null;
             /** Name */
             name: string;
+            /** Published At */
+            published_at?: number | null;
             /** Source */
             source: string;
             /** Standard Id */
             standard_id: string;
             /** Status */
             status: string;
-            /** Version */
-            version?: number | null;
         };
         /** StructureDiffResponse */
         StructureDiffResponse: {
@@ -4107,13 +4106,12 @@ export interface operations {
             };
         };
     };
-    get_standard_api_standards__standard_id___version__get: {
+    get_standard_api_standards__standard_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 standard_id: string;
-                version: string;
             };
             cookie?: never;
         };
@@ -4139,13 +4137,12 @@ export interface operations {
             };
         };
     };
-    export_standard_api_standards__standard_id___version__export_get: {
+    export_standard_api_standards__standard_id__export_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 standard_id: string;
-                version: string;
             };
             cookie?: never;
         };

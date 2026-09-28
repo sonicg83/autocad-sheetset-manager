@@ -184,6 +184,7 @@ export default {
   },
   // ---- 标准库发布与导入（PLAN-DM-041 Task 3；服务端分配版本与名称唯一门禁） ----
   standards: {
+    idExists: "该标准 ID 已存在，请选择其他标准",
     nameConflict: "该标准名称已被其他已发布标准占用，请修改名称后重试",
     versionExists: "同一标准 ID 与版本已存在，已发布版本不可覆盖",
     versionLimitReached: "该标准已达到最高发布版本，无法再发布新版本",

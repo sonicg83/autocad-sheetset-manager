@@ -13,9 +13,10 @@ from dst_manager.infrastructure.standards.package import (
 
 VALID_MANIFEST = json.dumps(
     {
-        "schema_version": 2,
-        "standard_id": "szmedi.gas",
-        "version": 1,
+        "schema_version": 3,
+        "standard_id": "123e4567-e89b-42d3-a456-426614174101",
+        "published_at": 1_800_000_000_123,
+        "description": "标准包描述原文",
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [
@@ -74,9 +75,9 @@ LEGACY_MANIFEST = json.dumps(
 #: Schema v2 但结构不合法的 manifest：错误码保留 Schema 侧的精确稳定码。
 MALFORMED_MANIFEST = json.dumps(
     {
-        "schema_version": 2,
-        "standard_id": "szmedi.gas",
-        "version": 1,
+        "schema_version": 3,
+        "standard_id": "123e4567-e89b-42d3-a456-426614174101",
+        "published_at": 1_800_000_000_123,
         "supported_cad_versions": ["2020"],
         "properties": [],
         "dwg_naming": {"segments": [{"literal": "x"}]},
@@ -202,8 +203,9 @@ def test_package_lists_declared_entries(tmp_path: Path) -> None:
         {"manifest.json": VALID_MANIFEST, "assets/A2.dwg": b"dwg-bytes"},
     )
     loaded = StandardPackageReader().read(package)
-    assert loaded.standard.standard_id == "szmedi.gas"
-    assert loaded.standard.version == 1
-    assert isinstance(loaded.standard.version, int)
+    assert loaded.standard.standard_id == "123e4567-e89b-42d3-a456-426614174101"
+    assert loaded.standard.published_at == 1_800_000_000_123
+    assert loaded.standard.description == "标准包描述原文"
+    assert not hasattr(loaded.standard, "version")
     entries = {entry.path: entry.size for entry in loaded.entries}
     assert entries == {"assets/A2.dwg": len(b"dwg-bytes")}

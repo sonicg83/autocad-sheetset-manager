@@ -22,9 +22,9 @@ class StandardSummaryModel(ContractModel):
     source: str
     status: str
     standard_id: str
-    #: 草稿为 ``None``，已发布为服务端分配的整数版本（PLAN-DM-041 Task 2）。
-    version: int | None = None
     name: str
+    description: str
+    published_at: int | None = None
     draft_id: str | None = None
 
 
@@ -51,8 +51,9 @@ class ImportedStandardDraftResponse(StandardDraftResponse):
 
 class StandardPublishResponse(ContractModel):
     standard_id: str
-    version: int
+    published_at: int
     name: str
+    description: str
     #: 发布检查诊断：成功发布时只可能包含 warning（error 已转 422）。
     diagnostics: list[StandardDiagnosticModel] = Field(default_factory=list)
 
@@ -73,29 +74,22 @@ class StandardImportConfirmRequest(ContractModel):
     """确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。"""
 
     preview_id: str
-
-
-class StandardExistingVersionModel(ContractModel):
-    """同 ID 在官方/用户库中已有的整数发布版本。"""
-
-    source: str
-    version: int
+    name: str | None = None
 
 
 class StandardImportPreviewResponse(ContractModel):
-    """预检结果：候选身份、已有版本、诊断与可否导入。
-
-    身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；
-    包或路径非法则直接 422。
+    """预检结果：身份冲突可阻断，名称冲突仍保留确认改名所需凭证。
     """
 
     preview_id: str | None = None
     expires_at: str | None = None
     standard_id: str
-    version: int
     name: str
+    description: str
+    published_at: int
+    name_conflict: bool
+    existing_name: str | None = None
     supported_cad_versions: list[str] = Field(default_factory=list)
-    existing_versions: list[StandardExistingVersionModel] = Field(default_factory=list)
     diagnostics: list[StandardDiagnosticModel] = Field(default_factory=list)
     can_import: bool
 
@@ -112,8 +106,9 @@ class StandardDependencyModel(ContractModel):
 
 class StandardDetailResponse(ContractModel):
     standard_id: str
-    version: int
     name: str
+    description: str
+    published_at: int
     supported_cad_versions: list[str]
     dependencies: list[StandardDependencyModel]
     #: 完整标准文档（派生草稿等场景需要）；与身份字段冗余但保持契约自洽。

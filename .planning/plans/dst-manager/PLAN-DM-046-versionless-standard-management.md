@@ -89,15 +89,15 @@ related:
 
 ### Task 3：标准包预检、改名导入与导出
 
-**Files:** 修改 `src/dst_manager/infrastructure/standards/package.py`、`import_previews.py`、`store.py`，`src/dst_manager/application/standards.py`，`src/dst_manager/interfaces/standard_contracts.py`、`standard_api.py`、`message_catalog.py`；修改 `tests/unit/test_standard_import_previews.py`、`tests/unit/test_standard_package.py`、`tests/integration/test_standard_api.py`；更新 `changelog.md`。
+**Files:** 修改 `src/dst_manager/infrastructure/standards/package.py`、`store.py`，`src/dst_manager/application/standards.py`；新建 `src/dst_manager/application/standard_packages.py` 拆分包预检、确认和导出编排，`standard_common.py` 集中错误映射与诊断序列化；修改 `src/dst_manager/interfaces/standard_contracts.py`、`standard_api.py`、`message_catalog.py`；修改 `tests/unit/test_standard_import_previews.py`、`test_standard_package.py`、`test_message_catalog.py`、`tests/integration/test_standard_api.py`；更新 `web/src/api/openapi.json`、`schema.d.ts` 及中英文 `errors.ts`；更新 `changelog.md`。
 
 **Interfaces:** 预检响应保留 `preview_id`、`expires_at`、`can_import` 和诊断，改为 `standard_id`、`name`、`description`、`published_at`、`name_conflict: bool`、`existing_name: str | None`；确认请求为 `{preview_id, name?: str}`，名称相同且 ID 不同须提供可用新名称；同 ID 返回 `STANDARD_ID_EXISTS` 并优先于名称冲突。导出文件名 `<uuid>.dststandard`，manifest／document 保留 `description`。
 
-- [ ] **Step 1: Write failing tests.** 同 ID、不同名、不同时间仍阻止且显示本机已有名称；仅同名时保留预检凭证，改名后导入保留 ID／时间／描述、原包字节不变；导出再导入描述一致且不产生 `release_notes`；并发占用在确认时返回 409；重复确认同一凭证幂等返回首次结果；非法包和逃逸资产仍拒绝。
-- [ ] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_standard_import_previews.py tests/unit/test_standard_package.py tests/integration/test_standard_api.py`。
-- [ ] **Step 3: Implement preview and confirm.** 继续只消费预检快照；在库锁内校验最终名称和 ID，仅重写入库副本 manifest／document 的 `name` 并重新执行完整校验，原压缩包不写回。更新 OpenAPI 生成类型和中英文错误文案。
-- [ ] **Step 4: Verify GREEN.** 重跑本任务测试与 `rtk uv run ruff check .`；生成的 `web/src/api/schema.d.ts` 与接口一致。
-- [ ] **Step 5: Commit this task.** 只提交本任务改动。
+- [x] **Step 1: Write failing tests.** 同 ID、不同名、不同时间仍阻止且显示本机已有名称；仅同名时保留预检凭证，改名后导入保留 ID／时间／描述、原包字节不变；导出再导入描述一致且不产生 `release_notes`；并发占用在确认时返回 409；重复确认同一凭证幂等返回首次结果；非法包和逃逸资产仍拒绝。
+- [x] **Step 2: Verify RED.** 新增 Task 3 API 用例在实现前失败；随后运行标准包、预检和标准 API 回归。
+- [x] **Step 3: Implement preview and confirm.** 继续只消费预检快照；在库锁内校验最终名称和 ID，仅重写入库副本 manifest／document 的 `name` 并重新执行完整校验，原压缩包不写回。更新 OpenAPI 生成类型和中英文错误文案。
+- [x] **Step 4: Verify GREEN.** 标准包／预检／错误目录单元测试 58 项通过；标准 API 集成测试 56 项通过，2 项 DST 导入用例留待 Task 4；`rtk uv run ruff check .`、`rtk npm run check:api` 与 `git diff --check` 通过。
+- [x] **Step 5: Commit this task.** 只提交本任务改动。
 
 ### Task 4：创建草稿、计划、XLSX 与工程绑定改为 UUID
 
@@ -145,7 +145,7 @@ related:
 
 ### Task 7：兼容清点、端到端验证与交付文档
 
-**Files:** 修改 `docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md`、`README.md`、`docs/dst-manager/README.md`、`.planning/README.md`、`changelog.md`；按实际生成结果更新测试夹具及 `web/src/api/openapi.json`、`schema.d.ts`。
+**Files:** 修改 `docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md`、`README.md`、`docs/dst-manager/README.md`、`.planning/README.md`、`changelog.md`；按实际生成结果更新测试夹具及 `web/src/api/openapi.json`、`schema.d.ts`；拆分 `src/dst_manager/infrastructure/standards/store.py` 的草稿、身份查询与包读写实现，新增同层基础设施模块并保持 `StandardStore` 公共接口。
 
 **Interfaces:** 发布包指南只描述 UUID＋发布时间＋标准描述；旧 `schema_version: 2`、`release_notes` 与 `id@version` 数据清点报告包括目录／数量和双字段冲突数量而不包含用户私有路径或描述正文；任何真实旧用户数据触发迁移设计门禁，不执行删除重建。
 
@@ -153,4 +153,5 @@ related:
 - [ ] **Step 2: Run backend gates.** `rtk uv run ruff check .`、`rtk uv run pytest -q`、`rtk uv lock --check`；按结果处理真实失败，不把既有环境失败写成通过。
 - [ ] **Step 3: Run frontend gates.** 在 `web` 中运行 `rtk npm run test:unit`、`rtk npm run build`、相关 `rtk npx playwright test`；核对生成 OpenAPI、类型与 i18n 守卫。
 - [ ] **Step 4: Review user flows.** 逐项走新建→输入标准描述→发布→在列表／详情查看描述→导出→导入（同 ID／同名）→创建草稿→用户标准删除确认→已建项目打开；核对官方标准删除请求被拒绝。复核 Task 6 五项视觉验收及截图证据；在真实桌面壳可用时验证原生包选择器、浅深主题与窄视口，缺少环境则如实记录未验证。
-- [ ] **Step 5: Update docs and commit.** 仅在实现完成后更新 README 的“当前功能”描述，将本计划状态及验证结果记入文档；只提交本任务文件。
+- [ ] **Step 5: Split oversized store implementation.** 当前 `store.py` 超过单文件软上限；按草稿存储、身份查询、发布／包读写职责拆分到同层模块，保留 `StandardStore` 门面、路径与错误码契约。重跑标准库、发布、导入导出与迁移回归测试，并确认新模块不依赖接口层。
+- [ ] **Step 6: Update docs and commit.** 仅在实现完成后更新 README 的“当前功能”描述，将本计划状态及验证结果记入文档；只提交本任务文件。

@@ -178,10 +178,19 @@ def test_remembered_result_is_returned_for_repeat_confirmation(tmp_path: Path) -
     store = make_store(tmp_path)
     record = store.register(store.snapshot_source(write_source(tmp_path)), {})
 
-    stored = store.remember_result(record.preview_id, {"standard_id": "a.b", "version": 1})
+    stored = store.remember_result(
+        record.preview_id,
+        {
+            "standard_id": "123e4567-e89b-42d3-a456-426614174101",
+            "published_at": 1_800_000_000_123,
+        },
+    )
 
-    assert stored == {"standard_id": "a.b", "version": 1}
-    assert store.require(record.preview_id).consumed == {"standard_id": "a.b", "version": 1}
+    assert stored == {
+        "standard_id": "123e4567-e89b-42d3-a456-426614174101",
+        "published_at": 1_800_000_000_123,
+    }
+    assert store.require(record.preview_id).consumed == stored
 
 
 def test_preview_ids_are_random_and_unguessable(tmp_path: Path) -> None:

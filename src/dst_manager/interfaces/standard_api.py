@@ -14,11 +14,6 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from dst_manager.application.errors import ApplicationError
-from dst_manager.domain.standards import (
-    StandardSchemaError,
-    parse_standard_version_segment,
-)
 from dst_manager.infrastructure.standards.store import StandardStoreError
 from dst_manager.interfaces.message_catalog import error_payload
 from dst_manager.interfaces.standard_contracts import (
@@ -54,6 +49,7 @@ def register_standard_routes(app: FastAPI) -> None:
         # 标准库错误消息以稳定码为前缀；未登记码按 422 处理
         code = str(exc).split(":", 1)[0]
         status = {
+            "STANDARD_ID_EXISTS": 409,
             "STANDARD_VERSION_EXISTS": 409,
             "STANDARD_NAME_CONFLICT": 409,
             "STANDARD_VERSION_LIMIT_REACHED": 409,
@@ -63,15 +59,6 @@ def register_standard_routes(app: FastAPI) -> None:
 
     def service(request: Request):
         return request.app.state.service
-
-    def version_segment(value: str) -> int:
-        """路由版本段只接受规范十进制正整数（与目录段/绑定身份同口径）。"""
-        try:
-            return parse_standard_version_segment(value)
-        except StandardSchemaError as exc:
-            raise ApplicationError(
-                str(exc).split(":", 1)[0], str(exc), 422
-            ) from exc
 
     @app.get(
         "/api/standards",
@@ -183,13 +170,12 @@ def register_standard_routes(app: FastAPI) -> None:
     )
     def import_standard(request: Request, body: StandardImportConfirmRequest):
         # 只接受预检凭证：服务端不接受绕过预检的路径导入。
-        return service(request).confirm_standard_import(body.preview_id)
+        return service(request).confirm_standard_import(body.preview_id, name=body.name)
 
-    @app.get("/api/standards/{standard_id}/{version}/export")
-    def export_standard(request: Request, standard_id: str, version: str):
+    @app.get("/api/standards/{standard_id}/export")
+    def export_standard(request: Request, standard_id: str):
         package = service(request).export_standard_package(
             standard_id,
-            version_segment(version),
             service(request).settings.data_dir / "tmp" / "standard-exports",
         )
         return FileResponse(package, media_type="application/zip", filename=package.name)
@@ -197,12 +183,12 @@ def register_standard_routes(app: FastAPI) -> None:
     # ---- 身份路由 --------------------------------------------------------
 
     @app.get(
-        "/api/standards/{standard_id}/{version}",
+        "/api/standards/{standard_id}",
         response_model=StandardDetailResponse,
         response_model_exclude_unset=True,
     )
-    def get_standard(request: Request, standard_id: str, version: str):
-        return service(request).get_standard(standard_id, version_segment(version))
+    def get_standard(request: Request, standard_id: str):
+        return service(request).get_standard(standard_id)
 
 
 

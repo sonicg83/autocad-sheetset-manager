@@ -5262,6 +5262,10 @@
             "title": "Dependencies",
             "type": "array"
           },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
           "document": {
             "additionalProperties": true,
             "title": "Document",
@@ -5270,6 +5274,10 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "integer"
           },
           "standard_id": {
             "title": "Standard Id",
@@ -5281,16 +5289,13 @@
             },
             "title": "Supported Cad Versions",
             "type": "array"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
           }
         },
         "required": [
           "standard_id",
-          "version",
           "name",
+          "description",
+          "published_at",
           "supported_cad_versions",
           "dependencies",
           "document"
@@ -5419,30 +5424,21 @@
         "title": "StandardDstImportRequest",
         "type": "object"
       },
-      "StandardExistingVersionModel": {
-        "additionalProperties": false,
-        "description": "同 ID 在官方/用户库中已有的整数发布版本。",
-        "properties": {
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "source",
-          "version"
-        ],
-        "title": "StandardExistingVersionModel",
-        "type": "object"
-      },
       "StandardImportConfirmRequest": {
         "additionalProperties": false,
         "description": "确认导入：只接受预检凭证，不再接受路径（SPEC-DM-019 §4.1）。",
         "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "preview_id": {
             "title": "Preview Id",
             "type": "string"
@@ -5471,11 +5467,15 @@
       },
       "StandardImportPreviewResponse": {
         "additionalProperties": false,
-        "description": "预检结果：候选身份、已有版本、诊断与可否导入。\n\n身份/名称冲突时 ``can_import`` 为 ``false`` 且 ``preview_id``/``expires_at`` 为空；\n包或路径非法则直接 422。",
+        "description": "预检结果：身份冲突可阻断，名称冲突仍保留确认改名所需凭证。\n    ",
         "properties": {
           "can_import": {
             "title": "Can Import",
             "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
           },
           "diagnostics": {
             "items": {
@@ -5484,12 +5484,16 @@
             "title": "Diagnostics",
             "type": "array"
           },
-          "existing_versions": {
-            "items": {
-              "$ref": "#/components/schemas/StandardExistingVersionModel"
-            },
-            "title": "Existing Versions",
-            "type": "array"
+          "existing_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Name"
           },
           "expires_at": {
             "anyOf": [
@@ -5506,6 +5510,10 @@
             "title": "Name",
             "type": "string"
           },
+          "name_conflict": {
+            "title": "Name Conflict",
+            "type": "boolean"
+          },
           "preview_id": {
             "anyOf": [
               {
@@ -5517,6 +5525,10 @@
             ],
             "title": "Preview Id"
           },
+          "published_at": {
+            "title": "Published At",
+            "type": "integer"
+          },
           "standard_id": {
             "title": "Standard Id",
             "type": "string"
@@ -5527,16 +5539,14 @@
             },
             "title": "Supported Cad Versions",
             "type": "array"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
           }
         },
         "required": [
           "standard_id",
-          "version",
           "name",
+          "description",
+          "published_at",
+          "name_conflict",
           "can_import"
         ],
         "title": "StandardImportPreviewResponse",
@@ -5545,6 +5555,10 @@
       "StandardPublishResponse": {
         "additionalProperties": false,
         "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
           "diagnostics": {
             "items": {
               "$ref": "#/components/schemas/StandardDiagnosticModel"
@@ -5556,19 +5570,20 @@
             "title": "Name",
             "type": "string"
           },
+          "published_at": {
+            "title": "Published At",
+            "type": "integer"
+          },
           "standard_id": {
             "title": "Standard Id",
             "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
           }
         },
         "required": [
           "standard_id",
-          "version",
-          "name"
+          "published_at",
+          "name",
+          "description"
         ],
         "title": "StandardPublishResponse",
         "type": "object"
@@ -5576,6 +5591,10 @@
       "StandardSummaryModel": {
         "additionalProperties": false,
         "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
           "draft_id": {
             "anyOf": [
               {
@@ -5591,6 +5610,17 @@
             "title": "Name",
             "type": "string"
           },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -5602,24 +5632,14 @@
           "status": {
             "title": "Status",
             "type": "string"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
           }
         },
         "required": [
           "source",
           "status",
           "standard_id",
-          "name"
+          "name",
+          "description"
         ],
         "title": "StandardSummaryModel",
         "type": "object"
@@ -8007,9 +8027,9 @@
         "summary": "Cancel Standard Import"
       }
     },
-    "/api/standards/{standard_id}/{version}": {
+    "/api/standards/{standard_id}": {
       "get": {
-        "operationId": "get_standard_api_standards__standard_id___version__get",
+        "operationId": "get_standard_api_standards__standard_id__get",
         "parameters": [
           {
             "in": "path",
@@ -8017,15 +8037,6 @@
             "required": true,
             "schema": {
               "title": "Standard Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "title": "Version",
               "type": "string"
             }
           }
@@ -8055,9 +8066,9 @@
         "summary": "Get Standard"
       }
     },
-    "/api/standards/{standard_id}/{version}/export": {
+    "/api/standards/{standard_id}/export": {
       "get": {
-        "operationId": "export_standard_api_standards__standard_id___version__export_get",
+        "operationId": "export_standard_api_standards__standard_id__export_get",
         "parameters": [
           {
             "in": "path",
@@ -8065,15 +8076,6 @@
             "required": true,
             "schema": {
               "title": "Standard Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "title": "Version",
               "type": "string"
             }
           }

@@ -183,6 +183,7 @@ export default {
   },
   // ---- Standard library publish and import (PLAN-DM-041 Task 3) ----
   standards: {
+    idExists: "A standard with this ID already exists; choose a different standard",
     nameConflict: "That standard name is already used by another published standard; rename it and retry",
     versionExists: "A standard with the same ID and version already exists; published versions cannot be overwritten",
     versionLimitReached: "This standard has reached the highest publishable version",

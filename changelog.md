@@ -1,3 +1,9 @@
+## 2026-09-29（无版本标准包预检、改名导入与导出）
+
+- 标准详情与包导出改为 UUID 路由；预检返回描述、发布时间及名称冲突信息。同 UUID 按已有标准阻止并显示名称；仅名称冲突时保留凭证，确认改名后只在副本中更新 manifest 并完整复验，来源包不变。导入、导出继续保留 UUID、发布时间与 `description`。将包编排拆到 `standard_packages.py`，并提取 `standard_common.py` 共享错误映射与诊断序列化，避免继续扩张标准入口模块。
+- 同步标准 API 契约、OpenAPI/TypeScript 类型及中英文 UUID 冲突文案。
+- 验证：标准包/预检/错误目录单元测试 58 项通过；标准 API 集成测试 56 项通过，2 项 DST 导入用例留待 Task 4；`uv run ruff check .` 与 `npm run check:api` 通过。
+
 ## 2026-09-28（标准管理 Demo 反馈纳入设计与计划）
 
 - 明确仅用户标准可删除、官方标准不可删除；将发布页「版本说明」设计为顶层 `description` 标准描述，并规划旧 `release_notes` 文本迁移。

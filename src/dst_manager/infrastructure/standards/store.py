@@ -490,6 +490,18 @@ class StandardStore:
                 return standard
         return None
 
+    def has_published_identity(self, standard_id: str) -> bool:
+        """即使发布目录中的文档损坏，也报告该 UUID 已被占用。"""
+        try:
+            canonical_id = parse_standard_id(standard_id)
+        except ValueError as exc:
+            raise _error("STANDARD_ID_INVALID", "标准 ID 必须是带连字符的 UUID") from exc
+        return any(
+            (directory := self._published_dir(root, canonical_id)).exists()
+            or directory.is_symlink()
+            for root in (self._published_root, self._official_root)
+        )
+
     def get_document(
         self, standard_id: str, version: int | str | None = None
     ) -> dict[str, object] | None:

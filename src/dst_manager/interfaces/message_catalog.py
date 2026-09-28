@@ -202,7 +202,8 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "XML_INVALID": _E("errors.xml.invalid"),
     "XML_ROOT_INVALID": _E("errors.xml.rootInvalid"),
     "XML_TEXT_INVALID": _E("errors.xml.textInvalid"),
-    # ---- 标准库发布与导入（PLAN-DM-041 Task 3；服务端分配版本与名称唯一门禁） ----
+    # ---- 标准库发布与导入（PLAN-DM-046 Task 3；UUID 与名称唯一门禁） ----
+    "STANDARD_ID_EXISTS": _E("errors.standards.idExists"),
     "STANDARD_NAME_CONFLICT": _E("errors.standards.nameConflict"),
     "STANDARD_VERSION_EXISTS": _E("errors.standards.versionExists"),
     "STANDARD_VERSION_LIMIT_REACHED": _E("errors.standards.versionLimitReached"),
