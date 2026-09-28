@@ -101,12 +101,19 @@ test("项目信息按标准动态生成属性，目录名合成完整路径", as
   await openCreation(page);
   await chooseStandard(page);
 
-  // 普通属性：文本 + 枚举，必填与标准默认值可见；派生属性只读且无输入控件
+  // 普通属性：文本 + 枚举，必填属性在名称旁以星号标记（不再展示「必填 · 默认值」小字）；
+  // 派生属性只读且无输入控件，图纸集作用域按当前输入实时求值
   await expect(page.getByLabel("工程名称")).toHaveValue("");
   await expect(page.getByLabel("专业")).toHaveValue("燃气");
-  await expect(page.getByText("必填 · 标准默认值：燃气")).toBeVisible();
+  await expect(
+    page.locator("label.form-field__label", {hasText: "工程名称"}).locator(".form-field__required"),
+  ).toHaveText("*");
+  await expect(
+    page.locator("label.form-field__label", {hasText: "专业"}).locator(".form-field__required"),
+  ).toHaveText("*");
+  await expect(page.getByText("标准默认值")).toHaveCount(0);
   await expect(page.getByText("专业代码")).toBeVisible();
-  await expect(page.getByText("待计算")).toBeVisible();
+  await expect(page.getByTestId("creation-derived-value")).toHaveText("RQ");
 
   // 目录名初值为「新建项目」；选择上一级目录后展示拼接后的完整最终路径
   await expect(page.getByLabel("项目目录名")).toHaveValue("新建项目");
@@ -116,9 +123,10 @@ test("项目信息按标准动态生成属性，目录名合成完整路径", as
   await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\项目\\新建项目");
   await page.getByLabel("项目目录名").fill("滨河路新建项目");
   await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\项目\\滨河路新建项目");
-  // 用户清空属性后不自动回填标准默认值
+  // 用户清空属性后不自动回填标准默认值；映射源为空时派生值实时变为空
   await page.getByLabel("专业").selectOption("");
   await expect(page.getByLabel("专业")).toHaveValue("");
+  await expect(page.getByTestId("creation-derived-value")).toHaveText("（空）");
 });
 
 test("无桌面壳时保留手动路径输入并说明原因", async ({page}) => {

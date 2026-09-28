@@ -240,10 +240,11 @@ function propertyLabel(propertyId: string): string {
   return found === undefined || found.name === "" ? propertyId : found.name;
 }
 
-/** 按可见标签文本定位控件：FormField 以 `<label for>` 关联控件，id 由实例计数器生成。 */
+/** 按可见标签文本定位控件：FormField 以 `<label for>` 关联控件，id 由实例计数器生成。
+ *  必填属性的标签文本以星号结尾（FormField 的 required 星号），比较前先剥掉。 */
 function focusByLabel(labelText: string): void {
   const label = Array.from(document.querySelectorAll<HTMLLabelElement>("label")).find(
-    item => item.htmlFor !== "" && item.textContent?.trim() === labelText,
+    item => item.htmlFor !== "" && item.textContent?.replace(/\*$/, "").trim() === labelText,
   );
   if (label === undefined) return;
   document.getElementById(label.htmlFor)?.focus();

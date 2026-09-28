@@ -14,6 +14,8 @@ from dst_manager.interfaces.error_contracts import ParamValue
 
 __all__ = [
     "CreationAssetOptionModel",
+    "CreationDerivedEvaluateRequest",
+    "CreationDerivedEvaluateResponse",
     "CreationDraftCreateRequest",
     "CreationDraftResponse",
     "CreationDraftSaveRequest",
@@ -125,6 +127,20 @@ class CreationPreviewDiagnosticModel(ContractModel):
     severity: str
     group_id: str = ""
     property_id: str = ""
+
+
+class CreationDerivedEvaluateRequest(ContractModel):
+    """实时求值请求：只携带界面当前输入的图纸集普通属性值（不保存草稿）。"""
+
+    sheetset_values: dict[str, str] = Field(default_factory=dict)
+
+
+class CreationDerivedEvaluateResponse(ContractModel):
+    """图纸集作用域派生属性的实时求值结果；求值语义与权威预览一致。"""
+
+    draft_id: str
+    values: dict[str, str] = Field(default_factory=dict)
+    diagnostics: list[CreationPreviewDiagnosticModel] = Field(default_factory=list)
 
 
 class CreationPreviewPropertyRowModel(ContractModel):

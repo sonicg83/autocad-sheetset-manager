@@ -65,6 +65,8 @@ export interface CreationStore extends CreationState {
   goToStep(step: CreationStep): Promise<void>;
   /** 保存草稿；内容与上次成功保存一致时跳过请求（返回 true）。 */
   save(force?: boolean): Promise<boolean>;
+  /** 图纸集派生属性实时求值（只读）：把界面当前输入交给后端求值并写入 derivedValues。 */
+  refreshDerived(): Promise<void>;
   setSheetsetValue(propertyId: string, value: string): void;
   setParentPath(value: string): void;
   setFolderName(value: string): void;
@@ -125,6 +127,8 @@ export function createCreationStore(
       ? defaultFolderName
       : creationPathParts(seed.draft.target_path).folderName || defaultFolderName,
     sheetsetValues: seed === null ? {} : {...seed.draft.sheetset_values},
+    derivedValues: {},
+    derivedPending: false,
     groups: seed === null ? [] : seed.draft.groups.map(cloneGroup),
     selectedGroupIds: [],
     previewState: null,
@@ -189,6 +193,7 @@ export function createCreationStore(
       sheet_values: creationWithPropertyDefaults(group.sheet_values, standard, "sheet"),
     }));
     state.selectedGroupIds = [];
+    state.derivedValues = {};
     invalidatePreview();
     savedSignature = saveSignature();
   }
@@ -202,6 +207,7 @@ export function createCreationStore(
     state.parentPath = "";
     state.folderName = defaultFolderName;
     state.sheetsetValues = {};
+    state.derivedValues = {};
     state.groups = [];
     state.selectedGroupIds = [];
     state.error = "";
@@ -371,6 +377,24 @@ export function createCreationStore(
     return found;
   }
 
+  // 项目信息页实时派生求值：只读、不保存草稿、不失效预览；竞态用序号丢弃过期响应。
+  // 失败不阻塞输入（保留既有结果并回到待计算状态），权威值仍以预览响应为准。
+  let derivedSequence = 0;
+  async function refreshDerived(): Promise<void> {
+    if (state.draftId === "") return;
+    const sequence = ++derivedSequence;
+    state.derivedPending = true;
+    try {
+      const outcome = await api.evaluateSheetsetDerived(state.draftId, {...state.sheetsetValues});
+      if (sequence !== derivedSequence) return;
+      state.derivedValues = outcome.values;
+    } catch {
+      // 求值失败按「待计算」呈现，不写入全局错误横幅
+    } finally {
+      if (sequence === derivedSequence) state.derivedPending = false;
+    }
+  }
+
   function addGroup(): CreationGroupState {
     const createdOrder = creationNextOrder(state.groups);
     const groupId = creationNextGroupId(state.groups, createdOrder);
@@ -442,6 +466,7 @@ export function createCreationStore(
       await save();
     },
     save,
+    refreshDerived,
     setSheetsetValue: (propertyId: string, value: string): void => {
       // 用户主动清空后不得回填标准默认值：这里只写入显式值，不查默认值
       state.sheetsetValues = {...state.sheetsetValues, [propertyId]: value};

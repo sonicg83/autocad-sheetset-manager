@@ -61,6 +61,8 @@ export interface CreationFixtureState {
   /** 权威预览请求次数与执行请求体（执行只允许携带 `preview_digest`）。 */
   previewRequests: number;
   executeBodies: Array<Record<string, unknown>>;
+  /** 图纸集派生属性实时求值请求次数。 */
+  derivedRequests: number;
   /** 创建任务 SSE 连接次数（含轮询回退共用的终态响应）。 */
   jobStreams: number;
   /** 可变的权威预览响应；用例可在进入第四阶段前替换。 */
@@ -484,6 +486,7 @@ export async function installCreation(
     templateRequests: 0,
     previewRequests: 0,
     executeBodies: [],
+    derivedRequests: 0,
     jobStreams: 0,
     preview: options.preview === undefined ? creationPreview() : options.preview,
     executeJob: options.executeJob ?? creationQueuedJob(),
@@ -538,6 +541,19 @@ export async function installCreation(
         state.previewRequests += 1;
         // 权威预览只由后端给出：夹具返回固定替身，前端不得自行推算任何派生输出
         return route.fulfill({json: state.preview ?? creationPreview()});
+      }
+      const derivedMatch = /^\/api\/creation-drafts\/([^/]+)\/derived-values$/.exec(path);
+      if (derivedMatch && method === "POST") {
+        state.derivedRequests += 1;
+        // 实时求值替身：按夹具标准文档的映射行求值（燃气→RQ；可选源为空得空串；
+        // 其余取值未被映射行覆盖，视为阻断，无派生值键）。
+        const body = (await request.postDataJSON()) as {sheetset_values: Record<string, string>};
+        const source = body.sheetset_values["prop-major"] ?? "";
+        const values: Record<string, string> =
+          source === "" ? {"prop-code": ""} : source === "燃气" ? {"prop-code": "RQ"} : {};
+        return route.fulfill({
+          json: {draft_id: decodeURIComponent(derivedMatch[1]), values, diagnostics: []},
+        });
       }
       const executeMatch = /^\/api\/creation-drafts\/([^/]+)\/execute$/.exec(path);
       if (executeMatch && method === "POST") {

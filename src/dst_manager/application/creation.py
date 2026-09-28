@@ -44,9 +44,11 @@ from dst_manager.application.creation_import import (
 )
 from dst_manager.application.errors import ApplicationError
 from dst_manager.domain.creation import (
+    SHEETSET_SCOPE,
     CreationDiagnostic,
     CreationDraft,
     CreationGroupInput,
+    unknown_value_property_ids,
     validate_creation_target_path,
 )
 from dst_manager.domain.creation_plan_models import (
@@ -58,6 +60,10 @@ from dst_manager.domain.creation_planning import create_creation_plan
 from dst_manager.domain.keywords import normalize_keywords
 from dst_manager.domain.models import SuffixOptions
 from dst_manager.domain.standard_models import DrawingStandard, NumberingPolicy
+from dst_manager.domain.standard_rules import (
+    compile_standard_properties,
+    evaluate_standard_properties,
+)
 from dst_manager.infrastructure.creation_drafts import CreationDraftStore
 from dst_manager.infrastructure.standards.package import MAX_ENTRY_SIZE
 
@@ -240,6 +246,50 @@ class CreationOperations:
         }
         return draft, plan, payload
 
+    # ---- 项目信息实时派生求值 --------------------------------------------
+
+    def evaluate_creation_sheetset_derived(
+        self, draft_id: str, sheetset_values: Mapping[str, str]
+    ) -> dict[str, object]:
+        """按草稿固定标准实时求值图纸集作用域派生属性（只读，不保存草稿）。
+
+        求值语义与权威预览一致（``standard_rules.evaluate_standard_properties``）：
+        值键必须是可输入普通属性（未知键以 ``CREATION_DRAFT_INVALID`` 拒绝），
+        漏键按「上游无法计算」阻断。只返回 ``sheetset`` 作用域的派生值与诊断；
+        ``sheet`` 作用域派生依赖逐张编号与标题，只能在权威预览中求值。
+        """
+        draft = self._load_creation_draft(draft_id)
+        standard = self._require_published_standard(
+            draft.standard_id, draft.standard_version
+        )
+        unknown = unknown_value_property_ids(standard, SHEETSET_SCOPE, sheetset_values)
+        if unknown:
+            raise _creation_error(
+                "CREATION_DRAFT_INVALID",
+                f"图纸集输入包含非可输入普通属性 {list(unknown)}",
+            )
+        compiled = compile_standard_properties(standard)
+        result = evaluate_standard_properties(compiled, dict(sheetset_values), {})
+        values = {
+            prop.property_id: result.values[prop.property_id]
+            for prop in standard.properties
+            if prop.scope == SHEETSET_SCOPE
+            and prop.is_derived
+            and prop.property_id in result.values
+        }
+        diagnostics = [
+            {
+                "code": item.code,
+                "message": item.message,
+                "severity": item.severity,
+                "group_id": "",
+                "property_id": item.property_id or "",
+            }
+            for item in result.diagnostics
+            if _diagnostic_in_scope(standard, item.property_id, SHEETSET_SCOPE)
+        ]
+        return {"draft_id": draft.id, "values": values, "diagnostics": diagnostics}
+
     # ---- 草稿输入保存 ----------------------------------------------------
 
     def update_creation_draft(
@@ -344,6 +394,16 @@ def creation_preview_digest(
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _diagnostic_in_scope(
+    standard: DrawingStandard, property_id: str | None, scope: str
+) -> bool:
+    """诊断是否指向指定作用域的属性；不针对具体属性的诊断不进入求值响应。"""
+    if property_id is None:
+        return False
+    prop = standard.find_property(property_id)
+    return prop is not None and prop.scope == scope
 
 
 def _preview_diagnostics(

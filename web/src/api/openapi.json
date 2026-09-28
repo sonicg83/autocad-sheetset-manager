@@ -723,7 +723,7 @@
       },
       "CreationAssetOptionModel": {
         "additionalProperties": false,
-        "description": "标准包内的一个受控模板资产候选（``label`` 同类内唯一）。",
+        "description": "标准包内的一个受控模板资产候选（``label`` 即资产标识文字）。",
         "properties": {
           "asset_id": {
             "title": "Asset Id",
@@ -751,6 +751,50 @@
           "label"
         ],
         "title": "CreationAssetOptionModel",
+        "type": "object"
+      },
+      "CreationDerivedEvaluateRequest": {
+        "additionalProperties": false,
+        "description": "实时求值请求：只携带界面当前输入的图纸集普通属性值（不保存草稿）。",
+        "properties": {
+          "sheetset_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sheetset Values",
+            "type": "object"
+          }
+        },
+        "title": "CreationDerivedEvaluateRequest",
+        "type": "object"
+      },
+      "CreationDerivedEvaluateResponse": {
+        "additionalProperties": false,
+        "description": "图纸集作用域派生属性的实时求值结果；求值语义与权威预览一致。",
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/CreationPreviewDiagnosticModel"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "draft_id"
+        ],
+        "title": "CreationDerivedEvaluateResponse",
         "type": "object"
       },
       "CreationDraftCreateRequest": {
@@ -6396,6 +6440,55 @@
           }
         },
         "summary": "Save Creation Draft"
+      }
+    },
+    "/api/creation-drafts/{draft_id}/derived-values": {
+      "post": {
+        "operationId": "evaluate_creation_derived_values_api_creation_drafts__draft_id__derived_values_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreationDerivedEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreationDerivedEvaluateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Creation Derived Values"
       }
     },
     "/api/creation-drafts/{draft_id}/execute": {

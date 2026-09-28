@@ -159,6 +159,17 @@ export interface CreationPreviewDiagnostic {
   property_id: string;
 }
 
+/**
+ * 图纸集作用域派生属性的实时求值结果（项目信息页展示用）。
+ * 求值在草稿固定标准上由后端完成，语义与权威预览一致；被阻断的派生属性
+ * 不出现在 `values` 里，对应诊断在 `diagnostics` 中。
+ */
+export interface CreationDerivedEvaluation {
+  draft_id: string;
+  values: Record<string, string>;
+  diagnostics: CreationPreviewDiagnostic[];
+}
+
 /** 逐张属性明细的一行：图号 + 该张实际值。 */
 export interface CreationPreviewPropertyRow {
   number: string;
@@ -308,6 +319,14 @@ export interface CreationApi {
   previewDraft(draftId: string): Promise<CreationPreview>;
   /** 执行创建：只发送权威摘要，入队创建任务并返回任务状态。 */
   executeDraft(draftId: string, previewDigest: string): Promise<Job>;
+  /**
+   * 实时求值草稿固定标准下图纸集作用域的派生属性（只读，不保存草稿）。
+   * `sheetsetValues` 是界面当前输入（完整普通属性键）。
+   */
+  evaluateSheetsetDerived(
+    draftId: string,
+    sheetsetValues: Record<string, string>,
+  ): Promise<CreationDerivedEvaluation>;
 }
 
 /** 向导输入状态：全部是普通值，组件直接读 `store.step` / `store.groups` 等字段。 */
@@ -326,6 +345,10 @@ export interface CreationState extends CreationPreviewSessionState {
   parentPath: string;
   folderName: string;
   sheetsetValues: Record<string, string>;
+  /** 图纸集作用域派生属性的实时求值结果（项目信息页展示；无值时回退「待计算」）。 */
+  derivedValues: Record<string, string>;
+  /** 实时求值请求进行中。 */
+  derivedPending: boolean;
   groups: CreationGroupState[];
   selectedGroupIds: string[];
   pending: boolean;

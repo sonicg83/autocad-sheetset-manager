@@ -1115,6 +1115,77 @@ def test_preview_never_starts_cad(
     assert body["executable"] is True
 
 
+# ---- 项目信息实时派生求值 ---------------------------------------------------
+
+
+def derived_values(client: TestClient, draft_id: str, sheetset_values: dict[str, str]):
+    return client.post(
+        f"/api/creation-drafts/{draft_id}/derived-values",
+        json={"sheetset_values": sheetset_values},
+    )
+
+
+def test_derived_values_evaluates_sheetset_scope_live(
+    client: TestClient, creation_draft: DraftFixture
+) -> None:
+    """图纸集派生属性按请求值实时求值，语义与预览一致且不改动草稿。"""
+    draft = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
+    response = derived_values(
+        client, creation_draft.id, dict(SHEETSET_VALUES)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["draft_id"] == creation_draft.id
+    assert body["values"] == {"prop-code": "RQ"}
+    assert body["diagnostics"] == []
+    # 只读求值：草稿内容与修订号零变化
+    assert client.get(f"/api/creation-drafts/{creation_draft.id}").json() == draft
+
+
+def test_derived_values_follows_input_changes(
+    client: TestClient, creation_draft: DraftFixture
+) -> None:
+    """可选源为空得到空串结果；改选枚举后映射结果随之变化。"""
+    empty = derived_values(
+        client, creation_draft.id, {"prop-name": "示例工程", "prop-major": ""}
+    ).json()
+    assert empty["values"] == {"prop-code": ""}
+    switched = derived_values(
+        client, creation_draft.id, {"prop-name": "示例工程", "prop-major": "燃油"}
+    ).json()
+    assert switched["values"] == {"prop-code": "RY"}
+
+
+def test_derived_values_reports_blocked_derived_as_diagnostics(
+    client: TestClient, creation_draft: DraftFixture
+) -> None:
+    """枚举值非法时阻断映射属性：无派生值键，只给可定位诊断。"""
+    body = derived_values(
+        client, creation_draft.id, {"prop-name": "示例工程", "prop-major": "水电"}
+    ).json()
+    assert body["values"] == {}
+    codes = {item["code"] for item in body["diagnostics"]}
+    assert "STANDARD_ENUM_VALUE_INVALID" in codes
+    assert "STANDARD_DERIVED_UPSTREAM_INVALID" in codes
+    assert all(item["property_id"] in {"prop-major", "prop-code"} for item in body["diagnostics"])
+
+
+def test_derived_values_rejects_unknown_input_keys(
+    client: TestClient, creation_draft: DraftFixture
+) -> None:
+    response = derived_values(
+        client, creation_draft.id, {"prop-code": "伪造派生值"}
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "CREATION_DRAFT_INVALID"
+
+
+def test_derived_values_requires_existing_draft(client: TestClient) -> None:
+    response = derived_values(client, "draft-missing", {})
+    assert response.status_code == 404
+    assert response.json()["code"] == "CREATION_DRAFT_NOT_FOUND"
+
+
 def test_draft_save_rejects_derived_and_unknown_input(
     client: TestClient, creation_draft: DraftFixture
 ) -> None:

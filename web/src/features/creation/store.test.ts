@@ -5,6 +5,7 @@ import {describe, expect, it, vi} from "vitest";
 import {createCreationStore} from "./store";
 import type {
   CreationApi,
+  CreationDerivedEvaluation,
   CreationDraftState,
   CreationImportOutcome,
   CreationSaveInput,
@@ -117,6 +118,7 @@ function fakeCreationApi(): CreationApi {
       preview_digest: "digest-1",
     })),
     executeDraft: vi.fn(async () => ({id: "job-1", status: "QUEUED", workspace_id: null})),
+    evaluateSheetsetDerived: vi.fn(async () => ({draft_id: "draft-1", values: {}, diagnostics: []})),
   };
 }
 
@@ -146,6 +148,50 @@ describe("createCreationStore", () => {
     store.setSheetsetValue("prop-major", "");
     expect(store.sheetsetValues["prop-major"]).toBe("");
     expect(store.previewDigest).toBeNull();
+  });
+
+  it("refreshDerived 把界面输入交给后端求值并写入 derivedValues（不失效预览）", async () => {
+    const api = fakeCreationApi();
+    const store = createCreationStore(api);
+    api.evaluateSheetsetDerived = vi.fn(
+      async (draftId: string, sheetsetValues: Record<string, string>): Promise<CreationDerivedEvaluation> => ({
+        draft_id: draftId,
+        values: sheetsetValues["prop-major"] === "燃气" ? {"prop-code": "RQ"} : {},
+        diagnostics: [],
+      }),
+    );
+
+    store.setSheetsetValue("prop-major", "燃气");
+    await store.refreshDerived();
+
+    expect(api.evaluateSheetsetDerived).toHaveBeenCalledWith("draft-1", {"prop-major": "燃气"});
+    expect(store.derivedValues).toEqual({"prop-code": "RQ"});
+    expect(store.derivedPending).toBe(false);
+    // 只读求值不进入保存签名，也不失效预览会话
+    expect(store.previewDigest).toBeNull();
+  });
+
+  it("refreshDerived 失败时保留既有结果并清除 pending", async () => {
+    const api = fakeCreationApi();
+    const store = createCreationStore(api);
+    api.evaluateSheetsetDerived = vi.fn(async () => {
+      throw new Error("NETWORK_DOWN");
+    });
+    store.derivedValues = {"prop-code": "RQ"};
+
+    await store.refreshDerived();
+
+    expect(store.derivedValues).toEqual({"prop-code": "RQ"});
+    expect(store.derivedPending).toBe(false);
+    expect(store.error).toBe("");
+  });
+
+  it("adoptDraft 替换草稿时清空旧派生值", async () => {
+    const api = fakeCreationApi();
+    const store = createCreationStore(api);
+    store.derivedValues = {"prop-code": "RQ"};
+    await store.resumeDraft("draft-1");
+    expect(store.derivedValues).toEqual({});
   });
 
   it("clears incompatible inputs when the fixed standard is replaced", async () => {

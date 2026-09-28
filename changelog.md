@@ -1,3 +1,9 @@
+## 2026-09-28（创建项目信息页：隐藏属性小字、必填星号与派生属性实时求值）
+
+- 创建向导「项目信息」阶段按用户反馈调整三处：① 属性字段下不再展示「文本/枚举 · 必填 · 标准默认值」说明小字（默认值仍在草稿初建时应用，行为不变）；② 必填属性在属性名称旁渲染醒目红色星号——`FormField` 新增 `required` prop（星号 `aria-hidden`，控件另绑 `aria-required`，`CreateSheetSetView` 的诊断跳转 `focusByLabel` 比较前剥离星号后缀）；③ 图纸集作用域派生属性在本页实时求值：新增只读端点 `POST /api/creation-drafts/{draft_id}/derived-values`（应用层 `evaluate_creation_sheetset_derived` 复用 `standard_rules` 既有求值语义，未知键以 `CREATION_DRAFT_INVALID` 拒绝，只返回 sheetset 作用域派生值与诊断，不保存草稿、不改变修订），前端 store 新增 `derivedValues`/`derivedPending` 与 `refreshDerived`（序号防竞态、失败静默回退「待计算」），`ProjectStep` 挂载与输入防抖（300ms）后刷新，空结果按「（空）」呈现；图纸作用域派生属性仍标注「预览时计算」（依赖逐张编号与标题）。i18n 同步改写中英文 `creation.project` 文案并删除随小字作废的 6 个键。
+- 同步设计文档：[SPEC-DM-018](docs/dst-manager/specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md) §3.1 按新行为改写并新增 §10 修订记录（`updated` 更新为 2026-09-28）；[ARCH-DM-007](docs/dst-manager/architecture/ARCH-DM-007-frontend-ui-foundations.md) §5 原语职责表为 `FormField` 补充必填星号；`docs/dst-manager/README.md` 摘要同步。顺带修正 [GUIDE-DM-007](docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md) §9.1 中 PLAN-DM-045 已删除的「映射源唯一占用」过期表述。创建交互 Demo（mockup）为冻结评审制品，按其「与本文冲突以本文为准」原则不改动。
+- 验证：`uv run ruff check .` 通过；`uv run pytest -q` 除 `tests/unit/test_setup_bat.py` 既有环境失败（GBK 代码页乱码，干净工作树复现，与 2026-09-27 记录一致）外全部通过，其中 `test_creation_api.py` 7 条求值新用例通过；`npm run test:unit` 345/345；`npm run build`（含 `check:api`/`check:i18n`/`check:ui`/`vue-tsc`/`vite build`）退出码 0；`npx playwright test` 创建向导输入 50/50、复核 45/45、i18n 工作流 36/36（含派生实时值「燃气→RQ」「清空→（空）」与必填星号断言）。
+
 ## 2026-09-28（创建资产候选标签改用资产标识文字）
 
 - 创建新图纸集的图纸组步骤中，基础模板与布局模板下拉选项改为显示资产标识文字（`asset_id`），不再显示模板文件名：`creation_asset_options` 的 `label` 直接取 `asset.asset_id`（标准 Schema 已保证全标准唯一，删除原「文件名优先、冲突退回包内相对路径」的 `_asset_labels` 回退逻辑），XLSX 创建模板的候选列表、隐藏资产映射与导入校验随之统一使用资产标识文字；预览表中 `base_template`/`layout_template` 仍显示包内相对路径，不受影响。行为变化：此前导出的旧 XLSX 模板（隐藏表资产标签为文件名）导入时会以 `CREATION_XLSX_METADATA_INVALID` 明确报错，需重新导出模板填写。

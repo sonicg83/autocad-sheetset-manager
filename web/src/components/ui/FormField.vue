@@ -8,12 +8,15 @@ import {nextInstanceId} from "./instanceId";
 //
 // `label` 是必填 props：可见标签是字段的可访问名称来源，缺省不渲染等价于字段无法访问。
 // `hint`/`error` 只是文案，组件不判断错误内容是否合法，也不决定何时显示。
+// `required` 只负责 label 旁的醒目星号（视觉呈现，aria-hidden；控件上的
+// `aria-required` 由调用方按需绑定），未传时不渲染星号。
 // 未传 `id` 时用 `nextInstanceId()` 生成同页唯一的兜底 id（模块级计数器，见 `instanceId.ts`）。
 const props = defineProps<{
   label: string;
   id?: string;
   hint?: string;
   error?: string;
+  required?: boolean;
 }>();
 
 const fallbackId = nextInstanceId("form-field");
@@ -30,7 +33,7 @@ const describedBy = computed(() => {
 </script>
 <template>
   <div class="form-field" :class="{'form-field--invalid': invalid}">
-    <label class="form-field__label" :for="controlId">{{ label }}</label>
+    <label class="form-field__label" :for="controlId">{{ label }}<span v-if="required" class="form-field__required" aria-hidden="true">*</span></label>
     <slot :id="controlId" :describedBy="describedBy" :invalid="invalid" />
     <p v-if="hint" :id="hintId" class="form-field__hint">{{ hint }}</p>
     <p v-if="error" :id="errorId" class="form-field__error">{{ error }}</p>
@@ -39,6 +42,7 @@ const describedBy = computed(() => {
 <style scoped>
 .form-field{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
 .form-field__label{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-text-secondary)}
+.form-field__required{margin-left:var(--space-1);color:var(--color-danger);font-weight:700}
 .form-field__hint{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-text-muted)}
 .form-field__error{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-danger)}
 </style>

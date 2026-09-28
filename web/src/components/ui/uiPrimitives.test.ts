@@ -351,6 +351,25 @@ describe("FormField", () => {
     expect(forId).toMatch(/^form-field-/);
     expect(wrapper.find("select").attributes("id")).toBe(forId);
   });
+
+  it("required 时 label 渲染醒目星号（aria-hidden），未传时没有星号", () => {
+    const required = mount(FormField, {
+      props: {label: "工程名称", required: true},
+      slots: {default: (slotProps: {id: string}) => h(UiInput, {...slotProps})},
+    });
+    const star = required.find(".form-field__required");
+    expect(star.exists()).toBe(true);
+    expect(star.text()).toBe("*");
+    expect(star.attributes("aria-hidden")).toBe("true");
+    expect(required.find("label").text()).toBe("工程名称*");
+
+    const plain = mount(FormField, {
+      props: {label: "备注"},
+      slots: {default: (slotProps: {id: string}) => h(UiInput, {...slotProps})},
+    });
+    expect(plain.find(".form-field__required").exists()).toBe(false);
+    expect(plain.find("label").text()).toBe("备注");
+  });
 });
 
 // 兜底 id 必须在**同一页面**内唯一。@vue/test-utils 每次 `mount()` 都是新的 app，

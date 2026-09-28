@@ -86,7 +86,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 - [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
-- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；版本展示已按 SPEC-DM-019 统一为 `v<n>`）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
+- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；版本展示已按 SPEC-DM-019 统一为 `v<n>`；2026-09-28 §3.1 收敛为必填星号标记、取消说明小字，图纸集派生属性在项目信息页实时求值）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
 - [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已接受；整数发布版本、无版本草稿、按 ID 名称唯一门禁、服务端版本分配与 `.dststandard` 两步预检导入，由 PLAN-DM-041 Task 1–8 落地，§12 给出实施验证映射）](specs/SPEC-DM-019-standard-version-and-package-import.md)
 
 ## 研究与分析

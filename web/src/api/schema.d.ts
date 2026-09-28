@@ -57,6 +57,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/creation-drafts/{draft_id}/derived-values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Creation Derived Values */
+        post: operations["evaluate_creation_derived_values_api_creation_drafts__draft_id__derived_values_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/creation-drafts/{draft_id}/execute": {
         parameters: {
             query?: never;
@@ -1033,7 +1050,7 @@ export interface components {
         };
         /**
          * CreationAssetOptionModel
-         * @description 标准包内的一个受控模板资产候选（``label`` 同类内唯一）。
+         * @description 标准包内的一个受控模板资产候选（``label`` 即资产标识文字）。
          */
         CreationAssetOptionModel: {
             /** Asset Id */
@@ -1044,6 +1061,30 @@ export interface components {
             label: string;
             /** Layouts */
             layouts?: string[];
+        };
+        /**
+         * CreationDerivedEvaluateRequest
+         * @description 实时求值请求：只携带界面当前输入的图纸集普通属性值（不保存草稿）。
+         */
+        CreationDerivedEvaluateRequest: {
+            /** Sheetset Values */
+            sheetset_values?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * CreationDerivedEvaluateResponse
+         * @description 图纸集作用域派生属性的实时求值结果；求值语义与权威预览一致。
+         */
+        CreationDerivedEvaluateResponse: {
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["CreationPreviewDiagnosticModel"][];
+            /** Draft Id */
+            draft_id: string;
+            /** Values */
+            values?: {
+                [key: string]: string;
+            };
         };
         /**
          * CreationDraftCreateRequest
@@ -3197,6 +3238,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluate_creation_derived_values_api_creation_drafts__draft_id__derived_values_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreationDerivedEvaluateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreationDerivedEvaluateResponse"];
                 };
             };
             /** @description Validation Error */

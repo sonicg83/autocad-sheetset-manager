@@ -6,7 +6,7 @@ document_kind: architecture
 owners:
   - dst-manager
 created: 2026-09-14
-updated: 2026-09-27
+updated: 2026-09-28
 related:
   - ARCH-DM-001
   - SPEC-DM-006
@@ -189,7 +189,7 @@ web/src/
 | `UiIconButton` | 固定点击面积、可访问名称、tooltip 与图标隐藏语义 | 图标语义推断 |
 | `UiIcon` | 本地 SVG、尺寸、笔画和主题色 | 任意 HTML/SVG 注入 |
 | `UiInput` / `UiSelect` | 字体、盒模型、焦点、禁用、错误态透传 | 最终业务校验 |
-| `FormField` | 可见 label、hint/error ID 与 `aria-describedby` | 表单提交编排 |
+| `FormField` | 可见 label（含必填星号，`aria-hidden`）、hint/error ID 与 `aria-describedby` | 表单提交编排、控件上的 `aria-required` 绑定 |
 | `dialogFocus.ts` | 初始焦点、Tab 圈闭、Escape 与焦点归还 | 决定是否允许关闭 |
 
 不强制一次替换全仓控件。只有迁移页面和新增页面必须使用原语；旧页面在对应阶段迁移并通过门禁后再删除旧样式。

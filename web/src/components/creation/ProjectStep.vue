@@ -1,22 +1,23 @@
 <script setup lang="ts">
 // 第二阶段：项目信息（SPEC-DM-018 §3；PLAN-DM-036 Task 8）。
-// 图纸集属性按标准动态生成：普通文本用输入框、枚举用选项控件，标明必填与标准默认值；
-// 派生属性只读展示（待计算）。项目目录 = 已存在的上一级目录 + 可编辑目录名，界面展示
+// 图纸集属性按标准动态生成：普通文本用输入框、枚举用选项控件，必填属性在属性名称旁
+// 渲染醒目星号（FormField 的 required，控件上另绑 aria-required）；默认值仍由草稿初建
+// 时应用，不在字段下重复展示说明小字。派生属性只读：图纸集作用域的派生属性把界面当前
+// 输入交给后端实时求值（store.refreshDerived，输入防抖触发）；图纸作用域依赖逐张编号
+// 与标题，只能在权威预览中求值。项目目录 = 已存在的上一级目录 + 可编辑目录名，界面展示
 // 拼接后的完整最终路径；目录名不从任何属性推断，也不自动追加「(2)」等后缀。
 // 桌面壳可用时走既有 `shell.select_folder` 桥；桥不可用时直接输入完整路径，后端同样校验。
-import {computed, ref} from "vue";
-import {useI18n} from "vue-i18n";
+import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import FormField from "../ui/FormField.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import {selectSettingsPath, shellReady} from "../../api/shell";
 import {creationTargetPath} from "../../features/creation/inputModel";
-import type {CreationOrdinaryProperty} from "../../features/creation/types";
+import type {CreationDerivedProperty, CreationOrdinaryProperty} from "../../features/creation/types";
 import type {CreationStore} from "../../features/creation/store";
 
 const props = defineProps<{store: CreationStore}>();
-const {t} = useI18n();
 
 const properties = computed(() => props.store.standard?.sheetset_properties ?? []);
 // 完整最终路径由纯函数合成（与草稿保存的 target_path 同一份实现）
@@ -26,20 +27,25 @@ const derived = computed(() => props.store.standard?.derived_properties ?? []);
 const folderPickerDisabled = ref(false);
 const pickerUnavailable = computed(() => folderPickerDisabled.value || !shellReady.value);
 
-function hintOf(property: CreationOrdinaryProperty): string {
-  const parts = [
-    t(property.kind === "enum" ? "creation.project.kindEnum" : "creation.project.kindText"),
-    t(property.required ? "creation.project.required" : "creation.project.optional"),
-    property.default_value === ""
-      ? t("creation.project.defaultValueEmpty")
-      : t("creation.project.defaultHint", {value: property.default_value}),
-  ];
-  return parts.join(" · ");
-}
-
 function valueOf(property: CreationOrdinaryProperty): string {
   return props.store.sheetsetValues[property.property_id] ?? "";
 }
+
+/** 图纸集作用域派生属性的实时值；无值（未算出/被阻断）返回 undefined 回退「待计算」。 */
+function derivedValueOf(property: CreationDerivedProperty): string | undefined {
+  if (property.scope !== "sheetset") return undefined;
+  return props.store.derivedValues[property.property_id];
+}
+
+// 输入变化防抖后请求后端实时求值（只读，不改草稿与预览状态）；进入页面先算一次
+let deriveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleDerivedRefresh(): void {
+  clearTimeout(deriveTimer);
+  deriveTimer = setTimeout(() => { void props.store.refreshDerived(); }, 300);
+}
+watch(() => props.store.sheetsetValues, scheduleDerivedRefresh);
+onMounted(() => { void props.store.refreshDerived(); });
+onBeforeUnmount(() => clearTimeout(deriveTimer));
 
 async function chooseParentFolder(): Promise<void> {
   const picked = await selectSettingsPath("folder", "");
@@ -65,7 +71,7 @@ async function chooseParentFolder(): Promise<void> {
           v-for="property in properties"
           :key="property.property_id"
           :label="property.name"
-          :hint="hintOf(property)"
+          :required="property.required"
         >
           <template #default="{id, describedBy, invalid}">
             <UiSelect
@@ -73,6 +79,7 @@ async function chooseParentFolder(): Promise<void> {
               :id="id"
               :described-by="describedBy"
               :invalid="invalid"
+              :aria-required="property.required ? 'true' : undefined"
               :model-value="valueOf(property)"
               @update:model-value="(value: string) => store.setSheetsetValue(property.property_id, value)"
             >
@@ -86,6 +93,7 @@ async function chooseParentFolder(): Promise<void> {
               :id="id"
               :described-by="describedBy"
               :invalid="invalid"
+              :aria-required="property.required ? 'true' : undefined"
               :model-value="valueOf(property)"
               @update:model-value="(value: string) => store.setSheetsetValue(property.property_id, value)"
             />
@@ -98,7 +106,16 @@ async function chooseParentFolder(): Promise<void> {
         <ul>
           <li v-for="property in derived" :key="property.property_id">
             <span>{{ property.name }}</span>
-            <span class="pending">{{ $t("creation.project.derivedPending") }}</span>
+            <span
+              v-if="derivedValueOf(property) !== undefined"
+              class="derived-value"
+              data-testid="creation-derived-value"
+            >{{ derivedValueOf(property) === "" ? $t("creation.project.emptyValue") : derivedValueOf(property) }}</span>
+            <span
+              v-else-if="property.scope === 'sheet'"
+              class="pending"
+            >{{ $t("creation.project.derivedSheetPending") }}</span>
+            <span v-else class="pending">{{ $t("creation.project.derivedPending") }}</span>
           </li>
         </ul>
       </section>
@@ -159,6 +176,7 @@ async function chooseParentFolder(): Promise<void> {
 .derived h3{margin:0;font-size:var(--font-card-title);color:var(--color-text-primary)}
 .derived ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
 .derived li{display:flex;justify-content:space-between;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-primary)}
+.derived-value{font-family:var(--font-mono);color:var(--color-text-primary);word-break:break-all;text-align:right}
 .pending{color:var(--color-text-muted)}
 .path-field{display:grid;gap:var(--space-3)}
 .parent-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:end}

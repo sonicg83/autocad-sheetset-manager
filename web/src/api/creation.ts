@@ -9,6 +9,7 @@ import {fetchStandardDetail} from "./standards";
 import type {Job} from "./contracts";
 import type {
   CreationApi,
+  CreationDerivedEvaluation,
   CreationDraftState,
   CreationGroupState,
   CreationIdentity,
@@ -16,6 +17,7 @@ import type {
   CreationImportInput,
   CreationImportOutcome,
   CreationPreview,
+  CreationPreviewDiagnostic,
   CreationPreviewGroup,
   CreationPreviewPropertyCell,
   CreationPreviewPropertyRow,
@@ -165,13 +167,7 @@ function toPreview(body: unknown): CreationPreview {
       suffix_type: typeof suffix["suffix_type"] === "number" ? suffix["suffix_type"] : 0,
       unnumbered_keywords: keywords.filter((item): item is string => typeof item === "string"),
     },
-    diagnostics: asRecords(raw["diagnostics"]).map(item => ({
-      code: asString(item["code"]),
-      message: asString(item["message"]),
-      severity: asString(item["severity"]),
-      group_id: asString(item["group_id"]),
-      property_id: asString(item["property_id"]),
-    })),
+    diagnostics: toDiagnostics(raw["diagnostics"]),
     groups: asRecords(raw["groups"]).map(toPreviewGroup),
     executable: raw["executable"] === true,
     preview_digest: asString(raw["preview_digest"]),
@@ -304,6 +300,38 @@ export function fetchCreationPreview(draftId: string): Promise<CreationPreview> 
   }).then(toPreview);
 }
 
+/** 预览/求值共用的诊断投影（与后端诊断模型同形，缺字段按空处理）。 */
+function toDiagnostics(value: unknown): CreationPreviewDiagnostic[] {
+  return asRecords(value).map(item => ({
+    code: asString(item["code"]),
+    message: asString(item["message"]),
+    severity: asString(item["severity"]),
+    group_id: asString(item["group_id"]),
+    property_id: asString(item["property_id"]),
+  }));
+}
+
+/**
+ * 图纸集派生属性实时求值（POST）：后端按草稿固定标准对请求值求值，
+ * 语义与权威预览一致；只读，不保存草稿也不改变修订。
+ */
+export function fetchCreationDerivedValues(
+  draftId: string,
+  sheetsetValues: Record<string, string>,
+): Promise<CreationDerivedEvaluation> {
+  return request<unknown>(`/api/creation-drafts/${encodeURIComponent(draftId)}/derived-values`, {
+    method: "POST",
+    body: JSON.stringify({sheetset_values: sheetsetValues}),
+  }).then(body => {
+    const raw = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+    return {
+      draft_id: asString(raw["draft_id"]),
+      values: asStringRecord(raw["values"]),
+      diagnostics: toDiagnostics(raw["diagnostics"]),
+    };
+  });
+}
+
 /** 执行创建（POST）：只发送权威摘要，返回入队的创建任务。 */
 export function executeCreationDraft(draftId: string, previewDigest: string): Promise<Job> {
   return request<Job>(`/api/creation-drafts/${encodeURIComponent(draftId)}/execute`, {
@@ -354,4 +382,5 @@ export const creationApi: CreationApi = {
   importWorkbook: importCreationWorkbook,
   previewDraft: fetchCreationPreview,
   executeDraft: executeCreationDraft,
+  evaluateSheetsetDerived: fetchCreationDerivedValues,
 };

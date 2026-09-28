@@ -147,6 +147,7 @@ function fakeCreationApi(): CreationApi {
     importWorkbook: vi.fn(async (): Promise<CreationImportOutcome> => ({ok: true, draft: seedDraft()})),
     previewDraft: vi.fn(async () => seedPreview()),
     executeDraft: vi.fn(async () => ({id: "job-1", status: "QUEUED", workspace_id: null})),
+    evaluateSheetsetDerived: vi.fn(async () => ({draft_id: "draft-1", values: {}, diagnostics: []})),
   };
 }
 

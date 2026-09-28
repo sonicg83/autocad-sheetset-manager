@@ -24,6 +24,8 @@ from dst_manager.domain.creation import (
     CreationGroupInput,
 )
 from dst_manager.interfaces.creation_contracts import (
+    CreationDerivedEvaluateRequest,
+    CreationDerivedEvaluateResponse,
     CreationDraftCreateRequest,
     CreationDraftResponse,
     CreationDraftSaveRequest,
@@ -142,6 +144,18 @@ def register_creation_routes(app: FastAPI) -> None:
     )
     def preview_creation_draft(request: Request, draft_id: str):
         return service(request).preview(draft_id)
+
+    @app.post(
+        "/api/creation-drafts/{draft_id}/derived-values",
+        response_model=CreationDerivedEvaluateResponse,
+        response_model_exclude_unset=True,
+    )
+    def evaluate_creation_derived_values(
+        request: Request, draft_id: str, body: CreationDerivedEvaluateRequest
+    ):
+        return service(request).evaluate_creation_sheetset_derived(
+            draft_id, body.sheetset_values
+        )
 
     @app.post(
         "/api/creation-drafts/{draft_id}/execute",
