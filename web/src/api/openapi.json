@@ -799,21 +799,15 @@
       },
       "CreationDraftCreateRequest": {
         "additionalProperties": false,
-        "description": "按已发布标准身份建草稿；版本在这里固定，此后不可改写。",
+        "description": "按已发布标准 UUID 建草稿。",
         "properties": {
           "standard_id": {
             "title": "Standard Id",
             "type": "string"
-          },
-          "version": {
-            "minimum": 1.0,
-            "title": "Version",
-            "type": "integer"
           }
         },
         "required": [
-          "standard_id",
-          "version"
+          "standard_id"
         ],
         "title": "CreationDraftCreateRequest",
         "type": "object"
@@ -848,10 +842,6 @@
             "title": "Standard Id",
             "type": "string"
           },
-          "standard_version": {
-            "title": "Standard Version",
-            "type": "integer"
-          },
           "step": {
             "title": "Step",
             "type": "string"
@@ -864,7 +854,6 @@
         "required": [
           "id",
           "standard_id",
-          "standard_version",
           "revision",
           "step",
           "target_path"
@@ -1339,10 +1328,6 @@
             "title": "Standard Name",
             "type": "string"
           },
-          "standard_version": {
-            "title": "Standard Version",
-            "type": "integer"
-          },
           "suffix": {
             "$ref": "#/components/schemas/CreationSuffixModel"
           },
@@ -1355,7 +1340,6 @@
           "draft_id",
           "revision",
           "standard_id",
-          "standard_version",
           "standard_name",
           "target_path",
           "group_count",
@@ -1437,15 +1421,10 @@
             },
             "title": "Supported Cad Versions",
             "type": "array"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
           }
         },
         "required": [
           "standard_id",
-          "version",
           "name",
           "available"
         ],

@@ -8,10 +8,9 @@ import type {Job} from "../../api/contracts";
 
 export type CreationStep = "standard" | "project" | "groups" | "review";
 
-/** 固定的标准身份：`standard_id` 与发布版本在草稿初建时确定，此后不可改写。 */
+/** 固定的标准身份：UUID 在草稿初建时确定，此后不可改写。 */
 export interface CreationIdentity {
   standardId: string;
-  version: number;
 }
 
 /** 标准包内的受控模板资产候选；`kind` 取后端 `base-template` / `layout-template`。 */
@@ -26,7 +25,6 @@ export interface CreationAssetOption {
 /** 创建标准候选；不可用时 `reasons` 说明为什么不能选（后端已本地化，原样呈现）。 */
 export interface CreationStandardCandidate {
   standard_id: string;
-  version: number;
   name: string;
   supported_cad_versions: string[];
   available: boolean;
@@ -54,7 +52,6 @@ export interface CreationGroupState {
 export interface CreationDraftState {
   id: string;
   standard_id: string;
-  standard_version: number;
   revision: number;
   step: CreationStep;
   target_path: string;
@@ -230,7 +227,6 @@ export interface CreationPreview {
   draft_id: string;
   revision: number;
   standard_id: string;
-  standard_version: number;
   standard_name: string;
   target_path: string;
   sheetset_values: Record<string, string>;

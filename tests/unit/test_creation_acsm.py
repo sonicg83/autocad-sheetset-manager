@@ -33,6 +33,7 @@ from dst_manager.infrastructure.acsm_xml.creation import (
     SKELETON_PATH,
     STANDARD_IDENTITY_PROPERTY,
     STANDARD_OPTIONS_PROPERTY,
+    CreationAcsmError,
     apply_layout_handles,
     build_minimal_acsm,
     is_placeholder_handle,
@@ -42,7 +43,7 @@ from dst_manager.infrastructure.acsm_xml.creation import (
 from dst_manager.infrastructure.dst_codec import DstCodec
 
 TARGET_PATH = r"C:\Projects\新建项目"
-STANDARD_IDENTITY = "szmedi.gas@1"
+STANDARD_IDENTITY = "123e4567-e89b-42d3-a456-426614174000"
 #: 逐张 sheet 属性期望值：`prop-stage`/`prop-part` 是普通输入，`prop-label`
 #: 是「专业代码-图号」派生组合。
 EXPECTED_SHEET_PROPERTIES = [
@@ -56,8 +57,7 @@ def _draft() -> CreationDraft:
     """两个图纸组（2 张 + 1 张）：同组共用输入，组内逐张图号不同。"""
     return CreationDraft(
         id="draft-1",
-        standard_id="szmedi.gas",
-        standard_version=1,
+        standard_id="123e4567-e89b-42d3-a456-426614174000",
         revision=1,
         step="review",
         target_path=TARGET_PATH,
@@ -131,6 +131,16 @@ def test_minimal_acsm_has_fresh_ids_and_no_legacy_placeholders(plan) -> None:
     assert first.root.xpath("//*[local-name()='AcSmSheetSet']/*[local-name()='AcSmProp' and @propname='Name']/text()") == [
         Path(plan.target_path).name
     ]
+
+
+def test_minimal_acsm_rejects_legacy_versioned_standard_identity(plan) -> None:
+    invalid = replace(
+        plan,
+        settings=replace(plan.settings, standard_identity="szmedi.gas@1"),
+    )
+    with pytest.raises(CreationAcsmError) as exc_info:
+        build_minimal_acsm(invalid)
+    assert exc_info.value.code == "STANDARD_IDENTITY_INVALID"
 
 
 def test_minimal_acsm_fingerprint_is_fresh_per_instantiation(plan) -> None:

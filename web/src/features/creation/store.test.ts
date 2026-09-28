@@ -17,8 +17,7 @@ import type {
 function seedDraft(): CreationDraftState {
   return {
     id: "draft-1",
-    standard_id: "szmedi.gas",
-    standard_version: 1,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     revision: 1,
     step: "groups",
     target_path: "D:\\项目\\新建项目",
@@ -36,9 +35,9 @@ function seedDraft(): CreationDraftState {
   };
 }
 
-function seedStandard(standardId = "szmedi.gas", version = 1): CreationStandardInputs {
+function seedStandard(standardId = "00000000-0000-4000-8000-000000000046"): CreationStandardInputs {
   return {
-    identity: {standardId, version},
+    identity: {standardId},
     name: "市政燃气施工图",
     sheetset_properties: [
       {
@@ -76,15 +75,14 @@ function seedStandard(standardId = "szmedi.gas", version = 1): CreationStandardI
   };
 }
 
-function candidate(standardId: string, version: number): CreationStandardCandidate {
+function candidate(standardId: string): CreationStandardCandidate {
   return {
     standard_id: standardId,
-    version,
     name: "市政燃气施工图",
     supported_cad_versions: ["2020"],
     available: true,
     reasons: [],
-    asset_options: seedStandard(standardId, version).asset_options,
+    asset_options: seedStandard(standardId).asset_options,
   };
 }
 
@@ -102,8 +100,7 @@ function fakeCreationApi(): CreationApi {
     previewDraft: vi.fn(async () => ({
       draft_id: "draft-1",
       revision: 1,
-      standard_id: "szmedi.gas",
-      standard_version: 1,
+      standard_id: "00000000-0000-4000-8000-000000000046",
       standard_name: "市政燃气施工图",
       target_path: "D:\\项目\\新建项目",
       sheetset_values: {},
@@ -200,8 +197,7 @@ describe("createCreationStore", () => {
     store.setSheetsetValue("prop-major", "建筑");
     api.createDraft = vi.fn(async (): Promise<CreationDraftState> => ({
       id: "draft-2",
-      standard_id: "user.b",
-      standard_version: 2,
+      standard_id: "00000000-0000-4000-8000-000000000047",
       revision: 1,
       step: "project",
       target_path: "",
@@ -210,12 +206,12 @@ describe("createCreationStore", () => {
     }));
     api.fetchStandardDocument = vi.fn(async () => ({}));
 
-    await store.chooseStandard(candidate("user.b", 2), {replace: true});
+    await store.chooseStandard(candidate("00000000-0000-4000-8000-000000000047"), {replace: true});
 
     expect(api.deleteDraft).toHaveBeenCalledWith("draft-1");
     expect(store.groups).toHaveLength(0);
     expect(store.sheetsetValues).toEqual({});
-    expect(store.standard?.identity.standardId).toBe("user.b");
+    expect(store.standard?.identity.standardId).toBe("00000000-0000-4000-8000-000000000047");
     expect(store.step).toBe("project");
     expect(store.previewDigest).toBeNull();
   });

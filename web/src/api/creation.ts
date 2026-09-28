@@ -5,7 +5,6 @@
 // 整批被拒（422）时响应体还带 `diagnostics`（工作表/行/列定位），统一错误通道拿不到它。
 // 执行只发送 `preview_digest`：目标路径、组表、编号与命名结果一律由服务端重算。
 import {localizedError, request} from "./client";
-import {fetchStandardDetail} from "./standards";
 import type {Job} from "./contracts";
 import type {
   CreationApi,
@@ -33,7 +32,6 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** 契约里的版本字段是服务端分配的整数（PLAN-DM-041 Task 4）。 */
 function asNumber(value: unknown): number {
   return typeof value === "number" && Number.isInteger(value) ? value : 0;
 }
@@ -78,7 +76,6 @@ function toDraftState(body: unknown): CreationDraftState {
   return {
     id: asString(raw["id"]),
     standard_id: asString(raw["standard_id"]),
-    standard_version: asNumber(raw["standard_version"]),
     revision: typeof raw["revision"] === "number" ? raw["revision"] : 0,
     step: asStep(raw["step"]),
     target_path: asString(raw["target_path"]),
@@ -150,7 +147,6 @@ function toPreview(body: unknown): CreationPreview {
     draft_id: asString(raw["draft_id"]),
     revision: typeof raw["revision"] === "number" ? raw["revision"] : 0,
     standard_id: asString(raw["standard_id"]),
-    standard_version: asNumber(raw["standard_version"]),
     standard_name: asString(raw["standard_name"]),
     target_path: asString(raw["target_path"]),
     sheetset_values: asStringRecord(raw["sheetset_values"]),
@@ -178,7 +174,6 @@ function toCandidate(raw: Record<string, unknown>): CreationStandardCandidate {
   const options = Array.isArray(raw["asset_options"]) ? raw["asset_options"] : [];
   return {
     standard_id: asString(raw["standard_id"]),
-    version: asNumber(raw["version"]),
     name: asString(raw["name"]),
     supported_cad_versions: Array.isArray(raw["supported_cad_versions"])
       ? raw["supported_cad_versions"].filter((item): item is string => typeof item === "string")
@@ -246,13 +241,15 @@ export function fetchCreationStandards(): Promise<CreationStandardCandidate[]> {
 export function fetchCreationStandardDocument(
   identity: CreationIdentity,
 ): Promise<Record<string, unknown>> {
-  return fetchStandardDetail(identity).then(detail => detail.document);
+  return request<{document: Record<string, unknown>}>(
+    `/api/standards/${encodeURIComponent(identity.standardId)}`,
+  ).then(detail => detail.document);
 }
 
 export function createCreationDraft(identity: CreationIdentity): Promise<CreationDraftState> {
   return request<unknown>("/api/creation-drafts", {
     method: "POST",
-    body: JSON.stringify({standard_id: identity.standardId, version: identity.version}),
+    body: JSON.stringify({standard_id: identity.standardId}),
   }).then(toDraftState);
 }
 

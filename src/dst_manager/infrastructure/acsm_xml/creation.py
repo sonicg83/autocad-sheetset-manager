@@ -37,6 +37,7 @@ from dst_manager.domain.creation_plan_models import (
     SheetPlan,
 )
 from dst_manager.domain.editing import EditingError, validate_xml_text
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.infrastructure.acsm_xml.contract import CLSID_PROPERTY_VALUE
 from dst_manager.infrastructure.acsm_xml.document import AcsmDocument, load_acsm
 
@@ -129,6 +130,12 @@ def build_minimal_acsm(plan: CreationPlan) -> AcsmDocument:
     （SPEC-DM-017 §3.2），并写保留属性 ``DSTManager.Standard`` 与
     ``DSTManager.StandardOptions``。布局引用一律先写受控占位 Handle。
     """
+    try:
+        standard_id = parse_standard_id(plan.settings.standard_identity)
+    except ValueError as exc:
+        raise CreationAcsmError("STANDARD_IDENTITY_INVALID", str(exc)) from exc
+    if standard_id != plan.settings.standard_identity:
+        raise CreationAcsmError("STANDARD_IDENTITY_INVALID", "标准 UUID 必须使用规范小写形式")
     root = _skeleton_root()
     sheet_set = _single_child(root, "AcSmSheetSet")
     _write_database(root)

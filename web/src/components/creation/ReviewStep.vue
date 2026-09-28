@@ -188,7 +188,7 @@ async function recheckAndExecute(): Promise<void> {
         <dl class="preview-context" data-testid="creation-preview-context">
           <div>
             <dt>{{ $t("creation.review.contextStandard") }}</dt>
-            <dd>{{ preview.standard_name }} · v{{ preview.standard_version }}（{{ preview.standard_id }}）</dd>
+            <dd>{{ preview.standard_name }}（{{ preview.standard_id }}）</dd>
           </div>
           <div>
             <dt>{{ $t("creation.review.contextTarget") }}</dt>

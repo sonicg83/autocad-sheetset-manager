@@ -105,11 +105,11 @@ related:
 
 **Interfaces:** `create_creation_draft(standard_id: str) -> CreationDraft`；`CreationDraft.standard_id: str` 且无 `standard_version`；`standard_package_root(store: StandardStore, standard_id: str) -> Path | None`；新工程 `DSTManager.Standard=<uuid>`；新 XLSX 元数据 `standard_id=<uuid>` 且不写 `standard_version`。创建草稿和创建任务入队与标准删除共用生命周期锁。
 
-- [ ] **Step 1: Write failing tests.** 创建／恢复／预览／执行都只按 UUID 定位；模板导入匹配 UUID；新工程绑定与项目快照目录为 UUID；删除库内标准后已创建项目仍由快照打开；旧 `id@version` 工程只读解析且打开不写磁盘。运行中任务继续锁定原标准内容。
-- [ ] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_creation_drafts.py tests/integration/test_creation_api.py tests/integration/test_created_project_opens.py tests/unit/test_standard_service.py`。
-- [ ] **Step 3: Implement the interfaces.** 保留旧工程绑定解析为只读兼容分支，不对旧 DST／快照执行身份迁移；新创建链路不得写旧格式。旧数据清点结果若含真实用户包或创建草稿，按 Global Constraints 先追加独立迁移设计和测试再继续。
-- [ ] **Step 4: Verify GREEN.** 重跑本任务测试和 `rtk uv run ruff check .`；旧工程只读测试核对 DST／DWG 文件哈希与时间戳均不变。
-- [ ] **Step 5: Commit this task.** 只提交本任务改动。
+- [x] **Step 1: Write failing tests.** 创建／恢复／预览／执行都只按 UUID 定位；模板导入匹配 UUID；新工程绑定与项目快照目录为 UUID；删除库内标准后已创建项目仍由快照打开；旧 `id@version` 工程只读解析且打开不写磁盘。运行中任务继续锁定原标准内容。
+- [x] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_creation_drafts.py tests/integration/test_creation_api.py tests/integration/test_created_project_opens.py tests/unit/test_standard_service.py`。
+- [x] **Step 3: Implement the interfaces.** 保留旧工程绑定解析为只读兼容分支，不对旧 DST／快照执行身份迁移；新创建链路不得写旧格式。旧数据清点结果若含真实用户包或创建草稿，按 Global Constraints 先追加独立迁移设计和测试再继续。
+- [x] **Step 4: Verify GREEN.** 重跑本任务测试和 `rtk uv run ruff check .`；旧工程只读测试核对 DST／DWG 文件哈希与时间戳均不变。 已验证：Python 定向回归 192 项通过，标准服务测试（含历史快照与库包移除后工程快照）22 项通过；Ruff 全库通过；Web Vitest 344 项、生产构建及创建向导 Playwright 51 项通过。
+- [x] **Step 5: Commit this task.** 只提交本任务改动。
 
 ### Task 5：删除影响预览与关联草稿事务
 

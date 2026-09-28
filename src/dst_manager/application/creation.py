@@ -129,10 +129,10 @@ class CreationOperations:
         """按草稿固定的标准版本导出模板；标签与导入校验共用同一份资产候选。"""
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            draft.standard_id, draft.standard_version
+            draft.standard_id
         )
         return CreationTemplateFile(
-            filename=f"creation-template-{standard.standard_id}-{standard.version}.xlsx",
+            filename=f"creation-template-{standard.standard_id}.xlsx",
             data=build_creation_template(standard, creation_asset_options(standard)),
         )
 
@@ -147,7 +147,7 @@ class CreationOperations:
         """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            draft.standard_id, draft.standard_version
+            draft.standard_id
         )
         if len(data) > MAX_CREATION_XLSX_BYTES:
             return CreationImportOutcome(
@@ -197,7 +197,7 @@ class CreationOperations:
         """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            draft.standard_id, draft.standard_version
+            draft.standard_id
         )
         settings = self._live_settings()
         suffix_options = SuffixOptions(
@@ -213,7 +213,6 @@ class CreationOperations:
             "draft_id": draft.id,
             "revision": draft.revision,
             "standard_id": standard.standard_id,
-            "standard_version": standard.version,
             "standard_name": standard.name,
             "target_path": draft.target_path,
             "sheetset_values": dict(plan.sheetset_values),
@@ -260,7 +259,7 @@ class CreationOperations:
         """
         draft = self._load_creation_draft(draft_id)
         standard = self._require_published_standard(
-            draft.standard_id, draft.standard_version
+            draft.standard_id
         )
         unknown = unknown_value_property_ids(standard, SHEETSET_SCOPE, sheetset_values)
         if unknown:
@@ -341,11 +340,11 @@ class CreationOperations:
 
     def _standard_document_digest(self, standard: DrawingStandard) -> str:
         """已发布标准文档内容哈希；标准在读取后消失时仍按缺失稳定拒绝。"""
-        document = self.standard_store.get_document(standard.standard_id, standard.version)
+        document = self.standard_store.get_document(standard.standard_id)
         if document is None:
             raise _creation_error(
                 "CREATION_STANDARD_MISSING",
-                f"标准 {standard.standard_id}@{standard.version} 未发布或已不可用",
+                f"标准 {standard.standard_id} 未发布或已不可用",
                 404,
             )
         return standard_document_digest(document)
@@ -435,7 +434,6 @@ def _preview_diagnostics(
 def _candidate_payload(candidate: CreationStandardCandidate) -> dict[str, object]:
     return {
         "standard_id": candidate.standard_id,
-        "version": candidate.version,
         "name": candidate.name,
         "supported_cad_versions": list(candidate.supported_cad_versions),
         "available": candidate.available,

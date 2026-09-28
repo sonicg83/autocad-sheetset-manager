@@ -79,7 +79,9 @@ def test_tampered_standard_identity_in_metadata_is_rejected(standard, options) -
         sheetset={"项目保存路径": DEFAULT_SHEETSET_PATH},
         rows=(group_row(),),
         mutate=lambda workbook: setattr(
-            meta_cell(workbook, "standard", "standard_version"), "value", "9.9.9"
+            meta_cell(workbook, "standard", "standard_id"),
+            "value",
+            "123e4567-e89b-42d3-a456-426614174099",
         ),
     )
     result = parse_creation_workbook(data, standard, options)

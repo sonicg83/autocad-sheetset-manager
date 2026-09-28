@@ -26,6 +26,7 @@ from dst_manager.domain.creation_plan_inputs import (
     BASE_TEMPLATE_KIND,
     LAYOUT_TEMPLATE_KIND,
 )
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.domain.standard_models import (
     DrawingStandard,
     StandardAsset,
@@ -100,8 +101,6 @@ class CreationStandardCandidate:
     """一个创建标准候选：可用时可直接建草稿，不可用时带原因。"""
 
     standard_id: str
-    #: 服务端分配的整数发布版本（与 API 契约一致）。
-    version: int
     name: str
     supported_cad_versions: tuple[str, ...] = ()
     available: bool = False
@@ -136,7 +135,7 @@ def resolve_creation_assets(
     store: StandardStore, standard: DrawingStandard
 ) -> CreationAssetSnapshot:
     """解析候选与声明文件内容哈希；文件缺失只记录，不抛出（由预览显式阻断）。"""
-    root = standard_package_root(store, standard.standard_id, standard.version)
+    root = standard_package_root(store, standard.standard_id)
     files = tuple(
         CreationAssetFile(
             asset_id=asset.asset_id,
@@ -157,19 +156,20 @@ def creation_standard_candidates(
 ) -> tuple[CreationStandardCandidate, ...]:
     """已发布标准的创建候选（含不可用候选与其原因），顺序沿用标准库列表顺序。"""
     return tuple(
-        _candidate(store, summary.standard_id, summary.version, manifests)
+        _candidate(store, summary.standard_id, manifests)
         for summary in store.list()
-        if summary.status == "published" and isinstance(summary.version, int)
+        if summary.status == "published"
     )
 
 
-def standard_package_root(
-    store: StandardStore, standard_id: str, version: int | str
-) -> Path | None:
+def standard_package_root(store: StandardStore, standard_id: str) -> Path | None:
     """已发布标准的包目录；读取顺序与 :meth:`StandardStore.get` 一致。"""
-    segment = str(version)
+    try:
+        standard_id = parse_standard_id(standard_id)
+    except ValueError:
+        return None
     for root in (store.published_root, store.official_root):
-        candidate = Path(root) / standard_id / segment
+        candidate = Path(root) / standard_id
         if (candidate / "document.json").is_file():
             return candidate
     return None
@@ -181,7 +181,7 @@ def standard_document_digest(document: Mapping[str, object]) -> str:
 
 
 def _candidate(
-    store: StandardStore, standard_id: str, version: int, manifests: Mapping[str, object]
+    store: StandardStore, standard_id: str, manifests: Mapping[str, object]
 ) -> CreationStandardCandidate:
     """单个候选：文档不可解析时也要给出稳定原因，不冒泡成 500。
 
@@ -190,11 +190,10 @@ def _candidate(
     同一口径处理——该标准不可用并附原因，其它候选不受影响。
     """
     try:
-        standard = store.get(standard_id, version)
+        standard = store.get(standard_id)
     except (StandardSchemaError, StandardStoreError, OSError, ValueError) as exc:
         return CreationStandardCandidate(
             standard_id=standard_id,
-            version=version,
             name="",
             available=False,
             reasons=(f"标准文档无法解析：{exc}",),
@@ -202,7 +201,6 @@ def _candidate(
     if standard is None:
         return CreationStandardCandidate(
             standard_id=standard_id,
-            version=version,
             name="",
             available=False,
             reasons=("标准已发布内容不可读取",),
@@ -214,7 +212,6 @@ def _candidate(
     )
     return CreationStandardCandidate(
         standard_id=standard.standard_id,
-        version=standard.version,
         name=standard.name,
         supported_cad_versions=standard.supported_cad_versions,
         available=not reasons,

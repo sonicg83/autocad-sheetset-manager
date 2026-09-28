@@ -31,7 +31,6 @@ from dst_manager.application.creation_job import (
     CreationJobRunner,
 )
 from dst_manager.application.errors import ApplicationError
-from dst_manager.application.standards import parse_standard_identity
 from dst_manager.domain.creation_plan_models import CreationPlan
 from dst_manager.domain.models import JobStatus
 from dst_manager.infrastructure.autocad.worker import LayoutCreationWorker
@@ -53,6 +52,12 @@ class CreationExecutionOperations:
 
     def execute_creation(self, draft_id: str, preview_digest: str) -> dict[str, Any]:
         """复核权威预览后把创建任务入队；不写目标目录、不启动 CAD。"""
+        with self.standard_store.lifecycle_lock():
+            return self._enqueue_creation_locked(draft_id, preview_digest)
+
+    def _enqueue_creation_locked(
+        self, draft_id: str, preview_digest: str
+    ) -> dict[str, Any]:
         draft, plan, preview = self._creation_preview(draft_id)
         if preview["preview_digest"] != preview_digest:
             raise _creation_error(
@@ -78,7 +83,6 @@ class CreationExecutionOperations:
                 "creation_revision": draft.revision,
                 "standard": {
                     "standard_id": draft.standard_id,
-                    "version": draft.standard_version,
                 },
                 "preview_digest": preview_digest,
                 "target_path": plan.target_path,
@@ -139,9 +143,9 @@ class CreationExecutionOperations:
         return runner.run(job["id"], attempt, plan)
 
     def _creation_asset_root(self, plan: CreationPlan) -> Path:
-        """计划固定的标准身份 → 标准包根；不可读取即稳定拒绝，不降级到其它版本。"""
-        standard_id, version = parse_standard_identity(plan.settings.standard_identity)
-        root = standard_package_root(self.standard_store, standard_id, version)
+        """按计划固定的标准 UUID 查找包根；不可读取即稳定拒绝。"""
+        standard_id = plan.settings.standard_identity
+        root = standard_package_root(self.standard_store, standard_id)
         if root is None:
             raise _creation_error(
                 "CREATION_STANDARD_MISSING",

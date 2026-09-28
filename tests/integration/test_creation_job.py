@@ -65,9 +65,10 @@ from dst_platform.autocad.process import CoreConsoleResult
 #: 夹具标准与 Task 2/4 同一份：两个 sheetset 普通属性、一个 sheetset 派生映射、
 #: 一个 sheet 普通文本、一个 sheet 普通枚举、一个 sheet 派生组合，两个模板资产。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
-    "version": 1,
+    "schema_version": 3,
+    "standard_id": "00000000-0000-4000-8000-000000000046",
+    "published_at": 1_700_000_000_000,
+    "description": "",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -159,7 +160,7 @@ STANDARD_DOCUMENT: dict[str, object] = {
 
 STANDARD = parse_published_standard_document(STANDARD_DOCUMENT)
 TARGET_PATH = r"C:\Projects\新建项目"
-STANDARD_IDENTITY = "szmedi.gas@1"
+STANDARD_IDENTITY = "00000000-0000-4000-8000-000000000046"
 #: 布局模板真实布局集合：包含标准声明的图幅 A1（另有 A0 与 Model）。
 TEMPLATE_LAYOUTS = ("A1", "A0", "Model")
 #: 每个主 DWG 的布局集合：与计划逐项一致。
@@ -255,8 +256,7 @@ class ExternalContentAfterFirstCommit:
 def _draft() -> CreationDraft:
     return CreationDraft(
         id="draft-1",
-        standard_id="szmedi.gas",
-        standard_version=1,
+        standard_id="123e4567-e89b-42d3-a456-426614174000",
         revision=1,
         step="review",
         target_path=TARGET_PATH,

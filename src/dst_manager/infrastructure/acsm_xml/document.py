@@ -23,6 +23,7 @@ from dst_manager.domain.models import (
     Subset,
     ValidationIssue,
 )
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.infrastructure.acsm_xml.contract import (
     CLSID_LAYOUT_REFERENCE,
     CLSID_PROPERTY_BAG,
@@ -220,6 +221,10 @@ class AcsmDocument:
                 standard = command.get("standard")
                 if not isinstance(standard, str):
                     raise AcsmValidationError("STANDARD_IDENTITY_INVALID: bind_standard 缺少 standard")
+                try:
+                    standard = parse_standard_id(standard)
+                except ValueError as exc:
+                    raise AcsmValidationError(f"STANDARD_IDENTITY_INVALID: {exc}") from exc
                 self._ensure_reserved_property_definitions()
                 self._set_custom_properties(
                     matches[0],

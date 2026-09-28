@@ -1088,13 +1088,11 @@ export interface components {
         };
         /**
          * CreationDraftCreateRequest
-         * @description 按已发布标准身份建草稿；版本在这里固定，此后不可改写。
+         * @description 按已发布标准 UUID 建草稿。
          */
         CreationDraftCreateRequest: {
             /** Standard Id */
             standard_id: string;
-            /** Version */
-            version: number;
         };
         /**
          * CreationDraftResponse
@@ -1113,8 +1111,6 @@ export interface components {
             };
             /** Standard Id */
             standard_id: string;
-            /** Standard Version */
-            standard_version: number;
             /** Step */
             step: string;
             /** Target Path */
@@ -1335,8 +1331,6 @@ export interface components {
             standard_id: string;
             /** Standard Name */
             standard_name: string;
-            /** Standard Version */
-            standard_version: number;
             suffix: components["schemas"]["CreationSuffixModel"];
             /** Target Path */
             target_path: string;
@@ -1374,8 +1368,6 @@ export interface components {
             standard_id: string;
             /** Supported Cad Versions */
             supported_cad_versions?: string[];
-            /** Version */
-            version: number;
         };
         /**
          * CreationSuffixModel

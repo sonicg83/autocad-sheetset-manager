@@ -42,9 +42,10 @@ from dst_manager.interfaces.api import create_app
 #: 最小可发布标准：两个普通 sheetset 属性、一个派生映射、一个普通 sheet 文本、
 #: 一个普通 sheet 枚举、一个派生组合，外加基础模板与布局模板各一个受控资产。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
-    "version": 1,
+    "schema_version": 3,
+    "standard_id": "00000000-0000-4000-8000-000000000046",
+    "published_at": 1_700_000_000_000,
+    "description": "",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -137,7 +138,7 @@ STANDARD_DOCUMENT: dict[str, object] = {
 #: 声明资产文件缺失的标准：同一文档换身份，模板文件不写盘。
 MISSING_ASSET_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
-    "standard_id": "szmedi.missing",
+    "standard_id": "00000000-0000-4000-8000-000000000047",
     # 不同 ID 的已发布标准名称必须唯一（SPEC-DM-019 §3.2）。
     "name": "市政缺失资产标准",
 }
@@ -145,7 +146,7 @@ MISSING_ASSET_DOCUMENT: dict[str, object] = {
 #: 同类内文件名冲突的标准：两个基础模板同名不同目录，标签仍取资产标识文字。
 DUPLICATE_LABEL_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
-    "standard_id": "szmedi.dupe",
+    "standard_id": "00000000-0000-4000-8000-000000000048",
     "name": "市政重名标签标准",
     "assets": [
         {"asset_id": "base-a", "kind": "base-template", "file": "a1/a1.dwt"},
@@ -168,7 +169,7 @@ DUPLICATE_LABEL_FILES: dict[str, bytes] = {
 #: 声明受信扩展依赖的标准（发布时该扩展必须已注册）。
 DEPENDENT_DOCUMENT: dict[str, object] = {
     **STANDARD_DOCUMENT,
-    "standard_id": "szmedi.dependent",
+    "standard_id": "00000000-0000-4000-8000-000000000049",
     "name": "市政依赖标准",
     "dependencies": [
         {
@@ -291,17 +292,20 @@ def publish_standard(
 
 
 def draft_document(document: dict) -> dict:
-    """草稿不携带正式版本（PLAN-DM-041）：去 version 的文档副本。"""
-    return {key: value for key, value in document.items() if key != "version"}
+    """返回符合 schema v3 的未发布标准文档。"""
+    draft = dict(document)
+    draft["published_at"] = None
+    draft.pop("version", None)
+    return draft
 
 
-def published_root(root: Path, standard_id: str = "szmedi.gas", version: int = 1) -> Path:
-    return root / "standards" / "user" / "published" / standard_id / str(version)
+def published_root(root: Path, standard_id: str = "00000000-0000-4000-8000-000000000046") -> Path:
+    return root / "standards" / "user" / "published" / standard_id
 
 
 def create_creation_draft(client: TestClient) -> dict:
     response = client.post(
-        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": 1}
+        "/api/creation-drafts", json={"standard_id": "00000000-0000-4000-8000-000000000046"}
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -562,7 +566,7 @@ def test_execute_enqueues_creation_job_without_workspace(
     assert job["payload"]["creation_draft_id"] == creation_draft.id
     assert job["payload"]["preview_digest"] == preview.digest
     assert job["payload"]["target_path"] == body["target_path"]
-    assert job["payload"]["standard"] == {"standard_id": "szmedi.gas", "version": 1}
+    assert job["payload"]["standard"] == {"standard_id": "00000000-0000-4000-8000-000000000046"}
     assert not target.exists()
     # 无工作区时仍能记录状态与时间线（SSE 事件同源）
     detail = client.get(f"/api/jobs/{job['id']}").json()
@@ -615,8 +619,8 @@ def test_job_events_stream_stops_at_needs_review(
 
 def test_draft_crud_roundtrip(client: TestClient, creation_draft: DraftFixture) -> None:
     draft = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
-    assert draft["standard_id"] == "szmedi.gas"
-    assert draft["standard_version"] == 1
+    assert draft["standard_id"] == "00000000-0000-4000-8000-000000000046"
+    assert "standard_version" not in draft
     assert draft["revision"] == 2
 
     saved = update_creation_draft(client, creation_draft.id)
@@ -647,10 +651,21 @@ def test_unknown_draft_is_stable_not_found(client: TestClient) -> None:
 
 def test_draft_creation_requires_published_standard(client: TestClient) -> None:
     response = client.post(
-        "/api/creation-drafts", json={"standard_id": "szmedi.gas", "version": 1}
+        "/api/creation-drafts", json={"standard_id": "00000000-0000-4000-8000-000000000099"}
     )
     assert response.status_code == 404
     assert response.json()["code"] == "CREATION_STANDARD_MISSING"
+
+    legacy = client.post(
+        "/api/creation-drafts",
+        json={"standard_id": "00000000-0000-4000-8000-000000000099", "version": 1},
+    )
+    assert legacy.status_code == 422
+
+    invalid_id = client.post(
+        "/api/creation-drafts", json={"standard_id": "legacy.standard"}
+    )
+    assert invalid_id.status_code == 422
 
 
 def test_execute_endpoint_requires_preview_digest(
@@ -678,8 +693,7 @@ def test_candidates_list_available_standard_with_asset_options(
     candidates = client.get("/api/creation-drafts/standards").json()
     assert candidates == [
         {
-            "standard_id": "szmedi.gas",
-            "version": 1,
+            "standard_id": "00000000-0000-4000-8000-000000000046",
             "name": "市政燃气施工图",
             "supported_cad_versions": ["2016", "2020"],
             "available": True,
@@ -711,15 +725,13 @@ def test_candidate_without_template_files_is_unavailable(
     )
     # 发布门禁保证资产在发布时必须存在；这里模拟发布后模板文件被外部删除/移动，
     # 候选列表仍必须给出稳定原因而不是把坏标准当成可选。
-    shutil.rmtree(
-        published_root(root, standard_id="szmedi.missing", version=1) / "templates"
-    )
+    shutil.rmtree(published_root(root, standard_id="00000000-0000-4000-8000-000000000047") / "templates")
     candidates = {
         item["standard_id"]: item
         for item in client.get("/api/creation-drafts/standards").json()
     }
-    assert candidates["szmedi.gas"]["available"] is True
-    broken = candidates["szmedi.missing"]
+    assert candidates["00000000-0000-4000-8000-000000000046"]["available"] is True
+    broken = candidates["00000000-0000-4000-8000-000000000047"]
     assert broken["available"] is False
     assert broken["reasons"] == [
         "标准资产 'base-a1' 声明的文件 'templates/a1.dwt' 不存在或路径非法",
@@ -749,7 +761,7 @@ def test_candidate_with_corrupt_standard_document_is_unavailable(
 
     assert response.status_code == 200, case
     candidates = {item["standard_id"]: item for item in response.json()}
-    broken = candidates["szmedi.gas"]
+    broken = candidates["00000000-0000-4000-8000-000000000046"]
     assert broken["available"] is False
     assert len(broken["reasons"]) == 1 and "标准文档无法解析" in broken["reasons"][0]
 
@@ -757,14 +769,14 @@ def test_candidate_with_corrupt_standard_document_is_unavailable(
 def test_candidates_survive_illegal_published_directory_name(
     client: TestClient, root: Path
 ) -> None:
-    """标准库中混入非法版本目录名时，候选列表仍返回 200 并列出其余标准。"""
+    """标准库根中混入非法 UUID 目录时，候选列表仍返回 200 并列出其余标准。"""
     publish_standard(client, root)
-    (root / "standards" / "user" / "published" / "szmedi.gas" / "tmp").mkdir()
+    (root / "standards" / "user" / "published" / "invalid-id").mkdir()
 
     response = client.get("/api/creation-drafts/standards")
 
     assert response.status_code == 200, response.text
-    assert [item["standard_id"] for item in response.json()] == ["szmedi.gas"]
+    assert [item["standard_id"] for item in response.json()] == ["00000000-0000-4000-8000-000000000046"]
 
 
 def test_candidate_labels_use_asset_id_even_with_duplicate_filenames(
@@ -782,8 +794,8 @@ def test_candidate_labels_use_asset_id_even_with_duplicate_filenames(
         item["standard_id"]: item
         for item in client.get("/api/creation-drafts/standards").json()
     }
-    assert candidates["szmedi.dupe"]["available"] is True
-    assert [item["label"] for item in candidates["szmedi.dupe"]["asset_options"]] == [
+    assert candidates["00000000-0000-4000-8000-000000000048"]["available"] is True
+    assert [item["label"] for item in candidates["00000000-0000-4000-8000-000000000048"]["asset_options"]] == [
         "base-a",
         "base-b",
         "layout-a1",
@@ -801,7 +813,7 @@ def test_candidate_with_missing_trusted_dependency_is_unavailable(
         item["standard_id"]: item
         for item in without_extension.get("/api/creation-drafts/standards").json()
     }
-    dependent = candidates["szmedi.dependent"]
+    dependent = candidates["00000000-0000-4000-8000-000000000049"]
     assert dependent["available"] is False
     assert dependent["reasons"] == [
         "受信扩展依赖未满足：test.trusted/layout.template.v1（extension-missing）"
@@ -819,9 +831,15 @@ def test_xlsx_template_exports_current_standard(
     assert response.headers["content-type"].startswith(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    assert "creation-template-szmedi.gas-1.xlsx" in response.headers["content-disposition"]
+    assert "creation-template-00000000-0000-4000-8000-000000000046.xlsx" in response.headers["content-disposition"]
     workbook = load_workbook(BytesIO(response.content))
     assert workbook.sheetnames == [SHEETSET_SHEET, SHEET_SHEET, META_SHEET, LIST_SHEET]
+    metadata = list(workbook[META_SHEET].values)
+    assert any(
+        row[:3] == ("standard", "standard_id", "00000000-0000-4000-8000-000000000046")
+        for row in metadata
+    )
+    assert not any(row[1] == "standard_version" for row in metadata if len(row) > 1)
 
 
 def test_import_replaces_all_inputs_atomically(
@@ -924,7 +942,7 @@ def test_preview_returns_group_table_and_sheet_details(
     body = preview_draft(client, creation_draft.id).json()
     assert body["executable"] is True
     assert body["diagnostics"] == []
-    assert body["standard_id"] == "szmedi.gas"
+    assert body["standard_id"] == "00000000-0000-4000-8000-000000000046"
     assert body["standard_name"] == "市政燃气施工图"
     assert body["target_path"] == str(tmp_path / "projects" / "新建项目")
     assert body["group_count"] == 1
@@ -1234,5 +1252,5 @@ def test_draft_document_shape_is_unchanged_by_preview(
 def test_standard_document_fixture_is_publishable() -> None:
     """夹具标准必须是可发布文档，避免测试用非法标准掩盖契约问题。"""
     standard = parse_published_standard_document(copy.deepcopy(STANDARD_DOCUMENT))
-    assert standard.standard_id == "szmedi.gas"
+    assert standard.standard_id == "00000000-0000-4000-8000-000000000046"
     assert [asset.asset_id for asset in standard.assets] == ["base-a1", "layout-a1"]

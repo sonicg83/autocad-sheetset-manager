@@ -9,6 +9,7 @@
 from pydantic import Field, field_validator
 
 from dst_manager.domain.creation import CREATION_STEPS
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.interfaces.contracts import ContractModel
 from dst_manager.interfaces.error_contracts import ParamValue
 
@@ -48,7 +49,6 @@ class CreationStandardCandidateModel(ContractModel):
     """创建标准候选；不可用时 ``reasons`` 说明为什么不能选。"""
 
     standard_id: str
-    version: int
     name: str
     supported_cad_versions: list[str] = Field(default_factory=list)
     available: bool
@@ -70,10 +70,17 @@ class CreationGroupModel(ContractModel):
 
 
 class CreationDraftCreateRequest(ContractModel):
-    """按已发布标准身份建草稿；版本在这里固定，此后不可改写。"""
+    """按已发布标准 UUID 建草稿。"""
 
     standard_id: str
-    version: int = Field(ge=1)
+
+    @field_validator("standard_id")
+    @classmethod
+    def validate_standard_id(cls, value: str) -> str:
+        try:
+            return parse_standard_id(value)
+        except ValueError as exc:
+            raise ValueError("standard_id 必须是带连字符的 UUID") from exc
 
 
 class CreationDraftSaveRequest(ContractModel):
@@ -111,7 +118,6 @@ class CreationDraftResponse(ContractModel):
 
     id: str
     standard_id: str
-    standard_version: int
     revision: int
     step: str
     target_path: str
@@ -207,7 +213,6 @@ class CreationPreviewResponse(ContractModel):
     draft_id: str
     revision: int
     standard_id: str
-    standard_version: int
     standard_name: str
     target_path: str
     sheetset_values: dict[str, str] = Field(default_factory=dict)

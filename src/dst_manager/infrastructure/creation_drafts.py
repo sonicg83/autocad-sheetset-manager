@@ -33,11 +33,11 @@ from dst_manager.domain.creation import (
     CreationDraft,
     CreationGroupInput,
 )
+from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
 
-#: 草稿文档版本；v2 起 ``standard_version`` 为整数（v1 文本版本不再支持，
-#: 本地草稿视为损坏隔离，不自动迁移）。
-CREATION_DRAFT_SCHEMA_VERSION = 2
+#: 草稿文档版本；v3 固定 UUID 标准身份，不再保存发布版本。
+CREATION_DRAFT_SCHEMA_VERSION = 3
 DRAFT_NAME = "draft.json"
 
 _DRAFT_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -46,7 +46,6 @@ _DRAFT_KEYS = frozenset(
         "schema_version",
         "id",
         "standard_id",
-        "standard_version",
         "revision",
         "step",
         "target_path",
@@ -103,7 +102,6 @@ class CreationDraftStore:
     def create(
         self,
         standard_id: str,
-        standard_version: int,
         sheetset_values: Mapping[str, str],
         *,
         step: str = CREATION_INITIAL_STEP,
@@ -116,7 +114,7 @@ class CreationDraftStore:
         draft = CreationDraft(
             id=uuid.uuid4().hex,
             standard_id=standard_id,
-            standard_version=standard_version,            revision=1,
+            revision=1,
             step=step,
             target_path="",
             sheetset_values=dict(sheetset_values),
@@ -164,14 +162,10 @@ class CreationDraftStore:
             raise _error(
                 CreationDraftInvalidError, f"草稿身份 {value.id!r} 与路径 {draft_id!r} 不一致"
             )
-        if (value.standard_id, value.standard_version) != (
-            stored.standard_id,
-            stored.standard_version,
-        ):
+        if value.standard_id != stored.standard_id:
             raise _error(
                 CreationDraftInvalidError,
-                f"草稿固定的标准 {stored.standard_id}@{stored.standard_version} 不可改写为 "
-                f"{value.standard_id}@{value.standard_version}",
+                f"草稿固定的标准 {stored.standard_id} 不可改写为 {value.standard_id}",
             )
         saved = replace(value, revision=stored.revision + 1)
         self._write(self._directory(draft_id), _document_or_invalid(saved))
@@ -241,7 +235,6 @@ def _draft_to_document(draft: CreationDraft) -> dict[str, object]:
         "schema_version": CREATION_DRAFT_SCHEMA_VERSION,
         "id": draft.id,
         "standard_id": draft.standard_id,
-        "standard_version": draft.standard_version,
         "revision": draft.revision,
         "step": draft.step,
         "target_path": draft.target_path,
@@ -263,7 +256,6 @@ def _draft_from_document(document: object, draft_id: str) -> CreationDraft:
     return CreationDraft(
         id=str(document["id"]),
         standard_id=str(document["standard_id"]),
-        standard_version=cast(int, document["standard_version"]),
         revision=cast(int, document["revision"]),
         step=str(document["step"]),
         target_path=str(document["target_path"]),
@@ -301,7 +293,10 @@ def _validate_document(document: object) -> None:
         raise ValueError(f"草稿 schema_version {document['schema_version']!r} 不受支持")
     for key in ("id", "standard_id"):
         _require_text(document[key], key)
-    _require_int(document["standard_version"], "standard_version", minimum=1)
+    try:
+        document["standard_id"] = parse_standard_id(document["standard_id"])
+    except ValueError as exc:
+        raise ValueError(f"草稿 standard_id 无效：{exc}") from exc
     _require_int(document["revision"], "revision", minimum=1)
     if document["step"] not in CREATION_STEPS:
         raise ValueError(f"草稿阶段 {document['step']!r} 不在 {list(CREATION_STEPS)} 内")

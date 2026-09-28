@@ -215,7 +215,7 @@ class StandardStore:
         self._reader = StandardPackageReader()
         try:
             if has_legacy_drafts(self._drafts_root):
-                with self._exclusive():
+                with self.lifecycle_lock():
                     if has_legacy_drafts(self._drafts_root):
                         migrate_legacy_drafts(
                             standards_root=self._standards_root,
@@ -240,7 +240,7 @@ class StandardStore:
         return self._drafts_root
 
     @contextmanager
-    def _exclusive(self):
+    def lifecycle_lock(self):
         """标准库写入门禁：**进程内互斥（必需）+ 跨进程文件锁（纵深防御）**。
 
         两层职责不同，不得因为「产品是单实例」而删掉任何一层：
@@ -411,13 +411,10 @@ class StandardStore:
                 continue
             document = self._read_document(standard_dir)
             schema_version = document.get("schema_version")
-            if type(schema_version) is not int or schema_version != SUPPORTED_SCHEMA_VERSIONS[0]:
-                continue
-            try:
-                document_id = parse_standard_id(document.get("standard_id"))
-            except ValueError:
-                continue
-            if document_id != canonical_id:
+            if schema_version is not None and (
+                type(schema_version) is not int
+                or schema_version != SUPPORTED_SCHEMA_VERSIONS[0]
+            ):
                 continue
             raw_published_at = document.get("published_at")
             published_at = (
@@ -559,7 +556,7 @@ class StandardStore:
         if draft_id is None:
             draft_id = f"draft-{uuid.uuid4().hex[:12]}"
         target = self._draft_dir(draft_id)
-        with self._exclusive():
+        with self.lifecycle_lock():
             self.check_available_identity(standard.standard_id, standard.name)
             if target.exists():
                 raise _error("STANDARD_DRAFT_EXISTS", f"草稿 {draft_id!r} 已存在")
@@ -576,7 +573,7 @@ class StandardStore:
         normalized_document = dict(document)
         normalized_document["standard_id"] = standard.standard_id
         target = self._draft_dir(draft_id)
-        with self._exclusive():
+        with self.lifecycle_lock():
             if not (target / DOCUMENT_NAME).is_file():
                 raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
             self.check_available_identity(
@@ -699,7 +696,7 @@ class StandardStore:
         self, draft_id: str, *, published_at: int | None = None
     ) -> PublishedStandard:
         """写入发布时间并在标准库锁内原子发布 UUID 包。"""
-        with self._exclusive():
+        with self.lifecycle_lock():
             draft = self.get_draft(draft_id)
             if draft is None:
                 raise _error("STANDARD_DRAFT_NOT_FOUND", f"草稿 {draft_id!r} 不存在")
@@ -785,7 +782,7 @@ class StandardStore:
         读包与建目录都在标准库锁内完成，并在锁内重新核对身份与名称，
         使预检后的库状态变化不会造成静默覆盖。
         """
-        with self._exclusive():
+        with self.lifecycle_lock():
             loaded = loaded if loaded is not None else self.read_package(path)
             standard = loaded.standard
             gate = _publish_gate_error(standard)

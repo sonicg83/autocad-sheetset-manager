@@ -66,7 +66,7 @@ def register_creation_routes(app: FastAPI) -> None:
     )
     def create_creation_draft(request: Request, body: CreationDraftCreateRequest):
         return _draft_payload(
-            service(request).create_creation_draft((body.standard_id, body.version))
+            service(request).create_creation_draft(body.standard_id)
         )
 
     @app.get(
@@ -177,7 +177,6 @@ def _draft_payload(draft: CreationDraft) -> dict[str, object]:
     return {
         "id": draft.id,
         "standard_id": draft.standard_id,
-        "standard_version": draft.standard_version,
         "revision": draft.revision,
         "step": draft.step,
         "target_path": draft.target_path,

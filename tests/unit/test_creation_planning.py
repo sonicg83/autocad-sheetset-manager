@@ -142,7 +142,6 @@ def _draft(
     return CreationDraft(
         id="draft-1",
         standard_id=STANDARD.standard_id,
-        standard_version=STANDARD.version,
         revision=revision,
         step="review",
         target_path=target_path,

@@ -23,6 +23,7 @@ from dst_manager.infrastructure.creation_drafts import (
     CreationDraftStore,
     CreationDraftStoreError,
 )
+from dst_manager.infrastructure.standards.store import StandardStore
 
 #: 创建草稿稳定错误码 → HTTP 状态。
 _CREATION_STATUS = {
@@ -47,31 +48,31 @@ def _store_error(exc: CreationDraftStoreError) -> ApplicationError:
 class CreationDraftOperations:
     """经 `self` 访问 standard_store/creation_drafts 的创建草稿功能域。"""
 
-    standard_store: object  # 由 DstManagerService.__init__ 注入 StandardStore
+    standard_store: StandardStore  # 由 DstManagerService.__init__ 注入
     creation_drafts: CreationDraftStore  # 由 DstManagerService.__init__ 注入
 
     # ---- 草稿生命周期 ----------------------------------------------------
 
-    def create_creation_draft(self, identity: tuple[str, int]) -> CreationDraft:
-        """固定一个已发布标准版本并建立修订 1 的空草稿。
+    def create_creation_draft(self, standard_id: str) -> CreationDraft:
+        """固定一个已发布标准并建立修订 1 的空草稿。
 
         初建时对每个普通 sheetset 属性应用一次标准默认值；``target_path`` 与
         图纸组留空，由后续保存逐步补全。
         """
-        standard = self._require_published_standard(identity[0], identity[1])
-        try:
-            return self.creation_drafts.create(
-                standard.standard_id,
-                standard.version,
-                ordinary_property_defaults(standard, SHEETSET_SCOPE),
-            )
-        except CreationDraftStoreError as exc:
-            raise _store_error(exc) from exc
+        with self.standard_store.lifecycle_lock():
+            standard = self._require_published_standard(standard_id)
+            try:
+                return self.creation_drafts.create(
+                    standard.standard_id,
+                    ordinary_property_defaults(standard, SHEETSET_SCOPE),
+                )
+            except CreationDraftStoreError as exc:
+                raise _store_error(exc) from exc
 
     def get_creation_draft(self, draft_id: str) -> CreationDraft:
-        """恢复草稿；固定标准版本不可解析时稳定拒绝。"""
+        """恢复草稿；固定标准不可解析时稳定拒绝。"""
         draft = self._load_creation_draft(draft_id)
-        self._require_published_standard(draft.standard_id, draft.standard_version)
+        self._require_published_standard(draft.standard_id)
         return draft
 
     def save_creation_draft(
@@ -84,9 +85,7 @@ class CreationDraftOperations:
         且不改变磁盘内容与修订号。
         """
         stored = self._load_creation_draft(draft_id)
-        standard = self._require_published_standard(
-            stored.standard_id, stored.standard_version
-        )
+        standard = self._require_published_standard(stored.standard_id)
         self._reject_non_input_values(standard, value)
         try:
             return self.creation_drafts.save(
@@ -110,12 +109,12 @@ class CreationDraftOperations:
         except CreationDraftStoreError as exc:
             raise _store_error(exc) from exc
 
-    def _require_published_standard(self, standard_id: str, version: int) -> DrawingStandard:
-        standard = self.standard_store.get(standard_id, version)
+    def _require_published_standard(self, standard_id: str) -> DrawingStandard:
+        standard = self.standard_store.get(standard_id)
         if standard is None:
             raise _creation_error(
                 "CREATION_STANDARD_MISSING",
-                f"标准 {standard_id}@{version} 未发布或已不可用，请重新选择标准后创建",
+                f"标准 {standard_id} 未发布或已不可用，请重新选择标准后创建",
             )
         return standard
 

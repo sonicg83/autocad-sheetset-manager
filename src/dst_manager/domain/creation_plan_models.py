@@ -137,7 +137,7 @@ class CreationSettings:
     RFC-INT-003「标准身份、存储与恢复」）。
     """
 
-    #: ``<standard_id>@<version>``：与工作区标准绑定属性同一形态。
+    #: ``standard UUID``：与工作区标准绑定属性同一形态。
     standard_identity: str
     #: 按标准文档顺序的全部属性定义（普通 + 派生、两个作用域）。
     properties: tuple[CreationProperty, ...]
@@ -179,7 +179,7 @@ def plan_digest(
 ) -> str:
     """确定性内容摘要：稳定序列化（排序键 + 固定分隔符），不使用 ``hash()``/集合顺序。"""
     payload = {
-        "standard": {"id": standard.standard_id, "version": standard.version},
+        "standard": {"id": standard.standard_id},
         "draft": {"id": draft.id, "revision": draft.revision, "target_path": draft.target_path},
         "numbering": {
             "sequence_field": standard.numbering.sequence_field,

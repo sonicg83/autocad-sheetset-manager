@@ -24,7 +24,12 @@ from dst_manager.application.standard_common import (
 from dst_manager.application.standard_common import (
     store_error as _store_error,
 )
+from dst_manager.domain.legacy_standard_compat import (
+    parse_legacy_published_standard_document,
+)
 from dst_manager.domain.models import Severity, ValidationIssue, Workspace
+from dst_manager.domain.standard_identity import parse_standard_id
+from dst_manager.domain.standard_models import LegacyDrawingStandard
 from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
@@ -61,20 +66,24 @@ class StandardResolution:
 
     status: Literal["unbound", "resolved", "missing"]
     standard_id: str = ""
-    version: int = 0
-    standard: DrawingStandard | None = None
+    standard: DrawingStandard | LegacyDrawingStandard | None = None
     source: str = ""
     diagnostics: tuple[ValidationIssue, ...] = ()
 
 
-def parse_standard_identity(identity: str) -> tuple[str, int]:
-    """解析 ``standard_id@<n>`` 绑定身份；非法输入抛 422。
+def parse_standard_identity(identity: str) -> tuple[str, int | None]:
+    """解析新 UUID 或旧 ``standard_id@<n>`` 绑定；旧形态仅用于只读兼容。
 
-    版本必须是规范十进制正整数（与目录段、路由段同一口径）：``@0``、``@01``、
-    ``@1.0.0``、``@../`` 一律拒绝。
+    旧绑定的版本必须是规范十进制正整数：``@0``、``@01``、``@1.0.0``、``@../``
+    一律拒绝。新绑定只接受带连字符的 UUID。
     """
     standard_id, separator, version = identity.partition(IDENTITY_SEPARATOR)
-    if not separator or not STANDARD_ID_PATTERN.fullmatch(standard_id):
+    if not separator:
+        try:
+            return parse_standard_id(identity), None
+        except ValueError as exc:
+            raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
+    if not STANDARD_ID_PATTERN.fullmatch(standard_id):
         raise ApplicationError(
             "STANDARD_IDENTITY_INVALID",
             f"标准身份 {identity!r} 非法，应为 standard_id@<正整数版本>",
@@ -87,8 +96,11 @@ def parse_standard_identity(identity: str) -> tuple[str, int]:
     return standard_id, parsed
 
 
-def snapshot_directory(root: Path, standard_id: str, version: int | str) -> Path:
-    return Path(root) / ".dst-manager" / "standards" / standard_id / str(version)
+def snapshot_directory(
+    root: Path, standard_id: str, version: int | str | None = None
+) -> Path:
+    directory = Path(root) / ".dst-manager" / "standards" / standard_id
+    return directory if version is None else directory / str(version)
 
 
 class StandardOperations:
@@ -115,22 +127,25 @@ class StandardOperations:
     # ---- 绑定解析与快照恢复 ----------------------------------------------
 
     def resolve_workspace_standard(self, workspace_id: str) -> StandardResolution:
-        """解析工作区标准绑定；快照缺失时按 ID/版本从标准库恢复。"""
+        """解析工作区绑定；新 UUID 可恢复项目快照，旧版本绑定只读解析。"""
         workspace = self.get_workspace(workspace_id)
         resolution = self._resolve_binding(workspace)
         if resolution.status != "resolved" or resolution.source == "project-snapshot":
             return resolution
-        restored = self._restore_snapshot(workspace, resolution.standard_id, resolution.version)
+        identity = workspace.document.custom_properties.get(RESERVED_BINDING_PROPERTY, "").strip()
+        _standard_id, version = parse_standard_identity(identity)
+        if version is not None:
+            return resolution
+        restored = self._restore_snapshot(workspace, resolution.standard_id, version)
         if restored is None:
             return StandardResolution(
                 status="missing",
                 standard_id=resolution.standard_id,
-                version=resolution.version,
                 diagnostics=(
                     ValidationIssue(
                         "STANDARD_MISSING",
                         Severity("warning"),
-                        f"标准 {resolution.standard_id}@{resolution.version} 在标准库中不存在",
+                        f"标准 {identity} 在标准库中不存在",
                     ),
                 ),
             )
@@ -138,7 +153,6 @@ class StandardOperations:
         return StandardResolution(
             status="resolved",
             standard_id=resolution.standard_id,
-            version=resolution.version,
             standard=standard,
             source=source,
         )
@@ -164,11 +178,30 @@ class StandardOperations:
             )
         snapshot = snapshot_directory(workspace.root, standard_id, version)
         if (snapshot / "document.json").is_file():
+            try:
+                standard = (
+                    self._load_snapshot(snapshot)
+                    if version is None
+                    else self._load_legacy_snapshot(snapshot, standard_id, version)
+                )
+            except (OSError, ValueError, StandardSchemaError):
+                standard = None
+            if standard is None:
+                return StandardResolution(
+                    status="missing",
+                    standard_id=standard_id,
+                    diagnostics=(
+                        ValidationIssue(
+                            "STANDARD_MISSING",
+                            Severity("warning"),
+                            f"标准 {identity} 的项目快照无法读取，标准能力已降级",
+                        ),
+                    ),
+                )
             return StandardResolution(
                 status="resolved",
                 standard_id=standard_id,
-                version=version,
-                standard=self._load_snapshot(snapshot),
+                standard=standard,
                 source="project-snapshot",
             )
         restored = self._locate_in_library(standard_id, version)
@@ -177,45 +210,56 @@ class StandardOperations:
             return StandardResolution(
                 status="resolved",
                 standard_id=standard_id,
-                version=version,
                 standard=standard,
                 source=source,
             )
         return StandardResolution(
             status="missing",
             standard_id=standard_id,
-            version=version,
             diagnostics=(
                 ValidationIssue(
                     "STANDARD_MISSING",
                     Severity("warning"),
-                    f"标准 {standard_id}@{version} 不在官方/用户标准库中，标准能力已降级",
+                    f"标准 {identity} 不在官方/用户标准库中，标准能力已降级",
                 ),
             ),
         )
 
     def _locate_in_library(
-        self, standard_id: str, version: int
+        self, standard_id: str, version: int | None
     ) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
             (store.published_root, "user-library"),
             (store.official_root, "official-library"),
         ):
-            document = Path(root) / standard_id / str(version) / "document.json"
+            package = Path(root) / standard_id
+            if version is not None:
+                package = package / str(version)
+            document = package / "document.json"
             if document.is_file():
-                return self._load_snapshot(document.parent), source
+                try:
+                    standard = (
+                        self._load_snapshot(document.parent)
+                        if version is None
+                        else self._load_legacy_snapshot(document.parent, standard_id, version)
+                    )
+                    return standard, source
+                except (OSError, ValueError, StandardSchemaError):
+                    continue
         return None
 
     def _restore_snapshot(
-        self, workspace: Workspace, standard_id: str, version: int
+        self, workspace: Workspace, standard_id: str, version: int | None
     ) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
             (store.published_root, "user-library"),
             (store.official_root, "official-library"),
         ):
-            source_dir = Path(root) / standard_id / str(version)
+            source_dir = Path(root) / standard_id
+            if version is not None:
+                source_dir = source_dir / str(version)
             if not (source_dir / "document.json").is_file():
                 continue
             snapshot = snapshot_directory(workspace.root, standard_id, version)
@@ -234,14 +278,29 @@ class StandardOperations:
             json.loads((directory / "document.json").read_text(encoding="utf-8"))
         )
 
+    @staticmethod
+    def _load_legacy_snapshot(
+        directory: Path, standard_id: str, version: int
+    ) -> LegacyDrawingStandard:
+        import json
+
+        return parse_legacy_published_standard_document(
+            json.loads((directory / "document.json").read_text(encoding="utf-8")),
+            standard_id=standard_id,
+            version=version,
+        )
+
     # ---- 绑定写入 --------------------------------------------------------
 
     def bind_workspace_standard(
         self, workspace_id: str, identity: str, base_revision_id: str
     ) -> dict[str, object]:
-        """通过专用命令把标准身份写入图纸集保留属性。"""
-        standard_id, version = parse_standard_identity(identity)
-        commands = [{"type": "bind_standard", "standard": identity}]
+        """通过专用命令把 UUID 写入图纸集保留属性。"""
+        try:
+            standard_id = parse_standard_id(identity)
+        except ValueError as exc:
+            raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
+        commands = [{"type": "bind_standard", "standard": standard_id}]
         plan = self.preview_changes(workspace_id, base_revision_id, commands)
         if not plan["executable"]:
             raise ApplicationError("PLAN_INVALID", "执行计划包含阻断诊断")
@@ -254,7 +313,6 @@ class StandardOperations:
         return {
             "status": "bound",
             "standard_id": standard_id,
-            "version": version,
             "job_id": job.get("id"),
         }
 

@@ -283,3 +283,21 @@ class DrawingStandard(_StandardDocumentMixin):
     assets: tuple[StandardAsset, ...]
     numbering: NumberingPolicy
     dependencies: tuple[StandardDependency, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LegacyDrawingStandard(_StandardDocumentMixin):
+    """旧版工程快照的只读内存模型；旧发布时间未知且不写回。"""
+
+    schema_version: int
+    standard_id: str
+    version: int
+    published_at: None
+    name: str
+    description: str
+    supported_cad_versions: tuple[str, ...]
+    properties: tuple[StandardProperty, ...]
+    dwg_naming: DwgNamingTemplate
+    assets: tuple[StandardAsset, ...]
+    numbering: NumberingPolicy
+    dependencies: tuple[StandardDependency, ...] = ()

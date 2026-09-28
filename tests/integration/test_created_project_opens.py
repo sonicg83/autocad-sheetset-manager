@@ -48,9 +48,10 @@ from dst_platform.autocad.process import CoreConsoleResult
 #: 夹具标准：一个 sheetset 文本、一个 sheetset 枚举、一个 sheet 文本，一个基础模板
 #: 与一个布局模板（声明图幅 A1），DWG 命名只用受控片段与系统字段。
 STANDARD_DOCUMENT: dict[str, object] = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
-    "version": 1,
+    "schema_version": 3,
+    "standard_id": "00000000-0000-4000-8000-000000000046",
+    "published_at": 1_700_000_000_000,
+    "description": "",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -114,10 +115,10 @@ ASSET_FILES: dict[str, bytes] = {
 #: 布局模板的真实布局集合：包含标准声明的图幅 A1。
 TEMPLATE_LAYOUTS = ("A1", "A2", "A3", "Model")
 
-STANDARD_IDENTITY = "szmedi.gas@1"
+STANDARD_IDENTITY = "00000000-0000-4000-8000-000000000046"
 CREATION_JOB_ID = "job-1"
 #: 项目内标准快照目录（brief Step 1 断言的精确位置）。
-STANDARD_SNAPSHOT = ".dst-manager/standards/szmedi.gas/1"
+STANDARD_SNAPSHOT = ".dst-manager/standards/00000000-0000-4000-8000-000000000046"
 
 
 class FakeCadExecutor:
@@ -284,9 +285,9 @@ def fault_injector(monkeypatch: pytest.MonkeyPatch) -> RegistrationFaultInjector
 
 def test_created_project_opens_as_normal_workspace(service, completed_creation) -> None:
     workspace = service.get_workspace(completed_creation.workspace_id)
-    assert workspace.document.custom_properties["DSTManager.Standard"] == "szmedi.gas@1"
+    assert workspace.document.custom_properties["DSTManager.Standard"] == STANDARD_IDENTITY
     assert workspace.revision_id == completed_creation.revision_id
-    assert (workspace.root / ".dst-manager/standards/szmedi.gas/1").is_dir()
+    assert (workspace.root / STANDARD_SNAPSHOT).is_dir()
 
 
 def test_registration_failure_is_recoverable_not_successful(service, published_candidate, fault_injector) -> None:
@@ -452,13 +453,13 @@ def test_created_project_keeps_standard_semantics_after_library_version_is_delet
     service: DstManagerService, completed_creation: CompletedCreation
 ) -> None:
     """标准库里的版本被删除后，语义仍由项目内快照恢复，不拒绝打开。"""
-    shutil.rmtree(service.standard_store.published_root / "szmedi.gas")
+    shutil.rmtree(service.standard_store.published_root / STANDARD_IDENTITY)
 
     resolution = service.resolve_workspace_standard(completed_creation.workspace_id)
 
     assert resolution.status == "resolved"
     assert resolution.source == "project-snapshot"
-    assert resolution.standard_id == "szmedi.gas" and resolution.version == 1
+    assert resolution.standard_id == STANDARD_IDENTITY
     reopened = service.get_workspace(completed_creation.workspace_id)
     assert reopened.revision_id == completed_creation.revision_id
     assert not [item for item in reopened.document.diagnostics if item.severity.value == "error"]
@@ -468,7 +469,7 @@ def test_registration_succeeds_when_the_library_version_is_already_gone(
     service: DstManagerService, published_candidate: PublishedProject
 ) -> None:
     """发布与登记之间库中版本消失：登记仍成功，工作区照常打开（标准能力降级）。"""
-    shutil.rmtree(service.standard_store.published_root / "szmedi.gas")
+    shutil.rmtree(service.standard_store.published_root / STANDARD_IDENTITY)
 
     result = service.finish_creation(published_candidate)
 
@@ -614,9 +615,8 @@ def test_registration_refuses_to_report_success_without_the_revision_manifest(
 
 def _publish_standard(service: DstManagerService) -> None:
     """发布夹具标准：资产文件先写入草稿目录，发布后随目录一起落到 published 下。"""
-    # 草稿不携带版本（PLAN-DM-041 Task 2）：本地夹具去 version 后再入库。
     draft = service.create_standard_draft(
-        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
+        {**STANDARD_DOCUMENT, "published_at": None},
         "draft-gas",
     )
     draft_root = (
@@ -631,11 +631,12 @@ def _publish_standard(service: DstManagerService) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
     published = service.publish_standard(str(draft["draft_id"]))
-    assert published["standard_id"] == "szmedi.gas" and published["version"] == 1
+    assert published["standard_id"] == STANDARD_IDENTITY
+    assert "version" not in published
 
 
 def _package_root(service: DstManagerService) -> Path:
-    return service.standard_store.published_root / "szmedi.gas" / "1"
+    return service.standard_store.published_root / STANDARD_IDENTITY
 
 
 def _fake_capability(tmp_path: Path) -> CadCapability:
@@ -682,7 +683,7 @@ def _draft_value(draft: CreationDraft, target: Path) -> CreationDraft:
 
 def _creation_site(service: DstManagerService, tmp_path: Path, *, target: Path) -> CreationSite:
     """建一份可执行草稿并算出权威预览摘要与计划（与执行入口同一份重算口径）。"""
-    draft = service.create_creation_draft(("szmedi.gas", 1))
+    draft = service.create_creation_draft(STANDARD_IDENTITY)
     saved = service.save_creation_draft(
         draft.id,
         expected_revision=draft.revision,
@@ -708,7 +709,7 @@ def _creation_site(service: DstManagerService, tmp_path: Path, *, target: Path) 
 def _standard_document_is_publishable() -> None:
     """夹具标准必须能通过发布门禁（否则夹具失效，测试失败点会被误导）。"""
     standard = parse_published_standard_document(STANDARD_DOCUMENT)
-    assert standard.standard_id == "szmedi.gas"
+    assert standard.standard_id == STANDARD_IDENTITY
 
 
 def test_fixture_standard_is_publishable() -> None:

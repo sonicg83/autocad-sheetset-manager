@@ -158,7 +158,7 @@ export function createCreationStore(
   }
 
   function sameIdentity(left: CreationIdentity | null, right: CreationIdentity): boolean {
-    return left !== null && left.standardId === right.standardId && left.version === right.version;
+    return left !== null && left.standardId === right.standardId;
   }
 
   // 权威预览会话：状态迁移在 `previewSession.ts`，本模块只组合并在输入变化时失效
@@ -272,7 +272,6 @@ export function createCreationStore(
   ): Promise<boolean> {
     const identity: CreationIdentity = {
       standardId: candidate.standard_id,
-      version: candidate.version,
     };
     if (state.draftId !== "" && chooseOptions.replace !== true) {
       // 同一固定标准：复用现有草稿，不重建输入（切换标准必须显式要求 replace）
@@ -310,10 +309,10 @@ export function createCreationStore(
     try {
       const draft = await api.fetchDraft(draftId);
       const candidate = state.candidates.find(
-        item => item.standard_id === draft.standard_id && item.version === draft.standard_version,
+        item => item.standard_id === draft.standard_id,
       );
       const inputs = await loadStandardInputs(
-        {standardId: draft.standard_id, version: draft.standard_version},
+        {standardId: draft.standard_id},
         candidate?.name ?? "",
         candidate?.asset_options ?? [],
       );

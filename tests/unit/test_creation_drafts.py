@@ -19,9 +19,10 @@ from dst_manager.domain.creation import CreationGroupInput
 # 最小可发布标准：两个普通 sheetset 属性（文本带默认值、枚举无默认值）、一个派生
 # 映射属性（不得进入草稿输入）与一个普通 sheet 属性。
 STANDARD_DOCUMENT = {
-    "schema_version": 2,
-    "standard_id": "szmedi.gas",
-    "version": 1,
+    "schema_version": 3,
+    "standard_id": "00000000-0000-4000-8000-000000000046",
+    "published_at": 1_700_000_000_000,
+    "description": "",
     "name": "市政燃气施工图",
     "supported_cad_versions": ["2016", "2020"],
     "properties": [
@@ -73,7 +74,6 @@ DRAFT_DOCUMENT_KEYS = {
     "schema_version",
     "id",
     "standard_id",
-    "standard_version",
     "revision",
     "step",
     "target_path",
@@ -96,7 +96,7 @@ GROUP_DOCUMENT_KEYS = {
 class PublishedStandardFixture:
     """已发布标准夹具：稳定身份 + 原始文档。"""
 
-    identity: tuple[str, int]
+    identity: str
     document: dict[str, object]
 
 
@@ -108,14 +108,10 @@ def service(tmp_path: Path) -> DstManagerService:
 @pytest.fixture
 def published_standard(service: DstManagerService) -> PublishedStandardFixture:
     store = service.standard_store
-    # 草稿不携带版本（PLAN-DM-041 Task 2）。
-    store.create_draft(
-        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
-        draft_id="draft-gas",
-    )
+    store.create_draft({**STANDARD_DOCUMENT, "published_at": None}, draft_id="draft-gas")
     published = store.publish("draft-gas")
     return PublishedStandardFixture(
-        identity=(published.standard_id, published.version),
+        identity=published.standard_id,
         document=STANDARD_DOCUMENT,
     )
 
@@ -149,7 +145,8 @@ def group(group_id: str, created_order: int, **overrides: object) -> CreationGro
 def test_creation_draft_pins_published_standard(tmp_path, service, published_standard) -> None:
     draft = service.create_creation_draft(published_standard.identity)
     restored = service.get_creation_draft(draft.id)
-    assert (restored.standard_id, restored.standard_version) == published_standard.identity
+    assert restored.standard_id == published_standard.identity
+    assert not hasattr(restored, "standard_version")
     assert restored.revision == 1
     assert restored.target_path == ""
     assert restored.groups == ()
@@ -229,7 +226,8 @@ def test_restored_draft_carries_no_preview_state(service, draft) -> None:
     saved = service.save_creation_draft(draft.id, expected_revision=1, value=value)
     document = json.loads(draft_document_path(service, draft.id).read_text(encoding="utf-8"))
     assert set(document) == DRAFT_DOCUMENT_KEYS
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 3
+    assert "standard_version" not in document
     assert document["revision"] == 2
     assert document["step"] == "groups"
     assert document["target_path"] == "C:/projects/新建项目"
@@ -276,12 +274,11 @@ def test_draft_document_with_unknown_field_is_quarantined(service, draft) -> Non
         service.get_creation_draft(draft.id)
 
 
-def test_missing_published_standard_version_reports_standard_missing(
+def test_missing_published_standard_reports_standard_missing(
     service, published_standard
 ) -> None:
     draft = service.create_creation_draft(published_standard.identity)
-    standard_id, version = published_standard.identity
-    shutil.rmtree(service.standard_store.published_root / standard_id / str(version))
+    shutil.rmtree(service.standard_store.published_root / published_standard.identity)
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
         service.get_creation_draft(draft.id)
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
@@ -290,13 +287,12 @@ def test_missing_published_standard_version_reports_standard_missing(
 
 def test_standard_draft_is_not_usable_for_creation(service) -> None:
     service.standard_store.create_draft(
-        {key: value for key, value in STANDARD_DOCUMENT.items() if key != "version"},
-        draft_id="draft-gas",
+        {**STANDARD_DOCUMENT, "published_at": None}, draft_id="draft-gas"
     )
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
-        service.create_creation_draft(("szmedi.gas", 1))
+        service.create_creation_draft(STANDARD_DOCUMENT["standard_id"])
     with pytest.raises(ApplicationError, match="CREATION_STANDARD_MISSING"):
-        service.create_creation_draft(("szmedi.gas", 9))
+        service.create_creation_draft("00000000-0000-4000-8000-000000000099")
 
 
 def test_save_rejects_derived_and_out_of_scope_values(service, draft) -> None:
@@ -323,7 +319,7 @@ def test_save_rejects_duplicate_group_identity(service, draft) -> None:
 
 
 def test_save_rejects_pinned_standard_change(service, draft) -> None:
-    changed = replace(draft, standard_version=9)
+    changed = replace(draft, standard_id="00000000-0000-4000-8000-000000000099")
     with pytest.raises(ApplicationError, match="CREATION_DRAFT_INVALID"):
         service.save_creation_draft(draft.id, expected_revision=1, value=changed)
     renamed = replace(draft, id="other-draft")

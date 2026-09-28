@@ -236,7 +236,7 @@ def _creation_settings(
     ``DSTManager.StandardOptions``）必须随计划冻结。
     """
     return CreationSettings(
-        standard_identity=f"{standard.standard_id}@{standard.version}",
+        standard_identity=standard.standard_id,
         properties=tuple(
             CreationProperty(prop.property_id, prop.name, prop.scope)
             for prop in standard.properties

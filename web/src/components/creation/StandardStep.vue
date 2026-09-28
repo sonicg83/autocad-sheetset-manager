@@ -30,7 +30,7 @@ const preview = computed<CreationStandardCandidate | null>(() => {
   const fixed = props.store.standard?.identity;
   if (fixed !== undefined && fixed !== null) {
     const current = available.value.find(
-      item => item.standard_id === fixed.standardId && item.version === fixed.version,
+      item => item.standard_id === fixed.standardId,
     );
     if (current !== undefined) return current;
   }
@@ -43,8 +43,7 @@ const isFixed = computed(() => {
     fixed !== undefined &&
     fixed !== null &&
     candidate !== null &&
-    fixed.standardId === candidate.standard_id &&
-    fixed.version === candidate.version
+    fixed.standardId === candidate.standard_id
   );
 });
 const counts = computed(() => {
@@ -60,7 +59,7 @@ const counts = computed(() => {
 });
 
 function keyOf(candidate: CreationStandardCandidate): string {
-  return `${candidate.standard_id}@${candidate.version}`;
+  return candidate.standard_id;
 }
 </script>
 <template>
@@ -84,7 +83,7 @@ function keyOf(candidate: CreationStandardCandidate): string {
               @focus="focusedKey = keyOf(candidate)"
             >
               <strong>{{ candidate.name }}</strong>
-              <small>{{ candidate.standard_id }} · v{{ candidate.version }}</small>
+              <small>{{ candidate.standard_id }}</small>
               <span class="badge">{{ $t("creation.standard.available") }}</span>
             </button>
           </li>
@@ -110,8 +109,8 @@ function keyOf(candidate: CreationStandardCandidate): string {
         <h3 class="detail-name">{{ preview.name }}</h3>
         <dl class="identity">
           <div>
-            <dt>{{ $t("creation.standard.version") }}</dt>
-            <dd>{{ preview.standard_id }} · v{{ preview.version }}</dd>
+            <dt>{{ $t("creation.standard.id") }}</dt>
+            <dd>{{ preview.standard_id }}</dd>
           </div>
           <div>
             <dt>{{ $t("creation.standard.cadVersions") }}</dt>

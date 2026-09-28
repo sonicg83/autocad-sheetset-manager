@@ -13,7 +13,6 @@ import type {Page} from "@playwright/test";
 
 export type CreationCandidateBody = {
   standard_id: string;
-  version: number;
   name: string;
   supported_cad_versions: string[];
   available: boolean;
@@ -35,7 +34,6 @@ export type CreationGroupBody = {
 export type CreationDraftBody = {
   id: string;
   standard_id: string;
-  standard_version: number;
   revision: number;
   step: string;
   target_path: string;
@@ -53,7 +51,7 @@ export type CreationImportDiagnosticBody = {
 
 export interface CreationFixtureState {
   drafts: Map<string, CreationDraftBody>;
-  createBodies: Array<{standard_id: string; version: number}>;
+  createBodies: Array<{standard_id: string}>;
   saveBodies: Array<Record<string, unknown>>;
   deleted: string[];
   importAttempts: number;
@@ -103,8 +101,10 @@ export interface CreationFixtureOptions {
 /** 标准文档：图纸集文本/枚举 + 派生映射 + 图纸组枚举/文本 + 两种模板资产。 */
 export function creationStandardDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schema_version: 2,
-    standard_id: "szmedi.gas",
+    schema_version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000046",
+    published_at: 1700000000000,
+    description: "",
     name: "市政燃气施工图",
     supported_cad_versions: ["2016", "2020"],
     properties: [
@@ -155,8 +155,7 @@ export function creationStandardDocument(overrides: Record<string, unknown> = {}
 /** 可用候选：与 `creationStandardDocument` 的属性与资产同源。 */
 export function creationCandidate(overrides: Partial<CreationCandidateBody> = {}): CreationCandidateBody {
   return {
-    standard_id: "szmedi.gas",
-    version: 1,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
     supported_cad_versions: ["2016", "2020"],
     available: true,
@@ -172,8 +171,7 @@ export function creationCandidate(overrides: Partial<CreationCandidateBody> = {}
 /** 不可用候选：模板资产缺失，只能出现在「无可用标准」的原因说明里。 */
 export function unavailableCreationCandidate(): CreationCandidateBody {
   return creationCandidate({
-    standard_id: "user.old",
-    version: 7,
+    standard_id: "00000000-0000-4000-8000-000000000047",
     name: "旧版市政模板",
     available: false,
     reasons: ["标准资产 'layout-a' 声明的文件 '市政图框.dwt' 不存在或路径非法"],
@@ -186,9 +184,9 @@ export function publishedStandardSummary(overrides: Record<string, unknown> = {}
   return {
     source: "user",
     status: "published",
-    standard_id: "szmedi.gas",
-    version: 1,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
+    published_at: 1700000000000,
     draft_id: null,
     ...overrides,
   };
@@ -281,8 +279,7 @@ export function creationPreview(overrides: Record<string, unknown> = {}): Record
   return {
     draft_id: "draft-1",
     revision: 2,
-    standard_id: "szmedi.gas",
-    standard_version: 1,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     standard_name: "市政燃气施工图",
     target_path: "D:\\项目\\新建项目",
     sheetset_values: {"prop-name": "滨河路改造工程", "prop-major": "燃气"},
@@ -511,12 +508,11 @@ export async function installCreation(
         return route.fulfill({json: candidates});
       }
       if (path === "/api/creation-drafts" && method === "POST") {
-        const body = (await request.postDataJSON()) as {standard_id: string; version: number};
+        const body = (await request.postDataJSON()) as {standard_id: string};
         state.createBodies.push(body);
         const draft: CreationDraftBody = {
           id: `draft-${state.createBodies.length}`,
           standard_id: body.standard_id,
-          standard_version: body.version,
           revision: 1,
           step: "project",
           target_path: "",
@@ -650,17 +646,16 @@ export async function installCreation(
     route => route.fulfill({json: options.standardsList ?? []}),
   );
   await page.route(
-    url => /^\/api\/standards\/[^/]+\/[^/]+$/.test(url.pathname),
+    url => /^\/api\/standards\/[^/]+$/.test(url.pathname),
     route => {
       const segments = new URL(route.request().url()).pathname.split("/");
       return route.fulfill({
         json: {
           standard_id: decodeURIComponent(segments[3] ?? ""),
-          version: Number(segments[4]),
           name: document["name"],
           supported_cad_versions: document["supported_cad_versions"],
           dependencies: [],
-          document: {...document, standard_id: decodeURIComponent(segments[3] ?? ""), version: Number(segments[4])},
+          document: {...document, standard_id: decodeURIComponent(segments[3] ?? "")},
         },
       });
     },

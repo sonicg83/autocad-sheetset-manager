@@ -101,7 +101,6 @@ const fixedStandard = computed(() => {
   return t("creation.wizard.fixedStandard", {
     name: name === "" ? identity.standardId : name,
     id: identity.standardId,
-    version: identity.version,
   });
 });
 
@@ -131,12 +130,11 @@ watch(() => store.draftId, draftId => writeStoredDraftId(draftId));
 /** 标准候选：列表里没有（例如详情入口指向的版本依赖不可用）时按身份合成一个空候选。 */
 function candidateFor(identity: StandardIdentity): CreationStandardCandidate {
   const found = store.candidates.find(
-    item => item.standard_id === identity.standardId && item.version === identity.version,
+    item => item.standard_id === identity.standardId,
   );
   if (found !== undefined) return found;
   return {
     standard_id: identity.standardId,
-    version: identity.version,
     name: "",
     supported_cad_versions: [],
     available: true,
@@ -160,8 +158,7 @@ async function useStandard(candidate: CreationStandardCandidate): Promise<void> 
   const current = store.standard?.identity ?? null;
   const same =
     current !== null &&
-    current.standardId === candidate.standard_id &&
-    current.version === candidate.version;
+    current.standardId === candidate.standard_id;
   if (hasStandard.value && !same) {
     if (!(await confirmSwitchStandard())) return;
     invalidateCreationJob(true);
@@ -178,7 +175,7 @@ async function enterFromIdentity(identity: StandardIdentity): Promise<void> {
     const resumed = await store.resumeDraft(storedId);
     if (resumed) {
       const current = store.standard?.identity ?? null;
-      if (current !== null && current.standardId === identity.standardId && current.version === identity.version) {
+      if (current !== null && current.standardId === identity.standardId) {
         await store.goToStep("project");
         return;
       }

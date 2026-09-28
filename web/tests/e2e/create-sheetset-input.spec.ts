@@ -91,8 +91,8 @@ test("标准详情「用于创建」固定发布版本并直接进入第二阶�
 
   // 直接落到第二阶段，且草稿固定的标准身份来自详情（不要求重复选择）
   await expect(page.getByRole("region", {name: "项目信息"})).toBeVisible();
-  await expect(page.getByTestId("creation-fixed-standard")).toContainText("szmedi.gas");
-  expect(state.createBodies).toEqual([{standard_id: "szmedi.gas", version: 1}]);
+  await expect(page.getByTestId("creation-fixed-standard")).toContainText("00000000-0000-4000-8000-000000000046");
+  expect(state.createBodies).toEqual([{standard_id: "00000000-0000-4000-8000-000000000046"}]);
   await expect(page.getByTestId("creation-stepper").locator('[aria-current="step"]')).toHaveText(/2\s*项目信息/);
 });
 
@@ -309,7 +309,7 @@ test("草稿恢复提示继续或重新开始，重新开始须确认并放弃�
 });
 
 test("切换标准先提示再清除不兼容输入，不静默迁移", async ({page}) => {
-  const second = creationCandidate({standard_id: "user.b", version: 2, name: "建筑设计图纸标准"});
+  const second = creationCandidate({standard_id: "00000000-0000-4000-8000-000000000047", name: "建筑设计图纸标准"});
   await installCreation(page, {candidates: [creationCandidate(), second]});
   await openCreation(page);
   await chooseStandard(page);
@@ -325,12 +325,12 @@ test("切换标准先提示再清除不兼容输入，不静默迁移", async ({
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", {name: "取消"}).click();
   // 取消保留当前草稿与输入（仍在第一阶段，未清除）
-  await expect(page.getByTestId("creation-fixed-standard")).toContainText("szmedi.gas");
+  await expect(page.getByTestId("creation-fixed-standard")).toContainText("00000000-0000-4000-8000-000000000046");
 
   await page.getByTestId("creation-standard-list").getByRole("button").filter({hasText: "建筑设计图纸标准"}).click();
   await page.getByRole("dialog", {name: "切换图纸标准？"}).getByRole("button", {name: "切换标准"}).click();
   await expect(page.getByRole("region", {name: "项目信息"})).toBeVisible();
-  await expect(page.getByTestId("creation-fixed-standard")).toContainText("user.b");
+  await expect(page.getByTestId("creation-fixed-standard")).toContainText("00000000-0000-4000-8000-000000000047");
 });
 
 test("保存失败时返回欢迎页被拦下，草稿与输入都不丢", async ({page}) => {
