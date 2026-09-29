@@ -33,6 +33,7 @@ import type {
 } from "./types";
 import {
   creationBatchPatch,
+  creationClearCascadeValues,
   creationCopiedGroup,
   creationDefaultGroup,
   creationGroupIssues,
@@ -41,6 +42,7 @@ import {
   creationNextGroupId,
   creationNextOrder,
   creationPathParts,
+  creationSetInputValue,
   creationStandardInputs,
   creationTargetPath,
   creationWithPropertyDefaults,
@@ -79,7 +81,7 @@ export interface CreationStore extends CreationState {
   toggleGroup(groupId: string, selected?: boolean): void;
   selectAllGroups(): void;
   clearGroupSelection(): void;
-  batchUpdate(groupIds: string[], fieldId: string, change: CreationBatchChange): void;
+  batchUpdate(groupIds: string[], fieldId: string, change: CreationBatchChange): boolean;
   invalidatePreview(): void;
   /** 编号设置等向导外变化使旧摘要失效（与 `invalidatePreview` 同一实现，按原因区分入口）。 */
   invalidateForSettingsChange(): void;
@@ -408,21 +410,39 @@ export function createCreationStore(
   }
 
   function updateGroup(groupId: string, patch: CreationGroupPatch): void {
-    state.groups = state.groups.map(item =>
-      item.group_id === groupId ? {...item, ...patch} : item,
-    );
+    state.groups = state.groups.map(item => {
+      if (item.group_id !== groupId) return item;
+      let nextPatch = patch;
+      if (patch.sheet_values !== undefined && state.standard !== null) {
+        let values = {...patch.sheet_values};
+        for (const property of state.standard.sheet_properties) {
+          if (property.kind !== "cascade") continue;
+          const parentId = property.source_property_id;
+          if ((item.sheet_values[parentId] ?? "") !== (values[parentId] ?? "")) {
+            values = creationClearCascadeValues(values, state.standard.sheet_properties, parentId);
+          }
+        }
+        nextPatch = {...patch, sheet_values: values};
+      }
+      return {...item, ...nextPatch};
+    });
     invalidatePreview();
   }
 
-  function batchUpdate(groupIds: string[], fieldId: string, change: CreationBatchChange): void {
+  function batchUpdate(groupIds: string[], fieldId: string, change: CreationBatchChange): boolean {
     const targets = new Set(groupIds);
-    if (targets.size === 0) return;
+    const selected = state.groups.filter(item => targets.has(item.group_id));
+    if (selected.length === 0) return false;
+    const patches = selected.map(item => creationBatchPatch(item, state.standard, fieldId, change));
+    // 先验证所有选中组，再一次写回，避免无效批量值只改动部分组。
+    if (patches.some(patch => patch === null)) return false;
+    const patchById = new Map(selected.map((item, index) => [item.group_id, patches[index]!] as const));
     state.groups = state.groups.map(item => {
-      if (!targets.has(item.group_id)) return item;
-      const patch = creationBatchPatch(item, state.standard, fieldId, change);
-      return patch === null ? item : {...item, ...patch};
+      const patch = patchById.get(item.group_id);
+      return patch === undefined ? item : {...item, ...patch};
     });
     invalidatePreview();
+    return true;
   }
 
   async function importWorkbook(file: File): Promise<boolean> {
@@ -468,7 +488,12 @@ export function createCreationStore(
     refreshDerived,
     setSheetsetValue: (propertyId: string, value: string): void => {
       // 用户主动清空后不得回填标准默认值：这里只写入显式值，不查默认值
-      state.sheetsetValues = {...state.sheetsetValues, [propertyId]: value};
+      state.sheetsetValues = creationSetInputValue(
+        state.sheetsetValues,
+        state.standard?.sheetset_properties ?? [],
+        propertyId,
+        value,
+      );
       invalidatePreview();
     },
     setParentPath: (value: string): void => {

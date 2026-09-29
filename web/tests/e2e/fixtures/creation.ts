@@ -82,6 +82,8 @@ export interface CreationFixtureState {
 
 export interface CreationFixtureOptions {
   candidates?: CreationCandidateBody[];
+  /** 固定标准详情文档；用于覆盖特定创建属性组合。 */
+  standardDocument?: Record<string, unknown>;
   /** 权威预览响应；默认 `creationPreview()`（三组、含不编号组与多值属性）。 */
   preview?: Record<string, unknown> | null;
   /** 执行入队返回的任务；默认 `creationQueuedJob()`。 */
@@ -150,6 +152,47 @@ export function creationStandardDocument(overrides: Record<string, unknown> = {}
     numbering: {sequence_field: "subset.sequence", digits: 2, start: 1},
     ...overrides,
   };
+}
+
+/** 带图纸集与图纸组级联属性的标准详情文档，供向导级联交互用例复用。 */
+export function creationCascadeDocument(): Record<string, unknown> {
+  const document = creationStandardDocument({schema_version: 4});
+  const properties = document["properties"] as Array<Record<string, unknown>>;
+  const major = properties.find(property => property["property_id"] === "prop-major");
+  if (major !== undefined) {
+    major["default_value"] = "道路";
+    major["enum_items"] = [
+      {item_id: "enum-road", value: "道路"},
+      {item_id: "enum-gas", value: "燃气"},
+    ];
+  }
+  properties.push(
+    {
+      property_id: "prop-region", name: "区域", scope: "sheetset", kind: "cascade",
+      source_property_id: "prop-major",
+      cascade_options: [
+        {source_item_id: "enum-road", values: ["东区", "西区"]},
+        {source_item_id: "enum-gas", values: ["北区", "南区"]},
+      ],
+    },
+    {
+      property_id: "prop-route", name: "线路类型", scope: "sheet", kind: "enum",
+      required: false, default_value: "道路",
+      enum_items: [
+        {item_id: "enum-route-road", value: "道路"},
+        {item_id: "enum-route-gas", value: "燃气"},
+      ],
+    },
+    {
+      property_id: "prop-route-detail", name: "线路等级", scope: "sheet", kind: "cascade",
+      source_property_id: "prop-route",
+      cascade_options: [
+        {source_item_id: "enum-route-road", values: ["城市道路", "公路", "通用"]},
+        {source_item_id: "enum-route-gas", values: ["庭院管网", "长输管线", "通用"]},
+      ],
+    },
+  );
+  return document;
 }
 
 /** 可用候选：与 `creationStandardDocument` 的属性与资产同源。 */
@@ -494,7 +537,7 @@ export async function installCreation(
     importSuccess: options.importSuccess ?? creationImportSuccess(),
   };
   const candidates = options.candidates ?? [creationCandidate(), unavailableCreationCandidate()];
-  const document = creationStandardDocument();
+  const document = options.standardDocument ?? creationStandardDocument();
 
   await page.route(
     url => url.pathname.startsWith("/api/creation-drafts"),

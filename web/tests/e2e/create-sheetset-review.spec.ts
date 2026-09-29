@@ -9,6 +9,7 @@
 import {expect, test, type Page} from "@playwright/test";
 import {
   chooseStandard,
+  creationCascadeDocument,
   creationFailedJob,
   creationPreview,
   creationPreviewWithDiagnostics,
@@ -113,6 +114,48 @@ test("顶部摘要与按组一行主表只呈现后端权威结果", async ({pag
   await expect(section).toContainText("04-05");
   await expect(section).toContainText("纵断面图");
   await expect(section).toContainText("RQ-纵断面图.dwg");
+});
+
+test("恢复的非法级联值保留原值，预览诊断可定位并清空修正", async ({page}) => {
+  const state = await installCreation(page, {standardDocument: creationCascadeDocument()});
+  await openCreation(page);
+  await chooseStandard(page);
+  await page.getByLabel("专业").selectOption("道路");
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  await groupRow(page, "group-1").locator('input[type="text"]').first().fill("线路图");
+  await groupRow(page, "group-1").getByLabel(/线路等级$/).selectOption("城市道路");
+
+  await page.getByRole("button", {name: "返回欢迎页"}).click();
+  await expect(page.getByRole("heading", {name: "打开图纸集"})).toBeVisible();
+  await expect.poll(() => state.saveBodies.length).toBeGreaterThan(0);
+  const draft = state.drafts.get("draft-1");
+  expect(draft).toBeDefined();
+  if (draft === undefined) throw new Error("missing saved fixture draft");
+  draft.groups[0]!.sheet_values["prop-route-detail"] = "旧线路值";
+  state.preview = {
+    ...creationPreview(),
+    executable: false,
+    diagnostics: [{
+      code: "STANDARD_CASCADE_VALUE_INVALID",
+      message: "线路等级与线路类型不匹配",
+      severity: "error",
+      group_id: "group-1",
+      property_id: "prop-route-detail",
+    }],
+  };
+
+  await page.getByRole("button", {name: "创建新图纸集"}).click();
+  await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
+  const detail = groupRow(page, "group-1").getByLabel(/线路等级$/);
+  await expect(detail).toHaveValue("旧线路值");
+  await page.getByRole("button", {name: "下一步"}).click();
+  await expect(page.getByTestId("creation-preview-errors")).toContainText("级联值与当前上级选项不匹配");
+  await page.getByRole("button", {name: "返回修改第 1 项"}).click();
+  await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
+  await expect(detail).toHaveValue("旧线路值");
+  await detail.selectOption("");
+  await expect(detail).toHaveValue("");
 });
 
 test("组内同值直接显示，多值显示首张值加省略号，首张为空显示（空）加省略号", async ({page}) => {

@@ -7,11 +7,13 @@
 import type {
   CreationAssetOption,
   CreationBatchChange,
+  CreationCascadeProperty,
   CreationDerivedProperty,
   CreationDraftState,
   CreationGroupIssueCode,
   CreationGroupPatch,
   CreationGroupState,
+  CreationInputProperty,
   CreationIdentity,
   CreationOrdinaryProperty,
   CreationStandardInputs,
@@ -63,6 +65,27 @@ function ordinaryProperty(raw: Record<string, unknown>, scope: string): Creation
   };
 }
 
+function cascadeProperty(raw: Record<string, unknown>, scope: string): CreationCascadeProperty {
+  const rows = Array.isArray(raw["cascade_options"]) ? raw["cascade_options"] : [];
+  return {
+    property_id: asString(raw["property_id"]),
+    name: asString(raw["name"]),
+    scope: scope === SHEET_SCOPE ? SHEET_SCOPE : SHEETSET_SCOPE,
+    kind: "cascade",
+    required: raw["required"] === true,
+    default_value: "",
+    source_property_id: asString(raw["source_property_id"]),
+    cascade_options: rows
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map(item => ({
+        source_item_id: asString(item["source_item_id"]),
+        values: Array.isArray(item["values"])
+          ? item["values"].filter((value): value is string => typeof value === "string")
+          : [],
+      })),
+  };
+}
+
 function derivedProperty(raw: Record<string, unknown>, scope: string): CreationDerivedProperty {
   return {
     property_id: asString(raw["property_id"]),
@@ -84,13 +107,16 @@ export function creationStandardInputs(
   document: Record<string, unknown>,
   assetOptions: CreationAssetOption[],
 ): CreationStandardInputs {
-  const sheetset: CreationOrdinaryProperty[] = [];
-  const sheet: CreationOrdinaryProperty[] = [];
+  const sheetset: CreationInputProperty[] = [];
+  const sheet: CreationInputProperty[] = [];
   const derived: CreationDerivedProperty[] = [];
   for (const raw of documentProperties(document)) {
     const scope = asString(raw["scope"]);
     if (scope !== SHEETSET_SCOPE && scope !== SHEET_SCOPE) continue;
-    if (ORDINARY_KINDS.has(asString(raw["kind"]))) {
+    if (asString(raw["kind"]) === "cascade") {
+      const property = cascadeProperty(raw, scope);
+      (scope === SHEET_SCOPE ? sheet : sheetset).push(property);
+    } else if (ORDINARY_KINDS.has(asString(raw["kind"]))) {
       const property = ordinaryProperty(raw, scope);
       (scope === SHEET_SCOPE ? sheet : sheetset).push(property);
     } else {
@@ -159,6 +185,67 @@ export function creationPropertyDefaults(
   return values;
 }
 
+/** 级联候选：从同作用域枚举上级的当前值解析稳定条目 ID，再读取对应选项组。 */
+export function creationCascadeOptions(
+  standard: CreationStandardInputs,
+  property: CreationCascadeProperty,
+  values: Record<string, string>,
+): string[] {
+  const properties = property.scope === SHEET_SCOPE
+    ? standard.sheet_properties
+    : standard.sheetset_properties;
+  const source = properties.find(
+    (candidate): candidate is CreationOrdinaryProperty =>
+      candidate.property_id === property.source_property_id && candidate.kind === "enum",
+  );
+  if (source === undefined) return [];
+  const selected = values[source.property_id] ?? "";
+  if (selected === "") return [];
+  const item = source.options.find(option => option.value === selected);
+  if (item === undefined) return [];
+  return [...(property.cascade_options.find(row => row.source_item_id === item.item_id)?.values ?? [])];
+}
+
+/** 多组批量级联输入只允许所有选中组当前上级都提供的共同候选。 */
+export function creationCascadeIntersection(
+  standard: CreationStandardInputs,
+  property: CreationCascadeProperty,
+  groupValues: Array<Record<string, string>>,
+): string[] {
+  if (groupValues.length === 0) return [];
+  const first = creationCascadeOptions(standard, property, groupValues[0] ?? {});
+  return first.filter(value =>
+    groupValues.slice(1).every(values => creationCascadeOptions(standard, property, values).includes(value)),
+  );
+}
+
+/** 更新一个输入值；上级枚举改变时仅清空同一对象内直接依赖的级联字段。 */
+export function creationSetInputValue(
+  values: Record<string, string>,
+  properties: CreationInputProperty[],
+  propertyId: string,
+  value: string,
+): Record<string, string> {
+  const next = {...values, [propertyId]: value};
+  if ((values[propertyId] ?? "") === value) return next;
+  return creationClearCascadeValues(next, properties, propertyId);
+}
+
+/** 按已确认的上级变化清空该对象中所有直接依赖项。 */
+export function creationClearCascadeValues(
+  values: Record<string, string>,
+  properties: CreationInputProperty[],
+  sourcePropertyId: string,
+): Record<string, string> {
+  const next = {...values};
+  for (const property of properties) {
+    if (property.kind === "cascade" && property.source_property_id === sourcePropertyId) {
+      next[property.property_id] = "";
+    }
+  }
+  return next;
+}
+
 /** 按标准顺序补齐可输入属性：缺键按标准默认值补，已有的显式空串原样保留。 */
 export function creationWithPropertyDefaults(
   values: Record<string, string>,
@@ -177,7 +264,7 @@ export function creationWithPropertyDefaults(
   return merged;
 }
 
-/** 首个图纸组：标准默认值（sheet 普通属性默认值 + 首个基础/布局模板候选与图幅）。 */
+/** 首个图纸组：标准默认值（sheet 输入属性默认值 + 首个基础/布局模板候选与图幅）。 */
 export function creationDefaultGroup(
   standard: CreationStandardInputs | null,
   groupId: string,
@@ -316,7 +403,22 @@ export function creationBatchPatch(
   }
   const property = standard?.sheet_properties.find(item => item.property_id === fieldId);
   if (property === undefined) return null;
-  return {sheet_values: {...group.sheet_values, [fieldId]: change.kind === "clear" ? "" : change.value}};
+  if (property.kind === "cascade") {
+    if (change.kind === "clear") {
+      return {sheet_values: {...group.sheet_values, [fieldId]: ""}};
+    }
+    if (standard === null || !creationCascadeOptions(standard, property, group.sheet_values).includes(change.value)) {
+      return null;
+    }
+    return {sheet_values: {...group.sheet_values, [fieldId]: change.value}};
+  }
+  const value = change.kind === "clear" ? "" : change.value;
+  if (property.kind === "enum" && value !== "" && !property.options.some(option => option.value === value)) {
+    return null;
+  }
+  return {
+    sheet_values: creationSetInputValue(group.sheet_values, standard?.sheet_properties ?? [], fieldId, value),
+  };
 }
 
 /** 批量修改当前值：选中组在该字段上的取值集合（用于「值不相同」判定）。 */

@@ -3,6 +3,7 @@
 // 使按组编辑用例不必先走一次异步草稿恢复。
 import {describe, expect, it, vi} from "vitest";
 import {createCreationStore} from "./store";
+import {creationCascadeOptions, creationStandardInputs} from "./inputModel";
 import type {
   CreationApi,
   CreationDerivedEvaluation,
@@ -75,6 +76,70 @@ function seedStandard(standardId = "00000000-0000-4000-8000-000000000046"): Crea
   };
 }
 
+function cascadeStandardDocument(): Record<string, unknown> {
+  return {
+    properties: [
+      {
+        property_id: "prop-major", name: "专业", scope: "sheetset", kind: "enum",
+        required: true, default_value: "道路",
+        enum_items: [{item_id: "enum-road", value: "道路"}, {item_id: "enum-gas", value: "燃气"}],
+      },
+      {
+        property_id: "prop-region", name: "区域", scope: "sheetset", kind: "cascade",
+        source_property_id: "prop-major",
+        cascade_options: [
+          {source_item_id: "enum-road", values: ["东区", "西区"]},
+          {source_item_id: "enum-gas", values: ["北区", "南区"]},
+        ],
+      },
+      {
+        property_id: "prop-route", name: "线路类型", scope: "sheet", kind: "enum",
+        required: false, default_value: "道路",
+        enum_items: [{item_id: "enum-route-road", value: "道路"}, {item_id: "enum-route-gas", value: "燃气"}],
+      },
+      {
+        property_id: "prop-route-detail", name: "线路等级", scope: "sheet", kind: "cascade",
+        source_property_id: "prop-route",
+        cascade_options: [
+          {source_item_id: "enum-route-road", values: ["城市道路", "公路", "通用"]},
+          {source_item_id: "enum-route-gas", values: ["庭院管网", "长输管线", "通用"]},
+        ],
+      },
+    ],
+  };
+}
+
+function cascadeStandard(): CreationStandardInputs {
+  return creationStandardInputs(
+    {standardId: "00000000-0000-4000-8000-000000000046"},
+    "市政燃气施工图",
+    cascadeStandardDocument(),
+    seedStandard().asset_options,
+  );
+}
+
+function cascadeDraft(): CreationDraftState {
+  const draft = seedDraft();
+  return {
+    ...draft,
+    sheetset_values: {"prop-major": "道路", "prop-region": "东区"},
+    groups: draft.groups.map((group, index) => ({
+      ...group,
+      sheet_values: {
+        ...group.sheet_values,
+        "prop-route": index === 1 ? "燃气" : "道路",
+        "prop-route-detail": index === 1 ? "庭院管网" : index === 2 ? "通用" : "城市道路",
+      },
+    })),
+  };
+}
+
+function cascadeApi(): CreationApi {
+  const api = fakeCreationApi();
+  api.seed = {draft: cascadeDraft(), standard: cascadeStandard()};
+  return api;
+}
+
 function candidate(standardId: string): CreationStandardCandidate {
   return {
     standard_id: standardId,
@@ -120,6 +185,95 @@ function fakeCreationApi(): CreationApi {
 }
 
 describe("createCreationStore", () => {
+  it("resolves cascade choices from the current same-scope parent and disables without one", () => {
+    const standard = cascadeStandard();
+    const region = standard.sheetset_properties.find(property => property.property_id === "prop-region");
+    expect(region?.kind).toBe("cascade");
+    if (region?.kind !== "cascade") throw new Error("missing cascade fixture");
+
+    expect(creationCascadeOptions(standard, region, {})).toEqual([]);
+    expect(creationCascadeOptions(standard, region, {"prop-major": "道路"})).toEqual(["东区", "西区"]);
+    expect(creationCascadeOptions(standard, region, {"prop-major": "燃气"})).toEqual(["北区", "南区"]);
+  });
+
+  it("clears dependent cascade values only on the changed object and copies the latest pair", () => {
+    const store = createCreationStore(cascadeApi());
+    store.setSheetsetValue("prop-major", "燃气");
+    expect(store.sheetsetValues["prop-region"]).toBe("");
+
+    store.setGroupSheetValue("group-1", "prop-route", "燃气");
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("");
+    expect(store.group("group-2").sheet_values["prop-route-detail"]).toBe("庭院管网");
+
+    const copied = store.addGroup();
+    expect(copied.sheet_values["prop-route"]).toBe("道路");
+    expect(copied.sheet_values["prop-route-detail"]).toBe("通用");
+  });
+
+  it("clears cascades for only selected groups when batch changing their parent", () => {
+    const store = createCreationStore(cascadeApi());
+    store.batchUpdate(["group-1", "group-2"], "prop-route", {kind: "set", value: "道路"});
+
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("城市道路");
+    expect(store.group("group-2").sheet_values["prop-route-detail"]).toBe("");
+    expect(store.group("group-3").sheet_values["prop-route-detail"]).toBe("通用");
+  });
+
+  it("rejects an invalid cascade batch atomically and applies values in the shared choice intersection", () => {
+    const store = createCreationStore(cascadeApi());
+    store.previewDigest = "digest-before-batch";
+    store.canExecute = true;
+    expect(store.batchUpdate(["group-1", "group-2"], "prop-route-detail", {kind: "set", value: "城市道路"})).toBe(false);
+
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("城市道路");
+    expect(store.group("group-2").sheet_values["prop-route-detail"]).toBe("庭院管网");
+    expect(store.previewDigest).toBe("digest-before-batch");
+    expect(store.canExecute).toBe(true);
+
+    expect(store.batchUpdate(["group-1", "group-2"], "prop-route-detail", {kind: "set", value: "通用"})).toBe(true);
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("通用");
+    expect(store.group("group-2").sheet_values["prop-route-detail"]).toBe("通用");
+    expect(store.previewDigest).toBeNull();
+
+    store.setGroupSheetValue("group-2", "prop-route-detail", "旧线路值");
+    expect(store.batchUpdate(["group-1", "group-2"], "prop-route-detail", {kind: "clear"})).toBe(true);
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("");
+    expect(store.group("group-2").sheet_values["prop-route-detail"]).toBe("");
+  });
+
+  it("preserves an invalid restored cascade value until the user clears it", async () => {
+    const api = fakeCreationApi();
+    const draft = cascadeDraft();
+    draft.groups[0]!.sheet_values["prop-route-detail"] = "旧线路值";
+    api.fetchDraft = vi.fn(async () => draft);
+    api.fetchStandardDocument = vi.fn(async () => cascadeStandardDocument());
+    const basePreview = await api.previewDraft("draft-1");
+    api.previewDraft = vi.fn(async () => ({
+      ...basePreview,
+      executable: false,
+      diagnostics: [{
+        code: "STANDARD_CASCADE_VALUE_INVALID",
+        message: "线路等级与线路类型不匹配",
+        severity: "error",
+        group_id: "group-1",
+        property_id: "prop-route-detail",
+      }],
+    }));
+    const store = createCreationStore(api);
+
+    expect(await store.resumeDraft("draft-1")).toBe(true);
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("旧线路值");
+    expect(await store.preview()).toBe(true);
+    expect(store.previewState?.diagnostics[0]).toMatchObject({
+      code: "STANDARD_CASCADE_VALUE_INVALID",
+      group_id: "group-1",
+      property_id: "prop-route-detail",
+    });
+
+    store.setGroupSheetValue("group-1", "prop-route-detail", "");
+    expect(store.group("group-1").sheet_values["prop-route-detail"]).toBe("");
+  });
+
   it("copies the most recently created group after reorder", async () => {
     const store = createCreationStore(fakeCreationApi());
     store.addGroup();

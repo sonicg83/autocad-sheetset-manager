@@ -9,6 +9,7 @@ export default {
     CREATION_REQUIRED_VALUE_MISSING: "必填属性缺少值",
     CREATION_SHEETSET_VALUE_MISSING: "图纸集属性缺少值",
     CREATION_GROUP_VALUE_MISSING: "图纸组属性缺少值",
+    STANDARD_CASCADE_VALUE_INVALID: "级联值与当前上级选项不匹配",
     CREATION_GROUP_TITLE_EMPTY: "图纸组图名不能为空",
     CREATION_GROUP_TITLE_DUPLICATE: "图纸组图名重复",
     CREATION_GROUP_COUNT_INVALID: "图纸组张数非法",
@@ -43,6 +44,10 @@ export default {
     CREATION_XLSX_TITLE_DUPLICATE: "图名与其它行重复（去首尾空格、大小写不敏感）",
     CREATION_XLSX_ASSET_INVALID: "模板资产不在当前候选映射内或已不可用",
     CREATION_XLSX_SCALE_EXCEEDED: "工作簿规模超出受控上限",
+  },
+  cascade: {
+    invalidSavedValue: "已保存值与当前候选不匹配，可清空后重新选择",
+    chooseParent: "请先选择上级选项，再选择此级联属性。",
   },
   // 以下为四阶段向导与输入界面文案（Task 8）。键名只描述界面职责，不复制后端规则；
   // 阶段名与后端 `CREATION_STEPS` 同口径，批量字段名与图纸组表列名共用同一份文案。
@@ -172,6 +177,8 @@ export default {
     batchBoundary: "不支持批量修改图名或派生字段；清空必须使用“明确清空”，空输入不会被当作清空。",
     batchNoValue: "请输入或选择新值",
     batchApplied: "已应用到 {count} 个图纸组",
+    batchRejected: "选中的图纸组无法全部应用此值，请检查级联候选后重试。",
+    batchCascadeNoCommon: "当前选中组没有共同的级联候选项；请选择共同上级，或逐组编辑。",
   },
   // 第四阶段「检查并创建」文案（Task 9）。键名只描述界面职责：编号与命名结果一律以后端
   // 权威预览响应为准，界面不重算；诊断码→文案与后端 `diagnostics[].code` 一一对应。

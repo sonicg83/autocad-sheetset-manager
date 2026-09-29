@@ -12,7 +12,13 @@ import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import GroupBatchDialog from "./GroupBatchDialog.vue";
-import {BASE_TEMPLATE_KIND, LAYOUT_TEMPLATE_KIND, creationAssetOptions, creationPaperLayouts} from "../../features/creation/inputModel";
+import {
+  BASE_TEMPLATE_KIND,
+  LAYOUT_TEMPLATE_KIND,
+  creationAssetOptions,
+  creationCascadeOptions,
+  creationPaperLayouts,
+} from "../../features/creation/inputModel";
 import type {CreationGroupIssueCode} from "../../features/creation/types";
 import type {CreationStore} from "../../features/creation/store";
 
@@ -71,6 +77,32 @@ function registerTitleInput(groupId: string, instance: ComponentPublicInstance |
 }
 function paperOptions(group: {layout_asset_id: string}): string[] {
   return creationPaperLayouts(props.store.standard, group.layout_asset_id);
+}
+function cascadeOptions(property: {kind: string; property_id: string}, values: Record<string, string>): string[] {
+  const standard = props.store.standard;
+  if (standard === null || property.kind !== "cascade") return [];
+  const cascade = standard.sheet_properties.find(item => item.property_id === property.property_id);
+  return cascade?.kind === "cascade" ? creationCascadeOptions(standard, cascade, values) : [];
+}
+function cascadeDisabled(
+  property: {kind: string; property_id: string},
+  values: Record<string, string>,
+): boolean {
+  return property.kind === "cascade"
+    && (values[property.property_id] ?? "") === ""
+    && cascadeOptions(property, values).length === 0;
+}
+function showSavedCascadeValue(
+  property: {kind: string; property_id: string},
+  values: Record<string, string>,
+): boolean {
+  const value = values[property.property_id] ?? "";
+  return property.kind === "cascade" && value !== ""
+    && !cascadeOptions(property, values).includes(value);
+}
+function cascadeHintId(groupId: string, propertyId: string): string {
+  const safe = (value: string) => value.replace(/[^a-zA-Z0-9_-]/gu, "-");
+  return `creation-cascade-hint-${safe(groupId)}-${safe(propertyId)}`;
 }
 async function addGroup(): Promise<void> {
   const group = props.store.addGroup();
@@ -220,12 +252,34 @@ function toggleAll(event: Event): void {
                     {{ option.value }}
                   </option>
                 </UiSelect>
+                <UiSelect
+                  v-else-if="property.kind === 'cascade'"
+                  :label="property.name" :aria-label="cellLabel(index, property.name)"
+                  :disabled="cascadeDisabled(property, group.sheet_values)"
+                  :aria-required="property.required ? 'true' : undefined"
+                  :described-by="cascadeDisabled(property, group.sheet_values) ? cascadeHintId(group.group_id, property.property_id) : undefined"
+                  :model-value="group.sheet_values[property.property_id] ?? ''"
+                  @update:model-value="(value: string) => store.setGroupSheetValue(group.group_id, property.property_id, value)"
+                >
+                  <option value="">{{ $t("creation.project.emptyValue") }}</option>
+                  <option v-if="showSavedCascadeValue(property, group.sheet_values)" :value="group.sheet_values[property.property_id]">
+                    {{ group.sheet_values[property.property_id] }} · {{ $t("creation.cascade.invalidSavedValue") }}
+                  </option>
+                  <option v-for="value in cascadeOptions(property, group.sheet_values)" :key="value" :value="value">
+                    {{ value }}
+                  </option>
+                </UiSelect>
                 <UiInput
                   v-else
                   :label="property.name" :aria-label="cellLabel(index, property.name)"
                   :model-value="group.sheet_values[property.property_id] ?? ''"
                   @update:model-value="(value: string) => store.setGroupSheetValue(group.group_id, property.property_id, value)"
                 />
+                <p
+                  v-if="cascadeDisabled(property, group.sheet_values)"
+                  :id="cascadeHintId(group.group_id, property.property_id)"
+                  class="cascade-disabled-hint" role="note"
+                >{{ $t("creation.cascade.chooseParent") }}</p>
               </td>
               <td>
                 <div class="row-actions">
@@ -264,6 +318,7 @@ function toggleAll(event: Event): void {
 .toolbar{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
 .summary{color:var(--color-text-secondary);font-size:var(--font-caption)}
 .note{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
+.cascade-disabled-hint{margin:0;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.4}
 /* 表宽随内容，容器自身横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .group-table{width:max-content;min-width:max-content;border-collapse:collapse}

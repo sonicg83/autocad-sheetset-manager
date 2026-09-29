@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 批量修改对话框（SPEC-DM-018 §4.2；PLAN-DM-036 Task 8）。
-// 先选多个图纸组，再选字段与新值，一次应用到选中组：只作用选中组，当前值不一致时显示
-// 「值不相同」；清空必须是明确操作——未填写的输入框不会被当作清空。字段列表只含张数、
+// 先选多个图纸组，再选字段与新值，一次应用到选中组：级联候选取各组上级的交集，整批先校验；
+// 当前值不一致时显示「值不相同」，清空必须是明确操作。字段列表只含张数、
 // 基础模板、布局模板、布局名称与标准的可输入 sheet 属性，不含图名或任何派生字段。
 import {computed, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
@@ -15,6 +15,7 @@ import {
   LAYOUT_TEMPLATE_KIND,
   creationAssetOptions,
   creationBatchValues,
+  creationCascadeIntersection,
   creationPaperLayouts,
 } from "../../features/creation/inputModel";
 import {
@@ -33,6 +34,7 @@ const {t} = useI18n();
 const card = ref<HTMLElement | null>(null);
 const fieldId = ref<string>(CREATION_BATCH_COUNT);
 const value = ref("");
+const batchError = ref("");
 
 const fields = computed<Array<{id: string; kind: CreationBatchFieldKind; label: string}>>(() => [
   {id: CREATION_BATCH_COUNT, kind: "count", label: t("creation.groups.columnCount")},
@@ -41,7 +43,7 @@ const fields = computed<Array<{id: string; kind: CreationBatchFieldKind; label: 
   {id: CREATION_BATCH_PAPER, kind: "paper-layout", label: t("creation.groups.columnPaper")},
   ...(props.store.standard?.sheet_properties ?? []).map(property => ({
     id: property.property_id,
-    kind: property.kind as CreationBatchFieldKind,
+    kind: property.kind,
     label: property.name,
   })),
 ]);
@@ -65,11 +67,26 @@ const paperOptions = computed(() =>
   creationPaperLayouts(props.store.standard, props.store.selectedGroups()[0]?.layout_asset_id ?? ""),
 );
 const enumOptions = computed(
-  () =>
-    props.store.standard?.sheet_properties.find(item => item.property_id === fieldId.value)?.options ??
-    [],
+  () => {
+    const property = props.store.standard?.sheet_properties.find(item => item.property_id === fieldId.value);
+    return property?.kind === "enum" ? property.options : [];
+  },
 );
-const canApply = computed(() => props.store.selectedGroupIds.length > 0 && value.value !== "");
+const cascadeOptions = computed(() => {
+  const standard = props.store.standard;
+  const property = standard?.sheet_properties.find(item => item.property_id === fieldId.value);
+  if (standard === null || property?.kind !== "cascade") return [];
+  return creationCascadeIntersection(
+    standard,
+    property,
+    props.store.selectedGroups().map(group => group.sheet_values),
+  );
+});
+const canApply = computed(() =>
+  props.store.selectedGroupIds.length > 0
+  && value.value !== ""
+  && (kind.value !== "cascade" || cascadeOptions.value.includes(value.value)),
+);
 const canClear = computed(
   () => props.store.selectedGroupIds.length > 0 && fieldId.value !== CREATION_BATCH_COUNT,
 );
@@ -78,17 +95,22 @@ const canClear = computed(
 watch(
   () => props.open,
   open => {
-    if (open) value.value = "";
+    if (open) {
+      value.value = "";
+      batchError.value = "";
+    }
   },
 );
 
 function changeField(next: string): void {
   fieldId.value = next;
   value.value = "";
+  batchError.value = "";
 }
 
 function changeValue(next: string): void {
   value.value = next;
+  batchError.value = "";
 }
 
 const {onDialogKeydown} = useDialogFocus({
@@ -103,16 +125,23 @@ const {onDialogKeydown} = useDialogFocus({
 
 function apply(): void {
   if (!canApply.value) return;
-  props.store.batchUpdate([...props.store.selectedGroupIds], fieldId.value, {
+  const applied = props.store.batchUpdate([...props.store.selectedGroupIds], fieldId.value, {
     kind: "set",
     value: value.value,
   });
+  if (!applied) {
+    batchError.value = t("creation.groups.batchRejected");
+    return;
+  }
   emit("close");
 }
 
 function clear(): void {
   if (!canClear.value) return;
-  props.store.batchUpdate([...props.store.selectedGroupIds], fieldId.value, {kind: "clear"});
+  if (!props.store.batchUpdate([...props.store.selectedGroupIds], fieldId.value, {kind: "clear"})) {
+    batchError.value = t("creation.groups.batchRejected");
+    return;
+  }
   emit("close");
 }
 </script>
@@ -141,7 +170,7 @@ function clear(): void {
         <FormField :label="t('creation.groups.batchValue')">
           <template #default="{id, describedBy}">
             <UiSelect
-              v-if="kind === 'base-template' || kind === 'layout-template' || kind === 'paper-layout' || kind === 'enum'"
+              v-if="kind === 'base-template' || kind === 'layout-template' || kind === 'paper-layout' || kind === 'enum' || kind === 'cascade'"
               :id="id" :described-by="describedBy" :model-value="value"
               @update:model-value="changeValue"
             >
@@ -154,6 +183,9 @@ function clear(): void {
               </template>
               <template v-else-if="kind === 'paper-layout'">
                 <option v-for="layout in paperOptions" :key="layout" :value="layout">{{ layout }}</option>
+              </template>
+              <template v-else-if="kind === 'cascade'">
+                <option v-for="option in cascadeOptions" :key="option" :value="option">{{ option }}</option>
               </template>
               <template v-else>
                 <option v-for="option in enumOptions" :key="option.item_id" :value="option.value">{{ option.value }}</option>
@@ -169,9 +201,13 @@ function clear(): void {
               :id="id" :described-by="describedBy"
               :model-value="value" @update:model-value="changeValue"
             />
+            <p v-if="kind === 'cascade' && cascadeOptions.length === 0" class="batch-hint" role="status">
+              {{ t("creation.groups.batchCascadeNoCommon") }}
+            </p>
           </template>
         </FormField>
       </div>
+      <p v-if="batchError !== ''" class="batch-error" role="alert">{{ batchError }}</p>
       <p class="batch-boundary">{{ t("creation.groups.batchBoundary") }}</p>
       <div class="modal-actions">
         <UiButton variant="secondary" :disabled="!canClear" @click="clear">
@@ -189,7 +225,9 @@ function clear(): void {
 <style scoped>
 .batch-card{display:grid;gap:var(--space-3)}
 .batch-lead{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
+.batch-error{margin:0;color:var(--color-danger);font-size:var(--font-label);line-height:1.5}
 .batch-state{margin:0;color:var(--color-text-primary);font-size:var(--font-label)}
+.batch-hint{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.5}
 .batch-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
 .batch-boundary{margin:0;color:var(--color-text-muted);font-size:var(--font-caption);line-height:1.6}
 .spacer{flex:1}

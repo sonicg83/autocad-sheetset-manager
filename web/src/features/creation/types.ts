@@ -44,7 +44,7 @@ export interface CreationGroupState {
   base_asset_id: string;
   layout_asset_id: string;
   paper_layout: string;
-  /** 只含可输入普通 sheet 属性；显式空串与遗漏键不同义。 */
+  /** 可输入 sheet 属性；显式空串与遗漏键不同义。 */
   sheet_values: Record<string, string>;
 }
 
@@ -77,6 +77,21 @@ export interface CreationOrdinaryProperty {
   options: CreationEnumOption[];
 }
 
+/** 级联属性以同作用域枚举属性的稳定条目 ID 查找子级选项。 */
+export interface CreationCascadeProperty {
+  property_id: string;
+  name: string;
+  scope: "sheetset" | "sheet";
+  kind: "cascade";
+  required: boolean;
+  /** 级联属性没有默认值；初建时必须显式为空。 */
+  default_value: string;
+  source_property_id: string;
+  cascade_options: Array<{source_item_id: string; values: string[]}>;
+}
+
+export type CreationInputProperty = CreationOrdinaryProperty | CreationCascadeProperty;
+
 /** 派生属性：只读展示（创建阶段不提供输入，求值以后端预览为准）。 */
 export interface CreationDerivedProperty {
   property_id: string;
@@ -92,8 +107,8 @@ export interface CreationDerivedProperty {
 export interface CreationStandardInputs {
   identity: CreationIdentity;
   name: string;
-  sheetset_properties: CreationOrdinaryProperty[];
-  sheet_properties: CreationOrdinaryProperty[];
+  sheetset_properties: CreationInputProperty[];
+  sheet_properties: CreationInputProperty[];
   derived_properties: CreationDerivedProperty[];
   asset_options: CreationAssetOption[];
 }
@@ -135,14 +150,15 @@ export const CREATION_BATCH_BASE = "base_asset_id";
 export const CREATION_BATCH_LAYOUT = "layout_asset_id";
 export const CREATION_BATCH_PAPER = "paper_layout";
 
-/** 批量修改支持的字段种类：用于选择取值控件（数字 / 资产 / 图幅 / 文本 / 枚举）。 */
+/** 批量修改支持的字段种类：用于选择取值控件（数字 / 资产 / 图幅 / 文本 / 枚举 / 级联）。 */
 export type CreationBatchFieldKind =
   | "count"
   | "base-template"
   | "layout-template"
   | "paper-layout"
   | "text"
-  | "enum";
+  | "enum"
+  | "cascade";
 
 /** 一条创建预览诊断：稳定错误码 + 可定位的图纸组/属性（与后端预览响应同形）。 */
 export interface CreationPreviewDiagnostic {
@@ -317,7 +333,7 @@ export interface CreationApi {
   executeDraft(draftId: string, previewDigest: string): Promise<Job>;
   /**
    * 实时求值草稿固定标准下图纸集作用域的派生属性（只读，不保存草稿）。
-   * `sheetsetValues` 是界面当前输入（完整普通属性键）。
+   * `sheetsetValues` 是界面当前输入（完整可输入属性键）。
    */
   evaluateSheetsetDerived(
     draftId: string,

@@ -8,6 +8,7 @@
 import {expect, test, type Locator, type Page} from "@playwright/test";
 import {
   chooseStandard,
+  creationCascadeDocument,
   creationCandidate,
   groupRow,
   installCreation,
@@ -127,6 +128,90 @@ test("项目信息按标准动态生成属性，目录名合成完整路径", as
   await page.getByLabel("专业").selectOption("");
   await expect(page.getByLabel("专业")).toHaveValue("");
   await expect(page.getByTestId("creation-derived-value")).toHaveText("（空）");
+});
+
+test("级联输入按当前上级筛选，复制与批量上级修改只影响目标图纸组", async ({page}) => {
+  await installCreation(page, {standardDocument: creationCascadeDocument()});
+  await openCreation(page);
+  await chooseStandard(page);
+
+  const region = page.getByLabel("区域");
+  await page.getByLabel("专业").selectOption("");
+  await expect(region).toBeDisabled();
+  await expect(region).toHaveValue("");
+  await expect(page.getByText("请先选择上级选项，再选择此级联属性。")).toBeVisible();
+  await page.getByLabel("专业").selectOption("道路");
+  await expect(region).toBeEnabled();
+  const regionOptions = await region.locator("option").allTextContents();
+  expect(regionOptions).toContain("东区");
+  expect(regionOptions).not.toContain("北区");
+  await region.selectOption("东区");
+  await page.getByLabel("专业").selectOption("燃气");
+  await expect(region).toHaveValue("");
+  const gasRegionOptions = await region.locator("option").allTextContents();
+  expect(gasRegionOptions).toContain("北区");
+  expect(gasRegionOptions).not.toContain("东区");
+  await page.getByLabel("专业").selectOption("道路");
+  await region.selectOption("东区");
+
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const first = groupRow(page, "group-1");
+  const firstRoute = first.getByLabel(/线路类型$/);
+  const firstDetail = first.getByLabel(/线路等级$/);
+  await firstRoute.selectOption("");
+  await expect(firstDetail).toBeDisabled();
+  await expect(firstDetail).toHaveValue("");
+  await expect(page.getByText("请先选择上级选项，再选择此级联属性。")).toBeVisible();
+  await firstRoute.selectOption("道路");
+  await expect(firstDetail).toBeEnabled();
+  await firstDetail.selectOption("城市道路");
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const second = groupRow(page, "group-2");
+  await expect(second.getByLabel(/线路类型$/)).toHaveValue("道路");
+  await expect(second.getByLabel(/线路等级$/)).toHaveValue("城市道路");
+  await second.getByLabel(/线路类型$/).selectOption("燃气");
+  await expect(second.getByLabel(/线路等级$/)).toHaveValue("");
+  const gasDetailOptions = await second.getByLabel(/线路等级$/).locator("option").allTextContents();
+  expect(gasDetailOptions).toContain("庭院管网");
+  expect(gasDetailOptions).not.toContain("城市道路");
+  await second.getByLabel(/线路等级$/).selectOption("庭院管网");
+
+  await first.getByRole("checkbox").check();
+  await second.getByRole("checkbox").check();
+  await page.getByRole("button", {name: "批量修改"}).click();
+  const dialog = page.getByRole("dialog", {name: "批量修改选中图纸组"});
+  await dialog.getByLabel("字段").selectOption("prop-route-detail");
+  const batchValue = dialog.getByLabel("新值");
+  const cascadeChoices = await batchValue.locator("option").allTextContents();
+  expect(cascadeChoices).toContain("通用");
+  expect(cascadeChoices).not.toContain("城市道路");
+  expect(cascadeChoices).not.toContain("庭院管网");
+  await batchValue.selectOption("通用");
+  await dialog.getByRole("button", {name: "应用到选中组"}).click();
+  await expect(first.getByLabel(/线路等级$/)).toHaveValue("通用");
+  await expect(second.getByLabel(/线路等级$/)).toHaveValue("通用");
+
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const third = groupRow(page, "group-3");
+  await expect(third.getByLabel(/线路类型$/)).toHaveValue("燃气");
+  await expect(third.getByLabel(/线路等级$/)).toHaveValue("通用");
+
+  await first.getByLabel(/线路类型$/).selectOption("燃气");
+  await expect(first.getByLabel(/线路等级$/)).toHaveValue("");
+  await expect(second.getByLabel(/线路等级$/)).toHaveValue("通用");
+  await expect(third.getByLabel(/线路等级$/)).toHaveValue("通用");
+
+  await page.getByRole("button", {name: "批量修改"}).click();
+  await dialog.getByLabel("字段").selectOption("prop-route");
+  await dialog.getByLabel("新值").selectOption("道路");
+  await dialog.getByRole("button", {name: "应用到选中组"}).click();
+  await expect(first.getByLabel(/线路类型$/)).toHaveValue("道路");
+  await expect(first.getByLabel(/线路等级$/)).toHaveValue("");
+  await expect(second.getByLabel(/线路类型$/)).toHaveValue("道路");
+  await expect(second.getByLabel(/线路等级$/)).toHaveValue("");
+  await expect(third.getByLabel(/线路类型$/)).toHaveValue("燃气");
+  await expect(third.getByLabel(/线路等级$/)).toHaveValue("通用");
 });
 
 test("无桌面壳时保留手动路径输入并说明原因", async ({page}) => {

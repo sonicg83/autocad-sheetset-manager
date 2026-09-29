@@ -10,6 +10,7 @@ export default {
     CREATION_REQUIRED_VALUE_MISSING: "A required property has no value",
     CREATION_SHEETSET_VALUE_MISSING: "A sheet set property has no value",
     CREATION_GROUP_VALUE_MISSING: "A drawing group property has no value",
+    STANDARD_CASCADE_VALUE_INVALID: "The cascading value does not match the current parent choice",
     CREATION_GROUP_TITLE_EMPTY: "The drawing group title must not be empty",
     CREATION_GROUP_TITLE_DUPLICATE: "Duplicate drawing group title",
     CREATION_GROUP_COUNT_INVALID: "Illegal sheet count for the drawing group",
@@ -44,6 +45,10 @@ export default {
     CREATION_XLSX_TITLE_DUPLICATE: "The sheet title duplicates another row (trimmed, case-insensitive)",
     CREATION_XLSX_ASSET_INVALID: "The template asset is not in the current candidate mapping or is no longer available",
     CREATION_XLSX_SCALE_EXCEEDED: "The workbook size exceeds the controlled limit",
+  },
+  cascade: {
+    invalidSavedValue: "Saved value does not match the current choices; clear it and choose again",
+    chooseParent: "Choose a parent option before choosing this cascading property.",
   },
   // Wizard and input-surface copy (Task 8). Keys describe the UI responsibility only; stage
   // names mirror the backend `CREATION_STEPS`, and batch field names reuse the group column copy.
@@ -173,6 +178,8 @@ export default {
     batchBoundary: "Titles and derived fields cannot be batch-edited; clearing requires “Clear explicitly” and an empty input is never treated as a clear.",
     batchNoValue: "Enter or choose a new value",
     batchApplied: "Applied to {count} drawing groups",
+    batchRejected: "This value cannot be applied to every selected group. Check the cascade choices and try again.",
+    batchCascadeNoCommon: "The selected groups have no common cascading option. Choose a shared parent or edit each group separately.",
   },
   // Check-and-create step copy (Task 9). Keys describe the UI responsibility only: numbering and
   // naming results always come from the authoritative backend preview, and diagnostic codes map

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 第二阶段：项目信息（SPEC-DM-018 §3；PLAN-DM-036 Task 8）。
-// 图纸集属性按标准动态生成：普通文本用输入框、枚举用选项控件，必填属性在属性名称旁
+// 图纸集属性按标准动态生成：普通文本用输入框、枚举与级联属性用候选控件，必填属性在名称旁
 // 渲染醒目星号（FormField 的 required，控件上另绑 aria-required）；默认值仍由草稿初建
 // 时应用，不在字段下重复展示说明小字。派生属性只读：图纸集作用域的派生属性把界面当前
 // 输入交给后端实时求值（store.refreshDerived，输入防抖触发）；图纸作用域依赖逐张编号
@@ -13,8 +13,8 @@ import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import {selectSettingsPath, shellReady} from "../../api/shell";
-import {creationTargetPath} from "../../features/creation/inputModel";
-import type {CreationDerivedProperty, CreationOrdinaryProperty} from "../../features/creation/types";
+import {creationCascadeOptions, creationTargetPath} from "../../features/creation/inputModel";
+import type {CreationDerivedProperty, CreationInputProperty} from "../../features/creation/types";
 import type {CreationStore} from "../../features/creation/store";
 
 const props = defineProps<{store: CreationStore}>();
@@ -27,8 +27,28 @@ const derived = computed(() => props.store.standard?.derived_properties ?? []);
 const folderPickerDisabled = ref(false);
 const pickerUnavailable = computed(() => folderPickerDisabled.value || !shellReady.value);
 
-function valueOf(property: CreationOrdinaryProperty): string {
+function valueOf(property: CreationInputProperty): string {
   return props.store.sheetsetValues[property.property_id] ?? "";
+}
+
+function optionsOf(property: CreationInputProperty): Array<{id: string; value: string}> {
+  if (property.kind === "cascade") {
+    return creationCascadeOptions(props.store.standard!, property, props.store.sheetsetValues)
+      .map(value => ({id: value, value}));
+  }
+  return property.options.map(option => ({id: option.item_id, value: option.value}));
+}
+
+function cascadeDisabled(property: CreationInputProperty): boolean {
+  return property.kind === "cascade"
+    && valueOf(property) === ""
+    && optionsOf(property).length === 0;
+}
+
+function showSavedCascadeValue(property: CreationInputProperty): boolean {
+  return property.kind === "cascade"
+    && valueOf(property) !== ""
+    && !optionsOf(property).some(option => option.value === valueOf(property));
 }
 
 /** 图纸集作用域派生属性的实时值；无值（未算出/被阻断）返回 undefined 回退「待计算」。 */
@@ -75,16 +95,20 @@ async function chooseParentFolder(): Promise<void> {
         >
           <template #default="{id, describedBy, invalid}">
             <UiSelect
-              v-if="property.kind === 'enum'"
+              v-if="property.kind !== 'text'"
               :id="id"
               :described-by="describedBy"
               :invalid="invalid"
+              :disabled="cascadeDisabled(property)"
               :aria-required="property.required ? 'true' : undefined"
               :model-value="valueOf(property)"
               @update:model-value="(value: string) => store.setSheetsetValue(property.property_id, value)"
             >
               <option value="">{{ $t("creation.project.emptyValue") }}</option>
-              <option v-for="option in property.options" :key="option.item_id" :value="option.value">
+              <option v-if="showSavedCascadeValue(property)" :value="valueOf(property)">
+                {{ valueOf(property) }} · {{ $t("creation.cascade.invalidSavedValue") }}
+              </option>
+              <option v-for="option in optionsOf(property)" :key="option.id" :value="option.value">
                 {{ option.value }}
               </option>
             </UiSelect>
@@ -97,6 +121,9 @@ async function chooseParentFolder(): Promise<void> {
               :model-value="valueOf(property)"
               @update:model-value="(value: string) => store.setSheetsetValue(property.property_id, value)"
             />
+            <p v-if="cascadeDisabled(property)" class="note" role="note">
+              {{ $t("creation.cascade.chooseParent") }}
+            </p>
           </template>
         </FormField>
       </div>
