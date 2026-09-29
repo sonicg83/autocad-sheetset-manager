@@ -25,12 +25,12 @@ import {
 
 function newSchemaDocument(): Record<string, unknown> {
   return {
-    schema_version: 1,
-    standard_id: "szmedi.gas",
-    version: 1,
+    schema_version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
+    description: "初版说明",
+    published_at: null,
     supported_cad_versions: ["2016", "2020"],
-    release_notes: "初版说明",
     properties: [
       {
         property_id: "prop-major",
@@ -119,7 +119,8 @@ describe("draft model", () => {
 
   it("preserves unknown top level fields and the default dwg naming template", () => {
     const draft = draftDocument();
-    expect(draft.release_notes).toBe("初版说明");
+    expect(draft.description).toBe("初版说明");
+    expect(draft).not.toHaveProperty("release_notes");
     expect(draft.dwg_naming.segments).toHaveLength(5);
     expect(EDITOR_SECTIONS.map(section => section.id)).toEqual([
       "basic", "ordinary", "derived", "dwgNaming", "assets", "publish",
@@ -206,8 +207,12 @@ describe("draft model", () => {
   });
 
   it("creates a blank standard that satisfies the save gate and carries the default naming template", () => {
-    const document = blankStandardDocument({standardId: "user.draft", name: "新标准"});
-    // 旧顶层 rules 不得再被写入（Schema v1 直接替换）
+    const document = blankStandardDocument({standardId: "00000000-0000-4000-8000-000000000046", name: "新标准"});
+    expect(document.schema_version).toBe(3);
+    expect(document.published_at).toBeNull();
+    expect(document.description).toBe("");
+    expect(document).not.toHaveProperty("release_notes");
+    // 旧顶层 rules 不得再被写入
     expect(Object.keys(document)).not.toContain("rules");
     expect(document.dwg_naming).toEqual({segments: defaultDwgNamingSegments()});
     const draft = toDraftDocument(document);
@@ -438,19 +443,28 @@ describe("映射目标缓冲隔离（PLAN-DM-040 Task 7，F10）", () => {
 
 describe("draftKey（PLAN-DM-040 Task 5）", () => {
   it("同来源同版本的不同标准不重复", () => {
-    const gas = {source: "official" as const, standard_id: "official.gas", version: 1, draft_id: null};
-    const water = {source: "official" as const, standard_id: "official.water", version: 1, draft_id: null};
+    const gas = {source: "official" as const, standard_id: "00000000-0000-4000-8000-000000000001", draft_id: null};
+    const water = {source: "official" as const, standard_id: "00000000-0000-4000-8000-000000000002", draft_id: null};
     expect(draftKey(gas)).not.toBe(draftKey(water));
   });
 
-  it("草稿用稳定 draft_id，已发布版本用 source/standard_id/version", () => {
-    expect(draftKey({source: "user", standard_id: "user.gas", version: null, draft_id: "draft-1"})).toBe("user/draft-1");
-    expect(draftKey({source: "user", standard_id: "user.gas", version: 3, draft_id: null})).toBe(
-      "user/user.gas/3",
+  it("草稿用稳定 draft_id，已发布标准用 source/standard_id", () => {
+    expect(draftKey({source: "user", standard_id: "00000000-0000-4000-8000-000000000001", draft_id: "draft-1"})).toBe("user/draft-1");
+    expect(draftKey({source: "user", standard_id: "00000000-0000-4000-8000-000000000002", draft_id: null})).toBe(
+      "user/00000000-0000-4000-8000-000000000002",
     );
-    // 同身份的用户已发布版本与官方版本仍必须可区分
-    expect(draftKey({source: "official", standard_id: "user.gas", version: 3, draft_id: null})).not.toBe(
-      draftKey({source: "user", standard_id: "user.gas", version: 3, draft_id: null}),
-    );
+  });
+
+  it("maps legacy release notes to description and removes the version fields", () => {
+    const legacy = toDraftDocument({
+      schema_version: 2,
+      standard_id: "00000000-0000-4000-8000-000000000046",
+      version: 2,
+      name: "旧标准",
+      release_notes: "迁移说明",
+    });
+    expect(legacy.description).toBe("迁移说明");
+    expect(legacy).not.toHaveProperty("version");
+    expect(legacy).not.toHaveProperty("release_notes");
   });
 });

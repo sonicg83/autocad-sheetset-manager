@@ -1,9 +1,8 @@
 <script setup lang="ts">
-// 标准详情右栏（PLAN-DM-035 Task 8）：身份、能力摘要、版本历史与动作。
-// 只读边界不隐藏动作——禁用并显示可见原因（detailActions.readOnlyReason）。
-import {computed} from "vue";
+import {computed, ref} from "vue";
+import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
-import {detailActions, formatStandardVersion, versionHistory} from "./standardLibraryModel";
+import {detailActions, formatPublishedAt} from "./standardLibraryModel";
 import type {StandardDetail, StandardIdentity, StandardSummary} from "../../features/standards/types";
 
 const props = defineProps<{
@@ -11,35 +10,29 @@ const props = defineProps<{
   detail: StandardDetail | null;
   detailPending: boolean;
   detailError: string;
-  items: StandardSummary[];
-  /** 窄视口两级视图：显示可见的“返回列表”入口。 */
+  deleteImpactCount?: number | null;
+  deleteNotice?: string;
   narrow?: boolean;
 }>();
 const emit = defineEmits<{
   derive: [];
   exportStandard: [];
   deleteDraft: [];
+  deleteStandard: [];
   edit: [];
-  /** 用于创建：把固定标准身份交给创建向导（PLAN-DM-036 Task 8）。 */
   useForCreate: [identity: StandardIdentity];
-  /** 版本历史跳转：条目自带完整身份（来源 + 标准 ID + 版本），跨来源跳转不得沿用当前来源。 */
-  openVersion: [entry: {source: "official" | "user"; standard_id: string; version: number; name: string}];
-  /** 详情加载失败就地重试：只重发详情请求。 */
   retry: [];
-  /** 窄视口返回列表（保留当前选择与筛选）。 */
   backToList: [];
 }>();
+const {t} = useI18n();
+const copied = ref(false);
 
 const actions = computed(() => (props.summary === null ? null : detailActions(props.summary)));
-/** 「用于创建」的固定身份：只有已发布版本才有整数版本。 */
 const createIdentity = computed<StandardIdentity | null>(() => {
   const summary = props.summary;
-  if (summary === null || summary.status !== "published" || summary.version === null) return null;
-  return {standardId: summary.standard_id, version: summary.version};
+  if (summary === null || summary.status !== "published") return null;
+  return {standardId: summary.standard_id};
 });
-const versions = computed(() =>
-  props.summary === null ? [] : versionHistory(props.summary.standard_id, props.items),
-);
 const documentCounts = computed(() => {
   const document = props.detail?.document;
   if (!document) return null;
@@ -49,12 +42,20 @@ const documentCounts = computed(() => {
     const kind = (item as {kind?: string}).kind;
     return kind === "text" || kind === "enum";
   }).length;
-  return {
-    ordinary,
-    derived: properties.length - ordinary,
-    assets: count(document["assets"]),
-  };
+  return {ordinary, derived: properties.length - ordinary, assets: count(document["assets"])};
 });
+
+async function copyStandardId(): Promise<void> {
+  const standardId = props.summary?.standard_id;
+  if (!standardId || !navigator.clipboard) return;
+  try {
+    await navigator.clipboard.writeText(standardId);
+    copied.value = true;
+    window.setTimeout(() => {copied.value = false;}, 1600);
+  } catch {
+    copied.value = false;
+  }
+}
 </script>
 <template>
   <section class="detail-pane" role="region" :aria-label="$t('standards.detail.region')">
@@ -70,88 +71,93 @@ const documentCounts = computed(() => {
       <p v-if="actions?.readOnlyReason" class="detail-reason" role="note">
         {{ $t(actions.readOnlyReason === "official" ? "standards.detail.readOnlyOfficial" : "standards.detail.readOnlyPublished") }}
       </p>
-      <dl class="detail-identity">
-        <div><dt>{{ $t("standards.detail.standardId") }}</dt><dd>{{ summary.standard_id }}</dd></div>
-        <div v-if="summary.status === 'published'">
-          <dt>{{ $t("standards.detail.version") }}</dt><dd>{{ summary.version === null ? "—" : formatStandardVersion(summary.version) }}</dd>
-        </div>
-        <div>
-          <dt>{{ $t("standards.detail.status") }}</dt>
-          <dd>{{ $t(summary.status === "draft" ? "standards.library.statusDraft" : "standards.library.statusPublished") }}</dd>
-        </div>
-        <div>
-          <dt>{{ $t("standards.detail.source") }}</dt>
-          <dd>{{ $t(summary.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}</dd>
-        </div>
-      </dl>
+      <section class="detail-section">
+        <h4>{{ $t("standards.detail.basics") }}</h4>
+        <dl class="detail-identity">
+          <div class="identity-id">
+            <dt>{{ $t("standards.detail.standardId") }}</dt>
+            <dd>{{ summary.standard_id }}
+              <UiButton variant="secondary" class="copy-id" :aria-label="$t('standards.detail.copyId')" @click="copyStandardId">
+                {{ copied ? $t("standards.detail.copied") : $t("standards.detail.copyId") }}
+              </UiButton>
+            </dd>
+          </div>
+          <div>
+            <dt>{{ $t("standards.detail.status") }}</dt>
+            <dd>{{ $t(summary.status === "draft" ? "standards.library.statusDraft" : "standards.library.statusPublished") }}</dd>
+          </div>
+          <div>
+            <dt>{{ $t("standards.detail.source") }}</dt>
+            <dd>{{ $t(summary.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}</dd>
+          </div>
+          <div v-if="summary.status === 'published'">
+            <dt>{{ $t("standards.detail.publishedAt") }}</dt>
+            <dd>{{ formatPublishedAt(summary.published_at) ?? $t("standards.library.noPublishedAt") }}</dd>
+          </div>
+        </dl>
+        <p v-if="copied" class="copy-status" role="status">{{ $t("standards.detail.copied") }}</p>
+      </section>
+      <section class="detail-section detail-overview">
+        <h4>{{ $t("standards.detail.overview") }}</h4>
+        <p>{{ summary.description || $t("standards.library.noDescription") }}</p>
+      </section>
       <p v-if="detailPending" class="detail-note" role="status">{{ $t("standards.detail.loading") }}</p>
       <template v-else-if="detailError">
         <p class="detail-note error" role="alert" data-testid="detail-error">{{ detailError }}</p>
-        <!-- 只有已发布版本有可重发的详情请求；草稿加载失败请重新点「编辑」 -->
-        <UiButton
-          v-if="summary.status === 'published'"
-          variant="secondary"
-          :disabled="detailPending"
-          @click="emit('retry')"
-        >
+        <UiButton v-if="summary.status === 'published'" variant="secondary" :disabled="detailPending" @click="emit('retry')">
           {{ $t("standards.detail.retry") }}
         </UiButton>
       </template>
       <template v-else-if="detail">
-        <div v-if="documentCounts" class="detail-counts">
-          <span>{{ $t("standards.detail.ordinaryCount", {count: documentCounts.ordinary}) }}</span>
-          <span>{{ $t("standards.detail.derivedCount", {count: documentCounts.derived}) }}</span>
-          <span>{{ $t("standards.detail.assetsCount", {count: documentCounts.assets}) }}</span>
-        </div>
-        <div v-if="detail.dependencies.length > 0" class="detail-dependencies">
+        <section v-if="documentCounts" class="detail-section">
+          <h4>{{ $t("standards.detail.contents") }}</h4>
+          <div class="detail-counts">
+            <span>{{ $t("standards.detail.ordinaryCount", {count: documentCounts.ordinary}) }}</span>
+            <span>{{ $t("standards.detail.derivedCount", {count: documentCounts.derived}) }}</span>
+            <span>{{ $t("standards.detail.assetsCount", {count: documentCounts.assets}) }}</span>
+          </div>
+        </section>
+        <section v-if="detail.dependencies.length > 0" class="detail-section detail-dependencies">
           <h4>{{ $t("standards.detail.dependencies") }}</h4>
           <ul>
             <li v-for="dependency in detail.dependencies" :key="dependency.capability_id">
               {{ dependency.extension_id }} / {{ dependency.capability_id }} ≥ {{ dependency.min_version }}
             </li>
           </ul>
-        </div>
+        </section>
       </template>
-      <div v-if="versions.length > 0" class="detail-versions">
-        <h4>{{ $t("standards.detail.versionHistory") }}</h4>
-        <ul>
-          <li v-for="entry in versions" :key="`${entry.source}/${entry.version}`">
-            <button
-              type="button"
-              class="version-link"
-              @click="emit('openVersion', {source: entry.source, standard_id: summary.standard_id, version: entry.version, name: entry.name})"
-            >
-              {{ formatStandardVersion(entry.version) }} · {{ entry.name }} · {{ $t(entry.source === "official" ? "standards.library.sourceOfficial" : "standards.library.sourceUser") }}
-            </button>
-          </li>
-        </ul>
-      </div>
+      <p v-if="deleteImpactCount !== null && deleteImpactCount !== undefined" class="delete-impact" role="status">
+        {{ $t("standards.delete.impactCount", {count: deleteImpactCount}) }}
+      </p>
+      <p v-if="deleteNotice" class="detail-note error" role="alert" data-testid="standard-delete-notice">{{ deleteNotice }}</p>
       <div class="detail-actions">
-        <UiButton
-          v-if="actions?.canEdit"
-          variant="secondary"
-          @click="emit('edit')"
-        >{{ $t("standards.detail.edit") }}</UiButton>
+        <UiButton v-if="actions?.canEdit" variant="secondary" @click="emit('edit')">{{ $t("standards.detail.edit") }}</UiButton>
         <UiButton v-if="actions?.canDerive" variant="secondary" @click="emit('derive')">{{ $t("standards.detail.derive") }}</UiButton>
         <UiButton v-if="actions?.canExport" variant="secondary" @click="emit('exportStandard')">{{ $t("standards.detail.export") }}</UiButton>
         <UiButton v-if="createIdentity !== null" variant="secondary" @click="emit('useForCreate', createIdentity)">{{ $t("standards.detail.useForCreate") }}</UiButton>
-        <UiButton v-if="actions?.canDelete" variant="secondary" @click="emit('deleteDraft')">{{ $t("standards.detail.delete") }}</UiButton>
+        <UiButton v-if="actions?.canDelete && summary.status === 'draft'" variant="secondary" @click="emit('deleteDraft')">{{ $t("standards.detail.delete") }}</UiButton>
+        <UiButton v-if="actions?.canDelete && summary.status === 'published'" variant="secondary" @click="emit('deleteStandard')">{{ $t("standards.detail.delete") }}</UiButton>
       </div>
     </template>
   </section>
 </template>
 <style scoped>
-.detail-pane{display:grid;gap:var(--space-3);align-content:start;min-width:0}
+.detail-pane{display:grid;gap:var(--space-3);align-content:start;min-width:0;min-height:0;overflow:auto}
+.detail-title{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .detail-note{color:var(--color-text-secondary);font-size:var(--font-label);margin:0}
 .detail-note.error{color:var(--color-danger)}
-.detail-title{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
 .detail-reason{margin:0;font-size:var(--font-label);color:var(--color-text-secondary);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-2)}
+.detail-section{display:grid;gap:var(--space-2);min-width:0}
+.detail-section h4{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
+.detail-section p{margin:0;color:var(--color-text-primary);font-size:var(--font-label);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .detail-identity{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin:0}
-.detail-identity dt{font-size:var(--font-label);color:var(--color-text-secondary)}
-.detail-identity dd{margin:0;color:var(--color-text-primary);word-break:break-all}
-.detail-counts{display:flex;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary)}
-.detail-dependencies h4,.detail-versions h4{margin:0 0 var(--space-1);font-size:var(--font-label);color:var(--color-text-secondary)}
-.detail-dependencies ul,.detail-versions ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);font-size:var(--font-label)}
-.version-link{background:none;border:none;padding:0;color:var(--color-accent);cursor:pointer;font-size:var(--font-label)}
+.detail-identity dt{font-size:var(--font-caption);color:var(--color-text-secondary)}
+.detail-identity dd{display:flex;align-items:center;gap:var(--space-2);margin:0;color:var(--color-text-primary);overflow-wrap:anywhere}
+.detail-identity .identity-id{grid-column:1/-1}
+.copy-id{flex:none;font-size:var(--font-caption);padding:var(--space-1) var(--space-2)}
+.copy-status{margin:0;color:var(--color-success);font-size:var(--font-caption)}
+.detail-counts{display:flex;gap:var(--space-3);font-size:var(--font-label);color:var(--color-text-secondary);flex-wrap:wrap}
+.detail-dependencies ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);font-size:var(--font-label)}
+.delete-impact{margin:0;color:var(--color-text-secondary);font-size:var(--font-label)}
 .detail-actions{display:flex;gap:var(--space-2);flex-wrap:wrap}
 </style>

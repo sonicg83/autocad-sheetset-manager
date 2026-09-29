@@ -99,6 +99,14 @@ async function stable(page: Page, theme: "light" | "dark"): Promise<void> {
   await page.mouse.move(0, 0);
 }
 
+async function expectNoPageHScroll(page: Page, label: string): Promise<void> {
+  const metrics = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  expect(metrics.documentWidth, `${label}：无页面级横向溢出`).toBeLessThanOrEqual(metrics.viewportWidth);
+}
+
 async function shot(page: Page, info: TestInfo, name: string): Promise<void> {
   const screenshotPath = info.outputPath(`${name}.png`);
   await page.screenshot({path: screenshotPath, animations: "disabled"});
@@ -127,8 +135,8 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await page.setViewportSize({width: 1440, height: 900});
   await installPreferenceSnapshot(page, "light");
   const state = await installStandards(page, [
-    published("official", 2),
-    published("user", 1),
+    published("official", {standard_id: "00000000-0000-4000-8000-000000000101", description: "面向项目的官方绘图规则。"}),
+    published("user", {standard_id: "00000000-0000-4000-8000-000000000102", description: "已发布用户标准说明。"}),
     draft("草稿 1", "draft-1"),
   ], {
     drafts: {"draft-1": visualDraft()},
@@ -179,7 +187,7 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await expect(page.getByRole("button", {name: "发布标准"})).toBeDisabled();
   await shot(page, info, "g4-07-publish-error-light-1440x900");
 
-  // 发布成功详情：补齐映射目标后发布，进入新版本只读详情
+  // 发布成功详情：补齐映射目标后发布，进入已发布标准只读详情
   await page.getByRole("button", {name: "返回编辑"}).click();
   await openEditorSection(page, "derived");
   await page.getByTestId("edit-derived-prop-code").click();
@@ -188,7 +196,7 @@ test("G4 八态：1440×900 浅色（欢迎页/标准库/属性/映射/组合/�
   await page.getByRole("button", {name: "发布检查"}).click();
   await expect(page.getByRole("button", {name: "发布标准"})).toBeEnabled();
   await page.getByRole("button", {name: "发布标准"}).click();
-  await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
+  await expect(page.getByText("已发布标准不可直接修改")).toBeVisible();
   await stable(page, "light");
   await shot(page, info, "g4-08-publish-success-light-1440x900");
 });
@@ -197,7 +205,7 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
   // 补充 1/2/4：深色 1440×900
   await page.setViewportSize({width: 1440, height: 900});
   await installPreferenceSnapshot(page, "dark");
-  await installStandards(page, [published("official", 2), draft("草稿 1", "draft-1")], {
+  await installStandards(page, [published("official"), draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": visualDraftWithMappingGap()},
     assetResults: {layouts: {asset_id: "layouts", kind: "layout-template", layouts: ["Model", "A2", "A3"], diagnostics: []}},
   });
@@ -214,14 +222,24 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
   await expect(page.getByTestId("publish-review")).toContainText("存在没有目标值的枚举项");
   await shot(page, info, "g4-11-publish-error-dark-1440x900");
 
-  // 补充 3：DWG 命名 900×768 窄视口（字段浏览器 + 令牌编辑 + 预览）
+  // PLAN-DM-046：标准库与标准详情的窄视口真实页面截图。
   await page.setViewportSize({width: 900, height: 768});
-  await installStandards(page, [draft("草稿 1", "draft-1")], {
+  await installStandards(page, [
+    published("official", {standard_id: "00000000-0000-4000-8000-000000000103", description: "项目图纸的官方规则说明。"}),
+    draft("草稿 1", "draft-1"),
+  ], {
     drafts: {"draft-1": visualDraft()},
     assetResults: {layouts: {asset_id: "layouts", kind: "layout-template", layouts: ["Model", "A2", "A3"], diagnostics: []}},
   });
   await installPreferenceSnapshot(page, "light");
   await openStandards(page);
+  await stable(page, "light");
+  await shot(page, info, "plan-dm-046-library-light-900x768");
+  await libraryItems(page).filter({hasText: "官方标准"}).click();
+  await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
+  await shot(page, info, "plan-dm-046-detail-light-900x768");
+  await page.getByRole("button", {name: "返回列表"}).click();
+
   await openDraftEditor(page);
   await openEditorSection(page, "dwgNaming");
   await expect(page.getByTestId("token-preview")).toContainText("RQ-001-003 示例子集.dwg");
@@ -229,4 +247,32 @@ test("G4 补充四态：欢迎页深色、标准库深色、字段映射窄视�
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(900);
   await shot(page, info, "g4-12-dwg-naming-narrow-light-900x768");
+});
+
+test("标准库与详情 200% 缩放布局证据", async ({page}, info) => {
+  // 1440×900 屏幕在 200% 缩放下对应 720×450 CSS 视口；直接设置 CSS 尺寸，保证
+  // 浏览器媒体查询、页面尺寸和自动化点击使用同一坐标系。
+  await page.setViewportSize({width: 720, height: 450});
+  await installPreferenceSnapshot(page, "light");
+  await installStandards(page, [
+    published("official", {standard_id: "00000000-0000-4000-8000-000000000104", description: "用于显示 UUID、发布时间及完整标准描述。"}),
+    draft("草稿 1", "draft-1"),
+  ]);
+  await page.goto("/");
+  expect(await page.evaluate(() => [window.innerWidth, window.innerHeight])).toEqual([720, 450]);
+  await page.getByRole("button", {name: "管理图纸标准"}).click();
+  const library = page.getByRole("region", {name: "标准库"});
+  const detail = page.getByRole("region", {name: "标准详情"});
+  await expect(library).toBeVisible();
+  await expect(detail).toBeHidden();
+  await expectNoPageHScroll(page, "200% 标准库列表");
+  await stable(page, "light");
+  await shot(page, info, "plan-dm-046-library-light-200-percent");
+  await libraryItems(page).filter({hasText: "官方标准"}).click();
+  await expect(detail).toBeVisible();
+  await expect(library).toBeHidden();
+  await expect(page.getByRole("button", {name: "返回列表"})).toBeInViewport();
+  await expectNoPageHScroll(page, "200% 标准详情");
+  await stable(page, "light");
+  await shot(page, info, "plan-dm-046-detail-light-200-percent");
 });

@@ -18,6 +18,8 @@ import type {
   PublishedStandard,
   SaveDraftInput,
   StandardDetail,
+  StandardDeleteImpact,
+  StandardDeleteResult,
   StandardDraft,
   StandardIdentity,
   StandardSummary,
@@ -35,6 +37,8 @@ export interface StandardApi {
   confirmImport(input: ConfirmImportInput): Promise<PublishedStandard>;
   cancelImport(previewId: string): Promise<void>;
   deleteDraft(draftId: string): Promise<void>;
+  previewDeleteStandard(standardId: string): Promise<StandardDeleteImpact>;
+  deleteStandard(standardId: string, impactToken: string): Promise<StandardDeleteResult>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
   copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
 }
@@ -72,6 +76,8 @@ export interface StandardStore {
   confirmImport(input: ConfirmImportInput): Promise<PublishedStandard>;
   cancelImport(previewId: string): Promise<void>;
   deleteDraft(draftId: string): Promise<void>;
+  previewDeleteStandard(standardId: string): Promise<StandardDeleteImpact>;
+  deleteStandard(standardId: string, impactToken: string): Promise<StandardDeleteResult>;
   inspectAsset(input: InspectAssetInput): Promise<AssetInspection>;
   /** 本机模板受控复制：成功时返回包内相对路径与按需读取的非 Model 布局。 */
   copyAssetFile(input: CopyAssetFileInput): Promise<CopiedAssetFile>;
@@ -136,9 +142,7 @@ export function createStandardStore(api: StandardApi): StandardStore {
   /** 详情是否与给定身份一致（已加载且身份匹配才允许被派生等动作消费）。 */
   function detailMatches(identity: StandardIdentity): boolean {
     const loaded = detail.value;
-    return loaded !== null
-      && loaded.standard_id === identity.standardId
-      && loaded.version === identity.version;
+    return loaded !== null && loaded.standard_id === identity.standardId;
   }
 
   function clearDetail(): void {
@@ -220,6 +224,8 @@ export function createStandardStore(api: StandardApi): StandardStore {
     confirmImport: (input) => runAction(() => api.confirmImport(input)),
     cancelImport: (previewId) => runAction(() => api.cancelImport(previewId)),
     deleteDraft: (draftId) => runAction(() => api.deleteDraft(draftId)),
+    previewDeleteStandard: (standardId) => runAction(() => api.previewDeleteStandard(standardId)),
+    deleteStandard: (standardId, impactToken) => runAction(() => api.deleteStandard(standardId, impactToken)),
     inspectAsset: (input) => runAction(() => api.inspectAsset(input)),
     copyAssetFile: (input) => runAction(() => api.copyAssetFile(input)),
   };

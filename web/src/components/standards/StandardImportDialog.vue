@@ -8,7 +8,6 @@ import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import {FOCUSABLE_SELECTOR, useDialogFocus} from "../ui/dialogFocus";
-import {formatStandardVersion} from "./standardLibraryModel";
 import type {
   ImportPreviewResult,
   PublishedStandard,
@@ -21,7 +20,7 @@ const props = defineProps<{
   /** 原生选择：undefined = 桥不可用（切到开发态回退），null = 用户取消，string = 选中路径。 */
   selectPath: (localizedDescription: string) => Promise<string | null | undefined>;
   previewImport: (path: string) => Promise<ImportPreviewResult>;
-  confirmImport: (previewId: string) => Promise<PublishedStandard>;
+  confirmImport: (previewId: string, name?: string) => Promise<PublishedStandard>;
   cancelImport: (previewId: string) => Promise<void>;
 }>();
 const emit = defineEmits<{close: []; imported: [standard: PublishedStandard]}>();
@@ -32,6 +31,7 @@ type ImportPhase = "idle" | "previewing" | "confirmable" | "blocked" | "importin
 
 const card = ref<HTMLElement | null>(null);
 const path = ref("");
+const importName = ref("");
 const phase = ref<ImportPhase>("idle");
 const result = ref<ImportPreviewResult | null>(null);
 const errorText = ref("");
@@ -123,8 +123,17 @@ watch(
 const canPreview = computed(
   () => path.value.trim().length > 0 && phase.value !== "previewing" && phase.value !== "importing",
 );
-const canConfirm = computed(() => phase.value === "confirmable" && result.value?.preview_id != null);
 const busy = computed(() => phase.value === "previewing" || phase.value === "importing");
+const diagnostics = computed(() => result.value?.diagnostics ?? []);
+const canConfirm = computed(() => {
+  const preview = result.value;
+  if (preview?.preview_id == null || busy.value) return false;
+  if (phase.value === "confirmable") return true;
+  if (!preview.name_conflict || phase.value !== "blocked") return false;
+  const canRename = importName.value.trim() !== "" && importName.value.trim() !== preview.name.trim();
+  const otherErrors = diagnostics.value.some(item => item.severity === "error" && item.code !== "STANDARD_NAME_CONFLICT");
+  return canRename && !otherErrors;
+});
 
 function startExpiryTimer(): void {
   stopExpiryTimer();
@@ -187,8 +196,9 @@ async function runPreview(): Promise<void> {
       return;
     }
     result.value = preview;
+    importName.value = preview.name;
     phase.value = preview.can_import ? "confirmable" : "blocked";
-    if (preview.can_import) startExpiryTimer();
+    if (preview.can_import || preview.name_conflict) startExpiryTimer();
   } catch (exc) {
     if (revision !== requestRevision || !props.open) return;
     phase.value = "idle";
@@ -203,7 +213,9 @@ async function runConfirm(): Promise<void> {
   errorText.value = "";
   phase.value = "importing";
   try {
-    const published = await props.confirmImport(previewId);
+    const preview = result.value;
+    const name = preview?.name_conflict ? importName.value.trim() : undefined;
+    const published = await props.confirmImport(previewId, name);
     if (revision === requestRevision && props.open) {
       stopExpiryTimer();
       phase.value = "success";
@@ -229,15 +241,6 @@ function messageOf(exc: unknown): string {
   if (exc instanceof Error && exc.message.length > 0) return exc.message;
   return t("errors.ui.unknownSummary");
 }
-
-const diagnostics = computed(() => result.value?.diagnostics ?? []);
-const existingText = computed(() => {
-  const versions = result.value?.existing_versions ?? [];
-  if (versions.length === 0) return t("standards.import.existingNone");
-  return t("standards.import.existing", {
-    versions: versions.map(item => `${formatStandardVersion(item.version)}(${item.source})`).join("、"),
-  });
-});
 
 onBeforeUnmount(() => {
   requestRevision += 1;
@@ -296,12 +299,16 @@ onBeforeUnmount(() => {
         <p class="import-identity">
           {{ $t("standards.import.identity", {
             id: result.standard_id,
-            version: result.version,
             name: result.name,
           }) }}
         </p>
-        <p class="import-note">{{ existingText }}</p>
-        <p v-if="phase === 'blocked'" class="import-blocked">{{ $t("standards.import.blocked") }}</p>
+        <p v-if="result.description" class="import-note">{{ result.description }}</p>
+        <div v-if="result.name_conflict" class="rename-field">
+          <span>{{ $t("standards.import.renameLabel", {name: result.existing_name ?? result.name}) }}</span>
+          <UiInput v-model="importName" :label="$t('standards.import.nameLabel')" />
+        </div>
+        <p v-if="result.name_conflict" class="import-note">{{ $t("standards.import.renameHint") }}</p>
+        <p v-if="phase === 'blocked' && !result.name_conflict" class="import-blocked">{{ $t("standards.import.blocked") }}</p>
         <ul v-if="diagnostics.length > 0" class="import-diagnostics" data-testid="import-diagnostics">
           <li v-for="item in diagnostics" :key="`${item.code}-${item.message}`">
             <code>{{ item.code }}</code> · {{ item.message }}
@@ -309,7 +316,7 @@ onBeforeUnmount(() => {
         </ul>
       </div>
       <p v-if="phase === 'success'" class="import-success" role="status" data-testid="import-success">
-        {{ $t("standards.import.success", {id: result?.standard_id ?? "", version: result?.version ?? 0}) }}
+        {{ $t("standards.import.success", {id: result?.standard_id ?? ""}) }}
       </p>
 
       <p v-if="errorText" class="import-error" role="alert" data-testid="import-error">{{ errorText }}</p>
@@ -344,6 +351,7 @@ onBeforeUnmount(() => {
 .import-dialog h3{margin:0;font-size:var(--font-page-title)}
 .import-note{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .import-preview{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md)}
+.rename-field{display:grid;gap:var(--space-1);font-size:var(--font-label);color:var(--color-text-secondary)}
 .import-identity{margin:0;font-size:var(--font-label);color:var(--color-text-primary)}
 .import-blocked{margin:0;font-size:var(--font-label);color:var(--color-danger)}
 .import-diagnostics{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);font-size:var(--font-label);color:var(--color-text-secondary)}

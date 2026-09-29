@@ -62,7 +62,7 @@ const emit = defineEmits<{
     @open-folder="emit('open-folder')"
     @open-settings="emit('open-settings')"
   />
-  <div class="shell-body">
+  <div class="shell-body" :class="{'workspace-active': hasWorkspace}">
     <main class="shell-main" :class="{'sheets-active': sheetsActive}">
       <p v-if="error" class="error notice">{{ error }}</p>
       <!-- PLAN-DM-021 Task 9（I18N-11）：未知错误的原始文本只在可展开诊断详情呈现 -->
@@ -102,7 +102,8 @@ const emit = defineEmits<{
 
 <style scoped>
 /* 壳层布局：自 App.vue 原样搬入（Task 11 Step 6），未改任何取值。 */
-.shell-body{display:flex;align-items:stretch;height:calc(100vh - 104px);min-height:0}
+.shell-body{display:flex;align-items:stretch;height:calc(100vh - var(--shell-bar-height));min-height:0}
+.shell-body.workspace-active{height:calc(100vh - var(--shell-bar-height) - var(--shell-bar-height))}
 .shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:var(--space-5);overflow:auto}
 .shell-main.sheets-active{overflow:hidden}
 </style>

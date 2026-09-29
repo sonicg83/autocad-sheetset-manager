@@ -141,10 +141,10 @@ const cadVersionsText = computed({
     buffer.value.supported_cad_versions = String(value).split(",").map(item => item.trim()).filter(Boolean);
   },
 });
-/** 版本说明：草稿文档的自由文本字段（不进入领域 Schema，随草稿本体保存与导出）。 */
-const releaseNotes = computed({
-  get: () => typeof buffer.value.release_notes === "string" ? buffer.value.release_notes : "",
-  set: (value: string) => { buffer.value.release_notes = value; },
+/** 标准描述是 v3 文档字段，随草稿保存并进入已发布标准包。 */
+const description = computed({
+  get: () => typeof buffer.value.description === "string" ? buffer.value.description : "",
+  set: (value: string) => { buffer.value.description = value; },
 });
 const cadVersion = computed(() => buffer.value.supported_cad_versions[0] ?? "");
 /** 资产编辑器复制入口：附上当前 CAD 版本，复制后立即读取非 Model 布局供勾选。 */
@@ -303,7 +303,7 @@ async function publish(): Promise<void> {
   }
   publishPending.value = true;
   try {
-    // 发布成功后由父层完成导航（退出编辑器 + 定位新版本只读详情），此处不自行切视图
+    // 发布成功后由父层完成导航（退出编辑器并定位已发布标准详情），此处不自行切视图
     await props.publishDraft();
   } catch (error) {
     publishError.value = errorMessage(error);
@@ -418,12 +418,12 @@ defineExpose({guard, isDirty: () => dirty.value});
         :inspection-pending="inspectionPending"
         :publish-pending="publishPending"
         :publish-error="publishError"
-        :release-notes="releaseNotes"
+          :description="description"
         @publish="publish"
         @close="view = 'sections'"
         @recheck="runInspections"
         @jump="jumpFromReview"
-        @update:release-notes="releaseNotes = $event"
+          @update:description="description = $event"
       />
     </template>
     <template v-else>
@@ -452,7 +452,6 @@ defineExpose({guard, isDirty: () => dirty.value});
           <!-- 身份由草稿本身决定：只读并在可见说明里给出原因（F11） -->
           <UiInput :model-value="buffer.standard_id" :label="$t('standards.detail.standardId')" readonly />
           <p class="identity-note" role="note" data-testid="identity-readonly-note">{{ $t("standards.editor.identityReadonlyHint") }}</p>
-          <p class="pending-note" role="note" data-testid="version-assigned-note">{{ $t("standards.publish.versionAssignedByServer") }}</p>
           <UiInput v-model="cadVersionsText" :label="$t('standards.editor.cadVersionsLabel')" />
         </section>
         <OrdinaryPropertyEditor
@@ -488,7 +487,6 @@ defineExpose({guard, isDirty: () => dirty.value});
         />
         <section v-else class="publish-section" role="region" :aria-label="$t('standards.sections.publish')">
           <h3 class="section-title">{{ $t("standards.sections.publish") }}</h3>
-          <p class="pending-note" role="note" data-testid="publish-version-note">{{ $t("standards.publish.versionAssignedByServer") }}</p>
           <UiButton variant="secondary" @click="openReview">{{ $t("standards.editor.publishCheck") }}</UiButton>
         </section>
         </div>

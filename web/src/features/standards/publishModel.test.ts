@@ -33,10 +33,11 @@ function layoutAsset(assetId: string, paperLayouts: string[], kind = "layout-tem
 
 function documentWith(assets: DraftAsset[], overrides: Record<string, unknown> = {}) {
   return toDraftDocument({
-    schema_version: 1,
-    standard_id: "szmedi.gas",
-    version: "3.0.0",
+    schema_version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000001",
     name: "市政燃气施工图",
+    description: "",
+    published_at: null,
     supported_cad_versions: ["2020"],
     properties: [
       {
@@ -94,9 +95,9 @@ describe("启用图幅与实际布局", () => {
 });
 
 describe("资产检查快照", () => {
-  it("名称和版本说明不使已检查的资产失效", () => {
+  it("名称和标准描述不使已检查的资产失效", () => {
     const original = documentWith([layoutAsset("layouts", ["A2"])]);
-    const changed = {...original, name: "新名称", release_notes: "本版说明"};
+    const changed = {...original, name: "新名称", description: "标准说明"};
     expect(assetInspectionSnapshot(changed)).toBe(assetInspectionSnapshot(original));
   });
 
@@ -274,7 +275,7 @@ describe("buildPublishGate", () => {
 });
 
 describe("检查结果绑定已保存草稿（PLAN-DM-040 Task 4，F06/F07）", () => {
-  const SNAPSHOT = '{"standard_id":"szmedi.gas","assets":[]}';
+  const SNAPSHOT = '{"standard_id":"00000000-0000-4000-8000-000000000001","assets":[]}';
 
   function record(overrides: Partial<InspectionRecord> = {}): InspectionRecord {
     return {

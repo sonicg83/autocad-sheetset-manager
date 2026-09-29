@@ -17,6 +17,8 @@ import type {
   PublishedStandard,
   SaveDraftInput,
   StandardDetail,
+  StandardDeleteImpact,
+  StandardDeleteResult,
   StandardDraft,
   StandardIdentity,
   StandardSummary,
@@ -28,9 +30,7 @@ export function fetchStandards(): Promise<StandardSummary[]> {
 }
 
 export function fetchStandardDetail(identity: StandardIdentity): Promise<StandardDetail> {
-  return request<StandardDetail>(
-    `/api/standards/${encodeURIComponent(identity.standardId)}/${encodeURIComponent(identity.version)}`,
-  );
+  return request<StandardDetail>(`/api/standards/${encodeURIComponent(identity.standardId)}`);
 }
 
 export function fetchStandardDraft(draftId: string): Promise<StandardDraft> {
@@ -57,6 +57,17 @@ export function deleteStandardDraft(draftId: string): Promise<void> {
   }).then(() => undefined);
 }
 
+export function previewStandardDelete(standardId: string): Promise<StandardDeleteImpact> {
+  return request<StandardDeleteImpact>(`/api/standards/${encodeURIComponent(standardId)}/delete-impact`);
+}
+
+export function deleteStandard(standardId: string, impactToken: string): Promise<StandardDeleteResult> {
+  return request<StandardDeleteResult>(`/api/standards/${encodeURIComponent(standardId)}`, {
+    method: "DELETE",
+    body: JSON.stringify({impact_token: impactToken}),
+  });
+}
+
 export function publishStandardDraft(input: PublishInput): Promise<PublishedStandard> {
   return request<PublishedStandard>(
     `/api/standards/drafts/${encodeURIComponent(input.draftId)}/publish`,
@@ -76,7 +87,7 @@ export function previewStandardImport(input: ImportPreviewInput): Promise<Import
 export function confirmStandardImport(input: ConfirmImportInput): Promise<PublishedStandard> {
   return request<PublishedStandard>("/api/standards/import", {
     method: "POST",
-    body: JSON.stringify({preview_id: input.previewId}),
+    body: JSON.stringify({preview_id: input.previewId, name: input.name ?? null}),
   });
 }
 
@@ -110,9 +121,9 @@ export function copyStandardAssetFile(input: CopyAssetFileInput): Promise<Copied
   );
 }
 
-/** 标准包导出下载地址（GET /api/standards/{id}/{ver}/export，zip 下载）。 */
+/** 标准包导出下载地址（GET /api/standards/{id}/export，zip 下载）。 */
 export function standardExportUrl(identity: StandardIdentity): string {
-  return `/api/standards/${encodeURIComponent(identity.standardId)}/${encodeURIComponent(identity.version)}/export`;
+  return `/api/standards/${encodeURIComponent(identity.standardId)}/export`;
 }
 
 // 组合默认实现：store 注入点（createStandardStore）按此契约消费，
@@ -129,6 +140,8 @@ export const standardsApi: StandardApi = {
   confirmImport: confirmStandardImport,
   cancelImport: cancelStandardImport,
   deleteDraft: deleteStandardDraft,
+  previewDeleteStandard: previewStandardDelete,
+  deleteStandard,
   inspectAsset: inspectStandardAsset,
   copyAssetFile: copyStandardAssetFile,
 };

@@ -2,22 +2,20 @@
 // 不复制后端最终校验规则（标准 Schema 校验在应用/领域层，错误以稳定码返回）。
 export type StartSurface = "welcome" | "standards" | "create-sheetset";
 
-/** 新建草稿起点（Task 8 创建对话框）：空白 / 复制发布版本 / 从 DST 提取。 */
+/** 新建草稿起点：空白 / 基于已发布标准 / 从 DST 提取。 */
 export type CreateMode = "blank" | "derive" | "from-dst";
 
 export interface StandardIdentity {
   standardId: string;
-  /** 服务端分配的整数发布版本；界面展示加 `v` 前缀。 */
-  version: number;
 }
 
 export interface StandardSummary {
   source: "official" | "user";
   status: "published" | "draft";
   standard_id: string;
-  /** 已发布为服务端分配的整数版本；草稿为 `null`。 */
-  version: number | null;
   name: string;
+  description: string;
+  published_at: number | null;
   draft_id: string | null;
 }
 
@@ -29,8 +27,9 @@ export interface StandardDependency {
 
 export interface StandardDetail {
   standard_id: string;
-  version: number;
+  published_at: number;
   name: string;
+  description: string;
   supported_cad_versions: string[];
   dependencies: StandardDependency[];
   /** 完整标准文档（派生草稿等场景需要）。 */
@@ -50,8 +49,9 @@ export interface ImportedStandardDraft extends StandardDraft {
 
 export interface PublishedStandard {
   standard_id: string;
-  version: number;
+  published_at: number;
   name: string;
+  description: string;
 }
 
 export type StandardDiagnosticSeverity = "error" | "warning" | "info";
@@ -109,19 +109,16 @@ export interface ImportPreviewInput {
   path: string;
 }
 
-export interface StandardExistingVersion {
-  source: "official" | "user";
-  version: number;
-}
-
 export interface ImportPreviewResult {
   preview_id: string | null;
   expires_at: string | null;
   standard_id: string;
-  version: number;
   name: string;
+  description: string;
+  published_at: number;
+  name_conflict: boolean;
+  existing_name: string | null;
   supported_cad_versions: string[];
-  existing_versions: StandardExistingVersion[];
   diagnostics: StandardDiagnostic[];
   can_import: boolean;
 }
@@ -129,6 +126,18 @@ export interface ImportPreviewResult {
 /** 确认导入：只接受预检凭证（服务端不接受绕过预检的路径）。 */
 export interface ConfirmImportInput {
   previewId: string;
+  name?: string;
+}
+
+export interface StandardDeleteImpact {
+  standard_id: string;
+  affected_count: number;
+  impact_token: string;
+}
+
+export interface StandardDeleteResult {
+  standard_id: string;
+  deleted_count: number;
 }
 
 export interface CreateDraftFromDstInput {

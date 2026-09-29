@@ -1,6 +1,6 @@
 // 模板资产检查与发布检查 e2e（PLAN-DM-035 Task 10 / SPEC-DM-016 §8–§9）。
 // 覆盖：启用图幅与实际布局差异（含 `A3 ` 多空格）、资产文件缺失、检查本身失败与标准错误
-// 分离、未引用资产仍可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入新版本只读详情。
+// 分离、未引用资产仍可发布、发布错误跳回映射表并聚焦未覆盖摘要、发布成功后进入已发布标准只读详情。
 import {expect, test} from "@playwright/test";
 import {
   draft,
@@ -138,13 +138,14 @@ test("未被标准值引用的有效布局资产不产生发布警告且仍可�
   await expect(publish).toBeEnabled();
   await publish.click();
 
-  // 发布成功：退出编辑器并定位到新版本只读详情（草稿不复存在）
+  // 发布成功：退出编辑器并定位到已发布标准只读详情（草稿不复存在）
   await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
-  await expect(page.getByText("已发布版本不可直接修改")).toBeVisible();
+  await expect(page.getByText("已发布标准不可直接修改")).toBeVisible();
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
   await expect(page.getByRole("button", {name: "派生新草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导出标准包"})).toBeVisible();
-  await expect(libraryItems(page).filter({hasText: "v1"})).toHaveCount(1);
+  await expect(libraryItems(page)).toHaveCount(1);
+  await expect(libraryItems(page).first().locator(".library-time")).toBeVisible();
   await expect(libraryItems(page).filter({hasText: "草稿 1"})).toHaveCount(0);
   expect(state.publishCalls).toBe(1);
 });
@@ -225,7 +226,7 @@ test("结构未完成时「保存并检查」不提交结果：显示未检查�
   expect(state.inspectCalls).toEqual([]);
 });
 
-test("修改版本说明后保留有效资产检查并可发布", async ({page}) => {
+test("修改标准描述后保留有效资产检查并可发布", async ({page}) => {
   const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": layoutDraft(["A2"])},
     assetResults: {layouts: inspection("layouts", ["Model", "A2"])},
@@ -236,14 +237,14 @@ test("修改版本说明后保留有效资产检查并可发布", async ({page})
 
   const publish = page.getByRole("button", {name: "发布标准"});
   await expect(publish).toBeEnabled();
-  // 版本说明写入草稿缓冲，但不改变资产文件、启用图幅或 CAD 版本。
-  await page.getByLabel("版本说明").fill("修订说明");
+  // 标准描述写入草稿缓冲，并随已发布标准保留。
+  await page.getByLabel("标准描述").fill("标准说明");
   await expect(page.getByTestId("publish-review")).not.toContainText("启用图幅 A2 不在文件实际布局中");
   await expect(publish).toBeEnabled();
   await publish.click();
   await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
   expect(state.inspectCalls).toEqual(["layouts"]);
-  expect(state.saveBodies.at(-1)?.release_notes).toBe("修订说明");
+  expect(state.saveBodies.at(-1)?.description).toBe("标准说明");
   expect(state.publishCalls).toBe(1);
 });
 

@@ -144,7 +144,7 @@ test("普通属性到映射、组合和 DWG 命名形成单向流程", async ({p
   await openDraftEditor(page);
 
   await expect(page.getByTestId("standard-section-nav").getByRole("button")).toHaveText([
-    "1基本信息", "2普通属性1", "3派生属性2", "4DWG 命名1", "5模板资产", "6版本与发布",
+    "1基本信息", "2普通属性1", "3派生属性2", "4DWG 命名1", "5模板资产", "6发布",
   ]);
 
   // 枚举改名：稳定 ID 不变，映射按 enum_item_id 保留目标并进入待确认
@@ -588,10 +588,9 @@ test("900×768 下英文与深色主题主要动作仍可见且无溢出", async
 
 test("200% 缩放下欢迎页、编辑器正文与发布检查页无页面级横向溢出", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  // 200% 缩放后的 CSS 视口等效为 720×450；直接设置视口可保留 Playwright 鼠标坐标一致。
+  await page.setViewportSize({width: 720, height: 450});
   await page.goto("/");
-  // 1440×900 下浏览器 200% 缩放 = CSS 视口 720×450 + 2x 渲染（与 i18n 证据同一口径）
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setDeviceMetricsOverride", {width: 720, height: 450, deviceScaleFactor: 2, mobile: false});
   await expect(page.getByTestId("welcome-layout")).toBeVisible();
   await expectNoPageHScroll(page, "200% 欢迎页");
 
@@ -626,6 +625,7 @@ test("900×768 下模态操作栏可见且无横向溢出", async ({page}) => {
 
 test("200% 缩放下组合模态操作栏可达", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await page.setViewportSize({width: 1440, height: 900});
   await openStandards(page);
   await openDraftEditor(page);
   // 1440×900 下浏览器 200% 缩放 = CSS 视口 720×450 + 2x 渲染（与 i18n 证据同一口径）
@@ -757,15 +757,17 @@ test("草稿身份在编辑器中只读，保存走草稿级路由", async ({pag
   await openEditorSection(page, "basic");
 
   await expect(page.getByLabel("标准 ID")).toHaveAttribute("readonly", "");
-  // 草稿不填写版本：编辑器中不存在版本输入，只显示「发布时由服务端分配」说明
+  // 草稿身份固定为标准 UUID；版本号不属于标准文档。
   await expect(page.getByLabel("版本号")).toHaveCount(0);
   await expect(page.getByTestId("identity-readonly-note")).toContainText("创建后不可修改");
-  await expect(page.getByTestId("version-assigned-note")).toContainText("由服务端在官方与用户库");
 
   await page.getByLabel("标准名称").fill("改名后的标准");
   await saveDraftDocument(page);
   expect(state.savedDraftIds).toEqual(["draft-1"]);
   expect(state.drafts.get("draft-1")?.["name"]).toBe("改名后的标准");
+  expect(state.drafts.get("draft-1")?.["version"]).toBeUndefined();
+  expect(state.drafts.get("draft-1")?.["release_notes"]).toBeUndefined();
+  expect(state.drafts.get("draft-1")?.["description"]).toBe("");
 });
 
 // ---- CSV 弹窗焦点契约与可见标签（PLAN-DM-040 Task 9，F13） -----------------

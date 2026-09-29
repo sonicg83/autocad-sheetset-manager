@@ -141,6 +141,8 @@ export interface DraftDocument {
   schema_version: number;
   standard_id: string;
   name: string;
+  description: string;
+  published_at: number | null;
   supported_cad_versions: string[];
   properties: DraftProperty[];
   dwg_naming: DraftDwgNaming;
@@ -162,7 +164,7 @@ export function defaultDwgNamingSegments(): DraftSegment[] {
 }
 
 /**
- * 新建空白标准文档（SPEC-DM-017 §6.3）：不写任何旧顶层 `rules`，并预填默认 DWG 命名模板
+ * 新建空白标准文档（SPEC-DM-017 §6.3）：使用 Schema v3，不写旧版本／发布说明字段，预填默认 DWG 命名模板
  * `{subset.scope} {subset.name}`，使用户进入编辑器即可保存。
  */
 export function blankStandardDocument(input: {
@@ -170,11 +172,12 @@ export function blankStandardDocument(input: {
   name: string;
   supportedCadVersions?: string[];
 }): Record<string, unknown> {
-  // 草稿不携带正式版本：服务端在发布时分配 `max(官方, 用户) + 1`（SPEC-DM-019 §2.3、§3.1）。
   return {
-    schema_version: 2,
+    schema_version: 3,
     standard_id: input.standardId,
     name: input.name,
+    description: "",
+    published_at: null,
     supported_cad_versions: input.supportedCadVersions ?? ["2020"],
     properties: [],
     dwg_naming: {segments: defaultDwgNamingSegments()},
@@ -275,14 +278,19 @@ function normalizeAsset(raw: unknown): DraftAsset {
 export function toDraftDocument(document: Record<string, unknown>): DraftDocument {
   const numbering = asRecord(document.numbering);
   const naming = asRecord(document.dwg_naming);
-  // 草稿不携带 version：从已发布文档派生时显式丢弃，避免草稿被草稿门禁拒绝。
+  // 迁移旧草稿／派生文档时只把旧发布说明迁移一次，标准文档始终只保留 description。
   const rest = {...document};
   delete rest.version;
+  delete rest.release_notes;
   return {
     ...rest,
-    schema_version: asInt(document.schema_version, 1),
+    schema_version: 3,
     standard_id: asString(document.standard_id),
     name: asString(document.name),
+    description: typeof document.description === "string" ? document.description : asString(document.release_notes),
+    published_at: typeof document.published_at === "number" && Number.isFinite(document.published_at)
+      ? document.published_at
+      : null,
     supported_cad_versions: asStringArray(document.supported_cad_versions),
     properties: (Array.isArray(document.properties) ? document.properties : []).map(normalizeProperty),
     dwg_naming: {
@@ -802,7 +810,7 @@ function filenameIssues(document: DraftDocument): GatedDiagnostic[] {
   return filenameDiagnostics(dwgNamingSkeleton(document), "dwgNaming");
 }
 
-export const STANDARD_ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/;
+export const STANDARD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validAssetPath(path: string): boolean {
   if (path === "") return false;
@@ -1030,16 +1038,12 @@ export const EDITOR_SECTIONS: Array<{id: EditorSectionId; labelKey: string}> = [
   {id: "publish", labelKey: "standards.sections.publish"},
 ];
 
-/** 标准库中的稳定键（列表选中与编辑器定位共用）。
- *
- * 草稿用稳定 ``draft_id``；已发布版本用 ``source/standard_id/version``——只用版本会
- * 让同来源、同版本的不同标准共用同一个键（F05），导致选中与详情串位。
- */
+/** 标准库中的稳定键：草稿用 draft_id，已发布标准用来源与 UUID。 */
 export function draftKey(
-  summary: Pick<StandardSummary, "source" | "standard_id" | "draft_id" | "version">,
+  summary: Pick<StandardSummary, "source" | "standard_id" | "draft_id">,
 ): string {
   if (summary.draft_id !== null && summary.draft_id !== undefined) {
     return `${summary.source}/${summary.draft_id}`;
   }
-  return `${summary.source}/${summary.standard_id}/${summary.version}`;
+  return `${summary.source}/${summary.standard_id}`;
 }

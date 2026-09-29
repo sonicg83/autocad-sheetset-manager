@@ -27,10 +27,11 @@ const i18n = createI18n({
  */
 function documentWithSharedSource(): DraftDocument {
   return toDraftDocument({
-    schema_version: 1,
-    standard_id: "szmedi.gas",
-    version: "0.1.0",
+    schema_version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000001",
     name: "市政燃气施工图",
+    description: "",
+    published_at: null,
     supported_cad_versions: ["2020"],
     properties: [
       {

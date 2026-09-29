@@ -1,10 +1,9 @@
 <script setup lang="ts">
 // 发布检查页（PLAN-DM-035 Task 10 / SPEC-DM-016 §9.1–§9.2）：独立检查页，不使用小型确认对话框。
-// 左侧列出检查域及错误/警告计数，右侧列出问题、修复入口、版本号、版本说明与发布动作。
+// 左侧列出检查域及错误/警告计数，右侧列出问题、修复入口、标准描述与发布动作。
 // 错误阻止发布，警告允许发布并在发布动作附近汇总；每个问题均可返回对应编辑分区并聚焦到
 // 字段、映射行或资产；检查本身失败单独呈现，不误报为「标准存在错误」。
-// 版本号只读：草稿身份在创建时确定（`PUT /api/standards/{id}/{ver}` 按文档内身份查找草稿），
-// 需要新版本应从已发布版本派生新草稿。
+// 标准身份由创建时生成的 UUID 固定；发布只改变生命周期状态，不递增版本号。
 import {computed} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import {
@@ -24,14 +23,14 @@ const props = defineProps<{
   inspectionPending: boolean;
   publishPending: boolean;
   publishError: string;
-  releaseNotes: string;
+  description: string;
 }>();
 const emit = defineEmits<{
   publish: [];
   close: [];
   recheck: [];
   jump: [target: PublishTarget];
-  "update:releaseNotes": [value: string];
+  "update:description": [value: string];
 }>();
 
 const sectionLabelKeys: Record<EditorSectionId, string> = {
@@ -87,8 +86,8 @@ function locationOf(issue: PublishIssue): string {
   return "";
 }
 
-function addNote(value: unknown): void {
-  emit("update:releaseNotes", String(value));
+function updateDescription(value: unknown): void {
+  emit("update:description", String(value));
 }
 </script>
 <template>
@@ -152,16 +151,15 @@ function addNote(value: unknown): void {
           </div>
         </template>
         <div class="release-block">
-          <p class="review-note" data-testid="publish-version">{{ $t("standards.publish.versionAssignedByServer") }}</p>
-          <label class="field-label" for="publish-release-notes">{{ $t("standards.publish.releaseNotes") }}</label>
+          <label class="field-label" for="publish-description">{{ $t("standards.publish.description") }}</label>
           <textarea
-            id="publish-release-notes"
+            id="publish-description"
             class="notes-input"
             rows="3"
-            :value="releaseNotes"
-            @input="addNote(($event.target as HTMLTextAreaElement).value)"
+            :value="description"
+            @input="updateDescription(($event.target as HTMLTextAreaElement).value)"
           />
-          <p class="review-note">{{ $t("standards.publish.releaseNotesHint") }}</p>
+          <p class="review-note">{{ $t("standards.publish.descriptionHint") }}</p>
         </div>
         <div class="dependency-block">
           <h5 class="block-title">{{ $t("standards.publish.dependencies") }}</h5>

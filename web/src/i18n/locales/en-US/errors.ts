@@ -181,12 +181,12 @@ export default {
     templateConflict: "The template was updated by another save (server r{current_revision}, local r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
     xlsxInvalid: "Candidate file validation failed: {check}",
   },
-  // ---- Standard library publish and import (PLAN-DM-041 Task 3) ----
+  // ---- Standard library publish and import; legacy version error codes remain for compatibility ----
   standards: {
     idExists: "A standard with this ID already exists; choose a different standard",
     nameConflict: "That standard name is already used by another published standard; rename it and retry",
-    versionExists: "A standard with the same ID and version already exists; published versions cannot be overwritten",
-    versionLimitReached: "This standard has reached the highest publishable version",
+    versionExists: "A legacy standard ID and release version already exist; the old package cannot be overwritten",
+    versionLimitReached: "The legacy standard has reached its release version limit",
     publishFailed: "Writing the published standard failed; the draft and its assets are unchanged and a retry is safe",
     importSourceInvalid: "Choose a .dststandard package file",
     importSourceNotFound: "The selected import file does not exist or is no longer readable",
@@ -195,7 +195,7 @@ export default {
     previewNotFound: "The import preview has expired or is unknown; preview the file again",
     previewExpired: "The import preview has expired; preview the file again",
     libraryBusy: "The standard library is busy with another operation; retry in a moment",
-    versionInvalid: "The standard version must be an integer in 1..2147483647; drafts must not carry a version",
+    versionInvalid: "The legacy standard version field or dependency version format is invalid",
     deleteImpactChanged: "The standards deletion impact changed; preview again before confirming",
     deleteJobActive: "A creation task is still using this standard",
     deleteForbidden: "Official standards cannot be deleted",

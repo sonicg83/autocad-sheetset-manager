@@ -82,7 +82,7 @@ test("无可用标准时说明原因并可前往标准库", async ({page}) => {
   await expect(page.getByRole("heading", {name: "标准管理"})).toBeVisible();
 });
 
-test("标准详情「用于创建」固定发布版本并直接进入第二阶段", async ({page}) => {
+test("标准详情「用于创建」固定标准身份并直接进入第二阶段", async ({page}) => {
   const state = await installCreation(page, {standardsList: [publishedStandardSummary()]});
   await page.goto("/");
   await page.getByRole("button", {name: "管理图纸标准"}).click();

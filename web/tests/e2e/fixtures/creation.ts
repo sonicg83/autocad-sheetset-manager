@@ -186,6 +186,7 @@ export function publishedStandardSummary(overrides: Record<string, unknown> = {}
     status: "published",
     standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
+    description: "",
     published_at: 1700000000000,
     draft_id: null,
     ...overrides,

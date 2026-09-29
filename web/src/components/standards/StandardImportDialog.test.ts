@@ -22,14 +22,13 @@ function preview(overrides: Partial<ImportPreviewResult> = {}): ImportPreviewRes
   return {
     preview_id: "preview-1",
     expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-    standard_id: "szmedi.gas",
-    version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
+    description: "标准描述",
+    published_at: 1_704_164_645_000,
+    name_conflict: false,
+    existing_name: null,
     supported_cad_versions: ["2020"],
-    existing_versions: [
-      {source: "official", version: 2},
-      {source: "user", version: 1},
-    ],
     diagnostics: [],
     can_import: true,
     ...overrides,
@@ -38,7 +37,7 @@ function preview(overrides: Partial<ImportPreviewResult> = {}): ImportPreviewRes
 
 type Harness = {
   previewImport: Mock<(path: string) => Promise<ImportPreviewResult>>;
-  confirmImport: Mock<(previewId: string) => Promise<PublishedStandard>>;
+  confirmImport: Mock<(previewId: string, name?: string) => Promise<PublishedStandard>>;
   cancelImport: Mock<(previewId: string) => Promise<void>>;
   selectPath: Mock<(localizedDescription: string) => Promise<string | null | undefined>>;
 };
@@ -55,9 +54,14 @@ function mountDialog(
 ) {
   const harness: Harness = {
     previewImport: vi.fn(async (_path: string) => options.previewResult ?? preview()),
-    confirmImport: vi.fn(async (_previewId: string) => {
+    confirmImport: vi.fn(async (_previewId: string, _name?: string) => {
       if (options.confirmError) throw options.confirmError;
-      return options.confirmResult ?? {standard_id: "szmedi.gas", version: 3, name: "市政燃气施工图"};
+      return options.confirmResult ?? {
+        standard_id: "00000000-0000-4000-8000-000000000046",
+        published_at: 1_704_164_645_000,
+        name: "市政燃气施工图",
+        description: "标准描述",
+      };
     }),
     cancelImport: vi.fn(async (_previewId: string) => undefined),
     selectPath: vi.fn(async (_localizedDescription: string) => options.selectResult ?? null),
@@ -122,14 +126,14 @@ describe("StandardImportDialog", () => {
         preview_id: null,
         expires_at: null,
         can_import: false,
-        diagnostics: [{code: "STANDARD_VERSION_EXISTS", severity: "error", message: "同一标准 ID 与版本已存在"}],
+        diagnostics: [{code: "STANDARD_ID_EXISTS", severity: "error", message: "同一标准 ID 已存在"}],
       }),
     });
     await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
     await flushPromises();
     await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get('[data-testid="import-diagnostics"]').text()).toContain("STANDARD_VERSION_EXISTS");
+    expect(wrapper.get('[data-testid="import-diagnostics"]').text()).toContain("STANDARD_ID_EXISTS");
     expect(wrapper.get('[data-testid="import-confirm-button"]').attributes("disabled")).toBeDefined();
     expect(wrapper.find('[data-testid="import-selected-path"]').exists()).toBe(true);
   });
@@ -143,14 +147,37 @@ describe("StandardImportDialog", () => {
     await wrapper.get('[data-testid="import-confirm-button"]').trigger("click");
     await flushPromises();
     expect(wrapper.find('[data-testid="import-success"]').exists()).toBe(true);
-    expect(harness.confirmImport).toHaveBeenCalledWith("preview-1");
+    expect(harness.confirmImport).toHaveBeenCalledWith("preview-1", undefined);
     expect(wrapper.emitted("imported")).toHaveLength(1);
+  });
+
+  it("名称冲突时可编辑导入名称并只提交本机副本改名", async () => {
+    const {wrapper, harness} = mountDialog({
+      selectResult: "C:\\标准包\\a.dststandard",
+      previewResult: preview({
+        preview_id: "preview-rename",
+        can_import: false,
+        name_conflict: true,
+        existing_name: "已存在的标准",
+        diagnostics: [{code: "STANDARD_NAME_CONFLICT", severity: "error", message: "名称已使用"}],
+      }),
+    });
+    await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[data-testid="import-confirm-button"]').attributes("disabled")).toBeDefined();
+    await wrapper.get(".rename-field input").setValue("本地改名标准");
+    expect(wrapper.get('[data-testid="import-confirm-button"]').attributes("disabled")).toBeUndefined();
+    await wrapper.get('[data-testid="import-confirm-button"]').trigger("click");
+    await flushPromises();
+    expect(harness.confirmImport).toHaveBeenCalledWith("preview-rename", "本地改名标准");
   });
 
   it("确认失败（预检后库状态变化）留在弹窗、保留路径并清除旧凭证", async () => {
     const {wrapper, harness} = mountDialog({
       selectResult: "C:\\标准包\\a.dststandard",
-      confirmError: new Error("STANDARD_VERSION_EXISTS: 同一标准 ID 与版本已存在"),
+      confirmError: new Error("STANDARD_ID_EXISTS: 同一标准 ID 已存在"),
     });
     await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
     await flushPromises();
@@ -158,7 +185,7 @@ describe("StandardImportDialog", () => {
     await flushPromises();
     await wrapper.get('[data-testid="import-confirm-button"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get('[data-testid="import-error"]').text()).toContain("STANDARD_VERSION_EXISTS");
+    expect(wrapper.get('[data-testid="import-error"]').text()).toContain("STANDARD_ID_EXISTS");
     expect(harness.cancelImport).toHaveBeenCalledWith("preview-1");
     // 路径保留、旧预检清除：用户可直接重新预检
     expect(wrapper.get<HTMLInputElement>('[data-testid="import-selected-path"]').element.value).toBe(

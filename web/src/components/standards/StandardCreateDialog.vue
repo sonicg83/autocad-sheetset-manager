@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 新建草稿对话框（PLAN-DM-035 Task 8 Step 4）：只负责三个起点——
-// 空白草稿 / 复制发布版本 / 从 DST 提取；具体内容编辑由分区编辑器承接。
+// 空白草稿 / 基于已发布标准 / 从 DST 提取；具体内容编辑由分区编辑器承接。
 import {computed, reactive, ref, watch} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
@@ -15,7 +15,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{close: []; submit: [payload: {name: string; dstPath: string}]}>();
 
-// 草稿不填写版本（SPEC-DM-019 §2.3）：正式版本由服务端在发布时分配。
+// 草稿和已发布标准共用 UUID，不存在单独的版本号字段。
 const form = reactive({name: "", dstPath: ""});
 
 // 焦点契约（PLAN-DM-040 Task 9，F13）：与 UnsavedInputDialog/ConfirmModal 同源。
@@ -56,10 +56,9 @@ function submit(): void {
     <section ref="card" class="create-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.create.title')">
       <h3>{{ $t("standards.create.title") }}</h3>
       <p v-if="mode === 'derive'" class="create-origin">
-        {{ $t("standards.create.deriveFrom", {id: origin?.standard_id ?? "", version: origin?.version ?? ""}) }}
+        {{ $t("standards.create.deriveFrom", {id: origin?.standard_id ?? ""}) }}
       </p>
       <UiInput v-model="form.name" :label="$t('standards.create.nameLabel')" />
-      <p class="create-note" role="note">{{ $t("standards.create.versionAssignedByServer") }}</p>
       <UiInput
         v-if="mode === 'from-dst'"
         v-model="form.dstPath"

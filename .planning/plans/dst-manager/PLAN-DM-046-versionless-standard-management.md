@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-046
 title: 无版本图纸标准身份与标准库管理实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-28
-updated: 2026-09-28
+updated: 2026-09-29
 related:
   - SPEC-DM-020
   - SPEC-DM-016
@@ -129,11 +129,11 @@ related:
 
 **Interfaces:** 列表数据模型为平铺 `StandardSummary[]`，摘要包含 `description`，保留 `StandardFilters`；顶部按钮顺序固定；显示时间用 `Intl.DateTimeFormat` 的系统时区和显式数字字段组装 `YYYY/MM/DD HH:mm`，避免区域设置改变分隔符。发布检查输入改为「标准描述」并绑定 `description`。删除对话框消费 `delete-impact`，提交 token；名称冲突导入对话框编辑 `name`。
 
-- [ ] **Step 1: Write failing tests.** 平铺列表不显示版本组；名称下显示描述，长描述单行省略，列表不显示 ID 但 ID 搜索仍命中；详情标题下无描述，内容概览显示全文；搜索和来源／状态过滤保持原行为；固定顶部按钮在长列表、900×768 和 200% 缩放可见；浅深主题布局一致；时间按模拟时区转换；发布检查「标准描述」保存后在摘要和详情可见；同 ID 导入阻止、同名导入改名；仅用户已发布标准有删除动作，删除关联数量和取消／确认文案正确；创建向导不显示版本。
-- [ ] **Step 2: Verify RED.** Run `rtk npm run test:unit`（工作目录 `web`）及定向 Playwright 用例；新增断言失败。
-- [ ] **Step 3: Implement UI.** 依 Demo 改造顶部标题／操作区、左侧标准库卡片和右侧详情分区，沿用现有主题令牌及真实服务端动作，不带入演示数据和情境切换。删除组展开状态和版本历史视图；保留现有名称／ID 搜索和过滤逻辑。列表卡片名称下一行使用单行省略的描述并提供完整文本访问方式；移除卡片 ID，详情基本信息仍完整显示且可复制。详情标题下不渲染描述，内容概览中完整展示。将新建、导入动作移到 `StandardsView` 顶部返回按钮左侧，从列表底部移除重复入口；保留已有「用于创建图纸集」等正式动作。把 `releaseNotes` UI 状态与文案迁移为 `description`。删除失败与影响变化时保留当前标准并刷新数量。
-- [ ] **Step 4: Verify GREEN and visual acceptance.** Run `rtk npm run test:unit`、`rtk npm run build` 和定向 `rtk npx playwright test ...`（工作目录 `web`）；全部通过。另在 1440×900 浅色／深色、900×768 和 200% 缩放下截取真实页面证据，对照 [Demo 截图](../../../docs/dst-manager/specs/assets/SPEC-DM-020/standard-management-demo-light.png) 及下列验收项逐项核对，记录通过／偏差；截图只作布局参照，以 SPEC-DM-020 的后续文字修订覆盖其中旧 ID／描述位置。
-- [ ] **Step 5: Commit this task.** 只提交本任务改动。
+- [x] **Step 1: Write failing tests.** 平铺列表不显示版本组；名称下显示描述，长描述单行省略，列表不显示 ID 但 ID 搜索仍命中；详情标题下无描述，内容概览显示全文；搜索和来源／状态过滤保持原行为；固定顶部按钮在长列表、900×768 和 200% 缩放可见；浅深主题布局一致；时间按模拟时区转换；发布检查「标准描述」保存后在摘要和详情可见；同 ID 导入阻止、同名导入改名；仅用户已发布标准有删除动作，删除关联数量和取消／确认文案正确；创建向导不显示版本。
+- [x] **Step 2: Verify RED.** Run `rtk npm run test:unit`（工作目录 `web`）及定向 Playwright 用例；新增断言失败。
+- [x] **Step 3: Implement UI.** 依 Demo 改造顶部标题／操作区、左侧标准库卡片和右侧详情分区，沿用现有主题令牌及真实服务端动作，不带入演示数据和情境切换。删除组展开状态和版本历史视图；保留现有名称／ID 搜索和过滤逻辑。列表卡片名称下一行使用单行省略的标准描述并提供完整文本访问方式；移除卡片 ID，详情基本信息仍完整显示且可复制。详情标题下不渲染描述，内容概览中完整展示。将新建、导入动作移到 `StandardsView` 顶部返回按钮左侧，从列表底部移除重复入口；保留已有「用于创建图纸集」等正式动作。把 `releaseNotes` UI 状态与文案迁移为 `description`。删除失败与影响变化时保留当前标准并刷新数量；修复无工作区小视口中壳层多预留底部操作栏高度导致标准列表不可达的问题。
+- [x] **Step 4: Verify GREEN and visual acceptance.** `rtk npm run test:unit`：29 个文件／338 项通过；`rtk npm run build`：OpenAPI、i18n（1,631 键／11 域）、UI 契约、TypeScript 与 Vite 构建通过；定向 Playwright 六个 spec 最终 138 项通过。视觉截图覆盖 1440×900 浅色／深色、900×768 与 720×450 CSS 视口（等效于 1440×900 屏幕的 200% 缩放）；对照 [Demo 截图](../../../docs/dst-manager/specs/assets/SPEC-DM-020/standard-management-demo-light.png) 检查操作顺序、主从分栏、描述与发布时间、UUID 详情、窄视图切换和横向溢出，五项均通过。真实 Windows WebView2 原生缩放尚未验证。
+- [x] **Step 5: Commit this task.** 只提交本任务改动。
 
 **Task 6 视觉验收项：**
 
@@ -142,6 +142,8 @@ related:
 3. 列表项的视觉顺序为名称及来源／状态徽标、下一行单行省略的标准描述、已发布时的本地发布时间；不出现 ID、发布版本或版本组。无描述有统一空值提示；键盘及屏幕阅读器可获得完整描述。
 4. 详情依次为名称／徽标／动作、基本信息、标准内容概览；名称正下方不显示描述。基本信息完整展示并可复制 UUID，概览可读描述全文；用户已发布标准有删除动作，官方标准无删除动作。
 5. 两种主题使用现有语义令牌，层级、间距和可读性一致；窄视口按列表→详情切换，900×768 与 200% 缩放下没有横向溢出、遮挡或不可达动作。Demo 的假数据、情境切换和演示提示均不进入产品。
+
+Task 6 视觉验收记录（2026-09-29）：以上五项均通过。截图位于 `web/test-results/` 的 Playwright 忽略产物中，没有写入正式 Demo 资产；真实 WebView2 缩放按 Task 7 环境限制记录。
 
 ### Task 7：兼容清点、端到端验证与交付文档
 

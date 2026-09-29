@@ -11,34 +11,57 @@ export type StandardSummary = {
   source: "official" | "user";
   status: "published" | "draft";
   standard_id: string;
-  /** 服务端分配的整数发布版本；草稿为 null。 */
-  version: number | null;
   name: string;
+  description: string;
+  published_at: number | null;
   draft_id: string | null;
 };
 
-export function published(source: "official" | "user", version: number, overrides: Partial<StandardSummary> = {}): StandardSummary {
-  return {source, status: "published", standard_id: "szmedi.gas", version, name: "市政燃气施工图", draft_id: null, ...overrides};
+export function published(
+  source: "official" | "user",
+  overrides: Partial<StandardSummary> = {},
+): StandardSummary {
+  return {
+    source,
+    status: "published",
+    standard_id: "00000000-0000-4000-8000-000000000046",
+    name: source === "official" ? "官方标准" : "用户标准",
+    description: "标准说明",
+    published_at: 1_704_164_645_000,
+    draft_id: null,
+    ...overrides,
+  };
 }
 
-/** 草稿不携带版本（发布时由服务端分配），身份经 draft_id 承载，按 standard_id 归集。 */
+/** 草稿由 draft_id 承载，标准 UUID 与已发布包身份一致。 */
 export function draft(name: string, draftId: string, overrides: Partial<StandardSummary> = {}): StandardSummary {
-  return {source: "user", status: "draft", standard_id: "szmedi.gas", version: null, name, draft_id: draftId, ...overrides};
+  return {
+    source: "user",
+    status: "draft",
+    standard_id: "00000000-0000-4000-8000-000000000046",
+    name,
+    description: "草稿说明",
+    published_at: null,
+    draft_id: draftId,
+    ...overrides,
+  };
 }
 
 /** 与 StandardDetailResponse 契约同构的详情；document 供派生草稿与能力摘要消费。 */
 export function detailBody(summary: StandardSummary) {
   return {
     standard_id: summary.standard_id,
-    version: summary.version,
+    published_at: summary.published_at ?? 1_704_164_645_000,
     name: summary.name,
+    description: summary.description,
     supported_cad_versions: ["2016", "2020"],
     dependencies: [{extension_id: "dst-manager.sheet-catalog", capability_id: "catalog.render", min_version: "0.1.0"}],
     document: {
-      schema_version: 2,
+      schema_version: 3,
       standard_id: summary.standard_id,
-      version: summary.version,
       name: summary.name,
+      description: summary.description,
+      published_at: summary.published_at ?? 1_704_164_645_000,
       supported_cad_versions: ["2016", "2020"],
       properties: [
         {
@@ -77,8 +100,9 @@ export function detailBody(summary: StandardSummary) {
 export function detailFromDocument(document: Record<string, unknown>) {
   return {
     standard_id: String(document["standard_id"] ?? ""),
-    version: String(document["version"] ?? ""),
+    published_at: Number(document["published_at"] ?? 0),
     name: String(document["name"] ?? ""),
+    description: String(document["description"] ?? ""),
     supported_cad_versions: (document["supported_cad_versions"] as string[] | undefined) ?? [],
     dependencies: (document["dependencies"] as unknown[] | undefined) ?? [],
     document,
@@ -91,6 +115,9 @@ export interface StandardsFixtureState {
   listFails: boolean;
   createBodies: unknown[];
   deleted: string[];
+  deletedStandards: string[];
+  deleteImpactRequests: string[];
+  deleteTokens: Array<{standardId: string; impactToken: string}>;
   /** 导入预检端点被调用次数（碰撞场景断言用）。 */
   importAttempts: number;
   /** 确认导入端点被调用次数（幂等/防重复提交断言用）。 */
@@ -105,7 +132,7 @@ export interface StandardsFixtureState {
   savedDraftIds: string[];
   /** 内存草稿文档：draft_id → document。 */
   drafts: Map<string, Record<string, unknown>>;
-  /** 已发布文档（发布后详情端点直接返回它）：`"id@ver"` → document。 */
+  /** 已发布文档（发布后详情端点直接返回它）：standard_id → document。 */
   published: Map<string, Record<string, unknown>>;
   /** 资产检查结果：asset_id → 响应。 */
   assetResults: Record<string, AssetInspection>;
@@ -133,8 +160,10 @@ export interface StandardsFixtureState {
 export type StandardsFixtureOptions = {
   /** 列表端点返回 500，驱动加载失败边界。 */
   listFails?: boolean;
-  /** 预检固定返回的冲突诊断（默认与后端一致：can_import=false + STANDARD_VERSION_EXISTS）。 */
+  /** 预检固定返回的身份冲突诊断。 */
   importConflict?: {status: number; code: string; message: string};
+  /** 预检返回名称冲突，确认时可提交新名称作为本机副本名。 */
+  importNameConflict?: string;
   /** 预置草稿文档：draft_id → document（编辑器加载与保存目标）。 */
   drafts?: Record<string, Record<string, unknown>>;
   /** 预置资产检查结果：asset_id → 响应。 */
@@ -143,7 +172,7 @@ export type StandardsFixtureOptions = {
   assetInspectFailures?: Record<string, {status: number; code: string; message: string}>;
   /** 按 standard_id 注入详情加载失败（驱动“切换后旧详情不得被消费”）。 */
   detailFailures?: Record<string, {status: number; code: string; message: string}>;
-  /** 按 `standard_id@version` 覆盖详情文档：区分不同标准的派生来源内容。 */
+  /** 按 standard_id 覆盖详情文档：区分不同标准的派生来源内容。 */
   detailDocuments?: Record<string, Record<string, unknown>>;
   /** 资产复制端点返回的布局列表（模拟后端从 DWG 读到的布局；默认 Model+A1+A2）。 */
   assetCopyLayouts?: string[];
@@ -152,9 +181,11 @@ export type StandardsFixtureOptions = {
 /** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
 export function draftDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schema_version: 2,
-    standard_id: "szmedi.gas",
+    schema_version: 3,
+    standard_id: "00000000-0000-4000-8000-000000000046",
     name: "市政燃气施工图",
+    description: "",
+    published_at: null,
     supported_cad_versions: ["2020"],
     properties: [
       {
@@ -259,6 +290,9 @@ export async function installStandards(
     listFails: options.listFails === true,
     createBodies: [],
     deleted: [],
+    deletedStandards: [],
+    deleteImpactRequests: [],
+    deleteTokens: [],
     importAttempts: 0,
     confirmAttempts: 0,
     cancelAttempts: 0,
@@ -288,6 +322,45 @@ export async function installStandards(
       if (path === "/api/standards" && method === "GET") {
         if (state.listFails) return route.fulfill({status: 500, json: {code: "INTERNAL_ERROR", message: "标准库不可用"}});
         return route.fulfill({json: state.list});
+      }
+      const impactMatch = /^\/api\/standards\/([^/]+)\/delete-impact$/.exec(path);
+      if (impactMatch && method === "GET") {
+        const standardId = decodeURIComponent(impactMatch[1]);
+        state.deleteImpactRequests.push(standardId);
+        const summary = state.list.find(item => item.status === "published" && item.standard_id === standardId);
+        if (summary === undefined || summary.source !== "user") {
+          return route.fulfill({status: 403, json: {code: "STANDARD_OFFICIAL_DELETE_FORBIDDEN", message: "不可删除官方标准"}});
+        }
+        const affectedCount = state.list.filter(item => item.status === "draft" && item.standard_id === standardId).length;
+        return route.fulfill({json: {
+          standard_id: standardId,
+          affected_count: affectedCount,
+          impact_token: `impact:${standardId}:${affectedCount}`,
+        }});
+      }
+      const standardDeleteMatch = /^\/api\/standards\/([^/]+)$/.exec(path);
+      if (standardDeleteMatch && method === "DELETE") {
+        const standardId = decodeURIComponent(standardDeleteMatch[1]);
+        const body = (await request.postDataJSON()) as {impact_token: string};
+        state.deleteTokens.push({standardId, impactToken: body.impact_token});
+        const summary = state.list.find(item => item.status === "published" && item.standard_id === standardId);
+        const affected = state.list.filter(item => item.status === "draft" && item.standard_id === standardId);
+        const expectedToken = `impact:${standardId}:${affected.length}`;
+        if (summary === undefined || summary.source !== "user") {
+          return route.fulfill({status: 403, json: {code: "STANDARD_OFFICIAL_DELETE_FORBIDDEN", message: "不可删除官方标准"}});
+        }
+        if (body.impact_token !== expectedToken) {
+          return route.fulfill({status: 409, json: {code: "STANDARD_DELETE_IMPACT_CHANGED", message: "删除影响已变化"}});
+        }
+        state.deletedStandards.push(standardId);
+        state.list = state.list.filter(item => item.standard_id !== standardId);
+        for (const item of affected) {
+          if (item.draft_id !== null) {
+            state.deleted.push(item.draft_id);
+            state.drafts.delete(item.draft_id);
+          }
+        }
+        return route.fulfill({json: {standard_id: standardId, deleted_count: affected.length + 1}});
       }
       if (path === "/api/standards/drafts" && method === "POST") {
         const body = (await request.postDataJSON()) as {document: Record<string, unknown>};
@@ -340,55 +413,73 @@ export async function installStandards(
         state.importAttempts += 1;
         const body = (await request.postDataJSON()) as {path: string};
         state.previewPaths.push(body.path);
-        // 与后端同构：冲突以 200 + can_import=false + 诊断呈现，不抛异常；
-        // 未配置 importConflict 时按可导入返回（成功路径）。
         const conflict = options.importConflict;
         if (conflict !== undefined && conflict.status !== 200) {
           return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
         }
-        const existing = state.list.filter(item => item.status === "published" && item.standard_id === "szmedi.gas");
-        const blocked = conflict !== undefined;
-        if (blocked) {
+        const nameConflict = options.importNameConflict !== undefined;
+        if (conflict !== undefined) {
           return route.fulfill({
             json: {
               preview_id: null,
               expires_at: null,
-              standard_id: "szmedi.gas",
-              version: existing[0]?.version ?? 1,
-              name: "市政燃气施工图",
+              standard_id: "00000000-0000-4000-8000-000000000047",
+              name: "导入标准",
+              description: "导入标准描述",
+              published_at: 1_704_164_645_000,
+              name_conflict: false,
+              existing_name: null,
               supported_cad_versions: ["2020"],
-              existing_versions: existing.map(item => ({source: item.source, version: item.version ?? 0})),
               diagnostics: [{code: conflict.code, severity: "error", message: conflict.message, property_id: null, segment_index: null}],
               can_import: false,
             },
           });
         }
-        const version = existing.reduce((max, item) => Math.max(max, item.version ?? 0), 0) + 1;
         return route.fulfill({
           json: {
             preview_id: `preview-${state.importAttempts}`,
             expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-            standard_id: "szmedi.gas",
-            version,
-            name: "市政燃气施工图",
+            standard_id: "00000000-0000-4000-8000-000000000047",
+            name: "导入标准",
+            description: "导入标准描述",
+            published_at: 1_704_164_645_000,
+            name_conflict: nameConflict,
+            existing_name: options.importNameConflict ?? null,
             supported_cad_versions: ["2020"],
-            existing_versions: existing.map(item => ({source: item.source, version: item.version ?? 0})),
-            diagnostics: [],
-            can_import: true,
+            diagnostics: nameConflict
+              ? [{code: "STANDARD_NAME_CONFLICT", severity: "error", message: "名称已使用", property_id: null, segment_index: null}]
+              : [],
+            can_import: !nameConflict,
           },
         });
       }
       if (path === "/api/standards/import" && method === "POST") {
         state.confirmAttempts += 1;
-        const body = (await request.postDataJSON()) as {preview_id: string};
+        const body = (await request.postDataJSON()) as {preview_id: string; name?: string | null};
         const conflict = options.importConflict;
         if (conflict !== undefined && conflict.status !== 200) {
           return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});
         }
-        const existing = state.list.filter(item => item.status === "published" && item.standard_id === "szmedi.gas");
-        const version = existing.reduce((max, item) => Math.max(max, item.version ?? 0), 0) + 1;
-        state.list.push({source: "user", status: "published", standard_id: "szmedi.gas", version, name: "市政燃气施工图", draft_id: null});
-        return route.fulfill({json: {standard_id: "szmedi.gas", version, name: "市政燃气施工图", preview_id: body.preview_id}});
+        if (options.importNameConflict !== undefined && (!body.name || body.name === options.importNameConflict)) {
+          return route.fulfill({status: 409, json: {code: "STANDARD_NAME_CONFLICT", message: "名称已使用"}});
+        }
+        const imported = {
+          source: "user" as const,
+          status: "published" as const,
+          standard_id: "00000000-0000-4000-8000-000000000047",
+          name: body.name ?? "导入标准",
+          description: "导入标准描述",
+          published_at: 1_704_164_645_000,
+          draft_id: null,
+        };
+        state.list.push(imported);
+        return route.fulfill({json: {
+          standard_id: imported.standard_id,
+          published_at: imported.published_at,
+          name: imported.name,
+          description: imported.description,
+          preview_id: body.preview_id,
+        }});
       }
       const importCancelMatch = /^\/api\/standards\/import-previews\/([^/]+)$/.exec(path);
       if (importCancelMatch && method === "DELETE") {
@@ -417,39 +508,44 @@ export async function installStandards(
         state.publishDraftIds.push(draftId);
         const document = state.drafts.get(draftId) ?? {};
         const standardId = String(document["standard_id"] ?? "");
-        // 与后端一致：服务端在官方/用户库同 ID 的现有版本上分配 max+1（草稿不携带版本）
-        const highest = state.list
-          .filter(item => item.status === "published" && item.standard_id === standardId)
-          .reduce((max, item) => Math.max(max, item.version ?? 0), 0);
-        const version = highest + 1;
+        const publishedAt = Date.now();
+        const publishedDocument = {...document, published_at: publishedAt};
         // 后端发布把草稿目录移入已发布目录：草稿不再存在，列表出现同名用户已发布版本
         state.drafts.delete(draftId);
         state.list = state.list.filter(item => item.draft_id !== draftId);
-        state.list.push({source: "user", status: "published", standard_id: standardId, version, name: String(document["name"] ?? ""), draft_id: null});
-        state.published.set(`${standardId}@${version}`, document);
-        return route.fulfill({json: {standard_id: standardId, version, name: document["name"] ?? ""}});
+        const summary: StandardSummary = {
+          source: "user",
+          status: "published",
+          standard_id: standardId,
+          name: String(document["name"] ?? ""),
+          description: String(document["description"] ?? ""),
+          published_at: publishedAt,
+          draft_id: null,
+        };
+        state.list.push(summary);
+        state.published.set(standardId, publishedDocument);
+        return route.fulfill({json: {
+          standard_id: standardId,
+          published_at: publishedAt,
+          name: summary.name,
+          description: summary.description,
+        }});
       }
-      if (method === "PUT") {
-        // 兼容保留：既有身份路由（前端不再使用，回归对照用）
-        const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
-        if (match === null) return route.fulfill({status: 404, json: {code: "NOT_FOUND", message: path}});
-        // 身份路由已按 SPEC-DM-019 §4.1 移除：与后端一致返回 405。
-        return route.fulfill({status: 405, json: {code: "METHOD_NOT_ALLOWED", message: path}});
+      const exportMatch = /^\/api\/standards\/([^/]+)\/export$/.exec(path);
+      if (exportMatch && method === "GET") {
+        return route.fulfill({status: 200, body: "standard-package", contentType: "application/zip"});
       }
-      const match = /^\/api\/standards\/([^/]+)\/([^/]+)$/.exec(path);
-      if (match && method === "GET" && match[1] !== "drafts") {
-        const standardId = decodeURIComponent(match[1]);
-        const version = Number(decodeURIComponent(match[2]));
-        const publishedDocument = state.published.get(`${standardId}@${version}`);
+      const standardMatch = /^\/api\/standards\/([^/]+)$/.exec(path);
+      if (standardMatch && method === "GET") {
+        const standardId = decodeURIComponent(standardMatch[1]);
         const summary = state.list.find(item =>
-          item.status === "published"
-          && item.standard_id === standardId
-          && item.version === version);
+          item.status === "published" && item.standard_id === standardId);
         if (summary === undefined) return route.fulfill({status: 404, json: {code: "STANDARD_NOT_FOUND", message: "未找到"}});
         const failure = state.detailFailures[standardId];
         if (failure !== undefined) return route.fulfill({status: failure.status, json: {code: failure.code, message: failure.message}});
+        const publishedDocument = state.published.get(standardId);
         if (publishedDocument !== undefined) return route.fulfill({json: detailFromDocument(publishedDocument)});
-        const override = options.detailDocuments?.[`${standardId}@${version}`];
+        const override = options.detailDocuments?.[standardId];
         if (override !== undefined) return route.fulfill({json: {...detailBody(summary), document: override}});
         return route.fulfill({json: detailBody(summary)});
       }
@@ -474,9 +570,6 @@ export function libraryItems(page: Page): Locator {
 }
 
 /** 归集组头按钮（按 standard_id 归集；键盘可展开/收起）。 */
-export function groupHeaders(page: Page): Locator {
-  return page.getByTestId("library-group-header");
-}
 
 /** 选中草稿并进入分区编辑器（详情面板的「编辑」入口）。 */
 export async function openDraftEditor(page: Page, draftName = "草稿 1"): Promise<void> {

@@ -182,12 +182,12 @@ export default {
     templateConflict: "模板已被其他保存更新（服务端 r{current_revision}，本地 r{expected_revision}），本地编辑已保留，可另存为新模板或按新修订重试",
     xlsxInvalid: "候选文件校验未通过：{check}",
   },
-  // ---- 标准库发布与导入（PLAN-DM-041 Task 3；服务端分配版本与名称唯一门禁） ----
+  // ---- 标准库发布与导入（保留旧版标准身份错误码，前端流程按 UUID 管理） ----
   standards: {
     idExists: "该标准 ID 已存在，请选择其他标准",
     nameConflict: "该标准名称已被其他已发布标准占用，请修改名称后重试",
-    versionExists: "同一标准 ID 与版本已存在，已发布版本不可覆盖",
-    versionLimitReached: "该标准已达到最高发布版本，无法再发布新版本",
+    versionExists: "旧版标准 ID 与发布版本已存在，不能覆盖旧包",
+    versionLimitReached: "旧版标准发布版本已达到上限",
     publishFailed: "标准发布写入失败，草稿与资产保持不变，可直接重试",
     importSourceInvalid: "只能选择 .dststandard 标准包文件",
     importSourceNotFound: "所选的导入文件不存在或已不可读",
@@ -196,7 +196,7 @@ export default {
     previewNotFound: "导入预检已失效，请重新选择文件预检",
     previewExpired: "导入预检已过期，请重新选择文件预检",
     libraryBusy: "标准库正在被其他操作占用，请稍后重试",
-    versionInvalid: "标准版本必须是 1..2147483647 的整数；草稿不得携带版本",
+    versionInvalid: "旧版标准版本字段或依赖版本格式无效",
     deleteImpactChanged: "标准删除影响已变化，请重新预览后确认",
     deleteJobActive: "仍有创建任务正在使用此标准",
     deleteForbidden: "官方标准不可删除",
