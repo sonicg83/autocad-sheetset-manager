@@ -1,3 +1,12 @@
+## 2026-09-29 PLAN-DM-047 计划评审修订（文档，未改代码）
+
+- 按仓库代码核验结果修订 PLAN-DM-047：Task 1 补入 `standard_rules.py`，明确级联定义诊断必须接入 `publish_diagnostics`（`store_common._publish_gate_error`、发布与包预检共用该聚合）才真正阻断，并要求 `validate_mapping_sources` 与 `_validate_references` 对 `kind == "cascade"` 跳过映射语义、改用级联稳定码；`REFERENCE_KINDS`/`references_to` 增加 `cascade` 反向引用以承担删除保护。
+- Task 2 补入 `application/standards.py`，把「v3 草稿显式保存升级 v4」定责给后端 `save_standard_draft`（结构门禁与身份核对后归一版本再写盘并返回升级后文档），并点明 `store_core.py` 两处版本门禁与「manifest 即标准文档」事实。
+- Task 3 补入 `application/creation_drafts.py`（初值播种与未知键门禁），明确 `ordinary_properties` 谓词从 `not is_derived` 改为 `kind in ORDINARY_PROPERTY_KINDS`，并统一必填/缺键复用既有创建码、`STANDARD_CASCADE_VALUE_INVALID` 仅表达上下级不匹配。
+- Task 4 明确成对校验插在 `_read_sheetset`/`_read_groups` 全量读取之后；Task 5 补入 `publishModel.ts`、`StandardPublishReview.vue`（分区枚举、评审映射、`sectionLabelKeys`）与 `ReferenceKind` 删除保护，并明确 `blankStandardDocument` 写 v4、`toDraftDocument` 保留来源版本；Task 6 把批量级联改为先全量校验再一次性提交；Task 5/6 的 E2E 步骤补齐精确命令。
+- 新增全局约束：v3 文档出现 `cascade_options` 或 `kind: "cascade"` 一律拒绝；发布行级定位沿用 message 惯例（前端用既有 `itemId` 跳转，不新增契约字段）；Task 7 增加 SPEC-DM-021 状态收口与索引同步。
+- 验证：`git diff --check` 通过；计划引用的 SPEC/指南/索引路径逐条核对存在；本次仅修改 `.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md` 与 `changelog.md`，未触碰产品代码，Ruff/pytest/Web 构建不适用。
+
 ## 2026-09-29（PLAN-DM-036 Task 9 收尾：创建成功接管后的壳可信上下文）
 
 - 修复创建向导创建新图纸集后的两处报错（同一根因）：工作区「打开所在文件夹」报「工作区已切换或未打开，请重新打开」，图纸页「显示列」报「当前没有匹配的已打开工作区」。壳进程可信工作区上下文此前只在 `POST /api/workspaces/open` 登记，而创建登记走应用层 `open_workspace`、前端接管新工作区只调 `GET /api/workspaces/{id}`，壳上下文因此停在「未登记」或旧工作区，所有依赖上下文的壳桥方法按 ID 不匹配拒绝（同一根因还使创建后扩展成果「另存为」不可用）。
