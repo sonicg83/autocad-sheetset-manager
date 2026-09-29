@@ -20,9 +20,9 @@ export type DerivedPropertyKind = "mapping" | "composition";
 
 export const DERIVED_PROPERTY_KINDS: DerivedPropertyKind[] = ["mapping", "composition"];
 
-export type DraftPropertyKind = OrdinaryPropertyKind | DerivedPropertyKind;
+export type DraftPropertyKind = OrdinaryPropertyKind | "cascade" | DerivedPropertyKind;
 
-export const PROPERTY_KINDS: DraftPropertyKind[] = [...ORDINARY_PROPERTY_KINDS, ...DERIVED_PROPERTY_KINDS];
+export const PROPERTY_KINDS: DraftPropertyKind[] = [...ORDINARY_PROPERTY_KINDS, "cascade", ...DERIVED_PROPERTY_KINDS];
 
 /** 子集系统字段：只对标准级 DWG 命名模板开放。 */
 export const SUBSET_SYSTEM_FIELDS = ["subset.scope", "subset.name", "subset.sequence"] as const;
@@ -62,6 +62,11 @@ export interface DraftMappingRow {
   value: string;
 }
 
+export interface DraftCascadeRow {
+  source_item_id: string;
+  values: string[];
+}
+
 /** 片段只能是属性令牌、系统字段令牌或固定文本（三者互斥，可带受控补零格式码）。 */
 export interface DraftSegment {
   property_id?: string;
@@ -97,6 +102,12 @@ export interface DraftMappingProperty extends DraftPropertyBase {
   confirmed_source_items: Array<[string, string]>;
 }
 
+export interface DraftCascadeProperty extends DraftPropertyBase {
+  kind: "cascade";
+  source_property_id: string;
+  cascade_options: DraftCascadeRow[];
+}
+
 export interface DraftCompositionProperty extends DraftPropertyBase {
   kind: "composition";
   segments: DraftSegment[];
@@ -105,6 +116,7 @@ export interface DraftCompositionProperty extends DraftPropertyBase {
 export type DraftProperty =
   | DraftTextProperty
   | DraftEnumProperty
+  | DraftCascadeProperty
   | DraftMappingProperty
   | DraftCompositionProperty;
 
@@ -173,7 +185,7 @@ export function blankStandardDocument(input: {
   supportedCadVersions?: string[];
 }): Record<string, unknown> {
   return {
-    schema_version: 3,
+    schema_version: 4,
     standard_id: input.standardId,
     name: input.name,
     description: "",
@@ -222,6 +234,11 @@ function normalizeMappingRow(raw: unknown): DraftMappingRow {
   return {item_id: asString(source.item_id), value: asString(source.value)};
 }
 
+function normalizeCascadeRow(raw: unknown): DraftCascadeRow {
+  const source = asRecord(raw);
+  return {source_item_id: asString(source.source_item_id), values: asStringArray(source.values)};
+}
+
 function normalizeConfirmedItems(raw: unknown): Array<[string, string]> {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -254,6 +271,14 @@ function normalizeProperty(raw: unknown): DraftProperty {
       confirmed_source_items: normalizeConfirmedItems(source.confirmed_source_items),
     };
   }
+  if (kind === "cascade") {
+    return {
+      ...base,
+      kind,
+      source_property_id: asString(source.source_property_id),
+      cascade_options: (Array.isArray(source.cascade_options) ? source.cascade_options : []).map(normalizeCascadeRow),
+    };
+  }
   if (kind === "composition") {
     return {
       ...base,
@@ -284,7 +309,7 @@ export function toDraftDocument(document: Record<string, unknown>): DraftDocumen
   delete rest.release_notes;
   return {
     ...rest,
-    schema_version: 3,
+    schema_version: asInt(document.schema_version, 3),
     standard_id: asString(document.standard_id),
     name: asString(document.name),
     description: typeof document.description === "string" ? document.description : asString(document.release_notes),
@@ -424,11 +449,35 @@ export function selectableMappingSources(
   });
 }
 
+export function selectableCascadeSources(
+  document: DraftDocument,
+  property: DraftCascadeProperty,
+): DraftEnumProperty[] {
+  return document.properties.filter((candidate): candidate is DraftEnumProperty =>
+    candidate.kind === "enum" && candidate.scope === property.scope,
+  );
+}
+
+export function cascadeOptionsFor(
+  property: DraftCascadeProperty,
+  source: DraftEnumProperty | undefined,
+): DraftCascadeRow[] {
+  if (source === undefined || source.property_id !== property.source_property_id) return [];
+  return source.enum_items.map(item => ({
+    source_item_id: item.item_id,
+    values: [...(property.cascade_options.find(row => row.source_item_id === item.item_id)?.values ?? [])],
+  }));
+}
+
+export function parseCascadeValues(text: string): string[] {
+  return text.split(/[,，]/u).map(value => value.trim());
+}
+
 // -------------------------------------------------------------- 引用
 
 // -------------------------------------------------------------- 反向引用
 
-export type ReferenceKind = "mapping" | "composition" | "dwgNaming";
+export type ReferenceKind = "mapping" | "cascade" | "composition" | "dwgNaming";
 
 export interface PropertyReference {
   kind: ReferenceKind;
@@ -446,6 +495,9 @@ export function referencesTo(document: DraftDocument, propertyId: string): Prope
   for (const property of document.properties) {
     if (property.kind === "mapping" && property.source_property_id === propertyId) {
       references.push({kind: "mapping", ownerId: property.property_id});
+    }
+    if (property.kind === "cascade" && property.source_property_id === propertyId) {
+      references.push({kind: "cascade", ownerId: property.property_id});
     }
     if (property.kind === "composition") {
       property.segments.forEach((segment, segmentIndex) => {
@@ -627,6 +679,12 @@ function propertyStructureDiagnostics(document: DraftDocument): GatedDiagnostic[
         diagnostics.push({...base, code: "STANDARD_MAPPING_SOURCE_INVALID", gate: "structure"});
       }
     }
+    if (property.kind === "cascade") {
+      const source = propertyById(document, property.source_property_id);
+      if (source === undefined && property.source_property_id !== "") {
+        diagnostics.push({...base, code: "STANDARD_CASCADE_SOURCE_INVALID", gate: "structure"});
+      }
+    }
     if (property.kind === "composition") {
       const allowed = compositionFields(document, property.scope).filter(
         field => !SHEET_SYSTEM_FIELDS.includes(field as typeof SHEET_SYSTEM_FIELDS[number]),
@@ -699,6 +757,41 @@ function propertyPublishDiagnostics(document: DraftDocument): GatedDiagnostic[] 
         }
         if (mappingConfirmationRequired(property, source)) {
           diagnostics.push({...base, code: "STANDARD_MAPPING_CONFIRMATION_REQUIRED", severity: "warning", gate: "publish"});
+        }
+      }
+    }
+    if (property.kind === "cascade") {
+      const source = propertyById(document, property.source_property_id);
+      if (source === undefined) {
+        if (property.source_property_id === "") {
+          diagnostics.push({...base, code: "STANDARD_CASCADE_SOURCE_INVALID", gate: "publish"});
+        }
+      } else if (source.kind !== "enum" || source.scope !== property.scope || source.enum_items.length === 0) {
+        diagnostics.push({...base, code: "STANDARD_CASCADE_SOURCE_INVALID", gate: "publish"});
+      } else {
+        if (property.default_value !== "") {
+          diagnostics.push({...base, code: "STANDARD_CASCADE_OPTIONS_INVALID", gate: "publish"});
+        }
+        const expectedIds = source.enum_items.map(item => item.item_id);
+        const actualIds = property.cascade_options.map(row => row.source_item_id);
+        if (expectedIds.length !== actualIds.length || expectedIds.some((id, index) => id !== actualIds[index])) {
+          const mismatchIndex = expectedIds.findIndex((id, index) => id !== actualIds[index]);
+          diagnostics.push({
+            ...base,
+            code: "STANDARD_CASCADE_OPTIONS_INVALID",
+            itemId: expectedIds[mismatchIndex] ?? expectedIds[0] ?? actualIds[0],
+            gate: "publish",
+          });
+        }
+        for (const row of property.cascade_options) {
+          const normalized = row.values.map(value => value.trim().toLocaleLowerCase());
+          if (
+            row.values.length === 0
+            || row.values.some(value => value.trim() === "")
+            || new Set(normalized).size !== normalized.length
+          ) {
+            diagnostics.push({...base, code: "STANDARD_CASCADE_OPTIONS_INVALID", itemId: row.source_item_id, gate: "publish"});
+          }
         }
       }
     }
@@ -971,6 +1064,18 @@ export function blankOrdinaryProperty(
   return {...base, kind: "text"};
 }
 
+export function blankCascadeProperty(
+  document: DraftDocument,
+  scope: DraftPropertyScope = "sheetset",
+): DraftCascadeProperty {
+  return {
+    ...blankBase(document, scope),
+    kind: "cascade",
+    source_property_id: "",
+    cascade_options: [],
+  };
+}
+
 export function blankDerivedProperty(
   document: DraftDocument,
   kind: DerivedPropertyKind,
@@ -1026,12 +1131,13 @@ export function parsePropertyCsv(text: string, document: DraftDocument): DraftPr
 
 // -------------------------------------------------------------- 编辑分区
 
-/** 编辑分区标识（SPEC-DM-017 §2 的固定六分区顺序）。 */
-export type EditorSectionId = "basic" | "ordinary" | "derived" | "dwgNaming" | "assets" | "publish";
+/** 编辑分区标识（SPEC-DM-017 §2 加入级联分区后的固定顺序）。 */
+export type EditorSectionId = "basic" | "ordinary" | "cascade" | "derived" | "dwgNaming" | "assets" | "publish";
 
 export const EDITOR_SECTIONS: Array<{id: EditorSectionId; labelKey: string}> = [
   {id: "basic", labelKey: "standards.sections.basic"},
   {id: "ordinary", labelKey: "standards.sections.ordinary"},
+  {id: "cascade", labelKey: "standards.sections.cascade"},
   {id: "derived", labelKey: "standards.sections.derived"},
   {id: "dwgNaming", labelKey: "standards.sections.dwgNaming"},
   {id: "assets", labelKey: "standards.sections.assets"},

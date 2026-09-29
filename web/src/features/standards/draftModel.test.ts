@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {
   EDITOR_SECTIONS,
   blankStandardDocument,
+  cascadeOptionsFor,
   defaultDwgNamingSegments,
   draftKey,
   mappingTargetBuffer,
@@ -19,6 +20,8 @@ import {
   parsePropertyCsv,
   publishIssues,
   referencesTo,
+  parseCascadeValues,
+  selectableCascadeSources,
   renderDwgNamingPreview,
   toDraftDocument,
 } from "./draftModel";
@@ -123,8 +126,89 @@ describe("draft model", () => {
     expect(draft).not.toHaveProperty("release_notes");
     expect(draft.dwg_naming.segments).toHaveLength(5);
     expect(EDITOR_SECTIONS.map(section => section.id)).toEqual([
-      "basic", "ordinary", "derived", "dwgNaming", "assets", "publish",
+      "basic", "ordinary", "cascade", "derived", "dwgNaming", "assets", "publish",
     ]);
+  });
+
+  it("preserves cascade definitions, source versions, and stable enum row identities", () => {
+    const raw = newSchemaDocument();
+    raw.schema_version = 4;
+    raw.properties = [
+      ...(raw.properties as Array<Record<string, unknown>>),
+      {
+        property_id: "prop-subdivision",
+        name: "分区",
+        scope: "sheetset",
+        kind: "cascade",
+        source_property_id: "prop-major",
+        cascade_options: [
+          {source_item_id: "enum-gas", values: ["市政", "庭院"]},
+        ],
+      },
+    ];
+    const document = toDraftDocument(raw);
+    const cascade = document.properties.find(property => property.property_id === "prop-subdivision");
+    expect(document.schema_version).toBe(4);
+    expect(cascade?.kind).toBe("cascade");
+    expect(cascade?.kind === "cascade" && cascade.cascade_options).toEqual([
+      {source_item_id: "enum-gas", values: ["市政", "庭院"]},
+    ]);
+    expect(toDraftDocument({...raw, schema_version: 3}).schema_version).toBe(3);
+    expect(toDraftDocument({...raw, schema_version: undefined}).schema_version).toBe(3);
+  });
+
+  it("keeps cascade rows keyed by enum item id and resets rows when source is changed", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-subdivision",
+      name: "分区",
+      scope: "sheetset",
+      kind: "cascade",
+      source_property_id: "prop-major",
+      cascade_options: [{source_item_id: "enum-gas", values: ["市政"]}],
+    });
+    const cascade = document.properties.find(property => property.property_id === "prop-subdivision");
+    if (cascade?.kind !== "cascade") throw new Error("missing cascade fixture");
+    const renamedSource = {...document.properties[0]!, kind: "enum" as const, enum_items: [
+      {item_id: "enum-gas", value: "燃气专业"},
+      {item_id: "enum-water", value: "给水"},
+    ]};
+    expect(cascadeOptionsFor(cascade, renamedSource)).toEqual([
+      {source_item_id: "enum-gas", values: ["市政"]},
+      {source_item_id: "enum-water", values: []},
+    ]);
+    const replacementSource = {...renamedSource, property_id: "prop-other", enum_items: [
+      {item_id: "enum-gas", value: "另一个专业"},
+    ]};
+    expect(cascadeOptionsFor({...cascade, source_property_id: "prop-other", cascade_options: []}, replacementSource))
+      .toEqual([{source_item_id: "enum-gas", values: []}]);
+  });
+
+  it("offers only same-scope enum sources and parses both comma forms in the editor", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-sheet-enum", name: "图纸类别", scope: "sheet", kind: "enum",
+      enum_items: [{item_id: "enum-sheet", value: "总图"}],
+    });
+    const cascade = toDraftDocument({properties: [{
+      property_id: "prop-cascade", name: "分册", scope: "sheet", kind: "cascade",
+      source_property_id: "", cascade_options: [],
+    }]}).properties[0];
+    if (cascade?.kind !== "cascade") throw new Error("missing cascade fixture");
+    expect(selectableCascadeSources(document, cascade).map(property => property.property_id)).toEqual(["prop-sheet-enum"]);
+    expect(parseCascadeValues(" 土建, 给排水，电气 ")).toEqual(["土建", "给排水", "电气"]);
+    expect(parseCascadeValues("土建,")).toEqual(["土建", ""]);
+  });
+
+  it("reports a dangling cascade source once as a structural error", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-broken-cascade",
+      name: "分区",
+      scope: "sheetset",
+      kind: "cascade",
+      source_property_id: "prop-missing",
+      cascade_options: [],
+    });
+    expect(codes(draftDiagnostics(document))).toEqual(["STANDARD_CASCADE_SOURCE_INVALID"]);
+    expect(codes(publishIssues(document))).toEqual(["STANDARD_CASCADE_SOURCE_INVALID"]);
   });
 
   it("enumerates composition and dwg naming tokens with their segment index", () => {
@@ -188,6 +272,21 @@ describe("draft model", () => {
     expect(referencesTo(document, "prop-major")).toEqual([{kind: "mapping", ownerId: "prop-code"}]);
   });
 
+  it("blocks deleting an enum used as a cascade source and names the dependent property", () => {
+    const document = withProperty(draftDocument(), {
+      property_id: "prop-subdivision",
+      name: "分区",
+      scope: "sheetset",
+      kind: "cascade",
+      source_property_id: "prop-major",
+      cascade_options: [{source_item_id: "enum-gas", values: ["市政"]}],
+    });
+    expect(referencesTo(document, "prop-major")).toEqual([
+      {kind: "mapping", ownerId: "prop-code"},
+      {kind: "cascade", ownerId: "prop-subdivision"},
+    ]);
+  });
+
   it("allows two mappings to share one source without a duplicate-source error", () => {
     const document = withProperty(draftDocument(), {
       property_id: "prop-code-2",
@@ -208,7 +307,7 @@ describe("draft model", () => {
 
   it("creates a blank standard that satisfies the save gate and carries the default naming template", () => {
     const document = blankStandardDocument({standardId: "00000000-0000-4000-8000-000000000046", name: "新标准"});
-    expect(document.schema_version).toBe(3);
+    expect(document.schema_version).toBe(4);
     expect(document.published_at).toBeNull();
     expect(document.description).toBe("");
     expect(document).not.toHaveProperty("release_notes");

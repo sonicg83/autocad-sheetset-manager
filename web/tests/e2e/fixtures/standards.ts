@@ -176,6 +176,8 @@ export type StandardsFixtureOptions = {
   detailDocuments?: Record<string, Record<string, unknown>>;
   /** 资产复制端点返回的布局列表（模拟后端从 DWG 读到的布局；默认 Model+A1+A2）。 */
   assetCopyLayouts?: string[];
+  /** 保存接口返回的 Schema 版本，可验证编辑器采用服务端升级后的基准。 */
+  saveSchemaVersion?: number;
 };
 
 /** 最小合法标准文档（草稿）：普通属性（枚举）+ 映射 + 组合 + 全局 DWG 命名模板。 */
@@ -406,8 +408,11 @@ export async function installStandards(
         if (!state.drafts.has(draftId)) {
           return route.fulfill({status: 404, json: {code: "STANDARD_DRAFT_NOT_FOUND", message: draftId}});
         }
-        state.drafts.set(draftId, body.document);
-        return route.fulfill({json: {draft_id: draftId, document: body.document}});
+        const savedDocument = options.saveSchemaVersion === undefined
+          ? body.document
+          : {...body.document, schema_version: options.saveSchemaVersion};
+        state.drafts.set(draftId, savedDocument);
+        return route.fulfill({json: {draft_id: draftId, document: savedDocument}});
       }
       if (path === "/api/standards/import-previews" && method === "POST") {
         state.importAttempts += 1;

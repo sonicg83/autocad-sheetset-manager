@@ -42,6 +42,7 @@ export const TABLE_CONTRACTS = Object.freeze([
   htmlTable("src/components/standards/OrdinaryPropertyEditor.vue", "ordinary-properties", ".ordinary-table th,.ordinary-table td"),
   gridTable("src/components/standards/EnumValuesDialog.vue", "enum-values", ".enum-head", ".enum-row"),
   gridTable("src/components/standards/MappingPropertyDialog.vue", "mapping-values", ".mapping-head", ".mapping-row"),
+  gridTable("src/components/standards/CascadePropertyEditor.vue", "cascade-properties", ".cascade-head", ".cascade-row"),
   gridTable("src/components/standards/DerivedPropertyEditor.vue", "derived-properties", ".derived-head", ".derived-row"),
   gridTable("src/components/sheet-catalog/ColumnEditor.vue", "catalog-columns", ".columns-head", ".column-row"),
 ]);
@@ -50,6 +51,7 @@ export const TABLE_CONTRACTS = Object.freeze([
 export const GRID_TABLE_CONTRACTS = Object.freeze([
   gridTable("src/components/standards/EnumValuesDialog.vue", "enum-values", ".enum-head", ".enum-row"),
   gridTable("src/components/standards/MappingPropertyDialog.vue", "mapping-values", ".mapping-head", ".mapping-row"),
+  gridTable("src/components/standards/CascadePropertyEditor.vue", "cascade-properties", ".cascade-head", ".cascade-row"),
   gridTable("src/components/standards/DerivedPropertyEditor.vue", "derived-properties", ".derived-head", ".derived-row"),
   gridTable("src/components/sheet-catalog/ColumnEditor.vue", "catalog-columns", ".columns-head", ".column-row"),
 ]);

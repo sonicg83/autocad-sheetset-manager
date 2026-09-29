@@ -144,7 +144,7 @@ test("普通属性到映射、组合和 DWG 命名形成单向流程", async ({p
   await openDraftEditor(page);
 
   await expect(page.getByTestId("standard-section-nav").getByRole("button")).toHaveText([
-    "1基本信息", "2普通属性1", "3派生属性2", "4DWG 命名1", "5模板资产", "6发布",
+    "1基本信息", "2普通属性1", "3级联属性", "4派生属性2", "5DWG 命名1", "6模板资产", "7发布",
   ]);
 
   // 枚举改名：稳定 ID 不变，映射按 enum_item_id 保留目标并进入待确认
@@ -169,6 +169,110 @@ test("普通属性到映射、组合和 DWG 命名形成单向流程", async ({p
   await expect(page.getByTestId("token-preview-state")).toHaveText("示例");
   await expect(page.getByTestId("naming-extension-note")).toContainText(".dwg");
   await expect(page.getByTestId("naming-uniqueness-warning")).toHaveCount(0);
+});
+
+test("级联属性按作用域过滤上级枚举并从发布诊断跳回稳定枚举行", async ({page}) => {
+  const document = draftDocument();
+  document.schema_version = 4;
+  document.properties = [
+    ...(document.properties as Array<Record<string, unknown>>),
+    {
+      property_id: "prop-sheet-category",
+      name: "图纸类别",
+      scope: "sheet",
+      kind: "enum",
+      enum_items: [
+        {item_id: "enum-gas", value: "通用类别"},
+        {item_id: "enum-sheet", value: "图纸组"},
+      ],
+    },
+  ];
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": document}});
+  await openStandards(page);
+  await openDraftEditor(page);
+
+  await openEditorSection(page, "cascade");
+  await page.getByTestId("add-cascade").click();
+  await page.getByTestId("cascade-name").fill("分册");
+  await page.getByTestId("cascade-source").selectOption("prop-major");
+  await page.getByTestId("cascade-values-enum-gas").fill("市政燃气，庭院燃气");
+  await page.getByTestId("cascade-values-enum-jz").fill("住宅");
+  await page.getByTestId("cascade-values-enum-jg").fill("结构");
+  await page.getByTestId("confirm-cascade").click();
+
+  await page.getByTestId("edit-cascade-prop-new").click();
+  await page.getByTestId("cascade-scope").selectOption("sheet");
+  await expect(page.getByTestId("cascade-source")).toHaveValue("");
+  const sourceIds = await page.getByTestId("cascade-source").locator("option").evaluateAll(options =>
+    options.map(option => (option as HTMLOptionElement).value).filter(Boolean),
+  );
+  expect(sourceIds).toEqual(["prop-sheet-category"]);
+  await page.getByTestId("cascade-source").selectOption("prop-sheet-category");
+  await expect(page.getByTestId("cascade-values-enum-gas")).toHaveValue("");
+  await page.getByTestId("cascade-values-enum-gas").fill("总图");
+  await page.getByTestId("cascade-values-enum-sheet").fill("全套");
+  await page.getByTestId("confirm-cascade").click();
+
+  // 上级枚举项改名保留候选值；新项出现空行，诊断携带稳定 item ID。
+  await openEditorSection(page, "ordinary");
+  await page.getByTestId("edit-enum-prop-sheet-category").click();
+  await page.getByTestId("enum-value-enum-gas").fill("总图纸");
+  await page.getByTestId("save-enum").click();
+  await page.getByTestId("edit-enum-prop-sheet-category").click();
+  await page.getByTestId("add-enum").click();
+  await page.getByTestId("enum-value-enum-new").fill("专题");
+  await page.getByTestId("save-enum").click();
+
+  await openEditorSection(page, "cascade");
+  await expect(page.getByTestId("cascade-issue-prop-new")).toBeVisible();
+  await page.getByTestId("edit-cascade-prop-new").click();
+  await expect(page.getByTestId("cascade-source-value-enum-gas")).toHaveText("总图纸");
+  await expect(page.getByTestId("cascade-values-enum-gas")).toHaveValue("总图");
+  await expect(page.getByTestId("cascade-values-enum-new")).toHaveValue("");
+  await page.getByTestId("cancel-cascade").click();
+
+  // 源属性被级联属性引用时，普通属性区阻止删除并显示引用方名称。
+  await openEditorSection(page, "ordinary");
+  await page.getByTestId("ordinary-remove-prop-sheet-category").click();
+  await expect(page.getByTestId("ordinary-delete-blocked")).toContainText("分册");
+
+  await page.getByRole("button", {name: "发布检查"}).click();
+  await expect(page.getByTestId("publish-review")).toBeVisible();
+  await page.getByTestId("publish-issue-0").click();
+  await expect(page.getByTestId("cascade-dialog")).toBeVisible();
+  await expect(page.getByTestId("cascade-values-enum-new")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("cascade-dialog")).toHaveCount(0);
+});
+
+test("保存 v3 草稿后采用服务端 v4 基准，窄视口暗色主题可用键盘操作级联对话框", async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await installLocale(page, "dark", "zh-CN");
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+    saveSchemaVersion: 4,
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+
+  await page.getByLabel("标准名称").fill("v4 草稿");
+  await page.getByRole("button", {name: "保存草稿"}).click();
+  await expect(editorSaveState(page)).toHaveText("已保存");
+  expect(state.drafts.get("draft-1")?.schema_version).toBe(4);
+  await expect(page.getByRole("button", {name: "保存草稿"})).toHaveAttribute("aria-disabled", "true");
+  expect(state.saveBodies).toHaveLength(1);
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await openEditorSection(page, "cascade");
+  await page.getByTestId("add-cascade").click();
+  const dialog = page.getByTestId("cascade-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId("cascade-name")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("cascade-scope")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expectNoPageHScroll(page, "390x844 暗色级联编辑器");
 });
 
 test("草稿编辑器替换标准库主从分栏并在返回后恢复选择", async ({page}) => {

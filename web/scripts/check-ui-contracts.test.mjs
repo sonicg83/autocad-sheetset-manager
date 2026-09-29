@@ -1411,14 +1411,14 @@ th{padding:var(--space-1);vertical-align:middle}</style>
 
 describe("grid 表格几何与逐表守卫", () => {
   test("登记清单覆盖 18 张真实表与 4 张 grid 表", () => {
-    assert.equal(TABLE_CONTRACTS.length, 22);
-    assert.equal(GRID_TABLE_CONTRACTS.length, 4);
-    assert.equal(new Set(TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 22);
-    assert.equal(new Set(GRID_TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 4);
+    assert.equal(TABLE_CONTRACTS.length, 23);
+    assert.equal(GRID_TABLE_CONTRACTS.length, 5);
+    assert.equal(new Set(TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 23);
+    assert.equal(new Set(GRID_TABLE_CONTRACTS.map(item => `${item.file}|${item.marker}`)).size, 5);
     assert.deepEqual(
-      TABLE_CONTRACTS.filter(item => ["enum-values", "mapping-values", "derived-properties", "catalog-columns"].includes(item.marker))
+      TABLE_CONTRACTS.filter(item => ["enum-values", "mapping-values", "cascade-properties", "derived-properties", "catalog-columns"].includes(item.marker))
         .map(item => item.marker),
-      ["enum-values", "mapping-values", "derived-properties", "catalog-columns"],
+      ["enum-values", "mapping-values", "cascade-properties", "derived-properties", "catalog-columns"],
     );
   });
 

@@ -18,6 +18,7 @@ import UiInput from "../ui/UiInput.vue";
 import UnsavedInputDialog from "../ui/UnsavedInputDialog.vue";
 import StandardSectionNav from "./StandardSectionNav.vue";
 import OrdinaryPropertyEditor from "./OrdinaryPropertyEditor.vue";
+import CascadePropertyEditor from "./CascadePropertyEditor.vue";
 import DerivedPropertyEditor from "./DerivedPropertyEditor.vue";
 import DwgNamingEditor from "./DwgNamingEditor.vue";
 import TemplateAssetsEditor from "./TemplateAssetsEditor.vue";
@@ -52,6 +53,7 @@ type GuardChoice = "save" | "discard" | "stay";
 const MODAL_CODES = new Set([
   "STANDARD_MAPPING_TARGET_EMPTY",
   "STANDARD_MAPPING_CONFIRMATION_REQUIRED",
+  "STANDARD_CASCADE_OPTIONS_INVALID",
 ]);
 
 const props = defineProps<{
@@ -122,6 +124,7 @@ const sectionCounts = computed<Record<string, number>>(() => ({
   ordinary: buffer.value.properties.filter(
     property => property.kind === "text" || property.kind === "enum",
   ).length,
+  cascade: buffer.value.properties.filter(property => property.kind === "cascade").length,
   derived: buffer.value.properties.filter(isDerivedProperty).length,
   dwgNaming: buffer.value.dwg_naming.segments.length > 0 ? 1 : 0,
   assets: buffer.value.assets.length,
@@ -180,6 +183,7 @@ function sectionOfDiagnostic(item: DraftDiagnostic): EditorSectionId {
   const property = buffer.value.properties.find(
     candidate => candidate.property_id === item.propertyId,
   );
+  if (property?.kind === "cascade") return "cascade";
   return property !== undefined && isDerivedProperty(property) ? "derived" : "ordinary";
 }
 
@@ -456,6 +460,13 @@ defineExpose({guard, isDirty: () => dirty.value});
         </section>
         <OrdinaryPropertyEditor
           v-else-if="active === 'ordinary'"
+          :document="buffer"
+          :diagnostics="reviewIssues"
+          :focus-request="focusRequest"
+          @delete-blocked="onDeleteBlocked"
+        />
+        <CascadePropertyEditor
+          v-else-if="active === 'cascade'"
           :document="buffer"
           :diagnostics="reviewIssues"
           :focus-request="focusRequest"

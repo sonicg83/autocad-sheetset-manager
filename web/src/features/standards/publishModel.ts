@@ -1,6 +1,6 @@
 // 发布检查模型（PLAN-DM-038 Task 5 / SPEC-DM-017 §7–§8）：纯函数门禁，无 Vue 与网络依赖。
 // 职责边界：
-// - 把草稿发布诊断（`publishIssues`）映射到六个编辑分区与可聚焦目标；
+// - 把草稿发布诊断（`publishIssues`）映射到七个编辑分区与可聚焦目标；
 // - 把后端资产检查结果与前端可推导的启用图幅缺失、未引用资产警告归一为发布问题；
 // - 判定 `canPublish`：错误与「检查本身失败」都阻断，warning 不阻断。
 // 后端仍是发布门禁的权威：这里只做发布前的就地提示，同一问题在后端返回时使用同一稳定码。
@@ -213,6 +213,7 @@ function sectionOfDiagnostic(document: DraftDocument, diagnostic: DraftDiagnosti
       return "basic";
     default: {
       const property = propertyById(document, diagnostic.propertyId ?? "");
+      if (property?.kind === "cascade") return "cascade";
       return property !== undefined && isDerivedProperty(property) ? "derived" : "ordinary";
     }
   }
@@ -327,7 +328,7 @@ export function buildPublishGate(report: PublishReport): PublishGate {
   };
 }
 
-/** 检查域顺序（SPEC-DM-017 §2 的六分区）：左侧计数与右侧分组的共同顺序。 */
+/** 检查域顺序（SPEC-DM-017 §2 加入级联分区后的顺序）：左侧计数与右侧分组共用。 */
 export const PUBLISH_SECTIONS: EditorSectionId[] = [
-  "basic", "ordinary", "derived", "dwgNaming", "assets", "publish",
+  "basic", "ordinary", "cascade", "derived", "dwgNaming", "assets", "publish",
 ];

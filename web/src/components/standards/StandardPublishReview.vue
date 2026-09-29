@@ -36,6 +36,7 @@ const emit = defineEmits<{
 const sectionLabelKeys: Record<EditorSectionId, string> = {
   basic: "standards.sections.basic",
   ordinary: "standards.sections.ordinary",
+  cascade: "standards.sections.cascade",
   derived: "standards.sections.derived",
   dwgNaming: "standards.sections.dwgNaming",
   assets: "standards.sections.assets",
@@ -73,12 +74,18 @@ function locationOf(issue: PublishIssue): string {
     const property = props.document.properties.find(item => item.property_id === issue.target.propertyId);
     if (property === undefined) return "";
     if (issue.target.itemId === undefined) return property.name || property.property_id;
-    const source = props.document.properties.find(
-      item => item.property_id === (property.kind === "mapping" ? property.source_property_id : ""),
-    );
+    const sourcePropertyId = property.kind === "mapping" || property.kind === "cascade"
+      ? property.source_property_id
+      : "";
+    const source = props.document.properties.find(item => item.property_id === sourcePropertyId);
     const item = source !== undefined && source.kind === "enum"
       ? source.enum_items.find(candidate => candidate.item_id === issue.target.itemId)
       : undefined;
+    if (property.kind === "cascade") {
+      return item === undefined
+        ? property.name || property.property_id
+        : `${property.name || property.property_id} · ${item.value}`;
+    }
     return item === undefined
       ? property.name || property.property_id
       : `${property.name || property.property_id} · ${item.value}`;

@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest";
 import {
   PAPER_LAYOUT_MISSING_CODE,
   PAPER_LAYOUTS_EMPTY_CODE,
+  PUBLISH_SECTIONS,
   assetInspectionSnapshot,
   assetReferences,
   buildPublishGate,
@@ -185,6 +186,39 @@ describe("buildPublishGate", () => {
       propertyId: "prop-code",
       propertyName: "专业代码",
       itemId: "enum-a3",
+    });
+  });
+
+  it("routes cascade row diagnostics to the cascade section and stable parent item", () => {
+    const document = documentWith([], {
+      dwg_naming: {segments: [{system_field: "subset.scope"}, {system_field: "subset.name"}]},
+      properties: [
+        {
+          property_id: "prop-major",
+          name: "专业",
+          scope: "sheetset",
+          kind: "enum",
+          enum_items: [{item_id: "enum-gas", value: "燃气"}, {item_id: "enum-water", value: "给水"}],
+        },
+        {
+          property_id: "prop-subdivision",
+          name: "分区",
+          scope: "sheetset",
+          kind: "cascade",
+          source_property_id: "prop-major",
+          cascade_options: [{source_item_id: "enum-gas", values: ["市政"]}],
+        },
+      ],
+    });
+    const gate = buildPublishGate({document, assets: []});
+    expect(PUBLISH_SECTIONS).toEqual(["basic", "ordinary", "cascade", "derived", "dwgNaming", "assets", "publish"]);
+    expect(gate.blockingErrors.map(issue => [issue.code, issue.target.section, issue.target.itemId])).toEqual([
+      ["STANDARD_CASCADE_OPTIONS_INVALID", "cascade", "enum-water"],
+    ]);
+    expect(gate.blockingErrors[0]?.params).toEqual({
+      propertyId: "prop-subdivision",
+      propertyName: "分区",
+      itemId: "enum-water",
     });
   });
 
