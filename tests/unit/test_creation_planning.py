@@ -21,6 +21,7 @@ from dst_manager.domain.creation import (
     SHEETSET_SCOPE,
     CreationDraft,
     CreationGroupInput,
+    ordinary_properties,
     ordinary_property_defaults,
 )
 from dst_manager.domain.creation_planning import create_creation_plan
@@ -68,6 +69,51 @@ def _properties(document: dict[str, object]) -> list[dict[str, object]]:
 #: 夹具标准：普通 sheetset（文本/枚举）、派生 sheetset（映射）、普通 sheet（文本/枚举/必填）、
 #: 派生 sheet（组合）、标准级 DWG 命名模板与两个资产声明。
 STANDARD = parse_published_standard_document(_plan_document())
+
+
+def cascade_standard() -> DrawingStandard:
+    document = _plan_document()
+    document["schema_version"] = 4
+    properties = _properties(document)
+    properties.extend(
+        [
+            {
+                "property_id": "prop-district",
+                "name": "片区",
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "required": True,
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一"]},
+                    {"source_item_id": "enum-oil", "values": ["分册一", "分册二"]},
+                ],
+            },
+            {
+                "property_id": "prop-volume",
+                "name": "分册",
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-part",
+                "required": True,
+                "cascade_options": [
+                    {"source_item_id": "enum-part-a", "values": ["分册一"]},
+                    {"source_item_id": "enum-part-b", "values": ["分册二"]},
+                ],
+            },
+        ]
+    )
+    next(prop for prop in properties if prop["property_id"] == "prop-part")[
+        "required"
+    ] = True
+    label = next(prop for prop in properties if prop["property_id"] == "prop-label")
+    label["segments"].insert(0, {"property_id": "prop-volume"})
+    naming = document["dwg_naming"]
+    naming["segments"].insert(0, {"property_id": "prop-district"})
+    return parse_published_standard_document(document)
+
+
+CASCADE_STANDARD = cascade_standard()
 
 
 def standard_with_digits(digits: int) -> DrawingStandard:
@@ -173,6 +219,144 @@ def diagnostic_codes(plan) -> list[str]:
         if diagnostic.code not in seen:
             seen.append(diagnostic.code)
     return seen
+
+
+def _cascade_sheet_values(parent: str, child: str) -> dict[str, str]:
+    values = ordinary_property_defaults(CASCADE_STANDARD, SHEET_SCOPE)
+    values.update(
+        {
+            "prop-part": parent,
+            "prop-volume": child,
+            REQUIRED_SHEET_PROPERTY: REQUIRED_SHEET_VALUE,
+        }
+    )
+    return values
+
+
+def _cascade_draft(
+    groups: list[CreationGroupInput], *, parent: str = "燃气", child: str = "分册一"
+) -> CreationDraft:
+    values = ordinary_property_defaults(CASCADE_STANDARD, SHEETSET_SCOPE)
+    values.update({"prop-major": parent, "prop-district": child})
+    return _draft(groups, sheetset_values=values)
+
+
+def test_cascade_properties_are_inputs_but_not_ordinary_properties() -> None:
+    from dst_manager.domain import creation
+
+    for scope, cascade_id in (
+        (SHEETSET_SCOPE, "prop-district"),
+        (SHEET_SCOPE, "prop-volume"),
+    ):
+        assert cascade_id not in {
+            prop.property_id for prop in ordinary_properties(CASCADE_STANDARD, scope)
+        }
+        assert cascade_id in {
+            prop.property_id for prop in creation.input_properties(CASCADE_STANDARD, scope)
+        }
+        assert creation.input_property_defaults(CASCADE_STANDARD, scope)[cascade_id] == ""
+
+
+def test_cascade_values_flow_to_sheetset_sheets_composition_and_naming() -> None:
+    groups = [
+        replace(
+            _group("group-1", "平面图", 1),
+            sheet_values=_cascade_sheet_values("A 段", "分册一"),
+        ),
+        replace(
+            _group("group-2", "剖面图", 1, created_order=2),
+            sheet_values=_cascade_sheet_values("B 段", "分册二"),
+        ),
+    ]
+
+    plan = create_creation_plan(
+        _cascade_draft(groups), CASCADE_STANDARD, SuffixOptions(False, 1, ())
+    )
+
+    assert plan.diagnostics == ()
+    assert plan.sheetset_values["prop-district"] == "分册一"
+    assert plan.groups[0].sheets[0].values["prop-volume"] == "分册一"
+    assert plan.groups[1].sheets[0].values["prop-volume"] == "分册二"
+    assert "分册一" in plan.groups[0].sheets[0].values["prop-label"]
+    assert "分册一" in plan.groups[0].dwg_name
+
+
+def test_invalid_sheet_cascade_reports_the_group_and_blocks_the_plan() -> None:
+    groups = [
+        _group("group-1", "平面图", 1),
+        replace(
+            _group("group-2", "剖面图", 1, created_order=2),
+            sheet_values=_cascade_sheet_values("B 段", "分册一"),
+        ),
+    ]
+    groups[0] = replace(
+        groups[0], sheet_values=_cascade_sheet_values("A 段", "分册一")
+    )
+
+    plan = create_creation_plan(
+        _cascade_draft(groups), CASCADE_STANDARD, SuffixOptions(False, 1, ())
+    )
+
+    invalid = next(
+        item
+        for item in plan.diagnostics
+        if item.code == "STANDARD_CASCADE_VALUE_INVALID"
+    )
+    assert invalid.group_id == "group-2"
+    assert invalid.property_id == "prop-volume"
+    assert plan.has_errors
+
+
+def test_empty_parent_nonempty_cascade_and_missing_cascade_use_input_diagnostics() -> None:
+    group = replace(
+        _group("group-1", "平面图", 1),
+        sheet_values=_cascade_sheet_values("", "分册一"),
+    )
+    plan = create_creation_plan(
+        _cascade_draft([group]), CASCADE_STANDARD, SuffixOptions(False, 1, ())
+    )
+    assert any(
+        item.code == "STANDARD_CASCADE_VALUE_INVALID"
+        and item.property_id == "prop-volume"
+        for item in plan.diagnostics
+    )
+    assert any(
+        item.code == "CREATION_REQUIRED_VALUE_MISSING"
+        and item.property_id == "prop-part"
+        for item in plan.diagnostics
+    )
+
+    illegal_parent = _cascade_sheet_values("不存在的分部", "分册一")
+    invalid_parent_plan = create_creation_plan(
+        _cascade_draft([replace(group, sheet_values=illegal_parent)]),
+        CASCADE_STANDARD,
+        SuffixOptions(False, 1, ()),
+    )
+    assert any(
+        item.code == "STANDARD_ENUM_VALUE_INVALID"
+        and item.property_id == "prop-part"
+        for item in invalid_parent_plan.diagnostics
+    )
+    assert not any(
+        item.code == "STANDARD_CASCADE_VALUE_INVALID"
+        and item.property_id == "prop-volume"
+        for item in invalid_parent_plan.diagnostics
+    )
+
+    missing_values = _cascade_sheet_values("A 段", "分册一")
+    del missing_values["prop-volume"]
+    missing = create_creation_plan(
+        _cascade_draft(
+            [replace(group, sheet_values=missing_values)]
+        ),
+        CASCADE_STANDARD,
+        SuffixOptions(False, 1, ()),
+    )
+    assert any(
+        item.code == "CREATION_GROUP_VALUE_MISSING"
+        and item.property_id == "prop-volume"
+        for item in missing.diagnostics
+    )
 
 
 @pytest.fixture

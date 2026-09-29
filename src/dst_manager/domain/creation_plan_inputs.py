@@ -72,7 +72,7 @@ def input_diagnostics(
             diagnostics.append(
                 CreationPlanDiagnostic(
                     code=missing_code,
-                    message=f"缺少普通属性 {name!r} 的值（漏传键与显式空串不可混同）",
+                    message=f"缺少输入属性 {name!r} 的值（漏传键与显式空串不可混同）",
                     group_id=group_id,
                     property_id=prop.property_id,
                 )

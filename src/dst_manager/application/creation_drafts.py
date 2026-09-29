@@ -15,7 +15,7 @@ from dst_manager.domain.creation import (
     SHEET_SCOPE,
     SHEETSET_SCOPE,
     CreationDraft,
-    ordinary_property_defaults,
+    input_property_defaults,
     unknown_value_property_ids,
 )
 from dst_manager.domain.standards import DrawingStandard
@@ -56,7 +56,7 @@ class CreationDraftOperations:
     def create_creation_draft(self, standard_id: str) -> CreationDraft:
         """固定一个已发布标准并建立修订 1 的空草稿。
 
-        初建时对每个普通 sheetset 属性应用一次标准默认值；``target_path`` 与
+        初建时对普通 sheetset 属性应用一次标准默认值、级联属性置空；``target_path`` 与
         图纸组留空，由后续保存逐步补全。
         """
         with self.standard_store.lifecycle_lock():
@@ -64,7 +64,7 @@ class CreationDraftOperations:
             try:
                 return self.creation_drafts.create(
                     standard.standard_id,
-                    ordinary_property_defaults(standard, SHEETSET_SCOPE),
+                    input_property_defaults(standard, SHEETSET_SCOPE),
                 )
             except CreationDraftStoreError as exc:
                 raise _store_error(exc) from exc
@@ -80,7 +80,7 @@ class CreationDraftOperations:
     ) -> CreationDraft:
         """按乐观修订保存草稿；任何输入变更都递增修订并使旧预览失效。
 
-        草稿只保存可输入普通属性；派生字段、跨作用域字段、未知字段、重复组
+        草稿只保存普通与级联输入；派生字段、跨作用域字段、未知字段、重复组
         身份、改写固定标准或草稿 ID 的请求一律以 `CREATION_DRAFT_INVALID` 拒绝，
         且不改变磁盘内容与修订号。
         """
@@ -122,17 +122,17 @@ class CreationDraftOperations:
 
     @staticmethod
     def _reject_non_input_values(standard: DrawingStandard, value: CreationDraft) -> None:
-        """拒绝非「可输入普通属性」的值键：派生结果与逐张输入不得进入草稿。"""
+        """拒绝非可输入属性的值键：派生结果与逐张输入不得进入草稿。"""
         unknown = unknown_value_property_ids(standard, SHEETSET_SCOPE, value.sheetset_values)
         if unknown:
             raise _creation_error(
                 "CREATION_DRAFT_INVALID",
-                f"图纸集输入包含非可输入普通属性 {list(unknown)}",
+                f"图纸集输入包含非可输入属性 {list(unknown)}",
             )
         for group in value.groups:
             unknown = unknown_value_property_ids(standard, SHEET_SCOPE, group.sheet_values)
             if unknown:
                 raise _creation_error(
                     "CREATION_DRAFT_INVALID",
-                    f"图纸组 {group.group_id!r} 输入包含非可输入普通属性 {list(unknown)}",
+                    f"图纸组 {group.group_id!r} 输入包含非可输入属性 {list(unknown)}",
                 )

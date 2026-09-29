@@ -59,6 +59,7 @@ from dst_manager.domain.creation_plan_models import (
 from dst_manager.domain.creation_planning import create_creation_plan
 from dst_manager.domain.keywords import normalize_keywords
 from dst_manager.domain.models import SuffixOptions
+from dst_manager.domain.standard_cascade import validate_cascade_values
 from dst_manager.domain.standard_models import DrawingStandard, NumberingPolicy
 from dst_manager.domain.standard_rules import (
     compile_standard_properties,
@@ -253,7 +254,7 @@ class CreationOperations:
         """按草稿固定标准实时求值图纸集作用域派生属性（只读，不保存草稿）。
 
         求值语义与权威预览一致（``standard_rules.evaluate_standard_properties``）：
-        值键必须是可输入普通属性（未知键以 ``CREATION_DRAFT_INVALID`` 拒绝），
+        值键必须是可输入属性（未知键以 ``CREATION_DRAFT_INVALID`` 拒绝），
         漏键按「上游无法计算」阻断。只返回 ``sheetset`` 作用域的派生值与诊断；
         ``sheet`` 作用域派生依赖逐张编号与标题，只能在权威预览中求值。
         """
@@ -265,11 +266,14 @@ class CreationOperations:
         if unknown:
             raise _creation_error(
                 "CREATION_DRAFT_INVALID",
-                f"图纸集输入包含非可输入普通属性 {list(unknown)}",
+                f"图纸集输入包含非可输入属性 {list(unknown)}",
             )
+        cascade_diagnostics = validate_cascade_values(
+            standard, SHEETSET_SCOPE, sheetset_values
+        )
         compiled = compile_standard_properties(standard)
         result = evaluate_standard_properties(compiled, dict(sheetset_values), {})
-        values = {
+        values = {} if cascade_diagnostics else {
             prop.property_id: result.values[prop.property_id]
             for prop in standard.properties
             if prop.scope == SHEETSET_SCOPE
@@ -284,7 +288,7 @@ class CreationOperations:
                 "group_id": "",
                 "property_id": item.property_id or "",
             }
-            for item in result.diagnostics
+            for item in (*cascade_diagnostics, *result.diagnostics)
             if _diagnostic_in_scope(standard, item.property_id, SHEETSET_SCOPE)
         ]
         return {"draft_id": draft.id, "values": values, "diagnostics": diagnostics}

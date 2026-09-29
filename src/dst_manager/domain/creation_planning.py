@@ -18,7 +18,7 @@
 
 关键语义：
 
-- ``draft.sheetset_values`` 与每组 ``sheet_values`` 必须是完整 ``property_id``
+- ``draft.sheetset_values`` 与每组 ``sheet_values`` 必须是完整的可输入 ``property_id``
   字典：缺键报创建输入诊断，绝不在求值时临时补空串，也绝不从旧派生值回填；
 - 漏传普通属性键在派生求值中同样报 ``STANDARD_DERIVED_UPSTREAM_INVALID`` 并阻断
   下游，显式空串仍按「可选源为空」处理（求值语义见 ``standard_rules``）；
@@ -38,7 +38,7 @@ from dst_manager.domain.creation import (
     SHEETSET_SCOPE,
     CreationDraft,
     CreationGroupInput,
-    ordinary_properties,
+    input_properties,
 )
 from dst_manager.domain.creation_plan_inputs import (
     duplicate_title_diagnostics,
@@ -68,6 +68,7 @@ from dst_manager.domain.sheet_numbering import (
     format_number_range,
     is_unnumbered_title,
 )
+from dst_manager.domain.standard_cascade import validate_cascade_values
 from dst_manager.domain.standard_models import DrawingStandard
 from dst_manager.domain.standard_naming import (
     SubsetNamingContext,
@@ -99,16 +100,19 @@ def create_creation_plan(
 ) -> CreationPlan:
     """把草稿与标准编译成创建计划；不读文件系统、不启动 CAD、不查标准包文件。"""
     compiled = compile_standard_properties(standard)
-    sheetset_ordinary = ordinary_properties(standard, SHEETSET_SCOPE)
-    sheet_ordinary = ordinary_properties(standard, SHEET_SCOPE)
+    sheetset_inputs = input_properties(standard, SHEETSET_SCOPE)
+    sheet_inputs = input_properties(standard, SHEET_SCOPE)
     path_diagnostics = target_path_diagnostics(draft.target_path)
     diagnostics: list[CreationPlanDiagnostic] = [
         *path_diagnostics,
         *input_diagnostics(
-            sheetset_ordinary,
+            sheetset_inputs,
             draft.sheetset_values,
             "",
             "CREATION_SHEETSET_VALUE_MISSING",
+        ),
+        *_cascade_value_diagnostics(
+            standard, SHEETSET_SCOPE, draft.sheetset_values, ""
         ),
     ]
 
@@ -124,10 +128,15 @@ def create_creation_plan(
         diagnostics.extend(group_diagnostics(group, titles[index]))
         diagnostics.extend(
             input_diagnostics(
-                sheet_ordinary,
+                sheet_inputs,
                 group.sheet_values,
                 group.group_id,
                 "CREATION_GROUP_VALUE_MISSING",
+            )
+        )
+        diagnostics.extend(
+            _cascade_value_diagnostics(
+                standard, SHEET_SCOPE, group.sheet_values, group.group_id
             )
         )
         diagnostics.extend(base_diagnostics)
@@ -422,6 +431,25 @@ def _evaluate(
             )
         )
     return result.values, diagnostics
+
+
+def _cascade_value_diagnostics(
+    standard: DrawingStandard,
+    scope: str,
+    values: Mapping[str, str],
+    group_id: str,
+) -> list[CreationPlanDiagnostic]:
+    """把领域级联诊断转换为创建计划诊断，并保留组与属性定位。"""
+    return [
+        CreationPlanDiagnostic(
+            code=item.code,
+            message=item.message,
+            group_id=group_id,
+            property_id=item.property_id or "",
+            severity=item.severity,
+        )
+        for item in validate_cascade_values(standard, scope, values)
+    ]
 
 
 def _scope_values(

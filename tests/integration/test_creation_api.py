@@ -520,6 +520,134 @@ def test_execute_rejects_stale_preview(
     assert response.json()["code"] == "CREATION_PREVIEW_STALE"
 
 
+def test_cascade_inputs_preview_per_group_and_stale_execution_are_blocked(
+    tmp_path: Path,
+) -> None:
+    document = copy.deepcopy(STANDARD_DOCUMENT)
+    document["schema_version"] = 4
+    properties = document["properties"]
+    properties.extend(
+        [
+            {
+                "property_id": "prop-district",
+                "name": "片区",
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一"]},
+                    {"source_item_id": "enum-oil", "values": ["分册一", "分册二"]},
+                ],
+            },
+            {
+                "property_id": "prop-volume",
+                "name": "分册",
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-part",
+                "cascade_options": [
+                    {"source_item_id": "enum-part-a", "values": ["分册一"]},
+                    {"source_item_id": "enum-part-b", "values": ["分册二"]},
+                ],
+            },
+        ]
+    )
+    next(prop for prop in properties if prop["property_id"] == "prop-label")[
+        "segments"
+    ].insert(0, {"property_id": "prop-volume"})
+    document["dwg_naming"]["segments"].insert(0, {"property_id": "prop-district"})
+
+    client = make_client(tmp_path)
+    root = data_dir(tmp_path)
+    publish_standard(client, root, document=document)
+    draft = create_creation_draft(client)
+    assert draft["sheetset_values"]["prop-district"] == ""
+
+    target_path = str(tmp_path / "projects" / "cascade-project")
+    sheetset_values = {**SHEETSET_VALUES, "prop-district": "分册一"}
+    groups = [
+        group_input(
+            group_id="group-a",
+            title="平面图",
+            sheet_values={**SHEET_VALUES, "prop-volume": "分册一"},
+        ),
+        group_input(
+            group_id="group-b",
+            created_order=2,
+            title="剖面图",
+            sheet_values={
+                **SHEET_VALUES,
+                "prop-part": "B 段",
+                "prop-volume": "分册二",
+            },
+        ),
+    ]
+    saved = save_creation_draft(
+        client,
+        draft["id"],
+        expected_revision=draft["revision"],
+        target_path=target_path,
+        groups=groups,
+        sheetset_values=sheetset_values,
+    )
+    assert saved["sheetset_values"]["prop-district"] == "分册一"
+    assert saved["groups"][0]["sheet_values"]["prop-volume"] == "分册一"
+
+    live = client.post(
+        f"/api/creation-drafts/{draft['id']}/derived-values",
+        json={
+            "sheetset_values": {
+                **saved["sheetset_values"],
+                "prop-district": "不属于当前上级的值",
+            }
+        },
+    )
+    assert live.status_code == 200, live.text
+    assert live.json()["values"] == {}
+    assert any(
+        item["code"] == "STANDARD_CASCADE_VALUE_INVALID"
+        and item["property_id"] == "prop-district"
+        for item in live.json()["diagnostics"]
+    )
+
+    valid_preview = preview_draft(client, draft["id"])
+    assert valid_preview.status_code == 200, valid_preview.text
+    valid_body = valid_preview.json()
+    assert valid_body["executable"] is True
+    assert valid_body["sheetset_values"]["prop-district"] == "分册一"
+    assert valid_body["groups"][0]["sheets"][0]["values"]["prop-volume"] == "分册一"
+    assert "分册一" in valid_body["groups"][0]["sheets"][0]["values"]["prop-label"]
+
+    invalid_groups = copy.deepcopy(saved["groups"])
+    invalid_groups[1]["sheet_values"]["prop-volume"] = "分册一"
+    save_creation_draft(
+        client,
+        draft["id"],
+        expected_revision=saved["revision"],
+        target_path=target_path,
+        groups=invalid_groups,
+        sheetset_values=saved["sheetset_values"],
+    )
+    invalid_preview = preview_draft(client, draft["id"])
+    assert invalid_preview.status_code == 200, invalid_preview.text
+    assert invalid_preview.json()["executable"] is False
+    cascade_diagnostic = next(
+        item
+        for item in invalid_preview.json()["diagnostics"]
+        if item["code"] == "STANDARD_CASCADE_VALUE_INVALID"
+    )
+    assert cascade_diagnostic["group_id"] == "group-b"
+    assert cascade_diagnostic["property_id"] == "prop-volume"
+
+    stale = client.post(
+        f"/api/creation-drafts/{draft['id']}/execute",
+        json={"preview_digest": valid_body["preview_digest"]},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "CREATION_PREVIEW_STALE"
+    assert not Path(target_path).exists()
+
+
 def test_execute_rejects_non_executable_draft(
     client: TestClient, root: Path, tmp_path: Path
 ) -> None:

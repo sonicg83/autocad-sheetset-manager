@@ -21,7 +21,11 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from dst_manager.domain.standard_models import DrawingStandard, StandardProperty
+from dst_manager.domain.standard_models import (
+    ORDINARY_PROPERTY_KINDS,
+    DrawingStandard,
+    StandardProperty,
+)
 from dst_manager.domain.standard_naming import (
     MAX_FILENAME_LENGTH,
     segment_safety_violations,
@@ -73,7 +77,7 @@ class CreationGroupInput:
     base_asset_id: str
     layout_asset_id: str
     paper_layout: str
-    #: 只含可输入普通 sheet 属性：``property_id → str``；显式空串与遗漏键不同义。
+    #: 只含本作用域可输入属性：``property_id → str``；显式空串与遗漏键不同义。
     sheet_values: dict[str, str] = field(default_factory=dict)
 
 
@@ -90,7 +94,7 @@ class CreationDraft:
     revision: int
     step: str
     target_path: str
-    #: 只含可输入普通 sheetset 属性：``property_id → str``。
+    #: 只含可输入 sheetset 属性：``property_id → str``。
     sheetset_values: dict[str, str] = field(default_factory=dict)
     #: 组序由数组顺序决定；``group_id`` 只用于稳定定位。
     groups: tuple[CreationGroupInput, ...] = ()
@@ -116,7 +120,7 @@ class CreationDiagnostic:
 class CreationImportValue:
     """一次 XLSX 导入解析出的创建输入。
 
-    只含完整最终路径、可输入普通 sheetset 值与按行序排列的图纸组；草稿身份、
+    只含完整最终路径、可输入 sheetset 值与按行序排列的图纸组；草稿身份、
     修订与阶段由应用层在一次性保存时补，不在这里出现。
     """
 
@@ -135,32 +139,49 @@ class CreationImportResult:
 
 
 def ordinary_properties(standard: DrawingStandard, scope: str) -> tuple[StandardProperty, ...]:
-    """某作用域内全部可输入普通属性（按标准文档顺序）。
+    """某作用域内的普通文本与枚举属性（按标准文档顺序）。
 
-    派生属性不是输入项，既不产生初值，也不接受输入；图纸集与图纸组输入、
-    XLSX 模板列都按本函数判定「可输入字段」。
+    级联属性虽可输入，但不属于普通属性；需要完整输入键集合时使用
+    :func:`input_properties`。
     """
     return tuple(
-        prop for prop in standard.properties if prop.scope == scope and not prop.is_derived
+        prop
+        for prop in standard.properties
+        if prop.scope == scope and prop.kind in ORDINARY_PROPERTY_KINDS
+    )
+
+
+def input_properties(standard: DrawingStandard, scope: str) -> tuple[StandardProperty, ...]:
+    """某作用域内全部可输入属性（普通属性与级联，按标准文档顺序）。"""
+    return tuple(
+        prop
+        for prop in standard.properties
+        if prop.scope == scope
+        and (prop.kind in ORDINARY_PROPERTY_KINDS or prop.kind == "cascade")
     )
 
 
 def ordinary_property_defaults(standard: DrawingStandard, scope: str) -> dict[str, str]:
-    """某作用域内全部可输入普通属性的初值：``property_id → 标准默认值``。
+    """某作用域内普通属性初值：``property_id → 标准默认值``。
 
-    只用于初建那一次（含「首个图纸组」）；派生属性不产生输入项。
+    只用于需要普通属性默认值的场景；创建草稿播种使用 input_property_defaults。
     """
     return {prop.property_id: prop.default_value for prop in ordinary_properties(standard, scope)}
+
+
+def input_property_defaults(standard: DrawingStandard, scope: str) -> dict[str, str]:
+    """创建草稿初值：普通属性取标准默认值，级联属性从空串开始。"""
+    return {prop.property_id: prop.default_value for prop in input_properties(standard, scope)}
 
 
 def unknown_value_property_ids(
     standard: DrawingStandard, scope: str, values: Mapping[str, str]
 ) -> tuple[str, ...]:
-    """``values`` 中不属于该作用域可输入普通属性的键（保持出现顺序）。
+    """``values`` 中不属于该作用域可输入属性的键（保持出现顺序）。
 
     用于拒绝来自请求的派生字段、跨作用域字段与未知字段。
     """
-    known = {prop.property_id for prop in ordinary_properties(standard, scope)}
+    known = {prop.property_id for prop in input_properties(standard, scope)}
     return tuple(key for key in values if key not in known)
 
 

@@ -22,6 +22,7 @@ Task 7 追加：启动恢复对「已提交但未登记」的创建发布幂等�
 真实跑通「渲染固定 SCR → 写脚本 → 解析 sidecar → 回读布局与 Handle」的代码路径。
 """
 
+import copy
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -462,6 +463,75 @@ def test_staged_dst_roundtrip_matches_plan_and_records_report(
     assert candidate.report.dwg_count == len(plan.groups)
     assert candidate.report.sheet_count == len(sheets)
     assert candidate.report.encoded_sha256 == file_sha256(candidate.dst_path)
+
+
+def test_staged_dst_materializes_cascade_values_on_their_scope_nodes(
+    runner, tmp_path: Path
+) -> None:
+    document_data = copy.deepcopy(STANDARD_DOCUMENT)
+    document_data["schema_version"] = 4
+    properties = document_data["properties"]
+    properties.extend(
+        [
+            {
+                "property_id": "prop-district",
+                "name": "片区",
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一"]},
+                    {"source_item_id": "enum-oil", "values": ["分册二"]},
+                ],
+            },
+            {
+                "property_id": "prop-volume",
+                "name": "分册",
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-part",
+                "cascade_options": [
+                    {"source_item_id": "enum-part-a", "values": ["分册一"]},
+                    {"source_item_id": "enum-part-b", "values": ["分册二"]},
+                ],
+            },
+        ]
+    )
+    next(prop for prop in properties if prop["property_id"] == "prop-label")[
+        "segments"
+    ].insert(0, {"property_id": "prop-volume"})
+    standard = parse_published_standard_document(document_data)
+
+    draft = _draft()
+    groups = tuple(
+        replace(
+            group,
+            sheet_values={
+                **group.sheet_values,
+                "prop-volume": "分册一" if group.group_id == "group-1" else "分册二",
+            },
+        )
+        for group in draft.groups
+    )
+    draft = replace(
+        draft,
+        target_path=str(tmp_path / "projects" / "新建项目"),
+        sheetset_values={**draft.sheetset_values, "prop-district": "分册一"},
+        groups=groups,
+    )
+    plan = create_creation_plan(draft, standard, SuffixOptions(False, 1, ()))
+    assert plan.diagnostics == ()
+
+    candidate = runner.stage("cascade-job", 1, plan)
+    document = load_acsm(DstCodec().decode_file(candidate.dst_path))
+    projected = document.project(Path(plan.target_path))
+
+    assert projected.custom_properties["片区"] == "分册一"
+    assert [sheet.custom_properties["分册"] for sheet in projected.sheets] == [
+        "分册一",
+        "分册一",
+        "分册二",
+    ]
 
 
 def test_retry_uses_a_new_attempt_directory(runner, plan, tmp_path) -> None:
