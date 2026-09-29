@@ -1,4 +1,4 @@
-"""图纸标准 Schema v2 领域模型（PLAN-DM-038 Task 1；PLAN-DM-041 Task 2）。
+"""图纸标准 Schema v3/v4 领域模型（PLAN-DM-047 Task 1）。
 
 本模块只放冻结数据类型：枚举项、映射行、令牌片段、属性、DWG 命名模板、
 资产、编号、依赖、诊断，以及草稿（``DraftDrawingStandard``）与已发布文档
@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 PropertyScope = Literal["sheetset", "sheet"]
-PropertyKind = Literal["text", "enum", "mapping", "composition"]
+PropertyKind = Literal["text", "enum", "cascade", "mapping", "composition"]
 DiagnosticSeverity = Literal["error", "warning"]
 
 #: 属性作用域：只有图纸集与 Sheet 两级。
@@ -24,7 +24,7 @@ PROPERTY_SCOPES: tuple[str, ...] = ("sheetset", "sheet")
 ORDINARY_PROPERTY_KINDS: tuple[str, ...] = ("text", "enum")
 #: 派生属性种类：派生属性只含映射与组合。
 DERIVED_PROPERTY_KINDS: tuple[str, ...] = ("mapping", "composition")
-PROPERTY_KINDS: tuple[str, ...] = ORDINARY_PROPERTY_KINDS + DERIVED_PROPERTY_KINDS
+PROPERTY_KINDS: tuple[str, ...] = ORDINARY_PROPERTY_KINDS + ("cascade",) + DERIVED_PROPERTY_KINDS
 
 #: 子集系统字段：只对标准级 DWG 命名模板开放。
 SUBSET_SYSTEM_FIELDS: tuple[str, ...] = (
@@ -47,7 +47,7 @@ RESERVED_PROPERTY_NAME_PREFIX = "dstmanager."
 ASSET_KINDS: tuple[str, ...] = ("base-template", "layout-template")
 
 #: 引用种类：映射源、组合令牌与 DWG 命名令牌。
-REFERENCE_KINDS: tuple[str, ...] = ("mapping", "composition", "dwg-naming")
+REFERENCE_KINDS: tuple[str, ...] = ("cascade", "mapping", "composition", "dwg-naming")
 
 
 def normalize_property_name(name: str) -> str:
@@ -69,6 +69,14 @@ class StandardMappingRow:
 
     item_id: str
     value: str
+
+
+@dataclass(frozen=True, slots=True)
+class StandardCascadeRow:
+    """级联候选行：以来源枚举项稳定 ID 关联有序候选值。"""
+
+    source_item_id: str
+    values: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +110,7 @@ class StandardProperty:
     confirmed_source_items: tuple[tuple[str, str], ...] = ()
     segments: tuple[StandardSegment, ...] = ()
     description: str = ""
+    cascade_options: tuple[StandardCascadeRow, ...] = ()
 
     @property
     def is_derived(self) -> bool:
@@ -230,6 +239,10 @@ class _StandardDocumentMixin:
                 references.append(
                     StandardReference(kind="mapping", owner_id=prop.property_id)
                 )
+            if prop.kind == "cascade" and prop.source_property_id == property_id:
+                references.append(
+                    StandardReference(kind="cascade", owner_id=prop.property_id)
+                )
             if prop.kind == "composition":
                 for index, segment in enumerate(prop.segments):
                     if segment.property_id == property_id:
@@ -250,7 +263,7 @@ class _StandardDocumentMixin:
 
 @dataclass(frozen=True, slots=True)
 class DraftDrawingStandard(_StandardDocumentMixin):
-    """不可变的用户标准草稿文档（Schema v3）。
+    """不可变的用户标准草稿文档（Schema v3/v4）。
 
     草稿不持有发布时间；正式时间仅在发布时写入。
     """
@@ -270,7 +283,7 @@ class DraftDrawingStandard(_StandardDocumentMixin):
 
 @dataclass(frozen=True, slots=True)
 class DrawingStandard(_StandardDocumentMixin):
-    """不可变的已发布图纸标准文档（Schema v3）。
+    """不可变的已发布图纸标准文档（Schema v3/v4）。
 
     发布标准必须包含有效的 ``published_at``。
     """

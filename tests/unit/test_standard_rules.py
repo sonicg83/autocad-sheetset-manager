@@ -358,3 +358,185 @@ def test_unrelated_ordinary_values_pass_through_unchanged() -> None:
     assert result.values["prop-extra"] == "原值"
     assert result.values["prop-major"] == "燃气"
     assert result.values["prop-code"] == "RQ"
+
+def _cascade_document() -> dict[str, object]:
+    """追加 sheetset 与 sheet 同级级联的 v4 发布文档。"""
+    document = standard_document()
+    document["schema_version"] = 4
+    properties = _properties(document)
+    properties.extend(
+        [
+            {
+                "property_id": "prop-volume",
+                "name": "分册",
+                "previous_names": [],
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一", "分册二"]}
+                ],
+            },
+            {
+                "property_id": "prop-sheet-major",
+                "name": "图纸专业",
+                "previous_names": [],
+                "scope": "sheet",
+                "kind": "enum",
+                "enum_items": [
+                    {"item_id": "enum-road", "value": "道路"},
+                    {"item_id": "enum-water", "value": "给水"},
+                ],
+            },
+            {
+                "property_id": "prop-sheet-volume",
+                "name": "图纸分册",
+                "previous_names": [],
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-sheet-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-road", "values": ["分册一"]},
+                    {"source_item_id": "enum-water", "values": ["分册一", "分册三"]},
+                ],
+            },
+        ]
+    )
+    return document
+
+
+def test_cascade_options_are_validated_by_source_enum_identity() -> None:
+    from dst_manager.domain import standards as standard_domain
+
+    validate = getattr(standard_domain, "validate_cascade_definition", None)
+    assert callable(validate)
+    valid = parse_published_standard_document(_cascade_document())
+    assert codes(validate(valid)) == []
+
+    cases: list[tuple[str, dict[str, object], str]] = []
+    missing_source = _cascade_document()
+    _properties(missing_source)[3]["source_property_id"] = "missing"
+    cases.append(("missing-source", missing_source, "STANDARD_CASCADE_SOURCE_INVALID"))
+
+    wrong_scope = _cascade_document()
+    _properties(wrong_scope)[3]["source_property_id"] = "prop-sheet-major"
+    cases.append(("wrong-scope", wrong_scope, "STANDARD_CASCADE_SOURCE_INVALID"))
+
+    non_enum = _cascade_document()
+    _properties(non_enum).append(
+        {
+            "property_id": "prop-text-source",
+            "name": "文本源",
+            "previous_names": [],
+            "scope": "sheetset",
+            "kind": "text",
+        }
+    )
+    _properties(non_enum)[3]["source_property_id"] = "prop-text-source"
+    cases.append(("non-enum-source", non_enum, "STANDARD_CASCADE_SOURCE_INVALID"))
+
+    self_reference = _cascade_document()
+    _properties(self_reference)[3]["source_property_id"] = "prop-volume"
+    cases.append(("self-reference", self_reference, "STANDARD_CASCADE_SOURCE_INVALID"))
+
+    empty_source = _cascade_document()
+    _properties(empty_source)[0]["enum_items"] = []
+    cases.append(("empty-source", empty_source, "STANDARD_CASCADE_SOURCE_INVALID"))
+
+    for _name, document, expected in cases:
+        standard = parse_published_standard_document(document)
+        assert expected in codes(validate(standard))
+
+
+def test_cascade_option_rows_reject_empty_duplicate_missing_and_stale_entries() -> None:
+    from dst_manager.domain import standards as standard_domain
+
+    validate = getattr(standard_domain, "validate_cascade_definition", None)
+    assert callable(validate)
+    mutations = [
+        lambda row: row.update(values=[]),
+        lambda row: row.update(values=["", "  "]),
+        lambda row: row.update(values=["分册一", " 分册一 "]),
+        lambda row: row.update(source_item_id="stale-item"),
+    ]
+    for mutate in mutations:
+        document = _cascade_document()
+        cascade = _properties(document)[3]
+        rows = cascade["cascade_options"]
+        assert isinstance(rows, list)
+        mutate(rows[0])
+        standard = parse_published_standard_document(document)
+        assert "STANDARD_CASCADE_OPTIONS_INVALID" in codes(validate(standard))
+
+    missing_row = _cascade_document()
+    cascade = _properties(missing_row)[3]
+    cascade["cascade_options"] = []
+    standard = parse_published_standard_document(missing_row)
+    assert "STANDARD_CASCADE_OPTIONS_INVALID" in codes(validate(standard))
+
+
+def test_cascade_mapping_source_and_sheet_dwg_name_are_rejected() -> None:
+    import pytest
+
+    from dst_manager.domain.standard_errors import StandardSchemaError
+
+    document = _cascade_document()
+    _properties(document).append(
+        {
+            "property_id": "prop-bad-map",
+            "name": "非法映射",
+            "previous_names": [],
+            "scope": "sheetset",
+            "kind": "mapping",
+            "source_property_id": "prop-volume",
+            "mapping": [],
+        }
+    )
+    with pytest.raises(StandardSchemaError, match="STANDARD_MAPPING_SOURCE_INVALID"):
+        parse_published_standard_document(document)
+
+    named = _cascade_document()
+    named["dwg_naming"] = {"segments": [{"property_id": "prop-sheet-volume"}]}
+    with pytest.raises(StandardSchemaError, match="STANDARD_NAMING_FIELD_SCOPE_INVALID"):
+        parse_published_standard_document(named)
+
+
+def test_cascade_values_use_scope_and_current_parent_value() -> None:
+    from dst_manager.domain import standards as standard_domain
+
+    validate = getattr(standard_domain, "validate_cascade_values", None)
+    assert callable(validate)
+    standard = parse_published_standard_document(_cascade_document())
+
+    assert validate(
+        standard, "sheetset", {"prop-major": "燃气", "prop-volume": "分册一"}
+    ) == ()
+    assert validate(
+        standard,
+        "sheet",
+        {"prop-sheet-major": "给水", "prop-sheet-volume": "分册三"},
+    ) == ()
+    mismatch = validate(
+        standard, "sheetset", {"prop-major": "燃气", "prop-volume": "分册三"}
+    )
+    assert codes(mismatch) == ["STANDARD_CASCADE_VALUE_INVALID"]
+    assert mismatch[0].property_id == "prop-volume"
+
+    parent_empty = validate(
+        standard, "sheetset", {"prop-major": "", "prop-volume": "分册一"}
+    )
+    assert codes(parent_empty) == ["STANDARD_CASCADE_VALUE_INVALID"]
+    invalid_parent = validate(
+        standard, "sheetset", {"prop-major": "不存在的专业", "prop-volume": "分册一"}
+    )
+    assert invalid_parent == ()
+def test_cascade_default_value_is_rejected() -> None:
+    from dst_manager.domain import standards as standard_domain
+
+    validate = getattr(standard_domain, "validate_cascade_definition", None)
+    assert callable(validate)
+    document = _cascade_document()
+    _properties(document)[3]["default_value"] = "分册一"
+
+    diagnostics = validate(parse_published_standard_document(document))
+    assert "STANDARD_CASCADE_OPTIONS_INVALID" in codes(diagnostics)

@@ -1,4 +1,4 @@
-"""图纸标准 Schema v3 领域模型与解析测试（PLAN-DM-046 Task 1）。"""
+"""图纸标准 Schema v3/v4 领域模型与解析测试（PLAN-DM-047 Task 1）。"""
 
 import pytest
 
@@ -265,7 +265,7 @@ def test_published_document_rejects_legacy_version_values(version: object) -> No
         parse_published_standard_document(document)
 
 
-@pytest.mark.parametrize("schema_version", [1, 2, 4, None])
+@pytest.mark.parametrize("schema_version", [1, 2, 5, None])
 def test_document_rejects_unsupported_schema_version(schema_version: object) -> None:
     document = valid_standard_document()
     document["schema_version"] = schema_version
@@ -736,3 +736,142 @@ def test_loads_standard_document_rejects_duplicate_json_keys() -> None:
 def test_loads_standard_document_rejects_broken_json() -> None:
     with pytest.raises(StandardSchemaError, match="STANDARD_JSON_INVALID"):
         loads_standard_document("{not json")
+
+def _cascade_standard_document() -> dict[str, object]:
+    """包含两级同作用域级联及重复候选文本的 v4 标准文档。"""
+    document = valid_standard_document()
+    document["schema_version"] = 4
+    properties = document["properties"]
+    assert isinstance(properties, list)
+    properties[2]["enum_items"] = [
+        {"item_id": "enum-sheet-road", "value": "道路"},
+        {"item_id": "enum-sheet-gas", "value": "燃气"},
+    ]
+    properties.extend(
+        [
+            {
+                "property_id": "prop-volume",
+                "name": "图纸级分册",
+                "previous_names": [],
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一", "分册二"]}
+                ],
+            },
+            {
+                "property_id": "prop-sheet-major",
+                "name": "图纸专业",
+                "previous_names": [],
+                "scope": "sheet",
+                "kind": "enum",
+                "enum_items": [
+                    {"item_id": "enum-sheet-road", "value": "道路"},
+                    {"item_id": "enum-sheet-gas", "value": "燃气"},
+                ],
+            },
+            {
+                "property_id": "prop-sheet-volume",
+                "name": "图纸分册项",
+                "previous_names": [],
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-sheet-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-sheet-road", "values": ["分册一", "分册二"]},
+                    {"source_item_id": "enum-sheet-gas", "values": ["分册一"]},
+                ],
+            },
+            {
+                "property_id": "prop-volume-label",
+                "name": "分册标签",
+                "previous_names": [],
+                "scope": "sheetset",
+                "kind": "composition",
+                "segments": [{"property_id": "prop-volume"}],
+            },
+            {
+                "property_id": "prop-sheet-volume-label",
+                "name": "图纸分册标签",
+                "previous_names": [],
+                "scope": "sheet",
+                "kind": "composition",
+                "segments": [{"property_id": "prop-sheet-volume"}],
+            },
+        ]
+    )
+    naming = document["dwg_naming"]
+    assert isinstance(naming, dict)
+    segments = naming["segments"]
+    assert isinstance(segments, list)
+    segments.append({"property_id": "prop-volume"})
+    return document
+
+
+def test_v4_cascade_properties_round_trip_both_scopes_and_references() -> None:
+    import json
+    from dataclasses import asdict
+
+    document = _cascade_standard_document()
+    parsed = standard_domain.loads_standard_document(
+        json.dumps(document, ensure_ascii=False)
+    )
+    set_cascade = parsed.property_by_id("prop-volume")
+    sheet_cascade = parsed.property_by_id("prop-sheet-volume")
+    cascade_row = getattr(standard_domain, "StandardCascadeRow", None)
+
+    assert cascade_row is not None
+    assert parsed.schema_version == 4
+    assert set_cascade.kind == sheet_cascade.kind == "cascade"
+    assert set_cascade.is_derived is False
+    assert set_cascade.cascade_options == (
+        cascade_row(source_item_id="enum-gas", values=("分册一", "分册二")),
+    )
+    assert sheet_cascade.cascade_options[0].values == ("分册一", "分册二")
+    encoded_property = json.loads(
+        json.dumps(asdict(set_cascade), ensure_ascii=False)
+    )
+    assert encoded_property["cascade_options"] == [
+        {"source_item_id": "enum-gas", "values": ["分册一", "分册二"]}
+    ]
+    assert "cascade" in standard_domain.REFERENCE_KINDS
+    assert any(
+        reference.kind == "cascade" and reference.owner_id == "prop-volume"
+        for reference in parsed.references_to("prop-major")
+    )
+    assert {
+        reference.kind for reference in parsed.references_to("prop-volume")
+    } == {"composition", "dwg-naming"}
+
+
+@pytest.mark.parametrize("field", ["kind", "cascade_options"])
+def test_v3_document_rejects_cascade_fields(field: str) -> None:
+    document = valid_draft_document()
+    properties = document["properties"]
+    assert isinstance(properties, list)
+    if field == "kind":
+        properties[0]["kind"] = "cascade"
+        properties[0]["source_property_id"] = "prop-part"
+    else:
+        properties[0]["cascade_options"] = []
+
+    with pytest.raises(StandardSchemaError, match="STANDARD_CASCADE_SCHEMA_UNSUPPORTED"):
+        parse_standard_draft_document(document)
+
+
+def test_v3_document_without_cascade_remains_readable() -> None:
+    document = valid_draft_document()
+    parsed = parse_standard_draft_document(document)
+    assert parsed.schema_version == 3
+    assert parsed.property_by_id("prop-major").kind == "enum"
+
+
+def test_v4_document_rejects_unknown_property_kind() -> None:
+    document = _cascade_standard_document()
+    properties = document["properties"]
+    assert isinstance(properties, list)
+    properties[0]["kind"] = "future-kind"
+
+    with pytest.raises(StandardSchemaError, match="STANDARD_PROPERTY_KIND_INVALID"):
+        parse_published_standard_document(document)

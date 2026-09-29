@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from dst_manager.domain.standard_cascade import validate_cascade_definition
 from dst_manager.domain.standard_models import (
     DrawingStandard,
     StandardDiagnostic,
@@ -289,7 +290,9 @@ def publish_diagnostics(standard: DrawingStandard) -> tuple[StandardDiagnostic, 
     不在本函数判定；组合字段越权与引用未知字段已在 Schema 发布解析中阻断。
     """
     compiled = compile_standard_properties(standard)
-    diagnostics: list[StandardDiagnostic] = []
+    diagnostics: list[StandardDiagnostic] = list(
+        validate_cascade_definition(standard)
+    )
     for mapping in compiled.mappings:
         for row in mapping.rows:
             if not row.value:

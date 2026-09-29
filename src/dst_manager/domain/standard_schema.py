@@ -20,6 +20,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from dst_manager.domain.standard_cascade import parse_cascade_options
 from dst_manager.domain.standard_errors import (
     StandardSchemaError,  # noqa: F401
 )
@@ -49,7 +50,7 @@ from dst_manager.domain.standard_versioning import (
 )
 
 #: 支持的文档格式版本。
-SUPPORTED_SCHEMA_VERSIONS = (3,)
+SUPPORTED_SCHEMA_VERSIONS = (3, 4)
 
 def _require_str(data: Mapping[str, Any], key: str, code: str) -> str:
     value = data.get(key)
@@ -178,7 +179,7 @@ def _parse_confirmed_items(raw: Any, property_id: str) -> tuple[tuple[str, str],
     return tuple(confirmed)
 
 
-def _parse_property(raw: Any, index: int) -> StandardProperty:
+def _parse_property(raw: Any, index: int, schema_version: int) -> StandardProperty:
     if not isinstance(raw, Mapping):
         raise _error("STANDARD_PROPERTY_INVALID", f"属性 #{index} 不是对象")
     property_id = _require_str(raw, "property_id", "STANDARD_PROPERTY_ID_INVALID")
@@ -186,9 +187,19 @@ def _parse_property(raw: Any, index: int) -> StandardProperty:
     if scope not in PROPERTY_SCOPES:
         raise _error("STANDARD_SCOPE_INVALID", f"属性 {property_id!r} 作用域 {scope!r} 未知")
     kind = raw.get("kind")
+    if schema_version == 3 and (kind == "cascade" or "cascade_options" in raw):
+        raise _error(
+            "STANDARD_CASCADE_SCHEMA_UNSUPPORTED",
+            "级联属性仅支持 schema_version 4",
+        )
     if kind not in PROPERTY_KINDS:
         raise _error(
             "STANDARD_PROPERTY_KIND_INVALID", f"属性 {property_id!r} 类型 {kind!r} 未知"
+        )
+    if kind != "cascade" and "cascade_options" in raw:
+        raise _error(
+            "STANDARD_CASCADE_OPTIONS_INVALID",
+            f"非级联属性 {property_id!r} 不得包含 cascade_options",
         )
     required = raw.get("required", False)
     if not isinstance(required, bool):
@@ -197,9 +208,12 @@ def _parse_property(raw: Any, index: int) -> StandardProperty:
     if source_property_id is not None and (
         not isinstance(source_property_id, str) or not source_property_id
     ):
-        raise _error(
-            "STANDARD_MAPPING_SOURCE_INVALID", f"属性 {property_id!r} 的映射源 ID 非法"
+        source_code = (
+            "STANDARD_CASCADE_SOURCE_INVALID"
+            if kind == "cascade"
+            else "STANDARD_MAPPING_SOURCE_INVALID"
         )
+        raise _error(source_code, f"属性 {property_id!r} 的源 ID 非法")
     return StandardProperty(
         property_id=property_id,
         name=_text(raw, "name", "STANDARD_PROPERTY_INVALID"),
@@ -213,6 +227,11 @@ def _parse_property(raw: Any, index: int) -> StandardProperty:
             for position, item in enumerate(
                 _sequence(raw, "enum_items", "STANDARD_ENUM_ITEM_INVALID")
             )
+        ),
+        cascade_options=(
+            parse_cascade_options(raw.get("cascade_options", ()), property_id)
+            if kind == "cascade"
+            else ()
         ),
         source_property_id=source_property_id,
         mapping=tuple(
@@ -321,9 +340,11 @@ def resolve_segment_property(
 
 def _validate_references(standard: DrawingStandard) -> None:
     for prop in standard.properties:
-        if prop.source_property_id is not None and standard.find_property(
-            prop.source_property_id
-        ) is None:
+        if (
+            prop.kind != "cascade"
+            and prop.source_property_id is not None
+            and standard.find_property(prop.source_property_id) is None
+        ):
             raise _error(
                 "STANDARD_MAPPING_SOURCE_INVALID",
                 f"属性 {prop.property_id!r} 的映射源 {prop.source_property_id!r} 不存在",
@@ -388,7 +409,7 @@ def _parse_common_structure(data: Mapping[str, object], *, published: bool) -> d
         )
 
     properties = tuple(
-        _parse_property(item, index)
+        _parse_property(item, index, int(schema_version))
         for index, item in enumerate(_sequence(data, "properties", "STANDARD_PROPERTY_INVALID"))
     )
     property_ids = [prop.property_id for prop in properties]

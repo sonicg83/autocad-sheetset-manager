@@ -121,6 +121,8 @@ def validate_enum_properties(standard: DrawingStandard) -> None:
 def validate_mapping_sources(standard: DrawingStandard) -> None:
     """映射源必须是普通枚举属性，且作用域不得越权。"""
     for prop in standard.properties:
+        if prop.kind == "cascade":
+            continue
         if prop.kind == "mapping" and prop.source_property_id is None:
             # 草稿允许还没选源；发布时必须阻断，否则会留下一个永不求值的映射属性。
             raise _error(

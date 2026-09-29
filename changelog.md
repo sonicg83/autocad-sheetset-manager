@@ -1,3 +1,7 @@
+## 2026-09-29（PLAN-DM-047 Task 1：标准模型、Schema v4 与级联发布门禁）
+
+- 标准领域模型加入以来源枚举项稳定 ID 关联的有序候选行；解析器兼容 v3/v4 并拒绝 v3 级联字段；发布诊断校验同作用域普通枚举来源、候选行完整性、无默认值和候选值；增加级联反向引用保护与按作用域、当前上级值校验创建输入。
+- 验证：目标 pytest 107 项通过；本任务 Python 文件 Ruff 检查通过。
 ## 2026-09-29 PLAN-DM-047 计划评审修订（文档，未改代码）
 
 - 按仓库代码核验结果修订 PLAN-DM-047：Task 1 补入 `standard_rules.py`，明确级联定义诊断必须接入 `publish_diagnostics`（`store_common._publish_gate_error`、发布与包预检共用该聚合）才真正阻断，并要求 `validate_mapping_sources` 与 `_validate_references` 对 `kind == "cascade"` 跳过映射语义、改用级联稳定码；`REFERENCE_KINDS`/`references_to` 增加 `cascade` 反向引用以承担删除保护。
