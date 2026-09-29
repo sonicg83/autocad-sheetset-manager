@@ -197,6 +197,120 @@ def test_draft_lifecycle_roundtrip(tmp_path: Path) -> None:
     )
 
 
+def test_saving_v3_draft_explicitly_upgrades_response_and_disk_to_v4(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-v3")
+    document_path = (
+        client.app.state.service.standard_store.drafts_root
+        / "draft-v3"
+        / "document.json"
+    )
+    original_bytes = document_path.read_bytes()
+    original_mtime_ns = document_path.stat().st_mtime_ns
+
+    opened = client.get("/api/standards/drafts/draft-v3")
+    assert opened.status_code == 200
+    assert opened.json()["document"]["schema_version"] == 3
+    assert document_path.read_bytes() == original_bytes
+    assert document_path.stat().st_mtime_ns == original_mtime_ns
+
+    edited = copy.deepcopy(DRAFT_DOCUMENT)
+    edited["name"] = "显式保存后升级"
+    saved = client.put(
+        "/api/standards/drafts/draft-v3", json={"document": edited}
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["document"]["schema_version"] == 4
+    assert json.loads(document_path.read_text(encoding="utf-8"))["schema_version"] == 4
+
+
+def test_saving_v3_draft_with_cascade_fields_is_rejected(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    make_draft(client, DRAFT_DOCUMENT, "draft-v3")
+    edited = copy.deepcopy(DRAFT_DOCUMENT)
+    edited["properties"].append(
+        {
+            "property_id": "prop-zone",
+            "name": "片区",
+            "scope": "sheetset",
+            "kind": "cascade",
+            "source_property_id": "prop-major",
+            "cascade_options": [
+                {"source_item_id": "enum-gas", "values": ["北区"]}
+            ],
+        }
+    )
+
+    response = client.put(
+        "/api/standards/drafts/draft-v3", json={"document": edited}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "STANDARD_CASCADE_SCHEMA_UNSUPPORTED"
+
+
+def test_v4_cascade_survives_draft_publish_export_preflight_and_import(
+    tmp_path: Path,
+) -> None:
+    document = copy.deepcopy(DRAFT_DOCUMENT)
+    document["schema_version"] = 4
+    document["properties"].append(
+        {
+            "property_id": "prop-zone",
+            "name": "片区",
+            "scope": "sheetset",
+            "kind": "cascade",
+            "source_property_id": "prop-major",
+            "cascade_options": [
+                {"source_item_id": "enum-gas", "values": ["北区", "南区"]}
+            ],
+        }
+    )
+    client = make_client(tmp_path)
+    make_draft(client, document, "draft-v4")
+
+    saved = client.put(
+        "/api/standards/drafts/draft-v4", json={"document": document}
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["document"]["properties"][-1]["cascade_options"] == [
+        {"source_item_id": "enum-gas", "values": ["北区", "南区"]}
+    ]
+    published = client.post("/api/standards/drafts/draft-v4/publish")
+    assert published.status_code == 200, published.text
+
+    details = client.get(f"/api/standards/{STANDARD_ID}")
+    assert details.status_code == 200
+    assert details.json()["document"]["schema_version"] == 4
+    package = tmp_path / "cascade.dststandard"
+    package.write_bytes(
+        client.get(f"/api/standards/{STANDARD_ID}/export").content
+    )
+    with zipfile.ZipFile(package) as archive:
+        exported_document = json.loads(archive.read("manifest.json"))
+    expected_options = exported_document["properties"][-1]["cascade_options"]
+    assert expected_options == [
+        {"source_item_id": "enum-gas", "values": ["北区", "南区"]}
+    ]
+
+    other = make_client(tmp_path / "other")
+    preview = other.post(
+        "/api/standards/import-previews", json={"path": str(package)}
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_import"] is True
+    imported = other.post(
+        "/api/standards/import", json={"preview_id": preview.json()["preview_id"]}
+    )
+    assert imported.status_code == 200, imported.text
+    imported_document = other.get(f"/api/standards/{STANDARD_ID}").json()["document"]
+    assert imported_document["schema_version"] == 4
+    assert imported_document["properties"][-1]["cascade_options"] == expected_options
+
+
 def test_published_detail_includes_dependencies(published_standard: TestClient) -> None:
     detail = published_standard.get(f"/api/standards/{STANDARD_ID}")
     assert detail.status_code == 200
@@ -327,6 +441,8 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
     assert exported.headers["content-type"] == "application/zip"
     package = tmp_path / "copy.dststandard"
     package.write_bytes(exported.content)
+    with zipfile.ZipFile(package) as archive:
+        assert json.loads(archive.read("manifest.json"))["schema_version"] == 3
 
     other = make_client(tmp_path / "second")
     preview = other.post("/api/standards/import-previews", json={"path": str(package)})
@@ -346,6 +462,8 @@ def test_export_and_import_package_roundtrip(published_standard: TestClient, tmp
     assert imported.json()["standard_id"] == STANDARD_ID
     assert imported.json()["published_at"] == body["published_at"]
     assert "version" not in imported.json()
+    imported_detail = other.get(f"/api/standards/{STANDARD_ID}").json()["document"]
+    assert imported_detail["schema_version"] == 3
 
     # 同一凭证重复确认返回原成功结果，不二次写入。
     repeated = other.post(
@@ -1116,7 +1234,7 @@ def test_standard_package_full_loop_from_draft_asset_to_import_roundtrip(
     with zipfile.ZipFile(package) as archive:
         assert sorted(archive.namelist()) == [copied, "manifest.json"]
         manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
-    assert manifest["schema_version"] == 3
+    assert manifest["schema_version"] == 4
     assert manifest["standard_id"] == STANDARD_ID
     assert manifest["published_at"] == published_at
     assert manifest["description"] == "标准描述原文"

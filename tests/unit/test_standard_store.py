@@ -36,6 +36,37 @@ def test_standard_store_facade_keeps_operations_in_focused_modules() -> None:
     assert StandardStore.export_package.__module__.endswith(".package_io")
 
 
+def test_opening_v3_draft_does_not_rewrite_document_or_timestamp(
+    store: StandardStore,
+) -> None:
+    create_draft(store, standard_document(FIRST_ID), draft_id="draft-v3")
+    document_path = store.drafts_root / "draft-v3" / "document.json"
+    original_bytes = document_path.read_bytes()
+    original_mtime_ns = document_path.stat().st_mtime_ns
+
+    opened = store.get_draft("draft-v3")
+    listed = next(
+        item for item in store.list() if item.draft_id == "draft-v3"
+    )
+
+    assert opened is not None
+    assert opened.document["schema_version"] == 3
+    assert listed.status == "draft"
+    assert document_path.read_bytes() == original_bytes
+    assert document_path.stat().st_mtime_ns == original_mtime_ns
+
+
+def test_list_includes_v4_published_standard(store: StandardStore) -> None:
+    document = standard_document(SECOND_ID, published=True)
+    document["schema_version"] = 4
+    write_published(store.published_root, document)
+
+    summary = next(item for item in store.list() if item.standard_id == SECOND_ID)
+
+    assert summary.status == "published"
+    assert summary.published_at == PUBLISHED_AT
+
+
 def standard_document(
     standard_id: str = FIRST_ID,
     *,

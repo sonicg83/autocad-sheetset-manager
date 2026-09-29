@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from dst_manager.domain.standards import (
+    SUPPORTED_SCHEMA_VERSIONS,
     DrawingStandard,
     StandardSchemaError,
     parse_standard_draft_document,
@@ -42,7 +43,11 @@ class StandardDraftStorage:
         data = json.loads(document.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return None
-        if data.get("schema_version") != 3:
+        schema_version = data.get("schema_version")
+        if (
+            type(schema_version) is not int
+            or schema_version not in SUPPORTED_SCHEMA_VERSIONS
+        ):
             return None
         try:
             parse_standard_draft_document(data)

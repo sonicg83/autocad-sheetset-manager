@@ -299,8 +299,10 @@ class StandardOperations:
         except StandardSchemaError as exc:
             raise _store_error(exc) from exc
         _require_identity_match(existing.document, document)
+        normalized_document = dict(document)
+        normalized_document["schema_version"] = 4
         try:
-            draft = self.standard_store.save_draft(draft_id, document)
+            draft = self.standard_store.save_draft(draft_id, normalized_document)
         except (StandardStoreError, StandardSchemaError) as exc:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}

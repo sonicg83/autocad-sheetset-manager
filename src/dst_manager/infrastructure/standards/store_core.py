@@ -174,7 +174,7 @@ class StandardStoreCore:
             schema_version = document.get("schema_version")
             if schema_version is not None and (
                 type(schema_version) is not int
-                or schema_version != SUPPORTED_SCHEMA_VERSIONS[0]
+                or schema_version not in SUPPORTED_SCHEMA_VERSIONS
             ):
                 continue
             raw_published_at = document.get("published_at")

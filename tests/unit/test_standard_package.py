@@ -167,6 +167,19 @@ def test_package_rejects_invalid_manifest_schema(tmp_path: Path) -> None:
         StandardPackageReader().read(package)
 
 
+def test_package_rejects_unknown_v4_property_kind(tmp_path: Path) -> None:
+    manifest = json.loads(VALID_MANIFEST)
+    manifest["schema_version"] = 4
+    manifest["properties"][0]["kind"] = "future-kind"
+    package = write_zip(
+        tmp_path,
+        {"manifest.json": json.dumps(manifest, ensure_ascii=False)},
+    )
+
+    with pytest.raises(StandardPackageError, match="STANDARD_PROPERTY_KIND_INVALID"):
+        StandardPackageReader().read(package)
+
+
 def test_package_rejects_oversized_entry(tmp_path: Path) -> None:
     package = write_zip(
         tmp_path,
