@@ -136,8 +136,20 @@ class ShellBridge:
     # 返回可序列化字典：{ok:true;value} 或 {ok:false;code;message}。
 
     def _context_error(self, workspace_id: str) -> dict | None:
+        """上下文校验失败的结构化结果；两种原因用不同稳定码区分。
+
+        - ``SHELL_WORKSPACE_NOT_OPENED``：壳里没有任何已登记工作区（从未打开或已关闭）；
+        - ``SHELL_WORKSPACE_UNAVAILABLE``：已登记但 ID 不匹配（工作区已切换）。
+
+        均为可呈现错误：前端据此分别提示“尚未登记”与“已切换，请重新打开”，
+        不把“从未打开”误报成“已切换”。
+        """
         context = self._context.current if self._context is not None else None
-        if context is None or context.workspace_id != workspace_id:
+        if context is None:
+            return shell_error(
+                "SHELL_WORKSPACE_NOT_OPENED", "桌面壳尚未登记已打开的工作区，请重新打开图纸集"
+            )
+        if context.workspace_id != workspace_id:
             return shell_error(
                 "SHELL_WORKSPACE_UNAVAILABLE", "当前没有匹配的已打开工作区，请重新打开图纸集"
             )

@@ -416,11 +416,11 @@ def test_open_external_rejects_non_string_input():
 
 
 def test_bridge_context_error_carries_message_key():
-    """无匹配上下文的桥错误返回统一结构：code/message_key/params/message 齐备。"""
+    """未登记上下文的桥错误返回统一结构：code/message_key/params/message 齐备。"""
     result = ShellBridge().open_workspace_folder("workspace-1")
     assert result["ok"] is False
-    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
-    assert result["message_key"] == "errors.shell.workspaceUnavailable"
+    assert result["code"] == "SHELL_WORKSPACE_NOT_OPENED"
+    assert result["message_key"] == "errors.shell.workspaceNotOpened"
     assert result["params"] == {}
     assert result["message"]  # 兼容文本保留（迁移窗口）
 
@@ -603,7 +603,7 @@ def test_request_extension_save_rejects_without_matching_context():
         "dst-manager.sheet-catalog", "export-xlsx", "workspace-1"
     )
     assert result["ok"] is False
-    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+    assert result["code"] == "SHELL_WORKSPACE_NOT_OPENED"
 
 
 def test_request_extension_save_rejects_unwired_bridge():

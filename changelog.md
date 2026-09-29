@@ -1,3 +1,14 @@
+## 2026-09-29（PLAN-DM-036 Task 9 收尾：创建成功接管后的壳可信上下文）
+
+- 修复创建向导创建新图纸集后的两处报错（同一根因）：工作区「打开所在文件夹」报「工作区已切换或未打开，请重新打开」，图纸页「显示列」报「当前没有匹配的已打开工作区」。壳进程可信工作区上下文此前只在 `POST /api/workspaces/open` 登记，而创建登记走应用层 `open_workspace`、前端接管新工作区只调 `GET /api/workspaces/{id}`，壳上下文因此停在「未登记」或旧工作区，所有依赖上下文的壳桥方法按 ID 不匹配拒绝（同一根因还使创建后扩展成果「另存为」不可用）。
+- `GET /api/workspaces/{id}` 与打开端点同口径登记可信上下文；壳上下文校验失败拆成两个稳定码：`SHELL_WORKSPACE_NOT_OPENED`（壳中无任何已打开工作区）与 `SHELL_WORKSPACE_UNAVAILABLE`（已登记但 ID 不匹配，即已切换）；新增文案键 `errors.shell.workspaceNotOpened`（中英文）。
+- 前端「打开所在文件夹」按两个 code 分别提示「当前工作区尚未在桌面壳中登记，请重新打开该图纸集」与「工作区已切换，请重新打开」（后者原为「工作区已切换或未打开」，未打开已由前者覆盖）；图纸页「显示列」读取失败仅在偏好存储 IO/结构失败时沿用「读取列配置失败，本次使用默认显示」，其余按错误目录渲染具体原因，不再把真实原因藏进笼统文案。
+- 回归测试：`tests/unit/test_shell_workspace.py` 新增「应用层创建登记后按 ID 接管必须登记上下文」与「旧上下文必须被替换、旧 ID 继续按已切换拒绝」两例；`tests/unit/test_shell.py`、`tests/unit/test_message_catalog.py` 同步更新上下文 code 与文案键；`web/src/composables/useWorkspaceLifecycle.test.ts` 新增两个 code 的前端提示分流用例（回退映射即变红）。
+- 文档：[SPEC-DM-009](docs/dst-manager/specs/SPEC-DM-009-sheets-workspace-ui.md) §7 补充「两条入口都登记可信上下文、上下文失败区分未登记与已切换」；[PLAN-DM-036](.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 追加 Task 9 收尾小节。
+- 验证：`uv run ruff check .` 通过；`uv lock --check` 通过；`uv run pytest -q` **2151 项 / 74 skipped / 0 failed**（`--ignore=tests/integration/test_standard_delete.py`，见下）；Web `check:i18n` 1634 键 / 11 域、`npm run test:unit` **343 passed / 29 files**、`npm run build`（check:api + check:i18n + check:ui + vue-tsc + 生产构建）通过、`npx playwright test sheets-folder.spec.ts sheets-columns.spec.ts` **56 passed**。
+- 未修复的既有问题（与本次改动无关，单独登记）：`tests/integration/test_standard_delete.py` 从 `tests/unit/` 目录导入 `creation_xlsx_fixtures`，在并行收集顺序下报 `ModuleNotFoundError`（单跑该文件必现，与任一单元测试同跑则通过）——该文件与 `pyproject.toml` 均未在本次改动中修改。
+- 未修残差：`clear_workspace_context` 仍只用单一 `SHELL_WORKSPACE_UNAVAILABLE`（其结果被前端 best-effort 忽略），未纳入本次分流。
+
 ## 2026-09-29 工作区错误提示可手动关闭
 
 - 在工作区全局错误提示旁增加关闭按钮；关闭仅隐藏当前提示，错误内容变化或错误状态清空后重新显示。补充中英文无障碍名称。

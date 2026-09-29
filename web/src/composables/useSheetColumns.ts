@@ -213,7 +213,11 @@ export function useSheetColumns(deps: {
     if (generation !== loadGeneration || deps.workspace.value?.id !== workspaceId) return;
     if (result === null) return; // 旧桥缺方法：保持默认降级
     if (!result.ok) {
-      saveError.value = t("sheets.errors.columnsLoadFailed");
+      // IO/结构类失败沿用「本次使用默认显示」的降级提示；其余（上下文未登记/已切换等）
+      // 按错误目录渲染具体原因，不把真实原因藏进笼统文案（与保存路径同口径）。
+      saveError.value = result.code === "SHEET_PREFERENCES_IO" || result.code === "SHEET_PREFERENCES_INVALID"
+        ? t("sheets.errors.columnsLoadFailed")
+        : localizedError(result.message_key, result.params, result.message);
       return;
     }
     if (result.value !== null) preferences.value = result.value;

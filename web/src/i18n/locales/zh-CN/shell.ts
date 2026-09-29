@@ -273,7 +273,8 @@ export default {
   errors: {
     restoreRunning: "修订恢复正在执行，请稍候",
     shellFolderUnsupported: "当前桌面壳不支持打开图纸集所在文件夹",
-    workspaceSwitched: "工作区已切换或未打开，请重新打开",
+    workspaceSwitched: "工作区已切换，请重新打开",
+    workspaceNotOpened: "当前工作区尚未在桌面壳中登记，请重新打开该图纸集",
     closeFirst: "请先关闭当前工作区，再打开新的 DST 文件",
     dstOnly: "仅支持 DST 文件",
     shellNotReady: "桌面壳未就绪，请通过 dst-manager desktop 启动",

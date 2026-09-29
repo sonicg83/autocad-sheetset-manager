@@ -270,7 +270,8 @@ export default {
   errors: {
     restoreRunning: "A revision restore is running; please wait",
     shellFolderUnsupported: "The current desktop shell does not support opening the sheet set folder",
-    workspaceSwitched: "The workspace has switched or is not open; please reopen",
+    workspaceSwitched: "The workspace has switched; please reopen",
+    workspaceNotOpened: "This workspace is not registered in the desktop shell; please reopen it",
     closeFirst: "Close the current workspace before opening a new DST file",
     dstOnly: "Only DST files are supported",
     shellNotReady: "Desktop shell is not ready; start via dst-manager desktop",

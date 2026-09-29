@@ -189,7 +189,13 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleOptions): Workspac
       error.value = t("shell.errors.shellFolderUnsupported");
       return;
     }
-    if (!result.ok) error.value = result.code === "SHELL_WORKSPACE_UNAVAILABLE" ? t("shell.errors.workspaceSwitched") : localizedError(result.message_key, result.params, result.message);
+    if (!result.ok) {
+      // 未登记与已切换是两种不同原因（PLAN-DM-036 Task 9 收尾）：分别给可执行提示，
+      // 不把“壳里从未登记过工作区”误报成“工作区已切换”。
+      if (result.code === "SHELL_WORKSPACE_NOT_OPENED") error.value = t("shell.errors.workspaceNotOpened");
+      else if (result.code === "SHELL_WORKSPACE_UNAVAILABLE") error.value = t("shell.errors.workspaceSwitched");
+      else error.value = localizedError(result.message_key, result.params, result.message);
+    }
   }
 
   const DST_EXT = /\.dst$/i;

@@ -5,7 +5,7 @@ status: active
 owners:
 - dst-manager
 created: 2026-09-21
-updated: 2026-09-24
+updated: 2026-09-29
 related:
 - RFC-INT-003
 - PLAN-DM-035
@@ -753,3 +753,12 @@ Task 9 实施中的偏差（已由控制方裁决）：创建任务的进度复�
 - 再复核（范围收窄到 `556eb35..8bc3daf`）：四项全部 **ADDRESSED**，无新增 Critical/Important。
 - 控制方独立复跑最终门禁（修复波之后）：`uv run ruff check .` 通过；`uv run pytest` **1900 passed / 74 skipped / 0 failed**（1974 collected，120.8s）；`uv lock --check` 通过；`npm run test:unit` **303 passed / 28 files**；`check:i18n` **1571 键 / 11 域**；`check:ui` 0 违规；`npm run build` 通过；全量 `npx playwright test` **654 passed**（其中 `main.spec.ts:290` 性能预算用例在满载并行下记为 1 flaky，单独重跑 `main.spec.ts` **129 passed**，判定为既有负载抖动而非回归）。
 - 未修残差项（含各任务延后的 Minor 与本次复核新增项）已登记到 [PLAN-DM-036 最终复核残差项](../../../todos/dst-manager/2026-09-24-plan-dm-036-deferred-minors.md)，不阻塞本计划主体交付。
+
+## Task 9 收尾：创建成功接管后的壳可信上下文（2026-09-29）
+
+- 现象：创建向导创建新图纸集成功后，工作区「打开所在文件夹」报「工作区已切换或未打开，请重新打开」；图纸页「显示列」保存报「当前没有匹配的已打开工作区」，读取报「读取列配置失败」。
+- 根因：壳进程可信工作区上下文（`ShellContext`）只在 `POST /api/workspaces/open` 经 `on_workspace_opened` 登记；`creation_registration._register_published_workspace` 走的是应用层 `open_workspace`（不经该端点），而前端接管新工作区只调 `GET /api/workspaces/{id}`（`useWorkspaceLifecycle.doOpenWorkspaceById`），该端点此前同样不登记 ⇒ 壳上下文停在「未登记」或旧工作区，前端 `workspace_id` 已是新工作区，所有依赖上下文的壳桥调用一律按 ID 不匹配拒绝（同一根因还使创建后扩展成果「另存为」不可用）。
+- 修复：`GET /api/workspaces/{id}` 与打开端点同口径登记可信上下文；壳上下文校验失败按原因拆成两个稳定码——`SHELL_WORKSPACE_NOT_OPENED`（壳中无任何已打开工作区）与 `SHELL_WORKSPACE_UNAVAILABLE`（已登记但 ID 不匹配）；前端「打开所在文件夹」据此分别提示；图纸页「显示列」读取失败只在偏好存储 IO/结构失败时沿用「本次使用默认显示」降级文案，其余按错误目录渲染具体原因。
+- 回归测试：`tests/unit/test_shell_workspace.py` 新增「创建登记（应用层）后按 ID 接管必须登记上下文」与「旧上下文必须被替换（旧 ID 继续按已切换拒绝）」两例；`tests/unit/test_shell.py`、`tests/unit/test_message_catalog.py` 同步更新上下文 code 与文案键；`web/src/composables/useWorkspaceLifecycle.test.ts` 新增两个 code 的前端提示分流用例。
+- 未修残差：`clear_workspace_context` 仍用单一 `SHELL_WORKSPACE_UNAVAILABLE`（其返回值被前端 best-effort 忽略），未纳入本次分流。
+- 用户可复现的临时规避（修复前）：创建成功后关闭工作区，从欢迎页「选择 DST 文件」重新打开该 DST——该路径走打开端点，会登记上下文。

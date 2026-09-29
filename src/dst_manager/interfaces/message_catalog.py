@@ -133,6 +133,9 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "SETTINGS_SCHEMA_OLDER": _E("errors.settings.schemaOlder"),
     "SETTINGS_VALIDATION_FAILED": _E("errors.settings.validationFailed"),
     # ---- ShellBridge（interfaces/shell.py，{ok:false} 结果） ----
+    # 可信上下文校验失败分两码：未登记（壳里没有任何已打开工作区）vs 已切换
+    # （已登记但 ID 不匹配），前端据此给不同提示。
+    "SHELL_WORKSPACE_NOT_OPENED": _E("errors.shell.workspaceNotOpened"),
     "SHELL_WORKSPACE_UNAVAILABLE": _E("errors.shell.workspaceUnavailable"),
     "SHELL_OPEN_FAILED": _E("errors.shell.openFailed"),
     "SHELL_DIRECTORY_NOT_FOUND": _E("errors.shell.directoryNotFound"),

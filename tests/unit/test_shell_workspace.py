@@ -5,6 +5,7 @@ workspace_id、关闭后调用、目录消失、空格/中文路径、路径/命
 以及 load/save_sheet_columns 与 clear_workspace_context 的错误码与成功路径。
 """
 
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -61,10 +62,11 @@ def _valid_preferences():
 
 
 def test_open_folder_requires_opened_workspace(tmp_path):
+    # 从未登记上下文（壳里没有任何已打开工作区）：与「已切换」区分，报未打开
     bridge, _, explorer = _make_bridge(tmp_path)
     result = bridge.open_workspace_folder("ws-1")
     assert result["ok"] is False
-    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+    assert result["code"] == "SHELL_WORKSPACE_NOT_OPENED"
     assert explorer.calls == []
 
 
@@ -81,13 +83,13 @@ def test_open_folder_rejects_other_workspace_id(tmp_path):
     assert explorer.calls == []
 
 
-def test_open_folder_after_close_returns_unavailable(tmp_path):
+def test_open_folder_after_close_returns_not_opened(tmp_path):
     bridge, context, explorer = _make_bridge(tmp_path)
     context.set_workspace(_fake_workspace("ws-1", tmp_path / "工程", tmp_path / "工程" / "图纸集.dst"))
     assert bridge.clear_workspace_context("ws-1")["ok"] is True
     result = bridge.open_workspace_folder("ws-1")
     assert result["ok"] is False
-    assert result["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+    assert result["code"] == "SHELL_WORKSPACE_NOT_OPENED"
     assert explorer.calls == []
 
 
@@ -196,8 +198,8 @@ def test_save_sheet_columns_io_error_maps_to_preferences_io(tmp_path):
 
 def test_sheet_columns_require_valid_context(tmp_path):
     bridge, _, _ = _make_bridge(tmp_path)
-    assert bridge.load_sheet_columns("ws-1")["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
-    assert bridge.save_sheet_columns("ws-1", _valid_preferences())["code"] == "SHELL_WORKSPACE_UNAVAILABLE"
+    assert bridge.load_sheet_columns("ws-1")["code"] == "SHELL_WORKSPACE_NOT_OPENED"
+    assert bridge.save_sheet_columns("ws-1", _valid_preferences())["code"] == "SHELL_WORKSPACE_NOT_OPENED"
 
 
 def test_clear_workspace_context_clears_and_is_idempotent_guarded(tmp_path):
@@ -242,3 +244,61 @@ def test_create_app_open_without_callback_keeps_http_contract(tmp_path, tiny_wor
         body = response.json()
         assert body["id"] and body["dst_path"] == str(dst) and body["revision_id"]
         assert body["sheet_set"]["sheet_count"] == 1
+
+
+# ---- PLAN-DM-036 Task 9 收尾：创建成果按 ID 接管必须登记可信上下文 ----
+# 创建登记走应用层的 `open_workspace`（`creation_registration._register_published_workspace`），
+# 不经过 `POST /api/workspaces/open`，因此 `on_workspace_opened` 不会被触发；前端接管
+# 新工作区只调 `GET /api/workspaces/{id}`（useWorkspaceLifecycle.doOpenWorkspaceById）。
+# 该端点不登记时，壳上下文停在「未登记」或旧工作区，创建后的「打开所在文件夹」与
+# 「显示列」偏好桥调用全部被 SHELL_WORKSPACE_NOT_OPENED / SHELL_WORKSPACE_UNAVAILABLE 拒绝。
+
+
+def test_get_workspace_registers_context_after_creation_takeover(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    context = ShellContext()
+    explorer = FakeExplorer()
+    bridge = ShellBridge(
+        context=context,
+        preferences=SheetPreferences(tmp_path / "app-data"),
+        explorer=explorer,
+    )
+    app = create_app(Settings(data_dir=tmp_path / "data"), on_workspace_opened=context.set_workspace)
+    # 创建登记等价调用：应用层 open_workspace（workspace_root 为目标目录）
+    created = app.state.service.open_workspace(dst, workspace_root=tmp_path)
+    assert context.current is None  # 创建登记本身不登记壳上下文
+    with TestClient(app) as client:
+        response = client.get(f"/api/workspaces/{created.id}")
+        assert response.status_code == 200
+    assert context.current is not None
+    assert context.current.workspace_id == created.id
+    assert context.current.dst_path == dst
+    # 接管之后两个入口都必须可用（创建后不再需要关闭重开）
+    assert bridge.open_workspace_folder(created.id) == {"ok": True, "value": None}
+    assert bridge.load_sheet_columns(created.id) == {"ok": True, "value": None}
+    assert explorer.calls == [("select", dst)]
+
+
+def test_get_workspace_replaces_stale_context_after_creation_takeover(tmp_path, tiny_workspace):
+    dst, _ = tiny_workspace
+    other_root = tmp_path / "另一个工程"
+    other_root.mkdir()
+    shutil.copy(dst, other_root / "test.dst")
+    shutil.copy(tmp_path / "A.dwg", other_root / "A.dwg")
+    context = ShellContext()
+    bridge = ShellBridge(
+        context=context,
+        preferences=SheetPreferences(tmp_path / "app-data"),
+        explorer=FakeExplorer(),
+    )
+    app = create_app(Settings(data_dir=tmp_path / "data"), on_workspace_opened=context.set_workspace)
+    with TestClient(app) as client:
+        previous_id = client.post("/api/workspaces/open", json={"dst_path": str(dst)}).json()["id"]
+        assert context.current is not None and context.current.workspace_id == previous_id
+        created = app.state.service.open_workspace(other_root / "test.dst", workspace_root=other_root)
+        assert created.id != previous_id
+        assert client.get(f"/api/workspaces/{created.id}").status_code == 200
+    # 上下文必须切到新工作区：旧 ID 不残留，也不再接受旧 ID 的桥调用
+    assert context.current is not None and context.current.workspace_id == created.id
+    assert bridge.open_workspace_folder(created.id)["ok"] is True
+    assert bridge.open_workspace_folder(previous_id)["code"] == "SHELL_WORKSPACE_UNAVAILABLE"

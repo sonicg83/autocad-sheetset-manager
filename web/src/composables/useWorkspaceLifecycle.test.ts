@@ -5,6 +5,7 @@
 import {ref} from "vue";
 import {beforeEach, describe, expect, it, vi} from "vitest";
 import {useWorkspaceLifecycle, type WorkspaceLifecycleOptions} from "./useWorkspaceLifecycle";
+import {shellReady} from "../api/shell";
 import {useDraftGuards} from "./useDraftGuards";
 import {apiRequest, cmd, makeConflicted, makeDraftDeps, mockApiClient} from "./appCompositionTestSupport";
 import type {Workspace} from "../api/contracts";
@@ -240,5 +241,49 @@ describe("useWorkspaceLifecycle：打开 / 关闭 / 刷新", () => {
     expect(apiRequest.mock.calls.length).toBeGreaterThan(before);
     expect(apiRequest.mock.calls.some((call) => String(call[0]) === "/api/workspaces/w1")).toBe(true);
     expect(deps.workspace.value?.revision_id).toBe("r9");
+  });
+});
+
+// —— PLAN-DM-036 Task 9 收尾：「打开所在文件夹」错误按原因分流 ——
+// 壳侧把「未登记上下文」与「上下文已切换」拆成两个稳定码；前端必须分别给提示，
+// 不把「壳里从未登记过工作区」（创建成功接管后的典型状态）误报成「工作区已切换」。
+// 真实 `../api/shell` 模块 + 注入的假桥：shellReady 是导出 ref，置真即启用壳路径。
+function installShellBridge(result: unknown) {
+  const bridge = {open_workspace_folder: vi.fn(async () => result)};
+  (window as unknown as {pywebview?: {api: unknown}}).pywebview = {api: bridge};
+  shellReady.value = true;
+  return bridge;
+}
+
+function clearShellBridge() {
+  delete (window as unknown as {pywebview?: unknown}).pywebview;
+  shellReady.value = false;
+}
+
+describe("openFolder：壳桥错误分流", () => {
+  it("未登记上下文给「尚未登记」提示，不误报成「工作区已切换」", async () => {
+    const deps = makeLifecycleDeps();
+    deps.workspace.value = {id: "w1", revision_id: "r1"} as unknown as Workspace;
+    const lifecycle = useWorkspaceLifecycle(deps);
+    installShellBridge({ok: false, code: "SHELL_WORKSPACE_NOT_OPENED", message: "未登记", message_key: "errors.shell.workspaceNotOpened", params: {}});
+    try {
+      await lifecycle.openFolder();
+      expect(deps.error.value).toBe("shell.errors.workspaceNotOpened");
+    } finally {
+      clearShellBridge();
+    }
+  });
+
+  it("上下文已切换保留既有「已切换」提示", async () => {
+    const deps = makeLifecycleDeps();
+    deps.workspace.value = {id: "w1", revision_id: "r1"} as unknown as Workspace;
+    const lifecycle = useWorkspaceLifecycle(deps);
+    installShellBridge({ok: false, code: "SHELL_WORKSPACE_UNAVAILABLE", message: "已切换", message_key: "errors.shell.workspaceUnavailable", params: {}});
+    try {
+      await lifecycle.openFolder();
+      expect(deps.error.value).toBe("shell.errors.workspaceSwitched");
+    } finally {
+      clearShellBridge();
+    }
   });
 });

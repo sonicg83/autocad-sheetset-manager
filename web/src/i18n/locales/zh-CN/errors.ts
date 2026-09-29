@@ -145,6 +145,7 @@ export default {
   },
   shell: {
     workspaceUnavailable: "当前没有匹配的已打开工作区",
+    workspaceNotOpened: "桌面壳尚未登记已打开的工作区，请重新打开图纸集",
     openFailed: "在资源管理器中打开失败",
     directoryNotFound: "图纸集目录不存在，可能已被移动或删除",
     artifactDirectoryNotFound: "导出成果所在目录不存在，可能已被移动或删除",
