@@ -1,3 +1,9 @@
+## 2026-09-30（PLAN-DM-047 Task 7：契约、回归和文档收口）
+
+- 补齐级联上级枚举删除保护的专门回归，并收紧 DST 物化测试，确认 `sheetset` 与 `sheet` 上级/级联属性只写入各自作用域节点。复核 v3 基线、v4 包往返、两张 XLSX 错配、API 直写和组级旧预览门禁。
+- SPEC-DM-021 收口为 `accepted`；同步 SPEC-DM-017、SPEC-DM-018、用户指南及文档/计划索引，记录实施与验证边界。
+- 验证：Ruff、`uv lock --check`、相关 pytest **354 passed**、Web 单测 **359 passed**、API/i18n/UI 检查、生产构建及定向 Playwright **99 passed**；未设置 `DST_MANAGER_RUN_AUTOCAD=1`，真实 AutoCAD 系统测试跳过。构建保留主包 781.54 kB 的体积提示。
+
 ## 2026-09-29（PLAN-DM-047 Task 6：创建向导级联输入与草稿恢复）
 
 - 创建向导在项目信息和图纸组页按同作用域枚举上级显示级联候选；更改上级只清理当前对象的依赖值，新图纸组复制上级与级联值配对。

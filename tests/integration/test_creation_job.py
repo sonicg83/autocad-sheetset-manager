@@ -527,11 +527,15 @@ def test_staged_dst_materializes_cascade_values_on_their_scope_nodes(
     projected = document.project(Path(plan.target_path))
 
     assert projected.custom_properties["片区"] == "分册一"
+    assert "分部" not in projected.custom_properties
+    assert "分册" not in projected.custom_properties
+    assert all("专业" not in sheet.custom_properties for sheet in projected.sheets)
     assert [sheet.custom_properties["分册"] for sheet in projected.sheets] == [
         "分册一",
         "分册一",
         "分册二",
     ]
+    assert all("片区" not in sheet.custom_properties for sheet in projected.sheets)
 
 
 def test_retry_uses_a_new_attempt_directory(runner, plan, tmp_path) -> None:

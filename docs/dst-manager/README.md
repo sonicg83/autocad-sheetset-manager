@@ -1,6 +1,6 @@
 # DST Manager 文档入口
 
-2026-09-29 新增 [图纸标准级联枚举属性规范（SPEC-DM-021，draft）](specs/SPEC-DM-021-cascading-enum-properties.md) 与 [实施计划（PLAN-DM-047，proposed）](../../.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：设计普通/级联/派生三类属性、`sheetset`/`sheet` 同级枚举到一级级联的联动、XLSX 静态候选与后端成对校验；尚未实施。
+2026-09-30 完成 [图纸标准级联枚举属性规范（SPEC-DM-021，accepted）](specs/SPEC-DM-021-cascading-enum-properties.md) 与 [实施计划（PLAN-DM-047，completed）](../../.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：交付普通/级联/派生属性、`sheetset`/`sheet` 同级联动、XLSX 静态候选与后端成对校验，实际实现与验证见计划摘要。
 
 2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除。后续按用户确认取消旧格式兼容：旧发布包、草稿和 `id@version` 项目快照均不迁移、不读取；存量清理及验证记录见计划 Task 8。
 
@@ -90,8 +90,9 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [不编号图纸关键字规范（SPEC-DM-014，已接受；增量修订 SPEC-DM-001 的统一派生编号规则，设置项位于「编号规则」分组；实施计划 PLAN-DM-027 已完成，自动化门禁已闭合；因引入新控件类型 `text` 属 M 级，G3/G4/G8/G9 未重开，缺口与待补动作见该计划；2026-09-14「已知代价」（不编号子集之后被迫 `rename_only`）已由 ADR-DM-005 / PLAN-DM-030 关闭；同场景的编号种子缺陷（删除不编号子集使后续子集重编为 0 起）已由 PLAN-DM-032 修复，§行为 3/§行为 5 表述已按实现校正）](specs/SPEC-DM-014-unnumbered-subset-keywords.md)
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
-- [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
-- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；标准列表不显示发布版本；2026-09-28 §3.1 收敛为必填星号标记、取消说明小字，图纸集派生属性在项目信息页实时求值）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
+- [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/级联/派生属性、映射、组合物化及全局 DWG 命名模板；级联契约由 SPEC-DM-021 定义）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
+- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览；已同步项目/组级联输入、静态候选和成对校验）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
+- [图纸标准级联枚举属性规范（SPEC-DM-021，已接受；定义 `sheetset`/`sheet` 同级级联、Schema v4、创建校验、XLSX 与 DST 物化，由 PLAN-DM-047 实施）](specs/SPEC-DM-021-cascading-enum-properties.md)
 - [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，已接受；UUID、UTC 发布时间、平铺列表、改名导入与已发布标准删除）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md)
 - [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已被取代；记录整数版本实现与 PLAN-DM-041 验证）](specs/SPEC-DM-019-standard-version-and-package-import.md)
 

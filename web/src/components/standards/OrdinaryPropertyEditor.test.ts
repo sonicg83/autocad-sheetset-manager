@@ -226,6 +226,37 @@ describe("OrdinaryPropertyEditor", () => {
     expect(wrapper.emitted("deleteBlocked")?.[0]?.[0]).toMatchObject({propertyId: "prop-major"});
   });
 
+  it("blocks deleting an enum property used as a cascade source", async () => {
+    const draft = documentWithEnum();
+    draft.schema_version = 4;
+    const cascade = toDraftDocument({
+      schema_version: 4,
+      properties: [{
+        property_id: "prop-subdivision",
+        name: "片区",
+        scope: "sheetset",
+        kind: "cascade",
+        source_property_id: "prop-major",
+        cascade_options: [
+          {source_item_id: "enum-gas", values: ["北区"]},
+          {source_item_id: "enum-water", values: ["南区"]},
+        ],
+      }],
+    }).properties[0];
+    if (cascade === undefined) throw new Error("missing cascade fixture");
+    draft.properties.push(cascade);
+
+    const wrapper = mountEditor(draft);
+    await wrapper.get("[data-testid=ordinary-remove-prop-major]").trigger("click");
+
+    expect(propertyOf(draft, "prop-major")).toBeDefined();
+    expect(wrapper.get("[data-testid=ordinary-delete-blocked]").text()).toContain("片区");
+    expect(wrapper.emitted("deleteBlocked")?.[0]?.[0]).toMatchObject({
+      propertyId: "prop-major",
+      references: expect.arrayContaining([{kind: "cascade", ownerId: "prop-subdivision"}]),
+    });
+  });
+
   it("removes an unreferenced property", async () => {
     const draft = documentWithEnum();
     const wrapper = mountEditor(draft);

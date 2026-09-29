@@ -1,11 +1,11 @@
 ---
 id: SPEC-DM-021
 title: 图纸标准级联枚举属性规范
-status: draft
+status: accepted
 owners:
   - dst-manager
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 related:
   - SPEC-DM-017
   - SPEC-DM-018
@@ -97,3 +97,7 @@ related:
 4. 草稿恢复、API 直写与 XLSX 粘贴非法组合均被后端阻断，原值不被静默改写；XLSX 错误分别定位到 `SheetSet` 的 B 列或 `Sheet` 的具体行列，整批导入保持原草稿。
 5. 预览、组合及合法作用域的 DWG 命名看到同一个有效级联值；最终 DST 仅在相应图纸集或 Sheet 节点写入上级与级联属性，不含候选分组中间属性。
 6. v3 标准照常加载和创建；v3 草稿只读打开不改文件，显式保存升级 v4；未知 v4 属性种类明确拒绝。
+
+## 修订记录
+
+- 2026-09-30（PLAN-DM-047）：完成级联属性标准编辑、创建向导、XLSX、预览和 DST 物化；六组验收场景已按自动化回归与真实 CAD 环境边界核验，规范状态由 `draft` 收口为 `accepted`。实现与验证记录见 [PLAN-DM-047 实际验证摘要](../../../.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md#实际验证摘要)。
