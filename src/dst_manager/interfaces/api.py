@@ -278,7 +278,10 @@ def create_app(
         response_model_exclude_unset=True,
     )
     def get_workspace(workspace_id: str):
-        return workspace_json(service.get_workspace(workspace_id))
+        workspace = service.get_workspace(workspace_id)
+        if on_workspace_opened is not None:
+            on_workspace_opened(workspace)
+        return workspace_json(workspace)
 
     @app.get(
         "/api/workspaces/{workspace_id}/draft",

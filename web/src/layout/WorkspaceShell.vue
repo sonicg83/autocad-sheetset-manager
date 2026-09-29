@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import {ref, watch} from "vue";
 import TopBar from "./TopBar.vue";
 import TabBar from "./TabBar.vue";
 import TaskOverlay from "./TaskOverlay.vue";
 import ActionDock from "./ActionDock.vue";
+import UiIconButton from "../components/ui/UiIconButton.vue";
 
 // 纯展示壳层（PLAN-DM-029 Task 11 Step 6）。只装配 TopBar/TabBar/TaskOverlay/ActionDock 与
 // 壳层级提示，把页面内容经默认 slot 透出；业务状态一律由根组件经 props 传入、经 emits 回传。
@@ -17,7 +19,7 @@ type TabBarProps = InstanceType<typeof TabBar>["$props"];
 type TaskOverlayProps = InstanceType<typeof TaskOverlay>["$props"];
 type ActionDockProps = InstanceType<typeof ActionDock>["$props"];
 
-defineProps<{
+const props = defineProps<{
   // 壳层级提示与布局开关
   hasWorkspace: boolean;
   sheetsActive: boolean;
@@ -30,6 +32,13 @@ defineProps<{
   taskOverlay: TaskOverlayProps;
   dock: ActionDockProps;
 }>();
+
+const dismissedError = ref<string | null>(null);
+watch(() => props.error, () => { dismissedError.value = null; });
+
+function dismissError() {
+  if (props.error) dismissedError.value = props.error;
+}
 
 const emit = defineEmits<{
   close: [];
@@ -64,7 +73,10 @@ const emit = defineEmits<{
   />
   <div class="shell-body" :class="{'workspace-active': hasWorkspace}">
     <main class="shell-main" :class="{'sheets-active': sheetsActive}">
-      <p v-if="error" class="error notice">{{ error }}</p>
+      <div v-if="error && dismissedError !== error" class="error notice shell-error" role="alert">
+        <span class="shell-error-message">{{ error }}</span>
+        <UiIconButton class="shell-error-dismiss" icon="close" :label="$t('shell.workspace.dismissError')" @click="dismissError" />
+      </div>
       <!-- PLAN-DM-021 Task 9（I18N-11）：未知错误的原始文本只在可展开诊断详情呈现 -->
       <details v-if="error && lastErrorDiagnostic" class="error notice"><summary>{{ $t("errors.ui.diagnosticsDetails") }}</summary><pre class="error-raw">{{ lastErrorDiagnostic }}</pre></details>
       <p v-if="isWorkspaceLoading" class="panel loading" role="status">{{ $t("shell.workspace.loading") }}</p>
@@ -106,4 +118,7 @@ const emit = defineEmits<{
 .shell-body.workspace-active{height:calc(100vh - var(--shell-bar-height) - var(--shell-bar-height))}
 .shell-main{display:flex;flex-direction:column;gap:var(--space-3);flex:1;min-width:0;min-height:0;max-width:none;margin:0;padding:var(--space-5);overflow:auto}
 .shell-main.sheets-active{overflow:hidden}
+.shell-error{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.shell-error-message{min-width:0;overflow-wrap:anywhere}
+.shell-error-dismiss{flex:none}
 </style>

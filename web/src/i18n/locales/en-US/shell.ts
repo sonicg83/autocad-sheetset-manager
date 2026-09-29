@@ -114,6 +114,7 @@ export default {
     closeConfirmTitle: "Close Workspace",
     closeConfirmMessage: "There are unpublished changes. Changes are saved automatically in the draft; reopening the same DST resumes them. Close and discard the current changes?",
     closeConfirmConfirm: "Close and discard current changes",
+    dismissError: "Dismiss error notice",
     reloadConflictTitle: "Discard conflicting actions and reload",
     reloadConflictMessage: "This will discard unsaved conflicting actions in this window and reload the newer draft on the server. Continue?",
     reloadConflictConfirm: "Discard conflicts and reload",

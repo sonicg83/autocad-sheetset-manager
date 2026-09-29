@@ -117,6 +117,7 @@ export default {
     closeConfirmTitle: "关闭工作区",
     closeConfirmMessage: "存在未发布完毕的改动。改动已自动保存，重新打开同一 DST 可继续处理。确定关闭并放弃当前改动？",
     closeConfirmConfirm: "确定关闭并放弃当前改动",
+    dismissError: "关闭错误提示",
     reloadConflictTitle: "放弃冲突动作并重新加载",
     reloadConflictMessage: "将放弃当前窗口未保存的冲突动作，并重新读取服务器上的较新草稿。是否继续？",
     reloadConflictConfirm: "确定放弃冲突动作并重新加载",
