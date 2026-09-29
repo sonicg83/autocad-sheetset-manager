@@ -239,7 +239,8 @@ describe("StandardImportDialog", () => {
     await wrapper.get('[data-testid="import-choose-file"]').trigger("click");
     await flushPromises();
     await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
-    await wrapper.get(".import-backdrop").trigger("click");
+    // 关闭走 Esc（点遮罩已不再关闭弹窗）；关闭流程同样递增修订号并清理在途预检
+    await wrapper.get(".import-backdrop").trigger("keydown", {key: "Escape"});
     await flushPromises();
     await wrapper.setProps({open: false});
     await wrapper.setProps({open: true});
@@ -253,6 +254,13 @@ describe("StandardImportDialog", () => {
 
     expect(wrapper.get(".import-identity").text()).toContain("B");
     expect(harness.cancelImport).toHaveBeenCalledWith("preview-A");
+  });
+
+  it("点击遮罩不再关闭弹窗（模态只经关闭按钮或 Esc 退出）", async () => {
+    const {wrapper} = mountDialog();
+    await wrapper.get(".import-backdrop").trigger("click");
+    expect(wrapper.emitted("close")).toBeUndefined();
+    expect(wrapper.find('[data-testid="standard-import-dialog"]').exists()).toBe(true);
   });
 
   it("凭证过期后清除旧预检并要求重新预检", async () => {

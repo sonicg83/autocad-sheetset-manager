@@ -353,7 +353,8 @@ function applyCsv(): void {
       @save="saveEnum"
       @cancel="dialogPropertyId = null"
     />
-    <div v-if="csvOpen" class="modal-mask" @click.self="csvOpen = false" @keydown="onCsvKeydown">
+    <!-- 点遮罩不关闭：模态只能经取消/应用按钮或 Esc 退出（仓库统一口径），避免误触丢弃粘贴内容 -->
+    <div v-if="csvOpen" class="modal-mask" @keydown="onCsvKeydown">
       <section ref="csvCard" class="csv-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.ordinary.csv.title')">
         <h4 class="csv-title">{{ $t("standards.ordinary.csv.title") }}</h4>
         <p class="csv-hint">{{ $t("standards.ordinary.csv.hint") }}</p>

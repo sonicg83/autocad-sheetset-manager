@@ -245,6 +245,13 @@ describe("OrdinaryPropertyEditor", () => {
     expect(draft.properties.filter(item => item.kind === "mapping")).toHaveLength(1);
   });
 
+  it("点击遮罩不再关闭 CSV 弹窗（模态只经取消/应用按钮或 Esc 退出）", async () => {
+    const wrapper = mountEditor(documentWithEnum());
+    await wrapper.get("[data-testid=ordinary-csv]").trigger("click");
+    await wrapper.get(".modal-mask").trigger("click");
+    expect(wrapper.find("textarea").exists()).toBe(true);
+  });
+
   it("focuses the requested property row", async () => {
     const wrapper = mountEditor(documentWithEnum());
     await wrapper.setProps({focusRequest: {propertyId: "prop-major"}});

@@ -63,7 +63,8 @@ function onPropertyChange(col: SheetColumnOption, event: Event) {
     <button type="button" class="cols-toggle" :aria-expanded="open ? 'true' : 'false'" aria-controls="column-settings-panel" aria-haspopup="dialog" @click="openPanel">
       {{ $t("sheets.columns.toggle") }}<span v-if="newPropertyCount" class="cols-count">{{ $t("sheets.columns.newFieldCount", {count: newPropertyCount}) }}</span>
     </button>
-    <div v-if="open" class="cols-mask" @keydown="onKeydown" @click.self="closePanel">
+    <!-- 点遮罩不关闭：模态只能经「关闭」按钮或 Esc 退出（仓库统一口径） -->
+    <div v-if="open" class="cols-mask" @keydown="onKeydown">
       <div id="column-settings-panel" class="cols-panel" role="dialog" aria-modal="true" :aria-label="$t('sheets.columns.dialogAria')" tabindex="-1" ref="panel">
         <div class="cols-head">
           <h3 class="cols-title">{{ $t("sheets.columns.toggle") }}</h3>

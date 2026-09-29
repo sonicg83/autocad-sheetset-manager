@@ -52,7 +52,8 @@ function submit(): void {
 }
 </script>
 <template>
-  <div v-if="open" class="create-dialog-backdrop" @click.self="emit('close')" @keydown="onDialogKeydown">
+  <!-- 点遮罩不关闭：模态只能经取消/确认按钮或 Esc 退出（仓库统一口径），避免误触丢弃已填内容 -->
+  <div v-if="open" class="create-dialog-backdrop" @keydown="onDialogKeydown">
     <section ref="card" class="create-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.create.title')">
       <h3>{{ $t("standards.create.title") }}</h3>
       <p v-if="mode === 'derive'" class="create-origin">

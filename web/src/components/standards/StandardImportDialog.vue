@@ -249,7 +249,8 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <div v-if="open" class="import-backdrop" @click.self="close" @keydown="onDialogKeydown">
+  <!-- 点遮罩不关闭：模态只能经关闭按钮或 Esc 退出（仓库统一口径），避免误触丢弃预检结果 -->
+  <div v-if="open" class="import-backdrop" @keydown="onDialogKeydown">
     <section
       ref="card"
       class="import-dialog"
