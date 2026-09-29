@@ -7,9 +7,8 @@
 - 发布必须带非负 UTC Unix 毫秒整数 ``published_at``；
 - 两种文档都拒绝旧标准发布 ``version`` 字段。
 
-两个版本概念必须分开：标准发布版本用 :func:`parse_standard_version`（JSON 整数）
-或 :func:`parse_standard_version_segment`（路径段/绑定身份文本），依赖能力版本用
-:func:`parse_dependency_version`（保留三段语义化字符串）；三者不得共用 pattern。
+依赖能力版本使用 :func:`parse_dependency_version`（三段数字字符串）；它与
+标准身份和文档格式版本无关。
 
 语义门禁见 :mod:`dst_manager.domain.standard_semantics`；两阶段入口在
 :mod:`dst_manager.domain.standards` 门面组合。
@@ -46,13 +45,7 @@ from dst_manager.domain.standard_models import (
 )
 from dst_manager.domain.standard_versioning import (
     DEPENDENCY_VERSION_PATTERN,  # noqa: F401
-    LEGACY_STANDARD_ID_PATTERN,  # noqa: F401
-    MAX_STANDARD_VERSION,  # noqa: F401
-    STANDARD_ID_PATTERN,  # noqa: F401
-    STANDARD_VERSION_SEGMENT_PATTERN,  # noqa: F401
     parse_dependency_version,
-    parse_standard_version,  # noqa: F401
-    parse_standard_version_segment,  # noqa: F401
 )
 
 #: 支持的文档格式版本。

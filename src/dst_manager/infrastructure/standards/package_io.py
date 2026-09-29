@@ -199,16 +199,10 @@ class StandardPackageIO:
     def export_package(
         self,
         standard_id: str,
-        dest_dir: Path | int | str,
-        legacy_dest_dir: Path | None = None,
+        dest_dir: Path | str,
     ) -> Path:
         import zipfile
 
-        if self.is_legacy_published(standard_id):
-            raise _error(
-                "STANDARD_LEGACY_READ_ONLY",
-                "旧版标准仅供查看与历史兼容，不能导出为新版本标准包",
-            )
         candidates = [
             self._published_dir(root, standard_id)
             for root in (self._published_root, self._official_root)
@@ -226,8 +220,7 @@ class StandardPackageIO:
             assets = resolve_asset_files(standard, source)
         except StandardAssetError as exc:
             raise _asset_gate_error(exc) from exc
-        # 第三个参数仅在旧应用门面尚未迁移时接收并忽略旧发布版本。
-        dest = Path(legacy_dest_dir if legacy_dest_dir is not None else dest_dir)
+        dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
         package = dest / f"{standard.standard_id}.dststandard"
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:

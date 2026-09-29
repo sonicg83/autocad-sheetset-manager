@@ -24,21 +24,15 @@ from dst_manager.application.standard_common import (
 from dst_manager.application.standard_common import (
     store_error as _store_error,
 )
-from dst_manager.domain.legacy_standard_compat import (
-    parse_legacy_published_standard_document,
-)
 from dst_manager.domain.models import Severity, ValidationIssue, Workspace
 from dst_manager.domain.standard_identity import parse_standard_id
-from dst_manager.domain.standard_models import LegacyDrawingStandard
 from dst_manager.domain.standard_naming import publish_naming_diagnostics
 from dst_manager.domain.standard_rules import publish_diagnostics
 from dst_manager.domain.standards import (
-    STANDARD_ID_PATTERN,
     DrawingStandard,
     StandardDiagnostic,
     parse_published_standard_document,
     parse_standard_draft_document,
-    parse_standard_version_segment,
 )
 
 if TYPE_CHECKING:
@@ -50,9 +44,6 @@ from dst_manager.infrastructure.standards.store import StandardStoreError
 RESERVED_BINDING_PROPERTY = "DSTManager.Standard"
 RESERVED_OPTIONS_PROPERTY = "DSTManager.StandardOptions"
 RESERVED_PROPERTIES = (RESERVED_BINDING_PROPERTY, RESERVED_OPTIONS_PROPERTY)
-
-IDENTITY_SEPARATOR = "@"
-
 
 @dataclass(frozen=True, slots=True)
 class StandardResolution:
@@ -66,41 +57,21 @@ class StandardResolution:
 
     status: Literal["unbound", "resolved", "missing"]
     standard_id: str = ""
-    standard: DrawingStandard | LegacyDrawingStandard | None = None
+    standard: DrawingStandard | None = None
     source: str = ""
     diagnostics: tuple[ValidationIssue, ...] = ()
 
 
-def parse_standard_identity(identity: str) -> tuple[str, int | None]:
-    """解析新 UUID 或旧 ``standard_id@<n>`` 绑定；旧形态仅用于只读兼容。
-
-    旧绑定的版本必须是规范十进制正整数：``@0``、``@01``、``@1.0.0``、``@../``
-    一律拒绝。新绑定只接受带连字符的 UUID。
-    """
-    standard_id, separator, version = identity.partition(IDENTITY_SEPARATOR)
-    if not separator:
-        try:
-            return parse_standard_id(identity), None
-        except ValueError as exc:
-            raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
-    if not STANDARD_ID_PATTERN.fullmatch(standard_id):
-        raise ApplicationError(
-            "STANDARD_IDENTITY_INVALID",
-            f"标准身份 {identity!r} 非法，应为 standard_id@<正整数版本>",
-            422,
-        )
+def parse_standard_identity(identity: str) -> str:
+    """标准绑定只接受 UUID；旧 ``standard_id@version`` 形态不再兼容。"""
     try:
-        parsed = parse_standard_version_segment(version)
-    except Exception as exc:  # StandardSchemaError：稳定码已在消息前缀
+        return parse_standard_id(identity)
+    except ValueError as exc:
         raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
-    return standard_id, parsed
 
 
-def snapshot_directory(
-    root: Path, standard_id: str, version: int | str | None = None
-) -> Path:
-    directory = Path(root) / ".dst-manager" / "standards" / standard_id
-    return directory if version is None else directory / str(version)
+def snapshot_directory(root: Path, standard_id: str) -> Path:
+    return Path(root) / ".dst-manager" / "standards" / standard_id
 
 
 class StandardOperations:
@@ -127,16 +98,15 @@ class StandardOperations:
     # ---- 绑定解析与快照恢复 ----------------------------------------------
 
     def resolve_workspace_standard(self, workspace_id: str) -> StandardResolution:
-        """解析工作区绑定；新 UUID 可恢复项目快照，旧版本绑定只读解析。"""
+        """解析 UUID 绑定；新标准可从项目快照恢复。"""
         workspace = self.get_workspace(workspace_id)
         resolution = self._resolve_binding(workspace)
         if resolution.status != "resolved" or resolution.source == "project-snapshot":
             return resolution
-        identity = workspace.document.custom_properties.get(RESERVED_BINDING_PROPERTY, "").strip()
-        _standard_id, version = parse_standard_identity(identity)
-        if version is not None:
-            return resolution
-        restored = self._restore_snapshot(workspace, resolution.standard_id, version)
+        identity = workspace.document.custom_properties.get(
+            RESERVED_BINDING_PROPERTY, ""
+        ).strip()
+        restored = self._restore_snapshot(workspace, resolution.standard_id)
         if restored is None:
             return StandardResolution(
                 status="missing",
@@ -168,7 +138,7 @@ class StandardOperations:
         if not identity:
             return StandardResolution(status="unbound")
         try:
-            standard_id, version = parse_standard_identity(identity)
+            standard_id = parse_standard_identity(identity)
         except ApplicationError as exc:
             return StandardResolution(
                 status="missing",
@@ -176,14 +146,10 @@ class StandardOperations:
                     ValidationIssue("STANDARD_MISSING", Severity("error"), str(exc)),
                 ),
             )
-        snapshot = snapshot_directory(workspace.root, standard_id, version)
+        snapshot = snapshot_directory(workspace.root, standard_id)
         if (snapshot / "document.json").is_file():
             try:
-                standard = (
-                    self._load_snapshot(snapshot)
-                    if version is None
-                    else self._load_legacy_snapshot(snapshot, standard_id, version)
-                )
+                standard = self._load_snapshot(snapshot)
             except (OSError, ValueError, StandardSchemaError):
                 standard = None
             if standard is None:
@@ -204,7 +170,7 @@ class StandardOperations:
                 standard=standard,
                 source="project-snapshot",
             )
-        restored = self._locate_in_library(standard_id, version)
+        restored = self._locate_in_library(standard_id)
         if restored is not None:
             standard, source = restored
             return StandardResolution(
@@ -225,32 +191,24 @@ class StandardOperations:
             ),
         )
 
-    def _locate_in_library(
-        self, standard_id: str, version: int | None
-    ) -> tuple[DrawingStandard, str] | None:
+    def _locate_in_library(self, standard_id: str) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
             (store.published_root, "user-library"),
             (store.official_root, "official-library"),
         ):
             package = Path(root) / standard_id
-            if version is not None:
-                package = package / str(version)
             document = package / "document.json"
             if document.is_file():
                 try:
-                    standard = (
-                        self._load_snapshot(document.parent)
-                        if version is None
-                        else self._load_legacy_snapshot(document.parent, standard_id, version)
-                    )
+                    standard = self._load_snapshot(document.parent)
                     return standard, source
                 except (OSError, ValueError, StandardSchemaError):
                     continue
         return None
 
     def _restore_snapshot(
-        self, workspace: Workspace, standard_id: str, version: int | None
+        self, workspace: Workspace, standard_id: str
     ) -> tuple[DrawingStandard, str] | None:
         store = self.standard_store
         for root, source in (
@@ -258,11 +216,9 @@ class StandardOperations:
             (store.official_root, "official-library"),
         ):
             source_dir = Path(root) / standard_id
-            if version is not None:
-                source_dir = source_dir / str(version)
             if not (source_dir / "document.json").is_file():
                 continue
-            snapshot = snapshot_directory(workspace.root, standard_id, version)
+            snapshot = snapshot_directory(workspace.root, standard_id)
             snapshot.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(source_dir, snapshot)
             return self._load_snapshot(snapshot), source
@@ -278,34 +234,13 @@ class StandardOperations:
             json.loads((directory / "document.json").read_text(encoding="utf-8"))
         )
 
-    @staticmethod
-    def _load_legacy_snapshot(
-        directory: Path, standard_id: str, version: int
-    ) -> LegacyDrawingStandard:
-        import json
-
-        return parse_legacy_published_standard_document(
-            json.loads((directory / "document.json").read_text(encoding="utf-8")),
-            standard_id=standard_id,
-            version=version,
-        )
-
     # ---- 绑定写入 --------------------------------------------------------
 
     def bind_workspace_standard(
         self, workspace_id: str, identity: str, base_revision_id: str
     ) -> dict[str, object]:
         """通过专用命令把 UUID 写入图纸集保留属性。"""
-        try:
-            standard_id = parse_standard_id(identity)
-        except ValueError as exc:
-            raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
-        if self.standard_store.is_legacy_published(standard_id):
-            raise ApplicationError(
-                "STANDARD_LEGACY_READ_ONLY",
-                "旧版标准仅供查看与历史兼容，不能绑定到新工程",
-                409,
-            )
+        standard_id = parse_standard_identity(identity)
         commands = [{"type": "bind_standard", "standard": standard_id}]
         plan = self.preview_changes(workspace_id, base_revision_id, commands)
         if not plan["executable"]:
@@ -370,9 +305,7 @@ class StandardOperations:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}
 
-    def get_standard(
-        self, standard_id: str, version: int | str | None = None
-    ) -> dict[str, object]:
+    def get_standard(self, standard_id: str) -> dict[str, object]:
         standard = self.standard_store.get(standard_id)
         if standard is None:
             raise ApplicationError(
@@ -457,10 +390,9 @@ def _require_identity_match(
 ) -> None:
     """文档身份必须等于预期身份（草稿已存身份或路径身份）；两个保存入口共用。"""
     expected_id = expected.get("standard_id")
-    expected_version = expected.get("version")
-    if document.get("standard_id") != expected_id or document.get("version") != expected_version:
+    if document.get("standard_id") != expected_id:
         raise ApplicationError(
             "STANDARD_IDENTITY_MISMATCH",
-            f"文档身份 {document.get('standard_id')!r}@{document.get('version')!r} 与预期身份 {expected_id!r}@{expected_version!r} 不一致",
+            f"文档标准 ID {document.get('standard_id')!r} 与预期身份 {expected_id!r} 不一致",
             422,
         )

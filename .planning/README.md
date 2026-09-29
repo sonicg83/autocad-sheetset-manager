@@ -7,7 +7,7 @@
 - [DST Manager 路线图](roadmaps/dst-manager.md)
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
-- [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，completed）](plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)：完成 UUID＋发布时间、描述、改名导入、平铺管理、关联创建草稿删除、旧版本只读兼容迁移与端到端验证。
+- [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，completed）](plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)：完成 UUID＋发布时间、描述、改名导入、平铺管理与关联创建草稿删除；Task 8 按用户确认移除旧格式迁移和读取，并清理存量旧包、草稿及项目快照。
 - [DST Builder Plan 索引（历史资料）](plans/dst-builder/README.md)
 - 待办见 [`todos/dst-manager/`](todos/dst-manager/)；Builder 相关待办已随 Builder 退场清理（PLAN-INT-004）。
 - 备忘：[PLAN-INT-002 交付记录（MEMO-INT-001）](memos/integration/MEMO-INT-001-plan-int-002-delivery-record.md)：执行方式、26 项控制器裁定、计划缺陷与待决事项。

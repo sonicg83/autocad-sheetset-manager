@@ -61,14 +61,14 @@ describe("detailActions", () => {
     expect(detailActions(user).canExport).toBe(true);
   });
 
-  it("keeps migrated standards with unknown publication time read-only", () => {
-    const legacy = published("00000000-0000-4000-8000-000000000004", "旧版标准", "user", "原版说明", null);
-    expect(detailActions(legacy)).toEqual({
+  it("blocks actions for a published item without a valid publication time", () => {
+    const invalid = published("00000000-0000-4000-8000-000000000004", "无效标准", "user", "", null);
+    expect(detailActions(invalid)).toEqual({
       canEdit: false,
       canDelete: false,
       canDerive: false,
       canExport: false,
-      readOnlyReason: "legacy",
+      readOnlyReason: "published",
     });
   });
 });

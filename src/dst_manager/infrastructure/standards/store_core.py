@@ -8,9 +8,6 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from dst_manager.domain.legacy_standard_compat import (
-    parse_migrated_published_standard_document,
-)
 from dst_manager.domain.standard_identity import parse_standard_id
 from dst_manager.domain.standards import (
     SUPPORTED_SCHEMA_VERSIONS,
@@ -20,17 +17,6 @@ from dst_manager.domain.standards import (
 from dst_manager.infrastructure.filesystem.locking import (
     FileLockError,
     WorkspaceTransactionLock,
-)
-from dst_manager.infrastructure.standards.legacy_published_migration import (
-    LegacyPublishedMigrationError,
-    migrated_standard_ids,
-)
-from dst_manager.infrastructure.standards.migration import (
-    BACKUP_NAME,
-    StandardMigrationError,
-    has_legacy_drafts,
-    has_legacy_published,
-    migrate_legacy_standards,
 )
 from dst_manager.infrastructure.standards.package import StandardPackageReader
 from dst_manager.infrastructure.standards.store_common import (
@@ -72,28 +58,7 @@ class StandardStoreCore:
             raise _error("STANDARD_LIBRARY_PATH_INVALID", "官方库与用户库必须位于同一标准库树") from exc
         self._published_root = self._user_root / "published"
         self._drafts_root = self._user_root / "drafts"
-        backup_parent = self._standards_root.parent / "backups" / BACKUP_NAME
         self._reader = StandardPackageReader()
-        try:
-            if has_legacy_drafts(self._drafts_root) or has_legacy_published(
-                self._published_root, backup_parent
-            ):
-                with self.lifecycle_lock():
-                    if has_legacy_drafts(self._drafts_root) or has_legacy_published(
-                        self._published_root, backup_parent
-                    ):
-                        migrate_legacy_standards(
-                            standards_root=self._standards_root,
-                            official_root=self._official_root,
-                            published_root=self._published_root,
-                            drafts_root=self._drafts_root,
-                            identity_entries=self._identity_entries(),
-                        )
-            self._legacy_published_ids = migrated_standard_ids(
-                backup_parent / "legacy-published-uuid-map.json"
-            )
-        except (StandardMigrationError, LegacyPublishedMigrationError) as exc:
-            raise StandardStoreError(str(exc)) from exc
 
     @property
     def official_root(self) -> Path:
@@ -196,7 +161,7 @@ class StandardStoreCore:
                 child.is_dir() and (child / DOCUMENT_NAME).is_file()
                 for child in standard_dir.iterdir()
             ):
-                # 旧 ID/版本容器只由迁移兼容层读取，不能作为 UUID 标准出现在列表。
+                # 旧 ID/版本目录没有根级文档，不作为当前 UUID 标准读取。
                 continue
             try:
                 canonical_id = _safe_segment(standard_dir.name, "id")
@@ -213,6 +178,9 @@ class StandardStoreCore:
             ):
                 continue
             raw_published_at = document.get("published_at")
+            if schema_version == 3 and raw_published_at is None:
+                # v3 发布标准必须有发布时间；损坏文档仍保留为不可用候选供上层说明。
+                continue
             published_at = (
                 raw_published_at
                 if isinstance(raw_published_at, int)
@@ -271,21 +239,12 @@ class StandardStoreCore:
             )
         return data
 
-    def get(
-        self, standard_id: str, version: int | str | None = None
-    ) -> DrawingStandard | None:
+    def get(self, standard_id: str) -> DrawingStandard | None:
         for root in (self._published_root, self._official_root):
             document = self._published_dir(root, standard_id) / DOCUMENT_NAME
             if document.is_file():
                 data = self._read_supported(document)
-                standard = (
-                    parse_migrated_published_standard_document(
-                        data, standard_id=standard_id
-                    )
-                    if root == self._published_root
-                    and standard_id in self._legacy_published_ids
-                    else parse_published_standard_document(data)
-                )
+                standard = parse_published_standard_document(data)
                 if standard.standard_id != _safe_segment(standard_id, "id"):
                     raise _error("STANDARD_ID_INVALID", "文档标准 ID 与存储目录不一致")
                 return standard
@@ -303,13 +262,7 @@ class StandardStoreCore:
             for root in (self._published_root, self._official_root)
         )
 
-    def is_legacy_published(self, standard_id: str) -> bool:
-        """迁移兼容标准只读，不能导出、删除或用于新工程绑定。"""
-        return standard_id in self._legacy_published_ids
-
-    def get_document(
-        self, standard_id: str, version: int | str | None = None
-    ) -> dict[str, object] | None:
+    def get_document(self, standard_id: str) -> dict[str, object] | None:
         """读取已发布标准的原始文档字典（派生草稿等场景需要完整内容）。"""
         for root in (self._published_root, self._official_root):
             document = self._published_dir(root, standard_id) / DOCUMENT_NAME

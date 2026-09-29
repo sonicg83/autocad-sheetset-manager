@@ -201,7 +201,6 @@ export default {
     deleteJobActive: "仍有创建任务正在使用此标准",
     deleteForbidden: "官方标准不可删除",
     deleteFailed: "标准删除失败；事务已尽可能回滚",
-    legacyReadOnly: "旧版标准仅供查看与历史兼容，不能导出、删除或用于新工程",
   },
   ui: {
     unknownSummary: "操作失败，发生未知错误",

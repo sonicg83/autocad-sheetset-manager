@@ -181,7 +181,7 @@ export default {
     templateConflict: "The template was updated by another save (server r{current_revision}, local r{expected_revision}); local edits are kept — save as a new template or retry with the new revision",
     xlsxInvalid: "Candidate file validation failed: {check}",
   },
-  // ---- Standard library publish and import; legacy version error codes remain for compatibility ----
+  // ---- Standard library publish and import ----
   standards: {
     idExists: "A standard with this ID already exists; choose a different standard",
     nameConflict: "That standard name is already used by another published standard; rename it and retry",
@@ -200,7 +200,6 @@ export default {
     deleteJobActive: "A creation task is still using this standard",
     deleteForbidden: "Official standards cannot be deleted",
     deleteFailed: "Deleting the standard failed; the transaction was rolled back when possible",
-    legacyReadOnly: "Legacy standards are read-only and cannot be exported, deleted, or bound to new projects",
   },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",

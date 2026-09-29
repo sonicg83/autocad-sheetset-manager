@@ -347,16 +347,6 @@ def test_materialize_published_document_does_not_mutate_draft() -> None:
     assert published["description"] == draft["description"]
 
 
-def test_version_segment_is_bounded_before_int_conversion() -> None:
-    """超长数字串必须在 int() 前拒绝：否则会撞 CPython int_max_str_digits 并穿透成 500。"""
-    from dst_manager.domain.standard_schema import parse_standard_version_segment
-
-    with pytest.raises(StandardSchemaError, match="STANDARD_VERSION_INVALID"):
-        parse_standard_version_segment("9" * 4301)
-    # 上限值本身仍接受
-    assert parse_standard_version_segment(str(2147483647)) == 2147483647
-
-
 def test_dependency_min_version_keeps_three_segment_string() -> None:
     """依赖能力版本与标准发布版本用两个解析器：三段字符串保留，整数与单位字符串拒绝。"""
     document = valid_draft_document()

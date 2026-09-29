@@ -1,6 +1,6 @@
 # DST Manager 文档入口
 
-2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除；旧发布版本逐项映射为发布时间未知的只读 UUID 兼容项，旧源文件与项目快照保持原样。
+2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除。后续按用户确认取消旧格式兼容：旧发布包、草稿和 `id@version` 项目快照均不迁移、不读取；存量清理及验证记录见计划 Task 8。
 
 2026-09-27 按 [PLAN-DM-044](../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) 增量修订 [SPEC-DM-006 §6.4](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 与 [ARCH-DM-007 §4.3/§9](architecture/ARCH-DM-007-frontend-ui-foundations.md)：为语义化 grid 伪表格补充对齐与列头命名契约，并固定静态规则名称及逐表守卫；实施计划已进入 `active`，前端改造与自动化验证仍待执行。
 

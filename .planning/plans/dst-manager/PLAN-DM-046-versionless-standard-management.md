@@ -105,7 +105,7 @@ related:
 
 **Interfaces:** `create_creation_draft(standard_id: str) -> CreationDraft`；`CreationDraft.standard_id: str` 且无 `standard_version`；`standard_package_root(store: StandardStore, standard_id: str) -> Path | None`；新工程 `DSTManager.Standard=<uuid>`；新 XLSX 元数据 `standard_id=<uuid>` 且不写 `standard_version`。创建草稿和创建任务入队与标准删除共用生命周期锁。
 
-- [x] **Step 1: Write failing tests.** 创建／恢复／预览／执行都只按 UUID 定位；模板导入匹配 UUID；新工程绑定与项目快照目录为 UUID；删除库内标准后已创建项目仍由快照打开；旧 `id@version` 工程只读解析且打开不写磁盘。运行中任务继续锁定原标准内容。
+- [x] **Step 1: Write failing tests.** 创建／恢复／预览／执行都只按 UUID 定位；模板导入匹配 UUID；新工程绑定与项目快照目录为 UUID；删除库内标准后已创建项目仍由快照打开；旧 `id@version` 工程不解析，打开只报告标准缺失且不写磁盘。运行中任务继续锁定原标准内容。
 - [x] **Step 2: Verify RED.** Run `rtk uv run pytest -q -p no:xdist tests/unit/test_creation_drafts.py tests/integration/test_creation_api.py tests/integration/test_created_project_opens.py tests/unit/test_standard_service.py`。
 - [x] **Step 3: Implement the interfaces.** 保留旧工程绑定解析为只读兼容分支，不对旧 DST／快照执行身份迁移；新创建链路不得写旧格式。旧数据清点结果若含真实用户包或创建草稿，按 Global Constraints 先追加独立迁移设计和测试再继续。
 - [x] **Step 4: Verify GREEN.** 重跑本任务测试和 `rtk uv run ruff check .`；旧工程只读测试核对 DST／DWG 文件哈希与时间戳均不变。 已验证：Python 定向回归 192 项通过，标准服务测试（含历史快照与库包移除后工程快照）22 项通过；Ruff 全库通过；Web Vitest 344 项、生产构建及创建向导 Playwright 51 项通过。
@@ -149,7 +149,7 @@ Task 6 视觉验收记录（2026-09-29）：以上五项均通过。截图位于
 
 **Files:** 修改 `docs/dst-manager/guides/GUIDE-DM-007-official-standard-package-release.md`、`README.md`、`docs/dst-manager/README.md`、`.planning/README.md`、`changelog.md`；按实际生成结果更新测试夹具及 `web/src/api/openapi.json`、`schema.d.ts`；拆分 `src/dst_manager/infrastructure/standards/store.py` 的草稿、身份查询与包读写实现，新增同层基础设施模块并保持 `StandardStore` 公共接口。
 
-**Interfaces:** 发布包指南只描述 UUID＋发布时间＋标准描述；旧 `schema_version: 2`、`release_notes` 与 `id@version` 数据清点报告包括目录／数量和双字段冲突数量而不包含用户私有路径或描述正文；任何真实旧用户数据触发迁移设计门禁，不执行删除重建。
+**Interfaces:** 发布包指南只描述 UUID＋发布时间＋标准描述；旧 schema 发布包、旧标准草稿和 `id@version` 项目快照不迁移、不读取。旧数据清点只报告类型和数量，不包含用户私有路径或标准描述正文；如需清理，先备份并校验，再只删除已识别的旧标准数据。
 
 **执行记录（2026-09-29）：** 只读清点发现本机用户库有 4 个旧发布包（同一旧身份下的 4 个版本）、1 个旧草稿和 1 份旧项目快照；无官方标准或创建草稿，`description` 与 `release_notes` 冲突数为 0。按用户选择，每个旧发布版本映射独立 UUID，发布时间保持未知；原发布包与项目快照只读保留。迁移先验证包含标准库全树的 SHA-256 备份，再生成 schema v3 兼容副本与稳定 UUID 映射；旧草稿迁移保留描述，工程快照仍按旧 `id@version` 只读解析。
 
@@ -164,3 +164,20 @@ Task 7 UI 记录：隔离数据目录下启动真实 pywebview/WebView2 壳；�
 - [x] **Step 4: Review user flows.** 关键浏览器流程、原生 .dststandard 文件筛选/取消及浅深主题切换通过；浏览器窄视口与 200% 检查通过。真实 WebView2 窗口窄视口复核被物理 Escape 中断，未完成该项。 逐项走新建→输入标准描述→发布→在列表／详情查看描述→导出→导入（同 ID／同名）→创建草稿→用户标准删除确认→已建项目打开；核对官方标准删除请求被拒绝。复核 Task 6 五项视觉验收及截图证据；已通过自动化流程及原生包选择器、浅深主题检查；窄视口的真实壳检查中断，限制如实记录。
 - [x] **Step 5: Split oversized store implementation.** 已按草稿存储、身份查询、发布／包读写职责拆分到同层模块，保留 `StandardStore` 门面、路径与错误码契约；定向标准库及迁移回归通过，且新模块不导入接口层。
 - [x] **Step 6: Update docs and commit.** 已同步中英文 README、DST Manager 索引、发布指南、计划与 changelog；Task 7 文件已提交。 仅在实现完成后更新 README 的“当前功能”描述，将本计划状态及验证结果记入文档；只提交本任务文件。
+
+### Task 8：按用户决定取消旧标准兼容并清理存量
+
+**决策（2026-09-29）：** 用户确认旧发布包、旧标准草稿和旧项目标准快照均可舍弃，从当前 UUID/schema v3 标准开始；不兼容旧标准，不在应用启动时自动迁移或删除。
+
+**Files:** 删除旧 schema 迁移器及旧绑定解析；调整标准库、草稿库和项目绑定读取；更新对应回归、发布指南、中英文 README、本计划和 `changelog.md`。只对用户数据目录内可由迁移清单或旧 schema 明确识别的旧标准目标执行一次清理。
+
+**Interfaces:** 当前标准只按 UUID 和 schema v3 读取；旧发布包、旧标准草稿和 `id@version` 快照不可见。恢复备份位于标准库扫描目录之外；清理不得触及标准库中无关 UUID、数据库、项目文件、DST/DWG 或工作区其余内容。
+
+- [x] **Step 1: Write failing tests.** 覆盖旧发布包与旧草稿不再迁移/列出、无发布时间的旧副本不进入标准库、旧 `id@version` 绑定不读取快照且打开项目不改写文件。
+- [x] **Step 2: Remove compatibility code.** 移除启动迁移、旧 schema 解析、旧发布身份与版本段解析、旧快照读取和兼容 UI；严格保留当前 UUID/schema v3 读写。
+- [x] **Step 3: Back up and clean identified legacy data.** 核对迁移映射与旧源的对应关系；备份完整标准数据树及唯一旧项目标准快照，生成并逐文件验证 SHA-256 清单；仅清除被映射的迁移副本、旧发布目录、迁移草稿副本及旧项目快照目录。
+- [x] **Step 4: Verify and record.** 确认目标路径已清理、无关标准与项目/DST/DWG/数据库哈希未变；运行 Python 与 Web 回归、更新文档和 changelog，并记录实际结果后将计划标记 completed。
+
+**Task 8 存量处理记录（2026-09-29）：** 安装版数据中发现 4 个旧 schema 发布版本目录，以及由此前迁移生成的 4 个 UUID 发布副本和 1 个 schema v3 草稿副本；既有 UUID 映射逐项对应这 4 个发布副本，迁移前草稿备份与草稿副本目录一致。唯一旧项目快照与旧发布身份一致。清理前校验既有迁移备份 15/15 项 SHA-256；另在标准库扫描根之外创建恢复备份，包含完整标准数据树和旧项目标准快照，共 32 个文件，备份清单独立复核 32/32 项。随后只删除上述旧发布目录、映射副本、迁移草稿副本及快照；活动标准目录中旧文档与旧快照均为 0。项目树（排除目标快照）、DST/DWG 和工作区数据库哈希未变化，其他标准数据树逐项一致；仓库本地 `.dst-manager-data` 未触碰。
+
+**Task 8 验证记录（2026-09-29）：** `rtk uv run ruff check .` 与 `rtk uv lock --check` 通过；全量串行 pytest 为 2088 passed、74 skipped；Web 单测 339 passed，生产构建通过，Playwright E2E 708 passed（4 workers）。

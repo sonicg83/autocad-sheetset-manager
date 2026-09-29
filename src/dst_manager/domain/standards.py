@@ -52,9 +52,6 @@ from dst_manager.domain.standard_models import (
 )
 from dst_manager.domain.standard_schema import (
     DEPENDENCY_VERSION_PATTERN,
-    MAX_STANDARD_VERSION,
-    STANDARD_ID_PATTERN,
-    STANDARD_VERSION_SEGMENT_PATTERN,
     SUPPORTED_SCHEMA_VERSIONS,
     StandardSchemaError,
     loads_standard_json,
@@ -62,8 +59,6 @@ from dst_manager.domain.standard_schema import (
     parse_published_at,
     parse_published_standard_structure,
     parse_standard_draft_structure,
-    parse_standard_version,
-    parse_standard_version_segment,
 )
 from dst_manager.domain.standard_semantics import (
     MAX_PAD_WIDTH,
@@ -76,7 +71,6 @@ __all__ = [
     "DEPENDENCY_VERSION_PATTERN",
     "DERIVED_PROPERTY_KINDS",
     "MAX_PAD_WIDTH",
-    "MAX_STANDARD_VERSION",
     "ORDINARY_PROPERTY_KINDS",
     "PAD_FORMAT_PATTERN",
     "PROPERTY_KINDS",
@@ -85,8 +79,6 @@ __all__ = [
     "RESERVED_PROPERTY_NAMES",
     "RESERVED_PROPERTY_NAME_PREFIX",
     "SHEET_SYSTEM_FIELDS",
-    "STANDARD_ID_PATTERN",
-    "STANDARD_VERSION_SEGMENT_PATTERN",
     "SUBSET_SYSTEM_FIELDS",
     "SUPPORTED_SCHEMA_VERSIONS",
     "SYSTEM_FIELDS",
@@ -114,8 +106,6 @@ __all__ = [
     "parse_published_standard_document",
     "parse_standard_draft_document",
     "parse_standard_id",
-    "parse_standard_version",
-    "parse_standard_version_segment",
 ]
 
 

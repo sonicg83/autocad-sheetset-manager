@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dst_manager.domain.standards import (
     DrawingStandard,
+    StandardSchemaError,
     parse_standard_draft_document,
 )
 from dst_manager.infrastructure.filesystem.atomic import atomic_write_text
@@ -41,6 +42,12 @@ class StandardDraftStorage:
         data = json.loads(document.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return None
+        if data.get("schema_version") != 3:
+            return None
+        try:
+            parse_standard_draft_document(data)
+        except StandardSchemaError:
+            return None
         return StandardDraft(draft_id=draft_id, document=data)
 
     def _iter_drafts(self) -> list[StandardDraft]:
@@ -53,7 +60,7 @@ class StandardDraftStorage:
             try:
                 draft = self.get_draft(directory.name)
             except StandardStoreError:
-                # 目录名非法的历史草稿只跳过，不删除也不阻断其余条目。
+                # 目录名非法的草稿只跳过，不删除也不阻断其余条目。
                 continue
             if draft is not None:
                 drafts.append(draft)

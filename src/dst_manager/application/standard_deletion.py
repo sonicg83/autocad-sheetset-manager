@@ -76,12 +76,6 @@ class StandardDeletionOperations:
             raise ApplicationError(
                 "STANDARD_ID_NOT_FOUND", f"用户标准 {standard_id!r} 不存在", 404
             )
-        if self.standard_store.is_legacy_published(standard_id):
-            raise ApplicationError(
-                "STANDARD_LEGACY_READ_ONLY",
-                "旧版标准仅供查看与历史兼容，不能删除",
-                409,
-            )
         try:
             if self.standard_store.get(standard_id) is None:
                 raise ApplicationError(

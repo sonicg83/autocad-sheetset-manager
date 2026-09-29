@@ -55,7 +55,6 @@ export default {
     dependencies: "受信扩展依赖",
     readOnlyOfficial: "官方标准只读",
     readOnlyPublished: "已发布标准不可直接修改",
-    readOnlyLegacy: "旧版标准仅供查看与历史兼容",
     edit: "编辑",
     derive: "派生新草稿",
     export: "导出标准包",

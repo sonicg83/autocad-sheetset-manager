@@ -222,7 +222,6 @@ CATALOG: dict[str, ErrorCatalogEntry] = {
     "STANDARD_DELETE_JOB_ACTIVE": _E("errors.standards.deleteJobActive"),
     "STANDARD_DELETE_FORBIDDEN": _E("errors.standards.deleteForbidden"),
     "STANDARD_DELETE_FAILED": _E("errors.standards.deleteFailed"),
-    "STANDARD_LEGACY_READ_ONLY": _E("errors.standards.legacyReadOnly"),
 }
 
 

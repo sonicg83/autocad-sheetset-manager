@@ -113,7 +113,7 @@ class CreationDraftOperations:
 
     def _require_published_standard(self, standard_id: str) -> DrawingStandard:
         standard = self.standard_store.get(standard_id)
-        if standard is None or self.standard_store.is_legacy_published(standard_id):
+        if standard is None:
             raise _creation_error(
                 "CREATION_STANDARD_MISSING",
                 f"标准 {standard_id} 未发布或已不可用，请重新选择标准后创建",

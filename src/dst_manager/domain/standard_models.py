@@ -272,30 +272,12 @@ class DraftDrawingStandard(_StandardDocumentMixin):
 class DrawingStandard(_StandardDocumentMixin):
     """不可变的已发布图纸标准文档（Schema v3）。
 
-    仅旧版本迁移兼容对象允许 ``published_at`` 为空；普通 v3 发布解析仍要求有效时间。
+    发布标准必须包含有效的 ``published_at``。
     """
 
     schema_version: int
     standard_id: str
-    published_at: int | None
-    name: str
-    description: str
-    supported_cad_versions: tuple[str, ...]
-    properties: tuple[StandardProperty, ...]
-    dwg_naming: DwgNamingTemplate
-    assets: tuple[StandardAsset, ...]
-    numbering: NumberingPolicy
-    dependencies: tuple[StandardDependency, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class LegacyDrawingStandard(_StandardDocumentMixin):
-    """旧版工程快照的只读内存模型；旧发布时间未知且不写回。"""
-
-    schema_version: int
-    standard_id: str
-    version: int
-    published_at: None
+    published_at: int
     name: str
     description: str
     supported_cad_versions: tuple[str, ...]

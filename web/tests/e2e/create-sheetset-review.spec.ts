@@ -81,7 +81,7 @@ test("顶部摘要与按组一行主表只呈现后端权威结果", async ({pag
   await openReviewStep(page);
 
   // 顶部：固定标准、最终项目路径、组数/张数/DWG 数、当前编号设置与检查状态
-  await expect(page.getByTestId("creation-fixed-standard")).toContainText("szmedi.gas");
+  await expect(page.getByTestId("creation-fixed-standard")).toContainText("00000000-0000-4000-8000-000000000046");
   await expect(page.getByTestId("creation-preview-context")).toContainText("D:\\项目\\新建项目");
   const summary = page.getByTestId("creation-preview-summary");
   await expect(summary).toContainText("3 个图纸组");

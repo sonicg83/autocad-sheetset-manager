@@ -109,7 +109,7 @@ def test_resolve_restores_project_snapshot_from_user_library(
     assert opened.standard.source == "project-snapshot"
 
 
-def test_legacy_versioned_binding_reads_snapshot_without_writes(
+def test_legacy_versioned_binding_is_unrecognized_and_snapshot_is_untouched(
     service: DstManagerService, workspace
 ) -> None:
     standard_id = "legacy.gas"
@@ -135,13 +135,12 @@ def test_legacy_versioned_binding_reads_snapshot_without_writes(
 
     opened = service.open_workspace(workspace.dst_path)
 
-    assert opened.standard.status == "resolved"
-    assert opened.standard.source == "project-snapshot"
-    assert opened.standard.standard_id == standard_id
-    assert opened.standard.standard is not None
-    assert opened.standard.standard.version == 1
-    assert opened.standard.standard.description == "旧版说明"
-    assert opened.standard.standard.published_at is None
+    assert opened.standard.status == "missing"
+    assert opened.standard.source == ""
+    assert opened.standard.standard_id == ""
+    assert opened.standard.standard is None
+    assert any(item.code == "STANDARD_MISSING" for item in opened.document.diagnostics)
+    # 旧绑定不再识别；打开工程不会自行删除或改写快照与工程文件。
     assert (snapshot / "document.json").read_bytes() == snapshot_bytes
     assert (snapshot / "document.json").stat().st_mtime_ns == snapshot_mtime
     assert workspace.dst_path.read_bytes() == dst_bytes
@@ -158,7 +157,7 @@ def test_missing_standard_does_not_block_workspace_open(
     original_mtime = workspace.dst_path.stat().st_mtime_ns
     opened = service.open_workspace(workspace.dst_path)
     assert opened.standard.status == "missing"
-    assert opened.standard.standard_id == "missing"
+    assert opened.standard.standard_id == ""
     assert any(item.code == "STANDARD_MISSING" for item in opened.document.diagnostics)
     # 打开动作本身不创建项目快照。
     assert not (opened.root / ".dst-manager/standards/missing/1").exists()
