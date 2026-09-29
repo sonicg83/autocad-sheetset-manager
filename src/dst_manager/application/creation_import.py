@@ -91,8 +91,7 @@ class _WorkbookParser(CreationMetadataStages, CreationRowStages):
             if self.diagnostics:
                 return self._reject()
         target_path, sheetset_values = self._read_sheetset()
-        if self.diagnostics:
-            return self._reject()
+        # 继续读取图纸组，以便一次返回 SheetSet 与各组的完整级联配对诊断。
         groups = self._read_groups()
         if self.diagnostics:
             return self._reject()

@@ -7,6 +7,7 @@
 
 from creation_xlsx_fixtures import (
     DEFAULT_SHEETSET_PATH,
+    cascade_standard,
     diagnostic,
     fill_template,
     group_row,
@@ -73,6 +74,71 @@ def test_imported_value_matches_ui_input_shape(standard, options) -> None:
         "A1",
     )
     assert group.sheet_values == {"prop-stage": "施工图", "prop-part": "A 段"}
+
+
+def test_cascade_import_round_trips_sheetset_and_each_group_values(options) -> None:
+    standard = cascade_standard()
+    data = fill_template(
+        standard,
+        options,
+        sheetset={
+            "项目保存路径": DEFAULT_SHEETSET_PATH,
+            "工程名称": "示例工程",
+            "专业": "燃油",
+            "片区": "分册三",
+        },
+        rows=(
+            group_row(图名="平面图", 分部="A 段", 分册="分册二"),
+            group_row(图名="剖面图", 分部="B 段", 分册="分册四"),
+        ),
+    )
+
+    result = parse_creation_workbook(data, standard, options)
+
+    assert result.diagnostics == ()
+    assert result.value.sheetset_values == {
+        "prop-name": "示例工程",
+        "prop-major": "燃油",
+        "prop-district": "分册三",
+    }
+    assert [group.sheet_values for group in result.value.groups] == [
+        {"prop-stage": "施工图", "prop-part": "A 段", "prop-volume": "分册二"},
+        {"prop-stage": "施工图", "prop-part": "B 段", "prop-volume": "分册四"},
+    ]
+
+
+def test_cascade_mismatches_report_both_cells_and_reject_the_batch(options) -> None:
+    standard = cascade_standard()
+    data = fill_template(
+        standard,
+        options,
+        sheetset={
+            "项目保存路径": DEFAULT_SHEETSET_PATH,
+            "专业": "燃气",
+            "片区": "分册四",
+        },
+        rows=(
+            group_row(图名="平面图", 分部="A 段", 分册="分册四"),
+            group_row(图名="剖面图", 分部="B 段", 分册="分册四"),
+        ),
+    )
+
+    result = parse_creation_workbook(data, standard, options)
+
+    assert result.value is None
+    sheetset_diagnostic = next(
+        item
+        for item in result.diagnostics
+        if item.code == "STANDARD_CASCADE_VALUE_INVALID"
+        and item.sheet == "SheetSet"
+    )
+    sheet_diagnostic = next(
+        item
+        for item in result.diagnostics
+        if item.code == "STANDARD_CASCADE_VALUE_INVALID" and item.sheet == "Sheet"
+    )
+    assert (sheetset_diagnostic.row, sheetset_diagnostic.column) == (5, "B")
+    assert (sheet_diagnostic.row, sheet_diagnostic.column) == (2, "H")
 
 
 # ---- 资产、图幅与行输入校验 ----------------------------------------------

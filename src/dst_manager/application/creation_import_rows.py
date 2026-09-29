@@ -19,12 +19,14 @@ from dataclasses import replace
 
 from dst_manager.domain.creation import (
     SHEET_SCOPE,
+    SHEETSET_SCOPE,
     CreationAssetOption,
     CreationDiagnostic,
     CreationGroupInput,
-    ordinary_properties,
+    input_properties,
     validate_creation_target_path,
 )
+from dst_manager.domain.standard_cascade import validate_cascade_values
 from dst_manager.domain.standard_models import (
     DrawingStandard,
     StandardProperty,
@@ -192,6 +194,19 @@ class CreationRowStages:
             self._check_enum_value(
                 self.standard.property_by_id(row_spec.property_id), text, SHEETSET_SHEET, row_spec.row, "B"
             )
+        for diagnostic in validate_cascade_values(
+            self.standard, SHEETSET_SCOPE, values
+        ):
+            row_spec = self.plan.sheetset_row(diagnostic.property_id or "")
+            if row_spec is None:
+                continue
+            self._add(
+                diagnostic.code,
+                diagnostic.message,
+                sheet=SHEETSET_SHEET,
+                row=row_spec.row,
+                column="B",
+            )
         return target_path, values
 
     def _check_enum_value(
@@ -216,8 +231,9 @@ class CreationRowStages:
         grid = self._grid(SHEET_SHEET)
         title_spec = self._require_column("title")
         count_spec = self._require_column("count")
-        sheet_properties = ordinary_properties(self.standard, SHEET_SCOPE)
+        sheet_properties = input_properties(self.standard, SHEET_SCOPE)
         groups: list[CreationGroupInput] = []
+        group_rows: dict[str, int] = {}
         titles: dict[str, int] = {}
         for row in range(2, len(grid.rows) + 1):
             if not any(cell.strip() for cell in grid.rows[row - 1]):
@@ -236,9 +252,10 @@ class CreationRowStages:
                 text = self._cell(SHEET_SHEET, row, spec.index)
                 sheet_values[prop.property_id] = text
                 self._check_enum_value(prop, text, SHEET_SHEET, row, spec.column)
+            group_id = f"xlsx-{row}"
             groups.append(
                 CreationGroupInput(
-                    group_id=f"xlsx-{row}",
+                    group_id=group_id,
                     created_order=len(groups) + 1,
                     title=title,
                     count=count if count is not None else 0,
@@ -248,6 +265,21 @@ class CreationRowStages:
                     sheet_values=sheet_values,
                 )
             )  # 已有诊断时整组会被丢弃；仍按同一形状构造，保证组序与行序一致
+            group_rows[group_id] = row
+        for group in groups:
+            for diagnostic in validate_cascade_values(
+                self.standard, SHEET_SCOPE, group.sheet_values
+            ):
+                spec = self.plan.column(diagnostic.property_id or "")
+                if spec is None:
+                    continue
+                self._add(
+                    diagnostic.code,
+                    diagnostic.message,
+                    sheet=SHEET_SHEET,
+                    row=group_rows[group.group_id],
+                    column=spec.column,
+                )
         return tuple(groups)
 
     def _require_column(self, key: str) -> CreationColumnSpec:

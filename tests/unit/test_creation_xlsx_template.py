@@ -8,7 +8,7 @@
 
 from io import BytesIO
 
-from creation_xlsx_fixtures import build_creation_template
+from creation_xlsx_fixtures import build_creation_template, cascade_standard
 from openpyxl import load_workbook
 
 from dst_manager.infrastructure.creation_xlsx import (
@@ -75,3 +75,48 @@ def test_template_hidden_metadata_maps_labels_to_stable_ids(standard, options) -
     assert records[("asset", "layout-template")] == ("layout-a1", "layout-a1")
     assert records[("sheetset_target_path", "2")] == (None, "项目保存路径")
     assert records[("sheetset_property", "3")] == ("prop-name", "工程名称")
+
+
+def test_cascade_template_has_static_deduplicated_candidates_and_two_visible_sheets(
+    options,
+) -> None:
+    workbook = load_workbook(
+        BytesIO(build_creation_template(cascade_standard(), options))
+    )
+
+    assert [
+        sheet.title for sheet in workbook if sheet.sheet_state == "visible"
+    ] == [SHEETSET_SHEET, SHEET_SHEET]
+    assert all(
+        cell.data_type != "f"
+        for sheet in workbook
+        for row in sheet.iter_rows()
+        for cell in row
+    )
+    assert "片区" in [cell.value for cell in workbook[SHEETSET_SHEET]["A"]]
+    assert "分册" in [cell.value for cell in workbook[SHEET_SHEET][1]]
+    assert any(
+        "B5" in str(validation.sqref)
+        for validation in workbook[SHEETSET_SHEET].data_validations.dataValidation
+    )
+    assert any(
+        "H2:H" in str(validation.sqref)
+        for validation in workbook[SHEET_SHEET].data_validations.dataValidation
+    )
+
+    lists = workbook[LIST_SHEET]
+    columns = {
+        lists.cell(row=1, column=column).value: column
+        for column in range(1, lists.max_column + 1)
+    }
+    for property_id, expected in (
+        ("prop-district", ["分册一", "分册二", "分册三"]),
+        ("prop-volume", ["分册一", "分册二", "分册四"]),
+    ):
+        column = columns[property_id]
+        actual = [
+            lists.cell(row=row, column=column).value
+            for row in range(2, lists.max_row + 1)
+            if lists.cell(row=row, column=column).value is not None
+        ]
+        assert actual == expected

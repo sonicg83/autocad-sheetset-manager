@@ -21,7 +21,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from dst_manager.domain.creation import (
     SHEETSET_SCOPE,
     CreationAssetOption,
-    ordinary_properties,
+    input_properties,
 )
 from dst_manager.domain.standard_models import DrawingStandard
 from dst_manager.infrastructure.creation_xlsx_protocol import (
@@ -155,6 +155,13 @@ def _candidate_columns(
     for prop in standard.properties:
         if prop.kind == "enum":
             entries.append((prop.property_id, tuple(item.value for item in prop.enum_items)))
+        elif prop.kind == "cascade":
+            values = tuple(
+                dict.fromkeys(
+                    value for row in prop.cascade_options for value in row.values
+                )
+            )
+            entries.append((prop.property_id, values))
     for key, kind in (("base_template", "base-template"), ("layout_template", "layout-template")):
         entries.append((key, plan.asset_labels(kind)))
     entries.append(("paper_layout", plan.layout_names()))
@@ -182,7 +189,7 @@ def _write_data_validations(
     candidates: dict[str, tuple[int, int]],
 ) -> None:
     """枚举与三类模板/布局选项加 Data Validation；候选值引用隐藏表，避免转义问题。"""
-    for prop in ordinary_properties(standard, SHEETSET_SCOPE):
+    for prop in input_properties(standard, SHEETSET_SCOPE):
         reference = _list_reference(candidates, prop.property_id)
         if reference is None:
             continue
@@ -193,7 +200,7 @@ def _write_data_validations(
         if spec.is_fixed:
             if spec.key not in ("base_template", "layout_template", "paper_layout"):
                 continue
-        elif standard.property_by_id(spec.key).kind != "enum":
+        elif standard.property_by_id(spec.key).kind not in ("enum", "cascade"):
             continue
         reference = _list_reference(candidates, spec.key)
         if reference is None:

@@ -24,7 +24,7 @@ from dst_manager.domain.creation import (
     SHEET_SCOPE,
     SHEETSET_SCOPE,
     CreationAssetOption,
-    ordinary_properties,
+    input_properties,
 )
 from dst_manager.domain.standard_models import (
     DrawingStandard,
@@ -252,7 +252,7 @@ def creation_template_plan(
         columns.append(
             CreationColumnSpec(index=len(columns) + 1, header=header, key=key, is_fixed=True)
         )
-    for prop in ordinary_properties(standard, SHEET_SCOPE):
+    for prop in input_properties(standard, SHEET_SCOPE):
         header = _unique_header(prop.name, used)
         used.add(normalize_property_name(header))
         columns.append(
@@ -262,7 +262,7 @@ def creation_template_plan(
         )
 
     sheetset_rows: list[CreationSheetSetRow] = [CreationSheetSetRow(row=2, label=TARGET_PATH_LABEL)]
-    for prop in ordinary_properties(standard, SHEETSET_SCOPE):
+    for prop in input_properties(standard, SHEETSET_SCOPE):
         sheetset_rows.append(
             CreationSheetSetRow(
                 row=len(sheetset_rows) + 2, label=prop.name, property_id=prop.property_id

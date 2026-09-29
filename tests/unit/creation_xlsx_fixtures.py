@@ -167,6 +167,45 @@ def group_row(**overrides: object) -> dict[str, object]:
     return row
 
 
+def cascade_standard() -> DrawingStandard:
+    """两级 v4 级联标准；不同来源项共享候选以固定本级去重顺序。"""
+    document = copy.deepcopy(STANDARD_DOCUMENT)
+    document["schema_version"] = 4
+    properties = document["properties"]
+    properties.extend(
+        [
+            {
+                "property_id": "prop-district",
+                "name": "片区",
+                "scope": "sheetset",
+                "kind": "cascade",
+                "source_property_id": "prop-major",
+                "cascade_options": [
+                    {"source_item_id": "enum-gas", "values": ["分册一", "分册二"]},
+                    {"source_item_id": "enum-oil", "values": ["分册一", "分册三"]},
+                ],
+            },
+            {
+                "property_id": "prop-volume",
+                "name": "分册",
+                "scope": "sheet",
+                "kind": "cascade",
+                "source_property_id": "prop-part",
+                "cascade_options": [
+                    {"source_item_id": "enum-part-a", "values": ["分册一", "分册二"]},
+                    {"source_item_id": "enum-part-b", "values": ["分册一", "分册四"]},
+                ],
+            },
+        ]
+    )
+    label = next(prop for prop in properties if prop["property_id"] == "prop-label")
+    label["segments"].insert(0, {"property_id": "prop-volume"})
+    document["dwg_naming"]["segments"].insert(
+        0, {"property_id": "prop-district"}
+    )
+    return parse_published_standard_document(document)
+
+
 def _label_row(worksheet, label: str) -> int:
     for row in range(1, worksheet.max_row + 1):
         if worksheet.cell(row=row, column=1).value == label:
