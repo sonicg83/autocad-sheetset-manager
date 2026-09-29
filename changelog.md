@@ -2,7 +2,8 @@
 
 - 补齐级联上级枚举删除保护的专门回归，并收紧 DST 物化测试，确认 `sheetset` 与 `sheet` 上级/级联属性只写入各自作用域节点。复核 v3 基线、v4 包往返、两张 XLSX 错配、API 直写和组级旧预览门禁。
 - SPEC-DM-021 收口为 `accepted`；同步 SPEC-DM-017、SPEC-DM-018、用户指南及文档/计划索引，记录实施与验证边界。
-- 验证：Ruff、`uv lock --check`、相关 pytest **354 passed**、Web 单测 **359 passed**、API/i18n/UI 检查、生产构建及定向 Playwright **99 passed**；未设置 `DST_MANAGER_RUN_AUTOCAD=1`，真实 AutoCAD 系统测试跳过。构建保留主包 781.54 kB 的体积提示。
+- 修复全量 pytest 收集时标准删除集成用例的跨目录共享夹具导入，避免依赖测试收集顺序。
+- 验证：Ruff、`uv lock --check`、相关 pytest **354 passed**、全量 Python pytest **退出码 0**、Web 单测 **359 passed**、API/i18n/UI 检查、生产构建及定向 Playwright **99 passed**；未设置 `DST_MANAGER_RUN_AUTOCAD=1`，真实 AutoCAD 系统测试跳过。构建保留主包 781.54 kB 的体积提示。
 
 ## 2026-09-29（PLAN-DM-047 Task 6：创建向导级联输入与草稿恢复）
 

@@ -156,5 +156,5 @@ SPEC-DM-021 §8 的六组验收场景全部有自动化或明确记录的真实�
 
 - Task 1–7 均完成。Task 1–6 提交依次为 `5d7c59a`、`daa411c`、`5a8c891`、`ffe51eb`、`ee5c7df`、`08d6113`；Task 7 的文档、测试与本摘要随该任务提交。
 - §8 场景与回归对应：标准两作用域 Schema、源项与引用删除保护由 `test_drawing_standards.py`、`test_standard_rules.py` 和 `OrdinaryPropertyEditor.test.ts` 覆盖；v3 读取/只读零写入/显式升级与 v4 包往返由 `test_standard_api.py` 覆盖；创建页联动、草稿恢复和整批批量拒绝由 Web 单测及创建向导 E2E 覆盖；XLSX 两作用域错配由 `test_creation_xlsx_rows.py` 覆盖；API 直写与组级级联变化使旧预览失效由 `test_creation_api.py` 覆盖；预览求值和 DST 作用域物化由 `test_creation_planning.py`、`test_creation_job.py` 覆盖。
-- 验证通过：`rtk uv run ruff check .`、相关 pytest **354 passed**、`rtk uv lock --check`、Web `check:api` / `check:i18n`（1664 键、11 域）/ `check:ui`、单测 **359 passed**、生产构建、定向 Playwright **99 passed**。生产构建提示主 JavaScript 包为 781.54 kB，超出 500 kB 建议阈值。
+- 验证通过：`rtk uv run ruff check .`、相关 pytest **354 passed**、全量 Python `rtk uv run pytest -q`（退出码 0）、`rtk uv lock --check`、Web `check:api` / `check:i18n`（1664 键、11 域）/ `check:ui`、单测 **359 passed**、生产构建、定向 Playwright **99 passed**。全量回归同时修复了标准删除集成测试依赖偶然导入路径的问题。生产构建提示主 JavaScript 包为 781.54 kB，超出 500 kB 建议阈值。
 - 未修改数据库模型或迁移。真实 AutoCAD 系统测试跳过：执行环境未设置 `DST_MANAGER_RUN_AUTOCAD=1`。

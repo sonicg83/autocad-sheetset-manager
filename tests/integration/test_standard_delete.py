@@ -10,12 +10,12 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from creation_xlsx_fixtures import STANDARD_DOCUMENT
 from fastapi.testclient import TestClient
 
 from dst_manager.application.service import DstManagerService
 from dst_manager.config import Settings
 from dst_manager.interfaces.api import create_app
+from tests.unit.creation_xlsx_fixtures import STANDARD_DOCUMENT
 
 FIRST_ID = "00000000-0000-4000-8000-000000000046"
 SECOND_ID = "00000000-0000-4000-8000-000000000047"
