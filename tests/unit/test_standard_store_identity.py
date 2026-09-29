@@ -82,9 +82,9 @@ def create_draft(
 def test_publish_uses_uuid_directory_timestamp_and_flat_summary(
     store: StandardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dst_manager.infrastructure.standards.store as store_module
+    import dst_manager.infrastructure.standards.package_io as package_module
 
-    monkeypatch.setattr(store_module.time, "time_ns", lambda: PUBLISHED_AT * 1_000_000)
+    monkeypatch.setattr(package_module.time, "time_ns", lambda: PUBLISHED_AT * 1_000_000)
     create_draft(
         store,
         FIRST_ID,

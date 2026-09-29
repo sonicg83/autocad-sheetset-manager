@@ -1,12 +1,8 @@
-"""用户标准库旧草稿备份与 schema v3 迁移。"""
+"""用户标准库旧草稿与旧发布包备份、兼容迁移。"""
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import shutil
-import uuid
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -20,13 +16,21 @@ from dst_manager.infrastructure.standards.identity_index import (
     IdentityEntry,
     IdentityIndex,
 )
+from dst_manager.infrastructure.standards.legacy_published_migration import (
+    LegacyPublishedMigrationError,
+    has_pending_legacy_published,
+    install_legacy_published_copies,
+    prepare_legacy_published,
+    save_legacy_mapping,
+)
+from dst_manager.infrastructure.standards.migration_backup import (
+    ensure_verified_backup,
+    sha256_file,
+)
 
 BACKUP_NAME = "PLAN-DM-046-pre-migration-2026-09-28"
-LIBRARY_LOCK_NAME = ".standards.lock"
-_MANIFEST_NAME = "sha256-manifest.json"
 _REPORT_NAME = "migration-report.json"
 _MIGRATABLE_SCHEMA_VERSIONS = frozenset({1, 2})
-_HASH_CHUNK_SIZE = 1024 * 1024
 
 
 class StandardMigrationError(Exception):
@@ -38,41 +42,65 @@ def has_legacy_drafts(drafts_root: Path) -> bool:
     return bool(_legacy_drafts(Path(drafts_root)))
 
 
-def migrate_legacy_drafts(
+def has_legacy_published(published_root: Path, backup_parent: Path) -> bool:
+    """只读探测是否存在尚未映射的旧版发布包。"""
+    return has_pending_legacy_published(
+        Path(published_root), Path(backup_parent) / "legacy-published-uuid-map.json"
+    )
+
+
+def migrate_legacy_standards(
     *,
     standards_root: Path,
     official_root: Path,
     published_root: Path,
     drafts_root: Path,
     identity_entries: Iterable[IdentityEntry],
-) -> tuple[int, int]:
-    """先校验整库备份，再验证并逐文件原子迁移旧用户草稿。
+) -> tuple[int, int, int]:
+    """先校验整库备份，再迁移旧草稿并为每个旧发布包生成 UUID 副本。
 
-    返回本次迁移的草稿数和描述冲突数。调用方负责在标准库互斥锁内执行。
+    旧发布目录与工程快照均只读；兼容副本发布时间未知。调用方负责持锁。
     """
     standards_root = Path(standards_root).resolve()
-    legacy = _legacy_drafts(Path(drafts_root))
-    if not legacy:
-        return 0, 0
-    _reject_legacy_published(official_root, published_root)
-
-    data_root = standards_root.parent if standards_root.name == "standards" else standards_root
-    backup_parent = data_root / "backups" / BACKUP_NAME
-    backup_tree = backup_parent / "standards"
-    backup_manifest = _ensure_verified_backup(
-        standards_root, backup_parent, backup_tree
-    )
-    for _draft_id, document_path, _document in legacy:
+    drafts_root = Path(drafts_root)
+    published_root = Path(published_root)
+    legacy_drafts = _legacy_drafts(drafts_root)
+    backup_parent = standards_root.parent / "backups" / BACKUP_NAME
+    has_pending_published = has_legacy_published(published_root, backup_parent)
+    if not legacy_drafts and not has_pending_published:
+        return 0, 0, 0
+    _reject_legacy_published(official_root)
+    try:
+        backup_manifest = ensure_verified_backup(standards_root, backup_parent)
+    except ValueError as exc:
+        raise StandardMigrationError(str(exc)) from exc
+    for _draft_id, document_path, _document in legacy_drafts:
         relative_path = document_path.relative_to(standards_root).as_posix()
-        if backup_manifest.get(relative_path) != _sha256_file(document_path):
+        if backup_manifest.get(relative_path) != sha256_file(document_path):
             raise StandardMigrationError(
                 "STANDARD_BACKUP_INVALID: 待迁移草稿与经校验备份不一致"
             )
 
+    try:
+        prepared_published, mapping, package_conflicts, published_identities = (
+            prepare_legacy_published(
+                standards_root=standards_root,
+                published_root=published_root,
+                backup_manifest=backup_manifest,
+                backup_parent=backup_parent,
+                identity_entries=identity_entries,
+            )
+        )
+    except LegacyPublishedMigrationError as exc:
+        raise StandardMigrationError(str(exc)) from exc
+
     index = IdentityIndex(identity_entries)
-    prepared: list[tuple[Path, dict[str, object]]] = []
+    for identity in published_identities:
+        if index.find_id(identity.standard_id) is None:
+            index.add(identity)
+    prepared_drafts: list[tuple[Path, dict[str, object]]] = []
     conflict_count = 0
-    for draft_id, document_path, document in legacy:
+    for draft_id, document_path, document in legacy_drafts:
         raw_description = document.get("description")
         raw_release_notes = document.get("release_notes")
         description = raw_description if isinstance(raw_description, str) else None
@@ -113,23 +141,41 @@ def migrate_legacy_drafts(
                 draft_id=draft_id,
             )
         )
-        prepared.append((document_path, migrated))
+        prepared_drafts.append((document_path, migrated))
 
     report_path = backup_parent / _REPORT_NAME
     previous_report = _read_aggregate_report(report_path)
+    previous_draft_count = _nonnegative_count(
+        previous_report.get("draft_migrated_count", previous_report.get("migrated_count"))
+    )
+    previous_published_count = _nonnegative_count(
+        previous_report.get("published_migrated_count")
+    )
+    draft_count = max(len(prepared_drafts), previous_draft_count)
+    published_count = max(len(prepared_published), previous_published_count)
     report = {
         "format": 1,
-        "migrated_count": max(
-            len(prepared), _nonnegative_count(previous_report.get("migrated_count"))
-        ),
+        "migrated_count": draft_count + published_count,
+        "draft_migrated_count": draft_count,
+        "published_migrated_count": published_count,
         "description_conflict_count": max(
-            conflict_count,
+            conflict_count + package_conflicts,
             _nonnegative_count(previous_report.get("description_conflict_count")),
         ),
         "result": "prepared",
     }
+    try:
+        save_legacy_mapping(backup_parent / "legacy-published-uuid-map.json", mapping)
+    except OSError as exc:
+        raise StandardMigrationError(
+            "STANDARD_MIGRATION_FAILED: 旧发布包 UUID 映射无法保存"
+        ) from exc
     _write_report(report_path, report)
-    for document_path, document in prepared:
+    try:
+        install_legacy_published_copies(prepared_published, published_root)
+    except LegacyPublishedMigrationError as exc:
+        raise StandardMigrationError(str(exc)) from exc
+    for document_path, document in prepared_drafts:
         try:
             atomic_write_text(
                 document_path,
@@ -141,7 +187,26 @@ def migrate_legacy_drafts(
             ) from exc
     report["result"] = "completed"
     _write_report(report_path, report)
-    return len(prepared), conflict_count
+    return len(prepared_published), len(prepared_drafts), package_conflicts + conflict_count
+
+
+def migrate_legacy_drafts(
+    *,
+    standards_root: Path,
+    official_root: Path,
+    published_root: Path,
+    drafts_root: Path,
+    identity_entries: Iterable[IdentityEntry],
+) -> tuple[int, int]:
+    """兼容旧调用门面；同时执行当前标准库迁移并返回草稿数与冲突数。"""
+    _published_count, draft_count, conflict_count = migrate_legacy_standards(
+        standards_root=standards_root,
+        official_root=official_root,
+        published_root=published_root,
+        drafts_root=drafts_root,
+        identity_entries=identity_entries,
+    )
+    return draft_count, conflict_count
 
 
 def _legacy_drafts(drafts_root: Path) -> list[tuple[str, Path, dict[str, object]]]:
@@ -197,90 +262,6 @@ def _reject_legacy_published(*roots: Path) -> None:
                 )
 
 
-def _ensure_verified_backup(
-    source_root: Path, backup_parent: Path, backup_tree: Path
-) -> dict[str, str]:
-    manifest_path = backup_parent / _MANIFEST_NAME
-    try:
-        source_manifest = _file_manifest(source_root)
-        data_root = backup_parent.parent.parent
-        backups_root = backup_parent.parent
-        if data_root.is_symlink() or backups_root.is_symlink() or backup_parent.is_symlink():
-            raise ValueError("备份路径不能包含符号链接")
-        if manifest_path.is_symlink() or backup_tree.is_symlink():
-            raise ValueError("备份文件不能是符号链接")
-        if backup_tree.exists():
-            if not backup_parent.is_dir() or not backup_tree.is_dir():
-                raise ValueError("备份 standards 不是普通目录")
-            backup_manifest = _file_manifest(backup_tree)
-            if manifest_path.is_file():
-                expected = json.loads(manifest_path.read_text(encoding="utf-8"))
-                expected_files = expected.get("files") if isinstance(expected, dict) else None
-                if (
-                    not isinstance(expected, dict)
-                    or expected.get("format") != 1
-                    or expected.get("file_count") != len(expected_files or {})
-                    or expected_files != backup_manifest
-                ):
-                    raise ValueError("已有备份与校验清单不一致")
-            elif source_manifest != backup_manifest:
-                raise ValueError("已有备份与当前标准库不一致")
-            _write_manifest(manifest_path, backup_manifest)
-            return backup_manifest
-        if backup_parent.exists() or manifest_path.exists():
-            raise ValueError("已有备份不完整，拒绝覆盖")
-
-        backup_parent.mkdir(parents=True, exist_ok=True)
-        staging = backup_parent / f".standards-copy-{uuid.uuid4().hex}"
-
-        def ignore_lock(_directory: str, names: list[str]) -> set[str]:
-            return {name for name in names if name == LIBRARY_LOCK_NAME}
-
-        try:
-            shutil.copytree(source_root, staging, ignore=ignore_lock)
-            staged_manifest = _file_manifest(staging)
-            if staged_manifest != source_manifest:
-                raise ValueError("标准库备份的文件数或 SHA-256 与源目录不一致")
-            os.replace(staging, backup_tree)
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-        _write_manifest(manifest_path, staged_manifest)
-        return staged_manifest
-    except (OSError, ValueError, TypeError, AttributeError) as exc:
-        raise StandardMigrationError(
-            f"STANDARD_BACKUP_INVALID: 迁移前标准库备份校验失败：{exc}"
-        ) from exc
-
-
-def _file_manifest(root: Path) -> dict[str, str]:
-    files: dict[str, str] = {}
-    for directory, names, filenames in os.walk(root, followlinks=False):
-        base = Path(directory)
-        for name in names:
-            if (base / name).is_symlink():
-                raise ValueError("标准库树含符号链接目录")
-        for name in filenames:
-            path = base / name
-            if path.name == LIBRARY_LOCK_NAME:
-                continue
-            if path.is_symlink():
-                raise ValueError("标准库树含符号链接文件")
-            digest = hashlib.sha256()
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(_HASH_CHUNK_SIZE), b""):
-                    digest.update(chunk)
-            files[path.relative_to(root).as_posix()] = digest.hexdigest()
-    return dict(sorted(files.items()))
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(_HASH_CHUNK_SIZE), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _read_aggregate_report(path: Path) -> dict[str, object]:
     if not path.is_file() or path.is_symlink():
         return {}
@@ -295,11 +276,6 @@ def _read_aggregate_report(path: Path) -> dict[str, object]:
 
 def _nonnegative_count(value: object) -> int:
     return value if type(value) is int and value >= 0 else 0
-
-
-def _write_manifest(path: Path, files: dict[str, str]) -> None:
-    payload = {"format": 1, "file_count": len(files), "files": files}
-    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def _write_report(path: Path, report: dict[str, object]) -> None:

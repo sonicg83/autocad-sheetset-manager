@@ -270,11 +270,14 @@ class DraftDrawingStandard(_StandardDocumentMixin):
 
 @dataclass(frozen=True, slots=True)
 class DrawingStandard(_StandardDocumentMixin):
-    """不可变的已发布图纸标准文档（Schema v3）。"""
+    """不可变的已发布图纸标准文档（Schema v3）。
+
+    仅旧版本迁移兼容对象允许 ``published_at`` 为空；普通 v3 发布解析仍要求有效时间。
+    """
 
     schema_version: int
     standard_id: str
-    published_at: int
+    published_at: int | None
     name: str
     description: str
     supported_cad_versions: tuple[str, ...]

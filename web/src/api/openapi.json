@@ -5312,8 +5312,15 @@
             "type": "string"
           },
           "published_at": {
-            "title": "Published At",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
           },
           "standard_id": {
             "title": "Standard Id",
@@ -5331,7 +5338,6 @@
           "standard_id",
           "name",
           "description",
-          "published_at",
           "supported_cad_versions",
           "dependencies",
           "document"

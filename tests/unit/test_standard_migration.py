@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -47,6 +48,150 @@ def legacy_store(tmp_path: Path, document: dict[str, object]):
     return official_root, user_root, source
 
 
+def legacy_published_package(
+    published_root: Path, version: int, *, description: str
+) -> tuple[Path, bytes, bytes]:
+    from creation_xlsx_fixtures import STANDARD_DOCUMENT
+
+    package_dir = published_root / "legacy.water" / str(version)
+    assets_dir = package_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "retained-template.dwt").write_bytes(b"legacy template")
+    document = copy.deepcopy(STANDARD_DOCUMENT)
+    document.update(
+        {
+            "schema_version": 2,
+            "standard_id": "legacy.water",
+            "version": version,
+            "name": f"历史水务标准 {version}",
+            "release_notes": description,
+            "assets": [],
+        }
+    )
+    document.pop("published_at", None)
+    document.pop("description", None)
+    source = package_dir / "document.json"
+    source.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    return source, source.read_bytes(), (assets_dir / "retained-template.dwt").read_bytes()
+
+
+def test_legacy_published_versions_get_distinct_read_only_uuids(
+    tmp_path: Path,
+) -> None:
+    standards_root = tmp_path / "standards"
+    official_root = standards_root / "official"
+    user_root = standards_root / "user"
+    published_root = user_root / "published"
+    first_source, first_bytes, first_asset = legacy_published_package(
+        published_root, 2, description="第二版原始说明"
+    )
+    second_source, second_bytes, second_asset = legacy_published_package(
+        published_root, 5, description="第五版原始说明"
+    )
+
+    store = StandardStore(official_root=official_root, user_root=user_root)
+
+    summaries = [
+        item
+        for item in store.list()
+        if item.source == "user" and item.status == "published"
+    ]
+    assert len(summaries) == 2
+    assert len({item.standard_id for item in summaries}) == 2
+    assert all(len(item.standard_id) == 36 and item.published_at is None for item in summaries)
+    by_description = {item.description: item for item in summaries}
+    assert set(by_description) == {"第二版原始说明", "第五版原始说明"}
+    for source, original_bytes, asset_bytes, description in (
+        (first_source, first_bytes, first_asset, "第二版原始说明"),
+        (second_source, second_bytes, second_asset, "第五版原始说明"),
+    ):
+        summary = by_description[description]
+        standard = store.get(summary.standard_id)
+        assert standard is not None
+        assert standard.standard_id == summary.standard_id
+        assert standard.published_at is None
+        assert store.is_legacy_published(summary.standard_id)
+        assert store.get_document(summary.standard_id)["description"] == description
+        with pytest.raises(StandardStoreError, match="STANDARD_LEGACY_READ_ONLY"):
+            store.export_package(summary.standard_id, tmp_path)
+        migrated_dir = store.published_root / summary.standard_id
+        assert (migrated_dir / "assets" / "retained-template.dwt").read_bytes() == asset_bytes
+        assert source.read_bytes() == original_bytes
+
+    backup_root = tmp_path / "backups" / BACKUP_NAME / "standards"
+    assert (
+        backup_root / "user" / "published" / "legacy.water" / "2" / "document.json"
+    ).read_bytes() == first_bytes
+    assert (
+        backup_root / "user" / "published" / "legacy.water" / "5" / "document.json"
+    ).read_bytes() == second_bytes
+
+    reopened = StandardStore(official_root=official_root, user_root=user_root)
+    assert {
+        item.description: item.standard_id
+        for item in reopened.list()
+        if item.source == "user" and item.status == "published"
+    } == {description: item.standard_id for description, item in by_description.items()}
+
+    from dst_manager.application.errors import ApplicationError
+    from dst_manager.application.standard_deletion import StandardDeletionOperations
+
+    deletion = StandardDeletionOperations.__new__(StandardDeletionOperations)
+    deletion.standard_store = store
+    deletion.creation_drafts = type("Drafts", (), {"list_by_standard": lambda *_: ()})()
+    with pytest.raises(ApplicationError) as deletion_error:
+        deletion.standard_delete_impact(next(iter(by_description.values())).standard_id)
+    assert deletion_error.value.code == "STANDARD_LEGACY_READ_ONLY"
+
+    from dst_manager.application.standards import StandardOperations
+
+    service = StandardOperations.__new__(StandardOperations)
+    service.standard_store = store
+    service.preview_changes = lambda *_args, **_kwargs: {
+        "executable": True,
+        "preview_digest": "preview",
+    }
+    service.execute_changes = lambda *_args, **_kwargs: {"id": "job"}
+    with pytest.raises(ApplicationError) as binding_error:
+        service.bind_workspace_standard(
+            "workspace", next(iter(by_description.values())).standard_id, "revision"
+        )
+    assert binding_error.value.code == "STANDARD_LEGACY_READ_ONLY"
+
+
+def test_duplicate_legacy_uuid_mapping_blocks_reopen_without_rewriting_sources(
+    tmp_path: Path,
+) -> None:
+    standards_root = tmp_path / "standards"
+    official_root = standards_root / "official"
+    user_root = standards_root / "user"
+    published_root = user_root / "published"
+    first_source, first_bytes, _ = legacy_published_package(
+        published_root, 2, description="第二版原始说明"
+    )
+    second_source, second_bytes, _ = legacy_published_package(
+        published_root, 5, description="第五版原始说明"
+    )
+    StandardStore(official_root=official_root, user_root=user_root)
+
+    mapping_path = (
+        tmp_path
+        / "backups"
+        / BACKUP_NAME
+        / "legacy-published-uuid-map.json"
+    )
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    entries = list(mapping["entries"].values())
+    entries[1]["standard_id"] = entries[0]["standard_id"]
+    mapping_path.write_text(json.dumps(mapping), encoding="utf-8")
+
+    with pytest.raises(StandardStoreError, match="STANDARD_BACKUP_INVALID"):
+        StandardStore(official_root=official_root, user_root=user_root)
+
+    assert first_source.read_bytes() == first_bytes
+    assert second_source.read_bytes() == second_bytes
+
+
 @pytest.mark.parametrize("schema_version", [1, 2])
 def test_initialization_backups_and_migrates_legacy_draft_idempotently(
     tmp_path: Path, schema_version: int
@@ -73,7 +218,14 @@ def test_initialization_backups_and_migrates_legacy_draft_idempotently(
     report = json.loads((backup_dir / "migration-report.json").read_text(encoding="utf-8"))
     assert report["migrated_count"] == 1
     assert report["description_conflict_count"] == 0
-    assert set(report) <= {"format", "migrated_count", "description_conflict_count", "result"}
+    assert set(report) <= {
+        "format",
+        "migrated_count",
+        "draft_migrated_count",
+        "published_migrated_count",
+        "description_conflict_count",
+        "result",
+    }
 
     reopened = StandardStore(
         official_root=tmp_path / "standards" / "official",

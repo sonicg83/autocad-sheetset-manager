@@ -1,7 +1,7 @@
 ---
 id: PLAN-DM-046
 title: 无版本图纸标准身份与标准库管理实施计划
-status: active
+status: completed
 owners:
   - dst-manager
 created: 2026-09-28
@@ -151,9 +151,16 @@ Task 6 视觉验收记录（2026-09-29）：以上五项均通过。截图位于
 
 **Interfaces:** 发布包指南只描述 UUID＋发布时间＋标准描述；旧 `schema_version: 2`、`release_notes` 与 `id@version` 数据清点报告包括目录／数量和双字段冲突数量而不包含用户私有路径或描述正文；任何真实旧用户数据触发迁移设计门禁，不执行删除重建。
 
-- [ ] **Step 1: Record migration inventory.** 检查官方／用户库、创建草稿与绑定工程是否存在旧身份及 `release_notes`；只记录数量、类型和双字段冲突数量，不记录描述正文。若有真实数据，先补迁移方案、备份与回归测试，验证原文字迁移；无真实数据时更新公开夹具和官方包制作流程。
-- [ ] **Step 2: Run backend gates.** `rtk uv run ruff check .`、`rtk uv run pytest -q`、`rtk uv lock --check`；按结果处理真实失败，不把既有环境失败写成通过。
-- [ ] **Step 3: Run frontend gates.** 在 `web` 中运行 `rtk npm run test:unit`、`rtk npm run build`、相关 `rtk npx playwright test`；核对生成 OpenAPI、类型与 i18n 守卫。
-- [ ] **Step 4: Review user flows.** 逐项走新建→输入标准描述→发布→在列表／详情查看描述→导出→导入（同 ID／同名）→创建草稿→用户标准删除确认→已建项目打开；核对官方标准删除请求被拒绝。复核 Task 6 五项视觉验收及截图证据；在真实桌面壳可用时验证原生包选择器、浅深主题与窄视口，缺少环境则如实记录未验证。
-- [ ] **Step 5: Split oversized store implementation.** 当前 `store.py` 超过单文件软上限；按草稿存储、身份查询、发布／包读写职责拆分到同层模块，保留 `StandardStore` 门面、路径与错误码契约。重跑标准库、发布、导入导出与迁移回归测试，并确认新模块不依赖接口层。
-- [ ] **Step 6: Update docs and commit.** 仅在实现完成后更新 README 的“当前功能”描述，将本计划状态及验证结果记入文档；只提交本任务文件。
+**执行记录（2026-09-29）：** 只读清点发现本机用户库有 4 个旧发布包（同一旧身份下的 4 个版本）、1 个旧草稿和 1 份旧项目快照；无官方标准或创建草稿，`description` 与 `release_notes` 冲突数为 0。按用户选择，每个旧发布版本映射独立 UUID，发布时间保持未知；原发布包与项目快照只读保留。迁移先验证包含标准库全树的 SHA-256 备份，再生成 schema v3 兼容副本与稳定 UUID 映射；旧草稿迁移保留描述，工程快照仍按旧 `id@version` 只读解析。
+
+兼容迁移演练针对临时副本执行：4 个发布版本得到 4 个不同 UUID，发布时间均为空；4 份发布描述与旧草稿描述摘要一致；旧发布源文件哈希未变化；备份清单校验通过，项目数据库哈希未变化。演练未修改本机源包、草稿或项目快照。
+
+Task 7 UI 记录：隔离数据目录下启动真实 pywebview/WebView2 壳；原生打开对话框显示 `.dststandard` 文件过滤，未选择文件并正常取消；浅色与深色主题均可切换。Playwright 全套 103 项通过，包含 200% 与窄视口检查；真实壳窗口缩至窄视口的检查因 Computer Use 被物理 Escape 中断而未完成。Task 6 已有的五项视觉验收与截图继续有效。
+
+**Task 7 后端验证记录（2026-09-29）：** 临时副本迁移演练确认 4 个旧发布版本获得 4 个不同 UUID，发布时间均保持未知；旧发布源文件未变化、备份 SHA-256 校验通过、项目数据库未变化，发布描述与草稿描述均保留。全量 pytest 首次 xdist 运行因测试 worker 共享数据库出现竞争；改为隔离数据目录串行重跑后 2095 passed、74 skipped。
+- [x] **Step 1: Record migration inventory.** 已按上述数量与冲突数记录；为旧发布包增加逐版本 UUID 映射、发布时间未知、原包只读与备份校验；回归覆盖描述迁移、源文件不变和项目数据库不变。
+- [x] **Step 2: Run backend gates.** Ruff 全库检查与 uv lock 检查通过；xdist 因测试 worker 共享数据库互扰未通过，随后使用隔离数据目录串行运行完整后端套件，2095 passed、74 skipped。聚焦兼容回归 164 passed。 `rtk uv run ruff check .`、`rtk uv run pytest -q`、`rtk uv lock --check`；按结果处理真实失败，不把既有环境失败写成通过。
+- [x] **Step 3: Run frontend gates.** API/i18n/UI 契约检查与生产构建通过；Vitest 339 passed，Playwright 103 passed（含窄视口与 200% 缩放）。 在 `web` 中运行 `rtk npm run test:unit`、`rtk npm run build`、相关 `rtk npx playwright test`；核对生成 OpenAPI、类型与 i18n 守卫。
+- [x] **Step 4: Review user flows.** 关键浏览器流程、原生 .dststandard 文件筛选/取消及浅深主题切换通过；浏览器窄视口与 200% 检查通过。真实 WebView2 窗口窄视口复核被物理 Escape 中断，未完成该项。 逐项走新建→输入标准描述→发布→在列表／详情查看描述→导出→导入（同 ID／同名）→创建草稿→用户标准删除确认→已建项目打开；核对官方标准删除请求被拒绝。复核 Task 6 五项视觉验收及截图证据；已通过自动化流程及原生包选择器、浅深主题检查；窄视口的真实壳检查中断，限制如实记录。
+- [x] **Step 5: Split oversized store implementation.** 已按草稿存储、身份查询、发布／包读写职责拆分到同层模块，保留 `StandardStore` 门面、路径与错误码契约；定向标准库及迁移回归通过，且新模块不导入接口层。
+- [x] **Step 6: Update docs and commit.** 已同步中英文 README、DST Manager 索引、发布指南、计划与 changelog；Task 7 文件已提交。 仅在实现完成后更新 README 的“当前功能”描述，将本计划状态及验证结果记入文档；只提交本任务文件。

@@ -1,6 +1,6 @@
 # DST Manager 文档入口
 
-2026-09-28 新增 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md)：以独立 UUID、标准名称和 UTC 发布时间替换整数发布版本及按 ID 归集；导入同 ID 阻止、同名改名；用户已发布标准可删除并一并清理确认时关联的未完成图纸集创建草稿；已实现的搜索与来源／状态过滤保留。实施见 [PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（proposed）；当前代码仍是 SPEC-DM-019 的版本模型。
+2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除；旧发布版本逐项映射为发布时间未知的只读 UUID 兼容项，旧源文件与项目快照保持原样。
 
 2026-09-27 按 [PLAN-DM-044](../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) 增量修订 [SPEC-DM-006 §6.4](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 与 [ARCH-DM-007 §4.3/§9](architecture/ARCH-DM-007-frontend-ui-foundations.md)：为语义化 grid 伪表格补充对齐与列头命名契约，并固定静态规则名称及逐表守卫；实施计划已进入 `active`，前端改造与自动化验证仍待执行。
 
@@ -8,7 +8,7 @@
 
 2026-09-25 新增 [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，accepted）](specs/SPEC-DM-019-standard-version-and-package-import.md)：把标准发布版本固定为 `1..2147483647` 的正整数（文档升为 `schema_version: 2`，草稿不携带版本），本机发布由服务端在官方/用户库同 ID 的现有版本上分配 `max+1`，不同 ID 的已发布标准名称按 NFKC + `casefold()` 归一后唯一；`.dststandard` 导入改为“限时快照预检 + 凭证确认”两步。同步增量修订 [SPEC-DM-016](specs/SPEC-DM-016-drawing-standard-management-ui.md) §4.2/§5（两步导入与按 ID 归集）与 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)（`v<n>` 展示），并按新契约更新 [GUIDE-DM-007](guides/GUIDE-DM-007-official-standard-package-release.md)。实施计划为 [PLAN-DM-041](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md)。
 
-2026-09-25 实施 [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，active）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md) 的 Task 1–7 与 Task 8 自动门禁：标准发布版本改由服务端在官方/用户库上分配整数（草稿不携带版本）、不同 ID 名称按 NFKC + `casefold()` 唯一、标准库按 `standard_id` 归集并按整数降序、`.dststandard` 导入改为「限时快照预检 + 凭证确认」两步并由固定 `dststandard` 原生选择器驱动；长期契约见 [SPEC-DM-019](specs/SPEC-DM-019-standard-version-and-package-import.md)（已 `accepted`）。真实 Windows WebView2 G9 待用户执行，计划保持 `active`。
+2026-09-25 实施 [标准整数版本、按 ID 归集与标准包预检导入实施计划（PLAN-DM-041，历史记录）](../../.planning/plans/dst-manager/PLAN-DM-041-standard-package-import-picker.md) 的 Task 1–7 与 Task 8 自动门禁：旧代码曾按 ID 分配整数版本并归集标准；该契约已由 SPEC-DM-020 取代，保留此条作为历史实现记录。
 
 2026-09-24 修订 [图纸标准平台审查问题修复计划（PLAN-DM-040，active）](../../.planning/plans/dst-manager/PLAN-DM-040-standard-platform-review-remediation.md)：把草稿编辑器无法纳入本机 DWG、资产发布/导入硬门禁、编辑状态与 UI 契约，以及实测复现的身份路由越界（F17），共 F01–F15 与 F17 的 16 项问题拆成按 Step 执行的 10 个任务；原 F16 已拆为 PLAN-DM-041。任务 1–9 与任务 10 的闭环验证、全量门禁已实施（含真实 AutoCAD 2016 布局检查闭环），真实桌面 G9 仍待人工执行，因此计划保持 `active`。
 
@@ -88,7 +88,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [前端文本编辑状态与提交动作契约（SPEC-DM-015，已接受；统一五处文本编辑器的比较基准、修改提示、错误优先级与 clean 动作语义，实施计划 PLAN-DM-034）](specs/SPEC-DM-015-frontend-text-edit-state-contract.md)
 - [图纸标准管理与欢迎页入口 UI 规范（SPEC-DM-016，已接受；确定打开 DST 优先的欢迎页、主从分栏标准库、模板资产检查与独立发布检查页；属性与 DWG 命名旧设计已由 SPEC-DM-017 取代；PLAN-DM-035 首次交付证据仍保留于该规范 §12.3；欢迎页双栏与证据已由 [PLAN-DM-039](../../.planning/plans/dst-manager/PLAN-DM-039-standard-platform-ui-visual-closure.md) 重建并经用户 Demo 对照裁决）](specs/SPEC-DM-016-drawing-standard-management-ui.md)
 - [图纸标准属性与 DWG 命名规范（SPEC-DM-017，已接受；收敛普通/派生属性、枚举映射、组合物化及全局 DWG 命名模板；实施计划 [PLAN-DM-038](../../.planning/plans/dst-manager/PLAN-DM-038-standard-properties-and-dwg-naming-remediation.md) 已完成：Schema v1 直接替换，旧通用规则模型与顶层 `rules` 已删除，标准编辑器改为六分区，发布门禁区分 error/warning）](specs/SPEC-DM-017-standard-properties-and-dwg-naming.md)
-- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；版本展示已按 SPEC-DM-019 统一为 `v<n>`；2026-09-28 §3.1 收敛为必填星号标记、取消说明小字，图纸集派生属性在项目信息页实时求值）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
+- [标准驱动新建图纸集 UI 规范（SPEC-DM-018，已接受；四阶段向导、图纸组编辑、XLSX 全量导入与按组预览，由 PLAN-DM-036 实施；标准列表不显示发布版本；2026-09-28 §3.1 收敛为必填星号标记、取消说明小字，图纸集派生属性在项目信息页实时求值）](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md)
 - [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，已接受；UUID、UTC 发布时间、平铺列表、改名导入与已发布标准删除）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md)
 - [图纸标准版本身份与标准包预检导入规范（SPEC-DM-019，已被取代；记录整数版本实现与 PLAN-DM-041 验证）](specs/SPEC-DM-019-standard-version-and-package-import.md)
 
@@ -105,7 +105,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [多语言与本地化配置 SOP（GUIDE-DM-004，评审中）](guides/GUIDE-DM-004-multilingual-config-sop.md)
 - [Builtin 内置扩展开发指南（GUIDE-DM-005，评审中；以图纸目录为例）](guides/GUIDE-DM-005-builtin-extension-development.md)
 - [DST Manager 用户使用指南（GUIDE-DM-006，draft；面向最终用户的安装、日常受控编辑、发布与故障处理）](guides/GUIDE-DM-006-user-guide.md)
-- [官方图纸标准包编制、审核与随包发布指南（GUIDE-DM-007，draft；面向标准编制人、审核人和 Manager 发布维护者，说明候选包、官方晋升、随包分发、验收与纠错；`schema_version: 2`、整数版本与两步导入口径已按 SPEC-DM-019 同步）](guides/GUIDE-DM-007-official-standard-package-release.md)
+- [官方图纸标准包编制、审核与随包发布指南（GUIDE-DM-007，draft；面向标准编制人、审核人和 Manager 发布维护者，说明候选包、官方晋升、随包分发、验收与纠错；已按 SPEC-DM-020 同步 `schema_version: 3`、UUID、描述与兼容迁移口径）](guides/GUIDE-DM-007-official-standard-package-release.md)
 - [图纸页单表工作区交互 Demo（模拟数据）](mockups/SPEC-DM-009-sheets-demo.html)
 - [属性页分区编辑交互 Demo（模拟数据）](mockups/SPEC-DM-010-properties-demo.html)
 - [设置中心交互 Demo（模拟数据，SPEC-DM-011 G4 已冻结：第三次重开于 2026-09-12 由用户确认）](mockups/SPEC-DM-011-settings-demo.html)

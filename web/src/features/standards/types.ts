@@ -27,7 +27,7 @@ export interface StandardDependency {
 
 export interface StandardDetail {
   standard_id: string;
-  published_at: number;
+  published_at: number | null;
   name: string;
   description: string;
   supported_cad_versions: string[];

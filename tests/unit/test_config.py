@@ -79,6 +79,7 @@ def test_frozen_data_dir_defaults_to_localappdata(monkeypatch, tmp_path):
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "dst-manager.exe"))
+    monkeypatch.delenv("DST_MANAGER_DATA_DIR", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData"))
     settings = Settings(_env_file=None)
     assert settings.data_dir == (tmp_path / "AppData" / "dst-manager" / "data").resolve()

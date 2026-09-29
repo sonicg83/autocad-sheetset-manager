@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from uuid import NAMESPACE_URL, uuid5
 
 from dst_manager.domain.standard_errors import StandardSchemaError
-from dst_manager.domain.standard_models import LegacyDrawingStandard
+from dst_manager.domain.standard_identity import parse_standard_id
+from dst_manager.domain.standard_models import DrawingStandard, LegacyDrawingStandard
 from dst_manager.domain.standard_schema import (
     LEGACY_STANDARD_ID_PATTERN,
     parse_standard_version,
@@ -57,6 +58,38 @@ def parse_legacy_published_standard_document(
         schema_version=2,
         standard_id=standard_id,
         version=stored_version,
+        published_at=None,
+        name=draft.name,
+        description=draft.description,
+        supported_cad_versions=draft.supported_cad_versions,
+        properties=draft.properties,
+        dwg_naming=draft.dwg_naming,
+        assets=draft.assets,
+        numbering=draft.numbering,
+        dependencies=draft.dependencies,
+    )
+
+
+def parse_migrated_published_standard_document(
+    data: Mapping[str, object], *, standard_id: str
+) -> DrawingStandard:
+    """读取发布时间未知的旧发布包兼容副本，不放宽普通 v3 发布门禁。"""
+    try:
+        canonical_id = parse_standard_id(standard_id)
+        stored_id = parse_standard_id(data.get("standard_id"))
+    except (TypeError, ValueError) as exc:
+        raise StandardSchemaError("STANDARD_ID_INVALID: 兼容副本 UUID 无效") from exc
+    if canonical_id != stored_id:
+        raise StandardSchemaError("STANDARD_ID_INVALID: 兼容副本 ID 与目录身份不一致")
+    if data.get("schema_version") != 3 or data.get("published_at") is not None:
+        raise StandardSchemaError("STANDARD_SCHEMA_VERSION_UNSUPPORTED: 不是旧发布包兼容副本")
+    if "version" in data or "release_notes" in data:
+        raise StandardSchemaError("STANDARD_VERSION_INVALID: 兼容副本仍含旧版本字段")
+    draft = parse_standard_draft_document(data)
+    validate_published_semantics(draft)
+    return DrawingStandard(
+        schema_version=3,
+        standard_id=draft.standard_id,
         published_at=None,
         name=draft.name,
         description=draft.description,

@@ -108,7 +108,7 @@ class StandardDetailResponse(ContractModel):
     standard_id: str
     name: str
     description: str
-    published_at: int
+    published_at: int | None = None
     supported_cad_versions: list[str]
     dependencies: list[StandardDependencyModel]
     #: 完整标准文档（派生草稿等场景需要）；与身份字段冗余但保持契约自洽。

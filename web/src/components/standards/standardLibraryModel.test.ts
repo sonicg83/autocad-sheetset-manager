@@ -60,6 +60,17 @@ describe("detailActions", () => {
     expect(detailActions(user).canDerive).toBe(true);
     expect(detailActions(user).canExport).toBe(true);
   });
+
+  it("keeps migrated standards with unknown publication time read-only", () => {
+    const legacy = published("00000000-0000-4000-8000-000000000004", "旧版标准", "user", "原版说明", null);
+    expect(detailActions(legacy)).toEqual({
+      canEdit: false,
+      canDelete: false,
+      canDerive: false,
+      canExport: false,
+      readOnlyReason: "legacy",
+    });
+  });
 });
 
 describe("formatPublishedAt", () => {

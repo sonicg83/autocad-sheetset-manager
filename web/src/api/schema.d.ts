@@ -2767,7 +2767,7 @@ export interface components {
             /** Name */
             name: string;
             /** Published At */
-            published_at: number;
+            published_at?: number | null;
             /** Standard Id */
             standard_id: string;
             /** Supported Cad Versions */

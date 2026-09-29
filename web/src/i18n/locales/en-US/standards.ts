@@ -56,6 +56,7 @@ export default {
     dependencies: "Trusted extension dependencies",
     readOnlyOfficial: "Official standards are read-only",
     readOnlyPublished: "Published standards cannot be edited directly",
+    readOnlyLegacy: "Legacy standards are available for viewing and history compatibility only",
     edit: "Edit",
     derive: "Derive new draft",
     export: "Export package",

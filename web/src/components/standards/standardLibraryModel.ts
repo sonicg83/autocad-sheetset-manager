@@ -52,7 +52,7 @@ export function formatPublishedAt(timestamp: number | null | undefined): string 
   return `${year}/${month}/${day} ${hour}:${minute}`;
 }
 
-export type ReadOnlyReason = "official" | "published";
+export type ReadOnlyReason = "official" | "published" | "legacy";
 
 export interface DetailActions {
   canEdit: boolean;
@@ -69,6 +69,9 @@ export function detailActions(summary: StandardSummary): DetailActions {
   }
   if (summary.source === "official") {
     return {canEdit: false, canDelete: false, canDerive: true, canExport: true, readOnlyReason: "official"};
+  }
+  if (summary.published_at === null) {
+    return {canEdit: false, canDelete: false, canDerive: false, canExport: false, readOnlyReason: "legacy"};
   }
   return {canEdit: false, canDelete: true, canDerive: true, canExport: true, readOnlyReason: "published"};
 }

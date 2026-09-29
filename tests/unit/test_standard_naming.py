@@ -31,9 +31,10 @@ DEFAULT_SEGMENTS: tuple[dict[str, object], ...] = (
 def _standard(segments: tuple[dict[str, object], ...]) -> DrawingStandard:
     """带 sheetset 映射属性 prop-code 与 sheet 属性 prop-sheet 的最小已发布标准。"""
     document: dict[str, object] = {
-        "schema_version": 2,
-        "standard_id": "szmedi.gas",
-        "version": 1,
+        "schema_version": 3,
+        "standard_id": "00000000-0000-4000-8000-000000000038",
+        "published_at": 1_700_000_000_000,
+        "description": "",
         "name": "市政燃气施工图",
         "supported_cad_versions": ["2016", "2020"],
         "properties": [

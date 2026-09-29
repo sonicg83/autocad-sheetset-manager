@@ -33,6 +33,7 @@ def _draft(version: int = 0) -> dict:
 
 
 def test_default_draft_directory_is_absolute_and_independent_of_cwd(tmp_path, monkeypatch):
+    monkeypatch.delenv("DST_MANAGER_DRAFT_DIR", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
     monkeypatch.chdir(tmp_path)
 

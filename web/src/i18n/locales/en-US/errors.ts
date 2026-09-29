@@ -200,6 +200,7 @@ export default {
     deleteJobActive: "A creation task is still using this standard",
     deleteForbidden: "Official standards cannot be deleted",
     deleteFailed: "Deleting the standard failed; the transaction was rolled back when possible",
+    legacyReadOnly: "Legacy standards are read-only and cannot be exported, deleted, or bound to new projects",
   },
   ui: {
     unknownSummary: "The operation failed due to an unknown error",

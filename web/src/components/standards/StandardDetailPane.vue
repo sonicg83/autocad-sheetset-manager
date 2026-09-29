@@ -30,7 +30,7 @@ const copied = ref(false);
 const actions = computed(() => (props.summary === null ? null : detailActions(props.summary)));
 const createIdentity = computed<StandardIdentity | null>(() => {
   const summary = props.summary;
-  if (summary === null || summary.status !== "published") return null;
+  if (summary === null || summary.status !== "published" || summary.published_at === null) return null;
   return {standardId: summary.standard_id};
 });
 const documentCounts = computed(() => {
@@ -69,7 +69,7 @@ async function copyStandardId(): Promise<void> {
       >{{ $t("standards.detail.backToList") }}</UiButton>
       <h3 class="detail-title">{{ summary.name }}</h3>
       <p v-if="actions?.readOnlyReason" class="detail-reason" role="note">
-        {{ $t(actions.readOnlyReason === "official" ? "standards.detail.readOnlyOfficial" : "standards.detail.readOnlyPublished") }}
+        {{ $t(actions.readOnlyReason === "official" ? "standards.detail.readOnlyOfficial" : actions.readOnlyReason === "legacy" ? "standards.detail.readOnlyLegacy" : "standards.detail.readOnlyPublished") }}
       </p>
       <section class="detail-section">
         <h4>{{ $t("standards.detail.basics") }}</h4>

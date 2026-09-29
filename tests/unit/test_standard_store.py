@@ -29,6 +29,13 @@ THIRD_ID = "123e4567-e89b-42d3-a456-426614174103"
 PUBLISHED_AT = 1_800_000_000_123
 
 
+def test_standard_store_facade_keeps_operations_in_focused_modules() -> None:
+    assert StandardStore.__module__ == "dst_manager.infrastructure.standards.store"
+    assert StandardStore.create_draft.__module__.endswith(".draft_storage")
+    assert StandardStore.check_available_identity.__module__.endswith(".identity_lookup")
+    assert StandardStore.export_package.__module__.endswith(".package_io")
+
+
 def standard_document(
     standard_id: str = FIRST_ID,
     *,
@@ -250,9 +257,9 @@ def test_empty_name_draft_is_allowed_and_does_not_reserve_identity(
 def test_publish_uses_timestamp_and_uuid_directory(
     store: StandardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dst_manager.infrastructure.standards.store as store_module
+    import dst_manager.infrastructure.standards.package_io as package_module
 
-    monkeypatch.setattr(store_module.time, "time_ns", lambda: PUBLISHED_AT * 1_000_000)
+    monkeypatch.setattr(package_module.time, "time_ns", lambda: PUBLISHED_AT * 1_000_000)
     create_draft(
         store,
         standard_document(FIRST_ID, description="发布后保留"),
@@ -368,7 +375,7 @@ def test_publish_rejects_incomplete_document_without_moving_draft(
 def test_library_lock_timeout_reports_stable_code(
     store: StandardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dst_manager.infrastructure.standards.store as store_module
+    import dst_manager.infrastructure.standards.store_core as core_module
     from dst_manager.infrastructure.filesystem.locking import (
         WorkspaceTransactionBusyError,
     )
@@ -388,7 +395,7 @@ def test_library_lock_timeout_reports_stable_code(
         standard_document(FIRST_ID),
         draft_id="draft-one",
     )
-    monkeypatch.setattr(store_module, "WorkspaceTransactionLock", BusyLock)
+    monkeypatch.setattr(core_module, "WorkspaceTransactionLock", BusyLock)
     with pytest.raises(StandardStoreError, match="STANDARD_LIBRARY_BUSY"):
         store.publish("draft-one", published_at=PUBLISHED_AT)
 

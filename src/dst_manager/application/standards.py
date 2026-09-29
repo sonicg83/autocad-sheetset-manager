@@ -300,6 +300,12 @@ class StandardOperations:
             standard_id = parse_standard_id(identity)
         except ValueError as exc:
             raise ApplicationError("STANDARD_IDENTITY_INVALID", str(exc), 422) from exc
+        if self.standard_store.is_legacy_published(standard_id):
+            raise ApplicationError(
+                "STANDARD_LEGACY_READ_ONLY",
+                "旧版标准仅供查看与历史兼容，不能绑定到新工程",
+                409,
+            )
         commands = [{"type": "bind_standard", "standard": standard_id}]
         plan = self.preview_changes(workspace_id, base_revision_id, commands)
         if not plan["executable"]:
