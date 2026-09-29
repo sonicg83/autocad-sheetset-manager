@@ -5,13 +5,14 @@ status: accepted
 owners:
 - dst-manager
 created: 2026-09-23
-updated: 2026-09-28
+updated: 2026-09-29
 related:
 - RFC-INT-003
 - SPEC-DM-014
 - SPEC-DM-016
 - SPEC-DM-017
 - SPEC-DM-020
+- SPEC-DM-021
 - ARCH-DM-007
 - PLAN-DM-036
 ---
@@ -25,6 +26,7 @@ related:
 - 欢迎页和标准库入口沿用 [SPEC-DM-016](SPEC-DM-016-drawing-standard-management-ui.md)。
 - 新标准仅用 UUID 绑定，已发布标准显示系统时区发布时间；身份与时间口径见 [SPEC-DM-020](SPEC-DM-020-versionless-standard-identity-and-management.md)。
 - 普通/派生属性与唯一 DWG 命名模板沿用 [SPEC-DM-017](SPEC-DM-017-standard-properties-and-dwg-naming.md)。
+- 拟新增的可输入级联属性及 XLSX 静态候选/成对校验见 [SPEC-DM-021（草稿）](SPEC-DM-021-cascading-enum-properties.md)；实施前本文现行创建契约不变。
 - 「不编号图纸」关键字的判定、补零和不占号语义沿用 [SPEC-DM-014](SPEC-DM-014-unnumbered-subset-keywords.md)。
 - 后端创建链路和实施任务由 [PLAN-DM-036](../../../.planning/plans/dst-manager/PLAN-DM-036-standard-driven-sheetset-creation.md) 承接；创建所需最小 DST 骨架由 Manager 内置，见 [RFC-INT-003](../../integration/rfcs/RFC-INT-003-retire-builder-standard-driven-sheetset-creation.md) 的 2026-09-23 实施收敛。
 - [四阶段交互 Demo](../mockups/SPEC-DM-018-creation-demo.html) 用模拟数据展示页面和关键状态，仅辅助评审；不生成真实 XLSX，也不调用创建 API。

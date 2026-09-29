@@ -7,6 +7,7 @@
 - [DST Manager 路线图](roadmaps/dst-manager.md)
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
+- [级联枚举属性实施计划（PLAN-DM-047，proposed）](plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：为 `sheetset` 和 `sheet` 建立同级普通枚举驱动的一级可输入级联属性；只完成设计与计划，尚未实施。
 - [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，completed）](plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)：完成 UUID＋发布时间、描述、改名导入、平铺管理与关联创建草稿删除；Task 8 按用户确认移除旧格式迁移和读取，并清理存量旧包、草稿及项目快照。
 - [DST Builder Plan 索引（历史资料）](plans/dst-builder/README.md)
 - 待办见 [`todos/dst-manager/`](todos/dst-manager/)；Builder 相关待办已随 Builder 退场清理（PLAN-INT-004）。

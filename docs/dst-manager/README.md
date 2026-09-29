@@ -1,5 +1,7 @@
 # DST Manager 文档入口
 
+2026-09-29 新增 [图纸标准级联枚举属性规范（SPEC-DM-021，draft）](specs/SPEC-DM-021-cascading-enum-properties.md) 与 [实施计划（PLAN-DM-047，proposed）](../../.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：设计普通/级联/派生三类属性、`sheetset`/`sheet` 同级枚举到一级级联的联动、XLSX 静态候选与后端成对校验；尚未实施。
+
 2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除。后续按用户确认取消旧格式兼容：旧发布包、草稿和 `id@version` 项目快照均不迁移、不读取；存量清理及验证记录见计划 Task 8。
 
 2026-09-27 按 [PLAN-DM-044](../../.planning/plans/dst-manager/PLAN-DM-044-grid-pseudo-table-alignment.md) 增量修订 [SPEC-DM-006 §6.4](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 与 [ARCH-DM-007 §4.3/§9](architecture/ARCH-DM-007-frontend-ui-foundations.md)：为语义化 grid 伪表格补充对齐与列头命名契约，并固定静态规则名称及逐表守卫；实施计划已进入 `active`，前端改造与自动化验证仍待执行。
@@ -49,6 +51,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 
 ## 当前规范与决策
 
+- [图纸标准级联枚举属性规范（SPEC-DM-021，草稿；`sheetset`/`sheet` 同级一级级联、创建输入与 XLSX 成对校验，待实施）](specs/SPEC-DM-021-cascading-enum-properties.md)
 - [产品愿景（VISION-DM-001）](product/vision.md)
 - [已接受的架构基线（ARCH-DM-001）](architecture/ARCH-DM-001-dst-manager-mvp-baseline.md)
 - [Windows 绿色分发包与一键 release 流程（ARCH-DM-002，已接受）](architecture/ARCH-DM-002-windows-release-packaging.md)

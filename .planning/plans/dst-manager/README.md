@@ -3,6 +3,7 @@
 状态：持续规划中；当前能力基线为 v0.2.1（含 PLAN-DM-005、PLAN-DM-006、PLAN-DM-008 与 PLAN-DM-009）。
 目标：把当前技术验证型 MVP 完善为可长期、可靠地处理真实工程的单人单机图纸集编辑管理工具。
 
+- [级联枚举属性实施计划（PLAN-DM-047，proposed）](PLAN-DM-047-cascading-enum-properties.md)：承接 [SPEC-DM-021](../../../docs/dst-manager/specs/SPEC-DM-021-cascading-enum-properties.md)，规划 `sheetset`/`sheet` 同级级联的标准 Schema、发布门禁、创建向导、XLSX 和前后端验证；尚未实施。
 - [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，proposed）](PLAN-DM-046-versionless-standard-management.md)：承接 [SPEC-DM-020](../../../docs/dst-manager/specs/SPEC-DM-020-versionless-standard-identity-and-management.md)，调整标准身份、导入、删除、创建链路和界面；现有搜索与来源／状态过滤保留。
 - [映射源一对多复用实施计划（PLAN-DM-045，completed）](PLAN-DM-045-mapping-source-multi-target-reuse.md)：解除 SPEC-DM-017 §5.2「一个普通枚举属性最多被一个映射属性用作源」的限制，允许同一枚举源被多个映射属性独立复用（专业名称 → 专业代码 / 图册名称 / 图册代码）；彻底移除 `STANDARD_MAPPING_SOURCE_DUPLICATE` 阻断码及其前后端诊断、`MODAL_CODES` 分支、中英文文案与回归用例，不保留 warning；保留源类型与作用域校验，无数据结构变更与迁移。实际验证：ruff 通过、pytest 仅 `test_setup_bat.py` 两条既有 GBK 环境失败、`test:unit` 339、`test:contracts` 114、`check:i18n`（1620 键）/`check:ui`/`build` 退出 0、`standards-editor` e2e 64 passed。
 - [语义化 grid 伪表格对齐契约收口实施计划（PLAN-DM-044，active）](PLAN-DM-044-grid-pseudo-table-alignment.md)：把 4 个用 CSS grid 模拟表格的组件（枚举值弹窗、映射属性弹窗、派生属性表、目录列编辑器）纳入 SPEC-DM-006 §6.4 对齐契约——补显式表格语义与稳定锚点，新增 `grid-table-*` 静态规则与「语义化表格必须有契约规则」守卫，并以计算样式断言收口；同时**取消枚举值、映射属性、派生属性与目录列编辑器四张表行的双重表头**（列头经 `aria-labelledby` 承担行内控件可访问名，`ColumnEditor` 另补行号以区分多行，扩展 `visible-input-label` 第四形态），与 PLAN-DM-043 的真实 `<table>` 范围互不重叠。

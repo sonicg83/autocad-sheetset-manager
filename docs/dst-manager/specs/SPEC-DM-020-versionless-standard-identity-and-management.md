@@ -5,11 +5,12 @@ status: accepted
 owners:
   - dst-manager
 created: 2026-09-28
-updated: 2026-09-28
+updated: 2026-09-29
 related:
   - SPEC-DM-016
   - SPEC-DM-018
   - SPEC-DM-019
+  - SPEC-DM-021
   - PLAN-DM-046
   - ARCH-DM-001
 ---
@@ -19,6 +20,8 @@ related:
 ## 1. 目的与权威边界
 
 本规范依据 2026-09-28 的用户决策，取代 [SPEC-DM-019](SPEC-DM-019-standard-version-and-package-import.md) 中标准发布版本、按 ID 归集、导入冲突与相关接口的长期契约。`schema_version` 仍是 JSON 格式版本，`dependencies[*].min_version` 仍是扩展能力版本；两者不因取消**标准发布版本**而消失。
+
+级联属性拟将标准文档从当前 v3 扩展至 v4，设计见 [SPEC-DM-021（草稿）](SPEC-DM-021-cascading-enum-properties.md)；在该方案实施前，本规范的 v3 身份与包格式仍为现行契约。
 
 标准属性、命名、资产及发布检查沿用 [SPEC-DM-017](SPEC-DM-017-standard-properties-and-dwg-naming.md)；创建向导的页面组织沿用 [SPEC-DM-018](SPEC-DM-018-standard-driven-sheetset-creation-ui.md)；DST/DWG 受控发布与项目快照沿用 [ARCH-DM-001](../architecture/ARCH-DM-001-dst-manager-mvp-baseline.md)。本规范只替换与标准身份、库列表、导入、删除直接冲突的条款。现有两步导入的限时快照、凭证、大小上限和路径安全门禁继续有效。
 

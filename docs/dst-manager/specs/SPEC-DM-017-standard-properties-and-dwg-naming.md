@@ -5,7 +5,7 @@ status: accepted
 owners:
 - dst-manager
 created: 2026-09-22
-updated: 2026-09-27
+updated: 2026-09-29
 related:
 - RFC-INT-003
 - SPEC-DM-016
@@ -13,6 +13,7 @@ related:
 - PLAN-DM-036
 - PLAN-DM-037
 - PLAN-DM-045
+- SPEC-DM-021
 ---
 
 # 图纸标准属性与 DWG 命名规范
@@ -20,6 +21,8 @@ related:
 ## 1. 目的与权威范围
 
 本文定义图纸标准中的普通属性、派生属性和全局 DWG 命名模板，是这些领域规则及编辑交互的唯一权威规范。本文取代 [SPEC-DM-016](SPEC-DM-016-drawing-standard-management-ui.md) §6.3、§7.1～§7.3 中的属性、映射、组合与 DWG 命名设计；SPEC-DM-016 的欢迎页、标准库、模板资产、发布检查、响应式和可访问性要求继续有效。
+
+拟新增的第三区域「级联属性」及其与普通/派生属性的关系见 [SPEC-DM-021（草稿）](SPEC-DM-021-cascading-enum-properties.md)；本实现基线仍按本文现行两类属性执行，待级联方案实施时再同步收口。
 
 实施时必须同时查看 [标准属性与 DWG 命名交互 Demo](../mockups/SPEC-DM-017-standard-properties-and-dwg-naming-demo.html)。Demo 用去敏模拟数据演示普通属性、枚举维护、映射/组合派生属性和 DWG 命名的目标布局与交互状态，是 PLAN-DM-038 的前端实施对照；本文仍是规则与验收的权威来源，Demo 与本文冲突时以本文为准，不得从 Demo 的模拟数据反推领域规则。
 
@@ -281,4 +284,3 @@ DWG 命名编辑器与组合属性编辑器使用相同骨架：左侧字段浏�
 ## 11. 修订记录
 
 - 2026-09-27（PLAN-DM-045）：放开映射源唯一占用。§5.2 由「一个普通枚举属性最多被一个映射属性用作源」改为「可以被多个映射属性用作源，各映射属性独立维护映射表与确认快照」；§7.1 阻断错误清单删除「源被重复占用」；§9 验收第 3 条同步改为「映射源类型与作用域门禁、同一源被多个映射复用」。随之作废 `STANDARD_MAPPING_SOURCE_DUPLICATE` 阻断码（前后端诊断、`MODAL_CODES` 分支与中英文文案一并移除，不保留 warning）。§5.2 的源类型校验、作用域校验、`enum_item_id` 行关联、目标非空与待确认规则不变。
-
