@@ -22,6 +22,7 @@ web/dist/
 web/test-results/
 web/playwright-report/
 web/*.tsbuildinfo
+.playwright-mcp/
 
 # PyInstaller 产物目录（onedir 输出 dist/DSTManager/ 与中间目录 build/）
 /build/
