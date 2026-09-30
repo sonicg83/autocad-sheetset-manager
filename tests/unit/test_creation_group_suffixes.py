@@ -138,3 +138,22 @@ def test_reordering_same_title_groups_recalculates_the_suffix_ranges():
 @pytest.mark.parametrize("title", ["平面图", "平面图 (一)", "平面图 (3)"])
 def test_single_sheet_title_compression_preserves_actual_title(title):
     assert compress_group_title("平面图", [title]) == title
+
+
+@pytest.mark.parametrize(
+    "titles",
+    [
+        ["剖面图 (一)"],
+        ["剖面图"],
+        ["平面图 (一"],
+        [""],
+        ["剖面图 (一)", "剖面图 (二)"],
+        ["平面图 (一)", "剖面图 (二)"],
+    ],
+)
+def test_title_compression_falls_back_for_unrelated_or_malformed_titles(titles):
+    assert compress_group_title("平面图", titles) == "平面图"
+
+
+def test_single_sheet_compression_accepts_canonical_case_insensitive_base():
+    assert compress_group_title(" PLAN ", ["Plan (3)"]) == "Plan (3)"

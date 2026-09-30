@@ -342,8 +342,7 @@ export function creationGroupIssues(
   const issues: Record<string, CreationGroupIssueCode[]> = {};
   for (const group of groups) {
     const codes: CreationGroupIssueCode[] = [];
-    const key = group.title.trim().toLocaleLowerCase();
-    if (key === "") codes.push("title_empty");
+    if (group.title.trim() === "") codes.push("title_empty");
     if (!Number.isInteger(group.count) || group.count < 1) codes.push("count_invalid");
     if (
       !creationAssetOptions(standard, BASE_TEMPLATE_KIND).some(

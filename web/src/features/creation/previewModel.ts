@@ -111,7 +111,6 @@ export function groupSheetValues(
 /** 组内固定控件诊断码 → 控件（`CREATION_ASSET_INVALID` 同时覆盖两种模板资产，另判）。 */
 const GROUP_FIELD_BY_CODE: Readonly<Record<string, CreationGroupField>> = {
   CREATION_GROUP_TITLE_EMPTY: "title",
-  CREATION_GROUP_TITLE_DUPLICATE: "title",
   CREATION_GROUP_COUNT_INVALID: "count",
   CREATION_PAPER_LAYOUT_INVALID: "paper",
 };

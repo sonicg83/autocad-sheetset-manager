@@ -88,7 +88,7 @@ def compress_group_title(base_title: str, sheet_titles: Sequence[str]) -> str:
     """
     if not sheet_titles:
         return base_title
-    if len(sheet_titles) == 1:
+    if len(sheet_titles) == 1 and sheet_titles[0].strip().casefold() == base_title.strip().casefold():
         return sheet_titles[0]
     actual_base, separator, _ = sheet_titles[0].rpartition(" (")
     if not separator or actual_base.strip().casefold() != base_title.strip().casefold():
@@ -100,5 +100,7 @@ def compress_group_title(base_title: str, sheet_titles: Sequence[str]) -> str:
             suffixes.append(title[len(prefix):-1])
         else:
             return base_title  # 结构异常时防御性回退为基础标题
+    if len(sheet_titles) == 1:
+        return sheet_titles[0]  # 有后缀的单张标题也必须先通过基础标题与结构校验。
     # 区间压缩：只保留首末两张图纸的序号（如 (一)-(六)），与图纸标题后缀语义对齐
     return f"{prefix}{suffixes[0]})-({suffixes[-1]})"
