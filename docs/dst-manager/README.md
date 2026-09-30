@@ -69,6 +69,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [CAD 工作范围按可证明差异收敛（ADR-DM-005，已实施；部分替代 ADR-DM-003 的「前沿之后必须进入 CAD 工作范围」）](adr/ADR-DM-005-provable-diff-cad-scope.md)
 - [实施路线图（ROADMAP-DM-001）](../../.planning/roadmaps/dst-manager.md)
 - [当前 Plan 索引](../../.planning/plans/dst-manager/README.md)
+- [提示分类与反馈一致性实施计划（PLAN-DM-048，proposed，未执行）](../../.planning/plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：承接 SPEC-DM-006 §6.7/§10.4；任务、测试与验收安排见计划正文。
 
 产品需求：
 
