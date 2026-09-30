@@ -1,3 +1,10 @@
+## 2026-09-30 按 MEMO-DM-043 修订 PLAN-DM-048
+
+- 补齐 G0–G9 门禁台账、G5 技术映射要求、SPEC-DM-006 接受/G4 冻结/G6 双负责人审核前不得修改生产代码的启动条件，以及 GUIDE-DM-001 完整双向追踪矩阵。
+- 明确 G3/G4 Demo、冻结截图、设计规格与逐项裁决交付物；级联帮助 ID 改用 `domIdToken(JSON.stringify(...))`，Banner tone 对齐 `notice/success/warning/error`，并补充任务 4–6 的测试名和行为断言。
+- 补充实际对比度比值、正交截图预算、Status live region、DraftActionsPanel 漏网消费方及 PLAN-DM-034 联合 G9 记录要求；同步计划索引。
+- 仅修订文档与导航；PLAN-DM-048 保持 `proposed`，未执行产品测试、构建、浏览器、读屏或真实桌面验收。
+
 ## 2026-09-30 输出 PLAN-DM-048 实施计划审查备忘
 
 - 新增 [MEMO-DM-043](.planning/memos/dst-manager/2026-09-30-plan-dm-048-review.md)：只读核对 PLAN-DM-048 的 67 个既有路径、7 个拟新建路径、命令与 SPEC/GUIDE/ARCH 相关章节，确认计划主体与仓库现状一致。
