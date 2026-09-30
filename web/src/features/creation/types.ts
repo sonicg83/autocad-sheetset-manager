@@ -125,7 +125,6 @@ export interface CreationImportDiagnostic {
 /** 图纸组即时提示的稳定问题码；文案由视图经语言包渲染，模型不持有用户可见文本。 */
 export type CreationGroupIssueCode =
   | "title_empty"
-  | "title_duplicate"
   | "count_invalid"
   | "base_asset_missing"
   | "layout_asset_missing"

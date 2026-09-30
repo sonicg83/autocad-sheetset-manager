@@ -184,7 +184,7 @@ related:
 允许字段只有：
 
 - `subset.scope`：子集内图纸号范围，例如 `007-011`；
-- `subset.name`：从 AcSm 子集 `Name` 解构后去除范围的可编辑名称；
+- `subset.name`：子集的可编辑名称。在标准驱动创建的 DWG 命名上下文中，使用本组实际图纸标题的压缩结果（多张保留首末后缀范围，单张保留实际后缀），不改写图纸组输入名称或 AcSm 子集名称。压缩规则由 [SPEC-DM-008 §3.2](SPEC-DM-008-v032-naming-and-template-flows.md#32-派生规则) 定义，创建交互见 [SPEC-DM-018 §6.1](SPEC-DM-018-standard-driven-sheetset-creation-ui.md#61-预览主体)；
 - `subset.sequence`：子集在图纸集中的 1 起始物理顺序，包含不编号子集，与图纸流水号无关，可使用受控数字补零格式；
 - 全部 `sheetset` 作用域属性，包括普通、级联、映射和组合属性。
 

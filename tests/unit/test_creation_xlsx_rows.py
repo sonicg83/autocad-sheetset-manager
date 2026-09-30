@@ -2,7 +2,7 @@
 
 覆盖 brief Step 1 的路径/张数往返用例与 Step 4 的行级用例：合法工作簿按行序
 往返成图纸组（一行一组，张数不展开为逐张输入）、与界面输入同形、粘贴绕过的非法
-枚举值整批拒绝，以及失效资产、图幅与布局模板不匹配、重复图名、非法张数的定位诊断。
+枚举值整批拒绝、同名组独立导入，以及失效资产、图幅不匹配与非法张数的定位诊断。
 """
 
 from creation_xlsx_fixtures import (
@@ -176,7 +176,7 @@ def test_layout_template_and_paper_layout_mismatch_is_rejected(standard, options
     assert (found.sheet, found.row, found.column) == (SHEET_SHEET, 2, "C")
 
 
-def test_duplicate_group_title_is_rejected(standard, options) -> None:
+def test_duplicate_group_titles_are_imported_as_independent_groups(standard, options) -> None:
     data = fill_template(
         standard,
         options,
@@ -184,9 +184,9 @@ def test_duplicate_group_title_is_rejected(standard, options) -> None:
         rows=(group_row(图名="平面图"), group_row(图名=" 平面图 ")),
     )
     result = parse_creation_workbook(data, standard, options)
-    assert result.value is None
-    found = diagnostic(result, "CREATION_XLSX_TITLE_DUPLICATE")
-    assert (found.sheet, found.row, found.column) == (SHEET_SHEET, 3, "A")
+    assert result.diagnostics == ()
+    assert [group.title for group in result.value.groups] == ["平面图", " 平面图 "]
+    assert [group.group_id for group in result.value.groups] == ["xlsx-2", "xlsx-3"]
 
 
 def test_invalid_group_count_is_rejected(standard, options) -> None:

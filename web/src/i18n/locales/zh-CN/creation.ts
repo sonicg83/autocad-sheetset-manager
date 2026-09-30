@@ -155,7 +155,6 @@ export default {
     empty: "还没有图纸组：点击“新建图纸组”开始，第一个组使用标准默认值。",
     derivedHint: "图号、图纸标题、DWG 文件名与派生属性由预览计算，不在创建阶段输入。",
     issueTitleEmpty: "图名不能为空",
-    issueTitleDuplicate: "图名与其他图纸组重复（去首尾空格、大小写不敏感）",
     issueCountInvalid: "张数必须是正整数",
     issueBaseMissing: "基础模板未选择或已不可用",
     issueLayoutMissing: "布局模板未选择或已不可用",

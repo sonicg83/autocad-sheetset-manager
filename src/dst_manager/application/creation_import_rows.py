@@ -234,12 +234,11 @@ class CreationRowStages:
         sheet_properties = input_properties(self.standard, SHEET_SCOPE)
         groups: list[CreationGroupInput] = []
         group_rows: dict[str, int] = {}
-        titles: dict[str, int] = {}
         for row in range(2, len(grid.rows) + 1):
             if not any(cell.strip() for cell in grid.rows[row - 1]):
                 continue
             title = self._cell(SHEET_SHEET, row, title_spec.index)
-            self._check_title(title, row, title_spec, titles)
+            self._check_title(title, row, title_spec)
             count = self._read_count(row, count_spec)
             assets = {
                 kind: self._resolve_asset(kind, self._require_column(key), row)
@@ -288,7 +287,7 @@ class CreationRowStages:
         return spec
 
     def _check_title(
-        self, title: str, row: int, spec: CreationColumnSpec, titles: dict[str, int]
+        self, title: str, row: int, spec: CreationColumnSpec
     ) -> None:
         if not title.strip():
             self._add(
@@ -298,18 +297,6 @@ class CreationRowStages:
                 row=row,
                 column=spec.column,
             )
-            return
-        key = normalize_property_name(title)
-        if key in titles:
-            self._add(
-                "CREATION_XLSX_TITLE_DUPLICATE",
-                f"图名 {title!r} 与第 {titles[key]} 行重复（去首尾空格、大小写不敏感）",
-                sheet=SHEET_SHEET,
-                row=row,
-                column=spec.column,
-            )
-            return
-        titles[key] = row
 
     def _read_count(self, row: int, spec: CreationColumnSpec) -> int | None:
         text = self._cell(SHEET_SHEET, row, spec.index).strip()

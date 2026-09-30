@@ -287,6 +287,19 @@ describe("createCreationStore", () => {
     expect(store.previewDigest).toBeNull();
   });
 
+  it("同名图纸组独立保留且不标错，空图名仍提示错误", () => {
+    const store = createCreationStore(fakeCreationApi());
+    store.updateGroup("group-1", {title: "平面图", count: 2});
+    store.updateGroup("group-2", {title: " 平面图 ", count: 3});
+
+    expect(store.groupIssues("group-1")).toEqual([]);
+    expect(store.groupIssues("group-2")).toEqual([]);
+    expect(store.group("group-1").count).toBe(2);
+    expect(store.group("group-2").count).toBe(3);
+    store.updateGroup("group-1", {title: ""});
+    expect(store.groupIssues("group-1")).toContain("title_empty");
+  });
+
   it("applies an explicit clear only to selected groups", async () => {
     const store = createCreationStore(fakeCreationApi());
     store.batchUpdate(["group-1", "group-3"], "prop-stage", {kind: "clear"});

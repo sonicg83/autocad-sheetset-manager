@@ -474,7 +474,7 @@ def test_invalid_target_path_blocks_plan_without_group_absolute_paths() -> None:
     assert plan.groups[0].target_path == ""
 
 
-def test_duplicate_group_title_ignores_case_and_surrounding_spaces() -> None:
+def test_same_title_groups_ignore_surrounding_spaces_and_keep_single_sheet_suffixes() -> None:
     draft = _draft(
         [
             _group("group-1", "平面图", 1, created_order=1),
@@ -484,9 +484,9 @@ def test_duplicate_group_title_ignores_case_and_surrounding_spaces() -> None:
 
     plan = create_creation_plan(draft, STANDARD, SuffixOptions(True, 1))
 
-    assert plan.has_errors
-    assert [item.group_id for item in plan.diagnostics if item.code == "CREATION_GROUP_TITLE_DUPLICATE"] == [
-        "group-2"
+    assert not plan.has_errors
+    assert [group.dwg_name for group in plan.groups] == [
+        "RQ-01 平面图 (一).dwg", "RQ-02 平面图 (二).dwg"
     ]
 
 
@@ -615,7 +615,7 @@ def test_valid_plan_exposes_targets_templates_and_two_level_values() -> None:
     group = plan.groups[0]
     assert group.group_id == "group-1"
     assert group.number_range == "01-02"
-    assert group.dwg_name == "RQ-01-02 平面图.dwg"
+    assert group.dwg_name == "RQ-01-02 平面图 (一)-(二).dwg"
     assert Path(group.target_path) == Path(TARGET_PATH) / group.dwg_name
     assert group.base_template == "templates/a1.dwt"
     assert group.layout_template == "templates/a1-layout.dwt"

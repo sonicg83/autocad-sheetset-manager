@@ -13,7 +13,7 @@
 - ``required`` 非空只在创建实际值门禁判断（标准可以没有必填属性默认值）；
 - 资产必须存在且种类相符，图幅必须是布局模板资产勾选的启用图幅（PLAN-DM-042），
   不是自由文本；
-- 组图名重复按「去首尾空格 + 大小写不敏感」判定。
+- 允许同名图纸组，实际 DWG 名称冲突在命名阶段判断。
 
 每个函数只返回诊断与解析结果，不抛出、不修改入参；去重与顺序由调用方
 （:mod:`dst_manager.domain.creation_planning`）统一维护。
@@ -37,7 +37,6 @@ from dst_manager.domain.standard_models import (
 __all__ = [
     "BASE_TEMPLATE_KIND",
     "LAYOUT_TEMPLATE_KIND",
-    "duplicate_title_diagnostics",
     "group_diagnostics",
     "input_diagnostics",
     "resolve_base_template",
@@ -110,33 +109,6 @@ def group_diagnostics(
                 group_id=group.group_id,
             )
         )
-    return diagnostics
-
-
-def duplicate_title_diagnostics(
-    group_inputs: Sequence[CreationGroupInput], titles: Sequence[str]
-) -> list[CreationPlanDiagnostic]:
-    """组图名重复：去首尾空格 + 大小写不敏感（空图名已单独阻断）。"""
-    diagnostics: list[CreationPlanDiagnostic] = []
-    owners: dict[str, str] = {}
-    for index, group in enumerate(group_inputs):
-        if not titles[index]:
-            continue
-        key = titles[index].casefold()
-        owner = owners.get(key)
-        if owner is not None:
-            diagnostics.append(
-                CreationPlanDiagnostic(
-                    code="CREATION_GROUP_TITLE_DUPLICATE",
-                    message=(
-                        f"图纸组图名 {titles[index]!r} 与组 {owner!r} 重复"
-                        "（忽略大小写与首尾空格）"
-                    ),
-                    group_id=group.group_id,
-                )
-            )
-            continue
-        owners[key] = group.group_id
     return diagnostics
 
 

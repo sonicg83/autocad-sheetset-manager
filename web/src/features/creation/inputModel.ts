@@ -332,26 +332,18 @@ export function creationNextOrder(groups: CreationGroupState[]): number {
 }
 
 /**
- * 按组即时提示（只帮定位，不是最终校验）：图名非空、图名唯一（去首尾空格 +
- * 大小写不敏感）、张数为正整数、模板与图幅来自当前标准的可用候选。
- * 同名重复的每个组都标错（不静默改名、不追加序号）。
+ * 按组即时提示（只帮定位，不是最终校验）：图名非空、张数为正整数、模板与图幅
+ * 来自当前标准的可用候选。同名组保持独立，后缀与文件名冲突交由后端预览处理。
  */
 export function creationGroupIssues(
   groups: CreationGroupState[],
   standard: CreationStandardInputs | null,
 ): Record<string, CreationGroupIssueCode[]> {
-  const titles = new Map<string, number>();
-  for (const group of groups) {
-    const key = group.title.trim().toLocaleLowerCase();
-    if (key === "") continue;
-    titles.set(key, (titles.get(key) ?? 0) + 1);
-  }
   const issues: Record<string, CreationGroupIssueCode[]> = {};
   for (const group of groups) {
     const codes: CreationGroupIssueCode[] = [];
     const key = group.title.trim().toLocaleLowerCase();
     if (key === "") codes.push("title_empty");
-    else if ((titles.get(key) ?? 0) > 1) codes.push("title_duplicate");
     if (!Number.isInteger(group.count) || group.count < 1) codes.push("count_invalid");
     if (
       !creationAssetOptions(standard, BASE_TEMPLATE_KIND).some(

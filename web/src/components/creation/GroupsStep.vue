@@ -2,7 +2,7 @@
 // 第三阶段：图纸组（SPEC-DM-018 §4；PLAN-DM-036 Task 8）。
 // 一行一个子集、一个主 DWG：图名｜张数｜基础模板｜布局模板｜布局名称｜其他可输入 sheet 属性
 // + 末列操作。末列沿用图纸目录插件的 32×32 图标按钮视觉（↑/↓/✕，各自有完整可访问名称，
-// 首末行禁用正确）。新建组复制创建序最大的组并聚焦图名；重复图名只标错、不自动改名。
+// 首末行禁用正确）。新建组复制创建序最大的组并聚焦图名；同名组保持独立、不自动改名。
 // 图号、标题、DWG 文件名与派生属性由预览计算，本阶段不提供逐张输入。
 // 行内错误的可访问关联：图名/张数/模板/图幅四个控件经 `aria-describedby` 指向本行的
 // 错误列表（只用 `aria-invalid` 只能告知「有错」，读不到原因）。
@@ -31,7 +31,6 @@ const titleInputs = ref<Record<string, HTMLInputElement | null>>({});
 // 即时提示码 → 语言包键的稳定映射（不在模板里拼键名）
 const ISSUE_KEYS: Record<CreationGroupIssueCode, string> = {
   title_empty: "creation.groups.issueTitleEmpty",
-  title_duplicate: "creation.groups.issueTitleDuplicate",
   count_invalid: "creation.groups.issueCountInvalid",
   base_asset_missing: "creation.groups.issueBaseMissing",
   layout_asset_missing: "creation.groups.issueLayoutMissing",
@@ -176,7 +175,7 @@ function toggleAll(event: Event): void {
                   :ref="instance => registerTitleInput(group.group_id, instance as ComponentPublicInstance | null)"
                   :label="$t('creation.groups.columnTitle')"
                   :aria-label="cellLabel(index, $t('creation.groups.columnTitle'))"
-                  :invalid="issuesOf(group.group_id).includes('title_empty') || issuesOf(group.group_id).includes('title_duplicate')"
+                  :invalid="issuesOf(group.group_id).includes('title_empty')"
                   :described-by="rowDescribedBy(group.group_id)"
                   :placeholder="$t('creation.groups.titlePlaceholder')"
                   :model-value="group.title"

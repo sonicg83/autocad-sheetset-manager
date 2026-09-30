@@ -83,12 +83,17 @@ def compress_group_title(base_title: str, sheet_titles: Sequence[str]) -> str:
 
     例如三张 `图纸目录 (一)`/`图纸目录 (二)`/`图纸目录 (三)` 压缩为
     `图纸目录 (一)-(三)`，供派生 DWG 文件名与预览的「图纸」列使用。组内仅一张时
-    沿用基础标题（向后兼容）；任一张标题结构不符合 `基础标题 (后缀)` 时防御性
+    沿用实际标题及其后缀；任一张标题结构不符合 `基础标题 (后缀)` 时防御性
     回退为基础标题，保持与旧行为一致。
     """
-    if len(sheet_titles) < 2:
-        return base_title  # 组内仅一张时沿用基础标题（SPEC-DM-008 §3.2 向后兼容）
-    prefix = f"{base_title} ("
+    if not sheet_titles:
+        return base_title
+    if len(sheet_titles) == 1:
+        return sheet_titles[0]
+    actual_base, separator, _ = sheet_titles[0].rpartition(" (")
+    if not separator or actual_base.strip().casefold() != base_title.strip().casefold():
+        return base_title
+    prefix = f"{actual_base} ("
     suffixes: list[str] = []
     for title in sheet_titles:
         if title.startswith(prefix) and title.endswith(")"):

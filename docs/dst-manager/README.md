@@ -1,5 +1,7 @@
 # DST Manager 文档入口
 
+2026-09-30 调整标准创建的同名图纸组与 DWG 后缀规则：界面及 XLSX 允许同名组，图纸标题跨同名组连续编号，文件名按本组实际标题压缩后代入标准命名模板；创建与编辑工作区的单张组均保留实际标题后缀。契约见 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md) 与 [SPEC-DM-008 §3.2](specs/SPEC-DM-008-v032-naming-and-template-flows.md#32-派生规则)。
+
 2026-09-30 完成 [图纸标准级联枚举属性规范（SPEC-DM-021，accepted）](specs/SPEC-DM-021-cascading-enum-properties.md) 与 [实施计划（PLAN-DM-047，completed）](../../.planning/plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：交付普通/级联/派生属性、`sheetset`/`sheet` 同级联动、XLSX 静态候选与后端成对校验，实际实现与验证见计划摘要。
 
 2026-09-29 完成 [无版本图纸标准身份与标准库管理规范（SPEC-DM-020，accepted）](specs/SPEC-DM-020-versionless-standard-identity-and-management.md) 实施：[PLAN-DM-046](../../.planning/plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)（completed）落地 UUID、描述、发布时间、导入改名、平铺列表和关联草稿删除。后续按用户确认取消旧格式兼容：旧发布包、草稿和 `id@version` 项目快照均不迁移、不读取；存量清理及验证记录见计划 Task 8。

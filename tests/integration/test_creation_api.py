@@ -1089,9 +1089,9 @@ def test_preview_returns_group_table_and_sheet_details(
     assert group["title"] == "平面图"
     assert group["number_range"] == "01-02"
     assert group["sheet_count"] == 2
-    assert group["dwg_name"] == "RQ-01-02 平面图.dwg"
+    assert group["dwg_name"] == "RQ-01-02 平面图 (一)-(二).dwg"
     assert group["target_path"] == str(
-        tmp_path / "projects" / "新建项目" / "RQ-01-02 平面图.dwg"
+        tmp_path / "projects" / "新建项目" / "RQ-01-02 平面图 (一)-(二).dwg"
     )
     assert group["base_template"] == "templates/a1.dwt"
     assert group["layout_template"] == "templates/a1-layout.dwt"
@@ -1112,6 +1112,37 @@ def test_preview_digest_is_stable_without_changes(
     first = preview_draft(client, creation_draft.id).json()
     second = preview_draft(client, creation_draft.id).json()
     assert first["preview_digest"] == second["preview_digest"]
+
+
+@pytest.mark.parametrize(
+    ("counts", "filenames"),
+    [
+        ((2, 3), ["RQ-01-02 平面图 (一)-(二).dwg", "RQ-03-05 平面图 (三)-(五).dwg"]),
+        ((1, 1), ["RQ-01 平面图 (一).dwg", "RQ-02 平面图 (二).dwg"]),
+    ],
+)
+def test_same_title_groups_save_and_preview_with_continuous_filename_suffixes(
+    client: TestClient, creation_draft: DraftFixture, counts, filenames
+) -> None:
+    before = client.get(f"/api/creation-drafts/{creation_draft.id}").json()
+    saved = save_creation_draft(
+        client,
+        creation_draft.id,
+        expected_revision=before["revision"],
+        target_path=before["target_path"],
+        groups=[
+            group_input(group_id=f"group-{index + 1}", created_order=index + 1, count=count)
+            for index, count in enumerate(counts)
+        ],
+    )
+    assert [group["count"] for group in saved["groups"]] == list(counts)
+    response = preview_draft(client, creation_draft.id)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["executable"] is True
+    assert body["diagnostics"] == []
+    assert [group["dwg_name"] for group in body["groups"]] == filenames
+    assert [group["title"] for group in body["groups"]] == ["平面图", "平面图"]
 
 
 def test_preview_digest_binds_standard_settings_and_assets(

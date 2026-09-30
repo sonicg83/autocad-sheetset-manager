@@ -253,8 +253,9 @@ test("新建图纸组复制最近创建的组，重排后仍按创建序复制�
   await page.getByRole("button", {name: "新建图纸组"}).click();
   await expect(rowTitle(page, "group-3")).toHaveValue("平面图");
   await expect(rowCount(page, "group-3")).toHaveValue("3");
-  // 未改名而与原组重复：直接标错、不自动追加序号
-  await expect(groupRow(page, "group-3").getByText("图名与其他图纸组重复（去首尾空格、大小写不敏感）")).toBeVisible();
+  // 同名组独立保留输入，不标错，也不自动改名。
+  await expect(rowTitle(page, "group-3")).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#creation-group-issues-group-3")).toHaveCount(0);
   await expect(rowTitle(page, "group-2")).toHaveValue("平面图");
   await expect(rowTitle(page, "group-3")).toHaveValue("平面图");
 
@@ -263,7 +264,7 @@ test("新建图纸组复制最近创建的组，重排后仍按创建序复制�
   await expect(groupRow(page, "group-2").getByRole("button", {name: "上移第 1 组"})).toBeDisabled();
   await expect(groupRow(page, "group-3").getByRole("button", {name: "下移第 3 组"})).toBeDisabled();
 
-  // 改名后错误消失；删除组后汇总同步
+  // 用户仍可独立改名；删除组后汇总同步。
   await rowTitle(page, "group-3").fill("纵断面图");
   await expect(groupRow(page, "group-3").getByText("图名与其他图纸组重复", {exact: false})).toHaveCount(0);
   await groupRow(page, "group-1").getByRole("button", {name: /删除第 \d+ 组/}).click();
@@ -279,15 +280,17 @@ test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗�
 
   await page.getByRole("button", {name: "新建图纸组"}).click();
   await rowTitle(page, "group-1").fill("平面图");
-  // 新建组复制最近创建的组：未改名而同名 → 两行都标错，且各行的图名输入都有 describedby
+  // 同名本身合法；清空首行图名后仍应提供可访问的行内错误。
   await page.getByRole("button", {name: "新建图纸组"}).click();
   expect(await rowOrder(page)).toEqual(["group-1", "group-2"]);
   await expect(rowTitle(page, "group-2")).toHaveValue("平面图");
+  await expect(rowTitle(page, "group-1")).not.toHaveAttribute("aria-invalid", "true");
+  await rowTitle(page, "group-1").fill("");
 
   // 每行的错误列表有稳定 id；该行图名/张数/模板/图幅控件指向它（不是只给 aria-invalid）
   const issues = page.locator("#creation-group-issues-group-1");
   await expect(issues).toBeVisible();
-  await expect(issues).toContainText("图名与其他图纸组重复（去首尾空格、大小写不敏感）");
+  await expect(issues).toContainText("图名不能为空");
 
   const title = rowTitle(page, "group-1");
   await title.focus();
@@ -295,7 +298,7 @@ test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗�
   await expect(title).toHaveAttribute("aria-invalid", "true");
   await expect(title).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
   // 键盘聚焦即可获得原因（可访问描述来自该行的错误列表）
-  await expect(title).toHaveAccessibleDescription("图名与其他图纸组重复（去首尾空格、大小写不敏感）");
+  await expect(title).toHaveAccessibleDescription("图名不能为空");
   for (const control of [
     rowCount(page, "group-1"),
     groupRow(page, "group-1").getByLabel(/基础模板$/),
@@ -635,8 +638,9 @@ test("分组编辑表 48px 档与出错行增高（同行中点对齐 ≤1px）"
     "编辑控件保持 38px 表单档",
   ).toBe(38);
   expect(await controlCenterSpread(row), "同行控件与复选命中区垂直中点差 ≤1px").toBeLessThanOrEqual(1);
-  // 同名第二组触发行内错误：该行按内容增高、整行同档对齐且错误列表不被裁切
+  // 空图名触发行内错误：该行按内容增高、整行同档对齐且错误列表不被裁切。
   await page.getByRole("button", {name: "新建图纸组"}).click();
+  await rowTitle(page, "group-2").fill("");
   const errorRow = groupRow(page, "group-2");
   const issues = errorRow.locator(".row-issues");
   await expect(issues, "出错行必须出现行内错误列表").toBeVisible();

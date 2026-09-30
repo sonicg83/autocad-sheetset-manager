@@ -156,7 +156,6 @@ export default {
     empty: "No drawing group yet: use “New drawing group” to start; the first group uses the standard defaults.",
     derivedHint: "Sheet numbers, titles, DWG file names and derived properties are computed by the preview and are not inputs here.",
     issueTitleEmpty: "The title must not be empty",
-    issueTitleDuplicate: "The title duplicates another drawing group (trimmed, case-insensitive)",
     issueCountInvalid: "The sheet count must be a positive integer",
     issueBaseMissing: "No base template selected, or it is no longer available",
     issueLayoutMissing: "No layout template selected, or it is no longer available",

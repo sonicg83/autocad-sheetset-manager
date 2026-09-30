@@ -74,6 +74,29 @@ def test_same_title_group_uses_first_trimmed_spelling_for_all_members():
     assert titles == [["Plan (2)"], ["Plan (1)"]]
 
 
+def test_same_title_single_sheet_subsets_keep_actual_suffixes_in_dwg_names():
+    document = SheetSetDocument(
+        "db", "图纸集",
+        [
+            Subset("subset-1", "1 平面图", 1, [
+                _sheet("sheet-1", "01", "平面图", "C:/工程/RQ-01 平面图.dwg")
+            ]),
+            Subset("subset-2", "2 平面图", 2, [
+                _sheet("sheet-2", "02", "平面图", "C:/工程/RQ-02 平面图.dwg")
+            ]),
+        ],
+    )
+
+    derived = derive_document_structure(document, [], SuffixOptions(True, 1))
+
+    assert [subset.sheets[0].title for subset in derived.subsets] == [
+        "平面图 (一)", "平面图 (二)"
+    ]
+    assert [Path(subset.target_file).name for subset in derived.subsets] == [
+        "RQ-01 平面图 (一).dwg", "RQ-02 平面图 (二).dwg"
+    ]
+
+
 @pytest.mark.parametrize(
     ("base_title", "ordinal", "enabled", "suffix_type", "expected"),
     [

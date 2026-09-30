@@ -41,7 +41,6 @@ from dst_manager.domain.creation import (
     input_properties,
 )
 from dst_manager.domain.creation_plan_inputs import (
-    duplicate_title_diagnostics,
     group_diagnostics,
     input_diagnostics,
     resolve_base_template,
@@ -141,7 +140,6 @@ def create_creation_plan(
         )
         diagnostics.extend(base_diagnostics)
         diagnostics.extend(layout_diagnostics)
-    diagnostics.extend(duplicate_title_diagnostics(group_inputs, titles))
 
     # 输入形状门禁先于派生求值：先报「输入不完整/非法」，再报「求值失败」。
     diagnostics = _dedupe(diagnostics)
@@ -203,6 +201,7 @@ def create_creation_plan(
         group_inputs,
         titles,
         number_ranges,
+        sheets_by_group,
     )
     evaluation.extend(naming_diagnostics)
     diagnostics = _dedupe([*diagnostics, *evaluation])
@@ -320,15 +319,20 @@ def _dwg_names(
     group_inputs: Sequence[CreationGroupInput],
     titles: Sequence[str],
     number_ranges: Sequence[str],
+    sheets_by_group: Sequence[Sequence[SheetPlan]],
 ) -> tuple[list[str], list[CreationPlanDiagnostic]]:
-    """全局 DWG 命名：``sheetset`` 派生结果 + 组号段/图名，失败或重名即阻断。"""
+    """标准 DWG 命名：组名使用实际图纸标题压缩结果，失败或重名即阻断。"""
     namable = [
         index
         for index, group in enumerate(group_inputs)
         if titles[index] and group.count >= 1
     ]
     contexts = [
-        SubsetNamingContext(number_ranges[index], titles[index], index + 1)
+        SubsetNamingContext(
+            number_ranges[index],
+            compress_group_title(titles[index], [sheet.title for sheet in sheets_by_group[index]]),
+            index + 1,
+        )
         for index in namable
     ]
     names = [""] * len(group_inputs)

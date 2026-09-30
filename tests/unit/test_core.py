@@ -681,8 +681,12 @@ def _chained_rename_workspace(
     tmp_path: Path,
     count: int = 2,
     handles: list[str] | None = None,
+    suffix_names: bool = False,
 ) -> tuple[Workspace, list[Path]]:
-    drawings = [tmp_path / f"{index:03d} 共享.dwg" for index in range(1, count + 1)]
+    drawings = [
+        tmp_path / f"{index:03d} 共享{' (' + str(index) + ')' if suffix_names else ''}.dwg"
+        for index in range(1, count + 1)
+    ]
     for index, drawing in enumerate(drawings, start=1):
         drawing.write_bytes(f"old-{index}".encode())
     ids = [f"g00000000-0000-0000-0001-{index:012X}" for index in range(1, 3 + 3 * count)]
@@ -3427,7 +3431,7 @@ def test_create_group_full_flow_publishes_new_dwg_without_deleting_existing(tiny
 
 
 def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
-    workspace, old_drawings = _chained_rename_workspace(tmp_path)
+    workspace, old_drawings = _chained_rename_workspace(tmp_path, suffix_names=True)
     template = tmp_path / "模板.dwt"
     template.write_bytes(b"template")
     command = {
@@ -3477,7 +3481,7 @@ def test_front_insert_publishes_complete_chained_dwg_renames(tmp_path: Path):
 
 
 def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: Path):
-    workspace, old_drawings = _chained_rename_workspace(tmp_path, count=3)
+    workspace, old_drawings = _chained_rename_workspace(tmp_path, count=3, suffix_names=True)
     template = tmp_path / "中部模板.dwt"
     template.write_bytes(b"middle-template")
     command = {
@@ -3491,7 +3495,7 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
     }
     plan = build_structural_plan(workspace, [command], SuffixOptions(True, 2))
     changed_targets = [Path(group["target_file"]) for group in plan["groups"]]
-    assert changed_targets == [old_drawings[1], old_drawings[2], tmp_path / "004 共享.dwg"]
+    assert changed_targets == [old_drawings[1], old_drawings[2], tmp_path / "004 共享 (4).dwg"]
     layouts_by_target = {
         Path(group["target_file"]).name: [layout["target_layout"] for layout in group["layouts"]]
         for group in plan["groups"]
@@ -3514,7 +3518,7 @@ def test_middle_insert_publishes_overlapping_source_and_target_paths(tmp_path: P
         plan,
     )
 
-    final_drawings = [*old_drawings, tmp_path / "004 共享.dwg"]
+    final_drawings = [*old_drawings, tmp_path / "004 共享 (4).dwg"]
     assert result["status"] == "SUCCEEDED"
     assert [path.read_bytes() for path in final_drawings] == [
         b"old-1",
