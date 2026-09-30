@@ -5424,6 +5424,17 @@
               }
             ],
             "title": "Draft Id"
+          },
+          "source_standard_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Standard Id"
           }
         },
         "required": [

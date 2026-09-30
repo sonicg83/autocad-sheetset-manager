@@ -2801,6 +2801,8 @@ export interface components {
             };
             /** Draft Id */
             draft_id?: string | null;
+            /** Source Standard Id */
+            source_standard_id?: string | null;
         };
         /** StandardDraftResponse */
         StandardDraftResponse: {

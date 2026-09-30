@@ -106,6 +106,8 @@ export default {
     nameLabel: "Standard name",
     identityReadonlyHint: "The standard ID comes from the draft identity and cannot be changed after creation; create or derive a new draft to change it.",
     cadVersionsLabel: "Supported CAD versions (comma separated)",
+    numberingDigitsLabel: "Numbering digits",
+    numberingDigitsHelp: "Pad shorter sheet numbers with leading zeros, for example 001 and 002 for 3 digits. Longer numbers remain complete.",
     saveDraft: "Save draft",
     publishCheck: "Publish check",
     saving: "Saving…",

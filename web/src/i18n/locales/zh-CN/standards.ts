@@ -105,6 +105,8 @@ export default {
     nameLabel: "标准名称",
     identityReadonlyHint: "标准 ID 由草稿身份决定，创建后不可修改；需要新身份请新建或派生草稿。",
     cadVersionsLabel: "支持 CAD 版本（逗号分隔）",
+    numberingDigitsLabel: "编号位数",
+    numberingDigitsHelp: "图号不足设定位数时在前面补零，例如 3 位显示为 001、002；超出位数的图号保持完整。",
     saveDraft: "保存草稿",
     publishCheck: "发布检查",
     saving: "正在保存…",

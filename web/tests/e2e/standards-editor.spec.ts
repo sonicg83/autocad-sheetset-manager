@@ -128,6 +128,55 @@ async function saveDraftDocument(page: Page): Promise<void> {
   await expect(editorSaveState(page)).toHaveText("已保存");
 }
 
+test("基本信息的编号位数更新命名示例并在保存重开后保留", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  const digits = page.getByRole("spinbutton", {name: "编号位数"});
+  await expect(digits).toHaveValue("3");
+  await digits.fill("4");
+  await openEditorSection(page, "dwgNaming");
+  await expect(page.getByTestId("token-preview")).toHaveText("RQ-0001-0003 示例子集.dwg");
+  await saveDraftDocument(page);
+  expect(state.saveBodies).toHaveLength(1);
+  expect(state.saveBodies[0].numbering).toEqual({sequence_field: "subset.sequence", digits: 4, start: 1});
+
+  await page.getByRole("button", {name: "返回标准库"}).click();
+  await openDraftEditor(page);
+  await expect(digits).toHaveValue("4");
+});
+
+test("编号位数的空值、零、负数和小数阻止保存且可修复", async ({page}) => {
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": draftDocument()},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  const digits = page.getByRole("spinbutton", {name: "编号位数"});
+  const save = page.getByRole("button", {name: "保存草稿"});
+  for (const value of ["", "0", "-1", "1.5"]) {
+    await digits.fill(value);
+    await expect(digits).toHaveValue(value);
+    await expect(digits).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByTestId("numbering-digits-error")).toContainText("正整数");
+    await expect(save).toBeDisabled();
+  }
+  // 切换分区不丢失未完成输入，不能悄悄恢复默认位数。
+  await digits.fill("");
+  await openEditorSection(page, "dwgNaming");
+  await openEditorSection(page, "basic");
+  await expect(digits).toHaveValue("");
+  await expect(save).toBeDisabled();
+  expect(state.saveBodies).toHaveLength(0);
+  await digits.fill("2");
+  await expect(digits).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByTestId("numbering-digits-error")).toHaveCount(0);
+  await saveDraftDocument(page);
+  expect(state.saveBodies[0].numbering).toEqual({sequence_field: "subset.sequence", digits: 2, start: 1});
+});
+
 /** 把界面语言与主题切到指定值：**不写全局共享的 settings.json**，改用 page 级请求拦截
  * （与 `main.spec.ts` 英文节、`standards-visual-evidence.spec.ts` 同型）——本 spec 在并行 project
  * 中运行，写共享配置会让并发 worker 拉到错误的语言/主题。 */

@@ -17,6 +17,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UnsavedInputDialog from "../ui/UnsavedInputDialog.vue";
 import StandardSectionNav from "./StandardSectionNav.vue";
+import StandardBasicEditor from "./StandardBasicEditor.vue";
 import OrdinaryPropertyEditor from "./OrdinaryPropertyEditor.vue";
 import CascadePropertyEditor from "./CascadePropertyEditor.vue";
 import DerivedPropertyEditor from "./DerivedPropertyEditor.vue";
@@ -137,12 +138,6 @@ const saveStateText = computed(() => {
   if (invalid.value) return "standards.editor.invalidHint";
   // clean = 缓冲与可信基准一致：草稿已保存，无需写操作（直接保存模型）
   return dirty.value ? "standards.editor.dirtyHint" : "standards.editor.saved";
-});
-const cadVersionsText = computed({
-  get: () => buffer.value.supported_cad_versions.join(", "),
-  set: (value: string) => {
-    buffer.value.supported_cad_versions = String(value).split(",").map(item => item.trim()).filter(Boolean);
-  },
 });
 /** 标准描述是 v3 文档字段，随草稿保存并进入已发布标准包。 */
 const description = computed({
@@ -451,13 +446,7 @@ defineExpose({guard, isDirty: () => dirty.value});
       <StandardSectionNav class="editor-nav" :active="active" :sections="sections" @select="active = $event; deleteBlocked = ''" />
       <div class="editor-panel">
         <div class="editor-panel-body">
-        <section v-if="active === 'basic'" class="basic-section" role="region" :aria-label="$t('standards.sections.basic')">
-          <h3 class="section-title">{{ $t("standards.sections.basic") }}</h3>
-          <!-- 身份由草稿本身决定：只读并在可见说明里给出原因（F11） -->
-          <UiInput :model-value="buffer.standard_id" :label="$t('standards.detail.standardId')" readonly />
-          <p class="identity-note" role="note" data-testid="identity-readonly-note">{{ $t("standards.editor.identityReadonlyHint") }}</p>
-          <UiInput v-model="cadVersionsText" :label="$t('standards.editor.cadVersionsLabel')" />
-        </section>
+        <StandardBasicEditor v-if="active === 'basic'" :document="buffer" :diagnostics="diagnostics" />
         <OrdinaryPropertyEditor
           v-else-if="active === 'ordinary'"
           :document="buffer"
@@ -546,8 +535,6 @@ defineExpose({guard, isDirty: () => dirty.value});
 }
 .editor-panel{min-width:0;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-surface)}
 .editor-panel-body{padding:var(--space-4)}
-.basic-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
-.identity-note{margin:0;font-size:var(--font-label);color:var(--color-text-secondary)}
 .publish-section{display:grid;gap:var(--space-2);max-width:var(--card-max-width)}
 .section-title{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
 .pending-note{display:flex;align-items:center;gap:var(--space-2);margin:0;padding:var(--space-3);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md);font-size:var(--font-label);color:var(--color-text-secondary)}

@@ -35,6 +35,8 @@ class StandardDocumentRequest(ContractModel):
 class StandardDraftRequest(ContractModel):
     draft_id: str | None = None
     document: dict[str, object]
+    #: 复制已发布标准时的一次性来源 UUID；仅从 document 取新身份和名称，其余由源标准提供。
+    source_standard_id: str | None = None
 
 
 class StandardDraftResponse(ContractModel):

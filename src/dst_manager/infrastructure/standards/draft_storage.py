@@ -20,6 +20,10 @@ from dst_manager.infrastructure.standards.asset_paths import (
     StandardAssetError,
     resolve_asset_file,
 )
+from dst_manager.infrastructure.standards.draft_copy import (
+    copy_published_assets,
+    prepare_published_copy,
+)
 from dst_manager.infrastructure.standards.store_common import (
     _ASSET_NAME_ATTEMPTS,
     _COPY_CHUNK_SIZE,
@@ -72,7 +76,8 @@ class StandardDraftStorage:
         return drafts
 
     def create_draft(
-        self, document: Mapping[str, object], draft_id: str | None = None
+        self, document: Mapping[str, object], draft_id: str | None = None,
+        *, source_standard_id: str | None = None,
     ) -> StandardDraft:
         """保存一份草稿文档；只要求结构合法，允许语义未完成内容。"""
         standard = parse_standard_draft_document(document)  # 提前拒绝结构非法的草稿
@@ -83,11 +88,18 @@ class StandardDraftStorage:
             draft_id = f"draft-{uuid.uuid4().hex[:12]}"
         target = self._draft_dir(draft_id)
         with self.lifecycle_lock():
+            files = ()
+            if source_standard_id is not None:
+                normalized_document, files = prepare_published_copy(
+                    self, source_standard_id, standard.standard_id, standard.name,
+                )
+                standard = parse_standard_draft_document(normalized_document)
             self.check_available_identity(standard.standard_id, standard.name)
             if target.exists():
                 raise _error("STANDARD_DRAFT_EXISTS", f"草稿 {draft_id!r} 已存在")
             target.mkdir(parents=True)
             try:
+                copy_published_assets(target, files)
                 self._write_document(target, normalized_document)
             except BaseException:
                 shutil.rmtree(target, ignore_errors=True)

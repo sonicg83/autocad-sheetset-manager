@@ -205,7 +205,7 @@ async function submitCreate(payload: {name: string; dstPath: string}): Promise<v
       }
       // 复制为独立标准草稿：沿用内容，但分配新 UUID 并清空发布时间。
       const derived = deriveStandardDraftDocument(base, defaultStandardId(), payload.name);
-      created = await store.createDraft({document: derived});
+      created = await store.createDraft({document: derived, sourceStandardId: origin.standard_id});
     } else if (createMode.value === "from-dst") {
       created = await store.createDraftFromDst({dstPath: payload.dstPath});
     } else {

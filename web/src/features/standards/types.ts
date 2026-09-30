@@ -72,6 +72,8 @@ export interface AssetInspection {
 export interface CreateDraftInput {
   draftId?: string;
   document: Record<string, unknown>;
+  /** 复制已发布标准时的一次性来源 UUID，不进入新标准文档。 */
+  sourceStandardId?: string;
 }
 
 /** 本机模板受控复制：前端只传用户显式选择的来源路径，返回服务端生成的受控副本名。 */

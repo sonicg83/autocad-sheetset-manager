@@ -420,6 +420,7 @@ test("切换选择后复制只消费已加载且身份匹配的详情", async ({
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   );
   expect((created.document["numbering"] as {digits: number}).digits).toBe(3);
+  expect(state.createBodies[0]).toHaveProperty("source_standard_id", "00000000-0000-4000-8000-000000000012");
 });
 
 test("删除用户标准前预览关联草稿，影响变化后要求重新确认", async ({page}) => {

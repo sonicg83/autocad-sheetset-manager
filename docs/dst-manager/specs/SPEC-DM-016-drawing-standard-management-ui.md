@@ -5,7 +5,7 @@ status: accepted
 owners:
 - dst-manager
 created: 2026-09-21
-updated: 2026-09-28
+updated: 2026-09-30
 related:
 - RFC-INT-003
 - ARCH-DM-007
@@ -241,6 +241,8 @@ related:
 - 旧"多文件 + role"结构（`files`/`role` 字段）已退役：旧形状文档与标准包在保存和导入时按稳定诊断码拒绝，不做自动迁移，需重新导入或重建。
 
 **本机模板来源与包内路径（PLAN-DM-040 Task 3 修订；复制响应扩展见 PLAN-DM-042）：**
+
+从官方或用户已发布标准“复制为新草稿”时，文档及声明引用的模板文件一并复制到新草稿，自动保留资产声明和布局勾选，无需逐项重新选择本机文件；副本独立性与失败回滚以 [SPEC-DM-020 §2](SPEC-DM-020-versionless-standard-identity-and-management.md#2-身份生命周期与时间) 为准。
 
 - 草稿只保存包内相对路径（受控副本名）；本机绝对路径只作一次性导入来源，不写入 `document.json`、发布目录或包内 `manifest.json`，也不在前端缓冲中保留；
 - 桌面壳可用时，用户经固定 `template` 文件种类（`*.dwg;*.dwt`）选择本机模板，由后端把文件复制到草稿受控资产目录，返回形如 `assets/managed-<uuid4hex>.dwg|.dwt` 的受控副本名，并随响应返回 `layouts`（复制时从受控副本读取的实际布局，含 `Model`，由前端过滤）与 `layouts_error`（布局读取失败时的稳定码；读取失败不影响复制结果）；前端据此渲染 §8.2 的布局勾选清单；

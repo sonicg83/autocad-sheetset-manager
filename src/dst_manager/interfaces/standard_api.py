@@ -93,7 +93,9 @@ def register_standard_routes(app: FastAPI) -> None:
         response_model_exclude_unset=True,
     )
     def create_standard_draft(request: Request, body: StandardDraftRequest):
-        return service(request).create_standard_draft(body.document, body.draft_id)
+        return service(request).create_standard_draft(
+            body.document, body.draft_id, source_standard_id=body.source_standard_id,
+        )
 
     @app.post(
         "/api/standards/drafts/from-dst",

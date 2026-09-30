@@ -40,7 +40,11 @@ export function fetchStandardDraft(draftId: string): Promise<StandardDraft> {
 export function createStandardDraft(input: CreateDraftInput): Promise<StandardDraft> {
   return request<StandardDraft>("/api/standards/drafts", {
     method: "POST",
-    body: JSON.stringify({draft_id: input.draftId ?? null, document: input.document}),
+    body: JSON.stringify({
+      draft_id: input.draftId ?? null,
+      document: input.document,
+      ...(input.sourceStandardId === undefined ? {} : {source_standard_id: input.sourceStandardId}),
+    }),
   });
 }
 

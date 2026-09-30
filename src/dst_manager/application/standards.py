@@ -260,10 +260,13 @@ class StandardOperations:
     # ---- 草稿/发布/导入导出 API 编排（Task 6） ----------------------------
 
     def create_standard_draft(
-        self, document: Mapping[str, object], draft_id: str | None = None
+        self, document: Mapping[str, object], draft_id: str | None = None,
+        *, source_standard_id: str | None = None,
     ) -> dict[str, object]:
         try:
-            draft = self.standard_store.create_draft(document, draft_id)
+            draft = self.standard_store.create_draft(
+                document, draft_id, source_standard_id=source_standard_id,
+            )
         except (StandardStoreError, StandardSchemaError) as exc:
             raise _store_error(exc) from exc
         return {"draft_id": draft.draft_id, "document": draft.document}
