@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DST Manager · 提示分级规范（草案）</title>
+<style>
+/* 全部数值取自 web/src/styles/tokens.css，本页不引入任何新令牌。 */
+:root{
+  --font-ui:"Inter","Microsoft YaHei",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --color-bg-canvas:#F6F7F9; --color-bg-surface:#FFFFFF; --color-bg-muted:#EEF1F5;
+  --color-text-primary:#1A2233; --color-text-secondary:#4A5568; --color-text-muted:#6B7280;
+  --color-border-subtle:#E3E8EF; --color-border-strong:#C7D0DB;
+  --color-accent:#2F5BE0; --color-on-accent:#FFFFFF; --color-focus:#2F5BE0;
+  --color-success:#1B7F4B; --color-success-bg:#E7F4EC;
+  --color-warning:#946200; --color-warning-bg:#FBF1DB;
+  --color-danger:#C2302B; --color-danger-bg:#FBEAE8;
+  --color-info:#245FA6; --color-info-bg:#E8F0F9;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-full:9999px;
+  --shadow-1:0 1px 2px rgba(16,24,40,.06); --shadow-2:0 4px 12px rgba(16,24,40,.10);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px; --space-7:40px; --space-8:48px;
+  --font-caption:12px; --font-label:13px; --font-body:14px;
+  --font-card-title:14px; --font-panel-title:15px; --font-view-title:18px; --font-page-title:20px;
+  --line-height-body:1.5;
+}
+[data-theme="dark"]{
+  --color-bg-canvas:#10151E; --color-bg-surface:#171E29; --color-bg-muted:#212B39;
+  --color-text-primary:#E6EAF2; --color-text-secondary:#AEB8C7; --color-text-muted:#8592A3;
+  --color-border-subtle:#2A3444; --color-border-strong:#3B485C;
+  --color-accent:#6B8DFF; --color-on-accent:#0F1420; --color-focus:#6B8DFF;
+  --color-success:#54C98A; --color-success-bg:#12301F;
+  --color-warning:#E0B15A; --color-warning-bg:#332712;
+  --color-danger:#F0776E; --color-danger-bg:#3A1917;
+  --color-info:#7CB0E8; --color-info-bg:#132739;
+  --shadow-1:0 1px 2px rgba(0,0,0,.30); --shadow-2:0 4px 12px rgba(0,0,0,.40);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--color-bg-canvas); color:var(--color-text-primary);
+  font-family:var(--font-ui); font-size:var(--font-body); line-height:var(--line-height-body);
+  font-feature-settings:"tnum" 1;
+}
+:focus-visible{outline:2px solid var(--color-focus); outline-offset:2px; border-radius:var(--radius-sm)}
+
+/* ---------- 顶栏 ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:var(--space-4);
+  min-height:52px; padding:0 var(--space-5);
+  background:color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--color-border-subtle);
+}
+.topbar__title{font-size:var(--font-label); font-weight:600; letter-spacing:.01em; margin:0}
+.topbar__spacer{flex:1}
+.segmented{display:inline-flex; padding:2px; gap:2px; background:var(--color-bg-muted); border-radius:var(--radius-sm)}
+.segmented button{
+  border:0; background:transparent; color:var(--color-text-secondary); cursor:pointer;
+  font:inherit; font-size:var(--font-caption); padding:5px 12px; border-radius:var(--radius-sm);
+}
+.segmented button[aria-pressed="true"]{background:var(--color-bg-surface); color:var(--color-text-primary); box-shadow:var(--shadow-1)}
+
+/* ---------- 页头 ---------- */
+.masthead{padding:var(--space-8) var(--space-5) var(--space-6); max-width:1180px; margin:0 auto}
+.masthead h1{
+  /* 用 em 而非 ch：本页标题是中文，ch 按半角 "0" 计宽，会把"每一层"拆断。 */
+  font-size:var(--font-page-title); font-weight:650; margin:0 0 var(--space-3);
+  letter-spacing:-.01em; max-width:23em; line-height:1.35;
+}
+.masthead p{margin:0; max-width:62ch; color:var(--color-text-secondary)}
+.masthead strong{color:var(--color-text-primary); font-weight:600}
+
+/* 现状证据条：用真实测量值，不做装饰性大数字。
+   描边与圆角放在容器上，格子只用 1px 缝隙显色 —— 这样换行时
+   边缘始终正确，不依赖 first/last-child 假设。 */
+.evidence-wrap{max-width:1180px; margin:var(--space-6) auto 0; padding:0 var(--space-5)}
+.evidence{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1px;
+  margin:0; background:var(--color-border-subtle);
+  border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); overflow:hidden;
+}
+.evidence div{background:var(--color-bg-surface); padding:var(--space-4) var(--space-5)}
+.evidence dt{font-size:var(--font-caption); color:var(--color-text-muted); margin:0 0 var(--space-1)}
+.evidence dd{margin:0; font-size:var(--font-view-title); font-weight:600; font-variant-numeric:tabular-nums}
+.evidence dd small{font-size:var(--font-caption); font-weight:400; color:var(--color-text-muted); margin-left:2px}
+
+/* ---------- 主体：左刻度 + 右内容 ---------- */
+.layout{display:grid; grid-template-columns:200px minmax(0,1fr); gap:var(--space-7); max-width:1180px; margin:0 auto; padding:var(--space-8) var(--space-5) var(--space-8)}
+.rail{position:sticky; top:76px; align-self:start}
+.rail h2{font-size:var(--font-caption); font-weight:600; color:var(--color-text-muted); margin:0 0 var(--space-3)}
+.rail ol{list-style:none; margin:0; padding:0; position:relative}
+/* 竖线是层级轴：位置本身编码"从外到内"的深度 */
+.rail ol::before{content:""; position:absolute; left:5px; top:10px; bottom:10px; width:1px; background:var(--color-border-strong)}
+.rail li{position:relative; padding-left:var(--space-5); margin-bottom:var(--space-3)}
+.rail li::before{
+  content:""; position:absolute; left:0; top:7px; width:11px; height:11px; border-radius:var(--radius-full);
+  background:var(--color-bg-canvas); border:2px solid var(--color-border-strong);
+}
+.rail li[data-active="true"]::before{border-color:var(--color-accent); background:var(--color-accent)}
+.rail a{color:var(--color-text-secondary); text-decoration:none; font-size:var(--font-label); display:block}
+.rail a:hover{color:var(--color-text-primary)}
+.rail li[data-active="true"] a{color:var(--color-text-primary); font-weight:600}
+.rail .depth{display:block; font-size:var(--font-caption); color:var(--color-text-muted)}
+
+/* ---------- 每一级 ---------- */
+.level{
+  background:var(--color-bg-surface); border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg); padding:var(--space-6); margin-bottom:var(--space-6);
+  scroll-margin-top:76px;
+}
+.level__head{display:flex; align-items:baseline; gap:var(--space-3); flex-wrap:wrap; margin-bottom:var(--space-2)}
+.level__head h2{margin:0; font-size:var(--font-view-title); font-weight:650; letter-spacing:-.01em}
+.level__head .en{font-family:var(--font-mono); font-size:var(--font-caption); color:var(--color-text-muted)}
+.level__purpose{margin:0 0 var(--space-5); color:var(--color-text-secondary); max-width:60ch}
+
+/* 流式而非网格：规格项宽度差异大（"13px" vs "--color-text-secondary"），
+   固定列宽会把令牌名拦腰断词。 */
+.spec{display:flex; flex-wrap:wrap; gap:var(--space-4) var(--space-6); margin:0 0 var(--space-5); padding:var(--space-4) 0; border-top:1px solid var(--color-border-subtle); border-bottom:1px solid var(--color-border-subtle)}
+.spec div{min-width:0}
+.spec dt{font-size:var(--font-caption); color:var(--color-text-muted); margin-bottom:var(--space-1)}
+.spec dd{margin:0; font-size:var(--font-label)}
+.spec code{font-family:var(--font-mono); font-size:var(--font-caption); color:var(--color-text-secondary); background:var(--color-bg-muted); padding:1px 5px; border-radius:var(--radius-sm); white-space:nowrap}
+
+/* 正例 / 反例：反例用降饱和与斜纹标注"不要这样做" */
+.pair{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4)}
+.case{border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); overflow:hidden; display:flex; flex-direction:column}
+.case__tag{
+  display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+  font-size:var(--font-caption); font-weight:600; border-bottom:1px solid var(--color-border-subtle);
+}
+.case--do .case__tag{background:var(--color-success-bg); color:var(--color-success)}
+.case--dont .case__tag{background:var(--color-danger-bg); color:var(--color-danger)}
+.case__stage{padding:var(--space-4); background:var(--color-bg-canvas); flex:1}
+.case__why{padding:var(--space-3); font-size:var(--font-caption); color:var(--color-text-muted); border-top:1px solid var(--color-border-subtle); background:var(--color-bg-surface)}
+.case__why b{color:var(--color-text-secondary); font-weight:600}
+
+/* ---------- 被演示的"真实界面片段" ---------- */
+.ui-card{background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); padding:var(--space-4)}
+.ui-card__title{font-size:var(--font-card-title); font-weight:600; margin:0 0 var(--space-1)}
+/* ① Lead —— 13px / secondary */
+.t-lead{font-size:var(--font-label); color:var(--color-text-secondary); margin:0}
+/* ② Help —— 12px / muted */
+.t-help{font-size:var(--font-caption); color:var(--color-text-muted); margin:0}
+/* ③ Status —— 12px，按语义着色 */
+.t-status{font-size:var(--font-caption); margin:0; display:inline-flex; align-items:center; gap:var(--space-2)}
+.t-status--ok{color:var(--color-success)}
+.t-status--busy{color:var(--color-info)}
+/* ④ Banner —— 语义底色 + 左色条 */
+.t-banner{display:flex; gap:var(--space-3); padding:var(--space-3) var(--space-4); border-radius:var(--radius-sm); font-size:var(--font-label); border-left:3px solid}
+.t-banner--info{background:var(--color-info-bg); color:var(--color-info); border-left-color:var(--color-info)}
+.t-banner--warn{background:var(--color-warning-bg); color:var(--color-warning); border-left-color:var(--color-warning)}
+.t-banner--danger{background:var(--color-danger-bg); color:var(--color-danger); border-left-color:var(--color-danger)}
+/* ⑤ Error —— 12px / danger，紧贴字段 */
+.field{display:flex; flex-direction:column; gap:var(--space-1)}
+.field__label{font-size:var(--font-label); color:var(--color-text-secondary)}
+.field__input{height:38px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); background:var(--color-bg-surface); padding:0 var(--space-3); font:inherit; font-size:var(--font-body); color:var(--color-text-primary)}
+.field__input--invalid{border-color:var(--color-danger)}
+.t-error{font-size:var(--font-caption); color:var(--color-danger); margin:0}
+
+.stack-2 > * + *{margin-top:var(--space-2)}
+.stack-3 > * + *{margin-top:var(--space-3)}
+
+/* ---------- 改前 / 改后 ---------- */
+.compare{max-width:1180px; margin:0 auto; padding:0 var(--space-5) var(--space-8)}
+.compare > h2{font-size:var(--font-view-title); font-weight:650; margin:0 0 var(--space-2); letter-spacing:-.01em}
+.compare > p{margin:0 0 var(--space-5); color:var(--color-text-secondary); max-width:62ch}
+.compare__grid{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-5); align-items:start}
+.screen{border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:var(--color-bg-surface); overflow:hidden}
+.screen__bar{display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border-subtle); font-size:var(--font-caption); font-weight:600}
+.screen--before .screen__bar{background:var(--color-danger-bg); color:var(--color-danger)}
+.screen--after .screen__bar{background:var(--color-success-bg); color:var(--color-success)}
+.screen__body{padding:var(--space-5)}
+.screen__count{font-weight:400; opacity:.85}
+
+/* 标出每一处提示属于哪一级 */
+.mk{position:relative; padding-left:0}
+.mk[data-lv]::before{
+  content:attr(data-lv); font-family:var(--font-mono); font-size:10px; line-height:1;
+  display:inline-block; margin-right:6px; padding:2px 4px; border-radius:3px; vertical-align:1px;
+  background:var(--color-bg-muted); color:var(--color-text-muted);
+}
+.mk[data-lv="LEAD"]::before{background:var(--color-info-bg); color:var(--color-info)}
+.mk[data-lv="HELP"]::before{background:var(--color-bg-muted); color:var(--color-text-muted)}
+.mk[data-lv="STATUS"]::before{background:var(--color-success-bg); color:var(--color-success)}
+.mk[data-lv="BANNER"]::before{background:var(--color-warning-bg); color:var(--color-warning)}
+.mk[data-lv="ERR"]::before{background:var(--color-danger-bg); color:var(--color-danger)}
+.mk--cut{text-decoration:line-through; text-decoration-color:var(--color-danger); text-decoration-thickness:1px; opacity:.55}
+
+.taskrow{display:flex; flex-direction:column; gap:var(--space-1); padding:var(--space-3); border:1px solid var(--color-border-subtle); border-radius:var(--radius-sm); background:var(--color-bg-surface)}
+.taskrow + .taskrow{margin-top:var(--space-2)}
+.taskrow__name{font-size:var(--font-label); font-weight:600}
+
+.note-box{margin-top:var(--space-3); padding:var(--space-3); background:var(--color-bg-muted); border-radius:var(--radius-sm); font-size:var(--font-caption); color:var(--color-text-secondary)}
+
+.legend{display:flex; flex-wrap:wrap; gap:var(--space-3); margin:0 0 var(--space-5); font-size:var(--font-caption); color:var(--color-text-muted)}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:10px; height:10px; border-radius:3px; display:inline-block}
+
+footer{max-width:1180px; margin:0 auto; padding:var(--space-6) var(--space-5) var(--space-8); border-top:1px solid var(--color-border-subtle); color:var(--color-text-muted); font-size:var(--font-caption)}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr; gap:var(--space-5)}
+  .rail{position:static}
+  .rail ol{display:flex; flex-wrap:wrap; gap:var(--space-2)}
+  .rail ol::before{display:none}
+  .rail li{padding-left:0; margin:0}
+  .rail li::before{display:none}
+  .rail a{padding:6px 10px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-full)}
+  .pair,.compare__grid{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <p class="topbar__title">DST Manager · 提示分级规范（草案）</p>
+  <span class="topbar__spacer"></span>
+  <div class="segmented" role="group" aria-label="主题">
+    <button type="button" id="btn-light" aria-pressed="true">浅色</button>
+    <button type="button" id="btn-dark" aria-pressed="false">暗色</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <h1>提示不是越多越好，而是每一层只回答一个问题</h1>
+  <p>当前界面"感觉很乱"，根因不是提示数量多，而是<strong>从来没有规定过每一层提示该出现在哪、该回答什么</strong>。于是每个区块标题下都挂了一行小字，其中不少在解释系统内部实现，而不是帮用户做决定。下面把提示固定成五级，每级只负责一个问题。</p>
+</header>
+
+<div class="evidence-wrap">
+  <dl class="evidence">
+    <div><dt>首页小字占字符量</dt><dd>63<small>%</small></dd></div>
+    <div><dt>主工作区小字节点占比</dt><dd>88<small>%</small></dd></div>
+    <div><dt>全库自建提示类名</dt><dd>60<small>+ 种</small></dd></div>
+    <div><dt>各自定义提示样式的组件</dt><dd>28<small>个</small></dd></div>
+  </dl>
+</div>
+
+<div class="layout">
+  <nav class="rail" aria-label="层级目录">
+    <h2>从外到内</h2>
+    <ol id="rail-list">
+      <li data-active="true"><a href="#lv-lead">① Lead 导语<span class="depth">页面 / 区块</span></a></li>
+      <li><a href="#lv-help">② Help 帮助<span class="depth">字段 / 控件</span></a></li>
+      <li><a href="#lv-status">③ Status 状态<span class="depth">操作反馈</span></a></li>
+      <li><a href="#lv-banner">④ Banner 横幅<span class="depth">整体关注</span></a></li>
+      <li><a href="#lv-error">⑤ Error 行内错误<span class="depth">单个字段</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ① Lead -->
+    <article class="level" id="lv-lead">
+      <div class="level__head">
+        <h2>① Lead 导语</h2><span class="en">--font-label · secondary</span>
+      </div>
+      <p class="level__purpose">回答"这个页面或区块是干什么的"。它站在区块标题下面，帮人决定要不要往下看。</p>
+
+      <dl class="spec">
+        <div><dt>字号 / 颜色</dt><dd><code>13px</code> <code>--color-text-secondary</code></dd></div>
+        <div><dt>数量约束</dt><dd>每个区块<strong>最多 1 条</strong></dd></div>
+        <div><dt>是否常驻</dt><dd>常驻</dd></div>
+        <div><dt>不负责</dt><dd>字段怎么填、系统怎么实现</dd></div>
+      </dl>
+
+      <div class="pair">
+        <div class="case case--do">
+          <div class="case__tag">这样写</div>
+          <div class="case__stage">
+            <div class="ui-card stack-2">
+              <h3 class="ui-card__title">打开图纸集</h3>
+              <p class="t-lead">选择一个 .dst 文件打开工作区，进行受控日常编辑与可恢复发布。</p>
+            </div>
+          </div>
+          <div class="case__why">一句话说清"这里能做什么"，用户读完就知道下一步。</div>
+        </div>
+        <div class="case case--dont">
+          <div class="case__tag">不要这样</div>
+          <div class="case__stage">
+            <div class="ui-card stack-2">
+              <h3 class="ui-card__title">打开图纸集</h3>
+              <p class="t-lead">选择一个 .dst 文件打开工作区，进行受控日常编辑与可恢复发布。修改先进入草稿，正式发布前不改动工程文件。草稿保存在应用数据目录。</p>
+            </div>
+          </div>
+          <div class="case__why">把三段话挤成一段。后两句分别属于 <b>Help</b>（草稿行为）和实现细节（存储路径），不该混进导语。</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ② Help -->
+    <article class="level" id="lv-help">
+      <div class="level__head">
+        <h2>② Help 帮助</h2><span class="en">--font-caption · muted</span>
+      </div>
+      <p class="level__purpose">回答"这个字段怎么填、什么格式、有什么限制"。它紧贴控件，只在确实会产生疑问时出现。</p>
+
+      <dl class="spec">
+        <div><dt>字号 / 颜色</dt><dd><code>12px</code> <code>--color-text-muted</code></dd></div>
+        <div><dt>数量约束</dt><dd>每个字段最多 1 条</dd></div>
+        <div><dt>是否常驻</dt><dd>仅确有歧义时</dd></div>
+        <div><dt>不负责</dt><dd>解释系统内部机制</dd></div>
+      </dl>
+
+      <div class="pair">
+        <div class="case case--do">
+          <div class="case__tag">这样写</div>
+          <div class="case__stage">
+            <div class="field">
+              <label class="field__label" for="d-path">项目保存路径</label>
+              <input class="field__input" id="d-path" value="D:\项目\2026-厂区改造" readonly />
+              <p class="t-help">先选一个已存在的上一级目录，再命名最终项目目录。</p>
+            </div>
+          </div>
+          <div class="case__why">说的正是用户在这个输入框前会犹豫的事：该填到哪一层。</div>
+        </div>
+        <div class="case case--dont">
+          <div class="case__tag">不要这样</div>
+          <div class="case__stage">
+            <div class="field">
+              <label class="field__label" for="d-path2">标准详情</label>
+              <input class="field__input" id="d-path2" value="选定后固定标准 UUID" readonly />
+              <p class="t-help">选定后固定标准 UUID，后续切换需清除当前输入并重新填写。</p>
+            </div>
+          </div>
+          <div class="case__why">"UUID" 是实现细节，用户既看不见也用不上。这类说明属于 <b>ADR</b>，不属于界面。</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ③ Status -->
+    <article class="level" id="lv-status">
+      <div class="level__head">
+        <h2>③ Status 状态</h2><span class="en">--font-caption · 语义色</span>
+      </div>
+      <p class="level__purpose">回答"刚才那件事结果如何"。它由操作触发，做完就消失 —— 常驻的状态说明会退化成噪音。</p>
+
+      <dl class="spec">
+        <div><dt>字号</dt><dd><code>12px</code></dd></div>
+        <div><dt>颜色</dt><dd>按语义：成功 / 进行中 / 失败</dd></div>
+        <div><dt>是否常驻</dt><dd>动态，用完即隐</dd></div>
+        <div><dt>不负责</dt><dd>替代说明性文案长期占位</dd></div>
+      </dl>
+
+      <div class="pair">
+        <div class="case case--do">
+          <div class="case__tag">这样写</div>
+          <div class="case__stage">
+            <div class="ui-card stack-3">
+              <p class="t-status t-status--ok">● 草稿已保存</p>
+              <p class="t-status t-status--busy">◐ 正在生成预览…</p>
+            </div>
+          </div>
+          <div class="case__why">出现即代表"刚刚发生了什么"，用户扫一眼就能确认。</div>
+        </div>
+        <div class="case case--dont">
+          <div class="case__tag">不要这样</div>
+          <div class="case__stage">
+            <div class="ui-card">
+              <p class="t-help">最近打开记录为空，因此本页不生成占位项目。</p>
+            </div>
+          </div>
+          <div class="case__why">这是<b>空状态</b>，不是状态反馈，而且"占位项目"是开发者词汇。空状态应该给出下一步动作。</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ④ Banner -->
+    <article class="level" id="lv-banner">
+      <div class="level__head">
+        <h2>④ Banner 横幅</h2><span class="en">语义底色 + 左色条</span>
+      </div>
+      <p class="level__purpose">回答"有什么需要我整体注意的"。它横跨区块，用于用户必须先知道才能继续的事。</p>
+
+      <dl class="spec">
+        <div><dt>规格</dt><dd>语义底色 + 左色条，字号 <code>13px</code></dd></div>
+        <div><dt>语义</dt><dd>信息 / 警告 / 错误 / 成功</dd></div>
+        <div><dt>数量约束</dt><dd>同屏尽量 1 条</dd></div>
+        <div><dt>不负责</dt><dd>当普通状态消息用</dd></div>
+      </dl>
+
+      <div class="pair">
+        <div class="case case--do">
+          <div class="case__tag">这样写</div>
+          <div class="case__stage">
+            <div class="stack-3">
+              <div class="t-banner t-banner--info">浏览与预览永远安全；正式写入不可逆，需完整预览后确认。</div>
+              <div class="t-banner t-banner--warn">有 2 张图纸待变更，发布前请先预览。</div>
+            </div>
+          </div>
+          <div class="case__why">颜色与语义对齐：信息用蓝、警告用琥珀。左侧色条让它在长页面里也能被扫到。</div>
+        </div>
+        <div class="case case--dont">
+          <div class="case__tag">当前实现的问题</div>
+          <div class="case__stage">
+            <div class="stack-3">
+              <div class="t-banner t-banner--danger">已刷新图纸列表</div>
+              <div class="t-banner t-banner--danger">创建必须绑定图纸标准；不提供空白无标准创建，也不会恢复独立 Builder。</div>
+            </div>
+          </div>
+          <div class="case__why">全局 <code>.notice</code> 只有一条定义且是<b>红色危险底</b>，被同时用作普通状态和产品决策说明 —— 层级缺失的直接后果。</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ⑤ Error -->
+    <article class="level" id="lv-error">
+      <div class="level__head">
+        <h2>⑤ Error 行内错误</h2><span class="en">--font-caption · danger</span>
+      </div>
+      <p class="level__purpose">回答"哪个字段不对、怎么改"。它紧贴出错的字段，与字段通过 <code>aria-describedby</code> 关联。</p>
+
+      <dl class="spec">
+        <div><dt>字号 / 颜色</dt><dd><code>12px</code> <code>--color-danger</code></dd></div>
+        <div><dt>位置</dt><dd>紧贴字段下方</dd></div>
+        <div><dt>是否常驻</dt><dd>仅出错时</dd></div>
+        <div><dt>不负责</dt><dd>概括多个字段的问题</dd></div>
+      </dl>
+
+      <div class="pair">
+        <div class="case case--do">
+          <div class="case__tag">这样写</div>
+          <div class="case__stage">
+            <div class="field">
+              <label class="field__label" for="d-err">项目目录</label>
+              <input class="field__input field__input--invalid" id="d-err" value="D:\项目\2026 改造 " aria-invalid="true" readonly />
+              <p class="t-error">项目目录名不得以空格或点号结尾。</p>
+            </div>
+          </div>
+          <div class="case__why">直接说清哪里错、怎么改。用户不需要读第二遍。</div>
+        </div>
+        <div class="case case--dont">
+          <div class="case__tag">不要这样</div>
+          <div class="case__stage">
+            <div class="field">
+              <label class="field__label" for="d-err2">图纸组</label>
+              <input class="field__input field__input--invalid" id="d-err2" value="第一册" aria-invalid="true" readonly />
+              <p class="t-error">请先选择上级选项，再选择此级联属性。</p>
+              <p class="t-error">请先选择上级选项，再选择此级联属性。</p>
+              <p class="t-error">请先选择上级选项，再选择此级联属性。</p>
+            </div>
+          </div>
+          <div class="case__why">同一句在<b>每个被禁用的字段下各复读一遍</b>。这种情况应提级为区块级一条说明。</div>
+        </div>
+      </div>
+    </article>
+
+  </main>
+</div>
+
+<section class="compare">
+  <h2>改前 / 改后：启动页</h2>
+  <p>同一屏，提示从 8 处降到 4 处，字符量减少约六成。保留下来的每一条都回答了一个具体问题；被删掉的是实现说明和产品决策记录。</p>
+
+  <div class="legend">
+    <span><i style="background:var(--color-info-bg);border:1px solid var(--color-info)"></i>Lead 导语</span>
+    <span><i style="background:var(--color-bg-muted);border:1px solid var(--color-border-strong)"></i>Help 帮助</span>
+    <span><i style="background:var(--color-success-bg);border:1px solid var(--color-success)"></i>Status 状态</span>
+    <span><i style="background:var(--color-warning-bg);border:1px solid var(--color-warning)"></i>Banner 横幅</span>
+  </div>
+
+  <div class="compare__grid">
+    <div class="screen screen--before">
+      <div class="screen__bar"><span>改前</span><span class="screen__count">8 处提示 · 约 200 字</span></div>
+      <div class="screen__body stack-3">
+        <p class="t-lead mk" data-lv="LEAD">打开已有图纸集继续工作，或从已发布的图纸标准准备新项目。</p>
+
+        <div class="ui-card stack-2">
+          <h3 class="ui-card__title">打开图纸集</h3>
+          <p class="t-lead mk" data-lv="LEAD">选择一个 .dst 文件打开工作区，进行受控日常编辑与可恢复发布。修改先进入草稿，正式发布前不改动工程文件。</p>
+        </div>
+
+        <div class="ui-card stack-2">
+          <h3 class="ui-card__title">其他任务</h3>
+          <p class="t-lead mk" data-lv="LEAD">不打开工作区也可以管理标准或准备新项目。</p>
+          <div class="taskrow"><span class="taskrow__name">创建新图纸集</span><span class="t-help mk" data-lv="HELP">从已发布标准开始，先选择标准和版本。</span></div>
+          <div class="taskrow"><span class="taskrow__name">管理图纸标准</span><span class="t-help mk" data-lv="HELP">查看官方标准、用户标准和草稿。</span></div>
+          <div class="taskrow"><span class="taskrow__name">导入标准包</span><span class="t-help mk" data-lv="HELP">选择 .dststandard 文件并执行导入预检。</span></div>
+        </div>
+
+        <div class="note-box mk" data-lv="BANNER">创建必须绑定图纸标准；不提供空白无标准创建，也不会恢复独立 Builder。</div>
+        <p class="t-help mk" data-lv="STATUS">最近打开记录为空，因此本页不生成占位项目。</p>
+      </div>
+    </div>
+
+    <div class="screen screen--after">
+      <div class="screen__bar"><span>改后</span><span class="screen__count">4 处提示 · 约 80 字</span></div>
+      <div class="screen__body stack-3">
+        <p class="t-lead mk" data-lv="LEAD">打开已有图纸集继续工作，或从已发布的图纸标准准备新项目。</p>
+
+        <div class="ui-card stack-2">
+          <h3 class="ui-card__title">打开图纸集</h3>
+          <p class="t-help mk" data-lv="HELP">修改先进入草稿，可随时撤销。</p>
+        </div>
+
+        <div class="ui-card stack-2">
+          <h3 class="ui-card__title">其他任务</h3>
+          <p class="t-lead mk" data-lv="LEAD">不打开工作区也可以管理标准或准备新项目。</p>
+          <div class="taskrow"><span class="taskrow__name">创建新图纸集</span></div>
+          <div class="taskrow"><span class="taskrow__name">管理图纸标准</span></div>
+          <div class="taskrow"><span class="taskrow__name">导入标准包</span></div>
+        </div>
+
+        <p class="t-help mk" data-lv="STATUS">还没有打开过图纸集。输入 .dst 路径开始。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note-box" style="margin-top:var(--space-5)">
+    <strong>三条删除理由</strong><br>
+    · 「不提供空白无标准创建，也不会恢复独立 Builder」—— 产品决策记录，属于 ADR，用户不需要在界面上读它。<br>
+    · 「最近打开记录为空，因此本页不生成占位项目」—— 实现说明；改成邀请用户行动的<b>空状态</b>。<br>
+    · 三个任务按钮的副标题 —— 按钮名称已经自明，副标题只是重复。
+  </div>
+</section>
+
+<footer>
+  本页为规范草案演示，配色与字号全部取自 <code>web/src/styles/tokens.css</code>，未引入新令牌。五级分级建议写入 <code>SPEC-DM-006 §6.7</code>。
+</footer>
+
+<script>
+const root = document.documentElement;
+const light = document.getElementById("btn-light");
+const dark = document.getElementById("btn-dark");
+function setTheme(t){
+  root.dataset.theme = t;
+  light.setAttribute("aria-pressed", String(t === "light"));
+  dark.setAttribute("aria-pressed", String(t === "dark"));
+}
+light.addEventListener("click", () => setTheme("light"));
+dark.addEventListener("click", () => setTheme("dark"));
+
+// 滚动时高亮左侧层级轴
+const items = [...document.querySelectorAll("#rail-list li")];
+const targets = items.map(li => document.querySelector(li.querySelector("a").getAttribute("href")));
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const i = targets.indexOf(entry.target);
+    if (i < 0) return;
+    items.forEach((li, j) => li.dataset.active = String(j === i));
+  });
+}, {rootMargin:"-80px 0px -70% 0px"});
+targets.forEach(t => t && observer.observe(t));
+</script>
+</body>
+</html>
