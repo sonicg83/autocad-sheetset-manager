@@ -79,6 +79,7 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   expect(created.document["standard_id"]).toBe("00000000-0000-4000-8000-000000000047");
   expect(created.document["version"]).toBeUndefined();
   expect(created.document["schema_version"]).toBe(3);
+  expect(created.document["published_at"]).toBeNull();
 });
 
 test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => {
@@ -90,11 +91,11 @@ test("新建空白标准写入新 Schema 并可直接保存", async ({page}) => 
   await dialog.getByLabel("标准名称").fill("空白标准");
   await dialog.getByRole("button", {name: "创建草稿"}).click();
 
-  // 创建体必须是 Schema v3：不含旧发布字段和旧顶层 rules，且带默认 DWG 命名模板
+  // 创建体必须是 Schema v4：不含旧发布字段和旧顶层 rules，且带默认 DWG 命名模板
   expect(state.createBodies).toHaveLength(1);
   const created = state.createBodies[0] as {document: Record<string, unknown>};
   expect(created.document["standard_id"]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-  expect(created.document["schema_version"]).toBe(3);
+  expect(created.document["schema_version"]).toBe(4);
   expect(created.document["description"]).toBe("");
   expect(created.document["published_at"]).toBeNull();
   expect(created.document["release_notes"]).toBeUndefined();

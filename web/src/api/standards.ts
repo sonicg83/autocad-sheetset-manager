@@ -62,8 +62,8 @@ export function previewStandardDelete(standardId: string): Promise<StandardDelet
 }
 
 export function deleteStandard(standardId: string, impactToken: string): Promise<StandardDeleteResult> {
-  return request<StandardDeleteResult>(`/api/standards/${encodeURIComponent(standardId)}`, {
-    method: "DELETE",
+  return request<StandardDeleteResult>(`/api/standards/${encodeURIComponent(standardId)}/delete`, {
+    method: "POST",
     body: JSON.stringify({impact_token: impactToken}),
   });
 }

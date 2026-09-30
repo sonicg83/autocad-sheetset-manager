@@ -6,6 +6,7 @@ import {
   blankStandardDocument,
   cascadeOptionsFor,
   defaultDwgNamingSegments,
+  deriveStandardDraftDocument,
   draftKey,
   mappingTargetBuffer,
   mappingTargetsFor,
@@ -111,6 +112,26 @@ function withEnumValues(document: DraftDocument, items: Array<{item_id: string; 
 }
 
 describe("draft model", () => {
+  it("从已发布 v3 标准派生可编辑草稿时清空发布时间并保留原 Schema", () => {
+    const published = {
+      schema_version: 3,
+      standard_id: "00000000-0000-4000-8000-000000000046",
+      name: "已发布标准",
+      published_at: 1_800_000_000_123,
+      properties: [{property_id: "prop-title", kind: "text"}],
+    };
+
+    const draft = deriveStandardDraftDocument(published, published.standard_id, "派生草稿");
+
+    expect(draft).toMatchObject({
+      schema_version: 3,
+      standard_id: published.standard_id,
+      name: "派生草稿",
+      published_at: null,
+      properties: published.properties,
+    });
+    expect(published.published_at).toBe(1_800_000_000_123);
+  });
   it("keeps ids and separates ordinary from derived properties", () => {
     const draft = toDraftDocument(newSchemaDocument());
     expect(draft.properties.map(item => [item.property_id, item.kind])).toEqual([

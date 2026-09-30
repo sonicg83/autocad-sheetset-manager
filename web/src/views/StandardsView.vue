@@ -15,7 +15,7 @@ import StandardEditor from "../components/standards/StandardEditor.vue";
 import StandardImportDialog from "../components/standards/StandardImportDialog.vue";
 import {selectStandardPackagePath, shellReady} from "../api/shell";
 import {DEFAULT_FILTERS, detailActions, type StandardFilters} from "../components/standards/standardLibraryModel";
-import {blankStandardDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
+import {blankStandardDocument, deriveStandardDraftDocument, draftKey, toDraftDocument, type DraftAsset} from "../features/standards/draftModel";
 import type {AssetInspection, CopiedAssetFile} from "../features/standards/types";
 import type {
   CreateMode,
@@ -204,7 +204,7 @@ async function submitCreate(payload: {name: string; dstPath: string}): Promise<v
         return;
       }
       // 派生文档保留原标准 UUID，并把用户提供的新名称写入草稿。
-      const derived: Record<string, unknown> = {...base, standard_id: origin.standard_id, name: payload.name};
+      const derived = deriveStandardDraftDocument(base, origin.standard_id, payload.name);
       created = await store.createDraft({document: derived});
     } else if (createMode.value === "from-dst") {
       created = await store.createDraftFromDst({dstPath: payload.dstPath});

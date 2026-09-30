@@ -340,8 +340,8 @@ export async function installStandards(
           impact_token: `impact:${standardId}:${affectedCount}`,
         }});
       }
-      const standardDeleteMatch = /^\/api\/standards\/([^/]+)$/.exec(path);
-      if (standardDeleteMatch && method === "DELETE") {
+      const standardDeleteMatch = /^\/api\/standards\/([^/]+)\/delete$/.exec(path);
+      if (standardDeleteMatch && method === "POST") {
         const standardId = decodeURIComponent(standardDeleteMatch[1]);
         const body = (await request.postDataJSON()) as {impact_token: string};
         state.deleteTokens.push({standardId, impactToken: body.impact_token});

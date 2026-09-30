@@ -198,6 +198,20 @@ export function blankStandardDocument(input: {
   };
 }
 
+/** 从已发布标准派生草稿时保留定义与 Schema，只重置草稿身份字段。 */
+export function deriveStandardDraftDocument(
+  document: Record<string, unknown>,
+  standardId: string,
+  name: string,
+): Record<string, unknown> {
+  return {
+    ...document,
+    standard_id: standardId,
+    name,
+    published_at: null,
+  };
+}
+
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
