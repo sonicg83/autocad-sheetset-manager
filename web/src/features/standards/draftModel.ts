@@ -198,7 +198,7 @@ export function blankStandardDocument(input: {
   };
 }
 
-/** 从已发布标准派生草稿时保留定义与 Schema，只重置草稿身份字段。 */
+/** 复制已发布标准为独立草稿：保留定义与 Schema，使用新 ID 并清空发布时间。 */
 export function deriveStandardDraftDocument(
   document: Record<string, unknown>,
   standardId: string,

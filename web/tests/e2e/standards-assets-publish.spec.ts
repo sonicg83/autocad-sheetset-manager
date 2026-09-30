@@ -142,7 +142,7 @@ test("未被标准值引用的有效布局资产不产生发布警告且仍可�
   await expect(page.getByRole("region", {name: "标准详情"})).toBeVisible();
   await expect(page.getByText("已发布标准不可直接修改")).toBeVisible();
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
-  await expect(page.getByRole("button", {name: "派生新草稿"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "复制为新草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导出标准包"})).toBeVisible();
   await expect(libraryItems(page)).toHaveCount(1);
   await expect(libraryItems(page).first().locator(".library-time")).toBeVisible();

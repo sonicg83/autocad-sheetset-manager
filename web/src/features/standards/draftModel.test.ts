@@ -112,7 +112,7 @@ function withEnumValues(document: DraftDocument, items: Array<{item_id: string; 
 }
 
 describe("draft model", () => {
-  it("从已发布 v3 标准派生可编辑草稿时清空发布时间并保留原 Schema", () => {
+  it("复制已发布 v3 标准为独立草稿时使用新 ID、清空发布时间并保留原 Schema", () => {
     const published = {
       schema_version: 3,
       standard_id: "00000000-0000-4000-8000-000000000046",
@@ -121,12 +121,16 @@ describe("draft model", () => {
       properties: [{property_id: "prop-title", kind: "text"}],
     };
 
-    const draft = deriveStandardDraftDocument(published, published.standard_id, "派生草稿");
+    const draft = deriveStandardDraftDocument(
+      published,
+      "00000000-0000-4000-8000-000000000048",
+      "复制草稿",
+    );
 
     expect(draft).toMatchObject({
       schema_version: 3,
-      standard_id: published.standard_id,
-      name: "派生草稿",
+      standard_id: "00000000-0000-4000-8000-000000000048",
+      name: "复制草稿",
       published_at: null,
       properties: published.properties,
     });

@@ -1,6 +1,6 @@
 // 标准库主从分栏 e2e（PLAN-DM-035 Task 8 / SPEC-DM-016 §5–§6）。
 // 标准端点经 fixtures/standards 的 route mock 驱动，断言停留在语义层：空库与筛选
-// 无结果的区分、官方/已发布只读边界、草稿可维护、派生新草稿、加载失败与导入碰撞
+// 无结果的区分、官方/已发布只读边界、草稿可维护、复制为新草稿、加载失败与导入碰撞
 // 不改变选中、900×768 分级视图无横向溢出。
 import {expect, test, type Page} from "@playwright/test";
 import {chooseStandardPackage, draft, draftDocument, installStandards, libraryItems, openStandards, published} from "./fixtures/standards";
@@ -33,7 +33,7 @@ test("空标准库与筛选无结果区分呈现", async ({page}) => {
   await expect(page.getByText("标准库为空，可新建草稿或导入标准包。")).toHaveCount(0);
 });
 
-test("官方标准只读并保留派生与导出动作", async ({page}) => {
+test("官方标准只读并保留复制与导出动作", async ({page}) => {
   await installStandards(page, [published("official", {name: "官方标准"}), published("user", {name: "用户标准", standard_id: "00000000-0000-4000-8000-000000000047"})]);
   await openStandards(page);
   await libraryItems(page).filter({hasText: "官方标准"}).click();
@@ -41,7 +41,7 @@ test("官方标准只读并保留派生与导出动作", async ({page}) => {
   await expect(page.getByText("官方标准只读")).toBeVisible();
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
   await expect(page.getByRole("button", {name: "删除", exact: true})).toHaveCount(0);
-  await expect(page.getByRole("button", {name: "派生新草稿"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "复制为新草稿"})).toBeVisible();
   await expect(page.getByRole("button", {name: "导出标准包"})).toBeVisible();
   // 能力摘要来自标准详情文档
   await expect(page.getByText("普通属性 1 项")).toBeVisible();
@@ -49,7 +49,7 @@ test("官方标准只读并保留派生与导出动作", async ({page}) => {
   await expect(page.getByText("版本历史")).toHaveCount(0);
 });
 
-test("发布版本只读并可派生新草稿", async ({page}) => {
+test("发布标准只读并可复制为新草稿", async ({page}) => {
   const state = await installStandards(page, [
     published("official", {name: "官方燃气标准"}),
     published("user", {name: "用户燃气标准", standard_id: "00000000-0000-4000-8000-000000000047"}),
@@ -63,10 +63,10 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   await expect(page.getByRole("button", {name: "编辑"})).toHaveCount(0);
   await expect(page.getByRole("button", {name: "删除", exact: true})).toBeVisible();
 
-  await page.getByRole("button", {name: "派生新草稿"}).click();
+  await page.getByRole("button", {name: "复制为新草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText(/基于 00000000-0000-4000-8000-000000000047 派生/)).toBeVisible();
+  await expect(dialog.getByText("复制标准内容并创建新的标准 ID。")).toBeVisible();
   // 名称取当前草稿数 +1；新草稿按 UUID 标识。
   await expect(dialog.getByLabel("标准名称")).toHaveValue("草稿 3");
   await expect(dialog.getByLabel("版本号")).toHaveCount(0);
@@ -76,7 +76,10 @@ test("发布版本只读并可派生新草稿", async ({page}) => {
   await expect(page.getByText("草稿 3")).toBeVisible();
   expect(state.createBodies).toHaveLength(1);
   const created = state.createBodies[0] as {document: Record<string, unknown>};
-  expect(created.document["standard_id"]).toBe("00000000-0000-4000-8000-000000000047");
+  expect(created.document["standard_id"]).not.toBe("00000000-0000-4000-8000-000000000047");
+  expect(created.document["standard_id"]).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
   expect(created.document["version"]).toBeUndefined();
   expect(created.document["schema_version"]).toBe(3);
   expect(created.document["published_at"]).toBeNull();
@@ -129,7 +132,7 @@ test("草稿可维护：编辑入口直接进入分区编辑器", async ({page})
   await expect(edit).toBeVisible();
   await expect(edit).toBeEnabled();
   await expect(page.getByRole("button", {name: "删除", exact: true})).toBeVisible();
-  await expect(page.getByRole("button", {name: "派生新草稿"})).toHaveCount(0);
+  await expect(page.getByRole("button", {name: "复制为新草稿"})).toHaveCount(0);
 
   // Task 9：编辑入口直接进入分区编辑器，草稿按 draft_id 读取并建立可信基准
   await edit.click();
@@ -366,7 +369,7 @@ test("选中旧草稿后新建：资产检查只调用新草稿 ID", async ({pag
 
 // ---- 陈旧详情与版本跳转（PLAN-DM-040 Task 6，F08/F09） --------------------
 
-test("切换选择后派生只消费已加载且身份匹配的详情", async ({page}) => {
+test("切换选择后复制只消费已加载且身份匹配的详情", async ({page}) => {
   const state = await installStandards(
     page,
     [
@@ -378,7 +381,7 @@ test("切换选择后派生只消费已加载且身份匹配的详情", async ({
         "00000000-0000-4000-8000-000000000012": {status: 404, code: "STANDARD_NOT_FOUND", message: "标准不存在"},
       },
       detailDocuments: {
-        // 两份详情内容可区分：派生来源必须是当前标准的文档
+        // 两份详情内容可区分：复制内容必须来自当前标准文档
         "00000000-0000-4000-8000-000000000011": draftDocument({standard_id: "00000000-0000-4000-8000-000000000011", name: "官方燃气标准", numbering: {sequence_field: "subset.sequence", digits: 2}}),
         "00000000-0000-4000-8000-000000000012": draftDocument({standard_id: "00000000-0000-4000-8000-000000000012", name: "官方给水标准", numbering: {sequence_field: "subset.sequence", digits: 3}}),
       },
@@ -389,30 +392,33 @@ test("切换选择后派生只消费已加载且身份匹配的详情", async ({
   await libraryItems(page).filter({hasText: "官方燃气标准"}).click();
   await expect(detail).toContainText("00000000-0000-4000-8000-000000000011");
 
-  // 切到加载失败的 B：旧详情不得继续可用，派生不得基于 A 提交
+  // 切到加载失败的 B：旧详情不得继续可用，复制不得基于 A 提交
   await libraryItems(page).filter({hasText: "官方给水标准"}).click();
   await expect(detail).not.toContainText("00000000-0000-4000-8000-000000000011");
-  await page.getByRole("button", {name: "派生新草稿"}).click();
+  await page.getByRole("button", {name: "复制为新草稿"}).click();
   const dialog = page.getByRole("dialog", {name: "新建标准草稿"});
-  await dialog.getByLabel("标准名称").fill("派生草稿");
+  await dialog.getByLabel("标准名称").fill("复制草稿");
   await dialog.getByRole("button", {name: "创建草稿"}).click();
-  await expect(page.getByText("请先加载要派生的已发布标准详情。")).toBeVisible();
+  await expect(page.getByText("请先加载要复制的已发布标准详情。")).toBeVisible();
   expect(state.createBodies).toEqual([]);
 
-  // B 恢复加载后重新派生：来源必须是 B 的文档
+  // B 恢复加载后重新复制：内容必须来自 B 的文档
   delete state.detailFailures["00000000-0000-4000-8000-000000000012"];
   await dialog.getByRole("button", {name: "取消"}).click();
   await libraryItems(page).filter({hasText: "官方燃气标准"}).click();
   await libraryItems(page).filter({hasText: "官方给水标准"}).click();
   await expect(detail).toContainText("00000000-0000-4000-8000-000000000012");
-  await page.getByRole("button", {name: "派生新草稿"}).click();
-  await dialog.getByLabel("标准名称").fill("派生草稿");
+  await page.getByRole("button", {name: "复制为新草稿"}).click();
+  await dialog.getByLabel("标准名称").fill("复制草稿");
   await dialog.getByRole("button", {name: "创建草稿"}).click();
 
   await expect(page.getByRole("region", {name: "标准草稿编辑器"})).toBeVisible();
   expect(state.createBodies).toHaveLength(1);
   const created = state.createBodies[0] as {document: Record<string, unknown>};
-  expect(created.document["standard_id"]).toBe("00000000-0000-4000-8000-000000000012");
+  expect(created.document["standard_id"]).not.toBe("00000000-0000-4000-8000-000000000012");
+  expect(created.document["standard_id"]).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
   expect((created.document["numbering"] as {digits: number}).digits).toBe(3);
 });
 

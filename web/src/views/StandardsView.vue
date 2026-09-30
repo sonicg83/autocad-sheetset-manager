@@ -200,18 +200,18 @@ async function submitCreate(payload: {name: string; dstPath: string}): Promise<v
       const base = store.detailMatches(identity) ? store.detail.value?.document : undefined;
       if (base === undefined) {
         // 派生必须基于已加载的已发布标准文档：缺详情不提交，保留对话框与可见原因
-        store.actionError.value = t("standards.create.deriveNeedsDetail");
+        store.actionError.value = t("standards.create.copyNeedsDetail");
         return;
       }
-      // 派生文档保留原标准 UUID，并把用户提供的新名称写入草稿。
-      const derived = deriveStandardDraftDocument(base, origin.standard_id, payload.name);
+      // 复制为独立标准草稿：沿用内容，但分配新 UUID 并清空发布时间。
+      const derived = deriveStandardDraftDocument(base, defaultStandardId(), payload.name);
       created = await store.createDraft({document: derived});
     } else if (createMode.value === "from-dst") {
       created = await store.createDraftFromDst({dstPath: payload.dstPath});
     } else {
       created = await store.createDraft({
         document: blankStandardDocument({
-          standardId: defaultStandardId(payload.name),
+          standardId: defaultStandardId(),
           name: payload.name,
         }),
       });
@@ -234,8 +234,7 @@ async function submitCreate(payload: {name: string; dstPath: string}): Promise<v
   await store.refresh();
 }
 
-function defaultStandardId(name: string): string {
-  void name;
+function defaultStandardId(): string {
   return crypto.randomUUID();
 }
 
@@ -421,7 +420,6 @@ const selectedActions = computed(() => selected.value === null ? null : detailAc
     <StandardCreateDialog
       :open="createDialogOpen"
       :mode="createMode"
-      :origin="selected"
       :default-draft-name="defaultDraftName"
       @close="createDialogOpen = false"
       @submit="submitCreate"

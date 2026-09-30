@@ -57,7 +57,7 @@ export default {
     readOnlyOfficial: "Official standards are read-only",
     readOnlyPublished: "Published standards cannot be edited directly",
     edit: "Edit",
-    derive: "Derive new draft",
+    derive: "Copy as new draft",
     export: "Export package",
     useForCreate: "Use to create sheet set",
     delete: "Delete",
@@ -65,12 +65,12 @@ export default {
   create: {
     title: "New standard draft",
     defaultName: "Draft {count}",
-    deriveFrom: "Derived from {id}",
+    copyNotice: "Copy the standard content into a draft with a new standard ID.",
     nameLabel: "Standard name",
     dstPathLabel: "Source DST path",
     cancel: "Cancel",
     confirm: "Create draft",
-    deriveNeedsDetail: "Load the published standard detail before deriving from it.",
+    copyNeedsDetail: "Load the published standard detail before copying it.",
   },
   import: {
     title: "Import standard package",

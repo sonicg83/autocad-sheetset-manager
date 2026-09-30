@@ -56,7 +56,7 @@ export default {
     readOnlyOfficial: "官方标准只读",
     readOnlyPublished: "已发布标准不可直接修改",
     edit: "编辑",
-    derive: "派生新草稿",
+    derive: "复制为新草稿",
     export: "导出标准包",
     useForCreate: "用于创建图纸集",
     delete: "删除",
@@ -64,12 +64,12 @@ export default {
   create: {
     title: "新建标准草稿",
     defaultName: "草稿 {count}",
-    deriveFrom: "基于 {id} 派生",
+    copyNotice: "复制标准内容并创建新的标准 ID。",
     nameLabel: "标准名称",
     dstPathLabel: "源 DST 路径",
     cancel: "取消",
     confirm: "创建草稿",
-    deriveNeedsDetail: "请先加载要派生的已发布标准详情。",
+    copyNeedsDetail: "请先加载要复制的已发布标准详情。",
   },
   import: {
     title: "导入标准包",

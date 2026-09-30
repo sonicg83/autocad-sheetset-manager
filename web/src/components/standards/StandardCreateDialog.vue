@@ -5,12 +5,11 @@ import {computed, reactive, ref, watch} from "vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
-import type {CreateMode, StandardSummary} from "../../features/standards/types";
+import type {CreateMode} from "../../features/standards/types";
 
 const props = defineProps<{
   open: boolean;
   mode: CreateMode;
-  origin: StandardSummary | null;
   defaultDraftName: string;
 }>();
 const emit = defineEmits<{close: []; submit: [payload: {name: string; dstPath: string}]}>();
@@ -57,7 +56,7 @@ function submit(): void {
     <section ref="card" class="create-dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="$t('standards.create.title')">
       <h3>{{ $t("standards.create.title") }}</h3>
       <p v-if="mode === 'derive'" class="create-origin">
-        {{ $t("standards.create.deriveFrom", {id: origin?.standard_id ?? ""}) }}
+        {{ $t("standards.create.copyNotice") }}
       </p>
       <UiInput v-model="form.name" :label="$t('standards.create.nameLabel')" />
       <UiInput
