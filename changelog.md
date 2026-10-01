@@ -1,3 +1,25 @@
+## 2026-10-01 建立提示原语并统一描述关联（PLAN-DM-048 Task 2）
+
+- 新增 `UiHint`、`UiBanner` 和描述 ID 合并函数，支持 Lead/Help/Status/Error、四种 Banner tone、静态提示默认不播报及可选单一 live role。
+- 扩展 `FormField.sharedDescribedBy`，统一 `aria-describedby` 为错误→字段帮助→共享帮助，稳定去重并在元素撤下时移除对应引用；Help/Error 字号改为 caption。
+- 验证：定向 UI 单测 40 项通过，`check:ui` 与完整 Web 生产构建通过（含 API/i18n/UI 检查、`vue-tsc -b`）。构建提示现有主 JavaScript 包超过 500 kB。
+- Task 2 已完成；G8 浏览器计算样式、读屏及 G9 WebView2 验收仍待计划后续批次。Task 3 开始前补齐并复核对应 G5 映射。
+
+## 2026-10-01 接受 SPEC-DM-006 并继续 PLAN-DM-048 Task 1
+
+- 修正 SPEC-DM-006 §7.3 对 WCAG 2.1 SC 2.2.2 与 3.1.2 的适用范围，并补充 `zh-CN`、`en-US`、`system` 语言路径、页面根 `lang`、异语言片段和自动更新/动效验证要求；状态由 `review` 转为 `accepted`。
+- 同步 PLAN-DM-048、`.planning/README.md`、计划索引、资产索引与 DST Manager 文档入口；对照源码复核 6 个共享/高风险 Vue 状态源，并将原型 27 个情形映射到生产状态所有者和既有测试入口，记录生命周期、ARIA 播报、Toast 失败保留风险与焦点核对边界。计划追踪矩阵和 Task 7 补入 Toast 自动关闭/动效的 SC 2.2.2 条件检查。
+- 用户转达技术负责人已确认批准 G6，并于 2026-10-01 确认 G4 Demo 冻结；结合此前执行授权，PLAN-DM-048 转为 `active` 并进入 Task 2。其余 G5 逐消费者明细作为对应迁移批次开始前置条件补齐，未将其记为已完成。
+- 用户于 2026-10-01 确认候选 HTML 可作为 G4 设计冻结基准；登记固定文件 SHA-256、28 张冻结截图、27 种状态映射与键盘规格。G4 通过；生产同态与运行态键盘验证列入 G8/G9。
+- 本轮仅修改文档与执行账本；未运行产品测试、构建、读屏或 Windows WebView2 验收。
+
+## 2026-09-30 推进 PLAN-DM-048 Task 1 门禁材料
+
+- 扫描计划目标目录的 153 个文件，筛选出 62 个提示/关联语义消费者并登记 Vue 文件与提示语言 key；扩展候选原型至 27 种可复现情形。
+- 用户接受六项候选原则；为 7 个页面/展示组采集 28 张正交 JPEG 样本，登记视口、主题、默认缩放、滚动位置、图像像素尺寸和 SHA-256。
+- 候选 HTML SHA-256 为 b6d8c0dfd02cf0ec9a9d877992cdb77aeec5fa52adc8b47eea3c9dd564b54a0d；静态预检为 103 个唯一 id、11 个有效 aria-describedby 引用、27 个完整情形映射，内嵌脚本 node --check 通过。相对链接检查 7 份文档无缺失，git diff --check 通过。
+- G4 的逐状态生产差异与键盘行为核对、G5 技术映射仍未完成；SPEC-DM-006 仍为 review，G6 未通过。未修改生产代码、业务测试或 Spec，未运行产品测试或生产构建；仅做候选页有限 Tab/Enter/Space 抽样，未做穷尽键盘遍历、读屏或真实桌面验收。
+
 ## 2026-09-30 按 MEMO-DM-043 修订 PLAN-DM-048
 
 - 补齐 G0–G9 门禁台账、G5 技术映射要求、SPEC-DM-006 接受/G4 冻结/G6 双负责人审核前不得修改生产代码的启动条件，以及 GUIDE-DM-001 完整双向追踪矩阵。

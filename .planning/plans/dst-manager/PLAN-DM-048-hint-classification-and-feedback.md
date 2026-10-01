@@ -1,11 +1,11 @@
 ---
 id: PLAN-DM-048
 title: 提示分类与反馈一致性实施计划
-status: proposed
+status: active
 owners:
   - dst-manager
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-01
 related:
   - SPEC-DM-006
   - SPEC-DM-015
@@ -21,7 +21,7 @@ related:
 
 # 提示分类与反馈一致性实施计划
 
-> **执行约定：** 后续实施使用 `superpowers:executing-plans`，或用户另行选定的执行方式，逐任务完成回归测试、最小实现、验证与复核；不得自行启动子代理。复选框只在实际完成并登记证据后勾选。**当前用户仅授权编写文档，本计划未执行，不代表实现、门禁或真实桌面验收通过。**
+> **执行约定：** 后续实施使用 `superpowers:executing-plans`，或用户另行选定的执行方式，逐任务完成回归测试、最小实现、验证与复核；不得自行启动子代理。复选框只在实际完成并登记证据后勾选。用户于 2026-09-30 明确授权执行本计划并接受六项候选原则；当前仅推进 Task 1 候选与门禁材料，G6 未通过不得启动生产修改。
 
 **目标：** 将既有界面的提示按 Lead、Help、Status、Banner、Error 五类收口，减少无效说明和重复通知，同时保留状态、错误定位、操作后果和发布安全信息。
 
@@ -37,7 +37,7 @@ related:
 
 - 本计划覆盖现有欢迎页、标准管理/编辑、创建向导、图纸/属性编辑、设置/扩展配置、图纸目录、工作区外壳与任务反馈；不重做布局、导航、空状态或任务进度组件。
 - 属跨页面及共享外壳变更，按 GUIDE-DM-001 的 L 级组织，拆成任务 2～7 的可独立验收批次；G0～G9 全部登记。沿用视觉方向须记录理由，已冻结页面只重开受影响的提示状态，不静默覆盖原证据。
-- 编写计划不等于 G4 冻结。SPEC-DM-006 仍为 `review`；实施前确认 §6.7 口径和任务 1 的候选证据，不能把本次文档授权视为执行或发布授权。
+- SPEC-DM-006 已为 `accepted`，G4 与 G6 已于 2026-10-01 按用户确认通过。剩余 G5 逐消费者细化映射不视为完成；每个迁移批次仍须在开工前补齐其涉及消费者的状态/ARIA/回退映射并由技术负责人复核。
 - 任务开始前读取根、docs、scope 索引和相关源码，检查 `rtk git status --short`。仓库可能有其他任务变更，重新定位组件和测试，不覆盖用户改动；执行阶段才按实际需要创建隔离工作区。
 - Lead 使用 `--font-label`（13px）与 `--color-text-secondary`；Help 使用 `--font-caption`（12px）与 `--color-text-muted`；Status/Error 使用 `--font-caption`，颜色按真实语义。保持 `tokens, reset, primitives, legacy` 层序。
 - 不新增依赖、不改 HTTP/SSE 字段、错误码、后端校验、发布事务、数据库或 CAD Worker；不改变编辑比较基准、clean 动作守卫、级联清空与非法原值保留规则。
@@ -48,18 +48,18 @@ related:
 
 ### 1.1 门禁台账
 
-本计划按 GUIDE-DM-001 的 L 级流程登记 G0～G9。当前所有门禁均为“未开始”；本次计划修订不产生门禁通过结论。本轮用户授权只覆盖文档修订。任务 1 建立范围、设计与技术证据并推进至 G6；任务 2 开始前必须同时具备后续明确的实施授权，以及业务负责人和技术负责人分别记录的 G6 通过。SPEC-DM-006 当前仍为 `review`，在其接受且 G4 冻结、追踪矩阵完整之前，G6 保持未通过，禁止开始生产修改。
+本计划按 GUIDE-DM-001 的 L 级流程登记 G0～G9。用户于 2026-09-30 明确授权执行本计划并接受 G4 六项候选原则；2026-10-01 又确认固定候选 HTML 可作为 G4 设计冻结基准。冻结件及 28 张截图、27 种状态映射、设计/键盘规格已登记；生产实现同态与运行态键盘核验留在 G8/G9。SPEC-DM-006 已接受；技术负责人批准 G6 已由用户转达，用户确认 G4 冻结并维持执行授权，故 G6 于 2026-10-01 通过并启动计划。G5 的 62 个消费者细化映射尚未全部完成；按本次门禁裁决，将剩余映射作为各对应迁移批次开始前必须补齐的材料，不能当作已完成。风险及裁决见本计划验证记录和执行账本。
 
 | 门禁 | 状态 | 通过证据与责任 |
 | --- | --- | --- |
-| G0 立项与范围 | 未开始 | 范围、非目标和变更等级；业务负责人、技术负责人 |
-| G1 用户任务与流程 | 未开始 | 受影响任务、状态与结束条件；业务负责人 |
-| G2 信息架构与交互模型 | 未开始 | 五类提示的职责、位置、数量及播报模型；业务负责人、设计执行者 |
-| G3 视觉方向 | 未开始 | 令牌、原语复用说明及候选取舍；业务负责人 |
-| G4 Demo 与设计冻结 | 未开始 | 可操作候选、冻结截图、规格、差异表与逐项确认；业务负责人、设计执行者 |
-| G5 技术映射 | 未开始 | 当前生产组件、测试接口、风险和回退映射；技术负责人 |
-| G6 计划就绪 | 未开始 | 已接受 Spec、完整双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
-| G7 分批实施 | 未开始 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
+| G0 立项与范围 | 通过（计划执行授权已给出） | Web 提示分类与反馈一致性；不扩大后端、CAD、发布契约；用户授权执行本计划 |
+| G1 用户任务与流程 | 通过（纳入 G4/G6 确认） | 创建、标准/导入、属性编辑、设置/目录、全局壳层、异步任务六类路径；用户接受对应候选状态与结束原则 |
+| G2 信息架构与交互模型 | 通过（六项候选原则已接受） | Lead、Help、Status、Banner、Error 职责与主要播报/保留原则；用户确认日期 2026-09-30 |
+| G3 视觉方向 | 通过（方向 A 已接受） | 沿用现有令牌和中性信息层级，标题自明时不加 Lead；用户确认日期 2026-09-30 |
+| G4 Demo 与设计冻结 | 已通过并冻结（2026-10-01，用户确认候选 HTML 可作为设计冻结基准） | 固定版 Demo、28 张截图、27 种状态映射、设计/键盘规格与用户确认；生产同态及运行态键盘验证列入 G8 |
+| G5 技术映射 | 初筛与 6 个高风险源复核已备；其余逐消费者细化映射按批次补齐 | 每一对应批次开始前，完成涉及消费者的状态/ARIA/回退映射并复核；技术负责人 |
+| G6 | 计划就绪 | **通过（2026-10-01）**：用户确认 G4 冻结、维持实施授权，并转达技术负责人批准。剩余 G5 详表按对应批次前置条件补齐，属本次明确裁决的残余事项 | 已接受 Spec、冻结设计、双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
+| G7 分批实施 | Task 2 已完成；Task 3 待开始 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
 | G8 设计 QA | 未开始 | 同状态计算样式、行为、键盘、响应式和差异裁决；业务负责人、验证者 |
 | G9 真实验收与关闭 | 未开始 | Windows WebView2/真实工作方式记录、遗留项和最终结论；业务负责人、技术负责人 |
 
@@ -80,7 +80,9 @@ related:
 
 ## 3. 文件结构与共享接口
 
-### 3.1 新建文件及职责（均待执行）
+### 3.1 新建文件及职责
+
+Task 2 已创建提示原语、描述 ID 合并函数及对应测试；任务 3～7 的条目仍按各批次实施。
 
 | 文件 | 职责 |
 | --- | --- |
@@ -150,12 +152,15 @@ function groupCascadeHelp(instanceId: string, objectId: string, fields: readonly
 
 **接口：** 输入现有 props、业务状态及已接受的规范；输出逐提示清单（文件/语言 key、用途、作用对象、显示条件、结束条件、主要播报者、保留/删除/合并方案、负责批次、准确测试名与断言）和 GUIDE-DM-001 全列追踪矩阵。清单包含所有提示消费方，未改项也记录保留理由；任务 4～6 的测试名、i18n key 和断言在分批开始前冻结到清单。
 
-- [ ] 按 GUIDE-DM-001 记录 G0 范围/非目标、G1 用户任务、G2 信息架构、G3 视觉方向；在 G5 映射现有生产组件、数据/状态来源、测试接口、风险和回退路径。明确复用既有令牌与原语、考虑过的候选及淘汰理由，并将 SPEC-DM-006 尚未接受作为当前阻断项登记。
-- [ ] 用同一份去敏数据建立可操作候选，至少可复现：初始、自明标题/需 Lead、Help 与 Error 并存、dirty/待写入、保存进行中/成功/失败、冲突、同/不同上级与不同图纸组级联、多字段错误、四种横幅及独立全局风险；提供触发入口和重置方式，与生产现状逐状态比较。
-- [ ] 将 Demo 与实际业务契约差异、控件尺寸/间距/换行/截断规格、键盘顺序/焦点回归、状态显示与结束条件、live-region 归属写入候选说明；建立逐项用户裁决与日期记录。只对受影响的 G2/G4 状态重开，其他状态引用原冻结证据。
-- [ ] 在 `.planning/memos/dst-manager/assets/PLAN-DM-048/README.md` 登记冻结截图的视口、主题、缩放、状态、日期、裁决与 SHA-256；候选 HTML 链接加入 `docs/dst-manager/README.md`。截图采用正交抽样，遵循 ARCH-DM-007 §9.3 的单页 4–6 张上限及整轮 24–30 张预算。
-- [ ] 逐条填完 §7 追踪矩阵并双向核对：每条 Spec 要求有任务、自动测试、设计 QA 与真实验收；每个任务均指回 Spec。SPEC-DM-006 被接受、G4 冻结、G5 技术映射和矩阵全部完成后，请业务负责人及技术负责人记录 G6 结论；未通过时停在此任务，不启动生产修改。
-- [ ] 候选预览按仓库约定绑定 `127.0.0.1` 的局部 HTTP 服务，用完停止；只有取得明确实施授权且 G6 通过后才把状态改为 `active` 并进入任务 2。本次用户授权只覆盖文档修订；更新本批 changelog、导航和证据索引，只暂存本批文件并以简体中文动词短语提交。
+- [x] 记录 G0～G4 的范围、用户路径、提示职责和 A/B 视觉方向候选；登记 SPEC-DM-006 的初始阻断状态，现已于 2026-10-01 接受。
+- [x] 建立 62 个 Vue 消费者的初筛，标出字面 key、候选类别和责任任务，并静态复核 6 个共享/高风险状态源；余下逐消费者用途、作用对象、显示/结束条件、状态所有者、播报者、测试断言、风险和回退须在对应迁移批次开始前补齐并由技术负责人复核（依据 2026-10-01 G6 裁决转为批次前置条件，不代表映射已完成）。
+- [x] 用同一份虚构数据建立可操作候选，提供 27 种情形入口、主题切换、模拟创建步骤和重置方式；用户于 2026-10-01 确认该 HTML 可作为 G4 设计冻结基准。
+- [x] 将候选职责、token/字号档位、自然换行、状态保留和播报候选写入盘点备忘；用户于 2026-09-30 接受六项原则，并于 2026-10-01 确认设计冻结。生产同态差异和运行态键盘核验纳入 G8，不宣称生产已经符合冻结候选。
+- [x] 在 `.planning/memos/dst-manager/assets/PLAN-DM-048/README.md` 登记 28 张冻结截图及视口、主题、缩放、状态、滚动位置、图像像素尺寸、采集日期、裁决记录与 SHA-256；遵循 ARCH-DM-007 §9.3 的每页 4–6 张及整轮 24–30 张预算。冻结截图不等同生产验收。
+- [x] 完成并双向核对 §7 追踪矩阵：每条 Spec 要求均映射任务、自动测试、设计 QA 与真实验收，每个任务均有 Spec 映射；实施覆盖状态仍为“未覆盖”。
+- [x] SPEC-DM-006 已接受；用户于 2026-10-01 确认 G4 冻结并维持执行授权，技术负责人批准 G6 已由用户转达；记录 G6 通过。G5 未完成的逐消费者明细按上项作为各批次开始前条件补齐。
+- [x] 按仓库约定将候选预览服务绑定 `127.0.0.1` 并在检查后停止；已更新本批 changelog、导航和证据索引。
+- [x] 用户已明确授权执行且 G6 已通过；计划状态转为 `active` 并进入任务 2。按仓库约定只暂存本批文件并使用简体中文动词短语提交。
 
 ### 任务 2：建立提示原语与描述关联
 
@@ -165,7 +170,7 @@ function groupCascadeHelp(instanceId: string, objectId: string, fields: readonly
 
 **接口：** 输入现有令牌、实例 ID 和控件插槽；输出 §3.2 接口，供任务 3～7 消费。原语不读取 API、store 或计时器。
 
-- [ ] 为 `description_error_first_and_unique`、`hint_and_error_remain_visible`、`shared_description_updates_without_dangling_id`、`static_banner_is_not_alert`、`dynamic_hint_has_one_live_owner`、`lead_help_use_fixed_semantic_color` 编写失败测试。验证 Status live region 先挂载再更新，且同一动态事件只有一个 live owner；判别联合类型拒绝 Lead/Help 的语义 tone 及 Error 的非 error tone。示例关键断言：
+- [x] 为 `description_error_first_and_unique`、`hint_and_error_remain_visible`、`shared_description_updates_without_dangling_id`、`static_banner_is_not_alert`、`dynamic_hint_has_one_live_owner`、`lead_help_use_fixed_semantic_color` 编写失败测试。验证 Status live region 先挂载再更新，且同一动态事件只有一个 live owner；判别联合类型拒绝 Lead/Help 的语义 tone 及 Error 的非 error tone。RED 由 FormField 错误优先顺序断言证实；新测试模块在组件创建前无法收集，不计为行为 RED。
 
 ```ts
 expect(mergeDescriptionIds("field-error", "field-help", "group-help field-help"))
@@ -173,10 +178,10 @@ expect(mergeDescriptionIds("field-error", "field-help", "group-help field-help")
 expect(mergeDescriptionIds()).toBeUndefined();
 ```
 
-- [ ] 在 `web/` 运行 `rtk npm run test:unit -- src/components/ui/hints.test.ts src/components/ui/uiPrimitives.test.ts`，记录新增契约的预期失败，不把依赖故障当 RED。
-- [ ] 实现 §3.2；FormField 同时保留必要 Help/Error 并改用 caption。缺失共享元素由调用方负责条件同步，组件不遍历全局 DOM猜测业务。
-- [ ] 重跑上述用例并运行 `rtk npm run check:ui`；随后迁移批次用浏览器计算样式证明实际字号/颜色，不能用 happy-dom 样式字符串检查代替视觉结果。
-- [ ] 更新本批 changelog，只暂存原语、测试和变更记录并以简体中文动词短语提交。
+- [x] 在 `web/` 运行 `rtk npm run test:unit -- src/components/ui/hints.test.ts src/components/ui/uiPrimitives.test.ts`，记录新增契约的预期失败，不把依赖故障当 RED。
+- [x] 实现 §3.2；FormField 同时保留必要 Help/Error 并改用 caption。缺失共享元素由调用方负责条件同步，组件不遍历全局 DOM猜测业务。
+- [x] 重跑上述用例并运行 `rtk npm run check:ui`；随后迁移批次用浏览器计算样式证明实际字号/颜色，不能用 happy-dom 样式字符串检查代替视觉结果。后续 G8 浏览器计算样式验收仍未完成。
+- [x] 更新本批 changelog，只暂存原语、测试和变更记录并以简体中文动词短语提交。
 
 ### 任务 3：创建向导与级联共享帮助
 
@@ -240,6 +245,7 @@ expect(mergeDescriptionIds()).toBeUndefined();
 **接口：** `useToast()` 继续返回 `toasts/pushToast/dismiss`，Toast 的 `id/type/title/body/jumpTab` 和普通/创建任务监视器公开接口保持不变；使用已有 job ID、订阅代次和每次尝试终态标记去重，不在协议新增事件字段。
 
 - [ ] 使用假计时器、伪 EventSource 和受控轮询新增 `duplicate_terminal_events_notify_once_per_attempt`、`polling_fallback_does_not_repeat_notification`、`failure_and_conflict_remain_visible_until_recovery`、`stale_subscription_has_no_effect`；并断言成功 5000ms 结束、更多成功不能裁切掉未处理失败、浮层可见不弹、同 ID 新尝试能再次通知、`NEEDS_REVIEW` 不发直接重试请求。
+- [ ] 对成功 Toast 的 5000ms 自动关闭及 0.18s 入场动效逐项按 SPEC-DM-006 §7.3 的 SC 2.2.2 条件评估；若适用，先加入暂停、停止、隐藏或控制更新频率所需的 RED 断言，再实现；若不适用，记录所测时长、并行呈现和适用判断依据。`prefers-reduced-motion` 不代替该项判断。
 - [ ] 运行 `rtk npm run test:unit -- src/composables/useToast.test.ts src/composables/useJobMonitor.test.ts` 取得 RED。
 - [ ] 收口 ToastHost 的播报归属；在 useJobMonitor 现有代次范围内标记终态已处理，保留成功后刷新等既有动作恰好一次。useToast 的数量上限只裁切可丢弃的成功通知；失败如需视觉折叠，必须有可见汇总和完整查看入口，先回到 G4 裁决，不在实现时静默隐藏。
 - [ ] 将 `.notice` 消费方逐一迁移到显式 tone；确认全部消费者和展开诊断已改后才删除危险底色兜底，不能全局换成中性底色让真实失败弱化。全局错误关闭仅改变呈现，后端/页面阻断状态保持，原始错误详情仍可查。
@@ -297,11 +303,11 @@ rtk npm run test:e2e -- --retries=0
 | DM048-01 | §6.7.1 五类提示的职责、位置、数量、字号和颜色 | 分类总览、自明标题、需解释区块、并存 Help/Error | 1–7 | `lead_help_use_fixed_semantic_color`；`hint-contracts.spec.ts` 计算样式 | G8 同状态核对数量、字号、颜色、位置 | G9 创建/标准/编辑/设置页面抽查 | 未覆盖 |
 | DM048-02 | §6.7.2 提示选型、内部说明边界及目标路径/影响/恢复事实 | 标准导入冲突、删除/切换、XLSX 覆盖及发布风险 | 1、3–7 | `standard_import_conflict_preserves_target_and_recovery_action` 及任务清单逐行断言 | G8 候选与生产逐项比较 | G9 核对关键操作后果与恢复动作 | 未覆盖 |
 | DM048-03 | §6.7.3 短暂成功、进行中、失败、dirty/冲突持续状态 | 延迟保存、失败、关闭通知后仍 dirty/待写入 | 1、2、3、5–7 | `success_feedback_dismissal_keeps_pending_write_status`、`settings_help_error_remain_associated_after_provider_conflict` | G8 状态结束条件与显示一致 | G9 实际操作关闭通知并确认阻断不解除 | 未覆盖 |
-| DM048-04 | §6.6、§6.7.3 异步终态与同事件播报去重 | 浮层可见/隐藏、SSE 重复、轮询回退、同 ID 重试 | 1、7 | `useToast`/`useJobMonitor` 终态用例、`hint-contracts.spec.ts` 通知计数 | G8 检查唯一主要播报来源 | G9 读屏确认任务终态只播报一次 | 未覆盖 |
+| DM048-04 | §6.6、§6.7.3 异步终态、同事件播报去重与成功通知结束方式 | 浮层可见/隐藏、SSE 重复、轮询回退、同 ID 重试、成功通知自动关闭 | 1、7 | `useToast`/`useJobMonitor` 终态用例、`hint-contracts.spec.ts` 通知计数 | G8 检查唯一主要播报来源；按 §7.3 记录 5 秒自动关闭和入场动效对 SC 2.2.2 的适用判断 | G9 读屏确认任务终态只播报一次，核对适用的暂停/停止/隐藏或更新频率控制 | 未覆盖 |
 | DM048-05 | §6.7.4 共享 Help 的同作用范围、身份稳定与唯一关联 | 同/不同上级、不同对象/图纸组、双实例 | 1、2、3 | `same_parent_one_shared_help`、`different_parent_separate_help`、`different_group_separate_help`、`shared_help_ids_do_not_collide` | G8 检查 IDREF 无悬空、跨实例不串联 | G9 键盘/读屏检查禁用字段及共享说明 | 未覆盖 |
 | DM048-06 | §6.3、§6.7.4 多字段 Error 定位、Help/Error 共存和 `aria-invalid` | 两个空字段、范围帮助与错误、摘要跳转 | 1–3、5、6 | `empty_required_fields_remain_individually_described_and_invalid`；`description_error_first_and_unique` | G8 检查焦点、关联与修正说明 | G9 读屏确认摘要及字段定位 | 未覆盖 |
 | DM048-07 | §6.7.5 四种横幅、多风险独立显示与语义匹配 | notice/warning/error/success、多独立风险 | 1、2、4、7 | `static_banner_is_not_alert`、横幅计算色/对比度断言 | G8 检查每项风险可见及颜色/文字/图标一致 | G9 检查阻断风险不自动消失 | 未覆盖 |
-| DM048-08 | §10.1 对比度与 §10.2 视口/主题/缩放矩阵 | light/dark、四视口、长文/长路径、关键密集页 200% | 1–8 | `hint-contracts.spec.ts` 实际颜色比值及视口/溢出断言 | G8 正交抽样截图，遵守 4–6/页和 24–30/轮 | G9 Windows WebView2 100/125/150/200% | 未覆盖 |
+| DM048-08 | §7.3 SC 2.2.2 适用判断；§10.1 对比度与 §10.2 视口/主题/缩放矩阵 | Toast 自动关闭/入场动效适用性、light/dark、四视口、长文/长路径、关键密集页 200% | 1、7、8 | `hint-contracts.spec.ts` 实际颜色比值及视口/溢出断言；若 SC 2.2.2 适用，按判断补对应交互断言 | G8 正交抽样截图，遵守 4–6/页和 24–30/轮；记录 SC 2.2.2 逐项判断及所需控制 | G9 Windows WebView2 100/125/150/200%，验证适用控制可发现且可操作 | 未覆盖 |
 | DM048-09A | §10.4 标题自明/用途需解释 | 自明标题与需 Lead 区块 | 1、4 | `self_describing_standard_sections_do_not_add_redundant_lead` | G8 比较容器数量与文案职责 | G9 标准页真实使用检查 | 未覆盖 |
 | DM048-09B | §10.4 多控件依赖同/不同上级 | 同上级、不同上级及不同图纸组 | 1、3 | `same_parent_one_shared_help`、`different_parent_separate_help`、`different_group_separate_help`、`shared_help_ids_do_not_collide` | G8 对照依赖关系、ID 与关联 | G9 键盘/读屏检查共享说明 | 未覆盖 |
 | DM048-09C | §10.4 多个必填字段为空 | 两个空字段及摘要定位 | 1、3、5 | `empty_required_fields_remain_individually_described_and_invalid` | G8 检查焦点归位和逐字段关联 | G9 读屏确认摘要定位 | 未覆盖 |
@@ -328,4 +334,20 @@ rtk npm run test:e2e -- --retries=0
 
 ## 9. 实际验证记录
 
-2026-09-30：依据 [MEMO-DM-043](../../memos/dst-manager/2026-09-30-plan-dm-048-review.md) 修订本计划，补齐 G6 前置、完整追踪矩阵、G3/G4 交付清单、精确 ID 编码、任务 4～6 的 RED 断言、对比度与正交截图策略、PLAN-DM-034 联合验收关系及逐批提交步骤；同步计划导航和 changelog。计划任务均未执行，未运行本计划的产品测试、构建、浏览器、读屏或真实桌面验收；G0～G9 仍为未开始，SPEC-DM-006 仍为 `review`，计划保持 `proposed`。
+2026-09-30（依据 MEMO-DM-043 修订）：补齐 G6 前置、完整追踪矩阵、G3/G4 交付清单、精确 ID 编码、任务 4～6 的 RED 断言、对比度与正交截图策略、PLAN-DM-034 联合验收关系及逐批提交步骤；当时未执行产品测试、构建、浏览器、读屏或真实桌面验收。
+
+2026-09-30（Task 1 候选证据）：在隔离 worktree 中扫描计划目标目录的 153 个文件，列出 62 个含提示/关联语义标记的 Vue 消费者及字面 key；新增 [提示迁移盘点](../../memos/dst-manager/2026-09-30-plan-dm-048-hint-inventory.md)、[候选资产索引](../../memos/dst-manager/assets/PLAN-DM-048/README.md) 和 [交互候选](../../../docs/dst-manager/mockups/PLAN-DM-048-hint-classification.html)。用户于 2026-09-30 明确接受六项候选原则。原型 HTML SHA-256 为 `b6d8c0dfd02cf0ec9a9d877992cdb77aeec5fa52adc8b47eea3c9dd564b54a0d`，大小 46101 bytes；静态预检确认 103 个唯一 id、11 个 aria-describedby 引用均有目标、27 种情形与页面/区块映射完整，唯一内嵌脚本通过 node --check。候选预览曾由 127.0.0.1 本地服务返回 HTTP 200，并在 Codex Browser 加载。
+
+2026-09-30（G4 候选截图）：为 7 个页面/展示组采集 28 张全页 JPEG 候选截图，每组 4 张，记录 CSS 视口、主题、默认缩放、顶部滚动位置、图像像素尺寸和 SHA-256；覆盖 1440×900、1024×768、1120×768、900×768 与 light/dark。900×768 仅为韧性检查。对 900×768 的 warning/blocker、1120×768 深色任务复核、1440×900 四种 Banner tone 样本做目视核对。截图索引与文件已登记，原型/截图均为虚构演示，尚未作为生产 G8 证据。
+
+截至 2026-09-30：本批相对链接检查 7 份目标文档无缺失，`rtk git diff --check` 通过。G4 仍未冻结：逐状态 Demo/生产差异表与键盘焦点规格尚待复核；G5 仍待逐消费者技术映射及技术负责人复核；SPEC-DM-006 当时为 `review`，G6 未通过。G7～G9 未开始，计划保持 `proposed`。未修改生产组件、API、Spec 或业务测试，未运行产品测试或生产构建，只做了有限的候选页 Tab/Enter/Space 抽样，未做穷尽键盘遍历、屏幕阅读器或真实 Windows WebView2 验收。
+
+2026-10-01：SPEC-DM-006 §7.3 澄清 SC 2.2.2/3.1.2 并转为 `accepted`；本计划 §7 将 SC 2.2.2 条件判断映射到 Toast 自动关闭/动效的 G8/G9 检查。静态复核 FormField、Toast、普通与创建任务监视器、WorkspaceShell、DraftActionsPanel 六个高风险源并登记到迁移盘点；该样本不是全部 62 个消费者的完整 G5 映射。G4 逐状态差异/键盘规格、剩余 G5 映射与技术负责人复核、G6 双负责人签认仍未完成；G7～G9 未开始，计划保持 `proposed`，未改生产组件/测试/API，未运行产品测试或构建。
+
+2026-10-01：依据用户转达，记录技术负责人已确认批准 G6。此为技术签认记录；当时 G4 冻结确认尚未收到，G5 全部消费者映射与追踪矩阵交叉核对仍未完成，故综合 G6 仍未通过，Task 2 和生产修改仍未启动。
+
+2026-10-01：用户确认 `docs/dst-manager/mockups/PLAN-DM-048-hint-classification.html` 可作为 G4 设计冻结基准。冻结对象为 SHA-256 `b6d8c0dfd02cf0ec9a9d877992cdb77aeec5fa52adc8b47eea3c9dd564b54a0d`、46101 bytes 的固定候选版本，连同 28 张截图、27 种状态映射和设计/键盘规格；G4 记为通过。生产同态与运行态键盘核验留在 G8。
+
+2026-10-01：用户转达技术负责人批准 G6，并确认继续此前执行授权，综合 G6 记为通过，计划转为 `active`。Ruling：将尚未完成的逐消费者 G5 明细转为对应迁移批次的开始前置条件，不把未完成映射记为完成；如果该裁决错误，批次可能遗漏特定消费者、播报或恢复边界，造成返工/回归，因此每批必须先补齐并由技术负责人复核映射。开始 Task 2。
+
+2026-10-01（Task 2）：按盘点备忘 §9.4 的批次映射新增 `UiHint`、`UiBanner` 和 `mergeDescriptionIds`，扩展 `FormField.sharedDescribedBy`，将 Help/Error字号改为 caption，并调整描述顺序为错误→字段帮助→共享帮助。RED：修改后的 FormField 契约先失败，实际仍输出 hint→error；新提示测试在组件文件建立前无法收集，此结果未记作行为 RED。GREEN：`rtk npm run test:unit -- src/components/ui/hints.test.ts src/components/ui/uiPrimitives.test.ts`，40 tests 通过；`rtk npm run check:ui` 通过；`rtk npm run build` 通过（含 API/i18n/UI 检查、`vue-tsc -b` 与 Vite 构建）。构建保留既有主包超过 500 kB 的体积提示。G8 浏览器计算样式及 G9 WebView2/读屏验收未执行；Task 3 尚待开始。

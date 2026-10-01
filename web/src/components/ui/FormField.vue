@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed} from "vue";
 import {nextInstanceId} from "./instanceId";
+import {mergeDescriptionIds} from "./descriptionIds";
 
 // 字段包装原语（PLAN-DM-029 Task 3 Step 5；ARCH-DM-007 §5）：负责可见 label、hint/error
 // 元素及其 id、以及 `aria-describedby` 的关联；`invalid` 由 `error` 派生，不需要调用方
@@ -17,6 +18,7 @@ const props = defineProps<{
   hint?: string;
   error?: string;
   required?: boolean;
+  sharedDescribedBy?: string;
 }>();
 
 const fallbackId = nextInstanceId("form-field");
@@ -24,12 +26,11 @@ const controlId = computed(() => props.id ?? fallbackId);
 const hintId = computed(() => `${controlId.value}-hint`);
 const errorId = computed(() => `${controlId.value}-error`);
 const invalid = computed(() => Boolean(props.error));
-const describedBy = computed(() => {
-  const ids: string[] = [];
-  if (props.hint) ids.push(hintId.value);
-  if (props.error) ids.push(errorId.value);
-  return ids.length === 0 ? undefined : ids.join(" ");
-});
+const describedBy = computed(() => mergeDescriptionIds(
+  props.error ? errorId.value : undefined,
+  props.hint ? hintId.value : undefined,
+  props.sharedDescribedBy,
+));
 </script>
 <template>
   <div class="form-field" :class="{'form-field--invalid': invalid}">
@@ -43,6 +44,6 @@ const describedBy = computed(() => {
 .form-field{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
 .form-field__label{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-text-secondary)}
 .form-field__required{margin-left:var(--space-1);color:var(--color-danger);font-weight:700}
-.form-field__hint{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-text-muted)}
-.form-field__error{font-family:var(--font-ui);font-size:var(--font-label);color:var(--color-danger)}
+.form-field__hint{font-family:var(--font-ui);font-size:var(--font-caption);color:var(--color-text-muted)}
+.form-field__error{font-family:var(--font-ui);font-size:var(--font-caption);color:var(--color-danger)}
 </style>

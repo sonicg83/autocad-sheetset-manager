@@ -322,14 +322,18 @@ describe("FormField", () => {
     expect(wrapper.classes()).toContain("form-field--invalid");
   });
 
-  it("hint/error 的 id 按出现情况聚合进 aria-describedby", () => {
+  it("错误描述优先于字段帮助，且共享帮助 ID 稳定去重", () => {
     const both = mount(FormField, {
-      props: {label: "名称", id: "field-2", hint: "最多 255 字符", error: "重复"},
-      slots: {default: (slotProps: {id: string; describedBy?: string}) => h(UiInput, {...slotProps})},
+      props: {label: "名称", id: "field-2", hint: "最多 255 字符", error: "重复", sharedDescribedBy: "group-help field-2-hint"},
+      slots: {default: (slotProps: {id: string; describedBy?: string}) => [
+        h(UiInput, {...slotProps}), h("p", {id: "group-help"}, "组内共享说明"),
+      ]},
     });
     expect(both.find(".form-field__hint").attributes("id")).toBe("field-2-hint");
     expect(both.find(".form-field__error").attributes("id")).toBe("field-2-error");
-    expect(both.find("input").attributes("aria-describedby")).toBe("field-2-hint field-2-error");
+    expect(both.find("input").attributes("aria-describedby")).toBe("field-2-error field-2-hint group-help");
+    expect(both.find("input").attributes("aria-invalid")).toBe("true");
+    expect(both.find("#group-help").text()).toBe("组内共享说明");
 
     const hintOnly = mount(FormField, {
       props: {label: "名称", id: "field-3", hint: "最多 255 字符"},
@@ -393,7 +397,7 @@ describe("实例标识（同页多实例）", () => {
       expect(field.find("label").attributes("for")).toBe(ids[index]);
       expect(field.find(".form-field__hint").attributes("id")).toBe(`${ids[index]}-hint`);
       expect(field.find(".form-field__error").attributes("id")).toBe(`${ids[index]}-error`);
-      expect(field.find("input").attributes("aria-describedby")).toBe(`${ids[index]}-hint ${ids[index]}-error`);
+      expect(field.find("input").attributes("aria-describedby")).toBe(`${ids[index]}-error ${ids[index]}-hint`);
     });
   });
 
