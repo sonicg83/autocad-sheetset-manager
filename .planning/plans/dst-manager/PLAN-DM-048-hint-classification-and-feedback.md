@@ -59,7 +59,7 @@ related:
 | G4 Demo 与设计冻结 | 已通过并冻结（2026-10-01，用户确认候选 HTML 可作为设计冻结基准） | 固定版 Demo、28 张截图、27 种状态映射、设计/键盘规格与用户确认；生产同态及运行态键盘验证列入 G8 |
 | G5 技术映射 | 初筛与 6 个高风险源复核已备；其余逐消费者细化映射按批次补齐 | 每一对应批次开始前，完成涉及消费者的状态/ARIA/回退映射并复核；技术负责人 |
 | G6 | 计划就绪 | **通过（2026-10-01）**：用户确认 G4 冻结、维持实施授权，并转达技术负责人批准。剩余 G5 详表按对应批次前置条件补齐，属本次明确裁决的残余事项 | 已接受 Spec、冻结设计、双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
-| G7 分批实施 | Task 2 已完成；Task 3 待开始 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
+| G7 分批实施 | Task 2 已完成；Task 3 等待 G5 批次映射复核 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
 | G8 设计 QA | 未开始 | 同状态计算样式、行为、键盘、响应式和差异裁决；业务负责人、验证者 |
 | G9 真实验收与关闭 | 未开始 | Windows WebView2/真实工作方式记录、遗留项和最终结论；业务负责人、技术负责人 |
 
@@ -191,6 +191,7 @@ expect(mergeDescriptionIds()).toBeUndefined();
 
 **接口：** 消费任务 2 原语及既有创建 store/inputModel 的属性身份、取值、候选与错误；输出 §3.3 分组及控件描述关联，不改创建草稿负载。
 
+- [ ] Task 3 开工门槛：技术负责人复核盘点备忘 §9.5 的状态/显示条件/ARIA/恢复映射；特别确认 XLSX 失败关闭后是否保留原尝试诊断。未复核前不写本批生产代码。
 - [ ] 编写 `same_parent_one_shared_help`、`different_parent_separate_help`、`different_group_separate_help`、`shared_help_ids_do_not_collide` 单测及对应输入 E2E；ID 用例覆盖冒号与连字符、空格、中文、百分号、重复分隔符、分隔符边界歧义和不同表单实例。加入 `creation_switch_and_xlsx_override_preserve_affected_inputs_and_target`，断言切换/覆盖前可见受影响输入、最终路径与不可覆盖事实；同时覆盖两个必填错误（各自 `aria-invalid="true"` 且关联可见 Error）、非法旧级联值、上级选择后说明消失。
 - [ ] 运行 `rtk npm run test:unit -- src/features/creation/cascadeHelp.test.ts` 与 `rtk npm run test:e2e -- create-sheetset-input.spec.ts --workers=1 --retries=0`，记录有意义的 RED。
 - [ ] 实现分组并接入 ProjectStep/GroupsStep 的禁用说明；共享 Help 指明上级名称，绑定所有相关控件，保留非法原值及清空入口。其他步骤按任务 1 清单迁移，保留最终路径、标准切换影响、XLSX 全量覆盖确认和不可覆盖声明。
@@ -351,3 +352,5 @@ rtk npm run test:e2e -- --retries=0
 2026-10-01：用户转达技术负责人批准 G6，并确认继续此前执行授权，综合 G6 记为通过，计划转为 `active`。Ruling：将尚未完成的逐消费者 G5 明细转为对应迁移批次的开始前置条件，不把未完成映射记为完成；如果该裁决错误，批次可能遗漏特定消费者、播报或恢复边界，造成返工/回归，因此每批必须先补齐并由技术负责人复核映射。开始 Task 2。
 
 2026-10-01（Task 2）：按盘点备忘 §9.4 的批次映射新增 `UiHint`、`UiBanner` 和 `mergeDescriptionIds`，扩展 `FormField.sharedDescribedBy`，将 Help/Error字号改为 caption，并调整描述顺序为错误→字段帮助→共享帮助。RED：修改后的 FormField 契约先失败，实际仍输出 hint→error；新提示测试在组件文件建立前无法收集，此结果未记作行为 RED。GREEN：`rtk npm run test:unit -- src/components/ui/hints.test.ts src/components/ui/uiPrimitives.test.ts`，40 tests 通过；`rtk npm run check:ui` 通过；`rtk npm run build` 通过（含 API/i18n/UI 检查、`vue-tsc -b` 与 Vite 构建）。构建保留既有主包超过 500 kB 的体积提示。G8 浏览器计算样式及 G9 WebView2/读屏验收未执行；Task 3 尚待开始。
+
+2026-10-01（Task 3 G5 预备）：按计划涉及源码和既有 E2E/Store 测试核对八个消费点，将级联禁用/保存非法值、切换/导入、预览 Error 与 notice、组行定位、最终路径和草稿恢复边界记入盘点备忘 §9.5。发现 XLSX 对话框关闭会清空失败诊断，提出依照已接受原则保留最近失败摘要至新文件/新尝试。Task 3 页面/测试尚未修改，等待技术负责人复核该批映射与此处置。
