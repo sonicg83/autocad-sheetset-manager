@@ -84,6 +84,8 @@ export interface CreationFixtureOptions {
   candidates?: CreationCandidateBody[];
   /** 固定标准详情文档；用于覆盖特定创建属性组合。 */
   standardDocument?: Record<string, unknown>;
+  /** 初始 sheetset 属性；用于恢复非法旧值等输入边界回归。 */
+  initialSheetsetValues?: Record<string, string>;
   /** 权威预览响应；默认 `creationPreview()`（三组、含不编号组与多值属性）。 */
   preview?: Record<string, unknown> | null;
   /** 执行入队返回的任务；默认 `creationQueuedJob()`。 */
@@ -189,6 +191,47 @@ export function creationCascadeDocument(): Record<string, unknown> {
       cascade_options: [
         {source_item_id: "enum-route-road", values: ["城市道路", "公路", "通用"]},
         {source_item_id: "enum-route-gas", values: ["庭院管网", "长输管线", "通用"]},
+      ],
+    },
+  );
+  return document;
+}
+
+/** 两级共享级联属性夹具：覆盖同一上级的多个字段、不同上级及对象隔离。 */
+export function creationSharedCascadeDocument(): Record<string, unknown> {
+  const document = creationCascadeDocument();
+  const properties = document["properties"] as Array<Record<string, unknown>>;
+  properties.push(
+    {
+      property_id: "prop-region-code", name: "区域代码", scope: "sheetset", kind: "cascade",
+      source_property_id: "prop-major",
+      cascade_options: [
+        {source_item_id: "enum-road", values: ["R1", "R2"]},
+        {source_item_id: "enum-gas", values: ["G1", "G2"]},
+      ],
+    },
+    {
+      property_id: "prop-route-class", name: "线路分类", scope: "sheet", kind: "cascade",
+      source_property_id: "prop-route",
+      cascade_options: [
+        {source_item_id: "enum-route-road", values: ["城市路", "公路"]},
+        {source_item_id: "enum-route-gas", values: ["庭院管线", "长输管线"]},
+      ],
+    },
+    {
+      property_id: "prop-pipe-kind", name: "管网类型", scope: "sheet", kind: "enum",
+      required: false, default_value: "供水",
+      enum_items: [
+        {item_id: "enum-pipe-water", value: "供水"},
+        {item_id: "enum-pipe-gas", value: "燃气"},
+      ],
+    },
+    {
+      property_id: "prop-pipe-spec", name: "管网规格", scope: "sheet", kind: "cascade",
+      source_property_id: "prop-pipe-kind",
+      cascade_options: [
+        {source_item_id: "enum-pipe-water", values: ["DN100", "DN200"]},
+        {source_item_id: "enum-pipe-gas", values: ["DN50", "DN80"]},
       ],
     },
   );
@@ -561,7 +604,7 @@ export async function installCreation(
           step: "project",
           target_path: "",
           // 初建时后端只应用普通 sheetset 属性默认值（图纸组与路径留空）
-          sheetset_values: {"prop-name": "", "prop-major": "燃气"},
+          sheetset_values: {"prop-name": "", "prop-major": "燃气", ...options.initialSheetsetValues},
           groups: [],
         };
         state.drafts.set(draft.id, draft);

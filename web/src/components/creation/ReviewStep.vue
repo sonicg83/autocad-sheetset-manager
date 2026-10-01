@@ -10,6 +10,8 @@
 import {computed, onMounted, ref} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import UiBanner from "../ui/UiBanner.vue";
+import UiHint from "../ui/UiHint.vue";
 import JobStatusPanel from "../JobStatusPanel.vue";
 import SheetValuesDialog from "./SheetValuesDialog.vue";
 import {isTerminalJobStatus} from "../../composables/useJobMonitor";
@@ -156,7 +158,7 @@ async function recheckAndExecute(): Promise<void> {
       <header class="card-head">
         <div>
           <h2>{{ $t("creation.review.title") }}</h2>
-          <p>{{ $t("creation.review.lead") }}</p>
+          <UiHint kind="lead">{{ $t("creation.review.lead") }}</UiHint>
         </div>
         <UiButton
           variant="secondary" data-testid="creation-preview-recheck"
@@ -166,17 +168,17 @@ async function recheckAndExecute(): Promise<void> {
           {{ $t("creation.review.recheck") }}
         </UiButton>
       </header>
-      <p v-if="store.previewPending" class="note" role="status" data-testid="creation-preview-loading">
-        {{ $t("creation.review.loading") }}
-      </p>
-      <template v-else-if="preview === null">
-        <p class="banner warn" data-testid="creation-preview-stale">
+      <UiHint kind="status" live="polite" data-testid="creation-preview-loading">
+        {{ store.previewPending ? $t("creation.review.loading") : "" }}
+      </UiHint>
+      <template v-if="!store.previewPending && preview === null">
+        <UiBanner tone="warning" data-testid="creation-preview-stale">
           <strong>{{ $t("creation.review.staleTitle") }}</strong>
           {{ $t("creation.review.staleDesc") }}
-        </p>
-        <p class="note">{{ $t("creation.review.stalePath", {path: store.targetPath()}) }}</p>
+        </UiBanner>
+        <UiHint kind="help">{{ $t("creation.review.stalePath", {path: store.targetPath()}) }}</UiHint>
       </template>
-      <template v-else>
+      <template v-else-if="!store.previewPending && preview !== null">
         <div class="summary-row" data-testid="creation-preview-summary">
           <span class="badge neutral">{{ $t("creation.review.groupsBadge", {count: preview.group_count}) }}</span>
           <span class="badge neutral">{{ $t("creation.review.sheetsBadge", {count: preview.sheet_count}) }}</span>
@@ -199,36 +201,34 @@ async function recheckAndExecute(): Promise<void> {
             <dd data-testid="creation-preview-numbering">{{ numberingText() }}</dd>
           </div>
         </dl>
-        <section
-          v-if="errorRows.length > 0" class="diagnostics error"
-          data-testid="creation-preview-errors" role="alert"
-        >
-          <h3>{{ $t("creation.review.errorsTitle", {count: errorRows.length}) }}</h3>
-          <ul>
-            <li v-for="row in errorRows" :key="row.key">
-              <span>{{ row.text }}</span>
-              <button
-                v-if="row.target !== null" type="button" class="link"
-                @click="emit('locate', row.target)"
-              >{{ $t("creation.review.jump", {index: row.index}) }}</button>
-            </li>
-          </ul>
-        </section>
-        <section
-          v-if="noticeRows.length > 0" class="diagnostics notice"
-          data-testid="creation-preview-warnings"
-        >
-          <h3>{{ $t("creation.review.noticesTitle", {count: noticeRows.length}) }}</h3>
-          <ul>
-            <li v-for="row in noticeRows" :key="row.key">
-              <span>{{ row.text }}</span>
-              <button
-                v-if="row.target !== null" type="button" class="link"
-                @click="emit('locate', row.target)"
-              >{{ $t("creation.review.jump", {index: row.index}) }}</button>
-            </li>
-          </ul>
-        </section>
+        <UiBanner v-if="errorRows.length > 0" tone="error" live="assertive" data-testid="creation-preview-errors">
+          <div class="diagnostics">
+            <h3>{{ $t("creation.review.errorsTitle", {count: errorRows.length}) }}</h3>
+            <ul>
+              <li v-for="row in errorRows" :key="row.key">
+                <span>{{ row.text }}</span>
+                <button
+                  v-if="row.target !== null" type="button" class="link"
+                  @click="emit('locate', row.target)"
+                >{{ $t("creation.review.jump", {index: row.index}) }}</button>
+              </li>
+            </ul>
+          </div>
+        </UiBanner>
+        <UiBanner v-if="noticeRows.length > 0" tone="warning" data-testid="creation-preview-warnings">
+          <div class="diagnostics">
+            <h3>{{ $t("creation.review.noticesTitle", {count: noticeRows.length}) }}</h3>
+            <ul>
+              <li v-for="row in noticeRows" :key="row.key">
+                <span>{{ row.text }}</span>
+                <button
+                  v-if="row.target !== null" type="button" class="link"
+                  @click="emit('locate', row.target)"
+                >{{ $t("creation.review.jump", {index: row.index}) }}</button>
+              </li>
+            </ul>
+          </div>
+        </UiBanner>
         <!-- 主表：一组一行；表宽随内容，容器自身横向滚动，首列保持可见 -->
         <div class="table-scroll">
           <table data-ui-table-contract="creation-review" class="preview-table" data-testid="creation-preview-table" :aria-label="$t('creation.review.tableLabel')">
@@ -275,9 +275,9 @@ async function recheckAndExecute(): Promise<void> {
             </tbody>
           </table>
         </div>
-        <p class="note">{{ $t("creation.review.tableNote") }}</p>
+        <UiHint kind="help">{{ $t("creation.review.tableNote") }}</UiHint>
         <div class="execute-bar">
-          <p class="note">{{ $t("creation.review.executeHint") }}</p>
+          <UiHint kind="help">{{ $t("creation.review.executeHint") }}</UiHint>
           <UiButton
             variant="primary" data-testid="creation-execute"
             :disabled="executeDisabled" @click="confirmAndExecute"
@@ -290,9 +290,9 @@ async function recheckAndExecute(): Promise<void> {
     <section v-if="job !== null" class="card job-card" data-testid="creation-job">
       <h3>{{ $t("creation.review.jobTitle") }}</h3>
       <JobStatusPanel :job="job" :connection-mode="connectionMode" @retry="recheckAndExecute" />
-      <p v-if="!jobRunning && job.status !== 'SUCCEEDED'" class="note">
+      <UiHint v-if="!jobRunning && job.status !== 'SUCCEEDED'" kind="help">
         {{ $t("creation.review.jobFailedNote") }}
-      </p>
+      </UiHint>
     </section>
     <SheetValuesDialog
       :open="dialogGroup !== null && dialogColumn !== null"
@@ -306,10 +306,7 @@ async function recheckAndExecute(): Promise<void> {
 .card{padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);display:grid;gap:var(--space-3);min-width:0}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap}
 .card-head h2{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
-.card-head p{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 .note{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
-.banner{margin:0;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-primary);font-size:var(--font-label)}
-.banner.warn{background:var(--color-warning-bg);color:var(--color-text-primary)}
 .summary-row{display:flex;gap:var(--space-2);flex-wrap:wrap}
 .badge{font-size:var(--font-caption);padding:var(--space-1) var(--space-2);border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary)}
 .badge.good{background:var(--color-success-bg);color:var(--color-success)}
@@ -317,9 +314,7 @@ async function recheckAndExecute(): Promise<void> {
 .preview-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--sheet-property-search-width)),1fr));gap:var(--space-3);margin:0}
 .preview-context dt{color:var(--color-text-secondary);font-size:var(--font-caption)}
 .preview-context dd{margin:var(--space-1) 0 0;color:var(--color-text-primary);font-size:var(--font-label);word-break:break-all}
-.diagnostics{padding:var(--space-3);border-radius:var(--radius-md);display:grid;gap:var(--space-2)}
-.diagnostics.error{background:var(--color-danger-bg)}
-.diagnostics.notice{background:var(--color-warning-bg)}
+.diagnostics{display:grid;gap:var(--space-2)}
 .diagnostics h3{margin:0;font-size:var(--font-card-title);color:var(--color-text-primary)}
 .diagnostics ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
 .diagnostics li{display:flex;align-items:baseline;gap:var(--space-2);flex-wrap:wrap;font-size:var(--font-label);color:var(--color-text-primary)}

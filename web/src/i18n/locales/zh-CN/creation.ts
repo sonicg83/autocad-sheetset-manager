@@ -45,7 +45,7 @@ export default {
   },
   cascade: {
     invalidSavedValue: "已保存值与当前候选不匹配，可清空后重新选择",
-    chooseParent: "请先选择上级选项，再选择此级联属性。",
+    chooseParent: "请先选择“{parent}”，再选择此级联属性。",
   },
   // 以下为四阶段向导与输入界面文案（Task 8）。键名只描述界面职责，不复制后端规则；
   // 阶段名与后端 `CREATION_STEPS` 同口径，批量字段名与图纸组表列名共用同一份文案。
@@ -215,7 +215,7 @@ export default {
     moreLabel: "查看第 {index} 组{property}的全部图纸值",
     tableNote: "不编号图纸组只显示单个补零值（如 00），不占用后续编号；主表不提供「布局」列，布局名与资产可用性仍参与后端校验。",
     valuesTitle: "{group} · {property}",
-    valuesLead: "共 {count} 张图纸，按组内顺序列出实际属性值。",
+    valuesLead: "下表列出此图纸组的全部 {count} 张图纸，并按组内顺序展示每张图纸的该属性实际值。",
     valuesSheetNumber: "图号",
     valuesSheetTitle: "图纸标题",
     valuesClose: "关闭",

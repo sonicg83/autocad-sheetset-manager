@@ -7,6 +7,7 @@
 import {computed, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import UiHint from "../ui/UiHint.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
 import type {ConfirmOptions} from "../../composables/useConfirm";
 import type {CreationImportDiagnostic} from "../../features/creation/types";
@@ -31,10 +32,9 @@ watch(
   () => props.open,
   open => {
     if (open) return;
-    // 关闭即复位：文件选择与上一次的成功/失败呈现不得跨次残留
+    // 关闭只收起对话框；最近一次失败诊断会保留到下一次选择文件或开始导入。
     file.value = null;
     succeeded.value = false;
-    props.store.clearImportState();
   },
 );
 
@@ -100,7 +100,7 @@ async function startImport(): Promise<void> {
       :aria-label="t('creation.xlsx.title')" tabindex="-1"
     >
       <h2>{{ t("creation.xlsx.title") }}</h2>
-      <p class="xlsx-lead">{{ t("creation.xlsx.lead") }}</p>
+      <UiHint kind="lead">{{ t("creation.xlsx.lead") }}</UiHint>
       <div class="xlsx-row">
         <a
           class="xlsx-download" data-testid="creation-xlsx-template"
@@ -115,10 +115,12 @@ async function startImport(): Promise<void> {
         id="creation-xlsx-file" class="xlsx-file" type="file" accept=".xlsx"
         data-testid="creation-xlsx-file" @change="pickFile"
       >
-      <p class="xlsx-boundary">{{ t("creation.xlsx.boundary") }}</p>
-      <p v-if="succeeded" class="xlsx-status success" role="status">{{ t("creation.xlsx.success") }}</p>
-      <template v-else-if="store.importMessage !== '' || store.importDiagnostics.length > 0">
-        <p class="xlsx-status error" role="alert">{{ t("creation.xlsx.failed") }}</p>
+      <UiHint kind="help">{{ t("creation.xlsx.boundary") }}</UiHint>
+      <UiHint kind="status" tone="success" live="polite">
+        {{ succeeded ? t("creation.xlsx.success") : "" }}
+      </UiHint>
+      <template v-if="!succeeded && (store.importMessage !== '' || store.importDiagnostics.length > 0)">
+        <UiHint kind="error" live="assertive">{{ t("creation.xlsx.failed") }}</UiHint>
         <p v-if="store.importMessage !== ''" class="xlsx-detail">{{ store.importMessage }}</p>
         <section v-if="store.importDiagnostics.length > 0" class="diagnostics" data-testid="creation-xlsx-diagnostics">
           <h3>{{ t("creation.xlsx.diagnosticsTitle", {count: store.importDiagnostics.length}) }}</h3>
@@ -141,16 +143,11 @@ async function startImport(): Promise<void> {
 </template>
 <style scoped>
 .xlsx-card{display:grid;gap:var(--space-3)}
-.xlsx-lead{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 .xlsx-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
 .xlsx-download{color:var(--color-accent);font-size:var(--font-label)}
 .xlsx-note{color:var(--color-text-muted);font-size:var(--font-caption)}
 .xlsx-file-label{font-size:var(--font-label);color:var(--color-text-secondary)}
 .xlsx-file{font-size:var(--font-label);color:var(--color-text-primary)}
-.xlsx-boundary{margin:0;color:var(--color-text-muted);font-size:var(--font-caption);line-height:1.6}
-.xlsx-status{margin:0;font-size:var(--font-label)}
-.xlsx-status.success{color:var(--color-success)}
-.xlsx-status.error{color:var(--color-danger)}
 .xlsx-detail{margin:0;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.6;word-break:break-word}
 .diagnostics{display:grid;gap:var(--space-2)}
 .diagnostics h3{margin:0;font-size:var(--font-card-title);color:var(--color-text-primary)}

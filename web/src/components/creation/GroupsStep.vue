@@ -9,8 +9,10 @@
 import {computed, nextTick, ref, type ComponentPublicInstance} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import UiHint from "../ui/UiHint.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
+import {nextInstanceId} from "../ui/instanceId";
 import GroupBatchDialog from "./GroupBatchDialog.vue";
 import {
   BASE_TEMPLATE_KIND,
@@ -19,12 +21,15 @@ import {
   creationCascadeOptions,
   creationPaperLayouts,
 } from "../../features/creation/inputModel";
-import type {CreationGroupIssueCode} from "../../features/creation/types";
+import {groupCascadeHelp} from "../../features/creation/cascadeHelp";
+import type {CascadeHelpGroup} from "../../features/creation/cascadeHelp";
+import type {CreationCascadeProperty, CreationGroupIssueCode, CreationGroupState} from "../../features/creation/types";
 import type {CreationStore} from "../../features/creation/store";
 
 const props = defineProps<{store: CreationStore}>();
 const {t} = useI18n();
 
+const componentInstanceId = nextInstanceId("creation-groups");
 const batchOpen = ref(false);
 const titleInputs = ref<Record<string, HTMLInputElement | null>>({});
 
@@ -99,9 +104,25 @@ function showSavedCascadeValue(
   return property.kind === "cascade" && value !== ""
     && !cascadeOptions(property, values).includes(value);
 }
-function cascadeHintId(groupId: string, propertyId: string): string {
-  const safe = (value: string) => value.replace(/[^a-zA-Z0-9_-]/gu, "-");
-  return `creation-cascade-hint-${safe(groupId)}-${safe(propertyId)}`;
+function cascadeHelpGroups(group: Pick<CreationGroupState, "group_id" | "sheet_values">): CascadeHelpGroup[] {
+  const disabled = sheetProperties.value.filter(
+    (property): property is CreationCascadeProperty => property.kind === "cascade" && cascadeDisabled(property, group.sheet_values),
+  );
+  return groupCascadeHelp(componentInstanceId, group.group_id, disabled.map(property => ({
+    propertyId: property.property_id,
+    sourcePropertyId: property.source_property_id,
+    sourceName: sheetProperties.value.find(source => source.property_id === property.source_property_id)?.name
+      ?? property.source_property_id,
+  })));
+}
+function cascadeHelpFor(
+  group: Pick<CreationGroupState, "group_id" | "sheet_values">,
+  propertyId: string,
+): CascadeHelpGroup | undefined {
+  return cascadeHelpGroups(group).find(help => help.propertyIds.includes(propertyId));
+}
+function isFirstCascadeHelp(group: CreationGroupState, propertyId: string): boolean {
+  return cascadeHelpFor(group, propertyId)?.propertyIds[0] === propertyId;
 }
 async function addGroup(): Promise<void> {
   const group = props.store.addGroup();
@@ -121,7 +142,7 @@ function toggleAll(event: Event): void {
       <header class="card-head">
         <div>
           <h2>{{ $t("creation.groups.title") }}</h2>
-          <p>{{ $t("creation.groups.lead") }}</p>
+          <UiHint kind="lead">{{ $t("creation.groups.lead") }}</UiHint>
         </div>
         <div class="toolbar">
           <UiButton variant="secondary" @click="addGroup">{{ $t("creation.groups.add") }}</UiButton>
@@ -134,7 +155,7 @@ function toggleAll(event: Event): void {
           </span>
         </div>
       </header>
-      <p class="note">{{ $t("creation.groups.addHint") }}</p>
+      <UiHint kind="help">{{ $t("creation.groups.addHint") }}</UiHint>
       <p v-if="store.groups.length === 0" class="note" data-testid="creation-groups-empty">
         {{ $t("creation.groups.empty") }}
       </p>
@@ -256,7 +277,7 @@ function toggleAll(event: Event): void {
                   :label="property.name" :aria-label="cellLabel(index, property.name)"
                   :disabled="cascadeDisabled(property, group.sheet_values)"
                   :aria-required="property.required ? 'true' : undefined"
-                  :described-by="cascadeDisabled(property, group.sheet_values) ? cascadeHintId(group.group_id, property.property_id) : undefined"
+                  :described-by="cascadeHelpFor(group, property.property_id)?.id"
                   :model-value="group.sheet_values[property.property_id] ?? ''"
                   @update:model-value="(value: string) => store.setGroupSheetValue(group.group_id, property.property_id, value)"
                 >
@@ -274,11 +295,9 @@ function toggleAll(event: Event): void {
                   :model-value="group.sheet_values[property.property_id] ?? ''"
                   @update:model-value="(value: string) => store.setGroupSheetValue(group.group_id, property.property_id, value)"
                 />
-                <p
-                  v-if="cascadeDisabled(property, group.sheet_values)"
-                  :id="cascadeHintId(group.group_id, property.property_id)"
-                  class="cascade-disabled-hint" role="note"
-                >{{ $t("creation.cascade.chooseParent") }}</p>
+                <UiHint v-if="isFirstCascadeHelp(group, property.property_id)" :id="cascadeHelpFor(group, property.property_id)?.id" kind="help">
+                  {{ $t("creation.cascade.chooseParent", {parent: cascadeHelpFor(group, property.property_id)?.sourceName}) }}
+                </UiHint>
               </td>
               <td>
                 <div class="row-actions">
@@ -303,7 +322,7 @@ function toggleAll(event: Event): void {
           </tbody>
         </table>
       </div>
-      <p class="note">{{ $t("creation.groups.derivedHint") }}</p>
+      <UiHint kind="help">{{ $t("creation.groups.derivedHint") }}</UiHint>
     </section>
     <GroupBatchDialog :store="store" :open="batchOpen" @close="batchOpen = false" />
   </section>
@@ -313,11 +332,9 @@ function toggleAll(event: Event): void {
 .card{padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);display:grid;gap:var(--space-3);min-width:0}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap}
 .card-head h2{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
-.card-head p{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 .toolbar{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
 .summary{color:var(--color-text-secondary);font-size:var(--font-caption)}
 .note{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
-.cascade-disabled-hint{margin:0;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.4}
 /* 表宽随内容，容器自身横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .group-table{width:max-content;min-width:max-content;border-collapse:collapse}

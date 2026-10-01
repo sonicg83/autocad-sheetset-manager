@@ -7,8 +7,11 @@ import {computed, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import FormField from "../ui/FormField.vue";
 import UiButton from "../ui/UiButton.vue";
+import UiHint from "../ui/UiHint.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
+import {nextInstanceId} from "../ui/instanceId";
+import {mergeDescriptionIds} from "../ui/descriptionIds";
 import {useDialogFocus} from "../ui/dialogFocus";
 import {
   BASE_TEMPLATE_KIND,
@@ -32,6 +35,8 @@ const emit = defineEmits<{close: []}>();
 const {t} = useI18n();
 
 const card = ref<HTMLElement | null>(null);
+const batchErrorId = nextInstanceId("creation-batch-error");
+const cascadeStatusId = nextInstanceId("creation-batch-status");
 const fieldId = ref<string>(CREATION_BATCH_COUNT);
 const value = ref("");
 const batchError = ref("");
@@ -82,6 +87,10 @@ const cascadeOptions = computed(() => {
     props.store.selectedGroups().map(group => group.sheet_values),
   );
 });
+const valueDescribedBy = computed(() => mergeDescriptionIds(
+  batchError.value !== "" ? batchErrorId : undefined,
+  kind.value === "cascade" && cascadeOptions.value.length === 0 ? cascadeStatusId : undefined,
+));
 const canApply = computed(() =>
   props.store.selectedGroupIds.length > 0
   && value.value !== ""
@@ -152,10 +161,10 @@ function clear(): void {
       :aria-label="t('creation.groups.batchTitle')" tabindex="-1"
     >
       <h2>{{ t("creation.groups.batchTitle") }}</h2>
-      <p class="batch-lead">{{ t("creation.groups.batchLead") }}</p>
-      <p class="batch-state" data-testid="creation-batch-state">
+      <UiHint kind="lead">{{ t("creation.groups.batchLead") }}</UiHint>
+      <UiHint kind="status" live="polite" data-testid="creation-batch-state">
         {{ t("creation.groups.batchSelected", {count: store.selectedGroupIds.length}) }} · {{ currentText }}
-      </p>
+      </UiHint>
       <div class="batch-grid">
         <FormField :label="t('creation.groups.batchField')">
           <template #default="{id, describedBy}">
@@ -167,11 +176,11 @@ function clear(): void {
             </UiSelect>
           </template>
         </FormField>
-        <FormField :label="t('creation.groups.batchValue')">
+        <FormField :label="t('creation.groups.batchValue')" :shared-described-by="valueDescribedBy">
           <template #default="{id, describedBy}">
             <UiSelect
               v-if="kind === 'base-template' || kind === 'layout-template' || kind === 'paper-layout' || kind === 'enum' || kind === 'cascade'"
-              :id="id" :described-by="describedBy" :model-value="value"
+              :id="id" :described-by="describedBy" :invalid="batchError !== ''" :model-value="value"
               @update:model-value="changeValue"
             >
               <option value="" disabled>{{ t("creation.groups.batchNoValue") }}</option>
@@ -193,22 +202,22 @@ function clear(): void {
             </UiSelect>
             <UiInput
               v-else-if="kind === 'count'"
-              :id="id" :described-by="describedBy" type="number" min="1" step="1"
+              :id="id" :described-by="describedBy" :invalid="batchError !== ''" type="number" min="1" step="1"
               :model-value="value" @update:model-value="changeValue"
             />
             <UiInput
               v-else
-              :id="id" :described-by="describedBy"
+              :id="id" :described-by="describedBy" :invalid="batchError !== ''"
               :model-value="value" @update:model-value="changeValue"
             />
-            <p v-if="kind === 'cascade' && cascadeOptions.length === 0" class="batch-hint" role="status">
-              {{ t("creation.groups.batchCascadeNoCommon") }}
-            </p>
+            <UiHint :id="cascadeStatusId" kind="status" live="polite">
+              {{ kind === 'cascade' && cascadeOptions.length === 0 ? t("creation.groups.batchCascadeNoCommon") : "" }}
+            </UiHint>
+            <UiHint v-if="batchError !== ''" :id="batchErrorId" kind="error" live="assertive">{{ batchError }}</UiHint>
           </template>
         </FormField>
       </div>
-      <p v-if="batchError !== ''" class="batch-error" role="alert">{{ batchError }}</p>
-      <p class="batch-boundary">{{ t("creation.groups.batchBoundary") }}</p>
+      <UiHint kind="help">{{ t("creation.groups.batchBoundary") }}</UiHint>
       <div class="modal-actions">
         <UiButton variant="secondary" :disabled="!canClear" @click="clear">
           {{ t("creation.groups.batchClear") }}
@@ -224,12 +233,7 @@ function clear(): void {
 </template>
 <style scoped>
 .batch-card{display:grid;gap:var(--space-3)}
-.batch-lead{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
-.batch-error{margin:0;color:var(--color-danger);font-size:var(--font-label);line-height:1.5}
-.batch-state{margin:0;color:var(--color-text-primary);font-size:var(--font-label)}
-.batch-hint{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-caption);line-height:1.5}
 .batch-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
-.batch-boundary{margin:0;color:var(--color-text-muted);font-size:var(--font-caption);line-height:1.6}
 .spacer{flex:1}
 @media (max-width: 720px){
   .batch-grid{grid-template-columns:minmax(0,1fr)}
