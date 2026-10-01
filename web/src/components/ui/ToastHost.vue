@@ -8,7 +8,7 @@ defineProps<{toasts:Toast[]}>();
 const emit=defineEmits<{dismiss:[id:number];jump:[tab:string]}>();
 </script>
 <template>
-  <div class="toast-host" aria-live="polite">
+  <div class="toast-host">
     <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type" :role="toast.type==='ok'?'status':'alert'">
       <div class="toast-main">
         <strong>{{toast.title}}</strong>

@@ -40,7 +40,7 @@ const summaryText = computed(() => {
         {{ catalog.exportState.phase === "exporting" ? $t("extensions.sheetCatalog.exporting") : $t("extensions.sheetCatalog.exportButton") }}
       </UiButton>
     </div>
-    <p v-if="catalog.actionError.value" class="error notice" role="alert">{{ catalog.actionError.value }}</p>
+    <p v-if="catalog.actionError.value" class="error notice" data-tone="error" role="alert">{{ catalog.actionError.value }}</p>
     <div v-if="catalog.exportState.phase === 'success'" class="success" role="status">
       <p class="success-path">
         <strong>{{ $t("extensions.sheetCatalog.exportSuccessTitle") }}</strong>

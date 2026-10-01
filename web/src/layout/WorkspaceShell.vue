@@ -73,12 +73,12 @@ const emit = defineEmits<{
   />
   <div class="shell-body" :class="{'workspace-active': hasWorkspace}">
     <main class="shell-main" :class="{'sheets-active': sheetsActive}">
-      <div v-if="error && dismissedError !== error" class="error notice shell-error" role="alert">
+      <div v-if="error && dismissedError !== error" class="error notice shell-error" data-tone="error" role="alert">
         <span class="shell-error-message">{{ error }}</span>
         <UiIconButton class="shell-error-dismiss" icon="close" :label="$t('shell.workspace.dismissError')" @click="dismissError" />
       </div>
       <!-- PLAN-DM-021 Task 9（I18N-11）：未知错误的原始文本只在可展开诊断详情呈现 -->
-      <details v-if="error && lastErrorDiagnostic" class="error notice"><summary>{{ $t("errors.ui.diagnosticsDetails") }}</summary><pre class="error-raw">{{ lastErrorDiagnostic }}</pre></details>
+      <details v-if="error && lastErrorDiagnostic" class="error notice" data-tone="error"><summary>{{ $t("errors.ui.diagnosticsDetails") }}</summary><pre class="error-raw">{{ lastErrorDiagnostic }}</pre></details>
       <p v-if="isWorkspaceLoading" class="panel loading" role="status">{{ $t("shell.workspace.loading") }}</p>
       <p v-if="isRestoreExecuting" class="panel loading" role="status">{{ $t("shell.workspace.restoring") }}</p>
       <!-- TabBar 的键盘处理是**原生 DOM 监听**（TabBar 只 emit select，单根 <nav> 承接透传的 @keydown）→

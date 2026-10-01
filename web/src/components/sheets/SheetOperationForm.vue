@@ -245,14 +245,14 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
             </select>
           </label>
         </template>
-        <p v-if="emptyTargetSubset" class="notice" role="status">{{ $t("sheets.operation.emptyReferenceNotice") }}</p>
+        <p v-if="emptyTargetSubset" class="notice" data-tone="warning" role="status">{{ $t("sheets.operation.emptyReferenceNotice") }}</p>
       </div>
     </template>
 
     <!-- 新建子集：标题、参照子集、之前/之后、初始图纸数、基础模板文件、布局模板文件及布局 -->
     <template v-else-if="context.kind === 'insert-subset'">
       <div class="form-body">
-        <p v-if="isEmptySet" class="notice" role="status">{{ $t("sheets.view.createFirstSubset") }}</p>
+        <p v-if="isEmptySet" class="notice" data-tone="warning" role="status">{{ $t("sheets.view.createFirstSubset") }}</p>
         <template v-else>
           <label class="form-field">
             {{ $t("sheets.operation.referenceSubset") }}

@@ -318,3 +318,26 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 | CatalogPreview.vue / preview controller | 预览 pending、过滤数量、ready 空结果和表格内容；新响应/取消旧响应时更新。 | 动态过滤数量与 pending 是 Status；ready 空结果是状态消息；表格本身不重复播报同一数量。 | 保留筛选/预览结果和行数，窄视口滚动容器不溢出；运行 sheet-catalog.spec.ts。 |
 
 **执行裁决：** Ruling: Task 6 G5 映射由执行者依据已接受 Spec、既有用户裁决、源码和回归入口自查后继续；用户要求不中断，因此不逐批等待额外确认；若自查遗漏消费者或独立技术复核发现边界不成立，代价是遗漏 ARIA/恢复路径并导致返工，本批用完整消费者表、对应 E2E 和最终独立整分支审查降低风险。
+
+### 9.9 G5 批次映射：Task 7 全局提示、任务通知与剩余消费方
+
+**状态：** Task 7 实现、单测、主界面与创建向导回归已完成。以下映射由执行者依据已接受的候选、Spec、实现和回归自查；用户要求不中断，因此本批未等待独立技术负责人逐项签认。G8 计算样式/跨视口 QA 与 G9 真实桌面、读屏验收仍未完成。
+
+| 消费方 / 状态所有者 | 用途、显示条件与结束条件 | 播报、持续状态与回退边界 | 验证与剩余风险 |
+| --- | --- | --- | --- |
+| `WorkspaceShell.vue` / workspace error 与 diagnostics | 工作区级错误、诊断及恢复动作；错误更新时展示，用户关闭只隐藏当前呈现。诊断原文仍可展开查看。 | 全局错误作为主要 `alert`；关闭不清除 error/diagnostic 状态，新的错误更新可再次展示。 | 主界面 E2E 检查关闭后任务状态、诊断与阻断仍存在；需 G8 核对实际样式和读屏播报。 |
+| `ActionDock.vue` / workspace gate | 当前预览、写入门禁及禁用原因。门禁条件解除前持续显示并禁用相应操作。 | 禁用原因以 `role=note` 提示；原生 disabled 控件保持不可操作。关闭其他提示不清除门禁。 | 失败、冲突和独立 blocker 的主界面 E2E；不能将关闭通知解释为放行。 |
+| `TaskOverlay.vue` / job state、open tab | 任务进度与跨页签任务入口；浮层可折叠或切换页签，任务状态继续存在。 | 进度内容在可见浮层时抑制重复 toast；隐藏浮层不终止任务，也不清除结果。 | Task 7 E2E 覆盖任务仍可见；G8/G9 需验证真实任务重连及读屏体验。 |
+| `JobStatusPanel.vue` / job record | 状态、`error_code`、详细原因、建议、文件影响及可重试动作；恢复成功后由任务状态迁移结束失败态。 | NEEDS_REVIEW 展示代码（若有）和详情；监视器拒绝对 NEEDS_REVIEW 直接 POST 重试。其他已有可重试失败仍走原动作。 | `useJobMonitor.test.ts` 覆盖详情与重试守卫，主界面 E2E 覆盖错误信息和门禁；HTTP/SSE 契约未变。 |
+| `RepairStatusPanel.vue` / repair job owner；`RevisionHistoryPanel.vue` / revision history owner | 保留修复与修订既有状态、诊断、预览/确认与恢复流程。本批复核未发现其需迁移的 `.notice` 标记。 | 原有状态所有者继续持有状态；提示收口不替代修复预览、修订恢复或确认门禁。 | 保留对应回归和 Task 7 高风险消费者检查；本批未改这两个面板。 |
+| `ToastHost.vue` / `useToast` | 操作成功、失败及任务终态的短期/持久通知；可显式关闭。成功 5000ms 自动关闭，失败持续到用户关闭。 | 每条 toast 独立 `status`（成功）或 `alert`（失败）；外层不再嵌套第二个 live region。最多 4 条普通通知时只淘汰最旧成功项；若全为未处理失败则保留失败并允许超过 4 条。关闭 toast 不改业务状态。 | fake timer 和队列单测；Playwright 验证关闭成功/失败 toast 后持续任务/门禁保留。SC 2.2.2：仅成功通知在 5000ms 后自动关闭，进入动画时长 0.18 秒且仅在 `prefers-reduced-motion: no-preference` 生效；失败通知可手动隐藏但不会自行消失。该解释仍须在 G8/G9 检查。 |
+| `useJobMonitor.ts` / subscription generation 与任务终态 | 通过 SSE 或轮询更新同一任务尝试；终态副作用只处理一次。新订阅代次可处理同 ID 的重试，旧订阅事件被忽略。 | 可见进度面板时抑制对应 toast；失败 toast 带详情。终态去重标记在通知/异步刷新前设置，避免 SSE 重放与轮询竞争重复通知或刷新。 | `duplicate_terminal_events_notify_once_per_attempt`、`polling_fallback_does_not_repeat_notification`、旧订阅与同 ID 重试单测；E2E 覆盖错误、冲突及 blocker 共存。 |
+| `useCreationJob.ts` / creation generation | 专用创建任务监视器维护创建终态及其回调；每个 generation 一次性执行终态副作用。 | 创建没有普通工作区任务监视器，保留专用所有者；重复终态不得重复触发成功回调、清除草稿或覆盖已有恢复状态。 | `useCreationJob.test.ts` 回归重复终态；创建向导 E2E 验证失败诊断在预览重检后仍可见。 |
+| `DraftActionsPanel.vue` / draft integrity state | 草稿损坏与过期阻断及安全恢复。损坏显示 warning；过期显示 error；重载冲突或丢弃陈旧草稿后由草稿所有者更新状态。 | 损坏用 warning tone、`role=note`；过期用 error tone、`role=note`。全局壳层错误是动态主要播报者，ActionDock 持有禁用门禁；恢复动作仍可达。 | `DraftActionsPanel.test.ts` 覆盖语义、ARIA、恢复和禁用预览；主界面 E2E 覆盖 warning 与 blocker 并存。 |
+| `PreviewPanel.vue` / preview state | CAD 校验延期说明；预览过程中持续显示，随预览状态变化结束。 | warning tone、`role=note`，不制造第二个 live alert；真实业务校验和写入门禁保持不变。 | 保留预览既有回归；G8 核对 warning 颜色与状态边界。 |
+| `SheetsView.vue` / prune result 与 filtered target | 修剪结果是信息状态；被筛选隐藏的目标是 warning。用户清筛选后目标可恢复定位。 | 分别使用 info/status 与 warning/status；关闭 toast 不改变过滤条件、目标身份或写入门禁。 | 主界面 E2E 验证目标隐藏警告与清筛选动作；检查过滤后目标可见。 |
+| `SheetOperationForm.vue` / operation form | 空引用与空图纸集是操作前 warning；在对话框中持续至输入改变或对话框结束。 | warning/status，不把校验说明重复做成 alert；原有操作守卫与确认流程不变。 | 主界面表单回归及 Task 7 全量主界面 Playwright；G8 核对窄视口长文。 |
+| `SheetCatalogView.vue`、`CatalogActions.vue`、`TemplateBar.vue` / `useSheetCatalog` 与 export controller | 目录加载、模板保存/删除、导出预览及导出错误；冲突和失败持续至恢复或放弃。 | 错误使用 error tone/alert；冲突保留目标模板、修订诊断、重试/放弃路径；导出失败保留目标路径和重新预览/重试动作。 | Task 6 目录 E2E 已覆盖；Task 7 `check:ui`、全量主界面 E2E；保持 Provider/revision、导出失效和目标路径契约。 |
+| `legacy.css` 与迁移后的 `.notice` 消费方 | 为全部剩余遗留 notice 明确 tone，避免默认危险色承担中性信息。 | 12 个实际 markup notice 分布在 8 个 Vue 文件，均显式指定 `data-tone`；移除通用 danger 背景规则，定义 notice/success/warning/error 映射。 | `hints.test.ts` 扫描实际 Vue markup，确认所有 notice 都有 tone；`check:ui` 通过。计算前景/背景对比度仍属 Task 8 G8。 |
+
+**Task 7 验证记录（2026-10-02）：** 相关 Vitest 5 个文件 23/23；主界面 Playwright 132/132；创建向导 Playwright 46/46；后端终态契约 2/2；`check:i18n` 通过（1664 keys / 11 domains），`check:ui` 通过。完整视觉、对比度、读屏、Windows WebView2 与 200% 缩放仍由 Task 8/ G8/G9 验收；因此本记录不构成计划完成或 G9 通过。

@@ -348,6 +348,7 @@ test("创建失败保留草稿与诊断，修正后重新预览并以新任务�
 
   await page.getByTestId("creation-preview-recheck").click();
   await expect(page.getByTestId("creation-execute")).toBeEnabled();
+  await expect(page.getByTestId("creation-job")).toContainText("FAILED"); // 修复预览不会抹掉最近一次任务诊断
   await page.getByTestId("creation-execute").click();
   await page.getByRole("dialog", {name: "创建并打开图纸集？"}).getByRole("checkbox").check();
   await page.getByRole("dialog", {name: "创建并打开图纸集？"}).getByRole("button", {name: "创建并打开图纸集"}).click();

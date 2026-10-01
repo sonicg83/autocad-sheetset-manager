@@ -5,6 +5,7 @@ import {mount} from "@vue/test-utils";
 import {readFileSync} from "node:fs";
 import FormField from "./FormField.vue";
 import UiBanner from "./UiBanner.vue";
+import ToastHost from "./ToastHost.vue";
 import UiHint, {type UiHintProps} from "./UiHint.vue";
 import UiInput from "./UiInput.vue";
 import {mergeDescriptionIds} from "./descriptionIds";
@@ -113,5 +114,44 @@ describe("提示原语与描述关联", () => {
     }
     const source = readFileSync("src/components/ui/UiBanner.vue", "utf8");
     expect(source).toContain(".ui-banner--notice{color:var(--color-info);background:var(--color-info-bg)}");
+  });
+
+  it("每条 toast 自己承担一次播报，关闭成功通知不依赖外层 live region", () => {
+    const wrapper = mount(ToastHost, {
+      props: {toasts: [
+        {id: 1, type: "ok", title: "已完成", body: "任务成功"},
+        {id: 2, type: "fail", title: "发布失败", body: "整批未发布"},
+      ]},
+      global: {mocks: {$t: (key: string) => key}},
+    });
+
+    expect(wrapper.find(".toast-host").attributes("aria-live")).toBeUndefined();
+    expect(wrapper.findAll("[aria-live]")).toHaveLength(0);
+    expect(wrapper.findAll('[role="status"]')).toHaveLength(1);
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1);
+    expect(wrapper.get('.toast.ok button[aria-label="shell.toast.close"]').exists()).toBe(true);
+    expect(wrapper.get('.toast.fail button[aria-label="shell.toast.close"]').exists()).toBe(true);
+  });
+
+  it("所有 legacy notice 消费方显式声明语义 tone", () => {
+    const consumers = [
+      "src/layout/WorkspaceShell.vue",
+      "src/components/DraftActionsPanel.vue",
+      "src/components/PreviewPanel.vue",
+      "src/views/SheetsView.vue",
+      "src/views/SheetCatalogView.vue",
+      "src/components/sheet-catalog/CatalogActions.vue",
+      "src/components/sheet-catalog/TemplateBar.vue",
+      "src/components/sheets/SheetOperationForm.vue",
+    ];
+    const tagWithClass = /<[a-z][^>]*\bclass="[^"]*"[^>]*>/gims;
+    for (const file of consumers) {
+      const source = readFileSync(file, "utf8");
+      const noticeTags = [...source.matchAll(tagWithClass)].filter(([tag]) => (tag.match(/\bclass="([^"]*)"/)?.[1] ?? "").split(/\s+/).includes("notice"));
+      expect(noticeTags.length, `${file} still has a legacy notice consumer`).toBeGreaterThan(0);
+      for (const tag of noticeTags) expect(tag[0], file).toMatch(/\bdata-tone="(?:notice|success|warning|error)"/);
+    }
+    const legacy = readFileSync("src/styles/legacy.css", "utf8");
+    expect(legacy).not.toMatch(/\.notice\s*\{[^}]*background:\s*var\(--color-danger-bg\)/s);
   });
 });

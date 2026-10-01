@@ -7,7 +7,7 @@
 - [DST Manager 路线图](roadmaps/dst-manager.md)
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
-- [提示分类与反馈一致性实施计划（PLAN-DM-048，active，Task 2 进行中）](plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：SPEC-DM-006 已 accepted，G4 已冻结、G6 已通过；剩余逐消费者 G5 明细作为对应迁移批次开始前置条件补齐。
+- [提示分类与反馈一致性实施计划（PLAN-DM-048，active，Task 2～7 G7 已完成；Task 8 进行中）](plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：SPEC-DM-006 已 accepted，G4 已冻结、G6 已通过；Task 6～7 G5 映射由执行者自查并登记风险。G8 生产视觉/计算样式与 G9 WebView2/读屏验收仍待关闭。
 - [级联枚举属性实施计划（PLAN-DM-047，completed）](plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：完成 `sheetset`/`sheet` 同级级联的标准 Schema v4、编辑与发布门禁、创建向导、XLSX、预览和 DST 物化；实际验证摘要见计划正文。
 - [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，completed）](plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)：完成 UUID＋发布时间、描述、改名导入、平铺管理与关联创建草稿删除；Task 8 按用户确认移除旧格式迁移和读取，并清理存量旧包、草稿及项目快照。
 - [DST Builder Plan 索引（历史资料）](plans/dst-builder/README.md)

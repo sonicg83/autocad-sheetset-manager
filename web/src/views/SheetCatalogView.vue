@@ -102,7 +102,7 @@ function onGuardKeydown(event: KeyboardEvent) {
       <span class="readonly-code">{{ t("settings.extensions.diagnosticCode", {code: catalog.readOnlyCode.value}) }}</span>
     </p>
     <p v-if="catalog.loading.value" class="loading" role="status">{{ $t("extensions.sheetCatalog.loading") }}</p>
-    <p v-else-if="catalog.loadError.value" class="error notice" role="alert">{{ catalog.loadError.value }}</p>
+    <p v-else-if="catalog.loadError.value" class="error notice" data-tone="error" role="alert">{{ catalog.loadError.value }}</p>
     <div v-else class="catalog-grid">
       <TemplateBar :catalog="catalog" @confirm-remove="confirmRemove" />
       <div class="catalog-row">

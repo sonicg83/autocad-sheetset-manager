@@ -5,7 +5,7 @@ status: active
 owners:
   - dst-manager
 created: 2026-09-30
-updated: 2026-10-01
+updated: 2026-10-02
 related:
   - SPEC-DM-006
   - SPEC-DM-015
@@ -21,7 +21,7 @@ related:
 
 # 提示分类与反馈一致性实施计划
 
-> **执行约定：** 后续实施使用 `superpowers:executing-plans`，或用户另行选定的执行方式，逐任务完成回归测试、最小实现、验证与复核；不得自行启动子代理。复选框只在实际完成并登记证据后勾选。用户于 2026-09-30 明确授权执行本计划并接受六项候选原则；当前仅推进 Task 1 候选与门禁材料，G6 未通过不得启动生产修改。
+> **执行约定：** 后续实施使用 `superpowers:executing-plans`，逐任务完成回归测试、最小实现、验证与复核；不得自行启动子代理。复选框只在实际完成并登记证据后勾选。用户于 2026-09-30 明确授权执行本计划并接受六项候选原则；SPEC-DM-006 已接受、G4 已冻结、G6 于 2026-10-01 通过。Task 2～7 已完成 G7 实施验证，Task 8 正在收口 G8；G9 真实桌面与读屏验收仍待执行。
 
 **目标：** 将既有界面的提示按 Lead、Help、Status、Banner、Error 五类收口，减少无效说明和重复通知，同时保留状态、错误定位、操作后果和发布安全信息。
 
@@ -59,7 +59,7 @@ related:
 | G4 Demo 与设计冻结 | 已通过并冻结（2026-10-01，用户确认候选 HTML 可作为设计冻结基准） | 固定版 Demo、28 张截图、27 种状态映射、设计/键盘规格与用户确认；生产同态及运行态键盘验证列入 G8 |
 | G5 技术映射 | 初筛与 6 个高风险源复核已备；其余逐消费者细化映射按批次补齐 | 每一对应批次开始前，完成涉及消费者的状态/ARIA/回退映射并复核；技术负责人 |
 | G6 | 计划就绪 | **通过（2026-10-01）**：用户确认 G4 冻结、维持实施授权，并转达技术负责人批准。剩余 G5 详表按对应批次前置条件补齐，属本次明确裁决的残余事项 | 已接受 Spec、冻结设计、双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
-| G7 分批实施 | Task 2～Task 6 已完成；Task 6 设置 E2E 33/33、扩展 E2E 72/72、目录 E2E 108/108、定向单测 13/13、check:i18n 通过。G8/G9 验收仍待后续任务 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
+| G7 分批实施 | Task 2～Task 7 已完成；Task 7 通知/UI 单测 23/23、主界面 Playwright 132/132、创建向导 Playwright 46/46、终态后端契约 2/2、check:i18n 与 check:ui 通过。Task 7 G5 映射为执行者自查，不是独立技术负责人签认。G8/G9 验收仍待后续任务 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
 | G8 设计 QA | 未开始 | 同状态计算样式、行为、键盘、响应式和差异裁决；业务负责人、验证者 |
 | G9 真实验收与关闭 | 未开始 | Windows WebView2/真实工作方式记录、遗留项和最终结论；业务负责人、技术负责人 |
 
@@ -251,16 +251,17 @@ expect(mergeDescriptionIds()).toBeUndefined();
 
 **接口：** `useToast()` 继续返回 `toasts/pushToast/dismiss`，Toast 的 `id/type/title/body/jumpTab` 和普通/创建任务监视器公开接口保持不变；使用已有 job ID、订阅代次和每次尝试终态标记去重，不在协议新增事件字段。
 
-- [ ] 使用假计时器、伪 EventSource 和受控轮询新增 `duplicate_terminal_events_notify_once_per_attempt`、`polling_fallback_does_not_repeat_notification`、`failure_and_conflict_remain_visible_until_recovery`、`stale_subscription_has_no_effect`；并断言成功 5000ms 结束、更多成功不能裁切掉未处理失败、浮层可见不弹、同 ID 新尝试能再次通知、`NEEDS_REVIEW` 不发直接重试请求。
-- [ ] 对成功 Toast 的 5000ms 自动关闭及 0.18s 入场动效逐项按 SPEC-DM-006 §7.3 的 SC 2.2.2 条件评估；若适用，先加入暂停、停止、隐藏或控制更新频率所需的 RED 断言，再实现；若不适用，记录所测时长、并行呈现和适用判断依据。`prefers-reduced-motion` 不代替该项判断。
-- [ ] 运行 `rtk npm run test:unit -- src/composables/useToast.test.ts src/composables/useJobMonitor.test.ts` 取得 RED。
-- [ ] 收口 ToastHost 的播报归属；在 useJobMonitor 现有代次范围内标记终态已处理，保留成功后刷新等既有动作恰好一次。useToast 的数量上限只裁切可丢弃的成功通知；失败如需视觉折叠，必须有可见汇总和完整查看入口，先回到 G4 裁决，不在实现时静默隐藏。
-- [ ] 将 `.notice` 消费方逐一迁移到显式 tone；确认全部消费者和展开诊断已改后才删除危险底色兜底，不能全局换成中性底色让真实失败弱化。全局错误关闭仅改变呈现，后端/页面阻断状态保持，原始错误详情仍可查。
-- [ ] 按任务 1 清单收口尚未覆盖的浮层、修订与结构性表单提示；复核同时存在 warning/error 时阻断可见、恢复动作仍经预览确认。
-- [ ] 为 `DraftActionsPanel.vue` 的 `corrupted`/`stale` 状态新增回归，验证危险后果、禁用原因和安全恢复动作持续可见；该消费方不得因 `.notice` 样式迁移遗漏。
-- [ ] 新增 `independent_global_blocker_remains_visible_with_warning`，在全局 warning 与独立阻断同时出现时断言两者均可发现、写入仍受阻断且分别保留语义。
-- [ ] 重跑通知单测、`main.spec.ts` 和 `create-sheetset-review.spec.ts`，并运行 `rtk proxy uv run pytest tests/unit/test_job_terminal_statuses.py -q`（仓库根目录）。UI 消费方通过后运行 `rtk npm run check:ui`；不新增按旧类名粗暴禁止的规则。
-- [ ] 更新本批 changelog，只暂存本批页面、测试与变更记录并以简体中文动词短语提交。
+**G5 状态：** 按用户“请继续完成后续任务，中间不用间断”的指示，执行者对盘点备忘 §9.9 的全局错误、任务状态/通知、创建任务与 legacy `.notice` 消费方映射逐项自查后实施；这不是独立技术负责人签认。若遗漏 owner/ARIA/恢复边界，可能造成重复播报、误解除 blocker 或失败信息丢失；以 12 个 notice 实例全量扫描、单测、两套页面 E2E 和 G8 独立整分支复核缓解。
+
+- [x] 用假计时器、伪 EventSource 和受控轮询覆盖 `duplicate_terminal_events_notify_once_per_attempt`、`polling_fallback_does_not_repeat_notification`、`failure_and_conflict_remain_visible_until_recovery`、`stale_subscription_has_no_effect`；另验证浮层可见时不弹、同 ID retry 新 attempt 可再通知、成功 5000ms 自动关闭、失败不被数量上限淘汰，`NEEDS_REVIEW` 不发直接重试请求。`useCreationJob` 的 RED 用例复现重复终态会重复切换工作区，故按同一订阅代次修正。
+- [x] 对成功 Toast 5000ms 自动关闭及 0.18s 入场动效按 SC 2.2.2 条件评估并记入备忘 §9.9：成功项是静态单次内容，有可访问的逐项关闭/隐藏按钮；动效仅 0.18 秒并且 `prefers-reduced-motion: reduce` 时不运行，未满足超过 5 秒的移动内容条件；关闭控件同时给用户控制隐藏的路径。失败项常驻，逐项查看/关闭；此裁决不代替 G9 读屏播报验证。
+- [x] 运行通知单测首轮 RED，再实现 GREEN；最终 `useToast`/`useJobMonitor`/`useCreationJob`/`DraftActionsPanel`/提示原语定向单测 23/23。
+- [x] 收口 ToastHost 播报归属：移除父级重复 `aria-live`，每条 Toast 自己承担单一 `status/alert`；useJobMonitor 在订阅代次内先标记再通知/刷新，防止异步刷新期间重复处理。数量上限只清理成功项，不淘汰未处理失败。
+- [x] 将全部 12 个 `.notice` markup（8 个 Vue 源文件）迁到显式 `notice/success/warning/error` tone，移除危险红色通用兜底；错误诊断仍可展开。`DraftActionsPanel` 的 corrupted/stale 使用持续 note，动态全局错误 alert 为主要播报者；安全恢复、Disabled 原因和原始错误仍在。
+- [x] 按 §9.9 收口任务、修订与结构性表单提示：不存在额外 legacy `.notice` 的 `ActionDock`、`TaskOverlay`、`JobStatusPanel`、`RepairStatusPanel`、`RevisionHistoryPanel` 保留各 owner 和恢复路径；筛选 warning 与 NEEDS_REVIEW blocker 共存且发布仍受阻断。
+- [x] 为 `DraftActionsPanel` 的 `corrupted`/`stale` 新增单测，验证 tone、ARIA、危险后果、禁用预览和重新加载/丢弃恢复动作；新增 `independent_global_blocker_remains_visible_with_warning` 与“关闭 Toast/全局错误不解除 job blocker”的 E2E。
+- [x] 终验：通知及创建任务定向单测 23/23；`main.spec.ts` 命令 132/132（含 Playwright 设置项目依赖）；`create-sheetset-review.spec.ts` 命令 46/46（含设置项目依赖）；`tests/unit/test_job_terminal_statuses.py` 2/2；`check:i18n`（1664 键/11 域）及 `check:ui` 退出码 0。两次首次 E2E 的失败均为旧宽松“关闭”定位和树默认折叠测试前置，已收紧为精确工作区按钮/先展开树并复跑通过。生产构建、跨页 G8 与真实 WebView2/读屏 G9 留待 Task 8。
+- [x] 更新本批 changelog、计划、备忘和导航；只暂存 Task 7 文件并以简体中文动词短语提交。
 
 ### 任务 8：综合验收、证据和文档收口（G7～G9）
 
