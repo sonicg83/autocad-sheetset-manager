@@ -1,7 +1,13 @@
 ## 2026-10-01 新增布局替换后视口保持调研备忘（MEMO-DM-044）
 
 - 新增 `.planning/memos/dst-manager/MEMO-DM-044-layout-swap-viewport-preservation.md`：定位视口丢失根因（`worker.py` 的 `DstDeleteLayouts` 后 `-LAYOUT _Template` 整体替换布局，视口随布局消失）；登记「图纸集字段只在布局中求值」硬约束及其对「图框改为外部参照」路线的否决；比选四个成立方案（命名视图＋图层快照、图签块重定义、视口实体克隆、一布局多图框）与两个已否决方案；提取 `legacy/plugin/setviews` 与 `legacy/plugin/setviewport` 的机制（`ViewTableRecord` + `LayerState` + 图幅长度推导比例）并列出 7 项现代化改造要点；辨析 Callout Block／View Label Block 与 `SheetSetPlaceholder` 字段；登记 3 个真实样本 DST 的元素普查（`AcSmSheetView` 实例为 0、契约仅登记 7 类对象）与 7 项真机验证清单。
-- 新增配套可视化 `.planning/memos/dst-manager/assets/MEMO-DM-044/scheme-comparison.html`：自包含、双配色、无外部 JS 依赖的静态方案比选页。
+- 新增配套可视化 `.planning/memos/dst-manager/assets/MEMO-DM-044/scheme-comparison.html`：自包含、双配色、无外部 JS 依赖的静态方案比选页（10 节）。
+- 同轮追加备忘 §六「批量视图框提取与顺序确定」并同步可视化第 6 节：依据用户确认的两条现实约束（图框矩形一般不带标识；顺序随工程类型分线性 / 非线性），确立「拾取顺序承载的是矩形↔图号配对、几何排序只能给出序号」的判定，给出 `linear` / `grid` / `manual` 三档排序策略（沿中心线里程投影、带容差的 AABB 分带 reading order、一次性交互建序）、顺序表与几何指纹字段、恢复期双向校验，以及 `DstListViewFrames` / `DstCreateViews` 两步命令形态；同时登记原 `SetViews` 三处需收紧的校验（`&&` 守卫、UCS 推导 `TwistAngle`、依赖 `PromptStatus.OK` 结束）。
+- 再续补备忘 §6.11–6.16「朝向与坐标系」并同步可视化第 6 节：记录用户补充的 UCS 依赖（选矩形前需人工设「底边为 X、高为 Y、X 正向朝序号增加方向」的 UCS），据此确立「顺序与朝向是同一件事的两面」；整理 WCS/UCS/OCS/DCS/PSDCS 体系与 `ViewCenter`、`ViewHeight`、`CenterPoint`、`ViewDirection` 的坐标系归属；给出 `ViewTarget = 矩形中心 ⇒ ViewCenter 恒为 (0,0)` 的简化约定、`linear`/`grid` 下的朝向自动推导规则、`twist` 符号必须实测标定（优先用 `acedSetCurrentView` 绕开手算），以及 legacy 未设 `UcsPerViewport` 导致存下的 UCS 不生效的遗漏；真机验证清单增至 8 项（新增 V8）。
+- 再续补备忘 §6.17–6.20「view ↔ viewport 的坐标系关系与实现流程」并在可视化第 6 节补入一张两阶段流程图：用「一台相机」类比说明 view 保存的字段（`ViewTarget`/`ViewDirection`/`ViewTwist` 生成 DCS，`CenterPoint`/`Width`/`Height` 属 DCS，故必须成组保存）、从 view 到 viewport 的 9 步实现流程（含每步所在坐标系）、两个「中心点」的区分、比例与单位口径，以及 `Width / ViewWidth == Height / ViewHeight` 这条可自动暴露朝向错误的校验等式。
+- 新增备忘附录 A「`DstCreateViews` 字段契约与领域层纯函数签名草案（draft，待立项）」：给出 `DstListViewFrames`（只读枚举）与 `DstCreateViews`（受控写入）两个命令的输入/输出 JSON 契约、稳定诊断码表、可容差比较的几何指纹 `frame_key` / `frame_hash` 与双射匹配算法、声明式的 twist 标定常量（`convention` / `twist_sign` / `twist_offset`）与 6 步标定流程、`src/dst_manager/domain/view_frames.py` 的纯函数签名、与 §6.18 九步流程的字段映射表、安全不变量与 6 项待裁决项。
+- 新增备忘附录 B「twist 标定真机核对表（V8）」并同步可视化第 6 节的契约速览与标定三判据：给出前置条件清单、30° / 200×100 标定样本的 8 个已知量与期望值、8 步执行步骤、三条判据（定向角点比对 / 宽高比自洽 / 目视）各自的职责边界、可填空的记录表、7 类失败模式排查表、结论落点（`u_cs` 含 `calibrated` 溯源字段）与证据清单。
+- **同轮修正上一轮的一处过度声明**：`Width / ViewWidth == Height / ViewHeight` 只能验证图幅内框与声明视图宽高比的自洽性（`ViewWidth` 是请求里写进去的，两边必然等比例），**不能抓 twist 错误**；且 AABB 对 θ 对称，**+30° 与 −30° 的反算包围盒完全相同**，故 twist 必须用定向角点比对（已同步修改备忘 §6.20 与可视化第 6 节）。
 - 同步 `.planning/README.md` 执行资料索引。
 - 本轮只新增备忘与可视化文档，未修改产品代码、插件、标准 Schema、DST codec 或测试；未在真实 AutoCAD 上执行验证，未立项、未创建 SPEC/Plan。
 
