@@ -604,7 +604,14 @@ test("generated 设置：保存 422 按 params.field 行内定位、输入保留
   await expect.poll(() => mock.puts.length).toBe(1);
   // 错误摘要取得焦点（tabindex=-1），条目链接字段；行内错误定位到 params.field
   await expect(dialog.getByTestId("extension-settings-error-summary")).toBeFocused();
-  await expect(dialog.locator('[data-field="batch_limit"] .ef-error')).toBeVisible();
+  const row = dialog.locator('[data-field="batch_limit"]');
+  const fieldError = row.locator(".ef-error");
+  await expect(fieldError).toBeVisible();
+  const describedBy = (await limit.getAttribute("aria-describedby"))?.split(" ") ?? [];
+  expect(describedBy[0]).toBe(await fieldError.getAttribute("id")); // Error → dirty Status → Help
+  expect(describedBy[1]).toBe(await row.locator(".ef-dirty").getAttribute("id"));
+  expect(describedBy[2]).toBe(await row.locator(".ef-hint").first().getAttribute("id"));
+  await expect(fieldError).not.toHaveAttribute("role", "alert"); // 摘要负责主要播报，字段仍可被关联
   await expect(limit).toHaveValue("999");
   await expect(limit).toHaveAttribute("aria-invalid", "true");
   // 保留输入且未落盘：其他字段保持服务端值，子视图未关闭
@@ -1403,4 +1410,68 @@ test("custom 面板：高版本只读进入配置子视图，面板整体 disabl
   // M2：没有工作区反馈就没有"已校验"这回事，状态列必须是中性"未校验"而不是"有效"
   await expect(panel.locator(".status-badge").first()).toHaveText("未校验");
   await expect(panel.locator(".status-badge").first()).toHaveClass(/neutral/);
+});
+
+test("settings_help_error_remain_associated_after_provider_conflict", async ({page}) => {
+  const existingName = "现有目录";
+  const mock = await installCatalogSettings(page, {value: {user_templates: [catalogTemplate(existingName)]}});
+  await installExtensions(page, [extensionSummary()]);
+  await page.goto("/");
+  await openExtensionsSection(page);
+  await openConfigView(page, CATALOG_NAME);
+
+  const dialog = page.locator(SETTINGS_DIALOG);
+  const filter = dialog.locator(CATALOG_FILTER);
+  const tooManyKeywords = Array.from({length: 51}, (_, index) => `关键词${index}`).join(", ");
+  await filter.fill(tooManyKeywords);
+  await dialog.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => mock.puts.length).toBe(1);
+
+  const fieldError = dialog.getByTestId("catalog-settings-filter-error");
+  await expect(fieldError).toBeVisible();
+  const originalFieldError = await fieldError.textContent();
+  expect(originalFieldError).toBeTruthy();
+  await expect(dialog.locator("#catalog-settings-filter-hint")).toBeVisible();
+  const describedBy = (await filter.getAttribute("aria-describedby"))?.split(" ") ?? [];
+  expect(describedBy).toEqual([
+    "catalog-settings-filter-error",
+    "catalog-settings-filter-dirty",
+    "catalog-settings-filter-hint",
+  ]); // Error → dirty Status → Help，三项引用均实际存在
+  for (const id of describedBy) await expect(dialog.locator(`#${id}`)).toBeVisible();
+  await expect(dialog.getByTestId("extension-settings-error-summary")).toBeFocused();
+  await expect(fieldError).not.toHaveAttribute("role", "alert");
+
+  // 当前字段值仍违反服务端约束；下一次请求若走真实校验仍会先得到 422，
+  // 因此在边界注入独立的 Provider 409，验证两种诊断同时存在时宿主如何保留状态。
+  let providerConflictPuts = 0;
+  await page.route("**/api/extensions/*/settings", async route => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    providerConflictPuts += 1;
+    await route.fulfill({
+      status: 409,
+      json: {
+        code: "SHEET_CATALOG_COLUMN_DUPLICATE",
+        message_key: "errors.sheetCatalog.columnDuplicate",
+        message: `名称重复：${existingName}`,
+        params: {header: existingName},
+      },
+    });
+  });
+
+  // 后续模板保存触发 Provider 级 409；旧过滤字段错误、帮助和 dirty 状态仍归原字段，
+  // 新冲突摘要不把字段错误清掉，也不伪造其来源。
+  await dialog.getByRole("button", {name: "另存为"}).click();
+  const saveAs = page.getByRole("dialog", {name: "另存为模板"});
+  await saveAs.getByLabel("模板名称").fill(existingName);
+  await saveAs.getByRole("button", {name: "保存", exact: true}).click();
+  await expect.poll(() => providerConflictPuts).toBe(1);
+  const providerError = dialog.getByTestId("extension-settings-save-failed");
+  await expect(providerError).toContainText(`名称重复：${existingName}`);
+  await expect(filter).toHaveValue(tooManyKeywords);
+  await expect(filter).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByTestId("catalog-settings-filter-dirty")).toBeVisible();
+  await expect(dialog.locator(".dlg-foot").getByRole("button", {name: "保存", exact: true})).toBeDisabled();
+  await expect(fieldError).toBeVisible();
+  await expect(fieldError).toHaveText(originalFieldError!);
 });

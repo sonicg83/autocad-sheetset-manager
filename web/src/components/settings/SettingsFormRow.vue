@@ -56,8 +56,8 @@ const hintText=computed<string|undefined>(()=>{
 const hasHint=computed(()=>hintText.value!==undefined);
 const describedBy=computed(()=>{
   const ids:string[]=[];
-  if(hasHint.value)ids.push(hintId.value);
   if(hasError.value)ids.push(errorId.value);
+  if(hasHint.value)ids.push(hintId.value);
   return ids.length===0?undefined:ids.join(" ");
 });
 // 生效显示值：编辑缓冲优先；清除（null）与未配置（null/null）显示为空
@@ -120,7 +120,7 @@ function onEnumInput(event:Event){
         <button v-if="item.hasFileOverride||pendingUnset" type="button" class="link-btn" :disabled="disabled" @click="emit('unset',item.key)">{{pendingUnset?t("settings.row.undoRestoreInherited"):t("settings.row.restoreInherited")}}</button>
         <span v-if="hintText!==undefined" :id="hintId" class="f-hint">{{hintText}}</span>
       </div>
-      <p v-if="hasError" :id="errorId" class="f-error" role="alert">{{error}}</p>
+      <p v-if="hasError" :id="errorId" class="f-error">{{error}}</p>
     </div>
   </div>
 </template>

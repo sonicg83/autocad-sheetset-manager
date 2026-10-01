@@ -453,6 +453,19 @@ test.describe("模板栏模板级状态（PLAN-DM-034 Task 6）", () => {
   });
 });
 
+test("sheet_catalog_save_has_one_primary_success_announcement", async ({page}) => {
+  const template = userTemplate("标准目录", [{header: "图号", expression: "{sheet.number}"}]);
+  await openCatalog(page, {userTemplates: [template], preferenceTemplateId: template.template_id});
+  const bar = page.getByRole("region", {name: "模板栏"});
+  await catalogHeader(page, 1).fill("图纸编号");
+  await page.getByRole("button", {name: "保存修改"}).click();
+
+  await expect(bar.locator(".template-state")).toHaveText("已保存");
+  await expect(bar.locator(".template-state")).toHaveAttribute("role", "status");
+  await expect(page.locator(".toast-host [role='status']")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({hasText: "已保存"})).toHaveCount(1);
+});
+
 // PLAN-DM-023 Task 3（追踪矩阵 V1/V5/V8/A1）：输出列恢复为冻结 Demo 的紧凑表格式——
 // `.columns-head` 与 `.column-row` 共用同一组 grid 轨道，每行同时显示顺序、列名、
 // 表达式、状态和操作；列区自身限高滚动，列数增长不得撑高页面。

@@ -41,9 +41,6 @@ async function confirmRemove() {
   if (!ok) return;
   if (await catalog.removeTemplate()) pushToast({type: "ok", title: t("extensions.sheetCatalog.toastDeleted"), body: removeTargetName.value});
 }
-function onSaved() {
-  pushToast({type: "ok", title: t("extensions.sheetCatalog.toastSaved"), body: catalog.draft.value.name});
-}
 
 // 三选一守卫模态焦点（SPEC §13：Esc、焦点圈闭与归还）。打开时焦点移入模态卡片、
 // 关闭归还触发元素；Tab 在模态内可聚焦元素间圈闭（禁用的"保存为模板"不参与）。
@@ -107,7 +104,7 @@ function onGuardKeydown(event: KeyboardEvent) {
     <p v-if="catalog.loading.value" class="loading" role="status">{{ $t("extensions.sheetCatalog.loading") }}</p>
     <p v-else-if="catalog.loadError.value" class="error notice" role="alert">{{ catalog.loadError.value }}</p>
     <div v-else class="catalog-grid">
-      <TemplateBar :catalog="catalog" @saved="onSaved" @confirm-remove="confirmRemove" />
+      <TemplateBar :catalog="catalog" @confirm-remove="confirmRemove" />
       <div class="catalog-row">
         <FieldBrowser :catalog="catalog" />
         <!-- 业务页传入真实校验反馈：兼容性徽标与摘要显示（设置中心 custom 面板不传） -->

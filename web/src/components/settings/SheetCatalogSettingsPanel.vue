@@ -32,9 +32,10 @@ watch(() => props.state.readOnly.value, value => { readOnly.value = value; }, {i
 //（控制器对「服务端规范化数组重建的文本」比较，不在这里重新比较快照），与 hint/error
 // 一起经稳定 ID 关联到输入的 aria-describedby。
 const filterDescribedBy = computed(() => {
-  const ids = ["catalog-settings-filter-hint"];
-  if (catalog.filterDirty.value) ids.push("catalog-settings-filter-dirty");
+  const ids: string[] = [];
   if (catalog.filterError.value !== "") ids.push("catalog-settings-filter-error");
+  if (catalog.filterDirty.value) ids.push("catalog-settings-filter-dirty");
+  ids.push("catalog-settings-filter-hint");
   return ids.join(" ");
 });
 
@@ -119,13 +120,12 @@ async function confirmRemove(): Promise<void> {
           @input="catalog.setFilterText(($event.target as HTMLInputElement).value)"
         >
         <p id="catalog-settings-filter-hint" class="cs-hint">{{ $t("extensions.sheetCatalog.settingsFilterHint") }}</p>
-        <!-- 字段级 dirty 可见文字（PLAN-DM-034 Task 5）：role="status" 温和播报，
-             与字段级 422 错误（下方的 role="alert"）是两种层级——错误存在时红色优先 -->
+        <!-- 字段级 dirty 可见文字经 aria-describedby 温和关联；宿主错误摘要负责播报字段错误。 -->
         <p
           v-if="catalog.filterDirty.value" id="catalog-settings-filter-dirty" class="cs-dirty"
           role="status" data-testid="catalog-settings-filter-dirty"
         >{{ $t("extensions.sheetCatalog.dirtyBadge") }}</p>
-        <p v-if="catalog.filterError.value" id="catalog-settings-filter-error" class="cs-error" role="alert" data-testid="catalog-settings-filter-error">{{ catalog.filterError.value }}</p>
+        <p v-if="catalog.filterError.value" id="catalog-settings-filter-error" class="cs-error" data-testid="catalog-settings-filter-error">{{ catalog.filterError.value }}</p>
       </div>
     </section>
 

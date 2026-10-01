@@ -81,6 +81,9 @@ function errorOf(item: ExtensionSettingsItem): ExtensionFieldError | undefined {
 function hintId(key: string): string {
   return `extension-settings-hint-${key}`;
 }
+function rangeHintId(key: string): string {
+  return `extension-settings-range-${key}`;
+}
 function dirtyId(key: string): string {
   return `extension-settings-dirty-${key}`;
 }
@@ -96,9 +99,10 @@ function isDirty(item: ExtensionSettingsItem): boolean {
 }
 function describedBy(item: ExtensionSettingsItem): string | undefined {
   const ids: string[] = [];
-  if (item.description_key) ids.push(hintId(item.key));
-  if (isDirty(item)) ids.push(dirtyId(item.key));
   if (errorOf(item) !== undefined) ids.push(errorId(item.key));
+  if (isDirty(item)) ids.push(dirtyId(item.key));
+  if (item.min_value !== null) ids.push(rangeHintId(item.key));
+  if (item.description_key) ids.push(hintId(item.key));
   return ids.length === 0 ? undefined : ids.join(" ");
 }
 </script>
@@ -156,9 +160,9 @@ function describedBy(item: ExtensionSettingsItem): string | undefined {
         >{{ t("extensions.sheetCatalog.dirtyBadge") }}</span>
         <div v-if="item.description_key || item.min_value !== null" class="ef-foot">
           <span v-if="item.description_key" :id="hintId(item.key)" class="ef-hint">{{ t(item.description_key) }}</span>
-          <span v-if="item.min_value !== null" class="ef-hint">{{ item.min_value }}–{{ item.max_value }}</span>
+          <span v-if="item.min_value !== null" :id="rangeHintId(item.key)" class="ef-hint">{{ item.min_value }}–{{ item.max_value }}</span>
         </div>
-        <p v-if="errorOf(item)" :id="errorId(item.key)" class="ef-error" role="alert">{{ errorOf(item)?.message }}</p>
+        <p v-if="errorOf(item)" :id="errorId(item.key)" class="ef-error">{{ errorOf(item)?.message }}</p>
       </div>
     </div>
   </div>

@@ -59,7 +59,7 @@ related:
 | G4 Demo 与设计冻结 | 已通过并冻结（2026-10-01，用户确认候选 HTML 可作为设计冻结基准） | 固定版 Demo、28 张截图、27 种状态映射、设计/键盘规格与用户确认；生产同态及运行态键盘验证列入 G8 |
 | G5 技术映射 | 初筛与 6 个高风险源复核已备；其余逐消费者细化映射按批次补齐 | 每一对应批次开始前，完成涉及消费者的状态/ARIA/回退映射并复核；技术负责人 |
 | G6 | 计划就绪 | **通过（2026-10-01）**：用户确认 G4 冻结、维持实施授权，并转达技术负责人批准。剩余 G5 详表按对应批次前置条件补齐，属本次明确裁决的残余事项 | 已接受 Spec、冻结设计、双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
-| G7 分批实施 | Task 2～Task 5 已完成；Task 5 六份 E2E 152/152、定向单测 41/41，check:i18n、check:ui 与生产构建通过。G8/G9 验收仍待后续任务 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
+| G7 分批实施 | Task 2～Task 6 已完成；Task 6 设置 E2E 33/33、扩展 E2E 72/72、目录 E2E 108/108、定向单测 13/13、check:i18n 通过。G8/G9 验收仍待后续任务 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
 | G8 设计 QA | 未开始 | 同状态计算样式、行为、键盘、响应式和差异裁决；业务负责人、验证者 |
 | G9 真实验收与关闭 | 未开始 | Windows WebView2/真实工作方式记录、遗留项和最终结论；业务负责人、技术负责人 |
 
@@ -236,10 +236,12 @@ expect(mergeDescriptionIds()).toBeUndefined();
 
 **接口：** 消费 `useSettings/useExtensionSettings/useSheetCatalog` 的原有保存、错误和只读状态；用任务 2 关联/原语承接提示，不复制 Provider 校验。
 
-- [ ] 新增 `settings_help_error_remain_associated_after_provider_conflict`，以已裁决的 Provider 409 流程断言 Help/Error 同时可见、错误控件关联且 dirty/写入守卫不因关闭反馈解除；新增 `sheet_catalog_save_has_one_primary_success_announcement`，断言模板保存的同一成功事件只有一个主要 live 通知。另断言长格式帮助与错误并存。
-- [ ] 运行新增失败用例；迁移共享及生成式表单提示，保留“无修改可保存”和只读原因。共享错误摘要负责播报时，逐字段说明保留关联并取消重复 alert。
-- [ ] 运行 `rtk npm run test:unit -- src/composables/useSettings.test.ts src/composables/useExtensionSettings.test.ts`，上述三份 E2E 与 i18n 检查；确认保存/导出请求次数、取消行为、未提交输入保护不变。
-- [ ] 更新本批 changelog，只暂存本批页面、测试与变更记录并以简体中文动词短语提交。
+**G5 状态：** 按用户“继续完成后续任务，中间不用间断”的指示，执行者以已接受 Spec、前序用户裁决、源代码和现有测试完成 §9.8 消费者映射自查后继续实施；此为透明记录的自查，不冒称已取得独立技术负责人签认。若映射漏掉消费路径，可能遗漏 ARIA、恢复或阻断边界并产生返工；完整消费者表、指定 E2E 和最终独立整分支审查作为风险缓解。
+
+- [x] 新增 `settings_help_error_remain_associated_after_provider_conflict`，用边界注入 Provider 409 验证 Help/Error 并存、IDREF、dirty、写入守卫与原 422 详情保持；新增 `sheet_catalog_save_has_one_primary_success_announcement`，断言模板保存只有持续状态这一主要 live 通知；覆盖范围帮助与错误并存。
+- [x] 迁移共享及生成式表单提示；范围/描述帮助、Error 与 dirty 均由稳定 ID 关联，错误摘要负责主要播报，逐字段错误不再重复 alert；保留“无修改可保存”和只读原因。
+- [x] 运行 `rtk npm run test:unit -- src/composables/useSettings.test.ts src/composables/useExtensionSettings.test.ts`（13/13）、`settings-dialog.spec.ts`（33/33）、`extensions-settings.spec.ts`（72/72）、`sheet-catalog.spec.ts`（108/108）与 `rtk npm run check:i18n`；覆盖取消、保存、导出、未提交输入保护与错误/冲突。目录保存不再重复发出成功 Toast。
+- [x] 更新本批 changelog、计划、盘点备忘和 scope 导航；只暂存本批页面、测试和变更记录并以简体中文动词短语提交。
 
 ### 任务 7：全局横幅、任务通知与剩余消费方
 

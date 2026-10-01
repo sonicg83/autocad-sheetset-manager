@@ -296,3 +296,25 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 - RED：新增回归先复现属性错误摘要未聚焦、操作摘要无 tabindex、图纸输入 IDREF 为 Status→Error，以及标准普通属性错误缺少 IDREF。
 - GREEN：六份 E2E 152/152，包含 sheets-editing、sheets-drafts、properties-values、properties-definitions、properties-csv、standards-editor，同时覆盖 Playwright 设置项目依赖；OrdinaryPropertyEditor、useSheetProjection 和 useDraftGuards 单测 41/41。check:i18n、check:ui、npm run build（含 OpenAPI、vue-tsc -b 与 Vite production build）均通过。
 - 构建保留主 JavaScript 包 >500 kB 的既有提示。G8 生产浏览器视觉/计算样式/运行态键盘与 G9 Windows WebView2/读屏验收尚未执行，Task 5 仅关闭 G7 实施门。
+
+### 9.8 G5 批次映射：Task 6 设置、扩展配置与图纸目录
+
+**状态：** Task 6 消费者映射已逐项对照当前源码、SPEC-DM-006 §6.7/§10、SPEC-DM-015 §2/§5/§9 与计划既有行为回归；本批按用户 2026-10-01 指示持续执行，由实施者完成映射自查，不把该记录描述成另行取得的技术负责人签字。
+
+| 消费者 / 状态所有者 | 用途、触发与结束条件 | 关联、播报与本批边界 | 必须保留的行为、验证与风险 |
+| --- | --- | --- | --- |
+| SettingsDialog.vue / useSettings | 首次打开加载；普通设置缓冲、422、409、网络失败、只读、保存中及成功状态。错误到用户修正/重试或关闭；dirty 到按基准恢复/保存。 | 422 摘要负责聚合播报和字段跳转；SettingsFormRow 保留逐字段 Error IDREF。dirty、pendingUnset、修订与输入由现有 composable 持有。成功只保留一种主要播报，clean 状态仍可见。 | 保持语言保存事务、取消/关闭确认、unset 负载、请求次数与 409 刷新快照但保留本地输入；运行 settings-dialog.spec.ts。 |
+| SettingsFormRow.vue / useSettings | 每个普通设置字段依服务端声明展示 label、当前值、可选 Help、来源与 422/local validation Error；只读和保存中禁用。 | Help 与 Error 通过稳定 IDREF 关联；Error 先于 Help。字段错误摘要取得焦点时，逐字段文字不再额外成为 alert，避免同一 422 重复播报。 | 保持路径选择、枚举原值类型、恢复继承、开关即时值/保存缓冲和服务端校验边界；验证摘要链接、aria-invalid、长说明并存。 |
+| ExtensionsSection.vue / extension 管理 store | 扩展列表 loading、load failed/retry、empty；启停立即提交、失败行内反馈；固定说明明确启停不受下方取消影响。请求成功后以服务端列表状态结束。 | “立即生效”是 note；加载是 Status；失败是 Error；列表空态为普通正文。启停错误只由本区播报。 | 不改变启停确认、disabled、焦点恢复和设置对话框生命周期；覆盖现有 extensions-settings.spec.ts 启停、加载失败路径。 |
+| ExtensionSettingsHost.vue + useExtensionSettings | 快照加载/刷新、loading、网络失败、Provider 409、修订冲突、只读 Schema、422 字段错误与保存成功；dirty 和字段编辑由 composable 持有。 | 修订冲突显示目标扩展、修订诊断、重试/放弃；Provider 409 不冒充修订冲突；422 摘要负责聚合播报，字段 Error 留作关联文本。 | 保留本地输入、revision 重试条件、只读 fail-closed、刷新失败提示、字段错误后写入守卫及公开设置接口；运行 extensions-settings.spec.ts。 |
+| GeneratedExtensionSettingsForm.vue / ExtensionSettingsHost | 每个声明字段按 Provider 顺序显示控件、可选长描述/范围、dirty 状态和 422 Error；输入变化清除该字段错误并按有效快照重新计算 dirty。 | aria-describedby 按 Error → dirty Status → Help；错误字段保留 aria-invalid；Host 摘要是该提交错误的主要播报者，行内 Error 不用第二个 alert。 | 不在前端复制 Provider 约束或静默规范化输入；验证字段定位、长说明+错误共存及修正后恢复。 |
+| AboutSection.vue / fetchAbout 会话 memo | 关于信息加载、失败、版本/许可证与外链打开结果。加载于请求结束，失败持续至组件重进/会话变化。 | 加载为 Status；失败应有一处清楚 Error，不重复播报同一失败；外链结果与加载状态区分。 | 不改变请求 memo、语言、系统浏览器白名单与开发态 window.open 回退；运行设置对话框关于分区回归。 |
+| SheetCatalogSettingsPanel.vue / useSheetCatalogSettings | 模板、输出图纸过滤词 dirty/error/read-only；字段 Help 常驻；Provider 字段错误在修正该字段后清除，保存失败不重建草稿。 | 过滤控件的 IDREF 顺序为 Error → dirty Status → Help；错误摘要来自 ExtensionSettingsHost，字段文字仍被控件关联但不重复 alert。 | 保留原始过滤文本提交、服务端规范化后重建、read-only fieldset 与脏状态保护；Provider 错误/冲突后检查字段仍可读且保存门禁准确。 |
+| SheetCatalogView.vue / useSheetCatalog | 页面标题/版本/状态、只读诊断、目录加载/失败；删除和保存完成；页面 toast 与导出状态由对应 owner 持有。 | 静态管理指引不冒充 live 状态；加载为 Status、载入失败为 Error、只读为 note；删除/模板保存一次操作只保留一个主要成功播报。 | 保持 schema newer 只读说明、三选一关闭守卫、目标模板与最终输出路径；运行 sheet-catalog.spec.ts。 |
+| TemplateBar.vue / useSheetCatalogSettings | 内置/用户模板身份、clean/dirty、保存/另存/删除、Provider/revision 冲突；冲突持续到重试成功或放弃。 | 模板 clean/dirty 徽标是持续 Status；设置子视图 hideConflict 只由 Host 显示冲突；模板成功不与持续“已保存”状态重复播报。 | 保留 clean 语义禁用、危险删除确认、冲突双出路及服务端修订守卫；断言唯一成功反馈和既有冲突 E2E。 |
+| ColumnEditor.vue / template draft controller | 列名/表达式输入、语法/兼容诊断、行状态、列计数；依当前草稿变化实时更新。 | 语法/字段解释是 Help；每列有效/需修正为可见 Status；不能把静态字段兼容提示误作 Provider Error，也不把错误摘要隐去。 | 不扩展表达式校验、兼容性门禁或模板契约；复用 sheet-catalog.spec.ts 的重复列 Provider 409、字段状态和导出阻断回归。 |
+| FieldBrowser.vue / catalog field inventory + search | 字段分组、字段搜索、各组空态及无匹配状态由本地搜索结果确定。 | 语法说明是 Help；静态空态不是 live status；保留可搜索名称、规范引用和作用域说明。 | 不改变字段插入/光标位置和键盘行为；复用 sheet-catalog.spec.ts 搜索与插入用例。 |
+| CatalogActions.vue / export controller | readiness summary、预览失效/重试提示、导出中/成功/失败、目标路径及打开文件夹动作。 | 导出成功保留最终路径和打开目录动作；失败 Error 持续并提供重试/重新预览出路。避免 actionError 与 exportError 表达同一来源。 | 保留设置修订绑定与过期预览门禁；不削弱导出阻断，运行图纸目录导出与失败 E2E。 |
+| CatalogPreview.vue / preview controller | 预览 pending、过滤数量、ready 空结果和表格内容；新响应/取消旧响应时更新。 | 动态过滤数量与 pending 是 Status；ready 空结果是状态消息；表格本身不重复播报同一数量。 | 保留筛选/预览结果和行数，窄视口滚动容器不溢出；运行 sheet-catalog.spec.ts。 |
+
+**执行裁决：** Ruling: Task 6 G5 映射由执行者依据已接受 Spec、既有用户裁决、源码和回归入口自查后继续；用户要求不中断，因此不逐批等待额外确认；若自查遗漏消费者或独立技术复核发现边界不成立，代价是遗漏 ARIA/恢复路径并导致返工，本批用完整消费者表、对应 E2E 和最终独立整分支审查降低风险。
