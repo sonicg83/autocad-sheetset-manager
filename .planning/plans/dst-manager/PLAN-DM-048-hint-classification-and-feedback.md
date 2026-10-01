@@ -59,7 +59,7 @@ related:
 | G4 Demo 与设计冻结 | 已通过并冻结（2026-10-01，用户确认候选 HTML 可作为设计冻结基准） | 固定版 Demo、28 张截图、27 种状态映射、设计/键盘规格与用户确认；生产同态及运行态键盘验证列入 G8 |
 | G5 技术映射 | 初筛与 6 个高风险源复核已备；其余逐消费者细化映射按批次补齐 | 每一对应批次开始前，完成涉及消费者的状态/ARIA/回退映射并复核；技术负责人 |
 | G6 | 计划就绪 | **通过（2026-10-01）**：用户确认 G4 冻结、维持实施授权，并转达技术负责人批准。剩余 G5 详表按对应批次前置条件补齐，属本次明确裁决的残余事项 | 已接受 Spec、冻结设计、双向追踪矩阵、可执行批次和验证方案；业务负责人、技术负责人 |
-| G7 分批实施 | Task 2、Task 3 已完成（Task 3：单测 44 项、输入 E2E 55 项、复核 E2E 46 项通过）；Task 4 G5 映射待复核 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
+| G7 分批实施 | Task 2～Task 4 已完成；Task 4 四份 E2E 124 项、导入弹窗单测 15 项通过，`check:i18n`、`check:ui` 与生产构建通过。Task 5 开工前须完成 G5 明细映射与复核 | 每批 RED/GREEN、实现审查和回退记录；技术负责人、实施者 |
 | G8 设计 QA | 未开始 | 同状态计算样式、行为、键盘、响应式和差异裁决；业务负责人、验证者 |
 | G9 真实验收与关闭 | 未开始 | Windows WebView2/真实工作方式记录、遗留项和最终结论；业务负责人、技术负责人 |
 
@@ -200,16 +200,17 @@ expect(mergeDescriptionIds()).toBeUndefined();
 
 ### 任务 4：欢迎页与标准管理/编辑文案收口
 
-**文件：** 修改 `views/WelcomeView.vue`、`StandardsView.vue`，`components/standards/StandardLibraryPane.vue`、`StandardDetailPane.vue`、`StandardEditor.vue`、`StandardBasicEditor.vue`、`StandardPublishReview.vue`、`StandardImportDialog.vue` 及任务 1 清单内的属性/模板子组件；中英文 `shell.ts/standards.ts`；扩展 `standards-welcome.spec.ts`、`standards-editor.spec.ts`、`standards-assets-publish.spec.ts`。
+**文件：** 修改 `views/WelcomeView.vue`、`StandardsView.vue`，`components/standards/StandardLibraryPane.vue`、`StandardDetailPane.vue`、`StandardEditor.vue`、`StandardBasicEditor.vue`、`StandardPublishReview.vue`、`StandardImportDialog.vue` 及任务 1 清单内的属性/模板子组件；中英文 `shell.ts/standards.ts`；扩展 `standards-welcome.spec.ts`、`standards-editor.spec.ts`、`standards-assets-publish.spec.ts`、`standards-library.spec.ts`。
 
 **规格映射：** SPEC-DM-006 §6.7.1、§6.7.2、§10.4；SPEC-DM-016 对应页面行为。
 
 **接口：** 消费现有标准身份、描述、输入状态及原语；不改标准 Schema、保存/发布/复制/删除接口。已有资产复制、编号位数等其他任务交付保持原行为。
 
-- [ ] 新增 `self_describing_standard_sections_do_not_add_redundant_lead`，断言自明标题下没有重复 Lead；新增 `standard_import_conflict_preserves_target_and_recovery_action`，断言冲突说明保留目标路径、受影响事项和唯一安全恢复动作。编号位数帮助与字段 Error 并存并保持关联；删除标准和切换标准的后果仍可见。
-- [ ] 运行上述 RED 用例，按任务 1 清单逐条迁移；保留欢迎页打开 DST 优先与现有布局，空状态按 §6.5 处理，不把空态文本强制包成 Status。
-- [ ] 运行 `rtk npm run test:e2e -- standards-welcome.spec.ts standards-editor.spec.ts standards-assets-publish.spec.ts --workers=1 --retries=0` 与 `rtk npm run check:i18n`；核对浅深主题和长文本证据，记录本批差异裁决。
-- [ ] 更新本批 changelog，只暂存本批页面、测试与变更记录并以简体中文动词短语提交。
+- [x] Task 4 G5 开工门槛：技术负责人于 2026-10-01 批准盘点备忘 §9.6 的状态/ARIA/恢复映射；导入 ID/名称冲突、确认竞态、删除影响变化与发布 warning/blocker 门禁按映射执行。
+- [x] 覆盖自明区块标题不重复 Lead，并保留身份/字段规则说明；复用现有 ID 冲突不可改名绕过、名称冲突改本机副本名和删除影响变化后二次确认用例，新增确认竞态保留源路径/候选/冲突目标、作废旧凭证且要求重预检的回归。编号位数帮助与字段 Error 并存，Error 排在 `aria-describedby` 首位。
+- [x] 按任务 1 清单复核本批消费者；保留欢迎页打开 DST 优先、已有帮助中的范围/下一步/恢复说明与原布局，不把空态文本强制包成 Status。自明区块无冗余 Lead，未发现需要删除的欢迎页说明。
+- [x] 运行四份 Task 4 E2E（124/124）、导入弹窗单测（15/15）、`check:i18n`、`check:ui` 与生产构建；E2E 同时覆盖 900×768、200% 缩放、暗色英文及超长名称。构建通过，仍报告主 JavaScript 包超过 500 kB；G8 浏览器视觉证据与 G9 WebView2 验收保留待办。
+- [x] 更新本批 changelog 与盘点备忘，只暂存 Task 4 计划、备忘、实现和测试文件，并以简体中文动词短语提交。
 
 ### 任务 5：图纸与属性编辑保留持续状态和错误定位
 

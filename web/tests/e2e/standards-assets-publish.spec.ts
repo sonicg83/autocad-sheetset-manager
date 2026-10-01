@@ -75,6 +75,27 @@ test("启用图幅缺失时显示精确差异并阻断发布", async ({page}) =>
   await expect(page.getByText("存在错误或检查失败，暂不能发布。")).toBeVisible();
 });
 
+test("发布检查同时保留 warning 与独立 blocker", async ({page}) => {
+  const document = layoutDraft();
+  document.numbering = {sequence_field: "subset.sequence", digits: 0, start: 1};
+  document.dwg_naming = {segments: [{literal: "项目"}]};
+  document.assets = [];
+  const state = await installStandards(page, [draft("草稿 1", "draft-1")], {
+    drafts: {"draft-1": document},
+  });
+  await openStandards(page);
+  await openDraftEditor(page);
+  await page.getByRole("button", {name: "发布检查"}).click();
+
+  const review = page.getByTestId("publish-review");
+  await expect(review.getByText("编号策略非法：补零位数必须是正整数")).toBeVisible();
+  await expect(review.getByText("模板未使用 subset.scope 或 subset.sequence，只能在具体项目中证明唯一性")).toBeVisible();
+  await expect(review.getByText("错误", {exact: true})).toBeVisible();
+  await expect(review.getByText("警告", {exact: true})).toBeVisible();
+  await expect(page.getByRole("button", {name: "发布标准"})).toBeDisabled();
+  expect(state.publishCalls).toBe(0);
+});
+
 test("资产文件缺失阻断发布并给出受控路径诊断", async ({page}) => {
   await installStandards(page, [draft("草稿 1", "draft-1")], {
     drafts: {"draft-1": layoutDraft(["A3"])},

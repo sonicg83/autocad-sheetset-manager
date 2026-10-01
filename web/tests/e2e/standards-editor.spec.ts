@@ -163,6 +163,13 @@ test("编号位数的空值、零、负数和小数阻止保存且可修复", as
     await expect(page.getByTestId("numbering-digits-error")).toContainText("正整数");
     await expect(save).toBeDisabled();
   }
+  const error = page.getByTestId("numbering-digits-error");
+  const errorId = await error.getAttribute("id");
+  const describedBy = (await digits.getAttribute("aria-describedby"))?.trim().split(/\s+/) ?? [];
+  expect(describedBy).toHaveLength(2);
+  expect(describedBy[0]).toBe(errorId);
+  expect(errorId).not.toBeNull();
+  await expect(page.locator(`#${describedBy[1]}`)).toBeVisible();
   // 切换分区不丢失未完成输入，不能悄悄恢复默认位数。
   await digits.fill("");
   await openEditorSection(page, "dwgNaming");
@@ -175,6 +182,24 @@ test("编号位数的空值、零、负数和小数阻止保存且可修复", as
   await expect(page.getByTestId("numbering-digits-error")).toHaveCount(0);
   await saveDraftDocument(page);
   expect(state.saveBodies[0].numbering).toEqual({sequence_field: "subset.sequence", digits: 2, start: 1});
+});
+
+test("自明的标准区块标题不重复 Lead，保留必要的字段规则说明", async ({page}) => {
+  await installStandards(page, [draft("草稿 1", "draft-1")], {drafts: {"draft-1": draftDocument()}});
+  await openStandards(page);
+  await openDraftEditor(page);
+
+  await openEditorSection(page, "basic");
+  const basic = page.getByRole("region", {name: "基本信息"});
+  await expect(basic.getByRole("heading", {name: "基本信息"})).toBeVisible();
+  await expect(basic.locator('[data-hint-kind="lead"]')).toHaveCount(0);
+  await expect(basic.getByTestId("identity-readonly-note")).toBeVisible();
+
+  await openEditorSection(page, "ordinary");
+  const ordinary = page.getByRole("region", {name: "普通属性"});
+  await expect(ordinary.getByRole("heading", {name: "普通属性"})).toBeVisible();
+  await expect(ordinary.locator('[data-hint-kind="lead"]')).toHaveCount(0);
+  await expect(ordinary.getByText(/全局唯一/)).toBeVisible();
 });
 
 /** 把界面语言与主题切到指定值：**不写全局共享的 settings.json**，改用 page 级请求拦截

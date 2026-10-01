@@ -164,6 +164,8 @@ export type StandardsFixtureOptions = {
   importConflict?: {status: number; code: string; message: string};
   /** 预检返回名称冲突，确认时可提交新名称作为本机副本名。 */
   importNameConflict?: string;
+  /** 预检成功后、确认阶段发生冲突（模拟并发写入）。 */
+  importConfirmConflict?: {status: number; code: string; message: string};
   /** 预置草稿文档：draft_id → document（编辑器加载与保存目标）。 */
   drafts?: Record<string, Record<string, unknown>>;
   /** 预置资产检查结果：asset_id → 响应。 */
@@ -461,6 +463,13 @@ export async function installStandards(
       if (path === "/api/standards/import" && method === "POST") {
         state.confirmAttempts += 1;
         const body = (await request.postDataJSON()) as {preview_id: string; name?: string | null};
+        const confirmConflict = options.importConfirmConflict;
+        if (confirmConflict !== undefined) {
+          return route.fulfill({
+            status: confirmConflict.status,
+            json: {code: confirmConflict.code, message: confirmConflict.message},
+          });
+        }
         const conflict = options.importConflict;
         if (conflict !== undefined && conflict.status !== 200) {
           return route.fulfill({status: conflict.status, json: {code: conflict.code, message: conflict.message}});

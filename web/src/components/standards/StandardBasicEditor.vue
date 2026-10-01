@@ -37,7 +37,7 @@ const numberingDigitsText = computed({
         :label="$t('standards.editor.numberingDigitsLabel')"
         type="number" min="1" step="1"
         :invalid="numberingInvalid"
-        :described-by="numberingInvalid ? `${helpId} ${errorId}` : helpId"
+        :described-by="numberingInvalid ? `${errorId} ${helpId}` : helpId"
       />
       <p :id="helpId" class="field-note">{{ $t("standards.editor.numberingDigitsHelp") }}</p>
       <p v-if="numberingInvalid" :id="errorId" class="field-error" role="alert" data-testid="numbering-digits-error">

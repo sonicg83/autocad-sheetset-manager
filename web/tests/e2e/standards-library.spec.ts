@@ -268,6 +268,49 @@ test("同名导入可改名为本机副本并保留原标准包", async ({page})
     .toBe("00000000-0000-4000-8000-000000000047");
 });
 
+test("确认阶段身份冲突保留来源与目标信息并要求重新预检", async ({page}) => {
+  const sourcePath = "C:\\标准包\\同 ID 竞态.dststandard";
+  const state = await installStandards(page, [
+    published("official", {name: "当前选择标准"}),
+    published("user", {name: "现有用户标准", standard_id: "00000000-0000-4000-8000-000000000047"}),
+  ], {
+    importConfirmConflict: {
+      status: 409,
+      code: "STANDARD_ID_EXISTS",
+      message: "STANDARD_ID_EXISTS：目标“现有用户标准”已存在，请重新预检。",
+    },
+  });
+  await openStandards(page);
+  const selected = libraryItems(page).filter({hasText: "当前选择标准"});
+  await selected.click();
+  await page.getByRole("button", {name: "导入标准包"}).click();
+  const dialog = page.getByRole("dialog", {name: "导入标准包"});
+  await chooseStandardPackage(page, sourcePath);
+  await dialog.getByTestId("import-preview-button").click();
+  await expect(dialog.getByTestId("import-preview")).toBeVisible();
+  await expect(dialog.getByTestId("import-preview")).toContainText("00000000-0000-4000-8000-000000000047");
+  await expect(dialog.getByTestId("import-confirm-button")).toBeEnabled();
+
+  await dialog.getByTestId("import-confirm-button").click();
+
+  await expect(dialog.getByTestId("import-error")).toContainText("现有用户标准");
+  await expect(dialog.getByTestId("import-selected-path")).toHaveValue(sourcePath);
+  await expect(dialog.getByTestId("import-preview")).toBeVisible();
+  await expect(dialog.getByTestId("import-preview")).toContainText("00000000-0000-4000-8000-000000000047");
+  await expect(dialog.getByTestId("import-confirm-button")).toBeDisabled();
+  await expect(dialog.getByTestId("import-preview-button")).toHaveText("重新预检");
+  await expect(selected).toHaveClass(/selected/);
+  await expect(page.getByRole("region", {name: "标准详情"})).toContainText("当前选择标准");
+  expect(state.confirmAttempts).toBe(1);
+  expect(state.cancelAttempts).toBe(1);
+  expect(state.list).toHaveLength(2);
+
+  await dialog.getByTestId("import-preview-button").click();
+  await expect(dialog.getByTestId("import-error")).toHaveCount(0);
+  await expect(dialog.getByTestId("import-confirm-button")).toBeEnabled();
+  expect(state.previewPaths).toEqual([sourcePath, sourcePath]);
+});
+
 test("无桌面壳显示明确标注的本机路径开发态，桥迟到注入后离开该模式", async ({page}) => {
   // 覆盖 beforeEach 注入的假桥：本次按无壳浏览器起始
   await page.addInitScript(() => {

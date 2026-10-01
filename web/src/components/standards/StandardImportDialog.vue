@@ -5,6 +5,7 @@
 // 渲染层不复制任何后端规则：可否导入、诊断与候选身份全部来自预检响应。
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
+import {ApiError} from "../../api/client";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import {FOCUSABLE_SELECTOR, useDialogFocus} from "../ui/dialogFocus";
@@ -223,8 +224,17 @@ async function runConfirm(): Promise<void> {
     emit("imported", published);
   } catch (exc) {
     if (revision !== requestRevision || !props.open) return;
-    // 确认失败（冲突/凭证失效/发布故障）留在弹窗内：保留路径，允许重新预检或重试。
-    await dropPreview();
+    // 旧凭证必须作废，但候选身份/诊断仍是解释本次冲突所需的上下文。
+    const current = result.value;
+    if (current?.preview_id === previewId) {
+      result.value = {...current, preview_id: null, expires_at: null};
+    }
+    try {
+      await props.cancelImport(previewId);
+    } catch {
+      // 本地已禁用旧 token；服务端会在凭证到期后清理未取消的快照。
+    }
+    if (revision !== requestRevision || !props.open) return;
     phase.value = "idle";
     errorText.value = messageOf(exc);
   }
@@ -238,6 +248,15 @@ async function close(): Promise<void> {
 }
 
 function messageOf(exc: unknown): string {
+  if (
+    exc instanceof ApiError
+    && exc.status === 409
+    && (exc.code === "STANDARD_ID_EXISTS" || exc.code === "STANDARD_NAME_CONFLICT")
+    && exc.rawMessage
+  ) {
+    // 409 摘要保留本地化通用说明，同时展示已有目标等恢复所需的服务端冲突细节。
+    return `${exc.message}：${exc.rawMessage}`;
+  }
   if (exc instanceof Error && exc.message.length > 0) return exc.message;
   return t("errors.ui.unknownSummary");
 }

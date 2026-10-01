@@ -249,3 +249,27 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 - XLSX 导入失败后关闭并重开对话框会保留最近一次摘要和诊断；选新文件或开始新尝试时清除旧诊断。成功通知关闭不回滚已导入草稿。
 - RED：实现前定向浏览器用例确认具名级联 Help/IDREF 缺失及 XLSX 关闭对话框后诊断被清除；修复后对应回归通过。
 - GREEN：`rtk npm run test:unit -- src/features/creation/cascadeHelp.test.ts src/components/ui/hints.test.ts src/components/ui/uiPrimitives.test.ts`（3 个文件、44 项）；`rtk npm run test:e2e -- create-sheetset-input.spec.ts --workers=1 --retries=0`（55 项）；`rtk npm run test:e2e -- create-sheetset-review.spec.ts --workers=1 --retries=0`（46 项）；`rtk npm run check:ui`、`rtk npm run check:i18n`（1663 keys/11 domains）及 `rtk npm run build` 通过。构建仍报告主 JavaScript 包超过 500 kB。G8 生产浏览器视觉/运行态 QA 与 G9 Windows WebView2 验收未执行。
+
+
+### 9.6 G5 批次映射：Task 4 欢迎页与标准管理/编辑
+
+本映射根据 Task 4 涉及源码、现有 E2E、SPEC-DM-006 §6.7/§10.4、SPEC-DM-016 和现行身份/导入/删除契约 SPEC-DM-020 核对。此前用户已接受方向 A 与六项提示/响应式候选；标题自明时不增加重复 Lead，保留能说明边界、下一步或恢复办法的 Help。Task 4 只收口页面文案、提示关联和冲突呈现，不改标准 Schema、store/API、发布/导入/删除门禁或预检凭证流程。
+
+| 消费者/状态所有者 | 用途、触发与结束条件 | 描述/播报和本批决定 | 必须保留的行为、验证与风险 |
+| --- | --- | --- | --- |
+| `views/WelcomeView.vue` / 页面静态文案与输入框本地路径 | 首屏说明打开既有 DST 与从标准准备新项目两条路径；shell 不可用时显示有可见标签的路径输入，最近打开记录为空时说明不造占位项目。 | 通用欢迎标题下的 `startDesc` 仅在仍补足下一步选择时保留；主卡/任务卡标题下不重复同义 Lead。拖放提示、无 shell 路径边界、标准驱动创建边界是不同信息，不能删成无说明入口。recent-empty 是静态说明，不包装为 Status。 | 保持「打开图纸集」唯一主操作、三个次级任务的顺序和去向、输入路径可见标签、空历史事实及 900×768 单列首任务优先；沿用 `standards-welcome.spec.ts` 的路由/布局回归。
+| `StandardsView.vue` + `StandardLibraryPane.vue` / store 的 action/list 状态及本地 filters | 标准页标题与固定新建/导入/返回动作；列表加载、请求失败、全库为空、过滤无结果；错误由 retry 或新请求结束。 | 页面标题、筛选器 label 与清楚的空状态文本足够时不加重复 Lead。加载使用单一 Status；失败摘要用 Error 并保留重试；空库/无匹配保持普通内容，后者保留清除筛选操作；actionError 仍是当前操作 Error。 | 不将加载失败误报成空库，不清筛选/选择来隐藏失败，不新增重复播报；保留页面入口和列表筛选语义。验证浅/深主题和长文案。
+| `StandardDetailPane.vue` / summary、detail、delete-impact 与 `StandardsView.vue` 删除流程 | 未选中时引导选择；详情加载/失败和重试；草稿/已发布/官方可执行动作不同；删除先取关联创建草稿数量，再确认和提交。 | 未选中为空态文本，不标 status；加载为 Status；详情失败为 Error 并保留重试。read-only 原因继续说明为何不可编辑。删除影响数持续显示；影响集合变化时保留目标标准与更新后的数量，说明旧确认失效并要求重新确认。 | 不因反馈关闭或冲突清掉所选目标、当前影响数、错误原因或安全恢复动作；不删除未关联草稿、项目快照或已创建图纸集。现有 `standards-library.spec.ts` 的 `STANDARD_DELETE_IMPACT_CHANGED` 回归是门禁，断言第二次确认使用新 token。
+| `StandardEditor.vue` / 编辑缓冲、dirty/invalid、save/inspect/publish 请求及当前 draft ID | clean/dirty/saving/failed 状态；结构诊断跳转；发布检查、资源检查、发布失败及离开编辑器三选一门禁。 | 草稿标题/名称/ID已有身份信息时不加重复 Lead；`saveStateText` 是必须持续的编辑 Status，不随一次性通知结束而消失。保存/发布 Error 与阻断原因持续显示并保留重试；结构诊断摘要和逐项定位保持当前目标。 | 保存失败/修订冲突不丢缓冲或 dirty 状态；返回/切分区继续走既有保存、放弃、留在此处门禁；不将草稿保存误写成已发布。保持请求次数、基准与发布门禁。
+| `StandardBasicEditor.vue` / numbering digits 和诊断 | 编号位数帮助常驻；合法性诊断出现时增加字段 Error，修复后撤下。标准 ID 为创建后不可变身份。 | `numberingDigitsHelp` 是解释补零规则的 Help；错误和 Help 并存，控件 `aria-invalid` 与描述 ID 同步，`aria-describedby` 顺序为 Error → Help。只读 ID 旁保留身份变更办法；自明分区标题下不再加重复 Lead。 | 保留空/零/负数/小数输入、不自动恢复默认值及既有发布/保存校验；E2E 同时断言 help/error 可见、invalid 与无悬空 IDREF。
+| `StandardPublishReview.vue` / draft diagnostics、asset inspection、publish gate | 检查中 Status；问题/资产检查失败、warnings、errors、提交发布失败；各 issue 可跳回对应分区并聚焦。 | 「发布检查」标题下的说明若讲清 error 阻断、warning 不阻断和跳转行为则保留为有用 Help，不当重复 Lead。错误/警告数与检查失败分开；静态问题列表不设重复 live owner；发布失败用 Error；warning 与独立 blocker 同时可见，关闭可关闭的提示不解除 `gate.canPublish`。 | 保留 target section/字段、摘要、跳转和重新检查入口；旧/过期资产检查仍阻断；成功状态不替代持续草稿状态。沿用 `standards-editor.spec.ts` 与 `standards-assets-publish.spec.ts` 的警告、阻断和跳转回归。
+| `StandardImportDialog.vue` / 当前 source path、preview result、diagnostics、expires_at、confirm phase | 选择 `.dststandard` → 服务端快照预检 → 用户确认；预检/导入中 Status；文件/凭证错误或确认竞态 Error；成功后本地列表定位新目标。 | 保留可见来源路径、候选 ID/名称、诊断目标与安全恢复方式。相同 UUID 已存在时不可改名绕过，清楚展示已有目标并禁用确认；不同 UUID 仅名称冲突时保留冲突名称、预填可编辑本机副本名，并说明原包 ID/发布时间/文件不变。确认阶段若 409，错误需保留源路径、候选/冲突目标及影响；旧 token 失效时给出重新预检动作，不允许直接重用。字段 Help/Error 并存时 Error 优先关联。 | 成功提示可随用户关闭，但导入库事实、刷新后的目标选择和已发布只读状态继续存在；关闭/取消仍取消临时快照。不得改写源 `.dststandard`、跳过预检或凭证、复用过期 token、改变 ID/name 冲突规则。新增冲突 E2E 放在现有标准库测试 `standards-library.spec.ts`（计划漏列，现修订）；断言 ID 冲突不可改名、名称冲突的局部改名、确认阶段竞态保留 target/path/recovery 且不产生部分导入。
+| Task 4 涉及的属性/模板子组件标题与静态说明 | `OrdinaryPropertyEditor`、`CascadePropertyEditor`、`DerivedPropertyEditor`、`DwgNamingEditor`、`TemplateAssetsEditor` 等按区块标题和能力提示展示。 | Task 4 只删除与自明标题重复的 Lead；标题本身无法表达的来源范围、依赖、资产安全副本、字段规则或命名限制保留为一条有用 Help。字段错误、运行态 Status/Banner 和较深的控件关联继续留给计划中后续消费者批次，不趁本批合并。 | 不删除用户理解约束、命名风险或恢复办法所需内容；不更改验证门禁。对保留和删除的说明在 `standards-editor.spec.ts` 中用语义断言覆盖，避免仅以 CSS 类名证明视觉/语义。
+
+**Task 4 开工前需复核的关键裁决：** 导入冲突区分“同 ID 不可绕过”与“仅名称冲突可改名”；确认竞态必须提示重新预检；删除影响变化需更新数量并再次确认；所有冲突反馈保留当前操作目标、影响和安全恢复路径。标准库 UI 现有 E2E 在 `standards-library.spec.ts`，因此本批测试范围需包含它。
+
+**Task 4 实施与验证记录（2026-10-01）：** 用户已批准本节 G5 映射。自明标题下无重复 Lead；欢迎页和编辑器中说明范围、下一步、字段规则、资产安全或恢复办法的内容均保留。确认导入发生 409 时，保留来源路径和候选诊断、显示本地化错误摘要与服务端冲突目标、作废旧凭证并要求重新预检；编号位数的 `aria-describedby` 改为 Error → Help。warning + blocker 回归用例使用本地命名唯一性 warning 与无效编号 blocker，断言两者同时可见且发布仍禁用。
+
+- 验证：`standards-welcome.spec.ts`、`standards-editor.spec.ts`、`standards-assets-publish.spec.ts`、`standards-library.spec.ts` 共 124/124 E2E 通过；`StandardImportDialog.test.ts` 15/15 通过。
+- `check:i18n`（1663 键/11 域）、`check:ui` 和 `npm run build` 均通过。构建仍提示主 JS 包超过 500 kB；E2E 输出有既存 `NO_COLOR`/`FORCE_COLOR` 环境提示。现有 E2E 覆盖 900×768、200% 缩放、暗色英文与超长标准名；生产同态截图对照和 WebView2 运行态仍归 G8/G9。
+- 本批没有删除有用说明，也未更改标准 Schema、导入/删除/发布契约或其他业务状态；移除/重排提示以外的视觉差异与完整截图证据留待 G8。
