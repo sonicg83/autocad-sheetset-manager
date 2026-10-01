@@ -96,7 +96,7 @@ test("提交失败保留输入并呈现行内错误与可聚焦摘要", async ({
   let failures = 1;
   await installSheetsFixture(page, {
     failDraftSave: () => failures-- > 0
-      ? {code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效"}}
+      ? {code: "PROPERTY_VALIDATION", message: "属性值校验失败", fields: {"图幅": "值无效", "专业": "需要填写有效专业"}}
       : null,
   });
   await openWorkspace(page);
@@ -106,8 +106,19 @@ test("提交失败保留输入并呈现行内错误与可聚焦摘要", async ({
   // 失败保留输入、呈现行内错误与可聚焦摘要，摘要提供字段跳转入口
   await expect(page.getByRole("textbox", {name: "属性 图幅", exact: true})).toHaveValue("A2");
   await expect(page.getByText("值无效", {exact: true})).toBeVisible();
-  await expect(page.getByRole("alert", {name: "加入草稿错误摘要"})).toBeVisible();
+  const summary = page.getByRole("alert", {name: "加入草稿错误摘要"});
+  await expect(summary).toBeVisible();
+  await expect(summary).toBeFocused();
   await expect(page.getByRole("button", {name: /图幅：值无效/})).toBeVisible();
+  await expect(page.getByRole("button", {name: /专业：需要填写有效专业/})).toBeVisible();
+  const field = page.getByRole("textbox", {name: "属性 图幅", exact: true});
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  const ids = (await field.getAttribute("aria-describedby"))!.split(/\s+/);
+  expect(ids).toHaveLength(2);
+  expect(ids[0]).toMatch(/-error$/);
+  expect(ids[1]).toMatch(/-status$/);
+  await page.getByRole("button", {name: /专业：需要填写有效专业/}).click();
+  await expect(page.getByRole("textbox", {name: "属性 专业", exact: true})).toBeFocused();
 });
 
 test("错误摘要跳转到第六页字段并聚焦", async ({page}) => {

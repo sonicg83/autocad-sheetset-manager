@@ -15,6 +15,7 @@ import UiIconButton from "../ui/UiIconButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import EnumValuesDialog from "./EnumValuesDialog.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
+import {domIdToken} from "../ui/domId";
 import {
   PROPERTY_SCOPES,
   blankOrdinaryProperty,
@@ -100,6 +101,10 @@ function issueText(property: DraftProperty): string {
   return issuesOf(property)
     .map(diagnostic => t(`standards.diagnostic.${diagnostic.code}`, diagnosticParams(diagnostic)))
     .join(t("standards.enumDialog.nameSeparator"));
+}
+
+function issueId(property: DraftProperty): string {
+  return `ordinary-issue-${domIdToken(property.property_id)}`;
 }
 
 function diagnosticParams(diagnostic: DraftDiagnostic): Record<string, string | number> {
@@ -247,9 +252,10 @@ function applyCsv(): void {
               :label="$t('standards.ordinary.name')"
               :aria-label="$t('standards.ordinary.name')"
               :invalid="hasError(property)"
+              :described-by="hasError(property) ? issueId(property) : undefined"
               :data-testid="`ordinary-name-${property.property_id}`"
             />
-            <p v-if="hasError(property)" class="row-issue" :data-testid="`ordinary-issue-${property.property_id}`">
+            <p v-if="hasError(property)" :id="issueId(property)" class="row-issue" :data-testid="`ordinary-issue-${property.property_id}`">
               {{ issueText(property) }}
             </p>
           </td>

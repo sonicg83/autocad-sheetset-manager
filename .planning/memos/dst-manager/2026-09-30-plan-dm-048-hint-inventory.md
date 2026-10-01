@@ -276,7 +276,7 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 
 ### 9.7 G5 批次映射候选：Task 5 图纸、属性与标准字段
 
-**状态：待技术负责人复核。** 本节是 Task 5 开工前的具体映射，覆盖盘点 §6 标记为 Task 5 的全部消费者。Task 4 已完成的标准管理/导入/发布路径沿用 §9.6 的实现与验证，不因盘点标签重复迁移；Task 4 明确延期的标准子编辑器字段级关联在本批显式收口。当前没有 Task 5 产品实现变更。
+**状态：用户于 2026-10-01 确认批准，Task 5 G5 映射通过并允许开工。** 本节是 Task 5 开工前的具体映射，覆盖盘点 §6 标记为 Task 5 的全部消费者。Task 4 已完成的标准管理/导入/发布路径沿用 §9.6 的实现与验证，不因盘点标签重复迁移；Task 4 明确延期的标准子编辑器字段级关联在本批显式收口。本节下方记录按批准映射完成的 Task 5 实施与验证。
 
 | 消费者与状态所有者 | 触发、生命周期及需保留的信息 | 错误关联、播报与恢复 | 计划断言与风险边界 |
 | --- | --- | --- | --- |
@@ -289,4 +289,10 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 | 标准字段子编辑器：`CascadePropertyEditor.vue`、`CompositionPropertyDialog.vue`、`DerivedPropertyEditor.vue`、`DwgNamingEditor.vue`、`EnumValuesDialog.vue`、`MappingPropertyDialog.vue`、`OrdinaryPropertyEditor.vue`、`TokenExpressionEditor.vue`；`StandardEditor.vue` 持有标准草稿及整体 diagnostics | 在 Task 4 静态提示迁移之外，补齐本地输入 Error、字段级状态/Help 的用途、持有者、结束条件；保持级联空选项、表达式错误、唯一性 warning、pending suffix、非法/旧值、草稿修改和对话框焦点返回的原有语义。 | 有稳定字段路径的 Error 通过真实输入 IDREF 关联，顺序为 Error → 当前 Status → Help；Error 输入设置 `aria-invalid=true`。没有可靠字段路径的发布/跨字段诊断留在 editor summary 并链接真实目标，不伪造某个字段的归属。警告仍是警告，不变成 Error/阻断。 | 若实施修改，扩展 `standards-editor.spec.ts` 覆盖真实字段关联、summary 定位、非法原值与 pending 状态保留；风险：自定义控件遗漏 IDREF、聚合诊断被错误绑定到输入或错误地解除发布阻断。 |
 | Task 4 已完成的标准状态面：`AssetInspectionPanel.vue`、`StandardBasicEditor.vue`、`StandardDetailPane.vue`、`StandardImportDialog.vue`、`StandardLibraryPane.vue`、`StandardPublishReview.vue`、`TemplateAssetsEditor.vue` | 沿用 §9.6 的已批准生命周期：资产可重试，编号 Help/Error 共存，库加载/空态可恢复，导入路径/候选/冲突目标/诊断及失效 token 可见，warning 与 blocker 并存，任务状态与通知关闭分离。 | 复用 Task 4 已通过的关联、定位、错误排序、warning+blocker 和恢复断言；本批不改写相同路径。只有发现新的字段/播报缺口时才纳入实际 diff 并补对应断言。 | 对照 §9.6 的完成证据和 Task 4 124 项 E2E，不重复加入相同测试。风险：把盘点责任标签误当成 Task 4 未处理的产品缺口，造成无必要重开。 |
 
-**本批复核裁决候选：** (1) `SheetPropertyEditor` 与 `PropertyValuePanel` 统一 Error-first 描述顺序，并保留 `aria-invalid`；(2) `PropertiesView` 错误摘要获得键盘聚焦入口，聚合操作错误只聚焦真实摘要；(3) 持续写入反馈测试落在真实批量属性 Toast→表格待变更路径，字段编辑回基准单独断言零写入；(4) Task 4 延期的八个标准子编辑器字段/诊断边界作为本批显式覆盖，Task 4 已验收状态页只复用 §9.6 证据；(5) CSV 继续遵循当前显式关闭确认，不将 XLSX 的失败诊断保留规则未经裁决地复制过来。请技术负责人批准或列出需修改项后再开始 Task 5 实现。\n
+**批准记录（2026-10-01）：** 用户确认批准本节映射及以下裁决，允许 Task 5 开始实现： (1) `SheetPropertyEditor` 与 `PropertyValuePanel` 统一 Error-first 描述顺序，并保留 `aria-invalid`；(2) `PropertiesView` 错误摘要获得键盘聚焦入口，聚合操作错误只聚焦真实摘要；(3) 持续写入反馈测试落在真实批量属性 Toast→表格待变更路径，字段编辑回基准单独断言零写入；(4) Task 4 延期的八个标准子编辑器字段/诊断边界作为本批显式覆盖，Task 4 已验收状态页只复用 §9.6 证据；(5) CSV 继续遵循当前显式关闭确认，不将 XLSX 的失败诊断保留规则未经裁决地复制过来。Task 5 实现按以上批准边界推进。
+
+**Task 5 实施记录（2026-10-01）：** 按用户批准的 G5 映射收口字段级错误顺序和定位。`SheetPropertyEditor`、`PropertyValuePanel` 将描述顺序设为 Error → dirty/pending Status；`PropertiesView` 属性错误摘要和 `SheetOperationForm` 聚合错误摘要获得 `tabindex=-1` 并在新错误出现时聚焦，属性摘要保留逐字段跳转；`OrdinaryPropertyEditor` 将属性级发布诊断关联到真实行错误，并用稳定 ID token 建立 IDREF。批量 Toast 验证使用 `SheetToolbar` 的真实草稿操作，关闭通知后表格“待变更”仍在；属性值改回草稿基准断言草稿 PUT 数为零。CSV、属性定义、对照对话框及 Task 4 已验收标准状态沿用原生命周期和恢复行为，没有改 API、业务校验或编辑比较基准。
+
+- RED：新增回归先复现属性错误摘要未聚焦、操作摘要无 tabindex、图纸输入 IDREF 为 Status→Error，以及标准普通属性错误缺少 IDREF。
+- GREEN：六份 E2E 152/152，包含 sheets-editing、sheets-drafts、properties-values、properties-definitions、properties-csv、standards-editor，同时覆盖 Playwright 设置项目依赖；OrdinaryPropertyEditor、useSheetProjection 和 useDraftGuards 单测 41/41。check:i18n、check:ui、npm run build（含 OpenAPI、vue-tsc -b 与 Vite production build）均通过。
+- 构建保留主 JavaScript 包 >500 kB 的既有提示。G8 生产浏览器视觉/计算样式/运行态键盘与 G9 Windows WebView2/读屏验收尚未执行，Task 5 仅关闭 G7 实施门。

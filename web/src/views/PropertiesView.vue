@@ -7,7 +7,7 @@
 // 不直接改 workspace props、不编排 API 命令：值编辑经 usePropertiesWorkspace，定义增删
 // 经 emit 交给 App 既有命令簿门禁（queuePropertyDefinition/queueDeleteProperty），
 // CSV 读取/预览/确认经 App 的 useCsvImport（渐进面板 + 门禁 + 强确认）。
-import {computed, nextTick, ref} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {CsvPreview,PropertyDefinition,Workspace} from "../api/contracts";
 import type {DefinitionScopeFilter} from "../features/properties/model";
@@ -58,6 +58,13 @@ const {t} = useI18n();
 // 摘要项标签：@name 用独立语义键，其余为属性名（用户数据，保持原样，I18N-16）
 function labelOf(key:ValueKey):string{return key==="@name"?t("properties.values.nameLabel"):key.slice("sheetset:".length)}
 const fieldErrorEntries=computed<[ValueKey,string][]>(()=>Object.entries(props.propertyErrors) as [ValueKey,string][]);
+const hasPropertyError = computed(() => Boolean(props.propertySummaryError) || fieldErrorEntries.value.length > 0);
+const propertySummaryEl = ref<HTMLDivElement | null>(null);
+watch(hasPropertyError, async (active, wasActive) => {
+  if (!active || wasActive) return;
+  await nextTick();
+  propertySummaryEl.value?.focus();
+});
 async function jumpToError(key:ValueKey){
   if(props.propertyValuesCollapsed)emit("update:propertyValuesCollapsed",false);
   await nextTick();
@@ -74,7 +81,7 @@ async function addSheetsetField(){
 </script>
 <template>
   <section class="properties-view" role="tabpanel" id="panel-properties" :aria-label="$t('properties.view.regionAria')">
-    <div v-if="propertySummaryError" class="error-summary" role="alert">
+    <div v-if="propertySummaryError" ref="propertySummaryEl" class="error-summary" tabindex="-1" role="alert">
       <p class="error-summary-title">{{ propertySummaryError }}</p>
       <button v-for="[key,message] in fieldErrorEntries" :key="key" type="button" class="error-summary-jump" @click="jumpToError(key)">{{ $t("properties.summary.fieldError", {label: labelOf(key), message}) }}</button>
     </div>

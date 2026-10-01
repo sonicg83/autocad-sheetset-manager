@@ -3,7 +3,7 @@
 状态：持续规划中；当前能力基线为 v0.2.1（含 PLAN-DM-005、PLAN-DM-006、PLAN-DM-008 与 PLAN-DM-009）。
 目标：把当前技术验证型 MVP 完善为可长期、可靠地处理真实工程的单人单机图纸集编辑管理工具。
 
-- [提示分类与反馈一致性实施计划（PLAN-DM-048，active；Task 2～4 已完成，Task 5 G5 映射待复核）](PLAN-DM-048-hint-classification-and-feedback.md)：承接 accepted 的 SPEC-DM-006；[G4 冻结 Demo](../../../docs/dst-manager/mockups/PLAN-DM-048-hint-classification.html) 与 G6 通过已登记。Task 5 映射细节见盘点备忘 §9.7，获技术负责人复核后再开始该批实现；G8/G9 尚待验收。
+- [提示分类与反馈一致性实施计划（PLAN-DM-048，active；Task 2～5 G7 已完成）](PLAN-DM-048-hint-classification-and-feedback.md)：承接 accepted 的 SPEC-DM-006；[G4 冻结 Demo](../../../docs/dst-manager/mockups/PLAN-DM-048-hint-classification.html) 与 G6 通过已登记。Task 2～5 的 G7 实施验证已完成；G8/G9 尚待验收。
 - [级联枚举属性实施计划（PLAN-DM-047，completed）](PLAN-DM-047-cascading-enum-properties.md)：完成 `sheetset`/`sheet` 同级级联的标准 Schema v4、编辑与发布门禁、创建向导、XLSX、预览和 DST 物化；规格与验证摘要见 [SPEC-DM-021](../../../docs/dst-manager/specs/SPEC-DM-021-cascading-enum-properties.md) 和计划正文。
 - [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，proposed）](PLAN-DM-046-versionless-standard-management.md)：承接 [SPEC-DM-020](../../../docs/dst-manager/specs/SPEC-DM-020-versionless-standard-identity-and-management.md)，调整标准身份、导入、删除、创建链路和界面；现有搜索与来源／状态过滤保留。
 - [映射源一对多复用实施计划（PLAN-DM-045，completed）](PLAN-DM-045-mapping-source-multi-target-reuse.md)：解除 SPEC-DM-017 §5.2「一个普通枚举属性最多被一个映射属性用作源」的限制，允许同一枚举源被多个映射属性独立复用（专业名称 → 专业代码 / 图册名称 / 图册代码）；彻底移除 `STANDARD_MAPPING_SOURCE_DUPLICATE` 阻断码及其前后端诊断、`MODAL_CODES` 分支、中英文文案与回归用例，不保留 warning；保留源类型与作用域校验，无数据结构变更与迁移。实际验证：ruff 通过、pytest 仅 `test_setup_bat.py` 两条既有 GBK 环境失败、`test:unit` 339、`test:contracts` 114、`check:i18n`（1620 键）/`check:ui`/`build` 退出 0、`standards-editor` e2e 64 passed。

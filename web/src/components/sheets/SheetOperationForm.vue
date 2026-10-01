@@ -4,7 +4,7 @@
 // 转发），dirty 标记供三选一保护；提交/取消/删除子集/模板文件选择转发给 App.vue。
 // 参照以稳定对象 ID 绑定：选择参照对象而非手填序号；目标变化后清除不属于新目标的参照。
 // 空图纸集显示「创建首个子集」，不展示不存在的参照；空子集提示当前流程不可用并禁用新增。
-import {computed} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
 import type {LayoutSourceType, Placement, Sheet, Subset, Workspace} from "../../api/contracts";
 import type {OperationContext} from "../../composables/useSheetEditor";
@@ -25,6 +25,12 @@ const emit = defineEmits<{
 
 const context = computed(() => props.context);
 const {t} = useI18n();
+const summaryEl = ref<HTMLElement | null>(null);
+watch(() => context.value.summaryError, async (message, previous) => {
+  if (!message || previous) return;
+  await nextTick();
+  summaryEl.value?.focus();
+});
 // 操作类型 → 表单标题语义键映射（稳定操作类型 → sheets.operation.*）
 const OPERATION_TITLE_KEYS = {rename: "sheets.operation.renameTitle", "insert-sheet": "sheets.operation.insertSheetTitle", "insert-subset": "sheets.operation.insertSubsetTitle"} as const;
 
@@ -296,7 +302,7 @@ const submitDisabled = computed(() => context.value.invalid || emptyTargetSubset
       </div>
     </template>
 
-    <p v-if="context.summaryError" class="error-summary" role="alert">{{ context.summaryError }}</p>
+    <p v-if="context.summaryError" ref="summaryEl" class="error-summary" tabindex="-1" role="alert">{{ context.summaryError }}</p>
 
     <footer class="form-footer">
       <span class="form-status" role="status">{{ context.invalid ? $t("sheets.operation.statusInvalid") : $t("sheets.operation.statusDraft") }}</span>
