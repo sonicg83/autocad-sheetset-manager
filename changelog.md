@@ -1,3 +1,16 @@
+## 2026-10-01 新增布局替换后视口保持调研备忘（MEMO-DM-044）
+
+- 新增 `.planning/memos/dst-manager/MEMO-DM-044-layout-swap-viewport-preservation.md`：定位视口丢失根因（`worker.py` 的 `DstDeleteLayouts` 后 `-LAYOUT _Template` 整体替换布局，视口随布局消失）；登记「图纸集字段只在布局中求值」硬约束及其对「图框改为外部参照」路线的否决；比选四个成立方案（命名视图＋图层快照、图签块重定义、视口实体克隆、一布局多图框）与两个已否决方案；提取 `legacy/plugin/setviews` 与 `legacy/plugin/setviewport` 的机制（`ViewTableRecord` + `LayerState` + 图幅长度推导比例）并列出 7 项现代化改造要点；辨析 Callout Block／View Label Block 与 `SheetSetPlaceholder` 字段；登记 3 个真实样本 DST 的元素普查（`AcSmSheetView` 实例为 0、契约仅登记 7 类对象）与 7 项真机验证清单。
+- 新增配套可视化 `.planning/memos/dst-manager/assets/MEMO-DM-044/scheme-comparison.html`：自包含、双配色、无外部 JS 依赖的静态方案比选页。
+- 同步 `.planning/README.md` 执行资料索引。
+- 本轮只新增备忘与可视化文档，未修改产品代码、插件、标准 Schema、DST codec 或测试；未在真实 AutoCAD 上执行验证，未立项、未创建 SPEC/Plan。
+
+## 2026-10-01 修正 SPEC-DM-006 的 WCAG 准则适用范围
+
+- §7.3 将 WCAG 2.2.2 改为按自动开始、并行呈现及持续条件评估，不再因没有超时而整体排除；明确符合条件时的控制要求及 `prefers-reduced-motion` 的适用边界。
+- 将 SC 3.1.2 纳入中英文界面范围，要求页面根语言标记跟随 `zh-CN`、`en-US` 或系统解析结果；§10.1/§10.3 增加语言和动态内容验收项。
+- 仅修订文档，未运行产品测试或构建，未宣称实现或 WCAG 验收通过。
+
 ## 2026-09-30 按 MEMO-DM-043 修订 PLAN-DM-048
 
 - 补齐 G0–G9 门禁台账、G5 技术映射要求、SPEC-DM-006 接受/G4 冻结/G6 双负责人审核前不得修改生产代码的启动条件，以及 GUIDE-DM-001 完整双向追踪矩阵。
