@@ -129,8 +129,8 @@ describe("提示原语与描述关联", () => {
     expect(wrapper.findAll("[aria-live]")).toHaveLength(0);
     expect(wrapper.findAll('[role="status"]')).toHaveLength(1);
     expect(wrapper.findAll('[role="alert"]')).toHaveLength(1);
-    expect(wrapper.get('.toast.ok button[aria-label="shell.toast.close"]').exists()).toBe(true);
-    expect(wrapper.get('.toast.fail button[aria-label="shell.toast.close"]').exists()).toBe(true);
+    expect(wrapper.find('.toast.ok button[aria-label="shell.toast.close"]').exists()).toBe(true);
+    expect(wrapper.find('.toast.fail button[aria-label="shell.toast.close"]').exists()).toBe(true);
   });
 
   it("所有 legacy notice 消费方显式声明语义 tone", () => {

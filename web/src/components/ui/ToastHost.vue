@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 非模态通知宿主（SPEC-DM-006 §6.6）：aria-live="polite" 容器；ok 项 role="status"、fail 项 role="alert"；
+// 非模态通知宿主（SPEC-DM-006 §6.6）：每条通知独立承担 status/alert，宿主不再嵌套 live region；
 // 每项含关闭按钮（`UiIconButton icon="close"`，可访问名称走 `shell.toast.close`）与可选"查看"按钮
 // （emit jump，App 调 openOverlay(tab)）
 import UiIconButton from "./UiIconButton.vue";

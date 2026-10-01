@@ -2277,6 +2277,13 @@ test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
     await expect(job).toBeInViewport();
     await expect(page.getByText("任务 job-evidence")).toBeVisible();
     await expect(job.getByText("PUBLISH_ROLLED_BACK")).toBeVisible();
+    const summaryLineCounts=await job.locator(".job > b, .job > span, .job > small").evaluateAll(nodes=>nodes.map(node=>{
+      const range=document.createRange();range.selectNodeContents(node);
+      return {text:node.textContent?.trim(),lines:range.getClientRects().length};
+    }));
+    const terminalSummary=summaryLineCounts.find(item=>item.text==="已回滚 · 100% · 第 1 次");
+    expect(terminalSummary?.lines, "终态、进度和尝试信息须保持完整可读").toBeLessThanOrEqual(2);
+    expect(summaryLineCounts.filter(item=>item.text).every(item=>item.lines<=2), "任务摘要字段在浮层窄宽度下最多换两行："+JSON.stringify(summaryLineCounts)).toBe(true);
     // 计算样式断言：深色下抽屉底色必须取自当前主题的 --color-bg-surface（不得硬编码浅色）
     const drawerBg = await page.locator(".task-drawer").evaluate(el => {const probe=document.createElement("span");probe.style.color="var(--color-bg-surface)";el.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {actual:getComputedStyle(el).backgroundColor,expected};});
     expect(drawerBg.actual, "深色下抽屉底色应取自 --color-bg-surface").toBe(drawerBg.expected);

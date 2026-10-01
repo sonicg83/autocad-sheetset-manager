@@ -341,3 +341,17 @@ Task 3 的生产迁移已完成，技术负责人映射与 XLSX 失败诊断保�
 | `legacy.css` 与迁移后的 `.notice` 消费方 | 为全部剩余遗留 notice 明确 tone，避免默认危险色承担中性信息。 | 12 个实际 markup notice 分布在 8 个 Vue 文件，均显式指定 `data-tone`；移除通用 danger 背景规则，定义 notice/success/warning/error 映射。 | `hints.test.ts` 扫描实际 Vue markup，确认所有 notice 都有 tone；`check:ui` 通过。计算前景/背景对比度仍属 Task 8 G8。 |
 
 **Task 7 验证记录（2026-10-02）：** 相关 Vitest 5 个文件 23/23；主界面 Playwright 132/132；创建向导 Playwright 46/46；后端终态契约 2/2；`check:i18n` 通过（1664 keys / 11 domains），`check:ui` 通过。完整视觉、对比度、读屏、Windows WebView2 与 200% 缩放仍由 Task 8/ G8/G9 验收；因此本记录不构成计划完成或 G9 通过。
+
+### 9.10 G8 执行映射：Task 8 生产截图、计算样式与修正
+
+**状态：** 2026-10-02 完成自动检查及 30 张生产视口截图的抽样目视复核，G8 部分完成。截图与八份 JSON 由 [PLAN-DM-048 证据索引](assets/PLAN-DM-048/README.md) 保存；裁决/方法/待办责任见仓库根 [design-qa.md](../../../design-qa.md)。本记录不表示全页矩阵、人工读屏或 G9 真实验收通过。
+
+| 消费方 / 所有者 | QA 覆盖与裁决 | 证据、修正与剩余风险 |
+| --- | --- | --- |
+| `UiHint`、`UiBanner`、语义 token | 创建预览双主题 × 4 视口抽检；实测 Lead/Help/Status/Error、四类 Banner 前景/背景/边线；提示正文至少 4.834:1，Banner 文本及边线至少 4.669:1。 | `hint-contracts.spec.ts` 产出 8 份 JSON；矩阵与对比度回归通过。修正浅色 `--color-success` 从 `#1B7F4B`（背景 `#E7F4EC` 上 4.433:1）至 `#1B7A47`（4.834:1）；深色令牌未变。其它迁移页面的完整跨视口颜色矩阵尚待补。 |
+| 创建预览 / `FormField` | 检查唯一 ID、每条 `aria-describedby` 均恰好一个目标、错误摘要聚焦、无效输入 `aria-invalid` 和长路径/多行错误换行；页面无整页横向溢出。 | `hint-contracts.spec.ts` 运行 4 视口 × 双主题；G8 仍需人工读屏核对错误摘要播报、共享 Help 与动态 Status。 |
+| `JobStatusPanel.vue` / `.job` | 1280×720 浮层原先把状态摘要压为 5 行，RED 断言复现；改为局部按内容宽度换行。更新后身份/状态字段均不超过 2 行，错误码和安全重试可见。 | 任务浮层 E2E 34/34、完整 Playwright 725/725；更新后的截图在 `g8-production/g8-26-job-status-dark-1280x720.png`。此修正只改变显示布局，任务状态和重试契约不变。 |
+| `WorkspaceShell.vue`、错误与恢复状态 | 对属性错误、长错误路径、修复 blocker、标准发布失败、目录 warning/dirty、设置校验和任务失败结果进行正交截图检查。 | 共 30 张截图；抽样中长文本可读，warning 与 blocker 并存且恢复信息可见；无遗留 P0/P1/P2 视觉问题。未执行完整的 4 视口 × 双主题全页几何矩阵，亦未执行读屏。 |
+| Task 7 toast / 状态所有者 | 沿用已完成的 `useToast`、`useJobMonitor`、创建任务监视器与页面回归，检查关闭通知不清除工作状态、失败不被成功队列淘汰、同一任务尝试不重复副作用。 | 完整 Playwright 725/725、Task 7 Vitest 23/23；DOM 断言不能证明实际屏幕阅读器不会重复播报，人工读屏仍需用户/业务负责人执行。 |
+
+**G8 残余项与恢复条件：** 实施者需将其余迁移页面补入四视口 × 双主题矩阵，并对属性、目录、图纸页记录实际浏览器 200% 缩放；用户/业务负责人需在可操作的 Windows 屏幕阅读器会话复核 Error/Help/Status 朗读和 SSE/轮询单次播报。只有真实 Windows WebView2 交互会话可恢复 G9（浅/深主题 × 100/125/150/200%）；与 PLAN-DM-034 共用截图时仍须分别登记裁决。本计划在这些项闭合前保持 `active`。

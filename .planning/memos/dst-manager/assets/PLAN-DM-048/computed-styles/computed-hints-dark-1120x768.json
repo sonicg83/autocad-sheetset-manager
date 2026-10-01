@@ -1,0 +1,161 @@
+{
+  "theme": "dark",
+  "viewport": {
+    "width": 1120,
+    "height": 768
+  },
+  "hints": [
+    {
+      "kind": "lead",
+      "tone": "lead",
+      "fontSize": "13px",
+      "color": "rgb(174, 184, 199)",
+      "expectedColor": "rgb(174, 184, 199)",
+      "contrast": 9.129110851354882
+    },
+    {
+      "kind": "lead",
+      "tone": "lead",
+      "fontSize": "13px",
+      "color": "rgb(174, 184, 199)",
+      "expectedColor": "rgb(174, 184, 199)",
+      "contrast": 8.356695980627533
+    },
+    {
+      "kind": "help",
+      "tone": "help",
+      "fontSize": "12px",
+      "color": "rgb(133, 146, 163)",
+      "expectedColor": "rgb(133, 146, 163)",
+      "contrast": 5.292571345254946
+    },
+    {
+      "kind": "help",
+      "tone": "help",
+      "fontSize": "12px",
+      "color": "rgb(133, 146, 163)",
+      "expectedColor": "rgb(133, 146, 163)",
+      "contrast": 5.292571345254946
+    }
+  ],
+  "hintVariants": [
+    {
+      "kind": "lead",
+      "tone": "",
+      "fontSize": "13px",
+      "color": "rgb(174, 184, 199)",
+      "expectedColor": "rgb(174, 184, 199)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 8.356695980627533
+    },
+    {
+      "kind": "help",
+      "tone": "",
+      "fontSize": "12px",
+      "color": "rgb(133, 146, 163)",
+      "expectedColor": "rgb(133, 146, 163)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 5.292571345254946
+    },
+    {
+      "kind": "status",
+      "tone": "neutral",
+      "fontSize": "12px",
+      "color": "rgb(174, 184, 199)",
+      "expectedColor": "rgb(174, 184, 199)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 8.356695980627533
+    },
+    {
+      "kind": "status",
+      "tone": "info",
+      "fontSize": "12px",
+      "color": "rgb(124, 176, 232)",
+      "expectedColor": "rgb(124, 176, 232)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 7.36141278835946
+    },
+    {
+      "kind": "status",
+      "tone": "success",
+      "fontSize": "12px",
+      "color": "rgb(84, 201, 138)",
+      "expectedColor": "rgb(84, 201, 138)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 8.052095768199775
+    },
+    {
+      "kind": "status",
+      "tone": "warning",
+      "fontSize": "12px",
+      "color": "rgb(224, 177, 90)",
+      "expectedColor": "rgb(224, 177, 90)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 8.456617589615398
+    },
+    {
+      "kind": "status",
+      "tone": "error",
+      "fontSize": "12px",
+      "color": "rgb(240, 119, 110)",
+      "expectedColor": "rgb(240, 119, 110)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 6.035067931923779
+    },
+    {
+      "kind": "error",
+      "tone": "error",
+      "fontSize": "12px",
+      "color": "rgb(240, 119, 110)",
+      "expectedColor": "rgb(240, 119, 110)",
+      "background": "rgb(23, 30, 41)",
+      "contrast": 6.035067931923779
+    }
+  ],
+  "banners": [
+    {
+      "tone": "notice",
+      "foreground": "rgb(124, 176, 232)",
+      "background": "rgb(19, 39, 57)",
+      "border": "rgb(124, 176, 232)",
+      "textRatio": 6.704817437921591,
+      "uiRatio": 6.704817437921591,
+      "width": 600,
+      "scrollWidth": 595,
+      "clientWidth": 595
+    },
+    {
+      "tone": "success",
+      "foreground": "rgb(84, 201, 138)",
+      "background": "rgb(18, 48, 31)",
+      "border": "rgb(84, 201, 138)",
+      "textRatio": 6.8778249442296016,
+      "uiRatio": 6.8778249442296016,
+      "width": 600,
+      "scrollWidth": 595,
+      "clientWidth": 595
+    },
+    {
+      "tone": "warning",
+      "foreground": "rgb(224, 177, 90)",
+      "background": "rgb(51, 39, 18)",
+      "border": "rgb(224, 177, 90)",
+      "textRatio": 7.366760812646933,
+      "uiRatio": 7.366760812646933,
+      "width": 600,
+      "scrollWidth": 595,
+      "clientWidth": 595
+    },
+    {
+      "tone": "error",
+      "foreground": "rgb(240, 119, 110)",
+      "background": "rgb(58, 25, 23)",
+      "border": "rgb(240, 119, 110)",
+      "textRatio": 5.685236041122943,
+      "uiRatio": 5.685236041122943,
+      "width": 600,
+      "scrollWidth": 595,
+      "clientWidth": 595
+    }
+  ]
+}

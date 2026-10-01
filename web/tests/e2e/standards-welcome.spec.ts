@@ -102,7 +102,7 @@ test("无桌面壳时路径输入与打开行为不回归", async ({page}) => {
   await pageWithoutShell.getByRole("button", {name: "返回欢迎页"}).click();
   await input.fill("C:\\project\\test.dst");
   await pageWithoutShell.getByRole("button", {name: "打开项目"}).click();
-  await expect(pageWithoutShell.getByRole("button", {name: "关闭"})).toBeVisible();
+  await expect(pageWithoutShell.getByRole("button", {name: "关闭工作区", exact: true})).toBeVisible();
 });
 
 test("普通 DST 打开行为不回归", async ({page}) => {

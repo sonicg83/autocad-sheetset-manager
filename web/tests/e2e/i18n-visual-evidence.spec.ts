@@ -107,7 +107,7 @@ test("900×768 深色（英文）：主操作可达且长错误完整可读", as
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", {name: "Select DST File"}).click();
   // 本地化摘要完整渲染（无单行截断），盒子不超出视口（String(e) 带 "Error: " 前缀）
-  const notice = page.locator("p.error.notice").first();
+  const notice = page.locator('[role="alert"].error.notice').first();
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("The operation failed due to an unknown error");
   const noticeFit = await notice.evaluate((el) => ({ch: el.clientHeight, sh: el.scrollHeight, right: el.getBoundingClientRect().right}));

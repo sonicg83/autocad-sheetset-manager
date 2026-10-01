@@ -2,7 +2,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {ref} from "vue";
 import type {Job, Workspace} from "../api/contracts";
-import {useToast} from "./useToast";
+import {useToast, type Toast} from "./useToast";
 
 const {requestMock} = vi.hoisted(() => ({requestMock: vi.fn()}));
 
@@ -29,12 +29,12 @@ function makeJob(status: string, overrides: Partial<Job> = {}): Job {
   return {id: "job-1", status, workspace_id: "workspace-1", error_code: null, error_detail: null, ...overrides} as Job;
 }
 
-function makeMonitor(extra: {pushToast?: ReturnType<typeof vi.fn>; shouldSuppress?: () => boolean} = {}) {
-  const pushToast = extra.pushToast ?? vi.fn();
+function makeMonitor(extra: {pushToast?: (toast: Omit<Toast, "id">) => void; shouldSuppress?: () => boolean} = {}) {
+  const pushToast = vi.fn<(toast: Omit<Toast, "id">) => void>();
   const onJobSucceeded = vi.fn(async () => {});
   const error = ref("");
   const workspace = ref({id: "workspace-1"} as Workspace);
-  const monitor = useJobMonitor({isWorkspaceLoading: ref(false), workspace, onJobSucceeded, error, pushToast, shouldSuppress: extra.shouldSuppress});
+  const monitor = useJobMonitor({isWorkspaceLoading: ref(false), workspace, onJobSucceeded, error, pushToast: extra.pushToast ?? pushToast, shouldSuppress: extra.shouldSuppress});
   return {monitor, pushToast, onJobSucceeded, error, workspace};
 }
 

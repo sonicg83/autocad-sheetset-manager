@@ -1,6 +1,6 @@
 # PLAN-DM-048 G4 冻结资产与证据索引
 
-> 状态：G4 冻结包。SPEC-DM-006 于 2026-10-01 转为 `accepted`；用户于 2026-09-30 接受六项原则，并于 2026-10-01 确认本索引关联的固定 HTML 可作为设计冻结基准。截图与 Demo 均为虚构数据，不作为生产页面 G8 证据。
+> 状态：G4 候选与冻结证据保留于本索引前半部；候选 Demo 和 28 张 G4 截图均使用虚构数据。索引末尾另列 2026-10-02 Playwright 生产页面 G8 视觉抽样，不混作 G4 候选证据。SPEC-DM-006 于 2026-10-01 转为 `accepted`；用户于 2026-09-30 接受六项原则，并于 2026-10-01 确认固定 HTML 可作为设计冻结基准。
 
 ## G4 冻结版本
 
@@ -70,3 +70,42 @@
 ## 本地预览与限制
 
 预览只绑定 127.0.0.1，服务目录限定为 docs/dst-manager/mockups；采集完成后停止服务。仅对冻结候选页做了有限的 14 个 Tab 焦点、Enter/Space 激活和焦点轮廓抽样；未验证真实生产计算样式、API/持久化、屏幕阅读器播报、穷尽键盘行为或 Windows WebView2。相应结论留给 G5、G8 与 G9。
+
+## G8 生产页面视觉抽样（2026-10-02）
+
+本轮从 Playwright Chromium 页面状态抽取 30 张视口截图，覆盖欢迎页 1 张、创建向导 4 张、标准管理 4 张、属性页 4 张、图纸页 4 张、设置中心 4 张、图纸目录 4 张、工作区外壳/任务 5 张；每个复杂页面/展示组不超过 4–6 张。截图像素与设置的 CSS 视口相同（DPR 1），浏览器缩放为默认 100%，未调用全页截图。文件按 SHA-256 固定，便于复核。
+
+八份生产计算样式快照（light/dark × 4 视口）保存在 [computed-styles](computed-styles/)：每份 4 个实际提示、8 个提示原语 tone 变体和 4 个 Banner tone；共 96 个提示对比度读数，最小值 4.834:1；Banner 32 组样本的文本/边线对比度最小值均为 4.669:1。该抽样不替代其余迁移页全矩阵、指定页面 200% 缩放、人工读屏或 G9 Windows WebView2 验收。任务状态浮层窄宽度问题已修正；视觉报告见 [design-qa.md](../../../../../design-qa.md)。
+
+| 页面/状态 | 主题 | CSS 视口 / PNG 像素 | 证据 | SHA-256 |
+| --- | --- | --- | --- | --- |
+| 欢迎页 / 欢迎页默认 | light | 1440×900 CSS px / 1440×900 PNG px | [01-welcome-light.png](screenshots/g8-production/01-welcome-light.png) | b7c15ebaed6e2bf52a7305367271aace54a8e1e0622f7552486dce292c48cdc6 |
+| 标准管理 / 标准库默认 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-02-standards-library-light-1440x900.png](screenshots/g8-production/g8-02-standards-library-light-1440x900.png) | d4ca1440c1808652a586ade9b7e7f1a98b3dce3e26328cef25140cecfe3bc713 |
+| 标准管理 / 标准库默认 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-03-standards-library-dark-1440x900.png](screenshots/g8-production/g8-03-standards-library-dark-1440x900.png) | 96c96bbbf844eff500e9cf0a793a1ddf74699055e216ca8d2b5cfb2fa755d04c |
+| 标准管理 / 发布错误 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-04-standards-publish-error-dark-1440x900.png](screenshots/g8-production/g8-04-standards-publish-error-dark-1440x900.png) | 0c4e8ef1e5ffff9ebc0a61511d25379c999ea7857c2bb3394783aaeb157dff52 |
+| 标准管理 / 窄视口字段映射 | light | 900×768 CSS px / 900×768 PNG px | [g8-05-standards-narrow-mapping-light-900x768.png](screenshots/g8-production/g8-05-standards-narrow-mapping-light-900x768.png) | 18707a2e5fb568cbaf601738acc402fdd2e056e6c4539443ef42b5fc7c9d1a43 |
+| 图纸属性 / 属性错误 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-06-properties-error-light-1440x900.png](screenshots/g8-production/g8-06-properties-error-light-1440x900.png) | fd76e0b9e1e74db9b0157b3abe0d39179ce0446fd37081482ba24e7792774773 |
+| 图纸属性 / 属性错误 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-07-properties-error-dark-1440x900.png](screenshots/g8-production/g8-07-properties-error-dark-1440x900.png) | 6e2e20fffd805cad0d7310c08193ee72dcb207c5ffb81e0efdf1671ec63a8762 |
+| 图纸属性 / 属性表窄视口 | light | 900×768 CSS px / 900×768 PNG px | [g8-08-properties-narrow-light-900x768.png](screenshots/g8-production/g8-08-properties-narrow-light-900x768.png) | fd9b819e7350e1b44479d1a7b6d2c6da50faae52eb063681ea8b5e38eaed005e |
+| 图纸属性 / 属性表窄视口 | dark | 900×768 CSS px / 900×768 PNG px | [g8-09-properties-narrow-dark-900x768.png](screenshots/g8-production/g8-09-properties-narrow-dark-900x768.png) | 0cce9eb3bb92eaa929423aaf72544286d362d3d87e1b0d93a0db311457203346 |
+| 图纸页 / 图纸页默认 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-10-sheets-default-light-1440x900.png](screenshots/g8-production/g8-10-sheets-default-light-1440x900.png) | ffa1ebf27399c65956395ca16f5c547ce1d761466d5f24750770f4e54009a106 |
+| 图纸页 / 图纸页默认 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-11-sheets-default-dark-1440x900.png](screenshots/g8-production/g8-11-sheets-default-dark-1440x900.png) | ff7710c65d372e555c871364ec69ac316862362d4b343ab82881a66be2e39734 |
+| 图纸页 / 任务浮层打开 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-12-sheets-task-overlay-light-1440x900.png](screenshots/g8-production/g8-12-sheets-task-overlay-light-1440x900.png) | 2862c3a3224f951f337f0f7d19eb1afe52b1cfbe9675781dcbc02c5585c47a62 |
+| 图纸页 / 任务浮层打开 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-13-sheets-task-overlay-dark-1440x900.png](screenshots/g8-production/g8-13-sheets-task-overlay-dark-1440x900.png) | 0f229000852d98e00bcc83d093c11c4c436b1b3328022b7c391e1d7429bf0196 |
+| 设置中心 / 设置 dirty | light | 1280×720 CSS px / 1280×720 PNG px | [g8-14-settings-dirty-light-1280x720.png](screenshots/g8-production/g8-14-settings-dirty-light-1280x720.png) | 0cb4077f9bdcf09ded0065e5ea44bc09b51d0f0268e368eb8dc4712743478bc5 |
+| 设置中心 / 设置 dirty | dark | 1280×720 CSS px / 1280×720 PNG px | [g8-15-settings-dirty-dark-1280x720.png](screenshots/g8-production/g8-15-settings-dirty-dark-1280x720.png) | 6b5663592a138b01032f819284c7a034d53ddb02ed96a4a73abf71f47221c226 |
+| 设置中心 / 设置校验错误 | light | 1280×720 CSS px / 1280×720 PNG px | [g8-16-settings-validation-error-light-1280x720.png](screenshots/g8-production/g8-16-settings-validation-error-light-1280x720.png) | 822edd32167152e061a51a3195714cfee9f1f06fc635d9ba1a24eb4993f2bf90 |
+| 设置中心 / 设置窄视口 | light | 900×600 CSS px / 900×600 PNG px | [g8-17-settings-narrow-light-900x600.png](screenshots/g8-production/g8-17-settings-narrow-light-900x600.png) | c533c7f9581f48c188df1ebeb4782d0f5c983798300b4d55c598cd176f2f2a4a |
+| 图纸目录 / 目录 warning | light | 1440×1000 CSS px / 1440×1000 PNG px | [g8-18-catalog-warning-light-1440x1000.png](screenshots/g8-production/g8-18-catalog-warning-light-1440x1000.png) | 5621daf41551f9dd0ca39cb3182743d53309e1727578ecf1081d720b848c51fb |
+| 图纸目录 / 目录 warning | dark | 900×700 CSS px / 900×700 PNG px | [g8-19-catalog-warning-dark-900x700.png](screenshots/g8-production/g8-19-catalog-warning-dark-900x700.png) | 5ce321dce6493557534fdad3c213e94085c40a607def8d79999899b00a529f34 |
+| 图纸目录 / 目录 dirty | light | 1440×1000 CSS px / 1440×1000 PNG px | [g8-20-catalog-dirty-light-1440x1000.png](screenshots/g8-production/g8-20-catalog-dirty-light-1440x1000.png) | df2884a603e6e28598c91145f2fc01592847b5c40a6ff3e1ed4cac6b5721ccd1 |
+| 图纸目录 / 目录 dirty | dark | 1440×1000 CSS px / 1440×1000 PNG px | [g8-21-catalog-dirty-dark-1440x1000.png](screenshots/g8-production/g8-21-catalog-dirty-dark-1440x1000.png) | 44fbf4513c84797881d278f9f65986be7b0684d6bbb8ce04c4b2c96ebc76f6cc |
+| 工作区外壳/任务 / 工作区默认 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-22-shell-default-light-1440x900.png](screenshots/g8-production/g8-22-shell-default-light-1440x900.png) | d3d95c853a6048113c3078ce5bd58c9de9ac95c90dcfb57c588e07cd541b73ca |
+| 工作区外壳/任务 / 工作区默认 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-23-shell-default-dark-1440x900.png](screenshots/g8-production/g8-23-shell-default-dark-1440x900.png) | d38774841275176511b91564f8091662b179a3723a81503e456b184fa75bd92a |
+| 工作区外壳/任务 / 超长错误 | dark | 900×768 CSS px / 900×768 PNG px | [g8-24-shell-long-error-dark-900x768.png](screenshots/g8-production/g8-24-shell-long-error-dark-900x768.png) | 1bab20ecda5f778d45f7598623fcf243d871c5b286f46bca8f1afdfc7a11f814 |
+| 工作区外壳/任务 / 修复 blocker | light | 1280×720 CSS px / 1280×720 PNG px | [g8-25-repair-blocker-light-1280x720.png](screenshots/g8-production/g8-25-repair-blocker-light-1280x720.png) | 16497c7ed460d36cece7ccc8518ab81ad70652df859dcfe06ef94133dc513e0e |
+| 工作区外壳/任务 / 任务回滚状态 | dark | 1280×720 CSS px / 1280×720 PNG px | [g8-26-job-status-dark-1280x720.png](screenshots/g8-production/g8-26-job-status-dark-1280x720.png) | fc70fa8aca1e045c5753c223b68f02debfdd583c9d133863be53fd75368a975c |
+| 创建向导 / 预览诊断与警告 | dark | 1440×900 CSS px / 1440×900 PNG px | [g8-creation-review-dark-1440x900.png](screenshots/g8-production/g8-creation-review-dark-1440x900.png) | b311b788a6ef8ccda06ecc83637d4f6cf0cb70a1cbd53ff0790dbb8f8dda6457 |
+| 创建向导 / 预览诊断与警告 | dark | 900×768 CSS px / 900×768 PNG px | [g8-creation-review-dark-900x768.png](screenshots/g8-production/g8-creation-review-dark-900x768.png) | 442dffe079c3d49cc968073cf61925d428f96653649fcf31bb2ecf3bdcb9848b |
+| 创建向导 / 预览诊断与警告 | light | 1440×900 CSS px / 1440×900 PNG px | [g8-creation-review-light-1440x900.png](screenshots/g8-production/g8-creation-review-light-1440x900.png) | 7a556f49dbba379c9d549db876954ca95751c52159f82a3da44aa7e73d222469 |
+| 创建向导 / 预览诊断与警告 | light | 900×768 CSS px / 900×768 PNG px | [g8-creation-review-light-900x768.png](screenshots/g8-production/g8-creation-review-light-900x768.png) | 8c0ecd736d9ccd56dfff0d0254018c35fe787413e15e08aee5a7289910612641 |
