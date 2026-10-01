@@ -1,6 +1,6 @@
 # DST Manager 文档入口
 
-2026-10-01 [SPEC-DM-006](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 经 WCAG 适用范围澄清后转为 `accepted`，作为后续界面与交互实施依据；该状态不代表现有实现已通过完整 WCAG 验收。[PLAN-DM-048](../../.planning/plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md) 的 G4 已冻结、G6 已通过，Task 2 开始实施；其余 G5 消费者细化映射须在对应迁移批次开始前补齐。
+2026-10-01 [SPEC-DM-006](specs/SPEC-DM-006-dst-manager-desktop-ui-ux.md) 已接受；[PLAN-DM-048](../../.planning/plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md) 的 G4 已冻结、G6 已通过，Task 2～4 已完成并提交。Task 5 尚未实施，G5 逐消费者映射正在复核；G8 生产视觉/键盘 QA 与 G9 Windows WebView2 验收仍待后续关闭。
 
 2026-09-30 调整标准创建的同名图纸组与 DWG 后缀规则：界面及 XLSX 允许同名组，图纸标题跨同名组连续编号，文件名按本组实际标题压缩后代入标准命名模板；创建与编辑工作区的单张组均保留实际标题后缀。契约见 [SPEC-DM-018](specs/SPEC-DM-018-standard-driven-sheetset-creation-ui.md) 与 [SPEC-DM-008 §3.2](specs/SPEC-DM-008-v032-naming-and-template-flows.md#32-派生规则)。
 
@@ -71,7 +71,7 @@ DST Manager 面向单人单机真实工程，提供既有 DST/DWG 的检查、�
 - [CAD 工作范围按可证明差异收敛（ADR-DM-005，已实施；部分替代 ADR-DM-003 的「前沿之后必须进入 CAD 工作范围」）](adr/ADR-DM-005-provable-diff-cad-scope.md)
 - [实施路线图（ROADMAP-DM-001）](../../.planning/roadmaps/dst-manager.md)
 - [当前 Plan 索引](../../.planning/plans/dst-manager/README.md)
-- [提示分类与反馈一致性实施计划（PLAN-DM-048，active，Task 2 进行中）](../../.planning/plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：承接 accepted 的 SPEC-DM-006 §6.7/§10.1/§10.2/§10.4；G4 已冻结、G6 已通过。其余 G5 消费者映射须在对应迁移批次开始前补齐并复核。
+- [提示分类与反馈一致性实施计划（PLAN-DM-048，active）](../../.planning/plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：SPEC-DM-006 已接受，G4 冻结、G6 通过；Task 2～4 已完成，Task 5 G5 映射待复核；G8/G9 尚未关闭。
 - [提示分类与反馈一致性 G4 冻结 Demo](mockups/PLAN-DM-048-hint-classification.html)
 - [PLAN-DM-048 提示迁移清单](../../.planning/memos/dst-manager/2026-09-30-plan-dm-048-hint-inventory.md)
 - [PLAN-DM-048 候选资产与证据索引](../../.planning/memos/dst-manager/assets/PLAN-DM-048/README.md)

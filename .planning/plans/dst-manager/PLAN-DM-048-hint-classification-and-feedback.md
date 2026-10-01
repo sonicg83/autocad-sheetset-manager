@@ -212,18 +212,21 @@ expect(mergeDescriptionIds()).toBeUndefined();
 - [x] 运行四份 Task 4 E2E（124/124）、导入弹窗单测（15/15）、`check:i18n`、`check:ui` 与生产构建；E2E 同时覆盖 900×768、200% 缩放、暗色英文及超长名称。构建通过，仍报告主 JavaScript 包超过 500 kB；G8 浏览器视觉证据与 G9 WebView2 验收保留待办。
 - [x] 更新本批 changelog 与盘点备忘，只暂存 Task 4 计划、备忘、实现和测试文件，并以简体中文动词短语提交。
 
-### 任务 5：图纸与属性编辑保留持续状态和错误定位
+### 任务 5：图纸、属性与标准字段的持续状态和错误定位
 
-**文件：** 修改 `views/SheetsView.vue/PropertiesView.vue`、`components/sheets/SheetPropertyEditor.vue/SheetOperationForm.vue`、`components/properties/PropertyValuePanel.vue/PropertyDefinitionPanel.vue/PropertyCsvPanel.vue` 和清单内其他提示；中英文 `sheets.ts/properties.ts`；扩展 `sheets-editing.spec.ts`、`properties-values.spec.ts`、`properties-definitions.spec.ts`、`properties-csv.spec.ts`。
+**G5 状态：** 本节为开工映射候选，待技术负责人复核。映射覆盖盘点 §6 中标记为 Task 5 的全部消费者；已由 Task 4 完成的标准管理提示/操作路径只复核其边界与证据，不重复迁移。Task 4 明确延期的标准子编辑器字段级 Error/Status/Help 关联纳入本批，避免无归属地遗留。
 
-**规格映射：** SPEC-DM-006 §6.3、§6.7.1、§6.7.3、§6.7.4、§10.4；SPEC-DM-015 §9。
+**文件：** 图纸/属性主流程：`views/SheetsView.vue/PropertiesView.vue`、`components/sheets/SheetPropertyEditor.vue/SheetOperationForm.vue/SheetToolbar.vue/ColumnSettings.vue`、`components/properties/PropertyValuePanel.vue/PropertyDefinitionPanel.vue/PropertyCsvPanel.vue/PropertyValueCompareDialog.vue`；标准字段子编辑器的剩余关联核对：`CascadePropertyEditor.vue`、`CompositionPropertyDialog.vue`、`DerivedPropertyEditor.vue`、`DwgNamingEditor.vue`、`EnumValuesDialog.vue`、`MappingPropertyDialog.vue`、`OrdinaryPropertyEditor.vue`、`TokenExpressionEditor.vue`。`StandardBasicEditor.vue` 的编号帮助/错误顺序和 `AssetInspectionPanel.vue`、`StandardEditor.vue`、`StandardImportDialog.vue`、`StandardLibraryPane.vue`、`StandardPublishReview.vue`、`TemplateAssetsEditor.vue` 等 Task 4 已处理路径沿用 §9.6 完成证据，发现新缺口才纳入变更。同步中英文 `sheets.ts`/`properties.ts`/`standards.ts`；扩展 `sheets-editing.spec.ts`、`properties-values.spec.ts`、`properties-definitions.spec.ts`、`properties-csv.spec.ts`，标准字段关联有变更时扩展 `standards-editor.spec.ts`。
 
-**接口：** 消费既有 `useSheetEditor`、`usePropertiesWorkspace` 状态和提交事件；不改比较基准或公开 props/emits。自建表格的行错误继续关联具体字段。
+**规格映射：** SPEC-DM-006 §§6.3、6.7.1、6.7.3、6.7.4、10.4；SPEC-DM-015 §9；标准编辑器沿用 SPEC-DM-016 与 SPEC-DM-021 既有校验、草稿和错误语义。
 
-- [ ] 新增 `empty_required_fields_remain_individually_described_and_invalid`，断言错误摘要可聚焦每个空字段、每个控件的 `aria-describedby` 都指向其当前 Error 且 `aria-invalid="true"`；新增 `range_help_and_error_remain_associated`，断言范围/格式修正 Help 与 Error 并存且错误优先；新增 `success_feedback_dismissal_keeps_pending_write_status`，断言成功 Toast 消失后真实 dirty/待写入状态仍持续，改回基准不发写请求。
-- [ ] 运行各归属 E2E 的新增用例取得 RED；迁移提示外观与描述顺序，只删除重复通知，不删 SPEC-DM-015 要求的修改文字或错误摘要。
-- [ ] 重跑上述四份 E2E，并运行 `rtk npm run test:unit -- src/composables/useSheetProjection.test.ts src/composables/useDraftGuards.test.ts`。验证只影响提示、clean 动作和错误门禁保持；记录同状态截图及主要播报来源。
-- [ ] 更新本批 changelog，只暂存本批页面、测试与变更记录并以简体中文动词短语提交。
+**接口：** 只消费 `useSheetEditor`、`usePropertiesWorkspace`、标准编辑器现有 draft/diagnostic 与既有 events；不改变比较基准、请求契约、公开 props/emits、clean 守卫或级联/非法原值保留规则。仅在真实字段身份稳定时建立字段 IDREF；聚合操作错误保留聚合摘要，不伪造字段归属。
+
+- [ ] 技术负责人复核备忘 §9.7 的完整消费者矩阵与裁决：每个输入 Error 在 `aria-describedby` 中先于 dirty/pending Status 和 Help；有 Error 的控件保留 `aria-invalid="true"`；属性错误摘要可聚焦且链接能逐项到达字段；SheetOperationForm 没有可靠字段路径的聚合错误聚焦摘要，不添加虚构字段链接。
+- [ ] 保持成功 Toast 与持续状态分离：图纸/属性字段提交路径不产生成功 Toast，不为其合成通知；对 `SheetToolbar` 批量属性草稿使用真实成功 Toast，关闭 Toast 后 `SheetTable` 的“待变更”仍在。字段编辑从当前草稿投影值改回基准时请求数不增加。
+- [ ] 覆盖空必填字段逐项关联/摘要跳转、Help 与 Error 共存顺序、dirty/pending/error 状态共存、CSV 预览诊断与关闭确认、定义字段失败保留输入、标准子编辑器的真实字段/聚合错误边界。复用 Task 4 已通过的标准编号 Help+Error 回归，不重复造同义测试；若本批改动该消费者则在 `standards-editor.spec.ts` 保持断言。
+- [ ] 运行 `sheets-editing.spec.ts`、`properties-values.spec.ts`、`properties-definitions.spec.ts`、`properties-csv.spec.ts` 与涉及标准字段修改时的 `standards-editor.spec.ts`；运行 `rtk npm run test:unit -- src/composables/useSheetProjection.test.ts src/composables/useDraftGuards.test.ts` 及实际改动标准子编辑器的定向单测。按实际文案/组件改动运行 `check:i18n`、`check:ui` 和生产构建，验证 clean/error gates 与请求数不漂移。
+- [ ] 更新 changelog、计划、盘点备忘和 scope 导航；只暂存本批文件，验证后用简体中文动词短语提交。为 G8 保留相同状态计算/生产渲染证据与当前源码播报者记录。
 
 ### 任务 6：设置、扩展配置与图纸目录
 
