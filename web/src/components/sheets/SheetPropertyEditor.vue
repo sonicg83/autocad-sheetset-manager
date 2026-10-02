@@ -56,7 +56,7 @@ function fieldErrorId(name: string) { return `${fieldId(name)}-error`; }
 function fieldStatusId(name: string) { return `${fieldId(name)}-status`; }
 // 字段状态文字（dirty 提示 / 行内错误）经 aria-describedby 与输入关联。
 function describedBy(name: string) {
-  const ids = [isDirty(name) ? fieldStatusId(name) : "", props.context.errors[name] ? fieldErrorId(name) : ""].filter(Boolean);
+  const ids = [props.context.errors[name] ? fieldErrorId(name) : "", isDirty(name) ? fieldStatusId(name) : ""].filter(Boolean);
   return ids.length > 0 ? ids.join(" ") : undefined;
 }
 function onInput(name: string, event: Event) { emit("setValue", name, (event.target as HTMLInputElement).value); }

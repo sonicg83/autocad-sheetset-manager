@@ -174,7 +174,7 @@ describe("StandardImportDialog", () => {
     expect(harness.confirmImport).toHaveBeenCalledWith("preview-rename", "本地改名标准");
   });
 
-  it("确认失败（预检后库状态变化）留在弹窗、保留路径并清除旧凭证", async () => {
+  it("确认失败（预检后库状态变化）保留候选详情并要求重新预检", async () => {
     const {wrapper, harness} = mountDialog({
       selectResult: "C:\\标准包\\a.dststandard",
       confirmError: new Error("STANDARD_ID_EXISTS: 同一标准 ID 已存在"),
@@ -187,11 +187,19 @@ describe("StandardImportDialog", () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="import-error"]').text()).toContain("STANDARD_ID_EXISTS");
     expect(harness.cancelImport).toHaveBeenCalledWith("preview-1");
-    // 路径保留、旧预检清除：用户可直接重新预检
+    // 路径和候选身份保留；旧凭证已清除，必须显式重新预检。
     expect(wrapper.get<HTMLInputElement>('[data-testid="import-selected-path"]').element.value).toBe(
       "C:\\标准包\\a.dststandard",
     );
-    expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="import-preview"]').text()).toContain("市政燃气施工图");
+    expect(wrapper.get('[data-testid="import-confirm-button"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-testid="import-preview-button"]').text()).toContain("重新预检");
+
+    await wrapper.get('[data-testid="import-preview-button"]').trigger("click");
+    await flushPromises();
+    expect(harness.previewImport).toHaveBeenCalledTimes(2);
+    expect(harness.cancelImport).toHaveBeenCalledTimes(1);
+    expect(wrapper.get('[data-testid="import-confirm-button"]').attributes("disabled")).toBeUndefined();
   });
 
   it("更换文件清除旧预检并取消服务端凭证", async () => {

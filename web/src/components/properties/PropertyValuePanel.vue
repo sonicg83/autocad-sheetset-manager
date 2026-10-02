@@ -71,8 +71,8 @@ function errorId(key: ValueKey): string {
 function describedBy(key: ValueKey): string | undefined {
   const status = props.statusOf(key);
   const parts: string[] = [];
-  if (status.dirty || status.pending) parts.push(statusId(key));
   if (errorOf(key)) parts.push(errorId(key));
+  if (status.dirty || status.pending) parts.push(statusId(key));
   return parts.length ? parts.join(" ") : undefined;
 }
 // 长值固定跨两列（span 2）：两列模式下占整行、四列模式下占半行；名称行恒占满整行。

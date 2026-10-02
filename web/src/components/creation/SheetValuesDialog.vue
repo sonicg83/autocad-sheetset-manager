@@ -8,6 +8,7 @@
 import {computed, ref} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import UiHint from "../ui/UiHint.vue";
 import {useDialogFocus} from "../ui/dialogFocus";
 import type {CreationPreviewPropertyColumn} from "../../features/creation/previewModel";
 import type {CreationPreviewGroup} from "../../features/creation/types";
@@ -55,9 +56,9 @@ const {onDialogKeydown} = useDialogFocus({
       :aria-label="title" tabindex="-1"
     >
       <h2>{{ title }}</h2>
-      <p class="values-lead">
+      <UiHint kind="lead">
         {{ $t("creation.review.valuesLead", {count: rows.length}) }}
-      </p>
+      </UiHint>
       <div class="table-scroll">
         <table data-ui-table-contract="sheet-values" class="values-table" data-testid="sheet-values-table">
           <thead>
@@ -86,7 +87,6 @@ const {onDialogKeydown} = useDialogFocus({
 </template>
 <style scoped>
 .values-card{display:grid;gap:var(--space-3)}
-.values-lead{margin:0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 /* 主表与模态各自横向滚动：900×768 下页面整体不横溢 */
 .table-scroll{overflow-x:auto;min-width:0}
 .values-table{width:100%;border-collapse:collapse}

@@ -40,6 +40,11 @@ test("跨范围两张批量只改指定字段并保留其他字段", async ({pag
   await page.getByRole("button", {name: "批量加入草稿"}).click();
   // 提交摘要提示完整数量与跨子集范围
   await expect(page.getByRole("status").filter({hasText: "批量更新 比例（2 张 / 2 个子集）"})).toBeVisible();
+  const toast = page.getByRole("status").filter({hasText: "批量更新 比例（2 张 / 2 个子集）"});
+  await toast.getByRole("button", {name: "忽略通知"}).click();
+  await expect(toast).toHaveCount(0);
+  const firstRow = page.locator(".sheet-table-window tbody tr").filter({hasText: "001"});
+  await expect(firstRow.locator(".status.pending")).toHaveText("待变更");
   await expect.poll(() => draftBodies.length).toBeGreaterThan(0);
   const commands = lastPropertyCommands(draftBodies[draftBodies.length - 1], ["sheet-1", "sheet-4"]);
   expect(commands.map((item) => item.sheet_id)).toEqual(["sheet-1", "sheet-4"]);
@@ -211,7 +216,10 @@ test("结构表单服务端失败保留完整输入且不展示为已创建", as
   await page.getByLabel("模板来源").selectOption("existing_snapshot");
   await page.getByRole("button", {name: "加入草稿", exact: true}).click();
   // 服务端保存失败：表单保留、呈现本地化未知摘要（原文不出现）、不展示为已创建
-  await expect(page.getByText("操作失败，发生未知错误", {exact: true})).toBeVisible();
+  const summary = page.locator(".operation-form .error-summary");
+  await expect(summary).toHaveAttribute("tabindex", "-1");
+  await expect(summary).toBeFocused();
+  await expect(summary).toContainText("操作失败，发生未知错误");
   await expect(page.getByText("草稿保存失败", {exact: true})).toHaveCount(0);
   await expect(page.getByRole("region", {name: "新增图纸"})).toBeVisible();
   await expect(page.getByLabel("参照图纸")).toHaveValue("sheet-1");

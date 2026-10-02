@@ -254,12 +254,18 @@ test("阻断错误与非阻断提示分区呈现，错误可跳回并定位到�
 
   const errors = page.getByTestId("creation-preview-errors");
   await expect(errors).toBeVisible();
+  await expect(errors).toHaveAttribute("data-hint-kind", "banner");
+  await expect(errors).toHaveAttribute("data-tone", "error");
+  await expect(errors).toHaveAttribute("role", "alert");
   await expect(errors).toContainText("图纸组图名不能为空");
   await expect(errors).toContainText("必填属性缺少值");
   await expect(page.getByTestId("creation-preview-status")).toHaveText("2 项阻断错误");
   // 非阻断提示单独呈现，不混进阻断错误
   const warnings = page.getByTestId("creation-preview-warnings");
   await expect(warnings).toBeVisible();
+  await expect(warnings).toHaveAttribute("data-hint-kind", "banner");
+  await expect(warnings).toHaveAttribute("data-tone", "warning");
+  await expect(warnings).not.toHaveAttribute("role", /.+/u);
   await expect(warnings).toContainText("目标DWG内布局名重复：平面图-01");
   await expect(errors).not.toContainText("目标DWG内布局名重复");
   // 有阻断错误时不得创建
@@ -342,6 +348,7 @@ test("创建失败保留草稿与诊断，修正后重新预览并以新任务�
 
   await page.getByTestId("creation-preview-recheck").click();
   await expect(page.getByTestId("creation-execute")).toBeEnabled();
+  await expect(page.getByTestId("creation-job")).toContainText("FAILED"); // 修复预览不会抹掉最近一次任务诊断
   await page.getByTestId("creation-execute").click();
   await page.getByRole("dialog", {name: "创建并打开图纸集？"}).getByRole("checkbox").check();
   await page.getByRole("dialog", {name: "创建并打开图纸集？"}).getByRole("button", {name: "创建并打开图纸集"}).click();

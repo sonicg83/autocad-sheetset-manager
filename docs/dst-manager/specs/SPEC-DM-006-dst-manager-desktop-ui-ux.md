@@ -1,7 +1,7 @@
 ---
 id: SPEC-DM-006
 title: DST Manager 单人桌面界面人性化与易用性设计规范
-status: review
+status: accepted
 document_kind: spec
 owners:
   - dst-manager
@@ -25,6 +25,7 @@ related:
   - ARCH-DM-007
   - SPEC-DM-017
   - PLAN-DM-044
+  - PLAN-DM-048
   - SPEC-DM-015
   - SPEC-DM-018
   - SPEC-DM-021
@@ -58,6 +59,8 @@ DST Manager 是面向单人单机真实工程的本地桌面工具，用于既�
 - 2026-09-30（提示分类初稿）：§6.7 由“四种横幅”扩写为 Lead 导语 / Help 帮助 / Status 状态 / Banner 横幅 / Error 行内错误，并约束导语数量、实现说明和重复提示。初稿演示仅用于讨论，不构成实现或验收证据；未经记录统计范围、方法与基准版本的量化结果不作为规范依据。状态保持 `review`。
 - 2026-09-30（提示分类审查修订）：将“五级”明确为按用途划分的**五类提示**，与严重程度分离；补充提示选择顺序、状态生命周期、同一事件的反馈去重、共享帮助与字段错误的边界、Help/Error 共存和无障碍关联。保留用户需要的目标路径、操作后果与恢复边界，撤销承诺限定为草稿阶段；对齐 [SPEC-DM-015](SPEC-DM-015-frontend-text-edit-state-contract.md)、[SPEC-DM-018](SPEC-DM-018-standard-driven-sheetset-creation-ui.md) 和 [SPEC-DM-021](SPEC-DM-021-cascading-enum-properties.md)。§10 新增提示验收场景；本次只修订文档，不宣称代码已实施或视觉验收已通过。状态保持 `review`。
 - 2026-10-01（WCAG 适用范围澄清）：§7.3 将 `2.2.2` 从基于“无超时”的整段排除改为按自动开始、并行呈现和持续条件逐项评估；明确符合条件的动效/自动更新信息所需控制及其与 `prefers-reduced-motion` 的区别。补入 `3.1.2`，把语言验收改为覆盖 `zh-CN`、`en-US` 和系统解析结果，并要求页面语言标记跟随生效语言；§10.1/§10.3 补充相应验证。本次仅修订规范，不宣称实现或 WCAG 验收已通过。
+
+- 2026-10-01（状态接收）：依据本轮审查结论及用户提出的状态转换请求，将本规范状态由 `review` 改为 `accepted`。此状态表示规范条款已作为后续实施依据；不代表既有实现、完整 WCAG 一致性或任何实施计划的 G4/G8/G9 验收已通过。
 
 ## 2. 范围
 

@@ -90,7 +90,7 @@ function selectDst(page:Page,dst:string,name="选择 DST 文件"){return page.ev
 async function openWorkspace(page:Page,dst="C:\\project\\test.dst"){
   await page.goto("/");
   await selectDst(page,dst);
-  await expect(page.getByRole("button",{name:"关闭"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"关闭工作区"})).toBeVisible();
 }
 
 // 确认模态交互（替代原生 confirm）：需要勾选的模态先勾选，再点按确认按钮
@@ -253,7 +253,7 @@ test("草稿网络保存失败会中止工作区切换并保留编辑",async({pa
   await page.route("**/api/workspaces/*/draft",route=>route.request().method()==="GET"?route.fulfill({json:{draft:null,corrupted:false,stale:false,stale_reasons:[]}}):route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.getByLabel("图纸集名称", {exact: true});await name.fill("未保存名称");await page.getByRole("button",{name:"更新图纸集"}).click();await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText(/保存失败/)).toBeVisible();
-  await page.getByRole("button",{name:"关闭"}).click();await cancelModal(page);
+  await page.getByRole("button",{name:"关闭工作区"}).click();await cancelModal(page);
   await page.getByRole("tab",{name:"属性"}).click();await expect(name).toHaveValue("未保存名称");await page.getByRole("tab",{name:"图纸"}).click();await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
 });
 
@@ -263,7 +263,7 @@ test("草稿版本冲突会中止工作区切换并保留编辑",async({page})=>
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspace}));
   await page.route("**/api/workspaces/workspace-1",route=>route.fulfill({json:workspace}));
   await openWorkspace(page,"C:\\A.dst");await page.getByRole("tab",{name:"属性"}).click();const name=page.getByLabel("图纸集名称", {exact: true});await name.fill("冲突名称");await page.getByRole("button",{name:"更新图纸集"}).click();await expect(page.getByText(/其他窗口更新/)).toBeVisible();
-  await page.getByRole("button",{name:"关闭"}).click();await cancelModal(page);
+  await page.getByRole("button",{name:"关闭工作区"}).click();await cancelModal(page);
   await expect(name).toHaveValue("冲突名称");await page.getByRole("tab",{name:"图纸"}).click();await openDraftPop(page);await expect(page.getByText("动作 1/1")).toBeVisible();await expect(page.getByRole("status")).toHaveCount(0);
   await page.getByRole("button",{name:"放弃本地冲突动作并重新加载"}).click();await confirmModal(page,/确定放弃冲突动作并重新加载/);await page.getByRole("tab",{name:"属性"}).click();await expect(page.getByLabel("图纸集名称", {exact: true})).toHaveValue("测试图纸集");await page.getByRole("tab",{name:"图纸"}).click();await expect(page.getByText("动作 0/0")).toBeVisible();
 });
@@ -511,7 +511,7 @@ test("恢复写入错误会显示消息并解除入口锁定",async({page})=>{
   await page.route("**/api/workspaces/open",route=>route.fulfill({json:workspaceVersion("workspace-A","工作区 A","revision-A")}));await page.route("**/api/revisions?workspace_id=workspace-A",route=>{revisionCalls++;return route.fulfill({json:[{id:"revision-A-old",created_at:"2026-08-12T00:00:00Z",before_hash:"aaaaaaaa",result_hash:"bbbbbbbb"}]})});await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore-preview",route=>route.fulfill({json:{revision_id:"revision-A-old",executable:true,files:[{path:"A.dst",action:"replace",conflict:false}]}}));await page.route("**/api/workspaces/workspace-A/revisions/revision-A-old/restore",async route=>{restoreStarted=true;await restorePost.promise;return route.fulfill({status:500,json:{message:"恢复失败"}})});
   await openWorkspace(page,"C:\\A.dst");
   await page.getByRole("tab",{name:"修订历史"}).click();await expectActionAppearance(page, ".revisions-view button");await page.getByRole("button",{name:"恢复预览"}).click();await expectActionAppearance(page, ".revisions-view .primary");await page.getByRole("button",{name:"恢复为新修订"}).click();await confirmModal(page,/确认恢复/);await expect.poll(()=>restoreStarted).toBe(true);await expect(page.getByText("正在恢复修订…",{exact:true})).toBeVisible();restorePost.resolve();// PLAN-DM-021 Task 9（I18N-11）：无 message_key 的错误按未知错误呈现——本地化摘要为主提示，原文在诊断详情
-  await expect(page.locator("p.error.notice")).toContainText("操作失败，发生未知错误");await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeHidden();await page.locator("details.error.notice").getByText("原始错误详情").click();await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭"})).toBeEnabled();await expect(page.getByRole("tab",{name:"修订历史"})).toBeEnabled();await page.getByRole("tab",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await page.getByRole("tab",{name:"图纸"}).click();await expect(page.locator(".sheets-workspace")).toBeVisible();
+  await expect(page.locator(".shell-error")).toContainText("操作失败，发生未知错误");await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeHidden();await page.locator("details.error.notice").getByText("原始错误详情").click();await expect(page.locator("details.error.notice").getByText("恢复失败")).toBeVisible();await expect(page.getByText("正在恢复修订…",{exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"关闭工作区"})).toBeEnabled();await expect(page.getByRole("tab",{name:"修订历史"})).toBeEnabled();await page.getByRole("tab",{name:"修订历史"}).click();expect(revisionCalls).toBe(2);await page.getByRole("tab",{name:"图纸"}).click();await expect(page.locator(".sheets-workspace")).toBeVisible();
 });
 
 test("旧编辑入口已移除且图号标题只读",async({page})=>{
@@ -943,7 +943,7 @@ test("任务回滚终态后 ActionDock 解锁不再锁定任务进行中",async(
   await expect(page.getByRole("button",{name:"预览变更"})).toBeEnabled();
 });
 
-test("NEEDS_REVIEW 终态时 ActionDock 锁定并提示需人工检查禁止直接重试",async({page})=>{
+test("independent_global_blocker_remains_visible_with_warning",async({page})=>{
   // 回归：dst_validation 是加载时快照、仅 SUCCEEDED 刷新；VALID 工作区遇 NEEDS_REVIEW 后不能落入"有效可执行"，
   // 须由 dock 独立分支锁定（§6.9 行"需人工检查，禁止直接重试"，与 useJobMonitor.retryJob 的 NEEDS_REVIEW 禁止重试一致）
   await installMockEventSource(page);
@@ -954,8 +954,43 @@ test("NEEDS_REVIEW 终态时 ActionDock 锁定并提示需人工检查禁止直�
   await page.getByRole("button",{name:"预览变更"}).click();
   await page.getByRole("button",{name:"确认写入"}).click();await confirmModal(page,/确认发布/);
   await expect(page.getByText("任务进行中")).toBeVisible();
-  // 终态 NEEDS_REVIEW：需人工检查，预览/确认写入均禁用且内联文本可见（不依赖 dst_validation 快照）
-  await page.evaluate(()=>(window as any).__emitJob({id:"job-review",workspace_id:"workspace-1",status:"NEEDS_REVIEW",progress:100,attempt:0,files:[]}));
+  // 用户不在进度页时收到终态：Toast 显示错误码、目标后果与恢复信息。
+  await page.getByRole("complementary",{name:"任务浮层"}).getByRole("button",{name:"收起任务浮层"}).click();
+  const reviewDetail="目标文件保留；核对发布日志后重新打开工作区。";
+  await page.evaluate(payload=>(window as any).__emitJob(payload),{id:"job-review",workspace_id:"workspace-1",status:"NEEDS_REVIEW",progress:100,attempt:0,error_code:"PUBLISH_STATE_UNCERTAIN",error_detail:reviewDetail,files:[]});
+  const failedToast=page.getByRole("alert").filter({hasText:"需人工检查"});
+  await expect(failedToast).toContainText("PUBLISH_STATE_UNCERTAIN");
+  await expect(failedToast).toContainText(reviewDetail);
+  await expect(page.getByText("需人工检查，禁止直接重试")).toBeVisible();
+  await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();
+
+  // 关闭 Toast 只关闭本次结果提示，任务状态与 Dock blocker 仍由各自 owner 保留。
+  await failedToast.getByRole("button",{name:"忽略通知"}).click();
+  await expect(failedToast).toHaveCount(0);
+  await expect(page.getByText("需人工检查，禁止直接重试")).toBeVisible();
+
+  // 同屏增加一个独立 warning：树定位目标仍受搜索过滤；warning 不遮盖人工复核 blocker。
+  await page.getByRole("treeitem",{name:/001-002 第一册/}).locator(".chevron").click();
+  await expect(page.getByRole("treeitem",{name:"001 第一册 (一)"})).toBeVisible();
+  await page.getByLabel("搜索图纸").fill("无匹配图纸");
+  await page.getByRole("treeitem",{name:"001 第一册 (一)"}).click();
+  const warning=page.getByRole("status").filter({hasText:"目标被筛选隐藏"});
+  await expect(warning).toHaveAttribute("data-tone","warning");
+  await expect(warning).toContainText("清除筛选并定位");
+  await expect(page.getByText("需人工检查，禁止直接重试")).toBeVisible();
+
+  // 进度面板仍保留错误码和恢复细节；重试被状态守卫拒绝，关闭随后出现的全局错误也不解 blocker。
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});
+  await overlay.getByRole("button",{name:"展开任务浮层"}).click();
+  await expect(overlay).toContainText("PUBLISH_STATE_UNCERTAIN");
+  await expect(overlay).toContainText(reviewDetail);
+  await overlay.getByRole("button",{name:"重试"}).click();
+  await expect(page.getByText("发布状态需要人工检查，禁止直接重试",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"关闭错误提示"}).click();
+  await expect(page.getByText("发布状态需要人工检查，禁止直接重试",{exact:true})).toHaveCount(0);
+  await expect(overlay).toContainText("PUBLISH_STATE_UNCERTAIN");
+  await expect(warning).toBeVisible();
   await expect(page.getByText("需人工检查，禁止直接重试")).toBeVisible();
   await expect(page.getByRole("button",{name:"预览变更"})).toBeDisabled();
   await expect(page.getByRole("button",{name:"确认写入"})).toBeDisabled();
@@ -1032,10 +1067,13 @@ test("任务成功经 SSE 推送 toast 且失败通知常驻可查看",async({pa
   expect.soft(Math.round(closeBox.height),"toast 关闭按钮高度").toBe(36);
   await expect(toast.locator(".toast-actions .toast-view")).toHaveText("查看");
   await toast.getByRole("button",{name:"查看"}).click();
-  await expect(page.getByRole("complementary",{name:"任务浮层"}).getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
+  const overlay=page.getByRole("complementary",{name:"任务浮层"});
+  await expect(overlay.getByRole("tab",{name:"实施进度"})).toHaveAttribute("aria-selected","true");
+  await expect(overlay).toContainText("CAD_TIMEOUT");
   // Task 5 起关闭按钮带 aria-label（忽略通知），可访问名不再依赖 ✕ 字形
   await toast.getByRole("button",{name:"忽略通知"}).click();
   await expect(toast).toHaveCount(0);
+  await expect(overlay).toContainText("CAD_TIMEOUT"); // 关闭短时通知不清除任务诊断
 });
 
 test("发布回滚终态展示可读真因：toast 与实施进度面板均带 error_detail",async({page})=>{
@@ -1487,7 +1525,7 @@ test("已知 API 错误按 message_key 渲染并忽略兼容 message",async({pag
   await page.route("**/api/workspaces/open",route=>route.fulfill({status:404,json:{code:"WORKSPACE_NOT_FOUND",message_key:"errors.workspace.notFound",params:{},message:"【兼容】旧中文文本不应进入主提示"}}));
   await page.goto("/");
   await selectDst(page,"C:\\project\\test.dst");
-  const notice=page.locator("p.error.notice");
+  const notice=page.locator(".shell-error");
   await expect(notice).toContainText("工作区不存在，请重新打开图纸集");
   // 已知错误：兼容 message 不进主提示，也不进诊断详情
   await expect(page.getByText("【兼容】旧中文文本不应进入主提示")).toHaveCount(0);
@@ -1498,7 +1536,7 @@ test("未知 API 错误显示本地化摘要、原文只在可展开诊断详情
   await page.route("**/api/workspaces/open",route=>route.fulfill({status:500,json:{code:"DRAFT_SAVE_FAILED",message:"保存失败"}}));
   await page.goto("/");
   await selectDst(page,"C:\\project\\test.dst");
-  const notice=page.locator("p.error.notice");
+  const notice=page.locator(".shell-error");
   await expect(notice).toContainText("操作失败，发生未知错误");
   await expect(notice).not.toContainText("保存失败");
   // 原始文本只在可展开诊断详情：折叠时不可见，展开后可读
@@ -2239,6 +2277,13 @@ test.describe("旧页面持久证据（PLAN-DM-029 Task 9 Step 5）", () => {
     await expect(job).toBeInViewport();
     await expect(page.getByText("任务 job-evidence")).toBeVisible();
     await expect(job.getByText("PUBLISH_ROLLED_BACK")).toBeVisible();
+    const summaryLineCounts=await job.locator(".job > b, .job > span, .job > small").evaluateAll(nodes=>nodes.map(node=>{
+      const range=document.createRange();range.selectNodeContents(node);
+      return {text:node.textContent?.trim(),lines:range.getClientRects().length};
+    }));
+    const terminalSummary=summaryLineCounts.find(item=>item.text==="已回滚 · 100% · 第 1 次");
+    expect(terminalSummary?.lines, "终态、进度和尝试信息须保持完整可读").toBeLessThanOrEqual(2);
+    expect(summaryLineCounts.filter(item=>item.text).every(item=>item.lines<=2), "任务摘要字段在浮层窄宽度下最多换两行："+JSON.stringify(summaryLineCounts)).toBe(true);
     // 计算样式断言：深色下抽屉底色必须取自当前主题的 --color-bg-surface（不得硬编码浅色）
     const drawerBg = await page.locator(".task-drawer").evaluate(el => {const probe=document.createElement("span");probe.style.color="var(--color-bg-surface)";el.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {actual:getComputedStyle(el).backgroundColor,expected};});
     expect(drawerBg.actual, "深色下抽屉底色应取自 --color-bg-surface").toBe(drawerBg.expected);

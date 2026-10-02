@@ -46,7 +46,7 @@ export default {
   },
   cascade: {
     invalidSavedValue: "Saved value does not match the current choices; clear it and choose again",
-    chooseParent: "Choose a parent option before choosing this cascading property.",
+    chooseParent: "Choose “{parent}” before choosing this cascading property.",
   },
   // Wizard and input-surface copy (Task 8). Keys describe the UI responsibility only; stage
   // names mirror the backend `CREATION_STEPS`, and batch field names reuse the group column copy.
@@ -217,7 +217,7 @@ export default {
     moreLabel: "Show every drawing value of {property} in group {index}",
     tableNote: "An unnumbered drawing group shows a single zero-padded value (such as 00) and consumes no later number; the table has no “Layout” column, while layout names and asset availability still take part in backend validation.",
     valuesTitle: "{group} · {property}",
-    valuesLead: "{count} sheets in total, listed in group order with the actual property values.",
+    valuesLead: "All {count} sheets in this group are listed below in group order with the actual value of this property.",
     valuesSheetNumber: "Sheet number",
     valuesSheetTitle: "Sheet title",
     valuesClose: "Close",

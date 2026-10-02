@@ -32,6 +32,7 @@ export function useCreationJob(options: {
   const job = ref<Job | null>(null);
   const connectionMode = ref<"sse" | "polling">("sse");
   let generation = 0;
+  let terminalHandledGeneration: number | null = null;
   let events: EventSource | null = null;
   let pollTimer: number | null = null;
 
@@ -48,7 +49,10 @@ export function useCreationJob(options: {
   }
 
   /** 终态处理：只按后端终态响应决定成功切换或保留草稿重试。 */
-  async function settle(result: Job): Promise<void> {
+  async function settle(result: Job, started: number): Promise<void> {
+    if (terminalHandledGeneration === started) return;
+    // 先标记再调用异步 owner，避免同一事件流重放时重复切换工作区或失效预览。
+    terminalHandledGeneration = started;
     if (result.status === "SUCCEEDED") {
       const workspaceId = result.workspace_id ?? "";
       if (workspaceId !== "") await options.onSucceeded(workspaceId);
@@ -76,7 +80,7 @@ export function useCreationJob(options: {
         schedulePoll(id, started);
         return;
       }
-      await settle(result);
+      await settle(result, started);
     } catch {
       // 轮询失败不改变任务状态：保留最后一次已知状态，由用户决定是否重试
       schedulePoll(id, started);
@@ -104,7 +108,7 @@ export function useCreationJob(options: {
       if (!isTerminalJobStatus(result.status)) return;
       source.close();
       if (events === source) events = null;
-      await settle(result);
+      await settle(result, started);
     };
     source.onerror = () => {
       if (started !== generation) return;

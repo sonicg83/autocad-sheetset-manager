@@ -346,6 +346,11 @@ test("422 结构化错误：错误摘要聚焦并链接字段、语言与输入�
   await expect(summary).toBeFocused(); // 错误摘要取得焦点（tabindex=-1）
   await expect(summary).toContainText("CAD 超时（秒）"); // 摘要条目解析字段标签
   await expect(summary).toContainText("必须在 30–3600 之间"); // message_key + 结构化参数
+  const timeoutDescribedBy = (await timeout.getAttribute("aria-describedby"))?.split(" ") ?? [];
+  expect(timeoutDescribedBy[0]).toMatch(/^settings-error-/); // 字段错误先于范围帮助
+  const timeoutError = page.locator(`#${timeoutDescribedBy[0]}`);
+  await expect(timeoutError).toBeVisible();
+  await expect(timeoutError).not.toHaveAttribute("role", "alert"); // 摘要是唯一主要错误播报者
   await expect(page.getByRole("dialog", {name: "设置"})).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN"); // 语言不变
   await expect(timeout).toHaveValue("120"); // 本地输入保留

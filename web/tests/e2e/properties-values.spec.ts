@@ -202,7 +202,7 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   await page.setViewportSize({width: 1440, height: 900});
   await install(page, {
     initialDraft: PENDING_DRAFT,
-    failDraftSave: () => ({code: "DRAFT_SAVE_FAILED", message: "草稿保存失败", fields: {项目编号: "演示校验错误"}}),
+    failDraftSave: () => ({code: "DRAFT_SAVE_FAILED", message: "草稿保存失败", fields: {项目编号: "演示校验错误", 建设单位: "单位值无效"}}),
   });
   await openProperties(page);
   // 草稿投影 ≠ 正式基准 → 待写入（蓝）
@@ -224,6 +224,9 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   // 虚构 code 不在错误目录（I18N-11）：摘要显示本地化未知摘要，兼容原文不进主提示；字段错误照常
   await expect(page.getByRole("alert")).toContainText("操作失败，发生未知错误");
   await expect(page.getByRole("alert")).not.toContainText("草稿保存失败");
+  const summary = page.locator(".properties-view > .error-summary");
+  await expect(summary).toBeFocused();
+  await expect(summary.getByRole("button")).toHaveCount(2);
   await expect(dirtyItem.getByText("演示校验错误")).toBeVisible();
   await expect(dirtyItem.getByText("待写入")).toBeVisible();
   await expect(dirtyItem).toHaveClass(/invalid/);
@@ -240,6 +243,11 @@ test("三态并存：琥珀未加入草稿、蓝待写入、错误边框优先�
   const describedby = await dirtyItem.getByRole("textbox").getAttribute("aria-describedby");
   expect(describedby).toContain("prop-error-");
   expect(describedby).toContain("prop-status-");
+  const ids = describedby!.split(/\s+/);
+  expect(ids[0]).toMatch(/^prop-error-/);
+  expect(ids[1]).toMatch(/^prop-status-/);
+  await summary.getByRole("button", {name: /建设单位/}).click();
+  await expect(page.getByRole("textbox", {name: "属性 建设单位", exact: true})).toBeFocused();
 });
 
 // —— PLAN-DM-034 任务 3：clean 初始态「更新图纸集」为可聚焦的语义禁用，强制触发不产生空命令 ——
@@ -268,7 +276,7 @@ test("clean 初始态加入草稿语义禁用且强制触发计数不增", async
 
 test("输入不同再改回草稿值：dirty 计数、隐藏修改数、字段标记与按钮状态同步归零", async ({page}) => {
   await page.setViewportSize({width: 1440, height: 900});
-  await install(page);
+  const {draftBodies} = await install(page);
   await openProperties(page);
   const metrics = page.locator(".value-panel .metrics");
   const submit = page.locator(".value-panel .head-actions").getByRole("button", {name: "更新图纸集"});
@@ -294,6 +302,7 @@ test("输入不同再改回草稿值：dirty 计数、隐藏修改数、字段�
   await expect(metrics).not.toContainText("未加入草稿");
   await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(page.locator(".value-panel .match-count")).not.toContainText("修改被隐藏");
+  expect(draftBodies).toHaveLength(0);
 });
 
 test("含空格属性名的状态说明使用有效 aria-describedby IDREF", async ({page}) => {

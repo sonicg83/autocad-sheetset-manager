@@ -1,8 +1,16 @@
+
 ## 2026-10-02 修正创建向导 XLSX 覆盖导入 e2e 步骤导航
 
 - 修正 `web/tests/e2e/create-sheetset-input.spec.ts` 用例 `creation_switch_and_xlsx_override_preserve_affected_inputs_and_target`：成功覆盖导入后向导会自动跳入「图纸组」阶段，原断言直接读取「工程名称」导致 `element(s) not found`；改为先断言停留在「图纸组」，再经「上一步」退回「项目信息」核对输入与最终路径。
 - 验证：`npx playwright test create-sheetset-input.spec.ts -g "creation_switch_and_xlsx_override_preserve_affected_inputs_and_target"` 通过（含 settings 前置依赖项目，34 passed）。
+- 合并验收发现普通 DST 打开回归用例的关闭按钮名称匹配过宽；限定为「关闭工作区」，避免同时出现的错误提示关闭按钮造成 Playwright strict-mode 歧义。
+- 合并结果复验：首次全量 E2E 为 724/725，唯一失败即上述严格名称歧义；修正后全量 Playwright 725/725 通过。
+## 2026-10-02 推进 PLAN-DM-048 Task 8 自动验收与生产视觉抽样
 
+- 新增提示原语真实计算样式/对比度、IDREF 与长文本视口回归；归档 30 张生产页面截图及 8 份双主题 × 四视口计算样式 JSON，并补充 `design-qa.md` 和 G8 索引。
+- 修正浅色成功令牌对比度（4.433:1 → 4.834:1）；修正窄浮层任务摘要逐词换行，保留任务状态、错误码和恢复按钮。补正两处变更后过时的 E2E 定位器。
+- 验证：Playwright 全量 **725/725**；定向任务浮层套件 **34/34**；Web 单测 **389/389**、契约测试 **133/133**；`check:api`、`check:i18n`（1664 keys/11 domains）、`check:ui`、生产构建、Ruff 与 `uv lock --check` 通过；pytest 退出码 0。构建仍报告主包 >500 kB。
+- G8 部分完成：人工读屏、其它迁移页的完整四视口矩阵及指定页 200% 缩放待补；G9 WebView2/真实工作方式验收未开始。PLAN-DM-048 继续保持 `active`。
 ## 2026-10-01 新增布局替换后视口保持调研备忘（MEMO-DM-044）
 
 - 新增 `.planning/memos/dst-manager/MEMO-DM-044-layout-swap-viewport-preservation.md`：定位视口丢失根因（`worker.py` 的 `DstDeleteLayouts` 后 `-LAYOUT _Template` 整体替换布局，视口随布局消失）；登记「图纸集字段只在布局中求值」硬约束及其对「图框改为外部参照」路线的否决；比选四个成立方案（命名视图＋图层快照、图签块重定义、视口实体克隆、一布局多图框）与两个已否决方案；提取 `legacy/plugin/setviews` 与 `legacy/plugin/setviewport` 的机制（`ViewTableRecord` + `LayerState` + 图幅长度推导比例）并列出 7 项现代化改造要点；辨析 Callout Block／View Label Block 与 `SheetSetPlaceholder` 字段；登记 3 个真实样本 DST 的元素普查（`AcSmSheetView` 实例为 0、契约仅登记 7 类对象）与 7 项真机验证清单。
@@ -15,12 +23,66 @@
 - **同轮修正上一轮的一处过度声明**：`Width / ViewWidth == Height / ViewHeight` 只能验证图幅内框与声明视图宽高比的自洽性（`ViewWidth` 是请求里写进去的，两边必然等比例），**不能抓 twist 错误**；且 AABB 对 θ 对称，**+30° 与 −30° 的反算包围盒完全相同**，故 twist 必须用定向角点比对（已同步修改备忘 §6.20 与可视化第 6 节）。
 - 同步 `.planning/README.md` 执行资料索引。
 - 本轮只新增备忘与可视化文档，未修改产品代码、插件、标准 Schema、DST codec 或测试；未在真实 AutoCAD 上执行验证，未立项、未创建 SPEC/Plan。
-
 ## 2026-10-01 修正 SPEC-DM-006 的 WCAG 准则适用范围
 
 - §7.3 将 WCAG 2.2.2 改为按自动开始、并行呈现及持续条件评估，不再因没有超时而整体排除；明确符合条件时的控制要求及 `prefers-reduced-motion` 的适用边界。
 - 将 SC 3.1.2 纳入中英文界面范围，要求页面根语言标记跟随 `zh-CN`、`en-US` 或系统解析结果；§10.1/§10.3 增加语言和动态内容验收项。
 - 仅修订文档，未运行产品测试或构建，未宣称实现或 WCAG 验收通过。
+## 2026-10-01 完成设置、扩展配置与图纸目录 Task 6 提示迁移
+
+- 设置字段、generated 扩展字段和图纸过滤输入统一按 Error → dirty Status → Help 关联；设置宿主错误摘要承担主要 422 播报，逐字段错误保留可关联文本，不重复 alert。
+- 给 generated 字段数值范围说明补稳定 ID；移除目录模板保存的重复成功 Toast，保留模板栏持续“已保存”状态与删除成功反馈。
+- 增加 Provider 409 后字段 Help/Error/dirty/写入守卫保持，以及模板保存单一成功播报回归。
+- 验证：设置 E2E 33/33、扩展 E2E 72/72、目录 E2E 108/108、指定 composable 单测 13/13、`check:i18n` 通过。G8/G9 仍待后续验收。
+## 2026-10-01 完成图纸、属性与标准字段 Task 5 错误定位收口
+
+- 图纸与属性输入的描述顺序统一为 Error → dirty/pending Status；属性值错误摘要与操作表单聚合错误可聚焦并保持原有字段跳转/聚合边界。
+- 为标准普通属性名称输入关联其发布诊断；新增回归覆盖多字段定位、真实批量 Toast 关闭后“待变更”保留，以及属性值回到草稿值时不发起写请求。
+- 验证：六份 E2E 152/152、定向单测 41/41；check:i18n、check:ui、完整生产构建通过。构建仍提示主 JavaScript 包超过 500 kB；G8 生产视觉/键盘 QA 与 G9 WebView2 验收仍待后续执行。
+## 2026-10-01 准备图纸、属性与标准字段 Task 5 G5 映射复核
+
+- 在 PLAN-DM-048 盘点备忘新增 §9.7，覆盖全部 Task 5 消费者，标明 Task 4 已完成路径与延期字段关联的边界。
+- 将字段 Error-first 顺序、属性错误摘要聚焦、聚合错误回退、Toast 与持久待写入状态的真实来源，以及 CSV 关闭确认写入 Task 5 开工映射候选。
+- Task 5 产品实现尚未开始；映射待技术负责人复核。更新计划和 dst-manager 导航状态。
+## 2026-10-01 完成欢迎页与标准管理 Task 4 提示收口
+
+- 确认导入遇到并发身份冲突后保留来源路径、候选详情和冲突目标，作废旧预检凭证并要求重新预检；编号字段在出错时按 Error → Help 关联。
+- 增加标准管理回归，验证自明区块不加重复 Lead、warning 与独立 blocker 同时可见且 blocker 仍禁用发布；保留删除影响重确认和身份冲突恢复行为。
+- 验证：Task 4 四份 E2E 124/124、导入弹窗单测 15/15、`check:i18n`、`check:ui` 和生产构建通过。构建仍有主包超过 500 kB 提示；G8/G9 验收待后续执行。
+## 2026-10-01 批准欢迎页与标准管理 Task 4 G5 映射
+
+- 按 SPEC-DM-006、SPEC-DM-016 与现行 SPEC-DM-020 核对欢迎页、标准库、编辑/发布检查、标准包导入和删除影响的状态、提示关联与恢复路径，映射见盘点备忘 §9.6。
+- 明确同 ID 冲突不能靠改名绕过、仅名称冲突可改本机副本名；确认阶段冲突要求重新预检；删除影响变化后更新数量并重新确认。
+- 将现有冲突回归所在的 `standards-library.spec.ts` 补入 Task 4 测试清单；用户于 2026-10-01 批准本批 G5 映射，Task 4 进入实施。
+## 2026-10-01 完成创建向导与级联帮助迁移（PLAN-DM-048 Task 3）
+
+- 创建向导的级联字段按表单实例、对象/group 与上级属性共享具名 Help，并保持非法旧值、字段错误、最终路径及错误定位；动态 Status/Error 与静态 Banner 按状态映射迁移。
+- XLSX 导入失败关闭对话框后保留最近一次摘要和诊断，直到用户选择新文件或开始新尝试；成功导入草稿不因关闭成功通知而回滚。
+- 验证：级联/提示单测 44 项、输入 E2E 55 项、复核 E2E 46 项通过；`check:ui`、`check:i18n`（1663 keys/11 domains）和生产 build 通过。build 仍显示主 JavaScript 包超过 500 kB。
+- Task 3 完成；G8 生产浏览器视觉/运行态检查与 G9 Windows WebView2 验收保留待办。
+## 2026-10-01 准备创建向导 Task 3 批次复核
+
+- 为创建向导与级联共享帮助补齐 G5 批次映射，覆盖八个视图/对话框、CreationStore/inputModel 状态所有者、显示与结束条件、ARIA/错误定位、路径和恢复边界及既有测试入口。
+- 标出 XLSX 导入失败后关闭对话框会清空诊断的现状，并提出保留到用户选择新文件或开始新尝试；用户于 2026-10-01 确认技术负责人批准 §9.5 映射与该处置，Task 3 已开工。
+## 2026-10-01 建立提示原语并统一描述关联（PLAN-DM-048 Task 2）
+
+- 新增 `UiHint`、`UiBanner` 和描述 ID 合并函数，支持 Lead/Help/Status/Error、四种 Banner tone、静态提示默认不播报及可选单一 live role。
+- 扩展 `FormField.sharedDescribedBy`，统一 `aria-describedby` 为错误→字段帮助→共享帮助，稳定去重并在元素撤下时移除对应引用；Help/Error 字号改为 caption。
+- 验证：定向 UI 单测 40 项通过，`check:ui` 与完整 Web 生产构建通过（含 API/i18n/UI 检查、`vue-tsc -b`）。构建提示现有主 JavaScript 包超过 500 kB。
+- Task 2 已完成；G8 浏览器计算样式、读屏及 G9 WebView2 验收仍待计划后续批次。Task 3 开始前补齐并复核对应 G5 映射。
+## 2026-10-01 接受 SPEC-DM-006 并继续 PLAN-DM-048 Task 1
+
+- 修正 SPEC-DM-006 §7.3 对 WCAG 2.1 SC 2.2.2 与 3.1.2 的适用范围，并补充 `zh-CN`、`en-US`、`system` 语言路径、页面根 `lang`、异语言片段和自动更新/动效验证要求；状态由 `review` 转为 `accepted`。
+- 同步 PLAN-DM-048、`.planning/README.md`、计划索引、资产索引与 DST Manager 文档入口；对照源码复核 6 个共享/高风险 Vue 状态源，并将原型 27 个情形映射到生产状态所有者和既有测试入口，记录生命周期、ARIA 播报、Toast 失败保留风险与焦点核对边界。计划追踪矩阵和 Task 7 补入 Toast 自动关闭/动效的 SC 2.2.2 条件检查。
+- 用户转达技术负责人已确认批准 G6，并于 2026-10-01 确认 G4 Demo 冻结；结合此前执行授权，PLAN-DM-048 转为 `active` 并进入 Task 2。其余 G5 逐消费者明细作为对应迁移批次开始前置条件补齐，未将其记为已完成。
+- 用户于 2026-10-01 确认候选 HTML 可作为 G4 设计冻结基准；登记固定文件 SHA-256、28 张冻结截图、27 种状态映射与键盘规格。G4 通过；生产同态与运行态键盘验证列入 G8/G9。
+- 本轮仅修改文档与执行账本；未运行产品测试、构建、读屏或 Windows WebView2 验收。
+## 2026-09-30 推进 PLAN-DM-048 Task 1 门禁材料
+
+- 扫描计划目标目录的 153 个文件，筛选出 62 个提示/关联语义消费者并登记 Vue 文件与提示语言 key；扩展候选原型至 27 种可复现情形。
+- 用户接受六项候选原则；为 7 个页面/展示组采集 28 张正交 JPEG 样本，登记视口、主题、默认缩放、滚动位置、图像像素尺寸和 SHA-256。
+- 候选 HTML SHA-256 为 b6d8c0dfd02cf0ec9a9d877992cdb77aeec5fa52adc8b47eea3c9dd564b54a0d；静态预检为 103 个唯一 id、11 个有效 aria-describedby 引用、27 个完整情形映射，内嵌脚本 node --check 通过。相对链接检查 7 份文档无缺失，git diff --check 通过。
+- G4 的逐状态生产差异与键盘行为核对、G5 技术映射仍未完成；SPEC-DM-006 仍为 review，G6 未通过。未修改生产代码、业务测试或 Spec，未运行产品测试或生产构建；仅做候选页有限 Tab/Enter/Space 抽样，未做穷尽键盘遍历、读屏或真实桌面验收。
 
 ## 2026-09-30 按 MEMO-DM-043 修订 PLAN-DM-048
 
@@ -3541,3 +3603,8 @@
 - 标准库改为 UUID 单层目录，发布写入 UTC Unix 毫秒时间，列表摘要携带描述与发布时间并按库锁检查 ID 和非空名称冲突。
 - 新增旧 v1/v2 用户草稿迁移：先校验整库 SHA-256 备份，再保留草稿内容原子升级；迁移报告仅保存计数和结果。
 - 更新标准库、发布回滚、名称唯一、迁移备份与重入测试。
+## 2026-10-02 完成全局反馈与任务通知 Task 7 提示收口
+
+- 终态通知按订阅代次幂等处理；修复普通任务与创建任务 SSE 重复终态造成的重复播报/工作区切换，人工复核通知补充错误码和恢复详情。失败 Toast 不被数量上限淘汰，成功 Toast 仍于 5000ms 自动关闭。
+- ToastHost 改为每条通知单独播报；12 个 `.notice` markup 全部声明语义 tone，移除 legacy 通用危险红色底色。关闭 Toast 或全局错误不清除任务/草稿 blocker。
+- 验证：通知/创建任务定向单测 23/23；Playwright 主界面 132/132、创建向导 46/46；后端终态契约 2/2；`check:i18n`（1664 键/11 域）和 `check:ui` 通过。G8/G9 尚待 Task 8。

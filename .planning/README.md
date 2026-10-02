@@ -7,7 +7,7 @@
 - [DST Manager 路线图](roadmaps/dst-manager.md)
 - [跨项目整合路线图](roadmaps/integration.md)
 - [DST Manager Plan 索引](plans/dst-manager/README.md)
-- [提示分类与反馈一致性实施计划（PLAN-DM-048，proposed，未执行）](plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：依据 MEMO-DM-043 补齐 G0–G9 台账、G6 双向追踪矩阵、G3/G4 设计证据和可执行测试断言；SPEC-DM-006 接受、G4 冻结及 G6 双负责人通过前不得开始生产修改。
+- [提示分类与反馈一致性实施计划（PLAN-DM-048，active；Task 2～7 G7 已完成，Task 8 自动化与生产截图抽样完成）](plans/dst-manager/PLAN-DM-048-hint-classification-and-feedback.md)：SPEC-DM-006 已 accepted，G4 已冻结、G6 已通过；G8 部分完成（725/725 Playwright、30 张生产截图），全页 4 视口矩阵、指定页面 200% 缩放和人工读屏仍待补；G9 Windows WebView2 待执行。细节见 [视觉 QA](../design-qa.md) 与 [证据索引](memos/dst-manager/assets/PLAN-DM-048/README.md)。
 - [级联枚举属性实施计划（PLAN-DM-047，completed）](plans/dst-manager/PLAN-DM-047-cascading-enum-properties.md)：完成 `sheetset`/`sheet` 同级级联的标准 Schema v4、编辑与发布门禁、创建向导、XLSX、预览和 DST 物化；实际验证摘要见计划正文。
 - [无版本图纸标准身份与标准库管理实施计划（PLAN-DM-046，completed）](plans/dst-manager/PLAN-DM-046-versionless-standard-management.md)：完成 UUID＋发布时间、描述、改名导入、平铺管理与关联创建草稿删除；Task 8 按用户确认移除旧格式迁移和读取，并清理存量旧包、草稿及项目快照。
 - [DST Builder Plan 索引（历史资料）](plans/dst-builder/README.md)

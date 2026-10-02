@@ -226,8 +226,8 @@ onBeforeUnmount(() => {
           @reset-columns="$emit('resetColumns')"
         />
 
-        <p v-if="pruneMessage" class="notice prune-notice" role="status">{{ pruneMessage }}</p>
-        <p v-if="hiddenTarget" class="notice hidden-target-notice" role="status">
+        <p v-if="pruneMessage" class="notice prune-notice" data-tone="notice" role="status">{{ pruneMessage }}</p>
+        <p v-if="hiddenTarget" class="notice hidden-target-notice" data-tone="warning" role="status">
           <span>{{ $t("sheets.view.hiddenTarget") }}</span>
           <button type="button" @click="$emit('clearFilters')">{{ $t("sheets.view.clearFiltersAndLocate") }}</button>
         </p>

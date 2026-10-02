@@ -9,6 +9,7 @@ import {expect, test, type Locator, type Page} from "@playwright/test";
 import {
   chooseStandard,
   creationCascadeDocument,
+  creationSharedCascadeDocument,
   creationCandidate,
   groupRow,
   installCreation,
@@ -139,7 +140,7 @@ test("级联输入按当前上级筛选，复制与批量上级修改只影响�
   await page.getByLabel("专业").selectOption("");
   await expect(region).toBeDisabled();
   await expect(region).toHaveValue("");
-  await expect(page.getByText("请先选择上级选项，再选择此级联属性。")).toBeVisible();
+  await expect(page.getByText("请先选择“专业”，再选择此级联属性。")).toBeVisible();
   await page.getByLabel("专业").selectOption("道路");
   await expect(region).toBeEnabled();
   const regionOptions = await region.locator("option").allTextContents();
@@ -162,7 +163,7 @@ test("级联输入按当前上级筛选，复制与批量上级修改只影响�
   await firstRoute.selectOption("");
   await expect(firstDetail).toBeDisabled();
   await expect(firstDetail).toHaveValue("");
-  await expect(page.getByText("请先选择上级选项，再选择此级联属性。")).toBeVisible();
+  await expect(page.getByText("请先选择“线路类型”，再选择此级联属性。")).toBeVisible();
   await firstRoute.selectOption("道路");
   await expect(firstDetail).toBeEnabled();
   await firstDetail.selectOption("城市道路");
@@ -212,6 +213,104 @@ test("级联输入按当前上级筛选，复制与批量上级修改只影响�
   await expect(second.getByLabel(/线路等级$/)).toHaveValue("");
   await expect(third.getByLabel(/线路类型$/)).toHaveValue("燃气");
   await expect(third.getByLabel(/线路等级$/)).toHaveValue("通用");
+});
+
+test("恢复的非法级联值保留到用户明确清除", async ({page}) => {
+  await installCreation(page, {
+    standardDocument: creationCascadeDocument(),
+    initialSheetsetValues: {"prop-region": "保存的旧区域"},
+  });
+  await openCreation(page);
+  await chooseStandard(page);
+
+  const region = page.getByLabel("区域", {exact: true});
+  await expect(region).toBeEnabled();
+  await expect(region).toHaveValue("保存的旧区域");
+  await expect(region.locator("option:checked")).toContainText("已保存值与当前候选不匹配");
+
+  await region.selectOption("");
+  await expect(region).toHaveValue("");
+  await expect(region.locator("option").filter({hasText: "保存的旧区域"})).toHaveCount(0);
+});
+
+test("同上级字段共享具名级联帮助，不同上级、图纸组与表单实例分离", async ({page}) => {
+  await installCreation(page, {standardDocument: creationSharedCascadeDocument()});
+  await openCreation(page);
+  await chooseStandard(page);
+
+  const major = page.getByLabel("专业");
+  const region = page.getByLabel("区域", {exact: true});
+  const regionCode = page.getByLabel("区域代码");
+  await major.selectOption("");
+  await expect(region).toBeDisabled();
+  await expect(regionCode).toBeDisabled();
+  const projectHelpId = await region.getAttribute("aria-describedby");
+  expect(projectHelpId).not.toBeNull();
+  await expect(regionCode).toHaveAttribute("aria-describedby", projectHelpId!);
+  const projectHelp = page.locator(`[id="${projectHelpId}"]`);
+  await expect(projectHelp).toHaveAttribute("data-hint-kind", "help");
+  await expect(projectHelp).toContainText("专业");
+  await expect(page.locator(".project-step .field-grid [data-hint-kind='help']")).toHaveCount(1);
+  await major.selectOption("道路");
+  await expect(region).toBeEnabled();
+  await expect(regionCode).toBeEnabled();
+  await expect(projectHelp).toHaveCount(0);
+  await expect(region).not.toHaveAttribute("aria-describedby", /./u);
+
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const first = groupRow(page, "group-1");
+  const route = first.getByLabel(/线路类型$/);
+  const routeDetail = first.getByLabel(/线路等级$/);
+  const routeClass = first.getByLabel(/线路分类$/);
+  const pipeKind = first.getByLabel(/管网类型$/);
+  const pipeSpec = first.getByLabel(/管网规格$/);
+  await route.selectOption("");
+  await pipeKind.selectOption("");
+  await expect(routeDetail).toBeDisabled();
+  await expect(routeClass).toBeDisabled();
+  await expect(pipeSpec).toBeDisabled();
+  const routeHelpId = await routeDetail.getAttribute("aria-describedby");
+  const pipeHelpId = await pipeSpec.getAttribute("aria-describedby");
+  expect(routeHelpId).not.toBeNull();
+  expect(pipeHelpId).not.toBeNull();
+  expect(routeHelpId).not.toBe(pipeHelpId);
+  await expect(routeClass).toHaveAttribute("aria-describedby", routeHelpId!);
+  await expect(first.locator(`[id="${routeHelpId}"]`)).toContainText("线路类型");
+  await expect(first.locator(`[id="${pipeHelpId}"]`)).toContainText("管网类型");
+  await expect(first.locator('[data-hint-kind="help"]')).toHaveCount(2);
+
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  const second = groupRow(page, "group-2");
+  const secondRouteDetail = second.getByLabel(/线路等级$/);
+  const secondRouteClass = second.getByLabel(/线路分类$/);
+  const secondPipeSpec = second.getByLabel(/管网规格$/);
+  const secondRouteHelpId = await secondRouteDetail.getAttribute("aria-describedby");
+  const secondPipeHelpId = await secondPipeSpec.getAttribute("aria-describedby");
+  expect(secondRouteHelpId).not.toBe(routeHelpId);
+  expect(secondPipeHelpId).not.toBe(pipeHelpId);
+  await expect(secondRouteClass).toHaveAttribute("aria-describedby", secondRouteHelpId!);
+  await expect(second.locator('[data-hint-kind="help"]')).toHaveCount(2);
+
+  await route.selectOption("道路");
+  await second.getByLabel(/线路类型$/).selectOption("燃气");
+  await first.getByRole("checkbox").check();
+  await second.getByRole("checkbox").check();
+  await page.getByRole("button", {name: "批量修改"}).click();
+  const batchDialog = page.getByRole("dialog", {name: "批量修改选中图纸组"});
+  await batchDialog.getByLabel("字段").selectOption("prop-route-class");
+  const noCommon = batchDialog.locator('[data-hint-kind="status"]').filter({hasText: "当前选中组没有共同的级联候选项"});
+  await expect(noCommon).toContainText("当前选中组没有共同的级联候选项");
+  const noCommonId = await noCommon.getAttribute("id");
+  expect(noCommonId).not.toBeNull();
+  await expect(batchDialog.getByLabel("新值")).toHaveAttribute("aria-describedby", noCommonId!);
+  await batchDialog.getByRole("button", {name: "关闭"}).click();
+
+  await expect(routeDetail).toBeEnabled();
+  await expect(routeClass).toBeEnabled();
+  await expect(first.locator(`[id="${routeHelpId}"]`)).toHaveCount(0);
+  await expect(pipeSpec).toBeDisabled();
+  await expect(first.locator(`[id="${pipeHelpId}"]`)).toBeVisible();
 });
 
 test("无桌面壳时保留手动路径输入并说明原因", async ({page}) => {
@@ -286,11 +385,13 @@ test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗�
   await expect(rowTitle(page, "group-2")).toHaveValue("平面图");
   await expect(rowTitle(page, "group-1")).not.toHaveAttribute("aria-invalid", "true");
   await rowTitle(page, "group-1").fill("");
+  await rowCount(page, "group-1").fill("0");
 
-  // 每行的错误列表有稳定 id；该行图名/张数/模板/图幅控件指向它（不是只给 aria-invalid）
+  // 两项独立错误同时保留；每行错误列表有稳定 id，并由各出错控件引用。
   const issues = page.locator("#creation-group-issues-group-1");
   await expect(issues).toBeVisible();
   await expect(issues).toContainText("图名不能为空");
+  await expect(issues).toContainText("张数必须是正整数");
 
   const title = rowTitle(page, "group-1");
   await title.focus();
@@ -298,9 +399,14 @@ test("行内错误经 aria-describedby 关联到对应输入，聚焦即可朗�
   await expect(title).toHaveAttribute("aria-invalid", "true");
   await expect(title).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
   // 键盘聚焦即可获得原因（可访问描述来自该行的错误列表）
-  await expect(title).toHaveAccessibleDescription("图名不能为空");
+  await expect(title).toHaveAccessibleDescription(/图名不能为空/u);
+  const count = rowCount(page, "group-1");
+  await expect(count).toHaveAttribute("aria-invalid", "true");
+  await expect(count).toHaveAttribute("aria-describedby", "creation-group-issues-group-1");
+  await expect(count).toHaveAccessibleDescription(/张数必须是正整数/u);
+  await count.fill("1");
+  await expect(issues).not.toContainText("张数必须是正整数");
   for (const control of [
-    rowCount(page, "group-1"),
     groupRow(page, "group-1").getByLabel(/基础模板$/),
     groupRow(page, "group-1").getByLabel(/布局模板$/),
     groupRow(page, "group-1").getByLabel(/布局名称$/),
@@ -459,6 +565,8 @@ test("creation_switch_and_xlsx_override_preserve_affected_inputs_and_target", as
   await dialog.getByRole("button", {name: "开始导入"}).click();
   const overwrite = page.getByRole("dialog", {name: "覆盖当前草稿？"});
   await expect(overwrite).toContainText("项目属性、项目路径和全部图纸组");
+
+  await expect(overwrite).toContainText("不比较差异");
   await overwrite.getByRole("button", {name: "取消"}).click();
   expect(state.importAttempts).toBe(0);
   await expect(page.getByLabel("工程名称")).toHaveValue("切换前保留工程");
@@ -470,6 +578,7 @@ test("creation_switch_and_xlsx_override_preserve_affected_inputs_and_target", as
   await expect.poll(() => state.importAttempts).toBe(1);
   await expect(page.getByText("导入成功：项目属性、项目路径和全部图纸组已被替换", {exact: false})).toBeVisible();
   await dialog.getByRole("button", {name: "取消"}).click();
+
   // 成功覆盖导入后向导自动跳到「图纸组」，需先退回「项目信息」再核对输入与路径
   await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
   await page.getByRole("button", {name: "上一步"}).click();
@@ -493,7 +602,10 @@ test("保存失败时返回欢迎页被拦下，草稿与输入都不丢", async
     },
   };
   await page.getByRole("button", {name: "返回欢迎页"}).click();
-  await expect(page.getByTestId("creation-error")).toHaveText("创建草稿已被其他操作修改，请刷新后重试");
+  const creationError = page.getByTestId("creation-error");
+  await expect(creationError).toHaveText("创建草稿已被其他操作修改，请刷新后重试");
+  await expect(creationError).toHaveAttribute("data-tone", "error");
+  await expect(creationError).toHaveAttribute("role", "alert");
   await expect(page.getByRole("region", {name: "创建新图纸集"})).toBeVisible();
   await expect(page.getByRole("heading", {name: "打开图纸集"})).toHaveCount(0);
   // 输入与草稿都没变：失败的保存不写草稿，界面也不清空
@@ -540,6 +652,7 @@ test("XLSX 导入取消不发写请求，失败可定位且草稿零变更", asy
   await expect.poll(() => state.importAttempts).toBe(1);
   const diagnostics = page.getByTestId("creation-xlsx-diagnostics");
   await expect(diagnostics).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveAttribute("data-hint-kind", "error");
   await expect(diagnostics).toContainText("工作表 Sheet · 第 3 行 · 列 E");
   await expect(diagnostics).toContainText("图幅不在所选布局模板的布局内");
   await expect(diagnostics).toContainText("工作表 SheetSet · 第 5 行 · 列 B");
@@ -548,14 +661,20 @@ test("XLSX 导入取消不发写请求，失败可定位且草稿零变更", asy
   await expect(page.getByRole("region", {name: "项目信息"})).toBeVisible();
   await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\项目\\新建项目");
 
-  // 成功导入：一次性替换输入并使旧预览失效
-  state.importFailure = null;
+  // 关闭只收起窗口：最近失败诊断在重开后仍可查看，直到开始新尝试或选择新文件。
   await page.getByRole("button", {name: "XLSX 批量录入"}).click();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId("creation-xlsx-diagnostics")).toContainText("工作表 Sheet · 第 3 行 · 列 E");
+  await expect(page.getByTestId("creation-xlsx-diagnostics")).toContainText("工作表 SheetSet · 第 5 行 · 列 B");
+
+  // 选择新文件会清除旧诊断；成功导入一次性替换输入并使旧预览失效。
+  state.importFailure = null;
   await page.getByTestId("creation-xlsx-file").setInputFiles({
     name: "creation-ok.xlsx",
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     buffer: Buffer.from("stub"),
   });
+  await expect(page.getByTestId("creation-xlsx-diagnostics")).toHaveCount(0);
   await dialog.getByRole("button", {name: "开始导入"}).click();
   await page.getByRole("dialog", {name: "覆盖当前草稿？"}).getByRole("button", {name: "覆盖并导入"}).click();
   await expect(page.getByText("导入成功：项目属性、项目路径和全部图纸组已被替换", {exact: false})).toBeVisible();
@@ -656,6 +775,7 @@ test("标准候选加载失败给出稳定错误且不伪造空库", async ({pag
   await installCreation(page, {listFails: true});
   await openCreation(page);
   await expect(page.getByText("标准候选加载失败", {exact: false})).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveAttribute("data-hint-kind", "error");
   await expect(page.getByText("当前没有可用于创建的标准", {exact: false})).toHaveCount(0);
   await expect(page.getByTestId("creation-standard-list")).toHaveCount(0);
 });

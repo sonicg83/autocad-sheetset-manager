@@ -34,6 +34,7 @@ export function useJobMonitor(deps:{
   const job=ref<Job|null>(null);
   const connectionMode=ref<"sse"|"polling">("sse");
   let jobMonitorGeneration=0;
+  let terminalHandledGeneration:number|null=null;
   let activeJobEvents:EventSource|null=null;
   let pollTimer:number|null=null;
 
@@ -46,20 +47,32 @@ export function useJobMonitor(deps:{
   function notifyTerminal(job:Job){
     if(deps.shouldSuppress?.())return;
     if(job.status==="SUCCEEDED"){deps.pushToast?.({type:"ok",title:t("jobs.toasts.succeededTitle"),body:t("jobs.toasts.succeededBody"),jumpTab:"prog"});return}
-    if(job.status==="NEEDS_REVIEW"){deps.pushToast?.({type:"fail",title:t("jobs.toasts.needsReviewTitle"),body:withDetail(t("jobs.toasts.needsReviewBody"),job.error_detail),jumpTab:"prog"});return}
+    if(job.status==="NEEDS_REVIEW"){
+      const code=job.error_code??"";
+      const body=code?t("jobs.toasts.needsReviewBody",{code}):t("jobs.toasts.needsReviewBodyNoCode");
+      deps.pushToast?.({type:"fail",title:t("jobs.toasts.needsReviewTitle"),body:withDetail(body,job.error_detail),jumpTab:"prog"});
+      return;
+    }
     const code=job.error_code??"";
     const body=code?t("jobs.toasts.failedBody",{code}):t("jobs.toasts.failedBodyNoCode");
     deps.pushToast?.({type:"fail",title:t("jobs.toasts.failedTitle"),body:withDetail(body,job.error_detail),jumpTab:"prog"});
+  }
+  async function settleTerminal(result:Job,generation:number,workspaceId:string){
+    if(terminalHandledGeneration===generation)return;
+    // 标记先于异步刷新，避免刷新期间重放 SSE 再次通知或再次刷新。
+    terminalHandledGeneration=generation;
+    notifyTerminal(result);
+    if(result.status==="SUCCEEDED")await deps.onJobSucceeded(workspaceId);
   }
   function watchJob(id:string,workspaceId:string){
     const generation=invalidateJobMonitor(false);
     const events=new EventSource(`/api/jobs/${id}/events`);
     activeJobEvents=events;
-    events.onmessage=async event=>{if(!monitorMatches(generation,workspaceId))return;const result:Job=JSON.parse(event.data);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(terminal(result.status)){notifyTerminal(result);events.close();if(activeJobEvents===events)activeJobEvents=null;if(result.status==="SUCCEEDED"){await deps.onJobSucceeded(workspaceId)}}};
+    events.onmessage=async event=>{if(!monitorMatches(generation,workspaceId))return;const result:Job=JSON.parse(event.data);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(terminal(result.status)){if(activeJobEvents===events){events.close();activeJobEvents=null}await settleTerminal(result,generation,workspaceId)}};
     events.onerror=()=>{if(!monitorMatches(generation,workspaceId))return;events.close();if(activeJobEvents===events)activeJobEvents=null;connectionMode.value="polling";schedulePoll(id,workspaceId,generation)};
   }
   function schedulePoll(id:string,workspaceId:string,generation:number){if(!monitorMatches(generation,workspaceId))return;if(pollTimer!==null)clearTimeout(pollTimer);pollTimer=window.setTimeout(()=>{pollTimer=null;void pollJob(id,workspaceId,generation)},1000)}
-  async function pollJob(id:string,workspaceId:string,generation:number){if(!monitorMatches(generation,workspaceId)||job.value&&terminal(job.value.status))return;try{const result:Job=await request(`/api/jobs/${id}`);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(!terminal(result.status))schedulePoll(id,workspaceId,generation);else{notifyTerminal(result);if(result.status==="SUCCEEDED"){await deps.onJobSucceeded(workspaceId)}}}catch(e){if(monitorMatches(generation,workspaceId))deps.error.value=String(e)}}
+  async function pollJob(id:string,workspaceId:string,generation:number){if(!monitorMatches(generation,workspaceId)||job.value&&terminal(job.value.status))return;try{const result:Job=await request(`/api/jobs/${id}`);if(!monitorMatches(generation,workspaceId))return;job.value=result;if(!terminal(result.status))schedulePoll(id,workspaceId,generation);else await settleTerminal(result,generation,workspaceId)}catch(e){if(monitorMatches(generation,workspaceId))deps.error.value=String(e)}}
   async function retryJob(){const current=deps.workspace.value;if(!current||!job.value||!job.value.id||deps.isWorkspaceLoading.value)return;if(job.value.status==="NEEDS_REVIEW"){deps.error.value=t("jobs.errors.needsReviewRetry");return}const workspaceId=current.id,id=job.value.id,generation=invalidateJobMonitor(false);try{const result:Job=await request(`/api/jobs/${id}/retry`,{method:"POST"});if(!monitorMatches(generation,workspaceId))return;job.value=result;if(result.status==="QUEUED")watchJob(id,workspaceId)}catch(e){if(monitorMatches(generation,workspaceId))deps.error.value=String(e)}}
   // 供 App.vue 及相邻域组合式函数做 jobMonitorGeneration 的纯代次校验（行为与直接比较 jobMonitorGeneration 等价）
   function isCurrentJobGeneration(generation:number){return generation===jobMonitorGeneration}

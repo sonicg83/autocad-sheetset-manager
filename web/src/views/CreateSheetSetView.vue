@@ -7,7 +7,9 @@
 // 按工作区匹配的全局任务监视器）；成功后把 `workspace_id` 交给 App 切换普通工作区。
 import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {useI18n} from "vue-i18n";
+import UiBanner from "../components/ui/UiBanner.vue";
 import UiButton from "../components/ui/UiButton.vue";
+import UiHint from "../components/ui/UiHint.vue";
 import StandardStep from "../components/creation/StandardStep.vue";
 import ProjectStep from "../components/creation/ProjectStep.vue";
 import GroupsStep from "../components/creation/GroupsStep.vue";
@@ -305,7 +307,7 @@ async function backToWelcome(): Promise<void> {
     <header class="wizard-head">
       <div>
         <h1>{{ $t("creation.wizard.title") }}</h1>
-        <p>{{ $t("creation.wizard.lead") }}</p>
+        <UiHint kind="lead">{{ $t("creation.wizard.lead") }}</UiHint>
       </div>
       <div class="wizard-actions">
         <span v-if="fixedStandard !== ''" class="badge" data-testid="creation-fixed-standard">{{ fixedStandard }}</span>
@@ -328,13 +330,22 @@ async function backToWelcome(): Promise<void> {
         <span class="step-label">{{ label }}</span>
       </div>
     </nav>
-    <p v-if="resumeVisible" class="banner" role="status" data-testid="creation-resume-banner">
+    <UiBanner v-if="resumeVisible" tone="notice" live="polite" data-testid="creation-resume-banner">
       {{ $t("creation.wizard.resumeBanner", {step: stepLabels[stepIndex]}) }}
-      <button type="button" @click="dismissResume">{{ $t("creation.wizard.resumeContinue") }}</button>
-      <button type="button" @click="restart">{{ $t("creation.wizard.resumeRestart") }}</button>
-    </p>
-    <p v-if="store.error !== ''" class="banner error" role="alert" data-testid="creation-error">{{ store.error }}</p>
-    <p v-if="store.pending" class="banner" role="status">{{ $t("creation.wizard.saving") }}</p>
+      <template #actions>
+        <button type="button" class="resume-action" @click="dismissResume">{{ $t("creation.wizard.resumeContinue") }}</button>
+        <button type="button" class="resume-action" @click="restart">{{ $t("creation.wizard.resumeRestart") }}</button>
+      </template>
+    </UiBanner>
+    <UiBanner v-if="store.error !== ''" tone="error" live="assertive" data-testid="creation-error">
+      {{ store.error }}
+    </UiBanner>
+    <UiHint kind="status" live="polite" class="status-region">
+      {{ store.pending ? $t("creation.wizard.saving") : "" }}
+    </UiHint>
+    <UiBanner v-if="store.pending" tone="notice">
+      {{ $t("creation.wizard.saving") }}
+    </UiBanner>
     <div class="wizard-stage">
       <StandardStep
         v-if="store.step === 'standard'"
@@ -370,7 +381,6 @@ async function backToWelcome(): Promise<void> {
 .wizard-stage :deep(.card){align-content:start}
 .wizard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap}
 .wizard-head h1{margin:0;font-size:var(--font-page-title);color:var(--color-text-primary)}
-.wizard-head p{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 .wizard-actions{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
 .badge{font-size:var(--font-caption);padding:var(--space-1) var(--space-2);border-radius:var(--radius-full);color:var(--color-info);background:var(--color-info-bg);font-family:var(--font-mono)}
 .stepper{display:flex;gap:var(--space-2);flex-wrap:wrap;list-style:none;margin:0;padding:var(--space-3);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg)}
@@ -379,8 +389,7 @@ async function backToWelcome(): Promise<void> {
 .step.done{color:var(--color-success)}
 .step-number{display:inline-grid;place-items:center;width:var(--space-5);height:var(--space-5);border-radius:var(--radius-full);background:var(--color-bg-muted);color:var(--color-text-secondary);font-size:var(--font-caption)}
 .step.current .step-number{background:var(--color-on-accent);color:var(--color-accent)}
-.banner{margin:0;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-info-bg);color:var(--color-text-primary);font-size:var(--font-label)}
-.banner.error{background:var(--color-danger-bg);color:var(--color-danger)}
-.banner button{font-size:var(--font-label);padding:var(--space-1) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer}
+.status-region{position:absolute;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+.resume-action{font-size:var(--font-label);padding:var(--space-1) var(--space-3);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer}
 .wizard-foot{display:flex;justify-content:flex-end;gap:var(--space-2)}
 </style>

@@ -29,7 +29,11 @@
   .preview{margin-top:20px}
   .primary{background:var(--color-accent);color:var(--color-on-accent)}
   .danger,.error{color:var(--color-danger)}
-  .notice{background:var(--color-danger-bg);padding:10px 14px;border-radius:var(--radius-sm)}
+  .notice{padding:10px 14px;border-radius:var(--radius-sm)}
+  .notice[data-tone="notice"]{color:var(--color-info);background:var(--color-info-bg)}
+  .notice[data-tone="success"]{color:var(--color-success);background:var(--color-success-bg)}
+  .notice[data-tone="warning"]{color:var(--color-warning);background:var(--color-warning-bg)}
+  .notice[data-tone="error"]{color:var(--color-danger);background:var(--color-danger-bg)}
   .job{display:flex;gap:20px;background:var(--color-bg-surface);padding:12px;margin-top:12px;border-left:4px solid var(--color-accent)}
   .job-detail>table{background:var(--color-bg-surface)}
 

@@ -195,8 +195,12 @@ describe("OrdinaryPropertyEditor", () => {
     const major = propertyOf(draft, "prop-major");
     if (major !== undefined) major.default_value = "蒸汽";
     const wrapper = mountEditor(draft, publishIssues(draft));
-    expect(wrapper.get("[data-testid=ordinary-issue-prop-major]").text()).toContain("枚举默认值");
-    expect(wrapper.get("[data-testid=ordinary-name-prop-major]").attributes("aria-invalid")).toBe("true");
+    const issue = wrapper.get("[data-testid=ordinary-issue-prop-major]");
+    const name = wrapper.get("[data-testid=ordinary-name-prop-major]");
+    expect(issue.text()).toContain("枚举默认值");
+    expect(name.attributes("aria-invalid")).toBe("true");
+    expect(name.attributes("aria-describedby")).toBe("ordinary-issue-prop-major");
+    expect(issue.attributes("id")).toBe("ordinary-issue-prop-major");
   });
 
   it("renders the offending scope value in the issue text", () => {

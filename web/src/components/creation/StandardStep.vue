@@ -6,6 +6,7 @@
 import {computed, ref} from "vue";
 import {useI18n} from "vue-i18n";
 import UiButton from "../ui/UiButton.vue";
+import UiHint from "../ui/UiHint.vue";
 import type {CreationStandardCandidate} from "../../features/creation/types";
 import type {CreationStore} from "../../features/creation/store";
 
@@ -67,13 +68,15 @@ function keyOf(candidate: CreationStandardCandidate): string {
     <section class="card">
       <header class="card-head">
         <h2>{{ $t("creation.standard.title") }}</h2>
-        <p>{{ $t("creation.standard.lead") }}</p>
+        <UiHint kind="lead">{{ $t("creation.standard.lead") }}</UiHint>
       </header>
-      <p v-if="store.candidatesPending" class="note" role="status">{{ $t("creation.standard.loading") }}</p>
-      <p v-else-if="store.candidatesError" class="note error" role="alert">
+      <UiHint kind="status" live="polite" data-testid="creation-standard-loading">
+        {{ store.candidatesPending ? $t("creation.standard.loading") : "" }}
+      </UiHint>
+      <UiHint v-if="store.candidatesError" kind="error" live="assertive" data-testid="creation-standard-error">
         {{ $t("creation.standard.listError", {message: store.candidatesError}) }}
-      </p>
-      <template v-else-if="available.length > 0">
+      </UiHint>
+      <template v-else-if="!store.candidatesPending && !store.candidatesError && available.length > 0">
         <ul class="candidate-list" data-testid="creation-standard-list">
           <li v-for="candidate in available" :key="keyOf(candidate)">
             <button
@@ -89,7 +92,7 @@ function keyOf(candidate: CreationStandardCandidate): string {
           </li>
         </ul>
       </template>
-      <div v-else class="empty" role="status">
+      <div v-else-if="!store.candidatesPending && !store.candidatesError" class="empty" role="status">
         <p>{{ $t("creation.standard.empty") }}</p>
         <ul v-if="unavailableReasons.length > 0" class="reasons">
           <li v-for="reason in unavailableReasons" :key="reason">{{ reason }}</li>
@@ -102,7 +105,7 @@ function keyOf(candidate: CreationStandardCandidate): string {
     <section class="card" data-testid="creation-standard-detail">
       <header class="card-head">
         <h2>{{ $t("creation.standard.detailTitle") }}</h2>
-        <p>{{ $t("creation.standard.detailLead") }}</p>
+          <UiHint kind="lead">{{ $t("creation.standard.detailLead") }}</UiHint>
       </header>
       <p v-if="preview === null" class="note">{{ $t("creation.standard.detailEmpty") }}</p>
       <template v-else>
@@ -131,9 +134,7 @@ function keyOf(candidate: CreationStandardCandidate): string {
 .standard-step{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:var(--space-4);align-items:start}
 .card{padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);display:grid;gap:var(--space-3)}
 .card-head h2{margin:0;font-size:var(--font-title);color:var(--color-text-primary)}
-.card-head p{margin:var(--space-1) 0 0;color:var(--color-text-secondary);font-size:var(--font-label);line-height:1.6}
 .note{margin:0;color:var(--color-text-secondary);font-size:var(--font-label)}
-.note.error{color:var(--color-danger)}
 .candidate-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
 .candidate{width:100%;display:grid;gap:var(--space-1);text-align:left;padding:var(--space-3);border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-surface);color:var(--color-text-primary);cursor:pointer;font-family:var(--font-ui)}
 .candidate:hover{border-color:var(--color-accent);background:var(--color-bg-muted)}

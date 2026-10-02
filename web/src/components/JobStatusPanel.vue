@@ -29,4 +29,8 @@ function cadOperationLabel(operation?:string|null){if(!operation)return t("commo
 /* 跨列日志详情：多行文本格取顶端对齐，按内容增高且可换行阅读 */
 .job-detail .log-cell{vertical-align:top}
 .job-detail .log-cell pre{margin:var(--space-1) 0 0;white-space:pre-wrap;word-break:break-word}
+/* 浮层有独立宽度，不能用视口断点决定摘要是否换行；保留字段可读宽度后再按容器折行。 */
+.job{flex-wrap:wrap}
+.job>*{flex:0 0 auto;max-width:100%}
+.job>.error{overflow-wrap:anywhere}
 </style>
