@@ -1,3 +1,8 @@
+## 2026-10-02 修正创建向导 XLSX 覆盖导入 e2e 步骤导航
+
+- 修正 `web/tests/e2e/create-sheetset-input.spec.ts` 用例 `creation_switch_and_xlsx_override_preserve_affected_inputs_and_target`：成功覆盖导入后向导会自动跳入「图纸组」阶段，原断言直接读取「工程名称」导致 `element(s) not found`；改为先断言停留在「图纸组」，再经「上一步」退回「项目信息」核对输入与最终路径。
+- 验证：`npx playwright test create-sheetset-input.spec.ts -g "creation_switch_and_xlsx_override_preserve_affected_inputs_and_target"` 通过（含 settings 前置依赖项目，34 passed）。
+
 ## 2026-10-01 新增布局替换后视口保持调研备忘（MEMO-DM-044）
 
 - 新增 `.planning/memos/dst-manager/MEMO-DM-044-layout-swap-viewport-preservation.md`：定位视口丢失根因（`worker.py` 的 `DstDeleteLayouts` 后 `-LAYOUT _Template` 整体替换布局，视口随布局消失）；登记「图纸集字段只在布局中求值」硬约束及其对「图框改为外部参照」路线的否决；比选四个成立方案（命名视图＋图层快照、图签块重定义、视口实体克隆、一布局多图框）与两个已否决方案；提取 `legacy/plugin/setviews` 与 `legacy/plugin/setviewport` 的机制（`ViewTableRecord` + `LayerState` + 图幅长度推导比例）并列出 7 项现代化改造要点；辨析 Callout Block／View Label Block 与 `SheetSetPlaceholder` 字段；登记 3 个真实样本 DST 的元素普查（`AcSmSheetView` 实例为 0、契约仅登记 7 类对象）与 7 项真机验证清单。

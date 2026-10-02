@@ -421,6 +421,62 @@ test("切换标准先提示再清除不兼容输入，不静默迁移", async ({
   await expect(page.getByTestId("creation-fixed-standard")).toContainText("00000000-0000-4000-8000-000000000047");
 });
 
+test("creation_switch_and_xlsx_override_preserve_affected_inputs_and_target", async ({page}) => {
+  const second = creationCandidate({standard_id: "00000000-0000-4000-8000-000000000047", name: "建筑设计图纸标准"});
+  const state = await installCreation(page, {candidates: [creationCandidate(), second]});
+  await openCreation(page);
+  await chooseStandard(page);
+
+  await page.getByLabel("工程名称").fill("切换前保留工程");
+  await page.getByLabel("上一级目录").fill("D:\\目标根目录");
+  await page.getByLabel("项目目录名").fill("创建目标");
+  await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\目标根目录\\创建目标");
+  await openGroupsStep(page);
+  await page.getByRole("button", {name: "新建图纸组"}).click();
+  await rowTitle(page, "group-1").fill("现有图纸组");
+
+  await page.getByRole("button", {name: "上一步"}).click();
+  await page.getByRole("button", {name: "上一步"}).click();
+  await page.getByTestId("creation-standard-list").getByRole("button").filter({hasText: "建筑设计图纸标准"}).click();
+  const switchConfirm = page.getByRole("dialog", {name: "切换图纸标准？"});
+  await expect(switchConfirm).toContainText("新标准的可输入字段、模板候选与旧预览都不再适用");
+  await switchConfirm.getByRole("button", {name: "取消"}).click();
+
+  await chooseStandard(page);
+  await expect(page.getByLabel("工程名称")).toHaveValue("切换前保留工程");
+  await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\目标根目录\\创建目标");
+  await openGroupsStep(page);
+  await expect(rowTitle(page, "group-1")).toHaveValue("现有图纸组");
+  await page.getByRole("button", {name: "上一步"}).click();
+
+  await page.getByRole("button", {name: "XLSX 批量录入"}).click();
+  const dialog = page.getByRole("dialog", {name: "XLSX 批量录入"});
+  await page.getByTestId("creation-xlsx-file").setInputFiles({
+    name: "replacement.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("stub"),
+  });
+  await dialog.getByRole("button", {name: "开始导入"}).click();
+  const overwrite = page.getByRole("dialog", {name: "覆盖当前草稿？"});
+  await expect(overwrite).toContainText("项目属性、项目路径和全部图纸组");
+  await overwrite.getByRole("button", {name: "取消"}).click();
+  expect(state.importAttempts).toBe(0);
+  await expect(page.getByLabel("工程名称")).toHaveValue("切换前保留工程");
+  await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\目标根目录\\创建目标");
+
+  state.importFailure = null;
+  await dialog.getByRole("button", {name: "开始导入"}).click();
+  await page.getByRole("dialog", {name: "覆盖当前草稿？"}).getByRole("button", {name: "覆盖并导入"}).click();
+  await expect.poll(() => state.importAttempts).toBe(1);
+  await expect(page.getByText("导入成功：项目属性、项目路径和全部图纸组已被替换", {exact: false})).toBeVisible();
+  await dialog.getByRole("button", {name: "取消"}).click();
+  // 成功覆盖导入后向导自动跳到「图纸组」，需先退回「项目信息」再核对输入与路径
+  await expect(page.getByRole("region", {name: "图纸组"})).toBeVisible();
+  await page.getByRole("button", {name: "上一步"}).click();
+  await expect(page.getByLabel("工程名称")).toHaveValue("滨河路改造工程");
+  await expect(page.getByTestId("creation-final-path")).toHaveText("D:\\导入项目\\滨河路新建项目");
+});
+
 test("保存失败时返回欢迎页被拦下，草稿与输入都不丢", async ({page}) => {
   const state = await installCreation(page);
   await openCreation(page);
