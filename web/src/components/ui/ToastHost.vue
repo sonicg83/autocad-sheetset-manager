@@ -3,12 +3,21 @@
 // 每项含关闭按钮（`UiIconButton icon="close"`，可访问名称走 `shell.toast.close`）与可选"查看"按钮
 // （emit jump，App 调 openOverlay(tab)）
 import UiIconButton from "./UiIconButton.vue";
+import {ref, watch} from "vue";
 import type {Toast} from "../../composables/useToast";
-defineProps<{toasts:Toast[]}>();
+const props=defineProps<{toasts:Toast[]}>();
 const emit=defineEmits<{dismiss:[id:number];jump:[tab:string]}>();
+const host=ref<HTMLElement|null>(null);
+watch(()=>props.toasts.map(toast=>toast.id),(ids,previous)=>{
+  const newest=ids.at(-1);
+  // 新反馈到达时滚动到末尾；逐项关闭或用户正在操作既有通知时保留阅读位置与焦点。
+  if(newest===undefined||previous.includes(newest)||host.value===null)return;
+  if(host.value.contains(document.activeElement))return;
+  host.value.scrollTop=host.value.scrollHeight;
+},{flush:"post"});
 </script>
 <template>
-  <div class="toast-host">
+  <div ref="host" class="toast-host">
     <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type" :role="toast.type==='ok'?'status':'alert'">
       <div class="toast-main">
         <strong>{{toast.title}}</strong>
@@ -22,8 +31,8 @@ const emit=defineEmits<{dismiss:[id:number];jump:[tab:string]}>();
   </div>
 </template>
 <style scoped>
-.toast-host{position:fixed;top:var(--space-5);right:var(--space-5);z-index:1100;display:flex;flex-direction:column;gap:var(--space-2);max-width:var(--toast-max-width)}
-.toast{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-2);border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary)}
+.toast-host{position:fixed;top:var(--space-5);right:var(--space-5);z-index:1100;display:flex;flex-direction:column;gap:var(--space-2);max-width:min(var(--toast-max-width),calc(100vw - var(--space-5) * 2));max-height:calc(100vh - var(--space-5) * 2);overflow-y:auto;overscroll-behavior:contain}
+.toast{display:flex;flex-shrink:0;align-items:flex-start;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-2);border:1px solid var(--color-border-subtle);background:var(--color-bg-surface);color:var(--color-text-primary)}
 .toast.ok{border-left:4px solid var(--color-success)}
 .toast.fail{border-left:4px solid var(--color-danger)}
 .toast-main{display:flex;flex-direction:column;gap:2px;min-width:0}

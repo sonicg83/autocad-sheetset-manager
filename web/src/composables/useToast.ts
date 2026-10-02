@@ -1,5 +1,5 @@
 // 任务终态非模态通知组合式函数（SPEC-DM-006 §6.6）：
-// ok 5 秒自动消失（role="status"）、fail 常驻不自动消失（role="alert"）；同屏上限 4 条，超出移除最旧
+// ok 5 秒自动消失（role="status"）、fail 常驻不自动消失（role="alert"）；通常保留 4 条，失败超量由宿主滚动呈现
 import {ref} from "vue";
 import type {Ref} from "vue";
 
@@ -14,8 +14,8 @@ export function useToast(){
     const toast:Toast={id:nextId++,...t};
     const next=[...toasts.value,toast];
     if(next.length>4){
-      // 失败通知承载恢复信息，不得被上限淘汰；仅在有成功通知可清理时维持通常上限。
-      const oldestSuccess=next.findIndex(item=>item.type==="ok");
+      // 只清理旧成功通知；失败承载恢复信息，新通知必须先得到完整展示机会。
+      const oldestSuccess=next.findIndex(item=>item.type==="ok"&&item.id!==toast.id);
       if(oldestSuccess>=0)next.splice(oldestSuccess,1);
     }
     toasts.value=next;
